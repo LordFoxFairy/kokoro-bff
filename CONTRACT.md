@@ -1,5 +1,7 @@
 # Kokoro BFF v1 契约摘要
 
+完整 API 文档入口：[docs/api/README.md](./docs/api/README.md)。本文是快速摘要，资源级字段、示例、幂等和 Mock 验收以 `docs/api/v1/` 为准。
+
 ## 服务调用约定
 
 所有 `/v1/*` 请求是 Web server → BFF 的 server-to-server 调用：

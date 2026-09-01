@@ -2,6 +2,8 @@
 
 `kokoro-bff` 是 Kokoro 的独立业务适配子仓库。它承接 Web 的业务投影、聚合、幂等和上游切换；它不是 Gateway，也不承载 Chat 的会话事实。
 
+API 文档入口：[docs/api/README.md](./docs/api/README.md)。当前契约版本为 **Kokoro Business API v1**；文档结构参考 Manus API 的成熟资源和生命周期设计，但路径、字段和业务边界以本仓库契约为准。
+
 ## 边界
 
 ```text
