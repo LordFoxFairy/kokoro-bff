@@ -65,10 +65,6 @@ function isMutation(method: string): boolean {
 function requiresIdempotency(method: string, segments: string[]): boolean {
   if (!isMutation(method)) return false
   if (method === "POST" && segments[0] === "skills" && segments[1] === "github" && segments[2] === "preview") return false
-  // The current Web HubClient intentionally does not add an idempotency key
-  // to the basic MCP registration request. Keep that request compatible while
-  // preserving the mutation gate for toggles and deletes.
-  if (method === "POST" && segments[0] === "mcp" && segments[1] === "servers" && segments.length === 2) return false
   return true
 }
 

@@ -256,16 +256,25 @@ describe("kokoro-bff v1 mock contract", () => {
   it("completes the MCP server register, toggle, list, and delete mock flow", async () => {
     const base = await listen(createBffServer(config()))
     const name = "phase-one-mcp"
-    const registered = await fetch(`${base}/v1/mcp/servers`, {
+    const registration = {
+      name,
+      transport: "streamable_http",
+      url: "https://mcp.example.test/stream",
+      allowed_tools: ["search", "fetch"],
+      secret_ref: "handle:srt_fixture",
+    }
+    const missingKey = await fetch(`${base}/v1/mcp/servers`, {
       method: "POST",
       headers: { ...authHeaders(), "content-type": "application/json" },
-      body: JSON.stringify({
-        name,
-        transport: "streamable_http",
-        url: "https://mcp.example.test/stream",
-        allowed_tools: ["search", "fetch"],
-        secret_ref: "handle:srt_fixture",
-      }),
+      body: JSON.stringify(registration),
+    })
+    assert.equal(missingKey.status, 400)
+    assert.equal((await missingKey.json() as { error: { code: string } }).error.code, "idempotency_key_required")
+
+    const registered = await fetch(`${base}/v1/mcp/servers`, {
+      method: "POST",
+      headers: { ...authHeaders(), "content-type": "application/json", "idempotency-key": "mcp-register-phase-one" },
+      body: JSON.stringify(registration),
     })
     const registeredBody = await registered.json() as {
       data: { server: Record<string, unknown> }
