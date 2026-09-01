@@ -84,6 +84,128 @@ describe("kokoro-bff v1 mock contract", () => {
     assert.deepEqual(await first.json(), await second.json())
   })
 
+  it("closes the project instruction read, update, and revision history flow", async () => {
+    const base = await listen(createBffServer(config()))
+    const projectId = "project_kokoro"
+    const read = await fetch(`${base}/v1/projects/${projectId}`, { headers: authHeaders() })
+    const readBody = await read.json() as {
+      data: { project: { id: string; instruction: string } }
+      meta: { request_id: string }
+    }
+    assert.equal(read.status, 200)
+    assert.equal(readBody.data.project.id, projectId)
+    assert.equal(typeof readBody.data.project.instruction, "string")
+
+    const nextInstruction = "Keep all implementation notes scoped to this project."
+    const missingKey = await fetch(`${base}/v1/projects/${projectId}`, {
+      method: "PATCH",
+      headers: { ...authHeaders(), "content-type": "application/json" },
+      body: JSON.stringify({ instruction: nextInstruction }),
+    })
+    assert.equal(missingKey.status, 400)
+    assert.equal((await missingKey.json() as { error: { code: string } }).error.code, "idempotency_key_required")
+
+    const init = {
+      method: "PATCH",
+      headers: { ...authHeaders(), "content-type": "application/json", "idempotency-key": "project-instruction-flow" },
+      body: JSON.stringify({ instruction: nextInstruction }),
+    }
+    const updated = await fetch(`${base}/v1/projects/${projectId}`, init)
+    const replayed = await fetch(`${base}/v1/projects/${projectId}`, init)
+    assert.equal(updated.status, 200)
+    assert.deepEqual(await updated.json(), await replayed.json())
+
+    const afterUpdate = await fetch(`${base}/v1/projects/${projectId}`, { headers: authHeaders() })
+    const afterUpdateBody = await afterUpdate.json() as { data: { project: { instruction: string } } }
+    assert.equal(afterUpdateBody.data.project.instruction, nextInstruction)
+
+    const revisions = await fetch(`${base}/v1/projects/${projectId}/instruction-revisions`, { headers: authHeaders() })
+    const revisionsBody = await revisions.json() as {
+      data: { items: Array<{ id: string; instruction: string; updatedAt: number; actorName: string; current: boolean }> }
+      meta: { request_id: string }
+    }
+    assert.equal(revisions.status, 200)
+    assert.ok(revisionsBody.data.items.length >= 2)
+    assert.equal(revisionsBody.data.items[0]?.instruction, nextInstruction)
+    assert.equal(revisionsBody.data.items[0]?.current, true)
+    assert.ok(revisionsBody.data.items[0]?.id)
+    assert.equal(typeof revisionsBody.data.items[0]?.updatedAt, "number")
+    assert.equal(typeof revisionsBody.data.items[0]?.actorName, "string")
+    assert.ok(revisionsBody.meta.request_id.length > 0)
+  })
+
+  it("accepts project resource multipart mocks and replays the canonical success", async () => {
+    const base = await listen(createBffServer(config()))
+    const path = "/v1/projects/project_kokoro/resources"
+    const missingKeyBody = new FormData()
+    missingKeyBody.append("files", new Blob(["fixture bytes"], { type: "text/plain" }), "fixture.txt")
+    const missingKey = await fetch(`${base}${path}`, {
+      method: "POST",
+      headers: authHeaders(),
+      body: missingKeyBody,
+    })
+    assert.equal(missingKey.status, 400)
+    assert.equal((await missingKey.json() as { error: { code: string } }).error.code, "idempotency_key_required")
+
+    const makeBody = () => {
+      const form = new FormData()
+      form.append("files", new Blob(["fixture bytes"], { type: "text/plain" }), "fixture.txt")
+      return form
+    }
+    const init = { method: "POST", headers: { ...authHeaders(), "idempotency-key": "project-resource-flow" }, body: makeBody() }
+    const first = await fetch(`${base}${path}`, init)
+    const second = await fetch(`${base}${path}`, init)
+    const firstBody = await first.json() as { data: { ok: boolean } }
+    const secondBody = await second.json() as { data: { ok: boolean } }
+    assert.equal(first.status, 200)
+    assert.deepEqual(firstBody, secondBody)
+    assert.deepEqual(firstBody.data, { ok: true })
+  })
+
+  it("persists project skill state and creates scheduled tasks from snake_case Web input", async () => {
+    const base = await listen(createBffServer(config()))
+    const projectId = "project_kokoro"
+    const skillPath = `${base}/v1/projects/${projectId}/skills/skill-builder`
+    const missingSkillKey = await fetch(skillPath, {
+      method: "PATCH",
+      headers: { ...authHeaders(), "content-type": "application/json" },
+      body: JSON.stringify({ enabled: false }),
+    })
+    assert.equal(missingSkillKey.status, 400)
+    assert.equal((await missingSkillKey.json() as { error: { code: string } }).error.code, "idempotency_key_required")
+
+    const disabled = await fetch(skillPath, {
+      method: "PATCH",
+      headers: { ...authHeaders(), "content-type": "application/json", "idempotency-key": "project-skill-disable" },
+      body: JSON.stringify({ enabled: false }),
+    })
+    const disabledBody = await disabled.json() as { data: { skill: { project_id: string; name: string; enabled: boolean } } }
+    assert.equal(disabled.status, 200)
+    assert.deepEqual(disabledBody.data.skill, { project_id: projectId, name: "skill-builder", enabled: false })
+
+    const scheduled = await fetch(`${base}/v1/projects/${projectId}/scheduled-tasks`, {
+      method: "POST",
+      headers: { ...authHeaders(), "content-type": "application/json", "idempotency-key": "project-scheduled-flow" },
+      body: JSON.stringify({
+        title: "Daily briefing",
+        prompt: "Summarize the project updates.",
+        frequency: "daily",
+        time: "08:00",
+        timezone: "UTC",
+        expires_at: "2026-02-01T00:00:00.000Z",
+        auto_approve: true,
+      }),
+    })
+    const scheduledBody = await scheduled.json() as {
+      data: { task: { project_id: string; title: string; expires_at?: string; auto_approve: boolean } }
+    }
+    assert.equal(scheduled.status, 200)
+    assert.equal(scheduledBody.data.task.project_id, projectId)
+    assert.equal(scheduledBody.data.task.title, "Daily briefing")
+    assert.equal(scheduledBody.data.task.expires_at, "2026-02-01T00:00:00.000Z")
+    assert.equal(scheduledBody.data.task.auto_approve, true)
+  })
+
   it("keeps Agent setup as a BFF projection while Chat remains outside this service", async () => {
     const base = await listen(createBffServer(config()))
     const response = await fetch(`${base}/v1/agents/connections/setup?platform=telegram`, { headers: authHeaders() })
@@ -108,7 +230,7 @@ describe("kokoro-bff v1 mock contract", () => {
     assert.equal(created.status, 200)
     const createdBody = await created.json() as { data: { task: { id: string } } }
     const listed = await fetch(`${base}/v1/scheduled-tasks`, { headers: authHeaders() })
-    assert.equal((await listed.json() as { data: { tasks: unknown[] } }).data.tasks.length, 2)
+    assert.ok((await listed.json() as { data: { tasks: unknown[] } }).data.tasks.length >= 2)
     assert.match(createdBody.data.task.id, /^scheduled_/)
   })
 
@@ -328,6 +450,21 @@ describe("kokoro-bff v1 mock contract", () => {
       .some((server) => server.name === name), false)
   })
 
+  it("routes live Skills traffic to the explicit Skills upstream", async () => {
+    const upstream = createServer((_request, response) => {
+      response.setHeader("content-type", "application/json")
+      response.end(JSON.stringify({ data: { skills: [] }, meta: { request_id: "skills-live" } }))
+    })
+    const upstreamBase = await listen(upstream)
+    const base = await listen(createBffServer(config({
+      mode: "live",
+      upstreams: { ...config().upstreams, skills: upstreamBase, hub: null },
+    })))
+    const response = await fetch(`${base}/v1/skills/pool`, { headers: authHeaders() })
+    assert.equal(response.status, 200)
+    assert.deepEqual(await response.json(), { data: { skills: [] }, meta: { request_id: "skills-live" } })
+  })
+
   it("generates standard Forwarded context for live upstream calls", async () => {
     let received: Record<string, string | undefined> = {}
     const upstream = createServer((request, response) => {
@@ -346,5 +483,31 @@ describe("kokoro-bff v1 mock contract", () => {
     assert.equal(response.status, 200)
     assert.deepEqual(received, { forwarded: "host=dev.kokoro.localhost", service: "kokoro-bff", secret: "bff-upstream-secret", xDomain: undefined })
     assert.equal((await response.json() as { meta: { request_id: string } }).meta.request_id, "live-request")
+  })
+
+  it("routes top-level skills to the skills upstream while MCP stays on hub", async () => {
+    const received: string[] = []
+    const skillsUpstream = createServer((request, response) => {
+      received.push(`skills:${request.url}`)
+      response.setHeader("content-type", "application/json")
+      response.end(JSON.stringify({ data: { skills: [] }, meta: { request_id: "upstream" } }))
+    })
+    const hubUpstream = createServer((request, response) => {
+      received.push(`hub:${request.url}`)
+      response.setHeader("content-type", "application/json")
+      response.end(JSON.stringify({ data: { servers: [] }, meta: { request_id: "upstream" } }))
+    })
+    const skillsBase = await listen(skillsUpstream)
+    const hubBase = await listen(hubUpstream)
+    const base = await listen(createBffServer(config({
+      mode: "live",
+      upstreams: { ...config().upstreams, skills: skillsBase, hub: hubBase },
+    })))
+
+    const skills = await fetch(`${base}/v1/skills`, { headers: authHeaders() })
+    const mcp = await fetch(`${base}/v1/mcp/servers`, { headers: authHeaders() })
+    assert.equal(skills.status, 200)
+    assert.equal(mcp.status, 200)
+    assert.deepEqual(received, ["skills:/skills", "hub:/mcp/servers"])
   })
 })

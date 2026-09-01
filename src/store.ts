@@ -6,6 +6,7 @@ import type {
   McpServer,
   McpTransport,
   Project,
+  ProjectInstructionRevision,
   ScheduledTask,
   Skill,
   SkillQuota,
@@ -22,6 +23,7 @@ export class MockStore {
     name: "Kokoro",
     slug: "kokoro",
     description: "Kokoro product workspace",
+    instruction: "Keep implementation notes scoped to this project.",
     created_at: now,
     updated_at: now,
   }]
@@ -60,6 +62,20 @@ export class MockStore {
 
   readonly mcpServers: McpServer[] = []
 
+  readonly projectInstructionHistory = new Map<string, ProjectInstructionRevision[]>([
+    ["project_kokoro", [{
+      id: "project-instruction-initial",
+      instruction: "Keep implementation notes scoped to this project.",
+      updatedAt: 1767225600000,
+      actorName: "Kokoro",
+      current: true,
+    }]],
+  ])
+
+  readonly projectSkills = new Map<string, Map<string, boolean>>([
+    ["project_kokoro", new Map([["skill-builder", true]])],
+  ])
+
   readonly library: LibraryItem[] = [{
     id: "artifact_contract",
     title: "Business API contract",
@@ -82,6 +98,44 @@ export class MockStore {
 
   projectTasks(projectId: string): Task[] {
     return this.tasks.filter((task) => task.project_id === projectId)
+  }
+
+  findProject(idOrSlug: string): Project | undefined {
+    return this.projects.find((project) => project.id === idOrSlug || project.slug === idOrSlug)
+  }
+
+  updateProjectInstruction(projectId: string, instruction: string): Project | undefined {
+    const project = this.findProject(projectId)
+    if (project === undefined) return undefined
+    project.instruction = instruction
+    project.updated_at = new Date().toISOString()
+    const history = this.projectInstructionHistory.get(project.id) ?? []
+    const revision: ProjectInstructionRevision = {
+      id: `project-instruction-${history.length + 1}`,
+      instruction,
+      updatedAt: Date.now(),
+      actorName: "You",
+      current: true,
+    }
+    this.projectInstructionHistory.set(project.id, [revision, ...history.map((item) => ({ ...item, current: false }))])
+    return project
+  }
+
+  projectInstructions(projectId: string): ProjectInstructionRevision[] {
+    return this.projectInstructionHistory.get(this.findProject(projectId)?.id ?? projectId) ?? []
+  }
+
+  setProjectSkillEnabled(projectId: string, name: string, enabled: boolean): boolean {
+    const project = this.findProject(projectId)
+    if (project === undefined) return false
+    const skills = this.projectSkills.get(project.id) ?? new Map<string, boolean>()
+    skills.set(name, enabled)
+    this.projectSkills.set(project.id, skills)
+    return true
+  }
+
+  projectSkillEnabled(projectId: string, name: string): boolean | undefined {
+    return this.projectSkills.get(this.findProject(projectId)?.id ?? projectId)?.get(name)
   }
 
   skillQuota(namespace: string): SkillQuota {
@@ -171,12 +225,15 @@ export class MockStore {
       updated_at: timestamp,
     }
     this.projects.push(project)
+    this.projectInstructionHistory.set(project.id, [])
+    this.projectSkills.set(project.id, new Map())
     return project
   }
 
   createScheduledTask(input: Partial<ScheduledTask>): ScheduledTask {
     const task: ScheduledTask = {
       id: `scheduled_${this.scheduledTasks.length + 1}`,
+      project_id: input.project_id,
       title: input.title || "Untitled task",
       prompt: input.prompt || "",
       frequency: input.frequency || "daily",

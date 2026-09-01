@@ -53,8 +53,9 @@ x-kokoro-user-id: <sealed-session user id>
 | --- | --- | --- |
 | GET | `/healthz`, `/readyz` | 进程/配置探针，不需要业务身份 |
 | GET/POST | `/v1/projects` | 专案列表与创建 |
-| GET | `/v1/projects/:projectId` | 专案投影 |
-| GET | `/v1/projects/:projectId/tasks` | 专案任务投影 |
+| GET/PATCH | `/v1/projects/:projectId` | 专案投影与 instruction 更新 |
+| GET | `/v1/projects/:projectId/tasks`, `/v1/projects/:projectId/instruction-revisions` | 专案任务与 instruction 历史 |
+| POST/PATCH | `/v1/projects/:projectId/resources`, `/v1/projects/:projectId/scheduled-tasks`, `/v1/projects/:projectId/skills/:skill` | 专案资源、排程与技能投影 |
 | GET | `/v1/skills`, `/v1/skills/pool`, `/v1/skills/catalog` | 技能目录/池 |
 | GET | `/v1/skills/quota` | 当前 namespace 技能包配额 |
 | GET | `/v1/skills/:name/revisions[?scope=...]` | 技能版本历史 |
@@ -83,7 +84,7 @@ GitHub skill 预览和导入使用相同的请求/响应数据形状：请求体
 ## Mock → Live
 
 - `KOKORO_BFF_MODE=mock`：只使用 `src/store.ts` 的本地 fixture，适合 Web/BFF 联调。
-- `KOKORO_BFF_MODE=live`：按 `KOKORO_*_BASE_URL` 选择上游；缺少对应地址直接返回 `503 upstream_not_configured`，不会静默回退到 mock。
+- `KOKORO_BFF_MODE=live`：按 `KOKORO_*_BASE_URL` 选择上游；Skills 使用独立的 `KOKORO_SKILLS_BASE_URL`，MCP/connectors 使用 `KOKORO_HUB_BASE_URL`；缺少对应地址直接返回 `503 upstream_not_configured`，不会静默回退到 mock。
 - 出站请求统一注入 `x-kokoro-service: kokoro-bff`、`x-kokoro-request-id`、标准 `Forwarded` 和可选内部 secret。
 - Agent 目前没有 HTTP server，因此 live 模式不会假装调用它；部署 Agent HTTP adapter 后再启用 `KOKORO_AGENT_BASE_URL`。
 

@@ -35,8 +35,9 @@
 | 方法 | 路径 | 责任 |
 | --- | --- | --- |
 | GET/POST | `/v1/projects` | 专案列表与创建 |
-| GET | `/v1/projects/:projectId` | 专案投影 |
-| GET | `/v1/projects/:projectId/tasks` | 专案任务投影 |
+| GET/PATCH | `/v1/projects/:projectId` | 专案投影与 instruction 更新 |
+| GET | `/v1/projects/:projectId/tasks`, `/v1/projects/:projectId/instruction-revisions` | 专案任务与 instruction 历史 |
+| POST/PATCH | `/v1/projects/:projectId/resources`, `/v1/projects/:projectId/scheduled-tasks`, `/v1/projects/:projectId/skills/:skill` | 专案资源、排程与技能投影 |
 | GET | `/v1/skills`, `/v1/skills/pool`, `/v1/skills/catalog` | 技能目录/池 |
 | GET | `/v1/skills/quota` | 当前 namespace 技能包配额 |
 | GET | `/v1/skills/:name/revisions[?scope=...]` | 技能版本历史 |
@@ -57,6 +58,14 @@
 
 技能配额、版本历史与 MCP server 成功响应必须符合 Web schemas 的 data 结构。MCP 注册体为
 `{ "name": "...", "transport": "http|streamable_http", "url": "...", "allowed_tools": [], "secret_ref": null }`；`scope` 由 BFF 从 namespace 派生，启停/删除成功返回 `data: { "ok": true }`。
+
+## 上游选择
+
+Live 模式按业务资源选择独立的显式 upstream：Projects → `KOKORO_PROJECTS_BASE_URL`，Skills →
+`KOKORO_SKILLS_BASE_URL`，MCP/connectors → `KOKORO_HUB_BASE_URL`，Scheduled →
+`KOKORO_SCHEDULED_BASE_URL`，Agents → `KOKORO_AGENT_BASE_URL`，Library →
+`KOKORO_LIBRARY_BASE_URL`，Billing → `KOKORO_BILLING_BASE_URL`。缺少对应地址返回
+`upstream_not_configured`，不回退到 Gateway 或 Mock。
 
 ## 责任分层
 

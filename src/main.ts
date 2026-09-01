@@ -163,6 +163,10 @@ function jsonBody(body: Buffer): Record<string, unknown> | null {
   }
 }
 
+function isMultipart(request: IncomingMessage): boolean {
+  return request.headers["content-type"]?.toLowerCase().startsWith("multipart/form-data") === true
+}
+
 function mutationKey(request: IncomingMessage, path: string, context: Context): string | null {
   const key = request.headers["idempotency-key"]
   if (typeof key !== "string" || key.trim() === "") return null
@@ -253,7 +257,7 @@ async function mockBusiness(
     }
   }
 
-  const input = body === undefined ? {} : jsonBody(body)
+  const input = body === undefined || isMultipart(request) ? {} : jsonBody(body)
   if (body !== undefined && input === null) {
     result(response, 400, failure("invalid_json", "Request body must be a JSON object", context.requestId), context)
     return
@@ -269,10 +273,48 @@ async function mockBusiness(
         status = 400
         payload = failure("invalid_project", "Project name is required", context.requestId)
       } else payload = { project: store.createProject({ name: json.name.trim(), description: typeof json.description === "string" ? json.description : undefined }) }
-    } else if (segments.length === 2 && method === "GET") {
-      const project = store.projects.find((item) => item.id === segments[1] || item.slug === segments[1])
+    } else if (segments.length === 2 && (method === "GET" || method === "PATCH")) {
+      const project = store.findProject(segments[1] || "")
       if (project === undefined) { status = 404; payload = failure("project_not_found", "Project was not found", context.requestId) }
-      else payload = { project }
+      else if (method === "GET") payload = { project }
+      else if (typeof json.instruction !== "string") {
+        status = 400
+        payload = failure("invalid_project_instruction", "Project instruction must be a string", context.requestId)
+      } else payload = { project: store.updateProjectInstruction(project.id, json.instruction) }
+    } else if (segments.length === 3 && segments[2] === "instruction-revisions" && method === "GET") {
+      if (store.findProject(segments[1] || "") === undefined) {
+        status = 404
+        payload = failure("project_not_found", "Project was not found", context.requestId)
+      } else payload = { items: store.projectInstructions(segments[1] || "") }
+    } else if (segments.length === 3 && segments[2] === "resources" && method === "POST") {
+      if (store.findProject(segments[1] || "") === undefined) {
+        status = 404
+        payload = failure("project_not_found", "Project was not found", context.requestId)
+      } else payload = { ok: true }
+    } else if (segments.length === 4 && segments[2] === "skills" && method === "PATCH") {
+      const project = store.findProject(segments[1] || "")
+      if (project === undefined) {
+        status = 404
+        payload = failure("project_not_found", "Project was not found", context.requestId)
+      } else if (typeof json.enabled !== "boolean") {
+        status = 400
+        payload = failure("invalid_project_skill", "Skill enabled must be a boolean", context.requestId)
+      } else {
+        store.setProjectSkillEnabled(project.id, segments[3] || "", json.enabled)
+        payload = { skill: { project_id: project.id, name: segments[3] || "", enabled: json.enabled } }
+      }
+    } else if (segments.length === 3 && segments[2] === "scheduled-tasks" && method === "POST") {
+      const project = store.findProject(segments[1] || "")
+      if (project === undefined) {
+        status = 404
+        payload = failure("project_not_found", "Project was not found", context.requestId)
+      } else {
+        const task = store.createScheduledTask({
+          ...(json as Partial<ScheduledTask>),
+          project_id: project.id,
+        })
+        payload = { task }
+      }
     } else if (segments.length === 3 && segments[2] === "tasks" && method === "GET") {
       payload = taskData(store.projectTasks(segments[1] || ""))
     } else { status = 404; payload = failure("bff_route_not_found", "Business route was not found", context.requestId) }
@@ -384,7 +426,8 @@ async function mockBusiness(
 
 function upstreamKey(segments: string[]): string | null {
   if (segments[0] === "projects") return "projects"
-  if (segments[0] === "skills" || segments[0] === "mcp" || segments[0] === "connectors" || segments[0] === "preferences" || segments[0] === "cloud-computers" || segments[0] === "integrations") return "hub"
+  if (segments[0] === "skills") return "skills"
+  if (segments[0] === "mcp" || segments[0] === "connectors" || segments[0] === "preferences" || segments[0] === "cloud-computers" || segments[0] === "integrations") return "hub"
   if (segments[0] === "scheduled-tasks") return "scheduled"
   if (segments[0] === "agents") return "agents"
   if (segments[0] === "library") return "library"

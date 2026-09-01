@@ -18,8 +18,17 @@ export type Project = {
   name: string
   slug: string
   description: string
+  instruction?: string
   created_at: string
   updated_at: string
+}
+
+export type ProjectInstructionRevision = {
+  id: string
+  instruction: string
+  updatedAt: number
+  actorName: string
+  current: boolean
 }
 
 export type Task = {
@@ -75,6 +84,7 @@ export type McpServer = {
 
 export type ScheduledTask = {
   id: string
+  project_id?: string
   title: string
   prompt: string
   frequency: "daily" | "weekly"
