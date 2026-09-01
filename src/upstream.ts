@@ -1,8 +1,13 @@
 import { request as httpRequest } from "node:http"
 import { request as httpsRequest } from "node:https"
-import { Readable } from "node:stream"
 
 import type { BffConfig } from "./config.js"
+
+export type UpstreamResponse = {
+  status: number
+  headers: Headers
+  body: Buffer
+}
 
 function requestHeaders(config: BffConfig, requestId: string, incoming: Headers): Record<string, string> {
   const headers = new Headers()
@@ -33,7 +38,7 @@ export async function proxyUpstream(
   requestId: string,
   incoming: Headers,
   body: Buffer | undefined,
-): Promise<Response> {
+): Promise<UpstreamResponse> {
   const target = new URL(path, `${baseUrl.replace(/\/+$/u, "/")}`)
   const requestFn = target.protocol === "https:" ? httpsRequest : httpRequest
   return new Promise((resolve, reject) => {
@@ -41,11 +46,17 @@ export async function proxyUpstream(
       method,
       headers: requestHeaders(config, requestId, incoming),
     }, (response) => {
-      const stream = response.statusCode === 204 ? undefined : Readable.toWeb(response) as ReadableStream<Uint8Array>
-      resolve(new Response(stream, {
-        status: response.statusCode ?? 502,
-        headers: incomingHeaders(response.headers),
-      }))
+      const chunks: Buffer[] = []
+      response.on("data", (chunk) => {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+      })
+      response.on("end", () => {
+        resolve({
+          status: response.statusCode ?? 502,
+          headers: incomingHeaders(response.headers),
+          body: Buffer.concat(chunks),
+        })
+      })
     })
     client.once("error", reject)
     if (body !== undefined) client.write(body)

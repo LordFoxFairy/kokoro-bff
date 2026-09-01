@@ -49,7 +49,7 @@ KOKORO_BFF_SHARED_SECRET=local-web-bff-secret
 KOKORO_DOMAIN=dev.kokoro.localhost
 ```
 
-生产拓扑为 `Web → BFF → 业务 API`。`kokoro-gateway` 不在该路径中，Chat 仍是 `Web → kokoro-session`。
+生产拓扑为 `Web → BFF → 业务 API/Agent`。`kokoro-gateway` 不在该路径中；Chat 由 BFF 的 Chat 业务模块边界统一承接，Agent 仅负责 Run、control、HITL 与恢复执行。
 
 ## 健康检查和回滚
 

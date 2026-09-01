@@ -10,14 +10,16 @@ Kokoro BFF 是浏览器 Web 与业务 API 子仓库之间的业务适配层，�
 - 幂等、request id、错误归一
 - Mock/Live upstream 切换
 
+阶段 1 只依赖 PostgreSQL + Redis；BFF 不引入 MySQL 或 Mongo 连接，也不把旧存储模型带回本仓。Mock/Live 只通过 HTTP upstream 与 Redis/PG adapter 契约协作。
+
 BFF 不负责：
 
 - 浏览器 UI 和组件
-- Chat/SSE、消息和 run control 的事实存储
+- Agent 执行内核；Chat 的 Web-facing v1 会话/消息/SSE/control/share 由 BFF 的 Chat 业务模块边界承接，Agent 只负责执行事实与恢复
 - Agent Redis Worker 的内部实现
 - 直接访问其他业务子仓库的 SQL
 
-机器可读契约：[openapi.yaml](./openapi.yaml)。本阶段先冻结 Health、Projects 和项目级投影；其余业务资源按同一结构逐步补齐。
+机器可读契约：[openapi.yaml](./openapi.yaml)。本阶段覆盖 Health、Projects、Chat、Skills、MCP、Scheduled、Agents setup、Library 与 Billing 的现有 v1 业务面。
 
 ## Base URL 和调用方
 
@@ -33,11 +35,12 @@ http://127.0.0.1:4300
 x-kokoro-service: web-bff
 x-kokoro-internal-secret: <KOKORO_BFF_SHARED_SECRET>
 x-kokoro-namespace: <sealed-session namespace>
-x-kokoro-user-id: <sealed-session user id>
+x-kokoro-principal-id: <trusted principal id>
 x-kokoro-request-id: <optional request id>
 ```
 
-`x-kokoro-namespace` 和 `x-kokoro-user-id` 必须来自 Web 服务端解封后的 session。浏览器自行携带的 tenant、site、`X-Domain` 或 `X-Forwarded-*` 不参与身份选择。
+`x-kokoro-namespace` 和 `x-kokoro-principal-id` 必须来自 Web 服务端解封后的 session。浏览器自行携带的 tenant、site、`X-Domain` 或 `X-Forwarded-*` 不参与身份选择。
+`/v1/shared/:shareId` 只允许 Web server-only adapter 用 `x-kokoro-service + x-kokoro-internal-secret` 读取公开快照，不需要用户 namespace。
 
 ## 成功响应
 
@@ -87,7 +90,7 @@ x-kokoro-request-id: <optional request id>
 | 409 | 当前状态冲突或重复资源 | `mcp_server_exists` |
 | 413 | 请求体超过限制 | `request_body_too_large` |
 | 429 | 上游限流 | `rate_limited` |
-| 502 | 上游不可达或响应不符合契约 | `upstream_unreachable` |
+| 502 | 上游不可达、HTTP 错误或响应不符合契约 | `upstream_unreachable`, `upstream_http_error`, `upstream_response_invalid` |
 | 503 | 对应业务上游未配置 | `upstream_not_configured` |
 
 `message` 面向日志和调试，Web 的用户文案应按稳定 `code` 映射。生产环境不得把上游凭据、堆栈或 SQL 错误返回给客户端。
@@ -107,6 +110,7 @@ namespace + HTTP method + canonical path + Idempotency-Key
 ```
 
 相同范围的重复请求必须返回第一次请求的 HTTP 状态和业务响应。相同 key 但请求语义不同，不得复用旧结果，应由实现记录请求指纹并返回冲突。
+Mock/Live 两种模式都必须遵守同一幂等判定入口。
 
 ## Live upstream
 
@@ -118,7 +122,6 @@ BFF 通过显式环境变量选择业务服务：
 | Skills | `KOKORO_SKILLS_BASE_URL` |
 | MCP/Connectors | `KOKORO_HUB_BASE_URL` |
 | Scheduled | `KOKORO_SCHEDULED_BASE_URL` |
-| Agents | `KOKORO_AGENT_BASE_URL` |
 | Library | `KOKORO_LIBRARY_BASE_URL` |
 | Billing | `KOKORO_BILLING_BASE_URL` |
 
@@ -136,7 +139,8 @@ Forwarded: host=<KOKORO_DOMAIN>
 | 资源 | v1 文档 | Mock | Live 替换 |
 | --- | --- | --- | --- |
 | Projects | 已完成 | 已完成 | 按 `KOKORO_PROJECTS_BASE_URL` |
+| Chat | 已完成 | 已完成 | BFF 的 Chat 业务边界；live 等待 Agent HTTP adapter |
 | Skills | 下一阶段 | 已完成 | 按 `KOKORO_SKILLS_BASE_URL` |
 | Scheduled | 下一阶段 | 已完成 | 按 `KOKORO_SCHEDULED_BASE_URL` |
-| Agents setup | 下一阶段 | 已完成 | 按 `KOKORO_AGENT_BASE_URL` |
+| Agents setup | 下一阶段 | 已完成 | Mock 可用；live 等待 Agent HTTP adapter |
 | Library/Billing | 下一阶段 | 已完成 | 按对应 upstream |

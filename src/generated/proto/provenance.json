@@ -1,0 +1,51 @@
+{
+  "consumer": "kokoro-bff",
+  "generatorSha256": "c3ccc8124c83697c901eadaa1643de1d8753c390253fe274658c30360512bd46",
+  "language": "typescript",
+  "manifestSha256": "c395b2bdf2d7898b36279a7a2ed84174b9f5b59af6453f6100221cc39af93522",
+  "outputs": {
+    "kokoro/agent/v1/agent_events_pb.ts": "bfd10c30d074e6e577fa874e4f415c4cadf82478a79df24ef8c07ad245ca16ca",
+    "kokoro/agent/v1/agent_runtime_pb.ts": "d8518eaaf9ca2efdc4dad1b2326c7faffe23da463fb7212666461596e382387d",
+    "kokoro/chat/v1/chat_pb.ts": "77546d7d3374fd348ba4f3ce26e68db8df2fa505696ad450aa7c694c28d90fa8",
+    "kokoro/common/v1/common_pb.ts": "6e3e306499960dd556214a2496258a946c30dc1fa4e7bdeb1ecf82c5b3d6dae5",
+    "kokoro/iam/v1/authorization_pb.ts": "9ddba46a14678ceee5a7ef1a862bf71aa58938bfa7efb213135d833893cbf2c5"
+  },
+  "protoFiles": [
+    "kokoro/common/v1/common.proto",
+    "kokoro/chat/v1/chat.proto",
+    "kokoro/iam/v1/authorization.proto",
+    "kokoro/agent/v1/agent_events.proto",
+    "kokoro/agent/v1/agent_runtime.proto"
+  ],
+  "registeredSourceSha256": {
+    ".node-version": "f14b4987904bcb5814e4459a057ed4d20f58a633152288a761214dcd28780b56",
+    "contract/buf.gen.yaml": "390173e03715ae9d24db494e05a354b69e5b53223e8cdbf68626c8a07dc5df25",
+    "contract/consumers.yaml": "4c05de85c0a9ce63358a80a9d13210fbb6953f8d365121e04fe8e2f33a71fee9",
+    "contract/generate.py": "c3ccc8124c83697c901eadaa1643de1d8753c390253fe274658c30360512bd46",
+    "contract/openapi/slice-a-web-v1.yaml": "57c96022ad35b1cc978af340e69412d715e14a5611d3e5e1566fdb93d583bb26",
+    "contract/proto/kokoro/agent/v1/agent_events.proto": "d6a105ee8b747c418f0818f9a87293e1ac0d8e8efd13824e632031c0db6ca609",
+    "contract/proto/kokoro/agent/v1/agent_runtime.proto": "1206b536cad9f52b1084dbc6136e13d9a592223565e8cebeb4435e2ae2632594",
+    "contract/proto/kokoro/capability/v1/capability_runtime.proto": "b2201252959d480baed2070dd1fe4ae3ca8955e78ec55eb5fa17a99b558a50c3",
+    "contract/proto/kokoro/chat/v1/chat.proto": "558b555ed78a9b73be9a68d744b1528352dd8f1bccf8a4a9efd4b4fe02099783",
+    "contract/proto/kokoro/common/v1/common.proto": "936baf2c132146b9b159248dcca634787578f9aa8ad0403c041df96f79b3ab5e",
+    "contract/proto/kokoro/iam/v1/authentication.proto": "1e89045a58bd21d19850eb15c5ac76090ec65cf0376b6770ec6fa4d7b7f99541",
+    "contract/proto/kokoro/iam/v1/authorization.proto": "78b53cbbd02d5bd2efad23881d040a1519cd3502a582351394da48244187d95f",
+    "contract/proto/kokoro/model/v1/model_catalog.proto": "9de803e0511c744374541c980bdcb6a1f4a6b66d846fc61f1f75fd2db71923b3",
+    "contract/proto/kokoro/site/v1/site.proto": "b5a8732c83fe4b095358a79715064714b2b483e71bc3d6715ead7fecdb84322c",
+    "contract/proto/kokoro/storage/v1/storage.proto": "20a498ad61b7ddd869d1917ab6b774732a85d5ac06b08313d1c050ec37d2ab71",
+    "contract/slice-a-contract-manifest.yaml": "c395b2bdf2d7898b36279a7a2ed84174b9f5b59af6453f6100221cc39af93522",
+    "contract/validate_slice_a_manifest.py": "8aeb4b11c3a6045b415d7b94707cc2d5ef1b6f96ac7ba72086c8d2a5a523707d",
+    "package.json": "02b640687727b2826801076ab5a5b3ba182a48f37944898fed264dbd731bc680",
+    "pnpm-lock.yaml": "378729d7e6b4432d484f0097f52525f162e324dab06a0e20fa31e279ec949270",
+    "pnpm-workspace.yaml": "0f22d54194aa7cc861b7589ddada4355f0c145a77f130810adee19a0e9189279",
+    "pyproject.toml": "900d8b31deb010bf26bdb5ccd16466bdb176d3d609068c678bd7e3d967a9bf09",
+    "uv.lock": "09bc222ff5c4308fd2ed5967407dd1dd41b44ffbfebe8839ef441aa78d06468f"
+  },
+  "sourceRootCommit": "afd367db387e11172150e64b8c5278918c47cd24",
+  "sourceRootTree": "c161b67ad7853f9a8dba46b480943629b75a9393",
+  "tools": {
+    "grpcio-tools": "1.76.0",
+    "protobuf": "6.33.6",
+    "protoc-gen-es": "2.14.0"
+  }
+}

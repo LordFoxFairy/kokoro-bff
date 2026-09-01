@@ -1,6 +1,8 @@
 import { createServer, type Server } from "node:http"
+import { existsSync, readFileSync } from "node:fs"
 import assert from "node:assert/strict"
 import { afterEach, describe, it } from "node:test"
+import { fileURLToPath } from "node:url"
 
 import { createBffServer } from "../dist/main.js"
 import type { BffConfig } from "../src/config.js"
@@ -44,7 +46,7 @@ function authHeaders(): Record<string, string> {
     "x-kokoro-service": "web-bff",
     "x-kokoro-internal-secret": "test-secret",
     "x-kokoro-namespace": "ns_test",
-    "x-kokoro-user-id": "user_test",
+    "x-kokoro-principal-id": "user_test",
   }
 }
 
@@ -82,6 +84,14 @@ describe("kokoro-bff v1 mock contract", () => {
     const second = await fetch(`${base}/v1/projects`, createInit)
     assert.equal(first.status, 200)
     assert.deepEqual(await first.json(), await second.json())
+
+    const conflict = await fetch(`${base}/v1/projects`, {
+      method: "POST",
+      headers: { ...headers, "content-type": "application/json", "idempotency-key": "project-create-1" },
+      body: JSON.stringify({ name: "Design system", description: "Different payload" }),
+    })
+    assert.equal(conflict.status, 409)
+    assert.equal((await conflict.json() as { error: { code: string } }).error.code, "idempotency_conflict")
   })
 
   it("closes the project instruction read, update, and revision history flow", async () => {
@@ -206,7 +216,7 @@ describe("kokoro-bff v1 mock contract", () => {
     assert.equal(scheduledBody.data.task.auto_approve, true)
   })
 
-  it("keeps Agent setup as a BFF projection while Chat remains outside this service", async () => {
+  it("keeps Agent setup and Chat as BFF-owned projections", async () => {
     const base = await listen(createBffServer(config()))
     const response = await fetch(`${base}/v1/agents/connections/setup?platform=telegram`, { headers: authHeaders() })
     assert.equal(response.status, 200)
@@ -232,6 +242,45 @@ describe("kokoro-bff v1 mock contract", () => {
     const listed = await fetch(`${base}/v1/scheduled-tasks`, { headers: authHeaders() })
     assert.ok((await listed.json() as { data: { tasks: unknown[] } }).data.tasks.length >= 2)
     assert.match(createdBody.data.task.id, /^scheduled_/)
+  })
+
+  it("reports readyz from the actual mode and upstream configuration", async () => {
+    const mockBase = await listen(createBffServer(config()))
+    const mockReady = await fetch(`${mockBase}/readyz`)
+    assert.equal(mockReady.status, 200)
+    assert.deepEqual(await mockReady.json(), { status: "ok", service: "kokoro-bff", mode: "mock" })
+
+    const upstream = createServer((_request, response) => {
+      response.setHeader("content-type", "application/json")
+      response.end(JSON.stringify({ data: { ok: true }, meta: { request_id: "readyz-live" } }))
+    })
+    const upstreamBase = await listen(upstream)
+    const liveReadyBase = await listen(createBffServer(config({
+      mode: "live",
+      upstreams: {
+        projects: upstreamBase,
+        hub: upstreamBase,
+        skills: upstreamBase,
+        scheduled: upstreamBase,
+        agents: null,
+        library: upstreamBase,
+        billing: upstreamBase,
+      },
+    })))
+    const liveReady = await fetch(`${liveReadyBase}/readyz`)
+    assert.equal(liveReady.status, 503)
+    assert.deepEqual(await liveReady.json(), { status: "ok", service: "kokoro-bff", mode: "live" })
+
+    const liveAgentRoute = await fetch(`${liveReadyBase}/v1/sessions`, { headers: authHeaders() })
+    assert.equal(liveAgentRoute.status, 503)
+    assert.equal((await liveAgentRoute.json() as { error: { code: string } }).error.code, "upstream_not_configured")
+
+    const livePartialBase = await listen(createBffServer(config({
+      mode: "live",
+      upstreams: { ...config().upstreams, projects: upstreamBase },
+    })))
+    const livePartial = await fetch(`${livePartialBase}/readyz`)
+    assert.equal(livePartial.status, 503)
   })
 
   it("previews a GitHub skill without requiring Idempotency-Key", async () => {
@@ -509,5 +558,291 @@ describe("kokoro-bff v1 mock contract", () => {
     assert.equal(skills.status, 200)
     assert.equal(mcp.status, 200)
     assert.deepEqual(received, ["skills:/skills", "hub:/mcp/servers"])
+  })
+
+  it("covers auth failures, idempotency conflicts, live normalization, and docs coverage", async () => {
+    const unauthBase = await listen(createBffServer(config()))
+    const missingService = await fetch(`${unauthBase}/v1/projects`)
+    assert.equal(missingService.status, 403)
+    assert.equal((await missingService.json() as { error: { code: string } }).error.code, "service_auth_failed")
+
+    const secretlessBase = await listen(createBffServer(config({ sharedSecret: null })))
+    const missingServiceOnSecretless = await fetch(`${secretlessBase}/v1/projects`, {
+      headers: {
+        "x-kokoro-namespace": "ns_test",
+        "x-kokoro-principal-id": "user_test",
+      },
+    })
+    assert.equal(missingServiceOnSecretless.status, 401)
+
+    const wrongSecret = await fetch(`${unauthBase}/v1/projects`, {
+      headers: {
+        "x-kokoro-service": "web-bff",
+        "x-kokoro-internal-secret": "wrong",
+        "x-kokoro-namespace": "ns_test",
+        "x-kokoro-principal-id": "user_test",
+      },
+    })
+    assert.equal(wrongSecret.status, 403)
+
+    const missingNamespace = await fetch(`${unauthBase}/v1/projects`, {
+      headers: {
+        "x-kokoro-service": "web-bff",
+        "x-kokoro-internal-secret": "test-secret",
+        "x-kokoro-principal-id": "user_test",
+      },
+    })
+    assert.equal(missingNamespace.status, 403)
+
+    const missingUpstreamBase = await listen(createBffServer(config({
+      mode: "live",
+      upstreams: { ...config().upstreams, projects: null },
+    })))
+    const missingUpstream = await fetch(`${missingUpstreamBase}/v1/projects`, { headers: authHeaders() })
+    assert.equal(missingUpstream.status, 503)
+    assert.equal((await missingUpstream.json() as { error: { code: string } }).error.code, "upstream_not_configured")
+
+    const unreachableBase = await listen(createBffServer(config({
+      mode: "live",
+      upstreams: { ...config().upstreams, skills: "http://127.0.0.1:1" },
+    })))
+    const unreachable = await fetch(`${unreachableBase}/v1/skills/pool`, { headers: authHeaders() })
+    assert.equal(unreachable.status, 502)
+    assert.equal((await unreachable.json() as { error: { code: string } }).error.code, "upstream_unreachable")
+
+    const malformedUpstream = createServer((_request, response) => {
+      response.statusCode = 200
+      response.setHeader("content-type", "text/plain")
+      response.end("not json")
+    })
+    const malformedBase = await listen(malformedUpstream)
+    const malformedBff = await listen(createBffServer(config({
+      mode: "live",
+      upstreams: { ...config().upstreams, skills: malformedBase },
+    })))
+    const malformed = await fetch(`${malformedBff}/v1/skills/pool`, { headers: authHeaders() })
+    assert.equal(malformed.status, 502)
+    assert.equal((await malformed.json() as { error: { code: string } }).error.code, "upstream_response_invalid")
+
+    const emptyUpstream = createServer((_request, response) => {
+      response.statusCode = 200
+      response.setHeader("content-type", "application/json")
+      response.end("")
+    })
+    const emptyBase = await listen(emptyUpstream)
+    const emptyBff = await listen(createBffServer(config({
+      mode: "live",
+      upstreams: { ...config().upstreams, skills: emptyBase },
+    })))
+    const empty = await fetch(`${emptyBff}/v1/skills/pool`, { headers: authHeaders() })
+    assert.equal(empty.status, 502)
+    assert.equal((await empty.json() as { error: { code: string } }).error.code, "upstream_response_invalid")
+
+    const errorEnvelopeUpstream = createServer((_request, response) => {
+      response.statusCode = 503
+      response.setHeader("content-type", "application/json")
+      response.end(JSON.stringify({
+        error: { code: "skills_unavailable", message: "Skills are down" },
+        meta: { request_id: "skills-upstream-503" },
+      }))
+    })
+    const errorEnvelopeBase = await listen(errorEnvelopeUpstream)
+    const errorEnvelopeBff = await listen(createBffServer(config({
+      mode: "live",
+      upstreams: { ...config().upstreams, skills: errorEnvelopeBase },
+    })))
+    const errorEnvelope = await fetch(`${errorEnvelopeBff}/v1/skills/pool`, { headers: authHeaders() })
+    assert.equal(errorEnvelope.status, 503)
+    assert.deepEqual(await errorEnvelope.json(), {
+      error: { code: "skills_unavailable", message: "Skills are down" },
+      meta: { request_id: "skills-upstream-503" },
+    })
+
+    const httpErrorUpstream = createServer((_request, response) => {
+      response.statusCode = 500
+      response.setHeader("content-type", "text/plain")
+      response.end("boom")
+    })
+    const httpErrorBase = await listen(httpErrorUpstream)
+    const httpErrorBff = await listen(createBffServer(config({
+      mode: "live",
+      upstreams: { ...config().upstreams, skills: httpErrorBase },
+    })))
+    const httpError = await fetch(`${httpErrorBff}/v1/skills/pool`, { headers: authHeaders() })
+    assert.equal(httpError.status, 500)
+    assert.equal((await httpError.json() as { error: { code: string } }).error.code, "upstream_http_error")
+
+    const baseDir = fileURLToPath(new URL("../docs/api/v1/", import.meta.url))
+    for (const file of ["README.md", "projects.md", "skills.md", "mcp.md", "scheduled.md", "agents.md", "library.md", "billing.md", "openapi.yaml"]) {
+      assert.equal(existsSync(`${baseDir}/${file}`), true, file)
+    }
+
+    const openapi = readFileSync(`${baseDir}/openapi.yaml`, "utf8")
+    for (const path of [
+      "/v1/projects",
+      "/v1/projects/{projectId}",
+      "/v1/projects/{projectId}/tasks",
+      "/v1/projects/{projectId}/instruction-revisions",
+      "/v1/projects/{projectId}/resources",
+      "/v1/projects/{projectId}/skills/{skill}",
+      "/v1/projects/{projectId}/scheduled-tasks",
+      "/v1/skills",
+      "/v1/skills/pool",
+      "/v1/skills/catalog",
+      "/v1/skills/quota",
+      "/v1/skills/{name}/revisions",
+      "/v1/skills/{name}/enable",
+      "/v1/skills/{name}/disable",
+      "/v1/skills/github/preview",
+      "/v1/skills/github/import",
+      "/v1/mcp/servers",
+      "/v1/mcp/servers/{name}/enable",
+      "/v1/mcp/servers/{name}/disable",
+      "/v1/mcp/servers/{name}",
+      "/v1/scheduled-tasks",
+      "/v1/scheduled-tasks/{id}",
+      "/v1/scheduled-tasks/{id}/retry",
+      "/v1/agents/connections/setup",
+      "/v1/sessions",
+      "/v1/sessions/{id}",
+      "/v1/sessions/{id}/messages",
+      "/v1/sessions/{id}/events",
+      "/v1/sessions/{id}/runs/{runId}/control",
+      "/v1/sessions/{id}/title",
+      "/v1/sessions/{id}",
+      "/v1/sessions/{id}/share",
+      "/v1/shared/{shareId}",
+      "/v1/library",
+      "/v1/billing/plans",
+      "/v1/billing/summary",
+      "/v1/billing/checkout",
+    ]) {
+      assert.ok(openapi.includes(path), path)
+    }
+  })
+
+  it("serves the chat session mock contract across list, detail, messages, events, control, title, delete, and share", async () => {
+    const base = await listen(createBffServer(config()))
+    const headers = authHeaders()
+
+    const list = await fetch(`${base}/v1/sessions`, { headers })
+    assert.equal(list.status, 200)
+    const listBody = await list.json() as { data: { sessions: Array<{ session_id: string; title: string; updated_at: string }>; next_cursor?: string }; meta: { request_id: string } }
+    assert.ok(listBody.data.sessions.length >= 1)
+
+    const sessionId = listBody.data.sessions[0]?.session_id
+    assert.ok(sessionId)
+
+    const isolated = await fetch(`${base}/v1/sessions?scope=other-scope&project_ref=project_kokoro`, { headers })
+    const isolatedBody = await isolated.json() as { data: { sessions: Array<{ session_id: string }> } }
+    assert.equal(isolatedBody.data.sessions.length, 0)
+
+    const detail = await fetch(`${base}/v1/sessions/${sessionId}`, { headers })
+    assert.equal(detail.status, 200)
+    const detailBody = await detail.json() as {
+      data: {
+        session: { session_id: string; title: string; owner_id: string; created_at: string; updated_at: string }
+        messages?: Array<{ message_id: string; role: string; content: string; status: string; created_at: string; run_id?: string }>
+        active_run?: { run_id: string; status: string }
+        pending_pauses: unknown[]
+        files: unknown[]
+        deliveries: unknown[]
+        event_watermark: number
+      }
+      meta: { request_id: string }
+    }
+    assert.equal(detailBody.data.session.session_id, sessionId)
+    assert.equal(detailBody.data.session.owner_id, "ns_test")
+    assert.equal(detailBody.data.event_watermark, 2)
+    assert.equal(detailBody.data.pending_pauses.length, 0)
+    assert.equal(detailBody.data.files.length, 0)
+    assert.equal(detailBody.data.deliveries.length, 0)
+
+    const message = await fetch(`${base}/v1/sessions/${sessionId}/messages`, {
+      method: "POST",
+      headers: { ...headers, "content-type": "application/json", "idempotency-key": "chat-message-1" },
+      body: JSON.stringify({ content: "Hello from mock chat" }),
+    })
+    assert.equal(message.status, 200)
+    const messageBody = await message.json() as {
+      data: { run_id: string; user_message_id: string; assistant_message_id: string }
+      meta: { request_id: string }
+    }
+    assert.ok(messageBody.data.run_id.length > 0)
+    assert.ok(messageBody.data.user_message_id.length > 0)
+    assert.ok(messageBody.data.assistant_message_id.length > 0)
+
+    const events = await fetch(`${base}/v1/sessions/${sessionId}/events`, { headers })
+    assert.equal(events.status, 200)
+    assert.ok((events.headers.get("content-type") || "").startsWith("text/event-stream"))
+    const eventsText = await events.text()
+    const frames = eventsText.trim().split(/\n\n/u).filter(Boolean)
+    assert.ok(frames.length >= 2)
+    const firstFrameData = frames[0]?.split("\n").find((line) => line.startsWith("data: "))?.slice("data: ".length) || ""
+    const firstEvent = JSON.parse(firstFrameData) as { kind: string; payload: { owner_id: string } }
+    assert.equal(firstEvent.kind, "session.created")
+    assert.equal(firstEvent.payload.owner_id, "ns_test")
+
+    const control = await fetch(`${base}/v1/sessions/${sessionId}/runs/${messageBody.data.run_id}/control`, {
+      method: "POST",
+      headers: { ...headers, "content-type": "application/json", "idempotency-key": "chat-control-1" },
+      body: JSON.stringify({ action: "cancel" }),
+    })
+    assert.equal(control.status, 200)
+    const controlBody = await control.json() as { data: { ok: true }; meta: { request_id: string } }
+    assert.equal(controlBody.data.ok, true)
+
+    const renamed = await fetch(`${base}/v1/sessions/${sessionId}/title`, {
+      method: "PATCH",
+      headers: { ...headers, "content-type": "application/json", "idempotency-key": "chat-title-1" },
+      body: JSON.stringify({ title: "Mock chat title" }),
+    })
+    assert.equal(renamed.status, 200)
+    const renamedBody = await renamed.json() as { data: { ok: true }; meta: { request_id: string } }
+    assert.equal(renamedBody.data.ok, true)
+
+    const shared = await fetch(`${base}/v1/sessions/${sessionId}/share`, {
+      method: "POST",
+      headers: { ...headers, "content-type": "application/json", "idempotency-key": "chat-share-1" },
+      body: JSON.stringify({}),
+    })
+    assert.equal(shared.status, 200)
+    const sharedBody = await shared.json() as { data: { share_id: string } }
+    assert.ok(sharedBody.data.share_id.length > 0)
+
+    const publicShare = await fetch(`${base}/v1/shared/${sharedBody.data.share_id}`, {
+      headers: {
+        "x-kokoro-service": "web-bff",
+        "x-kokoro-internal-secret": "test-secret",
+      },
+    })
+    assert.equal(publicShare.status, 200)
+    const publicShareBody = await publicShare.json() as {
+      data: { session: { session_id: string; title: string; owner_id: string }; pending_pauses: unknown[]; files: unknown[]; deliveries: unknown[]; event_watermark: number }
+      meta: { request_id: string }
+    }
+    assert.equal(publicShareBody.data.session.session_id, sessionId)
+    assert.equal(publicShareBody.data.session.owner_id, "ns_test")
+    assert.equal(publicShareBody.data.event_watermark >= 2, true)
+
+    const revoked = await fetch(`${base}/v1/sessions/${sessionId}/share`, {
+      method: "DELETE",
+      headers: { ...headers, "idempotency-key": "chat-share-delete-1" },
+    })
+    assert.equal(revoked.status, 200)
+    const revokedBody = await revoked.json() as { data: { share_id: string }; meta: { request_id: string } }
+    assert.equal(revokedBody.data.share_id, sharedBody.data.share_id)
+
+    const deleted = await fetch(`${base}/v1/sessions/${sessionId}`, {
+      method: "DELETE",
+      headers: { ...headers, "idempotency-key": "chat-delete-1" },
+    })
+    assert.equal(deleted.status, 200)
+    const deletedBody = await deleted.json() as { data: { status: string }; meta: { request_id: string } }
+    assert.equal(deletedBody.data.status, "deleted")
+
+    const missing = await fetch(`${base}/v1/sessions/${sessionId}`, { headers })
+    assert.equal(missing.status, 404)
+    assert.equal((await missing.json() as { error: { code: string } }).error.code, "session_not_found")
   })
 })

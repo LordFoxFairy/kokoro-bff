@@ -2,22 +2,27 @@ openapi: 3.1.0
 info:
   title: Kokoro Business API
   version: 1.0.0
-  description: |
-    Kokoro BFF 面向 Web 的业务契约。当前文档先覆盖 Projects 及项目级投影。
-    资源级实现和持久化由各业务子仓库负责，BFF 不直接访问业务 SQL。
+  description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
 servers:
   - url: http://127.0.0.1:4300
     description: Local mock BFF
   - url: https://bff.example.com
-    description: Production placeholder; configure through deployment environment
+    description: Production placeholder
 security:
   - serviceHeader: []
     internalSecret: []
     namespace: []
-    userId: []
+    principalId: []
 tags:
   - name: Health
   - name: Projects
+  - name: Chat
+  - name: Skills
+  - name: MCP
+  - name: Scheduled
+  - name: Agents
+  - name: Library
+  - name: Billing
 paths:
   /healthz:
     get:
@@ -38,18 +43,236 @@ paths:
       security: []
       responses:
         '200':
-          description: Service configuration is ready
+          description: Service is ready
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/HealthResponse'
         '503':
-          $ref: '#/components/responses/ServiceUnavailable'
+          description: Required upstreams are not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /v1/sessions:
+    get:
+      tags: [Chat]
+      operationId: listSessions
+      parameters:
+        - $ref: '#/components/parameters/ScopeQuery'
+        - $ref: '#/components/parameters/ProjectRefQuery'
+      responses:
+        '200':
+          description: Session list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionListResponse'
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+  /v1/sessions/{id}:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    get:
+      tags: [Chat]
+      operationId: getSessionSnapshot
+      parameters:
+        - $ref: '#/components/parameters/ScopeQuery'
+        - $ref: '#/components/parameters/ProjectRefQuery'
+      responses:
+        '200':
+          description: Session snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionSnapshotResponse'
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Chat]
+      operationId: deleteSession
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/ScopeQuery'
+        - $ref: '#/components/parameters/ProjectRefQuery'
+      responses:
+        '200':
+          description: Delete receipt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteSessionResponse'
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/sessions/{id}/messages:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    post:
+      tags: [Chat]
+      operationId: createMessage
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/ScopeQuery'
+        - $ref: '#/components/parameters/ProjectRefQuery'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageCreateRequest'
+      responses:
+        '200':
+          description: Message receipt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageReceiptResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/sessions/{id}/events:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    get:
+      tags: [Chat]
+      operationId: streamSessionEvents
+      parameters:
+        - $ref: '#/components/parameters/ScopeQuery'
+        - $ref: '#/components/parameters/ProjectRefQuery'
+      responses:
+        '200':
+          description: Session event stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/sessions/{id}/runs/{runId}/control:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+      - $ref: '#/components/parameters/RunId'
+    post:
+      tags: [Chat]
+      operationId: controlRun
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/ScopeQuery'
+        - $ref: '#/components/parameters/ProjectRefQuery'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunControlRequest'
+      responses:
+        '200':
+          description: Run control receipt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/sessions/{id}/title:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    patch:
+      tags: [Chat]
+      operationId: renameSession
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/ScopeQuery'
+        - $ref: '#/components/parameters/ProjectRefQuery'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RenameSessionRequest'
+      responses:
+        '200':
+          description: Rename receipt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/sessions/{id}/share:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    post:
+      tags: [Chat]
+      operationId: createShare
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/ScopeQuery'
+        - $ref: '#/components/parameters/ProjectRefQuery'
+      responses:
+        '200':
+          description: Share receipt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShareReceiptResponse'
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      tags: [Chat]
+      operationId: revokeShare
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/ScopeQuery'
+        - $ref: '#/components/parameters/ProjectRefQuery'
+      responses:
+        '200':
+          description: Share receipt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShareReceiptResponse'
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/shared/{shareId}:
+    parameters:
+      - $ref: '#/components/parameters/ShareId'
+    get:
+      tags: [Chat]
+      operationId: getSharedSessionSnapshot
+      parameters:
+        - $ref: '#/components/parameters/ScopeQuery'
+        - $ref: '#/components/parameters/ProjectRefQuery'
+      responses:
+        '200':
+          description: Shared session snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionSnapshotResponse'
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /v1/projects:
     get:
       tags: [Projects]
       operationId: listProjects
-      summary: List visible projects
       responses:
         '200':
           description: Project list
@@ -57,14 +280,11 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProjectListResponse'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
     post:
       tags: [Projects]
       operationId: createProject
-      summary: Create a project
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -73,9 +293,6 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/CreateProjectRequest'
-            example:
-              name: Design system
-              description: Shared business UI
       responses:
         '200':
           description: Project created
@@ -83,19 +300,15 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProjectResponse'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '409':
-          $ref: '#/components/responses/Conflict'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '409': { $ref: '#/components/responses/Conflict' }
   /v1/projects/{projectId}:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
     get:
       tags: [Projects]
       operationId: getProject
-      summary: Get a project projection
       responses:
         '200':
           description: Project projection
@@ -103,14 +316,11 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProjectResponse'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
     patch:
       tags: [Projects]
       operationId: updateProjectInstruction
-      summary: Update project instruction
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -119,8 +329,6 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/UpdateProjectInstructionRequest'
-            example:
-              instruction: Keep all implementation notes scoped to this project.
       responses:
         '200':
           description: Updated project projection
@@ -128,37 +336,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProjectResponse'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
   /v1/projects/{projectId}/tasks:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
     get:
       tags: [Projects]
       operationId: listProjectTasks
-      summary: List task projections for a project
       responses:
         '200':
-          description: Task projections
+          description: Project task projections
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/TaskListResponse'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /v1/projects/{projectId}/instruction-revisions:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
     get:
       tags: [Projects]
       operationId: listProjectInstructionRevisions
-      summary: List project instruction revisions
       responses:
         '200':
           description: Instruction history
@@ -166,17 +368,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProjectInstructionRevisionResponse'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /v1/projects/{projectId}/resources:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
     post:
       tags: [Projects]
       operationId: uploadProjectResources
-      summary: Upload project resources
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -185,13 +384,13 @@ paths:
           multipart/form-data:
             schema:
               type: object
+              required: [files]
               properties:
                 files:
                   type: array
                   items:
                     type: string
                     format: binary
-              required: [files]
       responses:
         '200':
           description: Resource request accepted by the BFF
@@ -199,25 +398,17 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/OkResponse'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
   /v1/projects/{projectId}/skills/{skill}:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
-      - name: skill
-        in: path
-        required: true
-        schema:
-          type: string
-          minLength: 1
+      - $ref: '#/components/parameters/SkillName'
     patch:
       tags: [Projects]
       operationId: updateProjectSkill
-      summary: Enable or disable a project skill
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -226,8 +417,6 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/ProjectSkillRequest'
-            example:
-              enabled: false
       responses:
         '200':
           description: Project skill state
@@ -235,19 +424,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProjectSkillResponse'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
   /v1/projects/{projectId}/scheduled-tasks:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
     post:
       tags: [Projects]
       operationId: createProjectScheduledTask
-      summary: Create a scheduled task for a project
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -258,39 +444,438 @@ paths:
               $ref: '#/components/schemas/CreateScheduledTaskRequest'
       responses:
         '200':
-          description: Scheduled task projection
+          description: Project scheduled task projection
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ScheduledTaskResponse'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/skills:
+    get:
+      tags: [Skills]
+      operationId: listSkills
+      responses:
+        '200':
+          description: Skill projections
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillListResponse'
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+  /v1/skills/pool:
+    get:
+      tags: [Skills]
+      operationId: listSkillPool
+      responses:
+        '200':
+          description: Skill pool
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillPoolResponse'
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+  /v1/skills/catalog:
+    get:
+      tags: [Skills]
+      operationId: listSkillCatalog
+      responses:
+        '200':
+          description: Skill catalog
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillCatalogResponse'
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+  /v1/skills/quota:
+    get:
+      tags: [Skills]
+      operationId: getSkillQuota
+      responses:
+        '200':
+          description: Skill quota
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillQuotaResponse'
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+  /v1/skills/{name}/revisions:
+    parameters:
+      - $ref: '#/components/parameters/SkillNameOnly'
+      - $ref: '#/components/parameters/SkillScope'
+    get:
+      tags: [Skills]
+      operationId: listSkillRevisions
+      responses:
+        '200':
+          description: Skill revisions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillRevisionResponse'
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+  /v1/skills/{name}/enable:
+    parameters:
+      - $ref: '#/components/parameters/SkillNameOnly'
+      - $ref: '#/components/parameters/SkillScope'
+    post:
+      tags: [Skills]
+      operationId: enableSkill
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Skill enabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/skills/{name}/disable:
+    parameters:
+      - $ref: '#/components/parameters/SkillNameOnly'
+      - $ref: '#/components/parameters/SkillScope'
+    post:
+      tags: [Skills]
+      operationId: disableSkill
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Skill disabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/skills/github/preview:
+    post:
+      tags: [Skills]
+      operationId: previewGithubSkill
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GithubSkillRequest'
+      responses:
+        '200':
+          description: GitHub skill preview
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GithubSkillResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+  /v1/skills/github/import:
+    post:
+      tags: [Skills]
+      operationId: importGithubSkill
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GithubSkillRequest'
+      responses:
+        '200':
+          description: GitHub skill import
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GithubSkillResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/mcp/servers:
+    get:
+      tags: [MCP]
+      operationId: listMcpServers
+      responses:
+        '200':
+          description: MCP server list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpServerListResponse'
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+    post:
+      tags: [MCP]
+      operationId: registerMcpServer
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/McpServerRequest'
+      responses:
+        '200':
+          description: MCP server registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpServerResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/mcp/servers/{name}/enable:
+    parameters:
+      - $ref: '#/components/parameters/McpServerName'
+    post:
+      tags: [MCP]
+      operationId: enableMcpServer
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: MCP server enabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/mcp/servers/{name}/disable:
+    parameters:
+      - $ref: '#/components/parameters/McpServerName'
+    post:
+      tags: [MCP]
+      operationId: disableMcpServer
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: MCP server disabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/mcp/servers/{name}:
+    parameters:
+      - $ref: '#/components/parameters/McpServerName'
+    delete:
+      tags: [MCP]
+      operationId: deleteMcpServer
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: MCP server deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/scheduled-tasks:
+    get:
+      tags: [Scheduled]
+      operationId: listScheduledTasks
+      responses:
+        '200':
+          description: Scheduled task list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduledTaskListResponse'
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+    post:
+      tags: [Scheduled]
+      operationId: createScheduledTask
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateScheduledTaskRequest'
+      responses:
+        '200':
+          description: Scheduled task created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduledTaskResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/scheduled-tasks/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ScheduledTaskId'
+    get:
+      tags: [Scheduled]
+      operationId: getScheduledTask
+      responses:
+        '200':
+          description: Scheduled task
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduledTaskResponse'
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Scheduled]
+      operationId: updateScheduledTask
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScheduledTaskPatchRequest'
+      responses:
+        '200':
+          description: Scheduled task updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduledTaskResponse'
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      tags: [Scheduled]
+      operationId: deleteScheduledTask
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Scheduled task deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/scheduled-tasks/{id}/retry:
+    parameters:
+      - $ref: '#/components/parameters/ScheduledTaskId'
+    post:
+      tags: [Scheduled]
+      operationId: retryScheduledTask
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Scheduled task retried
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduledTaskResponse'
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/agents/connections/setup:
+    get:
+      tags: [Agents]
+      operationId: getAgentConnectionSetup
+      parameters:
+        - $ref: '#/components/parameters/Platform'
+      responses:
+        '200':
+          description: Agent connection setup
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentConnectionSetupResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+  /v1/library:
+    get:
+      tags: [Library]
+      operationId: listLibrary
+      responses:
+        '200':
+          description: Library items
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LibraryResponse'
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+  /v1/billing/plans:
+    get:
+      tags: [Billing]
+      operationId: listBillingPlans
+      responses:
+        '200':
+          description: Billing plans
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BillingPlanListResponse'
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+  /v1/billing/summary:
+    get:
+      tags: [Billing]
+      operationId: getBillingSummary
+      responses:
+        '200':
+          description: Billing summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BillingSummaryResponse'
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+  /v1/billing/checkout:
+    post:
+      tags: [Billing]
+      operationId: createBillingCheckout
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BillingCheckoutRequest'
+      responses:
+        '200':
+          description: Checkout projection
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BillingCheckoutResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
 components:
   securitySchemes:
     serviceHeader:
       type: apiKey
       in: header
       name: x-kokoro-service
-      description: Must be web-bff; server-to-server only.
     internalSecret:
       type: apiKey
       in: header
       name: x-kokoro-internal-secret
-      description: Required when KOKORO_BFF_SHARED_SECRET is configured.
     namespace:
       type: apiKey
       in: header
       name: x-kokoro-namespace
-      description: Derived from the sealed Web session.
-    userId:
+    principalId:
       type: apiKey
       in: header
-      name: x-kokoro-user-id
-      description: Derived from the sealed Web session.
+      name: x-kokoro-principal-id
   parameters:
     ProjectId:
       name: projectId
@@ -298,15 +883,49 @@ components:
       required: true
       schema:
         type: string
-        minLength: 1
+    SkillName:
+      name: skill
+      in: path
+      required: true
+      schema:
+        type: string
+    SkillNameOnly:
+      name: name
+      in: path
+      required: true
+      schema:
+        type: string
+    SkillScope:
+      name: scope
+      in: query
+      required: false
+      schema:
+        type: string
+    McpServerName:
+      name: name
+      in: path
+      required: true
+      schema:
+        type: string
+    ScheduledTaskId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    Platform:
+      name: platform
+      in: query
+      required: true
+      schema:
+        type: string
+        enum: [telegram, line, slack]
     IdempotencyKey:
       name: Idempotency-Key
       in: header
       required: true
       schema:
         type: string
-        minLength: 1
-        maxLength: 255
   schemas:
     RequestMeta:
       type: object
@@ -314,242 +933,7 @@ components:
       properties:
         request_id:
           type: string
-          minLength: 1
-    Project:
-      type: object
-      required: [id, name, slug, description, created_at, updated_at]
-      properties:
-        id:
-          type: string
-        name:
-          type: string
-        slug:
-          type: string
-        description:
-          type: string
-        instruction:
-          type: string
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
-    Task:
-      type: object
-      required: [id, project_id, title, status, updated_at]
-      properties:
-        id:
-          type: string
-        project_id:
-          type: string
-        title:
-          type: string
-        status:
-          type: string
-          enum: [todo, in_progress, done]
-        updated_at:
-          type: string
-          format: date-time
-    ProjectInstructionRevision:
-      type: object
-      required: [id, instruction, updatedAt, actorName, current]
-      properties:
-        id:
-          type: string
-        instruction:
-          type: string
-        updatedAt:
-          type: integer
-          format: int64
-        actorName:
-          type: string
-        current:
-          type: boolean
-    ScheduledTask:
-      type: object
-      required: [id, title, prompt, frequency, time, timezone, next_run_at, auto_approve, enabled, status]
-      properties:
-        id:
-          type: string
-        project_id:
-          type: string
-        title:
-          type: string
-        prompt:
-          type: string
-        frequency:
-          type: string
-          enum: [daily, weekly]
-        time:
-          type: string
-        timezone:
-          type: string
-        next_run_at:
-          type: string
-          format: date-time
-        expires_at:
-          type: string
-          format: date-time
-        auto_approve:
-          type: boolean
-        enabled:
-          type: boolean
-        status:
-          type: string
-          enum: [active, paused, failed]
-    CreateProjectRequest:
-      type: object
-      required: [name]
-      additionalProperties: false
-      properties:
-        name:
-          type: string
-          minLength: 1
-        description:
-          type: string
-    UpdateProjectInstructionRequest:
-      type: object
-      required: [instruction]
-      additionalProperties: false
-      properties:
-        instruction:
-          type: string
-    ProjectSkillRequest:
-      type: object
-      required: [enabled]
-      additionalProperties: false
-      properties:
-        enabled:
-          type: boolean
-    CreateScheduledTaskRequest:
-      type: object
-      additionalProperties: false
-      properties:
-        title:
-          type: string
-        prompt:
-          type: string
-        frequency:
-          type: string
-          enum: [daily, weekly]
-        time:
-          type: string
-        timezone:
-          type: string
-        next_run_at:
-          type: string
-          format: date-time
-        expires_at:
-          type: string
-          format: date-time
-        auto_approve:
-          type: boolean
-        enabled:
-          type: boolean
-        status:
-          type: string
-          enum: [active, paused, failed]
-    ProjectListResponse:
-      type: object
-      required: [data, meta]
-      properties:
-        data:
-          type: object
-          required: [projects]
-          properties:
-            projects:
-              type: array
-              items:
-                $ref: '#/components/schemas/Project'
-        meta:
-          $ref: '#/components/schemas/RequestMeta'
-    ProjectResponse:
-      type: object
-      required: [data, meta]
-      properties:
-        data:
-          type: object
-          required: [project]
-          properties:
-            project:
-              $ref: '#/components/schemas/Project'
-        meta:
-          $ref: '#/components/schemas/RequestMeta'
-    TaskListResponse:
-      type: object
-      required: [data, meta]
-      properties:
-        data:
-          type: object
-          required: [tasks]
-          properties:
-            tasks:
-              type: array
-              items:
-                $ref: '#/components/schemas/Task'
-        meta:
-          $ref: '#/components/schemas/RequestMeta'
-    ProjectInstructionRevisionResponse:
-      type: object
-      required: [data, meta]
-      properties:
-        data:
-          type: object
-          required: [items]
-          properties:
-            items:
-              type: array
-              items:
-                $ref: '#/components/schemas/ProjectInstructionRevision'
-        meta:
-          $ref: '#/components/schemas/RequestMeta'
-    ProjectSkillResponse:
-      type: object
-      required: [data, meta]
-      properties:
-        data:
-          type: object
-          required: [skill]
-          properties:
-            skill:
-              type: object
-              required: [project_id, name, enabled]
-              properties:
-                project_id:
-                  type: string
-                name:
-                  type: string
-                enabled:
-                  type: boolean
-        meta:
-          $ref: '#/components/schemas/RequestMeta'
-    ScheduledTaskResponse:
-      type: object
-      required: [data, meta]
-      properties:
-        data:
-          type: object
-          required: [task]
-          properties:
-            task:
-              $ref: '#/components/schemas/ScheduledTask'
-        meta:
-          $ref: '#/components/schemas/RequestMeta'
-    OkResponse:
-      type: object
-      required: [data, meta]
-      properties:
-        data:
-          type: object
-          required: [ok]
-          properties:
-            ok:
-              type: boolean
-              const: true
-        meta:
-          $ref: '#/components/schemas/RequestMeta'
-    ErrorResponse:
+    ErrorEnvelope:
       type: object
       required: [error, meta]
       properties:
@@ -576,40 +960,475 @@ components:
         mode:
           type: string
           enum: [mock, live]
+    Project:
+      type: object
+      required: [id, name, slug, description, created_at, updated_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        slug: { type: string }
+        description: { type: string }
+        instruction: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    ProjectListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [projects]
+          properties:
+            projects:
+              type: array
+              items: { $ref: '#/components/schemas/Project' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    ProjectResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [project]
+          properties:
+            project: { $ref: '#/components/schemas/Project' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    Task:
+      type: object
+      required: [id, project_id, title, status, updated_at]
+      properties:
+        id: { type: string }
+        project_id: { type: string }
+        title: { type: string }
+        status:
+          type: string
+          enum: [todo, in_progress, done]
+        updated_at: { type: string, format: date-time }
+    TaskListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [tasks]
+          properties:
+            tasks:
+              type: array
+              items: { $ref: '#/components/schemas/Task' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    ProjectInstructionRevision:
+      type: object
+      required: [id, instruction, updatedAt, actorName, current]
+      properties:
+        id: { type: string }
+        instruction: { type: string }
+        updatedAt: { type: integer, format: int64 }
+        actorName: { type: string }
+        current: { type: boolean }
+    ProjectInstructionRevisionResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/ProjectInstructionRevision' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    CreateProjectRequest:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name: { type: string }
+        description: { type: string }
+    UpdateProjectInstructionRequest:
+      type: object
+      required: [instruction]
+      additionalProperties: false
+      properties:
+        instruction: { type: string }
+    ProjectSkillRequest:
+      type: object
+      required: [enabled]
+      additionalProperties: false
+      properties:
+        enabled: { type: boolean }
+    ProjectSkillResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [skill]
+          properties:
+            skill:
+              type: object
+              required: [project_id, name, enabled]
+              properties:
+                project_id: { type: string }
+                name: { type: string }
+                enabled: { type: boolean }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    ScheduledTask:
+      type: object
+      required: [id, title, prompt, frequency, time, timezone, next_run_at, auto_approve, enabled, status]
+      properties:
+        id: { type: string }
+        project_id: { type: string }
+        title: { type: string }
+        prompt: { type: string }
+        frequency:
+          type: string
+          enum: [daily, weekly]
+        time: { type: string }
+        timezone: { type: string }
+        next_run_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+        auto_approve: { type: boolean }
+        enabled: { type: boolean }
+        status:
+          type: string
+          enum: [active, paused, failed]
+    ScheduledTaskResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [task]
+          properties:
+            task: { $ref: '#/components/schemas/ScheduledTask' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    ScheduledTaskListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [tasks]
+          properties:
+            tasks:
+              type: array
+              items: { $ref: '#/components/schemas/ScheduledTask' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    CreateScheduledTaskRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        title: { type: string }
+        prompt: { type: string }
+        frequency:
+          type: string
+          enum: [daily, weekly]
+        time: { type: string }
+        timezone: { type: string }
+        next_run_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+        auto_approve: { type: boolean }
+        enabled: { type: boolean }
+        status:
+          type: string
+          enum: [active, paused, failed]
+    ScheduledTaskPatchRequest:
+      type: object
+      additionalProperties: true
+    Skill:
+      type: object
+      required: [name, description, content_hash, scope]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        content_hash: { type: string }
+        scope: { type: string }
+        source_url: { type: string }
+        enabled: { type: boolean }
+        installed: { type: boolean }
+        categories:
+          type: array
+          items: { type: string }
+        updated_at: { type: integer }
+    SkillListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [skills]
+          properties:
+            skills:
+              type: array
+              items: { $ref: '#/components/schemas/Skill' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    SkillPoolResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [skills]
+          properties:
+            skills:
+              type: array
+              items: { $ref: '#/components/schemas/Skill' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    SkillCatalogResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [skills, next_cursor]
+          properties:
+            skills:
+              type: array
+              items: { $ref: '#/components/schemas/Skill' }
+            next_cursor:
+              type: [string, 'null']
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    SkillQuotaResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [namespace, package_count, package_bytes, max_packages, max_bytes]
+          properties:
+            namespace: { type: string }
+            package_count: { type: integer }
+            package_bytes: { type: integer }
+            max_packages: { type: integer }
+            max_bytes: { type: integer }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    SkillRevision:
+      type: object
+      required: [scope, name, revision, content_hash, package_size, source, created_at]
+      properties:
+        scope: { type: string }
+        name: { type: string }
+        revision: { type: integer }
+        content_hash: { type: string }
+        package_size: { type: integer }
+        source: { type: string }
+        created_at: { type: integer }
+    SkillRevisionResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [revisions]
+          properties:
+            revisions:
+              type: array
+              items: { $ref: '#/components/schemas/SkillRevision' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    GithubSkillRequest:
+      type: object
+      required: [repository]
+      additionalProperties: false
+      properties:
+        repository: { type: string }
+    GithubSkillResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [repository, default_branch, skill]
+          properties:
+            repository: { type: string }
+            default_branch: { type: string }
+            skill:
+              type: object
+              required: [name, description]
+              properties:
+                name: { type: string }
+                description: { type: string }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    McpServer:
+      type: object
+      required: [scope, name, revision, transport, url, allowed_tools, secret_ref, enabled]
+      properties:
+        scope: { type: string }
+        name: { type: string }
+        revision: { type: integer }
+        transport:
+          type: string
+          enum: [http, streamable_http]
+        url: { type: string }
+        allowed_tools:
+          type: array
+          items: { type: string }
+        secret_ref:
+          type: [string, 'null']
+        enabled: { type: boolean }
+    McpServerRequest:
+      type: object
+      required: [name, transport, url, allowed_tools]
+      additionalProperties: false
+      properties:
+        name: { type: string }
+        transport:
+          type: string
+          enum: [http, streamable_http]
+        url: { type: string }
+        allowed_tools:
+          type: array
+          items: { type: string }
+        secret_ref:
+          type: [string, 'null']
+    McpServerListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [servers]
+          properties:
+            servers:
+              type: array
+              items: { $ref: '#/components/schemas/McpServer' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    McpServerResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [server]
+          properties:
+            server: { $ref: '#/components/schemas/McpServer' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    AgentConnectionSetup:
+      type: object
+      required: [platform, status, qr_value, continue_url, expires_at]
+      properties:
+        platform:
+          type: string
+          enum: [telegram, line, slack]
+        status:
+          type: string
+          enum: [disconnected, pending, connected, expired]
+        qr_value: { type: string }
+        continue_url: { type: string }
+        expires_at: { type: string, format: date-time }
+    AgentConnectionSetupResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/AgentConnectionSetup' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    LibraryItem:
+      type: object
+      required: [id, title, type, created_at, url]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        type:
+          type: string
+          enum: [document, spreadsheet, presentation, image, other]
+        created_at: { type: string, format: date-time }
+        url: { type: string }
+    LibraryResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/LibraryItem' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    BillingPlan:
+      type: object
+      required: [id, key, name, currency, amount_minor, credit_micros, billing_interval]
+      properties:
+        id: { type: string }
+        key: { type: string }
+        name: { type: string }
+        currency: { type: string }
+        amount_minor: { type: string }
+        credit_micros: { type: string }
+        billing_interval:
+          type: string
+          enum: [once, month, year]
+    BillingPlanListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [plans]
+          properties:
+            plans:
+              type: array
+              items: { $ref: '#/components/schemas/BillingPlan' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    BillingSummary:
+      type: object
+      required: [balance, currency, period, usage]
+      properties:
+        balance: { type: number }
+        currency: { type: string }
+        period: { type: string }
+        usage: { type: number }
+    BillingSummaryResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/BillingSummary' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    BillingCheckoutRequest:
+      type: object
+      required: [plan_id]
+      additionalProperties: false
+      properties:
+        plan_id: { type: string }
+    BillingCheckoutResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [checkout_url]
+          properties:
+            checkout_url: { type: string }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    OkResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [ok]
+          properties:
+            ok:
+              type: boolean
+              const: true
+        meta: { $ref: '#/components/schemas/RequestMeta' }
   responses:
     BadRequest:
       description: Invalid request
       content:
         application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
-    Unauthorized:
-      description: Missing or invalid service identity
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
-    Forbidden:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    ServiceAuthFailed:
       description: Service authentication failed
       content:
         application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
     NotFound:
       description: Resource not found
       content:
         application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
     Conflict:
-      description: Idempotency or resource conflict
+      description: Request conflict
       content:
         application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
-    ServiceUnavailable:
-      description: Required upstream is not configured
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }

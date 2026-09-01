@@ -2,6 +2,12 @@ import type {
   AgentConnectionSetup,
   BillingPlan,
   BillingSummary,
+  ChatEvent,
+  Delivery,
+  ChatMessage,
+  ChatRun,
+  ChatSessionDetail,
+  ChatSessionSummary,
   LibraryItem,
   McpServer,
   McpTransport,
@@ -12,10 +18,29 @@ import type {
   SkillQuota,
   SkillRevision,
   Task,
+  WorkspaceFile,
 } from "./contracts.js"
 
 const now = "2026-01-01T00:00:00.000Z"
 const skillPackageSize = 122880
+
+type ChatSessionRecord = {
+  session_id: string
+  title: string
+  owner_id: string
+  project_ref: string
+  created_at: string
+  updated_at: string
+  deleted_at: string | null
+  messages: ChatMessage[]
+  active_run: { run_id: string; status: string } | null
+  pending_pauses: Array<Record<string, unknown>>
+  files: WorkspaceFile[]
+  deliveries: Delivery[]
+  events: ChatEvent[]
+  share_id: string | null
+  share_revoked_at: string | null
+}
 
 export class MockStore {
   readonly projects: Project[] = [{
@@ -94,6 +119,43 @@ export class MockStore {
     amount_minor: "900",
     credit_micros: "1000000",
     billing_interval: "once",
+  }]
+
+  readonly sessions: ChatSessionRecord[] = [{
+    session_id: "session_kokoro",
+    title: "Review business API contract",
+    owner_id: "ns_test",
+    project_ref: "project_kokoro",
+    created_at: now,
+    updated_at: now,
+    deleted_at: null,
+    messages: [],
+    active_run: {
+      run_id: "run_1",
+      status: "running",
+    },
+    events: [{
+      event_id: "event_1",
+      seq: 1,
+      session_id: "session_kokoro",
+      run_id: "run_1",
+      kind: "session.created",
+      timestamp: now,
+      payload: { title: "Review business API contract", owner_id: "ns_test" },
+    }, {
+      event_id: "event_2",
+      seq: 2,
+      session_id: "session_kokoro",
+      run_id: "run_1",
+      kind: "run.created",
+      timestamp: now,
+      payload: { run_id: "run_1" },
+    }],
+    pending_pauses: [],
+    files: [],
+    deliveries: [],
+    share_id: null,
+    share_revoked_at: null,
   }]
 
   projectTasks(projectId: string): Task[] {
@@ -286,5 +348,184 @@ export class MockStore {
       continue_url: `https://dev.kokoro.localhost/app/agents?platform=${platform}`,
       expires_at: "2026-01-01T00:15:00.000Z",
     }
+  }
+
+  listSessions(scope?: string, projectRef?: string): ChatSessionSummary[] {
+    return this.sessions
+      .filter((session) => session.deleted_at === null)
+      .filter((session) => scope === undefined || session.owner_id === scope)
+      .filter((session) => projectRef === undefined || session.project_ref === projectRef)
+      .map((session) => ({
+        session_id: session.session_id,
+        title: session.title,
+        updated_at: session.updated_at,
+      }))
+  }
+
+  findSession(id: string, scope?: string, projectRef?: string): ChatSessionRecord | undefined {
+    return this.sessions.find((session) =>
+      session.session_id === id
+      && session.deleted_at === null
+      && (scope === undefined || session.owner_id === scope)
+      && (projectRef === undefined || session.project_ref === projectRef),
+    )
+  }
+
+  findSharedSession(shareId: string, scope?: string, projectRef?: string): ChatSessionRecord | undefined {
+    return this.sessions.find((session) =>
+      session.share_id === shareId
+      && session.share_revoked_at === null
+      && session.deleted_at === null
+      && (scope === undefined || session.owner_id === scope)
+      && (projectRef === undefined || session.project_ref === projectRef),
+    )
+  }
+
+  readSession(id: string, scope?: string, projectRef?: string): ChatSessionDetail | undefined {
+    const session = this.findSession(id, scope, projectRef)
+    if (session === undefined) return undefined
+    const activeRun = session.active_run === null ? undefined : { run_id: session.active_run.run_id, status: session.active_run.status }
+    return {
+      session: {
+        session_id: session.session_id,
+        title: session.title,
+        owner_id: session.owner_id,
+        created_at: session.created_at,
+        updated_at: session.updated_at,
+      },
+      ...(session.messages.length === 0 ? {} : { messages: session.messages.map((message) => ({ ...message })) }),
+      ...(activeRun === undefined ? {} : { active_run: activeRun }),
+      pending_pauses: session.pending_pauses.map((pause) => ({ ...pause })),
+      files: session.files.map((file) => ({ ...file })),
+      deliveries: session.deliveries.map((delivery) => ({ ...delivery })),
+      event_watermark: session.events.at(-1)?.seq ?? 0,
+    }
+  }
+
+  submitSessionMessage(sessionId: string, content: string, scope?: string, projectRef?: string): { run_id: string; user_message_id: string; assistant_message_id: string } | null {
+    const session = this.findSession(sessionId, scope, projectRef)
+    if (session === undefined) return null
+    const timestamp = new Date().toISOString()
+    const runId = session.active_run?.run_id ?? `run_${session.events.length + 1}`
+    if (session.active_run === null) {
+      session.active_run = { run_id: runId, status: "running" }
+      session.events.push({
+        event_id: `event_${session.events.length + 1}`,
+        seq: session.events.length + 1,
+        session_id: session.session_id,
+        run_id: runId,
+        kind: "run.created",
+        timestamp,
+        payload: { run_id: runId },
+      })
+    }
+    const userMessageId = `message_${session.messages.length + 1}`
+    const assistantMessageId = `message_${session.messages.length + 2}`
+    const userMessage: ChatMessage = {
+      message_id: userMessageId,
+      role: "user",
+      content,
+      status: "completed",
+      created_at: timestamp,
+      run_id: runId,
+    }
+    const assistantMessage: ChatMessage = {
+      message_id: assistantMessageId,
+      role: "assistant",
+      content: `Mock reply: ${content}`,
+      status: "completed",
+      created_at: timestamp,
+      run_id: runId,
+    }
+    session.messages.push(userMessage, assistantMessage)
+    session.updated_at = timestamp
+    session.events.push({
+      event_id: `event_${session.events.length + 1}`,
+      seq: session.events.length + 1,
+      session_id: session.session_id,
+      run_id: runId,
+      kind: "message.user",
+      timestamp,
+      payload: { message_id: userMessageId, content },
+    })
+    session.events.push({
+      event_id: `event_${session.events.length + 1}`,
+      seq: session.events.length + 1,
+      session_id: session.session_id,
+      run_id: runId,
+      kind: "message.completed",
+      timestamp,
+      payload: { segment_id: `segment_${session.messages.length}`, content: assistantMessage.content },
+    })
+    return { run_id: runId, user_message_id: userMessageId, assistant_message_id: assistantMessageId }
+  }
+
+  controlSessionRun(sessionId: string, runId: string, action: "cancel" | "resume", decisions?: string[], scope?: string, projectRef?: string): { ok: true } | null {
+    const session = this.findSession(sessionId, scope, projectRef)
+    if (session === undefined) return null
+    if (session.active_run === null || session.active_run.run_id !== runId) return null
+    const timestamp = new Date().toISOString()
+    session.active_run.status = action === "cancel" ? "cancelled" : "running"
+    session.updated_at = timestamp
+    return { ok: true }
+  }
+
+  updateSessionTitle(sessionId: string, title: string, scope?: string, projectRef?: string): { ok: true } | null {
+    const session = this.findSession(sessionId, scope, projectRef)
+    if (session === undefined) return null
+    session.title = title
+    session.updated_at = new Date().toISOString()
+    return { ok: true }
+  }
+
+  deleteSession(sessionId: string, scope?: string, projectRef?: string): { status: string } | null {
+    const session = this.findSession(sessionId, scope, projectRef)
+    if (session === undefined || session.deleted_at !== null) return null
+    session.deleted_at = new Date().toISOString()
+    session.updated_at = new Date().toISOString()
+    if (session.share_id !== null) {
+      session.share_revoked_at = session.updated_at
+    }
+    return { status: "deleted" }
+  }
+
+  createSessionShare(sessionId: string, scope?: string, projectRef?: string): { share_id: string } | null {
+    const session = this.findSession(sessionId, scope, projectRef)
+    if (session === undefined) return null
+    if (session.share_id !== null && session.share_revoked_at === null) {
+      return { share_id: session.share_id }
+    }
+    const shareId = `shr_${(this.sessions.length + session.events.length).toString(16).padStart(32, "0")}`
+    session.share_id = shareId
+    session.share_revoked_at = null
+    session.updated_at = new Date().toISOString()
+    session.events.push({
+      event_id: `event_${session.events.length + 1}`,
+      seq: session.events.length + 1,
+      session_id: session.session_id,
+      run_id: session.active_run?.run_id ?? "",
+      kind: "session.shared",
+      timestamp: session.updated_at,
+      payload: { share_id: shareId },
+    })
+    return { share_id: shareId }
+  }
+
+  revokeSessionShare(sessionId: string, scope?: string, projectRef?: string): { share_id: string } | null {
+    const session = this.findSession(sessionId, scope, projectRef)
+    if (session === undefined || session.share_id === null || session.share_revoked_at !== null) return null
+    const revokedAt = new Date().toISOString()
+    session.updated_at = revokedAt
+    session.share_revoked_at = revokedAt
+    session.events.push({
+      event_id: `event_${session.events.length + 1}`,
+      seq: session.events.length + 1,
+      session_id: session.session_id,
+      run_id: session.active_run?.run_id ?? "",
+      kind: "session.unshared",
+      timestamp: revokedAt,
+      payload: { share_id: session.share_id },
+    })
+    return { share_id: session.share_id }
   }
 }

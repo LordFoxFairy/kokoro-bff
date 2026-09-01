@@ -38,7 +38,7 @@ Projects 是业务工作区的容器。一个 Project 可以提供共享 instruc
 GET /v1/projects
 x-kokoro-service: web-bff
 x-kokoro-namespace: ns_demo
-x-kokoro-user-id: user_demo
+x-kokoro-principal-id: principal_demo
 ```
 
 ### Response `200`

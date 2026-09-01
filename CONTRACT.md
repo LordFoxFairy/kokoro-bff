@@ -8,7 +8,7 @@
 
 - `x-kokoro-service` 必须为 `web-bff`。
 - 配置了 `KOKORO_BFF_SHARED_SECRET` 时，`x-kokoro-internal-secret` 必须匹配。
-- `x-kokoro-namespace` 和 `x-kokoro-user-id` 必须来自 Web 已解封的 sealed session，不接受浏览器自带身份头。
+- `x-kokoro-namespace` 和 `x-kokoro-principal-id` 必须来自 Web 已解封的 sealed session，不接受浏览器自带身份头。
 - `x-kokoro-request-id` 可选；缺失时 BFF 生成 UUID，并在 `meta.request_id` 返回。
 - `X-Domain`、`Host`、`X-Forwarded-*` 不参与业务路由；BFF 到业务服务的上下文固定为 `Forwarded: host=<KOKORO_DOMAIN>`。
 
@@ -51,7 +51,7 @@
 | DELETE | `/v1/mcp/servers/:name` | MCP server 删除 |
 | GET/POST/PATCH/DELETE | `/v1/scheduled-tasks[/:id]` | 定时任务投影与变更 |
 | POST | `/v1/scheduled-tasks/:id/retry` | 重试定时任务 |
-| GET | `/v1/agents/connections/setup?platform=telegram\|line\|slack` | Agent 连接设置投影 |
+| GET | `/v1/agents/connections/setup?platform=telegram\|line\|slack` | Agent 连接设置投影（当前仅 Mock；Agent worker 没有 HTTP adapter） |
 | GET | `/v1/library` | 产物/资料库投影 |
 | GET | `/v1/billing/plans`, `/v1/billing/summary` | 套餐与余额/用量摘要 |
 | POST | `/v1/billing/checkout` | 通过 plan_id 创建业务 checkout 投影 |
@@ -63,11 +63,12 @@
 
 ## 上游选择
 
-Live 模式按业务资源选择独立的显式 upstream：Projects → `KOKORO_PROJECTS_BASE_URL`，Skills →
+Live 模式按业务资源选择独立的显式 HTTP upstream：Projects → `KOKORO_PROJECTS_BASE_URL`，Skills →
 `KOKORO_SKILLS_BASE_URL`，MCP/connectors → `KOKORO_HUB_BASE_URL`，Scheduled →
-`KOKORO_SCHEDULED_BASE_URL`，Agents → `KOKORO_AGENT_BASE_URL`，Library →
-`KOKORO_LIBRARY_BASE_URL`，Billing → `KOKORO_BILLING_BASE_URL`。缺少对应地址返回
-`upstream_not_configured`，不回退到 Gateway 或 Mock。
+`KOKORO_SCHEDULED_BASE_URL`，Library → `KOKORO_LIBRARY_BASE_URL`，Billing →
+`KOKORO_BILLING_BASE_URL`。Agent 当前只有 worker 入口，没有 HTTP adapter；生产环境不设置
+`KOKORO_AGENT_BASE_URL`，Chat/Agent live 路由返回 `503 upstream_not_configured`，不把 worker
+当作 HTTP 入口。缺少任何已声明业务地址时返回 `upstream_not_configured`，不回退到 Gateway 或 Mock。
 
 ## 责任分层
 
@@ -76,4 +77,4 @@ Live 模式按业务资源选择独立的显式 upstream：Projects → `KOKORO_
 | Kokoro Web | 同源路由、sealed session、浏览器展示 | 业务编排、内部服务凭据下发给浏览器 |
 | Kokoro BFF | 业务投影、聚合、幂等、mock/live、上游路由 | Chat/SSE 事实、Agent Redis、前端组件 |
 | Kokoro Agent | Redis run worker、执行身份和能力调用 | HTTP 业务 ingress、浏览器 session、BFF 路由 |
-| Kokoro Session | Chat session、消息、SSE、run control、artifact | 业务目录和专案编排 |
+| Kokoro Chat（BFF 内置模块） | Chat session、消息、SSE、run control、分享投影 | Agent worker 的执行内核、业务目录和专案编排 |
