@@ -186,6 +186,139 @@ describe("kokoro-bff v1 mock contract", () => {
     }
   })
 
+  it("completes the skill quota, revision, and toggle mock flow", async () => {
+    const base = await listen(createBffServer(config()))
+    const quotaResponse = await fetch(`${base}/v1/skills/quota`, {
+      headers: { ...authHeaders(), "x-kokoro-request-id": "skills-quota-request" },
+    })
+    const quotaBody = await quotaResponse.json() as {
+      data: {
+        namespace: string
+        package_count: number
+        package_bytes: number
+        max_packages: number
+        max_bytes: number
+      }
+      meta: { request_id: string }
+    }
+    assert.equal(quotaResponse.status, 200)
+    assert.equal(quotaBody.data.namespace, "ns_test")
+    assert.ok(Number.isInteger(quotaBody.data.package_count))
+    assert.ok(Number.isInteger(quotaBody.data.package_bytes))
+    assert.ok(Number.isInteger(quotaBody.data.max_packages))
+    assert.ok(Number.isInteger(quotaBody.data.max_bytes))
+    assert.equal(quotaBody.meta.request_id, "skills-quota-request")
+
+    const revisionsResponse = await fetch(`${base}/v1/skills/contract-review/revisions?scope=official`, {
+      headers: authHeaders(),
+    })
+    const revisionsBody = await revisionsResponse.json() as {
+      data: { revisions: Array<Record<string, unknown>> }
+      meta: { request_id: string }
+    }
+    assert.equal(revisionsResponse.status, 200)
+    assert.equal(revisionsBody.data.revisions.length, 1)
+    assert.deepEqual(revisionsBody.data.revisions[0], {
+      scope: "official",
+      name: "contract-review",
+      revision: 1,
+      content_hash: "sha256:fixture-contract-review",
+      package_size: 122880,
+      source: "mock",
+      created_at: 1767225600,
+    })
+    assert.ok(revisionsBody.meta.request_id.length > 0)
+
+    const toggleHeaders = {
+      ...authHeaders(),
+      "idempotency-key": "skills-toggle-contract-review-disable",
+    }
+    const disabled = await fetch(`${base}/v1/skills/contract-review/disable?scope=official`, {
+      method: "POST",
+      headers: toggleHeaders,
+    })
+    assert.equal(disabled.status, 200)
+    assert.deepEqual((await disabled.json() as { data: { ok: boolean } }).data, { ok: true })
+
+    const afterDisable = await fetch(`${base}/v1/skills`, { headers: authHeaders() })
+    const disabledSkill = ((await afterDisable.json() as { data: { skills: Array<{ name: string; enabled?: boolean }> } }).data.skills)
+      .find((skill) => skill.name === "contract-review")
+    assert.equal(disabledSkill?.enabled, false)
+
+    const enabled = await fetch(`${base}/v1/skills/contract-review/enable?scope=official`, {
+      method: "POST",
+      headers: { ...authHeaders(), "idempotency-key": "skills-toggle-contract-review-enable" },
+    })
+    assert.equal(enabled.status, 200)
+    assert.deepEqual((await enabled.json() as { data: { ok: boolean } }).data, { ok: true })
+  })
+
+  it("completes the MCP server register, toggle, list, and delete mock flow", async () => {
+    const base = await listen(createBffServer(config()))
+    const name = "phase-one-mcp"
+    const registered = await fetch(`${base}/v1/mcp/servers`, {
+      method: "POST",
+      headers: { ...authHeaders(), "content-type": "application/json" },
+      body: JSON.stringify({
+        name,
+        transport: "streamable_http",
+        url: "https://mcp.example.test/stream",
+        allowed_tools: ["search", "fetch"],
+        secret_ref: "handle:srt_fixture",
+      }),
+    })
+    const registeredBody = await registered.json() as {
+      data: { server: Record<string, unknown> }
+      meta: { request_id: string }
+    }
+    assert.equal(registered.status, 200)
+    assert.deepEqual(registeredBody.data.server, {
+      scope: "ns_test",
+      name,
+      revision: 1,
+      transport: "streamable_http",
+      url: "https://mcp.example.test/stream",
+      allowed_tools: ["search", "fetch"],
+      secret_ref: "handle:srt_fixture",
+      enabled: true,
+    })
+    assert.ok(registeredBody.meta.request_id.length > 0)
+
+    const listed = await fetch(`${base}/v1/mcp/servers`, { headers: authHeaders() })
+    const listedBody = await listed.json() as {
+      data: { servers: Array<{ name: string; enabled: boolean }> }
+      meta: { request_id: string }
+    }
+    assert.equal(listed.status, 200)
+    assert.equal(listedBody.data.servers.find((server) => server.name === name)?.enabled, true)
+    assert.ok(listedBody.meta.request_id.length > 0)
+
+    const disabled = await fetch(`${base}/v1/mcp/servers/${name}/disable`, {
+      method: "POST",
+      headers: { ...authHeaders(), "idempotency-key": "mcp-toggle-phase-one-disable" },
+    })
+    assert.equal(disabled.status, 200)
+    assert.deepEqual((await disabled.json() as { data: { ok: boolean } }).data, { ok: true })
+
+    const enabled = await fetch(`${base}/v1/mcp/servers/${name}/enable`, {
+      method: "POST",
+      headers: { ...authHeaders(), "idempotency-key": "mcp-toggle-phase-one-enable" },
+    })
+    assert.equal(enabled.status, 200)
+    assert.deepEqual((await enabled.json() as { data: { ok: boolean } }).data, { ok: true })
+
+    const deleted = await fetch(`${base}/v1/mcp/servers/${name}`, {
+      method: "DELETE",
+      headers: { ...authHeaders(), "idempotency-key": "mcp-delete-phase-one" },
+    })
+    assert.equal(deleted.status, 200)
+    assert.deepEqual((await deleted.json() as { data: { ok: boolean } }).data, { ok: true })
+
+    const afterDelete = await fetch(`${base}/v1/mcp/servers`, { headers: authHeaders() })
+    assert.equal(((await afterDelete.json() as { data: { servers: Array<{ name: string }> } }).data.servers)
+      .some((server) => server.name === name), false)
+  })
+
   it("generates standard Forwarded context for live upstream calls", async () => {
     let received: Record<string, string | undefined> = {}
     const upstream = createServer((request, response) => {

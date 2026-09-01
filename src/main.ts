@@ -7,6 +7,7 @@ import type {
   BffEnvelope,
   BillingSummary,
   LibraryItem,
+  McpTransport,
   Project,
   ScheduledTask,
   Skill,
@@ -62,7 +63,42 @@ function isMutation(method: string): boolean {
 }
 
 function requiresIdempotency(method: string, segments: string[]): boolean {
-  return isMutation(method) && !(method === "POST" && segments[0] === "skills" && segments[1] === "github" && segments[2] === "preview")
+  if (!isMutation(method)) return false
+  if (method === "POST" && segments[0] === "skills" && segments[1] === "github" && segments[2] === "preview") return false
+  // The current Web HubClient intentionally does not add an idempotency key
+  // to the basic MCP registration request. Keep that request compatible while
+  // preserving the mutation gate for toggles and deletes.
+  if (method === "POST" && segments[0] === "mcp" && segments[1] === "servers" && segments.length === 2) return false
+  return true
+}
+
+function mcpRegisterInput(value: Record<string, unknown>): {
+  name: string
+  transport: McpTransport
+  url: string
+  allowed_tools: string[]
+  secret_ref: string | null
+} | null {
+  const name = typeof value.name === "string" ? value.name.trim() : ""
+  const transport = value.transport
+  const url = typeof value.url === "string" ? value.url.trim() : ""
+  const allowedTools = value.allowed_tools
+  const secretRef = value.secret_ref
+  if (
+    name === ""
+    || (transport !== "http" && transport !== "streamable_http")
+    || url === ""
+    || !Array.isArray(allowedTools)
+    || !allowedTools.every((tool): tool is string => typeof tool === "string")
+    || (secretRef !== undefined && secretRef !== null && typeof secretRef !== "string")
+  ) return null
+  return {
+    name,
+    transport,
+    url,
+    allowed_tools: [...allowedTools],
+    secret_ref: secretRef === undefined ? null : secretRef,
+  }
 }
 
 function githubSkillSource(value: unknown): GithubSkillSource | null {
@@ -145,6 +181,52 @@ function projectData(projects: Project[]): { projects: Project[] } { return { pr
 function taskData(tasks: Task[]): { tasks: Task[] } { return { tasks } }
 function skillData(skills: Skill[]): { skills: Skill[] } { return { skills } }
 function scheduledData(tasks: ScheduledTask[]): { tasks: ScheduledTask[] } { return { tasks } }
+function skillPoolData(skills: Skill[]): { skills: Array<{
+  name: string
+  description: string
+  content_hash: string
+  scope: string
+  enabled?: boolean
+  categories?: string[]
+  updated_at?: number
+}> } {
+  return {
+    skills: skills.map((skill) => ({
+      name: skill.name,
+      description: skill.description,
+      content_hash: skill.content_hash,
+      scope: skill.scope,
+      ...(skill.enabled === undefined ? {} : { enabled: skill.enabled }),
+      ...(skill.categories === undefined ? {} : { categories: skill.categories }),
+      ...(skill.updated_at === undefined ? {} : { updated_at: skill.updated_at }),
+    })),
+  }
+}
+
+function skillCatalogData(skills: Skill[]): { skills: Array<{
+  name: string
+  description: string
+  content_hash: string
+  scope: string
+  installed: boolean
+  enabled: boolean
+  categories?: string[]
+  updated_at?: number
+}>; next_cursor: null } {
+  return {
+    skills: skills.map((skill) => ({
+      name: skill.name,
+      description: skill.description,
+      content_hash: skill.content_hash,
+      scope: skill.scope,
+      installed: skill.installed ?? true,
+      enabled: skill.enabled ?? true,
+      ...(skill.categories === undefined ? {} : { categories: skill.categories }),
+      ...(skill.updated_at === undefined ? {} : { updated_at: skill.updated_at }),
+    })),
+    next_cursor: null,
+  }
+}
 
 async function mockBusiness(
   request: IncomingMessage,
@@ -200,8 +282,19 @@ async function mockBusiness(
     } else { status = 404; payload = failure("bff_route_not_found", "Business route was not found", context.requestId) }
   } else if (segments[0] === "skills") {
     if (segments.length === 1 && method === "GET") payload = skillData(store.skills)
-    else if (segments.length === 2 && segments[1] === "catalog" && method === "GET") payload = { skills: store.skills, next_cursor: null }
-    else if (segments.length === 2 && segments[1] === "pool" && method === "GET") payload = skillData(store.skills.filter((skill) => skill.enabled !== false))
+    else if (segments.length === 2 && segments[1] === "catalog" && method === "GET") payload = skillCatalogData(store.skills)
+    else if (segments.length === 2 && segments[1] === "pool" && method === "GET") payload = skillPoolData(store.skills.filter((skill) => skill.enabled !== false))
+    else if (segments.length === 2 && segments[1] === "quota" && method === "GET") payload = store.skillQuota(context.identity.namespace)
+    else if (segments.length === 3 && segments[2] === "revisions" && method === "GET") {
+      payload = { revisions: store.skillRevisions(segments[1] || "", queryOf(request).get("scope")?.trim() || undefined) }
+    } else if (segments.length === 3 && (segments[2] === "enable" || segments[2] === "disable") && method === "POST") {
+      const enabled = segments[2] === "enable"
+      const changed = store.setSkillEnabled(segments[1] || "", enabled, queryOf(request).get("scope")?.trim() || undefined)
+      if (!changed) {
+        status = 404
+        payload = failure("skill_not_found", "Skill was not found", context.requestId)
+      } else payload = { ok: true }
+    }
     else if (segments.length === 3 && segments[1] === "github" && (segments[2] === "preview" || segments[2] === "import") && method === "POST") {
       const source = githubSkillSource(json.repository)
       if (source === null) {
@@ -213,6 +306,33 @@ async function mockBusiness(
         const skill = store.importGithubSkill(source)
         payload = { repository: source.source_url, default_branch: "main", skill: { name: skill.name, description: skill.description } }
       }
+    } else { status = 404; payload = failure("bff_route_not_found", "Business route was not found", context.requestId) }
+  } else if (segments[0] === "mcp" && segments[1] === "servers") {
+    const name = segments[2]
+    if (segments.length === 2 && method === "GET") payload = { servers: store.mcpServers }
+    else if (segments.length === 2 && method === "POST") {
+      const input = mcpRegisterInput(json)
+      if (input === null) {
+        status = 400
+        payload = failure("invalid_mcp_server", "A valid MCP server registration is required", context.requestId)
+      } else if (store.findMcpServer(input.name) !== undefined) {
+        status = 409
+        payload = failure("mcp_server_exists", "MCP server already exists", context.requestId)
+      } else {
+        payload = { server: store.registerMcpServer({ ...input, scope: context.identity.namespace }) }
+      }
+    } else if (segments.length === 4 && (segments[3] === "enable" || segments[3] === "disable") && method === "POST") {
+      const changed = store.setMcpEnabled(name || "", segments[3] === "enable")
+      if (!changed) {
+        status = 404
+        payload = failure("mcp_server_not_found", "MCP server was not found", context.requestId)
+      } else payload = { ok: true }
+    } else if (segments.length === 3 && method === "DELETE") {
+      const deleted = store.deleteMcpServer(name || "")
+      if (!deleted) {
+        status = 404
+        payload = failure("mcp_server_not_found", "MCP server was not found", context.requestId)
+      } else payload = { ok: true }
     } else { status = 404; payload = failure("bff_route_not_found", "Business route was not found", context.requestId) }
   } else if (segments[0] === "scheduled-tasks") {
     const id = segments[1]

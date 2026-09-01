@@ -1,6 +1,20 @@
-import type { AgentConnectionSetup, BillingPlan, BillingSummary, LibraryItem, Project, ScheduledTask, Skill, Task } from "./contracts.js"
+import type {
+  AgentConnectionSetup,
+  BillingPlan,
+  BillingSummary,
+  LibraryItem,
+  McpServer,
+  McpTransport,
+  Project,
+  ScheduledTask,
+  Skill,
+  SkillQuota,
+  SkillRevision,
+  Task,
+} from "./contracts.js"
 
 const now = "2026-01-01T00:00:00.000Z"
+const skillPackageSize = 122880
 
 export class MockStore {
   readonly projects: Project[] = [{
@@ -44,6 +58,8 @@ export class MockStore {
     updated_at: 1767225600,
   }]
 
+  readonly mcpServers: McpServer[] = []
+
   readonly library: LibraryItem[] = [{
     id: "artifact_contract",
     title: "Business API contract",
@@ -66,6 +82,81 @@ export class MockStore {
 
   projectTasks(projectId: string): Task[] {
     return this.tasks.filter((task) => task.project_id === projectId)
+  }
+
+  skillQuota(namespace: string): SkillQuota {
+    const packageCount = this.skills.filter((skill) => skill.scope !== "official").length
+    return {
+      namespace,
+      package_count: packageCount,
+      package_bytes: packageCount * skillPackageSize,
+      max_packages: 20,
+      max_bytes: 52428800,
+    }
+  }
+
+  skillRevisions(name: string, scope?: string): SkillRevision[] {
+    return this.skills
+      .filter((skill) => skill.name === name && (scope === undefined || skill.scope === scope))
+      .map((skill) => ({
+        scope: skill.scope,
+        name: skill.name,
+        revision: 1,
+        content_hash: skill.content_hash,
+        package_size: skillPackageSize,
+        source: skill.source_url || "mock",
+        created_at: skill.updated_at || 1767225600,
+      }))
+  }
+
+  setSkillEnabled(name: string, enabled: boolean, scope?: string): boolean {
+    let changed = false
+    for (const skill of this.skills) {
+      if (skill.name !== name || (scope !== undefined && skill.scope !== scope)) continue
+      skill.enabled = enabled
+      changed = true
+    }
+    return changed
+  }
+
+  registerMcpServer(input: {
+    scope: string
+    name: string
+    transport: McpTransport
+    url: string
+    allowed_tools: string[]
+    secret_ref: string | null
+  }): McpServer {
+    const server: McpServer = {
+      scope: input.scope,
+      name: input.name,
+      revision: 1,
+      transport: input.transport,
+      url: input.url,
+      allowed_tools: [...input.allowed_tools],
+      secret_ref: input.secret_ref,
+      enabled: true,
+    }
+    this.mcpServers.push(server)
+    return server
+  }
+
+  findMcpServer(name: string): McpServer | undefined {
+    return this.mcpServers.find((server) => server.name === name)
+  }
+
+  setMcpEnabled(name: string, enabled: boolean): boolean {
+    const server = this.findMcpServer(name)
+    if (server === undefined) return false
+    server.enabled = enabled
+    return true
+  }
+
+  deleteMcpServer(name: string): boolean {
+    const index = this.mcpServers.findIndex((server) => server.name === name)
+    if (index < 0) return false
+    this.mcpServers.splice(index, 1)
+    return true
   }
 
   createProject(input: { name: string; description?: string }): Project {

@@ -56,8 +56,14 @@ x-kokoro-user-id: <sealed-session user id>
 | GET | `/v1/projects/:projectId` | 专案投影 |
 | GET | `/v1/projects/:projectId/tasks` | 专案任务投影 |
 | GET | `/v1/skills`, `/v1/skills/pool`, `/v1/skills/catalog` | 技能目录/池 |
+| GET | `/v1/skills/quota` | 当前 namespace 技能包配额 |
+| GET | `/v1/skills/:name/revisions[?scope=...]` | 技能版本历史 |
+| POST | `/v1/skills/:name/enable[?scope=...]`, `/v1/skills/:name/disable[?scope=...]` | 技能启用/停用 |
 | POST | `/v1/skills/github/preview` | GitHub skill 预览（`repository` 请求字段，Idempotency-Key 可选） |
 | POST | `/v1/skills/github/import` | 幂等导入 GitHub skill |
+| GET/POST | `/v1/mcp/servers` | MCP server 列表与注册 |
+| POST | `/v1/mcp/servers/:name/enable`, `/v1/mcp/servers/:name/disable` | MCP server 启用/停用 |
+| DELETE | `/v1/mcp/servers/:name` | MCP server 删除 |
 | GET/POST/PATCH/DELETE | `/v1/scheduled-tasks[/:id]` | 定时任务投影与变更 |
 | POST | `/v1/scheduled-tasks/:id/retry` | 重试定时任务 |
 | GET | `/v1/agents/connections/setup?platform=telegram\|line\|slack` | Agent 连接设置投影 |
@@ -65,7 +71,10 @@ x-kokoro-user-id: <sealed-session user id>
 | GET | `/v1/billing/plans`, `/v1/billing/summary` | 套餐与余额/用量摘要 |
 | POST | `/v1/billing/checkout` | 通过 plan_id 创建业务 checkout 投影 |
 
-除 GitHub skill 预览外，所有变更请求必须携带 `Idempotency-Key`。服务端以 namespace、方法、路径和 key 组成幂等范围。
+除 GitHub skill 预览和基础 MCP server 注册外，所有变更请求必须携带 `Idempotency-Key`。服务端以 namespace、方法、路径和 key 组成幂等范围；MCP 注册保持与当前 Web HubClient 的无 key 请求兼容。
+
+技能配额、版本历史与 MCP server 成功响应均使用 `{ data, meta: { request_id } }`。MCP 注册体为
+`{ "name": "...", "transport": "http|streamable_http", "url": "...", "allowed_tools": [], "secret_ref": null }`，其中 `scope` 由 BFF 从 namespace 派生；启停/删除成功返回 `data: { "ok": true }`。
 
 GitHub skill 预览和导入使用相同的请求/响应数据形状：请求体为
 `{ "repository": "https://github.com/OWNER/REPO" }`，成功响应的 `data` 为
