@@ -35,6 +35,7 @@ export type Skill = {
   description: string
   content_hash: string
   scope: string
+  source_url?: string
   enabled?: boolean
   installed?: boolean
   categories?: string[]

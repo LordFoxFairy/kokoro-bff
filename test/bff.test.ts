@@ -112,6 +112,61 @@ describe("kokoro-bff v1 mock contract", () => {
     assert.match(createdBody.data.task.id, /^scheduled_/)
   })
 
+  it("previews a GitHub skill without requiring Idempotency-Key", async () => {
+    const base = await listen(createBffServer(config()))
+    const response = await fetch(`${base}/v1/skills/github/preview`, {
+      method: "POST",
+      headers: { ...authHeaders(), "content-type": "application/json" },
+      body: JSON.stringify({ url: "https://github.com/acme/skill-pack/tree/main/review" }),
+    })
+    const body = await response.json() as { data: { preview: { source_url: string; owner: string; repository: string } }; meta: { request_id: string } }
+
+    assert.equal(response.status, 200)
+    assert.equal(body.data.preview.source_url, "https://github.com/acme/skill-pack/tree/main/review")
+    assert.equal(body.data.preview.owner, "acme")
+    assert.equal(body.data.preview.repository, "skill-pack")
+    assert.ok(body.meta.request_id.length > 0)
+  })
+
+  it("requires Idempotency-Key for GitHub skill import and replays the result", async () => {
+    const base = await listen(createBffServer(config()))
+    const url = "https://github.com/acme/skill-pack/tree/main/review"
+    const missingKey = await fetch(`${base}/v1/skills/github/import`, {
+      method: "POST",
+      headers: { ...authHeaders(), "content-type": "application/json" },
+      body: JSON.stringify({ url }),
+    })
+    assert.equal(missingKey.status, 400)
+    assert.equal((await missingKey.json() as { error: { code: string } }).error.code, "idempotency_key_required")
+
+    const init = {
+      method: "POST",
+      headers: { ...authHeaders(), "content-type": "application/json", "idempotency-key": "github-import-1" },
+      body: JSON.stringify({ url }),
+    }
+    const first = await fetch(`${base}/v1/skills/github/import`, init)
+    const second = await fetch(`${base}/v1/skills/github/import`, init)
+    const firstBody = await first.json() as { data: { skill: { source_url: string } }; meta: { request_id: string } }
+
+    assert.equal(first.status, 200)
+    assert.deepEqual(firstBody, await second.json())
+    assert.equal(firstBody.data.skill.source_url, url)
+    assert.ok(firstBody.meta.request_id.length > 0)
+  })
+
+  it("rejects non-GitHub URLs for GitHub skill preview and import", async () => {
+    const base = await listen(createBffServer(config()))
+    for (const path of ["preview", "import"]) {
+      const response = await fetch(`${base}/v1/skills/github/${path}`, {
+        method: "POST",
+        headers: { ...authHeaders(), "content-type": "application/json", ...(path === "import" ? { "idempotency-key": "github-import-invalid" } : {}) },
+        body: JSON.stringify({ url: "https://example.com/acme/skill-pack" }),
+      })
+      assert.equal(response.status, 400)
+      assert.equal((await response.json() as { error: { code: string } }).error.code, "invalid_github_url")
+    }
+  })
+
   it("generates standard Forwarded context for live upstream calls", async () => {
     let received: Record<string, string | undefined> = {}
     const upstream = createServer((request, response) => {

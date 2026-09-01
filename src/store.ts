@@ -101,6 +101,32 @@ export class MockStore {
     return task
   }
 
+  importGithubSkill(input: {
+    source_url: string
+    owner: string
+    repository: string
+    path: string
+    name: string
+    description: string
+  }): Skill {
+    const existing = this.skills.find((skill) => skill.source_url === input.source_url)
+    if (existing !== undefined) return existing
+
+    const skill: Skill = {
+      name: input.name,
+      description: input.description,
+      content_hash: `sha256:fixture-github-${input.owner}-${input.repository}-${input.path || "root"}`,
+      scope: "user",
+      source_url: input.source_url,
+      installed: true,
+      enabled: true,
+      categories: ["github"],
+      updated_at: 1767225600,
+    }
+    this.skills.push(skill)
+    return skill
+  }
+
   findScheduledTask(id: string): ScheduledTask | undefined {
     return this.scheduledTasks.find((task) => task.id === id)
   }

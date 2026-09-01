@@ -25,6 +25,15 @@ type Context = {
   identity: { namespace: string; userId: string }
 }
 
+type GithubSkillSource = {
+  source_url: string
+  owner: string
+  repository: string
+  path: string
+  name: string
+  description: string
+}
+
 function send(response: ServerResponse, status: number, body: unknown): void {
   const payload = Buffer.from(JSON.stringify(body))
   response.writeHead(status, {
@@ -51,6 +60,47 @@ function queryOf(request: IncomingMessage): URLSearchParams {
 
 function isMutation(method: string): boolean {
   return method === "POST" || method === "PUT" || method === "PATCH" || method === "DELETE"
+}
+
+function requiresIdempotency(method: string, segments: string[]): boolean {
+  return isMutation(method) && !(method === "POST" && segments[0] === "skills" && segments[1] === "github" && segments[2] === "preview")
+}
+
+function githubSkillSource(value: unknown): GithubSkillSource | null {
+  if (typeof value !== "string" || value.trim() === "") return null
+  const sourceUrl = value.trim()
+  let parsed: URL
+  try {
+    parsed = new URL(sourceUrl)
+  } catch {
+    return null
+  }
+  if (parsed.protocol !== "https:" || !["github.com", "www.github.com"].includes(parsed.hostname) || parsed.username || parsed.password || parsed.search || parsed.hash) {
+    return null
+  }
+
+  let parts: string[]
+  try {
+    parts = parsed.pathname.split("/").filter(Boolean).map((part) => decodeURIComponent(part))
+  } catch {
+    return null
+  }
+  const owner = parts[0]
+  const repository = parts[1]
+  if (owner === undefined || repository === undefined || !/^[A-Za-z0-9][A-Za-z0-9-]*$/u.test(owner) || !/^[A-Za-z0-9_.-]+$/u.test(repository)) {
+    return null
+  }
+
+  const path = parts.slice(2).join("/")
+  const name = path.split("/").filter(Boolean).pop() || repository.replace(/\.git$/u, "")
+  return {
+    source_url: sourceUrl,
+    owner,
+    repository,
+    path,
+    name,
+    description: `Mock GitHub skill from ${owner}/${repository}`,
+  }
 }
 
 function authorize(request: IncomingMessage, config: BffConfig, id: string): Context | null {
@@ -113,8 +163,9 @@ async function mockBusiness(
   const method = request.method || "GET"
   const route = `/${segments.join("/")}`
   let body: Buffer | undefined
-  if (isMutation(method)) {
-    const key = mutationKey(request, route, context)
+  let key: string | null = null
+  if (requiresIdempotency(method, segments)) {
+    key = mutationKey(request, route, context)
     if (key === null) {
       result(response, 400, failure("idempotency_key_required", "Mutations require Idempotency-Key", context.requestId), context)
       return
@@ -124,6 +175,8 @@ async function mockBusiness(
       result(response, prior.status, prior.body, context)
       return
     }
+  }
+  if (isMutation(method)) {
     try { body = await readBody(request) } catch {
       result(response, 413, failure("request_body_too_large", "Request body is too large", context.requestId), context)
       return
@@ -157,7 +210,17 @@ async function mockBusiness(
     if (segments.length === 1 && method === "GET") payload = skillData(store.skills)
     else if (segments.length === 2 && segments[1] === "catalog" && method === "GET") payload = { skills: store.skills, next_cursor: null }
     else if (segments.length === 2 && segments[1] === "pool" && method === "GET") payload = skillData(store.skills.filter((skill) => skill.enabled !== false))
-    else { status = 404; payload = failure("bff_route_not_found", "Business route was not found", context.requestId) }
+    else if (segments.length === 3 && segments[1] === "github" && (segments[2] === "preview" || segments[2] === "import") && method === "POST") {
+      const source = githubSkillSource(json.url ?? json.github_url)
+      if (source === null) {
+        status = 400
+        payload = failure("invalid_github_url", "A valid GitHub URL is required", context.requestId)
+      } else if (segments[2] === "preview") {
+        payload = { preview: source }
+      } else {
+        payload = { skill: store.importGithubSkill(source) }
+      }
+    } else { status = 404; payload = failure("bff_route_not_found", "Business route was not found", context.requestId) }
   } else if (segments[0] === "scheduled-tasks") {
     const id = segments[1]
     if (segments.length === 1 && method === "GET") payload = scheduledData(store.scheduledTasks)
@@ -206,10 +269,7 @@ async function mockBusiness(
 
   const isError = typeof payload === "object" && payload !== null && "error" in payload
   const envelope = isError ? payload : ok(payload, context.requestId)
-  if (isMutation(method)) {
-    const key = mutationKey(request, route, context)
-    if (key !== null) idempotency.set(key, { status, body: envelope })
-  }
+  if (key !== null) idempotency.set(key, { status, body: envelope })
   result(response, status, envelope, context)
 }
 
