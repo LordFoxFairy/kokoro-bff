@@ -29,7 +29,6 @@ type GithubSkillSource = {
   source_url: string
   owner: string
   repository: string
-  path: string
   name: string
   description: string
 }
@@ -68,7 +67,7 @@ function requiresIdempotency(method: string, segments: string[]): boolean {
 
 function githubSkillSource(value: unknown): GithubSkillSource | null {
   if (typeof value !== "string" || value.trim() === "") return null
-  const sourceUrl = value.trim()
+  const sourceUrl = value.trim().replace(/\/$/u, "")
   let parsed: URL
   try {
     parsed = new URL(sourceUrl)
@@ -79,26 +78,19 @@ function githubSkillSource(value: unknown): GithubSkillSource | null {
     return null
   }
 
-  let parts: string[]
-  try {
-    parts = parsed.pathname.split("/").filter(Boolean).map((part) => decodeURIComponent(part))
-  } catch {
-    return null
-  }
+  const parts = parsed.pathname.split("/").filter(Boolean)
+  if (parts.length !== 2) return null
   const owner = parts[0]
-  const repository = parts[1]
-  if (owner === undefined || repository === undefined || !/^[A-Za-z0-9][A-Za-z0-9-]*$/u.test(owner) || !/^[A-Za-z0-9_.-]+$/u.test(repository)) {
+  const repository = parts[1]?.replace(/\.git$/u, "")
+  if (owner === undefined || repository === undefined || !/^[A-Za-z0-9_.-]+$/u.test(owner) || !/^[A-Za-z0-9_.-]+$/u.test(repository)) {
     return null
   }
-
-  const path = parts.slice(2).join("/")
-  const name = path.split("/").filter(Boolean).pop() || repository.replace(/\.git$/u, "")
+  const canonical = `https://github.com/${owner}/${repository}`
   return {
-    source_url: sourceUrl,
+    source_url: canonical,
     owner,
     repository,
-    path,
-    name,
+    name: repository,
     description: `Mock GitHub skill from ${owner}/${repository}`,
   }
 }
@@ -211,14 +203,15 @@ async function mockBusiness(
     else if (segments.length === 2 && segments[1] === "catalog" && method === "GET") payload = { skills: store.skills, next_cursor: null }
     else if (segments.length === 2 && segments[1] === "pool" && method === "GET") payload = skillData(store.skills.filter((skill) => skill.enabled !== false))
     else if (segments.length === 3 && segments[1] === "github" && (segments[2] === "preview" || segments[2] === "import") && method === "POST") {
-      const source = githubSkillSource(json.url ?? json.github_url)
+      const source = githubSkillSource(json.repository)
       if (source === null) {
         status = 400
         payload = failure("invalid_github_url", "A valid GitHub URL is required", context.requestId)
       } else if (segments[2] === "preview") {
-        payload = { preview: source }
+        payload = { repository: source.source_url, default_branch: "main", skill: { name: source.name, description: source.description } }
       } else {
-        payload = { skill: store.importGithubSkill(source) }
+        const skill = store.importGithubSkill(source)
+        payload = { repository: source.source_url, default_branch: "main", skill: { name: skill.name, description: skill.description } }
       }
     } else { status = 404; payload = failure("bff_route_not_found", "Business route was not found", context.requestId) }
   } else if (segments[0] === "scheduled-tasks") {

@@ -105,7 +105,6 @@ export class MockStore {
     source_url: string
     owner: string
     repository: string
-    path: string
     name: string
     description: string
   }): Skill {
@@ -115,7 +114,7 @@ export class MockStore {
     const skill: Skill = {
       name: input.name,
       description: input.description,
-      content_hash: `sha256:fixture-github-${input.owner}-${input.repository}-${input.path || "root"}`,
+      content_hash: `sha256:fixture-github-${input.owner}-${input.repository}`,
       scope: "user",
       source_url: input.source_url,
       installed: true,

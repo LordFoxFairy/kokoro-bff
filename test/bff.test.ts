@@ -114,27 +114,36 @@ describe("kokoro-bff v1 mock contract", () => {
 
   it("previews a GitHub skill without requiring Idempotency-Key", async () => {
     const base = await listen(createBffServer(config()))
+    const repository = "https://github.com/acme/skill-pack"
     const response = await fetch(`${base}/v1/skills/github/preview`, {
       method: "POST",
       headers: { ...authHeaders(), "content-type": "application/json" },
-      body: JSON.stringify({ url: "https://github.com/acme/skill-pack/tree/main/review" }),
+      body: JSON.stringify({ repository }),
     })
-    const body = await response.json() as { data: { preview: { source_url: string; owner: string; repository: string } }; meta: { request_id: string } }
+    const body = await response.json() as {
+      data: { repository: string; default_branch: string; skill: { name: string; description: string } }
+      meta: { request_id: string }
+    }
 
     assert.equal(response.status, 200)
-    assert.equal(body.data.preview.source_url, "https://github.com/acme/skill-pack/tree/main/review")
-    assert.equal(body.data.preview.owner, "acme")
-    assert.equal(body.data.preview.repository, "skill-pack")
+    assert.deepEqual(body.data, {
+      repository,
+      default_branch: "main",
+      skill: {
+        name: "skill-pack",
+        description: "Mock GitHub skill from acme/skill-pack",
+      },
+    })
     assert.ok(body.meta.request_id.length > 0)
   })
 
   it("requires Idempotency-Key for GitHub skill import and replays the result", async () => {
     const base = await listen(createBffServer(config()))
-    const url = "https://github.com/acme/skill-pack/tree/main/review"
+    const repository = "https://github.com/acme/skill-pack"
     const missingKey = await fetch(`${base}/v1/skills/github/import`, {
       method: "POST",
       headers: { ...authHeaders(), "content-type": "application/json" },
-      body: JSON.stringify({ url }),
+      body: JSON.stringify({ repository }),
     })
     assert.equal(missingKey.status, 400)
     assert.equal((await missingKey.json() as { error: { code: string } }).error.code, "idempotency_key_required")
@@ -142,15 +151,25 @@ describe("kokoro-bff v1 mock contract", () => {
     const init = {
       method: "POST",
       headers: { ...authHeaders(), "content-type": "application/json", "idempotency-key": "github-import-1" },
-      body: JSON.stringify({ url }),
+      body: JSON.stringify({ repository }),
     }
     const first = await fetch(`${base}/v1/skills/github/import`, init)
     const second = await fetch(`${base}/v1/skills/github/import`, init)
-    const firstBody = await first.json() as { data: { skill: { source_url: string } }; meta: { request_id: string } }
+    const firstBody = await first.json() as {
+      data: { repository: string; default_branch: string; skill: { name: string; description: string } }
+      meta: { request_id: string }
+    }
 
     assert.equal(first.status, 200)
     assert.deepEqual(firstBody, await second.json())
-    assert.equal(firstBody.data.skill.source_url, url)
+    assert.deepEqual(firstBody.data, {
+      repository,
+      default_branch: "main",
+      skill: {
+        name: "skill-pack",
+        description: "Mock GitHub skill from acme/skill-pack",
+      },
+    })
     assert.ok(firstBody.meta.request_id.length > 0)
   })
 
@@ -160,7 +179,7 @@ describe("kokoro-bff v1 mock contract", () => {
       const response = await fetch(`${base}/v1/skills/github/${path}`, {
         method: "POST",
         headers: { ...authHeaders(), "content-type": "application/json", ...(path === "import" ? { "idempotency-key": "github-import-invalid" } : {}) },
-        body: JSON.stringify({ url: "https://example.com/acme/skill-pack" }),
+        body: JSON.stringify({ repository: "https://example.com/acme/skill-pack" }),
       })
       assert.equal(response.status, 400)
       assert.equal((await response.json() as { error: { code: string } }).error.code, "invalid_github_url")
