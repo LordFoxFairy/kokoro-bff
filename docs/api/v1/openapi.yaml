@@ -1,0 +1,615 @@
+openapi: 3.1.0
+info:
+  title: Kokoro Business API
+  version: 1.0.0
+  description: |
+    Kokoro BFF 面向 Web 的业务契约。当前文档先覆盖 Projects 及项目级投影。
+    资源级实现和持久化由各业务子仓库负责，BFF 不直接访问业务 SQL。
+servers:
+  - url: http://127.0.0.1:4300
+    description: Local mock BFF
+  - url: https://bff.example.com
+    description: Production placeholder; configure through deployment environment
+security:
+  - serviceHeader: []
+    internalSecret: []
+    namespace: []
+    userId: []
+tags:
+  - name: Health
+  - name: Projects
+paths:
+  /healthz:
+    get:
+      tags: [Health]
+      operationId: healthz
+      security: []
+      responses:
+        '200':
+          description: Process is alive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /readyz:
+    get:
+      tags: [Health]
+      operationId: readyz
+      security: []
+      responses:
+        '200':
+          description: Service configuration is ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /v1/projects:
+    get:
+      tags: [Projects]
+      operationId: listProjects
+      summary: List visible projects
+      responses:
+        '200':
+          description: Project list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Projects]
+      operationId: createProject
+      summary: Create a project
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProjectRequest'
+            example:
+              name: Design system
+              description: Shared business UI
+      responses:
+        '200':
+          description: Project created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/projects/{projectId}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      tags: [Projects]
+      operationId: getProject
+      summary: Get a project projection
+      responses:
+        '200':
+          description: Project projection
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Projects]
+      operationId: updateProjectInstruction
+      summary: Update project instruction
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProjectInstructionRequest'
+            example:
+              instruction: Keep all implementation notes scoped to this project.
+      responses:
+        '200':
+          description: Updated project projection
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/projects/{projectId}/tasks:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      tags: [Projects]
+      operationId: listProjectTasks
+      summary: List task projections for a project
+      responses:
+        '200':
+          description: Task projections
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskListResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/projects/{projectId}/instruction-revisions:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      tags: [Projects]
+      operationId: listProjectInstructionRevisions
+      summary: List project instruction revisions
+      responses:
+        '200':
+          description: Instruction history
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectInstructionRevisionResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/projects/{projectId}/resources:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      tags: [Projects]
+      operationId: uploadProjectResources
+      summary: Upload project resources
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                files:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+              required: [files]
+      responses:
+        '200':
+          description: Resource request accepted by the BFF
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/projects/{projectId}/skills/{skill}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - name: skill
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+    patch:
+      tags: [Projects]
+      operationId: updateProjectSkill
+      summary: Enable or disable a project skill
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectSkillRequest'
+            example:
+              enabled: false
+      responses:
+        '200':
+          description: Project skill state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectSkillResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/projects/{projectId}/scheduled-tasks:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      tags: [Projects]
+      operationId: createProjectScheduledTask
+      summary: Create a scheduled task for a project
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateScheduledTaskRequest'
+      responses:
+        '200':
+          description: Scheduled task projection
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduledTaskResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+components:
+  securitySchemes:
+    serviceHeader:
+      type: apiKey
+      in: header
+      name: x-kokoro-service
+      description: Must be web-bff; server-to-server only.
+    internalSecret:
+      type: apiKey
+      in: header
+      name: x-kokoro-internal-secret
+      description: Required when KOKORO_BFF_SHARED_SECRET is configured.
+    namespace:
+      type: apiKey
+      in: header
+      name: x-kokoro-namespace
+      description: Derived from the sealed Web session.
+    userId:
+      type: apiKey
+      in: header
+      name: x-kokoro-user-id
+      description: Derived from the sealed Web session.
+  parameters:
+    ProjectId:
+      name: projectId
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 255
+  schemas:
+    RequestMeta:
+      type: object
+      required: [request_id]
+      properties:
+        request_id:
+          type: string
+          minLength: 1
+    Project:
+      type: object
+      required: [id, name, slug, description, created_at, updated_at]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        instruction:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    Task:
+      type: object
+      required: [id, project_id, title, status, updated_at]
+      properties:
+        id:
+          type: string
+        project_id:
+          type: string
+        title:
+          type: string
+        status:
+          type: string
+          enum: [todo, in_progress, done]
+        updated_at:
+          type: string
+          format: date-time
+    ProjectInstructionRevision:
+      type: object
+      required: [id, instruction, updatedAt, actorName, current]
+      properties:
+        id:
+          type: string
+        instruction:
+          type: string
+        updatedAt:
+          type: integer
+          format: int64
+        actorName:
+          type: string
+        current:
+          type: boolean
+    ScheduledTask:
+      type: object
+      required: [id, title, prompt, frequency, time, timezone, next_run_at, auto_approve, enabled, status]
+      properties:
+        id:
+          type: string
+        project_id:
+          type: string
+        title:
+          type: string
+        prompt:
+          type: string
+        frequency:
+          type: string
+          enum: [daily, weekly]
+        time:
+          type: string
+        timezone:
+          type: string
+        next_run_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        auto_approve:
+          type: boolean
+        enabled:
+          type: boolean
+        status:
+          type: string
+          enum: [active, paused, failed]
+    CreateProjectRequest:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+        description:
+          type: string
+    UpdateProjectInstructionRequest:
+      type: object
+      required: [instruction]
+      additionalProperties: false
+      properties:
+        instruction:
+          type: string
+    ProjectSkillRequest:
+      type: object
+      required: [enabled]
+      additionalProperties: false
+      properties:
+        enabled:
+          type: boolean
+    CreateScheduledTaskRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        title:
+          type: string
+        prompt:
+          type: string
+        frequency:
+          type: string
+          enum: [daily, weekly]
+        time:
+          type: string
+        timezone:
+          type: string
+        next_run_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        auto_approve:
+          type: boolean
+        enabled:
+          type: boolean
+        status:
+          type: string
+          enum: [active, paused, failed]
+    ProjectListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [projects]
+          properties:
+            projects:
+              type: array
+              items:
+                $ref: '#/components/schemas/Project'
+        meta:
+          $ref: '#/components/schemas/RequestMeta'
+    ProjectResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [project]
+          properties:
+            project:
+              $ref: '#/components/schemas/Project'
+        meta:
+          $ref: '#/components/schemas/RequestMeta'
+    TaskListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [tasks]
+          properties:
+            tasks:
+              type: array
+              items:
+                $ref: '#/components/schemas/Task'
+        meta:
+          $ref: '#/components/schemas/RequestMeta'
+    ProjectInstructionRevisionResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/ProjectInstructionRevision'
+        meta:
+          $ref: '#/components/schemas/RequestMeta'
+    ProjectSkillResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [skill]
+          properties:
+            skill:
+              type: object
+              required: [project_id, name, enabled]
+              properties:
+                project_id:
+                  type: string
+                name:
+                  type: string
+                enabled:
+                  type: boolean
+        meta:
+          $ref: '#/components/schemas/RequestMeta'
+    ScheduledTaskResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [task]
+          properties:
+            task:
+              $ref: '#/components/schemas/ScheduledTask'
+        meta:
+          $ref: '#/components/schemas/RequestMeta'
+    OkResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [ok]
+          properties:
+            ok:
+              type: boolean
+              const: true
+        meta:
+          $ref: '#/components/schemas/RequestMeta'
+    ErrorResponse:
+      type: object
+      required: [error, meta]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+        meta:
+          $ref: '#/components/schemas/RequestMeta'
+    HealthResponse:
+      type: object
+      required: [status, service, mode]
+      properties:
+        status:
+          type: string
+          const: ok
+        service:
+          type: string
+          const: kokoro-bff
+        mode:
+          type: string
+          enum: [mock, live]
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Missing or invalid service identity
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Service authentication failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: Idempotency or resource conflict
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ServiceUnavailable:
+      description: Required upstream is not configured
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'

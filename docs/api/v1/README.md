@@ -17,6 +17,8 @@ BFF 不负责：
 - Agent Redis Worker 的内部实现
 - 直接访问其他业务子仓库的 SQL
 
+机器可读契约：[openapi.yaml](./openapi.yaml)。本阶段先冻结 Health、Projects 和项目级投影；其余业务资源按同一结构逐步补齐。
+
 ## Base URL 和调用方
 
 本地 Mock：
