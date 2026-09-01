@@ -56,7 +56,7 @@ x-kokoro-user-id: <sealed-session user id>
 | GET | `/v1/projects/:projectId` | 专案投影 |
 | GET | `/v1/projects/:projectId/tasks` | 专案任务投影 |
 | GET | `/v1/skills`, `/v1/skills/pool`, `/v1/skills/catalog` | 技能目录/池 |
-| POST | `/v1/skills/github/preview` | GitHub skill URL 预览（Idempotency-Key 可选） |
+| POST | `/v1/skills/github/preview` | GitHub skill 预览（`repository` 请求字段，Idempotency-Key 可选） |
 | POST | `/v1/skills/github/import` | 幂等导入 GitHub skill |
 | GET/POST/PATCH/DELETE | `/v1/scheduled-tasks[/:id]` | 定时任务投影与变更 |
 | POST | `/v1/scheduled-tasks/:id/retry` | 重试定时任务 |
@@ -66,6 +66,10 @@ x-kokoro-user-id: <sealed-session user id>
 | POST | `/v1/billing/checkout` | 通过 plan_id 创建业务 checkout 投影 |
 
 除 GitHub skill 预览外，所有变更请求必须携带 `Idempotency-Key`。服务端以 namespace、方法、路径和 key 组成幂等范围。
+
+GitHub skill 预览和导入使用相同的请求/响应数据形状：请求体为
+`{ "repository": "https://github.com/OWNER/REPO" }`，成功响应的 `data` 为
+`{ "repository": "...", "default_branch": "main", "skill": { "name": "...", "description": "..." } }`。
 
 ## Mock → Live
 
