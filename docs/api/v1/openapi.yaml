@@ -204,6 +204,27 @@ paths:
   /v1/sessions/{id}/messages:
     parameters:
       - $ref: '#/components/parameters/SessionId'
+    get:
+      tags: [Chat]
+      operationId: listSessionMessages
+      summary: List session messages
+      description: Cursor-paginated message history for a session. This is the v1 equivalent of Manus task.listMessages; session detail remains a bounded metadata snapshot.
+      parameters:
+        - $ref: '#/components/parameters/ScopeQuery'
+        - $ref: '#/components/parameters/ProjectRefQuery'
+        - $ref: '#/components/parameters/LimitQuery'
+        - $ref: '#/components/parameters/CursorQuery'
+      responses:
+        '200':
+          description: Cursor-paginated session messages
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionMessageListResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
     post:
       tags: [Chat]
       operationId: createMessage
@@ -1237,12 +1258,27 @@ components:
               description: Opaque cursor for the next page; null means there is no next page.
               example: null
         meta: { $ref: '#/components/schemas/RequestMeta' }
+    SessionMessageListResponse:
+      type: object
+      required: [data, meta]
+      additionalProperties: false
+      properties:
+        data:
+          type: object
+          required: [messages, next_cursor]
+          additionalProperties: false
+          properties:
+            messages:
+              type: array
+              items: { $ref: '#/components/schemas/ChatMessage' }
+            next_cursor:
+              type: [string, 'null']
+              description: Opaque cursor for the next page; null means there is no next page.
+              example: null
+        meta: { $ref: '#/components/schemas/RequestMeta' }
       example:
         data:
-          sessions:
-            - session_id: session_kokoro
-              title: Review business API contract
-              updated_at: '2026-01-01T00:00:00.000Z'
+          messages: []
           next_cursor: null
         meta:
           request_id: req_01JASYNC000000000000000000

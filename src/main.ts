@@ -29,6 +29,7 @@ import {
   buildAgentLaunch,
   buildSessionDetail,
   mapAgentEvent,
+  mapAgentMessage,
   type AgentChatEvent,
   type AgentChatMessage,
 } from "./adapters/agent.js"
@@ -448,6 +449,27 @@ function scheduledData(tasks: ScheduledTask[]): { tasks: ScheduledTask[] } { ret
 function chatSessionsData(sessions: ChatSessionSummary[], nextCursor: string | null = null): { sessions: ChatSessionSummary[]; next_cursor: string | null } {
   return { sessions, next_cursor: nextCursor }
 }
+
+function sessionScope(request: IncomingMessage, context: Context): { scope: string; projectRef?: string } | { error: string } {
+  const query = queryOf(request)
+  const requestedScope = query.get("scope")?.trim()
+  if (requestedScope !== undefined && requestedScope !== "" && requestedScope !== "direct") {
+    return { error: "scope must be direct when provided" }
+  }
+  const projectRef = query.get("project_ref")?.trim() || undefined
+  return { scope: context.identity.namespace, ...(projectRef === undefined ? {} : { projectRef }) }
+}
+
+function mockControlReceipt(runId: string, commandId: string, body: Record<string, unknown>): Record<string, unknown> {
+  const requestDigest = createHash("sha256").update(stableStringify(body)).digest("hex")
+  return {
+    run_id: runId,
+    command_id: commandId,
+    request_digest: `sha256:${requestDigest}`,
+    status: "succeeded",
+    replayed: false,
+  }
+}
 function chatSessionDetailData(detail: ChatSessionDetail): ChatSessionDetail {
   return detail
 }
@@ -542,6 +564,26 @@ function agentSessionListData(body: unknown): { sessions: ChatSessionSummary[]; 
   const nextCursor = data.next_cursor
   if (nextCursor !== undefined && nextCursor !== null && typeof nextCursor !== "string") return null
   return { sessions, next_cursor: nextCursor ?? null }
+}
+
+function agentMessageListData(body: unknown, limit: number): { messages: ChatMessage[]; next_cursor: string | null } | null {
+  const data = dataOf(body)
+  if (data === null || !Array.isArray(data.messages) || !data.messages.every(isRecord) || typeof data.next_seq !== "number" || !Number.isSafeInteger(data.next_seq) || data.next_seq < 0) return null
+  const records = data.messages as AgentChatMessage[]
+  const page = records.slice(0, limit).map(mapAgentMessage)
+  const last = records[limit - 1]
+  return {
+    messages: page,
+    next_cursor: records.length === limit && last !== undefined ? `msg_${last.seq}` : null,
+  }
+}
+
+function messageCursor(value: string | undefined): number | null {
+  if (value === undefined || value === "") return 0
+  const match = /^msg_(\d+)$/u.exec(value)
+  if (match === null) return null
+  const cursor = Number(match[1])
+  return Number.isSafeInteger(cursor) && cursor >= 0 ? cursor : null
 }
 
 type BillingPlanProjection = {
@@ -837,6 +879,34 @@ async function liveAgentSession(
     return true
   }
 
+  if (businessPath.length === 3 && businessPath[2] === "messages" && method === "GET") {
+    const incomingQuery = queryOf(request)
+    const rawLimit = incomingQuery.get("limit")
+    const limit = rawLimit === null || rawLimit === "" ? 20 : Number(rawLimit)
+    const cursor = messageCursor(incomingQuery.get("cursor")?.trim() || undefined)
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100 || cursor === null) {
+      reply(response, 400, failure("invalid_pagination", "limit must be between 1 and 100 and cursor must be valid", context.requestId), context, idempotency, mutation)
+      return true
+    }
+    try {
+      const ownerPath = `/v1/sessions/${encodeURIComponent(sessionId)}/messages?after_seq=${cursor}&limit=${limit}`
+      const result = await callAgent(config, baseUrl, ownerPath, "GET", context.requestId, request, undefined, context, assertion)
+      if (result.status >= 400) {
+        sendAgentFailure(response, result, context, idempotency, mutation)
+        return true
+      }
+      const projected = agentMessageListData(result.body, limit)
+      if (projected === null) {
+        reply(response, 502, failure("upstream_response_invalid", "Agent message history response is invalid", context.requestId), context, idempotency, mutation)
+        return true
+      }
+      reply(response, 200, ok(projected, context.requestId), context, idempotency, mutation)
+    } catch {
+      reply(response, 502, failure("upstream_unreachable", "The configured Agent upstream is unavailable", context.requestId), context, idempotency, mutation)
+    }
+    return true
+  }
+
   if (businessPath.length === 3 && businessPath[2] === "messages" && method === "POST") {
     if (typeof json.content !== "string" || json.content.trim() === "") {
       reply(response, 400, failure("invalid_message", "Message content is required", context.requestId), context, idempotency, mutation)
@@ -849,6 +919,7 @@ async function liveAgentSession(
     }
     const launch = buildAgentLaunch({
       identity: context.identity,
+      requestId: context.requestId,
       sessionId,
       idempotencyKey: key,
       content: json.content.trim(),
@@ -1197,6 +1268,7 @@ async function schedulerDispatch(
   }
   const launch = buildAgentLaunch({
     identity: context.identity,
+    requestId: id,
     sessionId: `scheduled:${taskId}`,
     idempotencyKey: occurrenceKey,
     content: record.task.prompt,
@@ -1745,36 +1817,58 @@ async function mockBusiness(
 
   if (segments[0] === "sessions") {
     const sessionId = segments[1] || ""
-    const scope = queryOf(request).get("scope")?.trim() || undefined
-    const projectRef = queryOf(request).get("project_ref")?.trim() || undefined
-    if (segments.length === 1 && method === "GET") payload = chatSessionsData(store.listSessions(scope, projectRef))
+    const scoped = sessionScope(request, context)
+    if ("error" in scoped) {
+      status = 400
+      payload = failure("invalid_session_scope", scoped.error, context.requestId)
+    } else if (segments.length === 1 && method === "GET") {
+      payload = chatSessionsData(store.listSessions(scoped.scope, scoped.projectRef))
+    }
     else if (segments.length === 2 && method === "GET") {
-      const detail = store.readSession(sessionId, scope, projectRef)
+      const detail = store.readSession(sessionId, scoped.scope, scoped.projectRef)
       if (detail === undefined) {
         status = 404
         payload = failure("session_not_found", "Session was not found", context.requestId)
       } else payload = chatSessionDetailData(detail)
+    } else if (segments.length === 3 && segments[2] === "messages" && method === "GET") {
+      const query = queryOf(request)
+      const limit = Number(query.get("limit") || "20")
+      const cursor = query.get("cursor")?.trim() || undefined
+      const result = Number.isInteger(limit) && limit >= 1 && limit <= 100
+        ? store.listSessionMessages(sessionId, scoped.scope, scoped.projectRef, cursor, limit)
+        : undefined
+      if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+        status = 400
+        payload = failure("invalid_pagination", "limit must be between 1 and 100", context.requestId)
+      } else if (result === undefined) {
+        status = 404
+        payload = failure("session_not_found", "Session was not found", context.requestId)
+      } else if ("invalid_cursor" in result) {
+        status = 400
+        payload = failure("invalid_cursor", "cursor is invalid", context.requestId)
+      } else payload = result
     } else if (segments.length === 3 && segments[2] === "messages" && method === "POST") {
       if (typeof json.content !== "string" || json.content.trim() === "") {
         status = 400
         payload = failure("invalid_message", "Message content is required", context.requestId)
       } else {
-        const result = store.submitSessionMessage(sessionId, json.content.trim(), scope, projectRef)
+        const result = store.submitSessionMessage(sessionId, json.content.trim(), scoped.scope, scoped.projectRef)
         if (result === null) {
           status = 404
           payload = failure("session_not_found", "Session was not found", context.requestId)
         } else {
           status = 202
           payload = result
+          setTimeout(() => { store.completeSessionRun(sessionId, result.run_id, json.content as string, scoped.scope, scoped.projectRef) }, 10)
         }
       }
     } else if (segments.length === 3 && segments[2] === "events" && method === "GET") {
-      const detail = store.readSession(sessionId, scope, projectRef)
+      const detail = store.readSession(sessionId, scoped.scope, scoped.projectRef)
       if (detail === undefined) {
         status = 404
         payload = failure("session_not_found", "Session was not found", context.requestId)
       } else {
-        const session = store.findSession(sessionId, scope, projectRef)
+        const session = store.findSession(sessionId, scoped.scope, scoped.projectRef)
         const lastEventIdHeader = headerString(request.headers["last-event-id"]).trim()
         const cursor = lastEventIdHeader === "" ? 0 : Number(lastEventIdHeader)
         const events = session?.events.filter((event) => event.seq > (Number.isFinite(cursor) ? cursor : 0)) ?? []
@@ -1806,13 +1900,14 @@ async function mockBusiness(
         status = 400
         payload = failure("invalid_run_control", "Control request does not match the v1 contract", context.requestId)
       } else {
-        const result = store.controlSessionRun(sessionId, segments[3] || "", action, decisions, scope, projectRef)
+        const commandId = idempotencyKey(request) || "mock-command"
+        const result = store.controlSessionRun(sessionId, segments[3] || "", action, decisions, scoped.scope, scoped.projectRef)
         if (result === null) {
           status = 404
           payload = failure("run_not_found", "Run was not found", context.requestId)
         } else {
           status = 202
-          payload = result
+          payload = mockControlReceipt(segments[3] || "", commandId, json)
         }
       }
     } else if (segments.length === 3 && segments[2] === "title" && method === "PATCH") {
@@ -1820,7 +1915,7 @@ async function mockBusiness(
         status = 400
         payload = failure("invalid_title", "Title is required", context.requestId)
       } else {
-        const session = store.updateSessionTitle(sessionId, json.title.trim(), scope, projectRef)
+        const session = store.updateSessionTitle(sessionId, json.title.trim(), scoped.scope, scoped.projectRef)
         if (session === null) {
           status = 404
           payload = failure("session_not_found", "Session was not found", context.requestId)
@@ -1829,7 +1924,7 @@ async function mockBusiness(
         }
       }
     } else if (segments.length === 2 && method === "DELETE") {
-      const deleted = store.deleteSession(sessionId, scope, projectRef)
+      const deleted = store.deleteSession(sessionId, scoped.scope, scoped.projectRef)
       if (!deleted) {
         status = 404
         payload = failure("session_not_found", "Session was not found", context.requestId)
@@ -1837,7 +1932,7 @@ async function mockBusiness(
         payload = deleted
       }
     } else if (segments.length === 3 && segments[2] === "share" && method === "POST") {
-      const share = store.createSessionShare(sessionId, scope, projectRef)
+      const share = store.createSessionShare(sessionId, scoped.scope, scoped.projectRef)
       if (share === null) {
         status = 404
         payload = failure("session_not_found", "Session was not found", context.requestId)
@@ -1845,7 +1940,7 @@ async function mockBusiness(
         payload = share
       }
     } else if (segments.length === 3 && segments[2] === "share" && method === "DELETE") {
-      const share = store.revokeSessionShare(sessionId, scope, projectRef)
+      const share = store.revokeSessionShare(sessionId, scoped.scope, scoped.projectRef)
       if (share === null) {
         status = 404
         payload = failure("share_not_found", "Share was not found", context.requestId)

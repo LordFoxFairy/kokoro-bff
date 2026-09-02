@@ -1068,8 +1068,8 @@ describe("kokoro-bff v1 mock contract", () => {
     assert.ok(sessionId)
 
     const isolated = await fetch(`${base}/v1/sessions?scope=other-scope&project_ref=project_kokoro`, { headers })
-    const isolatedBody = await isolated.json() as { data: { sessions: Array<{ session_id: string }> } }
-    assert.equal(isolatedBody.data.sessions.length, 0)
+    assert.equal(isolated.status, 400)
+    assert.equal((await isolated.json() as { error: { code: string } }).error.code, "invalid_session_scope")
 
     const detail = await fetch(`${base}/v1/sessions/${sessionId}`, { headers })
     assert.equal(detail.status, 200)
@@ -1106,6 +1106,14 @@ describe("kokoro-bff v1 mock contract", () => {
     assert.ok(messageBody.data.user_message_id.length > 0)
     assert.ok(messageBody.data.assistant_message_id.length > 0)
 
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    const messagePage = await fetch(`${base}/v1/sessions/${sessionId}/messages?limit=1`, { headers })
+    assert.equal(messagePage.status, 200)
+    const messagePageBody = await messagePage.json() as { data: { messages: Array<{ role: string }>; next_cursor: string | null } }
+    assert.equal(messagePageBody.data.messages.length, 1)
+    assert.equal(messagePageBody.data.messages[0]?.role, "user")
+    assert.ok(messagePageBody.data.next_cursor)
+
     const events = await fetch(`${base}/v1/sessions/${sessionId}/events`, { headers })
     assert.equal(events.status, 200)
     assert.ok((events.headers.get("content-type") || "").startsWith("text/event-stream"))
@@ -1124,8 +1132,12 @@ describe("kokoro-bff v1 mock contract", () => {
       body: JSON.stringify({ kind: "run.cancel" }),
     })
     assert.equal(control.status, 202)
-    const controlBody = await control.json() as { data: { ok: true }; meta: { request_id: string } }
-    assert.equal(controlBody.data.ok, true)
+    const controlBody = await control.json() as { data: { run_id: string; command_id: string; request_digest: string; status: string; replayed: boolean }; meta: { request_id: string } }
+    assert.equal(controlBody.data.run_id, messageBody.data.run_id)
+    assert.equal(controlBody.data.command_id, "chat-control-1")
+    assert.match(controlBody.data.request_digest, /^sha256:/u)
+    assert.equal(controlBody.data.status, "succeeded")
+    assert.equal(controlBody.data.replayed, false)
 
     const renamed = await fetch(`${base}/v1/sessions/${sessionId}/title`, {
       method: "PATCH",
@@ -1258,6 +1270,16 @@ describe("kokoro-bff v1 mock contract", () => {
     const listedEnvelope = await listed.json() as { data: { sessions: Array<{ session_id: string; title: string; updated_at: string }> } }
     assert.deepEqual(listedEnvelope.data.sessions, [{ session_id: "session-live", title: "hello", updated_at: "1970-01-01T00:00:00.001Z" }])
     assert.equal(received.some((item) => item.url === "/v1/sessions?project_ref=project_kokoro&limit=10"), true)
+
+    const messagePage = await fetch(`${base}/v1/sessions/session-live/messages?limit=1`, { headers: authHeaders() })
+    assert.equal(messagePage.status, 200)
+    const messagePageEnvelope = await messagePage.json() as { data: { messages: Array<{ message_id: string; role: string }>; next_cursor: string | null } }
+    assert.deepEqual(messagePageEnvelope.data.messages, [{ message_id: "user-msg", role: "user", content: "hello", status: "completed", created_at: "1970-01-01T00:00:00.001Z", run_id: "run_bff_test" }])
+    assert.equal(messagePageEnvelope.data.next_cursor, "msg_1")
+    assert.equal(received.some((item) => item.url === "/v1/sessions/session-live/messages?after_seq=0&limit=1"), true)
+
+    const invalidMessageCursor = await fetch(`${base}/v1/sessions/session-live/messages?cursor=bad`, { headers: authHeaders() })
+    assert.equal(invalidMessageCursor.status, 400)
 
     const replay = await fetch(`${base}/v1/sessions/session-live/messages`, { method: "POST", headers, body: JSON.stringify({ content: "hello", model: "default", project_ref: "project_kokoro" }) })
     assert.equal(replay.status, 202)

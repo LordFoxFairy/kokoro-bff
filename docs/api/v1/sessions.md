@@ -91,6 +91,15 @@ Session list 在 v1 由 Agent 持久化并按 trusted execution identity 查询�
 
 `GET /v1/sessions/{id}` 和 `GET /v1/shared/{shareId}` 返回当前投影水位：
 
+完整消息历史使用单独的 cursor API，避免把 detail 变成无界响应：
+
+```http
+GET /v1/sessions/{id}/messages?limit=20&cursor=CURSOR
+```
+
+这是 Kokoro v1 对 Manus `task.listMessages` 语义的对应入口。`cursor` 是不透明值，排序和
+分页由事实 owner 决定；客户端只能原样回传 `data.next_cursor`。
+
 ```json
 {
   "data": {

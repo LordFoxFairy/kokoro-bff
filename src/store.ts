@@ -362,6 +362,32 @@ export class MockStore {
       }))
   }
 
+  listSessionMessages(
+    id: string,
+    scope: string | undefined,
+    projectRef: string | undefined,
+    cursor: string | undefined,
+    limit: number,
+  ): { messages: ChatMessage[]; next_cursor: string | null } | { invalid_cursor: true } | undefined {
+    const session = this.findSession(id, scope, projectRef)
+    if (session === undefined) return undefined
+    const offset = cursor === undefined ? 0 : this.decodeMessageCursor(cursor)
+    if (offset === null) return { invalid_cursor: true }
+    const messages = session.messages.slice(offset, offset + limit).map((message) => ({ ...message }))
+    const nextOffset = offset + messages.length
+    return {
+      messages,
+      next_cursor: nextOffset < session.messages.length ? `msg_${nextOffset}` : null,
+    }
+  }
+
+  private decodeMessageCursor(cursor: string): number | null {
+    const match = /^msg_(\d+)$/u.exec(cursor)
+    if (match === null) return null
+    const offset = Number(match[1])
+    return Number.isSafeInteger(offset) && offset >= 0 ? offset : null
+  }
+
   findSession(id: string, scope?: string, projectRef?: string): ChatSessionRecord | undefined {
     return this.sessions.find((session) =>
       session.session_id === id
@@ -406,8 +432,8 @@ export class MockStore {
     const session = this.findSession(sessionId, scope, projectRef)
     if (session === undefined) return null
     const timestamp = new Date().toISOString()
-    const runId = session.active_run?.run_id ?? `run_${session.events.length + 1}`
-    if (session.active_run === null) {
+    const runId = session.active_run?.status === "running" ? session.active_run.run_id : `run_${session.events.length + 1}`
+    if (session.active_run?.status !== "running") {
       session.active_run = { run_id: runId, status: "running" }
       session.events.push({
         event_id: `event_${session.events.length + 1}`,
@@ -429,15 +455,7 @@ export class MockStore {
       created_at: timestamp,
       run_id: runId,
     }
-    const assistantMessage: ChatMessage = {
-      message_id: assistantMessageId,
-      role: "assistant",
-      content: `Mock reply: ${content}`,
-      status: "completed",
-      created_at: timestamp,
-      run_id: runId,
-    }
-    session.messages.push(userMessage, assistantMessage)
+    session.messages.push(userMessage)
     session.updated_at = timestamp
     session.events.push({
       event_id: `event_${session.events.length + 1}`,
@@ -448,6 +466,25 @@ export class MockStore {
       timestamp,
       payload: { message_id: userMessageId, content },
     })
+    return { run_id: runId, user_message_id: userMessageId, assistant_message_id: assistantMessageId }
+  }
+
+  completeSessionRun(sessionId: string, runId: string, content: string, scope?: string, projectRef?: string): boolean {
+    const session = this.findSession(sessionId, scope, projectRef)
+    if (session === undefined || session.active_run?.run_id !== runId || session.active_run.status !== "running") return false
+    const timestamp = new Date().toISOString()
+    const assistantMessageId = `message_${session.messages.length + 1}`
+    const assistantMessage: ChatMessage = {
+      message_id: assistantMessageId,
+      role: "assistant",
+      content: `Mock reply: ${content}`,
+      status: "completed",
+      created_at: timestamp,
+      run_id: runId,
+    }
+    session.messages.push(assistantMessage)
+    session.active_run.status = "completed"
+    session.updated_at = timestamp
     session.events.push({
       event_id: `event_${session.events.length + 1}`,
       seq: session.events.length + 1,
@@ -457,7 +494,16 @@ export class MockStore {
       timestamp,
       payload: { segment_id: `segment_${session.messages.length}`, content: assistantMessage.content },
     })
-    return { run_id: runId, user_message_id: userMessageId, assistant_message_id: assistantMessageId }
+    session.events.push({
+      event_id: `event_${session.events.length + 1}`,
+      seq: session.events.length + 1,
+      session_id: session.session_id,
+      run_id: runId,
+      kind: "run.completed",
+      timestamp,
+      payload: { status: "completed" },
+    })
+    return true
   }
 
   controlSessionRun(sessionId: string, runId: string, action: "cancel" | "resume" | "steer", decisions?: string[], scope?: string, projectRef?: string): { ok: true } | null {
@@ -467,6 +513,17 @@ export class MockStore {
     const timestamp = new Date().toISOString()
     session.active_run.status = action === "cancel" ? "cancelled" : "running"
     session.updated_at = timestamp
+    if (action === "cancel") {
+      session.events.push({
+        event_id: `event_${session.events.length + 1}`,
+        seq: session.events.length + 1,
+        session_id: session.session_id,
+        run_id: runId,
+        kind: "run.completed",
+        timestamp,
+        payload: { status: "cancelled" },
+      })
+    }
     return { ok: true }
   }
 

@@ -131,7 +131,7 @@ export type BillingPlan = {
 }
 
 export type ChatSessionStatus = "active" | "deleted"
-export type ChatRunStatus = "running" | "completed" | "cancelled"
+export type ChatRunStatus = "queued" | "running" | "waiting" | "stopped" | "completed" | "cancelled" | "error"
 export type ChatMessageRole = "user" | "assistant" | "system"
 
 export type ChatSessionSummary = {

@@ -93,6 +93,7 @@ export function agentIdentityHeaders(identity: BffIdentity, assertionRef: string
 
 export function buildAgentLaunch(input: {
   identity: BffIdentity
+  requestId: string
   sessionId: string
   idempotencyKey: string
   content: string
@@ -118,7 +119,7 @@ export function buildAgentLaunch(input: {
   if (input.mcpServers !== undefined) trace.mcp_servers = [...input.mcpServers]
 
   const body: Record<string, unknown> = {
-    request_id: `req_bff_${suffix}`,
+    request_id: input.requestId,
     run_id: runId,
     session_id: input.sessionId,
     feature_key: "chat",
