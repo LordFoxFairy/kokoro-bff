@@ -2119,23 +2119,6 @@ components:
               items: { $ref: '#/components/schemas/MoriCandidate' }
             next_cursor: { type: [string, 'null'] }
         meta: { $ref: '#/components/schemas/RequestMeta' }
-    MoriVersion:
-      type: object
-      required: [version_ref, project_ref, source_candidate_ref, status, title, duration_seconds, audio_asset_ref, waveform_asset_ref, style_tags, created_at]
-      additionalProperties: false
-      properties:
-        version_ref: { type: string, minLength: 1 }
-        project_ref: { type: string, minLength: 1 }
-        source_candidate_ref: { type: string, minLength: 1 }
-        status: { type: string, enum: [current, draft, archived] }
-        title: { type: string }
-        duration_seconds: { type: integer, minimum: 1 }
-        audio_asset_ref: { type: string, minLength: 1 }
-        waveform_asset_ref: { type: string, minLength: 1 }
-        style_tags:
-          type: array
-          items: { type: string }
-        created_at: { type: string, format: date-time }
     MoriPromote:
       type: object
       required: [version_ref, project_ref, source_candidate_ref, status]

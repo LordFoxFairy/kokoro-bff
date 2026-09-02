@@ -18,6 +18,9 @@ importers:
         specifier: ^5.12.1
         version: 5.12.1
     devDependencies:
+      '@redocly/cli':
+        specifier: 2.46.1
+        version: 2.46.1
       '@types/node':
         specifier: ^22.15.0
         version: 22.20.1
@@ -68,6 +71,11 @@ packages:
     engines: {node: '>= 18.19.0'}
     peerDependencies:
       '@redis/client': ^5.12.1
+
+  '@redocly/cli@2.46.1':
+    resolution: {integrity: sha512-FSUSq2FU8VN7DmTobTmq7zb3zPnDkRKSMd3n38D62JFJUUZKnLMQtn7BUhsD2dCFH2WgF05I3fbN7QHDQyCBeA==}
+    engines: {node: '>=22.12.0 || >=20.19.0 <21.0.0', npm: '>=10'}
+    hasBin: true
 
   '@types/node@22.20.1':
     resolution: {integrity: sha512-EANqOCF9QFyra+4pfxUcX9STKJpCLjMbObVzljIJomAWSnuSIEAvyzEU53GaajbXJEgdh0iEcPL+DGvpUd4k1Q==}
@@ -172,6 +180,8 @@ snapshots:
   '@redis/time-series@5.12.1(@redis/client@5.12.1)':
     dependencies:
       '@redis/client': 5.12.1
+
+  '@redocly/cli@2.46.1': {}
 
   '@types/node@22.20.1':
     dependencies:
