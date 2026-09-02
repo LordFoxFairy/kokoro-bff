@@ -62,6 +62,7 @@ MCP 仅负责 server 投影与启停删除，不承载 Agent Redis 或 Chat 事�
 - `mcp_server_not_found`
 - `idempotency_key_required`
 - `idempotency_conflict`
+- `idempotency_in_progress`
 
 ## Live upstream
 

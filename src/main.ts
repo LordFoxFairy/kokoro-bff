@@ -21,7 +21,7 @@ import type {
 } from "./contracts.js"
 import { failure, ok } from "./contracts.js"
 import { MockStore } from "./store.js"
-import { PostgresBusinessStore } from "./business-store.js"
+import { PENDING_RECEIPT_STATUS, PostgresBusinessStore } from "./business-store.js"
 import { proxyUpstream, type UpstreamResponse } from "./upstream.js"
 import {
   agentIdentityHeaders,
@@ -165,7 +165,14 @@ async function commitReceipt(
   if (mutation === null) return
   // Service/transport failures remain retryable. A persisted 5xx receipt
   // would turn a transient owner outage into a permanent client replay.
-  if (status >= 500) return
+  if (status >= 500) {
+    const current = idempotency.get(mutation.scope)
+    if (current?.fingerprint === mutation.fingerprint && current.receipt.status === PENDING_RECEIPT_STATUS) {
+      idempotency.delete(mutation.scope)
+    }
+    if (mutation.persistent !== undefined) await mutation.persistent.releaseReceipt(mutation.scope, mutation.fingerprint)
+    return
+  }
   idempotency.set(mutation.scope, {
     fingerprint: mutation.fingerprint,
     receipt: {
@@ -315,17 +322,28 @@ async function mutationTicket(
   body: Buffer,
   idempotency: Map<string, IdempotencyEntry>,
   persistent?: PostgresBusinessStore,
-): Promise<{ ticket: MutationTicket | null; replay: IdempotencyReceipt | null; conflict: boolean }> {
+): Promise<{ ticket: MutationTicket | null; replay: IdempotencyReceipt | null; conflict: boolean; pending: boolean }> {
   const key = idempotencyKey(request)
-  if (key === null) return { ticket: null, replay: null, conflict: false }
+  if (key === null) return { ticket: null, replay: null, conflict: false, pending: false }
   const scope = mutationScope(context, method, path, key)
   const fingerprint = fingerprintBody(request, body)
-  const prior = persistent === undefined ? idempotency.get(scope) : await persistent.getReceipt(scope)
-  if (prior !== undefined && prior !== null) {
-    if (prior.fingerprint !== fingerprint) return { ticket: null, replay: null, conflict: true }
-    return { ticket: null, replay: "receipt" in prior ? prior.receipt : { status: prior.status, body: prior.body }, conflict: false }
+  if (persistent !== undefined) {
+    const claim = await persistent.claimReceipt(scope, fingerprint)
+    if (claim.claimed) return { ticket: { scope, fingerprint, persistent }, replay: null, conflict: false, pending: false }
+    const prior = claim.receipt
+    if (prior === null) return { ticket: null, replay: null, conflict: false, pending: true }
+    if (prior.fingerprint !== fingerprint) return { ticket: null, replay: null, conflict: true, pending: false }
+    if (prior.status === PENDING_RECEIPT_STATUS) return { ticket: null, replay: null, conflict: false, pending: true }
+    return { ticket: null, replay: prior, conflict: false, pending: false }
   }
-  return { ticket: { scope, fingerprint, ...(persistent === undefined ? {} : { persistent }) }, replay: null, conflict: false }
+  const prior = idempotency.get(scope)
+  if (prior !== undefined && prior !== null) {
+    if (prior.fingerprint !== fingerprint) return { ticket: null, replay: null, conflict: true, pending: false }
+    if (prior.receipt.status === PENDING_RECEIPT_STATUS) return { ticket: null, replay: null, conflict: false, pending: true }
+    return { ticket: null, replay: prior.receipt, conflict: false, pending: false }
+  }
+  idempotency.set(scope, { fingerprint, receipt: { status: PENDING_RECEIPT_STATUS, body: {} } })
+  return { ticket: { scope, fingerprint }, replay: null, conflict: false, pending: false }
 }
 
 function normalizeUpstreamResponse(
@@ -1139,6 +1157,10 @@ async function schedulerDispatch(
   }
   if (mutation.conflict) {
     send(response, 409, failure("idempotency_conflict", "Idempotency key already used with a different request payload", id))
+    return true
+  }
+  if (mutation.pending) {
+    send(response, 409, failure("idempotency_in_progress", "An identical mutation is already in progress", id))
     return true
   }
   const record = await businessStore.findScheduledTaskRecord(tenantId, taskId)
@@ -2116,6 +2138,10 @@ async function handle(
     }
     if (result.conflict) {
       send(response, 409, failure("idempotency_conflict", "Idempotency key already used with a different request payload", id))
+      return
+    }
+    if (result.pending) {
+      send(response, 409, failure("idempotency_in_progress", "An identical mutation is already in progress", id))
       return
     }
     mutation = result.ticket

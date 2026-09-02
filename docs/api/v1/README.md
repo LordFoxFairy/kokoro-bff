@@ -112,6 +112,12 @@ namespace + HTTP method + canonical path + Idempotency-Key
 相同范围的重复请求必须返回第一次请求的 HTTP 状态和业务响应。相同 key 但请求语义不同，不得复用旧结果，应由实现记录请求指纹并返回冲突。
 Mock/Live 两种模式都必须遵守同一幂等判定入口。
 
+实现细节：请求开始处理前先登记 pending receipt。若另一个请求使用相同 namespace、路径和
+`Idempotency-Key`，且原请求仍在处理，返回 `409 idempotency_in_progress`，不得并行触发第二次
+业务副作用。原请求成功后，后续请求重放已保存的状态和响应；传输或上游 `5xx` 不保存为终态，
+可安全重试。PostgreSQL receipt 的 pending claim 在 60 秒后允许回收，用于处理进程崩溃遗留的
+未完成 claim。
+
 ## Live upstream
 
 BFF 通过显式环境变量选择业务服务：

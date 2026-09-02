@@ -11,6 +11,14 @@ export type PersistentReceipt = {
   body: unknown
 }
 
+export type ReceiptClaim = {
+  claimed: boolean
+  receipt: PersistentReceipt | null
+}
+
+// Internal-only marker. It is never exposed as an HTTP response status.
+export const PENDING_RECEIPT_STATUS = 102
+
 export type ScheduledTaskRecord = {
   task: ScheduledTask
   ownerId: string
@@ -154,12 +162,43 @@ export class PostgresBusinessStore {
     return row === undefined ? null : { fingerprint: row.fingerprint, status: row.status, body: row.body }
   }
 
+  public async claimReceipt(scope: string, fingerprint: string): Promise<ReceiptClaim> {
+    const result = await this.pool.query<{ fingerprint: string; status: number; body: unknown }>(
+      `INSERT INTO bff_idempotency_receipt (scope, fingerprint, status, response_body)
+       VALUES ($1, $2, $3, '{}'::jsonb)
+       ON CONFLICT (scope) DO UPDATE
+         SET fingerprint = EXCLUDED.fingerprint,
+             status = EXCLUDED.status,
+             response_body = '{}'::jsonb,
+             created_at = CURRENT_TIMESTAMP
+         WHERE bff_idempotency_receipt.status = $3
+           AND bff_idempotency_receipt.created_at < CURRENT_TIMESTAMP - INTERVAL '60 seconds'
+       RETURNING fingerprint, status, response_body AS body`,
+      [scope, fingerprint, PENDING_RECEIPT_STATUS],
+    )
+    if (result.rows[0] !== undefined) return { claimed: true, receipt: null }
+    return { claimed: false, receipt: await this.getReceipt(scope) }
+  }
+
   public async putReceipt(scope: string, receipt: PersistentReceipt): Promise<void> {
     await this.pool.query(
       `INSERT INTO bff_idempotency_receipt (scope, fingerprint, status, response_body)
        VALUES ($1, $2, $3, $4::jsonb)
-       ON CONFLICT (scope) DO NOTHING`,
-      [scope, receipt.fingerprint, receipt.status, JSON.stringify(receipt.body)],
+       ON CONFLICT (scope) DO UPDATE
+         SET status = EXCLUDED.status,
+             response_body = EXCLUDED.response_body,
+             created_at = CURRENT_TIMESTAMP
+         WHERE bff_idempotency_receipt.status = $5
+           AND bff_idempotency_receipt.fingerprint = EXCLUDED.fingerprint`,
+      [scope, receipt.fingerprint, receipt.status, JSON.stringify(receipt.body), PENDING_RECEIPT_STATUS],
+    )
+  }
+
+  public async releaseReceipt(scope: string, fingerprint: string): Promise<void> {
+    await this.pool.query(
+      `DELETE FROM bff_idempotency_receipt
+       WHERE scope = $1 AND fingerprint = $2 AND status = $3`,
+      [scope, fingerprint, PENDING_RECEIPT_STATUS],
     )
   }
 

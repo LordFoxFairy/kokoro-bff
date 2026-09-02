@@ -20,6 +20,15 @@ async function listen(server: Server): Promise<string> {
   return `http://127.0.0.1:${address.port}`
 }
 
+async function waitFor(predicate: () => boolean, timeoutMs = 2000): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (predicate()) return
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+  throw new Error("timed out waiting for test condition")
+}
+
 function config(overrides: Partial<BffConfig> = {}): BffConfig {
   return {
     host: "127.0.0.1",
@@ -1274,6 +1283,47 @@ describe("kokoro-bff v1 mock contract", () => {
     assert.deepEqual((await control.json() as { data: { ok: boolean } }).data, { ok: true })
     const controlRequest = received.find((item) => item.url?.endsWith("/control"))
     assert.deepEqual(controlRequest?.body, { kind: "run.cancel", session_id: "session-live", decision_id: "decision-1" })
+  })
+
+  it("rejects a duplicate mutation while the original request is still in flight", async () => {
+    let launchCount = 0
+    let releaseLaunch!: () => void
+    const launchGate = new Promise<void>((resolve) => { releaseLaunch = resolve })
+    let launchStarted = false
+    const agent = createServer(async (request, response) => {
+      if (request.url !== "/v1/runs" || request.method !== "POST") {
+        response.statusCode = 404
+        response.end()
+        return
+      }
+      const chunks: Buffer[] = []
+      for await (const chunk of request) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+      const launch = JSON.parse(Buffer.concat(chunks).toString("utf8")) as { run_id: string; session_id: string }
+      launchCount += 1
+      launchStarted = true
+      await launchGate
+      response.setHeader("content-type", "application/json")
+      response.statusCode = 202
+      response.end(JSON.stringify({ data: { run_id: launch.run_id, session_id: launch.session_id, replayed: false }, meta: { request_id: "agent" } }))
+    })
+    const agentBase = await listen(agent)
+    const base = await listen(createBffServer(config({ mode: "live", agentEnabled: true, upstreams: { ...config().upstreams, agents: agentBase } })))
+    const headers = { ...authHeaders(), "content-type": "application/json", "idempotency-key": "live-chat-inflight" }
+    const payload = JSON.stringify({ content: "hello", model: "default", project_ref: "project_kokoro" })
+
+    const firstPromise = fetch(`${base}/v1/sessions/session-inflight/messages`, { method: "POST", headers, body: payload })
+    await waitFor(() => launchStarted)
+    const duplicate = await fetch(`${base}/v1/sessions/session-inflight/messages`, { method: "POST", headers, body: payload })
+    assert.equal(duplicate.status, 409)
+    assert.equal((await duplicate.json() as { error: { code: string } }).error.code, "idempotency_in_progress")
+
+    releaseLaunch()
+    const first = await firstPromise
+    assert.equal(first.status, 202)
+    const replay = await fetch(`${base}/v1/sessions/session-inflight/messages`, { method: "POST", headers, body: payload })
+    assert.equal(replay.status, 202)
+    assert.deepEqual(await replay.json(), await first.json())
+    assert.equal(launchCount, 1)
   })
 
   it("keeps unsupported live Chat mutations explicit instead of falling back to mock state", async () => {

@@ -39,6 +39,7 @@ Billing catalog 读取，不接受浏览器自行提交的价格。
 - `plan_not_found`
 - `idempotency_key_required`
 - `idempotency_conflict`
+- `idempotency_in_progress`
 
 ## Live upstream
 

@@ -116,6 +116,7 @@ Idempotency-Key: project-create-001
 | 400 | `idempotency_key_required` | 缺少幂等键 |
 | 400 | `invalid_project` | `name` 缺失或为空 |
 | 409 | `idempotency_conflict` | 同一 key 对应不同请求语义 |
+| 409 | `idempotency_in_progress` | 相同 key 的请求仍在处理中 |
 
 ## GET `/v1/projects/:projectId`
 

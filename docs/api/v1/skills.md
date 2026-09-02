@@ -59,7 +59,7 @@ Skills 由 BFF 负责聚合、配额、启停和 GitHub skill 导入；具体包
 ## POST `/v1/skills/:name/enable[?scope=...]`
 ## POST `/v1/skills/:name/disable[?scope=...]`
 
-启停技能，必须携带 `Idempotency-Key`。同 key 同 payload 重放原 receipt；同 key 不同 payload 返回 `409 idempotency_conflict`。
+启停技能，必须携带 `Idempotency-Key`。同 key 同 payload 重放原 receipt；同 key 不同 payload 返回 `409 idempotency_conflict`；相同 key 的原请求尚未完成时返回 `409 idempotency_in_progress`，不会重复触发状态变更。
 
 ### Response `200`
 
@@ -104,6 +104,7 @@ Skills 由 BFF 负责聚合、配额、启停和 GitHub skill 导入；具体包
 - `skill_not_found`
 - `idempotency_key_required`
 - `idempotency_conflict`
+- `idempotency_in_progress`
 
 ## Live upstream
 

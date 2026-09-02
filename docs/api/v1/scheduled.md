@@ -51,6 +51,7 @@ internal command dispatch。
 - `scheduled_task_expired` (`410`): an expired task never launches an Agent run.
 - `idempotency_key_required`
 - `idempotency_conflict`
+- `idempotency_in_progress`
 
 ## Live boundary
 
