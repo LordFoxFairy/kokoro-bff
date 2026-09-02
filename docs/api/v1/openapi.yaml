@@ -89,7 +89,7 @@ paths:
       tags: [System]
       operationId: getRuntimeManifest
       summary: Get the tenant runtime manifest
-      description: Resolves the configured host through IAM, loads the System owner manifest, and projects its resource fields once into the BFF v1 snake_case transport.
+      description: Uses the server-configured tenant and domain to load the System owner manifest; System validates its own Site/Host binding before the BFF projects the resource fields once into the v1 snake_case transport.
       parameters:
         - name: product_id
           in: query
@@ -105,7 +105,7 @@ paths:
           schema: { type: string, minLength: 1 }
       responses:
         '200':
-          description: IAM-derived tenant runtime manifest
+          description: Server-configured tenant runtime manifest; System validates the configured tenant with Forwarded host against its own Site/Host binding.
           content:
             application/json:
               schema:

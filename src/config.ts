@@ -7,11 +7,11 @@ export type BffConfig = {
   port: number
   mode: BffMode
   domain: string
+  tenantId: string | null
   sharedSecret: string | null
   upstreamSecret: string | null
   upstreamTimeoutMs: number
   upstreamMaxResponseBytes: number
-  iamServiceToken: string | null
   schedulerServiceToken: string | null
   schedulerTargetUrl: string | null
   agentEnabled: boolean
@@ -64,7 +64,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("KOKORO_BFF_PORT must be a valid port")
 
   const upstreams: Record<string, string | null> = {
-    iam: optionalUrl(env.KOKORO_IAM_BASE_URL),
     system: optionalUrl(env.KOKORO_SYSTEM_BASE_URL),
     model: optionalUrl(env.KOKORO_MODEL_BASE_URL),
     capability: optionalUrl(env.KOKORO_CAPABILITY_BASE_URL),
@@ -83,11 +82,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
     port,
     mode,
     domain,
+    tenantId: env.KOKORO_TENANT_ID?.trim() || null,
     sharedSecret,
     upstreamSecret: env.KOKORO_INTERNAL_SECRET_BFF?.trim() || null,
     upstreamTimeoutMs: positiveInteger(env.KOKORO_UPSTREAM_TIMEOUT_MS, "KOKORO_UPSTREAM_TIMEOUT_MS", DEFAULT_UPSTREAM_TIMEOUT_MS),
     upstreamMaxResponseBytes: positiveInteger(env.KOKORO_UPSTREAM_MAX_RESPONSE_BYTES, "KOKORO_UPSTREAM_MAX_RESPONSE_BYTES", DEFAULT_UPSTREAM_MAX_RESPONSE_BYTES),
-    iamServiceToken: env.KOKORO_IAM_SERVICE_TOKEN?.trim() || null,
     schedulerServiceToken: env.KOKORO_SCHEDULER_SERVICE_TOKEN?.trim() || null,
     schedulerTargetUrl: optionalUrl(env.KOKORO_SCHEDULER_TARGET_URL),
     agentEnabled: booleanFlag(env.KOKORO_AGENT_ENABLED, false),

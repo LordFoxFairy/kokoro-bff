@@ -7,6 +7,7 @@ describe("kokoro-bff optional Agent configuration", () => {
   it("defaults Agent to optional and disabled", () => {
     const config = loadConfig({ KOKORO_DOMAIN: "dev.kokoro.localhost" })
     assert.equal(config.agentEnabled, false)
+    assert.equal(config.tenantId, null)
     assert.equal(config.upstreamTimeoutMs, 5000)
     assert.equal(config.upstreamMaxResponseBytes, 1024 * 1024)
   })
@@ -15,11 +16,13 @@ describe("kokoro-bff optional Agent configuration", () => {
     const config = loadConfig({
       KOKORO_BFF_MODE: "live",
       KOKORO_DOMAIN: "app.example.com",
+      KOKORO_TENANT_ID: "tenant_prod",
       KOKORO_BFF_SHARED_SECRET: "bff-secret",
       KOKORO_AGENT_ENABLED: "1",
       KOKORO_AGENT_BASE_URL: "http://kokoro-agent:4401",
     })
     assert.equal(config.agentEnabled, true)
+    assert.equal(config.tenantId, "tenant_prod")
     assert.equal(config.upstreams.agents, "http://kokoro-agent:4401")
   })
 

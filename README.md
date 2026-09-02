@@ -31,6 +31,7 @@ src/main.ts                             # composition root and route registratio
 
 `src/modules/*/repository.ts` 只定义 repository port、领域输入类型和返回模型，不得导入 `pg`、Redis 或 SQL。数据库实现必须位于 `src/infrastructure/postgres/*-repository.ts`；这样 BFF 的业务服务可以注入真实实现或 mock，而不会把存储驱动泄漏到业务模块。
 - 部署域名只通过 `KOKORO_DOMAIN` 产生标准 RFC 7239 `Forwarded: host=...`。不读取或转发 `X-Domain`、浏览器 Host 作为业务选择依据。
+- 站点的跨仓租户上下文通过服务端 `KOKORO_TENANT_ID` 配置；System 再用 `tenant_id + Forwarded host` 校验自己持有的 Site/Host binding。浏览器不提交 tenant 或域名选择。
 
 ## 本地运行
 

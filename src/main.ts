@@ -6,7 +6,6 @@ import { MockBffStore } from "./infrastructure/mock/bff-store.js"
 import { PostgresBffRepositories } from "./infrastructure/postgres/repositories.js"
 import { MoriMockBffStore } from "./adapters/mori.js"
 import { mutationTicket, type IdempotencyEntry, type MutationTicket } from "./application/idempotency.js"
-import { resolveTenantForManifest } from "./application/projections.js"
 import { normalizeUpstreamResponse, reply, send } from "./http/response.js"
 import { proxyUpstream } from "./upstream.js"
 import { authorize, authorizeServerOnly, idempotencyKey, isMutation, pathOf, queryOf, readBody, requestBodyJson, requestId, requiresIdempotency, type Context } from "./http/request.js"
@@ -83,8 +82,7 @@ async function handle(
     && request.method === "GET"
     && authorizeServerOnly(request, config)
   ) {
-    const tenantId = await resolveTenantForManifest(config, id)
-    if (tenantId !== null) context = { requestId: id, identity: { namespace: tenantId, userId: "runtime-manifest" } }
+    if (config.tenantId !== null) context = { requestId: id, identity: { namespace: config.tenantId, userId: "runtime-manifest" } }
   }
   if (context === null) {
     send(response, config.sharedSecret !== null ? 403 : 401, failure("service_auth_failed", "BFF authentication failed", id))

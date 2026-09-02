@@ -1,6 +1,5 @@
 import type { IncomingMessage } from "node:http"
 
-import type { BffConfig } from "../config.js"
 import type { ChatMessage, ChatSessionSummary, LibraryItem, McpServer } from "../contracts/index.js"
 import { mapAgentMessage, type AgentChatMessage } from "../adapters/agent.js"
 import { isRecord, queryOf, type Context } from "../http/request.js"
@@ -257,32 +256,6 @@ export function systemManifestData(body: unknown): Record<string, unknown> | nul
     config_version: data.configVersion,
     release_id: data.releaseId,
     digest: data.digest,
-  }
-}
-
-export async function resolveTenantForManifest(config: BffConfig, requestId: string): Promise<string | null> {
-  const baseUrl = config.upstreams.iam
-  const token = config.iamServiceToken
-  if (baseUrl === null || token === null) return null
-  const target = new URL("/internal/iam/tenant-binding", `${baseUrl}/`)
-  target.searchParams.set("host", config.domain)
-  try {
-    const response = await fetch(target, {
-      headers: {
-        authorization: `Bearer ${token}`,
-        "x-kokoro-request-id": requestId,
-        forwarded: `host=${config.domain}`,
-      },
-      signal: AbortSignal.timeout(5000),
-    })
-    if (!response.ok) return null
-    const parsed: unknown = await response.json().catch(() => null)
-    const data = dataOf(parsed)
-    return data !== null && data.status === "active" && typeof data.tenant_id === "string" && data.tenant_id.trim() !== ""
-      ? data.tenant_id.trim()
-      : null
-  } catch {
-    return null
   }
 }
 

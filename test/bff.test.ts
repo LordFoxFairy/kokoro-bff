@@ -35,18 +35,17 @@ function config(overrides: Partial<BffConfig> = {}): BffConfig {
     port: 4300,
     mode: "mock",
     domain: "dev.kokoro.localhost",
+    tenantId: "tenant_test",
     sharedSecret: "test-secret",
     upstreamSecret: "bff-upstream-secret",
     upstreamTimeoutMs: 5000,
     upstreamMaxResponseBytes: 1024 * 1024,
-    iamServiceToken: null,
     schedulerServiceToken: null,
     schedulerTargetUrl: null,
     agentEnabled: false,
     postgresUrl: null,
     redisUrl: null,
     upstreams: {
-      iam: null,
       system: null,
       model: null,
       capability: null,
@@ -276,7 +275,6 @@ describe("kokoro-bff v1 mock contract", () => {
     const liveReadyBase = await listen(createBffServer(config({
       mode: "live",
       upstreams: {
-        iam: upstreamBase,
         system: upstreamBase,
         model: upstreamBase,
         capability: upstreamBase,
@@ -715,24 +713,21 @@ describe("kokoro-bff v1 mock contract", () => {
     })
   })
 
-  it("projects the canonical runtime manifest through System without requiring browser tenant headers", async () => {
-    let received: { url: string | undefined; service: string | undefined; secret: string | undefined; forwarded: string | undefined } = {
+  it("projects the canonical runtime manifest through System using configured tenant context", async () => {
+    let received: { url: string | undefined; service: string | undefined; secret: string | undefined; forwarded: string | undefined; tenant: string | undefined } = {
       url: undefined,
       service: undefined,
       secret: undefined,
       forwarded: undefined,
+      tenant: undefined,
     }
-    const iam = createServer((_request, response) => {
-      response.setHeader("content-type", "application/json")
-      response.end(JSON.stringify({ data: { host: "dev.kokoro.localhost", tenant_id: "tenant_manifest", status: "active", binding_revision: "test" }, meta: { request_id: "iam" } }))
-    })
-    const iamBase = await listen(iam)
     const upstream = createServer((request, response) => {
       received = {
         url: request.url,
         service: request.headers["x-kokoro-service"]?.toString(),
         secret: request.headers["x-kokoro-internal-secret"]?.toString(),
         forwarded: request.headers.forwarded?.toString(),
+        tenant: request.headers["x-kokoro-tenant-id"]?.toString(),
       }
       response.setHeader("content-type", "application/json")
       response.end(JSON.stringify({
@@ -753,7 +748,9 @@ describe("kokoro-bff v1 mock contract", () => {
       }))
     })
     const upstreamBase = await listen(upstream)
-    const base = await listen(createBffServer(config({ mode: "live", upstreams: { ...config().upstreams, iam: iamBase, system: upstreamBase }, iamServiceToken: "iam-token" })))
+    const runtimeConfig = config({ mode: "live", upstreams: { ...config().upstreams, system: upstreamBase } }) as BffConfig & { tenantId: string }
+    runtimeConfig.tenantId = "tenant_manifest"
+    const base = await listen(createBffServer(runtimeConfig))
 
     const response = await fetch(`${base}/v1/system/runtime-manifest?product_id=kokoro&locale=en-US&surface_id=user-web`, {
       headers: { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "test-secret", "x-kokoro-request-id": "manifest-live" },
@@ -764,6 +761,7 @@ describe("kokoro-bff v1 mock contract", () => {
       service: "web-bff",
       secret: "bff-upstream-secret",
       forwarded: "host=dev.kokoro.localhost",
+      tenant: "tenant_manifest",
     })
     assert.deepEqual(await response.json(), {
       data: {
