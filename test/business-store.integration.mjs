@@ -54,6 +54,8 @@ function bffConfig(overrides = {}) {
     domain: "dev.kokoro.localhost",
     sharedSecret: "web-secret",
     upstreamSecret: "bff-secret",
+    upstreamTimeoutMs: 5000,
+    upstreamMaxResponseBytes: 1024 * 1024,
     iamServiceToken: null,
     schedulerServiceToken: "scheduler-secret",
     schedulerTargetUrl: overrides.schedulerTargetUrl,

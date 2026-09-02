@@ -7,6 +7,8 @@ describe("kokoro-bff optional Agent configuration", () => {
   it("defaults Agent to optional and disabled", () => {
     const config = loadConfig({ KOKORO_DOMAIN: "dev.kokoro.localhost" })
     assert.equal(config.agentEnabled, false)
+    assert.equal(config.upstreamTimeoutMs, 5000)
+    assert.equal(config.upstreamMaxResponseBytes, 1024 * 1024)
   })
 
   it("enables Agent explicitly for live execution", () => {
@@ -19,5 +21,15 @@ describe("kokoro-bff optional Agent configuration", () => {
     })
     assert.equal(config.agentEnabled, true)
     assert.equal(config.upstreams.agents, "http://kokoro-agent:4401")
+  })
+
+  it("loads owner transport limits from the environment", () => {
+    const config = loadConfig({
+      KOKORO_DOMAIN: "dev.kokoro.localhost",
+      KOKORO_UPSTREAM_TIMEOUT_MS: "250",
+      KOKORO_UPSTREAM_MAX_RESPONSE_BYTES: "4096",
+    })
+    assert.equal(config.upstreamTimeoutMs, 250)
+    assert.equal(config.upstreamMaxResponseBytes, 4096)
   })
 })

@@ -2,6 +2,10 @@ import { request as httpRequest } from "node:http"
 import { request as httpsRequest } from "node:https"
 
 import type { BffConfig } from "./config.js"
+import {
+  DEFAULT_UPSTREAM_MAX_RESPONSE_BYTES,
+  DEFAULT_UPSTREAM_TIMEOUT_MS,
+} from "./config.js"
 
 export type UpstreamResponse = {
   status: number
@@ -10,6 +14,21 @@ export type UpstreamResponse = {
 }
 
 export type TrustedUpstreamHeaders = Readonly<Record<string, string>>
+
+export type UpstreamRequestErrorCode =
+  | "upstream_timeout"
+  | "upstream_connection_error"
+  | "upstream_response_too_large"
+
+export class UpstreamRequestError extends Error {
+  public readonly code: UpstreamRequestErrorCode
+
+  public constructor(code: UpstreamRequestErrorCode, message: string, cause?: unknown) {
+    super(message, { cause })
+    this.name = "UpstreamRequestError"
+    this.code = code
+  }
+}
 
 const TRUSTED_HEADER_NAMES = new Set([
   "x-kokoro-tenant-ref",
@@ -77,31 +96,80 @@ export async function proxyUpstream(
 ): Promise<UpstreamResponse> {
   const target = new URL(path, `${baseUrl.replace(/\/+$/u, "/")}`)
   const requestFn = target.protocol === "https:" ? httpsRequest : httpRequest
+  const timeoutMs = config.upstreamTimeoutMs ?? DEFAULT_UPSTREAM_TIMEOUT_MS
+  const maxResponseBytes = config.upstreamMaxResponseBytes ?? DEFAULT_UPSTREAM_MAX_RESPONSE_BYTES
   return new Promise((resolve, reject) => {
+    let settled = false
+    let client: ReturnType<typeof httpRequest> | null = null
+    let timeout: ReturnType<typeof setTimeout> | undefined
+    const fail = (error: UpstreamRequestError): void => {
+      if (settled) return
+      settled = true
+      if (timeout !== undefined) clearTimeout(timeout)
+      reject(error)
+    }
+    const succeed = (result: UpstreamResponse): void => {
+      if (settled) return
+      settled = true
+      if (timeout !== undefined) clearTimeout(timeout)
+      resolve(result)
+    }
+    const normalizeConnectionError = (error: unknown): UpstreamRequestError => {
+      if (error instanceof UpstreamRequestError) return error
+      return new UpstreamRequestError("upstream_connection_error", "The upstream connection failed", error)
+    }
     const headers = requestHeaders({ ...config, upstreamSecret: serviceToken }, requestId, incoming, trustedHeaders, callerService)
     // The Agent ingress is a small stdlib HTTP server and intentionally reads
     // Content-Length rather than implementing chunked transfer decoding. Keep
     // the BFF transport explicit so JSON mutation bodies are not observed as
     // an empty object by the owner.
     if (body !== undefined) headers["content-length"] = String(body.byteLength)
-    const client = requestFn(target, {
-      method,
-      headers,
-    }, (response) => {
-      const chunks: Buffer[] = []
-      response.on("data", (chunk) => {
-        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
-      })
-      response.on("end", () => {
-        resolve({
-          status: response.statusCode ?? 502,
-          headers: incomingHeaders(response.headers),
-          body: Buffer.concat(chunks),
+    const onTimeout = (): void => {
+      fail(new UpstreamRequestError("upstream_timeout", "The upstream request timed out"))
+      client?.destroy()
+    }
+    timeout = setTimeout(onTimeout, timeoutMs)
+    try {
+      client = requestFn(target, {
+        method,
+        headers,
+      }, (response) => {
+        const chunks: Buffer[] = []
+        let responseBytes = 0
+        response.on("data", (chunk) => {
+          if (settled) return
+          const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+          responseBytes += buffer.byteLength
+          if (responseBytes > maxResponseBytes) {
+            fail(new UpstreamRequestError("upstream_response_too_large", "The upstream response body exceeded its limit"))
+            response.destroy()
+            client?.destroy()
+            return
+          }
+          chunks.push(buffer)
+        })
+        response.once("aborted", () => {
+          fail(normalizeConnectionError(new Error("upstream response aborted")))
+        })
+        response.once("error", (error) => {
+          fail(normalizeConnectionError(error))
+        })
+        response.once("end", () => {
+          succeed({
+            status: response.statusCode ?? 502,
+            headers: incomingHeaders(response.headers),
+            body: Buffer.concat(chunks),
+          })
         })
       })
-    })
-    client.once("error", reject)
-    if (body !== undefined) client.write(body)
-    client.end()
+      client.once("error", (error) => {
+        fail(normalizeConnectionError(error))
+      })
+      if (body !== undefined) client.write(body)
+      client.end()
+    } catch (error) {
+      fail(normalizeConnectionError(error))
+      client?.destroy()
+    }
   })
 }

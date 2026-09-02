@@ -28,6 +28,8 @@ function config(overrides: Partial<BffConfig> = {}): BffConfig {
     domain: "dev.kokoro.localhost",
     sharedSecret: "test-secret",
     upstreamSecret: "bff-upstream-secret",
+    upstreamTimeoutMs: 5000,
+    upstreamMaxResponseBytes: 1024 * 1024,
     iamServiceToken: null,
     schedulerServiceToken: null,
     schedulerTargetUrl: null,

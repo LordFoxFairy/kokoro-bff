@@ -9,6 +9,8 @@ export type BffConfig = {
   domain: string
   sharedSecret: string | null
   upstreamSecret: string | null
+  upstreamTimeoutMs: number
+  upstreamMaxResponseBytes: number
   iamServiceToken: string | null
   schedulerServiceToken: string | null
   schedulerTargetUrl: string | null
@@ -17,6 +19,9 @@ export type BffConfig = {
   redisUrl: string | null
   upstreams: Record<string, string | null>
 }
+
+export const DEFAULT_UPSTREAM_TIMEOUT_MS = 5000
+export const DEFAULT_UPSTREAM_MAX_RESPONSE_BYTES = 1024 * 1024
 
 function booleanFlag(value: string | undefined, fallback: boolean): boolean {
   const raw = value?.trim().toLowerCase()
@@ -34,6 +39,14 @@ function optionalUrl(value: string | undefined): string | null {
     throw new Error("upstream URL must use http or https")
   }
   return raw.replace(/\/+$/u, "")
+}
+
+function positiveInteger(value: string | undefined, name: string, fallback: number): number {
+  const raw = value?.trim()
+  if (!raw) return fallback
+  const parsed = Number(raw)
+  if (!Number.isSafeInteger(parsed) || parsed < 1) throw new Error(`${name} must be a positive integer`)
+  return parsed
 }
 
 function requiredDomain(value: string | undefined): string {
@@ -72,6 +85,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
     domain,
     sharedSecret,
     upstreamSecret: env.KOKORO_INTERNAL_SECRET_BFF?.trim() || null,
+    upstreamTimeoutMs: positiveInteger(env.KOKORO_UPSTREAM_TIMEOUT_MS, "KOKORO_UPSTREAM_TIMEOUT_MS", DEFAULT_UPSTREAM_TIMEOUT_MS),
+    upstreamMaxResponseBytes: positiveInteger(env.KOKORO_UPSTREAM_MAX_RESPONSE_BYTES, "KOKORO_UPSTREAM_MAX_RESPONSE_BYTES", DEFAULT_UPSTREAM_MAX_RESPONSE_BYTES),
     iamServiceToken: env.KOKORO_IAM_SERVICE_TOKEN?.trim() || null,
     schedulerServiceToken: env.KOKORO_SCHEDULER_SERVICE_TOKEN?.trim() || null,
     schedulerTargetUrl: optionalUrl(env.KOKORO_SCHEDULER_TARGET_URL),
