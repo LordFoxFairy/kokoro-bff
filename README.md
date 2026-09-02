@@ -15,7 +15,7 @@ kokoro-agent HTTP ingress → Redis run streams（HTTP admission 与执行 worke
 - Web、BFF、Agent 各自是独立仓库，不通过 workspace package、源码复制或 git submodule 复用实现。
 - BFF 只通过版本化 HTTP 契约与业务服务对接；第一阶段的 `mock` 模式是本仓库内置的确定性 fixture，`live` 模式的 Project/Scheduled 事实由本仓 PostgreSQL 持有，Redis 仅作为租户隔离缓存和协调。Scheduled 的定义永远归 BFF，Scheduler 只持有通用 ScheduleJob 和 occurrence lease。
 - BFF 不连接 Agent 的 Redis stream；Agent 的 HTTP ingress 是唯一业务调用面，生产环境通过 `KOKORO_AGENT_BASE_URL` 配置它，worker 仍由 Agent 自己管理。Agent 是可选执行 profile，由 `KOKORO_AGENT_ENABLED=1` 显式开启；未开启时 BFF 仍可就绪，Chat/调度执行路由返回稳定的 `agent_not_configured`。当前 Chat launch/control/replay/detail/session-list 已完成 live 组合；session list 由 Agent 持久化并按 identity 查询，rename/delete/share 与 Agent setup 仍由 live adapter 明确报告未接线能力。
-- Chat、消息、SSE、artifact 和 run control 的 Web-facing projection 统一由本仓 Chat 业务模块边界承接；不再新增独立 `kokoro-session` 或 `kokoro-chat` 子仓库。HTTP 组合根在 `src/main.ts`，通用请求/响应与幂等服务位于 `src/http/`、`src/application/`，业务 repository port 与输入 DTO 位于 `src/modules/`，具体 PostgreSQL/Mock adapter 位于 `src/infrastructure/`，契约位于 `src/contracts/`。
+- Chat、消息、SSE、artifact 和 run control 的 Web-facing projection 统一由本仓 Chat 业务模块边界承接；不再新增独立 `kokoro-session` 或 `kokoro-chat` 子仓库。`src/main.ts` 仅作为 HTTP 组合根和通用请求管线，资源路由位于 `src/http/routes/`；通用请求/响应与幂等服务位于 `src/http/`、`src/application/`，业务 repository port 与输入 DTO 位于 `src/modules/`，具体 PostgreSQL/Mock adapter 位于 `src/infrastructure/`，契约位于 `src/contracts/`。
 
 目录边界固定为：
 

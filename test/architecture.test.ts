@@ -32,6 +32,13 @@ test("BFF keeps repository, service, contract, and adapter boundaries explicit",
     "src/infrastructure/postgres/scheduled-task-repository.ts",
     "src/infrastructure/postgres/repositories.ts",
     "src/infrastructure/mock/bff-store.ts",
+    "src/http/routes/agent.ts",
+    "src/http/routes/live-bff.ts",
+    "src/http/routes/owner.ts",
+    "src/http/routes/mock.ts",
+    "src/http/routes/mori.ts",
+    "src/http/routes/scheduler.ts",
+    "src/http/routes/routing.ts",
   ]) {
     assert.equal(await exists(relativePath), true, relativePath)
   }
@@ -43,6 +50,15 @@ test("BFF keeps repository, service, contract, and adapter boundaries explicit",
   ]) {
     assert.equal(await exists(legacyPath), false, legacyPath)
   }
+})
+
+test("BFF composition root stays small and delegates resource routes", async () => {
+  const main = await readFile(path.join(root, "src/main.ts"), "utf8")
+  assert.ok(main.split("\n").length < 400, "src/main.ts must remain a composition root")
+  assert.match(main, /routes\/agent\.js/)
+  assert.match(main, /routes\/owner\.js/)
+  assert.match(main, /routes\/scheduler\.js/)
+  assert.match(main, /routes\/mock\.js/)
 })
 
 test("BFF runtime has no compatibility migration or direct database setup in the route host", async () => {
