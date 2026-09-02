@@ -177,7 +177,7 @@ function page<T>(items: T[], cursor: string | null, limit: number, prefix: strin
   }
 }
 
-export class MoriMockStore {
+export class MoriMockBffStore {
   readonly projects = [structuredClone(previewProject)]
   readonly candidates = previewCandidates.map((candidate) => structuredClone(candidate))
   readonly songPlans = [structuredClone(previewSongPlan)]

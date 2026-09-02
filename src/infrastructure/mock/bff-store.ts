@@ -19,7 +19,7 @@ import type {
   SkillRevision,
   Task,
   WorkspaceFile,
-} from "./contracts.js"
+} from "../../contracts/index.js"
 
 const now = "2026-01-01T00:00:00.000Z"
 const skillPackageSize = 122880
@@ -42,7 +42,7 @@ type ChatSessionRecord = {
   share_revoked_at: string | null
 }
 
-export class MockStore {
+export class MockBffStore {
   readonly projects: Project[] = [{
     id: "project_kokoro",
     name: "Kokoro",

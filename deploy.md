@@ -16,7 +16,7 @@ NODE_ENV=production pnpm start
 Live 模式的 BFF 业务事实由本仓 PostgreSQL 持有，Redis 只做租户隔离的短缓存和协调。首次启动前在同一版本运行迁移：
 
 ```bash
-KOKORO_BFF_POSTGRES_URL="$KOKORO_BFF_POSTGRES_URL" pnpm db:migrate
+KOKORO_BFF_POSTGRES_URL="$KOKORO_BFF_POSTGRES_URL" pnpm db:setup
 ```
 
 Live `readyz` 同时检查 BFF PostgreSQL、Redis 和 Agent；迁移未执行或依赖不可用时保持非就绪，不回退到内存 fixture。

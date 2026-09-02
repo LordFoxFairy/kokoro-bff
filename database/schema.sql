@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS bff_scheduled_task (
   task_id TEXT PRIMARY KEY,
   tenant_id TEXT NOT NULL,
   project_id TEXT,
-  owner_id TEXT NOT NULL DEFAULT 'unknown',
+  owner_id TEXT NOT NULL,
   title TEXT NOT NULL,
   prompt TEXT NOT NULL,
   frequency TEXT NOT NULL CHECK (frequency IN ('daily', 'weekly')),

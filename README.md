@@ -15,7 +15,7 @@ kokoro-agent HTTP ingress → Redis run streams（HTTP admission 与执行 worke
 - Web、BFF、Agent 各自是独立仓库，不通过 workspace package、源码复制或 git submodule 复用实现。
 - BFF 只通过版本化 HTTP 契约与业务服务对接；第一阶段的 `mock` 模式是本仓库内置的确定性 fixture，`live` 模式的 Project/Scheduled 事实由本仓 PostgreSQL 持有，Redis 仅作为租户隔离缓存和协调。Scheduled 的定义永远归 BFF，Scheduler 只持有通用 ScheduleJob 和 occurrence lease。
 - BFF 不连接 Agent 的 Redis stream；Agent 的 HTTP ingress 是唯一业务调用面，生产环境通过 `KOKORO_AGENT_BASE_URL` 配置它，worker 仍由 Agent 自己管理。Agent 是可选执行 profile，由 `KOKORO_AGENT_ENABLED=1` 显式开启；未开启时 BFF 仍可就绪，Chat/调度执行路由返回稳定的 `agent_not_configured`。当前 Chat launch/control/replay/detail/session-list 已完成 live 组合；session list 由 Agent 持久化并按 identity 查询，rename/delete/share 与 Agent setup 仍由 live adapter 明确报告未接线能力。
-- Chat、消息、SSE、artifact 和 run control 的 Web-facing projection 统一由本仓 Chat 业务模块边界承接；不再新增独立 `kokoro-session` 或 `kokoro-chat` 子仓库。当前实现集中在 `src/main.ts`、`src/store.ts` 与 `src/contracts.ts`，文档中的“Chat 模块”表示职责边界，不暗示一个跨仓或未提交的目录。
+- Chat、消息、SSE、artifact 和 run control 的 Web-facing projection 统一由本仓 Chat 业务模块边界承接；不再新增独立 `kokoro-session` 或 `kokoro-chat` 子仓库。HTTP 组合根在 `src/main.ts`，通用请求/响应与幂等服务位于 `src/http/`、`src/application/`，业务 repository port 位于 `src/modules/`，具体 PostgreSQL/Mock adapter 位于 `src/infrastructure/`，契约位于 `src/contracts/`。
 - 部署域名只通过 `KOKORO_DOMAIN` 产生标准 RFC 7239 `Forwarded: host=...`。不读取或转发 `X-Domain`、浏览器 Host 作为业务选择依据。
 
 ## 本地运行
@@ -88,8 +88,8 @@ GitHub skill 预览和导入使用相同的请求/响应数据形状：请求体
 
 ## Mock → Live
 
-- `KOKORO_BFF_MODE=mock`：只使用 `src/store.ts` 的本地 fixture，适合 Web/BFF 联调。
-- `KOKORO_BFF_MODE=live`：按 owner-based `KOKORO_*_BASE_URL` 选择已接线的业务 upstream；Chat 只有在 `KOKORO_AGENT_ENABLED=1` 且配置 `KOKORO_AGENT_BASE_URL` 时才指向 Agent HTTP ingress。BFF-owned Project/Scheduled 使用本仓 PostgreSQL/Redis，启动前执行 `pnpm db:migrate`；Skills/MCP、Library、Model、Billing、System manifest 已有明确 owner projection，未注册的写操作仍返回明确的未接线错误，不把 worker 当作 HTTP 服务，也不静默回退到 mock。
+- `KOKORO_BFF_MODE=mock`：只使用 `src/infrastructure/mock/bff-store.ts` 的本地 fixture，适合 Web/BFF 联调。
+- `KOKORO_BFF_MODE=live`：按 owner-based `KOKORO_*_BASE_URL` 选择已接线的业务 upstream；Chat 只有在 `KOKORO_AGENT_ENABLED=1` 且配置 `KOKORO_AGENT_BASE_URL` 时才指向 Agent HTTP ingress。BFF-owned Project/Scheduled 使用本仓 PostgreSQL/Redis，启动前执行 `pnpm db:setup`；Skills/MCP、Library、Model、Billing、System manifest 已有明确 owner projection，未注册的写操作仍返回明确的未接线错误，不把 worker 当作 HTTP 服务，也不静默回退到 mock。
 - 出站请求统一注入 `x-kokoro-request-id`、标准 `X-Request-Id`、标准 `Forwarded`、服务 `Authorization: Bearer` 和内部上下文；通用 compatibility proxy 使用 `x-kokoro-service: kokoro-bff`，已注册 HTTP owner adapter 使用 `x-kokoro-service: web-bff`，以匹配各自 v1 owner contract。浏览器的 Authorization、`X-Domain` 和 Host 不会透传为 owner 身份。
 - Scheduled live adapter 需要 `KOKORO_SCHEDULER_BASE_URL`、`KOKORO_SCHEDULER_SERVICE_TOKEN` 和 `KOKORO_SCHEDULER_TARGET_URL`。任务变更先写 BFF 事实，再同步 Scheduler；Scheduler dispatch 回调 `/internal/bff/scheduled-tasks/dispatch`，BFF 校验服务 token 后以保存的 owner 身份向 Agent admission 发起幂等 Run。
 - Agent HTTP ingress 已在 `LordFoxFairy/kokoro-agent` 的 v1 contract 中提供；BFF 已完成 launch/control/replay/detail/session-list 的 Chat adapter。rename/delete/share 在 Agent ingress 增加前返回明确的 `503 chat_projection_not_configured`；`/readyz` 默认只检查 BFF 自身的 live business store，启用 Agent profile 时才额外要求 Agent upstream 已配置。

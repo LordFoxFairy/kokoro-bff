@@ -18,11 +18,11 @@ import type {
   ScheduledTask,
   Skill,
   Task,
-} from "./contracts.js"
-import { failure, ok } from "./contracts.js"
-import { MockStore } from "./store.js"
-import { PENDING_RECEIPT_STATUS, PostgresBusinessStore } from "./business-store.js"
-import { proxyUpstream, type UpstreamResponse } from "./upstream.js"
+} from "./contracts/index.js"
+import { failure, ok } from "./contracts/index.js"
+import { MockBffStore } from "./infrastructure/mock/bff-store.js"
+import { PostgresBffRepositories } from "./infrastructure/postgres/repositories.js"
+import { proxyUpstream } from "./upstream.js"
 import {
   agentIdentityHeaders,
   buildAgentControl,
@@ -34,27 +34,28 @@ import {
   type AgentChatMessage,
 } from "./adapters/agent.js"
 import { buildSchedulerJob, schedulerJobName, type SchedulerJob } from "./adapters/scheduler.js"
-import { MoriMockStore, type MoriGenerationInput, type MoriSongPlan } from "./adapters/mori.js"
+import { MoriMockBffStore, type MoriGenerationInput, type MoriSongPlan } from "./adapters/mori.js"
+import { mutationTicket, type IdempotencyEntry, type IdempotencyReceipt, type MutationTicket } from "./application/idempotency.js"
+import { normalizeUpstreamResponse, reply, send } from "./http/response.js"
+import {
+  authorize,
+  authorizeServerOnly,
+  incomingHeaders,
+  headerString,
+  idempotencyKey,
+  isMutation,
+  isRecord,
+  pathOf,
+  queryOf,
+  readBody,
+  requestBodyJson,
+  requestId,
+  requiresIdempotency,
+  stableStringify,
+  type Context,
+} from "./http/request.js"
 
 const PLATFORMS = new Set<AgentConnectionSetup["platform"]>(["telegram", "line", "slack"])
-
-type Context = {
-  requestId: string
-  identity: { namespace: string; userId: string }
-}
-
-type IdempotencyReceipt = { status: number; body: unknown }
-
-type IdempotencyEntry = {
-  fingerprint: string
-  receipt: IdempotencyReceipt
-}
-
-type MutationTicket = {
-  scope: string
-  fingerprint: string
-  persistent?: PostgresBusinessStore
-}
 
 type GithubSkillSource = {
   source_url: string
@@ -62,183 +63,6 @@ type GithubSkillSource = {
   repository: string
   name: string
   description: string
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-}
-
-function stableStringify(value: unknown): string {
-  if (value === undefined) return "null"
-  if (value === null || typeof value !== "object") return JSON.stringify(value)
-  if (Array.isArray(value)) return `[${value.map((item) => stableStringify(item)).join(",")}]`
-  const entries = Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableStringify((value as Record<string, unknown>)[key])}`)
-  return `{${entries.join(",")}}`
-}
-
-function headerString(value: string | string[] | undefined): string {
-  if (typeof value === "string") return value
-  if (Array.isArray(value)) return value.join(", ")
-  return ""
-}
-
-function requestContentType(request: IncomingMessage): string {
-  return headerString(request.headers["content-type"]).toLowerCase()
-}
-
-function parseBoundary(contentType: string): string | null {
-  const match = /boundary=(?:"([^"]+)"|([^;]+))/iu.exec(contentType)
-  return match?.[1] ?? match?.[2] ?? null
-}
-
-function parseMultipartFingerprint(contentType: string, body: Buffer): string | null {
-  const boundary = parseBoundary(contentType)
-  if (boundary === null) return null
-  const marker = `--${boundary}`
-  const sections = body.toString("latin1").split(marker)
-  if (sections.length < 2) return null
-
-  const parts: Array<{
-    name: string
-    filename: string | null
-    content_type: string | null
-    body: string
-  }> = []
-
-  for (const section of sections.slice(1)) {
-    if (section.startsWith("--")) break
-    const trimmed = section.replace(/^\r?\n/u, "").replace(/\r?\n$/u, "")
-    if (trimmed.length === 0) continue
-    const splitAt = trimmed.indexOf("\r\n\r\n")
-    if (splitAt < 0) return null
-    const headers = trimmed.slice(0, splitAt).split("\r\n")
-    const content = trimmed.slice(splitAt + 4).replace(/\r\n$/u, "")
-    const headerMap = new Map<string, string>()
-    for (const line of headers) {
-      const colon = line.indexOf(":")
-      if (colon < 0) return null
-      headerMap.set(line.slice(0, colon).trim().toLowerCase(), line.slice(colon + 1).trim())
-    }
-    const disposition = headerMap.get("content-disposition") ?? ""
-    const nameMatch = /name="([^"]+)"/iu.exec(disposition)
-    if (nameMatch === null) return null
-    const name = nameMatch[1] ?? ""
-    if (name === "") return null
-    const filenameMatch = /filename="([^"]+)"/iu.exec(disposition)
-    parts.push({
-      name,
-      filename: filenameMatch?.[1] ?? null,
-      content_type: headerMap.get("content-type") ?? null,
-      body: Buffer.from(content, "latin1").toString("base64"),
-    })
-  }
-
-  return stableStringify(parts)
-}
-
-function fingerprintBody(request: IncomingMessage, body: Buffer): string {
-  const contentType = requestContentType(request)
-  if (body.byteLength === 0) return "empty"
-  if (contentType.startsWith("multipart/form-data")) {
-    const multipart = parseMultipartFingerprint(contentType, body)
-    if (multipart !== null) return `multipart:${multipart}`
-  }
-  if (contentType.includes("json")) {
-    try {
-      const parsed: unknown = JSON.parse(body.toString("utf8"))
-      return `json:${stableStringify(parsed)}`
-    } catch {
-      // fall through to raw body
-    }
-  }
-  return `raw:${body.toString("base64")}`
-}
-
-function mutationScope(context: Context, method: string, path: string, key: string): string {
-  return `${context.identity.namespace}:${method}:${path}:${key}`
-}
-
-async function commitReceipt(
-  idempotency: Map<string, IdempotencyEntry>,
-  mutation: MutationTicket | null,
-  status: number,
-  body: unknown,
-): Promise<void> {
-  if (mutation === null) return
-  // Service/transport failures remain retryable. A persisted 5xx receipt
-  // would turn a transient owner outage into a permanent client replay.
-  if (status >= 500) {
-    const current = idempotency.get(mutation.scope)
-    if (current?.fingerprint === mutation.fingerprint && current.receipt.status === PENDING_RECEIPT_STATUS) {
-      idempotency.delete(mutation.scope)
-    }
-    if (mutation.persistent !== undefined) await mutation.persistent.releaseReceipt(mutation.scope, mutation.fingerprint)
-    return
-  }
-  if (mutation.persistent !== undefined) {
-    try {
-      await mutation.persistent.putReceipt(mutation.scope, { fingerprint: mutation.fingerprint, status, body })
-    } catch (error) {
-      await mutation.persistent.releaseReceipt(mutation.scope, mutation.fingerprint).catch(() => undefined)
-      throw error
-    }
-  }
-  idempotency.set(mutation.scope, { fingerprint: mutation.fingerprint, receipt: { status, body: structuredClone(body) } })
-}
-
-async function reply(
-  response: ServerResponse,
-  status: number,
-  body: unknown,
-  context: Context,
-  idempotency: Map<string, IdempotencyEntry>,
-  mutation: MutationTicket | null,
-): Promise<void> {
-  try {
-    await commitReceipt(idempotency, mutation, status, body)
-    send(response, status, body)
-  } catch {
-    send(response, 503, failure("business_store_unavailable", "The BFF business store is unavailable", context.requestId))
-  }
-}
-
-function idempotencyKey(request: IncomingMessage): string | null {
-  const key = headerString(request.headers["idempotency-key"]).trim()
-  return key === "" ? null : key
-}
-
-function send(response: ServerResponse, status: number, body: unknown): void {
-  const payload = Buffer.from(JSON.stringify(body))
-  response.writeHead(status, {
-    "content-type": "application/json; charset=utf-8",
-    "cache-control": "no-store",
-    "content-length": payload.byteLength,
-  })
-  response.end(payload)
-}
-
-function requestId(request: IncomingMessage): string {
-  const value = request.headers["x-kokoro-request-id"] ?? request.headers["x-request-id"]
-  return typeof value === "string" && value.trim() ? value.trim() : randomUUID()
-}
-
-function pathOf(request: IncomingMessage): string[] {
-  const pathname = new URL(request.url || "/", "http://bff.local").pathname
-  return pathname.split("/").filter(Boolean).map((segment) => decodeURIComponent(segment))
-}
-
-function queryOf(request: IncomingMessage): URLSearchParams {
-  return new URL(request.url || "/", "http://bff.local").searchParams
-}
-
-function isMutation(method: string): boolean {
-  return method === "POST" || method === "PUT" || method === "PATCH" || method === "DELETE"
-}
-
-function requiresIdempotency(method: string, segments: string[]): boolean {
-  if (!isMutation(method)) return false
-  if (method === "POST" && segments[0] === "skills" && segments[1] === "github" && segments[2] === "preview") return false
-  return true
 }
 
 function mcpRegisterInput(value: Record<string, unknown>): {
@@ -297,17 +121,6 @@ function githubSkillSource(value: unknown): GithubSkillSource | null {
     repository,
     name: repository,
     description: `Mock GitHub skill from ${owner}/${repository}`,
-  }
-}
-
-function requestBodyJson(request: IncomingMessage, body: Buffer): Record<string, unknown> | null {
-  if (body.byteLength === 0) return {}
-  if (requestContentType(request).startsWith("multipart/form-data")) return {}
-  try {
-    const parsed: unknown = JSON.parse(body.toString("utf8"))
-    return isRecord(parsed) && !Array.isArray(parsed) ? parsed : null
-  } catch {
-    return null
   }
 }
 
@@ -394,138 +207,6 @@ function moriPageInput(request: IncomingMessage): { cursor: string | null; limit
 function moriExportInput(json: Record<string, unknown>): "mp3" | "wav" | null {
   if (json.format === undefined || json.format === "mp3") return "mp3"
   return json.format === "wav" ? "wav" : null
-}
-
-async function mutationTicket(
-  request: IncomingMessage,
-  method: string,
-  path: string,
-  context: Context,
-  body: Buffer,
-  idempotency: Map<string, IdempotencyEntry>,
-  persistent?: PostgresBusinessStore,
-): Promise<{ ticket: MutationTicket | null; replay: IdempotencyReceipt | null; conflict: boolean; pending: boolean }> {
-  const key = idempotencyKey(request)
-  if (key === null) return { ticket: null, replay: null, conflict: false, pending: false }
-  const scope = mutationScope(context, method, path, key)
-  const fingerprint = fingerprintBody(request, body)
-  if (persistent !== undefined) {
-    const claim = await persistent.claimReceipt(scope, fingerprint)
-    if (claim.claimed) return { ticket: { scope, fingerprint, persistent }, replay: null, conflict: false, pending: false }
-    const prior = claim.receipt
-    if (prior === null) return { ticket: null, replay: null, conflict: false, pending: true }
-    if (prior.fingerprint !== fingerprint) return { ticket: null, replay: null, conflict: true, pending: false }
-    if (prior.status === PENDING_RECEIPT_STATUS) return { ticket: null, replay: null, conflict: false, pending: true }
-    return { ticket: null, replay: prior, conflict: false, pending: false }
-  }
-  const prior = idempotency.get(scope)
-  if (prior !== undefined && prior !== null) {
-    if (prior.fingerprint !== fingerprint) return { ticket: null, replay: null, conflict: true, pending: false }
-    if (prior.receipt.status === PENDING_RECEIPT_STATUS) return { ticket: null, replay: null, conflict: false, pending: true }
-    return { ticket: null, replay: prior.receipt, conflict: false, pending: false }
-  }
-  idempotency.set(scope, { fingerprint, receipt: { status: PENDING_RECEIPT_STATUS, body: {} } })
-  return { ticket: { scope, fingerprint }, replay: null, conflict: false, pending: false }
-}
-
-function normalizeUpstreamResponse(
-  upstream: UpstreamResponse,
-  requestId: string,
-): { status: number; body: unknown } {
-  const text = upstream.body.toString("utf8")
-  if (text.trim() === "") {
-    return {
-      status: upstream.status >= 400 ? upstream.status : 502,
-      body: failure(
-        upstream.status >= 400 ? "upstream_http_error" : "upstream_response_invalid",
-        upstream.status >= 400
-          ? `Upstream returned HTTP ${upstream.status} with an empty body`
-          : "The configured upstream returned an empty response",
-        requestId,
-      ),
-    }
-  }
-
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(text)
-  } catch {
-    return {
-      status: upstream.status >= 400 ? upstream.status : 502,
-      body: failure(
-        upstream.status >= 400 ? "upstream_http_error" : "upstream_response_invalid",
-        upstream.status >= 400
-          ? `Upstream returned HTTP ${upstream.status}`
-          : "The configured upstream did not return JSON",
-        requestId,
-      ),
-    }
-  }
-
-  if (isRecord(parsed) && isRecord(parsed.error) && typeof parsed.error.code === "string" && typeof parsed.error.message === "string") {
-    const responseRequestId = isRecord(parsed.meta) && typeof parsed.meta.request_id === "string" && parsed.meta.request_id.trim() !== ""
-      ? parsed.meta.request_id.trim()
-      : requestId
-    return {
-      status: upstream.status >= 400 ? upstream.status : 502,
-      body: failure(parsed.error.code, parsed.error.message, responseRequestId),
-    }
-  }
-
-  if (upstream.status >= 400) {
-    const responseRequestId = headerString(upstream.headers.get("x-kokoro-request-id") ?? "").trim() || requestId
-    return {
-      status: upstream.status,
-      body: failure("upstream_http_error", `Upstream returned HTTP ${upstream.status}`, responseRequestId),
-    }
-  }
-
-  if (isRecord(parsed) && "data" in parsed) {
-    const responseRequestId = isRecord(parsed.meta) && typeof parsed.meta.request_id === "string" && parsed.meta.request_id.trim() !== ""
-      ? parsed.meta.request_id.trim()
-      : requestId
-    return {
-      status: upstream.status,
-      body: {
-        ...parsed,
-        meta: { request_id: responseRequestId },
-      },
-    }
-  }
-
-  return { status: upstream.status, body: ok(parsed, requestId) }
-}
-
-function authorizeServerOnly(request: IncomingMessage, config: BffConfig): boolean {
-  const service = request.headers["x-kokoro-service"]
-  if (service !== "web-bff") return false
-  return config.sharedSecret !== null && request.headers["x-kokoro-internal-secret"] === config.sharedSecret
-}
-
-function authorize(request: IncomingMessage, config: BffConfig, id: string): Context | null {
-  const service = request.headers["x-kokoro-service"]
-  if (service !== "web-bff") return null
-  if (config.sharedSecret !== null && request.headers["x-kokoro-internal-secret"] !== config.sharedSecret) {
-    return null
-  }
-  const namespace = request.headers["x-kokoro-namespace"]
-  const userId = request.headers["x-kokoro-principal-id"]
-  if (typeof namespace !== "string" || namespace.trim() === "" || typeof userId !== "string" || userId.trim() === "") {
-    return null
-  }
-  return { requestId: id, identity: { namespace: namespace.trim(), userId: userId.trim() } }
-}
-
-async function readBody(request: IncomingMessage): Promise<Buffer> {
-  const chunks: Buffer[] = []
-  let size = 0
-  for await (const chunk of request) {
-    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
-    size += buffer.byteLength
-    if (size > 1024 * 1024) throw new Error("request body too large")
-    chunks.push(buffer)
-  }
-  return Buffer.concat(chunks)
 }
 
 function projectData(projects: Project[]): { projects: Project[] } { return { projects } }
@@ -866,14 +547,6 @@ async function resolveTenantForManifest(config: BffConfig, requestId: string): P
   } catch {
     return null
   }
-}
-
-function incomingHeaders(request: IncomingMessage): Headers {
-  const headers = new Headers()
-  for (const [name, value] of Object.entries(request.headers)) {
-    if (value !== undefined) headers.set(name, Array.isArray(value) ? value.join(", ") : value)
-  }
-  return headers
 }
 
 function dataOf(body: unknown): Record<string, unknown> | null {
@@ -1255,7 +928,7 @@ async function reconcileSchedulerTask(
   return first
 }
 
-async function markScheduledTaskFailed(store: PostgresBusinessStore, tenantId: string, taskId: string): Promise<void> {
+async function markScheduledTaskFailed(store: PostgresBffRepositories, tenantId: string, taskId: string): Promise<void> {
   await store.updateScheduledTask(tenantId, taskId, { status: "failed", enabled: false })
 }
 
@@ -1263,7 +936,7 @@ async function schedulerDispatch(
   request: IncomingMessage,
   response: ServerResponse,
   config: BffConfig,
-  businessStore: PostgresBusinessStore | null,
+  businessStore: PostgresBffRepositories | null,
   idempotency: Map<string, IdempotencyEntry>,
 ): Promise<boolean> {
   const id = requestId(request)
@@ -1417,8 +1090,8 @@ function scheduledCreateInput(json: Record<string, unknown>, projectId?: string)
   }
 }
 
-function scheduledPatchInput(json: Record<string, unknown>): Parameters<PostgresBusinessStore["updateScheduledTask"]>[2] | null {
-  const input: Parameters<PostgresBusinessStore["updateScheduledTask"]>[2] = {}
+function scheduledPatchInput(json: Record<string, unknown>): Parameters<PostgresBffRepositories["updateScheduledTask"]>[2] | null {
+  const input: Parameters<PostgresBffRepositories["updateScheduledTask"]>[2] = {}
   if (json.title !== undefined) {
     if (typeof json.title !== "string" || json.title.trim() === "") return null
     input.title = json.title.trim()
@@ -1471,7 +1144,7 @@ async function liveBffBusiness(
   json: Record<string, unknown>,
   mutation: MutationTicket | null,
   idempotency: Map<string, IdempotencyEntry>,
-  store: PostgresBusinessStore,
+  store: PostgresBffRepositories,
 ): Promise<boolean> {
   const method = request.method || "GET"
   const tenantId = context.identity.namespace
@@ -1892,7 +1565,7 @@ async function mockMoriBusiness(
   response: ServerResponse,
   segments: string[],
   context: Context,
-  mori: MoriMockStore,
+  mori: MoriMockBffStore,
   idempotency: Map<string, IdempotencyEntry>,
   mutation: MutationTicket | null,
   json: Record<string, unknown>,
@@ -2073,8 +1746,8 @@ async function mockBusiness(
   response: ServerResponse,
   segments: string[],
   context: Context,
-  store: MockStore,
-  mori: MoriMockStore,
+  store: MockBffStore,
+  mori: MoriMockBffStore,
   idempotency: Map<string, IdempotencyEntry>,
   mutation: MutationTicket | null,
   json: Record<string, unknown>,
@@ -2413,10 +2086,10 @@ async function handle(
   request: IncomingMessage,
   response: ServerResponse,
   config: BffConfig,
-  store: MockStore,
-  mori: MoriMockStore,
+  store: MockBffStore,
+  mori: MoriMockBffStore,
   idempotency: Map<string, IdempotencyEntry>,
-  businessStore: PostgresBusinessStore | null,
+  businessStore: PostgresBffRepositories | null,
 ): Promise<void> {
   const id = requestId(request)
   const segments = pathOf(request)
@@ -2568,7 +2241,7 @@ async function handle(
   await mockBusiness(request, response, businessPath, context, store, mori, idempotency, mutation, json)
 }
 
-async function reconcilePersistedScheduledTasks(config: BffConfig, store: PostgresBusinessStore): Promise<void> {
+async function reconcilePersistedScheduledTasks(config: BffConfig, store: PostgresBffRepositories): Promise<void> {
   if (config.upstreams.scheduler === null || config.schedulerTargetUrl === null) return
   try {
     const records = await store.listScheduledTaskRecords()
@@ -2604,11 +2277,11 @@ async function reconcilePersistedScheduledTasks(config: BffConfig, store: Postgr
 }
 
 export function createBffServer(config: BffConfig = loadConfig()) {
-  const store = new MockStore()
-  const mori = new MoriMockStore()
+  const store = new MockBffStore()
+  const mori = new MoriMockBffStore()
   const idempotency = new Map<string, IdempotencyEntry>()
   const businessStore = config.mode === "live" && config.postgresUrl !== null && config.redisUrl !== null
-    ? new PostgresBusinessStore(config.postgresUrl, config.redisUrl)
+    ? new PostgresBffRepositories(config.postgresUrl, config.redisUrl)
     : null
   const server = createServer((request, response) => {
     void handle(request, response, config, store, mori, idempotency, businessStore).catch(() => {

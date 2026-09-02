@@ -5,7 +5,7 @@ import type {
   ChatMessage,
   ChatSessionDetail,
   ChatSessionSummary,
-} from "../contracts.js"
+} from "../contracts/index.js"
 
 export type BffIdentity = {
   namespace: string

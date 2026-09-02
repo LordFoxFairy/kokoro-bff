@@ -53,4 +53,4 @@ docs/api/
 - 破坏性字段或语义变更必须新建 `/v2/*`，不能静默改变 v1。
 - 新增可选字段属于向后兼容变更，但必须更新 schema、示例和测试。
 - Web 的 `/api/*` 是同源适配层路径；它不是业务服务的公开版本号。
-- Chat/SSE 属于本仓 Chat 业务模块边界的 BFF v1 projection；当前实现集中在 `src/main.ts`、`src/store.ts` 与 `src/contracts.ts`，不再创建独立 `kokoro-session` 或 `kokoro-chat` 子仓库。
+- Chat/SSE 属于本仓 Chat 业务模块边界的 BFF v1 projection；HTTP 组合根在 `src/main.ts`，通用请求/响应与幂等服务位于 `src/http/`、`src/application/`，持久化端口/模块位于 `src/modules/`，具体 PostgreSQL/Mock adapter 位于 `src/infrastructure/`，契约位于 `src/contracts/`。不再创建独立 `kokoro-session` 或 `kokoro-chat` 子仓库。
