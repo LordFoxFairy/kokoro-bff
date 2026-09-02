@@ -845,4 +845,112 @@ describe("kokoro-bff v1 mock contract", () => {
     assert.equal(missing.status, 404)
     assert.equal((await missing.json() as { error: { code: string } }).error.code, "session_not_found")
   })
+
+  it("adapts live Chat launch, replay, detail, and control to the Agent ingress", async () => {
+    const received: Array<{ method: string; url: string; headers: Record<string, string | undefined>; body: Record<string, unknown> }> = []
+    const agent = createServer(async (request, response) => {
+      const chunks: Buffer[] = []
+      for await (const chunk of request) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+      const body = chunks.length === 0 ? {} : JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>
+      const headers = {
+        xDomain: request.headers["x-domain"]?.toString(),
+        service: request.headers["x-kokoro-service"]?.toString(),
+        tenant: request.headers["x-kokoro-tenant-ref"]?.toString(),
+        subject: request.headers["x-kokoro-subject-ref"]?.toString(),
+        actor: request.headers["x-kokoro-actor-ref"]?.toString(),
+        assertion: request.headers["x-kokoro-identity-assertion-ref"]?.toString(),
+      }
+      received.push({ method: request.method || "", url: request.url || "", headers, body })
+      const runId = typeof body.run_id === "string" ? body.run_id : "run_bff_test"
+      const sessionId = typeof body.session_id === "string" ? body.session_id : "session-live"
+      const events = [
+        { chat_event_id: "cev-start", session_id: sessionId, run_id: runId, event_type: "run.started", payload_json: '{"status":"running"}', seq: 1, created_at: 1 },
+        { chat_event_id: "cev-delta", session_id: sessionId, run_id: runId, chat_message_id: "msg-final", event_type: "assistant.delta", payload_json: '{"delta":"hello"}', seq: 2, created_at: 2 },
+        { chat_event_id: "cev-complete", session_id: sessionId, run_id: runId, chat_message_id: "msg-final", event_type: "assistant.completed", payload_json: '{"content":"hello"}', seq: 3, created_at: 3 },
+        { chat_event_id: "cev-terminal", session_id: sessionId, run_id: runId, event_type: "run.completed", payload_json: '{"status":"completed","token_usage":null}', seq: 4, created_at: 4 },
+      ]
+      response.setHeader("content-type", "application/json")
+      if (request.url === "/v1/runs" && request.method === "POST") {
+        response.statusCode = 202
+        response.end(JSON.stringify({ data: { run_id: runId, session_id: sessionId, replayed: false }, meta: { request_id: "agent" } }))
+      } else if (request.url?.startsWith("/v1/runs/") && request.url.endsWith("/control") && request.method === "POST") {
+        response.statusCode = 202
+        response.end(JSON.stringify({ data: { run_id: runId, accepted: true }, meta: { request_id: "agent" } }))
+      } else if (request.url?.includes("/messages") && request.method === "GET") {
+        response.end(JSON.stringify({ data: { messages: [{ chat_message_id: "user-msg", session_id: sessionId, run_id: runId, role: "user", content: "hello", status: "completed", seq: 1, created_at: 1, updated_at: 1 }], next_seq: 1 }, meta: { request_id: "agent" } }))
+      } else if (request.url?.includes("/events") && request.method === "GET") {
+        response.end(JSON.stringify({ data: { events, next_seq: 4, watermark: 4 }, meta: { request_id: "agent" } }))
+      } else {
+        response.statusCode = 404
+        response.end(JSON.stringify({ error: { code: "route_not_found", message: "not found" }, meta: { request_id: "agent" } }))
+      }
+    })
+    const agentBase = await listen(agent)
+    const base = await listen(createBffServer(config({
+      mode: "live",
+      upstreams: { ...config().upstreams, agents: agentBase },
+    })))
+    const headers = { ...authHeaders(), "content-type": "application/json", "idempotency-key": "live-chat-1", "x-domain": "spoofed.example" }
+    const first = await fetch(`${base}/v1/sessions/session-live/messages`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ content: "hello", model: "default", project_ref: "project_kokoro" }),
+    })
+    assert.equal(first.status, 202)
+    const firstEnvelope = await first.json() as { data: { run_id: string; user_message_id: string; assistant_message_id: string }; meta: { request_id: string } }
+    assert.ok(firstEnvelope.data.run_id.startsWith("run_bff_"))
+    assert.ok(firstEnvelope.data.assistant_message_id.endsWith("_assistant"))
+    assert.equal(received[0]?.headers.xDomain, undefined)
+    assert.equal(received[0]?.headers.service, "kokoro-bff")
+    assert.equal(received[0]?.headers.tenant, "ns_test")
+    assert.equal(received[0]?.headers.subject, "user_test")
+    assert.equal(received[0]?.headers.actor, "user_test")
+    assert.equal((received[0]?.body.execution_identity as { tenant_ref: string }).tenant_ref, "ns_test")
+    assert.equal((received[0]?.body as { trace: { project_ref: string } }).trace.project_ref, "project_kokoro")
+
+    const replay = await fetch(`${base}/v1/sessions/session-live/messages`, { method: "POST", headers, body: JSON.stringify({ content: "hello", model: "default", project_ref: "project_kokoro" }) })
+    assert.equal(replay.status, 202)
+    assert.deepEqual(await replay.json(), firstEnvelope)
+    assert.equal(received.filter((item) => item.url === "/v1/runs").length, 1)
+
+    const events = await fetch(`${base}/v1/sessions/session-live/events`, { headers: authHeaders() })
+    assert.equal(events.status, 200)
+    const eventFrames = (await events.text()).trim().split("\n\n").filter(Boolean)
+    assert.equal(eventFrames.length, 4)
+    assert.match(eventFrames[0] || "", /"kind":"run.created"/u)
+    assert.match(eventFrames[1] || "", /"kind":"message.delta"/u)
+
+    const detail = await fetch(`${base}/v1/sessions/session-live`, { headers: authHeaders() })
+    assert.equal(detail.status, 200)
+    const detailBody = await detail.json() as { data: { session: { owner_id: string }; messages: unknown[]; event_watermark: number } }
+    assert.equal(detailBody.data.session.owner_id, "ns_test")
+    assert.equal(detailBody.data.messages.length, 1)
+    assert.equal(detailBody.data.event_watermark, 4)
+
+    const control = await fetch(`${base}/v1/sessions/session-live/runs/${firstEnvelope.data.run_id}/control`, {
+      method: "POST",
+      headers: { ...authHeaders(), "content-type": "application/json", "idempotency-key": "live-control-1" },
+      body: JSON.stringify({ kind: "run.cancel", decision_id: "decision-1" }),
+    })
+    assert.equal(control.status, 200)
+    assert.deepEqual((await control.json() as { data: { ok: boolean } }).data, { ok: true })
+    const controlRequest = received.find((item) => item.url?.endsWith("/control"))
+    assert.deepEqual(controlRequest?.body, { kind: "run.cancel", session_id: "session-live", decision_id: "decision-1" })
+  })
+
+  it("keeps unsupported live Chat mutations explicit instead of falling back to mock state", async () => {
+    const agent = createServer((_request, response) => {
+      response.setHeader("content-type", "application/json")
+      response.end(JSON.stringify({ data: { events: [], messages: [], watermark: 0 }, meta: { request_id: "agent" } }))
+    })
+    const agentBase = await listen(agent)
+    const base = await listen(createBffServer(config({ mode: "live", upstreams: { ...config().upstreams, agents: agentBase } })))
+    const response = await fetch(`${base}/v1/sessions/session-live/title`, {
+      method: "PATCH",
+      headers: { ...authHeaders(), "content-type": "application/json", "idempotency-key": "unsupported-title" },
+      body: JSON.stringify({ title: "Should not be silently local" }),
+    })
+    assert.equal(response.status, 503)
+    assert.equal((await response.json() as { error: { code: string } }).error.code, "chat_projection_not_configured")
+  })
 })

@@ -124,6 +124,7 @@ BFF 通过显式环境变量选择业务服务：
 | Scheduled | `KOKORO_SCHEDULED_BASE_URL` |
 | Library | `KOKORO_LIBRARY_BASE_URL` |
 | Billing | `KOKORO_BILLING_BASE_URL` |
+| Chat/Agent ingress | `KOKORO_AGENT_BASE_URL` |
 
 缺少对应地址时返回 `503 upstream_not_configured`，不回退到 Gateway，也不在 live 模式静默使用 Mock。
 
@@ -139,7 +140,7 @@ Forwarded: host=<KOKORO_DOMAIN>
 | 资源 | v1 文档 | Mock | Live 替换 |
 | --- | --- | --- | --- |
 | Projects | 已完成 | 已完成 | 按 `KOKORO_PROJECTS_BASE_URL` |
-| Chat | 已完成 | 已完成 | BFF 的 Chat 业务边界；live 等待 Agent HTTP adapter |
+| Chat | 已完成 | 已完成 | BFF Chat adapter → `KOKORO_AGENT_BASE_URL` Agent HTTP ingress；session list index 和 rename/delete/share 仍显式标注能力边界 |
 | Skills | 下一阶段 | 已完成 | 按 `KOKORO_SKILLS_BASE_URL` |
 | Scheduled | 下一阶段 | 已完成 | 按 `KOKORO_SCHEDULED_BASE_URL` |
 | Agents setup | 下一阶段 | 已完成 | Mock 可用；live 等待 Agent HTTP adapter |

@@ -21,6 +21,16 @@ import type {
 import { failure, ok } from "./contracts.js"
 import { MockStore } from "./store.js"
 import { proxyUpstream, type UpstreamResponse } from "./upstream.js"
+import {
+  agentIdentityHeaders,
+  buildAgentControl,
+  buildAgentLaunch,
+  buildSessionDetail,
+  buildSessionSummary,
+  mapAgentEvent,
+  type AgentChatEvent,
+  type AgentChatMessage,
+} from "./adapters/agent.js"
 
 const PLATFORMS = new Set<AgentConnectionSetup["platform"]>(["telegram", "line", "slack"])
 
@@ -414,6 +424,229 @@ function chatShareData(shareId: string): { share_id: string } { return { share_i
 function chatSseFrame(event: ChatEvent): string {
   return `id: ${event.seq}\ndata: ${JSON.stringify(event)}\n\n`
 }
+
+type LiveSessionIndex = Map<string, Map<string, string | undefined>>
+
+function incomingHeaders(request: IncomingMessage): Headers {
+  const headers = new Headers()
+  for (const [name, value] of Object.entries(request.headers)) {
+    if (value !== undefined) headers.set(name, Array.isArray(value) ? value.join(", ") : value)
+  }
+  return headers
+}
+
+function dataOf(body: unknown): Record<string, unknown> | null {
+  if (!isRecord(body) || !isRecord(body.data)) return null
+  return body.data
+}
+
+function agentSessionAssertion(context: Context, sessionId: string): string {
+  return `bff:session:${context.identity.namespace}:${sessionId}`
+}
+
+async function callAgent(
+  config: BffConfig,
+  baseUrl: string,
+  path: string,
+  method: string,
+  requestId: string,
+  request: IncomingMessage,
+  body: Buffer | undefined,
+  identity: Context,
+  assertionRef: string,
+): Promise<{ status: number; body: unknown }> {
+  const upstream = await proxyUpstream(
+    config,
+    baseUrl,
+    path,
+    method,
+    requestId,
+    incomingHeaders(request),
+    body,
+    agentIdentityHeaders(identity.identity, assertionRef),
+  )
+  return normalizeUpstreamResponse(upstream, requestId)
+}
+
+function sendAgentFailure(
+  response: ServerResponse,
+  result: { status: number; body: unknown },
+  context: Context,
+  idempotency: Map<string, IdempotencyEntry>,
+  mutation: MutationTicket | null,
+): void {
+  reply(response, result.status, result.body, context, idempotency, mutation)
+}
+
+async function liveAgentSession(
+  request: IncomingMessage,
+  response: ServerResponse,
+  config: BffConfig,
+  context: Context,
+  businessPath: string[],
+  body: Buffer | undefined,
+  json: Record<string, unknown>,
+  mutation: MutationTicket | null,
+  idempotency: Map<string, IdempotencyEntry>,
+  liveSessions: LiveSessionIndex,
+): Promise<boolean> {
+  const baseUrl = config.upstreams.agents ?? null
+  if (baseUrl === null) {
+    reply(response, 503, failure("upstream_not_configured", "No upstream is configured for agents", context.requestId), context, idempotency, mutation)
+    return true
+  }
+  const method = request.method || "GET"
+  const sessionId = businessPath[1] || ""
+  const assertion = agentSessionAssertion(context, sessionId)
+  const sessionIndex = liveSessions.get(context.identity.namespace) ?? new Map<string, string | undefined>()
+
+  if (businessPath.length === 1 && method === "GET") {
+    const projectRef = queryOf(request).get("project_ref")?.trim() || undefined
+    const items = [...sessionIndex.entries()]
+      .filter(([, indexedProject]) => projectRef === undefined || indexedProject === projectRef)
+      .map(async ([id, indexedProject]) => {
+        const detailResult = await callAgent(config, baseUrl, `/v1/sessions/${encodeURIComponent(id)}/messages?after_seq=0&limit=1000`, "GET", context.requestId, request, undefined, context, agentSessionAssertion(context, id))
+        if (detailResult.status >= 400) throw new Error("agent session list projection failed")
+        const messagesData = dataOf(detailResult.body)
+        const messages = Array.isArray(messagesData?.messages) ? messagesData.messages as AgentChatMessage[] : []
+        const detail = buildSessionDetail(context.identity, id, messages, [], 0)
+        return { item: buildSessionSummary(context.identity, id, detail), projectRef: indexedProject }
+      })
+    try {
+      const listed = await Promise.all(items)
+      reply(response, 200, ok({ sessions: listed.map(({ item }) => item) }, context.requestId), context, idempotency, mutation)
+    } catch {
+      reply(response, 502, failure("upstream_response_invalid", "Agent session list projection failed", context.requestId), context, idempotency, mutation)
+    }
+    return true
+  }
+
+  if (businessPath.length === 3 && businessPath[2] === "messages" && method === "POST") {
+    if (typeof json.content !== "string" || json.content.trim() === "") {
+      reply(response, 400, failure("invalid_message", "Message content is required", context.requestId), context, idempotency, mutation)
+      return true
+    }
+    const key = idempotencyKey(request)
+    if (key === null) {
+      reply(response, 400, failure("idempotency_key_required", "Mutations require Idempotency-Key", context.requestId), context, idempotency, mutation)
+      return true
+    }
+    const launch = buildAgentLaunch({
+      identity: context.identity,
+      sessionId,
+      idempotencyKey: key,
+      content: json.content.trim(),
+      ...(typeof json.model === "string" ? { model: json.model } : {}),
+      ...(typeof json.agent === "string" ? { agent: json.agent } : {}),
+      ...(typeof json.thinking === "boolean" ? { thinking: json.thinking } : {}),
+      ...(Array.isArray(json.pinned_skills) ? { pinnedSkills: json.pinned_skills.filter((value): value is string => typeof value === "string") } : {}),
+      ...(Array.isArray(json.mcp_servers) ? { mcpServers: json.mcp_servers.filter((value): value is string => typeof value === "string") } : {}),
+      ...(typeof json.project_ref === "string" ? { projectRef: json.project_ref } : {}),
+    })
+    const launchBody = Buffer.from(JSON.stringify(launch.body))
+    try {
+      const result = await callAgent(config, baseUrl, "/v1/runs", "POST", context.requestId, request, launchBody, context, String((launch.body.execution_identity as Record<string, unknown>).identity_assertion_ref))
+      if (result.status >= 400) {
+        sendAgentFailure(response, result, context, idempotency, mutation)
+        return true
+      }
+      const data = dataOf(result.body)
+      if (data === null || data.run_id !== launch.receipt.run_id) {
+        sendAgentFailure(response, { status: 502, body: failure("upstream_response_invalid", "Agent launch receipt did not match the requested run", context.requestId) }, context, idempotency, mutation)
+        return true
+      }
+      sessionIndex.set(sessionId, typeof json.project_ref === "string" ? json.project_ref : undefined)
+      liveSessions.set(context.identity.namespace, sessionIndex)
+      reply(response, 202, ok(launch.receipt, context.requestId), context, idempotency, mutation)
+    } catch {
+      reply(response, 502, failure("upstream_unreachable", "The configured Agent upstream is unavailable", context.requestId), context, idempotency, mutation)
+    }
+    return true
+  }
+
+  if (businessPath.length === 5 && businessPath[2] === "runs" && businessPath[4] === "control" && method === "POST") {
+    const control = buildAgentControl(sessionId, json)
+    if (control === null) {
+      reply(response, 400, failure("invalid_run_control", "Control request does not match the v1 contract", context.requestId), context, idempotency, mutation)
+      return true
+    }
+    const runId = businessPath[3] || ""
+    try {
+      const result = await callAgent(config, baseUrl, `/v1/runs/${encodeURIComponent(runId)}/control`, "POST", context.requestId, request, Buffer.from(JSON.stringify(control)), context, assertion)
+      if (result.status >= 400) {
+        sendAgentFailure(response, result, context, idempotency, mutation)
+        return true
+      }
+      reply(response, 200, ok({ ok: true }, context.requestId), context, idempotency, mutation)
+    } catch {
+      reply(response, 502, failure("upstream_unreachable", "The configured Agent upstream is unavailable", context.requestId), context, idempotency, mutation)
+    }
+    return true
+  }
+
+  if (businessPath.length === 3 && businessPath[2] === "events" && method === "GET") {
+    const lastEventId = headerString(request.headers["last-event-id"]).trim()
+    const cursor = lastEventId === "" ? 0 : Number(lastEventId)
+    const afterSeq = Number.isInteger(cursor) && cursor >= 0 ? cursor : 0
+    try {
+      const result = await callAgent(config, baseUrl, `/v1/sessions/${encodeURIComponent(sessionId)}/events?after_seq=${afterSeq}&limit=1000`, "GET", context.requestId, request, undefined, context, assertion)
+      if (result.status >= 400) {
+        sendAgentFailure(response, result, context, idempotency, mutation)
+        return true
+      }
+      const data = dataOf(result.body)
+      const rawEvents = Array.isArray(data?.events) ? data.events as AgentChatEvent[] : null
+      if (data === null || rawEvents === null) {
+        sendAgentFailure(response, { status: 502, body: failure("upstream_response_invalid", "Agent event replay did not match the v1 contract", context.requestId) }, context, idempotency, mutation)
+        return true
+      }
+      const events = rawEvents.map(mapAgentEvent).filter((event): event is ChatEvent => event !== null)
+      response.writeHead(200, {
+        "content-type": "text/event-stream; charset=utf-8",
+        "cache-control": "no-store",
+        connection: "keep-alive",
+        "x-kokoro-request-id": context.requestId,
+      })
+      response.end(events.length === 0 ? ": keep-alive\n\n" : events.map(chatSseFrame).join(""))
+    } catch {
+      reply(response, 502, failure("upstream_response_invalid", "Agent event projection failed", context.requestId), context, idempotency, mutation)
+    }
+    return true
+  }
+
+  if (businessPath.length === 2 && method === "GET") {
+    try {
+      const [messagesResult, eventsResult] = await Promise.all([
+        callAgent(config, baseUrl, `/v1/sessions/${encodeURIComponent(sessionId)}/messages?after_seq=0&limit=1000`, "GET", context.requestId, request, undefined, context, assertion),
+        callAgent(config, baseUrl, `/v1/sessions/${encodeURIComponent(sessionId)}/events?after_seq=0&limit=1000`, "GET", context.requestId, request, undefined, context, assertion),
+      ])
+      if (messagesResult.status >= 400) {
+        sendAgentFailure(response, messagesResult, context, idempotency, mutation)
+        return true
+      }
+      if (eventsResult.status >= 400) {
+        sendAgentFailure(response, eventsResult, context, idempotency, mutation)
+        return true
+      }
+      const messagesData = dataOf(messagesResult.body)
+      const eventsData = dataOf(eventsResult.body)
+      const messages = Array.isArray(messagesData?.messages) ? messagesData.messages as AgentChatMessage[] : null
+      const events = Array.isArray(eventsData?.events) ? eventsData.events as AgentChatEvent[] : null
+      const watermark = typeof eventsData?.watermark === "number" ? eventsData.watermark : null
+      if (messagesData === null || eventsData === null || messages === null || events === null || watermark === null) {
+        sendAgentFailure(response, { status: 502, body: failure("upstream_response_invalid", "Agent session projection did not match the v1 contract", context.requestId) }, context, idempotency, mutation)
+        return true
+      }
+      reply(response, 200, ok(buildSessionDetail(context.identity, sessionId, messages, events, watermark), context.requestId), context, idempotency, mutation)
+    } catch {
+      reply(response, 502, failure("upstream_response_invalid", "Agent session projection failed", context.requestId), context, idempotency, mutation)
+    }
+    return true
+  }
+
+  reply(response, 503, failure("chat_projection_not_configured", "This Chat operation is not exposed by the Agent v1 adapter", context.requestId), context, idempotency, mutation)
+  return true
+}
 function skillPoolData(skills: Skill[]): { skills: Array<{
   name: string
   description: string
@@ -522,8 +755,16 @@ async function mockBusiness(
         return
       }
     } else if (segments.length === 5 && segments[2] === "runs" && segments[4] === "control" && method === "POST") {
-      const action = typeof json.action === "string" ? json.action : ""
-      const decisions = Array.isArray(json.decisions) ? json.decisions.filter((decision): decision is string => typeof decision === "string") : undefined
+      const action = typeof json.action === "string"
+        ? json.action
+        : json.kind === "run.cancel"
+          ? "cancel"
+          : json.kind === "run.resume"
+            ? "resume"
+            : ""
+      const decisions = Array.isArray(json.decisions)
+        ? json.decisions.map((decision) => typeof decision === "string" ? decision : JSON.stringify(decision))
+        : undefined
       if (action !== "cancel" && action !== "resume") {
         status = 400
         payload = failure("invalid_run_control", "Control action must be cancel or resume", context.requestId)
@@ -756,6 +997,7 @@ async function handle(
   config: BffConfig,
   store: MockStore,
   idempotency: Map<string, IdempotencyEntry>,
+  liveSessions: LiveSessionIndex,
 ): Promise<void> {
   const id = requestId(request)
   const segments = pathOf(request)
@@ -840,6 +1082,10 @@ async function handle(
     json = parsed
   }
   if (config.mode === "live") {
+    if (businessPath[0] === "sessions") {
+      await liveAgentSession(request, response, config, context, businessPath, body, json, mutation, idempotency, liveSessions)
+      return
+    }
     const baseUrl = upstreamBase
     if (baseUrl === null) {
       reply(response, 503, failure("upstream_not_configured", `No upstream is configured for ${key || "this route"}`, id), context, idempotency, mutation)
@@ -861,8 +1107,9 @@ async function handle(
 export function createBffServer(config: BffConfig = loadConfig()) {
   const store = new MockStore()
   const idempotency = new Map<string, IdempotencyEntry>()
+  const liveSessions: LiveSessionIndex = new Map()
   return createServer((request, response) => {
-    void handle(request, response, config, store, idempotency).catch(() => {
+    void handle(request, response, config, store, idempotency, liveSessions).catch(() => {
       if (!response.headersSent) send(response, 500, failure("internal_error", "The BFF encountered an internal error", requestId(request)))
       else response.destroy()
     })
