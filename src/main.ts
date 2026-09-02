@@ -475,16 +475,13 @@ function modelCatalogData(body: unknown): { models: Array<{
   const models = []
   for (const item of items) {
     if (!isRecord(item)) return null
-    const key = stringField(item, "key", "name")
+    const key = stringField(item, "key")
     if (key === null) return null
-    const provider = stringField(item, "provider") ?? (key.includes("/") ? (key.split("/", 1)[0] ?? "kokoro") : "kokoro")
-    const name = stringField(item, "name") ?? key
-    const displayName = stringField(item, "display_name", "displayName")
-    const isDefault = typeof item.is_default === "boolean"
-      ? item.is_default
-      : typeof item.isDefault === "boolean"
-        ? item.isDefault
-        : false
+    const displayName = stringField(item, "display_name")
+    if (displayName === null) return null
+    const provider = key.includes("/") ? (key.split("/", 1)[0] ?? "kokoro") : "kokoro"
+    const name = key
+    const isDefault = false
     models.push({
       provider,
       name,
@@ -492,8 +489,7 @@ function modelCatalogData(body: unknown): { models: Array<{
       ...(displayName === null ? {} : { display_name: displayName }),
     })
   }
-  const page = isRecord(data.page) ? data.page : null
-  const nextCursor = data.next_cursor ?? data.nextCursor ?? page?.next_cursor ?? page?.nextCursor
+  const nextCursor = data.next_cursor
   if (nextCursor !== undefined && nextCursor !== null && typeof nextCursor !== "string") return null
   return { models, ...(nextCursor === undefined ? {} : { next_cursor: nextCursor }) }
 }
@@ -515,13 +511,13 @@ function billingPlansData(body: unknown): { plans: BillingPlanProjection[] } | n
   const plans: BillingPlanProjection[] = []
   for (const offer of offers) {
     if (!isRecord(offer)) return null
-    const id = stringField(offer, "offer_revision_id", "offerRevisionId", "id")
-    const key = stringField(offer, "offer_key", "offerKey", "key")
+    const id = stringField(offer, "id")
+    const key = stringField(offer, "key")
     const name = stringField(offer, "name")
     const currency = stringField(offer, "currency")
-    const amountMinor = stringField(offer, "amount_minor", "amountMinor")
-    const creditMicros = stringField(offer, "credit_micros", "creditMicros")
-    const billingInterval = stringField(offer, "billing_interval", "billingInterval")
+    const amountMinor = stringField(offer, "amount_minor")
+    const creditMicros = stringField(offer, "credit_micros")
+    const billingInterval = stringField(offer, "billing_interval")
     if (
       id === null || key === null || name === null || currency === null
       || amountMinor === null || creditMicros === null
@@ -534,7 +530,7 @@ function billingPlansData(body: unknown): { plans: BillingPlanProjection[] } | n
 
 function checkoutUrlData(body: unknown): { checkout_url: string } | null {
   const data = dataOf(body)
-  const checkoutUrl = data === null ? null : stringField(data, "checkout_url", "checkoutUrl")
+  const checkoutUrl = data === null ? null : stringField(data, "checkout_url")
   return checkoutUrl === null ? null : { checkout_url: checkoutUrl }
 }
 

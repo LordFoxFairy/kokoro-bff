@@ -789,10 +789,10 @@ describe("kokoro-bff v1 mock contract", () => {
       response.setHeader("content-type", "application/json")
       response.end(JSON.stringify({
         data: {
-          items: [{ key: "claude-sonnet", displayName: "Claude Sonnet", featureKey: "chat", availability: "active" }],
-          page: { nextCursor: "model-cursor-next" },
+          items: [{ key: "claude-sonnet", display_name: "Claude Sonnet", feature_key: "chat", availability: "available" }],
+          next_cursor: "model-cursor-next",
         },
-        requestId: "model-owner-request",
+        meta: { request_id: "model-owner-request" },
       }))
     })
     const upstreamBase = await listen(upstream)
@@ -824,11 +824,11 @@ describe("kokoro-bff v1 mock contract", () => {
         received.push({ url: request.url, body: Buffer.concat(chunks).toString("utf8"), service: request.headers["x-kokoro-service"]?.toString() })
         response.setHeader("content-type", "application/json")
         if (request.url === "/v1/commerce/catalog") {
-          response.end(JSON.stringify({ data: { offers: [{ id: "offer-revision-1", key: "pro", name: "Pro", currency: "USD", amountMinor: "1999", creditMicros: "1000000", billingInterval: "month" }] }, requestId: "billing-catalog" }))
+          response.end(JSON.stringify({ data: { offers: [{ id: "offer-revision-1", key: "pro", name: "Pro", currency: "USD", amount_minor: "1999", credit_micros: "1000000", billing_interval: "month" }] }, meta: { request_id: "billing-catalog" } }))
           return
         }
         response.statusCode = 201
-        response.end(JSON.stringify({ data: { checkoutId: "checkout-1", checkoutUrl: "https://pay.test/checkout-1" }, requestId: "billing-checkout" }))
+        response.end(JSON.stringify({ data: { checkout_id: "checkout-1", checkout_url: "https://pay.test/checkout-1" }, meta: { request_id: "billing-checkout" } }))
       })
     })
     const upstreamBase = await listen(upstream)
