@@ -108,7 +108,10 @@ rename/delete/share 操作会返回 `503 chat_projection_not_configured`，不�
 
 `GET /v1/sessions/{id}/events`
 
-返回 `text/event-stream`，每帧 `data:` 必须是 `parseSessionEvent` 可通过的 JSON。
+返回持续的 `text/event-stream`。BFF 先用 `Last-Event-ID` 从 Agent replay，之后以相同游标
+轮询 Agent 增量事件；每帧 `data:` 必须是 `parseSessionEvent` 可通过的 JSON，空闲期间发送
+SSE comment keep-alive，收到 `run.completed`/`run.failed` 后关闭。客户端断开会停止轮询，
+不会将连接生命周期绑定到一次性的上游 HTTP 响应。
 
 Agent chat projection 的 `run.started`、`assistant.delta`、`assistant.completed`、`activity`、
 `interaction`、`delivery`、`run.completed`、`run.failed` 分别投影到 Web 的

@@ -443,6 +443,27 @@ function chatSseFrame(event: ChatEvent): string {
   return `id: ${event.seq}\ndata: ${JSON.stringify(event)}\n\n`
 }
 
+function waitForSsePoll(request: IncomingMessage, response: ServerResponse, delayMs: number): Promise<boolean> {
+  if (request.aborted || response.destroyed || response.writableEnded) return Promise.resolve(false)
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      cleanup()
+      resolve(true)
+    }, delayMs)
+    const stop = (): void => {
+      cleanup()
+      resolve(false)
+    }
+    const cleanup = (): void => {
+      clearTimeout(timer)
+      request.off("aborted", stop)
+      response.off("close", stop)
+    }
+    request.once("aborted", stop)
+    response.once("close", stop)
+  })
+}
+
 type LiveOwnerResult = { status: number; body: unknown }
 
 function ownerIdentityHeaders(context: Context): Record<string, string> {
@@ -867,29 +888,46 @@ async function liveAgentSession(
   if (businessPath.length === 3 && businessPath[2] === "events" && method === "GET") {
     const lastEventId = headerString(request.headers["last-event-id"]).trim()
     const cursor = lastEventId === "" ? 0 : Number(lastEventId)
-    const afterSeq = Number.isInteger(cursor) && cursor >= 0 ? cursor : 0
+    let afterSeq = Number.isInteger(cursor) && cursor >= 0 ? cursor : 0
+    let streamStarted = false
     try {
-      const result = await callAgent(config, baseUrl, `/v1/sessions/${encodeURIComponent(sessionId)}/events?after_seq=${afterSeq}&limit=1000`, "GET", context.requestId, request, undefined, context, assertion)
-      if (result.status >= 400) {
-        sendAgentFailure(response, result, context, idempotency, mutation)
-        return true
+      for (;;) {
+        const result = await callAgent(config, baseUrl, `/v1/sessions/${encodeURIComponent(sessionId)}/events?after_seq=${afterSeq}&limit=1000`, "GET", context.requestId, request, undefined, context, assertion)
+        if (result.status >= 400) {
+          if (!streamStarted) sendAgentFailure(response, result, context, idempotency, mutation)
+          else response.end(": upstream-error\n\n")
+          return true
+        }
+        const data = dataOf(result.body)
+        const rawEvents = Array.isArray(data?.events) ? data.events as AgentChatEvent[] : null
+        if (data === null || rawEvents === null) {
+          if (!streamStarted) sendAgentFailure(response, { status: 502, body: failure("upstream_response_invalid", "Agent event replay did not match the v1 contract", context.requestId) }, context, idempotency, mutation)
+          else response.end(": upstream-response-invalid\n\n")
+          return true
+        }
+        if (!streamStarted) {
+          response.writeHead(200, {
+            "content-type": "text/event-stream; charset=utf-8",
+            "cache-control": "no-store",
+            connection: "keep-alive",
+            "x-kokoro-request-id": context.requestId,
+          })
+          streamStarted = true
+        }
+        const events = rawEvents.map(mapAgentEvent).filter((event): event is ChatEvent => event !== null)
+        if (events.length > 0) {
+          response.write(events.map(chatSseFrame).join(""))
+          afterSeq = Math.max(afterSeq, ...events.map((event) => event.seq))
+        } else {
+          response.write(": keep-alive\n\n")
+        }
+        if (events.some((event) => event.kind === "run.completed" || event.kind === "run.failed")) break
+        if (!await waitForSsePoll(request, response, 1000)) break
       }
-      const data = dataOf(result.body)
-      const rawEvents = Array.isArray(data?.events) ? data.events as AgentChatEvent[] : null
-      if (data === null || rawEvents === null) {
-        sendAgentFailure(response, { status: 502, body: failure("upstream_response_invalid", "Agent event replay did not match the v1 contract", context.requestId) }, context, idempotency, mutation)
-        return true
-      }
-      const events = rawEvents.map(mapAgentEvent).filter((event): event is ChatEvent => event !== null)
-      response.writeHead(200, {
-        "content-type": "text/event-stream; charset=utf-8",
-        "cache-control": "no-store",
-        connection: "keep-alive",
-        "x-kokoro-request-id": context.requestId,
-      })
-      response.end(events.length === 0 ? ": keep-alive\n\n" : events.map(chatSseFrame).join(""))
+      if (!response.writableEnded) response.end()
     } catch {
-      reply(response, 502, failure("upstream_response_invalid", "Agent event projection failed", context.requestId), context, idempotency, mutation)
+      if (!streamStarted) reply(response, 502, failure("upstream_response_invalid", "Agent event projection failed", context.requestId), context, idempotency, mutation)
+      else if (!response.writableEnded) response.end(": upstream-error\n\n")
     }
     return true
   }
