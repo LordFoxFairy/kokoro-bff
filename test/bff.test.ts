@@ -1060,8 +1060,9 @@ describe("kokoro-bff v1 mock contract", () => {
 
     const list = await fetch(`${base}/v1/sessions`, { headers })
     assert.equal(list.status, 200)
-    const listBody = await list.json() as { data: { sessions: Array<{ session_id: string; title: string; updated_at: string }>; next_cursor?: string }; meta: { request_id: string } }
+    const listBody = await list.json() as { data: { sessions: Array<{ session_id: string; title: string; updated_at: string }>; next_cursor: string | null }; meta: { request_id: string } }
     assert.ok(listBody.data.sessions.length >= 1)
+    assert.equal(listBody.data.next_cursor, null)
 
     const sessionId = listBody.data.sessions[0]?.session_id
     assert.ok(sessionId)
@@ -1111,6 +1112,7 @@ describe("kokoro-bff v1 mock contract", () => {
     const eventsText = await events.text()
     const frames = eventsText.trim().split(/\n\n/u).filter(Boolean)
     assert.ok(frames.length >= 2)
+    assert.match(frames[0] || "", /event: session\.created/u)
     const firstFrameData = frames[0]?.split("\n").find((line) => line.startsWith("data: "))?.slice("data: ".length) || ""
     const firstEvent = JSON.parse(firstFrameData) as { kind: string; payload: { owner_id: string } }
     assert.equal(firstEvent.kind, "session.created")
@@ -1119,9 +1121,9 @@ describe("kokoro-bff v1 mock contract", () => {
     const control = await fetch(`${base}/v1/sessions/${sessionId}/runs/${messageBody.data.run_id}/control`, {
       method: "POST",
       headers: { ...headers, "content-type": "application/json", "idempotency-key": "chat-control-1" },
-      body: JSON.stringify({ action: "cancel" }),
+      body: JSON.stringify({ kind: "run.cancel" }),
     })
-    assert.equal(control.status, 200)
+    assert.equal(control.status, 202)
     const controlBody = await control.json() as { data: { ok: true }; meta: { request_id: string } }
     assert.equal(controlBody.data.ok, true)
 
@@ -1210,8 +1212,10 @@ describe("kokoro-bff v1 mock contract", () => {
       } else if (request.url?.startsWith("/v1/sessions?") && request.method === "GET") {
         response.end(JSON.stringify({ data: { sessions: [{ session_id: "session-live", title: "hello", updated_at: 1 }], next_cursor: null }, meta: { request_id: "agent" } }))
       } else if (request.url?.startsWith("/v1/runs/") && request.url.endsWith("/control") && request.method === "POST") {
+        const controlRunId = request.url.split("/")[3] || runId
+        const commandId = request.headers["idempotency-key"]?.toString() || "command-test"
         response.statusCode = 202
-        response.end(JSON.stringify({ data: { run_id: runId, accepted: true }, meta: { request_id: "agent" } }))
+        response.end(JSON.stringify({ data: { run_id: controlRunId, command_id: commandId, request_digest: "sha256:test", status: "pending", replayed: false }, meta: { request_id: "agent" } }))
       } else if (request.url?.includes("/messages") && request.method === "GET") {
         response.end(JSON.stringify({ data: { messages: [{ chat_message_id: "user-msg", session_id: sessionId, run_id: runId, role: "user", content: "hello", status: "completed", seq: 1, created_at: 1, updated_at: 1 }], next_seq: 1 }, meta: { request_id: "agent" } }))
       } else if (request.url?.includes("/events") && request.method === "GET") {
@@ -1277,12 +1281,18 @@ describe("kokoro-bff v1 mock contract", () => {
     const control = await fetch(`${base}/v1/sessions/session-live/runs/${firstEnvelope.data.run_id}/control`, {
       method: "POST",
       headers: { ...authHeaders(), "content-type": "application/json", "idempotency-key": "live-control-1" },
-      body: JSON.stringify({ kind: "run.cancel", decision_id: "decision-1" }),
+      body: JSON.stringify({ kind: "run.cancel" }),
     })
-    assert.equal(control.status, 200)
-    assert.deepEqual((await control.json() as { data: { ok: boolean } }).data, { ok: true })
+    assert.equal(control.status, 202)
+    assert.deepEqual((await control.json() as { data: { command_id: string; run_id: string; status: string; replayed: boolean } }).data, {
+      run_id: firstEnvelope.data.run_id,
+      command_id: "live-control-1",
+      request_digest: "sha256:test",
+      status: "pending",
+      replayed: false,
+    })
     const controlRequest = received.find((item) => item.url?.endsWith("/control"))
-    assert.deepEqual(controlRequest?.body, { kind: "run.cancel", session_id: "session-live", decision_id: "decision-1" })
+    assert.deepEqual(controlRequest?.body, { kind: "run.cancel", session_id: "session-live" })
   })
 
   it("rejects a duplicate mutation while the original request is still in flight", async () => {
@@ -1340,5 +1350,23 @@ describe("kokoro-bff v1 mock contract", () => {
     })
     assert.equal(response.status, 503)
     assert.equal((await response.json() as { error: { code: string } }).error.code, "chat_projection_not_configured")
+  })
+
+  it("does not expose deprecated capability compatibility paths", async () => {
+    const capability = createServer((_request, response) => {
+      response.setHeader("content-type", "application/json")
+      response.end(JSON.stringify({ data: { servers: [] }, meta: { request_id: "capability" } }))
+    })
+    const capabilityBase = await listen(capability)
+    const base = await listen(createBffServer(config({
+      mode: "live",
+      upstreams: { ...config().upstreams, capability: capabilityBase },
+    })))
+
+    for (const path of ["/v1/connectors", "/v1/preferences", "/v1/cloud-computers", "/v1/integrations"]) {
+      const response = await fetch(`${base}${path}`, { headers: authHeaders() })
+      assert.equal(response.status, 404, path)
+      assert.equal((await response.json() as { error: { code: string } }).error.code, "bff_route_not_found")
+    }
   })
 })

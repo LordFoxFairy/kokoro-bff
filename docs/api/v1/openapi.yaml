@@ -3,10 +3,13 @@ info:
   title: Kokoro Business API
   version: 1.0.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
+  license:
+    name: Proprietary Kokoro contract
+    url: https://kokoro.invalid/license
 servers:
   - url: http://127.0.0.1:4300
     description: Local mock BFF
-  - url: https://bff.example.com
+  - url: https://bff.kokoro.invalid
     description: Production placeholder
 security:
   - serviceHeader: []
@@ -15,21 +18,33 @@ security:
     principalId: []
 tags:
   - name: Health
+    description: Process and dependency health probes.
   - name: System
+    description: Tenant-scoped runtime manifest projection.
   - name: Projects
+    description: BFF-owned projects and project resources.
   - name: Chat
+    description: Asynchronous sessions, messages, event streams, and run controls.
   - name: Models
+    description: Tenant-visible model candidates.
   - name: Skills
+    description: Skill catalog, revisions, quotas, and lifecycle operations.
   - name: MCP
+    description: MCP server projections and lifecycle operations.
   - name: Scheduled
+    description: BFF-owned scheduled task definitions.
   - name: Agents
+    description: Agent connection setup projections.
   - name: Library
+    description: Storage-owned library projection.
   - name: Billing
+    description: Billing catalog, summary, and checkout projections.
 paths:
   /healthz:
     get:
       tags: [Health]
       operationId: healthz
+      summary: Check process health
       security: []
       responses:
         '200':
@@ -38,10 +53,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HealthResponse'
+        '400':
+          description: Invalid probe request
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
   /readyz:
     get:
       tags: [Health]
       operationId: readyz
+      summary: Check service readiness
       security: []
       responses:
         '200':
@@ -56,10 +77,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HealthResponse'
+        '400':
+          description: Invalid probe request
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
   /v1/system/runtime-manifest:
     get:
       tags: [System]
       operationId: getRuntimeManifest
+      summary: Get the tenant runtime manifest
       description: Resolves the configured host through IAM, loads the System owner manifest, and projects its resource fields once into the BFF v1 snake_case transport.
       parameters:
         - name: product_id
@@ -97,9 +124,12 @@ paths:
     get:
       tags: [Chat]
       operationId: listSessions
+      summary: List chat sessions
       parameters:
         - $ref: '#/components/parameters/ScopeQuery'
         - $ref: '#/components/parameters/ProjectRefQuery'
+        - $ref: '#/components/parameters/LimitQuery'
+        - $ref: '#/components/parameters/CursorQuery'
       responses:
         '200':
           description: Session list
@@ -113,6 +143,7 @@ paths:
     get:
       tags: [Models]
       operationId: listModels
+      summary: List visible models
       parameters:
         - name: feature_key
           in: query
@@ -137,6 +168,7 @@ paths:
     get:
       tags: [Chat]
       operationId: getSessionSnapshot
+      summary: Get a session snapshot
       parameters:
         - $ref: '#/components/parameters/ScopeQuery'
         - $ref: '#/components/parameters/ProjectRefQuery'
@@ -153,6 +185,7 @@ paths:
     delete:
       tags: [Chat]
       operationId: deleteSession
+      summary: Delete a chat session
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
         - $ref: '#/components/parameters/ScopeQuery'
@@ -174,6 +207,7 @@ paths:
     post:
       tags: [Chat]
       operationId: createMessage
+      summary: Submit a session message
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
         - $ref: '#/components/parameters/ScopeQuery'
@@ -184,6 +218,10 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/MessageCreateRequest'
+            example:
+              content: Review the latest project changes.
+              model: default
+              project_ref: project_kokoro
       responses:
         '202':
           description: Message receipt
@@ -202,16 +240,24 @@ paths:
     get:
       tags: [Chat]
       operationId: streamSessionEvents
+      summary: Stream session events
       parameters:
         - $ref: '#/components/parameters/ScopeQuery'
         - $ref: '#/components/parameters/ProjectRefQuery'
+        - $ref: '#/components/parameters/LastEventId'
       responses:
         '200':
           description: Session event stream
+          headers:
+            X-Kokoro-Request-Id:
+              description: Request correlation identifier for the stream setup.
+              schema:
+                $ref: '#/components/schemas/RequestId'
+              example: req_01JASYNC000000000000000000
           content:
             text/event-stream:
               schema:
-                type: string
+                $ref: '#/components/schemas/SessionEventStream'
         '401': { $ref: '#/components/responses/ServiceAuthFailed' }
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -222,6 +268,7 @@ paths:
     post:
       tags: [Chat]
       operationId: controlRun
+      summary: Control an asynchronous run
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
         - $ref: '#/components/parameters/ScopeQuery'
@@ -232,13 +279,23 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/RunControlRequest'
+            examples:
+              cancel:
+                value:
+                  kind: run.cancel
+              resume:
+                value:
+                  kind: run.resume
+                  decisions:
+                    - type: approve
+                      tool_id: tool_01J
       responses:
-        '200':
+        '202':
           description: Run control receipt
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/OkResponse'
+                $ref: '#/components/schemas/ControlReceiptResponse'
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/ServiceAuthFailed' }
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
@@ -250,6 +307,7 @@ paths:
     patch:
       tags: [Chat]
       operationId: renameSession
+      summary: Rename a chat session
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
         - $ref: '#/components/parameters/ScopeQuery'
@@ -278,6 +336,7 @@ paths:
     post:
       tags: [Chat]
       operationId: createShare
+      summary: Create a session share
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
         - $ref: '#/components/parameters/ScopeQuery'
@@ -296,6 +355,7 @@ paths:
     delete:
       tags: [Chat]
       operationId: revokeShare
+      summary: Revoke a session share
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
         - $ref: '#/components/parameters/ScopeQuery'
@@ -317,6 +377,7 @@ paths:
     get:
       tags: [Chat]
       operationId: getSharedSessionSnapshot
+      summary: Get a shared session snapshot
       parameters:
         - $ref: '#/components/parameters/ScopeQuery'
         - $ref: '#/components/parameters/ProjectRefQuery'
@@ -334,6 +395,7 @@ paths:
     get:
       tags: [Projects]
       operationId: listProjects
+      summary: List projects
       responses:
         '200':
           description: Project list
@@ -346,6 +408,7 @@ paths:
     post:
       tags: [Projects]
       operationId: createProject
+      summary: Create a project
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -370,6 +433,7 @@ paths:
     get:
       tags: [Projects]
       operationId: getProject
+      summary: Get a project
       responses:
         '200':
           description: Project projection
@@ -382,6 +446,7 @@ paths:
     patch:
       tags: [Projects]
       operationId: updateProjectInstruction
+      summary: Update project instructions
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -407,6 +472,7 @@ paths:
     get:
       tags: [Projects]
       operationId: listProjectTasks
+      summary: List project tasks
       responses:
         '200':
           description: Project task projections
@@ -422,6 +488,7 @@ paths:
     get:
       tags: [Projects]
       operationId: listProjectInstructionRevisions
+      summary: List instruction revisions
       responses:
         '200':
           description: Instruction history
@@ -437,6 +504,7 @@ paths:
     post:
       tags: [Projects]
       operationId: uploadProjectResources
+      summary: Upload project resources
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -470,6 +538,7 @@ paths:
     patch:
       tags: [Projects]
       operationId: updateProjectSkill
+      summary: Update project skill state
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -495,6 +564,7 @@ paths:
     post:
       tags: [Projects]
       operationId: createProjectScheduledTask
+      summary: Create a project scheduled task
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -518,6 +588,7 @@ paths:
     get:
       tags: [Skills]
       operationId: listSkills
+      summary: List skills
       responses:
         '200':
           description: Skill projections
@@ -530,6 +601,7 @@ paths:
     get:
       tags: [Skills]
       operationId: listSkillPool
+      summary: List the skill pool
       responses:
         '200':
           description: Skill pool
@@ -542,6 +614,7 @@ paths:
     get:
       tags: [Skills]
       operationId: listSkillCatalog
+      summary: List the skill catalog
       responses:
         '200':
           description: Skill catalog
@@ -554,6 +627,7 @@ paths:
     get:
       tags: [Skills]
       operationId: getSkillQuota
+      summary: Get skill quota
       responses:
         '200':
           description: Skill quota
@@ -569,6 +643,7 @@ paths:
     get:
       tags: [Skills]
       operationId: listSkillRevisions
+      summary: List skill revisions
       responses:
         '200':
           description: Skill revisions
@@ -584,6 +659,7 @@ paths:
     post:
       tags: [Skills]
       operationId: enableSkill
+      summary: Enable a skill
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       responses:
@@ -603,6 +679,7 @@ paths:
     post:
       tags: [Skills]
       operationId: disableSkill
+      summary: Disable a skill
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       responses:
@@ -619,6 +696,7 @@ paths:
     post:
       tags: [Skills]
       operationId: previewGithubSkill
+      summary: Preview a GitHub skill
       requestBody:
         required: true
         content:
@@ -638,6 +716,7 @@ paths:
     post:
       tags: [Skills]
       operationId: importGithubSkill
+      summary: Import a GitHub skill
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -660,6 +739,7 @@ paths:
     get:
       tags: [MCP]
       operationId: listMcpServers
+      summary: List MCP servers
       responses:
         '200':
           description: MCP server list
@@ -671,6 +751,7 @@ paths:
     post:
       tags: [MCP]
       operationId: registerMcpServer
+      summary: Register an MCP server
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -695,6 +776,7 @@ paths:
     post:
       tags: [MCP]
       operationId: enableMcpServer
+      summary: Enable an MCP server
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       responses:
@@ -713,6 +795,7 @@ paths:
     post:
       tags: [MCP]
       operationId: disableMcpServer
+      summary: Disable an MCP server
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       responses:
@@ -731,6 +814,7 @@ paths:
     delete:
       tags: [MCP]
       operationId: deleteMcpServer
+      summary: Delete an MCP server
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       responses:
@@ -747,6 +831,7 @@ paths:
     get:
       tags: [Scheduled]
       operationId: listScheduledTasks
+      summary: List scheduled tasks
       responses:
         '200':
           description: Scheduled task list
@@ -758,6 +843,7 @@ paths:
     post:
       tags: [Scheduled]
       operationId: createScheduledTask
+      summary: Create a scheduled task
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -782,6 +868,7 @@ paths:
     get:
       tags: [Scheduled]
       operationId: getScheduledTask
+      summary: Get a scheduled task
       responses:
         '200':
           description: Scheduled task
@@ -794,6 +881,7 @@ paths:
     patch:
       tags: [Scheduled]
       operationId: updateScheduledTask
+      summary: Update a scheduled task
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -815,6 +903,7 @@ paths:
     delete:
       tags: [Scheduled]
       operationId: deleteScheduledTask
+      summary: Delete a scheduled task
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       responses:
@@ -833,6 +922,7 @@ paths:
     post:
       tags: [Scheduled]
       operationId: retryScheduledTask
+      summary: Retry a scheduled task
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       responses:
@@ -849,6 +939,7 @@ paths:
     get:
       tags: [Agents]
       operationId: getAgentConnectionSetup
+      summary: Get agent connection setup
       parameters:
         - $ref: '#/components/parameters/Platform'
       responses:
@@ -864,6 +955,7 @@ paths:
     get:
       tags: [Library]
       operationId: listLibrary
+      summary: List library items
       responses:
         '200':
           description: Library items
@@ -876,6 +968,7 @@ paths:
     get:
       tags: [Billing]
       operationId: listBillingPlans
+      summary: List billing plans
       responses:
         '200':
           description: Billing plans
@@ -888,6 +981,7 @@ paths:
     get:
       tags: [Billing]
       operationId: getBillingSummary
+      summary: Get billing summary
       responses:
         '200':
           description: Billing summary
@@ -900,6 +994,7 @@ paths:
     post:
       tags: [Billing]
       operationId: createBillingCheckout
+      summary: Create a billing checkout
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -938,6 +1033,78 @@ components:
       in: header
       name: x-kokoro-principal-id
   parameters:
+    SessionId:
+      name: id
+      in: path
+      required: true
+      description: Opaque chat session identifier.
+      schema:
+        type: string
+        minLength: 1
+      example: session_kokoro
+    RunId:
+      name: runId
+      in: path
+      required: true
+      description: Opaque asynchronous run identifier.
+      schema:
+        type: string
+        minLength: 1
+      example: run_01JASYNC
+    ShareId:
+      name: shareId
+      in: path
+      required: true
+      description: Opaque public session share identifier.
+      schema:
+        type: string
+        minLength: 1
+      example: shr_01JSHARE
+    ScopeQuery:
+      name: scope
+      in: query
+      required: false
+      description: Optional server-derived scope filter; it cannot override authenticated identity.
+      schema:
+        type: string
+        minLength: 1
+      example: ns_test
+    ProjectRefQuery:
+      name: project_ref
+      in: query
+      required: false
+      description: Filter sessions to a project reference.
+      schema:
+        type: string
+        minLength: 1
+      example: project_kokoro
+    LimitQuery:
+      name: limit
+      in: query
+      required: false
+      description: Maximum number of sessions to return.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+      example: 20
+    CursorQuery:
+      name: cursor
+      in: query
+      required: false
+      description: Opaque cursor returned by the previous page.
+      schema:
+        $ref: '#/components/schemas/Cursor'
+      example: cur_01JNEXT
+    LastEventId:
+      name: Last-Event-ID
+      in: header
+      required: false
+      description: Last delivered event sequence; the stream resumes strictly after this cursor.
+      schema:
+        $ref: '#/components/schemas/EventCursor'
+      example: 4
     ProjectId:
       name: projectId
       in: path
@@ -988,26 +1155,397 @@ components:
       schema:
         type: string
   schemas:
+    RequestId:
+      type: string
+      minLength: 1
+      maxLength: 256
+      description: Request correlation identifier echoed by every v1 envelope.
+      example: req_01JASYNC000000000000000000
+    Cursor:
+      type: string
+      minLength: 1
+      maxLength: 2048
+      description: Opaque pagination cursor. Clients must not parse or construct it.
+      example: cur_01JNEXT000000000000000000
+    EventCursor:
+      type: integer
+      minimum: 0
+      description: Monotonic session event sequence used by Last-Event-ID.
+      example: 4
     RequestMeta:
       type: object
       required: [request_id]
+      additionalProperties: false
       properties:
         request_id:
+          $ref: '#/components/schemas/RequestId'
+      example:
+        request_id: req_01JASYNC000000000000000000
+    ErrorDetail:
+      type: object
+      required: [code, message]
+      additionalProperties: false
+      properties:
+        code:
           type: string
+          minLength: 1
+          example: session_not_found
+        message:
+          type: string
+          minLength: 1
+          example: Session was not found
     ErrorEnvelope:
       type: object
       required: [error, meta]
+      additionalProperties: false
       properties:
+        error: { $ref: '#/components/schemas/ErrorDetail' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+      example:
         error:
-          type: object
-          required: [code, message]
-          properties:
-            code:
-              type: string
-            message:
-              type: string
+          code: session_not_found
+          message: Session was not found
         meta:
-          $ref: '#/components/schemas/RequestMeta'
+          request_id: req_01JASYNC000000000000000000
+    ChatSessionSummary:
+      type: object
+      required: [session_id, title, updated_at]
+      additionalProperties: false
+      properties:
+        session_id: { type: string, minLength: 1 }
+        title: { type: string }
+        updated_at: { type: string, format: date-time }
+      example:
+        session_id: session_kokoro
+        title: Review business API contract
+        updated_at: '2026-01-01T00:00:00.000Z'
+    SessionListResponse:
+      type: object
+      required: [data, meta]
+      additionalProperties: false
+      properties:
+        data:
+          type: object
+          required: [sessions, next_cursor]
+          additionalProperties: false
+          properties:
+            sessions:
+              type: array
+              items: { $ref: '#/components/schemas/ChatSessionSummary' }
+            next_cursor:
+              type: [string, 'null']
+              description: Opaque cursor for the next page; null means there is no next page.
+              example: null
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+      example:
+        data:
+          sessions:
+            - session_id: session_kokoro
+              title: Review business API contract
+              updated_at: '2026-01-01T00:00:00.000Z'
+          next_cursor: null
+        meta:
+          request_id: req_01JASYNC000000000000000000
+    ChatSession:
+      type: object
+      required: [session_id, title, owner_id, created_at, updated_at]
+      additionalProperties: false
+      properties:
+        session_id: { type: string, minLength: 1 }
+        title: { type: string }
+        owner_id: { type: string, minLength: 1 }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+      example:
+        session_id: session_kokoro
+        title: Review business API contract
+        owner_id: ns_test
+        created_at: '2026-01-01T00:00:00.000Z'
+        updated_at: '2026-01-01T00:00:00.000Z'
+    ChatMessage:
+      type: object
+      required: [message_id, role, content, status, created_at]
+      additionalProperties: false
+      properties:
+        message_id: { type: string, minLength: 1 }
+        role:
+          type: string
+          enum: [user, assistant, system]
+        content: { type: string }
+        status:
+          type: string
+          enum: [pending, streaming, completed, failed]
+        created_at: { type: string, format: date-time }
+        run_id: { type: string }
+      example:
+        message_id: msg_01JUSER
+        role: user
+        content: Review the contract
+        status: completed
+        created_at: '2026-01-01T00:00:00.000Z'
+        run_id: run_01JASYNC
+    ChatRun:
+      type: object
+      required: [run_id, status]
+      additionalProperties: false
+      properties:
+        run_id: { type: string, minLength: 1 }
+        status:
+          type: string
+          enum: [running, completed, cancelled, failed, waiting]
+      example:
+        run_id: run_01JASYNC
+        status: running
+    SessionSnapshotResponse:
+      type: object
+      required: [data, meta]
+      additionalProperties: false
+      properties:
+        data:
+          type: object
+          required: [session, pending_pauses, files, deliveries, event_watermark]
+          additionalProperties: false
+          properties:
+            session: { $ref: '#/components/schemas/ChatSession' }
+            messages:
+              type: array
+              items: { $ref: '#/components/schemas/ChatMessage' }
+            active_run: { $ref: '#/components/schemas/ChatRun' }
+            pending_pauses:
+              type: array
+              items:
+                type: object
+                additionalProperties: true
+            files:
+              type: array
+              items: { $ref: '#/components/schemas/WorkspaceFile' }
+            deliveries:
+              type: array
+              items: { $ref: '#/components/schemas/Delivery' }
+            event_watermark: { $ref: '#/components/schemas/EventCursor' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+      example:
+        data:
+          session:
+            session_id: session_kokoro
+            title: Review business API contract
+            owner_id: ns_test
+            created_at: '2026-01-01T00:00:00.000Z'
+            updated_at: '2026-01-01T00:00:00.000Z'
+          messages: []
+          active_run:
+            run_id: run_01JASYNC
+            status: running
+          pending_pauses: []
+          files: []
+          deliveries: []
+          event_watermark: 4
+        meta:
+          request_id: req_01JASYNC000000000000000000
+    WorkspaceFile:
+      type: object
+      required: [path, mime, bytes]
+      additionalProperties: false
+      properties:
+        path: { type: string }
+        mime: { type: string }
+        bytes: { type: integer, minimum: 0 }
+    Delivery:
+      type: object
+      required: [content_hash, path, title, mime, size, run_id, created_at]
+      additionalProperties: false
+      properties:
+        content_hash: { type: string }
+        path: { type: string }
+        title: { type: string }
+        mime: { type: string }
+        size: { type: integer, minimum: 0 }
+        run_id: { type: string }
+        created_at: { type: string, format: date-time }
+    MessageCreateRequest:
+      type: object
+      required: [content]
+      additionalProperties: false
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 100000
+        model: { type: string, minLength: 1 }
+        agent: { type: string, minLength: 1 }
+        thinking: { type: boolean }
+        pinned_skills:
+          type: array
+          items: { type: string, minLength: 1 }
+        mcp_servers:
+          type: array
+          items: { type: string, minLength: 1 }
+        project_ref: { type: string, minLength: 1 }
+      example:
+        content: Review the latest project changes.
+        model: default
+        project_ref: project_kokoro
+    MessageReceipt:
+      type: object
+      required: [run_id, user_message_id, assistant_message_id]
+      additionalProperties: false
+      properties:
+        run_id: { type: string, minLength: 1 }
+        user_message_id: { type: string, minLength: 1 }
+        assistant_message_id: { type: string, minLength: 1 }
+      example:
+        run_id: run_01JASYNC
+        user_message_id: msg_01JUSER
+        assistant_message_id: msg_01JASSISTANT
+    MessageReceiptResponse:
+      type: object
+      required: [data, meta]
+      additionalProperties: false
+      properties:
+        data: { $ref: '#/components/schemas/MessageReceipt' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+      example:
+        data:
+          run_id: run_01JASYNC
+          user_message_id: msg_01JUSER
+          assistant_message_id: msg_01JASSISTANT
+        meta:
+          request_id: req_01JASYNC000000000000000000
+    RunCancelRequest:
+      type: object
+      required: [kind]
+      additionalProperties: false
+      properties:
+        kind: { type: string, const: run.cancel }
+      example:
+        kind: run.cancel
+    RunResumeRequest:
+      type: object
+      required: [kind, decisions]
+      additionalProperties: false
+      properties:
+        kind: { type: string, const: run.resume }
+        decisions:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            additionalProperties: true
+      example:
+        kind: run.resume
+        decisions:
+          - type: approve
+            tool_id: tool_01J
+    RunSteerRequest:
+      type: object
+      required: [kind, message_id, content]
+      additionalProperties: false
+      properties:
+        kind: { type: string, const: run.steer }
+        message_id: { type: string, minLength: 1 }
+        content: { type: string, minLength: 1 }
+      example:
+        kind: run.steer
+        message_id: msg_01JASSISTANT
+        content: Focus on the API contract.
+    RunControlRequest:
+      oneOf:
+        - $ref: '#/components/schemas/RunCancelRequest'
+        - $ref: '#/components/schemas/RunResumeRequest'
+        - $ref: '#/components/schemas/RunSteerRequest'
+      discriminator:
+        propertyName: kind
+      examples:
+        - kind: run.cancel
+        - kind: run.resume
+          decisions:
+            - type: approve
+              tool_id: tool_01J
+    ControlReceipt:
+      type: object
+      required: [run_id, command_id, request_digest, status, replayed]
+      additionalProperties: false
+      properties:
+        run_id: { type: string, minLength: 1 }
+        command_id: { type: string, minLength: 1 }
+        request_digest: { type: string, minLength: 1 }
+        status: { type: string, enum: [pending, succeeded, failed] }
+        error_code: { type: [string, 'null'] }
+        replayed: { type: boolean }
+      example:
+        run_id: run_01JASYNC
+        command_id: command_01J
+        request_digest: sha256:abc123
+        status: pending
+        replayed: false
+    ControlReceiptResponse:
+      type: object
+      required: [data, meta]
+      additionalProperties: false
+      properties:
+        data: { $ref: '#/components/schemas/ControlReceipt' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+      example:
+        data:
+          run_id: run_01JASYNC
+          command_id: command_01J
+          request_digest: sha256:abc123
+          status: pending
+          replayed: false
+        meta:
+          request_id: req_01JASYNC000000000000000000
+    SessionEventStream:
+      type: string
+      description: Newline-delimited server-sent event frames. The event id is the resume cursor.
+      example: |-
+        id: 4
+        event: run.completed
+        data: {"event_id":"event_4","seq":4,"session_id":"session_kokoro","run_id":"run_01JASYNC","kind":"run.completed","timestamp":"2026-01-01T00:00:04.000Z","payload":{"status":"completed"}}
+    RenameSessionRequest:
+      type: object
+      required: [title]
+      additionalProperties: false
+      properties:
+        title: { type: string, minLength: 1, maxLength: 200 }
+      example:
+        title: Contract review
+    DeleteSessionResponse:
+      type: object
+      required: [data, meta]
+      additionalProperties: false
+      properties:
+        data:
+          type: object
+          required: [status]
+          additionalProperties: false
+          properties:
+            status: { type: string, const: deleted }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+      example:
+        data:
+          status: deleted
+        meta:
+          request_id: req_01JASYNC000000000000000000
+    ShareReceipt:
+      type: object
+      required: [share_id]
+      additionalProperties: false
+      properties:
+        share_id: { type: string, minLength: 1 }
+      example:
+        share_id: shr_01JSHARE
+    ShareReceiptResponse:
+      type: object
+      required: [data, meta]
+      additionalProperties: false
+      properties:
+        data: { $ref: '#/components/schemas/ShareReceipt' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+      example:
+        data:
+          share_id: shr_01JSHARE
+        meta:
+          request_id: req_01JASYNC000000000000000000
     HealthResponse:
       type: object
       required: [status, service, mode]
@@ -1458,6 +1996,7 @@ components:
             plans:
               type: array
               items: { $ref: '#/components/schemas/BillingPlan' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
 
     ModelCandidate:
       type: object

@@ -460,7 +460,7 @@ export class MockStore {
     return { run_id: runId, user_message_id: userMessageId, assistant_message_id: assistantMessageId }
   }
 
-  controlSessionRun(sessionId: string, runId: string, action: "cancel" | "resume", decisions?: string[], scope?: string, projectRef?: string): { ok: true } | null {
+  controlSessionRun(sessionId: string, runId: string, action: "cancel" | "resume" | "steer", decisions?: string[], scope?: string, projectRef?: string): { ok: true } | null {
     const session = this.findSession(sessionId, scope, projectRef)
     if (session === undefined) return null
     if (session.active_run === null || session.active_run.run_id !== runId) return null

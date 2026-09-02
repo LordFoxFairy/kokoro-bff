@@ -445,15 +445,15 @@ function projectData(projects: Project[]): { projects: Project[] } { return { pr
 function taskData(tasks: Task[]): { tasks: Task[] } { return { tasks } }
 function skillData(skills: Skill[]): { skills: Skill[] } { return { skills } }
 function scheduledData(tasks: ScheduledTask[]): { tasks: ScheduledTask[] } { return { tasks } }
-function chatSessionsData(sessions: ChatSessionSummary[], nextCursor?: string): { sessions: ChatSessionSummary[]; next_cursor?: string } {
-  return nextCursor === undefined ? { sessions } : { sessions, next_cursor: nextCursor }
+function chatSessionsData(sessions: ChatSessionSummary[], nextCursor: string | null = null): { sessions: ChatSessionSummary[]; next_cursor: string | null } {
+  return { sessions, next_cursor: nextCursor }
 }
 function chatSessionDetailData(detail: ChatSessionDetail): ChatSessionDetail {
   return detail
 }
 function chatShareData(shareId: string): { share_id: string } { return { share_id: shareId } }
 function chatSseFrame(event: ChatEvent): string {
-  return `id: ${event.seq}\ndata: ${JSON.stringify(event)}\n\n`
+  return `id: ${event.seq}\nevent: ${event.kind}\ndata: ${JSON.stringify(event)}\n\n`
 }
 
 function waitForSsePoll(request: IncomingMessage, response: ServerResponse, delayMs: number): Promise<boolean> {
@@ -525,7 +525,7 @@ function modelCatalogData(body: unknown): { models: Array<{
   return { models, ...(nextCursor === undefined ? {} : { next_cursor: nextCursor }) }
 }
 
-function agentSessionListData(body: unknown): { sessions: ChatSessionSummary[]; next_cursor?: string | null } | null {
+function agentSessionListData(body: unknown): { sessions: ChatSessionSummary[]; next_cursor: string | null } | null {
   const data = dataOf(body)
   if (data === null || !Array.isArray(data.sessions)) return null
   const sessions: ChatSessionSummary[] = []
@@ -541,7 +541,7 @@ function agentSessionListData(body: unknown): { sessions: ChatSessionSummary[]; 
   }
   const nextCursor = data.next_cursor
   if (nextCursor !== undefined && nextCursor !== null && typeof nextCursor !== "string") return null
-  return nextCursor === undefined ? { sessions } : { sessions, next_cursor: nextCursor }
+  return { sessions, next_cursor: nextCursor ?? null }
 }
 
 type BillingPlanProjection = {
@@ -885,13 +885,23 @@ async function liveAgentSession(
       return true
     }
     const runId = businessPath[3] || ""
+    const commandId = idempotencyKey(request)
+    if (commandId === null) {
+      reply(response, 400, failure("idempotency_key_required", "Control requests require Idempotency-Key", context.requestId), context, idempotency, mutation)
+      return true
+    }
     try {
       const result = await callAgent(config, baseUrl, `/v1/runs/${encodeURIComponent(runId)}/control`, "POST", context.requestId, request, Buffer.from(JSON.stringify(control)), context, assertion)
       if (result.status >= 400) {
         sendAgentFailure(response, result, context, idempotency, mutation)
         return true
       }
-      reply(response, 200, ok({ ok: true }, context.requestId), context, idempotency, mutation)
+      const receipt = dataOf(result.body)
+      if (receipt === null || receipt.command_id !== commandId || receipt.run_id !== runId) {
+        sendAgentFailure(response, { status: 502, body: failure("upstream_response_invalid", "Agent control receipt did not match the requested command", context.requestId) }, context, idempotency, mutation)
+        return true
+      }
+      reply(response, 202, ok(receipt, context.requestId), context, idempotency, mutation)
     } catch {
       reply(response, 502, failure("upstream_unreachable", "The configured Agent upstream is unavailable", context.requestId), context, idempotency, mutation)
     }
@@ -1781,25 +1791,27 @@ async function mockBusiness(
         return
       }
     } else if (segments.length === 5 && segments[2] === "runs" && segments[4] === "control" && method === "POST") {
-      const action = typeof json.action === "string"
-        ? json.action
-        : json.kind === "run.cancel"
-          ? "cancel"
-          : json.kind === "run.resume"
-            ? "resume"
+      const control = buildAgentControl(sessionId, json)
+      const action = control?.kind === "run.cancel"
+        ? "cancel"
+        : control?.kind === "run.resume"
+          ? "resume"
+          : control?.kind === "run.steer"
+            ? "steer"
             : ""
       const decisions = Array.isArray(json.decisions)
         ? json.decisions.map((decision) => typeof decision === "string" ? decision : JSON.stringify(decision))
         : undefined
-      if (action !== "cancel" && action !== "resume") {
+      if (control === null || action === "") {
         status = 400
-        payload = failure("invalid_run_control", "Control action must be cancel or resume", context.requestId)
+        payload = failure("invalid_run_control", "Control request does not match the v1 contract", context.requestId)
       } else {
         const result = store.controlSessionRun(sessionId, segments[3] || "", action, decisions, scope, projectRef)
         if (result === null) {
           status = 404
           payload = failure("run_not_found", "Run was not found", context.requestId)
         } else {
+          status = 202
           payload = result
         }
       }
@@ -2010,7 +2022,7 @@ function upstreamKey(segments: string[]): string | null {
   if (segments[0] === "system") return "system"
   if (segments[0] === "models") return "model"
   if (segments[0] === "skills") return "capability"
-  if (segments[0] === "mcp" || segments[0] === "connectors" || segments[0] === "preferences" || segments[0] === "cloud-computers" || segments[0] === "integrations") return "capability"
+  if (segments[0] === "mcp") return "capability"
   if (segments[0] === "agents") return "agents"
   if (segments[0] === "library") return "storage"
   if (segments[0] === "billing") return "billing"
@@ -2107,6 +2119,10 @@ async function handle(
   }
   const key = upstreamKey(businessPath)
   const upstreamBase = key === null ? null : configuredUpstream(config, key)
+  if (key === null && !bffOwnedBusinessPath(businessPath)) {
+    send(response, 404, failure("bff_route_not_found", "Business route was not found", id))
+    return
+  }
   const method = request.method || "GET"
   let body: Buffer | undefined
   let json: Record<string, unknown> = {}

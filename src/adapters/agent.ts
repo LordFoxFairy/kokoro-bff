@@ -33,7 +33,6 @@ export type AgentLaunch = {
 export type AgentControl = {
   kind: "run.cancel" | "run.resume" | "run.steer"
   session_id: string
-  decision_id?: string
   decisions?: unknown[]
   message_id?: string
   content?: string
@@ -74,6 +73,11 @@ function jsonValue(value: unknown): unknown {
       : typeof value === "object" && value !== null
         ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, jsonValue(item)]))
         : String(value)
+}
+
+function hasOnlyKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
+  const allowed = new Set(keys)
+  return Object.keys(value).every((key) => allowed.has(key))
 }
 
 export function agentIdentityHeaders(identity: BffIdentity, assertionRef: string): AgentIdentityHeaders {
@@ -147,13 +151,13 @@ export function buildAgentControl(
   body: Record<string, unknown>,
 ): AgentControl | null {
   const kind = body.kind
-  if (kind === "run.cancel" && typeof body.decision_id === "string" && body.decision_id.trim() !== "") {
-    return { kind, session_id: sessionId, decision_id: body.decision_id }
+  if (kind === "run.cancel" && hasOnlyKeys(body, ["kind"])) {
+    return { kind, session_id: sessionId }
   }
-  if (kind === "run.resume" && typeof body.decision_id === "string" && body.decision_id.trim() !== "" && Array.isArray(body.decisions) && body.decisions.length > 0) {
-    return { kind, session_id: sessionId, decision_id: body.decision_id, decisions: body.decisions.map(jsonValue) }
+  if (kind === "run.resume" && hasOnlyKeys(body, ["kind", "decisions"]) && Array.isArray(body.decisions) && body.decisions.length > 0) {
+    return { kind, session_id: sessionId, decisions: body.decisions.map(jsonValue) }
   }
-  if (kind === "run.steer" && typeof body.message_id === "string" && typeof body.content === "string" && body.message_id.trim() !== "" && body.content.trim() !== "") {
+  if (kind === "run.steer" && hasOnlyKeys(body, ["kind", "message_id", "content"]) && typeof body.message_id === "string" && typeof body.content === "string" && body.message_id.trim() !== "" && body.content.trim() !== "") {
     return { kind, session_id: sessionId, message_id: body.message_id, content: body.content }
   }
   return null
