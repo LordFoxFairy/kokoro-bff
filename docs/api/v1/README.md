@@ -170,7 +170,7 @@ Model/Billing 的 owner HTTP 面明确注册为 `web-bff` caller；Agent ingress
 
 | Web-facing surface | BFF boundary | Fact owner |
 | --- | --- | --- |
-| Chat/session/run/SSE | `src/adapters/agent.ts` + BFF Chat | Agent execution facts; BFF owns public projection |
+| Chat/session/run/SSE | `src/adapters/agent/` + BFF Chat | Agent execution facts; BFF owns public projection. The boundary is split into identity, launch/control builders, and chat projections; the root `src/adapters/agent.ts` is only a compatibility barrel. |
 | Project/workspace projection | BFF business adapter | BFF projection; System owns Site/Workspace/Policy |
 | Skills/MCP | Capability Connect adapter | Capability |
 | Model selection | `liveOwnerBusiness` Model projection | Model |
