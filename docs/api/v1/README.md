@@ -131,6 +131,7 @@ BFF 通过显式环境变量选择业务服务：
 | Billing | `KOKORO_BILLING_BASE_URL` |
 | Model | `KOKORO_MODEL_BASE_URL` |
 | Chat / Agent ingress | `KOKORO_AGENT_BASE_URL` |
+| Mori Music owner | `KOKORO_MUSIC_BASE_URL` |
 
 缺少对应地址时返回 `503 upstream_not_configured`，不回退到 Gateway，也不在 live 模式静默使用 Mock。
 
@@ -150,7 +151,7 @@ Model/Billing 的 owner HTTP 面明确注册为 `web-bff` caller；Agent ingress
 | 资源 | v1 文档 | Mock | Live 替换 |
 | --- | --- | --- | --- |
 | Projects | 已完成 | 已完成 | BFF-owned PostgreSQL fact store；System 仅承接 Site/Workspace/Policy |
-| Mori Music | v1 projection | 已完成（Mock） | Live 需要显式 Music owner adapter；不回退到 Mock |
+| Mori Music | v1 projection | 已完成（Mock） | 已接入 `KOKORO_MUSIC_BASE_URL`；缺失时 `503 music_owner_not_configured`，不回退到 Mock |
 | Chat | 已完成 | 已完成 | BFF Chat adapter → `KOKORO_AGENT_BASE_URL` Agent HTTP ingress；session list 由 Agent 持久化查询，rename/delete/share 仍显式标注能力边界 |
 | Model | v1 owner adapter | 已完成 | `/bff/model-catalog` → `{ data: { models } }`，由 BFF 注入 tenant/subject 上下文 |
 | Skills | Connect owner adapter | 已完成（Mock） | live 使用 Capability 专用 projection；未接入的写操作显式返回 503 |

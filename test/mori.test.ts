@@ -42,6 +42,7 @@ function config(overrides: Partial<BffConfig> = {}): BffConfig {
       scheduler: null,
       agents: null,
       billing: null,
+      music: null,
     },
     ...overrides,
   }
@@ -230,11 +231,11 @@ describe("Mori music projection", () => {
     assert.equal((await invalidCursor.json() as { error: { code: string } }).error.code, "invalid_cursor")
   })
 
-  it("does not silently use mock music facts in live mode", async () => {
+  it("fails closed when the live Music owner is not configured", async () => {
     const base = await listen(createBffServer(config({ mode: "live" })))
     const response = await fetch(`${base}/v1/mori/projects/project_preview_first_light`, { headers: authHeaders() })
     const body = await response.json() as { error: { code: string } }
     assert.equal(response.status, 503)
-    assert.equal(body.error.code, "mori_projection_not_configured")
+    assert.equal(body.error.code, "music_owner_not_configured")
   })
 })

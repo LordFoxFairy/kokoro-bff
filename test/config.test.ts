@@ -10,6 +10,7 @@ describe("kokoro-bff optional Agent configuration", () => {
     assert.equal(config.tenantId, null)
     assert.equal(config.upstreamTimeoutMs, 5000)
     assert.equal(config.upstreamMaxResponseBytes, 1024 * 1024)
+    assert.equal(config.upstreams.music, null)
   })
 
   it("enables Agent explicitly for live execution", () => {
@@ -20,10 +21,12 @@ describe("kokoro-bff optional Agent configuration", () => {
       KOKORO_BFF_SHARED_SECRET: "bff-secret",
       KOKORO_AGENT_ENABLED: "1",
       KOKORO_AGENT_BASE_URL: "http://kokoro-agent:4401",
+      KOKORO_MUSIC_BASE_URL: "http://kokoro-music:4410",
     })
     assert.equal(config.agentEnabled, true)
     assert.equal(config.tenantId, "tenant_prod")
     assert.equal(config.upstreams.agents, "http://kokoro-agent:4401")
+    assert.equal(config.upstreams.music, "http://kokoro-music:4410")
   })
 
   it("loads owner transport limits from the environment", () => {

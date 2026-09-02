@@ -72,10 +72,22 @@ SSE 使用 `Last-Event-ID: GENERATION_REF:SEQUENCE` 作为 replay anchor。事�
 
 ## Live 边界
 
-Live 模式目前对 Mori 返回 `503 mori_projection_not_configured`，保持 fail-closed。接入时应
-增加 `src/adapters/music.ts`，由 Music owner 负责 provider-neutral generation fact；BFF 只做
-身份、幂等、状态/事件 projection 和错误归一。浏览器永远不接触 provider token、task id、
-provider URL 或 provider 名称。
+Live 模式通过 `KOKORO_MUSIC_BASE_URL` 接入独立的 Music owner。BFF 将已 allowlist 的 Mori
+路由映射到 owner 的 `/internal/bff/mori/*` ingress，并负责身份、幂等、状态/事件 projection
+和错误归一；未配置 owner 时返回 `503 music_owner_not_configured`，不回退到 Mock 事实。
+
+Music owner 的响应会经过 `src/adapters/music.ts` 的 provider-neutral projection：未知字段会
+被丢弃，SSE 只转发合法的 Mori generation event envelope，provider token、task id、provider
+URL 和 provider 名称永远不会进入浏览器响应。owner 的服务身份通过 `KOKORO_INTERNAL_SECRET_BFF`
+传递，浏览器提交的 bearer token 不会被转发。
+
+本地 live 接线示例：
+
+```bash
+KOKORO_BFF_MODE=live \
+KOKORO_MUSIC_BASE_URL=http://kokoro-music:4410 \
+KOKORO_INTERNAL_SECRET_BFF=example-internal-secret
+```
 
 ## Mock 验证
 

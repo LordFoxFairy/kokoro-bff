@@ -15,7 +15,7 @@
     "lint": "tsc -p tsconfig.json --noEmit",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "contract:lint": "redocly lint docs/api/v1/openapi.yaml",
-    "test": "pnpm build && node --test test/architecture.test.ts test/bff.test.ts test/config.test.ts test/mori.test.ts test/scheduler.test.ts test/upstream.test.ts",
+    "test": "pnpm build && node --test test/architecture.test.ts test/bff.test.ts test/config.test.ts test/mori.test.ts test/music.test.ts test/scheduler.test.ts test/upstream.test.ts",
     "test:integration": "pnpm build && node --test test/business-store.integration.mjs",
     "check": "pnpm lint && pnpm contract:lint && pnpm test && pnpm build"
   },

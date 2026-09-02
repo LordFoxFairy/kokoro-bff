@@ -11,6 +11,7 @@ export function upstreamKey(segments: string[]): string | null {
   if (segments[0] === "agents") return "agents"
   if (segments[0] === "library") return "storage"
   if (segments[0] === "billing") return "billing"
+  if (segments[0] === "mori") return "music"
   return null
 }
 

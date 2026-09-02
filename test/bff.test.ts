@@ -53,6 +53,7 @@ function config(overrides: Partial<BffConfig> = {}): BffConfig {
       scheduler: null,
       agents: null,
       billing: null,
+      music: null,
     },
     ...overrides,
   }

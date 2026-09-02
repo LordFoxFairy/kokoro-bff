@@ -69,7 +69,9 @@
 Live 模式按业务 owner 选择独立的显式 HTTP/RPC adapter：System → `KOKORO_SYSTEM_BASE_URL`，Model →
 `KOKORO_MODEL_BASE_URL`，Capability → `KOKORO_CAPABILITY_BASE_URL`，Storage →
 `KOKORO_STORAGE_BASE_URL`，Scheduler → `KOKORO_SCHEDULER_BASE_URL`，Billing →
-`KOKORO_BILLING_BASE_URL`，Chat/Run → `KOKORO_AGENT_BASE_URL`。IAM 认证由 Web 的
+`KOKORO_BILLING_BASE_URL`，Chat/Run → `KOKORO_AGENT_BASE_URL`，Mori Music → `KOKORO_MUSIC_BASE_URL`。
+Mori 的公开 `/v1/mori/*` 路由只映射到 Music owner 的 `/internal/bff/mori/*` ingress，并在 BFF
+边界重新投影为 provider-neutral 字段。IAM 认证由 Web 的
 server adapter 完成后把已验证的内部身份上下文交给 BFF；BFF 不再保留 IAM URL/token 配置，也不由浏览器直接调用 IAM。Model catalog、Billing catalog/checkout
 和 Agent Chat 已有显式 adapter；Capability/Storage Connect bridge、BFF Project/Scheduled
 持久化以及 Agent setup 仍必须保持明确的未接线状态，不能回退到 Gateway 或 Mock。

@@ -27,6 +27,7 @@ not a passing integration result.
 | Model | List models with feature and cursor | BFF forwards the filter and preserves the owner page cursor |
 | Storage | Read the library projection | BFF receives Storage's read-only projection without database access |
 | Billing | Read catalog and create checkout | BFF uses the Billing web-bff service boundary and stable v1 envelope |
+| Mori Music | Live Project/Generation/Library/Export routes | BFF allowlists the route, projects the Music owner response, and never leaks provider fields |
 | Scheduler | Create/update/delete a task | PostgreSQL fact and Scheduler `ScheduleJob` registration are synchronized |
 | Scheduler recovery | Restart BFF or Scheduler | Active, enabled, unexpired facts are re-registered; paused/failed/expired facts are skipped |
 | Scheduler dispatch | Replay one occurrence | Same idempotency key returns the durable receipt and never starts a second Agent run |
@@ -35,5 +36,5 @@ not a passing integration result.
 ## Owner boundary
 
 The BFF is the only owner of the Web business projection. System, IAM, Model,
-Billing, Capability, Storage, Scheduler, and Agent remain independent owner
-services and are reached only through their documented HTTP/protobuf boundary.
+Billing, Capability, Storage, Scheduler, Agent, and Music remain independent
+owner services and are reached only through their documented HTTP/protobuf boundary.

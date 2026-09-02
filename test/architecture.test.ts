@@ -35,10 +35,12 @@ test("BFF keeps repository, service, contract, and adapter boundaries explicit",
     "src/http/routes/agent.ts",
     "src/http/routes/live-bff.ts",
     "src/http/routes/owner.ts",
+    "src/http/routes/music.ts",
     "src/http/routes/mock.ts",
     "src/http/routes/mori.ts",
     "src/http/routes/scheduler.ts",
     "src/http/routes/routing.ts",
+    "src/adapters/music.ts",
   ]) {
     assert.equal(await exists(relativePath), true, relativePath)
   }

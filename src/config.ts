@@ -71,6 +71,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
     scheduler: optionalUrl(env.KOKORO_SCHEDULER_BASE_URL),
     agents: optionalUrl(env.KOKORO_AGENT_BASE_URL),
     billing: optionalUrl(env.KOKORO_BILLING_BASE_URL),
+    music: optionalUrl(env.KOKORO_MUSIC_BASE_URL),
   }
   const domain = requiredDomain(env.KOKORO_DOMAIN || "dev.kokoro.localhost")
   const sharedSecret = env.KOKORO_BFF_SHARED_SECRET?.trim() || null

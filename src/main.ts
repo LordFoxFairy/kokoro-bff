@@ -13,6 +13,7 @@ import { liveAgentSession } from "./http/routes/agent.js"
 import { mockBusiness } from "./http/routes/mock.js"
 import { liveBffBusiness } from "./http/routes/live-bff.js"
 import { liveOwnerBusiness } from "./http/routes/owner.js"
+import { liveMoriBusiness } from "./http/routes/music.js"
 import { configuredUpstream, bffOwnedBusinessPath, isMoriBusinessPath, upstreamKey } from "./http/routes/routing.js"
 import { reconcileSchedulerTask, schedulerDispatch } from "./http/routes/scheduler.js"
 import type { LiveOwnerResult } from "./http/routes/types.js"
@@ -144,11 +145,11 @@ async function handle(
     }
     json = parsed
   }
-  if (config.mode === "live" && isMoriBusinessPath(businessPath)) {
-    await reply(response, 503, failure("mori_projection_not_configured", "Mori music projection is not configured in live mode", context.requestId), context, idempotency, mutation)
-    return
-  }
   if (config.mode === "live") {
+    if (isMoriBusinessPath(businessPath)) {
+      await liveMoriBusiness(request, response, config, context, businessPath, body, mutation, idempotency)
+      return
+    }
     if (businessPath[0] === "sessions") {
       await liveAgentSession(request, response, config, context, businessPath, body, json, mutation, idempotency)
       return
