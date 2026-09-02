@@ -22,8 +22,9 @@ namespace、session 和 `Idempotency-Key` 的 SHA-256 稳定派生，进程重�
 run admission；`assistant_message_id` 是稳定 provisional id，最终 assistant message id 以
 Agent 的 chat projection 事件为准。
 
-Session list 在 v1 由 BFF 对本进程已提交的 session index 做投影；该 index 不是事实源，生产部署
-应在下一切片增加 Agent 的 identity-scoped session index/read RPC。未由 Agent ingress 暴露的
+Session list 在 v1 由 Agent 持久化并按 trusted execution identity 查询；BFF 只转发
+`project_ref`、`limit`、`cursor` 并投影稳定的 Web summary，不维护进程内 session index。
+Agent 的 session metadata 是列表事实源，不能由浏览器提交的 namespace 或 user 字段覆盖。未由 Agent ingress 暴露的
 rename/delete/share 操作会返回 `503 chat_projection_not_configured`，不会静默写入 BFF 内存。
 
 ## 鉴权
@@ -44,6 +45,9 @@ rename/delete/share 操作会返回 `503 chat_projection_not_configured`，不�
 ## 会话列表
 
 `GET /v1/sessions`
+
+可选查询参数：`project_ref`、`limit`（1..100）、`cursor`。`next_cursor` 为不透明游标，
+客户端只需原样带回下一页；列表按 `updated_at` 倒序返回，并按 Agent identity 隔离。
 
 返回：
 
@@ -120,4 +124,5 @@ Agent chat projection 的 `run.started`、`assistant.delta`、`assistant.complet
 
 ## 隔离
 
-`scope` / `project_ref` 查询参数可用于只看指定 namespace / project；不匹配时返回空列表或 404。
+`project_ref` 查询参数可用于只看指定项目；不匹配时返回空列表或 404。namespace 和 subject
+只从 BFF 认证上下文派生，不能通过查询参数覆盖。

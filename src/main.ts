@@ -28,7 +28,6 @@ import {
   buildAgentControl,
   buildAgentLaunch,
   buildSessionDetail,
-  buildSessionSummary,
   mapAgentEvent,
   type AgentChatEvent,
   type AgentChatMessage,
@@ -444,8 +443,6 @@ function chatSseFrame(event: ChatEvent): string {
   return `id: ${event.seq}\ndata: ${JSON.stringify(event)}\n\n`
 }
 
-type LiveSessionIndex = Map<string, Map<string, string | undefined>>
-
 type LiveOwnerResult = { status: number; body: unknown }
 
 function ownerIdentityHeaders(context: Context): Record<string, string> {
@@ -492,6 +489,25 @@ function modelCatalogData(body: unknown): { models: Array<{
   const nextCursor = data.next_cursor
   if (nextCursor !== undefined && nextCursor !== null && typeof nextCursor !== "string") return null
   return { models, ...(nextCursor === undefined ? {} : { next_cursor: nextCursor }) }
+}
+
+function agentSessionListData(body: unknown): { sessions: ChatSessionSummary[]; next_cursor?: string | null } | null {
+  const data = dataOf(body)
+  if (data === null || !Array.isArray(data.sessions)) return null
+  const sessions: ChatSessionSummary[] = []
+  for (const item of data.sessions) {
+    if (!isRecord(item)) return null
+    const sessionId = stringField(item, "session_id")
+    const title = stringField(item, "title")
+    const updatedAt = item.updated_at
+    if (sessionId === null || title === null || typeof updatedAt !== "number" || !Number.isFinite(updatedAt)) return null
+    const date = new Date(updatedAt)
+    if (!Number.isFinite(date.getTime())) return null
+    sessions.push({ session_id: sessionId, title, updated_at: date.toISOString() })
+  }
+  const nextCursor = data.next_cursor
+  if (nextCursor !== undefined && nextCursor !== null && typeof nextCursor !== "string") return null
+  return nextCursor === undefined ? { sessions } : { sessions, next_cursor: nextCursor }
 }
 
 type BillingPlanProjection = {
@@ -751,7 +767,6 @@ async function liveAgentSession(
   json: Record<string, unknown>,
   mutation: MutationTicket | null,
   idempotency: Map<string, IdempotencyEntry>,
-  liveSessions: LiveSessionIndex,
 ): Promise<boolean> {
   const baseUrl = config.upstreams.agents ?? null
   if (!config.agentEnabled || baseUrl === null) {
@@ -761,25 +776,29 @@ async function liveAgentSession(
   const method = request.method || "GET"
   const sessionId = businessPath[1] || ""
   const assertion = agentSessionAssertion(context, sessionId)
-  const sessionIndex = liveSessions.get(context.identity.namespace) ?? new Map<string, string | undefined>()
 
   if (businessPath.length === 1 && method === "GET") {
-    const projectRef = queryOf(request).get("project_ref")?.trim() || undefined
-    const items = [...sessionIndex.entries()]
-      .filter(([, indexedProject]) => projectRef === undefined || indexedProject === projectRef)
-      .map(async ([id, indexedProject]) => {
-        const detailResult = await callAgent(config, baseUrl, `/v1/sessions/${encodeURIComponent(id)}/messages?after_seq=0&limit=1000`, "GET", context.requestId, request, undefined, context, agentSessionAssertion(context, id))
-        if (detailResult.status >= 400) throw new Error("agent session list projection failed")
-        const messagesData = dataOf(detailResult.body)
-        const messages = Array.isArray(messagesData?.messages) ? messagesData.messages as AgentChatMessage[] : []
-        const detail = buildSessionDetail(context.identity, id, messages, [], 0)
-        return { item: buildSessionSummary(context.identity, id, detail), projectRef: indexedProject }
-      })
     try {
-      const listed = await Promise.all(items)
-      reply(response, 200, ok({ sessions: listed.map(({ item }) => item) }, context.requestId), context, idempotency, mutation)
+      const incomingQuery = queryOf(request)
+      const ownerQuery = new URLSearchParams()
+      for (const key of ["project_ref", "limit", "cursor"]) {
+        const value = incomingQuery.get(key)
+        if (value !== null && value !== "") ownerQuery.set(key, value)
+      }
+      const ownerPath = `/v1/sessions${ownerQuery.size > 0 ? `?${ownerQuery.toString()}` : ""}`
+      const result = await callAgent(config, baseUrl, ownerPath, "GET", context.requestId, request, undefined, context, agentSessionAssertion(context, "session-list"))
+      if (result.status >= 400) {
+        sendAgentFailure(response, result, context, idempotency, mutation)
+        return true
+      }
+      const projected = agentSessionListData(result.body)
+      if (projected === null) {
+        reply(response, 502, failure("upstream_response_invalid", "Agent session list response is invalid", context.requestId), context, idempotency, mutation)
+        return true
+      }
+      reply(response, 200, ok(projected, context.requestId), context, idempotency, mutation)
     } catch {
-      reply(response, 502, failure("upstream_response_invalid", "Agent session list projection failed", context.requestId), context, idempotency, mutation)
+      reply(response, 502, failure("upstream_unreachable", "The configured Agent upstream is unavailable", context.requestId), context, idempotency, mutation)
     }
     return true
   }
@@ -818,8 +837,6 @@ async function liveAgentSession(
         sendAgentFailure(response, { status: 502, body: failure("upstream_response_invalid", "Agent launch receipt did not match the requested run", context.requestId) }, context, idempotency, mutation)
         return true
       }
-      sessionIndex.set(sessionId, typeof json.project_ref === "string" ? json.project_ref : undefined)
-      liveSessions.set(context.identity.namespace, sessionIndex)
       reply(response, 202, ok(launch.receipt, context.requestId), context, idempotency, mutation)
     } catch {
       reply(response, 502, failure("upstream_unreachable", "The configured Agent upstream is unavailable", context.requestId), context, idempotency, mutation)
@@ -1959,7 +1976,6 @@ async function handle(
   config: BffConfig,
   store: MockStore,
   idempotency: Map<string, IdempotencyEntry>,
-  liveSessions: LiveSessionIndex,
   businessStore: PostgresBusinessStore | null,
 ): Promise<void> {
   const id = requestId(request)
@@ -2075,7 +2091,7 @@ async function handle(
   }
   if (config.mode === "live") {
     if (businessPath[0] === "sessions") {
-      await liveAgentSession(request, response, config, context, businessPath, body, json, mutation, idempotency, liveSessions)
+      await liveAgentSession(request, response, config, context, businessPath, body, json, mutation, idempotency)
       return
     }
     if (businessStore !== null && bffOwnedBusinessPath(businessPath)) {
@@ -2138,12 +2154,11 @@ async function reconcilePersistedScheduledTasks(config: BffConfig, store: Postgr
 export function createBffServer(config: BffConfig = loadConfig()) {
   const store = new MockStore()
   const idempotency = new Map<string, IdempotencyEntry>()
-  const liveSessions: LiveSessionIndex = new Map()
   const businessStore = config.mode === "live" && config.postgresUrl !== null && config.redisUrl !== null
     ? new PostgresBusinessStore(config.postgresUrl, config.redisUrl)
     : null
   const server = createServer((request, response) => {
-    void handle(request, response, config, store, idempotency, liveSessions, businessStore).catch(() => {
+    void handle(request, response, config, store, idempotency, businessStore).catch(() => {
       if (!response.headersSent) send(response, 500, failure("internal_error", "The BFF encountered an internal error", requestId(request)))
       else response.destroy()
     })

@@ -144,7 +144,7 @@ Model/Billing 的 owner HTTP 面明确注册为 `web-bff` caller；Agent ingress
 | 资源 | v1 文档 | Mock | Live 替换 |
 | --- | --- | --- | --- |
 | Projects | 已完成 | 已完成 | BFF-owned PostgreSQL fact store；System 仅承接 Site/Workspace/Policy |
-| Chat | 已完成 | 已完成 | BFF Chat adapter → `KOKORO_AGENT_BASE_URL` Agent HTTP ingress；session list index 和 rename/delete/share 仍显式标注能力边界 |
+| Chat | 已完成 | 已完成 | BFF Chat adapter → `KOKORO_AGENT_BASE_URL` Agent HTTP ingress；session list 由 Agent 持久化查询，rename/delete/share 仍显式标注能力边界 |
 | Model | v1 owner adapter | 已完成 | `/bff/model-catalog` → `{ data: { models } }`，由 BFF 注入 tenant/subject 上下文 |
 | Skills | Connect owner adapter | 已完成（Mock） | live 使用 Capability 专用 projection；未接入的写操作显式返回 503 |
 | Scheduled | BFF fact store + Scheduler command adapter | 已完成（Mock） | live 使用 BFF PostgreSQL/Redis fact store；创建/更新/删除/retry 会同步 Scheduler，dispatch 回到 BFF 再进入 Agent |

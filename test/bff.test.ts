@@ -1198,6 +1198,8 @@ describe("kokoro-bff v1 mock contract", () => {
       if (request.url === "/v1/runs" && request.method === "POST") {
         response.statusCode = 202
         response.end(JSON.stringify({ data: { run_id: runId, session_id: sessionId, replayed: false }, meta: { request_id: "agent" } }))
+      } else if (request.url?.startsWith("/v1/sessions?") && request.method === "GET") {
+        response.end(JSON.stringify({ data: { sessions: [{ session_id: "session-live", title: "hello", updated_at: 1 }], next_cursor: null }, meta: { request_id: "agent" } }))
       } else if (request.url?.startsWith("/v1/runs/") && request.url.endsWith("/control") && request.method === "POST") {
         response.statusCode = 202
         response.end(JSON.stringify({ data: { run_id: runId, accepted: true }, meta: { request_id: "agent" } }))
@@ -1234,6 +1236,12 @@ describe("kokoro-bff v1 mock contract", () => {
     assert.equal(received[0]?.headers.actor, "user_test")
     assert.equal((received[0]?.body.execution_identity as { tenant_ref: string }).tenant_ref, "ns_test")
     assert.equal((received[0]?.body as { trace: { project_ref: string } }).trace.project_ref, "project_kokoro")
+
+    const listed = await fetch(`${base}/v1/sessions?project_ref=project_kokoro&limit=10`, { headers: authHeaders() })
+    assert.equal(listed.status, 200)
+    const listedEnvelope = await listed.json() as { data: { sessions: Array<{ session_id: string; title: string; updated_at: string }> } }
+    assert.deepEqual(listedEnvelope.data.sessions, [{ session_id: "session-live", title: "hello", updated_at: "1970-01-01T00:00:00.001Z" }])
+    assert.equal(received.some((item) => item.url === "/v1/sessions?project_ref=project_kokoro&limit=10"), true)
 
     const replay = await fetch(`${base}/v1/sessions/session-live/messages`, { method: "POST", headers, body: JSON.stringify({ content: "hello", model: "default", project_ref: "project_kokoro" }) })
     assert.equal(replay.status, 202)
