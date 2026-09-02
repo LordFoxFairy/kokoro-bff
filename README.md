@@ -9,12 +9,12 @@ API 文档入口：[docs/api/README.md](./docs/api/README.md)。当前契约版�
 ```text
 浏览器 → kokoro-app 同源 /api/* → kokoro-bff /v1/* → 业务 API 子仓库
 浏览器 → kokoro-app 同源 /api/session/* → kokoro-bff /v1/sessions/*（Chat/SSE）
-kokoro-agent → Redis run streams（执行 worker，无 HTTP ingress）
+kokoro-agent HTTP ingress → Redis run streams（HTTP admission 与执行 worker 分进程）
 ```
 
 - Web、BFF、Agent 各自是独立仓库，不通过 workspace package、源码复制或 git submodule 复用实现。
 - BFF 只通过版本化 HTTP 契约与业务服务对接；第一阶段的 `mock` 模式是本仓库内置的确定性 upstream fixture。
-- BFF 不连接 Agent 的 Redis stream；Agent 仍是 worker。当前 Agent 没有 HTTP adapter，生产环境不设置 `KOKORO_AGENT_BASE_URL`，因此 Chat/Agent live 路由保持未接线并返回 `503 upstream_not_configured`；待独立 HTTP adapter 具备契约后再接入。
+- BFF 不连接 Agent 的 Redis stream；Agent 的 HTTP ingress 是唯一业务调用面，生产环境通过 `KOKORO_AGENT_BASE_URL` 配置它，worker 仍由 Agent 自己管理。当前 BFF 尚未把 Chat session metadata 与 Agent run ingress 完成 live 组合，因此真实切换前继续使用 mock，并由 live adapter 明确报告未接线能力。
 - Chat、消息、SSE、artifact 和 run control 的 Web-facing projection 统一由本仓 Chat 业务模块边界承接；不再新增独立 `kokoro-session` 或 `kokoro-chat` 子仓库。当前实现集中在 `src/main.ts`、`src/store.ts` 与 `src/contracts.ts`，文档中的“Chat 模块”表示职责边界，不暗示一个跨仓或未提交的目录。
 - 部署域名只通过 `KOKORO_DOMAIN` 产生标准 RFC 7239 `Forwarded: host=...`。不读取或转发 `X-Domain`、浏览器 Host 作为业务选择依据。
 
@@ -86,9 +86,9 @@ GitHub skill 预览和导入使用相同的请求/响应数据形状：请求体
 ## Mock → Live
 
 - `KOKORO_BFF_MODE=mock`：只使用 `src/store.ts` 的本地 fixture，适合 Web/BFF 联调。
-- `KOKORO_BFF_MODE=live`：按 `KOKORO_*_BASE_URL` 选择已接线的业务 HTTP 上游；Skills 使用独立的 `KOKORO_SKILLS_BASE_URL`，MCP/connectors 使用 `KOKORO_HUB_BASE_URL`。当前 Agent 只有 worker 入口、没有 HTTP adapter，Chat/Agent 不设置 `KOKORO_AGENT_BASE_URL`；访问对应 live 路由返回 `503 upstream_not_configured`，不会把 worker 当作 HTTP 服务，也不会静默回退到 mock。
+- `KOKORO_BFF_MODE=live`：按 `KOKORO_*_BASE_URL` 选择已接线的业务 HTTP 上游；Skills 使用独立的 `KOKORO_SKILLS_BASE_URL`，MCP/connectors 使用 `KOKORO_HUB_BASE_URL`，Agent 使用 `KOKORO_AGENT_BASE_URL` 指向其 HTTP ingress。尚未完成的资源返回明确的 `503 upstream_not_configured`，不把 worker 当作 HTTP 服务，也不静默回退到 mock。
 - 出站请求统一注入 `x-kokoro-service: kokoro-bff`、`x-kokoro-request-id`、标准 `Forwarded` 和可选内部 secret。
-- Agent 目前没有 HTTP server，因此 live 模式不会假装调用它；部署并验证版本化 Agent HTTP adapter 后，再单独启用 `KOKORO_AGENT_BASE_URL`。在当前配置下，`/readyz` 与 Chat/Agent live 路由都明确反映“未接线”状态：`/readyz` 返回 `503`，路由返回 `503 upstream_not_configured`。
+- Agent HTTP ingress 已在 `LordFoxFairy/kokoro-agent` 的 v1 contract 中提供；BFF live adapter 仍需完成 session metadata 与 run/control/replay 的组合后才启用线上地址。未配置该地址时，`/readyz` 与 Chat/Agent live 路由都明确反映未接线状态：`/readyz` 返回 `503`，路由返回 `503 upstream_not_configured`。
 
 ## 检查与发布
 
