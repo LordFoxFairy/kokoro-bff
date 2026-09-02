@@ -113,7 +113,10 @@ export function projectChatEvent(event: ChatEvent, state: AgUiProjectionState): 
         events.push(base(event, EventType.TEXT_MESSAGE_START, { messageId, role: "assistant" }))
       }
       const delta = stringField(payload, "delta")
-      if (delta !== "") events.push(base(event, EventType.TEXT_MESSAGE_CONTENT, { messageId, delta }))
+      // Always emit the content frame, including an empty delta. One internal
+      // Chat event can expand to START + CONTENT; CONTENT marks the source
+      // event as fully projected for replay purposes.
+      events.push(base(event, EventType.TEXT_MESSAGE_CONTENT, { messageId, delta }))
       return events
     }
     case "message.completed": {

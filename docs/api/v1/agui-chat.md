@@ -38,3 +38,7 @@ data: {"type":"TEXT_MESSAGE_CONTENT", ...}
 | 业务扩展 | `CUSTOM` | 名称使用 `kokoro.<context>.<event>` |
 
 Web 端先按 AG-UI schema 校验，再投影到纯 reducer 使用的 `SessionEvent`；preview fixture 仍可直接产生内部事件，因此本地开发无需启动 Agent。
+
+一个 Agent Chat fact 可能展开为多个 AG-UI frame（例如 START + CONTENT）。`id` 和
+`metadata.kokoro.seq` 保留同一个 source sequence；Web 只在该 fact 的最后一个 frame 到达
+后推进 `Last-Event-ID`，因此断线发生在中间 frame 时会重放完整 fact，不会丢文本或工具参数。
