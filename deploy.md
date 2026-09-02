@@ -13,6 +13,14 @@ NODE_ENV=production pnpm start
 
 将 `.env.prod.example` 复制为平台变量模板，再注入真实值。不要把 `.env.prod` 提交到仓库。
 
+Live 模式的 BFF 业务事实由本仓 PostgreSQL 持有，Redis 只做租户隔离的短缓存和协调。首次启动前在同一版本运行迁移：
+
+```bash
+KOKORO_BFF_POSTGRES_URL="$KOKORO_BFF_POSTGRES_URL" pnpm db:migrate
+```
+
+Live `readyz` 同时检查 BFF PostgreSQL、Redis 和 Agent；迁移未执行或依赖不可用时保持非就绪，不回退到内存 fixture。
+
 ## 方案 B：生产 Docker 镜像
 
 Dockerfile 是生产模式，启动命令为 `node dist/main.js`；本地开发不需要 Docker：
@@ -47,6 +55,10 @@ BFF：
 KOKORO_BFF_MODE=mock
 KOKORO_BFF_SHARED_SECRET=local-web-bff-secret
 KOKORO_DOMAIN=dev.kokoro.localhost
+# Live 另外配置 Scheduler：
+# KOKORO_SCHEDULER_BASE_URL=http://kokoro-scheduler:4252
+# KOKORO_SCHEDULER_SERVICE_TOKEN=<scheduler-service-token>
+# KOKORO_SCHEDULER_TARGET_URL=http://kokoro-bff:4300/internal/bff/scheduled-tasks/dispatch
 ```
 
 生产拓扑为 `Web → BFF → 业务 API/Agent`。`kokoro-gateway` 不在该路径中；Chat 由 BFF 的 Chat 业务模块边界统一承接，Agent 仅负责 Run、control、HITL 与恢复执行。

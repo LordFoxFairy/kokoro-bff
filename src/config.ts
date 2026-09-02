@@ -9,6 +9,11 @@ export type BffConfig = {
   domain: string
   sharedSecret: string | null
   upstreamSecret: string | null
+  iamServiceToken: string | null
+  schedulerServiceToken: string | null
+  schedulerTargetUrl: string | null
+  postgresUrl: string | null
+  redisUrl: string | null
   upstreams: Record<string, string | null>
 }
 
@@ -58,6 +63,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
     domain,
     sharedSecret,
     upstreamSecret: env.KOKORO_INTERNAL_SECRET_BFF?.trim() || null,
+    iamServiceToken: env.KOKORO_IAM_SERVICE_TOKEN?.trim() || null,
+    schedulerServiceToken: env.KOKORO_SCHEDULER_SERVICE_TOKEN?.trim() || null,
+    schedulerTargetUrl: optionalUrl(env.KOKORO_SCHEDULER_TARGET_URL),
+    postgresUrl: env.KOKORO_BFF_POSTGRES_URL?.trim() || null,
+    redisUrl: env.KOKORO_BFF_REDIS_URL?.trim() || null,
     upstreams,
   }
 }

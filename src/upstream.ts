@@ -33,14 +33,22 @@ function requestHeaders(
   callerService: string,
 ): Record<string, string> {
   const headers = new Headers()
-  for (const name of ["accept", "content-type", "idempotency-key", "authorization"] as const) {
+  // Never forward a browser/user bearer token to an owner.  Owner calls are
+  // authenticated with the BFF's service credential below; forwarding the
+  // inbound token would let a user credential override the service boundary
+  // and breaks owners (notably Scheduler) that reject multiple credentials.
+  for (const name of ["accept", "content-type", "idempotency-key"] as const) {
     const value = incoming.get(name)
     if (value !== null) headers.set(name, value)
   }
   headers.set("x-kokoro-service", callerService)
   headers.set("x-kokoro-request-id", requestId)
+  headers.set("x-request-id", requestId)
   headers.set("forwarded", `host=${config.domain}`)
-  if (config.upstreamSecret !== null) headers.set("x-kokoro-internal-secret", config.upstreamSecret)
+  if (config.upstreamSecret !== null) {
+    headers.set("x-kokoro-internal-secret", config.upstreamSecret)
+    headers.set("authorization", `Bearer ${config.upstreamSecret}`)
+  }
   for (const [name, value] of Object.entries(trusted)) {
     if (TRUSTED_HEADER_NAMES.has(name.toLowerCase()) && value.trim() !== "") headers.set(name, value)
   }
@@ -65,13 +73,14 @@ export async function proxyUpstream(
   body: Buffer | undefined,
   trustedHeaders: TrustedUpstreamHeaders = {},
   callerService = "kokoro-bff",
+  serviceToken: string | null = config.upstreamSecret,
 ): Promise<UpstreamResponse> {
   const target = new URL(path, `${baseUrl.replace(/\/+$/u, "/")}`)
   const requestFn = target.protocol === "https:" ? httpsRequest : httpRequest
   return new Promise((resolve, reject) => {
     const client = requestFn(target, {
       method,
-      headers: requestHeaders(config, requestId, incoming, trustedHeaders, callerService),
+      headers: requestHeaders({ ...config, upstreamSecret: serviceToken }, requestId, incoming, trustedHeaders, callerService),
     }, (response) => {
       const chunks: Buffer[] = []
       response.on("data", (chunk) => {
