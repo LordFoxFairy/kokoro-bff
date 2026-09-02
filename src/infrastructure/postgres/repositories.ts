@@ -1,7 +1,11 @@
 import { PostgresBffDatabase } from "./client.js"
-import { PostgresIdempotencyRepository, PENDING_RECEIPT_STATUS, type PersistentReceipt, type ReceiptClaim } from "../../modules/idempotency/repository.js"
-import { PostgresProjectRepository } from "../../modules/projects/repository.js"
-import { PostgresScheduledTaskRepository, type ScheduledTaskRecord } from "../../modules/scheduled/repository.js"
+import { PostgresIdempotencyRepository } from "./idempotency-repository.js"
+import { PostgresProjectRepository } from "./project-repository.js"
+import { PostgresScheduledTaskRepository } from "./scheduled-task-repository.js"
+import { PENDING_RECEIPT_STATUS, type PersistentReceipt, type ReceiptClaim } from "../../modules/idempotency/repository.js"
+import type { IdempotencyRepository } from "../../modules/idempotency/repository.js"
+import type { ProjectRepository } from "../../modules/projects/repository.js"
+import type { ScheduledTaskRecord, ScheduledTaskRepository } from "../../modules/scheduled/repository.js"
 
 export { PENDING_RECEIPT_STATUS }
 export type { PersistentReceipt, ReceiptClaim } from "../../modules/idempotency/repository.js"
@@ -9,9 +13,9 @@ export type { ScheduledTaskRecord } from "../../modules/scheduled/repository.js"
 
 export class PostgresBffRepositories {
   private readonly database: PostgresBffDatabase
-  private readonly idempotency: PostgresIdempotencyRepository
-  private readonly projects: PostgresProjectRepository
-  private readonly scheduled: PostgresScheduledTaskRepository
+  private readonly idempotency: IdempotencyRepository
+  private readonly projects: ProjectRepository
+  private readonly scheduled: ScheduledTaskRepository
 
   public constructor(postgresUrl: string, redisUrl: string) {
     this.database = new PostgresBffDatabase(postgresUrl, redisUrl)

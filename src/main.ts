@@ -6,13 +6,11 @@ import type {
   AgentConnectionSetup,
   BillingSummary,
   ChatEvent,
-  ChatMessage,
   ChatRun,
   ChatSessionDetail,
   ChatSessionSummary,
   ChatShare,
   LibraryItem,
-  McpServer,
   McpTransport,
   Project,
   ScheduledTask,
@@ -29,13 +27,35 @@ import {
   buildAgentLaunch,
   buildSessionDetail,
   mapAgentEvent,
-  mapAgentMessage,
   type AgentChatEvent,
-  type AgentChatMessage,
 } from "./adapters/agent.js"
+import type { AgentChatMessage } from "./adapters/agent.js"
 import { buildSchedulerJob, schedulerJobName, type SchedulerJob } from "./adapters/scheduler.js"
-import { MoriMockBffStore, type MoriGenerationInput, type MoriSongPlan } from "./adapters/mori.js"
+import { MoriMockBffStore } from "./adapters/mori.js"
+import { moriExportInput, moriGenerationInput, moriPageInput, moriProjectInput, moriSongPlanInput } from "./modules/mori/input.js"
+import { scheduledCreateInput, scheduledPatchInput } from "./modules/scheduled/input.js"
 import { mutationTicket, type IdempotencyEntry, type IdempotencyReceipt, type MutationTicket } from "./application/idempotency.js"
+import {
+  agentSessionAssertion,
+  agentMessageListData,
+  agentSessionListData,
+  billingPlansData,
+  capabilityMcpData,
+  capabilitySkillsData,
+  checkoutUrlData,
+  dataOf,
+  libraryData,
+  libraryItemType,
+  mappedOwnerQuery,
+  messageCursor,
+  modelCatalogData,
+  ownerIdentityHeaders,
+  resolveTenantForManifest,
+  stringField,
+  systemManifestData,
+  type BillingPlanProjection,
+  type CapabilitySkillProjection,
+} from "./application/projections.js"
 import { normalizeUpstreamResponse, reply, send } from "./http/response.js"
 import {
   authorize,
@@ -124,91 +144,6 @@ function githubSkillSource(value: unknown): GithubSkillSource | null {
   }
 }
 
-function moriGenerationInput(json: Record<string, unknown>): MoriGenerationInput | null {
-  const mode = json.mode
-  const prompt = json.prompt
-  const lyricsMode = json.lyrics_mode
-  const songPlanRef = json.song_plan_ref
-  const lyrics = json.lyrics
-  const style = json.style
-  const references = json.reference_asset_refs
-  const voiceRef = json.voice_ref
-  const duration = json.duration_seconds
-  const durationSeconds = duration === null ? null : typeof duration === "number" ? duration : undefined
-  if (
-    (mode !== "smart" && mode !== "custom")
-    || typeof prompt !== "string" || prompt.trim() === ""
-    || (lyricsMode !== "lyrics" && lyricsMode !== "instrumental")
-    || (songPlanRef !== null && typeof songPlanRef !== "string")
-    || (lyrics !== null && typeof lyrics !== "string")
-    || (style !== null && typeof style !== "string")
-    || !Array.isArray(references) || !references.every((item): item is string => typeof item === "string")
-    || (voiceRef !== null && typeof voiceRef !== "string")
-    || durationSeconds === undefined
-    || (durationSeconds !== null && (!Number.isSafeInteger(durationSeconds) || durationSeconds < 30 || durationSeconds > 600))
-    || (lyricsMode === "instrumental" && lyrics !== null)
-  ) return null
-  return {
-    mode,
-    prompt: prompt.trim(),
-    song_plan_ref: songPlanRef === null ? null : songPlanRef.trim() || null,
-    lyrics: lyricsMode === "lyrics" && typeof lyrics === "string" ? lyrics.trim() || null : null,
-    style: style === null ? null : style.trim() || null,
-    reference_asset_refs: [...references],
-    voice_ref: voiceRef === null ? null : voiceRef.trim() || null,
-    duration_seconds: durationSeconds,
-    lyrics_mode: lyricsMode,
-  }
-}
-
-function moriProjectInput(json: Record<string, unknown>): { title: string; description: string } | null {
-  const title = typeof json.title === "string" ? json.title.trim() : ""
-  const description = typeof json.description === "string" ? json.description.trim() : ""
-  if (title === "" || title.length > 160 || description.length > 2000) return null
-  return { title, description }
-}
-
-function moriSongPlanInput(json: Record<string, unknown>): Omit<MoriSongPlan, "song_plan_ref" | "project_ref" | "created_at"> | null {
-  const prompt = typeof json.prompt === "string" ? json.prompt.trim() : ""
-  const mood = typeof json.mood === "string" ? json.mood.trim() : ""
-  const tempo = json.tempo_bpm
-  const structure = json.structure
-  const instruments = json.instruments
-  const vocalDirection = typeof json.vocal_direction === "string" ? json.vocal_direction.trim() : ""
-  const lyricsIntent = typeof json.lyrics_intent === "string" ? json.lyrics_intent.trim() : ""
-  if (
-    prompt === ""
-    || mood === ""
-    || typeof tempo !== "number" || !Number.isSafeInteger(tempo) || tempo < 40 || tempo > 240
-    || !Array.isArray(structure) || structure.length === 0 || !structure.every((item): item is string => typeof item === "string" && item.trim() !== "")
-    || !Array.isArray(instruments) || !instruments.every((item): item is string => typeof item === "string" && item.trim() !== "")
-    || vocalDirection === ""
-    || lyricsIntent === ""
-  ) return null
-  return {
-    prompt,
-    mood,
-    tempo_bpm: tempo,
-    structure: structure.map((item) => item.trim()),
-    instruments: instruments.map((item) => item.trim()),
-    vocal_direction: vocalDirection,
-    lyrics_intent: lyricsIntent,
-  }
-}
-
-function moriPageInput(request: IncomingMessage): { cursor: string | null; limit: number } | null {
-  const query = queryOf(request)
-  const limitValue = query.get("limit")
-  const limit = limitValue === null || limitValue.trim() === "" ? 20 : Number(limitValue)
-  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) return null
-  return { cursor: query.get("cursor")?.trim() || null, limit }
-}
-
-function moriExportInput(json: Record<string, unknown>): "mp3" | "wav" | null {
-  if (json.format === undefined || json.format === "mp3") return "mp3"
-  return json.format === "wav" ? "wav" : null
-}
-
 function projectData(projects: Project[]): { projects: Project[] } { return { projects } }
 function taskData(tasks: Task[]): { tasks: Task[] } { return { tasks } }
 function skillData(skills: Skill[]): { skills: Skill[] } { return { skills } }
@@ -267,296 +202,6 @@ function waitForSsePoll(request: IncomingMessage, response: ServerResponse, dela
 }
 
 type LiveOwnerResult = { status: number; body: unknown }
-
-function ownerIdentityHeaders(context: Context): Record<string, string> {
-  return {
-    "x-kokoro-tenant-id": context.identity.namespace,
-    "x-kokoro-subject": context.identity.userId,
-    "x-kokoro-actor-id": context.identity.userId,
-  }
-}
-
-function stringField(value: Record<string, unknown>, ...names: string[]): string | null {
-  for (const name of names) {
-    if (typeof value[name] === "string" && value[name].trim() !== "") return value[name].trim()
-  }
-  return null
-}
-
-function modelCatalogData(body: unknown): { models: Array<{
-  provider: string
-  name: string
-  is_default: boolean
-  display_name?: string
-}>; next_cursor?: string | null } | null {
-  const data = dataOf(body)
-  if (data === null || !Array.isArray(data.items)) return null
-  const items = data.items
-  const models = []
-  for (const item of items) {
-    if (!isRecord(item)) return null
-    const key = stringField(item, "key")
-    if (key === null) return null
-    const displayName = stringField(item, "display_name")
-    if (displayName === null) return null
-    const provider = key.includes("/") ? (key.split("/", 1)[0] ?? "kokoro") : "kokoro"
-    const name = key
-    const isDefault = false
-    models.push({
-      provider,
-      name,
-      is_default: isDefault,
-      ...(displayName === null ? {} : { display_name: displayName }),
-    })
-  }
-  const nextCursor = data.next_cursor
-  if (nextCursor !== undefined && nextCursor !== null && typeof nextCursor !== "string") return null
-  return { models, ...(nextCursor === undefined ? {} : { next_cursor: nextCursor }) }
-}
-
-function agentSessionListData(body: unknown): { sessions: ChatSessionSummary[]; next_cursor: string | null } | null {
-  const data = dataOf(body)
-  if (data === null || !Array.isArray(data.sessions)) return null
-  const sessions: ChatSessionSummary[] = []
-  for (const item of data.sessions) {
-    if (!isRecord(item)) return null
-    const sessionId = stringField(item, "session_id")
-    const title = stringField(item, "title")
-    const updatedAt = item.updated_at
-    if (sessionId === null || title === null || typeof updatedAt !== "number" || !Number.isFinite(updatedAt)) return null
-    const date = new Date(updatedAt)
-    if (!Number.isFinite(date.getTime())) return null
-    sessions.push({ session_id: sessionId, title, updated_at: date.toISOString() })
-  }
-  const nextCursor = data.next_cursor
-  if (nextCursor !== undefined && nextCursor !== null && typeof nextCursor !== "string") return null
-  return { sessions, next_cursor: nextCursor ?? null }
-}
-
-function agentMessageListData(body: unknown, limit: number): { messages: ChatMessage[]; next_cursor: string | null } | null {
-  const data = dataOf(body)
-  if (data === null || !Array.isArray(data.messages) || !data.messages.every(isRecord) || typeof data.next_seq !== "number" || !Number.isSafeInteger(data.next_seq) || data.next_seq < 0) return null
-  const records = data.messages as AgentChatMessage[]
-  const page = records.slice(0, limit).map(mapAgentMessage)
-  const last = records[limit - 1]
-  return {
-    messages: page,
-    next_cursor: records.length === limit && last !== undefined ? `msg_${last.seq}` : null,
-  }
-}
-
-function messageCursor(value: string | undefined): number | null {
-  if (value === undefined || value === "") return 0
-  const match = /^msg_(\d+)$/u.exec(value)
-  if (match === null) return null
-  const cursor = Number(match[1])
-  return Number.isSafeInteger(cursor) && cursor >= 0 ? cursor : null
-}
-
-type BillingPlanProjection = {
-  id: string
-  key: string
-  name: string
-  currency: string
-  amount_minor: string
-  credit_micros: string
-  billing_interval: "once" | "month" | "year"
-}
-
-function billingPlansData(body: unknown): { plans: BillingPlanProjection[] } | null {
-  const data = dataOf(body)
-  const offers = data?.offers
-  if (!Array.isArray(offers)) return null
-  const plans: BillingPlanProjection[] = []
-  for (const offer of offers) {
-    if (!isRecord(offer)) return null
-    const id = stringField(offer, "id")
-    const key = stringField(offer, "key")
-    const name = stringField(offer, "name")
-    const currency = stringField(offer, "currency")
-    const amountMinor = stringField(offer, "amount_minor")
-    const creditMicros = stringField(offer, "credit_micros")
-    const billingInterval = stringField(offer, "billing_interval")
-    if (
-      id === null || key === null || name === null || currency === null
-      || amountMinor === null || creditMicros === null
-      || (billingInterval !== "once" && billingInterval !== "month" && billingInterval !== "year")
-    ) return null
-    plans.push({ id, key, name, currency, amount_minor: amountMinor, credit_micros: creditMicros, billing_interval: billingInterval })
-  }
-  return { plans }
-}
-
-function checkoutUrlData(body: unknown): { checkout_url: string } | null {
-  const data = dataOf(body)
-  const checkoutUrl = data === null ? null : stringField(data, "checkout_url")
-  return checkoutUrl === null ? null : { checkout_url: checkoutUrl }
-}
-
-type CapabilitySkillProjection = {
-  name: string
-  description: string
-  content_hash: string
-  scope: string
-  enabled: boolean
-  installed?: boolean
-  categories?: string[]
-}
-
-function capabilitySkillsData(body: unknown, catalog: boolean): { skills: CapabilitySkillProjection[]; next_cursor?: string | null } | null {
-  const data = dataOf(body)
-  if (data === null || !Array.isArray(data.skills)) return null
-  const skills: CapabilitySkillProjection[] = []
-  for (const item of data.skills) {
-    if (!isRecord(item)) return null
-    const name = stringField(item, "name")
-    const description = stringField(item, "description")
-    const contentHash = stringField(item, "content_hash", "contentHash")
-    const scope = stringField(item, "scope")
-    if (name === null || description === null || contentHash === null || scope === null) return null
-    const enabled = typeof item.enabled === "boolean" ? item.enabled : true
-    const categories = Array.isArray(item.categories)
-      ? item.categories.filter((value): value is string => typeof value === "string")
-      : undefined
-    skills.push({
-      name,
-      description,
-      content_hash: contentHash,
-      scope,
-      enabled,
-      ...(catalog ? { installed: item.installed !== false } : {}),
-      ...(categories === undefined ? {} : { categories }),
-    })
-  }
-  const nextCursor = data.next_cursor
-  if (nextCursor !== undefined && nextCursor !== null && typeof nextCursor !== "string") return null
-  return { skills, ...(catalog ? { next_cursor: nextCursor ?? null } : nextCursor === undefined ? {} : { next_cursor: nextCursor }) }
-}
-
-function capabilityMcpData(body: unknown, tenantId: string): { servers: McpServer[]; next_cursor?: string } | null {
-  const data = dataOf(body)
-  if (data === null || !Array.isArray(data.servers)) return null
-  const servers: McpServer[] = []
-  for (const item of data.servers) {
-    if (!isRecord(item)) return null
-    const name = stringField(item, "server_identity", "name")
-    const transport = stringField(item, "transport")
-    const serverId = stringField(item, "server_id", "serverId")
-    const status = stringField(item, "status")
-    if (name === null || transport === null || serverId === null || status === null) return null
-    if (transport !== "stdio" && transport !== "streamable_http" && transport !== "sse_compat") return null
-    servers.push({
-      scope: tenantId,
-      name,
-      revision: 1,
-      transport: transport === "stdio" ? "http" : "streamable_http",
-      // Capability's server_identity is the public endpoint identity. Keep
-      // that owner value instead of manufacturing a capability:// URL that
-      // the Web client could mistake for a connectable endpoint.
-      url: name,
-      allowed_tools: [],
-      secret_ref: null,
-      enabled: status === "registered",
-    })
-  }
-  const nextCursor = data.next_cursor
-  if (nextCursor !== undefined && typeof nextCursor !== "string") return null
-  return { servers, ...(nextCursor === undefined ? {} : { next_cursor: nextCursor }) }
-}
-
-function mappedOwnerQuery(request: IncomingMessage, mapping: Readonly<Record<string, string>>): string {
-  const incoming = queryOf(request)
-  const owner = new URLSearchParams()
-  for (const [incomingName, ownerName] of Object.entries(mapping)) {
-    for (const value of incoming.getAll(incomingName)) {
-      const trimmed = value.trim()
-      if (trimmed !== "") owner.append(ownerName, trimmed)
-    }
-  }
-  return owner.size === 0 ? "" : `?${owner.toString()}`
-}
-
-function libraryItemType(mimeType: string): LibraryItem["type"] {
-  if (mimeType.startsWith("image/")) return "image"
-  if (mimeType.includes("spreadsheet") || mimeType.includes("excel") || mimeType === "text/csv") return "spreadsheet"
-  if (mimeType.includes("presentation") || mimeType.includes("powerpoint")) return "presentation"
-  if (mimeType.startsWith("text/") || mimeType.includes("pdf") || mimeType.includes("word") || mimeType.includes("document")) return "document"
-  return "other"
-}
-
-function libraryData(body: unknown): { items: LibraryItem[] } | null {
-  const data = dataOf(body)
-  if (data === null || !Array.isArray(data.items)) return null
-  const items: LibraryItem[] = []
-  for (const item of data.items) {
-    if (!isRecord(item)) return null
-    const id = stringField(item, "artifact_id", "asset_id")
-    const title = stringField(item, "filename", "artifact_id", "asset_id")
-    const mimeType = stringField(item, "mime_type", "mimeType")
-    const createdAt = stringField(item, "created_at", "finalized_at")
-    if (id === null || title === null || mimeType === null || createdAt === null || Number.isNaN(Date.parse(createdAt))) return null
-    items.push({ id, title, type: libraryItemType(mimeType), created_at: new Date(createdAt).toISOString(), url: "" })
-  }
-  return { items }
-}
-
-function systemManifestData(body: unknown): Record<string, unknown> | null {
-  const data = dataOf(body)
-  if (data === null) return null
-  const stringFields = ["tenantId", "productId", "locale", "configVersion", "digest"]
-  for (const field of stringFields) if (typeof data[field] !== "string" || data[field].trim() === "") return null
-  for (const field of ["navigation", "localeNamespaces", "featureFlags", "references"]) if (!Array.isArray(data[field])) return null
-  if (!isRecord(data.theme)) return null
-  if (data.releaseId !== null && typeof data.releaseId !== "string") return null
-  return {
-    tenant_id: data.tenantId,
-    product_id: data.productId,
-    locale: data.locale,
-    navigation: data.navigation,
-    locale_namespaces: data.localeNamespaces,
-    theme: data.theme,
-    feature_flags: data.featureFlags,
-    references: data.references,
-    config_version: data.configVersion,
-    release_id: data.releaseId,
-    digest: data.digest,
-  }
-}
-
-async function resolveTenantForManifest(config: BffConfig, requestId: string): Promise<string | null> {
-  const baseUrl = config.upstreams.iam
-  const token = config.iamServiceToken
-  if (baseUrl === null || token === null) return null
-  const target = new URL("/internal/iam/tenant-binding", `${baseUrl}/`)
-  target.searchParams.set("host", config.domain)
-  try {
-    const response = await fetch(target, {
-      headers: {
-        authorization: `Bearer ${token}`,
-        "x-kokoro-request-id": requestId,
-        forwarded: `host=${config.domain}`,
-      },
-      signal: AbortSignal.timeout(5000),
-    })
-    if (!response.ok) return null
-    const parsed: unknown = await response.json().catch(() => null)
-    const data = dataOf(parsed)
-    return data !== null && data.status === "active" && typeof data.tenant_id === "string" && data.tenant_id.trim() !== ""
-      ? data.tenant_id.trim()
-      : null
-  } catch {
-    return null
-  }
-}
-
-function dataOf(body: unknown): Record<string, unknown> | null {
-  if (!isRecord(body) || !isRecord(body.data)) return null
-  return body.data
-}
-
-function agentSessionAssertion(context: Context, sessionId: string): string {
-  return `bff:session:${context.identity.namespace}:${sessionId}`
-}
 
 async function callAgent(
   config: BffConfig,
@@ -1049,90 +694,6 @@ async function schedulerDispatch(
     await reply(response, 502, failure("agent_unreachable", "The configured Agent upstream is unavailable", id), context, idempotency, mutation.ticket)
   }
   return true
-}
-
-function scheduledCreateInput(json: Record<string, unknown>, projectId?: string): {
-  projectId?: string
-  title: string
-  prompt: string
-  frequency: "daily" | "weekly"
-  time: string
-  timezone: string
-  nextRunAt: string
-  expiresAt?: string
-  autoApprove: boolean
-} | null {
-  const title = typeof json.title === "string" ? json.title.trim() : ""
-  const prompt = typeof json.prompt === "string" ? json.prompt.trim() : ""
-  const frequency = json.frequency
-  const time = typeof json.time === "string" ? json.time.trim() : ""
-  const timezone = typeof json.timezone === "string" ? json.timezone.trim() : ""
-  const nextRunAt = typeof json.next_run_at === "string" && json.next_run_at.trim() !== ""
-    ? json.next_run_at.trim()
-    : new Date().toISOString()
-  const expiresAt = json.expires_at === undefined ? undefined : typeof json.expires_at === "string" ? json.expires_at.trim() : null
-  if (
-    title === "" || prompt === "" || (frequency !== "daily" && frequency !== "weekly")
-    || !/^([01]\d|2[0-3]):[0-5]\d$/u.test(time) || timezone === ""
-    || Number.isNaN(Date.parse(nextRunAt)) || expiresAt === null
-    || (expiresAt !== undefined && Number.isNaN(Date.parse(expiresAt)))
-  ) return null
-  return {
-    ...(projectId === undefined ? {} : { projectId }),
-    title,
-    prompt,
-    frequency,
-    time,
-    timezone,
-    nextRunAt,
-    ...(expiresAt === undefined ? {} : { expiresAt }),
-    autoApprove: typeof json.auto_approve === "boolean" ? json.auto_approve : false,
-  }
-}
-
-function scheduledPatchInput(json: Record<string, unknown>): Parameters<PostgresBffRepositories["updateScheduledTask"]>[2] | null {
-  const input: Parameters<PostgresBffRepositories["updateScheduledTask"]>[2] = {}
-  if (json.title !== undefined) {
-    if (typeof json.title !== "string" || json.title.trim() === "") return null
-    input.title = json.title.trim()
-  }
-  if (json.prompt !== undefined) {
-    if (typeof json.prompt !== "string" || json.prompt.trim() === "") return null
-    input.prompt = json.prompt.trim()
-  }
-  if (json.frequency !== undefined) {
-    if (json.frequency !== "daily" && json.frequency !== "weekly") return null
-    input.frequency = json.frequency
-  }
-  if (json.time !== undefined) {
-    if (typeof json.time !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/u.test(json.time)) return null
-    input.time = json.time
-  }
-  if (json.timezone !== undefined) {
-    if (typeof json.timezone !== "string" || json.timezone.trim() === "") return null
-    input.timezone = json.timezone.trim()
-  }
-  if (json.next_run_at !== undefined) {
-    if (typeof json.next_run_at !== "string" || Number.isNaN(Date.parse(json.next_run_at))) return null
-    input.nextRunAt = json.next_run_at
-  }
-  if (json.expires_at !== undefined) {
-    if (json.expires_at !== null && (typeof json.expires_at !== "string" || Number.isNaN(Date.parse(json.expires_at)))) return null
-    input.expiresAt = json.expires_at
-  }
-  if (json.auto_approve !== undefined) {
-    if (typeof json.auto_approve !== "boolean") return null
-    input.autoApprove = json.auto_approve
-  }
-  if (json.enabled !== undefined) {
-    if (typeof json.enabled !== "boolean") return null
-    input.enabled = json.enabled
-  }
-  if (json.status !== undefined) {
-    if (json.status !== "active" && json.status !== "paused" && json.status !== "failed") return null
-    input.status = json.status
-  }
-  return input
 }
 
 async function liveBffBusiness(

@@ -24,6 +24,9 @@ test("BFF keeps repository, service, contract, and adapter boundaries explicit",
     "src/modules/projects/repository.ts",
     "src/modules/scheduled/repository.ts",
     "src/infrastructure/postgres/client.ts",
+    "src/infrastructure/postgres/idempotency-repository.ts",
+    "src/infrastructure/postgres/project-repository.ts",
+    "src/infrastructure/postgres/scheduled-task-repository.ts",
     "src/infrastructure/postgres/repositories.ts",
     "src/infrastructure/mock/bff-store.ts",
   ]) {
@@ -49,4 +52,17 @@ test("BFF runtime has no compatibility migration or direct database setup in the
   assert.equal(setup.includes("ALTER TABLE"), false)
   assert.equal(setup.includes("unknown"), false)
   assert.equal(setup.includes("db:migrate"), false)
+})
+
+test("BFF module repository ports stay free of infrastructure dependencies", async () => {
+  for (const relativePath of [
+    "src/modules/idempotency/repository.ts",
+    "src/modules/projects/repository.ts",
+    "src/modules/scheduled/repository.ts",
+  ]) {
+    const source = await readFile(path.join(root, relativePath), "utf8")
+    assert.equal(source.includes("from \"pg\""), false, relativePath)
+    assert.equal(source.includes("infrastructure/"), false, relativePath)
+    assert.equal(source.includes("SELECT "), false, relativePath)
+  }
 })
