@@ -173,20 +173,15 @@ async function commitReceipt(
     if (mutation.persistent !== undefined) await mutation.persistent.releaseReceipt(mutation.scope, mutation.fingerprint)
     return
   }
-  idempotency.set(mutation.scope, {
-    fingerprint: mutation.fingerprint,
-    receipt: {
-      status,
-      body: structuredClone(body),
-    },
-  })
   if (mutation.persistent !== undefined) {
-    await mutation.persistent.putReceipt(mutation.scope, {
-      fingerprint: mutation.fingerprint,
-      status,
-      body,
-    })
+    try {
+      await mutation.persistent.putReceipt(mutation.scope, { fingerprint: mutation.fingerprint, status, body })
+    } catch (error) {
+      await mutation.persistent.releaseReceipt(mutation.scope, mutation.fingerprint).catch(() => undefined)
+      throw error
+    }
   }
+  idempotency.set(mutation.scope, { fingerprint: mutation.fingerprint, receipt: { status, body: structuredClone(body) } })
 }
 
 async function reply(
