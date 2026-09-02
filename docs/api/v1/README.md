@@ -19,7 +19,7 @@ BFF 不负责：
 - Agent Redis Worker 的内部实现
 - 直接访问其他业务子仓库的 SQL
 
-机器可读契约：[openapi.yaml](./openapi.yaml)。本阶段覆盖 Health、Projects、Chat、Models、Skills、MCP、Scheduled、Agents setup、Library 与 Billing 的现有 v1 业务面。
+机器可读契约：[openapi.yaml](./openapi.yaml)。本阶段覆盖 Health、System runtime manifest、Projects、Chat、Models、Skills、MCP、Scheduled、Agents setup、Library 与 Billing 的现有 v1 业务面。
 
 ## Base URL 和调用方
 
@@ -143,14 +143,14 @@ Model/Billing 的 owner HTTP 面明确注册为 `web-bff` caller；Agent ingress
 
 | 资源 | v1 文档 | Mock | Live 替换 |
 | --- | --- | --- | --- |
-| Projects | 已完成 | 已完成 | BFF-owned business module；System 仅承接 Site/Workspace/Policy |
+| Projects | 已完成 | 已完成 | BFF-owned PostgreSQL fact store；System 仅承接 Site/Workspace/Policy |
 | Chat | 已完成 | 已完成 | BFF Chat adapter → `KOKORO_AGENT_BASE_URL` Agent HTTP ingress；session list index 和 rename/delete/share 仍显式标注能力边界 |
 | Model | v1 owner adapter | 已完成 | `/bff/model-catalog` → `{ data: { models } }`，由 BFF 注入 tenant/subject 上下文 |
-| Skills | Connect owner adapter | 已完成（Mock） | live 仍需 Capability Connect bridge；当前 compatibility proxy 只用于 transport fixture |
-| Scheduled | BFF fact store + Scheduler command adapter | 已完成（Mock） | live 需 BFF PostgreSQL/Redis fact store，再生成 Scheduler generic job |
+| Skills | Connect owner adapter | 已完成（Mock） | live 使用 Capability 专用 projection；未接入的写操作显式返回 503 |
+| Scheduled | BFF fact store + Scheduler command adapter | 已完成（Mock） | live 使用 BFF PostgreSQL/Redis fact store；创建/更新/删除/retry 会同步 Scheduler，dispatch 回到 BFF 再进入 Agent |
 | Agents setup | 下一阶段 | 已完成 | Mock 可用；live 仍需 Agent setup adapter |
 | Billing | v1 owner adapter | 已完成 | `/v1/commerce/catalog`、`/v1/billing/checkout` → Web 兼容的 plans/checkout 投影 |
-| Library | Storage Connect adapter | 已完成（Mock） | Storage v1 没有 list RPC；live bridge 仍必须返回明确未接线状态 |
+| Library | Storage Connect adapter | 已完成（Mock） | live 使用 Storage 专用内部 projection；未接入的写操作显式返回 503 |
 
 ### Live adapter boundary
 

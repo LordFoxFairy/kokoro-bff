@@ -15,6 +15,7 @@ security:
     principalId: []
 tags:
   - name: Health
+  - name: System
   - name: Projects
   - name: Chat
   - name: Models
@@ -55,6 +56,43 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HealthResponse'
+  /v1/system/runtime-manifest:
+    get:
+      tags: [System]
+      operationId: getRuntimeManifest
+      description: Resolves the configured host through IAM, loads the System owner manifest, and projects its resource fields once into the BFF v1 snake_case transport.
+      parameters:
+        - name: product_id
+          in: query
+          required: true
+          schema: { type: string, minLength: 1 }
+        - name: locale
+          in: query
+          required: true
+          schema: { type: string, minLength: 2 }
+        - name: surface_id
+          in: query
+          required: true
+          schema: { type: string, minLength: 1 }
+      responses:
+        '200':
+          description: IAM-derived tenant runtime manifest
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeManifestResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '502':
+          description: IAM or System owner transport/contract failure
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503':
+          description: IAM/System owner is not configured or unavailable
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
   /v1/sessions:
     get:
       tags: [Chat]
@@ -1366,6 +1404,35 @@ components:
             items:
               type: array
               items: { $ref: '#/components/schemas/LibraryItem' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    RuntimeManifest:
+      type: object
+      required: [tenant_id, product_id, locale, navigation, locale_namespaces, theme, feature_flags, references, config_version, release_id, digest]
+      properties:
+        tenant_id: { type: string, minLength: 1 }
+        product_id: { type: string, minLength: 1 }
+        locale: { type: string, minLength: 2 }
+        navigation:
+          type: array
+          items: {}
+        locale_namespaces:
+          type: array
+          items: {}
+        theme: { type: object, additionalProperties: true }
+        feature_flags:
+          type: array
+          items: {}
+        references:
+          type: array
+          items: {}
+        config_version: { type: string, minLength: 1 }
+        release_id: { type: [string, 'null'] }
+        digest: { type: string, minLength: 1 }
+    RuntimeManifestResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/RuntimeManifest' }
         meta: { $ref: '#/components/schemas/RequestMeta' }
     BillingPlan:
       type: object

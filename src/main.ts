@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http"
-import { randomUUID } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 
 import { loadConfig, type BffConfig } from "./config.js"
 import type {
@@ -12,6 +12,7 @@ import type {
   ChatSessionSummary,
   ChatShare,
   LibraryItem,
+  McpServer,
   McpTransport,
   Project,
   ScheduledTask,
@@ -20,6 +21,7 @@ import type {
 } from "./contracts.js"
 import { failure, ok } from "./contracts.js"
 import { MockStore } from "./store.js"
+import { PostgresBusinessStore } from "./business-store.js"
 import { proxyUpstream, type UpstreamResponse } from "./upstream.js"
 import {
   agentIdentityHeaders,
@@ -31,6 +33,7 @@ import {
   type AgentChatEvent,
   type AgentChatMessage,
 } from "./adapters/agent.js"
+import { buildSchedulerJob, schedulerJobName, type SchedulerJob } from "./adapters/scheduler.js"
 
 const PLATFORMS = new Set<AgentConnectionSetup["platform"]>(["telegram", "line", "slack"])
 
@@ -49,6 +52,7 @@ type IdempotencyEntry = {
 type MutationTicket = {
   scope: string
   fingerprint: string
+  persistent?: PostgresBusinessStore
 }
 
 type GithubSkillSource = {
@@ -153,13 +157,16 @@ function mutationScope(context: Context, method: string, path: string, key: stri
   return `${context.identity.namespace}:${method}:${path}:${key}`
 }
 
-function commitReceipt(
+async function commitReceipt(
   idempotency: Map<string, IdempotencyEntry>,
   mutation: MutationTicket | null,
   status: number,
   body: unknown,
-): void {
+): Promise<void> {
   if (mutation === null) return
+  // Service/transport failures remain retryable. A persisted 5xx receipt
+  // would turn a transient owner outage into a permanent client replay.
+  if (status >= 500) return
   idempotency.set(mutation.scope, {
     fingerprint: mutation.fingerprint,
     receipt: {
@@ -167,18 +174,29 @@ function commitReceipt(
       body: structuredClone(body),
     },
   })
+  if (mutation.persistent !== undefined) {
+    await mutation.persistent.putReceipt(mutation.scope, {
+      fingerprint: mutation.fingerprint,
+      status,
+      body,
+    })
+  }
 }
 
-function reply(
+async function reply(
   response: ServerResponse,
   status: number,
   body: unknown,
   context: Context,
   idempotency: Map<string, IdempotencyEntry>,
   mutation: MutationTicket | null,
-): void {
-  commitReceipt(idempotency, mutation, status, body)
-  send(response, status, body)
+): Promise<void> {
+  try {
+    await commitReceipt(idempotency, mutation, status, body)
+    send(response, status, body)
+  } catch {
+    send(response, 503, failure("business_store_unavailable", "The BFF business store is unavailable", context.requestId))
+  }
 }
 
 function idempotencyKey(request: IncomingMessage): string | null {
@@ -197,7 +215,7 @@ function send(response: ServerResponse, status: number, body: unknown): void {
 }
 
 function requestId(request: IncomingMessage): string {
-  const value = request.headers["x-kokoro-request-id"]
+  const value = request.headers["x-kokoro-request-id"] ?? request.headers["x-request-id"]
   return typeof value === "string" && value.trim() ? value.trim() : randomUUID()
 }
 
@@ -290,24 +308,25 @@ function requestBodyJson(request: IncomingMessage, body: Buffer): Record<string,
   }
 }
 
-function mutationTicket(
+async function mutationTicket(
   request: IncomingMessage,
   method: string,
   path: string,
   context: Context,
   body: Buffer,
   idempotency: Map<string, IdempotencyEntry>,
-): { ticket: MutationTicket | null; replay: IdempotencyReceipt | null; conflict: boolean } {
+  persistent?: PostgresBusinessStore,
+): Promise<{ ticket: MutationTicket | null; replay: IdempotencyReceipt | null; conflict: boolean }> {
   const key = idempotencyKey(request)
   if (key === null) return { ticket: null, replay: null, conflict: false }
   const scope = mutationScope(context, method, path, key)
   const fingerprint = fingerprintBody(request, body)
-  const prior = idempotency.get(scope)
-  if (prior !== undefined) {
+  const prior = persistent === undefined ? idempotency.get(scope) : await persistent.getReceipt(scope)
+  if (prior !== undefined && prior !== null) {
     if (prior.fingerprint !== fingerprint) return { ticket: null, replay: null, conflict: true }
-    return { ticket: null, replay: prior.receipt, conflict: false }
+    return { ticket: null, replay: "receipt" in prior ? prior.receipt : { status: prior.status, body: prior.body }, conflict: false }
   }
-  return { ticket: { scope, fingerprint }, replay: null, conflict: false }
+  return { ticket: { scope, fingerprint, ...(persistent === undefined ? {} : { persistent }) }, replay: null, conflict: false }
 }
 
 function normalizeUpstreamResponse(
@@ -449,10 +468,10 @@ function modelCatalogData(body: unknown): { models: Array<{
   name: string
   is_default: boolean
   display_name?: string
-}> } | null {
+}>; next_cursor?: string | null } | null {
   const data = dataOf(body)
-  const items = data?.items
-  if (!Array.isArray(items)) return null
+  if (data === null || !Array.isArray(data.items)) return null
+  const items = data.items
   const models = []
   for (const item of items) {
     if (!isRecord(item)) return null
@@ -473,7 +492,10 @@ function modelCatalogData(body: unknown): { models: Array<{
       ...(displayName === null ? {} : { display_name: displayName }),
     })
   }
-  return { models }
+  const page = isRecord(data.page) ? data.page : null
+  const nextCursor = data.next_cursor ?? data.nextCursor ?? page?.next_cursor ?? page?.nextCursor
+  if (nextCursor !== undefined && nextCursor !== null && typeof nextCursor !== "string") return null
+  return { models, ...(nextCursor === undefined ? {} : { next_cursor: nextCursor }) }
 }
 
 type BillingPlanProjection = {
@@ -514,6 +536,162 @@ function checkoutUrlData(body: unknown): { checkout_url: string } | null {
   const data = dataOf(body)
   const checkoutUrl = data === null ? null : stringField(data, "checkout_url", "checkoutUrl")
   return checkoutUrl === null ? null : { checkout_url: checkoutUrl }
+}
+
+type CapabilitySkillProjection = {
+  name: string
+  description: string
+  content_hash: string
+  scope: string
+  enabled: boolean
+  installed?: boolean
+  categories?: string[]
+}
+
+function capabilitySkillsData(body: unknown, catalog: boolean): { skills: CapabilitySkillProjection[]; next_cursor?: string | null } | null {
+  const data = dataOf(body)
+  if (data === null || !Array.isArray(data.skills)) return null
+  const skills: CapabilitySkillProjection[] = []
+  for (const item of data.skills) {
+    if (!isRecord(item)) return null
+    const name = stringField(item, "name")
+    const description = stringField(item, "description")
+    const contentHash = stringField(item, "content_hash", "contentHash")
+    const scope = stringField(item, "scope")
+    if (name === null || description === null || contentHash === null || scope === null) return null
+    const enabled = typeof item.enabled === "boolean" ? item.enabled : true
+    const categories = Array.isArray(item.categories)
+      ? item.categories.filter((value): value is string => typeof value === "string")
+      : undefined
+    skills.push({
+      name,
+      description,
+      content_hash: contentHash,
+      scope,
+      enabled,
+      ...(catalog ? { installed: item.installed !== false } : {}),
+      ...(categories === undefined ? {} : { categories }),
+    })
+  }
+  const nextCursor = data.next_cursor
+  if (nextCursor !== undefined && nextCursor !== null && typeof nextCursor !== "string") return null
+  return { skills, ...(catalog ? { next_cursor: nextCursor ?? null } : nextCursor === undefined ? {} : { next_cursor: nextCursor }) }
+}
+
+function capabilityMcpData(body: unknown, tenantId: string): { servers: McpServer[]; next_cursor?: string } | null {
+  const data = dataOf(body)
+  if (data === null || !Array.isArray(data.servers)) return null
+  const servers: McpServer[] = []
+  for (const item of data.servers) {
+    if (!isRecord(item)) return null
+    const name = stringField(item, "server_identity", "name")
+    const transport = stringField(item, "transport")
+    const serverId = stringField(item, "server_id", "serverId")
+    const status = stringField(item, "status")
+    if (name === null || transport === null || serverId === null || status === null) return null
+    if (transport !== "stdio" && transport !== "streamable_http" && transport !== "sse_compat") return null
+    servers.push({
+      scope: tenantId,
+      name,
+      revision: 1,
+      transport: transport === "stdio" ? "http" : "streamable_http",
+      // Capability's server_identity is the public endpoint identity. Keep
+      // that owner value instead of manufacturing a capability:// URL that
+      // the Web client could mistake for a connectable endpoint.
+      url: name,
+      allowed_tools: [],
+      secret_ref: null,
+      enabled: status === "registered",
+    })
+  }
+  const nextCursor = data.next_cursor
+  if (nextCursor !== undefined && typeof nextCursor !== "string") return null
+  return { servers, ...(nextCursor === undefined ? {} : { next_cursor: nextCursor }) }
+}
+
+function mappedOwnerQuery(request: IncomingMessage, mapping: Readonly<Record<string, string>>): string {
+  const incoming = queryOf(request)
+  const owner = new URLSearchParams()
+  for (const [incomingName, ownerName] of Object.entries(mapping)) {
+    for (const value of incoming.getAll(incomingName)) {
+      const trimmed = value.trim()
+      if (trimmed !== "") owner.append(ownerName, trimmed)
+    }
+  }
+  return owner.size === 0 ? "" : `?${owner.toString()}`
+}
+
+function libraryItemType(mimeType: string): LibraryItem["type"] {
+  if (mimeType.startsWith("image/")) return "image"
+  if (mimeType.includes("spreadsheet") || mimeType.includes("excel") || mimeType === "text/csv") return "spreadsheet"
+  if (mimeType.includes("presentation") || mimeType.includes("powerpoint")) return "presentation"
+  if (mimeType.startsWith("text/") || mimeType.includes("pdf") || mimeType.includes("word") || mimeType.includes("document")) return "document"
+  return "other"
+}
+
+function libraryData(body: unknown): { items: LibraryItem[] } | null {
+  const data = dataOf(body)
+  if (data === null || !Array.isArray(data.items)) return null
+  const items: LibraryItem[] = []
+  for (const item of data.items) {
+    if (!isRecord(item)) return null
+    const id = stringField(item, "artifact_id", "asset_id")
+    const title = stringField(item, "filename", "artifact_id", "asset_id")
+    const mimeType = stringField(item, "mime_type", "mimeType")
+    const createdAt = stringField(item, "created_at", "finalized_at")
+    if (id === null || title === null || mimeType === null || createdAt === null || Number.isNaN(Date.parse(createdAt))) return null
+    items.push({ id, title, type: libraryItemType(mimeType), created_at: new Date(createdAt).toISOString(), url: "" })
+  }
+  return { items }
+}
+
+function systemManifestData(body: unknown): Record<string, unknown> | null {
+  const data = dataOf(body)
+  if (data === null) return null
+  const stringFields = ["tenantId", "productId", "locale", "configVersion", "digest"]
+  for (const field of stringFields) if (typeof data[field] !== "string" || data[field].trim() === "") return null
+  for (const field of ["navigation", "localeNamespaces", "featureFlags", "references"]) if (!Array.isArray(data[field])) return null
+  if (!isRecord(data.theme)) return null
+  if (data.releaseId !== null && typeof data.releaseId !== "string") return null
+  return {
+    tenant_id: data.tenantId,
+    product_id: data.productId,
+    locale: data.locale,
+    navigation: data.navigation,
+    locale_namespaces: data.localeNamespaces,
+    theme: data.theme,
+    feature_flags: data.featureFlags,
+    references: data.references,
+    config_version: data.configVersion,
+    release_id: data.releaseId,
+    digest: data.digest,
+  }
+}
+
+async function resolveTenantForManifest(config: BffConfig, requestId: string): Promise<string | null> {
+  const baseUrl = config.upstreams.iam
+  const token = config.iamServiceToken
+  if (baseUrl === null || token === null) return null
+  const target = new URL("/internal/iam/tenant-binding", `${baseUrl}/`)
+  target.searchParams.set("host", config.domain)
+  try {
+    const response = await fetch(target, {
+      headers: {
+        authorization: `Bearer ${token}`,
+        "x-kokoro-request-id": requestId,
+        forwarded: `host=${config.domain}`,
+      },
+      signal: AbortSignal.timeout(5000),
+    })
+    if (!response.ok) return null
+    const parsed: unknown = await response.json().catch(() => null)
+    const data = dataOf(parsed)
+    return data !== null && data.status === "active" && typeof data.tenant_id === "string" && data.tenant_id.trim() !== ""
+      ? data.tenant_id.trim()
+      : null
+  } catch {
+    return null
+  }
 }
 
 function incomingHeaders(request: IncomingMessage): Headers {
@@ -768,6 +946,488 @@ async function liveOwnerRequest(
   }
 }
 
+function scheduledTaskId(context: Context, path: string, key: string): string {
+  const digest = createHash("sha256")
+    .update(`${context.identity.namespace}\u001f${path}\u001f${key}`)
+    .digest("hex")
+    .slice(0, 32)
+  return `scheduled_${digest}`
+}
+
+function schedulerErrorCode(body: unknown): string | null {
+  return isRecord(body) && isRecord(body.error) && typeof body.error.code === "string" ? body.error.code : null
+}
+
+async function liveSchedulerRequest(
+  request: IncomingMessage,
+  config: BffConfig,
+  context: Context,
+  method: string,
+  path: string,
+  body?: Buffer,
+): Promise<LiveOwnerResult> {
+  const schedulerBase = config.upstreams.scheduler ?? null
+  if (schedulerBase === null) {
+    return { status: 503, body: failure("scheduler_not_configured", "Scheduler upstream is not configured", context.requestId) }
+  }
+  if (config.schedulerTargetUrl === null) {
+    return { status: 503, body: failure("scheduler_target_not_configured", "Scheduler target URL is not configured", context.requestId) }
+  }
+  try {
+    const upstream = await proxyUpstream(
+      config,
+      schedulerBase,
+      path,
+      method,
+      context.requestId,
+      incomingHeaders(request),
+      body,
+      ownerIdentityHeaders(context),
+      "web-bff",
+      config.schedulerServiceToken ?? config.upstreamSecret,
+    )
+    return normalizeUpstreamResponse(upstream, context.requestId)
+  } catch {
+    return { status: 502, body: failure("scheduler_unreachable", "The configured Scheduler upstream is unavailable", context.requestId) }
+  }
+}
+
+async function reconcileSchedulerTask(
+  request: IncomingMessage,
+  config: BffConfig,
+  context: Context,
+  task: ScheduledTask,
+  ownerId: string,
+  operation: "register" | "replace" | "delete",
+): Promise<LiveOwnerResult> {
+  const job = buildSchedulerJob(task, context.identity.namespace, ownerId, config.schedulerTargetUrl ?? "")
+  const path = `/internal/scheduler/v1/jobs/${encodeURIComponent(schedulerJobName(task.id))}`
+  if (operation === "delete") {
+    const result = await liveSchedulerRequest(request, config, context, "DELETE", path)
+    if (result.status === 404 && schedulerErrorCode(result.body) === "job_not_found") {
+      return { status: 200, body: ok({ name: schedulerJobName(task.id), status: "deleted" }, context.requestId) }
+    }
+    return result
+  }
+
+  const method = operation === "register" ? "POST" : "PUT"
+  const first = await liveSchedulerRequest(request, config, context, method, path, Buffer.from(JSON.stringify(job)))
+  // A BFF retry may arrive after Scheduler committed the registration but
+  // before the original response reached us. Reconcile by replacing the
+  // existing job instead of treating that state as a permanent failure.
+  if (operation === "register" && first.status === 409 && schedulerErrorCode(first.body) === "job_already_exists") {
+    return liveSchedulerRequest(request, config, context, "PUT", path, Buffer.from(JSON.stringify(job)))
+  }
+  if (operation === "replace" && first.status === 404 && schedulerErrorCode(first.body) === "job_not_found") {
+    return liveSchedulerRequest(request, config, context, "POST", path, Buffer.from(JSON.stringify(job)))
+  }
+  return first
+}
+
+async function markScheduledTaskFailed(store: PostgresBusinessStore, tenantId: string, taskId: string): Promise<void> {
+  await store.updateScheduledTask(tenantId, taskId, { status: "failed", enabled: false })
+}
+
+async function schedulerDispatch(
+  request: IncomingMessage,
+  response: ServerResponse,
+  config: BffConfig,
+  businessStore: PostgresBusinessStore | null,
+  idempotency: Map<string, IdempotencyEntry>,
+): Promise<boolean> {
+  const id = requestId(request)
+  if (request.method !== "POST") {
+    send(response, 405, failure("method_not_allowed", "Only POST is supported", id))
+    return true
+  }
+  const schedulerToken = config.schedulerServiceToken ?? config.upstreamSecret
+  const authorization = headerString(request.headers.authorization).trim()
+  const bearer = authorization.toLowerCase().startsWith("bearer ") ? authorization.slice(7).trim() : ""
+  const internalSecret = headerString(request.headers["x-kokoro-internal-secret"]).trim()
+  if (schedulerToken === null || (bearer !== schedulerToken && internalSecret !== schedulerToken)) {
+    send(response, 401, failure("service_auth_failed", "Scheduler dispatch authentication failed", id))
+    return true
+  }
+  if (businessStore === null) {
+    send(response, 503, failure("business_store_not_configured", "BFF business fact store is not configured", id))
+    return true
+  }
+  let body: Buffer
+  try {
+    body = await readBody(request)
+  } catch {
+    send(response, 413, failure("request_body_too_large", "Request body is too large", id))
+    return true
+  }
+  const json = requestBodyJson(request, body)
+  const tenantId = typeof json?.tenant_id === "string" ? json.tenant_id.trim() : ""
+  const taskId = typeof json?.task_id === "string" ? json.task_id.trim() : ""
+  const ownerId = typeof json?.owner_id === "string" ? json.owner_id.trim() : ""
+  const schedulerJob = headerString(request.headers["x-kokoro-scheduler-job"]).trim()
+  const schedulerOccurrence = headerString(request.headers["x-kokoro-scheduler-occurrence"]).trim()
+  const occurrenceKey = idempotencyKey(request)
+  const expectedOccurrenceKey = schedulerOccurrence === "" ? null : `schedule:${schedulerJob}:${schedulerOccurrence}`
+  if (
+    json === null
+    || tenantId === ""
+    || taskId === ""
+    || ownerId === ""
+    || occurrenceKey === null
+    || schedulerJob !== schedulerJobName(taskId)
+    || !/^\d{8}T\d{6}Z$/u.test(schedulerOccurrence)
+    || occurrenceKey !== expectedOccurrenceKey
+  ) {
+    send(response, 400, failure("invalid_scheduler_dispatch", "Scheduler dispatch payload or headers are invalid", id))
+    return true
+  }
+  const context: Context = { requestId: id, identity: { namespace: tenantId, userId: ownerId } }
+  const mutation = await mutationTicket(request, "POST", "/internal/bff/scheduled-tasks/dispatch", context, body, idempotency, businessStore)
+  if (mutation.replay !== null) {
+    send(response, mutation.replay.status, mutation.replay.body)
+    return true
+  }
+  if (mutation.conflict) {
+    send(response, 409, failure("idempotency_conflict", "Idempotency key already used with a different request payload", id))
+    return true
+  }
+  const record = await businessStore.findScheduledTaskRecord(tenantId, taskId)
+  if (record === null || record.ownerId !== ownerId) {
+    await reply(response, 404, failure("scheduled_task_not_found", "Scheduled task was not found", id), context, idempotency, mutation.ticket)
+    return true
+  }
+  if (
+    json.prompt !== record.task.prompt
+    || json.auto_approve !== record.task.auto_approve
+    || json.timezone !== record.task.timezone
+    || (record.task.project_id === undefined ? json.project_id !== undefined : json.project_id !== record.task.project_id)
+  ) {
+    await reply(response, 409, failure("invalid_scheduler_dispatch", "Scheduler dispatch does not match the stored task", id), context, idempotency, mutation.ticket)
+    return true
+  }
+  if (!record.task.enabled || record.task.status !== "active") {
+    await reply(response, 409, failure("scheduled_task_not_active", "Scheduled task is not active", id), context, idempotency, mutation.ticket)
+    return true
+  }
+  if (record.task.expires_at !== undefined && Date.parse(record.task.expires_at) <= Date.now()) {
+    await reply(response, 410, failure("scheduled_task_expired", "Scheduled task has expired", id), context, idempotency, mutation.ticket)
+    return true
+  }
+  const agentUrl = config.upstreams.agents ?? null
+  if (agentUrl === null) {
+    await reply(response, 503, failure("agent_not_configured", "Agent upstream is not configured", id), context, idempotency, mutation.ticket)
+    return true
+  }
+  const launch = buildAgentLaunch({
+    identity: context.identity,
+    sessionId: `scheduled:${taskId}`,
+    idempotencyKey: occurrenceKey,
+    content: record.task.prompt,
+    ...(record.task.project_id === undefined ? {} : { projectRef: record.task.project_id }),
+  })
+  try {
+    const result = await callAgent(config, agentUrl, "/v1/runs", "POST", id, request, Buffer.from(JSON.stringify(launch.body)), context, String((launch.body.execution_identity as Record<string, unknown>).identity_assertion_ref))
+    if (result.status >= 400) {
+      await reply(response, result.status, result.body, context, idempotency, mutation.ticket)
+      return true
+    }
+    const data = dataOf(result.body)
+    if (data === null || data.run_id !== launch.receipt.run_id) {
+      await reply(response, 502, failure("upstream_response_invalid", "Scheduled Agent launch receipt did not match the requested run", id), context, idempotency, mutation.ticket)
+      return true
+    }
+    await reply(response, 202, ok({ task_id: taskId, run_id: launch.receipt.run_id }, id), context, idempotency, mutation.ticket)
+  } catch {
+    await reply(response, 502, failure("agent_unreachable", "The configured Agent upstream is unavailable", id), context, idempotency, mutation.ticket)
+  }
+  return true
+}
+
+function scheduledCreateInput(json: Record<string, unknown>, projectId?: string): {
+  projectId?: string
+  title: string
+  prompt: string
+  frequency: "daily" | "weekly"
+  time: string
+  timezone: string
+  nextRunAt: string
+  expiresAt?: string
+  autoApprove: boolean
+} | null {
+  const title = typeof json.title === "string" ? json.title.trim() : ""
+  const prompt = typeof json.prompt === "string" ? json.prompt.trim() : ""
+  const frequency = json.frequency
+  const time = typeof json.time === "string" ? json.time.trim() : ""
+  const timezone = typeof json.timezone === "string" ? json.timezone.trim() : ""
+  const nextRunAt = typeof json.next_run_at === "string" && json.next_run_at.trim() !== ""
+    ? json.next_run_at.trim()
+    : new Date().toISOString()
+  const expiresAt = json.expires_at === undefined ? undefined : typeof json.expires_at === "string" ? json.expires_at.trim() : null
+  if (
+    title === "" || prompt === "" || (frequency !== "daily" && frequency !== "weekly")
+    || !/^([01]\d|2[0-3]):[0-5]\d$/u.test(time) || timezone === ""
+    || Number.isNaN(Date.parse(nextRunAt)) || expiresAt === null
+    || (expiresAt !== undefined && Number.isNaN(Date.parse(expiresAt)))
+  ) return null
+  return {
+    ...(projectId === undefined ? {} : { projectId }),
+    title,
+    prompt,
+    frequency,
+    time,
+    timezone,
+    nextRunAt,
+    ...(expiresAt === undefined ? {} : { expiresAt }),
+    autoApprove: typeof json.auto_approve === "boolean" ? json.auto_approve : false,
+  }
+}
+
+function scheduledPatchInput(json: Record<string, unknown>): Parameters<PostgresBusinessStore["updateScheduledTask"]>[2] | null {
+  const input: Parameters<PostgresBusinessStore["updateScheduledTask"]>[2] = {}
+  if (json.title !== undefined) {
+    if (typeof json.title !== "string" || json.title.trim() === "") return null
+    input.title = json.title.trim()
+  }
+  if (json.prompt !== undefined) {
+    if (typeof json.prompt !== "string" || json.prompt.trim() === "") return null
+    input.prompt = json.prompt.trim()
+  }
+  if (json.frequency !== undefined) {
+    if (json.frequency !== "daily" && json.frequency !== "weekly") return null
+    input.frequency = json.frequency
+  }
+  if (json.time !== undefined) {
+    if (typeof json.time !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/u.test(json.time)) return null
+    input.time = json.time
+  }
+  if (json.timezone !== undefined) {
+    if (typeof json.timezone !== "string" || json.timezone.trim() === "") return null
+    input.timezone = json.timezone.trim()
+  }
+  if (json.next_run_at !== undefined) {
+    if (typeof json.next_run_at !== "string" || Number.isNaN(Date.parse(json.next_run_at))) return null
+    input.nextRunAt = json.next_run_at
+  }
+  if (json.expires_at !== undefined) {
+    if (json.expires_at !== null && (typeof json.expires_at !== "string" || Number.isNaN(Date.parse(json.expires_at)))) return null
+    input.expiresAt = json.expires_at
+  }
+  if (json.auto_approve !== undefined) {
+    if (typeof json.auto_approve !== "boolean") return null
+    input.autoApprove = json.auto_approve
+  }
+  if (json.enabled !== undefined) {
+    if (typeof json.enabled !== "boolean") return null
+    input.enabled = json.enabled
+  }
+  if (json.status !== undefined) {
+    if (json.status !== "active" && json.status !== "paused" && json.status !== "failed") return null
+    input.status = json.status
+  }
+  return input
+}
+
+async function liveBffBusiness(
+  request: IncomingMessage,
+  response: ServerResponse,
+  config: BffConfig,
+  context: Context,
+  businessPath: string[],
+  json: Record<string, unknown>,
+  mutation: MutationTicket | null,
+  idempotency: Map<string, IdempotencyEntry>,
+  store: PostgresBusinessStore,
+): Promise<boolean> {
+  const method = request.method || "GET"
+  const tenantId = context.identity.namespace
+  try {
+    if (businessPath[0] === "projects") {
+      const projectId = businessPath[1]
+      if (businessPath.length === 1 && method === "GET") {
+        await reply(response, 200, ok(projectData(await store.listProjects(tenantId)), context.requestId), context, idempotency, mutation)
+        return true
+      }
+      if (businessPath.length === 1 && method === "POST") {
+        const name = typeof json.name === "string" ? json.name.trim() : ""
+        if (name === "") {
+          await reply(response, 400, failure("invalid_project", "Project name is required", context.requestId), context, idempotency, mutation)
+          return true
+        }
+        const project = await store.createProject(tenantId, name, typeof json.description === "string" ? json.description : "")
+        await reply(response, 200, ok({ project }, context.requestId), context, idempotency, mutation)
+        return true
+      }
+      if (businessPath.length === 2 && projectId !== undefined && method === "GET") {
+        const project = await store.findProject(tenantId, projectId)
+        await reply(response, project === null ? 404 : 200, project === null ? failure("project_not_found", "Project was not found", context.requestId) : ok({ project }, context.requestId), context, idempotency, mutation)
+        return true
+      }
+      if (businessPath.length === 2 && projectId !== undefined && method === "PATCH") {
+        if (typeof json.instruction !== "string") {
+          await reply(response, 400, failure("invalid_project_instruction", "Project instruction must be a string", context.requestId), context, idempotency, mutation)
+          return true
+        }
+        const project = await store.updateProjectInstruction(tenantId, projectId, json.instruction, context.identity.userId)
+        await reply(response, project === null ? 404 : 200, project === null ? failure("project_not_found", "Project was not found", context.requestId) : ok({ project }, context.requestId), context, idempotency, mutation)
+        return true
+      }
+      if (businessPath.length === 3 && projectId !== undefined && businessPath[2] === "instruction-revisions" && method === "GET") {
+        const revisions = await store.instructionRevisions(tenantId, projectId)
+        await reply(response, revisions === null ? 404 : 200, revisions === null ? failure("project_not_found", "Project was not found", context.requestId) : ok({ items: revisions }, context.requestId), context, idempotency, mutation)
+        return true
+      }
+      if (businessPath.length === 3 && projectId !== undefined && businessPath[2] === "tasks" && method === "GET") {
+        if (await store.findProject(tenantId, projectId) === null) {
+          await reply(response, 404, failure("project_not_found", "Project was not found", context.requestId), context, idempotency, mutation)
+        } else {
+          await reply(response, 200, ok({ tasks: await store.listTasks(tenantId, projectId) }, context.requestId), context, idempotency, mutation)
+        }
+        return true
+      }
+      if (businessPath.length === 3 && projectId !== undefined && businessPath[2] === "resources" && method === "POST") {
+        await reply(response, 503, failure("storage_projection_not_configured", "Storage resource projection is not configured", context.requestId), context, idempotency, mutation)
+        return true
+      }
+      if (businessPath.length === 4 && projectId !== undefined && businessPath[2] === "skills" && businessPath[3] !== undefined && method === "PATCH") {
+        if (typeof json.enabled !== "boolean") {
+          await reply(response, 400, failure("invalid_project_skill", "Skill enabled must be a boolean", context.requestId), context, idempotency, mutation)
+          return true
+        }
+        const project = await store.findProject(tenantId, projectId)
+        if (project === null) {
+          await reply(response, 404, failure("project_not_found", "Project was not found", context.requestId), context, idempotency, mutation)
+        } else {
+          await store.setProjectSkill(tenantId, project.id, businessPath[3], json.enabled)
+          await reply(response, 200, ok({ skill: { project_id: project.id, name: businessPath[3], enabled: json.enabled } }, context.requestId), context, idempotency, mutation)
+        }
+        return true
+      }
+      if (businessPath.length === 3 && projectId !== undefined && businessPath[2] === "scheduled-tasks" && method === "POST") {
+        const input = scheduledCreateInput(json, projectId)
+        if (input === null) {
+          await reply(response, 400, failure("invalid_scheduled_task", "Scheduled task fields are invalid", context.requestId), context, idempotency, mutation)
+          return true
+        }
+        let task = await store.createScheduledTask(
+          tenantId,
+          context.identity.userId,
+          input,
+          scheduledTaskId(context, `/${businessPath.join("/")}`, idempotencyKey(request) ?? randomUUID()),
+        )
+        if (task.status === "failed") {
+          task = (await store.updateScheduledTask(tenantId, task.id, { status: "active", enabled: true })) ?? task
+        }
+        const scheduleResult = await reconcileSchedulerTask(request, config, context, task, context.identity.userId, "register")
+        if (scheduleResult.status >= 400) {
+          await markScheduledTaskFailed(store, tenantId, task.id)
+          await reply(response, 503, failure("scheduler_registration_failed", "Scheduled task could not be registered", context.requestId), context, idempotency, mutation)
+        } else {
+          await reply(response, 200, ok({ task }, context.requestId), context, idempotency, mutation)
+        }
+        return true
+      }
+    }
+
+    if (businessPath[0] === "scheduled-tasks") {
+      const taskId = businessPath[1]
+      if (businessPath.length === 1 && method === "GET") {
+        await reply(response, 200, ok(scheduledData(await store.listScheduledTasks(tenantId)), context.requestId), context, idempotency, mutation)
+        return true
+      }
+      if (businessPath.length === 1 && method === "POST") {
+        const input = scheduledCreateInput(json, typeof json.project_id === "string" ? json.project_id : undefined)
+        if (input === null) {
+          await reply(response, 400, failure("invalid_scheduled_task", "Scheduled task fields are invalid", context.requestId), context, idempotency, mutation)
+          return true
+        }
+        let task = await store.createScheduledTask(
+          tenantId,
+          context.identity.userId,
+          input,
+          scheduledTaskId(context, `/${businessPath.join("/")}`, idempotencyKey(request) ?? randomUUID()),
+        )
+        if (task.status === "failed") {
+          task = (await store.updateScheduledTask(tenantId, task.id, { status: "active", enabled: true })) ?? task
+        }
+        const scheduleResult = await reconcileSchedulerTask(request, config, context, task, context.identity.userId, "register")
+        if (scheduleResult.status >= 400) {
+          await markScheduledTaskFailed(store, tenantId, task.id)
+          await reply(response, 503, failure("scheduler_registration_failed", "Scheduled task could not be registered", context.requestId), context, idempotency, mutation)
+        } else {
+          await reply(response, 200, ok({ task }, context.requestId), context, idempotency, mutation)
+        }
+        return true
+      }
+      if (businessPath.length === 2 && taskId !== undefined && method === "GET") {
+        const task = await store.findScheduledTask(tenantId, taskId)
+        await reply(response, task === null ? 404 : 200, task === null ? failure("scheduled_task_not_found", "Scheduled task was not found", context.requestId) : ok({ task }, context.requestId), context, idempotency, mutation)
+        return true
+      }
+      if (businessPath.length === 2 && taskId !== undefined && method === "PATCH") {
+        const patch = scheduledPatchInput(json)
+        if (patch === null) {
+          await reply(response, 400, failure("invalid_scheduled_task", "Scheduled task fields are invalid", context.requestId), context, idempotency, mutation)
+          return true
+        }
+        const record = taskId === undefined ? null : await store.findScheduledTaskRecord(tenantId, taskId)
+        const task = record === null ? null : await store.updateScheduledTask(tenantId, taskId, patch)
+        if (task === null) {
+          await reply(response, 404, failure("scheduled_task_not_found", "Scheduled task was not found", context.requestId), context, idempotency, mutation)
+        } else {
+          const scheduleResult = await reconcileSchedulerTask(request, config, context, task, record?.ownerId ?? context.identity.userId, "replace")
+          if (scheduleResult.status >= 400) {
+            await markScheduledTaskFailed(store, tenantId, task.id)
+            await reply(response, 503, failure("scheduler_update_failed", "Scheduled task scheduler registration could not be updated", context.requestId), context, idempotency, mutation)
+          } else {
+            await reply(response, 200, ok({ task }, context.requestId), context, idempotency, mutation)
+          }
+        }
+        return true
+      }
+      if (businessPath.length === 2 && taskId !== undefined && method === "DELETE") {
+        const record = await store.findScheduledTaskRecord(tenantId, taskId)
+        if (record === null) {
+          await reply(response, 404, failure("scheduled_task_not_found", "Scheduled task was not found", context.requestId), context, idempotency, mutation)
+        } else {
+          const scheduleResult = await reconcileSchedulerTask(request, config, context, record.task, record.ownerId, "delete")
+          if (scheduleResult.status >= 400) {
+            await reply(response, 503, failure("scheduler_delete_failed", "Scheduled task scheduler registration could not be removed", context.requestId), context, idempotency, mutation)
+          } else {
+            const deleted = await store.deleteScheduledTask(tenantId, taskId)
+            await reply(response, deleted ? 200 : 404, deleted ? ok({ ok: true }, context.requestId) : failure("scheduled_task_not_found", "Scheduled task was not found", context.requestId), context, idempotency, mutation)
+          }
+        }
+        return true
+      }
+      if (businessPath.length === 3 && taskId !== undefined && businessPath[2] === "retry" && method === "POST") {
+        const record = await store.findScheduledTaskRecord(tenantId, taskId)
+        const task = record === null ? null : await store.updateScheduledTask(tenantId, taskId, { status: "active", enabled: true })
+        if (task === null) {
+          await reply(response, 404, failure("scheduled_task_not_found", "Scheduled task was not found", context.requestId), context, idempotency, mutation)
+        } else {
+          const scheduleResult = await reconcileSchedulerTask(request, config, context, task, record?.ownerId ?? context.identity.userId, "replace")
+          if (scheduleResult.status >= 400) {
+            await markScheduledTaskFailed(store, tenantId, task.id)
+            await reply(response, 503, failure("scheduler_retry_failed", "Scheduled task could not be registered again", context.requestId), context, idempotency, mutation)
+          } else {
+            await reply(response, 200, ok({ task }, context.requestId), context, idempotency, mutation)
+          }
+        }
+        return true
+      }
+    }
+    return false
+  } catch (error) {
+    if (error instanceof Error && error.message === "PROJECT_SLUG_CONFLICT") {
+      await reply(response, 409, failure("project_exists", "A project with this slug already exists", context.requestId), context, idempotency, mutation)
+    } else if (error instanceof Error && error.message === "PROJECT_NOT_FOUND") {
+      await reply(response, 404, failure("project_not_found", "Project was not found", context.requestId), context, idempotency, mutation)
+    } else {
+      await reply(response, 503, failure("business_store_unavailable", "The BFF business store is unavailable", context.requestId), context, idempotency, mutation)
+    }
+    return true
+  }
+}
+
 async function liveOwnerBusiness(
   request: IncomingMessage,
   response: ServerResponse,
@@ -780,6 +1440,88 @@ async function liveOwnerBusiness(
 ): Promise<boolean> {
   const method = request.method || "GET"
 
+  if (businessPath.length === 2 && businessPath[0] === "system" && businessPath[1] === "runtime-manifest" && method === "GET") {
+    const query = queryOf(request)
+    const productId = query.get("product_id")?.trim() ?? ""
+    const locale = query.get("locale")?.trim() || "en-US"
+    const surfaceId = query.get("surface_id")?.trim() || "user-web"
+    if (productId === "" || locale === "" || surfaceId === "") {
+      await reply(response, 400, failure("invalid_runtime_manifest_request", "product_id, locale, and surface_id are required", context.requestId), context, idempotency, mutation)
+      return true
+    }
+    const ownerQuery = new URLSearchParams({ product_id: productId, locale, surface_id: surfaceId })
+    const result = await liveOwnerRequest(request, config, context, "system", `/system/runtime-manifest?${ownerQuery.toString()}`, method)
+    if (result.status >= 400) {
+      await reply(response, result.status, result.body, context, idempotency, mutation)
+      return true
+    }
+    const projected = systemManifestData(result.body)
+    if (projected === null || projected.product_id !== productId || projected.locale !== locale) {
+      await reply(response, 502, failure("upstream_response_invalid", "System runtime manifest did not match the v1 owner contract", context.requestId), context, idempotency, mutation)
+      return true
+    }
+    await reply(response, result.status, ok(projected, context.requestId), context, idempotency, mutation)
+    return true
+  }
+  if (businessPath[0] === "system") {
+    await reply(response, 503, failure("system_projection_not_configured", "This System operation is not exposed by the BFF owner adapter", context.requestId), context, idempotency, mutation)
+    return true
+  }
+
+  const capabilityPath = businessPath[0] === "skills"
+    ? businessPath.length === 1 && method === "GET"
+      ? "/bff/skills"
+      : businessPath.length === 2 && businessPath[1] === "pool" && method === "GET"
+        ? "/bff/skills/pool"
+        : businessPath.length === 2 && businessPath[1] === "catalog" && method === "GET"
+          ? "/bff/skills/catalog"
+          : null
+    : businessPath.length === 2 && businessPath[0] === "mcp" && businessPath[1] === "servers" && method === "GET"
+      ? "/bff/mcp/servers"
+      : null
+  if (capabilityPath !== null) {
+    const query = capabilityPath === "/bff/mcp/servers"
+      ? mappedOwnerQuery(request, { provider_key: "provider_key", limit: "limit", cursor: "cursor" })
+      : mappedOwnerQuery(request, { q: "q", query: "query", tags: "tags", scope_kind: "scope_kind", limit: "limit", cursor: "cursor" })
+    const result = await liveOwnerRequest(request, config, context, "capability", `${capabilityPath}${query}`, method)
+    if (result.status >= 400) {
+      await reply(response, result.status, result.body, context, idempotency, mutation)
+      return true
+    }
+    const projected = capabilityPath === "/bff/mcp/servers"
+      ? capabilityMcpData(result.body, context.identity.namespace)
+      : capabilitySkillsData(result.body, capabilityPath === "/bff/skills/catalog")
+    if (projected === null) {
+      await reply(response, 502, failure("upstream_response_invalid", "Capability projection did not match the v1 owner contract", context.requestId), context, idempotency, mutation)
+      return true
+    }
+    await reply(response, result.status, ok(projected, context.requestId), context, idempotency, mutation)
+    return true
+  }
+  if (businessPath[0] === "skills" || businessPath[0] === "mcp") {
+    await reply(response, 503, failure("capability_projection_not_configured", "This Capability operation is not exposed by the BFF owner adapter", context.requestId), context, idempotency, mutation)
+    return true
+  }
+
+  if (businessPath.length === 1 && businessPath[0] === "library" && method === "GET") {
+    const result = await liveOwnerRequest(request, config, context, "storage", "/internal/bff/library", method)
+    if (result.status >= 400) {
+      await reply(response, result.status, result.body, context, idempotency, mutation)
+      return true
+    }
+    const projected = libraryData(result.body)
+    if (projected === null) {
+      await reply(response, 502, failure("upstream_response_invalid", "Storage library projection did not match the v1 owner contract", context.requestId), context, idempotency, mutation)
+      return true
+    }
+    await reply(response, result.status, ok(projected, context.requestId), context, idempotency, mutation)
+    return true
+  }
+  if (businessPath[0] === "library" || businessPath[0] === "assets" || businessPath[0] === "artifacts") {
+    await reply(response, 503, failure("storage_projection_not_configured", "This Storage operation is not exposed by the BFF owner adapter", context.requestId), context, idempotency, mutation)
+    return true
+  }
+
   if (businessPath.length === 1 && businessPath[0] === "models" && method === "GET") {
     const query = queryOf(request)
     const ownerQuery = new URLSearchParams()
@@ -790,48 +1532,48 @@ async function liveOwnerBusiness(
     const path = `/bff/model-catalog${ownerQuery.size === 0 ? "" : `?${ownerQuery.toString()}`}`
     const result = await liveOwnerRequest(request, config, context, "model", path, method)
     if (result.status >= 400) {
-      reply(response, result.status, result.body, context, idempotency, mutation)
+      await reply(response, result.status, result.body, context, idempotency, mutation)
       return true
     }
     const projected = modelCatalogData(result.body)
     if (projected === null) {
-      reply(response, 502, failure("upstream_response_invalid", "Model catalog did not match the v1 owner contract", context.requestId), context, idempotency, mutation)
+      await reply(response, 502, failure("upstream_response_invalid", "Model catalog did not match the v1 owner contract", context.requestId), context, idempotency, mutation)
       return true
     }
-    reply(response, result.status, ok(projected, context.requestId), context, idempotency, mutation)
+    await reply(response, result.status, ok(projected, context.requestId), context, idempotency, mutation)
     return true
   }
 
   if (businessPath[0] === "billing" && businessPath[1] === "plans" && businessPath.length === 2 && method === "GET") {
     const result = await liveOwnerRequest(request, config, context, "billing", "/v1/commerce/catalog", method)
     if (result.status >= 400) {
-      reply(response, result.status, result.body, context, idempotency, mutation)
+      await reply(response, result.status, result.body, context, idempotency, mutation)
       return true
     }
     const projected = billingPlansData(result.body)
     if (projected === null) {
-      reply(response, 502, failure("upstream_response_invalid", "Billing catalog did not match the v1 owner contract", context.requestId), context, idempotency, mutation)
+      await reply(response, 502, failure("upstream_response_invalid", "Billing catalog did not match the v1 owner contract", context.requestId), context, idempotency, mutation)
       return true
     }
-    reply(response, result.status, ok(projected, context.requestId), context, idempotency, mutation)
+    await reply(response, result.status, ok(projected, context.requestId), context, idempotency, mutation)
     return true
   }
 
   if (businessPath[0] === "billing" && businessPath[1] === "checkout" && businessPath.length === 2 && method === "POST") {
     const planId = typeof json.plan_id === "string" ? json.plan_id.trim() : ""
     if (planId === "") {
-      reply(response, 400, failure("invalid_checkout", "plan_id is required", context.requestId), context, idempotency, mutation)
+      await reply(response, 400, failure("invalid_checkout", "plan_id is required", context.requestId), context, idempotency, mutation)
       return true
     }
     const catalogResult = await liveOwnerRequest(request, config, context, "billing", "/v1/commerce/catalog", "GET")
     if (catalogResult.status >= 400) {
-      reply(response, catalogResult.status, catalogResult.body, context, idempotency, mutation)
+      await reply(response, catalogResult.status, catalogResult.body, context, idempotency, mutation)
       return true
     }
     const catalog = billingPlansData(catalogResult.body)
     const plan = catalog?.plans.find((candidate) => candidate.id === planId)
     if (plan === undefined) {
-      reply(response, 404, failure("plan_not_found", "Billing plan was not found", context.requestId), context, idempotency, mutation)
+      await reply(response, 404, failure("plan_not_found", "Billing plan was not found", context.requestId, ), context, idempotency, mutation)
       return true
     }
     const checkoutBody = Buffer.from(JSON.stringify({
@@ -847,15 +1589,15 @@ async function liveOwnerBusiness(
     }))
     const checkoutResult = await liveOwnerRequest(request, config, context, "billing", "/v1/billing/checkout", method, checkoutBody)
     if (checkoutResult.status >= 400) {
-      reply(response, checkoutResult.status, checkoutResult.body, context, idempotency, mutation)
+      await reply(response, checkoutResult.status, checkoutResult.body, context, idempotency, mutation)
       return true
     }
     const projected = checkoutUrlData(checkoutResult.body)
     if (projected === null) {
-      reply(response, 502, failure("upstream_response_invalid", "Billing checkout did not return a checkout URL", context.requestId), context, idempotency, mutation)
+      await reply(response, 502, failure("upstream_response_invalid", "Billing checkout did not return a checkout URL", context.requestId), context, idempotency, mutation)
       return true
     }
-    reply(response, checkoutResult.status, ok(projected, context.requestId), context, idempotency, mutation)
+    await reply(response, checkoutResult.status, ok(projected, context.requestId), context, idempotency, mutation)
     return true
   }
 
@@ -1196,6 +1938,7 @@ function upstreamKey(segments: string[]): string | null {
   // Chat is a BFF-owned Web contract in mock mode and an Agent business
   // adapter in live mode; it never falls back to a Session service.
   if (segments[0] === "sessions") return "agents"
+  if (segments[0] === "system") return "system"
   if (segments[0] === "models") return "model"
   if (segments[0] === "skills") return "capability"
   if (segments[0] === "mcp" || segments[0] === "connectors" || segments[0] === "preferences" || segments[0] === "cloud-computers" || segments[0] === "integrations") return "capability"
@@ -1221,6 +1964,7 @@ async function handle(
   store: MockStore,
   idempotency: Map<string, IdempotencyEntry>,
   liveSessions: LiveSessionIndex,
+  businessStore: PostgresBusinessStore | null,
 ): Promise<void> {
   const id = requestId(request)
   const segments = pathOf(request)
@@ -1232,7 +1976,8 @@ async function handle(
     // Agent is the only required live dependency for the core Chat path.
     // Other owner adapters are independently deployable and report a
     // route-scoped 503 until their own base URL is configured.
-    const ready = config.mode === "mock" || configuredUpstream(config, "agents") !== null
+    const ready = config.mode === "mock"
+      || (configuredUpstream(config, "agents") !== null && businessStore !== null && await businessStore.ready().then(() => true).catch(() => false))
     send(response, ready ? 200 : 503, { status: "ok", service: "kokoro-bff", mode: config.mode })
     return
   }
@@ -1256,22 +2001,38 @@ async function handle(
     send(response, 200, ok(detail, id))
     return
   }
+  if (segments[0] === "internal" && segments[1] === "bff" && segments[2] === "scheduled-tasks" && segments[3] === "dispatch" && segments.length === 4) {
+    await schedulerDispatch(request, response, config, businessStore, idempotency)
+    return
+  }
   if (segments[0] !== "v1") {
     send(response, 404, failure("route_not_found", "Use the versioned /v1 business API", id))
     return
   }
 
-  const context = authorize(request, config, id)
+  const businessPath = segments.slice(1)
+  let context = authorize(request, config, id)
+  if (
+    context === null
+    && config.mode === "live"
+    && businessPath.length === 2
+    && businessPath[0] === "system"
+    && businessPath[1] === "runtime-manifest"
+    && request.method === "GET"
+    && authorizeServerOnly(request, config)
+  ) {
+    const tenantId = await resolveTenantForManifest(config, id)
+    if (tenantId !== null) context = { requestId: id, identity: { namespace: tenantId, userId: "runtime-manifest" } }
+  }
   if (context === null) {
     send(response, config.sharedSecret !== null ? 403 : 401, failure("service_auth_failed", "BFF authentication failed", id))
     return
   }
-  const businessPath = segments.slice(1)
   // Project and ScheduledTask are BFF business facts. Until the BFF
   // PostgreSQL/Redis fact store is enabled, live mode must fail explicitly;
   // it must not route these resources to System or Scheduler, and must not
   // persist a mock receipt while claiming a successful mutation.
-  if (config.mode === "live" && bffOwnedBusinessPath(businessPath)) {
+  if (config.mode === "live" && bffOwnedBusinessPath(businessPath) && businessStore === null) {
     send(response, 503, failure("business_store_not_configured", "BFF business fact store is not configured", id))
     return
   }
@@ -1296,7 +2057,7 @@ async function handle(
   }
   if (mutationRequired) {
     const route = `/${businessPath.join("/")}`
-    const result = mutationTicket(request, method, route, context, body ?? Buffer.alloc(0), idempotency)
+    const result = await mutationTicket(request, method, route, context, body ?? Buffer.alloc(0), idempotency, config.mode === "live" ? businessStore ?? undefined : undefined)
     if (result.replay !== null) {
       send(response, result.replay.status, result.replay.body)
       return
@@ -1320,6 +2081,9 @@ async function handle(
       await liveAgentSession(request, response, config, context, businessPath, body, json, mutation, idempotency, liveSessions)
       return
     }
+    if (businessStore !== null && bffOwnedBusinessPath(businessPath)) {
+      if (await liveBffBusiness(request, response, config, context, businessPath, json, mutation, idempotency, businessStore)) return
+    }
     if (await liveOwnerBusiness(request, response, config, context, businessPath, json, mutation, idempotency)) return
     const baseUrl = upstreamBase
     if (baseUrl === null) {
@@ -1339,16 +2103,59 @@ async function handle(
   await mockBusiness(request, response, businessPath, context, store, idempotency, mutation, json)
 }
 
+async function reconcilePersistedScheduledTasks(config: BffConfig, store: PostgresBusinessStore): Promise<void> {
+  if (config.upstreams.scheduler === null || config.schedulerTargetUrl === null) return
+  try {
+    const records = await store.listScheduledTaskRecords()
+    const request = { headers: {} } as IncomingMessage
+    let registered = 0
+    let skipped = 0
+    let failed = 0
+    for (const record of records) {
+      const { task, tenantId, ownerId } = record
+      if (!task.enabled || task.status !== "active" || (task.expires_at !== undefined && Date.parse(task.expires_at) <= Date.now())) {
+        skipped += 1
+        continue
+      }
+      const context: Context = {
+        requestId: `bff-startup-scheduler-reconcile-${task.id}`,
+        identity: { namespace: tenantId, userId: ownerId },
+      }
+      const result = await Promise.race([
+        reconcileSchedulerTask(request, config, context, task, ownerId, "register"),
+        new Promise<LiveOwnerResult>(resolve => setTimeout(() => resolve({ status: 504, body: null }), 5000)),
+      ])
+      if (result.status >= 400) failed += 1
+      else registered += 1
+    }
+    if (registered !== 0 || skipped !== 0 || failed !== 0) {
+      console.log(`kokoro-bff scheduler reconciliation registered=${registered} skipped=${skipped} failed=${failed}`)
+    }
+  } catch {
+    // Reconciliation is best-effort. Persisted business facts remain
+    // authoritative and the next startup/retry can reconcile again.
+    console.error("kokoro-bff scheduler reconciliation failed")
+  }
+}
+
 export function createBffServer(config: BffConfig = loadConfig()) {
   const store = new MockStore()
   const idempotency = new Map<string, IdempotencyEntry>()
   const liveSessions: LiveSessionIndex = new Map()
-  return createServer((request, response) => {
-    void handle(request, response, config, store, idempotency, liveSessions).catch(() => {
+  const businessStore = config.mode === "live" && config.postgresUrl !== null && config.redisUrl !== null
+    ? new PostgresBusinessStore(config.postgresUrl, config.redisUrl)
+    : null
+  const server = createServer((request, response) => {
+    void handle(request, response, config, store, idempotency, liveSessions, businessStore).catch(() => {
       if (!response.headersSent) send(response, 500, failure("internal_error", "The BFF encountered an internal error", requestId(request)))
       else response.destroy()
     })
   })
+  if (businessStore !== null && config.mode === "live") {
+    server.once("listening", () => { void reconcilePersistedScheduledTasks(config, businessStore) })
+  }
+  server.once("close", () => { void businessStore?.close() })
+  return server
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
