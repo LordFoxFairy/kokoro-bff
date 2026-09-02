@@ -2,15 +2,15 @@ import { PostgresBffDatabase } from "./client.js"
 import { PostgresIdempotencyRepository } from "./idempotency-repository.js"
 import { PostgresProjectRepository } from "./project-repository.js"
 import { PostgresScheduledTaskRepository } from "./scheduled-task-repository.js"
-import { PENDING_RECEIPT_STATUS, type PersistentReceipt, type ReceiptClaim } from "../../modules/idempotency/repository.js"
-import type { IdempotencyRepository } from "../../modules/idempotency/repository.js"
-import type { ProjectRepository } from "../../modules/projects/repository.js"
-import type { ScheduledTaskRecord, ScheduledTaskRepository } from "../../modules/scheduled/repository.js"
+import { PENDING_RECEIPT_STATUS, type PersistentReceipt, type ReceiptClaim } from "../../application/ports/idempotency-repository.js"
+import type { IdempotencyRepository } from "../../application/ports/idempotency-repository.js"
+import type { ProjectRepository } from "../../application/ports/project-repository.js"
+import type { ScheduledTaskRecord, ScheduledTaskRepository } from "../../application/ports/scheduled-task-repository.js"
 import { BffApplicationServices } from "../../application/services.js"
 
 export { PENDING_RECEIPT_STATUS }
-export type { PersistentReceipt, ReceiptClaim } from "../../modules/idempotency/repository.js"
-export type { ScheduledTaskRecord } from "../../modules/scheduled/repository.js"
+export type { PersistentReceipt, ReceiptClaim } from "../../application/ports/idempotency-repository.js"
+export type { ScheduledTaskRecord } from "../../application/ports/scheduled-task-repository.js"
 
 export class PostgresBffRepositories {
   private readonly database: PostgresBffDatabase

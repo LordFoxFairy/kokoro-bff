@@ -1,4 +1,4 @@
-import type { ChatEvent, ChatMessage, ChatSessionDetail, ChatSessionSummary } from "../../contracts/index.js"
+import type { ChatEvent, ChatMessage, ChatSessionDetail, ChatSessionSummary } from "../../../contracts/index.js"
 import type { AgentChatEvent, AgentChatMessage, BffIdentity } from "./types.js"
 
 function recordPayload(event: AgentChatEvent): Record<string, unknown> {

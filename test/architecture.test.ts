@@ -16,16 +16,19 @@ async function exists(relativePath: string): Promise<boolean> {
   }
 }
 
-test("BFF keeps repository, service, contract, and adapter boundaries explicit", async () => {
+test("BFF keeps contract, application, client, and repository boundaries explicit", async () => {
   for (const relativePath of [
     "src/contracts/index.ts",
+    "src/contracts/mori.ts",
     "src/application/idempotency.ts",
     "src/application/project-service.ts",
     "src/application/scheduled-task-service.ts",
     "src/application/services.ts",
-    "src/modules/idempotency/repository.ts",
-    "src/modules/projects/repository.ts",
-    "src/modules/scheduled/repository.ts",
+    "src/application/ports/idempotency-repository.ts",
+    "src/application/ports/project-repository.ts",
+    "src/application/ports/scheduled-task-repository.ts",
+    "src/application/scheduled/input.ts",
+    "src/application/mori/input.ts",
     "src/infrastructure/postgres/client.ts",
     "src/infrastructure/postgres/idempotency-repository.ts",
     "src/infrastructure/postgres/project-repository.ts",
@@ -40,12 +43,15 @@ test("BFF keeps repository, service, contract, and adapter boundaries explicit",
     "src/http/routes/mori.ts",
     "src/http/routes/scheduler.ts",
     "src/http/routes/routing.ts",
-    "src/adapters/agent/index.ts",
-    "src/adapters/agent/types.ts",
-    "src/adapters/agent/launch.ts",
-    "src/adapters/agent/control.ts",
-    "src/adapters/agent/projection.ts",
-    "src/adapters/music.ts",
+    "src/infrastructure/clients/agent/index.ts",
+    "src/infrastructure/clients/agent/types.ts",
+    "src/infrastructure/clients/agent/launch.ts",
+    "src/infrastructure/clients/agent/control.ts",
+    "src/infrastructure/clients/agent/projection.ts",
+    "src/infrastructure/clients/mori/owner-route.ts",
+    "src/infrastructure/clients/scheduler/job.ts",
+    "src/infrastructure/mock/mori-store.ts",
+    "src/interfaces/http/agui/events.ts",
   ]) {
     assert.equal(await exists(relativePath), true, relativePath)
   }
@@ -54,6 +60,8 @@ test("BFF keeps repository, service, contract, and adapter boundaries explicit",
     "src/business-store.ts",
     "src/store.ts",
     "src/migrate.ts",
+    "src/adapters",
+    "src/modules",
   ]) {
     assert.equal(await exists(legacyPath), false, legacyPath)
   }
@@ -80,15 +88,25 @@ test("BFF runtime has no compatibility migration or direct database setup in the
   assert.equal(setup.includes("db:migrate"), false)
 })
 
-test("BFF module repository ports stay free of infrastructure dependencies", async () => {
+test("BFF application ports stay free of infrastructure dependencies", async () => {
   for (const relativePath of [
-    "src/modules/idempotency/repository.ts",
-    "src/modules/projects/repository.ts",
-    "src/modules/scheduled/repository.ts",
+    "src/application/ports/idempotency-repository.ts",
+    "src/application/ports/project-repository.ts",
+    "src/application/ports/scheduled-task-repository.ts",
   ]) {
     const source = await readFile(path.join(root, relativePath), "utf8")
     assert.equal(source.includes("from \"pg\""), false, relativePath)
     assert.equal(source.includes("infrastructure/"), false, relativePath)
     assert.equal(source.includes("SELECT "), false, relativePath)
+  }
+})
+
+test("BFF production code has one explicit owner boundary", async () => {
+  const files = await import("node:fs/promises").then(({ readdir }) => readdir(path.join(root, "src"), { recursive: true }))
+  for (const file of files) {
+    if (typeof file !== "string" || !file.endsWith(".ts")) continue
+    const source = await readFile(path.join(root, "src", file), "utf8")
+    assert.equal(source.includes("/adapters/"), false, `src/${file}`)
+    assert.equal(source.includes("/modules/"), false, `src/${file}`)
   }
 })

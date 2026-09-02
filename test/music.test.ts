@@ -4,7 +4,7 @@ import { afterEach, describe, it } from "node:test"
 
 import { createBffServer } from "../dist/main.js"
 import type { BffConfig } from "../src/config.js"
-import { musicOwnerRoute, projectMoriResponse, projectMoriEventStream } from "../dist/adapters/music.js"
+import { musicOwnerRoute, projectMoriResponse, projectMoriEventStream } from "../dist/infrastructure/clients/mori/owner-route.js"
 
 const servers: Server[] = []
 

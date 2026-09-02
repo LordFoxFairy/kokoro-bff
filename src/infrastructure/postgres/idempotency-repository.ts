@@ -5,7 +5,7 @@ import {
   type IdempotencyRepository,
   type PersistentReceipt,
   type ReceiptClaim,
-} from "../../modules/idempotency/repository.js"
+} from "../../application/ports/idempotency-repository.js"
 
 export class PostgresIdempotencyRepository implements IdempotencyRepository {
   public constructor(private readonly pool: Pool) {}

@@ -4,7 +4,7 @@ import type {
   ScheduledTaskPatch,
   ScheduledTaskRecord,
   ScheduledTaskRepository,
-} from "../modules/scheduled/repository.js"
+} from "./ports/scheduled-task-repository.js"
 
 /** Scheduled-task use cases. Scheduler registration remains an explicit adapter boundary. */
 export class ScheduledTaskService {

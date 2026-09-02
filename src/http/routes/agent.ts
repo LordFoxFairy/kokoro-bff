@@ -3,13 +3,15 @@ import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config.js"
 import { failure, ok } from "../../contracts/index.js"
 import { proxyUpstream } from "../../upstream.js"
-import { agentIdentityHeaders, buildAgentControl, buildAgentLaunch, buildSessionDetail, mapAgentEvent, type AgentChatEvent, type AgentChatMessage } from "../../adapters/agent.js"
+import { agentIdentityHeaders, buildAgentControl, buildAgentLaunch, buildSessionDetail, mapAgentEvent, type AgentChatEvent, type AgentChatMessage } from "../../infrastructure/clients/agent/index.js"
 import { agentMessageListData, agentSessionAssertion, agentSessionListData, dataOf, messageCursor } from "../../application/projections.js"
 import type { ChatEvent } from "../../contracts/index.js"
 import { normalizeUpstreamResponse, reply } from "../response.js"
 import { headerString, incomingHeaders, idempotencyKey, queryOf, type Context } from "../request.js"
 import type { IdempotencyEntry, MutationTicket } from "../../application/idempotency.js"
-import { chatSseFrame, waitForSsePoll } from "./helpers.js"
+import { waitForSsePoll } from "./helpers.js"
+import { agUiSseFrame } from "../../interfaces/http/agui/sse.js"
+import { createAgUiProjectionState, projectChatEvent } from "../../interfaces/http/agui/events.js"
 
 export async function callAgent(
   config: BffConfig,
@@ -196,6 +198,7 @@ export async function liveAgentSession(
     const cursor = lastEventId === "" ? 0 : Number(lastEventId)
     let afterSeq = Number.isInteger(cursor) && cursor >= 0 ? cursor : 0
     let streamStarted = false
+    const projectionState = createAgUiProjectionState()
     try {
       for (;;) {
         const result = await callAgent(config, baseUrl, `/v1/sessions/${encodeURIComponent(sessionId)}/events?after_seq=${afterSeq}&limit=1000`, "GET", context.requestId, request, undefined, context, assertion)
@@ -221,8 +224,9 @@ export async function liveAgentSession(
           streamStarted = true
         }
         const events = rawEvents.map(mapAgentEvent).filter((event): event is ChatEvent => event !== null)
-        if (events.length > 0) {
-          response.write(events.map(chatSseFrame).join(""))
+        const agUiEvents = events.flatMap((event) => projectChatEvent(event, projectionState))
+        if (agUiEvents.length > 0) {
+          response.write(agUiEvents.map(agUiSseFrame).join(""))
           afterSeq = Math.max(afterSeq, ...events.map((event) => event.seq))
         } else {
           response.write(": keep-alive\n\n")

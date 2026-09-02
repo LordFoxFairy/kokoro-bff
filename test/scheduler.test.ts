@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
-import { buildSchedulerJob, schedulerJobName } from "../dist/adapters/scheduler.js"
+import { buildSchedulerJob, schedulerJobName } from "../dist/infrastructure/clients/scheduler/job.js"
 
 describe("BFF Scheduler adapter", () => {
   it("maps a BFF task into a stable UTC ScheduleJob", () => {

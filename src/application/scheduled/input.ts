@@ -1,4 +1,4 @@
-import type { ScheduledTaskCreateInput, ScheduledTaskPatch } from "./repository.js"
+import type { ScheduledTaskCreateInput, ScheduledTaskPatch } from "../ports/scheduled-task-repository.js"
 
 export function scheduledCreateInput(json: Record<string, unknown>, projectId?: string): ScheduledTaskCreateInput | null {
   const title = typeof json.title === "string" ? json.title.trim() : ""

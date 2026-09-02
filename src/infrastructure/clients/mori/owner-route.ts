@@ -1,6 +1,6 @@
-import { ok, type BffEnvelope } from "../contracts/index.js"
-import { isRecord } from "../http/request.js"
-import type { MoriGenerationStatus } from "./mori.js"
+import { ok, type BffEnvelope } from "../../../contracts/index.js"
+import { isRecord } from "../../../http/request.js"
+import type { MoriGenerationStatus } from "../../../contracts/mori.js"
 
 export type MoriOwnerResponseKind =
   | "project_list"

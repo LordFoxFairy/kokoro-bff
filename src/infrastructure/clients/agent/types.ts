@@ -1,4 +1,4 @@
-import type { ChatEvent, ChatMessage, ChatSessionDetail, ChatSessionSummary } from "../../contracts/index.js"
+import type { ChatEvent, ChatMessage, ChatSessionDetail, ChatSessionSummary } from "../../../contracts/index.js"
 
 export type BffIdentity = {
   namespace: string

@@ -163,14 +163,14 @@ Model/Billing 的 owner HTTP 面明确注册为 `web-bff` caller；Agent ingress
 ### Live adapter boundary
 
 `KOKORO_*_BASE_URL` 只选择 owner 服务，不表示 BFF 已经拥有该 owner 的领域事实。BFF 的 live
-实现必须在 `src/adapters/<owner>/` 中完成请求/响应、权限、错误、超时和幂等映射；通用
+实现必须在 `src/infrastructure/clients/<owner>/` 中完成 owner 请求/响应、错误和超时映射；通用
 `proxyUpstream` 只允许作为尚未接入的显式 transport fixture，不能被验收报告当成业务闭环。
 
 当前 owner 事实归属固定为：
 
 | Web-facing surface | BFF boundary | Fact owner |
 | --- | --- | --- |
-| Chat/session/run/SSE | `src/adapters/agent/` + BFF Chat | Agent execution facts; BFF owns public projection. The boundary is split into identity, launch/control builders, and chat projections; the root `src/adapters/agent.ts` is only a compatibility barrel. |
+| Chat/session/run/SSE | `src/infrastructure/clients/agent/` + BFF Chat | Agent execution facts; BFF owns public projection. The boundary is split into identity, launch/control builders, chat projections, and `src/interfaces/http/agui/` transport encoding. |
 | Project/workspace projection | BFF business adapter | BFF projection; System owns Site/Workspace/Policy |
 | Skills/MCP | Capability Connect adapter | Capability |
 | Model selection | `liveOwnerBusiness` Model projection | Model |

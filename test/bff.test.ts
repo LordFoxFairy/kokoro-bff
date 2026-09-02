@@ -1119,11 +1119,11 @@ describe("kokoro-bff v1 mock contract", () => {
     const eventsText = await events.text()
     const frames = eventsText.trim().split(/\n\n/u).filter(Boolean)
     assert.ok(frames.length >= 2)
-    assert.match(frames[0] || "", /event: session\.created/u)
+    assert.match(frames[0] || "", /"type":"CUSTOM"/u)
     const firstFrameData = frames[0]?.split("\n").find((line) => line.startsWith("data: "))?.slice("data: ".length) || ""
-    const firstEvent = JSON.parse(firstFrameData) as { kind: string; payload: { owner_id: string } }
-    assert.equal(firstEvent.kind, "session.created")
-    assert.equal(firstEvent.payload.owner_id, "ns_test")
+    const firstEvent = JSON.parse(firstFrameData) as { name: string; value: { owner_id: string } }
+    assert.equal(firstEvent.name, "kokoro.session.created")
+    assert.equal(firstEvent.value.owner_id, "ns_test")
 
     const control = await fetch(`${base}/v1/sessions/${sessionId}/runs/${messageBody.data.run_id}/control`, {
       method: "POST",
@@ -1288,9 +1288,10 @@ describe("kokoro-bff v1 mock contract", () => {
     const events = await fetch(`${base}/v1/sessions/session-live/events`, { headers: authHeaders() })
     assert.equal(events.status, 200)
     const eventFrames = (await events.text()).trim().split("\n\n").filter(Boolean)
-    assert.equal(eventFrames.length, 4)
-    assert.match(eventFrames[0] || "", /"kind":"run.created"/u)
-    assert.match(eventFrames[1] || "", /"kind":"message.delta"/u)
+    assert.equal(eventFrames.length, 5)
+    assert.match(eventFrames[0] || "", /"type":"RUN_STARTED"/u)
+    assert.match(eventFrames[1] || "", /"type":"TEXT_MESSAGE_START"/u)
+    assert.match(eventFrames[2] || "", /"type":"TEXT_MESSAGE_CONTENT"/u)
 
     const detail = await fetch(`${base}/v1/sessions/session-live`, { headers: authHeaders() })
     assert.equal(detail.status, 200)

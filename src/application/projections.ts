@@ -1,7 +1,7 @@
 import type { IncomingMessage } from "node:http"
 
 import type { ChatMessage, ChatSessionSummary, LibraryItem, McpServer } from "../contracts/index.js"
-import { mapAgentMessage, type AgentChatMessage } from "../adapters/agent.js"
+import { mapAgentMessage, type AgentChatMessage } from "../infrastructure/clients/agent/index.js"
 import { isRecord, queryOf, type Context } from "../http/request.js"
 
 export function ownerIdentityHeaders(context: Context): Record<string, string> {

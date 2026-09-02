@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@ag-ui/core':
+        specifier: 0.0.59
+        version: 0.0.59
       '@bufbuild/protobuf':
         specifier: 2.14.0
         version: 2.14.0
@@ -32,6 +35,9 @@ importers:
         version: 5.9.3
 
 packages:
+
+  '@ag-ui/core@0.0.59':
+    resolution: {integrity: sha512-hDgy4ipTqXieT8YG8Mr917Y+FD/f11VK1GefZ5CwTDCuNqS/oTwjJ5l/DZkicThgS8hQW/Y7wPylPBMBJ8BkUg==}
 
   '@bufbuild/protobuf@2.14.0':
     resolution: {integrity: sha512-C3UGsiCwSprE2NKIIFA3hCDlpXTMCAXRZuEVp88L1GY36Y41+rYL5fryE+nOFhp4p4JPQvdV8PQ4DWgHgeTE+w==}
@@ -157,7 +163,14 @@ packages:
     resolution: {integrity: sha512-LKYU1iAXJXUgAXn9URjiu+MWhyUXHsvfp7mcuYm9dSUKK0/CjtrUwFAxD82/mCWbtLsGjFIad0wIsod4zrTAEQ==}
     engines: {node: '>=0.4'}
 
+  zod@3.25.76:
+    resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
+
 snapshots:
+
+  '@ag-ui/core@0.0.59':
+    dependencies:
+      zod: 3.25.76
 
   '@bufbuild/protobuf@2.14.0': {}
 
@@ -258,3 +271,5 @@ snapshots:
   undici-types@6.21.0: {}
 
   xtend@4.0.2: {}
+
+  zod@3.25.76: {}

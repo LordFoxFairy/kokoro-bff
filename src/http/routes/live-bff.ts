@@ -10,7 +10,7 @@ import { reply } from "../response.js"
 import type { IdempotencyEntry, MutationTicket } from "../../application/idempotency.js"
 import { projectData, scheduledData } from "./helpers.js"
 import { markScheduledTaskFailed, reconcileSchedulerTask } from "./scheduler.js"
-import { scheduledCreateInput, scheduledPatchInput } from "../../modules/scheduled/input.js"
+import { scheduledCreateInput, scheduledPatchInput } from "../../application/scheduled/input.js"
 import { scheduledTaskId } from "./scheduler.js"
 
 export async function liveBffBusiness(

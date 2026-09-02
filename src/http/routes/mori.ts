@@ -1,8 +1,8 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 
 import { failure, ok } from "../../contracts/index.js"
-import { MoriMockBffStore } from "../../adapters/mori.js"
-import { moriExportInput, moriGenerationInput, moriPageInput, moriProjectInput, moriSongPlanInput } from "../../modules/mori/input.js"
+import { MoriMockBffStore } from "../../infrastructure/mock/mori-store.js"
+import { moriExportInput, moriGenerationInput, moriPageInput, moriProjectInput, moriSongPlanInput } from "../../application/mori/input.js"
 import { reply } from "../response.js"
 import { headerString, queryOf, type Context } from "../request.js"
 import type { IdempotencyEntry, MutationTicket } from "../../application/idempotency.js"

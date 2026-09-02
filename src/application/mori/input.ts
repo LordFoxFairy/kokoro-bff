@@ -1,6 +1,6 @@
 import type { IncomingMessage } from "node:http"
 
-import type { MoriGenerationInput, MoriSongPlan } from "../../adapters/mori.js"
+import type { MoriGenerationInput, MoriSongPlan } from "../../contracts/mori.js"
 import { queryOf } from "../../http/request.js"
 
 export function moriGenerationInput(json: Record<string, unknown>): MoriGenerationInput | null {

@@ -2,13 +2,13 @@ import { randomUUID } from "node:crypto"
 
 import type { ScheduledTask } from "../../contracts/index.js"
 import type { PostgresBffDatabase } from "./client.js"
-import type { ProjectRepository } from "../../modules/projects/repository.js"
+import type { ProjectRepository } from "../../application/ports/project-repository.js"
 import type {
   ScheduledTaskCreateInput,
   ScheduledTaskPatch,
   ScheduledTaskRecord,
   ScheduledTaskRepository,
-} from "../../modules/scheduled/repository.js"
+} from "../../application/ports/scheduled-task-repository.js"
 
 type ScheduledTaskRow = {
   task_id: string

@@ -76,7 +76,7 @@ Live 模式通过 `KOKORO_MUSIC_BASE_URL` 接入独立的 Music owner。BFF 将�
 路由映射到 owner 的 `/internal/bff/mori/*` ingress，并负责身份、幂等、状态/事件 projection
 和错误归一；未配置 owner 时返回 `503 music_owner_not_configured`，不回退到 Mock 事实。
 
-Music owner 的响应会经过 `src/adapters/music.ts` 的 provider-neutral projection：未知字段会
+Music owner 的响应会经过 `src/infrastructure/clients/mori/owner-route.ts` 的 provider-neutral projection：未知字段会
 被丢弃，SSE 只转发合法的 Mori generation event envelope，provider token、task id、provider
 URL 和 provider 名称永远不会进入浏览器响应。owner 的服务身份通过 `KOKORO_INTERNAL_SECRET_BFF`
 传递，浏览器提交的 bearer token 不会被转发。

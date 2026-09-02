@@ -1,4 +1,4 @@
-import type { ScheduledTask } from "../contracts/index.js"
+import type { ScheduledTask } from "../../../contracts/index.js"
 
 export type SchedulerJob = {
   name: string

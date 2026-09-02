@@ -1,7 +1,7 @@
 import type { IncomingMessage } from "node:http"
 
 import { failure } from "../contracts/index.js"
-import { PENDING_RECEIPT_STATUS, type IdempotencyRepository } from "../modules/idempotency/repository.js"
+import { PENDING_RECEIPT_STATUS, type IdempotencyRepository } from "./ports/idempotency-repository.js"
 import { fingerprintBody, idempotencyKey, type Context } from "../http/request.js"
 
 export type IdempotencyReceipt = { status: number; body: unknown }

@@ -1,5 +1,5 @@
 import type { Project, ProjectInstructionRevision, Task } from "../contracts/index.js"
-import type { ProjectRepository } from "../modules/projects/repository.js"
+import type { ProjectRepository } from "./ports/project-repository.js"
 
 /** Project use cases. HTTP handlers depend on this service, not on SQL adapters. */
 export class ProjectService {

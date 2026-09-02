@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto"
 
 import type { Project, ProjectInstructionRevision, Task } from "../../contracts/index.js"
 import type { PostgresBffDatabase } from "./client.js"
-import type { ProjectRepository } from "../../modules/projects/repository.js"
+import type { ProjectRepository } from "../../application/ports/project-repository.js"
 
 type ProjectRow = {
   project_id: string

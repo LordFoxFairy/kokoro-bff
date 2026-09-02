@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from "node:http"
 
 import { failure } from "../../contracts/index.js"
 import type { BffConfig } from "../../config.js"
-import { projectMoriEventStream, projectMoriResponse, musicOwnerRoute } from "../../adapters/music.js"
+import { projectMoriEventStream, projectMoriResponse, musicOwnerRoute } from "../../infrastructure/clients/mori/owner-route.js"
 import { ownerIdentityHeaders } from "../../application/projections.js"
 import { proxyUpstream } from "../../upstream.js"
 import { incomingHeaders, type Context } from "../request.js"

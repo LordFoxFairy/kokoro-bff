@@ -3,12 +3,14 @@ import type { IncomingMessage, ServerResponse } from "node:http"
 import type { AgentConnectionSetup, BillingSummary, LibraryItem, Project, ScheduledTask, Skill } from "../../contracts/index.js"
 import { failure, ok, type ChatSessionDetail } from "../../contracts/index.js"
 import { MockBffStore } from "../../infrastructure/mock/bff-store.js"
-import { MoriMockBffStore } from "../../adapters/mori.js"
-import { buildAgentControl } from "../../adapters/agent.js"
+import { MoriMockBffStore } from "../../infrastructure/mock/mori-store.js"
+import { buildAgentControl } from "../../infrastructure/clients/agent/index.js"
 import { reply } from "../response.js"
 import { headerString, idempotencyKey, isRecord, queryOf, type Context } from "../request.js"
 import type { IdempotencyEntry, MutationTicket } from "../../application/idempotency.js"
-import { chatSessionDetailData, chatSessionsData, chatSseFrame, githubSkillSource, mcpRegisterInput, mockControlReceipt, PLATFORMS, projectData, scheduledData, sessionScope, skillData, taskData } from "./helpers.js"
+import { chatSessionDetailData, chatSessionsData, githubSkillSource, mcpRegisterInput, mockControlReceipt, PLATFORMS, projectData, scheduledData, sessionScope, skillData, taskData } from "./helpers.js"
+import { agUiSseFrame } from "../../interfaces/http/agui/sse.js"
+import { createAgUiProjectionState, projectChatEvent } from "../../interfaces/http/agui/events.js"
 import { skillCatalogData, skillPoolData } from "./owner.js"
 import { mockMoriBusiness } from "./mori.js"
 
@@ -97,7 +99,9 @@ export async function mockBusiness(
           response.end(": keep-alive\n\n")
           return
         }
-        response.end(events.map((event) => chatSseFrame(event)).join(""))
+        const projectionState = createAgUiProjectionState()
+        const agUiEvents = events.flatMap((event) => projectChatEvent(event, projectionState))
+        response.end(agUiEvents.map(agUiSseFrame).join(""))
         return
       }
     } else if (segments.length === 5 && segments[2] === "runs" && segments[4] === "control" && method === "POST") {

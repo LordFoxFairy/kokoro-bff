@@ -1,5 +1,5 @@
-import type { ProjectRepository } from "../modules/projects/repository.js"
-import type { ScheduledTaskRepository } from "../modules/scheduled/repository.js"
+import type { ProjectRepository } from "./ports/project-repository.js"
+import type { ScheduledTaskRepository } from "./ports/scheduled-task-repository.js"
 import { ProjectService } from "./project-service.js"
 import { ScheduledTaskService } from "./scheduled-task-service.js"
 

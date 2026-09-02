@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto"
 import type { IncomingMessage, ServerResponse } from "node:http"
 
-import type { AgentConnectionSetup, ChatEvent, ChatSessionDetail, ChatSessionSummary, McpTransport, Project, ScheduledTask, Skill, Task } from "../../contracts/index.js"
+import type { AgentConnectionSetup, ChatSessionDetail, ChatSessionSummary, McpTransport, Project, ScheduledTask, Skill, Task } from "../../contracts/index.js"
 import { queryOf, stableStringify, type Context } from "../request.js"
 
 export const PLATFORMS = new Set<AgentConnectionSetup["platform"]>(["telegram", "line", "slack"])
@@ -105,10 +105,6 @@ export function chatSessionDetailData(detail: ChatSessionDetail): ChatSessionDet
   return detail
 }
 export function chatShareData(shareId: string): { share_id: string } { return { share_id: shareId } }
-export function chatSseFrame(event: ChatEvent): string {
-  return `id: ${event.seq}\nevent: ${event.kind}\ndata: ${JSON.stringify(event)}\n\n`
-}
-
 export function waitForSsePoll(request: IncomingMessage, response: ServerResponse, delayMs: number): Promise<boolean> {
   if (request.aborted || response.destroyed || response.writableEnded) return Promise.resolve(false)
   return new Promise((resolve) => {
