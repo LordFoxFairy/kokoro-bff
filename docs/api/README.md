@@ -9,6 +9,7 @@ Kokoro 的 API 文档以 **API-first** 为准：先冻结可观察的 HTTP 契�
 
 - [v1 总览](./v1/README.md)
 - [Projects v1](./v1/projects.md)
+- [Mori Music v1](./v1/mori.md)
 - [Chat v1](./v1/sessions.md)
 - [Skills v1](./v1/skills.md)
 - [MCP v1](./v1/mcp.md)
@@ -25,6 +26,7 @@ docs/api/
 └── v1/
     ├── README.md       # 版本、鉴权、包络、通用约定
     ├── projects.md     # Projects 与项目级投影
+    ├── mori.md         # Mori 音乐生成与 SSE projection
     ├── sessions.md     # Chat / shared snapshot 投影
     ├── skills.md       # Skills、GitHub skill、quota/revisions
     ├── mcp.md          # MCP servers 与连接投影

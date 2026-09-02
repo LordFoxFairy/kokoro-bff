@@ -23,6 +23,8 @@ tags:
     description: Tenant-scoped runtime manifest projection.
   - name: Projects
     description: BFF-owned projects and project resources.
+  - name: Mori Music
+    description: Provider-neutral music creation projections and generation events.
   - name: Chat
     description: Asynchronous sessions, messages, event streams, and run controls.
   - name: Models
@@ -484,6 +486,114 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProjectResponse'
         '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/mori/projects:
+    get:
+      tags: [Mori Music]
+      operationId: listMoriProjects
+      summary: List Mori music projects
+      responses:
+        '200':
+          description: Mori project list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MoriProjectListResponse'
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+  /v1/mori/projects/{projectRef}:
+    parameters:
+      - $ref: '#/components/parameters/MoriProjectRef'
+    get:
+      tags: [Mori Music]
+      operationId: getMoriProject
+      summary: Get a Mori music project
+      responses:
+        '200':
+          description: Mori project projection
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MoriProjectResponse'
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/mori/projects/{projectRef}/generations:
+    parameters:
+      - $ref: '#/components/parameters/MoriProjectRef'
+    post:
+      tags: [Mori Music]
+      operationId: createMoriGeneration
+      summary: Queue a Mori music generation
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MoriGenerationRequest'
+      responses:
+        '202':
+          description: Generation queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MoriGenerationReceiptResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/mori/generations/{generationRef}:
+    parameters:
+      - $ref: '#/components/parameters/MoriGenerationRef'
+    get:
+      tags: [Mori Music]
+      operationId: getMoriGeneration
+      summary: Get a Mori generation snapshot
+      responses:
+        '200':
+          description: Generation snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MoriGenerationResponse'
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/mori/generations/{generationRef}/events:
+    parameters:
+      - $ref: '#/components/parameters/MoriGenerationRef'
+      - $ref: '#/components/parameters/MoriLastEventId'
+    get:
+      tags: [Mori Music]
+      operationId: streamMoriGenerationEvents
+      summary: Stream Mori generation progress events
+      responses:
+        '200':
+          description: Server-sent generation events
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/mori/generations/{generationRef}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/MoriGenerationRef'
+    post:
+      tags: [Mori Music]
+      operationId: cancelMoriGeneration
+      summary: Cancel a Mori generation
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '202':
+          description: Cancellation applied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MoriGenerationReceiptResponse'
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
@@ -1132,6 +1242,32 @@ components:
       required: true
       schema:
         type: string
+    MoriProjectRef:
+      name: projectRef
+      in: path
+      required: true
+      description: Opaque Mori music project reference.
+      schema:
+        type: string
+        minLength: 1
+      example: project_preview_first_light
+    MoriGenerationRef:
+      name: generationRef
+      in: path
+      required: true
+      description: Opaque Mori generation reference.
+      schema:
+        type: string
+        minLength: 1
+      example: generation_mori_1
+    MoriLastEventId:
+      name: Last-Event-ID
+      in: header
+      required: false
+      description: Mori generation event cursor; the stream resumes strictly after this id.
+      schema:
+        type: string
+      example: generation_mori_1:2
     SkillName:
       name: skill
       in: path
@@ -1627,6 +1763,88 @@ components:
           required: [project]
           properties:
             project: { $ref: '#/components/schemas/Project' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    MoriProject:
+      type: object
+      required: [project_ref, title, description, current_version_ref, candidate_count, last_activity_at]
+      additionalProperties: false
+      properties:
+        project_ref: { type: string, minLength: 1 }
+        title: { type: string }
+        description: { type: string }
+        current_version_ref: { type: [string, 'null'] }
+        candidate_count: { type: integer, minimum: 0 }
+        last_activity_at: { type: string, format: date-time }
+    MoriProjectListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [projects, next_cursor]
+          properties:
+            projects:
+              type: array
+              items: { $ref: '#/components/schemas/MoriProject' }
+            next_cursor: { type: [string, 'null'] }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    MoriProjectResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/MoriProject' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    MoriGenerationRequest:
+      type: object
+      required: [song_plan_ref, mode, prompt, lyrics, lyrics_mode, style, reference_asset_refs, voice_ref, duration_seconds]
+      additionalProperties: false
+      properties:
+        song_plan_ref: { type: [string, 'null'] }
+        mode: { type: string, enum: [smart, custom] }
+        prompt: { type: string, minLength: 1 }
+        lyrics: { type: [string, 'null'] }
+        lyrics_mode: { type: string, enum: [lyrics, instrumental] }
+        style: { type: [string, 'null'] }
+        reference_asset_refs:
+          type: array
+          items: { type: string }
+        voice_ref: { type: [string, 'null'] }
+        duration_seconds: { type: [integer, 'null'], minimum: 30, maximum: 600 }
+    MoriGenerationReceipt:
+      type: object
+      required: [generation_ref, status]
+      additionalProperties: false
+      properties:
+        generation_ref: { type: string, minLength: 1 }
+        status: { type: string, enum: [queued, preparing, generating] }
+    MoriGenerationReceiptResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/MoriGenerationReceipt' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    MoriGeneration:
+      type: object
+      required: [generation_ref, project_ref, song_plan_ref, mode, status, progress, candidate_refs, created_at]
+      additionalProperties: false
+      properties:
+        generation_ref: { type: string, minLength: 1 }
+        project_ref: { type: string, minLength: 1 }
+        song_plan_ref: { type: [string, 'null'] }
+        mode: { type: string, enum: [smart, custom] }
+        status:
+          type: string
+          enum: [queued, preparing, generating, post_processing, succeeded, failed, cancelled, expired]
+        progress: { type: integer, minimum: 0, maximum: 100 }
+        candidate_refs:
+          type: array
+          items: { type: string }
+        created_at: { type: string, format: date-time }
+    MoriGenerationResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/MoriGeneration' }
         meta: { $ref: '#/components/schemas/RequestMeta' }
     Task:
       type: object

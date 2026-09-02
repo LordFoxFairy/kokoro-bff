@@ -19,7 +19,7 @@ BFF 不负责：
 - Agent Redis Worker 的内部实现
 - 直接访问其他业务子仓库的 SQL
 
-机器可读契约：[openapi.yaml](./openapi.yaml)。本阶段覆盖 Health、System runtime manifest、Projects、Chat、Models、Skills、MCP、Scheduled、Agents setup、Library 与 Billing 的现有 v1 业务面。
+机器可读契约：[openapi.yaml](./openapi.yaml)。本阶段覆盖 Health、System runtime manifest、Projects、Mori Music、Chat、Models、Skills、MCP、Scheduled、Agents setup、Library 与 Billing 的现有 v1 业务面。
 
 ## Base URL 和调用方
 
@@ -150,6 +150,7 @@ Model/Billing 的 owner HTTP 面明确注册为 `web-bff` caller；Agent ingress
 | 资源 | v1 文档 | Mock | Live 替换 |
 | --- | --- | --- | --- |
 | Projects | 已完成 | 已完成 | BFF-owned PostgreSQL fact store；System 仅承接 Site/Workspace/Policy |
+| Mori Music | v1 projection | 已完成（Mock） | Live 需要显式 Music owner adapter；不回退到 Mock |
 | Chat | 已完成 | 已完成 | BFF Chat adapter → `KOKORO_AGENT_BASE_URL` Agent HTTP ingress；session list 由 Agent 持久化查询，rename/delete/share 仍显式标注能力边界 |
 | Model | v1 owner adapter | 已完成 | `/bff/model-catalog` → `{ data: { models } }`，由 BFF 注入 tenant/subject 上下文 |
 | Skills | Connect owner adapter | 已完成（Mock） | live 使用 Capability 专用 projection；未接入的写操作显式返回 503 |

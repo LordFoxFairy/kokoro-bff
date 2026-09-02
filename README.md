@@ -56,6 +56,8 @@ x-kokoro-principal-id: <sealed-session user id>
 | GET | `/healthz`, `/readyz` | 进程/配置探针，不需要业务身份 |
 | GET/POST | `/v1/projects` | 专案列表与创建 |
 | GET/PATCH | `/v1/projects/:projectId` | 专案投影与 instruction 更新 |
+| GET/POST | `/v1/mori/projects[/:projectRef]/generations` | Mori 音乐项目与生成 receipt（Mock） |
+| GET/POST | `/v1/mori/generations/:generationRef[/events\|/cancel]` | Mori Generation 快照、SSE 和取消（Mock） |
 | GET | `/v1/projects/:projectId/tasks`, `/v1/projects/:projectId/instruction-revisions` | 专案任务与 instruction 历史 |
 | POST/PATCH | `/v1/projects/:projectId/resources`, `/v1/projects/:projectId/scheduled-tasks`, `/v1/projects/:projectId/skills/:skill` | 专案资源、排程与技能投影 |
 | GET | `/v1/skills`, `/v1/skills/pool`, `/v1/skills/catalog` | 技能目录/池 |

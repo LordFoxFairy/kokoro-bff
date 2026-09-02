@@ -34,6 +34,7 @@ import {
   type AgentChatMessage,
 } from "./adapters/agent.js"
 import { buildSchedulerJob, schedulerJobName, type SchedulerJob } from "./adapters/scheduler.js"
+import { MoriMockStore, type MoriGenerationInput } from "./adapters/mori.js"
 
 const PLATFORMS = new Set<AgentConnectionSetup["platform"]>(["telegram", "line", "slack"])
 
@@ -307,6 +308,43 @@ function requestBodyJson(request: IncomingMessage, body: Buffer): Record<string,
     return isRecord(parsed) && !Array.isArray(parsed) ? parsed : null
   } catch {
     return null
+  }
+}
+
+function moriGenerationInput(json: Record<string, unknown>): MoriGenerationInput | null {
+  const mode = json.mode
+  const prompt = json.prompt
+  const lyricsMode = json.lyrics_mode
+  const songPlanRef = json.song_plan_ref
+  const lyrics = json.lyrics
+  const style = json.style
+  const references = json.reference_asset_refs
+  const voiceRef = json.voice_ref
+  const duration = json.duration_seconds
+  const durationSeconds = duration === null ? null : typeof duration === "number" ? duration : undefined
+  if (
+    (mode !== "smart" && mode !== "custom")
+    || typeof prompt !== "string" || prompt.trim() === ""
+    || (lyricsMode !== "lyrics" && lyricsMode !== "instrumental")
+    || (songPlanRef !== null && typeof songPlanRef !== "string")
+    || (lyrics !== null && typeof lyrics !== "string")
+    || (style !== null && typeof style !== "string")
+    || !Array.isArray(references) || !references.every((item): item is string => typeof item === "string")
+    || (voiceRef !== null && typeof voiceRef !== "string")
+    || durationSeconds === undefined
+    || (durationSeconds !== null && (!Number.isSafeInteger(durationSeconds) || durationSeconds < 30 || durationSeconds > 600))
+    || (lyricsMode === "instrumental" && lyrics !== null)
+  ) return null
+  return {
+    mode,
+    prompt: prompt.trim(),
+    song_plan_ref: songPlanRef === null ? null : songPlanRef.trim() || null,
+    lyrics: lyricsMode === "lyrics" && typeof lyrics === "string" ? lyrics.trim() || null : null,
+    style: style === null ? null : style.trim() || null,
+    reference_asset_refs: [...references],
+    voice_ref: voiceRef === null ? null : voiceRef.trim() || null,
+    duration_seconds: durationSeconds,
+    lyrics_mode: lyricsMode,
   }
 }
 
@@ -1801,12 +1839,96 @@ function skillCatalogData(skills: Skill[]): { skills: Array<{
   }
 }
 
+async function mockMoriBusiness(
+  request: IncomingMessage,
+  response: ServerResponse,
+  segments: string[],
+  context: Context,
+  mori: MoriMockStore,
+  idempotency: Map<string, IdempotencyEntry>,
+  mutation: MutationTicket | null,
+  json: Record<string, unknown>,
+): Promise<boolean> {
+  if (segments[0] !== "mori") return false
+  const method = request.method || "GET"
+
+  if (segments.length === 2 && segments[1] === "projects" && method === "GET") {
+    await reply(response, 200, ok({ projects: mori.listProjects(), next_cursor: null }, context.requestId), context, idempotency, mutation)
+    return true
+  }
+
+  if (segments.length === 3 && segments[1] === "projects" && method === "GET") {
+    const project = mori.findProject(segments[2] || "")
+    if (project === undefined) await reply(response, 404, failure("project_not_found", "Mori project was not found", context.requestId), context, idempotency, mutation)
+    else await reply(response, 200, ok(project, context.requestId), context, idempotency, mutation)
+    return true
+  }
+
+  if (segments.length === 4 && segments[1] === "projects" && segments[3] === "generations" && method === "POST") {
+    const projectRef = segments[2] || ""
+    if (mori.findProject(projectRef) === undefined) {
+      await reply(response, 404, failure("project_not_found", "Mori project was not found", context.requestId), context, idempotency, mutation)
+      return true
+    }
+    const input = moriGenerationInput(json)
+    if (input === null) {
+      await reply(response, 400, failure("invalid_generation", "Generation input does not match the Mori contract", context.requestId), context, idempotency, mutation)
+      return true
+    }
+    const generation = mori.createGeneration(projectRef, input)
+    await reply(response, 202, ok({ generation_ref: generation.generation_ref, status: generation.status }, context.requestId), context, idempotency, mutation)
+    return true
+  }
+
+  if (segments.length === 3 && segments[1] === "generations" && method === "GET") {
+    const generation = mori.findGeneration(segments[2] || "")
+    if (generation === undefined) await reply(response, 404, failure("generation_not_found", "Mori generation was not found", context.requestId), context, idempotency, mutation)
+    else await reply(response, 200, ok(generation, context.requestId), context, idempotency, mutation)
+    return true
+  }
+
+  if (segments.length === 4 && segments[1] === "generations" && segments[3] === "cancel" && method === "POST") {
+    const generation = mori.cancelGeneration(segments[2] || "")
+    if (generation === null) await reply(response, 404, failure("generation_not_found", "Mori generation was not found", context.requestId), context, idempotency, mutation)
+    else await reply(response, 202, ok({ generation_ref: generation.generation_ref, status: generation.status }, context.requestId), context, idempotency, mutation)
+    return true
+  }
+
+  if (segments.length === 4 && segments[1] === "generations" && segments[3] === "events" && method === "GET") {
+    const generationRef = segments[2] || ""
+    const lastEventId = headerString(request.headers["last-event-id"]).trim() || null
+    const result = mori.eventsSince(generationRef, lastEventId)
+    if (result === null) {
+      await reply(response, 404, failure("generation_not_found", "Mori generation was not found", context.requestId), context, idempotency, mutation)
+      return true
+    }
+    if (result.invalid) {
+      await reply(response, 400, failure("invalid_event_cursor", "Last-Event-ID is invalid", context.requestId), context, idempotency, mutation)
+      return true
+    }
+    response.writeHead(200, {
+      "content-type": "text/event-stream; charset=utf-8",
+      "cache-control": "no-store",
+      connection: "keep-alive",
+    })
+    const body = result.events.length === 0
+      ? ": keep-alive\n\n"
+      : result.events.map((event) => `id: ${event.id}\nevent: ${event.event}\ndata: ${JSON.stringify(ok(event.data, context.requestId))}\n\n`).join("")
+    response.end(body)
+    return true
+  }
+
+  await reply(response, 404, failure("mori_route_not_found", "Mori business route was not found", context.requestId), context, idempotency, mutation)
+  return true
+}
+
 async function mockBusiness(
   request: IncomingMessage,
   response: ServerResponse,
   segments: string[],
   context: Context,
   store: MockStore,
+  mori: MoriMockStore,
   idempotency: Map<string, IdempotencyEntry>,
   mutation: MutationTicket | null,
   json: Record<string, unknown>,
@@ -1815,6 +1937,10 @@ async function mockBusiness(
   let status = 200
   let payload: unknown
 
+  if (segments[0] === "mori") {
+    await mockMoriBusiness(request, response, segments, context, mori, idempotency, mutation, json)
+    return
+  }
   if (segments[0] === "sessions") {
     const sessionId = segments[1] || ""
     const scoped = sessionScope(request, context)
@@ -2128,6 +2254,10 @@ function bffOwnedBusinessPath(segments: string[]): boolean {
   return segments[0] === "projects" || segments[0] === "scheduled-tasks"
 }
 
+function isMoriBusinessPath(segments: string[]): boolean {
+  return segments[0] === "mori"
+}
+
 function configuredUpstream(config: BffConfig, owner: string): string | null {
   const direct = config.upstreams[owner]
   return direct ?? null
@@ -2138,6 +2268,7 @@ async function handle(
   response: ServerResponse,
   config: BffConfig,
   store: MockStore,
+  mori: MoriMockStore,
   idempotency: Map<string, IdempotencyEntry>,
   businessStore: PostgresBusinessStore | null,
 ): Promise<void> {
@@ -2214,7 +2345,7 @@ async function handle(
   }
   const key = upstreamKey(businessPath)
   const upstreamBase = key === null ? null : configuredUpstream(config, key)
-  if (key === null && !bffOwnedBusinessPath(businessPath)) {
+  if (key === null && !bffOwnedBusinessPath(businessPath) && !isMoriBusinessPath(businessPath)) {
     send(response, 404, failure("bff_route_not_found", "Business route was not found", id))
     return
   }
@@ -2260,6 +2391,10 @@ async function handle(
     }
     json = parsed
   }
+  if (config.mode === "live" && isMoriBusinessPath(businessPath)) {
+    await reply(response, 503, failure("mori_projection_not_configured", "Mori music projection is not configured in live mode", context.requestId), context, idempotency, mutation)
+    return
+  }
   if (config.mode === "live") {
     if (businessPath[0] === "sessions") {
       await liveAgentSession(request, response, config, context, businessPath, body, json, mutation, idempotency)
@@ -2284,7 +2419,7 @@ async function handle(
     }
     return
   }
-  await mockBusiness(request, response, businessPath, context, store, idempotency, mutation, json)
+  await mockBusiness(request, response, businessPath, context, store, mori, idempotency, mutation, json)
 }
 
 async function reconcilePersistedScheduledTasks(config: BffConfig, store: PostgresBusinessStore): Promise<void> {
@@ -2324,12 +2459,13 @@ async function reconcilePersistedScheduledTasks(config: BffConfig, store: Postgr
 
 export function createBffServer(config: BffConfig = loadConfig()) {
   const store = new MockStore()
+  const mori = new MoriMockStore()
   const idempotency = new Map<string, IdempotencyEntry>()
   const businessStore = config.mode === "live" && config.postgresUrl !== null && config.redisUrl !== null
     ? new PostgresBusinessStore(config.postgresUrl, config.redisUrl)
     : null
   const server = createServer((request, response) => {
-    void handle(request, response, config, store, idempotency, businessStore).catch(() => {
+    void handle(request, response, config, store, mori, idempotency, businessStore).catch(() => {
       if (!response.headersSent) send(response, 500, failure("internal_error", "The BFF encountered an internal error", requestId(request)))
       else response.destroy()
     })
