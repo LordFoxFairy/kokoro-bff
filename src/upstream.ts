@@ -78,9 +78,15 @@ export async function proxyUpstream(
   const target = new URL(path, `${baseUrl.replace(/\/+$/u, "/")}`)
   const requestFn = target.protocol === "https:" ? httpsRequest : httpRequest
   return new Promise((resolve, reject) => {
+    const headers = requestHeaders({ ...config, upstreamSecret: serviceToken }, requestId, incoming, trustedHeaders, callerService)
+    // The Agent ingress is a small stdlib HTTP server and intentionally reads
+    // Content-Length rather than implementing chunked transfer decoding. Keep
+    // the BFF transport explicit so JSON mutation bodies are not observed as
+    // an empty object by the owner.
+    if (body !== undefined) headers["content-length"] = String(body.byteLength)
     const client = requestFn(target, {
       method,
-      headers: requestHeaders({ ...config, upstreamSecret: serviceToken }, requestId, incoming, trustedHeaders, callerService),
+      headers,
     }, (response) => {
       const chunks: Buffer[] = []
       response.on("data", (chunk) => {

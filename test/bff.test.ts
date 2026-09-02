@@ -1176,6 +1176,7 @@ describe("kokoro-bff v1 mock contract", () => {
       const headers = {
         xDomain: request.headers["x-domain"]?.toString(),
         service: request.headers["x-kokoro-service"]?.toString(),
+        contentLength: request.headers["content-length"]?.toString(),
         tenant: request.headers["x-kokoro-tenant-ref"]?.toString(),
         subject: request.headers["x-kokoro-subject-ref"]?.toString(),
         actor: request.headers["x-kokoro-actor-ref"]?.toString(),
@@ -1223,6 +1224,7 @@ describe("kokoro-bff v1 mock contract", () => {
     assert.ok(firstEnvelope.data.assistant_message_id.endsWith("_assistant"))
     assert.equal(received[0]?.headers.xDomain, undefined)
     assert.equal(received[0]?.headers.service, "kokoro-bff")
+    assert.equal(Number(received[0]?.headers.contentLength), Buffer.byteLength(JSON.stringify(received[0]?.body)))
     assert.equal(received[0]?.headers.tenant, "ns_test")
     assert.equal(received[0]?.headers.subject, "user_test")
     assert.equal(received[0]?.headers.actor, "user_test")
