@@ -574,7 +574,7 @@ async function reconcileSchedulerTask(
 }
 
 async function markScheduledTaskFailed(store: PostgresBffRepositories, tenantId: string, taskId: string): Promise<void> {
-  await store.updateScheduledTask(tenantId, taskId, { status: "failed", enabled: false })
+  await store.services.scheduledTasks.update(tenantId, taskId, { status: "failed", enabled: false })
 }
 
 async function schedulerDispatch(
@@ -643,7 +643,7 @@ async function schedulerDispatch(
     send(response, 409, failure("idempotency_in_progress", "An identical mutation is already in progress", id))
     return true
   }
-  const record = await businessStore.findScheduledTaskRecord(tenantId, taskId)
+  const record = await businessStore.services.scheduledTasks.findRecord(tenantId, taskId)
   if (record === null || record.ownerId !== ownerId) {
     await reply(response, 404, failure("scheduled_task_not_found", "Scheduled task was not found", id), context, idempotency, mutation.ticket)
     return true
@@ -713,7 +713,7 @@ async function liveBffBusiness(
     if (businessPath[0] === "projects") {
       const projectId = businessPath[1]
       if (businessPath.length === 1 && method === "GET") {
-        await reply(response, 200, ok(projectData(await store.listProjects(tenantId)), context.requestId), context, idempotency, mutation)
+        await reply(response, 200, ok(projectData(await store.services.projects.list(tenantId)), context.requestId), context, idempotency, mutation)
         return true
       }
       if (businessPath.length === 1 && method === "POST") {
@@ -722,12 +722,12 @@ async function liveBffBusiness(
           await reply(response, 400, failure("invalid_project", "Project name is required", context.requestId), context, idempotency, mutation)
           return true
         }
-        const project = await store.createProject(tenantId, name, typeof json.description === "string" ? json.description : "")
+        const project = await store.services.projects.create(tenantId, name, typeof json.description === "string" ? json.description : "")
         await reply(response, 200, ok({ project }, context.requestId), context, idempotency, mutation)
         return true
       }
       if (businessPath.length === 2 && projectId !== undefined && method === "GET") {
-        const project = await store.findProject(tenantId, projectId)
+        const project = await store.services.projects.find(tenantId, projectId)
         await reply(response, project === null ? 404 : 200, project === null ? failure("project_not_found", "Project was not found", context.requestId) : ok({ project }, context.requestId), context, idempotency, mutation)
         return true
       }
@@ -736,20 +736,20 @@ async function liveBffBusiness(
           await reply(response, 400, failure("invalid_project_instruction", "Project instruction must be a string", context.requestId), context, idempotency, mutation)
           return true
         }
-        const project = await store.updateProjectInstruction(tenantId, projectId, json.instruction, context.identity.userId)
+        const project = await store.services.projects.updateInstruction(tenantId, projectId, json.instruction, context.identity.userId)
         await reply(response, project === null ? 404 : 200, project === null ? failure("project_not_found", "Project was not found", context.requestId) : ok({ project }, context.requestId), context, idempotency, mutation)
         return true
       }
       if (businessPath.length === 3 && projectId !== undefined && businessPath[2] === "instruction-revisions" && method === "GET") {
-        const revisions = await store.instructionRevisions(tenantId, projectId)
+        const revisions = await store.services.projects.revisions(tenantId, projectId)
         await reply(response, revisions === null ? 404 : 200, revisions === null ? failure("project_not_found", "Project was not found", context.requestId) : ok({ items: revisions }, context.requestId), context, idempotency, mutation)
         return true
       }
       if (businessPath.length === 3 && projectId !== undefined && businessPath[2] === "tasks" && method === "GET") {
-        if (await store.findProject(tenantId, projectId) === null) {
+        if (await store.services.projects.find(tenantId, projectId) === null) {
           await reply(response, 404, failure("project_not_found", "Project was not found", context.requestId), context, idempotency, mutation)
         } else {
-          await reply(response, 200, ok({ tasks: await store.listTasks(tenantId, projectId) }, context.requestId), context, idempotency, mutation)
+          await reply(response, 200, ok({ tasks: await store.services.projects.tasks(tenantId, projectId) }, context.requestId), context, idempotency, mutation)
         }
         return true
       }
@@ -762,11 +762,11 @@ async function liveBffBusiness(
           await reply(response, 400, failure("invalid_project_skill", "Skill enabled must be a boolean", context.requestId), context, idempotency, mutation)
           return true
         }
-        const project = await store.findProject(tenantId, projectId)
+        const project = await store.services.projects.find(tenantId, projectId)
         if (project === null) {
           await reply(response, 404, failure("project_not_found", "Project was not found", context.requestId), context, idempotency, mutation)
         } else {
-          await store.setProjectSkill(tenantId, project.id, businessPath[3], json.enabled)
+          await store.services.projects.setSkill(tenantId, project.id, businessPath[3], json.enabled)
           await reply(response, 200, ok({ skill: { project_id: project.id, name: businessPath[3], enabled: json.enabled } }, context.requestId), context, idempotency, mutation)
         }
         return true
@@ -777,14 +777,14 @@ async function liveBffBusiness(
           await reply(response, 400, failure("invalid_scheduled_task", "Scheduled task fields are invalid", context.requestId), context, idempotency, mutation)
           return true
         }
-        let task = await store.createScheduledTask(
+        let task = await store.services.scheduledTasks.create(
           tenantId,
           context.identity.userId,
           input,
           scheduledTaskId(context, `/${businessPath.join("/")}`, idempotencyKey(request) ?? randomUUID()),
         )
         if (task.status === "failed") {
-          task = (await store.updateScheduledTask(tenantId, task.id, { status: "active", enabled: true })) ?? task
+          task = (await store.services.scheduledTasks.update(tenantId, task.id, { status: "active", enabled: true })) ?? task
         }
         const scheduleResult = await reconcileSchedulerTask(request, config, context, task, context.identity.userId, "register")
         if (scheduleResult.status >= 400) {
@@ -800,7 +800,7 @@ async function liveBffBusiness(
     if (businessPath[0] === "scheduled-tasks") {
       const taskId = businessPath[1]
       if (businessPath.length === 1 && method === "GET") {
-        await reply(response, 200, ok(scheduledData(await store.listScheduledTasks(tenantId)), context.requestId), context, idempotency, mutation)
+        await reply(response, 200, ok(scheduledData(await store.services.scheduledTasks.list(tenantId)), context.requestId), context, idempotency, mutation)
         return true
       }
       if (businessPath.length === 1 && method === "POST") {
@@ -809,14 +809,14 @@ async function liveBffBusiness(
           await reply(response, 400, failure("invalid_scheduled_task", "Scheduled task fields are invalid", context.requestId), context, idempotency, mutation)
           return true
         }
-        let task = await store.createScheduledTask(
+        let task = await store.services.scheduledTasks.create(
           tenantId,
           context.identity.userId,
           input,
           scheduledTaskId(context, `/${businessPath.join("/")}`, idempotencyKey(request) ?? randomUUID()),
         )
         if (task.status === "failed") {
-          task = (await store.updateScheduledTask(tenantId, task.id, { status: "active", enabled: true })) ?? task
+          task = (await store.services.scheduledTasks.update(tenantId, task.id, { status: "active", enabled: true })) ?? task
         }
         const scheduleResult = await reconcileSchedulerTask(request, config, context, task, context.identity.userId, "register")
         if (scheduleResult.status >= 400) {
@@ -828,7 +828,7 @@ async function liveBffBusiness(
         return true
       }
       if (businessPath.length === 2 && taskId !== undefined && method === "GET") {
-        const task = await store.findScheduledTask(tenantId, taskId)
+        const task = await store.services.scheduledTasks.find(tenantId, taskId)
         await reply(response, task === null ? 404 : 200, task === null ? failure("scheduled_task_not_found", "Scheduled task was not found", context.requestId) : ok({ task }, context.requestId), context, idempotency, mutation)
         return true
       }
@@ -838,8 +838,8 @@ async function liveBffBusiness(
           await reply(response, 400, failure("invalid_scheduled_task", "Scheduled task fields are invalid", context.requestId), context, idempotency, mutation)
           return true
         }
-        const record = taskId === undefined ? null : await store.findScheduledTaskRecord(tenantId, taskId)
-        const task = record === null ? null : await store.updateScheduledTask(tenantId, taskId, patch)
+        const record = taskId === undefined ? null : await store.services.scheduledTasks.findRecord(tenantId, taskId)
+        const task = record === null ? null : await store.services.scheduledTasks.update(tenantId, taskId, patch)
         if (task === null) {
           await reply(response, 404, failure("scheduled_task_not_found", "Scheduled task was not found", context.requestId), context, idempotency, mutation)
         } else {
@@ -854,7 +854,7 @@ async function liveBffBusiness(
         return true
       }
       if (businessPath.length === 2 && taskId !== undefined && method === "DELETE") {
-        const record = await store.findScheduledTaskRecord(tenantId, taskId)
+        const record = await store.services.scheduledTasks.findRecord(tenantId, taskId)
         if (record === null) {
           await reply(response, 404, failure("scheduled_task_not_found", "Scheduled task was not found", context.requestId), context, idempotency, mutation)
         } else {
@@ -862,15 +862,15 @@ async function liveBffBusiness(
           if (scheduleResult.status >= 400) {
             await reply(response, 503, failure("scheduler_delete_failed", "Scheduled task scheduler registration could not be removed", context.requestId), context, idempotency, mutation)
           } else {
-            const deleted = await store.deleteScheduledTask(tenantId, taskId)
+            const deleted = await store.services.scheduledTasks.delete(tenantId, taskId)
             await reply(response, deleted ? 200 : 404, deleted ? ok({ ok: true }, context.requestId) : failure("scheduled_task_not_found", "Scheduled task was not found", context.requestId), context, idempotency, mutation)
           }
         }
         return true
       }
       if (businessPath.length === 3 && taskId !== undefined && businessPath[2] === "retry" && method === "POST") {
-        const record = await store.findScheduledTaskRecord(tenantId, taskId)
-        const task = record === null ? null : await store.updateScheduledTask(tenantId, taskId, { status: "active", enabled: true })
+        const record = await store.services.scheduledTasks.findRecord(tenantId, taskId)
+        const task = record === null ? null : await store.services.scheduledTasks.update(tenantId, taskId, { status: "active", enabled: true })
         if (task === null) {
           await reply(response, 404, failure("scheduled_task_not_found", "Scheduled task was not found", context.requestId), context, idempotency, mutation)
         } else {
@@ -1805,7 +1805,7 @@ async function handle(
 async function reconcilePersistedScheduledTasks(config: BffConfig, store: PostgresBffRepositories): Promise<void> {
   if (config.upstreams.scheduler === null || config.schedulerTargetUrl === null) return
   try {
-    const records = await store.listScheduledTaskRecords()
+    const records = await store.services.scheduledTasks.listRecords()
     const request = { headers: {} } as IncomingMessage
     let registered = 0
     let skipped = 0
