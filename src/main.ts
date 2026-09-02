@@ -427,6 +427,95 @@ function chatSseFrame(event: ChatEvent): string {
 
 type LiveSessionIndex = Map<string, Map<string, string | undefined>>
 
+type LiveOwnerResult = { status: number; body: unknown }
+
+function ownerIdentityHeaders(context: Context): Record<string, string> {
+  return {
+    "x-kokoro-tenant-id": context.identity.namespace,
+    "x-kokoro-subject": context.identity.userId,
+    "x-kokoro-actor-id": context.identity.userId,
+  }
+}
+
+function stringField(value: Record<string, unknown>, ...names: string[]): string | null {
+  for (const name of names) {
+    if (typeof value[name] === "string" && value[name].trim() !== "") return value[name].trim()
+  }
+  return null
+}
+
+function modelCatalogData(body: unknown): { models: Array<{
+  provider: string
+  name: string
+  is_default: boolean
+  display_name?: string
+}> } | null {
+  const data = dataOf(body)
+  const items = data?.items
+  if (!Array.isArray(items)) return null
+  const models = []
+  for (const item of items) {
+    if (!isRecord(item)) return null
+    const key = stringField(item, "key", "name")
+    if (key === null) return null
+    const provider = stringField(item, "provider") ?? (key.includes("/") ? (key.split("/", 1)[0] ?? "kokoro") : "kokoro")
+    const name = stringField(item, "name") ?? key
+    const displayName = stringField(item, "display_name", "displayName")
+    const isDefault = typeof item.is_default === "boolean"
+      ? item.is_default
+      : typeof item.isDefault === "boolean"
+        ? item.isDefault
+        : false
+    models.push({
+      provider,
+      name,
+      is_default: isDefault,
+      ...(displayName === null ? {} : { display_name: displayName }),
+    })
+  }
+  return { models }
+}
+
+type BillingPlanProjection = {
+  id: string
+  key: string
+  name: string
+  currency: string
+  amount_minor: string
+  credit_micros: string
+  billing_interval: "once" | "month" | "year"
+}
+
+function billingPlansData(body: unknown): { plans: BillingPlanProjection[] } | null {
+  const data = dataOf(body)
+  const offers = data?.offers
+  if (!Array.isArray(offers)) return null
+  const plans: BillingPlanProjection[] = []
+  for (const offer of offers) {
+    if (!isRecord(offer)) return null
+    const id = stringField(offer, "offer_revision_id", "offerRevisionId", "id")
+    const key = stringField(offer, "offer_key", "offerKey", "key")
+    const name = stringField(offer, "name")
+    const currency = stringField(offer, "currency")
+    const amountMinor = stringField(offer, "amount_minor", "amountMinor")
+    const creditMicros = stringField(offer, "credit_micros", "creditMicros")
+    const billingInterval = stringField(offer, "billing_interval", "billingInterval")
+    if (
+      id === null || key === null || name === null || currency === null
+      || amountMinor === null || creditMicros === null
+      || (billingInterval !== "once" && billingInterval !== "month" && billingInterval !== "year")
+    ) return null
+    plans.push({ id, key, name, currency, amount_minor: amountMinor, credit_micros: creditMicros, billing_interval: billingInterval })
+  }
+  return { plans }
+}
+
+function checkoutUrlData(body: unknown): { checkout_url: string } | null {
+  const data = dataOf(body)
+  const checkoutUrl = data === null ? null : stringField(data, "checkout_url", "checkoutUrl")
+  return checkoutUrl === null ? null : { checkout_url: checkoutUrl }
+}
+
 function incomingHeaders(request: IncomingMessage): Headers {
   const headers = new Headers()
   for (const [name, value] of Object.entries(request.headers)) {
@@ -647,6 +736,132 @@ async function liveAgentSession(
   reply(response, 503, failure("chat_projection_not_configured", "This Chat operation is not exposed by the Agent v1 adapter", context.requestId), context, idempotency, mutation)
   return true
 }
+
+async function liveOwnerRequest(
+  request: IncomingMessage,
+  config: BffConfig,
+  context: Context,
+  owner: string,
+  path: string,
+  method: string,
+  body?: Buffer,
+): Promise<LiveOwnerResult> {
+  const baseUrl = config.upstreams[owner] ?? null
+  if (baseUrl === null) {
+    return { status: 503, body: failure("upstream_not_configured", `No upstream is configured for ${owner}`, context.requestId) }
+  }
+  try {
+    const upstream = await proxyUpstream(
+      config,
+      baseUrl,
+      path,
+      method,
+      context.requestId,
+      incomingHeaders(request),
+      body,
+      ownerIdentityHeaders(context),
+      "web-bff",
+    )
+    return normalizeUpstreamResponse(upstream, context.requestId)
+  } catch {
+    return { status: 502, body: failure("upstream_unreachable", `The configured ${owner} upstream is unavailable`, context.requestId) }
+  }
+}
+
+async function liveOwnerBusiness(
+  request: IncomingMessage,
+  response: ServerResponse,
+  config: BffConfig,
+  context: Context,
+  businessPath: string[],
+  json: Record<string, unknown>,
+  mutation: MutationTicket | null,
+  idempotency: Map<string, IdempotencyEntry>,
+): Promise<boolean> {
+  const method = request.method || "GET"
+
+  if (businessPath.length === 1 && businessPath[0] === "models" && method === "GET") {
+    const query = queryOf(request)
+    const ownerQuery = new URLSearchParams()
+    for (const [incomingName, ownerName] of [["feature_key", "featureKey"], ["limit", "limit"], ["cursor", "cursor"]] as const) {
+      const value = query.get(incomingName)?.trim()
+      if (value) ownerQuery.set(ownerName, value)
+    }
+    const path = `/bff/model-catalog${ownerQuery.size === 0 ? "" : `?${ownerQuery.toString()}`}`
+    const result = await liveOwnerRequest(request, config, context, "model", path, method)
+    if (result.status >= 400) {
+      reply(response, result.status, result.body, context, idempotency, mutation)
+      return true
+    }
+    const projected = modelCatalogData(result.body)
+    if (projected === null) {
+      reply(response, 502, failure("upstream_response_invalid", "Model catalog did not match the v1 owner contract", context.requestId), context, idempotency, mutation)
+      return true
+    }
+    reply(response, result.status, ok(projected, context.requestId), context, idempotency, mutation)
+    return true
+  }
+
+  if (businessPath[0] === "billing" && businessPath[1] === "plans" && businessPath.length === 2 && method === "GET") {
+    const result = await liveOwnerRequest(request, config, context, "billing", "/v1/commerce/catalog", method)
+    if (result.status >= 400) {
+      reply(response, result.status, result.body, context, idempotency, mutation)
+      return true
+    }
+    const projected = billingPlansData(result.body)
+    if (projected === null) {
+      reply(response, 502, failure("upstream_response_invalid", "Billing catalog did not match the v1 owner contract", context.requestId), context, idempotency, mutation)
+      return true
+    }
+    reply(response, result.status, ok(projected, context.requestId), context, idempotency, mutation)
+    return true
+  }
+
+  if (businessPath[0] === "billing" && businessPath[1] === "checkout" && businessPath.length === 2 && method === "POST") {
+    const planId = typeof json.plan_id === "string" ? json.plan_id.trim() : ""
+    if (planId === "") {
+      reply(response, 400, failure("invalid_checkout", "plan_id is required", context.requestId), context, idempotency, mutation)
+      return true
+    }
+    const catalogResult = await liveOwnerRequest(request, config, context, "billing", "/v1/commerce/catalog", "GET")
+    if (catalogResult.status >= 400) {
+      reply(response, catalogResult.status, catalogResult.body, context, idempotency, mutation)
+      return true
+    }
+    const catalog = billingPlansData(catalogResult.body)
+    const plan = catalog?.plans.find((candidate) => candidate.id === planId)
+    if (plan === undefined) {
+      reply(response, 404, failure("plan_not_found", "Billing plan was not found", context.requestId), context, idempotency, mutation)
+      return true
+    }
+    const checkoutBody = Buffer.from(JSON.stringify({
+      offer_revision_id: plan.id,
+      amount_minor: plan.amount_minor,
+      currency: plan.currency,
+      quote_snapshot: {
+        key: plan.key,
+        credit_micros: plan.credit_micros,
+        name: plan.name,
+        plan_id: plan.id,
+      },
+    }))
+    const checkoutResult = await liveOwnerRequest(request, config, context, "billing", "/v1/billing/checkout", method, checkoutBody)
+    if (checkoutResult.status >= 400) {
+      reply(response, checkoutResult.status, checkoutResult.body, context, idempotency, mutation)
+      return true
+    }
+    const projected = checkoutUrlData(checkoutResult.body)
+    if (projected === null) {
+      reply(response, 502, failure("upstream_response_invalid", "Billing checkout did not return a checkout URL", context.requestId), context, idempotency, mutation)
+      return true
+    }
+    reply(response, checkoutResult.status, ok(projected, context.requestId), context, idempotency, mutation)
+    return true
+  }
+
+  return false
+}
+
 function skillPoolData(skills: Skill[]): { skills: Array<{
   name: string
   description: string
@@ -981,14 +1196,22 @@ function upstreamKey(segments: string[]): string | null {
   // Chat is a BFF-owned Web contract in mock mode and an Agent business
   // adapter in live mode; it never falls back to a Session service.
   if (segments[0] === "sessions") return "agents"
-  if (segments[0] === "projects") return "projects"
-  if (segments[0] === "skills") return "skills"
-  if (segments[0] === "mcp" || segments[0] === "connectors" || segments[0] === "preferences" || segments[0] === "cloud-computers" || segments[0] === "integrations") return "hub"
-  if (segments[0] === "scheduled-tasks") return "scheduled"
+  if (segments[0] === "models") return "model"
+  if (segments[0] === "skills") return "capability"
+  if (segments[0] === "mcp" || segments[0] === "connectors" || segments[0] === "preferences" || segments[0] === "cloud-computers" || segments[0] === "integrations") return "capability"
   if (segments[0] === "agents") return "agents"
-  if (segments[0] === "library") return "library"
+  if (segments[0] === "library") return "storage"
   if (segments[0] === "billing") return "billing"
   return null
+}
+
+function bffOwnedBusinessPath(segments: string[]): boolean {
+  return segments[0] === "projects" || segments[0] === "scheduled-tasks"
+}
+
+function configuredUpstream(config: BffConfig, owner: string): string | null {
+  const direct = config.upstreams[owner]
+  return direct ?? null
 }
 
 async function handle(
@@ -1006,7 +1229,10 @@ async function handle(
     return
   }
   if (segments.length === 1 && segments[0] === "readyz" && request.method === "GET") {
-    const ready = config.mode === "mock" || Object.values(config.upstreams).every((value) => value !== null)
+    // Agent is the only required live dependency for the core Chat path.
+    // Other owner adapters are independently deployable and report a
+    // route-scoped 503 until their own base URL is configured.
+    const ready = config.mode === "mock" || configuredUpstream(config, "agents") !== null
     send(response, ready ? 200 : 503, { status: "ok", service: "kokoro-bff", mode: config.mode })
     return
   }
@@ -1041,8 +1267,16 @@ async function handle(
     return
   }
   const businessPath = segments.slice(1)
+  // Project and ScheduledTask are BFF business facts. Until the BFF
+  // PostgreSQL/Redis fact store is enabled, live mode must fail explicitly;
+  // it must not route these resources to System or Scheduler, and must not
+  // persist a mock receipt while claiming a successful mutation.
+  if (config.mode === "live" && bffOwnedBusinessPath(businessPath)) {
+    send(response, 503, failure("business_store_not_configured", "BFF business fact store is not configured", id))
+    return
+  }
   const key = upstreamKey(businessPath)
-  const upstreamBase = key === null ? null : (config.upstreams[key] ?? null)
+  const upstreamBase = key === null ? null : configuredUpstream(config, key)
   const method = request.method || "GET"
   let body: Buffer | undefined
   let json: Record<string, unknown> = {}
@@ -1086,6 +1320,7 @@ async function handle(
       await liveAgentSession(request, response, config, context, businessPath, body, json, mutation, idempotency, liveSessions)
       return
     }
+    if (await liveOwnerBusiness(request, response, config, context, businessPath, json, mutation, idempotency)) return
     const baseUrl = upstreamBase
     if (baseUrl === null) {
       reply(response, 503, failure("upstream_not_configured", `No upstream is configured for ${key || "this route"}`, id), context, idempotency, mutation)

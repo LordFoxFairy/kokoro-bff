@@ -107,4 +107,4 @@ Skills 由 BFF 负责聚合、配额、启停和 GitHub skill 导入；具体包
 
 ## Live upstream
 
-Skills live 模式走 `KOKORO_SKILLS_BASE_URL`，返回必须是 JSON；HTTP error、空 body、非 JSON、错误 envelope 都不得当作成功数据。
+Skills live 模式走 Capability owner 的 `KOKORO_CAPABILITY_BASE_URL`，返回必须是 JSON；HTTP error、空 body、非 JSON、错误 envelope 都不得当作成功数据。

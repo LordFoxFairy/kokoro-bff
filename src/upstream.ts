@@ -20,6 +20,9 @@ const TRUSTED_HEADER_NAMES = new Set([
   "x-kokoro-identity-assertion-ref",
   "x-kokoro-tenant-id",
   "x-kokoro-subject-id",
+  "x-kokoro-subject",
+  "x-kokoro-actor-id",
+  "x-kokoro-iam-permissions",
 ])
 
 function requestHeaders(
@@ -27,13 +30,14 @@ function requestHeaders(
   requestId: string,
   incoming: Headers,
   trusted: TrustedUpstreamHeaders,
+  callerService: string,
 ): Record<string, string> {
   const headers = new Headers()
   for (const name of ["accept", "content-type", "idempotency-key", "authorization"] as const) {
     const value = incoming.get(name)
     if (value !== null) headers.set(name, value)
   }
-  headers.set("x-kokoro-service", "kokoro-bff")
+  headers.set("x-kokoro-service", callerService)
   headers.set("x-kokoro-request-id", requestId)
   headers.set("forwarded", `host=${config.domain}`)
   if (config.upstreamSecret !== null) headers.set("x-kokoro-internal-secret", config.upstreamSecret)
@@ -60,13 +64,14 @@ export async function proxyUpstream(
   incoming: Headers,
   body: Buffer | undefined,
   trustedHeaders: TrustedUpstreamHeaders = {},
+  callerService = "kokoro-bff",
 ): Promise<UpstreamResponse> {
   const target = new URL(path, `${baseUrl.replace(/\/+$/u, "/")}`)
   const requestFn = target.protocol === "https:" ? httpsRequest : httpRequest
   return new Promise((resolve, reject) => {
     const client = requestFn(target, {
       method,
-      headers: requestHeaders(config, requestId, incoming, trustedHeaders),
+      headers: requestHeaders(config, requestId, incoming, trustedHeaders, callerService),
     }, (response) => {
       const chunks: Buffer[] = []
       response.on("data", (chunk) => {

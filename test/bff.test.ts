@@ -29,12 +29,13 @@ function config(overrides: Partial<BffConfig> = {}): BffConfig {
     sharedSecret: "test-secret",
     upstreamSecret: "bff-upstream-secret",
     upstreams: {
-      projects: null,
-      hub: null,
-      skills: null,
-      scheduled: null,
+      iam: null,
+      system: null,
+      model: null,
+      capability: null,
+      storage: null,
+      scheduler: null,
       agents: null,
-      library: null,
       billing: null,
     },
     ...overrides,
@@ -258,12 +259,13 @@ describe("kokoro-bff v1 mock contract", () => {
     const liveReadyBase = await listen(createBffServer(config({
       mode: "live",
       upstreams: {
-        projects: upstreamBase,
-        hub: upstreamBase,
-        skills: upstreamBase,
-        scheduled: upstreamBase,
+        iam: upstreamBase,
+        system: upstreamBase,
+        model: upstreamBase,
+        capability: upstreamBase,
+        storage: upstreamBase,
+        scheduler: upstreamBase,
         agents: null,
-        library: upstreamBase,
         billing: upstreamBase,
       },
     })))
@@ -277,7 +279,7 @@ describe("kokoro-bff v1 mock contract", () => {
 
     const livePartialBase = await listen(createBffServer(config({
       mode: "live",
-      upstreams: { ...config().upstreams, projects: upstreamBase },
+      upstreams: { ...config().upstreams, system: upstreamBase },
     })))
     const livePartial = await fetch(`${livePartialBase}/readyz`)
     assert.equal(livePartial.status, 503)
@@ -507,7 +509,7 @@ describe("kokoro-bff v1 mock contract", () => {
     const upstreamBase = await listen(upstream)
     const base = await listen(createBffServer(config({
       mode: "live",
-      upstreams: { ...config().upstreams, skills: upstreamBase, hub: null },
+      upstreams: { ...config().upstreams, capability: upstreamBase },
     })))
     const response = await fetch(`${base}/v1/skills/pool`, { headers: authHeaders() })
     assert.equal(response.status, 200)
@@ -524,17 +526,17 @@ describe("kokoro-bff v1 mock contract", () => {
         xDomain: request.headers["x-domain"]?.toString(),
       }
       response.setHeader("content-type", "application/json")
-      response.end(JSON.stringify({ project: { id: "project_live" } }))
+      response.end(JSON.stringify({ data: { skill: { name: "project-live" } }, meta: { request_id: "live-request" } }))
     })
     const upstreamBase = await listen(upstream)
-    const base = await listen(createBffServer(config({ mode: "live", upstreams: { ...config().upstreams, projects: upstreamBase } })))
-    const response = await fetch(`${base}/v1/projects/project_live`, { headers: { ...authHeaders(), "x-domain": "evil.example", "x-kokoro-request-id": "live-request" } })
+    const base = await listen(createBffServer(config({ mode: "live", upstreams: { ...config().upstreams, capability: upstreamBase } })))
+    const response = await fetch(`${base}/v1/skills/project-live`, { headers: { ...authHeaders(), "x-domain": "evil.example", "x-kokoro-request-id": "live-request" } })
     assert.equal(response.status, 200)
     assert.deepEqual(received, { forwarded: "host=dev.kokoro.localhost", service: "kokoro-bff", secret: "bff-upstream-secret", xDomain: undefined })
     assert.equal((await response.json() as { meta: { request_id: string } }).meta.request_id, "live-request")
   })
 
-  it("routes top-level skills to the skills upstream while MCP stays on hub", async () => {
+  it("routes Skills and MCP through the single Capability owner", async () => {
     const received: string[] = []
     const skillsUpstream = createServer((request, response) => {
       received.push(`skills:${request.url}`)
@@ -542,22 +544,129 @@ describe("kokoro-bff v1 mock contract", () => {
       response.end(JSON.stringify({ data: { skills: [] }, meta: { request_id: "upstream" } }))
     })
     const hubUpstream = createServer((request, response) => {
-      received.push(`hub:${request.url}`)
+      received.push(`capability:${request.url}`)
       response.setHeader("content-type", "application/json")
       response.end(JSON.stringify({ data: { servers: [] }, meta: { request_id: "upstream" } }))
     })
     const skillsBase = await listen(skillsUpstream)
-    const hubBase = await listen(hubUpstream)
+    const capabilityBase = await listen(hubUpstream)
     const base = await listen(createBffServer(config({
       mode: "live",
-      upstreams: { ...config().upstreams, skills: skillsBase, hub: hubBase },
+      upstreams: { ...config().upstreams, capability: capabilityBase },
     })))
 
     const skills = await fetch(`${base}/v1/skills`, { headers: authHeaders() })
     const mcp = await fetch(`${base}/v1/mcp/servers`, { headers: authHeaders() })
     assert.equal(skills.status, 200)
     assert.equal(mcp.status, 200)
-    assert.deepEqual(received, ["skills:/skills", "hub:/mcp/servers"])
+    assert.deepEqual(received, ["capability:/skills", "capability:/mcp/servers"])
+  })
+
+  it("projects the Model catalog through its owner contract", async () => {
+    const received: { url: string | undefined; service: string | undefined; tenant: string | undefined; subject: string | undefined } = {
+      url: undefined,
+      service: undefined,
+      tenant: undefined,
+      subject: undefined,
+    }
+    const upstream = createServer((request, response) => {
+      received.url = request.url
+      received.service = request.headers["x-kokoro-service"]?.toString()
+      received.tenant = request.headers["x-kokoro-tenant-id"]?.toString()
+      received.subject = request.headers["x-kokoro-subject"]?.toString()
+      response.setHeader("content-type", "application/json")
+      response.end(JSON.stringify({
+        data: {
+          items: [{ key: "claude-sonnet", displayName: "Claude Sonnet", featureKey: "chat", availability: "active" }],
+        },
+        requestId: "model-owner-request",
+      }))
+    })
+    const upstreamBase = await listen(upstream)
+    const base = await listen(createBffServer(config({
+      mode: "live",
+      upstreams: { ...config().upstreams, model: upstreamBase },
+    })))
+
+    const response = await fetch(`${base}/v1/models?feature_key=chat&limit=20&cursor=cursor-1`, { headers: { ...authHeaders(), "x-kokoro-request-id": "model-owner-request" } })
+    assert.equal(response.status, 200)
+    assert.deepEqual(await response.json(), {
+      data: { models: [{ provider: "kokoro", name: "claude-sonnet", is_default: false, display_name: "Claude Sonnet" }] },
+      meta: { request_id: "model-owner-request" },
+    })
+    assert.deepEqual(received, {
+      url: "/bff/model-catalog?featureKey=chat&limit=20&cursor=cursor-1",
+      service: "web-bff",
+      tenant: "ns_test",
+      subject: "user_test",
+    })
+  })
+
+  it("projects Billing catalog and checkout through the v1 owner contract", async () => {
+    const received: Array<{ url: string | undefined; body: string; service: string | undefined }> = []
+    const upstream = createServer((request, response) => {
+      const chunks: Buffer[] = []
+      request.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)))
+      request.on("end", () => {
+        received.push({ url: request.url, body: Buffer.concat(chunks).toString("utf8"), service: request.headers["x-kokoro-service"]?.toString() })
+        response.setHeader("content-type", "application/json")
+        if (request.url === "/v1/commerce/catalog") {
+          response.end(JSON.stringify({ data: { offers: [{ id: "offer-revision-1", key: "pro", name: "Pro", currency: "USD", amountMinor: "1999", creditMicros: "1000000", billingInterval: "month" }] }, requestId: "billing-catalog" }))
+          return
+        }
+        response.statusCode = 201
+        response.end(JSON.stringify({ data: { checkoutId: "checkout-1", checkoutUrl: "https://pay.test/checkout-1" }, requestId: "billing-checkout" }))
+      })
+    })
+    const upstreamBase = await listen(upstream)
+    const base = await listen(createBffServer(config({
+      mode: "live",
+      upstreams: { ...config().upstreams, billing: upstreamBase },
+    })))
+
+    const plans = await fetch(`${base}/v1/billing/plans`, { headers: { ...authHeaders(), "x-kokoro-request-id": "billing-catalog" } })
+    assert.equal(plans.status, 200)
+    assert.deepEqual(await plans.json(), {
+      data: { plans: [{ id: "offer-revision-1", key: "pro", name: "Pro", currency: "USD", amount_minor: "1999", credit_micros: "1000000", billing_interval: "month" }] },
+      meta: { request_id: "billing-catalog" },
+    })
+
+    const checkout = await fetch(`${base}/v1/billing/checkout`, {
+      method: "POST",
+      headers: { ...authHeaders(), "content-type": "application/json", "idempotency-key": "billing-checkout-key", "x-kokoro-request-id": "billing-checkout" },
+      body: JSON.stringify({ plan_id: "offer-revision-1" }),
+    })
+    assert.equal(checkout.status, 201)
+    assert.deepEqual(await checkout.json(), {
+      data: { checkout_url: "https://pay.test/checkout-1" },
+      meta: { request_id: "billing-checkout" },
+    })
+    assert.equal(received[0]?.url, "/v1/commerce/catalog")
+    assert.equal(received[0]?.service, "web-bff")
+    assert.deepEqual(JSON.parse(received[2]?.body ?? "{}"), {
+      offer_revision_id: "offer-revision-1",
+      amount_minor: "1999",
+      currency: "USD",
+      quote_snapshot: { key: "pro", credit_micros: "1000000", name: "Pro", plan_id: "offer-revision-1" },
+    })
+  })
+
+  it("does not misroute BFF-owned projects or scheduled definitions to an owner", async () => {
+    const upstream = createServer((_request, response) => {
+      response.setHeader("content-type", "application/json")
+      response.end(JSON.stringify({ data: { items: [] }, meta: { request_id: "should-not-be-called" } }))
+    })
+    const upstreamBase = await listen(upstream)
+    const base = await listen(createBffServer(config({
+      mode: "live",
+      upstreams: { ...config().upstreams, system: upstreamBase, scheduler: upstreamBase },
+    })))
+
+    for (const path of ["/v1/projects", "/v1/scheduled-tasks"]) {
+      const response = await fetch(`${base}${path}`, { headers: authHeaders() })
+      assert.equal(response.status, 503)
+      assert.equal((await response.json() as { error: { code: string } }).error.code, "business_store_not_configured")
+    }
   })
 
   it("covers auth failures, idempotency conflicts, live normalization, and docs coverage", async () => {
@@ -596,15 +705,15 @@ describe("kokoro-bff v1 mock contract", () => {
 
     const missingUpstreamBase = await listen(createBffServer(config({
       mode: "live",
-      upstreams: { ...config().upstreams, projects: null },
+      upstreams: { ...config().upstreams, capability: null },
     })))
-    const missingUpstream = await fetch(`${missingUpstreamBase}/v1/projects`, { headers: authHeaders() })
+    const missingUpstream = await fetch(`${missingUpstreamBase}/v1/skills`, { headers: authHeaders() })
     assert.equal(missingUpstream.status, 503)
     assert.equal((await missingUpstream.json() as { error: { code: string } }).error.code, "upstream_not_configured")
 
     const unreachableBase = await listen(createBffServer(config({
       mode: "live",
-      upstreams: { ...config().upstreams, skills: "http://127.0.0.1:1" },
+      upstreams: { ...config().upstreams, capability: "http://127.0.0.1:1" },
     })))
     const unreachable = await fetch(`${unreachableBase}/v1/skills/pool`, { headers: authHeaders() })
     assert.equal(unreachable.status, 502)
@@ -618,7 +727,7 @@ describe("kokoro-bff v1 mock contract", () => {
     const malformedBase = await listen(malformedUpstream)
     const malformedBff = await listen(createBffServer(config({
       mode: "live",
-      upstreams: { ...config().upstreams, skills: malformedBase },
+      upstreams: { ...config().upstreams, capability: malformedBase },
     })))
     const malformed = await fetch(`${malformedBff}/v1/skills/pool`, { headers: authHeaders() })
     assert.equal(malformed.status, 502)
@@ -632,7 +741,7 @@ describe("kokoro-bff v1 mock contract", () => {
     const emptyBase = await listen(emptyUpstream)
     const emptyBff = await listen(createBffServer(config({
       mode: "live",
-      upstreams: { ...config().upstreams, skills: emptyBase },
+      upstreams: { ...config().upstreams, capability: emptyBase },
     })))
     const empty = await fetch(`${emptyBff}/v1/skills/pool`, { headers: authHeaders() })
     assert.equal(empty.status, 502)
@@ -649,7 +758,7 @@ describe("kokoro-bff v1 mock contract", () => {
     const errorEnvelopeBase = await listen(errorEnvelopeUpstream)
     const errorEnvelopeBff = await listen(createBffServer(config({
       mode: "live",
-      upstreams: { ...config().upstreams, skills: errorEnvelopeBase },
+      upstreams: { ...config().upstreams, capability: errorEnvelopeBase },
     })))
     const errorEnvelope = await fetch(`${errorEnvelopeBff}/v1/skills/pool`, { headers: authHeaders() })
     assert.equal(errorEnvelope.status, 503)
@@ -666,14 +775,14 @@ describe("kokoro-bff v1 mock contract", () => {
     const httpErrorBase = await listen(httpErrorUpstream)
     const httpErrorBff = await listen(createBffServer(config({
       mode: "live",
-      upstreams: { ...config().upstreams, skills: httpErrorBase },
+      upstreams: { ...config().upstreams, capability: httpErrorBase },
     })))
     const httpError = await fetch(`${httpErrorBff}/v1/skills/pool`, { headers: authHeaders() })
     assert.equal(httpError.status, 500)
     assert.equal((await httpError.json() as { error: { code: string } }).error.code, "upstream_http_error")
 
     const baseDir = fileURLToPath(new URL("../docs/api/v1/", import.meta.url))
-    for (const file of ["README.md", "projects.md", "skills.md", "mcp.md", "scheduled.md", "agents.md", "library.md", "billing.md", "openapi.yaml"]) {
+    for (const file of ["README.md", "projects.md", "models.md", "skills.md", "mcp.md", "scheduled.md", "agents.md", "library.md", "billing.md", "openapi.yaml"]) {
       assert.equal(existsSync(`${baseDir}/${file}`), true, file)
     }
 
@@ -704,6 +813,7 @@ describe("kokoro-bff v1 mock contract", () => {
       "/v1/scheduled-tasks/{id}/retry",
       "/v1/agents/connections/setup",
       "/v1/sessions",
+      "/v1/models",
       "/v1/sessions/{id}",
       "/v1/sessions/{id}/messages",
       "/v1/sessions/{id}/events",

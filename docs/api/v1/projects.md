@@ -1,6 +1,8 @@
 # Projects API v1
 
-Projects 是业务工作区的容器。一个 Project 可以提供共享 instruction，并关联任务、资源、技能和排程。Project 的 SQL 由 Projects 业务服务负责；BFF 只返回投影和编排请求。
+Projects 是 BFF 的 Web-facing 业务投影。一个 Project 可以提供共享 instruction，并关联任务、资源、技能和排程。
+System 只拥有 Site、Workspace、Runtime Manifest 和 Policy；BFF 不把 Project API 伪装成 System 的内部
+`/system/*` 控制面，也不访问任何 owner 的 SQL。
 
 ## 资源模型
 

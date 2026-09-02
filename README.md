@@ -14,7 +14,7 @@ kokoro-agent HTTP ingress → Redis run streams（HTTP admission 与执行 worke
 
 - Web、BFF、Agent 各自是独立仓库，不通过 workspace package、源码复制或 git submodule 复用实现。
 - BFF 只通过版本化 HTTP 契约与业务服务对接；第一阶段的 `mock` 模式是本仓库内置的确定性 upstream fixture。
-- BFF 不连接 Agent 的 Redis stream；Agent 的 HTTP ingress 是唯一业务调用面，生产环境通过 `KOKORO_AGENT_BASE_URL` 配置它，worker 仍由 Agent 自己管理。当前 BFF 尚未把 Chat session metadata 与 Agent run ingress 完成 live 组合，因此真实切换前继续使用 mock，并由 live adapter 明确报告未接线能力。
+- BFF 不连接 Agent 的 Redis stream；Agent 的 HTTP ingress 是唯一业务调用面，生产环境通过 `KOKORO_AGENT_BASE_URL` 配置它，worker 仍由 Agent 自己管理。当前 Chat launch/control/replay/detail 已完成 live 组合；session list 仅是 BFF 进程内索引，rename/delete/share 与 Agent setup 仍由 live adapter 明确报告未接线能力。
 - Chat、消息、SSE、artifact 和 run control 的 Web-facing projection 统一由本仓 Chat 业务模块边界承接；不再新增独立 `kokoro-session` 或 `kokoro-chat` 子仓库。当前实现集中在 `src/main.ts`、`src/store.ts` 与 `src/contracts.ts`，文档中的“Chat 模块”表示职责边界，不暗示一个跨仓或未提交的目录。
 - 部署域名只通过 `KOKORO_DOMAIN` 产生标准 RFC 7239 `Forwarded: host=...`。不读取或转发 `X-Domain`、浏览器 Host 作为业务选择依据。
 
@@ -64,6 +64,7 @@ x-kokoro-principal-id: <sealed-session user id>
 | POST | `/v1/skills/:name/enable[?scope=...]`, `/v1/skills/:name/disable[?scope=...]` | 技能启用/停用 |
 | POST | `/v1/skills/github/preview` | GitHub skill 预览（`repository` 请求字段，Idempotency-Key 可选） |
 | POST | `/v1/skills/github/import` | 幂等导入 GitHub skill |
+| GET | `/v1/models` | Model owner catalog 的 Web 投影 |
 | GET/POST | `/v1/mcp/servers` | MCP server 列表与注册 |
 | POST | `/v1/mcp/servers/:name/enable`, `/v1/mcp/servers/:name/disable` | MCP server 启用/停用 |
 | DELETE | `/v1/mcp/servers/:name` | MCP server 删除 |
@@ -86,9 +87,9 @@ GitHub skill 预览和导入使用相同的请求/响应数据形状：请求体
 ## Mock → Live
 
 - `KOKORO_BFF_MODE=mock`：只使用 `src/store.ts` 的本地 fixture，适合 Web/BFF 联调。
-- `KOKORO_BFF_MODE=live`：按 `KOKORO_*_BASE_URL` 选择已接线的业务 HTTP 上游；Skills 使用独立的 `KOKORO_SKILLS_BASE_URL`，MCP/connectors 使用 `KOKORO_HUB_BASE_URL`，Agent 使用 `KOKORO_AGENT_BASE_URL` 指向其 HTTP ingress。尚未完成的资源返回明确的 `503 upstream_not_configured`，不把 worker 当作 HTTP 服务，也不静默回退到 mock。
-- 出站请求统一注入 `x-kokoro-service: kokoro-bff`、`x-kokoro-request-id`、标准 `Forwarded` 和可选内部 secret。
-- Agent HTTP ingress 已在 `LordFoxFairy/kokoro-agent` 的 v1 contract 中提供；BFF live adapter 仍需完成 session metadata 与 run/control/replay 的组合后才启用线上地址。未配置该地址时，`/readyz` 与 Chat/Agent live 路由都明确反映未接线状态：`/readyz` 返回 `503`，路由返回 `503 upstream_not_configured`。
+- `KOKORO_BFF_MODE=live`：按 owner-based `KOKORO_*_BASE_URL` 选择已接线的业务 upstream；Chat 使用 `KOKORO_AGENT_BASE_URL` 指向 Agent HTTP ingress。BFF-owned Project/Scheduled、Capability/Storage Connect bridge、Agent setup 和未注册的 owner operation 返回明确的未接线错误，不把 worker 当作 HTTP 服务，也不静默回退到 mock。
+- 出站请求统一注入 `x-kokoro-request-id`、标准 `Forwarded` 和可选内部 secret；通用 compatibility proxy 使用 `x-kokoro-service: kokoro-bff`，Model/Billing 的已注册 HTTP owner adapter 使用 `x-kokoro-service: web-bff`，以匹配各自 v1 owner contract。
+- Agent HTTP ingress 已在 `LordFoxFairy/kokoro-agent` 的 v1 contract 中提供；BFF 已完成 launch/control/replay/detail 的 Chat adapter。Session list 仅使用 BFF 进程内索引，rename/delete/share 在 Agent ingress 增加前返回明确的 `503 chat_projection_not_configured`；`/readyz` 只要求 Agent 这个核心 Chat 依赖就绪。
 
 ## 检查与发布
 

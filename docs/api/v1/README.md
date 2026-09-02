@@ -19,7 +19,7 @@ BFF 不负责：
 - Agent Redis Worker 的内部实现
 - 直接访问其他业务子仓库的 SQL
 
-机器可读契约：[openapi.yaml](./openapi.yaml)。本阶段覆盖 Health、Projects、Chat、Skills、MCP、Scheduled、Agents setup、Library 与 Billing 的现有 v1 业务面。
+机器可读契约：[openapi.yaml](./openapi.yaml)。本阶段覆盖 Health、Projects、Chat、Models、Skills、MCP、Scheduled、Agents setup、Library 与 Billing 的现有 v1 业务面。
 
 ## Base URL 和调用方
 
@@ -118,13 +118,13 @@ BFF 通过显式环境变量选择业务服务：
 
 | 业务资源 | 环境变量 |
 | --- | --- |
-| Projects | `KOKORO_PROJECTS_BASE_URL` |
-| Skills | `KOKORO_SKILLS_BASE_URL` |
-| MCP/Connectors | `KOKORO_HUB_BASE_URL` |
-| Scheduled | `KOKORO_SCHEDULED_BASE_URL` |
-| Library | `KOKORO_LIBRARY_BASE_URL` |
+| System / Site / Workspace / Policy | `KOKORO_SYSTEM_BASE_URL` |
+| Capability / Skills / MCP | `KOKORO_CAPABILITY_BASE_URL` |
+| Scheduler / Scheduled | `KOKORO_SCHEDULER_BASE_URL` |
+| Storage / Library | `KOKORO_STORAGE_BASE_URL` |
 | Billing | `KOKORO_BILLING_BASE_URL` |
-| Chat/Agent ingress | `KOKORO_AGENT_BASE_URL` |
+| Model | `KOKORO_MODEL_BASE_URL` |
+| Chat / Agent ingress | `KOKORO_AGENT_BASE_URL` |
 
 缺少对应地址时返回 `503 upstream_not_configured`，不回退到 Gateway，也不在 live 模式静默使用 Mock。
 
@@ -135,13 +135,37 @@ x-kokoro-service: kokoro-bff
 Forwarded: host=<KOKORO_DOMAIN>
 ```
 
+Model/Billing 的 owner HTTP 面明确注册为 `web-bff` caller；Agent ingress 继续使用
+`kokoro-bff` caller，以匹配 Agent 自己的服务身份契约。BFF 不把浏览器的 `X-Domain`、
+`Host` 或 `X-Forwarded-*` 透传为业务上下文。
+
 ## 资源状态
 
 | 资源 | v1 文档 | Mock | Live 替换 |
 | --- | --- | --- | --- |
-| Projects | 已完成 | 已完成 | 按 `KOKORO_PROJECTS_BASE_URL` |
+| Projects | 已完成 | 已完成 | BFF-owned business module；System 仅承接 Site/Workspace/Policy |
 | Chat | 已完成 | 已完成 | BFF Chat adapter → `KOKORO_AGENT_BASE_URL` Agent HTTP ingress；session list index 和 rename/delete/share 仍显式标注能力边界 |
-| Skills | 下一阶段 | 已完成 | 按 `KOKORO_SKILLS_BASE_URL` |
-| Scheduled | 下一阶段 | 已完成 | 按 `KOKORO_SCHEDULED_BASE_URL` |
-| Agents setup | 下一阶段 | 已完成 | Mock 可用；live 等待 Agent HTTP adapter |
-| Library/Billing | 下一阶段 | 已完成 | 按对应 upstream |
+| Model | v1 owner adapter | 已完成 | `/bff/model-catalog` → `{ data: { models } }`，由 BFF 注入 tenant/subject 上下文 |
+| Skills | Connect owner adapter | 已完成（Mock） | live 仍需 Capability Connect bridge；当前 compatibility proxy 只用于 transport fixture |
+| Scheduled | BFF fact store + Scheduler command adapter | 已完成（Mock） | live 需 BFF PostgreSQL/Redis fact store，再生成 Scheduler generic job |
+| Agents setup | 下一阶段 | 已完成 | Mock 可用；live 仍需 Agent setup adapter |
+| Billing | v1 owner adapter | 已完成 | `/v1/commerce/catalog`、`/v1/billing/checkout` → Web 兼容的 plans/checkout 投影 |
+| Library | Storage Connect adapter | 已完成（Mock） | Storage v1 没有 list RPC；live bridge 仍必须返回明确未接线状态 |
+
+### Live adapter boundary
+
+`KOKORO_*_BASE_URL` 只选择 owner 服务，不表示 BFF 已经拥有该 owner 的领域事实。BFF 的 live
+实现必须在 `src/adapters/<owner>/` 中完成请求/响应、权限、错误、超时和幂等映射；通用
+`proxyUpstream` 只允许作为尚未接入的显式 transport fixture，不能被验收报告当成业务闭环。
+
+当前 owner 事实归属固定为：
+
+| Web-facing surface | BFF boundary | Fact owner |
+| --- | --- | --- |
+| Chat/session/run/SSE | `src/adapters/agent.ts` + BFF Chat | Agent execution facts; BFF owns public projection |
+| Project/workspace projection | BFF business adapter | BFF projection; System owns Site/Workspace/Policy |
+| Skills/MCP | Capability Connect adapter | Capability |
+| Model selection | `liveOwnerBusiness` Model projection | Model |
+| Billing/credit | `liveOwnerBusiness` Billing projection | Billing |
+| Library/assets/artifacts | Storage Connect adapter | Storage |
+| Scheduled task definition | BFF business module | BFF definition; Scheduler only dispatches generic jobs |

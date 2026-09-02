@@ -19,4 +19,4 @@ Library 只提供资源/产物投影。
 
 ## Live upstream
 
-Library live 模式走 `KOKORO_LIBRARY_BASE_URL`。
+Library live 模式走 Storage owner 的 `KOKORO_STORAGE_BASE_URL`。

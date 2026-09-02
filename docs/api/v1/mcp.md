@@ -65,4 +65,4 @@ MCP 仅负责 server 投影与启停删除，不承载 Agent Redis 或 Chat 事�
 
 ## Live upstream
 
-MCP live 模式走 `KOKORO_HUB_BASE_URL`，scope 由 BFF 从 namespace 派生。
+MCP live 模式走 Capability owner 的 `KOKORO_CAPABILITY_BASE_URL`，scope 由 BFF 从可信 namespace 派生。

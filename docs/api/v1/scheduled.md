@@ -1,6 +1,8 @@
 # Scheduled API v1
 
-Scheduled 负责定时任务投影与变更；任务执行事实仍由对应业务服务或 worker 负责。
+Scheduled 是 BFF 的业务模块：BFF 持有面向 Web 的任务定义、权限、幂等回执和投影；任务执行事实不在
+Scheduler 中生成。`kokoro-scheduler` 只负责通用 `ScheduleJob` 的触发、lease、retry、misfire 和
+internal command dispatch。
 
 ## 资源模型
 
@@ -48,6 +50,19 @@ Scheduled 负责定时任务投影与变更；任务执行事实仍由对应业�
 - `idempotency_key_required`
 - `idempotency_conflict`
 
-## Live upstream
+## Live boundary
 
-Scheduled live 模式走 `KOKORO_SCHEDULED_BASE_URL`。
+当前 `/v1/scheduled-tasks` 没有可直接替代 BFF 任务定义的 Scheduler CRUD upstream。live 模式在
+Scheduler command adapter 完成前必须返回可观测的 `503 scheduler_command_not_configured`，不能把
+`SCHEDULER_JOBS_JSON` 当成用户任务数据库，也不能把 Scheduler 的内部配置 API 暴露给浏览器。
+
+当 command adapter 就绪后，流程固定为：
+
+```text
+BFF scheduled-task definition
+  -> Scheduler ScheduleJob registration/dispatch
+  -> BFF-owned internal command receipt
+  -> BFF task execution projection
+```
+
+`KOKORO_SCHEDULER_BASE_URL` 只表示 Scheduler internal command endpoint；它不改变任务定义的 owner。

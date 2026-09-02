@@ -46,12 +46,13 @@
 | POST | `/v1/skills/:name/enable[?scope=...]`, `/v1/skills/:name/disable[?scope=...]` | 技能启用/停用 |
 | POST | `/v1/skills/github/preview` | GitHub skill 预览 |
 | POST | `/v1/skills/github/import` | 幂等导入 GitHub skill |
+| GET | `/v1/models` | Model owner catalog 的 Web 投影 |
 | GET/POST | `/v1/mcp/servers` | MCP server 列表与注册 |
 | POST | `/v1/mcp/servers/:name/enable`, `/v1/mcp/servers/:name/disable` | MCP server 启用/停用 |
 | DELETE | `/v1/mcp/servers/:name` | MCP server 删除 |
 | GET/POST/PATCH/DELETE | `/v1/scheduled-tasks[/:id]` | 定时任务投影与变更 |
 | POST | `/v1/scheduled-tasks/:id/retry` | 重试定时任务 |
-| GET | `/v1/agents/connections/setup?platform=telegram\|line\|slack` | Agent 连接设置投影（当前仅 Mock；Agent worker 没有 HTTP adapter） |
+| GET | `/v1/agents/connections/setup?platform=telegram\|line\|slack` | Agent 连接设置投影（Mock；live adapter 尚未注册） |
 | GET | `/v1/library` | 产物/资料库投影 |
 | GET | `/v1/billing/plans`, `/v1/billing/summary` | 套餐与余额/用量摘要 |
 | POST | `/v1/billing/checkout` | 通过 plan_id 创建业务 checkout 投影 |
@@ -63,18 +64,19 @@
 
 ## 上游选择
 
-Live 模式按业务资源选择独立的显式 HTTP upstream：Projects → `KOKORO_PROJECTS_BASE_URL`，Skills →
-`KOKORO_SKILLS_BASE_URL`，MCP/connectors → `KOKORO_HUB_BASE_URL`，Scheduled →
-`KOKORO_SCHEDULED_BASE_URL`，Library → `KOKORO_LIBRARY_BASE_URL`，Billing →
-`KOKORO_BILLING_BASE_URL`。Agent 当前只有 worker 入口，没有 HTTP adapter；生产环境不设置
-`KOKORO_AGENT_BASE_URL`，Chat/Agent live 路由返回 `503 upstream_not_configured`，不把 worker
-当作 HTTP 入口。缺少任何已声明业务地址时返回 `upstream_not_configured`，不回退到 Gateway 或 Mock。
+Live 模式按业务 owner 选择独立的显式 HTTP/RPC adapter：System → `KOKORO_SYSTEM_BASE_URL`，Model →
+`KOKORO_MODEL_BASE_URL`，Capability → `KOKORO_CAPABILITY_BASE_URL`，Storage →
+`KOKORO_STORAGE_BASE_URL`，Scheduler → `KOKORO_SCHEDULER_BASE_URL`，Billing →
+`KOKORO_BILLING_BASE_URL`，Chat/Run → `KOKORO_AGENT_BASE_URL`。IAM 的认证入口由 Web 的
+server adapter 使用 `KOKORO_IAM_BASE_URL`，不由浏览器调用。Model catalog、Billing catalog/checkout
+和 Agent Chat 已有显式 adapter；Capability/Storage Connect bridge、BFF Project/Scheduled
+持久化以及 Agent setup 仍必须保持明确的未接线状态，不能回退到 Gateway 或 Mock。
 
 ## 责任分层
 
 | 层 | 负责 | 不负责 |
 | --- | --- | --- |
 | Kokoro Web | 同源路由、sealed session、浏览器展示 | 业务编排、内部服务凭据下发给浏览器 |
-| Kokoro BFF | 业务投影、聚合、幂等、mock/live、上游路由 | Chat/SSE 事实、Agent Redis、前端组件 |
-| Kokoro Agent | Redis run worker、执行身份和能力调用 | HTTP 业务 ingress、浏览器 session、BFF 路由 |
+| Kokoro BFF | 业务投影、聚合、幂等、mock/live、owner adapter 路由；Chat 公共投影 | Chat/SSE 执行事实、Agent Redis、前端组件 |
+| Kokoro Agent | Redis run worker、执行身份和能力调用、Chat facts HTTP ingress | 浏览器 session、BFF 路由 |
 | Kokoro Chat（BFF 内置模块） | Chat session、消息、SSE、run control、分享投影 | Agent worker 的执行内核、业务目录和专案编排 |

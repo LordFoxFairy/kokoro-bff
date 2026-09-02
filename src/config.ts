@@ -37,12 +37,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("KOKORO_BFF_PORT must be a valid port")
 
   const upstreams: Record<string, string | null> = {
-    projects: optionalUrl(env.KOKORO_PROJECTS_BASE_URL),
-    hub: optionalUrl(env.KOKORO_HUB_BASE_URL),
-    skills: optionalUrl(env.KOKORO_SKILLS_BASE_URL),
-    scheduled: optionalUrl(env.KOKORO_SCHEDULED_BASE_URL),
+    iam: optionalUrl(env.KOKORO_IAM_BASE_URL),
+    system: optionalUrl(env.KOKORO_SYSTEM_BASE_URL),
+    model: optionalUrl(env.KOKORO_MODEL_BASE_URL),
+    capability: optionalUrl(env.KOKORO_CAPABILITY_BASE_URL),
+    storage: optionalUrl(env.KOKORO_STORAGE_BASE_URL),
+    scheduler: optionalUrl(env.KOKORO_SCHEDULER_BASE_URL),
     agents: optionalUrl(env.KOKORO_AGENT_BASE_URL),
-    library: optionalUrl(env.KOKORO_LIBRARY_BASE_URL),
     billing: optionalUrl(env.KOKORO_BILLING_BASE_URL),
   }
   const domain = requiredDomain(env.KOKORO_DOMAIN || "dev.kokoro.localhost")
