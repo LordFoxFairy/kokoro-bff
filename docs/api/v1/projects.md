@@ -64,7 +64,9 @@ x-kokoro-principal-id: principal_demo
 }
 ```
 
-当前 v1 Mock 不分页。真实数据量增加前必须先补 `limit`, `cursor` 和 `has_more`，不能在不同 upstream 中使用不同分页语义。
+当前 v1 Project 列表和任务列表使用 BFF 自有 PostgreSQL 事实；Mock 模式仍使用确定性 fixture。
+任务列表的事实表为 `bff_project_task`，BFF 不从 Agent 或其他子仓库读取任务表。分页仍需在数据量达到门槛前按统一
+`limit` + opaque `cursor` 契约补齐，不能在不同 owner 中使用不同分页语义。
 
 ## POST `/v1/projects`
 

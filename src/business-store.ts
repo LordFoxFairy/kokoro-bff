@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto"
 import { Pool } from "pg"
 import { createClient, type RedisClientType } from "redis"
 
-import type { Project, ProjectInstructionRevision, ScheduledTask } from "./contracts.js"
+import type { Project, ProjectInstructionRevision, ScheduledTask, Task } from "./contracts.js"
 
 export type PersistentReceipt = {
   fingerprint: string
@@ -35,6 +35,15 @@ type RevisionRow = {
   current: boolean
 }
 
+type ProjectTaskRow = {
+  task_id: string
+  tenant_id: string
+  project_id: string
+  title: string
+  status: "todo" | "in_progress" | "done"
+  updated_at: Date | string
+}
+
 type ScheduledTaskRow = {
   task_id: string
   tenant_id: string
@@ -64,6 +73,16 @@ function projectFromRow(row: ProjectRow): Project {
     description: row.description,
     ...(row.instruction === null ? {} : { instruction: row.instruction }),
     created_at: timestamp(row.created_at),
+    updated_at: timestamp(row.updated_at),
+  }
+}
+
+function taskFromRow(row: ProjectTaskRow): Task {
+  return {
+    id: row.task_id,
+    project_id: row.project_id,
+    title: row.title,
+    status: row.status,
     updated_at: timestamp(row.updated_at),
   }
 }
@@ -255,10 +274,17 @@ export class PostgresBusinessStore {
     return true
   }
 
-  public async listTasks(tenantId: string, projectId: string): Promise<[]> {
+  public async listTasks(tenantId: string, projectId: string): Promise<Task[]> {
     const project = await this.findProject(tenantId, projectId)
     if (project === null) return []
-    return []
+    const result = await this.pool.query<ProjectTaskRow>(
+      `SELECT task_id, tenant_id, project_id, title, status, updated_at
+         FROM bff_project_task
+        WHERE tenant_id = $1 AND project_id = $2
+        ORDER BY updated_at DESC, task_id ASC`,
+      [tenantId, project.id],
+    )
+    return result.rows.map(taskFromRow)
   }
 
   public async listScheduledTasks(tenantId: string): Promise<ScheduledTask[]> {

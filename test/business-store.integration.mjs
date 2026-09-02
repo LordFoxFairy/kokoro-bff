@@ -87,7 +87,7 @@ integrationTest("persists BFF facts, registers Scheduler, and replays Agent disp
   let bff
   try {
     await schemaPool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-    await schemaPool.query("TRUNCATE bff_scheduled_task, bff_idempotency_receipt, bff_project_instruction_revision, bff_project_skill, bff_project CASCADE")
+    await schemaPool.query("TRUNCATE bff_scheduled_task, bff_project_task, bff_idempotency_receipt, bff_project_instruction_revision, bff_project_skill, bff_project CASCADE")
     await schemaPool.query("ALTER TABLE bff_scheduled_task ADD COLUMN IF NOT EXISTS owner_id TEXT")
     await schemaPool.query("UPDATE bff_scheduled_task SET owner_id = 'unknown' WHERE owner_id IS NULL")
     await schemaPool.query("ALTER TABLE bff_scheduled_task ALTER COLUMN owner_id SET DEFAULT 'unknown'")

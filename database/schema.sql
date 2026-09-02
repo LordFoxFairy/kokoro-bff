@@ -34,6 +34,17 @@ CREATE TABLE IF NOT EXISTS bff_project_skill (
   PRIMARY KEY (tenant_id, project_id, skill_name)
 );
 
+CREATE TABLE IF NOT EXISTS bff_project_task (
+  task_id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  project_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('todo', 'in_progress', 'done')),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS bff_project_task_tenant_project_idx
+  ON bff_project_task (tenant_id, project_id, updated_at DESC, task_id ASC);
+
 CREATE TABLE IF NOT EXISTS bff_scheduled_task (
   task_id TEXT PRIMARY KEY,
   tenant_id TEXT NOT NULL,
