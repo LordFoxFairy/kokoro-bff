@@ -31,6 +31,7 @@ function config(overrides: Partial<BffConfig> = {}): BffConfig {
     iamServiceToken: null,
     schedulerServiceToken: null,
     schedulerTargetUrl: null,
+    agentEnabled: false,
     postgresUrl: null,
     redisUrl: null,
     upstreams: {
@@ -280,7 +281,7 @@ describe("kokoro-bff v1 mock contract", () => {
 
     const liveAgentRoute = await fetch(`${liveReadyBase}/v1/sessions`, { headers: authHeaders() })
     assert.equal(liveAgentRoute.status, 503)
-    assert.equal((await liveAgentRoute.json() as { error: { code: string } }).error.code, "upstream_not_configured")
+    assert.equal((await liveAgentRoute.json() as { error: { code: string } }).error.code, "agent_not_configured")
 
     const livePartialBase = await listen(createBffServer(config({
       mode: "live",
@@ -1210,6 +1211,7 @@ describe("kokoro-bff v1 mock contract", () => {
     const agentBase = await listen(agent)
     const base = await listen(createBffServer(config({
       mode: "live",
+      agentEnabled: true,
       upstreams: { ...config().upstreams, agents: agentBase },
     })))
     const headers = { ...authHeaders(), "content-type": "application/json", "idempotency-key": "live-chat-1", "x-domain": "spoofed.example" }
@@ -1267,7 +1269,7 @@ describe("kokoro-bff v1 mock contract", () => {
       response.end(JSON.stringify({ data: { events: [], messages: [], watermark: 0 }, meta: { request_id: "agent" } }))
     })
     const agentBase = await listen(agent)
-    const base = await listen(createBffServer(config({ mode: "live", upstreams: { ...config().upstreams, agents: agentBase } })))
+    const base = await listen(createBffServer(config({ mode: "live", agentEnabled: true, upstreams: { ...config().upstreams, agents: agentBase } })))
     const response = await fetch(`${base}/v1/sessions/session-live/title`, {
       method: "PATCH",
       headers: { ...authHeaders(), "content-type": "application/json", "idempotency-key": "unsupported-title" },

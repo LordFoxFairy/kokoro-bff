@@ -758,8 +758,8 @@ async function liveAgentSession(
   liveSessions: LiveSessionIndex,
 ): Promise<boolean> {
   const baseUrl = config.upstreams.agents ?? null
-  if (baseUrl === null) {
-    reply(response, 503, failure("upstream_not_configured", "No upstream is configured for agents", context.requestId), context, idempotency, mutation)
+  if (!config.agentEnabled || baseUrl === null) {
+    reply(response, 503, failure("agent_not_configured", "Agent execution is disabled or not configured", context.requestId), context, idempotency, mutation)
     return true
   }
   const method = request.method || "GET"
@@ -1113,7 +1113,7 @@ async function schedulerDispatch(
     return true
   }
   const agentUrl = config.upstreams.agents ?? null
-  if (agentUrl === null) {
+  if (!config.agentEnabled || agentUrl === null) {
     await reply(response, 503, failure("agent_not_configured", "Agent upstream is not configured", id), context, idempotency, mutation.ticket)
     return true
   }
@@ -1973,11 +1973,12 @@ async function handle(
     return
   }
   if (segments.length === 1 && segments[0] === "readyz" && request.method === "GET") {
-    // Agent is the only required live dependency for the core Chat path.
-    // Other owner adapters are independently deployable and report a
-    // route-scoped 503 until their own base URL is configured.
+    // The BFF business store is required for live business facts. Agent is an
+    // optional execution profile and only gates Agent/Chat routes.
     const ready = config.mode === "mock"
-      || (configuredUpstream(config, "agents") !== null && businessStore !== null && await businessStore.ready().then(() => true).catch(() => false))
+      || (businessStore !== null
+        && await businessStore.ready().then(() => true).catch(() => false)
+        && (!config.agentEnabled || configuredUpstream(config, "agents") !== null))
     send(response, ready ? 200 : 503, { status: "ok", service: "kokoro-bff", mode: config.mode })
     return
   }

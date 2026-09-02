@@ -12,9 +12,18 @@ export type BffConfig = {
   iamServiceToken: string | null
   schedulerServiceToken: string | null
   schedulerTargetUrl: string | null
+  agentEnabled: boolean
   postgresUrl: string | null
   redisUrl: string | null
   upstreams: Record<string, string | null>
+}
+
+function booleanFlag(value: string | undefined, fallback: boolean): boolean {
+  const raw = value?.trim().toLowerCase()
+  if (!raw) return fallback
+  if (["1", "true", "yes", "on"].includes(raw)) return true
+  if (["0", "false", "no", "off"].includes(raw)) return false
+  throw new Error("KOKORO_AGENT_ENABLED must be a boolean")
 }
 
 function optionalUrl(value: string | undefined): string | null {
@@ -66,6 +75,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
     iamServiceToken: env.KOKORO_IAM_SERVICE_TOKEN?.trim() || null,
     schedulerServiceToken: env.KOKORO_SCHEDULER_SERVICE_TOKEN?.trim() || null,
     schedulerTargetUrl: optionalUrl(env.KOKORO_SCHEDULER_TARGET_URL),
+    agentEnabled: booleanFlag(env.KOKORO_AGENT_ENABLED, false),
     postgresUrl: env.KOKORO_BFF_POSTGRES_URL?.trim() || null,
     redisUrl: env.KOKORO_BFF_REDIS_URL?.trim() || null,
     upstreams,

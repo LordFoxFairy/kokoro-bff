@@ -14,7 +14,7 @@
     "db:migrate": "pnpm build && node dist/migrate.js",
     "lint": "tsc -p tsconfig.json --noEmit",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "pnpm build && node --test test/bff.test.ts test/scheduler.test.ts",
+    "test": "pnpm build && node --test test/bff.test.ts test/config.test.ts test/scheduler.test.ts",
     "test:integration": "pnpm build && node --test test/business-store.integration.mjs",
     "check": "pnpm lint && pnpm test && pnpm build"
   },
