@@ -1087,7 +1087,7 @@ describe("kokoro-bff v1 mock contract", () => {
       headers: { ...headers, "content-type": "application/json", "idempotency-key": "chat-message-1" },
       body: JSON.stringify({ content: "Hello from mock chat" }),
     })
-    assert.equal(message.status, 200)
+    assert.equal(message.status, 202)
     const messageBody = await message.json() as {
       data: { run_id: string; user_message_id: string; assistant_message_id: string }
       meta: { request_id: string }
@@ -1206,7 +1206,10 @@ describe("kokoro-bff v1 mock contract", () => {
       } else if (request.url?.includes("/messages") && request.method === "GET") {
         response.end(JSON.stringify({ data: { messages: [{ chat_message_id: "user-msg", session_id: sessionId, run_id: runId, role: "user", content: "hello", status: "completed", seq: 1, created_at: 1, updated_at: 1 }], next_seq: 1 }, meta: { request_id: "agent" } }))
       } else if (request.url?.includes("/events") && request.method === "GET") {
-        response.end(JSON.stringify({ data: { events, next_seq: 4, watermark: 4 }, meta: { request_id: "agent" } }))
+        const eventUrl = new URL(request.url, "http://agent.local")
+        const afterSeq = Number(eventUrl.searchParams.get("after_seq") || "0")
+        const visibleEvents = afterSeq >= 2 ? events.slice(2) : events.slice(0, 2)
+        response.end(JSON.stringify({ data: { events: visibleEvents, next_seq: visibleEvents.at(-1)?.seq ?? afterSeq, watermark: 4 }, meta: { request_id: "agent" } }))
       } else {
         response.statusCode = 404
         response.end(JSON.stringify({ error: { code: "route_not_found", message: "not found" }, meta: { request_id: "agent" } }))

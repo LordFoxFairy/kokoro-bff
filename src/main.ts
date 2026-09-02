@@ -1737,6 +1737,7 @@ async function mockBusiness(
           status = 404
           payload = failure("session_not_found", "Session was not found", context.requestId)
         } else {
+          status = 202
           payload = result
         }
       }

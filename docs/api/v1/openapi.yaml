@@ -185,7 +185,7 @@ paths:
             schema:
               $ref: '#/components/schemas/MessageCreateRequest'
       responses:
-        '200':
+        '202':
           description: Message receipt
           content:
             application/json:
