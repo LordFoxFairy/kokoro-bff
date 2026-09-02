@@ -150,6 +150,87 @@ describe("Mori music projection", () => {
     assert.equal(cancelBody.data.status, "cancelled")
   })
 
+  it("keeps projects, Song Plans, candidates, versions, library, remix, and export on one contract", async () => {
+    const base = await listen(createBffServer(config()))
+    const createProject = await fetch(`${base}/v1/mori/projects`, {
+      method: "POST",
+      headers: { ...authHeaders(), "content-type": "application/json", "idempotency-key": "mori-project-1" },
+      body: JSON.stringify({ title: "Blue Hour", description: "A patient electronic sketch." }),
+    })
+    const projectBody = await createProject.json() as { data: { project_ref: string; current_version_ref: string | null } }
+    assert.equal(createProject.status, 201)
+    assert.equal(projectBody.data.current_version_ref, null)
+
+    const plan = await fetch(`${base}/v1/mori/projects/${projectBody.data.project_ref}/song_plans`, {
+      method: "POST",
+      headers: { ...authHeaders(), "content-type": "application/json", "idempotency-key": "mori-plan-1" },
+      body: JSON.stringify({
+        prompt: "A patient electronic sketch for the blue hour.",
+        mood: "reflective spacious",
+        tempo_bpm: 96,
+        structure: ["intro", "verse", "chorus", "outro"],
+        instruments: ["soft_synth", "sub_bass"],
+        vocal_direction: "close and understated",
+        lyrics_intent: "leave the day with a little more room to breathe",
+      }),
+    })
+    const planBody = await plan.json() as { data: { song_plan_ref: string; project_ref: string } }
+    assert.equal(plan.status, 201)
+    assert.equal(planBody.data.project_ref, projectBody.data.project_ref)
+
+    const candidatesResponse = await fetch(`${base}/v1/mori/projects/project_preview_first_light/candidates`, { headers: authHeaders() })
+    const candidatesBody = await candidatesResponse.json() as { data: { candidates: Array<{ candidate_ref: string; version_ref: string }>; next_cursor: string | null } }
+    assert.equal(candidatesResponse.status, 200)
+    assert.equal(candidatesBody.data.candidates.length, 2)
+    assert.equal(candidatesBody.data.next_cursor, null)
+
+    const promoted = await fetch(`${base}/v1/mori/candidates/${candidatesBody.data.candidates[1]?.candidate_ref}/promote`, {
+      method: "POST",
+      headers: { ...authHeaders(), "content-type": "application/json", "idempotency-key": "mori-promote-1" },
+      body: "{}",
+    })
+    const promotedBody = await promoted.json() as { data: { version_ref: string; source_candidate_ref: string; status: string } }
+    assert.equal(promoted.status, 201)
+    assert.equal(promotedBody.data.source_candidate_ref, candidatesBody.data.candidates[1]?.candidate_ref)
+    assert.equal(promotedBody.data.status, "current")
+
+    const remix = await fetch(`${base}/v1/mori/versions/${promotedBody.data.version_ref}/remix`, {
+      method: "POST",
+      headers: { ...authHeaders(), "content-type": "application/json", "idempotency-key": "mori-remix-1" },
+      body: "{}",
+    })
+    const remixBody = await remix.json() as { data: { generation_ref: string; status: string } }
+    assert.equal(remix.status, 202)
+    assert.equal(remixBody.data.status, "queued")
+
+    const exportResponse = await fetch(`${base}/v1/mori/versions/${promotedBody.data.version_ref}/exports`, {
+      method: "POST",
+      headers: { ...authHeaders(), "content-type": "application/json", "idempotency-key": "mori-export-1" },
+      body: JSON.stringify({ format: "wav" }),
+    })
+    const exportBody = await exportResponse.json() as { data: { export_ref: string; status: string } }
+    assert.equal(exportResponse.status, 202)
+    assert.equal(exportBody.data.status, "queued")
+
+    await wait(140)
+    const library = await fetch(`${base}/v1/mori/library?kind=all&limit=10`, { headers: authHeaders() })
+    const libraryBody = await library.json() as { data: { items: Array<{ version_ref: string }>; next_cursor: string | null } }
+    assert.equal(library.status, 200)
+    assert.equal(libraryBody.data.items.length, 2)
+    assert.equal(libraryBody.data.next_cursor, null)
+
+    const exportSnapshot = await fetch(`${base}/v1/mori/exports/${exportBody.data.export_ref}`, { headers: authHeaders() })
+    const exportSnapshotBody = await exportSnapshot.json() as { data: { status: string; format: string; download_url: string | null } }
+    assert.equal(exportSnapshot.status, 200)
+    assert.equal(exportSnapshotBody.data.status, "succeeded")
+    assert.equal(exportSnapshotBody.data.format, "wav")
+    assert.match(exportSnapshotBody.data.download_url || "", /^https:\/\/download\.kokoro\.invalid\/mori\//u)
+
+    const invalidCursor = await fetch(`${base}/v1/mori/library?cursor=not-a-cursor`, { headers: authHeaders() })
+    assert.equal(invalidCursor.status, 400)
+    assert.equal((await invalidCursor.json() as { error: { code: string } }).error.code, "invalid_cursor")
+  })
+
   it("does not silently use mock music facts in live mode", async () => {
     const base = await listen(createBffServer(config({ mode: "live" })))
     const response = await fetch(`${base}/v1/mori/projects/project_preview_first_light`, { headers: authHeaders() })

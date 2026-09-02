@@ -25,12 +25,20 @@ namespace 和 principal headers。所有产生事实变化的 POST 必须携带 
 ## 已接入的 Mock endpoints
 
 ```text
+POST /v1/mori/projects                                    → 201
 GET  /v1/mori/projects
 GET  /v1/mori/projects/{project_ref}
+POST /v1/mori/projects/{project_ref}/song_plans            → 201
 POST /v1/mori/projects/{project_ref}/generations       → 202
 GET  /v1/mori/generations/{generation_ref}
 GET  /v1/mori/generations/{generation_ref}/events      → text/event-stream
 POST /v1/mori/generations/{generation_ref}/cancel      → 202
+GET  /v1/mori/projects/{project_ref}/candidates
+POST /v1/mori/candidates/{candidate_ref}/promote       → 201
+POST /v1/mori/versions/{version_ref}/remix             → 202
+GET  /v1/mori/library
+POST /v1/mori/versions/{version_ref}/exports            → 202
+GET  /v1/mori/exports/{export_ref}
 ```
 
 Generation 请求体：
@@ -52,6 +60,11 @@ Generation 请求体：
 创建返回 `generation_ref` 和 `status: queued`。Mock 会按 `queued → preparing → generating →
 post_processing → succeeded` 推进，并在成功时生成两个候选方向。取消是显式命令；已经进入
 终态的 Generation 不会被网络断开或取消请求改写。
+
+Promote 会把 Candidate 确认成不可变 Version，并更新 Project 的 `current_version_ref`；旧的
+current Version 只会变成 `archived`，不会被覆盖。Library 只展示已经 Promote 的 Version。
+Remix 复用 Version 的输入上下文创建新的异步 Generation。Export 以 `queued → processing →
+succeeded` 推进，成功后才出现短时 `download_url` projection。
 
 SSE 使用 `Last-Event-ID: GENERATION_REF:SEQUENCE` 作为 replay anchor。事件 id 不重复发送，
 事件 data 仍使用 Mori 成功 envelope。非法或属于其他 Generation 的 cursor 返回
