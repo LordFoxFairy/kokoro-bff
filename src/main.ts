@@ -211,9 +211,13 @@ async function reconcilePersistedScheduledTasks(config: BffConfig, store: Postgr
   }
 }
 
-export function createBffServer(config: BffConfig = loadConfig()) {
+export type BffServerOptions = {
+  moriAutoProgress?: boolean
+}
+
+export function createBffServer(config: BffConfig = loadConfig(), options: BffServerOptions = {}) {
   const store = new MockBffStore()
-  const mori = new MoriMockBffStore()
+  const mori = new MoriMockBffStore(options.moriAutoProgress ?? true)
   const idempotency = new Map<string, IdempotencyEntry>()
   const businessStore = config.mode === "live" && config.postgresUrl !== null && config.redisUrl !== null
     ? new PostgresBffRepositories(config.postgresUrl, config.redisUrl)

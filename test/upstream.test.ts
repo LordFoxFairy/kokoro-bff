@@ -44,9 +44,9 @@ function config(overrides: Partial<BffConfig> = {}): BffConfig {
   }
 }
 
-function call(baseUrl: string) {
+function call(baseUrl: string, overrides: Partial<BffConfig> = {}) {
   return proxyUpstream(
-    config(),
+    config(overrides),
     baseUrl,
     "/owner",
     "GET",
@@ -67,7 +67,7 @@ describe("owner upstream transport", () => {
       response.end('{"ok":true}')
     }))
 
-    const result = await call(baseUrl)
+    const result = await call(baseUrl, { upstreamTimeoutMs: 10000 })
 
     assert.equal(result.status, 201)
     assert.equal(result.headers.get("content-type"), "application/json")
@@ -79,7 +79,7 @@ describe("owner upstream transport", () => {
       // Keep the owner request open until the BFF timeout destroys it.
     }))
 
-    await assert.rejects(call(baseUrl), (error: unknown) => {
+    await assert.rejects(call(baseUrl, { upstreamTimeoutMs: 100 }), (error: unknown) => {
       assert.equal(error instanceof Error, true)
       assert.equal((error as Error & { code?: string }).code, "upstream_timeout")
       return true
@@ -92,7 +92,7 @@ describe("owner upstream transport", () => {
       response.end(Buffer.alloc(1025, "x"))
     }))
 
-    await assert.rejects(call(baseUrl), (error: unknown) => {
+    await assert.rejects(call(baseUrl, { upstreamTimeoutMs: 10000 }), (error: unknown) => {
       assert.equal(error instanceof Error, true)
       assert.equal((error as Error & { code?: string }).code, "upstream_response_too_large")
       return true

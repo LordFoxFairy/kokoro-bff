@@ -102,7 +102,7 @@ export class MoriMockBffStore {
   private nextVersionNumber = 1
   private nextExportNumber = 1
 
-  constructor() {
+  public constructor(private readonly autoProgress = true) {
     const generation: MoriGenerationRecord = {
       generation_ref: "generation_preview_first_light",
       project_ref: previewProject.project_ref,
@@ -294,7 +294,7 @@ export class MoriMockBffStore {
     }
     this.generations.set(generationRef, generation)
     this.appendEvent(generation)
-    this.scheduleProgress(generationRef)
+    if (this.autoProgress) this.scheduleProgress(generationRef)
     return this.snapshot(generation)
   }
 

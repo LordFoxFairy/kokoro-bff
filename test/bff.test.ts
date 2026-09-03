@@ -589,7 +589,11 @@ describe("kokoro-bff v1 mock contract", () => {
       }))
     })
     const upstreamBase = await listen(upstream)
-    const base = await listen(createBffServer(config({ mode: "live", upstreams: { ...config().upstreams, capability: upstreamBase } })))
+    const base = await listen(createBffServer(config({
+      mode: "live",
+      upstreamTimeoutMs: 10000,
+      upstreams: { ...config().upstreams, capability: upstreamBase },
+    })))
     const response = await fetch(`${base}/v1/skills`, { headers: { ...authHeaders(), authorization: "Bearer user-jwt", "x-domain": "evil.example", "x-kokoro-request-id": "live-request" } })
     assert.equal(response.status, 200)
     assert.deepEqual(received, {

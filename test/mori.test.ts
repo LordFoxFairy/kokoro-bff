@@ -121,7 +121,7 @@ describe("Mori music projection", () => {
   })
 
   it("requires a mutation key and leaves cancellation as an explicit terminal state", async () => {
-    const base = await listen(createBffServer(config()))
+    const base = await listen(createBffServer(config(), { moriAutoProgress: false }))
     const path = `${base}/v1/mori/projects/project_preview_first_light/generations`
     const body = JSON.stringify({
       song_plan_ref: null,

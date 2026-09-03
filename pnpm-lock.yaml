@@ -11,9 +11,6 @@ importers:
       '@ag-ui/core':
         specifier: 0.0.59
         version: 0.0.59
-      '@bufbuild/protobuf':
-        specifier: 2.14.0
-        version: 2.14.0
       pg:
         specifier: ^8.23.0
         version: 8.23.0
@@ -38,9 +35,6 @@ packages:
 
   '@ag-ui/core@0.0.59':
     resolution: {integrity: sha512-hDgy4ipTqXieT8YG8Mr917Y+FD/f11VK1GefZ5CwTDCuNqS/oTwjJ5l/DZkicThgS8hQW/Y7wPylPBMBJ8BkUg==}
-
-  '@bufbuild/protobuf@2.14.0':
-    resolution: {integrity: sha512-C3UGsiCwSprE2NKIIFA3hCDlpXTMCAXRZuEVp88L1GY36Y41+rYL5fryE+nOFhp4p4JPQvdV8PQ4DWgHgeTE+w==}
 
   '@redis/bloom@5.12.1':
     resolution: {integrity: sha512-PUUfv+ms7jgPSBVoo/DN4AkPHj4D5TZSd6SbJX7egzBplkYUcKmHRE8RKia7UtZ8bSQbLguLvxVO+asKtQfZWA==}
@@ -171,8 +165,6 @@ snapshots:
   '@ag-ui/core@0.0.59':
     dependencies:
       zod: 3.25.76
-
-  '@bufbuild/protobuf@2.14.0': {}
 
   '@redis/bloom@5.12.1(@redis/client@5.12.1)':
     dependencies:
