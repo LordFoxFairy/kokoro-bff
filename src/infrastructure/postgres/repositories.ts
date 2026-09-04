@@ -2,6 +2,7 @@ import { PostgresBffDatabase } from "./client.js"
 import { PostgresIdempotencyRepository } from "./idempotency-repository.js"
 import { PostgresProjectRepository } from "./project-repository.js"
 import { PostgresScheduledTaskRepository } from "./scheduled-task-repository.js"
+import { PostgresChatRepository } from "./chat-repository.js"
 import { PENDING_RECEIPT_STATUS, type PersistentReceipt, type ReceiptClaim } from "../../application/ports/idempotency-repository.js"
 import type { IdempotencyRepository } from "../../application/ports/idempotency-repository.js"
 import type { ProjectRepository } from "../../application/ports/project-repository.js"
@@ -29,9 +30,10 @@ export class PostgresBffRepositories {
     this.idempotency = new PostgresIdempotencyRepository(this.database.pool)
     this.projects = new PostgresProjectRepository(this.database)
     const scheduled = new PostgresScheduledTaskRepository(this.database)
+    const chat = new PostgresChatRepository(this.database)
     this.scheduled = scheduled
     this.scheduledTaskOutbox = scheduled
-    this.services = new BffApplicationServices(this.projects, this.scheduled)
+    this.services = new BffApplicationServices(this.projects, this.scheduled, chat)
     this.agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(this.database))
   }
 

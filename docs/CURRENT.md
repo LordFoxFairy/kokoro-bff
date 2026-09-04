@@ -21,6 +21,10 @@
 - `/v1/*` 校验 `web-bff` 服务身份、共享 secret、namespace、principal 和 request id；浏览器不应直连 BFF。
 - Live Project、instruction revision、project skill、project task、ScheduledTask 与 mutation receipt 使用本仓
   PostgreSQL repository。Redis 当前用于 readiness/ping 和 Project cache invalidation，不是事实源。
+- Live Conversation、Message、Share 使用本仓 `bff_conversation`、`bff_message`、`bff_share` PostgreSQL repository；
+  所有读写带 tenant predicate，删除保留 tombstone，share 撤销/过期后保留记录并只暴露 active/unexpired share。
+- Chat session list/detail/message history/title/delete/share routes 不再读取 Agent history；Message create 先在 BFF
+  事务中写入 user message，再通过窄 Agent launch client 提交执行。Agent 仍只拥有 Run/control/source execution events。
 - ScheduledTask aggregate 的 `nextRunAt`/`expiresAt` 在 application/domain 内是有效的 UTC `Date`；HTTP/JSON 与
   Scheduler command 使用 RFC 3339 UTC 字符串，`time` + IANA `timezone` 保留本地周期规则。数据库事实使用
   `TIMESTAMPTZ(3)`。
@@ -53,8 +57,10 @@
 
 ### P0：运行时正确性
 
-1. **Conversation / Message / Share 的 BFF 事实 ownership 尚未实现。** 当前 Live session/message 数据来自
-   Agent；BFF 只拥有公开投影契约，尚未拥有这些产品事实表与 repository。
+1. **Chat assistant message reconciliation 与 Agent dispatch outbox 尚未实现。** 当前 Message create 先写入 BFF user
+   message；assistant provisional id 在 receipt 中返回。若随后 Agent launch 失败，会留下已提交的 user Message fact，
+   但没有 outbox/自动重试来重新投递；这属于后续 P0，当前切片不宣称跨系统原子闭环。Agent source event 到 BFF Message
+   状态/内容的 durable reconciliation 也仍是下一切片。
 2. **事务型 outbox 仍按 owner/切片分阶段。** ScheduledTask → Scheduler 的 bounded outbox 已实现并有真实 PG
    integration；Project side effect、Agent Run dispatch，以及 mutation receipt claim 与 task/outbox 的统一事务仍未完成。
    Scheduler 外部投递是 at-least-once，依靠稳定 command/idempotency identity 和条件 settlement 收敛。
@@ -81,10 +87,9 @@
 
 ## 本阶段闭环边界
 
-本阶段闭环 ScheduledTask tenant/time 边界、task revision、fact+Scheduler command 的本地事务、bounded outbox
-dispatcher 的 lease/fence/retry/terminal state，以及真实 PostgreSQL/Redis integration。它不扩展到 Agent Run、Agent
-自有 outbox、Conversation/Message/Share、AG-UI GC、主动 event consumer、完整 IAM permission enforcement 或生产
-telemetry；Chat repository 与 Agent wire protocol 保持本仓既有调用边界。
+本阶段闭环 BFF-owned Conversation/Message/Share schema、repository/application/domain/interfaces 路由接线，并保留
+Agent launch/control/event 与 AG-UI projection 的既有窄边界。它不扩展到 Agent Run、Agent 自有 outbox、assistant
+message reconciliation、AG-UI GC、主动 event consumer、完整 IAM permission enforcement 或生产 telemetry。
 
 ## 当前证据命令
 

@@ -38,8 +38,8 @@ Root 标准要求的 `src/domain/`、`src/config/`、`src/bootstrap/` 尚未落�
 
 ## 本仓事实
 
-当前 PostgreSQL 保存 Project、instruction revision、project skill、project task、ScheduledTask、idempotency receipt，
-以及 durable AG-UI stream/source-event/public-frame ledger。Conversation、Message、Share 与 outbox 尚无 BFF 表。
+当前 PostgreSQL 保存 Project、instruction revision、project skill、project task、ScheduledTask、idempotency receipt、
+Conversation/Message/Share canonical facts，以及 durable AG-UI stream/source-event/public-frame ledger。
 完整表清单见 [`docs/DATA_MODEL.md`](./docs/DATA_MODEL.md)。
 
 ## Public API 与 owner adapter
@@ -48,7 +48,8 @@ Root 标准要求的 `src/domain/`、`src/config/`、`src/bootstrap/` 尚未落�
 - 资源说明：[`docs/api/README.md`](./docs/api/README.md)
 - AG-UI：[`docs/api/v1/agui-chat.md`](./docs/api/v1/agui-chat.md)
 - System / Model / Billing / Capability / Storage：当前由 `src/http/routes/owner.ts` 投影
-- Agent Chat：`src/http/routes/agent.ts` 拉取 Agent source event；`src/application/agui/` 投影；
+- Chat facts：`src/http/routes/chat.ts` 读取/写入 BFF PostgreSQL；`src/infrastructure/postgres/chat-repository.ts` 维护 tenant、锁和 cursor；
+- Agent Chat：`src/http/routes/agent.ts` 只拉取 Agent source event、launch 和 control；`src/application/agui/` 投影；
   `src/infrastructure/postgres/agui-projection-repository.ts` 在公开发送前持久化并分配 cursor
 - Scheduler：当前由 `src/http/routes/scheduler.ts` 注册、对账和处理 dispatch
 - Mori：当前由 `src/infrastructure/clients/mori/owner-route.ts` 投影独立 Music owner

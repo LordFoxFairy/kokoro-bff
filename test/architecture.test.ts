@@ -26,14 +26,20 @@ test("BFF keeps contract, application, client, and repository boundaries explici
     "src/domain/project/name.ts",
     "src/domain/scheduled-task/task.ts",
     "src/domain/scheduled-task/outbox.ts",
+    "src/domain/chat/conversation.ts",
+    "src/domain/chat/message.ts",
+    "src/domain/chat/share.ts",
     "src/contracts/index.ts",
     "src/contracts/mori.ts",
     "src/application/idempotency.ts",
     "src/application/project-service.ts",
+    "src/application/chat-service.ts",
+    "src/application/chat/mappers.ts",
     "src/application/scheduled-task-service.ts",
     "src/application/services.ts",
     "src/application/ports/idempotency-repository.ts",
     "src/application/ports/project-repository.ts",
+    "src/application/ports/chat-repository.ts",
     "src/application/ports/scheduled-task-repository.ts",
     "src/application/ports/scheduled-task-outbox-repository.ts",
     "src/application/ports/scheduled-task-outbox-delivery.ts",
@@ -49,9 +55,11 @@ test("BFF keeps contract, application, client, and repository boundaries explici
     "src/infrastructure/postgres/idempotency-repository.ts",
     "src/infrastructure/postgres/agui-projection-repository.ts",
     "src/infrastructure/postgres/project-repository.ts",
+    "src/infrastructure/postgres/chat-repository.ts",
     "src/infrastructure/postgres/scheduled-task-repository.ts",
     "src/infrastructure/postgres/repositories.ts",
     "src/http/routes/agent.ts",
+    "src/http/routes/chat.ts",
     "src/http/routes/live-bff.ts",
     "src/http/routes/owner.ts",
     "src/http/routes/music.ts",
@@ -197,6 +205,26 @@ test("BFF durable AG-UI persistence is parameterized, tenant/session scoped, and
   assert.equal(route.includes("createAgUiProjectionState"), false)
   assert.match(schema, /uq_bff_agui_event_source_frame/u)
   assert.equal(/FOREIGN KEY|REFERENCES/iu.test(schema), false)
+})
+
+test("BFF Chat facts keep ownership, tenant predicates, locks, and opaque cursors in the BFF boundary", async () => {
+  const [repository, route, schema] = await Promise.all([
+    readFile(path.join(root, "src/infrastructure/postgres/chat-repository.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/chat.ts"), "utf8"),
+    readFile(path.join(root, "database/schema.sql"), "utf8"),
+  ])
+  assert.match(repository, /tenant_id = \$1/u)
+  assert.match(repository, /FOR UPDATE/u)
+  assert.match(repository, /encodeCursor/u)
+  assert.match(repository, /CURRENT_TIMESTAMP\(3\)/u)
+  assert.equal(repository.includes("SELECT *"), false)
+  assert.equal(/FOREIGN KEY|REFERENCES/iu.test(schema), false)
+  assert.match(route, /services\.chat/u)
+  assert.match(route, /callAgent/u)
+  assert.doesNotMatch(route, /Agent.*messages.*GET/u)
+  assert.match(schema, /bff_conversation/u)
+  assert.match(schema, /bff_message/u)
+  assert.match(schema, /bff_share/u)
 })
 
 test("ScheduledTask mutations use a tenant-scoped transactional outbox and fenced dispatcher", async () => {

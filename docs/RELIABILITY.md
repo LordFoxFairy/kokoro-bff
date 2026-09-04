@@ -2,6 +2,10 @@
 
 ## 当前可靠性机制
 
+Chat Message create 的 BFF fact 写入与 Agent launch 目前是两个边界：BFF 事务先提交 user Message，再调用 Agent 窄 client。
+Agent launch 失败可能留下已提交的 user Message，而本切片没有 Agent dispatch outbox 或自动重试；该缺口是后续 P0，
+当前状态不等同于跨系统原子提交。AG-UI projection 仍是独立的 BFF ledger。
+
 - 所有响应关联 request id；owner response 可沿用同一 id。
 - 出站 HTTP 有整体 timeout 与最大响应字节数；不可达、HTTP error 和 contract mismatch 使用稳定错误归一。
 - mutation 使用 pending/terminal receipt，支持 replay、conflict 和 in-progress 判定；5xx 释放 pending claim以允许重试。

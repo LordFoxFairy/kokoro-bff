@@ -7,6 +7,7 @@ import { fingerprintBody, authorize, authorizeServerOnly, idempotencyKey, isMuta
 import { normalizeUpstreamResponse, reply, send } from "../http/response.js"
 import { proxyUpstream } from "../upstream.js"
 import { liveAgentSession } from "../http/routes/agent.js"
+import { liveChatBusiness } from "../http/routes/chat.js"
 import { liveBffBusiness } from "../http/routes/live-bff.js"
 import { liveOwnerBusiness } from "../http/routes/owner.js"
 import { liveMoriBusiness } from "../http/routes/music.js"
@@ -38,12 +39,35 @@ async function handle(
       send(response, config.sharedSecret !== null ? 403 : 401, failure("service_auth_failed", "BFF authentication failed", id))
       return
     }
+    const scope = queryOf(request).get("scope")?.trim() || undefined
+    const projectRef = queryOf(request).get("project_ref")?.trim() || undefined
+    if (composition.businessStore?.services.chat !== undefined) {
+      const shared = await composition.businessStore.services.chat.findActiveShare(segments[2] || "", scope, projectRef)
+      if (shared === null) {
+        send(response, 404, failure("share_not_found", "Share was not found", id))
+        return
+      }
+      const messages = await composition.businessStore.services.chat.listMessages(shared.conversation.tenantId, shared.conversation.conversationId, 100, null)
+      send(response, 200, ok({
+        session: {
+          session_id: shared.conversation.conversationId,
+          title: shared.conversation.title,
+          owner_id: shared.conversation.ownerId,
+          created_at: shared.conversation.createdAt.toISOString(),
+          updated_at: shared.conversation.updatedAt.toISOString(),
+        },
+        ...(messages === null || messages.messages.length === 0 ? {} : { messages: messages.messages }),
+        pending_pauses: [],
+        files: [],
+        deliveries: [],
+        event_watermark: null,
+      }, id))
+      return
+    }
     if (composition.sharedSessionReader === undefined) {
       send(response, 503, failure("share_projection_not_configured", "Share projection is not configured", id))
       return
     }
-    const scope = queryOf(request).get("scope")?.trim() || undefined
-    const projectRef = queryOf(request).get("project_ref")?.trim() || undefined
     const session = composition.sharedSessionReader.findSharedSession(segments[2] || "", scope, projectRef)
     if (session === undefined) {
       send(response, 404, failure("share_not_found", "Share was not found", id))
@@ -154,6 +178,7 @@ async function handle(
     return
   }
   if (businessPath[0] === "sessions") {
+    if (composition.businessStore !== null && await liveChatBusiness(request, response, config, context, businessPath, json, mutation, composition.idempotency, composition.businessStore)) return
     await liveAgentSession(request, response, config, context, businessPath, json, mutation, composition.idempotency, composition.businessStore?.agUi ?? null, composition.agUiRuntime)
     return
   }

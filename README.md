@@ -18,14 +18,14 @@ Browser -> kokoro same-origin /api/* -> kokoro-bff /v1/* -> owner API / Agent / 
 | Project / ScheduledTask | Live 使用本仓 PostgreSQL；Redis 用于 readiness/cache coordination |
 | Idempotency | business store 存在时有 PostgreSQL receipt；部分路径仍可能使用进程内 Map |
 | Chat / AG-UI | Live 先把 Agent source fact 与 AG-UI frame 原子投影到本仓 PostgreSQL，再从 ledger 输出 SSE |
-| Conversation / Message / Share | 公开契约由 BFF 拥有，但 Live 产品事实当前仍来自 Agent，BFF 表尚未落地 |
+| Conversation / Message / Share | Live 产品事实由本仓 PostgreSQL 的 `bff_conversation`、`bff_message`、`bff_share` canonical tables 提供 |
 | Durable AG-UI ledger | 已实现 tenant/session 隔离、source identity 去重、单调内部序列及逐 frame opaque cursor；retention/GC 未实现 |
 | ScheduledTask durable dispatch | 已实现本仓 bounded outbox、租约/fence、重试/终态；mutation receipt 仍未与事实事务合并 |
 | Mock | 仍编入 `src/`，只作本地 fixture，不是生产完成证据 |
 
 ## Owner 边界
 
-- BFF：public Product API、Project、ScheduledTask，以及待落地的 Chat 产品事实与 durable public projection。
+- BFF：public Product API、Project、ScheduledTask、Conversation/Message/Share 产品事实与 durable public projection。
 - Agent：Run、checkpoint、lease、tool journal、执行事件、HITL、evidence；BFF 只调用 Agent HTTP ingress。
 - Scheduler：通用 ScheduleJob、occurrence、lease、retry、misfire、dispatch；不拥有 ScheduledTask 业务定义。
 - IAM/System/Model/Billing/Capability/Storage/Music：各自拥有领域事实和 internal contract；BFF 只做窄 projection。
@@ -49,8 +49,8 @@ pnpm dev
 curl -fsS http://127.0.0.1:4300/healthz
 ```
 
-本地默认 `KOKORO_BFF_MODE=mock`。Mock 不需要数据库，只用于确定性契约联调。业务请求必须由 Web server adapter
-携带受信服务 envelope；浏览器不应持有内部 secret 或直接访问 4300。
+本地运行使用 `KOKORO_BFF_MODE=live`，并连接本地 PostgreSQL/Redis。确定性契约联调通过显式 test composition
+装配 fixture；业务请求必须由 Web server adapter 携带受信服务 envelope，浏览器不应持有内部 secret 或直接访问 4300。
 
 Live BFF-owned facts 需要共享 PostgreSQL 与 Redis DB 8：
 

@@ -125,6 +125,74 @@ CREATE TABLE IF NOT EXISTS bff_idempotency_receipt (
   created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
 );
 
+-- BFF canonical Chat product facts. Agent run identifiers are opaque and
+-- are checked only by the application boundary. Deleted conversations remain for retention and
+-- audit cleanup; public reads select status = active only.
+CREATE TABLE IF NOT EXISTS bff_conversation (
+  conversation_id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  owner_id TEXT NOT NULL,
+  project_ref TEXT,
+  title TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active' CONSTRAINT ck_bff_conversation_status CHECK (status IN ('active', 'deleted')),
+  created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  deleted_at TIMESTAMPTZ(3),
+  CONSTRAINT ck_bff_conversation_identity CHECK (length(btrim(tenant_id)) > 0 AND length(btrim(owner_id)) > 0),
+  CONSTRAINT ck_bff_conversation_title CHECK (length(btrim(title)) BETWEEN 1 AND 200),
+  CONSTRAINT ck_bff_conversation_deleted CHECK ((status = 'deleted' AND deleted_at IS NOT NULL) OR (status = 'active' AND deleted_at IS NULL))
+);
+CREATE INDEX IF NOT EXISTS ix_bff_conversation_tenant_updated
+  ON bff_conversation (tenant_id, updated_at DESC, conversation_id ASC)
+  WHERE status = 'active';
+CREATE INDEX IF NOT EXISTS ix_bff_conversation_tenant_project_updated
+  ON bff_conversation (tenant_id, project_ref, updated_at DESC, conversation_id ASC)
+  WHERE status = 'active';
+
+CREATE TABLE IF NOT EXISTS bff_message (
+  message_id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  conversation_id TEXT NOT NULL,
+  run_id TEXT,
+  role TEXT NOT NULL CONSTRAINT ck_bff_message_role CHECK (role IN ('user', 'assistant', 'system')),
+  content TEXT NOT NULL,
+  status TEXT NOT NULL CONSTRAINT ck_bff_message_status CHECK (status IN ('pending', 'streaming', 'completed', 'failed')),
+  message_seq BIGINT NOT NULL,
+  created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT uq_bff_message_conversation_sequence UNIQUE (tenant_id, conversation_id, message_seq),
+  CONSTRAINT ck_bff_message_identity CHECK (length(btrim(tenant_id)) > 0 AND length(btrim(conversation_id)) > 0),
+  CONSTRAINT ck_bff_message_sequence CHECK (message_seq >= 1)
+);
+CREATE INDEX IF NOT EXISTS ix_bff_message_tenant_conversation_created
+  ON bff_message (tenant_id, conversation_id, created_at ASC, message_seq ASC, message_id ASC);
+
+-- A share is revocable and optionally expires. Revoked/expired rows are kept
+-- until the documented retention job removes them; only active, unexpired rows
+-- are public. One active share per tenant/conversation is the business rule.
+-- Replacement transaction marks rows matching
+-- expires_at IS NOT NULL AND expires_at <= CURRENT_TIMESTAMP(3) as revoked
+-- before the partial unique index is evaluated.
+CREATE TABLE IF NOT EXISTS bff_share (
+  share_id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  conversation_id TEXT NOT NULL,
+  url TEXT NOT NULL,
+  created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  expires_at TIMESTAMPTZ(3),
+  revoked_at TIMESTAMPTZ(3),
+  CONSTRAINT ck_bff_share_identity CHECK (length(btrim(tenant_id)) > 0 AND length(btrim(conversation_id)) > 0),
+  CONSTRAINT ck_bff_share_url CHECK (length(btrim(url)) > 0),
+  CONSTRAINT ck_bff_share_expiry CHECK (expires_at IS NULL OR expires_at > created_at),
+  CONSTRAINT ck_bff_share_revoke_after_create CHECK (revoked_at IS NULL OR revoked_at >= created_at)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_bff_share_active_conversation
+  ON bff_share (tenant_id, conversation_id)
+  WHERE revoked_at IS NULL;
+CREATE INDEX IF NOT EXISTS ix_bff_share_active_lookup
+  ON bff_share (share_id, tenant_id, conversation_id)
+  WHERE revoked_at IS NULL;
+
 -- Durable public AG-UI projection. Agent execution events are copied into this
 -- BFF-owned ledger before any public SSE frame is emitted. The stream row is
 -- also the per-tenant/session sequence allocator and projection-state fence.

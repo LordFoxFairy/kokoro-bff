@@ -125,9 +125,11 @@ Agent 自有 event wire 的时间编码由 Agent contract 决定（当前 client
 在 projection adapter 边界解析为 UTC instant，BFF domain/application/数据库事实不把 epoch 数字当作时间。该约定不
 改动 Agent Run 或 Agent outbox。
 
-Conversation、Message、Share 的产品事实最终归 BFF；Agent 只拥有 Run、checkpoint、lease、tool journal、执行事件、
-HITL 与 evidence。当前 Live session/message history 仍来自 Agent，是明确缺口。AG-UI ledger 当前无 retention/GC 和
-cursor-expired 水位；source ingestion 仍由公开读取驱动，不是独立 durable consumer。
+Conversation、Message、Share 的产品事实由 BFF PostgreSQL canonical tables 与 ChatApplicationService 持有；Agent 只
+拥有 Run、checkpoint、lease、tool journal、执行事件、HITL 与 evidence。Live session list/detail/message history/title/
+delete/share routes 只读取 BFF facts；Message create 在 BFF 事务中追加 user message 后调用窄 Agent launch client。AG-UI
+ledger 仍独立保存 Agent execution projection，assistant message reconciliation、retention/GC 和主动 source consumer
+属于后续切片。
 
 ## 7. 出站与失败归一
 

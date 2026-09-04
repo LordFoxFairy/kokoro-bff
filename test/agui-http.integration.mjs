@@ -15,6 +15,9 @@ const integrationTest = postgresUrl && redisUrl ? test : test.skip
 const servers = []
 
 const TABLES = [
+  "bff_share",
+  "bff_message",
+  "bff_conversation",
   "bff_agui_event",
   "bff_agui_source_event",
   "bff_agui_stream",
@@ -118,6 +121,11 @@ integrationTest("serves live and restarted replay only from the tenant-scoped Po
       { chat_event_id: "source_message_end", session_id: "session_live", run_id: "run_1", chat_message_id: "message_1", event_type: "assistant.completed", payload_json: '{"content":"hello"}', seq: 3, created_at: 3000 },
       { chat_event_id: "source_terminal", session_id: "session_live", run_id: "run_1", event_type: "run.completed", payload_json: '{"status":"completed","token_usage":null}', seq: 4, created_at: 4000 },
     ]
+    await pool.query(
+      `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title)
+       VALUES ($1, $2, $3, $4)`,
+      ["session_live", "tenant_a", "user_integration", "Live Chat"],
+    )
     const eventRequests = []
     agent = createServer((request, response) => {
       response.setHeader("content-type", "application/json")
@@ -167,7 +175,7 @@ integrationTest("serves live and restarted replay only from the tenant-scoped Po
     const detailBody = await detail.json()
     assert.equal(detailBody.data.event_watermark, originalFrames.at(-1).id)
     assert.equal(detailBody.data.active_run, undefined)
-    assert.deepEqual(eventRequests.slice(0, 4), [0, 2, 0, 2])
+    assert.deepEqual(eventRequests.slice(0, 4), [0, 2])
 
     const ledger = await pool.query(
       `SELECT public_sequence, cursor, event_type

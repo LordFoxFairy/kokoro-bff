@@ -17,6 +17,9 @@
 | `bff_scheduled_task` | ScheduledTask definition | task id；tenant 列表；revision | 保存 owner、IANA timezone + local time rule、UTC `next_run_at` |
 | `bff_scheduled_task_outbox` | ScheduledTask → Scheduler command | outbox id；`tenant_id + task_id + command_type + idempotency_key` 唯一；ready/task index | bounded register/replace/delete queue；保存版本化 payload、lineage、lease/fence、attempt/error/terminal state |
 | `bff_idempotency_receipt` | mutation receipt | scope PK | pending/terminal status 与 JSON response |
+| `bff_conversation` | Conversation 产品事实 | `conversation_id`；tenant + updated_at 稳定列表排序 | active/deleted tombstone；删除不物理清除，保留至 retention cleanup |
+| `bff_message` | Message 产品事实 | `message_id`；tenant + conversation + message_seq 唯一 | role/status CHECK；`run_id` 是 Agent opaque reference，不做跨仓关系约束 |
+| `bff_share` | Share 产品事实 | `share_id`；tenant + conversation active partial unique | revoked/expired rows retained；public lookup 只接受未撤销且未过期记录 |
 | `bff_agui_stream` | tenant/session public projection state | `(tenant_id, session_id)` PK | version fence、source high-watermark、next public sequence、open text/tool state |
 | `bff_agui_source_event` | 已摄取 Agent source identity | tenant/session/owner/event PK；source sequence 唯一 | 保存 SHA-256 digest；包括零 public frame 的未知 source kind |
 | `bff_agui_event` | append-only public AG-UI frame | tenant/session/public sequence PK；cursor 全局唯一；source frame 唯一 | 完整 JSON payload 与 opaque cursor |
@@ -57,8 +60,22 @@
 Project side effect、Agent Run outbox、mutation receipt claim 与 ScheduledTask fact/outbox 的统一事务、outbox retention
 和后台 reconciliation 尚未完成；这些不属于本切片。ScheduledTask → Scheduler bounded outbox 已是当前 schema 事实。
 
-当前也没有 BFF-owned Conversation、Message、Share、durable command receipt resource、version/ETag 或 delivery
-projection 表。Live Chat history 仍从 Agent HTTP ingress 读取；这不等于 BFF 已经拥有 Chat 产品事实。
+当前没有独立 Chat assistant reconciliation worker、durable command receipt resource、version/ETag 或 delivery
+projection 表。Conversation、Message、Share 已由 BFF PostgreSQL 拥有；Agent HTTP ingress 仅负责 launch/control/source
+execution events，不作为 Chat 产品事实读取源。
+
+### Chat 产品事实不变量
+
+1. 所有 Conversation/Message/Share repository 查询都带 `tenant_id`；跨 tenant 的 id、cursor、project_ref 和 share
+   不返回有效事实。
+2. Message append 与 Conversation lock 在同一事务中执行，锁顺序固定为 Conversation → message sequence allocation →
+   Message insert → Conversation updated_at；没有数据库级跨仓关系约束。
+3. Conversation delete 先更新 active row 为 deleted tombstone，再在同一事务撤销 active shares；Message rows 保留用于
+   retention/audit cleanup，公开列表与详情只看 active conversation。
+4. Share 的 partial unique index 只限制 `revoked_at IS NULL`。创建 share 时在持有 Conversation lock 的事务中先将已过期且
+   未撤销的 share 标记 revoked，再创建 replacement，因此过期 share 不会阻塞新 share；retention job 后续清理历史 rows。
+5. Conversation 与 Message 列表使用 `(updated_at, id)` / `(created_at, message_seq, message_id)` 稳定排序，cursor 是带前缀的
+   base64url opaque token；时间在 application/domain 使用 UTC `Date`，数据库使用 `TIMESTAMPTZ(3)`。
 
 ## 时间、约束与命名
 

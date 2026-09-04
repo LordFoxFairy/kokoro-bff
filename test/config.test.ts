@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { readFile } from "node:fs/promises"
 import { describe, it } from "node:test"
 
 import { loadConfig } from "../dist/config/runtime.js"
@@ -99,5 +100,11 @@ describe("kokoro-bff optional Agent configuration", () => {
   it("requires explicit live persistence and rejects the removed mode", () => {
     assert.throws(() => loadConfig({ KOKORO_DOMAIN: "dev.kokoro.localhost", KOKORO_BFF_SHARED_SECRET: "test-secret" }), /KOKORO_BFF_POSTGRES_URL/u)
     assert.throws(() => loadConfig({ ...runtimeEnv, KOKORO_BFF_MODE: "mock" }), /KOKORO_BFF_MODE must be live/u)
+  })
+
+  it("keeps the checked-in runtime example aligned with the live-only loader", async () => {
+    const example = await readFile(new URL("../.env.example", import.meta.url), "utf8")
+    assert.match(example, /^KOKORO_BFF_MODE=live$/mu)
+    assert.doesNotMatch(example, /^KOKORO_BFF_MODE=mock$/mu)
   })
 })
