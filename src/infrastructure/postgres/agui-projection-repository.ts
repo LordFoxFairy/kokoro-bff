@@ -247,7 +247,7 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
     return "committed"
   }
 
-  public async replay(tenantId: string, sessionId: string, cursorValue: string | null, limit: number) {
+  public async replay(tenantId: string, sessionId: string, cursorValue: string | null, limit: number, maxBytes: number) {
     const result = await this.database.pool.query<ReplayRow>(
       `WITH cursor_position AS MATERIALIZED (
          SELECT CASE
@@ -292,8 +292,15 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
                  AND terminal.public_sequence >= latest.public_sequence
             )
        ),
-       frame_page AS (
-         SELECT event.public_sequence, event.cursor, event.event_type, event.event_payload
+       frame_candidates AS (
+         SELECT event.public_sequence,
+                event.cursor,
+                event.event_type,
+                event.event_payload,
+                octet_length(event.event_payload::text)
+                  + octet_length(event.cursor)
+                  + octet_length(event.event_type)
+                  + 64 AS frame_bytes
            FROM bff_agui_event AS event
            CROSS JOIN cursor_position AS position
           WHERE position.after_sequence >= 0
@@ -302,6 +309,17 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
             AND event.public_sequence > position.after_sequence
           ORDER BY event.public_sequence ASC
           LIMIT $4
+       ),
+       sized_frame_page AS (
+         SELECT candidate.*,
+                row_number() OVER (ORDER BY candidate.public_sequence ASC) AS frame_number,
+                sum(candidate.frame_bytes) OVER (ORDER BY candidate.public_sequence ASC) AS cumulative_bytes
+           FROM frame_candidates AS candidate
+       ),
+       frame_page AS (
+         SELECT page.public_sequence, page.cursor, page.event_type, page.event_payload
+           FROM sized_frame_page AS page
+          WHERE page.frame_number = 1 OR page.cumulative_bytes <= $5
        )
        SELECT position.after_sequence >= 0 AS cursor_valid,
               position.after_sequence::text AS after_sequence,
@@ -315,7 +333,7 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
          CROSS JOIN stream_head AS head
          LEFT JOIN frame_page AS frame ON TRUE
         ORDER BY frame.public_sequence ASC NULLS LAST`,
-      [tenantId, sessionId, cursorValue, limit],
+      [tenantId, sessionId, cursorValue, limit, maxBytes],
     )
     const snapshot = result.rows[0]
     if (snapshot === undefined || !snapshot.cursor_valid) return { kind: "invalid_cursor" as const }

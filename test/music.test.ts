@@ -3,6 +3,7 @@ import { createServer, type Server } from "node:http"
 import { afterEach, describe, it } from "node:test"
 
 import { createBffServer } from "../dist/main.js"
+import { DEFAULT_AGUI_CONFIG } from "../dist/config.js"
 import type { BffConfig } from "../src/config.js"
 import { musicOwnerRoute, projectMoriResponse, projectMoriEventStream } from "../dist/infrastructure/clients/mori/owner-route.js"
 
@@ -35,6 +36,7 @@ function config(overrides: Partial<BffConfig> = {}): BffConfig {
     agentEnabled: false,
     postgresUrl: null,
     redisUrl: null,
+    agUi: DEFAULT_AGUI_CONFIG,
     upstreams: {
       system: null,
       model: null,

@@ -62,6 +62,13 @@ function bffConfig(overrides = {}) {
     schedulerTargetUrl: overrides.schedulerTargetUrl,
     postgresUrl,
     redisUrl,
+    agUi: {
+      replayPageFrames: 128,
+      replayPageBytes: 1024 * 1024,
+      streamMaxFrames: 10_000,
+      streamMaxBytes: 16 * 1024 * 1024,
+      streamMaxDurationMs: 5 * 60 * 1000,
+    },
     upstreams: {
       system: null,
       model: null,

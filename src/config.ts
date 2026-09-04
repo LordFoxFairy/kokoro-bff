@@ -2,6 +2,22 @@ import { URL } from "node:url"
 
 export type BffMode = "mock" | "live"
 
+export type AgUiConfig = {
+  replayPageFrames: number
+  replayPageBytes: number
+  streamMaxFrames: number
+  streamMaxBytes: number
+  streamMaxDurationMs: number
+}
+
+export const DEFAULT_AGUI_CONFIG: AgUiConfig = {
+  replayPageFrames: 128,
+  replayPageBytes: 1024 * 1024,
+  streamMaxFrames: 10_000,
+  streamMaxBytes: 16 * 1024 * 1024,
+  streamMaxDurationMs: 5 * 60 * 1000,
+}
+
 export type BffConfig = {
   host: string
   port: number
@@ -17,6 +33,7 @@ export type BffConfig = {
   agentEnabled: boolean
   postgresUrl: string | null
   redisUrl: string | null
+  agUi: AgUiConfig
   upstreams: Record<string, string | null>
 }
 
@@ -93,6 +110,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
     agentEnabled: booleanFlag(env.KOKORO_AGENT_ENABLED, false),
     postgresUrl: env.KOKORO_BFF_POSTGRES_URL?.trim() || null,
     redisUrl: env.KOKORO_BFF_REDIS_URL?.trim() || null,
+    agUi: {
+      replayPageFrames: positiveInteger(env.KOKORO_AGUI_REPLAY_PAGE_FRAMES, "KOKORO_AGUI_REPLAY_PAGE_FRAMES", DEFAULT_AGUI_CONFIG.replayPageFrames),
+      replayPageBytes: positiveInteger(env.KOKORO_AGUI_REPLAY_PAGE_BYTES, "KOKORO_AGUI_REPLAY_PAGE_BYTES", DEFAULT_AGUI_CONFIG.replayPageBytes),
+      streamMaxFrames: positiveInteger(env.KOKORO_AGUI_STREAM_MAX_FRAMES, "KOKORO_AGUI_STREAM_MAX_FRAMES", DEFAULT_AGUI_CONFIG.streamMaxFrames),
+      streamMaxBytes: positiveInteger(env.KOKORO_AGUI_STREAM_MAX_BYTES, "KOKORO_AGUI_STREAM_MAX_BYTES", DEFAULT_AGUI_CONFIG.streamMaxBytes),
+      streamMaxDurationMs: positiveInteger(env.KOKORO_AGUI_STREAM_MAX_DURATION_MS, "KOKORO_AGUI_STREAM_MAX_DURATION_MS", DEFAULT_AGUI_CONFIG.streamMaxDurationMs),
+    },
     upstreams,
   }
 }

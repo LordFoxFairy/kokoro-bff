@@ -287,6 +287,11 @@ integrationTest("keeps replay page boundaries and terminal state tied to the lat
     assert.equal(terminalHead.kind, "page")
     assert.equal(terminalHead.atHead, true)
     assert.equal(terminalHead.terminalRunId, "run_2")
+
+    const byteBounded = await store.agUi.replay("tenant_a", "session_runs", null, 100, 1)
+    assert.equal(byteBounded.kind, "page")
+    assert.equal(byteBounded.frames.length, 1)
+    assert.equal(byteBounded.atHead, false)
   } finally {
     if (store !== null) await store.close().catch(() => undefined)
     await pool.end()

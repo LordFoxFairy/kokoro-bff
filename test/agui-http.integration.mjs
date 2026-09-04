@@ -50,7 +50,7 @@ function auth(tenantId) {
   }
 }
 
-function bffConfig({ agentEnabled, agentBase }) {
+function bffConfig({ agentEnabled, agentBase, agUi }) {
   return {
     host: "127.0.0.1",
     port: 4300,
@@ -66,6 +66,13 @@ function bffConfig({ agentEnabled, agentBase }) {
     schedulerTargetUrl: null,
     postgresUrl,
     redisUrl,
+    agUi: agUi ?? {
+      replayPageFrames: 128,
+      replayPageBytes: 1024 * 1024,
+      streamMaxFrames: 10_000,
+      streamMaxBytes: 16 * 1024 * 1024,
+      streamMaxDurationMs: 5 * 60 * 1000,
+    },
     upstreams: {
       system: null,
       model: null,
@@ -295,6 +302,62 @@ integrationTest("fails loudly when Agent event pagination metadata disagrees wit
       ["tenant_a", "session_invalid_page"],
     )
     assert.equal(sourceCount.rows[0].count, 0)
+  } finally {
+    if (bff !== null) await close(bff)
+    if (agent !== null) await close(agent)
+    for (const server of servers.splice(0)) {
+      if (server.listening) await close(server)
+    }
+    await pool.end()
+  }
+})
+
+integrationTest("ends at the SSE frame budget and resumes strictly after the last written cursor", async () => {
+  const pool = new Pool({ connectionString: postgresUrl })
+  let bff = null
+  let agent = null
+  try {
+    await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
+    await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+    const events = [
+      { chat_event_id: "budget_run_1_started", session_id: "session_budget", run_id: "run_1", event_type: "run.started", payload_json: '{"status":"running"}', seq: 1, created_at: 1000 },
+      { chat_event_id: "budget_run_1_finished", session_id: "session_budget", run_id: "run_1", event_type: "run.completed", payload_json: '{"status":"completed"}', seq: 2, created_at: 2000 },
+      { chat_event_id: "budget_run_2_started", session_id: "session_budget", run_id: "run_2", event_type: "run.started", payload_json: '{"status":"running"}', seq: 3, created_at: 3000 },
+      { chat_event_id: "budget_run_2_finished", session_id: "session_budget", run_id: "run_2", event_type: "run.completed", payload_json: '{"status":"completed"}', seq: 4, created_at: 4000 },
+    ]
+    agent = createServer((request, response) => {
+      const url = new URL(request.url ?? "/", "http://agent.local")
+      const afterSequence = Number(url.searchParams.get("after_seq") ?? "0")
+      const page = events.filter((candidate) => candidate.seq > afterSequence)
+      response.setHeader("content-type", "application/json")
+      response.end(JSON.stringify({ data: { events: page, next_seq: page.at(-1)?.seq ?? afterSequence, watermark: 4 }, meta: { request_id: "agent" } }))
+    })
+    const agentBase = await listen(agent)
+    bff = createBffServer(bffConfig({
+      agentEnabled: true,
+      agentBase,
+      agUi: {
+        replayPageFrames: 128,
+        replayPageBytes: 1024 * 1024,
+        streamMaxFrames: 2,
+        streamMaxBytes: 1024 * 1024,
+        streamMaxDurationMs: 30_000,
+      },
+    }))
+    const base = await listen(bff)
+
+    const first = await fetch(`${base}/v1/sessions/session_budget/events`, { headers: auth("tenant_a") })
+    assert.equal(first.status, 200)
+    const firstFrames = parseSse(await first.text())
+    assert.deepEqual(firstFrames.map((frame) => frame.event.type), ["RUN_STARTED", "RUN_FINISHED"])
+
+    const resumed = await fetch(`${base}/v1/sessions/session_budget/events`, {
+      headers: { ...auth("tenant_a"), "last-event-id": firstFrames.at(-1).id },
+    })
+    assert.equal(resumed.status, 200)
+    const resumedFrames = parseSse(await resumed.text())
+    assert.deepEqual(resumedFrames.map((frame) => frame.event.type), ["RUN_STARTED", "RUN_FINISHED"])
+    assert.equal(new Set([...firstFrames, ...resumedFrames].map((frame) => frame.id)).size, 4)
   } finally {
     if (bff !== null) await close(bff)
     if (agent !== null) await close(agent)

@@ -9,7 +9,7 @@ import { normalizeUpstreamResponse, reply } from "../response.js"
 import { headerString, incomingHeaders, idempotencyKey, queryOf, type Context } from "../request.js"
 import type { IdempotencyEntry, MutationTicket } from "../../application/idempotency.js"
 import { waitForSsePoll } from "./helpers.js"
-import { agUiSseFrame } from "../../interfaces/http/agui/sse.js"
+import { AgUiSseWriter } from "../../interfaces/http/agui/sse.js"
 import { AgUiSourceIdentityConflictError } from "../../application/agui/errors.js"
 import type { AgentProjectionSource, AgUiProjectionService } from "../../application/agui/project-session-events.js"
 
@@ -132,16 +132,31 @@ async function durableAgentEventStream(
   const cursorHeader = request.headers["last-event-id"]
   let cursor = cursorHeader === undefined ? null : headerString(cursorHeader).trim()
   let streamStarted = false
+  const writer = new AgUiSseWriter(request, response, {
+    maxFrames: config.agUi.streamMaxFrames,
+    maxBytes: config.agUi.streamMaxBytes,
+    maxDurationMs: config.agUi.streamMaxDurationMs,
+  })
 
-  const drainLedger = async (): Promise<"head" | "terminal" | "invalid_cursor"> => {
+  const drainLedger = async (): Promise<"head" | "terminal" | "invalid_cursor" | "stopped"> => {
     for (;;) {
-      const page = await projection.replay(context.identity.namespace, sessionId, cursor, 1000)
+      const page = await projection.replay(
+        context.identity.namespace,
+        sessionId,
+        cursor,
+        config.agUi.replayPageFrames,
+        config.agUi.replayPageBytes,
+      )
       if (page.kind === "invalid_cursor") return "invalid_cursor"
       if (page.frames.length > 0) {
         startAgUiStream(response, context.requestId)
         streamStarted = true
-        response.write(page.frames.map((frame) => agUiSseFrame(frame.payload, frame.cursor)).join(""))
-        cursor = page.frames.at(-1)?.cursor ?? cursor
+        const write = await writer.writeFrames(page.frames)
+        cursor = write.lastCursor ?? cursor
+        if (write.status !== "written") {
+          if (!response.writableEnded && !response.destroyed) response.end()
+          return "stopped"
+        }
       }
       if (!page.atHead) continue
       return page.terminalRunId === null ? "head" : "terminal"
@@ -154,6 +169,7 @@ async function durableAgentEventStream(
       reply(response, 400, failure("invalid_event_cursor", "Last-Event-ID is invalid for this session", context.requestId), context, idempotency, mutation)
       return
     }
+    if (initial === "stopped") return
     if (initial === "terminal" && (!config.agentEnabled || baseUrl === null)) {
       startAgUiStream(response, context.requestId)
       response.end()
@@ -162,7 +178,10 @@ async function durableAgentEventStream(
     if (!config.agentEnabled || baseUrl === null) {
       if (!streamStarted) {
         reply(response, 503, failure("agent_not_configured", "Agent execution is disabled or not configured", context.requestId), context, idempotency, mutation)
-      } else response.end(": source-unavailable\n\n")
+      } else {
+        await writer.writeComment("source-unavailable")
+        if (!response.writableEnded && !response.destroyed) response.end()
+      }
       return
     }
 
@@ -185,14 +204,20 @@ async function durableAgentEventStream(
         )
         if (result.status >= 400) {
           if (!streamStarted) sendAgentFailure(response, result, context, idempotency, mutation)
-          else response.end(": upstream-error\n\n")
+          else {
+            await writer.writeComment("upstream-error")
+            if (!response.writableEnded && !response.destroyed) response.end()
+          }
           return
         }
         const data = dataOf(result.body)
         const page = agentEventPage(data, sessionId, afterSequence, 1000)
         if (page === null || (snapshotWatermark !== null && page.watermark < snapshotWatermark)) {
           if (!streamStarted) sendAgentFailure(response, { status: 502, body: failure("upstream_response_invalid", "Agent event replay did not match the v1 contract", context.requestId) }, context, idempotency, mutation)
-          else response.end(": upstream-response-invalid\n\n")
+          else {
+            await writer.writeComment("upstream-response-invalid")
+            if (!response.writableEnded && !response.destroyed) response.end()
+          }
           return
         }
         snapshotWatermark = page.watermark
@@ -203,6 +228,7 @@ async function durableAgentEventStream(
         }
         afterSequence = page.nextSequence
         const drained = await drainLedger()
+        if (drained === "stopped") return
         if (page.exhausted && drained === "terminal") {
           startAgUiStream(response, context.requestId)
           response.end()
@@ -213,7 +239,7 @@ async function durableAgentEventStream(
       if (!streamStarted || insertedFrames === 0) {
         startAgUiStream(response, context.requestId)
         streamStarted = true
-        response.write(": keep-alive\n\n")
+        if (await writer.writeComment("keep-alive") !== "written") break
       }
       if (!await waitForSsePoll(request, response, 1000)) break
     }
@@ -223,7 +249,10 @@ async function durableAgentEventStream(
     const code = sourceConflict ? "upstream_event_identity_conflict" : "upstream_response_invalid"
     const message = sourceConflict ? "Agent reused a durable event identity" : "Agent event projection failed"
     if (!streamStarted) reply(response, 502, failure(code, message, context.requestId), context, idempotency, mutation)
-    else if (!response.writableEnded) response.end(": upstream-error\n\n")
+    else if (!response.writableEnded && !response.destroyed) {
+      await writer.writeComment("upstream-error")
+      if (!response.writableEnded && !response.destroyed) response.end()
+    }
   }
 }
 

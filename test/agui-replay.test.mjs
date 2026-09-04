@@ -5,10 +5,12 @@ import { PostgresAgUiProjectionRepository } from "../dist/infrastructure/postgre
 
 it("resolves cursor, frame page, head, and run terminal state in one database statement", async () => {
   const queries = []
+  const parameters = []
   const database = {
     pool: {
-      query: async (sql) => {
+      query: async (sql, values) => {
         queries.push(sql)
+        parameters.push(values)
         if (sql.includes("cursor_position")) {
           return {
             rows: [{
@@ -38,9 +40,11 @@ it("resolves cursor, frame page, head, and run terminal state in one database st
     "session_1",
     "agui_44444444444444444444444444444444",
     100,
+    4096,
   )
 
   assert.equal(queries.length, 1)
+  assert.deepEqual(parameters, [["tenant_1", "session_1", "agui_44444444444444444444444444444444", 100, 4096]])
   assert.equal(page.kind, "page")
   assert.equal(page.atHead, true)
   assert.equal(page.terminalRunId, null)

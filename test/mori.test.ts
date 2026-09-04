@@ -3,6 +3,7 @@ import assert from "node:assert/strict"
 import { afterEach, describe, it } from "node:test"
 
 import { createBffServer } from "../dist/main.js"
+import { DEFAULT_AGUI_CONFIG } from "../dist/config.js"
 import type { BffConfig } from "../src/config.js"
 
 const servers: Server[] = []
@@ -34,6 +35,7 @@ function config(overrides: Partial<BffConfig> = {}): BffConfig {
     agentEnabled: false,
     postgresUrl: null,
     redisUrl: null,
+    agUi: DEFAULT_AGUI_CONFIG,
     upstreams: {
       system: null,
       model: null,

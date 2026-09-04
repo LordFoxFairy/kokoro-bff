@@ -11,6 +11,13 @@ describe("kokoro-bff optional Agent configuration", () => {
     assert.equal(config.upstreamTimeoutMs, 5000)
     assert.equal(config.upstreamMaxResponseBytes, 1024 * 1024)
     assert.equal(config.upstreams.music, null)
+    assert.deepEqual(config.agUi, {
+      replayPageFrames: 128,
+      replayPageBytes: 1024 * 1024,
+      streamMaxFrames: 10_000,
+      streamMaxBytes: 16 * 1024 * 1024,
+      streamMaxDurationMs: 5 * 60 * 1000,
+    })
   })
 
   it("enables Agent explicitly for live execution", () => {
@@ -37,5 +44,23 @@ describe("kokoro-bff optional Agent configuration", () => {
     })
     assert.equal(config.upstreamTimeoutMs, 250)
     assert.equal(config.upstreamMaxResponseBytes, 4096)
+  })
+
+  it("loads AG-UI replay and stream budgets from the environment", () => {
+    const config = loadConfig({
+      KOKORO_DOMAIN: "dev.kokoro.localhost",
+      KOKORO_AGUI_REPLAY_PAGE_FRAMES: "16",
+      KOKORO_AGUI_REPLAY_PAGE_BYTES: "4096",
+      KOKORO_AGUI_STREAM_MAX_FRAMES: "32",
+      KOKORO_AGUI_STREAM_MAX_BYTES: "8192",
+      KOKORO_AGUI_STREAM_MAX_DURATION_MS: "250",
+    })
+    assert.deepEqual(config.agUi, {
+      replayPageFrames: 16,
+      replayPageBytes: 4096,
+      streamMaxFrames: 32,
+      streamMaxBytes: 8192,
+      streamMaxDurationMs: 250,
+    })
   })
 })

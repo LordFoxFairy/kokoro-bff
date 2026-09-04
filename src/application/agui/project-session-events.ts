@@ -171,10 +171,12 @@ export class AgUiProjectionService {
     sessionId: string,
     cursor: string | null,
     limit = 1000,
+    maxBytes = 1024 * 1024,
   ): Promise<AgUiReplayPage | AgUiInvalidCursor> {
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1000) throw new Error("AG-UI replay limit must be between 1 and 1000")
+    if (!Number.isSafeInteger(maxBytes) || maxBytes < 1) throw new Error("AG-UI replay byte limit must be a positive safe integer")
     if (cursor !== null && !OPAQUE_CURSOR_PATTERN.test(cursor)) return Promise.resolve({ kind: "invalid_cursor" })
-    return this.repository.replay(tenantId, sessionId, cursor, limit)
+    return this.repository.replay(tenantId, sessionId, cursor, limit, maxBytes)
   }
 
   public status(tenantId: string, sessionId: string): Promise<AgUiProjectionStatus> {
