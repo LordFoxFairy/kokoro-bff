@@ -21,8 +21,9 @@ BFF 是 Kokoro 唯一 `public` HTTP owner。Browser 仍必须经 `kokoro` same-o
 | `x-kokoro-idempotency` | `none\|required` | 是否要求 `Idempotency-Key` |
 | `x-kokoro-permission` | 稳定 dotted identifier 或 `anonymous` | admission 权限意图 |
 
-`pnpm contract:check` 对全部 operation 执行门禁。metadata 表示协议策略，不证明对应 Live adapter、数据库事实或 SLO
-已经完成；实现状态看 [`CURRENT.md`](./CURRENT.md)。
+`pnpm contract:check` 对全部 operation 执行门禁；`node scripts/verify-openapi.ts` 另外校验字段命名、响应 envelope、
+状态码、幂等参数、分页游标和 AG-UI replay 形状。metadata 表示协议策略，不证明对应 Live adapter、数据库事实或
+SLO 已经完成；实现状态看 [`CURRENT.md`](./CURRENT.md)。
 
 ## 调用与鉴权
 
@@ -54,10 +55,15 @@ JSON 错误：
 {"error": {"code": "stable_code", "message": "Log-safe message"}, "meta": {"request_id": "REQUEST_ID"}}
 ```
 
-外部 JSON 的目标规则是 `snake_case`，瞬时点使用 RFC 3339 UTC 毫秒精度。当前已知例外是
-`ProjectInstructionRevision.updatedAt/actorName` 及其 Unix milliseconds；runtime mapper、consumer 与 contract 尚未在
-本阶段改动，因此不能声称全 surface 已收敛。错误 `code` 可编程且稳定；message 不暴露 SQL、stack、credential 或
-provider 原文。
+外部 JSON 字段统一使用 `snake_case`，瞬时点使用 RFC 3339 UTC 毫秒精度。`ProjectInstructionRevision` 的 canonical
+字段是 `updated_at`（`string`、`date-time`）和 `actor_name`，对应 schema example 也使用相同字段。此契约切片只更新
+BFF 的机器事实与契约门禁；runtime mapper、Web consumer 和 `docs/api/v1/projects.md` 仍由 source/documentation owner
+同步，在同步完成前不把运行时 parity 当作已验证事实。错误 `code` 可编程且稳定；message 不暴露 SQL、stack、credential
+或 provider 原文。
+
+业务 JSON 成功响应统一使用 `{data, meta}`，错误响应统一使用 `{error, meta}`。`/healthz` 的 `200`、`/readyz` 的
+`200/503` 是明确的 probe `HealthResponse` 例外；probe 的无效请求和业务失败仍使用 `ErrorEnvelope`。SSE 响应使用
+各自的 `text/event-stream` schema，不套 JSON envelope。
 
 ## 列表、并发与版本
 

@@ -2547,13 +2547,19 @@ components:
         meta: { $ref: '#/components/schemas/RequestMeta' }
     ProjectInstructionRevision:
       type: object
-      required: [id, instruction, updatedAt, actorName, current]
+      required: [id, instruction, updated_at, actor_name, current]
       properties:
         id: { type: string }
         instruction: { type: string }
-        updatedAt: { type: integer, format: int64 }
-        actorName: { type: string }
+        updated_at: { type: string, format: date-time }
+        actor_name: { type: string }
         current: { type: boolean }
+      example:
+        id: project-instruction-2
+        instruction: Keep all implementation notes scoped to this project.
+        updated_at: '2026-01-01T00:00:00.000Z'
+        actor_name: You
+        current: true
     ProjectInstructionRevisionResponse:
       type: object
       required: [data, meta]
@@ -2566,6 +2572,16 @@ components:
               type: array
               items: { $ref: '#/components/schemas/ProjectInstructionRevision' }
         meta: { $ref: '#/components/schemas/RequestMeta' }
+      example:
+        data:
+          items:
+            - id: project-instruction-2
+              instruction: Keep all implementation notes scoped to this project.
+              updated_at: '2026-01-01T00:00:00.000Z'
+              actor_name: You
+              current: true
+        meta:
+          request_id: req_project_instruction_history_1
     CreateProjectRequest:
       type: object
       required: [name]
