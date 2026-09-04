@@ -11,7 +11,7 @@ import { headerString, incomingHeaders, idempotencyKey, queryOf, type Context } 
 import type { IdempotencyEntry, MutationTicket } from "../../application/idempotency.js"
 import { waitForSsePoll } from "./helpers.js"
 import { agUiSseFrame } from "../../interfaces/http/agui/sse.js"
-import { createAgUiProjectionState, projectChatEvent } from "../../interfaces/http/agui/events.js"
+import { createAgUiProjectionState, projectChatEvent } from "../../application/agui/project-chat-event.js"
 
 export async function callAgent(
   config: BffConfig,
@@ -226,7 +226,7 @@ export async function liveAgentSession(
         const events = rawEvents.map(mapAgentEvent).filter((event): event is ChatEvent => event !== null)
         const agUiEvents = events.flatMap((event) => projectChatEvent(event, projectionState))
         if (agUiEvents.length > 0) {
-          response.write(agUiEvents.map(agUiSseFrame).join(""))
+          response.write(agUiEvents.map((event) => agUiSseFrame(event, String(event.metadata.kokoro.seq))).join(""))
           afterSeq = Math.max(afterSeq, ...events.map((event) => event.seq))
         } else {
           response.write(": keep-alive\n\n")

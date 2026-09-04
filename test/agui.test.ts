@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 import { EventSchemas } from "@ag-ui/core"
 
-import { createAgUiProjectionState, projectChatEvent } from "../dist/interfaces/http/agui/events.js"
+import { createAgUiProjectionState, projectChatEvent } from "../dist/application/agui/project-chat-event.js"
 
 const base = {
   event_id: "evt_1",

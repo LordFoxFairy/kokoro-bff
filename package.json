@@ -20,7 +20,7 @@
     "contract:update-baseline": "node scripts/check-contract.mjs --write-baseline",
     "test:architecture": "pnpm build && node --test test/architecture.test.ts",
     "test": "pnpm build && node --test test/architecture.test.ts test/contract-governance.test.mjs test/schema-governance.test.mjs test/agui.test.ts test/bff.test.ts test/config.test.ts test/mori.test.ts test/music.test.ts test/scheduler.test.ts test/upstream.test.ts",
-    "test:integration": "pnpm build && node --test test/business-store.integration.mjs",
+    "test:integration": "pnpm build && node --test --test-concurrency=1 test/business-store.integration.mjs test/agui-projection.integration.mjs",
     "check": "pnpm lint && pnpm typecheck && pnpm contract:check && pnpm test && pnpm build"
   },
   "devDependencies": {

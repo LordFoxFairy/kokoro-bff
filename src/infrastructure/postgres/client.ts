@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { Pool } from "pg"
 import { createClient, type RedisClientType } from "redis"
 
@@ -35,5 +36,11 @@ export class PostgresBffDatabase {
   public async invalidateProjects(tenantId: string): Promise<void> {
     await this.connectRedis()
     await this.redis.del(`kokoro:bff:projects:${tenantId}`)
+  }
+
+  public async notifyAgUiProjection(tenantId: string, sessionId: string, cursor: string | null): Promise<void> {
+    await this.connectRedis()
+    const streamKey = createHash("sha256").update(`${tenantId}\u0000${sessionId}`).digest("hex")
+    await this.redis.publish(`kokoro:bff:agui:${streamKey}`, JSON.stringify({ cursor }))
   }
 }

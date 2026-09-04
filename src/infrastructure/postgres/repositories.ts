@@ -7,6 +7,8 @@ import type { IdempotencyRepository } from "../../application/ports/idempotency-
 import type { ProjectRepository } from "../../application/ports/project-repository.js"
 import type { ScheduledTaskRecord, ScheduledTaskRepository } from "../../application/ports/scheduled-task-repository.js"
 import { BffApplicationServices } from "../../application/services.js"
+import { AgUiProjectionService } from "../../application/agui/project-session-events.js"
+import { PostgresAgUiProjectionRepository } from "./agui-projection-repository.js"
 
 export { PENDING_RECEIPT_STATUS }
 export type { PersistentReceipt, ReceiptClaim } from "../../application/ports/idempotency-repository.js"
@@ -18,6 +20,7 @@ export class PostgresBffRepositories {
   private readonly projects: ProjectRepository
   private readonly scheduled: ScheduledTaskRepository
   public readonly services: BffApplicationServices
+  public readonly agUi: AgUiProjectionService
 
   public constructor(postgresUrl: string, redisUrl: string) {
     this.database = new PostgresBffDatabase(postgresUrl, redisUrl)
@@ -25,6 +28,7 @@ export class PostgresBffRepositories {
     this.projects = new PostgresProjectRepository(this.database)
     this.scheduled = new PostgresScheduledTaskRepository(this.database, this.projects)
     this.services = new BffApplicationServices(this.projects, this.scheduled)
+    this.agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(this.database))
   }
 
   public ready(): Promise<void> { return this.database.ready() }

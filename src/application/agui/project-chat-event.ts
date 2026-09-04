@@ -1,4 +1,4 @@
-import type { ChatEvent } from "../../../contracts/chat.js"
+import type { ChatEvent } from "../../contracts/chat.js"
 import { EventType } from "@ag-ui/core"
 
 /**

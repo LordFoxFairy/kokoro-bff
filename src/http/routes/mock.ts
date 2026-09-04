@@ -10,7 +10,7 @@ import { headerString, idempotencyKey, isRecord, queryOf, type Context } from ".
 import type { IdempotencyEntry, MutationTicket } from "../../application/idempotency.js"
 import { chatSessionDetailData, chatSessionsData, githubSkillSource, mcpRegisterInput, mockControlReceipt, PLATFORMS, projectData, scheduledData, sessionScope, skillData, taskData } from "./helpers.js"
 import { agUiSseFrame } from "../../interfaces/http/agui/sse.js"
-import { createAgUiProjectionState, projectChatEvent } from "../../interfaces/http/agui/events.js"
+import { createAgUiProjectionState, projectChatEvent } from "../../application/agui/project-chat-event.js"
 import { skillCatalogData, skillPoolData } from "./owner.js"
 import { mockMoriBusiness } from "./mori.js"
 
@@ -101,7 +101,7 @@ export async function mockBusiness(
         }
         const projectionState = createAgUiProjectionState()
         const agUiEvents = events.flatMap((event) => projectChatEvent(event, projectionState))
-        response.end(agUiEvents.map(agUiSseFrame).join(""))
+        response.end(agUiEvents.map((event) => agUiSseFrame(event, String(event.metadata.kokoro.seq))).join(""))
         return
       }
     } else if (segments.length === 5 && segments[2] === "runs" && segments[4] === "control" && method === "POST") {
