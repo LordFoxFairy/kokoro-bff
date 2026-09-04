@@ -24,7 +24,7 @@ BFF 是公开 Product API 的唯一 owner；其他仓库只发布自己的 inter
 | `src/main.ts` | server composition、通用 auth/body/idempotency 管线、route dispatch | 仍直接装配生产 mock |
 | `src/http/routes/` | resource route handlers | 尚未迁入标准 `interfaces/http/` |
 | `src/application/` | project/scheduled use case、AG-UI projection/fence、ports、input mapper | 尚无明确 Domain aggregate 层 |
-| `src/infrastructure/postgres/` | BFF-owned repository、durable AG-UI ledger、Redis cache/notification | receipt 与业务写未共享事务 |
+| `src/infrastructure/postgres/` | BFF-owned repository、durable AG-UI ledger、ScheduledTask outbox、Redis cache/notification | mutation receipt 与业务写仍未共享事务 |
 | `src/infrastructure/clients/` | Agent、Scheduler、Mori 窄 adapter；其他 owner 仍集中于 owner route | client 目录尚未对每个 owner 全部分拆 |
 | `src/interfaces/http/agui/` | 已持久化 AG-UI payload → schema-valid SSE frame | 完整 OpenAPI runtime validator 尚未形成 |
 | `src/contracts/` | 当前手写 Web-facing types/envelope | 尚未由 canonical OpenAPI 生成且未与 Domain 类型彻底分离 |
@@ -69,14 +69,25 @@ ScheduledTask 当前流程：
 
 ```text
 validate input
-  -> write/update BFF PostgreSQL fact
-  -> synchronously register or replace Scheduler job
-  -> on failure mark task failed
-  -> startup best-effort reconciliation retries active facts
+  -> derive trusted tenant/actor/request/idempotency lineage
+  -> BEGIN
+  -> tenant-scoped project/task lock and task revision write
+  -> write versioned Scheduler command to bff_scheduled_task_outbox
+  -> COMMIT (fact and command are one local transaction)
+  -> dispatcher claims with SKIP LOCKED + lease_token + fence
+  -> call Scheduler outside the database transaction
+  -> conditional succeeded/retryable/failed settlement
 ```
 
-Delete 当前先删除 Scheduler job，再删除 BFF fact。这个流程不是原子跨服务事务；目标是本地事务写 fact + outbox，
-由 dispatcher 重试，并以 receipt/event reconciliation 收敛。
+Outbox 不是通用跨域队列；每行只表示一个 `scheduler.register|replace|delete` command，payload 带 schema version、
+task revision 和完整 tenant/actor/request/idempotency lineage。相同 `(tenant_id, task_id, command_type,
+idempotency_key)` 只产生一个业务 command；同一 task 的较新 command 要等较早 pending/retryable/leased command
+结束后再 claim。删除先在同一事务写 delete command，再删除 BFF fact，因此 Scheduler job 的外部删除可在进程崩溃后恢复。
+
+Dispatcher 的 HTTP 投递是 at-least-once：lease 过期可被其他 worker 重新 claim，settlement 必须匹配 owner、token 和
+fence；2xx 终结为 `succeeded`，明确的瞬时错误进入指数退避 `retryable`，超过 attempt budget 或永久 4xx 进入 `failed`。
+Scheduler 注册的 409/404 只按稳定 job identity 做 register/replace reconciliation。mutation receipt 目前仍由外层
+idempotency repository 单独 claim/commit，尚未与 task/outbox 合并为一个 receipt 事务。
 
 ## 6. Chat 与 AG-UI
 
@@ -110,6 +121,10 @@ high-watermark；通知失败不回滚事实。当前 HTTP 请求自己轮询 Ag
 终态 ledger 在 Agent unavailable/disabled 和 BFF 重启后仍可独立 replay；非终态且无法接触 Agent 时只能返回已持久化
 部分并明确结束，或在尚未开始 SSE 时返回 503。
 
+Agent 自有 event wire 的时间编码由 Agent contract 决定（当前 client boundary 保留其 epoch-millisecond 形状）；BFF
+在 projection adapter 边界解析为 UTC instant，BFF domain/application/数据库事实不把 epoch 数字当作时间。该约定不
+改动 Agent Run 或 Agent outbox。
+
 Conversation、Message、Share 的产品事实最终归 BFF；Agent 只拥有 Run、checkpoint、lease、tool journal、执行事件、
 HITL 与 evidence。当前 Live session/message history 仍来自 Agent，是明确缺口。AG-UI ledger 当前无 retention/GC 和
 cursor-expired 水位；source ingestion 仍由公开读取驱动，不是独立 durable consumer。
@@ -125,5 +140,7 @@ provider body、SQL 或 stack。
 - Mock 是本地确定性 fixture，不需要 PostgreSQL/Redis；它不是生产完成证据。
 - Live BFF-owned 路由要求 PostgreSQL + Redis；`/readyz` 检查可用性。AG-UI committed replay 只读取 PostgreSQL，
   但 Redis 不可用仍会使整体 readiness 失败。
-- 启动后异步 reconcile 持久化 ScheduledTask；该过程 best-effort，不阻塞 listen。
-- 当前 graceful shutdown 关闭 repository，但尚无完整 in-flight drain、outbox dispatcher drain 或 termination budget。
+- 监听后启动 ScheduledTask bounded outbox dispatcher；它不扫描或重建已成功 command，只 claim pending/retryable/expired
+  lease rows。
+- graceful shutdown 先停止 dispatcher 并等待当前 bounded cycle，再关闭 repository；尚无完整 request drain 或 termination
+  budget。

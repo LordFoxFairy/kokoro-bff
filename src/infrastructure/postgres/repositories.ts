@@ -6,6 +6,7 @@ import { PENDING_RECEIPT_STATUS, type PersistentReceipt, type ReceiptClaim } fro
 import type { IdempotencyRepository } from "../../application/ports/idempotency-repository.js"
 import type { ProjectRepository } from "../../application/ports/project-repository.js"
 import type { ScheduledTaskRepository } from "../../application/ports/scheduled-task-repository.js"
+import type { ScheduledTaskOutboxRepository } from "../../application/ports/scheduled-task-outbox-repository.js"
 import { BffApplicationServices } from "../../application/services.js"
 import { AgUiProjectionService } from "../../application/agui/project-session-events.js"
 import { PostgresAgUiProjectionRepository } from "./agui-projection-repository.js"
@@ -21,12 +22,15 @@ export class PostgresBffRepositories {
   private readonly scheduled: ScheduledTaskRepository
   public readonly services: BffApplicationServices
   public readonly agUi: AgUiProjectionService
+  public readonly scheduledTaskOutbox: ScheduledTaskOutboxRepository
 
   public constructor(postgresUrl: string, redisUrl: string) {
     this.database = new PostgresBffDatabase(postgresUrl, redisUrl)
     this.idempotency = new PostgresIdempotencyRepository(this.database.pool)
     this.projects = new PostgresProjectRepository(this.database)
-    this.scheduled = new PostgresScheduledTaskRepository(this.database, this.projects)
+    const scheduled = new PostgresScheduledTaskRepository(this.database)
+    this.scheduled = scheduled
+    this.scheduledTaskOutbox = scheduled
     this.services = new BffApplicationServices(this.projects, this.scheduled)
     this.agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(this.database))
   }

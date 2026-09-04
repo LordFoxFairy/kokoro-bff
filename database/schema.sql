@@ -55,15 +55,67 @@ CREATE TABLE IF NOT EXISTS bff_scheduled_task (
   frequency TEXT NOT NULL CONSTRAINT ck_bff_scheduled_task_frequency CHECK (frequency IN ('daily', 'weekly')),
   task_time TEXT NOT NULL,
   timezone TEXT NOT NULL,
-  next_run_at TIMESTAMPTZ NOT NULL,
-  expires_at TIMESTAMPTZ,
+  next_run_at TIMESTAMPTZ(3) NOT NULL,
+  expires_at TIMESTAMPTZ(3),
   auto_approve BOOLEAN NOT NULL DEFAULT false,
   enabled BOOLEAN NOT NULL DEFAULT true,
   status TEXT NOT NULL CONSTRAINT ck_bff_scheduled_task_status CHECK (status IN ('active', 'paused', 'failed')),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  revision BIGINT NOT NULL DEFAULT 1 CONSTRAINT ck_bff_scheduled_task_revision CHECK (revision >= 1),
+  created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
 );
 CREATE INDEX IF NOT EXISTS ix_bff_scheduled_task_tenant ON bff_scheduled_task (tenant_id, created_at ASC);
+
+-- ScheduledTask owns this bounded outbox. It is intentionally not a generic
+-- cross-domain queue: every row is one versioned Scheduler command for one
+-- BFF task, with the original request lineage retained beside the payload.
+CREATE TABLE IF NOT EXISTS bff_scheduled_task_outbox (
+  outbox_id TEXT NOT NULL,
+  tenant_id TEXT NOT NULL,
+  task_id TEXT NOT NULL,
+  command_type TEXT NOT NULL,
+  aggregate_revision BIGINT NOT NULL,
+  payload JSONB NOT NULL,
+  actor_id TEXT NOT NULL,
+  request_id TEXT NOT NULL,
+  idempotency_key TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  available_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  lease_owner TEXT,
+  lease_token TEXT,
+  lease_until TIMESTAMPTZ(3),
+  fence BIGINT NOT NULL DEFAULT 0,
+  last_error_code TEXT,
+  last_error_at TIMESTAMPTZ(3),
+  completed_at TIMESTAMPTZ(3),
+  created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT pk_bff_scheduled_task_outbox PRIMARY KEY (outbox_id),
+  CONSTRAINT uq_bff_scheduled_task_outbox_business UNIQUE (tenant_id, task_id, command_type, idempotency_key),
+  CONSTRAINT ck_bff_scheduled_task_outbox_command_type CHECK (command_type IN ('scheduler.register', 'scheduler.replace', 'scheduler.delete')),
+  CONSTRAINT ck_bff_scheduled_task_outbox_revision CHECK (aggregate_revision >= 1),
+  CONSTRAINT ck_bff_scheduled_task_outbox_payload CHECK (jsonb_typeof(payload) = 'object'),
+  CONSTRAINT ck_bff_scheduled_task_outbox_status CHECK (status IN ('pending', 'leased', 'retryable', 'succeeded', 'failed')),
+  CONSTRAINT ck_bff_scheduled_task_outbox_attempts CHECK (attempt_count >= 0),
+  CONSTRAINT ck_bff_scheduled_task_outbox_fence CHECK (fence >= 0),
+  CONSTRAINT ck_bff_scheduled_task_outbox_lease CHECK (
+    (status = 'leased' AND lease_owner IS NOT NULL AND lease_token IS NOT NULL AND lease_until IS NOT NULL)
+    OR (status <> 'leased' AND lease_owner IS NULL AND lease_token IS NULL AND lease_until IS NULL)
+  ),
+  CONSTRAINT ck_bff_scheduled_task_outbox_lineage CHECK (
+    length(btrim(tenant_id)) > 0 AND length(btrim(actor_id)) > 0
+    AND length(btrim(request_id)) > 0 AND length(btrim(idempotency_key)) > 0
+  )
+);
+CREATE INDEX IF NOT EXISTS ix_bff_scheduled_task_outbox_ready
+  ON bff_scheduled_task_outbox (available_at ASC, created_at ASC, outbox_id ASC)
+  WHERE status IN ('pending', 'retryable');
+CREATE INDEX IF NOT EXISTS ix_bff_scheduled_task_outbox_task
+  ON bff_scheduled_task_outbox (tenant_id, task_id, created_at ASC, outbox_id ASC);
+CREATE INDEX IF NOT EXISTS ix_bff_scheduled_task_outbox_lease
+  ON bff_scheduled_task_outbox (lease_until ASC, created_at ASC, outbox_id ASC)
+  WHERE status = 'leased';
 
 CREATE TABLE IF NOT EXISTS bff_idempotency_receipt (
   scope TEXT PRIMARY KEY,

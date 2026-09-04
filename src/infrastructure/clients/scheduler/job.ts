@@ -1,4 +1,4 @@
-import type { ScheduledTask } from "../../../contracts/index.js"
+import type { ScheduledTaskFact } from "../../../domain/scheduled-task/task.js"
 
 export type SchedulerJob = {
   name: string
@@ -25,8 +25,8 @@ export function schedulerJobName(taskId: string): string {
   return `kokoro.scheduled.${taskId.replace(/[^a-zA-Z0-9._-]/gu, "-")}`.toLowerCase().slice(0, 64)
 }
 
-function utcSchedule(task: ScheduledTask): string {
-  const nextRun = new Date(task.next_run_at)
+function utcSchedule(task: ScheduledTaskFact): string {
+  const nextRun = task.nextRunAt
   if (Number.isNaN(nextRun.getTime())) throw new Error("SCHEDULE_NEXT_RUN_INVALID")
   const minute = nextRun.getUTCMinutes()
   const hour = nextRun.getUTCHours()
@@ -34,7 +34,7 @@ function utcSchedule(task: ScheduledTask): string {
   return `${minute} ${hour} * * ${nextRun.getUTCDay()}`
 }
 
-export function buildSchedulerJob(task: ScheduledTask, tenantId: string, ownerId: string, targetUrl: string): SchedulerJob {
+export function buildSchedulerJob(task: ScheduledTaskFact, tenantId: string, ownerId: string, targetUrl: string): SchedulerJob {
   return {
     name: schedulerJobName(task.id),
     schedule: utcSchedule(task),
@@ -43,10 +43,10 @@ export function buildSchedulerJob(task: ScheduledTask, tenantId: string, ownerId
     body: {
       tenant_id: tenantId,
       task_id: task.id,
-      ...(task.project_id === undefined ? {} : { project_id: task.project_id }),
+      ...(task.projectId === undefined ? {} : { project_id: task.projectId }),
       owner_id: ownerId,
       prompt: task.prompt,
-      auto_approve: task.auto_approve,
+      auto_approve: task.autoApprove,
       timezone: task.timezone,
     },
     retry: { max_attempts: 3, backoff_seconds: 30 },

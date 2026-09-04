@@ -2,21 +2,17 @@ import { createHash } from "node:crypto"
 import type { IncomingMessage, ServerResponse } from "node:http"
 
 import type { BffConfig } from "../../config/runtime.js"
-import { failure, ok, type ScheduledTask } from "../../contracts/index.js"
+import { failure, ok } from "../../contracts/index.js"
 import type { BffBusinessStore } from "../../application/ports/bff-business-store.js"
-import { proxyUpstream } from "../../upstream.js"
 import { buildAgentLaunch } from "../../infrastructure/clients/agent/index.js"
-import { buildSchedulerJob, schedulerJobName } from "../../infrastructure/clients/scheduler/job.js"
+import { schedulerJobName } from "../../infrastructure/clients/scheduler/job.js"
 import { mutationTicket, type IdempotencyEntry } from "../../application/idempotency.js"
 import { fingerprintBody } from "../request.js"
 import { dataOf } from "../../application/projections.js"
-import { ownerIdentityHeaders } from "../../infrastructure/clients/owner/identity.js"
-import { normalizeUpstreamResponse, reply, send } from "../response.js"
-import { headerString, idempotencyKey, incomingHeaders, readBody, requestBodyJson, requestId } from "../request.js"
-import { isRecord } from "../../domain/json.js"
+import { reply, send } from "../response.js"
+import { headerString, idempotencyKey, readBody, requestBodyJson, requestId } from "../request.js"
 import type { RequestContext } from "../../domain/request-context.js"
 import { callAgent } from "./agent.js"
-import type { LiveOwnerResult } from "./types.js"
 
 export function scheduledTaskId(context: RequestContext, path: string, key: string): string {
   const digest = createHash("sha256")
@@ -24,80 +20,6 @@ export function scheduledTaskId(context: RequestContext, path: string, key: stri
     .digest("hex")
     .slice(0, 32)
   return `scheduled_${digest}`
-}
-
-function schedulerErrorCode(body: unknown): string | null {
-  return isRecord(body) && isRecord(body.error) && typeof body.error.code === "string" ? body.error.code : null
-}
-
-async function liveSchedulerRequest(
-  request: IncomingMessage,
-  config: BffConfig,
-  context: RequestContext,
-  method: string,
-  path: string,
-  body?: Buffer,
-): Promise<LiveOwnerResult> {
-  const schedulerBase = config.upstreams.scheduler ?? null
-  if (schedulerBase === null) {
-    return { status: 503, body: failure("scheduler_not_configured", "Scheduler upstream is not configured", context.requestId) }
-  }
-  if (config.schedulerTargetUrl === null) {
-    return { status: 503, body: failure("scheduler_target_not_configured", "Scheduler target URL is not configured", context.requestId) }
-  }
-  try {
-    const upstream = await proxyUpstream(
-      config,
-      schedulerBase,
-      path,
-      method,
-      context.requestId,
-      incomingHeaders(request),
-      body,
-      ownerIdentityHeaders(context),
-      "web-bff",
-      config.schedulerServiceToken ?? config.upstreamSecret,
-    )
-    return normalizeUpstreamResponse(upstream, context.requestId)
-  } catch {
-    return { status: 502, body: failure("scheduler_unreachable", "The configured Scheduler upstream is unavailable", context.requestId) }
-  }
-}
-
-export async function reconcileSchedulerTask(
-  request: IncomingMessage,
-  config: BffConfig,
-  context: RequestContext,
-  task: ScheduledTask,
-  ownerId: string,
-  operation: "register" | "replace" | "delete",
-): Promise<LiveOwnerResult> {
-  const job = buildSchedulerJob(task, context.identity.namespace, ownerId, config.schedulerTargetUrl ?? "")
-  const path = `/internal/scheduler/v1/jobs/${encodeURIComponent(schedulerJobName(task.id))}`
-  if (operation === "delete") {
-    const result = await liveSchedulerRequest(request, config, context, "DELETE", path)
-    if (result.status === 404 && schedulerErrorCode(result.body) === "job_not_found") {
-      return { status: 200, body: ok({ name: schedulerJobName(task.id), status: "deleted" }, context.requestId) }
-    }
-    return result
-  }
-
-  const method = operation === "register" ? "POST" : "PUT"
-  const first = await liveSchedulerRequest(request, config, context, method, path, Buffer.from(JSON.stringify(job)))
-  // A BFF retry may arrive after Scheduler committed the registration but
-  // before the original response reached us. Reconcile by replacing the
-  // existing job instead of treating that state as a permanent failure.
-  if (operation === "register" && first.status === 409 && schedulerErrorCode(first.body) === "job_already_exists") {
-    return liveSchedulerRequest(request, config, context, "PUT", path, Buffer.from(JSON.stringify(job)))
-  }
-  if (operation === "replace" && first.status === 404 && schedulerErrorCode(first.body) === "job_not_found") {
-    return liveSchedulerRequest(request, config, context, "POST", path, Buffer.from(JSON.stringify(job)))
-  }
-  return first
-}
-
-export async function markScheduledTaskFailed(store: BffBusinessStore, tenantId: string, taskId: string): Promise<void> {
-  await store.services.scheduledTasks.update(tenantId, taskId, { status: "failed", enabled: false })
 }
 
 export async function schedulerDispatch(
@@ -173,9 +95,9 @@ export async function schedulerDispatch(
   }
   if (
     json.prompt !== record.task.prompt
-    || json.auto_approve !== record.task.auto_approve
+    || json.auto_approve !== record.task.autoApprove
     || json.timezone !== record.task.timezone
-    || (record.task.project_id === undefined ? json.project_id !== undefined : json.project_id !== record.task.project_id)
+    || (record.task.projectId === undefined ? json.project_id !== undefined : json.project_id !== record.task.projectId)
   ) {
     await reply(response, 409, failure("invalid_scheduler_dispatch", "Scheduler dispatch does not match the stored task", id), context, idempotency, mutation.ticket)
     return true
@@ -184,7 +106,7 @@ export async function schedulerDispatch(
     await reply(response, 409, failure("scheduled_task_not_active", "Scheduled task is not active", id), context, idempotency, mutation.ticket)
     return true
   }
-  if (record.task.expires_at !== undefined && Date.parse(record.task.expires_at) <= Date.now()) {
+  if (record.task.expiresAt !== undefined && record.task.expiresAt.getTime() <= Date.now()) {
     await reply(response, 410, failure("scheduled_task_expired", "Scheduled task has expired", id), context, idempotency, mutation.ticket)
     return true
   }
@@ -199,7 +121,7 @@ export async function schedulerDispatch(
     sessionId: `scheduled:${taskId}`,
     idempotencyKey: occurrenceKey,
     content: record.task.prompt,
-    ...(record.task.project_id === undefined ? {} : { projectRef: record.task.project_id }),
+    ...(record.task.projectId === undefined ? {} : { projectRef: record.task.projectId }),
   })
   try {
     const result = await callAgent(config, agentUrl, "/v1/runs", "POST", id, request, Buffer.from(JSON.stringify(launch.body)), context, String((launch.body.execution_identity as Record<string, unknown>).identity_assertion_ref))

@@ -7,16 +7,17 @@ describe("BFF Scheduler adapter", () => {
   it("maps a BFF task into a stable UTC ScheduleJob", () => {
     const task = {
       id: "scheduled_fixture",
-      project_id: "project_fixture",
+      projectId: "project_fixture",
       title: "Daily review",
       prompt: "Review the project.",
       frequency: "daily" as const,
       time: "08:00",
       timezone: "America/New_York",
-      next_run_at: "2026-09-01T12:00:00.000Z",
-      auto_approve: true,
+      nextRunAt: new Date("2026-09-01T12:00:00.000Z"),
+      autoApprove: true,
       enabled: true,
       status: "active" as const,
+      revision: 1,
     }
     assert.equal(schedulerJobName(task.id), "kokoro.scheduled.scheduled_fixture")
     assert.deepEqual(buildSchedulerJob(task, "tenant_fixture", "user_fixture", "http://bff.test/internal/bff/scheduled-tasks/dispatch"), {
@@ -47,10 +48,11 @@ describe("BFF Scheduler adapter", () => {
       frequency: "weekly" as const,
       time: "08:00",
       timezone: "UTC",
-      next_run_at: "2026-09-06T08:00:00.000Z",
-      auto_approve: false,
+      nextRunAt: new Date("2026-09-06T08:00:00.000Z"),
+      autoApprove: false,
       enabled: false,
       status: "paused" as const,
+      revision: 1,
     }
     assert.equal(buildSchedulerJob(task, "tenant", "owner", "http://bff.test/dispatch").schedule, "0 8 * * 0")
     assert.equal(buildSchedulerJob(task, "tenant", "owner", "http://bff.test/dispatch").paused, true)

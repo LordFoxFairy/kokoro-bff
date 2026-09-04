@@ -1,9 +1,12 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
+import { randomUUID } from "node:crypto"
 
 import type { BffConfig } from "../config/runtime.js"
 import { AgUiSessionRuntime } from "../application/agui/session-runtime.js"
 import type { IdempotencyEntry, MutationTicket } from "../application/idempotency.js"
 import type { BffBusinessStore } from "../application/ports/bff-business-store.js"
+import { ScheduledTaskOutboxDispatcher } from "../application/scheduled-task-outbox-dispatcher.js"
+import { SchedulerOutboxDelivery } from "../infrastructure/clients/scheduler/outbox-delivery.js"
 import { PostgresBffRepositories } from "../infrastructure/postgres/repositories.js"
 import type { RequestContext } from "../domain/request-context.js"
 
@@ -25,6 +28,7 @@ export type BffServerComposition = {
   businessStore: BffBusinessStore | null
   idempotency: Map<string, IdempotencyEntry>
   agUiRuntime: AgUiSessionRuntime
+  scheduledTaskDispatcher?: ScheduledTaskOutboxDispatcher
   readiness: () => Promise<void>
   close: () => Promise<void>
   routeHandler?: BffRouteHandler
@@ -39,6 +43,7 @@ export type BffCompositionOptions = {
   businessStore?: BffBusinessStore | null
   idempotency?: Map<string, IdempotencyEntry>
   agUiRuntime?: AgUiSessionRuntime
+  scheduledTaskDispatcher?: ScheduledTaskOutboxDispatcher
   readiness?: () => Promise<void>
   close?: () => Promise<void>
   routeHandler?: BffRouteHandler
@@ -76,13 +81,34 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     ? async (): Promise<void> => { throw new Error("BFF business store is not configured") }
     : (): Promise<void> => businessStore.ready())
   const ownsStore = !explicitlySuppliedStore
-  const close = options.close ?? (ownsStore && businessStore !== null
+  const scheduledTaskDispatcher = options.scheduledTaskDispatcher ?? (
+    businessStore?.scheduledTaskOutbox === undefined
+      ? undefined
+      : new ScheduledTaskOutboxDispatcher(
+        businessStore.scheduledTaskOutbox,
+        new SchedulerOutboxDelivery(config),
+        { workerId: `bff-scheduled-outbox-${process.pid}-${randomUUID()}` },
+      )
+  )
+  const closeStore = options.close ?? (ownsStore && businessStore !== null
     ? (): Promise<void> => businessStore.close()
     : async (): Promise<void> => undefined)
+  let closePromise: Promise<void> | null = null
+  const close = (): Promise<void> => {
+    if (closePromise !== null) return closePromise
+    closePromise = (async (): Promise<void> => {
+      // Stop claiming new rows first; stop() drains the in-flight delivery so
+      // an acknowledged Scheduler command is not abandoned during shutdown.
+      await scheduledTaskDispatcher?.stop()
+      await closeStore()
+    })()
+    return closePromise
+  }
   return {
     businessStore,
     idempotency: options.idempotency ?? new Map<string, IdempotencyEntry>(),
     agUiRuntime: options.agUiRuntime ?? createAgUiRuntime(config),
+    ...(scheduledTaskDispatcher === undefined ? {} : { scheduledTaskDispatcher }),
     readiness,
     close,
     ...(options.routeHandler === undefined ? {} : { routeHandler: options.routeHandler }),

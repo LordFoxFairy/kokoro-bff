@@ -1,24 +1,32 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 
-import { randomUUID } from "node:crypto"
-
-import type { BffConfig } from "../../config/runtime.js"
 import { failure, ok } from "../../contracts/index.js"
 import type { BffBusinessStore } from "../../application/ports/bff-business-store.js"
+import type { ScheduledTaskMutationLineage } from "../../application/ports/scheduled-task-repository.js"
 import { idempotencyKey } from "../request.js"
 import type { RequestContext } from "../../domain/request-context.js"
 import { reply } from "../response.js"
 import type { IdempotencyEntry, MutationTicket } from "../../application/idempotency.js"
 import { projectData, scheduledData } from "./helpers.js"
-import { markScheduledTaskFailed, reconcileSchedulerTask } from "./scheduler.js"
 import { scheduledCreateInput, scheduledPatchInput } from "../../application/scheduled/input.js"
+import { scheduledTaskResponse } from "../../application/scheduled/mappers.js"
 import { scheduledTaskId } from "./scheduler.js"
 import { projectName } from "../../domain/project/name.js"
+
+function mutationLineage(context: RequestContext, request: IncomingMessage): ScheduledTaskMutationLineage {
+  const key = idempotencyKey(request)
+  if (key === null) throw new Error("SCHEDULED_TASK_IDEMPOTENCY_KEY_REQUIRED")
+  return {
+    tenantId: context.identity.namespace,
+    actorId: context.identity.userId,
+    requestId: context.requestId,
+    idempotencyKey: key,
+  }
+}
 
 export async function liveBffBusiness(
   request: IncomingMessage,
   response: ServerResponse,
-  config: BffConfig,
   context: RequestContext,
   businessPath: string[],
   json: Record<string, unknown>,
@@ -96,22 +104,15 @@ export async function liveBffBusiness(
           await reply(response, 400, failure("invalid_scheduled_task", "Scheduled task fields are invalid", context.requestId), context, idempotency, mutation)
           return true
         }
-        let task = await store.services.scheduledTasks.create(
+        const lineage = mutationLineage(context, request)
+        const task = await store.services.scheduledTasks.create(
           tenantId,
           context.identity.userId,
           input,
-          scheduledTaskId(context, `/${businessPath.join("/")}`, idempotencyKey(request) ?? randomUUID()),
+          scheduledTaskId(context, `/${businessPath.join("/")}`, lineage.idempotencyKey),
+          lineage,
         )
-        if (task.status === "failed") {
-          task = (await store.services.scheduledTasks.update(tenantId, task.id, { status: "active", enabled: true })) ?? task
-        }
-        const scheduleResult = await reconcileSchedulerTask(request, config, context, task, context.identity.userId, "register")
-        if (scheduleResult.status >= 400) {
-          await markScheduledTaskFailed(store, tenantId, task.id)
-          await reply(response, 503, failure("scheduler_registration_failed", "Scheduled task could not be registered", context.requestId), context, idempotency, mutation)
-        } else {
-          await reply(response, 200, ok({ task }, context.requestId), context, idempotency, mutation)
-        }
+        await reply(response, 200, ok({ task: scheduledTaskResponse(task) }, context.requestId), context, idempotency, mutation)
         return true
       }
     }
@@ -119,7 +120,8 @@ export async function liveBffBusiness(
     if (businessPath[0] === "scheduled-tasks") {
       const taskId = businessPath[1]
       if (businessPath.length === 1 && method === "GET") {
-        await reply(response, 200, ok(scheduledData(await store.services.scheduledTasks.list(tenantId)), context.requestId), context, idempotency, mutation)
+        const tasks = await store.services.scheduledTasks.list(tenantId)
+        await reply(response, 200, ok(scheduledData(tasks.map(scheduledTaskResponse)), context.requestId), context, idempotency, mutation)
         return true
       }
       if (businessPath.length === 1 && method === "POST") {
@@ -128,27 +130,20 @@ export async function liveBffBusiness(
           await reply(response, 400, failure("invalid_scheduled_task", "Scheduled task fields are invalid", context.requestId), context, idempotency, mutation)
           return true
         }
-        let task = await store.services.scheduledTasks.create(
+        const lineage = mutationLineage(context, request)
+        const task = await store.services.scheduledTasks.create(
           tenantId,
           context.identity.userId,
           input,
-          scheduledTaskId(context, `/${businessPath.join("/")}`, idempotencyKey(request) ?? randomUUID()),
+          scheduledTaskId(context, `/${businessPath.join("/")}`, lineage.idempotencyKey),
+          lineage,
         )
-        if (task.status === "failed") {
-          task = (await store.services.scheduledTasks.update(tenantId, task.id, { status: "active", enabled: true })) ?? task
-        }
-        const scheduleResult = await reconcileSchedulerTask(request, config, context, task, context.identity.userId, "register")
-        if (scheduleResult.status >= 400) {
-          await markScheduledTaskFailed(store, tenantId, task.id)
-          await reply(response, 503, failure("scheduler_registration_failed", "Scheduled task could not be registered", context.requestId), context, idempotency, mutation)
-        } else {
-          await reply(response, 200, ok({ task }, context.requestId), context, idempotency, mutation)
-        }
+        await reply(response, 200, ok({ task: scheduledTaskResponse(task) }, context.requestId), context, idempotency, mutation)
         return true
       }
       if (businessPath.length === 2 && taskId !== undefined && method === "GET") {
         const task = await store.services.scheduledTasks.find(tenantId, taskId)
-        await reply(response, task === null ? 404 : 200, task === null ? failure("scheduled_task_not_found", "Scheduled task was not found", context.requestId) : ok({ task }, context.requestId), context, idempotency, mutation)
+        await reply(response, task === null ? 404 : 200, task === null ? failure("scheduled_task_not_found", "Scheduled task was not found", context.requestId) : ok({ task: scheduledTaskResponse(task) }, context.requestId), context, idempotency, mutation)
         return true
       }
       if (businessPath.length === 2 && taskId !== undefined && method === "PATCH") {
@@ -157,49 +152,25 @@ export async function liveBffBusiness(
           await reply(response, 400, failure("invalid_scheduled_task", "Scheduled task fields are invalid", context.requestId), context, idempotency, mutation)
           return true
         }
-        const record = taskId === undefined ? null : await store.services.scheduledTasks.findRecord(tenantId, taskId)
-        const task = record === null ? null : await store.services.scheduledTasks.update(tenantId, taskId, patch)
+        const task = await store.services.scheduledTasks.update(tenantId, taskId, patch, mutationLineage(context, request))
         if (task === null) {
           await reply(response, 404, failure("scheduled_task_not_found", "Scheduled task was not found", context.requestId), context, idempotency, mutation)
         } else {
-          const scheduleResult = await reconcileSchedulerTask(request, config, context, task, record?.ownerId ?? context.identity.userId, "replace")
-          if (scheduleResult.status >= 400) {
-            await markScheduledTaskFailed(store, tenantId, task.id)
-            await reply(response, 503, failure("scheduler_update_failed", "Scheduled task scheduler registration could not be updated", context.requestId), context, idempotency, mutation)
-          } else {
-            await reply(response, 200, ok({ task }, context.requestId), context, idempotency, mutation)
-          }
+          await reply(response, 200, ok({ task: scheduledTaskResponse(task) }, context.requestId), context, idempotency, mutation)
         }
         return true
       }
       if (businessPath.length === 2 && taskId !== undefined && method === "DELETE") {
-        const record = await store.services.scheduledTasks.findRecord(tenantId, taskId)
-        if (record === null) {
-          await reply(response, 404, failure("scheduled_task_not_found", "Scheduled task was not found", context.requestId), context, idempotency, mutation)
-        } else {
-          const scheduleResult = await reconcileSchedulerTask(request, config, context, record.task, record.ownerId, "delete")
-          if (scheduleResult.status >= 400) {
-            await reply(response, 503, failure("scheduler_delete_failed", "Scheduled task scheduler registration could not be removed", context.requestId), context, idempotency, mutation)
-          } else {
-            const deleted = await store.services.scheduledTasks.delete(tenantId, taskId)
-            await reply(response, deleted ? 200 : 404, deleted ? ok({ ok: true }, context.requestId) : failure("scheduled_task_not_found", "Scheduled task was not found", context.requestId), context, idempotency, mutation)
-          }
-        }
+        const deleted = await store.services.scheduledTasks.delete(tenantId, taskId, mutationLineage(context, request))
+        await reply(response, deleted ? 200 : 404, deleted ? ok({ ok: true }, context.requestId) : failure("scheduled_task_not_found", "Scheduled task was not found", context.requestId), context, idempotency, mutation)
         return true
       }
       if (businessPath.length === 3 && taskId !== undefined && businessPath[2] === "retry" && method === "POST") {
-        const record = await store.services.scheduledTasks.findRecord(tenantId, taskId)
-        const task = record === null ? null : await store.services.scheduledTasks.update(tenantId, taskId, { status: "active", enabled: true })
+        const task = await store.services.scheduledTasks.update(tenantId, taskId, { status: "active", enabled: true }, mutationLineage(context, request))
         if (task === null) {
           await reply(response, 404, failure("scheduled_task_not_found", "Scheduled task was not found", context.requestId), context, idempotency, mutation)
         } else {
-          const scheduleResult = await reconcileSchedulerTask(request, config, context, task, record?.ownerId ?? context.identity.userId, "replace")
-          if (scheduleResult.status >= 400) {
-            await markScheduledTaskFailed(store, tenantId, task.id)
-            await reply(response, 503, failure("scheduler_retry_failed", "Scheduled task could not be registered again", context.requestId), context, idempotency, mutation)
-          } else {
-            await reply(response, 200, ok({ task }, context.requestId), context, idempotency, mutation)
-          }
+          await reply(response, 200, ok({ task: scheduledTaskResponse(task) }, context.requestId), context, idempotency, mutation)
         }
         return true
       }

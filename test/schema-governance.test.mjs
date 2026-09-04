@@ -10,6 +10,8 @@ test("schema application reads the repository canonical schema", async () => {
   const schema = await loadCanonicalSchema()
 
   assert.match(schema, /CREATE TABLE IF NOT EXISTS bff_project/u)
+  assert.match(schema, /CREATE TABLE IF NOT EXISTS bff_scheduled_task/u)
+  assert.match(schema, /CREATE TABLE IF NOT EXISTS bff_scheduled_task_outbox/u)
   assert.match(schema, /CREATE TABLE IF NOT EXISTS bff_idempotency_receipt/u)
   assert.match(schema, /CREATE TABLE IF NOT EXISTS bff_agui_stream/u)
   assert.match(schema, /CREATE TABLE IF NOT EXISTS bff_agui_source_event/u)
@@ -29,6 +31,9 @@ test("canonical schema uses stable diagnostic names for indexes and constraints"
   assert.match(schema, /CONSTRAINT ck_bff_project_task_status CHECK/u)
   assert.match(schema, /CONSTRAINT ck_bff_scheduled_task_frequency CHECK/u)
   assert.match(schema, /CONSTRAINT ck_bff_scheduled_task_status CHECK/u)
+  assert.match(schema, /CONSTRAINT ck_bff_scheduled_task_outbox_status CHECK/u)
+  assert.match(schema, /CONSTRAINT uq_bff_scheduled_task_outbox_business UNIQUE/u)
+  assert.match(schema, /CREATE INDEX IF NOT EXISTS ix_bff_scheduled_task_outbox_ready/u)
   assert.doesNotMatch(schema, /CREATE (?:UNIQUE )?INDEX IF NOT EXISTS bff_[a-z0-9_]+_idx\b/iu)
 
   for (const line of schema.split("\n")) {

@@ -6,7 +6,11 @@
 - 出站 HTTP 有整体 timeout 与最大响应字节数；不可达、HTTP error 和 contract mismatch 使用稳定错误归一。
 - mutation 使用 pending/terminal receipt，支持 replay、conflict 和 in-progress 判定；5xx 释放 pending claim以允许重试。
 - PostgreSQL pending receipt 60 秒后可回收，防止进程崩溃永久占用 key。
-- ScheduledTask 使用稳定 job name/occurrence key；启动时 best-effort 重新注册 active task。
+- ScheduledTask mutation 在一个 PostgreSQL 事务内提交 task fact 与 `bff_scheduled_task_outbox` command；稳定的
+  `(tenant_id, task_id, command_type, idempotency_key)` identity 防止重复 command。
+- BFF 监听后启动 bounded outbox dispatcher；dispatcher 用 `FOR UPDATE SKIP LOCKED`、lease owner/token/fence、
+  指数退避和 attempt budget 交付 Scheduler，并在停止时等待当前 cycle 完成。启动恢复只回收 pending/retryable 或
+  已过期 lease，不再扫描全部 task 并同步重建 Scheduler 状态。
 - Live 配置/上游缺失时 fail closed，不回退到 Mock 成功。
 - AG-UI source identity、projection state、全部展开 frame 与 source high-watermark 在同一 PostgreSQL 事务提交；公开
   SSE 只读取 committed ledger。
@@ -22,9 +26,14 @@ Idempotency-Key 和完整请求语义时重试。
 
 ## Outbox 与跨服务一致性
 
-**当前不具备事务型 outbox。** ScheduledTask create/update 先写 BFF fact，再同步 Scheduler；失败后标记 task failed。
-Delete 先删除 Scheduler job，再删除 BFF fact。进程在两个步骤间崩溃会产生短暂或持久 divergence，当前依赖 retry 与
-startup reconciliation，而不是 durable dispatcher/fencing。
+ScheduledTask bounded outbox 已实现。create/update/retry 在同一事务写入 revision 与 Scheduler register/replace
+command；delete 在删除 fact 前同一事务写入 delete command。提交后才由 dispatcher 在事务外调用 Scheduler，因此
+Scheduler 不可达时本地事实仍已提交，command 保持 `retryable`，不会把外部失败伪装成同步 mutation 失败。
+
+每个 command 保存 tenant/actor/request/idempotency lineage 和版本化 task snapshot。claim 会递增 fence 并设置
+lease；settlement 必须同时匹配 outbox id、lease owner、token 和 fence，旧 worker 在 lease 被回收后不能覆盖新 worker
+的结果。2xx 进入 `succeeded`，瞬时 transport/408/425/429/5xx 进入退避，永久 4xx 或超过 attempt budget 进入
+`failed`。同一 task 的 command 按创建序列 FIFO claim，避免旧 snapshot 覆盖新 revision。
 
 目标路径是：同一 PostgreSQL 事务写 aggregate、receipt claim 与 outbox；dispatcher 使用稳定 command identity、退避、
 jitter、lease/fencing 投递；owner receipt 与 BFF outbox 状态 reconciliation 后完成公开 receipt。
@@ -60,13 +69,13 @@ restore 与长时间 fault injection。当前读取驱动 ingestion；source fac
 | PostgreSQL 不可用 | BFF-owned Live route 503；readyz 非就绪 | 恢复 DB 后重试 |
 | Redis 不可用 | readyz 失败；AG-UI publish 被忽略，已提交 replay 仍在 PG | 恢复 Redis；无需重建 event history |
 | owner timeout/过大响应 | 稳定 502/错误归一 | 在幂等预算内重试 |
-| Scheduler 注册失败 | task 标记 failed | `retry` 或重启 reconciliation |
+| Scheduler 注册失败 | command 进入 `retryable`，超过 attempt budget 后进入 `failed`；本地 task fact 保留 | dispatcher 退避重试，或调用 `retry` 产生新 revision command |
 | Agent 不可用 | 新 Chat/dispatch fail closed；终态 AG-UI ledger 可独立 replay | 同 key 重试；公开历史从 PG 读取 |
-| BFF 在同步 side effect 中间崩溃 | 可能 divergence | 当前靠 owner state + 启动 reconcile；outbox 待实现 |
+| BFF 在 Scheduler 投递前/中间崩溃 | 已提交 command 保留；leased row 在 lease 到期后可重领 | 新 dispatcher recovery claim，外部以稳定 job/idempotency identity 收敛 |
 | cursor 格式错误、未知或跨 scope | 400 `invalid_event_cursor` | 使用该 tenant/session 最后确认的 SSE id |
 | cursor 早于未来保留水位 | 当前不清理，因此尚无此状态 | retention/cursor-expired policy 待实现 |
 
 ## 关闭与降级缺口
 
-当前 server close 会关闭 PG/Redis client，但没有完整的 request drain、dispatcher drain、termination deadline、circuit
-breaker 或 bulkhead。Mock 仅用于本地契约 fixture，绝不作为 Live 降级路径。
+当前 server close 会先停止并 drain ScheduledTask dispatcher，再关闭 PG/Redis client；仍没有完整的 request drain、
+termination deadline、circuit breaker 或 bulkhead。Mock 仅用于本地契约 fixture，绝不作为 Live 降级路径。

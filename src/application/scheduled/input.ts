@@ -1,4 +1,14 @@
 import type { ScheduledTaskCreateInput, ScheduledTaskPatch } from "../ports/scheduled-task-repository.js"
+import { isIanaTimezone, parseUtcTimestamp } from "../../domain/scheduled-task/task.js"
+
+function instant(value: unknown, errorCode: string): Date | null {
+  if (typeof value !== "string" || value.trim() === "") return null
+  try {
+    return parseUtcTimestamp(value.trim(), errorCode)
+  } catch {
+    return null
+  }
+}
 
 export function scheduledCreateInput(json: Record<string, unknown>, projectId?: string): ScheduledTaskCreateInput | null {
   const title = typeof json.title === "string" ? json.title.trim() : ""
@@ -6,15 +16,16 @@ export function scheduledCreateInput(json: Record<string, unknown>, projectId?: 
   const frequency = json.frequency
   const time = typeof json.time === "string" ? json.time.trim() : ""
   const timezone = typeof json.timezone === "string" ? json.timezone.trim() : ""
-  const nextRunAt = typeof json.next_run_at === "string" && json.next_run_at.trim() !== ""
-    ? json.next_run_at.trim()
-    : new Date().toISOString()
-  const expiresAt = json.expires_at === undefined ? undefined : typeof json.expires_at === "string" ? json.expires_at.trim() : null
+  const nextRunAt = json.next_run_at === undefined ? new Date() : instant(json.next_run_at, "SCHEDULED_TASK_NEXT_RUN_INVALID")
+  const expiresAt = json.expires_at === undefined
+    ? undefined
+    : json.expires_at === null
+      ? null
+      : instant(json.expires_at, "SCHEDULED_TASK_EXPIRES_INVALID")
   if (
     title === "" || prompt === "" || (frequency !== "daily" && frequency !== "weekly")
-    || !/^([01]\d|2[0-3]):[0-5]\d$/u.test(time) || timezone === ""
-    || Number.isNaN(Date.parse(nextRunAt)) || expiresAt === null
-    || (expiresAt !== undefined && Number.isNaN(Date.parse(expiresAt)))
+    || !/^([01]\d|2[0-3]):[0-5]\d$/u.test(time) || timezone === "" || !isIanaTimezone(timezone)
+    || nextRunAt === null || expiresAt === null
   ) return null
   return {
     ...(projectId === undefined ? {} : { projectId }),
@@ -48,16 +59,22 @@ export function scheduledPatchInput(json: Record<string, unknown>): ScheduledTas
     input.time = json.time
   }
   if (json.timezone !== undefined) {
-    if (typeof json.timezone !== "string" || json.timezone.trim() === "") return null
+    if (typeof json.timezone !== "string" || json.timezone.trim() === "" || !isIanaTimezone(json.timezone.trim())) return null
     input.timezone = json.timezone.trim()
   }
   if (json.next_run_at !== undefined) {
-    if (typeof json.next_run_at !== "string" || Number.isNaN(Date.parse(json.next_run_at))) return null
-    input.nextRunAt = json.next_run_at
+    const nextRunAt = instant(json.next_run_at, "SCHEDULED_TASK_NEXT_RUN_INVALID")
+    if (nextRunAt === null) return null
+    input.nextRunAt = nextRunAt
   }
   if (json.expires_at !== undefined) {
-    if (json.expires_at !== null && (typeof json.expires_at !== "string" || Number.isNaN(Date.parse(json.expires_at)))) return null
-    input.expiresAt = json.expires_at
+    if (json.expires_at === null) {
+      input.expiresAt = null
+    } else {
+      const expiresAt = instant(json.expires_at, "SCHEDULED_TASK_EXPIRES_INVALID")
+      if (expiresAt === null) return null
+      input.expiresAt = expiresAt
+    }
   }
   if (json.auto_approve !== undefined) {
     if (typeof json.auto_approve !== "boolean") return null

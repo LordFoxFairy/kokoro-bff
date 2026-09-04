@@ -20,7 +20,7 @@ Browser -> kokoro same-origin /api/* -> kokoro-bff /v1/* -> owner API / Agent / 
 | Chat / AG-UI | Live 先把 Agent source fact 与 AG-UI frame 原子投影到本仓 PostgreSQL，再从 ledger 输出 SSE |
 | Conversation / Message / Share | 公开契约由 BFF 拥有，但 Live 产品事实当前仍来自 Agent，BFF 表尚未落地 |
 | Durable AG-UI ledger | 已实现 tenant/session 隔离、source identity 去重、单调内部序列及逐 frame opaque cursor；retention/GC 未实现 |
-| Transactional outbox | 未实现 |
+| ScheduledTask durable dispatch | 已实现本仓 bounded outbox、租约/fence、重试/终态；mutation receipt 仍未与事实事务合并 |
 | Mock | 仍编入 `src/`，只作本地 fixture，不是生产完成证据 |
 
 ## Owner 边界
@@ -34,6 +34,9 @@ Browser -> kokoro same-origin /api/* -> kokoro-bff /v1/* -> owner API / Agent / 
 AG-UI 是 Web 与 BFF 之间唯一 Agent 网络协议。Vercel AI SDK 只属于 Web 内部 UI adapter，不建立第二套网络 stream。
 `Last-Event-ID` 必须原样回传 BFF 发出的 `agui_*` opaque cursor；Agent source sequence 只存在于内部 metadata，不能作为
 公开 replay cursor。Redis 仅发布投影更新通知，不保存 replay 数据；删除 Redis 状态不影响 PostgreSQL replay。
+
+ScheduledTask 的 HTTP/JSON 时间字段在边界使用 RFC 3339 UTC；application/domain 使用带有效 instant 的 `Date`，PostgreSQL
+使用 `TIMESTAMPTZ(3)`。`time` 与 IANA `timezone` 是本地周期规则，`next_run_at` 是其对应的 UTC occurrence 基准。
 
 ## 五分钟启动
 

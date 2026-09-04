@@ -21,6 +21,9 @@
 - `/v1/*` 校验 `web-bff` 服务身份、共享 secret、namespace、principal 和 request id；浏览器不应直连 BFF。
 - Live Project、instruction revision、project skill、project task、ScheduledTask 与 mutation receipt 使用本仓
   PostgreSQL repository。Redis 当前用于 readiness/ping 和 Project cache invalidation，不是事实源。
+- ScheduledTask aggregate 的 `nextRunAt`/`expiresAt` 在 application/domain 内是有效的 UTC `Date`；HTTP/JSON 与
+  Scheduler command 使用 RFC 3339 UTC 字符串，`time` + IANA `timezone` 保留本地周期规则。数据库事实使用
+  `TIMESTAMPTZ(3)`。
 - Live mutation 仅在 BFF business store 已配置时使用 PostgreSQL receipt；没有 business store 的非 BFF owner
   mutation 仍使用进程内 Map。因此“所有 Live mutation 均持久幂等”不是当前事实。
 - 当前 receipt scope 是 `namespace + method + canonical path + Idempotency-Key`；fingerprint 覆盖规范化 body，
@@ -36,9 +39,15 @@
   冲突 fail closed。未映射的 Agent event 也登记 source identity 并推进 source high-watermark，避免重复轮询遮蔽缺口。
 - Redis 对 AG-UI 只执行 ephemeral `PUBLISH`；发布失败不回滚已提交 ledger，也没有 Redis replay key/stream。终态 ledger
   可在 Agent disabled/unavailable 及 BFF 重启后独立 replay。
-- Scheduler 变更当前采用同步注册/替换/删除，加启动时 best-effort reconciliation；dispatch receipt 使用稳定
-  occurrence idempotency key。
-- 缺失上游、非法响应和未接写操作会返回稳定错误，不静默降级到 Live 成功。
+- ScheduledTask create/update/delete/retry 先在同一 PostgreSQL 本地事务写入 task revision 与
+  `bff_scheduled_task_outbox` command；事务提交后由 bounded dispatcher 在事务外调用 Scheduler。command 保留
+  `tenant_id`、`actor_id`、`request_id`、`idempotency_key` 和版本化 task snapshot，并以 `SKIP LOCKED`、lease token、
+  fence、指数退避、重试上限和 `pending/leased/retryable/succeeded/failed` 状态恢复。Scheduler dispatch receipt 仍使用
+  稳定 occurrence idempotency key。
+- Agent 自有 wire protocol 不在本切片改写；若其事件边界使用 epoch milliseconds，BFF 将其视为 wire encoding，AG-UI
+  projection 的内部时间仍在边界解析为 UTC instant。
+- 缺失 BFF store、非法请求/响应和未接写操作会返回稳定错误；ScheduledTask 在 Scheduler 缺失时仍可提交本地
+  fact+outbox，外部 command 保持 retryable，不伪造 Scheduler 已成功。
 
 ## 未完成缺口
 
@@ -46,8 +55,9 @@
 
 1. **Conversation / Message / Share 的 BFF 事实 ownership 尚未实现。** 当前 Live session/message 数据来自
    Agent；BFF 只拥有公开投影契约，尚未拥有这些产品事实表与 repository。
-2. **事务型 outbox 尚未实现。** Project/ScheduledTask 写入、Scheduler 注册和 Agent dispatch 不在一个本地事务
-   与 outbox 状态机中；同步失败依靠 `failed` 标记、重试或启动 reconciliation 收敛。
+2. **事务型 outbox 仍按 owner/切片分阶段。** ScheduledTask → Scheduler 的 bounded outbox 已实现并有真实 PG
+   integration；Project side effect、Agent Run dispatch，以及 mutation receipt claim 与 task/outbox 的统一事务仍未完成。
+   Scheduler 外部投递是 at-least-once，依靠稳定 command/idempotency identity 和条件 settlement 收敛。
 3. **幂等摘要与事务边界不完整。** query、selected headers 未进入 fingerprint；receipt 与业务事实/出站命令
    没有统一事务和 fencing。
 4. **AG-UI retention/GC 与主动摄取仍未完成。** 当前 ledger 不删除，因此尚无 cursor-expired 状态、安全 GC 水位或
@@ -61,8 +71,8 @@
 - `MockBffStore`、Mori mock 与 mock routes 仍位于生产 `src/` 并编入产物。
 - TypeScript 已显式启用 `useUnknownInCatchVariables`；`exactOptionalPropertyTypes`、`noImplicitReturns`、
   `noUnusedLocals`、`noUnusedParameters` 仍因现有源码错误未启用。
-- 新增 AG-UI 表已使用 `TIMESTAMPTZ(3)` 与命名 constraint；既有六张表的时间精度、constraint/index 命名，以及
-  outbox/retention 仍待后续切片处理。
+- 新增 AG-UI 表与本阶段 ScheduledTask/outbox 表已使用 `TIMESTAMPTZ(3)` 与命名 constraint；既有六张表的时间精度、
+  constraint/index 命名，以及 receipt/outbox retention 仍待后续切片处理。
 - `ProjectInstructionRevision` 当前仍暴露 `updatedAt`、`actorName` 和 Unix milliseconds；这是已知 wire-naming/
   UTC 违例，需与 runtime mapper、Web consumer 和 OpenAPI 同一切片删除，不能只改文档伪造 snake_case。
 - CI 尚未提供真实 PostgreSQL/Redis service gate、fresh-schema 安装、固定 SHA actions 与完整供应链扫描。
@@ -71,9 +81,10 @@
 
 ## 本阶段闭环边界
 
-Phase 2 仅闭环 durable public AG-UI projection 的 schema、投影事务、opaque cursor、HTTP replay/live 接线、真实
-PostgreSQL/Redis integration 与对应 contract。它不把 Conversation/Message/Share、outbox、GC、主动 event consumer、
-完整 IAM permission enforcement 或生产 telemetry 标记为完成。
+本阶段闭环 ScheduledTask tenant/time 边界、task revision、fact+Scheduler command 的本地事务、bounded outbox
+dispatcher 的 lease/fence/retry/terminal state，以及真实 PostgreSQL/Redis integration。它不扩展到 Agent Run、Agent
+自有 outbox、Conversation/Message/Share、AG-UI GC、主动 event consumer、完整 IAM permission enforcement 或生产
+telemetry；Chat repository 与 Agent wire protocol 保持本仓既有调用边界。
 
 ## 当前证据命令
 

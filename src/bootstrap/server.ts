@@ -11,11 +11,8 @@ import { liveBffBusiness } from "../http/routes/live-bff.js"
 import { liveOwnerBusiness } from "../http/routes/owner.js"
 import { liveMoriBusiness } from "../http/routes/music.js"
 import { configuredUpstream, bffOwnedBusinessPath, isMoriBusinessPath, upstreamKey } from "../http/routes/routing.js"
-import { reconcileSchedulerTask, schedulerDispatch } from "../http/routes/scheduler.js"
-import type { LiveOwnerResult } from "../http/routes/types.js"
-import type { RequestContext } from "../domain/request-context.js"
+import { schedulerDispatch } from "../http/routes/scheduler.js"
 import { createBffComposition, type BffCompositionOptions, type BffRouteInput } from "./runtime.js"
-import type { BffBusinessStore } from "../application/ports/bff-business-store.js"
 
 async function handle(
   request: IncomingMessage,
@@ -161,7 +158,7 @@ async function handle(
     return
   }
   if (composition.businessStore !== null && bffOwnedBusinessPath(businessPath)) {
-    if (await liveBffBusiness(request, response, config, context, businessPath, json, mutation, composition.idempotency, composition.businessStore)) return
+    if (await liveBffBusiness(request, response, context, businessPath, json, mutation, composition.idempotency, composition.businessStore)) return
   }
   if (await liveOwnerBusiness(request, response, config, context, businessPath, json, mutation, composition.idempotency)) return
   if (upstreamBase === null) {
@@ -178,39 +175,6 @@ async function handle(
   }
 }
 
-async function reconcilePersistedScheduledTasks(config: BffConfig, store: BffBusinessStore): Promise<void> {
-  if (config.upstreams.scheduler === null || config.schedulerTargetUrl === null) return
-  try {
-    const records = await store.services.scheduledTasks.listRecords()
-    const request = { headers: {} } as IncomingMessage
-    let registered = 0
-    let skipped = 0
-    let failed = 0
-    for (const record of records) {
-      const { task, tenantId, ownerId } = record
-      if (!task.enabled || task.status !== "active" || (task.expires_at !== undefined && Date.parse(task.expires_at) <= Date.now())) {
-        skipped += 1
-        continue
-      }
-      const context: RequestContext = {
-        requestId: `bff-startup-scheduler-reconcile-${task.id}`,
-        identity: { namespace: tenantId, userId: ownerId },
-      }
-      const result = await Promise.race([
-        reconcileSchedulerTask(request, config, context, task, ownerId, "register"),
-        new Promise<LiveOwnerResult>((resolve) => setTimeout(() => resolve({ status: 504, body: null }), 5000)),
-      ])
-      if (result.status >= 400) failed += 1
-      else registered += 1
-    }
-    if (registered !== 0 || skipped !== 0 || failed !== 0) {
-      console.log(`kokoro-bff scheduler reconciliation registered=${registered} skipped=${skipped} failed=${failed}`)
-    }
-  } catch {
-    console.error("kokoro-bff scheduler reconciliation failed")
-  }
-}
-
 export type BffServerOptions = BffCompositionOptions
 
 export function createBffServer(config: BffConfig = loadConfig(), options: BffServerOptions = {}): Server {
@@ -221,9 +185,8 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
       else response.destroy()
     })
   })
-  const persistedStore = composition.businessStore
-  if (persistedStore !== null) {
-    server.once("listening", () => { void reconcilePersistedScheduledTasks(config, persistedStore) })
+  if (composition.scheduledTaskDispatcher !== undefined) {
+    server.once("listening", () => { composition.scheduledTaskDispatcher?.start() })
   }
   server.once("close", () => { void composition.close() })
   return server

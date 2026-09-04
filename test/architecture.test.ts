@@ -24,6 +24,8 @@ test("BFF keeps contract, application, client, and repository boundaries explici
     "src/domain/json.ts",
     "src/domain/request-context.ts",
     "src/domain/project/name.ts",
+    "src/domain/scheduled-task/task.ts",
+    "src/domain/scheduled-task/outbox.ts",
     "src/contracts/index.ts",
     "src/contracts/mori.ts",
     "src/application/idempotency.ts",
@@ -33,7 +35,11 @@ test("BFF keeps contract, application, client, and repository boundaries explici
     "src/application/ports/idempotency-repository.ts",
     "src/application/ports/project-repository.ts",
     "src/application/ports/scheduled-task-repository.ts",
+    "src/application/ports/scheduled-task-outbox-repository.ts",
+    "src/application/ports/scheduled-task-outbox-delivery.ts",
+    "src/application/scheduled-task-outbox-dispatcher.ts",
     "src/application/scheduled/input.ts",
+    "src/application/scheduled/mappers.ts",
     "src/application/mori/input.ts",
     "src/application/agui/errors.ts",
     "src/application/agui/project-chat-event.ts",
@@ -58,6 +64,7 @@ test("BFF keeps contract, application, client, and repository boundaries explici
     "src/infrastructure/clients/agent/projection.ts",
     "src/infrastructure/clients/mori/owner-route.ts",
     "src/infrastructure/clients/scheduler/job.ts",
+    "src/infrastructure/clients/scheduler/outbox-delivery.ts",
     "src/infrastructure/clients/owner/identity.ts",
     "src/interfaces/http/agui/sse.ts",
     "test/doubles/bff-store.ts",
@@ -179,6 +186,33 @@ test("BFF durable AG-UI persistence is parameterized, tenant/session scoped, and
   assert.equal(/FOREIGN KEY|REFERENCES/iu.test(schema), false)
 })
 
+test("ScheduledTask mutations use a tenant-scoped transactional outbox and fenced dispatcher", async () => {
+  const [scheduledRepository, outboxRepository, dispatcher, delivery, liveRoute, schema] = await Promise.all([
+    readFile(path.join(root, "src/infrastructure/postgres/scheduled-task-repository.ts"), "utf8"),
+    readFile(path.join(root, "src/application/ports/scheduled-task-outbox-repository.ts"), "utf8"),
+    readFile(path.join(root, "src/application/scheduled-task-outbox-dispatcher.ts"), "utf8"),
+    readFile(path.join(root, "src/infrastructure/clients/scheduler/outbox-delivery.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/live-bff.ts"), "utf8"),
+    readFile(path.join(root, "database/schema.sql"), "utf8"),
+  ])
+  assert.match(scheduledRepository, /BEGIN/u)
+  assert.match(scheduledRepository, /COMMIT/u)
+  assert.match(scheduledRepository, /bff_scheduled_task_outbox/u)
+  assert.match(scheduledRepository, /tenant_id = \$1/u)
+  assert.match(scheduledRepository, /FOR UPDATE SKIP LOCKED/u)
+  assert.match(scheduledRepository, /lease_token/u)
+  assert.match(scheduledRepository, /fence/u)
+  assert.match(outboxRepository, /markScheduledTaskOutboxSucceeded/u)
+  assert.match(dispatcher, /markScheduledTaskOutboxRetryable/u)
+  assert.match(dispatcher, /maxAttempts/u)
+  assert.match(delivery, /proxyUpstream/u)
+  assert.match(delivery, /idempotency-key/u)
+  assert.doesNotMatch(liveRoute, /reconcileSchedulerTask\(/u)
+  assert.match(liveRoute, /mutationLineage/u)
+  assert.match(schema, /CONSTRAINT uq_bff_scheduled_task_outbox_business UNIQUE/u)
+  assert.equal(/FOREIGN KEY|REFERENCES/iu.test(schema), false)
+})
+
 test("BFF production code has one explicit owner boundary", async () => {
   const files = await import("node:fs/promises").then(({ readdir }) => readdir(path.join(root, "src"), { recursive: true }))
   for (const file of files) {
@@ -229,9 +263,9 @@ test("BFF governance documents distinguish implemented facts from accepted targe
   assert.match(apiContract, /contract\/openapi\/v1\/openapi\.yaml/u)
   assert.match(dataModel, /bff_agui_event/u)
   assert.match(dataModel, /AG-UI ledger 当前 append-only 且不自动删除/u)
-  assert.match(dataModel, /当前 schema 没有 outbox 表/u)
-  assert.match(reliability, /当前不具备事务型 outbox/u)
+  assert.match(dataModel, /bff_scheduled_task_outbox/u)
+  assert.match(reliability, /ScheduledTask.*outbox/u)
   assert.match(reliability, /唯一 durable truth 是 BFF PostgreSQL ledger/u)
   assert.equal(schema.includes("bff_agui_event"), true)
-  assert.equal(schema.includes("bff_outbox"), false)
+  assert.equal(/CREATE TABLE IF NOT EXISTS bff_outbox\b/u.test(schema), false)
 })
