@@ -18,6 +18,12 @@ async function exists(relativePath: string): Promise<boolean> {
 
 test("BFF keeps contract, application, client, and repository boundaries explicit", async () => {
   for (const relativePath of [
+    "src/bootstrap/runtime.ts",
+    "src/bootstrap/server.ts",
+    "src/config/runtime.ts",
+    "src/domain/json.ts",
+    "src/domain/request-context.ts",
+    "src/domain/project/name.ts",
     "src/contracts/index.ts",
     "src/contracts/mori.ts",
     "src/application/idempotency.ts",
@@ -39,14 +45,10 @@ test("BFF keeps contract, application, client, and repository boundaries explici
     "src/infrastructure/postgres/project-repository.ts",
     "src/infrastructure/postgres/scheduled-task-repository.ts",
     "src/infrastructure/postgres/repositories.ts",
-    "src/infrastructure/mock/bff-store.ts",
-    "src/infrastructure/mock/agui.ts",
     "src/http/routes/agent.ts",
     "src/http/routes/live-bff.ts",
     "src/http/routes/owner.ts",
     "src/http/routes/music.ts",
-    "src/http/routes/mock.ts",
-    "src/http/routes/mori.ts",
     "src/http/routes/scheduler.ts",
     "src/http/routes/routing.ts",
     "src/infrastructure/clients/agent/index.ts",
@@ -56,8 +58,13 @@ test("BFF keeps contract, application, client, and repository boundaries explici
     "src/infrastructure/clients/agent/projection.ts",
     "src/infrastructure/clients/mori/owner-route.ts",
     "src/infrastructure/clients/scheduler/job.ts",
-    "src/infrastructure/mock/mori-store.ts",
+    "src/infrastructure/clients/owner/identity.ts",
     "src/interfaces/http/agui/sse.ts",
+    "test/doubles/bff-store.ts",
+    "test/doubles/agui.ts",
+    "test/doubles/mori-store.ts",
+    "test/doubles/mock-route.ts",
+    "test/doubles/mori-route.ts",
   ]) {
     assert.equal(await exists(relativePath), true, relativePath)
   }
@@ -69,6 +76,9 @@ test("BFF keeps contract, application, client, and repository boundaries explici
     "src/adapters",
     "src/modules",
     "src/interfaces/http/agui/events.ts",
+    "src/infrastructure/mock",
+    "src/http/routes/mock.ts",
+    "src/http/routes/mori.ts",
   ]) {
     assert.equal(await exists(legacyPath), false, legacyPath)
   }
@@ -76,11 +86,28 @@ test("BFF keeps contract, application, client, and repository boundaries explici
 
 test("BFF composition root stays small and delegates resource routes", async () => {
   const main = await readFile(path.join(root, "src/main.ts"), "utf8")
-  assert.ok(main.split("\n").length < 400, "src/main.ts must remain a composition root")
-  assert.match(main, /routes\/agent\.js/)
-  assert.match(main, /routes\/owner\.js/)
-  assert.match(main, /routes\/scheduler\.js/)
-  assert.match(main, /routes\/mock\.js/)
+  const server = await readFile(path.join(root, "src/bootstrap/server.ts"), "utf8")
+  assert.ok(main.split("\n").length < 80, "src/main.ts must remain a thin entry point")
+  assert.match(main, /bootstrap\/server\.js/)
+  assert.match(server, /routes\/agent\.js/)
+  assert.match(server, /routes\/owner\.js/)
+  assert.match(server, /routes\/scheduler\.js/)
+  assert.doesNotMatch(server, /routes\/mock\.js|MockBffStore|MoriMockBffStore/)
+})
+
+test("BFF production composition requires the live PostgreSQL and Redis runtime", async () => {
+  const [main, runtime, config] = await Promise.all([
+    readFile(path.join(root, "src/main.ts"), "utf8"),
+    readFile(path.join(root, "src/bootstrap/runtime.ts"), "utf8"),
+    readFile(path.join(root, "src/config/runtime.ts"), "utf8"),
+  ])
+  assert.doesNotMatch(main, /infrastructure\/mock|new\s+(?:Mock|MoriMock)/u)
+  assert.match(runtime, /PostgresBffRepositories/u)
+  assert.match(runtime, /postgresUrl/u)
+  assert.match(runtime, /redisUrl/u)
+  assert.match(runtime, /required|not configured/u)
+  assert.match(config, /mode:\s*"live"/u)
+  assert.doesNotMatch(config, /mode:\s*"mock"|default.*mock/iu)
 })
 
 test("BFF runtime has no compatibility migration or direct database setup in the route host", async () => {
@@ -96,17 +123,37 @@ test("BFF runtime has no compatibility migration or direct database setup in the
 })
 
 test("BFF application ports stay free of infrastructure dependencies", async () => {
-  for (const relativePath of [
-    "src/application/ports/idempotency-repository.ts",
-    "src/application/ports/project-repository.ts",
-    "src/application/ports/scheduled-task-repository.ts",
-    "src/application/agui/ports/agui-projection-repository.ts",
-  ]) {
+  const files = await import("node:fs/promises").then(({ readdir }) => readdir(path.join(root, "src/application"), { recursive: true }))
+  for (const file of files) {
+    if (typeof file !== "string" || !file.endsWith(".ts")) continue
+    const relativePath = `src/application/${file}`
     const source = await readFile(path.join(root, relativePath), "utf8")
-    assert.equal(source.includes("from \"pg\""), false, relativePath)
-    assert.equal(source.includes("infrastructure/"), false, relativePath)
+    assert.doesNotMatch(source, /from\s+["'][^"']*(?:node:http|\/http\/|\/infrastructure\/|(?:^|\/)pg(?:\.js)?|(?:^|\/)redis(?:\.js)?)[^"']*["']/u, relativePath)
     assert.equal(source.includes("SELECT "), false, relativePath)
   }
+})
+
+test("BFF domain code is real policy, not an empty layer or transport adapter", async () => {
+  const files = await import("node:fs/promises").then(({ readdir }) => readdir(path.join(root, "src/domain"), { recursive: true }))
+  assert.ok(files.some((file) => typeof file === "string" && file.endsWith(".ts")))
+  for (const file of files) {
+    if (typeof file !== "string" || !file.endsWith(".ts")) continue
+    const source = await readFile(path.join(root, "src/domain", file), "utf8")
+    assert.doesNotMatch(source, /from\s+["'][^"']*(?:node:http|\/http\/|\/infrastructure\/|fastify|express)[^"']*["']/u, `src/domain/${file}`)
+  }
+})
+
+test("BFF test doubles are outside production source and are explicitly assembled", async () => {
+  const files = await import("node:fs/promises").then(({ readdir }) => readdir(path.join(root, "src"), { recursive: true }))
+  for (const file of files) {
+    if (typeof file !== "string" || !file.endsWith(".ts")) continue
+    const source = await readFile(path.join(root, "src", file), "utf8")
+    assert.doesNotMatch(source, /MockBffStore|MoriMockBffStore|routes\/mock\.js|routes\/mori\.js/u, `src/${file}`)
+  }
+  const composition = await readFile(path.join(root, "test/doubles/server.ts"), "utf8")
+  assert.match(composition, /createBffServer/u)
+  assert.match(composition, /businessStore:\s*null/u)
+  assert.match(composition, /routeHandler/u)
 })
 
 test("BFF durable AG-UI persistence is parameterized, tenant/session scoped, and Redis-notification-only", async () => {

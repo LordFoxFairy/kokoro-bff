@@ -101,8 +101,10 @@ export class MoriMockBffStore {
   private nextSongPlanNumber = 1
   private nextVersionNumber = 1
   private nextExportNumber = 1
+  private readonly autoProgress: boolean
 
-  public constructor(private readonly autoProgress = true) {
+  public constructor(autoProgress = true) {
+    this.autoProgress = autoProgress
     const generation: MoriGenerationRecord = {
       generation_ref: "generation_preview_first_light",
       project_ref: previewProject.project_ref,

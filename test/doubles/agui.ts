@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto"
 
-import { createAgUiProjectionState, projectChatEvent } from "../../application/agui/project-chat-event.js"
-import type { ChatEvent } from "../../contracts/chat.js"
+import { createAgUiProjectionState, projectChatEvent } from "../../dist/application/agui/project-chat-event.js"
+import type { ChatEvent } from "../../src/contracts/chat.ts"
 
 export type MockAgUiFrame = {
   cursor: string

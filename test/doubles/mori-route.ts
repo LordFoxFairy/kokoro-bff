@@ -1,17 +1,18 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 
-import { failure, ok } from "../../contracts/index.js"
-import { MoriMockBffStore } from "../../infrastructure/mock/mori-store.js"
-import { moriExportInput, moriGenerationInput, moriPageInput, moriProjectInput, moriSongPlanInput } from "../../application/mori/input.js"
-import { reply } from "../response.js"
-import { headerString, queryOf, type Context } from "../request.js"
-import type { IdempotencyEntry, MutationTicket } from "../../application/idempotency.js"
+import { failure, ok } from "../../dist/contracts/index.js"
+import { MoriMockBffStore } from "./mori-store.ts"
+import { moriExportInput, moriGenerationInput, moriPageInput, moriProjectInput, moriSongPlanInput } from "../../dist/application/mori/input.js"
+import { reply } from "../../dist/http/response.js"
+import { headerString, queryOf } from "../../dist/http/request.js"
+import type { IdempotencyEntry, MutationTicket } from "../../src/application/idempotency.ts"
+import type { RequestContext } from "../../src/domain/request-context.ts"
 
 export async function mockMoriBusiness(
   request: IncomingMessage,
   response: ServerResponse,
   segments: string[],
-  context: Context,
+  context: RequestContext,
   mori: MoriMockBffStore,
   idempotency: Map<string, IdempotencyEntry>,
   mutation: MutationTicket | null,
@@ -21,7 +22,7 @@ export async function mockMoriBusiness(
   const method = request.method || "GET"
 
   if (segments.length === 2 && segments[1] === "projects" && method === "GET") {
-    const pagination = moriPageInput(request)
+    const pagination = moriPageInput(queryOf(request))
     const projects = pagination === null ? null : mori.listProjectsPage(pagination.cursor, pagination.limit)
     if (pagination === null) await reply(response, 400, failure("invalid_pagination", "limit must be between 1 and 100", context.requestId), context, idempotency, mutation)
     else if (projects === null) await reply(response, 400, failure("invalid_cursor", "cursor is invalid", context.requestId), context, idempotency, mutation)
@@ -115,7 +116,7 @@ export async function mockMoriBusiness(
       await reply(response, 404, failure("project_not_found", "Mori project was not found", context.requestId), context, idempotency, mutation)
       return true
     }
-    const pagination = moriPageInput(request)
+    const pagination = moriPageInput(queryOf(request))
     const candidates = pagination === null ? null : mori.listCandidates(projectRef, pagination.cursor, pagination.limit)
     if (pagination === null) await reply(response, 400, failure("invalid_pagination", "limit must be between 1 and 100", context.requestId), context, idempotency, mutation)
     else if (candidates === null) await reply(response, 400, failure("invalid_cursor", "cursor is invalid", context.requestId), context, idempotency, mutation)
@@ -157,7 +158,7 @@ export async function mockMoriBusiness(
       await reply(response, 400, failure("invalid_library_kind", "kind must be all or version", context.requestId), context, idempotency, mutation)
       return true
     }
-    const pagination = moriPageInput(request)
+    const pagination = moriPageInput(queryOf(request))
     const library = pagination === null ? null : mori.listLibrary(kind, pagination.cursor, pagination.limit)
     if (pagination === null) await reply(response, 400, failure("invalid_pagination", "limit must be between 1 and 100", context.requestId), context, idempotency, mutation)
     else if (library === null) await reply(response, 400, failure("invalid_cursor", "cursor is invalid", context.requestId), context, idempotency, mutation)

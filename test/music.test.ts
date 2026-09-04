@@ -2,9 +2,9 @@ import assert from "node:assert/strict"
 import { createServer, type Server } from "node:http"
 import { afterEach, describe, it } from "node:test"
 
-import { createBffServer } from "../dist/main.js"
-import { DEFAULT_AGUI_CONFIG } from "../dist/config.js"
-import type { BffConfig } from "../src/config.js"
+import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
+import type { BffConfig } from "../src/config/runtime.ts"
+import { createLiveTestBffServer } from "./doubles/server.ts"
 import { musicOwnerRoute, projectMoriResponse, projectMoriEventStream } from "../dist/infrastructure/clients/mori/owner-route.js"
 
 const servers: Server[] = []
@@ -180,7 +180,7 @@ describe("Mori Music owner adapter", () => {
       }))
     })
     const ownerBase = await listen(owner)
-    const bff = await listen(createBffServer(config({ upstreams: { ...config().upstreams, music: ownerBase } })))
+    const bff = await listen(createLiveTestBffServer(config({ upstreams: { ...config().upstreams, music: ownerBase } })))
 
     const response = await fetch(`${bff}/v1/mori/projects/project_123?provider=secret`, {
       headers: { ...authHeaders(), authorization: "Bearer user-secret" },
@@ -214,7 +214,7 @@ describe("Mori Music owner adapter", () => {
       ].join("\n"))
     })
     const ownerBase = await listen(owner)
-    const bff = await listen(createBffServer(config({ upstreams: { ...config().upstreams, music: ownerBase } })))
+    const bff = await listen(createLiveTestBffServer(config({ upstreams: { ...config().upstreams, music: ownerBase } })))
     const response = await fetch(`${bff}/v1/mori/generations/generation_1/events`, { headers: authHeaders() })
     const text = await response.text()
 

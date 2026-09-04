@@ -1,11 +1,12 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 
 import { failure } from "../../contracts/index.js"
-import type { BffConfig } from "../../config.js"
+import type { BffConfig } from "../../config/runtime.js"
 import { projectMoriEventStream, projectMoriResponse, musicOwnerRoute } from "../../infrastructure/clients/mori/owner-route.js"
-import { ownerIdentityHeaders } from "../../application/projections.js"
+import { ownerIdentityHeaders } from "../../infrastructure/clients/owner/identity.js"
 import { proxyUpstream } from "../../upstream.js"
-import { incomingHeaders, type Context } from "../request.js"
+import { incomingHeaders } from "../request.js"
+import type { RequestContext } from "../../domain/request-context.js"
 import { normalizeUpstreamResponse, reply } from "../response.js"
 import type { IdempotencyEntry, MutationTicket } from "../../application/idempotency.js"
 import { liveOwnerRequest } from "./owner.js"
@@ -14,7 +15,7 @@ export async function liveMoriBusiness(
   request: IncomingMessage,
   response: ServerResponse,
   config: BffConfig,
-  context: Context,
+  context: RequestContext,
   businessPath: string[],
   body: Buffer | undefined,
   mutation: MutationTicket | null,

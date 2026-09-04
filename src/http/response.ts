@@ -2,7 +2,9 @@ import type { ServerResponse } from "node:http"
 
 import { failure, ok } from "../contracts/index.js"
 import { commitReceipt, type IdempotencyEntry, type MutationTicket } from "../application/idempotency.js"
-import { headerString, isRecord, type Context } from "./request.js"
+import { isRecord } from "../domain/json.js"
+import type { RequestContext } from "../domain/request-context.js"
+import { headerString } from "./request.js"
 import type { UpstreamResponse } from "../upstream.js"
 
 export function send(response: ServerResponse, status: number, body: unknown): void {
@@ -35,7 +37,7 @@ export async function reply(
   response: ServerResponse,
   status: number,
   body: unknown,
-  context: Context,
+  context: RequestContext,
   idempotency: Map<string, IdempotencyEntry>,
   mutation: MutationTicket | null,
 ): Promise<void> {

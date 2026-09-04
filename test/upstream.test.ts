@@ -2,8 +2,8 @@ import { createServer, type Server } from "node:http"
 import assert from "node:assert/strict"
 import { afterEach, describe, it } from "node:test"
 
-import { DEFAULT_AGUI_CONFIG } from "../dist/config.js"
-import type { BffConfig } from "../src/config.js"
+import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
+import type { BffConfig } from "../src/config/runtime.ts"
 import { proxyUpstream } from "../dist/upstream.js"
 
 const servers: Server[] = []

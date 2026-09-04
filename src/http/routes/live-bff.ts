@@ -2,27 +2,29 @@ import type { IncomingMessage, ServerResponse } from "node:http"
 
 import { randomUUID } from "node:crypto"
 
-import type { BffConfig } from "../../config.js"
+import type { BffConfig } from "../../config/runtime.js"
 import { failure, ok } from "../../contracts/index.js"
-import { PostgresBffRepositories } from "../../infrastructure/postgres/repositories.js"
-import { idempotencyKey, type Context } from "../request.js"
+import type { BffBusinessStore } from "../../application/ports/bff-business-store.js"
+import { idempotencyKey } from "../request.js"
+import type { RequestContext } from "../../domain/request-context.js"
 import { reply } from "../response.js"
 import type { IdempotencyEntry, MutationTicket } from "../../application/idempotency.js"
 import { projectData, scheduledData } from "./helpers.js"
 import { markScheduledTaskFailed, reconcileSchedulerTask } from "./scheduler.js"
 import { scheduledCreateInput, scheduledPatchInput } from "../../application/scheduled/input.js"
 import { scheduledTaskId } from "./scheduler.js"
+import { projectName } from "../../domain/project/name.js"
 
 export async function liveBffBusiness(
   request: IncomingMessage,
   response: ServerResponse,
   config: BffConfig,
-  context: Context,
+  context: RequestContext,
   businessPath: string[],
   json: Record<string, unknown>,
   mutation: MutationTicket | null,
   idempotency: Map<string, IdempotencyEntry>,
-  store: PostgresBffRepositories,
+  store: BffBusinessStore,
 ): Promise<boolean> {
   const method = request.method || "GET"
   const tenantId = context.identity.namespace
@@ -34,8 +36,8 @@ export async function liveBffBusiness(
         return true
       }
       if (businessPath.length === 1 && method === "POST") {
-        const name = typeof json.name === "string" ? json.name.trim() : ""
-        if (name === "") {
+        const name = projectName(json.name)
+        if (name === null) {
           await reply(response, 400, failure("invalid_project", "Project name is required", context.requestId), context, idempotency, mutation)
           return true
         }

@@ -1,20 +1,24 @@
 import { createHash } from "node:crypto"
 import type { IncomingMessage, ServerResponse } from "node:http"
 
-import type { BffConfig } from "../../config.js"
+import type { BffConfig } from "../../config/runtime.js"
 import { failure, ok, type ScheduledTask } from "../../contracts/index.js"
-import { PostgresBffRepositories } from "../../infrastructure/postgres/repositories.js"
+import type { BffBusinessStore } from "../../application/ports/bff-business-store.js"
 import { proxyUpstream } from "../../upstream.js"
 import { buildAgentLaunch } from "../../infrastructure/clients/agent/index.js"
-import { buildSchedulerJob, schedulerJobName, type SchedulerJob } from "../../infrastructure/clients/scheduler/job.js"
+import { buildSchedulerJob, schedulerJobName } from "../../infrastructure/clients/scheduler/job.js"
 import { mutationTicket, type IdempotencyEntry } from "../../application/idempotency.js"
-import { dataOf, ownerIdentityHeaders } from "../../application/projections.js"
+import { fingerprintBody } from "../request.js"
+import { dataOf } from "../../application/projections.js"
+import { ownerIdentityHeaders } from "../../infrastructure/clients/owner/identity.js"
 import { normalizeUpstreamResponse, reply, send } from "../response.js"
-import { headerString, idempotencyKey, incomingHeaders, isRecord, readBody, requestBodyJson, requestId, type Context } from "../request.js"
+import { headerString, idempotencyKey, incomingHeaders, readBody, requestBodyJson, requestId } from "../request.js"
+import { isRecord } from "../../domain/json.js"
+import type { RequestContext } from "../../domain/request-context.js"
 import { callAgent } from "./agent.js"
 import type { LiveOwnerResult } from "./types.js"
 
-export function scheduledTaskId(context: Context, path: string, key: string): string {
+export function scheduledTaskId(context: RequestContext, path: string, key: string): string {
   const digest = createHash("sha256")
     .update(`${context.identity.namespace}\u001f${path}\u001f${key}`)
     .digest("hex")
@@ -29,7 +33,7 @@ function schedulerErrorCode(body: unknown): string | null {
 async function liveSchedulerRequest(
   request: IncomingMessage,
   config: BffConfig,
-  context: Context,
+  context: RequestContext,
   method: string,
   path: string,
   body?: Buffer,
@@ -63,7 +67,7 @@ async function liveSchedulerRequest(
 export async function reconcileSchedulerTask(
   request: IncomingMessage,
   config: BffConfig,
-  context: Context,
+  context: RequestContext,
   task: ScheduledTask,
   ownerId: string,
   operation: "register" | "replace" | "delete",
@@ -92,7 +96,7 @@ export async function reconcileSchedulerTask(
   return first
 }
 
-export async function markScheduledTaskFailed(store: PostgresBffRepositories, tenantId: string, taskId: string): Promise<void> {
+export async function markScheduledTaskFailed(store: BffBusinessStore, tenantId: string, taskId: string): Promise<void> {
   await store.services.scheduledTasks.update(tenantId, taskId, { status: "failed", enabled: false })
 }
 
@@ -100,7 +104,7 @@ export async function schedulerDispatch(
   request: IncomingMessage,
   response: ServerResponse,
   config: BffConfig,
-  businessStore: PostgresBffRepositories | null,
+  businessStore: BffBusinessStore | null,
   idempotency: Map<string, IdempotencyEntry>,
 ): Promise<boolean> {
   const id = requestId(request)
@@ -148,8 +152,8 @@ export async function schedulerDispatch(
     send(response, 400, failure("invalid_scheduler_dispatch", "Scheduler dispatch payload or headers are invalid", id))
     return true
   }
-  const context: Context = { requestId: id, identity: { namespace: tenantId, userId: ownerId } }
-  const mutation = await mutationTicket(request, "POST", "/internal/bff/scheduled-tasks/dispatch", context, body, idempotency, businessStore)
+  const context: RequestContext = { requestId: id, identity: { namespace: tenantId, userId: ownerId } }
+  const mutation = await mutationTicket(occurrenceKey, "POST", "/internal/bff/scheduled-tasks/dispatch", context, fingerprintBody(request, body), idempotency, businessStore)
   if (mutation.replay !== null) {
     send(response, mutation.replay.status, mutation.replay.body)
     return true

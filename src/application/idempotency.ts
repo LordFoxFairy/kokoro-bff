@@ -1,30 +1,26 @@
-import type { IncomingMessage } from "node:http"
-
 import { failure } from "../contracts/index.js"
 import { PENDING_RECEIPT_STATUS, type IdempotencyRepository } from "./ports/idempotency-repository.js"
-import { fingerprintBody, idempotencyKey, type Context } from "../http/request.js"
+import type { RequestContext } from "../domain/request-context.js"
 
 export type IdempotencyReceipt = { status: number; body: unknown }
 export type IdempotencyEntry = { fingerprint: string; receipt: IdempotencyReceipt }
 export type MutationTicket = { scope: string; fingerprint: string; persistent?: IdempotencyRepository }
 
-function mutationScope(context: Context, method: string, path: string, key: string): string {
+function mutationScope(context: RequestContext, method: string, path: string, key: string): string {
   return `${context.identity.namespace}:${method}:${path}:${key}`
 }
 
 export async function mutationTicket(
-  request: IncomingMessage,
+  key: string | null,
   method: string,
   path: string,
-  context: Context,
-  body: Buffer,
+  context: RequestContext,
+  fingerprint: string,
   idempotency: Map<string, IdempotencyEntry>,
   persistent?: IdempotencyRepository,
 ): Promise<{ ticket: MutationTicket | null; replay: IdempotencyReceipt | null; conflict: boolean; pending: boolean }> {
-  const key = idempotencyKey(request)
   if (key === null) return { ticket: null, replay: null, conflict: false, pending: false }
   const scope = mutationScope(context, method, path, key)
-  const fingerprint = fingerprintBody(request, body)
   if (persistent !== undefined) {
     const claim = await persistent.claimReceipt(scope, fingerprint)
     if (claim.claimed) return { ticket: { scope, fingerprint, persistent }, replay: null, conflict: false, pending: false }

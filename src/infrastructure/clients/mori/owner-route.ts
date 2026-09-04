@@ -1,5 +1,5 @@
 import { ok, type BffEnvelope } from "../../../contracts/index.js"
-import { isRecord } from "../../../http/request.js"
+import { isRecord } from "../../../domain/json.js"
 import type { MoriGenerationStatus } from "../../../contracts/mori.js"
 
 export type MoriOwnerResponseKind =
@@ -48,7 +48,7 @@ function querySuffix(requestUrl: string | undefined, allowed: readonly string[])
 
 function route(
   tail: string[],
-  method: string,
+  _method: string,
   requestUrl: string | undefined,
   kind: MoriOwnerResponseKind,
   allowedQuery: readonly string[],

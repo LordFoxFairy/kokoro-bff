@@ -1,12 +1,13 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 
-import type { BffConfig } from "../../config.js"
+import type { BffConfig } from "../../config/runtime.js"
 import { failure, ok } from "../../contracts/index.js"
 import { proxyUpstream } from "../../upstream.js"
 import { agentEventPage, agentIdentityHeaders, buildAgentControl, buildAgentLaunch, buildSessionDetail, mapAgentEvent, type AgentChatEvent, type AgentChatMessage } from "../../infrastructure/clients/agent/index.js"
 import { agentMessageListData, agentSessionAssertion, agentSessionListData, dataOf, messageCursor } from "../../application/projections.js"
 import { normalizeUpstreamResponse, reply } from "../response.js"
-import { headerString, incomingHeaders, idempotencyKey, queryOf, type Context } from "../request.js"
+import { headerString, incomingHeaders, idempotencyKey, queryOf } from "../request.js"
+import type { RequestContext } from "../../domain/request-context.js"
 import type { IdempotencyEntry, MutationTicket } from "../../application/idempotency.js"
 import { AgUiSseWriter } from "../../interfaces/http/agui/sse.js"
 import { AgUiSourceIdentityConflictError } from "../../application/agui/errors.js"
@@ -28,7 +29,7 @@ export async function callAgent(
   requestId: string,
   request: IncomingMessage,
   body: Buffer | undefined,
-  identity: Context,
+  identity: RequestContext,
   assertionRef: string,
 ): Promise<{ status: number; body: unknown }> {
   const upstream = await proxyUpstream(
@@ -47,7 +48,7 @@ export async function callAgent(
 function sendAgentFailure(
   response: ServerResponse,
   result: { status: number; body: unknown },
-  context: Context,
+  context: RequestContext,
   idempotency: Map<string, IdempotencyEntry>,
   mutation: MutationTicket | null,
 ): void {
@@ -72,7 +73,7 @@ async function readAgentEventHistory(
   config: BffConfig,
   baseUrl: string,
   request: IncomingMessage,
-  context: Context,
+  context: RequestContext,
   sessionId: string,
   assertion: string,
 ): Promise<AgentEventHistoryResult> {
@@ -123,7 +124,7 @@ async function durableAgentEventStream(
   request: IncomingMessage,
   response: ServerResponse,
   config: BffConfig,
-  context: Context,
+  context: RequestContext,
   sessionId: string,
   assertion: string,
   baseUrl: string | null,
@@ -297,9 +298,8 @@ export async function liveAgentSession(
   request: IncomingMessage,
   response: ServerResponse,
   config: BffConfig,
-  context: Context,
+  context: RequestContext,
   businessPath: string[],
-  body: Buffer | undefined,
   json: Record<string, unknown>,
   mutation: MutationTicket | null,
   idempotency: Map<string, IdempotencyEntry>,

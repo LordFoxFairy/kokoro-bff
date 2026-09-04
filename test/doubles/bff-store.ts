@@ -19,8 +19,8 @@ import type {
   SkillRevision,
   Task,
   WorkspaceFile,
-} from "../../contracts/index.js"
-import { mockAgUiWatermark } from "./agui.js"
+} from "../../src/contracts/index.ts"
+import { mockAgUiWatermark } from "./agui.ts"
 
 const now = "2026-01-01T00:00:00.000Z"
 const skillPackageSize = 122880

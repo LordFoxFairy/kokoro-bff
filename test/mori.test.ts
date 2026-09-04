@@ -2,9 +2,9 @@ import { createServer, type Server } from "node:http"
 import assert from "node:assert/strict"
 import { afterEach, describe, it } from "node:test"
 
-import { createBffServer } from "../dist/main.js"
-import { DEFAULT_AGUI_CONFIG } from "../dist/config.js"
-import type { BffConfig } from "../src/config.js"
+import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
+import type { BffConfig } from "../src/config/runtime.ts"
+import { createLiveTestBffServer, createTestBffServer } from "./doubles/server.ts"
 
 const servers: Server[] = []
 
@@ -19,11 +19,19 @@ async function listen(server: Server): Promise<string> {
   return `http://127.0.0.1:${address.port}`
 }
 
+function testServer(configValue: BffConfig, options: { moriAutoProgress?: boolean } = {}): Server {
+  return createTestBffServer(configValue, options).server
+}
+
+function liveServer(configValue: BffConfig): Server {
+  return createLiveTestBffServer(configValue)
+}
+
 function config(overrides: Partial<BffConfig> = {}): BffConfig {
   return {
     host: "127.0.0.1",
     port: 4300,
-    mode: "mock",
+    mode: "live",
     domain: "dev.kokoro.localhost",
     tenantId: "tenant_test",
     sharedSecret: "test-secret",
@@ -69,7 +77,7 @@ afterEach(async () => {
 
 describe("Mori music projection", () => {
   it("creates a project-bound generation, replays idempotency, and streams progress", async () => {
-    const base = await listen(createBffServer(config()))
+    const base = await listen(testServer(config()))
     const projectRef = "project_preview_first_light"
     const project = await fetch(`${base}/v1/mori/projects/${projectRef}`, { headers: authHeaders() })
     const projectBody = await project.json() as { data: { project_ref: string; candidate_count: number }; meta: { request_id: string } }
@@ -123,7 +131,7 @@ describe("Mori music projection", () => {
   })
 
   it("requires a mutation key and leaves cancellation as an explicit terminal state", async () => {
-    const base = await listen(createBffServer(config(), { moriAutoProgress: false }))
+    const base = await listen(testServer(config(), { moriAutoProgress: false }))
     const path = `${base}/v1/mori/projects/project_preview_first_light/generations`
     const body = JSON.stringify({
       song_plan_ref: null,
@@ -153,7 +161,7 @@ describe("Mori music projection", () => {
   })
 
   it("keeps projects, Song Plans, candidates, versions, library, remix, and export on one contract", async () => {
-    const base = await listen(createBffServer(config()))
+    const base = await listen(testServer(config()))
     const createProject = await fetch(`${base}/v1/mori/projects`, {
       method: "POST",
       headers: { ...authHeaders(), "content-type": "application/json", "idempotency-key": "mori-project-1" },
@@ -234,7 +242,7 @@ describe("Mori music projection", () => {
   })
 
   it("fails closed when the live Music owner is not configured", async () => {
-    const base = await listen(createBffServer(config({ mode: "live" })))
+    const base = await listen(liveServer(config({ mode: "live" })))
     const response = await fetch(`${base}/v1/mori/projects/project_preview_first_light`, { headers: authHeaders() })
     const body = await response.json() as { error: { code: string } }
     assert.equal(response.status, 503)

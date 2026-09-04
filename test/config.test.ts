@@ -1,11 +1,17 @@
 import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
-import { loadConfig } from "../dist/config.js"
+import { loadConfig } from "../dist/config/runtime.js"
+
+const runtimeEnv = {
+  KOKORO_BFF_SHARED_SECRET: "test-secret",
+  KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/kokoro_bff",
+  KOKORO_BFF_REDIS_URL: "redis://localhost:6379/8",
+}
 
 describe("kokoro-bff optional Agent configuration", () => {
   it("defaults Agent to optional and disabled", () => {
-    const config = loadConfig({ KOKORO_DOMAIN: "dev.kokoro.localhost" })
+    const config = loadConfig({ ...runtimeEnv, KOKORO_DOMAIN: "dev.kokoro.localhost" })
     assert.equal(config.agentEnabled, false)
     assert.equal(config.tenantId, null)
     assert.equal(config.upstreamTimeoutMs, 5000)
@@ -29,10 +35,13 @@ describe("kokoro-bff optional Agent configuration", () => {
 
   it("enables Agent explicitly for live execution", () => {
     const config = loadConfig({
+      ...runtimeEnv,
       KOKORO_BFF_MODE: "live",
       KOKORO_DOMAIN: "app.example.com",
       KOKORO_TENANT_ID: "tenant_prod",
       KOKORO_BFF_SHARED_SECRET: "bff-secret",
+      KOKORO_BFF_POSTGRES_URL: "postgresql://kokoro-bff/db",
+      KOKORO_BFF_REDIS_URL: "rediss://kokoro-redis:6380/8",
       KOKORO_AGENT_ENABLED: "1",
       KOKORO_AGENT_BASE_URL: "http://kokoro-agent:4401",
       KOKORO_MUSIC_BASE_URL: "http://kokoro-music:4410",
@@ -45,6 +54,7 @@ describe("kokoro-bff optional Agent configuration", () => {
 
   it("loads owner transport limits from the environment", () => {
     const config = loadConfig({
+      ...runtimeEnv,
       KOKORO_DOMAIN: "dev.kokoro.localhost",
       KOKORO_UPSTREAM_TIMEOUT_MS: "250",
       KOKORO_UPSTREAM_MAX_RESPONSE_BYTES: "4096",
@@ -55,6 +65,7 @@ describe("kokoro-bff optional Agent configuration", () => {
 
   it("loads AG-UI replay and stream budgets from the environment", () => {
     const config = loadConfig({
+      ...runtimeEnv,
       KOKORO_DOMAIN: "dev.kokoro.localhost",
       KOKORO_AGUI_REPLAY_PAGE_FRAMES: "16",
       KOKORO_AGUI_REPLAY_PAGE_BYTES: "4096",
@@ -83,5 +94,10 @@ describe("kokoro-bff optional Agent configuration", () => {
       pollJitterPercent: 10,
       replayCacheTtlMs: 15,
     })
+  })
+
+  it("requires explicit live persistence and rejects the removed mode", () => {
+    assert.throws(() => loadConfig({ KOKORO_DOMAIN: "dev.kokoro.localhost", KOKORO_BFF_SHARED_SECRET: "test-secret" }), /KOKORO_BFF_POSTGRES_URL/u)
+    assert.throws(() => loadConfig({ ...runtimeEnv, KOKORO_BFF_MODE: "mock" }), /KOKORO_BFF_MODE must be live/u)
   })
 })

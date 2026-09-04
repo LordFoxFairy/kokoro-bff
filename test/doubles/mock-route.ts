@@ -1,24 +1,27 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 
-import type { AgentConnectionSetup, BillingSummary, LibraryItem, Project, ScheduledTask, Skill } from "../../contracts/index.js"
-import { failure, ok, type ChatSessionDetail } from "../../contracts/index.js"
-import { MockBffStore } from "../../infrastructure/mock/bff-store.js"
-import { MoriMockBffStore } from "../../infrastructure/mock/mori-store.js"
-import { buildAgentControl } from "../../infrastructure/clients/agent/index.js"
-import { reply } from "../response.js"
-import { headerString, idempotencyKey, isRecord, queryOf, type Context } from "../request.js"
-import type { IdempotencyEntry, MutationTicket } from "../../application/idempotency.js"
-import { chatSessionDetailData, chatSessionsData, githubSkillSource, mcpRegisterInput, mockControlReceipt, PLATFORMS, projectData, scheduledData, sessionScope, skillData, taskData } from "./helpers.js"
-import { agUiSseFrame } from "../../interfaces/http/agui/sse.js"
-import { mockAgUiFrames } from "../../infrastructure/mock/agui.js"
-import { skillCatalogData, skillPoolData } from "./owner.js"
-import { mockMoriBusiness } from "./mori.js"
+import type { AgentConnectionSetup, BillingSummary, LibraryItem, Project, ScheduledTask, Skill } from "../../src/contracts/index.ts"
+import { failure, ok } from "../../dist/contracts/index.js"
+import type { ChatSessionDetail } from "../../src/contracts/index.ts"
+import { MockBffStore } from "./bff-store.ts"
+import { MoriMockBffStore } from "./mori-store.ts"
+import { buildAgentControl } from "../../dist/infrastructure/clients/agent/index.js"
+import { reply } from "../../dist/http/response.js"
+import { headerString, idempotencyKey, queryOf } from "../../dist/http/request.js"
+import { isRecord } from "../../dist/domain/json.js"
+import type { RequestContext } from "../../src/domain/request-context.ts"
+import type { IdempotencyEntry, MutationTicket } from "../../src/application/idempotency.ts"
+import { chatSessionDetailData, chatSessionsData, githubSkillSource, mcpRegisterInput, mockControlReceipt, PLATFORMS, projectData, scheduledData, sessionScope, skillData, taskData } from "./helpers.ts"
+import { agUiSseFrame } from "../../dist/interfaces/http/agui/sse.js"
+import { mockAgUiFrames } from "./agui.ts"
+import { skillCatalogData, skillPoolData } from "../../dist/http/routes/owner.js"
+import { mockMoriBusiness } from "./mori-route.ts"
 
 export async function mockBusiness(
   request: IncomingMessage,
   response: ServerResponse,
   segments: string[],
-  context: Context,
+  context: RequestContext,
   store: MockBffStore,
   mori: MoriMockBffStore,
   idempotency: Map<string, IdempotencyEntry>,

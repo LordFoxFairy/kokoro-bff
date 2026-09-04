@@ -1,14 +1,38 @@
-import type { IncomingMessage } from "node:http"
-
 import type { ChatMessage, ChatSessionSummary, LibraryItem, McpServer } from "../contracts/index.js"
-import { mapAgentMessage, type AgentChatMessage } from "../infrastructure/clients/agent/index.js"
-import { isRecord, queryOf, type Context } from "../http/request.js"
+import { isRecord } from "../domain/json.js"
+import type { RequestContext } from "../domain/request-context.js"
 
-export function ownerIdentityHeaders(context: Context): Record<string, string> {
+type AgentChatMessage = {
+  chat_message_id: string
+  session_id: string
+  run_id: string
+  role: "user" | "assistant"
+  content: string
+  status: "completed" | "failed"
+  seq: number
+  created_at: number
+  updated_at: number
+}
+
+function nonEmptyString(value: unknown, label: string): string {
+  if (typeof value !== "string" || value.trim() === "") throw new Error(`Agent message field ${label} is invalid`)
+  return value
+}
+
+function isoTime(value: number): string {
+  const date = new Date(value)
+  if (!Number.isFinite(date.getTime())) throw new Error("Agent message timestamp is invalid")
+  return date.toISOString()
+}
+
+function mapAgentMessage(message: AgentChatMessage): ChatMessage {
   return {
-    "x-kokoro-tenant-id": context.identity.namespace,
-    "x-kokoro-subject": context.identity.userId,
-    "x-kokoro-actor-id": context.identity.userId,
+    message_id: nonEmptyString(message.chat_message_id, "chat_message_id"),
+    role: message.role,
+    content: message.content,
+    status: message.status,
+    created_at: isoTime(message.created_at),
+    run_id: message.run_id,
   }
 }
 
@@ -200,8 +224,7 @@ export function capabilityMcpData(body: unknown, tenantId: string): { servers: M
   return { servers, ...(nextCursor === undefined ? {} : { next_cursor: nextCursor }) }
 }
 
-export function mappedOwnerQuery(request: IncomingMessage, mapping: Readonly<Record<string, string>>): string {
-  const incoming = queryOf(request)
+export function mappedOwnerQuery(incoming: URLSearchParams, mapping: Readonly<Record<string, string>>): string {
   const owner = new URLSearchParams()
   for (const [incomingName, ownerName] of Object.entries(mapping)) {
     for (const value of incoming.getAll(incomingName)) {
@@ -264,6 +287,6 @@ export function dataOf(body: unknown): Record<string, unknown> | null {
   return body.data
 }
 
-export function agentSessionAssertion(context: Context, sessionId: string): string {
+export function agentSessionAssertion(context: RequestContext, sessionId: string): string {
   return `bff:session:${context.identity.namespace}:${sessionId}`
 }

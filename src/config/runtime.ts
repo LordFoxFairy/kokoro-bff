@@ -1,6 +1,6 @@
 import { URL } from "node:url"
 
-export type BffMode = "mock" | "live"
+export type BffMode = "live"
 
 export type AgUiConfig = {
   replayPageFrames: number
@@ -72,6 +72,14 @@ function optionalUrl(value: string | undefined): string | null {
   return raw.replace(/\/+$/u, "")
 }
 
+function requiredConnectionUrl(value: string | undefined, name: string, protocols: readonly string[]): string {
+  const raw = value?.trim()
+  if (!raw) throw new Error(`${name} is required for the live BFF runtime`)
+  const parsed = new URL(raw)
+  if (!protocols.includes(parsed.protocol)) throw new Error(`${name} must use ${protocols.join(" or ")}`)
+  return raw.replace(/\/+$/u, "")
+}
+
 function positiveInteger(value: string | undefined, name: string, fallback: number): number {
   const raw = value?.trim()
   if (!raw) return fallback
@@ -97,8 +105,10 @@ function requiredDomain(value: string | undefined): string {
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
-  const mode = env.KOKORO_BFF_MODE?.trim() || "mock"
-  if (mode !== "mock" && mode !== "live") throw new Error("KOKORO_BFF_MODE must be mock or live")
+  const requestedMode = env.KOKORO_BFF_MODE?.trim()
+  if (requestedMode !== undefined && requestedMode !== "" && requestedMode !== "live") {
+    throw new Error("KOKORO_BFF_MODE must be live")
+  }
   const port = Number.parseInt(env.KOKORO_BFF_PORT?.trim() || "4300", 10)
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("KOKORO_BFF_PORT must be a valid port")
 
@@ -114,9 +124,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
   }
   const domain = requiredDomain(env.KOKORO_DOMAIN || "dev.kokoro.localhost")
   const sharedSecret = env.KOKORO_BFF_SHARED_SECRET?.trim() || null
-  if (mode === "live" && sharedSecret === null) {
-    throw new Error("KOKORO_BFF_SHARED_SECRET is required in live mode")
-  }
+  if (sharedSecret === null) throw new Error("KOKORO_BFF_SHARED_SECRET is required for the live BFF runtime")
   const agUi: AgUiConfig = {
     replayPageFrames: positiveInteger(env.KOKORO_AGUI_REPLAY_PAGE_FRAMES, "KOKORO_AGUI_REPLAY_PAGE_FRAMES", DEFAULT_AGUI_CONFIG.replayPageFrames),
     replayPageBytes: positiveInteger(env.KOKORO_AGUI_REPLAY_PAGE_BYTES, "KOKORO_AGUI_REPLAY_PAGE_BYTES", DEFAULT_AGUI_CONFIG.replayPageBytes),
@@ -138,7 +146,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
   return {
     host: env.KOKORO_BFF_HOST?.trim() || "127.0.0.1",
     port,
-    mode,
+    mode: "live",
     domain,
     tenantId: env.KOKORO_TENANT_ID?.trim() || null,
     sharedSecret,
@@ -148,8 +156,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
     schedulerServiceToken: env.KOKORO_SCHEDULER_SERVICE_TOKEN?.trim() || null,
     schedulerTargetUrl: optionalUrl(env.KOKORO_SCHEDULER_TARGET_URL),
     agentEnabled: booleanFlag(env.KOKORO_AGENT_ENABLED, false),
-    postgresUrl: env.KOKORO_BFF_POSTGRES_URL?.trim() || null,
-    redisUrl: env.KOKORO_BFF_REDIS_URL?.trim() || null,
+    postgresUrl: requiredConnectionUrl(env.KOKORO_BFF_POSTGRES_URL, "KOKORO_BFF_POSTGRES_URL", ["postgres:", "postgresql:"]),
+    redisUrl: requiredConnectionUrl(env.KOKORO_BFF_REDIS_URL, "KOKORO_BFF_REDIS_URL", ["redis:", "rediss:"]),
     agUi,
     upstreams,
   }

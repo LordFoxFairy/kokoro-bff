@@ -1,8 +1,7 @@
-import type { BffConfig } from "../../config.js"
+import type { BffConfig } from "../../config/runtime.js"
 
 export function upstreamKey(segments: string[]): string | null {
-  // Chat is a BFF-owned Web contract in mock mode and an Agent business
-  // adapter in live mode; it never falls back to a Session service.
+  // Chat is an Agent business adapter; it never falls back to a Session service.
   if (segments[0] === "sessions") return "agents"
   if (segments[0] === "system") return "system"
   if (segments[0] === "models") return "model"

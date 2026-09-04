@@ -4,9 +4,9 @@ import assert from "node:assert/strict"
 import { afterEach, describe, it } from "node:test"
 import { fileURLToPath } from "node:url"
 
-import { createBffServer } from "../dist/main.js"
-import { DEFAULT_AGUI_CONFIG } from "../dist/config.js"
-import type { BffConfig } from "../src/config.js"
+import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
+import type { BffConfig } from "../src/config/runtime.ts"
+import { createLiveTestBffServer, createTestBffServer } from "./doubles/server.ts"
 
 const servers: Server[] = []
 
@@ -34,7 +34,7 @@ function config(overrides: Partial<BffConfig> = {}): BffConfig {
   return {
     host: "127.0.0.1",
     port: 4300,
-    mode: "mock",
+    mode: "live",
     domain: "dev.kokoro.localhost",
     tenantId: "tenant_test",
     sharedSecret: "test-secret",
@@ -61,6 +61,14 @@ function config(overrides: Partial<BffConfig> = {}): BffConfig {
   }
 }
 
+function testServer(configValue: BffConfig, options: { moriAutoProgress?: boolean } = {}): Server {
+  return createTestBffServer(configValue, options).server
+}
+
+function liveServer(configValue: BffConfig, options: { readiness?: () => Promise<void> } = {}): Server {
+  return createLiveTestBffServer(configValue, options)
+}
+
 function authHeaders(): Record<string, string> {
   return {
     "x-kokoro-service": "web-bff",
@@ -76,10 +84,10 @@ afterEach(async () => {
 
 describe("kokoro-bff v1 mock contract", () => {
   it("exposes unauthenticated health and rejects browser calls to business routes", async () => {
-    const base = await listen(createBffServer(config()))
+    const base = await listen(testServer(config()))
     const health = await fetch(`${base}/healthz`)
     assert.equal(health.status, 200)
-    assert.deepEqual(await health.json(), { status: "ok", service: "kokoro-bff", mode: "mock" })
+    assert.deepEqual(await health.json(), { status: "ok", service: "kokoro-bff", mode: "live" })
 
     const response = await fetch(`${base}/v1/projects`, { headers: { "x-domain": "evil.example" } })
     assert.equal(response.status, 403)
@@ -87,7 +95,7 @@ describe("kokoro-bff v1 mock contract", () => {
   })
 
   it("returns a versioned project projection and replays idempotent creation", async () => {
-    const base = await listen(createBffServer(config()))
+    const base = await listen(testServer(config()))
     const headers = { ...authHeaders(), "x-kokoro-request-id": "request-projects" }
     const list = await fetch(`${base}/v1/projects`, { headers })
     const listBody = await list.json() as { data: { projects: Array<{ id: string }> }; meta: { request_id: string } }
@@ -115,7 +123,7 @@ describe("kokoro-bff v1 mock contract", () => {
   })
 
   it("closes the project instruction read, update, and revision history flow", async () => {
-    const base = await listen(createBffServer(config()))
+    const base = await listen(testServer(config()))
     const projectId = "project_kokoro"
     const read = await fetch(`${base}/v1/projects/${projectId}`, { headers: authHeaders() })
     const readBody = await read.json() as {
@@ -165,7 +173,7 @@ describe("kokoro-bff v1 mock contract", () => {
   })
 
   it("accepts project resource multipart mocks and replays the canonical success", async () => {
-    const base = await listen(createBffServer(config()))
+    const base = await listen(testServer(config()))
     const path = "/v1/projects/project_kokoro/resources"
     const missingKeyBody = new FormData()
     missingKeyBody.append("files", new Blob(["fixture bytes"], { type: "text/plain" }), "fixture.txt")
@@ -193,7 +201,7 @@ describe("kokoro-bff v1 mock contract", () => {
   })
 
   it("persists project skill state and creates scheduled tasks from snake_case Web input", async () => {
-    const base = await listen(createBffServer(config()))
+    const base = await listen(testServer(config()))
     const projectId = "project_kokoro"
     const skillPath = `${base}/v1/projects/${projectId}/skills/skill-builder`
     const missingSkillKey = await fetch(skillPath, {
@@ -237,7 +245,7 @@ describe("kokoro-bff v1 mock contract", () => {
   })
 
   it("keeps Agent setup and Chat as BFF-owned projections", async () => {
-    const base = await listen(createBffServer(config()))
+    const base = await listen(testServer(config()))
     const response = await fetch(`${base}/v1/agents/connections/setup?platform=telegram`, { headers: authHeaders() })
     assert.equal(response.status, 200)
     const agentBody = await response.json() as { data: { platform: string; status: string }; meta: { request_id: string } }
@@ -250,7 +258,7 @@ describe("kokoro-bff v1 mock contract", () => {
   })
 
   it("supports scheduled task mutations through the same business contract", async () => {
-    const base = await listen(createBffServer(config()))
+    const base = await listen(testServer(config()))
     const headers = { ...authHeaders(), "content-type": "application/json", "idempotency-key": "schedule-create-1" }
     const created = await fetch(`${base}/v1/scheduled-tasks`, {
       method: "POST",
@@ -265,17 +273,17 @@ describe("kokoro-bff v1 mock contract", () => {
   })
 
   it("reports readyz from the actual mode and upstream configuration", async () => {
-    const mockBase = await listen(createBffServer(config()))
+    const mockBase = await listen(testServer(config()))
     const mockReady = await fetch(`${mockBase}/readyz`)
     assert.equal(mockReady.status, 200)
-    assert.deepEqual(await mockReady.json(), { status: "ok", service: "kokoro-bff", mode: "mock" })
+    assert.deepEqual(await mockReady.json(), { status: "ok", service: "kokoro-bff", mode: "live" })
 
     const upstream = createServer((_request, response) => {
       response.setHeader("content-type", "application/json")
       response.end(JSON.stringify({ data: { ok: true }, meta: { request_id: "readyz-live" } }))
     })
     const upstreamBase = await listen(upstream)
-    const liveReadyBase = await listen(createBffServer(config({
+    const liveReadyBase = await listen(liveServer(config({
       mode: "live",
       upstreams: {
         system: upstreamBase,
@@ -286,7 +294,7 @@ describe("kokoro-bff v1 mock contract", () => {
         agents: null,
         billing: upstreamBase,
       },
-    })))
+    }), { readiness: async (): Promise<void> => { throw new Error("database unavailable") } }))
     const liveReady = await fetch(`${liveReadyBase}/readyz`)
     assert.equal(liveReady.status, 503)
     assert.deepEqual(await liveReady.json(), { status: "ok", service: "kokoro-bff", mode: "live" })
@@ -295,16 +303,16 @@ describe("kokoro-bff v1 mock contract", () => {
     assert.equal(liveAgentRoute.status, 503)
     assert.equal((await liveAgentRoute.json() as { error: { code: string } }).error.code, "agent_not_configured")
 
-    const livePartialBase = await listen(createBffServer(config({
+    const livePartialBase = await listen(liveServer(config({
       mode: "live",
       upstreams: { ...config().upstreams, system: upstreamBase },
-    })))
+    }), { readiness: async (): Promise<void> => { throw new Error("database unavailable") } }))
     const livePartial = await fetch(`${livePartialBase}/readyz`)
     assert.equal(livePartial.status, 503)
   })
 
   it("previews a GitHub skill without requiring Idempotency-Key", async () => {
-    const base = await listen(createBffServer(config()))
+    const base = await listen(testServer(config()))
     const repository = "https://github.com/acme/skill-pack"
     const response = await fetch(`${base}/v1/skills/github/preview`, {
       method: "POST",
@@ -329,7 +337,7 @@ describe("kokoro-bff v1 mock contract", () => {
   })
 
   it("requires Idempotency-Key for GitHub skill import and replays the result", async () => {
-    const base = await listen(createBffServer(config()))
+    const base = await listen(testServer(config()))
     const repository = "https://github.com/acme/skill-pack"
     const missingKey = await fetch(`${base}/v1/skills/github/import`, {
       method: "POST",
@@ -365,7 +373,7 @@ describe("kokoro-bff v1 mock contract", () => {
   })
 
   it("rejects non-GitHub URLs for GitHub skill preview and import", async () => {
-    const base = await listen(createBffServer(config()))
+    const base = await listen(testServer(config()))
     for (const path of ["preview", "import"]) {
       const response = await fetch(`${base}/v1/skills/github/${path}`, {
         method: "POST",
@@ -378,7 +386,7 @@ describe("kokoro-bff v1 mock contract", () => {
   })
 
   it("completes the skill quota, revision, and toggle mock flow", async () => {
-    const base = await listen(createBffServer(config()))
+    const base = await listen(testServer(config()))
     const quotaResponse = await fetch(`${base}/v1/skills/quota`, {
       headers: { ...authHeaders(), "x-kokoro-request-id": "skills-quota-request" },
     })
@@ -445,7 +453,7 @@ describe("kokoro-bff v1 mock contract", () => {
   })
 
   it("completes the MCP server register, toggle, list, and delete mock flow", async () => {
-    const base = await listen(createBffServer(config()))
+    const base = await listen(testServer(config()))
     const name = "phase-one-mcp"
     const registration = {
       name,
@@ -540,7 +548,7 @@ describe("kokoro-bff v1 mock contract", () => {
       }))
     })
     const upstreamBase = await listen(upstream)
-    const base = await listen(createBffServer(config({
+    const base = await listen(liveServer(config({
       mode: "live",
       upstreams: { ...config().upstreams, capability: upstreamBase },
     })))
@@ -591,7 +599,7 @@ describe("kokoro-bff v1 mock contract", () => {
       }))
     })
     const upstreamBase = await listen(upstream)
-    const base = await listen(createBffServer(config({
+    const base = await listen(liveServer(config({
       mode: "live",
       upstreamTimeoutMs: 10000,
       upstreams: { ...config().upstreams, capability: upstreamBase },
@@ -617,7 +625,7 @@ describe("kokoro-bff v1 mock contract", () => {
       response.end(JSON.stringify({ data: { skills: [], servers: [] }, meta: { request_id: "upstream" } }))
     })
     const capabilityBase = await listen(hubUpstream)
-    const base = await listen(createBffServer(config({
+    const base = await listen(liveServer(config({
       mode: "live",
       upstreams: { ...config().upstreams, capability: capabilityBase },
     })))
@@ -637,7 +645,7 @@ describe("kokoro-bff v1 mock contract", () => {
       response.end(JSON.stringify({ data: { skills: [], servers: [], next_cursor: "capability-cursor-next" }, meta: { request_id: "capability-query" } }))
     })
     const upstreamBase = await listen(upstream)
-    const base = await listen(createBffServer(config({ mode: "live", upstreams: { ...config().upstreams, capability: upstreamBase } })))
+    const base = await listen(liveServer(config({ mode: "live", upstreams: { ...config().upstreams, capability: upstreamBase } })))
 
     const skills = await fetch(`${base}/v1/skills/catalog?q=contract%20review&tags=review&tags=security&scope_kind=personal&limit=10&cursor=cursor-1`, { headers: { ...authHeaders(), "x-kokoro-request-id": "capability-query" } })
     assert.equal(skills.status, 200)
@@ -694,7 +702,7 @@ describe("kokoro-bff v1 mock contract", () => {
       }))
     })
     const upstreamBase = await listen(upstream)
-    const base = await listen(createBffServer(config({ mode: "live", upstreams: { ...config().upstreams, storage: upstreamBase } })))
+    const base = await listen(liveServer(config({ mode: "live", upstreams: { ...config().upstreams, storage: upstreamBase } })))
 
     const response = await fetch(`${base}/v1/library`, { headers: { ...authHeaders(), "x-domain": "evil.example", "x-kokoro-request-id": "library-live" } })
     assert.equal(response.status, 200)
@@ -757,7 +765,7 @@ describe("kokoro-bff v1 mock contract", () => {
     const upstreamBase = await listen(upstream)
     const runtimeConfig = config({ mode: "live", upstreams: { ...config().upstreams, system: upstreamBase } }) as BffConfig & { tenantId: string }
     runtimeConfig.tenantId = "tenant_manifest"
-    const base = await listen(createBffServer(runtimeConfig))
+    const base = await listen(liveServer(runtimeConfig))
 
     const response = await fetch(`${base}/v1/system/runtime-manifest?product_id=kokoro&locale=en-US&surface_id=user-web`, {
       headers: { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "test-secret", "x-kokoro-request-id": "manifest-live" },
@@ -810,7 +818,7 @@ describe("kokoro-bff v1 mock contract", () => {
       }))
     })
     const upstreamBase = await listen(upstream)
-    const base = await listen(createBffServer(config({
+    const base = await listen(liveServer(config({
       mode: "live",
       upstreams: { ...config().upstreams, model: upstreamBase },
     })))
@@ -846,7 +854,7 @@ describe("kokoro-bff v1 mock contract", () => {
       })
     })
     const upstreamBase = await listen(upstream)
-    const base = await listen(createBffServer(config({
+    const base = await listen(liveServer(config({
       mode: "live",
       upstreams: { ...config().upstreams, billing: upstreamBase },
     })))
@@ -884,7 +892,7 @@ describe("kokoro-bff v1 mock contract", () => {
       response.end(JSON.stringify({ data: { items: [] }, meta: { request_id: "should-not-be-called" } }))
     })
     const upstreamBase = await listen(upstream)
-    const base = await listen(createBffServer(config({
+    const base = await listen(liveServer(config({
       mode: "live",
       upstreams: { ...config().upstreams, system: upstreamBase, scheduler: upstreamBase },
     })))
@@ -897,12 +905,12 @@ describe("kokoro-bff v1 mock contract", () => {
   })
 
   it("covers auth failures, idempotency conflicts, live normalization, and docs coverage", async () => {
-    const unauthBase = await listen(createBffServer(config()))
+    const unauthBase = await listen(liveServer(config()))
     const missingService = await fetch(`${unauthBase}/v1/projects`)
     assert.equal(missingService.status, 403)
     assert.equal((await missingService.json() as { error: { code: string } }).error.code, "service_auth_failed")
 
-    const secretlessBase = await listen(createBffServer(config({ sharedSecret: null })))
+    const secretlessBase = await listen(liveServer(config({ sharedSecret: null })))
     const missingServiceOnSecretless = await fetch(`${secretlessBase}/v1/projects`, {
       headers: {
         "x-kokoro-namespace": "ns_test",
@@ -930,7 +938,7 @@ describe("kokoro-bff v1 mock contract", () => {
     })
     assert.equal(missingNamespace.status, 403)
 
-    const missingUpstreamBase = await listen(createBffServer(config({
+    const missingUpstreamBase = await listen(liveServer(config({
       mode: "live",
       upstreams: { ...config().upstreams, capability: null },
     })))
@@ -938,7 +946,7 @@ describe("kokoro-bff v1 mock contract", () => {
     assert.equal(missingUpstream.status, 503)
     assert.equal((await missingUpstream.json() as { error: { code: string } }).error.code, "upstream_not_configured")
 
-    const unreachableBase = await listen(createBffServer(config({
+    const unreachableBase = await listen(liveServer(config({
       mode: "live",
       upstreams: { ...config().upstreams, capability: "http://127.0.0.1:1" },
     })))
@@ -952,7 +960,7 @@ describe("kokoro-bff v1 mock contract", () => {
       response.end("not json")
     })
     const malformedBase = await listen(malformedUpstream)
-    const malformedBff = await listen(createBffServer(config({
+    const malformedBff = await listen(liveServer(config({
       mode: "live",
       upstreams: { ...config().upstreams, capability: malformedBase },
     })))
@@ -966,7 +974,7 @@ describe("kokoro-bff v1 mock contract", () => {
       response.end("")
     })
     const emptyBase = await listen(emptyUpstream)
-    const emptyBff = await listen(createBffServer(config({
+    const emptyBff = await listen(liveServer(config({
       mode: "live",
       upstreams: { ...config().upstreams, capability: emptyBase },
     })))
@@ -983,7 +991,7 @@ describe("kokoro-bff v1 mock contract", () => {
       }))
     })
     const errorEnvelopeBase = await listen(errorEnvelopeUpstream)
-    const errorEnvelopeBff = await listen(createBffServer(config({
+    const errorEnvelopeBff = await listen(liveServer(config({
       mode: "live",
       upstreams: { ...config().upstreams, capability: errorEnvelopeBase },
     })))
@@ -1000,7 +1008,7 @@ describe("kokoro-bff v1 mock contract", () => {
       response.end("boom")
     })
     const httpErrorBase = await listen(httpErrorUpstream)
-    const httpErrorBff = await listen(createBffServer(config({
+    const httpErrorBff = await listen(liveServer(config({
       mode: "live",
       upstreams: { ...config().upstreams, capability: httpErrorBase },
     })))
@@ -1060,7 +1068,7 @@ describe("kokoro-bff v1 mock contract", () => {
   })
 
   it("serves the chat session mock contract across list, detail, messages, events, control, title, delete, and share", async () => {
-    const base = await listen(createBffServer(config()))
+    const base = await listen(testServer(config()))
     const headers = authHeaders()
 
     const list = await fetch(`${base}/v1/sessions`, { headers })
@@ -1259,7 +1267,7 @@ describe("kokoro-bff v1 mock contract", () => {
       }
     })
     const agentBase = await listen(agent)
-    const base = await listen(createBffServer(config({
+    const base = await listen(liveServer(config({
       mode: "live",
       agentEnabled: true,
       upstreams: { ...config().upstreams, agents: agentBase },
@@ -1351,7 +1359,7 @@ describe("kokoro-bff v1 mock contract", () => {
       response.end(JSON.stringify({ data: { run_id: launch.run_id, session_id: launch.session_id, replayed: false }, meta: { request_id: "agent" } }))
     })
     const agentBase = await listen(agent)
-    const base = await listen(createBffServer(config({ mode: "live", agentEnabled: true, upstreams: { ...config().upstreams, agents: agentBase } })))
+    const base = await listen(liveServer(config({ mode: "live", agentEnabled: true, upstreams: { ...config().upstreams, agents: agentBase } })))
     const headers = { ...authHeaders(), "content-type": "application/json", "idempotency-key": "live-chat-inflight" }
     const payload = JSON.stringify({ content: "hello", model: "default", project_ref: "project_kokoro" })
 
@@ -1376,7 +1384,7 @@ describe("kokoro-bff v1 mock contract", () => {
       response.end(JSON.stringify({ data: { events: [], messages: [], watermark: 0 }, meta: { request_id: "agent" } }))
     })
     const agentBase = await listen(agent)
-    const base = await listen(createBffServer(config({ mode: "live", agentEnabled: true, upstreams: { ...config().upstreams, agents: agentBase } })))
+    const base = await listen(liveServer(config({ mode: "live", agentEnabled: true, upstreams: { ...config().upstreams, agents: agentBase } })))
     const response = await fetch(`${base}/v1/sessions/session-live/title`, {
       method: "PATCH",
       headers: { ...authHeaders(), "content-type": "application/json", "idempotency-key": "unsupported-title" },
@@ -1392,7 +1400,7 @@ describe("kokoro-bff v1 mock contract", () => {
       response.end(JSON.stringify({ data: { servers: [] }, meta: { request_id: "capability" } }))
     })
     const capabilityBase = await listen(capability)
-    const base = await listen(createBffServer(config({
+    const base = await listen(liveServer(config({
       mode: "live",
       upstreams: { ...config().upstreams, capability: capabilityBase },
     })))

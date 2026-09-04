@@ -1,7 +1,4 @@
-import type { IncomingMessage } from "node:http"
-
 import type { MoriGenerationInput, MoriSongPlan } from "../../contracts/mori.js"
-import { queryOf } from "../../http/request.js"
 
 export function moriGenerationInput(json: Record<string, unknown>): MoriGenerationInput | null {
   const mode = json.mode
@@ -75,8 +72,7 @@ export function moriSongPlanInput(json: Record<string, unknown>): Omit<MoriSongP
   }
 }
 
-export function moriPageInput(request: IncomingMessage): { cursor: string | null; limit: number } | null {
-  const query = queryOf(request)
+export function moriPageInput(query: URLSearchParams): { cursor: string | null; limit: number } | null {
   const limitValue = query.get("limit")
   const limit = limitValue === null || limitValue.trim() === "" ? 20 : Number(limitValue)
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) return null

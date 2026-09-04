@@ -1,19 +1,21 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 
-import type { BffConfig } from "../../config.js"
+import type { BffConfig } from "../../config/runtime.js"
 import type { Skill } from "../../contracts/index.js"
 import { failure, ok } from "../../contracts/index.js"
 import { proxyUpstream } from "../../upstream.js"
-import { billingPlansData, capabilityMcpData, capabilitySkillsData, checkoutUrlData, libraryData, mappedOwnerQuery, modelCatalogData, ownerIdentityHeaders, systemManifestData } from "../../application/projections.js"
+import { billingPlansData, capabilityMcpData, capabilitySkillsData, checkoutUrlData, libraryData, mappedOwnerQuery, modelCatalogData, systemManifestData } from "../../application/projections.js"
+import { ownerIdentityHeaders } from "../../infrastructure/clients/owner/identity.js"
 import { normalizeUpstreamResponse, reply } from "../response.js"
-import { incomingHeaders, queryOf, type Context } from "../request.js"
+import { incomingHeaders, queryOf } from "../request.js"
+import type { RequestContext } from "../../domain/request-context.js"
 import type { IdempotencyEntry, MutationTicket } from "../../application/idempotency.js"
 import type { LiveOwnerResult } from "./types.js"
 
 export async function liveOwnerRequest(
   request: IncomingMessage,
   config: BffConfig,
-  context: Context,
+  context: RequestContext,
   owner: string,
   path: string,
   method: string,
@@ -45,7 +47,7 @@ export async function liveOwnerBusiness(
   request: IncomingMessage,
   response: ServerResponse,
   config: BffConfig,
-  context: Context,
+  context: RequestContext,
   businessPath: string[],
   json: Record<string, unknown>,
   mutation: MutationTicket | null,
@@ -94,8 +96,8 @@ export async function liveOwnerBusiness(
       : null
   if (capabilityPath !== null) {
     const query = capabilityPath === "/bff/mcp/servers"
-      ? mappedOwnerQuery(request, { provider_key: "provider_key", limit: "limit", cursor: "cursor" })
-      : mappedOwnerQuery(request, { q: "q", query: "query", tags: "tags", scope_kind: "scope_kind", limit: "limit", cursor: "cursor" })
+      ? mappedOwnerQuery(queryOf(request), { provider_key: "provider_key", limit: "limit", cursor: "cursor" })
+      : mappedOwnerQuery(queryOf(request), { q: "q", query: "query", tags: "tags", scope_kind: "scope_kind", limit: "limit", cursor: "cursor" })
     const result = await liveOwnerRequest(request, config, context, "capability", `${capabilityPath}${query}`, method)
     if (result.status >= 400) {
       await reply(response, result.status, result.body, context, idempotency, mutation)

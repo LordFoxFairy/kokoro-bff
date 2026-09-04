@@ -6,21 +6,6 @@ function digest(input: string): string {
   return createHash("sha256").update(input).digest("hex")
 }
 
-function jsonValue(value: unknown): unknown {
-  return value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean"
-    ? value
-    : Array.isArray(value)
-      ? value.map(jsonValue)
-      : typeof value === "object" && value !== null
-        ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, jsonValue(item)]))
-        : String(value)
-}
-
-function hasOnlyKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
-  const allowed = new Set(keys)
-  return Object.keys(value).every((key) => allowed.has(key))
-}
-
 export function buildAgentLaunch(input: {
   identity: BffIdentity
   requestId: string
@@ -76,4 +61,3 @@ export function buildAgentLaunch(input: {
     },
   }
 }
-

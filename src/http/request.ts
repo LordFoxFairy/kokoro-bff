@@ -1,16 +1,9 @@
 import { randomUUID } from "node:crypto"
 import type { IncomingMessage } from "node:http"
 
-import type { BffConfig } from "../config.js"
-
-export type Context = {
-  requestId: string
-  identity: { namespace: string; userId: string }
-}
-
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-}
+import type { BffConfig } from "../config/runtime.js"
+import { isRecord } from "../domain/json.js"
+import type { RequestContext } from "../domain/request-context.js"
 
 export function stableStringify(value: unknown): string {
   if (value === undefined) return "null"
@@ -121,7 +114,7 @@ export function authorizeServerOnly(request: IncomingMessage, config: BffConfig)
   return service === "web-bff" && config.sharedSecret !== null && request.headers["x-kokoro-internal-secret"] === config.sharedSecret
 }
 
-export function authorize(request: IncomingMessage, config: BffConfig, id: string): Context | null {
+export function authorize(request: IncomingMessage, config: BffConfig, id: string): RequestContext | null {
   const service = request.headers["x-kokoro-service"]
   if (service !== "web-bff") return null
   if (config.sharedSecret !== null && request.headers["x-kokoro-internal-secret"] !== config.sharedSecret) return null
