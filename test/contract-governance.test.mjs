@@ -59,6 +59,33 @@ test("the repository canonical OpenAPI passes governance and its frozen v1 surfa
   assert.deepEqual(compareOperationBaseline(openapi, baseline), [])
 })
 
+test("the public AG-UI contract exposes only durable opaque BFF cursors", async () => {
+  const openapi = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
+  const eventOperation = openapi.slice(
+    openapi.indexOf("  /v1/sessions/{id}/events:"),
+    openapi.indexOf("  /v1/sessions/{id}/runs/{runId}/control:"),
+  )
+  const eventCursor = openapi.slice(
+    openapi.indexOf("    EventCursor:"),
+    openapi.indexOf("    RequestMeta:"),
+  )
+  const eventStream = openapi.slice(
+    openapi.indexOf("    SessionEventStream:"),
+    openapi.indexOf("    RenameSessionRequest:"),
+  )
+
+  assert.match(eventOperation, /'400': \{ \$ref: '#\/components\/responses\/BadRequest' \}/u)
+  assert.match(eventOperation, /'502': \{ \$ref: '#\/components\/responses\/BadGateway' \}/u)
+  assert.match(eventOperation, /'503': \{ \$ref: '#\/components\/responses\/ServiceUnavailable' \}/u)
+  assert.match(eventCursor, /type: string/u)
+  assert.match(eventCursor, /pattern: '\^agui_\[0-9a-f\]\{32\}\$'/u)
+  assert.match(eventCursor, /Clients must not parse or construct/u)
+  assert.doesNotMatch(eventCursor, /type: integer/u)
+  assert.match(eventStream, /id: agui_[0-9a-f]{32}/u)
+  assert.match(eventStream, /"type":"RUN_FINISHED"/u)
+  assert.doesNotMatch(eventStream, /"kind":"run\.completed"/u)
+})
+
 test("the repository exposes executable contract, schema, and strictness gates", async () => {
   const [packageDocument, tsconfigDocument, contractReadme] = await Promise.all([
     readFile(new URL("../package.json", import.meta.url), "utf8"),

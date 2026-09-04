@@ -15,8 +15,12 @@ declare a stable permission identifier and require the trusted `web-bff` service
 
 ## Version
 
-The current contract version is `0.1.0` on the `/v1` HTTP namespace. Its operation stability is `beta`; that marker
+The current contract version is `1.0.0` on the `/v1` HTTP namespace. Its operation stability is `beta`; that marker
 describes compatibility expectations, not proof that every Live adapter or persistence path is complete.
+
+`GET /v1/sessions/{id}/events` issues one opaque `agui_*` cursor per durable public frame. Agent source sequences remain
+internal projection metadata and are not valid public resume cursors. Callers persist the last SSE `id` verbatim and send
+it back as `Last-Event-ID`; they do not derive, decode, or reuse it across tenants or sessions.
 
 ## Generation
 

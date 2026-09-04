@@ -331,9 +331,12 @@ paths:
             text/event-stream:
               schema:
                 $ref: '#/components/schemas/SessionEventStream'
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/ServiceAuthFailed' }
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '502': { $ref: '#/components/responses/BadGateway' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/sessions/{id}/runs/{runId}/control:
     parameters:
       - $ref: '#/components/parameters/SessionId'
@@ -1724,10 +1727,10 @@ components:
       name: Last-Event-ID
       in: header
       required: false
-      description: Last delivered event sequence; the stream resumes strictly after this cursor.
+      description: Opaque BFF ledger cursor from the last delivered AG-UI frame; replay resumes strictly after it.
       schema:
         $ref: '#/components/schemas/EventCursor'
-      example: 4
+      example: agui_0123456789abcdef0123456789abcdef
     ProjectId:
       name: projectId
       in: path
@@ -1844,10 +1847,17 @@ components:
       description: Opaque pagination cursor. Clients must not parse or construct it.
       example: cur_01JNEXT000000000000000000
     EventCursor:
-      type: integer
-      minimum: 0
-      description: Monotonic session event sequence used by Last-Event-ID.
-      example: 4
+      type: string
+      minLength: 37
+      maxLength: 37
+      pattern: '^agui_[0-9a-f]{32}$'
+      description: Opaque cursor for one durable BFF AG-UI frame. Clients must not parse or construct it.
+      example: agui_0123456789abcdef0123456789abcdef
+    EventWatermark:
+      description: Cursor of the current durable AG-UI ledger head, or null before the first public frame.
+      oneOf:
+        - $ref: '#/components/schemas/EventCursor'
+        - type: 'null'
     RequestMeta:
       type: object
       required: [request_id]
@@ -2013,7 +2023,7 @@ components:
             deliveries:
               type: array
               items: { $ref: '#/components/schemas/Delivery' }
-            event_watermark: { $ref: '#/components/schemas/EventCursor' }
+            event_watermark: { $ref: '#/components/schemas/EventWatermark' }
         meta: { $ref: '#/components/schemas/RequestMeta' }
       example:
         data:
@@ -2030,7 +2040,7 @@ components:
           pending_pauses: []
           files: []
           deliveries: []
-          event_watermark: 4
+          event_watermark: agui_0123456789abcdef0123456789abcdef
         meta:
           request_id: req_01JASYNC000000000000000000
     WorkspaceFile:
@@ -2187,11 +2197,10 @@ components:
           request_id: req_01JASYNC000000000000000000
     SessionEventStream:
       type: string
-      description: Newline-delimited server-sent event frames. The event id is the resume cursor.
+      description: AG-UI server-sent event frames read from the BFF PostgreSQL ledger. Each id is a distinct opaque resume cursor.
       example: |-
-        id: 4
-        event: run.completed
-        data: {"event_id":"event_4","seq":4,"session_id":"session_kokoro","run_id":"run_01JASYNC","kind":"run.completed","timestamp":"2026-01-01T00:00:04.000Z","payload":{"status":"completed"}}
+        id: agui_0123456789abcdef0123456789abcdef
+        data: {"type":"RUN_FINISHED","timestamp":1767225604000,"threadId":"session_kokoro","runId":"run_01JASYNC","metadata":{"kokoro":{"event_id":"agent_event_4","seq":4,"session_id":"session_kokoro","run_id":"run_01JASYNC","timestamp":"2026-01-01T00:00:04.000Z"}}}
     RenameSessionRequest:
       type: object
       required: [title]
@@ -2999,6 +3008,16 @@ components:
           schema: { $ref: '#/components/schemas/ErrorEnvelope' }
     Conflict:
       description: Request conflict
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    BadGateway:
+      description: An owner source response was unavailable, malformed, or reused a conflicting source identity
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    ServiceUnavailable:
+      description: A required BFF fact store or owner source is not configured
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorEnvelope' }
