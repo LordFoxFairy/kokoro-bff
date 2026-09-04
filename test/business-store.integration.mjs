@@ -68,6 +68,13 @@ function bffConfig(overrides = {}) {
       streamMaxFrames: 10_000,
       streamMaxBytes: 16 * 1024 * 1024,
       streamMaxDurationMs: 5 * 60 * 1000,
+      maxConnectionsGlobal: 256,
+      maxConnectionsPerTenant: 64,
+      maxConnectionsPerSession: 8,
+      pollBaseDelayMs: 1000,
+      pollMaxDelayMs: 8000,
+      pollJitterPercent: 20,
+      replayCacheTtlMs: 25,
     },
     upstreams: {
       system: null,

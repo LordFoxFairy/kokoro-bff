@@ -8,10 +8,17 @@ import { agentMessageListData, agentSessionAssertion, agentSessionListData, data
 import { normalizeUpstreamResponse, reply } from "../response.js"
 import { headerString, incomingHeaders, idempotencyKey, queryOf, type Context } from "../request.js"
 import type { IdempotencyEntry, MutationTicket } from "../../application/idempotency.js"
-import { waitForSsePoll } from "./helpers.js"
 import { AgUiSseWriter } from "../../interfaces/http/agui/sse.js"
 import { AgUiSourceIdentityConflictError } from "../../application/agui/errors.js"
 import type { AgentProjectionSource, AgUiProjectionService } from "../../application/agui/project-session-events.js"
+import { type AgUiSourcePollResult, type AgUiSessionRuntime } from "../../application/agui/session-runtime.js"
+
+class AgentSourcePollError extends Error {
+  public constructor(public readonly result: { status: number; body: unknown }) {
+    super("Agent source poll failed")
+    this.name = "AgentSourcePollError"
+  }
+}
 
 export async function callAgent(
   config: BffConfig,
@@ -123,9 +130,17 @@ async function durableAgentEventStream(
   projection: AgUiProjectionService | null,
   idempotency: Map<string, IdempotencyEntry>,
   mutation: MutationTicket | null,
+  runtime: AgUiSessionRuntime,
 ): Promise<void> {
   if (projection === null) {
     reply(response, 503, failure("business_store_not_configured", "BFF AG-UI projection store is not configured", context.requestId), context, idempotency, mutation)
+    return
+  }
+
+  const tenantId = context.identity.namespace
+  const connection = runtime.connections.acquire(tenantId, sessionId)
+  if (connection === null) {
+    reply(response, 429, failure("agui_connection_limit_exceeded", "AG-UI stream connection capacity was exceeded", context.requestId), context, idempotency, mutation)
     return
   }
 
@@ -140,12 +155,19 @@ async function durableAgentEventStream(
 
   const drainLedger = async (): Promise<"head" | "terminal" | "invalid_cursor" | "stopped"> => {
     for (;;) {
-      const page = await projection.replay(
-        context.identity.namespace,
+      const page = await runtime.replays.replay(
+        tenantId,
         sessionId,
         cursor,
         config.agUi.replayPageFrames,
         config.agUi.replayPageBytes,
+        () => projection.replay(
+          tenantId,
+          sessionId,
+          cursor,
+          config.agUi.replayPageFrames,
+          config.agUi.replayPageBytes,
+        ),
       )
       if (page.kind === "invalid_cursor") return "invalid_cursor"
       if (page.frames.length > 0) {
@@ -160,6 +182,52 @@ async function durableAgentEventStream(
       }
       if (!page.atHead) continue
       return page.terminalRunId === null ? "head" : "terminal"
+    }
+  }
+
+  const synchronizeSource = async (): Promise<AgUiSourcePollResult> => {
+    const status = await projection.status(tenantId, sessionId)
+    let afterSequence = status.sourceHighWatermark
+    let snapshotWatermark: number | null = null
+    let insertedFrames = 0
+    let fetchedEvents = 0
+    for (;;) {
+      const result = await callAgent(
+        config,
+        baseUrl ?? "",
+        `/v1/sessions/${encodeURIComponent(sessionId)}/events?after_seq=${afterSequence}&limit=1000`,
+        "GET",
+        context.requestId,
+        request,
+        undefined,
+        context,
+        assertion,
+      )
+      if (result.status >= 400) throw new AgentSourcePollError(result)
+      const page = agentEventPage(dataOf(result.body), sessionId, afterSequence, 1000)
+      if (page === null || (snapshotWatermark !== null && page.watermark < snapshotWatermark)) {
+        throw new AgentSourcePollError({
+          status: 502,
+          body: failure("upstream_response_invalid", "Agent event replay did not match the v1 contract", context.requestId),
+        })
+      }
+      snapshotWatermark = page.watermark
+      fetchedEvents += page.events.length
+      if (page.events.length > 0) {
+        const ingested = await projection.ingest(tenantId, sessionId, projectionSources(page.events))
+        if (ingested.sourceHighWatermark !== page.nextSequence) throw new Error("Agent source watermark did not converge")
+        insertedFrames += ingested.insertedFrames
+        if (ingested.insertedFrames > 0) runtime.replays.invalidate(tenantId, sessionId)
+      }
+      afterSequence = page.nextSequence
+      if (page.exhausted) {
+        return {
+          fetchedEvents,
+          insertedFrames,
+          sourceHighWatermark: afterSequence,
+          snapshotWatermark: page.watermark,
+        }
+      }
     }
   }
 
@@ -186,65 +254,31 @@ async function durableAgentEventStream(
     }
 
     for (;;) {
-      const status = await projection.status(context.identity.namespace, sessionId)
-      let afterSequence = status.sourceHighWatermark
-      let snapshotWatermark: number | null = null
-      let insertedFrames = 0
-      for (;;) {
-        const result = await callAgent(
-          config,
-          baseUrl,
-          `/v1/sessions/${encodeURIComponent(sessionId)}/events?after_seq=${afterSequence}&limit=1000`,
-          "GET",
-          context.requestId,
-          request,
-          undefined,
-          context,
-          assertion,
-        )
-        if (result.status >= 400) {
-          if (!streamStarted) sendAgentFailure(response, result, context, idempotency, mutation)
-          else {
-            await writer.writeComment("upstream-error")
-            if (!response.writableEnded && !response.destroyed) response.end()
-          }
-          return
-        }
-        const data = dataOf(result.body)
-        const page = agentEventPage(data, sessionId, afterSequence, 1000)
-        if (page === null || (snapshotWatermark !== null && page.watermark < snapshotWatermark)) {
-          if (!streamStarted) sendAgentFailure(response, { status: 502, body: failure("upstream_response_invalid", "Agent event replay did not match the v1 contract", context.requestId) }, context, idempotency, mutation)
-          else {
-            await writer.writeComment("upstream-response-invalid")
-            if (!response.writableEnded && !response.destroyed) response.end()
-          }
-          return
-        }
-        snapshotWatermark = page.watermark
-        if (page.events.length > 0) {
-          const ingested = await projection.ingest(context.identity.namespace, sessionId, projectionSources(page.events))
-          if (ingested.sourceHighWatermark !== page.nextSequence) throw new Error("Agent source watermark did not converge")
-          insertedFrames += ingested.insertedFrames
-        }
-        afterSequence = page.nextSequence
-        const drained = await drainLedger()
-        if (drained === "stopped") return
-        if (page.exhausted && drained === "terminal") {
-          startAgUiStream(response, context.requestId)
-          response.end()
-          return
-        }
-        if (page.exhausted) break
+      const synchronized = await runtime.sourcePolls.poll(tenantId, sessionId, synchronizeSource)
+      const drained = await drainLedger()
+      if (drained === "stopped") return
+      if (drained === "terminal") {
+        startAgUiStream(response, context.requestId)
+        response.end()
+        return
       }
-      if (!streamStarted || insertedFrames === 0) {
+      if (!streamStarted || synchronized.insertedFrames === 0) {
         startAgUiStream(response, context.requestId)
         streamStarted = true
         if (await writer.writeComment("keep-alive") !== "written") break
       }
-      if (!await waitForSsePoll(request, response, 1000)) break
+      if (request.aborted || response.destroyed || response.writableEnded) break
     }
     if (!response.writableEnded) response.end()
   } catch (error) {
+    if (error instanceof AgentSourcePollError) {
+      if (!streamStarted) sendAgentFailure(response, error.result, context, idempotency, mutation)
+      else if (!response.writableEnded && !response.destroyed) {
+        await writer.writeComment("upstream-error")
+        if (!response.writableEnded && !response.destroyed) response.end()
+      }
+      return
+    }
     const sourceConflict = error instanceof AgUiSourceIdentityConflictError
     const code = sourceConflict ? "upstream_event_identity_conflict" : "upstream_response_invalid"
     const message = sourceConflict ? "Agent reused a durable event identity" : "Agent event projection failed"
@@ -253,6 +287,9 @@ async function durableAgentEventStream(
       await writer.writeComment("upstream-error")
       if (!response.writableEnded && !response.destroyed) response.end()
     }
+  } finally {
+    connection.release()
+    if (runtime.connections.sessionCount(tenantId, sessionId) === 0) runtime.sourcePolls.clear(tenantId, sessionId)
   }
 }
 
@@ -267,6 +304,7 @@ export async function liveAgentSession(
   mutation: MutationTicket | null,
   idempotency: Map<string, IdempotencyEntry>,
   agUiProjection: AgUiProjectionService | null,
+  agUiRuntime: AgUiSessionRuntime,
 ): Promise<boolean> {
   const baseUrl = config.upstreams.agents ?? null
   const method = request.method || "GET"
@@ -274,7 +312,7 @@ export async function liveAgentSession(
   const assertion = agentSessionAssertion(context, sessionId)
 
   if (businessPath.length === 3 && businessPath[2] === "events" && method === "GET") {
-    await durableAgentEventStream(request, response, config, context, sessionId, assertion, baseUrl, agUiProjection, idempotency, mutation)
+    await durableAgentEventStream(request, response, config, context, sessionId, assertion, baseUrl, agUiProjection, idempotency, mutation, agUiRuntime)
     return true
   }
 

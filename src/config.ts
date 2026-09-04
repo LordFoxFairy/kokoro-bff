@@ -8,6 +8,13 @@ export type AgUiConfig = {
   streamMaxFrames: number
   streamMaxBytes: number
   streamMaxDurationMs: number
+  maxConnectionsGlobal: number
+  maxConnectionsPerTenant: number
+  maxConnectionsPerSession: number
+  pollBaseDelayMs: number
+  pollMaxDelayMs: number
+  pollJitterPercent: number
+  replayCacheTtlMs: number
 }
 
 export const DEFAULT_AGUI_CONFIG: AgUiConfig = {
@@ -16,6 +23,13 @@ export const DEFAULT_AGUI_CONFIG: AgUiConfig = {
   streamMaxFrames: 10_000,
   streamMaxBytes: 16 * 1024 * 1024,
   streamMaxDurationMs: 5 * 60 * 1000,
+  maxConnectionsGlobal: 256,
+  maxConnectionsPerTenant: 64,
+  maxConnectionsPerSession: 8,
+  pollBaseDelayMs: 1000,
+  pollMaxDelayMs: 8000,
+  pollJitterPercent: 20,
+  replayCacheTtlMs: 25,
 }
 
 export type BffConfig = {
@@ -66,6 +80,14 @@ function positiveInteger(value: string | undefined, name: string, fallback: numb
   return parsed
 }
 
+function percentage(value: string | undefined, name: string, fallback: number): number {
+  const raw = value?.trim()
+  if (!raw) return fallback
+  const parsed = Number(raw)
+  if (!Number.isSafeInteger(parsed) || parsed < 0 || parsed > 100) throw new Error(`${name} must be an integer between 0 and 100`)
+  return parsed
+}
+
 function requiredDomain(value: string | undefined): string {
   const domain = value?.trim()
   if (!domain || !/^[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251})[A-Za-z0-9]$/u.test(domain)) {
@@ -95,6 +117,24 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
   if (mode === "live" && sharedSecret === null) {
     throw new Error("KOKORO_BFF_SHARED_SECRET is required in live mode")
   }
+  const agUi: AgUiConfig = {
+    replayPageFrames: positiveInteger(env.KOKORO_AGUI_REPLAY_PAGE_FRAMES, "KOKORO_AGUI_REPLAY_PAGE_FRAMES", DEFAULT_AGUI_CONFIG.replayPageFrames),
+    replayPageBytes: positiveInteger(env.KOKORO_AGUI_REPLAY_PAGE_BYTES, "KOKORO_AGUI_REPLAY_PAGE_BYTES", DEFAULT_AGUI_CONFIG.replayPageBytes),
+    streamMaxFrames: positiveInteger(env.KOKORO_AGUI_STREAM_MAX_FRAMES, "KOKORO_AGUI_STREAM_MAX_FRAMES", DEFAULT_AGUI_CONFIG.streamMaxFrames),
+    streamMaxBytes: positiveInteger(env.KOKORO_AGUI_STREAM_MAX_BYTES, "KOKORO_AGUI_STREAM_MAX_BYTES", DEFAULT_AGUI_CONFIG.streamMaxBytes),
+    streamMaxDurationMs: positiveInteger(env.KOKORO_AGUI_STREAM_MAX_DURATION_MS, "KOKORO_AGUI_STREAM_MAX_DURATION_MS", DEFAULT_AGUI_CONFIG.streamMaxDurationMs),
+    maxConnectionsGlobal: positiveInteger(env.KOKORO_AGUI_MAX_CONNECTIONS_GLOBAL, "KOKORO_AGUI_MAX_CONNECTIONS_GLOBAL", DEFAULT_AGUI_CONFIG.maxConnectionsGlobal),
+    maxConnectionsPerTenant: positiveInteger(env.KOKORO_AGUI_MAX_CONNECTIONS_PER_TENANT, "KOKORO_AGUI_MAX_CONNECTIONS_PER_TENANT", DEFAULT_AGUI_CONFIG.maxConnectionsPerTenant),
+    maxConnectionsPerSession: positiveInteger(env.KOKORO_AGUI_MAX_CONNECTIONS_PER_SESSION, "KOKORO_AGUI_MAX_CONNECTIONS_PER_SESSION", DEFAULT_AGUI_CONFIG.maxConnectionsPerSession),
+    pollBaseDelayMs: positiveInteger(env.KOKORO_AGUI_POLL_BASE_DELAY_MS, "KOKORO_AGUI_POLL_BASE_DELAY_MS", DEFAULT_AGUI_CONFIG.pollBaseDelayMs),
+    pollMaxDelayMs: positiveInteger(env.KOKORO_AGUI_POLL_MAX_DELAY_MS, "KOKORO_AGUI_POLL_MAX_DELAY_MS", DEFAULT_AGUI_CONFIG.pollMaxDelayMs),
+    pollJitterPercent: percentage(env.KOKORO_AGUI_POLL_JITTER_PERCENT, "KOKORO_AGUI_POLL_JITTER_PERCENT", DEFAULT_AGUI_CONFIG.pollJitterPercent),
+    replayCacheTtlMs: positiveInteger(env.KOKORO_AGUI_REPLAY_CACHE_TTL_MS, "KOKORO_AGUI_REPLAY_CACHE_TTL_MS", DEFAULT_AGUI_CONFIG.replayCacheTtlMs),
+  }
+  if (agUi.maxConnectionsPerTenant > agUi.maxConnectionsGlobal || agUi.maxConnectionsPerSession > agUi.maxConnectionsPerTenant) {
+    throw new Error("AG-UI connection limits must satisfy session <= tenant <= global")
+  }
+  if (agUi.pollBaseDelayMs > agUi.pollMaxDelayMs) throw new Error("AG-UI poll base delay must not exceed its maximum delay")
   return {
     host: env.KOKORO_BFF_HOST?.trim() || "127.0.0.1",
     port,
@@ -110,13 +150,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
     agentEnabled: booleanFlag(env.KOKORO_AGENT_ENABLED, false),
     postgresUrl: env.KOKORO_BFF_POSTGRES_URL?.trim() || null,
     redisUrl: env.KOKORO_BFF_REDIS_URL?.trim() || null,
-    agUi: {
-      replayPageFrames: positiveInteger(env.KOKORO_AGUI_REPLAY_PAGE_FRAMES, "KOKORO_AGUI_REPLAY_PAGE_FRAMES", DEFAULT_AGUI_CONFIG.replayPageFrames),
-      replayPageBytes: positiveInteger(env.KOKORO_AGUI_REPLAY_PAGE_BYTES, "KOKORO_AGUI_REPLAY_PAGE_BYTES", DEFAULT_AGUI_CONFIG.replayPageBytes),
-      streamMaxFrames: positiveInteger(env.KOKORO_AGUI_STREAM_MAX_FRAMES, "KOKORO_AGUI_STREAM_MAX_FRAMES", DEFAULT_AGUI_CONFIG.streamMaxFrames),
-      streamMaxBytes: positiveInteger(env.KOKORO_AGUI_STREAM_MAX_BYTES, "KOKORO_AGUI_STREAM_MAX_BYTES", DEFAULT_AGUI_CONFIG.streamMaxBytes),
-      streamMaxDurationMs: positiveInteger(env.KOKORO_AGUI_STREAM_MAX_DURATION_MS, "KOKORO_AGUI_STREAM_MAX_DURATION_MS", DEFAULT_AGUI_CONFIG.streamMaxDurationMs),
-    },
+    agUi,
     upstreams,
   }
 }

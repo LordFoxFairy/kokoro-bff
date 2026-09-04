@@ -17,6 +17,7 @@ import { liveMoriBusiness } from "./http/routes/music.js"
 import { configuredUpstream, bffOwnedBusinessPath, isMoriBusinessPath, upstreamKey } from "./http/routes/routing.js"
 import { reconcileSchedulerTask, schedulerDispatch } from "./http/routes/scheduler.js"
 import type { LiveOwnerResult } from "./http/routes/types.js"
+import { AgUiSessionRuntime } from "./application/agui/session-runtime.js"
 
 async function handle(
   request: IncomingMessage,
@@ -26,6 +27,7 @@ async function handle(
   mori: MoriMockBffStore,
   idempotency: Map<string, IdempotencyEntry>,
   businessStore: PostgresBffRepositories | null,
+  agUiRuntime: AgUiSessionRuntime,
 ): Promise<void> {
   const id = requestId(request)
   const segments = pathOf(request)
@@ -151,7 +153,7 @@ async function handle(
       return
     }
     if (businessPath[0] === "sessions") {
-      await liveAgentSession(request, response, config, context, businessPath, body, json, mutation, idempotency, businessStore?.agUi ?? null)
+      await liveAgentSession(request, response, config, context, businessPath, body, json, mutation, idempotency, businessStore?.agUi ?? null, agUiRuntime)
       return
     }
     if (businessStore !== null && bffOwnedBusinessPath(businessPath)) {
@@ -213,6 +215,7 @@ async function reconcilePersistedScheduledTasks(config: BffConfig, store: Postgr
 
 export type BffServerOptions = {
   moriAutoProgress?: boolean
+  agUiRuntime?: AgUiSessionRuntime
 }
 
 export function createBffServer(config: BffConfig = loadConfig(), options: BffServerOptions = {}) {
@@ -222,8 +225,21 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
   const businessStore = config.mode === "live" && config.postgresUrl !== null && config.redisUrl !== null
     ? new PostgresBffRepositories(config.postgresUrl, config.redisUrl)
     : null
+  const agUiRuntime = options.agUiRuntime ?? new AgUiSessionRuntime({
+    connections: {
+      global: config.agUi.maxConnectionsGlobal,
+      perTenant: config.agUi.maxConnectionsPerTenant,
+      perSession: config.agUi.maxConnectionsPerSession,
+    },
+    poll: {
+      baseDelayMs: config.agUi.pollBaseDelayMs,
+      maxDelayMs: config.agUi.pollMaxDelayMs,
+      jitterRatio: config.agUi.pollJitterPercent / 100,
+    },
+    replayCacheTtlMs: config.agUi.replayCacheTtlMs,
+  })
   const server = createServer((request, response) => {
-    void handle(request, response, config, store, mori, idempotency, businessStore).catch(() => {
+    void handle(request, response, config, store, mori, idempotency, businessStore, agUiRuntime).catch(() => {
       if (!response.headersSent) send(response, 500, failure("internal_error", "The BFF encountered an internal error", requestId(request)))
       else response.destroy()
     })

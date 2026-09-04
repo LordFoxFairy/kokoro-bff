@@ -7,6 +7,7 @@ import { EventSchemas } from "@ag-ui/core"
 import { Pool } from "pg"
 
 import { createBffServer } from "../dist/main.js"
+import { AgUiSessionRuntime } from "../dist/application/agui/session-runtime.js"
 
 const postgresUrl = process.env.KOKORO_TEST_POSTGRES_URL
 const redisUrl = process.env.KOKORO_TEST_REDIS_URL
@@ -72,6 +73,13 @@ function bffConfig({ agentEnabled, agentBase, agUi }) {
       streamMaxFrames: 10_000,
       streamMaxBytes: 16 * 1024 * 1024,
       streamMaxDurationMs: 5 * 60 * 1000,
+      maxConnectionsGlobal: 256,
+      maxConnectionsPerTenant: 64,
+      maxConnectionsPerSession: 8,
+      pollBaseDelayMs: 1000,
+      pollMaxDelayMs: 8000,
+      pollJitterPercent: 20,
+      replayCacheTtlMs: 25,
     },
     upstreams: {
       system: null,
@@ -342,6 +350,13 @@ integrationTest("ends at the SSE frame budget and resumes strictly after the las
         streamMaxFrames: 2,
         streamMaxBytes: 1024 * 1024,
         streamMaxDurationMs: 30_000,
+        maxConnectionsGlobal: 256,
+        maxConnectionsPerTenant: 64,
+        maxConnectionsPerSession: 8,
+        pollBaseDelayMs: 1000,
+        pollMaxDelayMs: 8000,
+        pollJitterPercent: 20,
+        replayCacheTtlMs: 25,
       },
     }))
     const base = await listen(bff)
@@ -358,6 +373,71 @@ integrationTest("ends at the SSE frame budget and resumes strictly after the las
     const resumedFrames = parseSse(await resumed.text())
     assert.deepEqual(resumedFrames.map((frame) => frame.event.type), ["RUN_STARTED", "RUN_FINISHED"])
     assert.equal(new Set([...firstFrames, ...resumedFrames].map((frame) => frame.id)).size, 4)
+  } finally {
+    if (bff !== null) await close(bff)
+    if (agent !== null) await close(agent)
+    for (const server of servers.splice(0)) {
+      if (server.listening) await close(server)
+    }
+    await pool.end()
+  }
+})
+
+integrationTest("bounds same-session connections and coalesces their Agent and PostgreSQL polling", async () => {
+  const pool = new Pool({ connectionString: postgresUrl })
+  let bff = null
+  let agent = null
+  try {
+    await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
+    await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+    let agentCalls = 0
+    const source = { chat_event_id: "capacity_started", session_id: "session_capacity", run_id: "run_capacity", event_type: "run.started", payload_json: '{"status":"running"}', seq: 1, created_at: 1000 }
+    agent = createServer((request, response) => {
+      agentCalls += 1
+      const url = new URL(request.url ?? "/", "http://agent.local")
+      const afterSequence = Number(url.searchParams.get("after_seq") ?? "0")
+      const events = afterSequence === 0 ? [source] : []
+      response.setHeader("content-type", "application/json")
+      response.end(JSON.stringify({ data: { events, next_seq: events.at(-1)?.seq ?? afterSequence, watermark: 1 }, meta: { request_id: "agent" } }))
+    })
+    const agentBase = await listen(agent)
+    const agUi = {
+      replayPageFrames: 128,
+      replayPageBytes: 1024 * 1024,
+      streamMaxFrames: 100,
+      streamMaxBytes: 1024 * 1024,
+      streamMaxDurationMs: 150,
+      maxConnectionsGlobal: 4,
+      maxConnectionsPerTenant: 4,
+      maxConnectionsPerSession: 4,
+      pollBaseDelayMs: 40,
+      pollMaxDelayMs: 160,
+      pollJitterPercent: 0,
+      replayCacheTtlMs: 25,
+    }
+    const runtime = new AgUiSessionRuntime({
+      connections: { global: 4, perTenant: 4, perSession: 4 },
+      poll: { baseDelayMs: 40, maxDelayMs: 160, jitterRatio: 0 },
+      replayCacheTtlMs: 25,
+    })
+    bff = createBffServer(bffConfig({ agentEnabled: true, agentBase, agUi }), { agUiRuntime: runtime })
+    const base = await listen(bff)
+
+    const clients = await Promise.all(Array.from({ length: 4 }, () => (
+      fetch(`${base}/v1/sessions/session_capacity/events`, { headers: auth("tenant_a") })
+    )))
+    assert.ok(clients.every((response) => response.status === 200))
+    const rejected = await fetch(`${base}/v1/sessions/session_capacity/events`, { headers: auth("tenant_a") })
+    assert.equal(rejected.status, 429)
+    assert.equal((await rejected.json()).error.code, "agui_connection_limit_exceeded")
+
+    const bodies = await Promise.all(clients.map((response) => response.text()))
+    assert.ok(bodies.every((body) => parseSse(body).some((frame) => frame.event.type === "RUN_STARTED")))
+    const metrics = runtime.snapshot()
+    assert.ok(agentCalls <= 4, `expected at most 4 shared Agent polls, received ${agentCalls}`)
+    assert.ok(metrics.sourcePolls.executions <= 4)
+    assert.ok(metrics.replays.loads <= 6, `expected at most 6 shared PostgreSQL replay loads, received ${metrics.replays.loads}`)
+    assert.equal(metrics.connections.global, 0)
   } finally {
     if (bff !== null) await close(bff)
     if (agent !== null) await close(agent)
