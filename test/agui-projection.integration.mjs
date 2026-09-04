@@ -1,11 +1,15 @@
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
+import { connect as connectTcp, createServer as createTcpServer } from "node:net"
 import { test } from "node:test"
 
 import { Pool } from "pg"
 import { createClient } from "redis"
 
 import { PostgresBffRepositories } from "../dist/infrastructure/postgres/repositories.js"
+import { PostgresBffDatabase } from "../dist/infrastructure/postgres/client.js"
+import { PostgresAgUiProjectionRepository } from "../dist/infrastructure/postgres/agui-projection-repository.js"
+import { AgUiProjectionService } from "../dist/application/agui/project-session-events.js"
 
 const postgresUrl = process.env.KOKORO_TEST_POSTGRES_URL
 const redisUrl = process.env.KOKORO_TEST_REDIS_URL
@@ -45,6 +49,33 @@ function agentSource({ id, sequence, kind, payload, sessionId = "session_shared"
       kind,
       timestamp: occurredAt,
       payload,
+    },
+  }
+}
+
+async function redisProxy(targetUrl) {
+  const target = new URL(targetUrl)
+  const sockets = new Set()
+  const server = createTcpServer((client) => {
+    const upstream = connectTcp(Number(target.port), target.hostname)
+    sockets.add(client)
+    sockets.add(upstream)
+    const forget = (socket) => () => sockets.delete(socket)
+    client.once("close", forget(client))
+    upstream.once("close", forget(upstream))
+    client.pipe(upstream).pipe(client)
+  })
+  await new Promise((resolve, reject) => {
+    server.once("error", reject)
+    server.listen(0, "127.0.0.1", resolve)
+  })
+  const address = server.address()
+  if (address === null || typeof address === "string") throw new Error("Redis proxy did not bind")
+  return {
+    url: `redis://127.0.0.1:${address.port}${target.pathname}`,
+    disconnect: async () => {
+      for (const socket of sockets) socket.destroy()
+      await new Promise((resolve) => server.close(resolve))
     },
   }
 }
@@ -291,6 +322,76 @@ integrationTest("returns a self-consistent replay snapshot while a new run is ap
     }
   } finally {
     if (store !== null) await store.close().catch(() => undefined)
+    await pool.end()
+  }
+})
+
+integrationTest("replays a committed projection immediately when Redis was never reachable", async () => {
+  const pool = new Pool({ connectionString: postgresUrl })
+  let database = null
+  try {
+    await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
+    await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+    database = new PostgresBffDatabase(postgresUrl, "redis://127.0.0.1:1/8")
+    const projection = new AgUiProjectionService(new PostgresAgUiProjectionRepository(database))
+
+    const outcome = await Promise.race([
+      projection.ingest("tenant_a", "session_redis_down", [agentSource({
+        id: "redis_down_source",
+        sequence: 1,
+        kind: "message.delta",
+        payload: { segment_id: "message_redis_down", delta: "durable" },
+        sessionId: "session_redis_down",
+      })]).then(() => "committed"),
+      new Promise((resolve) => setTimeout(() => resolve("blocked"), 500)),
+    ])
+    assert.equal(outcome, "committed")
+
+    const replay = await projection.replay("tenant_a", "session_redis_down", null, 100)
+    assert.equal(replay.kind, "page")
+    assert.deepEqual(replay.frames.map((frame) => frame.eventType), ["TEXT_MESSAGE_START", "TEXT_MESSAGE_CONTENT"])
+  } finally {
+    if (database !== null) {
+      if (database.redis.isOpen) database.redis.destroy()
+      await database.pool.end().catch(() => undefined)
+    }
+    await pool.end()
+  }
+})
+
+integrationTest("replays a committed projection immediately after the Redis notification connection drops", async () => {
+  const pool = new Pool({ connectionString: postgresUrl })
+  const proxy = await redisProxy(redisUrl)
+  let database = null
+  try {
+    await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
+    await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+    database = new PostgresBffDatabase(postgresUrl, proxy.url)
+    await database.ready()
+    await proxy.disconnect()
+    for (let attempt = 0; attempt < 50 && database.redis.isReady; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+    assert.equal(database.redis.isReady, false)
+
+    const projection = new AgUiProjectionService(new PostgresAgUiProjectionRepository(database))
+    const outcome = await Promise.race([
+      projection.ingest("tenant_a", "session_redis_drop", [agentSource({
+        id: "redis_drop_source",
+        sequence: 1,
+        kind: "message.delta",
+        payload: { segment_id: "message_redis_drop", delta: "durable" },
+        sessionId: "session_redis_drop",
+      })]).then(() => "committed"),
+      new Promise((resolve) => setTimeout(() => resolve("blocked"), 500)),
+    ])
+    assert.equal(outcome, "committed")
+    const replay = await projection.replay("tenant_a", "session_redis_drop", null, 100)
+    assert.equal(replay.kind, "page")
+    assert.deepEqual(replay.frames.map((frame) => frame.eventType), ["TEXT_MESSAGE_START", "TEXT_MESSAGE_CONTENT"])
+  } finally {
+    if (database !== null) await database.close().catch(() => undefined)
+    await proxy.disconnect().catch(() => undefined)
     await pool.end()
   }
 })
