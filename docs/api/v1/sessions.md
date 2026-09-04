@@ -6,6 +6,10 @@ Chat BFF 承接 Web v1 的会话、消息、SSE、run control 与分享投影；
 
 契约的异步形态参考 Manus API 的“提交 → receipt → 游标事件读取”生命周期：提交接口只确认 admission，不等待模型完成；客户端通过事件游标恢复进度并按终态事件停止轮询。Kokoro 保留自己的 `/v1` 路径、snake_case 字段和统一 `{data, meta}` / `{error, meta}` envelope。
 
+## 当前实现状态
+
+BFF 已输出 schema-valid AG-UI SSE，但当前从 Agent replay 即时投影，`Last-Event-ID` 仍是 Agent source sequence；`database/schema.sql` 尚无 BFF durable AG-UI ledger/public cursor。Live Conversation、Message 与 Share 事实也尚未落入 BFF PostgreSQL。以下 owner mapping 是当前物理读取路径，不表示目标 ownership 已经完成。
+
 ## Live owner
 
 Live 模式下 Chat 只通过 `KOKORO_AGENT_BASE_URL` 调用 Agent 的 HTTP ingress，不读 Agent 数据库，也不回退到 Mock。BFF 的映射固定为：

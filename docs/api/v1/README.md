@@ -1,5 +1,9 @@
 # Kokoro Business API v1
 
+## 当前实现提示
+
+本页描述 v1 契约。Live 完成度以 [`../../CURRENT.md`](../../CURRENT.md) 为准：当前 AG-UI 是对 Agent history 的即时投影，BFF durable ledger/outbox 与 Conversation/Message/Share PostgreSQL ownership 尚未实现。契约存在不等于运行时已经闭环。
+
 ## 目标
 
 Kokoro BFF 是浏览器 Web 与业务 API 子仓库之间的业务适配层，负责：
@@ -112,10 +116,10 @@ Idempotency-Key: <client-generated-key>
 namespace + HTTP method + canonical path + Idempotency-Key
 ```
 
-相同范围的重复请求必须返回第一次请求的 HTTP 状态和业务响应。相同 key 但请求语义不同，不得复用旧结果，应由实现记录请求指纹并返回冲突。
+相同范围的重复请求必须返回第一次请求的 HTTP 状态和业务响应。Live 且 BFF business store 已配置时 receipt 持久化；其余当前路径可能使用进程内 Map。相同 key 但请求语义不同，不得复用旧结果，应由实现记录请求指纹并返回冲突。
 Mock/Live 两种模式都必须遵守同一幂等判定入口。
 
-实现细节：请求开始处理前先登记 pending receipt。若另一个请求使用相同 namespace、路径和
+当前实现细节：请求开始处理前先登记 pending receipt。fingerprint 目前规范化 body，但 query 与 selected headers 尚未覆盖；receipt、业务 fact 与 outbox 也尚未在同一事务提交。若另一个请求使用相同 namespace、路径和
 `Idempotency-Key`，且原请求仍在处理，返回 `409 idempotency_in_progress`，不得并行触发第二次
 业务副作用。原请求成功后，后续请求重放已保存的状态和响应；传输或上游 `5xx` 不保存为终态，
 可安全重试。PostgreSQL receipt 的 pending claim 在 60 秒后允许回收，用于处理进程崩溃遗留的
@@ -151,17 +155,17 @@ Model/Billing 的 owner HTTP 面明确注册为 `web-bff` caller；Agent ingress
 
 ## 资源状态
 
-| 资源 | v1 文档 | Mock | Live 替换 |
+| 资源 | v1 contract | Mock | Live 当前事实 |
 | --- | --- | --- | --- |
-| Projects | 已完成 | 已完成 | BFF-owned PostgreSQL fact store；System 仅承接 Site/Workspace/Policy |
-| Mori Music | v1 projection | 已完成（Mock） | 已接入 `KOKORO_MUSIC_BASE_URL`；缺失时 `503 music_owner_not_configured`，不回退到 Mock |
-| Chat | 已完成 | 已完成 | BFF Chat adapter → `KOKORO_AGENT_BASE_URL` Agent HTTP ingress；session list 由 Agent 持久化查询，rename/delete/share 仍显式标注能力边界 |
-| Model | v1 owner adapter | 已完成 | `/bff/model-catalog` → `{ data: { models } }`，由 BFF 注入 tenant/subject 上下文 |
-| Skills | Connect owner adapter | 已完成（Mock） | live 使用 Capability 专用 projection；未接入的写操作显式返回 503 |
-| Scheduled | BFF fact store + Scheduler command adapter | 已完成（Mock） | live 使用 BFF PostgreSQL/Redis fact store；创建/更新/删除/retry 会同步 Scheduler，dispatch 回到 BFF 再进入 Agent |
-| Agents setup | 下一阶段 | 已完成 | Mock 可用；live 仍需 Agent setup adapter |
-| Billing | v1 owner adapter | 已完成 | `/v1/commerce/catalog`、`/v1/billing/checkout` → Web 兼容的 plans/checkout 投影 |
-| Library | Storage Connect adapter | 已完成（Mock） | live 使用 Storage 专用内部 projection；未接入的写操作显式返回 503 |
+| Projects | 已定义 | 有 | BFF-owned PostgreSQL fact store；System 仅承接 Site/Workspace/Policy |
+| Mori Music | 已定义 | 有 | 已接入 `KOKORO_MUSIC_BASE_URL`；缺失时 fail closed |
+| Chat | 已定义 | 有 | Agent HTTP adapter 与即时 AG-UI projection 已接；BFF Chat facts/durable ledger 未完成，部分 mutation 返回 503 |
+| Model | 已定义 | 有 | catalog read projection 已接 |
+| Skills / MCP | 已定义 | 有 | Capability read projection 已接；未接写操作返回 503 |
+| Scheduled | 已定义 | 有 | PostgreSQL fact + 同步 Scheduler 已接；transactional outbox 未完成 |
+| Agents setup | 已定义 | 有 | Live adapter 未接 |
+| Billing | 已定义 | 有 | plans/checkout 已接；summary 等 surface 未全部接线 |
+| Library | 已定义 | 有 | Storage read projection 已接；未接写操作返回 503 |
 
 ### Live adapter boundary
 
@@ -173,7 +177,7 @@ Model/Billing 的 owner HTTP 面明确注册为 `web-bff` caller；Agent ingress
 
 | Web-facing surface | BFF boundary | Fact owner |
 | --- | --- | --- |
-| Chat/session/run/SSE | `src/infrastructure/clients/agent/` + BFF Chat | Agent execution facts; BFF owns public projection. The boundary is split into identity, launch/control builders, chat projections, and `src/interfaces/http/agui/` transport encoding. |
+| Chat/session/run/SSE | `src/infrastructure/clients/agent/` + BFF Chat | Agent currently supplies execution/history facts; BFF owns the public contract, while durable projection and Chat product tables remain open. |
 | Project/workspace projection | BFF business adapter | BFF projection; System owns Site/Workspace/Policy |
 | Skills/MCP | Capability Connect adapter | Capability |
 | Model selection | `liveOwnerBusiness` Model projection | Model |

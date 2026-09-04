@@ -1,6 +1,6 @@
 # Kokoro API Docs
 
-Kokoro 的 API 文档以 **API-first** 为准：先冻结可观察的 HTTP 契约，再由各业务子仓库实现持久化和领域逻辑。
+`kokoro-bff` 是 Kokoro 唯一 public HTTP Product API owner。API 文档以 **API-first** 为准：先冻结可观察的 HTTP 契约，再由 owner 实现持久化和领域逻辑。
 阶段 1 仅采用 **PostgreSQL + Redis**；BFF 不引入 MySQL 或 Mongo 依赖，Mock/Live 只通过 HTTP upstream 与 Redis/PG adapter 契约协作，不新增旧存储依赖。
 
 当前版本是 **Kokoro Business API v1**。文档的章节组织、资源描述、生命周期和示例风格参考 Manus API 的公开文档，但路径、字段、错误码和身份边界属于 Kokoro 自己的契约。不要把 Manus 的 v2 路径直接当成 Kokoro 的接口版本。
@@ -17,7 +17,9 @@ Kokoro 的 API 文档以 **API-first** 为准：先冻结可观察的 HTTP 契�
 - [Agents v1](./v1/agents.md)
 - [Library v1](./v1/library.md)
 - [Billing v1](./v1/billing.md)
-- [完整契约摘要](../../CONTRACT.md)
+- [公开契约策略](../API_CONTRACT.md)
+- [Canonical OpenAPI](../../contract/openapi/v1/openapi.yaml)
+- [当前实现与缺口](../CURRENT.md)
 
 ## 文档分层
 
@@ -37,7 +39,7 @@ docs/api/
     └── ...             # 后续按业务资源拆分
 ```
 
-每个资源文档必须包含：
+字段级事实源只在 `contract/openapi/v1/openapi.yaml`；本目录不保存第二份机器 schema。每个资源文档必须包含：
 
 1. 资源目标和所有者
 2. endpoint、HTTP 方法和鉴权要求

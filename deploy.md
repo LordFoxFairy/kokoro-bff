@@ -13,13 +13,13 @@ NODE_ENV=production pnpm start
 
 将 `.env.prod.example` 复制为平台变量模板，再注入真实值。不要把 `.env.prod` 提交到仓库。
 
-Live 模式的 BFF 业务事实由本仓 PostgreSQL 持有，Redis 只做租户隔离的短缓存和协调。首次启动前在同一版本运行迁移：
+Live 模式的 BFF 业务事实由本仓 PostgreSQL 持有，Redis 只做租户隔离的短缓存和协调。首次启动前在空数据库安装同版本 canonical schema：
 
 ```bash
-KOKORO_BFF_POSTGRES_URL="$KOKORO_BFF_POSTGRES_URL" pnpm db:setup
+KOKORO_BFF_POSTGRES_URL="$KOKORO_BFF_POSTGRES_URL" pnpm db:apply-schema
 ```
 
-Live `readyz` 同时检查 BFF PostgreSQL、Redis 和 Agent；迁移未执行或依赖不可用时保持非就绪，不回退到内存 fixture。
+Live `readyz` 同时检查 BFF PostgreSQL、Redis 和 Agent；schema 未安装或依赖不可用时保持非就绪，不回退到内存 fixture。
 
 ## 方案 B：生产 Docker 镜像
 

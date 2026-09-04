@@ -1,122 +1,118 @@
-# Kokoro BFF
+# kokoro-bff
 
-`kokoro-bff` 是 Kokoro 的独立业务适配子仓库。它承接 Web 的业务投影、聚合、幂等和上游切换，并以内置 Chat 模块承接会话、消息、SSE、run control 与分享投影；它不是 Gateway。
-
-API 文档入口：[docs/api/README.md](./docs/api/README.md)。当前契约版本为 **Kokoro Business API v1**；文档结构参考 Manus API 的成熟资源和生命周期设计，但路径、字段和业务边界以本仓库契约为准。
-
-## 边界
+`kokoro-bff` 是 Kokoro 唯一 public HTTP owner，发布 Web-facing Product API，并承担 Conversation、Message、
+Share、Project、ScheduledTask 与 durable AG-UI projection 的目标边界。Browser 不直连本服务；唯一调用方向是：
 
 ```text
-浏览器 → kokoro-app 同源 /api/* → kokoro-bff /v1/* → 业务 API 子仓库
-浏览器 → kokoro-app 同源 /api/session/* → kokoro-bff /v1/sessions/*（Chat/SSE）
-kokoro-agent HTTP ingress → Redis run streams（HTTP admission 与执行 worker 分进程）
+Browser -> kokoro same-origin /api/* -> kokoro-bff /v1/* -> owner API / Agent / Scheduler
 ```
 
-- Web、BFF、Agent 各自是独立仓库，不通过 workspace package、源码复制或 git submodule 复用实现。
-- Mori 是独立音乐产品；Live Mori 请求通过 `KOKORO_MUSIC_BASE_URL` 进入独立 Music owner。BFF 只暴露
-  provider-neutral Mori projection，Mock 与 Live 不会混用事实。
-- BFF 只通过版本化 HTTP 契约与业务服务对接；第一阶段的 `mock` 模式是本仓库内置的确定性 fixture，`live` 模式的 Project/Scheduled 事实由本仓 PostgreSQL 持有，Redis 仅作为租户隔离缓存和协调。Scheduled 的定义永远归 BFF，Scheduler 只持有通用 ScheduleJob 和 occurrence lease。
-- BFF 不连接 Agent 的 Redis stream；Agent 的 HTTP ingress 是唯一业务调用面，生产环境通过 `KOKORO_AGENT_BASE_URL` 配置它，worker 仍由 Agent 自己管理。Agent 是可选执行 profile，由 `KOKORO_AGENT_ENABLED=1` 显式开启；未开启时 BFF 仍可就绪，Chat/调度执行路由返回稳定的 `agent_not_configured`。当前 Chat launch/control/replay/detail/session-list 已完成 live 组合；session list 由 Agent 持久化并按 identity 查询，rename/delete/share 与 Agent setup 仍由 live adapter 明确报告未接线能力。
-- Chat、消息、SSE、artifact 和 run control 的 Web-facing projection 统一由本仓 Chat 业务模块边界承接；不再新增独立 `kokoro-session` 或 `kokoro-chat` 子仓库。`src/main.ts` 仅作为 HTTP 组合根和通用请求管线，资源路由位于 `src/http/routes/`；业务 port 和输入 DTO 位于 `src/application/`，owner client 位于 `src/infrastructure/clients/`，Mock 只位于 `src/infrastructure/mock/`，契约位于 `src/contracts/`。Agent client 按 identity、launch/control、projection 拆分，不再设置含义模糊的 `adapters` 或 `modules` 目录。
+字段级事实源是 [`contract/openapi/v1/openapi.yaml`](./contract/openapi/v1/openapi.yaml)。当前实现与未完成缺口以
+[`docs/CURRENT.md`](./docs/CURRENT.md) 为准；目标架构或历史验收不等于现状。
 
-目录边界固定为：
+## 当前状态摘要
 
-```text
-src/contracts/                         # v1 wire DTO/schema/envelope
-src/application/<bounded-context>/     # use cases and input DTOs
-src/application/ports/                 # repository and external boundary ports
-src/application/                       # cross-module use-case orchestration
-src/infrastructure/postgres/           # PostgreSQL repository implementations
-src/infrastructure/mock/               # deterministic local contract fixtures
-src/interfaces/http/                   # reserved for extracted HTTP handlers
-src/main.ts                             # composition root and route registration only
-```
+| 能力 | 当前事实 |
+| --- | --- |
+| Public contract | 63 个 operation，全部具备 owner/visibility/stability/idempotency/permission metadata |
+| Project / ScheduledTask | Live 使用本仓 PostgreSQL；Redis 用于 readiness/cache coordination |
+| Idempotency | business store 存在时有 PostgreSQL receipt；部分路径仍可能使用进程内 Map |
+| Chat / AG-UI | BFF 从 Agent HTTP replay 即时投影 AG-UI SSE；cursor 仍是 Agent source sequence |
+| Conversation / Message / Share | 公开契约由 BFF 拥有，但 Live 产品事实当前仍来自 Agent，BFF 表尚未落地 |
+| Durable AG-UI ledger | 未实现 |
+| Transactional outbox | 未实现 |
+| Mock | 仍编入 `src/`，只作本地 fixture，不是生产完成证据 |
 
-`src/application/ports/*` 只定义 repository port、领域输入类型和返回模型，不得导入 `pg`、Redis 或 SQL。数据库实现位于 `src/infrastructure/postgres/*-repository.ts`；这样 BFF 的业务服务可以注入真实实现或 mock，而不会把存储驱动泄漏到业务模块。
-- 部署域名只通过 `KOKORO_DOMAIN` 产生标准 RFC 7239 `Forwarded: host=...`。不读取或转发 `X-Domain`、浏览器 Host 作为业务选择依据。
-- 站点的跨仓租户上下文通过服务端 `KOKORO_TENANT_ID` 配置；System 再用 `tenant_id + Forwarded host` 校验自己持有的 Site/Host binding。浏览器不提交 tenant 或域名选择。
+## Owner 边界
 
-## 本地运行
+- BFF：public Product API、Project、ScheduledTask，以及待落地的 Chat 产品事实与 durable public projection。
+- Agent：Run、checkpoint、lease、tool journal、执行事件、HITL、evidence；BFF 只调用 Agent HTTP ingress。
+- Scheduler：通用 ScheduleJob、occurrence、lease、retry、misfire、dispatch；不拥有 ScheduledTask 业务定义。
+- IAM/System/Model/Billing/Capability/Storage/Music：各自拥有领域事实和 internal contract；BFF 只做窄 projection。
+- Root：拓扑、治理和 Developer API catalog；不保存本仓 OpenAPI 镜像。
+
+AG-UI 是 Web 与 BFF 之间唯一 Agent 网络协议。Vercel AI SDK 只属于 Web 内部 UI adapter，不建立第二套网络 stream。
+
+## 五分钟启动
+
+要求：Node.js 22、pnpm 11.25.0。
 
 ```bash
 cp .env.local.example .env.local
-pnpm install --ignore-workspace
+pnpm install --frozen-lockfile
 pnpm dev
-curl http://127.0.0.1:4300/healthz
+curl -fsS http://127.0.0.1:4300/healthz
 ```
 
-本地默认是 `KOKORO_BFF_MODE=mock`。业务请求是 server-only 契约，需要 Web 侧代理传入：
+本地默认 `KOKORO_BFF_MODE=mock`。Mock 不需要数据库，只用于确定性契约联调。业务请求必须由 Web server adapter
+携带受信服务 envelope；浏览器不应持有内部 secret 或直接访问 4300。
 
-```text
-x-kokoro-service: web-bff
-x-kokoro-internal-secret: <KOKORO_BFF_SHARED_SECRET>
-x-kokoro-namespace: <sealed-session namespace>
-x-kokoro-principal-id: <sealed-session user id>
-```
-
-浏览器不应直接调用 4300 端口，也不应持有任何内部 secret。
-
-## API 版本 v1
-
-成功响应统一为：
-
-```json
-{
-  "data": {},
-  "meta": { "request_id": "..." }
-}
-```
-
-业务入口：
-
-| 方法 | 路径 | 责任 |
-| --- | --- | --- |
-| GET | `/healthz`, `/readyz` | 进程/配置探针，不需要业务身份 |
-| GET/POST | `/v1/projects` | 专案列表与创建 |
-| GET/PATCH | `/v1/projects/:projectId` | 专案投影与 instruction 更新 |
-| GET/POST | `/v1/mori/projects[/:projectRef]/generations` | Mori 音乐项目与生成 receipt |
-| GET/POST | `/v1/mori/generations/:generationRef[/events\|/cancel]` | Mori Generation 快照、SSE 和取消 |
-| GET | `/v1/projects/:projectId/tasks`, `/v1/projects/:projectId/instruction-revisions` | 专案任务与 instruction 历史 |
-| POST/PATCH | `/v1/projects/:projectId/resources`, `/v1/projects/:projectId/scheduled-tasks`, `/v1/projects/:projectId/skills/:skill` | 专案资源、排程与技能投影 |
-| GET | `/v1/skills`, `/v1/skills/pool`, `/v1/skills/catalog` | 技能目录/池 |
-| GET | `/v1/skills/quota` | 当前 namespace 技能包配额 |
-| GET | `/v1/skills/:name/revisions[?scope=...]` | 技能版本历史 |
-| POST | `/v1/skills/:name/enable[?scope=...]`, `/v1/skills/:name/disable[?scope=...]` | 技能启用/停用 |
-| POST | `/v1/skills/github/preview` | GitHub skill 预览（`repository` 请求字段，Idempotency-Key 可选） |
-| POST | `/v1/skills/github/import` | 幂等导入 GitHub skill |
-| GET | `/v1/models` | Model owner catalog 的 Web 投影 |
-| GET/POST | `/v1/mcp/servers` | MCP server 列表与注册 |
-| POST | `/v1/mcp/servers/:name/enable`, `/v1/mcp/servers/:name/disable` | MCP server 启用/停用 |
-| DELETE | `/v1/mcp/servers/:name` | MCP server 删除 |
-| GET/POST/PATCH/DELETE | `/v1/scheduled-tasks[/:id]` | 定时任务投影与变更 |
-| POST | `/v1/scheduled-tasks/:id/retry` | 重试定时任务 |
-| GET | `/v1/agents/connections/setup?platform=telegram\|line\|slack` | Agent 连接设置投影 |
-| GET | `/v1/library` | 产物/资料库投影 |
-| GET | `/v1/billing/plans`, `/v1/billing/summary` | 套餐与余额/用量摘要 |
-| POST | `/v1/billing/checkout` | 通过 plan_id 创建业务 checkout 投影 |
-
-除 GitHub skill 预览外，所有变更请求必须携带 `Idempotency-Key`。服务端以 namespace、方法、路径和 key 组成幂等范围；Web HubClient 的所有 mutation 请求都应转发该 header。
-
-技能配额、版本历史与 MCP server 成功响应均使用 `{ data, meta: { request_id } }`。MCP 注册体为
-`{ "name": "...", "transport": "http|streamable_http", "url": "...", "allowed_tools": [], "secret_ref": null }`，其中 `scope` 由 BFF 从 namespace 派生；启停/删除成功返回 `data: { "ok": true }`。
-
-GitHub skill 预览和导入使用相同的请求/响应数据形状：请求体为
-`{ "repository": "https://github.com/OWNER/REPO" }`，成功响应的 `data` 为
-`{ "repository": "...", "default_branch": "main", "skill": { "name": "...", "description": "..." } }`。
-
-## Mock → Live
-
-- `KOKORO_BFF_MODE=mock`：只使用 `src/infrastructure/mock/bff-store.ts` 的本地 fixture，适合 Web/BFF 联调。
-- `KOKORO_BFF_MODE=live`：按 owner-based `KOKORO_*_BASE_URL` 选择已接线的业务 upstream；Mori 使用 `KOKORO_MUSIC_BASE_URL`，并将 `/v1/mori/*` allowlist 映射到 Music owner 的 `/internal/bff/mori/*` ingress。Chat 只有在 `KOKORO_AGENT_ENABLED=1` 且配置 `KOKORO_AGENT_BASE_URL` 时才指向 Agent HTTP ingress。BFF-owned Project/Scheduled 使用本仓 PostgreSQL/Redis，启动前执行 `pnpm db:setup`；Skills/MCP、Library、Model、Billing、System manifest 已有明确 owner projection，未注册的写操作仍返回明确的未接线错误，不把 worker 当作 HTTP 服务，也不静默回退到 mock。
-- 出站请求统一注入 `x-kokoro-request-id`、标准 `X-Request-Id`、标准 `Forwarded`、服务 `Authorization: Bearer` 和内部上下文；通用 compatibility proxy 使用 `x-kokoro-service: kokoro-bff`，已注册 HTTP owner adapter 使用 `x-kokoro-service: web-bff`，以匹配各自 v1 owner contract。浏览器的 Authorization、`X-Domain` 和 Host 不会透传为 owner 身份。
-- Scheduled live adapter 需要 `KOKORO_SCHEDULER_BASE_URL`、`KOKORO_SCHEDULER_SERVICE_TOKEN` 和 `KOKORO_SCHEDULER_TARGET_URL`。任务变更先写 BFF 事实，再同步 Scheduler；Scheduler dispatch 回调 `/internal/bff/scheduled-tasks/dispatch`，BFF 校验服务 token 后以保存的 owner 身份向 Agent admission 发起幂等 Run。
-- Agent HTTP ingress 已在 `LordFoxFairy/kokoro-agent` 的 v1 contract 中提供；BFF 已完成 launch/control/replay/detail/session-list 的 Chat adapter。rename/delete/share 在 Agent ingress 增加前返回明确的 `503 chat_projection_not_configured`；`/readyz` 默认只检查 BFF 自身的 live business store，启用 Agent profile 时才额外要求 Agent upstream 已配置。
-
-## 检查与发布
+Live BFF-owned facts 需要共享 PostgreSQL 与 Redis DB 8：
 
 ```bash
-pnpm check
-docker build -t kokoro-bff:local .
+KOKORO_BFF_POSTGRES_URL=POSTGRES_URL pnpm db:apply-schema
+KOKORO_BFF_MODE=live \
+KOKORO_BFF_POSTGRES_URL=POSTGRES_URL \
+KOKORO_BFF_REDIS_URL=redis://127.0.0.1:6379/8 \
+pnpm dev
 ```
 
-普通 push 只运行 CI；只有 `v*.*.*` tag 才发布 `ghcr.io/<owner>/kokoro-bff:<tag>` 和 `latest`。本地开发直接 `pnpm dev`，Dockerfile 只使用生产编译产物。
+只复用一个本地 PostgreSQL 和一个 Redis，不为 BFF 重复启动基础设施。`db:apply-schema` 面向空数据库安装 canonical
+schema，不执行历史 migration。
+
+## 服务调用 envelope
+
+```http
+x-kokoro-service: web-bff
+x-kokoro-internal-secret: TOKEN
+x-kokoro-namespace: TENANT
+x-kokoro-principal-id: SUBJECT
+x-kokoro-request-id: REQUEST_ID
+```
+
+Live 必须配置 shared secret。BFF 不采用浏览器的 Host、X-Domain、X-Forwarded-*、tenant 或 Authorization 作为 owner
+身份。完整规则见 [`docs/SECURITY.md`](./docs/SECURITY.md)。
+
+## 质量门禁
+
+```bash
+pnpm lint
+pnpm typecheck
+pnpm contract:check
+pnpm test:architecture
+pnpm test
+pnpm build
+```
+
+真实基础设施：
+
+```bash
+KOKORO_BFF_POSTGRES_URL=POSTGRES_URL pnpm db:apply-schema
+KOKORO_TEST_POSTGRES_URL=POSTGRES_URL \
+KOKORO_TEST_REDIS_URL=redis://127.0.0.1:6379/8 \
+pnpm test:integration
+```
+
+缺少 fixture 时 integration 是未执行，不是通过。完整矩阵见 [`docs/ACCEPTANCE.md`](./docs/ACCEPTANCE.md)。
+
+## 文档
+
+- [Repository map](./INDEX.md)
+- [Documentation index](./docs/INDEX.md)
+- [Current implementation and gaps](./docs/CURRENT.md)
+- [Technical design](./docs/TECHNICAL_DESIGN.md)
+- [API policy](./docs/API_CONTRACT.md)
+- [Data model](./docs/DATA_MODEL.md)
+- [Security](./docs/SECURITY.md)
+- [Reliability](./docs/RELIABILITY.md)
+- [SLO targets](./docs/SLO.md)
+- [Runbook](./docs/RUNBOOK.md)
+- [Acceptance](./docs/ACCEPTANCE.md)
+- [ADR index](./docs/ADR/README.md)
+- [Resource API docs](./docs/api/README.md)
+- [Contract provenance](./contract/README.md)
+
+## 发布
+
+普通 push/PR 只执行质量检查；`v*.*.*` tag 才允许发布镜像。候选镜像、漏洞扫描、SBOM、provenance、签名、
+health/ready smoke 尚未在当前治理阶段全部闭环，不应据此 README 宣称生产就绪。

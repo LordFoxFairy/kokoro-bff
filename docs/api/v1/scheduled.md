@@ -53,6 +53,10 @@ internal command dispatch。
 - `idempotency_conflict`
 - `idempotency_in_progress`
 
+## 当前一致性限制
+
+当前 schema 没有 outbox。create/update 先写 BFF fact 再同步 Scheduler，失败时标记 task failed；delete 先删除 Scheduler job 再删除 BFF fact。启动 reconciliation 是 best-effort 恢复机制，不等同于事务型跨服务一致性。
+
 ## Live boundary
 
 live 模式在 `KOKORO_BFF_POSTGRES_URL` + `KOKORO_BFF_REDIS_URL` 配置后由 BFF 持有任务事实，并通过

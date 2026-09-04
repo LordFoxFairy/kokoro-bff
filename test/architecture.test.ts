@@ -110,3 +110,46 @@ test("BFF production code has one explicit owner boundary", async () => {
     assert.equal(source.includes("/modules/"), false, `src/${file}`)
   }
 })
+
+test("BFF governance documents distinguish implemented facts from accepted target decisions", async () => {
+  const requiredDocuments = [
+    "AGENTS.md",
+    "INDEX.md",
+    "docs/INDEX.md",
+    "docs/CURRENT.md",
+    "docs/TECHNICAL_DESIGN.md",
+    "docs/API_CONTRACT.md",
+    "docs/DATA_MODEL.md",
+    "docs/SECURITY.md",
+    "docs/RELIABILITY.md",
+    "docs/SLO.md",
+    "docs/RUNBOOK.md",
+    "docs/ACCEPTANCE.md",
+    "docs/ADR/README.md",
+    "docs/ADR/ADR-001-public-product-api-and-ag-ui.md",
+  ]
+  for (const relativePath of requiredDocuments) {
+    assert.equal(await exists(relativePath), true, relativePath)
+  }
+
+  const [readme, current, technicalDesign, apiContract, dataModel, reliability, schema] = await Promise.all([
+    readFile(path.join(root, "README.md"), "utf8"),
+    readFile(path.join(root, "docs/CURRENT.md"), "utf8"),
+    readFile(path.join(root, "docs/TECHNICAL_DESIGN.md"), "utf8"),
+    readFile(path.join(root, "docs/API_CONTRACT.md"), "utf8"),
+    readFile(path.join(root, "docs/DATA_MODEL.md"), "utf8"),
+    readFile(path.join(root, "docs/RELIABILITY.md"), "utf8"),
+    readFile(path.join(root, "database/schema.sql"), "utf8"),
+  ])
+
+  assert.match(readme, /唯一 public HTTP owner/u)
+  assert.match(current, /^## 已实现事实$/mu)
+  assert.match(current, /^## 未完成缺口$/mu)
+  assert.match(technicalDesign, /AG-UI 是 Web ↔ BFF 唯一 Agent 网络协议/u)
+  assert.match(apiContract, /contract\/openapi\/v1\/openapi\.yaml/u)
+  assert.match(dataModel, /当前 schema 没有 AG-UI ledger 表/u)
+  assert.match(dataModel, /当前 schema 没有 outbox 表/u)
+  assert.match(reliability, /当前不具备事务型 outbox/u)
+  assert.equal(schema.includes("bff_agui_event"), false)
+  assert.equal(schema.includes("bff_outbox"), false)
+})
