@@ -20,6 +20,8 @@ export type AgUiSourceProjection = {
   frames: AgUiEvent[]
 }
 
+export type AgUiSourceIdentity = Omit<AgUiSourceProjection, "frames">
+
 export type CommitAgUiProjection = {
   tenantId: string
   sessionId: string
@@ -54,6 +56,7 @@ export type AgUiProjectionStatus = {
 
 export interface AgUiProjectionRepository {
   readStream(tenantId: string, sessionId: string): Promise<AgUiStreamState>
+  assertPersistedSources(tenantId: string, sessionId: string, sources: readonly AgUiSourceIdentity[]): Promise<void>
   commitProjection(command: CommitAgUiProjection): Promise<"committed" | "version_conflict">
   replay(tenantId: string, sessionId: string, cursor: string | null, limit: number): Promise<AgUiReplayPage | AgUiInvalidCursor>
   status(tenantId: string, sessionId: string): Promise<AgUiProjectionStatus>

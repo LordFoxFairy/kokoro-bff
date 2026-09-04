@@ -114,6 +114,26 @@ integrationTest("keeps durable AG-UI replay lossless, idempotent, tenant-scoped,
     await assert.rejects(
       store.agUi.ingest("tenant_a", "session_shared", [agentSource({
         id: "agent_event_2",
+        sequence: 2,
+        kind: "message.delta",
+        payload: { segment_id: "message_1", delta: "mutated after commit" },
+      })]),
+      /AG-UI source identity conflict/u,
+    )
+
+    await assert.rejects(
+      store.agUi.ingest("tenant_a", "session_shared", [agentSource({
+        id: "agent_event_other",
+        sequence: 2,
+        kind: "message.delta",
+        payload: { segment_id: "message_1", delta: "reused sequence" },
+      })]),
+      /AG-UI source identity conflict/u,
+    )
+
+    await assert.rejects(
+      store.agUi.ingest("tenant_a", "session_shared", [agentSource({
+        id: "agent_event_2",
         sequence: 3,
         kind: "message.delta",
         payload: { segment_id: "message_1", delta: "mutated" },

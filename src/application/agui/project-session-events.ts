@@ -12,6 +12,7 @@ import type {
   AgUiProjectionStatus,
   AgUiReplayPage,
   AgUiInvalidCursor,
+  AgUiSourceIdentity,
   AgUiSourceProjection,
 } from "./ports/agui-projection-repository.js"
 
@@ -100,13 +101,23 @@ function projectSources(
   state: AgUiProjectionState,
 ): AgUiSourceProjection[] {
   return sources.map((source) => ({
+    ...sourceIdentity(source),
+    frames: source.event === null ? [] : projectChatEvent(source.event, state),
+  }))
+}
+
+function sourceIdentity(source: AgentProjectionSource): AgUiSourceIdentity {
+  return {
     sourceOwner: "kokoro-agent",
     sourceEventId: source.sourceEventId,
     sourceSequence: source.sourceSequence,
     sourceDigest: digestOf(source.sourcePayload),
     sourceOccurredAt: source.sourceOccurredAt,
-    frames: source.event === null ? [] : projectChatEvent(source.event, state),
-  }))
+  }
+}
+
+function sourceIdentities(sources: readonly AgentProjectionSource[]): AgUiSourceIdentity[] {
+  return sources.map(sourceIdentity)
 }
 
 export class AgUiProjectionService {
@@ -119,9 +130,15 @@ export class AgUiProjectionService {
   ): Promise<AgUiIngestResult> {
     if (tenantId.trim() === "" || sessionId.trim() === "") throw new Error("AG-UI tenant and session are required")
     const sources = orderedSources(incoming, sessionId)
+    const identities = sourceIdentities(sources)
 
     for (let attempt = 0; attempt < MAX_COMMIT_ATTEMPTS; attempt += 1) {
       const stream = await this.repository.readStream(tenantId, sessionId)
+      await this.repository.assertPersistedSources(
+        tenantId,
+        sessionId,
+        identities.filter((source) => source.sourceSequence <= stream.sourceHighWatermark),
+      )
       const pending = sources.filter((source) => source.sourceSequence > stream.sourceHighWatermark)
       if (pending.length === 0) {
         return { insertedSources: 0, insertedFrames: 0, sourceHighWatermark: stream.sourceHighWatermark }

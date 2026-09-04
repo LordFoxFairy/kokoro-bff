@@ -4,6 +4,7 @@ import { AgUiSourceIdentityConflictError } from "../../application/agui/errors.j
 import type {
   AgUiProjectionRepository,
   AgUiProjectionStateSnapshot,
+  AgUiSourceIdentity,
   AgUiStreamState,
   CommitAgUiProjection,
   StoredAgUiFrame,
@@ -31,6 +32,13 @@ type CursorRow = {
 type StatusRow = {
   source_high_watermark: string
   current_cursor: string | null
+}
+
+type SourceIdentityRow = {
+  source_event_id: string
+  source_sequence: string
+  source_digest: string
+  source_occurred_at: Date
 }
 
 function safeInteger(value: string | number, label: string): number {
@@ -93,6 +101,41 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
       version: safeInteger(row.version, "stream version"),
       sourceHighWatermark: safeInteger(row.source_high_watermark, "source high watermark"),
       projectionState: projectionState(row.projection_state),
+    }
+  }
+
+  public async assertPersistedSources(
+    tenantId: string,
+    sessionId: string,
+    sources: readonly AgUiSourceIdentity[],
+  ): Promise<void> {
+    if (sources.length === 0) return
+    const result = await this.database.pool.query<SourceIdentityRow>(
+      `SELECT source_event_id, source_sequence, source_digest, source_occurred_at
+         FROM bff_agui_source_event
+        WHERE tenant_id = $1
+          AND session_id = $2
+          AND source_owner = 'kokoro-agent'
+          AND (source_event_id = ANY($3::text[]) OR source_sequence = ANY($4::bigint[]))`,
+      [
+        tenantId,
+        sessionId,
+        sources.map((source) => source.sourceEventId),
+        sources.map((source) => source.sourceSequence),
+      ],
+    )
+    const byEventId = new Map(result.rows.map((row) => [row.source_event_id, row]))
+    const bySequence = new Map(result.rows.map((row) => [safeInteger(row.source_sequence, "source sequence"), row]))
+    for (const source of sources) {
+      const eventRow = byEventId.get(source.sourceEventId)
+      const sequenceRow = bySequence.get(source.sourceSequence)
+      if (
+        eventRow === undefined
+        || sequenceRow === undefined
+        || eventRow !== sequenceRow
+        || eventRow.source_digest !== source.sourceDigest
+        || eventRow.source_occurred_at.toISOString() !== new Date(source.sourceOccurredAt).toISOString()
+      ) throw new AgUiSourceIdentityConflictError()
     }
   }
 
