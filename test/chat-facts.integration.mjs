@@ -111,14 +111,19 @@ integrationTest("serves tenant-scoped Chat facts from BFF PostgreSQL and revokes
     )
     await pool.query(
       `INSERT INTO bff_message (message_id, tenant_id, conversation_id, run_id, role, content, status, message_seq)
-       VALUES ($1, $2, $3, $4, 'user', $5, 'completed', 1)`,
-      [`message_${Date.now()}`, tenant, conversationId, "run_opaque", "Persisted in BFF"],
+       VALUES ($1, $2, $3, $4, 'user', $5, 'completed', $6)`,
+      [`message_${Date.now()}`, tenant, conversationId, "run_opaque", "Persisted in BFF", "9223372036854775806"],
+    )
+    await pool.query(
+      `INSERT INTO bff_message (message_id, tenant_id, conversation_id, run_id, role, content, status, message_seq)
+       VALUES ($1, $2, $3, $4, 'assistant', $5, 'completed', $6)`,
+      [`message_${Date.now()}_second`, tenant, conversationId, "run_opaque", "Second high sequence", "9223372036854775807"],
     )
     await redis.connect()
     bff = createBffServer(config())
     const base = await listen(bff)
 
-    const listed = await fetch(`${base}/v1/sessions`, { headers: auth(tenant) })
+    const listed = await fetch(`${base}/v1/sessions`, { headers: auth(tenant, "chat_user") })
     assert.equal(listed.status, 200)
     assert.equal((await listed.json()).data.sessions[0].session_id, conversationId)
 
@@ -126,13 +131,31 @@ integrationTest("serves tenant-scoped Chat facts from BFF PostgreSQL and revokes
     assert.equal(otherRead.status, 404)
     assert.equal((await otherRead.json()).error.code, "session_not_found")
 
-    const messages = await fetch(`${base}/v1/sessions/${conversationId}/messages`, { headers: auth(tenant) })
+    const messages = await fetch(`${base}/v1/sessions/${conversationId}/messages`, { headers: auth(tenant, "chat_user") })
     assert.equal(messages.status, 200)
     assert.equal((await messages.json()).data.messages[0].content, "Persisted in BFF")
 
+    const firstMessagePage = await fetch(`${base}/v1/sessions/${conversationId}/messages?limit=1`, { headers: auth(tenant, "chat_user") })
+    const firstMessagePageBody = await firstMessagePage.json()
+    assert.equal(firstMessagePageBody.data.messages[0].content, "Persisted in BFF")
+    const secondMessagePage = await fetch(
+      `${base}/v1/sessions/${conversationId}/messages?limit=1&cursor=${encodeURIComponent(firstMessagePageBody.data.next_cursor)}`,
+      { headers: auth(tenant, "chat_user") },
+    )
+    const secondMessagePageBody = await secondMessagePage.json()
+    assert.equal(secondMessagePageBody.data.messages[0].content, "Second high sequence")
+    assert.equal(secondMessagePageBody.data.next_cursor, null)
+
+    const disabledAdmission = await fetch(`${base}/v1/sessions/${conversationId}/messages`, {
+      method: "POST",
+      headers: { ...auth(tenant, "chat_user"), "content-type": "application/json", "idempotency-key": "disabled-admission" },
+      body: JSON.stringify({ content: "Agent is disabled" }),
+    })
+    assert.equal(disabledAdmission.status, 503)
+
     const shared = await fetch(`${base}/v1/sessions/${conversationId}/share`, {
       method: "POST",
-      headers: { ...auth(tenant), "idempotency-key": "chat-share-integration" },
+      headers: { ...auth(tenant, "chat_user"), "idempotency-key": "chat-share-integration" },
     })
     assert.equal(shared.status, 200)
     const shareId = (await shared.json()).data.share_id
@@ -143,6 +166,52 @@ integrationTest("serves tenant-scoped Chat facts from BFF PostgreSQL and revokes
     assert.equal(publicShare.status, 200)
     assert.equal((await publicShare.json()).data.session.session_id, conversationId)
 
+    const otherSubject = "other_chat_user"
+    const ownerMatrix = [
+      await fetch(`${base}/v1/sessions`, { headers: auth(tenant, otherSubject) }),
+      await fetch(`${base}/v1/sessions/${conversationId}`, { headers: auth(tenant, otherSubject) }),
+      await fetch(`${base}/v1/sessions/${conversationId}/messages`, { headers: auth(tenant, otherSubject) }),
+      await fetch(`${base}/v1/sessions/${conversationId}/title`, {
+        method: "PATCH",
+        headers: { ...auth(tenant, otherSubject), "content-type": "application/json", "idempotency-key": "shared-owner-key" },
+        body: JSON.stringify({ title: "Other subject title" }),
+      }),
+      await fetch(`${base}/v1/sessions/${conversationId}`, {
+        method: "DELETE",
+        headers: { ...auth(tenant, otherSubject), "idempotency-key": "other-subject-delete" },
+      }),
+      await fetch(`${base}/v1/sessions/${conversationId}/share`, {
+        method: "POST",
+        headers: { ...auth(tenant, otherSubject), "idempotency-key": "other-subject-share" },
+      }),
+      await fetch(`${base}/v1/sessions/${conversationId}/share`, {
+        method: "DELETE",
+        headers: { ...auth(tenant, otherSubject), "idempotency-key": "other-subject-revoke" },
+      }),
+    ]
+    assert.deepEqual((await ownerMatrix[0].json()).data.sessions, [])
+    for (const response of ownerMatrix.slice(1)) assert.equal(response.status, 404)
+
+    const ownerSameKey = await fetch(`${base}/v1/sessions/${conversationId}/title`, {
+      method: "PATCH",
+      headers: { ...auth(tenant, "chat_user"), "content-type": "application/json", "idempotency-key": "shared-owner-key" },
+      body: JSON.stringify({ title: "  Owner title  " }),
+    })
+    assert.equal(ownerSameKey.status, 200)
+    const ownerSemanticReplay = await fetch(`${base}/v1/sessions/${conversationId}/title`, {
+      method: "PATCH",
+      headers: { ...auth(tenant, "chat_user"), "content-type": "application/json", "idempotency-key": "shared-owner-key" },
+      body: JSON.stringify({ title: "Owner title" }),
+    })
+    assert.equal(ownerSemanticReplay.status, 200)
+
+    const queryDrift = await fetch(`${base}/v1/sessions/${conversationId}/title?project_ref=other-project`, {
+      method: "PATCH",
+      headers: { ...auth(tenant, "chat_user"), "content-type": "application/json", "idempotency-key": "shared-owner-key" },
+      body: JSON.stringify({ title: "Owner title" }),
+    })
+    assert.equal(queryDrift.status, 409)
+
     await pool.query(
       `UPDATE bff_share
           SET created_at = CURRENT_TIMESTAMP(3) - INTERVAL '2 seconds',
@@ -152,7 +221,7 @@ integrationTest("serves tenant-scoped Chat facts from BFF PostgreSQL and revokes
     )
     const replacement = await fetch(`${base}/v1/sessions/${conversationId}/share`, {
       method: "POST",
-      headers: { ...auth(tenant), "idempotency-key": "chat-share-replacement-integration" },
+      headers: { ...auth(tenant, "chat_user"), "idempotency-key": "chat-share-replacement-integration" },
     })
     assert.equal(replacement.status, 200)
     const replacementId = (await replacement.json()).data.share_id
@@ -169,7 +238,7 @@ integrationTest("serves tenant-scoped Chat facts from BFF PostgreSQL and revokes
 
     const revoked = await fetch(`${base}/v1/sessions/${conversationId}/share`, {
       method: "DELETE",
-      headers: { ...auth(tenant), "idempotency-key": "chat-revoke-integration" },
+      headers: { ...auth(tenant, "chat_user"), "idempotency-key": "chat-revoke-integration" },
     })
     assert.equal(revoked.status, 200)
     const afterRevoke = await fetch(`${base}/v1/shared/${shareId}`, {
@@ -230,9 +299,31 @@ integrationTest("accepts a Chat turn after the message and Agent dispatch are du
     bff = createBffServer(runtimeConfig)
     const base = await listen(bff)
 
+    const invalidBodies = [
+      { content: "hello", extra: true },
+      { content: "hello", model: " " },
+      { content: "hello", pinned_skills: ["valid", 7] },
+      { content: "x".repeat(100_001) },
+    ]
+    for (const [index, invalidBody] of invalidBodies.entries()) {
+      const invalid = await fetch(`${base}/v1/sessions/${conversationId}/messages`, {
+        method: "POST",
+        headers: { ...auth(tenant, "chat_user"), "content-type": "application/json", "idempotency-key": `invalid-chat-${index}` },
+        body: JSON.stringify(invalidBody),
+      })
+      assert.equal(invalid.status, 400)
+      assert.equal((await invalid.json()).error.code, "invalid_message")
+    }
+    const oversized = await fetch(`${base}/v1/sessions/${conversationId}/messages`, {
+      method: "POST",
+      headers: { ...auth(tenant, "chat_user"), "content-type": "application/json", "idempotency-key": "oversized-chat" },
+      body: JSON.stringify({ content: "x".repeat(1024 * 1024 + 1) }),
+    })
+    assert.equal(oversized.status, 413)
+
     const submitted = await fetch(`${base}/v1/sessions/${conversationId}/messages`, {
       method: "POST",
-      headers: { ...auth(tenant, "chat_user"), "content-type": "application/json", "idempotency-key": "durable-chat-turn" },
+      headers: { ...auth(tenant, "chat_user"), "content-type": "application/json", "idempotency-key": "durable-chat-turn", "x-kokoro-request-id": "request-first" },
       body: JSON.stringify({ content: "Persist before dispatch" }),
     })
 
@@ -242,11 +333,14 @@ integrationTest("accepts a Chat turn after the message and Agent dispatch are du
 
     const replay = await fetch(`${base}/v1/sessions/${conversationId}/messages`, {
       method: "POST",
-      headers: { ...auth(tenant, "chat_user"), "content-type": "application/json", "idempotency-key": "durable-chat-turn" },
+      headers: { ...auth(tenant, "chat_user"), "content-type": "application/json", "idempotency-key": "durable-chat-turn", "x-kokoro-request-id": "request-replay" },
       body: JSON.stringify({ content: "Persist before dispatch" }),
     })
     assert.equal(replay.status, 202)
-    assert.deepEqual(await replay.json(), submittedEnvelope)
+    const replayEnvelope = await replay.json()
+    assert.deepEqual(replayEnvelope.data, submittedEnvelope.data)
+    assert.equal(submittedEnvelope.meta.request_id, "request-first")
+    assert.equal(replayEnvelope.meta.request_id, "request-replay")
 
     const conflict = await fetch(`${base}/v1/sessions/${conversationId}/messages`, {
       method: "POST",

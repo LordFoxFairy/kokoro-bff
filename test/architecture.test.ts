@@ -274,22 +274,32 @@ test("Chat admission commits messages, AG-UI lineage, and Agent delivery before 
   assert.match(schema, /ck_bff_agent_dispatch_lease/u)
 })
 
-test("BFF Chat facts keep ownership, tenant predicates, locks, and opaque cursors in the BFF boundary", async () => {
-  const [repository, route, schema] = await Promise.all([
+test("BFF Chat facts keep owner predicates and isolate public share capability reads", async () => {
+  const [repository, publicShareRepository, route, server, schema] = await Promise.all([
     readFile(path.join(root, "src/infrastructure/postgres/chat-repository.ts"), "utf8"),
+    readFile(path.join(root, "src/infrastructure/postgres/public-share-repository.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/chat.ts"), "utf8"),
+    readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
     readFile(path.join(root, "database/schema.sql"), "utf8"),
   ])
   assert.match(repository, /tenant_id = \$1/u)
+  assert.match(repository, /owner_id = \$2/u)
   assert.match(repository, /FOR UPDATE/u)
   assert.match(repository, /encodeCursor/u)
+  assert.match(repository, /ORDER BY message\.message_seq ASC, message\.message_id ASC/u)
+  assert.doesNotMatch(repository, /ORDER BY message\.created_at/u)
   assert.match(repository, /CURRENT_TIMESTAMP\(3\)/u)
   assert.equal(repository.includes("SELECT *"), false)
+  assert.match(publicShareRepository, /Public share capability reads/u)
+  assert.doesNotMatch(publicShareRepository, /subjectId/u)
   assert.equal(/FOREIGN KEY|REFERENCES/iu.test(schema), false)
   assert.match(route, /services\.chat/u)
+  assert.match(route, /subjectId/u)
   assert.match(route, /services\.chatTurns\.submit/u)
   assert.doesNotMatch(route, /callAgent/u)
   assert.doesNotMatch(route, /Agent.*messages.*GET/u)
+  assert.match(server, /services\.publicShares/u)
+  assert.doesNotMatch(server, /services\.chat\.findActiveShare/u)
   assert.match(schema, /bff_conversation/u)
   assert.match(schema, /bff_message/u)
   assert.match(schema, /bff_share/u)

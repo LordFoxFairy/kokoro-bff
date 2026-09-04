@@ -14,6 +14,8 @@ const ERROR_RESPONSE_COMPONENTS = new Set([
   "ServiceAuthFailed",
   "NotFound",
   "Conflict",
+  "Gone",
+  "PayloadTooLarge",
   "BadGateway",
   "ServiceUnavailable",
 ])

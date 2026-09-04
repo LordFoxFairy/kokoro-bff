@@ -9,13 +9,13 @@ export class ChatApplicationService {
     this.repository = repository
   }
 
-  public async listConversations(tenantId: string, projectRef: string | undefined, limit: number, cursor: string | null): Promise<{ sessions: ChatSessionSummary[]; next_cursor: string | null }> {
-    const page = await this.repository.listConversations(tenantId, projectRef, limit, cursor)
+  public async listConversations(tenantId: string, subjectId: string, projectRef: string | undefined, limit: number, cursor: string | null): Promise<{ sessions: ChatSessionSummary[]; next_cursor: string | null }> {
+    const page = await this.repository.listConversations(tenantId, subjectId, projectRef, limit, cursor)
     return { sessions: page.conversations.map(conversationSummary), next_cursor: page.next_cursor }
   }
 
-  public async findConversation(tenantId: string, conversationId: string, projectRef: string | undefined): Promise<ChatSessionDetail["session"] | null> {
-    const conversation = await this.repository.findConversation(tenantId, conversationId, projectRef)
+  public async findConversation(tenantId: string, subjectId: string, conversationId: string, projectRef: string | undefined): Promise<ChatSessionDetail["session"] | null> {
+    const conversation = await this.repository.findConversation(tenantId, subjectId, conversationId, projectRef)
     if (conversation === null) return null
     return {
       session_id: conversation.conversationId,
@@ -26,28 +26,24 @@ export class ChatApplicationService {
     }
   }
 
-  public async listMessages(tenantId: string, conversationId: string, limit: number, cursor: string | null, projectRef?: string): Promise<{ messages: ChatMessage[]; next_cursor: string | null } | null> {
-    const page = await this.repository.listMessages(tenantId, conversationId, limit, cursor, projectRef)
+  public async listMessages(tenantId: string, subjectId: string, conversationId: string, limit: number, cursor: string | null, projectRef?: string): Promise<{ messages: ChatMessage[]; next_cursor: string | null } | null> {
+    const page = await this.repository.listMessages(tenantId, subjectId, conversationId, limit, cursor, projectRef)
     return page === null ? null : { messages: page.messages.map(chatMessage), next_cursor: page.next_cursor }
   }
 
-  public renameConversation(tenantId: string, conversationId: string, title: string, projectRef?: string): ReturnType<ChatRepository["renameConversation"]> {
-    return this.repository.renameConversation(tenantId, conversationId, title, projectRef)
+  public renameConversation(tenantId: string, subjectId: string, conversationId: string, title: string, projectRef?: string): ReturnType<ChatRepository["renameConversation"]> {
+    return this.repository.renameConversation(tenantId, subjectId, conversationId, title, projectRef)
   }
 
-  public deleteConversation(tenantId: string, conversationId: string, projectRef?: string): ReturnType<ChatRepository["deleteConversation"]> {
-    return this.repository.deleteConversation(tenantId, conversationId, projectRef)
+  public deleteConversation(tenantId: string, subjectId: string, conversationId: string, projectRef?: string): ReturnType<ChatRepository["deleteConversation"]> {
+    return this.repository.deleteConversation(tenantId, subjectId, conversationId, projectRef)
   }
 
-  public createShare(tenantId: string, conversationId: string, projectRef?: string): ReturnType<ChatRepository["createShare"]> {
-    return this.repository.createShare(tenantId, conversationId, projectRef)
+  public createShare(tenantId: string, subjectId: string, conversationId: string, projectRef?: string): ReturnType<ChatRepository["createShare"]> {
+    return this.repository.createShare(tenantId, subjectId, conversationId, projectRef)
   }
 
-  public revokeShare(tenantId: string, conversationId: string, projectRef?: string): ReturnType<ChatRepository["revokeShare"]> {
-    return this.repository.revokeShare(tenantId, conversationId, projectRef)
-  }
-
-  public findActiveShare(shareId: string, tenantId?: string, projectRef?: string): ReturnType<ChatRepository["findActiveShare"]> {
-    return this.repository.findActiveShare(shareId, tenantId, projectRef)
+  public revokeShare(tenantId: string, subjectId: string, conversationId: string, projectRef?: string): ReturnType<ChatRepository["revokeShare"]> {
+    return this.repository.revokeShare(tenantId, subjectId, conversationId, projectRef)
   }
 }

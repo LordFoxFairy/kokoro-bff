@@ -3,7 +3,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { loadConfig, type BffConfig } from "../config/runtime.js"
 import { failure, ok } from "../contracts/index.js"
 import { mutationTicket, type MutationTicket } from "../application/idempotency.js"
-import { fingerprintBody, authorize, authorizeServerOnly, idempotencyKey, isMutation, pathOf, queryOf, readBody, requestBodyJson, requestId, requiresIdempotency } from "../http/request.js"
+import { mutationFingerprint, authorize, authorizeServerOnly, idempotencyKey, isMutation, pathOf, queryOf, readBody, requestBodyJson, requestId, requiresIdempotency } from "../http/request.js"
 import { reply, send } from "../http/response.js"
 import { normalizeUpstreamResponse } from "../infrastructure/clients/upstream-response.js"
 import { proxyUpstream } from "../upstream.js"
@@ -42,13 +42,18 @@ async function handle(
     }
     const scope = queryOf(request).get("scope")?.trim() || undefined
     const projectRef = queryOf(request).get("project_ref")?.trim() || undefined
-    if (composition.businessStore?.services.chat !== undefined) {
-      const shared = await composition.businessStore.services.chat.findActiveShare(segments[2] || "", scope, projectRef)
+    if (composition.businessStore?.services.publicShares !== undefined) {
+      const shared = await composition.businessStore.services.publicShares.findActiveShare(segments[2] || "", scope, projectRef)
       if (shared === null) {
         send(response, 404, failure("share_not_found", "Share was not found", id))
         return
       }
-      const messages = await composition.businessStore.services.chat.listMessages(shared.conversation.tenantId, shared.conversation.conversationId, 100, null)
+      const messages = await composition.businessStore.services.publicShares.listMessages(
+        shared.share.shareId,
+        shared.conversation.tenantId,
+        shared.conversation.conversationId,
+        100,
+      )
       send(response, 200, ok({
         session: {
           session_id: shared.conversation.conversationId,
@@ -139,9 +144,31 @@ async function handle(
       return
     }
   }
-  if (mutationRequired) {
+  if (isMutation(method)) {
+    const parsed = requestBodyJson(request, body ?? Buffer.alloc(0))
+    if (parsed === null) {
+      send(response, 400, failure("invalid_json", "Request body must be a JSON object", id))
+      return
+    }
+    json = parsed
+  }
+  const durableChatAdmission = composition.routeHandler === undefined
+    && composition.businessStore !== null
+    && method === "POST"
+    && businessPath.length === 3
+    && businessPath[0] === "sessions"
+    && businessPath[2] === "messages"
+  if (mutationRequired && !durableChatAdmission) {
     const route = `/${businessPath.join("/")}`
-    const result = await mutationTicket(keyValue, method, route, context, fingerprintBody(request, body ?? Buffer.alloc(0)), composition.idempotency, composition.businessStore ?? undefined)
+    const result = await mutationTicket(
+      keyValue,
+      method,
+      route,
+      context,
+      mutationFingerprint(request, businessPath, json, body ?? Buffer.alloc(0)),
+      composition.idempotency,
+      composition.businessStore ?? undefined,
+    )
     if (result.replay !== null) {
       send(response, result.replay.status, result.replay.body)
       return
@@ -156,15 +183,6 @@ async function handle(
     }
     mutation = result.ticket
   }
-  if (isMutation(method)) {
-    const parsed = requestBodyJson(request, body ?? Buffer.alloc(0))
-    if (parsed === null) {
-      reply(response, 400, failure("invalid_json", "Request body must be a JSON object", id), context, composition.idempotency, mutation)
-      return
-    }
-    json = parsed
-  }
-
   if (composition.routeHandler !== undefined) {
     const input: BffRouteInput = { request, response, businessPath, context, body, json, mutation, idempotency: composition.idempotency }
     const handled = await composition.routeHandler(input)

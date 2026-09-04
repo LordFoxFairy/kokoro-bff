@@ -3,6 +3,7 @@ import { PostgresIdempotencyRepository } from "./idempotency-repository.js"
 import { PostgresProjectRepository } from "./project-repository.js"
 import { PostgresScheduledTaskRepository } from "./scheduled-task-repository.js"
 import { PostgresChatRepository } from "./chat-repository.js"
+import { PostgresPublicShareRepository } from "./public-share-repository.js"
 import { PostgresAgentDispatchOutboxRepository } from "./agent-dispatch-outbox-repository.js"
 import { PENDING_RECEIPT_STATUS, type PersistentReceipt, type ReceiptClaim } from "../../application/ports/idempotency-repository.js"
 import type { IdempotencyRepository } from "../../application/ports/idempotency-repository.js"
@@ -38,6 +39,7 @@ export class PostgresBffRepositories {
     this.projects = new PostgresProjectRepository(this.database)
     const scheduled = new PostgresScheduledTaskRepository(this.database)
     const chat = new PostgresChatRepository(this.database)
+    const publicShares = new PostgresPublicShareRepository(this.database)
     const agentDispatchOutbox = new PostgresAgentDispatchOutboxRepository(this.database)
     this.scheduled = scheduled
     this.scheduledTaskOutbox = scheduled
@@ -46,6 +48,7 @@ export class PostgresBffRepositories {
       this.projects,
       this.scheduled,
       chat,
+      publicShares,
       agentDispatchOutbox,
       new Sha256StableIdGenerator(),
     )

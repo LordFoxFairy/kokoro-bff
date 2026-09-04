@@ -142,11 +142,11 @@ CREATE TABLE IF NOT EXISTS bff_conversation (
   CONSTRAINT ck_bff_conversation_title CHECK (length(btrim(title)) BETWEEN 1 AND 200),
   CONSTRAINT ck_bff_conversation_deleted CHECK ((status = 'deleted' AND deleted_at IS NOT NULL) OR (status = 'active' AND deleted_at IS NULL))
 );
-CREATE INDEX IF NOT EXISTS ix_bff_conversation_tenant_updated
-  ON bff_conversation (tenant_id, updated_at DESC, conversation_id ASC)
+CREATE INDEX IF NOT EXISTS ix_bff_conversation_owner_updated
+  ON bff_conversation (tenant_id, owner_id, updated_at DESC, conversation_id ASC)
   WHERE status = 'active';
-CREATE INDEX IF NOT EXISTS ix_bff_conversation_tenant_project_updated
-  ON bff_conversation (tenant_id, project_ref, updated_at DESC, conversation_id ASC)
+CREATE INDEX IF NOT EXISTS ix_bff_conversation_owner_project_updated
+  ON bff_conversation (tenant_id, owner_id, project_ref, updated_at DESC, conversation_id ASC)
   WHERE status = 'active';
 
 CREATE TABLE IF NOT EXISTS bff_message (
@@ -164,8 +164,8 @@ CREATE TABLE IF NOT EXISTS bff_message (
   CONSTRAINT ck_bff_message_identity CHECK (length(btrim(tenant_id)) > 0 AND length(btrim(conversation_id)) > 0),
   CONSTRAINT ck_bff_message_sequence CHECK (message_seq >= 1)
 );
-CREATE INDEX IF NOT EXISTS ix_bff_message_tenant_conversation_created
-  ON bff_message (tenant_id, conversation_id, created_at ASC, message_seq ASC, message_id ASC);
+CREATE INDEX IF NOT EXISTS ix_bff_message_tenant_conversation_sequence
+  ON bff_message (tenant_id, conversation_id, message_seq ASC, message_id ASC);
 
 -- Transactional Chat -> Agent command queue. A user message, its provisional
 -- assistant message, expected AG-UI run fence, and this row commit together.

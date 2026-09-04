@@ -7,7 +7,7 @@ export type IdempotencyEntry = { fingerprint: string; receipt: IdempotencyReceip
 export type MutationTicket = { scope: string; fingerprint: string; persistent?: IdempotencyRepository }
 
 function mutationScope(context: RequestContext, method: string, path: string, key: string): string {
-  return `${context.identity.namespace}:${method}:${path}:${key}`
+  return JSON.stringify([context.identity.namespace, context.identity.userId, method, path, key])
 }
 
 export async function mutationTicket(

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 import type { IncomingMessage } from "node:http"
 
 import type { BffConfig } from "../config/runtime.js"
+import { parseMessageCreateRequest } from "../application/chat/message-create-input.js"
 import { isRecord } from "../domain/json.js"
 import type { RequestContext } from "../domain/request-context.js"
 
@@ -79,6 +80,67 @@ export function fingerprintBody(request: IncomingMessage, body: Buffer): string 
     }
   }
   return `raw:${body.toString("base64")}`
+}
+
+function canonicalContentType(request: IncomingMessage): string {
+  return requestContentType(request).split(";", 1)[0]?.trim() ?? ""
+}
+
+function canonicalQuery(request: IncomingMessage): Array<[string, string]> {
+  return [...queryOf(request).entries()]
+    .map(([name, value]): [string, string] => [name, value.trim()])
+    .sort(([leftName, leftValue], [rightName, rightValue]) => (
+      leftName.localeCompare(rightName) || leftValue.localeCompare(rightValue)
+    ))
+}
+
+function canonicalJsonBody(
+  request: IncomingMessage,
+  businessPath: readonly string[],
+  json: Readonly<Record<string, unknown>>,
+): unknown {
+  if (
+    request.method === "POST"
+    && businessPath.length === 3
+    && businessPath[0] === "sessions"
+    && businessPath[2] === "messages"
+  ) {
+    return parseMessageCreateRequest(
+      Object.fromEntries(Object.entries(json)),
+      queryOf(request).get("project_ref") ?? undefined,
+    ) ?? json
+  }
+  if (
+    request.method === "PATCH"
+    && businessPath.length === 3
+    && businessPath[0] === "sessions"
+    && businessPath[2] === "title"
+    && typeof json.title === "string"
+  ) return { ...json, title: json.title.trim() }
+  return json
+}
+
+/** Canonical route semantics used by the outer idempotency receipt. */
+export function mutationFingerprint(
+  request: IncomingMessage,
+  businessPath: readonly string[],
+  json: Readonly<Record<string, unknown>>,
+  body: Buffer,
+): string {
+  const contentType = canonicalContentType(request)
+  const semanticBody = contentType === "application/json" || contentType.endsWith("+json")
+    ? canonicalJsonBody(request, businessPath, json)
+    : fingerprintBody(request, body)
+  return stableStringify({
+    method: request.method ?? "GET",
+    path: businessPath,
+    query: canonicalQuery(request),
+    headers: {
+      content_type: contentType,
+      if_match: headerString(request.headers["if-match"]).trim() || null,
+    },
+    body: semanticBody,
+  })
 }
 
 export function idempotencyKey(request: IncomingMessage): string | null {

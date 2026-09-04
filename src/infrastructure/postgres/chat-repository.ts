@@ -10,14 +10,12 @@ import {
   decodeCursor,
   encodeCursor,
   instant,
-  messageColumns,
   messageFromRow,
   shareColumns,
   shareFromRow,
   type ConversationRow,
   type MessageRow,
   type ShareRow,
-  type SharedRow,
 } from "./chat-repository-mappers.js"
 
 export class PostgresChatRepository implements ChatRepository {
@@ -27,18 +25,20 @@ export class PostgresChatRepository implements ChatRepository {
     this.database = database
   }
 
-  public async listConversations(tenantId: string, projectRef: string | undefined, limit: number, cursor: string | null): Promise<ConversationPage> {
+  public async listConversations(tenantId: string, subjectId: string, projectRef: string | undefined, limit: number, cursor: string | null): Promise<ConversationPage> {
     const position = decodeCursor(cursor, "conv")
+    if (position !== null && !("timestamp" in position)) throw new Error("CHAT_CURSOR_INVALID")
     const result = await this.database.pool.query<ConversationRow>(
       `SELECT ${conversationColumns}
          FROM bff_conversation
         WHERE tenant_id = $1
+          AND owner_id = $2
           AND status = 'active'
-          AND ($2::text IS NULL OR project_ref = $2)
-          AND ($3::timestamptz IS NULL OR (updated_at, conversation_id) < ($3, $4))
+          AND ($3::text IS NULL OR project_ref = $3)
+          AND ($4::timestamptz IS NULL OR (updated_at, conversation_id) < ($4, $5))
         ORDER BY updated_at DESC, conversation_id ASC
-        LIMIT $5`,
-      [tenantId, projectRef ?? null, position?.timestamp ?? null, position?.id ?? null, limit + 1],
+        LIMIT $6`,
+      [tenantId, subjectId, projectRef ?? null, position?.timestamp ?? null, position?.id ?? null, limit + 1],
     )
     const rows = result.rows.slice(0, limit)
     const last = rows.length === limit ? rows.at(-1) : undefined
@@ -48,67 +48,77 @@ export class PostgresChatRepository implements ChatRepository {
     }
   }
 
-  public async findConversation(tenantId: string, conversationId: string, projectRef: string | undefined): Promise<Conversation | null> {
+  public async findConversation(tenantId: string, subjectId: string, conversationId: string, projectRef: string | undefined): Promise<Conversation | null> {
     const result = await this.database.pool.query<ConversationRow>(
       `SELECT ${conversationColumns}
          FROM bff_conversation
-        WHERE tenant_id = $1 AND conversation_id = $2 AND status = 'active'
-          AND ($3::text IS NULL OR project_ref = $3)
+        WHERE tenant_id = $1 AND owner_id = $2 AND conversation_id = $3 AND status = 'active'
+          AND ($4::text IS NULL OR project_ref = $4)
         LIMIT 1`,
-      [tenantId, conversationId, projectRef ?? null],
+      [tenantId, subjectId, conversationId, projectRef ?? null],
     )
     const row = result.rows[0]
     return row === undefined ? null : conversationFromRow(row)
   }
 
-  public async listMessages(tenantId: string, conversationId: string, limit: number, cursor: string | null, projectRef?: string): Promise<MessagePage | null> {
+  public async listMessages(tenantId: string, subjectId: string, conversationId: string, limit: number, cursor: string | null, projectRef?: string): Promise<MessagePage | null> {
     const position = decodeCursor(cursor, "msg")
-    if (position !== null && position.sequence === undefined) throw new Error("CHAT_CURSOR_INVALID")
+    if (position !== null && !("sequence" in position)) throw new Error("CHAT_CURSOR_INVALID")
     const exists = await this.database.pool.query<{ conversation_id: string }>(
       `SELECT conversation_id FROM bff_conversation
-        WHERE tenant_id = $1 AND conversation_id = $2 AND status = 'active'
-          AND ($3::text IS NULL OR project_ref = $3) LIMIT 1`,
-      [tenantId, conversationId, projectRef ?? null],
+        WHERE tenant_id = $1 AND owner_id = $2 AND conversation_id = $3 AND status = 'active'
+          AND ($4::text IS NULL OR project_ref = $4) LIMIT 1`,
+      [tenantId, subjectId, conversationId, projectRef ?? null],
     )
     if (exists.rows[0] === undefined) return null
     const result = await this.database.pool.query<MessageRow>(
-      `SELECT ${messageColumns}
-         FROM bff_message
-        WHERE tenant_id = $1 AND conversation_id = $2
-          AND ($3::timestamptz IS NULL OR (created_at, message_seq, message_id) > ($3, $4, $5))
-        ORDER BY created_at ASC, message_seq ASC, message_id ASC
-        LIMIT $6`,
-      [tenantId, conversationId, position?.timestamp ?? null, position?.sequence ?? null, position?.id ?? null, limit + 1],
+      `SELECT message.message_id, message.tenant_id, message.conversation_id, message.run_id,
+              message.role, message.content, message.status, message.message_seq,
+              message.created_at, message.updated_at
+         FROM bff_message AS message
+        WHERE message.tenant_id = $1 AND message.conversation_id = $3
+          AND EXISTS (
+            SELECT 1 FROM bff_conversation AS conversation
+             WHERE conversation.tenant_id = message.tenant_id
+               AND conversation.conversation_id = message.conversation_id
+               AND conversation.owner_id = $2
+               AND conversation.status = 'active'
+               AND ($4::text IS NULL OR conversation.project_ref = $4)
+          )
+          AND ($5::bigint IS NULL OR (message.message_seq, message.message_id) > ($5, $6))
+        ORDER BY message.message_seq ASC, message.message_id ASC
+        LIMIT $7`,
+      [tenantId, subjectId, conversationId, projectRef ?? null, position?.sequence ?? null, position?.id ?? null, limit + 1],
     )
     const rows = result.rows.slice(0, limit)
     const last = rows.length === limit ? rows.at(-1) : undefined
     return {
       messages: rows.map(messageFromRow),
-      next_cursor: last === undefined ? null : encodeCursor({ timestamp: instant(last.created_at).toISOString(), id: last.message_id, sequence: Number(last.message_seq) }, "msg"),
+      next_cursor: last === undefined ? null : encodeCursor({ sequence: String(last.message_seq), id: last.message_id }, "msg"),
     }
   }
 
-  public async renameConversation(tenantId: string, conversationId: string, title: string, projectRef?: string): Promise<Conversation | null> {
+  public async renameConversation(tenantId: string, subjectId: string, conversationId: string, title: string, projectRef?: string): Promise<Conversation | null> {
     const result = await this.database.pool.query<ConversationRow>(
-      `UPDATE bff_conversation SET title = $3, updated_at = CURRENT_TIMESTAMP(3)
-        WHERE tenant_id = $1 AND conversation_id = $2 AND status = 'active'
-          AND ($4::text IS NULL OR project_ref = $4)
+      `UPDATE bff_conversation SET title = $4, updated_at = CURRENT_TIMESTAMP(3)
+        WHERE tenant_id = $1 AND owner_id = $2 AND conversation_id = $3 AND status = 'active'
+          AND ($5::text IS NULL OR project_ref = $5)
         RETURNING ${conversationColumns}`,
-      [tenantId, conversationId, title, projectRef ?? null],
+      [tenantId, subjectId, conversationId, title, projectRef ?? null],
     )
     const row = result.rows[0]
     return row === undefined ? null : conversationFromRow(row)
   }
 
-  public async deleteConversation(tenantId: string, conversationId: string, projectRef?: string): Promise<boolean> {
+  public async deleteConversation(tenantId: string, subjectId: string, conversationId: string, projectRef?: string): Promise<boolean> {
     const client = await this.database.pool.connect()
     try {
       await client.query("BEGIN")
       const result = await client.query<{ conversation_id: string }>(
         `UPDATE bff_conversation SET status = 'deleted', deleted_at = CURRENT_TIMESTAMP(3), updated_at = CURRENT_TIMESTAMP(3)
-          WHERE tenant_id = $1 AND conversation_id = $2 AND status = 'active'
-            AND ($3::text IS NULL OR project_ref = $3) RETURNING conversation_id`,
-        [tenantId, conversationId, projectRef ?? null],
+          WHERE tenant_id = $1 AND owner_id = $2 AND conversation_id = $3 AND status = 'active'
+            AND ($4::text IS NULL OR project_ref = $4) RETURNING conversation_id`,
+        [tenantId, subjectId, conversationId, projectRef ?? null],
       )
       if (result.rows[0] === undefined) {
         await client.query("ROLLBACK")
@@ -116,8 +126,14 @@ export class PostgresChatRepository implements ChatRepository {
       }
       await client.query(
         `UPDATE bff_share SET revoked_at = CURRENT_TIMESTAMP(3)
-          WHERE tenant_id = $1 AND conversation_id = $2 AND revoked_at IS NULL`,
-        [tenantId, conversationId],
+          WHERE tenant_id = $1 AND conversation_id = $3 AND revoked_at IS NULL
+            AND EXISTS (
+              SELECT 1 FROM bff_conversation AS conversation
+               WHERE conversation.tenant_id = bff_share.tenant_id
+                 AND conversation.conversation_id = bff_share.conversation_id
+                 AND conversation.owner_id = $2
+            )`,
+        [tenantId, subjectId, conversationId],
       )
       await client.query(
         `UPDATE bff_agui_stream
@@ -129,8 +145,8 @@ export class PostgresChatRepository implements ChatRepository {
                 consumer_last_error_code = 'conversation_deleted',
                 consumer_last_error_at = CURRENT_TIMESTAMP(3),
                 updated_at = CURRENT_TIMESTAMP(3)
-          WHERE tenant_id = $1 AND session_id = $2`,
-        [tenantId, conversationId],
+          WHERE tenant_id = $1 AND session_id = $3 AND consumer_subject_id = $2`,
+        [tenantId, subjectId, conversationId],
       )
       await client.query(
         `UPDATE bff_agent_dispatch_outbox
@@ -138,16 +154,22 @@ export class PostgresChatRepository implements ChatRepository {
                 last_error_code = 'conversation_deleted', last_error_at = CURRENT_TIMESTAMP(3),
                 lease_owner = NULL, lease_token = NULL, lease_until = NULL,
                 fence = fence + 1, updated_at = CURRENT_TIMESTAMP(3)
-          WHERE tenant_id = $1 AND conversation_id = $2
+          WHERE tenant_id = $1 AND subject_id = $2 AND conversation_id = $3
             AND status IN ('pending', 'retryable', 'leased')`,
-        [tenantId, conversationId],
+        [tenantId, subjectId, conversationId],
       )
       await client.query(
         `UPDATE bff_message
             SET status = 'failed', updated_at = CURRENT_TIMESTAMP(3)
-          WHERE tenant_id = $1 AND conversation_id = $2
-            AND role = 'assistant' AND status IN ('pending', 'streaming')`,
-        [tenantId, conversationId],
+          WHERE tenant_id = $1 AND conversation_id = $3
+            AND role = 'assistant' AND status IN ('pending', 'streaming')
+            AND EXISTS (
+              SELECT 1 FROM bff_conversation AS conversation
+               WHERE conversation.tenant_id = bff_message.tenant_id
+                 AND conversation.conversation_id = bff_message.conversation_id
+                 AND conversation.owner_id = $2
+            )`,
+        [tenantId, subjectId, conversationId],
       )
       await client.query("COMMIT")
       return true
@@ -159,15 +181,15 @@ export class PostgresChatRepository implements ChatRepository {
     }
   }
 
-  public async createShare(tenantId: string, conversationId: string, projectRef?: string): Promise<Share | null> {
+  public async createShare(tenantId: string, subjectId: string, conversationId: string, projectRef?: string): Promise<Share | null> {
     const client = await this.database.pool.connect()
     try {
       await client.query("BEGIN")
       const conversation = await client.query<{ conversation_id: string }>(
         `SELECT conversation_id FROM bff_conversation
-          WHERE tenant_id = $1 AND conversation_id = $2 AND status = 'active'
-            AND ($3::text IS NULL OR project_ref = $3) FOR UPDATE`,
-        [tenantId, conversationId, projectRef ?? null],
+          WHERE tenant_id = $1 AND owner_id = $2 AND conversation_id = $3 AND status = 'active'
+            AND ($4::text IS NULL OR project_ref = $4) FOR UPDATE`,
+        [tenantId, subjectId, conversationId, projectRef ?? null],
       )
       if (conversation.rows[0] === undefined) {
         await client.query("ROLLBACK")
@@ -175,10 +197,16 @@ export class PostgresChatRepository implements ChatRepository {
       }
       const existing = await client.query<ShareRow>(
         `SELECT ${shareColumns} FROM bff_share
-          WHERE tenant_id = $1 AND conversation_id = $2 AND revoked_at IS NULL
+          WHERE tenant_id = $1 AND conversation_id = $3 AND revoked_at IS NULL
+            AND EXISTS (
+              SELECT 1 FROM bff_conversation AS conversation
+               WHERE conversation.tenant_id = bff_share.tenant_id
+                 AND conversation.conversation_id = bff_share.conversation_id
+                 AND conversation.owner_id = $2
+            )
             AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP(3))
           LIMIT 1`,
-        [tenantId, conversationId],
+        [tenantId, subjectId, conversationId],
       )
       if (existing.rows[0] !== undefined) {
         await client.query("COMMIT")
@@ -189,9 +217,15 @@ export class PostgresChatRepository implements ChatRepository {
       // unique index is checked for the replacement share.
       await client.query(
         `UPDATE bff_share SET revoked_at = CURRENT_TIMESTAMP(3)
-          WHERE tenant_id = $1 AND conversation_id = $2 AND revoked_at IS NULL
+          WHERE tenant_id = $1 AND conversation_id = $3 AND revoked_at IS NULL
+            AND EXISTS (
+              SELECT 1 FROM bff_conversation AS conversation
+               WHERE conversation.tenant_id = bff_share.tenant_id
+                 AND conversation.conversation_id = bff_share.conversation_id
+                 AND conversation.owner_id = $2
+            )
             AND expires_at IS NOT NULL AND expires_at <= CURRENT_TIMESTAMP(3)`,
-        [tenantId, conversationId],
+        [tenantId, subjectId, conversationId],
       )
       const shareId = `shr_${randomUUID().replaceAll("-", "")}`
       const inserted = await client.query<ShareRow>(
@@ -211,60 +245,24 @@ export class PostgresChatRepository implements ChatRepository {
     }
   }
 
-  public async revokeShare(tenantId: string, conversationId: string, projectRef?: string): Promise<Share | null> {
+  public async revokeShare(tenantId: string, subjectId: string, conversationId: string, projectRef?: string): Promise<Share | null> {
     const result = await this.database.pool.query<ShareRow>(
       `UPDATE bff_share SET revoked_at = CURRENT_TIMESTAMP(3)
-        WHERE tenant_id = $1 AND conversation_id = $2 AND revoked_at IS NULL
-          AND ($3::text IS NULL OR EXISTS (
-            SELECT 1 FROM bff_conversation c
-             WHERE c.tenant_id = bff_share.tenant_id AND c.conversation_id = bff_share.conversation_id
-               AND c.project_ref = $3 AND c.status = 'active'
-          ))
+        WHERE tenant_id = $1 AND conversation_id = $3 AND revoked_at IS NULL
+          AND EXISTS (
+            SELECT 1 FROM bff_conversation AS conversation
+             WHERE conversation.tenant_id = bff_share.tenant_id
+               AND conversation.conversation_id = bff_share.conversation_id
+               AND conversation.owner_id = $2
+               AND conversation.status = 'active'
+               AND ($4::text IS NULL OR conversation.project_ref = $4)
+          )
           AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP(3))
         RETURNING ${shareColumns}`,
-      [tenantId, conversationId, projectRef ?? null],
+      [tenantId, subjectId, conversationId, projectRef ?? null],
     )
     const row = result.rows[0]
     return row === undefined ? null : shareFromRow(row)
   }
 
-  public async findActiveShare(shareId: string, tenantId?: string, projectRef?: string): Promise<{ share: Share; conversation: Conversation } | null> {
-    const result = await this.database.pool.query<SharedRow>(
-      `SELECT s.share_id, s.tenant_id AS share_tenant_id, s.conversation_id AS share_conversation_id, s.url,
-              s.created_at AS share_created_at, s.expires_at, s.revoked_at,
-              c.conversation_id, c.tenant_id, c.owner_id, c.project_ref, c.title, c.status,
-              c.created_at AS conversation_created_at, c.updated_at, c.deleted_at
-         FROM bff_share s
-         JOIN bff_conversation c ON c.tenant_id = s.tenant_id AND c.conversation_id = s.conversation_id
-        WHERE s.share_id = $1 AND s.tenant_id = COALESCE($2::text, s.tenant_id)
-          AND ($3::text IS NULL OR c.project_ref = $3)
-          AND s.revoked_at IS NULL AND (s.expires_at IS NULL OR s.expires_at > CURRENT_TIMESTAMP(3))
-          AND c.status = 'active'
-        LIMIT 1`,
-      [shareId, tenantId ?? null, projectRef ?? null],
-    )
-    const row = result.rows[0]
-    return row === undefined ? null : {
-      share: shareFromRow({
-        share_id: row.share_id,
-        tenant_id: row.share_tenant_id,
-        conversation_id: row.share_conversation_id,
-        url: row.url,
-        created_at: row.share_created_at,
-        expires_at: row.expires_at,
-        revoked_at: row.revoked_at,
-      }),
-      conversation: conversationFromRow({
-        conversation_id: row.conversation_id,
-        tenant_id: row.tenant_id,
-        owner_id: row.owner_id,
-        project_ref: row.project_ref,
-        title: row.title,
-        status: row.status,
-        created_at: row.conversation_created_at,
-        updated_at: row.updated_at,
-        deleted_at: row.deleted_at,
-      }),
-    }
-  }
 }

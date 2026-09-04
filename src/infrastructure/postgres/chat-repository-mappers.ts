@@ -56,7 +56,7 @@ export type SharedRow = {
   deleted_at: Date | string | null
 }
 
-export type CursorPosition = { timestamp: string; id: string; sequence?: number }
+export type CursorPosition = { timestamp: string; id: string } | { sequence: string; id: string }
 
 export function instant(value: Date | string): Date {
   const date = value instanceof Date ? value : new Date(value)
@@ -73,13 +73,19 @@ export function decodeCursor(value: string | null, prefix: "conv" | "msg"): Curs
   if (!value.startsWith(`${prefix}_`)) throw new Error("CHAT_CURSOR_INVALID")
   try {
     const parsed: unknown = JSON.parse(Buffer.from(value.slice(prefix.length + 1), "base64url").toString("utf8"))
-    if (typeof parsed !== "object" || parsed === null || !("timestamp" in parsed) || !("id" in parsed)) throw new Error("invalid")
-    const timestamp = parsed.timestamp
+    if (typeof parsed !== "object" || parsed === null || !("id" in parsed)) throw new Error("invalid")
     const id = parsed.id
-    const sequence = "sequence" in parsed ? parsed.sequence : undefined
-    if (typeof timestamp !== "string" || typeof id !== "string" || id === "" || !Number.isFinite(Date.parse(timestamp))) throw new Error("invalid")
-    if (sequence !== undefined && (typeof sequence !== "number" || !Number.isSafeInteger(sequence) || sequence < 1)) throw new Error("invalid")
-    return { timestamp: new Date(timestamp).toISOString(), id, ...(sequence === undefined ? {} : { sequence }) }
+    if (typeof id !== "string" || id === "") throw new Error("invalid")
+    if (prefix === "conv") {
+      if (!("timestamp" in parsed) || typeof parsed.timestamp !== "string" || !Number.isFinite(Date.parse(parsed.timestamp))) {
+        throw new Error("invalid")
+      }
+      return { timestamp: new Date(parsed.timestamp).toISOString(), id }
+    }
+    if (!("sequence" in parsed) || typeof parsed.sequence !== "string" || !/^[1-9][0-9]*$/u.test(parsed.sequence)) {
+      throw new Error("invalid")
+    }
+    return { sequence: parsed.sequence, id }
   } catch {
     throw new Error("CHAT_CURSOR_INVALID")
   }
@@ -100,8 +106,8 @@ export function conversationFromRow(row: ConversationRow): Conversation {
 }
 
 export function messageFromRow(row: MessageRow): Message {
-  const sequence = typeof row.message_seq === "number" ? row.message_seq : Number(row.message_seq)
-  if (!Number.isSafeInteger(sequence) || sequence < 1) throw new Error("CHAT_MESSAGE_SEQUENCE_INVALID")
+  const sequence = String(row.message_seq)
+  if (!/^[1-9][0-9]*$/u.test(sequence)) throw new Error("CHAT_MESSAGE_SEQUENCE_INVALID")
   return {
     messageId: row.message_id,
     tenantId: row.tenant_id,

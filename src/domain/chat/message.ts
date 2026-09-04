@@ -9,7 +9,8 @@ export type Message = {
   role: MessageRole
   content: string
   status: MessageStatus
-  messageSeq: number
+  /** PostgreSQL BIGINT decimal; never coerced through a JavaScript Number. */
+  messageSeq: string
   createdAt: Date
   updatedAt: Date
 }

@@ -73,3 +73,22 @@ test("the contract gate rejects missing mutation idempotency and AG-UI status co
   assert.ok(errors.some((error) => error.includes("createMessage") && error.includes("Idempotency-Key")))
   assert.ok(errors.some((error) => error.includes("streamSessionEvents") && error.includes("503")))
 })
+
+test("MessageCreateRequest and runtime failure statuses stay strict", async () => {
+  const { openapi } = await readContract()
+  const messageOperation = openapi.slice(
+    openapi.indexOf("  /v1/sessions/{id}/messages:"),
+    openapi.indexOf("  /v1/sessions/{id}/events:"),
+  )
+  const messageRequest = openapi.slice(
+    openapi.indexOf("    MessageCreateRequest:"),
+    openapi.indexOf("    MessageReceipt:"),
+  )
+
+  assert.match(messageOperation, /'413': \{ \$ref: '#\/components\/responses\/PayloadTooLarge' \}/u)
+  assert.match(messageOperation, /'503': \{ \$ref: '#\/components\/responses\/ServiceUnavailable' \}/u)
+  assert.match(messageRequest, /additionalProperties: false/u)
+  assert.match(messageRequest, /maxLength: 100000/u)
+  assert.match(messageRequest, /pinned_skills:[\s\S]*items: \{ type: string, minLength: 1 \}/u)
+  assert.match(messageRequest, /mcp_servers:[\s\S]*items: \{ type: string, minLength: 1 \}/u)
+})

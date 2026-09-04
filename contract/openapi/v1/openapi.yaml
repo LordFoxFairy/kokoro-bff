@@ -302,6 +302,8 @@ paths:
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/sessions/{id}/events:
     parameters:
       - $ref: '#/components/parameters/SessionId'
@@ -3030,6 +3032,11 @@ components:
           schema: { $ref: '#/components/schemas/ErrorEnvelope' }
     Gone:
       description: The supplied durable cursor is outside the retained replay window
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    PayloadTooLarge:
+      description: The request body exceeded the BFF admission limit
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorEnvelope' }
