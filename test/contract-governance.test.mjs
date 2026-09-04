@@ -98,8 +98,10 @@ test("the repository exposes executable contract, schema, and strictness gates",
 
   assert.equal(packageJson.packageManager, "pnpm@11.25.0")
   assert.match(packageJson.scripts["contract:lint"], /contract\/openapi\/v1\/openapi\.yaml/u)
-  assert.equal(packageJson.scripts["contract:test"], "node --test test/contract-governance.test.mjs")
-  assert.equal(packageJson.scripts["contract:check"], "pnpm contract:lint && pnpm contract:test")
+  assert.equal(packageJson.scripts["contract:semantic"], "node scripts/verify-openapi.ts")
+  assert.match(packageJson.scripts["contract:test"], /test\/contract\/openapi-contract\.test\.mjs/u)
+  assert.match(packageJson.scripts["contract:test"], /test\/agent-control-adapter\.test\.ts/u)
+  assert.equal(packageJson.scripts["contract:check"], "pnpm contract:lint && pnpm contract:semantic && pnpm contract:test")
   assert.equal(packageJson.scripts["db:apply-schema"], "node scripts/apply-schema.mjs")
   assert.equal(tsconfig.compilerOptions.useUnknownInCatchVariables, true)
   for (const heading of ["Owner", "Visibility", "Version", "Generation", "Breaking policy", "Provenance"]) {

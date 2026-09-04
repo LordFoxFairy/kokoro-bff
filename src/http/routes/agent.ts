@@ -3,7 +3,12 @@ import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
 import { failure, ok } from "../../contracts/index.js"
 import { proxyUpstream } from "../../upstream.js"
-import { agentIdentityHeaders, buildAgentControl } from "../../infrastructure/clients/agent/index.js"
+import {
+  agentControlRequestDigest,
+  agentIdentityHeaders,
+  buildAgentControl,
+  parseAgentControlReceipt,
+} from "../../infrastructure/clients/agent/index.js"
 import { agentSessionAssertion, dataOf } from "../../application/projections.js"
 import { reply } from "../response.js"
 import { normalizeUpstreamResponse } from "../../infrastructure/clients/upstream-response.js"
@@ -44,8 +49,8 @@ function sendAgentFailure(
   context: RequestContext,
   idempotency: Map<string, IdempotencyEntry>,
   mutation: MutationTicket | null,
-): void {
-  reply(response, result.status, result.body, context, idempotency, mutation)
+): Promise<void> {
+  return reply(response, result.status, result.body, context, idempotency, mutation)
 }
 
 function startAgUiStream(response: ServerResponse, requestId: string): void {
@@ -242,15 +247,21 @@ export async function liveAgentSession(
     try {
       const result = await callAgent(config, baseUrl, `/v1/runs/${encodeURIComponent(runId)}/control`, "POST", context.requestId, request, Buffer.from(JSON.stringify(control)), context, assertion)
       if (result.status >= 400) {
-        sendAgentFailure(response, result, context, idempotency, mutation)
+        await sendAgentFailure(response, result, context, idempotency, mutation)
         return true
       }
-      const receipt = dataOf(result.body)
-      if (receipt === null || receipt.command_id !== commandId || receipt.run_id !== runId) {
-        sendAgentFailure(response, { status: 502, body: failure("upstream_response_invalid", "Agent control receipt did not match the requested command", context.requestId) }, context, idempotency, mutation)
+      const receipt = parseAgentControlReceipt(dataOf(result.body))
+      const requestDigest = agentControlRequestDigest(runId, control)
+      if (
+        result.status !== 202
+        || receipt === null
+        || receipt.command_id !== commandId
+        || receipt.request_digest !== requestDigest
+      ) {
+        await sendAgentFailure(response, { status: 502, body: failure("upstream_response_invalid", "Agent control receipt did not match the requested command", context.requestId) }, context, idempotency, mutation)
         return true
       }
-      reply(response, 202, ok(receipt, context.requestId), context, idempotency, mutation)
+      reply(response, 202, ok({ run_id: runId, ...receipt }, context.requestId), context, idempotency, mutation)
     } catch {
       reply(response, 502, failure("upstream_unreachable", "The configured Agent upstream is unavailable", context.requestId), context, idempotency, mutation)
     }

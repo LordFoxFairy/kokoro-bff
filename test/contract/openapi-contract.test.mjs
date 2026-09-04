@@ -2,10 +2,14 @@ import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { test } from "node:test"
 
-import { inspectBffOpenApi } from "../../scripts/verify-openapi.ts"
+import {
+  inspectAgentControlSnapshot,
+  inspectBffOpenApi,
+} from "../../scripts/verify-openapi.ts"
 
 const openapiUrl = new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url)
 const baselineUrl = new URL("../../contract/tests/v1-operations.json", import.meta.url)
+const agentControlSnapshotUrl = new URL("../../contract/external/kokoro-agent/control-receipt.v1.json", import.meta.url)
 
 async function readContract() {
   const [openapi, baselineDocument] = await Promise.all([
@@ -91,4 +95,31 @@ test("MessageCreateRequest and runtime failure statuses stay strict", async () =
   assert.match(messageRequest, /maxLength: 100000/u)
   assert.match(messageRequest, /pinned_skills:[\s\S]*items: \{ type: string, minLength: 1 \}/u)
   assert.match(messageRequest, /mcp_servers:[\s\S]*items: \{ type: string, minLength: 1 \}/u)
+})
+
+test("semantic gates enforce Gone, admission overload, and control upstream failures", async () => {
+  const { openapi, baseline } = await readContract()
+  const broken = openapi
+    .replace("        '410': { $ref: '#/components/responses/Gone' }\n", "")
+    .replace("        '413': { $ref: '#/components/responses/PayloadTooLarge' }\n", "")
+    .replace(
+      "        '502': { $ref: '#/components/responses/BadGateway' }\n        '503': { $ref: '#/components/responses/ServiceUnavailable' }\n  /v1/sessions/{id}/title:",
+      "  /v1/sessions/{id}/title:",
+    )
+
+  assert.notEqual(broken, openapi)
+  const errors = inspectBffOpenApi(broken, baseline)
+  assert.ok(errors.some((error) => error.includes("streamSessionEvents") && error.includes("410")))
+  assert.ok(errors.some((error) => error.includes("createMessage") && error.includes("413")))
+  assert.ok(errors.some((error) => error.includes("controlRun") && error.includes("502")))
+  assert.ok(errors.some((error) => error.includes("controlRun") && error.includes("503")))
+})
+
+test("the pinned Agent ControlReceipt excludes BFF-projected run_id", async () => {
+  const snapshot = JSON.parse(await readFile(agentControlSnapshotUrl, "utf8"))
+
+  assert.deepEqual(inspectAgentControlSnapshot(snapshot), [])
+  assert.deepEqual(snapshot.required, ["command_id", "request_digest", "status", "replayed"])
+  assert.equal(Object.hasOwn(snapshot.properties, "run_id"), false)
+  assert.equal(snapshot["x-kokoro-source"].commit, "70a38138f42f29e8a482fde7890fe0e2d0c27e34")
 })

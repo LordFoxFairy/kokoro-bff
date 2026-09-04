@@ -24,6 +24,57 @@ type BaselineOperation = { method: string; path: string; operation_id: string }
 type NamedBlock = { name: string; text: string }
 type OperationBlock = NamedBlock & { method: string; path: string; fields: Map<string, string> }
 
+const AGENT_CONTROL_SOURCE = {
+  version: "1.0.0",
+  commit: "70a38138f42f29e8a482fde7890fe0e2d0c27e34",
+  path: "contract/openapi/v1/openapi.json#/components/schemas/ControlReceipt",
+  artifact_sha256: "c7d80e568a39bd9f8fdae7adc165b33df98e4b45f2e5c91aea04c415d6b0158f",
+} as const
+
+const AGENT_CONTROL_RECEIPT_SCHEMA = {
+  type: "object",
+  required: ["command_id", "request_digest", "status", "replayed"],
+  properties: {
+    command_id: { type: "string", minLength: 1 },
+    request_digest: { type: "string", minLength: 1 },
+    status: { type: "string", enum: ["pending", "succeeded", "failed"] },
+    error_code: { type: "string", minLength: 1 },
+    replayed: { type: "boolean" },
+  },
+  additionalProperties: false,
+} as const
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function canonicalValue(value: unknown): string {
+  if (value === undefined) return "undefined"
+  if (value === null || typeof value !== "object") return JSON.stringify(value)
+  if (Array.isArray(value)) return `[${value.map(canonicalValue).join(",")}]`
+  return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalValue(Reflect.get(value, key))}`).join(",")}}`
+}
+
+export function inspectAgentControlSnapshot(snapshot: unknown): string[] {
+  if (!isRecord(snapshot)) return ["pinned Agent ControlReceipt snapshot must be a JSON object"]
+  const errors: string[] = []
+  if (snapshot["x-kokoro-owner"] !== "kokoro-agent") errors.push("pinned Agent ControlReceipt owner must be kokoro-agent")
+  const source = snapshot["x-kokoro-source"]
+  if (!isRecord(source) || canonicalValue(source) !== canonicalValue(AGENT_CONTROL_SOURCE)) {
+    errors.push("pinned Agent ControlReceipt provenance does not match the reviewed owner artifact")
+  }
+  const actualSchema = {
+    type: snapshot.type,
+    required: snapshot.required,
+    properties: snapshot.properties,
+    additionalProperties: snapshot.additionalProperties,
+  }
+  if (canonicalValue(actualSchema) !== canonicalValue(AGENT_CONTROL_RECEIPT_SCHEMA)) {
+    errors.push("pinned Agent ControlReceipt fields drifted from the reviewed owner artifact")
+  }
+  return errors
+}
+
 function indentation(line: string): number {
   return line.length - line.trimStart().length
 }
@@ -302,14 +353,53 @@ function idempotencyErrors(parameters: Map<string, NamedBlock>, operations: Oper
 
 function protocolErrors(parameters: Map<string, NamedBlock>, schemas: Map<string, NamedBlock>, operations: OperationBlock[]): string[] {
   const errors: string[] = []
+  const messageOperation = operations.find((operation) => operation.method === "POST" && operation.path === "/v1/sessions/{id}/messages")
+  if (messageOperation === undefined) {
+    errors.push("Chat message admission operation is missing")
+  } else {
+    const statuses = new Set(collectResponseBlocks(messageOperation).keys())
+    for (const status of ["202", "400", "401", "403", "404", "409", "413", "503"]) {
+      if (!statuses.has(status)) errors.push(`Chat message admission operation (${messageOperation.name}) must declare HTTP ${status}`)
+    }
+  }
+
+  const controlOperation = operations.find((operation) => operation.method === "POST" && operation.path === "/v1/sessions/{id}/runs/{runId}/control")
+  if (controlOperation === undefined) {
+    errors.push("Agent run control operation is missing")
+  } else {
+    const statuses = new Set(collectResponseBlocks(controlOperation).keys())
+    for (const status of ["202", "400", "401", "403", "404", "409", "502", "503"]) {
+      if (!statuses.has(status)) errors.push(`Agent run control operation (${controlOperation.name}) must declare HTTP ${status}`)
+    }
+  }
+
+  const controlReceipt = schemas.get("ControlReceipt")
+  const expectedControlFields = ["run_id", "command_id", "request_digest", "status", "replayed"]
+  if (controlReceipt === undefined) {
+    errors.push("BFF ControlReceipt projection schema is missing")
+  } else {
+    if (JSON.stringify(topLevelRequired(controlReceipt)) !== JSON.stringify(expectedControlFields)) {
+      errors.push(`BFF ControlReceipt required fields must be ${expectedControlFields.join(", ")}`)
+    }
+    if (!controlReceipt.text.includes("the Agent owner receipt does not repeat it")) {
+      errors.push("BFF ControlReceipt.run_id must document that it is projected from the trusted path")
+    }
+    if (!/^        error_code:\s*\{\s*type: string,\s*minLength: 1\s*\}\s*$/mu.test(controlReceipt.text)) {
+      errors.push("BFF ControlReceipt.error_code must be an optional non-empty string")
+    }
+  }
+
   const eventOperation = operations.find((operation) => operation.method === "GET" && operation.path === "/v1/sessions/{id}/events")
-  if (eventOperation === undefined) return ["AG-UI session event operation is missing"]
+  if (eventOperation === undefined) {
+    errors.push("AG-UI session event operation is missing")
+    return errors
+  }
 
   if (eventOperation.fields.get("x-kokoro-owner") !== "kokoro-bff" || eventOperation.fields.get("x-kokoro-visibility") !== "public") {
     errors.push("AG-UI session event operation must be owned and visible as kokoro-bff/public")
   }
   const statuses = new Set(collectResponseBlocks(eventOperation).keys())
-  for (const status of ["200", "400", "401", "403", "404", "502", "503"]) {
+  for (const status of ["200", "400", "401", "403", "404", "410", "502", "503"]) {
     if (!statuses.has(status)) {
       errors.push(`AG-UI session event operation (${eventOperation.name}) must declare HTTP ${status}`)
     }
@@ -375,9 +465,11 @@ async function main(): Promise<void> {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
   const openapiPath = path.join(root, "contract/openapi/v1/openapi.yaml")
   const baselinePath = path.join(root, "contract/tests/v1-operations.json")
-  const [source, baselineDocument] = await Promise.all([
+  const agentControlSnapshotPath = path.join(root, "contract/external/kokoro-agent/control-receipt.v1.json")
+  const [source, baselineDocument, agentControlSnapshotDocument] = await Promise.all([
     readFile(openapiPath, "utf8"),
     readFile(baselinePath, "utf8"),
+    readFile(agentControlSnapshotPath, "utf8"),
   ])
   const parsedBaseline: unknown = JSON.parse(baselineDocument)
   if (
@@ -388,7 +480,11 @@ async function main(): Promise<void> {
     throw new TypeError("contract/tests/v1-operations.json must contain an operations array")
   }
   const baseline = Reflect.get(parsedBaseline, "operations") as BaselineOperation[]
-  const errors = inspectBffOpenApi(source, baseline)
+  const agentControlSnapshot: unknown = JSON.parse(agentControlSnapshotDocument)
+  const errors = [
+    ...inspectBffOpenApi(source, baseline),
+    ...inspectAgentControlSnapshot(agentControlSnapshot),
+  ]
   if (errors.length > 0) {
     console.error(errors.join("\n"))
     process.exitCode = 1

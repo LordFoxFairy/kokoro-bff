@@ -35,7 +35,8 @@ downstream, read-only artifacts. Validate it with:
 pnpm contract:check
 ```
 
-`contract/tests/v1-operations.json` is a compatibility inventory, not a second field-level schema. After an approved,
+The gate runs Redocly, the frozen operation inventory, field/protocol semantic checks, and the executable Agent control
+adapter contract. `contract/tests/v1-operations.json` is a compatibility inventory, not a second field-level schema. After an approved,
 backward-compatible operation addition, regenerate that inventory with:
 
 ```bash
@@ -48,9 +49,9 @@ pnpm contract:update-baseline
   the same commit.
 - Removing a path/method, renaming an `operationId`, making an optional input required, narrowing a response, changing
   permission or idempotency semantics, or changing an existing field's meaning is breaking and requires `/v2`.
-- `pnpm contract:check` runs Redocly validation, operation metadata checks, and the frozen v1 path/method/operation-id
-  baseline. Schema-level compatibility still requires review; the baseline is deliberately not represented as complete
-  semantic-diff coverage.
+- `pnpm contract:check` runs Redocly validation, operation metadata checks, the frozen v1 path/method/operation-id
+  baseline, BFF semantic invariants, and the executable Agent control adapter test. General schema-level compatibility
+  still requires review; the operation inventory is deliberately not represented as complete semantic-diff coverage.
 - Updating the compatibility inventory to hide a removal or rename is prohibited. A versioned replacement must land
   before the old operation is retired.
 
@@ -66,3 +67,10 @@ shasum -a 256 contract/openapi/v1/openapi.yaml
 
 Consumers must pin the published version, source commit, and digest. They must not copy this file into Root or edit a
 generated client as a substitute for changing the owner contract.
+
+The narrow `contract/external/kokoro-agent/control-receipt.v1.json` consumer snapshot pins only the Agent-owned
+`ControlReceipt` shape required by this adapter. It records Agent commit
+`70a38138f42f29e8a482fde7890fe0e2d0c27e34`, source path
+`contract/openapi/v1/openapi.json#/components/schemas/ControlReceipt`, and full source artifact SHA-256
+`c7d80e568a39bd9f8fdae7adc165b33df98e4b45f2e5c91aea04c415d6b0158f`. The BFF validates that owner receipt before
+adding public `run_id` from the trusted route parameter; the snapshot is not a second Agent contract owner.

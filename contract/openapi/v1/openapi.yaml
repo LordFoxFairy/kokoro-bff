@@ -385,6 +385,8 @@ paths:
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '502': { $ref: '#/components/responses/BadGateway' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/sessions/{id}/title:
     parameters:
       - $ref: '#/components/parameters/SessionId'
@@ -2170,11 +2172,14 @@ components:
       required: [run_id, command_id, request_digest, status, replayed]
       additionalProperties: false
       properties:
-        run_id: { type: string, minLength: 1 }
+        run_id:
+          type: string
+          minLength: 1
+          description: BFF projection of the trusted runId path parameter; the Agent owner receipt does not repeat it.
         command_id: { type: string, minLength: 1 }
         request_digest: { type: string, minLength: 1 }
         status: { type: string, enum: [pending, succeeded, failed] }
-        error_code: { type: [string, 'null'] }
+        error_code: { type: string, minLength: 1 }
         replayed: { type: boolean }
       example:
         run_id: run_01JASYNC

@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:kokoro-agent:control-receipt:v1",
+  "title": "Pinned kokoro-agent ControlReceipt",
+  "x-kokoro-owner": "kokoro-agent",
+  "x-kokoro-source": {
+    "version": "1.0.0",
+    "commit": "70a38138f42f29e8a482fde7890fe0e2d0c27e34",
+    "path": "contract/openapi/v1/openapi.json#/components/schemas/ControlReceipt",
+    "artifact_sha256": "c7d80e568a39bd9f8fdae7adc165b33df98e4b45f2e5c91aea04c415d6b0158f"
+  },
+  "type": "object",
+  "required": [
+    "command_id",
+    "request_digest",
+    "status",
+    "replayed"
+  ],
+  "properties": {
+    "command_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "request_digest": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "succeeded",
+        "failed"
+      ]
+    },
+    "error_code": {
+      "type": "string",
+      "minLength": 1
+    },
+    "replayed": {
+      "type": "boolean"
+    }
+  },
+  "additionalProperties": false
+}
