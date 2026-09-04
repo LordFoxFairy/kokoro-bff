@@ -72,3 +72,67 @@ CREATE TABLE IF NOT EXISTS bff_idempotency_receipt (
   response_body JSONB NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Durable public AG-UI projection. Agent execution events are copied into this
+-- BFF-owned ledger before any public SSE frame is emitted. The stream row is
+-- also the per-tenant/session sequence allocator and projection-state fence.
+CREATE TABLE IF NOT EXISTS bff_agui_stream (
+  tenant_id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  version BIGINT NOT NULL DEFAULT 0,
+  source_high_watermark BIGINT NOT NULL DEFAULT 0,
+  next_public_sequence BIGINT NOT NULL DEFAULT 1,
+  projection_state JSONB NOT NULL DEFAULT '{"text_message_ids":[],"tool_call_ids":[]}'::jsonb,
+  created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT pk_bff_agui_stream PRIMARY KEY (tenant_id, session_id),
+  CONSTRAINT ck_bff_agui_stream_version CHECK (version >= 0),
+  CONSTRAINT ck_bff_agui_stream_source_high_watermark CHECK (source_high_watermark >= 0),
+  CONSTRAINT ck_bff_agui_stream_next_public_sequence CHECK (next_public_sequence >= 1),
+  CONSTRAINT ck_bff_agui_stream_projection_state CHECK (jsonb_typeof(projection_state) = 'object')
+);
+
+-- Every source fact is registered exactly once, including source event kinds
+-- that intentionally produce no public frame. This prevents projection gaps
+-- and gives conflicting reuse of an Agent identity a durable failure mode.
+CREATE TABLE IF NOT EXISTS bff_agui_source_event (
+  tenant_id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  source_owner TEXT NOT NULL,
+  source_event_id TEXT NOT NULL,
+  source_sequence BIGINT NOT NULL,
+  source_digest TEXT NOT NULL,
+  source_occurred_at TIMESTAMPTZ(3) NOT NULL,
+  projected_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT pk_bff_agui_source_event PRIMARY KEY (tenant_id, session_id, source_owner, source_event_id),
+  CONSTRAINT uq_bff_agui_source_event_sequence UNIQUE (tenant_id, session_id, source_owner, source_sequence),
+  CONSTRAINT ck_bff_agui_source_event_owner CHECK (source_owner = 'kokoro-agent'),
+  CONSTRAINT ck_bff_agui_source_event_sequence CHECK (source_sequence >= 1),
+  CONSTRAINT ck_bff_agui_source_event_digest CHECK (length(source_digest) = 64)
+);
+
+-- One source fact may expand into multiple AG-UI frames. Each frame receives a
+-- distinct opaque cursor backed by a monotonically increasing public sequence,
+-- so reconnecting after the first expanded frame never drops the next frame.
+CREATE TABLE IF NOT EXISTS bff_agui_event (
+  tenant_id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  public_sequence BIGINT NOT NULL,
+  cursor TEXT NOT NULL,
+  source_owner TEXT NOT NULL,
+  source_event_id TEXT NOT NULL,
+  frame_index INTEGER NOT NULL,
+  event_type TEXT NOT NULL,
+  event_payload JSONB NOT NULL,
+  source_occurred_at TIMESTAMPTZ(3) NOT NULL,
+  recorded_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT pk_bff_agui_event PRIMARY KEY (tenant_id, session_id, public_sequence),
+  CONSTRAINT uq_bff_agui_event_cursor UNIQUE (cursor),
+  CONSTRAINT uq_bff_agui_event_source_frame UNIQUE (tenant_id, session_id, source_owner, source_event_id, frame_index),
+  CONSTRAINT ck_bff_agui_event_public_sequence CHECK (public_sequence >= 1),
+  CONSTRAINT ck_bff_agui_event_cursor CHECK (length(cursor) BETWEEN 16 AND 160),
+  CONSTRAINT ck_bff_agui_event_source_owner CHECK (source_owner = 'kokoro-agent'),
+  CONSTRAINT ck_bff_agui_event_frame_index CHECK (frame_index >= 0),
+  CONSTRAINT ck_bff_agui_event_type CHECK (length(event_type) >= 1),
+  CONSTRAINT ck_bff_agui_event_payload CHECK (jsonb_typeof(event_payload) = 'object')
+);
