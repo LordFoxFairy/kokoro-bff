@@ -10,9 +10,24 @@
 | GOV-04 | Given Root audit，When 检查 BFF slice，Then public-contract、contract-provenance、toolchain 与 useUnknown 门禁不再报错 | Root audit JSON filter |
 | GOV-05 | Given 协作者脏文件，When 本阶段提交，Then该文件既未被修改也未进入 commit | `git diff --cached --name-only` + hash |
 
-本阶段通过不表示 runtime、schema、container、CI supply chain 或 production SLO 已完成。
+GOV-01～05 通过本身不表示 runtime、schema、container、CI supply chain 或 production SLO 已完成。
 
-## 2. 当前 Product API 验收矩阵
+## 2. Phase 2：durable AG-UI projection
+
+| ID | Given / When / Then | Evidence |
+| --- | --- | --- |
+| AGUI-01 | Given 一个 Agent source fact 展开 START+CONTENT，When 从 START cursor 重连，Then 只重放 CONTENT 且 cursor 不重复 | `test/agui-projection.integration.mjs` |
+| AGUI-02 | Given 相同 source identity 被并发/重复摄取，When transaction 竞争，Then 只有一组 source/frame rows 且 public sequence 连续 | `test/agui-projection.integration.mjs` |
+| AGUI-03 | Given 同 session id 的不同 tenant 或同 tenant 的不同 session，When 复用 foreign cursor，Then 返回 `invalid_event_cursor` 且不泄漏 frame | projection + HTTP integration |
+| AGUI-04 | Given projection state 与终态已提交，When BFF 重启且 Agent disabled，Then opaque cursor 仍从 PostgreSQL strictly-after replay | `test/agui-http.integration.mjs` |
+| AGUI-05 | Given Redis DB 8，When 投影提交，Then无 AG-UI 持久 key；Redis 只接收可丢失 publish，PG rows 不受影响 | `test/agui-projection.integration.mjs` + architecture gate |
+| AGUI-06 | Given canonical OpenAPI，When contract gate 执行，Then EventCursor 是 opaque string、SSE example 是 AG-UI、400/502/503 已声明 | `pnpm contract:check` |
+| AGUI-07 | Given fresh database，When apply canonical schema，Then一次建立 stream/source/event 三表，无 FK | `pnpm db:apply-schema` + schema test |
+
+Phase 2 不验收 retention/GC、cursor-expired、后台主动摄取、Conversation/Message/Share ownership 或 outbox；这些仍是
+开放项，不能由上述绿测推导为完成。
+
+## 3. 当前 Product API 验收矩阵
 
 | Area | Scenario | 当前状态/期望 |
 | --- | --- | --- |
@@ -21,13 +36,13 @@
 | Idempotency | 同 digest replay / different digest conflict / pending duplicate | 当前已覆盖；query/header/transaction gap 开放 |
 | Owner reads | System/Model/Capability/Storage/Billing | 显式 projection；缺失/坏响应 fail closed |
 | Chat admission | BFF → Agent HTTP run receipt | 当前覆盖 |
-| AG-UI | Agent fact → schema-valid SSE + source cursor replay | 即时投影已覆盖；durable BFF ledger 未完成 |
+| AG-UI | Agent fact → transactional PG ledger → schema-valid SSE + opaque replay | durable request-driven 闭环已覆盖；retention/GC 与主动摄取开放 |
 | Chat facts | Conversation/Message/Share BFF PostgreSQL ownership | 未完成 |
 | Scheduled | fact + Scheduler registration/dispatch replay | 当前同步流程有测试；outbox/crash atomicity 未完成 |
 | Tenant isolation | 每个 public route 的跨 tenant negative matrix | 部分覆盖，完整矩阵未完成 |
-| Recovery | PG/Redis/Agent/Scheduler crash、trim、restart、duplicate effect | 未形成完整 fault suite |
+| Recovery | AG-UI BFF restart/Agent-disabled replay 与 duplicate ingest 已覆盖；PG restore、trim/GC、Scheduler crash 仍未形成完整 fault suite |
 
-## 3. 必跑命令
+## 4. 必跑命令
 
 无外部 fixture：
 
@@ -46,7 +61,7 @@ git diff --check
 ```bash
 KOKORO_BFF_POSTGRES_URL=POSTGRES_URL pnpm db:apply-schema
 KOKORO_TEST_POSTGRES_URL=POSTGRES_URL \
-KOKORO_TEST_REDIS_URL=redis://127.0.0.1:6379/8 \
+KOKORO_TEST_REDIS_URL=redis://127.0.0.1:56380/8 \
 pnpm test:integration
 ```
 
@@ -67,7 +82,7 @@ PY
 
 Root audit 仍可因本阶段明确不修改的 runtime/schema/delivery 项返回非零；报告必须逐项列出，不能改成假绿。
 
-## 4. 提交验收
+## 5. 提交验收
 
 - 每个 commit 只 stage 本任务拥有的文件；
 - 提交前运行 `git diff --cached --check` 并审阅 `git diff --cached --name-status`；

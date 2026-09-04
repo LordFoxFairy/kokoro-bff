@@ -23,10 +23,10 @@ BFF 是公开 Product API 的唯一 owner；其他仓库只发布自己的 inter
 | --- | --- | --- |
 | `src/main.ts` | server composition、通用 auth/body/idempotency 管线、route dispatch | 仍直接装配生产 mock |
 | `src/http/routes/` | resource route handlers | 尚未迁入标准 `interfaces/http/` |
-| `src/application/` | project/scheduled use case、ports、projection/input mapper | 尚无明确 Domain aggregate 层 |
-| `src/infrastructure/postgres/` | BFF-owned repository 与 Redis cache invalidation | receipt 与业务写未共享事务 |
+| `src/application/` | project/scheduled use case、AG-UI projection/fence、ports、input mapper | 尚无明确 Domain aggregate 层 |
+| `src/infrastructure/postgres/` | BFF-owned repository、durable AG-UI ledger、Redis cache/notification | receipt 与业务写未共享事务 |
 | `src/infrastructure/clients/` | Agent、Scheduler、Mori 窄 adapter；其他 owner 仍集中于 owner route | client 目录尚未对每个 owner 全部分拆 |
-| `src/interfaces/http/agui/` | Chat fact → AG-UI projection 与 SSE frame schema check | 投影是即时的，不是 durable ledger |
+| `src/interfaces/http/agui/` | 已持久化 AG-UI payload → schema-valid SSE frame | 完整 OpenAPI runtime validator 尚未形成 |
 | `src/contracts/` | 当前手写 Web-facing types/envelope | 尚未由 canonical OpenAPI 生成且未与 Domain 类型彻底分离 |
 
 目标依赖方向是 `interfaces -> application -> domain`，concrete infrastructure 实现 Domain/Application port，
@@ -80,20 +80,39 @@ Delete 当前先删除 Scheduler job，再删除 BFF fact。这个流程不是�
 
 ## 6. Chat 与 AG-UI
 
-当前 Live 流：
+当前 Live event 流：
 
 ```text
-POST message -> Agent /v1/runs admission -> stable BFF receipt
-GET events   -> Agent replay(after_seq) -> ChatEvent mapper -> AG-UI schema -> SSE
-Last-Event-ID                                            ^ source sequence
+GET events
+  -> resolve Last-Event-ID against (tenant, session) in PostgreSQL
+  -> replay existing bff_agui_event rows strictly after public_sequence
+  -> fetch Agent source events after bff_agui_stream.source_high_watermark
+  -> validate source tenant/session shape
+  -> BEGIN + lock stream row + verify version fence
+  -> register source identity/digest + project all AG-UI frames + advance state/high-watermark
+  -> COMMIT
+  -> best-effort Redis PUBLISH notification
+  -> read committed PostgreSQL rows -> @ag-ui/core validation -> SSE
 ```
 
-BFF 当前没有 durable public event table。一个 Agent fact 可展开成多个 AG-UI frame，frame 在内存 projection state
-中维持 start/content/end 边界。目标 durable projection 必须在 PostgreSQL 中为每个 tenant/thread 保存单调 public
-cursor、完整 AG-UI payload、source identity、retention/GC watermark，并使重连只读取 BFF ledger。
+`bff_agui_stream` 以 `(tenant_id, session_id)` 为 scope，保存 source high-watermark、下一内部 public sequence、持久化
+projection state 与乐观 version；事务同时持有 row lock。`bff_agui_source_event` 以 source event id 为主键，并对
+source sequence 建第二个唯一约束；相同 identity 的不同 digest/sequence 触发稳定失败。`bff_agui_event` 为每个 AG-UI
+frame 保存完整 JSON payload、source mapping、frame index、单调内部 sequence 与独立随机 `agui_*` cursor。
+
+客户端只把 SSE `id` 原样作为 `Last-Event-ID`；cursor 不编码 authority。Repository 先用 tenant + session + cursor
+解析内部位置，再按 tenant + session + public sequence 查询，因此跨 tenant/session cursor 与不存在的 cursor 都返回
+`400 invalid_event_cursor`，且不泄漏原 owner。一个 source fact 的多 frame 在同一事务提交，但每帧有独立 cursor；连接
+恰好在 START 后断开时会从 CONTENT 继续，不会把 source sequence 当作已完成整个 projection。
+
+PostgreSQL 是 public replay 的唯一 durable truth。Redis 只 `PUBLISH` hash-scoped 更新提示，不存 event、cursor 或
+high-watermark；通知失败不回滚事实。当前 HTTP 请求自己轮询 Agent 并查询 PostgreSQL，尚未消费 Redis 通知来降低延迟。
+终态 ledger 在 Agent unavailable/disabled 和 BFF 重启后仍可独立 replay；非终态且无法接触 Agent 时只能返回已持久化
+部分并明确结束，或在尚未开始 SSE 时返回 503。
 
 Conversation、Message、Share 的产品事实最终归 BFF；Agent 只拥有 Run、checkpoint、lease、tool journal、执行事件、
-HITL 与 evidence。当前 Live session/message history 仍来自 Agent，是明确缺口。
+HITL 与 evidence。当前 Live session/message history 仍来自 Agent，是明确缺口。AG-UI ledger 当前无 retention/GC 和
+cursor-expired 水位；source ingestion 仍由公开读取驱动，不是独立 durable consumer。
 
 ## 7. 出站与失败归一
 
@@ -104,6 +123,7 @@ provider body、SQL 或 stack。
 ## 8. 启动与关闭
 
 - Mock 是本地确定性 fixture，不需要 PostgreSQL/Redis；它不是生产完成证据。
-- Live BFF-owned 路由要求 PostgreSQL + Redis；`/readyz` 检查可用性。
+- Live BFF-owned 路由要求 PostgreSQL + Redis；`/readyz` 检查可用性。AG-UI committed replay 只读取 PostgreSQL，
+  但 Redis 不可用仍会使整体 readiness 失败。
 - 启动后异步 reconcile 持久化 ScheduledTask；该过程 best-effort，不阻塞 listen。
 - 当前 graceful shutdown 关闭 repository，但尚无完整 in-flight drain、outbox dispatcher drain 或 termination budget。

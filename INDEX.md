@@ -20,12 +20,14 @@
 ```text
 src/
 ├── contracts/                     # 当前手写 transport DTO；尚未由 OpenAPI 生成
-├── application/                   # use case service、输入解析、port、projection mapper
+├── application/
+│   ├── agui/                      # durable projection use case、纯映射与 repository port
+│   └── ...                        # Project/ScheduledTask use case、输入解析与 ports
 ├── infrastructure/
 │   ├── clients/                   # Agent、Scheduler、Mori 等出站边界
-│   ├── postgres/                  # BFF-owned Project/ScheduledTask/receipt repository
+│   ├── postgres/                  # BFF facts、receipt 与 AG-UI ledger repository
 │   └── mock/                      # 当前仍编入生产源码的 fixture；目标是移到 test
-├── interfaces/http/agui/          # Agent fact → AG-UI 与 SSE 编码
+├── interfaces/http/agui/          # schema-valid SSE 编码；只输出已持久化 frame
 ├── http/routes/                   # 当前 HTTP route handlers
 ├── config.ts                      # 当前配置解析；目标目录 `src/config/` 尚未形成
 └── main.ts                        # composition root
@@ -36,8 +38,8 @@ Root 标准要求的 `src/domain/`、`src/config/`、`src/bootstrap/` 尚未落�
 
 ## 本仓事实
 
-当前 PostgreSQL 只保存 Project、instruction revision、project skill、project task、ScheduledTask 和
-idempotency receipt。Conversation、Message、Share、durable AG-UI ledger 与 outbox 尚无 BFF 表。
+当前 PostgreSQL 保存 Project、instruction revision、project skill、project task、ScheduledTask、idempotency receipt，
+以及 durable AG-UI stream/source-event/public-frame ledger。Conversation、Message、Share 与 outbox 尚无 BFF 表。
 完整表清单见 [`docs/DATA_MODEL.md`](./docs/DATA_MODEL.md)。
 
 ## Public API 与 owner adapter
@@ -46,7 +48,8 @@ idempotency receipt。Conversation、Message、Share、durable AG-UI ledger 与 
 - 资源说明：[`docs/api/README.md`](./docs/api/README.md)
 - AG-UI：[`docs/api/v1/agui-chat.md`](./docs/api/v1/agui-chat.md)
 - System / Model / Billing / Capability / Storage：当前由 `src/http/routes/owner.ts` 投影
-- Agent Chat：当前由 `src/http/routes/agent.ts` 调用 Agent HTTP ingress 并即时投影 AG-UI
+- Agent Chat：`src/http/routes/agent.ts` 拉取 Agent source event；`src/application/agui/` 投影；
+  `src/infrastructure/postgres/agui-projection-repository.ts` 在公开发送前持久化并分配 cursor
 - Scheduler：当前由 `src/http/routes/scheduler.ts` 注册、对账和处理 dispatch
 - Mori：当前由 `src/infrastructure/clients/mori/owner-route.ts` 投影独立 Music owner
 
@@ -57,5 +60,7 @@ idempotency receipt。Conversation、Message、Share、durable AG-UI ledger 与 
 | [`test/architecture.test.ts`](./test/architecture.test.ts) | 目录、依赖和文档事实门禁 |
 | [`test/contract-governance.test.mjs`](./test/contract-governance.test.mjs) | OpenAPI metadata 与冻结 operation surface |
 | [`test/business-store.integration.mjs`](./test/business-store.integration.mjs) | 真实 PostgreSQL/Redis business store |
+| [`test/agui-projection.integration.mjs`](./test/agui-projection.integration.mjs) | ledger、并发幂等、tenant/session 隔离、Redis 非事实源 |
+| [`test/agui-http.integration.mjs`](./test/agui-http.integration.mjs) | Live ingest、opaque cursor、重启 replay 与 contract error |
 | [`scripts/check-contract.mjs`](./scripts/check-contract.mjs) | 本仓 contract gate |
 | [`scripts/lint-source.mjs`](./scripts/lint-source.mjs) | 当前静态源码规则 |

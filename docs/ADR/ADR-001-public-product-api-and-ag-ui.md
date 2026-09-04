@@ -29,15 +29,17 @@ Agent 必须拥有 Run、checkpoint、lease、tool journal、执行事件、HITL
 
 - Web 不需要理解 Agent 私有 event，owner 路由和 provider 字段。
 - BFF 承担公开兼容、权限、幂等、cursor、retention 和 replay SLO。
-- 一个内部 fact 可以映射为多个 AG-UI frame，但 public cursor 只能在完整 projection unit 提交后推进。
+- 一个内部 fact 可以映射为多个 AG-UI frame；全部 frame 在一个事务提交，每个 frame 有独立 cursor，因此中间断线
+  不丢后续 frame。
 - owner contract 先变更并发布，BFF 再更新 client/projection；跨仓数据库 JOIN 被禁止。
 - 实现成本包括 Chat product tables、AG-UI ledger、outbox、dispatcher、GC 与故障恢复测试。
 
 ## Implementation status
 
-已实现：canonical BFF OpenAPI、operation governance、Agent HTTP ingress adapter、AG-UI schema-valid即时 projection、
-source sequence replay、条件性 PostgreSQL idempotency receipt。
+已实现：canonical BFF OpenAPI、operation governance、Agent HTTP ingress adapter、PostgreSQL durable AG-UI source/public
+ledger、逐 frame opaque cursor、tenant/session-scoped replay、projection state/version fence、Redis publish-only notification，
+以及条件性 PostgreSQL idempotency receipt。
 
-尚未实现：BFF Conversation/Message/Share tables、durable AG-UI ledger/public cursor、transactional outbox、完整 digest /
-fencing、retention/GC 和跨进程 crash/recovery tests。Accepted 表示方向已裁决，不表示这些项目已上线；当前事实以
+尚未实现：BFF Conversation/Message/Share tables、transactional outbox、完整 mutation digest/fencing、AG-UI
+retention/GC、后台主动摄取和完整 PG restore/fault suite。Accepted 表示方向已裁决，不表示这些项目已上线；当前事实以
 [`../CURRENT.md`](../CURRENT.md) 为准。

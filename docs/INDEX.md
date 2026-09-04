@@ -13,6 +13,8 @@
 9. [`ACCEPTANCE.md`](./ACCEPTANCE.md)：可执行验收矩阵与当前开放项。
 10. [`ADR/README.md`](./ADR/README.md)：仍有效的架构决策。
 
+Phase 2 durable AG-UI 的具体裁决见 [`ADR/ADR-002-durable-agui-ledger.md`](./ADR/ADR-002-durable-agui-ledger.md)。
+
 ## 协议文档
 
 - [`../contract/README.md`](../contract/README.md)：机器契约 owner、版本、生成、breaking、provenance。

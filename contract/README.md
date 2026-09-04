@@ -22,6 +22,10 @@ describes compatibility expectations, not proof that every Live adapter or persi
 internal projection metadata and are not valid public resume cursors. Callers persist the last SSE `id` verbatim and send
 it back as `Last-Event-ID`; they do not derive, decode, or reuse it across tenants or sessions.
 
+Phase 2 deliberately corrects the beta cursor shape from an Agent numeric sequence to the BFF-owned opaque token without
+a compatibility alias. Consumers must pin this contract commit and update in lockstep. After this correction, another
+cursor shape or meaning change follows the breaking policy below and requires a new API version.
+
 ## Generation
 
 The canonical OpenAPI is hand-authored at `contract/openapi/v1/openapi.yaml`; generated clients and documentation are

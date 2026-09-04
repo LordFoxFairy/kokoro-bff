@@ -1,6 +1,6 @@
 # kokoro-bff 当前实现
 
-状态：2026-09-03
+状态：2026-09-04
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。
 
 ## 已实现事实
@@ -13,6 +13,8 @@
   permission 元数据。
 - `pnpm contract:check` 执行 Redocly、metadata 检查和冻结 v1 path/method/operationId surface 检查。
 - AG-UI 是 BFF 对 Web 暴露的 Agent 事件 wire protocol；BFF 使用 `@ag-ui/core` schema 校验输出帧。
+- `Last-Event-ID` 是 BFF 为每个持久化 public frame 分配的 `agui_*` opaque cursor；Agent source sequence 不再是
+  public resume cursor。
 
 ### 当前运行时与持久化
 
@@ -23,8 +25,17 @@
   mutation 仍使用进程内 Map。因此“所有 Live mutation 均持久幂等”不是当前事实。
 - 当前 receipt scope 是 `namespace + method + canonical path + Idempotency-Key`；fingerprint 覆盖规范化 body，
   但尚未覆盖 query 与 selected headers。
-- Chat Live 路径通过 Agent HTTP ingress 读取 session/message/event execution facts。BFF 将 Agent Chat event
-  即时映射为 AG-UI SSE，并使用 Agent source sequence 作为 `Last-Event-ID`。
+- Chat Live 路径仍通过 Agent HTTP ingress 读取 execution source facts，但 public event 先写入本仓 PostgreSQL：
+  `bff_agui_source_event` 去重 source identity，`bff_agui_event` 保存完整 AG-UI frame，`bff_agui_stream` 保存
+  source high-watermark、projection state、version fence 与下一 public sequence。HTTP 只从该 ledger 输出 replay/live
+  frame。
+- 每个 public frame 有独立 cursor；一个 source fact 展开为 START+CONTENT 等多个 frame 时，可以从任一 frame 后
+  strictly-after 恢复。Repository 查询均携带 tenant + session；其他 tenant/session 的有效格式 cursor 返回
+  `invalid_event_cursor`。
+- 投影事务以 stream row lock + version fence 串行化并发写；source event id 与 source sequence 都有唯一约束，digest
+  冲突 fail closed。未映射的 Agent event 也登记 source identity 并推进 source high-watermark，避免重复轮询遮蔽缺口。
+- Redis 对 AG-UI 只执行 ephemeral `PUBLISH`；发布失败不回滚已提交 ledger，也没有 Redis replay key/stream。终态 ledger
+  可在 Agent disabled/unavailable 及 BFF 重启后独立 replay。
 - Scheduler 变更当前采用同步注册/替换/删除，加启动时 best-effort reconciliation；dispatch receipt 使用稳定
   occurrence idempotency key。
 - 缺失上游、非法响应和未接写操作会返回稳定错误，不静默降级到 Live 成功。
@@ -33,23 +44,25 @@
 
 ### P0：运行时正确性
 
-1. **Durable AG-UI projection 尚未实现。** `database/schema.sql` 没有 AG-UI event ledger、public cursor、
-   retention 或 GC 水位。当前 SSE 是对 Agent replay 的即时投影，BFF 重启后依赖 Agent source history。
-2. **Conversation / Message / Share 的 BFF 事实 ownership 尚未实现。** 当前 Live session/message/event 数据来自
+1. **Conversation / Message / Share 的 BFF 事实 ownership 尚未实现。** 当前 Live session/message 数据来自
    Agent；BFF 只拥有公开投影契约，尚未拥有这些产品事实表与 repository。
-3. **事务型 outbox 尚未实现。** Project/ScheduledTask 写入、Scheduler 注册和 Agent dispatch 不在一个本地事务
+2. **事务型 outbox 尚未实现。** Project/ScheduledTask 写入、Scheduler 注册和 Agent dispatch 不在一个本地事务
    与 outbox 状态机中；同步失败依靠 `failed` 标记、重试或启动 reconciliation 收敛。
-4. **幂等摘要与事务边界不完整。** query、selected headers 未进入 fingerprint；receipt 与业务事实/出站命令
+3. **幂等摘要与事务边界不完整。** query、selected headers 未进入 fingerprint；receipt 与业务事实/出站命令
    没有统一事务和 fencing。
+4. **AG-UI retention/GC 与主动摄取仍未完成。** 当前 ledger 不删除，因此尚无 cursor-expired 状态、安全 GC 水位或
+   retention worker；source ingestion 由 session detail/event stream 请求驱动，而不是独立 durable consumer。若某个
+   source event 在首次摄取前已从 Agent history 消失，BFF 无法从 Redis 恢复它。
 
 ### P1：架构与工程门禁
 
-- `src/domain/`、`src/config/`、`src/bootstrap/` 尚未形成；`src/http/` 与 `src/contracts/` 仍是当前物理结构。
+- `src/application/agui/` 已形成 projection use case 与 port；`src/domain/`、`src/config/`、`src/bootstrap/` 尚未形成，
+  `src/http/` 与 `src/contracts/` 仍是当前物理结构。
 - `MockBffStore`、Mori mock 与 mock routes 仍位于生产 `src/` 并编入产物。
 - TypeScript 已显式启用 `useUnknownInCatchVariables`；`exactOptionalPropertyTypes`、`noImplicitReturns`、
   `noUnusedLocals`、`noUnusedParameters` 仍因现有源码错误未启用。
-- canonical schema 的 `TIMESTAMPTZ(3)`、constraint/index 命名、durable ledger/outbox 和更完整 retention 仍待运行时
-  切片处理。
+- 新增 AG-UI 表已使用 `TIMESTAMPTZ(3)` 与命名 constraint；既有六张表的时间精度、constraint/index 命名，以及
+  outbox/retention 仍待后续切片处理。
 - `ProjectInstructionRevision` 当前仍暴露 `updatedAt`、`actorName` 和 Unix milliseconds；这是已知 wire-naming/
   UTC 违例，需与 runtime mapper、Web consumer 和 OpenAPI 同一切片删除，不能只改文档伪造 snake_case。
 - CI 尚未提供真实 PostgreSQL/Redis service gate、fresh-schema 安装、固定 SHA actions 与完整供应链扫描。
@@ -58,9 +71,9 @@
 
 ## 本阶段闭环边界
 
-本阶段只闭环文档、canonical contract、operation metadata、provenance/breaking policy、
-`useUnknownInCatchVariables` 与可执行 architecture/contract gate。它不修改 `src/`、`database/` 或 generated
-代码，也不把上述 P0/P1 运行时缺口标记为完成。
+Phase 2 仅闭环 durable public AG-UI projection 的 schema、投影事务、opaque cursor、HTTP replay/live 接线、真实
+PostgreSQL/Redis integration 与对应 contract。它不把 Conversation/Message/Share、outbox、GC、主动 event consumer、
+完整 IAM permission enforcement 或生产 telemetry 标记为完成。
 
 ## 当前证据命令
 
@@ -78,7 +91,7 @@ pnpm build
 ```bash
 KOKORO_BFF_POSTGRES_URL=POSTGRES_URL pnpm db:apply-schema
 KOKORO_TEST_POSTGRES_URL=POSTGRES_URL \
-KOKORO_TEST_REDIS_URL=redis://127.0.0.1:6379/8 \
+KOKORO_TEST_REDIS_URL=redis://127.0.0.1:56380/8 \
 pnpm test:integration
 ```
 

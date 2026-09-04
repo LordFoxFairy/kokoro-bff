@@ -28,7 +28,7 @@ Live fresh schema：
 KOKORO_BFF_POSTGRES_URL=POSTGRES_URL pnpm db:apply-schema
 KOKORO_BFF_MODE=live \
 KOKORO_BFF_POSTGRES_URL=POSTGRES_URL \
-KOKORO_BFF_REDIS_URL=redis://127.0.0.1:6379/8 \
+KOKORO_BFF_REDIS_URL=redis://127.0.0.1:56380/8 \
 pnpm start
 ```
 
@@ -77,17 +77,39 @@ schema 安装只面向 fresh/empty database；`IF NOT EXISTS` 不修复 drift。
 
 ## 7. AG-UI replay incident
 
-1. 记录 session id、最后确认的 `Last-Event-ID`、request id 和 Agent replay watermark。
-2. 用同一 cursor 重连；当前 cursor 是 Agent source sequence，不是 BFF durable public cursor。
-3. 若 Agent history 缺失、cursor gap 或同 source fact 的 frame 不完整，保留原始响应并升级；BFF 当前没有 ledger 可独立重建。
-4. 不切换 legacy SessionEvent 或 Vercel stream fallback。
+1. 记录 tenant、session id、最后确认的 opaque `Last-Event-ID`、request id 和 UTC 时间；不记录 event payload。
+2. 用同一 tenant/session/cursor 重连。`400 invalid_event_cursor` 表示格式错误、未知 token 或 scope 不匹配；不要把
+   Agent source `seq`、数据库 `public_sequence` 或其他 session cursor 代入。
+3. 查询 stream 与 source/public 水位，始终带 tenant + session predicate：
+
+   ```sql
+   SELECT version, source_high_watermark, next_public_sequence, updated_at
+   FROM bff_agui_stream
+   WHERE tenant_id = 'TENANT' AND session_id = 'SESSION';
+
+   SELECT public_sequence, cursor, source_owner, source_event_id, frame_index, event_type, recorded_at
+   FROM bff_agui_event
+   WHERE tenant_id = 'TENANT' AND session_id = 'SESSION'
+   ORDER BY public_sequence;
+   ```
+
+4. `upstream_event_identity_conflict`：按同 scope 查询 `bff_agui_source_event` 的 source event id、sequence、digest；
+   保留 Agent 原响应并停止该 stream 的自动重试。不得 update digest、覆盖 payload 或删除 unique row 来强行前进。
+5. Agent 不可用但 ledger head 是终态：BFF 应可只从 PostgreSQL replay。非终态只有部分 ledger 时先保护 PG，再恢复
+   Agent source history；Redis 不能补历史。
+6. Redis 不可用：readyz 会失败，AG-UI publish 提示会丢失，但 committed replay 不应丢。恢复 Redis 后无需复制或
+   回填 event key；AG-UI 不应存在 Redis 持久 key/stream。
+7. cursor gap/duplicate：立即冻结发布，比较 source event、frame index 与 public sequence。不要切换 legacy
+   SessionEvent、Vercel stream fallback，或重置 source high-watermark。
+8. 当前没有 retention/GC。禁止单独删除 `bff_agui_event`；否则 source watermark 已推进而 public frame 无法再投影。
 
 ## 8. 回滚
 
 - 回滚到上一个已验证的 immutable image/tag，并记录 digest。
 - v1 contract 若已被消费者使用，不通过回滚删除 operation/字段；必要时保留兼容实现或发布新版本。
 - 本仓 V1 无 migration 链；涉及 schema 的版本不做盲目 downgrade。先保护数据、验证旧二进制能读取现有 schema。
-- 回滚后重新运行 health/ready、最小 authenticated GET、idempotent replay 和 AG-UI reconnect。
+- 已发布 opaque cursor 依赖 ledger row；回滚不得恢复 numeric Agent sequence cursor。回滚后重新运行 health/ready、
+  最小 authenticated GET、idempotent replay 和 AG-UI reconnect。
 
 ## 9. 发布证据
 
@@ -99,6 +121,10 @@ pnpm test:architecture
 pnpm test
 pnpm build
 git diff --check
+
+KOKORO_TEST_POSTGRES_URL=POSTGRES_URL \
+KOKORO_TEST_REDIS_URL=redis://127.0.0.1:56380/8 \
+pnpm test:integration
 ```
 
 真实 PostgreSQL/Redis integration、candidate image smoke、安全扫描、SBOM/provenance/signature 需要单独附 evidence；缺少

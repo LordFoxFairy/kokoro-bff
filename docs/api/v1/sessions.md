@@ -8,7 +8,10 @@ Chat BFF 承接 Web v1 的会话、消息、SSE、run control 与分享投影；
 
 ## 当前实现状态
 
-BFF 已输出 schema-valid AG-UI SSE，但当前从 Agent replay 即时投影，`Last-Event-ID` 仍是 Agent source sequence；`database/schema.sql` 尚无 BFF durable AG-UI ledger/public cursor。Live Conversation、Message 与 Share 事实也尚未落入 BFF PostgreSQL。以下 owner mapping 是当前物理读取路径，不表示目标 ownership 已经完成。
+BFF 已实现 schema-valid AG-UI SSE 与 durable public projection：Agent source fact 先在同一 PostgreSQL 事务登记
+identity/digest、更新 projection state，并写入逐 frame ledger；提交后 HTTP 才发送。`Last-Event-ID` 是 BFF 发出的
+opaque `agui_*` cursor，不是 Agent source sequence。Live Conversation、Message 与 Share 产品事实仍未落入 BFF
+PostgreSQL；retention/GC 与后台主动摄取也尚未完成。
 
 ## Live owner
 
@@ -18,8 +21,8 @@ Live 模式下 Chat 只通过 `KOKORO_AGENT_BASE_URL` 调用 Agent 的 HTTP ingr
 |---|---|
 | `POST /v1/sessions/{id}/messages` | `POST /v1/runs` |
 | `POST /v1/sessions/{id}/runs/{runId}/control` | `POST /v1/runs/{runId}/control` |
-| `GET /v1/sessions/{id}/events` | `GET /v1/sessions/{id}/events`，`Last-Event-ID` → `after_seq` |
-| `GET /v1/sessions/{id}` | Agent messages + replay 的并行投影 |
+| `GET /v1/sessions/{id}/events` | 先用 `Last-Event-ID` 读取 BFF ledger，再以 BFF source high-watermark 调 Agent `after_seq` |
+| `GET /v1/sessions/{id}` | Agent messages/source events + BFF durable public watermark 投影 |
 
 BFF 为 Agent 注入受信的 `ExecutionIdentity` headers（tenant/subject/actor/assertion），浏览器的 `X-Domain`、`X-Forwarded-*` 和 tenant 字段不会转发。消息的 `run_id`/`user_message_id` 由 namespace、session 和 `Idempotency-Key` 的 SHA-256 稳定派生，进程重启后仍能命中 Agent 的 run admission；`assistant_message_id` 是稳定 provisional id，最终 assistant message id 以 Agent 的 chat projection 事件为准。
 
@@ -48,7 +51,10 @@ Session list 在 v1 由 Agent 持久化并按 trusted execution identity 查询�
 }
 ```
 
-常见 Chat 错误码：`invalid_json`、`invalid_message`、`invalid_run_control`、`idempotency_key_required`、`idempotency_conflict`、`idempotency_in_progress`、`session_not_found`、`run_not_found`、`agent_not_configured`、`chat_projection_not_configured`、`upstream_unreachable`。
+常见 Chat 错误码：`invalid_json`、`invalid_message`、`invalid_run_control`、`invalid_event_cursor`、
+`idempotency_key_required`、`idempotency_conflict`、`idempotency_in_progress`、`session_not_found`、`run_not_found`、
+`business_store_not_configured`、`agent_not_configured`、`chat_projection_not_configured`、`upstream_unreachable`、
+`upstream_event_identity_conflict`。
 
 除读取和事件流外，消息、control、rename、delete、share 均必须带 `Idempotency-Key`。相同 namespace、方法、规范化路径和 key 的重试返回同一 receipt；相同 key 但请求体不同返回 `409 idempotency_conflict`；原请求仍在处理时返回 `409 idempotency_in_progress`。
 
@@ -119,7 +125,7 @@ GET /v1/sessions/{id}/messages?limit=20&cursor=CURSOR
     "pending_pauses": [],
     "files": [],
     "deliveries": [],
-    "event_watermark": 4
+    "event_watermark": "agui_0123456789abcdef0123456789abcdef"
   },
   "meta": { "request_id": "req_01JASYNC000000000000000000" }
 }
@@ -154,15 +160,21 @@ GET /v1/sessions/{id}/messages?limit=20&cursor=CURSOR
 
 `GET /v1/sessions/{id}/events`
 
-客户端使用 `Last-Event-ID` 传递最近确认的非负事件序列；BFF 严格返回其后的事件。每个事件帧的 `id` 是恢复 cursor，`data` 是 JSON 的 `ChatEvent` 投影：
+客户端使用 `Last-Event-ID` 原样传递最近确认的 BFF opaque cursor；BFF 在相同 tenant/session scope 内严格返回其后的
+AG-UI frame。每帧有独立 cursor，一个 Agent source fact 即使展开为 START+CONTENT，也能在两帧之间无损恢复：
 
 ```text
-id: 4
-event: run.completed
-data: {"event_id":"event_4","seq":4,"session_id":"session_kokoro","run_id":"run_01JASYNC","kind":"run.completed","timestamp":"2026-01-01T00:00:04.000Z","payload":{"status":"completed"}}
+id: agui_0123456789abcdef0123456789abcdef
+data: {"type":"RUN_FINISHED","timestamp":1767225604000,"threadId":"session_kokoro","runId":"run_01JASYNC","metadata":{"kokoro":{"event_id":"agent_event_4","seq":4,"session_id":"session_kokoro","run_id":"run_01JASYNC","timestamp":"2026-01-01T00:00:04.000Z"}}}
 ```
 
-BFF 先从 Agent replay，再以相同 cursor 轮询增量事件；空闲期间发送 SSE comment keep-alive，收到 `run.completed` 或 `run.failed` 后关闭。客户端断开会停止轮询，不会将连接生命周期绑定到一次性的上游 HTTP 响应。收到事件后应先持久化最后一个合法 `id`，再处理业务 payload。
+BFF 先 drain PostgreSQL public ledger，再按持久化 source high-watermark 从 Agent 拉取增量；source identity、全部展开
+frame 和新 state 原子提交后，再次从 PostgreSQL 读取并发送。空闲期间发送 SSE comment keep-alive，ledger head 为
+`RUN_FINISHED`/`RUN_ERROR` 时关闭。客户端收到 frame 后应先保存最后确认的合法 `id`，再处理 payload。
+
+格式错误、未知或其他 tenant/session 的 cursor 返回 `400 invalid_event_cursor`。已提交终态可在 BFF 重启、Agent
+disabled/unavailable 后独立 replay。Redis 仅接收 best-effort notification，不保存 cursor/history。当前 ledger 不自动
+清理，尚未定义 cursor-expired；也没有后台 consumer 在无读取请求时主动摄取 Agent source history。
 
 Agent chat projection 的 `run.started`、`assistant.delta`、`assistant.completed`、`activity`、`interaction`、`delivery`、`run.completed`、`run.failed` 分别投影到 Web 的 `run.created`、消息/工具/子代理/成果/终态事件。活动参数默认被 Agent 脱敏为 `{}`；原始参数只留在 Agent 执行事实中。
 

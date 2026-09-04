@@ -14,7 +14,8 @@ SLI 只统计 BFF public Product API 和 AG-UI stream admission。上游 owner �
 | Product API availability | 非预期 5xx 之外的合格请求 / 合格请求 | 99.9% |
 | Read latency | 非 streaming GET 从接收到完整响应 | p95 < 500 ms，p99 < 1.5 s |
 | Mutation admission latency | 收到完整 body 到 receipt response | p95 < 750 ms，p99 < 2 s |
-| AG-UI reconnect success | 有效 cursor 在 10 s 内恢复首个 frame或明确终态 | 99.9% |
+| AG-UI reconnect success | 有效 BFF opaque cursor 在 10 s 内从 PostgreSQL 恢复首个 frame 或明确终态 | 99.9% |
+| AG-UI projection integrity | committed source identity 对应 frame 无 gap、重复或跨 tenant/session 可见 | 100% |
 | Idempotent replay correctness | 同 scope/digest 返回同 status/body 且无第二副作用 | 100% |
 | Tenant isolation | 跨 tenant 数据泄漏事件 | 0 |
 | Scheduled occurrence uniqueness | 同 task/occurrence 启动不超过一个 Run | 100% |
@@ -31,12 +32,13 @@ SLI 只统计 BFF public Product API 和 AG-UI stream admission。上游 owner �
 - owner timeout、response-too-large 或 schema mismatch 急升；
 - pending receipt 超过 60 秒或同 scope conflict 急升；
 - Scheduler failed/reconcile backlog 非零持续 10 分钟；
-- AG-UI reconnect failure、cursor gap 或 duplicate public cursor 任一出现；
+- AG-UI reconnect failure、source identity conflict、cursor gap 或 duplicate public cursor 任一出现；
 - cross-tenant negative canary 任一失败。
 
 ## 当前可观测性缺口
 
-当前实现尚未提供完整 Prometheus metrics、distributed trace、structured operation log、AG-UI ledger lag、outbox backlog、
+当前真实 integration 证明功能不变量，不等于 SLO 达标。实现尚未提供完整 Prometheus metrics、distributed trace、
+structured operation log、AG-UI source-to-public lag、stream version contention、Redis notification loss、outbox backlog、
 receipt age histogram 或 automated SLO report。因此本文件只能定义目标。上线前必须记录 query、label cardinality、
 采样与告警路由，并用真实流量/故障注入形成基线。
 

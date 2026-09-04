@@ -17,9 +17,9 @@ Browser -> kokoro same-origin /api/* -> kokoro-bff /v1/* -> owner API / Agent / 
 | Public contract | 63 个 operation，全部具备 owner/visibility/stability/idempotency/permission metadata |
 | Project / ScheduledTask | Live 使用本仓 PostgreSQL；Redis 用于 readiness/cache coordination |
 | Idempotency | business store 存在时有 PostgreSQL receipt；部分路径仍可能使用进程内 Map |
-| Chat / AG-UI | BFF 从 Agent HTTP replay 即时投影 AG-UI SSE；cursor 仍是 Agent source sequence |
+| Chat / AG-UI | Live 先把 Agent source fact 与 AG-UI frame 原子投影到本仓 PostgreSQL，再从 ledger 输出 SSE |
 | Conversation / Message / Share | 公开契约由 BFF 拥有，但 Live 产品事实当前仍来自 Agent，BFF 表尚未落地 |
-| Durable AG-UI ledger | 未实现 |
+| Durable AG-UI ledger | 已实现 tenant/session 隔离、source identity 去重、单调内部序列及逐 frame opaque cursor；retention/GC 未实现 |
 | Transactional outbox | 未实现 |
 | Mock | 仍编入 `src/`，只作本地 fixture，不是生产完成证据 |
 
@@ -32,6 +32,8 @@ Browser -> kokoro same-origin /api/* -> kokoro-bff /v1/* -> owner API / Agent / 
 - Root：拓扑、治理和 Developer API catalog；不保存本仓 OpenAPI 镜像。
 
 AG-UI 是 Web 与 BFF 之间唯一 Agent 网络协议。Vercel AI SDK 只属于 Web 内部 UI adapter，不建立第二套网络 stream。
+`Last-Event-ID` 必须原样回传 BFF 发出的 `agui_*` opaque cursor；Agent source sequence 只存在于内部 metadata，不能作为
+公开 replay cursor。Redis 仅发布投影更新通知，不保存 replay 数据；删除 Redis 状态不影响 PostgreSQL replay。
 
 ## 五分钟启动
 
@@ -53,7 +55,7 @@ Live BFF-owned facts 需要共享 PostgreSQL 与 Redis DB 8：
 KOKORO_BFF_POSTGRES_URL=POSTGRES_URL pnpm db:apply-schema
 KOKORO_BFF_MODE=live \
 KOKORO_BFF_POSTGRES_URL=POSTGRES_URL \
-KOKORO_BFF_REDIS_URL=redis://127.0.0.1:6379/8 \
+KOKORO_BFF_REDIS_URL=redis://127.0.0.1:56380/8 \
 pnpm dev
 ```
 
@@ -89,7 +91,7 @@ pnpm build
 ```bash
 KOKORO_BFF_POSTGRES_URL=POSTGRES_URL pnpm db:apply-schema
 KOKORO_TEST_POSTGRES_URL=POSTGRES_URL \
-KOKORO_TEST_REDIS_URL=redis://127.0.0.1:6379/8 \
+KOKORO_TEST_REDIS_URL=redis://127.0.0.1:56380/8 \
 pnpm test:integration
 ```
 

@@ -2,7 +2,9 @@
 
 ## 当前实现提示
 
-本页描述 v1 契约。Live 完成度以 [`../../CURRENT.md`](../../CURRENT.md) 为准：当前 AG-UI 是对 Agent history 的即时投影，BFF durable ledger/outbox 与 Conversation/Message/Share PostgreSQL ownership 尚未实现。契约存在不等于运行时已经闭环。
+本页描述 v1 契约。Live 完成度以 [`../../CURRENT.md`](../../CURRENT.md) 为准：AG-UI public frame 已在发送前写入
+BFF PostgreSQL ledger，并使用逐 frame opaque cursor；retention/GC、后台主动摄取、outbox 与
+Conversation/Message/Share PostgreSQL ownership 尚未实现。契约存在不等于全部运行时已经闭环。
 
 ## 目标
 
@@ -159,7 +161,7 @@ Model/Billing 的 owner HTTP 面明确注册为 `web-bff` caller；Agent ingress
 | --- | --- | --- | --- |
 | Projects | 已定义 | 有 | BFF-owned PostgreSQL fact store；System 仅承接 Site/Workspace/Policy |
 | Mori Music | 已定义 | 有 | 已接入 `KOKORO_MUSIC_BASE_URL`；缺失时 fail closed |
-| Chat | 已定义 | 有 | Agent HTTP adapter 与即时 AG-UI projection 已接；BFF Chat facts/durable ledger 未完成，部分 mutation 返回 503 |
+| Chat | 已定义 | 有 | Agent HTTP source adapter + BFF durable AG-UI ledger 已接；Chat 产品事实/GC 未完成，部分 mutation 返回 503 |
 | Model | 已定义 | 有 | catalog read projection 已接 |
 | Skills / MCP | 已定义 | 有 | Capability read projection 已接；未接写操作返回 503 |
 | Scheduled | 已定义 | 有 | PostgreSQL fact + 同步 Scheduler 已接；transactional outbox 未完成 |
@@ -177,7 +179,7 @@ Model/Billing 的 owner HTTP 面明确注册为 `web-bff` caller；Agent ingress
 
 | Web-facing surface | BFF boundary | Fact owner |
 | --- | --- | --- |
-| Chat/session/run/SSE | `src/infrastructure/clients/agent/` + BFF Chat | Agent currently supplies execution/history facts; BFF owns the public contract, while durable projection and Chat product tables remain open. |
+| Chat/session/run/SSE | `src/infrastructure/clients/agent/` + `src/application/agui/` + PostgreSQL | Agent supplies execution/history source facts; BFF owns the public contract and durable AG-UI projection; Chat product tables remain open. |
 | Project/workspace projection | BFF business adapter | BFF projection; System owns Site/Workspace/Policy |
 | Skills/MCP | Capability Connect adapter | Capability |
 | Model selection | `liveOwnerBusiness` Model projection | Model |

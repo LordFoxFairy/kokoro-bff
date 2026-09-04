@@ -8,6 +8,11 @@
 - PostgreSQL pending receipt 60 秒后可回收，防止进程崩溃永久占用 key。
 - ScheduledTask 使用稳定 job name/occurrence key；启动时 best-effort 重新注册 active task。
 - Live 配置/上游缺失时 fail closed，不回退到 Mock 成功。
+- AG-UI source identity、projection state、全部展开 frame 与 source high-watermark 在同一 PostgreSQL 事务提交；公开
+  SSE 只读取 committed ledger。
+- tenant/session stream row lock + version fence 串行化并发摄取；event id、source sequence 和 source frame 唯一约束
+  阻止重复 public frame。
+- 每个 public frame 有独立 opaque cursor；从 START frame 后恢复会继续 CONTENT，而不是跳过整个 source event。
 
 ## 幂等限制
 
@@ -26,11 +31,17 @@ jitter、lease/fencing 投递；owner receipt 与 BFF outbox 状态 reconciliati
 
 ## AG-UI replay
 
-当前事件由 Agent replay 即时映射为 AG-UI；`Last-Event-ID` 是 Agent source sequence。BFF 没有 durable public ledger，
-所以 BFF 无法独立保证 public cursor retention、GC、跨版本投影稳定性或 Agent history 缺失时的恢复。
+当前 public event 与 replay 的唯一 durable truth 是 BFF PostgreSQL ledger。HTTP 先重放已提交 rows，再按持久化 source
+high-watermark 从 Agent 获取新 source facts；投影事务提交后才发送。`Last-Event-ID` 是逐 frame `agui_*` token，内部
+public sequence 单调且不暴露。终态已持久化时，BFF 重启或 Agent disabled/unavailable 不影响 replay。
 
-目标必须验证：单调 public cursor、断线后 strictly-after replay、一个 source fact 展开多 frame 时不丢片段、BFF/Agent
-重启、cursor 过期的稳定错误、retention 和 GC safety watermark。
+真实 PostgreSQL/Redis integration 已验证：strictly-after、一个 source fact 展开多 frame 后从中间恢复、并发重复
+摄取、source identity 冲突、projection state 跨重启、tenant/session foreign cursor 拒绝、BFF 重启后 replay，以及
+Redis 不存在 AG-UI 持久键。Redis publish 可丢失且失败不回滚 ledger。
+
+尚未闭环：retention/GC safety watermark、cursor-expired 稳定错误、后台主动摄取、跨版本 re-projection、PG backup
+restore 与长时间 fault injection。当前读取驱动 ingestion；source fact 在首次摄取前从 Agent history 消失时仍可能形成
+不可恢复缺口。
 
 ## Retry 规则
 
@@ -47,12 +58,13 @@ jitter、lease/fencing 投递；owner receipt 与 BFF outbox 状态 reconciliati
 | 故障 | 当前行为 | 恢复 |
 | --- | --- | --- |
 | PostgreSQL 不可用 | BFF-owned Live route 503；readyz 非就绪 | 恢复 DB 后重试 |
-| Redis 不可用 | business store readiness 失败 | 恢复 Redis；PG facts 不应丢失 |
+| Redis 不可用 | readyz 失败；AG-UI publish 被忽略，已提交 replay 仍在 PG | 恢复 Redis；无需重建 event history |
 | owner timeout/过大响应 | 稳定 502/错误归一 | 在幂等预算内重试 |
 | Scheduler 注册失败 | task 标记 failed | `retry` 或重启 reconciliation |
-| Agent 不可用 | Chat/dispatch fail closed | 同 key 重试或稍后读取 receipt |
+| Agent 不可用 | 新 Chat/dispatch fail closed；终态 AG-UI ledger 可独立 replay | 同 key 重试；公开历史从 PG 读取 |
 | BFF 在同步 side effect 中间崩溃 | 可能 divergence | 当前靠 owner state + 启动 reconcile；outbox 待实现 |
-| cursor 早于保留水位 | 尚无 BFF policy | durable ledger/稳定 cursor-expired error 待实现 |
+| cursor 格式错误、未知或跨 scope | 400 `invalid_event_cursor` | 使用该 tenant/session 最后确认的 SSE id |
+| cursor 早于未来保留水位 | 当前不清理，因此尚无此状态 | retention/cursor-expired policy 待实现 |
 
 ## 关闭与降级缺口
 

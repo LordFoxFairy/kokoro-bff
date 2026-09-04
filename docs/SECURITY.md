@@ -20,6 +20,8 @@ X-Forwarded-*、tenant 或 actor header 作为 authority，也不把浏览器 Au
 - Scheduler dispatch 要求 configured bearer 或 internal secret，并校验 job name、UTC occurrence、task id、owner id 与
   稳定 idempotency key。
 - 共享快照仍要求 server-only service auth；share id 只选择资源。
+- AG-UI cursor 只是不可解释的定位 token，不是 capability。解析与 replay SQL 同时要求受信 namespace、session id 和
+  cursor；其他 tenant/session 的 token 与未知 token 统一返回 `invalid_event_cursor`，不透露资源是否存在。
 
 当前 BFF 信任 Web adapter 提供的 namespace/principal，尚未在本进程完成 IAM admission/permission lookup。OpenAPI
 `x-kokoro-permission` 已冻结权限意图，但运行时逐 operation permission enforcement 尚未闭环；这是安全缺口，不是
@@ -37,6 +39,8 @@ X-Forwarded-*、tenant 或 actor header 作为 authority，也不把浏览器 Au
 
 - secret 只来自环境变量，不写入日志、receipt 或 contract 示例。
 - `response_body` receipt 可能包含业务响应；当前没有字段级敏感数据分类、加密或 TTL，需在扩大 payload 前补齐。
+- `bff_agui_event.event_payload` 保存公开 AG-UI frame，可能含用户文本、tool result 或 delivery metadata；当前没有
+  retention/field encryption，数据库角色、备份和诊断查询必须按用户内容处理，禁止把 payload 写入普通日志。
 - 日志当前主要是进程/reconciliation 文本，尚未形成带 service/operation/request_id/trace_id/result/duration 的完整
   结构化审计面。
 - PostgreSQL、Redis 与 owner token 应使用最小权限独立凭据；BFF 不访问其他 owner 数据库。
@@ -52,7 +56,7 @@ X-Forwarded-*、tenant 或 actor header 作为 authority，也不把浏览器 Au
 | CSRF/CSP/cookie | 属于 Web same-origin adapter；需跨仓验收 |
 | schema validation | 部分手写 mapper + AG-UI schema；全 OpenAPI runtime validation 未闭环 |
 | dependency/source/secret scan | CI 尚未闭环 |
-| tenant negative tests | 部分 repository/route tests；完整 public surface 矩阵仍待补齐 |
+| tenant negative tests | AG-UI repository 与 HTTP foreign-cursor 已有真实 PG negative test；完整 public surface 矩阵仍待补齐 |
 
 ## 安全变更门禁
 

@@ -78,8 +78,18 @@ path 和 key；body 规范化后形成 fingerprint。Live 且 business store 配
 ## AG-UI
 
 `GET /v1/sessions/{id}/events` 的网络 payload 是 AG-UI SSE。BFF 不发布 legacy SessionEvent wire，也不发布 Vercel
-AI SDK data stream。当前 cursor 沿用 Agent source sequence，事件即时投影；BFF-owned durable ledger/public cursor 尚未
-实现。详见 [`api/v1/agui-chat.md`](./api/v1/agui-chat.md) 与 [`TECHNICAL_DESIGN.md`](./TECHNICAL_DESIGN.md)。
+AI SDK data stream。Live 事件在公开发送前原子写入 BFF PostgreSQL ledger；每个 AG-UI frame 的 SSE `id` 都是独立
+`agui_*` opaque cursor。客户端只保存并原样回传最后确认的 `id`，不得解析、构造或跨 tenant/session 复用；replay
+严格从该 cursor 对应内部位置之后开始。
+
+Agent source `seq` 只保留在 AG-UI `metadata.kokoro` 中用于诊断和投影 provenance，不是 public cursor。无效格式、未知
+或其他 tenant/session 的 `Last-Event-ID` 返回 `400 invalid_event_cursor`。终态已提交时，即使 Agent disabled/unavailable，
+BFF 重启后仍可只从 PostgreSQL replay；Redis 不参与 cursor 解析或历史读取。`event_watermark` 是当前 public ledger head
+cursor；第一帧尚未产生时为 `null`。
+
+cursor retention/expired error 尚未实现，当前 ledger 不自动删除。字段级定义与例子只看 canonical OpenAPI；实现、
+恢复和剩余缺口见 [`TECHNICAL_DESIGN.md`](./TECHNICAL_DESIGN.md)、[`RELIABILITY.md`](./RELIABILITY.md) 与
+[`CURRENT.md`](./CURRENT.md)。
 
 ## 资源文档
 
