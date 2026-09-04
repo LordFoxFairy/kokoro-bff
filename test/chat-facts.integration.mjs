@@ -7,6 +7,7 @@ import { Pool } from "pg"
 import { createClient } from "redis"
 
 import { createBffServer } from "../dist/main.js"
+import { PostgresBffRepositories } from "../dist/infrastructure/postgres/repositories.js"
 
 const postgresUrl = process.env.KOKORO_TEST_POSTGRES_URL
 const redisUrl = process.env.KOKORO_TEST_REDIS_URL
@@ -33,6 +34,16 @@ async function listen(server) {
 
 async function close(server) {
   if (server.listening) await new Promise((resolve) => server.close(() => resolve()))
+}
+
+async function waitFor(predicate, timeoutMs = 5000) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const value = await predicate()
+    if (value) return value
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  }
+  throw new Error("condition was not met before timeout")
 }
 
 function config() {
@@ -171,6 +182,232 @@ integrationTest("serves tenant-scoped Chat facts from BFF PostgreSQL and revokes
     await pool.query("DELETE FROM bff_message WHERE tenant_id IN ($1, $2)", [tenant, otherTenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_conversation WHERE tenant_id IN ($1, $2)", [tenant, otherTenant]).catch(() => undefined)
     await redis.quit().catch(() => undefined)
+    await pool.end()
+  }
+})
+
+integrationTest("accepts a Chat turn after the message and Agent dispatch are durably committed", async () => {
+  const pool = new Pool({ connectionString: postgresUrl })
+  const tenant = `chat_dispatch_${Date.now()}`
+  const conversationId = `conversation_dispatch_${Date.now()}`
+  let bff
+  let agent
+  let agentAvailable = false
+  let launchAttempts = 0
+  try {
+    await pool.query("DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_agui_stream, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE")
+    await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+    await pool.query(
+      `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title)
+       VALUES ($1, $2, $3, $4)`,
+      [conversationId, tenant, "chat_user", "Durable dispatch"],
+    )
+    agent = createServer(async (request, response) => {
+      if (request.url !== "/v1/runs" || request.method !== "POST") {
+        response.writeHead(503, { "content-type": "application/json" })
+        response.end(JSON.stringify({ error: { code: "agent_unavailable", message: "retry" }, meta: { request_id: "agent" } }))
+        return
+      }
+      const chunks = []
+      for await (const chunk of request) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+      const launch = JSON.parse(Buffer.concat(chunks).toString("utf8"))
+      launchAttempts += 1
+      if (!agentAvailable) {
+        response.writeHead(503, { "content-type": "application/json" })
+        response.end(JSON.stringify({ error: { code: "agent_unavailable", message: "retry" }, meta: { request_id: "agent" } }))
+        return
+      }
+      response.writeHead(202, { "content-type": "application/json" })
+      response.end(JSON.stringify({
+        data: { run_id: launch.run_id, session_id: launch.session_id, replayed: false },
+        meta: { request_id: "agent" },
+      }))
+    })
+    const agentBase = await listen(agent)
+    const runtimeConfig = config()
+    runtimeConfig.agentEnabled = true
+    runtimeConfig.upstreams.agents = agentBase
+    bff = createBffServer(runtimeConfig)
+    const base = await listen(bff)
+
+    const submitted = await fetch(`${base}/v1/sessions/${conversationId}/messages`, {
+      method: "POST",
+      headers: { ...auth(tenant, "chat_user"), "content-type": "application/json", "idempotency-key": "durable-chat-turn" },
+      body: JSON.stringify({ content: "Persist before dispatch" }),
+    })
+
+    assert.equal(submitted.status, 202)
+    const submittedEnvelope = await submitted.json()
+    const receipt = submittedEnvelope.data
+
+    const replay = await fetch(`${base}/v1/sessions/${conversationId}/messages`, {
+      method: "POST",
+      headers: { ...auth(tenant, "chat_user"), "content-type": "application/json", "idempotency-key": "durable-chat-turn" },
+      body: JSON.stringify({ content: "Persist before dispatch" }),
+    })
+    assert.equal(replay.status, 202)
+    assert.deepEqual(await replay.json(), submittedEnvelope)
+
+    const conflict = await fetch(`${base}/v1/sessions/${conversationId}/messages`, {
+      method: "POST",
+      headers: { ...auth(tenant, "chat_user"), "content-type": "application/json", "idempotency-key": "durable-chat-turn" },
+      body: JSON.stringify({ content: "Different payload" }),
+    })
+    assert.equal(conflict.status, 409)
+
+    const differentSubject = await fetch(`${base}/v1/sessions/${conversationId}/messages`, {
+      method: "POST",
+      headers: { ...auth(tenant, "other_user"), "content-type": "application/json", "idempotency-key": "durable-chat-other-subject" },
+      body: JSON.stringify({ content: "Must not cross owner" }),
+    })
+    assert.equal(differentSubject.status, 404)
+    const messages = await pool.query(
+      `SELECT message_id, role, status, run_id
+         FROM bff_message
+        WHERE tenant_id = $1 AND conversation_id = $2
+        ORDER BY message_seq ASC`,
+      [tenant, conversationId],
+    )
+    assert.deepEqual(messages.rows, [
+      { message_id: receipt.user_message_id, role: "user", status: "completed", run_id: receipt.run_id },
+      { message_id: receipt.assistant_message_id, role: "assistant", status: "pending", run_id: receipt.run_id },
+    ])
+    const outbox = await pool.query(
+      `SELECT run_id, user_message_id, assistant_message_id, status, attempt_count
+         FROM bff_agent_dispatch_outbox
+        WHERE tenant_id = $1 AND conversation_id = $2`,
+      [tenant, conversationId],
+    )
+    assert.equal(outbox.rows.length, 1)
+    assert.deepEqual(
+      {
+        run_id: outbox.rows[0].run_id,
+        user_message_id: outbox.rows[0].user_message_id,
+        assistant_message_id: outbox.rows[0].assistant_message_id,
+      },
+      {
+        run_id: receipt.run_id,
+        user_message_id: receipt.user_message_id,
+        assistant_message_id: receipt.assistant_message_id,
+      },
+    )
+
+    const retryable = await waitFor(async () => {
+      const result = await pool.query(
+        `SELECT status, attempt_count, last_error_code
+           FROM bff_agent_dispatch_outbox
+          WHERE tenant_id = $1 AND conversation_id = $2`,
+        [tenant, conversationId],
+      )
+      return result.rows[0]?.status === "retryable" ? result.rows[0] : null
+    })
+    assert.equal(retryable.attempt_count, 1)
+    assert.equal(retryable.last_error_code, "agent_unavailable")
+
+    await close(bff)
+    bff = undefined
+    agentAvailable = true
+    bff = createBffServer(runtimeConfig)
+    await listen(bff)
+    const succeeded = await waitFor(async () => {
+      const result = await pool.query(
+        `SELECT status, attempt_count, completed_at
+           FROM bff_agent_dispatch_outbox
+          WHERE tenant_id = $1 AND conversation_id = $2`,
+        [tenant, conversationId],
+      )
+      return result.rows[0]?.status === "succeeded" ? result.rows[0] : null
+    })
+    assert.ok(succeeded.attempt_count >= 2)
+    assert.ok(succeeded.completed_at)
+    assert.ok(launchAttempts >= 2)
+  } finally {
+    if (bff) await close(bff)
+    if (agent) await close(agent)
+    await pool.query("DELETE FROM bff_agent_dispatch_outbox WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_agui_stream WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_message WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_conversation WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+    await pool.end()
+  }
+})
+
+integrationTest("reclaims expired Agent dispatch leases and rejects stale or cross-tenant settlement", async () => {
+  const pool = new Pool({ connectionString: postgresUrl })
+  const tenant = `chat_fence_${Date.now()}`
+  const conversationId = `conversation_fence_${Date.now()}`
+  let store
+  try {
+    await pool.query("DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_agui_stream, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE")
+    await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+    await pool.query(
+      `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title)
+       VALUES ($1, $2, $3, $4)`,
+      [conversationId, tenant, "chat_user", "Lease fencing"],
+    )
+    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    await store.ready()
+    const receipt = await store.services.chatTurns.submit({
+      tenantId: tenant,
+      conversationId,
+      subjectId: "chat_user",
+      actorId: "chat_user",
+      requestId: "request_fence",
+      idempotencyKey: "chat-fence",
+      content: "Fence this dispatch",
+    })
+    assert.ok(receipt)
+
+    const first = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
+      workerId: "worker_a",
+      limit: 1,
+      leaseDurationMs: 5,
+    })
+    assert.equal(first.length, 1)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    const second = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
+      workerId: "worker_b",
+      limit: 1,
+      leaseDurationMs: 5000,
+    })
+    assert.equal(second.length, 1)
+    assert.equal(second[0].fence, first[0].fence + 1)
+
+    assert.equal(await store.agentDispatchOutbox.markAgentDispatchSucceeded({
+      tenantId: `${tenant}_other`,
+      outboxId: second[0].outboxId,
+      leaseOwner: second[0].leaseOwner,
+      leaseToken: second[0].leaseToken,
+      fence: second[0].fence,
+    }), false)
+    assert.equal(await store.agentDispatchOutbox.markAgentDispatchSucceeded({
+      tenantId: first[0].tenantId,
+      outboxId: first[0].outboxId,
+      leaseOwner: first[0].leaseOwner,
+      leaseToken: first[0].leaseToken,
+      fence: first[0].fence,
+    }), false)
+    assert.equal(await store.agentDispatchOutbox.markAgentDispatchSucceeded({
+      tenantId: second[0].tenantId,
+      outboxId: second[0].outboxId,
+      leaseOwner: second[0].leaseOwner,
+      leaseToken: second[0].leaseToken,
+      fence: second[0].fence,
+    }), true)
+
+    const state = await pool.query(
+      `SELECT status, attempt_count, fence
+         FROM bff_agent_dispatch_outbox
+        WHERE tenant_id = $1 AND conversation_id = $2`,
+      [tenant, conversationId],
+    )
+    assert.deepEqual(state.rows, [{ status: "succeeded", attempt_count: 2, fence: "2" }])
+  } finally {
+    if (store) await store.close()
+    await pool.query("DELETE FROM bff_agent_dispatch_outbox WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_agui_stream WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_message WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_conversation WHERE tenant_id = $1", [tenant]).catch(() => undefined)
     await pool.end()
   }
 })

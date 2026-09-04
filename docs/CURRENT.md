@@ -23,8 +23,10 @@
   PostgreSQL repository。Redis 当前用于 readiness/ping 和 Project cache invalidation，不是事实源。
 - Live Conversation、Message、Share 使用本仓 `bff_conversation`、`bff_message`、`bff_share` PostgreSQL repository；
   所有读写带 tenant predicate，删除保留 tombstone，share 撤销/过期后保留记录并只暴露 active/unexpired share。
-- Chat session list/detail/message history/title/delete/share routes 不再读取 Agent history；Message create 先在 BFF
-  事务中写入 user message，再通过窄 Agent launch client 提交执行。Agent 仍只拥有 Run/control/source execution events。
+- Chat session list/detail/message history/title/delete/share routes 不再读取 Agent history。Message create 在一个 BFF
+  PostgreSQL 事务中同时写入 completed user message、pending assistant message、`bff_agent_dispatch_outbox` 与预注册的
+  AG-UI expected run；HTTP 在本地事务提交后返回 `202`，后台 dispatcher 再通过窄 Agent client 投递。Agent 仍只拥有
+  Run/control/source execution events。
 - ScheduledTask aggregate 的 `nextRunAt`/`expiresAt` 在 application/domain 内是有效的 UTC `Date`；HTTP/JSON 与
   Scheduler command 使用 RFC 3339 UTC 字符串，`time` + IANA `timezone` 保留本地周期规则。数据库事实使用
   `TIMESTAMPTZ(3)`。
@@ -63,6 +65,9 @@
   `tenant_id`、`actor_id`、`request_id`、`idempotency_key` 和版本化 task snapshot，并以 `SKIP LOCKED`、lease token、
   fence、指数退避、重试上限和 `pending/leased/retryable/succeeded/failed` 状态恢复。Scheduler dispatch receipt 仍使用
   稳定 occurrence idempotency key。
+- Chat → Agent dispatcher 使用稳定 run/message/idempotency identity、`FOR UPDATE SKIP LOCKED`、lease token/fence、
+  有界 attempt 与指数退避执行 at-least-once 投递。BFF 或 Agent 重启不会丢失已接纳命令；过期 lease 可重新领取，旧
+  worker 和跨 tenant settlement 都不能覆盖当前结果。明确永久失败会把 provisional assistant message 标记为 failed。
 - Agent 自有 wire protocol 不在本切片改写；若其事件边界使用 epoch milliseconds，BFF 将其视为 wire encoding，AG-UI
   projection 的内部时间仍在边界解析为 UTC instant。
 - 缺失 BFF store、非法请求/响应和未接写操作会返回稳定错误；ScheduledTask 在 Scheduler 缺失时仍可提交本地
@@ -72,13 +77,12 @@
 
 ### P0：运行时正确性
 
-1. **Chat assistant message reconciliation 与 Agent dispatch outbox 尚未实现。** 当前 Message create 先写入 BFF user
-   message；assistant provisional id 在 receipt 中返回。若随后 Agent launch 失败，会留下已提交的 user Message fact，
-   但没有 outbox/自动重试来重新投递；这属于后续 P0，当前切片不宣称跨系统原子闭环。Agent source event 到 BFF Message
-   状态/内容的 durable reconciliation 也仍是下一切片。
-2. **事务型 outbox 仍按 owner/切片分阶段。** ScheduledTask → Scheduler 的 bounded outbox 已实现并有真实 PG
-   integration；Project side effect、Agent Run dispatch，以及 mutation receipt claim 与 task/outbox 的统一事务仍未完成。
-   Scheduler 外部投递是 at-least-once，依靠稳定 command/idempotency identity 和条件 settlement 收敛。
+1. **Chat assistant message reconciliation 尚未实现。** Agent dispatch outbox 已闭合 admission 与投递恢复，但成功接纳
+   Run 后，Agent source event 尚未 durable 回写 `bff_message` 的 streaming/completed 内容；provisional assistant message
+   会保持 pending，直到下一切片建立 event → Message reconciliation。当前不能把 AG-UI ledger 等同于 Message fact。
+2. **事务型 outbox 仍按 owner/切片分阶段。** ScheduledTask → Scheduler 与 Chat → Agent 的 bounded outbox 已实现并有
+   真实 PG integration；Project side effect，以及 mutation receipt claim 与 aggregate/outbox 的统一事务仍未完成。两条
+   外部投递均是 at-least-once，依靠稳定 command identity 与带 fence 的条件 settlement 收敛。
 3. **幂等摘要与事务边界不完整。** query、selected headers 未进入 fingerprint；receipt 与业务事实/出站命令
    没有统一事务和 fencing。
 4. **AG-UI 跨版本重投影与备份恢复演练仍未完成。** 主动 consumer、lease/fence、retention floor、frame GC、cursor
@@ -101,9 +105,9 @@
 
 ## 本阶段闭环边界
 
-本阶段闭环 BFF-owned Conversation/Message/Share、独立 durable AG-UI source consumer、lease/fence、retention/GC 与
-expired cursor。它不扩展到 Agent Run、Agent 自有 outbox、assistant message reconciliation、完整 IAM permission
-enforcement、projection 跨版本重建或生产 telemetry。
+本阶段闭环 BFF-owned Conversation/Message/Share、Chat → Agent transactional outbox、独立 durable AG-UI source
+consumer、lease/fence、retention/GC 与 expired cursor。它不拥有 Agent Run，也不扩展到 assistant message reconciliation、
+完整 IAM permission enforcement、projection 跨版本重建或生产 telemetry。
 
 ## 当前证据命令
 

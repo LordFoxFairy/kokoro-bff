@@ -223,10 +223,15 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
       else response.destroy()
     })
   })
-  if (composition.agUiProjector !== undefined || composition.scheduledTaskDispatcher !== undefined) {
+  if (
+    composition.agUiProjector !== undefined
+    || composition.scheduledTaskDispatcher !== undefined
+    || composition.agentDispatchDispatcher !== undefined
+  ) {
     server.once("listening", () => {
       composition.agUiProjector?.start()
       composition.scheduledTaskDispatcher?.start()
+      composition.agentDispatchDispatcher?.start()
     })
   }
   server.once("close", () => { void composition.close() })

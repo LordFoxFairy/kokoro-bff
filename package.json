@@ -20,7 +20,7 @@
     "contract:check": "pnpm contract:lint && pnpm contract:test",
     "contract:update-baseline": "node scripts/check-contract.mjs --write-baseline",
     "test:architecture": "pnpm build && node --test test/architecture.test.ts",
-    "test": "pnpm build && node --test test/architecture.test.ts test/contract-governance.test.mjs test/schema-governance.test.mjs test/chat-service.test.ts test/agui.test.ts test/agui-projector.test.mjs test/agui-runtime.test.mjs test/agui-source-page.test.mjs test/agui-replay.test.mjs test/agui-redis-notification.test.mjs test/agui-sse-writer.test.mjs test/bff.test.ts test/config.test.ts test/mori.test.ts test/music.test.ts test/scheduler.test.ts test/scheduled-input.test.ts test/scheduled-outbox.test.ts test/upstream.test.ts",
+    "test": "pnpm build && node --test test/architecture.test.ts test/contract-governance.test.mjs test/schema-governance.test.mjs test/chat-service.test.ts test/agent-dispatch-outbox.test.ts test/agui.test.ts test/agui-projector.test.mjs test/agui-runtime.test.mjs test/agui-source-page.test.mjs test/agui-replay.test.mjs test/agui-redis-notification.test.mjs test/agui-sse-writer.test.mjs test/bff.test.ts test/config.test.ts test/mori.test.ts test/music.test.ts test/scheduler.test.ts test/scheduled-input.test.ts test/scheduled-outbox.test.ts test/upstream.test.ts",
     "test:integration": "pnpm build && node --test --test-concurrency=1 test/scheduled-outbox.integration.mjs test/business-store.integration.mjs test/chat-facts.integration.mjs test/agui-http.integration.mjs test/agui-projection.integration.mjs",
     "check": "pnpm lint && pnpm typecheck && pnpm contract:check && pnpm test && pnpm build"
   },

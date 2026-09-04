@@ -7,8 +7,6 @@ import type { IdempotencyEntry, MutationTicket } from "../../application/idempot
 import type { RequestContext } from "../../domain/request-context.js"
 import { idempotencyKey, queryOf } from "../request.js"
 import { reply } from "../response.js"
-import { buildAgentLaunch } from "../../infrastructure/clients/agent/launch.js"
-import { callAgent } from "./agent.js"
 
 function projectRef(request: IncomingMessage): string | undefined {
   const value = queryOf(request).get("project_ref")?.trim()
@@ -28,6 +26,21 @@ function isInvalidCursor(error: unknown): boolean {
   return error instanceof Error && error.message === "CHAT_CURSOR_INVALID"
 }
 
+function chatError(error: unknown): { status: number; code: string; message: string } | null {
+  if (!(error instanceof Error)) return null
+  if (error.message === "CHAT_TURN_IDEMPOTENCY_CONFLICT") {
+    return { status: 409, code: "idempotency_conflict", message: "Idempotency key was already used with different Chat input" }
+  }
+  if (
+    error.message === "CHAT_TURN_INPUT_INVALID"
+    || error.message === "AGENT_DISPATCH_PAYLOAD_INVALID"
+    || error.message === "AGENT_DISPATCH_LINEAGE_MISMATCH"
+  ) {
+    return { status: 400, code: "invalid_message", message: "Chat message input is invalid" }
+  }
+  return null
+}
+
 async function sendChatError(
   response: ServerResponse,
   error: unknown,
@@ -36,10 +49,15 @@ async function sendChatError(
   mutation: MutationTicket | null,
 ): Promise<void> {
   const invalidCursor = isInvalidCursor(error)
+  const known = chatError(error)
   await reply(
     response,
-    invalidCursor ? 400 : 503,
-    failure(invalidCursor ? "invalid_cursor" : "business_store_unavailable", invalidCursor ? "cursor is invalid" : "The BFF business store is unavailable", context.requestId),
+    invalidCursor ? 400 : known?.status ?? 503,
+    failure(
+      invalidCursor ? "invalid_cursor" : known?.code ?? "business_store_unavailable",
+      invalidCursor ? "cursor is invalid" : known?.message ?? "The BFF business store is unavailable",
+      context.requestId,
+    ),
     context,
     idempotency,
     mutation,
@@ -137,20 +155,15 @@ export async function liveChatBusiness(
         await reply(response, 503, failure("agent_not_configured", "Agent execution is disabled or not configured", context.requestId), context, idempotency, mutation)
         return true
       }
-      if (store.agUiConsumers === undefined) {
-        await reply(response, 503, failure("agui_projector_not_configured", "The durable AG-UI projector is not configured", context.requestId), context, idempotency, mutation)
-        return true
-      }
-      const messageProjectRef = typeof json.project_ref === "string" ? json.project_ref.trim() : projectRef(request)
-      const conversation = await chat.findConversation(tenantId, conversationId, messageProjectRef)
-      if (conversation === null) {
-        await reply(response, 404, failure("session_not_found", "Session was not found", context.requestId), context, idempotency, mutation)
-        return true
-      }
-      const launch = buildAgentLaunch({
-        identity: context.identity,
+      const bodyProjectRef = typeof json.project_ref === "string" ? json.project_ref.trim() : undefined
+      const messageProjectRef = bodyProjectRef === undefined || bodyProjectRef === "" ? projectRef(request) : bodyProjectRef
+      const receipt = await store.services.chatTurns.submit({
+        tenantId,
+        conversationId,
+        ...(messageProjectRef === undefined ? {} : { projectRef: messageProjectRef }),
+        subjectId: context.identity.userId,
+        actorId: context.identity.userId,
         requestId: context.requestId,
-        sessionId: conversationId,
         idempotencyKey: key,
         content: json.content.trim(),
         ...(typeof json.model === "string" ? { model: json.model } : {}),
@@ -158,39 +171,12 @@ export async function liveChatBusiness(
         ...(typeof json.thinking === "boolean" ? { thinking: json.thinking } : {}),
         ...(Array.isArray(json.pinned_skills) ? { pinnedSkills: json.pinned_skills.filter((value): value is string => typeof value === "string") } : {}),
         ...(Array.isArray(json.mcp_servers) ? { mcpServers: json.mcp_servers.filter((value): value is string => typeof value === "string") } : {}),
-        ...(typeof json.project_ref === "string" ? { projectRef: json.project_ref } : {}),
       })
-      const appended = await chat.appendUserMessage({
-        tenantId,
-        conversationId,
-        ...(messageProjectRef === undefined ? {} : { projectRef: messageProjectRef }),
-        messageId: launch.receipt.user_message_id,
-        runId: launch.receipt.run_id,
-        content: json.content.trim(),
-      })
-      if (appended === null) {
+      if (receipt === null) {
         await reply(response, 404, failure("session_not_found", "Session was not found", context.requestId), context, idempotency, mutation)
         return true
       }
-      await store.agUiConsumers.registerConsumer(tenantId, conversationId, conversation.owner_id, launch.receipt.run_id)
-      let result: { status: number; body: unknown }
-      try {
-        result = await callAgent(config, agentBase, "/v1/runs", "POST", context.requestId, request, Buffer.from(JSON.stringify(launch.body)), context, launch.identityAssertionRef)
-      } catch {
-        await reply(response, 502, failure("upstream_unreachable", "The configured Agent upstream is unavailable", context.requestId), context, idempotency, mutation)
-        return true
-      }
-      if (result.status >= 400) {
-        await reply(response, result.status, result.body, context, idempotency, mutation)
-        return true
-      }
-      const body = result.body
-      const data = body !== null && typeof body === "object" && "data" in body && typeof body.data === "object" && body.data !== null ? body.data as Record<string, unknown> : null
-      if (data === null || data.run_id !== launch.receipt.run_id) {
-        await reply(response, 502, failure("upstream_response_invalid", "Agent launch receipt did not match the requested run", context.requestId), context, idempotency, mutation)
-        return true
-      }
-      await reply(response, 202, ok({ run_id: launch.receipt.run_id, user_message_id: appended.userMessage.messageId, assistant_message_id: appended.assistantMessageId }, context.requestId), context, idempotency, mutation)
+      await reply(response, 202, ok(receipt, context.requestId), context, idempotency, mutation)
       return true
     }
 

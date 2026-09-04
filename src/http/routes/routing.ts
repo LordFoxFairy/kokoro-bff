@@ -1,7 +1,7 @@
 import type { BffConfig } from "../../config/runtime.js"
 
 export function upstreamKey(segments: string[]): string | null {
-  // Chat is an Agent business adapter; it never falls back to a Session service.
+  // Agent remains the execution owner behind BFF-owned Chat and AG-UI routes.
   if (segments[0] === "sessions") return "agents"
   if (segments[0] === "system") return "system"
   if (segments[0] === "models") return "model"
@@ -15,7 +15,7 @@ export function upstreamKey(segments: string[]): string | null {
 }
 
 export function bffOwnedBusinessPath(segments: string[]): boolean {
-  return segments[0] === "projects" || segments[0] === "scheduled-tasks"
+  return segments[0] === "projects" || segments[0] === "scheduled-tasks" || segments[0] === "sessions"
 }
 
 export function isMoriBusinessPath(segments: string[]): boolean {

@@ -167,6 +167,72 @@ CREATE TABLE IF NOT EXISTS bff_message (
 CREATE INDEX IF NOT EXISTS ix_bff_message_tenant_conversation_created
   ON bff_message (tenant_id, conversation_id, created_at ASC, message_seq ASC, message_id ASC);
 
+-- Transactional Chat -> Agent command queue. A user message, its provisional
+-- assistant message, expected AG-UI run fence, and this row commit together.
+CREATE TABLE IF NOT EXISTS bff_agent_dispatch_outbox (
+  outbox_id TEXT NOT NULL,
+  tenant_id TEXT NOT NULL,
+  conversation_id TEXT NOT NULL,
+  subject_id TEXT NOT NULL,
+  actor_id TEXT NOT NULL,
+  request_id TEXT NOT NULL,
+  idempotency_key TEXT NOT NULL,
+  request_digest TEXT NOT NULL,
+  run_id TEXT NOT NULL,
+  user_message_id TEXT NOT NULL,
+  assistant_message_id TEXT NOT NULL,
+  identity_assertion_ref TEXT NOT NULL,
+  payload JSONB NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  available_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  lease_owner TEXT,
+  lease_token TEXT,
+  lease_until TIMESTAMPTZ(3),
+  fence BIGINT NOT NULL DEFAULT 0,
+  last_error_code TEXT,
+  last_error_at TIMESTAMPTZ(3),
+  completed_at TIMESTAMPTZ(3),
+  created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT pk_bff_agent_dispatch_outbox PRIMARY KEY (outbox_id),
+  CONSTRAINT uq_bff_agent_dispatch_business UNIQUE (tenant_id, conversation_id, idempotency_key),
+  CONSTRAINT uq_bff_agent_dispatch_run UNIQUE (tenant_id, run_id),
+  CONSTRAINT ck_bff_agent_dispatch_identity CHECK (
+    length(btrim(tenant_id)) > 0
+    AND length(btrim(conversation_id)) > 0
+    AND length(btrim(subject_id)) > 0
+    AND length(btrim(actor_id)) > 0
+    AND length(btrim(request_id)) > 0
+    AND length(btrim(idempotency_key)) > 0
+    AND length(btrim(run_id)) > 0
+    AND length(btrim(user_message_id)) > 0
+    AND length(btrim(assistant_message_id)) > 0
+    AND length(btrim(identity_assertion_ref)) > 0
+  ),
+  CONSTRAINT ck_bff_agent_dispatch_digest CHECK (request_digest ~ '^[0-9a-f]{64}$'),
+  CONSTRAINT ck_bff_agent_dispatch_payload CHECK (jsonb_typeof(payload) = 'object'),
+  CONSTRAINT ck_bff_agent_dispatch_status CHECK (status IN ('pending', 'leased', 'retryable', 'succeeded', 'failed')),
+  CONSTRAINT ck_bff_agent_dispatch_attempt CHECK (attempt_count >= 0),
+  CONSTRAINT ck_bff_agent_dispatch_fence CHECK (fence >= 0),
+  CONSTRAINT ck_bff_agent_dispatch_lease CHECK (
+    (status = 'leased' AND lease_owner IS NOT NULL AND lease_token IS NOT NULL AND lease_until IS NOT NULL)
+    OR (status <> 'leased' AND lease_owner IS NULL AND lease_token IS NULL AND lease_until IS NULL)
+  ),
+  CONSTRAINT ck_bff_agent_dispatch_completion CHECK (
+    (status IN ('succeeded', 'failed') AND completed_at IS NOT NULL)
+    OR (status NOT IN ('succeeded', 'failed') AND completed_at IS NULL)
+  )
+);
+CREATE INDEX IF NOT EXISTS ix_bff_agent_dispatch_ready
+  ON bff_agent_dispatch_outbox (available_at ASC, created_at ASC, outbox_id ASC)
+  WHERE status IN ('pending', 'retryable');
+CREATE INDEX IF NOT EXISTS ix_bff_agent_dispatch_lease
+  ON bff_agent_dispatch_outbox (lease_until ASC, created_at ASC, outbox_id ASC)
+  WHERE status = 'leased';
+CREATE INDEX IF NOT EXISTS ix_bff_agent_dispatch_conversation
+  ON bff_agent_dispatch_outbox (tenant_id, conversation_id, created_at ASC, outbox_id ASC);
+
 -- A share is revocable and optionally expires. Revoked/expired rows are kept
 -- until the documented retention job removes them; only active, unexpired rows
 -- are public. One active share per tenant/conversation is the business rule.

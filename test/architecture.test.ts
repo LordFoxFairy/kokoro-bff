@@ -29,17 +29,22 @@ test("BFF keeps contract, application, client, and repository boundaries explici
     "src/domain/chat/conversation.ts",
     "src/domain/chat/message.ts",
     "src/domain/chat/share.ts",
+    "src/domain/chat/agent-dispatch.ts",
     "src/contracts/index.ts",
     "src/contracts/mori.ts",
     "src/application/idempotency.ts",
     "src/application/project-service.ts",
     "src/application/chat-service.ts",
+    "src/application/chat-turn-service.ts",
+    "src/application/agent-dispatch-outbox-dispatcher.ts",
     "src/application/chat/mappers.ts",
     "src/application/scheduled-task-service.ts",
     "src/application/services.ts",
     "src/application/ports/idempotency-repository.ts",
     "src/application/ports/project-repository.ts",
     "src/application/ports/chat-repository.ts",
+    "src/application/ports/agent-dispatch-outbox-repository.ts",
+    "src/application/ports/agent-dispatch-delivery.ts",
     "src/application/ports/scheduled-task-repository.ts",
     "src/application/ports/scheduled-task-outbox-repository.ts",
     "src/application/ports/scheduled-task-outbox-delivery.ts",
@@ -56,6 +61,8 @@ test("BFF keeps contract, application, client, and repository boundaries explici
     "src/infrastructure/postgres/agui-projection-repository.ts",
     "src/infrastructure/postgres/project-repository.ts",
     "src/infrastructure/postgres/chat-repository.ts",
+    "src/infrastructure/postgres/agent-dispatch-outbox-repository.ts",
+    "src/infrastructure/postgres/agui-consumer-registration.ts",
     "src/infrastructure/postgres/scheduled-task-repository.ts",
     "src/infrastructure/postgres/repositories.ts",
     "src/http/routes/agent.ts",
@@ -68,6 +75,7 @@ test("BFF keeps contract, application, client, and repository boundaries explici
     "src/infrastructure/clients/agent/index.ts",
     "src/infrastructure/clients/agent/types.ts",
     "src/infrastructure/clients/agent/launch.ts",
+    "src/infrastructure/clients/agent/outbox-delivery.ts",
     "src/infrastructure/clients/agent/control.ts",
     "src/infrastructure/clients/agent/projection.ts",
     "src/infrastructure/clients/upstream-response.ts",
@@ -235,6 +243,37 @@ test("BFF durable AG-UI persistence is parameterized, tenant/session scoped, and
   assert.equal(/FOREIGN KEY|REFERENCES/iu.test(schema), false)
 })
 
+test("Chat admission commits messages, AG-UI lineage, and Agent delivery before asynchronous dispatch", async () => {
+  const [route, chatRepository, dispatchRepository, registration, dispatcher, runtime, schema] = await Promise.all([
+    readFile(path.join(root, "src/http/routes/chat.ts"), "utf8"),
+    readFile(path.join(root, "src/infrastructure/postgres/chat-repository.ts"), "utf8"),
+    readFile(path.join(root, "src/infrastructure/postgres/agent-dispatch-outbox-repository.ts"), "utf8"),
+    readFile(path.join(root, "src/infrastructure/postgres/agui-consumer-registration.ts"), "utf8"),
+    readFile(path.join(root, "src/application/agent-dispatch-outbox-dispatcher.ts"), "utf8"),
+    readFile(path.join(root, "src/bootstrap/runtime.ts"), "utf8"),
+    readFile(path.join(root, "database/schema.sql"), "utf8"),
+  ])
+
+  assert.match(route, /services\.chatTurns\.submit/u)
+  assert.doesNotMatch(route, /callAgent|buildAgentLaunch/u)
+  assert.doesNotMatch(chatRepository, /commitChatTurn|claimAgentDispatchOutbox/u)
+  assert.match(dispatchRepository, /BEGIN/u)
+  assert.match(dispatchRepository, /INSERT INTO bff_message/u)
+  assert.match(dispatchRepository, /INSERT INTO bff_agent_dispatch_outbox/u)
+  assert.match(dispatchRepository, /agUiConsumerRegistration/u)
+  assert.match(registration, /INSERT INTO bff_agui_stream/u)
+  assert.match(dispatchRepository, /FOR UPDATE SKIP LOCKED/u)
+  assert.match(dispatchRepository, /tenant_id = \$1 AND outbox_id = \$2/u)
+  assert.doesNotMatch(dispatchRepository, /SELECT \*/u)
+  assert.match(dispatcher, /claimAgentDispatchOutbox/u)
+  assert.match(dispatcher, /markAgentDispatchRetryable/u)
+  assert.match(runtime, /AgentDispatchOutboxDispatcher/u)
+  assert.match(runtime, /AgentOutboxDelivery/u)
+  assert.match(schema, /CREATE TABLE IF NOT EXISTS bff_agent_dispatch_outbox/u)
+  assert.match(schema, /uq_bff_agent_dispatch_business/u)
+  assert.match(schema, /ck_bff_agent_dispatch_lease/u)
+})
+
 test("BFF Chat facts keep ownership, tenant predicates, locks, and opaque cursors in the BFF boundary", async () => {
   const [repository, route, schema] = await Promise.all([
     readFile(path.join(root, "src/infrastructure/postgres/chat-repository.ts"), "utf8"),
@@ -248,7 +287,8 @@ test("BFF Chat facts keep ownership, tenant predicates, locks, and opaque cursor
   assert.equal(repository.includes("SELECT *"), false)
   assert.equal(/FOREIGN KEY|REFERENCES/iu.test(schema), false)
   assert.match(route, /services\.chat/u)
-  assert.match(route, /callAgent/u)
+  assert.match(route, /services\.chatTurns\.submit/u)
+  assert.doesNotMatch(route, /callAgent/u)
   assert.doesNotMatch(route, /Agent.*messages.*GET/u)
   assert.match(schema, /bff_conversation/u)
   assert.match(schema, /bff_message/u)

@@ -11,7 +11,9 @@ Chat BFF 承接 Web v1 的会话、消息、SSE、run control 与分享投影；
 BFF 已实现 schema-valid AG-UI SSE 与 durable public projection：Agent source fact 先在同一 PostgreSQL 事务登记
 identity/digest、更新 projection state，并写入逐 frame ledger；提交后 HTTP 才发送。`Last-Event-ID` 是 BFF 发出的
 opaque `agui_*` cursor，不是 Agent source sequence。Live Conversation、Message 与 Share 产品事实位于 BFF PostgreSQL；
-独立 projector 以 lease/fence 主动摄取，frame retention/GC 与 expired-cursor tombstone 已实现。
+Message admission 通过 transactional Agent dispatch outbox 提交；独立 dispatcher/projector 分别以 lease/fence 投递
+Agent command 与主动摄取 source，frame retention/GC 与 expired-cursor tombstone 已实现。assistant Message 的 durable
+内容/终态 reconciliation 尚未实现。
 
 ## Live owner
 
@@ -19,12 +21,12 @@ Live 模式下 Chat 只通过 `KOKORO_AGENT_BASE_URL` 调用 Agent 的 HTTP ingr
 
 | Web BFF v1 | Agent v1 ingress |
 |---|---|
-| `POST /v1/sessions/{id}/messages` | `POST /v1/runs` |
+| `POST /v1/sessions/{id}/messages` | 本地事务提交 Message + Agent outbox；后台 dispatcher 调用 `POST /v1/runs` |
 | `POST /v1/sessions/{id}/runs/{runId}/control` | `POST /v1/runs/{runId}/control` |
 | `GET /v1/sessions/{id}/events` | 只用 `Last-Event-ID` 读取 BFF durable ledger；后台 projector 独立调用 Agent source API |
 | `GET /v1/sessions/{id}` | BFF-owned Conversation/Message facts + durable public watermark |
 
-BFF 为 Agent 注入受信的 `ExecutionIdentity` headers（tenant/subject/actor/assertion），浏览器的 `X-Domain`、`X-Forwarded-*` 和 tenant 字段不会转发。消息的 `run_id`/`user_message_id` 由 namespace、session 和 `Idempotency-Key` 的 SHA-256 稳定派生，进程重启后仍能命中 Agent 的 run admission；`assistant_message_id` 是稳定 provisional id，最终 assistant message id 以 Agent 的 chat projection 事件为准。
+BFF 为 Agent 注入受信的 `ExecutionIdentity` headers（tenant/subject/actor/assertion），浏览器的 `X-Domain`、`X-Forwarded-*` 和 tenant 字段不会转发。消息的 `run_id`/`user_message_id` 由 namespace、subject、session 和 `Idempotency-Key` 的 SHA-256 稳定派生，进程重启后仍能命中 Agent 的 run admission；`assistant_message_id` 是稳定 provisional id，后续 reconciliation 将把 Agent source 内容归并到该 BFF-owned Message fact。
 
 Session list/detail/message history 在 v1 由 BFF PostgreSQL 持有，并按 trusted tenant、project 与 opaque cursor 查询；
 Agent 只持有 Run 和 execution event。`next_cursor` 是不透明值，客户端只能原样回传，不能解码或自行拼接。
@@ -156,6 +158,11 @@ GET /v1/sessions/{id}/messages?limit=20&cursor=CURSOR
   "meta": { "request_id": "req_01JASYNC000000000000000000" }
 }
 ```
+
+返回前，BFF 已在一个 PostgreSQL 事务中提交 completed user message、pending assistant message、Agent launch command 与
+expected-run consumer fence。Agent 此时可以尚未在线；后台 dispatcher 使用稳定 run identity、FIFO、`SKIP LOCKED`、
+lease token/fence 和有界指数退避执行 at-least-once 投递。相同 key 与相同请求重放同一 receipt；相同 key 但语义不同
+返回 `409 idempotency_conflict`。
 
 ## 事件流与 cursor
 

@@ -3,8 +3,8 @@
 ## 当前实现提示
 
 本页描述 v1 契约。Live 完成度以 [`../../CURRENT.md`](../../CURRENT.md) 为准：AG-UI public frame 已在发送前写入
-BFF PostgreSQL ledger，并使用逐 frame opaque cursor；Conversation/Message/Share、后台主动摄取、consumer fencing、
-retention/GC 与 expired cursor 已实现，Agent launch outbox 与 assistant reconciliation 尚未实现。契约存在不等于
+BFF PostgreSQL ledger，并使用逐 frame opaque cursor；Conversation/Message/Share、transactional Agent dispatch outbox、
+后台主动摄取、consumer fencing、retention/GC 与 expired cursor 已实现，assistant reconciliation 尚未实现。契约存在不等于
 全部运行时已经闭环。
 
 ## 目标
@@ -162,7 +162,7 @@ Model/Billing 的 owner HTTP 面明确注册为 `web-bff` caller；Agent ingress
 | --- | --- | --- | --- |
 | Projects | 已定义 | 有 | BFF-owned PostgreSQL fact store；System 仅承接 Site/Workspace/Policy |
 | Mori Music | 已定义 | 有 | 已接入 `KOKORO_MUSIC_BASE_URL`；缺失时 fail closed |
-| Chat | 已定义 | 有 | BFF Chat 产品事实 + fenced AG-UI projector/ledger/GC 已接；Agent launch outbox 与 assistant reconciliation 开放 |
+| Chat | 已定义 | 有 | BFF Chat facts + transactional Agent outbox + fenced AG-UI projector/ledger/GC 已接；assistant reconciliation 开放 |
 | Model | 已定义 | 有 | catalog read projection 已接 |
 | Skills / MCP | 已定义 | 有 | Capability read projection 已接；未接写操作返回 503 |
 | Scheduled | 已定义 | 有 | PostgreSQL fact + bounded transactional Scheduler outbox/dispatcher 已接 |

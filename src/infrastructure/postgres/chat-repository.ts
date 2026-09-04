@@ -1,8 +1,7 @@
 import { randomUUID } from "node:crypto"
 
-import type { ChatRepository, ConversationPage, MessagePage, NewUserMessage } from "../../application/ports/chat-repository.js"
+import type { ChatRepository, ConversationPage, MessagePage } from "../../application/ports/chat-repository.js"
 import type { Conversation } from "../../domain/chat/conversation.js"
-import type { Message } from "../../domain/chat/message.js"
 import type { Share } from "../../domain/chat/share.js"
 import type { PostgresBffDatabase } from "./client.js"
 import {
@@ -89,58 +88,6 @@ export class PostgresChatRepository implements ChatRepository {
     }
   }
 
-  public async appendUserMessage(input: NewUserMessage): Promise<{ userMessage: Message; assistantMessageId: string } | null> {
-    const client = await this.database.pool.connect()
-    try {
-      await client.query("BEGIN")
-      const conversation = await client.query<ConversationRow>(
-        `SELECT ${conversationColumns} FROM bff_conversation
-          WHERE tenant_id = $1 AND conversation_id = $2 AND status = 'active'
-            AND ($3::text IS NULL OR project_ref = $3) FOR UPDATE`,
-        [input.tenantId, input.conversationId, input.projectRef ?? null],
-      )
-      if (conversation.rows[0] === undefined) {
-        await client.query("ROLLBACK")
-        return null
-      }
-      const existing = await client.query<MessageRow>(
-        `SELECT ${messageColumns} FROM bff_message WHERE tenant_id = $1 AND message_id = $2 LIMIT 1`,
-        [input.tenantId, input.messageId],
-      )
-      if (existing.rows[0] !== undefined) {
-        await client.query("COMMIT")
-        return { userMessage: messageFromRow(existing.rows[0]), assistantMessageId: `${input.messageId.replace(/_user$/u, "_assistant")}` }
-      }
-      const sequence = await client.query<{ next_seq: string }>(
-        `SELECT COALESCE(MAX(message_seq), 0) + 1 AS next_seq FROM bff_message
-          WHERE tenant_id = $1 AND conversation_id = $2`,
-        [input.tenantId, input.conversationId],
-      )
-      const nextSequence = Number(sequence.rows[0]?.next_seq)
-      if (!Number.isSafeInteger(nextSequence) || nextSequence < 1) throw new Error("CHAT_MESSAGE_SEQUENCE_INVALID")
-      const inserted = await client.query<MessageRow>(
-        `INSERT INTO bff_message
-          (message_id, tenant_id, conversation_id, run_id, role, content, status, message_seq)
-         VALUES ($1, $2, $3, $4, 'user', $5, 'completed', $6)
-         RETURNING ${messageColumns}`,
-        [input.messageId, input.tenantId, input.conversationId, input.runId, input.content, nextSequence],
-      )
-      await client.query(
-        `UPDATE bff_conversation SET updated_at = CURRENT_TIMESTAMP(3) WHERE tenant_id = $1 AND conversation_id = $2`,
-        [input.tenantId, input.conversationId],
-      )
-      await client.query("COMMIT")
-      const row = inserted.rows[0]
-      if (row === undefined) throw new Error("CHAT_MESSAGE_INSERT_RETURNED_NO_ROW")
-      return { userMessage: messageFromRow(row), assistantMessageId: `${input.messageId.replace(/_user$/u, "_assistant")}` }
-    } catch (error) {
-      await client.query("ROLLBACK").catch(() => undefined)
-      throw error
-    } finally {
-      client.release()
-    }
-  }
-
   public async renameConversation(tenantId: string, conversationId: string, title: string, projectRef?: string): Promise<Conversation | null> {
     const result = await this.database.pool.query<ConversationRow>(
       `UPDATE bff_conversation SET title = $3, updated_at = CURRENT_TIMESTAMP(3)
@@ -183,6 +130,23 @@ export class PostgresChatRepository implements ChatRepository {
                 consumer_last_error_at = CURRENT_TIMESTAMP(3),
                 updated_at = CURRENT_TIMESTAMP(3)
           WHERE tenant_id = $1 AND session_id = $2`,
+        [tenantId, conversationId],
+      )
+      await client.query(
+        `UPDATE bff_agent_dispatch_outbox
+            SET status = 'failed', completed_at = CURRENT_TIMESTAMP(3),
+                last_error_code = 'conversation_deleted', last_error_at = CURRENT_TIMESTAMP(3),
+                lease_owner = NULL, lease_token = NULL, lease_until = NULL,
+                fence = fence + 1, updated_at = CURRENT_TIMESTAMP(3)
+          WHERE tenant_id = $1 AND conversation_id = $2
+            AND status IN ('pending', 'retryable', 'leased')`,
+        [tenantId, conversationId],
+      )
+      await client.query(
+        `UPDATE bff_message
+            SET status = 'failed', updated_at = CURRENT_TIMESTAMP(3)
+          WHERE tenant_id = $1 AND conversation_id = $2
+            AND role = 'assistant' AND status IN ('pending', 'streaming')`,
         [tenantId, conversationId],
       )
       await client.query("COMMIT")

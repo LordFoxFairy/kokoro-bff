@@ -31,10 +31,6 @@ export class ChatApplicationService {
     return page === null ? null : { messages: page.messages.map(chatMessage), next_cursor: page.next_cursor }
   }
 
-  public appendUserMessage(input: Parameters<ChatRepository["appendUserMessage"]>[0]): ReturnType<ChatRepository["appendUserMessage"]> {
-    return this.repository.appendUserMessage(input)
-  }
-
   public renameConversation(tenantId: string, conversationId: string, title: string, projectRef?: string): ReturnType<ChatRepository["renameConversation"]> {
     return this.repository.renameConversation(tenantId, conversationId, title, projectRef)
   }

@@ -3,11 +3,11 @@ import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
 import { failure, ok } from "../../contracts/index.js"
 import { proxyUpstream } from "../../upstream.js"
-import { agentIdentityHeaders, buildAgentControl, buildAgentLaunch } from "../../infrastructure/clients/agent/index.js"
-import { agentMessageListData, agentSessionAssertion, agentSessionListData, dataOf, messageCursor } from "../../application/projections.js"
+import { agentIdentityHeaders, buildAgentControl } from "../../infrastructure/clients/agent/index.js"
+import { agentSessionAssertion, dataOf } from "../../application/projections.js"
 import { reply } from "../response.js"
 import { normalizeUpstreamResponse } from "../../infrastructure/clients/upstream-response.js"
-import { headerString, incomingHeaders, idempotencyKey, queryOf } from "../request.js"
+import { headerString, incomingHeaders, idempotencyKey } from "../request.js"
 import type { RequestContext } from "../../domain/request-context.js"
 import type { IdempotencyEntry, MutationTicket } from "../../application/idempotency.js"
 import { AgUiSseWriter } from "../../interfaces/http/agui/sse.js"
@@ -226,102 +226,6 @@ export async function liveAgentSession(
 
   if (!config.agentEnabled || baseUrl === null) {
     reply(response, 503, failure("agent_not_configured", "Agent execution is disabled or not configured", context.requestId), context, idempotency, mutation)
-    return true
-  }
-
-  if (businessPath.length === 1 && method === "GET") {
-    try {
-      const incomingQuery = queryOf(request)
-      const ownerQuery = new URLSearchParams()
-      for (const key of ["project_ref", "limit", "cursor"]) {
-        const value = incomingQuery.get(key)
-        if (value !== null && value !== "") ownerQuery.set(key, value)
-      }
-      const ownerPath = `/v1/sessions${ownerQuery.size > 0 ? `?${ownerQuery.toString()}` : ""}`
-      const result = await callAgent(config, baseUrl, ownerPath, "GET", context.requestId, request, undefined, context, agentSessionAssertion(context, "session-list"))
-      if (result.status >= 400) {
-        sendAgentFailure(response, result, context, idempotency, mutation)
-        return true
-      }
-      const projected = agentSessionListData(result.body)
-      if (projected === null) {
-        reply(response, 502, failure("upstream_response_invalid", "Agent session list response is invalid", context.requestId), context, idempotency, mutation)
-        return true
-      }
-      reply(response, 200, ok(projected, context.requestId), context, idempotency, mutation)
-    } catch {
-      reply(response, 502, failure("upstream_unreachable", "The configured Agent upstream is unavailable", context.requestId), context, idempotency, mutation)
-    }
-    return true
-  }
-
-  if (businessPath.length === 3 && businessPath[2] === "messages" && method === "GET") {
-    const incomingQuery = queryOf(request)
-    const rawLimit = incomingQuery.get("limit")
-    const limit = rawLimit === null || rawLimit === "" ? 20 : Number(rawLimit)
-    const cursor = messageCursor(incomingQuery.get("cursor")?.trim() || undefined)
-    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100 || cursor === null) {
-      reply(response, 400, failure("invalid_pagination", "limit must be between 1 and 100 and cursor must be valid", context.requestId), context, idempotency, mutation)
-      return true
-    }
-    try {
-      const ownerPath = `/v1/sessions/${encodeURIComponent(sessionId)}/messages?after_seq=${cursor}&limit=${limit}`
-      const result = await callAgent(config, baseUrl, ownerPath, "GET", context.requestId, request, undefined, context, assertion)
-      if (result.status >= 400) {
-        sendAgentFailure(response, result, context, idempotency, mutation)
-        return true
-      }
-      const projected = agentMessageListData(result.body, limit)
-      if (projected === null) {
-        reply(response, 502, failure("upstream_response_invalid", "Agent message history response is invalid", context.requestId), context, idempotency, mutation)
-        return true
-      }
-      reply(response, 200, ok(projected, context.requestId), context, idempotency, mutation)
-    } catch {
-      reply(response, 502, failure("upstream_unreachable", "The configured Agent upstream is unavailable", context.requestId), context, idempotency, mutation)
-    }
-    return true
-  }
-
-  if (businessPath.length === 3 && businessPath[2] === "messages" && method === "POST") {
-    if (typeof json.content !== "string" || json.content.trim() === "") {
-      reply(response, 400, failure("invalid_message", "Message content is required", context.requestId), context, idempotency, mutation)
-      return true
-    }
-    const key = idempotencyKey(request)
-    if (key === null) {
-      reply(response, 400, failure("idempotency_key_required", "Mutations require Idempotency-Key", context.requestId), context, idempotency, mutation)
-      return true
-    }
-    const launch = buildAgentLaunch({
-      identity: context.identity,
-      requestId: context.requestId,
-      sessionId,
-      idempotencyKey: key,
-      content: json.content.trim(),
-      ...(typeof json.model === "string" ? { model: json.model } : {}),
-      ...(typeof json.agent === "string" ? { agent: json.agent } : {}),
-      ...(typeof json.thinking === "boolean" ? { thinking: json.thinking } : {}),
-      ...(Array.isArray(json.pinned_skills) ? { pinnedSkills: json.pinned_skills.filter((value): value is string => typeof value === "string") } : {}),
-      ...(Array.isArray(json.mcp_servers) ? { mcpServers: json.mcp_servers.filter((value): value is string => typeof value === "string") } : {}),
-      ...(typeof json.project_ref === "string" ? { projectRef: json.project_ref } : {}),
-    })
-    const launchBody = Buffer.from(JSON.stringify(launch.body))
-    try {
-      const result = await callAgent(config, baseUrl, "/v1/runs", "POST", context.requestId, request, launchBody, context, launch.identityAssertionRef)
-      if (result.status >= 400) {
-        sendAgentFailure(response, result, context, idempotency, mutation)
-        return true
-      }
-      const data = dataOf(result.body)
-      if (data === null || data.run_id !== launch.receipt.run_id) {
-        sendAgentFailure(response, { status: 502, body: failure("upstream_response_invalid", "Agent launch receipt did not match the requested run", context.requestId) }, context, idempotency, mutation)
-        return true
-      }
-      reply(response, 202, ok(launch.receipt, context.requestId), context, idempotency, mutation)
-    } catch {
-      reply(response, 502, failure("upstream_unreachable", "The configured Agent upstream is unavailable", context.requestId), context, idempotency, mutation)
-    }
     return true
   }
 

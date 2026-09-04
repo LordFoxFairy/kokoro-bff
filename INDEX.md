@@ -48,8 +48,8 @@ Conversation/Message/Share canonical facts，以及 durable AG-UI stream/source-
 - 资源说明：[`docs/api/README.md`](./docs/api/README.md)
 - AG-UI：[`docs/api/v1/agui-chat.md`](./docs/api/v1/agui-chat.md)
 - System / Model / Billing / Capability / Storage：当前由 `src/http/routes/owner.ts` 投影
-- Chat facts：`src/http/routes/chat.ts` 读取/写入 BFF PostgreSQL；`src/infrastructure/postgres/chat-repository.ts` 维护 tenant、锁和 cursor；
-- Agent Chat：`src/http/routes/agent.ts` 只拉取 Agent source event、launch 和 control；`src/application/agui/` 投影；
+- Chat facts：`src/http/routes/chat.ts` 读取/写入 BFF PostgreSQL；`src/infrastructure/postgres/chat-repository.ts` 维护 tenant、锁和 cursor；`chat-turn-service.ts` 与 `agent-dispatch-outbox-repository.ts` 原子提交 Message/Agent command；
+- Agent Chat：`src/http/routes/agent.ts` 只承接 durable AG-UI 读取和 run control；Agent launch 由后台 outbox dispatcher 投递；`src/application/agui/` 投影；
   `src/application/agui/projector.ts` 独立消费 Agent source；`agui-projection-repository.ts` 在公开发送前持久化并分配 cursor，
   `agui-consumer-repository.ts` 维护 lease/fence、重试、保留水位与 tombstone GC
 - Scheduler：当前由 `src/http/routes/scheduler.ts` 注册、对账和处理 dispatch

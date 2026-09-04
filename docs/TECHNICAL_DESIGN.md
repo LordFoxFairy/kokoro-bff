@@ -24,7 +24,7 @@ BFF 是公开 Product API 的唯一 owner；其他仓库只发布自己的 inter
 | `src/main.ts` | server composition、通用 auth/body/idempotency 管线、route dispatch | 仍直接装配生产 mock |
 | `src/http/routes/` | resource route handlers | 尚未迁入标准 `interfaces/http/` |
 | `src/application/` | project/scheduled use case、AG-UI projection/fence、ports、input mapper | 尚无明确 Domain aggregate 层 |
-| `src/infrastructure/postgres/` | BFF-owned repository、durable AG-UI ledger、ScheduledTask outbox、Redis cache/notification | mutation receipt 与业务写仍未共享事务 |
+| `src/infrastructure/postgres/` | BFF-owned repository、durable AG-UI ledger、ScheduledTask/Agent dispatch outbox、Redis cache/notification | mutation receipt 与业务写仍未共享事务 |
 | `src/infrastructure/clients/` | Agent、Scheduler、Mori 窄 adapter；其他 owner 仍集中于 owner route | client 目录尚未对每个 owner 全部分拆 |
 | `src/interfaces/http/agui/` | 已持久化 AG-UI payload → schema-valid SSE frame | 完整 OpenAPI runtime validator 尚未形成 |
 | `src/contracts/` | 当前手写 Web-facing types/envelope | 尚未由 canonical OpenAPI 生成且未与 Domain 类型彻底分离 |
@@ -148,8 +148,11 @@ Agent 自有 event wire 的时间编码由 Agent contract 决定（当前 client
 
 Conversation、Message、Share 的产品事实由 BFF PostgreSQL canonical tables 与 ChatApplicationService 持有；Agent 只
 拥有 Run、checkpoint、lease、tool journal、执行事件、HITL 与 evidence。Live session list/detail/message history/title/
-delete/share routes 只读取 BFF facts；Message create 在 BFF 事务中追加 user message 后调用窄 Agent launch client。AG-UI
-ledger 仍独立保存 Agent execution projection；assistant message reconciliation 与 Agent launch outbox 属于后续切片。
+delete/share routes 只读取 BFF facts。Message create 由 `ChatTurnApplicationService` 在一个本地事务内追加 completed user
+message、pending assistant message、Agent dispatch outbox command，并注册同一 expected run 的 AG-UI consumer；HTTP
+提交后即返回 `202`。后台 `AgentDispatchOutboxDispatcher` 在事务外以稳定 run identity、`SKIP LOCKED`、lease token/fence
+和有界退避调用 Agent。AG-UI ledger 仍独立保存 Agent execution projection；source event 到 assistant Message fact 的
+durable reconciliation 属于后续切片。
 
 ## 7. 出站与失败归一
 
@@ -162,6 +165,7 @@ provider body、SQL 或 stack。
 - Mock 是本地确定性 fixture，不需要 PostgreSQL/Redis；它不是生产完成证据。
 - Live BFF-owned 路由要求 PostgreSQL + Redis；`/readyz` 检查可用性。AG-UI committed replay 只读取 PostgreSQL，
   但 Redis 不可用仍会使整体 readiness 失败。
-- 监听后启动 AG-UI projector 与 ScheduledTask bounded outbox dispatcher；两者只 claim due/eligible/expired-lease rows。
-- graceful shutdown 先停止 projector 与 dispatcher、等待当前 bounded cycle 并释放仍持有的 lease，再关闭 repository；
+- 监听后启动 AG-UI projector、ScheduledTask dispatcher 与 Agent dispatch dispatcher；它们只 claim
+  due/eligible/expired-lease rows。
+- graceful shutdown 先停止 projector 与两个 dispatcher、等待当前 bounded cycle 并释放仍持有的 lease，再关闭 repository；
   尚无完整 HTTP request drain 或 termination budget。

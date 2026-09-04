@@ -30,8 +30,8 @@ GOV-01～05 通过本身不表示 runtime、schema、container、CI supply chain
 | AGUI-12 | Given 旧 projector 已读 stream 或新 lease 正在补投旧 run，When 新 `expected_run_id` 注册，Then version/fence 原子递增、旧 lease 失效且任何旧 run 都不能提交 terminal | PG integration |
 | AGUI-13 | Given worker wall clock 存在偏移且多个 run 事件交错，When claim/read/settle/release 与 terminal projection，Then PostgreSQL 时钟和 monotonic lease budget 保护有效 lease，且终态只清理所属 run state | unit + PG integration |
 
-Phase 2 不验收跨版本 re-projection、PG backup restore、长时间 fault injection、Agent launch outbox 或 assistant
-message reconciliation；这些不能由上述绿测推导为完成。
+Phase 2 不验收跨版本 re-projection、PG backup restore、长时间 fault injection 或 assistant message reconciliation；
+这些不能由上述绿测推导为完成。Agent dispatch outbox 由下方 Chat admission/recovery 项单独验收。
 
 ## 3. 当前 Product API 验收矩阵
 
@@ -41,12 +41,12 @@ message reconciliation；这些不能由上述绿测推导为完成。
 | Project | create/update/list + same-key replay | 当前有 unit/mock 与真实 store integration 用例 |
 | Idempotency | 同 digest replay / different digest conflict / pending duplicate | 当前已覆盖；query/header/transaction gap 开放 |
 | Owner reads | System/Model/Capability/Storage/Billing | 显式 projection；缺失/坏响应 fail closed |
-| Chat admission | BFF → Agent HTTP run receipt | 当前覆盖 |
+| Chat admission | user + provisional assistant + Agent command + expected-run fence 原子提交，HTTP 随后返回 202 | unit + 真实 PG integration 已覆盖 |
 | AG-UI | Agent fact → fenced background projector → transactional PG ledger → schema-valid SSE + opaque replay | 主动摄取、retention/GC 与 expired cursor 已覆盖 |
-| Chat facts | Conversation/Message/Share BFF PostgreSQL ownership | 已实现；Agent launch outbox 与 assistant reconciliation 开放 |
+| Chat facts | Conversation/Message/Share BFF PostgreSQL ownership | 已实现；assistant reconciliation 开放 |
 | Scheduled | fact + Scheduler registration/dispatch replay | bounded transactional outbox、lease/fence 与 crash recovery 已覆盖 |
 | Tenant isolation | 每个 public route 的跨 tenant negative matrix | 部分覆盖，完整矩阵未完成 |
-| Recovery | AG-UI restart/Agent-disabled replay、duplicate ingest、consumer fencing、GC/expired cursor 与 Scheduler outbox recovery 已覆盖；PG restore 仍开放 |
+| Recovery | AG-UI replay/fencing/GC、Scheduler outbox，以及 Agent dispatch retry、BFF restart、expired-lease reclaim、stale/cross-tenant settlement 已覆盖；PG restore 仍开放 |
 
 ## 4. 必跑命令
 

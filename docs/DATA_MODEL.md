@@ -19,6 +19,7 @@
 | `bff_idempotency_receipt` | mutation receipt | scope PK | pending/terminal status 与 JSON response |
 | `bff_conversation` | Conversation 产品事实 | `conversation_id`；tenant + updated_at 稳定列表排序 | active/deleted tombstone；删除不物理清除，保留至 retention cleanup |
 | `bff_message` | Message 产品事实 | `message_id`；tenant + conversation + message_seq 唯一 | role/status CHECK；`run_id` 是 Agent opaque reference，不做跨仓关系约束 |
+| `bff_agent_dispatch_outbox` | Chat → Agent launch command | outbox id；`tenant_id + conversation_id + idempotency_key` 唯一；run id 唯一；ready/lease/conversation index | 与两条 Message、expected-run registration 原子提交；保存版本化 payload、lineage、lease/fence、attempt/error/terminal state |
 | `bff_share` | Share 产品事实 | `share_id`；tenant + conversation active partial unique | revoked/expired rows retained；public lookup 只接受未撤销且未过期记录 |
 | `bff_agui_stream` | tenant/session public projection + consumer state | `(tenant_id, session_id)` PK | projection version/source watermark；`expected_run_id` 是最新接纳的 run fence，`latest_run_id` 是最近投影的 source run；latest run start retention boundary；subject、due time、lease token/fence、persistent failure count、blocked/error state |
 | `bff_agui_source_event` | 已摄取 Agent source identity | tenant/session/owner/event PK；source sequence 唯一 | 保存 SHA-256 digest；包括零 public frame 的未知 source kind |
@@ -70,26 +71,29 @@
 
 ## 当前不存在的目标事实
 
-Project side effect、Agent Run outbox、mutation receipt claim 与 ScheduledTask fact/outbox 的统一事务、outbox retention
-和后台业务 reconciliation 尚未完成；这些不属于本切片。ScheduledTask → Scheduler bounded outbox 与 AG-UI source
+Project side effect、mutation receipt claim 与 aggregate/outbox 的统一事务、outbox retention 和后台业务
+reconciliation 尚未完成；这些不属于本切片。ScheduledTask → Scheduler、Chat → Agent bounded outbox 与 AG-UI source
 consumer/GC 已是当前 schema 事实。
 
 当前没有独立 Chat assistant reconciliation worker、durable command receipt resource、version/ETag 或 delivery
 projection 表。Conversation、Message、Share 已由 BFF PostgreSQL 拥有；Agent HTTP ingress 负责 launch/control，独立
-projector 的窄 source reader 只读取 execution events，不作为 Chat 产品事实读取源。
+projector 的窄 source reader 只读取 execution events，不直接充当 Chat 产品事实读取源。
 
 ### Chat 产品事实不变量
 
 1. 所有 Conversation/Message/Share repository 查询都带 `tenant_id`；跨 tenant 的 id、cursor、project_ref 和 share
    不返回有效事实。
-2. Message append 与 Conversation lock 在同一事务中执行，锁顺序固定为 Conversation → message sequence allocation →
-   Message insert → Conversation updated_at；没有数据库级跨仓关系约束。
+2. Chat admission 与 Conversation lock 在同一事务中执行，锁顺序固定为 Conversation → idempotency lookup → message
+   sequence allocation → user/assistant Message insert → Agent outbox insert → expected-run registration → Conversation
+   updated_at；没有数据库级跨仓关系约束。
 3. Conversation delete 先更新 active row 为 deleted tombstone，再在同一事务撤销 active shares；Message rows 保留用于
    retention/audit cleanup，公开列表与详情只看 active conversation。
 4. Share 的 partial unique index 只限制 `revoked_at IS NULL`。创建 share 时在持有 Conversation lock 的事务中先将已过期且
    未撤销的 share 标记 revoked，再创建 replacement，因此过期 share 不会阻塞新 share；retention job 后续清理历史 rows。
 5. Conversation 与 Message 列表使用 `(updated_at, id)` / `(created_at, message_seq, message_id)` 稳定排序，cursor 是带前缀的
    base64url opaque token；时间在 application/domain 使用 UTC `Date`，数据库使用 `TIMESTAMPTZ(3)`。
+6. Agent outbox 只在 `pending`、到期 `retryable` 或 lease 已过期时 claim；同一 conversation 按创建顺序投递。
+   settlement 必须匹配 tenant、owner、token、fence 和未过期 lease；永久失败会原子标记对应 assistant Message failed。
 
 ## 时间、约束与命名
 
@@ -104,7 +108,7 @@ projector 的窄 source reader 只读取 execution events，不作为 Chat 产�
 
 BFF 本地逻辑库固定为 Redis DB 8。当前代码执行 readiness `PING`、Project cache invalidation 与 AG-UI projection
 更新 `PUBLISH`。AG-UI 不写 Redis key/stream；publish 是可丢失提示，失败不回滚 PostgreSQL。Redis 不保存 canonical
-Project/ScheduledTask/receipt/outbox，也不是公开 AG-UI replay 事实源；丢失后 ScheduledTask dispatcher 从 PostgreSQL
+Project/ScheduledTask/receipt/outbox，也不是公开 AG-UI replay 事实源；丢失后 Scheduler/Agent dispatcher 从 PostgreSQL
 继续 claim，AG-UI replay 仍从 PostgreSQL 恢复。
 
 ## 安装与 drift
