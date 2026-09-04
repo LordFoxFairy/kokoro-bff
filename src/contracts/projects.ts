@@ -11,8 +11,8 @@ export type Project = {
 export type ProjectInstructionRevision = {
   id: string
   instruction: string
-  updatedAt: number
-  actorName: string
+  updated_at: string
+  actor_name: string
   current: boolean
 }
 

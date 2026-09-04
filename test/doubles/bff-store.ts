@@ -92,8 +92,8 @@ export class MockBffStore {
     ["project_kokoro", [{
       id: "project-instruction-initial",
       instruction: "Keep implementation notes scoped to this project.",
-      updatedAt: 1767225600000,
-      actorName: "Kokoro",
+      updated_at: now,
+      actor_name: "Kokoro",
       current: true,
     }]],
   ])
@@ -171,13 +171,14 @@ export class MockBffStore {
     const project = this.findProject(projectId)
     if (project === undefined) return undefined
     project.instruction = instruction
-    project.updated_at = new Date().toISOString()
+    const revisionTimestamp = new Date().toISOString()
+    project.updated_at = revisionTimestamp
     const history = this.projectInstructionHistory.get(project.id) ?? []
     const revision: ProjectInstructionRevision = {
       id: `project-instruction-${history.length + 1}`,
       instruction,
-      updatedAt: Date.now(),
-      actorName: "You",
+      updated_at: revisionTimestamp,
+      actor_name: "You",
       current: true,
     }
     this.projectInstructionHistory.set(project.id, [revision, ...history.map((item) => ({ ...item, current: false }))])

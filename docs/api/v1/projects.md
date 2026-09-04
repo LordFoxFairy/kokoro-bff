@@ -193,8 +193,8 @@ Idempotency-Key: project-instruction-001
       {
         "id": "project-instruction-2",
         "instruction": "Keep all implementation notes scoped to this project.",
-        "updatedAt": 1767261900000,
-        "actorName": "You",
+        "updated_at": "2026-01-01T00:00:00.000Z",
+        "actor_name": "You",
         "current": true
       }
     ]
@@ -203,7 +203,7 @@ Idempotency-Key: project-instruction-001
 }
 ```
 
-`updatedAt` 是当前 Web 兼容字段，后续 v1 资源统一化时应增加 ISO 字段而不删除旧字段。
+`updated_at` 使用 RFC 3339 UTC 字符串，`actor_name` 使用字符串。
 
 ## GET `/v1/projects/:projectId/tasks`
 

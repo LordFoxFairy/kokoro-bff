@@ -63,8 +63,8 @@ function revisionFromRow(row: RevisionRow): ProjectInstructionRevision {
   return {
     id: row.revision_id,
     instruction: row.instruction,
-    updatedAt: new Date(row.updated_at).getTime(),
-    actorName: row.actor_id,
+    updated_at: timestamp(row.updated_at),
+    actor_name: row.actor_id,
     current: row.current,
   }
 }

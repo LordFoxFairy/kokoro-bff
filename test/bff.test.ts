@@ -159,7 +159,7 @@ describe("kokoro-bff v1 mock contract", () => {
 
     const revisions = await fetch(`${base}/v1/projects/${projectId}/instruction-revisions`, { headers: authHeaders() })
     const revisionsBody = await revisions.json() as {
-      data: { items: Array<{ id: string; instruction: string; updatedAt: number; actorName: string; current: boolean }> }
+      data: { items: Array<{ id: string; instruction: string; updated_at: string; actor_name: string; current: boolean }> }
       meta: { request_id: string }
     }
     assert.equal(revisions.status, 200)
@@ -167,8 +167,10 @@ describe("kokoro-bff v1 mock contract", () => {
     assert.equal(revisionsBody.data.items[0]?.instruction, nextInstruction)
     assert.equal(revisionsBody.data.items[0]?.current, true)
     assert.ok(revisionsBody.data.items[0]?.id)
-    assert.equal(typeof revisionsBody.data.items[0]?.updatedAt, "number")
-    assert.equal(typeof revisionsBody.data.items[0]?.actorName, "string")
+    assert.equal(typeof revisionsBody.data.items[0]?.updated_at, "string")
+    assert.equal(typeof revisionsBody.data.items[0]?.actor_name, "string")
+    assert.match(revisionsBody.data.items[0]?.updated_at ?? "", /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u)
+    assert.deepEqual(Object.keys(revisionsBody.data.items[0] ?? {}).sort(), ["actor_name", "current", "id", "instruction", "updated_at"])
     assert.ok(revisionsBody.meta.request_id.length > 0)
   })
 
