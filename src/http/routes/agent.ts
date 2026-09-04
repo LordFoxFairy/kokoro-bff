@@ -3,7 +3,7 @@ import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config.js"
 import { failure, ok } from "../../contracts/index.js"
 import { proxyUpstream } from "../../upstream.js"
-import { agentEventList, agentIdentityHeaders, buildAgentControl, buildAgentLaunch, buildSessionDetail, mapAgentEvent, type AgentChatEvent, type AgentChatMessage } from "../../infrastructure/clients/agent/index.js"
+import { agentEventPage, agentIdentityHeaders, buildAgentControl, buildAgentLaunch, buildSessionDetail, mapAgentEvent, type AgentChatEvent, type AgentChatMessage } from "../../infrastructure/clients/agent/index.js"
 import { agentMessageListData, agentSessionAssertion, agentSessionListData, dataOf, messageCursor } from "../../application/projections.js"
 import { normalizeUpstreamResponse, reply } from "../response.js"
 import { headerString, incomingHeaders, idempotencyKey, queryOf, type Context } from "../request.js"
@@ -57,6 +57,51 @@ function projectionSources(events: readonly AgentChatEvent[]): AgentProjectionSo
   }))
 }
 
+type AgentEventHistoryResult =
+  | { kind: "events"; events: AgentChatEvent[] }
+  | { kind: "error"; result: { status: number; body: unknown } }
+
+async function readAgentEventHistory(
+  config: BffConfig,
+  baseUrl: string,
+  request: IncomingMessage,
+  context: Context,
+  sessionId: string,
+  assertion: string,
+): Promise<AgentEventHistoryResult> {
+  const events: AgentChatEvent[] = []
+  let afterSequence = 0
+  let snapshotWatermark: number | null = null
+  for (;;) {
+    const result = await callAgent(
+      config,
+      baseUrl,
+      `/v1/sessions/${encodeURIComponent(sessionId)}/events?after_seq=${afterSequence}&limit=1000`,
+      "GET",
+      context.requestId,
+      request,
+      undefined,
+      context,
+      assertion,
+    )
+    if (result.status >= 400) return { kind: "error", result }
+    const page = agentEventPage(dataOf(result.body), sessionId, afterSequence, 1000)
+    if (page === null || (snapshotWatermark !== null && page.watermark < snapshotWatermark)) {
+      return {
+        kind: "error",
+        result: {
+          status: 502,
+          body: failure("upstream_response_invalid", "Agent event replay did not match the v1 contract", context.requestId),
+        },
+      }
+    }
+    events.push(...page.events)
+    afterSequence = page.nextSequence
+    snapshotWatermark = page.watermark
+    if (page.exhausted) return { kind: "events", events }
+  }
+}
+
 function startAgUiStream(response: ServerResponse, requestId: string): void {
   if (response.headersSent) return
   response.writeHead(200, {
@@ -65,10 +110,6 @@ function startAgUiStream(response: ServerResponse, requestId: string): void {
     connection: "keep-alive",
     "x-kokoro-request-id": requestId,
   })
-}
-
-function terminalEventType(eventType: string | null): boolean {
-  return eventType === "RUN_FINISHED" || eventType === "RUN_ERROR"
 }
 
 async function durableAgentEventStream(
@@ -103,7 +144,7 @@ async function durableAgentEventStream(
         cursor = page.frames.at(-1)?.cursor ?? cursor
       }
       if (!page.atHead) continue
-      return terminalEventType(page.headEventType) ? "terminal" : "head"
+      return page.terminalRunId === null ? "head" : "terminal"
     }
   }
 
@@ -127,37 +168,49 @@ async function durableAgentEventStream(
 
     for (;;) {
       const status = await projection.status(context.identity.namespace, sessionId)
-      const result = await callAgent(
-        config,
-        baseUrl,
-        `/v1/sessions/${encodeURIComponent(sessionId)}/events?after_seq=${status.sourceHighWatermark}&limit=1000`,
-        "GET",
-        context.requestId,
-        request,
-        undefined,
-        context,
-        assertion,
-      )
-      if (result.status >= 400) {
-        if (!streamStarted) sendAgentFailure(response, result, context, idempotency, mutation)
-        else response.end(": upstream-error\n\n")
-        return
+      let afterSequence = status.sourceHighWatermark
+      let snapshotWatermark: number | null = null
+      let insertedFrames = 0
+      for (;;) {
+        const result = await callAgent(
+          config,
+          baseUrl,
+          `/v1/sessions/${encodeURIComponent(sessionId)}/events?after_seq=${afterSequence}&limit=1000`,
+          "GET",
+          context.requestId,
+          request,
+          undefined,
+          context,
+          assertion,
+        )
+        if (result.status >= 400) {
+          if (!streamStarted) sendAgentFailure(response, result, context, idempotency, mutation)
+          else response.end(": upstream-error\n\n")
+          return
+        }
+        const data = dataOf(result.body)
+        const page = agentEventPage(data, sessionId, afterSequence, 1000)
+        if (page === null || (snapshotWatermark !== null && page.watermark < snapshotWatermark)) {
+          if (!streamStarted) sendAgentFailure(response, { status: 502, body: failure("upstream_response_invalid", "Agent event replay did not match the v1 contract", context.requestId) }, context, idempotency, mutation)
+          else response.end(": upstream-response-invalid\n\n")
+          return
+        }
+        snapshotWatermark = page.watermark
+        if (page.events.length > 0) {
+          const ingested = await projection.ingest(context.identity.namespace, sessionId, projectionSources(page.events))
+          if (ingested.sourceHighWatermark !== page.nextSequence) throw new Error("Agent source watermark did not converge")
+          insertedFrames += ingested.insertedFrames
+        }
+        afterSequence = page.nextSequence
+        const drained = await drainLedger()
+        if (page.exhausted && drained === "terminal") {
+          startAgUiStream(response, context.requestId)
+          response.end()
+          return
+        }
+        if (page.exhausted) break
       }
-      const data = dataOf(result.body)
-      const events = agentEventList(data?.events, sessionId)
-      if (data === null || events === null) {
-        if (!streamStarted) sendAgentFailure(response, { status: 502, body: failure("upstream_response_invalid", "Agent event replay did not match the v1 contract", context.requestId) }, context, idempotency, mutation)
-        else response.end(": upstream-response-invalid\n\n")
-        return
-      }
-      const ingested = await projection.ingest(context.identity.namespace, sessionId, projectionSources(events))
-      const drained = await drainLedger()
-      if (drained === "terminal") {
-        startAgUiStream(response, context.requestId)
-        response.end()
-        return
-      }
-      if (!streamStarted || ingested.insertedFrames === 0) {
+      if (!streamStarted || insertedFrames === 0) {
         startAgUiStream(response, context.requestId)
         streamStarted = true
         response.write(": keep-alive\n\n")
@@ -333,24 +386,22 @@ export async function liveAgentSession(
       return true
     }
     try {
-      const [messagesResult, eventsResult] = await Promise.all([
+      const [messagesResult, eventHistory] = await Promise.all([
         callAgent(config, baseUrl, `/v1/sessions/${encodeURIComponent(sessionId)}/messages?after_seq=0&limit=1000`, "GET", context.requestId, request, undefined, context, assertion),
-        callAgent(config, baseUrl, `/v1/sessions/${encodeURIComponent(sessionId)}/events?after_seq=0&limit=1000`, "GET", context.requestId, request, undefined, context, assertion),
+        readAgentEventHistory(config, baseUrl, request, context, sessionId, assertion),
       ])
       if (messagesResult.status >= 400) {
         sendAgentFailure(response, messagesResult, context, idempotency, mutation)
         return true
       }
-      if (eventsResult.status >= 400) {
-        sendAgentFailure(response, eventsResult, context, idempotency, mutation)
+      if (eventHistory.kind === "error") {
+        sendAgentFailure(response, eventHistory.result, context, idempotency, mutation)
         return true
       }
       const messagesData = dataOf(messagesResult.body)
-      const eventsData = dataOf(eventsResult.body)
       const messages = Array.isArray(messagesData?.messages) ? messagesData.messages as AgentChatMessage[] : null
-      const events = agentEventList(eventsData?.events, sessionId)
-      const sourceWatermark = eventsData?.watermark
-      if (messagesData === null || eventsData === null || messages === null || events === null || typeof sourceWatermark !== "number" || !Number.isSafeInteger(sourceWatermark) || sourceWatermark < 0) {
+      const events = eventHistory.events
+      if (messagesData === null || messages === null) {
         sendAgentFailure(response, { status: 502, body: failure("upstream_response_invalid", "Agent session projection did not match the v1 contract", context.requestId) }, context, idempotency, mutation)
         return true
       }

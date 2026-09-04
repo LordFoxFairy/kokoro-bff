@@ -111,7 +111,7 @@ integrationTest("serves live and restarted replay only from the tenant-scoped Po
         const afterSequence = Number(url.searchParams.get("after_seq") ?? "0")
         eventRequests.push(afterSequence)
         const page = afterSequence < 2 ? events.slice(0, 2) : events.filter((event) => event.seq > afterSequence)
-        response.end(JSON.stringify({ data: { events: page, next_seq: page.at(-1)?.seq ?? afterSequence, watermark: 4 }, meta: { request_id: "agent" } }))
+        response.end(JSON.stringify({ data: { events: page, next_seq: page.at(-1)?.seq ?? afterSequence, watermark: events.at(-1)?.seq ?? afterSequence }, meta: { request_id: "agent" } }))
         return
       }
       if (request.url?.includes("/messages") && request.method === "GET") {
@@ -151,6 +151,8 @@ integrationTest("serves live and restarted replay only from the tenant-scoped Po
     assert.equal(detail.status, 200)
     const detailBody = await detail.json()
     assert.equal(detailBody.data.event_watermark, originalFrames.at(-1).id)
+    assert.equal(detailBody.data.active_run, undefined)
+    assert.deepEqual(eventRequests.slice(0, 4), [0, 2, 0, 2])
 
     const ledger = await pool.query(
       `SELECT public_sequence, cursor, event_type
@@ -201,6 +203,98 @@ integrationTest("serves live and restarted replay only from the tenant-scoped Po
     })
     assert.equal(foreignTenant.status, 400)
     assert.equal((await foreignTenant.json()).error.code, "invalid_event_cursor")
+  } finally {
+    if (bff !== null) await close(bff)
+    if (agent !== null) await close(agent)
+    for (const server of servers.splice(0)) {
+      if (server.listening) await close(server)
+    }
+    await pool.end()
+  }
+})
+
+integrationTest("drains the complete Agent source snapshot before ending at a run terminal", async () => {
+  const pool = new Pool({ connectionString: postgresUrl })
+  let bff = null
+  let agent = null
+  try {
+    await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
+    await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+    const events = [
+      { chat_event_id: "run_1_started", session_id: "session_boundary", run_id: "run_1", event_type: "run.started", payload_json: '{"status":"running"}', seq: 1, created_at: 1000 },
+      { chat_event_id: "run_1_finished", session_id: "session_boundary", run_id: "run_1", event_type: "run.completed", payload_json: '{"status":"completed"}', seq: 2, created_at: 2000 },
+      { chat_event_id: "run_2_started", session_id: "session_boundary", run_id: "run_2", event_type: "run.started", payload_json: '{"status":"running"}', seq: 3, created_at: 3000 },
+      { chat_event_id: "run_2_finished", session_id: "session_boundary", run_id: "run_2", event_type: "run.completed", payload_json: '{"status":"completed"}', seq: 4, created_at: 4000 },
+    ]
+    const requestedAfter = []
+    agent = createServer((request, response) => {
+      const url = new URL(request.url ?? "/", "http://agent.local")
+      const afterSequence = Number(url.searchParams.get("after_seq") ?? "0")
+      requestedAfter.push(afterSequence)
+      const page = events.filter((candidate) => candidate.seq > afterSequence).slice(0, 2)
+      response.setHeader("content-type", "application/json")
+      response.end(JSON.stringify({
+        data: { events: page, next_seq: page.at(-1)?.seq ?? afterSequence, watermark: 4 },
+        meta: { request_id: "agent" },
+      }))
+    })
+    const agentBase = await listen(agent)
+    bff = createBffServer(bffConfig({ agentEnabled: true, agentBase }))
+    const base = await listen(bff)
+
+    const streamed = await fetch(`${base}/v1/sessions/session_boundary/events`, { headers: auth("tenant_a") })
+    assert.equal(streamed.status, 200)
+    const frames = parseSse(await streamed.text())
+    assert.deepEqual(frames.map((frame) => [frame.event.type, frame.event.metadata.kokoro.run_id]), [
+      ["RUN_STARTED", "run_1"],
+      ["RUN_FINISHED", "run_1"],
+      ["RUN_STARTED", "run_2"],
+      ["RUN_FINISHED", "run_2"],
+    ])
+    assert.deepEqual(requestedAfter, [0, 2])
+  } finally {
+    if (bff !== null) await close(bff)
+    if (agent !== null) await close(agent)
+    for (const server of servers.splice(0)) {
+      if (server.listening) await close(server)
+    }
+    await pool.end()
+  }
+})
+
+integrationTest("fails loudly when Agent event pagination metadata disagrees with the events", async () => {
+  const pool = new Pool({ connectionString: postgresUrl })
+  let bff = null
+  let agent = null
+  try {
+    await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
+    await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+    agent = createServer((_request, response) => {
+      response.setHeader("content-type", "application/json")
+      response.end(JSON.stringify({
+        data: {
+          events: [
+            { chat_event_id: "started", session_id: "session_invalid_page", run_id: "run_1", event_type: "run.started", payload_json: '{"status":"running"}', seq: 1, created_at: 1000 },
+            { chat_event_id: "terminal", session_id: "session_invalid_page", run_id: "run_1", event_type: "run.completed", payload_json: '{"status":"completed"}', seq: 2, created_at: 2000 },
+          ],
+          next_seq: 1,
+          watermark: 2,
+        },
+        meta: { request_id: "agent" },
+      }))
+    })
+    const agentBase = await listen(agent)
+    bff = createBffServer(bffConfig({ agentEnabled: true, agentBase }))
+    const base = await listen(bff)
+
+    const streamed = await fetch(`${base}/v1/sessions/session_invalid_page/events`, { headers: auth("tenant_a") })
+    assert.equal(streamed.status, 502)
+    assert.equal((await streamed.json()).error.code, "upstream_response_invalid")
+    const sourceCount = await pool.query(
+      "SELECT count(*)::integer AS count FROM bff_agui_source_event WHERE tenant_id = $1 AND session_id = $2",
+      ["tenant_a", "session_invalid_page"],
+    )
+    assert.equal(sourceCount.rows[0].count, 0)
   } finally {
     if (bff !== null) await close(bff)
     if (agent !== null) await close(agent)

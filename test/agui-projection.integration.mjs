@@ -222,3 +222,75 @@ integrationTest("keeps durable AG-UI replay lossless, idempotent, tenant-scoped,
     await pool.end()
   }
 })
+
+integrationTest("keeps replay page boundaries and terminal state tied to the latest run identity", async () => {
+  const pool = new Pool({ connectionString: postgresUrl })
+  let store = null
+  try {
+    await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
+    await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+
+    await store.agUi.ingest("tenant_a", "session_runs", [
+      agentSource({ id: "run_1_started", sequence: 1, kind: "run.created", payload: { run_id: "run_1" }, sessionId: "session_runs", runId: "run_1" }),
+      agentSource({ id: "run_1_finished", sequence: 2, kind: "run.completed", payload: { status: "completed" }, sessionId: "session_runs", runId: "run_1" }),
+      agentSource({ id: "run_2_started", sequence: 3, kind: "run.created", payload: { run_id: "run_2" }, sessionId: "session_runs", runId: "run_2" }),
+    ])
+
+    const pageAtOldTerminal = await store.agUi.replay("tenant_a", "session_runs", null, 2)
+    assert.equal(pageAtOldTerminal.kind, "page")
+    assert.deepEqual(pageAtOldTerminal.frames.map((frame) => frame.eventType), ["RUN_STARTED", "RUN_FINISHED"])
+    assert.equal(pageAtOldTerminal.atHead, false)
+    assert.equal(pageAtOldTerminal.terminalRunId, null)
+
+    const activeHead = await store.agUi.replay("tenant_a", "session_runs", pageAtOldTerminal.frames.at(-1).cursor, 2)
+    assert.equal(activeHead.kind, "page")
+    assert.deepEqual(activeHead.frames.map((frame) => frame.eventType), ["RUN_STARTED"])
+    assert.equal(activeHead.atHead, true)
+    assert.equal(activeHead.terminalRunId, null)
+
+    await store.agUi.ingest("tenant_a", "session_runs", [
+      agentSource({ id: "run_2_finished", sequence: 4, kind: "run.completed", payload: { status: "completed" }, sessionId: "session_runs", runId: "run_2" }),
+    ])
+    const terminalHead = await store.agUi.replay("tenant_a", "session_runs", activeHead.frames.at(-1).cursor, 1)
+    assert.equal(terminalHead.kind, "page")
+    assert.equal(terminalHead.atHead, true)
+    assert.equal(terminalHead.terminalRunId, "run_2")
+  } finally {
+    if (store !== null) await store.close().catch(() => undefined)
+    await pool.end()
+  }
+})
+
+integrationTest("returns a self-consistent replay snapshot while a new run is appended", async () => {
+  const pool = new Pool({ connectionString: postgresUrl })
+  let store = null
+  try {
+    await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
+    await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    await store.agUi.ingest("tenant_a", "session_append", [
+      agentSource({ id: "old_started", sequence: 1, kind: "run.created", payload: { run_id: "run_old" }, sessionId: "session_append", runId: "run_old" }),
+      agentSource({ id: "old_finished", sequence: 2, kind: "run.completed", payload: { status: "completed" }, sessionId: "session_append", runId: "run_old" }),
+    ])
+
+    for (let sequence = 3; sequence < 23; sequence += 1) {
+      const runId = `run_${sequence}`
+      const [page] = await Promise.all([
+        store.agUi.replay("tenant_a", "session_append", null, 100),
+        store.agUi.ingest("tenant_a", "session_append", [
+          agentSource({ id: `started_${sequence}`, sequence, kind: "run.created", payload: { run_id: runId }, sessionId: "session_append", runId }),
+        ]),
+      ])
+      assert.equal(page.kind, "page")
+      const visibleRunIds = page.frames
+        .filter((frame) => frame.eventType === "RUN_STARTED")
+        .map((frame) => frame.payload.metadata.kokoro.run_id)
+      const latestVisibleRun = visibleRunIds.at(-1)
+      if (page.atHead && latestVisibleRun !== "run_old") assert.equal(page.terminalRunId, null)
+    }
+  } finally {
+    if (store !== null) await store.close().catch(() => undefined)
+    await pool.end()
+  }
+})

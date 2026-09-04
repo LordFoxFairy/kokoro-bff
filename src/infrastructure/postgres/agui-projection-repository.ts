@@ -25,13 +25,20 @@ type FrameRow = {
   event_payload: unknown
 }
 
-type CursorRow = {
-  public_sequence: string
-}
-
 type StatusRow = {
   source_high_watermark: string
   current_cursor: string | null
+}
+
+type ReplayRow = {
+  cursor_valid: boolean
+  after_sequence: string
+  head_sequence: string
+  terminal_run_id: string | null
+  public_sequence: string | null
+  cursor: string | null
+  event_type: string | null
+  event_payload: unknown | null
 }
 
 type SourceIdentityRow = {
@@ -241,50 +248,94 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
   }
 
   public async replay(tenantId: string, sessionId: string, cursorValue: string | null, limit: number) {
-    let afterSequence = 0
-    if (cursorValue !== null) {
-      const cursorResult = await this.database.pool.query<CursorRow>(
-        `SELECT public_sequence
-           FROM bff_agui_event
-          WHERE tenant_id = $1 AND session_id = $2 AND cursor = $3`,
-        [tenantId, sessionId, cursorValue],
-      )
-      const row = cursorResult.rows[0]
-      if (row === undefined) return { kind: "invalid_cursor" as const }
-      afterSequence = safeInteger(row.public_sequence, "cursor sequence")
-    }
-
-    const [framesResult, streamResult] = await Promise.all([
-      this.database.pool.query<FrameRow>(
-        `SELECT public_sequence, cursor, event_type, event_payload
-           FROM bff_agui_event
-          WHERE tenant_id = $1 AND session_id = $2 AND public_sequence > $3
-          ORDER BY public_sequence ASC
-          LIMIT $4`,
-        [tenantId, sessionId, afterSequence, limit],
-      ),
-      this.database.pool.query<{ head_sequence: string; head_event_type: string | null }>(
-        `SELECT stream.next_public_sequence - 1 AS head_sequence,
-                (SELECT event.event_type
-                   FROM bff_agui_event AS event
-                  WHERE event.tenant_id = stream.tenant_id AND event.session_id = stream.session_id
-                  ORDER BY event.public_sequence DESC
-                  LIMIT 1) AS head_event_type
-           FROM bff_agui_stream AS stream
-          WHERE stream.tenant_id = $1 AND stream.session_id = $2`,
-        [tenantId, sessionId],
-      ),
-    ])
-    const frames = framesResult.rows.map(storedFrame)
+    const result = await this.database.pool.query<ReplayRow>(
+      `WITH cursor_position AS MATERIALIZED (
+         SELECT CASE
+                  WHEN $3::text IS NULL THEN 0::bigint
+                  ELSE COALESCE((
+                    SELECT event.public_sequence
+                      FROM bff_agui_event AS event
+                     WHERE event.tenant_id = $1
+                       AND event.session_id = $2
+                       AND event.cursor = $3
+                  ), -1::bigint)
+                END AS after_sequence
+       ),
+       stream_head AS (
+         SELECT COALESCE((
+           SELECT stream.next_public_sequence - 1
+             FROM bff_agui_stream AS stream
+            WHERE stream.tenant_id = $1 AND stream.session_id = $2
+         ), 0::bigint) AS head_sequence
+       ),
+       latest_run AS (
+         SELECT event.public_sequence,
+                event.event_payload #>> '{metadata,kokoro,run_id}' AS run_id
+           FROM bff_agui_event AS event
+          WHERE event.tenant_id = $1
+            AND event.session_id = $2
+            AND event.event_type = 'RUN_STARTED'
+          ORDER BY event.public_sequence DESC
+          LIMIT 1
+       ),
+       terminal_run AS (
+         SELECT latest.run_id
+           FROM latest_run AS latest
+          WHERE latest.run_id IS NOT NULL
+            AND EXISTS (
+              SELECT 1
+                FROM bff_agui_event AS terminal
+               WHERE terminal.tenant_id = $1
+                 AND terminal.session_id = $2
+                 AND terminal.event_type IN ('RUN_FINISHED', 'RUN_ERROR')
+                 AND terminal.event_payload #>> '{metadata,kokoro,run_id}' = latest.run_id
+                 AND terminal.public_sequence >= latest.public_sequence
+            )
+       ),
+       frame_page AS (
+         SELECT event.public_sequence, event.cursor, event.event_type, event.event_payload
+           FROM bff_agui_event AS event
+           CROSS JOIN cursor_position AS position
+          WHERE position.after_sequence >= 0
+            AND event.tenant_id = $1
+            AND event.session_id = $2
+            AND event.public_sequence > position.after_sequence
+          ORDER BY event.public_sequence ASC
+          LIMIT $4
+       )
+       SELECT position.after_sequence >= 0 AS cursor_valid,
+              position.after_sequence::text AS after_sequence,
+              head.head_sequence::text AS head_sequence,
+              (SELECT run_id FROM terminal_run) AS terminal_run_id,
+              frame.public_sequence::text AS public_sequence,
+              frame.cursor,
+              frame.event_type,
+              frame.event_payload
+         FROM cursor_position AS position
+         CROSS JOIN stream_head AS head
+         LEFT JOIN frame_page AS frame ON TRUE
+        ORDER BY frame.public_sequence ASC NULLS LAST`,
+      [tenantId, sessionId, cursorValue, limit],
+    )
+    const snapshot = result.rows[0]
+    if (snapshot === undefined || !snapshot.cursor_valid) return { kind: "invalid_cursor" as const }
+    const afterSequence = safeInteger(snapshot.after_sequence, "cursor sequence")
+    const frames = result.rows.flatMap((row): StoredAgUiFrame[] => {
+      if (row.public_sequence === null || row.cursor === null || row.event_type === null || row.event_payload === null) return []
+      return [storedFrame({
+        public_sequence: row.public_sequence,
+        cursor: row.cursor,
+        event_type: row.event_type,
+        event_payload: row.event_payload,
+      })]
+    })
     const deliveredSequence = frames.at(-1)?.publicSequence ?? afterSequence
-    const headSequence = streamResult.rows[0] === undefined
-      ? 0
-      : safeInteger(streamResult.rows[0].head_sequence, "head sequence")
+    const headSequence = safeInteger(snapshot.head_sequence, "head sequence")
     return {
       kind: "page" as const,
       frames,
       atHead: deliveredSequence >= headSequence,
-      headEventType: streamResult.rows[0]?.head_event_type ?? null,
+      terminalRunId: snapshot.terminal_run_id,
     }
   }
 

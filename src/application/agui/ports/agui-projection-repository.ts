@@ -42,7 +42,7 @@ export type AgUiReplayPage = {
   kind: "page"
   frames: StoredAgUiFrame[]
   atHead: boolean
-  headEventType: string | null
+  terminalRunId: string | null
 }
 
 export type AgUiInvalidCursor = {
