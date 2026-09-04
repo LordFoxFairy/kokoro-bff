@@ -57,6 +57,7 @@ function bffConfig(overrides = {}) {
     upstreamSecret: "bff-secret",
     upstreamTimeoutMs: 5000,
     upstreamMaxResponseBytes: 1024 * 1024,
+    agentEnabled: overrides.agentEnabled ?? false,
     schedulerServiceToken: "scheduler-secret",
     schedulerTargetUrl: overrides.schedulerTargetUrl,
     postgresUrl,
@@ -121,7 +122,7 @@ integrationTest("persists BFF facts, registers Scheduler, and replays Agent disp
     agentBase = await listen(agent)
 
     const targetUrl = "http://kokoro-bff:4300/internal/bff/scheduled-tasks/dispatch"
-    bff = createBffServer(bffConfig({ schedulerBase, agentBase, schedulerTargetUrl: targetUrl }))
+    bff = createBffServer(bffConfig({ schedulerBase, agentBase, agentEnabled: true, schedulerTargetUrl: targetUrl }))
     const base = await listen(bff)
 
     const createHeaders = { ...auth(namespace), "content-type": "application/json", "idempotency-key": "schedule-create-integration" }
@@ -213,7 +214,7 @@ integrationTest("persists BFF facts, registers Scheduler, and replays Agent disp
     assert.equal(reactivated.status, 200)
 
     await close(bff)
-    bff = createBffServer(bffConfig({ schedulerBase, agentBase, schedulerTargetUrl: targetUrl }))
+    bff = createBffServer(bffConfig({ schedulerBase, agentBase, agentEnabled: true, schedulerTargetUrl: targetUrl }))
     const restartedBase = await listen(bff)
     await waitFor(() => schedulerCalls.length === 5)
     const listed = await fetch(`${restartedBase}/v1/scheduled-tasks`, { headers: auth(namespace) })
