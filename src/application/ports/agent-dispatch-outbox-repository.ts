@@ -27,6 +27,7 @@ export type AgentDispatchOutboxClaimInput = {
   workerId: string
   limit: number
   leaseDurationMs: number
+  maxAttempts: number
 }
 
 /** Atomic Chat turn admission plus the durable Agent command queue. */

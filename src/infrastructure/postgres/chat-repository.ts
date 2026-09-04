@@ -41,7 +41,7 @@ export class PostgresChatRepository implements ChatRepository {
       [tenantId, subjectId, projectRef ?? null, position?.timestamp ?? null, position?.id ?? null, limit + 1],
     )
     const rows = result.rows.slice(0, limit)
-    const last = rows.length === limit ? rows.at(-1) : undefined
+    const last = result.rows.length > limit ? rows.at(-1) : undefined
     return {
       conversations: rows.map(conversationFromRow),
       next_cursor: last === undefined ? null : encodeCursor({ timestamp: instant(last.updated_at).toISOString(), id: last.conversation_id }, "conv"),
@@ -91,7 +91,7 @@ export class PostgresChatRepository implements ChatRepository {
       [tenantId, subjectId, conversationId, projectRef ?? null, position?.sequence ?? null, position?.id ?? null, limit + 1],
     )
     const rows = result.rows.slice(0, limit)
-    const last = rows.length === limit ? rows.at(-1) : undefined
+    const last = result.rows.length > limit ? rows.at(-1) : undefined
     return {
       messages: rows.map(messageFromRow),
       next_cursor: last === undefined ? null : encodeCursor({ sequence: String(last.message_seq), id: last.message_id }, "msg"),

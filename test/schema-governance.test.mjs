@@ -15,6 +15,8 @@ test("schema application reads the repository canonical schema", async () => {
   assert.match(schema, /CREATE TABLE IF NOT EXISTS bff_idempotency_receipt/u)
   assert.match(schema, /CREATE TABLE IF NOT EXISTS bff_conversation/u)
   assert.match(schema, /CREATE TABLE IF NOT EXISTS bff_message/u)
+  assert.match(schema, /conversation_dispatch_seq BIGINT NOT NULL/u)
+  assert.match(schema, /UNIQUE \(tenant_id, conversation_id, conversation_dispatch_seq\)/u)
   assert.match(schema, /CREATE TABLE IF NOT EXISTS bff_share/u)
   assert.match(schema, /CREATE TABLE IF NOT EXISTS bff_agui_stream/u)
   assert.match(schema, /CREATE TABLE IF NOT EXISTS bff_agui_source_event/u)
@@ -40,6 +42,7 @@ test("canonical schema uses stable diagnostic names for indexes and constraints"
   assert.match(schema, /expires_at IS NOT NULL AND expires_at <= CURRENT_TIMESTAMP\(3\)/u)
   assert.match(schema, /CONSTRAINT ck_bff_conversation_deleted CHECK/u)
   assert.match(schema, /CONSTRAINT ck_bff_message_role CHECK/u)
+  assert.match(schema, /CONSTRAINT ck_bff_agent_dispatch_sequence CHECK/u)
   assert.match(schema, /CREATE INDEX IF NOT EXISTS ix_bff_scheduled_task_outbox_ready/u)
   assert.doesNotMatch(schema, /CREATE (?:UNIQUE )?INDEX IF NOT EXISTS bff_[a-z0-9_]+_idx\b/iu)
 

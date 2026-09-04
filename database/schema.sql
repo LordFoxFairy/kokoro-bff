@@ -173,6 +173,7 @@ CREATE TABLE IF NOT EXISTS bff_agent_dispatch_outbox (
   outbox_id TEXT NOT NULL,
   tenant_id TEXT NOT NULL,
   conversation_id TEXT NOT NULL,
+  conversation_dispatch_seq BIGINT NOT NULL,
   subject_id TEXT NOT NULL,
   actor_id TEXT NOT NULL,
   request_id TEXT NOT NULL,
@@ -197,6 +198,7 @@ CREATE TABLE IF NOT EXISTS bff_agent_dispatch_outbox (
   updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   CONSTRAINT pk_bff_agent_dispatch_outbox PRIMARY KEY (outbox_id),
   CONSTRAINT uq_bff_agent_dispatch_business UNIQUE (tenant_id, conversation_id, idempotency_key),
+  CONSTRAINT uq_bff_agent_dispatch_sequence UNIQUE (tenant_id, conversation_id, conversation_dispatch_seq),
   CONSTRAINT uq_bff_agent_dispatch_run UNIQUE (tenant_id, run_id),
   CONSTRAINT ck_bff_agent_dispatch_identity CHECK (
     length(btrim(tenant_id)) > 0
@@ -214,6 +216,7 @@ CREATE TABLE IF NOT EXISTS bff_agent_dispatch_outbox (
   CONSTRAINT ck_bff_agent_dispatch_payload CHECK (jsonb_typeof(payload) = 'object'),
   CONSTRAINT ck_bff_agent_dispatch_status CHECK (status IN ('pending', 'leased', 'retryable', 'succeeded', 'failed')),
   CONSTRAINT ck_bff_agent_dispatch_attempt CHECK (attempt_count >= 0),
+  CONSTRAINT ck_bff_agent_dispatch_sequence CHECK (conversation_dispatch_seq >= 1),
   CONSTRAINT ck_bff_agent_dispatch_fence CHECK (fence >= 0),
   CONSTRAINT ck_bff_agent_dispatch_lease CHECK (
     (status = 'leased' AND lease_owner IS NOT NULL AND lease_token IS NOT NULL AND lease_until IS NOT NULL)
@@ -225,13 +228,16 @@ CREATE TABLE IF NOT EXISTS bff_agent_dispatch_outbox (
   )
 );
 CREATE INDEX IF NOT EXISTS ix_bff_agent_dispatch_ready
-  ON bff_agent_dispatch_outbox (available_at ASC, created_at ASC, outbox_id ASC)
+  ON bff_agent_dispatch_outbox
+    (available_at ASC, tenant_id ASC, conversation_id ASC, conversation_dispatch_seq ASC, outbox_id ASC)
   WHERE status IN ('pending', 'retryable');
 CREATE INDEX IF NOT EXISTS ix_bff_agent_dispatch_lease
-  ON bff_agent_dispatch_outbox (lease_until ASC, created_at ASC, outbox_id ASC)
+  ON bff_agent_dispatch_outbox
+    (lease_until ASC, tenant_id ASC, conversation_id ASC, conversation_dispatch_seq ASC, outbox_id ASC)
   WHERE status = 'leased';
 CREATE INDEX IF NOT EXISTS ix_bff_agent_dispatch_conversation
-  ON bff_agent_dispatch_outbox (tenant_id, conversation_id, created_at ASC, outbox_id ASC);
+  ON bff_agent_dispatch_outbox
+    (tenant_id, conversation_id, conversation_dispatch_seq ASC, outbox_id ASC);
 
 -- A share is revocable and optionally expires. Revoked/expired rows are kept
 -- until the documented retention job removes them; only active, unexpired rows

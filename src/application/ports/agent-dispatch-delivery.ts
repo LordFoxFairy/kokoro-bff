@@ -6,5 +6,5 @@ export type AgentDispatchDeliveryResult =
   | { outcome: "failed"; errorCode: string }
 
 export interface AgentDispatchDeliveryPort {
-  deliver(command: AgentDispatchCommand): Promise<AgentDispatchDeliveryResult>
+  deliver(command: AgentDispatchCommand, timeoutBudgetMs: number): Promise<AgentDispatchDeliveryResult>
 }

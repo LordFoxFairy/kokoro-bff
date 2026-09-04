@@ -6,7 +6,7 @@ import { proxyUpstream } from "../../../upstream.js"
 import { normalizeUpstreamResponse } from "../upstream-response.js"
 import { agentIdentityHeaders } from "./identity.js"
 
-type AgentAttempt =
+export type AgentDispatchAttempt =
   | { kind: "response"; status: number; body: unknown }
   | { kind: "transport"; errorCode: string }
 
@@ -27,12 +27,19 @@ function acceptedReceipt(body: unknown, command: AgentDispatchCommand): boolean 
   return body.data.run_id === command.runId && body.data.session_id === command.conversationId
 }
 
-function classify(attempt: AgentAttempt, command: AgentDispatchCommand): AgentDispatchDeliveryResult {
-  if (attempt.kind === "transport") return { outcome: "retryable", errorCode: attempt.errorCode }
+export function classifyAgentDispatchAttempt(
+  attempt: AgentDispatchAttempt,
+  command: AgentDispatchCommand,
+): AgentDispatchDeliveryResult {
+  if (attempt.kind === "transport") {
+    return attempt.errorCode === "upstream_response_too_large"
+      ? { outcome: "failed", errorCode: attempt.errorCode }
+      : { outcome: "retryable", errorCode: attempt.errorCode }
+  }
   if (attempt.status >= 200 && attempt.status < 300) {
     return acceptedReceipt(attempt.body, command)
       ? { outcome: "succeeded" }
-      : { outcome: "retryable", errorCode: "agent_receipt_invalid" }
+      : { outcome: "failed", errorCode: "agent_receipt_invalid" }
   }
   const errorCode = upstreamErrorCode(attempt.body, attempt.status)
   if (attempt.status === 408 || attempt.status === 425 || attempt.status === 429 || attempt.status >= 500) {
@@ -45,7 +52,10 @@ function classify(attempt: AgentAttempt, command: AgentDispatchCommand): AgentDi
 export class AgentOutboxDelivery implements AgentDispatchDeliveryPort {
   public constructor(private readonly config: BffConfig) {}
 
-  public async deliver(command: AgentDispatchCommand): Promise<AgentDispatchDeliveryResult> {
+  public async deliver(command: AgentDispatchCommand, timeoutBudgetMs: number): Promise<AgentDispatchDeliveryResult> {
+    if (!Number.isSafeInteger(timeoutBudgetMs) || timeoutBudgetMs < 1) {
+      throw new Error("AGENT_DISPATCH_TIMEOUT_BUDGET_INVALID")
+    }
     const baseUrl = this.config.upstreams.agents ?? null
     if (!this.config.agentEnabled || baseUrl === null) {
       return { outcome: "retryable", errorCode: "agent_not_configured" }
@@ -71,11 +81,12 @@ export class AgentOutboxDelivery implements AgentDispatchDeliveryPort {
         ),
         "kokoro-bff",
         this.config.upstreamSecret,
+        timeoutBudgetMs,
       )
       const normalized = normalizeUpstreamResponse(upstream, command.requestId)
-      return classify({ kind: "response", status: normalized.status, body: normalized.body }, command)
+      return classifyAgentDispatchAttempt({ kind: "response", status: upstream.status, body: normalized.body }, command)
     } catch (error) {
-      return classify({ kind: "transport", errorCode: transportErrorCode(error) }, command)
+      return classifyAgentDispatchAttempt({ kind: "transport", errorCode: transportErrorCode(error) }, command)
     }
   }
 }

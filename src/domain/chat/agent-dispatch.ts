@@ -44,6 +44,7 @@ export type AgentDispatchLease = {
 export type AgentDispatchCommand = AgentDispatchLease & {
   tenantId: string
   conversationId: string
+  conversationDispatchSeq: string
   subjectId: string
   actorId: string
   requestId: string
@@ -57,6 +58,7 @@ export type AgentDispatchCommand = AgentDispatchLease & {
   status: "leased"
   attemptCount: number
   leaseUntil: Date
+  leaseRemainingMs: number
 }
 
 export type AgentDispatchInput = {

@@ -367,7 +367,7 @@ integrationTest("accepts a Chat turn after the message and Agent dispatch are du
       { message_id: receipt.assistant_message_id, role: "assistant", status: "pending", run_id: receipt.run_id },
     ])
     const outbox = await pool.query(
-      `SELECT run_id, user_message_id, assistant_message_id, status, attempt_count
+      `SELECT run_id, user_message_id, assistant_message_id, conversation_dispatch_seq, status, attempt_count
          FROM bff_agent_dispatch_outbox
         WHERE tenant_id = $1 AND conversation_id = $2`,
       [tenant, conversationId],
@@ -385,6 +385,7 @@ integrationTest("accepts a Chat turn after the message and Agent dispatch are du
         assistant_message_id: receipt.assistant_message_id,
       },
     )
+    assert.equal(outbox.rows[0].conversation_dispatch_seq, "1")
 
     const retryable = await waitFor(async () => {
       const result = await pool.query(
@@ -456,6 +457,7 @@ integrationTest("reclaims expired Agent dispatch leases and rejects stale or cro
       workerId: "worker_a",
       limit: 1,
       leaseDurationMs: 5,
+      maxAttempts: 8,
     })
     assert.equal(first.length, 1)
     await new Promise((resolve) => setTimeout(resolve, 20))
@@ -463,9 +465,11 @@ integrationTest("reclaims expired Agent dispatch leases and rejects stale or cro
       workerId: "worker_b",
       limit: 1,
       leaseDurationMs: 5000,
+      maxAttempts: 8,
     })
     assert.equal(second.length, 1)
     assert.equal(second[0].fence, first[0].fence + 1)
+    assert.ok(second[0].leaseRemainingMs > 0 && second[0].leaseRemainingMs <= 5000)
 
     assert.equal(await store.agentDispatchOutbox.markAgentDispatchSucceeded({
       tenantId: `${tenant}_other`,
@@ -496,6 +500,88 @@ integrationTest("reclaims expired Agent dispatch leases and rejects stale or cro
       [tenant, conversationId],
     )
     assert.deepEqual(state.rows, [{ status: "succeeded", attempt_count: 2, fence: "2" }])
+  } finally {
+    if (store) await store.close()
+    await pool.query("DELETE FROM bff_agent_dispatch_outbox WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_agui_stream WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_message WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_conversation WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+    await pool.end()
+  }
+})
+
+integrationTest("claims Agent launches in persisted conversation FIFO and terminalizes exhausted heads before claim", async () => {
+  const pool = new Pool({ connectionString: postgresUrl })
+  const tenant = `chat_fifo_${Date.now()}`
+  const conversationId = `conversation_fifo_${Date.now()}`
+  let store
+  try {
+    await pool.query("DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_agui_stream, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE")
+    await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+    await pool.query(
+      `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title)
+       VALUES ($1, $2, $3, $4)`,
+      [conversationId, tenant, "chat_user", "Strict dispatch FIFO"],
+    )
+    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    await store.ready()
+    for (const suffix of ["first", "second", "third"]) {
+      assert.ok(await store.services.chatTurns.submit({
+        tenantId: tenant,
+        conversationId,
+        subjectId: "chat_user",
+        actorId: "chat_user",
+        requestId: `request_${suffix}`,
+        idempotencyKey: `chat-fifo-${suffix}`,
+        content: `Dispatch ${suffix}`,
+      }))
+    }
+
+    const first = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
+      workerId: "worker_fifo",
+      limit: 10,
+      leaseDurationMs: 5000,
+      maxAttempts: 8,
+    })
+    assert.equal(first.length, 1)
+    assert.equal(first[0].conversationDispatchSeq, "1")
+    assert.equal(await store.agentDispatchOutbox.markAgentDispatchSucceeded(first[0]), true)
+
+    await pool.query(
+      `UPDATE bff_agent_dispatch_outbox
+          SET status = 'retryable', attempt_count = 8,
+              available_at = CURRENT_TIMESTAMP(3) - INTERVAL '1 second'
+        WHERE tenant_id = $1 AND conversation_id = $2 AND conversation_dispatch_seq = 3`,
+      [tenant, conversationId],
+    )
+    const afterExhaustion = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
+      workerId: "worker_fifo",
+      limit: 10,
+      leaseDurationMs: 5000,
+      maxAttempts: 8,
+    })
+    assert.equal(afterExhaustion.length, 1)
+    assert.equal(afterExhaustion[0].conversationDispatchSeq, "5")
+
+    const rows = await pool.query(
+      `SELECT conversation_dispatch_seq, status, attempt_count, last_error_code
+         FROM bff_agent_dispatch_outbox
+        WHERE tenant_id = $1 AND conversation_id = $2
+        ORDER BY conversation_dispatch_seq ASC`,
+      [tenant, conversationId],
+    )
+    assert.deepEqual(rows.rows, [
+      { conversation_dispatch_seq: "1", status: "succeeded", attempt_count: 1, last_error_code: null },
+      { conversation_dispatch_seq: "3", status: "failed", attempt_count: 8, last_error_code: "agent_dispatch_attempts_exhausted" },
+      { conversation_dispatch_seq: "5", status: "leased", attempt_count: 1, last_error_code: null },
+    ])
+    const failedAssistant = await pool.query(
+      `SELECT status
+         FROM bff_message
+        WHERE tenant_id = $1 AND conversation_id = $2 AND message_seq = 4`,
+      [tenant, conversationId],
+    )
+    assert.equal(failedAssistant.rows[0].status, "failed")
   } finally {
     if (store) await store.close()
     await pool.query("DELETE FROM bff_agent_dispatch_outbox WHERE tenant_id = $1", [tenant]).catch(() => undefined)
