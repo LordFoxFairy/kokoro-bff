@@ -113,7 +113,7 @@ async function durableAgentEventStream(
       reply(response, 400, failure("invalid_event_cursor", "Last-Event-ID is invalid for this session", context.requestId), context, idempotency, mutation)
       return
     }
-    if (initial === "terminal") {
+    if (initial === "terminal" && (!config.agentEnabled || baseUrl === null)) {
       startAgUiStream(response, context.requestId)
       response.end()
       return

@@ -161,6 +161,18 @@ integrationTest("serves live and restarted replay only from the tenant-scoped Po
     )
     assert.deepEqual(ledger.rows.map((row) => row.cursor), originalFrames.map((frame) => frame.id))
 
+    events.push(
+      { chat_event_id: "source_run_2", session_id: "session_live", run_id: "run_2", event_type: "run.started", payload_json: '{"status":"running"}', seq: 5, created_at: 5000 },
+      { chat_event_id: "source_terminal_2", session_id: "session_live", run_id: "run_2", event_type: "run.completed", payload_json: '{"status":"completed","token_usage":null}', seq: 6, created_at: 6000 },
+    )
+    const nextRun = await fetch(`${base}/v1/sessions/session_live/events`, {
+      headers: { ...auth("tenant_a"), "last-event-id": originalFrames.at(-1).id },
+    })
+    assert.equal(nextRun.status, 200)
+    const nextRunFrames = parseSse(await nextRun.text())
+    assert.deepEqual(nextRunFrames.map((frame) => frame.event.type), ["RUN_STARTED", "RUN_FINISHED"])
+    assert.ok(nextRunFrames.every((frame) => /^agui_[0-9a-f]{32}$/u.test(frame.id)))
+
     await close(bff)
     bff = null
     await close(agent)
@@ -173,7 +185,10 @@ integrationTest("serves live and restarted replay only from the tenant-scoped Po
     })
     assert.equal(replayed.status, 200)
     const replayedFrames = parseSse(await replayed.text())
-    assert.deepEqual(replayedFrames.map((frame) => frame.id), originalFrames.slice(2).map((frame) => frame.id))
+    assert.deepEqual(
+      replayedFrames.map((frame) => frame.id),
+      [...originalFrames.slice(2), ...nextRunFrames].map((frame) => frame.id),
+    )
 
     const invalid = await fetch(`${restartedBase}/v1/sessions/session_live/events`, {
       headers: { ...auth("tenant_a"), "last-event-id": "4" },
