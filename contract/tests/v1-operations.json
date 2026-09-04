@@ -1,0 +1,320 @@
+{
+  "version": "v1",
+  "operations": [
+    {
+      "method": "GET",
+      "path": "/healthz",
+      "operation_id": "healthz"
+    },
+    {
+      "method": "GET",
+      "path": "/readyz",
+      "operation_id": "readyz"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/system/runtime-manifest",
+      "operation_id": "getRuntimeManifest"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/sessions",
+      "operation_id": "listSessions"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/models",
+      "operation_id": "listModels"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/sessions/{id}",
+      "operation_id": "getSessionSnapshot"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/sessions/{id}",
+      "operation_id": "deleteSession"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/sessions/{id}/messages",
+      "operation_id": "listSessionMessages"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/sessions/{id}/messages",
+      "operation_id": "createMessage"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/sessions/{id}/events",
+      "operation_id": "streamSessionEvents"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/sessions/{id}/runs/{runId}/control",
+      "operation_id": "controlRun"
+    },
+    {
+      "method": "PATCH",
+      "path": "/v1/sessions/{id}/title",
+      "operation_id": "renameSession"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/sessions/{id}/share",
+      "operation_id": "createShare"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/sessions/{id}/share",
+      "operation_id": "revokeShare"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/shared/{shareId}",
+      "operation_id": "getSharedSessionSnapshot"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects",
+      "operation_id": "listProjects"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects",
+      "operation_id": "createProject"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/{projectId}",
+      "operation_id": "getProject"
+    },
+    {
+      "method": "PATCH",
+      "path": "/v1/projects/{projectId}",
+      "operation_id": "updateProjectInstruction"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/mori/projects",
+      "operation_id": "listMoriProjects"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/mori/projects",
+      "operation_id": "createMoriProject"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/mori/projects/{projectRef}",
+      "operation_id": "getMoriProject"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/mori/projects/{projectRef}/song_plans",
+      "operation_id": "createMoriSongPlan"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/mori/projects/{projectRef}/generations",
+      "operation_id": "createMoriGeneration"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/mori/generations/{generationRef}",
+      "operation_id": "getMoriGeneration"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/mori/generations/{generationRef}/events",
+      "operation_id": "streamMoriGenerationEvents"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/mori/generations/{generationRef}/cancel",
+      "operation_id": "cancelMoriGeneration"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/mori/projects/{projectRef}/candidates",
+      "operation_id": "listMoriCandidates"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/mori/candidates/{candidateRef}/promote",
+      "operation_id": "promoteMoriCandidate"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/mori/versions/{versionRef}/remix",
+      "operation_id": "remixMoriVersion"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/mori/library",
+      "operation_id": "listMoriLibrary"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/mori/versions/{versionRef}/exports",
+      "operation_id": "createMoriExport"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/mori/exports/{exportRef}",
+      "operation_id": "getMoriExport"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/{projectId}/tasks",
+      "operation_id": "listProjectTasks"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/{projectId}/instruction-revisions",
+      "operation_id": "listProjectInstructionRevisions"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/{projectId}/resources",
+      "operation_id": "uploadProjectResources"
+    },
+    {
+      "method": "PATCH",
+      "path": "/v1/projects/{projectId}/skills/{skill}",
+      "operation_id": "updateProjectSkill"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/{projectId}/scheduled-tasks",
+      "operation_id": "createProjectScheduledTask"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/skills",
+      "operation_id": "listSkills"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/skills/pool",
+      "operation_id": "listSkillPool"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/skills/catalog",
+      "operation_id": "listSkillCatalog"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/skills/quota",
+      "operation_id": "getSkillQuota"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/skills/{name}/revisions",
+      "operation_id": "listSkillRevisions"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/skills/{name}/enable",
+      "operation_id": "enableSkill"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/skills/{name}/disable",
+      "operation_id": "disableSkill"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/skills/github/preview",
+      "operation_id": "previewGithubSkill"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/skills/github/import",
+      "operation_id": "importGithubSkill"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/mcp/servers",
+      "operation_id": "listMcpServers"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/mcp/servers",
+      "operation_id": "registerMcpServer"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/mcp/servers/{name}/enable",
+      "operation_id": "enableMcpServer"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/mcp/servers/{name}/disable",
+      "operation_id": "disableMcpServer"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/mcp/servers/{name}",
+      "operation_id": "deleteMcpServer"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/scheduled-tasks",
+      "operation_id": "listScheduledTasks"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/scheduled-tasks",
+      "operation_id": "createScheduledTask"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/scheduled-tasks/{id}",
+      "operation_id": "getScheduledTask"
+    },
+    {
+      "method": "PATCH",
+      "path": "/v1/scheduled-tasks/{id}",
+      "operation_id": "updateScheduledTask"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/scheduled-tasks/{id}",
+      "operation_id": "deleteScheduledTask"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/scheduled-tasks/{id}/retry",
+      "operation_id": "retryScheduledTask"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/agents/connections/setup",
+      "operation_id": "getAgentConnectionSetup"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/library",
+      "operation_id": "listLibrary"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/billing/plans",
+      "operation_id": "listBillingPlans"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/billing/summary",
+      "operation_id": "getBillingSummary"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/billing/checkout",
+      "operation_id": "createBillingCheckout"
+    }
+  ]
+}

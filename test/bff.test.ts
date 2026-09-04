@@ -1007,11 +1007,11 @@ describe("kokoro-bff v1 mock contract", () => {
     assert.equal((await httpError.json() as { error: { code: string } }).error.code, "upstream_http_error")
 
     const baseDir = fileURLToPath(new URL("../docs/api/v1/", import.meta.url))
-    for (const file of ["README.md", "projects.md", "system.md", "models.md", "skills.md", "mcp.md", "scheduled.md", "agents.md", "library.md", "billing.md", "openapi.yaml"]) {
+    for (const file of ["README.md", "projects.md", "system.md", "models.md", "skills.md", "mcp.md", "scheduled.md", "agents.md", "library.md", "billing.md"]) {
       assert.equal(existsSync(`${baseDir}/${file}`), true, file)
     }
 
-    const openapi = readFileSync(`${baseDir}/openapi.yaml`, "utf8")
+    const openapi = readFileSync(fileURLToPath(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url)), "utf8")
     for (const path of [
       "/v1/projects",
       "/v1/projects/{projectId}",

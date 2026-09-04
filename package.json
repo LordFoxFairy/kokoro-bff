@@ -2,7 +2,7 @@
   "name": "@kokoro/bff",
   "version": "0.1.0",
   "private": true,
-  "packageManager": "pnpm@11.2.2",
+  "packageManager": "pnpm@11.25.0",
   "engines": {
     "node": ">=22 <23"
   },
@@ -11,13 +11,17 @@
     "dev": "node --watch --experimental-strip-types src/main.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/main.js",
-    "db:setup": "pnpm build && node dist/database/setup.js",
+    "db:apply-schema": "pnpm build && node dist/database/setup.js",
     "lint": "node scripts/lint-source.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "contract:lint": "redocly lint docs/api/v1/openapi.yaml",
-    "test": "pnpm build && node --test test/architecture.test.ts test/agui.test.ts test/bff.test.ts test/config.test.ts test/mori.test.ts test/music.test.ts test/scheduler.test.ts test/upstream.test.ts",
+    "contract:lint": "redocly lint contract/openapi/v1/openapi.yaml",
+    "contract:test": "node --test test/contract-governance.test.mjs",
+    "contract:check": "pnpm contract:lint && pnpm contract:test",
+    "contract:update-baseline": "node scripts/check-contract.mjs --write-baseline",
+    "test:architecture": "pnpm build && node --test test/architecture.test.ts",
+    "test": "pnpm build && node --test test/architecture.test.ts test/contract-governance.test.mjs test/agui.test.ts test/bff.test.ts test/config.test.ts test/mori.test.ts test/music.test.ts test/scheduler.test.ts test/upstream.test.ts",
     "test:integration": "pnpm build && node --test test/business-store.integration.mjs",
-    "check": "pnpm lint && pnpm contract:lint && pnpm test && pnpm build"
+    "check": "pnpm lint && pnpm typecheck && pnpm contract:check && pnpm test && pnpm build"
   },
   "devDependencies": {
     "@redocly/cli": "2.46.1",

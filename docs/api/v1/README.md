@@ -19,7 +19,10 @@ BFF 不负责：
 - Agent Redis Worker 的内部实现
 - 直接访问其他业务子仓库的 SQL
 
-机器可读契约：[openapi.yaml](./openapi.yaml)。本阶段覆盖 Health、System runtime manifest、Projects、Mori Music、Chat、Models、Skills、MCP、Scheduled、Agents setup、Library 与 Billing 的现有 v1 业务面。
+机器可读契约：[contract/openapi/v1/openapi.yaml](../../../contract/openapi/v1/openapi.yaml)。该文件是唯一
+canonical OpenAPI；`docs/` 只解释协议，不保存第二份可编辑 schema。本阶段覆盖 Health、System runtime
+manifest、Projects、Mori Music、Chat、Models、Skills、MCP、Scheduled、Agents setup、Library 与 Billing
+的现有 v1 业务面。
 
 ## Base URL 和调用方
 

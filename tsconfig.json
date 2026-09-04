@@ -8,6 +8,7 @@
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
+    "useUnknownInCatchVariables": true,
     "noEmitOnError": true,
     "skipLibCheck": true,
     "sourceMap": true
