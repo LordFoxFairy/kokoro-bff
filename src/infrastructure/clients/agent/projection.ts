@@ -1,5 +1,5 @@
 import type { ChatEvent, ChatMessage, ChatSessionDetail, ChatSessionSummary } from "../../../contracts/index.js"
-import type { AgentChatEvent, AgentChatMessage, BffIdentity } from "./types.js"
+import type { AgentChatEvent, AgentChatMessage, AgentEventPage, BffIdentity } from "./types.js"
 
 function recordPayload(event: AgentChatEvent): Record<string, unknown> {
   let parsed: unknown
@@ -188,6 +188,52 @@ export function agentEventList(value: unknown, expectedSessionId: string): Agent
     events.push(parsed)
   }
   return events
+}
+
+export function agentEventPage(
+  value: unknown,
+  expectedSessionId: string,
+  afterSequence: number,
+  limit: number,
+): AgentEventPage | null {
+  if (
+    !isRecord(value)
+    || !Number.isSafeInteger(afterSequence)
+    || afterSequence < 0
+    || !Number.isSafeInteger(limit)
+    || limit < 1
+  ) return null
+
+  const events = agentEventList(value.events, expectedSessionId)
+  const nextSequence = value.next_seq
+  const watermark = value.watermark
+  if (
+    events === null
+    || events.length > limit
+    || typeof nextSequence !== "number"
+    || !Number.isSafeInteger(nextSequence)
+    || typeof watermark !== "number"
+    || !Number.isSafeInteger(watermark)
+    || nextSequence < afterSequence
+    || watermark < nextSequence
+  ) return null
+
+  const eventIds = new Set<string>()
+  let expectedSequence = afterSequence
+  for (const event of events) {
+    expectedSequence += 1
+    if (event.seq !== expectedSequence || eventIds.has(event.chat_event_id)) return null
+    eventIds.add(event.chat_event_id)
+  }
+  if (nextSequence !== expectedSequence) return null
+  if (events.length === 0 && watermark !== nextSequence) return null
+
+  return {
+    events,
+    nextSequence,
+    watermark,
+    exhausted: nextSequence === watermark,
+  }
 }
 
 export function mapAgentMessage(message: AgentChatMessage): ChatMessage {

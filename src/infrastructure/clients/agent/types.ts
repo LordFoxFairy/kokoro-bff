@@ -42,6 +42,13 @@ export type AgentChatEvent = {
   created_at: number
 }
 
+export type AgentEventPage = {
+  events: AgentChatEvent[]
+  nextSequence: number
+  watermark: number
+  exhausted: boolean
+}
+
 export type AgentChatMessage = {
   chat_message_id: string
   session_id: string

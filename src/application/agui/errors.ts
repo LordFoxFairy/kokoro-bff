@@ -11,3 +11,10 @@ export class AgUiProjectionContentionError extends Error {
     this.name = "AgUiProjectionContentionError"
   }
 }
+
+export class AgUiSourceContinuityError extends Error {
+  public constructor() {
+    super("AG-UI source sequence is not contiguous")
+    this.name = "AgUiSourceContinuityError"
+  }
+}

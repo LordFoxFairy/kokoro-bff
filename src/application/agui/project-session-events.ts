@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto"
 
 import type { ChatEvent } from "../../contracts/chat.js"
-import { AgUiProjectionContentionError, AgUiSourceIdentityConflictError } from "./errors.js"
+import { AgUiProjectionContentionError, AgUiSourceContinuityError, AgUiSourceIdentityConflictError } from "./errors.js"
 import {
   projectChatEvent,
   type AgUiProjectionState,
@@ -82,14 +82,13 @@ function assertSource(source: AgentProjectionSource, sessionId: string): void {
 }
 
 function orderedSources(sources: readonly AgentProjectionSource[], sessionId: string): AgentProjectionSource[] {
-  const ordered = [...sources].sort((left, right) => left.sourceSequence - right.sourceSequence)
+  const ordered = [...sources]
   const eventIds = new Set<string>()
-  let previousSequence = 0
+  let previousSequence: number | null = null
   for (const source of ordered) {
     assertSource(source, sessionId)
-    if (source.sourceSequence === previousSequence || eventIds.has(source.sourceEventId)) {
-      throw new AgUiSourceIdentityConflictError()
-    }
+    if (eventIds.has(source.sourceEventId)) throw new AgUiSourceIdentityConflictError()
+    if (previousSequence !== null && source.sourceSequence !== previousSequence + 1) throw new AgUiSourceContinuityError()
     previousSequence = source.sourceSequence
     eventIds.add(source.sourceEventId)
   }
@@ -143,6 +142,7 @@ export class AgUiProjectionService {
       if (pending.length === 0) {
         return { insertedSources: 0, insertedFrames: 0, sourceHighWatermark: stream.sourceHighWatermark }
       }
+      if (pending[0]?.sourceSequence !== stream.sourceHighWatermark + 1) throw new AgUiSourceContinuityError()
 
       const state = mutableState(stream.projectionState)
       const projections = projectSources(pending, state)
