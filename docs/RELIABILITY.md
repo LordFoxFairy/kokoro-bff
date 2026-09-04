@@ -44,17 +44,30 @@ jitter、lease/fencing 投递；owner receipt 与 BFF outbox 状态 reconciliati
 
 ## AG-UI replay
 
-当前 public event 与 replay 的唯一 durable truth 是 BFF PostgreSQL ledger。HTTP 先重放已提交 rows，再按持久化 source
-high-watermark 从 Agent 获取新 source facts；投影事务提交后才发送。`Last-Event-ID` 是逐 frame `agui_*` token，内部
-public sequence 单调且不暴露。终态已持久化时，BFF 重启或 Agent disabled/unavailable 不影响 replay。
+当前 public event 与 replay 的唯一 durable truth 是 BFF PostgreSQL ledger。独立 projector 按持久化 source
+high-watermark 从 Agent 获取新 facts，使用 lease/token/fence 提交；HTTP 只重放已提交 rows。`Last-Event-ID` 是逐 frame
+`agui_*` token，内部 public sequence 单调且不暴露。终态已持久化时，BFF 重启或 Agent disabled/unavailable 不影响 replay。
+SSE ledger wait 与后台 source projector 使用两组独立参数；projector 的 claim batch、page/attempt budget、lease、
+settlement reserve、poll、backoff max/jitter、ledger retention、GC 和 tombstone 窗口均由显式环境变量控制。启动配置
+会阻断超过 Agent page 上限、lease 不长于单次 owner timeout 加 settlement reserve、backoff base 大于 max，或
+tombstone 窗口短于 ledger retention 的组合。source request timeout 会收窄到当前 lease 剩余预算，给事务 settlement
+预留固定时间；跨 claim 的连续失败次数持久化并驱动 capped exponential backoff + jitter，成功 poll 后清零；合法
+`Retry-After` 在 backoff maximum 内参与下一次调度。
+lease eligibility 与实际 deadline 使用 PostgreSQL 时钟；claim 把数据库计算的剩余预算交给 worker，runner/source client
+只使用 monotonic clock 消耗预算，settlement/release 再由数据库时钟落点。不同 `expected_run_id` 的注册会递增
+version/fence 并撤销旧 lease；`latest_run_id` 只是最近投影的 source run，因此时钟偏移、迟到 worker 或新 lease 补投旧
+run 都不能恢复旧 terminal。message/tool projection state 以 run identity 隔离。
+持续 404/429/5xx 属于可恢复的 owner availability 故障：跨 claim 保持 capped durable retry，不因固定次数把 scope
+永久冻结；`consumer_failure_count`、last error/time 和 projector snapshot 是告警信号。权限、retention、contract、容量与
+continuity 等不可恢复错误立即进入 `blocked`，只能通过受控恢复重新激活。
 
 真实 PostgreSQL/Redis integration 已验证：strictly-after、一个 source fact 展开多 frame 后从中间恢复、并发重复
-摄取、source identity 冲突、projection state 跨重启、tenant/session foreign cursor 拒绝、BFF 重启后 replay，以及
-Redis 不存在 AG-UI 持久键。Redis publish 可丢失且失败不回滚 ledger。
+摄取、source identity 冲突、projection state 跨重启及跨 run 隔离、tenant/session 隔离、consumer fencing、expected-run
+stale commit 防护、worker 时钟偏移、BFF 重启后 replay、
+保留 GC、expired cursor，以及 Redis 不存在 AG-UI 持久键。Redis publish 可丢失且失败不回滚 ledger。
 
-尚未闭环：retention/GC safety watermark、cursor-expired 稳定错误、后台主动摄取、跨版本 re-projection、PG backup
-restore 与长时间 fault injection。当前读取驱动 ingestion；source fact 在首次摄取前从 Agent history 消失时仍可能形成
-不可恢复缺口。
+尚未闭环：跨版本 re-projection、PG backup restore、长时间 fault injection，以及 Agent source retention 小于
+projector 最大恢复时间时的跨服务数据保护策略。
 
 ## Retry 规则
 
@@ -75,11 +88,19 @@ restore 与长时间 fault injection。当前读取驱动 ingestion；source fac
 | owner timeout/过大响应 | 稳定 502/错误归一 | 在幂等预算内重试 |
 | Scheduler 注册失败 | command 进入 `retryable`，超过 attempt budget 后进入 `failed`；本地 task fact 保留 | dispatcher 退避重试，或调用 `retry` 产生新 revision command |
 | Agent 不可用 | 新 Chat/dispatch fail closed；终态 AG-UI ledger 可独立 replay | 同 key 重试；公开历史从 PG 读取 |
+| Agent source timeout/connection/404/409/423/429/5xx | 有界 attempt 后保持 active，持久失败计数并按 capped exponential backoff + jitter 重领 | 上游恢复后自动继续，watermark 不跳跃 |
+| Agent source 401/403/410/非法 4xx/过大响应，或 source gap 耗尽单次连续性预算 | consumer 立即 blocked，不无限重试 | 修复服务身份、retention 或 contract 后执行受控恢复 |
 | BFF 在 Scheduler 投递前/中间崩溃 | 已提交 command 保留；leased row 在 lease 到期后可重领 | 新 dispatcher recovery claim，外部以稳定 job/idempotency identity 收敛 |
-| cursor 格式错误、未知或跨 scope | 400 `invalid_event_cursor` | 使用该 tenant/session 最后确认的 SSE id |
-| cursor 早于未来保留水位 | 当前不清理，因此尚无此状态 | retention/cursor-expired policy 待实现 |
+| 当前 session 的 cursor 格式错误或未知 | 400 `invalid_event_cursor` | 使用该 tenant/session 最后确认的 SSE id |
+| session 不属于 trusted tenant | 404 `session_not_found` | 校验 tenant/session，不探测其他 scope |
+| cursor 已被 retention GC 回收且 tombstone 仍在 | 410 `event_cursor_expired` | 重新读取 bounded session snapshot，再从当前 watermark 建立流 |
+| AG-UI source contract/identity 冲突 | consumer 进入 blocked；尚未发送 SSE headers 时返回结构化 502，已开始的流直接关闭并在客户端携带最后 cursor 重连后返回结构化错误 | 冻结发布、核对 owner contract 与 source ledger，修复后执行受控重置 |
+
+SSE comment 只用于 `keep-alive` heartbeat，不承载错误码或状态迁移。headers 已发送后发生 projector/ledger 故障时，
+BFF 关闭连接而不伪造 AG-UI 业务事件；客户端保存最后确认 cursor 并重连，BFF 在能够发送普通 HTTP 响应时返回稳定
+JSON error envelope。Run 业务失败必须来自 durable AG-UI `RUN_ERROR`，不得通过 comment 旁路。
 
 ## 关闭与降级缺口
 
-当前 server close 会先停止并 drain ScheduledTask dispatcher，再关闭 PG/Redis client；仍没有完整的 request drain、
+当前 server close 会先停止并 drain AG-UI projector 与 ScheduledTask dispatcher，再关闭 PG/Redis client；仍没有完整的 request drain、
 termination deadline、circuit breaker 或 bulkhead。Mock 仅用于本地契约 fixture，绝不作为 Live 降级路径。

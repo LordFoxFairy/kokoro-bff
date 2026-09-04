@@ -15,6 +15,7 @@ const integrationTest = postgresUrl && redisUrl ? test : test.skip
 const servers = []
 
 const TABLES = [
+  "bff_agui_cursor_tombstone",
   "bff_share",
   "bff_message",
   "bff_conversation",
@@ -54,6 +55,14 @@ function auth(tenantId) {
   }
 }
 
+async function insertConversation(pool, sessionId, title) {
+  await pool.query(
+    `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title)
+     VALUES ($1, $2, $3, $4)`,
+    [sessionId, "tenant_a", "user_integration", title],
+  )
+}
+
 function bffConfig({ agentEnabled, agentBase, agUi }) {
   return {
     host: "127.0.0.1",
@@ -79,10 +88,24 @@ function bffConfig({ agentEnabled, agentBase, agUi }) {
       maxConnectionsGlobal: 256,
       maxConnectionsPerTenant: 64,
       maxConnectionsPerSession: 8,
-      pollBaseDelayMs: 1000,
-      pollMaxDelayMs: 8000,
-      pollJitterPercent: 20,
+      ledgerPollBaseDelayMs: 1000,
+      ledgerPollMaxDelayMs: 8000,
+      ledgerPollJitterPercent: 20,
       replayCacheTtlMs: 25,
+      projectorMaxConsumersPerCycle: 32,
+      projectorSourcePageSize: 256,
+      projectorMaxPagesPerConsumer: 8,
+      projectorSourceMaxAttempts: 3,
+      projectorLeaseDurationMs: 15_000,
+      projectorLeaseSettlementReserveMs: 500,
+      projectorPollIntervalMs: 1000,
+      projectorErrorBackoffMs: 5000,
+      projectorErrorBackoffMaxMs: 5 * 60 * 1000,
+      projectorErrorBackoffJitterPercent: 20,
+      retentionMs: 7 * 24 * 60 * 60 * 1000,
+      gcIntervalMs: 15 * 60 * 1000,
+      gcBatchSize: 100,
+      cursorTombstoneRetentionMs: 30 * 24 * 60 * 60 * 1000,
     },
     upstreams: {
       system: null,
@@ -121,11 +144,7 @@ integrationTest("serves live and restarted replay only from the tenant-scoped Po
       { chat_event_id: "source_message_end", session_id: "session_live", run_id: "run_1", chat_message_id: "message_1", event_type: "assistant.completed", payload_json: '{"content":"hello"}', seq: 3, created_at: 3000 },
       { chat_event_id: "source_terminal", session_id: "session_live", run_id: "run_1", event_type: "run.completed", payload_json: '{"status":"completed","token_usage":null}', seq: 4, created_at: 4000 },
     ]
-    await pool.query(
-      `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title)
-       VALUES ($1, $2, $3, $4)`,
-      ["session_live", "tenant_a", "user_integration", "Live Chat"],
-    )
+    await insertConversation(pool, "session_live", "Live Chat")
     const eventRequests = []
     agent = createServer((request, response) => {
       response.setHeader("content-type", "application/json")
@@ -175,7 +194,8 @@ integrationTest("serves live and restarted replay only from the tenant-scoped Po
     const detailBody = await detail.json()
     assert.equal(detailBody.data.event_watermark, originalFrames.at(-1).id)
     assert.equal(detailBody.data.active_run, undefined)
-    assert.deepEqual(eventRequests.slice(0, 4), [0, 2])
+    assert.deepEqual(eventRequests.slice(0, 2), [0, 2])
+    assert.ok(eventRequests.slice(2).every((sequence) => sequence === 4))
 
     const ledger = await pool.query(
       `SELECT public_sequence, cursor, event_type
@@ -224,8 +244,8 @@ integrationTest("serves live and restarted replay only from the tenant-scoped Po
     const foreignTenant = await fetch(`${restartedBase}/v1/sessions/session_live/events`, {
       headers: { ...auth("tenant_b"), "last-event-id": originalFrames[1].id },
     })
-    assert.equal(foreignTenant.status, 400)
-    assert.equal((await foreignTenant.json()).error.code, "invalid_event_cursor")
+    assert.equal(foreignTenant.status, 404)
+    assert.equal((await foreignTenant.json()).error.code, "session_not_found")
   } finally {
     if (bff !== null) await close(bff)
     if (agent !== null) await close(agent)
@@ -243,6 +263,7 @@ integrationTest("drains the complete Agent source snapshot before ending at a ru
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+    await insertConversation(pool, "session_boundary", "Boundary Chat")
     const events = [
       { chat_event_id: "run_1_started", session_id: "session_boundary", run_id: "run_1", event_type: "run.started", payload_json: '{"status":"running"}', seq: 1, created_at: 1000 },
       { chat_event_id: "run_1_finished", session_id: "session_boundary", run_id: "run_1", event_type: "run.completed", payload_json: '{"status":"completed"}', seq: 2, created_at: 2000 },
@@ -274,7 +295,8 @@ integrationTest("drains the complete Agent source snapshot before ending at a ru
       ["RUN_STARTED", "run_2"],
       ["RUN_FINISHED", "run_2"],
     ])
-    assert.deepEqual(requestedAfter, [0, 2])
+    assert.deepEqual(requestedAfter.slice(0, 2), [0, 2])
+    assert.ok(requestedAfter.slice(2).every((sequence) => sequence === 4))
   } finally {
     if (bff !== null) await close(bff)
     if (agent !== null) await close(agent)
@@ -292,6 +314,7 @@ integrationTest("fails loudly when Agent event pagination metadata disagrees wit
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+    await insertConversation(pool, "session_invalid_page", "Invalid Source Chat")
     agent = createServer((_request, response) => {
       response.setHeader("content-type", "application/json")
       response.end(JSON.stringify({
@@ -311,8 +334,15 @@ integrationTest("fails loudly when Agent event pagination metadata disagrees wit
     const base = await listen(bff)
 
     const streamed = await fetch(`${base}/v1/sessions/session_invalid_page/events`, { headers: auth("tenant_a") })
-    assert.equal(streamed.status, 502)
-    assert.equal((await streamed.json()).error.code, "upstream_response_invalid")
+    assert.equal(streamed.status, 200)
+    const streamedBody = await streamed.text()
+    const comments = streamedBody.split("\n").filter((line) => line.startsWith(": "))
+    assert.ok(comments.length >= 1)
+    assert.ok(comments.every((line) => line === ": keep-alive"), streamedBody)
+
+    const blocked = await fetch(`${base}/v1/sessions/session_invalid_page/events`, { headers: auth("tenant_a") })
+    assert.equal(blocked.status, 502)
+    assert.equal((await blocked.json()).error.code, "agui_projection_blocked")
     const sourceCount = await pool.query(
       "SELECT count(*)::integer AS count FROM bff_agui_source_event WHERE tenant_id = $1 AND session_id = $2",
       ["tenant_a", "session_invalid_page"],
@@ -335,6 +365,7 @@ integrationTest("ends at the SSE frame budget and resumes strictly after the las
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+    await insertConversation(pool, "session_budget", "Budget Chat")
     const events = [
       { chat_event_id: "budget_run_1_started", session_id: "session_budget", run_id: "run_1", event_type: "run.started", payload_json: '{"status":"running"}', seq: 1, created_at: 1000 },
       { chat_event_id: "budget_run_1_finished", session_id: "session_budget", run_id: "run_1", event_type: "run.completed", payload_json: '{"status":"completed"}', seq: 2, created_at: 2000 },
@@ -361,10 +392,24 @@ integrationTest("ends at the SSE frame budget and resumes strictly after the las
         maxConnectionsGlobal: 256,
         maxConnectionsPerTenant: 64,
         maxConnectionsPerSession: 8,
-        pollBaseDelayMs: 1000,
-        pollMaxDelayMs: 8000,
-        pollJitterPercent: 20,
+        ledgerPollBaseDelayMs: 1000,
+        ledgerPollMaxDelayMs: 8000,
+        ledgerPollJitterPercent: 20,
         replayCacheTtlMs: 25,
+        projectorMaxConsumersPerCycle: 32,
+        projectorSourcePageSize: 256,
+        projectorMaxPagesPerConsumer: 8,
+        projectorSourceMaxAttempts: 3,
+        projectorLeaseDurationMs: 15_000,
+        projectorLeaseSettlementReserveMs: 500,
+        projectorPollIntervalMs: 1000,
+        projectorErrorBackoffMs: 5000,
+        projectorErrorBackoffMaxMs: 5 * 60 * 1000,
+        projectorErrorBackoffJitterPercent: 20,
+        retentionMs: 7 * 24 * 60 * 60 * 1000,
+        gcIntervalMs: 15 * 60 * 1000,
+        gcBatchSize: 100,
+        cursorTombstoneRetentionMs: 30 * 24 * 60 * 60 * 1000,
       },
     }))
     const base = await listen(bff)
@@ -398,6 +443,7 @@ integrationTest("bounds same-session connections and coalesces their Agent and P
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+    await insertConversation(pool, "session_capacity", "Capacity Chat")
     let agentCalls = 0
     const source = { chat_event_id: "capacity_started", session_id: "session_capacity", run_id: "run_capacity", event_type: "run.started", payload_json: '{"status":"running"}', seq: 1, created_at: 1000 }
     agent = createServer((request, response) => {
@@ -418,14 +464,28 @@ integrationTest("bounds same-session connections and coalesces their Agent and P
       maxConnectionsGlobal: 4,
       maxConnectionsPerTenant: 4,
       maxConnectionsPerSession: 4,
-      pollBaseDelayMs: 40,
-      pollMaxDelayMs: 160,
-      pollJitterPercent: 0,
+      ledgerPollBaseDelayMs: 40,
+      ledgerPollMaxDelayMs: 160,
+      ledgerPollJitterPercent: 0,
       replayCacheTtlMs: 25,
+      projectorMaxConsumersPerCycle: 32,
+      projectorSourcePageSize: 256,
+      projectorMaxPagesPerConsumer: 8,
+      projectorSourceMaxAttempts: 3,
+      projectorLeaseDurationMs: 15_000,
+      projectorLeaseSettlementReserveMs: 500,
+      projectorPollIntervalMs: 40,
+      projectorErrorBackoffMs: 160,
+      projectorErrorBackoffMaxMs: 5000,
+      projectorErrorBackoffJitterPercent: 20,
+      retentionMs: 7 * 24 * 60 * 60 * 1000,
+      gcIntervalMs: 15 * 60 * 1000,
+      gcBatchSize: 100,
+      cursorTombstoneRetentionMs: 30 * 24 * 60 * 60 * 1000,
     }
     const runtime = new AgUiSessionRuntime({
       connections: { global: 4, perTenant: 4, perSession: 4 },
-      poll: { baseDelayMs: 40, maxDelayMs: 160, jitterRatio: 0 },
+      ledgerWait: { baseDelayMs: 40, maxDelayMs: 160, jitterRatio: 0 },
       replayCacheTtlMs: 25,
     })
     bff = createBffServer(bffConfig({ agentEnabled: true, agentBase, agUi }), { agUiRuntime: runtime })
@@ -443,7 +503,7 @@ integrationTest("bounds same-session connections and coalesces their Agent and P
     assert.ok(bodies.every((body) => parseSse(body).some((frame) => frame.event.type === "RUN_STARTED")))
     const metrics = runtime.snapshot()
     assert.ok(agentCalls <= 4, `expected at most 4 shared Agent polls, received ${agentCalls}`)
-    assert.ok(metrics.sourcePolls.executions <= 4)
+    assert.ok(metrics.ledgerWaits.waits <= 4)
     assert.ok(metrics.replays.loads <= 6, `expected at most 6 shared PostgreSQL replay loads, received ${metrics.replays.loads}`)
     assert.equal(metrics.connections.global, 0)
   } finally {

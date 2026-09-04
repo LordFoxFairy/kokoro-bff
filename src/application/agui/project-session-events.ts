@@ -1,9 +1,17 @@
 import { createHash } from "node:crypto"
+import { EventSchemas } from "@ag-ui/core"
 
 import type { ChatEvent } from "../../contracts/chat.js"
-import { AgUiProjectionContentionError, AgUiSourceContinuityError, AgUiSourceIdentityConflictError } from "./errors.js"
+import {
+  AgUiConsumerLeaseLostError,
+  AgUiProjectionContentionError,
+  AgUiSourceContractError,
+  AgUiSourceContinuityError,
+  AgUiSourceIdentityConflictError,
+} from "./errors.js"
 import {
   projectChatEvent,
+  type AgUiEvent,
   type AgUiProjectionState,
 } from "./project-chat-event.js"
 import type {
@@ -12,8 +20,10 @@ import type {
   AgUiProjectionStatus,
   AgUiReplayPage,
   AgUiInvalidCursor,
+  AgUiExpiredCursor,
   AgUiSourceIdentity,
   AgUiSourceProjection,
+  AgUiConsumerLease,
 } from "./ports/agui-projection-repository.js"
 
 const MAX_COMMIT_ATTEMPTS = 5
@@ -101,8 +111,54 @@ function projectSources(
 ): AgUiSourceProjection[] {
   return sources.map((source) => ({
     ...sourceIdentity(source),
-    frames: source.event === null ? [] : projectChatEvent(source.event, state),
+    frames: source.event === null ? [] : validateAgUiFrames(projectChatEvent(source.event, state)),
   }))
+}
+
+/** Keep schema-invalid frames outside the durable source/high-watermark transaction. */
+export function validateAgUiFrames(frames: readonly AgUiEvent[]): AgUiEvent[] {
+  try {
+    return frames.map((frame) => {
+      const parsed = EventSchemas.parse(frame)
+      // @ag-ui/core marks required wire fields as optional in its inferred union;
+      // successful runtime parsing is the authoritative boundary proof here.
+      return parsed as AgUiEvent
+    })
+  } catch {
+    throw new AgUiSourceContractError()
+  }
+}
+
+type RunProjectionState = {
+  latestRunId: string | null
+  terminalRunId: string | null
+}
+
+function runProjectionState(
+  stream: { expectedRunId?: string | null; latestRunId?: string | null; terminalRunId?: string | null },
+  projections: readonly AgUiSourceProjection[],
+): RunProjectionState {
+  let latestRunId = stream.latestRunId ?? null
+  let terminalRunId = stream.terminalRunId ?? null
+  const expectedRunId = stream.expectedRunId ?? null
+  for (const source of projections) {
+    for (const frame of source.frames) {
+      const runId = frame.runId ?? frame.metadata.kokoro.run_id
+      if (frame.type === "RUN_STARTED" && runId !== null && runId !== undefined && runId !== "") {
+        latestRunId = runId
+        if (expectedRunId === null || expectedRunId === runId) terminalRunId = null
+      } else if ((frame.type === "RUN_FINISHED" || frame.type === "RUN_ERROR") && runId !== null && runId !== undefined && runId !== "") {
+        if (expectedRunId !== null && expectedRunId === runId) {
+          latestRunId = runId
+          terminalRunId = runId
+        } else if (expectedRunId === null && (latestRunId === null || latestRunId === runId)) {
+          latestRunId = runId
+          terminalRunId = runId
+        }
+      }
+    }
+  }
+  return { latestRunId, terminalRunId }
 }
 
 function sourceIdentity(source: AgentProjectionSource): AgUiSourceIdentity {
@@ -126,8 +182,12 @@ export class AgUiProjectionService {
     tenantId: string,
     sessionId: string,
     incoming: readonly AgentProjectionSource[],
+    consumerLease?: AgUiConsumerLease,
   ): Promise<AgUiIngestResult> {
     if (tenantId.trim() === "" || sessionId.trim() === "") throw new Error("AG-UI tenant and session are required")
+    if (consumerLease !== undefined && (consumerLease.tenantId !== tenantId || consumerLease.sessionId !== sessionId)) {
+      throw new AgUiConsumerLeaseLostError()
+    }
     const sources = orderedSources(incoming, sessionId)
     const identities = sourceIdentities(sources)
 
@@ -147,6 +207,7 @@ export class AgUiProjectionService {
       const state = mutableState(stream.projectionState)
       const projections = projectSources(pending, state)
       const sourceHighWatermark = pending.at(-1)?.sourceSequence ?? stream.sourceHighWatermark
+      const runState = runProjectionState(stream, projections)
       const result = await this.repository.commitProjection({
         tenantId,
         sessionId,
@@ -154,6 +215,9 @@ export class AgUiProjectionService {
         sourceHighWatermark,
         projectionState: snapshotOf(state),
         sources: projections,
+        latestRunId: runState.latestRunId,
+        terminalRunId: runState.terminalRunId,
+        ...(consumerLease === undefined ? {} : { consumerLease }),
       })
       if (result === "committed") {
         return {
@@ -162,6 +226,7 @@ export class AgUiProjectionService {
           sourceHighWatermark,
         }
       }
+      if (result === "lease_conflict") throw new AgUiConsumerLeaseLostError()
     }
     throw new AgUiProjectionContentionError()
   }
@@ -172,7 +237,7 @@ export class AgUiProjectionService {
     cursor: string | null,
     limit = 1000,
     maxBytes = 1024 * 1024,
-  ): Promise<AgUiReplayPage | AgUiInvalidCursor> {
+  ): Promise<AgUiReplayPage | AgUiInvalidCursor | AgUiExpiredCursor> {
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1000) throw new Error("AG-UI replay limit must be between 1 and 1000")
     if (!Number.isSafeInteger(maxBytes) || maxBytes < 1) throw new Error("AG-UI replay byte limit must be a positive safe integer")
     if (cursor !== null && !OPAQUE_CURSOR_PATTERN.test(cursor)) return Promise.resolve({ kind: "invalid_cursor" })

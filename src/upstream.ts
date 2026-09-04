@@ -93,10 +93,15 @@ export async function proxyUpstream(
   trustedHeaders: TrustedUpstreamHeaders = {},
   callerService = "kokoro-bff",
   serviceToken: string | null = config.upstreamSecret,
+  timeoutBudgetMs?: number,
 ): Promise<UpstreamResponse> {
   const target = new URL(path, `${baseUrl.replace(/\/+$/u, "/")}`)
   const requestFn = target.protocol === "https:" ? httpsRequest : httpRequest
-  const timeoutMs = config.upstreamTimeoutMs ?? DEFAULT_UPSTREAM_TIMEOUT_MS
+  if (timeoutBudgetMs !== undefined && (!Number.isSafeInteger(timeoutBudgetMs) || timeoutBudgetMs < 1)) {
+    throw new Error("Upstream request timeout budget must be a positive safe integer")
+  }
+  const configuredTimeoutMs = config.upstreamTimeoutMs ?? DEFAULT_UPSTREAM_TIMEOUT_MS
+  const timeoutMs = timeoutBudgetMs === undefined ? configuredTimeoutMs : Math.min(configuredTimeoutMs, timeoutBudgetMs)
   const maxResponseBytes = config.upstreamMaxResponseBytes ?? DEFAULT_UPSTREAM_MAX_RESPONSE_BYTES
   return new Promise((resolve, reject) => {
     let settled = false

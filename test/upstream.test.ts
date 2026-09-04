@@ -88,6 +88,35 @@ describe("owner upstream transport", () => {
     })
   })
 
+  it("honors a narrower per-request timeout budget", async () => {
+    const baseUrl = await listen(createServer(() => {
+      // Keep the owner request open until the request-specific timeout destroys it.
+    }))
+    const startedAt = Date.now()
+
+    await assert.rejects(
+      proxyUpstream(
+        config({ upstreamTimeoutMs: 2000 }),
+        baseUrl,
+        "/owner",
+        "GET",
+        "request-budget",
+        new Headers(),
+        undefined,
+        {},
+        "kokoro-bff",
+        undefined,
+        50,
+      ),
+      (error: unknown) => {
+        assert.equal(error instanceof Error, true)
+        assert.equal((error as Error & { code?: string }).code, "upstream_timeout")
+        return true
+      },
+    )
+    assert.ok(Date.now() - startedAt < 1000)
+  })
+
   it("rejects a response that exceeds the configured body limit", async () => {
     const baseUrl = await listen(createServer((_request, response) => {
       response.writeHead(200, { "content-type": "text/plain" })

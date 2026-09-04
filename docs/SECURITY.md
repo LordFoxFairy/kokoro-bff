@@ -21,7 +21,8 @@ X-Forwarded-*、tenant 或 actor header 作为 authority，也不把浏览器 Au
   稳定 idempotency key。
 - 共享快照仍要求 server-only service auth；share id 只选择资源。
 - AG-UI cursor 只是不可解释的定位 token，不是 capability。解析与 replay SQL 同时要求受信 namespace、session id 和
-  cursor；其他 tenant/session 的 token 与未知 token 统一返回 `invalid_event_cursor`，不透露资源是否存在。
+  cursor；foreign tenant session 与普通缺失资源一致，当前 session 的 unknown token 返回 `invalid_event_cursor`，已回收
+  token 只在同 scope tombstone 命中时返回 `event_cursor_expired`。
 
 当前 BFF 信任 Web adapter 提供的 namespace/principal，尚未在本进程完成 IAM admission/permission lookup。OpenAPI
 `x-kokoro-permission` 已冻结权限意图，但运行时逐 operation permission enforcement 尚未闭环；这是安全缺口，不是
@@ -39,8 +40,8 @@ X-Forwarded-*、tenant 或 actor header 作为 authority，也不把浏览器 Au
 
 - secret 只来自环境变量，不写入日志、receipt 或 contract 示例。
 - `response_body` receipt 可能包含业务响应；当前没有字段级敏感数据分类、加密或 TTL，需在扩大 payload 前补齐。
-- `bff_agui_event.event_payload` 保存公开 AG-UI frame，可能含用户文本、tool result 或 delivery metadata；当前没有
-  retention/field encryption，数据库角色、备份和诊断查询必须按用户内容处理，禁止把 payload 写入普通日志。
+- `bff_agui_event.event_payload` 保存公开 AG-UI frame，可能含用户文本、tool result 或 delivery metadata；frame retention
+  与 tombstone GC 已实现，但尚无字段级加密，数据库角色、备份和诊断查询必须按用户内容处理，禁止把 payload 写入普通日志。
 - 日志当前主要是进程/reconciliation 文本，尚未形成带 service/operation/request_id/trace_id/result/duration 的完整
   结构化审计面。
 - PostgreSQL、Redis 与 owner token 应使用最小权限独立凭据；BFF 不访问其他 owner 数据库。

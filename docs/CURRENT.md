@@ -32,17 +32,32 @@
   mutation 仍使用进程内 Map。因此“所有 Live mutation 均持久幂等”不是当前事实。
 - 当前 receipt scope 是 `namespace + method + canonical path + Idempotency-Key`；fingerprint 覆盖规范化 body，
   但尚未覆盖 query 与 selected headers。
-- Chat Live 路径仍通过 Agent HTTP ingress 读取 execution source facts，但 public event 先写入本仓 PostgreSQL：
+- 独立 `AgUiProjectorRunner` 通过窄 Agent source reader 主动读取 execution source facts；公开 SSE 请求不再访问
+  Agent source，只读取本仓 PostgreSQL：
   `bff_agui_source_event` 去重 source identity，`bff_agui_event` 保存完整 AG-UI frame，`bff_agui_stream` 保存
   source high-watermark、projection state、version fence 与下一 public sequence。HTTP 只从该 ledger 输出 replay/live
   frame。
 - 每个 public frame 有独立 cursor；一个 source fact 展开为 START+CONTENT 等多个 frame 时，可以从任一 frame 后
-  strictly-after 恢复。Repository 查询均携带 tenant + session；其他 tenant/session 的有效格式 cursor 返回
-  `invalid_event_cursor`。
+  strictly-after 恢复。Repository 查询均携带 tenant + session；不存在于当前 tenant 的 session 先返回与普通缺失资源
+  相同的 `404 session_not_found`，当前 session 内未知 cursor 返回 `400 invalid_event_cursor`。
 - 投影事务以 stream row lock + version fence 串行化并发写；source event id 与 source sequence 都有唯一约束，digest
   冲突 fail closed。未映射的 Agent event 也登记 source identity 并推进 source high-watermark，避免重复轮询遮蔽缺口。
 - Redis 对 AG-UI 只执行 ephemeral `PUBLISH`；发布失败不回滚已提交 ledger，也没有 Redis replay key/stream。终态 ledger
   可在 Agent disabled/unavailable 及 BFF 重启后独立 replay。
+- `bff_agui_stream` 同时保存 consumer subject、next poll、lease owner/token/fence、连续失败计数、错误与最后完成时间；
+  `expected_run_id` 是最新接纳的 run fence，`latest_run_id` 只记录最近投影的 source run。多个实例使用
+  `FOR UPDATE SKIP LOCKED` 领取 scope，lease eligibility/deadline 由 PostgreSQL 时钟计算，worker 只用 monotonic clock
+  消耗数据库返回的剩余预算；不同 expected run 的注册会递增 version/fence 并撤销旧 lease，旧 worker或新 lease 补投的
+  旧 run 都无法提交 terminal 或覆盖 settlement。message/tool state
+  以 run identity 隔离，任一终态只清理所属 run。source read 在
+  lease deadline 内使用显式 attempt budget；timeout/connection/429/5xx 等瞬时错误跨 claim 执行 capped exponential
+  backoff + jitter，并在配置上限内尊重 `Retry-After`；成功后清零失败计数。契约、identity、source gap 预算耗尽、
+  401/403、410、非法 4xx 或过大响应进入可诊断 blocked 状态。
+- 后台 GC 使用 `latest_run_start_sequence` 作为安全边界，只删除该边界之前且超过 retention 的旧 run frame，保留
+  从最新 `RUN_STARTED` 到当前 head 的完整 run slice；没有可靠边界或 suffix 包含找不到同 run `RUN_STARTED` 的交错
+  frame 时跳过该 stream。回收前先把 frame cursor 写入
+  `bff_agui_cursor_tombstone`，再推进 retention floor。tombstone 窗口内重连返回 `410 event_cursor_expired`；窗口
+  结束后按未知 cursor 处理。
 - ScheduledTask create/update/delete/retry 先在同一 PostgreSQL 本地事务写入 task revision 与
   `bff_scheduled_task_outbox` command；事务提交后由 bounded dispatcher 在事务外调用 Scheduler。command 保留
   `tenant_id`、`actor_id`、`request_id`、`idempotency_key` 和版本化 task snapshot，并以 `SKIP LOCKED`、lease token、
@@ -66,30 +81,29 @@
    Scheduler 外部投递是 at-least-once，依靠稳定 command/idempotency identity 和条件 settlement 收敛。
 3. **幂等摘要与事务边界不完整。** query、selected headers 未进入 fingerprint；receipt 与业务事实/出站命令
    没有统一事务和 fencing。
-4. **AG-UI retention/GC 与主动摄取仍未完成。** 当前 ledger 不删除，因此尚无 cursor-expired 状态、安全 GC 水位或
-   retention worker；source ingestion 由 session detail/event stream 请求驱动，而不是独立 durable consumer。若某个
-   source event 在首次摄取前已从 Agent history 消失，BFF 无法从 Redis 恢复它。
+4. **AG-UI 跨版本重投影与备份恢复演练仍未完成。** 主动 consumer、lease/fence、retention floor、frame GC、cursor
+   tombstone 与 expired-cursor 错误已经实现；尚缺 projection version 升级策略、生产 PG restore 演练和长时故障注入。
 
 ### P1：架构与工程门禁
 
-- `src/application/agui/` 已形成 projection use case 与 port；`src/domain/`、`src/config/`、`src/bootstrap/` 尚未形成，
-  `src/http/` 与 `src/contracts/` 仍是当前物理结构。
-- `MockBffStore`、Mori mock 与 mock routes 仍位于生产 `src/` 并编入产物。
-- TypeScript 已显式启用 `useUnknownInCatchVariables`；`exactOptionalPropertyTypes`、`noImplicitReturns`、
-  `noUnusedLocals`、`noUnusedParameters` 仍因现有源码错误未启用。
+- `src/application/agui/` 已形成 projection use case、source/consumer ports 与独立 runner；具体 Agent client、PostgreSQL
+  ledger 和 consumer/GC 实现位于 `src/infrastructure/`，启动装配位于 `src/bootstrap/`。
+- Mock、fixture 与 route test doubles 只在 `test/`，不编入生产产物。
+- TypeScript strict、`exactOptionalPropertyTypes`、`noImplicitReturns`、`noUnusedLocals`、`noUnusedParameters` 与
+  `useUnknownInCatchVariables` 均已启用。
 - canonical schema 中所有瞬时点已统一使用 `TIMESTAMPTZ(3)` 与 `CURRENT_TIMESTAMP(3)`；部分既有 constraint/index
   命名，以及 receipt/outbox retention 仍待后续切片处理。
 - `ProjectInstructionRevision` 当前仍暴露 `updatedAt`、`actorName` 和 Unix milliseconds；这是已知 wire-naming/
   UTC 违例，需与 runtime mapper、Web consumer 和 OpenAPI 同一切片删除，不能只改文档伪造 snake_case。
 - CI 尚未提供真实 PostgreSQL/Redis service gate、fresh-schema 安装、固定 SHA actions 与完整供应链扫描。
 - Docker base digest、HEALTHCHECK、SBOM/provenance/signature/vulnerability scan 尚未在本阶段处理。
-- 独立 `.env.example` 尚未固定共享 Redis DB 8；现有 local/prod/test 模板需要后续收敛。
+- `.env.example` 已固定共享本地 PostgreSQL 端口与 Redis logical DB 8；CI 的隔离 service 端口由 workflow 显式覆盖。
 
 ## 本阶段闭环边界
 
-本阶段闭环 BFF-owned Conversation/Message/Share schema、repository/application/domain/interfaces 路由接线，并保留
-Agent launch/control/event 与 AG-UI projection 的既有窄边界。它不扩展到 Agent Run、Agent 自有 outbox、assistant
-message reconciliation、AG-UI GC、主动 event consumer、完整 IAM permission enforcement 或生产 telemetry。
+本阶段闭环 BFF-owned Conversation/Message/Share、独立 durable AG-UI source consumer、lease/fence、retention/GC 与
+expired cursor。它不扩展到 Agent Run、Agent 自有 outbox、assistant message reconciliation、完整 IAM permission
+enforcement、projection 跨版本重建或生产 telemetry。
 
 ## 当前证据命令
 

@@ -27,10 +27,24 @@ describe("kokoro-bff optional Agent configuration", () => {
       maxConnectionsGlobal: 256,
       maxConnectionsPerTenant: 64,
       maxConnectionsPerSession: 8,
-      pollBaseDelayMs: 1000,
-      pollMaxDelayMs: 8000,
-      pollJitterPercent: 20,
+      ledgerPollBaseDelayMs: 1000,
+      ledgerPollMaxDelayMs: 8000,
+      ledgerPollJitterPercent: 20,
       replayCacheTtlMs: 25,
+      projectorMaxConsumersPerCycle: 32,
+      projectorSourcePageSize: 256,
+      projectorMaxPagesPerConsumer: 8,
+      projectorSourceMaxAttempts: 3,
+      projectorLeaseDurationMs: 15_000,
+      projectorLeaseSettlementReserveMs: 500,
+      projectorPollIntervalMs: 1000,
+      projectorErrorBackoffMs: 5000,
+      projectorErrorBackoffMaxMs: 5 * 60 * 1000,
+      projectorErrorBackoffJitterPercent: 20,
+      retentionMs: 7 * 24 * 60 * 60 * 1000,
+      gcIntervalMs: 15 * 60 * 1000,
+      gcBatchSize: 100,
+      cursorTombstoneRetentionMs: 30 * 24 * 60 * 60 * 1000,
     })
   })
 
@@ -76,10 +90,24 @@ describe("kokoro-bff optional Agent configuration", () => {
       KOKORO_AGUI_MAX_CONNECTIONS_GLOBAL: "12",
       KOKORO_AGUI_MAX_CONNECTIONS_PER_TENANT: "6",
       KOKORO_AGUI_MAX_CONNECTIONS_PER_SESSION: "3",
-      KOKORO_AGUI_POLL_BASE_DELAY_MS: "40",
-      KOKORO_AGUI_POLL_MAX_DELAY_MS: "320",
-      KOKORO_AGUI_POLL_JITTER_PERCENT: "10",
+      KOKORO_AGUI_LEDGER_POLL_BASE_DELAY_MS: "40",
+      KOKORO_AGUI_LEDGER_POLL_MAX_DELAY_MS: "320",
+      KOKORO_AGUI_LEDGER_POLL_JITTER_PERCENT: "10",
       KOKORO_AGUI_REPLAY_CACHE_TTL_MS: "15",
+      KOKORO_AGUI_PROJECTOR_MAX_CONSUMERS_PER_CYCLE: "5",
+      KOKORO_AGUI_PROJECTOR_SOURCE_PAGE_SIZE: "6",
+      KOKORO_AGUI_PROJECTOR_MAX_PAGES_PER_CONSUMER: "7",
+      KOKORO_AGUI_PROJECTOR_SOURCE_MAX_ATTEMPTS: "8",
+      KOKORO_AGUI_PROJECTOR_LEASE_DURATION_MS: "9000",
+      KOKORO_AGUI_PROJECTOR_LEASE_SETTLEMENT_RESERVE_MS: "500",
+      KOKORO_AGUI_PROJECTOR_POLL_INTERVAL_MS: "11",
+      KOKORO_AGUI_PROJECTOR_ERROR_BACKOFF_MS: "12",
+      KOKORO_AGUI_PROJECTOR_ERROR_BACKOFF_MAX_MS: "120",
+      KOKORO_AGUI_PROJECTOR_ERROR_BACKOFF_JITTER_PERCENT: "15",
+      KOKORO_AGUI_RETENTION_MS: "13000",
+      KOKORO_AGUI_GC_INTERVAL_MS: "14",
+      KOKORO_AGUI_GC_BATCH_SIZE: "15",
+      KOKORO_AGUI_CURSOR_TOMBSTONE_RETENTION_MS: "16000",
     })
     assert.deepEqual(config.agUi, {
       replayPageFrames: 16,
@@ -90,11 +118,59 @@ describe("kokoro-bff optional Agent configuration", () => {
       maxConnectionsGlobal: 12,
       maxConnectionsPerTenant: 6,
       maxConnectionsPerSession: 3,
-      pollBaseDelayMs: 40,
-      pollMaxDelayMs: 320,
-      pollJitterPercent: 10,
+      ledgerPollBaseDelayMs: 40,
+      ledgerPollMaxDelayMs: 320,
+      ledgerPollJitterPercent: 10,
       replayCacheTtlMs: 15,
+      projectorMaxConsumersPerCycle: 5,
+      projectorSourcePageSize: 6,
+      projectorMaxPagesPerConsumer: 7,
+      projectorSourceMaxAttempts: 8,
+      projectorLeaseDurationMs: 9000,
+      projectorLeaseSettlementReserveMs: 500,
+      projectorPollIntervalMs: 11,
+      projectorErrorBackoffMs: 12,
+      projectorErrorBackoffMaxMs: 120,
+      projectorErrorBackoffJitterPercent: 15,
+      retentionMs: 13000,
+      gcIntervalMs: 14,
+      gcBatchSize: 15,
+      cursorTombstoneRetentionMs: 16000,
     })
+  })
+
+  it("requires the projector lease to exceed one upstream request timeout", () => {
+    assert.throws(() => loadConfig({
+      ...runtimeEnv,
+      KOKORO_UPSTREAM_TIMEOUT_MS: "5000",
+      KOKORO_AGUI_PROJECTOR_LEASE_DURATION_MS: "5000",
+    }), /projector lease duration must exceed the upstream timeout/u)
+  })
+
+  it("requires room for source settlement and a monotonic projector backoff range", () => {
+    assert.throws(() => loadConfig({
+      ...runtimeEnv,
+      KOKORO_UPSTREAM_TIMEOUT_MS: "5000",
+      KOKORO_AGUI_PROJECTOR_LEASE_DURATION_MS: "5400",
+      KOKORO_AGUI_PROJECTOR_LEASE_SETTLEMENT_RESERVE_MS: "500",
+    }), /lease duration must exceed the upstream timeout plus settlement reserve/u)
+    assert.throws(() => loadConfig({
+      ...runtimeEnv,
+      KOKORO_AGUI_PROJECTOR_ERROR_BACKOFF_MS: "1001",
+      KOKORO_AGUI_PROJECTOR_ERROR_BACKOFF_MAX_MS: "1000",
+    }), /error backoff base must not exceed its maximum/u)
+  })
+
+  it("rejects source pages above the Agent contract and tombstones shorter than ledger retention", () => {
+    assert.throws(() => loadConfig({
+      ...runtimeEnv,
+      KOKORO_AGUI_PROJECTOR_SOURCE_PAGE_SIZE: "1001",
+    }), /source page size must not exceed 1000/u)
+    assert.throws(() => loadConfig({
+      ...runtimeEnv,
+      KOKORO_AGUI_RETENTION_MS: "1000",
+      KOKORO_AGUI_CURSOR_TOMBSTONE_RETENTION_MS: "999",
+    }), /cursor tombstone retention must not be shorter than ledger retention/u)
   })
 
   it("requires explicit live persistence and rejects the removed mode", () => {

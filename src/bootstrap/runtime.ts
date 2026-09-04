@@ -3,10 +3,12 @@ import { randomUUID } from "node:crypto"
 
 import type { BffConfig } from "../config/runtime.js"
 import { AgUiSessionRuntime } from "../application/agui/session-runtime.js"
+import { AgUiProjectorRunner } from "../application/agui/projector.js"
 import type { IdempotencyEntry, MutationTicket } from "../application/idempotency.js"
 import type { BffBusinessStore } from "../application/ports/bff-business-store.js"
 import { ScheduledTaskOutboxDispatcher } from "../application/scheduled-task-outbox-dispatcher.js"
 import { SchedulerOutboxDelivery } from "../infrastructure/clients/scheduler/outbox-delivery.js"
+import { AgentAgUiSourceReader } from "../infrastructure/clients/agent/projector-source.js"
 import { PostgresBffRepositories } from "../infrastructure/postgres/repositories.js"
 import type { RequestContext } from "../domain/request-context.js"
 
@@ -28,6 +30,7 @@ export type BffServerComposition = {
   businessStore: BffBusinessStore | null
   idempotency: Map<string, IdempotencyEntry>
   agUiRuntime: AgUiSessionRuntime
+  agUiProjector?: AgUiProjectorRunner
   scheduledTaskDispatcher?: ScheduledTaskOutboxDispatcher
   readiness: () => Promise<void>
   close: () => Promise<void>
@@ -43,6 +46,7 @@ export type BffCompositionOptions = {
   businessStore?: BffBusinessStore | null
   idempotency?: Map<string, IdempotencyEntry>
   agUiRuntime?: AgUiSessionRuntime
+  agUiProjector?: AgUiProjectorRunner
   scheduledTaskDispatcher?: ScheduledTaskOutboxDispatcher
   readiness?: () => Promise<void>
   close?: () => Promise<void>
@@ -60,10 +64,10 @@ function createAgUiRuntime(config: BffConfig): AgUiSessionRuntime {
       perTenant: config.agUi.maxConnectionsPerTenant,
       perSession: config.agUi.maxConnectionsPerSession,
     },
-    poll: {
-      baseDelayMs: config.agUi.pollBaseDelayMs,
-      maxDelayMs: config.agUi.pollMaxDelayMs,
-      jitterRatio: config.agUi.pollJitterPercent / 100,
+    ledgerWait: {
+      baseDelayMs: config.agUi.ledgerPollBaseDelayMs,
+      maxDelayMs: config.agUi.ledgerPollMaxDelayMs,
+      jitterRatio: config.agUi.ledgerPollJitterPercent / 100,
     },
     replayCacheTtlMs: config.agUi.replayCacheTtlMs,
   })
@@ -90,6 +94,34 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
         { workerId: `bff-scheduled-outbox-${process.pid}-${randomUUID()}` },
       )
   )
+  const agentBaseUrl = config.upstreams.agents ?? null
+  const agUiProjector = options.agUiProjector ?? (
+    config.agentEnabled && agentBaseUrl !== null && businessStore?.agUiConsumers !== undefined
+      ? new AgUiProjectorRunner(
+        businessStore.agUi,
+        businessStore.agUiConsumers,
+        new AgentAgUiSourceReader(config, agentBaseUrl, {
+          maxAttempts: config.agUi.projectorSourceMaxAttempts,
+          leaseSettlementReserveMs: config.agUi.projectorLeaseSettlementReserveMs,
+        }),
+        {
+          workerId: `bff-agui-projector-${process.pid}-${randomUUID()}`,
+          maxConsumersPerCycle: config.agUi.projectorMaxConsumersPerCycle,
+          sourcePageSize: config.agUi.projectorSourcePageSize,
+          maxPagesPerConsumer: config.agUi.projectorMaxPagesPerConsumer,
+          leaseDurationMs: config.agUi.projectorLeaseDurationMs,
+          pollIntervalMs: config.agUi.projectorPollIntervalMs,
+          errorBackoffMs: config.agUi.projectorErrorBackoffMs,
+          errorBackoffMaxMs: config.agUi.projectorErrorBackoffMaxMs,
+          errorBackoffJitterPercent: config.agUi.projectorErrorBackoffJitterPercent,
+          retentionMs: config.agUi.retentionMs,
+          gcIntervalMs: config.agUi.gcIntervalMs,
+          gcBatchSize: config.agUi.gcBatchSize,
+          cursorTombstoneRetentionMs: config.agUi.cursorTombstoneRetentionMs,
+        },
+      )
+      : undefined
+  )
   const closeStore = options.close ?? (ownsStore && businessStore !== null
     ? (): Promise<void> => businessStore.close()
     : async (): Promise<void> => undefined)
@@ -97,8 +129,9 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
   const close = (): Promise<void> => {
     if (closePromise !== null) return closePromise
     closePromise = (async (): Promise<void> => {
-      // Stop claiming new rows first; stop() drains the in-flight delivery so
-      // an acknowledged Scheduler command is not abandoned during shutdown.
+      // Stop claimers first; stop() drains in-flight source reads and outbox
+      // deliveries before their shared persistence connections are closed.
+      await agUiProjector?.stop()
       await scheduledTaskDispatcher?.stop()
       await closeStore()
     })()
@@ -108,6 +141,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     businessStore,
     idempotency: options.idempotency ?? new Map<string, IdempotencyEntry>(),
     agUiRuntime: options.agUiRuntime ?? createAgUiRuntime(config),
+    ...(agUiProjector === undefined ? {} : { agUiProjector }),
     ...(scheduledTaskDispatcher === undefined ? {} : { scheduledTaskDispatcher }),
     readiness,
     close,

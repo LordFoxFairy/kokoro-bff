@@ -38,12 +38,6 @@ export function buildAgentLaunch(input: {
     run_id: runId,
     session_id: input.sessionId,
     feature_key: "chat",
-    execution_identity: {
-      tenant_ref: input.identity.namespace,
-      actor: { kind: "user", opaque_ref: input.identity.userId },
-      subject: { kind: "user", opaque_ref: input.identity.userId },
-      identity_assertion_ref: `bff:${suffix}`,
-    },
     message_id: userMessageId,
     content: input.content,
     ...(input.model === undefined ? {} : { requested_model_label: input.model }),
@@ -51,6 +45,7 @@ export function buildAgentLaunch(input: {
   }
   return {
     body,
+    identityAssertionRef: `bff:${suffix}`,
     receipt: {
       run_id: runId,
       user_message_id: userMessageId,

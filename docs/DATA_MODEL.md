@@ -20,9 +20,10 @@
 | `bff_conversation` | Conversation 产品事实 | `conversation_id`；tenant + updated_at 稳定列表排序 | active/deleted tombstone；删除不物理清除，保留至 retention cleanup |
 | `bff_message` | Message 产品事实 | `message_id`；tenant + conversation + message_seq 唯一 | role/status CHECK；`run_id` 是 Agent opaque reference，不做跨仓关系约束 |
 | `bff_share` | Share 产品事实 | `share_id`；tenant + conversation active partial unique | revoked/expired rows retained；public lookup 只接受未撤销且未过期记录 |
-| `bff_agui_stream` | tenant/session public projection state | `(tenant_id, session_id)` PK | version fence、source high-watermark、next public sequence、open text/tool state |
+| `bff_agui_stream` | tenant/session public projection + consumer state | `(tenant_id, session_id)` PK | projection version/source watermark；`expected_run_id` 是最新接纳的 run fence，`latest_run_id` 是最近投影的 source run；latest run start retention boundary；subject、due time、lease token/fence、persistent failure count、blocked/error state |
 | `bff_agui_source_event` | 已摄取 Agent source identity | tenant/session/owner/event PK；source sequence 唯一 | 保存 SHA-256 digest；包括零 public frame 的未知 source kind |
 | `bff_agui_event` | append-only public AG-UI frame | tenant/session/public sequence PK；cursor 全局唯一；source frame 唯一 | 完整 JSON payload 与 opaque cursor |
+| `bff_agui_cursor_tombstone` | 已回收 public cursor 的有界诊断事实 | tenant/session/cursor PK；expiry index | 在 tombstone 窗口内区分 expired 与未知/foreign cursor |
 
 所有当前 repository 查询都必须显式携带 tenant id；跨 owner reference 是 opaque id，不做跨数据库 JOIN。
 
@@ -38,6 +39,18 @@
 6. 一个 source event 可以产生 0、1 或多个 public frame。0 frame 仍登记并推进 source watermark；多个 frame 各有
    cursor，保证中间断线后的 strictly-after replay 无损。
 7. 表之间不设外键；同一事务与 repository 不变量维护映射完整性。
+8. consumer 使用 `FOR UPDATE SKIP LOCKED` 领取 scope，claim 递增 `consumer_fence`；projection commit 与 settlement
+   同时匹配 owner/token/fence/未过期 lease，旧 worker 不得推进 watermark。`consumer_failure_count` 在 retryable/blocked
+   settlement 时递增、成功 poll 时清零，为跨 worker 的 capped exponential backoff 提供持久依据。lease 到期与 deadline
+   由 PostgreSQL 时钟判断；claim 返回数据库计算的剩余 lease budget，进程内只用 monotonic clock 消耗该预算，worker
+   wall clock 不参与 lease 有效性判断。注册不同 `expected_run_id` 会递增 version/fence、撤销旧 lease并清除旧
+   terminal；`latest_run_id` 仅记录最近投影的 source run，只有 expected run 的终态可以关闭 public stream。持久化
+   message/tool projection key 带 run identity，终态只清理所属 run。
+9. GC 保留从最新 `RUN_STARTED` 到当前 head 的完整 run slice，只删除 `latest_run_start_sequence` 之前且超过
+   retention 的旧 run frame；没有可靠 run boundary，或 suffix 中存在找不到同 run `RUN_STARTED` 的交错 frame 时跳过
+   该 stream。旧 frame 删除前先写 cursor tombstone，再推进
+   `retention_floor_sequence`。已知被回收 cursor 在 tombstone retention 内返回 `410 event_cursor_expired`，tombstone
+   到期后不泄漏历史 scope。
 
 ### ScheduledTask 与 bounded outbox 不变量
 
@@ -58,11 +71,12 @@
 ## 当前不存在的目标事实
 
 Project side effect、Agent Run outbox、mutation receipt claim 与 ScheduledTask fact/outbox 的统一事务、outbox retention
-和后台 reconciliation 尚未完成；这些不属于本切片。ScheduledTask → Scheduler bounded outbox 已是当前 schema 事实。
+和后台业务 reconciliation 尚未完成；这些不属于本切片。ScheduledTask → Scheduler bounded outbox 与 AG-UI source
+consumer/GC 已是当前 schema 事实。
 
 当前没有独立 Chat assistant reconciliation worker、durable command receipt resource、version/ETag 或 delivery
-projection 表。Conversation、Message、Share 已由 BFF PostgreSQL 拥有；Agent HTTP ingress 仅负责 launch/control/source
-execution events，不作为 Chat 产品事实读取源。
+projection 表。Conversation、Message、Share 已由 BFF PostgreSQL 拥有；Agent HTTP ingress 负责 launch/control，独立
+projector 的窄 source reader 只读取 execution events，不作为 Chat 产品事实读取源。
 
 ### Chat 产品事实不变量
 
@@ -104,8 +118,9 @@ KOKORO_BFF_POSTGRES_URL=POSTGRES_URL pnpm db:apply-schema
 `CREATE TABLE IF NOT EXISTS` 便于本地重复安装，但不修复 drift。发布验收需要 fresh database 安装、schema naming /
 无外键/UTC 检查和真实 repository integration；生产升级策略在 V1 clean-slate 阶段尚未定义为历史 migration 链。
 
-## Retention 缺口
+## Retention 状态与缺口
 
-当前 schema 未声明 receipt TTL/归档任务、Project 删除语义、ScheduledTask tombstone、AG-UI retention floor 或
-ScheduledTask outbox 清理/归档策略。AG-UI ledger 当前 append-only 且不自动删除，因此没有 cursor-expired 响应。增加任何清理前必须先在
-contract、SLO、runbook 与真实恢复测试中定义安全水位；不得只删 `bff_agui_event` 而留下已推进的 source watermark。
+AG-UI frame retention、最新 run boundary 保护、retention floor 与 cursor tombstone 已由后台 GC 实现，并有真实
+PostgreSQL integration 覆盖。source identity rows 当前作为投影审计事实长期保留，不与 frame 同步删除。仍未声明 receipt TTL/归档、
+Project 删除清理、ScheduledTask tombstone、ScheduledTask outbox 归档和 source identity 的最终保留周期；这些策略必须先
+进入 contract/SLO/runbook 与恢复测试，不能用临时 SQL 直接清表。

@@ -1,4 +1,4 @@
-import type { AgUiInvalidCursor, AgUiReplayPage } from "./ports/agui-projection-repository.js"
+import type { AgUiExpiredCursor, AgUiInvalidCursor, AgUiReplayPage } from "./ports/agui-projection-repository.js"
 
 export type AgUiConnectionLimits = {
   global: number
@@ -73,50 +73,39 @@ export class AgUiConnectionLimiter {
   }
 }
 
-export type AgUiSourcePollResult = {
-  fetchedEvents: number
-  insertedFrames: number
-  sourceHighWatermark: number
-  snapshotWatermark: number
-}
-
-export type AgUiSourcePollConfig = {
+export type AgUiLedgerWaitConfig = {
   baseDelayMs: number
   maxDelayMs: number
   jitterRatio: number
 }
 
-type PollDependencies = {
-  now?: () => number
+type WaitDependencies = {
   random?: () => number
   sleep?: (milliseconds: number) => Promise<void>
 }
 
-type PollEntry = {
-  inFlight: Promise<AgUiSourcePollResult> | null
-  nextPollAt: number
-  nextIdleDelayMs: number
+type WaitEntry = {
+  inFlight: Promise<void> | null
+  nextDelayMs: number
 }
 
 function sessionKey(tenantId: string, sessionId: string): string {
   return JSON.stringify([tenantId, sessionId])
 }
 
-export class AgUiSourcePollCoordinator {
-  private readonly entries = new Map<string, PollEntry>()
-  private readonly now: () => number
+export class AgUiLedgerWaitCoordinator {
+  private readonly entries = new Map<string, WaitEntry>()
   private readonly random: () => number
   private readonly sleep: (milliseconds: number) => Promise<void>
-  private executions = 0
+  private waits = 0
 
-  public constructor(private readonly config: AgUiSourcePollConfig, dependencies: PollDependencies = {}) {
-    positiveSafeInteger(config.baseDelayMs, "AG-UI poll base delay")
-    positiveSafeInteger(config.maxDelayMs, "AG-UI poll maximum delay")
-    if (config.maxDelayMs < config.baseDelayMs) throw new Error("AG-UI poll maximum delay must not be below its base delay")
+  public constructor(private readonly config: AgUiLedgerWaitConfig, dependencies: WaitDependencies = {}) {
+    positiveSafeInteger(config.baseDelayMs, "AG-UI ledger wait base delay")
+    positiveSafeInteger(config.maxDelayMs, "AG-UI ledger wait maximum delay")
+    if (config.maxDelayMs < config.baseDelayMs) throw new Error("AG-UI ledger wait maximum delay must not be below its base delay")
     if (!Number.isFinite(config.jitterRatio) || config.jitterRatio < 0 || config.jitterRatio > 1) {
-      throw new Error("AG-UI poll jitter ratio must be between zero and one")
+      throw new Error("AG-UI ledger wait jitter ratio must be between zero and one")
     }
-    this.now = dependencies.now ?? Date.now
     this.random = dependencies.random ?? Math.random
     this.sleep = dependencies.sleep ?? ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)))
   }
@@ -126,39 +115,22 @@ export class AgUiSourcePollCoordinator {
     return Math.max(1, Math.round(delayMs * (1 + offset)))
   }
 
-  private async execute(entry: PollEntry, task: () => Promise<AgUiSourcePollResult>): Promise<AgUiSourcePollResult> {
-    const waitMs = Math.max(0, entry.nextPollAt - this.now())
-    if (waitMs > 0) await this.sleep(waitMs)
-    this.executions += 1
-    try {
-      const result = await task()
-      const nextDelay = result.fetchedEvents > 0 ? this.config.baseDelayMs : entry.nextIdleDelayMs
-      entry.nextPollAt = this.now() + this.jitter(nextDelay)
-      entry.nextIdleDelayMs = result.fetchedEvents > 0
-        ? this.config.baseDelayMs
-        : Math.min(this.config.maxDelayMs, entry.nextIdleDelayMs * 2)
-      return result
-    } catch (error) {
-      entry.nextPollAt = this.now() + this.jitter(this.config.baseDelayMs)
-      entry.nextIdleDelayMs = this.config.baseDelayMs
-      throw error
-    }
+  private async execute(entry: WaitEntry): Promise<void> {
+    const delayMs = entry.nextDelayMs
+    this.waits += 1
+    await this.sleep(this.jitter(delayMs))
+    entry.nextDelayMs = Math.min(this.config.maxDelayMs, delayMs * 2)
   }
 
-  public poll(
-    tenantId: string,
-    sessionId: string,
-    task: () => Promise<AgUiSourcePollResult>,
-  ): Promise<AgUiSourcePollResult> {
+  public wait(tenantId: string, sessionId: string): Promise<void> {
     const key = sessionKey(tenantId, sessionId)
     const entry = this.entries.get(key) ?? {
       inFlight: null,
-      nextPollAt: this.now(),
-      nextIdleDelayMs: this.config.baseDelayMs,
+      nextDelayMs: this.config.baseDelayMs,
     }
     this.entries.set(key, entry)
     if (entry.inFlight !== null) return entry.inFlight
-    const pending = this.execute(entry, task)
+    const pending = this.execute(entry)
     entry.inFlight = pending
     pending.then(
       () => { if (entry.inFlight === pending) entry.inFlight = null },
@@ -167,18 +139,23 @@ export class AgUiSourcePollCoordinator {
     return pending
   }
 
+  public observedChange(tenantId: string, sessionId: string): void {
+    const entry = this.entries.get(sessionKey(tenantId, sessionId))
+    if (entry !== undefined) entry.nextDelayMs = this.config.baseDelayMs
+  }
+
   public clear(tenantId: string, sessionId: string): void {
     const key = sessionKey(tenantId, sessionId)
     const entry = this.entries.get(key)
     if (entry?.inFlight === null) this.entries.delete(key)
   }
 
-  public snapshot(): { executions: number; entries: number } {
-    return { executions: this.executions, entries: this.entries.size }
+  public snapshot(): { waits: number; entries: number } {
+    return { waits: this.waits, entries: this.entries.size }
   }
 }
 
-export type AgUiReplayResult = AgUiReplayPage | AgUiInvalidCursor
+export type AgUiReplayResult = AgUiReplayPage | AgUiInvalidCursor | AgUiExpiredCursor
 
 type ReplayEntry = {
   scopeKey: string
@@ -243,29 +220,29 @@ export class AgUiReplayCoordinator {
 
 export type AgUiSessionRuntimeOptions = {
   connections: AgUiConnectionLimits
-  poll: AgUiSourcePollConfig
+  ledgerWait: AgUiLedgerWaitConfig
   replayCacheTtlMs: number
 }
 
 export class AgUiSessionRuntime {
   public readonly connections: AgUiConnectionLimiter
-  public readonly sourcePolls: AgUiSourcePollCoordinator
+  public readonly ledgerWaits: AgUiLedgerWaitCoordinator
   public readonly replays: AgUiReplayCoordinator
 
   public constructor(options: AgUiSessionRuntimeOptions) {
     this.connections = new AgUiConnectionLimiter(options.connections)
-    this.sourcePolls = new AgUiSourcePollCoordinator(options.poll)
+    this.ledgerWaits = new AgUiLedgerWaitCoordinator(options.ledgerWait)
     this.replays = new AgUiReplayCoordinator({ cacheTtlMs: options.replayCacheTtlMs })
   }
 
   public snapshot(): {
     connections: ReturnType<AgUiConnectionLimiter["snapshot"]>
-    sourcePolls: ReturnType<AgUiSourcePollCoordinator["snapshot"]>
+    ledgerWaits: ReturnType<AgUiLedgerWaitCoordinator["snapshot"]>
     replays: ReturnType<AgUiReplayCoordinator["snapshot"]>
   } {
     return {
       connections: this.connections.snapshot(),
-      sourcePolls: this.sourcePolls.snapshot(),
+      ledgerWaits: this.ledgerWaits.snapshot(),
       replays: this.replays.snapshot(),
     }
   }

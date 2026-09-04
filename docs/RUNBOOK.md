@@ -78,12 +78,16 @@ schema 安装只面向 fresh/empty database；`IF NOT EXISTS` 不修复 drift。
 ## 7. AG-UI replay incident
 
 1. 记录 tenant、session id、最后确认的 opaque `Last-Event-ID`、request id 和 UTC 时间；不记录 event payload。
-2. 用同一 tenant/session/cursor 重连。`400 invalid_event_cursor` 表示格式错误、未知 token 或 scope 不匹配；不要把
+2. 用同一 tenant/session/cursor 重连。`400 invalid_event_cursor` 表示当前 session 内格式错误或未知 token；`404
+   session_not_found` 表示 trusted tenant 下没有该 session；`410 event_cursor_expired` 表示 cursor 已越过保留水位。不要把
    Agent source `seq`、数据库 `public_sequence` 或其他 session cursor 代入。
 3. 查询 stream 与 source/public 水位，始终带 tenant + session predicate：
 
    ```sql
-   SELECT version, source_high_watermark, next_public_sequence, updated_at
+   SELECT version, source_high_watermark, next_public_sequence, retention_floor_sequence,
+          consumer_state, consumer_next_poll_at, consumer_lease_owner, consumer_failure_count,
+          consumer_lease_until, consumer_fence, consumer_last_error_code,
+          consumer_last_error_at, consumer_last_polled_at, updated_at
    FROM bff_agui_stream
    WHERE tenant_id = 'TENANT' AND session_id = 'SESSION';
 
@@ -93,15 +97,18 @@ schema 安装只面向 fresh/empty database；`IF NOT EXISTS` 不修复 drift。
    ORDER BY public_sequence;
    ```
 
-4. `upstream_event_identity_conflict`：按同 scope 查询 `bff_agui_source_event` 的 source event id、sequence、digest；
-   保留 Agent 原响应并停止该 stream 的自动重试。不得 update digest、覆盖 payload 或删除 unique row 来强行前进。
+4. `agui_projection_blocked`：按同 scope 查询 consumer error 与 `bff_agui_source_event` 的 source event id、sequence、
+   digest；保留 Agent 原响应并停止发布。若故障发生在 SSE headers 发送后，连接只会关闭，客户端应携带最后确认 cursor
+   重连并取得结构化 JSON error；SSE comment 只有 `keep-alive`，不承载错误。不得 update digest、覆盖 payload、删除
+   unique row 或直接把 blocked 改 active 来强行前进。
 5. Agent 不可用但 ledger head 是终态：BFF 应可只从 PostgreSQL replay。非终态只有部分 ledger 时先保护 PG，再恢复
    Agent source history；Redis 不能补历史。
 6. Redis 不可用：readyz 会失败，AG-UI publish 提示会丢失，但 committed replay 不应丢。恢复 Redis 后无需复制或
    回填 event key；AG-UI 不应存在 Redis 持久 key/stream。
 7. cursor gap/duplicate：立即冻结发布，比较 source event、frame index 与 public sequence。不要切换 legacy
    SessionEvent、Vercel stream fallback，或重置 source high-watermark。
-8. 当前没有 retention/GC。禁止单独删除 `bff_agui_event`；否则 source watermark 已推进而 public frame 无法再投影。
+8. `410 event_cursor_expired`：先读取 session snapshot 与当前 `event_watermark`，再建立新流；检查
+   `bff_agui_cursor_tombstone` 与 `retention_floor_sequence`。禁止手工单独删除 event/tombstone 或回退 source watermark。
 
 ## 8. 回滚
 

@@ -64,6 +64,20 @@ export async function liveChatBusiness(
   const chat = store.services.chat
 
   try {
+    if (businessPath.length === 3 && businessPath[2] === "events" && method === "GET") {
+      const conversation = await chat.findConversation(tenantId, conversationId, projectRef(request))
+      if (conversation === null) {
+        await reply(response, 404, failure("session_not_found", "Session was not found", context.requestId), context, idempotency, mutation)
+        return true
+      }
+      if (store.agUiConsumers === undefined) {
+        await reply(response, 503, failure("agui_projector_not_configured", "The durable AG-UI projector is not configured", context.requestId), context, idempotency, mutation)
+        return true
+      }
+      await store.agUiConsumers.registerConsumer(tenantId, conversationId, conversation.owner_id)
+      return false
+    }
+
     if (businessPath.length === 1 && method === "GET") {
       const page = pageInput(request, 20)
       if (page === null) {
@@ -123,7 +137,16 @@ export async function liveChatBusiness(
         await reply(response, 503, failure("agent_not_configured", "Agent execution is disabled or not configured", context.requestId), context, idempotency, mutation)
         return true
       }
+      if (store.agUiConsumers === undefined) {
+        await reply(response, 503, failure("agui_projector_not_configured", "The durable AG-UI projector is not configured", context.requestId), context, idempotency, mutation)
+        return true
+      }
       const messageProjectRef = typeof json.project_ref === "string" ? json.project_ref.trim() : projectRef(request)
+      const conversation = await chat.findConversation(tenantId, conversationId, messageProjectRef)
+      if (conversation === null) {
+        await reply(response, 404, failure("session_not_found", "Session was not found", context.requestId), context, idempotency, mutation)
+        return true
+      }
       const launch = buildAgentLaunch({
         identity: context.identity,
         requestId: context.requestId,
@@ -149,9 +172,10 @@ export async function liveChatBusiness(
         await reply(response, 404, failure("session_not_found", "Session was not found", context.requestId), context, idempotency, mutation)
         return true
       }
+      await store.agUiConsumers.registerConsumer(tenantId, conversationId, conversation.owner_id, launch.receipt.run_id)
       let result: { status: number; body: unknown }
       try {
-        result = await callAgent(config, agentBase, "/v1/runs", "POST", context.requestId, request, Buffer.from(JSON.stringify(launch.body)), context, String((launch.body.execution_identity as Record<string, unknown>).identity_assertion_ref))
+        result = await callAgent(config, agentBase, "/v1/runs", "POST", context.requestId, request, Buffer.from(JSON.stringify(launch.body)), context, launch.identityAssertionRef)
       } catch {
         await reply(response, 502, failure("upstream_unreachable", "The configured Agent upstream is unavailable", context.requestId), context, idempotency, mutation)
         return true

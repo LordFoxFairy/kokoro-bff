@@ -25,7 +25,7 @@ src/
 │   └── ...                        # Project/ScheduledTask use case、输入解析与 ports
 ├── infrastructure/
 │   ├── clients/                   # Agent、Scheduler、Mori 等出站边界
-│   ├── postgres/                  # BFF facts、receipt 与 AG-UI ledger repository
+│   ├── postgres/                  # BFF facts、receipt、AG-UI ledger 与 consumer/GC repositories
 │   └── mock/                      # 当前仍编入生产源码的 fixture；目标是移到 test
 ├── interfaces/http/agui/          # schema-valid SSE 编码；只输出已持久化 frame
 ├── http/routes/                   # 当前 HTTP route handlers
@@ -50,7 +50,8 @@ Conversation/Message/Share canonical facts，以及 durable AG-UI stream/source-
 - System / Model / Billing / Capability / Storage：当前由 `src/http/routes/owner.ts` 投影
 - Chat facts：`src/http/routes/chat.ts` 读取/写入 BFF PostgreSQL；`src/infrastructure/postgres/chat-repository.ts` 维护 tenant、锁和 cursor；
 - Agent Chat：`src/http/routes/agent.ts` 只拉取 Agent source event、launch 和 control；`src/application/agui/` 投影；
-  `src/infrastructure/postgres/agui-projection-repository.ts` 在公开发送前持久化并分配 cursor
+  `src/application/agui/projector.ts` 独立消费 Agent source；`agui-projection-repository.ts` 在公开发送前持久化并分配 cursor，
+  `agui-consumer-repository.ts` 维护 lease/fence、重试、保留水位与 tombstone GC
 - Scheduler：当前由 `src/http/routes/scheduler.ts` 注册、对账和处理 dispatch
 - Mori：当前由 `src/infrastructure/clients/mori/owner-route.ts` 投影独立 Music owner
 
@@ -61,7 +62,7 @@ Conversation/Message/Share canonical facts，以及 durable AG-UI stream/source-
 | [`test/architecture.test.ts`](./test/architecture.test.ts) | 目录、依赖和文档事实门禁 |
 | [`test/contract-governance.test.mjs`](./test/contract-governance.test.mjs) | OpenAPI metadata 与冻结 operation surface |
 | [`test/business-store.integration.mjs`](./test/business-store.integration.mjs) | 真实 PostgreSQL/Redis business store |
-| [`test/agui-projection.integration.mjs`](./test/agui-projection.integration.mjs) | ledger、并发幂等、tenant/session 隔离、Redis 非事实源 |
-| [`test/agui-http.integration.mjs`](./test/agui-http.integration.mjs) | Live ingest、opaque cursor、重启 replay 与 contract error |
+| [`test/agui-projection.integration.mjs`](./test/agui-projection.integration.mjs) | ledger、并发幂等、consumer fencing、GC/expired cursor、tenant 隔离、Redis 非事实源 |
+| [`test/agui-http.integration.mjs`](./test/agui-http.integration.mjs) | 后台主动摄取、opaque cursor、重启 replay 与 contract error |
 | [`scripts/check-contract.mjs`](./scripts/check-contract.mjs) | 本仓 contract gate |
 | [`scripts/lint-source.mjs`](./scripts/lint-source.mjs) | 当前静态源码规则 |

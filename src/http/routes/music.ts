@@ -7,7 +7,8 @@ import { ownerIdentityHeaders } from "../../infrastructure/clients/owner/identit
 import { proxyUpstream } from "../../upstream.js"
 import { incomingHeaders } from "../request.js"
 import type { RequestContext } from "../../domain/request-context.js"
-import { normalizeUpstreamResponse, reply } from "../response.js"
+import { reply } from "../response.js"
+import { normalizeUpstreamResponse } from "../../infrastructure/clients/upstream-response.js"
 import type { IdempotencyEntry, MutationTicket } from "../../application/idempotency.js"
 import { liveOwnerRequest } from "./owner.js"
 

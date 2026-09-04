@@ -3,13 +3,6 @@ import { describe, it } from "node:test"
 
 const runtimeModule = await import("../dist/application/agui/session-runtime.js").catch(() => null)
 
-const pollResult = (fetchedEvents) => ({
-  fetchedEvents,
-  insertedFrames: fetchedEvents,
-  sourceHighWatermark: fetchedEvents,
-  snapshotWatermark: fetchedEvents,
-})
-
 describe("AG-UI session runtime", () => {
   it("enforces global, tenant, and session connection limits with idempotent leases", () => {
     assert.notEqual(runtimeModule, null)
@@ -40,47 +33,31 @@ describe("AG-UI session runtime", () => {
     assert.deepEqual(limiter.snapshot(), { global: 0, tenants: {}, sessions: {} })
   })
 
-  it("coalesces concurrent source polls and backs empty sessions off with jitter", async () => {
+  it("coalesces concurrent ledger waits and resets backoff after observing frames", async () => {
     assert.notEqual(runtimeModule, null)
-    let now = 1000
-    let calls = 0
     const sleeps = []
-    const coordinator = new runtimeModule.AgUiSourcePollCoordinator({
+    const coordinator = new runtimeModule.AgUiLedgerWaitCoordinator({
       baseDelayMs: 100,
       maxDelayMs: 800,
       jitterRatio: 0.2,
     }, {
-      now: () => now,
       random: () => 0.75,
       sleep: async (milliseconds) => {
         sleeps.push(milliseconds)
-        now += milliseconds
+        await new Promise((resolve) => setImmediate(resolve))
       },
     })
-    const emptyPoll = async () => {
-      calls += 1
-      await new Promise((resolve) => setImmediate(resolve))
-      return pollResult(0)
-    }
 
-    const firstWave = await Promise.all(Array.from({ length: 20 }, () => coordinator.poll("tenant_a", "session_1", emptyPoll)))
-    assert.equal(calls, 1)
-    assert.ok(firstWave.every((result) => result.fetchedEvents === 0))
-
-    await Promise.all(Array.from({ length: 20 }, () => coordinator.poll("tenant_a", "session_1", emptyPoll)))
-    assert.equal(calls, 2)
+    await Promise.all(Array.from({ length: 20 }, () => coordinator.wait("tenant_a", "session_1")))
     assert.deepEqual(sleeps, [110])
+    assert.deepEqual(coordinator.snapshot(), { waits: 1, entries: 1 })
 
-    await coordinator.poll("tenant_a", "session_1", emptyPoll)
-    assert.equal(calls, 3)
+    await coordinator.wait("tenant_a", "session_1")
     assert.deepEqual(sleeps, [110, 220])
 
-    await coordinator.poll("tenant_a", "session_1", async () => {
-      calls += 1
-      return pollResult(1)
-    })
-    await coordinator.poll("tenant_a", "session_1", emptyPoll)
-    assert.deepEqual(sleeps, [110, 220, 440, 110])
+    coordinator.observedChange("tenant_a", "session_1")
+    await coordinator.wait("tenant_a", "session_1")
+    assert.deepEqual(sleeps, [110, 220, 110])
   })
 
   it("coalesces identical replay reads and invalidates the short-lived page cache after ingest", async () => {

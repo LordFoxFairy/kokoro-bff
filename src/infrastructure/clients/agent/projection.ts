@@ -196,13 +196,33 @@ export function agentEventPage(
   afterSequence: number,
   limit: number,
 ): AgentEventPage | null {
+  const parsed = classifyAgentEventPage(value, expectedSessionId, afterSequence, limit)
+  return parsed.kind === "page" ? parsed.page : null
+}
+
+export type AgentEventPageParse =
+  | { kind: "page"; page: AgentEventPage }
+  | { kind: "gap" }
+  | { kind: "invalid" }
+
+/**
+ * Distinguishes a temporarily incomplete Agent snapshot from a malformed
+ * response.  A gap is retried by the durable projector; malformed identity or
+ * metadata is recorded as a source-contract failure instead of being guessed.
+ */
+export function classifyAgentEventPage(
+  value: unknown,
+  expectedSessionId: string,
+  afterSequence: number,
+  limit: number,
+): AgentEventPageParse {
   if (
     !isRecord(value)
     || !Number.isSafeInteger(afterSequence)
     || afterSequence < 0
     || !Number.isSafeInteger(limit)
     || limit < 1
-  ) return null
+  ) return { kind: "invalid" }
 
   const events = agentEventList(value.events, expectedSessionId)
   const nextSequence = value.next_seq
@@ -216,24 +236,32 @@ export function agentEventPage(
     || !Number.isSafeInteger(watermark)
     || nextSequence < afterSequence
     || watermark < nextSequence
-  ) return null
+  ) return { kind: "invalid" }
 
   const eventIds = new Set<string>()
   let expectedSequence = afterSequence
   for (const event of events) {
-    expectedSequence += 1
-    if (event.seq !== expectedSequence || eventIds.has(event.chat_event_id)) return null
+    const requiredSequence = expectedSequence + 1
+    if (eventIds.has(event.chat_event_id)) return { kind: "invalid" }
+    if (event.seq !== requiredSequence) {
+      return event.seq > requiredSequence ? { kind: "gap" } : { kind: "invalid" }
+    }
     eventIds.add(event.chat_event_id)
+    expectedSequence = event.seq
   }
-  if (nextSequence !== expectedSequence) return null
-  if (events.length === 0 && watermark !== nextSequence) return null
+  if (nextSequence !== expectedSequence) {
+    return nextSequence > expectedSequence ? { kind: "gap" } : { kind: "invalid" }
+  }
+  if (events.length === 0 && watermark !== nextSequence) {
+    return watermark > nextSequence ? { kind: "gap" } : { kind: "invalid" }
+  }
 
-  return {
+  return { kind: "page", page: {
     events,
     nextSequence,
     watermark,
     exhausted: nextSequence === watermark,
-  }
+  } }
 }
 
 export function mapAgentMessage(message: AgentChatMessage): ChatMessage {

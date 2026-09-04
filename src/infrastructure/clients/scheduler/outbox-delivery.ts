@@ -5,7 +5,7 @@ import type { ScheduledTaskOutboxDeliveryPort, ScheduledTaskOutboxDeliveryResult
 import { scheduledTaskOutboxTaskFromPayload, type ScheduledTaskOutboxCommand, type ScheduledTaskOutboxOperation } from "../../../domain/scheduled-task/outbox.js"
 import { buildSchedulerJob, schedulerJobName } from "./job.js"
 import { ownerIdentityHeaders } from "../owner/identity.js"
-import { normalizeUpstreamResponse } from "../../../http/response.js"
+import { normalizeUpstreamResponse } from "../upstream-response.js"
 import { proxyUpstream } from "../../../upstream.js"
 
 type SchedulerAttempt =

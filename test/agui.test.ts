@@ -3,6 +3,7 @@ import { describe, it } from "node:test"
 import { EventSchemas } from "@ag-ui/core"
 
 import { createAgUiProjectionState, projectChatEvent } from "../dist/application/agui/project-chat-event.js"
+import { validateAgUiFrames } from "../dist/application/agui/project-session-events.js"
 import { agentEventList } from "../dist/infrastructure/clients/agent/projection.js"
 
 const base = {
@@ -69,5 +70,55 @@ describe("AG-UI projection", () => {
     assert.equal(agentEventList([source], "session_1"), null)
     assert.equal(agentEventList([{ ...source, session_id: "session_1", seq: 1.5 }], "session_1"), null)
     assert.deepEqual(agentEventList([{ ...source, session_id: "session_1" }], "session_1"), [{ ...source, session_id: "session_1" }])
+  })
+
+  it("rejects a non-canonical frame before the repository can persist it", () => {
+    assert.throws(
+      () => validateAgUiFrames([{ type: "RUN_STARTED", timestamp: "not-a-number" }]),
+      /source response did not match its contract/u,
+    )
+  })
+
+  it("persists the schema parser result rather than the unchecked input reference", () => {
+    const input = {
+      type: "RUN_STARTED",
+      threadId: "session_schema_result",
+      runId: "run_schema_result",
+      timestamp: 1,
+    } as const
+
+    const [validated] = validateAgUiFrames([input])
+
+    assert.notEqual(validated, input)
+    assert.deepEqual(validated, EventSchemas.parse(input))
+  })
+
+  it("keeps open message state isolated when a different run reaches a terminal", () => {
+    const state = createAgUiProjectionState()
+    const runB = {
+      ...base,
+      event_id: "evt_run_b_1",
+      run_id: "run_b",
+      kind: "message.delta" as const,
+      payload: { segment_id: "message_b", delta: "first" },
+    }
+    const first = projectChatEvent(runB, state)
+    assert.deepEqual(first.map((event) => event.type), ["TEXT_MESSAGE_START", "TEXT_MESSAGE_CONTENT"])
+
+    projectChatEvent({
+      ...base,
+      event_id: "evt_run_a_terminal",
+      run_id: "run_a",
+      kind: "run.completed",
+      payload: { status: "completed" },
+    }, state)
+
+    const continued = projectChatEvent({
+      ...runB,
+      event_id: "evt_run_b_2",
+      seq: runB.seq + 1,
+      payload: { segment_id: "message_b", delta: " second" },
+    }, state)
+    assert.deepEqual(continued.map((event) => event.type), ["TEXT_MESSAGE_CONTENT"])
   })
 })

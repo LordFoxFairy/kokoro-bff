@@ -70,6 +70,7 @@ test("BFF keeps contract, application, client, and repository boundaries explici
     "src/infrastructure/clients/agent/launch.ts",
     "src/infrastructure/clients/agent/control.ts",
     "src/infrastructure/clients/agent/projection.ts",
+    "src/infrastructure/clients/upstream-response.ts",
     "src/infrastructure/clients/mori/owner-route.ts",
     "src/infrastructure/clients/scheduler/job.ts",
     "src/infrastructure/clients/scheduler/outbox-delivery.ts",
@@ -148,6 +149,16 @@ test("BFF application ports stay free of infrastructure dependencies", async () 
   }
 })
 
+test("BFF infrastructure never imports HTTP or interface implementations", async () => {
+  const files = await import("node:fs/promises").then(({ readdir }) => readdir(path.join(root, "src/infrastructure"), { recursive: true }))
+  for (const file of files) {
+    if (typeof file !== "string" || !file.endsWith(".ts")) continue
+    const relativePath = `src/infrastructure/${file}`
+    const source = await readFile(path.join(root, relativePath), "utf8")
+    assert.doesNotMatch(source, /from\s+["'][^"']*(?:\/http\/|\/interfaces\/)[^"']*["']/u, relativePath)
+  }
+})
+
 test("BFF domain code is real policy, not an empty layer or transport adapter", async () => {
   const files = await import("node:fs/promises").then(({ readdir }) => readdir(path.join(root, "src/domain"), { recursive: true }))
   assert.ok(files.some((file) => typeof file === "string" && file.endsWith(".ts")))
@@ -184,11 +195,14 @@ test("BFF test doubles are outside production source and are explicitly assemble
   assert.match(composition, /routeHandler/u)
 })
 
-test("BFF durable AG-UI persistence is parameterized, tenant/session scoped, and Redis-notification-only", async () => {
-  const [repository, database, route, schema] = await Promise.all([
+test("BFF durable AG-UI persistence is parameterized, tenant/session scoped, and projected outside requests", async () => {
+  const [repository, consumerRepository, database, route, projector, composition, schema] = await Promise.all([
     readFile(path.join(root, "src/infrastructure/postgres/agui-projection-repository.ts"), "utf8"),
+    readFile(path.join(root, "src/infrastructure/postgres/agui-consumer-repository.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/postgres/client.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/agent.ts"), "utf8"),
+    readFile(path.join(root, "src/application/agui/projector.ts"), "utf8"),
+    readFile(path.join(root, "src/bootstrap/runtime.ts"), "utf8"),
     readFile(path.join(root, "database/schema.sql"), "utf8"),
   ])
 
@@ -197,12 +211,26 @@ test("BFF durable AG-UI persistence is parameterized, tenant/session scoped, and
   assert.match(repository, /FOR UPDATE/u)
   assert.equal(repository.includes("SELECT *"), false)
   assert.equal(repository.includes("FOREIGN KEY"), false)
+  assert.match(consumerRepository, /FOR UPDATE SKIP LOCKED/u)
+  assert.match(consumerRepository, /consumer_fence = consumer_fence \+ 1/u)
+  assert.match(consumerRepository, /consumer_failure_count/u)
+  assert.match(consumerRepository, /bff_agui_cursor_tombstone/u)
+  assert.match(consumerRepository, /retained\.event_type <> 'RUN_STARTED'/u)
+  assert.match(consumerRepository, /started\.event_type = 'RUN_STARTED'/u)
+  assert.equal(consumerRepository.includes("SELECT *"), false)
   assert.match(database, /\.publish\(/u)
   assert.match(database, /disableOfflineQueue: true/u)
   assert.equal(/redis\.(?:get|set|xAdd)\([^\n]*agui/iu.test(database), false)
-  assert.match(route, /projection\.ingest/u)
+  assert.match(projector, /projection\.ingest/u)
+  assert.match(projector, /claimConsumers/u)
+  assert.match(projector, /retryDelayMs\(lease\.failureCount\)/u)
+  assert.match(composition, /AgentAgUiSourceReader/u)
   assert.match(route, /projection\.replay/u)
+  assert.doesNotMatch(route, /events\?after_seq/u)
   assert.equal(route.includes("createAgUiProjectionState"), false)
+  const sseComments = [...route.matchAll(/writer\.writeComment\(([^)]*)\)/gu)].map((match) => match[1]?.trim())
+  assert.ok(sseComments.length > 0)
+  assert.ok(sseComments.every((comment) => comment === '"keep-alive"'))
   assert.match(schema, /uq_bff_agui_event_source_frame/u)
   assert.equal(/FOREIGN KEY|REFERENCES/iu.test(schema), false)
 })
@@ -286,7 +314,19 @@ test("BFF governance documents distinguish implemented facts from accepted targe
     assert.equal(await exists(relativePath), true, relativePath)
   }
 
-  const [readme, current, technicalDesign, apiContract, dataModel, reliability, schema] = await Promise.all([
+  const [
+    readme,
+    current,
+    technicalDesign,
+    apiContract,
+    dataModel,
+    reliability,
+    schema,
+    projectionService,
+    consumerRepository,
+    projector,
+    sourceReader,
+  ] = await Promise.all([
     readFile(path.join(root, "README.md"), "utf8"),
     readFile(path.join(root, "docs/CURRENT.md"), "utf8"),
     readFile(path.join(root, "docs/TECHNICAL_DESIGN.md"), "utf8"),
@@ -294,6 +334,10 @@ test("BFF governance documents distinguish implemented facts from accepted targe
     readFile(path.join(root, "docs/DATA_MODEL.md"), "utf8"),
     readFile(path.join(root, "docs/RELIABILITY.md"), "utf8"),
     readFile(path.join(root, "database/schema.sql"), "utf8"),
+    readFile(path.join(root, "src/application/agui/project-session-events.ts"), "utf8"),
+    readFile(path.join(root, "src/infrastructure/postgres/agui-consumer-repository.ts"), "utf8"),
+    readFile(path.join(root, "src/application/agui/projector.ts"), "utf8"),
+    readFile(path.join(root, "src/infrastructure/clients/agent/projector-source.ts"), "utf8"),
   ])
 
   assert.match(readme, /唯一 public HTTP owner/u)
@@ -303,10 +347,20 @@ test("BFF governance documents distinguish implemented facts from accepted targe
   assert.match(technicalDesign, /AG-UI 是 Web ↔ BFF 唯一 Agent 网络协议/u)
   assert.match(apiContract, /contract\/openapi\/v1\/openapi\.yaml/u)
   assert.match(dataModel, /bff_agui_event/u)
-  assert.match(dataModel, /AG-UI ledger 当前 append-only 且不自动删除/u)
+  assert.match(dataModel, /bff_agui_cursor_tombstone/u)
+  assert.match(dataModel, /GC 保留从最新 `RUN_STARTED` 到当前 head 的完整 run slice/u)
   assert.match(dataModel, /bff_scheduled_task_outbox/u)
   assert.match(reliability, /ScheduledTask.*outbox/u)
   assert.match(reliability, /唯一 durable truth 是 BFF PostgreSQL ledger/u)
   assert.equal(schema.includes("bff_agui_event"), true)
+  assert.equal(schema.includes("expected_run_id TEXT"), true)
+  assert.equal(schema.includes("latest_run_start_sequence"), true)
+  assert.match(dataModel, /`expected_run_id` 是最新接纳的 run fence，`latest_run_id` 是最近投影的 source run/u)
+  assert.match(consumerRepository, /lease_remaining_ms/u)
+  assert.match(consumerRepository, /consumer_next_poll_at = CURRENT_TIMESTAMP\(3\)/u)
+  assert.match(projector, /monotonicNow/u)
+  assert.match(sourceReader, /monotonicNow/u)
+  assert.match(projectionService, /validateAgUiFrames\(projectChatEvent/u)
+  assert.match(projectionService, /EventSchemas\.parse\(frame\)/u)
   assert.equal(/CREATE TABLE IF NOT EXISTS bff_outbox\b/u.test(schema), false)
 })

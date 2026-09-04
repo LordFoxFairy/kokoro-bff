@@ -46,6 +46,11 @@ export type AgUiEvent = {
   name?: string
   value?: unknown
   usage?: Array<Record<string, unknown>>
+  isError?: boolean
+  outcome?:
+    | { type: "success" }
+    | { type: "interrupt"; interrupts: Array<{ id: string; reason: string; message?: string }> }
+  status?: string
 }
 
 export type AgUiProjectionState = {
@@ -97,6 +102,24 @@ function usageField(payload: Record<string, unknown>): Array<Record<string, unkn
   return [{ inputTokens, outputTokens, totalTokens: inputTokens + outputTokens }]
 }
 
+function runStatePrefix(runId: string | null): string {
+  return `${JSON.stringify(runId)}:`
+}
+
+function runStateKey(runId: string | null, localId: string): string {
+  return `${runStatePrefix(runId)}${JSON.stringify(localId)}`
+}
+
+function clearRunState(state: AgUiProjectionState, runId: string | null): void {
+  const prefix = runStatePrefix(runId)
+  for (const key of state.textMessages) {
+    if (key.startsWith(prefix)) state.textMessages.delete(key)
+  }
+  for (const key of state.toolCalls) {
+    if (key.startsWith(prefix)) state.toolCalls.delete(key)
+  }
+}
+
 /** Convert one internal BFF Chat event into canonical AG-UI event(s). */
 export function projectChatEvent(event: ChatEvent, state: AgUiProjectionState): AgUiEvent[] {
   const payload = event.payload
@@ -107,9 +130,10 @@ export function projectChatEvent(event: ChatEvent, state: AgUiProjectionState): 
       return [base(event, EventType.RUN_STARTED, { threadId: event.session_id, runId: event.run_id ?? "" })]
     case "message.delta": {
       const messageId = stringField(payload, "segment_id", event.event_id)
+      const stateKey = runStateKey(event.run_id, messageId)
       const events: AgUiEvent[] = []
-      if (!state.textMessages.has(messageId)) {
-        state.textMessages.add(messageId)
+      if (!state.textMessages.has(stateKey)) {
+        state.textMessages.add(stateKey)
         events.push(base(event, EventType.TEXT_MESSAGE_START, { messageId, role: "assistant" }))
       }
       const delta = stringField(payload, "delta")
@@ -121,12 +145,12 @@ export function projectChatEvent(event: ChatEvent, state: AgUiProjectionState): 
     }
     case "message.completed": {
       const messageId = stringField(payload, "segment_id", event.event_id)
-      state.textMessages.delete(messageId)
+      state.textMessages.delete(runStateKey(event.run_id, messageId))
       return [base(event, EventType.TEXT_MESSAGE_END, { messageId })]
     }
     case "tool.invoked": {
       const toolCallId = stringField(payload, "tool_id", event.event_id)
-      state.toolCalls.add(toolCallId)
+      state.toolCalls.add(runStateKey(event.run_id, toolCallId))
       const args = JSON.stringify(recordField(payload, "args"))
       return [
         base(event, EventType.TOOL_CALL_START, {
@@ -139,7 +163,7 @@ export function projectChatEvent(event: ChatEvent, state: AgUiProjectionState): 
     }
     case "tool.returned": {
       const toolCallId = stringField(payload, "tool_id", event.event_id)
-      state.toolCalls.delete(toolCallId)
+      state.toolCalls.delete(runStateKey(event.run_id, toolCallId))
       return [
         base(event, EventType.TOOL_CALL_END, { toolCallId }),
         base(event, EventType.TOOL_CALL_RESULT, {
@@ -147,19 +171,35 @@ export function projectChatEvent(event: ChatEvent, state: AgUiProjectionState): 
           toolCallId,
           role: "tool",
           content: stringField(payload, "result"),
+          isError: payload.is_error === true,
         }),
       ]
     }
     case "run.completed": {
       const usage = usageField(payload)
+      const cancelled = stringField(payload, "status") === "cancelled"
+      clearRunState(state, event.run_id)
       return [base(event, EventType.RUN_FINISHED, {
         threadId: event.session_id,
         runId: event.run_id ?? "",
+        status: cancelled ? "cancelled" : "completed",
+        ...(cancelled
+          ? {
+              result: { status: "cancelled" },
+              outcome: {
+                type: "interrupt",
+                interrupts: [{ id: `cancelled:${event.event_id}`, reason: "cancelled", message: "Agent run cancelled" }],
+              },
+            }
+          : { outcome: { type: "success" } }),
         ...(usage === undefined ? {} : { usage }),
       })]
     }
     case "run.failed":
+      clearRunState(state, event.run_id)
       return [base(event, EventType.RUN_ERROR, {
+        threadId: event.session_id,
+        runId: event.run_id ?? "",
         message: stringField(payload, "message", "Agent run failed"),
         code: stringField(payload, "code", "internal_error"),
       })]

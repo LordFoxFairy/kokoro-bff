@@ -16,6 +16,7 @@ export type AgentIdentityHeaders = {
 
 export type AgentLaunch = {
   body: Record<string, unknown>
+  identityAssertionRef: string
   receipt: {
     run_id: string
     user_message_id: string

@@ -1290,7 +1290,8 @@ describe("kokoro-bff v1 mock contract", () => {
     assert.equal(received[0]?.headers.tenant, "ns_test")
     assert.equal(received[0]?.headers.subject, "user_test")
     assert.equal(received[0]?.headers.actor, "user_test")
-    assert.equal((received[0]?.body.execution_identity as { tenant_ref: string }).tenant_ref, "ns_test")
+    assert.equal(received[0]?.body.execution_identity, undefined)
+    assert.match(received[0]?.headers.assertion ?? "", /^bff:[0-9a-f]{64}$/u)
     assert.equal((received[0]?.body as { trace: { project_ref: string } }).trace.project_ref, "project_kokoro")
 
     const listed = await fetch(`${base}/v1/sessions?project_ref=project_kokoro&limit=10`, { headers: authHeaders() })

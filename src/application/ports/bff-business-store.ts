@@ -1,4 +1,5 @@
 import type { AgUiProjectionService } from "../agui/project-session-events.js"
+import type { AgUiProjectionConsumerRepository } from "../agui/ports/agui-projection-repository.js"
 import type { IdempotencyRepository } from "./idempotency-repository.js"
 import type { BffApplicationServices } from "../services.js"
 import type { ScheduledTaskOutboxRepository } from "./scheduled-task-outbox-repository.js"
@@ -7,6 +8,8 @@ import type { ScheduledTaskOutboxRepository } from "./scheduled-task-outbox-repo
 export interface BffBusinessStore extends IdempotencyRepository {
   readonly services: BffApplicationServices
   readonly agUi: AgUiProjectionService
+  /** Durable source-consumer control plane exposed by the live store. */
+  readonly agUiConsumers?: AgUiProjectionConsumerRepository
   /** Present on the live PostgreSQL composition; test route seams may omit it. */
   readonly scheduledTaskOutbox?: ScheduledTaskOutboxRepository
   ready(): Promise<void>

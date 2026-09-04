@@ -172,6 +172,19 @@ export class PostgresChatRepository implements ChatRepository {
           WHERE tenant_id = $1 AND conversation_id = $2 AND revoked_at IS NULL`,
         [tenantId, conversationId],
       )
+      await client.query(
+        `UPDATE bff_agui_stream
+            SET consumer_state = 'stopped',
+                consumer_fence = consumer_fence + 1,
+                consumer_lease_owner = NULL,
+                consumer_lease_token = NULL,
+                consumer_lease_until = NULL,
+                consumer_last_error_code = 'conversation_deleted',
+                consumer_last_error_at = CURRENT_TIMESTAMP(3),
+                updated_at = CURRENT_TIMESTAMP(3)
+          WHERE tenant_id = $1 AND session_id = $2`,
+        [tenantId, conversationId],
+      )
       await client.query("COMMIT")
       return true
     } catch (error) {

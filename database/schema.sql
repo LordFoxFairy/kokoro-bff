@@ -203,14 +203,47 @@ CREATE TABLE IF NOT EXISTS bff_agui_stream (
   source_high_watermark BIGINT NOT NULL DEFAULT 0,
   next_public_sequence BIGINT NOT NULL DEFAULT 1,
   projection_state JSONB NOT NULL DEFAULT '{"text_message_ids":[],"tool_call_ids":[]}'::jsonb,
+  expected_run_id TEXT,
+  latest_run_id TEXT,
+  latest_run_start_sequence BIGINT,
+  terminal_run_id TEXT,
+  retention_floor_sequence BIGINT NOT NULL DEFAULT 0,
+  consumer_subject_id TEXT,
+  consumer_state TEXT NOT NULL DEFAULT 'active',
+  consumer_next_poll_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  consumer_lease_owner TEXT,
+  consumer_lease_token TEXT,
+  consumer_lease_until TIMESTAMPTZ(3),
+  consumer_fence BIGINT NOT NULL DEFAULT 0,
+  consumer_failure_count BIGINT NOT NULL DEFAULT 0,
+  consumer_last_error_code TEXT,
+  consumer_last_error_at TIMESTAMPTZ(3),
+  consumer_last_polled_at TIMESTAMPTZ(3),
   created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   CONSTRAINT pk_bff_agui_stream PRIMARY KEY (tenant_id, session_id),
   CONSTRAINT ck_bff_agui_stream_version CHECK (version >= 0),
   CONSTRAINT ck_bff_agui_stream_source_high_watermark CHECK (source_high_watermark >= 0),
   CONSTRAINT ck_bff_agui_stream_next_public_sequence CHECK (next_public_sequence >= 1),
-  CONSTRAINT ck_bff_agui_stream_projection_state CHECK (jsonb_typeof(projection_state) = 'object')
+  CONSTRAINT ck_bff_agui_stream_latest_run_start CHECK (
+    latest_run_start_sequence IS NULL
+    OR (latest_run_start_sequence >= 1 AND latest_run_start_sequence < next_public_sequence)
+  ),
+  CONSTRAINT ck_bff_agui_stream_projection_state CHECK (jsonb_typeof(projection_state) = 'object'),
+  CONSTRAINT ck_bff_agui_stream_expected_run CHECK (expected_run_id IS NULL OR length(btrim(expected_run_id)) > 0),
+  CONSTRAINT ck_bff_agui_stream_retention_floor CHECK (retention_floor_sequence >= 0),
+  CONSTRAINT ck_bff_agui_stream_consumer_state CHECK (consumer_state IN ('active', 'blocked', 'stopped')),
+  CONSTRAINT ck_bff_agui_stream_consumer_fence CHECK (consumer_fence >= 0),
+  CONSTRAINT ck_bff_agui_stream_consumer_failure_count CHECK (consumer_failure_count >= 0),
+  CONSTRAINT ck_bff_agui_stream_consumer_identity CHECK (consumer_subject_id IS NULL OR length(btrim(consumer_subject_id)) > 0),
+  CONSTRAINT ck_bff_agui_stream_consumer_lease CHECK (
+    (consumer_lease_owner IS NULL AND consumer_lease_token IS NULL AND consumer_lease_until IS NULL)
+    OR (consumer_lease_owner IS NOT NULL AND consumer_lease_token IS NOT NULL AND consumer_lease_until IS NOT NULL)
+  )
 );
+CREATE INDEX IF NOT EXISTS ix_bff_agui_stream_consumer_due
+  ON bff_agui_stream (consumer_next_poll_at ASC, tenant_id ASC, session_id ASC)
+  WHERE consumer_state = 'active' AND consumer_subject_id IS NOT NULL;
 
 -- Every source fact is registered exactly once, including source event kinds
 -- that intentionally produce no public frame. This prevents projection gaps
@@ -256,3 +289,21 @@ CREATE TABLE IF NOT EXISTS bff_agui_event (
   CONSTRAINT ck_bff_agui_event_type CHECK (length(event_type) >= 1),
   CONSTRAINT ck_bff_agui_event_payload CHECK (jsonb_typeof(event_payload) = 'object')
 );
+CREATE INDEX IF NOT EXISTS ix_bff_agui_event_retention
+  ON bff_agui_event (tenant_id, session_id, recorded_at ASC, public_sequence ASC);
+
+-- A compact tombstone keeps a scope-bound answer for cursors whose frame was
+-- reclaimed. It prevents an expired cursor from being confused with an
+-- unknown/foreign cursor while the tombstone retention window is active.
+CREATE TABLE IF NOT EXISTS bff_agui_cursor_tombstone (
+  tenant_id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  cursor TEXT NOT NULL,
+  public_sequence BIGINT NOT NULL,
+  expired_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT pk_bff_agui_cursor_tombstone PRIMARY KEY (tenant_id, session_id, cursor),
+  CONSTRAINT ck_bff_agui_cursor_tombstone_sequence CHECK (public_sequence >= 1),
+  CONSTRAINT ck_bff_agui_cursor_tombstone_cursor CHECK (length(cursor) BETWEEN 16 AND 160)
+);
+CREATE INDEX IF NOT EXISTS ix_bff_agui_cursor_tombstone_expiry
+  ON bff_agui_cursor_tombstone (expired_at ASC, tenant_id ASC, session_id ASC);

@@ -36,10 +36,10 @@ Agent 必须拥有 Run、checkpoint、lease、tool journal、执行事件、HITL
 
 ## Implementation status
 
-已实现：canonical BFF OpenAPI、operation governance、Agent HTTP ingress adapter、PostgreSQL durable AG-UI source/public
-ledger、逐 frame opaque cursor、tenant/session-scoped replay、projection state/version fence、Redis publish-only notification，
-以及条件性 PostgreSQL idempotency receipt。
+已实现：canonical BFF OpenAPI、operation governance、Conversation/Message/Share、Agent HTTP ingress adapter、PostgreSQL
+durable AG-UI source/public ledger、逐 frame opaque cursor、tenant/session-scoped replay、projection state/version fence、
+后台 consumer lease/fence、retention/GC、expired cursor、Redis publish-only notification，以及条件性 PostgreSQL receipt。
 
-尚未实现：BFF Conversation/Message/Share tables、transactional outbox、完整 mutation digest/fencing、AG-UI
-retention/GC、后台主动摄取和完整 PG restore/fault suite。Accepted 表示方向已裁决，不表示这些项目已上线；当前事实以
+尚未实现：Agent launch transactional outbox、assistant reconciliation、完整 mutation digest/transaction fencing、
+跨版本 re-projection 和完整 PG restore/fault suite。Accepted 表示方向已裁决，不表示这些项目已上线；当前事实以
 [`../CURRENT.md`](../CURRENT.md) 为准。

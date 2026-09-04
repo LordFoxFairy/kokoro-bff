@@ -71,10 +71,24 @@ function bffConfig(overrides = {}) {
       maxConnectionsGlobal: 256,
       maxConnectionsPerTenant: 64,
       maxConnectionsPerSession: 8,
-      pollBaseDelayMs: 1000,
-      pollMaxDelayMs: 8000,
-      pollJitterPercent: 20,
+      ledgerPollBaseDelayMs: 1000,
+      ledgerPollMaxDelayMs: 8000,
+      ledgerPollJitterPercent: 20,
       replayCacheTtlMs: 25,
+      projectorMaxConsumersPerCycle: 32,
+      projectorSourcePageSize: 256,
+      projectorMaxPagesPerConsumer: 8,
+      projectorSourceMaxAttempts: 3,
+      projectorLeaseDurationMs: 15_000,
+      projectorLeaseSettlementReserveMs: 500,
+      projectorPollIntervalMs: 1000,
+      projectorErrorBackoffMs: 5000,
+      projectorErrorBackoffMaxMs: 5 * 60 * 1000,
+      projectorErrorBackoffJitterPercent: 20,
+      retentionMs: 7 * 24 * 60 * 60 * 1000,
+      gcIntervalMs: 15 * 60 * 1000,
+      gcBatchSize: 100,
+      cursorTombstoneRetentionMs: 30 * 24 * 60 * 60 * 1000,
     },
     upstreams: {
       system: null,
@@ -128,7 +142,14 @@ integrationTest("persists BFF facts, registers Scheduler, and replays Agent disp
       request.on("data", (chunk) => chunks.push(Buffer.from(chunk)))
       request.on("end", () => {
         const body = JSON.parse(Buffer.concat(chunks).toString("utf8"))
-        agentCalls.push({ body, authorization: request.headers.authorization, service: request.headers["x-kokoro-service"], tenant: request.headers["x-kokoro-tenant-id"] })
+        agentCalls.push({
+          body,
+          authorization: request.headers.authorization,
+          service: request.headers["x-kokoro-service"],
+          tenant: request.headers["x-kokoro-tenant-ref"],
+          subject: request.headers["x-kokoro-subject-ref"],
+          assertion: request.headers["x-kokoro-identity-assertion-ref"],
+        })
         response.setHeader("content-type", "application/json")
         response.end(JSON.stringify({ data: { run_id: body.run_id }, meta: { request_id: request.headers["x-kokoro-request-id"] } }))
       })
@@ -195,8 +216,10 @@ integrationTest("persists BFF facts, registers Scheduler, and replays Agent disp
     assert.equal(agentCalls.length, 1)
     assert.equal(agentCalls[0].authorization, "Bearer bff-secret")
     assert.equal(agentCalls[0].service, "kokoro-bff")
-    assert.equal(agentCalls[0].tenant, undefined)
-    assert.equal(agentCalls[0].body.execution_identity.tenant_ref, namespace)
+    assert.equal(agentCalls[0].tenant, namespace)
+    assert.equal(agentCalls[0].subject, "user_integration")
+    assert.match(agentCalls[0].assertion, /^bff:[0-9a-f]{64}$/)
+    assert.equal(agentCalls[0].body.execution_identity, undefined)
     const replayedDispatch = await fetch(`${base}/internal/bff/scheduled-tasks/dispatch`, { method: "POST", headers: dispatchHeaders, body: JSON.stringify(dispatchBody) })
     assert.equal(replayedDispatch.status, 202)
     assert.equal(agentCalls.length, 1)

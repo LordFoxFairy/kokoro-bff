@@ -91,19 +91,24 @@ idempotency repository 单独 claim/commit，尚未与 task/outbox 合并为一�
 
 ## 6. Chat 与 AG-UI
 
-当前 Live event 流：
+当前 Live event 流分成后台投影与公开读取两条单向路径：
 
 ```text
-GET events
-  -> resolve Last-Event-ID against (tenant, session) in PostgreSQL
-  -> replay existing bff_agui_event rows strictly after public_sequence
+AgUiProjectorRunner (process lifecycle)
+  -> seed/register eligible BFF Conversation scope
+  -> claim (tenant, session) with SKIP LOCKED + lease token + monotonic fence
   -> fetch Agent source events after bff_agui_stream.source_high_watermark
-  -> validate source tenant/session shape
-  -> BEGIN + lock stream row + verify version fence
+  -> validate owner contract, tenant/session identity, sequence and snapshot watermark
+  -> BEGIN + lock stream row + verify version and consumer fence
   -> register source identity/digest + project all AG-UI frames + advance state/high-watermark
   -> COMMIT
-  -> best-effort Redis PUBLISH notification
-  -> read committed PostgreSQL rows -> @ag-ui/core validation -> SSE
+  -> settle progress/retry/blocked + best-effort Redis PUBLISH
+
+GET events
+  -> verify BFF-owned Conversation in trusted tenant scope
+  -> resolve Last-Event-ID against (tenant, session) in PostgreSQL
+  -> read committed rows strictly after public_sequence
+  -> @ag-ui/core validation -> SSE
 ```
 
 `bff_agui_stream` 以 `(tenant_id, session_id)` 为 scope，保存 source high-watermark、下一内部 public sequence、持久化
@@ -112,14 +117,30 @@ source sequence 建第二个唯一约束；相同 identity 的不同 digest/sequ
 frame 保存完整 JSON payload、source mapping、frame index、单调内部 sequence 与独立随机 `agui_*` cursor。
 
 客户端只把 SSE `id` 原样作为 `Last-Event-ID`；cursor 不编码 authority。Repository 先用 tenant + session + cursor
-解析内部位置，再按 tenant + session + public sequence 查询，因此跨 tenant/session cursor 与不存在的 cursor 都返回
-`400 invalid_event_cursor`，且不泄漏原 owner。一个 source fact 的多 frame 在同一事务提交，但每帧有独立 cursor；连接
+解析内部位置，再按 tenant + session + public sequence 查询。跨 tenant 请求先按 Conversation owner 边界返回与普通缺失
+一致的 `404 session_not_found`；当前 session 内格式错误或未知 cursor 返回 `400 invalid_event_cursor`。一个 source fact
+的多 frame 在同一事务提交，但每帧有独立 cursor；连接
 恰好在 START 后断开时会从 CONTENT 继续，不会把 source sequence 当作已完成整个 projection。
 
 PostgreSQL 是 public replay 的唯一 durable truth。Redis 只 `PUBLISH` hash-scoped 更新提示，不存 event、cursor 或
-high-watermark；通知失败不回滚事实。当前 HTTP 请求自己轮询 Agent 并查询 PostgreSQL，尚未消费 Redis 通知来降低延迟。
-终态 ledger 在 Agent unavailable/disabled 和 BFF 重启后仍可独立 replay；非终态且无法接触 Agent 时只能返回已持久化
-部分并明确结束，或在尚未开始 SSE 时返回 503。
+high-watermark；通知失败不回滚事实。后台 runner 与 HTTP 生命周期独立，公开连接只以 bounded ledger polling 等待新
+commit，不会变成第二个 Agent consumer。终态 ledger 在 Agent unavailable/disabled 和 BFF 重启后仍可独立 replay；
+非终态且 projector 未配置时 fail closed。
+
+consumer 状态与 stream 同 row：subject、next poll、lease owner/token/until、递增 fence、连续失败计数、最后错误和最后
+完成时间均持久化。`expected_run_id` 表示最新接纳的 run，`latest_run_id` 只表示最近投影的 source run；旧 run 可以补投
+历史 frame，但只有 expected run 的终态可以关闭 public stream。claim 的到期判断和 deadline 由 PostgreSQL 时钟计算，
+并把剩余 lease budget 返回给 worker；runner 与 source client 在进程内使用 monotonic clock 消耗该预算，wall clock 只用于
+日志/协议时间。注册不同 expected run 时，同一事务递增 stream version/fence、撤销旧 lease并清除旧 terminal；旧 worker
+即使晚到也无法通过 commit/settlement 条件。projection state 以 run identity 隔离，某个 run 的终态只清理该 run 的
+message/tool 状态。每次 source read 受 attempt budget 和 lease
+deadline 共同限制，并为事务 settlement 预留时间；瞬时失败跨 claim 使用持久计数驱动 capped exponential backoff +
+jitter，并在配置上限内尊重 `Retry-After`，成功 poll 清零。source gap 耗尽内部连续性预算、不符合 contract、重复
+identity、永久 HTTP/容量错误把 scope 置为 blocked，避免静默跳过。
+stream 持久化最新 `RUN_STARTED` 的 public sequence；GC 仅删除该边界
+之前且早于 retention cutoff 的旧 run frame，并完整保留从边界到当前 head 的 run slice。没有可靠边界，或保留 suffix
+中存在找不到同 run `RUN_STARTED` 的交错 frame 时跳过回收。
+删除前写入有界 cursor tombstone，并推进 retention floor。tombstone 存续时返回 `410 event_cursor_expired`。
 
 Agent 自有 event wire 的时间编码由 Agent contract 决定（当前 client boundary 保留其 epoch-millisecond 形状）；BFF
 在 projection adapter 边界解析为 UTC instant，BFF domain/application/数据库事实不把 epoch 数字当作时间。该约定不
@@ -128,8 +149,7 @@ Agent 自有 event wire 的时间编码由 Agent contract 决定（当前 client
 Conversation、Message、Share 的产品事实由 BFF PostgreSQL canonical tables 与 ChatApplicationService 持有；Agent 只
 拥有 Run、checkpoint、lease、tool journal、执行事件、HITL 与 evidence。Live session list/detail/message history/title/
 delete/share routes 只读取 BFF facts；Message create 在 BFF 事务中追加 user message 后调用窄 Agent launch client。AG-UI
-ledger 仍独立保存 Agent execution projection，assistant message reconciliation、retention/GC 和主动 source consumer
-属于后续切片。
+ledger 仍独立保存 Agent execution projection；assistant message reconciliation 与 Agent launch outbox 属于后续切片。
 
 ## 7. 出站与失败归一
 
@@ -142,7 +162,6 @@ provider body、SQL 或 stack。
 - Mock 是本地确定性 fixture，不需要 PostgreSQL/Redis；它不是生产完成证据。
 - Live BFF-owned 路由要求 PostgreSQL + Redis；`/readyz` 检查可用性。AG-UI committed replay 只读取 PostgreSQL，
   但 Redis 不可用仍会使整体 readiness 失败。
-- 监听后启动 ScheduledTask bounded outbox dispatcher；它不扫描或重建已成功 command，只 claim pending/retryable/expired
-  lease rows。
-- graceful shutdown 先停止 dispatcher 并等待当前 bounded cycle，再关闭 repository；尚无完整 request drain 或 termination
-  budget。
+- 监听后启动 AG-UI projector 与 ScheduledTask bounded outbox dispatcher；两者只 claim due/eligible/expired-lease rows。
+- graceful shutdown 先停止 projector 与 dispatcher、等待当前 bounded cycle 并释放仍持有的 lease，再关闭 repository；
+  尚无完整 HTTP request drain 或 termination budget。

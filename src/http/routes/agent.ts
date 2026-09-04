@@ -3,23 +3,16 @@ import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
 import { failure, ok } from "../../contracts/index.js"
 import { proxyUpstream } from "../../upstream.js"
-import { agentEventPage, agentIdentityHeaders, buildAgentControl, buildAgentLaunch, buildSessionDetail, mapAgentEvent, type AgentChatEvent, type AgentChatMessage } from "../../infrastructure/clients/agent/index.js"
+import { agentIdentityHeaders, buildAgentControl, buildAgentLaunch } from "../../infrastructure/clients/agent/index.js"
 import { agentMessageListData, agentSessionAssertion, agentSessionListData, dataOf, messageCursor } from "../../application/projections.js"
-import { normalizeUpstreamResponse, reply } from "../response.js"
+import { reply } from "../response.js"
+import { normalizeUpstreamResponse } from "../../infrastructure/clients/upstream-response.js"
 import { headerString, incomingHeaders, idempotencyKey, queryOf } from "../request.js"
 import type { RequestContext } from "../../domain/request-context.js"
 import type { IdempotencyEntry, MutationTicket } from "../../application/idempotency.js"
 import { AgUiSseWriter } from "../../interfaces/http/agui/sse.js"
-import { AgUiSourceIdentityConflictError } from "../../application/agui/errors.js"
-import type { AgentProjectionSource, AgUiProjectionService } from "../../application/agui/project-session-events.js"
-import { type AgUiSourcePollResult, type AgUiSessionRuntime } from "../../application/agui/session-runtime.js"
-
-class AgentSourcePollError extends Error {
-  public constructor(public readonly result: { status: number; body: unknown }) {
-    super("Agent source poll failed")
-    this.name = "AgentSourcePollError"
-  }
-}
+import type { AgUiProjectionService } from "../../application/agui/project-session-events.js"
+import type { AgUiSessionRuntime } from "../../application/agui/session-runtime.js"
 
 export async function callAgent(
   config: BffConfig,
@@ -55,61 +48,6 @@ function sendAgentFailure(
   reply(response, result.status, result.body, context, idempotency, mutation)
 }
 
-function projectionSources(events: readonly AgentChatEvent[]): AgentProjectionSource[] {
-  return events.map((event) => ({
-    sourceEventId: event.chat_event_id,
-    sourceSequence: event.seq,
-    sourceOccurredAt: new Date(event.created_at).toISOString(),
-    sourcePayload: event,
-    event: mapAgentEvent(event),
-  }))
-}
-
-type AgentEventHistoryResult =
-  | { kind: "events"; events: AgentChatEvent[] }
-  | { kind: "error"; result: { status: number; body: unknown } }
-
-async function readAgentEventHistory(
-  config: BffConfig,
-  baseUrl: string,
-  request: IncomingMessage,
-  context: RequestContext,
-  sessionId: string,
-  assertion: string,
-): Promise<AgentEventHistoryResult> {
-  const events: AgentChatEvent[] = []
-  let afterSequence = 0
-  let snapshotWatermark: number | null = null
-  for (;;) {
-    const result = await callAgent(
-      config,
-      baseUrl,
-      `/v1/sessions/${encodeURIComponent(sessionId)}/events?after_seq=${afterSequence}&limit=1000`,
-      "GET",
-      context.requestId,
-      request,
-      undefined,
-      context,
-      assertion,
-    )
-    if (result.status >= 400) return { kind: "error", result }
-    const page = agentEventPage(dataOf(result.body), sessionId, afterSequence, 1000)
-    if (page === null || (snapshotWatermark !== null && page.watermark < snapshotWatermark)) {
-      return {
-        kind: "error",
-        result: {
-          status: 502,
-          body: failure("upstream_response_invalid", "Agent event replay did not match the v1 contract", context.requestId),
-        },
-      }
-    }
-    events.push(...page.events)
-    afterSequence = page.nextSequence
-    snapshotWatermark = page.watermark
-    if (page.exhausted) return { kind: "events", events }
-  }
-}
-
 function startAgUiStream(response: ServerResponse, requestId: string): void {
   if (response.headersSent) return
   response.writeHead(200, {
@@ -126,9 +64,8 @@ async function durableAgentEventStream(
   config: BffConfig,
   context: RequestContext,
   sessionId: string,
-  assertion: string,
-  baseUrl: string | null,
   projection: AgUiProjectionService | null,
+  sourceProjectionActive: boolean,
   idempotency: Map<string, IdempotencyEntry>,
   mutation: MutationTicket | null,
   runtime: AgUiSessionRuntime,
@@ -154,7 +91,11 @@ async function durableAgentEventStream(
     maxDurationMs: config.agUi.streamMaxDurationMs,
   })
 
-  const drainLedger = async (): Promise<"head" | "terminal" | "invalid_cursor" | "stopped"> => {
+  const drainLedger = async (): Promise<{
+    state: "head" | "terminal" | "invalid_cursor" | "expired_cursor" | "stopped"
+    wroteFrames: boolean
+  }> => {
+    let wroteFrames = false
     for (;;) {
       const page = await runtime.replays.replay(
         tenantId,
@@ -170,127 +111,93 @@ async function durableAgentEventStream(
           config.agUi.replayPageBytes,
         ),
       )
-      if (page.kind === "invalid_cursor") return "invalid_cursor"
+      if (page.kind === "invalid_cursor") return { state: "invalid_cursor", wroteFrames }
+      if (page.kind === "expired_cursor") return { state: "expired_cursor", wroteFrames }
       if (page.frames.length > 0) {
         startAgUiStream(response, context.requestId)
         streamStarted = true
         const write = await writer.writeFrames(page.frames)
         cursor = write.lastCursor ?? cursor
+        wroteFrames = wroteFrames || write.writtenFrames > 0
         if (write.status !== "written") {
           if (!response.writableEnded && !response.destroyed) response.end()
-          return "stopped"
+          return { state: "stopped", wroteFrames }
         }
       }
       if (!page.atHead) continue
-      return page.terminalRunId === null ? "head" : "terminal"
-    }
-  }
-
-  const synchronizeSource = async (): Promise<AgUiSourcePollResult> => {
-    const status = await projection.status(tenantId, sessionId)
-    let afterSequence = status.sourceHighWatermark
-    let snapshotWatermark: number | null = null
-    let insertedFrames = 0
-    let fetchedEvents = 0
-    for (;;) {
-      const result = await callAgent(
-        config,
-        baseUrl ?? "",
-        `/v1/sessions/${encodeURIComponent(sessionId)}/events?after_seq=${afterSequence}&limit=1000`,
-        "GET",
-        context.requestId,
-        request,
-        undefined,
-        context,
-        assertion,
-      )
-      if (result.status >= 400) throw new AgentSourcePollError(result)
-      const page = agentEventPage(dataOf(result.body), sessionId, afterSequence, 1000)
-      if (page === null || (snapshotWatermark !== null && page.watermark < snapshotWatermark)) {
-        throw new AgentSourcePollError({
-          status: 502,
-          body: failure("upstream_response_invalid", "Agent event replay did not match the v1 contract", context.requestId),
-        })
-      }
-      snapshotWatermark = page.watermark
-      fetchedEvents += page.events.length
-      if (page.events.length > 0) {
-        const ingested = await projection.ingest(tenantId, sessionId, projectionSources(page.events))
-        if (ingested.sourceHighWatermark !== page.nextSequence) throw new Error("Agent source watermark did not converge")
-        insertedFrames += ingested.insertedFrames
-        if (ingested.insertedFrames > 0) runtime.replays.invalidate(tenantId, sessionId)
-      }
-      afterSequence = page.nextSequence
-      if (page.exhausted) {
-        return {
-          fetchedEvents,
-          insertedFrames,
-          sourceHighWatermark: afterSequence,
-          snapshotWatermark: page.watermark,
-        }
-      }
+      return { state: page.terminalRunId === null ? "head" : "terminal", wroteFrames }
     }
   }
 
   try {
     const initial = await drainLedger()
-    if (initial === "invalid_cursor") {
+    if (initial.state === "invalid_cursor") {
       reply(response, 400, failure("invalid_event_cursor", "Last-Event-ID is invalid for this session", context.requestId), context, idempotency, mutation)
       return
     }
-    if (initial === "stopped") return
-    if (initial === "terminal" && (!config.agentEnabled || baseUrl === null)) {
+    if (initial.state === "expired_cursor") {
+      reply(response, 410, failure("event_cursor_expired", "Last-Event-ID is outside the retained replay window", context.requestId), context, idempotency, mutation)
+      return
+    }
+    if (initial.state === "stopped") return
+    if (initial.state === "terminal" && !sourceProjectionActive) {
       startAgUiStream(response, context.requestId)
       response.end()
       return
     }
-    if (!config.agentEnabled || baseUrl === null) {
+    const initialStatus = await projection.status(tenantId, sessionId)
+    const initialPollCompletion = initialStatus.consumerLastPolledAt
+    if (initialStatus.consumerState === "blocked") {
+      const code = initialStatus.consumerLastErrorCode ?? "projection_blocked"
       if (!streamStarted) {
-        reply(response, 503, failure("agent_not_configured", "Agent execution is disabled or not configured", context.requestId), context, idempotency, mutation)
+        reply(response, 502, failure("agui_projection_blocked", `AG-UI projection is blocked (${code})`, context.requestId), context, idempotency, mutation)
       } else {
-        await writer.writeComment("source-unavailable")
+        if (!response.writableEnded && !response.destroyed) response.end()
+      }
+      return
+    }
+    if (!sourceProjectionActive) {
+      if (!streamStarted) {
+        reply(response, 503, failure("agui_projector_not_configured", "The durable AG-UI projector is not configured", context.requestId), context, idempotency, mutation)
+      } else {
         if (!response.writableEnded && !response.destroyed) response.end()
       }
       return
     }
 
+    startAgUiStream(response, context.requestId)
+    streamStarted = true
+    if (await writer.writeComment("keep-alive") !== "written") return
     for (;;) {
-      const synchronized = await runtime.sourcePolls.poll(tenantId, sessionId, synchronizeSource)
+      await runtime.ledgerWaits.wait(tenantId, sessionId)
       const drained = await drainLedger()
-      if (drained === "stopped") return
-      if (drained === "terminal") {
-        startAgUiStream(response, context.requestId)
+      if (drained.state === "stopped") return
+      if (drained.state === "invalid_cursor" || drained.state === "expired_cursor") {
+        if (!response.writableEnded && !response.destroyed) response.end()
+        return
+      }
+      if (drained.wroteFrames) runtime.ledgerWaits.observedChange(tenantId, sessionId)
+      const status = await projection.status(tenantId, sessionId)
+      if (status.consumerState === "blocked") {
+        break
+      }
+      const sourceWasObserved = drained.wroteFrames || status.consumerLastPolledAt !== initialPollCompletion
+      if (drained.state === "terminal" && sourceWasObserved) {
         response.end()
         return
       }
-      if (!streamStarted || synchronized.insertedFrames === 0) {
-        startAgUiStream(response, context.requestId)
-        streamStarted = true
-        if (await writer.writeComment("keep-alive") !== "written") break
-      }
+      if (!drained.wroteFrames && await writer.writeComment("keep-alive") !== "written") break
       if (request.aborted || response.destroyed || response.writableEnded) break
     }
     if (!response.writableEnded) response.end()
-  } catch (error) {
-    if (error instanceof AgentSourcePollError) {
-      if (!streamStarted) sendAgentFailure(response, error.result, context, idempotency, mutation)
-      else if (!response.writableEnded && !response.destroyed) {
-        await writer.writeComment("upstream-error")
-        if (!response.writableEnded && !response.destroyed) response.end()
-      }
-      return
-    }
-    const sourceConflict = error instanceof AgUiSourceIdentityConflictError
-    const code = sourceConflict ? "upstream_event_identity_conflict" : "upstream_response_invalid"
-    const message = sourceConflict ? "Agent reused a durable event identity" : "Agent event projection failed"
-    if (!streamStarted) reply(response, 502, failure(code, message, context.requestId), context, idempotency, mutation)
+  } catch {
+    if (!streamStarted) reply(response, 503, failure("agui_ledger_unavailable", "The durable AG-UI ledger is unavailable", context.requestId), context, idempotency, mutation)
     else if (!response.writableEnded && !response.destroyed) {
-      await writer.writeComment("upstream-error")
-      if (!response.writableEnded && !response.destroyed) response.end()
+      response.end()
     }
   } finally {
     connection.release()
-    if (runtime.connections.sessionCount(tenantId, sessionId) === 0) runtime.sourcePolls.clear(tenantId, sessionId)
+    if (runtime.connections.sessionCount(tenantId, sessionId) === 0) runtime.ledgerWaits.clear(tenantId, sessionId)
   }
 }
 
@@ -305,6 +212,7 @@ export async function liveAgentSession(
   idempotency: Map<string, IdempotencyEntry>,
   agUiProjection: AgUiProjectionService | null,
   agUiRuntime: AgUiSessionRuntime,
+  sourceProjectionActive: boolean,
 ): Promise<boolean> {
   const baseUrl = config.upstreams.agents ?? null
   const method = request.method || "GET"
@@ -312,7 +220,7 @@ export async function liveAgentSession(
   const assertion = agentSessionAssertion(context, sessionId)
 
   if (businessPath.length === 3 && businessPath[2] === "events" && method === "GET") {
-    await durableAgentEventStream(request, response, config, context, sessionId, assertion, baseUrl, agUiProjection, idempotency, mutation, agUiRuntime)
+    await durableAgentEventStream(request, response, config, context, sessionId, agUiProjection, sourceProjectionActive, idempotency, mutation, agUiRuntime)
     return true
   }
 
@@ -400,7 +308,7 @@ export async function liveAgentSession(
     })
     const launchBody = Buffer.from(JSON.stringify(launch.body))
     try {
-      const result = await callAgent(config, baseUrl, "/v1/runs", "POST", context.requestId, request, launchBody, context, String((launch.body.execution_identity as Record<string, unknown>).identity_assertion_ref))
+      const result = await callAgent(config, baseUrl, "/v1/runs", "POST", context.requestId, request, launchBody, context, launch.identityAssertionRef)
       if (result.status >= 400) {
         sendAgentFailure(response, result, context, idempotency, mutation)
         return true
@@ -447,37 +355,8 @@ export async function liveAgentSession(
     return true
   }
 
-  if (businessPath.length === 2 && method === "GET") {
-    if (agUiProjection === null) {
-      reply(response, 503, failure("business_store_not_configured", "BFF AG-UI projection store is not configured", context.requestId), context, idempotency, mutation)
-      return true
-    }
-    try {
-      const [messagesResult, eventHistory] = await Promise.all([
-        callAgent(config, baseUrl, `/v1/sessions/${encodeURIComponent(sessionId)}/messages?after_seq=0&limit=1000`, "GET", context.requestId, request, undefined, context, assertion),
-        readAgentEventHistory(config, baseUrl, request, context, sessionId, assertion),
-      ])
-      if (messagesResult.status >= 400) {
-        sendAgentFailure(response, messagesResult, context, idempotency, mutation)
-        return true
-      }
-      if (eventHistory.kind === "error") {
-        sendAgentFailure(response, eventHistory.result, context, idempotency, mutation)
-        return true
-      }
-      const messagesData = dataOf(messagesResult.body)
-      const messages = Array.isArray(messagesData?.messages) ? messagesData.messages as AgentChatMessage[] : null
-      const events = eventHistory.events
-      if (messagesData === null || messages === null) {
-        sendAgentFailure(response, { status: 502, body: failure("upstream_response_invalid", "Agent session projection did not match the v1 contract", context.requestId) }, context, idempotency, mutation)
-        return true
-      }
-      await agUiProjection.ingest(context.identity.namespace, sessionId, projectionSources(events))
-      const projectionStatus = await agUiProjection.status(context.identity.namespace, sessionId)
-      reply(response, 200, ok(buildSessionDetail(context.identity, sessionId, messages, events, projectionStatus.currentCursor), context.requestId), context, idempotency, mutation)
-    } catch {
-      reply(response, 502, failure("upstream_response_invalid", "Agent session projection failed", context.requestId), context, idempotency, mutation)
-    }
+  if (businessPath.length === 2 && method === "GET" && agUiProjection === null) {
+    reply(response, 503, failure("business_store_not_configured", "BFF chat fact storage is not configured", context.requestId), context, idempotency, mutation)
     return true
   }
 

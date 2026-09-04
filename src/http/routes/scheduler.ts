@@ -124,7 +124,7 @@ export async function schedulerDispatch(
     ...(record.task.projectId === undefined ? {} : { projectRef: record.task.projectId }),
   })
   try {
-    const result = await callAgent(config, agentUrl, "/v1/runs", "POST", id, request, Buffer.from(JSON.stringify(launch.body)), context, String((launch.body.execution_identity as Record<string, unknown>).identity_assertion_ref))
+    const result = await callAgent(config, agentUrl, "/v1/runs", "POST", id, request, Buffer.from(JSON.stringify(launch.body)), context, launch.identityAssertionRef)
     if (result.status >= 400) {
       await reply(response, result.status, result.body, context, idempotency, mutation.ticket)
       return true

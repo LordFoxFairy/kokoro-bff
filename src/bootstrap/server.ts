@@ -4,7 +4,8 @@ import { loadConfig, type BffConfig } from "../config/runtime.js"
 import { failure, ok } from "../contracts/index.js"
 import { mutationTicket, type MutationTicket } from "../application/idempotency.js"
 import { fingerprintBody, authorize, authorizeServerOnly, idempotencyKey, isMutation, pathOf, queryOf, readBody, requestBodyJson, requestId, requiresIdempotency } from "../http/request.js"
-import { normalizeUpstreamResponse, reply, send } from "../http/response.js"
+import { reply, send } from "../http/response.js"
+import { normalizeUpstreamResponse } from "../infrastructure/clients/upstream-response.js"
 import { proxyUpstream } from "../upstream.js"
 import { liveAgentSession } from "../http/routes/agent.js"
 import { liveChatBusiness } from "../http/routes/chat.js"
@@ -179,7 +180,19 @@ async function handle(
   }
   if (businessPath[0] === "sessions") {
     if (composition.businessStore !== null && await liveChatBusiness(request, response, config, context, businessPath, json, mutation, composition.idempotency, composition.businessStore)) return
-    await liveAgentSession(request, response, config, context, businessPath, json, mutation, composition.idempotency, composition.businessStore?.agUi ?? null, composition.agUiRuntime)
+    await liveAgentSession(
+      request,
+      response,
+      config,
+      context,
+      businessPath,
+      json,
+      mutation,
+      composition.idempotency,
+      composition.businessStore?.agUi ?? null,
+      composition.agUiRuntime,
+      composition.agUiProjector !== undefined,
+    )
     return
   }
   if (composition.businessStore !== null && bffOwnedBusinessPath(businessPath)) {
@@ -210,8 +223,11 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
       else response.destroy()
     })
   })
-  if (composition.scheduledTaskDispatcher !== undefined) {
-    server.once("listening", () => { composition.scheduledTaskDispatcher?.start() })
+  if (composition.agUiProjector !== undefined || composition.scheduledTaskDispatcher !== undefined) {
+    server.once("listening", () => {
+      composition.agUiProjector?.start()
+      composition.scheduledTaskDispatcher?.start()
+    })
   }
   server.once("close", () => { void composition.close() })
   return server
