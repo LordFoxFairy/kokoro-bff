@@ -8,8 +8,8 @@ CREATE TABLE IF NOT EXISTS bff_project (
   slug TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
   instruction TEXT,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_bff_project_tenant_slug ON bff_project (tenant_id, slug);
 
@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS bff_project_instruction_revision (
   instruction TEXT NOT NULL,
   actor_id TEXT NOT NULL,
   current BOOLEAN NOT NULL DEFAULT false,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
 );
 CREATE INDEX IF NOT EXISTS ix_bff_project_instruction_revision
   ON bff_project_instruction_revision (tenant_id, project_id, updated_at DESC);
@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS bff_project_skill (
   project_id TEXT NOT NULL,
   skill_name TEXT NOT NULL,
   enabled BOOLEAN NOT NULL,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   PRIMARY KEY (tenant_id, project_id, skill_name)
 );
 
@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS bff_project_task (
   project_id TEXT NOT NULL,
   title TEXT NOT NULL,
   status TEXT NOT NULL CONSTRAINT ck_bff_project_task_status CHECK (status IN ('todo', 'in_progress', 'done')),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
 );
 CREATE INDEX IF NOT EXISTS ix_bff_project_task_tenant_project
   ON bff_project_task (tenant_id, project_id, updated_at DESC, task_id ASC);
@@ -122,7 +122,7 @@ CREATE TABLE IF NOT EXISTS bff_idempotency_receipt (
   fingerprint TEXT NOT NULL,
   status INTEGER NOT NULL,
   response_body JSONB NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
 );
 
 -- Durable public AG-UI projection. Agent execution events are copied into this

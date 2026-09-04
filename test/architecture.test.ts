@@ -146,8 +146,21 @@ test("BFF domain code is real policy, not an empty layer or transport adapter", 
   for (const file of files) {
     if (typeof file !== "string" || !file.endsWith(".ts")) continue
     const source = await readFile(path.join(root, "src/domain", file), "utf8")
-    assert.doesNotMatch(source, /from\s+["'][^"']*(?:node:http|\/http\/|\/infrastructure\/|fastify|express)[^"']*["']/u, `src/domain/${file}`)
+    assert.doesNotMatch(source, /from\s+["'][^"']*(?:node:|\/http\/|\/infrastructure\/|\/interfaces\/|\/application\/|(?:^|\/)pg(?:\.js)?|(?:^|\/)redis(?:\.js)?|fastify|express)[^"']*["']/u, `src/domain/${file}`)
   }
+})
+
+test("stable ScheduledTask outbox identity keeps crypto behind an infrastructure adapter", async () => {
+  const [domainOutbox, stableIdAdapter, scheduledRepository] = await Promise.all([
+    readFile(path.join(root, "src/domain/scheduled-task/outbox.ts"), "utf8"),
+    readFile(path.join(root, "src/infrastructure/identifiers/scheduled-task-outbox-id.ts"), "utf8"),
+    readFile(path.join(root, "src/infrastructure/postgres/scheduled-task-repository.ts"), "utf8"),
+  ])
+  assert.doesNotMatch(domainOutbox, /node:crypto|createHash/u)
+  assert.match(domainOutbox, /scheduledTaskOutboxIdentityMaterial/u)
+  assert.match(stableIdAdapter, /node:crypto/u)
+  assert.match(stableIdAdapter, /StableIdGenerator/u)
+  assert.match(scheduledRepository, /scheduledTaskOutboxId/u)
 })
 
 test("BFF test doubles are outside production source and are explicitly assembled", async () => {

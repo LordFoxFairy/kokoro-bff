@@ -44,6 +44,13 @@ test("canonical schema uses stable diagnostic names for indexes and constraints"
   }
 })
 
+test("canonical schema uses millisecond precision for every database instant", async () => {
+  const schema = await loadCanonicalSchema()
+
+  assert.doesNotMatch(schema, /\bTIMESTAMPTZ\b(?!\s*\(\s*3\s*\))/iu)
+  assert.doesNotMatch(schema, /\bCURRENT_TIMESTAMP\b(?!\s*\(\s*3\s*\))/iu)
+})
+
 test("schema application rejects a non-empty public schema", () => {
   assert.doesNotThrow(() => assertBlankDatabaseTables([]))
   assert.throws(

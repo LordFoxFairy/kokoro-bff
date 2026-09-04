@@ -3,10 +3,10 @@ import { describe, it } from "node:test"
 
 import {
   buildScheduledTaskOutboxPayload,
-  scheduledTaskOutboxId,
   scheduledTaskOutboxTaskFromPayload,
   scheduledTaskRetryDelayMs,
 } from "../dist/domain/scheduled-task/outbox.js"
+import { scheduledTaskOutboxId } from "../dist/infrastructure/identifiers/scheduled-task-outbox-id.js"
 import { ScheduledTaskOutboxDispatcher } from "../dist/application/scheduled-task-outbox-dispatcher.js"
 import type {
   ScheduledTaskOutboxRepository,
@@ -141,7 +141,7 @@ describe("ScheduledTask durable outbox", () => {
     assert.equal(internal.nextRunAt.toISOString(), "2026-09-01T08:00:00.000Z")
     assert.equal(
       scheduledTaskOutboxId("tenant_fixture", "scheduled_fixture", "replace", "schedule-fixture"),
-      scheduledTaskOutboxId("tenant_fixture", "scheduled_fixture", "replace", "schedule-fixture"),
+      "scheduled_outbox_a9418ff083b15fea19f73ac7c64a3f52",
     )
     assert.notEqual(
       scheduledTaskOutboxId("tenant_fixture", "scheduled_fixture", "replace", "other-key"),

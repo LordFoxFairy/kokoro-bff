@@ -62,9 +62,9 @@ projection 表。Live Chat history 仍从 Agent HTTP ingress 读取；这不等�
 
 ## 时间、约束与命名
 
-目标时间类型是 `TIMESTAMPTZ(3)` + `CURRENT_TIMESTAMP(3)`，API 为 RFC 3339 UTC。AG-UI 与 ScheduledTask/outbox 表已显式使用毫秒
-精度和 `pk_`/`uq_`/`ck_` constraint 名；既有六张表仍使用 `TIMESTAMPTZ`/`CURRENT_TIMESTAMP`，部分 index/CHECK
-尚未按 Root 规范命名。这是剩余 schema 治理缺口，不把新表合规扩大为全 schema 合规。
+所有数据库瞬时点统一使用 `TIMESTAMPTZ(3)` + `CURRENT_TIMESTAMP(3)`，API 为 RFC 3339 UTC。AG-UI 与 ScheduledTask/outbox
+表使用毫秒精度和 `pk_`/`uq_`/`ck_` constraint 名；部分既有 index/CHECK 尚未按 Root 规范命名。这是剩余 schema 治理
+缺口，不把时间精度合规扩大为其它命名重构。
 
 `NULL` 当前用于可选 instruction/project/expiry 等语义。Event/ledger 一旦落地应 append-only，不机械添加
 `updated_at`；同一毫秒顺序使用 public sequence 作为第二排序键。

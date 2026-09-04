@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto"
-
 import { isRecord } from "../json.js"
 import { isIanaTimezone, parseUtcTimestamp, utcDate, type ScheduledTaskFrequency, type ScheduledTaskStatus } from "./task.js"
 
@@ -85,10 +83,6 @@ export type ScheduledTaskOutboxCommand = ScheduledTaskOutboxLease & {
   availableAt: Date
   leaseUntil: Date
   lastErrorCode?: string
-}
-
-function digest(value: string): string {
-  return createHash("sha256").update(value).digest("hex")
 }
 
 function requiredString(record: Record<string, unknown>, key: string): string {
@@ -189,13 +183,14 @@ export function buildScheduledTaskOutboxPayload(
   }
 }
 
-export function scheduledTaskOutboxId(
+/** Canonical input for the infrastructure-owned stable ID generator. */
+export function scheduledTaskOutboxIdentityMaterial(
   tenantId: string,
   taskId: string,
   operation: ScheduledTaskOutboxOperation,
   idempotencyKey: string,
 ): string {
-  return `scheduled_outbox_${digest([tenantId, taskId, commandType(operation), idempotencyKey].join("\u001f")).slice(0, 32)}`
+  return [tenantId, taskId, commandType(operation), idempotencyKey].join("\u001f")
 }
 
 /** Parse JSONB at the infrastructure boundary before a worker can deliver it. */

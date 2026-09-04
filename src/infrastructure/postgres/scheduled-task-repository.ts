@@ -6,7 +6,6 @@ import {
   buildScheduledTaskOutboxPayload,
   commandType,
   parseScheduledTaskOutboxPayload,
-  scheduledTaskOutboxId,
   scheduledTaskOutboxTaskFromPayload,
   type ScheduledTaskOutboxCommand,
   type ScheduledTaskOutboxLease,
@@ -25,6 +24,11 @@ import type {
   ScheduledTaskRepository,
 } from "../../application/ports/scheduled-task-repository.js"
 import type { PostgresBffDatabase } from "./client.js"
+import type { StableIdGenerator } from "../../application/ports/stable-id-generator.js"
+import {
+  scheduledTaskOutboxId,
+  Sha256StableIdGenerator,
+} from "../identifiers/scheduled-task-outbox-id.js"
 
 type ScheduledTaskRow = {
   task_id: string
@@ -135,7 +139,7 @@ function validPositiveInteger(value: number, name: string): number {
   return value
 }
 
-function commandLineageMatches(row: ScheduledTaskOutboxRow, payload: ScheduledTaskOutboxPayload): boolean {
+function commandLineageMatches(row: ScheduledTaskOutboxRow, payload: ScheduledTaskOutboxPayload, stableIdGenerator: StableIdGenerator): boolean {
   const operation = row.command_type === "scheduler.register"
     ? "register"
     : row.command_type === "scheduler.replace"
@@ -151,15 +155,15 @@ function commandLineageMatches(row: ScheduledTaskOutboxRow, payload: ScheduledTa
     && payload.lineage.idempotency_key === row.idempotency_key
     && payload.task.task_id === row.task_id
     && payload.task.revision === safeInteger(row.aggregate_revision, "SCHEDULED_TASK_OUTBOX_REVISION")
-    && scheduledTaskOutboxId(row.tenant_id, row.task_id, operation, row.idempotency_key) === row.outbox_id
+    && scheduledTaskOutboxId(row.tenant_id, row.task_id, operation, row.idempotency_key, stableIdGenerator) === row.outbox_id
 }
 
-function claimedCommandFromRow(row: ScheduledTaskOutboxRow): ScheduledTaskOutboxCommand {
+function claimedCommandFromRow(row: ScheduledTaskOutboxRow, stableIdGenerator: StableIdGenerator): ScheduledTaskOutboxCommand {
   if (row.status !== "leased" || row.lease_owner === null || row.lease_token === null || row.lease_until === null) {
     throw new Error("SCHEDULED_TASK_OUTBOX_LEASE_INVALID")
   }
   const payload = parseScheduledTaskOutboxPayload(row.payload)
-  if (!commandLineageMatches(row, payload)) throw new Error("SCHEDULED_TASK_OUTBOX_LINEAGE_MISMATCH")
+  if (!commandLineageMatches(row, payload, stableIdGenerator)) throw new Error("SCHEDULED_TASK_OUTBOX_LINEAGE_MISMATCH")
   scheduledTaskOutboxTaskFromPayload(payload.task)
   return {
     outboxId: row.outbox_id,
@@ -183,7 +187,10 @@ function claimedCommandFromRow(row: ScheduledTaskOutboxRow): ScheduledTaskOutbox
 }
 
 export class PostgresScheduledTaskRepository implements ScheduledTaskRepository, ScheduledTaskOutboxRepository {
-  public constructor(private readonly database: PostgresBffDatabase) {}
+  public constructor(
+    private readonly database: PostgresBffDatabase,
+    private readonly stableIdGenerator: StableIdGenerator = new Sha256StableIdGenerator(),
+  ) {}
 
   public async listScheduledTasks(tenantId: string): Promise<ScheduledTaskFact[]> {
     const result = await this.database.pool.query<ScheduledTaskRow>(
@@ -335,7 +342,7 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskRepository,
                 claimed.last_error_code`,
       [now, limit, workerId, randomUUID(), leaseDurationMs],
     )
-    return result.rows.map(claimedCommandFromRow)
+    return result.rows.map((row) => claimedCommandFromRow(row, this.stableIdGenerator))
   }
 
   public async markScheduledTaskOutboxSucceeded(lease: ScheduledTaskOutboxLease, completedAt: Date): Promise<boolean> {
@@ -461,7 +468,7 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskRepository,
        VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, 'pending', 0, CURRENT_TIMESTAMP(3), 0)
        `,
       [
-        scheduledTaskOutboxId(row.tenant_id, row.task_id, operation, lineage.idempotencyKey),
+        scheduledTaskOutboxId(row.tenant_id, row.task_id, operation, lineage.idempotencyKey, this.stableIdGenerator),
         row.tenant_id,
         row.task_id,
         commandType(operation),

@@ -71,8 +71,8 @@
 - `MockBffStore`、Mori mock 与 mock routes 仍位于生产 `src/` 并编入产物。
 - TypeScript 已显式启用 `useUnknownInCatchVariables`；`exactOptionalPropertyTypes`、`noImplicitReturns`、
   `noUnusedLocals`、`noUnusedParameters` 仍因现有源码错误未启用。
-- 新增 AG-UI 表与本阶段 ScheduledTask/outbox 表已使用 `TIMESTAMPTZ(3)` 与命名 constraint；既有六张表的时间精度、
-  constraint/index 命名，以及 receipt/outbox retention 仍待后续切片处理。
+- canonical schema 中所有瞬时点已统一使用 `TIMESTAMPTZ(3)` 与 `CURRENT_TIMESTAMP(3)`；部分既有 constraint/index
+  命名，以及 receipt/outbox retention 仍待后续切片处理。
 - `ProjectInstructionRevision` 当前仍暴露 `updatedAt`、`actorName` 和 Unix milliseconds；这是已知 wire-naming/
   UTC 违例，需与 runtime mapper、Web consumer 和 OpenAPI 同一切片删除，不能只改文档伪造 snake_case。
 - CI 尚未提供真实 PostgreSQL/Redis service gate、fresh-schema 安装、固定 SHA actions 与完整供应链扫描。
