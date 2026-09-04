@@ -35,8 +35,8 @@ export class ChatApplicationService {
     return this.repository.renameConversation(tenantId, subjectId, conversationId, title, projectRef)
   }
 
-  public deleteConversation(tenantId: string, subjectId: string, conversationId: string, projectRef?: string): ReturnType<ChatRepository["deleteConversation"]> {
-    return this.repository.deleteConversation(tenantId, subjectId, conversationId, projectRef)
+  public deleteConversation(tenantId: string, subjectId: string, conversationId: string, requestId: string, projectRef?: string): ReturnType<ChatRepository["deleteConversation"]> {
+    return this.repository.deleteConversation(tenantId, subjectId, conversationId, requestId, projectRef)
   }
 
   public createShare(tenantId: string, subjectId: string, conversationId: string, projectRef?: string): ReturnType<ChatRepository["createShare"]> {

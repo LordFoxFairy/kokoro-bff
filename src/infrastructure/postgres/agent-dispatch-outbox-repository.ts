@@ -1,8 +1,11 @@
+import { randomUUID } from "node:crypto"
+
 import type {
   AgentDispatchOutboxClaimInput,
   AgentDispatchOutboxRepository,
   CommitChatTurn,
 } from "../../application/ports/agent-dispatch-outbox-repository.js"
+import { agentDispatchFailureProjection } from "../../application/agui/agent-dispatch-failure.js"
 import {
   parseAgentDispatchPayload,
   type AgentDispatchCommand,
@@ -37,6 +40,22 @@ type AgentDispatchRow = {
   lease_until: Date | string | null
   fence: string | number
   lease_remaining_ms?: string | number
+}
+
+type FailedDispatchRow = {
+  outbox_id: string
+  tenant_id: string
+  conversation_id: string
+  conversation_dispatch_seq: string | number
+  run_id: string
+  failed_at: Date | string
+}
+
+type DispatchFailureSettlement = {
+  settled: boolean
+  notificationCursor: string | null
+  tenantId: string | null
+  sessionId: string | null
 }
 
 const AGENT_DISPATCH_COLUMN_NAMES = [
@@ -288,7 +307,7 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
     const queryStartedAt = performance.now()
     try {
       await client.query("BEGIN")
-      await this.failOneExhaustedHead(client, input)
+      const exhausted = await this.failOneExhaustedHead(client, input)
       const result = await client.query<AgentDispatchRow>(
         `WITH candidates AS MATERIALIZED (
            SELECT current.outbox_id
@@ -337,6 +356,13 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
         [input.limit, input.workerId, input.leaseDurationMs, input.maxAttempts],
       )
       await client.query("COMMIT")
+      if (exhausted.notificationCursor !== null && exhausted.tenantId !== null && exhausted.sessionId !== null) {
+        await this.database.notifyAgUiProjection(
+          exhausted.tenantId,
+          exhausted.sessionId,
+          exhausted.notificationCursor,
+        ).catch(() => undefined)
+      }
       const queryElapsedMs = Math.max(0, Math.ceil(performance.now() - queryStartedAt))
       return result.rows.map((row) => claimedAgentDispatch(row, queryElapsedMs))
     } catch (error) {
@@ -347,7 +373,10 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
     }
   }
 
-  private async failOneExhaustedHead(client: PoolClient, input: AgentDispatchOutboxClaimInput): Promise<void> {
+  private async failOneExhaustedHead(
+    client: PoolClient,
+    input: AgentDispatchOutboxClaimInput,
+  ): Promise<DispatchFailureSettlement> {
     const exhausted = await client.query<AgentDispatchRow>(
       `WITH candidate AS MATERIALIZED (
          SELECT current.outbox_id
@@ -392,7 +421,9 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
       [input.maxAttempts, input.workerId, input.leaseDurationMs],
     )
     const row = exhausted.rows[0]
-    if (row === undefined || row.lease_owner === null || row.lease_token === null) return
+    if (row === undefined || row.lease_owner === null || row.lease_token === null) {
+      return { settled: false, notificationCursor: null, tenantId: null, sessionId: null }
+    }
     const settled = await this.markAgentDispatchFailedInTransaction(client, {
       tenantId: row.tenant_id,
       outboxId: row.outbox_id,
@@ -400,7 +431,8 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
       leaseToken: row.lease_token,
       fence: safeInteger(row.fence, "AGENT_DISPATCH_FENCE_INVALID"),
     }, "agent_dispatch_attempts_exhausted")
-    if (!settled) throw new Error("AGENT_DISPATCH_EXHAUSTED_SETTLEMENT_FAILED")
+    if (!settled.settled) throw new Error("AGENT_DISPATCH_EXHAUSTED_SETTLEMENT_FAILED")
+    return settled
   }
 
   public async markAgentDispatchSucceeded(lease: AgentDispatchLease): Promise<boolean> {
@@ -448,7 +480,14 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
       await client.query("BEGIN")
       const settled = await this.markAgentDispatchFailedInTransaction(client, lease, errorCode)
       await client.query("COMMIT")
-      return settled
+      if (settled.notificationCursor !== null && settled.tenantId !== null && settled.sessionId !== null) {
+        await this.database.notifyAgUiProjection(
+          settled.tenantId,
+          settled.sessionId,
+          settled.notificationCursor,
+        ).catch(() => undefined)
+      }
+      return settled.settled
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined)
       throw error
@@ -461,8 +500,8 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
     client: PoolClient,
     lease: AgentDispatchLease,
     errorCode: string,
-  ): Promise<boolean> {
-    const settled = await client.query<{ tenant_id: string; conversation_id: string; run_id: string }>(
+  ): Promise<DispatchFailureSettlement> {
+    const settled = await client.query<FailedDispatchRow>(
       `UPDATE bff_agent_dispatch_outbox
           SET status = 'failed', completed_at = CURRENT_TIMESTAMP(3),
               last_error_code = $6, last_error_at = CURRENT_TIMESTAMP(3),
@@ -470,11 +509,14 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
               updated_at = CURRENT_TIMESTAMP(3)
         WHERE tenant_id = $1 AND outbox_id = $2 AND status = 'leased' AND lease_owner = $3
           AND lease_token = $4 AND fence = $5 AND lease_until > CURRENT_TIMESTAMP(3)
-        RETURNING tenant_id, conversation_id, run_id`,
+        RETURNING outbox_id, tenant_id, conversation_id, conversation_dispatch_seq, run_id,
+                  CURRENT_TIMESTAMP(3) AS failed_at`,
       [lease.tenantId, lease.outboxId, lease.leaseOwner, lease.leaseToken, lease.fence, errorCode],
     )
     const row = settled.rows[0]
-    if (row === undefined) return false
+    if (row === undefined) {
+      return { settled: false, notificationCursor: null, tenantId: null, sessionId: null }
+    }
     await client.query(
       `UPDATE bff_message
           SET status = 'failed', updated_at = CURRENT_TIMESTAMP(3)
@@ -482,7 +524,82 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
           AND role = 'assistant' AND status IN ('pending', 'streaming')`,
       [row.tenant_id, row.conversation_id, row.run_id],
     )
-    return true
+    const stream = await client.query<{ expected_run_id: string | null; next_public_sequence: string }>(
+      `SELECT expected_run_id, next_public_sequence
+         FROM bff_agui_stream
+        WHERE tenant_id = $1 AND session_id = $2
+        FOR UPDATE`,
+      [row.tenant_id, row.conversation_id],
+    )
+    const streamRow = stream.rows[0]
+    if (streamRow === undefined) throw new Error("AGENT_DISPATCH_AGUI_STREAM_MISSING")
+    const projection = agentDispatchFailureProjection({
+      outboxId: row.outbox_id,
+      conversationId: row.conversation_id,
+      conversationDispatchSeq: positiveDecimal(row.conversation_dispatch_seq, "AGENT_DISPATCH_SEQUENCE_INVALID"),
+      runId: row.run_id,
+      errorCode,
+      failedAt: instant(row.failed_at).toISOString(),
+    })
+    const cursor = `agui_${randomUUID().replaceAll("-", "")}`
+    await client.query(
+      `INSERT INTO bff_agui_source_event
+        (tenant_id, session_id, source_owner, source_event_id, source_sequence,
+         source_digest, source_occurred_at)
+       VALUES ($1, $2, $3, $4, $5::bigint, $6, $7::timestamptz)`,
+      [
+        row.tenant_id,
+        row.conversation_id,
+        projection.sourceOwner,
+        projection.sourceEventId,
+        projection.sourceSequence,
+        projection.sourceDigest,
+        projection.sourceOccurredAt,
+      ],
+    )
+    await client.query(
+      `INSERT INTO bff_agui_event
+        (tenant_id, session_id, public_sequence, cursor, source_owner, source_event_id,
+         frame_index, event_type, event_payload, source_occurred_at)
+       VALUES ($1, $2, $3::bigint, $4, $5, $6, 0, $7, $8::jsonb, $9::timestamptz)`,
+      [
+        row.tenant_id,
+        row.conversation_id,
+        streamRow.next_public_sequence,
+        cursor,
+        projection.sourceOwner,
+        projection.sourceEventId,
+        projection.frameType,
+        JSON.stringify(projection.framePayload),
+        projection.sourceOccurredAt,
+      ],
+    )
+    const updated = await client.query(
+      `UPDATE bff_agui_stream
+          SET version = version + 1,
+              next_public_sequence = next_public_sequence + 1,
+              latest_run_id = CASE WHEN expected_run_id = $3 THEN $3 ELSE latest_run_id END,
+              terminal_run_id = CASE WHEN expected_run_id = $3 THEN $3 ELSE terminal_run_id END,
+              consumer_state = CASE WHEN expected_run_id = $3 THEN 'stopped' ELSE consumer_state END,
+              consumer_fence = consumer_fence + CASE WHEN expected_run_id = $3 THEN 1 ELSE 0 END,
+              consumer_failure_count = consumer_failure_count + CASE WHEN expected_run_id = $3 THEN 1 ELSE 0 END,
+              consumer_lease_owner = CASE WHEN expected_run_id = $3 THEN NULL ELSE consumer_lease_owner END,
+              consumer_lease_token = CASE WHEN expected_run_id = $3 THEN NULL ELSE consumer_lease_token END,
+              consumer_lease_until = CASE WHEN expected_run_id = $3 THEN NULL ELSE consumer_lease_until END,
+              consumer_last_error_code = CASE WHEN expected_run_id = $3 THEN $4 ELSE consumer_last_error_code END,
+              consumer_last_error_at = CASE WHEN expected_run_id = $3 THEN CURRENT_TIMESTAMP(3) ELSE consumer_last_error_at END,
+              consumer_last_polled_at = CASE WHEN expected_run_id = $3 THEN CURRENT_TIMESTAMP(3) ELSE consumer_last_polled_at END,
+              updated_at = CURRENT_TIMESTAMP(3)
+        WHERE tenant_id = $1 AND session_id = $2`,
+      [row.tenant_id, row.conversation_id, row.run_id, errorCode],
+    )
+    if (updated.rowCount !== 1) throw new Error("AGENT_DISPATCH_AGUI_SETTLEMENT_FAILED")
+    return {
+      settled: true,
+      notificationCursor: cursor,
+      tenantId: row.tenant_id,
+      sessionId: row.conversation_id,
+    }
   }
 
   private assertAgentDispatchLease(lease: AgentDispatchLease): void {

@@ -245,11 +245,13 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
     composition.agUiProjector !== undefined
     || composition.scheduledTaskDispatcher !== undefined
     || composition.agentDispatchDispatcher !== undefined
+    || composition.agentCancellationDispatcher !== undefined
   ) {
     server.once("listening", () => {
       composition.agUiProjector?.start()
       composition.scheduledTaskDispatcher?.start()
       composition.agentDispatchDispatcher?.start()
+      composition.agentCancellationDispatcher?.start()
     })
   }
   server.once("close", () => { void composition.close() })

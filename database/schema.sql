@@ -239,6 +239,74 @@ CREATE INDEX IF NOT EXISTS ix_bff_agent_dispatch_conversation
   ON bff_agent_dispatch_outbox
     (tenant_id, conversation_id, conversation_dispatch_seq ASC, outbox_id ASC);
 
+-- A deleted conversation must compensate every launch that may already have
+-- crossed the Agent boundary. These run.cancel commands are committed in the
+-- deletion transaction and delivered independently from launch settlement.
+CREATE TABLE IF NOT EXISTS bff_agent_cancellation_outbox (
+  cancellation_id TEXT NOT NULL,
+  tenant_id TEXT NOT NULL,
+  conversation_id TEXT NOT NULL,
+  conversation_dispatch_seq BIGINT NOT NULL,
+  run_id TEXT NOT NULL,
+  subject_id TEXT NOT NULL,
+  actor_id TEXT NOT NULL,
+  request_id TEXT NOT NULL,
+  command_id TEXT NOT NULL,
+  identity_assertion_ref TEXT NOT NULL,
+  payload JSONB NOT NULL,
+  status TEXT NOT NULL DEFAULT 'cancel_requested',
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  available_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  lease_owner TEXT,
+  lease_token TEXT,
+  lease_until TIMESTAMPTZ(3),
+  fence BIGINT NOT NULL DEFAULT 0,
+  last_error_code TEXT,
+  last_error_at TIMESTAMPTZ(3),
+  completed_at TIMESTAMPTZ(3),
+  created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT pk_bff_agent_cancellation_outbox PRIMARY KEY (cancellation_id),
+  CONSTRAINT uq_bff_agent_cancellation_command UNIQUE (tenant_id, command_id),
+  CONSTRAINT uq_bff_agent_cancellation_run UNIQUE (tenant_id, run_id),
+  CONSTRAINT ck_bff_agent_cancellation_identity CHECK (
+    length(btrim(tenant_id)) > 0
+    AND length(btrim(conversation_id)) > 0
+    AND length(btrim(run_id)) > 0
+    AND length(btrim(subject_id)) > 0
+    AND length(btrim(actor_id)) > 0
+    AND length(btrim(request_id)) > 0
+    AND length(btrim(command_id)) > 0
+    AND length(btrim(identity_assertion_ref)) > 0
+  ),
+  CONSTRAINT ck_bff_agent_cancellation_sequence CHECK (conversation_dispatch_seq >= 1),
+  CONSTRAINT ck_bff_agent_cancellation_payload CHECK (jsonb_typeof(payload) = 'object'),
+  CONSTRAINT ck_bff_agent_cancellation_status CHECK (
+    status IN ('cancel_requested', 'leased', 'retryable', 'succeeded', 'failed')
+  ),
+  CONSTRAINT ck_bff_agent_cancellation_attempt CHECK (attempt_count >= 0),
+  CONSTRAINT ck_bff_agent_cancellation_fence CHECK (fence >= 0),
+  CONSTRAINT ck_bff_agent_cancellation_lease CHECK (
+    (status = 'leased' AND lease_owner IS NOT NULL AND lease_token IS NOT NULL AND lease_until IS NOT NULL)
+    OR (status <> 'leased' AND lease_owner IS NULL AND lease_token IS NULL AND lease_until IS NULL)
+  ),
+  CONSTRAINT ck_bff_agent_cancellation_completion CHECK (
+    (status IN ('succeeded', 'failed') AND completed_at IS NOT NULL)
+    OR (status NOT IN ('succeeded', 'failed') AND completed_at IS NULL)
+  )
+);
+CREATE INDEX IF NOT EXISTS ix_bff_agent_cancellation_ready
+  ON bff_agent_cancellation_outbox
+    (available_at ASC, tenant_id ASC, conversation_id ASC, conversation_dispatch_seq ASC, cancellation_id ASC)
+  WHERE status IN ('cancel_requested', 'retryable');
+CREATE INDEX IF NOT EXISTS ix_bff_agent_cancellation_lease
+  ON bff_agent_cancellation_outbox
+    (lease_until ASC, tenant_id ASC, conversation_id ASC, conversation_dispatch_seq ASC, cancellation_id ASC)
+  WHERE status = 'leased';
+CREATE INDEX IF NOT EXISTS ix_bff_agent_cancellation_conversation
+  ON bff_agent_cancellation_outbox
+    (tenant_id, conversation_id, conversation_dispatch_seq ASC, cancellation_id ASC);
+
 -- A share is revocable and optionally expires. Revoked/expired rows are kept
 -- until the documented retention job removes them; only active, unexpired rows
 -- are public. One active share per tenant/conversation is the business rule.
@@ -331,7 +399,7 @@ CREATE TABLE IF NOT EXISTS bff_agui_source_event (
   projected_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   CONSTRAINT pk_bff_agui_source_event PRIMARY KEY (tenant_id, session_id, source_owner, source_event_id),
   CONSTRAINT uq_bff_agui_source_event_sequence UNIQUE (tenant_id, session_id, source_owner, source_sequence),
-  CONSTRAINT ck_bff_agui_source_event_owner CHECK (source_owner = 'kokoro-agent'),
+  CONSTRAINT ck_bff_agui_source_event_owner CHECK (source_owner IN ('kokoro-agent', 'kokoro-bff')),
   CONSTRAINT ck_bff_agui_source_event_sequence CHECK (source_sequence >= 1),
   CONSTRAINT ck_bff_agui_source_event_digest CHECK (length(source_digest) = 64)
 );
@@ -356,7 +424,7 @@ CREATE TABLE IF NOT EXISTS bff_agui_event (
   CONSTRAINT uq_bff_agui_event_source_frame UNIQUE (tenant_id, session_id, source_owner, source_event_id, frame_index),
   CONSTRAINT ck_bff_agui_event_public_sequence CHECK (public_sequence >= 1),
   CONSTRAINT ck_bff_agui_event_cursor CHECK (length(cursor) BETWEEN 16 AND 160),
-  CONSTRAINT ck_bff_agui_event_source_owner CHECK (source_owner = 'kokoro-agent'),
+  CONSTRAINT ck_bff_agui_event_source_owner CHECK (source_owner IN ('kokoro-agent', 'kokoro-bff')),
   CONSTRAINT ck_bff_agui_event_frame_index CHECK (frame_index >= 0),
   CONSTRAINT ck_bff_agui_event_type CHECK (length(event_type) >= 1),
   CONSTRAINT ck_bff_agui_event_payload CHECK (jsonb_typeof(event_payload) = 'object')

@@ -102,7 +102,7 @@ integrationTest("serves tenant-scoped Chat facts from BFF PostgreSQL and revokes
   const conversationId = `conversation_${Date.now()}`
   let bff
   try {
-    await pool.query("DROP TABLE IF EXISTS bff_share, bff_message, bff_conversation")
+    await pool.query("DROP TABLE IF EXISTS bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation")
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await pool.query(
       `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title)
@@ -264,7 +264,7 @@ integrationTest("accepts a Chat turn after the message and Agent dispatch are du
   let agentAvailable = false
   let launchAttempts = 0
   try {
-    await pool.query("DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_agui_stream, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE")
+    await pool.query("DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE")
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await pool.query(
       `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title)
@@ -433,7 +433,7 @@ integrationTest("reclaims expired Agent dispatch leases and rejects stale or cro
   const conversationId = `conversation_fence_${Date.now()}`
   let store
   try {
-    await pool.query("DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_agui_stream, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE")
+    await pool.query("DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE")
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await pool.query(
       `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title)
@@ -516,7 +516,7 @@ integrationTest("claims Agent launches in persisted conversation FIFO and termin
   const conversationId = `conversation_fifo_${Date.now()}`
   let store
   try {
-    await pool.query("DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_agui_stream, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE")
+    await pool.query("DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE")
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await pool.query(
       `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title)
@@ -584,6 +584,276 @@ integrationTest("claims Agent launches in persisted conversation FIFO and termin
     assert.equal(failedAssistant.rows[0].status, "failed")
   } finally {
     if (store) await store.close()
+    await pool.query("DELETE FROM bff_agent_dispatch_outbox WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_agui_stream WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_message WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_conversation WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+    await pool.end()
+  }
+})
+
+integrationTest("projects fenced dispatch failures as durable RUN_ERROR terminals", async () => {
+  const pool = new Pool({ connectionString: postgresUrl })
+  const tenant = `chat_failure_${Date.now()}`
+  const conversationId = `conversation_failure_${Date.now()}`
+  let store
+  let bff
+  let agent
+  let agentRequests = 0
+  try {
+    await pool.query("DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE")
+    await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+    await pool.query(
+      `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title)
+       VALUES ($1, $2, $3, $4)`,
+      [conversationId, tenant, "chat_user", "Dispatch failure ledger"],
+    )
+    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    await store.ready()
+    const firstReceipt = await store.services.chatTurns.submit({
+      tenantId: tenant,
+      conversationId,
+      subjectId: "chat_user",
+      actorId: "chat_user",
+      requestId: "request_failure_first",
+      idempotencyKey: "failure-first",
+      content: "First failing launch",
+    })
+    assert.ok(firstReceipt)
+    const [first] = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
+      workerId: "worker_failure",
+      limit: 1,
+      leaseDurationMs: 5000,
+      maxAttempts: 8,
+    })
+    assert.ok(first)
+    const secondReceipt = await store.services.chatTurns.submit({
+      tenantId: tenant,
+      conversationId,
+      subjectId: "chat_user",
+      actorId: "chat_user",
+      requestId: "request_failure_second",
+      idempotencyKey: "failure-second",
+      content: "Second failing launch",
+    })
+    assert.ok(secondReceipt)
+
+    assert.equal(await store.agentDispatchOutbox.markAgentDispatchFailed(first, "agent_receipt_invalid"), true)
+    let stream = await pool.query(
+      `SELECT expected_run_id, terminal_run_id, consumer_state
+         FROM bff_agui_stream WHERE tenant_id = $1 AND session_id = $2`,
+      [tenant, conversationId],
+    )
+    assert.deepEqual(stream.rows, [{
+      expected_run_id: secondReceipt.run_id,
+      terminal_run_id: null,
+      consumer_state: "active",
+    }])
+
+    const [second] = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
+      workerId: "worker_failure",
+      limit: 1,
+      leaseDurationMs: 5000,
+      maxAttempts: 8,
+    })
+    assert.ok(second)
+    assert.equal(await store.agentDispatchOutbox.markAgentDispatchFailed(second, "agent_http_400"), true)
+    assert.equal(await store.agentDispatchOutbox.markAgentDispatchFailed(second, "stale_duplicate"), false)
+
+    stream = await pool.query(
+      `SELECT expected_run_id, terminal_run_id, consumer_state, consumer_fence
+         FROM bff_agui_stream WHERE tenant_id = $1 AND session_id = $2`,
+      [tenant, conversationId],
+    )
+    assert.equal(stream.rows[0].expected_run_id, secondReceipt.run_id)
+    assert.equal(stream.rows[0].terminal_run_id, secondReceipt.run_id)
+    assert.equal(stream.rows[0].consumer_state, "stopped")
+    assert.ok(Number(stream.rows[0].consumer_fence) >= 1)
+
+    const failures = await pool.query(
+      `SELECT source.source_owner, source.source_sequence, event.event_type, event.event_payload
+         FROM bff_agui_source_event AS source
+         JOIN bff_agui_event AS event
+           ON event.tenant_id = source.tenant_id
+          AND event.session_id = source.session_id
+          AND event.source_owner = source.source_owner
+          AND event.source_event_id = source.source_event_id
+        WHERE source.tenant_id = $1 AND source.session_id = $2
+        ORDER BY event.public_sequence ASC`,
+      [tenant, conversationId],
+    )
+    assert.deepEqual(failures.rows.map((row) => [row.source_owner, row.source_sequence, row.event_type]), [
+      ["kokoro-bff", "1", "RUN_ERROR"],
+      ["kokoro-bff", "3", "RUN_ERROR"],
+    ])
+    assert.deepEqual(failures.rows.map((row) => row.event_payload.runId), [firstReceipt.run_id, secondReceipt.run_id])
+    assert.deepEqual(failures.rows.map((row) => row.event_payload.code), ["agent_receipt_invalid", "agent_http_400"])
+    const assistants = await pool.query(
+      `SELECT run_id, status FROM bff_message
+        WHERE tenant_id = $1 AND conversation_id = $2 AND role = 'assistant'
+        ORDER BY message_seq ASC`,
+      [tenant, conversationId],
+    )
+    assert.deepEqual(assistants.rows, [
+      { run_id: firstReceipt.run_id, status: "failed" },
+      { run_id: secondReceipt.run_id, status: "failed" },
+    ])
+
+    await store.close()
+    store = undefined
+    agent = createServer((_request, response) => {
+      agentRequests += 1
+      response.writeHead(500, { "content-type": "application/json" })
+      response.end(JSON.stringify({ error: { code: "unexpected", message: "must not poll" } }))
+    })
+    const agentBase = await listen(agent)
+    const runtimeConfig = config()
+    runtimeConfig.agentEnabled = true
+    runtimeConfig.upstreams.agents = agentBase
+    bff = createBffServer(runtimeConfig)
+    const base = await listen(bff)
+    const replay = await fetch(`${base}/v1/sessions/${conversationId}/events`, { headers: auth(tenant, "chat_user") })
+    assert.equal(replay.status, 200)
+    const body = await replay.text()
+    assert.match(body, /"type":"RUN_ERROR"/u)
+    assert.equal(agentRequests, 0)
+  } finally {
+    if (bff) await close(bff)
+    if (agent) await close(agent)
+    if (store) await store.close()
+    await pool.query("DELETE FROM bff_agent_cancellation_outbox WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_agent_dispatch_outbox WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_agui_event WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_agui_source_event WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_agui_stream WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_message WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_conversation WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+    await pool.end()
+  }
+})
+
+integrationTest("deletion atomically fences launches and enqueues durable cancellation for possibly admitted runs", async () => {
+  const pool = new Pool({ connectionString: postgresUrl })
+  const tenant = `chat_delete_${Date.now()}`
+  const conversationId = `conversation_delete_${Date.now()}`
+  let store
+  try {
+    await pool.query("DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE")
+    await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+    await pool.query(
+      `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title)
+       VALUES ($1, $2, $3, $4)`,
+      [conversationId, tenant, "chat_user", "Delete compensation"],
+    )
+    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    await store.ready()
+    for (const suffix of ["admitted", "inflight", "local_only"]) {
+      assert.ok(await store.services.chatTurns.submit({
+        tenantId: tenant,
+        conversationId,
+        subjectId: "chat_user",
+        actorId: "chat_user",
+        requestId: `request_${suffix}`,
+        idempotencyKey: `delete-${suffix}`,
+        content: `Delete ${suffix}`,
+      }))
+    }
+    const [admitted] = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
+      workerId: "worker_delete",
+      limit: 1,
+      leaseDurationMs: 5000,
+      maxAttempts: 8,
+    })
+    assert.ok(admitted)
+    assert.equal(await store.agentDispatchOutbox.markAgentDispatchSucceeded(admitted), true)
+    const [inflight] = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
+      workerId: "worker_delete",
+      limit: 1,
+      leaseDurationMs: 5000,
+      maxAttempts: 8,
+    })
+    assert.ok(inflight)
+
+    assert.equal(await store.services.chat.deleteConversation(
+      tenant,
+      "chat_user",
+      conversationId,
+      "request_delete_conversation",
+    ), true)
+    assert.equal(await store.agentDispatchOutbox.markAgentDispatchSucceeded(inflight), false)
+
+    const dispatch = await pool.query(
+      `SELECT conversation_dispatch_seq, status, fence FROM bff_agent_dispatch_outbox
+        WHERE tenant_id = $1 AND conversation_id = $2 ORDER BY conversation_dispatch_seq ASC`,
+      [tenant, conversationId],
+    )
+    assert.deepEqual(dispatch.rows.map((row) => [row.conversation_dispatch_seq, row.status]), [
+      ["1", "succeeded"],
+      ["3", "failed"],
+      ["5", "failed"],
+    ])
+    assert.ok(Number(dispatch.rows[1].fence) > inflight.fence)
+    const cancellations = await pool.query(
+      `SELECT cancellation_id, command_id, conversation_dispatch_seq, request_id, status, payload
+         FROM bff_agent_cancellation_outbox
+        WHERE tenant_id = $1 AND conversation_id = $2
+        ORDER BY conversation_dispatch_seq ASC`,
+      [tenant, conversationId],
+    )
+    assert.deepEqual(cancellations.rows.map((row) => [row.conversation_dispatch_seq, row.status]), [
+      ["1", "cancel_requested"],
+      ["3", "cancel_requested"],
+    ])
+    assert.ok(cancellations.rows.every((row) => row.cancellation_id === row.command_id))
+    assert.ok(cancellations.rows.every((row) => row.request_id === "request_delete_conversation"))
+    assert.ok(cancellations.rows.every((row) => row.payload.kind === "run.cancel" && row.payload.session_id === conversationId))
+
+    const firstCancel = await store.agentCancellationOutbox.claimAgentCancellationOutbox({
+      workerId: "worker_cancel",
+      limit: 10,
+      leaseDurationMs: 5000,
+      maxAttempts: 8,
+    })
+    assert.equal(firstCancel.length, 1)
+    assert.equal(firstCancel[0].conversationDispatchSeq, "1")
+    assert.equal(await store.agentCancellationOutbox.markAgentCancellationSucceeded({
+      ...firstCancel[0],
+      tenantId: `${tenant}_other`,
+    }), false)
+    assert.equal(await store.agentCancellationOutbox.markAgentCancellationSucceeded(firstCancel[0]), true)
+    const secondCancel = await store.agentCancellationOutbox.claimAgentCancellationOutbox({
+      workerId: "worker_cancel",
+      limit: 10,
+      leaseDurationMs: 5000,
+      maxAttempts: 8,
+    })
+    assert.equal(secondCancel.length, 1)
+    assert.equal(secondCancel[0].conversationDispatchSeq, "3")
+
+    const conversation = await pool.query(
+      "SELECT status FROM bff_conversation WHERE tenant_id = $1 AND conversation_id = $2",
+      [tenant, conversationId],
+    )
+    const assistants = await pool.query(
+      `SELECT status FROM bff_message WHERE tenant_id = $1 AND conversation_id = $2 AND role = 'assistant'`,
+      [tenant, conversationId],
+    )
+    const stream = await pool.query(
+      `SELECT consumer_state, consumer_lease_owner, consumer_lease_token, consumer_lease_until
+         FROM bff_agui_stream WHERE tenant_id = $1 AND session_id = $2`,
+      [tenant, conversationId],
+    )
+    assert.equal(conversation.rows[0].status, "deleted")
+    assert.ok(assistants.rows.every((row) => row.status === "failed"))
+    assert.deepEqual(stream.rows, [{
+      consumer_state: "stopped",
+      consumer_lease_owner: null,
+      consumer_lease_token: null,
+      consumer_lease_until: null,
+    }])
+  } finally {
+    if (store) await store.close()
+    await pool.query("DELETE FROM bff_agent_cancellation_outbox WHERE tenant_id = $1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_agent_dispatch_outbox WHERE tenant_id = $1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_agui_stream WHERE tenant_id = $1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_message WHERE tenant_id = $1", [tenant]).catch(() => undefined)

@@ -186,7 +186,13 @@ export async function liveChatBusiness(
     }
 
     if (businessPath.length === 2 && method === "DELETE") {
-      const deleted = await chat.deleteConversation(tenantId, subjectId, conversationId, projectRef(request))
+      const deleted = await chat.deleteConversation(
+        tenantId,
+        subjectId,
+        conversationId,
+        context.requestId,
+        projectRef(request),
+      )
       await reply(response, deleted ? 200 : 404, deleted ? ok({ status: "deleted" }, context.requestId) : failure("session_not_found", "Session was not found", context.requestId), context, idempotency, mutation)
       return true
     }

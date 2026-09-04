@@ -275,9 +275,13 @@ test("Chat admission commits messages, AG-UI lineage, and Agent delivery before 
   assert.match(dispatcher, /limit: 1/u)
   assert.match(runtime, /AgentDispatchOutboxDispatcher/u)
   assert.match(runtime, /AgentOutboxDelivery/u)
+  assert.match(runtime, /AgentCancellationOutboxDispatcher/u)
+  assert.match(runtime, /AgentCancellationDelivery/u)
   assert.match(schema, /CREATE TABLE IF NOT EXISTS bff_agent_dispatch_outbox/u)
   assert.match(schema, /uq_bff_agent_dispatch_business/u)
   assert.match(schema, /ck_bff_agent_dispatch_lease/u)
+  assert.match(schema, /CREATE TABLE IF NOT EXISTS bff_agent_cancellation_outbox/u)
+  assert.match(schema, /source_owner IN \('kokoro-agent', 'kokoro-bff'\)/u)
 })
 
 test("BFF Chat facts keep owner predicates and isolate public share capability reads", async () => {

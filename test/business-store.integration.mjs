@@ -114,7 +114,7 @@ integrationTest("persists BFF facts, registers Scheduler, and replays Agent disp
   let agentBase
   let bff
   try {
-    await schemaPool.query("DROP TABLE IF EXISTS bff_agui_event, bff_agui_source_event, bff_agui_stream, bff_scheduled_task_outbox, bff_scheduled_task, bff_project_task, bff_idempotency_receipt, bff_project_instruction_revision, bff_project_skill, bff_project CASCADE")
+    await schemaPool.query("DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_scheduled_task_outbox, bff_scheduled_task, bff_project_task, bff_idempotency_receipt, bff_project_instruction_revision, bff_project_skill, bff_project CASCADE")
     await schemaPool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await redis.connect()
 

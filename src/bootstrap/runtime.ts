@@ -8,8 +8,10 @@ import type { IdempotencyEntry, MutationTicket } from "../application/idempotenc
 import type { BffBusinessStore } from "../application/ports/bff-business-store.js"
 import { ScheduledTaskOutboxDispatcher } from "../application/scheduled-task-outbox-dispatcher.js"
 import { AgentDispatchOutboxDispatcher } from "../application/agent-dispatch-outbox-dispatcher.js"
+import { AgentCancellationOutboxDispatcher } from "../application/agent-cancellation-outbox-dispatcher.js"
 import { SchedulerOutboxDelivery } from "../infrastructure/clients/scheduler/outbox-delivery.js"
 import { AgentOutboxDelivery } from "../infrastructure/clients/agent/outbox-delivery.js"
+import { AgentCancellationDelivery } from "../infrastructure/clients/agent/cancellation-delivery.js"
 import { AgentAgUiSourceReader } from "../infrastructure/clients/agent/projector-source.js"
 import { PostgresBffRepositories } from "../infrastructure/postgres/repositories.js"
 import type { RequestContext } from "../domain/request-context.js"
@@ -35,6 +37,7 @@ export type BffServerComposition = {
   agUiProjector?: AgUiProjectorRunner
   scheduledTaskDispatcher?: ScheduledTaskOutboxDispatcher
   agentDispatchDispatcher?: AgentDispatchOutboxDispatcher
+  agentCancellationDispatcher?: AgentCancellationOutboxDispatcher
   readiness: () => Promise<void>
   close: () => Promise<void>
   routeHandler?: BffRouteHandler
@@ -52,6 +55,7 @@ export type BffCompositionOptions = {
   agUiProjector?: AgUiProjectorRunner
   scheduledTaskDispatcher?: ScheduledTaskOutboxDispatcher
   agentDispatchDispatcher?: AgentDispatchOutboxDispatcher
+  agentCancellationDispatcher?: AgentCancellationOutboxDispatcher
   readiness?: () => Promise<void>
   close?: () => Promise<void>
   routeHandler?: BffRouteHandler
@@ -109,6 +113,17 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
         { workerId: `bff-agent-outbox-${process.pid}-${randomUUID()}` },
       )
   )
+  const agentCancellationDispatcher = options.agentCancellationDispatcher ?? (
+    !config.agentEnabled
+      || config.upstreams.agents === null
+      || businessStore?.agentCancellationOutbox === undefined
+      ? undefined
+      : new AgentCancellationOutboxDispatcher(
+        businessStore.agentCancellationOutbox,
+        new AgentCancellationDelivery(config),
+        { workerId: `bff-agent-cancellation-${process.pid}-${randomUUID()}` },
+      )
+  )
   const agentBaseUrl = config.upstreams.agents ?? null
   const agUiProjector = options.agUiProjector ?? (
     config.agentEnabled && agentBaseUrl !== null && businessStore?.agUiConsumers !== undefined
@@ -147,6 +162,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
       // Stop claimers first; stop() drains in-flight source reads and outbox
       // deliveries before their shared persistence connections are closed.
       await agUiProjector?.stop()
+      await agentCancellationDispatcher?.stop()
       await agentDispatchDispatcher?.stop()
       await scheduledTaskDispatcher?.stop()
       await closeStore()
@@ -160,6 +176,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     ...(agUiProjector === undefined ? {} : { agUiProjector }),
     ...(scheduledTaskDispatcher === undefined ? {} : { scheduledTaskDispatcher }),
     ...(agentDispatchDispatcher === undefined ? {} : { agentDispatchDispatcher }),
+    ...(agentCancellationDispatcher === undefined ? {} : { agentCancellationDispatcher }),
     readiness,
     close,
     ...(options.routeHandler === undefined ? {} : { routeHandler: options.routeHandler }),

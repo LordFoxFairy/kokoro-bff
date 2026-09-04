@@ -5,6 +5,7 @@ import { PostgresScheduledTaskRepository } from "./scheduled-task-repository.js"
 import { PostgresChatRepository } from "./chat-repository.js"
 import { PostgresPublicShareRepository } from "./public-share-repository.js"
 import { PostgresAgentDispatchOutboxRepository } from "./agent-dispatch-outbox-repository.js"
+import { PostgresAgentCancellationOutboxRepository } from "./agent-cancellation-outbox-repository.js"
 import { PENDING_RECEIPT_STATUS, type PersistentReceipt, type ReceiptClaim } from "../../application/ports/idempotency-repository.js"
 import type { IdempotencyRepository } from "../../application/ports/idempotency-repository.js"
 import type { ProjectRepository } from "../../application/ports/project-repository.js"
@@ -16,6 +17,7 @@ import { PostgresAgUiProjectionRepository } from "./agui-projection-repository.j
 import { PostgresAgUiConsumerRepository } from "./agui-consumer-repository.js"
 import type { AgUiProjectionConsumerRepository } from "../../application/agui/ports/agui-projection-repository.js"
 import type { AgentDispatchOutboxRepository } from "../../application/ports/agent-dispatch-outbox-repository.js"
+import type { AgentCancellationOutboxRepository } from "../../application/ports/agent-cancellation-outbox-repository.js"
 import { Sha256StableIdGenerator } from "../identifiers/scheduled-task-outbox-id.js"
 
 export { PENDING_RECEIPT_STATUS }
@@ -32,6 +34,7 @@ export class PostgresBffRepositories {
   public readonly agUiConsumers: AgUiProjectionConsumerRepository
   public readonly scheduledTaskOutbox: ScheduledTaskOutboxRepository
   public readonly agentDispatchOutbox: AgentDispatchOutboxRepository
+  public readonly agentCancellationOutbox: AgentCancellationOutboxRepository
 
   public constructor(postgresUrl: string, redisUrl: string) {
     this.database = new PostgresBffDatabase(postgresUrl, redisUrl)
@@ -41,9 +44,11 @@ export class PostgresBffRepositories {
     const chat = new PostgresChatRepository(this.database)
     const publicShares = new PostgresPublicShareRepository(this.database)
     const agentDispatchOutbox = new PostgresAgentDispatchOutboxRepository(this.database)
+    const agentCancellationOutbox = new PostgresAgentCancellationOutboxRepository(this.database)
     this.scheduled = scheduled
     this.scheduledTaskOutbox = scheduled
     this.agentDispatchOutbox = agentDispatchOutbox
+    this.agentCancellationOutbox = agentCancellationOutbox
     this.services = new BffApplicationServices(
       this.projects,
       this.scheduled,

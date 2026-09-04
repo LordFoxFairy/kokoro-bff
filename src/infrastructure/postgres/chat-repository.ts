@@ -110,7 +110,14 @@ export class PostgresChatRepository implements ChatRepository {
     return row === undefined ? null : conversationFromRow(row)
   }
 
-  public async deleteConversation(tenantId: string, subjectId: string, conversationId: string, projectRef?: string): Promise<boolean> {
+  public async deleteConversation(
+    tenantId: string,
+    subjectId: string,
+    conversationId: string,
+    requestId: string,
+    projectRef?: string,
+  ): Promise<boolean> {
+    if (requestId.trim() === "") throw new Error("CHAT_DELETE_REQUEST_ID_REQUIRED")
     const client = await this.database.pool.connect()
     try {
       await client.query("BEGIN")
@@ -147,6 +154,31 @@ export class PostgresChatRepository implements ChatRepository {
                 updated_at = CURRENT_TIMESTAMP(3)
           WHERE tenant_id = $1 AND session_id = $3 AND consumer_subject_id = $2`,
         [tenantId, subjectId, conversationId],
+      )
+      await client.query(
+        `INSERT INTO bff_agent_cancellation_outbox
+          (cancellation_id, tenant_id, conversation_id, conversation_dispatch_seq, run_id,
+           subject_id, actor_id, request_id, command_id, identity_assertion_ref, payload,
+           status, attempt_count, available_at, fence)
+         SELECT 'cancel_' || dispatch.outbox_id,
+                dispatch.tenant_id,
+                dispatch.conversation_id,
+                dispatch.conversation_dispatch_seq,
+                dispatch.run_id,
+                dispatch.subject_id,
+                $2,
+                $4,
+                'cancel_' || dispatch.outbox_id,
+                dispatch.identity_assertion_ref,
+                jsonb_build_object('kind', 'run.cancel', 'session_id', dispatch.conversation_id),
+                'cancel_requested', 0, CURRENT_TIMESTAMP(3), 0
+           FROM bff_agent_dispatch_outbox AS dispatch
+          WHERE dispatch.tenant_id = $1
+            AND dispatch.subject_id = $2
+            AND dispatch.conversation_id = $3
+            AND dispatch.attempt_count > 0
+         ON CONFLICT (tenant_id, run_id) DO NOTHING`,
+        [tenantId, subjectId, conversationId, requestId],
       )
       await client.query(
         `UPDATE bff_agent_dispatch_outbox

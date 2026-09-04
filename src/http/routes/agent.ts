@@ -140,13 +140,12 @@ async function durableAgentEventStream(
       return
     }
     if (initial.state === "stopped") return
-    if (initial.state === "terminal" && !sourceProjectionActive) {
+    if (initial.state === "terminal") {
       startAgUiStream(response, context.requestId)
       response.end()
       return
     }
     const initialStatus = await projection.status(tenantId, sessionId)
-    const initialPollCompletion = initialStatus.consumerLastPolledAt
     if (initialStatus.consumerState === "blocked") {
       const code = initialStatus.consumerLastErrorCode ?? "projection_blocked"
       if (!streamStarted) {
@@ -181,8 +180,7 @@ async function durableAgentEventStream(
       if (status.consumerState === "blocked") {
         break
       }
-      const sourceWasObserved = drained.wroteFrames || status.consumerLastPolledAt !== initialPollCompletion
-      if (drained.state === "terminal" && sourceWasObserved) {
+      if (drained.state === "terminal") {
         response.end()
         return
       }

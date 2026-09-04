@@ -21,6 +21,8 @@ const TABLES = [
   "bff_agui_event",
   "bff_agui_source_event",
   "bff_agui_stream",
+  "bff_agent_cancellation_outbox",
+  "bff_agent_dispatch_outbox",
   "bff_message",
   "bff_conversation",
   "bff_scheduled_task",
