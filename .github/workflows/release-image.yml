@@ -1,49 +1,240 @@
-name: Release image
+name: Publish BFF image
 
 on:
   push:
-    tags: ['v*.*.*']
+    tags:
+      - "v*.*.*"
 
 jobs:
   verify:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    services:
+      postgres:
+        image: postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
+        env:
+          POSTGRES_DB: kokoro_worker_bff
+          POSTGRES_USER: kokoro
+          POSTGRES_PASSWORD: kokoro_ci
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd="pg_isready -U kokoro -d kokoro_worker_bff"
+          --health-interval=2s
+          --health-timeout=3s
+          --health-retries=30
+      redis:
+        image: redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
+        ports:
+          - 56379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=2s
+          --health-timeout=2s
+          --health-retries=15
+    env:
+      KOKORO_BFF_POSTGRES_URL: postgresql://kokoro:kokoro_ci@127.0.0.1:55432/kokoro_worker_bff
+      KOKORO_TEST_POSTGRES_URL: postgresql://kokoro:kokoro_ci@127.0.0.1:55432/kokoro_worker_bff
+      KOKORO_BFF_REDIS_URL: redis://127.0.0.1:56379/8
+      KOKORO_TEST_REDIS_URL: redis://127.0.0.1:56379/8
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Set up pnpm
+        uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
         with:
-          version: 11.2.2
-      - uses: actions/setup-node@v4
+          version: 11.25.0
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm check
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Scan dependencies, source configuration, and secrets
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,misconfig,secret
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: Install canonical PostgreSQL schema
+        run: pnpm db:apply-schema
+      - name: Run schema governance tests
+        run: pnpm schema:check
+      - name: Run lint
+        run: pnpm lint
+      - name: Run typecheck
+        run: pnpm typecheck
+      - name: Check public contract
+        run: pnpm contract:check
+      - name: Run unit and architecture tests
+        run: pnpm test
+      - name: Run real PostgreSQL and Redis integration tests
+        run: pnpm test:integration
+      - name: Build production image
+        run: docker build --tag kokoro-bff:release-verify .
 
-  image:
+  publish:
     needs: verify
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+      id-token: write
+    services:
+      postgres:
+        image: postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
+        env:
+          POSTGRES_DB: kokoro_worker_bff
+          POSTGRES_USER: kokoro
+          POSTGRES_PASSWORD: kokoro_ci
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd="pg_isready -U kokoro -d kokoro_worker_bff"
+          --health-interval=2s
+          --health-timeout=3s
+          --health-retries=30
+      redis:
+        image: redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
+        ports:
+          - 56379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=2s
+          --health-timeout=2s
+          --health-retries=15
+    env:
+      REGISTRY: ghcr.io
+      IMAGE_NAME: ghcr.io/${{ github.repository }}
+      CANDIDATE_IMAGE: kokoro-bff-release-candidate:${{ github.sha }}
+      KOKORO_BFF_POSTGRES_URL: postgresql://kokoro:kokoro_ci@127.0.0.1:55432/kokoro_worker_bff
+      KOKORO_BFF_REDIS_URL: redis://127.0.0.1:56379/8
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/login-action@v3
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Set up pnpm
+        uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
+        with:
+          version: 11.25.0
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies for candidate schema setup
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Install canonical PostgreSQL schema for candidate smoke
+        run: pnpm db:apply-schema
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+      - name: Generate image metadata
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=raw,value=latest
+            type=raw,value=sha-${{ github.sha }}
+      - name: Build local release candidate
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: ${{ env.CANDIDATE_IMAGE }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Scan release candidate image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.CANDIDATE_IMAGE }}
+          scan-type: image
+          scanners: vuln
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: Smoke candidate image health and readiness
+        shell: bash
+        env:
+          KOKORO_BFF_HOST: 0.0.0.0
+          KOKORO_BFF_PORT: "4300"
+          KOKORO_BFF_MODE: live
+          KOKORO_DOMAIN: release.kokoro.localhost
+          KOKORO_TENANT_ID: tenant_release
+          KOKORO_BFF_SHARED_SECRET: release-fixture-bff-secret
+          KOKORO_INTERNAL_SECRET_BFF: release-fixture-upstream-secret
+          KOKORO_AGENT_ENABLED: "0"
+        run: |
+          set -euo pipefail
+          cleanup() { docker rm --force kokoro-bff-release-candidate >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          docker run --detach --name kokoro-bff-release-candidate --network host \
+            --env KOKORO_BFF_HOST \
+            --env KOKORO_BFF_PORT \
+            --env KOKORO_BFF_MODE \
+            --env KOKORO_DOMAIN \
+            --env KOKORO_TENANT_ID \
+            --env KOKORO_BFF_SHARED_SECRET \
+            --env KOKORO_INTERNAL_SECRET_BFF \
+            --env KOKORO_AGENT_ENABLED \
+            --env KOKORO_BFF_POSTGRES_URL \
+            --env KOKORO_BFF_REDIS_URL \
+            "${CANDIDATE_IMAGE}"
+          health=starting
+          for attempt in $(seq 1 30); do
+            if ! docker inspect --format='{{.State.Running}}' kokoro-bff-release-candidate 2>/dev/null | grep -qx true; then
+              docker logs kokoro-bff-release-candidate || true
+              exit 1
+            fi
+            health=$(docker inspect --format='{{.State.Health.Status}}' kokoro-bff-release-candidate 2>/dev/null || true)
+            if [ "${health}" = healthy ]; then
+              break
+            fi
+            if [ "${health}" = unhealthy ]; then
+              docker logs kokoro-bff-release-candidate
+              exit 1
+            fi
+            sleep 1
+          done
+          [ "${health}" = healthy ]
+          curl --fail --silent --show-error http://127.0.0.1:4300/healthz >/dev/null
+          curl --fail --silent --show-error http://127.0.0.1:4300/readyz >/dev/null
+      - name: Clean candidate container
+        if: always()
+        run: docker rm --force kokoro-bff-release-candidate >/dev/null 2>&1 || true
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/metadata-action@v5
-        id: meta
-        with:
-          images: ghcr.io/${{ github.repository }}
-          tags: |
-            type=ref,event=tag
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
-      - uses: docker/build-push-action@v6
+      - name: Build and push production image with SBOM and provenance
+        id: push
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
         with:
           context: .
+          file: ./Dockerfile
           push: true
+          platforms: linux/amd64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          sbom: true
+          provenance: mode=max
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Sign immutable image digest
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: cosign sign --yes "${IMAGE_NAME}@${DIGEST}"

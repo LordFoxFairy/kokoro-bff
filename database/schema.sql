@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS bff_project (
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-CREATE UNIQUE INDEX IF NOT EXISTS bff_project_tenant_slug_idx ON bff_project (tenant_id, slug);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_bff_project_tenant_slug ON bff_project (tenant_id, slug);
 
 CREATE TABLE IF NOT EXISTS bff_project_instruction_revision (
   revision_id TEXT PRIMARY KEY,
@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS bff_project_instruction_revision (
   current BOOLEAN NOT NULL DEFAULT false,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX IF NOT EXISTS bff_project_instruction_revision_idx
+CREATE INDEX IF NOT EXISTS ix_bff_project_instruction_revision
   ON bff_project_instruction_revision (tenant_id, project_id, updated_at DESC);
 
 CREATE TABLE IF NOT EXISTS bff_project_skill (
@@ -39,10 +39,10 @@ CREATE TABLE IF NOT EXISTS bff_project_task (
   tenant_id TEXT NOT NULL,
   project_id TEXT NOT NULL,
   title TEXT NOT NULL,
-  status TEXT NOT NULL CHECK (status IN ('todo', 'in_progress', 'done')),
+  status TEXT NOT NULL CONSTRAINT ck_bff_project_task_status CHECK (status IN ('todo', 'in_progress', 'done')),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX IF NOT EXISTS bff_project_task_tenant_project_idx
+CREATE INDEX IF NOT EXISTS ix_bff_project_task_tenant_project
   ON bff_project_task (tenant_id, project_id, updated_at DESC, task_id ASC);
 
 CREATE TABLE IF NOT EXISTS bff_scheduled_task (
@@ -52,18 +52,18 @@ CREATE TABLE IF NOT EXISTS bff_scheduled_task (
   owner_id TEXT NOT NULL,
   title TEXT NOT NULL,
   prompt TEXT NOT NULL,
-  frequency TEXT NOT NULL CHECK (frequency IN ('daily', 'weekly')),
+  frequency TEXT NOT NULL CONSTRAINT ck_bff_scheduled_task_frequency CHECK (frequency IN ('daily', 'weekly')),
   task_time TEXT NOT NULL,
   timezone TEXT NOT NULL,
   next_run_at TIMESTAMPTZ NOT NULL,
   expires_at TIMESTAMPTZ,
   auto_approve BOOLEAN NOT NULL DEFAULT false,
   enabled BOOLEAN NOT NULL DEFAULT true,
-  status TEXT NOT NULL CHECK (status IN ('active', 'paused', 'failed')),
+  status TEXT NOT NULL CONSTRAINT ck_bff_scheduled_task_status CHECK (status IN ('active', 'paused', 'failed')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX IF NOT EXISTS bff_scheduled_task_tenant_idx ON bff_scheduled_task (tenant_id, created_at ASC);
+CREATE INDEX IF NOT EXISTS ix_bff_scheduled_task_tenant ON bff_scheduled_task (tenant_id, created_at ASC);
 
 CREATE TABLE IF NOT EXISTS bff_idempotency_receipt (
   scope TEXT PRIMARY KEY,

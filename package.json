@@ -12,6 +12,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/main.js",
     "db:apply-schema": "node scripts/apply-schema.mjs",
+    "schema:check": "node --test test/schema-governance.test.mjs",
     "lint": "node scripts/lint-source.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "contract:lint": "redocly lint contract/openapi/v1/openapi.yaml",
