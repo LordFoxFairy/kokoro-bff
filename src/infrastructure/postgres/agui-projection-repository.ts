@@ -220,10 +220,15 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
           LIMIT $4`,
         [tenantId, sessionId, afterSequence, limit],
       ),
-      this.database.pool.query<{ head_sequence: string }>(
-        `SELECT next_public_sequence - 1 AS head_sequence
-           FROM bff_agui_stream
-          WHERE tenant_id = $1 AND session_id = $2`,
+      this.database.pool.query<{ head_sequence: string; head_event_type: string | null }>(
+        `SELECT stream.next_public_sequence - 1 AS head_sequence,
+                (SELECT event.event_type
+                   FROM bff_agui_event AS event
+                  WHERE event.tenant_id = stream.tenant_id AND event.session_id = stream.session_id
+                  ORDER BY event.public_sequence DESC
+                  LIMIT 1) AS head_event_type
+           FROM bff_agui_stream AS stream
+          WHERE stream.tenant_id = $1 AND stream.session_id = $2`,
         [tenantId, sessionId],
       ),
     ])
@@ -232,7 +237,12 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
     const headSequence = streamResult.rows[0] === undefined
       ? 0
       : safeInteger(streamResult.rows[0].head_sequence, "head sequence")
-    return { kind: "page" as const, frames, atHead: deliveredSequence >= headSequence }
+    return {
+      kind: "page" as const,
+      frames,
+      atHead: deliveredSequence >= headSequence,
+      headEventType: streamResult.rows[0]?.head_event_type ?? null,
+    }
   }
 
   public async status(tenantId: string, sessionId: string) {

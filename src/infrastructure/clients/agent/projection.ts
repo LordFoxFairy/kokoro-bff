@@ -143,6 +143,53 @@ export function mapAgentEvent(event: AgentChatEvent): ChatEvent | null {
   }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function agentEvent(value: unknown, expectedSessionId: string): AgentChatEvent | null {
+  if (!isRecord(value)) return null
+  const chatEventId = value.chat_event_id
+  const sessionId = value.session_id
+  const runId = value.run_id
+  const eventType = value.event_type
+  const payloadJson = value.payload_json
+  const sequence = value.seq
+  const createdAt = value.created_at
+  const chatMessageId = value.chat_message_id
+  if (
+    typeof chatEventId !== "string" || chatEventId.trim() === ""
+    || sessionId !== expectedSessionId
+    || typeof runId !== "string" || runId.trim() === ""
+    || typeof eventType !== "string" || eventType.trim() === ""
+    || typeof payloadJson !== "string"
+    || typeof sequence !== "number" || !Number.isSafeInteger(sequence) || sequence < 1
+    || typeof createdAt !== "number" || !Number.isFinite(createdAt)
+    || (chatMessageId !== undefined && chatMessageId !== null && (typeof chatMessageId !== "string" || chatMessageId.trim() === ""))
+  ) return null
+  return {
+    chat_event_id: chatEventId,
+    session_id: sessionId,
+    run_id: runId,
+    event_type: eventType,
+    payload_json: payloadJson,
+    seq: sequence,
+    created_at: createdAt,
+    ...(chatMessageId === undefined ? {} : { chat_message_id: typeof chatMessageId === "string" ? chatMessageId : null }),
+  }
+}
+
+export function agentEventList(value: unknown, expectedSessionId: string): AgentChatEvent[] | null {
+  if (!Array.isArray(value)) return null
+  const events: AgentChatEvent[] = []
+  for (const candidate of value) {
+    const parsed = agentEvent(candidate, expectedSessionId)
+    if (parsed === null) return null
+    events.push(parsed)
+  }
+  return events
+}
+
 export function mapAgentMessage(message: AgentChatMessage): ChatMessage {
   return {
     message_id: nonEmptyString(message.chat_message_id, "chat_message_id"),
@@ -159,7 +206,7 @@ export function buildSessionDetail(
   sessionId: string,
   messages: AgentChatMessage[],
   events: AgentChatEvent[],
-  watermark: number,
+  watermark: string | null,
 ): ChatSessionDetail {
   const mappedEvents = events.map(mapAgentEvent).filter((event): event is ChatEvent => event !== null)
   const mappedMessages = messages.map(mapAgentMessage)

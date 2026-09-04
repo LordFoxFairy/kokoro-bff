@@ -3,6 +3,7 @@ import { describe, it } from "node:test"
 import { EventSchemas } from "@ag-ui/core"
 
 import { createAgUiProjectionState, projectChatEvent } from "../dist/application/agui/project-chat-event.js"
+import { agentEventList } from "../dist/infrastructure/clients/agent/projection.js"
 
 const base = {
   event_id: "evt_1",
@@ -53,5 +54,20 @@ describe("AG-UI projection", () => {
     assert.equal(events[0]?.metadata.kokoro.event_id, "evt_1")
     assert.equal(events[0]?.metadata.kokoro.seq, 3)
     for (const event of events) assert.doesNotThrow(() => EventSchemas.parse(event))
+  })
+
+  it("rejects malformed or cross-session Agent source events before persistence", () => {
+    const source = {
+      chat_event_id: "source_1",
+      session_id: "session_other",
+      run_id: "run_1",
+      event_type: "run.started",
+      payload_json: "{}",
+      seq: 1,
+      created_at: 1,
+    }
+    assert.equal(agentEventList([source], "session_1"), null)
+    assert.equal(agentEventList([{ ...source, session_id: "session_1", seq: 1.5 }], "session_1"), null)
+    assert.deepEqual(agentEventList([{ ...source, session_id: "session_1" }], "session_1"), [{ ...source, session_id: "session_1" }])
   })
 })

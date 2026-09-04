@@ -10,7 +10,7 @@ import { headerString, idempotencyKey, isRecord, queryOf, type Context } from ".
 import type { IdempotencyEntry, MutationTicket } from "../../application/idempotency.js"
 import { chatSessionDetailData, chatSessionsData, githubSkillSource, mcpRegisterInput, mockControlReceipt, PLATFORMS, projectData, scheduledData, sessionScope, skillData, taskData } from "./helpers.js"
 import { agUiSseFrame } from "../../interfaces/http/agui/sse.js"
-import { createAgUiProjectionState, projectChatEvent } from "../../application/agui/project-chat-event.js"
+import { mockAgUiFrames } from "../../infrastructure/mock/agui.js"
 import { skillCatalogData, skillPoolData } from "./owner.js"
 import { mockMoriBusiness } from "./mori.js"
 
@@ -87,22 +87,27 @@ export async function mockBusiness(
         payload = failure("session_not_found", "Session was not found", context.requestId)
       } else {
         const session = store.findSession(sessionId, scoped.scope, scoped.projectRef)
-        const lastEventIdHeader = headerString(request.headers["last-event-id"]).trim()
-        const cursor = lastEventIdHeader === "" ? 0 : Number(lastEventIdHeader)
-        const events = session?.events.filter((event) => event.seq > (Number.isFinite(cursor) ? cursor : 0)) ?? []
-        response.writeHead(200, {
-          "content-type": "text/event-stream; charset=utf-8",
-          "cache-control": "no-store",
-          connection: "keep-alive",
-        })
-        if (events.length === 0) {
-          response.end(": keep-alive\n\n")
+        const frames = mockAgUiFrames(session?.events ?? [])
+        const cursorHeader = request.headers["last-event-id"]
+        const cursor = cursorHeader === undefined ? null : headerString(cursorHeader).trim()
+        const cursorIndex = cursor === null ? -1 : frames.findIndex((frame) => frame.cursor === cursor)
+        if (cursor !== null && cursorIndex < 0) {
+          status = 400
+          payload = failure("invalid_event_cursor", "Last-Event-ID is invalid for this session", context.requestId)
+        } else {
+          const replay = frames.slice(cursorIndex + 1)
+          response.writeHead(200, {
+            "content-type": "text/event-stream; charset=utf-8",
+            "cache-control": "no-store",
+            connection: "keep-alive",
+          })
+          if (replay.length === 0) {
+            response.end(": keep-alive\n\n")
+            return
+          }
+          response.end(replay.map((frame) => agUiSseFrame(frame.payload, frame.cursor)).join(""))
           return
         }
-        const projectionState = createAgUiProjectionState()
-        const agUiEvents = events.flatMap((event) => projectChatEvent(event, projectionState))
-        response.end(agUiEvents.map((event) => agUiSseFrame(event, String(event.metadata.kokoro.seq))).join(""))
-        return
       }
     } else if (segments.length === 5 && segments[2] === "runs" && segments[4] === "control" && method === "POST") {
       const control = buildAgentControl(sessionId, json)

@@ -1084,13 +1084,13 @@ describe("kokoro-bff v1 mock contract", () => {
         pending_pauses: unknown[]
         files: unknown[]
         deliveries: unknown[]
-        event_watermark: number
+        event_watermark: string | null
       }
       meta: { request_id: string }
     }
     assert.equal(detailBody.data.session.session_id, sessionId)
     assert.equal(detailBody.data.session.owner_id, "ns_test")
-    assert.equal(detailBody.data.event_watermark, 2)
+    assert.match(detailBody.data.event_watermark ?? "", /^agui_[0-9a-f]{32}$/u)
     assert.equal(detailBody.data.pending_pauses.length, 0)
     assert.equal(detailBody.data.files.length, 0)
     assert.equal(detailBody.data.deliveries.length, 0)
@@ -1128,6 +1128,19 @@ describe("kokoro-bff v1 mock contract", () => {
     const firstEvent = JSON.parse(firstFrameData) as { name: string; value: { owner_id: string } }
     assert.equal(firstEvent.name, "kokoro.session.created")
     assert.equal(firstEvent.value.owner_id, "ns_test")
+    const firstFrameId = frames[0]?.split("\n").find((line) => line.startsWith("id: "))?.slice("id: ".length)
+    assert.match(firstFrameId ?? "", /^agui_[0-9a-f]{32}$/u)
+    const resumedEvents = await fetch(`${base}/v1/sessions/${sessionId}/events`, {
+      headers: { ...headers, "last-event-id": firstFrameId ?? "" },
+    })
+    assert.equal(resumedEvents.status, 200)
+    const resumedFrames = (await resumedEvents.text()).trim().split(/\n\n/u).filter(Boolean)
+    assert.deepEqual(resumedFrames, frames.slice(1))
+    const invalidEventCursor = await fetch(`${base}/v1/sessions/${sessionId}/events`, {
+      headers: { ...headers, "last-event-id": "4" },
+    })
+    assert.equal(invalidEventCursor.status, 400)
+    assert.equal((await invalidEventCursor.json() as { error: { code: string } }).error.code, "invalid_event_cursor")
 
     const control = await fetch(`${base}/v1/sessions/${sessionId}/runs/${messageBody.data.run_id}/control`, {
       method: "POST",
@@ -1168,12 +1181,12 @@ describe("kokoro-bff v1 mock contract", () => {
     })
     assert.equal(publicShare.status, 200)
     const publicShareBody = await publicShare.json() as {
-      data: { session: { session_id: string; title: string; owner_id: string }; pending_pauses: unknown[]; files: unknown[]; deliveries: unknown[]; event_watermark: number }
+      data: { session: { session_id: string; title: string; owner_id: string }; pending_pauses: unknown[]; files: unknown[]; deliveries: unknown[]; event_watermark: string | null }
       meta: { request_id: string }
     }
     assert.equal(publicShareBody.data.session.session_id, sessionId)
     assert.equal(publicShareBody.data.session.owner_id, "ns_test")
-    assert.equal(publicShareBody.data.event_watermark >= 2, true)
+    assert.match(publicShareBody.data.event_watermark ?? "", /^agui_[0-9a-f]{32}$/u)
 
     const revoked = await fetch(`${base}/v1/sessions/${sessionId}/share`, {
       method: "DELETE",
@@ -1196,7 +1209,7 @@ describe("kokoro-bff v1 mock contract", () => {
     assert.equal((await missing.json() as { error: { code: string } }).error.code, "session_not_found")
   })
 
-  it("adapts live Chat launch, replay, detail, and control to the Agent ingress", async () => {
+  it("adapts live Chat launch, message reads, and control while durable reads require the BFF store", async () => {
     const received: Array<{ method: string; url: string; headers: Record<string, string | undefined>; body: Record<string, unknown> }> = []
     const agent = createServer(async (request, response) => {
       const chunks: Buffer[] = []
@@ -1290,19 +1303,12 @@ describe("kokoro-bff v1 mock contract", () => {
     assert.equal(received.filter((item) => item.url === "/v1/runs").length, 1)
 
     const events = await fetch(`${base}/v1/sessions/session-live/events`, { headers: authHeaders() })
-    assert.equal(events.status, 200)
-    const eventFrames = (await events.text()).trim().split("\n\n").filter(Boolean)
-    assert.equal(eventFrames.length, 5)
-    assert.match(eventFrames[0] || "", /"type":"RUN_STARTED"/u)
-    assert.match(eventFrames[1] || "", /"type":"TEXT_MESSAGE_START"/u)
-    assert.match(eventFrames[2] || "", /"type":"TEXT_MESSAGE_CONTENT"/u)
+    assert.equal(events.status, 503)
+    assert.equal((await events.json() as { error: { code: string } }).error.code, "business_store_not_configured")
 
     const detail = await fetch(`${base}/v1/sessions/session-live`, { headers: authHeaders() })
-    assert.equal(detail.status, 200)
-    const detailBody = await detail.json() as { data: { session: { owner_id: string }; messages: unknown[]; event_watermark: number } }
-    assert.equal(detailBody.data.session.owner_id, "ns_test")
-    assert.equal(detailBody.data.messages.length, 1)
-    assert.equal(detailBody.data.event_watermark, 4)
+    assert.equal(detail.status, 503)
+    assert.equal((await detail.json() as { error: { code: string } }).error.code, "business_store_not_configured")
 
     const control = await fetch(`${base}/v1/sessions/session-live/runs/${firstEnvelope.data.run_id}/control`, {
       method: "POST",

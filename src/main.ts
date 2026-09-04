@@ -151,7 +151,7 @@ async function handle(
       return
     }
     if (businessPath[0] === "sessions") {
-      await liveAgentSession(request, response, config, context, businessPath, body, json, mutation, idempotency)
+      await liveAgentSession(request, response, config, context, businessPath, body, json, mutation, idempotency, businessStore?.agUi ?? null)
       return
     }
     if (businessStore !== null && bffOwnedBusinessPath(businessPath)) {

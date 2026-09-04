@@ -20,6 +20,7 @@ import type {
   Task,
   WorkspaceFile,
 } from "../../contracts/index.js"
+import { mockAgUiWatermark } from "./agui.js"
 
 const now = "2026-01-01T00:00:00.000Z"
 const skillPackageSize = 122880
@@ -424,7 +425,7 @@ export class MockBffStore {
       pending_pauses: session.pending_pauses.map((pause) => ({ ...pause })),
       files: session.files.map((file) => ({ ...file })),
       deliveries: session.deliveries.map((delivery) => ({ ...delivery })),
-      event_watermark: session.events.at(-1)?.seq ?? 0,
+      event_watermark: mockAgUiWatermark(session.events),
     }
   }
 

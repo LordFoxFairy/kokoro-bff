@@ -3,15 +3,15 @@ import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config.js"
 import { failure, ok } from "../../contracts/index.js"
 import { proxyUpstream } from "../../upstream.js"
-import { agentIdentityHeaders, buildAgentControl, buildAgentLaunch, buildSessionDetail, mapAgentEvent, type AgentChatEvent, type AgentChatMessage } from "../../infrastructure/clients/agent/index.js"
+import { agentEventList, agentIdentityHeaders, buildAgentControl, buildAgentLaunch, buildSessionDetail, mapAgentEvent, type AgentChatEvent, type AgentChatMessage } from "../../infrastructure/clients/agent/index.js"
 import { agentMessageListData, agentSessionAssertion, agentSessionListData, dataOf, messageCursor } from "../../application/projections.js"
-import type { ChatEvent } from "../../contracts/index.js"
 import { normalizeUpstreamResponse, reply } from "../response.js"
 import { headerString, incomingHeaders, idempotencyKey, queryOf, type Context } from "../request.js"
 import type { IdempotencyEntry, MutationTicket } from "../../application/idempotency.js"
 import { waitForSsePoll } from "./helpers.js"
 import { agUiSseFrame } from "../../interfaces/http/agui/sse.js"
-import { createAgUiProjectionState, projectChatEvent } from "../../application/agui/project-chat-event.js"
+import { AgUiSourceIdentityConflictError } from "../../application/agui/errors.js"
+import type { AgentProjectionSource, AgUiProjectionService } from "../../application/agui/project-session-events.js"
 
 export async function callAgent(
   config: BffConfig,
@@ -47,6 +47,133 @@ function sendAgentFailure(
   reply(response, result.status, result.body, context, idempotency, mutation)
 }
 
+function projectionSources(events: readonly AgentChatEvent[]): AgentProjectionSource[] {
+  return events.map((event) => ({
+    sourceEventId: event.chat_event_id,
+    sourceSequence: event.seq,
+    sourceOccurredAt: new Date(event.created_at).toISOString(),
+    sourcePayload: event,
+    event: mapAgentEvent(event),
+  }))
+}
+
+function startAgUiStream(response: ServerResponse, requestId: string): void {
+  if (response.headersSent) return
+  response.writeHead(200, {
+    "content-type": "text/event-stream; charset=utf-8",
+    "cache-control": "no-store",
+    connection: "keep-alive",
+    "x-kokoro-request-id": requestId,
+  })
+}
+
+function terminalEventType(eventType: string | null): boolean {
+  return eventType === "RUN_FINISHED" || eventType === "RUN_ERROR"
+}
+
+async function durableAgentEventStream(
+  request: IncomingMessage,
+  response: ServerResponse,
+  config: BffConfig,
+  context: Context,
+  sessionId: string,
+  assertion: string,
+  baseUrl: string | null,
+  projection: AgUiProjectionService | null,
+  idempotency: Map<string, IdempotencyEntry>,
+  mutation: MutationTicket | null,
+): Promise<void> {
+  if (projection === null) {
+    reply(response, 503, failure("business_store_not_configured", "BFF AG-UI projection store is not configured", context.requestId), context, idempotency, mutation)
+    return
+  }
+
+  const cursorHeader = request.headers["last-event-id"]
+  let cursor = cursorHeader === undefined ? null : headerString(cursorHeader).trim()
+  let streamStarted = false
+
+  const drainLedger = async (): Promise<"head" | "terminal" | "invalid_cursor"> => {
+    for (;;) {
+      const page = await projection.replay(context.identity.namespace, sessionId, cursor, 1000)
+      if (page.kind === "invalid_cursor") return "invalid_cursor"
+      if (page.frames.length > 0) {
+        startAgUiStream(response, context.requestId)
+        streamStarted = true
+        response.write(page.frames.map((frame) => agUiSseFrame(frame.payload, frame.cursor)).join(""))
+        cursor = page.frames.at(-1)?.cursor ?? cursor
+      }
+      if (!page.atHead) continue
+      return terminalEventType(page.headEventType) ? "terminal" : "head"
+    }
+  }
+
+  try {
+    const initial = await drainLedger()
+    if (initial === "invalid_cursor") {
+      reply(response, 400, failure("invalid_event_cursor", "Last-Event-ID is invalid for this session", context.requestId), context, idempotency, mutation)
+      return
+    }
+    if (initial === "terminal") {
+      startAgUiStream(response, context.requestId)
+      response.end()
+      return
+    }
+    if (!config.agentEnabled || baseUrl === null) {
+      if (!streamStarted) {
+        reply(response, 503, failure("agent_not_configured", "Agent execution is disabled or not configured", context.requestId), context, idempotency, mutation)
+      } else response.end(": source-unavailable\n\n")
+      return
+    }
+
+    for (;;) {
+      const status = await projection.status(context.identity.namespace, sessionId)
+      const result = await callAgent(
+        config,
+        baseUrl,
+        `/v1/sessions/${encodeURIComponent(sessionId)}/events?after_seq=${status.sourceHighWatermark}&limit=1000`,
+        "GET",
+        context.requestId,
+        request,
+        undefined,
+        context,
+        assertion,
+      )
+      if (result.status >= 400) {
+        if (!streamStarted) sendAgentFailure(response, result, context, idempotency, mutation)
+        else response.end(": upstream-error\n\n")
+        return
+      }
+      const data = dataOf(result.body)
+      const events = agentEventList(data?.events, sessionId)
+      if (data === null || events === null) {
+        if (!streamStarted) sendAgentFailure(response, { status: 502, body: failure("upstream_response_invalid", "Agent event replay did not match the v1 contract", context.requestId) }, context, idempotency, mutation)
+        else response.end(": upstream-response-invalid\n\n")
+        return
+      }
+      const ingested = await projection.ingest(context.identity.namespace, sessionId, projectionSources(events))
+      const drained = await drainLedger()
+      if (drained === "terminal") {
+        startAgUiStream(response, context.requestId)
+        response.end()
+        return
+      }
+      if (!streamStarted || ingested.insertedFrames === 0) {
+        startAgUiStream(response, context.requestId)
+        streamStarted = true
+        response.write(": keep-alive\n\n")
+      }
+      if (!await waitForSsePoll(request, response, 1000)) break
+    }
+    if (!response.writableEnded) response.end()
+  } catch (error) {
+    const sourceConflict = error instanceof AgUiSourceIdentityConflictError
+    const code = sourceConflict ? "upstream_event_identity_conflict" : "upstream_response_invalid"
+    const message = sourceConflict ? "Agent reused a durable event identity" : "Agent event projection failed"
+    if (!streamStarted) reply(response, 502, failure(code, message, context.requestId), context, idempotency, mutation)
+    else if (!response.writableEnded) response.end(": upstream-error\n\n")
+  }
+}
+
 export async function liveAgentSession(
   request: IncomingMessage,
   response: ServerResponse,
@@ -57,15 +184,22 @@ export async function liveAgentSession(
   json: Record<string, unknown>,
   mutation: MutationTicket | null,
   idempotency: Map<string, IdempotencyEntry>,
+  agUiProjection: AgUiProjectionService | null,
 ): Promise<boolean> {
   const baseUrl = config.upstreams.agents ?? null
+  const method = request.method || "GET"
+  const sessionId = businessPath[1] || ""
+  const assertion = agentSessionAssertion(context, sessionId)
+
+  if (businessPath.length === 3 && businessPath[2] === "events" && method === "GET") {
+    await durableAgentEventStream(request, response, config, context, sessionId, assertion, baseUrl, agUiProjection, idempotency, mutation)
+    return true
+  }
+
   if (!config.agentEnabled || baseUrl === null) {
     reply(response, 503, failure("agent_not_configured", "Agent execution is disabled or not configured", context.requestId), context, idempotency, mutation)
     return true
   }
-  const method = request.method || "GET"
-  const sessionId = businessPath[1] || ""
-  const assertion = agentSessionAssertion(context, sessionId)
 
   if (businessPath.length === 1 && method === "GET") {
     try {
@@ -193,56 +327,11 @@ export async function liveAgentSession(
     return true
   }
 
-  if (businessPath.length === 3 && businessPath[2] === "events" && method === "GET") {
-    const lastEventId = headerString(request.headers["last-event-id"]).trim()
-    const cursor = lastEventId === "" ? 0 : Number(lastEventId)
-    let afterSeq = Number.isInteger(cursor) && cursor >= 0 ? cursor : 0
-    let streamStarted = false
-    const projectionState = createAgUiProjectionState()
-    try {
-      for (;;) {
-        const result = await callAgent(config, baseUrl, `/v1/sessions/${encodeURIComponent(sessionId)}/events?after_seq=${afterSeq}&limit=1000`, "GET", context.requestId, request, undefined, context, assertion)
-        if (result.status >= 400) {
-          if (!streamStarted) sendAgentFailure(response, result, context, idempotency, mutation)
-          else response.end(": upstream-error\n\n")
-          return true
-        }
-        const data = dataOf(result.body)
-        const rawEvents = Array.isArray(data?.events) ? data.events as AgentChatEvent[] : null
-        if (data === null || rawEvents === null) {
-          if (!streamStarted) sendAgentFailure(response, { status: 502, body: failure("upstream_response_invalid", "Agent event replay did not match the v1 contract", context.requestId) }, context, idempotency, mutation)
-          else response.end(": upstream-response-invalid\n\n")
-          return true
-        }
-        if (!streamStarted) {
-          response.writeHead(200, {
-            "content-type": "text/event-stream; charset=utf-8",
-            "cache-control": "no-store",
-            connection: "keep-alive",
-            "x-kokoro-request-id": context.requestId,
-          })
-          streamStarted = true
-        }
-        const events = rawEvents.map(mapAgentEvent).filter((event): event is ChatEvent => event !== null)
-        const agUiEvents = events.flatMap((event) => projectChatEvent(event, projectionState))
-        if (agUiEvents.length > 0) {
-          response.write(agUiEvents.map((event) => agUiSseFrame(event, String(event.metadata.kokoro.seq))).join(""))
-          afterSeq = Math.max(afterSeq, ...events.map((event) => event.seq))
-        } else {
-          response.write(": keep-alive\n\n")
-        }
-        if (events.some((event) => event.kind === "run.completed" || event.kind === "run.failed")) break
-        if (!await waitForSsePoll(request, response, 1000)) break
-      }
-      if (!response.writableEnded) response.end()
-    } catch {
-      if (!streamStarted) reply(response, 502, failure("upstream_response_invalid", "Agent event projection failed", context.requestId), context, idempotency, mutation)
-      else if (!response.writableEnded) response.end(": upstream-error\n\n")
-    }
-    return true
-  }
-
   if (businessPath.length === 2 && method === "GET") {
+    if (agUiProjection === null) {
+      reply(response, 503, failure("business_store_not_configured", "BFF AG-UI projection store is not configured", context.requestId), context, idempotency, mutation)
+      return true
+    }
     try {
       const [messagesResult, eventsResult] = await Promise.all([
         callAgent(config, baseUrl, `/v1/sessions/${encodeURIComponent(sessionId)}/messages?after_seq=0&limit=1000`, "GET", context.requestId, request, undefined, context, assertion),
@@ -259,13 +348,15 @@ export async function liveAgentSession(
       const messagesData = dataOf(messagesResult.body)
       const eventsData = dataOf(eventsResult.body)
       const messages = Array.isArray(messagesData?.messages) ? messagesData.messages as AgentChatMessage[] : null
-      const events = Array.isArray(eventsData?.events) ? eventsData.events as AgentChatEvent[] : null
-      const watermark = typeof eventsData?.watermark === "number" ? eventsData.watermark : null
-      if (messagesData === null || eventsData === null || messages === null || events === null || watermark === null) {
+      const events = agentEventList(eventsData?.events, sessionId)
+      const sourceWatermark = eventsData?.watermark
+      if (messagesData === null || eventsData === null || messages === null || events === null || typeof sourceWatermark !== "number" || !Number.isSafeInteger(sourceWatermark) || sourceWatermark < 0) {
         sendAgentFailure(response, { status: 502, body: failure("upstream_response_invalid", "Agent session projection did not match the v1 contract", context.requestId) }, context, idempotency, mutation)
         return true
       }
-      reply(response, 200, ok(buildSessionDetail(context.identity, sessionId, messages, events, watermark), context.requestId), context, idempotency, mutation)
+      await agUiProjection.ingest(context.identity.namespace, sessionId, projectionSources(events))
+      const projectionStatus = await agUiProjection.status(context.identity.namespace, sessionId)
+      reply(response, 200, ok(buildSessionDetail(context.identity, sessionId, messages, events, projectionStatus.currentCursor), context.requestId), context, idempotency, mutation)
     } catch {
       reply(response, 502, failure("upstream_response_invalid", "Agent session projection failed", context.requestId), context, idempotency, mutation)
     }

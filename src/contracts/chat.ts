@@ -68,5 +68,5 @@ export type ChatSessionDetail = {
   pending_pauses: Array<Record<string, unknown>>
   files: WorkspaceFile[]
   deliveries: Delivery[]
-  event_watermark: number
+  event_watermark: string | null
 }

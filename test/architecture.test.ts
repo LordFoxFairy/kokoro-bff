@@ -29,12 +29,18 @@ test("BFF keeps contract, application, client, and repository boundaries explici
     "src/application/ports/scheduled-task-repository.ts",
     "src/application/scheduled/input.ts",
     "src/application/mori/input.ts",
+    "src/application/agui/errors.ts",
+    "src/application/agui/project-chat-event.ts",
+    "src/application/agui/project-session-events.ts",
+    "src/application/agui/ports/agui-projection-repository.ts",
     "src/infrastructure/postgres/client.ts",
     "src/infrastructure/postgres/idempotency-repository.ts",
+    "src/infrastructure/postgres/agui-projection-repository.ts",
     "src/infrastructure/postgres/project-repository.ts",
     "src/infrastructure/postgres/scheduled-task-repository.ts",
     "src/infrastructure/postgres/repositories.ts",
     "src/infrastructure/mock/bff-store.ts",
+    "src/infrastructure/mock/agui.ts",
     "src/http/routes/agent.ts",
     "src/http/routes/live-bff.ts",
     "src/http/routes/owner.ts",
@@ -51,7 +57,7 @@ test("BFF keeps contract, application, client, and repository boundaries explici
     "src/infrastructure/clients/mori/owner-route.ts",
     "src/infrastructure/clients/scheduler/job.ts",
     "src/infrastructure/mock/mori-store.ts",
-    "src/interfaces/http/agui/events.ts",
+    "src/interfaces/http/agui/sse.ts",
   ]) {
     assert.equal(await exists(relativePath), true, relativePath)
   }
@@ -62,6 +68,7 @@ test("BFF keeps contract, application, client, and repository boundaries explici
     "src/migrate.ts",
     "src/adapters",
     "src/modules",
+    "src/interfaces/http/agui/events.ts",
   ]) {
     assert.equal(await exists(legacyPath), false, legacyPath)
   }
@@ -93,12 +100,35 @@ test("BFF application ports stay free of infrastructure dependencies", async () 
     "src/application/ports/idempotency-repository.ts",
     "src/application/ports/project-repository.ts",
     "src/application/ports/scheduled-task-repository.ts",
+    "src/application/agui/ports/agui-projection-repository.ts",
   ]) {
     const source = await readFile(path.join(root, relativePath), "utf8")
     assert.equal(source.includes("from \"pg\""), false, relativePath)
     assert.equal(source.includes("infrastructure/"), false, relativePath)
     assert.equal(source.includes("SELECT "), false, relativePath)
   }
+})
+
+test("BFF durable AG-UI persistence is parameterized, tenant/session scoped, and Redis-notification-only", async () => {
+  const [repository, database, route, schema] = await Promise.all([
+    readFile(path.join(root, "src/infrastructure/postgres/agui-projection-repository.ts"), "utf8"),
+    readFile(path.join(root, "src/infrastructure/postgres/client.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/agent.ts"), "utf8"),
+    readFile(path.join(root, "database/schema.sql"), "utf8"),
+  ])
+
+  assert.match(repository, /WHERE tenant_id = \$1 AND session_id = \$2/u)
+  assert.match(repository, /source_high_watermark/u)
+  assert.match(repository, /FOR UPDATE/u)
+  assert.equal(repository.includes("SELECT *"), false)
+  assert.equal(repository.includes("FOREIGN KEY"), false)
+  assert.match(database, /redis\.publish\(/u)
+  assert.equal(/redis\.(?:get|set|xAdd)\([^\n]*agui/iu.test(database), false)
+  assert.match(route, /projection\.ingest/u)
+  assert.match(route, /projection\.replay/u)
+  assert.equal(route.includes("createAgUiProjectionState"), false)
+  assert.match(schema, /uq_bff_agui_event_source_frame/u)
+  assert.equal(/FOREIGN KEY|REFERENCES/iu.test(schema), false)
 })
 
 test("BFF production code has one explicit owner boundary", async () => {
