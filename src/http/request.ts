@@ -51,10 +51,11 @@ function parseMultipartFingerprint(contentType: string, body: Buffer): string | 
     }
     const disposition = headerMap.get("content-disposition") ?? ""
     const nameMatch = /name="([^"]+)"/iu.exec(disposition)
-    if (nameMatch === null || nameMatch[1] === "") return null
+    const fieldName = nameMatch?.[1]
+    if (fieldName === undefined || fieldName === "") return null
     const filenameMatch = /filename="([^"]+)"/iu.exec(disposition)
     parts.push({
-      name: nameMatch[1]!,
+      name: fieldName,
       filename: filenameMatch?.[1] ?? null,
       content_type: headerMap.get("content-type") ?? null,
       body: Buffer.from(content, "latin1").toString("base64"),

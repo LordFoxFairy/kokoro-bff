@@ -123,7 +123,8 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskRepository 
                  next_run_at, expires_at, auto_approve, enabled, status`,
       [tenantId, taskId, input.title ?? current.title, input.prompt ?? current.prompt, input.frequency ?? current.frequency, input.time ?? current.time, input.timezone ?? current.timezone, input.nextRunAt ?? current.next_run_at, input.expiresAt === undefined ? current.expires_at ?? null : input.expiresAt, input.autoApprove ?? current.auto_approve, input.enabled ?? current.enabled, input.status ?? current.status],
     )
-    return scheduledTaskFromRow(result.rows[0]!)
+    const row = result.rows[0]
+    return row === undefined ? null : scheduledTaskFromRow(row)
   }
 
   public async deleteScheduledTask(tenantId: string, taskId: string): Promise<boolean> {

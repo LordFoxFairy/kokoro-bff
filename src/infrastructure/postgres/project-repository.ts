@@ -110,7 +110,9 @@ export class PostgresProjectRepository implements ProjectRepository {
         [projectId, tenantId, name, slug, description],
       )
       await this.database.invalidateProjects(tenantId)
-      return projectFromRow(result.rows[0]!)
+      const row = result.rows[0]
+      if (row === undefined) throw new Error("PROJECT_CREATE_RETURNED_NO_ROW")
+      return projectFromRow(row)
     } catch (error) {
       if (isUniqueViolation(error)) throw new Error("PROJECT_SLUG_CONFLICT")
       throw error
