@@ -106,3 +106,11 @@ Root 在主工作树用 Node 22.22.2 / pnpm 11.25.0 重新运行 lint、typechec
 本切片验证使用 HTTP fixture，不替代真实 System runtime smoke；后者随 System G5/G6 闭环。
 全仓真实 PostgreSQL/Redis、镜像、安全及旧 BFF 架构收敛不以本切片宣称通过。
 未触碰原有未交接 `docs/api/v1/agui-chat.md`、`test/lifecycle.test.ts`。
+
+源码开发入口使用固定 `tsx@4.23.12` 执行 `src/main.ts`，因此保留 TypeScript 源码中的 NodeNext `.js`
+specifier，同时由单一前台进程承接 SIGTERM；`test/source-start.test.mjs` 证明入口先完成模块图加载并抵达配置校验，
+不会因原生 strip-types 无法解析源码 `.js` specifier 而提前退出。
+
+Root G6-dev复验（2026-09-08，基线1e03b87）：Node22.22.2 / pnpm11.25.0，frozen install、lint、typecheck、build、test152/152全通过。
+tsx4.23.12及esbuild0.28.2均MIT/Node>=18；仅显式允许esbuild postinstall，不允许所有依赖脚本。
+本切片修复已实证的源码模块加载失败；完整业务readiness仍由System跨仓live smoke验证。
