@@ -6,7 +6,7 @@
 Browser
   -> kokoro same-origin /api/* adapter
   -> kokoro-bff public /v1 Product API
-  -> IAM / System / Model / Billing / Capability / Storage owner APIs
+  -> IAM / System（含 model-catalog）/ Billing / Capability / Storage owner APIs
   -> kokoro-agent run ingress, control and execution history
   -> kokoro-scheduler generic job and occurrence dispatch
 ```
@@ -169,3 +169,10 @@ provider body、SQL 或 stack。
   due/eligible/expired-lease rows。
 - graceful shutdown 先停止 projector 与两个 dispatcher、等待当前 bounded cycle 并释放仍持有的 lease，再关闭 repository；
   尚无完整 HTTP request drain 或 termination budget。
+
+## System consumer cutover
+
+BFF 的窄 owner adapter 位于 `src/http/routes/owner.ts`，解析与公开投影位于
+`src/application/projections.ts`。runtime manifest 与 model catalog 共用唯一
+`KOKORO_SYSTEM_BASE_URL`；前者调用 `/v1/system/runtime-manifest`，后者调用
+`/v1/system/model-catalog/catalog`。本切片不增加持久化事实、运行层、fallback 或第二套 owner client。

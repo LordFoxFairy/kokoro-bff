@@ -78,6 +78,17 @@ describe("kokoro-bff optional Agent configuration", () => {
     assert.equal(config.upstreamMaxResponseBytes, 4096)
   })
 
+  it("uses System as the sole model-catalog owner upstream", () => {
+    const config = loadConfig({
+      ...runtimeEnv,
+      KOKORO_DOMAIN: "dev.kokoro.localhost",
+      KOKORO_SYSTEM_BASE_URL: "http://kokoro-system:4212",
+      KOKORO_MODEL_BASE_URL: "http://retired-model:4221",
+    })
+    assert.equal(config.upstreams.system, "http://kokoro-system:4212")
+    assert.equal("model" in config.upstreams, false)
+  })
+
   it("loads AG-UI replay and stream budgets from the environment", () => {
     const config = loadConfig({
       ...runtimeEnv,

@@ -128,3 +128,8 @@ AG-UI frame retention、最新 run boundary 保护、retention floor 与 cursor 
 PostgreSQL integration 覆盖。source identity rows 当前作为投影审计事实长期保留，不与 frame 同步删除。仍未声明 receipt TTL/归档、
 Project 删除清理、ScheduledTask tombstone、ScheduledTask outbox 归档和 source identity 的最终保留周期；这些策略必须先
 进入 contract/SLO/runbook 与恢复测试，不能用临时 SQL 直接清表。
+
+## System projection data boundary
+
+System runtime manifest 和 model catalog 均为只读 owner projection，不写入 BFF PostgreSQL，也不新增
+表、缓存事实或 schema。BFF 只在请求生命周期内验证并转换 System wire data；System 仍是这些事实的唯一 writer。

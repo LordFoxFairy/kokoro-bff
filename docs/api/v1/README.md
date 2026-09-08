@@ -139,7 +139,7 @@ BFF 通过显式环境变量选择业务服务：
 | Scheduler / Scheduled | `KOKORO_SCHEDULER_BASE_URL` |
 | Storage / Library | `KOKORO_STORAGE_BASE_URL` |
 | Billing | `KOKORO_BILLING_BASE_URL` |
-| Model | `KOKORO_MODEL_BASE_URL` |
+| Model catalog | `KOKORO_SYSTEM_BASE_URL` |
 | Chat / Agent ingress | `KOKORO_AGENT_BASE_URL` |
 | Mori Music owner | `KOKORO_MUSIC_BASE_URL` |
 

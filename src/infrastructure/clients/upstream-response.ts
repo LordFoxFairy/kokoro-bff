@@ -46,3 +46,39 @@ export function normalizeUpstreamResponse(upstream: UpstreamResponse, requestId:
   }
   return { status: upstream.status, body: ok(parsed, requestId) }
 }
+
+/** Validate the System v2 owner envelope without applying legacy owner compatibility wrapping. */
+export function normalizeSystemUpstreamResponse(upstream: UpstreamResponse, requestId: string): { status: number; body: unknown } {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(upstream.body.toString("utf8"))
+  } catch {
+    return { status: 502, body: failure("upstream_response_invalid", "System returned an invalid JSON envelope", requestId) }
+  }
+  if (!isRecord(parsed)) {
+    return { status: 502, body: failure("upstream_response_invalid", "System returned an invalid response envelope", requestId) }
+  }
+  const rootKeys = Object.keys(parsed)
+  if (upstream.status === 200) {
+    if (rootKeys.length !== 1 || rootKeys[0] !== "data" || !isRecord(parsed.data)) {
+      return { status: 502, body: failure("upstream_response_invalid", "System returned an invalid success envelope", requestId) }
+    }
+    return { status: upstream.status, body: parsed }
+  }
+  if (upstream.status < 400) {
+    return { status: 502, body: failure("upstream_response_invalid", `System returned unexpected HTTP ${upstream.status}`, requestId) }
+  }
+  if (rootKeys.length !== 1 || rootKeys[0] !== "error" || !isRecord(parsed.error)) {
+    return { status: 502, body: failure("upstream_response_invalid", "System returned an invalid error envelope", requestId) }
+  }
+  const errorKeys = Object.keys(parsed.error).sort()
+  if (
+    errorKeys.join(",") !== "code,message,retryable"
+    || typeof parsed.error.code !== "string" || parsed.error.code.trim() === ""
+    || typeof parsed.error.message !== "string"
+    || typeof parsed.error.retryable !== "boolean"
+  ) {
+    return { status: 502, body: failure("upstream_response_invalid", "System returned an invalid error envelope", requestId) }
+  }
+  return { status: upstream.status, body: failure(parsed.error.code, parsed.error.message, requestId) }
+}

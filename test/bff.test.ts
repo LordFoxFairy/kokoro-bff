@@ -40,7 +40,6 @@ function config(overrides: Partial<BffConfig> = {}): BffConfig {
     agUi: DEFAULT_AGUI_CONFIG,
     upstreams: {
       system: null,
-      model: null,
       capability: null,
       storage: null,
       scheduler: null,
@@ -740,19 +739,18 @@ describe("kokoro-bff v1 mock contract", () => {
       response.setHeader("content-type", "application/json")
       response.end(JSON.stringify({
         data: {
-          tenantId: "tenant_manifest",
-          productId: "kokoro",
+          tenant_id: "tenant_manifest",
+          product_id: "kokoro",
           locale: "en-US",
           navigation: [],
-          localeNamespaces: [],
+          locale_namespaces: [],
           theme: {},
-          featureFlags: [],
+          feature_flags: [],
           references: [],
-          configVersion: "1",
-          releaseId: null,
+          config_version: "1",
+          release_id: null,
           digest: "sha256:manifest",
         },
-        meta: { request_id: "manifest-owner" },
       }))
     })
     const upstreamBase = await listen(upstream)
@@ -765,7 +763,7 @@ describe("kokoro-bff v1 mock contract", () => {
     })
     assert.equal(response.status, 200)
     assert.deepEqual(received, {
-      url: "/system/runtime-manifest?product_id=kokoro&locale=en-US&surface_id=user-web",
+      url: "/v1/system/runtime-manifest?product_id=kokoro&locale=en-US&surface_id=user-web",
       service: "web-bff",
       secret: "bff-upstream-secret",
       forwarded: "host=dev.kokoro.localhost",
@@ -790,44 +788,106 @@ describe("kokoro-bff v1 mock contract", () => {
   })
 
   it("projects the Model catalog through its owner contract", async () => {
-    const received: { url: string | undefined; service: string | undefined; tenant: string | undefined; subject: string | undefined } = {
+    const received: { url: string | undefined; service: string | undefined; tenant: string | undefined; subject: string | undefined; requestId: string | undefined; permissions: string | undefined } = {
       url: undefined,
       service: undefined,
       tenant: undefined,
       subject: undefined,
+      requestId: undefined,
+      permissions: undefined,
     }
     const upstream = createServer((request, response) => {
       received.url = request.url
       received.service = request.headers["x-kokoro-service"]?.toString()
       received.tenant = request.headers["x-kokoro-tenant-id"]?.toString()
       received.subject = request.headers["x-kokoro-subject"]?.toString()
+      received.requestId = request.headers["x-request-id"]?.toString()
+      received.permissions = request.headers["x-kokoro-iam-permissions"]?.toString()
       response.setHeader("content-type", "application/json")
       response.end(JSON.stringify({
         data: {
-          items: [{ key: "claude-sonnet", display_name: "Claude Sonnet", feature_key: "chat", availability: "available" }],
+          items: [{ key: "claude-sonnet", display_name: "Claude Sonnet", is_default: true }],
           next_cursor: "model-cursor-next",
         },
-        meta: { request_id: "model-owner-request" },
       }))
     })
     const upstreamBase = await listen(upstream)
     const base = await listen(liveServer(config({
       mode: "live",
-      upstreams: { ...config().upstreams, model: upstreamBase },
+      upstreams: { ...config().upstreams, system: upstreamBase },
     })))
 
     const response = await fetch(`${base}/v1/models?feature_key=chat&limit=20&cursor=cursor-1`, { headers: { ...authHeaders(), "x-kokoro-request-id": "model-owner-request" } })
     assert.equal(response.status, 200)
     assert.deepEqual(await response.json(), {
-      data: { models: [{ provider: "kokoro", name: "claude-sonnet", is_default: false, display_name: "Claude Sonnet" }], next_cursor: "model-cursor-next" },
+      data: { models: [{ provider: "kokoro", name: "claude-sonnet", is_default: true, display_name: "Claude Sonnet" }], next_cursor: "model-cursor-next" },
       meta: { request_id: "model-owner-request" },
     })
     assert.deepEqual(received, {
-      url: "/bff/model-catalog?featureKey=chat&limit=20&cursor=cursor-1",
+      url: "/v1/system/model-catalog/catalog?feature_key=chat&limit=20&cursor=cursor-1",
       service: "web-bff",
       tenant: "ns_test",
       subject: "user_test",
+      requestId: "model-owner-request",
+      permissions: undefined,
     })
+  })
+
+  it("rejects model catalog items with a missing or non-boolean default marker", async () => {
+    for (const ownerBody of [
+      { data: { items: [{ key: "model-a", display_name: "Model A" }], next_cursor: null } },
+      { data: { items: [{ key: "model-a", display_name: "Model A", is_default: "true" }], next_cursor: null } },
+      { data: { items: [{ key: "model-a", display_name: "Model A", is_default: false }] } },
+      { items: [{ key: "model-a", display_name: "Model A", is_default: false }], next_cursor: null },
+      { data: { items: [{ key: "model-a", display_name: "Model A", is_default: false }], next_cursor: null }, meta: { request_id: "legacy" } },
+    ]) {
+      const upstream = createServer((_request, response) => {
+        response.setHeader("content-type", "application/json")
+        response.end(JSON.stringify(ownerBody))
+      })
+      const upstreamBase = await listen(upstream)
+      const base = await listen(liveServer(config({ upstreams: { ...config().upstreams, system: upstreamBase } })))
+      const response = await fetch(`${base}/v1/models?feature_key=chat`, { headers: { ...authHeaders(), "x-kokoro-request-id": "invalid-model-owner" } })
+      assert.equal(response.status, 502)
+      const responseBody = await response.json() as { error: { code: string }; meta: { request_id: string } }
+      assert.equal(responseBody.error.code, "upstream_response_invalid")
+      assert.equal(responseBody.meta.request_id, "invalid-model-owner")
+      assert.equal("data" in responseBody, false)
+    }
+  })
+
+  it("rejects malformed System errors and runtime manifests for another trusted tenant", async () => {
+    for (const ownerResponse of [
+      { status: 403, body: { error: { code: "forbidden", message: "denied" } } },
+      { status: 403, body: { error: { code: "forbidden", message: "denied", retryable: "false" } } },
+      {
+        status: 201,
+        body: { data: { tenant_id: "tenant_manifest", product_id: "kokoro", locale: "en-US", navigation: [], locale_namespaces: [], theme: {}, feature_flags: [], references: [], config_version: "1", release_id: null, digest: "sha256:manifest" } },
+      },
+      {
+        status: 302,
+        body: { data: { tenant_id: "tenant_manifest", product_id: "kokoro", locale: "en-US", navigation: [], locale_namespaces: [], theme: {}, feature_flags: [], references: [], config_version: "1", release_id: null, digest: "sha256:manifest" } },
+      },
+      {
+        status: 200,
+        body: { data: { tenant_id: "tenant_other", product_id: "kokoro", locale: "en-US", navigation: [], locale_namespaces: [], theme: {}, feature_flags: [], references: [], config_version: "1", release_id: null, digest: "sha256:manifest" } },
+      },
+    ]) {
+      const upstream = createServer((_request, response) => {
+        response.statusCode = ownerResponse.status
+        response.setHeader("content-type", "application/json")
+        response.end(JSON.stringify(ownerResponse.body))
+      })
+      const upstreamBase = await listen(upstream)
+      const runtimeConfig = config({ upstreams: { ...config().upstreams, system: upstreamBase } }) as BffConfig & { tenantId: string }
+      runtimeConfig.tenantId = "tenant_manifest"
+      const base = await listen(liveServer(runtimeConfig))
+      const response = await fetch(`${base}/v1/system/runtime-manifest?product_id=kokoro&locale=en-US&surface_id=user-web`, {
+        headers: { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "test-secret", "x-kokoro-request-id": "invalid-system-owner" },
+      })
+      assert.equal(response.status, 502)
+      assert.equal((await response.json() as { error: { code: string } }).error.code, "upstream_response_invalid")
+    }
   })
 
   it("projects Billing catalog and checkout through the v1 owner contract", async () => {

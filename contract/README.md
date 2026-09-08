@@ -74,3 +74,8 @@ The narrow `contract/external/kokoro-agent/control-receipt.v1.json` consumer sna
 `contract/openapi/v1/openapi.json#/components/schemas/ControlReceipt`, and full source artifact SHA-256
 `c7d80e568a39bd9f8fdae7adc165b33df98e4b45f2e5c91aea04c415d6b0158f`. The BFF validates that owner receipt before
 adding public `run_id` from the trusted route parameter; the snapshot is not a second Agent contract owner.
+
+The System consumer adapter is pinned to owner artifact `contract/openapi/system.openapi.json`, version `2.0.0`,
+System commit `f5702068d4416ad90b1bd02af57d2825c32be916`, SHA-256
+`f9ea76f107e1ea0fc19df20ee7c59032c0fbac66e640e9a16a1b770ab27c1f37`. This is a provenance reference only;
+the owner OpenAPI is not copied into this repository.

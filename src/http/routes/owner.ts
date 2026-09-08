@@ -7,7 +7,7 @@ import { proxyUpstream } from "../../upstream.js"
 import { billingPlansData, capabilityMcpData, capabilitySkillsData, checkoutUrlData, libraryData, mappedOwnerQuery, modelCatalogData, systemManifestData } from "../../application/projections.js"
 import { ownerIdentityHeaders } from "../../infrastructure/clients/owner/identity.js"
 import { reply } from "../response.js"
-import { normalizeUpstreamResponse } from "../../infrastructure/clients/upstream-response.js"
+import { normalizeSystemUpstreamResponse, normalizeUpstreamResponse } from "../../infrastructure/clients/upstream-response.js"
 import { incomingHeaders, queryOf } from "../request.js"
 import type { RequestContext } from "../../domain/request-context.js"
 import type { IdempotencyEntry, MutationTicket } from "../../application/idempotency.js"
@@ -21,6 +21,7 @@ export async function liveOwnerRequest(
   path: string,
   method: string,
   body?: Buffer,
+  strictSystemEnvelope = false,
 ): Promise<LiveOwnerResult> {
   const baseUrl = config.upstreams[owner] ?? null
   if (baseUrl === null) {
@@ -38,7 +39,9 @@ export async function liveOwnerRequest(
       ownerIdentityHeaders(context),
       "web-bff",
     )
-    return normalizeUpstreamResponse(upstream, context.requestId)
+    return strictSystemEnvelope
+      ? normalizeSystemUpstreamResponse(upstream, context.requestId)
+      : normalizeUpstreamResponse(upstream, context.requestId)
   } catch {
     return { status: 502, body: failure("upstream_unreachable", `The configured ${owner} upstream is unavailable`, context.requestId) }
   }
@@ -66,13 +69,13 @@ export async function liveOwnerBusiness(
       return true
     }
     const ownerQuery = new URLSearchParams({ product_id: productId, locale, surface_id: surfaceId })
-    const result = await liveOwnerRequest(request, config, context, "system", `/system/runtime-manifest?${ownerQuery.toString()}`, method)
+    const result = await liveOwnerRequest(request, config, context, "system", `/v1/system/runtime-manifest?${ownerQuery.toString()}`, method, undefined, true)
     if (result.status >= 400) {
       await reply(response, result.status, result.body, context, idempotency, mutation)
       return true
     }
     const projected = systemManifestData(result.body)
-    if (projected === null || projected.product_id !== productId || projected.locale !== locale) {
+    if (projected === null || projected.tenant_id !== context.identity.namespace || projected.product_id !== productId || projected.locale !== locale) {
       await reply(response, 502, failure("upstream_response_invalid", "System runtime manifest did not match the v1 owner contract", context.requestId), context, idempotency, mutation)
       return true
     }
@@ -141,12 +144,12 @@ export async function liveOwnerBusiness(
   if (businessPath.length === 1 && businessPath[0] === "models" && method === "GET") {
     const query = queryOf(request)
     const ownerQuery = new URLSearchParams()
-    for (const [incomingName, ownerName] of [["feature_key", "featureKey"], ["limit", "limit"], ["cursor", "cursor"]] as const) {
-      const value = query.get(incomingName)?.trim()
-      if (value) ownerQuery.set(ownerName, value)
+    for (const name of ["feature_key", "limit", "cursor"] as const) {
+      const value = query.get(name)?.trim()
+      if (value) ownerQuery.set(name, value)
     }
-    const path = `/bff/model-catalog${ownerQuery.size === 0 ? "" : `?${ownerQuery.toString()}`}`
-    const result = await liveOwnerRequest(request, config, context, "model", path, method)
+    const path = `/v1/system/model-catalog/catalog${ownerQuery.size === 0 ? "" : `?${ownerQuery.toString()}`}`
+    const result = await liveOwnerRequest(request, config, context, "system", path, method, undefined, true)
     if (result.status >= 400) {
       await reply(response, result.status, result.body, context, idempotency, mutation)
       return true

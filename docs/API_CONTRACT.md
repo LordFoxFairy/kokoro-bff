@@ -6,7 +6,7 @@
 `docs/api/` 只解释资源和生命周期；Root 只发布 catalog/reference，不保存可编辑镜像。
 
 BFF 是 Kokoro 唯一 `public` HTTP owner。Browser 仍必须经 `kokoro` same-origin adapter 调用；“public”不表示浏览器
-持有服务 secret。IAM、System、Model、Billing、Capability、Storage、Agent、Scheduler 和 Music 的接口均为各 owner
+持有服务 secret。IAM、System（含 model-catalog）、Billing、Capability、Storage、Agent、Scheduler 和 Music 的接口均为各 owner
 自己的 internal contract，BFF 只发布重新投影后的 Product API。
 
 ## Operation metadata
@@ -105,3 +105,12 @@ projector 通过 PostgreSQL lease/token/fence 独立于浏览器连接运行；�
 
 资源路径、请求、响应和示例从 [`api/README.md`](./api/README.md) 进入。OpenAPI 与资源文档冲突时以 canonical
 OpenAPI 为字段事实源，以 `CURRENT.md` 判断运行时是否已接线。
+
+## System owner dependency
+
+`GET /v1/system/runtime-manifest` 与 `GET /v1/models` 分别消费 System owner 的
+`GET /v1/system/runtime-manifest` 和 `GET /v1/system/model-catalog/catalog`。owner wire JSON 使用
+snake_case、成功 envelope 仅为 `{data}`，request ID 仅由 `x-request-id` header 表达；BFF 再按本仓
+public v1 envelope 投影。旧 `meta` 与裸 body 均拒绝；System 错误必须是仅含
+`error.code`、`error.message`、布尔 `error.retryable` 的 owner envelope。模型目录的 `key`、
+`display_name`、布尔 `is_default` 与必填的 string/null `next_cursor` 被严格消费。

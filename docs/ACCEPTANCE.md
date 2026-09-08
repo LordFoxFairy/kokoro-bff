@@ -40,7 +40,7 @@ Phase 2 不验收跨版本 re-projection、PG backup restore、长时间 fault i
 | Auth | Browser 直接携带业务身份调用 | 拒绝；只接受 Web service envelope |
 | Project | create/update/list + same-key replay | 当前有 unit/mock 与真实 store integration 用例 |
 | Idempotency | 同 digest replay / different digest conflict / pending duplicate | 当前已覆盖；query/header/transaction gap 开放 |
-| Owner reads | System/Model/Capability/Storage/Billing | 显式 projection；缺失/坏响应 fail closed |
+| Owner reads | System（含 Model）/Capability/Storage/Billing | 显式 projection；缺失/坏响应 fail closed |
 | Chat admission | user + provisional assistant + Agent command + expected-run fence 原子提交，HTTP 随后返回 202 | unit + 真实 PG integration 已覆盖 |
 | AG-UI | Agent fact → fenced background projector → transactional PG ledger → schema-valid SSE + opaque replay | 主动摄取、retention/GC 与 expired cursor 已覆盖 |
 | Chat facts | Conversation/Message/Share BFF PostgreSQL ownership | 已实现；assistant reconciliation 开放 |
@@ -94,3 +94,15 @@ Root audit 仍可因本阶段明确不修改的 runtime/schema/delivery 项返�
 - 提交前运行 `git diff --cached --check` 并审阅 `git diff --cached --name-status`；
 - 完成报告列出 commit、命令、exit code、integration fixture、Root BFF residual 和协作者文件 hash；
 - 只有 P0 runtime、真实基础设施、candidate image 与安全发布门禁都闭环后，才讨论生产就绪。
+
+## G6-BFF System 消费切片（2026-09-08）
+
+基线 `2d1dd0aefb38630be5e9716e36ca234a15250a11`；System owner artifact 固定
+`f5702068d4416ad90b1bd02af57d2825c32be916`，版本及 digest 见 `contract/README.md`。
+Root 在主工作树用 Node 22.22.2 / pnpm 11.25.0 重新运行 lint、typecheck、test、build、contract:check，
+全部退出 0；全量 test 150/150、contract 63 operations / 15 tests，聚焦 BFF/config/upstream 43 tests。
+独立只读审查发现的裸响应、缺失分页、可信 tenant 和非 200 状态边界均修正；201/302 用例先 RED 后 GREEN。
+保留其他 owner 原有协议，不新增 System 兼容包装或 Model fallback。
+本切片验证使用 HTTP fixture，不替代真实 System runtime smoke；后者随 System G5/G6 闭环。
+全仓真实 PostgreSQL/Redis、镜像、安全及旧 BFF 架构收敛不以本切片宣称通过。
+未触碰原有未交接 `docs/api/v1/agui-chat.md`、`test/lifecycle.test.ts`。

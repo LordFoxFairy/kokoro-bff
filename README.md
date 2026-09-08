@@ -28,7 +28,7 @@ Browser -> kokoro same-origin /api/* -> kokoro-bff /v1/* -> owner API / Agent / 
 - BFF：public Product API、Project、ScheduledTask、Conversation/Message/Share 产品事实与 durable public projection。
 - Agent：Run、checkpoint、lease、tool journal、执行事件、HITL、evidence；BFF 只调用 Agent HTTP ingress。
 - Scheduler：通用 ScheduleJob、occurrence、lease、retry、misfire、dispatch；不拥有 ScheduledTask 业务定义。
-- IAM/System/Model/Billing/Capability/Storage/Music：各自拥有领域事实和 internal contract；BFF 只做窄 projection。
+- IAM/System/Billing/Capability/Storage/Music：各自拥有领域事实（System 内含模型目录与路由）和 internal contract；BFF 只做窄 projection。
 - Root：拓扑、治理和 Developer API catalog；不保存本仓 OpenAPI 镜像。
 
 AG-UI 是 Web 与 BFF 之间唯一 Agent 网络协议。Vercel AI SDK 只属于 Web 内部 UI adapter，不建立第二套网络 stream。

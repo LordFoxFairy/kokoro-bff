@@ -59,19 +59,19 @@ export function modelCatalogData(body: unknown): { models: Array<{
     if (key === null) return null
     const displayName = stringField(item, "display_name")
     if (displayName === null) return null
+    if (typeof item.is_default !== "boolean") return null
     const provider = key.includes("/") ? (key.split("/", 1)[0] ?? "kokoro") : "kokoro"
     const name = key
-    const isDefault = false
     models.push({
       provider,
       name,
-      is_default: isDefault,
+      is_default: item.is_default,
       ...(displayName === null ? {} : { display_name: displayName }),
     })
   }
   const nextCursor = data.next_cursor
-  if (nextCursor !== undefined && nextCursor !== null && typeof nextCursor !== "string") return null
-  return { models, ...(nextCursor === undefined ? {} : { next_cursor: nextCursor }) }
+  if (nextCursor !== null && typeof nextCursor !== "string") return null
+  return { models, next_cursor: nextCursor }
 }
 
 export function agentSessionListData(body: unknown): { sessions: ChatSessionSummary[]; next_cursor: string | null } | null {
@@ -262,22 +262,22 @@ export function libraryData(body: unknown): { items: LibraryItem[] } | null {
 export function systemManifestData(body: unknown): Record<string, unknown> | null {
   const data = dataOf(body)
   if (data === null) return null
-  const stringFields = ["tenantId", "productId", "locale", "configVersion", "digest"]
+  const stringFields = ["tenant_id", "product_id", "locale", "config_version", "digest"]
   for (const field of stringFields) if (typeof data[field] !== "string" || data[field].trim() === "") return null
-  for (const field of ["navigation", "localeNamespaces", "featureFlags", "references"]) if (!Array.isArray(data[field])) return null
+  for (const field of ["navigation", "locale_namespaces", "feature_flags", "references"]) if (!Array.isArray(data[field])) return null
   if (!isRecord(data.theme)) return null
-  if (data.releaseId !== null && typeof data.releaseId !== "string") return null
+  if (data.release_id !== null && typeof data.release_id !== "string") return null
   return {
-    tenant_id: data.tenantId,
-    product_id: data.productId,
+    tenant_id: data.tenant_id,
+    product_id: data.product_id,
     locale: data.locale,
     navigation: data.navigation,
-    locale_namespaces: data.localeNamespaces,
+    locale_namespaces: data.locale_namespaces,
     theme: data.theme,
-    feature_flags: data.featureFlags,
+    feature_flags: data.feature_flags,
     references: data.references,
-    config_version: data.configVersion,
-    release_id: data.releaseId,
+    config_version: data.config_version,
+    release_id: data.release_id,
     digest: data.digest,
   }
 }
