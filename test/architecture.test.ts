@@ -1,11 +1,120 @@
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
-import { access } from "node:fs/promises"
+import { access, readdir } from "node:fs/promises"
 import { test } from "node:test"
 import { fileURLToPath } from "node:url"
 import path from "node:path"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
+
+type SourceFile = { relativePath: string; source: string }
+
+const canonicalInstaller: SourceFile = {
+  relativePath: "scripts/apply-schema.mjs",
+  source: 'const schemaUrl = new URL("../database/schema.sql", import.meta.url)\nassertBlankDatabaseTables([])',
+}
+
+function isSchemaInstallerScriptName(name: string): boolean {
+  return /^db:(?:apply|install|setup|migrat(?:e|ion|ions))(?:[-:][a-z0-9_-]+)*$/u.test(name)
+}
+
+function nodeExecutionEntry(command: string): string | null {
+  const tokens = command.trim().split(/\s+/u)
+  if (tokens[0] !== "node") return null
+
+  for (const token of tokens.slice(1)) {
+    if (/^(?:--test(?:=|$)|--eval(?:=|$)|--print(?:=|$)|--check(?:=|$)|-[epc]$)/u.test(token)) return null
+    const unquoted = token.replace(/^(?:"([^"]+)"|'([^']+)')$/u, "$1$2")
+    if (/\.[cm]?[jt]s(?:[?#][^\s]*)?$/u.test(unquoted)) return unquoted
+    if (/[;&|]/u.test(token)) return null
+  }
+  return null
+}
+
+function readsCanonicalSchema(source: string): boolean {
+  return (
+    source.includes("database/schema.sql") ||
+    /["'`]database["'`]\s*,\s*["'`]schema\.sql["'`]/u.test(source)
+  )
+}
+
+function staticLiteralModuleSpecifiers(source: string): string[] {
+  const specifiers: string[] = []
+  // This architecture rule intentionally covers literal ES imports, require(), and import(); computed paths and eval are out of scope.
+  for (const pattern of [
+    /\bfrom(?:\s|\/\*[\s\S]*?\*\/|\/\/[^\n]*(?:\n|$))*["'`]([^"'`]+)["'`]/gu,
+    /\bimport(?:\s|\/\*[\s\S]*?\*\/|\/\/[^\n]*(?:\n|$))+["'`]([^"'`]+)["'`]/gu,
+    /\b(?:import|require)(?:\s|\/\*[\s\S]*?\*\/|\/\/[^\n]*(?:\n|$))*\((?:\s|\/\*[\s\S]*?\*\/|\/\/[^\n]*(?:\n|$))*["'`]([^"'`]+)["'`]/gu,
+  ]) {
+    for (const match of source.matchAll(pattern)) {
+      if (match[1] !== undefined) specifiers.push(match[1])
+    }
+  }
+  return specifiers
+}
+
+function importsCanonicalSchemaInstaller(relativePath: string, source: string): boolean {
+  return staticLiteralModuleSpecifiers(source).some((specifier) => {
+    const literalPath = specifier.split(/[?#]/u, 1)[0] ?? specifier
+    const resolvedPath = literalPath.startsWith(".")
+      ? path.posix.normalize(path.posix.join(path.posix.dirname(relativePath), literalPath))
+      : literalPath
+    return resolvedPath === canonicalInstaller.relativePath || resolvedPath.endsWith(`/${canonicalInstaller.relativePath}`)
+  })
+}
+
+function assertSingleSchemaInstaller(scripts: Record<string, string>, sourceFiles: SourceFile[]): void {
+  const schemaInstallEntries = Object.entries(scripts).filter(
+    ([name, command]) => isSchemaInstallerScriptName(name) && nodeExecutionEntry(command) !== null,
+  )
+  const nonCanonicalSchemaReaders = sourceFiles
+    .filter(
+      ({ relativePath, source }) =>
+        relativePath !== canonicalInstaller.relativePath && readsCanonicalSchema(source),
+    )
+    .map(({ relativePath }) => relativePath)
+    .sort()
+  const nonCanonicalInstallerImports = sourceFiles
+    .filter(
+      ({ relativePath, source }) =>
+        relativePath !== canonicalInstaller.relativePath && importsCanonicalSchemaInstaller(relativePath, source),
+    )
+    .map(({ relativePath }) => relativePath)
+    .sort()
+  const installer = sourceFiles.find(({ relativePath }) => relativePath === canonicalInstaller.relativePath)?.source ?? ""
+
+  assert.deepEqual(
+    schemaInstallEntries,
+    [["db:apply-schema", "node scripts/apply-schema.mjs"]],
+    "BFF must expose a single schema installer command",
+  )
+  assert.deepEqual(
+    nonCanonicalSchemaReaders,
+    [],
+    "BFF source cannot read canonical schema outside the single schema installer",
+  )
+  assert.deepEqual(
+    nonCanonicalInstallerImports,
+    [],
+    "BFF source cannot use a static schema installer import outside the canonical installer",
+  )
+  assert.match(installer, /new URL\("\.\.\/database\/schema\.sql", import\.meta\.url\)/u)
+  assert.match(installer, /assertBlankDatabaseTables/u)
+  assert.doesNotMatch(installer, /ALTER TABLE|db:migrate/u)
+}
+
+async function readSchemaBoundarySources(): Promise<SourceFile[]> {
+  const sources: SourceFile[] = []
+  for (const relativeDirectory of ["src", "scripts"]) {
+    const files = await readdir(path.join(root, relativeDirectory), { recursive: true })
+    for (const file of files) {
+      if (typeof file !== "string" || !/\.[cm]?[jt]s$/u.test(file)) continue
+      const relativePath = `${relativeDirectory}/${file}`
+      sources.push({ relativePath, source: await readFile(path.join(root, relativePath), "utf8") })
+    }
+  }
+  return sources
+}
 
 async function exists(relativePath: string): Promise<boolean> {
   try {
@@ -134,16 +243,116 @@ test("BFF production composition requires the live PostgreSQL and Redis runtime"
   assert.doesNotMatch(config, /mode:\s*"mock"|default.*mock/iu)
 })
 
-test("BFF runtime has no compatibility migration or direct database setup in the route host", async () => {
-  const main = await readFile(path.join(root, "src/main.ts"), "utf8")
-  const setup = await readFile(path.join(root, "src/database/setup.ts"), "utf8")
+test("BFF runtime delegates canonical schema installation to the single declared installer", async () => {
+  const [main, packageSource, sourceFiles] = await Promise.all([
+    readFile(path.join(root, "src/main.ts"), "utf8"),
+    readFile(path.join(root, "package.json"), "utf8"),
+    readSchemaBoundarySources(),
+  ])
+  const packageJson = JSON.parse(packageSource) as { scripts?: Record<string, string> }
+
   assert.equal(main.includes("ALTER TABLE"), false)
   assert.equal(main.includes("CREATE TABLE"), false)
   assert.equal(main.includes("new Pool"), false)
   assert.equal(main.includes("createClient"), false)
-  assert.equal(setup.includes("ALTER TABLE"), false)
-  assert.equal(setup.includes("unknown"), false)
-  assert.equal(setup.includes("db:migrate"), false)
+  assert.equal(await exists("src/database/setup.ts"), false)
+  assertSingleSchemaInstaller(packageJson.scripts ?? {}, sourceFiles)
+})
+
+test("schema installer boundary rejects a second database installation command", () => {
+  assert.throws(
+    () =>
+      assertSingleSchemaInstaller(
+        {
+          "db:apply-schema": "node scripts/apply-schema.mjs",
+          "db:setup": "node scripts/install-schema.mjs",
+        },
+        [canonicalInstaller],
+      ),
+    /single schema installer/u,
+  )
+})
+
+test("schema installer boundary rejects a restored runtime schema loader", () => {
+  assert.throws(
+    () =>
+      assertSingleSchemaInstaller(
+        { "db:apply-schema": "node scripts/apply-schema.mjs" },
+        [
+          canonicalInstaller,
+          {
+            relativePath: "src/database/setup.ts",
+            source: 'await readFile(new URL("../database/schema.sql", import.meta.url), "utf8")',
+          },
+        ],
+      ),
+    /single schema installer/u,
+  )
+})
+
+test("schema installer boundary accepts a read-only database check command", () => {
+  assert.doesNotThrow(() =>
+    assertSingleSchemaInstaller(
+      {
+        "db:apply-schema": "node scripts/apply-schema.mjs",
+        "db:check": "node --test test/schema-governance.test.mjs",
+        "db:setup:test": "node --test test/apply-schema.mjs",
+        "db:setup:search": "rg apply-schema",
+      },
+      [canonicalInstaller],
+    ),
+  )
+})
+
+test("schema installer boundary rejects a restored runtime that imports the canonical installer", () => {
+  for (const installerImport of [
+    'import { loadCanonicalSchema } from "../../scripts/apply-schema.mjs"',
+    'const { loadCanonicalSchema } = require("../../scripts/apply-schema.mjs")',
+    'const { loadCanonicalSchema } = await import("../../scripts/apply-schema.mjs")',
+    'import { loadCanonicalSchema } from /* installer */ "../../scripts/apply-schema.mjs?source=runtime"',
+    'const { loadCanonicalSchema } = require( /* installer */ "../../scripts/apply-schema.mjs?source=runtime")',
+    'const { loadCanonicalSchema } = await import( /* installer */ "../../scripts/apply-schema.mjs?source=runtime", { with: { type: "module" } })',
+  ]) {
+    assert.throws(
+      () =>
+        assertSingleSchemaInstaller(
+          { "db:apply-schema": "node scripts/apply-schema.mjs" },
+          [
+            canonicalInstaller,
+            {
+              relativePath: "src/database/setup.ts",
+              source: [installerImport, "const schema = await loadCanonicalSchema()", "await pool.query(schema)"].join("\n"),
+            },
+          ],
+        ),
+      /static schema installer import/u,
+      installerImport,
+    )
+  }
+})
+
+test("schema installer boundary rejects a second script importing the canonical installer", () => {
+  assert.throws(
+    () =>
+      assertSingleSchemaInstaller(
+        {
+          "db:apply-schema": "node scripts/apply-schema.mjs",
+          "db:setup": "node scripts/bootstrap.mjs",
+        },
+        [
+          canonicalInstaller,
+          {
+            relativePath: "scripts/bootstrap.mjs",
+            source: [
+              'import { loadCanonicalSchema } from /* installer */ "./apply-schema.mjs"',
+              "const schema = await loadCanonicalSchema()",
+              "await pool.query(schema)",
+            ].join("\n"),
+          },
+        ],
+      ),
+    /single schema installer|static schema installer import/u,
+  )
 })
 
 test("BFF application ports stay free of infrastructure dependencies", async () => {
