@@ -1,8 +1,6 @@
 # Chat AG-UI v1
 
-本仓库对浏览器暴露的 Agent 事件流遵守 AG-UI 的事件模型；详细的 Root wire 基线见 Root 仓库的
-`contract/agui-v1.json`。Agent 内部仍保存
-自己的执行事实，BFF Chat 负责一次明确的 transport projection。
+本仓库对浏览器暴露的 Agent 事件流遵守 AG-UI 的事件模型。本页是 BFF-owned AG-UI 投影契约，Root 不保存第二份 wire source。Agent 内部保存自己的执行事实，BFF Chat 负责一次明确的 transport projection。
 
 运行时使用 `@ag-ui/core@0.0.59` 的 `EventType` 和 `EventSchemas`，不手写另一套 AG-UI 事件枚举。
 

@@ -39,6 +39,7 @@ export type BffServerComposition = {
   agentDispatchDispatcher?: AgentDispatchOutboxDispatcher
   agentCancellationDispatcher?: AgentCancellationOutboxDispatcher
   readiness: () => Promise<void>
+  stopWorkers: () => Promise<void>
   close: () => Promise<void>
   routeHandler?: BffRouteHandler
   sharedSessionReader?: {
@@ -155,16 +156,24 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
   const closeStore = options.close ?? (ownsStore && businessStore !== null
     ? (): Promise<void> => businessStore.close()
     : async (): Promise<void> => undefined)
-  let closePromise: Promise<void> | null = null
-  const close = (): Promise<void> => {
-    if (closePromise !== null) return closePromise
-    closePromise = (async (): Promise<void> => {
+  let stopWorkersPromise: Promise<void> | null = null
+  const stopWorkers = (): Promise<void> => {
+    if (stopWorkersPromise !== null) return stopWorkersPromise
+    stopWorkersPromise = (async (): Promise<void> => {
       // Stop claimers first; stop() drains in-flight source reads and outbox
       // deliveries before their shared persistence connections are closed.
       await agUiProjector?.stop()
       await agentCancellationDispatcher?.stop()
       await agentDispatchDispatcher?.stop()
       await scheduledTaskDispatcher?.stop()
+    })()
+    return stopWorkersPromise
+  }
+  let closePromise: Promise<void> | null = null
+  const close = (): Promise<void> => {
+    if (closePromise !== null) return closePromise
+    closePromise = (async (): Promise<void> => {
+      await stopWorkers()
       await closeStore()
     })()
     return closePromise
@@ -178,6 +187,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     ...(agentDispatchDispatcher === undefined ? {} : { agentDispatchDispatcher }),
     ...(agentCancellationDispatcher === undefined ? {} : { agentCancellationDispatcher }),
     readiness,
+    stopWorkers,
     close,
     ...(options.routeHandler === undefined ? {} : { routeHandler: options.routeHandler }),
     ...(options.sharedSessionReader === undefined ? {} : { sharedSessionReader: options.sharedSessionReader }),

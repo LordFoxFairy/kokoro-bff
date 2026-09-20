@@ -233,7 +233,12 @@ async function handle(
 
 export type BffServerOptions = BffCompositionOptions
 
-export function createBffServer(config: BffConfig = loadConfig(), options: BffServerOptions = {}): Server {
+export type BffServer = Server & {
+  /** Stop admission, drain active requests and workers, then close owned resources. */
+  shutdown: (gracePeriodMs?: number) => Promise<void>
+}
+
+export function createBffServer(config: BffConfig = loadConfig(), options: BffServerOptions = {}): BffServer {
   const composition = createBffComposition(config, options)
   const server = createServer((request, response) => {
     void handle(request, response, config, composition).catch(() => {
@@ -241,6 +246,41 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
       else response.destroy()
     })
   })
+  let shutdownPromise: Promise<void> | null = null
+  const shutdown = (gracePeriodMs = 30_000): Promise<void> => {
+    if (shutdownPromise !== null) return shutdownPromise
+    shutdownPromise = new Promise<void>((resolve, reject) => {
+      let forcedCloseTimer: NodeJS.Timeout | undefined
+      const finish = (error?: Error): void => {
+        if (forcedCloseTimer !== undefined) clearTimeout(forcedCloseTimer)
+        if (error !== undefined) reject(error)
+        else resolve()
+      }
+      const stopWorkers = composition.stopWorkers()
+      const closeServer = new Promise<void>((resolveClose, rejectClose) => {
+        server.close((error) => {
+          if (error !== undefined && (error as NodeJS.ErrnoException).code !== "ERR_SERVER_NOT_RUNNING") {
+            rejectClose(error)
+            return
+          }
+          resolveClose()
+        })
+      })
+      if (Number.isFinite(gracePeriodMs) && gracePeriodMs > 0) {
+        forcedCloseTimer = setTimeout(() => { server.closeAllConnections() }, gracePeriodMs)
+        forcedCloseTimer.unref()
+      }
+      void Promise.all([stopWorkers, closeServer]).then(
+        async () => {
+          await composition.close()
+          finish()
+        },
+        (error: unknown) => { finish(error instanceof Error ? error : new Error(String(error))) },
+      )
+    })
+    return shutdownPromise
+  }
+  Object.assign(server, { shutdown })
   if (
     composition.agUiProjector !== undefined
     || composition.scheduledTaskDispatcher !== undefined
@@ -255,5 +295,5 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
     })
   }
   server.once("close", () => { void composition.close() })
-  return server
+  return server as BffServer
 }
