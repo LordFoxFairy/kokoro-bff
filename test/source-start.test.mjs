@@ -9,7 +9,7 @@ const sourceEntry = new URL("../src/main.ts", import.meta.url)
 describe("BFF source runtime entry", () => {
   it("permits only the pinned tsx binary dependency build", () => {
     const workspacePolicy = readFileSync(new URL("../pnpm-workspace.yaml", import.meta.url), "utf8")
-    assert.equal(workspacePolicy, "allowBuilds:\n  esbuild: true\n")
+    assert.equal(workspacePolicy, "strictDepBuilds: true\nallowBuilds:\n  esbuild: true\n")
   })
 
   it("loads the TypeScript module graph before configuration validation", () => {
