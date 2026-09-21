@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { createHash } from "node:crypto"
 import { readFile } from "node:fs/promises"
 import { test } from "node:test"
 
@@ -57,6 +58,80 @@ test("the repository canonical OpenAPI passes governance and its frozen v1 surfa
 
   assert.deepEqual(inspectOpenApiGovernance(openapi), [])
   assert.deepEqual(compareOperationBaseline(openapi, baseline), [])
+})
+
+test("the Capability consumer pins the accepted owner artifact before runtime generation", async () => {
+  const ownerCommit = "7f89a267d745cbb9870f52d6edb23dec1a3c469b"
+  const ownerDigest = "e0b7c4b57ac030efb73878b51da2a3595ec0172bce0608a88ea925b57a69761a"
+  const vendorPath = `../contract/vendor/kokoro-capability/${ownerCommit}/capability-http.openapi.json`
+  const [manifestDocument, vendorDocument, configSource, lockfile] = await Promise.all([
+    readFile(new URL("../contract/dependencies/capability-http.json", import.meta.url), "utf8"),
+    readFile(new URL(vendorPath, import.meta.url)),
+    readFile(new URL("../openapi-ts.capability.config.ts", import.meta.url), "utf8"),
+    readFile(new URL("../pnpm-lock.yaml", import.meta.url)),
+  ])
+  const manifest = JSON.parse(manifestDocument)
+  const openapi = JSON.parse(vendorDocument.toString("utf8"))
+  const sha256 = (value) => createHash("sha256").update(value).digest("hex")
+
+  assert.deepEqual(Object.keys(manifest).sort(), [
+    "generated",
+    "generator",
+    "lockfile_sha256",
+    "owner",
+    "runtime",
+    "schema_version",
+    "status",
+  ])
+  assert.deepEqual(manifest, {
+    schema_version: 1,
+    status: "design-frozen",
+    owner: {
+      repository_path: "apps/kokoro-capability",
+      repository_commit: ownerCommit,
+      contract_version: "2.0.0",
+      contract_path: "contract/openapi/capability-http.openapi.json",
+      contract_sha256: ownerDigest,
+    },
+    generator: {
+      package: "@hey-api/openapi-ts",
+      version: "0.99.0",
+      config_path: "openapi-ts.capability.config.ts",
+      config_sha256: sha256(configSource),
+    },
+    runtime: { node: "22.22.2", pnpm: "11.25.0", zod: "4.5.4" },
+    lockfile_sha256: sha256(lockfile),
+    generated: [],
+  })
+  assert.equal(sha256(vendorDocument), ownerDigest)
+  assert.equal(openapi.info.version, "2.0.0")
+  assert.deepEqual(Object.keys(openapi.paths).sort(), [
+    "/v1/mcp/servers",
+    "/v1/skills",
+    "/v1/skills/catalog",
+    "/v1/skills/pool",
+  ])
+  for (const pathItem of Object.values(openapi.paths)) {
+    assert.deepEqual(Object.keys(pathItem), ["get"])
+  }
+  assert.equal(openapi.components.parameters.SkillQuery.name, "query")
+  assert.equal(
+    Object.values(openapi.components.parameters).some((parameter) => parameter.name === "q"),
+    false,
+  )
+  assert.equal(openapi.components.parameters.RequestId.name, "x-kokoro-request-id")
+  for (const responseName of ["SkillList", "McpServerList", "Error"]) {
+    const responseHeaders = openapi.components.responses[responseName].headers
+    assert.deepEqual(Object.keys(responseHeaders), ["x-kokoro-request-id"], responseName)
+    assert.deepEqual(
+      Object.entries(responseHeaders)
+        .filter(([, header]) => header.required === true)
+        .map(([name]) => name),
+      ["x-kokoro-request-id"],
+      `${responseName} must require exactly the canonical request-id response header`,
+    )
+  }
+  assert.equal(JSON.stringify(openapi).includes("/bff/"), false)
 })
 
 test("the public AG-UI contract exposes only durable opaque BFF cursors", async () => {

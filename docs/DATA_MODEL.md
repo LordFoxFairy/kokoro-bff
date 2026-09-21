@@ -133,3 +133,15 @@ Project 删除清理、ScheduledTask tombstone、ScheduledTask outbox 归档和 
 
 System runtime manifest 和 model catalog 均为只读 owner projection，不写入 BFF PostgreSQL，也不新增
 表、缓存事实或 schema。BFF 只在请求生命周期内验证并转换 System wire data；System 仍是这些事实的唯一 writer。
+
+## Capability projection data boundary
+
+Capability Skill、Skill Pool、Skill Catalog 与 MCP server 是 Capability owner fact，不是 BFF 持久化事实。该 consumer
+不新增 Capability 表、缓存事实或 schema，不读取 Capability 数据库/Redis，不建立跨仓 foreign key，也不把 owner
+cursor、响应或 generated wire type 写入 BFF PostgreSQL。列表 GET 在单次请求生命周期内完成校验、owner HTTP read 与
+public projection，没有 BFF 数据库事务、outbox、幂等 receipt、retention 或 GC。
+
+本设计切片不修改 [`../database/schema.sql`](../database/schema.sql)；其基线 SHA-256 为
+`8dcb1b3194ed4d4c50c42cdb9a199fec5e253793dd3ca062e92094ab68436da1`。fresh install、现有查询/index、tenant predicate
+与删除策略均保持不变。若 Capability projection 后续需要本地 durable fact，必须重新通过 owner、API 与 canonical
+schema 设计门，不能把 client cache 升格为事实源。

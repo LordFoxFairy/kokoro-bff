@@ -160,6 +160,32 @@ durable reconciliation 属于后续切片。
 只在具备稳定幂等 identity 时重试。缺配置、不可达、HTTP error 与 schema mismatch 分别映射为稳定错误，且不返回
 provider body、SQL 或 stack。
 
+## Capability consumer cutover
+
+Capability 是 Skill 与 MCP server 只读事实的唯一 owner；BFF 只拥有 public Product API projection 和消费适配。
+本切片冻结 accepted owner commit
+`7f89a267d745cbb9870f52d6edb23dec1a3c469b` 的 `2.0.0` HTTP OpenAPI，consumer 只消费
+Capability HTTP OpenAPI，不消费现有 Capability Proto，也不直连 Capability PostgreSQL/数据库或 Redis。固定 owner
+surface 只有四个 GET：`/v1/skills`、`/v1/skills/pool`、`/v1/skills/catalog`、`/v1/mcp/servers`。
+
+当前 runtime 仍由 `src/http/routes/owner.ts` 调用已漂移的 `/bff/*`，因此该 edge 仍是 broken；冻结设计不等于运行时
+已切换。W0B-4 从 vendored commit blob 生成 `src/generated/capability-http/`，并在
+`src/infrastructure/clients/capability/` 建立唯一 facade。generated wire 类型在 facade 终止，application 与 HTTP route
+只接触 BFF projection 类型；旧 `/bff/*`、fallback 和 alias 在同一实现切片删除，不保留双轨。
+
+请求管线只接受每个 operation 的 query allow-list。Skills 三个列表仅允许 `query`、重复 `tags`、`scope_kind`、
+`limit`、`cursor`；MCP 列表仅允许 `provider_key`、`limit`、`cursor`。BFF 从受信 Web envelope 构造
+`x-kokoro-service: web-bff`、owner token、tenant、subject 和 request id，不透传浏览器 Authorization、Host、
+X-Forwarded-*、body identity 或任意 header。调用总预算固定 5 秒，响应 body 上限固定 1 MiB；read-only GET 不自动
+重试，也没有本地数据库事务或 outbox。owner 400/401/503 与 transport/schema failure 在 facade 归一为 BFF 稳定错误，
+不返回 owner payload、token 或 stack。Skills cursor scope 固定为 `tenant + subject + operation + normalized filters`。
+MCP cursor scope 固定为 `tenant + operation + provider_key filters`；Capability MCP owner 不提供 subject binding，BFF 不自造该 binding。
+两类 opaque cursor 都只原样回传；BFF 不解析、不持久化也不把 cursor 当作 authority。
+
+Wave 3 由 BFF consumer owner 在 Platform `kokoro.platform.v1` ConnectRPC consumer 激活的同一切片删除 Capability HTTP
+facade、generated client、vendor 与 dependency manifest；Platform owner 负责发布替代 contract。切换不得保留 HTTP
+fallback、双读或 alias。
+
 ## 8. 启动与关闭
 
 - Mock 是本地确定性 fixture，不需要 PostgreSQL/Redis；它不是生产完成证据。

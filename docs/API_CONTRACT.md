@@ -72,6 +72,33 @@ BFF 的机器事实与契约门禁；runtime mapper、Web consumer 和 `docs/api
 - `/v1` 的 breaking policy 与 provenance 见 [`../contract/README.md`](../contract/README.md)。删除 path/method、重命名
   operationId、收窄 schema 或改变 permission/idempotency 语义必须进入新版本。
 
+## Capability projection dependency
+
+Capability internal-owner contract 固定为 commit
+`7f89a267d745cbb9870f52d6edb23dec1a3c469b`、version `2.0.0`、artifact
+`contract/openapi/capability-http.openapi.json`、SHA-256
+`e0b7c4b57ac030efb73878b51da2a3595ec0172bce0608a88ea925b57a69761a`。BFF vendored artifact 是只读生成输入；
+Capability 仍拥有 wire schema 与四个 internal-owner GET，BFF 拥有 public `/v1/skills`、`/v1/skills/pool`、
+`/v1/skills/catalog`、`/v1/mcp/servers` 的 projection contract。
+
+public Skills 查询中 `query` 是唯一 canonical 搜索参数；`q` 返回 `400 invalid_query_parameter`，不作为 alias、
+不转发。Skills 请求只允许 `query`、`tags`、`scope_kind`、`limit`、`cursor`，MCP 请求只允许
+`provider_key`、`limit`、`cursor`；未知 query parameter fail closed。Skills cursor scope 固定为 `tenant + subject + operation + normalized filters`。
+MCP cursor scope 固定为 `tenant + operation + provider_key filters`；MCP owner contract 不提供 subject binding，BFF 不自造 subject binding。
+两类 cursor 都是 owner 生成的 opaque continuation，BFF 只原样传递，不解析、不持久化。四个 GET 无副作用，
+`x-kokoro-idempotency=none`，不新增 mutation receipt 或事件协议。
+
+BFF 只从已验证的 Web service context 构造 Capability 的 `web-bff` service identity、tenant、subject 和 request id。
+浏览器的 Authorization、Host、X-Domain、X-Forwarded-* 与 body identity 不转发。Capability `200 {data}` 在 BFF
+边界映射为 canonical public `{data, meta}`；owner response `x-kokoro-request-id` 只用于关联，不进入 owner data。BFF 参数错误与
+owner 400 映射为稳定 public 400；owner 401 视为内部 service credential/configuration failure 并映射为
+`503 capability_unavailable`；owner 503 映射为 `503 capability_unavailable` 并保留可重试语义；非法 envelope、过大
+响应或其他 owner 5xx 映射为 `502 capability_response_invalid`。所有 public 错误仍遵守本仓 canonical OpenAPI；
+实现切片必须同步更新 public OpenAPI 与 operation baseline，设计冻结本身不修改它们。
+
+Capability HTTP 是 Wave 0B 的临时 hard-link closure；Wave 3 以 Platform ConnectRPC 原子替换并删除 HTTP consumer，
+不承诺 HTTP/Proto 双协议兼容。
+
 ## 幂等：当前事实与目标
 
 除无副作用 GitHub preview 外，POST/PATCH/DELETE 要求 `Idempotency-Key`。当前 scope 为 namespace、method、canonical

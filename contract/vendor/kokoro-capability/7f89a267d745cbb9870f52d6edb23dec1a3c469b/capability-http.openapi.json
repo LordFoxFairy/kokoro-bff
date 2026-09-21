@@ -1,0 +1,260 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Kokoro Capability Business HTTP API",
+    "version": "2.0.0",
+    "description": "Capability-owned read-only Skill and MCP server projections for trusted service consumers. Routes are registered only when their owning runtime surface is enabled; required adapters and service tokens are validated and probed before the listener starts."
+  },
+  "servers": [{ "url": "http://kokoro-capability:8086" }],
+  "x-kokoro-runtime": {
+    "default_surfaces": ["skill-catalog"],
+    "surface_requirements": {
+      "skill-source": ["storage", "iam_attestation", "bff_service_token"],
+      "mcp-server": ["provider_catalog", "iam_attestation", "bff_service_token"]
+    },
+    "startup_policy": "Missing configuration or a failed readiness probe prevents the process from listening."
+  },
+  "paths": {
+    "/v1/skills": {
+      "get": {
+        "operationId": "listVisibleSkills",
+        "x-kokoro-owner": "kokoro-capability",
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-stability": "stable",
+        "x-kokoro-idempotency": "read-only",
+        "x-kokoro-permission": "web-bff",
+        "x-kokoro-surface": "skill-source",
+        "parameters": [
+          { "$ref": "#/components/parameters/RequestId" },
+          { "$ref": "#/components/parameters/ServiceName" },
+          { "$ref": "#/components/parameters/ServiceToken" },
+          { "$ref": "#/components/parameters/TenantId" },
+          { "$ref": "#/components/parameters/SubjectId" },
+          { "$ref": "#/components/parameters/SkillQuery" },
+          { "$ref": "#/components/parameters/SkillTags" },
+          { "$ref": "#/components/parameters/SkillScope" },
+          { "$ref": "#/components/parameters/Limit" },
+          { "$ref": "#/components/parameters/Cursor" }
+        ],
+        "responses": {
+          "200": { "$ref": "#/components/responses/SkillList" },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" },
+          "503": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v1/skills/pool": {
+      "get": {
+        "operationId": "listVisibleSkillPool",
+        "x-kokoro-owner": "kokoro-capability",
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-stability": "stable",
+        "x-kokoro-idempotency": "read-only",
+        "x-kokoro-permission": "web-bff",
+        "x-kokoro-surface": "skill-source",
+        "parameters": [
+          { "$ref": "#/components/parameters/RequestId" },
+          { "$ref": "#/components/parameters/ServiceName" },
+          { "$ref": "#/components/parameters/ServiceToken" },
+          { "$ref": "#/components/parameters/TenantId" },
+          { "$ref": "#/components/parameters/SubjectId" },
+          { "$ref": "#/components/parameters/SkillQuery" },
+          { "$ref": "#/components/parameters/SkillTags" },
+          { "$ref": "#/components/parameters/SkillScope" },
+          { "$ref": "#/components/parameters/Limit" },
+          { "$ref": "#/components/parameters/Cursor" }
+        ],
+        "responses": {
+          "200": { "$ref": "#/components/responses/SkillList" },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" },
+          "503": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v1/skills/catalog": {
+      "get": {
+        "operationId": "listVisibleSkillCatalog",
+        "x-kokoro-owner": "kokoro-capability",
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-stability": "stable",
+        "x-kokoro-idempotency": "read-only",
+        "x-kokoro-permission": "web-bff",
+        "x-kokoro-surface": "skill-source",
+        "parameters": [
+          { "$ref": "#/components/parameters/RequestId" },
+          { "$ref": "#/components/parameters/ServiceName" },
+          { "$ref": "#/components/parameters/ServiceToken" },
+          { "$ref": "#/components/parameters/TenantId" },
+          { "$ref": "#/components/parameters/SubjectId" },
+          { "$ref": "#/components/parameters/SkillQuery" },
+          { "$ref": "#/components/parameters/SkillTags" },
+          { "$ref": "#/components/parameters/SkillScope" },
+          { "$ref": "#/components/parameters/Limit" },
+          { "$ref": "#/components/parameters/Cursor" }
+        ],
+        "responses": {
+          "200": { "$ref": "#/components/responses/SkillList" },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" },
+          "503": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v1/mcp/servers": {
+      "get": {
+        "operationId": "listMcpServers",
+        "x-kokoro-owner": "kokoro-capability",
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-stability": "stable",
+        "x-kokoro-idempotency": "read-only",
+        "x-kokoro-permission": "web-bff",
+        "x-kokoro-surface": "mcp-server",
+        "parameters": [
+          { "$ref": "#/components/parameters/RequestId" },
+          { "$ref": "#/components/parameters/ServiceName" },
+          { "$ref": "#/components/parameters/ServiceToken" },
+          { "$ref": "#/components/parameters/TenantId" },
+          { "$ref": "#/components/parameters/SubjectId" },
+          { "name": "provider_key", "in": "query", "schema": { "type": "string", "minLength": 1, "maxLength": 191 } },
+          { "$ref": "#/components/parameters/Limit" },
+          { "$ref": "#/components/parameters/Cursor" }
+        ],
+        "responses": {
+          "200": { "$ref": "#/components/responses/McpServerList" },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" },
+          "503": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "RequestId": { "name": "x-kokoro-request-id", "in": "header", "required": false, "schema": { "type": "string", "minLength": 1, "maxLength": 255 } },
+      "ServiceName": { "name": "x-kokoro-service", "in": "header", "required": true, "schema": { "type": "string", "const": "web-bff" } },
+      "ServiceToken": { "name": "x-kokoro-internal-secret", "in": "header", "required": true, "schema": { "type": "string", "minLength": 1 } },
+      "TenantId": { "name": "x-kokoro-tenant-id", "in": "header", "required": true, "schema": { "type": "string", "minLength": 1, "maxLength": 255 } },
+      "SubjectId": { "name": "x-kokoro-subject", "in": "header", "required": false, "schema": { "type": "string", "minLength": 1, "maxLength": 255 } },
+      "SkillQuery": { "name": "query", "in": "query", "required": false, "schema": { "type": "string", "minLength": 1, "maxLength": 1024 } },
+      "SkillTags": { "name": "tags", "in": "query", "required": false, "schema": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 128 } }, "style": "form", "explode": true },
+      "SkillScope": { "name": "scope_kind", "in": "query", "required": false, "schema": { "type": "string", "enum": ["personal", "project", "organization", "session", "1", "2", "3", "4"] } },
+      "Limit": { "name": "limit", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 50 } },
+      "Cursor": { "name": "cursor", "in": "query", "required": false, "schema": { "type": "string", "minLength": 1, "maxLength": 2048 } }
+    },
+    "schemas": {
+      "Skill": {
+        "type": "object",
+        "required": ["source_selector", "name", "description", "content_hash", "scope", "revision", "enabled", "categories"],
+        "additionalProperties": false,
+        "properties": {
+          "source_selector": { "type": "string" },
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "content_hash": { "type": "string" },
+          "scope": { "type": "string", "enum": ["personal", "project", "organization", "session", "unknown"] },
+          "revision": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+          "enabled": { "type": "boolean" },
+          "installed": { "type": "boolean" },
+          "categories": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "McpServer": {
+        "type": "object",
+        "required": ["server_id", "provider_key", "server_identity", "transport", "declaration_digest", "status"],
+        "additionalProperties": false,
+        "properties": {
+          "server_id": { "type": "string" },
+          "provider_key": { "type": "string" },
+          "server_identity": { "type": "string" },
+          "transport": { "type": "string", "enum": ["stdio", "streamable_http", "sse_compat", "unknown"] },
+          "declaration_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "status": { "type": "string", "enum": ["registered", "disabled", "unknown"] }
+        }
+      },
+      "ErrorEnvelope": {
+        "type": "object",
+        "required": ["error"],
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": ["code", "message", "retryable"],
+            "additionalProperties": false,
+            "properties": {
+              "code": { "type": "string" },
+              "message": { "type": "string" },
+              "retryable": { "type": "boolean" }
+            }
+          }
+        }
+      }
+    },
+    "responses": {
+      "SkillList": {
+        "description": "Visible Skill page",
+        "headers": {
+          "x-kokoro-request-id": { "required": true, "schema": { "type": "string", "minLength": 1, "maxLength": 255 } }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "required": ["data"],
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "type": "object",
+                  "required": ["skills"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "skills": { "type": "array", "items": { "$ref": "#/components/schemas/Skill" } },
+                    "next_cursor": { "type": ["string", "null"] }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "McpServerList": {
+        "description": "MCP server page",
+        "headers": {
+          "x-kokoro-request-id": { "required": true, "schema": { "type": "string", "minLength": 1, "maxLength": 255 } }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "required": ["data"],
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "type": "object",
+                  "required": ["servers"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "servers": { "type": "array", "items": { "$ref": "#/components/schemas/McpServer" } },
+                    "next_cursor": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "Error": {
+        "description": "Stable error envelope",
+        "headers": {
+          "x-kokoro-request-id": { "required": true, "schema": { "type": "string", "minLength": 1, "maxLength": 255 } }
+        },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }
+      }
+    }
+  }
+}

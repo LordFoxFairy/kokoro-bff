@@ -1,6 +1,6 @@
 # kokoro-bff 当前实现
 
-状态：2026-09-04
+状态：2026-09-21
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。
 
 ## 已实现事实
@@ -15,6 +15,9 @@
 - AG-UI 是 BFF 对 Web 暴露的 Agent 事件 wire protocol；BFF 使用 `@ag-ui/core` schema 校验输出帧。
 - `Last-Event-ID` 是 BFF 为每个持久化 public frame 分配的 `agui_*` opaque cursor；Agent source sequence 不再是
   public resume cursor。
+- Capability consumer 设计已冻结：accepted owner commit
+  `7f89a267d745cbb9870f52d6edb23dec1a3c469b` 的 HTTP OpenAPI `2.0.0` 已作为 immutable vendor input 固定，
+  dependency manifest 当前为 `design-frozen`。这只是实现前设计门，不表示 edge 已激活或 generated client 已存在。
 
 ### 当前运行时与持久化
 
@@ -72,6 +75,9 @@
   projection 的内部时间仍在边界解析为 UTC instant。
 - 缺失 BFF store、非法请求/响应和未接写操作会返回稳定错误；ScheduledTask 在 Scheduler 缺失时仍可提交本地
   fact+outbox，外部 command 保持 retryable，不伪造 Scheduler 已成功。
+- 当前 runtime 仍使用 Capability legacy `/bff/*` 路径和 public `q` 查询，尚未消费本次冻结的 owner artifact；
+  `EDGE-BFF-CAPABILITY` 因此保持 broken。W0B-4 在同一切片生成 narrow client、只接受 canonical `query`、让 `q`
+  返回 400，并删除 legacy path、fallback 与 alias。
 
 ## 未完成缺口
 
@@ -87,6 +93,9 @@
    没有统一事务和 fencing。
 4. **AG-UI 跨版本重投影与备份恢复演练仍未完成。** 主动 consumer、lease/fence、retention floor、frame GC、cursor
    tombstone 与 expired-cursor 错误已经实现；尚缺 projection version 升级策略、生产 PG restore 演练和长时故障注入。
+5. **Capability consumer 尚未实现。** owner tuple、vendored OpenAPI、generator config、HTTP-only 边界与无数据 owner/
+   schema 变更已经冻结；generated outputs、facade、runtime route、public OpenAPI/operation baseline 与 drift command 属于
+   W0B-4。本任务没有修改 `src/**`、package/lock 或 canonical database schema。
 
 ### P1：架构与工程门禁
 

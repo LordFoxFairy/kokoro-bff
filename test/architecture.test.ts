@@ -633,3 +633,43 @@ test("BFF governance documents distinguish implemented facts from accepted targe
   assert.match(projectionService, /EventSchemas\.parse\(frame\)/u)
   assert.equal(/CREATE TABLE IF NOT EXISTS bff_outbox\b/u.test(schema), false)
 })
+
+test("BFF freezes one HTTP-only Capability projection boundary without taking data ownership", async () => {
+  const [technicalDesign, apiContract, dataModel, current, generatorConfig, schema] = await Promise.all([
+    readFile(path.join(root, "docs/TECHNICAL_DESIGN.md"), "utf8"),
+    readFile(path.join(root, "docs/API_CONTRACT.md"), "utf8"),
+    readFile(path.join(root, "docs/DATA_MODEL.md"), "utf8"),
+    readFile(path.join(root, "docs/CURRENT.md"), "utf8"),
+    readFile(path.join(root, "openapi-ts.capability.config.ts"), "utf8"),
+    readFile(path.join(root, "database/schema.sql"), "utf8"),
+  ])
+
+  assert.match(technicalDesign, /^## Capability consumer cutover$/mu)
+  assert.match(technicalDesign, /只消费[\s\S]{0,80}HTTP OpenAPI/u)
+  assert.match(technicalDesign, /不消费[\s\S]{0,80}Proto/u)
+  assert.match(technicalDesign, /不直连[\s\S]{0,80}(?:PostgreSQL|数据库)[\s\S]{0,80}Redis/u)
+  assert.match(technicalDesign, /Wave 3[\s\S]{0,120}BFF[\s\S]{0,120}删除[\s\S]{0,120}HTTP[\s\S]{0,120}generated[\s\S]{0,120}vendor/u)
+  assert.match(apiContract, /`query`[\s\S]{0,80}唯一[\s\S]{0,80}canonical/u)
+  assert.match(apiContract, /`q`[\s\S]{0,80}`400 invalid_query_parameter`/u)
+  assert.match(apiContract, /Authorization[\s\S]{0,80}Host[\s\S]{0,80}X-Forwarded[\s\S]{0,80}不转发/u)
+  assert.match(apiContract, /Skills cursor scope 固定为 `tenant \+ subject \+ operation \+ normalized filters`/u)
+  assert.match(apiContract, /MCP cursor scope 固定为 `tenant \+ operation \+ provider_key filters`/u)
+  assert.match(apiContract, /MCP owner contract 不提供 subject binding/u)
+  assert.match(apiContract, /BFF 不自造 subject binding/u)
+  assert.match(technicalDesign, /Skills cursor scope 固定为 `tenant \+ subject \+ operation \+ normalized filters`/u)
+  assert.match(technicalDesign, /MCP cursor scope 固定为 `tenant \+ operation \+ provider_key filters`/u)
+  assert.match(dataModel, /^## Capability projection data boundary$/mu)
+  assert.match(dataModel, /不新增[\s\S]{0,80}表[\s\S]{0,80}缓存事实[\s\S]{0,80}schema/u)
+  assert.match(current, /Capability consumer 设计已冻结/u)
+  assert.match(current, /当前 runtime 仍使用[\s\S]{0,80}`\/bff\/\*`/u)
+  assert.match(current, /W0B-4[\s\S]{0,120}同一切片[\s\S]{0,120}删除/u)
+  assert.doesNotMatch(schema, /CREATE TABLE[^;]*capability/iu)
+
+  assert.match(generatorConfig, /contract\/vendor\/kokoro-capability/u)
+  assert.match(generatorConfig, /src\/generated\/capability-http/u)
+  assert.match(generatorConfig, /clean:\s*true/u)
+  assert.match(generatorConfig, /module:\s*\{\s*extension:\s*"\.js"\s*\}/u)
+  assert.match(generatorConfig, /name:\s*"zod",\s*compatibilityVersion:\s*4/u)
+  assert.match(generatorConfig, /name:\s*"@hey-api\/client-fetch",[\s\S]*bundle:\s*true/u)
+  assert.match(generatorConfig, /name:\s*"@hey-api\/sdk",[\s\S]*strategy:\s*"flat"/u)
+})

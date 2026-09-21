@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "status": "design-frozen",
+  "owner": {
+    "repository_path": "apps/kokoro-capability",
+    "repository_commit": "7f89a267d745cbb9870f52d6edb23dec1a3c469b",
+    "contract_version": "2.0.0",
+    "contract_path": "contract/openapi/capability-http.openapi.json",
+    "contract_sha256": "e0b7c4b57ac030efb73878b51da2a3595ec0172bce0608a88ea925b57a69761a"
+  },
+  "generator": {
+    "package": "@hey-api/openapi-ts",
+    "version": "0.99.0",
+    "config_path": "openapi-ts.capability.config.ts",
+    "config_sha256": "c2b73d0149fac5269572d4a634a0d4b23200e538c37e138654473b42e52a2a01"
+  },
+  "runtime": {
+    "node": "22.22.2",
+    "pnpm": "11.25.0",
+    "zod": "4.5.4"
+  },
+  "lockfile_sha256": "5a5ca4e985ca209286624956f21ad638fcb7922d9435a467225c3bc000a10bd8",
+  "generated": []
+}
