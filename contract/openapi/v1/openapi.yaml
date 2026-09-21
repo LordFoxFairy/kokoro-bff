@@ -1100,6 +1100,12 @@ paths:
       x-kokoro-idempotency: none
       x-kokoro-permission: capability.skill.read
       summary: List skills
+      parameters:
+        - $ref: '#/components/parameters/CapabilitySkillQuery'
+        - $ref: '#/components/parameters/CapabilitySkillTags'
+        - $ref: '#/components/parameters/CapabilitySkillScope'
+        - $ref: '#/components/parameters/CapabilityLimit'
+        - $ref: '#/components/parameters/CapabilityCursor'
       responses:
         '200':
           description: Skill projections
@@ -1108,6 +1114,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/SkillListResponse'
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '502': { $ref: '#/components/responses/BadGateway' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/skills/pool:
     get:
       tags: [Skills]
@@ -1118,6 +1127,12 @@ paths:
       x-kokoro-idempotency: none
       x-kokoro-permission: capability.skill.read
       summary: List the skill pool
+      parameters:
+        - $ref: '#/components/parameters/CapabilitySkillQuery'
+        - $ref: '#/components/parameters/CapabilitySkillTags'
+        - $ref: '#/components/parameters/CapabilitySkillScope'
+        - $ref: '#/components/parameters/CapabilityLimit'
+        - $ref: '#/components/parameters/CapabilityCursor'
       responses:
         '200':
           description: Skill pool
@@ -1126,6 +1141,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/SkillPoolResponse'
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '502': { $ref: '#/components/responses/BadGateway' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/skills/catalog:
     get:
       tags: [Skills]
@@ -1136,6 +1154,12 @@ paths:
       x-kokoro-idempotency: none
       x-kokoro-permission: capability.skill.read
       summary: List the skill catalog
+      parameters:
+        - $ref: '#/components/parameters/CapabilitySkillQuery'
+        - $ref: '#/components/parameters/CapabilitySkillTags'
+        - $ref: '#/components/parameters/CapabilitySkillScope'
+        - $ref: '#/components/parameters/CapabilityLimit'
+        - $ref: '#/components/parameters/CapabilityCursor'
       responses:
         '200':
           description: Skill catalog
@@ -1144,6 +1168,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/SkillCatalogResponse'
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '502': { $ref: '#/components/responses/BadGateway' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/skills/quota:
     get:
       tags: [Skills]
@@ -1296,6 +1323,10 @@ paths:
       x-kokoro-idempotency: none
       x-kokoro-permission: capability.mcp.read
       summary: List MCP servers
+      parameters:
+        - $ref: '#/components/parameters/CapabilityProviderKey'
+        - $ref: '#/components/parameters/CapabilityLimit'
+        - $ref: '#/components/parameters/CapabilityCursor'
       responses:
         '200':
           description: MCP server list
@@ -1304,6 +1335,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/McpServerListResponse'
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '502': { $ref: '#/components/responses/BadGateway' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
     post:
       tags: [MCP]
       operationId: registerMcpServer
@@ -1728,6 +1762,59 @@ components:
       schema:
         $ref: '#/components/schemas/Cursor'
       example: cur_01JNEXT
+    CapabilitySkillQuery:
+      name: query
+      in: query
+      required: false
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 1024
+    CapabilitySkillTags:
+      name: tags
+      in: query
+      required: false
+      schema:
+        type: array
+        items:
+          type: string
+          minLength: 1
+          maxLength: 128
+      style: form
+      explode: true
+    CapabilitySkillScope:
+      name: scope_kind
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [personal, project, organization, session, '1', '2', '3', '4']
+    CapabilityProviderKey:
+      name: provider_key
+      in: query
+      required: false
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 191
+    CapabilityLimit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 50
+    CapabilityCursor:
+      name: cursor
+      in: query
+      required: false
+      description: Opaque owner cursor; clients and the BFF must not parse or construct it.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 2048
     LastEventId:
       name: Last-Event-ID
       in: header
@@ -2714,6 +2801,8 @@ components:
             skills:
               type: array
               items: { $ref: '#/components/schemas/Skill' }
+            next_cursor:
+              type: [string, 'null']
         meta: { $ref: '#/components/schemas/RequestMeta' }
     SkillPoolResponse:
       type: object
@@ -2726,6 +2815,8 @@ components:
             skills:
               type: array
               items: { $ref: '#/components/schemas/Skill' }
+            next_cursor:
+              type: [string, 'null']
         meta: { $ref: '#/components/schemas/RequestMeta' }
     SkillCatalogResponse:
       type: object
@@ -2844,6 +2935,8 @@ components:
             servers:
               type: array
               items: { $ref: '#/components/schemas/McpServer' }
+            next_cursor:
+              type: string
         meta: { $ref: '#/components/schemas/RequestMeta' }
     McpServerResponse:
       type: object

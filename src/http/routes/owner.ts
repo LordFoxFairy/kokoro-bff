@@ -4,7 +4,9 @@ import type { BffConfig } from "../../config/runtime.js"
 import type { Skill } from "../../contracts/index.js"
 import { failure, ok } from "../../contracts/index.js"
 import { proxyUpstream } from "../../upstream.js"
-import { billingPlansData, capabilityMcpData, capabilitySkillsData, checkoutUrlData, libraryData, mappedOwnerQuery, modelCatalogData, systemManifestData } from "../../application/projections.js"
+import { billingPlansData, checkoutUrlData, libraryData, modelCatalogData, systemManifestData } from "../../application/projections.js"
+import { requestCapability } from "../../infrastructure/clients/capability/client.js"
+import type { CapabilityOperation } from "../../infrastructure/clients/capability/types.js"
 import { ownerIdentityHeaders } from "../../infrastructure/clients/owner/identity.js"
 import { reply } from "../response.js"
 import { normalizeSystemUpstreamResponse, normalizeUpstreamResponse } from "../../infrastructure/clients/upstream-response.js"
@@ -87,34 +89,24 @@ export async function liveOwnerBusiness(
     return true
   }
 
-  const capabilityPath = businessPath[0] === "skills"
+  const capabilityOperation: CapabilityOperation | null = businessPath[0] === "skills"
     ? businessPath.length === 1 && method === "GET"
-      ? "/bff/skills"
+      ? "skills"
       : businessPath.length === 2 && businessPath[1] === "pool" && method === "GET"
-        ? "/bff/skills/pool"
+        ? "skillPool"
         : businessPath.length === 2 && businessPath[1] === "catalog" && method === "GET"
-          ? "/bff/skills/catalog"
+          ? "skillCatalog"
           : null
     : businessPath.length === 2 && businessPath[0] === "mcp" && businessPath[1] === "servers" && method === "GET"
-      ? "/bff/mcp/servers"
+      ? "mcpServers"
       : null
-  if (capabilityPath !== null) {
-    const query = capabilityPath === "/bff/mcp/servers"
-      ? mappedOwnerQuery(queryOf(request), { provider_key: "provider_key", limit: "limit", cursor: "cursor" })
-      : mappedOwnerQuery(queryOf(request), { q: "q", query: "query", tags: "tags", scope_kind: "scope_kind", limit: "limit", cursor: "cursor" })
-    const result = await liveOwnerRequest(request, config, context, "capability", `${capabilityPath}${query}`, method)
-    if (result.status >= 400) {
-      await reply(response, result.status, result.body, context, idempotency, mutation)
+  if (capabilityOperation !== null) {
+    const result = await requestCapability(config, context, capabilityOperation, queryOf(request))
+    if (!result.ok) {
+      await reply(response, result.status, failure(result.code, result.message, context.requestId), context, idempotency, mutation)
       return true
     }
-    const projected = capabilityPath === "/bff/mcp/servers"
-      ? capabilityMcpData(result.body, context.identity.namespace)
-      : capabilitySkillsData(result.body, capabilityPath === "/bff/skills/catalog")
-    if (projected === null) {
-      await reply(response, 502, failure("upstream_response_invalid", "Capability projection did not match the v1 owner contract", context.requestId), context, idempotency, mutation)
-      return true
-    }
-    await reply(response, result.status, ok(projected, context.requestId), context, idempotency, mutation)
+    await reply(response, result.status, ok(result.data, context.requestId), context, idempotency, mutation)
     return true
   }
   if (businessPath[0] === "skills" || businessPath[0] === "mcp") {

@@ -15,9 +15,14 @@
 - AG-UI 是 BFF 对 Web 暴露的 Agent 事件 wire protocol；BFF 使用 `@ag-ui/core` schema 校验输出帧。
 - `Last-Event-ID` 是 BFF 为每个持久化 public frame 分配的 `agui_*` opaque cursor；Agent source sequence 不再是
   public resume cursor。
-- Capability consumer 设计已冻结：accepted owner commit
-  `7f89a267d745cbb9870f52d6edb23dec1a3c469b` 的 HTTP OpenAPI `2.0.0` 已作为 immutable vendor input 固定，
-  dependency manifest 当前为 `design-frozen`。这只是实现前设计门，不表示 edge 已激活或 generated client 已存在。
+- BFF runtime 的 Capability generated consumer、facade 与四条 canonical route 已实现：accepted owner commit
+  `7f89a267d745cbb9870f52d6edb23dec1a3c469b` 的 HTTP OpenAPI `2.0.0` 已作为 immutable vendor input 固定；
+  manifest 状态为 `generated`，exact 16-file client、facade、canonical owner routes 与 generation drift gate 已激活。
+  固定的 generator `0.99.0` 产物通过生成流水线内固定命中数的 `exactOptionalPropertyTypes` compatibility normalization，
+  禁止 TypeScript suppression 或手改产物；drift gate 连续生成两次并验证 byte-identical。升级到原生兼容的固定 generator 版本且
+  regeneration、drift、typecheck、build 全通过后删除该 normalization。
+  Root `EDGE-BFF-CAPABILITY` 仍为 broken，待 W0B-5 real smoke 与 W0B-6 integration 闭环后才可标记 active；本仓实现完成
+  不代表跨仓 edge 已激活。
 
 ### 当前运行时与持久化
 
@@ -75,9 +80,10 @@
   projection 的内部时间仍在边界解析为 UTC instant。
 - 缺失 BFF store、非法请求/响应和未接写操作会返回稳定错误；ScheduledTask 在 Scheduler 缺失时仍可提交本地
   fact+outbox，外部 command 保持 retryable，不伪造 Scheduler 已成功。
-- 当前 runtime 仍使用 Capability legacy `/bff/*` 路径和 public `q` 查询，尚未消费本次冻结的 owner artifact；
-  `EDGE-BFF-CAPABILITY` 因此保持 broken。W0B-4 在同一切片生成 narrow client、只接受 canonical `query`、让 `q`
-  返回 400，并删除 legacy path、fallback 与 alias。
+- 当前 runtime 通过唯一 Capability facade 调用四个 canonical owner GET；Skills 只接受 `query,tags,scope_kind,limit,cursor`，
+  MCP 只接受 `provider_key,limit,cursor`。旧路径、搜索 alias、handwritten compatibility fallback 均已删除；未知或非法
+  query 在出站 I/O 前返回 400。5 秒 timeout、1 MiB response cap、单次尝试、generated success/error 校验与稳定 502/503
+  映射已经由 focused test 锁定。
 
 ## 未完成缺口
 
@@ -93,9 +99,6 @@
    没有统一事务和 fencing。
 4. **AG-UI 跨版本重投影与备份恢复演练仍未完成。** 主动 consumer、lease/fence、retention floor、frame GC、cursor
    tombstone 与 expired-cursor 错误已经实现；尚缺 projection version 升级策略、生产 PG restore 演练和长时故障注入。
-5. **Capability consumer 尚未实现。** owner tuple、vendored OpenAPI、generator config、HTTP-only 边界与无数据 owner/
-   schema 变更已经冻结；generated outputs、facade、runtime route、public OpenAPI/operation baseline 与 drift command 属于
-   W0B-4。本任务没有修改 `src/**`、package/lock 或 canonical database schema。
 
 ### P1：架构与工程门禁
 

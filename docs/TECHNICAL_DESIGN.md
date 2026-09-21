@@ -168,10 +168,17 @@ Capability 是 Skill 与 MCP server 只读事实的唯一 owner；BFF 只拥有 
 Capability HTTP OpenAPI，不消费现有 Capability Proto，也不直连 Capability PostgreSQL/数据库或 Redis。固定 owner
 surface 只有四个 GET：`/v1/skills`、`/v1/skills/pool`、`/v1/skills/catalog`、`/v1/mcp/servers`。
 
-当前 runtime 仍由 `src/http/routes/owner.ts` 调用已漂移的 `/bff/*`，因此该 edge 仍是 broken；冻结设计不等于运行时
-已切换。W0B-4 从 vendored commit blob 生成 `src/generated/capability-http/`，并在
-`src/infrastructure/clients/capability/` 建立唯一 facade。generated wire 类型在 facade 终止，application 与 HTTP route
-只接触 BFF projection 类型；旧 `/bff/*`、fallback 和 alias 在同一实现切片删除，不保留双轨。
+当前 generated Capability HTTP consumer 已从 vendored commit blob 生成到 `src/generated/capability-http/`，
+`src/infrastructure/clients/capability/` 是唯一 facade。generated wire 类型在 facade 终止，application 与 HTTP route
+只接触 BFF projection 类型；runtime 已原子切到四个 canonical `/v1/*` owner GET，旧路径、fallback 和 alias 已删除，
+不存在双轨。`contract:check:capability` 在临时目录重新生成并校验 exact file allow-list、bytes 与所有 provenance digest。
+固定的 `@hey-api/openapi-ts@0.99.0` transport 模板会为 optional property 显式赋 `undefined`，与本仓
+`exactOptionalPropertyTypes` 冲突；生成流水线因此在 Prettier 前执行固定模式、固定命中数的 compatibility normalization，
+任一模板命中数漂移即失败。该步骤不手改 generated output、不使用 TypeScript suppression，drift gate 会连续生成两次并验证
+byte-identical，再与 checked-in 16 files 比较。升级到原生生成 exact-optional-compatible output 的固定 generator 版本并通过
+regeneration、drift、typecheck 与 build 后，删除该 normalization。
+同一固定计数流水线把 owner contract 中所有 `additionalProperties:false` 对应的 generated Zod object validator 收紧为
+`strict()`；top-level response、nested data/item 与 error envelope 出现未声明字段时一律 fail closed。
 
 请求管线只接受每个 operation 的 query allow-list。Skills 三个列表仅允许 `query`、重复 `tags`、`scope_kind`、
 `limit`、`cursor`；MCP 列表仅允许 `provider_key`、`limit`、`cursor`。BFF 从受信 Web envelope 构造

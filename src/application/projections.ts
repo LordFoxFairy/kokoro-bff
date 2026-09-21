@@ -1,4 +1,4 @@
-import type { ChatMessage, ChatSessionSummary, LibraryItem, McpServer } from "../contracts/index.js"
+import type { ChatMessage, ChatSessionSummary, LibraryItem } from "../contracts/index.js"
 import { isRecord } from "../domain/json.js"
 import type { RequestContext } from "../domain/request-context.js"
 
@@ -151,88 +151,6 @@ export function checkoutUrlData(body: unknown): { checkout_url: string } | null 
   const data = dataOf(body)
   const checkoutUrl = data === null ? null : stringField(data, "checkout_url")
   return checkoutUrl === null ? null : { checkout_url: checkoutUrl }
-}
-
-export type CapabilitySkillProjection = {
-  name: string
-  description: string
-  content_hash: string
-  scope: string
-  enabled: boolean
-  installed?: boolean
-  categories?: string[]
-}
-
-export function capabilitySkillsData(body: unknown, catalog: boolean): { skills: CapabilitySkillProjection[]; next_cursor?: string | null } | null {
-  const data = dataOf(body)
-  if (data === null || !Array.isArray(data.skills)) return null
-  const skills: CapabilitySkillProjection[] = []
-  for (const item of data.skills) {
-    if (!isRecord(item)) return null
-    const name = stringField(item, "name")
-    const description = stringField(item, "description")
-    const contentHash = stringField(item, "content_hash", "contentHash")
-    const scope = stringField(item, "scope")
-    if (name === null || description === null || contentHash === null || scope === null) return null
-    const enabled = typeof item.enabled === "boolean" ? item.enabled : true
-    const categories = Array.isArray(item.categories)
-      ? item.categories.filter((value): value is string => typeof value === "string")
-      : undefined
-    skills.push({
-      name,
-      description,
-      content_hash: contentHash,
-      scope,
-      enabled,
-      ...(catalog ? { installed: item.installed !== false } : {}),
-      ...(categories === undefined ? {} : { categories }),
-    })
-  }
-  const nextCursor = data.next_cursor
-  if (nextCursor !== undefined && nextCursor !== null && typeof nextCursor !== "string") return null
-  return { skills, ...(catalog ? { next_cursor: nextCursor ?? null } : nextCursor === undefined ? {} : { next_cursor: nextCursor }) }
-}
-
-export function capabilityMcpData(body: unknown, tenantId: string): { servers: McpServer[]; next_cursor?: string } | null {
-  const data = dataOf(body)
-  if (data === null || !Array.isArray(data.servers)) return null
-  const servers: McpServer[] = []
-  for (const item of data.servers) {
-    if (!isRecord(item)) return null
-    const name = stringField(item, "server_identity", "name")
-    const transport = stringField(item, "transport")
-    const serverId = stringField(item, "server_id", "serverId")
-    const status = stringField(item, "status")
-    if (name === null || transport === null || serverId === null || status === null) return null
-    if (transport !== "stdio" && transport !== "streamable_http" && transport !== "sse_compat") return null
-    servers.push({
-      scope: tenantId,
-      name,
-      revision: 1,
-      transport: transport === "stdio" ? "http" : "streamable_http",
-      // Capability's server_identity is the public endpoint identity. Keep
-      // that owner value instead of manufacturing a capability:// URL that
-      // the Web client could mistake for a connectable endpoint.
-      url: name,
-      allowed_tools: [],
-      secret_ref: null,
-      enabled: status === "registered",
-    })
-  }
-  const nextCursor = data.next_cursor
-  if (nextCursor !== undefined && typeof nextCursor !== "string") return null
-  return { servers, ...(nextCursor === undefined ? {} : { next_cursor: nextCursor }) }
-}
-
-export function mappedOwnerQuery(incoming: URLSearchParams, mapping: Readonly<Record<string, string>>): string {
-  const owner = new URLSearchParams()
-  for (const [incomingName, ownerName] of Object.entries(mapping)) {
-    for (const value of incoming.getAll(incomingName)) {
-      const trimmed = value.trim()
-      if (trimmed !== "") owner.append(ownerName, trimmed)
-    }
-  }
-  return owner.size === 0 ? "" : `?${owner.toString()}`
 }
 
 export function libraryItemType(mimeType: string): LibraryItem["type"] {

@@ -522,6 +522,7 @@ describe("kokoro-bff v1 mock contract", () => {
   it("routes live Skills traffic to the explicit Capability projection", async () => {
     const upstream = createServer((_request, response) => {
       response.setHeader("content-type", "application/json")
+      response.setHeader("x-kokoro-request-id", "skills-live")
       response.end(JSON.stringify({
         data: {
           skills: [{
@@ -534,9 +535,8 @@ describe("kokoro-bff v1 mock contract", () => {
             enabled: true,
             categories: ["review"],
           }],
-          next_cursor: null,
+          next_cursor: "pool-next",
         },
-        meta: { request_id: "skills-live" },
       }))
     })
     const upstreamBase = await listen(upstream)
@@ -556,7 +556,7 @@ describe("kokoro-bff v1 mock contract", () => {
           enabled: true,
           categories: ["review"],
         }],
-        next_cursor: null,
+        next_cursor: "pool-next",
       },
       meta: { request_id: "skills-live" },
     })
@@ -570,10 +570,12 @@ describe("kokoro-bff v1 mock contract", () => {
         service: request.headers["x-kokoro-service"]?.toString(),
         secret: request.headers["x-kokoro-internal-secret"]?.toString(),
         authorization: request.headers.authorization?.toString(),
+        xForwardedFor: request.headers["x-forwarded-for"]?.toString(),
         requestIdAlias: request.headers["x-request-id"]?.toString(),
         xDomain: request.headers["x-domain"]?.toString(),
       }
       response.setHeader("content-type", "application/json")
+      response.setHeader("x-kokoro-request-id", "live-request")
       response.end(JSON.stringify({
         data: {
           skills: [{
@@ -587,7 +589,6 @@ describe("kokoro-bff v1 mock contract", () => {
             categories: [],
           }],
         },
-        meta: { request_id: "live-request" },
       }))
     })
     const upstreamBase = await listen(upstream)
@@ -596,14 +597,15 @@ describe("kokoro-bff v1 mock contract", () => {
       upstreamTimeoutMs: 10000,
       upstreams: { ...config().upstreams, capability: upstreamBase },
     })))
-    const response = await fetch(`${base}/v1/skills`, { headers: { ...authHeaders(), authorization: "Bearer user-jwt", "x-domain": "evil.example", "x-kokoro-request-id": "live-request" } })
+    const response = await fetch(`${base}/v1/skills`, { headers: { ...authHeaders(), authorization: "Bearer user-jwt", forwarded: "for=198.51.100.7", "x-forwarded-for": "198.51.100.8", "x-domain": "evil.example", "x-kokoro-request-id": "live-request" } })
     assert.equal(response.status, 200)
     assert.deepEqual(received, {
-      forwarded: "host=dev.kokoro.localhost",
+      forwarded: undefined,
       service: "web-bff",
       secret: "bff-upstream-secret",
-      authorization: "Bearer bff-upstream-secret",
-      requestIdAlias: "live-request",
+      authorization: undefined,
+      xForwardedFor: undefined,
+      requestIdAlias: undefined,
       xDomain: undefined,
     })
     assert.equal((await response.json() as { meta: { request_id: string } }).meta.request_id, "live-request")
@@ -614,7 +616,10 @@ describe("kokoro-bff v1 mock contract", () => {
     const hubUpstream = createServer((request, response) => {
       received.push(`capability:${request.url}`)
       response.setHeader("content-type", "application/json")
-      response.end(JSON.stringify({ data: { skills: [], servers: [] }, meta: { request_id: "upstream" } }))
+      response.setHeader("x-kokoro-request-id", "upstream")
+      response.end(request.url?.startsWith("/v1/mcp/servers")
+        ? JSON.stringify({ data: { servers: [], next_cursor: "mcp-next" } })
+        : JSON.stringify({ data: { skills: [], next_cursor: "skills-next" } }))
     })
     const capabilityBase = await listen(hubUpstream)
     const base = await listen(liveServer(config({
@@ -626,7 +631,9 @@ describe("kokoro-bff v1 mock contract", () => {
     const mcp = await fetch(`${base}/v1/mcp/servers`, { headers: authHeaders() })
     assert.equal(skills.status, 200)
     assert.equal(mcp.status, 200)
-    assert.deepEqual(received, ["capability:/bff/skills", "capability:/bff/mcp/servers"])
+    assert.deepEqual((await skills.json() as { data: unknown }).data, { skills: [], next_cursor: "skills-next" })
+    assert.deepEqual((await mcp.json() as { data: unknown }).data, { servers: [], next_cursor: "mcp-next" })
+    assert.deepEqual(received, ["capability:/v1/skills", "capability:/v1/mcp/servers"])
   })
 
   it("forwards allowlisted Capability queries and preserves owner cursors", async () => {
@@ -634,22 +641,31 @@ describe("kokoro-bff v1 mock contract", () => {
     const upstream = createServer((request, response) => {
       received.push(request.url ?? "")
       response.setHeader("content-type", "application/json")
-      response.end(JSON.stringify({ data: { skills: [], servers: [], next_cursor: "capability-cursor-next" }, meta: { request_id: "capability-query" } }))
+      response.setHeader("x-kokoro-request-id", "capability-query")
+      response.end(request.url?.startsWith("/v1/mcp/servers")
+        ? JSON.stringify({ data: { servers: [], next_cursor: "capability-cursor-next" } })
+        : JSON.stringify({ data: { skills: [], next_cursor: "capability-cursor-next" } }))
     })
     const upstreamBase = await listen(upstream)
     const base = await listen(liveServer(config({ mode: "live", upstreams: { ...config().upstreams, capability: upstreamBase } })))
 
-    const skills = await fetch(`${base}/v1/skills/catalog?q=contract%20review&tags=review&tags=security&scope_kind=personal&limit=10&cursor=cursor-1`, { headers: { ...authHeaders(), "x-kokoro-request-id": "capability-query" } })
+    const skills = await fetch(`${base}/v1/skills/catalog?query=contract%20review&tags=review&tags=security&scope_kind=personal&limit=10&cursor=cursor-1`, { headers: { ...authHeaders(), "x-kokoro-request-id": "capability-query" } })
     assert.equal(skills.status, 200)
     assert.deepEqual(await skills.json(), {
       data: { skills: [], next_cursor: "capability-cursor-next" },
       meta: { request_id: "capability-query" },
     })
-    assert.equal(received[0], "/bff/skills/catalog?q=contract+review&tags=review&tags=security&scope_kind=personal&limit=10&cursor=cursor-1")
+    assert.equal(received[0], "/v1/skills/catalog?query=contract%20review&tags=review&tags=security&scope_kind=personal&limit=10&cursor=cursor-1")
 
     const mcp = await fetch(`${base}/v1/mcp/servers?provider_key=github&limit=5&cursor=mcp-1`, { headers: authHeaders() })
     assert.equal(mcp.status, 200)
-    assert.equal(received[1], "/bff/mcp/servers?provider_key=github&limit=5&cursor=mcp-1")
+    assert.equal(received[1], "/v1/mcp/servers?provider_key=github&limit=5&cursor=mcp-1")
+
+    const aliasQuery = new URLSearchParams([["q", "legacy"]])
+    const alias = await fetch(`${base}/v1/skills?${aliasQuery.toString()}`, { headers: authHeaders() })
+    assert.equal(alias.status, 400)
+    assert.equal((await alias.json() as { error: { code: string } }).error.code, "invalid_query_parameter")
+    assert.equal(received.length, 2)
   })
 
   it("projects live Library through the explicit Storage owner projection", async () => {
@@ -997,7 +1013,7 @@ describe("kokoro-bff v1 mock contract", () => {
     })))
     const missingUpstream = await fetch(`${missingUpstreamBase}/v1/skills`, { headers: authHeaders() })
     assert.equal(missingUpstream.status, 503)
-    assert.equal((await missingUpstream.json() as { error: { code: string } }).error.code, "upstream_not_configured")
+    assert.equal((await missingUpstream.json() as { error: { code: string } }).error.code, "capability_unavailable")
 
     const unreachableBase = await listen(liveServer(config({
       mode: "live",
@@ -1005,11 +1021,12 @@ describe("kokoro-bff v1 mock contract", () => {
     })))
     const unreachable = await fetch(`${unreachableBase}/v1/skills/pool`, { headers: authHeaders() })
     assert.equal(unreachable.status, 502)
-    assert.equal((await unreachable.json() as { error: { code: string } }).error.code, "upstream_unreachable")
+    assert.equal((await unreachable.json() as { error: { code: string } }).error.code, "capability_response_invalid")
 
     const malformedUpstream = createServer((_request, response) => {
       response.statusCode = 200
       response.setHeader("content-type", "text/plain")
+      response.setHeader("x-kokoro-request-id", "malformed")
       response.end("not json")
     })
     const malformedBase = await listen(malformedUpstream)
@@ -1019,11 +1036,12 @@ describe("kokoro-bff v1 mock contract", () => {
     })))
     const malformed = await fetch(`${malformedBff}/v1/skills/pool`, { headers: authHeaders() })
     assert.equal(malformed.status, 502)
-    assert.equal((await malformed.json() as { error: { code: string } }).error.code, "upstream_response_invalid")
+    assert.equal((await malformed.json() as { error: { code: string } }).error.code, "capability_response_invalid")
 
     const emptyUpstream = createServer((_request, response) => {
       response.statusCode = 200
       response.setHeader("content-type", "application/json")
+      response.setHeader("x-kokoro-request-id", "empty")
       response.end("")
     })
     const emptyBase = await listen(emptyUpstream)
@@ -1033,14 +1051,14 @@ describe("kokoro-bff v1 mock contract", () => {
     })))
     const empty = await fetch(`${emptyBff}/v1/skills/pool`, { headers: authHeaders() })
     assert.equal(empty.status, 502)
-    assert.equal((await empty.json() as { error: { code: string } }).error.code, "upstream_response_invalid")
+    assert.equal((await empty.json() as { error: { code: string } }).error.code, "capability_response_invalid")
 
     const errorEnvelopeUpstream = createServer((_request, response) => {
       response.statusCode = 503
       response.setHeader("content-type", "application/json")
+      response.setHeader("x-kokoro-request-id", "skills-upstream-503")
       response.end(JSON.stringify({
-        error: { code: "skills_unavailable", message: "Skills are down" },
-        meta: { request_id: "skills-upstream-503" },
+        error: { code: "skills_unavailable", message: "Skills are down", retryable: true },
       }))
     })
     const errorEnvelopeBase = await listen(errorEnvelopeUpstream)
@@ -1048,16 +1066,17 @@ describe("kokoro-bff v1 mock contract", () => {
       mode: "live",
       upstreams: { ...config().upstreams, capability: errorEnvelopeBase },
     })))
-    const errorEnvelope = await fetch(`${errorEnvelopeBff}/v1/skills/pool`, { headers: authHeaders() })
+    const errorEnvelope = await fetch(`${errorEnvelopeBff}/v1/skills/pool`, { headers: { ...authHeaders(), "x-kokoro-request-id": "public-capability-503" } })
     assert.equal(errorEnvelope.status, 503)
     assert.deepEqual(await errorEnvelope.json(), {
-      error: { code: "skills_unavailable", message: "Skills are down" },
-      meta: { request_id: "skills-upstream-503" },
+      error: { code: "capability_unavailable", message: "Capability is temporarily unavailable" },
+      meta: { request_id: "public-capability-503" },
     })
 
     const httpErrorUpstream = createServer((_request, response) => {
       response.statusCode = 500
       response.setHeader("content-type", "text/plain")
+      response.setHeader("x-kokoro-request-id", "owner-500")
       response.end("boom")
     })
     const httpErrorBase = await listen(httpErrorUpstream)
@@ -1066,8 +1085,8 @@ describe("kokoro-bff v1 mock contract", () => {
       upstreams: { ...config().upstreams, capability: httpErrorBase },
     })))
     const httpError = await fetch(`${httpErrorBff}/v1/skills/pool`, { headers: authHeaders() })
-    assert.equal(httpError.status, 500)
-    assert.equal((await httpError.json() as { error: { code: string } }).error.code, "upstream_http_error")
+    assert.equal(httpError.status, 502)
+    assert.equal((await httpError.json() as { error: { code: string } }).error.code, "capability_response_invalid")
 
     const baseDir = fileURLToPath(new URL("../docs/api/v1/", import.meta.url))
     for (const file of ["README.md", "projects.md", "system.md", "models.md", "skills.md", "mcp.md", "scheduled.md", "agents.md", "library.md", "billing.md"]) {
@@ -1320,7 +1339,9 @@ describe("kokoro-bff v1 mock contract", () => {
   })
 
   it("does not expose deprecated capability compatibility paths", async () => {
+    let ownerCalls = 0
     const capability = createServer((_request, response) => {
+      ownerCalls += 1
       response.setHeader("content-type", "application/json")
       response.end(JSON.stringify({ data: { servers: [] }, meta: { request_id: "capability" } }))
     })
@@ -1335,5 +1356,15 @@ describe("kokoro-bff v1 mock contract", () => {
       assert.equal(response.status, 404, path)
       assert.equal((await response.json() as { error: { code: string } }).error.code, "bff_route_not_found")
     }
+    const guardedRequests: Array<{ path: string; init: RequestInit }> = [
+      { path: "/v1/mcp/servers", init: { method: "POST", headers: { "content-type": "application/json", "idempotency-key": "mcp-register" }, body: "{}" } },
+      { path: "/v1/skills/quota", init: {} },
+    ]
+    for (const { path, init } of guardedRequests) {
+      const response = await fetch(`${base}${path}`, { ...init, headers: { ...authHeaders(), ...init.headers } })
+      assert.equal(response.status, 503, path)
+      assert.equal((await response.json() as { error: { code: string } }).error.code, "capability_projection_not_configured", path)
+    }
+    assert.equal(ownerCalls, 0)
   })
 })

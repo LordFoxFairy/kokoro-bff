@@ -9,6 +9,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx src/main.ts",
+    "format:check": "prettier --check --no-semi --print-width 160 openapi-ts.capability.config.ts scripts/generate-capability-http-client.mjs src/infrastructure/clients/capability src/generated/capability-http test/capability-client.test.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/main.js",
     "db:apply-schema": "node scripts/apply-schema.mjs",
@@ -18,23 +19,28 @@
     "contract:lint": "redocly lint contract/openapi/v1/openapi.yaml",
     "contract:semantic": "node scripts/verify-openapi.ts",
     "contract:test": "pnpm build && node --test test/contract-governance.test.mjs test/contract/openapi-contract.test.mjs test/agent-control-adapter.test.ts",
-    "contract:check": "pnpm contract:lint && pnpm contract:semantic && pnpm contract:test",
+    "contract:generate:capability": "node scripts/generate-capability-http-client.mjs --write",
+    "contract:check:capability": "node scripts/generate-capability-http-client.mjs --check",
+    "contract:check": "pnpm contract:check:capability && pnpm contract:lint && pnpm contract:semantic && pnpm contract:test",
     "contract:update-baseline": "node scripts/check-contract.mjs --write-baseline",
     "test:architecture": "pnpm build && node --test test/architecture.test.ts",
-    "test": "pnpm build && node --test test/architecture.test.ts test/contract-governance.test.mjs test/contract/openapi-contract.test.mjs test/schema-governance.test.mjs test/chat-service.test.ts test/chat-input.test.ts test/chat-cursor.test.ts test/idempotency.test.ts test/agent-dispatch-outbox.test.ts test/agent-cancellation-outbox.test.ts test/agent-control-adapter.test.ts test/agui.test.ts test/agui-projector.test.mjs test/agui-runtime.test.mjs test/agui-source-page.test.mjs test/agui-replay.test.mjs test/agui-redis-notification.test.mjs test/agui-sse-writer.test.mjs test/bff.test.ts test/config.test.ts test/lifecycle.test.ts test/mori.test.ts test/music.test.ts test/scheduler.test.ts test/scheduled-input.test.ts test/scheduled-outbox.test.ts test/source-start.test.mjs test/upstream.test.ts",
+    "test": "pnpm build && node --test test/architecture.test.ts test/contract-governance.test.mjs test/contract/openapi-contract.test.mjs test/schema-governance.test.mjs test/chat-service.test.ts test/chat-input.test.ts test/chat-cursor.test.ts test/idempotency.test.ts test/agent-dispatch-outbox.test.ts test/agent-cancellation-outbox.test.ts test/agent-control-adapter.test.ts test/agui.test.ts test/agui-projector.test.mjs test/agui-runtime.test.mjs test/agui-source-page.test.mjs test/agui-replay.test.mjs test/agui-redis-notification.test.mjs test/agui-sse-writer.test.mjs test/bff.test.ts test/capability-client.test.ts test/config.test.ts test/lifecycle.test.ts test/mori.test.ts test/music.test.ts test/scheduler.test.ts test/scheduled-input.test.ts test/scheduled-outbox.test.ts test/source-start.test.mjs test/upstream.test.ts",
     "test:integration": "pnpm build && node --test --test-concurrency=1 test/scheduled-outbox.integration.mjs test/business-store.integration.mjs test/chat-facts.integration.mjs test/agui-http.integration.mjs test/agui-projection.integration.mjs",
     "check": "pnpm lint && pnpm typecheck && pnpm contract:check && pnpm test && pnpm build"
   },
   "devDependencies": {
+    "@hey-api/openapi-ts": "0.99.0",
     "@redocly/cli": "2.46.1",
     "@types/node": "^22.15.0",
     "@types/pg": "^8.23.1",
+    "prettier": "3.9.6",
     "tsx": "4.23.12",
-    "typescript": "^5.8.3"
+    "typescript": "5.9.3"
   },
   "dependencies": {
     "@ag-ui/core": "0.0.59",
     "pg": "^8.23.0",
-    "redis": "^5.12.1"
+    "redis": "^5.12.1",
+    "zod": "4.5.4"
   }
 }

@@ -140,7 +140,6 @@ Capability Skill、Skill Pool、Skill Catalog 与 MCP server 是 Capability owne
 不新增 Capability 表、缓存事实或 schema，不读取 Capability 数据库/Redis，不建立跨仓 foreign key，也不把 owner
 cursor、响应或 generated wire type 写入 BFF PostgreSQL。列表 GET 在单次请求生命周期内完成校验、owner HTTP read 与
 public projection，没有 BFF 数据库事务、outbox、幂等 receipt、retention 或 GC。
-
 本设计切片不修改 [`../database/schema.sql`](../database/schema.sql)；其基线 SHA-256 为
 `8dcb1b3194ed4d4c50c42cdb9a199fec5e253793dd3ca062e92094ab68436da1`。fresh install、现有查询/index、tenant predicate
 与删除策略均保持不变。若 Capability projection 后续需要本地 durable fact，必须重新通过 owner、API 与 canonical
