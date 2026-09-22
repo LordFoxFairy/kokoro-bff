@@ -4,7 +4,7 @@ import type { BffConfig } from "../../config/runtime.js"
 import type { Skill } from "../../contracts/index.js"
 import { failure, ok } from "../../contracts/index.js"
 import { proxyUpstream } from "../../upstream.js"
-import { billingPlansData, checkoutUrlData, libraryData, modelCatalogData, systemManifestData } from "../../application/projections.js"
+import { billingPlansData, checkoutUrlData, modelCatalogData, systemManifestData } from "../../application/projections.js"
 import { requestCapability } from "../../infrastructure/clients/capability/client.js"
 import type { CapabilityOperation } from "../../infrastructure/clients/capability/types.js"
 import { ownerIdentityHeaders } from "../../infrastructure/clients/owner/identity.js"
@@ -115,21 +115,7 @@ export async function liveOwnerBusiness(
   }
 
   if (businessPath.length === 1 && businessPath[0] === "library" && method === "GET") {
-    const result = await liveOwnerRequest(request, config, context, "storage", "/internal/bff/library", method)
-    if (result.status >= 400) {
-      await reply(response, result.status, result.body, context, idempotency, mutation)
-      return true
-    }
-    const projected = libraryData(result.body)
-    if (projected === null) {
-      await reply(response, 502, failure("upstream_response_invalid", "Storage library projection did not match the v1 owner contract", context.requestId), context, idempotency, mutation)
-      return true
-    }
-    await reply(response, result.status, ok(projected, context.requestId), context, idempotency, mutation)
-    return true
-  }
-  if (businessPath[0] === "library" || businessPath[0] === "assets" || businessPath[0] === "artifacts") {
-    await reply(response, 503, failure("storage_projection_not_configured", "This Storage operation is not exposed by the BFF owner adapter", context.requestId), context, idempotency, mutation)
+    await reply(response, 503, failure("storage_integration_unavailable", "Storage integration is unavailable", context.requestId), context, idempotency, mutation)
     return true
   }
 

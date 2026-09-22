@@ -89,6 +89,15 @@ describe("kokoro-bff optional Agent configuration", () => {
     assert.equal("model" in config.upstreams, false)
   })
 
+  it("ignores the removed Storage HTTP environment variable", () => {
+    const config = loadConfig({
+      ...runtimeEnv,
+      KOKORO_DOMAIN: "dev.kokoro.localhost",
+      KOKORO_STORAGE_BASE_URL: "file:///must-be-ignored",
+    })
+    assert.equal("storage" in config.upstreams, false)
+  })
+
   it("loads AG-UI replay and stream budgets from the environment", () => {
     const config = loadConfig({
       ...runtimeEnv,

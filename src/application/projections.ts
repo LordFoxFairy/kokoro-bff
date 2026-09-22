@@ -1,4 +1,4 @@
-import type { ChatMessage, ChatSessionSummary, LibraryItem } from "../contracts/index.js"
+import type { ChatMessage, ChatSessionSummary } from "../contracts/index.js"
 import { isRecord } from "../domain/json.js"
 import type { RequestContext } from "../domain/request-context.js"
 
@@ -151,30 +151,6 @@ export function checkoutUrlData(body: unknown): { checkout_url: string } | null 
   const data = dataOf(body)
   const checkoutUrl = data === null ? null : stringField(data, "checkout_url")
   return checkoutUrl === null ? null : { checkout_url: checkoutUrl }
-}
-
-export function libraryItemType(mimeType: string): LibraryItem["type"] {
-  if (mimeType.startsWith("image/")) return "image"
-  if (mimeType.includes("spreadsheet") || mimeType.includes("excel") || mimeType === "text/csv") return "spreadsheet"
-  if (mimeType.includes("presentation") || mimeType.includes("powerpoint")) return "presentation"
-  if (mimeType.startsWith("text/") || mimeType.includes("pdf") || mimeType.includes("word") || mimeType.includes("document")) return "document"
-  return "other"
-}
-
-export function libraryData(body: unknown): { items: LibraryItem[] } | null {
-  const data = dataOf(body)
-  if (data === null || !Array.isArray(data.items)) return null
-  const items: LibraryItem[] = []
-  for (const item of data.items) {
-    if (!isRecord(item)) return null
-    const id = stringField(item, "artifact_id", "asset_id")
-    const title = stringField(item, "filename", "artifact_id", "asset_id")
-    const mimeType = stringField(item, "mime_type", "mimeType")
-    const createdAt = stringField(item, "created_at", "finalized_at")
-    if (id === null || title === null || mimeType === null || createdAt === null || Number.isNaN(Date.parse(createdAt))) return null
-    items.push({ id, title, type: libraryItemType(mimeType), created_at: new Date(createdAt).toISOString(), url: "" })
-  }
-  return { items }
 }
 
 export function systemManifestData(body: unknown): Record<string, unknown> | null {

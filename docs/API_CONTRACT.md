@@ -72,6 +72,17 @@ BFF 的机器事实与契约门禁；runtime mapper、Web consumer 和 `docs/api
 - `/v1` 的 breaking policy 与 provenance 见 [`../contract/README.md`](../contract/README.md)。删除 path/method、重命名
   operationId、收窄 schema 或改变 permission/idempotency 语义必须进入新版本。
 
+## Library degraded contract and Storage v2 prerequisites
+
+`GET /v1/library` 保留既有 path、method、`listLibrary` operationId 与 operation metadata，但在受信
+service-envelope admission 通过后只返回 `503 storage_integration_unavailable`；未认证请求仍返回既有
+`403 service_auth_failed`。503 使用 canonical `ErrorEnvelope`，当前 `meta.request_id` 行为保持不变。机器契约删除了
+不可达的 200 success 与仅服务旧 transport 的 `LibraryResponse`/`LibraryItem` schema；这不是 Library 可用性声明。
+
+未来 W2 success contract 必须在 Storage Proto v2 over ConnectRPC、caller × operation × scope、Capability scope
+mapping、trusted Run/ExecutionIdentity、W1 IAM admission 与 per-kind 或 BFF composite pagination 全部确定后重新发布。
+本切片不激活 Storage edge，不接受旧 HTTP fallback，也不把 placeholder 200 当作兼容承诺。
+
 ## Capability projection dependency
 
 Capability internal-owner contract 已在 BFF runtime 内生成并接线，固定为 commit

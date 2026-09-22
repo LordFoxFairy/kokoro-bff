@@ -59,6 +59,34 @@ test("the repository canonical OpenAPI passes governance and its frozen v1 surfa
   assert.deepEqual(compareOperationBaseline(openapi, baseline), [])
 })
 
+function inspectLibraryUnavailableContract(openapi) {
+  const start = openapi.indexOf("  /v1/library:")
+  const end = openapi.indexOf("  /v1/billing/plans:", start)
+  const operation = start < 0 || end < 0 ? "" : openapi.slice(start, end)
+  const errors = []
+  if (!operation.includes("operationId: listLibrary")) errors.push("GET /v1/library must retain operationId=listLibrary")
+  if (!operation.includes("'503':")) errors.push("GET /v1/library must declare HTTP 503")
+  if (!operation.includes("#/components/schemas/ErrorEnvelope")) errors.push("GET /v1/library 503 must use ErrorEnvelope")
+  if (!operation.includes("const: storage_integration_unavailable")) errors.push("GET /v1/library 503 must freeze storage_integration_unavailable")
+  if (operation.includes("'200':")) errors.push("GET /v1/library must not publish an unreachable 200 response")
+  if (/^    Library(?:Item|Response):/mu.test(openapi)) errors.push("unreachable Library success schemas must be absent")
+  return errors
+}
+
+test("Library publishes only the corrective 503 machine contract and rejects drift", async () => {
+  const openapi = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
+  assert.deepEqual(inspectLibraryUnavailableContract(openapi), [])
+
+  const wrongCode = openapi.replace("const: storage_integration_unavailable", "const: upstream_not_configured")
+  assert.ok(inspectLibraryUnavailableContract(wrongCode).some((error) => error.includes("storage_integration_unavailable")))
+
+  const libraryStart = openapi.indexOf("  /v1/library:")
+  const libraryEnd = openapi.indexOf("  /v1/billing/plans:", libraryStart)
+  const libraryOperation = openapi.slice(libraryStart, libraryEnd)
+  const withoutUnavailable = openapi.replace(libraryOperation, libraryOperation.replace("'503':", "'502':"))
+  assert.ok(inspectLibraryUnavailableContract(withoutUnavailable).some((error) => error.includes("HTTP 503")))
+})
+
 test("the Capability consumer pins the accepted owner artifact and generated runtime", async () => {
   const ownerCommit = "7f89a267d745cbb9870f52d6edb23dec1a3c469b"
   const ownerDigest = "e0b7c4b57ac030efb73878b51da2a3595ec0172bce0608a88ea925b57a69761a"

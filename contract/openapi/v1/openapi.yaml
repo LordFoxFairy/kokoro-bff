@@ -38,7 +38,7 @@ tags:
   - name: Agents
     description: Agent connection setup projections.
   - name: Library
-    description: Storage-owned library projection.
+    description: BFF Library surface pending the Storage v2 integration.
   - name: Billing
     description: Billing catalog, summary, and checkout projections.
 paths:
@@ -1607,13 +1607,22 @@ paths:
       x-kokoro-permission: storage.library.read
       summary: List library items
       responses:
-        '200':
-          description: Library items
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '503':
+          description: Storage integration is unavailable until the Storage v2 prerequisites are complete
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/LibraryResponse'
-        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+                allOf:
+                  - $ref: '#/components/schemas/ErrorEnvelope'
+                  - type: object
+                    properties:
+                      error:
+                        type: object
+                        properties:
+                          code:
+                            type: string
+                            const: storage_integration_unavailable
   /v1/billing/plans:
     get:
       tags: [Billing]
@@ -2966,29 +2975,6 @@ components:
       required: [data, meta]
       properties:
         data: { $ref: '#/components/schemas/AgentConnectionSetup' }
-        meta: { $ref: '#/components/schemas/RequestMeta' }
-    LibraryItem:
-      type: object
-      required: [id, title, type, created_at, url]
-      properties:
-        id: { type: string }
-        title: { type: string }
-        type:
-          type: string
-          enum: [document, spreadsheet, presentation, image, other]
-        created_at: { type: string, format: date-time }
-        url: { type: string }
-    LibraryResponse:
-      type: object
-      required: [data, meta]
-      properties:
-        data:
-          type: object
-          required: [items]
-          properties:
-            items:
-              type: array
-              items: { $ref: '#/components/schemas/LibraryItem' }
         meta: { $ref: '#/components/schemas/RequestMeta' }
     RuntimeManifest:
       type: object

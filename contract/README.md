@@ -45,6 +45,14 @@ pnpm contract:update-baseline
 
 ## Breaking policy
 
+### Corrective pre-release baseline
+
+Before the first public release, the previously declared Library `200` response was unreachable and depended on a dead
+Storage HTTP transport. The explicitly authorized clean-slate correction removes that response and its orphaned schemas,
+while preserving `/v1/library`, `GET`, `listLibrary`, and the operation metadata, and publishes the exact interim
+`503 storage_integration_unavailable` contract. This is a corrective baseline, not a claim of backward compatibility.
+After public release, the breaking policy below applies unchanged.
+
 - Additive optional fields, new error codes, and new operations may remain in `/v1` after examples and tests change in
   the same commit.
 - Removing a path/method, renaming an `operationId`, making an optional input required, narrowing a response, changing

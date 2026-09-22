@@ -668,72 +668,50 @@ describe("kokoro-bff v1 mock contract", () => {
     assert.equal(received.length, 2)
   })
 
-  it("projects live Library through the explicit Storage owner projection", async () => {
-    let received: { url: string | undefined; service: string | undefined; secret: string | undefined; tenant: string | undefined; subject: string | undefined; xDomain: string | undefined } = {
-      url: undefined,
-      service: undefined,
-      secret: undefined,
-      tenant: undefined,
-      subject: undefined,
-      xDomain: undefined,
-    }
-    const upstream = createServer((request, response) => {
-      received = {
-        url: request.url,
-        service: request.headers["x-kokoro-service"]?.toString(),
-        secret: request.headers["x-kokoro-internal-secret"]?.toString(),
-        tenant: request.headers["x-kokoro-tenant-id"]?.toString(),
-        subject: request.headers["x-kokoro-subject"]?.toString(),
-        xDomain: request.headers["x-domain"]?.toString(),
-      }
+  it("keeps Library unavailable after admission without opening a Storage connection", async () => {
+    let connections = 0
+    let requests = 0
+    const upstream = createServer((_request, response) => {
+      requests += 1
       response.setHeader("content-type", "application/json")
-      response.end(JSON.stringify({
-        data: {
-          items: [{
-            artifact_id: "artifact_1",
-            asset_id: "asset_1",
-            namespace: "ns_test",
-            owner_id: "user_test",
-            filename: "brief.pdf",
-            mime_type: "application/pdf",
-            content_sha256: "a".repeat(64),
-            size_bytes: 42,
-            upload_purpose: "artifact",
-            scan_state: "clean",
-            visibility: "private",
-            artifact_state: "final",
-            created_at: "2026-09-01T12:00:00.000Z",
-            finalized_at: "2026-09-01T12:01:00.000Z",
-          }],
-        },
-        meta: { request_id: "storage-live" },
-      }))
+      response.end(JSON.stringify({ data: { items: [] } }))
+    })
+    upstream.on("connection", () => {
+      connections += 1
     })
     const upstreamBase = await listen(upstream)
     const base = await listen(liveServer(config({ mode: "live", upstreams: { ...config().upstreams, storage: upstreamBase } })))
 
+    const unauthenticated = await fetch(`${base}/v1/library`, { headers: { "x-kokoro-request-id": "library-unauthenticated" } })
+    assert.equal(unauthenticated.status, 403)
+    assert.equal((await unauthenticated.json() as { error: { code: string } }).error.code, "service_auth_failed")
+
     const response = await fetch(`${base}/v1/library`, { headers: { ...authHeaders(), "x-domain": "evil.example", "x-kokoro-request-id": "library-live" } })
-    assert.equal(response.status, 200)
-    assert.deepEqual(received, {
-      url: "/internal/bff/library",
-      service: "web-bff",
-      secret: "bff-upstream-secret",
-      tenant: "ns_test",
-      subject: "user_test",
-      xDomain: undefined,
-    })
+    assert.equal(response.status, 503)
     assert.deepEqual(await response.json(), {
-      data: {
-        items: [{
-          id: "artifact_1",
-          title: "brief.pdf",
-          type: "document",
-          created_at: "2026-09-01T12:00:00.000Z",
-          url: "",
-        }],
+      error: {
+        code: "storage_integration_unavailable",
+        message: "Storage integration is unavailable",
       },
       meta: { request_id: "library-live" },
     })
+
+    const explicitTestComposition = await listen(testServer(config()))
+    const testResponse = await fetch(`${explicitTestComposition}/v1/library`, {
+      headers: { ...authHeaders(), "x-kokoro-request-id": "library-test-composition" },
+    })
+    assert.equal(testResponse.status, 503)
+    assert.deepEqual(await testResponse.json(), {
+      error: {
+        code: "storage_integration_unavailable",
+        message: "Storage integration is unavailable",
+      },
+      meta: { request_id: "library-test-composition" },
+    })
+
+    await new Promise<void>((resolve) => setImmediate(resolve))
+    assert.equal(connections, 0)
+    assert.equal(requests, 0)
   })
 
   it("projects the canonical runtime manifest through System using configured tenant context", async () => {

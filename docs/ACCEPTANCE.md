@@ -40,7 +40,8 @@ Phase 2 不验收跨版本 re-projection、PG backup restore、长时间 fault i
 | Auth | Browser 直接携带业务身份调用 | 拒绝；只接受 Web service envelope |
 | Project | create/update/list + same-key replay | 当前有 unit/mock 与真实 store integration 用例 |
 | Idempotency | 同 digest replay / different digest conflict / pending duplicate | 当前已覆盖；query/header/transaction gap 开放 |
-| Owner reads | System（含 Model）/Capability/Storage/Billing | 显式 projection；缺失/坏响应 fail closed |
+| Owner reads | System（含 Model）/Capability/Billing | 显式 projection；缺失/坏响应 fail closed |
+| Library degraded | 未认证 403；认证后固定 503 `storage_integration_unavailable` | live 与显式 test composition 一致，Storage connection/request 均为 0 |
 | Chat admission | user + provisional assistant + Agent command + expected-run fence 原子提交，HTTP 随后返回 202 | unit + 真实 PG integration 已覆盖 |
 | AG-UI | Agent fact → fenced background projector → transactional PG ledger → schema-valid SSE + opaque replay | 主动摄取、retention/GC 与 expired cursor 已覆盖 |
 | Chat facts | Conversation/Message/Share BFF PostgreSQL ownership | 已实现；assistant reconciliation 开放 |

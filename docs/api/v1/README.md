@@ -137,13 +137,13 @@ BFF 通过显式环境变量选择业务服务：
 | System / Site / Workspace / Policy | `KOKORO_SYSTEM_BASE_URL` |
 | Capability / Skills / MCP | `KOKORO_CAPABILITY_BASE_URL` |
 | Scheduler / Scheduled | `KOKORO_SCHEDULER_BASE_URL` |
-| Storage / Library | `KOKORO_STORAGE_BASE_URL` |
 | Billing | `KOKORO_BILLING_BASE_URL` |
 | Model catalog | `KOKORO_SYSTEM_BASE_URL` |
 | Chat / Agent ingress | `KOKORO_AGENT_BASE_URL` |
 | Mori Music owner | `KOKORO_MUSIC_BASE_URL` |
 
-缺少对应地址时返回 `503 upstream_not_configured`，不回退到 Gateway，也不在 live 模式静默使用 Mock。
+缺少对应地址时返回 `503 upstream_not_configured`，不回退到 Gateway，也不在 live 模式静默使用 Mock。Library 是明确
+例外：认证通过后固定返回 `503 storage_integration_unavailable`，且没有 Storage HTTP 环境变量或出站请求。
 
 BFF 调用上游时使用标准上下文：
 
@@ -168,7 +168,7 @@ Model/Billing 的 owner HTTP 面明确注册为 `web-bff` caller；Agent ingress
 | Scheduled | 已定义 | 有 | PostgreSQL fact + bounded transactional Scheduler outbox/dispatcher 已接 |
 | Agents setup | 已定义 | 有 | Live adapter 未接 |
 | Billing | 已定义 | 有 | plans/checkout 已接；summary 等 surface 未全部接线 |
-| Library | 已定义 | 有 | Storage read projection 已接；未接写操作返回 503 |
+| Library | 已定义 | 有 | W2 前固定 503；不建立 Storage 连接，不返回 mock 200 |
 
 ### Live adapter boundary
 
@@ -185,5 +185,5 @@ Model/Billing 的 owner HTTP 面明确注册为 `web-bff` caller；Agent ingress
 | Skills/MCP | Capability Connect adapter | Capability |
 | Model selection | `liveOwnerBusiness` Model projection | Model |
 | Billing/credit | `liveOwnerBusiness` Billing projection | Billing |
-| Library/assets/artifacts | Storage Connect adapter | Storage |
+| Library/assets/artifacts | W2 pending；未来只接 Storage Proto v2 over ConnectRPC | Storage |
 | Scheduled task definition | BFF business module | BFF definition; Scheduler only dispatches generic jobs |

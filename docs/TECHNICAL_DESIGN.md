@@ -160,6 +160,19 @@ durable reconciliation 属于后续切片。
 只在具备稳定幂等 identity 时重试。缺配置、不可达、HTTP error 与 schema mismatch 分别映射为稳定错误，且不返回
 provider body、SQL 或 stack。
 
+## Storage v2 handoff and interim unavailable contract
+
+Storage 继续唯一拥有 Asset、Artifact、Blob、Upload 与对象生命周期事实；BFF 只拥有 public Product API 的 Library
+入口。唯一未来协议是 Storage Proto v2 over ConnectRPC，当前切片不保留旧的 `/internal/bff/library` HTTP transport，
+也不建立临时 adapter、fallback 或双读。
+
+在 W2 前，service-envelope admission 通过后的 `GET /v1/library` 固定返回
+`503 storage_integration_unavailable`；未认证请求仍由既有 admission 返回 `403 service_auth_failed`。该响应完全在
+BFF 本地构造，不打开任何 Storage socket 或连接，不创建 PostgreSQL 事务、Redis cache、receipt 或 outbox。未来成功态
+只有在 Storage default-deny caller × operation × scope、Capability scope mapping 与拒绝规则、Agent trusted
+Run/ExecutionIdentity scope、BFF W1 IAM admission，以及 Library per-kind 或 BFF composite pagination 五项同时闭环后，
+才按真实 owner contract 重新设计并发布。
+
 ## Capability consumer cutover
 
 Capability 是 Skill 与 MCP server 只读事实的唯一 owner；BFF 只拥有 public Product API projection 和消费适配。

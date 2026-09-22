@@ -737,3 +737,63 @@ test("Scheduler control and receiver implement distinct owner boundaries and dur
     assert.doesNotMatch(source, /(?:from\s*|import\s*\()\s*["'][^"']*generated\/scheduler(?:\/|["'])/u, file)
   }
 })
+
+test("BFF freezes the Storage v2 handoff without claiming a live Library integration", async () => {
+  const [technical, api, data, current] = await Promise.all([
+    readFile(path.join(root, "docs/TECHNICAL_DESIGN.md"), "utf8"),
+    readFile(path.join(root, "docs/API_CONTRACT.md"), "utf8"),
+    readFile(path.join(root, "docs/DATA_MODEL.md"), "utf8"),
+    readFile(path.join(root, "docs/CURRENT.md"), "utf8"),
+  ])
+
+  assert.match(technical, /^## Storage v2 handoff and interim unavailable contract$/mu)
+  assert.match(technical, /唯一未来协议.{0,120}Storage Proto v2.{0,120}ConnectRPC/su)
+  assert.match(technical, /不打开.{0,80}Storage.{0,80}(?:socket|连接)/su)
+  assert.match(api, /^## Library degraded contract and Storage v2 prerequisites$/mu)
+  assert.match(api, /`GET \/v1\/library`.{0,120}`503 storage_integration_unavailable`/su)
+  assert.match(api, /per-kind.{0,80}composite pagination/su)
+  assert.match(data, /^## Storage projection data boundary$/mu)
+  assert.match(data, /不保存.{0,120}(?:Library|Asset|Artifact).{0,120}(?:表|cursor|缓存|receipt|outbox)/su)
+  assert.match(data, /不修改.{0,80}`database\/schema\.sql`/su)
+  assert.match(current, /^### Library \/ Storage degraded boundary$/mu)
+  assert.match(current, /`EDGE-BFF-STORAGE`.{0,80}(?:保持|仍为) `broken`/su)
+  for (const prerequisite of [
+    "caller × operation × scope",
+    "Capability scope mapping",
+    "Run/ExecutionIdentity",
+    "W1 IAM admission",
+    "per-kind 或 BFF composite pagination",
+  ]) {
+    assert.match(current, new RegExp(prerequisite, "u"), prerequisite)
+  }
+})
+
+test("Library degraded handling has no retired Storage HTTP or mock success path", async () => {
+  const [owner, projections, runtime, localEnv, prodEnv, account, mockRoute, mockStore, schema] = await Promise.all([
+    readFile(path.join(root, "src/http/routes/owner.ts"), "utf8"),
+    readFile(path.join(root, "src/application/projections.ts"), "utf8"),
+    readFile(path.join(root, "src/config/runtime.ts"), "utf8"),
+    readFile(path.join(root, ".env.local.example"), "utf8"),
+    readFile(path.join(root, ".env.prod.example"), "utf8"),
+    readFile(path.join(root, "src/contracts/account.ts"), "utf8"),
+    readFile(path.join(root, "test/doubles/mock-route.ts"), "utf8"),
+    readFile(path.join(root, "test/doubles/bff-store.ts"), "utf8"),
+    readFile(path.join(root, "database/schema.sql"), "utf8"),
+  ])
+
+  assert.match(owner, /storage_integration_unavailable/u)
+  for (const [name, source] of [
+    ["owner route", owner],
+    ["projection mapper", projections],
+    ["runtime config", runtime],
+    ["local env", localEnv],
+    ["production env", prodEnv],
+  ] as const) {
+    assert.doesNotMatch(source, /\/internal\/bff\/library|KOKORO_STORAGE_BASE_URL|libraryData|libraryItemType/u, name)
+  }
+  assert.doesNotMatch(account, /\bLibraryItem\b/u)
+  assert.doesNotMatch(mockRoute, /\bLibraryItem\b|store\.library/u)
+  assert.match(mockRoute, /storage_integration_unavailable/u)
+  assert.doesNotMatch(mockStore, /\bLibraryItem\b|readonly library/u)
+  assert.doesNotMatch(schema, /bff_(?:library|asset|artifact)/u)
+})

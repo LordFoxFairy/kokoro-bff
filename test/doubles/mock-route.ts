@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 
-import type { AgentConnectionSetup, BillingSummary, LibraryItem, Project, ScheduledTask, Skill } from "../../src/contracts/index.ts"
+import type { AgentConnectionSetup, BillingSummary, Project, ScheduledTask, Skill } from "../../src/contracts/index.ts"
 import { failure, ok } from "../../dist/contracts/index.js"
 import type { ChatSessionDetail } from "../../src/contracts/index.ts"
 import { MockBffStore } from "./bff-store.ts"
@@ -313,7 +313,8 @@ export async function mockBusiness(
       payload = failure("invalid_agent_platform", "platform must be telegram, line, or slack", context.requestId)
     } else payload = store.setup(platform as AgentConnectionSetup["platform"])
   } else if (segments[0] === "library" && segments.length === 1 && method === "GET") {
-    payload = { items: store.library } satisfies { items: LibraryItem[] }
+    status = 503
+    payload = failure("storage_integration_unavailable", "Storage integration is unavailable", context.requestId)
   } else if (segments[0] === "billing" && segments[1] === "plans" && method === "GET") {
     payload = { plans: store.plans }
   } else if (segments[0] === "billing" && segments[1] === "checkout" && method === "POST") {

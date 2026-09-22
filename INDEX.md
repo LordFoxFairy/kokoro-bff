@@ -47,7 +47,8 @@ Conversation/Message/Share canonical facts，以及 durable AG-UI stream/source-
 - Public API：[`docs/API_CONTRACT.md`](./docs/API_CONTRACT.md)
 - 资源说明：[`docs/api/README.md`](./docs/api/README.md)
 - AG-UI：[`docs/api/v1/agui-chat.md`](./docs/api/v1/agui-chat.md)
-- System / Model / Billing / Capability / Storage：当前由 `src/http/routes/owner.ts` 投影
+- System / Model / Billing / Capability：当前由 `src/http/routes/owner.ts` 投影
+- Library：`src/http/routes/owner.ts` 在 W2 前本地固定返回 `503 storage_integration_unavailable`，不调用 Storage
 - Chat facts：`src/http/routes/chat.ts` 读取/写入 BFF PostgreSQL；`src/infrastructure/postgres/chat-repository.ts` 维护 tenant、锁和 cursor；`chat-turn-service.ts` 与 `agent-dispatch-outbox-repository.ts` 原子提交 Message/Agent command；
 - Agent Chat：`src/http/routes/agent.ts` 只承接 durable AG-UI 读取和 run control；Agent launch 由后台 outbox dispatcher 投递；`src/application/agui/` 投影；
   `src/application/agui/projector.ts` 独立消费 Agent source；`agui-projection-repository.ts` 在公开发送前持久化并分配 cursor，

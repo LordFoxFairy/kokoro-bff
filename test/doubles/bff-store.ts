@@ -8,7 +8,6 @@ import type {
   ChatRun,
   ChatSessionDetail,
   ChatSessionSummary,
-  LibraryItem,
   McpServer,
   McpTransport,
   Project,
@@ -101,14 +100,6 @@ export class MockBffStore {
   readonly projectSkills = new Map<string, Map<string, boolean>>([
     ["project_kokoro", new Map([["skill-builder", true]])],
   ])
-
-  readonly library: LibraryItem[] = [{
-    id: "artifact_contract",
-    title: "Business API contract",
-    type: "document",
-    created_at: now,
-    url: "/artifacts/artifact_contract",
-  }]
 
   readonly billing: BillingSummary = { balance: 100, currency: "USD", period: "2026-01", usage: 0 }
 

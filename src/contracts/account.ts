@@ -6,14 +6,6 @@ export type AgentConnectionSetup = {
   expires_at: string
 }
 
-export type LibraryItem = {
-  id: string
-  title: string
-  type: "document" | "spreadsheet" | "presentation" | "image" | "other"
-  created_at: string
-  url: string
-}
-
 export type BillingSummary = {
   balance: number
   currency: string

@@ -134,6 +134,15 @@ Project 删除清理、ScheduledTask tombstone、ScheduledTask outbox 归档和 
 System runtime manifest 和 model catalog 均为只读 owner projection，不写入 BFF PostgreSQL，也不新增
 表、缓存事实或 schema。BFF 只在请求生命周期内验证并转换 System wire data；System 仍是这些事实的唯一 writer。
 
+## Storage projection data boundary
+
+BFF 当前不保存 Library、Asset 或 Artifact 表，也不保存 Storage cursor、缓存、receipt 或 outbox；Storage 仍是对象与
+文件生命周期事实的唯一 writer。当前 `GET /v1/library` 的 503 degraded response 不访问 PostgreSQL、Redis、Object
+Store 或 Storage network endpoint，不形成可恢复的业务事实。
+
+本切片不修改 `database/schema.sql`，不新增 migration、索引、Redis namespace 或跨 owner foreign key。未来 W2 若需
+durable BFF projection，必须先重新通过 owner、API、事务、retention 与 canonical schema 设计门。
+
 ## Capability projection data boundary
 
 Capability Skill、Skill Pool、Skill Catalog 与 MCP server 是 Capability owner fact，不是 BFF 持久化事实。该 consumer

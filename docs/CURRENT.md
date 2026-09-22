@@ -24,6 +24,19 @@
   Root `EDGE-BFF-CAPABILITY` 仍为 broken，待 W0B-5 real smoke 与 W0B-6 integration 闭环后才可标记 active；本仓实现完成
   不代表跨仓 edge 已激活。
 
+### Library / Storage degraded boundary
+
+- `GET /v1/library` 在 service-envelope admission 后固定返回 `503 storage_integration_unavailable`；未认证请求仍返回
+  `403 service_auth_failed`。BFF 不调用旧 `/internal/bff/library`，也不打开 Storage 连接。
+- public OpenAPI 保留 path、method、`listLibrary` operationId 与 metadata，删除不可达 200 以及孤立的
+  `LibraryResponse`/`LibraryItem` schema。当前响应不是 Library success contract。
+- `EDGE-BFF-STORAGE` 保持 `broken`；W2 success 与 edge activation 仍依赖以下五项：
+  1. Storage default-deny caller × operation × scope；
+  2. Capability scope mapping 与拒绝规则；
+  3. Agent trusted Run/ExecutionIdentity scope；
+  4. BFF W1 IAM admission；
+  5. Library per-kind 或 BFF composite pagination。
+
 ### 当前运行时与持久化
 
 - `/v1/*` 校验 `web-bff` 服务身份、共享 secret、namespace、principal 和 request id；浏览器不应直连 BFF。
