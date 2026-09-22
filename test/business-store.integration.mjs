@@ -114,7 +114,9 @@ integrationTest("persists BFF facts, registers Scheduler, and replays Agent disp
   let agentBase
   let bff
   try {
-    await schemaPool.query("DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_scheduled_task_outbox, bff_scheduled_task, bff_project_task, bff_idempotency_receipt, bff_project_instruction_revision, bff_project_skill, bff_project CASCADE")
+    await schemaPool.query(
+      "DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_scheduled_task_outbox, bff_scheduled_task, bff_project_task, bff_idempotency_receipt, bff_project_instruction_revision, bff_project_skill, bff_project CASCADE",
+    )
     await schemaPool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await redis.connect()
 
@@ -129,10 +131,12 @@ integrationTest("persists BFF facts, registers Scheduler, and replays Agent disp
           authorization: request.headers.authorization,
           service: request.headers["x-kokoro-service"],
           requestId: request.headers["x-request-id"],
-          job: raw ? JSON.parse(raw) : null,
+          schedule: raw ? JSON.parse(raw) : null,
         })
         response.setHeader("content-type", "application/json")
-        response.end(JSON.stringify({ data: { name: request.url?.split("/").at(-1), status: "registered" }, meta: { request_id: request.headers["x-request-id"] } }))
+        response.end(
+          JSON.stringify({ data: { name: request.url?.split("/").at(-1), status: "registered" }, meta: { request_id: request.headers["x-request-id"] } }),
+        )
       })
     })
     schedulerBase = await listen(scheduler)
@@ -179,8 +183,8 @@ integrationTest("persists BFF facts, registers Scheduler, and replays Agent disp
     assert.equal(schedulerCalls[0].method, "POST")
     assert.equal(schedulerCalls[0].authorization, "Bearer scheduler-secret")
     assert.equal(schedulerCalls[0].service, "web-bff")
-    assert.equal(schedulerCalls[0].job.url, targetUrl)
-    assert.equal(schedulerCalls[0].job.body.owner_id, "user_integration")
+    assert.equal(schedulerCalls[0].schedule.url, targetUrl)
+    assert.equal(schedulerCalls[0].schedule.body.owner_id, "user_integration")
 
     const otherTenant = await fetch(`${base}/v1/scheduled-tasks`, { headers: auth(`${namespace}_other`) })
     assert.deepEqual((await otherTenant.json()).data.tasks, [])
@@ -196,22 +200,28 @@ integrationTest("persists BFF facts, registers Scheduler, and replays Agent disp
     await waitFor(() => schedulerCalls.length === 2)
     assert.equal(schedulerCalls.at(-1).method, "PUT")
 
-    const dispatchBody = schedulerCalls.at(-1).job.body
+    const dispatchBody = schedulerCalls.at(-1).schedule.body
     const dispatchHeaders = {
       authorization: "Bearer scheduler-secret",
       "content-type": "application/json",
-      "x-kokoro-scheduler-job": schedulerCalls.at(-1).url.split("/").at(-1),
-      "x-kokoro-scheduler-occurrence": "20260901T120000Z",
+      "x-kokoro-tenant-id": namespace,
+      "x-kokoro-scheduler-schedule": schedulerCalls.at(-1).url.split("/").at(-1),
+      "x-kokoro-scheduler-occurrence": "2026-09-01T12:00:00.123456789Z",
       "x-request-id": "sched_integration_delivery_1",
-      "idempotency-key": `schedule:${schedulerCalls.at(-1).url.split("/").at(-1)}:20260901T120000Z`,
+      "idempotency-key": " opaque-scheduler-key ",
+      traceparent: "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01",
     }
     const mismatchedOccurrence = await fetch(`${base}/internal/bff/scheduled-tasks/dispatch`, {
       method: "POST",
-      headers: { ...dispatchHeaders, "x-kokoro-scheduler-occurrence": "20260901T120001Z" },
+      headers: { ...dispatchHeaders, "x-kokoro-tenant-id": `${namespace}_mismatch` },
       body: JSON.stringify(dispatchBody),
     })
     assert.equal(mismatchedOccurrence.status, 400)
-    const dispatched = await fetch(`${base}/internal/bff/scheduled-tasks/dispatch`, { method: "POST", headers: dispatchHeaders, body: JSON.stringify(dispatchBody) })
+    const dispatched = await fetch(`${base}/internal/bff/scheduled-tasks/dispatch`, {
+      method: "POST",
+      headers: dispatchHeaders,
+      body: JSON.stringify(dispatchBody),
+    })
     assert.equal(dispatched.status, 202)
     assert.equal(agentCalls.length, 1)
     assert.equal(agentCalls[0].authorization, "Bearer bff-secret")
@@ -220,7 +230,11 @@ integrationTest("persists BFF facts, registers Scheduler, and replays Agent disp
     assert.equal(agentCalls[0].subject, "user_integration")
     assert.match(agentCalls[0].assertion, /^bff:[0-9a-f]{64}$/)
     assert.equal(agentCalls[0].body.execution_identity, undefined)
-    const replayedDispatch = await fetch(`${base}/internal/bff/scheduled-tasks/dispatch`, { method: "POST", headers: dispatchHeaders, body: JSON.stringify(dispatchBody) })
+    const replayedDispatch = await fetch(`${base}/internal/bff/scheduled-tasks/dispatch`, {
+      method: "POST",
+      headers: dispatchHeaders,
+      body: JSON.stringify(dispatchBody),
+    })
     assert.equal(replayedDispatch.status, 202)
     assert.equal(agentCalls.length, 1)
 
@@ -235,9 +249,9 @@ integrationTest("persists BFF facts, registers Scheduler, and replays Agent disp
       method: "POST",
       headers: {
         ...dispatchHeaders,
-        "x-kokoro-scheduler-occurrence": "20260901T120001Z",
+        "x-kokoro-scheduler-occurrence": "2026-09-01T12:00:01.000000000Z",
         "x-request-id": "sched_integration_delivery_paused",
-        "idempotency-key": `schedule:${schedulerCalls.at(-1).url.split("/").at(-1)}:20260901T120001Z`,
+        "idempotency-key": "paused-scheduler-key",
       },
       body: JSON.stringify(dispatchBody),
     })
@@ -270,12 +284,15 @@ integrationTest("persists BFF facts, registers Scheduler, and replays Agent disp
         ORDER BY created_at ASC, outbox_id ASC`,
       [namespace],
     )
-    assert.deepEqual(outboxLineage.rows.map((row) => [row.command_type, row.tenant_id, row.actor_id, row.status]), [
-      ["scheduler.register", namespace, "user_integration", "succeeded"],
-      ["scheduler.replace", namespace, "user_integration", "succeeded"],
-      ["scheduler.replace", namespace, "user_integration", "succeeded"],
-      ["scheduler.replace", namespace, "user_integration", "succeeded"],
-    ])
+    assert.deepEqual(
+      outboxLineage.rows.map((row) => [row.command_type, row.tenant_id, row.actor_id, row.status]),
+      [
+        ["scheduler.register", namespace, "user_integration", "succeeded"],
+        ["scheduler.replace", namespace, "user_integration", "succeeded"],
+        ["scheduler.replace", namespace, "user_integration", "succeeded"],
+        ["scheduler.replace", namespace, "user_integration", "succeeded"],
+      ],
+    )
     assert.ok(outboxLineage.rows.every((row) => Number(row.fence) >= 1))
 
     await close(bff)
@@ -283,7 +300,10 @@ integrationTest("persists BFF facts, registers Scheduler, and replays Agent disp
     const restartedBase = await listen(bff)
     await new Promise((resolve) => setTimeout(resolve, 100))
     const listed = await fetch(`${restartedBase}/v1/scheduled-tasks`, { headers: auth(namespace) })
-    assert.deepEqual((await listed.json()).data.tasks.map((task) => task.id), [taskId])
+    assert.deepEqual(
+      (await listed.json()).data.tasks.map((task) => task.id),
+      [taskId],
+    )
     const replayedCreate = await fetch(`${restartedBase}/v1/scheduled-tasks`, { method: "POST", headers: createHeaders, body: JSON.stringify(createPayload) })
     assert.equal(replayedCreate.status, 200)
     assert.deepEqual((await replayedCreate.json()).data.task, createdBody.data.task)

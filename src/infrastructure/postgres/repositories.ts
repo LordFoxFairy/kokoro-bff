@@ -19,6 +19,8 @@ import type { AgUiProjectionConsumerRepository } from "../../application/agui/po
 import type { AgentDispatchOutboxRepository } from "../../application/ports/agent-dispatch-outbox-repository.js"
 import type { AgentCancellationOutboxRepository } from "../../application/ports/agent-cancellation-outbox-repository.js"
 import { Sha256StableIdGenerator } from "../identifiers/scheduled-task-outbox-id.js"
+import { PostgresSchedulerDispatchReceiptRepository } from "./scheduler-dispatch-receipt-repository.js"
+import type { SchedulerDispatchReceiptRepository } from "../../application/ports/scheduler-dispatch-receipt-repository.js"
 
 export { PENDING_RECEIPT_STATUS }
 export type { PersistentReceipt, ReceiptClaim } from "../../application/ports/idempotency-repository.js"
@@ -35,6 +37,7 @@ export class PostgresBffRepositories {
   public readonly scheduledTaskOutbox: ScheduledTaskOutboxRepository
   public readonly agentDispatchOutbox: AgentDispatchOutboxRepository
   public readonly agentCancellationOutbox: AgentCancellationOutboxRepository
+  public readonly schedulerDispatchReceipts: SchedulerDispatchReceiptRepository
 
   public constructor(postgresUrl: string, redisUrl: string) {
     this.database = new PostgresBffDatabase(postgresUrl, redisUrl)
@@ -49,24 +52,29 @@ export class PostgresBffRepositories {
     this.scheduledTaskOutbox = scheduled
     this.agentDispatchOutbox = agentDispatchOutbox
     this.agentCancellationOutbox = agentCancellationOutbox
-    this.services = new BffApplicationServices(
-      this.projects,
-      this.scheduled,
-      chat,
-      publicShares,
-      agentDispatchOutbox,
-      new Sha256StableIdGenerator(),
-    )
+    this.schedulerDispatchReceipts = new PostgresSchedulerDispatchReceiptRepository(this.database.pool)
+    this.services = new BffApplicationServices(this.projects, this.scheduled, chat, publicShares, agentDispatchOutbox, new Sha256StableIdGenerator())
     this.agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(this.database))
     this.agUiConsumers = new PostgresAgUiConsumerRepository(this.database)
   }
 
-  public ready(): Promise<void> { return this.database.ready() }
-  public close(): Promise<void> { return this.database.close() }
+  public ready(): Promise<void> {
+    return this.database.ready()
+  }
+  public close(): Promise<void> {
+    return this.database.close()
+  }
 
-  public getReceipt(scope: string): Promise<PersistentReceipt | null> { return this.idempotency.getReceipt(scope) }
-  public claimReceipt(scope: string, fingerprint: string): Promise<ReceiptClaim> { return this.idempotency.claimReceipt(scope, fingerprint) }
-  public putReceipt(scope: string, receipt: PersistentReceipt): Promise<void> { return this.idempotency.putReceipt(scope, receipt) }
-  public releaseReceipt(scope: string, fingerprint: string): Promise<void> { return this.idempotency.releaseReceipt(scope, fingerprint) }
-
+  public getReceipt(scope: string): Promise<PersistentReceipt | null> {
+    return this.idempotency.getReceipt(scope)
+  }
+  public claimReceipt(scope: string, fingerprint: string): Promise<ReceiptClaim> {
+    return this.idempotency.claimReceipt(scope, fingerprint)
+  }
+  public putReceipt(scope: string, receipt: PersistentReceipt): Promise<void> {
+    return this.idempotency.putReceipt(scope, receipt)
+  }
+  public releaseReceipt(scope: string, fingerprint: string): Promise<void> {
+    return this.idempotency.releaseReceipt(scope, fingerprint)
+  }
 }

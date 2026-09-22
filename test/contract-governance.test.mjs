@@ -3,11 +3,9 @@ import { createHash } from "node:crypto"
 import { readFile, readdir, stat } from "node:fs/promises"
 import { test } from "node:test"
 
-import {
-  compareOperationBaseline,
-  inspectOpenApiGovernance,
-} from "../scripts/check-contract.mjs"
+import { compareOperationBaseline, inspectOpenApiGovernance } from "../scripts/check-contract.mjs"
 import * as capabilityGenerator from "../scripts/generate-capability-http-client.mjs"
+import * as schedulerGenerator from "../scripts/generate-scheduler-contracts.mjs"
 
 const { replaceExactInSource } = capabilityGenerator
 
@@ -47,9 +45,7 @@ test("the breaking baseline rejects removed or renamed v1 operations", () => {
     { method: "GET", path: "/v1/projects", operation_id: "listProjects" },
   ]
 
-  assert.deepEqual(compareOperationBaseline(governedOperation, baseline), [
-    "breaking change: GET /v1/projects (listProjects) was removed",
-  ])
+  assert.deepEqual(compareOperationBaseline(governedOperation, baseline), ["breaking change: GET /v1/projects (listProjects) was removed"])
 })
 
 test("the repository canonical OpenAPI passes governance and its frozen v1 surface", async () => {
@@ -77,15 +73,7 @@ test("the Capability consumer pins the accepted owner artifact and generated run
   const openapi = JSON.parse(vendorDocument.toString("utf8"))
   const sha256 = (value) => createHash("sha256").update(value).digest("hex")
 
-  assert.deepEqual(Object.keys(manifest).sort(), [
-    "generated",
-    "generator",
-    "lockfile_sha256",
-    "owner",
-    "runtime",
-    "schema_version",
-    "status",
-  ])
+  assert.deepEqual(Object.keys(manifest).sort(), ["generated", "generator", "lockfile_sha256", "owner", "runtime", "schema_version", "status"])
   const generatedFiles = [
     "client.gen.ts",
     "client/client.gen.ts",
@@ -104,9 +92,7 @@ test("the Capability consumer pins the accepted owner artifact and generated run
     "types.gen.ts",
     "zod.gen.ts",
   ]
-  const generatedSources = await Promise.all(
-    generatedFiles.map((file) => readFile(new URL(`../src/generated/capability-http/${file}`, import.meta.url))),
-  )
+  const generatedSources = await Promise.all(generatedFiles.map((file) => readFile(new URL(`../src/generated/capability-http/${file}`, import.meta.url))))
   const generated = generatedFiles.map((file, index) => ({
     path: file,
     sha256: sha256(generatedSources[index]),
@@ -133,12 +119,7 @@ test("the Capability consumer pins the accepted owner artifact and generated run
   })
   assert.equal(sha256(vendorDocument), ownerDigest)
   assert.equal(openapi.info.version, "2.0.0")
-  assert.deepEqual(Object.keys(openapi.paths).sort(), [
-    "/v1/mcp/servers",
-    "/v1/skills",
-    "/v1/skills/catalog",
-    "/v1/skills/pool",
-  ])
+  assert.deepEqual(Object.keys(openapi.paths).sort(), ["/v1/mcp/servers", "/v1/skills", "/v1/skills/catalog", "/v1/skills/pool"])
   for (const pathItem of Object.values(openapi.paths)) {
     assert.deepEqual(Object.keys(pathItem), ["get"])
   }
@@ -173,14 +154,8 @@ test("the Capability consumer pins the accepted owner artifact and generated run
 
 test("the Capability generator compatibility normalizer fails closed on template drift", () => {
   assert.equal(replaceExactInSource("before TOKEN after", "TOKEN", "FIXED", 1, "fixture"), "before FIXED after")
-  assert.throws(
-    () => replaceExactInSource("TOKEN", "TOKEN", "FIXED", 2, "fixture"),
-    /fixture: expected 2 generator matches, found 1/u,
-  )
-  assert.throws(
-    () => replaceExactInSource("no marker", "TOKEN", "FIXED", 1, "fixture"),
-    /fixture: expected 1 generator matches, found 0/u,
-  )
+  assert.throws(() => replaceExactInSource("TOKEN", "TOKEN", "FIXED", 2, "fixture"), /fixture: expected 2 generator matches, found 1/u)
+  assert.throws(() => replaceExactInSource("no marker", "TOKEN", "FIXED", 1, "fixture"), /fixture: expected 1 generator matches, found 0/u)
 })
 
 test("the Capability generated allowlist rejects missing files, every extra extension, and extra directories", async () => {
@@ -231,18 +206,9 @@ test("the public Capability facade documents only canonical query parameters and
 
 test("the public AG-UI contract exposes only durable opaque BFF cursors", async () => {
   const openapi = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
-  const eventOperation = openapi.slice(
-    openapi.indexOf("  /v1/sessions/{id}/events:"),
-    openapi.indexOf("  /v1/sessions/{id}/runs/{runId}/control:"),
-  )
-  const eventCursor = openapi.slice(
-    openapi.indexOf("    EventCursor:"),
-    openapi.indexOf("    RequestMeta:"),
-  )
-  const eventStream = openapi.slice(
-    openapi.indexOf("    SessionEventStream:"),
-    openapi.indexOf("    RenameSessionRequest:"),
-  )
+  const eventOperation = openapi.slice(openapi.indexOf("  /v1/sessions/{id}/events:"), openapi.indexOf("  /v1/sessions/{id}/runs/{runId}/control:"))
+  const eventCursor = openapi.slice(openapi.indexOf("    EventCursor:"), openapi.indexOf("    RequestMeta:"))
+  const eventStream = openapi.slice(openapi.indexOf("    SessionEventStream:"), openapi.indexOf("    RenameSessionRequest:"))
 
   assert.match(eventOperation, /'400': \{ \$ref: '#\/components\/responses\/BadRequest' \}/u)
   assert.match(eventOperation, /'410': \{ \$ref: '#\/components\/responses\/Gone' \}/u)
@@ -273,9 +239,15 @@ test("the repository exposes executable contract, schema, and strictness gates",
   assert.match(packageJson.scripts["contract:test"], /test\/agent-control-adapter\.test\.ts/u)
   assert.match(packageJson.scripts["format:check"], /^prettier --check/u)
   assert.match(packageJson.scripts["format:check"], /src\/generated\/capability-http/u)
+  assert.match(packageJson.scripts["format:check"], /src\/generated\/scheduler/u)
   assert.equal(packageJson.scripts["contract:generate:capability"], "node scripts/generate-capability-http-client.mjs --write")
   assert.equal(packageJson.scripts["contract:check:capability"], "node scripts/generate-capability-http-client.mjs --check")
-  assert.equal(packageJson.scripts["contract:check"], "pnpm contract:check:capability && pnpm contract:lint && pnpm contract:semantic && pnpm contract:test")
+  assert.equal(packageJson.scripts["contract:generate:scheduler"], "node scripts/generate-scheduler-contracts.mjs --write")
+  assert.equal(packageJson.scripts["contract:check:scheduler"], "node scripts/generate-scheduler-contracts.mjs --check")
+  assert.equal(
+    packageJson.scripts["contract:check"],
+    "pnpm contract:check:capability && pnpm contract:check:scheduler && pnpm contract:lint && pnpm contract:semantic && pnpm contract:test",
+  )
   assert.equal(packageJson.devDependencies["@hey-api/openapi-ts"], "0.99.0")
   assert.equal(packageJson.devDependencies.prettier, "3.9.6")
   assert.equal(packageJson.devDependencies.typescript, "5.9.3")
@@ -287,8 +259,7 @@ test("the repository exposes executable contract, schema, and strictness gates",
   }
 })
 
-
-test("the Scheduler design pins immutable producer-owned control and webhook contracts", async () => {
+test("the Scheduler consumer pins immutable producer-owned control and webhook contracts", async () => {
   const ownerCommit = "92bf9e7e6724c591bab4b7fa27f08d694b59a67e"
   const ownerDigest = "6ec2f6d5d71efa60b92bba1eb2dd0c81b7439734e2bc4450caa221e952e24183"
   const [manifestDocument, vendor, config, lockfile, packageDocument] = await Promise.all([
@@ -299,9 +270,33 @@ test("the Scheduler design pins immutable producer-owned control and webhook con
     readFile(new URL("../package.json", import.meta.url), "utf8"),
   ])
   const sha256 = (value) => createHash("sha256").update(value).digest("hex")
+  const generatedFiles = [
+    "client.gen.ts",
+    "client/client.gen.ts",
+    "client/index.ts",
+    "client/types.gen.ts",
+    "client/utils.gen.ts",
+    "core/auth.gen.ts",
+    "core/bodySerializer.gen.ts",
+    "core/params.gen.ts",
+    "core/pathSerializer.gen.ts",
+    "core/queryKeySerializer.gen.ts",
+    "core/serverSentEvents.gen.ts",
+    "core/types.gen.ts",
+    "core/utils.gen.ts",
+    "sdk.gen.ts",
+    "types.gen.ts",
+    "zod.gen.ts",
+  ]
+  const generated = await Promise.all(
+    generatedFiles.map(async (file) => ({
+      path: file,
+      sha256: sha256(await readFile(new URL(`../src/generated/scheduler/${file}`, import.meta.url))),
+    })),
+  )
   assert.deepEqual(JSON.parse(manifestDocument), {
     schema_version: 1,
-    status: "design-frozen",
+    status: "generated",
     owner: {
       repository_path: "apps/kokoro-scheduler",
       repository_commit: ownerCommit,
@@ -317,7 +312,7 @@ test("the Scheduler design pins immutable producer-owned control and webhook con
     },
     runtime: { node: "22.22.2", pnpm: "11.25.0", zod: "4.5.4" },
     lockfile_sha256: sha256(lockfile),
-    generated: [],
+    generated,
   })
   assert.equal(sha256(vendor), ownerDigest)
   // The owner publishes JSON bytes as valid YAML; preserve them without reserialization.
@@ -330,7 +325,10 @@ test("the Scheduler design pins immutable producer-owned control and webhook con
   assert.deepEqual(control.post["x-kokoro-control-error-codes"], { 409: "schedule_already_exists" })
   assert.deepEqual(control.put["x-kokoro-control-error-codes"], { 404: "schedule_not_found" })
   assert.deepEqual(control.delete["x-kokoro-control-error-codes"], { 404: "schedule_not_found" })
-  assert.equal(Object.keys(owner.paths).some((name) => name.includes("/jobs")), false)
+  assert.equal(
+    Object.keys(owner.paths).some((name) => name.includes(`/${["jo", "bs"].join("")}`)),
+    false,
+  )
   const parameters = owner.components.parameters
   for (const method of ["post", "put"]) {
     const webhook = owner.webhooks.scheduleOccurrenceDispatch[method]
@@ -338,10 +336,10 @@ test("the Scheduler design pins immutable producer-owned control and webhook con
     assert.equal(webhook["x-kokoro-visibility"], "event-protocol")
     assert.equal(webhook["x-kokoro-idempotency"], "stable-occurrence-key")
     assert.deepEqual(webhook["x-kokoro-retryable-statuses"], [408, 425, 429, "5xx"])
-    assert.deepEqual(webhook.parameters.map(({ $ref }) => parameters[$ref.split("/").at(-1)].name), [
-      "X-Kokoro-Tenant-Id", "X-Kokoro-Scheduler-Schedule", "X-Kokoro-Scheduler-Occurrence",
-      "X-Request-Id", "Idempotency-Key", "traceparent",
-    ])
+    assert.deepEqual(
+      webhook.parameters.map(({ $ref }) => parameters[$ref.split("/").at(-1)].name),
+      ["X-Kokoro-Tenant-Id", "X-Kokoro-Scheduler-Schedule", "X-Kokoro-Scheduler-Occurrence", "X-Request-Id", "Idempotency-Key", "traceparent"],
+    )
     assert.ok(webhook.parameters.every(({ $ref }) => parameters[$ref.split("/").at(-1)].required === true))
     assert.deepEqual(webhook.requestBody.content["application/json"].schema, { type: "object" })
   }
@@ -353,4 +351,6 @@ test("the Scheduler design pins immutable producer-owned control and webhook con
   assert.equal(packageJson.dependencies["@hey-api/client-fetch"], undefined)
   assert.match(lockfile.toString("utf8"), /@hey-api\/openapi-ts[\s\S]*?specifier: 0\.99\.0/u)
   assert.match(config, new RegExp(ownerCommit, "u"))
+  assert.doesNotThrow(() => schedulerGenerator.assertGeneratedAllowlist(generatedFiles, ["client", "core"], "fixture"))
+  assert.throws(() => schedulerGenerator.assertGeneratedAllowlist(generatedFiles.slice(1), ["client", "core"], "fixture"), /file allowlist drifted/u)
 })

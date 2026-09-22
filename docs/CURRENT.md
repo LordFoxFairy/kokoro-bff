@@ -144,24 +144,28 @@ pnpm test:integration
 未提供 PostgreSQL/Redis fixture 时，后两项状态是“未执行”，不是“通过”。验收状态见
 [`ACCEPTANCE.md`](./ACCEPTANCE.md)。
 
+## Scheduler W0B-9 BFF 实现
 
-## Scheduler W0B-8 设计冻结（尚未接线）
-
-Scheduler manifest 状态为 `design-frozen`，`generated=[]`；owner commit
+Scheduler manifest 状态为 `generated`，固定 owner commit
 `92bf9e7e6724c591bab4b7fa27f08d694b59a67e`、version `1.0.0`、SHA-256
-`6ec2f6d5d71efa60b92bba1eb2dd0c81b7439734e2bc4450caa221e952e24183` 的原始 OpenAPI commit blob 已固定为只读 vendor。
-顶层 Scheduler generator config 已固定现有工具链与预期输出，但尚未正式生成/接线；此步不改 runtime、package/lock、
-public OpenAPI 或 SQL schema。control client 与 producer webhook receiver 的目标设计分别见 TECHNICAL_DESIGN / API_CONTRACT，
-专用 receipt 恢复见 DATA_MODEL。
+`6ec2f6d5d71efa60b92bba1eb2dd0c81b7439734e2bc4450caa221e952e24183`。16 个 generated 文件由
+`contract:check:scheduler` 在临时目录连续生成两次，校验 exact allow-list、byte-identical 与 manifest digest。
 
-当前 runtime 仍使用 `/internal/scheduler/v1/jobs`、`job_*` 错误、`X-Kokoro-Scheduler-Job`、compact occurrence 和自造 key；
-receiver 还从 body tenant 建立身份。通用 receipt 在超时后允许不同 fingerprint 覆盖、5xx 删除 pending，现有 Run 派生包含 actor/key。
-这些都是 W0B-9 要删除/替换的断链，不把文档目标描述成已实现安全或恢复能力。
-`EDGE-BFF-SCHEDULER` 与 `EDGE-SCHEDULER-BFF` 均保持 broken；W0B-9 consumer、W0B-10 双向 smoke 与 W0B-11 Root 集成
-完成前不激活。W0B-9 验证 BFF 真实 PostgreSQL receipt/CAS、BFF 重启恢复和稳定输出；W0B-10 的精确组合为真实
-Scheduler + BFF 进程及 Agent receipt stub；响应丢失后，仅 BFF 重启恢复并接收保持运行的 Scheduler 重试。
-不重启 Scheduler，不验证真实 Agent admission。
-真实 Agent admission、同 Run 参数冲突及 Agent 重启后唯一 Run 事实归后续 Agent-owner closure（W4）；
-`EDGE-BFF-AGENT` 保持 broken，不作为本波已验能力，也不据此扩大范围。
-SQL schema 不变不等于专用 receipt 已可直接复用：需独立 port/repository、snapshot/CAS、稳定 occurrence Run identity、
-装配和上述真实 PG/重启测试。当前治理门只证明 owner provenance、config 与设计边界，不证明实际投递。
+BFF ScheduledTask outbox 已改用 generated create/replace/delete control client 与 canonical Schedule 路径、header、稳定错误码；
+daily/weekly cron 从本地 wall time 与 IANA timezone 映射。dispatch receiver 先通过 generated webhook Zod 校验 exact header/body，
+再校验 trusted header tenant 与 body tenant 完全一致，并使用 RFC3339Nano canonical occurrence、递归 canonical JSON semantic digest。
+generated 校验只决定接纳，不用其 transform 后对象建立摘要；receipt 使用已验证的原始 parsed JSON 全部 own keys，递归拒绝非有限数字。
+opaque key 不 trim，只进入独立协议 scope。control client 对 response body 逐块计数，超过 hard cap 立即 cancel/abort，不先缓冲整包。
+
+专用 Scheduler receipt repository 复用现有 `bff_idempotency_receipt` 与连接池：digest 首次绑定后不可替换，60 秒数据库时钟 lease、
+claim token CAS、不可变首授权 launch snapshot、425 active pending、409 different digest、terminal replay 与 response-unknown 恢复已实现。
+claim/prepare/finalize/release 均先取得目标 row lock，再读取 `clock_timestamp()` 判断 deadline；claim/prepare 返回数据库剩余预算，
+Scheduler Agent 调用以进程内 monotonic elapsed 扣除固定 settlement reserve，独立于可配置的普通 upstream timeout。
+Scheduler Run identity 只依赖 trusted tenant、schedule 与 canonical occurrence；普通 Chat identity 未改变。真实 PostgreSQL integration
+覆盖并发 claim、短 row-lock 等待后的完整新 lease、等待期间过期的 prepare/finalize/release fencing、tenant isolation 与 response-unknown。
+真实 PostgreSQL + BFF HTTP + Agent stub integration 覆盖 Agent 接纳后 finalize 失败、关闭并重建 BFF、数据库 task 与 transport request ID
+变化后按原 key 重发首次完整 snapshot/Run，以及 stale prepare 零 Agent I/O；stub 调用次数不代表真实 Agent durable Run 事实。
+
+`EDGE-BFF-SCHEDULER` 与 `EDGE-SCHEDULER-BFF` 仍保持 broken；本仓完成只证明 BFF/PG 行为，待 W0B-10 真实 Scheduler + BFF +
+Agent receipt stub smoke 与 W0B-11 Root 集成后再激活。真实 Agent admission、同 Run 参数冲突及 Agent 重启后唯一 Run 事实归
+后续 Agent-owner closure（W4）；`EDGE-BFF-AGENT` 保持 broken。

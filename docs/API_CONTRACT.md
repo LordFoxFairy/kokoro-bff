@@ -13,13 +13,13 @@ BFF 是 Kokoro 唯一 `public` HTTP owner。Browser 仍必须经 `kokoro` same-o
 
 每个 operation 必须声明：
 
-| 扩展 | 当前值/格式 | 含义 |
-| --- | --- | --- |
-| `x-kokoro-owner` | `kokoro-bff` | 公开协议 owner |
-| `x-kokoro-visibility` | `public` | Product API 可见性 |
-| `x-kokoro-stability` | `stable\|beta\|experimental` | 兼容承诺；当前 v1 为 `beta` |
-| `x-kokoro-idempotency` | `none\|required` | 是否要求 `Idempotency-Key` |
-| `x-kokoro-permission` | 稳定 dotted identifier 或 `anonymous` | admission 权限意图 |
+| 扩展                   | 当前值/格式                           | 含义                        |
+| ---------------------- | ------------------------------------- | --------------------------- |
+| `x-kokoro-owner`       | `kokoro-bff`                          | 公开协议 owner              |
+| `x-kokoro-visibility`  | `public`                              | Product API 可见性          |
+| `x-kokoro-stability`   | `stable\|beta\|experimental`          | 兼容承诺；当前 v1 为 `beta` |
+| `x-kokoro-idempotency` | `none\|required`                      | 是否要求 `Idempotency-Key`  |
+| `x-kokoro-permission`  | 稳定 dotted identifier 或 `anonymous` | admission 权限意图          |
 
 `pnpm contract:check` 对全部 operation 执行门禁；`node scripts/verify-openapi.ts` 另外校验字段命名、响应 envelope、
 状态码、幂等参数、分页游标和 AG-UI replay 形状。metadata 表示协议策略，不证明对应 Live adapter、数据库事实或
@@ -46,13 +46,13 @@ capability，不替代服务认证。浏览器提供的 tenant、Host、X-Domain
 JSON 成功：
 
 ```json
-{"data": {}, "meta": {"request_id": "REQUEST_ID"}}
+{ "data": {}, "meta": { "request_id": "REQUEST_ID" } }
 ```
 
 JSON 错误：
 
 ```json
-{"error": {"code": "stable_code", "message": "Log-safe message"}, "meta": {"request_id": "REQUEST_ID"}}
+{ "error": { "code": "stable_code", "message": "Log-safe message" }, "meta": { "request_id": "REQUEST_ID" } }
 ```
 
 外部 JSON 字段统一使用 `snake_case`，瞬时点使用 RFC 3339 UTC 毫秒精度。`ProjectInstructionRevision` 的 canonical
@@ -150,10 +150,9 @@ public v1 envelope 投影。旧 `meta` 与裸 body 均拒绝；System 错误必�
 `error.code`、`error.message`、布尔 `error.retryable` 的 owner envelope。模型目录的 `key`、
 `display_name`、布尔 `is_default` 与必填的 string/null `next_cursor` 被严格消费。
 
-
 ## Scheduler control and event dependency
 
-状态为 W0B-8 `design-frozen`，runtime 接线待 W0B-9。Scheduler producer 的唯一机器来源是 commit
+W0B-9 已把固定 artifact 生成并接入 BFF control 与 event runtime。Scheduler producer 的唯一机器来源是 commit
 `92bf9e7e6724c591bab4b7fa27f08d694b59a67e` 的 `contract/openapi/v1/openapi.yaml`（version `1.0.0`，SHA-256
 `6ec2f6d5d71efa60b92bba1eb2dd0c81b7439734e2bc4450caa221e952e24183`），本仓只读 vendor 与
 `contract/dependencies/scheduler.json` 绑定它；不把 internal/event operations 加入本仓 public OpenAPI。
@@ -172,13 +171,15 @@ public v1 envelope 投影。旧 `meta` 与裸 body 均拒绝；System 错误必�
   受信 tenant 下的 stored task；prompt/project/auto_approve/timezone 是 BFF payload 的业务映射与一致性校验，不上升为 Scheduler schema。
 - `X-Kokoro-Scheduler-Schedule`、`X-Kokoro-Scheduler-Occurrence`、`X-Request-Id`、`Idempotency-Key`、`traceparent`
   按生成 webhook validator 校验，headers 大小写按 HTTP 规则归一。Scheduler key 是 opaque，存储原值，不 trim、解析、重构，
-  不校验自造 `schedule:<name>:<time>` 格式；owner schema 长度上限仍生效。
+  不校验自造 `schedule:<name>:<time>` 格式；owner schema 长度上限仍生效。生成 validator 的 transform 后对象不作为摘要输入；
+  接纳成功后保留原始 parsed JSON 的全部 own keys（包括顶层/嵌套 `__proto__`）。
 
 ### Semantic digest 与身份
 
 semantic digest 是 SHA-256(UTF-8 canonical JSON([trusted tenant, schedule, canonical RFC3339Nano occurrence, parsed body]))。
 occurrence 只接受合法 UTC `YYYY-MM-DDTHH:mm:ss[.fraction]Z`，fraction 为 1..9 位；规范化仅去掉末尾零和空小数点，
-保留纳秒区分，不使用 JS Date 截断为毫秒，拒绝无效日历日期、秒 60、偏移量及旧 compact 时间。无 fraction 与全零 fraction
+保留纳秒区分，以手写 proleptic Gregorian 规则校验四位年（含 `0000`/`0099`/`0100`），不使用会把 0..99 映射到
+1900..1999 的 `Date.UTC`，拒绝无效日历日期、秒 60、偏移量及旧 compact 时间。无 fraction 与全零 fraction
 表示相同 instant。request ID、traceparent、header 排列和 JSON 原始空白不参与摘要，opaque key 只索引 receipt，不参与 digest。
 
 canonical JSON 对对象递归按 UTF-16 code unit 排序键，并按该顺序逐项递归序列化为文本：
@@ -197,6 +198,8 @@ receipt scope 为 JSON.stringify([trusted tenant, "scheduler-dispatch:v1", opaqu
 首次不可信/非法入参为 400，认证失败为 401，任务不存在/不可见为 404，任务不活动或 snapshot 不一致为 409，过期为 410；
 这些明确终态不触发第二个 Run。持久 store 缺失/不可用、依赖配置失败为 503；Agent 网络/响应未知为 502，保留可恢复 receipt。
 返回 202 仅在 Agent 确认相同 Run 且 terminal receipt 落盘后；响应丢失通过原 receipt 重放。
+Scheduler Agent admission 还必须有大于零的 `database remaining lease - monotonic elapsed - settlement reserve`；预算耗尽不执行 Agent I/O。
+该专用预算上限不改变普通 Chat/owner 调用的全局 upstream timeout。
 
 receiver 的 Run identity 只依赖 trusted tenant + schedule + canonical occurrence（无歧义 JSON tuple + SHA-256），
 与 opaque key、actor 和 payload 变化解耦；改变 key 不得产生同 occurrence 的第二个 Run，Agent 对不同 launch 参数须冲突而非新建。

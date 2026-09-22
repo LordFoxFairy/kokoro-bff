@@ -5,6 +5,7 @@ import type { BffApplicationServices } from "../services.js"
 import type { ScheduledTaskOutboxRepository } from "./scheduled-task-outbox-repository.js"
 import type { AgentDispatchOutboxRepository } from "./agent-dispatch-outbox-repository.js"
 import type { AgentCancellationOutboxRepository } from "./agent-cancellation-outbox-repository.js"
+import type { SchedulerDispatchReceiptRepository } from "./scheduler-dispatch-receipt-repository.js"
 
 /** Runtime port consumed by BFF routes; PostgreSQL is one infrastructure implementation. */
 export interface BffBusinessStore extends IdempotencyRepository {
@@ -18,6 +19,8 @@ export interface BffBusinessStore extends IdempotencyRepository {
   readonly agentDispatchOutbox?: AgentDispatchOutboxRepository
   /** Durable compensation queue for Agent runs whose owning conversation was deleted. */
   readonly agentCancellationOutbox?: AgentCancellationOutboxRepository
+  /** Scheduler event-protocol receipt state; separate from public mutation receipts. */
+  readonly schedulerDispatchReceipts?: SchedulerDispatchReceiptRepository
   ready(): Promise<void>
   close(): Promise<void>
 }

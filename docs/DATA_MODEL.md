@@ -8,23 +8,23 @@
 
 ## 当前表
 
-| 表 | Owner fact | 关键键/查询 | 当前备注 |
-| --- | --- | --- | --- |
-| `bff_project` | Project projection | `project_id`; tenant + slug 唯一 | 保存 name/description/instruction |
-| `bff_project_instruction_revision` | instruction revision | tenant + project + updated_at | `current` 由应用维护 |
-| `bff_project_skill` | project skill state | tenant + project + skill PK | 布尔 enabled 投影 |
-| `bff_project_task` | project task projection | task id；tenant + project 排序 | status 有有限 CHECK |
-| `bff_scheduled_task` | ScheduledTask definition | task id；tenant 列表；revision | 保存 owner、IANA timezone + local time rule、UTC `next_run_at` |
-| `bff_scheduled_task_outbox` | ScheduledTask → Scheduler command | outbox id；`tenant_id + task_id + command_type + idempotency_key` 唯一；ready/task index | bounded register/replace/delete queue；保存版本化 payload、lineage、lease/fence、attempt/error/terminal state |
-| `bff_idempotency_receipt` | mutation receipt | scope PK | pending/terminal status 与 JSON response |
-| `bff_conversation` | Conversation 产品事实 | `conversation_id`；tenant + updated_at 稳定列表排序 | active/deleted tombstone；删除不物理清除，保留至 retention cleanup |
-| `bff_message` | Message 产品事实 | `message_id`；tenant + conversation + message_seq 唯一 | role/status CHECK；`run_id` 是 Agent opaque reference，不做跨仓关系约束 |
-| `bff_agent_dispatch_outbox` | Chat → Agent launch command | outbox id；`tenant_id + conversation_id + idempotency_key` 唯一；run id 唯一；ready/lease/conversation index | 与两条 Message、expected-run registration 原子提交；保存版本化 payload、lineage、lease/fence、attempt/error/terminal state |
-| `bff_share` | Share 产品事实 | `share_id`；tenant + conversation active partial unique | revoked/expired rows retained；public lookup 只接受未撤销且未过期记录 |
-| `bff_agui_stream` | tenant/session public projection + consumer state | `(tenant_id, session_id)` PK | projection version/source watermark；`expected_run_id` 是最新接纳的 run fence，`latest_run_id` 是最近投影的 source run；latest run start retention boundary；subject、due time、lease token/fence、persistent failure count、blocked/error state |
-| `bff_agui_source_event` | 已摄取 Agent source identity | tenant/session/owner/event PK；source sequence 唯一 | 保存 SHA-256 digest；包括零 public frame 的未知 source kind |
-| `bff_agui_event` | append-only public AG-UI frame | tenant/session/public sequence PK；cursor 全局唯一；source frame 唯一 | 完整 JSON payload 与 opaque cursor |
-| `bff_agui_cursor_tombstone` | 已回收 public cursor 的有界诊断事实 | tenant/session/cursor PK；expiry index | 在 tombstone 窗口内区分 expired 与未知/foreign cursor |
+| 表                                 | Owner fact                                        | 关键键/查询                                                                                                  | 当前备注                                                                                                                                                                                                                                         |
+| ---------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `bff_project`                      | Project projection                                | `project_id`; tenant + slug 唯一                                                                             | 保存 name/description/instruction                                                                                                                                                                                                                |
+| `bff_project_instruction_revision` | instruction revision                              | tenant + project + updated_at                                                                                | `current` 由应用维护                                                                                                                                                                                                                             |
+| `bff_project_skill`                | project skill state                               | tenant + project + skill PK                                                                                  | 布尔 enabled 投影                                                                                                                                                                                                                                |
+| `bff_project_task`                 | project task projection                           | task id；tenant + project 排序                                                                               | status 有有限 CHECK                                                                                                                                                                                                                              |
+| `bff_scheduled_task`               | ScheduledTask definition                          | task id；tenant 列表；revision                                                                               | 保存 owner、IANA timezone + local time rule、UTC `next_run_at`                                                                                                                                                                                   |
+| `bff_scheduled_task_outbox`        | ScheduledTask → Scheduler command                 | outbox id；`tenant_id + task_id + command_type + idempotency_key` 唯一；ready/task index                     | bounded register/replace/delete queue；保存版本化 payload、lineage、lease/fence、attempt/error/terminal state                                                                                                                                    |
+| `bff_idempotency_receipt`          | mutation receipt                                  | scope PK                                                                                                     | pending/terminal status 与 JSON response                                                                                                                                                                                                         |
+| `bff_conversation`                 | Conversation 产品事实                             | `conversation_id`；tenant + updated_at 稳定列表排序                                                          | active/deleted tombstone；删除不物理清除，保留至 retention cleanup                                                                                                                                                                               |
+| `bff_message`                      | Message 产品事实                                  | `message_id`；tenant + conversation + message_seq 唯一                                                       | role/status CHECK；`run_id` 是 Agent opaque reference，不做跨仓关系约束                                                                                                                                                                          |
+| `bff_agent_dispatch_outbox`        | Chat → Agent launch command                       | outbox id；`tenant_id + conversation_id + idempotency_key` 唯一；run id 唯一；ready/lease/conversation index | 与两条 Message、expected-run registration 原子提交；保存版本化 payload、lineage、lease/fence、attempt/error/terminal state                                                                                                                       |
+| `bff_share`                        | Share 产品事实                                    | `share_id`；tenant + conversation active partial unique                                                      | revoked/expired rows retained；public lookup 只接受未撤销且未过期记录                                                                                                                                                                            |
+| `bff_agui_stream`                  | tenant/session public projection + consumer state | `(tenant_id, session_id)` PK                                                                                 | projection version/source watermark；`expected_run_id` 是最新接纳的 run fence，`latest_run_id` 是最近投影的 source run；latest run start retention boundary；subject、due time、lease token/fence、persistent failure count、blocked/error state |
+| `bff_agui_source_event`            | 已摄取 Agent source identity                      | tenant/session/owner/event PK；source sequence 唯一                                                          | 保存 SHA-256 digest；包括零 public frame 的未知 source kind                                                                                                                                                                                      |
+| `bff_agui_event`                   | append-only public AG-UI frame                    | tenant/session/public sequence PK；cursor 全局唯一；source frame 唯一                                        | 完整 JSON payload 与 opaque cursor                                                                                                                                                                                                               |
+| `bff_agui_cursor_tombstone`        | 已回收 public cursor 的有界诊断事实               | tenant/session/cursor PK；expiry index                                                                       | 在 tombstone 窗口内区分 expired 与未知/foreign cursor                                                                                                                                                                                            |
 
 所有当前 repository 查询都必须显式携带 tenant id；跨 owner reference 是 opaque id，不做跨数据库 JOIN。
 
@@ -145,10 +145,9 @@ public projection，没有 BFF 数据库事务、outbox、幂等 receipt、reten
 与删除策略均保持不变。若 Capability projection 后续需要本地 durable fact，必须重新通过 owner、API 与 canonical
 schema 设计门，不能把 client cache 升格为事实源。
 
-
 ## Scheduler receiver receipt design
 
-**W0B-8 冻结目标；专用 repository 与下述 CAS 尚未实现。** 无 schema 变更：复用现有
+**W0B-9 已实现专用 repository 与下述 CAS。** 无 schema 变更：复用现有
 `bff_idempotency_receipt(scope TEXT PRIMARY KEY, fingerprint TEXT, status INTEGER, response_body JSONB, created_at TIMESTAMPTZ(3))`。
 本切片不改 canonical schema，SHA-256 仍为 `8dcb1b3194ed4d4c50c42cdb9a199fec5e253793dd3ca062e92094ab68436da1`。
 不新增 Schedule/Occurrence/Agent Run 表、不跨 owner SQL、不把 Redis 变成 receipt 真相源。
@@ -170,7 +169,9 @@ release/delete pending。scope 还包含 actor。因此直接复用通用 mutati
   snapshot 一经保存不可改写。终态 status 为实际 HTTP status，response 只保存可重放 status/body，不把内部 token/snapshot 返回 caller。
 - 首次 claim 插入固定 digest；冲突先读并比较 digest，不因 age/state 改变规则。匹配且 terminal 则 replay；活跃 pending 返回 425。
   retryable 到期或 pending lease 过期时，只在同 digest 上原子更新随机 `claim_token` 与 lease，保留 snapshot 和所有身份。
-  lease 固定 60 秒，单次 Agent I/O 总预算必须小于 lease 且保留 settlement 时间；数据库时钟判断 deadline，worker 不延长旧 token。
+  lease 固定 60 秒；row lock 获取后以 `clock_timestamp()` 计算新 lease/判断 deadline，禁止使用事务开始时冻结的
+  `CURRENT_TIMESTAMP` 发出已过期 claim。claim/prepare 返回数据库当时的剩余毫秒，单次 Agent I/O 从该预算扣除 monotonic elapsed
+  与固定 settlement reserve；worker 不延长旧 token，普通全局 upstream timeout 不能越过专用预算。
 - prepare snapshot、finalize、release-to-retryable 均匹配 scope + fingerprint + claim_token + 未终态 + 未过期 lease；检查受影响行数。
   旧 worker 零行更新即失去 claim，不返回自认成功，不覆盖新 token。release 只清 lease/设 retryable 与 retry_at，不删除 receipt。
   普通瞬时失败设有限退避；进程在 release 前崩溃仍可在 lease 到期后 reclaim。created_at 保留首次接纳时刻，lease 使用 JSONB 内的
@@ -191,12 +192,14 @@ release/delete pending。scope 还包含 actor。因此直接复用通用 mutati
 五元 scope 不相交，通用 release 不触及本 receiver 的行。无物理删除、软删或 TTL：在另行批准 retention/replay 上限与恢复策略前，
 Scheduler receipt 持续保留，不用 cache TTL 或 Scheduler 重试预算到期清除 digest。失败/重试状态亦保留供同身份恢复和审计。
 
-W0B-9 必须增加真实 PostgreSQL 测试：并发同 key、不同 digest（包括 lease 过期/5xx）、stale token finalize/release、
-新 repository 实例与 BFF 重启恢复 snapshot、Agent receipt stub 返回成功后落盘失败、tenant 隔离及稳定输出。
+W0B-9 已增加真实 PostgreSQL repository 测试：并发同 key、不同 digest、过期 reclaim、短 row-lock 等待后新 lease 的剩余期限，
+等待中到期的 prepare/finalize/release 拒绝、stale token、retryable、tenant 隔离及稳定 snapshot。另有真实 PostgreSQL + BFF HTTP
+以及 Agent stub 测试：Agent 接纳后 finalize 失败，关闭/重建 BFF 后在数据库 task 与 transport request ID 已变化时，同 key 仍重发
+首次完整 snapshot 与同一 Run identity；并通过真实 stale prepare CAS 证明零 Agent I/O。这里的 stub 只证明 BFF HTTP/PG 恢复，
+不证明真实 Agent durable admission 或唯一 Run 事实。
 W0B-10 使用真实 Scheduler + BFF 进程及 Agent receipt stub：响应丢失后，仅 BFF 重启恢复并接收保持运行的 Scheduler 重试；
 不重启 Scheduler。分别记录 HTTP attempts、
 稳定 Run ID 与 stub receipt 数量，不把 stub 计数写成真实 Agent Run facts。真实 Agent admission、同 Run 参数冲突、Agent 重启后
 唯一 Run 事实归 Agent-owner closure（W4），`EDGE-BFF-AGENT` 保持 broken，不增加到本波验收范围。
 不能将 memory double、文档正则检查或 build 成功称作真实 PostgreSQL 或 Agent 的持久恢复证据。
-本任务不运行 db:apply-schema/integration 或启动共享服务；`pnpm schema:check` 只验证原 canonical schema 静态门，
-fresh install 与上述真实行为门仍是后续实现的放行条件。
+本实现切片使用任务独占 PostgreSQL 完成 fresh install、非空拒绝与真实 receipt integration；Redis 仅复用 DB 8 且不作为 receipt 真相源。

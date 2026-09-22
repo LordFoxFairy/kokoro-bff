@@ -19,15 +19,15 @@ BFF 是公开 Product API 的唯一 owner；其他仓库只发布自己的 inter
 
 ## 2. 当前物理实现
 
-| 区域 | 当前职责 | 已知偏差 |
-| --- | --- | --- |
-| `src/main.ts` | server composition、通用 auth/body/idempotency 管线、route dispatch | 仍直接装配生产 mock |
-| `src/http/routes/` | resource route handlers | 尚未迁入标准 `interfaces/http/` |
-| `src/application/` | project/scheduled use case、AG-UI projection/fence、ports、input mapper | 尚无明确 Domain aggregate 层 |
-| `src/infrastructure/postgres/` | BFF-owned repository、durable AG-UI ledger、ScheduledTask/Agent dispatch outbox、Redis cache/notification | mutation receipt 与业务写仍未共享事务 |
-| `src/infrastructure/clients/` | Agent、Scheduler、Mori 窄 adapter；其他 owner 仍集中于 owner route | client 目录尚未对每个 owner 全部分拆 |
-| `src/interfaces/http/agui/` | 已持久化 AG-UI payload → schema-valid SSE frame | 完整 OpenAPI runtime validator 尚未形成 |
-| `src/contracts/` | 当前手写 Web-facing types/envelope | 尚未由 canonical OpenAPI 生成且未与 Domain 类型彻底分离 |
+| 区域                           | 当前职责                                                                                                  | 已知偏差                                                |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `src/main.ts`                  | server composition、通用 auth/body/idempotency 管线、route dispatch                                       | 仍直接装配生产 mock                                     |
+| `src/http/routes/`             | resource route handlers                                                                                   | 尚未迁入标准 `interfaces/http/`                         |
+| `src/application/`             | project/scheduled use case、AG-UI projection/fence、ports、input mapper                                   | 尚无明确 Domain aggregate 层                            |
+| `src/infrastructure/postgres/` | BFF-owned repository、durable AG-UI ledger、ScheduledTask/Agent dispatch outbox、Redis cache/notification | mutation receipt 与业务写仍未共享事务                   |
+| `src/infrastructure/clients/`  | Agent、Scheduler、Mori 窄 adapter；其他 owner 仍集中于 owner route                                        | client 目录尚未对每个 owner 全部分拆                    |
+| `src/interfaces/http/agui/`    | 已持久化 AG-UI payload → schema-valid SSE frame                                                           | 完整 OpenAPI runtime validator 尚未形成                 |
+| `src/contracts/`               | 当前手写 Web-facing types/envelope                                                                        | 尚未由 canonical OpenAPI 生成且未与 Domain 类型彻底分离 |
 
 目标依赖方向是 `interfaces -> application -> domain`，concrete infrastructure 实现 Domain/Application port，
 bootstrap 只负责装配。缺少目录时视为待重构，不创建空目录冒充完成。
@@ -210,39 +210,40 @@ BFF 的窄 owner adapter 位于 `src/http/routes/owner.ts`，解析与公开投�
 `KOKORO_SYSTEM_BASE_URL`；前者调用 `/v1/system/runtime-manifest`，后者调用
 `/v1/system/model-catalog/catalog`。本切片不增加持久化事实、运行层、fallback 或第二套 owner client。
 
-
 ## Scheduler control and receiver cutover
 
-**W0B-8 设计冻结，非 runtime 完成。** Scheduler 唯一维护 control `internal-owner` 与 dispatch `event-protocol`；
+**W0B-9 BFF runtime 已实现。** Scheduler 唯一维护 control `internal-owner` 与 dispatch `event-protocol`；
 BFF 拥有 ScheduledTask、consumer 验证与本仓 receipt。固定 producer commit
 `92bf9e7e6724c591bab4b7fa27f08d694b59a67e`、version `1.0.0`，来源是
 `contract/openapi/v1/openapi.yaml`，SHA-256 `6ec2f6d5d71efa60b92bba1eb2dd0c81b7439734e2bc4450caa221e952e24183`。
 原始 commit blob 只读保存到 `contract/vendor/kokoro-scheduler/<commit>/openapi.yaml`；
-`contract/dependencies/scheduler.json` 记录 provenance/config/lockfile digest，`generated=[]`，不表示已经生成。
+`contract/dependencies/scheduler.json` 状态为 `generated`，记录 provenance/config/lockfile 与 16 个生成产物 digest。
 `openapi-ts.scheduler.config.ts` 固定本仓既有 hey-api 0.99.0、TS 5.9.3、Zod 4.5.4、Node 22.22.2、pnpm 11.25.0，
 目标为 `src/generated/scheduler`。采用 bundled fetch、flat SDK、grouped params、fields response、Zod response validation、
-clean output 与 `.js` import；不新增 fetch package。正式生成、exact-optional compatibility normalization 和双生成 drift 门属 W0B-9。
+clean output 与 `.js` import；不新增 fetch package。正式生成、固定命中数 exact-optional compatibility normalization 与双生成 byte-identical drift 门已接入 `contract:check:scheduler`。
 
 ### 两个窄边界与放置决定
 
-| 边界 | 目标位置与职责 | 依赖与删除项 |
-| --- | --- | --- |
-| Control client | `src/infrastructure/clients/scheduler/control-client.ts` 终止 generated SDK/Zod，把 ScheduledTask outbox command 映射为 owner Schedule command | delivery 只调用该 client；删除旧 `/jobs` 路由、`job_not_found` / `job_already_exists` 和手写 Scheduler wire type |
-| Webhook contract | `src/infrastructure/clients/scheduler/webhook-contract.ts` 终止 generated producer webhook schema，输出本地已验证 dispatch input | `src/http/routes/scheduler.ts` 只做认证/解码/协调；删除旧 job header、compact occurrence 和自行拼接幂等 key |
-| Durable receiver receipt | 专用 application port 与 `src/infrastructure/postgres/scheduler-dispatch-receipt-repository.ts` | 复用本仓 receipt 表而非通用 mutation claim/release；经 `BffBusinessStore` 与 `repositories.ts` 装配；不直接访问 Scheduler/Agent DB |
+| 边界                     | 目标位置与职责                                                                                                                                 | 依赖与删除项                                                                                                                       |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Control client           | `src/infrastructure/clients/scheduler/control-client.ts` 终止 generated SDK/Zod，把 ScheduledTask outbox command 映射为 owner Schedule command | delivery 只调用该 client；删除旧资源路由、旧稳定错误码和手写 Scheduler wire type                                                   |
+| Webhook contract         | `src/infrastructure/clients/scheduler/webhook-contract.ts` 终止 generated producer webhook schema，输出本地已验证 dispatch input               | `src/http/routes/scheduler.ts` 只做认证/解码/协调；删除旧 job header、compact occurrence 和自行拼接幂等 key                        |
+| Durable receiver receipt | 专用 application port 与 `src/infrastructure/postgres/scheduler-dispatch-receipt-repository.ts`                                                | 复用本仓 receipt 表而非通用 mutation claim/release；经 `BffBusinessStore` 与 `repositories.ts` 装配；不直接访问 Scheduler/Agent DB |
 
 复用现有 owner client、postgres、port 目录优于新增一级 Scheduler 模块；尚未做 feature-first 全仓重组，不借本切片搬目录。
 vendor/manifest 优于 Root 可编辑 contract 中心；producer webhook 不复制进 BFF public OpenAPI。generated 类型只在上表前两个
 边界内部使用，禁止 application/domain import，也不从 sibling 源码 import。BFF-specific payload 是 BFF 的业务映射，
 不是第二份 producer event schema。hey-api 的 webhook TypeScript request type 当前未覆盖 headers；receiver 使用
 `zDispatchScheduleOccurrencePostWebhookRequest` 的生成 Zod schema（类型由 Zod 推导），不手写替代 owner headers。
-隔离临时目录生成已核实 opaque body 为 `z.record(z.string(), z.unknown())`，不会 strip 业务字段；
+隔离临时目录生成已核实 opaque body 为 `z.record(z.string(), z.unknown())`；该生成 validator 用于 acceptance，但 Zod transform
+可能删除顶层特殊键，因此 receiver 在 acceptance 后保留原始 parsed JSON 作为 digest/本地映射事实，并递归验证 finite JSON。
 receiver 继续单独验证 BFF payload，不把 opaque body 当成已通过业务授权。该可生成性检查不是正式 runtime/drift 验收。
 
 Control client 从受信 command tenant 构造身份，消费 `createSchedule` / `replaceSchedule` / `deleteSchedule`；
 register 的 `409 schedule_already_exists` 才转 replace，replace 的 `404 schedule_not_found` 才转 create，
 delete 的同码 404 视为已删除。每次 method/path/body 重放沿用稳定 command key；不按 message 或任意 409/404 推断成功。
-每次网络尝试有 timeout/响应大小限制，retry 由现有 bounded outbox 管理，不在 generated client 隐式无限重试。
+每次网络尝试有 timeout/响应大小限制；response stream 逐块计数，超过 hard cap 立即 cancel reader 并 abort 请求，
+不在 `arrayBuffer()` 完成后才判断。retry 由现有 bounded outbox 管理，不在 generated client 隐式无限重试。
 日/周规则使用 ScheduledTask 本地 `time` + IANA `timezone`；周日由 `nextRunAt` 在该 timezone 下的日期确定，
 交给 Scheduler 处理后续时区/DST 触发，不继续把当前 UTC hour 固化为全年周期。稳定 schedule name 保持 BFF task 映射；
 旧 `buildSchedulerJob` 的 UTC cron 与无顶层 timezone 的输出是待替换现状，不是目标契约。
@@ -277,6 +278,11 @@ W0B-9 证明 BFF 真实 PostgreSQL receipt/CAS、BFF 重启恢复与稳定输出
 `EDGE-BFF-AGENT` 保持 broken；stub receipt/HTTP 调用计数不证明真实 Agent 的持久幂等，不据此扩大本波范围。
 Agent 返回与期望 Run 不同、响应非法或结果未知时保留原 receipt，返回可重试
 网关错误；不要把网络断开当作“Agent 未执行”。5xx 不删除 key/digest；stale worker finalize/release 被 token 拒绝。
+
+receipt CAS 先 `FOR UPDATE` 锁定 row，再读取 PostgreSQL `clock_timestamp()`；事务开始时冻结的 `CURRENT_TIMESTAMP` 不参与
+锁等待后的 eligibility/deadline。claim 与 prepare 返回数据库观察到的剩余 lease，route 用 monotonic elapsed 消耗它，
+并在 Agent I/O 前扣除固定 settlement reserve；即使普通 upstream timeout 配置超过 60 秒，也只把专用剩余预算传给 transport。
+预算已过期/耗尽或 stale prepare 零行时不开始 Agent 网络请求，普通 Chat adapter 不走此分支。
 
 Scheduler 采用有界重试；receiver 活跃 lease 返回 425，不返回会被 producer 当永久失败的 409。超时 receipt 可有界 reclaim，
 失败持久化 retryable 状态而不是永远 in-progress。若 producer 重试预算耗尽，需要运维按同一原始 occurrence/key 重投并审计，

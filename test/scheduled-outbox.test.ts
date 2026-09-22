@@ -1,23 +1,14 @@
 import assert from "node:assert/strict"
+import { createServer } from "node:http"
 import { describe, it } from "node:test"
 
-import {
-  buildScheduledTaskOutboxPayload,
-  scheduledTaskOutboxTaskFromPayload,
-  scheduledTaskRetryDelayMs,
-} from "../dist/domain/scheduled-task/outbox.js"
+import { buildScheduledTaskOutboxPayload, scheduledTaskOutboxTaskFromPayload, scheduledTaskRetryDelayMs } from "../dist/domain/scheduled-task/outbox.js"
 import { scheduledTaskOutboxId } from "../dist/infrastructure/identifiers/scheduled-task-outbox-id.js"
 import { ScheduledTaskOutboxDispatcher } from "../dist/application/scheduled-task-outbox-dispatcher.js"
-import type {
-  ScheduledTaskOutboxRepository,
-} from "../dist/application/ports/scheduled-task-outbox-repository.js"
-import type {
-  ScheduledTaskOutboxCommand,
-} from "../dist/domain/scheduled-task/outbox.js"
-import type {
-  ScheduledTaskOutboxDeliveryPort,
-  ScheduledTaskOutboxDeliveryResult,
-} from "../dist/application/ports/scheduled-task-outbox-delivery.js"
+import type { ScheduledTaskOutboxRepository } from "../dist/application/ports/scheduled-task-outbox-repository.js"
+import type { ScheduledTaskOutboxCommand } from "../dist/domain/scheduled-task/outbox.js"
+import type { ScheduledTaskOutboxDeliveryPort, ScheduledTaskOutboxDeliveryResult } from "../dist/application/ports/scheduled-task-outbox-delivery.js"
+import { SchedulerOutboxDelivery } from "../dist/infrastructure/clients/scheduler/outbox-delivery.js"
 
 const task = {
   taskId: "scheduled_fixture",
@@ -79,11 +70,7 @@ class FixtureOutboxRepository implements ScheduledTaskOutboxRepository {
     return true
   }
 
-  public async markScheduledTaskOutboxRetryable(
-    lease: ScheduledTaskOutboxCommand,
-    nextAttemptAt: Date,
-    errorCode: string,
-  ): Promise<boolean> {
+  public async markScheduledTaskOutboxRetryable(lease: ScheduledTaskOutboxCommand, nextAttemptAt: Date, errorCode: string): Promise<boolean> {
     this.retryable.push({ id: lease.outboxId, nextAttemptAt, errorCode })
     return true
   }
@@ -158,10 +145,7 @@ describe("ScheduledTask durable outbox", () => {
   it("claims, retries, and completes through the lease-aware port", async () => {
     const repository = new FixtureOutboxRepository()
     repository.queued.push(command(1), command(2))
-    const delivery = new FixtureDelivery([
-      { outcome: "retryable", errorCode: "scheduler_timeout" },
-      { outcome: "succeeded" },
-    ])
+    const delivery = new FixtureDelivery([{ outcome: "retryable", errorCode: "scheduler_timeout" }, { outcome: "succeeded" }])
     let now = new Date("2026-09-04T12:00:00.000Z")
     const dispatcher = new ScheduledTaskOutboxDispatcher(repository, delivery, {
       workerId: "worker_fixture",
@@ -194,5 +178,38 @@ describe("ScheduledTask durable outbox", () => {
     assert.equal(await dispatcher.runOnce(), 1)
     assert.deepEqual(repository.failed, [{ id: command().outboxId, errorCode: "scheduler_unavailable" }])
     assert.equal(repository.retryable.length, 0)
+  })
+
+  it("reconciles create conflicts only on the canonical stable owner code", async () => {
+    const methods: string[] = []
+    const owner = createServer((request, response) => {
+      methods.push(request.method ?? "")
+      response.setHeader("content-type", "application/json")
+      if (request.method === "POST") {
+        response.statusCode = 409
+        response.end(JSON.stringify({ error: { code: "schedule_already_exists", message: "exists" }, meta: { request_id: "req_fixture" } }))
+      } else {
+        response.end(JSON.stringify({ data: { name: "kokoro.scheduled.scheduled_fixture", status: "updated" }, meta: { request_id: "req_fixture" } }))
+      }
+    })
+    await new Promise<void>((resolve, reject) => {
+      owner.once("error", reject)
+      owner.listen(0, "127.0.0.1", resolve)
+    })
+    const address = owner.address()
+    if (address === null || typeof address === "string") throw new Error("server did not bind")
+    try {
+      const delivery = new SchedulerOutboxDelivery({
+        upstreams: { scheduler: `http://127.0.0.1:${address.port}` },
+        schedulerServiceToken: "scheduler-token",
+        schedulerTargetUrl: "http://bff.test/internal/bff/scheduled-tasks/dispatch",
+        upstreamTimeoutMs: 1000,
+        upstreamMaxResponseBytes: 1024 * 1024,
+      } as never)
+      assert.deepEqual(await delivery.deliver({ ...command(), commandType: "scheduler.register" }), { outcome: "succeeded" })
+      assert.deepEqual(methods, ["POST", "PUT"])
+    } finally {
+      await new Promise<void>((resolve) => owner.close(() => resolve()))
+    }
   })
 })

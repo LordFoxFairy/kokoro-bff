@@ -102,13 +102,7 @@ integrationTest("ScheduledTask outbox is atomic, idempotent, tenant-scoped, and 
     )
     const taskId = `scheduled_core_${suffix}`
     const createLineage = lineage(tenants.core, `create-${suffix}`, suffix)
-    const created = await repository.createScheduledTask(
-      tenants.core,
-      createLineage.actorId,
-      taskInput(suffix, { projectId }),
-      taskId,
-      createLineage,
-    )
+    const created = await repository.createScheduledTask(tenants.core, createLineage.actorId, taskInput(suffix, { projectId }), taskId, createLineage)
     const duplicate = await repository.createScheduledTask(
       tenants.core,
       createLineage.actorId,
@@ -138,19 +132,9 @@ integrationTest("ScheduledTask outbox is atomic, idempotent, tenant-scoped, and 
     assert.equal(await repository.findScheduledTask(`${tenants.core}_other`, taskId), null)
 
     const updateLineage = lineage(tenants.core, `update-${suffix}`, suffix)
-    const updated = await repository.updateScheduledTask(
-      tenants.core,
-      taskId,
-      { prompt: "Updated prompt." },
-      updateLineage,
-    )
+    const updated = await repository.updateScheduledTask(tenants.core, taskId, { prompt: "Updated prompt." }, updateLineage)
     assert.equal(updated?.revision, 2)
-    const duplicateUpdate = await repository.updateScheduledTask(
-      tenants.core,
-      taskId,
-      { prompt: "A different retry body." },
-      updateLineage,
-    )
+    const duplicateUpdate = await repository.updateScheduledTask(tenants.core, taskId, { prompt: "A different retry body." }, updateLineage)
     assert.equal(duplicateUpdate?.revision, 2)
     assert.equal(duplicateUpdate?.prompt, "Updated prompt.")
 
@@ -196,23 +180,28 @@ integrationTest("ScheduledTask outbox is atomic, idempotent, tenant-scoped, and 
     const claimLineage = lineage(tenants.claim, `claim-${suffix}`, suffix)
     await repository.createScheduledTask(tenants.claim, claimLineage.actorId, taskInput(suffix), claimTaskId, claimLineage)
     const claimNow = new Date(Date.now() + 1000)
-    const claimed = (await repository.claimScheduledTaskOutbox({
-      workerId: `worker-a-${suffix}`,
-      limit: 1,
-      leaseDurationMs: 5000,
-      now: claimNow,
-    }))[0]
+    const claimed = (
+      await repository.claimScheduledTaskOutbox({
+        workerId: `worker-a-${suffix}`,
+        limit: 1,
+        leaseDurationMs: 5000,
+        now: claimNow,
+      })
+    )[0]
     assert.ok(claimed)
     assert.equal(claimed.status, "leased")
     assert.equal(claimed.attemptCount, 1)
     assert.equal(claimed.fence, 1)
     assert.ok(claimed.leaseUntil instanceof Date)
-    assert.deepEqual(await repository.claimScheduledTaskOutbox({
-      workerId: `worker-b-${suffix}`,
-      limit: 1,
-      leaseDurationMs: 5000,
-      now: claimNow,
-    }), [])
+    assert.deepEqual(
+      await repository.claimScheduledTaskOutbox({
+        workerId: `worker-b-${suffix}`,
+        limit: 1,
+        leaseDurationMs: 5000,
+        now: claimNow,
+      }),
+      [],
+    )
     const lease = {
       outboxId: claimed.outboxId,
       leaseOwner: claimed.leaseOwner,
@@ -232,20 +221,24 @@ integrationTest("ScheduledTask outbox is atomic, idempotent, tenant-scoped, and 
     pools.push(poolA, poolB)
     const repositoryA = new PostgresScheduledTaskRepository({ pool: poolA })
     const repositoryB = new PostgresScheduledTaskRepository({ pool: poolB })
-    const beforeRestart = (await repositoryA.claimScheduledTaskOutbox({
-      workerId: `worker-restart-a-${suffix}`,
-      limit: 1,
-      leaseDurationMs: 50,
-      now: new Date(Date.now() + 1000),
-    }))[0]
+    const beforeRestart = (
+      await repositoryA.claimScheduledTaskOutbox({
+        workerId: `worker-restart-a-${suffix}`,
+        limit: 1,
+        leaseDurationMs: 50,
+        now: new Date(Date.now() + 1000),
+      })
+    )[0]
     assert.ok(beforeRestart)
     await poolA.end()
-    const afterRestart = (await repositoryB.claimScheduledTaskOutbox({
-      workerId: `worker-restart-b-${suffix}`,
-      limit: 1,
-      leaseDurationMs: 5000,
-      now: new Date(beforeRestart.leaseUntil.getTime() + 10),
-    }))[0]
+    const afterRestart = (
+      await repositoryB.claimScheduledTaskOutbox({
+        workerId: `worker-restart-b-${suffix}`,
+        limit: 1,
+        leaseDurationMs: 5000,
+        now: new Date(beforeRestart.leaseUntil.getTime() + 10),
+      })
+    )[0]
     assert.ok(afterRestart)
     assert.equal(afterRestart.outboxId, beforeRestart.outboxId)
     assert.ok(afterRestart.fence > beforeRestart.fence)
@@ -273,8 +266,18 @@ integrationTest("ScheduledTask outbox is atomic, idempotent, tenant-scoped, and 
     const poolD = new Pool({ connectionString: postgresUrl, max: 2 })
     pools.push(poolC, poolD)
     const [claimedC, claimedD] = await Promise.all([
-      new PostgresScheduledTaskRepository({ pool: poolC }).claimScheduledTaskOutbox({ workerId: `worker-c-${suffix}`, limit: 10, leaseDurationMs: 5000, now: new Date(Date.now() + 1000) }),
-      new PostgresScheduledTaskRepository({ pool: poolD }).claimScheduledTaskOutbox({ workerId: `worker-d-${suffix}`, limit: 10, leaseDurationMs: 5000, now: new Date(Date.now() + 1000) }),
+      new PostgresScheduledTaskRepository({ pool: poolC }).claimScheduledTaskOutbox({
+        workerId: `worker-c-${suffix}`,
+        limit: 10,
+        leaseDurationMs: 5000,
+        now: new Date(Date.now() + 1000),
+      }),
+      new PostgresScheduledTaskRepository({ pool: poolD }).claimScheduledTaskOutbox({
+        workerId: `worker-d-${suffix}`,
+        limit: 10,
+        leaseDurationMs: 5000,
+        now: new Date(Date.now() + 1000),
+      }),
     ])
     const claimedIds = [...claimedC, ...claimedD].map((command) => command.outboxId)
     assert.equal(new Set(claimedIds).size, claimedIds.length)

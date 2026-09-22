@@ -32,10 +32,7 @@ function nodeExecutionEntry(command: string): string | null {
 }
 
 function readsCanonicalSchema(source: string): boolean {
-  return (
-    source.includes("database/schema.sql") ||
-    /["'`]database["'`]\s*,\s*["'`]schema\.sql["'`]/u.test(source)
-  )
+  return source.includes("database/schema.sql") || /["'`]database["'`]\s*,\s*["'`]schema\.sql["'`]/u.test(source)
 }
 
 function staticLiteralModuleSpecifiers(source: string): string[] {
@@ -56,48 +53,26 @@ function staticLiteralModuleSpecifiers(source: string): string[] {
 function importsCanonicalSchemaInstaller(relativePath: string, source: string): boolean {
   return staticLiteralModuleSpecifiers(source).some((specifier) => {
     const literalPath = specifier.split(/[?#]/u, 1)[0] ?? specifier
-    const resolvedPath = literalPath.startsWith(".")
-      ? path.posix.normalize(path.posix.join(path.posix.dirname(relativePath), literalPath))
-      : literalPath
+    const resolvedPath = literalPath.startsWith(".") ? path.posix.normalize(path.posix.join(path.posix.dirname(relativePath), literalPath)) : literalPath
     return resolvedPath === canonicalInstaller.relativePath || resolvedPath.endsWith(`/${canonicalInstaller.relativePath}`)
   })
 }
 
 function assertSingleSchemaInstaller(scripts: Record<string, string>, sourceFiles: SourceFile[]): void {
-  const schemaInstallEntries = Object.entries(scripts).filter(
-    ([name, command]) => isSchemaInstallerScriptName(name) && nodeExecutionEntry(command) !== null,
-  )
+  const schemaInstallEntries = Object.entries(scripts).filter(([name, command]) => isSchemaInstallerScriptName(name) && nodeExecutionEntry(command) !== null)
   const nonCanonicalSchemaReaders = sourceFiles
-    .filter(
-      ({ relativePath, source }) =>
-        relativePath !== canonicalInstaller.relativePath && readsCanonicalSchema(source),
-    )
+    .filter(({ relativePath, source }) => relativePath !== canonicalInstaller.relativePath && readsCanonicalSchema(source))
     .map(({ relativePath }) => relativePath)
     .sort()
   const nonCanonicalInstallerImports = sourceFiles
-    .filter(
-      ({ relativePath, source }) =>
-        relativePath !== canonicalInstaller.relativePath && importsCanonicalSchemaInstaller(relativePath, source),
-    )
+    .filter(({ relativePath, source }) => relativePath !== canonicalInstaller.relativePath && importsCanonicalSchemaInstaller(relativePath, source))
     .map(({ relativePath }) => relativePath)
     .sort()
   const installer = sourceFiles.find(({ relativePath }) => relativePath === canonicalInstaller.relativePath)?.source ?? ""
 
-  assert.deepEqual(
-    schemaInstallEntries,
-    [["db:apply-schema", "node scripts/apply-schema.mjs"]],
-    "BFF must expose a single schema installer command",
-  )
-  assert.deepEqual(
-    nonCanonicalSchemaReaders,
-    [],
-    "BFF source cannot read canonical schema outside the single schema installer",
-  )
-  assert.deepEqual(
-    nonCanonicalInstallerImports,
-    [],
-    "BFF source cannot use a static schema installer import outside the canonical installer",
-  )
+  assert.deepEqual(schemaInstallEntries, [["db:apply-schema", "node scripts/apply-schema.mjs"]], "BFF must expose a single schema installer command")
+  assert.deepEqual(nonCanonicalSchemaReaders, [], "BFF source cannot read canonical schema outside the single schema installer")
+  assert.deepEqual(nonCanonicalInstallerImports, [], "BFF source cannot use a static schema installer import outside the canonical installer")
   assert.match(installer, /new URL\("\.\.\/database\/schema\.sql", import\.meta\.url\)/u)
   assert.match(installer, /assertBlankDatabaseTables/u)
   assert.doesNotMatch(installer, /ALTER TABLE|db:migrate/u)
@@ -157,6 +132,7 @@ test("BFF keeps contract, application, client, and repository boundaries explici
     "src/application/ports/scheduled-task-repository.ts",
     "src/application/ports/scheduled-task-outbox-repository.ts",
     "src/application/ports/scheduled-task-outbox-delivery.ts",
+    "src/application/ports/scheduler-dispatch-receipt-repository.ts",
     "src/application/scheduled-task-outbox-dispatcher.ts",
     "src/application/scheduled/input.ts",
     "src/application/scheduled/mappers.ts",
@@ -174,6 +150,7 @@ test("BFF keeps contract, application, client, and repository boundaries explici
     "src/infrastructure/postgres/agui-consumer-registration.ts",
     "src/infrastructure/postgres/scheduled-task-repository.ts",
     "src/infrastructure/postgres/repositories.ts",
+    "src/infrastructure/postgres/scheduler-dispatch-receipt-repository.ts",
     "src/http/routes/agent.ts",
     "src/http/routes/chat.ts",
     "src/http/routes/live-bff.ts",
@@ -189,7 +166,10 @@ test("BFF keeps contract, application, client, and repository boundaries explici
     "src/infrastructure/clients/agent/projection.ts",
     "src/infrastructure/clients/upstream-response.ts",
     "src/infrastructure/clients/mori/owner-route.ts",
-    "src/infrastructure/clients/scheduler/job.ts",
+    "src/infrastructure/clients/scheduler/control-client.ts",
+    "src/infrastructure/clients/scheduler/dispatch-identity.ts",
+    "src/infrastructure/clients/scheduler/schedule.ts",
+    "src/infrastructure/clients/scheduler/webhook-contract.ts",
     "src/infrastructure/clients/scheduler/outbox-delivery.ts",
     "src/infrastructure/clients/owner/identity.ts",
     "src/infrastructure/clients/capability/client.ts",
@@ -302,16 +282,13 @@ test("schema installer boundary rejects a second database installation command",
 test("schema installer boundary rejects a restored runtime schema loader", () => {
   assert.throws(
     () =>
-      assertSingleSchemaInstaller(
-        { "db:apply-schema": "node scripts/apply-schema.mjs" },
-        [
-          canonicalInstaller,
-          {
-            relativePath: "src/database/setup.ts",
-            source: 'await readFile(new URL("../database/schema.sql", import.meta.url), "utf8")',
-          },
-        ],
-      ),
+      assertSingleSchemaInstaller({ "db:apply-schema": "node scripts/apply-schema.mjs" }, [
+        canonicalInstaller,
+        {
+          relativePath: "src/database/setup.ts",
+          source: 'await readFile(new URL("../database/schema.sql", import.meta.url), "utf8")',
+        },
+      ]),
     /single schema installer/u,
   )
 })
@@ -341,16 +318,13 @@ test("schema installer boundary rejects a restored runtime that imports the cano
   ]) {
     assert.throws(
       () =>
-        assertSingleSchemaInstaller(
-          { "db:apply-schema": "node scripts/apply-schema.mjs" },
-          [
-            canonicalInstaller,
-            {
-              relativePath: "src/database/setup.ts",
-              source: [installerImport, "const schema = await loadCanonicalSchema()", "await pool.query(schema)"].join("\n"),
-            },
-          ],
-        ),
+        assertSingleSchemaInstaller({ "db:apply-schema": "node scripts/apply-schema.mjs" }, [
+          canonicalInstaller,
+          {
+            relativePath: "src/database/setup.ts",
+            source: [installerImport, "const schema = await loadCanonicalSchema()", "await pool.query(schema)"].join("\n"),
+          },
+        ]),
       /static schema installer import/u,
       installerImport,
     )
@@ -387,7 +361,11 @@ test("BFF application ports stay free of infrastructure dependencies", async () 
     if (typeof file !== "string" || !file.endsWith(".ts")) continue
     const relativePath = `src/application/${file}`
     const source = await readFile(path.join(root, relativePath), "utf8")
-    assert.doesNotMatch(source, /from\s+["'][^"']*(?:node:http|\/http\/|\/infrastructure\/|(?:^|\/)pg(?:\.js)?|(?:^|\/)redis(?:\.js)?)[^"']*["']/u, relativePath)
+    assert.doesNotMatch(
+      source,
+      /from\s+["'][^"']*(?:node:http|\/http\/|\/infrastructure\/|(?:^|\/)pg(?:\.js)?|(?:^|\/)redis(?:\.js)?)[^"']*["']/u,
+      relativePath,
+    )
     assert.equal(source.includes("SELECT "), false, relativePath)
   }
 })
@@ -408,7 +386,11 @@ test("BFF domain code is real policy, not an empty layer or transport adapter", 
   for (const file of files) {
     if (typeof file !== "string" || !file.endsWith(".ts")) continue
     const source = await readFile(path.join(root, "src/domain", file), "utf8")
-    assert.doesNotMatch(source, /from\s+["'][^"']*(?:node:|\/http\/|\/infrastructure\/|\/interfaces\/|\/application\/|(?:^|\/)pg(?:\.js)?|(?:^|\/)redis(?:\.js)?|fastify|express)[^"']*["']/u, `src/domain/${file}`)
+    assert.doesNotMatch(
+      source,
+      /from\s+["'][^"']*(?:node:|\/http\/|\/infrastructure\/|\/interfaces\/|\/application\/|(?:^|\/)pg(?:\.js)?|(?:^|\/)redis(?:\.js)?|fastify|express)[^"']*["']/u,
+      `src/domain/${file}`,
+    )
   }
 })
 
@@ -551,11 +533,12 @@ test("BFF Chat facts keep owner predicates and isolate public share capability r
 })
 
 test("ScheduledTask mutations use a tenant-scoped transactional outbox and fenced dispatcher", async () => {
-  const [scheduledRepository, outboxRepository, dispatcher, delivery, liveRoute, schema] = await Promise.all([
+  const [scheduledRepository, outboxRepository, dispatcher, delivery, controlClient, liveRoute, schema] = await Promise.all([
     readFile(path.join(root, "src/infrastructure/postgres/scheduled-task-repository.ts"), "utf8"),
     readFile(path.join(root, "src/application/ports/scheduled-task-outbox-repository.ts"), "utf8"),
     readFile(path.join(root, "src/application/scheduled-task-outbox-dispatcher.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/clients/scheduler/outbox-delivery.ts"), "utf8"),
+    readFile(path.join(root, "src/infrastructure/clients/scheduler/control-client.ts"), "utf8"),
     readFile(path.join(root, "src/http/routes/live-bff.ts"), "utf8"),
     readFile(path.join(root, "database/schema.sql"), "utf8"),
   ])
@@ -569,8 +552,9 @@ test("ScheduledTask mutations use a tenant-scoped transactional outbox and fence
   assert.match(outboxRepository, /markScheduledTaskOutboxSucceeded/u)
   assert.match(dispatcher, /markScheduledTaskOutboxRetryable/u)
   assert.match(dispatcher, /maxAttempts/u)
-  assert.match(delivery, /proxyUpstream/u)
-  assert.match(delivery, /idempotency-key/u)
+  assert.match(delivery, /SchedulerControlClient/u)
+  assert.match(controlClient, /generated\/scheduler\/sdk\.gen\.js/u)
+  assert.match(controlClient, /Idempotency-Key/u)
   assert.doesNotMatch(liveRoute, /reconcileSchedulerTask\(/u)
   assert.match(liveRoute, /mutationLineage/u)
   assert.match(schema, /CONSTRAINT uq_bff_scheduled_task_outbox_business UNIQUE/u)
@@ -609,31 +593,20 @@ test("BFF governance documents distinguish implemented facts from accepted targe
     assert.equal(await exists(relativePath), true, relativePath)
   }
 
-  const [
-    readme,
-    current,
-    technicalDesign,
-    apiContract,
-    dataModel,
-    reliability,
-    schema,
-    projectionService,
-    consumerRepository,
-    projector,
-    sourceReader,
-  ] = await Promise.all([
-    readFile(path.join(root, "README.md"), "utf8"),
-    readFile(path.join(root, "docs/CURRENT.md"), "utf8"),
-    readFile(path.join(root, "docs/TECHNICAL_DESIGN.md"), "utf8"),
-    readFile(path.join(root, "docs/API_CONTRACT.md"), "utf8"),
-    readFile(path.join(root, "docs/DATA_MODEL.md"), "utf8"),
-    readFile(path.join(root, "docs/RELIABILITY.md"), "utf8"),
-    readFile(path.join(root, "database/schema.sql"), "utf8"),
-    readFile(path.join(root, "src/application/agui/project-session-events.ts"), "utf8"),
-    readFile(path.join(root, "src/infrastructure/postgres/agui-consumer-repository.ts"), "utf8"),
-    readFile(path.join(root, "src/application/agui/projector.ts"), "utf8"),
-    readFile(path.join(root, "src/infrastructure/clients/agent/projector-source.ts"), "utf8"),
-  ])
+  const [readme, current, technicalDesign, apiContract, dataModel, reliability, schema, projectionService, consumerRepository, projector, sourceReader] =
+    await Promise.all([
+      readFile(path.join(root, "README.md"), "utf8"),
+      readFile(path.join(root, "docs/CURRENT.md"), "utf8"),
+      readFile(path.join(root, "docs/TECHNICAL_DESIGN.md"), "utf8"),
+      readFile(path.join(root, "docs/API_CONTRACT.md"), "utf8"),
+      readFile(path.join(root, "docs/DATA_MODEL.md"), "utf8"),
+      readFile(path.join(root, "docs/RELIABILITY.md"), "utf8"),
+      readFile(path.join(root, "database/schema.sql"), "utf8"),
+      readFile(path.join(root, "src/application/agui/project-session-events.ts"), "utf8"),
+      readFile(path.join(root, "src/infrastructure/postgres/agui-consumer-repository.ts"), "utf8"),
+      readFile(path.join(root, "src/application/agui/projector.ts"), "utf8"),
+      readFile(path.join(root, "src/infrastructure/clients/agent/projector-source.ts"), "utf8"),
+    ])
 
   assert.match(readme, /唯一 public HTTP owner/u)
   assert.match(current, /^## 已实现事实$/mu)
@@ -712,8 +685,7 @@ test("BFF freezes one HTTP-only Capability projection boundary without taking da
   assert.match(technicalDesign, /升级到原生生成 exact-optional-compatible output 的固定 generator 版本/u)
 })
 
-
-test("Scheduler control and receiver freeze distinct owner boundaries and durable recovery invariants", async () => {
+test("Scheduler control and receiver implement distinct owner boundaries and durable recovery invariants", async () => {
   const [technical, api, data, current, config] = await Promise.all([
     readFile(path.join(root, "docs/TECHNICAL_DESIGN.md"), "utf8"),
     readFile(path.join(root, "docs/API_CONTRACT.md"), "utf8"),
@@ -726,7 +698,7 @@ test("Scheduler control and receiver freeze distinct owner boundaries and durabl
   assert.match(technical, /webhook-contract\.ts/u)
   assert.match(technical, /zDispatchScheduleOccurrencePostWebhookRequest/u)
   assert.match(technical, /response-unknown/u)
-  // These assertions freeze documentation scope, not algorithm or real Agent behavior.
+  // These assertions govern documented implementation scope, not real Agent behavior.
   for (const document of [technical, data, current]) {
     assert.match(document, /Agent-owner closure（W4）/u)
     assert.match(document, /`EDGE-BFF-AGENT` 保持 broken/u)
@@ -745,7 +717,7 @@ test("Scheduler control and receiver freeze distinct owner boundaries and durabl
   assert.match(data, /claim_token/u)
   assert.match(data, /不删除/u)
   assert.match(data, /无 schema 变更/u)
-  assert.match(current, /Scheduler manifest 状态为 `design-frozen`/u)
+  assert.match(current, /Scheduler manifest 状态为 `generated`/u)
   assert.match(current, /EDGE-BFF-SCHEDULER[\s\S]{0,120}broken/u)
   assert.match(current, /EDGE-SCHEDULER-BFF[\s\S]{0,120}broken/u)
   assert.match(config, /contract\/vendor\/kokoro-scheduler/u)
