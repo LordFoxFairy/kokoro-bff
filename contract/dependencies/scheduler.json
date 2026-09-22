@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "status": "design-frozen",
+  "owner": {
+    "repository_path": "apps/kokoro-scheduler",
+    "repository_commit": "92bf9e7e6724c591bab4b7fa27f08d694b59a67e",
+    "contract_version": "1.0.0",
+    "contract_path": "contract/openapi/v1/openapi.yaml",
+    "contract_sha256": "6ec2f6d5d71efa60b92bba1eb2dd0c81b7439734e2bc4450caa221e952e24183"
+  },
+  "generator": {
+    "package": "@hey-api/openapi-ts",
+    "version": "0.99.0",
+    "config_path": "openapi-ts.scheduler.config.ts",
+    "config_sha256": "c49de22f14cd1c682eb23dbb502258325067e157c91fe01a5bcf7676efa76dcc"
+  },
+  "runtime": {
+    "node": "22.22.2",
+    "pnpm": "11.25.0",
+    "zod": "4.5.4"
+  },
+  "lockfile_sha256": "bc3921fe5e105cae6a508aa7af2d8bddd82182ebd163e11983fd2c82c4fcb704",
+  "generated": []
+}

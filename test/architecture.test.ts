@@ -711,3 +711,57 @@ test("BFF freezes one HTTP-only Capability projection boundary without taking da
   assert.match(generatorScript, /two byte-identical generations/u)
   assert.match(technicalDesign, /升级到原生生成 exact-optional-compatible output 的固定 generator 版本/u)
 })
+
+
+test("Scheduler control and receiver freeze distinct owner boundaries and durable recovery invariants", async () => {
+  const [technical, api, data, current, config] = await Promise.all([
+    readFile(path.join(root, "docs/TECHNICAL_DESIGN.md"), "utf8"),
+    readFile(path.join(root, "docs/API_CONTRACT.md"), "utf8"),
+    readFile(path.join(root, "docs/DATA_MODEL.md"), "utf8"),
+    readFile(path.join(root, "docs/CURRENT.md"), "utf8"),
+    readFile(path.join(root, "openapi-ts.scheduler.config.ts"), "utf8"),
+  ])
+  assert.match(technical, /^## Scheduler control and receiver cutover$/mu)
+  assert.match(technical, /control-client\.ts/u)
+  assert.match(technical, /webhook-contract\.ts/u)
+  assert.match(technical, /zDispatchScheduleOccurrencePostWebhookRequest/u)
+  assert.match(technical, /response-unknown/u)
+  // These assertions freeze documentation scope, not algorithm or real Agent behavior.
+  for (const document of [technical, data, current]) {
+    assert.match(document, /Agent-owner closure（W4）/u)
+    assert.match(document, /`EDGE-BFF-AGENT` 保持 broken/u)
+    assert.match(document, /Agent receipt stub/u)
+  }
+  assert.match(api, /逐项递归序列化/u)
+  assert.match(api, /integer-index key/u)
+  assert.match(api, /`"2"`\/`"10"`\/`"01"`/u)
+  assert.match(api, /X-Kokoro-Tenant-Id/u)
+  assert.match(api, /400 invalid_scheduler_dispatch/u)
+  assert.match(api, /canonical RFC3339Nano/u)
+  assert.match(api, /SHA-256/u)
+  assert.match(api, /425 idempotency_in_progress/u)
+  assert.match(data, /^## Scheduler receiver receipt design$/mu)
+  assert.match(data, /不同 fingerprint/u)
+  assert.match(data, /claim_token/u)
+  assert.match(data, /不删除/u)
+  assert.match(data, /无 schema 变更/u)
+  assert.match(current, /Scheduler manifest 状态为 `design-frozen`/u)
+  assert.match(current, /EDGE-BFF-SCHEDULER[\s\S]{0,120}broken/u)
+  assert.match(current, /EDGE-SCHEDULER-BFF[\s\S]{0,120}broken/u)
+  assert.match(config, /contract\/vendor\/kokoro-scheduler/u)
+  assert.match(config, /src\/generated\/scheduler/u)
+  assert.match(config, /clean:\s*true/u)
+  assert.match(config, /module:\s*\{\s*extension:\s*"\.js"\s*\}/u)
+  assert.match(config, /name:\s*"zod",\s*compatibilityVersion:\s*4/u)
+  assert.match(config, /name:\s*"@hey-api\/client-fetch",[\s\S]*bundle:\s*true/u)
+  assert.match(config, /name:\s*"@hey-api\/sdk",[\s\S]*strategy:\s*"flat"/u)
+  assert.match(config, /paramsStructure:\s*"grouped"/u)
+  assert.match(config, /responseStyle:\s*"fields"/u)
+  assert.match(config, /validator:\s*\{\s*response:\s*"zod"\s*\}/u)
+  for (const file of await readdir(path.join(root, "src"), { recursive: true })) {
+    if (!file.endsWith(".ts") || file.startsWith("generated/")) continue
+    const source = await readFile(path.join(root, "src", file), "utf8")
+    if (["infrastructure/clients/scheduler/control-client.ts", "infrastructure/clients/scheduler/webhook-contract.ts"].includes(file)) continue
+    assert.doesNotMatch(source, /(?:from\s*|import\s*\()\s*["'][^"']*generated\/scheduler(?:\/|["'])/u, file)
+  }
+})

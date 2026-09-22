@@ -144,3 +144,59 @@ public projection，没有 BFF 数据库事务、outbox、幂等 receipt、reten
 `8dcb1b3194ed4d4c50c42cdb9a199fec5e253793dd3ca062e92094ab68436da1`。fresh install、现有查询/index、tenant predicate
 与删除策略均保持不变。若 Capability projection 后续需要本地 durable fact，必须重新通过 owner、API 与 canonical
 schema 设计门，不能把 client cache 升格为事实源。
+
+
+## Scheduler receiver receipt design
+
+**W0B-8 冻结目标；专用 repository 与下述 CAS 尚未实现。** 无 schema 变更：复用现有
+`bff_idempotency_receipt(scope TEXT PRIMARY KEY, fingerprint TEXT, status INTEGER, response_body JSONB, created_at TIMESTAMPTZ(3))`。
+本切片不改 canonical schema，SHA-256 仍为 `8dcb1b3194ed4d4c50c42cdb9a199fec5e253793dd3ca062e92094ab68436da1`。
+不新增 Schedule/Occurrence/Agent Run 表、不跨 owner SQL、不把 Redis 变成 receipt 真相源。
+
+当前通用 `claimReceipt` 在 pending 60 秒后允许不同 fingerprint 覆盖原值；通用 `commitReceipt` 遇 5xx 或落盘失败会
+release/delete pending。scope 还包含 actor。因此直接复用通用 mutation 流程不能满足本 receiver 的永久 digest 绑定与恢复。
+选择专用 Scheduler receipt port/repository，保留其他 public mutation 行为；通过 BffBusinessStore 暴露 `schedulerDispatchReceipts`，
+在 `src/infrastructure/postgres/repositories.ts` 复用同一个 pool 装配，不另建数据库连接或后台进程。
+
+### 存储与状态机
+
+- scope 是 API_CONTRACT 定义的三元 JSON tuple；tenant 在每个操作的 scope 中强制提供，不能由 body actor 拼出新 scope。
+  scope PK 提供同 key 并发唯一性；fingerprint 保存完整 semantic SHA-256，接纳后永不改写。
+  opaque key 以 JSON 字符串无损保存；canonical nano occurrence 保存在 JSONB snapshot 字符串，不放入毫秒 timestamp 列。
+- status=102 仅作内部未终态标记。response_body 是版本化本地存储 envelope，不是 owner wire schema：
+  `schema_version=1`、`state=pending|retryable|terminal`、`claim_token`、`lease_until`、`retry_at`、`snapshot`、
+  `last_error_code` 与 terminal `response`。snapshot 在 admission 前可为空；首次通过存储任务鉴权后、任何 Agent I/O 前，
+  原子保存 trusted tenant/schedule/occurrence/opaque key、actor、完整 Agent launch 参数和确定性 Run/message/assertion IDs。
+  snapshot 一经保存不可改写。终态 status 为实际 HTTP status，response 只保存可重放 status/body，不把内部 token/snapshot 返回 caller。
+- 首次 claim 插入固定 digest；冲突先读并比较 digest，不因 age/state 改变规则。匹配且 terminal 则 replay；活跃 pending 返回 425。
+  retryable 到期或 pending lease 过期时，只在同 digest 上原子更新随机 `claim_token` 与 lease，保留 snapshot 和所有身份。
+  lease 固定 60 秒，单次 Agent I/O 总预算必须小于 lease 且保留 settlement 时间；数据库时钟判断 deadline，worker 不延长旧 token。
+- prepare snapshot、finalize、release-to-retryable 均匹配 scope + fingerprint + claim_token + 未终态 + 未过期 lease；检查受影响行数。
+  旧 worker 零行更新即失去 claim，不返回自认成功，不覆盖新 token。release 只清 lease/设 retryable 与 retry_at，不删除 receipt。
+  普通瞬时失败设有限退避；进程在 release 前崩溃仍可在 lease 到期后 reclaim。created_at 保留首次接纳时刻，lease 使用 JSONB 内的
+  UTC 毫秒字段，由 SQL 参数化表达式/数据库时间计算；不依赖 created_at 重置模拟 fencing。
+- 单次本地事务只覆盖 claim 或 snapshot/settlement；远端 Agent 调用不持数据库锁，不承诺 BFF/Agent 原子提交。
+  首次 snapshot 验证必须保留 tenant/task/owner 检查；同一 snapshot 的恢复重发原 launch（包括原 Agent request ID），
+  不能随当前 task revision、actor 或 request ID 改写已经可能接纳的 Run。prepare/CAS 失败时禁止开始 Agent I/O。
+  snapshot 只保存该命令必需信息，不保存 bearer token；日志不输出 payload、凭据或整份 snapshot。
+- Agent 成功但 BFF finalize 失败时保留原 key/digest/snapshot，BFF 重启后以相同 Run identity 重试。端到端 Run 事实唯一依赖
+  Agent durable admission；真实 Agent 的保证待 Agent-owner closure（W4）验证，本波只验证 BFF receipt 与稳定输出。
+  暂时依赖失败返回可重试状态；明确业务失败写 terminal response。活跃 pending、retryable、terminal 均拒绝不同 digest。
+  非 JSONB envelope 版本、损坏 snapshot 或冲突 Agent receipt 均 fail closed 并记录，不静默清空重建。
+
+### 查询、保留与验证边界
+
+只有按完整 scope PK 的 claim/replay/CAS 查询，不做全表扫描，因此不新增索引。既有 schema 的 JSONB/status 容纳专用存储 envelope，
+不改变表 owner/列类型/约束/fresh install；该存储格式由专用 repository 验证。scope 的协议 namespace 与通用 public mutation
+五元 scope 不相交，通用 release 不触及本 receiver 的行。无物理删除、软删或 TTL：在另行批准 retention/replay 上限与恢复策略前，
+Scheduler receipt 持续保留，不用 cache TTL 或 Scheduler 重试预算到期清除 digest。失败/重试状态亦保留供同身份恢复和审计。
+
+W0B-9 必须增加真实 PostgreSQL 测试：并发同 key、不同 digest（包括 lease 过期/5xx）、stale token finalize/release、
+新 repository 实例与 BFF 重启恢复 snapshot、Agent receipt stub 返回成功后落盘失败、tenant 隔离及稳定输出。
+W0B-10 使用真实 Scheduler + BFF 进程及 Agent receipt stub：响应丢失后，仅 BFF 重启恢复并接收保持运行的 Scheduler 重试；
+不重启 Scheduler。分别记录 HTTP attempts、
+稳定 Run ID 与 stub receipt 数量，不把 stub 计数写成真实 Agent Run facts。真实 Agent admission、同 Run 参数冲突、Agent 重启后
+唯一 Run 事实归 Agent-owner closure（W4），`EDGE-BFF-AGENT` 保持 broken，不增加到本波验收范围。
+不能将 memory double、文档正则检查或 build 成功称作真实 PostgreSQL 或 Agent 的持久恢复证据。
+本任务不运行 db:apply-schema/integration 或启动共享服务；`pnpm schema:check` 只验证原 canonical schema 静态门，
+fresh install 与上述真实行为门仍是后续实现的放行条件。

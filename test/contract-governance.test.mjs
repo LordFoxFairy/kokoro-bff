@@ -286,3 +286,71 @@ test("the repository exposes executable contract, schema, and strictness gates",
     assert.match(contractReadme, new RegExp(`^## ${heading}$`, "mu"), heading)
   }
 })
+
+
+test("the Scheduler design pins immutable producer-owned control and webhook contracts", async () => {
+  const ownerCommit = "92bf9e7e6724c591bab4b7fa27f08d694b59a67e"
+  const ownerDigest = "6ec2f6d5d71efa60b92bba1eb2dd0c81b7439734e2bc4450caa221e952e24183"
+  const [manifestDocument, vendor, config, lockfile, packageDocument] = await Promise.all([
+    readFile(new URL("../contract/dependencies/scheduler.json", import.meta.url), "utf8"),
+    readFile(new URL(`../contract/vendor/kokoro-scheduler/${ownerCommit}/openapi.yaml`, import.meta.url)),
+    readFile(new URL("../openapi-ts.scheduler.config.ts", import.meta.url), "utf8"),
+    readFile(new URL("../pnpm-lock.yaml", import.meta.url)),
+    readFile(new URL("../package.json", import.meta.url), "utf8"),
+  ])
+  const sha256 = (value) => createHash("sha256").update(value).digest("hex")
+  assert.deepEqual(JSON.parse(manifestDocument), {
+    schema_version: 1,
+    status: "design-frozen",
+    owner: {
+      repository_path: "apps/kokoro-scheduler",
+      repository_commit: ownerCommit,
+      contract_version: "1.0.0",
+      contract_path: "contract/openapi/v1/openapi.yaml",
+      contract_sha256: ownerDigest,
+    },
+    generator: {
+      package: "@hey-api/openapi-ts",
+      version: "0.99.0",
+      config_path: "openapi-ts.scheduler.config.ts",
+      config_sha256: sha256(config),
+    },
+    runtime: { node: "22.22.2", pnpm: "11.25.0", zod: "4.5.4" },
+    lockfile_sha256: sha256(lockfile),
+    generated: [],
+  })
+  assert.equal(sha256(vendor), ownerDigest)
+  // The owner publishes JSON bytes as valid YAML; preserve them without reserialization.
+  const owner = JSON.parse(vendor.toString("utf8"))
+  assert.equal(owner.info.version, "1.0.0")
+  const control = owner.paths["/internal/scheduler/v1/schedules/{name}"]
+  assert.equal(control.post.operationId, "createSchedule")
+  assert.equal(control.put.operationId, "replaceSchedule")
+  assert.equal(control.delete.operationId, "deleteSchedule")
+  assert.deepEqual(control.post["x-kokoro-control-error-codes"], { 409: "schedule_already_exists" })
+  assert.deepEqual(control.put["x-kokoro-control-error-codes"], { 404: "schedule_not_found" })
+  assert.deepEqual(control.delete["x-kokoro-control-error-codes"], { 404: "schedule_not_found" })
+  assert.equal(Object.keys(owner.paths).some((name) => name.includes("/jobs")), false)
+  const parameters = owner.components.parameters
+  for (const method of ["post", "put"]) {
+    const webhook = owner.webhooks.scheduleOccurrenceDispatch[method]
+    assert.equal(webhook["x-kokoro-owner"], "kokoro-scheduler")
+    assert.equal(webhook["x-kokoro-visibility"], "event-protocol")
+    assert.equal(webhook["x-kokoro-idempotency"], "stable-occurrence-key")
+    assert.deepEqual(webhook["x-kokoro-retryable-statuses"], [408, 425, 429, "5xx"])
+    assert.deepEqual(webhook.parameters.map(({ $ref }) => parameters[$ref.split("/").at(-1)].name), [
+      "X-Kokoro-Tenant-Id", "X-Kokoro-Scheduler-Schedule", "X-Kokoro-Scheduler-Occurrence",
+      "X-Request-Id", "Idempotency-Key", "traceparent",
+    ])
+    assert.ok(webhook.parameters.every(({ $ref }) => parameters[$ref.split("/").at(-1)].required === true))
+    assert.deepEqual(webhook.requestBody.content["application/json"].schema, { type: "object" })
+  }
+  const packageJson = JSON.parse(packageDocument)
+  assert.equal(packageJson.devDependencies["@hey-api/openapi-ts"], "0.99.0")
+  assert.equal(packageJson.devDependencies.typescript, "5.9.3")
+  assert.equal(packageJson.dependencies.zod, "4.5.4")
+  assert.equal(packageJson.packageManager, "pnpm@11.25.0")
+  assert.equal(packageJson.dependencies["@hey-api/client-fetch"], undefined)
+  assert.match(lockfile.toString("utf8"), /@hey-api\/openapi-ts[\s\S]*?specifier: 0\.99\.0/u)
+  assert.match(config, new RegExp(ownerCommit, "u"))
+})

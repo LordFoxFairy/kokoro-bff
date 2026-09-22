@@ -40,7 +40,7 @@
   `TIMESTAMPTZ(3)`。
 - Live mutation 仅在 BFF business store 已配置时使用 PostgreSQL receipt；没有 business store 的非 BFF owner
   mutation 仍使用进程内 Map。因此“所有 Live mutation 均持久幂等”不是当前事实。
-- 当前 receipt scope 是 `namespace + method + canonical path + Idempotency-Key`；fingerprint 覆盖规范化 body，
+- 当前 receipt scope 是 `namespace + actor + method + canonical path + Idempotency-Key`；fingerprint 覆盖规范化 body，
   但尚未覆盖 query 与 selected headers。
 - 独立 `AgUiProjectorRunner` 通过窄 Agent source reader 主动读取 execution source facts；公开 SSE 请求不再访问
   Agent source，只读取本仓 PostgreSQL：
@@ -72,7 +72,7 @@
   `bff_scheduled_task_outbox` command；事务提交后由 bounded dispatcher 在事务外调用 Scheduler。command 保留
   `tenant_id`、`actor_id`、`request_id`、`idempotency_key` 和版本化 task snapshot，并以 `SKIP LOCKED`、lease token、
   fence、指数退避、重试上限和 `pending/leased/retryable/succeeded/failed` 状态恢复。Scheduler dispatch receipt 仍使用
-  稳定 occurrence idempotency key。
+  旧 compact occurrence idempotency key；与 pinned Scheduler producer 尚未闭环。
 - Chat → Agent dispatcher 使用稳定 run/message/idempotency identity、`FOR UPDATE SKIP LOCKED`、lease token/fence、
   有界 attempt 与指数退避执行 at-least-once 投递。BFF 或 Agent 重启不会丢失已接纳命令；过期 lease 可重新领取，旧
   worker 和跨 tenant settlement 都不能覆盖当前结果。明确永久失败会把 provisional assistant message 标记为 failed。
@@ -143,3 +143,25 @@ pnpm test:integration
 
 未提供 PostgreSQL/Redis fixture 时，后两项状态是“未执行”，不是“通过”。验收状态见
 [`ACCEPTANCE.md`](./ACCEPTANCE.md)。
+
+
+## Scheduler W0B-8 设计冻结（尚未接线）
+
+Scheduler manifest 状态为 `design-frozen`，`generated=[]`；owner commit
+`92bf9e7e6724c591bab4b7fa27f08d694b59a67e`、version `1.0.0`、SHA-256
+`6ec2f6d5d71efa60b92bba1eb2dd0c81b7439734e2bc4450caa221e952e24183` 的原始 OpenAPI commit blob 已固定为只读 vendor。
+顶层 Scheduler generator config 已固定现有工具链与预期输出，但尚未正式生成/接线；此步不改 runtime、package/lock、
+public OpenAPI 或 SQL schema。control client 与 producer webhook receiver 的目标设计分别见 TECHNICAL_DESIGN / API_CONTRACT，
+专用 receipt 恢复见 DATA_MODEL。
+
+当前 runtime 仍使用 `/internal/scheduler/v1/jobs`、`job_*` 错误、`X-Kokoro-Scheduler-Job`、compact occurrence 和自造 key；
+receiver 还从 body tenant 建立身份。通用 receipt 在超时后允许不同 fingerprint 覆盖、5xx 删除 pending，现有 Run 派生包含 actor/key。
+这些都是 W0B-9 要删除/替换的断链，不把文档目标描述成已实现安全或恢复能力。
+`EDGE-BFF-SCHEDULER` 与 `EDGE-SCHEDULER-BFF` 均保持 broken；W0B-9 consumer、W0B-10 双向 smoke 与 W0B-11 Root 集成
+完成前不激活。W0B-9 验证 BFF 真实 PostgreSQL receipt/CAS、BFF 重启恢复和稳定输出；W0B-10 的精确组合为真实
+Scheduler + BFF 进程及 Agent receipt stub；响应丢失后，仅 BFF 重启恢复并接收保持运行的 Scheduler 重试。
+不重启 Scheduler，不验证真实 Agent admission。
+真实 Agent admission、同 Run 参数冲突及 Agent 重启后唯一 Run 事实归后续 Agent-owner closure（W4）；
+`EDGE-BFF-AGENT` 保持 broken，不作为本波已验能力，也不据此扩大范围。
+SQL schema 不变不等于专用 receipt 已可直接复用：需独立 port/repository、snapshot/CAS、稳定 occurrence Run identity、
+装配和上述真实 PG/重启测试。当前治理门只证明 owner provenance、config 与设计边界，不证明实际投递。
