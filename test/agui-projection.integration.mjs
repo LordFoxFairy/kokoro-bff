@@ -671,7 +671,7 @@ integrationTest("consumer claims stop when the owning BFF conversation is delete
       limit: 10,
     })
     assert.equal(activeClaims.length, 1)
-    assert.equal(await store.services.chat.deleteConversation("tenant_a", "user_a", "session_deleted"), true)
+    assert.equal(await store.services.chat.deleteConversation("tenant_a", "user_a", "session_deleted", "delete-conversation-integration"), true)
     await assert.rejects(
       store.agUi.ingest("tenant_a", "session_deleted", [agentSource({
         id: "deleted_source_1",

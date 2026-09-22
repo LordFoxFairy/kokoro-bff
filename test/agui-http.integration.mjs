@@ -7,6 +7,7 @@ import { EventSchemas } from "@ag-ui/core"
 import { Pool } from "pg"
 
 import { createBffServer } from "../dist/main.js"
+import { PostgresBffRepositories } from "../dist/infrastructure/postgres/repositories.js"
 import { AgUiSessionRuntime } from "../dist/application/agui/session-runtime.js"
 
 const postgresUrl = process.env.KOKORO_TEST_POSTGRES_URL
@@ -136,6 +137,7 @@ integrationTest("serves live and restarted replay only from the tenant-scoped Po
   const pool = new Pool({ connectionString: postgresUrl })
   let bff = null
   let agent = null
+  let admissionStore = null
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
@@ -208,6 +210,8 @@ integrationTest("serves live and restarted replay only from the tenant-scoped Po
     )
     assert.deepEqual(ledger.rows.map((row) => row.cursor), originalFrames.map((frame) => frame.id))
 
+    admissionStore = new PostgresBffRepositories(postgresUrl, redisUrl)
+    await admissionStore.agUiConsumers.registerConsumer("tenant_a", "session_live", "user_integration", "run_2")
     events.push(
       { chat_event_id: "source_run_2", session_id: "session_live", run_id: "run_2", event_type: "run.started", payload_json: '{"status":"running"}', seq: 5, created_at: 5000 },
       { chat_event_id: "source_terminal_2", session_id: "session_live", run_id: "run_2", event_type: "run.completed", payload_json: '{"status":"completed","token_usage":null}', seq: 6, created_at: 6000 },
@@ -254,6 +258,7 @@ integrationTest("serves live and restarted replay only from the tenant-scoped Po
     for (const server of servers.splice(0)) {
       if (server.listening) await close(server)
     }
+    if (admissionStore !== null) await admissionStore.close()
     await pool.end()
   }
 })
