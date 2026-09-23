@@ -8,7 +8,7 @@ import { loadConfig } from "../dist/config/runtime.js"
 test("published browser-private policy is a deterministic read-only projection of runtime policy", async () => {
   const published = JSON.parse(await readFile(new URL("../contract/iam-relay-policy.json", import.meta.url), "utf8")) as unknown
   assert.deepEqual(published, IAM_RELAY_POLICY)
-  assert.equal(IAM_RELAY_POLICY.iamOwnerCommit, "f0bb18e6fee8f4b1ee9a1c2d9e7aa2eb4621e614")
+  assert.equal(IAM_RELAY_POLICY.iamOwnerCommit, "c9a277213ade41b9225ab0f158b89092d1869a83")
   assert.equal(IAM_RELAY_POLICY.iamAllowlistSha256, "f63dacfa8a7bcec3c56efb8ffb762a3f8bd82bb380eff40a1462db1e77d61ead")
 })
 

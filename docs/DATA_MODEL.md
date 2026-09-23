@@ -33,7 +33,7 @@
 
 起始 BFF `6238599667110fbfbc2d5ef3a9d53731f2623cfe` 尚无 `/iam` relay；当前待验工作树只是在 Web 服务身份
 校验后传输 IAM 原生协议，不拥有用户、OAuth client、授权码、access/refresh token、issuer Session、consent、
-Product Session 或 tenant membership 事实。IAM `f0bb18e6fee8f4b1ee9a1c2d9e7aa2eb4621e614` 拥有前六类与
+Product Session 或 tenant membership 事实。IAM `c9a277213ade41b9225ab0f158b89092d1869a83` 拥有前六类与
 tenant membership；Web 独自拥有 Auth.js Product Session 与其 Redis 协调状态。BFF 继续只拥有本页当前表列出的
 Product/AG-UI/Outbox 事实，普通 `/v1` 的 `tenant_id + user_id` 仍来自 IAM 0.2.0 在线 admission。
 
