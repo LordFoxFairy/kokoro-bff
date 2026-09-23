@@ -22,7 +22,7 @@ GOV-01～05 通过本身不表示 runtime、schema、container、CI supply chain
 | AGUI-04 | Given projection state 与终态已提交，When BFF 重启且 Agent disabled，Then opaque cursor 仍从 PostgreSQL strictly-after replay | `test/agui-http.integration.mjs` |
 | AGUI-05 | Given Redis DB 8，When 投影提交，Then无 AG-UI 持久 key；Redis 只接收可丢失 publish，PG rows 不受影响 | `test/agui-projection.integration.mjs` + architecture gate |
 | AGUI-06 | Given canonical OpenAPI，When contract gate 执行，Then EventCursor 是 opaque string、SSE example 是 AG-UI、400/410/502/503 已声明 | `pnpm contract:check` |
-| AGUI-07 | Given fresh database，When apply canonical schema，Then一次建立 stream/source/event/tombstone tables，无 FK | `pnpm db:apply-schema` + schema test |
+| AGUI-07 | Given 同一应用库中的空 `kokoro_bff` schema，When apply canonical schema，Then一次建立 stream/source/event/tombstone tables，无 FK 且其他 owner schema 可已有对象 | `pnpm db:apply-schema` + schema test |
 | AGUI-08 | Given 多 BFF worker，When 同时领取一个 source scope，Then `SKIP LOCKED` + token/fence 只允许当前 lease 提交 | `test/agui-projector.test.mjs` + PG integration |
 | AGUI-09 | Given 无浏览器连接，When Agent source 增长，Then独立 projector 仍摄取；HTTP 只读取 ledger | HTTP integration + architecture gate |
 | AGUI-10 | Given cursor frame 超过 retention，When GC 与重连，Then只回收最新 `RUN_STARTED` 之前的旧 run、保留最新 run slice、推进 floor，并返回 `410 event_cursor_expired`；没有可靠 run boundary 或 run 交错时跳过回收 | PG integration |
@@ -67,13 +67,14 @@ git diff --check
 真实基础设施：
 
 ```bash
-KOKORO_BFF_POSTGRES_URL=POSTGRES_URL pnpm db:apply-schema
-KOKORO_TEST_POSTGRES_URL=POSTGRES_URL \
+KOKORO_BFF_POSTGRES_URL='POSTGRES_URL?schema=kokoro_bff' pnpm db:apply-schema
+KOKORO_TEST_POSTGRES_URL='POSTGRES_URL?schema=kokoro_bff' \
 KOKORO_TEST_REDIS_URL=redis://127.0.0.1:56380/8 \
 pnpm test:integration
 ```
 
-`POSTGRES_URL` 必须指向本次测试的独立空 database；Redis 复用共享实例的 DB 8。fixture 缺失、连接失败或测试 skip 都不
+`POSTGRES_URL` 在 integration fixture 中必须指向本次测试自有的独立空 database；`schema=kokoro_bff` 指定
+BFF owner schema，Redis 复用共享实例的 DB 8。fixture 缺失、连接失败或测试 skip 都不
 计为通过。
 
 Root 本仓切片：

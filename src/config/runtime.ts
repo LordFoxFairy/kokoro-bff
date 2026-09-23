@@ -144,6 +144,23 @@ function requiredConnectionUrl(value: string | undefined, name: string, protocol
   return raw.replace(/\/+$/u, "")
 }
 
+export function assertBffPostgresUrl(raw: string): void {
+  const parsed = new URL(raw)
+  const schemas = parsed.searchParams.getAll("schema")
+  if (
+    !["postgres:", "postgresql:"].includes(parsed.protocol) ||
+    schemas.length !== 1 || schemas[0] !== "kokoro_bff" ||
+    [...parsed.searchParams.keys()].some((key) => ["options", "search_path"].includes(key.toLowerCase())) ||
+    parsed.hash !== ""
+  ) throw new Error("KOKORO_BFF_POSTGRES_URL must target the kokoro_bff schema without connection options")
+}
+
+function requiredBffPostgresUrl(value: string | undefined): string {
+  const url = requiredConnectionUrl(value, "KOKORO_BFF_POSTGRES_URL", ["postgres:", "postgresql:"])
+  assertBffPostgresUrl(url)
+  return url
+}
+
 function positiveInteger(value: string | undefined, name: string, fallback: number): number {
   const raw = value?.trim()
   if (!raw) return fallback
@@ -245,7 +262,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
     schedulerServiceToken: env.KOKORO_SCHEDULER_SERVICE_TOKEN?.trim() || null,
     schedulerTargetUrl: optionalUrl(env.KOKORO_SCHEDULER_TARGET_URL),
     agentEnabled: booleanFlag(env.KOKORO_AGENT_ENABLED, false),
-    postgresUrl: requiredConnectionUrl(env.KOKORO_BFF_POSTGRES_URL, "KOKORO_BFF_POSTGRES_URL", ["postgres:", "postgresql:"]),
+    postgresUrl: requiredBffPostgresUrl(env.KOKORO_BFF_POSTGRES_URL),
     redisUrl: requiredConnectionUrl(env.KOKORO_BFF_REDIS_URL, "KOKORO_BFF_REDIS_URL", ["redis:", "rediss:"]),
     agUi,
     upstreams,

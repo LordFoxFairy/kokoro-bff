@@ -25,10 +25,10 @@ pnpm dev
 Live fresh schema：
 
 ```bash
-KOKORO_BFF_POSTGRES_URL=POSTGRES_URL pnpm db:apply-schema
+KOKORO_BFF_POSTGRES_URL='POSTGRES_URL?schema=kokoro_bff' pnpm db:apply-schema
 KOKORO_BFF_MODE=live \
 KOKORO_IAM_BASE_URL=http://127.0.0.1:4201 \
-KOKORO_BFF_POSTGRES_URL=POSTGRES_URL \
+KOKORO_BFF_POSTGRES_URL='POSTGRES_URL?schema=kokoro_bff' \
 KOKORO_BFF_REDIS_URL=redis://127.0.0.1:56380/8 \
 pnpm start
 ```
@@ -57,10 +57,11 @@ curl -fsS http://127.0.0.1:4300/readyz
 ```bash
 pnpm contract:check
 shasum -a 256 contract/openapi/v1/openapi.yaml
-KOKORO_BFF_POSTGRES_URL=POSTGRES_URL pnpm db:apply-schema
+KOKORO_BFF_POSTGRES_URL='POSTGRES_URL?schema=kokoro_bff' pnpm db:apply-schema
 ```
 
-schema 安装只面向 fresh/empty database；`IF NOT EXISTS` 不修复 drift。发现 drift 时停止发布，比较当前
+schema 安装只面向 fresh/empty `kokoro_bff` owner schema；同库其他 owner schema 可以已有对象。
+`IF NOT EXISTS` 不修复 drift。发现 drift 时停止发布，比较当前
 `database/schema.sql` 与目标环境，保留快照并按独立恢复计划处理，不临时创建 migration/fallback。
 
 ## 5. Idempotency incident
@@ -135,7 +136,7 @@ pnpm test
 pnpm build
 git diff --check
 
-KOKORO_TEST_POSTGRES_URL=POSTGRES_URL \
+KOKORO_TEST_POSTGRES_URL='POSTGRES_URL?schema=kokoro_bff' \
 KOKORO_TEST_REDIS_URL=redis://127.0.0.1:56380/8 \
 pnpm test:integration
 ```

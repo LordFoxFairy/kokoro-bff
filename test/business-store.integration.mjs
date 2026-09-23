@@ -109,7 +109,7 @@ function bffConfig(overrides = {}) {
 const integrationTest = postgresUrl && redisUrl ? test : test.skip
 
 integrationTest("keeps Project and ScheduledTask facts private to the trusted subject", async () => {
-  const pool = new Pool({ connectionString: postgresUrl })
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   const redis = createClient({ url: redisUrl })
   const tenant = `privacy_${Date.now()}`
   const crossTenant = `${tenant}_cross`
@@ -244,7 +244,7 @@ integrationTest("keeps Project and ScheduledTask facts private to the trusted su
 })
 
 integrationTest("persists BFF facts, registers Scheduler, and replays Agent dispatch across restart", async () => {
-  const schemaPool = new Pool({ connectionString: postgresUrl })
+  const schemaPool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   const redis = createClient({ url: redisUrl })
   const namespace = `integration_${Date.now()}`
   const schedulerCalls = []

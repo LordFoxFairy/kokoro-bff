@@ -63,15 +63,15 @@ curl -fsS http://127.0.0.1:4300/healthz
 Live BFF-owned facts 需要共享 PostgreSQL 与 Redis DB 8：
 
 ```bash
-KOKORO_BFF_POSTGRES_URL=POSTGRES_URL pnpm db:apply-schema
+KOKORO_BFF_POSTGRES_URL='POSTGRES_URL?schema=kokoro_bff' pnpm db:apply-schema
 KOKORO_BFF_MODE=live \
-KOKORO_BFF_POSTGRES_URL=POSTGRES_URL \
+KOKORO_BFF_POSTGRES_URL='POSTGRES_URL?schema=kokoro_bff' \
 KOKORO_BFF_REDIS_URL=redis://127.0.0.1:56380/8 \
 pnpm dev
 ```
 
-只复用一个本地 PostgreSQL 和一个 Redis，不为 BFF 重复启动基础设施。`db:apply-schema` 面向空数据库安装 canonical
-schema，不执行历史 migration。
+只复用一个本地 PostgreSQL 和一个 Redis，不为 BFF 重复启动基础设施。`db:apply-schema` 仅在同一应用数据库的
+空 `kokoro_bff` schema 安装 canonical schema，不要求其他 owner schema 或 `public` 为空，也不执行历史 migration。
 
 ## 服务调用 envelope 与用户准入
 
@@ -101,8 +101,8 @@ pnpm build
 真实基础设施：
 
 ```bash
-KOKORO_BFF_POSTGRES_URL=POSTGRES_URL pnpm db:apply-schema
-KOKORO_TEST_POSTGRES_URL=POSTGRES_URL \
+KOKORO_BFF_POSTGRES_URL='POSTGRES_URL?schema=kokoro_bff' pnpm db:apply-schema
+KOKORO_TEST_POSTGRES_URL='POSTGRES_URL?schema=kokoro_bff' \
 KOKORO_TEST_REDIS_URL=redis://127.0.0.1:56380/8 \
 pnpm test:integration
 ```

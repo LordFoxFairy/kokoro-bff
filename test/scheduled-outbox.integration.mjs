@@ -50,7 +50,7 @@ integrationTest("ScheduledTask outbox is atomic, idempotent, tenant-scoped, and 
     concurrent: `outbox_concurrent_${suffix}`,
   }
   const pools = []
-  const pool = new Pool({ connectionString: postgresUrl, max: 10 })
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC", max: 10 })
   pools.push(pool)
   const schema = await readFile(new URL("../database/schema.sql", import.meta.url), "utf8")
   const repository = new PostgresScheduledTaskRepository({ pool })
@@ -242,8 +242,8 @@ integrationTest("ScheduledTask outbox is atomic, idempotent, tenant-scoped, and 
     const recoveryTaskId = `scheduled_recovery_${suffix}`
     const recoveryLineage = lineage(tenants.recovery, `recovery-${suffix}`, suffix)
     await repository.createScheduledTask(ownerScope(tenants.recovery, suffix), taskInput(suffix), recoveryTaskId, recoveryLineage)
-    const poolA = new Pool({ connectionString: postgresUrl, max: 2 })
-    const poolB = new Pool({ connectionString: postgresUrl, max: 2 })
+    const poolA = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC", max: 2 })
+    const poolB = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC", max: 2 })
     pools.push(poolA, poolB)
     const repositoryA = new PostgresScheduledTaskRepository({ pool: poolA })
     const repositoryB = new PostgresScheduledTaskRepository({ pool: poolB })
@@ -288,8 +288,8 @@ integrationTest("ScheduledTask outbox is atomic, idempotent, tenant-scoped, and 
       const concurrentLineage = lineage(tenants.concurrent, `concurrent-${suffix}-${index}`, suffix)
       await repository.createScheduledTask(ownerScope(tenants.concurrent, suffix), taskInput(suffix), concurrentTaskId, concurrentLineage)
     }
-    const poolC = new Pool({ connectionString: postgresUrl, max: 2 })
-    const poolD = new Pool({ connectionString: postgresUrl, max: 2 })
+    const poolC = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC", max: 2 })
+    const poolD = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC", max: 2 })
     pools.push(poolC, poolD)
     const [claimedC, claimedD] = await Promise.all([
       new PostgresScheduledTaskRepository({ pool: poolC }).claimScheduledTaskOutbox({

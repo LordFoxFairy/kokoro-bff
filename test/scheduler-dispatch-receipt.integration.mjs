@@ -91,7 +91,7 @@ function dispatchHeaders(tenantId, schedule, occurrence, idempotencyKey, request
 }
 
 integrationTest("Scheduler dispatch receipts preserve digest, snapshot, and fenced recovery", async () => {
-  const pool = new Pool({ connectionString: postgresUrl, max: 10 })
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC", max: 10 })
   const repository = new PostgresSchedulerDispatchReceiptRepository(pool)
   const suffix = `${Date.now()}-${randomUUID()}`
   const tenant = `scheduler-receipt-${suffix}`
@@ -140,7 +140,7 @@ integrationTest("Scheduler dispatch receipts preserve digest, snapshot, and fenc
 })
 
 integrationTest("Scheduler receipt CAS takes actual database time after row-lock waits", async () => {
-  const pool = new Pool({ connectionString: postgresUrl, max: 10 })
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC", max: 10 })
   const repository = new PostgresSchedulerDispatchReceiptRepository(pool)
   const suffix = `${Date.now()}-${randomUUID()}`
   const digest = "e".repeat(64)
@@ -207,7 +207,7 @@ integrationTest("Scheduler receipt CAS takes actual database time after row-lock
 })
 
 integrationTest("Scheduler receipt lease observation precedes budget query and commit delivery", async () => {
-  const pool = new Pool({ connectionString: postgresUrl, max: 5 })
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC", max: 5 })
   const suffix = `${Date.now()}-${randomUUID()}`
   const tenant = `scheduler-observation-${suffix}`
   const scopes = ["claim", "prepare"].map((name) => JSON.stringify([tenant, "scheduler-dispatch:v1", `${name}-${suffix}`]))
@@ -248,7 +248,7 @@ integrationTest("Scheduler receipt lease observation precedes budget query and c
 })
 
 integrationTest("Scheduler dispatch retryable release preserves immutable binding after response-unknown", async () => {
-  const pool = new Pool({ connectionString: postgresUrl })
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   const repository = new PostgresSchedulerDispatchReceiptRepository(pool)
   const suffix = `${Date.now()}-${randomUUID()}`
   const tenant = `scheduler-response-unknown-${suffix}`
@@ -286,7 +286,7 @@ receiverIntegrationTest("Scheduler HTTP receiver replays the frozen launch after
     auto_approve: false,
     timezone: "UTC",
   }
-  const pool = new Pool({ connectionString: postgresUrl })
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   const agentCalls = []
   const agent = createServer((request, response) => {
     const chunks = []

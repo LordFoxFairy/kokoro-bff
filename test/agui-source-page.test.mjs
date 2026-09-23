@@ -109,7 +109,7 @@ describe("Agent event page boundary", () => {
     try {
       const config = loadConfig({
         KOKORO_BFF_SHARED_SECRET: "test-secret",
-        KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/kokoro_bff",
+        KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/kokoro_bff?schema=kokoro_bff",
         KOKORO_BFF_REDIS_URL: "redis://localhost:6379/8",
         KOKORO_INTERNAL_SECRET_BFF: "upstream-secret",
       })
@@ -134,7 +134,7 @@ describe("Agent event page boundary", () => {
     try {
       const config = loadConfig({
         KOKORO_BFF_SHARED_SECRET: "test-secret",
-        KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/kokoro_bff",
+        KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/kokoro_bff?schema=kokoro_bff",
         KOKORO_BFF_REDIS_URL: "redis://localhost:6379/8",
         KOKORO_INTERNAL_SECRET_BFF: "upstream-secret",
       })
@@ -171,7 +171,7 @@ describe("Agent event page boundary", () => {
       try {
         const config = loadConfig({
           KOKORO_BFF_SHARED_SECRET: "test-secret",
-          KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/kokoro_bff",
+          KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/kokoro_bff?schema=kokoro_bff",
           KOKORO_BFF_REDIS_URL: "redis://localhost:6379/8",
           KOKORO_INTERNAL_SECRET_BFF: "upstream-secret",
         })
@@ -197,7 +197,7 @@ describe("Agent event page boundary", () => {
     try {
       const config = loadConfig({
         KOKORO_BFF_SHARED_SECRET: "test-secret",
-        KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/kokoro_bff",
+        KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/kokoro_bff?schema=kokoro_bff",
         KOKORO_BFF_REDIS_URL: "redis://localhost:6379/8",
         KOKORO_INTERNAL_SECRET_BFF: "upstream-secret",
         KOKORO_UPSTREAM_TIMEOUT_MS: "2000",
@@ -243,7 +243,7 @@ describe("Agent event page boundary", () => {
     try {
       const config = loadConfig({
         KOKORO_BFF_SHARED_SECRET: "test-secret",
-        KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/kokoro_bff",
+        KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/kokoro_bff?schema=kokoro_bff",
         KOKORO_BFF_REDIS_URL: "redis://localhost:6379/8",
         KOKORO_INTERNAL_SECRET_BFF: "upstream-secret",
       })
@@ -276,7 +276,7 @@ describe("Agent event page boundary", () => {
     try {
       const config = loadConfig({
         KOKORO_BFF_SHARED_SECRET: "test-secret",
-        KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/kokoro_bff",
+        KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/kokoro_bff?schema=kokoro_bff",
         KOKORO_BFF_REDIS_URL: "redis://localhost:6379/8",
         KOKORO_INTERNAL_SECRET_BFF: "upstream-secret",
       })

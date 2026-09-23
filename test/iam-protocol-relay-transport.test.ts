@@ -27,7 +27,7 @@ function bff(iamBaseUrl: string, limits: { timeoutMs?: number; responseBytes?: n
   return createLiveTestBffServer(
     loadConfig({
       KOKORO_BFF_SHARED_SECRET: "test-secret",
-      KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/unused_bff_relay_fixture",
+      KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/unused_bff_relay_fixture?schema=kokoro_bff",
       KOKORO_BFF_REDIS_URL: "redis://localhost:6379/8",
       KOKORO_IAM_BASE_URL: iamBaseUrl,
       KOKORO_IAM_ISSUER_URL: `${webOrigin}/iam`,

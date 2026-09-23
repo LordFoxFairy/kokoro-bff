@@ -138,7 +138,7 @@ function parseSse(body) {
 }
 
 integrationTest("serves live and restarted replay only from the tenant-scoped PostgreSQL AG-UI ledger", async () => {
-  const pool = new Pool({ connectionString: postgresUrl })
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   let bff = null
   let agent = null
   let admissionStore = null
@@ -274,7 +274,7 @@ integrationTest("serves live and restarted replay only from the tenant-scoped Po
 })
 
 integrationTest("drains the complete Agent source snapshot before ending at a run terminal", async () => {
-  const pool = new Pool({ connectionString: postgresUrl })
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   let bff = null
   let agent = null
   try {
@@ -325,7 +325,7 @@ integrationTest("drains the complete Agent source snapshot before ending at a ru
 })
 
 integrationTest("fails loudly when Agent event pagination metadata disagrees with the events", async () => {
-  const pool = new Pool({ connectionString: postgresUrl })
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   let bff = null
   let agent = null
   try {
@@ -376,7 +376,7 @@ integrationTest("fails loudly when Agent event pagination metadata disagrees wit
 })
 
 integrationTest("ends at the SSE frame budget and resumes strictly after the last written cursor", async () => {
-  const pool = new Pool({ connectionString: postgresUrl })
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   let bff = null
   let agent = null
   try {
@@ -454,7 +454,7 @@ integrationTest("ends at the SSE frame budget and resumes strictly after the las
 })
 
 integrationTest("bounds same-session connections and coalesces their Agent and PostgreSQL polling", async () => {
-  const pool = new Pool({ connectionString: postgresUrl })
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   let bff = null
   let agent = null
   try {

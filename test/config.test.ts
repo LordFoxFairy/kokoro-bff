@@ -2,13 +2,57 @@ import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { describe, it } from "node:test"
 
-import { loadConfig } from "../dist/config/runtime.js"
+import { assertBffPostgresUrl, loadConfig } from "../dist/config/runtime.js"
+import { PostgresBffDatabase } from "../dist/infrastructure/postgres/client.js"
 
 const runtimeEnv = {
   KOKORO_BFF_SHARED_SECRET: "test-secret",
-  KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/kokoro_bff",
+  KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/kokoro_bff?schema=kokoro_bff",
   KOKORO_BFF_REDIS_URL: "redis://localhost:6379/8",
 }
+
+describe("BFF owner PostgreSQL schema", () => {
+  it("requires an explicit fixed owner schema and rejects search_path overrides", () => {
+    assert.doesNotThrow(() => assertBffPostgresUrl(runtimeEnv.KOKORO_BFF_POSTGRES_URL))
+    for (const url of [
+      "postgresql://localhost/app",
+      "postgresql://localhost/app?schema=public",
+      "postgresql://localhost/app?schema=kokoro_iam",
+      "postgresql://localhost/app?schema=kokoro_bff&schema=kokoro_bff",
+      "postgresql://localhost/app?schema=kokoro_bff&options=-c%20search_path%3Dpublic",
+    ]) assert.throws(() => loadConfig({ ...runtimeEnv, KOKORO_BFF_POSTGRES_URL: url }), /kokoro_bff schema/u, url)
+  })
+
+  it("fails readiness before Redis I/O when the owner schema or a key table is missing", async () => {
+    for (const [schema, installed] of [[null, false], ["public", false], ["kokoro_iam", false], ["kokoro_bff", false]] as const) {
+      const db = new PostgresBffDatabase(runtimeEnv.KOKORO_BFF_POSTGRES_URL, "redis://127.0.0.1:1/8")
+      db.pool.query = async () => ({ rows: [{ schema, installed }] })
+      try {
+        await assert.rejects(db.ready(), /owner schema is not installed or incomplete/u)
+        assert.equal(db.redis.isOpen, false)
+      } finally {
+        await db.close()
+      }
+    }
+  })
+
+  it("keeps CI and release PostgreSQL URLs on the fixed owner schema", async () => {
+    for (const [name, count] of [["ci.yml", 2], ["release-image.yml", 3]] as const) {
+      const source = await readFile(new URL(`../.github/workflows/${name}`, import.meta.url), "utf8")
+      const urls = [...source.matchAll(/^\s*KOKORO_(?:BFF|TEST)_POSTGRES_URL:\s*(\S+)\s*$/gmu)].map((match) => match[1])
+      assert.equal(urls.length, count, name)
+      for (const url of urls) {
+        assert.ok(url, name)
+        assert.doesNotThrow(() => assertBffPostgresUrl(url), name)
+      }
+      const adminUrls = [...source.matchAll(/^\s*KOKORO_TEST_POSTGRES_ADMIN_URL:\s*(\S+)\s*$/gmu)].map((match) => match[1])
+      assert.equal(adminUrls.length, 1, `${name} must enable the real schema fixture`)
+      const target = new URL(urls[1])
+      target.searchParams.delete("schema")
+      assert.equal(adminUrls[0], target.toString(), `${name} admin URL must use the existing service database`)
+    }
+  })
+})
 
 describe("kokoro-bff optional Agent configuration", () => {
   it("defaults Agent to optional and disabled", () => {
@@ -69,7 +113,7 @@ describe("kokoro-bff optional Agent configuration", () => {
       KOKORO_DOMAIN: "app.example.com",
       KOKORO_TENANT_ID: "tenant_prod",
       KOKORO_BFF_SHARED_SECRET: "bff-secret",
-      KOKORO_BFF_POSTGRES_URL: "postgresql://kokoro-bff/db",
+      KOKORO_BFF_POSTGRES_URL: "postgresql://kokoro-bff/db?schema=kokoro_bff",
       KOKORO_BFF_REDIS_URL: "rediss://kokoro-redis:6380/8",
       KOKORO_AGENT_ENABLED: "1",
       KOKORO_AGENT_BASE_URL: "http://kokoro-agent:4401",
@@ -216,5 +260,13 @@ describe("kokoro-bff optional Agent configuration", () => {
     const example = await readFile(new URL("../.env.example", import.meta.url), "utf8")
     assert.match(example, /^KOKORO_BFF_MODE=live$/mu)
     assert.doesNotMatch(example, /^KOKORO_BFF_MODE=mock$/mu)
+    for (const name of [".env.example", ".env.local.example", ".env.test.example", ".env.prod.example"]) {
+      const content = await readFile(new URL(`../${name}`, import.meta.url), "utf8")
+      const postgresUrl = content.match(/^KOKORO_BFF_POSTGRES_URL=(.*)$/mu)?.[1]
+      assert.ok(postgresUrl, `${name} must show a BFF PostgreSQL URL`)
+      assert.doesNotThrow(() => assertBffPostgresUrl(postgresUrl), name)
+      const testUrl = content.match(/^KOKORO_TEST_POSTGRES_URL=(.*)$/mu)?.[1]
+      if (testUrl !== undefined) assert.doesNotThrow(() => assertBffPostgresUrl(testUrl), name)
+    }
   })
 })

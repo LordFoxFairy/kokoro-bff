@@ -1,9 +1,19 @@
 # kokoro-bff 当前实现
 
-状态：2026-09-22
+状态：2026-09-23
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。
 
 ## 已实现事实
+
+### W1C-DB-BFF：固定 PostgreSQL owner schema（待 Root 验收）
+
+- `KOKORO_BFF_POSTGRES_URL` 必须含唯一 `schema=kokoro_bff`；config/installer/runtime Pool 拒绝旧 public 或其他 owner URL，
+  实际连接固定 `search_path=kokoro_bff`；readiness 还校验 `current_schema()` 与关键 BFF 表，空 owner schema 或缺表不报告就绪。
+  SQL-first `database/schema.sql` 不变。
+- 安装器在 owner-scoped advisory lock 和事务内只检查/创建 `kokoro_bff`，以 schema 依赖 catalog 覆盖 table/type/function/collation 等对象；其他 schema 已有表允许，目标非空、重复安装、
+  SQL 失败均 fail closed。临时数据库真实测试覆盖 rollback/共存/重试拒绝，运行时独立临时库实测
+  `current_schema()=kokoro_bff`、`public` 表数 0、BFF 表数 16；测试自建数据库已清理。
+- `schema:check` 仍仅静态检查 canonical SQL，完整 persisted catalog drift 未覆盖；此项不冒称完成。
 
 ### W1C-1 本次源码切片：browser-private IAM relay
 
@@ -174,8 +184,8 @@ pnpm build
 真实基础设施证据必须另外提供：
 
 ```bash
-KOKORO_BFF_POSTGRES_URL=POSTGRES_URL pnpm db:apply-schema
-KOKORO_TEST_POSTGRES_URL=POSTGRES_URL \
+KOKORO_BFF_POSTGRES_URL='POSTGRES_URL?schema=kokoro_bff' pnpm db:apply-schema
+KOKORO_TEST_POSTGRES_URL='POSTGRES_URL?schema=kokoro_bff' \
 KOKORO_TEST_REDIS_URL=redis://127.0.0.1:56380/8 \
 pnpm test:integration
 ```

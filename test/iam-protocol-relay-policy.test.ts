@@ -42,7 +42,7 @@ test("only the locked issuer cookie names pass in their deployment mode", () => 
 test("relay URL configuration rejects partial settings and callback authority aliases", () => {
   const base = {
     KOKORO_BFF_SHARED_SECRET: "test-secret",
-    KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/unused",
+    KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/unused?schema=kokoro_bff",
     KOKORO_BFF_REDIS_URL: "redis://localhost:6379/8",
     KOKORO_IAM_ISSUER_URL: "https://web.example.test/iam",
     KOKORO_IAM_WEB_ORIGIN: "https://web.example.test",

@@ -87,7 +87,7 @@ async function redisProxy(targetUrl) {
 }
 
 integrationTest("keeps durable AG-UI replay lossless, idempotent, tenant-scoped, and independent of Redis state", async () => {
-  const pool = new Pool({ connectionString: postgresUrl })
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   const redis = createClient({ url: redisUrl })
   let store = null
   try {
@@ -261,7 +261,7 @@ integrationTest("keeps durable AG-UI replay lossless, idempotent, tenant-scoped,
 })
 
 integrationTest("keeps replay page boundaries and terminal state tied to the latest run identity", async () => {
-  const pool = new Pool({ connectionString: postgresUrl })
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   let store = null
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
@@ -305,7 +305,7 @@ integrationTest("keeps replay page boundaries and terminal state tied to the lat
 })
 
 integrationTest("returns a self-consistent replay snapshot while a new run is appended", async () => {
-  const pool = new Pool({ connectionString: postgresUrl })
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   let store = null
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
@@ -338,7 +338,7 @@ integrationTest("returns a self-consistent replay snapshot while a new run is ap
 })
 
 integrationTest("replays a committed projection immediately when Redis was never reachable", async () => {
-  const pool = new Pool({ connectionString: postgresUrl })
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   let database = null
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
@@ -371,7 +371,7 @@ integrationTest("replays a committed projection immediately when Redis was never
 })
 
 integrationTest("replays a committed projection immediately after the Redis notification connection drops", async () => {
-  const pool = new Pool({ connectionString: postgresUrl })
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   const proxy = await redisProxy(redisUrl)
   let database = null
   try {
@@ -408,7 +408,7 @@ integrationTest("replays a committed projection immediately after the Redis noti
 })
 
 integrationTest("claims AG-UI consumers with fencing and never commits through a superseded lease", async () => {
-  const pool = new Pool({ connectionString: postgresUrl })
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   let store = null
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
@@ -510,7 +510,7 @@ integrationTest("claims AG-UI consumers with fencing and never commits through a
 })
 
 integrationTest("expires reclaimed AG-UI cursors while retaining the latest run from RUN_STARTED through head", async () => {
-  const pool = new Pool({ connectionString: postgresUrl })
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   let store = null
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
@@ -571,7 +571,7 @@ integrationTest("expires reclaimed AG-UI cursors while retaining the latest run 
 })
 
 integrationTest("skips GC when interleaved runs would leave an event without its RUN_STARTED boundary", async () => {
-  const pool = new Pool({ connectionString: postgresUrl })
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   let store = null
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
@@ -613,7 +613,7 @@ integrationTest("skips GC when interleaved runs would leave an event without its
 })
 
 integrationTest("garbage collection skips ineligible streams instead of starving eligible later streams", async () => {
-  const pool = new Pool({ connectionString: postgresUrl })
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   let store = null
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
@@ -652,7 +652,7 @@ integrationTest("garbage collection skips ineligible streams instead of starving
 })
 
 integrationTest("consumer claims stop when the owning BFF conversation is deleted", async () => {
-  const pool = new Pool({ connectionString: postgresUrl })
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   let store = null
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
@@ -698,7 +698,7 @@ integrationTest("consumer claims stop when the owning BFF conversation is delete
 })
 
 integrationTest("registering a newer run clears the prior terminal before source events arrive", async () => {
-  const pool = new Pool({ connectionString: postgresUrl })
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   let store = null
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
@@ -728,7 +728,7 @@ integrationTest("registering a newer run clears the prior terminal before source
 })
 
 integrationTest("registering a newer run fences a stale projector commit", async () => {
-  const pool = new Pool({ connectionString: postgresUrl })
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   let store = null
   let database = null
   try {
@@ -796,7 +796,7 @@ integrationTest("registering a newer run fences a stale projector commit", async
 })
 
 integrationTest("consumer claims use the PostgreSQL clock instead of a skewed worker clock", async () => {
-  const pool = new Pool({ connectionString: postgresUrl })
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   let store = null
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
@@ -831,7 +831,7 @@ integrationTest("consumer claims use the PostgreSQL clock instead of a skewed wo
 })
 
 integrationTest("a new lease cannot publish an old run terminal over the expected run", async () => {
-  const pool = new Pool({ connectionString: postgresUrl })
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   let store = null
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
@@ -873,7 +873,7 @@ integrationTest("a new lease cannot publish an old run terminal over the expecte
 })
 
 integrationTest("the expected run can finish while source runs are interleaved", async () => {
-  const pool = new Pool({ connectionString: postgresUrl })
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   let store = null
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
@@ -909,7 +909,7 @@ integrationTest("the expected run can finish while source runs are interleaved",
 })
 
 integrationTest("a skewed worker can read and settle a database-clock lease", async () => {
-  const pool = new Pool({ connectionString: postgresUrl })
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   let store = null
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
@@ -945,7 +945,7 @@ integrationTest("a skewed worker can read and settle a database-clock lease", as
 })
 
 integrationTest("a skewed worker releases a lease back to the PostgreSQL clock", async () => {
-  const pool = new Pool({ connectionString: postgresUrl })
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   let store = null
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)

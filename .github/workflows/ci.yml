@@ -34,8 +34,9 @@ jobs:
           --health-timeout=2s
           --health-retries=15
     env:
-      KOKORO_BFF_POSTGRES_URL: postgresql://kokoro:kokoro_ci@127.0.0.1:55432/kokoro_worker_bff
-      KOKORO_TEST_POSTGRES_URL: postgresql://kokoro:kokoro_ci@127.0.0.1:55432/kokoro_worker_bff
+      KOKORO_BFF_POSTGRES_URL: postgresql://kokoro:kokoro_ci@127.0.0.1:55432/kokoro_worker_bff?schema=kokoro_bff
+      KOKORO_TEST_POSTGRES_URL: postgresql://kokoro:kokoro_ci@127.0.0.1:55432/kokoro_worker_bff?schema=kokoro_bff
+      KOKORO_TEST_POSTGRES_ADMIN_URL: postgresql://kokoro:kokoro_ci@127.0.0.1:55432/kokoro_worker_bff
       KOKORO_BFF_REDIS_URL: redis://127.0.0.1:56379/8
       KOKORO_TEST_REDIS_URL: redis://127.0.0.1:56379/8
     steps:

@@ -127,7 +127,7 @@ test("does not return Share metadata when it is revoked between lookup and messa
 })
 
 integrationTest("serves tenant-scoped Chat facts from BFF PostgreSQL and revokes expired shares before replacement", async () => {
-  const pool = new Pool({ connectionString: postgresUrl })
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   const redis = createClient({ url: redisUrl })
   const tenant = `chat_facts_${Date.now()}`
   const otherTenant = `${tenant}_other`
@@ -324,7 +324,7 @@ integrationTest("serves tenant-scoped Chat facts from BFF PostgreSQL and revokes
 })
 
 integrationTest("accepts a Chat turn after the message and Agent dispatch are durably committed", async () => {
-  const pool = new Pool({ connectionString: postgresUrl })
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   const tenant = `chat_dispatch_${Date.now()}`
   const conversationId = `conversation_dispatch_${Date.now()}`
   let bff
@@ -504,7 +504,7 @@ integrationTest("accepts a Chat turn after the message and Agent dispatch are du
 })
 
 integrationTest("reclaims expired Agent dispatch leases and rejects stale or cross-tenant settlement", async () => {
-  const pool = new Pool({ connectionString: postgresUrl })
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   const tenant = `chat_fence_${Date.now()}`
   const conversationId = `conversation_fence_${Date.now()}`
   let store
@@ -587,7 +587,7 @@ integrationTest("reclaims expired Agent dispatch leases and rejects stale or cro
 })
 
 integrationTest("claims Agent launches in persisted conversation FIFO and terminalizes exhausted heads before claim", async () => {
-  const pool = new Pool({ connectionString: postgresUrl })
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   const tenant = `chat_fifo_${Date.now()}`
   const conversationId = `conversation_fifo_${Date.now()}`
   let store
@@ -669,7 +669,7 @@ integrationTest("claims Agent launches in persisted conversation FIFO and termin
 })
 
 integrationTest("projects fenced dispatch failures as durable RUN_ERROR terminals", async () => {
-  const pool = new Pool({ connectionString: postgresUrl })
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   const tenant = `chat_failure_${Date.now()}`
   const conversationId = `conversation_failure_${Date.now()}`
   let store
@@ -809,7 +809,7 @@ integrationTest("projects fenced dispatch failures as durable RUN_ERROR terminal
 })
 
 integrationTest("deletion atomically fences launches and enqueues durable cancellation for possibly admitted runs", async () => {
-  const pool = new Pool({ connectionString: postgresUrl })
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   const tenant = `chat_delete_${Date.now()}`
   const conversationId = `conversation_delete_${Date.now()}`
   let store

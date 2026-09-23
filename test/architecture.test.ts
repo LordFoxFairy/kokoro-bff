@@ -11,7 +11,7 @@ type SourceFile = { relativePath: string; source: string }
 
 const canonicalInstaller: SourceFile = {
   relativePath: "scripts/apply-schema.mjs",
-  source: 'const schemaUrl = new URL("../database/schema.sql", import.meta.url)\nassertBlankDatabaseTables([])',
+  source: 'const schemaUrl = new URL("../database/schema.sql", import.meta.url)\nassertEmptyOwnerSchema([])',
 }
 
 function isSchemaInstallerScriptName(name: string): boolean {
@@ -74,7 +74,7 @@ function assertSingleSchemaInstaller(scripts: Record<string, string>, sourceFile
   assert.deepEqual(nonCanonicalSchemaReaders, [], "BFF source cannot read canonical schema outside the single schema installer")
   assert.deepEqual(nonCanonicalInstallerImports, [], "BFF source cannot use a static schema installer import outside the canonical installer")
   assert.match(installer, /new URL\("\.\.\/database\/schema\.sql", import\.meta\.url\)/u)
-  assert.match(installer, /assertBlankDatabaseTables/u)
+  assert.match(installer, /assertEmptyOwnerSchema/u)
   assert.doesNotMatch(installer, /ALTER TABLE|db:migrate/u)
 }
 

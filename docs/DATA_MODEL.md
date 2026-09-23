@@ -6,6 +6,23 @@
 不使用外键，不允许其他仓库直接读取这些表。关系由 tenant + owner scoped Repository/Application predicate、事务锁和 reconciliation
 维护。
 
+## W1C-DB-BFF 固定 owner schema（源码已实现；待 Root 验收）
+
+**当前态（`cd1c2600ea2a6e0716b07628822a49653964675a`）：** canonical SQL 未限定 schema；安装器
+要求 `public` 无表，runtime PostgreSQL Pool 默认 search_path。下文“空数据库安装”是此旧当前事实，不能作为
+单库多 owner 可运行的证据。
+
+**目标态：** 唯一 canonical DDL 仍为 `database/schema.sql`，所有 BFF 表、索引和约束仅安装于固定
+`kokoro_bff`；`KOKORO_BFF_POSTGRES_URL` 显式 `schema=kokoro_bff`，代码对 runtime/installer 连接均固定
+`search_path=kokoro_bff`。安装前在事务中取得 BFF owner advisory lock、创建不存在的目标 schema，并只检查
+本 schema 的 catalog 对象；其非空即拒绝，其他 schema（包括 `public`）已有表不影响 BFF fresh install。
+安装结束只校验目标 schema 与最小 BFF 表/索引存在，失败整体回滚。完整列/类型/默认值/约束/索引的 persisted
+catalog drift 尚待独立实现；现有 `schema:check` 是静态 canonical 门，不冒称已覆盖该缺口。重复安装不是 no-op，
+旧 public URL 不兼容。BFF repository 继续使用未限定表名但 search_path 不含其他 owner schema；
+tenant/subject predicate、BFF 本地事务、retention、Redis DB 8 与跨 owner opaque reference 均不变。
+测试 fixture 可用独立临时数据库或自有临时 schema 隔离，不表示应用部署需要多个数据库或角色。
+本片不新增表、migration、外键、第二份 DDL 或跨 owner SQL。
+
 ## 当前表
 
 | 表                                 | Owner fact                                        | 关键键/查询                                                                                                  | 当前备注                                                                                                                                                                                                                                         |
@@ -170,13 +187,14 @@ Project/ScheduledTask/receipt/outbox，也不是公开 AG-UI replay 事实源；
 
 ## 安装与 drift
 
-只在空数据库安装当前 schema：
+安装器只在空 `kokoro_bff` owner schema 安装当前 canonical SQL；同库其他 schema 可已有对象：
 
 ```bash
-KOKORO_BFF_POSTGRES_URL=POSTGRES_URL pnpm db:apply-schema
+KOKORO_BFF_POSTGRES_URL='POSTGRES_URL?schema=kokoro_bff' pnpm db:apply-schema
 ```
 
-`CREATE TABLE IF NOT EXISTS` 便于本地重复安装，但不修复 drift。发布验收需要 fresh database 安装、schema naming /
+`CREATE TABLE IF NOT EXISTS` 属于 canonical SQL，但安装器在 owner schema 非空时先拒绝重复安装，不能用它修复 drift。
+发布验收仍需要 schema naming /
 无外键/UTC 检查和真实 repository integration；生产升级策略在 V1 clean-slate 阶段尚未定义为历史 migration 链。
 
 ## Retention 状态与缺口

@@ -1,10 +1,16 @@
 import assert from "node:assert/strict"
+import { randomUUID } from "node:crypto"
 import { test } from "node:test"
+import pg from "pg"
 
 import {
-  assertBlankDatabaseTables,
+  applyCanonicalSchema,
+  assertEmptyOwnerSchema,
+  assertBffSchemaUrl,
   loadCanonicalSchema,
 } from "../scripts/apply-schema.mjs"
+
+const { Client } = pg
 
 test("schema application reads the repository canonical schema", async () => {
   const schema = await loadCanonicalSchema()
@@ -65,10 +71,72 @@ test("canonical schema uses millisecond precision for every database instant", a
   assert.doesNotMatch(schema, /\bCURRENT_TIMESTAMP\b(?!\s*\(\s*3\s*\))/iu)
 })
 
-test("schema application rejects a non-empty public schema", () => {
-  assert.doesNotThrow(() => assertBlankDatabaseTables([]))
+test("schema application rejects a non-empty BFF owner schema", () => {
+  assert.doesNotThrow(() => assertEmptyOwnerSchema([]))
   assert.throws(
-    () => assertBlankDatabaseTables(["existing_table"]),
-    /db:apply-schema requires a blank database; found tables: existing_table/u,
+    () => assertEmptyOwnerSchema(["existing_table"]),
+    /db:apply-schema requires an empty kokoro_bff schema; found objects: existing_table/u,
   )
+})
+
+test("schema installer accepts only a URL targeting the fixed BFF owner schema", () => {
+  assert.doesNotThrow(() => assertBffSchemaUrl("postgresql://localhost/app?schema=kokoro_bff"))
+  for (const url of [
+    "postgresql://localhost/app",
+    "postgresql://localhost/app?schema=public",
+    "postgresql://localhost/app?schema=kokoro_iam",
+    "postgresql://localhost/app?schema=kokoro_bff&schema=kokoro_bff",
+    "postgresql://localhost/app?schema=kokoro_bff&options=-c%20search_path%3Dpublic",
+  ]) assert.throws(() => assertBffSchemaUrl(url), /kokoro_bff schema/u, url)
+})
+
+const adminUrl = process.env.KOKORO_TEST_POSTGRES_ADMIN_URL
+const databaseTest = adminUrl ? test : test.skip
+
+databaseTest("owner schema install coexists with other schemas and rolls back on SQL failure", async () => {
+  const name = `kokoro_bff_schema_${randomUUID().replaceAll("-", "")}`
+  const admin = new Client({ connectionString: adminUrl })
+  const target = new URL(adminUrl)
+  target.pathname = `/${name}`
+  target.search = ""
+  target.searchParams.set("schema", "kokoro_bff")
+  const databaseUrl = target.toString()
+  let created = false
+  let client
+  try {
+    await admin.connect()
+    await admin.query(`CREATE DATABASE ${name}`)
+    created = true
+    await assert.rejects(
+      applyCanonicalSchema(databaseUrl, "CREATE TABLE bff_partial (id integer); SELECT 1 / 0"),
+      /division by zero/u,
+    )
+    client = new Client({ connectionString: databaseUrl })
+    await client.connect()
+    assert.equal((await client.query("SELECT count(*)::int AS count FROM pg_namespace WHERE nspname = 'kokoro_bff'")).rows[0].count, 0)
+    await client.query("CREATE SCHEMA kokoro_bff")
+    await client.query("CREATE COLLATION kokoro_bff.owner_guard (provider = libc, locale = 'C')")
+    await assert.rejects(applyCanonicalSchema(databaseUrl, await loadCanonicalSchema()), /empty kokoro_bff schema/u)
+    await client.query("DROP COLLATION kokoro_bff.owner_guard")
+    await client.query("CREATE TABLE public.other_owner_guard (id integer)")
+    await client.query("CREATE SCHEMA kokoro_iam")
+    await client.query("CREATE TABLE kokoro_iam.other_owner_guard (id integer)")
+    await applyCanonicalSchema(databaseUrl, await loadCanonicalSchema())
+    const bffTables = await client.query("SELECT count(*)::int AS count FROM pg_tables WHERE schemaname = 'kokoro_bff'")
+    assert.ok(bffTables.rows[0].count >= 10)
+    assert.equal((await client.query("SELECT count(*)::int AS count FROM pg_tables WHERE schemaname = 'public' AND tablename = 'other_owner_guard'")).rows[0].count, 1)
+    assert.equal((await client.query("SELECT count(*)::int AS count FROM pg_tables WHERE schemaname = 'kokoro_iam' AND tablename = 'other_owner_guard'")).rows[0].count, 1)
+    await assert.rejects(applyCanonicalSchema(databaseUrl, await loadCanonicalSchema()), /empty kokoro_bff schema/u)
+    await assert.rejects(applyCanonicalSchema(databaseUrl.replace("schema=kokoro_bff", "schema=public"), await loadCanonicalSchema()), /kokoro_bff schema/u)
+  } finally {
+    try {
+      await client?.end()
+    } finally {
+      try {
+        if (created) await admin.query(`DROP DATABASE ${name} WITH (FORCE)`)
+      } finally {
+        await admin.end()
+      }
+    }
+  }
 })
