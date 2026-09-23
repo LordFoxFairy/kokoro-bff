@@ -67,6 +67,13 @@ export type BffConfig = {
   domain: string
   tenantId: string | null
   iamBaseUrl: string | null
+  iamRelay?: Readonly<{
+    publicIssuerUrl: string
+    webOrigin: string
+    callbackUri: string
+    postLogoutUri: string
+    secureCookies: boolean
+  }>
   sharedSecret: string | null
   upstreamSecret: string | null
   upstreamTimeoutMs: number
@@ -110,6 +117,23 @@ function optionalOrigin(value: string | undefined): string | null {
     throw new Error("KOKORO_IAM_BASE_URL must be an HTTP(S) origin without credentials, path, query, or fragment")
   }
   return url.origin
+}
+
+function iamRelayConfig(env: NodeJS.ProcessEnv): BffConfig["iamRelay"] {
+  const values = [env.KOKORO_IAM_ISSUER_URL, env.KOKORO_IAM_WEB_ORIGIN, env.KOKORO_IAM_WEB_CALLBACK_URI, env.KOKORO_IAM_WEB_POST_LOGOUT_URI]
+  if (values.every((value) => value === undefined || value.trim() === "")) return undefined
+  if (values.some((value) => value === undefined || value.trim() === "")) throw new Error("IAM relay requires issuer, Web origin, callback URI and post-logout URI")
+  const [issuerRaw, originRaw, callbackRaw, logoutRaw] = values as [string, string, string, string]
+  const webOrigin = optionalOrigin(originRaw)
+  if (webOrigin === null) throw new Error("KOKORO_IAM_WEB_ORIGIN must be an HTTP(S) origin")
+  const issuer = new URL(issuerRaw)
+  const callback = new URL(callbackRaw)
+  const logout = new URL(logoutRaw)
+  if (issuer.toString() !== `${webOrigin}/iam` || callback.origin !== webOrigin || callback.username !== "" || callback.password !== ""
+    || !/^\/api\/auth\/callback\/[a-z0-9-]+$/u.test(callback.pathname)
+    || callback.search !== "" || callback.hash !== "" || logout.origin !== webOrigin || logout.pathname !== "/auth/sign-in"
+    || logout.username !== "" || logout.password !== "" || logout.search !== "" || logout.hash !== "") throw new Error("IAM relay URLs must bind the exact Web issuer, callback and post-logout paths")
+  return { publicIssuerUrl: issuer.toString(), webOrigin, callbackUri: callback.toString(), postLogoutUri: logout.toString(), secureCookies: env.NODE_ENV === "production" }
 }
 
 function requiredConnectionUrl(value: string | undefined, name: string, protocols: readonly string[]): string {
@@ -205,6 +229,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
     throw new Error("AG-UI projector error backoff base must not exceed its maximum")
   }
   if (agUi.cursorTombstoneRetentionMs < agUi.retentionMs) throw new Error("AG-UI cursor tombstone retention must not be shorter than ledger retention")
+  const relay = iamRelayConfig(env)
   return {
     host: env.KOKORO_BFF_HOST?.trim() || "127.0.0.1",
     port,
@@ -212,6 +237,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
     domain,
     tenantId: env.KOKORO_TENANT_ID?.trim() || null,
     iamBaseUrl: optionalOrigin(env.KOKORO_IAM_BASE_URL),
+    ...(relay === undefined ? {} : { iamRelay: relay }),
     sharedSecret,
     upstreamSecret: env.KOKORO_INTERNAL_SECRET_BFF?.trim() || null,
     upstreamTimeoutMs,

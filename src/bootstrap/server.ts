@@ -17,6 +17,7 @@ import { liveMoriBusiness } from "../http/routes/music.js"
 import { configuredUpstream, bffOwnedBusinessPath, isMoriBusinessPath, upstreamKey } from "../http/routes/routing.js"
 import { schedulerDispatch } from "../http/routes/scheduler.js"
 import { runtimeManifest } from "../http/routes/runtime-manifest.js"
+import { iamProtocolRelay } from "../http/routes/iam-protocol-relay.js"
 import { createBffComposition, type BffCompositionOptions, type BffRouteInput } from "./runtime.js"
 
 async function handle(
@@ -25,6 +26,10 @@ async function handle(
   config: BffConfig,
   composition: ReturnType<typeof createBffComposition>,
 ): Promise<void> {
+  if ((request.url ?? "").startsWith("/iam")) {
+    await iamProtocolRelay(request, response, config)
+    return
+  }
   const id = requestId(request)
   const segments = pathOf(request)
   if (segments.length === 1 && segments[0] === "healthz" && request.method === "GET") {

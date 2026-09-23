@@ -29,6 +29,27 @@
 所有当前 repository 查询都显式携带 tenant id；用户资源还携带可信 owner scope。Project、ScheduledTask 与 Conversation 已关闭
 同 tenant 跨 subject 的已知访问缺口。跨 owner reference 是 opaque id，不做跨数据库 JOIN。
 
+## W1C-1 浏览器 IAM relay 数据边界（工作树已实现；待 Root 验收）
+
+起始 BFF `6238599667110fbfbc2d5ef3a9d53731f2623cfe` 尚无 `/iam` relay；当前待验工作树只是在 Web 服务身份
+校验后传输 IAM 原生协议，不拥有用户、OAuth client、授权码、access/refresh token、issuer Session、consent、
+Product Session 或 tenant membership 事实。IAM `b2ad9dd6906b73f275b96d570dad66eae86e97e9` 拥有前六类与
+tenant membership；Web 独自拥有 Auth.js Product Session 与其 Redis 协调状态。BFF 继续只拥有本页当前表列出的
+Product/AG-UI/Outbox 事实，普通 `/v1` 的 `tenant_id + user_id` 仍来自 IAM 0.2.0 在线 admission。
+
+W1C-1 不修改 `database/schema.sql`、任何 BFF Repository、Redis namespace、receipt/outbox 表、索引或事务。
+由 BFF TS 准入策略派生的只读 `contract/iam-relay-policy.json` 是版本化传输 policy artifact，不是持久化模型、
+SQL schema 或 IAM session/token 副本；Web 固定消费其 BFF commit/blob digest 不会获得 BFF 数据库读写权。
+relay 不为登录、refresh、logout 建 BFF idempotency receipt/cache/session/token 表；不以 `get-session` 响应或浏览器 cookie
+创建 BFF `RequestContext`，也不从 query/body/header 自报 tenant/actor。准入拒绝、IAM 错误、timeout、断连与非法
+`Location`/`Set-Cookie` 均不写 BFF SQL/Redis、不领取 BFF lease、不创建 Product fact。IAM mutation 成败由 IAM
+自身事务/审计负责；跨 IAM/Web Product Session 的 revoke/logout 不是 BFF 分布式事务，BFF 不伪造原子性承诺。
+
+验证用 BFF 数据库表计数/Redis namespace 快照和 owned-process/socket 断言证明上述零写入；真 IAM 登录可改变 IAM 自己
+的 fixture Session/consent/token 数据，测试清理只清理本次创建的 IAM fixture，不清空共享资源。API/path/错误策略详见
+[API_CONTRACT](API_CONTRACT.md#w1c-1-browser-private-iam-relay-目标尚未实现)；运行时放置与请求生命周期详见
+[TECHNICAL_DESIGN](TECHNICAL_DESIGN.md#w1c-1-设计门web-同源-iam-协议-relay目标尚未实现)。
+
 ## W1B 数据边界
 
 ### Task 1 本变更：IAM admission 不落库

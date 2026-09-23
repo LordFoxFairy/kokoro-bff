@@ -8,6 +8,16 @@ this repository documents only the BFF projection exposed to callers.
 
 ## Visibility
 
+`iam-relay-policy.json` 是单独的 `browser-private` BFF relay 准入机器 artifact，不进入 public Product
+`openapi/v1/openapi.yaml`。唯一手写事实源是 `src/http/routes/iam-protocol-relay.policy.ts`；运行
+`pnpm contract:generate:iam-relay` 派生只读 JSON，`pnpm contract:check:iam-relay` 比较字节并拒绝手改漂移。
+它只记录 BFF 的 path/method/header/cookie/redirect/预算策略及固定 IAM commit/allowlist/snapshot digest，
+不复制 IAM OAuth/Better Auth 字段 schema。Web consumer 必须固定 BFF 发布 commit 与此 JSON 的 blob/SHA-256，
+再做自己的生成/策略测试；当前 Web 切换尚未完成。
+IAM 私有 allowlist/snapshot 不在 BFF vendoring。BFF 的本地门只证明 policy TS→JSON 字节一致；Root 的
+跨仓机器门从固定 IAM/BFF gitlink commit blob 校验两份 IAM digest、relay path/method 子集与 BFF artifact，
+并覆盖篡改负例。Root 组合门未通过前不宣称来源已闭环。
+
 Every operation in `openapi/v1/openapi.yaml` is classified as `public`. Browser code still reaches it through the
 `kokoro` same-origin server adapter; `public` describes product-contract visibility and does not expose BFF service
 credentials to a browser. Health and readiness operations use the `anonymous` permission marker. Business operations
