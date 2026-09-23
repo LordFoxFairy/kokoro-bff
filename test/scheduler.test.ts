@@ -80,6 +80,7 @@ function config(agentBase: string | null, upstreamTimeoutMs = 70_000) {
     mode: "live" as const,
     domain: "dev.kokoro.localhost",
     tenantId: "tenant_fixture",
+    iamBaseUrl: null,
     sharedSecret: "web-secret",
     upstreamSecret: "bff-secret",
     upstreamTimeoutMs,

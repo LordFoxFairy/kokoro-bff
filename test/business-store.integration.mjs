@@ -7,10 +7,12 @@ import { Pool } from "pg"
 import { createClient } from "redis"
 
 import { createBffServer } from "../dist/main.js"
+import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 
 const postgresUrl = process.env.KOKORO_TEST_POSTGRES_URL
 const redisUrl = process.env.KOKORO_TEST_REDIS_URL
 const servers = []
+const sessionAdmission = new SessionAdmissionDouble()
 
 async function listen(server) {
   servers.push(server)
@@ -38,11 +40,12 @@ async function waitFor(predicate, timeoutMs = 3000) {
 }
 
 function auth(namespace, principal = "user_integration") {
+  const token = `session-${namespace}-${principal}`
+  sessionAdmission.allow(token, { namespace, userId: principal })
   return {
     "x-kokoro-service": "web-bff",
     "x-kokoro-internal-secret": "web-secret",
-    "x-kokoro-namespace": namespace,
-    "x-kokoro-principal-id": principal,
+    authorization: `Bearer ${token}`,
   }
 }
 
@@ -53,6 +56,7 @@ function bffConfig(overrides = {}) {
     mode: "live",
     domain: "dev.kokoro.localhost",
     tenantId: "tenant_test",
+    iamBaseUrl: null,
     sharedSecret: "web-secret",
     upstreamSecret: "bff-secret",
     upstreamTimeoutMs: 5000,
@@ -161,7 +165,7 @@ integrationTest("persists BFF facts, registers Scheduler, and replays Agent disp
     agentBase = await listen(agent)
 
     const targetUrl = "http://kokoro-bff:4300/internal/bff/scheduled-tasks/dispatch"
-    bff = createBffServer(bffConfig({ schedulerBase, agentBase, agentEnabled: true, schedulerTargetUrl: targetUrl }))
+    bff = createBffServer(bffConfig({ schedulerBase, agentBase, agentEnabled: true, schedulerTargetUrl: targetUrl }), { sessionAdmission })
     const base = await listen(bff)
 
     const createHeaders = { ...auth(namespace), "content-type": "application/json", "idempotency-key": "schedule-create-integration" }
@@ -296,7 +300,7 @@ integrationTest("persists BFF facts, registers Scheduler, and replays Agent disp
     assert.ok(outboxLineage.rows.every((row) => Number(row.fence) >= 1))
 
     await close(bff)
-    bff = createBffServer(bffConfig({ schedulerBase, agentBase, agentEnabled: true, schedulerTargetUrl: targetUrl }))
+    bff = createBffServer(bffConfig({ schedulerBase, agentBase, agentEnabled: true, schedulerTargetUrl: targetUrl }), { sessionAdmission })
     const restartedBase = await listen(bff)
     await new Promise((resolve) => setTimeout(resolve, 100))
     const listed = await fetch(`${restartedBase}/v1/scheduled-tasks`, { headers: auth(namespace) })

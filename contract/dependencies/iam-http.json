@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "status": "generated",
+  "owner": {
+    "repository_path": "apps/kokoro-iam",
+    "repository_commit": "259a66e6a569889c030734f380e99685d8b9e21c",
+    "contract_version": "0.2.0",
+    "contract_path": "contract/openapi/iam.internal.v1.json",
+    "contract_sha256": "f7a3ea2e5ae7ade82ae1a6756a2f560d3129ca1b2977c6b0905633a284bd3aab"
+  },
+  "generator": {
+    "package": "@hey-api/openapi-ts",
+    "version": "0.99.0",
+    "config_path": "openapi-ts.iam.config.ts",
+    "config_sha256": "a09fbb072e27a6af119be211d33de03e413503c07cf8a2446c08dc1618915430"
+  },
+  "runtime": {
+    "node": "22.22.2",
+    "pnpm": "11.25.0",
+    "zod": "4.5.4"
+  },
+  "lockfile_sha256": "bc3921fe5e105cae6a508aa7af2d8bddd82182ebd163e11983fd2c82c4fcb704",
+  "generated": [
+    {
+      "path": "client.gen.ts",
+      "sha256": "a6622c66edd3af01581d3e2f8300c3a9596bc396e81ccb66d4612a1c6c44034e"
+    },
+    {
+      "path": "client/client.gen.ts",
+      "sha256": "a21c011210a9101e788ef6467e7d58d9a6def98a7f9ad2358cf4712df7e61eff"
+    },
+    {
+      "path": "client/index.ts",
+      "sha256": "99ab0d415e27c7e260e58ffe989fce7af454535ab5809407775974f32e3eb7b6"
+    },
+    {
+      "path": "client/types.gen.ts",
+      "sha256": "581edb4ba1bfdef4f476c8c0d27861641376566fc5e1238ed0280aa4fa1fda94"
+    },
+    {
+      "path": "client/utils.gen.ts",
+      "sha256": "c396147ad4886af96c437c8c2fb9e8706a750d20f688a0c3d068eaa00da5a5ef"
+    },
+    {
+      "path": "core/auth.gen.ts",
+      "sha256": "92fa002fb2c96a58e858828c5f79bd498e7998e0cc8822ff48e7313c0b87dbd4"
+    },
+    {
+      "path": "core/bodySerializer.gen.ts",
+      "sha256": "b9bd66196352f01f2debd0620130372bcf3eec4cf3d87bee11b1ca98e1ae0d1a"
+    },
+    {
+      "path": "core/params.gen.ts",
+      "sha256": "9886fa05622d38afbc1901a340e4b5b8edaf268568eaa35242b8f196901d297a"
+    },
+    {
+      "path": "core/pathSerializer.gen.ts",
+      "sha256": "5ebd41592d8612f3a39e6404b3212d8f76ea59475493aac38b342454ce18dfbe"
+    },
+    {
+      "path": "core/queryKeySerializer.gen.ts",
+      "sha256": "6597d62d031c9da5218c443f83f0f03b19f5d7c29cf36d6546f5d8363b6fd0f7"
+    },
+    {
+      "path": "core/serverSentEvents.gen.ts",
+      "sha256": "8516908fa2eb352653b036d47096826c378e075f6be81fe95452401f8f42ebe1"
+    },
+    {
+      "path": "core/types.gen.ts",
+      "sha256": "f26a0b3850b9d57e13d9b49b80c63987614b64a4df88e2b91f525aa277951415"
+    },
+    {
+      "path": "core/utils.gen.ts",
+      "sha256": "c506702ae2cd031ca21665e78d90bcc18d65daf3e8d3f8280983c5f873242774"
+    },
+    {
+      "path": "sdk.gen.ts",
+      "sha256": "3f7b3a9e363c7f1c70ee989245c70d454e2c30ade0a17755790e432abc99dcfb"
+    },
+    {
+      "path": "types.gen.ts",
+      "sha256": "6d3f9b5f94131b654927d14d75ef0c4afa4230a5af153fb035bdb63ac80f6ae9"
+    },
+    {
+      "path": "zod.gen.ts",
+      "sha256": "e9083824f0fa05ae48fc459a3e76ba19291febfd88adf1771d6a8b977c947d14"
+    }
+  ]
+}

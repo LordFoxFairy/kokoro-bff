@@ -27,6 +27,7 @@ Live fresh schema：
 ```bash
 KOKORO_BFF_POSTGRES_URL=POSTGRES_URL pnpm db:apply-schema
 KOKORO_BFF_MODE=live \
+KOKORO_IAM_BASE_URL=http://127.0.0.1:4201 \
 KOKORO_BFF_POSTGRES_URL=POSTGRES_URL \
 KOKORO_BFF_REDIS_URL=redis://127.0.0.1:56380/8 \
 pnpm start
@@ -42,8 +43,12 @@ curl -fsS http://127.0.0.1:4300/readyz
 ```
 
 - health 失败：检查进程、端口、Node 版本和启动日志。
-- health 成功而 ready 失败：检查 mode、PG、Redis DB 8，以及启用 profile 对应的 upstream config。
+- health 成功而 ready 失败：检查 mode、PG、Redis DB 8、严格 IAM origin，以及启用 profile 对应的 upstream config。
 - `service_auth_failed`：核对 Web/BFF shared secret 与 `x-kokoro-service`，不要临时关闭认证。
+- `session_authentication_required`/`session_invalid`/`session_forbidden`：核对 Web adapter 是否只发送一个当前 session
+  Bearer，并在 IAM 按 request id 查 session/membership；不要恢复 legacy identity headers。
+- `session_rate_limited`：只按 BFF 返回的受控 `Retry-After` 重试；`iam_admission_unavailable` 检查 IAM origin、owner
+  `x-request-id`、`Cache-Control: no-store`、响应 envelope、5 秒/1 MiB 限制与网络，不缓存放行。
 - `business_store_not_configured`：补齐 BFF PG/Redis，不能切到 Mock 伪造 Live 成功。
 - `upstream_*` / `*_not_configured`：按 route owner 检查 base URL、token、timeout 和 owner health。
 
@@ -60,7 +65,8 @@ schema 安装只面向 fresh/empty database；`IF NOT EXISTS` 不修复 drift。
 
 ## 5. Idempotency incident
 
-1. 用 namespace、method、canonical path、Idempotency-Key 定位 scope；不要在日志中暴露业务 body。
+1. 用 IAM admission 得到的 namespace/userId、method、canonical path、Idempotency-Key 定位 scope；不要在日志中暴露
+   Bearer 或业务 body。
 2. 查询 receipt 的 fingerprint/status/created_at，确认是 pending、terminal 还是不同 digest。
 3. pending 小于 60 秒：返回/等待 `idempotency_in_progress`，不并发重放。
 4. 超过 60 秒：由相同请求和 key 触发 claim recovery；先确认原 side effect 是否已有 owner receipt。

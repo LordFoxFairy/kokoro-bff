@@ -25,6 +25,28 @@ test("the canonical BFF OpenAPI passes field and protocol invariants", async () 
   assert.deepEqual(inspectBffOpenApi(openapi, baseline), [])
 })
 
+test("the public contract requires IAM bearer admission while Share and runtime manifest remain service-only", async () => {
+  const { openapi, baseline } = await readContract()
+  assert.match(openapi, /security:\n  - serviceHeader: \[\]\n    internalSecret: \[\]\n    userBearer: \[\]/u)
+  assert.doesNotMatch(openapi, /^    (?:namespace|principalId):/mu)
+  assert.match(openapi, /^    userBearer:\n      type: http\n      scheme: bearer/mu)
+
+  const operationBlock = (operation) => {
+    const start = openapi.indexOf(`      operationId: ${operation.operation_id}`)
+    const next = baseline.map((candidate) => openapi.indexOf(`      operationId: ${candidate.operation_id}`, start + 1)).filter((index) => index > start)
+    return openapi.slice(start, next.length === 0 ? openapi.indexOf("components:", start) : Math.min(...next))
+  }
+  for (const operation of baseline.filter(({ path }) => !["/healthz", "/readyz", "/v1/system/runtime-manifest", "/v1/shared/{shareId}"].includes(path))) {
+    const block = operationBlock(operation)
+    for (const status of ["401", "403", "429", "503"]) assert.match(block, new RegExp(`'${status}':`, "u"), `${operation.operation_id} ${status}`)
+  }
+  for (const operationId of ["getRuntimeManifest", "getSharedSessionSnapshot"]) {
+    const block = operationBlock(baseline.find(({ operation_id }) => operation_id === operationId))
+    assert.match(block, /security:\n        - serviceHeader: \[\]\n          internalSecret: \[\]/u)
+    assert.doesNotMatch(block, /userBearer/u)
+  }
+})
+
 test("ProjectInstructionRevision publishes snake_case RFC3339 fields and an aligned example", async () => {
   const { openapi } = await readContract()
   const revision = openapi.slice(
@@ -99,13 +121,15 @@ test("MessageCreateRequest and runtime failure statuses stay strict", async () =
 
 test("semantic gates enforce Gone, admission overload, and control upstream failures", async () => {
   const { openapi, baseline } = await readContract()
+  const controlStart = openapi.indexOf("  /v1/sessions/{id}/runs/{runId}/control:")
+  const controlEnd = openapi.indexOf("  /v1/sessions/{id}/title:", controlStart)
+  const control = openapi.slice(controlStart, controlEnd)
+    .replace("        '502': { $ref: '#/components/responses/BadGateway' }\n", "")
+    .replace("        '503': { $ref: '#/components/responses/ServiceUnavailable' }\n", "")
   const broken = openapi
     .replace("        '410': { $ref: '#/components/responses/Gone' }\n", "")
     .replace("        '413': { $ref: '#/components/responses/PayloadTooLarge' }\n", "")
-    .replace(
-      "        '502': { $ref: '#/components/responses/BadGateway' }\n        '503': { $ref: '#/components/responses/ServiceUnavailable' }\n  /v1/sessions/{id}/title:",
-      "  /v1/sessions/{id}/title:",
-    )
+    .replace(openapi.slice(controlStart, controlEnd), control)
 
   assert.notEqual(broken, openapi)
   const errors = inspectBffOpenApi(broken, baseline)

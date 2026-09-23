@@ -1,9 +1,10 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http"
 
 import { loadConfig, type BffConfig } from "../config/runtime.js"
+import { authorizeUserRequest } from "../auth/user-admission.js"
 import { failure, ok } from "../contracts/index.js"
 import { mutationTicket, type MutationTicket } from "../application/idempotency.js"
-import { mutationFingerprint, authorize, authorizeServerOnly, idempotencyKey, isMutation, pathOf, queryOf, readBody, requestBodyJson, requestId, requiresIdempotency } from "../http/request.js"
+import { mutationFingerprint, authorizeServerOnly, idempotencyKey, isMutation, pathOf, queryOf, readBody, requestBodyJson, requestId, requiresIdempotency } from "../http/request.js"
 import { reply, send } from "../http/response.js"
 import { normalizeUpstreamResponse } from "../infrastructure/clients/upstream-response.js"
 import { proxyUpstream } from "../upstream.js"
@@ -14,6 +15,7 @@ import { liveOwnerBusiness } from "../http/routes/owner.js"
 import { liveMoriBusiness } from "../http/routes/music.js"
 import { configuredUpstream, bffOwnedBusinessPath, isMoriBusinessPath, upstreamKey } from "../http/routes/routing.js"
 import { schedulerDispatch } from "../http/routes/scheduler.js"
+import { runtimeManifest } from "../http/routes/runtime-manifest.js"
 import { createBffComposition, type BffCompositionOptions, type BffRouteInput } from "./runtime.js"
 
 async function handle(
@@ -97,23 +99,30 @@ async function handle(
     return
   }
 
-  const businessPath = segments.slice(1)
-  let context = authorize(request, config, id)
-  if (
-    context === null
-    && businessPath.length === 2
-    && businessPath[0] === "system"
-    && businessPath[1] === "runtime-manifest"
-    && request.method === "GET"
-    && authorizeServerOnly(request, config)
-    && config.tenantId !== null
-  ) {
-    context = { requestId: id, identity: { namespace: config.tenantId, userId: "runtime-manifest" } }
-  }
-  if (context === null) {
-    send(response, config.sharedSecret !== null ? 403 : 401, failure("service_auth_failed", "BFF authentication failed", id))
+  if (segments.length === 3 && segments[1] === "system" && segments[2] === "runtime-manifest" && request.method === "GET") {
+    await runtimeManifest(request, response, config, id)
     return
   }
+
+  const businessPath = segments.slice(1)
+  const admissionAbort = new AbortController()
+  const onRequestAborted = (): void => { admissionAbort.abort() }
+  const onResponseClosed = (): void => { if (!response.writableEnded) admissionAbort.abort() }
+  request.once("aborted", onRequestAborted)
+  response.once("close", onResponseClosed)
+  const admission = await authorizeUserRequest(request, config, composition.sessionAdmission, id, admissionAbort.signal)
+    .finally(() => {
+      request.removeListener("aborted", onRequestAborted)
+      response.removeListener("close", onResponseClosed)
+    })
+  if (!admission.ok) {
+    if (!response.destroyed) {
+      response.setHeader("x-request-id", id)
+      send(response, admission.status, failure(admission.code, "BFF user admission failed", id), admission.retryAfter)
+    }
+    return
+  }
+  const context = admission.context
 
   if (composition.routeHandler === undefined && bffOwnedBusinessPath(businessPath) && composition.businessStore === null) {
     send(response, 503, failure("business_store_not_configured", "BFF business fact store is not configured", id))

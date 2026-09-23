@@ -4,6 +4,7 @@ import { test } from "node:test"
 
 import { createBffServer } from "../dist/bootstrap/server.js"
 import { DEFAULT_AGUI_CONFIG, type BffConfig } from "../dist/config/runtime.js"
+import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 
 function deferred(): { promise: Promise<void>; resolve: () => void } {
   let resolvePromise: (() => void) | undefined
@@ -21,6 +22,7 @@ function config(): BffConfig {
     mode: "live",
     domain: "dev.kokoro.localhost",
     tenantId: "tenant_lifecycle",
+    iamBaseUrl: null,
     sharedSecret: "web-secret",
     upstreamSecret: "bff-secret",
     upstreamTimeoutMs: 5000,
@@ -64,6 +66,7 @@ test("shutdown stops admission and drains HTTP plus workers before closing store
   }
   const server = createBffServer(config(), {
     businessStore: null,
+    sessionAdmission: new SessionAdmissionDouble({ "lifecycle-session": { namespace: "tenant_lifecycle", userId: "user_lifecycle" } }),
     readiness: async (): Promise<void> => undefined,
     agentDispatchDispatcher: worker,
     close: async (): Promise<void> => { events.push("store_closed") },
@@ -87,8 +90,7 @@ test("shutdown stops admission and drains HTTP plus workers before closing store
       headers: {
         "x-kokoro-service": "web-bff",
         "x-kokoro-internal-secret": "web-secret",
-        "x-kokoro-namespace": "tenant_lifecycle",
-        "x-kokoro-principal-id": "user_lifecycle",
+        authorization: "Bearer lifecycle-session",
       },
     })
     await requestStarted.promise

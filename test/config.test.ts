@@ -15,6 +15,7 @@ describe("kokoro-bff optional Agent configuration", () => {
     const config = loadConfig({ ...runtimeEnv, KOKORO_DOMAIN: "dev.kokoro.localhost" })
     assert.equal(config.agentEnabled, false)
     assert.equal(config.tenantId, null)
+    assert.equal(config.iamBaseUrl, null)
     assert.equal(config.upstreamTimeoutMs, 5000)
     assert.equal(config.upstreamMaxResponseBytes, 1024 * 1024)
     assert.equal(config.upstreams.music, null)
@@ -46,6 +47,19 @@ describe("kokoro-bff optional Agent configuration", () => {
       gcBatchSize: 100,
       cursorTombstoneRetentionMs: 30 * 24 * 60 * 60 * 1000,
     })
+  })
+
+  it("accepts only an HTTP(S) origin for IAM session admission", () => {
+    assert.equal(loadConfig({ ...runtimeEnv, KOKORO_IAM_BASE_URL: "https://iam.example:8443/" }).iamBaseUrl, "https://iam.example:8443")
+    for (const invalid of [
+      "ftp://iam.example",
+      "https://user:secret@iam.example",
+      "https://iam.example/internal",
+      "https://iam.example?mode=test",
+      "https://iam.example#fragment",
+    ]) {
+      assert.throws(() => loadConfig({ ...runtimeEnv, KOKORO_IAM_BASE_URL: invalid }), /KOKORO_IAM_BASE_URL/u)
+    }
   })
 
   it("enables Agent explicitly for live execution", () => {

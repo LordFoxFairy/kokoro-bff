@@ -4,7 +4,6 @@ import type { IncomingMessage } from "node:http"
 import type { BffConfig } from "../config/runtime.js"
 import { parseMessageCreateRequest } from "../application/chat/message-create-input.js"
 import { isRecord } from "../domain/json.js"
-import type { RequestContext } from "../domain/request-context.js"
 
 export function stableStringify(value: unknown): string {
   if (value === undefined) return "null"
@@ -175,16 +174,6 @@ export function requiresIdempotency(method: string, segments: string[]): boolean
 export function authorizeServerOnly(request: IncomingMessage, config: BffConfig): boolean {
   const service = request.headers["x-kokoro-service"]
   return service === "web-bff" && config.sharedSecret !== null && request.headers["x-kokoro-internal-secret"] === config.sharedSecret
-}
-
-export function authorize(request: IncomingMessage, config: BffConfig, id: string): RequestContext | null {
-  const service = request.headers["x-kokoro-service"]
-  if (service !== "web-bff") return null
-  if (config.sharedSecret !== null && request.headers["x-kokoro-internal-secret"] !== config.sharedSecret) return null
-  const namespace = request.headers["x-kokoro-namespace"]
-  const userId = request.headers["x-kokoro-principal-id"]
-  if (typeof namespace !== "string" || namespace.trim() === "" || typeof userId !== "string" || userId.trim() === "") return null
-  return { requestId: id, identity: { namespace: namespace.trim(), userId: userId.trim() } }
 }
 
 export async function readBody(request: IncomingMessage): Promise<Buffer> {

@@ -10,23 +10,28 @@ Untrusted browser
 ```
 
 浏览器不能直接获得 BFF shared secret、owner token、tenant id 或 service identity。BFF 不接受浏览器 Host、X-Domain、
-X-Forwarded-*、tenant 或 actor header 作为 authority，也不把浏览器 Authorization 透传给 owner。
+X-Forwarded-*、tenant 或 actor header 作为 authority，也不把 session Bearer 透传给业务 owner。
 
 ## 当前 admission
 
 - `/healthz`、`/readyz` 是 anonymous probes。
-- 常规 `/v1/*` 要求 `x-kokoro-service: web-bff`、namespace 和 principal；Live 还要求匹配 shared secret。
+- 常规 `/v1/*` 要求 `x-kokoro-service: web-bff`、匹配 shared secret 与唯一 Bearer；BFF 每次在线调用固定 IAM verify
+  operation，并只接受 owner 返回的 `tenant_id`/`user_id`。重复 Authorization、非法 response/header/status、timeout 与
+  transport failure 都 fail closed。
+- legacy `x-kokoro-namespace`/`x-kokoro-principal-id` 被忽略，不能覆盖 IAM identity。Bearer 不进入 context、日志、
+  receipt、PostgreSQL、Redis 或下游 owner header。
 - runtime manifest 的 tenant/domain 来自 BFF server config，由 System owner 校验 Site/Host binding。
 - Scheduler dispatch 要求 configured bearer 或 internal secret，并校验 job name、UTC occurrence、task id、owner id 与
   稳定 idempotency key。
-- 共享快照仍要求 server-only service auth；share id 只选择资源。
+- 共享快照与 runtime manifest 要求 server-only service auth；不要求或使用 user Bearer，额外无关 Authorization header
+  不改变有效请求。share id 只选择资源。
 - AG-UI cursor 只是不可解释的定位 token，不是 capability。解析与 replay SQL 同时要求受信 namespace、session id 和
   cursor；foreign tenant session 与普通缺失资源一致，当前 session 的 unknown token 返回 `invalid_event_cursor`，已回收
   token 只在同 scope tombstone 命中时返回 `event_cursor_expired`。
 
-当前 BFF 信任 Web adapter 提供的 namespace/principal，尚未在本进程完成 IAM admission/permission lookup。OpenAPI
-`x-kokoro-permission` 已冻结权限意图，但运行时逐 operation permission enforcement 尚未闭环；这是安全缺口，不是
-已完成能力。
+当前 BFF 已完成 IAM session admission，但 OpenAPI `x-kokoro-permission` 仍是冻结的权限意图，不等于逐 operation IAM
+permission enforcement。Project、ScheduledTask、Conversation 等 resource owner predicate 仍必须独立校验；Task 2 将收紧
+同 tenant 跨用户访问。
 
 ## 出站控制
 

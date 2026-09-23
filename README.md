@@ -15,6 +15,7 @@ Browser -> kokoro same-origin /api/* -> kokoro-bff /v1/* -> owner API / Agent / 
 | 能力 | 当前事实 |
 | --- | --- |
 | Public contract | 63 个 operation，全部具备 owner/visibility/stability/idempotency/permission metadata |
+| User admission | 普通 `/v1/*` 使用 service envelope + 唯一 Bearer，并在线验证固定 IAM `0.2.0` contract；legacy identity headers 被忽略 |
 | Project / ScheduledTask | Live 使用本仓 PostgreSQL；Redis 用于 readiness/cache coordination |
 | Idempotency | business store 存在时有 PostgreSQL receipt；部分路径仍可能使用进程内 Map |
 | Chat / AG-UI | Live 先把 Agent source fact 与 AG-UI frame 原子投影到本仓 PostgreSQL，再从 ledger 输出 SSE |
@@ -72,18 +73,19 @@ pnpm dev
 只复用一个本地 PostgreSQL 和一个 Redis，不为 BFF 重复启动基础设施。`db:apply-schema` 面向空数据库安装 canonical
 schema，不执行历史 migration。
 
-## 服务调用 envelope
+## 服务调用 envelope 与用户准入
 
 ```http
 x-kokoro-service: web-bff
 x-kokoro-internal-secret: TOKEN
-x-kokoro-namespace: TENANT
-x-kokoro-principal-id: SUBJECT
 x-kokoro-request-id: REQUEST_ID
+Authorization: Bearer SESSION_TOKEN
 ```
 
-Live 必须配置 shared secret。BFF 不采用浏览器的 Host、X-Domain、X-Forwarded-*、tenant 或 Authorization 作为 owner
-身份。完整规则见 [`docs/SECURITY.md`](./docs/SECURITY.md)。
+Live 必须配置 shared secret、`KOKORO_IAM_BASE_URL`、PostgreSQL 与 Redis。普通用户身份只采用 IAM 返回的
+`tenant_id`/`user_id`；legacy `x-kokoro-namespace`/`x-kokoro-principal-id`、Host、X-Domain 与 X-Forwarded-* 都不是身份
+authority。Bearer 只发送给 IAM，不转发给业务 owner。Share 与 runtime manifest 不要求或使用用户 Bearer；调用方额外携带
+无关 Authorization header 不改变其 service-only 语义。完整规则见 [`docs/SECURITY.md`](./docs/SECURITY.md)。
 
 ## 质量门禁
 

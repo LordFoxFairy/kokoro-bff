@@ -27,6 +27,7 @@ function config(overrides: Partial<BffConfig> = {}): BffConfig {
     mode: "live",
     domain: "dev.kokoro.localhost",
     tenantId: "tenant_test",
+    iamBaseUrl: null,
     sharedSecret: "test-secret",
     upstreamSecret: "bff-upstream-secret",
     upstreamTimeoutMs: 5000,
@@ -55,8 +56,7 @@ function authHeaders(): Record<string, string> {
   return {
     "x-kokoro-service": "web-bff",
     "x-kokoro-internal-secret": "test-secret",
-    "x-kokoro-namespace": "ns_test",
-    "x-kokoro-principal-id": "user_test",
+    authorization: "Bearer test-session",
   }
 }
 
@@ -183,7 +183,7 @@ describe("Mori Music owner adapter", () => {
     const bff = await listen(createLiveTestBffServer(config({ upstreams: { ...config().upstreams, music: ownerBase } })))
 
     const response = await fetch(`${bff}/v1/mori/projects/project_123?provider=secret`, {
-      headers: { ...authHeaders(), authorization: "Bearer user-secret" },
+      headers: authHeaders(),
     })
     const body = await response.json() as { data: { project_ref: string; candidate_count: number; provider_task_id?: string }; meta: { request_id: string } }
 

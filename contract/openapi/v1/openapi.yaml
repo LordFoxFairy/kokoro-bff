@@ -14,8 +14,7 @@ servers:
 security:
   - serviceHeader: []
     internalSecret: []
-    namespace: []
-    principalId: []
+    userBearer: []
 tags:
   - name: Health
     description: Process and dependency health probes.
@@ -118,6 +117,9 @@ paths:
           in: query
           required: true
           schema: { type: string, minLength: 1 }
+      security:
+        - serviceHeader: []
+          internalSecret: []
       responses:
         '200':
           description: Server-configured tenant runtime manifest; System validates the configured tenant with Forwarded host against its own Site/Host binding.
@@ -128,12 +130,12 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '502':
-          description: IAM or System owner transport/contract failure
+          description: System owner transport/contract failure
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
         '503':
-          description: IAM/System owner is not configured or unavailable
+          description: System owner is not configured or unavailable
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
@@ -161,6 +163,16 @@ paths:
                 $ref: '#/components/schemas/SessionListResponse'
         '401': { $ref: '#/components/responses/ServiceAuthFailed' }
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/models:
     get:
       tags: [Models]
@@ -189,6 +201,17 @@ paths:
               schema:
                 $ref: '#/components/schemas/ModelCandidateListResponse'
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/sessions/{id}:
     parameters:
       - $ref: '#/components/parameters/SessionId'
@@ -214,6 +237,16 @@ paths:
         '401': { $ref: '#/components/responses/ServiceAuthFailed' }
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
     delete:
       tags: [Chat]
       operationId: deleteSession
@@ -238,6 +271,16 @@ paths:
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/sessions/{id}/messages:
     parameters:
       - $ref: '#/components/parameters/SessionId'
@@ -267,6 +310,16 @@ paths:
         '401': { $ref: '#/components/responses/ServiceAuthFailed' }
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
     post:
       tags: [Chat]
       operationId: createMessage
@@ -304,6 +357,15 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
         '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
   /v1/sessions/{id}/events:
     parameters:
       - $ref: '#/components/parameters/SessionId'
@@ -340,6 +402,15 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '502': { $ref: '#/components/responses/BadGateway' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
   /v1/sessions/{id}/runs/{runId}/control:
     parameters:
       - $ref: '#/components/parameters/SessionId'
@@ -387,6 +458,15 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
         '502': { $ref: '#/components/responses/BadGateway' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
   /v1/sessions/{id}/title:
     parameters:
       - $ref: '#/components/parameters/SessionId'
@@ -421,6 +501,16 @@ paths:
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/sessions/{id}/share:
     parameters:
       - $ref: '#/components/parameters/SessionId'
@@ -448,6 +538,16 @@ paths:
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
     delete:
       tags: [Chat]
       operationId: revokeShare
@@ -472,6 +572,16 @@ paths:
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/shared/{shareId}:
     parameters:
       - $ref: '#/components/parameters/ShareId'
@@ -487,6 +597,9 @@ paths:
       parameters:
         - $ref: '#/components/parameters/ScopeQuery'
         - $ref: '#/components/parameters/ProjectRefQuery'
+      security:
+        - serviceHeader: []
+          internalSecret: []
       responses:
         '200':
           description: Shared session snapshot
@@ -494,7 +607,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SessionSnapshotResponse'
-        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
   /v1/projects:
@@ -516,6 +628,16 @@ paths:
                 $ref: '#/components/schemas/ProjectListResponse'
         '401': { $ref: '#/components/responses/ServiceAuthFailed' }
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
     post:
       tags: [Projects]
       operationId: createProject
@@ -543,6 +665,17 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/projects/{projectId}:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -564,6 +697,17 @@ paths:
                 $ref: '#/components/schemas/ProjectResponse'
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
     patch:
       tags: [Projects]
       operationId: updateProjectInstruction
@@ -592,6 +736,17 @@ paths:
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/mori/projects:
     get:
       tags: [Mori Music]
@@ -611,6 +766,17 @@ paths:
                 $ref: '#/components/schemas/MoriProjectListResponse'
         '400': { $ref: '#/components/responses/BadRequest' }
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
     post:
       tags: [Mori Music]
       operationId: createMoriProject
@@ -638,6 +804,17 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/mori/projects/{projectRef}:
     parameters:
       - $ref: '#/components/parameters/MoriProjectRef'
@@ -659,6 +836,17 @@ paths:
                 $ref: '#/components/schemas/MoriProjectResponse'
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/mori/projects/{projectRef}/song_plans:
     parameters:
       - $ref: '#/components/parameters/MoriProjectRef'
@@ -690,6 +878,17 @@ paths:
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/mori/projects/{projectRef}/generations:
     parameters:
       - $ref: '#/components/parameters/MoriProjectRef'
@@ -721,6 +920,17 @@ paths:
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/mori/generations/{generationRef}:
     parameters:
       - $ref: '#/components/parameters/MoriGenerationRef'
@@ -742,6 +952,17 @@ paths:
                 $ref: '#/components/schemas/MoriGenerationResponse'
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/mori/generations/{generationRef}/events:
     parameters:
       - $ref: '#/components/parameters/MoriGenerationRef'
@@ -765,6 +986,17 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/mori/generations/{generationRef}/cancel:
     parameters:
       - $ref: '#/components/parameters/MoriGenerationRef'
@@ -789,6 +1021,17 @@ paths:
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/mori/projects/{projectRef}/candidates:
     parameters:
       - $ref: '#/components/parameters/MoriProjectRef'
@@ -814,6 +1057,17 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/mori/candidates/{candidateRef}/promote:
     parameters:
       - $ref: '#/components/parameters/MoriCandidateRef'
@@ -838,6 +1092,17 @@ paths:
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/mori/versions/{versionRef}/remix:
     parameters:
       - $ref: '#/components/parameters/MoriVersionRef'
@@ -869,6 +1134,17 @@ paths:
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/mori/library:
     get:
       tags: [Mori Music]
@@ -895,6 +1171,17 @@ paths:
                 $ref: '#/components/schemas/MoriLibraryListResponse'
         '400': { $ref: '#/components/responses/BadRequest' }
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/mori/versions/{versionRef}/exports:
     parameters:
       - $ref: '#/components/parameters/MoriVersionRef'
@@ -926,6 +1213,17 @@ paths:
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/mori/exports/{exportRef}:
     parameters:
       - $ref: '#/components/parameters/MoriExportRef'
@@ -947,6 +1245,17 @@ paths:
                 $ref: '#/components/schemas/MoriExportResponse'
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/projects/{projectId}/tasks:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -968,6 +1277,17 @@ paths:
                 $ref: '#/components/schemas/TaskListResponse'
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/projects/{projectId}/instruction-revisions:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -989,6 +1309,17 @@ paths:
                 $ref: '#/components/schemas/ProjectInstructionRevisionResponse'
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/projects/{projectId}/resources:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -1027,6 +1358,17 @@ paths:
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/projects/{projectId}/skills/{skill}:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -1059,6 +1401,17 @@ paths:
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/projects/{projectId}/scheduled-tasks:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -1090,6 +1443,17 @@ paths:
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/skills:
     get:
       tags: [Skills]
@@ -1117,6 +1481,16 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '502': { $ref: '#/components/responses/BadGateway' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
   /v1/skills/pool:
     get:
       tags: [Skills]
@@ -1144,6 +1518,16 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '502': { $ref: '#/components/responses/BadGateway' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
   /v1/skills/catalog:
     get:
       tags: [Skills]
@@ -1171,6 +1555,16 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '502': { $ref: '#/components/responses/BadGateway' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
   /v1/skills/quota:
     get:
       tags: [Skills]
@@ -1189,6 +1583,17 @@ paths:
               schema:
                 $ref: '#/components/schemas/SkillQuotaResponse'
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/skills/{name}/revisions:
     parameters:
       - $ref: '#/components/parameters/SkillNameOnly'
@@ -1210,6 +1615,17 @@ paths:
               schema:
                 $ref: '#/components/schemas/SkillRevisionResponse'
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/skills/{name}/enable:
     parameters:
       - $ref: '#/components/parameters/SkillNameOnly'
@@ -1235,6 +1651,17 @@ paths:
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/skills/{name}/disable:
     parameters:
       - $ref: '#/components/parameters/SkillNameOnly'
@@ -1260,6 +1687,17 @@ paths:
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/skills/github/preview:
     post:
       tags: [Skills]
@@ -1285,6 +1723,17 @@ paths:
                 $ref: '#/components/schemas/GithubSkillResponse'
         '400': { $ref: '#/components/responses/BadRequest' }
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/skills/github/import:
     post:
       tags: [Skills]
@@ -1313,6 +1762,17 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/mcp/servers:
     get:
       tags: [MCP]
@@ -1338,6 +1798,16 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '502': { $ref: '#/components/responses/BadGateway' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
     post:
       tags: [MCP]
       operationId: registerMcpServer
@@ -1365,6 +1835,17 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/mcp/servers/{name}/enable:
     parameters:
       - $ref: '#/components/parameters/McpServerName'
@@ -1389,6 +1870,17 @@ paths:
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/mcp/servers/{name}/disable:
     parameters:
       - $ref: '#/components/parameters/McpServerName'
@@ -1413,6 +1905,17 @@ paths:
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/mcp/servers/{name}:
     parameters:
       - $ref: '#/components/parameters/McpServerName'
@@ -1437,6 +1940,17 @@ paths:
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/scheduled-tasks:
     get:
       tags: [Scheduled]
@@ -1455,6 +1969,17 @@ paths:
               schema:
                 $ref: '#/components/schemas/ScheduledTaskListResponse'
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
     post:
       tags: [Scheduled]
       operationId: createScheduledTask
@@ -1482,6 +2007,17 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/scheduled-tasks/{id}:
     parameters:
       - $ref: '#/components/parameters/ScheduledTaskId'
@@ -1503,6 +2039,17 @@ paths:
                 $ref: '#/components/schemas/ScheduledTaskResponse'
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
     patch:
       tags: [Scheduled]
       operationId: updateScheduledTask
@@ -1530,6 +2077,17 @@ paths:
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
     delete:
       tags: [Scheduled]
       operationId: deleteScheduledTask
@@ -1551,6 +2109,17 @@ paths:
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/scheduled-tasks/{id}/retry:
     parameters:
       - $ref: '#/components/parameters/ScheduledTaskId'
@@ -1575,6 +2144,17 @@ paths:
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/agents/connections/setup:
     get:
       tags: [Agents]
@@ -1596,6 +2176,17 @@ paths:
                 $ref: '#/components/schemas/AgentConnectionSetupResponse'
         '400': { $ref: '#/components/responses/BadRequest' }
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/library:
     get:
       tags: [Library]
@@ -1613,16 +2204,37 @@ paths:
           content:
             application/json:
               schema:
-                allOf:
-                  - $ref: '#/components/schemas/ErrorEnvelope'
-                  - type: object
-                    properties:
-                      error:
-                        type: object
+                oneOf:
+                  - allOf:
+                      - $ref: '#/components/schemas/ErrorEnvelope'
+                      - type: object
                         properties:
-                          code:
-                            type: string
-                            const: storage_integration_unavailable
+                          error:
+                            type: object
+                            properties:
+                              code:
+                                type: string
+                                const: storage_integration_unavailable
+                  - allOf:
+                      - $ref: '#/components/schemas/ErrorEnvelope'
+                      - type: object
+                        properties:
+                          error:
+                            type: object
+                            properties:
+                              code:
+                                type: string
+                                const: iam_admission_unavailable
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
   /v1/billing/plans:
     get:
       tags: [Billing]
@@ -1641,6 +2253,17 @@ paths:
               schema:
                 $ref: '#/components/schemas/BillingPlanListResponse'
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/billing/summary:
     get:
       tags: [Billing]
@@ -1659,6 +2282,17 @@ paths:
               schema:
                 $ref: '#/components/schemas/BillingSummaryResponse'
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/billing/checkout:
     post:
       tags: [Billing]
@@ -1688,6 +2322,17 @@ paths:
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
 components:
   securitySchemes:
     serviceHeader:
@@ -1698,14 +2343,10 @@ components:
       type: apiKey
       in: header
       name: x-kokoro-internal-secret
-    namespace:
-      type: apiKey
-      in: header
-      name: x-kokoro-namespace
-    principalId:
-      type: apiKey
-      in: header
-      name: x-kokoro-principal-id
+    userBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque-session-token
   parameters:
     SessionId:
       name: id
@@ -3100,7 +3741,7 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorEnvelope' }
     ServiceAuthFailed:
-      description: Service authentication failed
+      description: Service or user-session authentication failed
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorEnvelope' }

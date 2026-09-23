@@ -11,7 +11,9 @@ this repository documents only the BFF projection exposed to callers.
 Every operation in `openapi/v1/openapi.yaml` is classified as `public`. Browser code still reaches it through the
 `kokoro` same-origin server adapter; `public` describes product-contract visibility and does not expose BFF service
 credentials to a browser. Health and readiness operations use the `anonymous` permission marker. Business operations
-declare a stable permission identifier and require the trusted `web-bff` service envelope.
+declare a stable permission identifier and normally require the trusted `web-bff` service envelope plus an IAM-verified
+user Bearer. Share and runtime manifest explicitly override the top-level user Bearer requirement with service-only
+security; an irrelevant extra Authorization header does not become an additional credential requirement.
 
 ## Version
 
@@ -53,6 +55,10 @@ while preserving `/v1/library`, `GET`, `listLibrary`, and the operation metadata
 `503 storage_integration_unavailable` contract. This is a corrective baseline, not a claim of backward compatibility.
 After public release, the breaking policy below applies unchanged.
 
+The same pre-release corrective baseline removes legacy namespace/principal security schemes and makes online IAM
+session admission explicit. User-protected operations publish 401/403/429/503; Library's 503 keeps both
+`storage_integration_unavailable` after admission and `iam_admission_unavailable` before route execution.
+
 - Additive optional fields, new error codes, and new operations may remain in `/v1` after examples and tests change in
   the same commit.
 - Removing a path/method, renaming an `operationId`, making an optional input required, narrowing a response, changing
@@ -87,3 +93,9 @@ The System consumer adapter is pinned to owner artifact `contract/openapi/system
 System commit `f5702068d4416ad90b1bd02af57d2825c32be916`, SHA-256
 `f9ea76f107e1ea0fc19df20ee7c59032c0fbac66e640e9a16a1b770ab27c1f37`. This is a provenance reference only;
 the owner OpenAPI is not copied into this repository.
+
+The IAM admission consumer pins the complete owner artifact `contract/openapi/iam.internal.v1.json`, version `0.2.0`,
+IAM commit `259a66e6a569889c030734f380e99685d8b9e21c`, SHA-256
+`f7a3ea2e5ae7ade82ae1a6756a2f560d3129ca1b2977c6b0905633a284bd3aab`. `openapi-ts.iam.config.ts` filters the generated
+surface to `POST /internal/v1/session-authorizations/verify` without editing the vendor artifact; exact generated-file
+digests and toolchain provenance are recorded in `contract/dependencies/iam-http.json`.

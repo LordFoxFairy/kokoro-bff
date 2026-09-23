@@ -1,6 +1,6 @@
 # kokoro-bff 当前实现
 
-状态：2026-09-21
+状态：2026-09-22
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。
 
 ## 已实现事实
@@ -23,6 +23,10 @@
   regeneration、drift、typecheck、build 全通过后删除该 normalization。
   Root `EDGE-BFF-CAPABILITY` 仍为 broken，待 W0B-5 real smoke 与 W0B-6 integration 闭环后才可标记 active；本仓实现完成
   不代表跨仓 edge 已激活。
+- IAM session admission 已固定消费 IAM commit `259a66e6a569889c030734f380e99685d8b9e21c` 的完整 OpenAPI `0.2.0`，
+  再由 generator scope 过滤出 `POST /internal/v1/session-authorizations/verify` 及引用 schema。manifest 固定 owner digest、
+  Node `22.22.2`、pnpm `11.25.0`、generator `0.99.0`、Zod `4.5.4`、lockfile 与 16 个生成文件 digest；drift gate 做
+  allowlist、两次 byte-identical generation 与 strict response normalization 检查。
 
 ### Library / Storage degraded boundary
 
@@ -34,12 +38,16 @@
   1. Storage default-deny caller × operation × scope；
   2. Capability scope mapping 与拒绝规则；
   3. Agent trusted Run/ExecutionIdentity scope；
-  4. BFF W1 IAM admission；
-  5. Library per-kind 或 BFF composite pagination。
+  4. Library per-kind 或 BFF composite pagination。
 
 ### 当前运行时与持久化
 
-- `/v1/*` 校验 `web-bff` 服务身份、共享 secret、namespace、principal 和 request id；浏览器不应直连 BFF。
+- 普通 `/v1/*` 先校验 `web-bff` 服务身份与共享 secret，再要求唯一 Bearer 并在线调用 IAM；业务 context 的
+  namespace/userId 只来自严格验证后的 IAM `tenant_id`/`user_id`。legacy identity headers 不参与身份建立。
+- IAM request 无 body/query/redirect/retry/cache，受统一 5 秒与 1 MiB 上限、caller cancellation、合法 request-id 与
+  `Cache-Control: no-store` 约束。401/403/429/503 使用稳定 BFF error code；Bearer 不进入日志、receipt、store 或业务 owner。
+- Share 和 runtime manifest 只使用 service envelope，不要求或使用用户 Bearer；额外 Authorization header 被忽略。Scheduler
+  callback 继续使用独立 Scheduler bearer。production 未配置 IAM origin 时 readiness 与普通用户请求 fail closed。
 - Live Project、instruction revision、project skill、project task、ScheduledTask 与 mutation receipt 使用本仓
   PostgreSQL repository。Redis 当前用于 readiness/ping 和 Project cache invalidation，不是事实源。
 - Live Conversation、Message、Share 使用本仓 `bff_conversation`、`bff_message`、`bff_share` PostgreSQL repository；

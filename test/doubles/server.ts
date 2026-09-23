@@ -6,6 +6,7 @@ import type { BffServerOptions } from "../../src/bootstrap/server.ts"
 import { MockBffStore } from "./bff-store.ts"
 import { MoriMockBffStore } from "./mori-store.ts"
 import { mockBusiness } from "./mock-route.ts"
+import { SessionAdmissionDouble } from "./session-admission.ts"
 
 export type TestBffServer = {
   server: Server
@@ -18,6 +19,10 @@ export function createTestBffServer(config: BffConfig, options: { moriAutoProgre
   const store = new MockBffStore()
   const mori = new MoriMockBffStore(options.moriAutoProgress ?? true)
   const serverOptions: BffServerOptions = {
+    sessionAdmission: new SessionAdmissionDouble({
+      "test-session": { namespace: "ns_test", userId: "user_test" },
+      "control-session": { namespace: "tenant_control", userId: "user_control" },
+    }),
     businessStore: null,
     readiness: async (): Promise<void> => undefined,
     routeHandler: async ({ request, response, businessPath, context, json, mutation, idempotency }): Promise<void> => {
@@ -36,6 +41,10 @@ export function createLiveTestBffServer(
   const { readiness, ...otherOptions } = options
   return createBffServer(config, {
     ...otherOptions,
+    sessionAdmission: otherOptions.sessionAdmission ?? new SessionAdmissionDouble({
+      "test-session": { namespace: "ns_test", userId: "user_test" },
+      "control-session": { namespace: "tenant_control", userId: "user_control" },
+    }),
     businessStore: null,
     readiness: readiness ?? (async (): Promise<void> => undefined),
   })

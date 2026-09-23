@@ -14,6 +14,8 @@
 10. [`ADR/README.md`](./ADR/README.md)：仍有效的架构决策。
 
 Phase 2 durable AG-UI 的具体裁决见 [`ADR/ADR-002-durable-agui-ledger.md`](./ADR/ADR-002-durable-agui-ledger.md)。
+当前用户准入实现、固定 IAM contract provenance 与独立 service-only 例外分别记录在 `CURRENT.md`、
+`TECHNICAL_DESIGN.md`、`API_CONTRACT.md` 与 [`../contract/README.md`](../contract/README.md)。
 
 ## 协议文档
 

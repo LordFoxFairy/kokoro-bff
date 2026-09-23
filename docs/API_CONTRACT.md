@@ -27,7 +27,9 @@ SLO 已经完成；实现状态看 [`CURRENT.md`](./CURRENT.md)。
 
 ## 调用与鉴权
 
-除 probes 外，请求由 Web server 发送：
+### `c5e9b3c` 起始基线
+
+普通用户请求目前由 Web server 发送以下 header：
 
 ```http
 x-kokoro-service: web-bff
@@ -37,9 +39,70 @@ x-kokoro-principal-id: <trusted principal>
 x-kokoro-request-id: <optional correlation id>
 ```
 
-Live 必须配置 shared secret。共享快照由 server-only adapter 调用，不携带用户 namespace；其 share token 是资源
-capability，不替代服务认证。浏览器提供的 tenant、Host、X-Domain、X-Forwarded-* 或 Authorization 不作为上游
-身份来源。
+`src/http/request.ts::authorize` 在 shared secret 通过后直接信任 namespace/principal header，尚未调用 IAM。这是 Task 1
+要删除的旧身份来源，不是目标安全契约。当前 runtime manifest 还使用伪造 `runtime-manifest` principal；Task 1 把它改为显式
+service-only operation。这段只记录起始 commit；下节描述本变更实际 contract，Task 2 目标仍不得写成当前运行事实。
+
+### Task 1 本变更：IAM session admission
+
+普通 `/v1/*` 顶层 OpenAPI security 使用 `serviceHeader + internalSecret + userBearer` 的 AND 关系：Web adapter 必须同时提供
+`x-kokoro-service: web-bff`、正确 internal secret 与唯一 `Authorization: Bearer <session credential>`。旧
+`namespace`/`principalId` security scheme 删除；即使客户端继续发送同名 header，也不参与身份建立或 owner 请求。
+现有 63 个 path/method/operationId 保持冻结；所有受保护 operation 在 machine contract 中显式发布 401/403/429/503，
+Share 与 runtime manifest 使用下表的 operation-level service-only override。该 clean-slate 身份修正不承诺与未上线旧 header
+契约兼容。
+
+BFF 先检查服务身份，再解析 Bearer，然后消费 IAM 固定 commit
+`259a66e6a569889c030734f380e99685d8b9e21c`、internal OpenAPI `0.2.0`、SHA-256
+`f7a3ea2e5ae7ade82ae1a6756a2f560d3129ca1b2977c6b0905633a284bd3aab` 的
+`POST /internal/v1/session-authorizations/verify`。请求无 body/query，只带 Bearer、JSON Accept 与受控 `x-request-id`；
+redirect、自动重试和 admission cache 都关闭。只有 strict 200 且 `allowed=true`、`tenant_id`、`user_id`、`session_id`、
+`client_id` 非空才建立 `RequestContext.identity={namespace:tenant_id,userId:user_id}`。BFF 不解码 JWT 自建 authority，
+不把 Bearer 保存到 context、日志、receipt、数据库或转发给其他 owner。
+
+用户 admission 失败在 body 业务解析、idempotency claim/replay、SQL、outbox、SSE 与 owner socket 之前返回：
+
+| 条件 | Public status / code | 约束 |
+| --- | --- | --- |
+| service 缺失/错误 | `403 service_auth_failed` | 不调用 IAM；shared secret 未配置属于部署错误，不改用用户凭据 |
+| Bearer 缺失、重复或格式错误 | `401 session_authentication_required` | 不调用 IAM |
+| IAM 401 | `401 session_invalid` | 不复制 owner message |
+| IAM 403/404/409 | `403 session_forbidden` | membership/session/tenant 不可用都 fail closed |
+| IAM 429 | `429 session_rate_limited` | 仅转发十进制 1..86400 秒的合法 `Retry-After` |
+| IAM timeout/transport/其他 status/非法 envelope、header 或过大响应 | `503 iam_admission_unavailable` | 零重试、无缓存 fallback |
+
+IAM 成功与错误都必须有合法 `x-request-id` 和 `Cache-Control: no-store`。BFF admission 响应使用本仓 canonical
+`ErrorEnvelope`、`x-request-id` 与 `Cache-Control: no-store`，不返回 IAM body、token 或 stack。请求取消或 response 提前关闭会
+取消 IAM I/O；正常 request body end 不视为取消。一次用户请求或每次 SSE 建连/重连都重新 admission。
+
+### 显式服务边界
+
+| Operation | 身份与 authority | 与普通用户入口的关系 |
+| --- | --- | --- |
+| `GET /healthz`、`GET /readyz` | probe contract | 无用户身份；readiness 必须反映 IAM 配置缺失而不能伪装可服务用户 |
+| `GET /v1/shared/{shareId}` | `serviceHeader + internalSecret` + active/unexpired Share capability | OpenAPI 覆盖顶层 userBearer；不以额外 Authorization 授权，也不因其存在而拒绝；只读分享不授予 Run control/HITL/events/未分享文件 |
+| `GET /v1/system/runtime-manifest` | `serviceHeader + internalSecret` + server-side tenant/domain | OpenAPI 覆盖顶层 userBearer；无 fake user，不是 IAM fallback |
+| `POST /internal/bff/scheduled-tasks/dispatch` | 独立 Scheduler bearer + trusted event headers + durable receipt | 不属于 public OpenAPI 顶层 security，不接受 Web session Bearer |
+
+四类凭据不可互换。`x-kokoro-permission` 继续表示 Product operation 的动作意图；IAM session admission 不返回也不合成
+63 项业务 permission，BFF-owned facts 仍由资源 predicate 授权。
+
+### Task 2 目标：个人私有资源 contract
+
+普通用户资源默认 scope 为 IAM 验证得到的 `{ tenantId, subjectId }`，body/query/header 不能自报覆盖。Project 的
+list/detail/slug/instruction/revisions/skills/tasks、ScheduledTask 的 list/detail/create/update/delete/retry、Chat/Message、
+AG-UI events 与 cancel/resume/steer 都同时验证 tenant + subject。其他用户的 detail/mutation/control/events 与不存在资源使用同一
+404，不通过 403 或字段差异泄漏存在性；list 不返回同 tenant 其他用户资源。Project slug 只在同一 owner scope 唯一，因此同租户
+不同用户可使用相同 slug。
+
+ScheduledTask create 中 `owner_id` 只取 trusted subject，body 不能指定；引用 `project_id` 必须属于相同 scope。Scheduler callback
+继续从受信事件 tenant 与已存 task owner 建立内部执行身份，不把事件 body actor 变成 authority。Conversation 非空
+`project_ref` 必须解析为同 scope Project；创建和后续 message/query/control 都 fail closed。message body 与 query 同时提供不同
+`project_ref` 返回 `400 invalid_message`；Chat query `scope` 只允许省略、空或 `direct`，其他值返回 400，并且永远不作为 tenant
+或共享授权来源。
+
+显式 Share 仍是 Conversation 的独立只读 capability，可撤销/过期；持有 Share 不授权 Project、ScheduledTask、Run control、
+HITL、AG-UI events 或未分享文件。Task 2 不引入 Project ACL、团队共享或通用 authorization table。
 
 ## Envelope 与字段
 
@@ -74,13 +137,15 @@ BFF 的机器事实与契约门禁；runtime mapper、Web consumer 和 `docs/api
 
 ## Library degraded contract and Storage v2 prerequisites
 
-`GET /v1/library` 保留既有 path、method、`listLibrary` operationId 与 operation metadata，但在受信
-service-envelope admission 通过后只返回 `503 storage_integration_unavailable`；未认证请求仍返回既有
-`403 service_auth_failed`。503 使用 canonical `ErrorEnvelope`，当前 `meta.request_id` 行为保持不变。机器契约删除了
+`GET /v1/library` 保留既有 path、method、`listLibrary` operationId 与 operation metadata。`c5e9b3c` 在受信
+service-envelope admission 通过后只返回 `503 storage_integration_unavailable`；Task 1 后它与其他普通用户 operation 一样，
+还必须先通过 IAM Bearer admission。认证失败使用本页稳定 401/403/429/503 语义，admission 成功后仍返回 Storage 503。
+503 使用 canonical `ErrorEnvelope`，当前 `meta.request_id` 行为保持不变。机器契约删除了
 不可达的 200 success 与仅服务旧 transport 的 `LibraryResponse`/`LibraryItem` schema；这不是 Library 可用性声明。
 
 未来 W2 success contract 必须在 Storage Proto v2 over ConnectRPC、caller × operation × scope、Capability scope
-mapping、trusted Run/ExecutionIdentity、W1 IAM admission 与 per-kind 或 BFF composite pagination 全部确定后重新发布。
+mapping、trusted Run/ExecutionIdentity 与 per-kind 或 BFF composite pagination 全部确定后重新发布；W1 IAM admission 已在
+Task 1 本变更闭环。
 本切片不激活 Storage edge，不接受旧 HTTP fallback，也不把 placeholder 200 当作兼容承诺。
 
 ## Capability projection dependency
@@ -99,7 +164,8 @@ MCP cursor scope 固定为 `tenant + operation + provider_key filters`；MCP own
 两类 cursor 都是 owner 生成的 opaque continuation，BFF 只原样传递，不解析、不持久化。四个 GET 无副作用，
 `x-kokoro-idempotency=none`，不新增 mutation receipt 或事件协议。
 
-BFF 只从已验证的 Web service context 构造 Capability 的 `web-bff` service identity、tenant、subject 和 request id。
+BFF 在 `c5e9b3c` 从 Web service context 构造 Capability 的 `web-bff` service identity、tenant、subject 和 request id；
+Task 1 后 tenant/subject 必须来自 IAM admission 建立的 context，legacy identity header 不得参与。
 浏览器的 Authorization、Host、X-Domain、X-Forwarded-* 与 body identity 不转发。Capability `200 {data}` 在 BFF
 边界映射为 canonical public `{data, meta}`；owner response `x-kokoro-request-id` 只用于关联，不进入 owner data，且按 Unicode
 code point 校验长度为 1..255，缺失、空值或过长均映射为 `502 capability_response_invalid`。BFF 参数错误与
@@ -121,11 +187,12 @@ Capability HTTP 是 Wave 0B 的临时 hard-link closure；Wave 3 以 Platform Co
 ## 幂等：当前事实与目标
 
 除无副作用 GitHub preview 外，POST/PATCH/DELETE 要求 `Idempotency-Key`。当前 scope 为 namespace、actor、method、canonical
-path 和 key；body 规范化后形成 fingerprint。Live 且 business store 配置时 receipt 持久化到 PostgreSQL；否则部分
+path 和 key；fingerprint 覆盖 method、canonical path、排序 query、canonical body、content-type 与 `if-match`。Live 且
+business store 配置时 receipt 持久化到 PostgreSQL；否则部分
 非 BFF-owned Live mutation 和 Mock 使用进程内 Map。
 
-目标摘要还需覆盖 query、selected headers 和 canonical body，并让 receipt、BFF business fact 与 outbox 在同一事务
-提交。该目标尚未实现。
+目标仍需按 operation 确认更多 selected headers，并让普通 receipt、BFF business fact 与 outbox 在同一事务提交；该目标
+尚未实现。Task 2 的 owner predicate 必须先于通用 receipt replay/claim，防止同 tenant 其他用户重放已存在结果。
 
 ## AG-UI
 

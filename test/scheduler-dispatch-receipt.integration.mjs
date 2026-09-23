@@ -52,6 +52,7 @@ function receiverConfig(agentBase) {
     mode: "live",
     domain: "dev.kokoro.localhost",
     tenantId: "tenant_test",
+    iamBaseUrl: null,
     sharedSecret: "web-secret",
     upstreamSecret: "bff-secret",
     upstreamTimeoutMs: 70_000,

@@ -17,33 +17,106 @@ BFF 是公开 Product API 的唯一 owner；其他仓库只发布自己的 inter
 **AG-UI 是 Web ↔ BFF 唯一 Agent 网络协议。** Vercel AI SDK 的 `UIMessage` 属于 Web 内部 view adapter，
 不得成为第二套网络 envelope 或 resumable stream。
 
-## 2. 当前物理实现
+## 2. 当前物理实现（基线 `c5e9b3c`）
 
-| 区域                           | 当前职责                                                                                                  | 已知偏差                                                |
-| ------------------------------ | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| `src/main.ts`                  | server composition、通用 auth/body/idempotency 管线、route dispatch                                       | 仍直接装配生产 mock                                     |
-| `src/http/routes/`             | resource route handlers                                                                                   | 尚未迁入标准 `interfaces/http/`                         |
-| `src/application/`             | project/scheduled use case、AG-UI projection/fence、ports、input mapper                                   | 尚无明确 Domain aggregate 层                            |
-| `src/infrastructure/postgres/` | BFF-owned repository、durable AG-UI ledger、ScheduledTask/Agent dispatch outbox、Redis cache/notification | mutation receipt 与业务写仍未共享事务                   |
-| `src/infrastructure/clients/`  | Agent、Scheduler、Mori 窄 adapter；其他 owner 仍集中于 owner route                                        | client 目录尚未对每个 owner 全部分拆                    |
-| `src/interfaces/http/agui/`    | 已持久化 AG-UI payload → schema-valid SSE frame                                                           | 完整 OpenAPI runtime validator 尚未形成                 |
-| `src/contracts/`               | 当前手写 Web-facing types/envelope                                                                        | 尚未由 canonical OpenAPI 生成且未与 Domain 类型彻底分离 |
+| 区域                           | 当前职责                                                                                                  | W1B 边界                                                                                                   |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `src/main.ts`                  | 进程入口                                                                                                  | 不承载身份或业务规则                                                                                       |
+| `src/bootstrap/`               | server composition、请求管线、route dispatch、worker 生命周期                                            | Task 1 只装配 IAM admission 与显式服务例外；Task 2 在 receipt/owner I/O 之前接线资源授权                   |
+| `src/config/runtime.ts`        | 运行配置与 URL/预算校验                                                                                   | Task 1 新增严格 `KOKORO_IAM_BASE_URL` origin；不增加环境变量测试旁路                                      |
+| `src/http/routes/`             | Product route、System/owner projection、Scheduler callback                                                | Task 1 抽出 runtime-manifest 服务路由；Task 2 新增 `chat-authorization.ts`，不把业务授权塞进 `src/auth/`   |
+| `src/application/`             | Project、ScheduledTask、Chat 与 AG-UI use case，必要的 repository/delivery port                           | 延续现有业务能力聚合，不为 W1B 创建 Command bus、通用 ACL 或空层                                          |
+| `src/domain/`                  | 当前确有独立不变量的 Chat、ScheduledTask、Project value 与 request context                                | 是否拆分类型按语义/生命周期决定，不机械复制 DTO/Domain/Row/Wire                                           |
+| `src/infrastructure/postgres/` | BFF-owned repository、durable ledger/outbox/receipt；Redis cache/notification 协调                        | Task 2 修改现有 Project/ScheduledTask/Chat 数据访问；不创建数据库品牌目录的第二套实现                      |
+| `src/infrastructure/clients/`  | Agent、Scheduler、Capability、Mori 等窄 owner adapter                                                     | Task 1 IAM admission 不放在这里，因为它共同负责 HTTP 入口身份建立，而不是普通业务 owner projection        |
+| `src/generated/`               | Capability/Scheduler 固定契约生成物                                                                       | Task 1 增加 `iam-http`；生成物只由固定脚本产生，业务代码不得直接依赖其 wire 类型                           |
+| `src/contracts/`               | 当前手写 BFF public transport types/envelope                                                              | W1B 不借身份切片批量重构；字段事实仍以 public OpenAPI 为准                                                 |
 
-目标依赖方向是 `interfaces -> application -> domain`，concrete infrastructure 实现 Domain/Application port，
-bootstrap 只负责装配。缺少目录时视为待重构，不创建空目录冒充完成。
+当前目录是已运行职责的事实，不是强制四层模板。新文件按单一变化原因放置；既有 `application/ports`、
+`infrastructure/postgres` 或 `interfaces/http/agui` 不构成所有新业务必须复制的目录结构。
 
-## 3. 请求与身份管线
+## 3. W1B 请求、身份与授权设计
 
-1. Web server 解封 session，并向 BFF 发送 `x-kokoro-service: web-bff`、内部 secret、namespace、principal。
-2. BFF 校验服务 envelope，生成或沿用 request id；常规业务身份只从受信 header 建立。
-3. System runtime manifest 使用服务器配置的 `KOKORO_TENANT_ID` 与 `KOKORO_DOMAIN`；System 自己校验 Site/Host
-   binding。
-4. BFF 为 owner adapter 构造 allowlisted query/body 和服务身份；浏览器的 Authorization、Host、X-Domain、
-   X-Forwarded-* 不作为 owner authority。
-5. 响应在边界映射为 snake_case `{data, meta}` 或 `{error, meta}`。
+### 3.1 `c5e9b3c` 起始基线
 
-当前 BFF 不执行完整 IAM admission；它信任持有共享 secret 的 Web adapter 提供 namespace/principal。将 IAM
-admission 固定在 BFF 还是 Web 的职责需要后续 contract-first 决策与实现，当前文档不声称已经接入 IAM。
+普通 `/v1/*` 当前由 `src/http/request.ts::authorize` 校验 `web-bff` 与 shared secret，再直接把
+`x-kokoro-namespace`、`x-kokoro-principal-id` 组装为 `RequestContext`。这是待删除的自报身份入口；当前没有在线 IAM
+session admission。`src/bootstrap/server.ts` 还会为 runtime manifest 制造 `userId: "runtime-manifest"`，这不是用户身份事实。
+公开 Share 使用 service secret + share capability，Scheduler callback 使用独立 Scheduler bearer；它们当前和普通用户管线分支。
+本段只描述起始 commit；3.2～3.4 是 Task 1 本变更实现，3.5 仍是后续 Task 2 目标。
+
+### 3.2 Task 1 本变更：单一用户 admission 链
+
+```text
+request id
+  -> verify web-bff service + shared secret
+  -> parse exactly one Bearer credential
+  -> POST IAM /internal/v1/session-authorizations/verify (no body/query, no redirect/retry/cache)
+  -> strict generated response validation
+  -> RequestContext { namespace: tenant_id, userId: user_id }
+  -> resource authorization
+  -> body parsing / receipt / SQL / outbox / SSE / owner I/O
+```
+
+IAM 是 Tenant、Membership、Session 与身份唯一 owner；BFF 拥有入口准入和自己的业务资源授权。Task 1 固定消费 IAM commit
+`259a66e6a569889c030734f380e99685d8b9e21c`、OpenAPI `0.2.0`、SHA-256
+`f7a3ea2e5ae7ade82ae1a6756a2f560d3129ca1b2977c6b0905633a284bd3aab`。Node `22.22.2`、pnpm `11.25.0`、
+`@hey-api/openapi-ts` `0.99.0` 与当前 lockfile 固定；生成入口只保留 `verifySessionAuthorization` 及其引用 schema，完整
+vendor artifact 仍是可重复派生的来源。`src/generated/iam-http/` 只由脚本写入，manifest 记录精确文件清单和 digest；两次生成
+必须 byte-identical。Node 22 / exact-optional compatibility 修正只允许存在于生成脚本，以固定模式和固定命中数 fail closed，
+不得手改生成物或复制手写 IAM wire DTO。
+
+`src/auth/` 采用四个职责清晰的文件：`session-admission.types.ts` 定义不含 generated 类型的窄 port；
+`session-admission.transport.ts` 负责单次有界 HTTP、取消和 body cap；`session-admission.client.ts` 终止 generated schema 并归一失败；
+`user-admission.ts` 依次执行 service、Bearer 和 IAM 验证后建立 context。对比把这些文件放进历史
+`infrastructure/clients/iam`，这里采用 `src/auth/`，因为它们共同变化于入口身份建立，并且不能被业务 owner adapter 当作通用 IAM SDK。
+production composition 默认构造真实 client；`sessionAdmission?: SessionAdmission` 仅是显式测试 seam。Bearer 只发送给 IAM，
+不写入 context、数据库、日志、receipt 或其他 owner 请求。
+
+`KOKORO_IAM_BASE_URL` 解析为 `iamBaseUrl: string | null`，只接受无 userinfo、query、hash 的 HTTP(S) origin。
+缺失配置时普通用户请求返回 `503 iam_admission_unavailable`，production readiness 不宣称就绪；不得以 header identity、环境变量
+测试开关或缓存决定降级。一次请求或一次 SSE 建连/重连都重新 admission；已经建立的 SSE 仍由现有 connection duration 有界，
+Task 1 不宣称跨连接即时撤销。
+
+### 3.3 IAM 失败、取消与响应约束
+
+- IAM 只收到唯一 `Authorization: Bearer ...`、`Accept: application/json` 与受控 `x-request-id`；无 body/query、redirect、自动重试。
+- 整个 headers + body 读取预算取现有 upstream 配置与硬上限 5 秒/1 MiB 的较小值；超限、timeout、transport、非法 status/
+  envelope/header 都归一为 `503 iam_admission_unavailable`。
+- 只有 `allowed: true` 且 `tenant_id`、`user_id`、`session_id`、`client_id` 全部非空的 strict 200 才建立 context。
+  IAM 401 → `401 session_invalid`；403/404/409 → `403 session_forbidden`；429 → `429 session_rate_limited`，仅转发
+  1..86400 秒的合法 `Retry-After`。
+- IAM 响应必须有合法 `x-request-id` 和 `Cache-Control: no-store`；BFF 自己的 admission 响应也保持 canonical error envelope、
+  `x-request-id` 和 `no-store`，不复制 IAM message/body。
+- `request.aborted` 或 response 在完成前关闭时取消 IAM I/O；正常 request body end 不触发误取消。所有 listener、timer 与 reader
+  都在完成或失败后清理；取消后不得继续 body 解析、receipt、SQL、outbox、SSE 或 owner I/O。
+
+### 3.4 三个互不授权的服务例外
+
+1. `GET /v1/shared/{shareId}`：service secret + active/unexpired Share capability，只读 Conversation 投影；不要求或使用用户
+   Bearer，多带无关 Authorization header 不改变有效请求，也不授予 Run control、HITL、事件流或未分享文件。
+2. `GET /v1/system/runtime-manifest`：service secret + server-side `KOKORO_TENANT_ID`/`KOKORO_DOMAIN`；显式 handler 只向 System
+   发送 tenant/service 身份，删除 fake principal，不成为通用 service proxy。
+3. `POST /internal/bff/scheduled-tasks/dispatch`：独立 Scheduler token、trusted event tenant 与 durable receipt/CAS；不接受 Web
+   service secret 或用户 Bearer，也不由 IAM 故障改变其语义。
+
+`GET /healthz` 与 `GET /readyz` 继续是 probe。上述边界都不是 IAM 不可用时的用户 fallback，彼此凭据不可互换。
+
+### 3.5 Task 2 目标：默认个人私有
+
+用户业务 scope 统一以具名 `{ tenantId, subjectId }` 传递。Project、ScheduledTask、Conversation/Message、AG-UI events 和
+Run control 对同 tenant 其他用户及跨 tenant 用户均 fail closed；资源存在性敏感的 detail/mutation/control/events 返回与缺失一致的
+404。IAM admission 只证明身份，不替代 BFF owner predicate，也不根据 `x-kokoro-permission` 合成 63 项业务权限。
+
+Project 新增不可由 body 指定的 `owner_id`，slug 域变为 `tenant + owner + slug`；Project revisions/skills/tasks 通过父 Project
+predicate/lock 授权，不复制 owner 列。ScheduledTask 已有 `owner_id`，但所有用户 list/detail/update/delete/retry 必须增加 owner
+predicate；create 在 task/outbox 同一事务中锁定并验证引用 Project 属于同一 scope。内部 Scheduler `findRecord(tenant, task)`
+保留为具名服务语义，只供 callback 恢复已存 owner，不能被用户 route 复用。
+
+Chat 当前 Conversation repository 已有 `tenant + owner` predicate，但 Task 2 还必须验证非空 `project_ref` 指向同一 scope 的
+Project；body/query 同时给出不同 `project_ref` 返回 400。query `scope` 只允许省略、空或 `direct`，其他值返回 400，绝不作为
+tenant/授权来源。cancel/resume/steer 在通用 mutation receipt replay 与 Agent I/O 之前验证同 scope Conversation；Share 不进入该路径。
+公开 Share 与 Scheduler callback 按 3.4 的独立边界保持可用，不新建团队共享、Project ACL 或通用授权表。
 
 ## 4. 幂等状态机
 
@@ -57,13 +130,16 @@ different digest -> 409 idempotency_conflict
 ```
 
 Live 且 business store 已配置时 receipt 位于 `bff_idempotency_receipt`；否则当前实现使用进程内 Map。pending claim
-60 秒后可被回收。当前 digest 只规范化 body，scope 包含 namespace/actor/method/path/key；query、selected headers、
-业务写事务与 fencing 尚未覆盖。
+60 秒后可被回收。`c5e9b3c` 的 mutation fingerprint 已覆盖 method、canonical path、排序 query、canonical body、
+content-type 与 `if-match`；scope 包含 namespace/actor/method/path/key。receipt 与普通业务写事务、通用 fencing 仍未统一。
+Task 2 的资源 owner gate 必须位于 replay/claim 之前，避免同 tenant 其他用户命中旧结果或制造副作用。
 
 ## 5. Project 与 ScheduledTask
 
-Project 与 ScheduledTask 是 BFF-owned facts。当前 repository 对每个查询显式携带 tenant id，关系完整性由
-Application/Repository 管理，不使用数据库外键。
+Project 与 ScheduledTask 是 BFF-owned facts。`c5e9b3c` 的 repository 查询都携带 tenant id，但这只实现租户隔离：
+Project 没有 owner 列，list/detail/slug/child mutation 和 Redis list cache 都是 tenant scope；ScheduledTask 虽已有 `owner_id`，
+用户 list/detail/update/delete 仍只按 tenant 查询。Task 2 按 3.5 把用户路径收敛为 tenant + owner，并保留 Scheduler callback
+所需的显式内部查询。关系完整性由同一事务内的 Application/Repository predicate 与锁维护，不使用数据库外键。
 
 ScheduledTask 当前流程：
 
@@ -87,7 +163,9 @@ idempotency_key)` 只产生一个业务 command；同一 task 的较新 command 
 Dispatcher 的 HTTP 投递是 at-least-once：lease 过期可被其他 worker 重新 claim，settlement 必须匹配 owner、token 和
 fence；2xx 终结为 `succeeded`，明确的瞬时错误进入指数退避 `retryable`，超过 attempt budget 或永久 4xx 进入 `failed`。
 Scheduler 注册的 409/404 只按稳定 job identity 做 register/replace reconciliation。mutation receipt 目前仍由外层
-idempotency repository 单独 claim/commit，尚未与 task/outbox 合并为一个 receipt 事务。
+idempotency repository 单独 claim/commit，尚未与 task/outbox 合并为一个 receipt 事务。Task 2 将 create 的稳定
+`scheduledTaskId` 材料从 `tenant + path + key` 收紧为 `tenant + trusted subject + path + key`；create replay、用户查询和
+outbox lookup 不得跨 owner 命中。该修改不改变 Scheduler callback 的 opaque occurrence/key receipt scope。
 
 ## 6. Chat 与 AG-UI
 
@@ -166,11 +244,11 @@ Storage 继续唯一拥有 Asset、Artifact、Blob、Upload 与对象生命周�
 入口。唯一未来协议是 Storage Proto v2 over ConnectRPC，当前切片不保留旧的 `/internal/bff/library` HTTP transport，
 也不建立临时 adapter、fallback 或双读。
 
-在 W2 前，service-envelope admission 通过后的 `GET /v1/library` 固定返回
-`503 storage_integration_unavailable`；未认证请求仍由既有 admission 返回 `403 service_auth_failed`。该响应完全在
+在 W2 前，IAM admission 通过后的 `GET /v1/library` 固定返回 `503 storage_integration_unavailable`；准入前按 Task 1
+规则返回 401/403/429/503，其中 IAM 不可用为 `503 iam_admission_unavailable`。该响应完全在
 BFF 本地构造，不打开任何 Storage socket 或连接，不创建 PostgreSQL 事务、Redis cache、receipt 或 outbox。未来成功态
 只有在 Storage default-deny caller × operation × scope、Capability scope mapping 与拒绝规则、Agent trusted
-Run/ExecutionIdentity scope、BFF W1 IAM admission，以及 Library per-kind 或 BFF composite pagination 五项同时闭环后，
+Run/ExecutionIdentity scope，以及 Library per-kind 或 BFF composite pagination 同时闭环后，
 才按真实 owner contract 重新设计并发布。
 
 ## Capability consumer cutover

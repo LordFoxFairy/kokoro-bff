@@ -761,11 +761,30 @@ test("BFF freezes the Storage v2 handoff without claiming a live Library integra
     "caller × operation × scope",
     "Capability scope mapping",
     "Run/ExecutionIdentity",
-    "W1 IAM admission",
     "per-kind 或 BFF composite pagination",
   ]) {
     assert.match(current, new RegExp(prerequisite, "u"), prerequisite)
   }
+})
+
+test("BFF user identity crosses one pinned IAM admission boundary and service-only routes stay separate", async () => {
+  const [server, request, runtime, manifest, config, generatedSdk] = await Promise.all([
+    readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
+    readFile(path.join(root, "src/http/request.ts"), "utf8"),
+    readFile(path.join(root, "src/bootstrap/runtime.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/runtime-manifest.ts"), "utf8"),
+    readFile(path.join(root, "openapi-ts.iam.config.ts"), "utf8"),
+    readFile(path.join(root, "src/generated/iam-http/sdk.gen.ts"), "utf8"),
+  ])
+  assert.match(server, /authorizeUserRequest/u)
+  assert.doesNotMatch(request, /export function authorize\(/u)
+  assert.match(runtime, /new SessionAdmissionClient/u)
+  assert.match(runtime, /sessionAdmission\?: SessionAdmission/u)
+  assert.match(manifest, /authorizeServerOnly/u)
+  assert.doesNotMatch(manifest, /authorizeUserRequest|userId:\s*["']runtime-manifest/u)
+  assert.match(config, /POST \/internal\/v1\/session-authorizations\/verify/u)
+  assert.match(generatedSdk, /export const verifySessionAuthorization/u)
+  assert.doesNotMatch(generatedSdk, /getMetrics|healthz|readyz/u)
 })
 
 test("Library degraded handling has no retired Storage HTTP or mock success path", async () => {

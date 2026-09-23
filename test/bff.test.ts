@@ -28,6 +28,7 @@ function config(overrides: Partial<BffConfig> = {}): BffConfig {
     mode: "live",
     domain: "dev.kokoro.localhost",
     tenantId: "tenant_test",
+    iamBaseUrl: null,
     sharedSecret: "test-secret",
     upstreamSecret: "bff-upstream-secret",
     upstreamTimeoutMs: 5000,
@@ -63,8 +64,7 @@ function authHeaders(): Record<string, string> {
   return {
     "x-kokoro-service": "web-bff",
     "x-kokoro-internal-secret": "test-secret",
-    "x-kokoro-namespace": "ns_test",
-    "x-kokoro-principal-id": "user_test",
+    authorization: "Bearer test-session",
   }
 }
 
@@ -597,7 +597,7 @@ describe("kokoro-bff v1 mock contract", () => {
       upstreamTimeoutMs: 10000,
       upstreams: { ...config().upstreams, capability: upstreamBase },
     })))
-    const response = await fetch(`${base}/v1/skills`, { headers: { ...authHeaders(), authorization: "Bearer user-jwt", forwarded: "for=198.51.100.7", "x-forwarded-for": "198.51.100.8", "x-domain": "evil.example", "x-kokoro-request-id": "live-request" } })
+    const response = await fetch(`${base}/v1/skills`, { headers: { ...authHeaders(), forwarded: "for=198.51.100.7", "x-forwarded-for": "198.51.100.8", "x-domain": "evil.example", "x-kokoro-request-id": "live-request" } })
     assert.equal(response.status, 200)
     assert.deepEqual(received, {
       forwarded: undefined,
@@ -715,12 +715,15 @@ describe("kokoro-bff v1 mock contract", () => {
   })
 
   it("projects the canonical runtime manifest through System using configured tenant context", async () => {
-    let received: { url: string | undefined; service: string | undefined; secret: string | undefined; forwarded: string | undefined; tenant: string | undefined } = {
+    let received: { url: string | undefined; service: string | undefined; secret: string | undefined; forwarded: string | undefined; tenant: string | undefined; subject: string | undefined; actor: string | undefined; authorization: string | undefined } = {
       url: undefined,
       service: undefined,
       secret: undefined,
       forwarded: undefined,
       tenant: undefined,
+      subject: undefined,
+      actor: undefined,
+      authorization: undefined,
     }
     const upstream = createServer((request, response) => {
       received = {
@@ -729,6 +732,9 @@ describe("kokoro-bff v1 mock contract", () => {
         secret: request.headers["x-kokoro-internal-secret"]?.toString(),
         forwarded: request.headers.forwarded?.toString(),
         tenant: request.headers["x-kokoro-tenant-id"]?.toString(),
+        subject: request.headers["x-kokoro-subject"]?.toString(),
+        actor: request.headers["x-kokoro-actor-id"]?.toString(),
+        authorization: request.headers.authorization?.toString(),
       }
       response.setHeader("content-type", "application/json")
       response.end(JSON.stringify({
@@ -753,7 +759,7 @@ describe("kokoro-bff v1 mock contract", () => {
     const base = await listen(liveServer(runtimeConfig))
 
     const response = await fetch(`${base}/v1/system/runtime-manifest?product_id=kokoro&locale=en-US&surface_id=user-web`, {
-      headers: { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "test-secret", "x-kokoro-request-id": "manifest-live" },
+      headers: { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "test-secret", "x-kokoro-request-id": "manifest-live", authorization: "Bearer irrelevant-user-session" },
     })
     assert.equal(response.status, 200)
     assert.deepEqual(received, {
@@ -762,6 +768,9 @@ describe("kokoro-bff v1 mock contract", () => {
       secret: "bff-upstream-secret",
       forwarded: "host=dev.kokoro.localhost",
       tenant: "tenant_manifest",
+      subject: undefined,
+      actor: undefined,
+      authorization: "Bearer bff-upstream-secret",
     })
     assert.deepEqual(await response.json(), {
       data: {
@@ -960,30 +969,27 @@ describe("kokoro-bff v1 mock contract", () => {
     const secretlessBase = await listen(liveServer(config({ sharedSecret: null })))
     const missingServiceOnSecretless = await fetch(`${secretlessBase}/v1/projects`, {
       headers: {
-        "x-kokoro-namespace": "ns_test",
-        "x-kokoro-principal-id": "user_test",
+        authorization: "Bearer test-session",
       },
     })
-    assert.equal(missingServiceOnSecretless.status, 401)
+    assert.equal(missingServiceOnSecretless.status, 403)
 
     const wrongSecret = await fetch(`${unauthBase}/v1/projects`, {
       headers: {
         "x-kokoro-service": "web-bff",
         "x-kokoro-internal-secret": "wrong",
-        "x-kokoro-namespace": "ns_test",
-        "x-kokoro-principal-id": "user_test",
+        authorization: "Bearer test-session",
       },
     })
     assert.equal(wrongSecret.status, 403)
 
-    const missingNamespace = await fetch(`${unauthBase}/v1/projects`, {
+    const missingBearer = await fetch(`${unauthBase}/v1/projects`, {
       headers: {
         "x-kokoro-service": "web-bff",
         "x-kokoro-internal-secret": "test-secret",
-        "x-kokoro-principal-id": "user_test",
       },
     })
-    assert.equal(missingNamespace.status, 403)
+    assert.equal(missingBearer.status, 401)
 
     const missingUpstreamBase = await listen(liveServer(config({
       mode: "live",

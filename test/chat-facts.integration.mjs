@@ -8,17 +8,20 @@ import { createClient } from "redis"
 
 import { createBffServer } from "../dist/main.js"
 import { PostgresBffRepositories } from "../dist/infrastructure/postgres/repositories.js"
+import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 
 const postgresUrl = process.env.KOKORO_TEST_POSTGRES_URL
 const redisUrl = process.env.KOKORO_TEST_REDIS_URL
 const integrationTest = postgresUrl && redisUrl ? test : test.skip
+const sessionAdmission = new SessionAdmissionDouble()
 
 function auth(namespace, principal = "chat_integration_user") {
+  const token = `session-${namespace}-${principal}`
+  sessionAdmission.allow(token, { namespace, userId: principal })
   return {
     "x-kokoro-service": "web-bff",
     "x-kokoro-internal-secret": "web-secret",
-    "x-kokoro-namespace": namespace,
-    "x-kokoro-principal-id": principal,
+    authorization: `Bearer ${token}`,
   }
 }
 
@@ -53,6 +56,7 @@ function config() {
     mode: "live",
     domain: "dev.kokoro.localhost",
     tenantId: "tenant_test",
+    iamBaseUrl: null,
     sharedSecret: "web-secret",
     upstreamSecret: "bff-secret",
     upstreamTimeoutMs: 5000,
@@ -120,7 +124,7 @@ integrationTest("serves tenant-scoped Chat facts from BFF PostgreSQL and revokes
       [`message_${Date.now()}_second`, tenant, conversationId, "run_opaque", "Second high sequence", "9223372036854775807"],
     )
     await redis.connect()
-    bff = createBffServer(config())
+    bff = createBffServer(config(), { sessionAdmission })
     const base = await listen(bff)
 
     const listed = await fetch(`${base}/v1/sessions`, { headers: auth(tenant, "chat_user") })
@@ -296,7 +300,7 @@ integrationTest("accepts a Chat turn after the message and Agent dispatch are du
     const runtimeConfig = config()
     runtimeConfig.agentEnabled = true
     runtimeConfig.upstreams.agents = agentBase
-    bff = createBffServer(runtimeConfig)
+    bff = createBffServer(runtimeConfig, { sessionAdmission })
     const base = await listen(bff)
 
     const invalidBodies = [
@@ -402,7 +406,7 @@ integrationTest("accepts a Chat turn after the message and Agent dispatch are du
     await close(bff)
     bff = undefined
     agentAvailable = true
-    bff = createBffServer(runtimeConfig)
+    bff = createBffServer(runtimeConfig, { sessionAdmission })
     await listen(bff)
     const succeeded = await waitFor(async () => {
       const result = await pool.query(
@@ -710,7 +714,7 @@ integrationTest("projects fenced dispatch failures as durable RUN_ERROR terminal
     const runtimeConfig = config()
     runtimeConfig.agentEnabled = true
     runtimeConfig.upstreams.agents = agentBase
-    bff = createBffServer(runtimeConfig)
+    bff = createBffServer(runtimeConfig, { sessionAdmission })
     const base = await listen(bff)
     const replay = await fetch(`${base}/v1/sessions/${conversationId}/events`, { headers: auth(tenant, "chat_user") })
     assert.equal(replay.status, 200)

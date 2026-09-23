@@ -5,6 +5,7 @@ import { test } from "node:test"
 
 import { compareOperationBaseline, inspectOpenApiGovernance } from "../scripts/check-contract.mjs"
 import * as capabilityGenerator from "../scripts/generate-capability-http-client.mjs"
+import * as iamGenerator from "../scripts/generate-iam-http-client.mjs"
 import * as schedulerGenerator from "../scripts/generate-scheduler-contracts.mjs"
 
 const { replaceExactInSource } = capabilityGenerator
@@ -68,6 +69,7 @@ function inspectLibraryUnavailableContract(openapi) {
   if (!operation.includes("'503':")) errors.push("GET /v1/library must declare HTTP 503")
   if (!operation.includes("#/components/schemas/ErrorEnvelope")) errors.push("GET /v1/library 503 must use ErrorEnvelope")
   if (!operation.includes("const: storage_integration_unavailable")) errors.push("GET /v1/library 503 must freeze storage_integration_unavailable")
+  if (!operation.includes("const: iam_admission_unavailable")) errors.push("GET /v1/library 503 must also admit the pre-route IAM failure")
   if (operation.includes("'200':")) errors.push("GET /v1/library must not publish an unreachable 200 response")
   if (/^    Library(?:Item|Response):/mu.test(openapi)) errors.push("unreachable Library success schemas must be absent")
   return errors
@@ -197,6 +199,53 @@ test("the Capability generated allowlist rejects missing files, every extra exte
   assert.throws(() => assertGeneratedAllowlist(files, ["client", "core", "manual"], "fixture"), /directory allowlist drifted/u)
 })
 
+test("the IAM admission consumer pins the complete 0.2.0 owner artifact and generates only verifySessionAuthorization", async () => {
+  const commit = "259a66e6a569889c030734f380e99685d8b9e21c"
+  const digest = "f7a3ea2e5ae7ade82ae1a6756a2f560d3129ca1b2977c6b0905633a284bd3aab"
+  const [manifestSource, vendor, config, lockfile, sdk, types] = await Promise.all([
+    readFile(new URL("../contract/dependencies/iam-http.json", import.meta.url), "utf8"),
+    readFile(new URL(`../contract/vendor/kokoro-iam/${commit}/iam.internal.v1.json`, import.meta.url)),
+    readFile(new URL("../openapi-ts.iam.config.ts", import.meta.url), "utf8"),
+    readFile(new URL("../pnpm-lock.yaml", import.meta.url)),
+    readFile(new URL("../src/generated/iam-http/sdk.gen.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/generated/iam-http/types.gen.ts", import.meta.url), "utf8"),
+  ])
+  const sha256 = (value) => createHash("sha256").update(value).digest("hex")
+  const manifest = JSON.parse(manifestSource)
+  const owner = JSON.parse(vendor.toString("utf8"))
+  assert.equal(sha256(vendor), digest)
+  assert.equal(owner.info.version, "0.2.0")
+  assert.ok(Object.keys(owner.paths).length > 1)
+  assert.deepEqual(manifest.owner, {
+    repository_path: "apps/kokoro-iam",
+    repository_commit: commit,
+    contract_version: "0.2.0",
+    contract_path: "contract/openapi/iam.internal.v1.json",
+    contract_sha256: digest,
+  })
+  assert.deepEqual(manifest.generator, {
+    package: "@hey-api/openapi-ts",
+    version: "0.99.0",
+    config_path: "openapi-ts.iam.config.ts",
+    config_sha256: sha256(config),
+  })
+  assert.deepEqual(manifest.runtime, { node: "22.22.2", pnpm: "11.25.0", zod: "4.5.4" })
+  assert.equal(manifest.lockfile_sha256, sha256(lockfile))
+  assert.equal(manifest.generated.length, 16)
+  assert.match(sdk, /export const verifySessionAuthorization/u)
+  assert.doesNotMatch(`${sdk}\n${types}`, /getMetrics|healthz|readyz/u)
+  assert.match(config, /POST \/internal\/v1\/session-authorizations\/verify/u)
+})
+
+test("the IAM generator normalizer and generated-tree allowlist fail closed on drift", async () => {
+  assert.equal(iamGenerator.replaceExactInSource("before TOKEN after", "TOKEN", "FIXED", 1, "fixture"), "before FIXED after")
+  assert.throws(() => iamGenerator.replaceExactInSource("TOKEN", "TOKEN", "FIXED", 2, "fixture"), /expected 2 generator matches, found 1/u)
+  const manifest = JSON.parse(await readFile(new URL("../contract/dependencies/iam-http.json", import.meta.url), "utf8"))
+  const files = manifest.generated.map(({ path }) => path)
+  assert.doesNotThrow(() => iamGenerator.assertGeneratedAllowlist(files, ["client", "core"], "fixture"))
+  assert.throws(() => iamGenerator.assertGeneratedAllowlist([...files, "manual.ts"], ["client", "core"], "fixture"), /file allowlist drifted/u)
+})
+
 test("the public Capability facade documents only canonical query parameters and stable gateway failures", async () => {
   const openapi = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
   for (const [start, end] of [
@@ -268,13 +317,16 @@ test("the repository exposes executable contract, schema, and strictness gates",
   assert.match(packageJson.scripts["format:check"], /^prettier --check/u)
   assert.match(packageJson.scripts["format:check"], /src\/generated\/capability-http/u)
   assert.match(packageJson.scripts["format:check"], /src\/generated\/scheduler/u)
+  assert.match(packageJson.scripts["format:check"], /src\/generated\/iam-http/u)
   assert.equal(packageJson.scripts["contract:generate:capability"], "node scripts/generate-capability-http-client.mjs --write")
   assert.equal(packageJson.scripts["contract:check:capability"], "node scripts/generate-capability-http-client.mjs --check")
+  assert.equal(packageJson.scripts["contract:generate:iam"], "node scripts/generate-iam-http-client.mjs --write")
+  assert.equal(packageJson.scripts["contract:check:iam"], "node scripts/generate-iam-http-client.mjs --check")
   assert.equal(packageJson.scripts["contract:generate:scheduler"], "node scripts/generate-scheduler-contracts.mjs --write")
   assert.equal(packageJson.scripts["contract:check:scheduler"], "node scripts/generate-scheduler-contracts.mjs --check")
   assert.equal(
     packageJson.scripts["contract:check"],
-    "pnpm contract:check:capability && pnpm contract:check:scheduler && pnpm contract:lint && pnpm contract:semantic && pnpm contract:test",
+    "pnpm contract:check:capability && pnpm contract:check:iam && pnpm contract:check:scheduler && pnpm contract:lint && pnpm contract:semantic && pnpm contract:test",
   )
   assert.equal(packageJson.devDependencies["@hey-api/openapi-ts"], "0.99.0")
   assert.equal(packageJson.devDependencies.prettier, "3.9.6")

@@ -4,7 +4,7 @@ import type { BffConfig } from "../../config/runtime.js"
 import type { Skill } from "../../contracts/index.js"
 import { failure, ok } from "../../contracts/index.js"
 import { proxyUpstream } from "../../upstream.js"
-import { billingPlansData, checkoutUrlData, modelCatalogData, systemManifestData } from "../../application/projections.js"
+import { billingPlansData, checkoutUrlData, modelCatalogData } from "../../application/projections.js"
 import { requestCapability } from "../../infrastructure/clients/capability/client.js"
 import type { CapabilityOperation } from "../../infrastructure/clients/capability/types.js"
 import { ownerIdentityHeaders } from "../../infrastructure/clients/owner/identity.js"
@@ -61,29 +61,6 @@ export async function liveOwnerBusiness(
 ): Promise<boolean> {
   const method = request.method || "GET"
 
-  if (businessPath.length === 2 && businessPath[0] === "system" && businessPath[1] === "runtime-manifest" && method === "GET") {
-    const query = queryOf(request)
-    const productId = query.get("product_id")?.trim() ?? ""
-    const locale = query.get("locale")?.trim() || "en-US"
-    const surfaceId = query.get("surface_id")?.trim() || "user-web"
-    if (productId === "" || locale === "" || surfaceId === "") {
-      await reply(response, 400, failure("invalid_runtime_manifest_request", "product_id, locale, and surface_id are required", context.requestId), context, idempotency, mutation)
-      return true
-    }
-    const ownerQuery = new URLSearchParams({ product_id: productId, locale, surface_id: surfaceId })
-    const result = await liveOwnerRequest(request, config, context, "system", `/v1/system/runtime-manifest?${ownerQuery.toString()}`, method, undefined, true)
-    if (result.status >= 400) {
-      await reply(response, result.status, result.body, context, idempotency, mutation)
-      return true
-    }
-    const projected = systemManifestData(result.body)
-    if (projected === null || projected.tenant_id !== context.identity.namespace || projected.product_id !== productId || projected.locale !== locale) {
-      await reply(response, 502, failure("upstream_response_invalid", "System runtime manifest did not match the v1 owner contract", context.requestId), context, idempotency, mutation)
-      return true
-    }
-    await reply(response, result.status, ok(projected, context.requestId), context, idempotency, mutation)
-    return true
-  }
   if (businessPath[0] === "system") {
     await reply(response, 503, failure("system_projection_not_configured", "This System operation is not exposed by the BFF owner adapter", context.requestId), context, idempotency, mutation)
     return true

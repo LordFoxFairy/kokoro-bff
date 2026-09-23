@@ -9,11 +9,13 @@ import { Pool } from "pg"
 import { createBffServer } from "../dist/main.js"
 import { PostgresBffRepositories } from "../dist/infrastructure/postgres/repositories.js"
 import { AgUiSessionRuntime } from "../dist/application/agui/session-runtime.js"
+import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 
 const postgresUrl = process.env.KOKORO_TEST_POSTGRES_URL
 const redisUrl = process.env.KOKORO_TEST_REDIS_URL
 const integrationTest = postgresUrl && redisUrl ? test : test.skip
 const servers = []
+const sessionAdmission = new SessionAdmissionDouble()
 
 const TABLES = [
   "bff_agui_cursor_tombstone",
@@ -50,11 +52,12 @@ async function close(server) {
 }
 
 function auth(tenantId) {
+  const token = `session-${tenantId}-user_integration`
+  sessionAdmission.allow(token, { namespace: tenantId, userId: "user_integration" })
   return {
     "x-kokoro-service": "web-bff",
     "x-kokoro-internal-secret": "web-secret",
-    "x-kokoro-namespace": tenantId,
-    "x-kokoro-principal-id": "user_integration",
+    authorization: `Bearer ${token}`,
   }
 }
 
@@ -73,6 +76,7 @@ function bffConfig({ agentEnabled, agentBase, agUi }) {
     mode: "live",
     domain: "dev.kokoro.localhost",
     tenantId: "tenant_test",
+    iamBaseUrl: null,
     sharedSecret: "web-secret",
     upstreamSecret: "bff-secret",
     upstreamTimeoutMs: 5000,
@@ -174,7 +178,7 @@ integrationTest("serves live and restarted replay only from the tenant-scoped Po
       response.end(JSON.stringify({ error: { code: "not_found", message: "not found" }, meta: { request_id: "agent" } }))
     })
     const agentBase = await listen(agent)
-    bff = createBffServer(bffConfig({ agentEnabled: true, agentBase }))
+    bff = createBffServer(bffConfig({ agentEnabled: true, agentBase }), { sessionAdmission })
     const base = await listen(bff)
 
     const streamed = await fetch(`${base}/v1/sessions/session_live/events`, { headers: auth("tenant_a") })
@@ -229,7 +233,7 @@ integrationTest("serves live and restarted replay only from the tenant-scoped Po
     await close(agent)
     agent = null
 
-    bff = createBffServer(bffConfig({ agentEnabled: false, agentBase: null }))
+    bff = createBffServer(bffConfig({ agentEnabled: false, agentBase: null }), { sessionAdmission })
     const restartedBase = await listen(bff)
     const replayed = await fetch(`${restartedBase}/v1/sessions/session_live/events`, {
       headers: { ...auth("tenant_a"), "last-event-id": originalFrames[1].id },
@@ -290,7 +294,7 @@ integrationTest("drains the complete Agent source snapshot before ending at a ru
       }))
     })
     const agentBase = await listen(agent)
-    bff = createBffServer(bffConfig({ agentEnabled: true, agentBase }))
+    bff = createBffServer(bffConfig({ agentEnabled: true, agentBase }), { sessionAdmission })
     const base = await listen(bff)
 
     const streamed = await fetch(`${base}/v1/sessions/session_boundary/events`, { headers: auth("tenant_a") })
@@ -337,7 +341,7 @@ integrationTest("fails loudly when Agent event pagination metadata disagrees wit
       }))
     })
     const agentBase = await listen(agent)
-    bff = createBffServer(bffConfig({ agentEnabled: true, agentBase }))
+    bff = createBffServer(bffConfig({ agentEnabled: true, agentBase }), { sessionAdmission })
     const base = await listen(bff)
 
     const streamed = await fetch(`${base}/v1/sessions/session_invalid_page/events`, { headers: auth("tenant_a") })
@@ -418,7 +422,7 @@ integrationTest("ends at the SSE frame budget and resumes strictly after the las
         gcBatchSize: 100,
         cursorTombstoneRetentionMs: 30 * 24 * 60 * 60 * 1000,
       },
-    }))
+    }), { sessionAdmission })
     const base = await listen(bff)
 
     const first = await fetch(`${base}/v1/sessions/session_budget/events`, { headers: auth("tenant_a") })
@@ -495,7 +499,7 @@ integrationTest("bounds same-session connections and coalesces their Agent and P
       ledgerWait: { baseDelayMs: 40, maxDelayMs: 160, jitterRatio: 0 },
       replayCacheTtlMs: 25,
     })
-    bff = createBffServer(bffConfig({ agentEnabled: true, agentBase, agUi }), { agUiRuntime: runtime })
+    bff = createBffServer(bffConfig({ agentEnabled: true, agentBase, agUi }), { agUiRuntime: runtime, sessionAdmission })
     const base = await listen(bff)
 
     const clients = await Promise.all(Array.from({ length: 4 }, () => (

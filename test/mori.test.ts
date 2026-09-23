@@ -34,6 +34,7 @@ function config(overrides: Partial<BffConfig> = {}): BffConfig {
     mode: "live",
     domain: "dev.kokoro.localhost",
     tenantId: "tenant_test",
+    iamBaseUrl: null,
     sharedSecret: "test-secret",
     upstreamSecret: "bff-upstream-secret",
     upstreamTimeoutMs: 5000,
@@ -62,8 +63,7 @@ function authHeaders(): Record<string, string> {
   return {
     "x-kokoro-service": "web-bff",
     "x-kokoro-internal-secret": "test-secret",
-    "x-kokoro-namespace": "ns_test",
-    "x-kokoro-principal-id": "user_test",
+    authorization: "Bearer test-session",
   }
 }
 

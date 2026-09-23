@@ -15,6 +15,8 @@ import { AgentCancellationDelivery } from "../infrastructure/clients/agent/cance
 import { AgentAgUiSourceReader } from "../infrastructure/clients/agent/projector-source.js"
 import { PostgresBffRepositories } from "../infrastructure/postgres/repositories.js"
 import type { RequestContext } from "../domain/request-context.js"
+import { SessionAdmissionClient } from "../auth/session-admission.client.js"
+import type { SessionAdmission } from "../auth/session-admission.types.js"
 
 export type BffRouteInput = {
   request: IncomingMessage
@@ -32,6 +34,7 @@ export type BffRouteHandler = (input: BffRouteInput) => Promise<boolean | void>
 
 export type BffServerComposition = {
   businessStore: BffBusinessStore | null
+  sessionAdmission: SessionAdmission
   idempotency: Map<string, IdempotencyEntry>
   agUiRuntime: AgUiSessionRuntime
   agUiProjector?: AgUiProjectorRunner
@@ -51,6 +54,7 @@ export type BffServerComposition = {
 export type BffCompositionOptions = {
   /** Supplying null is an explicit test composition; omitted means real persistence. */
   businessStore?: BffBusinessStore | null
+  sessionAdmission?: SessionAdmission
   idempotency?: Map<string, IdempotencyEntry>
   agUiRuntime?: AgUiSessionRuntime
   agUiProjector?: AgUiProjectorRunner
@@ -84,15 +88,24 @@ function createAgUiRuntime(config: BffConfig): AgUiSessionRuntime {
 
 /** Compose production infrastructure or an explicitly supplied test seam. */
 export function createBffComposition(config: BffConfig, options: BffCompositionOptions = {}): BffServerComposition {
+  const sessionAdmission = options.sessionAdmission ?? new SessionAdmissionClient({
+    baseUrl: config.iamBaseUrl,
+    timeoutMs: config.upstreamTimeoutMs,
+    maxResponseBytes: config.upstreamMaxResponseBytes,
+  })
   const explicitlySuppliedStore = Object.prototype.hasOwnProperty.call(options, "businessStore")
   const businessStore = explicitlySuppliedStore
     ? (options.businessStore ?? null)
     : config.postgresUrl !== null && config.redisUrl !== null
       ? new PostgresBffRepositories(config.postgresUrl, config.redisUrl)
       : (() => { throw new Error("KOKORO_BFF_POSTGRES_URL and KOKORO_BFF_REDIS_URL are required for the live BFF runtime") })()
-  const readiness = options.readiness ?? (businessStore === null
+  const storeReadiness = options.readiness ?? (businessStore === null
     ? async (): Promise<void> => { throw new Error("BFF business store is not configured") }
     : (): Promise<void> => businessStore.ready())
+  const readiness = async (): Promise<void> => {
+    if (options.sessionAdmission === undefined && config.iamBaseUrl === null) throw new Error("KOKORO_IAM_BASE_URL is not configured")
+    await storeReadiness()
+  }
   const ownsStore = !explicitlySuppliedStore
   const scheduledTaskDispatcher = options.scheduledTaskDispatcher ?? (
     businessStore?.scheduledTaskOutbox === undefined
@@ -180,6 +193,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
   }
   return {
     businessStore,
+    sessionAdmission,
     idempotency: options.idempotency ?? new Map<string, IdempotencyEntry>(),
     agUiRuntime: options.agUiRuntime ?? createAgUiRuntime(config),
     ...(agUiProjector === undefined ? {} : { agUiProjector }),

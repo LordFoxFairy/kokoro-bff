@@ -9,7 +9,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx src/main.ts",
-    "format:check": "prettier --check --no-semi --print-width 160 openapi-ts.capability.config.ts openapi-ts.scheduler.config.ts scripts/generate-capability-http-client.mjs scripts/generate-scheduler-contracts.mjs src/infrastructure/clients/capability src/infrastructure/clients/scheduler src/infrastructure/postgres/scheduler-dispatch-receipt-repository.ts src/application/ports/scheduler-dispatch-receipt-repository.ts src/generated/capability-http src/generated/scheduler test/capability-client.test.ts test/scheduler-client.test.ts test/scheduler-dispatch-identity.test.ts test/scheduler-dispatch-receipt.integration.mjs",
+    "format:check": "prettier --check --no-semi --print-width 160 openapi-ts.capability.config.ts openapi-ts.iam.config.ts openapi-ts.scheduler.config.ts scripts/generate-capability-http-client.mjs scripts/generate-iam-http-client.mjs scripts/generate-scheduler-contracts.mjs src/auth src/http/routes/runtime-manifest.ts src/infrastructure/clients/capability src/infrastructure/clients/scheduler src/infrastructure/postgres/scheduler-dispatch-receipt-repository.ts src/application/ports/scheduler-dispatch-receipt-repository.ts src/generated/capability-http src/generated/iam-http src/generated/scheduler test/capability-client.test.ts test/iam-admission-client.test.ts test/user-admission.test.ts test/scheduler-client.test.ts test/scheduler-dispatch-identity.test.ts test/scheduler-dispatch-receipt.integration.mjs",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/main.js",
     "db:apply-schema": "node scripts/apply-schema.mjs",
@@ -23,12 +23,14 @@
     "contract:check:capability": "node scripts/generate-capability-http-client.mjs --check",
     "contract:generate:scheduler": "node scripts/generate-scheduler-contracts.mjs --write",
     "contract:check:scheduler": "node scripts/generate-scheduler-contracts.mjs --check",
-    "contract:check": "pnpm contract:check:capability && pnpm contract:check:scheduler && pnpm contract:lint && pnpm contract:semantic && pnpm contract:test",
+    "contract:check": "pnpm contract:check:capability && pnpm contract:check:iam && pnpm contract:check:scheduler && pnpm contract:lint && pnpm contract:semantic && pnpm contract:test",
     "contract:update-baseline": "node scripts/check-contract.mjs --write-baseline",
     "test:architecture": "pnpm build && node --test test/architecture.test.ts",
-    "test": "pnpm build && node --test test/architecture.test.ts test/contract-governance.test.mjs test/contract/openapi-contract.test.mjs test/schema-governance.test.mjs test/chat-service.test.ts test/chat-input.test.ts test/chat-cursor.test.ts test/idempotency.test.ts test/agent-dispatch-outbox.test.ts test/agent-cancellation-outbox.test.ts test/agent-control-adapter.test.ts test/agui.test.ts test/agui-projector.test.mjs test/agui-runtime.test.mjs test/agui-source-page.test.mjs test/agui-replay.test.mjs test/agui-redis-notification.test.mjs test/agui-sse-writer.test.mjs test/bff.test.ts test/capability-client.test.ts test/config.test.ts test/lifecycle.test.ts test/mori.test.ts test/music.test.ts test/scheduler-client.test.ts test/scheduler-dispatch-identity.test.ts test/scheduler.test.ts test/scheduled-input.test.ts test/scheduled-outbox.test.ts test/source-start.test.mjs test/upstream.test.ts",
+    "test": "pnpm build && node --test test/architecture.test.ts test/contract-governance.test.mjs test/contract/openapi-contract.test.mjs test/schema-governance.test.mjs test/chat-service.test.ts test/chat-input.test.ts test/chat-cursor.test.ts test/idempotency.test.ts test/iam-admission-client.test.ts test/user-admission.test.ts test/agent-dispatch-outbox.test.ts test/agent-cancellation-outbox.test.ts test/agent-control-adapter.test.ts test/agui.test.ts test/agui-projector.test.mjs test/agui-runtime.test.mjs test/agui-source-page.test.mjs test/agui-replay.test.mjs test/agui-redis-notification.test.mjs test/agui-sse-writer.test.mjs test/bff.test.ts test/capability-client.test.ts test/config.test.ts test/lifecycle.test.ts test/mori.test.ts test/music.test.ts test/scheduler-client.test.ts test/scheduler-dispatch-identity.test.ts test/scheduler.test.ts test/scheduled-input.test.ts test/scheduled-outbox.test.ts test/source-start.test.mjs test/upstream.test.ts",
     "test:integration": "pnpm build && node --test --test-concurrency=1 test/scheduler-dispatch-receipt.integration.mjs test/scheduled-outbox.integration.mjs test/business-store.integration.mjs test/chat-facts.integration.mjs test/agui-http.integration.mjs test/agui-projection.integration.mjs",
-    "check": "pnpm lint && pnpm typecheck && pnpm contract:check && pnpm test && pnpm build"
+    "check": "pnpm lint && pnpm typecheck && pnpm contract:check && pnpm test && pnpm build",
+    "contract:generate:iam": "node scripts/generate-iam-http-client.mjs --write",
+    "contract:check:iam": "node scripts/generate-iam-http-client.mjs --check"
   },
   "devDependencies": {
     "@hey-api/openapi-ts": "0.99.0",

@@ -66,6 +66,7 @@ export type BffConfig = {
   mode: BffMode
   domain: string
   tenantId: string | null
+  iamBaseUrl: string | null
   sharedSecret: string | null
   upstreamSecret: string | null
   upstreamTimeoutMs: number
@@ -98,6 +99,17 @@ function optionalUrl(value: string | undefined): string | null {
     throw new Error("upstream URL must use http or https")
   }
   return raw.replace(/\/+$/u, "")
+}
+
+function optionalOrigin(value: string | undefined): string | null {
+  const raw = value?.trim()
+  if (!raw) return null
+  const url = new URL(raw)
+  if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("KOKORO_IAM_BASE_URL must use http or https")
+  if (url.username !== "" || url.password !== "" || url.search !== "" || url.hash !== "" || (url.pathname !== "" && url.pathname !== "/")) {
+    throw new Error("KOKORO_IAM_BASE_URL must be an HTTP(S) origin without credentials, path, query, or fragment")
+  }
+  return url.origin
 }
 
 function requiredConnectionUrl(value: string | undefined, name: string, protocols: readonly string[]): string {
@@ -199,6 +211,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
     mode: "live",
     domain,
     tenantId: env.KOKORO_TENANT_ID?.trim() || null,
+    iamBaseUrl: optionalOrigin(env.KOKORO_IAM_BASE_URL),
     sharedSecret,
     upstreamSecret: env.KOKORO_INTERNAL_SECRET_BFF?.trim() || null,
     upstreamTimeoutMs,

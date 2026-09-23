@@ -19,22 +19,22 @@
 
 ```text
 src/
-├── contracts/                     # 当前手写 transport DTO；尚未由 OpenAPI 生成
+├── auth/                          # service + Bearer + pinned IAM session admission；只产出可信 RequestContext
+├── bootstrap/                     # production/test composition、HTTP admission 顺序与 worker 生命周期
+├── config/                        # 严格 runtime configuration（含 IAM origin）
+├── contracts/                     # BFF public transport envelope/projection types
+├── domain/                        # BFF-owned policy 与 identity/value objects
 ├── application/
 │   ├── agui/                      # durable projection use case、纯映射与 repository port
 │   └── ...                        # Project/ScheduledTask use case、输入解析与 ports
 ├── infrastructure/
 │   ├── clients/                   # Agent、Scheduler、Mori 等出站边界
 │   ├── postgres/                  # BFF facts、receipt、AG-UI ledger 与 consumer/GC repositories
-│   └── mock/                      # 当前仍编入生产源码的 fixture；目标是移到 test
 ├── interfaces/http/agui/          # schema-valid SSE 编码；只输出已持久化 frame
-├── http/routes/                   # 当前 HTTP route handlers
-├── config.ts                      # 当前配置解析；目标目录 `src/config/` 尚未形成
+├── http/routes/                   # Product routes；runtime-manifest 是独立 service-only handler
+├── generated/iam-http/            # 从完整固定 IAM vendor 过滤单 operation 的只读生成物
 └── main.ts                        # composition root
 ```
-
-Root 标准要求的 `src/domain/`、`src/config/`、`src/bootstrap/` 尚未落地；这属于运行时重构缺口，不能通过
-文档目录伪造完成。
 
 ## 本仓事实
 
@@ -45,10 +45,13 @@ Conversation/Message/Share canonical facts，以及 durable AG-UI stream/source-
 ## Public API 与 owner adapter
 
 - Public API：[`docs/API_CONTRACT.md`](./docs/API_CONTRACT.md)
+- IAM admission：`src/auth/`；完整 vendor、生成配置、manifest 与 drift gate 分别位于 `contract/vendor/kokoro-iam/`、
+  `openapi-ts.iam.config.ts`、`contract/dependencies/iam-http.json` 与 `scripts/generate-iam-http-client.mjs`
 - 资源说明：[`docs/api/README.md`](./docs/api/README.md)
 - AG-UI：[`docs/api/v1/agui-chat.md`](./docs/api/v1/agui-chat.md)
 - System / Model / Billing / Capability：当前由 `src/http/routes/owner.ts` 投影
-- Library：`src/http/routes/owner.ts` 在 W2 前本地固定返回 `503 storage_integration_unavailable`，不调用 Storage
+- Library：IAM admission 不可用时返回 `503 iam_admission_unavailable`；admission 成功后仍固定返回
+  `503 storage_integration_unavailable`，不调用 Storage
 - Chat facts：`src/http/routes/chat.ts` 读取/写入 BFF PostgreSQL；`src/infrastructure/postgres/chat-repository.ts` 维护 tenant、锁和 cursor；`chat-turn-service.ts` 与 `agent-dispatch-outbox-repository.ts` 原子提交 Message/Agent command；
 - Agent Chat：`src/http/routes/agent.ts` 只承接 durable AG-UI 读取和 run control；Agent launch 由后台 outbox dispatcher 投递；`src/application/agui/` 投影；
   `src/application/agui/projector.ts` 独立消费 Agent source；`agui-projection-repository.ts` 在公开发送前持久化并分配 cursor，

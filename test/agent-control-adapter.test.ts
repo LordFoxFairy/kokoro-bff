@@ -33,6 +33,7 @@ function config(agentBase: string): BffConfig {
     mode: "live",
     domain: "dev.kokoro.localhost",
     tenantId: "tenant_control",
+    iamBaseUrl: null,
     sharedSecret: "web-secret",
     upstreamSecret: "bff-secret",
     upstreamTimeoutMs: 5000,
@@ -62,8 +63,7 @@ function authHeaders(commandId: string): Record<string, string> {
     "idempotency-key": commandId,
     "x-kokoro-service": "web-bff",
     "x-kokoro-internal-secret": "web-secret",
-    "x-kokoro-namespace": "tenant_control",
-    "x-kokoro-principal-id": "user_control",
+    authorization: "Bearer control-session",
   }
 }
 
