@@ -20,7 +20,8 @@ import { headerString, incomingHeaders, readBody, requestBodyJson, requestId } f
 const SCHEDULER_RECEIPT_SETTLEMENT_RESERVE_MS = 5_000
 
 export function scheduledTaskId(context: RequestContext, path: string, key: string): string {
-  const digest = createHash("sha256").update(`${context.identity.namespace}\u001f${path}\u001f${key}`).digest("hex").slice(0, 32)
+  const material = JSON.stringify([context.identity.namespace, context.identity.userId, path, key])
+  const digest = createHash("sha256").update(material).digest("hex").slice(0, 32)
   return `scheduled_${digest}`
 }
 

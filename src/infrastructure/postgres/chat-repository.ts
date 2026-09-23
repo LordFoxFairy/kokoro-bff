@@ -34,6 +34,15 @@ export class PostgresChatRepository implements ChatRepository {
         WHERE tenant_id = $1
           AND owner_id = $2
           AND status = 'active'
+          AND (
+            project_ref IS NULL
+            OR EXISTS (
+              SELECT 1 FROM bff_project AS project
+               WHERE project.tenant_id = bff_conversation.tenant_id
+                 AND project.owner_id = bff_conversation.owner_id
+                 AND (project.project_id = bff_conversation.project_ref OR project.slug = bff_conversation.project_ref)
+            )
+          )
           AND ($3::text IS NULL OR project_ref = $3)
           AND ($4::timestamptz IS NULL OR (updated_at, conversation_id) < ($4, $5))
         ORDER BY updated_at DESC, conversation_id ASC
@@ -53,6 +62,15 @@ export class PostgresChatRepository implements ChatRepository {
       `SELECT ${conversationColumns}
          FROM bff_conversation
         WHERE tenant_id = $1 AND owner_id = $2 AND conversation_id = $3 AND status = 'active'
+          AND (
+            project_ref IS NULL
+            OR EXISTS (
+              SELECT 1 FROM bff_project AS project
+               WHERE project.tenant_id = bff_conversation.tenant_id
+                 AND project.owner_id = bff_conversation.owner_id
+                 AND (project.project_id = bff_conversation.project_ref OR project.slug = bff_conversation.project_ref)
+            )
+          )
           AND ($4::text IS NULL OR project_ref = $4)
         LIMIT 1`,
       [tenantId, subjectId, conversationId, projectRef ?? null],
@@ -67,6 +85,15 @@ export class PostgresChatRepository implements ChatRepository {
     const exists = await this.database.pool.query<{ conversation_id: string }>(
       `SELECT conversation_id FROM bff_conversation
         WHERE tenant_id = $1 AND owner_id = $2 AND conversation_id = $3 AND status = 'active'
+          AND (
+            project_ref IS NULL
+            OR EXISTS (
+              SELECT 1 FROM bff_project AS project
+               WHERE project.tenant_id = bff_conversation.tenant_id
+                 AND project.owner_id = bff_conversation.owner_id
+                 AND (project.project_id = bff_conversation.project_ref OR project.slug = bff_conversation.project_ref)
+            )
+          )
           AND ($4::text IS NULL OR project_ref = $4) LIMIT 1`,
       [tenantId, subjectId, conversationId, projectRef ?? null],
     )
@@ -83,6 +110,15 @@ export class PostgresChatRepository implements ChatRepository {
                AND conversation.conversation_id = message.conversation_id
                AND conversation.owner_id = $2
                AND conversation.status = 'active'
+               AND (
+                 conversation.project_ref IS NULL
+                 OR EXISTS (
+                   SELECT 1 FROM bff_project AS project
+                    WHERE project.tenant_id = conversation.tenant_id
+                      AND project.owner_id = conversation.owner_id
+                      AND (project.project_id = conversation.project_ref OR project.slug = conversation.project_ref)
+                 )
+               )
                AND ($4::text IS NULL OR conversation.project_ref = $4)
           )
           AND ($5::bigint IS NULL OR (message.message_seq, message.message_id) > ($5, $6))
@@ -102,6 +138,15 @@ export class PostgresChatRepository implements ChatRepository {
     const result = await this.database.pool.query<ConversationRow>(
       `UPDATE bff_conversation SET title = $4, updated_at = CURRENT_TIMESTAMP(3)
         WHERE tenant_id = $1 AND owner_id = $2 AND conversation_id = $3 AND status = 'active'
+          AND (
+            project_ref IS NULL
+            OR EXISTS (
+              SELECT 1 FROM bff_project AS project
+               WHERE project.tenant_id = bff_conversation.tenant_id
+                 AND project.owner_id = bff_conversation.owner_id
+                 AND (project.project_id = bff_conversation.project_ref OR project.slug = bff_conversation.project_ref)
+            )
+          )
           AND ($5::text IS NULL OR project_ref = $5)
         RETURNING ${conversationColumns}`,
       [tenantId, subjectId, conversationId, title, projectRef ?? null],
@@ -124,6 +169,15 @@ export class PostgresChatRepository implements ChatRepository {
       const result = await client.query<{ conversation_id: string }>(
         `UPDATE bff_conversation SET status = 'deleted', deleted_at = CURRENT_TIMESTAMP(3), updated_at = CURRENT_TIMESTAMP(3)
           WHERE tenant_id = $1 AND owner_id = $2 AND conversation_id = $3 AND status = 'active'
+            AND (
+              project_ref IS NULL
+              OR EXISTS (
+                SELECT 1 FROM bff_project AS project
+                 WHERE project.tenant_id = bff_conversation.tenant_id
+                   AND project.owner_id = bff_conversation.owner_id
+                   AND (project.project_id = bff_conversation.project_ref OR project.slug = bff_conversation.project_ref)
+              )
+            )
             AND ($4::text IS NULL OR project_ref = $4) RETURNING conversation_id`,
         [tenantId, subjectId, conversationId, projectRef ?? null],
       )
@@ -220,6 +274,15 @@ export class PostgresChatRepository implements ChatRepository {
       const conversation = await client.query<{ conversation_id: string }>(
         `SELECT conversation_id FROM bff_conversation
           WHERE tenant_id = $1 AND owner_id = $2 AND conversation_id = $3 AND status = 'active'
+            AND (
+              project_ref IS NULL
+              OR EXISTS (
+                SELECT 1 FROM bff_project AS project
+                 WHERE project.tenant_id = bff_conversation.tenant_id
+                   AND project.owner_id = bff_conversation.owner_id
+                   AND (project.project_id = bff_conversation.project_ref OR project.slug = bff_conversation.project_ref)
+              )
+            )
             AND ($4::text IS NULL OR project_ref = $4) FOR UPDATE`,
         [tenantId, subjectId, conversationId, projectRef ?? null],
       )
@@ -287,6 +350,15 @@ export class PostgresChatRepository implements ChatRepository {
                AND conversation.conversation_id = bff_share.conversation_id
                AND conversation.owner_id = $2
                AND conversation.status = 'active'
+               AND (
+                 conversation.project_ref IS NULL
+                 OR EXISTS (
+                   SELECT 1 FROM bff_project AS project
+                    WHERE project.tenant_id = conversation.tenant_id
+                      AND project.owner_id = conversation.owner_id
+                      AND (project.project_id = conversation.project_ref OR project.slug = conversation.project_ref)
+                 )
+               )
                AND ($4::text IS NULL OR conversation.project_ref = $4)
           )
           AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP(3))

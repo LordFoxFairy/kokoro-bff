@@ -98,20 +98,54 @@ function config() {
   }
 }
 
+test("does not return Share metadata when it is revoked between lookup and message read", async () => {
+  const shared = {
+    share: { shareId: "share_raced" },
+    conversation: {
+      tenantId: "tenant_raced",
+      conversationId: "conversation_raced",
+      title: "Private title",
+      ownerId: "owner_raced",
+      createdAt: new Date("2026-01-01T00:00:00Z"),
+      updatedAt: new Date("2026-01-01T00:00:00Z"),
+    },
+  }
+  const businessStore = {
+    services: { publicShares: { findActiveShare: async () => shared, listMessages: async () => null } },
+  }
+  const bff = createBffServer(config(), { businessStore, readiness: async () => undefined })
+  try {
+    const base = await listen(bff)
+    const response = await fetch(`${base}/v1/shared/share_raced`, {
+      headers: { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "web-secret" },
+    })
+    assert.equal(response.status, 404)
+    assert.equal((await response.json()).error.code, "share_not_found")
+  } finally {
+    await close(bff)
+  }
+})
+
 integrationTest("serves tenant-scoped Chat facts from BFF PostgreSQL and revokes expired shares before replacement", async () => {
   const pool = new Pool({ connectionString: postgresUrl })
   const redis = createClient({ url: redisUrl })
   const tenant = `chat_facts_${Date.now()}`
   const otherTenant = `${tenant}_other`
   const conversationId = `conversation_${Date.now()}`
+  const projectId = `project_${Date.now()}`
   let bff
   try {
     await pool.query("DROP TABLE IF EXISTS bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation")
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await pool.query(
-      `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title)
-       VALUES ($1, $2, $3, $4)`,
-      [conversationId, tenant, "chat_user", "Canonical Chat facts"],
+      `INSERT INTO bff_project (project_id, tenant_id, owner_id, name, slug)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [projectId, tenant, "chat_user", "Private Chat project", `private-chat-${Date.now()}`],
+    )
+    await pool.query(
+      `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, project_ref, title)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [conversationId, tenant, "chat_user", projectId, "Canonical Chat facts"],
     )
     await pool.query(
       `INSERT INTO bff_message (message_id, tenant_id, conversation_id, run_id, role, content, status, message_seq)
@@ -130,6 +164,14 @@ integrationTest("serves tenant-scoped Chat facts from BFF PostgreSQL and revokes
     const listed = await fetch(`${base}/v1/sessions`, { headers: auth(tenant, "chat_user") })
     assert.equal(listed.status, 200)
     assert.equal((await listed.json()).data.sessions[0].session_id, conversationId)
+
+    for (const query of ["scope=direct", "scope="]) {
+      const scoped = await fetch(`${base}/v1/sessions/${conversationId}?${query}`, { headers: auth(tenant, "chat_user") })
+      assert.equal(scoped.status, 200)
+    }
+    const invalidScope = await fetch(`${base}/v1/sessions/${conversationId}?scope=team`, { headers: auth(tenant, "chat_user") })
+    assert.equal(invalidScope.status, 400)
+    assert.equal((await invalidScope.json()).error.code, "invalid_scope")
 
     const otherRead = await fetch(`${base}/v1/sessions/${conversationId}`, { headers: auth(otherTenant) })
     assert.equal(otherRead.status, 404)
@@ -171,6 +213,13 @@ integrationTest("serves tenant-scoped Chat facts from BFF PostgreSQL and revokes
     assert.equal((await publicShare.json()).data.session.session_id, conversationId)
 
     const otherSubject = "other_chat_user"
+    const factsBeforeDeniedAccess = await pool.query(
+      `SELECT
+         (SELECT count(*)::int FROM bff_message WHERE tenant_id = $1 AND conversation_id = $2) AS messages,
+         (SELECT count(*)::int FROM bff_agent_dispatch_outbox WHERE tenant_id = $1 AND conversation_id = $2) AS dispatches,
+         (SELECT count(*)::int FROM bff_idempotency_receipt) AS receipts`,
+      [tenant, conversationId],
+    )
     const ownerMatrix = [
       await fetch(`${base}/v1/sessions`, { headers: auth(tenant, otherSubject) }),
       await fetch(`${base}/v1/sessions/${conversationId}`, { headers: auth(tenant, otherSubject) }),
@@ -192,9 +241,23 @@ integrationTest("serves tenant-scoped Chat facts from BFF PostgreSQL and revokes
         method: "DELETE",
         headers: { ...auth(tenant, otherSubject), "idempotency-key": "other-subject-revoke" },
       }),
+      await fetch(`${base}/v1/sessions/${conversationId}/events`, { headers: auth(tenant, otherSubject) }),
+      await fetch(`${base}/v1/sessions/${conversationId}/runs/run_private/control`, {
+        method: "POST",
+        headers: { ...auth(tenant, otherSubject), "content-type": "application/json", "idempotency-key": "other-subject-control" },
+        body: JSON.stringify({ kind: "run.cancel" }),
+      }),
     ]
     assert.deepEqual((await ownerMatrix[0].json()).data.sessions, [])
     for (const response of ownerMatrix.slice(1)) assert.equal(response.status, 404)
+    const factsAfterDeniedAccess = await pool.query(
+      `SELECT
+         (SELECT count(*)::int FROM bff_message WHERE tenant_id = $1 AND conversation_id = $2) AS messages,
+         (SELECT count(*)::int FROM bff_agent_dispatch_outbox WHERE tenant_id = $1 AND conversation_id = $2) AS dispatches,
+         (SELECT count(*)::int FROM bff_idempotency_receipt) AS receipts`,
+      [tenant, conversationId],
+    )
+    assert.deepEqual(factsAfterDeniedAccess.rows, factsBeforeDeniedAccess.rows)
 
     const ownerSameKey = await fetch(`${base}/v1/sessions/${conversationId}/title`, {
       method: "PATCH",
@@ -214,7 +277,7 @@ integrationTest("serves tenant-scoped Chat facts from BFF PostgreSQL and revokes
       headers: { ...auth(tenant, "chat_user"), "content-type": "application/json", "idempotency-key": "shared-owner-key" },
       body: JSON.stringify({ title: "Owner title" }),
     })
-    assert.equal(queryDrift.status, 409)
+    assert.equal(queryDrift.status, 404)
 
     await pool.query(
       `UPDATE bff_share
@@ -254,6 +317,7 @@ integrationTest("serves tenant-scoped Chat facts from BFF PostgreSQL and revokes
     await pool.query("DELETE FROM bff_share WHERE tenant_id IN ($1, $2)", [tenant, otherTenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_message WHERE tenant_id IN ($1, $2)", [tenant, otherTenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_conversation WHERE tenant_id IN ($1, $2)", [tenant, otherTenant]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_project WHERE tenant_id IN ($1, $2)", [tenant, otherTenant]).catch(() => undefined)
     await redis.quit().catch(() => undefined)
     await pool.end()
   }
@@ -302,6 +366,14 @@ integrationTest("accepts a Chat turn after the message and Agent dispatch are du
     runtimeConfig.upstreams.agents = agentBase
     bff = createBffServer(runtimeConfig, { sessionAdmission })
     const base = await listen(bff)
+
+    const mismatchedProjectRef = await fetch(`${base}/v1/sessions/${conversationId}/messages?project_ref=query_project`, {
+      method: "POST",
+      headers: { ...auth(tenant, "chat_user"), "content-type": "application/json", "idempotency-key": "mismatched-project-ref" },
+      body: JSON.stringify({ content: "hello", project_ref: "body_project" }),
+    })
+    assert.equal(mismatchedProjectRef.status, 400)
+    assert.equal((await mismatchedProjectRef.json()).error.code, "invalid_message")
 
     const invalidBodies = [
       { content: "hello", extra: true },

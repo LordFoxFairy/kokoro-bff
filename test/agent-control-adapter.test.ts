@@ -67,7 +67,7 @@ function authHeaders(commandId: string): Record<string, string> {
   }
 }
 
-function bffServer(configValue: BffConfig): Server {
+function bffServer(configValue: BffConfig, authorized = true): Server {
   const runtime = new AgUiSessionRuntime({
     connections: {
       global: configValue.agUi.maxConnectionsGlobal,
@@ -94,6 +94,7 @@ function bffServer(configValue: BffConfig): Server {
       null,
       runtime,
       false,
+      authorized ? { ok: true } : null,
     ),
   })
 }
@@ -198,4 +199,26 @@ test("rejects receipt identity drift and extra owner fields", async () => {
   const body: unknown = await response.json()
   assert.ok(isRecord(body) && isRecord(body.error))
   assert.equal(body.error.code, "upstream_response_invalid")
+})
+
+test("does not call Agent control when private Chat authorization is absent", async () => {
+  let calls = 0
+  const agent = createServer((_request, response) => {
+    calls += 1
+    response.writeHead(500).end()
+  })
+  const agentBase = await listen(agent)
+  const base = await listen(bffServer(config(agentBase), false))
+
+  const response = await fetch(`${base}/v1/sessions/session_control/runs/run_control/control`, {
+    method: "POST",
+    headers: authHeaders("command_denied"),
+    body: JSON.stringify({ kind: "run.cancel" }),
+  })
+
+  assert.equal(response.status, 404)
+  const body: unknown = await response.json()
+  assert.ok(isRecord(body) && isRecord(body.error))
+  assert.equal(body.error.code, "session_not_found")
+  assert.equal(calls, 0)
 })

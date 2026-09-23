@@ -10,6 +10,7 @@ test("schema application reads the repository canonical schema", async () => {
   const schema = await loadCanonicalSchema()
 
   assert.match(schema, /CREATE TABLE IF NOT EXISTS bff_project/u)
+  assert.match(schema, /CREATE TABLE IF NOT EXISTS bff_project[\s\S]*?owner_id TEXT NOT NULL/u)
   assert.match(schema, /CREATE TABLE IF NOT EXISTS bff_scheduled_task/u)
   assert.match(schema, /CREATE TABLE IF NOT EXISTS bff_scheduled_task_outbox/u)
   assert.match(schema, /CREATE TABLE IF NOT EXISTS bff_idempotency_receipt/u)
@@ -30,10 +31,11 @@ test("schema application reads the repository canonical schema", async () => {
 test("canonical schema uses stable diagnostic names for indexes and constraints", async () => {
   const schema = await loadCanonicalSchema()
 
-  assert.match(schema, /CREATE UNIQUE INDEX IF NOT EXISTS uq_bff_project_tenant_slug\b/u)
+  assert.match(schema, /CREATE UNIQUE INDEX IF NOT EXISTS uq_bff_project_owner_slug\b[\s\S]*?\(tenant_id, owner_id, slug\)/u)
+  assert.match(schema, /CREATE INDEX IF NOT EXISTS ix_bff_project_owner_list\b[\s\S]*?\(tenant_id, owner_id, created_at ASC, project_id ASC\)/u)
   assert.match(schema, /CREATE INDEX IF NOT EXISTS ix_bff_project_instruction_revision\b/u)
   assert.match(schema, /CREATE INDEX IF NOT EXISTS ix_bff_project_task_tenant_project\b/u)
-  assert.match(schema, /CREATE INDEX IF NOT EXISTS ix_bff_scheduled_task_tenant\b/u)
+  assert.match(schema, /CREATE INDEX IF NOT EXISTS ix_bff_scheduled_task_owner\b[\s\S]*?\(tenant_id, owner_id, created_at ASC, task_id ASC\)/u)
   assert.match(schema, /CONSTRAINT ck_bff_project_task_status CHECK/u)
   assert.match(schema, /CONSTRAINT ck_bff_scheduled_task_frequency CHECK/u)
   assert.match(schema, /CONSTRAINT ck_bff_scheduled_task_status CHECK/u)

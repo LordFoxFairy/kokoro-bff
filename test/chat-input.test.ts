@@ -13,7 +13,7 @@ describe("canonical MessageCreateRequest parsing", () => {
       pinned_skills: [" skill-a ", "skill-b"],
       mcp_servers: [" github "],
       project_ref: " project-body ",
-    }, " project-query "), {
+    }, " project-body "), {
       content: "hello",
       model: "default",
       agent: "reviewer",
@@ -29,6 +29,10 @@ describe("canonical MessageCreateRequest parsing", () => {
       content: "hello",
       projectRef: "project-query",
     })
+  })
+
+  it("rejects different body and query project references", () => {
+    assert.equal(parseMessageCreateRequest({ content: "hello", project_ref: "project-body" }, "project-query"), null)
   })
 
   it("rejects additional properties, oversized content, and invalid optional values", () => {

@@ -18,6 +18,10 @@ function lineage(tenantId, idempotencyKey, suffix) {
   }
 }
 
+function ownerScope(tenantId, suffix) {
+  return { tenantId, subjectId: `actor_${suffix}` }
+}
+
 function taskInput(suffix, overrides = {}) {
   return {
     title: `Review ${suffix}`,
@@ -80,8 +84,7 @@ integrationTest("ScheduledTask outbox is atomic, idempotent, tenant-scoped, and 
 
     await assert.rejects(
       repository.createScheduledTask(
-        tenants.rollback,
-        `actor_${suffix}`,
+        ownerScope(tenants.rollback, suffix),
         taskInput(suffix),
         `scheduled_rollback_${suffix}`,
         lineage(tenants.rollback, rollbackKey, suffix),
@@ -96,16 +99,16 @@ integrationTest("ScheduledTask outbox is atomic, idempotent, tenant-scoped, and 
 
     const projectId = `project_${suffix}`
     await pool.query(
-      `INSERT INTO bff_project (project_id, tenant_id, name, slug)
-       VALUES ($1, $2, $3, $4)`,
-      [projectId, tenants.core, "Outbox fixture", `outbox-${suffix}`],
+      `INSERT INTO bff_project (project_id, tenant_id, owner_id, name, slug)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [projectId, tenants.core, `actor_${suffix}`, "Outbox fixture", `outbox-${suffix}`],
     )
     const taskId = `scheduled_core_${suffix}`
     const createLineage = lineage(tenants.core, `create-${suffix}`, suffix)
-    const created = await repository.createScheduledTask(tenants.core, createLineage.actorId, taskInput(suffix, { projectId }), taskId, createLineage)
+    const coreScope = ownerScope(tenants.core, suffix)
+    const created = await repository.createScheduledTask(coreScope, taskInput(suffix, { projectId }), taskId, createLineage)
     const duplicate = await repository.createScheduledTask(
-      tenants.core,
-      createLineage.actorId,
+      coreScope,
       taskInput(`${suffix}-different`, { projectId, prompt: "A different retry body." }),
       taskId,
       createLineage,
@@ -128,19 +131,42 @@ integrationTest("ScheduledTask outbox is atomic, idempotent, tenant-scoped, and 
     assert.equal(registerRow.rows[0].payload.lineage.tenant_id, tenants.core)
     assert.equal(registerRow.rows[0].payload.task.next_run_at, "2026-09-04T12:00:00.000Z")
 
-    assert.deepEqual(await repository.listScheduledTasks(`${tenants.core}_other`), [])
-    assert.equal(await repository.findScheduledTask(`${tenants.core}_other`, taskId), null)
+    assert.deepEqual(await repository.listScheduledTasks(ownerScope(`${tenants.core}_other`, suffix)), [])
+    assert.equal(await repository.findScheduledTask(ownerScope(`${tenants.core}_other`, suffix), taskId), null)
+
+    const otherOwnerScope = { tenantId: tenants.core, subjectId: `actor_other_${suffix}` }
+    assert.deepEqual(await repository.listScheduledTasks(otherOwnerScope), [])
+    assert.equal(await repository.findScheduledTask(otherOwnerScope, taskId), null)
+    const beforeDeniedOutbox = await count(pool, "bff_scheduled_task_outbox", tenants.core)
+    assert.equal(
+      await repository.updateScheduledTask(
+        otherOwnerScope,
+        taskId,
+        { prompt: "Cross-owner update." },
+        lineage(tenants.core, `denied-update-${suffix}`, `other_${suffix}`),
+      ),
+      null,
+    )
+    assert.equal(
+      await repository.deleteScheduledTask(
+        otherOwnerScope,
+        taskId,
+        lineage(tenants.core, `denied-delete-${suffix}`, `other_${suffix}`),
+      ),
+      false,
+    )
+    assert.equal(await count(pool, "bff_scheduled_task_outbox", tenants.core), beforeDeniedOutbox)
 
     const updateLineage = lineage(tenants.core, `update-${suffix}`, suffix)
-    const updated = await repository.updateScheduledTask(tenants.core, taskId, { prompt: "Updated prompt." }, updateLineage)
+    const updated = await repository.updateScheduledTask(coreScope, taskId, { prompt: "Updated prompt." }, updateLineage)
     assert.equal(updated?.revision, 2)
-    const duplicateUpdate = await repository.updateScheduledTask(tenants.core, taskId, { prompt: "A different retry body." }, updateLineage)
+    const duplicateUpdate = await repository.updateScheduledTask(coreScope, taskId, { prompt: "A different retry body." }, updateLineage)
     assert.equal(duplicateUpdate?.revision, 2)
     assert.equal(duplicateUpdate?.prompt, "Updated prompt.")
 
     const secondUpdateLineage = lineage(tenants.core, `update-2-${suffix}`, suffix)
     const updatedAgain = await repository.updateScheduledTask(
-      tenants.core,
+      coreScope,
       taskId,
       { time: "09:00", expiresAt: new Date("2026-09-05T00:00:00.000Z") },
       secondUpdateLineage,
@@ -151,9 +177,9 @@ integrationTest("ScheduledTask outbox is atomic, idempotent, tenant-scoped, and 
     assert.equal(await count(pool, "bff_scheduled_task_outbox", tenants.core), 3)
 
     const deleteLineage = lineage(tenants.core, `delete-${suffix}`, suffix)
-    assert.equal(await repository.deleteScheduledTask(tenants.core, taskId, deleteLineage), true)
-    assert.equal(await repository.deleteScheduledTask(tenants.core, taskId, deleteLineage), true)
-    assert.equal(await repository.findScheduledTask(tenants.core, taskId), null)
+    assert.equal(await repository.deleteScheduledTask(coreScope, taskId, deleteLineage), true)
+    assert.equal(await repository.deleteScheduledTask(coreScope, taskId, deleteLineage), true)
+    assert.equal(await repository.findScheduledTask(coreScope, taskId), null)
     assert.equal(await count(pool, "bff_scheduled_task_outbox", tenants.core), 4)
     const deleteRow = await pool.query(
       `SELECT command_type, actor_id, request_id, idempotency_key
@@ -178,7 +204,7 @@ integrationTest("ScheduledTask outbox is atomic, idempotent, tenant-scoped, and 
 
     const claimTaskId = `scheduled_claim_${suffix}`
     const claimLineage = lineage(tenants.claim, `claim-${suffix}`, suffix)
-    await repository.createScheduledTask(tenants.claim, claimLineage.actorId, taskInput(suffix), claimTaskId, claimLineage)
+    await repository.createScheduledTask(ownerScope(tenants.claim, suffix), taskInput(suffix), claimTaskId, claimLineage)
     const claimNow = new Date(Date.now() + 1000)
     const claimed = (
       await repository.claimScheduledTaskOutbox({
@@ -215,7 +241,7 @@ integrationTest("ScheduledTask outbox is atomic, idempotent, tenant-scoped, and 
 
     const recoveryTaskId = `scheduled_recovery_${suffix}`
     const recoveryLineage = lineage(tenants.recovery, `recovery-${suffix}`, suffix)
-    await repository.createScheduledTask(tenants.recovery, recoveryLineage.actorId, taskInput(suffix), recoveryTaskId, recoveryLineage)
+    await repository.createScheduledTask(ownerScope(tenants.recovery, suffix), taskInput(suffix), recoveryTaskId, recoveryLineage)
     const poolA = new Pool({ connectionString: postgresUrl, max: 2 })
     const poolB = new Pool({ connectionString: postgresUrl, max: 2 })
     pools.push(poolA, poolB)
@@ -260,7 +286,7 @@ integrationTest("ScheduledTask outbox is atomic, idempotent, tenant-scoped, and 
     const concurrentTaskIds = Array.from({ length: 4 }, (_, index) => `scheduled_concurrent_${suffix}_${index}`)
     for (const [index, concurrentTaskId] of concurrentTaskIds.entries()) {
       const concurrentLineage = lineage(tenants.concurrent, `concurrent-${suffix}-${index}`, suffix)
-      await repository.createScheduledTask(tenants.concurrent, concurrentLineage.actorId, taskInput(suffix), concurrentTaskId, concurrentLineage)
+      await repository.createScheduledTask(ownerScope(tenants.concurrent, suffix), taskInput(suffix), concurrentTaskId, concurrentLineage)
     }
     const poolC = new Pool({ connectionString: postgresUrl, max: 2 })
     const poolD = new Pool({ connectionString: postgresUrl, max: 2 })

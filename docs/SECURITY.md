@@ -30,8 +30,8 @@ X-Forwarded-*、tenant 或 actor header 作为 authority，也不把 session Bea
   token 只在同 scope tombstone 命中时返回 `event_cursor_expired`。
 
 当前 BFF 已完成 IAM session admission，但 OpenAPI `x-kokoro-permission` 仍是冻结的权限意图，不等于逐 operation IAM
-permission enforcement。Project、ScheduledTask、Conversation 等 resource owner predicate 仍必须独立校验；Task 2 将收紧
-同 tenant 跨用户访问。
+permission enforcement。Project、ScheduledTask、Conversation 等 resource owner predicate 独立校验；Task 2 已关闭
+已知的同 tenant 跨用户访问缺口，并在 receipt replay 与 Agent I/O 前返回与缺失一致的 404。
 
 ## 出站控制
 
@@ -62,7 +62,7 @@ permission enforcement。Project、ScheduledTask、Conversation 等 resource own
 | CSRF/CSP/cookie | 属于 Web same-origin adapter；需跨仓验收 |
 | schema validation | 部分手写 mapper + AG-UI schema；全 OpenAPI runtime validation 未闭环 |
 | dependency/source/secret scan | CI 尚未闭环 |
-| tenant negative tests | AG-UI repository 与 HTTP foreign-cursor 已有真实 PG negative test；完整 public surface 矩阵仍待补齐 |
+| tenant/subject negative tests | Project、ScheduledTask、Chat message/control/events 已有真实 PG 同 tenant 跨 subject 与跨 tenant negative matrix；其余 public owner projection 仍按各 owner contract 验证 |
 
 ## 安全变更门禁
 

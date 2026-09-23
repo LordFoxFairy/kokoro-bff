@@ -41,7 +41,7 @@ x-kokoro-request-id: <optional correlation id>
 
 `src/http/request.ts::authorize` 在 shared secret 通过后直接信任 namespace/principal header，尚未调用 IAM。这是 Task 1
 要删除的旧身份来源，不是目标安全契约。当前 runtime manifest 还使用伪造 `runtime-manifest` principal；Task 1 把它改为显式
-service-only operation。这段只记录起始 commit；下节描述本变更实际 contract，Task 2 目标仍不得写成当前运行事实。
+service-only operation。这段只记录起始 commit；下节描述 Task 1 admission，随后章节描述 Task 2 已实现的私有资源 contract。
 
 ### Task 1 本变更：IAM session admission
 
@@ -87,7 +87,7 @@ IAM 成功与错误都必须有合法 `x-request-id` 和 `Cache-Control: no-stor
 四类凭据不可互换。`x-kokoro-permission` 继续表示 Product operation 的动作意图；IAM session admission 不返回也不合成
 63 项业务 permission，BFF-owned facts 仍由资源 predicate 授权。
 
-### Task 2 目标：个人私有资源 contract
+### Task 2 当前 contract：个人私有资源
 
 普通用户资源默认 scope 为 IAM 验证得到的 `{ tenantId, subjectId }`，body/query/header 不能自报覆盖。Project 的
 list/detail/slug/instruction/revisions/skills/tasks、ScheduledTask 的 list/detail/create/update/delete/retry、Chat/Message、
@@ -192,7 +192,7 @@ business store 配置时 receipt 持久化到 PostgreSQL；否则部分
 非 BFF-owned Live mutation 和 Mock 使用进程内 Map。
 
 目标仍需按 operation 确认更多 selected headers，并让普通 receipt、BFF business fact 与 outbox 在同一事务提交；该目标
-尚未实现。Task 2 的 owner predicate 必须先于通用 receipt replay/claim，防止同 tenant 其他用户重放已存在结果。
+尚未统一。现有资源 owner predicate 先于通用 receipt replay/claim，防止同 tenant 其他用户重放已存在结果；repository/事务继续重验。
 
 ## AG-UI
 

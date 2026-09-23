@@ -8,11 +8,7 @@ import type { RequestContext } from "../../domain/request-context.js"
 import { idempotencyKey, queryOf } from "../request.js"
 import { reply } from "../response.js"
 import { parseMessageCreateRequest } from "../../application/chat/message-create-input.js"
-
-function projectRef(request: IncomingMessage): string | undefined {
-  const value = queryOf(request).get("project_ref")?.trim()
-  return value === undefined || value === "" ? undefined : value
-}
+import type { AuthorizedChatRequest } from "./chat-authorization.js"
 
 function pageInput(request: IncomingMessage, defaultLimit: number): { limit: number; cursor: string | null } | null {
   const query = queryOf(request)
@@ -75,17 +71,19 @@ export async function liveChatBusiness(
   mutation: MutationTicket | null,
   idempotency: Map<string, IdempotencyEntry>,
   store: BffBusinessStore,
+  authorization: AuthorizedChatRequest,
 ): Promise<boolean> {
   if (businessPath[0] !== "sessions") return false
   const method = request.method || "GET"
   const tenantId = context.identity.namespace
   const subjectId = context.identity.userId
   const conversationId = businessPath[1] || ""
+  const projectRef = authorization.projectRef
   const chat = store.services.chat
 
   try {
     if (businessPath.length === 3 && businessPath[2] === "events" && method === "GET") {
-      const conversation = await chat.findConversation(tenantId, subjectId, conversationId, projectRef(request))
+      const conversation = await chat.findConversation(tenantId, subjectId, conversationId, projectRef)
       if (conversation === null) {
         await reply(response, 404, failure("session_not_found", "Session was not found", context.requestId), context, idempotency, mutation)
         return true
@@ -104,17 +102,17 @@ export async function liveChatBusiness(
         await reply(response, 400, failure("invalid_pagination", "limit must be between 1 and 100", context.requestId), context, idempotency, mutation)
         return true
       }
-      await reply(response, 200, ok(await chat.listConversations(tenantId, subjectId, projectRef(request), page.limit, page.cursor), context.requestId), context, idempotency, mutation)
+      await reply(response, 200, ok(await chat.listConversations(tenantId, subjectId, projectRef, page.limit, page.cursor), context.requestId), context, idempotency, mutation)
       return true
     }
 
     if (businessPath.length === 2 && method === "GET") {
-      const session = await chat.findConversation(tenantId, subjectId, conversationId, projectRef(request))
+      const session = await chat.findConversation(tenantId, subjectId, conversationId, projectRef)
       if (session === null) {
         await reply(response, 404, failure("session_not_found", "Session was not found", context.requestId), context, idempotency, mutation)
         return true
       }
-      const messages = await chat.listMessages(tenantId, subjectId, conversationId, 100, null, projectRef(request))
+      const messages = await chat.listMessages(tenantId, subjectId, conversationId, 100, null, projectRef)
       const watermark = await store.agUi.status(tenantId, conversationId).then((status) => status.currentCursor).catch(() => null)
       await reply(response, 200, ok({
         session,
@@ -133,7 +131,7 @@ export async function liveChatBusiness(
         await reply(response, 400, failure("invalid_pagination", "limit must be between 1 and 100", context.requestId), context, idempotency, mutation)
         return true
       }
-      const result = await chat.listMessages(tenantId, subjectId, conversationId, page.limit, page.cursor, projectRef(request))
+      const result = await chat.listMessages(tenantId, subjectId, conversationId, page.limit, page.cursor, projectRef)
       if (result === null) {
         await reply(response, 404, failure("session_not_found", "Session was not found", context.requestId), context, idempotency, mutation)
       } else {
@@ -143,7 +141,7 @@ export async function liveChatBusiness(
     }
 
     if (businessPath.length === 3 && businessPath[2] === "messages" && method === "POST") {
-      const input = parseMessageCreateRequest(json, projectRef(request))
+      const input = parseMessageCreateRequest(json, projectRef)
       if (input === null) {
         await reply(response, 400, failure("invalid_message", "Message request does not match the v1 contract", context.requestId), context, idempotency, mutation)
         return true
@@ -180,7 +178,7 @@ export async function liveChatBusiness(
         await reply(response, 400, failure("invalid_title", "Title is required", context.requestId), context, idempotency, mutation)
         return true
       }
-      const conversation = await chat.renameConversation(tenantId, subjectId, conversationId, json.title.trim(), projectRef(request))
+      const conversation = await chat.renameConversation(tenantId, subjectId, conversationId, json.title.trim(), projectRef)
       await reply(response, conversation === null ? 404 : 200, conversation === null ? failure("session_not_found", "Session was not found", context.requestId) : ok({ ok: true }, context.requestId), context, idempotency, mutation)
       return true
     }
@@ -191,20 +189,20 @@ export async function liveChatBusiness(
         subjectId,
         conversationId,
         context.requestId,
-        projectRef(request),
+        projectRef,
       )
       await reply(response, deleted ? 200 : 404, deleted ? ok({ status: "deleted" }, context.requestId) : failure("session_not_found", "Session was not found", context.requestId), context, idempotency, mutation)
       return true
     }
 
     if (businessPath.length === 3 && businessPath[2] === "share" && method === "POST") {
-      const share = await chat.createShare(tenantId, subjectId, conversationId, projectRef(request))
+      const share = await chat.createShare(tenantId, subjectId, conversationId, projectRef)
       await reply(response, share === null ? 404 : 200, share === null ? failure("session_not_found", "Session was not found", context.requestId) : ok({ share_id: share.shareId }, context.requestId), context, idempotency, mutation)
       return true
     }
 
     if (businessPath.length === 3 && businessPath[2] === "share" && method === "DELETE") {
-      const share = await chat.revokeShare(tenantId, subjectId, conversationId, projectRef(request))
+      const share = await chat.revokeShare(tenantId, subjectId, conversationId, projectRef)
       await reply(response, share === null ? 404 : 200, share === null ? failure("share_not_found", "Share was not found", context.requestId) : ok({ share_id: share.shareId }, context.requestId), context, idempotency, mutation)
       return true
     }

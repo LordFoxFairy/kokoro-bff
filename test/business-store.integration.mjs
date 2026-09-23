@@ -108,6 +108,141 @@ function bffConfig(overrides = {}) {
 
 const integrationTest = postgresUrl && redisUrl ? test : test.skip
 
+integrationTest("keeps Project and ScheduledTask facts private to the trusted subject", async () => {
+  const pool = new Pool({ connectionString: postgresUrl })
+  const redis = createClient({ url: redisUrl })
+  const tenant = `privacy_${Date.now()}`
+  const crossTenant = `${tenant}_cross`
+  const ownerA = "privacy_owner_a"
+  const ownerB = "privacy_owner_b"
+  let bff
+  try {
+    await pool.query(
+      "DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_scheduled_task_outbox, bff_scheduled_task, bff_project_task, bff_idempotency_receipt, bff_project_instruction_revision, bff_project_skill, bff_project CASCADE",
+    )
+    await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+    await redis.connect()
+    bff = createBffServer(bffConfig(), { sessionAdmission })
+    const base = await listen(bff)
+
+    const createProject = async (owner, key) => fetch(`${base}/v1/projects`, {
+      method: "POST",
+      headers: { ...auth(tenant, owner), "content-type": "application/json", "idempotency-key": key },
+      body: JSON.stringify({ name: "Private plan", description: owner }),
+    })
+    const projectAResponse = await createProject(ownerA, "project-a")
+    assert.equal(projectAResponse.status, 200)
+    const projectA = (await projectAResponse.json()).data.project
+
+    const ownerBProjects = await fetch(`${base}/v1/projects`, { headers: auth(tenant, ownerB) })
+    assert.deepEqual((await ownerBProjects.json()).data.projects, [])
+    const crossTenantProjects = await fetch(`${base}/v1/projects`, { headers: auth(crossTenant, ownerA) })
+    assert.deepEqual((await crossTenantProjects.json()).data.projects, [])
+
+    const projectBResponse = await createProject(ownerB, "project-b")
+    assert.equal(projectBResponse.status, 200)
+    const projectB = (await projectBResponse.json()).data.project
+    assert.equal(projectB.slug, projectA.slug)
+    assert.notEqual(projectB.id, projectA.id)
+
+    const beforeDeniedProject = await pool.query("SELECT instruction FROM bff_project WHERE project_id = $1", [projectA.id])
+    const beforeDeniedProjectReceipts = await pool.query("SELECT count(*)::int AS count FROM bff_idempotency_receipt")
+    const deniedProjectDetail = await fetch(`${base}/v1/projects/${projectA.id}`, { headers: auth(tenant, ownerB) })
+    assert.equal(deniedProjectDetail.status, 404)
+    const deniedProjectPatch = await fetch(`${base}/v1/projects/${projectA.id}`, {
+      method: "PATCH",
+      headers: { ...auth(tenant, ownerB), "content-type": "application/json", "idempotency-key": "denied-project-patch" },
+      body: JSON.stringify({ instruction: "steal" }),
+    })
+    assert.equal(deniedProjectPatch.status, 404)
+    assert.equal((await fetch(`${base}/v1/projects/${projectA.id}`, { headers: auth(crossTenant, ownerA) })).status, 404)
+    const crossTenantProjectPatch = await fetch(`${base}/v1/projects/${projectA.id}`, {
+      method: "PATCH",
+      headers: { ...auth(crossTenant, ownerA), "content-type": "application/json", "idempotency-key": "cross-tenant-project-patch" },
+      body: JSON.stringify({ instruction: "steal across tenant" }),
+    })
+    assert.equal(crossTenantProjectPatch.status, 404)
+    const afterDeniedProject = await pool.query("SELECT instruction FROM bff_project WHERE project_id = $1", [projectA.id])
+    const afterDeniedProjectReceipts = await pool.query("SELECT count(*)::int AS count FROM bff_idempotency_receipt")
+    assert.equal(afterDeniedProject.rows[0].instruction, beforeDeniedProject.rows[0].instruction)
+    assert.equal(afterDeniedProjectReceipts.rows[0].count, beforeDeniedProjectReceipts.rows[0].count)
+
+    const scheduledPayload = (projectId) => ({
+      project_id: projectId,
+      title: "Private schedule",
+      prompt: "Review privately.",
+      frequency: "daily",
+      time: "08:00",
+      timezone: "UTC",
+      next_run_at: "2026-09-01T08:00:00.000Z",
+      auto_approve: false,
+    })
+    const createScheduled = async (owner, projectId) => fetch(`${base}/v1/scheduled-tasks`, {
+      method: "POST",
+      headers: { ...auth(tenant, owner), "content-type": "application/json", "idempotency-key": "same-scheduled-key" },
+      body: JSON.stringify(scheduledPayload(projectId)),
+    })
+    const taskAResponse = await createScheduled(ownerA, projectA.id)
+    const taskBResponse = await createScheduled(ownerB, projectB.id)
+    assert.equal(taskAResponse.status, 200)
+    assert.equal(taskBResponse.status, 200)
+    const taskA = (await taskAResponse.json()).data.task
+    const taskB = (await taskBResponse.json()).data.task
+    assert.notEqual(taskA.id, taskB.id)
+
+    const slugTaskResponse = await fetch(`${base}/v1/scheduled-tasks`, {
+      method: "POST",
+      headers: { ...auth(tenant, ownerA), "content-type": "application/json", "idempotency-key": "scheduled-by-owned-slug" },
+      body: JSON.stringify(scheduledPayload(projectA.slug)),
+    })
+    assert.equal(slugTaskResponse.status, 200)
+    const slugTask = (await slugTaskResponse.json()).data.task
+    const storedSlugTask = await pool.query("SELECT project_id FROM bff_scheduled_task WHERE task_id = $1", [slugTask.id])
+    assert.equal(storedSlugTask.rows[0].project_id, projectA.id)
+
+    const ownerBTasks = await fetch(`${base}/v1/scheduled-tasks`, { headers: auth(tenant, ownerB) })
+    assert.deepEqual((await ownerBTasks.json()).data.tasks.map((task) => task.id), [taskB.id])
+    const crossTenantTasks = await fetch(`${base}/v1/scheduled-tasks`, { headers: auth(crossTenant, ownerA) })
+    assert.deepEqual((await crossTenantTasks.json()).data.tasks, [])
+
+    const beforeDeniedTask = await pool.query("SELECT prompt FROM bff_scheduled_task WHERE task_id = $1", [taskA.id])
+    const beforeDeniedOutbox = await pool.query("SELECT count(*)::int AS count FROM bff_scheduled_task_outbox")
+    const beforeDeniedTaskReceipts = await pool.query("SELECT count(*)::int AS count FROM bff_idempotency_receipt")
+    const deniedTaskDetail = await fetch(`${base}/v1/scheduled-tasks/${taskA.id}`, { headers: auth(tenant, ownerB) })
+    assert.equal(deniedTaskDetail.status, 404)
+    assert.equal((await fetch(`${base}/v1/scheduled-tasks/${taskA.id}`, { headers: auth(crossTenant, ownerA) })).status, 404)
+    for (const [operation, method, body] of [
+      ["patch", "PATCH", { prompt: "steal" }],
+      ["retry", "POST", undefined],
+      ["delete", "DELETE", undefined],
+    ]) {
+      const suffix = operation === "retry" ? "/retry" : ""
+      const denied = await fetch(`${base}/v1/scheduled-tasks/${taskA.id}${suffix}`, {
+        method,
+        headers: { ...auth(tenant, ownerB), "content-type": "application/json", "idempotency-key": `denied-task-${operation}` },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      })
+      assert.equal(denied.status, 404)
+    }
+    const crossTenantTaskPatch = await fetch(`${base}/v1/scheduled-tasks/${taskA.id}`, {
+      method: "PATCH",
+      headers: { ...auth(crossTenant, ownerA), "content-type": "application/json", "idempotency-key": "cross-tenant-task-patch" },
+      body: JSON.stringify({ prompt: "steal across tenant" }),
+    })
+    assert.equal(crossTenantTaskPatch.status, 404)
+    const afterDeniedTask = await pool.query("SELECT prompt FROM bff_scheduled_task WHERE task_id = $1", [taskA.id])
+    const afterDeniedOutbox = await pool.query("SELECT count(*)::int AS count FROM bff_scheduled_task_outbox")
+    const afterDeniedTaskReceipts = await pool.query("SELECT count(*)::int AS count FROM bff_idempotency_receipt")
+    assert.equal(afterDeniedTask.rows[0].prompt, beforeDeniedTask.rows[0].prompt)
+    assert.equal(afterDeniedOutbox.rows[0].count, beforeDeniedOutbox.rows[0].count)
+    assert.equal(afterDeniedTaskReceipts.rows[0].count, beforeDeniedTaskReceipts.rows[0].count)
+  } finally {
+    if (bff) await close(bff)
+    await redis.quit().catch(() => undefined)
+    await pool.end()
+  }
+})
+
 integrationTest("persists BFF facts, registers Scheduler, and replays Agent dispatch across restart", async () => {
   const schemaPool = new Pool({ connectionString: postgresUrl })
   const redis = createClient({ url: redisUrl })

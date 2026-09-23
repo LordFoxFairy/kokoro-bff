@@ -4,6 +4,7 @@
 CREATE TABLE IF NOT EXISTS bff_project (
   project_id TEXT PRIMARY KEY,
   tenant_id TEXT NOT NULL,
+  owner_id TEXT NOT NULL,
   name TEXT NOT NULL,
   slug TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
@@ -11,7 +12,10 @@ CREATE TABLE IF NOT EXISTS bff_project (
   created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
 );
-CREATE UNIQUE INDEX IF NOT EXISTS uq_bff_project_tenant_slug ON bff_project (tenant_id, slug);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_bff_project_owner_slug
+  ON bff_project (tenant_id, owner_id, slug);
+CREATE INDEX IF NOT EXISTS ix_bff_project_owner_list
+  ON bff_project (tenant_id, owner_id, created_at ASC, project_id ASC);
 
 CREATE TABLE IF NOT EXISTS bff_project_instruction_revision (
   revision_id TEXT PRIMARY KEY,
@@ -64,7 +68,8 @@ CREATE TABLE IF NOT EXISTS bff_scheduled_task (
   created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
 );
-CREATE INDEX IF NOT EXISTS ix_bff_scheduled_task_tenant ON bff_scheduled_task (tenant_id, created_at ASC);
+CREATE INDEX IF NOT EXISTS ix_bff_scheduled_task_owner
+  ON bff_scheduled_task (tenant_id, owner_id, created_at ASC, task_id ASC);
 
 -- ScheduledTask owns this bounded outbox. It is intentionally not a generic
 -- cross-domain queue: every row is one versioned Scheduler command for one

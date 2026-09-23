@@ -77,9 +77,9 @@ schema 安装只面向 fresh/empty database；`IF NOT EXISTS` 不修复 drift。
 
 - `scheduler_registration_failed`/`scheduler_update_failed`：检查 BFF task 状态是否已标为 failed，再修复 Scheduler 后调用
   `/v1/scheduled-tasks/{id}/retry` 并复用新的显式 mutation key。
-- delete 失败：BFF fact 应仍存在；先恢复 Scheduler，再重试相同 delete key。
-- BFF 重启会 best-effort 注册 active/enabled/unexpired tasks；查看 registered/skipped/failed 计数。
-- 在 outbox 落地前，禁止直接删除 BFF fact 或伪造 Scheduler receipt 来“修复”分叉。
+- delete command 已与本地 fact 删除同事务提交；Scheduler 失败时 outbox 保留可恢复 command。先恢复 Scheduler delivery，不手工重建 fact 或删除 outbox。
+- BFF 重启后 dispatcher 从 PostgreSQL outbox 恢复 pending/retryable command；检查 lease owner/token/fence、attempt 与 last_error_code。
+- 禁止直接删除 BFF fact/outbox 或伪造 Scheduler receipt 来“修复”分叉；用户诊断必须同时带 tenant + trusted subject。
 
 ## 7. AG-UI replay incident
 

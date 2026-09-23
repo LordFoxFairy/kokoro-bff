@@ -191,6 +191,15 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
             AND status = 'active'
             AND ($3::text IS NULL OR project_ref = $3)
             AND owner_id = $4
+            AND (
+              project_ref IS NULL
+              OR EXISTS (
+                SELECT 1 FROM bff_project AS project
+                 WHERE project.tenant_id = bff_conversation.tenant_id
+                   AND project.owner_id = bff_conversation.owner_id
+                   AND (project.project_id = bff_conversation.project_ref OR project.slug = bff_conversation.project_ref)
+              )
+            )
           FOR UPDATE`,
         [command.tenantId, command.conversationId, command.projectRef ?? null, command.subjectId],
       )

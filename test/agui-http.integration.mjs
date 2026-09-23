@@ -51,9 +51,9 @@ async function close(server) {
   await new Promise((resolve) => setTimeout(resolve, 30))
 }
 
-function auth(tenantId) {
-  const token = `session-${tenantId}-user_integration`
-  sessionAdmission.allow(token, { namespace: tenantId, userId: "user_integration" })
+function auth(tenantId, subjectId = "user_integration") {
+  const token = `session-${tenantId}-${subjectId}`
+  sessionAdmission.allow(token, { namespace: tenantId, userId: subjectId })
   return {
     "x-kokoro-service": "web-bff",
     "x-kokoro-internal-secret": "web-secret",
@@ -256,6 +256,12 @@ integrationTest("serves live and restarted replay only from the tenant-scoped Po
     })
     assert.equal(foreignTenant.status, 404)
     assert.equal((await foreignTenant.json()).error.code, "session_not_found")
+
+    const sameTenantOtherSubject = await fetch(`${restartedBase}/v1/sessions/session_live/events`, {
+      headers: { ...auth("tenant_a", "other_user"), "last-event-id": originalFrames[1].id },
+    })
+    assert.equal(sameTenantOtherSubject.status, 404)
+    assert.equal((await sameTenantOtherSubject.json()).error.code, "session_not_found")
   } finally {
     if (bff !== null) await close(bff)
     if (agent !== null) await close(agent)

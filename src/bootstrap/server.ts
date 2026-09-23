@@ -10,7 +10,8 @@ import { normalizeUpstreamResponse } from "../infrastructure/clients/upstream-re
 import { proxyUpstream } from "../upstream.js"
 import { liveAgentSession } from "../http/routes/agent.js"
 import { liveChatBusiness } from "../http/routes/chat.js"
-import { liveBffBusiness } from "../http/routes/live-bff.js"
+import { authorizeLiveBffMutation, liveBffBusiness } from "../http/routes/live-bff.js"
+import { authorizeChatRequest, type ChatAuthorization } from "../http/routes/chat-authorization.js"
 import { liveOwnerBusiness } from "../http/routes/owner.js"
 import { liveMoriBusiness } from "../http/routes/music.js"
 import { configuredUpstream, bffOwnedBusinessPath, isMoriBusinessPath, upstreamKey } from "../http/routes/routing.js"
@@ -56,6 +57,10 @@ async function handle(
         shared.conversation.conversationId,
         100,
       )
+      if (messages === null) {
+        send(response, 404, failure("share_not_found", "Share was not found", id))
+        return
+      }
       send(response, 200, ok({
         session: {
           session_id: shared.conversation.conversationId,
@@ -64,7 +69,7 @@ async function handle(
           created_at: shared.conversation.createdAt.toISOString(),
           updated_at: shared.conversation.updatedAt.toISOString(),
         },
-        ...(messages === null || messages.messages.length === 0 ? {} : { messages: messages.messages }),
+        ...(messages.messages.length === 0 ? {} : { messages: messages.messages }),
         pending_pauses: [],
         files: [],
         deliveries: [],
@@ -161,6 +166,24 @@ async function handle(
     }
     json = parsed
   }
+  let chatAuthorization: ChatAuthorization | null = null
+  if (composition.routeHandler === undefined && composition.businessStore !== null) {
+    try {
+      chatAuthorization = await authorizeChatRequest(request, context, businessPath, json, composition.businessStore)
+      if (chatAuthorization !== null && !chatAuthorization.ok) {
+        send(response, chatAuthorization.status, failure(chatAuthorization.code, chatAuthorization.message, id))
+        return
+      }
+      const resourceAuthorization = await authorizeLiveBffMutation(method, context, businessPath, json, composition.businessStore)
+      if (resourceAuthorization !== null && !resourceAuthorization.ok) {
+        send(response, resourceAuthorization.status, failure(resourceAuthorization.code, resourceAuthorization.message, id))
+        return
+      }
+    } catch {
+      send(response, 503, failure("business_store_unavailable", "The BFF business store is unavailable", id))
+      return
+    }
+  }
   const durableChatAdmission = composition.routeHandler === undefined
     && composition.businessStore !== null
     && method === "POST"
@@ -206,7 +229,23 @@ async function handle(
     return
   }
   if (businessPath[0] === "sessions") {
-    if (composition.businessStore !== null && await liveChatBusiness(request, response, config, context, businessPath, json, mutation, composition.idempotency, composition.businessStore)) return
+    if (
+      composition.businessStore !== null
+      && chatAuthorization !== null
+      && chatAuthorization.ok
+      && await liveChatBusiness(
+        request,
+        response,
+        config,
+        context,
+        businessPath,
+        json,
+        mutation,
+        composition.idempotency,
+        composition.businessStore,
+        chatAuthorization,
+      )
+    ) return
     await liveAgentSession(
       request,
       response,
@@ -219,6 +258,7 @@ async function handle(
       composition.businessStore?.agUi ?? null,
       composition.agUiRuntime,
       composition.agUiProjector !== undefined,
+      chatAuthorization,
     )
     return
   }

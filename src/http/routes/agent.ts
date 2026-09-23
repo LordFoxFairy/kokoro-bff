@@ -18,6 +18,7 @@ import type { IdempotencyEntry, MutationTicket } from "../../application/idempot
 import { AgUiSseWriter } from "../../interfaces/http/agui/sse.js"
 import type { AgUiProjectionService } from "../../application/agui/project-session-events.js"
 import type { AgUiSessionRuntime } from "../../application/agui/session-runtime.js"
+import type { AuthorizedChatRequest } from "./chat-authorization.js"
 
 export async function callAgent(
   config: BffConfig,
@@ -216,11 +217,17 @@ export async function liveAgentSession(
   agUiProjection: AgUiProjectionService | null,
   agUiRuntime: AgUiSessionRuntime,
   sourceProjectionActive: boolean,
+  authorization: AuthorizedChatRequest | null,
 ): Promise<boolean> {
   const baseUrl = config.upstreams.agents ?? null
   const method = request.method || "GET"
   const sessionId = businessPath[1] || ""
   const assertion = agentSessionAssertion(context, sessionId)
+
+  if (authorization === null) {
+    reply(response, 404, failure("session_not_found", "Session was not found", context.requestId), context, idempotency, mutation)
+    return true
+  }
 
   if (businessPath.length === 3 && businessPath[2] === "events" && method === "GET") {
     await durableAgentEventStream(request, response, config, context, sessionId, agUiProjection, sourceProjectionActive, idempotency, mutation, agUiRuntime)

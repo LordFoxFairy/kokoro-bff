@@ -49,9 +49,12 @@
 - Share 和 runtime manifest 只使用 service envelope，不要求或使用用户 Bearer；额外 Authorization header 被忽略。Scheduler
   callback 继续使用独立 Scheduler bearer。production 未配置 IAM origin 时 readiness 与普通用户请求 fail closed。
 - Live Project、instruction revision、project skill、project task、ScheduledTask 与 mutation receipt 使用本仓
-  PostgreSQL repository。Redis 当前用于 readiness/ping 和 Project cache invalidation，不是事实源。
+  PostgreSQL repository。Project 与 ScheduledTask 用户路径均以 IAM admission 的 tenant + subject 为 scope；Project slug 在 owner scope 唯一，
+  子事实由父 Project predicate/lock 保护，ScheduledTask 引用 Project 在 task+outbox 事务内重验。Project Redis 列表 cache 与 invalidate 已删除；
+  Redis 当前用于 readiness/ping 与 AG-UI 通知，不是业务事实源。
 - Live Conversation、Message、Share 使用本仓 `bff_conversation`、`bff_message`、`bff_share` PostgreSQL repository；
-  所有读写带 tenant predicate，删除保留 tombstone，share 撤销/过期后保留记录并只暴露 active/unexpired share。
+  所有私有读写带 tenant + owner predicate；非空 `project_ref` 还必须匹配同 scope Project。资源 gate 在通用 receipt 与 Agent I/O 前执行，
+  mutation repository/事务再次校验。删除保留 tombstone，share 撤销/过期后保留记录并只暴露 active/unexpired share。
 - Chat session list/detail/message history/title/delete/share routes 不再读取 Agent history。Message create 在一个 BFF
   PostgreSQL 事务中同时写入 completed user message、pending assistant message、`bff_agent_dispatch_outbox` 与预注册的
   AG-UI expected run；HTTP 在本地事务提交后返回 `202`，后台 dispatcher 再通过窄 Agent client 投递。Agent 仍只拥有
@@ -89,9 +92,9 @@
   frame 时跳过该 stream。回收前先把 frame cursor 写入
   `bff_agui_cursor_tombstone`，再推进 retention floor。tombstone 窗口内重连返回 `410 event_cursor_expired`；窗口
   结束后按未知 cursor 处理。
-- ScheduledTask create/update/delete/retry 先在同一 PostgreSQL 本地事务写入 task revision 与
+- ScheduledTask create/update/delete/retry 以 tenant + subject scope 先在同一 PostgreSQL 本地事务写入 task revision 与
   `bff_scheduled_task_outbox` command；事务提交后由 bounded dispatcher 在事务外调用 Scheduler。command 保留
-  `tenant_id`、`actor_id`、`request_id`、`idempotency_key` 和版本化 task snapshot，并以 `SKIP LOCKED`、lease token、
+  `tenant_id`、`actor_id`、`request_id`、`idempotency_key` 和版本化 task snapshot；稳定 task id 绑定 tenant、subject、path、key，并以 `SKIP LOCKED`、lease token、
   fence、指数退避、重试上限和 `pending/leased/retryable/succeeded/failed` 状态恢复。Scheduler dispatch receipt 仍使用
   旧 compact occurrence idempotency key；与 pinned Scheduler producer 尚未闭环。
 - Chat → Agent dispatcher 使用稳定 run/message/idempotency identity、`FOR UPDATE SKIP LOCKED`、lease token/fence、

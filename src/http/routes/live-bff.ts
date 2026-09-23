@@ -13,6 +13,46 @@ import { scheduledTaskResponse } from "../../application/scheduled/mappers.js"
 import { scheduledTaskId } from "./scheduler.js"
 import { projectName } from "../../domain/project/name.js"
 
+export type LiveBffAuthorization =
+  | Readonly<{ ok: true }>
+  | Readonly<{ ok: false; status: 404; code: "project_not_found" | "scheduled_task_not_found"; message: string }>
+
+/** Gate existing private resources before generic mutation receipt admission. */
+export async function authorizeLiveBffMutation(
+  method: string,
+  context: RequestContext,
+  businessPath: readonly string[],
+  json: Readonly<Record<string, unknown>>,
+  store: BffBusinessStore,
+): Promise<LiveBffAuthorization | null> {
+  if (!new Set(["POST", "PATCH", "DELETE"]).has(method)) return null
+  const scope = { tenantId: context.identity.namespace, subjectId: context.identity.userId }
+
+  if (businessPath[0] === "projects" && businessPath.length > 1) {
+    const projectId = businessPath[1]
+    if (projectId !== undefined && await store.services.projects.find(scope, projectId) === null) {
+      return { ok: false, status: 404, code: "project_not_found", message: "Project was not found" }
+    }
+    return { ok: true }
+  }
+
+  if (businessPath[0] === "scheduled-tasks") {
+    if (businessPath.length > 1) {
+      const taskId = businessPath[1]
+      if (taskId !== undefined && await store.services.scheduledTasks.find(scope, taskId) === null) {
+        return { ok: false, status: 404, code: "scheduled_task_not_found", message: "Scheduled task was not found" }
+      }
+      return { ok: true }
+    }
+    const projectId = typeof json.project_id === "string" ? json.project_id.trim() : ""
+    if (projectId !== "" && await store.services.projects.find(scope, projectId) === null) {
+      return { ok: false, status: 404, code: "project_not_found", message: "Project was not found" }
+    }
+    return { ok: true }
+  }
+  return null
+}
+
 function mutationLineage(context: RequestContext, request: IncomingMessage): ScheduledTaskMutationLineage {
   const key = idempotencyKey(request)
   if (key === null) throw new Error("SCHEDULED_TASK_IDEMPOTENCY_KEY_REQUIRED")
@@ -36,11 +76,12 @@ export async function liveBffBusiness(
 ): Promise<boolean> {
   const method = request.method || "GET"
   const tenantId = context.identity.namespace
+  const ownerScope = { tenantId, subjectId: context.identity.userId }
   try {
     if (businessPath[0] === "projects") {
       const projectId = businessPath[1]
       if (businessPath.length === 1 && method === "GET") {
-        await reply(response, 200, ok(projectData(await store.services.projects.list(tenantId)), context.requestId), context, idempotency, mutation)
+        await reply(response, 200, ok(projectData(await store.services.projects.list(ownerScope)), context.requestId), context, idempotency, mutation)
         return true
       }
       if (businessPath.length === 1 && method === "POST") {
@@ -49,12 +90,12 @@ export async function liveBffBusiness(
           await reply(response, 400, failure("invalid_project", "Project name is required", context.requestId), context, idempotency, mutation)
           return true
         }
-        const project = await store.services.projects.create(tenantId, name, typeof json.description === "string" ? json.description : "")
+        const project = await store.services.projects.create(ownerScope, name, typeof json.description === "string" ? json.description : "")
         await reply(response, 200, ok({ project }, context.requestId), context, idempotency, mutation)
         return true
       }
       if (businessPath.length === 2 && projectId !== undefined && method === "GET") {
-        const project = await store.services.projects.find(tenantId, projectId)
+        const project = await store.services.projects.find(ownerScope, projectId)
         await reply(response, project === null ? 404 : 200, project === null ? failure("project_not_found", "Project was not found", context.requestId) : ok({ project }, context.requestId), context, idempotency, mutation)
         return true
       }
@@ -63,20 +104,21 @@ export async function liveBffBusiness(
           await reply(response, 400, failure("invalid_project_instruction", "Project instruction must be a string", context.requestId), context, idempotency, mutation)
           return true
         }
-        const project = await store.services.projects.updateInstruction(tenantId, projectId, json.instruction, context.identity.userId)
+        const project = await store.services.projects.updateInstruction(ownerScope, projectId, json.instruction)
         await reply(response, project === null ? 404 : 200, project === null ? failure("project_not_found", "Project was not found", context.requestId) : ok({ project }, context.requestId), context, idempotency, mutation)
         return true
       }
       if (businessPath.length === 3 && projectId !== undefined && businessPath[2] === "instruction-revisions" && method === "GET") {
-        const revisions = await store.services.projects.revisions(tenantId, projectId)
+        const revisions = await store.services.projects.revisions(ownerScope, projectId)
         await reply(response, revisions === null ? 404 : 200, revisions === null ? failure("project_not_found", "Project was not found", context.requestId) : ok({ items: revisions }, context.requestId), context, idempotency, mutation)
         return true
       }
       if (businessPath.length === 3 && projectId !== undefined && businessPath[2] === "tasks" && method === "GET") {
-        if (await store.services.projects.find(tenantId, projectId) === null) {
+        const tasks = await store.services.projects.tasks(ownerScope, projectId)
+        if (tasks === null) {
           await reply(response, 404, failure("project_not_found", "Project was not found", context.requestId), context, idempotency, mutation)
         } else {
-          await reply(response, 200, ok({ tasks: await store.services.projects.tasks(tenantId, projectId) }, context.requestId), context, idempotency, mutation)
+          await reply(response, 200, ok({ tasks }, context.requestId), context, idempotency, mutation)
         }
         return true
       }
@@ -89,12 +131,14 @@ export async function liveBffBusiness(
           await reply(response, 400, failure("invalid_project_skill", "Skill enabled must be a boolean", context.requestId), context, idempotency, mutation)
           return true
         }
-        const project = await store.services.projects.find(tenantId, projectId)
+        const project = await store.services.projects.find(ownerScope, projectId)
         if (project === null) {
           await reply(response, 404, failure("project_not_found", "Project was not found", context.requestId), context, idempotency, mutation)
         } else {
-          await store.services.projects.setSkill(tenantId, project.id, businessPath[3], json.enabled)
-          await reply(response, 200, ok({ skill: { project_id: project.id, name: businessPath[3], enabled: json.enabled } }, context.requestId), context, idempotency, mutation)
+          const updated = await store.services.projects.setSkill(ownerScope, project.id, businessPath[3], json.enabled)
+          await reply(response, updated ? 200 : 404, updated
+            ? ok({ skill: { project_id: project.id, name: businessPath[3], enabled: json.enabled } }, context.requestId)
+            : failure("project_not_found", "Project was not found", context.requestId), context, idempotency, mutation)
         }
         return true
       }
@@ -106,8 +150,7 @@ export async function liveBffBusiness(
         }
         const lineage = mutationLineage(context, request)
         const task = await store.services.scheduledTasks.create(
-          tenantId,
-          context.identity.userId,
+          ownerScope,
           input,
           scheduledTaskId(context, `/${businessPath.join("/")}`, lineage.idempotencyKey),
           lineage,
@@ -120,7 +163,7 @@ export async function liveBffBusiness(
     if (businessPath[0] === "scheduled-tasks") {
       const taskId = businessPath[1]
       if (businessPath.length === 1 && method === "GET") {
-        const tasks = await store.services.scheduledTasks.list(tenantId)
+        const tasks = await store.services.scheduledTasks.list(ownerScope)
         await reply(response, 200, ok(scheduledData(tasks.map(scheduledTaskResponse)), context.requestId), context, idempotency, mutation)
         return true
       }
@@ -132,8 +175,7 @@ export async function liveBffBusiness(
         }
         const lineage = mutationLineage(context, request)
         const task = await store.services.scheduledTasks.create(
-          tenantId,
-          context.identity.userId,
+          ownerScope,
           input,
           scheduledTaskId(context, `/${businessPath.join("/")}`, lineage.idempotencyKey),
           lineage,
@@ -142,7 +184,7 @@ export async function liveBffBusiness(
         return true
       }
       if (businessPath.length === 2 && taskId !== undefined && method === "GET") {
-        const task = await store.services.scheduledTasks.find(tenantId, taskId)
+        const task = await store.services.scheduledTasks.find(ownerScope, taskId)
         await reply(response, task === null ? 404 : 200, task === null ? failure("scheduled_task_not_found", "Scheduled task was not found", context.requestId) : ok({ task: scheduledTaskResponse(task) }, context.requestId), context, idempotency, mutation)
         return true
       }
@@ -152,7 +194,7 @@ export async function liveBffBusiness(
           await reply(response, 400, failure("invalid_scheduled_task", "Scheduled task fields are invalid", context.requestId), context, idempotency, mutation)
           return true
         }
-        const task = await store.services.scheduledTasks.update(tenantId, taskId, patch, mutationLineage(context, request))
+        const task = await store.services.scheduledTasks.update(ownerScope, taskId, patch, mutationLineage(context, request))
         if (task === null) {
           await reply(response, 404, failure("scheduled_task_not_found", "Scheduled task was not found", context.requestId), context, idempotency, mutation)
         } else {
@@ -161,12 +203,12 @@ export async function liveBffBusiness(
         return true
       }
       if (businessPath.length === 2 && taskId !== undefined && method === "DELETE") {
-        const deleted = await store.services.scheduledTasks.delete(tenantId, taskId, mutationLineage(context, request))
+        const deleted = await store.services.scheduledTasks.delete(ownerScope, taskId, mutationLineage(context, request))
         await reply(response, deleted ? 200 : 404, deleted ? ok({ ok: true }, context.requestId) : failure("scheduled_task_not_found", "Scheduled task was not found", context.requestId), context, idempotency, mutation)
         return true
       }
       if (businessPath.length === 3 && taskId !== undefined && businessPath[2] === "retry" && method === "POST") {
-        const task = await store.services.scheduledTasks.update(tenantId, taskId, { status: "active", enabled: true }, mutationLineage(context, request))
+        const task = await store.services.scheduledTasks.update(ownerScope, taskId, { status: "active", enabled: true }, mutationLineage(context, request))
         if (task === null) {
           await reply(response, 404, failure("scheduled_task_not_found", "Scheduled task was not found", context.requestId), context, idempotency, mutation)
         } else {

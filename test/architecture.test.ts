@@ -152,6 +152,7 @@ test("BFF keeps contract, application, client, and repository boundaries explici
     "src/infrastructure/postgres/repositories.ts",
     "src/infrastructure/postgres/scheduler-dispatch-receipt-repository.ts",
     "src/http/routes/agent.ts",
+    "src/http/routes/chat-authorization.ts",
     "src/http/routes/chat.ts",
     "src/http/routes/live-bff.ts",
     "src/http/routes/owner.ts",
@@ -532,7 +533,37 @@ test("BFF Chat facts keep owner predicates and isolate public share capability r
   assert.match(schema, /bff_share/u)
 })
 
-test("ScheduledTask mutations use a tenant-scoped transactional outbox and fenced dispatcher", async () => {
+test("private BFF resources use named owner scopes before receipts and keep service capabilities separate", async () => {
+  const [projectPort, projectRepository, scheduledPort, scheduledRepository, chatAuthorization, server, client, openapi, schema] = await Promise.all([
+    readFile(path.join(root, "src/application/ports/project-repository.ts"), "utf8"),
+    readFile(path.join(root, "src/infrastructure/postgres/project-repository.ts"), "utf8"),
+    readFile(path.join(root, "src/application/ports/scheduled-task-repository.ts"), "utf8"),
+    readFile(path.join(root, "src/infrastructure/postgres/scheduled-task-repository.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/chat-authorization.ts"), "utf8"),
+    readFile(path.join(root, "src/bootstrap/server.ts"), "utf8"),
+    readFile(path.join(root, "src/infrastructure/postgres/client.ts"), "utf8"),
+    readFile(path.join(root, "contract/openapi/v1/openapi.yaml"), "utf8"),
+    readFile(path.join(root, "database/schema.sql"), "utf8"),
+  ])
+  assert.match(projectPort, /ProjectOwnerScope/u)
+  assert.match(scheduledPort, /ScheduledTaskOwnerScope/u)
+  assert.match(projectRepository, /tenant_id = \$1 AND owner_id = \$2/u)
+  assert.match(scheduledRepository, /tenant_id = \$1 AND owner_id = \$2/u)
+  assert.match(scheduledRepository, /FOR SHARE/u)
+  assert.doesNotMatch(client, /invalidateProjects|projects:\$\{tenant/u)
+  assert.match(chatAuthorization, /scope must be omitted, empty, or direct/u)
+  assert.match(chatAuthorization, /services\.chat\.findConversation/u)
+  assert.ok(server.indexOf("authorizeChatRequest") < server.indexOf("mutationTicket("))
+  assert.ok(server.indexOf("authorizeLiveBffMutation") < server.indexOf("mutationTicket("))
+  assert.match(openapi, /DirectScopeQuery:[\s\S]*enum: \['', direct\]/u)
+  assert.match(openapi, /ShareScopeQuery:[\s\S]*minLength: 1/u)
+  assert.match(schema, /uq_bff_project_owner_slug/u)
+  assert.match(schema, /ix_bff_project_owner_list/u)
+  assert.match(schema, /ix_bff_scheduled_task_owner/u)
+  assert.doesNotMatch(schema, /project_(?:acl|member)|authorization_grant/iu)
+})
+
+test("ScheduledTask mutations use an owner-scoped transactional outbox and fenced dispatcher", async () => {
   const [scheduledRepository, outboxRepository, dispatcher, delivery, controlClient, liveRoute, schema] = await Promise.all([
     readFile(path.join(root, "src/infrastructure/postgres/scheduled-task-repository.ts"), "utf8"),
     readFile(path.join(root, "src/application/ports/scheduled-task-outbox-repository.ts"), "utf8"),

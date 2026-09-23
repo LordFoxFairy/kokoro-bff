@@ -43,7 +43,7 @@ BFF 是公开 Product API 的唯一 owner；其他仓库只发布自己的 inter
 `x-kokoro-namespace`、`x-kokoro-principal-id` 组装为 `RequestContext`。这是待删除的自报身份入口；当前没有在线 IAM
 session admission。`src/bootstrap/server.ts` 还会为 runtime manifest 制造 `userId: "runtime-manifest"`，这不是用户身份事实。
 公开 Share 使用 service secret + share capability，Scheduler callback 使用独立 Scheduler bearer；它们当前和普通用户管线分支。
-本段只描述起始 commit；3.2～3.4 是 Task 1 本变更实现，3.5 仍是后续 Task 2 目标。
+本段只描述起始 commit；3.2～3.4 是 Task 1 实现，3.5 是 Task 2 已实现的个人私有边界。
 
 ### 3.2 Task 1 本变更：单一用户 admission 链
 
@@ -102,18 +102,18 @@ Task 1 不宣称跨连接即时撤销。
 
 `GET /healthz` 与 `GET /readyz` 继续是 probe。上述边界都不是 IAM 不可用时的用户 fallback，彼此凭据不可互换。
 
-### 3.5 Task 2 目标：默认个人私有
+### 3.5 Task 2 已实现：默认个人私有
 
 用户业务 scope 统一以具名 `{ tenantId, subjectId }` 传递。Project、ScheduledTask、Conversation/Message、AG-UI events 和
 Run control 对同 tenant 其他用户及跨 tenant 用户均 fail closed；资源存在性敏感的 detail/mutation/control/events 返回与缺失一致的
 404。IAM admission 只证明身份，不替代 BFF owner predicate，也不根据 `x-kokoro-permission` 合成 63 项业务权限。
 
 Project 新增不可由 body 指定的 `owner_id`，slug 域变为 `tenant + owner + slug`；Project revisions/skills/tasks 通过父 Project
-predicate/lock 授权，不复制 owner 列。ScheduledTask 已有 `owner_id`，但所有用户 list/detail/update/delete/retry 必须增加 owner
-predicate；create 在 task/outbox 同一事务中锁定并验证引用 Project 属于同一 scope。内部 Scheduler `findRecord(tenant, task)`
+predicate/lock 授权，不复制 owner 列。ScheduledTask 复用既有 `owner_id`；所有用户 list/detail/update/delete/retry 已增加 owner
+predicate，create 在 task/outbox 同一事务中锁定并验证引用 Project 属于同一 scope。内部 Scheduler `findRecord(tenant, task)`
 保留为具名服务语义，只供 callback 恢复已存 owner，不能被用户 route 复用。
 
-Chat 当前 Conversation repository 已有 `tenant + owner` predicate，但 Task 2 还必须验证非空 `project_ref` 指向同一 scope 的
+Chat Conversation repository 的 `tenant + owner` predicate 现已同时验证非空 `project_ref` 指向同一 scope 的
 Project；body/query 同时给出不同 `project_ref` 返回 400。query `scope` 只允许省略、空或 `direct`，其他值返回 400，绝不作为
 tenant/授权来源。cancel/resume/steer 在通用 mutation receipt replay 与 Agent I/O 之前验证同 scope Conversation；Share 不进入该路径。
 公开 Share 与 Scheduler callback 按 3.4 的独立边界保持可用，不新建团队共享、Project ACL 或通用授权表。
@@ -132,14 +132,14 @@ different digest -> 409 idempotency_conflict
 Live 且 business store 已配置时 receipt 位于 `bff_idempotency_receipt`；否则当前实现使用进程内 Map。pending claim
 60 秒后可被回收。`c5e9b3c` 的 mutation fingerprint 已覆盖 method、canonical path、排序 query、canonical body、
 content-type 与 `if-match`；scope 包含 namespace/actor/method/path/key。receipt 与普通业务写事务、通用 fencing 仍未统一。
-Task 2 的资源 owner gate 必须位于 replay/claim 之前，避免同 tenant 其他用户命中旧结果或制造副作用。
+资源 owner gate 现位于 replay/claim 之前，避免同 tenant 其他用户命中旧结果或制造副作用；repository/事务仍再次校验，避免 TOCTOU。
 
 ## 5. Project 与 ScheduledTask
 
 Project 与 ScheduledTask 是 BFF-owned facts。`c5e9b3c` 的 repository 查询都携带 tenant id，但这只实现租户隔离：
 Project 没有 owner 列，list/detail/slug/child mutation 和 Redis list cache 都是 tenant scope；ScheduledTask 虽已有 `owner_id`，
-用户 list/detail/update/delete 仍只按 tenant 查询。Task 2 按 3.5 把用户路径收敛为 tenant + owner，并保留 Scheduler callback
-所需的显式内部查询。关系完整性由同一事务内的 Application/Repository predicate 与锁维护，不使用数据库外键。
+用户 list/detail/update/delete 仍只按 tenant 查询。当前实现已按 3.5 把用户路径收敛为 tenant + owner，并保留 Scheduler callback
+所需的显式内部查询；Project Redis 列表 cache 与 invalidate 分支已经删除。关系完整性由同一事务内的 Application/Repository predicate 与锁维护，不使用数据库外键。
 
 ScheduledTask 当前流程：
 
@@ -147,7 +147,7 @@ ScheduledTask 当前流程：
 validate input
   -> derive trusted tenant/actor/request/idempotency lineage
   -> BEGIN
-  -> tenant-scoped project/task lock and task revision write
+  -> tenant + owner scoped project/task lock and task revision write
   -> write versioned Scheduler command to bff_scheduled_task_outbox
   -> COMMIT (fact and command are one local transaction)
   -> dispatcher claims with SKIP LOCKED + lease_token + fence
@@ -163,8 +163,8 @@ idempotency_key)` 只产生一个业务 command；同一 task 的较新 command 
 Dispatcher 的 HTTP 投递是 at-least-once：lease 过期可被其他 worker 重新 claim，settlement 必须匹配 owner、token 和
 fence；2xx 终结为 `succeeded`，明确的瞬时错误进入指数退避 `retryable`，超过 attempt budget 或永久 4xx 进入 `failed`。
 Scheduler 注册的 409/404 只按稳定 job identity 做 register/replace reconciliation。mutation receipt 目前仍由外层
-idempotency repository 单独 claim/commit，尚未与 task/outbox 合并为一个 receipt 事务。Task 2 将 create 的稳定
-`scheduledTaskId` 材料从 `tenant + path + key` 收紧为 `tenant + trusted subject + path + key`；create replay、用户查询和
+idempotency repository 单独 claim/commit，尚未与 task/outbox 合并为一个 receipt 事务。Task 2 已将 create 的稳定
+`scheduledTaskId` 材料从分隔符拼接收紧为无歧义 JSON 数组 `[tenant, trusted subject, path, key]`；create replay、用户查询和
 outbox lookup 不得跨 owner 命中。该修改不改变 Scheduler callback 的 opaque occurrence/key receipt scope。
 
 ## 6. Chat 与 AG-UI
@@ -183,7 +183,7 @@ AgUiProjectorRunner (process lifecycle)
   -> settle progress/retry/blocked + best-effort Redis PUBLISH
 
 GET events
-  -> verify BFF-owned Conversation in trusted tenant scope
+  -> verify BFF-owned Conversation in trusted tenant + subject scope
   -> resolve Last-Event-ID against (tenant, session) in PostgreSQL
   -> read committed rows strictly after public_sequence
   -> @ag-ui/core validation -> SSE
@@ -195,7 +195,7 @@ source sequence 建第二个唯一约束；相同 identity 的不同 digest/sequ
 frame 保存完整 JSON payload、source mapping、frame index、单调内部 sequence 与独立随机 `agui_*` cursor。
 
 客户端只把 SSE `id` 原样作为 `Last-Event-ID`；cursor 不编码 authority。Repository 先用 tenant + session + cursor
-解析内部位置，再按 tenant + session + public sequence 查询。跨 tenant 请求先按 Conversation owner 边界返回与普通缺失
+解析内部位置，再按 tenant + session + public sequence 查询。跨 tenant 或同 tenant 跨 subject 请求先按 Conversation owner 边界返回与普通缺失
 一致的 `404 session_not_found`；当前 session 内格式错误或未知 cursor 返回 `400 invalid_event_cursor`。一个 source fact
 的多 frame 在同一事务提交，但每帧有独立 cursor；连接
 恰好在 START 后断开时会从 CONTENT 继续，不会把 source sequence 当作已完成整个 projection。

@@ -59,6 +59,7 @@ export function parseMessageCreateRequest(
     || pinnedSkills === null
     || mcpServers === null
     || (json.thinking !== undefined && typeof json.thinking !== "boolean")
+    || (bodyProjectRef !== undefined && fallbackProjectRef !== undefined && bodyProjectRef !== fallbackProjectRef)
   ) return null
   const projectRef = bodyProjectRef ?? fallbackProjectRef
   return {

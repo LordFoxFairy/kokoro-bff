@@ -3,6 +3,7 @@ import type {
   ScheduledTaskCreateInput,
   ScheduledTaskPatch,
   ScheduledTaskMutationLineage,
+  ScheduledTaskOwnerScope,
   ScheduledTaskRecord,
   ScheduledTaskRepository,
 } from "./ports/scheduled-task-repository.js"
@@ -11,18 +12,20 @@ import type {
 export class ScheduledTaskService {
   public constructor(private readonly repository: ScheduledTaskRepository) {}
 
-  public list(tenantId: string): Promise<ScheduledTaskFact[]> { return this.repository.listScheduledTasks(tenantId) }
-  public find(tenantId: string, taskId: string): Promise<ScheduledTaskFact | null> { return this.repository.findScheduledTask(tenantId, taskId) }
+  public list(scope: ScheduledTaskOwnerScope): Promise<ScheduledTaskFact[]> { return this.repository.listScheduledTasks(scope) }
+  public find(scope: ScheduledTaskOwnerScope, taskId: string): Promise<ScheduledTaskFact | null> {
+    return this.repository.findScheduledTask(scope, taskId)
+  }
   public findRecord(tenantId: string, taskId: string): Promise<ScheduledTaskRecord | null> {
     return this.repository.findScheduledTaskRecord(tenantId, taskId)
   }
-  public create(tenantId: string, ownerId: string, input: ScheduledTaskCreateInput, requestedTaskId: string | undefined, lineage: ScheduledTaskMutationLineage): Promise<ScheduledTaskFact> {
-    return this.repository.createScheduledTask(tenantId, ownerId, input, requestedTaskId, lineage)
+  public create(scope: ScheduledTaskOwnerScope, input: ScheduledTaskCreateInput, requestedTaskId: string | undefined, lineage: ScheduledTaskMutationLineage): Promise<ScheduledTaskFact> {
+    return this.repository.createScheduledTask(scope, input, requestedTaskId, lineage)
   }
-  public update(tenantId: string, taskId: string, input: ScheduledTaskPatch, lineage: ScheduledTaskMutationLineage): Promise<ScheduledTaskFact | null> {
-    return this.repository.updateScheduledTask(tenantId, taskId, input, lineage)
+  public update(scope: ScheduledTaskOwnerScope, taskId: string, input: ScheduledTaskPatch, lineage: ScheduledTaskMutationLineage): Promise<ScheduledTaskFact | null> {
+    return this.repository.updateScheduledTask(scope, taskId, input, lineage)
   }
-  public delete(tenantId: string, taskId: string, lineage: ScheduledTaskMutationLineage): Promise<boolean> {
-    return this.repository.deleteScheduledTask(tenantId, taskId, lineage)
+  public delete(scope: ScheduledTaskOwnerScope, taskId: string, lineage: ScheduledTaskMutationLineage): Promise<boolean> {
+    return this.repository.deleteScheduledTask(scope, taskId, lineage)
   }
 }

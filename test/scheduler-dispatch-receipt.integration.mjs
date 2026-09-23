@@ -304,8 +304,7 @@ receiverIntegrationTest("Scheduler HTTP receiver replays the frozen launch after
     const agentBase = await listen(agent)
     store = new PostgresBffRepositories(postgresUrl, redisUrl)
     await store.services.scheduledTasks.create(
-      tenant,
-      owner,
+      { tenantId: tenant, subjectId: owner },
       {
         title: "Receiver fixture",
         prompt: body.prompt,

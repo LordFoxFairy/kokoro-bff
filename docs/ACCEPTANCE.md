@@ -38,16 +38,16 @@ Phase 2 不验收跨版本 re-projection、PG backup restore、长时间 fault i
 | Area | Scenario | 当前状态/期望 |
 | --- | --- | --- |
 | Auth | 普通用户 route 的 service/Bearer/IAM admission | legacy identity header 无效；IAM identity 唯一；撤销、取消、重复 Authorization、429/503 与 no-store 已覆盖 |
-| Project | create/update/list + same-key replay | 当前有 unit/mock 与真实 store integration 用例 |
+| Project | tenant+subject list/detail/slug/child mutation + same-key replay | 真实 PG 覆盖同 tenant/cross tenant 隔离、同 owner slug 唯一与不同 owner 同 slug |
 | Idempotency | 同 digest replay / different digest conflict / pending duplicate | 当前已覆盖；query/header/transaction gap 开放 |
 | Owner reads | System（含 Model）/Capability/Billing | 显式 projection；缺失/坏响应 fail closed |
 | Service-only exceptions | Share/runtime manifest 多带无关 Authorization | 不调用 IAM，按自身 service/share 或 System contract 处理；Scheduler callback 仍独立 |
 | Library degraded | admission 前可返回 503 `iam_admission_unavailable`；admission 后固定 503 `storage_integration_unavailable` | 两个 code 共存，Storage connection/request 均为 0 |
 | Chat admission | user + provisional assistant + Agent command + expected-run fence 原子提交，HTTP 随后返回 202 | unit + 真实 PG integration 已覆盖 |
 | AG-UI | Agent fact → fenced background projector → transactional PG ledger → schema-valid SSE + opaque replay | 主动摄取、retention/GC 与 expired cursor 已覆盖 |
-| Chat facts | Conversation/Message/Share BFF PostgreSQL ownership | 已实现；assistant reconciliation 开放 |
-| Scheduled | fact + Scheduler registration/dispatch replay | bounded transactional outbox、lease/fence 与 crash recovery 已覆盖 |
-| Tenant isolation | 每个 public route 的跨 tenant negative matrix | 部分覆盖，完整矩阵未完成 |
+| Chat facts | Conversation/Message/Share BFF PostgreSQL ownership | tenant+subject、project_ref、direct scope 与 share 只读边界已实现；assistant reconciliation 开放 |
+| Scheduled | private fact + Scheduler registration/dispatch replay | tenant+subject owner、Project relation、稳定 ID、bounded transactional outbox、lease/fence 与 crash recovery 已覆盖 |
+| Private resource isolation | Project/ScheduledTask/Chat/control/events 的同 tenant 跨 subject与跨 tenant negative matrix | W1B 私有资源面已覆盖；其他 owner projection 仍各自验证 |
 | Recovery | AG-UI replay/fencing/GC、Scheduler outbox，以及 Agent dispatch retry、BFF restart、expired-lease reclaim、stale/cross-tenant settlement 已覆盖；PG restore 仍开放 |
 
 ## 4. 必跑命令

@@ -7,6 +7,11 @@ export type ScheduledTaskMutationLineage = {
   idempotencyKey: string
 }
 
+export type ScheduledTaskOwnerScope = Readonly<{
+  tenantId: string
+  subjectId: string
+}>
+
 export type ScheduledTaskCreateInput = {
   projectId?: string
   title: string
@@ -39,22 +44,22 @@ export type ScheduledTaskRecord = {
 
 /** Port consumed by the BFF application layer. It contains no SQL or driver types. */
 export interface ScheduledTaskRepository {
-  listScheduledTasks(tenantId: string): Promise<ScheduledTaskFact[]>
-  findScheduledTask(tenantId: string, taskId: string): Promise<ScheduledTaskFact | null>
+  listScheduledTasks(scope: ScheduledTaskOwnerScope): Promise<ScheduledTaskFact[]>
+  findScheduledTask(scope: ScheduledTaskOwnerScope, taskId: string): Promise<ScheduledTaskFact | null>
+  /** Internal Scheduler callback lookup; never exposed as a user-resource query. */
   findScheduledTaskRecord(tenantId: string, taskId: string): Promise<ScheduledTaskRecord | null>
   /** Fact mutation and its Scheduler command are committed in one local transaction. */
   createScheduledTask(
-    tenantId: string,
-    ownerId: string,
+    scope: ScheduledTaskOwnerScope,
     input: ScheduledTaskCreateInput,
     requestedTaskId: string | undefined,
     lineage: ScheduledTaskMutationLineage,
   ): Promise<ScheduledTaskFact>
   updateScheduledTask(
-    tenantId: string,
+    scope: ScheduledTaskOwnerScope,
     taskId: string,
     input: ScheduledTaskPatch,
     lineage: ScheduledTaskMutationLineage,
   ): Promise<ScheduledTaskFact | null>
-  deleteScheduledTask(tenantId: string, taskId: string, lineage: ScheduledTaskMutationLineage): Promise<boolean>
+  deleteScheduledTask(scope: ScheduledTaskOwnerScope, taskId: string, lineage: ScheduledTaskMutationLineage): Promise<boolean>
 }
