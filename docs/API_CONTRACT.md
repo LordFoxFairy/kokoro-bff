@@ -37,7 +37,7 @@ blob 验证两份 IAM digest、relay path/method 子集及 BFF artifact，含篡
 Web 以固定 BFF commit + 此 artifact blob/SHA-256 digest 保存只读 vendor 输入，并运行 consumer test 比较
 Web route policy 与 BFF 已发布矩阵；不能只看本页 Markdown 或松散版本范围。
 
-固定上游来源为 IAM main `c0f6068731b8a506cd2d3554e72719aa7327f2be`，
+固定上游来源为 IAM main `b35a9a5301219654ea344c03407fd355f58c481e`，
 `src/modules/auth/ingress/auth-routes.constants.ts` SHA-256
 `f63dacfa8a7bcec3c56efb8ffb762a3f8bd82bb380eff40a1462db1e77d61ead`；原生 schema 快照
 `contract/vendor/better-auth.v1.7.3.json` SHA-256
