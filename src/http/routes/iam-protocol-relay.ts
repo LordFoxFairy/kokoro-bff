@@ -4,7 +4,7 @@ import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
 import { failure } from "../../contracts/index.js"
 import { send } from "../response.js"
-import { IAM_RELAY_POLICY, iamRelayCookieName, iamRelayRoute, type IamRelayRoute } from "./iam-protocol-relay.policy.js"
+import { IAM_RELAY_POLICY, fixedTenantSetActiveBody, iamRelayCookieName, iamRelayRoute, type IamRelayRoute } from "./iam-protocol-relay.policy.js"
 import { requestIamRelay, type IamRelayUpstream } from "./iam-protocol-relay.transport.js"
 
 const LOGOUT_CSP = "default-src 'none'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
@@ -168,6 +168,10 @@ export async function iamProtocolRelay(request: IncomingMessage, response: Serve
     replyFailure(response, id, 404, "iam_relay_route_not_found")
     return
   }
+  if (route.path === "/organization/set-active" && config.tenantId === null) {
+    replyFailure(response, id, 503, "product_tenant_not_configured")
+    return
+  }
   if (headerBytes(request) > IAM_RELAY_POLICY.maxHeaderBytes) {
     replyFailure(response, id, 413, "iam_relay_request_too_large")
     return
@@ -181,6 +185,17 @@ export async function iamProtocolRelay(request: IncomingMessage, response: Serve
   if (cookie === null) {
     replyFailure(response, id, 400, "iam_relay_cookie_invalid")
     return
+  }
+  if (route.path === "/organization/set-active") {
+    const sessionCookie = `${config.iamRelay.secureCookies ? "__Secure-" : ""}kokoro-issuer.session_token=`
+    const session = cookie
+      .split("; ")
+      .find((part) => part.startsWith(sessionCookie))
+      ?.slice(sessionCookie.length)
+    if (session === undefined || session.length === 0 || /\s/u.test(session)) {
+      replyFailure(response, id, 403, "iam_relay_credential_rejected")
+      return
+    }
   }
   if ((route.path === "/oauth2/token" || route.path === "/oauth2/revoke" || route.path === "/oauth2/userinfo") && cookie !== "") {
     replyFailure(response, id, 403, "iam_relay_cookie_rejected")
@@ -223,6 +238,22 @@ export async function iamProtocolRelay(request: IncomingMessage, response: Serve
     if (request.method === "GET" && body.length > 0) {
       replyFailure(response, id, 400, "iam_relay_body_rejected")
       return
+    }
+    if (route.path === "/organization/set-active") {
+      if (route.query !== "" || rawHeader(request, "content-type") !== "application/json") {
+        replyFailure(response, id, 400, "iam_relay_body_rejected")
+        return
+      }
+      const admission = fixedTenantSetActiveBody(body, config.tenantId!)
+      if (admission !== "valid") {
+        replyFailure(
+          response,
+          id,
+          admission === "tenant_mismatch" ? 403 : 400,
+          admission === "tenant_mismatch" ? "product_tenant_forbidden" : "iam_relay_body_rejected",
+        )
+        return
+      }
     }
     const headers = new Headers()
     for (const name of ["accept", "content-type"] as const) {

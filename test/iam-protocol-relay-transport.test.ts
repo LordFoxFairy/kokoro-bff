@@ -23,7 +23,7 @@ async function listen(server: Server): Promise<string> {
   return `http://127.0.0.1:${address.port}`
 }
 
-function bff(iamBaseUrl: string, limits: { timeoutMs?: number; responseBytes?: number } = {}): Server {
+function bff(iamBaseUrl: string, limits: { timeoutMs?: number; responseBytes?: number; tenantId?: string } = {}): Server {
   return createLiveTestBffServer(
     loadConfig({
       KOKORO_BFF_SHARED_SECRET: "test-secret",
@@ -34,11 +34,78 @@ function bff(iamBaseUrl: string, limits: { timeoutMs?: number; responseBytes?: n
       KOKORO_IAM_WEB_ORIGIN: webOrigin,
       KOKORO_IAM_WEB_CALLBACK_URI: `${webOrigin}/api/auth/callback/kokoro-iam`,
       KOKORO_IAM_WEB_POST_LOGOUT_URI: `${webOrigin}/auth/sign-in`,
+      ...(limits.tenantId === undefined ? {} : { KOKORO_TENANT_ID: limits.tenantId }),
       ...(limits.timeoutMs === undefined ? {} : { KOKORO_UPSTREAM_TIMEOUT_MS: String(limits.timeoutMs) }),
       ...(limits.responseBytes === undefined ? {} : { KOKORO_UPSTREAM_MAX_RESPONSE_BYTES: String(limits.responseBytes) }),
     }),
   )
 }
+
+test("fixed-tenant relay rejects list and invalid set-active before IAM socket", async () => {
+  const calls: Array<{ url: string | undefined; body: string; cookie: string | undefined }> = []
+  const iam = await listen(
+    createServer((request, response) => {
+      const chunks: Buffer[] = []
+      request.on("data", (chunk: Buffer) => chunks.push(chunk))
+      request.on("end", () => {
+        calls.push({ url: request.url, body: Buffer.concat(chunks).toString("utf8"), cookie: request.headers.cookie })
+        response.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" })
+        response.end("{}")
+      })
+    }),
+  )
+  const base = await listen(bff(iam, { tenantId: "tenant-fixed" }))
+  const query = "sig=signed%2Bvalue&ba_iat=123&ba_param=scope&ba_param=state"
+  const body = (organizationId: unknown, oauthQuery: unknown, extra: Record<string, unknown> = {}): string =>
+    JSON.stringify({ organizationId, oauth_query: oauthQuery, ...extra })
+  const headers = {
+    ...webServiceHeaders,
+    origin: webOrigin,
+    cookie: "authjs.session-token=product; kokoro-issuer.session_token=issuer-session",
+    "content-type": "application/json",
+  }
+  const post = (payload: string, overrides: Record<string, string> = {}, path = "/iam/organization/set-active") =>
+    fetch(`${base}${path}`, { method: "POST", headers: { ...headers, ...overrides }, body: payload })
+
+  assert.equal((await fetch(`${base}/iam/organization/list`, { headers })).status, 404)
+  assert.equal(
+    (
+      await fetch(`${base}/iam/organization/set-active`, {
+        method: "POST",
+        headers: { origin: webOrigin, cookie: headers.cookie, "content-type": "application/json" },
+        body: body("tenant-fixed", query),
+      })
+    ).status,
+    403,
+  )
+  for (const [payload, overrides, path, expectedStatus] of [
+    [body("tenant-other", query), {}, "/iam/organization/set-active", 403],
+    [body(null, query), {}, "/iam/organization/set-active", 400],
+    [body("tenant-fixed", query, { organizationSlug: "tenant-other" }), {}, "/iam/organization/set-active", 400],
+    [body("tenant-fixed", "sig=one&sig=two"), {}, "/iam/organization/set-active", 400],
+    [body("tenant-fixed", "ba_iat=123"), {}, "/iam/organization/set-active", 400],
+    [body("tenant-fixed", "sig=bad%XX"), {}, "/iam/organization/set-active", 400],
+    [body("tenant-fixed", `sig=${"a".repeat(8192)}`), {}, "/iam/organization/set-active", 400],
+    [body("tenant-fixed", query), { cookie: "authjs.session-token=product" }, "/iam/organization/set-active", 403],
+    [body("tenant-fixed", query), { cookie: "kokoro-issuer.session_token=" }, "/iam/organization/set-active", 403],
+    [body("tenant-fixed", query), { origin: "http://evil.example.test" }, "/iam/organization/set-active", 403],
+    [body("tenant-fixed", query), { "content-type": "text/plain" }, "/iam/organization/set-active", 400],
+    [body("tenant-fixed", query), {}, "/iam/organization/set-active?tenant=tenant-fixed", 400],
+  ] as const) {
+    const response = await post(payload, overrides, path)
+    assert.equal(response.status, expectedStatus, payload)
+  }
+  assert.equal(calls.length, 0)
+
+  const accepted = await post(body("tenant-fixed", query))
+  assert.equal(accepted.status, 200)
+  assert.deepEqual(calls, [{ url: "/iam/organization/set-active", body: body("tenant-fixed", query), cookie: "kokoro-issuer.session_token=issuer-session" }])
+
+  const missingConfig = await listen(bff(iam))
+  const absent = await fetch(`${missingConfig}/iam/organization/set-active`, { method: "POST", headers, body: body("tenant-fixed", query) })
+  assert.equal(absent.status, 503)
+  assert.equal(calls.length, 1)
+})
 
 afterEach(async () => {
   await Promise.all(

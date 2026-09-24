@@ -1,6 +1,6 @@
 /** BFF-owned browser-private relay policy; IAM owns the endpoint schemas. */
 export const IAM_RELAY_POLICY = {
-  version: "1.1.0",
+  version: "2.0.0",
   iamOwnerCommit: "b363554d07e5b6e182160b42ae1402330e55d9db",
   iamAllowlistSha256: "f63dacfa8a7bcec3c56efb8ffb762a3f8bd82bb380eff40a1462db1e77d61ead",
   iamSnapshotSha256: "b2eac1919e16fdc30a40bee0f3c4300b641bd8f674214aea7731bf10299559e1",
@@ -18,7 +18,6 @@ export const IAM_RELAY_POLICY = {
     "/verify-email": ["GET"],
     "/sign-out": ["POST"],
     "/get-session": ["GET"],
-    "/organization/list": ["GET"],
     "/organization/set-active": ["POST"],
     "/oauth2/consent": ["POST"],
     "/oauth2/continue": ["POST"],
@@ -55,4 +54,30 @@ export function iamRelayCookieName(name: string, secure: boolean): boolean {
   if (!name.startsWith(prefix)) return false
   const suffix = name.slice(prefix.length)
   return (IAM_RELAY_POLICY.cookieNames as readonly string[]).includes(suffix)
+}
+
+/** Structural admission only: the IAM owner verifies the continuation signature. */
+export function fixedTenantSetActiveBody(body: Buffer, tenantId: string): "valid" | "tenant_mismatch" | "invalid" {
+  let value: unknown
+  try {
+    value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(body)) as unknown
+  } catch {
+    return "invalid"
+  }
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return "invalid"
+  const fields = value as Record<string, unknown>
+  if (Object.keys(fields).sort().join(",") !== "oauth_query,organizationId") return "invalid"
+  if (typeof fields.organizationId !== "string" || fields.organizationId.length === 0 || typeof fields.oauth_query !== "string") return "invalid"
+  const query = fields.oauth_query
+  if (
+    query.length === 0 ||
+    Buffer.byteLength(query) > IAM_RELAY_POLICY.maxQueryBytes ||
+    /[?#\\\u0000-\u001f\u007f]/u.test(query) ||
+    /%(?![0-9a-fA-F]{2})/u.test(query)
+  )
+    return "invalid"
+  for (const pair of query.split("&")) if (pair.indexOf("=") < 1) return "invalid"
+  const signatures = new URLSearchParams(query).getAll("sig")
+  if (signatures.length !== 1 || signatures[0] === "") return "invalid"
+  return fields.organizationId === tenantId ? "valid" : "tenant_mismatch"
 }

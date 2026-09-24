@@ -1,5 +1,11 @@
 # kokoro-bff API contract policy
 
+## W1C-FIXED-TENANT-BFF-B：browser-private relay breaking policy
+
+**当前态（BFF `dadf9264`）：** relay policy `1.1.0` 仍公布 `GET /iam/organization/list`，且 `POST /iam/organization/set-active` 在通用 service/Origin/cookie/body size 检查后把任意 JSON 透传 IAM。下面 W1C-1 原始表记录的是该已发布基线，不是固定租户目标。
+
+**目标态：** policy `2.0.0` 删除 list，无 alias/fallback；set-active 仅供受信 `web-bff` 服务以配置的精确 Origin 调用。请求 URL 不带 query；入站须有合法且非空的 issuer `session_token` cookie，不能用 Product cookie 代替。`Content-Type: application/json`；body 是恰好两个 key 的 JSON object：`organizationId` 为与服务端 `KOKORO_TENANT_ID` 精确相等的非空 string，`oauth_query` 为无前导 `?`、不超过 policy `maxQueryBytes`、无控制字符/反斜线/畸形 percent escape 且恰有一个非空 `sig` 的原始 continuation query。BFF 保留原始 query 字节给 IAM，不自行验证或重签 `sig`。缺固定配置返回 `503 product_tenant_not_configured`；未知 path/method 包括 list 返回 404；其余本地拒绝为稳定 400/403，统一 `x-request-id`/`Cache-Control: no-store`，且均零 IAM socket。IAM 原生响应、权限和验签语义保持原样，BFF 不新增公开 `/v1` operation、幂等 receipt、分页或事件。Web 必须按固定 BFF commit/digest 切换消费者；跨仓切换前固定租户登录尚未闭环。
+
 ## W1C-FIXED-TENANT-BFF-A：普通 Product admission 的固定租户错误
 
 普通 `/v1` 用户操作保留既有 service envelope、唯一 User Bearer 与 IAM 在线 session admission；服务身份或 Bearer 格式先失败。`KOKORO_TENANT_ID` 未配置时在 IAM I/O 与业务处理前返回 `503 product_tenant_not_configured`；IAM admission 成功但其受信 `tenant_id` 与固定部署租户不相等时，在 route/body/idempotency/owner I/O 前返回 `403 product_tenant_forbidden`。两者使用现有错误 envelope、`x-request-id` 与 `Cache-Control: no-store`，不回显任何租户 ID；IAM 自身 401/403/429/503 仍按既有映射，不能由 header/query/body 提供另一租户值覆盖。Team 三 GET 与其他普通 Product 操作共用此闸；这不是 IAM Team 写 permission 的替代品。Share、runtime manifest、Scheduler callback 与 `/iam` browser-private 原生协议各守其独立服务边界，不应用此普通用户租户错误。当前 public OpenAPI 的 403/503 通用错误响应不新增 operation 或字段。
@@ -33,7 +39,7 @@ BFF transport 准入，但仍待 Root gitlink 来源门与真实正向 OAuth 组
 `contract/openapi/v1/openapi.yaml` 复制 IAM 字段或伪造 OAuth schema。IAM 是 native OAuth/OIDC 与 Better Auth
 wire owner；BFF 只决定 Web adapter 可经 relay 访问哪些固定 path/method，以及如何处理 HTTP 安全边界。
 机器证据由唯一手写 `src/http/routes/iam-protocol-relay.policy.ts` 经确定性脚本派生只读
-`contract/iam-relay-policy.json`（policy version `1.0.0`、IAM 固定 commit/allowlist/snapshot SHA-256、下面的
+`contract/iam-relay-policy.json`（该历史切片初始 policy version `1.0.0`，当前为 `2.0.0`；IAM 固定 commit/allowlist/snapshot SHA-256、下面的
 path/method、请求/响应 header、cookie/redirect 策略）。它是 `browser-private` BFF 自有准入策略，不是
 IAM OpenAPI/Better Auth schema 副本；手写 TS 与 JSON 不双向编辑。`pnpm contract:check` 重生 policy JSON
 字节并拒绝漂移；IAM 私有 allowlist/snapshot 不复制入 BFF。Root 独立组合机器门从固定 IAM/BFF gitlink commit
@@ -59,8 +65,8 @@ Web route policy 与 BFF 已发布矩阵；不能只看本页 Markdown 或松散
 | `/oauth2/end-session/confirm` | POST | 仅 IAM 原生 logout 确认续接 | issuer cookie + 同源 mutation 检查 |
 | `/sign-in/email`、`/sign-out` | POST | Web 登录页/退出 issuer Session | issuer cookie（如有）及 IAM Origin/CSRF；Product Session 独立清理 |
 | `/get-session` | GET | Web 登录页/tenant/consent 当前 issuer Session | 只读取 issuer cookie，不建立 BFF Product identity |
-| `/organization/list` | GET | Web tenant 选择页列出当前用户组织 | issuer Session、IAM 权限与分页原样生效 |
-| `/organization/set-active` | POST | Web tenant 选择页选择组织 | issuer Session、Origin/CSRF；BFF 不信任 body 作为 Product tenant |
+| `/organization/list` | GET | `1.1.0` 历史基线；`2.0.0` 已删除 | 当前 relay 返回 404，零 IAM socket |
+| `/organization/set-active` | POST | 固定 tenant OAuth 续接；不提供选择器 | 以本页 W1C-FIXED-TENANT-BFF-B 的精确输入准入；IAM 继续原生验签与 Session/成员校验 |
 | `/oauth2/consent`、`/oauth2/continue` | POST | Web consent/authorize 续接 | issuer Session、原生 consent/reference 校验 |
 
 本片**不开放** IAM allowlist 中的 `sign-in/magic-link`、`magic-link/verify`、注册/邮件验证/密码重置、其他 Session

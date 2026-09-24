@@ -149,7 +149,7 @@ test("missing fixed Product tenant fails before IAM and business work without ch
   const user = await fetch(`${base}/v1/projects`, { headers })
   const share = await fetch(`${base}/v1/shared/share-a`, { headers })
   const manifest = await fetch(`${base}/v1/system/runtime-manifest?product_id=kokoro&locale=en-US&surface_id=user-web`, { headers })
-  const issuer = await fetch(`${base}/iam/organization/list`, { headers })
+  const issuer = await fetch(`${base}/iam/get-session`, { headers })
 
   assert.equal(user.status, 503)
   assert.equal(((await user.json()) as { error: { code: string } }).error.code, "product_tenant_not_configured")
