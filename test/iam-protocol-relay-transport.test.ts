@@ -252,6 +252,40 @@ test("native 429 and logout security headers survive, while hostile redirect and
   assert.equal(hostile.headers.getSetCookie().length, 0)
 })
 
+test("only native logout GET presents trusted browser navigation semantics to IAM", async () => {
+  const calls: Array<{ path: string | undefined; method: string | undefined; mode: string | undefined; accept: string | undefined }> = []
+  const iam = await listen(
+    createServer((request, response) => {
+      calls.push({ path: request.url, method: request.method, mode: request.headers["sec-fetch-mode"], accept: request.headers.accept })
+      response.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" })
+      response.end("{}")
+    }),
+  )
+  const base = await listen(bff(iam))
+
+  const logout = await fetch(`${base}/iam/oauth2/end-session`, {
+    headers: { ...webServiceHeaders, accept: "text/html", "sec-fetch-mode": "cors" },
+  })
+  assert.equal(logout.status, 200)
+
+  const ordinary = await fetch(`${base}/iam/get-session`, {
+    headers: { ...webServiceHeaders, "sec-fetch-mode": "navigate" },
+  })
+  assert.equal(ordinary.status, 200)
+
+  const logoutPost = await fetch(`${base}/iam/oauth2/end-session`, {
+    method: "POST",
+    headers: { ...webServiceHeaders, origin: webOrigin, "sec-fetch-mode": "navigate" },
+  })
+  assert.equal(logoutPost.status, 200)
+
+  assert.deepEqual(calls, [
+    { path: "/iam/oauth2/end-session", method: "GET", mode: "navigate", accept: "text/html" },
+    { path: "/iam/get-session", method: "GET", mode: "cors", accept: "*/*" },
+    { path: "/iam/oauth2/end-session", method: "POST", mode: "cors", accept: "*/*" },
+  ])
+})
+
 test("duplicate Authorization never downgrades to an anonymous issuer request", async () => {
   let calls = 0
   const iam = await listen(
@@ -485,4 +519,45 @@ test("upstream response header cap cancels the live IAM stream", async () => {
   })
   assert.equal(result.status, 503)
   await Promise.race([upstreamClosed, new Promise((_, reject) => setTimeout(() => reject(new Error("IAM header stream was not cancelled")), 500))])
+})
+
+test("native logout navigation enforces the same upstream body cap and closes the socket", async () => {
+  let closed!: () => void
+  const upstreamClosed = new Promise<void>((resolve) => {
+    closed = resolve
+  })
+  const iam = await listen(
+    createServer((_request, response) => {
+      response.once("close", closed)
+      response.writeHead(200, { "content-type": "text/html" })
+      response.write("x".repeat(128))
+      response.write("y")
+    }),
+  )
+  const base = await listen(bff(iam, { responseBytes: 64 }))
+  const result = await fetch(`${base}/iam/oauth2/end-session`, {
+    headers: { ...webServiceHeaders, accept: "text/html" },
+  })
+  assert.equal(result.status, 503)
+  await Promise.race([upstreamClosed, new Promise((_, reject) => setTimeout(() => reject(new Error("IAM logout stream was not cancelled")), 500))])
+})
+
+test("native logout navigation shares the bounded upstream deadline", async () => {
+  let closed!: () => void
+  const upstreamClosed = new Promise<void>((resolve) => {
+    closed = resolve
+  })
+  const iam = await listen(
+    createServer((_request, response) => {
+      response.once("close", closed)
+      response.writeHead(200, { "content-type": "text/html" })
+      response.write("pending")
+    }),
+  )
+  const base = await listen(bff(iam, { timeoutMs: 120 }))
+  const result = await fetch(`${base}/iam/oauth2/end-session`, {
+    headers: { ...webServiceHeaders, accept: "text/html" },
+  })
+  assert.equal(result.status, 503)
+  await Promise.race([upstreamClosed, new Promise((_, reject) => setTimeout(() => reject(new Error("IAM logout deadline did not close socket")), 500))])
 })

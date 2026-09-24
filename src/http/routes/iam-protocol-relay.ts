@@ -238,6 +238,9 @@ export async function iamProtocolRelay(request: IncomingMessage, response: Serve
     if (origin !== null) headers.set("origin", origin)
     if (cookie !== "") headers.set("cookie", cookie)
     if (authorization !== null) headers.set("authorization", authorization)
+    // Node fetch defaults to cors; IAM's native logout confirmation requires a navigation.
+    // Synthesize this only after the fixed route/method admission, never from inbound headers.
+    if (route.path === "/oauth2/end-session" && request.method === "GET") headers.set("sec-fetch-mode", "navigate")
     headers.set("x-request-id", id)
     const upstream = await requestIamRelay({
       baseUrl: config.iamBaseUrl,
@@ -248,6 +251,7 @@ export async function iamProtocolRelay(request: IncomingMessage, response: Serve
       timeoutMs: Math.max(1, deadline - Date.now()),
       maxResponseBytes: config.upstreamMaxResponseBytes,
       signal: abort.signal,
+      browserNavigation: route.path === "/oauth2/end-session" && request.method === "GET",
     })
     if (abort.signal.aborted) {
       if (abort.signal.reason === "deadline") {
