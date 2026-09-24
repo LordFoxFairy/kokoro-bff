@@ -3,6 +3,8 @@
 状态：2026-09-24
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。
 
+W1C-Team 固定 IAM 文档来源级联：IAM main `b363554d07e5b6e182160b42ae1402330e55d9db` 仅校正 Team/固定 Product Tenant 三设计与 CURRENT；ingress allowlist SHA-256 `f63dacfa8a7bcec3c56efb8ffb762a3f8bd82bb380eff40a1462db1e77d61ead`、Better Auth vendor snapshot SHA-256 `b2eac1919e16fdc30a40bee0f3c4300b641bd8f674214aea7731bf10299559e1` 均未改变。本仓 browser-private policy 仅重钉 IAM commit，version `1.1.0`、路径/方法/头/cookie/限额语义不变；派生 artifact digest `97022ea8727619bae03927027ef6a8ce87a3d2da4580ba5d211dc63b16fdc42c`。Web 消费方与 Root gitlink/库存必须在本仓提交后按固定 SHA 续钉，未完成前不能称来源组合通过。
+
 W1C-FIXED-TENANT-BFF-A：普通 `/v1` 用户在 service + Bearer 检查后若缺 `KOKORO_TENANT_ID` 返回 `503 product_tenant_not_configured`（零 IAM I/O）；IAM 在线 admission 后若受信 tenant 不等固定配置返回 `403 product_tenant_forbidden`。两者在业务 route、body、receipt 与 owner I/O 前终止；同租户保留原有 tenant + subject 私有边界。service-only runtime manifest、Share、Scheduler callback 和 browser-private `/iam` 不经此闸；无 Team 写投影、Schema/索引或 relay policy 变更。Node 22 admission 测试先 2 RED，实施后 12/12 GREEN；Root 在冻结工作树复跑 `pnpm format:check && pnpm check`（全量 272 pass、1 skip）。真 IAM OAuth 异租户组合与 Root 来源 pin 仍待验收，不把本仓门禁等同跨仓完成。
 
 W1D-Chat-B1 当前实现：
