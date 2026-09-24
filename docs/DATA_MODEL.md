@@ -73,7 +73,7 @@ relay 不为登录、refresh、logout 建 BFF idempotency receipt/cache/session/
 
 ### R2e-IAM-VERIFY-RELAY 数据边界（本仓已实现，待 Root 验收）
 
-IAM `c16a9bcddd19211eb1e9705c392f4e5cf96f494e` 已发布 `GET /verify-email`，并独占 Better Auth 1.7.3
+IAM `093b76513a9aa71611c65d4f210e279d3227e002` 已发布 `GET /verify-email`，并独占 Better Auth 1.7.3
 有期签名 JWT 的签发/校验、用户邮箱已验证幂等事实与审计。起始 BFF `eb1eb2926d08b8a3779898b2c31e604a8585ec8b`
 尚未准入 `/iam/verify-email`；本次只把该 GET 加入既有 browser-private relay policy。BFF 不持有 token、
 不建立身份或 Product Session，不查询/写入 IAM 数据库，不把 IAM 验证结果投影为本地表或 Redis key。
@@ -81,6 +81,8 @@ IAM `c16a9bcddd19211eb1e9705c392f4e5cf96f494e` 已发布 `GET /verify-email`，�
 原始 query、token、原生响应 body/Location 均不写日志、receipt、outbox、缓存或业务事实。
 
 本切片对 `database/schema.sql`、所有 BFF 表/索引、事务、Redis namespace、retention/GC 和 fresh install **零变更**。
+仅重钉 IAM test-fixture 来源后的 browser-private artifact SHA-256 为
+`731735ba8ce07c578fe04fa51783a95c7ac7daf50df33cea0ef9cefedc32d032`；无新增持久化事实。
 准入拒绝、IAM 成功/失败/过期/重复验证、302、超时/取消和恶意 `Location` 均零 BFF SQL/Redis 写入；
 IAM 对邮箱已验证事实的幂等更新与审计是 IAM 自己的事务，不能误称为 BFF 的零副作用或跨服务原子事务。
 正式首个账号/固定 tenant 的受控 bootstrap 与 Product Session/OIDC client 开通各有 owner，邮件验证只是一环，

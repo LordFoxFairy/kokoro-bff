@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { createHash } from "node:crypto"
 import { readFile } from "node:fs/promises"
 import { test } from "node:test"
 
@@ -6,10 +7,12 @@ import { IAM_RELAY_POLICY, iamRelayCookieName, iamRelayRoute } from "../dist/htt
 import { loadConfig } from "../dist/config/runtime.js"
 
 test("published browser-private policy is a deterministic read-only projection of runtime policy", async () => {
-  const published = JSON.parse(await readFile(new URL("../contract/iam-relay-policy.json", import.meta.url), "utf8")) as unknown
+  const bytes = await readFile(new URL("../contract/iam-relay-policy.json", import.meta.url))
+  const published = JSON.parse(bytes.toString("utf8")) as unknown
   assert.deepEqual(published, IAM_RELAY_POLICY)
+  assert.equal(createHash("sha256").update(bytes).digest("hex"), "731735ba8ce07c578fe04fa51783a95c7ac7daf50df33cea0ef9cefedc32d032")
   assert.equal(IAM_RELAY_POLICY.version, "1.1.0")
-  assert.equal(IAM_RELAY_POLICY.iamOwnerCommit, "c16a9bcddd19211eb1e9705c392f4e5cf96f494e")
+  assert.equal(IAM_RELAY_POLICY.iamOwnerCommit, "093b76513a9aa71611c65d4f210e279d3227e002")
   assert.equal(IAM_RELAY_POLICY.iamAllowlistSha256, "f63dacfa8a7bcec3c56efb8ffb762a3f8bd82bb380eff40a1462db1e77d61ead")
 })
 
