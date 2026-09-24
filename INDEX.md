@@ -32,7 +32,7 @@ src/
 │   ├── postgres/                  # BFF facts、receipt、AG-UI ledger 与 consumer/GC repositories
 ├── interfaces/http/agui/          # schema-valid SSE 编码；只输出已持久化 frame
 ├── http/routes/                   # Product routes；runtime-manifest 是独立 service-only handler
-├── generated/iam-http/            # 从完整固定 IAM vendor 过滤单 operation 的只读生成物
+├── generated/iam-http/            # 从完整固定 IAM vendor 过滤 admission 与 Team 三读的只读生成物
 └── main.ts                        # composition root
 ```
 
@@ -47,6 +47,7 @@ Conversation/Message/Share canonical facts，以及 durable AG-UI stream/source-
 - Public API：[`docs/API_CONTRACT.md`](./docs/API_CONTRACT.md)
 - IAM admission：`src/auth/`；完整 vendor、生成配置、manifest 与 drift gate 分别位于 `contract/vendor/kokoro-iam/`、
   `openapi-ts.iam.config.ts`、`contract/dependencies/iam-http.json` 与 `scripts/generate-iam-http-client.mjs`
+- Team 只读投影：`src/http/routes/team.ts` 与 `src/infrastructure/clients/iam-team.ts`；事实和分页 cursor 仍由 IAM 拥有
 - 资源说明：[`docs/api/README.md`](./docs/api/README.md)
 - AG-UI：[`docs/api/v1/agui-chat.md`](./docs/api/v1/agui-chat.md)
 - System / Model / Billing / Capability：当前由 `src/http/routes/owner.ts` 投影

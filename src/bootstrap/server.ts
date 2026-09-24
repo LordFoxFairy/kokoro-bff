@@ -18,6 +18,7 @@ import { configuredUpstream, bffOwnedBusinessPath, isMoriBusinessPath, upstreamK
 import { schedulerDispatch } from "../http/routes/scheduler.js"
 import { runtimeManifest } from "../http/routes/runtime-manifest.js"
 import { iamProtocolRelay } from "../http/routes/iam-protocol-relay.js"
+import { liveTeamRead } from "../http/routes/team.js"
 import { createBffComposition, type BffCompositionOptions, type BffRouteInput } from "./runtime.js"
 
 async function handle(
@@ -133,6 +134,11 @@ async function handle(
     return
   }
   const context = admission.context
+
+  if (businessPath[0] === "team") {
+    await liveTeamRead(request, response, config, context, admission.bearerToken, businessPath)
+    return
+  }
 
   if (composition.routeHandler === undefined && bffOwnedBusinessPath(businessPath) && composition.businessStore === null) {
     send(response, 503, failure("business_store_not_configured", "BFF business fact store is not configured", id))

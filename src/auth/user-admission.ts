@@ -5,7 +5,8 @@ import type { RequestContext } from "../domain/request-context.js"
 import type { SessionAdmission } from "./session-admission.types.js"
 
 export type UserAdmissionResult =
-  Readonly<{ ok: true; context: RequestContext }> | Readonly<{ ok: false; status: 401 | 403 | 429 | 503; code: string; retryAfter?: string }>
+  | Readonly<{ ok: true; context: RequestContext; bearerToken: string }>
+  | Readonly<{ ok: false; status: 401 | 403 | 429 | 503; code: string; retryAfter?: string }>
 
 function authorizationValues(request: IncomingMessage): string[] {
   const values: string[] = []
@@ -36,5 +37,5 @@ export async function authorizeUserRequest(
   if (token === null) return { ok: false, status: 401, code: "session_authentication_required" }
   const result = await admission.verify({ token, requestId, signal })
   if (!result.ok) return result
-  return { ok: true, context: { requestId, identity: result.identity } }
+  return { ok: true, context: { requestId, identity: result.identity }, bearerToken: token }
 }

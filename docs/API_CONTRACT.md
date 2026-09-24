@@ -1,8 +1,8 @@
 # kokoro-bff API contract policy
 
-## W1C-Team-R2：待实现的公开只读契约
+## W1C-Team-R2：已实现、待真实 IAM 组合验收的公开只读契约
 
-IAM owner 内部 OpenAPI `0.3.0` 固定于 `68aa0da259df1f1ea9030936b8d5a46acba8c6ab`；BFF public OpenAPI 是 Web/开发者唯一 Product 契约。目标 `GET /v1/team/members|invitations|roles` 使用现有 service + User Bearer 准入，tenant 从 IAM admission 结果取得；唯一查询为 `limit` 与 `cursor`，默认 25、范围 1..100、cursor 最长 2048。成功 `{data:[...],meta:{request_id,next_cursor}}`，资源项字段与 IAM 0.3.0 一致，不复制 IAM 的写操作。错误明确区分本地非法分页 400、IAM 身份/权限拒绝 401/403/404、限流 429 与依赖/契约失败 503/502，`Retry-After` 只在合法且有界时保留；所有响应带 `x-request-id` 和 `Cache-Control:no-store`。新增 public schema 与运行时必须同一切片提交；当前工作树中此节仅是设计门，不能视作已发布接口。
+IAM owner 内部 OpenAPI `0.3.0` 固定于 `68aa0da259df1f1ea9030936b8d5a46acba8c6ab`；BFF public OpenAPI 是 Web/开发者唯一 Product 契约。`GET /v1/team/members|invitations|roles` 使用现有 service + User Bearer 准入，tenant 从 IAM admission 结果取得；唯一查询为 `limit` 与 `cursor`，默认 25、范围 1..100、cursor 最长 2048。成功 `{data:[...],meta:{request_id,next_cursor}}`，资源项字段与 IAM 0.3.0 一致，不复制 IAM 的写操作。错误明确区分本地非法分页 400、IAM 身份/权限拒绝 401/403/404、限流 429 与依赖/契约失败 503/502，`Retry-After` 只在合法且有界时保留；所有响应带 `x-request-id` 和 `Cache-Control:no-store`。public schema 与运行时在同一未提交切片，假 IAM HTTP 六项已通过；真 IAM scope/权限及 Web 消费仍待组合验证，不将当前工作树视作已发布接口。
 
 ## 事实源与可见性
 
@@ -147,7 +147,7 @@ service-only operation。这段只记录起始 commit；下节描述 Task 1 admi
 普通 `/v1/*` 顶层 OpenAPI security 使用 `serviceHeader + internalSecret + userBearer` 的 AND 关系：Web adapter 必须同时提供
 `x-kokoro-service: web-bff`、正确 internal secret 与唯一 `Authorization: Bearer <session credential>`。旧
 `namespace`/`principalId` security scheme 删除；即使客户端继续发送同名 header，也不参与身份建立或 owner 请求。
-现有 63 个 path/method/operationId 保持冻结；所有受保护 operation 在 machine contract 中显式发布 401/403/429/503，
+现有 66 个 path/method/operationId 保持冻结；所有受保护 operation 在 machine contract 中显式发布 401/403/429/503，
 Share 与 runtime manifest 使用下表的 operation-level service-only override。该 clean-slate 身份修正不承诺与未上线旧 header
 契约兼容。
 
@@ -184,7 +184,7 @@ IAM 成功与错误都必须有合法 `x-request-id` 和 `Cache-Control: no-stor
 | `POST /internal/bff/scheduled-tasks/dispatch` | 独立 Scheduler bearer + trusted event headers + durable receipt | 不属于 public OpenAPI 顶层 security，不接受 Web session Bearer |
 
 四类凭据不可互换。`x-kokoro-permission` 继续表示 Product operation 的动作意图；IAM session admission 不返回也不合成
-63 项业务 permission，BFF-owned facts 仍由资源 predicate 授权。
+公开 API 的业务 permission，BFF-owned facts 仍由资源 predicate 授权。
 
 ### Task 2 当前 contract：个人私有资源
 

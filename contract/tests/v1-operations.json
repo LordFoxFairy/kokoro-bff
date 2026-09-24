@@ -18,6 +18,21 @@
     },
     {
       "method": "GET",
+      "path": "/v1/team/members",
+      "operation_id": "listTeamMembers"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/team/invitations",
+      "operation_id": "listTeamInvitations"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/team/roles",
+      "operation_id": "listTeamRoles"
+    },
+    {
+      "method": "GET",
       "path": "/v1/sessions",
       "operation_id": "listSessions"
     },

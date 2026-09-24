@@ -3,7 +3,7 @@
 状态：2026-09-23
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。
 
-W1C-Team-R2 进行中：IAM owner main `68aa0da259df1f1ea9030936b8d5a46acba8c6ab` 的内部 OpenAPI `0.3.0` 已替换本仓旧 `0.2.0` vendor，生成链 scope 精确增加当前租户 members/invitations/roles 三 GET，旧 vendor 已删除。当前尚未发布 BFF public 三路由、Web 消费或真实 IAM HTTP 组合；仅凭生成物不能称 Team 闭环。
+W1C-Team-R2 进行中：IAM owner main `68aa0da259df1f1ea9030936b8d5a46acba8c6ab` 的内部 OpenAPI `0.3.0` 已替换本仓旧 `0.2.0` vendor，生成链 scope 精确增加当前租户 members/invitations/roles 三 GET，旧 vendor 已删除。当前未提交工作树已添加 BFF public 三 GET、只读 Team 客户端与六项假 IAM HTTP 回归；真实 IAM HTTP、Product token 新 Team scopes、Web 消费、Root gitlink/库存均未验，不能称 Team 跨仓闭环。
 
 ## 已实现事实
 
@@ -36,7 +36,7 @@ W1C-Team-R2 进行中：IAM owner main `68aa0da259df1f1ea9030936b8d5a46acba8c6ab
 
 - `kokoro-bff` 是唯一 public HTTP Product API owner；canonical OpenAPI 位于
   `contract/openapi/v1/openapi.yaml`。
-- 当前 OpenAPI 有 63 个 operation；每个 operation 都声明 owner、visibility、stability、idempotency 和
+- 当前 OpenAPI 有 66 个 operation；每个 operation 都声明 owner、visibility、stability、idempotency 和
   permission 元数据。
 - `pnpm contract:check` 执行 Redocly、metadata 检查和冻结 v1 path/method/operationId surface 检查。
 - AG-UI 是 BFF 对 Web 暴露的 Agent 事件 wire protocol；BFF 使用 `@ag-ui/core` schema 校验输出帧。
