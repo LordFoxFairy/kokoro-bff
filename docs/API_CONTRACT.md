@@ -37,7 +37,7 @@ blob 验证两份 IAM digest、relay path/method 子集及 BFF artifact，含篡
 Web 以固定 BFF commit + 此 artifact blob/SHA-256 digest 保存只读 vendor 输入，并运行 consumer test 比较
 Web route policy 与 BFF 已发布矩阵；不能只看本页 Markdown 或松散版本范围。
 
-固定上游来源为 IAM main `e36da9ecf8d62a364182949817431a8e2329d50a`，
+固定上游来源为 IAM main `c16a9bcddd19211eb1e9705c392f4e5cf96f494e`，
 `src/modules/auth/ingress/auth-routes.constants.ts` SHA-256
 `f63dacfa8a7bcec3c56efb8ffb762a3f8bd82bb380eff40a1462db1e77d61ead`；原生 schema 快照
 `contract/vendor/better-auth.v1.7.3.json` SHA-256
@@ -110,7 +110,7 @@ Share/runtime-manifest/Scheduler 各自服务例外保持不变。只有 W1C 真
 
 ### R2e-IAM-VERIFY-RELAY 增量（本仓已实现，待 Root 验收）
 
-IAM owner `e36da9ecf8d62a364182949817431a8e2329d50a` 的固定 ingress allowlist 已发布原生
+IAM owner `c16a9bcddd19211eb1e9705c392f4e5cf96f494e` 的固定 ingress allowlist 已发布原生
 `GET /verify-email`；起始 BFF `eb1eb2926d08b8a3779898b2c31e604a8585ec8b` 的
 `src/http/routes/iam-protocol-relay.policy.ts` 和派生 `contract/iam-relay-policy.json` 均无此项。
 上表“本片不开放邮件验证”描述 W1C-1 已实现的旧范围；R2e 本仓切片**只**从该范围中增加

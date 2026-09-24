@@ -73,7 +73,7 @@ relay 不为登录、refresh、logout 建 BFF idempotency receipt/cache/session/
 
 ### R2e-IAM-VERIFY-RELAY 数据边界（本仓已实现，待 Root 验收）
 
-IAM `e36da9ecf8d62a364182949817431a8e2329d50a` 已发布 `GET /verify-email`，并独占 Better Auth 1.7.3
+IAM `c16a9bcddd19211eb1e9705c392f4e5cf96f494e` 已发布 `GET /verify-email`，并独占 Better Auth 1.7.3
 有期签名 JWT 的签发/校验、用户邮箱已验证幂等事实与审计。起始 BFF `eb1eb2926d08b8a3779898b2c31e604a8585ec8b`
 尚未准入 `/iam/verify-email`；本次只把该 GET 加入既有 browser-private relay policy。BFF 不持有 token、
 不建立身份或 Product Session，不查询/写入 IAM 数据库，不把 IAM 验证结果投影为本地表或 Redis key。

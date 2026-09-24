@@ -30,7 +30,7 @@ W1D-Chat-B3 本提交：Agent HTTP v1.1.0 固定 owner commit
 已实跑通过；vendor 字节篡改会令 drift check 非零。该结果不替代 Root 对固定 gitlink 与真实
 Agent HTTP/worker 组合的最终验收。
 
-W1C-Team-R2 本仓源码已在 main `fd74202e69e4d40beaef9d3f9ab9b871365589a8` 发布：IAM owner `68aa0da259df1f1ea9030936b8d5a46acba8c6ab` 的内部 OpenAPI `0.3.0` 已替换旧 `0.2.0` vendor，生成链精确增加当前租户 members/invitations/roles 三 GET，旧 vendor 已删除；BFF public 三 GET、只读 Team 客户端与六项假 IAM HTTP 回归也已提交。当前 IAM `e36da9ecf8d62a364182949817431a8e2329d50a` 仍保留 test-owned Web OIDC client 的三个 Team 只读 scope；本仓 relay policy 来源已跟进该 commit，IAM allowlist 与原生快照 digest 未变。Web Team 消费仍未验，不能称 Team 跨仓闭环。
+W1C-Team-R2 本仓源码已在 main `fd74202e69e4d40beaef9d3f9ab9b871365589a8` 发布：IAM owner `68aa0da259df1f1ea9030936b8d5a46acba8c6ab` 的内部 OpenAPI `0.3.0` 已替换旧 `0.2.0` vendor，生成链精确增加当前租户 members/invitations/roles 三 GET，旧 vendor 已删除；BFF public 三 GET、只读 Team 客户端与六项假 IAM HTTP 回归也已提交。当前 IAM `c16a9bcddd19211eb1e9705c392f4e5cf96f494e` 仍保留 test-owned Web OIDC client 的三个 Team 只读 scope；本仓 relay policy 来源已跟进该 commit，IAM allowlist 与原生快照 digest 未变。Web Team 消费仍未验，不能称 Team 跨仓闭环。
 
 ## 已实现事实
 
@@ -46,7 +46,7 @@ W1C-Team-R2 本仓源码已在 main `fd74202e69e4d40beaef9d3f9ab9b871365589a8` �
 
 ### W1C-1 本次源码切片：browser-private IAM relay
 
-- R2e-IAM-VERIFY-RELAY 本仓切片在 IAM `e36da9ec` 已发布的 allowlist 内，仅向现有 browser-private relay
+- R2e-IAM-VERIFY-RELAY 本仓切片在 IAM `c16a9bc` 已发布的 allowlist 内，仅向现有 browser-private relay
   增加 `GET /iam/verify-email`，policy version `1.1.0`，生成 artifact 保持只读。相邻 policy/transport 测试
   先 RED 后 GREEN，验证原始 token query、模拟 IAM 原生 302 到固定同源 `/auth/sign-in`，以及上游缺失或
   返回可缓存 header 时 BFF 强制的 `Cache-Control: no-store`、`Referrer-Policy: no-referrer`、外域

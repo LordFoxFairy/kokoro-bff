@@ -135,7 +135,7 @@ Product Session 不泄露；单独真实 IAM HTTP fixture 验证 discovery→aut
 
 起始 BFF `eb1eb2926d08b8a3779898b2c31e604a8585ec8b` 的 relay policy/生成 artifact **没有**
 `/verify-email`，Web 当前同源 GET 集合也没有该路径；正式验证邮件的 `${WEB_ORIGIN}/iam/verify-email?...`
-因而尚不能贯通。IAM `e36da9ecf8d62a364182949817431a8e2329d50a` 的固定 ingress allowlist 已发布
+因而尚不能贯通。IAM `c16a9bcddd19211eb1e9705c392f4e5cf96f494e` 的固定 ingress allowlist 已发布
 `GET /verify-email`；Better Auth 1.7.3 的有期签名 JWT、邮箱已验证幂等状态、错误与审计均由 IAM 拥有。本仓本次仅在现有
 `src/http/routes/iam-protocol-relay.policy.ts` 增加 `"/verify-email": ["GET"]` 并将 policy 升至 `1.1.0`，再由既有生成链发布
 `contract/iam-relay-policy.json`；复用 `src/http/routes/iam-protocol-relay.ts` 的服务身份、原始 target
