@@ -1,5 +1,9 @@
 # kokoro-bff data model
 
+## W1C-FIXED-TENANT-BFF-A：固定部署租户不落库
+
+当前 BFF 所有用户事实仍按 IAM admission 的 tenant 与 subject predicate 存取，但入口原先未把受信 tenant 限定到 `KOKORO_TENANT_ID`。本切片在普通 `/v1` 用户 `RequestContext` 建立前比较受信 IAM tenant 与固定部署配置；缺配置或异租户请求均不进入业务 route、body 处理、receipt、SQL、Redis 或 owner I/O。同租户既有个人私有 predicate、事务、outbox 与 AG-UI ledger 不变。IAM 继续唯一拥有 Tenant/Membership/Session，BFF 不持久化固定租户目录或 Team 事实；`database/schema.sql`、索引、缓存 key、retention 和跨 owner 数据边界均零变化。service-only、Scheduler callback 与 browser-private IAM relay 的已有身份/数据路径不经普通用户闸，本片不赋予其新权限。
+
 ## W1C-Team-R2：零 Team 持久化边界（实现中，真实组合待验）
 
 Tenant/Membership/Invitation/Role 的 canonical schema、权限与分页快照仅由 IAM owner `68aa0da259df1f1ea9030936b8d5a46acba8c6ab` 维护。BFF 的三个只读 Product 投影不修改本仓 `database/schema.sql`，不创建 Team 表、Redis cache、receipt、outbox、共享 ORM 或跨 owner SQL。每次请求在线 admission 后由同一 User Bearer 调用 IAM；BFF 只保留请求生命周期内的验证结果和响应投影。IAM 故障、取消、无权、cursor 不合法或响应超限时不写 BFF 数据；验证使用零写入/零跨 owner SQL 的架构测试与真实 HTTP 负例。旧 Team 直连的删除属于 Web 消费切片，不能通过在 BFF 复制 IAM 数据来完成。

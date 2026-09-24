@@ -35,7 +35,10 @@ export async function authorizeUserRequest(
 
   const token = bearerToken(request)
   if (token === null) return { ok: false, status: 401, code: "session_authentication_required" }
+  const fixedTenantId = config.tenantId?.trim()
+  if (!fixedTenantId) return { ok: false, status: 503, code: "product_tenant_not_configured" }
   const result = await admission.verify({ token, requestId, signal })
   if (!result.ok) return result
+  if (result.identity.namespace !== fixedTenantId) return { ok: false, status: 403, code: "product_tenant_forbidden" }
   return { ok: true, context: { requestId, identity: result.identity }, bearerToken: token }
 }

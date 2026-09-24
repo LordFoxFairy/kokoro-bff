@@ -30,7 +30,7 @@ function config(overrides: Partial<BffConfig> = {}): BffConfig {
     port: 4300,
     mode: "live",
     domain: "dev.kokoro.localhost",
-    tenantId: "tenant_test",
+    tenantId: "ns_test",
     sharedSecret: "test-secret",
     upstreamSecret: "bff-upstream-secret",
     schedulerServiceToken: null,

@@ -3,6 +3,8 @@
 状态：2026-09-24
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。
 
+W1C-FIXED-TENANT-BFF-A：普通 `/v1` 用户在 service + Bearer 检查后若缺 `KOKORO_TENANT_ID` 返回 `503 product_tenant_not_configured`（零 IAM I/O）；IAM 在线 admission 后若受信 tenant 不等固定配置返回 `403 product_tenant_forbidden`。两者在业务 route、body、receipt 与 owner I/O 前终止；同租户保留原有 tenant + subject 私有边界。service-only runtime manifest、Share、Scheduler callback 和 browser-private `/iam` 不经此闸；无 Team 写投影、Schema/索引或 relay policy 变更。Node 22 admission 测试先 2 RED，实施后 12/12 GREEN；Root 在冻结工作树复跑 `pnpm format:check && pnpm check`（全量 272 pass、1 skip）。真 IAM OAuth 异租户组合与 Root 来源 pin 仍待验收，不把本仓门禁等同跨仓完成。
+
 W1D-Chat-B1 当前实现：
 Web 本地 `conv_<UUID>` 首条 `POST /v1/sessions/{id}/messages` 已改为在 BFF Chat turn 同一 PostgreSQL
 事务内隐式建 active Conversation，并写两条 Message、Agent outbox 与 expected-run registration；

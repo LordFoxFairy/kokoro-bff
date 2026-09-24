@@ -126,16 +126,98 @@ test("service and bearer rejection happen before IAM and route work", async () =
   assert.equal(routeCalls, 0)
 })
 
+test("missing fixed Product tenant fails before IAM and business work without changing service-only or issuer paths", async () => {
+  const admission = new SessionAdmissionDouble({ token: { namespace: "tenant-a", userId: "user-a" } })
+  let routeCalls = 0
+  const server = createLiveTestBffServer(
+    { ...config(), tenantId: null },
+    {
+      sessionAdmission: admission,
+      routeHandler: async ({ response }): Promise<void> => {
+        routeCalls += 1
+        response.writeHead(204).end()
+      },
+      sharedSessionReader: {
+        findSharedSession: () => ({ session_id: "session-share" }),
+        readSession: () => ({ session_id: "session-share" }),
+      },
+    },
+  )
+  const base = await listen(server)
+  const headers = { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "test-secret", authorization: "Bearer token" }
+
+  const user = await fetch(`${base}/v1/projects`, { headers })
+  const share = await fetch(`${base}/v1/shared/share-a`, { headers })
+  const manifest = await fetch(`${base}/v1/system/runtime-manifest?product_id=kokoro&locale=en-US&surface_id=user-web`, { headers })
+  const issuer = await fetch(`${base}/iam/organization/list`, { headers })
+
+  assert.equal(user.status, 503)
+  assert.equal(((await user.json()) as { error: { code: string } }).error.code, "product_tenant_not_configured")
+  assert.equal(user.headers.get("cache-control"), "no-store")
+  assert.match(user.headers.get("x-request-id") ?? "", /^[A-Za-z0-9_-]{1,128}$/u)
+  assert.equal(share.status, 200)
+  assert.equal(manifest.status, 503)
+  assert.equal(((await manifest.json()) as { error: { code: string } }).error.code, "upstream_not_configured")
+  assert.equal(issuer.status, 503)
+  assert.equal(((await issuer.json()) as { error: { code: string } }).error.code, "iam_relay_unavailable")
+  assert.equal(admission.calls.length, 0)
+  assert.equal(routeCalls, 0)
+})
+
+test("foreign IAM tenant is denied before body parsing, receipt claim, Team or owner I/O despite forged tenant headers", async () => {
+  const admission = new SessionAdmissionDouble({ token: { namespace: "tenant-other", userId: "user-other" } })
+  const idempotency = new Map()
+  let routeCalls = 0
+  const server = createLiveTestBffServer(
+    { ...config(), tenantId: "tenant-fixed" },
+    {
+      sessionAdmission: admission,
+      idempotency,
+      routeHandler: async ({ response }): Promise<void> => {
+        routeCalls += 1
+        response.writeHead(204).end()
+      },
+    },
+  )
+  const base = await listen(server)
+  const headers = {
+    "x-kokoro-service": "web-bff",
+    "x-kokoro-internal-secret": "test-secret",
+    authorization: "Bearer token",
+    "x-kokoro-tenant-id": "tenant-fixed",
+    "x-kokoro-namespace": "tenant-fixed",
+    "x-kokoro-principal-id": "forged",
+  }
+  const mutation = await fetch(`${base}/v1/projects`, {
+    method: "POST",
+    headers: { ...headers, "content-type": "application/json", "idempotency-key": "fixed-tenant-key" },
+    body: "not-json",
+  })
+  const team = await fetch(`${base}/v1/team/members`, { headers })
+
+  for (const response of [mutation, team]) {
+    assert.equal(response.status, 403)
+    assert.equal(((await response.json()) as { error: { code: string } }).error.code, "product_tenant_forbidden")
+    assert.equal(response.headers.get("cache-control"), "no-store")
+  }
+  assert.equal(admission.calls.length, 2)
+  assert.equal(idempotency.size, 0)
+  assert.equal(routeCalls, 0)
+})
+
 test("the IAM identity replaces malicious legacy identity headers", async () => {
   const admission = new SessionAdmissionDouble({ token: { namespace: "tenant-iam", userId: "user-iam" } })
   let capturedIdentity: unknown
-  const server = createLiveTestBffServer(config(), {
-    sessionAdmission: admission,
-    routeHandler: async ({ response, context }): Promise<void> => {
-      capturedIdentity = context.identity
-      response.writeHead(204).end()
+  const server = createLiveTestBffServer(
+    { ...config(), tenantId: "tenant-iam" },
+    {
+      sessionAdmission: admission,
+      routeHandler: async ({ response, context }): Promise<void> => {
+        capturedIdentity = context.identity
+        response.writeHead(204).end()
+      },
     },
-  })
+  )
   const base = await listen(server)
 
   const response = await fetch(`${base}/v1/projects`, {
@@ -156,13 +238,16 @@ test("the IAM identity replaces malicious legacy identity headers", async () => 
 test("a revoked session is denied before an existing idempotency result can replay", async () => {
   const admission = new SessionAdmissionDouble({ token: { namespace: "tenant-a", userId: "user-a" } })
   let routeCalls = 0
-  const server = createLiveTestBffServer(config(), {
-    sessionAdmission: admission,
-    routeHandler: async ({ response }): Promise<void> => {
-      routeCalls += 1
-      response.writeHead(200, { "content-type": "application/json" }).end('{"data":{"ok":true}}')
+  const server = createLiveTestBffServer(
+    { ...config(), tenantId: "tenant-a" },
+    {
+      sessionAdmission: admission,
+      routeHandler: async ({ response }): Promise<void> => {
+        routeCalls += 1
+        response.writeHead(200, { "content-type": "application/json" }).end('{"data":{"ok":true}}')
+      },
     },
-  })
+  )
   const base = await listen(server)
   const init = {
     method: "POST",

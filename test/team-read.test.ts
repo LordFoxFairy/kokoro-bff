@@ -38,7 +38,7 @@ function config(iamBaseUrl: string): BffConfig {
     port: 0,
     mode: "live",
     domain: "dev.kokoro.localhost",
-    tenantId: null,
+    tenantId: "tenant-verified",
     iamBaseUrl,
     sharedSecret: "test-secret",
     upstreamSecret: null,
