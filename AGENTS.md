@@ -32,7 +32,7 @@
 - PostgreSQL 保存事实；Redis 只用于 cache、stream、queue、lease、限流或协调。本地 BFF 使用 Redis DB 8。
 - 文件和目录按持续变化原因与业务能力聚合；只在语义或生命周期不同时分离 wire/internal/row 类型，禁止机械分层、
   万能 service、repository、common 或 utils。
-- 普通用户 `/v1/*` 身份只来自固定 IAM `0.2.0` session admission；legacy namespace/principal header 不是 authority。
+- 普通用户 `/v1/*` 身份只来自固定 IAM `0.3.0` session admission；legacy namespace/principal header 不是 authority。Team 三读消费同一用户 Bearer 与已验证 tenant，不自报身份。
   Share、runtime manifest 与 Scheduler callback 保持各自显式服务边界。
 - 生产 `src/` 不新增 Mock/Fake/InMemory；测试替身放 `test/fixtures/` 或 `test/doubles/`。
 - 不覆盖协作者未提交文件；只暂存当前任务拥有的路径。

@@ -34,6 +34,230 @@ export type ApiErrorResponse = {
   }
 }
 
+export type ListTenantMembersData = {
+  body?: never
+  headers?: {
+    /**
+     * Caller correlation identifier. Missing or invalid values are replaced by the service.
+     */
+    "x-request-id"?: string
+  }
+  path: {
+    tenant_id: string
+  }
+  query?: {
+    limit?: number
+    cursor?: string
+  }
+  url: "/internal/v1/tenants/{tenant_id}/members"
+}
+
+export type ListTenantMembersErrors = {
+  /**
+   * Stable internal API error envelope.
+   */
+  400: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  401: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  403: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  404: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  409: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  429: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  500: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  503: ApiErrorResponse
+}
+
+export type ListTenantMembersError = ListTenantMembersErrors[keyof ListTenantMembersErrors]
+
+export type ListTenantMembersResponses = {
+  200: {
+    data: Array<{
+      member_id: string
+      user_id: string
+      display_name: string
+      image_url: string | null
+      roles: Array<string>
+      joined_at: string
+    }>
+    meta: {
+      next_cursor: string | null
+    }
+  }
+}
+
+export type ListTenantMembersResponse = ListTenantMembersResponses[keyof ListTenantMembersResponses]
+
+export type ListTenantRolesData = {
+  body?: never
+  headers?: {
+    /**
+     * Caller correlation identifier. Missing or invalid values are replaced by the service.
+     */
+    "x-request-id"?: string
+  }
+  path: {
+    tenant_id: string
+  }
+  query?: {
+    limit?: number
+    cursor?: string
+  }
+  url: "/internal/v1/tenants/{tenant_id}/roles"
+}
+
+export type ListTenantRolesErrors = {
+  /**
+   * Stable internal API error envelope.
+   */
+  400: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  401: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  403: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  404: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  409: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  429: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  500: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  503: ApiErrorResponse
+}
+
+export type ListTenantRolesError = ListTenantRolesErrors[keyof ListTenantRolesErrors]
+
+export type ListTenantRolesResponses = {
+  200: {
+    data: Array<{
+      role_id: string | null
+      name: string
+      kind: "builtin" | "custom"
+      permissions: {
+        organization?: Array<"update">
+        member?: Array<"create" | "read" | "update" | "delete">
+        invitation?: Array<"create" | "read" | "cancel">
+        ac?: Array<"create" | "read" | "update">
+        tenant?: Array<"read">
+        audit?: Array<"read">
+      }
+    }>
+    meta: {
+      next_cursor: string | null
+    }
+  }
+}
+
+export type ListTenantRolesResponse = ListTenantRolesResponses[keyof ListTenantRolesResponses]
+
+export type ListTenantInvitationsData = {
+  body?: never
+  headers?: {
+    /**
+     * Caller correlation identifier. Missing or invalid values are replaced by the service.
+     */
+    "x-request-id"?: string
+  }
+  path: {
+    tenant_id: string
+  }
+  query?: {
+    limit?: number
+    cursor?: string
+  }
+  url: "/internal/v1/tenants/{tenant_id}/invitations"
+}
+
+export type ListTenantInvitationsErrors = {
+  /**
+   * Stable internal API error envelope.
+   */
+  400: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  401: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  403: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  404: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  409: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  429: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  500: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  503: ApiErrorResponse
+}
+
+export type ListTenantInvitationsError = ListTenantInvitationsErrors[keyof ListTenantInvitationsErrors]
+
+export type ListTenantInvitationsResponses = {
+  200: {
+    data: Array<{
+      invitation_id: string
+      email: string
+      roles: Array<string>
+      status: "pending"
+      created_at: string
+      expires_at: string
+    }>
+    meta: {
+      next_cursor: string | null
+    }
+  }
+}
+
+export type ListTenantInvitationsResponse = ListTenantInvitationsResponses[keyof ListTenantInvitationsResponses]
+
 export type VerifySessionAuthorizationData = {
   body?: never
   headers?: {

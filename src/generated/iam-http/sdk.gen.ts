@@ -2,8 +2,21 @@
 
 import { client } from "./client.gen.js"
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from "./client/index.js"
-import type { VerifySessionAuthorizationData, VerifySessionAuthorizationErrors, VerifySessionAuthorizationResponses } from "./types.gen.js"
-import { zVerifySessionAuthorizationResponse } from "./zod.gen.js"
+import type {
+  ListTenantInvitationsData,
+  ListTenantInvitationsErrors,
+  ListTenantInvitationsResponses,
+  ListTenantMembersData,
+  ListTenantMembersErrors,
+  ListTenantMembersResponses,
+  ListTenantRolesData,
+  ListTenantRolesErrors,
+  ListTenantRolesResponses,
+  VerifySessionAuthorizationData,
+  VerifySessionAuthorizationErrors,
+  VerifySessionAuthorizationResponses,
+} from "./types.gen.js"
+import { zListTenantInvitationsResponse, zListTenantMembersResponse, zListTenantRolesResponse, zVerifySessionAuthorizationResponse } from "./zod.gen.js"
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<
   TData,
@@ -22,6 +35,36 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
    */
   meta?: keyof ClientMeta extends never ? Record<string, unknown> : ClientMeta
 }
+
+export const listTenantMembers = <ThrowOnError extends boolean = false>(
+  options: Options<ListTenantMembersData, ThrowOnError>,
+): RequestResult<ListTenantMembersResponses, ListTenantMembersErrors, ThrowOnError> =>
+  (options.client ?? client).get<ListTenantMembersResponses, ListTenantMembersErrors, ThrowOnError>({
+    responseValidator: async (data) => await zListTenantMembersResponse.parseAsync(data),
+    security: [{ scheme: "bearer", type: "http" }],
+    url: "/internal/v1/tenants/{tenant_id}/members",
+    ...options,
+  })
+
+export const listTenantRoles = <ThrowOnError extends boolean = false>(
+  options: Options<ListTenantRolesData, ThrowOnError>,
+): RequestResult<ListTenantRolesResponses, ListTenantRolesErrors, ThrowOnError> =>
+  (options.client ?? client).get<ListTenantRolesResponses, ListTenantRolesErrors, ThrowOnError>({
+    responseValidator: async (data) => await zListTenantRolesResponse.parseAsync(data),
+    security: [{ scheme: "bearer", type: "http" }],
+    url: "/internal/v1/tenants/{tenant_id}/roles",
+    ...options,
+  })
+
+export const listTenantInvitations = <ThrowOnError extends boolean = false>(
+  options: Options<ListTenantInvitationsData, ThrowOnError>,
+): RequestResult<ListTenantInvitationsResponses, ListTenantInvitationsErrors, ThrowOnError> =>
+  (options.client ?? client).get<ListTenantInvitationsResponses, ListTenantInvitationsErrors, ThrowOnError>({
+    responseValidator: async (data) => await zListTenantInvitationsResponse.parseAsync(data),
+    security: [{ scheme: "bearer", type: "http" }],
+    url: "/internal/v1/tenants/{tenant_id}/invitations",
+    ...options,
+  })
 
 export const verifySessionAuthorization = <ThrowOnError extends boolean = false>(
   options?: Options<VerifySessionAuthorizationData, ThrowOnError>,

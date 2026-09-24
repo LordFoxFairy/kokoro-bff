@@ -199,9 +199,9 @@ test("the Capability generated allowlist rejects missing files, every extra exte
   assert.throws(() => assertGeneratedAllowlist(files, ["client", "core", "manual"], "fixture"), /directory allowlist drifted/u)
 })
 
-test("the IAM admission consumer pins the complete 0.2.0 owner artifact and generates only verifySessionAuthorization", async () => {
-  const commit = "259a66e6a569889c030734f380e99685d8b9e21c"
-  const digest = "f7a3ea2e5ae7ade82ae1a6756a2f560d3129ca1b2977c6b0905633a284bd3aab"
+test("the IAM admission and Team-read consumer pins the complete 0.3.0 owner artifact and generates only approved operations", async () => {
+  const commit = "68aa0da259df1f1ea9030936b8d5a46acba8c6ab"
+  const digest = "e1a023d3ae9839c345d65ec91c3674bd105a9c27f65bb6ecb10f74c965340c54"
   const [manifestSource, vendor, config, lockfile, sdk, types] = await Promise.all([
     readFile(new URL("../contract/dependencies/iam-http.json", import.meta.url), "utf8"),
     readFile(new URL(`../contract/vendor/kokoro-iam/${commit}/iam.internal.v1.json`, import.meta.url)),
@@ -214,12 +214,12 @@ test("the IAM admission consumer pins the complete 0.2.0 owner artifact and gene
   const manifest = JSON.parse(manifestSource)
   const owner = JSON.parse(vendor.toString("utf8"))
   assert.equal(sha256(vendor), digest)
-  assert.equal(owner.info.version, "0.2.0")
+  assert.equal(owner.info.version, "0.3.0")
   assert.ok(Object.keys(owner.paths).length > 1)
   assert.deepEqual(manifest.owner, {
     repository_path: "apps/kokoro-iam",
     repository_commit: commit,
-    contract_version: "0.2.0",
+    contract_version: "0.3.0",
     contract_path: "contract/openapi/iam.internal.v1.json",
     contract_sha256: digest,
   })
@@ -233,8 +233,18 @@ test("the IAM admission consumer pins the complete 0.2.0 owner artifact and gene
   assert.equal(manifest.lockfile_sha256, sha256(lockfile))
   assert.equal(manifest.generated.length, 16)
   assert.match(sdk, /export const verifySessionAuthorization/u)
+  for (const operation of ["listTenantMembers", "listTenantInvitations", "listTenantRoles"]) {
+    assert.match(sdk, new RegExp(`export const ${operation}`, "u"))
+  }
+  assert.deepEqual(
+    [...sdk.matchAll(/^export const ([A-Za-z0-9_]+)\s*=/gmu)].map((match) => match[1]).sort(),
+    ["listTenantInvitations", "listTenantMembers", "listTenantRoles", "verifySessionAuthorization"],
+  )
   assert.doesNotMatch(`${sdk}\n${types}`, /getMetrics|healthz|readyz/u)
   assert.match(config, /POST \/internal\/v1\/session-authorizations\/verify/u)
+  for (const resource of ["members", "invitations", "roles"]) {
+    assert.match(config, new RegExp(`GET /internal/v1/tenants/\\{tenant_id\\}/${resource}`, "u"))
+  }
 })
 
 test("the IAM generator normalizer and generated-tree allowlist fail closed on drift", async () => {

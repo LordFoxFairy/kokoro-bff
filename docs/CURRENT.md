@@ -3,6 +3,8 @@
 状态：2026-09-23
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。
 
+W1C-Team-R2 进行中：IAM owner main `68aa0da259df1f1ea9030936b8d5a46acba8c6ab` 的内部 OpenAPI `0.3.0` 已替换本仓旧 `0.2.0` vendor，生成链 scope 精确增加当前租户 members/invitations/roles 三 GET，旧 vendor 已删除。当前尚未发布 BFF public 三路由、Web 消费或真实 IAM HTTP 组合；仅凭生成物不能称 Team 闭环。
+
 ## 已实现事实
 
 ### W1C-DB-BFF：固定 PostgreSQL owner schema（待 Root 验收）

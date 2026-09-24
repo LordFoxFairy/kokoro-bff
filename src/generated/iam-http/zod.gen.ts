@@ -37,6 +37,157 @@ export const zApiErrorResponse = z
   })
   .strict()
 
+export const zListTenantMembersHeaders = z.object({
+  "x-request-id": z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{1,128}$/)
+    .optional(),
+})
+
+export const zListTenantMembersPath = z.object({
+  tenant_id: z.string().min(1),
+})
+
+export const zListTenantMembersQuery = z.object({
+  limit: z.int().gte(1).lte(100).optional().default(25),
+  cursor: z.string().min(1).max(2048).optional(),
+})
+
+export const zListTenantMembersResponse = z.object({
+  data: z.array(
+    z.object({
+      member_id: z.string().min(1),
+      user_id: z.string().min(1),
+      display_name: z.string(),
+      image_url: z.string().nullable(),
+      roles: z
+        .array(
+          z
+            .string()
+            .min(1)
+            .max(64)
+            .regex(/^[a-z][a-z0-9_-]*$/),
+        )
+        .min(1),
+      joined_at: z.iso
+        .datetime()
+        .regex(
+          /^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}(?:Z))$/,
+        ),
+    }),
+  ),
+  meta: z.object({
+    next_cursor: z.string().nullable(),
+  }),
+})
+
+export const zListTenantRolesHeaders = z.object({
+  "x-request-id": z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{1,128}$/)
+    .optional(),
+})
+
+export const zListTenantRolesPath = z.object({
+  tenant_id: z.string().min(1),
+})
+
+export const zListTenantRolesQuery = z.object({
+  limit: z.int().gte(1).lte(100).optional().default(25),
+  cursor: z.string().min(1).max(2048).optional(),
+})
+
+export const zListTenantRolesResponse = z.object({
+  data: z.array(
+    z.object({
+      role_id: z.string().min(1).nullable(),
+      name: z
+        .string()
+        .min(1)
+        .max(64)
+        .regex(/^[a-z][a-z0-9_-]*$/),
+      kind: z.enum(["builtin", "custom"]),
+      permissions: z.object({
+        organization: z
+          .array(z.enum(["update"]))
+          .min(1)
+          .optional(),
+        member: z
+          .array(z.enum(["create", "read", "update", "delete"]))
+          .min(1)
+          .optional(),
+        invitation: z
+          .array(z.enum(["create", "read", "cancel"]))
+          .min(1)
+          .optional(),
+        ac: z
+          .array(z.enum(["create", "read", "update"]))
+          .min(1)
+          .optional(),
+        tenant: z
+          .array(z.enum(["read"]))
+          .min(1)
+          .optional(),
+        audit: z
+          .array(z.enum(["read"]))
+          .min(1)
+          .optional(),
+      }),
+    }),
+  ),
+  meta: z.object({
+    next_cursor: z.string().nullable(),
+  }),
+})
+
+export const zListTenantInvitationsHeaders = z.object({
+  "x-request-id": z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{1,128}$/)
+    .optional(),
+})
+
+export const zListTenantInvitationsPath = z.object({
+  tenant_id: z.string().min(1),
+})
+
+export const zListTenantInvitationsQuery = z.object({
+  limit: z.int().gte(1).lte(100).optional().default(25),
+  cursor: z.string().min(1).max(2048).optional(),
+})
+
+export const zListTenantInvitationsResponse = z.object({
+  data: z.array(
+    z.object({
+      invitation_id: z.string().min(1),
+      email: z.email().regex(/^(?!\.)(?!.*\.\.)([A-Za-z0-9_'+\-\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\-]*\.)+[A-Za-z]{2,}$/),
+      roles: z
+        .array(
+          z
+            .string()
+            .min(1)
+            .max(64)
+            .regex(/^[a-z][a-z0-9_-]*$/),
+        )
+        .min(1),
+      status: z.enum(["pending"]),
+      created_at: z.iso
+        .datetime()
+        .regex(
+          /^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}(?:Z))$/,
+        ),
+      expires_at: z.iso
+        .datetime()
+        .regex(
+          /^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}(?:Z))$/,
+        ),
+    }),
+  ),
+  meta: z.object({
+    next_cursor: z.string().nullable(),
+  }),
+})
+
 export const zVerifySessionAuthorizationHeaders = z.object({
   "x-request-id": z
     .string()
