@@ -158,6 +158,15 @@ projector 的窄 source reader 只读取 execution events，不直接充当 Chat
 
 ### Chat 产品事实不变量
 
+W1D-Chat-B1 目标态在现有 canonical 表上实现隐式首次创建，不新增 schema。仅首发 POST 且
+`conversation_id` 为合法 `conv_<UUID>` 时，`bff_conversation` 的缺失主键可在 Chat turn 本地事务
+插入，`tenant_id`/`owner_id` 来自可信 admission，`project_ref` 必须在同事务先由本仓 Project 的
+tenant + owner 行验证。标题由首条消息内容确定性截取至最多 24 个 Unicode code point
+（截断加省略号）；空内容在入口拒绝。全局主键冲突时 `ON CONFLICT DO NOTHING`，随后
+tenant + owner + active 条件锁定；foreign/deleted row 不覆盖、不复活，也不插入消息或 outbox。
+新 Conversation、user/pending assistant Message、Agent outbox、AG-UI expected-run registration
+在同一 PG 事务提交或回滚；同 ID 并发等待主键并在行锁内执行原有 digest/key 去重。
+
 1. 所有 Conversation/Message/Share repository 查询都带 `tenant_id`；用户 Conversation/Message 还带 `owner_id`。跨 tenant
    或跨 owner 的 id/cursor 不返回有效事实。起始 `c5e9b3c` 的 `project_ref` 只被当作 Conversation filter；当前非空值必须先
    通过同 tenant/owner Project predicate，不能仅凭字符串匹配获得关联访问。

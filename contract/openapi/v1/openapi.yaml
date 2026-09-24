@@ -445,6 +445,12 @@ paths:
       x-kokoro-idempotency: required
       x-kokoro-permission: chat.message.create
       summary: Submit a session message
+      description: >-
+        For an absent client-created conv_<UUID> session, the first accepted message atomically
+        creates a private active session owned by the admitted tenant and subject, derives its
+        title from the first message, and queues the Agent run. Existing active sessions continue
+        normally. Deleted or foreign session identifiers remain not found; the identifier itself
+        grants no access. Replaying the same idempotency key and request returns the original receipt.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
         - $ref: '#/components/parameters/DirectScopeQuery'

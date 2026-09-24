@@ -188,6 +188,14 @@ IAM 成功与错误都必须有合法 `x-request-id` 和 `Cache-Control: no-stor
 
 ### Task 2 当前 contract：个人私有资源
 
+W1D-Chat-B1 目标语义：`POST /v1/sessions/{id}/messages` 对 Web 本地新造的
+`conv_<UUID>` 可在首条合法消息的 BFF 事务中隐式创建 active Conversation；成功仍返回既有
+`202 MessageReceiptResponse`，不增加独立 create-session operation。首条内容派生服务端标题，
+body 不接受 title。既有 active Conversation 的追加消息行为不变；其他格式的缺失 ID、
+已删除 ID、跨 tenant/subject 的 ID，以及不可见 Project 一律 fail closed 为 404。
+客户端提供的 ID 不赋予任何既存资源权限。相同 `Idempotency-Key` 与请求摘要重试返回原 receipt，
+同 key 不同内容返回 `409 idempotency_conflict`；同 ID 并发首发不会创建多条 Conversation。
+
 普通用户资源默认 scope 为 IAM 验证得到的 `{ tenantId, subjectId }`，body/query/header 不能自报覆盖。Project 的
 list/detail/slug/instruction/revisions/skills/tasks、ScheduledTask 的 list/detail/create/update/delete/retry、Chat/Message、
 AG-UI events 与 cancel/resume/steer 都同时验证 tenant + subject。其他用户的 detail/mutation/control/events 与不存在资源使用同一

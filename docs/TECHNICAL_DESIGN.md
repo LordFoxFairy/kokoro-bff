@@ -286,6 +286,25 @@ outbox lookup 不得跨 owner 命中。该修改不改变 Scheduler callback 的
 
 ## 6. Chat 与 AG-UI
 
+### W1D-Chat-B1：本地新会话首发 admission（目标态）
+
+当前 `POST /v1/sessions/{id}/messages` 在通用 receipt 前要求现存 BFF Conversation，
+`commitChatTurn` 也只锁定现存 active row；Web 本地生成的 `conv_<UUID>` 因而首发返回 404。
+目标只对该 POST 的合法 `conv_<UUID>` 缺失 ID 允许进入 Chat 事务；其他读写与非该格式的缺失 ID
+继续返回 404。`conv_*` 仅是候选创建格式，不是身份、所有权或既存资源访问凭据。
+
+在唯一 `PostgresAgentDispatchOutboxRepository.commitChatTurn` 的同一 PostgreSQL 事务内，
+非空 Project 先按 tenant + subject 锁定并重验，再用
+`INSERT ... ON CONFLICT DO NOTHING` 建立由受信 IAM tenant/subject 所有的 active Conversation，
+再以 tenant + subject + active + project predicate 锁定它；全局主键已属于其他 owner/tenant 或
+deleted tombstone 时不更新、不复活，并与普通缺失一致返回 404。非空 Project reference 在事务内
+按 tenant + subject 重验并锁定现有 BFF Project；不能用客户端 ID 或预检替代事务授权。
+新会话标题由首条已校验用户内容 `trim()` 后取前 24 个 Unicode code point，截断时追加省略号，
+不接受客户端自报 title，保证非空且不超过既有 200 字符约束。之后沿用既有锁顺序与
+idempotency lookup → 两条 Message → Agent outbox → expected-run registration → Conversation 更新，
+整个事务提交后才返回 202；同 ID 并发由主键冲突等待及 Conversation 行锁收敛，
+同 key 同 digest 重放原 receipt，不同 digest 返回 409。不存在新的 API、表、外部 I/O 或 AG-UI 投影逻辑。
+
 当前 Live event 流分成后台投影与公开读取两条单向路径：
 
 ```text

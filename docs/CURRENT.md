@@ -3,6 +3,13 @@
 状态：2026-09-23
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。
 
+W1D-Chat-B1 当前实现：
+Web 本地 `conv_<UUID>` 首条 `POST /v1/sessions/{id}/messages` 已改为在 BFF Chat turn 同一 PostgreSQL
+事务内隐式建 active Conversation，并写两条 Message、Agent outbox 与 expected-run registration；
+首条内容派生标题。既有 active 会话继续追加；foreign/deleted ID、非候选缺失 ID 与不可见 Project 返回
+404。没有新增表或 Agent 协议字段，assistant Message 的 source reconciliation 仍是后续切片。
+真实 PG/Redis 隔离回归与本仓完整门禁以本次执行结果为准，不以本段文字代替验收。
+
 W1C-Team-R2 本仓源码已在 main `fd74202e69e4d40beaef9d3f9ab9b871365589a8` 发布：IAM owner `68aa0da259df1f1ea9030936b8d5a46acba8c6ab` 的内部 OpenAPI `0.3.0` 已替换旧 `0.2.0` vendor，生成链精确增加当前租户 members/invitations/roles 三 GET，旧 vendor 已删除；BFF public 三 GET、只读 Team 客户端与六项假 IAM HTTP 回归也已提交。IAM test-owned Web OIDC client 后续在 `c0f6068731b8a506cd2d3554e72719aa7327f2be` 注册三个 Team 只读 scope；本仓 relay policy 来源跟进该 commit，IAM allowlist 与原生快照 digest 未变。真实 IAM HTTP、Web Team 消费、Root gitlink/库存尚未验，不能称 Team 跨仓闭环。
 
 ## 已实现事实

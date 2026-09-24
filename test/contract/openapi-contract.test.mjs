@@ -113,6 +113,9 @@ test("MessageCreateRequest and runtime failure statuses stay strict", async () =
 
   assert.match(messageOperation, /'413': \{ \$ref: '#\/components\/responses\/PayloadTooLarge' \}/u)
   assert.match(messageOperation, /'503': \{ \$ref: '#\/components\/responses\/ServiceUnavailable' \}/u)
+  assert.match(messageOperation, /absent client-created conv_<UUID> session/u)
+  assert.match(messageOperation, /Deleted or foreign session identifiers remain not found/u)
+  assert.match(messageOperation, /Replaying the same idempotency key and request returns the original receipt/u)
   assert.match(messageRequest, /additionalProperties: false/u)
   assert.match(messageRequest, /maxLength: 100000/u)
   assert.match(messageRequest, /pinned_skills:[\s\S]*items: \{ type: string, minLength: 1 \}/u)

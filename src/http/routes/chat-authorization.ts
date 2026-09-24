@@ -3,6 +3,7 @@ import type { IncomingMessage } from "node:http"
 import { parseMessageCreateRequest } from "../../application/chat/message-create-input.js"
 import type { BffBusinessStore } from "../../application/ports/bff-business-store.js"
 import type { RequestContext } from "../../domain/request-context.js"
+import { isClientCreatedConversationId } from "../../domain/chat/conversation.js"
 import { queryOf } from "../request.js"
 
 export type ChatAuthorization =
@@ -57,10 +58,16 @@ export async function authorizeChatRequest(
 
   if (businessPath.length >= 2) {
     const conversationId = businessPath[1]
+    const firstMessageCandidate = request.method === "POST"
+      && businessPath.length === 3
+      && businessPath[2] === "messages"
+      && conversationId !== undefined
+      && isClientCreatedConversationId(conversationId)
     if (
       conversationId === undefined
       || conversationId === ""
-      || await store.services.chat.findConversation(ownerScope.tenantId, ownerScope.subjectId, conversationId, projectRef) === null
+      || (await store.services.chat.findConversation(ownerScope.tenantId, ownerScope.subjectId, conversationId, projectRef) === null
+        && !firstMessageCandidate)
     ) {
       return { ok: false, status: 404, code: "session_not_found", message: "Session was not found" }
     }

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { randomUUID } from "node:crypto"
 import { readFile } from "node:fs/promises"
 import { createServer } from "node:http"
 import { test } from "node:test"
@@ -14,6 +15,8 @@ const postgresUrl = process.env.KOKORO_TEST_POSTGRES_URL
 const redisUrl = process.env.KOKORO_TEST_REDIS_URL
 const integrationTest = postgresUrl && redisUrl ? test : test.skip
 const sessionAdmission = new SessionAdmissionDouble()
+
+const idleWorker = { start() {}, async stop() {} }
 
 function auth(namespace, principal = "chat_integration_user") {
   const token = `session-${namespace}-${principal}`
@@ -97,6 +100,224 @@ function config() {
     upstreams: { agents: null, system: null, model: null, capability: null, storage: null, scheduler: null, billing: null },
   }
 }
+
+integrationTest("creates a Web-local first Conversation with its turn and Agent command atomically", async () => {
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
+  const tenant = `chat_first_${Date.now()}`
+  const conversationId = `conv_${randomUUID()}`
+  const titleSource = "  🌟 First message creates a private conversation with a useful title  "
+  let store
+  let bff
+  try {
+    await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
+    await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    await store.ready()
+    const runtimeConfig = {
+      ...config(),
+      agentEnabled: true,
+      upstreams: { ...config().upstreams, agents: "http://127.0.0.1:9" },
+    }
+    bff = createBffServer(runtimeConfig, {
+      businessStore: store,
+      sessionAdmission,
+      agentDispatchDispatcher: idleWorker,
+      agentCancellationDispatcher: idleWorker,
+      agUiProjector: idleWorker,
+      scheduledTaskDispatcher: idleWorker,
+    })
+    const base = await listen(bff)
+    const send = (key, content, id = conversationId, body = {}) => fetch(`${base}/v1/sessions/${id}/messages`, {
+      method: "POST",
+      headers: { ...auth(tenant, "first_user"), "idempotency-key": key, "content-type": "application/json" },
+      body: JSON.stringify({ content, ...body }),
+    })
+    const response = await send("first-turn", titleSource)
+    assert.equal(response.status, 202)
+    const receipt = (await response.json()).data
+    const conversation = await pool.query(
+      "SELECT tenant_id, owner_id, status, title FROM bff_conversation WHERE conversation_id = $1",
+      [conversationId],
+    )
+    assert.deepEqual(conversation.rows, [{
+      tenant_id: tenant,
+      owner_id: "first_user",
+      status: "active",
+      title: "🌟 First message creates …",
+    }])
+    const messages = await pool.query(
+      "SELECT message_id, role, status, content FROM bff_message WHERE tenant_id = $1 AND conversation_id = $2 ORDER BY message_seq",
+      [tenant, conversationId],
+    )
+    assert.deepEqual(messages.rows, [
+      { message_id: receipt.user_message_id, role: "user", status: "completed", content: titleSource.trim() },
+      { message_id: receipt.assistant_message_id, role: "assistant", status: "pending", content: "" },
+    ])
+    const outbox = await pool.query(
+      "SELECT run_id, status FROM bff_agent_dispatch_outbox WHERE tenant_id = $1 AND conversation_id = $2",
+      [tenant, conversationId],
+    )
+    assert.deepEqual(outbox.rows, [{ run_id: receipt.run_id, status: "pending" }])
+    const consumer = await pool.query(
+      "SELECT expected_run_id, consumer_subject_id FROM bff_agui_stream WHERE tenant_id = $1 AND session_id = $2",
+      [tenant, conversationId],
+    )
+    assert.deepEqual(consumer.rows, [{ expected_run_id: receipt.run_id, consumer_subject_id: "first_user" }])
+
+    const replay = await send("first-turn", titleSource)
+    assert.equal(replay.status, 202)
+    assert.deepEqual((await replay.json()).data, receipt)
+    const changed = await send("first-turn", "Changed content")
+    assert.equal(changed.status, 409)
+    assert.equal((await changed.json()).error.code, "idempotency_conflict")
+
+    const foreignId = `conv_${randomUUID()}`
+    await pool.query(
+      "INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title) VALUES ($1, $2, $3, $4)",
+      [foreignId, `${tenant}_foreign`, "other_user", "Foreign"],
+    )
+    const foreign = await send("foreign-turn", "Must not touch foreign", foreignId)
+    assert.equal(foreign.status, 404)
+    assert.equal((await foreign.json()).error.code, "session_not_found")
+    const otherOwnerId = `conv_${randomUUID()}`
+    await pool.query(
+      "INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title) VALUES ($1, $2, $3, $4)",
+      [otherOwnerId, tenant, "other_user", "Same tenant, other owner"],
+    )
+    const otherOwner = await send("other-owner-turn", "Must not touch other user", otherOwnerId)
+    assert.equal(otherOwner.status, 404)
+    assert.equal((await otherOwner.json()).error.code, "session_not_found")
+    const deletedId = `conv_${randomUUID()}`
+    await pool.query(
+      `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title, status, deleted_at)
+       VALUES ($1, $2, $3, $4, 'deleted', CURRENT_TIMESTAMP(3))`,
+      [deletedId, tenant, "first_user", "Deleted"],
+    )
+    const deleted = await send("deleted-turn", "Must not revive deleted", deletedId)
+    assert.equal(deleted.status, 404)
+    assert.equal((await deleted.json()).error.code, "session_not_found")
+    const oldFormat = await send("old-format-turn", "Must not create legacy ID", `session_${randomUUID()}`)
+    assert.equal(oldFormat.status, 404)
+    assert.equal((await oldFormat.json()).error.code, "session_not_found")
+    const absentProjectId = `conv_${randomUUID()}`
+    const absentProject = await send("project-absent", "No project access", absentProjectId, { project_ref: "not_a_project" })
+    assert.equal(absentProject.status, 404)
+    assert.equal((await absentProject.json()).error.code, "project_not_found")
+    const absentRows = await pool.query(
+      "SELECT conversation_id FROM bff_conversation WHERE conversation_id = $1",
+      [absentProjectId],
+    )
+    assert.equal(absentRows.rowCount, 0)
+
+    const projectId = `project_${randomUUID()}`
+    await pool.query(
+      "INSERT INTO bff_project (project_id, tenant_id, owner_id, name, slug) VALUES ($1, $2, $3, $4, $5)",
+      [projectId, tenant, "first_user", "Owned project", `owned-${randomUUID()}`],
+    )
+    const projectConversationId = `conv_${randomUUID()}`
+    assert.equal((await send("project-first", "Project first turn", projectConversationId, { project_ref: projectId })).status, 202)
+    const projectConversation = await pool.query(
+      "SELECT project_ref FROM bff_conversation WHERE conversation_id = $1",
+      [projectConversationId],
+    )
+    assert.equal(projectConversation.rows[0].project_ref, projectId)
+
+    const foreignProjectId = `project_${randomUUID()}`
+    await pool.query(
+      "INSERT INTO bff_project (project_id, tenant_id, owner_id, name, slug) VALUES ($1, $2, $3, $4, $5)",
+      [foreignProjectId, `${tenant}_foreign`, "other_user", "Foreign project", `foreign-${randomUUID()}`],
+    )
+    const foreignProjectConversationId = `conv_${randomUUID()}`
+    assert.equal((await send("project-foreign", "Not my project", foreignProjectConversationId, { project_ref: foreignProjectId })).status, 404)
+    const foreignProjectConversation = await pool.query(
+      "SELECT conversation_id FROM bff_conversation WHERE conversation_id = $1",
+      [foreignProjectConversationId],
+    )
+    assert.equal(foreignProjectConversation.rowCount, 0)
+
+    const concurrentId = `conv_${randomUUID()}`
+    const [parallelOne, parallelTwo] = await Promise.all([
+      send("parallel-one", "First concurrent turn", concurrentId),
+      send("parallel-two", "Second concurrent turn", concurrentId),
+    ])
+    assert.equal(parallelOne.status, 202)
+    assert.equal(parallelTwo.status, 202)
+    const concurrentRows = await pool.query(
+      "SELECT conversation_id, owner_id FROM bff_conversation WHERE conversation_id = $1",
+      [concurrentId],
+    )
+    assert.deepEqual(concurrentRows.rows, [{ conversation_id: concurrentId, owner_id: "first_user" }])
+    const concurrentMessages = await pool.query(
+      "SELECT message_seq FROM bff_message WHERE tenant_id = $1 AND conversation_id = $2 ORDER BY message_seq",
+      [tenant, concurrentId],
+    )
+    assert.deepEqual(concurrentMessages.rows.map((row) => Number(row.message_seq)), [1, 2, 3, 4])
+
+    const sameKeyId = `conv_${randomUUID()}`
+    const [duplicateOne, duplicateTwo] = await Promise.all([
+      send("parallel-same-key", "Same first turn", sameKeyId),
+      send("parallel-same-key", "Same first turn", sameKeyId),
+    ])
+    assert.equal(duplicateOne.status, 202)
+    assert.equal(duplicateTwo.status, 202)
+    assert.deepEqual((await duplicateOne.json()).data, (await duplicateTwo.json()).data)
+    const sameKeyMessages = await pool.query(
+      "SELECT message_seq FROM bff_message WHERE tenant_id = $1 AND conversation_id = $2 ORDER BY message_seq",
+      [tenant, sameKeyId],
+    )
+    assert.deepEqual(sameKeyMessages.rows.map((row) => Number(row.message_seq)), [1, 2])
+
+    const rollbackId = `conv_${randomUUID()}`
+    const rollbackRunId = `run_${randomUUID()}`
+    await assert.rejects(store.agentDispatchOutbox.commitChatTurn({
+      outboxId: `rollback_${randomUUID()}`,
+      tenantId: tenant,
+      conversationId: rollbackId,
+      subjectId: "first_user",
+      actorId: "first_user",
+      requestId: "rollback-request",
+      idempotencyKey: "rollback-key",
+      requestDigest: "a".repeat(64),
+      runId: rollbackRunId,
+      userMessageId: receipt.user_message_id,
+      assistantMessageId: `assistant_${randomUUID()}`,
+      identityAssertionRef: "bff:rollback",
+      content: "Rollback this first turn",
+      payload: {
+        schema_version: 1,
+        launch: {
+          request_id: "rollback-request",
+          run_id: rollbackRunId,
+          session_id: rollbackId,
+          feature_key: "chat",
+          message_id: receipt.user_message_id,
+          content: "Rollback this first turn",
+          trace: { source: "kokoro-bff" },
+        },
+      },
+    }), { code: "23505" })
+    const rolledBack = await pool.query("SELECT conversation_id FROM bff_conversation WHERE conversation_id = $1", [rollbackId])
+    assert.equal(rolledBack.rowCount, 0)
+
+    const existingId = `session_${randomUUID()}`
+    await pool.query(
+      "INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title) VALUES ($1, $2, $3, $4)",
+      [existingId, tenant, "first_user", "Existing"],
+    )
+    assert.equal((await send("existing-turn", "Continue existing", existingId)).status, 202)
+    const existing = await pool.query("SELECT title FROM bff_conversation WHERE conversation_id = $1", [existingId])
+    assert.equal(existing.rows[0].title, "Existing")
+  } finally {
+    if (bff) await close(bff)
+    if (store) await store.close()
+    await pool.query("DELETE FROM bff_agent_dispatch_outbox WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_agui_stream WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_message WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_conversation WHERE tenant_id IN ($1, $2)", [tenant, `${tenant}_foreign`]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_project WHERE tenant_id IN ($1, $2)", [tenant, `${tenant}_foreign`]).catch(() => undefined)
+    await pool.end()
+  }
+})
 
 test("does not return Share metadata when it is revoked between lookup and message read", async () => {
   const shared = {

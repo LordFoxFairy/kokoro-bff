@@ -17,6 +17,7 @@ import type { PoolClient } from "pg"
 import type { PostgresBffDatabase } from "./client.js"
 import { agUiConsumerRegistration } from "./agui-consumer-registration.js"
 import { instant } from "./chat-repository-mappers.js"
+import { firstMessageConversationTitle, isClientCreatedConversationId } from "../../domain/chat/conversation.js"
 
 type AgentDispatchRow = {
   outbox_id: string
@@ -183,6 +184,33 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
     const client = await this.database.pool.connect()
     try {
       await client.query("BEGIN")
+      if (command.projectRef !== undefined) {
+        const project = await client.query<{ project_id: string }>(
+          `SELECT project_id FROM bff_project
+            WHERE tenant_id = $1 AND owner_id = $2
+              AND (project_id = $3 OR slug = $3)
+            LIMIT 1 FOR SHARE`,
+          [command.tenantId, command.subjectId, command.projectRef],
+        )
+        if (project.rows[0] === undefined) {
+          await client.query("ROLLBACK")
+          return null
+        }
+      }
+      if (isClientCreatedConversationId(command.conversationId)) {
+        await client.query(
+          `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, project_ref, title, status)
+           VALUES ($1, $2, $3, $4, $5, 'active')
+           ON CONFLICT (conversation_id) DO NOTHING`,
+          [
+            command.conversationId,
+            command.tenantId,
+            command.subjectId,
+            command.projectRef ?? null,
+            firstMessageConversationTitle(command.content),
+          ],
+        )
+      }
       const conversation = await client.query<{ conversation_id: string }>(
         `SELECT conversation_id
            FROM bff_conversation
