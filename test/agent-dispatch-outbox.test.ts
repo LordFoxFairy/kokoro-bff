@@ -12,11 +12,7 @@ import type {
   CommitChatTurn,
 } from "../dist/application/ports/agent-dispatch-outbox-repository.js"
 import type { StableIdGenerator } from "../dist/application/ports/stable-id-generator.js"
-import type {
-  AgentDispatchCommand,
-  AgentDispatchLease,
-  AgentDispatchReceipt,
-} from "../dist/domain/chat/agent-dispatch.js"
+import type { AgentDispatchCommand, AgentDispatchLease, AgentDispatchReceipt } from "../dist/domain/chat/agent-dispatch.js"
 
 class Sha256TestIdGenerator implements StableIdGenerator {
   public generate(material: string): string {
@@ -138,19 +134,24 @@ describe("Agent dispatch outbox worker", () => {
     const dispatcher = new AgentDispatchOutboxDispatcher(repository, delivery, { workerId: "worker_fixture" })
 
     assert.equal(await dispatcher.runOnce(), 1)
-    assert.deepEqual(repository.succeeded, [{
-      tenantId: "tenant_fixture",
-      outboxId: "agent_outbox_fixture",
-      leaseOwner: "worker_fixture",
-      leaseToken: "lease_fixture",
-      fence: 7,
-    }])
+    assert.deepEqual(repository.succeeded, [
+      {
+        tenantId: "tenant_fixture",
+        outboxId: "agent_outbox_fixture",
+        leaseOwner: "worker_fixture",
+        leaseToken: "lease_fixture",
+        fence: 7,
+      },
+    ])
     assert.equal(repository.retryable.length, 0)
     assert.equal(repository.failed.length, 0)
-    assert.deepEqual(repository.claimInputs.map(({ limit, maxAttempts }) => ({ limit, maxAttempts })), [
-      { limit: 1, maxAttempts: 8 },
-      { limit: 1, maxAttempts: 8 },
-    ])
+    assert.deepEqual(
+      repository.claimInputs.map(({ limit, maxAttempts }) => ({ limit, maxAttempts })),
+      [
+        { limit: 1, maxAttempts: 8 },
+        { limit: 1, maxAttempts: 8 },
+      ],
+    )
   })
 
   it("persists retry classification and bounded jitter", async () => {
@@ -234,16 +235,28 @@ describe("Agent dispatch outbox worker", () => {
 describe("Agent dispatch HTTP classification", () => {
   it("accepts only a matching run/session receipt and makes malformed 2xx permanent", () => {
     const leased = command()
-    assert.deepEqual(classifyAgentDispatchAttempt({
-      kind: "response",
-      status: 202,
-      body: { data: { run_id: leased.runId, session_id: leased.conversationId } },
-    }, leased), { outcome: "succeeded" })
-    assert.deepEqual(classifyAgentDispatchAttempt({
-      kind: "response",
-      status: 202,
-      body: { data: { run_id: "other", session_id: leased.conversationId } },
-    }, leased), { outcome: "failed", errorCode: "agent_receipt_invalid" })
+    assert.deepEqual(
+      classifyAgentDispatchAttempt(
+        {
+          kind: "response",
+          status: 202,
+          body: { data: { run_id: leased.runId, session_id: leased.conversationId, replayed: false }, meta: { request_id: "request_1" } },
+        },
+        leased,
+      ),
+      { outcome: "succeeded" },
+    )
+    assert.deepEqual(
+      classifyAgentDispatchAttempt(
+        {
+          kind: "response",
+          status: 202,
+          body: { data: { run_id: "other", session_id: leased.conversationId, replayed: false }, meta: { request_id: "request_1" } },
+        },
+        leased,
+      ),
+      { outcome: "failed", errorCode: "agent_receipt_invalid" },
+    )
     assert.deepEqual(classifyAgentDispatchAttempt({ kind: "response", status: 204, body: undefined }, leased), {
       outcome: "failed",
       errorCode: "agent_receipt_invalid",
@@ -258,6 +271,10 @@ describe("Agent dispatch HTTP classification", () => {
     for (const status of [400, 401, 403, 404, 409, 422]) {
       assert.equal(classifyAgentDispatchAttempt({ kind: "response", status, body: {} }, leased).outcome, "failed")
     }
+    assert.deepEqual(classifyAgentDispatchAttempt({ kind: "response", status: 503, body: { error: { code: "evil\nheader", message: "secret" } } }, leased), {
+      outcome: "retryable",
+      errorCode: "agent_http_503",
+    })
     assert.deepEqual(classifyAgentDispatchAttempt({ kind: "transport", errorCode: "upstream_timeout" }, leased), {
       outcome: "retryable",
       errorCode: "upstream_timeout",

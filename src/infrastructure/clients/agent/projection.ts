@@ -96,10 +96,11 @@ export function mapAgentEvent(event: AgentChatEvent): ChatEvent | null {
           subagent_type: nonEmptyString(payload.subagent_type, "subagent_type"),
           source: sourceOf(payload.source),
         }
-        if (payload.status === "started") return baseEvent(event, "subagent.started", {
-          ...subagentPayload,
-          description: typeof payload.description === "string" ? payload.description : "",
-        })
+        if (payload.status === "started")
+          return baseEvent(event, "subagent.started", {
+            ...subagentPayload,
+            description: typeof payload.description === "string" ? payload.description : "",
+          })
         return baseEvent(event, "subagent.finished", {
           ...subagentPayload,
           ...(payload.status === "failed" ? { failed: true } : {}),
@@ -120,7 +121,9 @@ export function mapAgentEvent(event: AgentChatEvent): ChatEvent | null {
         editable: payload.editable === true,
         pending_tool_ids: Array.isArray(payload.pending_tool_ids) ? payload.pending_tool_ids : [],
         ...(typeof payload.result === "string" ? { result: payload.result } : {}),
-        ...(typeof payload.input_schema === "object" && payload.input_schema !== null && !Array.isArray(payload.input_schema) ? { input_schema: payload.input_schema } : {}),
+        ...(typeof payload.input_schema === "object" && payload.input_schema !== null && !Array.isArray(payload.input_schema)
+          ? { input_schema: payload.input_schema }
+          : {}),
         ...(typeof payload.risk === "object" && payload.risk !== null && !Array.isArray(payload.risk) ? { risk: payload.risk } : {}),
       })
     case "delivery":
@@ -161,21 +164,33 @@ function agentEvent(value: unknown, expectedSessionId: string): AgentChatEvent |
   const payloadJson = value.payload_json
   const sequence = value.seq
   const createdAt = value.created_at
+  const sourceIndex = value.source_index
   const chatMessageId = value.chat_message_id
   if (
-    typeof chatEventId !== "string" || chatEventId.trim() === ""
-    || sessionId !== expectedSessionId
-    || typeof runId !== "string" || runId.trim() === ""
-    || typeof eventType !== "string" || eventType.trim() === ""
-    || typeof payloadJson !== "string"
-    || typeof sequence !== "number" || !Number.isSafeInteger(sequence) || sequence < 1
-    || typeof createdAt !== "number" || !Number.isFinite(createdAt)
-    || (chatMessageId !== undefined && chatMessageId !== null && (typeof chatMessageId !== "string" || chatMessageId.trim() === ""))
-  ) return null
+    typeof chatEventId !== "string" ||
+    chatEventId.trim() === "" ||
+    sessionId !== expectedSessionId ||
+    typeof runId !== "string" ||
+    runId.trim() === "" ||
+    typeof eventType !== "string" ||
+    eventType.trim() === "" ||
+    typeof payloadJson !== "string" ||
+    typeof sequence !== "number" ||
+    !Number.isSafeInteger(sequence) ||
+    sequence < 1 ||
+    typeof createdAt !== "number" ||
+    !Number.isFinite(createdAt) ||
+    typeof sourceIndex !== "number" ||
+    !Number.isSafeInteger(sourceIndex) ||
+    sourceIndex < 0 ||
+    (chatMessageId !== undefined && chatMessageId !== null && (typeof chatMessageId !== "string" || chatMessageId.trim() === ""))
+  )
+    return null
   return {
     chat_event_id: chatEventId,
     session_id: sessionId,
     run_id: runId,
+    source_index: sourceIndex,
     event_type: eventType,
     payload_json: payloadJson,
     seq: sequence,
@@ -195,53 +210,35 @@ export function agentEventList(value: unknown, expectedSessionId: string): Agent
   return events
 }
 
-export function agentEventPage(
-  value: unknown,
-  expectedSessionId: string,
-  afterSequence: number,
-  limit: number,
-): AgentEventPage | null {
+export function agentEventPage(value: unknown, expectedSessionId: string, afterSequence: number, limit: number): AgentEventPage | null {
   const parsed = classifyAgentEventPage(value, expectedSessionId, afterSequence, limit)
   return parsed.kind === "page" ? parsed.page : null
 }
 
-export type AgentEventPageParse =
-  | { kind: "page"; page: AgentEventPage }
-  | { kind: "gap" }
-  | { kind: "invalid" }
+export type AgentEventPageParse = { kind: "page"; page: AgentEventPage } | { kind: "gap" } | { kind: "invalid" }
 
 /**
  * Distinguishes a temporarily incomplete Agent snapshot from a malformed
  * response.  A gap is retried by the durable projector; malformed identity or
  * metadata is recorded as a source-contract failure instead of being guessed.
  */
-export function classifyAgentEventPage(
-  value: unknown,
-  expectedSessionId: string,
-  afterSequence: number,
-  limit: number,
-): AgentEventPageParse {
-  if (
-    !isRecord(value)
-    || !Number.isSafeInteger(afterSequence)
-    || afterSequence < 0
-    || !Number.isSafeInteger(limit)
-    || limit < 1
-  ) return { kind: "invalid" }
+export function classifyAgentEventPage(value: unknown, expectedSessionId: string, afterSequence: number, limit: number): AgentEventPageParse {
+  if (!isRecord(value) || !Number.isSafeInteger(afterSequence) || afterSequence < 0 || !Number.isSafeInteger(limit) || limit < 1) return { kind: "invalid" }
 
   const events = agentEventList(value.events, expectedSessionId)
   const nextSequence = value.next_seq
   const watermark = value.watermark
   if (
-    events === null
-    || events.length > limit
-    || typeof nextSequence !== "number"
-    || !Number.isSafeInteger(nextSequence)
-    || typeof watermark !== "number"
-    || !Number.isSafeInteger(watermark)
-    || nextSequence < afterSequence
-    || watermark < nextSequence
-  ) return { kind: "invalid" }
+    events === null ||
+    events.length > limit ||
+    typeof nextSequence !== "number" ||
+    !Number.isSafeInteger(nextSequence) ||
+    typeof watermark !== "number" ||
+    !Number.isSafeInteger(watermark) ||
+    nextSequence < afterSequence ||
+    watermark < nextSequence
+  )
+    return { kind: "invalid" }
 
   const eventIds = new Set<string>()
   let expectedSequence = afterSequence
@@ -261,12 +258,15 @@ export function classifyAgentEventPage(
     return watermark > nextSequence ? { kind: "gap" } : { kind: "invalid" }
   }
 
-  return { kind: "page", page: {
-    events,
-    nextSequence,
-    watermark,
-    exhausted: nextSequence === watermark,
-  } }
+  return {
+    kind: "page",
+    page: {
+      events,
+      nextSequence,
+      watermark,
+      exhausted: nextSequence === watermark,
+    },
+  }
 }
 
 export function mapAgentMessage(message: AgentChatMessage): ChatMessage {
@@ -307,11 +307,13 @@ export function buildSessionDetail(
     ...(active === undefined ? {} : { active_run: { run_id: active.run_id ?? "", status: "running" } }),
     pending_pauses: mappedEvents.filter((event) => event.kind === "tool.awaiting_approval").map((event) => event.payload),
     files: [],
-    deliveries: mappedEvents.filter((event) => event.kind === "delivery.created").map((event) => ({
-      ...(event.payload as { content_hash: string; path: string; title: string; mime: string; size: number }),
-      run_id: event.run_id ?? sessionId,
-      created_at: event.timestamp,
-    })),
+    deliveries: mappedEvents
+      .filter((event) => event.kind === "delivery.created")
+      .map((event) => ({
+        ...(event.payload as { content_hash: string; path: string; title: string; mime: string; size: number }),
+        run_id: event.run_id ?? sessionId,
+        created_at: event.timestamp,
+      })),
     event_watermark: watermark,
   }
 }

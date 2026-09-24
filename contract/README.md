@@ -109,3 +109,11 @@ IAM commit `259a66e6a569889c030734f380e99685d8b9e21c`, SHA-256
 `f7a3ea2e5ae7ade82ae1a6756a2f560d3129ca1b2977c6b0905633a284bd3aab`. `openapi-ts.iam.config.ts` filters the generated
 surface to `POST /internal/v1/session-authorizations/verify` without editing the vendor artifact; exact generated-file
 digests and toolchain provenance are recorded in `contract/dependencies/iam-http.json`.
+
+The Agent HTTP consumer pins the complete owner `contract/openapi/v1/openapi.json` v1.1.0 at Agent commit
+`520ec181a101298b4f336aad273ce003b2735955`, SHA-256
+`2b9c7aad6f38db3e20200b037e4818ae932209ba3deecabf8fc984db6bcec492`.
+`openapi-ts.agent.config.ts` filters only `createRun` and `replaySessionEvents`; the full source bytes are vendored read-only
+under `contract/vendor/kokoro-agent/`. `pnpm contract:check:agent` verifies the fixed digest, toolchain and manifest,
+regenerates twice byte-identically, and compares every generated file. BFF validates the owner 202 receipt and 200 replay success envelopes and trusted error codes with the generated
+Zod schemas; this dependency does not make BFF the Agent contract owner.

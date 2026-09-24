@@ -310,6 +310,14 @@ sequence 稳定升序呈现，与 `event_watermark` 来自同一 BFF PostgreSQL 
 与 Agent source `chat_message_id`/AG-UI segment ID 不要求相同。一个 run 的多段 assistant
 输出在 BFF snapshot 中以最后一个实际已发布 segment 的权威 completed 正文（可为空）表示；中间段 completed
 仅维持 `streaming`，run success 才标记 `completed`，run failure/cancel 标记 `failed`。
+Agent HTTP consumer W1D-Chat-B3 将 owner `contract/openapi/v1/openapi.json` v1.1.0 固定于
+`520ec181a101298b4f336aad273ce003b2735955` / SHA-256
+`2b9c7aad6f38db3e20200b037e4818ae932209ba3deecabf8fc984db6bcec492`。仅生成
+`createRun`/`replaySessionEvents`，分别只接受 202 `LaunchReceiptEnvelope` 与 200
+`ReplayPageEnvelope`；缺少或多出 wire 字段、裸 body、204、非法 enum/int64/epoch 时间值均视为
+owner contract mismatch。BFF 自有 run/session 比对和 source seq 连续性仍独立执行；Agent
+运行时未列出的 replay 400、x-request-id 与 error retryable 差异留 Agent owner 后续修正。
+
 Agent owner main `520ec181a101298b4f336aad273ce003b2735955` 已发布空
 `assistant.completed(content="")` source；BFF 按该真实事件覆盖此前草稿，且不伪造缺失终帧。
 以上不改变已发布 JSON 字段、SSE frame 或 cursor 形状。

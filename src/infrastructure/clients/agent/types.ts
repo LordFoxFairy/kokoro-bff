@@ -36,6 +36,7 @@ export type AgentChatEvent = {
   chat_event_id: string
   session_id: string
   run_id: string
+  source_index: number
   chat_message_id?: string | null
   event_type: string
   payload_json: string

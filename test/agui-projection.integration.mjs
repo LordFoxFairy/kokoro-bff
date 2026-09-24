@@ -251,7 +251,7 @@ integrationTest("replays an Agent draft, tool, and empty final completion into t
     assert.ok(turn)
     const wire = (seq, eventType, payload, chatMessageId = null) => ({
       chat_event_id: `empty_source_${seq}`, session_id: sessionId, run_id: turn.run_id,
-      event_type: eventType, payload_json: JSON.stringify(payload), seq,
+      source_index: seq - 1, event_type: eventType, payload_json: JSON.stringify(payload), seq,
       created_at: seq * 1000, chat_message_id: chatMessageId,
     })
     // This is the Agent owner's published v1 replay shape, including a completed

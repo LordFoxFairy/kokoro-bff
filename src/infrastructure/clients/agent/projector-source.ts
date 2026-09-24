@@ -1,17 +1,12 @@
 import { randomUUID } from "node:crypto"
 
+import type { ReplaySessionEventsData } from "../../../generated/agent-http/types.gen.js"
 import type { BffConfig } from "../../../config/runtime.js"
-import { dataOf } from "../../../application/projections.js"
-import {
-  AgUiConsumerLeaseLostError,
-  AgUiSourceContinuityError,
-  AgUiSourceContractError,
-  AgUiSourceReadError,
-} from "../../../application/agui/errors.js"
+import { AgUiConsumerLeaseLostError, AgUiSourceContinuityError, AgUiSourceContractError, AgUiSourceReadError } from "../../../application/agui/errors.js"
 import type { AgUiConsumerLease } from "../../../application/agui/ports/agui-projection-repository.js"
 import type { AgUiSourcePage, AgUiSourceReader, AgUiSourceScope } from "../../../application/agui/ports/agui-source-reader.js"
 import type { AgentProjectionSource } from "../../../application/agui/project-session-events.js"
-import { normalizeUpstreamResponse } from "../upstream-response.js"
+import { parseAgentHttpJson, parseReplayPage } from "./http-wire.js"
 import { proxyUpstream, UpstreamRequestError, type UpstreamResponse } from "../../../upstream.js"
 import { agentIdentityHeaders } from "./identity.js"
 import { classifyAgentEventPage, mapAgentEvent } from "./projection.js"
@@ -128,12 +123,7 @@ export class AgentAgUiSourceReader implements AgUiSourceReader {
     if (baseUrl.trim() === "") throw new Error("AG-UI Agent source base URL is required")
   }
 
-  public async read(
-    scope: AgUiSourceScope,
-    afterSequence: number,
-    limit: number,
-    lease?: AgUiConsumerLease,
-  ): Promise<AgUiSourcePage> {
+  public async read(scope: AgUiSourceScope, afterSequence: number, limit: number, lease?: AgUiConsumerLease): Promise<AgUiSourcePage> {
     nonNegativeInteger(afterSequence, "AG-UI Agent source cursor")
     positiveInteger(limit, "AG-UI Agent source page size")
     if (lease !== undefined) positiveInteger(lease.leaseRemainingMs, "AG-UI Agent source lease remaining budget")
@@ -141,12 +131,16 @@ export class AgentAgUiSourceReader implements AgUiSourceReader {
     for (let attempt = 0; attempt < this.maxAttempts; attempt += 1) {
       const requestTimeoutMs = this.remainingLeaseBudget(leaseDeadline)
       const requestId = `agui-projector-${randomUUID()}`
+      const ownerRequest: Pick<ReplaySessionEventsData, "path" | "query"> = {
+        path: { session_id: scope.sessionId },
+        query: { after_seq: afterSequence, limit },
+      }
       let upstream: UpstreamResponse
       try {
         upstream = await proxyUpstream(
           this.config,
           this.baseUrl,
-          `/v1/sessions/${encodeURIComponent(scope.sessionId)}/events?after_seq=${afterSequence}&limit=${limit}`,
+          `/v1/sessions/${encodeURIComponent(ownerRequest.path.session_id)}/events?after_seq=${ownerRequest.query?.after_seq}&limit=${ownerRequest.query?.limit}`,
           "GET",
           requestId,
           new Headers({ accept: "application/json" }),
@@ -158,11 +152,11 @@ export class AgentAgUiSourceReader implements AgUiSourceReader {
         )
       } catch (error) {
         if (
-          error instanceof UpstreamRequestError
-          && error.code === "upstream_timeout"
-          && lease !== undefined
-          && requestTimeoutMs !== undefined
-          && requestTimeoutMs < this.config.upstreamTimeoutMs
+          error instanceof UpstreamRequestError &&
+          error.code === "upstream_timeout" &&
+          lease !== undefined &&
+          requestTimeoutMs !== undefined &&
+          requestTimeoutMs < this.config.upstreamTimeoutMs
         ) {
           throw new AgUiConsumerLeaseLostError()
         }
@@ -172,15 +166,16 @@ export class AgentAgUiSourceReader implements AgUiSourceReader {
         continue
       }
       this.remainingLeaseBudget(leaseDeadline)
-      const normalized = normalizeUpstreamResponse(upstream, requestId)
-      if (normalized.status >= 400) {
-        const failure = statusFailure(normalized.status, upstream.headers, this.now())
+      if (upstream.status >= 400) {
+        const failure = statusFailure(upstream.status, upstream.headers, this.now())
         if (!failure.retryable || attempt + 1 >= this.maxAttempts) throw failure
         if ((failure.retryAfterMs ?? 0) > this.retryMaxDelayMs) throw failure
         await this.waitForRetry(attempt, leaseDeadline, failure.retryAfterMs)
         continue
       }
-      const parsed = classifyAgentEventPage(dataOf(normalized.body), scope.sessionId, afterSequence, limit)
+      const envelope = parseReplayPage(upstream.status, parseAgentHttpJson(upstream.body))
+      if (envelope === null) throw new AgUiSourceContractError()
+      const parsed = classifyAgentEventPage(envelope.data, scope.sessionId, afterSequence, limit)
       if (parsed.kind === "gap") {
         if (attempt + 1 < this.maxAttempts) {
           await this.waitForRetry(attempt, leaseDeadline)
@@ -212,18 +207,11 @@ export class AgentAgUiSourceReader implements AgUiSourceReader {
     return Math.min(this.config.upstreamTimeoutMs, remaining)
   }
 
-  private async waitForRetry(
-    attempt: number,
-    leaseDeadline: number | undefined,
-    retryAfterMs = 0,
-  ): Promise<void> {
+  private async waitForRetry(attempt: number, leaseDeadline: number | undefined, retryAfterMs = 0): Promise<void> {
     const random = this.random()
     if (!Number.isFinite(random) || random < 0 || random > 1) throw new Error("AG-UI Agent source random provider returned an invalid value")
-    const exponential = Math.min(this.retryMaxDelayMs, this.retryBaseDelayMs * (2 ** Math.min(attempt, 30)))
-    const jittered = Math.max(1, Math.min(
-      this.retryMaxDelayMs,
-      Math.floor(exponential * (1 - this.retryJitterRatio + 2 * this.retryJitterRatio * random)),
-    ))
+    const exponential = Math.min(this.retryMaxDelayMs, this.retryBaseDelayMs * 2 ** Math.min(attempt, 30))
+    const jittered = Math.max(1, Math.min(this.retryMaxDelayMs, Math.floor(exponential * (1 - this.retryJitterRatio + 2 * this.retryJitterRatio * random))))
     const delay = Math.max(jittered, retryAfterMs)
     const remaining = this.remainingLeaseBudget(leaseDeadline)
     if (remaining !== undefined && delay >= remaining) throw new AgUiConsumerLeaseLostError()

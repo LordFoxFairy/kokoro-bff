@@ -236,10 +236,12 @@ test("the IAM admission and Team-read consumer pins the complete 0.3.0 owner art
   for (const operation of ["listTenantMembers", "listTenantInvitations", "listTenantRoles"]) {
     assert.match(sdk, new RegExp(`export const ${operation}`, "u"))
   }
-  assert.deepEqual(
-    [...sdk.matchAll(/^export const ([A-Za-z0-9_]+)\s*=/gmu)].map((match) => match[1]).sort(),
-    ["listTenantInvitations", "listTenantMembers", "listTenantRoles", "verifySessionAuthorization"],
-  )
+  assert.deepEqual([...sdk.matchAll(/^export const ([A-Za-z0-9_]+)\s*=/gmu)].map((match) => match[1]).sort(), [
+    "listTenantInvitations",
+    "listTenantMembers",
+    "listTenantRoles",
+    "verifySessionAuthorization",
+  ])
   assert.doesNotMatch(`${sdk}\n${types}`, /getMetrics|healthz|readyz/u)
   assert.match(config, /POST \/internal\/v1\/session-authorizations\/verify/u)
   for (const resource of ["members", "invitations", "roles"]) {
@@ -329,6 +331,7 @@ test("the repository exposes executable contract, schema, and strictness gates",
   assert.match(packageJson.scripts["format:check"], /src\/generated\/scheduler/u)
   assert.match(packageJson.scripts["format:check"], /src\/generated\/iam-http/u)
   assert.equal(packageJson.scripts["contract:generate:capability"], "node scripts/generate-capability-http-client.mjs --write")
+  assert.equal(packageJson.scripts["contract:check:agent"], "node scripts/generate-agent-http-client.mjs --check")
   assert.equal(packageJson.scripts["contract:check:capability"], "node scripts/generate-capability-http-client.mjs --check")
   assert.equal(packageJson.scripts["contract:generate:iam"], "node scripts/generate-iam-http-client.mjs --write")
   assert.equal(packageJson.scripts["contract:check:iam"], "node scripts/generate-iam-http-client.mjs --check")
@@ -336,7 +339,7 @@ test("the repository exposes executable contract, schema, and strictness gates",
   assert.equal(packageJson.scripts["contract:check:scheduler"], "node scripts/generate-scheduler-contracts.mjs --check")
   assert.equal(
     packageJson.scripts["contract:check"],
-    "pnpm contract:check:capability && pnpm contract:check:iam && pnpm contract:check:iam-relay && pnpm contract:check:scheduler && pnpm contract:lint && pnpm contract:semantic && pnpm contract:test",
+    "pnpm contract:check:agent && pnpm contract:check:capability && pnpm contract:check:iam && pnpm contract:check:iam-relay && pnpm contract:check:scheduler && pnpm contract:lint && pnpm contract:semantic && pnpm contract:test",
   )
   assert.equal(packageJson.devDependencies["@hey-api/openapi-ts"], "0.99.0")
   assert.equal(packageJson.devDependencies.prettier, "3.9.6")

@@ -147,10 +147,10 @@ integrationTest("serves live and restarted replay only from the tenant-scoped Po
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
 
     const events = [
-      { chat_event_id: "source_run", session_id: "session_live", run_id: "run_1", event_type: "run.started", payload_json: '{"status":"running"}', seq: 1, created_at: 1000 },
-      { chat_event_id: "source_delta", session_id: "session_live", run_id: "run_1", chat_message_id: "message_1", event_type: "assistant.delta", payload_json: '{"delta":"hello"}', seq: 2, created_at: 2000 },
-      { chat_event_id: "source_message_end", session_id: "session_live", run_id: "run_1", chat_message_id: "message_1", event_type: "assistant.completed", payload_json: '{"content":"hello"}', seq: 3, created_at: 3000 },
-      { chat_event_id: "source_terminal", session_id: "session_live", run_id: "run_1", event_type: "run.completed", payload_json: '{"status":"completed","token_usage":null}', seq: 4, created_at: 4000 },
+      { chat_event_id: "source_run", session_id: "session_live", run_id: "run_1", source_index: 0, event_type: "run.started", payload_json: '{"status":"running"}', seq: 1, created_at: 1000 },
+      { chat_event_id: "source_delta", session_id: "session_live", run_id: "run_1", chat_message_id: "message_1", source_index: 1, event_type: "assistant.delta", payload_json: '{"delta":"hello"}', seq: 2, created_at: 2000 },
+      { chat_event_id: "source_message_end", session_id: "session_live", run_id: "run_1", chat_message_id: "message_1", source_index: 2, event_type: "assistant.completed", payload_json: '{"content":"hello"}', seq: 3, created_at: 3000 },
+      { chat_event_id: "source_terminal", session_id: "session_live", run_id: "run_1", source_index: 3, event_type: "run.completed", payload_json: '{"status":"completed","token_usage":null}', seq: 4, created_at: 4000 },
     ]
     await insertConversation(pool, "session_live", "Live Chat")
     const eventRequests = []
@@ -234,8 +234,8 @@ integrationTest("serves live and restarted replay only from the tenant-scoped Po
     )
     await admissionStore.agUiConsumers.registerConsumer("tenant_a", "session_live", "user_integration", "run_2")
     events.push(
-      { chat_event_id: "source_run_2", session_id: "session_live", run_id: "run_2", event_type: "run.started", payload_json: '{"status":"running"}', seq: 5, created_at: 5000 },
-      { chat_event_id: "source_terminal_2", session_id: "session_live", run_id: "run_2", event_type: "run.completed", payload_json: '{"status":"completed","token_usage":null}', seq: 6, created_at: 6000 },
+      { chat_event_id: "source_run_2", session_id: "session_live", run_id: "run_2", source_index: 4, event_type: "run.started", payload_json: '{"status":"running"}', seq: 5, created_at: 5000 },
+      { chat_event_id: "source_terminal_2", session_id: "session_live", run_id: "run_2", source_index: 5, event_type: "run.completed", payload_json: '{"status":"completed","token_usage":null}', seq: 6, created_at: 6000 },
     )
     const nextRun = await fetch(`${base}/v1/sessions/session_live/events`, {
       headers: { ...auth("tenant_a"), "last-event-id": originalFrames.at(-1).id },
@@ -299,10 +299,10 @@ integrationTest("drains the complete Agent source snapshot before ending at a ru
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await insertConversation(pool, "session_boundary", "Boundary Chat")
     const events = [
-      { chat_event_id: "run_1_started", session_id: "session_boundary", run_id: "run_1", event_type: "run.started", payload_json: '{"status":"running"}', seq: 1, created_at: 1000 },
-      { chat_event_id: "run_1_finished", session_id: "session_boundary", run_id: "run_1", event_type: "run.completed", payload_json: '{"status":"completed"}', seq: 2, created_at: 2000 },
-      { chat_event_id: "run_2_started", session_id: "session_boundary", run_id: "run_2", event_type: "run.started", payload_json: '{"status":"running"}', seq: 3, created_at: 3000 },
-      { chat_event_id: "run_2_finished", session_id: "session_boundary", run_id: "run_2", event_type: "run.completed", payload_json: '{"status":"completed"}', seq: 4, created_at: 4000 },
+      { chat_event_id: "run_1_started", session_id: "session_boundary", run_id: "run_1", source_index: 0, event_type: "run.started", payload_json: '{"status":"running"}', seq: 1, created_at: 1000 },
+      { chat_event_id: "run_1_finished", session_id: "session_boundary", run_id: "run_1", source_index: 1, event_type: "run.completed", payload_json: '{"status":"completed"}', seq: 2, created_at: 2000 },
+      { chat_event_id: "run_2_started", session_id: "session_boundary", run_id: "run_2", source_index: 2, event_type: "run.started", payload_json: '{"status":"running"}', seq: 3, created_at: 3000 },
+      { chat_event_id: "run_2_finished", session_id: "session_boundary", run_id: "run_2", source_index: 3, event_type: "run.completed", payload_json: '{"status":"completed"}', seq: 4, created_at: 4000 },
     ]
     const requestedAfter = []
     agent = createServer((request, response) => {
@@ -354,8 +354,8 @@ integrationTest("fails loudly when Agent event pagination metadata disagrees wit
       response.end(JSON.stringify({
         data: {
           events: [
-            { chat_event_id: "started", session_id: "session_invalid_page", run_id: "run_1", event_type: "run.started", payload_json: '{"status":"running"}', seq: 1, created_at: 1000 },
-            { chat_event_id: "terminal", session_id: "session_invalid_page", run_id: "run_1", event_type: "run.completed", payload_json: '{"status":"completed"}', seq: 2, created_at: 2000 },
+            { chat_event_id: "started", session_id: "session_invalid_page", run_id: "run_1", source_index: 0, event_type: "run.started", payload_json: '{"status":"running"}', seq: 1, created_at: 1000 },
+            { chat_event_id: "terminal", session_id: "session_invalid_page", run_id: "run_1", source_index: 1, event_type: "run.completed", payload_json: '{"status":"completed"}', seq: 2, created_at: 2000 },
           ],
           next_seq: 1,
           watermark: 2,
@@ -401,10 +401,10 @@ integrationTest("ends at the SSE frame budget and resumes strictly after the las
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await insertConversation(pool, "session_budget", "Budget Chat")
     const events = [
-      { chat_event_id: "budget_run_1_started", session_id: "session_budget", run_id: "run_1", event_type: "run.started", payload_json: '{"status":"running"}', seq: 1, created_at: 1000 },
-      { chat_event_id: "budget_run_1_finished", session_id: "session_budget", run_id: "run_1", event_type: "run.completed", payload_json: '{"status":"completed"}', seq: 2, created_at: 2000 },
-      { chat_event_id: "budget_run_2_started", session_id: "session_budget", run_id: "run_2", event_type: "run.started", payload_json: '{"status":"running"}', seq: 3, created_at: 3000 },
-      { chat_event_id: "budget_run_2_finished", session_id: "session_budget", run_id: "run_2", event_type: "run.completed", payload_json: '{"status":"completed"}', seq: 4, created_at: 4000 },
+      { chat_event_id: "budget_run_1_started", session_id: "session_budget", run_id: "run_1", source_index: 0, event_type: "run.started", payload_json: '{"status":"running"}', seq: 1, created_at: 1000 },
+      { chat_event_id: "budget_run_1_finished", session_id: "session_budget", run_id: "run_1", source_index: 1, event_type: "run.completed", payload_json: '{"status":"completed"}', seq: 2, created_at: 2000 },
+      { chat_event_id: "budget_run_2_started", session_id: "session_budget", run_id: "run_2", source_index: 2, event_type: "run.started", payload_json: '{"status":"running"}', seq: 3, created_at: 3000 },
+      { chat_event_id: "budget_run_2_finished", session_id: "session_budget", run_id: "run_2", source_index: 3, event_type: "run.completed", payload_json: '{"status":"completed"}', seq: 4, created_at: 4000 },
     ]
     agent = createServer((request, response) => {
       const url = new URL(request.url ?? "/", "http://agent.local")
@@ -479,7 +479,7 @@ integrationTest("bounds same-session connections and coalesces their Agent and P
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await insertConversation(pool, "session_capacity", "Capacity Chat")
     let agentCalls = 0
-    const source = { chat_event_id: "capacity_started", session_id: "session_capacity", run_id: "run_capacity", event_type: "run.started", payload_json: '{"status":"running"}', seq: 1, created_at: 1000 }
+    const source = { chat_event_id: "capacity_started", session_id: "session_capacity", run_id: "run_capacity", source_index: 0, event_type: "run.started", payload_json: '{"status":"running"}', seq: 1, created_at: 1000 }
     agent = createServer((request, response) => {
       agentCalls += 1
       const url = new URL(request.url ?? "/", "http://agent.local")

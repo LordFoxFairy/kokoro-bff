@@ -19,13 +19,14 @@ async function listen(server) {
 }
 
 async function close(server) {
-  await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()))
+  await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())))
 }
 
 const event = (sequence, overrides = {}) => ({
   chat_event_id: `source_${sequence}`,
   session_id: "session_1",
   run_id: "run_1",
+  source_index: sequence - 1,
   event_type: sequence === 1 ? "run.started" : "assistant.delta",
   payload_json: sequence === 1 ? '{"status":"running"}' : '{"delta":"hello"}',
   seq: sequence,
@@ -37,11 +38,16 @@ describe("Agent event page boundary", () => {
   it("accepts a contiguous partial page and preserves its source snapshot fence", () => {
     assert.equal(typeof agentProjection.agentEventPage, "function")
     assert.deepEqual(
-      agentProjection.agentEventPage({
-        events: [event(1), event(2)],
-        next_seq: 2,
-        watermark: 4,
-      }, "session_1", 0, 1000),
+      agentProjection.agentEventPage(
+        {
+          events: [event(1), event(2)],
+          next_seq: 2,
+          watermark: 4,
+        },
+        "session_1",
+        0,
+        1000,
+      ),
       {
         events: [event(1), event(2)],
         nextSequence: 2,
@@ -53,14 +59,13 @@ describe("Agent event page boundary", () => {
 
   it("accepts an empty page only when the requested source snapshot is exhausted", () => {
     assert.equal(typeof agentProjection.agentEventPage, "function")
-    assert.deepEqual(
-      agentProjection.agentEventPage({ events: [], next_seq: 4, watermark: 4 }, "session_1", 4, 1000),
-      { events: [], nextSequence: 4, watermark: 4, exhausted: true },
-    )
-    assert.equal(
-      agentProjection.agentEventPage({ events: [], next_seq: 4, watermark: 5 }, "session_1", 4, 1000),
-      null,
-    )
+    assert.deepEqual(agentProjection.agentEventPage({ events: [], next_seq: 4, watermark: 4 }, "session_1", 4, 1000), {
+      events: [],
+      nextSequence: 4,
+      watermark: 4,
+      exhausted: true,
+    })
+    assert.equal(agentProjection.agentEventPage({ events: [], next_seq: 4, watermark: 5 }, "session_1", 4, 1000), null)
   })
 
   it("rejects source gaps, backward pages, and pagination fence drift", () => {
@@ -81,29 +86,89 @@ describe("Agent event page boundary", () => {
   it("rejects source identity drift and page overflow", () => {
     assert.equal(typeof agentProjection.agentEventPage, "function")
     assert.equal(
-      agentProjection.agentEventPage({
-        events: [event(1, { session_id: "session_other" })],
-        next_seq: 1,
-        watermark: 1,
-      }, "session_1", 0, 1000),
+      agentProjection.agentEventPage(
+        {
+          events: [event(1, { session_id: "session_other" })],
+          next_seq: 1,
+          watermark: 1,
+        },
+        "session_1",
+        0,
+        1000,
+      ),
       null,
     )
-    assert.equal(
-      agentProjection.agentEventPage({ events: [event(1), event(2)], next_seq: 2, watermark: 2 }, "session_1", 0, 1),
-      null,
-    )
+    assert.equal(agentProjection.agentEventPage({ events: [event(1), event(2)], next_seq: 2, watermark: 2 }, "session_1", 0, 1), null)
+  })
+
+  it("retries a source gap, then accepts a full owner envelope with an empty final segment", async () => {
+    let requests = 0
+    const completed = event(2, { event_type: "assistant.completed", payload_json: '{"content":""}', chat_message_id: "segment_1" })
+    const server = createServer((_request, response) => {
+      requests += 1
+      const events = requests === 1 ? [completed] : [event(1), completed]
+      response.setHeader("content-type", "application/json")
+      response.end(JSON.stringify({ data: { events, next_seq: 2, watermark: 2 }, meta: { request_id: "agent_request" } }))
+    })
+    const baseUrl = await listen(server)
+    try {
+      const config = loadConfig({
+        KOKORO_BFF_SHARED_SECRET: "test-secret",
+        KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/kokoro_bff?schema=kokoro_bff",
+        KOKORO_BFF_REDIS_URL: "redis://localhost:6379/8",
+        KOKORO_INTERNAL_SECRET_BFF: "upstream-secret",
+      })
+      const reader = new AgentAgUiSourceReader(config, baseUrl, { maxAttempts: 2, sleep: async () => undefined })
+      const page = await reader.read({ tenantId: "tenant_1", sessionId: "session_1", subjectId: "user_1" }, 0, 100)
+      assert.equal(requests, 2)
+      assert.equal(page.nextSequence, 2)
+      assert.equal(page.events[1].event.payload.content, "")
+      assert.equal(page.events[1].sourcePayload.source_index, 1)
+    } finally {
+      await close(server)
+    }
+  })
+
+  it("rejects 204 and bare replay pages at the live HTTP entry", async () => {
+    for (const responseShape of ["no-content", "bare"]) {
+      const server = createServer((_request, response) => {
+        if (responseShape === "no-content") {
+          response.writeHead(204)
+          response.end()
+          return
+        }
+        response.setHeader("content-type", "application/json")
+        response.end(JSON.stringify({ events: [], next_seq: 0, watermark: 0 }))
+      })
+      const baseUrl = await listen(server)
+      try {
+        const config = loadConfig({
+          KOKORO_BFF_SHARED_SECRET: "test-secret",
+          KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/kokoro_bff?schema=kokoro_bff",
+          KOKORO_BFF_REDIS_URL: "redis://localhost:6379/8",
+          KOKORO_INTERNAL_SECRET_BFF: "upstream-secret",
+        })
+        const reader = new AgentAgUiSourceReader(config, baseUrl, { maxAttempts: 1 })
+        await assert.rejects(reader.read({ tenantId: "tenant_1", sessionId: "session_1", subjectId: "user_1" }, 0, 100), AgUiSourceContractError)
+      } finally {
+        await close(server)
+      }
+    }
   })
 
   it("classifies an invalid event payload as a permanent source contract error", async () => {
     const server = createServer((_request, response) => {
       response.setHeader("content-type", "application/json")
-      response.end(JSON.stringify({
-        data: {
-          events: [event(1, { payload_json: "not-json" })],
-          next_seq: 1,
-          watermark: 1,
-        },
-      }))
+      response.end(
+        JSON.stringify({
+          data: {
+            events: [event(1, { payload_json: "not-json" })],
+            next_seq: 1,
+            watermark: 1,
+          },
+          meta: { request_id: "invalid-payload-test" },
+        }),
+      )
     })
     const baseUrl = await listen(server)
     try {
@@ -114,10 +179,7 @@ describe("Agent event page boundary", () => {
         KOKORO_INTERNAL_SECRET_BFF: "upstream-secret",
       })
       const reader = new AgentAgUiSourceReader(config, baseUrl, { maxAttempts: 1 })
-      await assert.rejects(
-        reader.read({ tenantId: "tenant_1", sessionId: "session_1", subjectId: "user_1" }, 0, 100),
-        AgUiSourceContractError,
-      )
+      await assert.rejects(reader.read({ tenantId: "tenant_1", sessionId: "session_1", subjectId: "user_1" }, 0, 100), AgUiSourceContractError)
     } finally {
       await close(server)
     }
@@ -141,9 +203,7 @@ describe("Agent event page boundary", () => {
       const reader = new AgentAgUiSourceReader(config, baseUrl, { maxAttempts: 3 })
       await assert.rejects(
         reader.read({ tenantId: "tenant_1", sessionId: "session_1", subjectId: "user_1" }, 0, 100),
-        (error) => error instanceof AgUiSourceReadError
-          && error.code === "agent_source_unauthorized"
-          && error.retryable === false,
+        (error) => error instanceof AgUiSourceReadError && error.code === "agent_source_unauthorized" && error.retryable === false,
       )
       assert.equal(requests, 1)
     } finally {
@@ -178,9 +238,7 @@ describe("Agent event page boundary", () => {
         const reader = new AgentAgUiSourceReader(config, baseUrl, { maxAttempts: 1 })
         await assert.rejects(
           reader.read({ tenantId: "tenant_1", sessionId: "session_1", subjectId: "user_1" }, 0, 100),
-          (error) => error instanceof AgUiSourceReadError
-            && error.code === code
-            && error.retryable === retryable,
+          (error) => error instanceof AgUiSourceReadError && error.code === code && error.retryable === retryable,
           `HTTP ${status}`,
         )
       } finally {
@@ -208,23 +266,18 @@ describe("Agent event page boundary", () => {
       })
       const startedAt = Date.now()
       await assert.rejects(
-        reader.read(
-          { tenantId: "tenant_1", sessionId: "session_1", subjectId: "user_1" },
-          0,
-          100,
-          {
-            tenantId: "tenant_1",
-            sessionId: "session_1",
-            subjectId: "user_1",
-            leaseOwner: "worker_1",
-            leaseToken: "lease_1",
-            fence: 1,
-            leaseUntil: new Date(Date.now() + 350).toISOString(),
-            leaseRemainingMs: 350,
-            sourceHighWatermark: 0,
-            failureCount: 0,
-          },
-        ),
+        reader.read({ tenantId: "tenant_1", sessionId: "session_1", subjectId: "user_1" }, 0, 100, {
+          tenantId: "tenant_1",
+          sessionId: "session_1",
+          subjectId: "user_1",
+          leaseOwner: "worker_1",
+          leaseToken: "lease_1",
+          fence: 1,
+          leaseUntil: new Date(Date.now() + 350).toISOString(),
+          leaseRemainingMs: 350,
+          sourceHighWatermark: 0,
+          failureCount: 0,
+        }),
         AgUiConsumerLeaseLostError,
       )
       assert.ok(Date.now() - startedAt < 1000)
@@ -253,7 +306,9 @@ describe("Agent event page boundary", () => {
         retryMaxDelayMs: 500,
         retryJitterPercent: 100,
         random: () => 1,
-        sleep: async (milliseconds) => { delays.push(milliseconds) },
+        sleep: async (milliseconds) => {
+          delays.push(milliseconds)
+        },
       })
       await assert.rejects(
         reader.read({ tenantId: "tenant_1", sessionId: "session_1", subjectId: "user_1" }, 0, 100),
@@ -286,10 +341,8 @@ describe("Agent event page boundary", () => {
       })
       await assert.rejects(
         reader.read({ tenantId: "tenant_1", sessionId: "session_1", subjectId: "user_1" }, 0, 100),
-        (error) => error instanceof AgUiSourceReadError
-          && error.code === "agent_source_rate_limited"
-          && error.retryable === true
-          && error.retryAfterMs === 2000,
+        (error) =>
+          error instanceof AgUiSourceReadError && error.code === "agent_source_rate_limited" && error.retryable === true && error.retryAfterMs === 2000,
       )
       assert.equal(requests, 1)
     } finally {
@@ -321,10 +374,7 @@ describe("AG-UI source continuity defense", () => {
     }
     const service = new AgUiProjectionService(repository)
 
-    await assert.rejects(
-      service.ingest("tenant_1", "session_1", [source(2)]),
-      /source sequence is not contiguous/u,
-    )
+    await assert.rejects(service.ingest("tenant_1", "session_1", [source(2)]), /source sequence is not contiguous/u)
   })
 
   it("rejects a backward source batch instead of sorting it into validity", async () => {
@@ -341,9 +391,6 @@ describe("AG-UI source continuity defense", () => {
     }
     const service = new AgUiProjectionService(repository)
 
-    await assert.rejects(
-      service.ingest("tenant_1", "session_1", [source(2), source(1)]),
-      /source sequence is not contiguous/u,
-    )
+    await assert.rejects(service.ingest("tenant_1", "session_1", [source(2), source(1)]), /source sequence is not contiguous/u)
   })
 })

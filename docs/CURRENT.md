@@ -10,17 +10,25 @@ Web 本地 `conv_<UUID>` 首条 `POST /v1/sessions/{id}/messages` 已改为在 B
 404。没有新增表或 Agent 协议字段。
 真实 PG/Redis 隔离回归与本仓完整门禁以本次执行结果为准，不以本段文字代替验收。
 
-W1D-Chat-B2 BFF 工作树候选：Agent source 的 assistant delta/completed 与 run terminal 已在 BFF AG-UI
+W1D-Chat-B2 已于 BFF main `8dedcb2510d8c5e3917561b9c979e7aa6ce8b8ae` 发布：Agent source 的 assistant delta/completed 与 run terminal 已在 BFF AG-UI
 source commit 同一事务中更新 outbox/expected-run 绑定的 assistant Message；多段以最后一段权威正文
 表示，中间段 completed 仍是 streaming，run 成功/失败/取消才终态。session snapshot 的 Message 与
 AG-UI watermark 使用同一只读 repeatable-read 快照，Message 只取最新 100 条并按 sequence 升序呈现。
 当前 run 对 active Conversation 的 outbox/assistant 绑定缺损会使 source/frame/watermark 整事务回滚，
 Agent mapper 不再把非字符串 delta/content 强制为空串。Agent owner main
 `520ec181a101298b4f336aad273ce003b2735955` 已发布空 `assistant.completed` 的真实 replay；
-BFF 工作树已验证草稿→工具→空最终段→run success 后 Message 正文为空，重开 snapshot 与 watermark 同快照。
+BFF 已验证草稿→工具→空最终段→run success 后 Message 正文为空，重开 snapshot 与 watermark 同快照。
 Node 22 在已创建空 `kokoro_bff` schema 的自有临时数据库实跑 `pnpm test:integration` 42/42，
-`pnpm test` 262 pass/1 skip、`pnpm contract:check` 26/26；本仓工作树验证结果与 Root
-后续集成结果分开记录。BFF main 当前基线仍为 `17d28502912bafe3b1887a5fdff9ca55dcf1be15`。
+`pnpm test` 262 pass/1 skip、`pnpm contract:check` 26/26；上述为 B2 发布前实测门禁，不冒充 B3 的当前结果。
+
+W1D-Chat-B3 本提交：Agent HTTP v1.1.0 固定 owner commit
+`520ec181a101298b4f336aad273ce003b2735955` 与完整 OpenAPI SHA-256
+`2b9c7aad6f38db3e20200b037e4818ae932209ba3deecabf8fc984db6bcec492`；两条生成 operation 的
+严格 202/200 success envelope 取代宽松手写接收和裸 body 回退。Node 22 在本提交候选上经 Root 独立复验
+`format:check`、`lint`、`typecheck`、`contract:check`（26/26）、`test`（267 pass/1 skip）、
+`test:architecture`（27/27）、`build` 与独占临时 PostgreSQL/Redis `test:integration`（42/42）
+已实跑通过；vendor 字节篡改会令 drift check 非零。该结果不替代 Root 对固定 gitlink 与真实
+Agent HTTP/worker 组合的最终验收。
 
 W1C-Team-R2 本仓源码已在 main `fd74202e69e4d40beaef9d3f9ab9b871365589a8` 发布：IAM owner `68aa0da259df1f1ea9030936b8d5a46acba8c6ab` 的内部 OpenAPI `0.3.0` 已替换旧 `0.2.0` vendor，生成链精确增加当前租户 members/invitations/roles 三 GET，旧 vendor 已删除；BFF public 三 GET、只读 Team 客户端与六项假 IAM HTTP 回归也已提交。IAM test-owned Web OIDC client 后续在 `c0f6068731b8a506cd2d3554e72719aa7327f2be` 注册三个 Team 只读 scope；本仓 relay policy 来源跟进该 commit，IAM allowlist 与原生快照 digest 未变。真实 IAM HTTP、Web Team 消费、Root gitlink/库存尚未验，不能称 Team 跨仓闭环。
 
@@ -159,7 +167,7 @@ W1C-Team-R2 本仓源码已在 main `fd74202e69e4d40beaef9d3f9ab9b871365589a8` �
 
 ### P0：运行时正确性
 
-1. **Chat assistant message reconciliation 待 Root 集成验收。** W1D-Chat-B2 BFF 工作树已加入 source event →
+1. **Chat assistant message reconciliation 已发布 BFF 单仓实现，Root 组合仍待验收。** W1D-Chat-B2 BFF main `8dedcb2` 已加入 source event →
    `bff_message` 同事务回写，含 Agent owner 已发布空终帧的消费测试；Root 须在 BFF 集成版本重跑
    真实 PG/Redis、静态及契约门。AG-UI ledger 与 BFF Message 仍是不同事实，不从 ledger 临时拼出产品 Message。
 2. **事务型 outbox 仍按 owner/切片分阶段。** ScheduledTask → Scheduler 与 Chat → Agent 的 bounded outbox 已实现并有

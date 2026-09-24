@@ -62,6 +62,7 @@ describe("AG-UI projection", () => {
       chat_event_id: "source_1",
       session_id: "session_other",
       run_id: "run_1",
+      source_index: 0,
       event_type: "run.started",
       payload_json: "{}",
       seq: 1,
@@ -69,6 +70,7 @@ describe("AG-UI projection", () => {
     }
     assert.equal(agentEventList([source], "session_1"), null)
     assert.equal(agentEventList([{ ...source, session_id: "session_1", seq: 1.5 }], "session_1"), null)
+    assert.equal(agentEventList([{ ...source, session_id: "session_1", source_index: undefined }], "session_1"), null)
     assert.deepEqual(agentEventList([{ ...source, session_id: "session_1" }], "session_1"), [{ ...source, session_id: "session_1" }])
   })
 
