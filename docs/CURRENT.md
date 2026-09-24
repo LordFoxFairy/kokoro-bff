@@ -3,6 +3,13 @@
 状态：2026-09-24
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。
 
+W1C IAM 来源重钉（2026-09-24）：IAM main `3231d2e9b225c337a1432ffb431cd7a5269d988d`
+新增第一方 Web client 固定 Tenant issuer 续接约束；IAM ingress allowlist 与 vendor
+snapshot 原始字节未变，BFF 只更新 `contract/iam-relay-policy.json` 的 owner commit
+来源并保持 policy `2.0.0` 的 route/body/cookie 语义；新 artifact SHA-256 为
+`b3c234924a48f9f92c9928f6e9d127172ee1f952658fa49dea99865cc554bc92`。Web 须固定新 artifact digest；
+本片来源重钉不单独证明浏览器 tenant 续接或 refresh 已闭环。
+
 W1C-FIXED-TENANT-BFF-C 当前工作树候选：公开 `GET /v1/me` 仅在普通 Product service+Bearer、IAM 在线 admission、固定 tenant guard 成功后读取本次 `RequestContext`，返回 `{data:{user_id,tenant_id},meta:{request_id}}`，无 BFF/IAM 数据库或 Redis 读写。OpenAPI 与 v1 operation baseline 已从 66 增至 67，canonical OpenAPI SHA-256 `75ab482132602bd1d7ce77dbec1423b10d4ce7a8244ad284ecac78cd4e7b50ca`；其他业务/relay 契约不变。相邻真实 BFF/IAM-stub HTTP 与 contract 测试先观察 2 个 RED，额外 GET body 负例再观察 1 个 RED，实施后聚焦 24/24 GREEN；Node22 `pnpm format:check && pnpm check` 通过，contract 27/27、全量 276 pass/1 skip、build 通过。本仓候选尚需 Root 冻结 SHA 审查、Web consumer pin 与真 IAM OAuth same/foreign/revoked 组合；IAM-stub HTTP 不能冒称 IAM 实际撤权链，真实 PG/Redis integration 未运行。
 
 W1C-FIXED-TENANT-BFF-B 当前实现：browser-private policy 已按 breaking 提升至 `2.0.0`，删除 `/organization/list`；`/organization/set-active` 仅在固定配置 tenant、精确 Web Origin/受信服务、非空 issuer session cookie、精确 JSON body 与有界 signed `oauth_query` 均通过时出站，缺/错 tenant 等负例在 IAM socket 前拒绝。policy JSON 由唯一 TS 事实源派生，SHA-256 为 `954ea40e828266488db7cd6bdf5309aab868436de665f22b9608744f51280606`。public OpenAPI、IAM 通用原生 endpoint、BFF Schema/Redis/receipt 不变。相邻 Node 22 真 HTTP 测试先观察 3 个 RED，实施及重新生成 artifact 后 24/24 GREEN；本仓 `pnpm format:check && pnpm check` 通过，contract test 26/26、全量 273 pass/1 skip、build 通过，未运行需要外部 IAM 进程的 `test:iam-relay:integration` 或真实 PG/Redis integration。下面 `1.1.0` 记录为起始已发布基线；Root 已在本仓工作树重跑完整 Node22 门，正式固定 SHA/跨仓组合待 Web 消费后验证。Web 当前仍使用 list/可选选择表单，须在 BFF 发布后原子切换；真 IAM OAuth/Root 来源 pin 尚未验收。
