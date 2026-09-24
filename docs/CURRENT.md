@@ -46,6 +46,15 @@ W1C-Team-R2 本仓源码已在 main `fd74202e69e4d40beaef9d3f9ab9b871365589a8` �
 
 ### W1C-1 本次源码切片：browser-private IAM relay
 
+- R2e-IAM-VERIFY-RELAY 本仓切片在 IAM `e36da9ec` 已发布的 allowlist 内，仅向现有 browser-private relay
+  增加 `GET /iam/verify-email`，policy version `1.1.0`，生成 artifact 保持只读。相邻 policy/transport 测试
+  先 RED 后 GREEN，验证原始 token query、模拟 IAM 原生 302 到固定同源 `/auth/sign-in`，以及上游缺失或
+  返回可缓存 header 时 BFF 强制的 `Cache-Control: no-store`、`Referrer-Policy: no-referrer`、外域
+  `Location` fail closed，以及错误方法/编码别名/浏览器 Authorization 零上游 socket、Product cookie 不出站。
+  BFF 不读写本地 SQL/Redis，也不拥有验证 token；IAM Better Auth 1.7.3 使用有期签名 JWT 与邮箱状态幂等语义。
+  真实 IAM 邮件点击、JWT 验证、Web policy 消费、正式账号 bootstrap 与普通 IAB HTTPS 登录仍待 Root/owner
+  后续组合，不表示用户当前 3310 可登录。Node 22 在本候选运行 `pnpm format:check && pnpm check` 通过，
+  单元/静态测试 270 pass、1 skip；未运行真实 PG/Redis integration。
 - 本次源码切片在普通 `/v1` IAM admission 之外，新增由 Web service secret 准入的精确 `/iam` 原生协议 relay；
   runtime 不签发 token、不开 IAM internal API、不读写 BFF SQL/Redis、不过 Product envelope。BFF 本地门已运行，
   仍待 Root gitlink 来源门与真实正向 OAuth 组合验收，因此不表示完整登录已可用。

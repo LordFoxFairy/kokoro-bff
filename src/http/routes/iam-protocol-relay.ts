@@ -266,6 +266,10 @@ export async function iamProtocolRelay(request: IncomingMessage, response: Serve
       replyFailure(response, id, 502, "iam_relay_response_invalid")
       return
     }
+    if (route.path === "/verify-email") {
+      outgoing["cache-control"] = "no-store"
+      outgoing["referrer-policy"] = "no-referrer"
+    }
     response.writeHead(upstream.status, {
       ...outgoing,
       "x-request-id": id,

@@ -109,6 +109,87 @@ test("BFF preserves IAM signed interaction query and filters Product Session coo
   assert.equal(forwardedCookie, "kokoro-issuer.session_token=issuer-token")
 })
 
+test("email verification keeps the raw token query and native same-origin 302 without Product credentials", async () => {
+  const upstreamCalls: Array<{ url: string | undefined; authorization: string | undefined; cookie: string | undefined }> = []
+  const iam = await listen(
+    createServer((request, response) => {
+      upstreamCalls.push({ url: request.url, authorization: request.headers.authorization, cookie: request.headers.cookie })
+      response.writeHead(302, {
+        location: `${webOrigin}/auth/sign-in`,
+        "cache-control": "no-store",
+      })
+      response.end()
+    }),
+  )
+  const base = await listen(bff(iam))
+  const rawQuery = "?token=opaque%2B%2F%3D&callbackURL=http%3A%2F%2Fweb.example.test%2Fauth%2Fsign-in&x=one&x=two"
+  const response = await fetch(`${base}/iam/verify-email${rawQuery}`, {
+    headers: {
+      ...webServiceHeaders,
+      cookie: "authjs.session-token=product-secret; kokoro-issuer.session_token=issuer-session",
+    },
+    redirect: "manual",
+  })
+  assert.equal(response.status, 302)
+  assert.equal(response.headers.get("location"), `${webOrigin}/auth/sign-in`)
+  assert.equal(response.headers.get("cache-control"), "no-store")
+  assert.equal(response.headers.get("referrer-policy"), "no-referrer")
+  assert.deepEqual(upstreamCalls, [{ url: `/iam/verify-email${rawQuery}`, authorization: undefined, cookie: "kokoro-issuer.session_token=issuer-session" }])
+})
+
+test("email verification overrides missing or cacheable native headers on 200 and same-origin 302", async () => {
+  let mode: "success" | "redirect" = "success"
+  const iam = await listen(
+    createServer((_request, response) => {
+      if (mode === "success") response.writeHead(200, { "content-type": "application/json" })
+      else response.writeHead(302, { location: `${webOrigin}/auth/sign-in`, "cache-control": "public, max-age=600", "referrer-policy": "unsafe-url" })
+      response.end(mode === "success" ? "{}" : "")
+    }),
+  )
+  const base = await listen(bff(iam))
+  const success = await fetch(`${base}/iam/verify-email?token=opaque`, { headers: webServiceHeaders, redirect: "manual" })
+  assert.equal(success.status, 200)
+  assert.equal(success.headers.get("cache-control"), "no-store")
+  assert.equal(success.headers.get("referrer-policy"), "no-referrer")
+
+  mode = "redirect"
+  const redirect = await fetch(`${base}/iam/verify-email?token=opaque`, { headers: webServiceHeaders, redirect: "manual" })
+  assert.equal(redirect.status, 302)
+  assert.equal(redirect.headers.get("location"), `${webOrigin}/auth/sign-in`)
+  assert.equal(redirect.headers.get("cache-control"), "no-store")
+  assert.equal(redirect.headers.get("referrer-policy"), "no-referrer")
+})
+
+test("email verification fails closed on hostile Location and rejects aliases, wrong methods and browser Authorization before IAM I/O", async () => {
+  let calls = 0
+  const iam = await listen(
+    createServer((_request, response) => {
+      calls++
+      response.writeHead(302, { location: "https://outside.example/steal?token=opaque", "cache-control": "no-store" })
+      response.end()
+    }),
+  )
+  const base = await listen(bff(iam))
+  for (const target of [
+    "/iam/%76erify-email?token=opaque",
+    "/iam/verify-email/?token=opaque",
+    "/iam//verify-email?token=opaque",
+    "/iam/verify-email%2F?token=opaque",
+  ]) {
+    const response = await fetch(`${base}${target}`, { headers: webServiceHeaders, redirect: "manual" })
+    assert.equal(response.status, 404, target)
+  }
+  assert.equal((await fetch(`${base}/iam/verify-email?token=opaque`, { method: "POST", headers: webServiceHeaders })).status, 404)
+  assert.equal((await fetch(`${base}/iam/verify-email?token=opaque`, { headers: { ...webServiceHeaders, authorization: "Bearer browser-token" } })).status, 403)
+  assert.equal(calls, 0)
+
+  const hostile = await fetch(`${base}/iam/verify-email?token=opaque`, { headers: webServiceHeaders, redirect: "manual" })
+  assert.equal(calls, 1)
+  assert.equal(hostile.status, 502)
+  assert.equal(hostile.headers.get("location"), null)
+  assert.equal(hostile.headers.get("cache-control"), "no-store")
+})
+
 test("relay rejects path aliases, wrong methods and browser credentials before IAM I/O", async () => {
   let calls = 0
   const iam = await listen(

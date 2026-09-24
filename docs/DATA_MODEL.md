@@ -71,6 +71,22 @@ relay 不为登录、refresh、logout 建 BFF idempotency receipt/cache/session/
 [API_CONTRACT](API_CONTRACT.md#w1c-1-browser-private-iam-relay-目标尚未实现)；运行时放置与请求生命周期详见
 [TECHNICAL_DESIGN](TECHNICAL_DESIGN.md#w1c-1-设计门web-同源-iam-协议-relay目标尚未实现)。
 
+### R2e-IAM-VERIFY-RELAY 数据边界（本仓已实现，待 Root 验收）
+
+IAM `e36da9ecf8d62a364182949817431a8e2329d50a` 已发布 `GET /verify-email`，并独占 Better Auth 1.7.3
+有期签名 JWT 的签发/校验、用户邮箱已验证幂等事实与审计。起始 BFF `eb1eb2926d08b8a3779898b2c31e604a8585ec8b`
+尚未准入 `/iam/verify-email`；本次只把该 GET 加入既有 browser-private relay policy。BFF 不持有 token、
+不建立身份或 Product Session，不查询/写入 IAM 数据库，不把 IAM 验证结果投影为本地表或 Redis key。
+`callbackURL` raw query 不是 BFF 的业务字段或出站路由，真实 302 `Location` 只按现有受限 Web/issuer 目标校验；
+原始 query、token、原生响应 body/Location 均不写日志、receipt、outbox、缓存或业务事实。
+
+本切片对 `database/schema.sql`、所有 BFF 表/索引、事务、Redis namespace、retention/GC 和 fresh install **零变更**。
+准入拒绝、IAM 成功/失败/过期/重复验证、302、超时/取消和恶意 `Location` 均零 BFF SQL/Redis 写入；
+IAM 对邮箱已验证事实的幂等更新与审计是 IAM 自己的事务，不能误称为 BFF 的零副作用或跨服务原子事务。
+正式首个账号/固定 tenant 的受控 bootstrap 与 Product Session/OIDC client 开通各有 owner，邮件验证只是一环，
+不因 relay 增加而推定开通完成。本仓无 SQL/Redis 代码路径；跨仓验收的零写入证据仍应比较 BFF 表与
+Redis namespace 前后快照，并由真实 IAM HTTP 证明 JWT 有期及邮箱状态幂等语义；本片不修改 canonical schema。
+
 ## W1B 数据边界
 
 ### Task 1 本变更：IAM admission 不落库

@@ -8,11 +8,19 @@ import { loadConfig } from "../dist/config/runtime.js"
 test("published browser-private policy is a deterministic read-only projection of runtime policy", async () => {
   const published = JSON.parse(await readFile(new URL("../contract/iam-relay-policy.json", import.meta.url), "utf8")) as unknown
   assert.deepEqual(published, IAM_RELAY_POLICY)
+  assert.equal(IAM_RELAY_POLICY.version, "1.1.0")
   assert.equal(IAM_RELAY_POLICY.iamOwnerCommit, "e36da9ecf8d62a364182949817431a8e2329d50a")
   assert.equal(IAM_RELAY_POLICY.iamAllowlistSha256, "f63dacfa8a7bcec3c56efb8ffb762a3f8bd82bb380eff40a1462db1e77d61ead")
 })
 
 test("relay route matrix is exact and never treats aliases as owner paths", () => {
+  const verificationQuery = "?token=opaque%2B%2F%3D&callbackURL=http%3A%2F%2Fweb.example.test%2Fauth%2Fsign-in&x=one&x=two"
+  assert.deepEqual(iamRelayRoute(`/iam/verify-email${verificationQuery}`, "GET"), {
+    path: "/verify-email",
+    query: verificationQuery,
+  })
+  assert.equal(iamRelayRoute("/iam/verify-email", "POST"), null)
+  assert.equal(iamRelayRoute("/iam/%76erify-email?token=opaque", "GET"), null)
   assert.deepEqual(iamRelayRoute("/iam/oauth2/authorize?client_id=a&ba_param=scope&ba_param=state", "GET"), {
     path: "/oauth2/authorize",
     query: "?client_id=a&ba_param=scope&ba_param=state",
