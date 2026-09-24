@@ -105,6 +105,24 @@ Conversation projection；撤销、过期或 tombstone 后拒绝，且不授权 
 
 ### AG-UI 不变量
 
+W1D-Chat-B2 目标态不增加表、列或跨 owner SQL。`bff_agent_dispatch_outbox` 持有
+`(tenant_id, conversation_id, run_id, subject_id, assistant_message_id)` 的本地绑定，
+`bff_agui_stream.expected_run_id` 持有当前 run fence；在同一 stream row lock/version/lease
+事务内才可把已验证 Agent source 的 delta、completed、failed/cancel 意图写回对应
+`bff_message`。只按 source 自报 `chat_message_id`、`segment_id` 或 `run_id` 不授予更新权。
+update 必须同时匹配 BFF Message 的 tenant、conversation、assistant ID、run、role、可变状态，
+以及 active Conversation owner；旧 run 和永久投递失败 row 不覆写。source identity/frames、
+assistant body/status、projection state/high-watermark 同提交；重复 source 不重复追加 delta。
+当前 run 的 active Conversation 若 UPDATE 影响 0 行，必须检查 outbox、subject、assistant ID 与
+Message row；缺损则回滚整个 source commit，不允许只推进 ledger。deleted Conversation、failed
+outbox、已终态 Message，以及无产品 Conversation 的历史 AG-UI scope 可合法跳过。
+Message 仍是一 run 一条业务 row，多段 assistant 以最后一段正文为快照，工具和未知 source
+不写 Message；仅对 Agent 实际发布的 source 保证，Agent owner main
+`520ec181a101298b4f336aad273ce003b2735955` 已发布空 completed source。
+Snapshot 以倒序截取最新 100 条 Message，再稳定升序呈现；读取以单连接
+只读 repeatable-read 同时观察 Conversation、Message、
+AG-UI cursor，不接受已更新正文与旧 watermark 的混合视图。
+
 1. `(tenant_id, session_id)` 是 sequence allocator、projection state 与查询的最小 scope；只凭 session id 或 cursor 不读取。
 2. `public_sequence` 从 1 单调递增，事务持有 stream row lock 并校验 `version`；它只在服务端排序，不进入 public wire。
 3. 每个 frame 的 `cursor` 是持久化随机 `agui_*` token。全局唯一约束防碰撞，tenant/session predicate 防止 token 成为

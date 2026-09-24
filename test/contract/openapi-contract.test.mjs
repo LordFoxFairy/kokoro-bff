@@ -25,6 +25,18 @@ test("the canonical BFF OpenAPI passes field and protocol invariants", async () 
   assert.deepEqual(inspectBffOpenApi(openapi, baseline), [])
 })
 
+test("the public snapshot contract binds Message facts and AG-UI watermark to one database read snapshot", async () => {
+  const { openapi } = await readContract()
+  const start = openapi.indexOf("      operationId: getSessionSnapshot")
+  const end = openapi.indexOf("  /v1/sessions/{id}/messages:", start)
+  assert.ok(start >= 0 && end > start)
+  const operation = openapi.slice(start, end)
+  assert.match(operation, /owner-scoped session, the latest 100 durable Message facts in chronological/u)
+  assert.match(operation, /order, and AG-UI event watermark/u)
+  assert.match(operation, /one PostgreSQL read snapshot/u)
+  assert.match(operation, /latest committed public\s+ledger cursor/u)
+})
+
 test("the public contract requires IAM bearer admission while Share and runtime manifest remain service-only", async () => {
   const { openapi, baseline } = await readContract()
   assert.match(openapi, /security:\n  - serviceHeader: \[\]\n    internalSecret: \[\]\n    userBearer: \[\]/u)

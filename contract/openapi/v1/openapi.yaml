@@ -340,6 +340,10 @@ paths:
       x-kokoro-idempotency: none
       x-kokoro-permission: chat.session.read
       summary: Get a session snapshot
+      description: >-
+        Returns the owner-scoped session, the latest 100 durable Message facts in chronological
+        order, and AG-UI event watermark from one PostgreSQL read snapshot. The watermark is the latest committed public
+        ledger cursor visible with these messages, not an Agent execution cursor.
       parameters:
         - $ref: '#/components/parameters/DirectScopeQuery'
         - $ref: '#/components/parameters/ProjectRefQuery'

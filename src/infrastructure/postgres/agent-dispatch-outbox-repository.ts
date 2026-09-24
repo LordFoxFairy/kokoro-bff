@@ -554,13 +554,6 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
     if (row === undefined) {
       return { settled: false, notificationCursor: null, tenantId: null, sessionId: null }
     }
-    await client.query(
-      `UPDATE bff_message
-          SET status = 'failed', updated_at = CURRENT_TIMESTAMP(3)
-        WHERE tenant_id = $1 AND conversation_id = $2 AND run_id = $3
-          AND role = 'assistant' AND status IN ('pending', 'streaming')`,
-      [row.tenant_id, row.conversation_id, row.run_id],
-    )
     const stream = await client.query<{ expected_run_id: string | null; next_public_sequence: string }>(
       `SELECT expected_run_id, next_public_sequence
          FROM bff_agui_stream
@@ -570,6 +563,14 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
     )
     const streamRow = stream.rows[0]
     if (streamRow === undefined) throw new Error("AGENT_DISPATCH_AGUI_STREAM_MISSING")
+    // Keep the same stream -> Message lock order as source projection.
+    await client.query(
+      `UPDATE bff_message
+          SET status = 'failed', updated_at = CURRENT_TIMESTAMP(3)
+        WHERE tenant_id = $1 AND conversation_id = $2 AND run_id = $3
+          AND role = 'assistant' AND status IN ('pending', 'streaming')`,
+      [row.tenant_id, row.conversation_id, row.run_id],
+    )
     const projection = agentDispatchFailureProjection({
       outboxId: row.outbox_id,
       conversationId: row.conversation_id,

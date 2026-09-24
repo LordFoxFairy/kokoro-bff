@@ -286,6 +286,39 @@ outbox lookup 不得跨 owner 命中。该修改不改变 Scheduler callback 的
 
 ## 6. Chat 与 AG-UI
 
+### W1D-Chat-B2：同事务 assistant Message reconciliation（目标态）
+
+当前 `commitProjection` 在一个 BFF PostgreSQL 事务内持久化 Agent source identity、AG-UI frame、
+projection state 和 source high-watermark，但不更新首发时创建的 pending assistant `bff_message`；
+`GET /v1/sessions/{id}` 还分别读取会话、消息和 ledger head，可能组合不同提交时刻。
+目标把可映射的 `assistant.delta`、`assistant.completed`、`run.completed`、`run.failed` 投影意图
+放入同一 source commit。Repository 先锁 AG-UI stream 并校验 version/lease，再仅通过本地
+`bff_agent_dispatch_outbox` 的 tenant/session/run/subject 与 active Conversation owner，取得
+`assistant_message_id`；source `chat_message_id`/segment ID 不作为 BFF row identity。
+仅与 stream `expected_run_id` 相等的 run 可更新其 assistant row；旧 run 的 AG-UI 历史 frame
+可入账但不能回写当前或历史业务 Message，已由 outbox 永久失败标记的 row 不能被晚到 source 复活。
+当前 run 对 active Conversation 的 Message update 若影响 0 行，Repository 再检查 outbox/assistant
+绑定；缺失或错位视为 source commit 错误，整体回滚，不推进 source watermark。无产品 Conversation、
+deleted Conversation、failed outbox 或已终态 Message 是明确的合法跳过。Agent mapper 对 delta/content
+要求字符串，畸形 source 在投影前拒绝而不以空串代替。
+
+一个 run 只有一条 BFF assistant 业务 Message。多段模型/工具回合采用最后一个 assistant
+segment 的正文（已实际发布的空正文也可）作为该 row 的快照表示，不拼接工具前中间段。新 segment 的首个 delta 重置正文，
+同段后续 delta 追加；`assistant.completed` 使用 Agent source payload 的权威完整 content 覆盖，
+但只保持 `streaming`，不把中间段误当 run 终态。只有 `run.completed(status=completed)` 把当前
+正文标记 `completed`；`run.failed` 或 `run.completed(status=cancelled)` 标记 `failed` 并保留
+已有正文。工具、subagent 和未知 source kind 不写业务 Message。source event 去重、body 更新、
+AG-UI frame 与 high-watermark 一起提交或回滚；重复/replay 不追加第二次 delta。
+
+公开 snapshot 改由现有 Chat repository 在同一 PostgreSQL `REPEATABLE READ READ ONLY` 事务
+读取 owner-scoped Conversation、最新 100 条 Message（选择时倒序截取，响应时按 sequence 稳定升序）
+与最新 ledger cursor，确保正文/status 与
+`event_watermark` 指向同一数据库快照；仍不把 AG-UI ledger 当 Message 产品事实源。
+Agent owner main `520ec181a101298b4f336aad273ce003b2735955` 已在真实 replay
+发布空 `assistant.completed(content="")`；BFF 对收到的空终帧照常覆盖草稿正文，
+只对实际已发布的 source 作上述保证，不合成缺失终帧。BFF 工作树与 Agent 已发布 owner
+实现的组合验收仍由 Root 执行。
+
 ### W1D-Chat-B1：本地新会话首发 admission（目标态）
 
 当前 `POST /v1/sessions/{id}/messages` 在通用 receipt 前要求现存 BFF Conversation，
@@ -365,8 +398,8 @@ Conversation、Message、Share 的产品事实由 BFF PostgreSQL canonical table
 delete/share routes 只读取 BFF facts。Message create 由 `ChatTurnApplicationService` 在一个本地事务内追加 completed user
 message、pending assistant message、Agent dispatch outbox command，并注册同一 expected run 的 AG-UI consumer；HTTP
 提交后即返回 `202`。后台 `AgentDispatchOutboxDispatcher` 在事务外以稳定 run identity、`SKIP LOCKED`、lease token/fence
-和有界退避调用 Agent。AG-UI ledger 仍独立保存 Agent execution projection；source event 到 assistant Message fact 的
-durable reconciliation 属于后续切片。
+和有界退避调用 Agent。AG-UI ledger 仍独立保存 Agent execution projection；W1D-Chat-B2
+在 source commit 内同时维护 assistant Message 产品事实，不复制 Agent 的 ChatMessage row。
 
 ## 7. 出站与失败归一
 

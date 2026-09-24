@@ -107,21 +107,12 @@ export async function liveChatBusiness(
     }
 
     if (businessPath.length === 2 && method === "GET") {
-      const session = await chat.findConversation(tenantId, subjectId, conversationId, projectRef)
-      if (session === null) {
+      const snapshot = await chat.snapshot(tenantId, subjectId, conversationId, projectRef)
+      if (snapshot === null) {
         await reply(response, 404, failure("session_not_found", "Session was not found", context.requestId), context, idempotency, mutation)
         return true
       }
-      const messages = await chat.listMessages(tenantId, subjectId, conversationId, 100, null, projectRef)
-      const watermark = await store.agUi.status(tenantId, conversationId).then((status) => status.currentCursor).catch(() => null)
-      await reply(response, 200, ok({
-        session,
-        ...(messages === null || messages.messages.length === 0 ? {} : { messages: messages.messages }),
-        pending_pauses: [],
-        files: [],
-        deliveries: [],
-        event_watermark: watermark,
-      }, context.requestId), context, idempotency, mutation)
+      await reply(response, 200, ok(snapshot, context.requestId), context, idempotency, mutation)
       return true
     }
 

@@ -303,6 +303,17 @@ business store 配置时 receipt 持久化到 PostgreSQL；否则部分
 
 ## AG-UI
 
+W1D-Chat-B2 目标语义：`GET /v1/sessions/{id}` 的 `messages` 是最新至多 100 条、按
+sequence 稳定升序呈现，与 `event_watermark` 来自同一 BFF PostgreSQL 读取快照；更早历史
+使用独立 Message 分页接口。该 cursor 只表示此快照已持久化的 AG-UI ledger head，
+不表示 Agent execution 的实时状态。首发 `202` 的 `assistant_message_id` 是 BFF 产品 Message ID，
+与 Agent source `chat_message_id`/AG-UI segment ID 不要求相同。一个 run 的多段 assistant
+输出在 BFF snapshot 中以最后一个实际已发布 segment 的权威 completed 正文（可为空）表示；中间段 completed
+仅维持 `streaming`，run success 才标记 `completed`，run failure/cancel 标记 `failed`。
+Agent owner main `520ec181a101298b4f336aad273ce003b2735955` 已发布空
+`assistant.completed(content="")` source；BFF 按该真实事件覆盖此前草稿，且不伪造缺失终帧。
+以上不改变已发布 JSON 字段、SSE frame 或 cursor 形状。
+
 `GET /v1/sessions/{id}/events` 的网络 payload 是 AG-UI SSE。BFF 不发布 legacy SessionEvent wire，也不发布 Vercel
 AI SDK data stream。独立后台 projector 把 Live source 事件原子写入 BFF PostgreSQL ledger 后，HTTP 才能读取；每个
 AG-UI frame 的 SSE `id` 都是独立

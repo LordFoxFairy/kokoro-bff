@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto"
+import type { PoolClient } from "pg"
 
 import { AgUiSourceIdentityConflictError } from "../../application/agui/errors.js"
 import type {
@@ -68,6 +69,69 @@ type SourceIdentityRow = {
   source_sequence: string
   source_digest: string
   source_occurred_at: Date
+}
+
+type AssistantBindingRow = {
+  conversation_status: "active" | "deleted"
+  conversation_owner_id: string
+  dispatch_status: string | null
+  dispatch_subject_id: string | null
+  assistant_message_id: string | null
+  message_tenant_id: string | null
+  message_conversation_id: string | null
+  message_run_id: string | null
+  message_role: string | null
+  message_status: string | null
+}
+
+async function assertAssistantBindingOrLegitimateSkip(
+  client: PoolClient,
+  tenantId: string,
+  sessionId: string,
+  runId: string,
+  subjectId: string,
+): Promise<void> {
+  const result = await client.query<AssistantBindingRow>(
+    `SELECT conversation.status AS conversation_status,
+            conversation.owner_id AS conversation_owner_id,
+            dispatch.status AS dispatch_status,
+            dispatch.subject_id AS dispatch_subject_id,
+            dispatch.assistant_message_id,
+            message.tenant_id AS message_tenant_id,
+            message.conversation_id AS message_conversation_id,
+            message.run_id AS message_run_id,
+            message.role AS message_role,
+            message.status AS message_status
+       FROM bff_conversation AS conversation
+       LEFT JOIN bff_agent_dispatch_outbox AS dispatch
+         ON dispatch.tenant_id = conversation.tenant_id
+        AND dispatch.conversation_id = conversation.conversation_id
+        AND dispatch.run_id = $3
+       LEFT JOIN bff_message AS message
+         ON message.message_id = dispatch.assistant_message_id
+      WHERE conversation.tenant_id = $1
+        AND conversation.conversation_id = $2`,
+    [tenantId, sessionId, runId],
+  )
+  const binding = result.rows[0]
+  // Legacy AG-UI-only streams and deleted product Conversations have no mutable Message fact.
+  if (binding === undefined || binding.conversation_status === "deleted") return
+  if (
+    binding.conversation_owner_id !== subjectId
+    || binding.dispatch_status === null
+    || binding.dispatch_subject_id !== subjectId
+  ) throw new Error("AGUI_ASSISTANT_BINDING_MISSING")
+  if (binding.dispatch_status === "failed") return
+  if (
+    binding.assistant_message_id === null
+    || binding.message_tenant_id !== tenantId
+    || binding.message_conversation_id !== sessionId
+    || binding.message_run_id !== runId
+    || binding.message_role !== "assistant"
+    || binding.message_status === null
+  ) throw new Error("AGUI_ASSISTANT_BINDING_MISSING")
+  if (binding.message_status === "completed" || binding.message_status === "failed") return
+  throw new Error("AGUI_ASSISTANT_BINDING_MISSING")
 }
 
 function safeInteger(value: string | number, label: string): number {
@@ -254,6 +318,47 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
           ],
         )
         if (inserted.rows[0] === undefined) throw new AgUiSourceIdentityConflictError()
+
+        const update = source.assistantUpdate
+        if (update !== undefined && stream.expected_run_id === update.runId && stream.consumer_subject_id !== null) {
+          // The source event is an ordering signal, never authority for the BFF Message ID.
+          // The admitted run and its outbox bind the only assistant row this transaction may change.
+          const changed = await client.query(
+            `UPDATE bff_message AS message
+                SET content = CASE
+                      WHEN $5::text = 'replace' THEN $6::text
+                      WHEN $5::text = 'append' THEN message.content || $6::text
+                      ELSE message.content
+                    END,
+                    status = CASE
+                      WHEN $5::text IN ('replace', 'append') THEN 'streaming'
+                      WHEN $5::text = 'complete' THEN 'completed'
+                      ELSE 'failed'
+                    END,
+                    updated_at = CURRENT_TIMESTAMP(3)
+               FROM bff_agent_dispatch_outbox AS dispatch,
+                    bff_conversation AS conversation
+              WHERE dispatch.tenant_id = $1
+                AND dispatch.conversation_id = $2
+                AND dispatch.run_id = $3
+                AND dispatch.subject_id = $4
+                AND dispatch.status <> 'failed'
+                AND conversation.tenant_id = dispatch.tenant_id
+                AND conversation.conversation_id = dispatch.conversation_id
+                AND conversation.owner_id = dispatch.subject_id
+                AND conversation.status = 'active'
+                AND message.message_id = dispatch.assistant_message_id
+                AND message.tenant_id = dispatch.tenant_id
+                AND message.conversation_id = dispatch.conversation_id
+                AND message.run_id = dispatch.run_id
+                AND message.role = 'assistant'
+                AND message.status IN ('pending', 'streaming')`,
+            [command.tenantId, command.sessionId, update.runId, stream.consumer_subject_id, update.kind, "content" in update ? update.content : null],
+          )
+          if (changed.rowCount !== 1) {
+            await assertAssistantBindingOrLegitimateSkip(client, command.tenantId, command.sessionId, update.runId, stream.consumer_subject_id)
+          }
+        }
 
         for (const [frameIndex, frame] of source.frames.entries()) {
           const frameCursor = newCursor()

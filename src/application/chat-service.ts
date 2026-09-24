@@ -26,6 +26,26 @@ export class ChatApplicationService {
     }
   }
 
+  public async snapshot(tenantId: string, subjectId: string, conversationId: string, projectRef: string | undefined): Promise<ChatSessionDetail | null> {
+    const snapshot = await this.repository.readSnapshot(tenantId, subjectId, conversationId, projectRef)
+    if (snapshot === null) return null
+    const { conversation, messages, eventWatermark } = snapshot
+    return {
+      session: {
+        session_id: conversation.conversationId,
+        title: conversation.title,
+        owner_id: conversation.ownerId,
+        created_at: conversation.createdAt.toISOString(),
+        updated_at: conversation.updatedAt.toISOString(),
+      },
+      ...(messages.length === 0 ? {} : { messages: messages.map(chatMessage) }),
+      pending_pauses: [],
+      files: [],
+      deliveries: [],
+      event_watermark: eventWatermark,
+    }
+  }
+
   public async listMessages(tenantId: string, subjectId: string, conversationId: string, limit: number, cursor: string | null, projectRef?: string): Promise<{ messages: ChatMessage[]; next_cursor: string | null } | null> {
     const page = await this.repository.listMessages(tenantId, subjectId, conversationId, limit, cursor, projectRef)
     return page === null ? null : { messages: page.messages.map(chatMessage), next_cursor: page.next_cursor }

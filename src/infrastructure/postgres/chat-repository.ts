@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 
-import type { ChatRepository, ConversationPage, MessagePage } from "../../application/ports/chat-repository.js"
+import type { ChatRepository, ChatSnapshot, ConversationPage, MessagePage } from "../../application/ports/chat-repository.js"
 import type { Conversation } from "../../domain/chat/conversation.js"
 import type { Share } from "../../domain/chat/share.js"
 import type { PostgresBffDatabase } from "./client.js"
@@ -77,6 +77,68 @@ export class PostgresChatRepository implements ChatRepository {
     )
     const row = result.rows[0]
     return row === undefined ? null : conversationFromRow(row)
+  }
+
+  public async readSnapshot(tenantId: string, subjectId: string, conversationId: string, projectRef: string | undefined): Promise<ChatSnapshot | null> {
+    const client = await this.database.pool.connect()
+    try {
+      // Every read, including the cursor, observes one committed projection boundary.
+      await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
+      const conversation = await client.query<ConversationRow>(
+        `SELECT ${conversationColumns}
+           FROM bff_conversation
+          WHERE tenant_id = $1 AND owner_id = $2 AND conversation_id = $3 AND status = 'active'
+            AND (
+              project_ref IS NULL
+              OR EXISTS (
+                SELECT 1 FROM bff_project AS project
+                 WHERE project.tenant_id = bff_conversation.tenant_id
+                   AND project.owner_id = bff_conversation.owner_id
+                   AND (project.project_id = bff_conversation.project_ref OR project.slug = bff_conversation.project_ref)
+              )
+            )
+            AND ($4::text IS NULL OR project_ref = $4)
+          LIMIT 1`,
+        [tenantId, subjectId, conversationId, projectRef ?? null],
+      )
+      const row = conversation.rows[0]
+      if (row === undefined) {
+        await client.query("COMMIT")
+        return null
+      }
+      const messages = await client.query<MessageRow>(
+        `SELECT latest.message_id, latest.tenant_id, latest.conversation_id, latest.run_id,
+                latest.role, latest.content, latest.status, latest.message_seq,
+                latest.created_at, latest.updated_at
+           FROM (
+             SELECT message_id, tenant_id, conversation_id, run_id, role, content, status,
+                    message_seq, created_at, updated_at
+               FROM bff_message
+              WHERE tenant_id = $1 AND conversation_id = $2
+              ORDER BY message_seq DESC, message_id DESC
+              LIMIT 100
+           ) AS latest
+          ORDER BY latest.message_seq ASC, latest.message_id ASC`,
+        [tenantId, conversationId],
+      )
+      const cursor = await client.query<{ cursor: string }>(
+        `SELECT cursor FROM bff_agui_event
+          WHERE tenant_id = $1 AND session_id = $2
+          ORDER BY public_sequence DESC LIMIT 1`,
+        [tenantId, conversationId],
+      )
+      await client.query("COMMIT")
+      return {
+        conversation: conversationFromRow(row),
+        messages: messages.rows.map(messageFromRow),
+        eventWatermark: cursor.rows[0]?.cursor ?? null,
+      }
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined)
+      throw error
+    } finally {
+      client.release()
+    }
   }
 
   public async listMessages(tenantId: string, subjectId: string, conversationId: string, limit: number, cursor: string | null, projectRef?: string): Promise<MessagePage | null> {

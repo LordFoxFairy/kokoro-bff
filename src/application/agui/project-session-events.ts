@@ -109,10 +109,37 @@ function projectSources(
   sources: readonly AgentProjectionSource[],
   state: AgUiProjectionState,
 ): AgUiSourceProjection[] {
-  return sources.map((source) => ({
-    ...sourceIdentity(source),
-    frames: source.event === null ? [] : validateAgUiFrames(projectChatEvent(source.event, state)),
-  }))
+  return sources.map((source) => {
+    const frames = source.event === null ? [] : validateAgUiFrames(projectChatEvent(source.event, state))
+    const event = source.event
+    if (event === null || event.run_id === null || event.run_id === "") return { ...sourceIdentity(source), frames }
+    const runId = event.run_id
+    if (event.kind === "message.delta") {
+      const content = event.payload.delta
+      if (typeof content !== "string") throw new AgUiSourceContractError()
+      return {
+        ...sourceIdentity(source), frames,
+        assistantUpdate: {
+          runId,
+          kind: frames.some((frame) => frame.type === "TEXT_MESSAGE_START") ? "replace" : "append",
+          content,
+        },
+      }
+    }
+    if (event.kind === "message.completed") {
+      const content = event.payload.content
+      if (typeof content !== "string") throw new AgUiSourceContractError()
+      return { ...sourceIdentity(source), frames, assistantUpdate: { runId, kind: "replace" as const, content } }
+    }
+    if (event.kind === "run.completed") {
+      if (event.payload.status !== "completed" && event.payload.status !== "cancelled") throw new AgUiSourceContractError()
+      return { ...sourceIdentity(source), frames, assistantUpdate: { runId, kind: event.payload.status === "cancelled" ? "fail" as const : "complete" as const } }
+    }
+    if (event.kind === "run.failed") {
+      return { ...sourceIdentity(source), frames, assistantUpdate: { runId, kind: "fail" as const } }
+    }
+    return { ...sourceIdentity(source), frames }
+  })
 }
 
 /** Keep schema-invalid frames outside the durable source/high-watermark transaction. */

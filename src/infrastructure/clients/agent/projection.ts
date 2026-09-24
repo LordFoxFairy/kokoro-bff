@@ -17,6 +17,11 @@ function nonEmptyString(value: unknown, label: string): string {
   return value
 }
 
+function stringValue(value: unknown, label: string): string {
+  if (typeof value !== "string") throw new Error(`Agent chat projection field ${label} is invalid`)
+  return value
+}
+
 function isoTime(value: number): string {
   const date = new Date(value)
   if (!Number.isFinite(date.getTime())) throw new Error("Agent chat projection timestamp is invalid")
@@ -59,12 +64,12 @@ export function mapAgentEvent(event: AgentChatEvent): ChatEvent | null {
     case "assistant.delta":
       return baseEvent(event, "message.delta", {
         segment_id: nonEmptyString(segmentId, "chat_message_id"),
-        delta: typeof payload.delta === "string" ? payload.delta : "",
+        delta: stringValue(payload.delta, "delta"),
       })
     case "assistant.completed":
       return baseEvent(event, "message.completed", {
         segment_id: nonEmptyString(segmentId, "chat_message_id"),
-        content: typeof payload.content === "string" ? payload.content : "",
+        content: stringValue(payload.content, "content"),
       })
     case "activity": {
       const activity = payload.activity

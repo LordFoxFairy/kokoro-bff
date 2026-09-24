@@ -17,6 +17,10 @@ export type AgUiStreamState = {
   retentionFloorSequence?: number
 }
 
+export type AgUiAssistantUpdate =
+  | { runId: string; kind: "replace" | "append"; content: string }
+  | { runId: string; kind: "complete" | "fail" }
+
 export type AgUiSourceProjection = {
   sourceOwner: "kokoro-agent"
   sourceEventId: string
@@ -24,9 +28,10 @@ export type AgUiSourceProjection = {
   sourceDigest: string
   sourceOccurredAt: string
   frames: AgUiEvent[]
+  assistantUpdate?: AgUiAssistantUpdate
 }
 
-export type AgUiSourceIdentity = Omit<AgUiSourceProjection, "frames">
+export type AgUiSourceIdentity = Omit<AgUiSourceProjection, "frames" | "assistantUpdate">
 
 export type CommitAgUiProjection = {
   tenantId: string

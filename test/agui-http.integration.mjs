@@ -215,6 +215,23 @@ integrationTest("serves live and restarted replay only from the tenant-scoped Po
     assert.deepEqual(ledger.rows.map((row) => row.cursor), originalFrames.map((frame) => frame.id))
 
     admissionStore = new PostgresBffRepositories(postgresUrl, redisUrl)
+    await admissionStore.ready()
+    // The second source run is already dispatched: provide its durable product binding
+    // without creating a pending outbox command for the live background dispatcher.
+    await pool.query(
+      `INSERT INTO bff_message (message_id, tenant_id, conversation_id, run_id, role, content, status, message_seq)
+       VALUES ('assistant_run_2', 'tenant_a', 'session_live', 'run_2', 'assistant', '', 'pending', 1)`,
+    )
+    await pool.query(
+      `INSERT INTO bff_agent_dispatch_outbox
+         (outbox_id, tenant_id, conversation_id, conversation_dispatch_seq, subject_id, actor_id,
+          request_id, idempotency_key, request_digest, run_id, user_message_id, assistant_message_id,
+          identity_assertion_ref, payload, status, completed_at)
+       VALUES ('dispatch_run_2', 'tenant_a', 'session_live', 1, 'user_integration', 'user_integration',
+               'request_run_2', 'turn_run_2', $1, 'run_2', 'user_run_2', 'assistant_run_2',
+               'assertion_run_2', '{}'::jsonb, 'succeeded', CURRENT_TIMESTAMP(3))`,
+      ["a".repeat(64)],
+    )
     await admissionStore.agUiConsumers.registerConsumer("tenant_a", "session_live", "user_integration", "run_2")
     events.push(
       { chat_event_id: "source_run_2", session_id: "session_live", run_id: "run_2", event_type: "run.started", payload_json: '{"status":"running"}', seq: 5, created_at: 5000 },
