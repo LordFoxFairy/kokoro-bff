@@ -18,6 +18,8 @@ security:
 tags:
   - name: Health
     description: Process and dependency health probes.
+  - name: Identity
+    description: Current IAM-admitted Product identity projections.
   - name: System
     description: Tenant-scoped runtime manifest projection.
   - name: Projects
@@ -141,6 +143,40 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+  /v1/me:
+    get:
+      tags: [Identity]
+      operationId: getCurrentUser
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: identity.self.read
+      summary: Get the current Product user and fixed tenant
+      description: The trusted Web service and unique user Bearer are verified online through IAM; the admitted tenant must equal the server-configured Product tenant. No caller-supplied tenant or user field is used.
+      responses:
+        '200':
+          description: Current IAM-admitted identity
+          headers:
+            x-request-id:
+              schema: { $ref: '#/components/schemas/RequestId' }
+            Cache-Control:
+              schema: { type: string, enum: [no-store] }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CurrentUserResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '429':
+          description: IAM admission is rate limited
+          headers:
+            Retry-After:
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/team/members:
     get:
       tags: [Team]
@@ -2808,6 +2844,20 @@ components:
             ac: { type: array, minItems: 1, items: { type: string, enum: [create, read, update] } }
             tenant: { type: array, minItems: 1, items: { type: string, enum: [read] } }
             audit: { type: array, minItems: 1, items: { type: string, enum: [read] } }
+    CurrentUserIdentity:
+      type: object
+      required: [user_id, tenant_id]
+      additionalProperties: false
+      properties:
+        user_id: { type: string, minLength: 1 }
+        tenant_id: { type: string, minLength: 1 }
+    CurrentUserResponse:
+      type: object
+      required: [data, meta]
+      additionalProperties: false
+      properties:
+        data: { $ref: '#/components/schemas/CurrentUserIdentity' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
     TeamMembersResponse:
       type: object
       required: [data, meta]

@@ -25,6 +25,22 @@ test("the canonical BFF OpenAPI passes field and protocol invariants", async () 
   assert.deepEqual(inspectBffOpenApi(openapi, baseline), [])
 })
 
+test("current Product identity is a narrow public self-read contract", async () => {
+  const { openapi, baseline } = await readContract()
+  assert.ok(baseline.some((operation) => operation.method === "GET" && operation.path === "/v1/me" && operation.operation_id === "getCurrentUser"))
+  const start = openapi.indexOf("  /v1/me:")
+  const end = openapi.indexOf("  /v1/team/members:", start)
+  assert.ok(start >= 0 && end > start)
+  const operation = openapi.slice(start, end)
+  assert.match(operation, /operationId: getCurrentUser/u)
+  assert.match(operation, /x-kokoro-permission: identity\.self\.read/u)
+  for (const status of ["200", "400", "401", "403", "429", "503"]) assert.match(operation, new RegExp(`'${status}':`, "u"))
+  assert.match(operation, /x-request-id:/u)
+  assert.match(operation, /Cache-Control:/u)
+  assert.match(openapi, /CurrentUserIdentity:\n\s+type: object\n\s+required: \[user_id, tenant_id\]\n\s+additionalProperties: false/u)
+  assert.match(openapi, /CurrentUserResponse:\n\s+type: object\n\s+required: \[data, meta\]\n\s+additionalProperties: false/u)
+})
+
 test("the public snapshot contract binds Message facts and AG-UI watermark to one database read snapshot", async () => {
   const { openapi } = await readContract()
   const start = openapi.indexOf("      operationId: getSessionSnapshot")

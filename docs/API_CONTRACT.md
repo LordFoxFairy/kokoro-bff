@@ -1,5 +1,11 @@
 # kokoro-bff API contract policy
 
+## W1C-FIXED-TENANT-BFF-C：`GET /v1/me` 当前身份契约
+
+**当前态（BFF `74ec30b`）：** public OpenAPI 没有 `/v1/me`；Web 可消费的 Team 列表、service-only runtime manifest 与 browser-private IAM issuer Session 不等于固定 Product token 的当前身份。已有普通 `/v1` admission 绑定 Web service + 唯一 Bearer + IAM 在线验证 + 固定租户。
+
+**目标态：** BFF 作为 public owner 添加 beta `getCurrentUser`、`identity.self.read` 分类，GET 无参数/正文/idempotency receipt；query 或带正文的请求在 admission 后返回 400。成功 200 的既有 Product envelope 是恰好 `{data:{user_id:string,tenant_id:string},meta:{request_id:string}}`，身份两字段仅来自本次受信 `RequestContext`；`x-request-id` 与 `Cache-Control: no-store` 固定，不缓存、不返回 issuer Session/token/scope/Team 目录。缺服务 403、缺/非法 Bearer 401、固定 tenant 未配置 503（零 IAM I/O）、IAM 拒绝/撤权 401/403、异租户 403、IAM 限流 429（仅合法有界 Retry-After）、IAM 不可用 503，均沿用稳定错误 envelope/no-store/request ID；身份不匹配不回显 token 或外租户 ID。query/路径别名不成为替代身份入口。公开机器字段事实源仅 `contract/openapi/v1/openapi.yaml`，冻结 v1 operation baseline 添加新操作；IAM 原生契约与 BFF relay policy 不变。Web 固定 BFF 来源后于 code callback 与 refresh finalize 调用并校验自身预期 subject/tenant，本仓不定义 Web Session 行为。
+
 ## W1C-FIXED-TENANT-BFF-B：browser-private relay breaking policy
 
 **当前态（BFF `dadf9264`）：** relay policy `1.1.0` 仍公布 `GET /iam/organization/list`，且 `POST /iam/organization/set-active` 在通用 service/Origin/cookie/body size 检查后把任意 JSON 透传 IAM。下面 W1C-1 原始表记录的是该已发布基线，不是固定租户目标。
@@ -183,7 +189,7 @@ service-only operation。这段只记录起始 commit；下节描述 Task 1 admi
 普通 `/v1/*` 顶层 OpenAPI security 使用 `serviceHeader + internalSecret + userBearer` 的 AND 关系：Web adapter 必须同时提供
 `x-kokoro-service: web-bff`、正确 internal secret 与唯一 `Authorization: Bearer <session credential>`。旧
 `namespace`/`principalId` security scheme 删除；即使客户端继续发送同名 header，也不参与身份建立或 owner 请求。
-现有 66 个 path/method/operationId 保持冻结；所有受保护 operation 在 machine contract 中显式发布 401/403/429/503，
+当时的 66 个 path/method/operationId 保持冻结；W1C-FIXED-TENANT-BFF-C 另加 `GET /v1/me`，当前合计 67 个。所有受保护 operation 在 machine contract 中显式发布 401/403/429/503，
 Share 与 runtime manifest 使用下表的 operation-level service-only override。该 clean-slate 身份修正不承诺与未上线旧 header
 契约兼容。
 

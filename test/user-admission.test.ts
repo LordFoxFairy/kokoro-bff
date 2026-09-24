@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { request as httpRequest, type Server } from "node:http"
+import { createServer, request as httpRequest, type Server } from "node:http"
 import { afterEach, test } from "node:test"
 
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
@@ -52,6 +52,127 @@ async function listen(server: Server): Promise<string> {
 
 afterEach(async () => {
   await Promise.all(servers.splice(0).map((server) => new Promise<void>((resolve) => server.close(() => resolve()))))
+})
+
+test("GET /v1/me projects only the online IAM-admitted Product identity", async () => {
+  const iamCalls: string[] = []
+  const iam = await listen(
+    createServer((request, response) => {
+      iamCalls.push(request.headers.authorization ?? "")
+      response.writeHead(200, { "content-type": "application/json", "cache-control": "no-store", "x-request-id": "iam-request" })
+      response.end(
+        JSON.stringify({ data: { allowed: true, tenant_id: "tenant-server", user_id: "user-trusted", session_id: "session-secret", client_id: "web-client" } }),
+      )
+    }),
+  )
+  const bff = await listen(createBffServer({ ...config(), iamBaseUrl: iam }, { businessStore: null, readiness: async () => undefined }))
+  const response = await fetch(`${bff}/v1/me`, {
+    headers: {
+      "x-kokoro-service": "web-bff",
+      "x-kokoro-internal-secret": "test-secret",
+      authorization: "Bearer product-token",
+      "x-kokoro-namespace": "tenant-forged",
+      "x-kokoro-principal-id": "user-forged",
+      "x-kokoro-tenant-id": "tenant-forged",
+      "x-request-id": "me-request",
+    },
+  })
+  assert.equal(response.status, 200)
+  assert.equal(response.headers.get("cache-control"), "no-store")
+  assert.equal(response.headers.get("x-request-id"), "me-request")
+  assert.deepEqual(await response.json(), { data: { user_id: "user-trusted", tenant_id: "tenant-server" }, meta: { request_id: "me-request" } })
+  assert.deepEqual(iamCalls, ["Bearer product-token"])
+  const forgedQuery = await fetch(`${bff}/v1/me?tenant_id=tenant-forged`, {
+    headers: {
+      "x-kokoro-service": "web-bff",
+      "x-kokoro-internal-secret": "test-secret",
+      authorization: "Bearer product-token",
+    },
+  })
+  assert.equal(forgedQuery.status, 400)
+  assert.equal(((await forgedQuery.json()) as { error: { code: string } }).error.code, "current_user_query_invalid")
+  assert.equal(iamCalls.length, 2)
+  const bodyStatus = await new Promise<number>((resolve, reject) => {
+    const upload = httpRequest(
+      `${bff}/v1/me`,
+      {
+        method: "GET",
+        headers: {
+          "x-kokoro-service": "web-bff",
+          "x-kokoro-internal-secret": "test-secret",
+          authorization: "Bearer product-token",
+          "content-type": "application/json",
+          "content-length": "2",
+        },
+      },
+      (reply) => {
+        reply.resume()
+        resolve(reply.statusCode ?? 0)
+      },
+    )
+    upload.once("error", reject)
+    upload.end("{}")
+  })
+  assert.equal(bodyStatus, 400)
+  assert.equal(iamCalls.length, 3)
+})
+
+test("GET /v1/me preserves fixed-tenant and IAM denial semantics without business store", async () => {
+  const iamCalls: string[] = []
+  const iam = await listen(
+    createServer((request, response) => {
+      const bearer = request.headers.authorization ?? ""
+      iamCalls.push(bearer)
+      const status = bearer === "Bearer foreign-token" ? 200 : bearer === "Bearer rate-token" ? 429 : 401
+      response.writeHead(status, {
+        "content-type": "application/json",
+        "cache-control": "no-store",
+        "x-request-id": "iam-request",
+        ...(status === 429 ? { "retry-after": "60" } : {}),
+      })
+      response.end(
+        status === 200
+          ? JSON.stringify({
+              data: { allowed: true, tenant_id: "tenant-foreign", user_id: "user-foreign", session_id: "session-foreign", client_id: "web-client" },
+            })
+          : JSON.stringify({ error: { code: "UNAUTHENTICATED", message: "private IAM detail", retryable: status === 429, details: [] } }),
+      )
+    }),
+  )
+  const bff = await listen(createBffServer({ ...config(), iamBaseUrl: iam }, { businessStore: null, readiness: async () => undefined }))
+  const headers = { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "test-secret" }
+  const untrusted = await fetch(`${bff}/v1/me`, { headers: { ...headers, "x-kokoro-internal-secret": "wrong", authorization: "Bearer revoked-token" } })
+  assert.equal(untrusted.status, 403)
+  assert.equal(((await untrusted.json()) as { error: { code: string } }).error.code, "service_auth_failed")
+  assert.equal(iamCalls.length, 0)
+  const cases = [
+    { authorization: undefined, status: 401, code: "session_authentication_required" },
+    { authorization: "Bearer revoked-token", status: 401, code: "session_invalid" },
+    { authorization: "Bearer foreign-token", status: 403, code: "product_tenant_forbidden" },
+    { authorization: "Bearer rate-token", status: 429, code: "session_rate_limited" },
+  ] as const
+  for (const item of cases) {
+    const response = await fetch(`${bff}/v1/me`, {
+      headers: { ...headers, ...(item.authorization === undefined ? {} : { authorization: item.authorization }) },
+    })
+    assert.equal(response.status, item.status)
+    assert.equal(response.headers.get("cache-control"), "no-store")
+    assert.match(response.headers.get("x-request-id") ?? "", /^[A-Za-z0-9_-]{1,128}$/u)
+    assert.equal(((await response.json()) as { error: { code: string } }).error.code, item.code)
+    assert.equal(response.headers.get("retry-after"), item.status === 429 ? "60" : null)
+  }
+  assert.deepEqual(iamCalls, ["Bearer revoked-token", "Bearer foreign-token", "Bearer rate-token"])
+  const missingConfig = await listen(
+    createBffServer({ ...config(), iamBaseUrl: iam, tenantId: null }, { businessStore: null, readiness: async () => undefined }),
+  )
+  const missing = await fetch(`${missingConfig}/v1/me`, { headers: { ...headers, authorization: "Bearer foreign-token" } })
+  assert.equal(missing.status, 503)
+  assert.equal(((await missing.json()) as { error: { code: string } }).error.code, "product_tenant_not_configured")
+  assert.equal(iamCalls.length, 3)
+  const unavailable = await listen(createBffServer({ ...config(), iamBaseUrl: null }, { businessStore: null, readiness: async () => undefined }))
+  const dependency = await fetch(`${unavailable}/v1/me`, { headers: { ...headers, authorization: "Bearer revoked-token" } })
+  assert.equal(dependency.status, 503)
+  assert.equal(((await dependency.json()) as { error: { code: string } }).error.code, "iam_admission_unavailable")
 })
 
 test("legacy identity headers cannot authorize a user request without a session bearer", async () => {

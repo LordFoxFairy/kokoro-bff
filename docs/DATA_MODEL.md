@@ -1,5 +1,9 @@
 # kokoro-bff data model
 
+## W1C-FIXED-TENANT-BFF-C 当前身份投影数据边界
+
+当前 BFF `74ec30b` 的可信 `RequestContext` 已由固定租户、在线 IAM admission 建立，但没有公开只含当前 user/tenant 的 Product 投影。目标 `GET /v1/me` 仅在该 admission 成功后读取请求内存中的 `identity.userId` 与 `identity.namespace` 并立即响应；不读取或写入 BFF/IAM PostgreSQL，不创建身份/Session/Team 表、Redis key、cache、receipt/outbox、事务或异步事件。固定 tenant 仍来自部署配置并与 IAM 受信结果比较，浏览器自报 body/header/query 不进入身份。`database/schema.sql`、16 张表、索引、owner schema、retention、fresh install 与既有 tenant+subject 资源 predicate 完全不变；此数据面无 SQL/Redis 命令可验，HTTP 测试需证明没有业务 store/owner 调用。IAM 仍唯一保存 Identity、Tenant、Session 与撤权事实，BFF 每次请求在线验证，不持久化授权快照。
+
 ## W1C-FIXED-TENANT-BFF-B relay 数据边界
 
 当前 BFF `dadf9264` 的 browser-private policy `1.1.0` 仍允许 IAM organization list 与任意 set-active JSON 进入原生 IAM；它不改变 BFF 表，但与部署固定租户目标不一致。目标切片只收窄 BFF 传输准入：在任何 IAM socket 前，用部署配置 `KOKORO_TENANT_ID` 与请求的精确 `organizationId` 比对，并要求合法 issuer cookie 与有界 signed OAuth continuation query。BFF 不读取 IAM Session/Tenant/Membership 表、不把浏览器 body 提升为 Product `RequestContext`，IAM 仍负责签名、成员和事务事实。BFF `database/schema.sql`、16 张表、索引、tenant/subject predicate、receipt/outbox、Redis DB 8、retention 与 fresh install 均不变；失败和成功的 relay 都不产生 BFF SQL/Redis 事实。本仓可用 policy/HTTP 零上游 socket 负例验证出站边界；真实 IAM 状态转移须由后续组合验收。
