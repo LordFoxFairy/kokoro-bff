@@ -3,7 +3,7 @@
 ## R5-INVITE-BFF-RELAY：邀请 interaction 的 browser-private 契约
 
 **当前态：** BFF 工作树 policy `2.1.0` 已把 IAM owner 固定为
-`ac94f152daffa2293801ea4f56f98b3ae59452d7`、OpenAPI `0.4.0`/SHA-256
+`7215223b2ed27a0d5217f3bbaaabce547006d3bb`、OpenAPI `0.4.0`/SHA-256
 `a18d57172df841cb2f55aa845a3eeb519ddb5abc8bea1c2be74fbb7e0fb62416`，并实现精确静态 sign-up、三条参数化邀请 relay 与
 `/iam/interactions/invitation?id=<UUID>` 邮件回跳。三条 invitation operation 的 owner/visibility/stability/idempotency、vendored
 OpenAPI、generated client 与 policy JSON 是 Root verifier 的机器来源；public Product OpenAPI 不包含这些 browser-private 入口。
@@ -84,7 +84,7 @@ Root verifier 从固定 IAM/BFF commit blob 复核静态子集、三条动态模
 
 派生 JSON 的字段 contract 为：顶层新增 `iamOpenapiPath="contract/openapi/iam.internal.v1.json"`、
 `iamOpenapiVersion="0.4.0"`、`iamOpenapiSha256="a18d57172df841cb2f55aa845a3eeb519ddb5abc8bea1c2be74fbb7e0fb62416"`，
-`iamOwnerCommit="ac94f152daffa2293801ea4f56f98b3ae59452d7"`；`invitationRoutes` 是三项有序数组，每项恰有
+`iamOwnerCommit="7215223b2ed27a0d5217f3bbaaabce547006d3bb"`；`invitationRoutes` 是三项有序数组，每项恰有
 `template,methods,operationId,owner,visibility,stability,idempotency`，相对 template 分别以
 `/v1/.../context|accept|reject` 结尾，methods 分别为 `["GET"],["POST"],["POST"]`，owner=`kokoro-iam`、
 visibility=`browser-private`、stability=`stable`、idempotency=`none`。`invitationSignUp` 固定静态 route/method、

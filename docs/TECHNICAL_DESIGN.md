@@ -5,7 +5,7 @@
 **当前态（BFF main `da03b76e450018ffa00f812da461569a00a377b3`）：** `/iam` 在
 `src/bootstrap/server.ts` 中先于普通 Product admission 分发，现有 `iamRelayRoute` 只匹配
 `IAM_RELAY_POLICY.routes` 中的 Better Auth 静态路径。policy `2.0.0` 未准入 `/sign-up/email`，也不能匹配 IAM Nest
-Controller 的三条动态路径。IAM main `ac94f152daffa2293801ea4f56f98b3ae59452d7` 已发布 internal OpenAPI `0.4.0`
+Controller 的三条动态路径。IAM main `7215223b2ed27a0d5217f3bbaaabce547006d3bb` 已发布 internal OpenAPI `0.4.0`
 （SHA-256 `a18d57172df841cb2f55aa845a3eeb519ddb5abc8bea1c2be74fbb7e0fb62416`）：
 `GET .../context`、`POST .../accept`、`POST .../reject`；邀请邮件已指向
 `/iam/interactions/invitation?id=<canonical-lowercase-UUID>`。当前 BFF 的 `allowedLocation` 只接受三条旧 Web interaction、
@@ -83,7 +83,7 @@ policy 目标 `2.1.0` 继续固定 IAM allowlist SHA-256
 `b2eac1919e16fdc30a40bee0f3c4300b641bd8f674214aea7731bf10299559e1`，并新增 IAM 最终 OpenAPI version/digest 与三条有序
 dynamic operation（template/method/operationId/owner/visibility/stability/idempotency）来源。BFF vendor、
 `contract/dependencies/iam-http.json`、生成配置及 generated client 后续从 IAM commit
-`ac94f152daffa2293801ea4f56f98b3ae59452d7` 的 0.4.0 原始字节重生，只新增三条
+`7215223b2ed27a0d5217f3bbaaabce547006d3bb` 的 0.4.0 原始字节重生，只新增三条
 issuer operation；`/sign-up/email` 仍来自静态 allowlist/snapshot，不混入 Nest generated client。
 
 后续 TS 事实源与派生 JSON 的新增字段形状固定如下；现有 `requestHeaders`、`responseHeaders`、Cookie 与预算字段原样保留，
@@ -92,7 +92,7 @@ issuer operation；`/sign-up/email` 仍来自静态 allowlist/snapshot，不混�
 ```json
 {
   "version": "2.1.0",
-  "iamOwnerCommit": "ac94f152daffa2293801ea4f56f98b3ae59452d7",
+  "iamOwnerCommit": "7215223b2ed27a0d5217f3bbaaabce547006d3bb",
   "iamAllowlistSha256": "f63dacfa8a7bcec3c56efb8ffb762a3f8bd82bb380eff40a1462db1e77d61ead",
   "iamSnapshotSha256": "b2eac1919e16fdc30a40bee0f3c4300b641bd8f674214aea7731bf10299559e1",
   "iamOpenapiPath": "contract/openapi/iam.internal.v1.json",

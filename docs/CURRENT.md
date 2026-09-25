@@ -3,13 +3,13 @@
 状态：2026-09-25
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。
 
-## R5-INVITE-BFF-RELAY 当前工作树候选（待 Root 审查）
+## R5-INVITE-BFF-RELAY 当前实现与来源重钉
 
-BFF main 基线 `d5ba4d03b1470ad08dfcbb90bc02c441c1275c3e` 的工作树已把 IAM owner 固定到
-`ac94f152daffa2293801ea4f56f98b3ae59452d7`、OpenAPI 0.4.0 SHA-256
+IAM `7215223b2ed27a0d5217f3bbaaabce547006d3bb` 只更新测试 SMTP fixture，0.4.0 OpenAPI 原始字节未变。BFF 已把 IAM owner 固定到
+`7215223b2ed27a0d5217f3bbaaabce547006d3bb`、OpenAPI 0.4.0 SHA-256
 `a18d57172df841cb2f55aa845a3eeb519ddb5abc8bea1c2be74fbb7e0fb62416`。vendor、dependency manifest、生成配置和 IAM client
 只新增三条 browser-private invitation operation；policy `2.1.0` 的派生 JSON SHA-256 为
-`b3ff912e70858cc5a5cf7bdbc597c8872ab29c5bfec4dfbe070ce4b37500239d`。静态 `routes` 只从 IAM `AUTH_ROUTES` 增加精确
+`f7a3a44d9839a0e54faffc8cf6b7ceb601d0d6b647637faf10e9070c927d93e7`。静态 `routes` 只从 IAM `AUTH_ROUTES` 增加精确
 `POST /sign-up/email`；context/accept/reject 仍位于独立 `invitationRoutes` 与具名动态 matcher，不形成 wildcard 或静态 map 模板。
 
 四路都在 Product admission、SQL、Redis、receipt 和业务 store 之前验证 Web 服务身份、精确 Origin 与有界 transport。动态三路另要求
@@ -29,7 +29,7 @@ message/payload。全部邀请结果固定 no-store/no-referrer/request-id，429
 `TOKEN_EXPIRED|INVALID_TOKEN|USER_NOT_FOUND|INVALID_USER` 作为唯一追加 error；其他 query/顺序/编码/外域仍 502。BFF 不新增
 Product API、数据库或缓存事实。真 HTTPS SMTP/Chromium、Web interaction/CSRF 与 Root 来源 verifier 仍待跨仓串行验收。
 
-Node 22.22.2 `pnpm format:check && pnpm check` 在当前工作树通过：IAM/policy/其他 generated drift gate 均为双生成字节一致，
+BFF 初次实现切片的 Node 22.22.2 `pnpm format:check && pnpm check` 通过：IAM/policy/其他 generated drift gate 均为双生成字节一致，
 contract test 28/28，全量 291 passed、1 skipped，最终 build 通过；Redocly 仅保留既有 Library 无 2xx warning。相邻 relay policy/真
 BFF HTTP 假 IAM 测试 32/32 通过并覆盖零上游 socket 拒绝、三动态成功/error、sign-up、Location、未知 status/schema/header、大小/
 deadline/取消与不重试。没有可用的 `KOKORO_TEST_IAM_BASE_URL` test-owned loopback owner，本次未启动共享 IAM/PostgreSQL/Redis，

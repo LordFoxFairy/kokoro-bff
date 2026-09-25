@@ -222,7 +222,7 @@ test("the Capability generated allowlist rejects missing files, every extra exte
 })
 
 test("the IAM consumer pins the complete 0.4.0 owner artifact and generates only approved admission, Team and invitation operations", async () => {
-  const commit = "ac94f152daffa2293801ea4f56f98b3ae59452d7"
+  const commit = "7215223b2ed27a0d5217f3bbaaabce547006d3bb"
   const digest = "a18d57172df841cb2f55aa845a3eeb519ddb5abc8bea1c2be74fbb7e0fb62416"
   const [manifestSource, vendor, config, lockfile, sdk, types] = await Promise.all([
     readFile(new URL("../contract/dependencies/iam-http.json", import.meta.url), "utf8"),

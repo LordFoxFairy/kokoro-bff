@@ -2,7 +2,7 @@
 
 ## R5-INVITE-BFF-RELAY：邀请 transport 无本地事实（设计门）
 
-IAM main `ac94f152daffa2293801ea4f56f98b3ae59452d7` 是 User、issuer Session、Tenant、Invitation、recipient、
+IAM main `7215223b2ed27a0d5217f3bbaaabce547006d3bb` 是 User、issuer Session、Tenant、Invitation、recipient、
 角色、Member 与 accept/reject 状态的唯一 owner。BFF 目标切片仅增加一个受限 Better Auth 静态 sign-up transport、三个精确
 Nest invitation dynamic transport，以及 verify-email 的精确 Web Location 回跳；它不拥有或投影这些业务事实。
 

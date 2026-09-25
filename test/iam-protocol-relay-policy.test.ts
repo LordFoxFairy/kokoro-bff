@@ -14,9 +14,9 @@ test("published browser-private policy is a deterministic read-only projection o
   const bytes = await readFile(new URL("../contract/iam-relay-policy.json", import.meta.url))
   const published = JSON.parse(bytes.toString("utf8")) as unknown
   assert.deepEqual(published, IAM_RELAY_POLICY)
-  assert.equal(createHash("sha256").update(bytes).digest("hex"), "b3ff912e70858cc5a5cf7bdbc597c8872ab29c5bfec4dfbe070ce4b37500239d")
+  assert.equal(createHash("sha256").update(bytes).digest("hex"), "f7a3a44d9839a0e54faffc8cf6b7ceb601d0d6b647637faf10e9070c927d93e7")
   assert.equal(IAM_RELAY_POLICY.version, "2.1.0")
-  assert.equal(IAM_RELAY_POLICY.iamOwnerCommit, "ac94f152daffa2293801ea4f56f98b3ae59452d7")
+  assert.equal(IAM_RELAY_POLICY.iamOwnerCommit, "7215223b2ed27a0d5217f3bbaaabce547006d3bb")
   assert.equal(IAM_RELAY_POLICY.iamAllowlistSha256, "f63dacfa8a7bcec3c56efb8ffb762a3f8bd82bb380eff40a1462db1e77d61ead")
   assert.equal(
     (IAM_RELAY_POLICY as unknown as { iamOpenapiSha256?: string }).iamOpenapiSha256,
@@ -63,7 +63,7 @@ test("published browser-private policy is a deterministic read-only projection o
 })
 
 test("vendored IAM 0.4.0 contract and generated-client manifest pin the invitation owner bytes", async () => {
-  const ownerCommit = "ac94f152daffa2293801ea4f56f98b3ae59452d7"
+  const ownerCommit = "7215223b2ed27a0d5217f3bbaaabce547006d3bb"
   const expectedDigest = "a18d57172df841cb2f55aa845a3eeb519ddb5abc8bea1c2be74fbb7e0fb62416"
   const vendor = await readFile(new URL(`../contract/vendor/kokoro-iam/${ownerCommit}/iam.internal.v1.json`, import.meta.url)).catch(() => null)
   assert.notEqual(vendor, null)
