@@ -40,6 +40,24 @@ test("OpenAPI governance rejects missing metadata and unsafe idempotency declara
   ])
 })
 
+test("only the six IAM-delegated Team mutations may declare no local receipt", () => {
+  for (const [method, path, operationId] of [
+    ["POST", "/v1/team/invitations", "createTeamInvitation"],
+    ["POST", "/v1/team/invitations/{invitation_id}/resend", "resendTeamInvitation"],
+    ["DELETE", "/v1/team/invitations/{invitation_id}", "cancelTeamInvitation"],
+    ["PUT", "/v1/team/members/{member_id}/roles", "replaceTeamMemberRoles"],
+    ["DELETE", "/v1/team/members/{member_id}", "removeTeamMember"],
+    ["DELETE", "/v1/team/members/me", "leaveTeam"],
+  ]) {
+    const operation = governedOperation.replace("/v1/projects", path).replace("    post:", `    ${method.toLowerCase()}:`).replace("createProject", operationId).replace("x-kokoro-idempotency: required", "x-kokoro-idempotency: none")
+    assert.deepEqual(inspectOpenApiGovernance(operation), [], operationId)
+    assert.match(inspectOpenApiGovernance(operation.replace(path, "/v1/projects")).join(" "), /idempotency=required/u)
+    assert.match(inspectOpenApiGovernance(operation.replace(`    ${method.toLowerCase()}:`, "    patch:")).join(" "), /idempotency=required/u)
+  }
+  const unrelated = governedOperation.replace("createProject", "newMutation").replace("x-kokoro-idempotency: required", "x-kokoro-idempotency: none")
+  assert.match(inspectOpenApiGovernance(unrelated).join(" "), /idempotency=required/u)
+})
+
 test("the breaking baseline rejects removed or renamed v1 operations", () => {
   const baseline = [
     { method: "POST", path: "/v1/projects", operation_id: "createProject" },
@@ -199,8 +217,8 @@ test("the Capability generated allowlist rejects missing files, every extra exte
   assert.throws(() => assertGeneratedAllowlist(files, ["client", "core", "manual"], "fixture"), /directory allowlist drifted/u)
 })
 
-test("the IAM admission and Team-read consumer pins the complete 0.3.0 owner artifact and generates only approved operations", async () => {
-  const commit = "68aa0da259df1f1ea9030936b8d5a46acba8c6ab"
+test("the IAM admission and Team read/write consumer pins the complete 0.3.0 owner artifact and generates only approved operations", async () => {
+  const commit = "ad5224a9e0a3a31d1c593d214d37940d6923b2e7"
   const digest = "e1a023d3ae9839c345d65ec91c3674bd105a9c27f65bb6ecb10f74c965340c54"
   const [manifestSource, vendor, config, lockfile, sdk, types] = await Promise.all([
     readFile(new URL("../contract/dependencies/iam-http.json", import.meta.url), "utf8"),
@@ -233,13 +251,29 @@ test("the IAM admission and Team-read consumer pins the complete 0.3.0 owner art
   assert.equal(manifest.lockfile_sha256, sha256(lockfile))
   assert.equal(manifest.generated.length, 16)
   assert.match(sdk, /export const verifySessionAuthorization/u)
-  for (const operation of ["listTenantMembers", "listTenantInvitations", "listTenantRoles"]) {
+  for (const operation of [
+    "listTenantMembers",
+    "listTenantInvitations",
+    "listTenantRoles",
+    "createTenantInvitation",
+    "resendTenantInvitation",
+    "cancelTenantInvitation",
+    "replaceTenantMemberRoles",
+    "removeTenantMember",
+    "leaveTenant",
+  ]) {
     assert.match(sdk, new RegExp(`export const ${operation}`, "u"))
   }
   assert.deepEqual([...sdk.matchAll(/^export const ([A-Za-z0-9_]+)\s*=/gmu)].map((match) => match[1]).sort(), [
+    "cancelTenantInvitation",
+    "createTenantInvitation",
+    "leaveTenant",
     "listTenantInvitations",
     "listTenantMembers",
     "listTenantRoles",
+    "removeTenantMember",
+    "replaceTenantMemberRoles",
+    "resendTenantInvitation",
     "verifySessionAuthorization",
   ])
   assert.doesNotMatch(`${sdk}\n${types}`, /getMetrics|healthz|readyz/u)

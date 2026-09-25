@@ -3,6 +3,15 @@
 import { client } from "./client.gen.js"
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from "./client/index.js"
 import type {
+  CancelTenantInvitationData,
+  CancelTenantInvitationErrors,
+  CancelTenantInvitationResponses,
+  CreateTenantInvitationData,
+  CreateTenantInvitationErrors,
+  CreateTenantInvitationResponses,
+  LeaveTenantData,
+  LeaveTenantErrors,
+  LeaveTenantResponses,
   ListTenantInvitationsData,
   ListTenantInvitationsErrors,
   ListTenantInvitationsResponses,
@@ -12,11 +21,31 @@ import type {
   ListTenantRolesData,
   ListTenantRolesErrors,
   ListTenantRolesResponses,
+  RemoveTenantMemberData,
+  RemoveTenantMemberErrors,
+  RemoveTenantMemberResponses,
+  ReplaceTenantMemberRolesData,
+  ReplaceTenantMemberRolesErrors,
+  ReplaceTenantMemberRolesResponses,
+  ResendTenantInvitationData,
+  ResendTenantInvitationErrors,
+  ResendTenantInvitationResponses,
   VerifySessionAuthorizationData,
   VerifySessionAuthorizationErrors,
   VerifySessionAuthorizationResponses,
 } from "./types.gen.js"
-import { zListTenantInvitationsResponse, zListTenantMembersResponse, zListTenantRolesResponse, zVerifySessionAuthorizationResponse } from "./zod.gen.js"
+import {
+  zCancelTenantInvitationResponse,
+  zCreateTenantInvitationResponse,
+  zLeaveTenantResponse,
+  zListTenantInvitationsResponse,
+  zListTenantMembersResponse,
+  zListTenantRolesResponse,
+  zRemoveTenantMemberResponse,
+  zReplaceTenantMemberRolesResponse,
+  zResendTenantInvitationResponse,
+  zVerifySessionAuthorizationResponse,
+} from "./zod.gen.js"
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<
   TData,
@@ -46,6 +75,40 @@ export const listTenantMembers = <ThrowOnError extends boolean = false>(
     ...options,
   })
 
+export const leaveTenant = <ThrowOnError extends boolean = false>(
+  options: Options<LeaveTenantData, ThrowOnError>,
+): RequestResult<LeaveTenantResponses, LeaveTenantErrors, ThrowOnError> =>
+  (options.client ?? client).delete<LeaveTenantResponses, LeaveTenantErrors, ThrowOnError>({
+    responseValidator: async (data) => await zLeaveTenantResponse.parseAsync(data),
+    security: [{ scheme: "bearer", type: "http" }],
+    url: "/internal/v1/tenants/{tenant_id}/members/me",
+    ...options,
+  })
+
+export const removeTenantMember = <ThrowOnError extends boolean = false>(
+  options: Options<RemoveTenantMemberData, ThrowOnError>,
+): RequestResult<RemoveTenantMemberResponses, RemoveTenantMemberErrors, ThrowOnError> =>
+  (options.client ?? client).delete<RemoveTenantMemberResponses, RemoveTenantMemberErrors, ThrowOnError>({
+    responseValidator: async (data) => await zRemoveTenantMemberResponse.parseAsync(data),
+    security: [{ scheme: "bearer", type: "http" }],
+    url: "/internal/v1/tenants/{tenant_id}/members/{member_id}",
+    ...options,
+  })
+
+export const replaceTenantMemberRoles = <ThrowOnError extends boolean = false>(
+  options: Options<ReplaceTenantMemberRolesData, ThrowOnError>,
+): RequestResult<ReplaceTenantMemberRolesResponses, ReplaceTenantMemberRolesErrors, ThrowOnError> =>
+  (options.client ?? client).put<ReplaceTenantMemberRolesResponses, ReplaceTenantMemberRolesErrors, ThrowOnError>({
+    responseValidator: async (data) => await zReplaceTenantMemberRolesResponse.parseAsync(data),
+    security: [{ scheme: "bearer", type: "http" }],
+    url: "/internal/v1/tenants/{tenant_id}/members/{member_id}/roles",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  })
+
 export const listTenantRoles = <ThrowOnError extends boolean = false>(
   options: Options<ListTenantRolesData, ThrowOnError>,
 ): RequestResult<ListTenantRolesResponses, ListTenantRolesErrors, ThrowOnError> =>
@@ -63,6 +126,40 @@ export const listTenantInvitations = <ThrowOnError extends boolean = false>(
     responseValidator: async (data) => await zListTenantInvitationsResponse.parseAsync(data),
     security: [{ scheme: "bearer", type: "http" }],
     url: "/internal/v1/tenants/{tenant_id}/invitations",
+    ...options,
+  })
+
+export const createTenantInvitation = <ThrowOnError extends boolean = false>(
+  options: Options<CreateTenantInvitationData, ThrowOnError>,
+): RequestResult<CreateTenantInvitationResponses, CreateTenantInvitationErrors, ThrowOnError> =>
+  (options.client ?? client).post<CreateTenantInvitationResponses, CreateTenantInvitationErrors, ThrowOnError>({
+    responseValidator: async (data) => await zCreateTenantInvitationResponse.parseAsync(data),
+    security: [{ scheme: "bearer", type: "http" }],
+    url: "/internal/v1/tenants/{tenant_id}/invitations",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  })
+
+export const resendTenantInvitation = <ThrowOnError extends boolean = false>(
+  options: Options<ResendTenantInvitationData, ThrowOnError>,
+): RequestResult<ResendTenantInvitationResponses, ResendTenantInvitationErrors, ThrowOnError> =>
+  (options.client ?? client).post<ResendTenantInvitationResponses, ResendTenantInvitationErrors, ThrowOnError>({
+    responseValidator: async (data) => await zResendTenantInvitationResponse.parseAsync(data),
+    security: [{ scheme: "bearer", type: "http" }],
+    url: "/internal/v1/tenants/{tenant_id}/invitations/{invitation_id}/resend",
+    ...options,
+  })
+
+export const cancelTenantInvitation = <ThrowOnError extends boolean = false>(
+  options: Options<CancelTenantInvitationData, ThrowOnError>,
+): RequestResult<CancelTenantInvitationResponses, CancelTenantInvitationErrors, ThrowOnError> =>
+  (options.client ?? client).delete<CancelTenantInvitationResponses, CancelTenantInvitationErrors, ThrowOnError>({
+    responseValidator: async (data) => await zCancelTenantInvitationResponse.parseAsync(data),
+    security: [{ scheme: "bearer", type: "http" }],
+    url: "/internal/v1/tenants/{tenant_id}/invitations/{invitation_id}",
     ...options,
   })
 

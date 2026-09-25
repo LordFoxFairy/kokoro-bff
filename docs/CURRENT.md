@@ -3,6 +3,10 @@
 状态：2026-09-24
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。
 
+## W1C-Team-R5 工作树目标（未获 Root 组合验收）
+
+基线 BFF `e0663a8c85f055c2bac5af894070fea8e24ff3ce` 只有 Team 三 GET；当前工作树增加六条 IAM user-delegated Team Product mutation。IAM owner pin 为 `ad5224a9e0a3a31d1c593d214d37940d6923b2e7`，internal OpenAPI 0.3.0 SHA-256 为 `e1a023d3ae9839c345d65ec91c3674bd105a9c27f65bb6ecb10f74c965340c54`（字节与旧 pin 相同）；browser-private policy `2.0.0` 只重钉 IAM SHA，派生 artifact SHA-256 `74893ba4e566e4824a278cd3ee1548030a33435f9b37b7026a8a7e943c080037`，route/header/cookie 语义不变。Team 不落 BFF SQL/Redis；IAM write scope/权限、冲突与并发由 IAM owner 裁决。Node22 `pnpm check` 本仓通过：282 passed、1 skipped；真固定租户 Web→BFF→IAM 链待 Root 验，未获 Root 组合验收。
+
 W1C IAM 来源重钉（2026-09-24）：IAM main `7f39193fff97dbb1398cb536ded7dca0db354213`
 仅调整 test-owned Web OIDC host 与集成测试；前一 IAM main `3231d2e9b225c337a1432ffb431cd7a5269d988d`
 已发布的第一方 Web client 固定 Tenant issuer 续接约束保持不变。IAM ingress allowlist 与 vendor

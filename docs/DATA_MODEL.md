@@ -1,5 +1,9 @@
 # kokoro-bff data model
 
+## W1C-Team-R5：Team 写投影无本地事实
+
+Member、Invitation、Role、并发条件写、pending 唯一索引、最后 Owner 保护和审计均归 IAM。BFF 六条 Product 写仅在一次请求生命周期内转发已准入 tenant 与 user Bearer，校验 owner wire 并投影结果；不新增 BFF 表、索引、schema、Redis key、缓存、receipt、outbox 或跨 owner SQL。`database/schema.sql` 保持不变。IAM 无 mutation receipt，BFF 不以本地缓存假冒幂等；超时/断线的提交状态是不确定的，客户端需读取 IAM 经 BFF 暴露的当前 Team 事实。
+
 ## W1C-FIXED-TENANT-BFF-C 当前身份投影数据边界
 
 当前 BFF `74ec30b` 的可信 `RequestContext` 已由固定租户、在线 IAM admission 建立，但没有公开只含当前 user/tenant 的 Product 投影。目标 `GET /v1/me` 仅在该 admission 成功后读取请求内存中的 `identity.userId` 与 `identity.namespace` 并立即响应；不读取或写入 BFF/IAM PostgreSQL，不创建身份/Session/Team 表、Redis key、cache、receipt/outbox、事务或异步事件。固定 tenant 仍来自部署配置并与 IAM 受信结果比较，浏览器自报 body/header/query 不进入身份。`database/schema.sql`、16 张表、索引、owner schema、retention、fresh install 与既有 tenant+subject 资源 predicate 完全不变；此数据面无 SQL/Redis 命令可验，HTTP 测试需证明没有业务 store/owner 调用。IAM 仍唯一保存 Identity、Tenant、Session 与撤权事实，BFF 每次请求在线验证，不持久化授权快照。

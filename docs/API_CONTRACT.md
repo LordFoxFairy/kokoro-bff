@@ -1,5 +1,11 @@
 # kokoro-bff API contract policy
 
+## W1C-Team-R5：Team Product mutation（目标切片）
+
+BFF public `/v1` beta 增加六条写：`POST /team/invitations`（`{email,roles}`）、`POST /team/invitations/{invitation_id}/resend`、`DELETE /team/invitations/{invitation_id}`、`PUT /team/members/{member_id}/roles`（`{roles}`）、`DELETE /team/members/{member_id}`、`DELETE /team/members/me`。所有路径带 `/v1` 前缀；body 严格限于列出的字段，重发、取消、移除与离开无 body。固定部署 tenant、actor 与 user-delegated Bearer 从统一 Product admission 取得，不接受 body/query/header 自报。IAM 0.3.0 owner 对应 `iam:invitation.write` 或 `iam:member.write` scope、当前 membership 与 permission；BFF 只投影，不代授权。
+
+成功均为 200 `{data:<IAM 对应写结果>,meta:{request_id}}`，分别为 invitation `{invitation_id,status:pending|canceled}`、role replacement `{member_id,roles}`、member removal/leave `{member_id,status:removed|left}`，以机器 OpenAPI 各 operation schema 为准。错误为 400/401/403/404/409/429/502/503；本地输入拒绝 400，IAM 业务冲突 409 保留受控 `LAST_OWNER`、`INVITATION_CONFLICT` 等 409 code、`ROLE_NOT_FOUND` 等 404 code，不把 409 压成 403；上游 500/503 或网络故障 503，形状漂移 502。限流只传合法有界 Retry-After；全部结果 no-store/x-request-id。IAM 没有写 receipt，本投影 `x-kokoro-idempotency: none`，没有 Idempotency-Key 承诺或自动重试；未知结果由调用方读取事实再决定后续操作。输入/响应字段与错误集合的唯一可编辑事实源是 `contract/openapi/v1/openapi.yaml`；IAM 生成客户端只消费固定 owner OpenAPI，非另一份可编辑 schema。
+
 ## W1C-FIXED-TENANT-BFF-C：`GET /v1/me` 当前身份契约
 
 **当前态（BFF `74ec30b`）：** public OpenAPI 没有 `/v1/me`；Web 可消费的 Team 列表、service-only runtime manifest 与 browser-private IAM issuer Session 不等于固定 Product token 的当前身份。已有普通 `/v1` admission 绑定 Web service + 唯一 Bearer + IAM 在线验证 + 固定租户。

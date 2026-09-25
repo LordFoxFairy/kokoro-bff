@@ -81,6 +81,83 @@ export const zListTenantMembersResponse = z.object({
   }),
 })
 
+export const zLeaveTenantHeaders = z.object({
+  "x-request-id": z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{1,128}$/)
+    .optional(),
+})
+
+export const zLeaveTenantPath = z.object({
+  tenant_id: z.string().min(1),
+})
+
+export const zLeaveTenantResponse = z.object({
+  data: z.object({
+    member_id: z.string().min(1),
+    status: z.enum(["left"]),
+  }),
+})
+
+export const zRemoveTenantMemberHeaders = z.object({
+  "x-request-id": z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{1,128}$/)
+    .optional(),
+})
+
+export const zRemoveTenantMemberPath = z.object({
+  tenant_id: z.string().min(1),
+  member_id: z.string().min(1),
+})
+
+export const zRemoveTenantMemberResponse = z.object({
+  data: z.object({
+    member_id: z.string().min(1),
+    status: z.enum(["removed"]),
+  }),
+})
+
+export const zReplaceTenantMemberRolesBody = z.object({
+  roles: z
+    .array(
+      z
+        .string()
+        .min(1)
+        .max(64)
+        .regex(/^[a-z][a-z0-9_-]*$/),
+    )
+    .min(1)
+    .max(20),
+})
+
+export const zReplaceTenantMemberRolesHeaders = z.object({
+  "x-request-id": z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{1,128}$/)
+    .optional(),
+})
+
+export const zReplaceTenantMemberRolesPath = z.object({
+  tenant_id: z.string().min(1),
+  member_id: z.string().min(1),
+})
+
+export const zReplaceTenantMemberRolesResponse = z.object({
+  data: z.object({
+    member_id: z.string().min(1),
+    roles: z
+      .array(
+        z
+          .string()
+          .min(1)
+          .max(64)
+          .regex(/^[a-z][a-z0-9_-]*$/),
+      )
+      .min(1),
+  }),
+})
+
 export const zListTenantRolesHeaders = z.object({
   "x-request-id": z
     .string()
@@ -185,6 +262,76 @@ export const zListTenantInvitationsResponse = z.object({
   ),
   meta: z.object({
     next_cursor: z.string().nullable(),
+  }),
+})
+
+export const zCreateTenantInvitationBody = z.object({
+  email: z.email().regex(/^(?!\.)(?!.*\.\.)([A-Za-z0-9_'+\-\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\-]*\.)+[A-Za-z]{2,}$/),
+  roles: z
+    .array(
+      z
+        .string()
+        .min(1)
+        .max(64)
+        .regex(/^[a-z][a-z0-9_-]*$/),
+    )
+    .min(1)
+    .max(20),
+})
+
+export const zCreateTenantInvitationHeaders = z.object({
+  "x-request-id": z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{1,128}$/)
+    .optional(),
+})
+
+export const zCreateTenantInvitationPath = z.object({
+  tenant_id: z.string().min(1),
+})
+
+export const zCreateTenantInvitationResponse = z.object({
+  data: z.object({
+    invitation_id: z.string().min(1),
+    status: z.enum(["pending"]),
+  }),
+})
+
+export const zResendTenantInvitationHeaders = z.object({
+  "x-request-id": z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{1,128}$/)
+    .optional(),
+})
+
+export const zResendTenantInvitationPath = z.object({
+  tenant_id: z.string().min(1),
+  invitation_id: z.string().min(1),
+})
+
+export const zResendTenantInvitationResponse = z.object({
+  data: z.object({
+    invitation_id: z.string().min(1),
+    status: z.enum(["pending"]),
+  }),
+})
+
+export const zCancelTenantInvitationHeaders = z.object({
+  "x-request-id": z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{1,128}$/)
+    .optional(),
+})
+
+export const zCancelTenantInvitationPath = z.object({
+  tenant_id: z.string().min(1),
+  invitation_id: z.string().min(1),
+})
+
+export const zCancelTenantInvitationResponse = z.object({
+  data: z.object({
+    invitation_id: z.string().min(1),
+    status: z.enum(["canceled"]),
   }),
 })
 

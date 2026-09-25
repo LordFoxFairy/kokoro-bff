@@ -11,6 +11,14 @@ const REQUIRED_EXTENSIONS = [
   "x-kokoro-permission",
 ]
 const STABILITY_VALUES = new Set(["stable", "beta", "experimental"])
+const TEAM_OWNER_DELEGATED_MUTATIONS = new Set([
+  "POST /v1/team/invitations createTeamInvitation",
+  "POST /v1/team/invitations/{invitation_id}/resend resendTeamInvitation",
+  "DELETE /v1/team/invitations/{invitation_id} cancelTeamInvitation",
+  "PUT /v1/team/members/{member_id}/roles replaceTeamMemberRoles",
+  "DELETE /v1/team/members/{member_id} removeTeamMember",
+  "DELETE /v1/team/members/me leaveTeam",
+])
 
 function scalar(value) {
   const trimmed = value.trim()
@@ -58,6 +66,7 @@ export function parseOpenApiOperations(source) {
 function expectedIdempotency(operation) {
   if (["GET", "HEAD", "OPTIONS"].includes(operation.method)) return "none"
   if (operation.fields.get("operationId") === "previewGithubSkill") return "none"
+  if (TEAM_OWNER_DELEGATED_MUTATIONS.has(`${operation.method} ${operation.path} ${operation.fields.get("operationId")}`)) return "none"
   return "required"
 }
 

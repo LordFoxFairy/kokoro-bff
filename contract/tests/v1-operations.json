@@ -32,9 +32,39 @@
       "operation_id": "listTeamInvitations"
     },
     {
+      "method": "POST",
+      "path": "/v1/team/invitations",
+      "operation_id": "createTeamInvitation"
+    },
+    {
       "method": "GET",
       "path": "/v1/team/roles",
       "operation_id": "listTeamRoles"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/team/invitations/{invitation_id}/resend",
+      "operation_id": "resendTeamInvitation"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/team/invitations/{invitation_id}",
+      "operation_id": "cancelTeamInvitation"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/team/members/me",
+      "operation_id": "leaveTeam"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/team/members/{member_id}/roles",
+      "operation_id": "replaceTeamMemberRoles"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/team/members/{member_id}",
+      "operation_id": "removeTeamMember"
     },
     {
       "method": "GET",

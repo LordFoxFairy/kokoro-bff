@@ -18,7 +18,7 @@ import { configuredUpstream, bffOwnedBusinessPath, isMoriBusinessPath, upstreamK
 import { schedulerDispatch } from "../http/routes/scheduler.js"
 import { runtimeManifest } from "../http/routes/runtime-manifest.js"
 import { iamProtocolRelay } from "../http/routes/iam-protocol-relay.js"
-import { liveTeamRead } from "../http/routes/team.js"
+import { liveTeamRead, liveTeamWrite } from "../http/routes/team.js"
 import { createBffComposition, type BffCompositionOptions, type BffRouteInput } from "./runtime.js"
 
 async function handle(
@@ -154,7 +154,8 @@ async function handle(
   }
 
   if (businessPath[0] === "team") {
-    await liveTeamRead(request, response, config, context, admission.bearerToken, businessPath)
+    if (request.method === "GET") await liveTeamRead(request, response, config, context, admission.bearerToken, businessPath)
+    else await liveTeamWrite(request, response, config, context, admission.bearerToken, businessPath)
     return
   }
 
