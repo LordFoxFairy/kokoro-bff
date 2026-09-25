@@ -10,9 +10,9 @@ test("published browser-private policy is a deterministic read-only projection o
   const bytes = await readFile(new URL("../contract/iam-relay-policy.json", import.meta.url))
   const published = JSON.parse(bytes.toString("utf8")) as unknown
   assert.deepEqual(published, IAM_RELAY_POLICY)
-  assert.equal(createHash("sha256").update(bytes).digest("hex"), "b3c234924a48f9f92c9928f6e9d127172ee1f952658fa49dea99865cc554bc92")
+  assert.equal(createHash("sha256").update(bytes).digest("hex"), "70cc9704ecf6f61d616011a72447ff3df8c209b3a769d5e4009692b81329e96f")
   assert.equal(IAM_RELAY_POLICY.version, "2.0.0")
-  assert.equal(IAM_RELAY_POLICY.iamOwnerCommit, "3231d2e9b225c337a1432ffb431cd7a5269d988d")
+  assert.equal(IAM_RELAY_POLICY.iamOwnerCommit, "7f39193fff97dbb1398cb536ded7dca0db354213")
   assert.equal(IAM_RELAY_POLICY.iamAllowlistSha256, "f63dacfa8a7bcec3c56efb8ffb762a3f8bd82bb380eff40a1462db1e77d61ead")
 })
 

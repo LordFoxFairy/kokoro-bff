@@ -3,11 +3,12 @@
 状态：2026-09-24
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。
 
-W1C IAM 来源重钉（2026-09-24）：IAM main `3231d2e9b225c337a1432ffb431cd7a5269d988d`
-新增第一方 Web client 固定 Tenant issuer 续接约束；IAM ingress allowlist 与 vendor
-snapshot 原始字节未变，BFF 只更新 `contract/iam-relay-policy.json` 的 owner commit
-来源并保持 policy `2.0.0` 的 route/body/cookie 语义；新 artifact SHA-256 为
-`b3c234924a48f9f92c9928f6e9d127172ee1f952658fa49dea99865cc554bc92`。Web 须固定新 artifact digest；
+W1C IAM 来源重钉（2026-09-24）：IAM main `7f39193fff97dbb1398cb536ded7dca0db354213`
+仅调整 test-owned Web OIDC host 与集成测试；前一 IAM main `3231d2e9b225c337a1432ffb431cd7a5269d988d`
+已发布的第一方 Web client 固定 Tenant issuer 续接约束保持不变。IAM ingress allowlist 与 vendor
+snapshot 原始字节未变，BFF 只更新 browser-private policy 的 owner commit 来源并保持 `2.0.0`
+的 route/body/cookie 语义；派生 `contract/iam-relay-policy.json` SHA-256 为
+`70cc9704ecf6f61d616011a72447ff3df8c209b3a769d5e4009692b81329e96f`。Web 须固定新 artifact digest；
 本片来源重钉不单独证明浏览器 tenant 续接或 refresh 已闭环。
 
 W1C-FIXED-TENANT-BFF-C 当前工作树候选：公开 `GET /v1/me` 仅在普通 Product service+Bearer、IAM 在线 admission、固定 tenant guard 成功后读取本次 `RequestContext`，返回 `{data:{user_id,tenant_id},meta:{request_id}}`，无 BFF/IAM 数据库或 Redis 读写。OpenAPI 与 v1 operation baseline 已从 66 增至 67，canonical OpenAPI SHA-256 `75ab482132602bd1d7ce77dbec1423b10d4ce7a8244ad284ecac78cd4e7b50ca`；其他业务/relay 契约不变。相邻真实 BFF/IAM-stub HTTP 与 contract 测试先观察 2 个 RED，额外 GET body 负例再观察 1 个 RED，实施后聚焦 24/24 GREEN；Node22 `pnpm format:check && pnpm check` 通过，contract 27/27、全量 276 pass/1 skip、build 通过。本仓候选尚需 Root 冻结 SHA 审查、Web consumer pin 与真 IAM OAuth same/foreign/revoked 组合；IAM-stub HTTP 不能冒称 IAM 实际撤权链，真实 PG/Redis integration 未运行。
