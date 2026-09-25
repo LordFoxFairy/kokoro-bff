@@ -1,5 +1,169 @@
 # kokoro-bff 技术设计
 
+## R5-INVITE-BFF-RELAY：邀请邮件的精确 browser-private transport（设计门，尚未实现）
+
+**当前态（BFF main `da03b76e450018ffa00f812da461569a00a377b3`）：** `/iam` 在
+`src/bootstrap/server.ts` 中先于普通 Product admission 分发，现有 `iamRelayRoute` 只匹配
+`IAM_RELAY_POLICY.routes` 中的 Better Auth 静态路径。policy `2.0.0` 未准入 `/sign-up/email`，也不能匹配 IAM Nest
+Controller 的三条动态路径。IAM main `ac94f152daffa2293801ea4f56f98b3ae59452d7` 已发布 internal OpenAPI `0.4.0`
+（SHA-256 `a18d57172df841cb2f55aa845a3eeb519ddb5abc8bea1c2be74fbb7e0fb62416`）：
+`GET .../context`、`POST .../accept`、`POST .../reject`；邀请邮件已指向
+`/iam/interactions/invitation?id=<canonical-lowercase-UUID>`。当前 BFF 的 `allowedLocation` 只接受三条旧 Web interaction、
+Auth.js callback/post-logout 或静态 IAM GET，所以 IAM 邮箱验证回到这个新页面时会被判为非法上游响应并返回 502。
+三条 operation 均已声明相同的 `x-kokoro-owner=kokoro-iam`、`x-kokoro-visibility=browser-private`、
+`x-kokoro-stability=stable` 与 `x-kokoro-idempotency=none`，可作为后续 Root verifier 的最终 owner evidence；本阶段只冻结文档，
+尚未写入 BFF runtime/policy pin。
+
+**目标职责：** BFF 只提供 `Browser → Web same-origin server → BFF → IAM` 的窄传输边界；IAM 继续唯一拥有 User、
+issuer Session、Invitation、Member、recipient/expiry/role 与状态机，Web 后续独立拥有静态页面、表单和一次性 CSRF。
+这些入口不经过已入组用户才可取得的 Product Bearer/admission，不新增 Product Team endpoint，也不让浏览器获得 BFF service secret。
+新邮箱按 `sign-up → SMTP verify-email → 重新 sign-in → context → accept|reject` 前进；accept 成功后才可启动 Product `/login`，
+reject 只进入完成页。
+
+| 设计门项目 | 裁决 |
+| --- | --- |
+| Owner / 唯一 writer | BFF `src/http/routes/iam-protocol-relay*` 唯一拥有 relay admission/transport policy；IAM 拥有四个上游 operation 及业务状态；Web 拥有浏览器 interaction/CSRF。 |
+| 当前入口 | 复用 `src/bootstrap/server.ts` 的 `/iam` 先行分支、现有 relay transport、配置中的固定 `KOKORO_TENANT_ID`/Web Origin、issuer Cookie 白名单及预算。 |
+| 目录方案 | 采用同一 relay 中**独立具名精确动态 matcher**，静态 `routes` 仍只表示 Better Auth `AUTH_ROUTES` 子集；淘汰把 `{tenant_id}`/`{invitation_id}` 通配或模板硬塞进静态 map 的方案，也淘汰新 gateway/Team route/Product admission。 |
+| 粒度 | 后续实现扩展现有 policy/relay/生成链和相邻测试；动态 matcher、注册 body codec、Location 判定各自保持单一职责，是否拆文件按实现大小和独立测试边界决定，不预建目录。 |
+| 依赖 | BFF 只消费 IAM 固定 commit 的 `AUTH_ROUTES`、Better Auth snapshot 与完整 internal OpenAPI；generated IAM wire schema在 relay adapter 终止。禁止 sibling 源码 import、IAM SQL/Redis、Product Bearer、浏览器 tenant/actor、宽 `/iam/*`。 |
+| 数据/API | public `/v1` OpenAPI、`database/schema.sql`、Redis DB 8、receipt/outbox/cache 均不变；browser-private policy 目标版本为 `2.1.0`。 |
+| 删除/替代 | 不保留 `/auth/invitation`、宽 `organization/get-invitation`、动态 wildcard、开放 callback、兼容 alias 或自动写重试。旧 Better Auth 静态子集继续按原精确矩阵工作。 |
+| 验证 | policy/transport/client 单元与真实 IAM HTTP 先 RED→GREEN；Node22 `pnpm format:check && pnpm check`；Root 固定 IAM→BFF→Web 来源后验证精确模板/visibility/method、篡改负例、真 HTTPS SMTP 点击、accept/reject/注册及资源清零。 |
+
+### 四个入口与双 matcher
+
+| BFF 精确入口 | IAM 机器来源 | 方法与目标语义 | BFF 额外准入 |
+| --- | --- | --- | --- |
+| `/iam/sign-up/email` | IAM `AUTH_ROUTES` + Better Auth 1.7.3 snapshot | `POST`；仅新邀请收件人的 email/password 注册 | 无 query/Authorization/Idempotency-Key/issuer Session；精确 Origin、JSON、64 KiB 总上限和恰好 `name,email,password,callbackURL` 四字段。`callbackURL` 必须逐字等于配置 Web Origin 下 `/iam/interactions/invitation?id=<canonical UUID>`；`image`、`rememberMe`、浏览器自报 callback 与额外字段拒绝。 |
+| `/iam/v1/tenants/{tenant_id}/invitations/{invitation_id}/context` | IAM OpenAPI 0.4.0 `getTenantInvitationContext` | `GET`；已验证 issuer Session 的 pending 邀请预览 | `tenant_id` 逐字等于 `KOKORO_TENANT_ID`；invitation 为小写 canonical UUID；无 query/body/Authorization/Idempotency-Key。 |
+| 同前缀 `.../{invitation_id}/accept` | IAM OpenAPI 0.4.0 `acceptTenantInvitation` | `POST`；pending → accepted，并由 IAM 创建 Member | 同一固定 tenant/UUID；无 query/body/Authorization/Idempotency-Key；Web 在调用 BFF 前验证一次性 CSRF。 |
+| 同前缀 `.../{invitation_id}/reject` | IAM OpenAPI 0.4.0 `rejectTenantInvitation` | `POST`；pending → rejected，不创建 Member | 与 accept 相同；Web 在调用 BFF 前验证一次性 CSRF。 |
+
+静态 matcher 仍对字面路径查 `routes[path]`，只增上述 `/sign-up/email`；动态 matcher 只接受三条具名模板，不接受额外段、
+尾斜线、大小写/反斜线/双斜线、点段、percent-encoded path、绝对 URL、fragment、错误方法或相似 action。两者都先验证
+`web-bff` 服务身份与 shared secret，再验证配置、原始 target、header/body；本地拒绝不得打开 IAM socket。动态三路和 sign-up
+都要求精确 Web Origin。动态三路必须在现有 Cookie 白名单过滤后存在一个非空、无重复的 issuer `session_token`，仅转发批准的
+issuer Cookie；sign-up 则要求过滤后的 issuer Cookie 为空。Product/Auth.js/其他 Cookie 不转发。Origin 只是 BFF/IAM 的来源门，
+不替代 Web 的一次性 CSRF；Web 后续所有邀请 POST（sign-up、accept、reject）均须在注入服务凭据前消费该 CSRF。
+
+### 传输、响应与 Location
+
+四路复用现有单次有界 transport：入站 header 16 KiB、body 64 KiB、raw query 8 KiB、总 deadline 不超过 5 秒、响应不超过
+1 MiB，调用方取消贯穿到真实上游 reader/socket；不跟随 redirect、不缓存、不自动重试。动态三路以 IAM 0.4.0 generated
+success/error schema验证 status/body；只有 owner 声明的 `200/400/401/403/404/409/429/500/503` 与严格 JSON envelope
+可原样返回。sign-up 只接受 pinned Better Auth snapshot 声明的 native status，并保持原生 wire，不套 Product envelope。
+未批准 status、content type、header、shape、超限响应或任意 3xx 均丢弃上游 body，返回脱敏
+`502 iam_relay_response_invalid`；transport/timeout 返回 `503 iam_relay_unavailable`。有效 429 只保留十进制 1..86400 秒
+`Retry-After`。所有成功、owner 错误和本地错误都由 BFF 固定输出 `Cache-Control: no-store`、
+`Referrer-Policy: no-referrer` 与受控 `x-request-id`；动态三路不接受或输出 `Location`/`Set-Cookie`，sign-up 仍只允许现有严格
+issuer `Set-Cookie` 规则，任何原始 token、cookie、password、query、Location、上游 body 或异常都不得进入日志。
+
+现有 `/iam/verify-email` GET 保持静态 Better Auth route，但 `allowedLocation` 新增一个**只对该上游 route 生效**的 Web 同源例外：
+pathname 必须逐字为 `/iam/interactions/invitation`。成功时 raw query 必须逐字为唯一
+`?id=<canonical-lowercase-UUID>`；失败时只允许 Better Auth 在该 callback 后追加的单个
+`&error=<OWNER_ENUM>`，其中 `OWNER_ENUM` 恰为 IAM
+`VERIFY_EMAIL_REDIRECT_ERROR_CODES` 当前四值 `TOKEN_EXPIRED|INVALID_TOKEN|USER_NOT_FOUND|INVALID_USER`。IAM 的真实 SMTP 测试已证明
+无效 token 返回 302 并追加 `error=INVALID_TOKEN`；若只允许成功形状，用户会收到 BFF 502 而看不到可恢复的验证失败页。BFF 因此
+采用这组 owner 枚举的窄失败形状，而不是任意 `error`：禁止 code/error 的其他值、重复/重排参数、percent alias、fragment、
+userinfo、scheme-relative 或外域。Web 只把枚举映射为固定安全文案，不回显原始 query。这个 Web 页面不是 IAM route，绝不加入
+`routes` 或动态 matcher；它只是邮箱验证响应的精确回跳目标。当前缺少此例外会稳定产生 502，因此它与
+sign-up/dynamic matcher 必须在同一实现切片落地和回归。
+
+### 状态机、失败恢复与来源级联
+
+`context` 只看 pending 且匹配当前 verified issuer email 的邀请；它不写状态。IAM 在 accept/reject 时重新检查 active tenant、
+recipient、expiry、pending 与角色，绝不相信此前预览。accept/reject 不是 BFF receipt 操作；超时、断线或响应校验失败后的提交结果
+为未知，BFF/Web 不盲重放。Web 可重新查询 context，但终态统一 404 不能证明前次 accept/reject 的具体结果，因此未知结果不得
+直接启动 Product 登录。429 按合法 `Retry-After` 等待；依赖故障 fail closed，不返回缓存预览。重复/并发由 IAM 条件写与
+Serializable 事务裁决，BFF 不伪造跨服务原子性。
+
+policy 目标 `2.1.0` 继续固定 IAM allowlist SHA-256
+`f63dacfa8a7bcec3c56efb8ffb762a3f8bd82bb380eff40a1462db1e77d61ead` 与 Better Auth snapshot SHA-256
+`b2eac1919e16fdc30a40bee0f3c4300b641bd8f674214aea7731bf10299559e1`，并新增 IAM 最终 OpenAPI version/digest 与三条有序
+dynamic operation（template/method/operationId/owner/visibility/stability/idempotency）来源。BFF vendor、
+`contract/dependencies/iam-http.json`、生成配置及 generated client 后续从 IAM commit
+`ac94f152daffa2293801ea4f56f98b3ae59452d7` 的 0.4.0 原始字节重生，只新增三条
+issuer operation；`/sign-up/email` 仍来自静态 allowlist/snapshot，不混入 Nest generated client。
+
+后续 TS 事实源与派生 JSON 的新增字段形状固定如下；现有 `requestHeaders`、`responseHeaders`、Cookie 与预算字段原样保留，
+`routes` 也继续保留当前所有静态 entry，仅示出本片新增项：
+
+```json
+{
+  "version": "2.1.0",
+  "iamOwnerCommit": "ac94f152daffa2293801ea4f56f98b3ae59452d7",
+  "iamAllowlistSha256": "f63dacfa8a7bcec3c56efb8ffb762a3f8bd82bb380eff40a1462db1e77d61ead",
+  "iamSnapshotSha256": "b2eac1919e16fdc30a40bee0f3c4300b641bd8f674214aea7731bf10299559e1",
+  "iamOpenapiPath": "contract/openapi/iam.internal.v1.json",
+  "iamOpenapiVersion": "0.4.0",
+  "iamOpenapiSha256": "a18d57172df841cb2f55aa845a3eeb519ddb5abc8bea1c2be74fbb7e0fb62416",
+  "routes": {
+    "/sign-up/email": ["POST"]
+  },
+  "invitationRoutes": [
+    {
+      "template": "/v1/tenants/{tenant_id}/invitations/{invitation_id}/context",
+      "methods": ["GET"],
+      "operationId": "getTenantInvitationContext",
+      "owner": "kokoro-iam",
+      "visibility": "browser-private",
+      "stability": "stable",
+      "idempotency": "none"
+    },
+    {
+      "template": "/v1/tenants/{tenant_id}/invitations/{invitation_id}/accept",
+      "methods": ["POST"],
+      "operationId": "acceptTenantInvitation",
+      "owner": "kokoro-iam",
+      "visibility": "browser-private",
+      "stability": "stable",
+      "idempotency": "none"
+    },
+    {
+      "template": "/v1/tenants/{tenant_id}/invitations/{invitation_id}/reject",
+      "methods": ["POST"],
+      "operationId": "rejectTenantInvitation",
+      "owner": "kokoro-iam",
+      "visibility": "browser-private",
+      "stability": "stable",
+      "idempotency": "none"
+    }
+  ],
+  "invitationSignUp": {
+    "route": "/sign-up/email",
+    "method": "POST",
+    "bodyFields": ["callbackURL", "email", "name", "password"],
+    "callbackPath": "/iam/interactions/invitation",
+    "callbackQueryParameter": "id"
+  },
+  "invitationLocation": {
+    "sourceRoute": "/verify-email",
+    "path": "/iam/interactions/invitation",
+    "queryParameter": "id",
+    "valueFormat": "canonical-lowercase-uuid",
+    "errorQueryParameter": "error",
+    "allowedErrorCodes": [
+      "TOKEN_EXPIRED",
+      "INVALID_TOKEN",
+      "USER_NOT_FOUND",
+      "INVALID_USER"
+    ]
+  }
+}
+```
+
+`template` 是去掉固定 `/iam` 前缀后的 BFF/IAM 相对路径；Root 用 `/iam` + template 查 owner OpenAPI。数组和字段次序属于
+确定性 artifact 字节的一部分。`routes` 的省略展示不表示删除旧 entry；生成器必须输出完整 policy。IAM 0.4.0 最终字节已让三条
+operation 逐项声明 owner/visibility/stability/idempotency；BFF artifact 必须从这些 extension 复制并由 Root 比对，不用 path/method
+推断或 BFF 自述代替 owner extension。
+
+Root verifier 后续从固定 gitlink commit blob 同时读取 IAM allowlist、snapshot、0.4.0 OpenAPI 和 BFF TS→JSON artifact：静态 routes
+继续验证为 `AUTH_ROUTES` 的窄子集；dynamic entries 必须恰好等于上述三条 path template/method/operationId，且 artifact 的
+owner/visibility/stability/idempotency 必须逐项与 IAM extension 一致；拒绝 wildcard、第四条动态路径、method/operation drift、旧 digest 与
+篡改 Location policy。`invitationLocation.allowedErrorCodes` 还必须逐项等于同一 IAM commit 的
+`VERIFY_EMAIL_REDIRECT_ERROR_CODES`，不允许 BFF 自增错误值。该来源门只证明发布字节一致，不替代真 SMTP/HTTP/浏览器旅程。
+
 ## W1C-Team-R5：固定租户 Team 写投影（目标切片）
 
 当前 BFF 仅有三条 Team GET；IAM `ad5224a9e0a3a31d1c593d214d37940d6923b2e7` 的 internal OpenAPI 0.3.0 已有六条写操作，其 SHA-256 `e1a023d3ae9839c345d65ec91c3674bd105a9c27f65bb6ecb10f74c965340c54` 与既有消费契约相同。IAM 是 Member/Invitation/Role 唯一 writer。目标是在现有 `src/http/routes/team.ts` 与 `src/infrastructure/clients/iam-team.ts` 扩展 Product 投影，由 `src/bootstrap/server.ts` 在统一 Product admission 后分发；不另建 gateway、Team SQL/Redis、缓存或 receipt。可信 tenant、Bearer 只来自 admission context，body 只含 owner 允许的 email/roles。六条路由为邀请创建、重发、取消，成员角色替换、移除和本人离开；`/members/me` 先于动态 member ID。
@@ -189,7 +353,8 @@ IAM 缺失或提供可缓存的 `Cache-Control`，BFF 都固定覆盖 `Cache-Con
 `Authorization`。本地拒绝须零 IAM socket；IAM 原生验证失败可产生一次有界 I/O，但不写 BFF SQL/Redis。
 日志/trace 不包含原始 request target、query、token、`Location` 或验证响应 body。
 
-本扩展不开放 `/sign-up/email`、`/send-verification-email`、`/organization/create` 或任何其他注册/组织写入，
+本段只描述已发布 R2e verify-email 基线：该历史扩展不开放 `/sign-up/email`、`/send-verification-email`、
+`/organization/create` 或任何其他注册/组织写入；本页 R5 目标随后只新增受限 `/sign-up/email`，其余仍关闭，
 也不将 `/iam/*` 变成通配代理。首次正式账号与固定 tenant 的开通仍由 IAM owner 的受控 bootstrap 独立完成；
 邮件验证只是其中必要一环，不等于 Product Session、OIDC client、tenant 成员或可登录入口已经就绪。
 相邻 policy/transport 测试先 RED 后 GREEN，覆盖原始 query、原生 302、固定 no-store/no-referrer、错误方法、编码路径、外域

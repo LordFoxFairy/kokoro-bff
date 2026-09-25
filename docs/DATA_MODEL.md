@@ -1,5 +1,39 @@
 # kokoro-bff data model
 
+## R5-INVITE-BFF-RELAY：邀请 transport 无本地事实（设计门）
+
+IAM main `ac94f152daffa2293801ea4f56f98b3ae59452d7` 是 User、issuer Session、Tenant、Invitation、recipient、
+角色、Member 与 accept/reject 状态的唯一 owner。BFF 目标切片仅增加一个受限 Better Auth 静态 sign-up transport、三个精确
+Nest invitation dynamic transport，以及 verify-email 的精确 Web Location 回跳；它不拥有或投影这些业务事实。
+
+因此 `database/schema.sql`、当前 16 张表、owner schema、索引、约束、retention/fresh install、Redis DB 8、
+`bff_idempotency_receipt`、outbox、cache、AG-UI ledger 与业务 transaction **全部不变**。BFF 不保存注册 email/name/password、
+验证 token/callback、issuer Cookie、context 响应、邀请 ID/角色/过期时间、Member ID 或 accept/reject 结果；不读取 IAM PostgreSQL/
+Redis，不创建跨 owner SQL/JOIN/外键，不把 browser-private interaction 变成 Product Team 数据。
+
+`/sign-up/email` 可能在 IAM 内创建未验证 User 并发送 SMTP；context 是 IAM RepeatableRead 只读查询；accept/reject 在 IAM
+Serializable 事务中条件更新 Invitation，accept 才创建 Member并写 IAM Audit。BFF 的单次 HTTP transport 不与这些 IAM 事务组成
+分布式事务。BFF 的 no-store/no-referrer、大小/时间/取消与来源 policy 只是传输约束，不是持久化或缓存事实。IAM 的 context Redis
+限流桶仍是 IAM owner 协调数据，BFF 不复制计数或把它写入本仓 Redis。
+
+状态只由 IAM 收敛：
+
+```text
+pending --accept--> accepted + Member
+pending --reject--> rejected
+pending --owner cancel--> canceled
+pending --time passes--> unavailable/expired
+```
+
+context 不修复或写状态，只暴露与已验证 issuer email 匹配的 active pending 邀请。BFF 不为 POST 建 receipt，也不自动重试；
+accept/reject 在 IAM 已提交但响应丢失时，BFF 只能报告未知。重新 GET 返回 404 不能区分 accepted/rejected/canceled/其他终态，
+不得伪造本地成功事实或直接创建 Product Session。重复/并发由 IAM 条件写、唯一性与 Serializable 事务处理；BFF 请求取消只停止
+继续传输，不能回滚已经在 IAM 提交的写。
+
+目标实现的数据库验证结论是“零 BFF SQL/Redis 路径”，应由 architecture/HTTP 测试和真实组合前后快照证明；不需要也不得为此
+修改 schema、运行 migration 或新增数据库集成模型。真实 SMTP/PG/Redis 的业务状态验证归 IAM/Root 组合，BFF 单仓只证明本地拒绝
+零 upstream socket、成功/失败均零本仓写入以及未知结果不重试。
+
 ## W1C-Team-R5：Team 写投影无本地事实
 
 Member、Invitation、Role、并发条件写、pending 唯一索引、最后 Owner 保护和审计均归 IAM。BFF 六条 Product 写仅在一次请求生命周期内转发已准入 tenant 与 user Bearer，校验 owner wire 并投影结果；不新增 BFF 表、索引、schema、Redis key、缓存、receipt、outbox 或跨 owner SQL。`database/schema.sql` 保持不变。IAM 无 mutation receipt，BFF 不以本地缓存假冒幂等；超时/断线的提交状态是不确定的，客户端需读取 IAM 经 BFF 暴露的当前 Team 事实。
