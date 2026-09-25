@@ -3,17 +3,138 @@ import { createHash } from "node:crypto"
 import { readFile } from "node:fs/promises"
 import { test } from "node:test"
 
-import { IAM_RELAY_POLICY, iamRelayCookieName, iamRelayRoute } from "../dist/http/routes/iam-protocol-relay.policy.js"
+import * as relayPolicy from "../dist/http/routes/iam-protocol-relay.policy.js"
+import * as iamSdk from "../dist/generated/iam-http/sdk.gen.js"
+import * as iamZod from "../dist/generated/iam-http/zod.gen.js"
 import { loadConfig } from "../dist/config/runtime.js"
+
+const { IAM_RELAY_POLICY, iamRelayCookieName, iamRelayRoute } = relayPolicy
 
 test("published browser-private policy is a deterministic read-only projection of runtime policy", async () => {
   const bytes = await readFile(new URL("../contract/iam-relay-policy.json", import.meta.url))
   const published = JSON.parse(bytes.toString("utf8")) as unknown
   assert.deepEqual(published, IAM_RELAY_POLICY)
-  assert.equal(createHash("sha256").update(bytes).digest("hex"), "74893ba4e566e4824a278cd3ee1548030a33435f9b37b7026a8a7e943c080037")
-  assert.equal(IAM_RELAY_POLICY.version, "2.0.0")
-  assert.equal(IAM_RELAY_POLICY.iamOwnerCommit, "ad5224a9e0a3a31d1c593d214d37940d6923b2e7")
+  assert.equal(createHash("sha256").update(bytes).digest("hex"), "b3ff912e70858cc5a5cf7bdbc597c8872ab29c5bfec4dfbe070ce4b37500239d")
+  assert.equal(IAM_RELAY_POLICY.version, "2.1.0")
+  assert.equal(IAM_RELAY_POLICY.iamOwnerCommit, "ac94f152daffa2293801ea4f56f98b3ae59452d7")
   assert.equal(IAM_RELAY_POLICY.iamAllowlistSha256, "f63dacfa8a7bcec3c56efb8ffb762a3f8bd82bb380eff40a1462db1e77d61ead")
+  assert.equal(
+    (IAM_RELAY_POLICY as unknown as { iamOpenapiSha256?: string }).iamOpenapiSha256,
+    "a18d57172df841cb2f55aa845a3eeb519ddb5abc8bea1c2be74fbb7e0fb62416",
+  )
+  assert.deepEqual((IAM_RELAY_POLICY.routes as Record<string, readonly string[]>)["/sign-up/email"], ["POST"])
+  assert.deepEqual((IAM_RELAY_POLICY as unknown as { invitationRoutes?: unknown }).invitationRoutes, [
+    {
+      template: "/v1/tenants/{tenant_id}/invitations/{invitation_id}/context",
+      methods: ["GET"],
+      operationId: "getTenantInvitationContext",
+      owner: "kokoro-iam",
+      visibility: "browser-private",
+      stability: "stable",
+      idempotency: "none",
+    },
+    {
+      template: "/v1/tenants/{tenant_id}/invitations/{invitation_id}/accept",
+      methods: ["POST"],
+      operationId: "acceptTenantInvitation",
+      owner: "kokoro-iam",
+      visibility: "browser-private",
+      stability: "stable",
+      idempotency: "none",
+    },
+    {
+      template: "/v1/tenants/{tenant_id}/invitations/{invitation_id}/reject",
+      methods: ["POST"],
+      operationId: "rejectTenantInvitation",
+      owner: "kokoro-iam",
+      visibility: "browser-private",
+      stability: "stable",
+      idempotency: "none",
+    },
+  ])
+  assert.deepEqual((IAM_RELAY_POLICY as unknown as { invitationLocation?: unknown }).invitationLocation, {
+    sourceRoute: "/verify-email",
+    path: "/iam/interactions/invitation",
+    queryParameter: "id",
+    valueFormat: "canonical-lowercase-uuid",
+    errorQueryParameter: "error",
+    allowedErrorCodes: ["TOKEN_EXPIRED", "INVALID_TOKEN", "USER_NOT_FOUND", "INVALID_USER"],
+  })
+})
+
+test("vendored IAM 0.4.0 contract and generated-client manifest pin the invitation owner bytes", async () => {
+  const ownerCommit = "ac94f152daffa2293801ea4f56f98b3ae59452d7"
+  const expectedDigest = "a18d57172df841cb2f55aa845a3eeb519ddb5abc8bea1c2be74fbb7e0fb62416"
+  const vendor = await readFile(new URL(`../contract/vendor/kokoro-iam/${ownerCommit}/iam.internal.v1.json`, import.meta.url)).catch(() => null)
+  assert.notEqual(vendor, null)
+  assert.equal(createHash("sha256").update(vendor!).digest("hex"), expectedDigest)
+  const contract = JSON.parse(vendor!.toString("utf8")) as { info?: { version?: string } }
+  assert.equal(contract.info?.version, "0.4.0")
+  const manifest = JSON.parse(await readFile(new URL("../contract/dependencies/iam-http.json", import.meta.url), "utf8")) as {
+    owner?: { repository_commit?: string; contract_version?: string; contract_sha256?: string }
+  }
+  assert.deepEqual(manifest.owner, {
+    repository_path: "apps/kokoro-iam",
+    repository_commit: ownerCommit,
+    contract_version: "0.4.0",
+    contract_path: "contract/openapi/iam.internal.v1.json",
+    contract_sha256: expectedDigest,
+  })
+})
+
+test("generated IAM client exposes only the three browser-private invitation operations added by 0.4.0", () => {
+  const sdk = iamSdk as unknown as Record<string, unknown>
+  const zod = iamZod as unknown as Record<string, unknown>
+  for (const operation of ["getTenantInvitationContext", "acceptTenantInvitation", "rejectTenantInvitation"]) {
+    assert.equal(typeof sdk[operation], "function", operation)
+  }
+  for (const schema of ["zGetTenantInvitationContextResponse", "zAcceptTenantInvitationResponse", "zRejectTenantInvitationResponse"]) {
+    assert.equal(typeof zod[schema], "object", schema)
+  }
+})
+
+test("invitation matcher accepts only the three exact owner routes with canonical IDs", () => {
+  const match = (relayPolicy as unknown as { iamInvitationRelayRoute?: (target: string, method: string) => unknown }).iamInvitationRelayRoute
+  const tenant = "tenant-fixed"
+  const invitation = "123e4567-e89b-42d3-a456-426614174000"
+  assert.deepEqual(match?.(`/iam/v1/tenants/${tenant}/invitations/${invitation}/context`, "GET"), {
+    path: `/v1/tenants/${tenant}/invitations/${invitation}/context`,
+    tenantId: tenant,
+    invitationId: invitation,
+    action: "context",
+  })
+  assert.deepEqual(match?.(`/iam/v1/tenants/${tenant}/invitations/${invitation}/accept`, "POST"), {
+    path: `/v1/tenants/${tenant}/invitations/${invitation}/accept`,
+    tenantId: tenant,
+    invitationId: invitation,
+    action: "accept",
+  })
+  assert.deepEqual(match?.(`/iam/v1/tenants/${tenant}/invitations/${invitation}/reject`, "POST"), {
+    path: `/v1/tenants/${tenant}/invitations/${invitation}/reject`,
+    tenantId: tenant,
+    invitationId: invitation,
+    action: "reject",
+  })
+  for (const [target, method] of [
+    [`/iam/v1/tenants/${tenant}/invitations/${invitation}/context`, "POST"],
+    [`/iam/v1/tenants/${tenant}/invitations/${invitation.toUpperCase()}/context`, "GET"],
+    [`/iam/v1/tenants/${tenant}/invitations/${invitation}/accept?next=x`, "POST"],
+    [`/iam/v1/tenants/${tenant}/invitations/${invitation}/accept/`, "POST"],
+    [`/iam/v1/tenants/${tenant}/invitations/${invitation}/resend`, "POST"],
+    [`/iam/v1/tenants/${tenant}/invitations/%31${invitation.slice(1)}/context`, "GET"],
+    [`/iam/v1/tenants/./invitations/${invitation}/context`, "GET"],
+    [`/iam/v1/tenants/../invitations/${invitation}/context`, "GET"],
+    [`/iam/v1/tenants/${tenant}/./${invitation}/context`, "GET"],
+    [`/iam/v1/tenants/${tenant}/invitations/${invitation}/context/.`, "GET"],
+    [`/iam/v1/tenants/${tenant}/invitations/${invitation}/context/..`, "GET"],
+    [`/iam/v1/tenants/${tenant}/invitations/123e4567-e89b-02d3-a456-426614174000/context`, "GET"],
+    [`/iam/v1/tenants/${tenant}/invitations/123e4567-e89b-42d3-7456-426614174000/context`, "GET"],
+  ] as const) {
+    assert.equal(match?.(target, method) ?? null, null, target)
+  }
+  for (const special of ["00000000-0000-0000-0000-000000000000", "ffffffff-ffff-ffff-ffff-ffffffffffff"]) {
+    assert.equal((match?.(`/iam/v1/tenants/${tenant}/invitations/${special}/context`, "GET") as { invitationId?: string } | null)?.invitationId, special)
+  }
 })
 
 test("relay route matrix is exact and never treats aliases as owner paths", () => {

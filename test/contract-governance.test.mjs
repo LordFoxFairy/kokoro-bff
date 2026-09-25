@@ -49,7 +49,11 @@ test("only the six IAM-delegated Team mutations may declare no local receipt", (
     ["DELETE", "/v1/team/members/{member_id}", "removeTeamMember"],
     ["DELETE", "/v1/team/members/me", "leaveTeam"],
   ]) {
-    const operation = governedOperation.replace("/v1/projects", path).replace("    post:", `    ${method.toLowerCase()}:`).replace("createProject", operationId).replace("x-kokoro-idempotency: required", "x-kokoro-idempotency: none")
+    const operation = governedOperation
+      .replace("/v1/projects", path)
+      .replace("    post:", `    ${method.toLowerCase()}:`)
+      .replace("createProject", operationId)
+      .replace("x-kokoro-idempotency: required", "x-kokoro-idempotency: none")
     assert.deepEqual(inspectOpenApiGovernance(operation), [], operationId)
     assert.match(inspectOpenApiGovernance(operation.replace(path, "/v1/projects")).join(" "), /idempotency=required/u)
     assert.match(inspectOpenApiGovernance(operation.replace(`    ${method.toLowerCase()}:`, "    patch:")).join(" "), /idempotency=required/u)
@@ -217,9 +221,9 @@ test("the Capability generated allowlist rejects missing files, every extra exte
   assert.throws(() => assertGeneratedAllowlist(files, ["client", "core", "manual"], "fixture"), /directory allowlist drifted/u)
 })
 
-test("the IAM admission and Team read/write consumer pins the complete 0.3.0 owner artifact and generates only approved operations", async () => {
-  const commit = "ad5224a9e0a3a31d1c593d214d37940d6923b2e7"
-  const digest = "e1a023d3ae9839c345d65ec91c3674bd105a9c27f65bb6ecb10f74c965340c54"
+test("the IAM consumer pins the complete 0.4.0 owner artifact and generates only approved admission, Team and invitation operations", async () => {
+  const commit = "ac94f152daffa2293801ea4f56f98b3ae59452d7"
+  const digest = "a18d57172df841cb2f55aa845a3eeb519ddb5abc8bea1c2be74fbb7e0fb62416"
   const [manifestSource, vendor, config, lockfile, sdk, types] = await Promise.all([
     readFile(new URL("../contract/dependencies/iam-http.json", import.meta.url), "utf8"),
     readFile(new URL(`../contract/vendor/kokoro-iam/${commit}/iam.internal.v1.json`, import.meta.url)),
@@ -232,12 +236,12 @@ test("the IAM admission and Team read/write consumer pins the complete 0.3.0 own
   const manifest = JSON.parse(manifestSource)
   const owner = JSON.parse(vendor.toString("utf8"))
   assert.equal(sha256(vendor), digest)
-  assert.equal(owner.info.version, "0.3.0")
+  assert.equal(owner.info.version, "0.4.0")
   assert.ok(Object.keys(owner.paths).length > 1)
   assert.deepEqual(manifest.owner, {
     repository_path: "apps/kokoro-iam",
     repository_commit: commit,
-    contract_version: "0.3.0",
+    contract_version: "0.4.0",
     contract_path: "contract/openapi/iam.internal.v1.json",
     contract_sha256: digest,
   })
@@ -261,16 +265,22 @@ test("the IAM admission and Team read/write consumer pins the complete 0.3.0 own
     "replaceTenantMemberRoles",
     "removeTenantMember",
     "leaveTenant",
+    "getTenantInvitationContext",
+    "acceptTenantInvitation",
+    "rejectTenantInvitation",
   ]) {
     assert.match(sdk, new RegExp(`export const ${operation}`, "u"))
   }
   assert.deepEqual([...sdk.matchAll(/^export const ([A-Za-z0-9_]+)\s*=/gmu)].map((match) => match[1]).sort(), [
+    "acceptTenantInvitation",
     "cancelTenantInvitation",
     "createTenantInvitation",
+    "getTenantInvitationContext",
     "leaveTenant",
     "listTenantInvitations",
     "listTenantMembers",
     "listTenantRoles",
+    "rejectTenantInvitation",
     "removeTenantMember",
     "replaceTenantMemberRoles",
     "resendTenantInvitation",

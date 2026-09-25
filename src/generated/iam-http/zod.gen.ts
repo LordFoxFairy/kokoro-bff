@@ -37,6 +37,77 @@ export const zApiErrorResponse = z
   })
   .strict()
 
+export const zGetTenantInvitationContextHeaders = z.object({
+  "x-request-id": z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{1,128}$/)
+    .optional(),
+})
+
+export const zGetTenantInvitationContextPath = z.object({
+  tenant_id: z.string().min(1).max(128),
+  invitation_id: z.intersection(
+    z
+      .string()
+      .regex(
+        /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/,
+      ),
+    z.string().regex(/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/),
+  ),
+})
+
+export const zGetTenantInvitationContextResponse = z.object({
+  data: z.object({
+    invitation_id: z
+      .uuid()
+      .regex(
+        /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/,
+      ),
+    tenant_id: z.string().min(1),
+    tenant_name: z.string().min(1),
+    roles: z
+      .array(
+        z
+          .string()
+          .min(1)
+          .max(64)
+          .regex(/^[a-z][a-z0-9_-]*$/),
+      )
+      .min(1),
+    status: z.enum(["pending"]),
+    expires_at: z.iso
+      .datetime()
+      .regex(
+        /^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$/,
+      ),
+  }),
+})
+
+export const zAcceptTenantInvitationPath = z.object({
+  tenant_id: z.string().min(1),
+  invitation_id: z.string().min(1),
+})
+
+export const zAcceptTenantInvitationResponse = z.object({
+  data: z.object({
+    invitation_id: z.string().min(1),
+    member_id: z.string().min(1),
+    status: z.enum(["accepted"]),
+  }),
+})
+
+export const zRejectTenantInvitationPath = z.object({
+  tenant_id: z.string().min(1),
+  invitation_id: z.string().min(1),
+})
+
+export const zRejectTenantInvitationResponse = z.object({
+  data: z.object({
+    invitation_id: z.string().min(1),
+    status: z.enum(["rejected"]),
+  }),
+})
+
 export const zListTenantMembersHeaders = z.object({
   "x-request-id": z
     .string()

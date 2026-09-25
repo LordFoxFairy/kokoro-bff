@@ -169,6 +169,859 @@
         ]
       }
     },
+    "/iam/v1/tenants/{tenant_id}/invitations/{invitation_id}/context": {
+      "get": {
+        "operationId": "getTenantInvitationContext",
+        "parameters": [
+          {
+            "name": "tenant_id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "invitation_id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "allOf": [
+                {
+                  "type": "string",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+                }
+              ]
+            }
+          },
+          {
+            "name": "x-request-id",
+            "in": "header",
+            "required": false,
+            "description": "Caller correlation identifier. Missing or invalid values are replaced by the service.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "invitation_id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "tenant_id": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "tenant_name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "roles": {
+                          "minItems": 1,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 64,
+                            "pattern": "^[a-z][a-z0-9_-]*$"
+                          }
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "pending"
+                          ]
+                        },
+                        "expires_at": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                        }
+                      },
+                      "required": [
+                        "invitation_id",
+                        "tenant_id",
+                        "tenant_name",
+                        "roles",
+                        "status",
+                        "expires_at"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "headers": {
+              "x-request-id": {
+                "description": "Final service request identifier used for this response.",
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                }
+              },
+              "Cache-Control": {
+                "description": "Invitation context must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              },
+              "Referrer-Policy": {
+                "description": "Invitation context must not leak by referrer.",
+                "schema": {
+                  "type": "string",
+                  "example": "no-referrer"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Stable internal API error envelope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "INVALID_ARGUMENT",
+                            "UNAUTHENTICATED",
+                            "PERMISSION_DENIED",
+                            "NOT_FOUND",
+                            "TENANT_NOT_FOUND",
+                            "MEMBER_NOT_FOUND",
+                            "ROLE_NOT_FOUND",
+                            "ROLE_NAME_CONFLICT",
+                            "ROLE_IN_USE",
+                            "INVITATION_NOT_FOUND",
+                            "INVITATION_EXPIRED",
+                            "INVITATION_CONFLICT",
+                            "CONFLICT",
+                            "TENANT_DISABLED",
+                            "LAST_OWNER",
+                            "VERSION_MISMATCH",
+                            "PRECONDITION_REQUIRED",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "DEPENDENCY_UNAVAILABLE",
+                            "INTERNAL"
+                          ]
+                        },
+                        "message": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {}
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable",
+                        "details"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "headers": {
+              "x-request-id": {
+                "description": "Final service request identifier used for this response.",
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                }
+              },
+              "Cache-Control": {
+                "description": "Invitation context must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              },
+              "Referrer-Policy": {
+                "description": "Invitation context must not leak by referrer.",
+                "schema": {
+                  "type": "string",
+                  "example": "no-referrer"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Stable internal API error envelope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "INVALID_ARGUMENT",
+                            "UNAUTHENTICATED",
+                            "PERMISSION_DENIED",
+                            "NOT_FOUND",
+                            "TENANT_NOT_FOUND",
+                            "MEMBER_NOT_FOUND",
+                            "ROLE_NOT_FOUND",
+                            "ROLE_NAME_CONFLICT",
+                            "ROLE_IN_USE",
+                            "INVITATION_NOT_FOUND",
+                            "INVITATION_EXPIRED",
+                            "INVITATION_CONFLICT",
+                            "CONFLICT",
+                            "TENANT_DISABLED",
+                            "LAST_OWNER",
+                            "VERSION_MISMATCH",
+                            "PRECONDITION_REQUIRED",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "DEPENDENCY_UNAVAILABLE",
+                            "INTERNAL"
+                          ]
+                        },
+                        "message": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {}
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable",
+                        "details"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "headers": {
+              "x-request-id": {
+                "description": "Final service request identifier used for this response.",
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                }
+              },
+              "Cache-Control": {
+                "description": "Invitation context must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              },
+              "Referrer-Policy": {
+                "description": "Invitation context must not leak by referrer.",
+                "schema": {
+                  "type": "string",
+                  "example": "no-referrer"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Stable internal API error envelope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "INVALID_ARGUMENT",
+                            "UNAUTHENTICATED",
+                            "PERMISSION_DENIED",
+                            "NOT_FOUND",
+                            "TENANT_NOT_FOUND",
+                            "MEMBER_NOT_FOUND",
+                            "ROLE_NOT_FOUND",
+                            "ROLE_NAME_CONFLICT",
+                            "ROLE_IN_USE",
+                            "INVITATION_NOT_FOUND",
+                            "INVITATION_EXPIRED",
+                            "INVITATION_CONFLICT",
+                            "CONFLICT",
+                            "TENANT_DISABLED",
+                            "LAST_OWNER",
+                            "VERSION_MISMATCH",
+                            "PRECONDITION_REQUIRED",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "DEPENDENCY_UNAVAILABLE",
+                            "INTERNAL"
+                          ]
+                        },
+                        "message": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {}
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable",
+                        "details"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "headers": {
+              "x-request-id": {
+                "description": "Final service request identifier used for this response.",
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                }
+              },
+              "Cache-Control": {
+                "description": "Invitation context must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              },
+              "Referrer-Policy": {
+                "description": "Invitation context must not leak by referrer.",
+                "schema": {
+                  "type": "string",
+                  "example": "no-referrer"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Stable internal API error envelope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "INVALID_ARGUMENT",
+                            "UNAUTHENTICATED",
+                            "PERMISSION_DENIED",
+                            "NOT_FOUND",
+                            "TENANT_NOT_FOUND",
+                            "MEMBER_NOT_FOUND",
+                            "ROLE_NOT_FOUND",
+                            "ROLE_NAME_CONFLICT",
+                            "ROLE_IN_USE",
+                            "INVITATION_NOT_FOUND",
+                            "INVITATION_EXPIRED",
+                            "INVITATION_CONFLICT",
+                            "CONFLICT",
+                            "TENANT_DISABLED",
+                            "LAST_OWNER",
+                            "VERSION_MISMATCH",
+                            "PRECONDITION_REQUIRED",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "DEPENDENCY_UNAVAILABLE",
+                            "INTERNAL"
+                          ]
+                        },
+                        "message": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {}
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable",
+                        "details"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "headers": {
+              "x-request-id": {
+                "description": "Final service request identifier used for this response.",
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                }
+              },
+              "Cache-Control": {
+                "description": "Invitation context must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              },
+              "Referrer-Policy": {
+                "description": "Invitation context must not leak by referrer.",
+                "schema": {
+                  "type": "string",
+                  "example": "no-referrer"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Stable internal API error envelope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "INVALID_ARGUMENT",
+                            "UNAUTHENTICATED",
+                            "PERMISSION_DENIED",
+                            "NOT_FOUND",
+                            "TENANT_NOT_FOUND",
+                            "MEMBER_NOT_FOUND",
+                            "ROLE_NOT_FOUND",
+                            "ROLE_NAME_CONFLICT",
+                            "ROLE_IN_USE",
+                            "INVITATION_NOT_FOUND",
+                            "INVITATION_EXPIRED",
+                            "INVITATION_CONFLICT",
+                            "CONFLICT",
+                            "TENANT_DISABLED",
+                            "LAST_OWNER",
+                            "VERSION_MISMATCH",
+                            "PRECONDITION_REQUIRED",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "DEPENDENCY_UNAVAILABLE",
+                            "INTERNAL"
+                          ]
+                        },
+                        "message": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {}
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable",
+                        "details"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "headers": {
+              "x-request-id": {
+                "description": "Final service request identifier used for this response.",
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                }
+              },
+              "Cache-Control": {
+                "description": "Invitation context must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              },
+              "Referrer-Policy": {
+                "description": "Invitation context must not leak by referrer.",
+                "schema": {
+                  "type": "string",
+                  "example": "no-referrer"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Stable internal API error envelope.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the fixed-window quota resets.",
+                "schema": {
+                  "type": "string",
+                  "example": "60"
+                }
+              },
+              "x-request-id": {
+                "description": "Final service request identifier used for this response.",
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                }
+              },
+              "Cache-Control": {
+                "description": "Invitation context must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              },
+              "Referrer-Policy": {
+                "description": "Invitation context must not leak by referrer.",
+                "schema": {
+                  "type": "string",
+                  "example": "no-referrer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "INVALID_ARGUMENT",
+                            "UNAUTHENTICATED",
+                            "PERMISSION_DENIED",
+                            "NOT_FOUND",
+                            "TENANT_NOT_FOUND",
+                            "MEMBER_NOT_FOUND",
+                            "ROLE_NOT_FOUND",
+                            "ROLE_NAME_CONFLICT",
+                            "ROLE_IN_USE",
+                            "INVITATION_NOT_FOUND",
+                            "INVITATION_EXPIRED",
+                            "INVITATION_CONFLICT",
+                            "CONFLICT",
+                            "TENANT_DISABLED",
+                            "LAST_OWNER",
+                            "VERSION_MISMATCH",
+                            "PRECONDITION_REQUIRED",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "DEPENDENCY_UNAVAILABLE",
+                            "INTERNAL"
+                          ]
+                        },
+                        "message": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {}
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable",
+                        "details"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Stable internal API error envelope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "INVALID_ARGUMENT",
+                            "UNAUTHENTICATED",
+                            "PERMISSION_DENIED",
+                            "NOT_FOUND",
+                            "TENANT_NOT_FOUND",
+                            "MEMBER_NOT_FOUND",
+                            "ROLE_NOT_FOUND",
+                            "ROLE_NAME_CONFLICT",
+                            "ROLE_IN_USE",
+                            "INVITATION_NOT_FOUND",
+                            "INVITATION_EXPIRED",
+                            "INVITATION_CONFLICT",
+                            "CONFLICT",
+                            "TENANT_DISABLED",
+                            "LAST_OWNER",
+                            "VERSION_MISMATCH",
+                            "PRECONDITION_REQUIRED",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "DEPENDENCY_UNAVAILABLE",
+                            "INTERNAL"
+                          ]
+                        },
+                        "message": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {}
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable",
+                        "details"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "headers": {
+              "x-request-id": {
+                "description": "Final service request identifier used for this response.",
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                }
+              },
+              "Cache-Control": {
+                "description": "Invitation context must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              },
+              "Referrer-Policy": {
+                "description": "Invitation context must not leak by referrer.",
+                "schema": {
+                  "type": "string",
+                  "example": "no-referrer"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Stable internal API error envelope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "INVALID_ARGUMENT",
+                            "UNAUTHENTICATED",
+                            "PERMISSION_DENIED",
+                            "NOT_FOUND",
+                            "TENANT_NOT_FOUND",
+                            "MEMBER_NOT_FOUND",
+                            "ROLE_NOT_FOUND",
+                            "ROLE_NAME_CONFLICT",
+                            "ROLE_IN_USE",
+                            "INVITATION_NOT_FOUND",
+                            "INVITATION_EXPIRED",
+                            "INVITATION_CONFLICT",
+                            "CONFLICT",
+                            "TENANT_DISABLED",
+                            "LAST_OWNER",
+                            "VERSION_MISMATCH",
+                            "PRECONDITION_REQUIRED",
+                            "PAYLOAD_TOO_LARGE",
+                            "RATE_LIMITED",
+                            "DEPENDENCY_UNAVAILABLE",
+                            "INTERNAL"
+                          ]
+                        },
+                        "message": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {}
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable",
+                        "details"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "headers": {
+              "x-request-id": {
+                "description": "Final service request identifier used for this response.",
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                }
+              },
+              "Cache-Control": {
+                "description": "Invitation context must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              },
+              "Referrer-Policy": {
+                "description": "Invitation context must not leak by referrer.",
+                "schema": {
+                  "type": "string",
+                  "example": "no-referrer"
+                }
+              }
+            }
+          }
+        },
+        "summary": "",
+        "tags": [
+          "Invitation responses"
+        ],
+        "x-kokoro-idempotency": "none",
+        "x-kokoro-owner": "kokoro-iam",
+        "x-kokoro-stability": "stable",
+        "x-kokoro-visibility": "browser-private"
+      }
+    },
     "/iam/v1/tenants/{tenant_id}/invitations/{invitation_id}/accept": {
       "post": {
         "operationId": "acceptTenantInvitation",
@@ -767,7 +1620,11 @@
         "summary": "",
         "tags": [
           "Invitation responses"
-        ]
+        ],
+        "x-kokoro-idempotency": "none",
+        "x-kokoro-owner": "kokoro-iam",
+        "x-kokoro-stability": "stable",
+        "x-kokoro-visibility": "browser-private"
       }
     },
     "/iam/v1/tenants/{tenant_id}/invitations/{invitation_id}/reject": {
@@ -1363,7 +2220,11 @@
         "summary": "",
         "tags": [
           "Invitation responses"
-        ]
+        ],
+        "x-kokoro-idempotency": "none",
+        "x-kokoro-owner": "kokoro-iam",
+        "x-kokoro-stability": "stable",
+        "x-kokoro-visibility": "browser-private"
       }
     },
     "/internal/v1/audit-events": {
@@ -7155,7 +8016,7 @@
   "info": {
     "title": "Kokoro IAM Internal API",
     "description": "IAM-owned liveness, Tenancy, Authorization and Audit operations.",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "contact": {}
   },
   "tags": [],

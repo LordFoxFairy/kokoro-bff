@@ -1,15 +1,12 @@
 # kokoro-bff API contract policy
 
-## R5-INVITE-BFF-RELAY：邀请 interaction 的 browser-private 契约（设计门，尚未实现）
+## R5-INVITE-BFF-RELAY：邀请 interaction 的 browser-private 契约
 
-**当前态：** BFF main `da03b76e450018ffa00f812da461569a00a377b3` 的 policy `2.0.0` 没有
-`POST /iam/sign-up/email`，静态 `iamRelayRoute` 也无法匹配 IAM Nest Controller 的三条参数化邀请路径。IAM
-`ac94f152daffa2293801ea4f56f98b3ae59452d7` 已发布 OpenAPI `0.4.0`/SHA-256
-`a18d57172df841cb2f55aa845a3eeb519ddb5abc8bea1c2be74fbb7e0fb62416`，并把邮件入口改为
-`/iam/interactions/invitation?id=<UUID>`；当前 BFF Location 白名单不认识该 Web 页面，邮箱验证成功的合法回跳会变成
-`502 iam_relay_response_invalid`。本节是下一实现切片的目标 contract，不表示入口当前可用。
-三条 invitation operation 已同时声明 owner/visibility/stability/idempotency，当前 digest 是后续 BFF
-vendor/generated/policy 与 Root verifier 的最终机器来源；本阶段尚未重钉 runtime。
+**当前态：** BFF 工作树 policy `2.1.0` 已把 IAM owner 固定为
+`ac94f152daffa2293801ea4f56f98b3ae59452d7`、OpenAPI `0.4.0`/SHA-256
+`a18d57172df841cb2f55aa845a3eeb519ddb5abc8bea1c2be74fbb7e0fb62416`，并实现精确静态 sign-up、三条参数化邀请 relay 与
+`/iam/interactions/invitation?id=<UUID>` 邮件回跳。三条 invitation operation 的 owner/visibility/stability/idempotency、vendored
+OpenAPI、generated client 与 policy JSON 是 Root verifier 的机器来源；public Product OpenAPI 不包含这些 browser-private 入口。
 
 这些 operation 的 BFF visibility 为 `browser-private`，不进入 public Product
 `contract/openapi/v1/openapi.yaml`，也不经过 Product admission。Caller 只能是 Web same-origin server：每次请求先带
@@ -38,8 +35,8 @@ issuer Cookie；新用户必须在真实 SMTP 验证后重新走独立 issuer si
 ### Owner 成功、错误与失败映射
 
 三条动态 operation 只接受 IAM machine contract 声明的 status 集合
-`200,400,401,403,404,409,429,500,503`、`application/json` 和严格 generated schema；合规的 IAM JSON 保持 native
-envelope/status，不套 BFF Product envelope。目标成功体精确为：
+`200,400,401,403,404,409,429,500,503`、`application/json` 和严格 generated schema；目标成功体保持以下 native
+envelope/status，不套 BFF Product envelope：
 
 ```json
 {"data":{"invitation_id":"UUID","tenant_id":"TENANT","tenant_name":"NAME","roles":["member"],"status":"pending","expires_at":"RFC3339"}}
@@ -50,11 +47,16 @@ envelope/status，不套 BFF Product envelope。目标成功体精确为：
 context 的 404 隐藏不存在、错收件人、错 tenant 与终态；匹配收件人才可能得到 `409 INVITATION_EXPIRED|TENANT_DISABLED` 或
 `404 ROLE_NOT_FOUND`。accept/reject 由 IAM 再次验证 recipient/tenant/pending/expiry/role；accept 成功才创建 Member，reject
 不创建 Member/Product Session。sign-up 只接受 pinned Better Auth snapshot 声明的 native status/body 上限，不创建 BFF Product
-Session 或 membership；即使 owner wire 成功，仍必须完成邮件验证并重新登录。
+Session 或 membership；200 user 的 email/URI/date-time 必须满足 pinned Better Auth schema，token 只允许 null/省略且
+`emailVerified=false`。即使 owner wire 成功，仍必须完成邮件验证并重新登录。
+
+动态非 200 先验证完整 generated `ApiErrorResponse`、稳定 owner code 且 `details=[]`，再保留该 code/retryable，以 code→固定安全文案表
+重建 JSON；owner message 与 payload 一律丢弃。sign-up 非 200 按 snapshot 精确接受 400/401 必填 string message，以及
+403/404/422/429/500 的可选 string message，然后按 status 重建固定 `IAM_SIGN_UP_*` code/message；不回传 owner message 或任意额外字段。
 
 所有成功和 owner error 均输出 BFF 受控 `x-request-id`、`Cache-Control: no-store`、
 `Referrer-Policy: no-referrer`；仅 429 可保留十进制 1..86400 秒的 `Retry-After`。动态三路不允许 Location 或
-Set-Cookie；sign-up 只可沿用现有严格 issuer Set-Cookie 过滤。未声明 status、非法/超限 header/body、schema 漂移、任意 dynamic
+Set-Cookie；sign-up 同样拒绝任何 Set-Cookie，SMTP 验证前不建立 issuer Session。未声明 status、非法/超限 header/body、schema 漂移、任意 dynamic
 3xx 或敏感原文均被丢弃并归一为 `502 iam_relay_response_invalid`；timeout/transport/cancel 归一为
 `503 iam_relay_unavailable`。不记录或返回未验证的 upstream body/message、token、cookie、password、query、stack 或 URL。
 

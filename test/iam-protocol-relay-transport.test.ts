@@ -257,6 +257,378 @@ test("email verification fails closed on hostile Location and rejects aliases, w
   assert.equal(hostile.headers.get("cache-control"), "no-store")
 })
 
+test("invitation relay admits only the fixed tenant, canonical UUID, exact Origin and issuer Session", async () => {
+  const tenant = "tenant-fixed"
+  const invitation = "123e4567-e89b-42d3-a456-426614174000"
+  const calls: Array<{ url: string | undefined; method: string | undefined; cookie: string | undefined; body: string }> = []
+  const iam = await listen(
+    createServer((request, response) => {
+      const chunks: Buffer[] = []
+      request.on("data", (chunk: Buffer) => chunks.push(chunk))
+      request.on("end", () => {
+        calls.push({ url: request.url, method: request.method, cookie: request.headers.cookie, body: Buffer.concat(chunks).toString("utf8") })
+        const action = request.url?.split("/").at(-1)
+        const data =
+          action === "context"
+            ? {
+                invitation_id: invitation,
+                tenant_id: tenant,
+                tenant_name: "Fixed tenant",
+                roles: ["member"],
+                status: "pending",
+                expires_at: "2026-09-26T00:00:00.000Z",
+              }
+            : action === "accept"
+              ? { invitation_id: invitation, member_id: "member-1", status: "accepted" }
+              : { invitation_id: invitation, status: "rejected" }
+        response.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "public" })
+        response.end(JSON.stringify({ data }))
+      })
+    }),
+  )
+  const base = await listen(bff(iam, { tenantId: tenant }))
+  const prefix = `${base}/iam/v1/tenants/${tenant}/invitations/${invitation}`
+  const headers = {
+    ...webServiceHeaders,
+    origin: webOrigin,
+    cookie: "authjs.session-token=product; kokoro-issuer.session_token=issuer-session",
+  }
+  for (const [path, method] of [
+    [`${prefix}/context`, "GET"],
+    [`${prefix}/accept`, "POST"],
+    [`${prefix}/reject`, "POST"],
+  ] as const) {
+    const response = await fetch(path, { method, headers })
+    assert.equal(response.status, 200, `${method} ${path}`)
+    assert.equal(response.headers.get("cache-control"), "no-store")
+    assert.equal(response.headers.get("referrer-policy"), "no-referrer")
+    assert.match(response.headers.get("x-request-id") ?? "", /^[A-Za-z0-9._:-]{1,128}$/u)
+  }
+  assert.deepEqual(
+    calls.map((call) => ({ ...call, url: call.url?.replace(invitation, "INVITATION") })),
+    [
+      { url: `/iam/v1/tenants/${tenant}/invitations/INVITATION/context`, method: "GET", cookie: "kokoro-issuer.session_token=issuer-session", body: "" },
+      { url: `/iam/v1/tenants/${tenant}/invitations/INVITATION/accept`, method: "POST", cookie: "kokoro-issuer.session_token=issuer-session", body: "" },
+      { url: `/iam/v1/tenants/${tenant}/invitations/INVITATION/reject`, method: "POST", cookie: "kokoro-issuer.session_token=issuer-session", body: "" },
+    ],
+  )
+
+  const rejected: Array<[string, RequestInit, number]> = [
+    [`${prefix}/context?next=x`, { method: "GET", headers }, 404],
+    [`${prefix}/context`, { method: "POST", headers }, 404],
+    [`${base}/iam/v1/tenants/other/invitations/${invitation}/context`, { headers }, 403],
+    [`${base}/iam/v1/tenants/${tenant}/invitations/${invitation.toUpperCase()}/context`, { headers }, 404],
+    [`${prefix}/context`, { headers: { ...webServiceHeaders, cookie: headers.cookie } }, 403],
+    [`${prefix}/context`, { headers: { ...webServiceHeaders, origin: webOrigin } }, 403],
+    [`${prefix}/context`, { headers: { ...headers, authorization: "Bearer product" } }, 403],
+    [`${prefix}/context`, { headers: { ...headers, "idempotency-key": "not-supported" } }, 400],
+    [`${prefix}/accept`, { method: "POST", headers: { ...headers, "content-type": "application/json" }, body: "{}" }, 400],
+  ]
+  for (const [path, init, status] of rejected) assert.equal((await fetch(path, init)).status, status, path)
+  assert.equal(calls.length, 3)
+
+  const noTenant = await listen(bff(iam))
+  assert.equal((await fetch(`${noTenant}/iam/v1/tenants/${tenant}/invitations/${invitation}/context`, { headers })).status, 503)
+  assert.equal(calls.length, 3)
+})
+
+test("invited-user sign-up is an exact four-field JSON relay with a server-owned callback", async () => {
+  const invitation = "123e4567-e89b-42d3-a456-426614174000"
+  const callbackURL = `${webOrigin}/iam/interactions/invitation?id=${invitation}`
+  const calls: Array<{ url: string | undefined; cookie: string | undefined; body: string }> = []
+  const iam = await listen(
+    createServer((request, response) => {
+      const chunks: Buffer[] = []
+      request.on("data", (chunk: Buffer) => chunks.push(chunk))
+      request.on("end", () => {
+        calls.push({ url: request.url, cookie: request.headers.cookie, body: Buffer.concat(chunks).toString("utf8") })
+        response.writeHead(200, { "content-type": "application/json; charset=utf-8" })
+        response.end(
+          JSON.stringify({
+            token: null,
+            user: {
+              id: "user-1",
+              email: "invitee@example.test",
+              name: "Invitee",
+              image: null,
+              emailVerified: false,
+              createdAt: "2026-09-25T00:00:00.000Z",
+              updatedAt: "2026-09-25T00:00:00.000Z",
+            },
+          }),
+        )
+      })
+    }),
+  )
+  const base = await listen(bff(iam, { tenantId: "tenant-fixed" }))
+  const body = { name: "Invitee", email: "invitee@example.test", password: "Test-only-password-928384!", callbackURL }
+  const headers = { ...webServiceHeaders, origin: webOrigin, "content-type": "application/json" }
+  const accepted = await fetch(`${base}/iam/sign-up/email`, { method: "POST", headers, body: JSON.stringify(body) })
+  assert.equal(accepted.status, 200)
+  assert.equal(accepted.headers.get("cache-control"), "no-store")
+  assert.equal(accepted.headers.get("referrer-policy"), "no-referrer")
+  assert.deepEqual(calls, [{ url: "/iam/sign-up/email", cookie: undefined, body: JSON.stringify(body) }])
+
+  const invalidBodies: unknown[] = [
+    { ...body, image: "https://outside.example/image" },
+    { ...body, rememberMe: false },
+    { ...body, callbackURL: `${webOrigin}/iam/interactions/invitation?id=${invitation}&next=x` },
+    { ...body, callbackURL: `https://outside.example/iam/interactions/invitation?id=${invitation}` },
+    { ...body, callbackURL: `${webOrigin}/iam/interactions/invitation?id=${invitation.toUpperCase()}` },
+    { ...body, name: "" },
+    { ...body, email: "" },
+    { ...body, password: "" },
+  ]
+  for (const invalid of invalidBodies) {
+    assert.equal((await fetch(`${base}/iam/sign-up/email`, { method: "POST", headers, body: JSON.stringify(invalid) })).status, 400)
+  }
+  for (const [path, overrides, status] of [
+    [`${base}/iam/sign-up/email?next=x`, {}, 400],
+    [`${base}/iam/sign-up/email`, { cookie: "kokoro-issuer.session_token=issuer" }, 403],
+    [`${base}/iam/sign-up/email`, { authorization: "Bearer product" }, 403],
+    [`${base}/iam/sign-up/email`, { "idempotency-key": "not-supported" }, 400],
+    [`${base}/iam/sign-up/email`, { origin: "https://outside.example" }, 403],
+    [`${base}/iam/sign-up/email`, { "content-type": "text/plain" }, 400],
+  ] as const) {
+    assert.equal(
+      (
+        await fetch(path, {
+          method: "POST",
+          headers: { ...headers, ...overrides },
+          body: JSON.stringify(body),
+        })
+      ).status,
+      status,
+      path,
+    )
+  }
+  assert.equal(calls.length, 1)
+})
+
+test("verify-email permits only the invitation success Location or one owner-enumerated error", async () => {
+  const invitation = "123e4567-e89b-42d3-a456-426614174000"
+  let location = `${webOrigin}/iam/interactions/invitation?id=${invitation}`
+  const iam = await listen(
+    createServer((_request, response) => {
+      response.writeHead(302, { location })
+      response.end()
+    }),
+  )
+  const base = await listen(bff(iam))
+  const request = () => fetch(`${base}/iam/verify-email?token=opaque`, { headers: webServiceHeaders, redirect: "manual" })
+  assert.equal((await request()).status, 302)
+  for (const error of ["TOKEN_EXPIRED", "INVALID_TOKEN", "USER_NOT_FOUND", "INVALID_USER"]) {
+    location = `${webOrigin}/iam/interactions/invitation?id=${invitation}&error=${error}`
+    const response = await request()
+    assert.equal(response.status, 302, error)
+    assert.equal(response.headers.get("location"), location)
+  }
+  for (const query of [
+    `id=${invitation}&error=OTHER`,
+    `error=INVALID_TOKEN&id=${invitation}`,
+    `id=${invitation}&error=INVALID_TOKEN&error=INVALID_TOKEN`,
+    `id=${invitation}&code=INVALID_TOKEN`,
+    `id=${invitation}&error=INVALID_TOKEN&next=x`,
+    `id=${invitation.toUpperCase()}&error=INVALID_TOKEN`,
+  ]) {
+    location = `${webOrigin}/iam/interactions/invitation?${query}`
+    assert.equal((await request()).status, 502, query)
+  }
+})
+
+test("invitation responses are pinned to owner statuses, strict schemas and non-redirecting headers", async () => {
+  const tenant = "tenant-fixed"
+  const invitation = "123e4567-e89b-42d3-a456-426614174000"
+  const success = {
+    data: {
+      invitation_id: invitation,
+      tenant_id: tenant,
+      tenant_name: "Fixed tenant",
+      roles: ["member"],
+      status: "pending",
+      expires_at: "2026-09-26T00:00:00.000Z",
+    },
+  }
+  const ownerError = { error: { code: "RATE_LIMITED", message: "Too many requests", retryable: true, details: [] } }
+  let upstream = { status: 200, headers: { "content-type": "application/json; charset=utf-8" } as Record<string, string | string[]>, body: success as unknown }
+  const iam = await listen(
+    createServer((_request, response) => {
+      response.writeHead(upstream.status, upstream.headers)
+      response.end(typeof upstream.body === "string" ? upstream.body : JSON.stringify(upstream.body))
+    }),
+  )
+  const base = await listen(bff(iam, { tenantId: tenant }))
+  const target = `${base}/iam/v1/tenants/${tenant}/invitations/${invitation}/context`
+  const headers = { ...webServiceHeaders, origin: webOrigin, cookie: "kokoro-issuer.session_token=issuer-session" }
+  const request = () => fetch(target, { headers, redirect: "manual" })
+
+  upstream = { status: 429, headers: { "content-type": "application/json", "retry-after": "60" }, body: ownerError }
+  const rateLimited = await request()
+  assert.equal(rateLimited.status, 429)
+  assert.equal(rateLimited.headers.get("retry-after"), "60")
+  assert.deepEqual(await rateLimited.json(), {
+    error: { code: "RATE_LIMITED", message: "Too many invitation requests", retryable: true, details: [] },
+  })
+  assert.doesNotMatch(
+    await (async () => {
+      upstream = {
+        status: 429,
+        headers: { "content-type": "application/json", "retry-after": "60" },
+        body: { error: { ...ownerError.error, message: "token=secret password=secret stack=/internal/path" } },
+      }
+      return (await request()).text()
+    })(),
+    /token|password|internal/iu,
+  )
+
+  const invalid: Array<{ label: string; status: number; headers: Record<string, string | string[]>; body: unknown }> = [
+    { label: "undeclared status", status: 201, headers: { "content-type": "application/json" }, body: success },
+    { label: "wrong media type", status: 200, headers: { "content-type": "text/plain" }, body: success },
+    { label: "malformed JSON", status: 200, headers: { "content-type": "application/json" }, body: "{" },
+    { label: "extra success field", status: 200, headers: { "content-type": "application/json" }, body: { ...success, extra: true } },
+    {
+      label: "extra nested field",
+      status: 200,
+      headers: { "content-type": "application/json" },
+      body: { data: { ...success.data, extra: true } },
+    },
+    { label: "error body on 200", status: 200, headers: { "content-type": "application/json" }, body: ownerError },
+    {
+      label: "unknown owner error",
+      status: 400,
+      headers: { "content-type": "application/json" },
+      body: { error: { ...ownerError.error, code: "UNKNOWN" } },
+    },
+    {
+      label: "non-empty owner error details",
+      status: 400,
+      headers: { "content-type": "application/json" },
+      body: { error: { ...ownerError.error, details: [{ token: "must-not-cross" }] } },
+    },
+    { label: "redirect", status: 302, headers: { location: `${webOrigin}/auth/sign-in` }, body: "" },
+    {
+      label: "issuer cookie",
+      status: 200,
+      headers: {
+        "content-type": "application/json",
+        "set-cookie": "kokoro-issuer.session_token=leak; Path=/iam; HttpOnly; SameSite=Lax",
+      },
+      body: success,
+    },
+    { label: "invalid retry", status: 429, headers: { "content-type": "application/json", "retry-after": "0" }, body: ownerError },
+  ]
+  for (const candidate of invalid) {
+    upstream = candidate
+    const response = await request()
+    assert.equal(response.status, 502, candidate.label)
+    assert.equal(response.headers.get("location"), null, candidate.label)
+    assert.equal(response.headers.get("set-cookie"), null, candidate.label)
+  }
+})
+
+test("invited-user sign-up accepts only pinned snapshot statuses and never forwards a credential token", async () => {
+  const invitation = "123e4567-e89b-42d3-a456-426614174000"
+  let upstream = { status: 302, headers: { location: `${webOrigin}/auth/sign-in` } as Record<string, string>, body: "" }
+  const iam = await listen(
+    createServer((_request, response) => {
+      response.writeHead(upstream.status, upstream.headers)
+      response.end(upstream.body)
+    }),
+  )
+  const base = await listen(bff(iam))
+  const request = () =>
+    fetch(`${base}/iam/sign-up/email`, {
+      method: "POST",
+      headers: { ...webServiceHeaders, origin: webOrigin, "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "Invitee",
+        email: "invitee@example.test",
+        password: "Test-only-password-928384!",
+        callbackURL: `${webOrigin}/iam/interactions/invitation?id=${invitation}`,
+      }),
+      redirect: "manual",
+    })
+  assert.equal((await request()).status, 502)
+  upstream = { status: 201, headers: { "content-type": "application/json" }, body: "{}" }
+  assert.equal((await request()).status, 502)
+  for (const status of [409, 503]) {
+    upstream = { status, headers: { "content-type": "application/json" }, body: JSON.stringify({ code: "UNDECLARED", message: "not in snapshot" }) }
+    assert.equal((await request()).status, 502, String(status))
+  }
+  upstream = {
+    status: 422,
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ message: "duplicate token=secret password=secret stack=/internal/path" }),
+  }
+  const rejected = await request()
+  assert.equal(rejected.status, 422)
+  assert.deepEqual(await rejected.json(), { code: "IAM_SIGN_UP_REJECTED", message: "Invitation sign-up was rejected" })
+  for (const status of [403, 429]) {
+    upstream = { status, headers: { "content-type": "application/json", ...(status === 429 ? { "retry-after": "60" } : {}) }, body: "{}" }
+    const response = await request()
+    assert.equal(response.status, status)
+    assert.deepEqual(await response.json(), {
+      code: status === 403 ? "IAM_SIGN_UP_FORBIDDEN" : "IAM_SIGN_UP_RATE_LIMITED",
+      message: status === 403 ? "Invitation sign-up was not permitted" : "Too many invitation sign-up requests",
+    })
+    if (status === 429) assert.equal(response.headers.get("retry-after"), "60")
+  }
+  upstream = {
+    status: 200,
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      token: null,
+      user: {
+        id: "user-1",
+        email: "not-email",
+        name: "Invitee",
+        image: "not-uri",
+        emailVerified: false,
+        createdAt: "not-date",
+        updatedAt: "2026-09-25T00:00:00.000Z",
+      },
+    }),
+  }
+  assert.equal((await request()).status, 502)
+  upstream = {
+    status: 200,
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      token: "must-not-cross-the-relay",
+      user: {
+        id: "user-1",
+        email: "invitee@example.test",
+        name: "Invitee",
+        image: null,
+        emailVerified: false,
+        createdAt: "2026-09-25T00:00:00.000Z",
+        updatedAt: "2026-09-25T00:00:00.000Z",
+      },
+    }),
+  }
+  assert.equal((await request()).status, 502)
+  upstream = {
+    status: 200,
+    headers: {
+      "content-type": "application/json",
+      "set-cookie": "kokoro-issuer.session_token=must-not-cross; Path=/iam; HttpOnly; SameSite=Lax",
+    },
+    body: JSON.stringify({
+      token: null,
+      user: {
+        id: "user-1",
+        email: "invitee@example.test",
+        name: "Invitee",
+        image: null,
+        emailVerified: false,
+        createdAt: "2026-09-25T00:00:00.000Z",
+        updatedAt: "2026-09-25T00:00:00.000Z",
+      },
+    }),
+  }
+  assert.equal((await request()).status, 502)
+})
+
 test("relay rejects path aliases, wrong methods and browser credentials before IAM I/O", async () => {
   let calls = 0
   const iam = await listen(

@@ -3,33 +3,37 @@
 状态：2026-09-25
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。
 
-## R5-INVITE-BFF-RELAY 当前基线与已冻结设计（尚未实现）
+## R5-INVITE-BFF-RELAY 当前工作树候选（待 Root 审查）
 
-BFF main `da03b76e450018ffa00f812da461569a00a377b3` 当前仍是 relay policy `2.0.0`：Better Auth 静态表中没有
-`POST /sign-up/email`，且 `iamRelayRoute` 不能匹配 IAM Nest 的
-`GET /iam/v1/tenants/{tenant_id}/invitations/{invitation_id}/context` 与 `POST .../accept|reject`。IAM owner main
-`ac94f152daffa2293801ea4f56f98b3ae59452d7` 已发布 OpenAPI 0.4.0（SHA-256
-`a18d57172df841cb2f55aa845a3eeb519ddb5abc8bea1c2be74fbb7e0fb62416`）及新邮件 URL；BFF vendor/generated manifest
-仍固定旧 IAM `ad5224a`/0.3.0。当前合法验证邮件回到 `/iam/interactions/invitation?id=<UUID>` 时，BFF
-`allowedLocation` 不接受该 Web 页面并会返回 502。故当前真实邀请注册、预览、接受和拒绝尚未接通。
-三条 invitation operation 均已具备 owner/visibility/stability/idempotency metadata；该 commit/digest 是后续
-vendor/generated/policy 与 Root verifier 的最终 owner evidence，本阶段仍未开始 runtime 实现。
+BFF main 基线 `d5ba4d03b1470ad08dfcbb90bc02c441c1275c3e` 的工作树已把 IAM owner 固定到
+`ac94f152daffa2293801ea4f56f98b3ae59452d7`、OpenAPI 0.4.0 SHA-256
+`a18d57172df841cb2f55aa845a3eeb519ddb5abc8bea1c2be74fbb7e0fb62416`。vendor、dependency manifest、生成配置和 IAM client
+只新增三条 browser-private invitation operation；policy `2.1.0` 的派生 JSON SHA-256 为
+`b3ff912e70858cc5a5cf7bdbc597c8872ab29c5bfec4dfbe070ce4b37500239d`。静态 `routes` 只从 IAM `AUTH_ROUTES` 增加精确
+`POST /sign-up/email`；context/accept/reject 仍位于独立 `invitationRoutes` 与具名动态 matcher，不形成 wildcard 或静态 map 模板。
 
-三设计文档已冻结下一实现边界：policy 目标 `2.1.0`，保留旧 Better Auth 静态子集并只从 IAM `AUTH_ROUTES` 增加受限
-`/sign-up/email`；三条 invitation Controller 由独立具名动态 matcher 处理，不使用 wildcard或塞入静态 map。四路均要求 Web
-服务身份、精确 Origin 和有界 transport；动态三路另要求配置中固定 tenant、小写 canonical invitation UUID、过滤后的非空 issuer
-Session Cookie，并拒绝 query/body/Authorization/Idempotency-Key。sign-up 只接收 Web server 构造的精确 interaction
-callback 与四字段 JSON，无 issuer Session。所有邀请 POST 的一次性 CSRF 归 Web 后续 interaction；BFF 不经 Product admission、
-不新增 Product Team endpoint、SQL/Redis/receipt/cache。
+四路都在 Product admission、SQL、Redis、receipt 和业务 store 之前验证 Web 服务身份、精确 Origin 与有界 transport。动态三路另要求
+配置中的固定 tenant、IAM canonical 小写 UUID、过滤后的非空 issuer Session，且无 query/body/Authorization/Idempotency-Key；
+sign-up 只接受恰好 `name,email,password,callbackURL` 的 JSON、无 issuer Session，并把 callback 固定为同源单邀请 ID。其 pinned
+Better Auth snapshot status 集为 200/400/401/403/404/422/429/500，不含 409/503；`requireEmailVerification=true` 的 200 必须是
+`token:null` 或省略 token 且 `emailVerified:false`，string credential token 或任意 Set-Cookie 都会被脱敏为 502，确保 SMTP 验证前不跨过
+issuer Session；user email/URI/date-time 也必须通过 pinned snapshot format。Web 后续不得渲染或使用 token 字段，
+所有邀请 POST 的一次性 CSRF 仍由 Web 在注入 BFF 服务凭据前消费。
 
-响应目标为 owner contract 允许的 native status/严格 schema和批准 header；全部 no-store/no-referrer/request-id，429 仅保留合法
-Retry-After，未知/超限响应脱敏为 502/503且不泄露原文。verify-email Location 只新增同源
-`/iam/interactions/invitation?id=<canonical UUID>`；owner 验证失败时再窄允许 IAM
-`VERIFY_EMAIL_REDIRECT_ERROR_CODES` 四值之一作为唯一追加 `error`，避免已知 INVALID_TOKEN 302 被误判为 502，其他 query 仍拒绝。
-Web 只展示枚举对应固定文案，不回显 query，也不把该页面注册为 IAM route。accept/reject 结果未知时不自动重试，404 context
-不足以证明前次写结果。IAM 0.4.0 vendor/generated 来源、policy artifact 与 Root verifier 的静态子集、三动态
-template/visibility/method/operationId/digest/Location 错误枚举/篡改负例仍待代码切片；Web interaction 和真 HTTPS SMTP/Chromium
-旅程在 BFF 发布后串行实施。
+动态响应按 generated owner schema 严格验证 status、JSON media type、成功/error body，禁止 Location/Set-Cookie；sign-up 同样限制
+snapshot status/body 并拒 3xx。动态错误额外要求 `details=[]`，只保留 generated 稳定 code/retryable 并用 code→固定安全文案重建；sign-up
+错误按 snapshot 的必填/可选 message 形状验证后，改用 status 对应的固定 `IAM_SIGN_UP_*` code/message，二者都不透传 owner 原始
+message/payload。全部邀请结果固定 no-store/no-referrer/request-id，429 只保留合法 Retry-After；未知、畸形或超限
+上游响应不泄露原文，transport/timeout 不重试。verify-email 只新增精确同源
+`/iam/interactions/invitation?id=<canonical UUID>`，失败只允许 owner 四值
+`TOKEN_EXPIRED|INVALID_TOKEN|USER_NOT_FOUND|INVALID_USER` 作为唯一追加 error；其他 query/顺序/编码/外域仍 502。BFF 不新增
+Product API、数据库或缓存事实。真 HTTPS SMTP/Chromium、Web interaction/CSRF 与 Root 来源 verifier 仍待跨仓串行验收。
+
+Node 22.22.2 `pnpm format:check && pnpm check` 在当前工作树通过：IAM/policy/其他 generated drift gate 均为双生成字节一致，
+contract test 28/28，全量 291 passed、1 skipped，最终 build 通过；Redocly 仅保留既有 Library 无 2xx warning。相邻 relay policy/真
+BFF HTTP 假 IAM 测试 32/32 通过并覆盖零上游 socket 拒绝、三动态成功/error、sign-up、Location、未知 status/schema/header、大小/
+deadline/取消与不重试。没有可用的 `KOKORO_TEST_IAM_BASE_URL` test-owned loopback owner，本次未启动共享 IAM/PostgreSQL/Redis，
+故 `test:iam-relay:integration`、真实 SMTP/PG/Redis 与浏览器验收明确未运行。
 
 ## W1C-Team-R5 工作树目标（未获 Root 组合验收）
 

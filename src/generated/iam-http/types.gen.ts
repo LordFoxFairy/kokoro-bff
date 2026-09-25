@@ -34,6 +34,863 @@ export type ApiErrorResponse = {
   }
 }
 
+export type GetTenantInvitationContextData = {
+  body?: never
+  headers?: {
+    /**
+     * Caller correlation identifier. Missing or invalid values are replaced by the service.
+     */
+    "x-request-id"?: string
+  }
+  path: {
+    tenant_id: string
+    invitation_id: string & string
+  }
+  query?: never
+  url: "/iam/v1/tenants/{tenant_id}/invitations/{invitation_id}/context"
+}
+
+export type GetTenantInvitationContextErrors = {
+  /**
+   * Stable internal API error envelope.
+   */
+  400: {
+    error: {
+      code:
+        | "INVALID_ARGUMENT"
+        | "UNAUTHENTICATED"
+        | "PERMISSION_DENIED"
+        | "NOT_FOUND"
+        | "TENANT_NOT_FOUND"
+        | "MEMBER_NOT_FOUND"
+        | "ROLE_NOT_FOUND"
+        | "ROLE_NAME_CONFLICT"
+        | "ROLE_IN_USE"
+        | "INVITATION_NOT_FOUND"
+        | "INVITATION_EXPIRED"
+        | "INVITATION_CONFLICT"
+        | "CONFLICT"
+        | "TENANT_DISABLED"
+        | "LAST_OWNER"
+        | "VERSION_MISMATCH"
+        | "PRECONDITION_REQUIRED"
+        | "PAYLOAD_TOO_LARGE"
+        | "RATE_LIMITED"
+        | "DEPENDENCY_UNAVAILABLE"
+        | "INTERNAL"
+      message: string
+      retryable: boolean
+      details: Array<unknown>
+    }
+  }
+  /**
+   * Stable internal API error envelope.
+   */
+  401: {
+    error: {
+      code:
+        | "INVALID_ARGUMENT"
+        | "UNAUTHENTICATED"
+        | "PERMISSION_DENIED"
+        | "NOT_FOUND"
+        | "TENANT_NOT_FOUND"
+        | "MEMBER_NOT_FOUND"
+        | "ROLE_NOT_FOUND"
+        | "ROLE_NAME_CONFLICT"
+        | "ROLE_IN_USE"
+        | "INVITATION_NOT_FOUND"
+        | "INVITATION_EXPIRED"
+        | "INVITATION_CONFLICT"
+        | "CONFLICT"
+        | "TENANT_DISABLED"
+        | "LAST_OWNER"
+        | "VERSION_MISMATCH"
+        | "PRECONDITION_REQUIRED"
+        | "PAYLOAD_TOO_LARGE"
+        | "RATE_LIMITED"
+        | "DEPENDENCY_UNAVAILABLE"
+        | "INTERNAL"
+      message: string
+      retryable: boolean
+      details: Array<unknown>
+    }
+  }
+  /**
+   * Stable internal API error envelope.
+   */
+  403: {
+    error: {
+      code:
+        | "INVALID_ARGUMENT"
+        | "UNAUTHENTICATED"
+        | "PERMISSION_DENIED"
+        | "NOT_FOUND"
+        | "TENANT_NOT_FOUND"
+        | "MEMBER_NOT_FOUND"
+        | "ROLE_NOT_FOUND"
+        | "ROLE_NAME_CONFLICT"
+        | "ROLE_IN_USE"
+        | "INVITATION_NOT_FOUND"
+        | "INVITATION_EXPIRED"
+        | "INVITATION_CONFLICT"
+        | "CONFLICT"
+        | "TENANT_DISABLED"
+        | "LAST_OWNER"
+        | "VERSION_MISMATCH"
+        | "PRECONDITION_REQUIRED"
+        | "PAYLOAD_TOO_LARGE"
+        | "RATE_LIMITED"
+        | "DEPENDENCY_UNAVAILABLE"
+        | "INTERNAL"
+      message: string
+      retryable: boolean
+      details: Array<unknown>
+    }
+  }
+  /**
+   * Stable internal API error envelope.
+   */
+  404: {
+    error: {
+      code:
+        | "INVALID_ARGUMENT"
+        | "UNAUTHENTICATED"
+        | "PERMISSION_DENIED"
+        | "NOT_FOUND"
+        | "TENANT_NOT_FOUND"
+        | "MEMBER_NOT_FOUND"
+        | "ROLE_NOT_FOUND"
+        | "ROLE_NAME_CONFLICT"
+        | "ROLE_IN_USE"
+        | "INVITATION_NOT_FOUND"
+        | "INVITATION_EXPIRED"
+        | "INVITATION_CONFLICT"
+        | "CONFLICT"
+        | "TENANT_DISABLED"
+        | "LAST_OWNER"
+        | "VERSION_MISMATCH"
+        | "PRECONDITION_REQUIRED"
+        | "PAYLOAD_TOO_LARGE"
+        | "RATE_LIMITED"
+        | "DEPENDENCY_UNAVAILABLE"
+        | "INTERNAL"
+      message: string
+      retryable: boolean
+      details: Array<unknown>
+    }
+  }
+  /**
+   * Stable internal API error envelope.
+   */
+  409: {
+    error: {
+      code:
+        | "INVALID_ARGUMENT"
+        | "UNAUTHENTICATED"
+        | "PERMISSION_DENIED"
+        | "NOT_FOUND"
+        | "TENANT_NOT_FOUND"
+        | "MEMBER_NOT_FOUND"
+        | "ROLE_NOT_FOUND"
+        | "ROLE_NAME_CONFLICT"
+        | "ROLE_IN_USE"
+        | "INVITATION_NOT_FOUND"
+        | "INVITATION_EXPIRED"
+        | "INVITATION_CONFLICT"
+        | "CONFLICT"
+        | "TENANT_DISABLED"
+        | "LAST_OWNER"
+        | "VERSION_MISMATCH"
+        | "PRECONDITION_REQUIRED"
+        | "PAYLOAD_TOO_LARGE"
+        | "RATE_LIMITED"
+        | "DEPENDENCY_UNAVAILABLE"
+        | "INTERNAL"
+      message: string
+      retryable: boolean
+      details: Array<unknown>
+    }
+  }
+  /**
+   * Stable internal API error envelope.
+   */
+  429: {
+    error: {
+      code:
+        | "INVALID_ARGUMENT"
+        | "UNAUTHENTICATED"
+        | "PERMISSION_DENIED"
+        | "NOT_FOUND"
+        | "TENANT_NOT_FOUND"
+        | "MEMBER_NOT_FOUND"
+        | "ROLE_NOT_FOUND"
+        | "ROLE_NAME_CONFLICT"
+        | "ROLE_IN_USE"
+        | "INVITATION_NOT_FOUND"
+        | "INVITATION_EXPIRED"
+        | "INVITATION_CONFLICT"
+        | "CONFLICT"
+        | "TENANT_DISABLED"
+        | "LAST_OWNER"
+        | "VERSION_MISMATCH"
+        | "PRECONDITION_REQUIRED"
+        | "PAYLOAD_TOO_LARGE"
+        | "RATE_LIMITED"
+        | "DEPENDENCY_UNAVAILABLE"
+        | "INTERNAL"
+      message: string
+      retryable: boolean
+      details: Array<unknown>
+    }
+  }
+  /**
+   * Stable internal API error envelope.
+   */
+  500: {
+    error: {
+      code:
+        | "INVALID_ARGUMENT"
+        | "UNAUTHENTICATED"
+        | "PERMISSION_DENIED"
+        | "NOT_FOUND"
+        | "TENANT_NOT_FOUND"
+        | "MEMBER_NOT_FOUND"
+        | "ROLE_NOT_FOUND"
+        | "ROLE_NAME_CONFLICT"
+        | "ROLE_IN_USE"
+        | "INVITATION_NOT_FOUND"
+        | "INVITATION_EXPIRED"
+        | "INVITATION_CONFLICT"
+        | "CONFLICT"
+        | "TENANT_DISABLED"
+        | "LAST_OWNER"
+        | "VERSION_MISMATCH"
+        | "PRECONDITION_REQUIRED"
+        | "PAYLOAD_TOO_LARGE"
+        | "RATE_LIMITED"
+        | "DEPENDENCY_UNAVAILABLE"
+        | "INTERNAL"
+      message: string
+      retryable: boolean
+      details: Array<unknown>
+    }
+  }
+  /**
+   * Stable internal API error envelope.
+   */
+  503: {
+    error: {
+      code:
+        | "INVALID_ARGUMENT"
+        | "UNAUTHENTICATED"
+        | "PERMISSION_DENIED"
+        | "NOT_FOUND"
+        | "TENANT_NOT_FOUND"
+        | "MEMBER_NOT_FOUND"
+        | "ROLE_NOT_FOUND"
+        | "ROLE_NAME_CONFLICT"
+        | "ROLE_IN_USE"
+        | "INVITATION_NOT_FOUND"
+        | "INVITATION_EXPIRED"
+        | "INVITATION_CONFLICT"
+        | "CONFLICT"
+        | "TENANT_DISABLED"
+        | "LAST_OWNER"
+        | "VERSION_MISMATCH"
+        | "PRECONDITION_REQUIRED"
+        | "PAYLOAD_TOO_LARGE"
+        | "RATE_LIMITED"
+        | "DEPENDENCY_UNAVAILABLE"
+        | "INTERNAL"
+      message: string
+      retryable: boolean
+      details: Array<unknown>
+    }
+  }
+}
+
+export type GetTenantInvitationContextError = GetTenantInvitationContextErrors[keyof GetTenantInvitationContextErrors]
+
+export type GetTenantInvitationContextResponses = {
+  200: {
+    data: {
+      invitation_id: string
+      tenant_id: string
+      tenant_name: string
+      roles: Array<string>
+      status: "pending"
+      expires_at: string
+    }
+  }
+}
+
+export type GetTenantInvitationContextResponse = GetTenantInvitationContextResponses[keyof GetTenantInvitationContextResponses]
+
+export type AcceptTenantInvitationData = {
+  body?: never
+  path: {
+    tenant_id: string
+    invitation_id: string
+  }
+  query?: never
+  url: "/iam/v1/tenants/{tenant_id}/invitations/{invitation_id}/accept"
+}
+
+export type AcceptTenantInvitationErrors = {
+  /**
+   * Stable internal API error envelope.
+   */
+  400: {
+    error: {
+      code:
+        | "INVALID_ARGUMENT"
+        | "UNAUTHENTICATED"
+        | "PERMISSION_DENIED"
+        | "NOT_FOUND"
+        | "TENANT_NOT_FOUND"
+        | "MEMBER_NOT_FOUND"
+        | "ROLE_NOT_FOUND"
+        | "ROLE_NAME_CONFLICT"
+        | "ROLE_IN_USE"
+        | "INVITATION_NOT_FOUND"
+        | "INVITATION_EXPIRED"
+        | "INVITATION_CONFLICT"
+        | "CONFLICT"
+        | "TENANT_DISABLED"
+        | "LAST_OWNER"
+        | "VERSION_MISMATCH"
+        | "PRECONDITION_REQUIRED"
+        | "PAYLOAD_TOO_LARGE"
+        | "RATE_LIMITED"
+        | "DEPENDENCY_UNAVAILABLE"
+        | "INTERNAL"
+      message: string
+      retryable: boolean
+      details: Array<unknown>
+    }
+  }
+  /**
+   * Stable internal API error envelope.
+   */
+  401: {
+    error: {
+      code:
+        | "INVALID_ARGUMENT"
+        | "UNAUTHENTICATED"
+        | "PERMISSION_DENIED"
+        | "NOT_FOUND"
+        | "TENANT_NOT_FOUND"
+        | "MEMBER_NOT_FOUND"
+        | "ROLE_NOT_FOUND"
+        | "ROLE_NAME_CONFLICT"
+        | "ROLE_IN_USE"
+        | "INVITATION_NOT_FOUND"
+        | "INVITATION_EXPIRED"
+        | "INVITATION_CONFLICT"
+        | "CONFLICT"
+        | "TENANT_DISABLED"
+        | "LAST_OWNER"
+        | "VERSION_MISMATCH"
+        | "PRECONDITION_REQUIRED"
+        | "PAYLOAD_TOO_LARGE"
+        | "RATE_LIMITED"
+        | "DEPENDENCY_UNAVAILABLE"
+        | "INTERNAL"
+      message: string
+      retryable: boolean
+      details: Array<unknown>
+    }
+  }
+  /**
+   * Stable internal API error envelope.
+   */
+  403: {
+    error: {
+      code:
+        | "INVALID_ARGUMENT"
+        | "UNAUTHENTICATED"
+        | "PERMISSION_DENIED"
+        | "NOT_FOUND"
+        | "TENANT_NOT_FOUND"
+        | "MEMBER_NOT_FOUND"
+        | "ROLE_NOT_FOUND"
+        | "ROLE_NAME_CONFLICT"
+        | "ROLE_IN_USE"
+        | "INVITATION_NOT_FOUND"
+        | "INVITATION_EXPIRED"
+        | "INVITATION_CONFLICT"
+        | "CONFLICT"
+        | "TENANT_DISABLED"
+        | "LAST_OWNER"
+        | "VERSION_MISMATCH"
+        | "PRECONDITION_REQUIRED"
+        | "PAYLOAD_TOO_LARGE"
+        | "RATE_LIMITED"
+        | "DEPENDENCY_UNAVAILABLE"
+        | "INTERNAL"
+      message: string
+      retryable: boolean
+      details: Array<unknown>
+    }
+  }
+  /**
+   * Stable internal API error envelope.
+   */
+  404: {
+    error: {
+      code:
+        | "INVALID_ARGUMENT"
+        | "UNAUTHENTICATED"
+        | "PERMISSION_DENIED"
+        | "NOT_FOUND"
+        | "TENANT_NOT_FOUND"
+        | "MEMBER_NOT_FOUND"
+        | "ROLE_NOT_FOUND"
+        | "ROLE_NAME_CONFLICT"
+        | "ROLE_IN_USE"
+        | "INVITATION_NOT_FOUND"
+        | "INVITATION_EXPIRED"
+        | "INVITATION_CONFLICT"
+        | "CONFLICT"
+        | "TENANT_DISABLED"
+        | "LAST_OWNER"
+        | "VERSION_MISMATCH"
+        | "PRECONDITION_REQUIRED"
+        | "PAYLOAD_TOO_LARGE"
+        | "RATE_LIMITED"
+        | "DEPENDENCY_UNAVAILABLE"
+        | "INTERNAL"
+      message: string
+      retryable: boolean
+      details: Array<unknown>
+    }
+  }
+  /**
+   * Stable internal API error envelope.
+   */
+  409: {
+    error: {
+      code:
+        | "INVALID_ARGUMENT"
+        | "UNAUTHENTICATED"
+        | "PERMISSION_DENIED"
+        | "NOT_FOUND"
+        | "TENANT_NOT_FOUND"
+        | "MEMBER_NOT_FOUND"
+        | "ROLE_NOT_FOUND"
+        | "ROLE_NAME_CONFLICT"
+        | "ROLE_IN_USE"
+        | "INVITATION_NOT_FOUND"
+        | "INVITATION_EXPIRED"
+        | "INVITATION_CONFLICT"
+        | "CONFLICT"
+        | "TENANT_DISABLED"
+        | "LAST_OWNER"
+        | "VERSION_MISMATCH"
+        | "PRECONDITION_REQUIRED"
+        | "PAYLOAD_TOO_LARGE"
+        | "RATE_LIMITED"
+        | "DEPENDENCY_UNAVAILABLE"
+        | "INTERNAL"
+      message: string
+      retryable: boolean
+      details: Array<unknown>
+    }
+  }
+  /**
+   * Stable internal API error envelope.
+   */
+  429: {
+    error: {
+      code:
+        | "INVALID_ARGUMENT"
+        | "UNAUTHENTICATED"
+        | "PERMISSION_DENIED"
+        | "NOT_FOUND"
+        | "TENANT_NOT_FOUND"
+        | "MEMBER_NOT_FOUND"
+        | "ROLE_NOT_FOUND"
+        | "ROLE_NAME_CONFLICT"
+        | "ROLE_IN_USE"
+        | "INVITATION_NOT_FOUND"
+        | "INVITATION_EXPIRED"
+        | "INVITATION_CONFLICT"
+        | "CONFLICT"
+        | "TENANT_DISABLED"
+        | "LAST_OWNER"
+        | "VERSION_MISMATCH"
+        | "PRECONDITION_REQUIRED"
+        | "PAYLOAD_TOO_LARGE"
+        | "RATE_LIMITED"
+        | "DEPENDENCY_UNAVAILABLE"
+        | "INTERNAL"
+      message: string
+      retryable: boolean
+      details: Array<unknown>
+    }
+  }
+  /**
+   * Stable internal API error envelope.
+   */
+  500: {
+    error: {
+      code:
+        | "INVALID_ARGUMENT"
+        | "UNAUTHENTICATED"
+        | "PERMISSION_DENIED"
+        | "NOT_FOUND"
+        | "TENANT_NOT_FOUND"
+        | "MEMBER_NOT_FOUND"
+        | "ROLE_NOT_FOUND"
+        | "ROLE_NAME_CONFLICT"
+        | "ROLE_IN_USE"
+        | "INVITATION_NOT_FOUND"
+        | "INVITATION_EXPIRED"
+        | "INVITATION_CONFLICT"
+        | "CONFLICT"
+        | "TENANT_DISABLED"
+        | "LAST_OWNER"
+        | "VERSION_MISMATCH"
+        | "PRECONDITION_REQUIRED"
+        | "PAYLOAD_TOO_LARGE"
+        | "RATE_LIMITED"
+        | "DEPENDENCY_UNAVAILABLE"
+        | "INTERNAL"
+      message: string
+      retryable: boolean
+      details: Array<unknown>
+    }
+  }
+  /**
+   * Stable internal API error envelope.
+   */
+  503: {
+    error: {
+      code:
+        | "INVALID_ARGUMENT"
+        | "UNAUTHENTICATED"
+        | "PERMISSION_DENIED"
+        | "NOT_FOUND"
+        | "TENANT_NOT_FOUND"
+        | "MEMBER_NOT_FOUND"
+        | "ROLE_NOT_FOUND"
+        | "ROLE_NAME_CONFLICT"
+        | "ROLE_IN_USE"
+        | "INVITATION_NOT_FOUND"
+        | "INVITATION_EXPIRED"
+        | "INVITATION_CONFLICT"
+        | "CONFLICT"
+        | "TENANT_DISABLED"
+        | "LAST_OWNER"
+        | "VERSION_MISMATCH"
+        | "PRECONDITION_REQUIRED"
+        | "PAYLOAD_TOO_LARGE"
+        | "RATE_LIMITED"
+        | "DEPENDENCY_UNAVAILABLE"
+        | "INTERNAL"
+      message: string
+      retryable: boolean
+      details: Array<unknown>
+    }
+  }
+}
+
+export type AcceptTenantInvitationError = AcceptTenantInvitationErrors[keyof AcceptTenantInvitationErrors]
+
+export type AcceptTenantInvitationResponses = {
+  200: {
+    data: {
+      invitation_id: string
+      member_id: string
+      status: "accepted"
+    }
+  }
+}
+
+export type AcceptTenantInvitationResponse = AcceptTenantInvitationResponses[keyof AcceptTenantInvitationResponses]
+
+export type RejectTenantInvitationData = {
+  body?: never
+  path: {
+    tenant_id: string
+    invitation_id: string
+  }
+  query?: never
+  url: "/iam/v1/tenants/{tenant_id}/invitations/{invitation_id}/reject"
+}
+
+export type RejectTenantInvitationErrors = {
+  /**
+   * Stable internal API error envelope.
+   */
+  400: {
+    error: {
+      code:
+        | "INVALID_ARGUMENT"
+        | "UNAUTHENTICATED"
+        | "PERMISSION_DENIED"
+        | "NOT_FOUND"
+        | "TENANT_NOT_FOUND"
+        | "MEMBER_NOT_FOUND"
+        | "ROLE_NOT_FOUND"
+        | "ROLE_NAME_CONFLICT"
+        | "ROLE_IN_USE"
+        | "INVITATION_NOT_FOUND"
+        | "INVITATION_EXPIRED"
+        | "INVITATION_CONFLICT"
+        | "CONFLICT"
+        | "TENANT_DISABLED"
+        | "LAST_OWNER"
+        | "VERSION_MISMATCH"
+        | "PRECONDITION_REQUIRED"
+        | "PAYLOAD_TOO_LARGE"
+        | "RATE_LIMITED"
+        | "DEPENDENCY_UNAVAILABLE"
+        | "INTERNAL"
+      message: string
+      retryable: boolean
+      details: Array<unknown>
+    }
+  }
+  /**
+   * Stable internal API error envelope.
+   */
+  401: {
+    error: {
+      code:
+        | "INVALID_ARGUMENT"
+        | "UNAUTHENTICATED"
+        | "PERMISSION_DENIED"
+        | "NOT_FOUND"
+        | "TENANT_NOT_FOUND"
+        | "MEMBER_NOT_FOUND"
+        | "ROLE_NOT_FOUND"
+        | "ROLE_NAME_CONFLICT"
+        | "ROLE_IN_USE"
+        | "INVITATION_NOT_FOUND"
+        | "INVITATION_EXPIRED"
+        | "INVITATION_CONFLICT"
+        | "CONFLICT"
+        | "TENANT_DISABLED"
+        | "LAST_OWNER"
+        | "VERSION_MISMATCH"
+        | "PRECONDITION_REQUIRED"
+        | "PAYLOAD_TOO_LARGE"
+        | "RATE_LIMITED"
+        | "DEPENDENCY_UNAVAILABLE"
+        | "INTERNAL"
+      message: string
+      retryable: boolean
+      details: Array<unknown>
+    }
+  }
+  /**
+   * Stable internal API error envelope.
+   */
+  403: {
+    error: {
+      code:
+        | "INVALID_ARGUMENT"
+        | "UNAUTHENTICATED"
+        | "PERMISSION_DENIED"
+        | "NOT_FOUND"
+        | "TENANT_NOT_FOUND"
+        | "MEMBER_NOT_FOUND"
+        | "ROLE_NOT_FOUND"
+        | "ROLE_NAME_CONFLICT"
+        | "ROLE_IN_USE"
+        | "INVITATION_NOT_FOUND"
+        | "INVITATION_EXPIRED"
+        | "INVITATION_CONFLICT"
+        | "CONFLICT"
+        | "TENANT_DISABLED"
+        | "LAST_OWNER"
+        | "VERSION_MISMATCH"
+        | "PRECONDITION_REQUIRED"
+        | "PAYLOAD_TOO_LARGE"
+        | "RATE_LIMITED"
+        | "DEPENDENCY_UNAVAILABLE"
+        | "INTERNAL"
+      message: string
+      retryable: boolean
+      details: Array<unknown>
+    }
+  }
+  /**
+   * Stable internal API error envelope.
+   */
+  404: {
+    error: {
+      code:
+        | "INVALID_ARGUMENT"
+        | "UNAUTHENTICATED"
+        | "PERMISSION_DENIED"
+        | "NOT_FOUND"
+        | "TENANT_NOT_FOUND"
+        | "MEMBER_NOT_FOUND"
+        | "ROLE_NOT_FOUND"
+        | "ROLE_NAME_CONFLICT"
+        | "ROLE_IN_USE"
+        | "INVITATION_NOT_FOUND"
+        | "INVITATION_EXPIRED"
+        | "INVITATION_CONFLICT"
+        | "CONFLICT"
+        | "TENANT_DISABLED"
+        | "LAST_OWNER"
+        | "VERSION_MISMATCH"
+        | "PRECONDITION_REQUIRED"
+        | "PAYLOAD_TOO_LARGE"
+        | "RATE_LIMITED"
+        | "DEPENDENCY_UNAVAILABLE"
+        | "INTERNAL"
+      message: string
+      retryable: boolean
+      details: Array<unknown>
+    }
+  }
+  /**
+   * Stable internal API error envelope.
+   */
+  409: {
+    error: {
+      code:
+        | "INVALID_ARGUMENT"
+        | "UNAUTHENTICATED"
+        | "PERMISSION_DENIED"
+        | "NOT_FOUND"
+        | "TENANT_NOT_FOUND"
+        | "MEMBER_NOT_FOUND"
+        | "ROLE_NOT_FOUND"
+        | "ROLE_NAME_CONFLICT"
+        | "ROLE_IN_USE"
+        | "INVITATION_NOT_FOUND"
+        | "INVITATION_EXPIRED"
+        | "INVITATION_CONFLICT"
+        | "CONFLICT"
+        | "TENANT_DISABLED"
+        | "LAST_OWNER"
+        | "VERSION_MISMATCH"
+        | "PRECONDITION_REQUIRED"
+        | "PAYLOAD_TOO_LARGE"
+        | "RATE_LIMITED"
+        | "DEPENDENCY_UNAVAILABLE"
+        | "INTERNAL"
+      message: string
+      retryable: boolean
+      details: Array<unknown>
+    }
+  }
+  /**
+   * Stable internal API error envelope.
+   */
+  429: {
+    error: {
+      code:
+        | "INVALID_ARGUMENT"
+        | "UNAUTHENTICATED"
+        | "PERMISSION_DENIED"
+        | "NOT_FOUND"
+        | "TENANT_NOT_FOUND"
+        | "MEMBER_NOT_FOUND"
+        | "ROLE_NOT_FOUND"
+        | "ROLE_NAME_CONFLICT"
+        | "ROLE_IN_USE"
+        | "INVITATION_NOT_FOUND"
+        | "INVITATION_EXPIRED"
+        | "INVITATION_CONFLICT"
+        | "CONFLICT"
+        | "TENANT_DISABLED"
+        | "LAST_OWNER"
+        | "VERSION_MISMATCH"
+        | "PRECONDITION_REQUIRED"
+        | "PAYLOAD_TOO_LARGE"
+        | "RATE_LIMITED"
+        | "DEPENDENCY_UNAVAILABLE"
+        | "INTERNAL"
+      message: string
+      retryable: boolean
+      details: Array<unknown>
+    }
+  }
+  /**
+   * Stable internal API error envelope.
+   */
+  500: {
+    error: {
+      code:
+        | "INVALID_ARGUMENT"
+        | "UNAUTHENTICATED"
+        | "PERMISSION_DENIED"
+        | "NOT_FOUND"
+        | "TENANT_NOT_FOUND"
+        | "MEMBER_NOT_FOUND"
+        | "ROLE_NOT_FOUND"
+        | "ROLE_NAME_CONFLICT"
+        | "ROLE_IN_USE"
+        | "INVITATION_NOT_FOUND"
+        | "INVITATION_EXPIRED"
+        | "INVITATION_CONFLICT"
+        | "CONFLICT"
+        | "TENANT_DISABLED"
+        | "LAST_OWNER"
+        | "VERSION_MISMATCH"
+        | "PRECONDITION_REQUIRED"
+        | "PAYLOAD_TOO_LARGE"
+        | "RATE_LIMITED"
+        | "DEPENDENCY_UNAVAILABLE"
+        | "INTERNAL"
+      message: string
+      retryable: boolean
+      details: Array<unknown>
+    }
+  }
+  /**
+   * Stable internal API error envelope.
+   */
+  503: {
+    error: {
+      code:
+        | "INVALID_ARGUMENT"
+        | "UNAUTHENTICATED"
+        | "PERMISSION_DENIED"
+        | "NOT_FOUND"
+        | "TENANT_NOT_FOUND"
+        | "MEMBER_NOT_FOUND"
+        | "ROLE_NOT_FOUND"
+        | "ROLE_NAME_CONFLICT"
+        | "ROLE_IN_USE"
+        | "INVITATION_NOT_FOUND"
+        | "INVITATION_EXPIRED"
+        | "INVITATION_CONFLICT"
+        | "CONFLICT"
+        | "TENANT_DISABLED"
+        | "LAST_OWNER"
+        | "VERSION_MISMATCH"
+        | "PRECONDITION_REQUIRED"
+        | "PAYLOAD_TOO_LARGE"
+        | "RATE_LIMITED"
+        | "DEPENDENCY_UNAVAILABLE"
+        | "INTERNAL"
+      message: string
+      retryable: boolean
+      details: Array<unknown>
+    }
+  }
+}
+
+export type RejectTenantInvitationError = RejectTenantInvitationErrors[keyof RejectTenantInvitationErrors]
+
+export type RejectTenantInvitationResponses = {
+  200: {
+    data: {
+      invitation_id: string
+      status: "rejected"
+    }
+  }
+}
+
+export type RejectTenantInvitationResponse = RejectTenantInvitationResponses[keyof RejectTenantInvitationResponses]
+
 export type ListTenantMembersData = {
   body?: never
   headers?: {

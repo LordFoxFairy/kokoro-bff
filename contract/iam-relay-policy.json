@@ -1,8 +1,11 @@
 {
-  "version": "2.0.0",
-  "iamOwnerCommit": "ad5224a9e0a3a31d1c593d214d37940d6923b2e7",
+  "version": "2.1.0",
+  "iamOwnerCommit": "ac94f152daffa2293801ea4f56f98b3ae59452d7",
   "iamAllowlistSha256": "f63dacfa8a7bcec3c56efb8ffb762a3f8bd82bb380eff40a1462db1e77d61ead",
   "iamSnapshotSha256": "b2eac1919e16fdc30a40bee0f3c4300b641bd8f674214aea7731bf10299559e1",
+  "iamOpenapiPath": "contract/openapi/iam.internal.v1.json",
+  "iamOpenapiVersion": "0.4.0",
+  "iamOpenapiSha256": "a18d57172df841cb2f55aa845a3eeb519ddb5abc8bea1c2be74fbb7e0fb62416",
   "routes": {
     "/.well-known/openid-configuration": [
       "GET"
@@ -33,6 +36,9 @@
     "/oauth2/end-session/confirm": [
       "POST"
     ],
+    "/sign-up/email": [
+      "POST"
+    ],
     "/sign-in/email": [
       "POST"
     ],
@@ -53,6 +59,66 @@
     ],
     "/oauth2/continue": [
       "POST"
+    ]
+  },
+  "invitationRoutes": [
+    {
+      "template": "/v1/tenants/{tenant_id}/invitations/{invitation_id}/context",
+      "methods": [
+        "GET"
+      ],
+      "operationId": "getTenantInvitationContext",
+      "owner": "kokoro-iam",
+      "visibility": "browser-private",
+      "stability": "stable",
+      "idempotency": "none"
+    },
+    {
+      "template": "/v1/tenants/{tenant_id}/invitations/{invitation_id}/accept",
+      "methods": [
+        "POST"
+      ],
+      "operationId": "acceptTenantInvitation",
+      "owner": "kokoro-iam",
+      "visibility": "browser-private",
+      "stability": "stable",
+      "idempotency": "none"
+    },
+    {
+      "template": "/v1/tenants/{tenant_id}/invitations/{invitation_id}/reject",
+      "methods": [
+        "POST"
+      ],
+      "operationId": "rejectTenantInvitation",
+      "owner": "kokoro-iam",
+      "visibility": "browser-private",
+      "stability": "stable",
+      "idempotency": "none"
+    }
+  ],
+  "invitationSignUp": {
+    "route": "/sign-up/email",
+    "method": "POST",
+    "bodyFields": [
+      "callbackURL",
+      "email",
+      "name",
+      "password"
+    ],
+    "callbackPath": "/iam/interactions/invitation",
+    "callbackQueryParameter": "id"
+  },
+  "invitationLocation": {
+    "sourceRoute": "/verify-email",
+    "path": "/iam/interactions/invitation",
+    "queryParameter": "id",
+    "valueFormat": "canonical-lowercase-uuid",
+    "errorQueryParameter": "error",
+    "allowedErrorCodes": [
+      "TOKEN_EXPIRED",
+      "INVALID_TOKEN",
+      "USER_NOT_FOUND",
+      "INVALID_USER"
     ]
   },
   "requestHeaders": [

@@ -3,12 +3,18 @@
 import { client } from "./client.gen.js"
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from "./client/index.js"
 import type {
+  AcceptTenantInvitationData,
+  AcceptTenantInvitationErrors,
+  AcceptTenantInvitationResponses,
   CancelTenantInvitationData,
   CancelTenantInvitationErrors,
   CancelTenantInvitationResponses,
   CreateTenantInvitationData,
   CreateTenantInvitationErrors,
   CreateTenantInvitationResponses,
+  GetTenantInvitationContextData,
+  GetTenantInvitationContextErrors,
+  GetTenantInvitationContextResponses,
   LeaveTenantData,
   LeaveTenantErrors,
   LeaveTenantResponses,
@@ -21,6 +27,9 @@ import type {
   ListTenantRolesData,
   ListTenantRolesErrors,
   ListTenantRolesResponses,
+  RejectTenantInvitationData,
+  RejectTenantInvitationErrors,
+  RejectTenantInvitationResponses,
   RemoveTenantMemberData,
   RemoveTenantMemberErrors,
   RemoveTenantMemberResponses,
@@ -35,12 +44,15 @@ import type {
   VerifySessionAuthorizationResponses,
 } from "./types.gen.js"
 import {
+  zAcceptTenantInvitationResponse,
   zCancelTenantInvitationResponse,
   zCreateTenantInvitationResponse,
+  zGetTenantInvitationContextResponse,
   zLeaveTenantResponse,
   zListTenantInvitationsResponse,
   zListTenantMembersResponse,
   zListTenantRolesResponse,
+  zRejectTenantInvitationResponse,
   zRemoveTenantMemberResponse,
   zReplaceTenantMemberRolesResponse,
   zResendTenantInvitationResponse,
@@ -64,6 +76,33 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
    */
   meta?: keyof ClientMeta extends never ? Record<string, unknown> : ClientMeta
 }
+
+export const getTenantInvitationContext = <ThrowOnError extends boolean = false>(
+  options: Options<GetTenantInvitationContextData, ThrowOnError>,
+): RequestResult<GetTenantInvitationContextResponses, GetTenantInvitationContextErrors, ThrowOnError> =>
+  (options.client ?? client).get<GetTenantInvitationContextResponses, GetTenantInvitationContextErrors, ThrowOnError>({
+    responseValidator: async (data) => await zGetTenantInvitationContextResponse.parseAsync(data),
+    url: "/iam/v1/tenants/{tenant_id}/invitations/{invitation_id}/context",
+    ...options,
+  })
+
+export const acceptTenantInvitation = <ThrowOnError extends boolean = false>(
+  options: Options<AcceptTenantInvitationData, ThrowOnError>,
+): RequestResult<AcceptTenantInvitationResponses, AcceptTenantInvitationErrors, ThrowOnError> =>
+  (options.client ?? client).post<AcceptTenantInvitationResponses, AcceptTenantInvitationErrors, ThrowOnError>({
+    responseValidator: async (data) => await zAcceptTenantInvitationResponse.parseAsync(data),
+    url: "/iam/v1/tenants/{tenant_id}/invitations/{invitation_id}/accept",
+    ...options,
+  })
+
+export const rejectTenantInvitation = <ThrowOnError extends boolean = false>(
+  options: Options<RejectTenantInvitationData, ThrowOnError>,
+): RequestResult<RejectTenantInvitationResponses, RejectTenantInvitationErrors, ThrowOnError> =>
+  (options.client ?? client).post<RejectTenantInvitationResponses, RejectTenantInvitationErrors, ThrowOnError>({
+    responseValidator: async (data) => await zRejectTenantInvitationResponse.parseAsync(data),
+    url: "/iam/v1/tenants/{tenant_id}/invitations/{invitation_id}/reject",
+    ...options,
+  })
 
 export const listTenantMembers = <ThrowOnError extends boolean = false>(
   options: Options<ListTenantMembersData, ThrowOnError>,
