@@ -96,7 +96,7 @@ function bff(owner: string): Server {
   })
 }
 function ownerHeaders() {
-  return { "content-type": "application/json", "cache-control": "no-store", "x-request-id": "iam-team-write-1" }
+  return { "content-type": "application/json", "x-request-id": "iam-team-write-1" }
 }
 
 test("six Team mutations use only admitted tenant and user Bearer, one IAM call, no cache", async () => {
@@ -245,4 +245,36 @@ test("Team mutation has no automatic retry on an uncertain owner result", async 
   const response = await fetch(`${app}/v1/team/members/me`, { method: "DELETE", headers })
   assert.equal(response.status, 503)
   assert.equal(calls, 1)
+})
+
+test("Team mutation still rejects malformed owner media type and request ID without requiring Cache-Control", async () => {
+  let responseHeaders: Record<string, string> = ownerHeaders()
+  const owner = await listen(
+    createServer((_request, response) => {
+      response.writeHead(200, responseHeaders).end(JSON.stringify({ data: { invitation_id: "invite-1", status: "pending" } }))
+    }),
+  )
+  const app = await listen(bff(owner))
+  const call = () =>
+    fetch(`${app}/v1/team/invitations`, {
+      method: "POST",
+      headers: { ...headers, "content-type": "application/json" },
+      body: JSON.stringify({ email: "new@example.test", roles: ["member"] }),
+    })
+  let result = await call()
+  assert.equal(result.status, 200)
+  assert.equal(result.headers.get("cache-control"), "no-store")
+  responseHeaders = { ...ownerHeaders(), "cache-control": "public, max-age=60" }
+  result = await call()
+  assert.equal(result.status, 200)
+  assert.equal(result.headers.get("cache-control"), "no-store")
+  responseHeaders = { ...ownerHeaders(), "content-type": "text/plain" }
+  result = await call()
+  assert.equal(result.status, 502)
+  responseHeaders = { ...ownerHeaders(), "x-request-id": "bad request id!" }
+  result = await call()
+  assert.equal(result.status, 502)
+  responseHeaders = { "content-type": "application/json" }
+  result = await call()
+  assert.equal(result.status, 502)
 })

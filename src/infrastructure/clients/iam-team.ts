@@ -48,15 +48,14 @@ function unavailable(): TeamReadResult {
   return { ok: false, status: 503, code: "team_owner_unavailable" }
 }
 
-function validHeaders(headers: Headers): boolean {
+function validHeaders(headers: Headers, requireNoStore: boolean): boolean {
   const requestId = headers.get("x-request-id")
   const cacheControl = headers.get("cache-control")
   const contentType = headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase()
   return (
     requestId !== null &&
     REQUEST_ID_PATTERN.test(requestId) &&
-    cacheControl !== null &&
-    cacheControl.split(",").some((part) => part.trim().toLowerCase() === "no-store") &&
+    (!requireNoStore || (cacheControl !== null && cacheControl.split(",").some((part) => part.trim().toLowerCase() === "no-store"))) &&
     contentType === "application/json"
   )
 }
@@ -125,7 +124,7 @@ export async function readIamTeamPage(input: TeamReadInput): Promise<TeamReadRes
       cache: "no-store",
       signal: abort.signal,
     })
-    if (!validHeaders(response.headers)) {
+    if (!validHeaders(response.headers, true)) {
       await response.body?.cancel().catch(() => undefined)
       return invalidOwnerResponse()
     }
@@ -240,7 +239,7 @@ export async function writeIamTeam(input: TeamWriteInput): Promise<TeamWriteResu
       cache: "no-store",
       signal: abort.signal,
     })
-    if (!validHeaders(response.headers)) {
+    if (!validHeaders(response.headers, false)) {
       await response.body?.cancel().catch(() => undefined)
       return invalidOwnerResponse()
     }
