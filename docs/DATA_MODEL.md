@@ -1,6 +1,12 @@
 # kokoro-bff data model
 
-## W1E-IAM-E2-BFF-SOURCE-PIN：当前数据边界
+## W1E-IAM-0.6-BFF-PIN：当前数据边界
+
+IAM `a4c2b61467f1fc1772d6b6d8e98f081c090289fb` 唯一拥有 Platform workload 身份、资源与 token
+introspection 事实；BFF 此片只固定 OpenAPI `0.6.0` 来源，不调用该操作，不存储、投影或复制 IAM 决策。
+`database/schema.sql`、事务、Redis、cache、receipt、outbox、AG-UI ledger 均不变；无跨 owner SQL。
+
+## W1E-IAM-E2-BFF-SOURCE-PIN：历史数据边界
 
 IAM `b720b6dc095b883237682102ca0a87ed6451a968` 拥有 execution authorization 决策、审计及其数据生命周期。
 BFF 本片仅固定完整 OpenAPI 0.5.0 来源；生成 operation allowlist 不增加 E2 verifier，不调用新操作，

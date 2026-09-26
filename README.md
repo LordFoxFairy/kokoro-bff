@@ -15,7 +15,7 @@ Browser -> kokoro same-origin /api/* -> kokoro-bff /v1/* -> owner API / Agent / 
 | 能力 | 当前事实 |
 | --- | --- |
 | Public contract | 67 个 operation，全部具备 owner/visibility/stability/idempotency/permission metadata |
-| User admission | 普通 `/v1/*` 使用 service envelope + 唯一 Bearer，并在线验证固定 IAM `0.2.0` contract；legacy identity headers 被忽略 |
+| User admission | 普通 `/v1/*` 使用 service envelope + 唯一 Bearer，并在线验证固定 IAM `0.6.0` contract；legacy identity headers 被忽略 |
 | Project / ScheduledTask | Live 使用本仓 PostgreSQL；Redis 用于 readiness/cache coordination |
 | Idempotency | business store 存在时有 PostgreSQL receipt；部分路径仍可能使用进程内 Map |
 | Chat / AG-UI | Live 先把 Agent source fact 与 AG-UI frame 原子投影到本仓 PostgreSQL，再从 ledger 输出 SSE |

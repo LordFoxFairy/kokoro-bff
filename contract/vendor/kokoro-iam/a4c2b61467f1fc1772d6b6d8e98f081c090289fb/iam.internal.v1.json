@@ -2227,6 +2227,372 @@
         "x-kokoro-visibility": "browser-private"
       }
     },
+    "/internal/v1/platform-workload-tokens/introspect": {
+      "post": {
+        "operationId": "introspectPlatformWorkloadToken",
+        "parameters": [
+          {
+            "name": "x-request-id",
+            "in": "header",
+            "required": false,
+            "description": "Caller correlation identifier. Missing or invalid values are replaced by the service.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "access_token": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 16384,
+                    "pattern": "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"
+                  },
+                  "surface": {
+                    "type": "string",
+                    "enum": [
+                      "tenant_execution",
+                      "projection",
+                      "catalog",
+                      "global_register"
+                    ]
+                  }
+                },
+                "required": [
+                  "access_token",
+                  "surface"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "headers": {
+              "Cache-Control": {
+                "description": "The introspection decision must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              },
+              "x-request-id": {
+                "description": "Final service request identifier used for this response.",
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                }
+              }
+            },
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "caller": {
+                              "type": "string",
+                              "enum": [
+                                "kokoro-agent",
+                                "kokoro-bff"
+                              ]
+                            },
+                            "caller_client_id": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "profile": {
+                              "type": "string",
+                              "enum": [
+                                "tenant_machine"
+                              ]
+                            },
+                            "scope": {
+                              "type": "string",
+                              "enum": [
+                                "platform:execution.invoke",
+                                "platform:projection.read",
+                                "platform:skill-catalog.manage"
+                              ]
+                            },
+                            "tenant_id": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "required": [
+                            "caller",
+                            "caller_client_id",
+                            "profile",
+                            "scope",
+                            "tenant_id"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "caller": {
+                              "type": "string",
+                              "enum": [
+                                "kokoro-system"
+                              ]
+                            },
+                            "caller_client_id": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "profile": {
+                              "type": "string",
+                              "enum": [
+                                "operator_machine"
+                              ]
+                            },
+                            "scope": {
+                              "type": "string",
+                              "enum": [
+                                "platform:mcp-server.register"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "caller",
+                            "caller_client_id",
+                            "profile",
+                            "scope"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Stable internal API error envelope.",
+            "headers": {
+              "Cache-Control": {
+                "description": "The admission decision must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              },
+              "x-request-id": {
+                "description": "Final service request identifier used for this response.",
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Stable internal API error envelope.",
+            "headers": {
+              "Cache-Control": {
+                "description": "The admission decision must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              },
+              "x-request-id": {
+                "description": "Final service request identifier used for this response.",
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Stable internal API error envelope.",
+            "headers": {
+              "Cache-Control": {
+                "description": "The admission decision must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              },
+              "x-request-id": {
+                "description": "Final service request identifier used for this response.",
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Stable internal API error envelope.",
+            "headers": {
+              "Cache-Control": {
+                "description": "The admission decision must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              },
+              "x-request-id": {
+                "description": "Final service request identifier used for this response.",
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Stable internal API error envelope.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the fixed-window quota resets.",
+                "schema": {
+                  "type": "string",
+                  "example": "60"
+                }
+              },
+              "Cache-Control": {
+                "description": "The admission decision must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              },
+              "x-request-id": {
+                "description": "Final service request identifier used for this response.",
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Stable internal API error envelope.",
+            "headers": {
+              "Cache-Control": {
+                "description": "The admission decision must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              },
+              "x-request-id": {
+                "description": "Final service request identifier used for this response.",
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Stable internal API error envelope.",
+            "headers": {
+              "Cache-Control": {
+                "description": "The admission decision must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              },
+              "x-request-id": {
+                "description": "Final service request identifier used for this response.",
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "platformResourceServerBasic": []
+          }
+        ],
+        "summary": "",
+        "tags": [
+          "Platform Workload Tokens"
+        ],
+        "x-kokoro-idempotency": "none",
+        "x-kokoro-owner": "kokoro-iam",
+        "x-kokoro-permission": "system:introspect",
+        "x-kokoro-stability": "stable",
+        "x-kokoro-visibility": "internal-owner"
+      }
+    },
     "/internal/v1/audit-events": {
       "get": {
         "operationId": "listAuditEvents",
@@ -8473,7 +8839,7 @@
   "info": {
     "title": "Kokoro IAM Internal API",
     "description": "IAM-owned liveness, Tenancy, Authorization and Audit operations.",
-    "version": "0.5.0",
+    "version": "0.6.0",
     "contact": {}
   },
   "tags": [],
@@ -8484,6 +8850,10 @@
         "scheme": "bearer",
         "bearerFormat": "JWT",
         "type": "http"
+      },
+      "platformResourceServerBasic": {
+        "type": "http",
+        "scheme": "basic"
       }
     },
     "schemas": {

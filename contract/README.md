@@ -104,11 +104,12 @@ System commit `f5702068d4416ad90b1bd02af57d2825c32be916`, SHA-256
 `f9ea76f107e1ea0fc19df20ee7c59032c0fbac66e640e9a16a1b770ab27c1f37`. This is a provenance reference only;
 the owner OpenAPI is not copied into this repository.
 
-The IAM admission consumer pins the complete owner artifact `contract/openapi/iam.internal.v1.json`, version `0.2.0`,
-IAM commit `259a66e6a569889c030734f380e99685d8b9e21c`, SHA-256
-`f7a3ea2e5ae7ade82ae1a6756a2f560d3129ca1b2977c6b0905633a284bd3aab`. `openapi-ts.iam.config.ts` filters the generated
-surface to `POST /internal/v1/session-authorizations/verify` without editing the vendor artifact; exact generated-file
-digests and toolchain provenance are recorded in `contract/dependencies/iam-http.json`.
+The IAM consumer pins the complete owner artifact `contract/openapi/iam.internal.v1.json`, version `0.6.0`,
+IAM commit `a4c2b61467f1fc1772d6b6d8e98f081c090289fb`, SHA-256
+`392ca0e49544c0ec6e0d2fa782c46c33c1847e2c350102e7ad3b8af43f858ced`. `openapi-ts.iam.config.ts` filters the generated
+surface to BFF admission, Team, and invitation operations without editing the full vendor artifact. Platform workload
+introspection and execution authorization remain excluded. Exact generated-file digests and toolchain provenance are
+recorded in `contract/dependencies/iam-http.json`.
 
 The Agent HTTP consumer pins the complete owner `contract/openapi/v1/openapi.json` v1.1.0 at Agent commit
 `520ec181a101298b4f336aad273ce003b2735955`, SHA-256

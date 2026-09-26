@@ -221,9 +221,9 @@ test("the Capability generated allowlist rejects missing files, every extra exte
   assert.throws(() => assertGeneratedAllowlist(files, ["client", "core", "manual"], "fixture"), /directory allowlist drifted/u)
 })
 
-test("the IAM consumer pins the complete 0.5.0 owner artifact and generates only approved admission, Team and invitation operations", async () => {
-  const commit = "b720b6dc095b883237682102ca0a87ed6451a968"
-  const digest = "cddfec4cd3439d98f399254911232c447582a97e9b1d4c109139e68baaf030b9"
+test("the IAM consumer pins the complete 0.6.0 owner artifact and generates only approved admission, Team and invitation operations", async () => {
+  const commit = "a4c2b61467f1fc1772d6b6d8e98f081c090289fb"
+  const digest = "392ca0e49544c0ec6e0d2fa782c46c33c1847e2c350102e7ad3b8af43f858ced"
   const [manifestSource, vendor, config, lockfile, sdk, types] = await Promise.all([
     readFile(new URL("../contract/dependencies/iam-http.json", import.meta.url), "utf8"),
     readFile(new URL(`../contract/vendor/kokoro-iam/${commit}/iam.internal.v1.json`, import.meta.url)),
@@ -236,12 +236,12 @@ test("the IAM consumer pins the complete 0.5.0 owner artifact and generates only
   const manifest = JSON.parse(manifestSource)
   const owner = JSON.parse(vendor.toString("utf8"))
   assert.equal(sha256(vendor), digest)
-  assert.equal(owner.info.version, "0.5.0")
+  assert.equal(owner.info.version, "0.6.0")
   assert.ok(Object.keys(owner.paths).length > 1)
   assert.deepEqual(manifest.owner, {
     repository_path: "apps/kokoro-iam",
     repository_commit: commit,
-    contract_version: "0.5.0",
+    contract_version: "0.6.0",
     contract_path: "contract/openapi/iam.internal.v1.json",
     contract_sha256: digest,
   })
@@ -289,6 +289,7 @@ test("the IAM consumer pins the complete 0.5.0 owner artifact and generates only
   assert.doesNotMatch(`${sdk}\n${types}`, /getMetrics|healthz|readyz/u)
   assert.match(config, /POST \/internal\/v1\/session-authorizations\/verify/u)
   assert.doesNotMatch(config, /POST \/internal\/v1\/execution-authorizations\/verify/u)
+  assert.doesNotMatch(config, /POST \/internal\/v1\/platform-workload-tokens\/introspect/u)
   for (const resource of ["members", "invitations", "roles"]) {
     assert.match(config, new RegExp(`GET /internal/v1/tenants/\\{tenant_id\\}/${resource}`, "u"))
   }

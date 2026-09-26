@@ -3,7 +3,20 @@
 状态：2026-09-26
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。
 
-## W1E-IAM-E2-BFF-SOURCE-PIN 当前来源
+## W1E-IAM-0.6-BFF-PIN 当前来源
+
+IAM owner `a4c2b61467f1fc1772d6b6d8e98f081c090289fb` 的 internal OpenAPI `0.6.0` 原始 SHA-256 为
+`392ca0e49544c0ec6e0d2fa782c46c33c1847e2c350102e7ad3b8af43f858ced`。本仓完整只读 vendor、生成配置、manifest
+与 browser-private relay policy 来源 tuple 均重钉到此唯一 owner commit，旧 `0.5.0` vendor 删除。生成器仍只筛既有 session、Team、
+invitation 操作；新增 Platform workload introspection 与原有 E2 verifier 都不进入 BFF generated client 或浏览器 relay。
+relay policy 仍为 `2.1.0`，route/header/cookie/status 未变；派生 JSON SHA-256 为
+`8f7d4f4cb6fa0ec34d2cce8702d8882d3270a316a6cbdb2d8bdaccefb9c6b4a1`。本片不改 Product API、SQL/Redis、业务逻辑。
+IAM 0.6 ingress 契约与运行端点已在 IAM owner 发布；Platform owner 尚未消费该端点或完成原子 cutover，后续跨仓验证仍需独立验收。
+Node 22.22.2 本仓 `pnpm format:check && pnpm check` 已由 Root 独立复跑通过：IAM 生成链无 drift，contract/全量测试
+292 passed、1 既有 skip，最终 build 通过；Redocly 仅有既有 Library 无 2xx warning。Root 跨仓来源验证仍待
+IAM→BFF→Web 三方组合固定；本片未启动共享服务或触碰 Web 3310。
+
+## W1E-IAM-E2-BFF-SOURCE-PIN 历史来源
 
 IAM owner `b720b6dc095b883237682102ca0a87ed6451a968` 的 internal OpenAPI `0.5.0` 原始 SHA-256 为
 `cddfec4cd3439d98f399254911232c447582a97e9b1d4c109139e68baaf030b9`。BFF 已替换旧 vendor，固定生成配置/manifest 并重生
