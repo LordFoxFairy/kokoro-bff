@@ -1,6 +1,13 @@
 # kokoro-bff API contract policy
 
-## W1E-IAM-PERMISSION-CONSUMER：当前来源
+## W1E-IAM-E2-BFF-SOURCE-PIN：当前来源
+
+IAM owner `b720b6dc095b883237682102ca0a87ed6451a968` 的 internal OpenAPI `0.5.0` SHA-256 是
+`cddfec4cd3439d98f399254911232c447582a97e9b1d4c109139e68baaf030b9`。BFF 固定完整 owner vendor，但生成器只筛选既有
+session、Team、invitation 操作；IAM E2 `verifyExecutionAuthorization` 不进入 BFF generated client 或 browser-private relay route。
+relay policy 版本仍是 `2.1.0`，路径、方法、header、cookie、status、错误映射及 public Product OpenAPI 不变。
+
+## W1E-IAM-PERMISSION-CONSUMER：历史来源
 
 IAM owner commit 为 `5c9cecf714c87234bbc9558665b23e09afa6e9f6`，OpenAPI `0.4.0` SHA-256 为
 `05ff7ff712ce06571ca5e092fdaf234b9ee4d1b4978c54e0d54d2b50fe51dde2`。IAM 角色列表响应仅增加可选

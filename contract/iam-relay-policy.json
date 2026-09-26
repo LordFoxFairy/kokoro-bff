@@ -1,11 +1,11 @@
 {
   "version": "2.1.0",
-  "iamOwnerCommit": "5c9cecf714c87234bbc9558665b23e09afa6e9f6",
+  "iamOwnerCommit": "b720b6dc095b883237682102ca0a87ed6451a968",
   "iamAllowlistSha256": "f63dacfa8a7bcec3c56efb8ffb762a3f8bd82bb380eff40a1462db1e77d61ead",
   "iamSnapshotSha256": "b2eac1919e16fdc30a40bee0f3c4300b641bd8f674214aea7731bf10299559e1",
   "iamOpenapiPath": "contract/openapi/iam.internal.v1.json",
-  "iamOpenapiVersion": "0.4.0",
-  "iamOpenapiSha256": "05ff7ff712ce06571ca5e092fdaf234b9ee4d1b4978c54e0d54d2b50fe51dde2",
+  "iamOpenapiVersion": "0.5.0",
+  "iamOpenapiSha256": "cddfec4cd3439d98f399254911232c447582a97e9b1d4c109139e68baaf030b9",
   "routes": {
     "/.well-known/openid-configuration": [
       "GET"

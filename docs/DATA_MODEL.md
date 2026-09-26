@@ -1,6 +1,13 @@
 # kokoro-bff data model
 
-## W1E-IAM-PERMISSION-CONSUMER：数据边界不变
+## W1E-IAM-E2-BFF-SOURCE-PIN：当前数据边界
+
+IAM `b720b6dc095b883237682102ca0a87ed6451a968` 拥有 execution authorization 决策、审计及其数据生命周期。
+BFF 本片仅固定完整 OpenAPI 0.5.0 来源；生成 operation allowlist 不增加 E2 verifier，不调用新操作，
+不增加持久化事实或跨 owner SQL。
+`database/schema.sql`、事务、Redis、cache、receipt、outbox、AG-UI ledger 均不变。
+
+## W1E-IAM-PERMISSION-CONSUMER：数据边界不变（历史验收）
 
 IAM `5c9cecf714c87234bbc9558665b23e09afa6e9f6` 的新增 `platform:execute` 是 IAM 角色目录代码事实，
 不是 BFF 数据。BFF 仅更新版本固定的只读 client 与 relay 来源；`database/schema.sql`、SQL/Redis、事务、

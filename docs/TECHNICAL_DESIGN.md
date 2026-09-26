@@ -1,6 +1,14 @@
 # kokoro-bff 技术设计
 
-## W1E-IAM-PERMISSION-CONSUMER：IAM 当前来源
+## W1E-IAM-E2-BFF-SOURCE-PIN：IAM 当前来源
+
+IAM owner `b720b6dc095b883237682102ca0a87ed6451a968` 的 internal OpenAPI 0.5.0 SHA-256 为
+`cddfec4cd3439d98f399254911232c447582a97e9b1d4c109139e68baaf030b9`。BFF 沿用既有固定 vendor →
+`scripts/generate-iam-http-client.mjs` → generated client/manifest → TypeScript relay policy → 派生 JSON 单向链；旧 vendor 删除。
+IAM E2 `verifyExecutionAuthorization` 不进入 BFF 生成 operation allowlist 或 browser-private 准入路由。relay route/header/cookie/status
+保持上一版本，public Product API、BFF SQL/Redis、事务与 AG-UI 不变。
+
+## W1E-IAM-PERMISSION-CONSUMER：IAM 历史来源
 
 IAM owner `5c9cecf714c87234bbc9558665b23e09afa6e9f6` 的 OpenAPI SHA-256 为
 `05ff7ff712ce06571ca5e092fdaf234b9ee4d1b4978c54e0d54d2b50fe51dde2`。BFF 只从该固定机器契约生成

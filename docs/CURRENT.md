@@ -3,7 +3,16 @@
 状态：2026-09-26
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。
 
-## W1E-IAM-PERMISSION-CONSUMER 来源更新
+## W1E-IAM-E2-BFF-SOURCE-PIN 当前来源
+
+IAM owner `b720b6dc095b883237682102ca0a87ed6451a968` 的 internal OpenAPI `0.5.0` 原始 SHA-256 为
+`cddfec4cd3439d98f399254911232c447582a97e9b1d4c109139e68baaf030b9`。BFF 已替换旧 vendor，固定生成配置/manifest 并重生
+16 个 client 文件；生成 operation allowlist 保持原有 session、Team、invitation 集合，不生成或调用 IAM E2 verifier。
+browser-private relay policy 仍为 `2.1.0`，route/header/cookie/status 与前一 pin 完全一致，只更新来源 commit/version/digest；
+派生 JSON SHA-256 为 `ed476b63205c0eaf59106dc618c138df6110ef6240ce2be50b417fea8ec800e4`。
+public Product API、SQL/Redis、运行时业务逻辑均未变；Web 与 Root 后续按已发布 BFF commit 串行重钉。
+
+## W1E-IAM-PERMISSION-CONSUMER 来源更新（历史验收）
 
 当前 IAM owner 为 `5c9cecf714c87234bbc9558665b23e09afa6e9f6`；internal OpenAPI `0.4.0` 的 SHA-256 为
 `05ff7ff712ce06571ca5e092fdaf234b9ee4d1b4978c54e0d54d2b50fe51dde2`。唯一 wire 变化是角色列表响应增加
