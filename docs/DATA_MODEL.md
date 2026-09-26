@@ -1,6 +1,12 @@
 # kokoro-bff data model
 
-## W1D-RELAY-PIN-BFF：数据边界不变
+## W1E-IAM-PERMISSION-CONSUMER：数据边界不变
+
+IAM `5c9cecf714c87234bbc9558665b23e09afa6e9f6` 的新增 `platform:execute` 是 IAM 角色目录代码事实，
+不是 BFF 数据。BFF 仅更新版本固定的只读 client 与 relay 来源；`database/schema.sql`、SQL/Redis、事务、
+cache、receipt、outbox、AG-UI ledger 及 owner 数据生命周期均不变。
+
+## W1D-RELAY-PIN-BFF：数据边界不变（历史验收）
 
 IAM owner `6a55ffb4c22f0b155ddb83157735c0ace766701d` 的固定传输来源字节与上一 pin 相同。
 本片只更新 BFF relay policy、generated IAM client 的 commit provenance 与 vendor 路径。

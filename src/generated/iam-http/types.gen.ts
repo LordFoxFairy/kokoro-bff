@@ -1229,6 +1229,7 @@ export type ListTenantRolesResponses = {
         ac?: Array<"create" | "read" | "update">
         tenant?: Array<"read">
         audit?: Array<"read">
+        platform?: Array<"execute">
       }
     }>
     meta: {

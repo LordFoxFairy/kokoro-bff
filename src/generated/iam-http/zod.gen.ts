@@ -280,6 +280,10 @@ export const zListTenantRolesResponse = z.object({
           .array(z.enum(["read"]))
           .min(1)
           .optional(),
+        platform: z
+          .array(z.enum(["execute"]))
+          .min(1)
+          .optional(),
       }),
     }),
   ),

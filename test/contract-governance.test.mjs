@@ -222,8 +222,8 @@ test("the Capability generated allowlist rejects missing files, every extra exte
 })
 
 test("the IAM consumer pins the complete 0.4.0 owner artifact and generates only approved admission, Team and invitation operations", async () => {
-  const commit = "6a55ffb4c22f0b155ddb83157735c0ace766701d"
-  const digest = "a18d57172df841cb2f55aa845a3eeb519ddb5abc8bea1c2be74fbb7e0fb62416"
+  const commit = "5c9cecf714c87234bbc9558665b23e09afa6e9f6"
+  const digest = "05ff7ff712ce06571ca5e092fdaf234b9ee4d1b4978c54e0d54d2b50fe51dde2"
   const [manifestSource, vendor, config, lockfile, sdk, types] = await Promise.all([
     readFile(new URL("../contract/dependencies/iam-http.json", import.meta.url), "utf8"),
     readFile(new URL(`../contract/vendor/kokoro-iam/${commit}/iam.internal.v1.json`, import.meta.url)),

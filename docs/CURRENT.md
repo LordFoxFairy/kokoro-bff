@@ -3,7 +3,16 @@
 状态：2026-09-26
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。
 
-## W1D-RELAY-PIN-BFF 来源更新
+## W1E-IAM-PERMISSION-CONSUMER 来源更新
+
+当前 IAM owner 为 `5c9cecf714c87234bbc9558665b23e09afa6e9f6`；internal OpenAPI `0.4.0` 的 SHA-256 为
+`05ff7ff712ce06571ca5e092fdaf234b9ee4d1b4978c54e0d54d2b50fe51dde2`。唯一 wire 变化是角色列表响应增加
+可选 `platform:["execute"]`；BFF 已重钉 owner 原始字节并重新生成 16 个 client 文件，其中只读角色类型与 Zod schema 有变化。
+browser-private relay `2.1.0` 的 route/header/cookie/status 不变，policy 仅更新 IAM 来源 commit/digest，派生 JSON SHA-256 为
+`7bb829c988908804d0c3cac0cb023a6c247af6b0b4a55e8baf90b39d795f7118`。BFF 不解释或授予该权限；IAM
+execution authorization endpoint 与 Platform consumer 仍待后续切片。
+
+## W1D-RELAY-PIN-BFF 来源更新（历史验收）
 
 IAM owner 已发布 `6a55ffb4c22f0b155ddb83157735c0ace766701d`；固定 allowlist、Better Auth 1.7.3 snapshot 与
 internal OpenAPI 0.4.0 的 SHA-256 分别为 `f63dacfa8a7bcec3c56efb8ffb762a3f8bd82bb380eff40a1462db1e77d61ead`、

@@ -1,6 +1,13 @@
 # kokoro-bff API contract policy
 
-## W1D-RELAY-PIN-BFF：来源变更，不变更 wire 契约
+## W1E-IAM-PERMISSION-CONSUMER：当前来源
+
+IAM owner commit 为 `5c9cecf714c87234bbc9558665b23e09afa6e9f6`，OpenAPI `0.4.0` SHA-256 为
+`05ff7ff712ce06571ca5e092fdaf234b9ee4d1b4978c54e0d54d2b50fe51dde2`。IAM 角色列表响应仅增加可选
+`platform:["execute"]`，BFF 生成 client 消费其结构而不进行权限裁决；relay `2.1.0` 的 route/method/header/cookie/status
+和 public Product OpenAPI 均不变，BFF policy provenance/派生 JSON 随 owner pin 更新。
+
+## W1D-RELAY-PIN-BFF：来源变更，不变更 wire 契约（历史验收）
 
 IAM owner commit 更新为 `6a55ffb4c22f0b155ddb83157735c0ace766701d`；固定 allowlist、Better Auth snapshot 与
 internal OpenAPI 0.4.0 的 SHA-256 与上一 pin 完全相同。BFF `2.1.0` relay policy 的 `iamOwnerCommit`、

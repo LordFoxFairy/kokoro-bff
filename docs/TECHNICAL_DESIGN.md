@@ -1,6 +1,13 @@
 # kokoro-bff 技术设计
 
-## W1D-RELAY-PIN-BFF：IAM 来源重钉
+## W1E-IAM-PERMISSION-CONSUMER：IAM 当前来源
+
+IAM owner `5c9cecf714c87234bbc9558665b23e09afa6e9f6` 的 OpenAPI SHA-256 为
+`05ff7ff712ce06571ca5e092fdaf234b9ee4d1b4978c54e0d54d2b50fe51dde2`。BFF 只从该固定机器契约生成
+角色列表中新增的可选 `platform:["execute"]` 类型/校验；不在 BFF 复制 IAM 权限判断。relay policy 保持原有准入形状，
+仅刷新来源 provenance。没有 BFF SQL、事务、Redis、Product API 或 AG-UI 变化。
+
+## W1D-RELAY-PIN-BFF：IAM 来源重钉（历史验收）
 
 当前 IAM owner 为 `6a55ffb4c22f0b155ddb83157735c0ace766701d`。其 ingress allowlist、Better Auth 1.7.3 snapshot、internal OpenAPI 0.4.0 的固定 blob SHA-256 分别为
 `f63dacfa8a7bcec3c56efb8ffb762a3f8bd82bb380eff40a1462db1e77d61ead`、

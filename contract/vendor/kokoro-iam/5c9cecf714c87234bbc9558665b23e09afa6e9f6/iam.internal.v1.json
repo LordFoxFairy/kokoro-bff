@@ -4784,6 +4784,16 @@
                                     "read"
                                   ]
                                 }
+                              },
+                              "platform": {
+                                "minItems": 1,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "execute"
+                                  ]
+                                }
                               }
                             },
                             "additionalProperties": false
