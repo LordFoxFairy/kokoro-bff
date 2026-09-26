@@ -1,7 +1,22 @@
 # kokoro-bff 当前实现
 
-状态：2026-09-25
+状态：2026-09-26
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。
+
+## W1D-RELAY-PIN-BFF 来源更新
+
+IAM owner 已发布 `6a55ffb4c22f0b155ddb83157735c0ace766701d`；固定 allowlist、Better Auth 1.7.3 snapshot 与
+internal OpenAPI 0.4.0 的 SHA-256 分别为 `f63dacfa8a7bcec3c56efb8ffb762a3f8bd82bb380eff40a1462db1e77d61ead`、
+`b2eac1919e16fdc30a40bee0f3c4300b641bd8f674214aea7731bf10299559e1`、
+`a18d57172df841cb2f55aa845a3eeb519ddb5abc8bea1c2be74fbb7e0fb62416`，与先前 pin 完全同字节。
+BFF 唯一手写 policy 仅重钉 `iamOwnerCommit`，派生 JSON SHA-256 变为
+`b18a559d162509c3029908b2e1c77ee7e59ed6af61b82e18be6b2e7669a0ef0c`；原 commit 替换回去时的 digest 仍为
+`f7a3a44d9839a0e54faffc8cf6b7ceb601d0d6b647637faf10e9070c927d93e7`，证明 route/header/cookie/status 等字段未漂移。
+IAM OpenAPI vendor 已按新 commit 路径迁移，旧路径删除；配置与 generated manifest 同 pin，生成的 16 个 client 文件原始字节无变化。
+本片不改 public Product API、SQL/Schema、Redis、状态机或 HTTP 行为。Node22 聚焦测试先观察 3 RED（policy commit/新 vendor/manifest），
+生成后 22/22 GREEN；`pnpm format:check && pnpm check` 通过，contract 28/28、全量 291 pass/1 既有 skip、build 通过，IAM client
+drift gate 为 16 文件两次字节相同。无隔离 IAM owner URL，因此未运行需外部进程的 `test:iam-relay:integration`；Web 消费与 Root 固定
+SHA/跨仓验收待后续串行完成。下面 R5 段落保留当时的来源和历史验收记录，不是当前 pin。
 
 ## R5-INVITE-BFF-RELAY 当前实现与来源重钉
 

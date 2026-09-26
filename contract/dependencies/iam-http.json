@@ -3,7 +3,7 @@
   "status": "generated",
   "owner": {
     "repository_path": "apps/kokoro-iam",
-    "repository_commit": "7215223b2ed27a0d5217f3bbaaabce547006d3bb",
+    "repository_commit": "6a55ffb4c22f0b155ddb83157735c0ace766701d",
     "contract_version": "0.4.0",
     "contract_path": "contract/openapi/iam.internal.v1.json",
     "contract_sha256": "a18d57172df841cb2f55aa845a3eeb519ddb5abc8bea1c2be74fbb7e0fb62416"
@@ -12,7 +12,7 @@
     "package": "@hey-api/openapi-ts",
     "version": "0.99.0",
     "config_path": "openapi-ts.iam.config.ts",
-    "config_sha256": "e71ea66cbd8a9f37e5c0761507995fee864cb54293dea7408e6041351a441860"
+    "config_sha256": "4086dc677c4adaa5142f918fb2e3f9d42c01b824d8953aaaf7a2a2b88e49ede7"
   },
   "runtime": {
     "node": "22.22.2",

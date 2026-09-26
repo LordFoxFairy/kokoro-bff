@@ -1,8 +1,19 @@
 # kokoro-bff 技术设计
 
-## R5-INVITE-BFF-RELAY：邀请邮件的精确 browser-private transport（设计门，尚未实现）
+## W1D-RELAY-PIN-BFF：IAM 来源重钉
 
-**当前态（BFF main `da03b76e450018ffa00f812da461569a00a377b3`）：** `/iam` 在
+当前 IAM owner 为 `6a55ffb4c22f0b155ddb83157735c0ace766701d`。其 ingress allowlist、Better Auth 1.7.3 snapshot、internal OpenAPI 0.4.0 的固定 blob SHA-256 分别为
+`f63dacfa8a7bcec3c56efb8ffb762a3f8bd82bb380eff40a1462db1e77d61ead`、
+`b2eac1919e16fdc30a40bee0f3c4300b641bd8f674214aea7731bf10299559e1`、
+`a18d57172df841cb2f55aa845a3eeb519ddb5abc8bea1c2be74fbb7e0fb62416`，与上一 pin 字节相同。
+BFF 只更新 browser-private relay policy 与 IAM generated client 的来源身份：TS policy 是唯一手写准入事实，JSON 由脚本派生；
+OpenAPI vendor 移至新 commit 路径，manifest 与生成配置固定同一 commit。旧 vendor 路径删除，不保留双轨。
+route/header/cookie/status、public Product API、业务状态机、SQL/Redis、事务及失败恢复均不变。
+本片由聚焦来源测试、双次确定性生成、`pnpm format:check && pnpm check` 验证；跨仓 Web 消费与 Root pin 串行后续验收。
+
+## R5-INVITE-BFF-RELAY：邀请邮件的精确 browser-private transport（历史设计门，已实现）
+
+**当时基线（BFF main `da03b76e450018ffa00f812da461569a00a377b3`）：** `/iam` 在
 `src/bootstrap/server.ts` 中先于普通 Product admission 分发，现有 `iamRelayRoute` 只匹配
 `IAM_RELAY_POLICY.routes` 中的 Better Auth 静态路径。policy `2.0.0` 未准入 `/sign-up/email`，也不能匹配 IAM Nest
 Controller 的三条动态路径。IAM main `7215223b2ed27a0d5217f3bbaaabce547006d3bb` 已发布 internal OpenAPI `0.4.0`
@@ -83,7 +94,7 @@ policy 目标 `2.1.0` 继续固定 IAM allowlist SHA-256
 `b2eac1919e16fdc30a40bee0f3c4300b641bd8f674214aea7731bf10299559e1`，并新增 IAM 最终 OpenAPI version/digest 与三条有序
 dynamic operation（template/method/operationId/owner/visibility/stability/idempotency）来源。BFF vendor、
 `contract/dependencies/iam-http.json`、生成配置及 generated client 后续从 IAM commit
-`7215223b2ed27a0d5217f3bbaaabce547006d3bb` 的 0.4.0 原始字节重生，只新增三条
+`6a55ffb4c22f0b155ddb83157735c0ace766701d` 的 0.4.0 原始字节重生，只新增三条
 issuer operation；`/sign-up/email` 仍来自静态 allowlist/snapshot，不混入 Nest generated client。
 
 后续 TS 事实源与派生 JSON 的新增字段形状固定如下；现有 `requestHeaders`、`responseHeaders`、Cookie 与预算字段原样保留，
@@ -92,7 +103,7 @@ issuer operation；`/sign-up/email` 仍来自静态 allowlist/snapshot，不混�
 ```json
 {
   "version": "2.1.0",
-  "iamOwnerCommit": "7215223b2ed27a0d5217f3bbaaabce547006d3bb",
+  "iamOwnerCommit": "6a55ffb4c22f0b155ddb83157735c0ace766701d",
   "iamAllowlistSha256": "f63dacfa8a7bcec3c56efb8ffb762a3f8bd82bb380eff40a1462db1e77d61ead",
   "iamSnapshotSha256": "b2eac1919e16fdc30a40bee0f3c4300b641bd8f674214aea7731bf10299559e1",
   "iamOpenapiPath": "contract/openapi/iam.internal.v1.json",

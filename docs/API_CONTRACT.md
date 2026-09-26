@@ -1,8 +1,16 @@
 # kokoro-bff API contract policy
 
+## W1D-RELAY-PIN-BFF：来源变更，不变更 wire 契约
+
+IAM owner commit 更新为 `6a55ffb4c22f0b155ddb83157735c0ace766701d`；固定 allowlist、Better Auth snapshot 与
+internal OpenAPI 0.4.0 的 SHA-256 与上一 pin 完全相同。BFF `2.1.0` relay policy 的 `iamOwnerCommit`、
+IAM vendor 目录、generated client manifest 与生成配置同步重钉；policy JSON 仍由 TS 事实源生成。
+静态/动态 route、method、header、cookie、status、错误映射和幂等语义不变；public Product OpenAPI 无变化。
+Web 必须在 BFF 发布后消费新的 policy digest，不复制 IAM contract 或手写 generated client。
+
 ## R5-INVITE-BFF-RELAY：邀请 interaction 的 browser-private 契约
 
-**当前态：** BFF 工作树 policy `2.1.0` 已把 IAM owner 固定为
+**R5 当时状态：** BFF 工作树 policy `2.1.0` 已把 IAM owner 固定为
 `7215223b2ed27a0d5217f3bbaaabce547006d3bb`、OpenAPI `0.4.0`/SHA-256
 `a18d57172df841cb2f55aa845a3eeb519ddb5abc8bea1c2be74fbb7e0fb62416`，并实现精确静态 sign-up、三条参数化邀请 relay 与
 `/iam/interactions/invitation?id=<UUID>` 邮件回跳。三条 invitation operation 的 owner/visibility/stability/idempotency、vendored
@@ -84,7 +92,7 @@ Root verifier 从固定 IAM/BFF commit blob 复核静态子集、三条动态模
 
 派生 JSON 的字段 contract 为：顶层新增 `iamOpenapiPath="contract/openapi/iam.internal.v1.json"`、
 `iamOpenapiVersion="0.4.0"`、`iamOpenapiSha256="a18d57172df841cb2f55aa845a3eeb519ddb5abc8bea1c2be74fbb7e0fb62416"`，
-`iamOwnerCommit="7215223b2ed27a0d5217f3bbaaabce547006d3bb"`；`invitationRoutes` 是三项有序数组，每项恰有
+`iamOwnerCommit="6a55ffb4c22f0b155ddb83157735c0ace766701d"`；`invitationRoutes` 是三项有序数组，每项恰有
 `template,methods,operationId,owner,visibility,stability,idempotency`，相对 template 分别以
 `/v1/.../context|accept|reject` 结尾，methods 分别为 `["GET"],["POST"],["POST"]`，owner=`kokoro-iam`、
 visibility=`browser-private`、stability=`stable`、idempotency=`none`。`invitationSignUp` 固定静态 route/method、
