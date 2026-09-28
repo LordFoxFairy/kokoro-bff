@@ -1,21 +1,27 @@
 # kokoro-bff API contract policy
 
-## W2-F2-S5 Product Artifact 公开契约（2026-09-28；文档目标，机器源尚未修改）
+## W2-F2-S5 Product Artifact 公开契约（2026-09-28；单仓已验，跨仓待验）
 
-**当前机器事实。** `contract/openapi/v1/openapi.yaml` 的 `listLibrary` 只允许必填 `kind=file`；
-`GET /v1/library/files/{asset_id}/content` 是普通个人 Asset 下载。当前没有 Artifact Library 的
-200 schema、Artifact 单项/下载 operation 或 share-bound Artifact operation。BFF Agent Chat adapter
-仍把 `delivery` 映射为 hash-only；BFF Storage manifest 仍固定 `2d87e26`，不能调用 F2 Final Artifact RPC。
-以下为下一代码门须写入唯一 OpenAPI/直接测试的**目标**，不是已发布接口。
+**当前机器事实。** 第一片已固定 Agent event-protocol 与 Storage F2 Proto，持久投影
+`bff_conversation_artifact`；第二片在唯一 OpenAPI 与 runtime 发布私有 Artifact 列表、
+单项和原字节下载。Root 已独立验证 Node22 完整静态/默认门与隔离真 PostgreSQL/Redis
+integration 44/44、schema 6/6；真 Storage/ObjectStore 与三仓组合仍待验，
+share-bound Artifact operation 尚无机器入口。下表为当前 Product wire，单仓通过不冒充用户可见闭环。
 
 | 目标 public wire                                                    | 明确语义                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `GET /v1/library?kind=artifact`（保留 `listLibrary`）               | `kind` 仍必填，仅允许单个 `file` 或 `artifact`；省略、重复、未知及 `all` 均 `400 invalid_library_kind`，不改变 `kind=file` 的个人文件 200。`limit` 缺省 50、范围 1–100；单个 opaque `cursor` 长度 1–4096。每页重新 service+Bearer/IAM admission、绑定 tenant/subject/kind/limit/位置；不是权限凭据或跨更新快照。                                                                                                                                                                                                                                                         |
 | Artifact 200 分支                                                   | 沿现有 `{data:{items,next_cursor},meta:{request_id}}` 运行 envelope（`x-request-id` 仍必带；header-only 目标是既有全仓偏差，另切裁决）。`items[]` 是判别 `kind:"artifact"`，含 `conversation_id`、`artifact_id`、`artifact_kind` 八值、`title`、`filename`、`mime_type`、十进制字符串 `size_bytes`、小写 64hex `content_sha256`、`source_run_id`、UTC `delivered_at`；`asset_id` 可作为已校验 owner ID 输出但不作为单项路径或权限。无 hash-only selector、对象 key、临时 URL 或个人文件冒名。空页为 `[]`/`null`；Storage 最终状态变化可能造成稀疏页，不伪装为 snapshot。 |
-| `GET /v1/library/artifacts/{conversation_id}/{artifact_id}`         | 建议 `operationId: getLibraryArtifact`，现有 `storage.library.read` 分类 metadata 不变，不新增 IAM 权限设计。每次按二元组先查 BFF 关联及本人 active Conversation，再以受信 tenant+conversation scope 调 Storage `GetFinalArtifact`；返回同一 Artifact item。单知 artifact ID、相同 digest、其他用户会话或同团队均不开放。                                                                                                                                                                                                                                                |
-| `GET /v1/library/artifacts/{conversation_id}/{artifact_id}/content` | 建议 `operationId: downloadLibraryArtifact`，200 为经最终 metadata/短期引用/对象字节校验后的原二进制，不套 JSON、不 302、不暴露签名 URL。响应 `Content-Type/Length/Disposition`、`Cache-Control:no-store`、`Referrer-Policy:no-referrer`、`X-Content-Type-Options:nosniff`、`x-request-id`；在发头前完成受界限字节长度与 SHA-256 核验，不出部分 200。GET 不要求 public 幂等键；Storage 签发所需 command receipt 属 Storage，不写 BFF Product receipt。                                                                                                                   |
+| `GET /v1/library/artifacts/{conversation_id}/{artifact_id}`         | 固定 `operationId: getLibraryArtifact`，现有 `storage.library.read` 分类 metadata 不变，不新增 IAM 权限设计。每次按二元组先查 BFF 关联及本人 active Conversation，再以受信 tenant+conversation scope 调 Storage `GetFinalArtifact`；返回同一 Artifact item。单知 artifact ID、相同 digest、其他用户会话或同团队均不开放。                                                                                                                                                                                                                                                |
+| `GET /v1/library/artifacts/{conversation_id}/{artifact_id}/content` | 固定 `operationId: downloadLibraryArtifact`，200 为经最终 metadata/短期引用/对象字节校验后的原二进制，不套 JSON、不 302、不暴露签名 URL。响应 `Content-Type/Length/Disposition`、`Cache-Control:no-store`、`Referrer-Policy:no-referrer`、`X-Content-Type-Options:nosniff`、`x-request-id`；在发头前完成受界限字节长度与 SHA-256 核验，不出部分 200。GET 不要求 public 幂等键；Storage 签发所需 command receipt 属 Storage，不写 BFF Product receipt。                                                                                                                   |
 | 显式分享                                                            | 首个 S5 代码切片只发布本人私有 Artifact Library，不混入别人分享。后续独立分享切片只用专门 `/v1/shared/{shareId}/artifacts/{artifactId}` 与 `/content`，沿既有 Share service-only 边界实时核验 share 的 tenant/conversation、未撤销/未过期、active Conversation 与关联；不把 share ID 当一般 Library cursor 或本人 ACL 替代，不从现有 `GET /v1/shared/{shareId}` 快照隐式附加下载资格。                                                                                                                                         |
-| 错误                                                                | 非法 selector/query/cursor 为稳定 400；无本人权限、他人租户/会话、未关联、Storage 不可见/非 FINAL/CLEAN 统一 404，不泄露存在性；认证/准入保持既有 401/403/429/503；Storage 超时/不可达 503，owner 响应、引用或 bytes 不可信 502。列表 owner 故障不是空页。错误使用现有稳定 `{error:{code,message,retryable,...}}` 与 `x-request-id`，不含 owner 原文、内部 URL/secret。具体新 code 名称随 OpenAPI 与错误测试同片固定。                                                                                                                                                   |
+| 错误                                                                | 非法 selector/query/cursor 为稳定 400；同固定租户他人 Conversation、错二元组、未关联、Storage 不可见/非 FINAL/CLEAN 统一 404，不泄露存在性。固定 Product tenant 外的受信 IAM 身份仍在既有 admission 先返回 `403 product_tenant_forbidden`，零 BFF SQL/Storage 调用；认证/准入其余 401/403/429/503 保持。Storage 超时/不可达 503，owner 响应、引用或 bytes 不可信 502；列表 owner 故障不是空页。错误不含 owner 原文、内部 URL/secret。 |
+
+`LibraryListResponse.data` 在页级 `oneOf`：空页、至少一项且全为 `kind=file`、至少一项且
+全为 `kind=artifact` 三者互斥；不允许同页混排，`next_cursor` 在空页也可非空以继续跳过
+当前不可见的关联。Artifact `/content` 每进程最多同时保留两个下载 spool 名额；第三个请求在
+ObjectStore GET 前返回稳定 `503 artifact_download_busy`，请求完成、失败或客户端断开后释放。
+这是进程内背压而非新增跨进程租户配额或持久权限事实。
 
 上游固定源为 Agent `486adb1539dd8a06ca90684e66f91be031aa70cf` event-protocol
 aggregate `cae30a40d712bce39ef33ef2dc857af4f5b69c6afd1956fda065ec77379ae02e`；

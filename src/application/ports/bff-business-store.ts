@@ -7,8 +7,26 @@ import type { AgentDispatchOutboxRepository } from "./agent-dispatch-outbox-repo
 import type { AgentCancellationOutboxRepository } from "./agent-cancellation-outbox-repository.js"
 import type { SchedulerDispatchReceiptRepository } from "./scheduler-dispatch-receipt-repository.js"
 
+export type ArtifactAssociation = Readonly<{
+  conversationId: string
+  artifactId: string
+  runId: string
+  sourceAssetId: string
+  sourceArtifactKind: "document" | "code" | "image" | "audio" | "video" | "data" | "archive" | "other"
+  sourceContentSha256: string
+  deliveredAt: string
+}>
+
+export type ArtifactPosition = Readonly<{ deliveredAt: string; conversationId: string; artifactId: string }>
+
+export interface ArtifactLibraryRepository {
+  listCandidates(tenantId: string, subjectId: string, position: ArtifactPosition | null, limit: number): Promise<readonly ArtifactAssociation[]>
+  findCandidate(tenantId: string, subjectId: string, conversationId: string, artifactId: string): Promise<ArtifactAssociation | null>
+}
+
 /** Runtime port consumed by BFF routes; PostgreSQL is one infrastructure implementation. */
 export interface BffBusinessStore extends IdempotencyRepository {
+  readonly artifactLibrary?: ArtifactLibraryRepository
   readonly services: BffApplicationServices
   readonly agUi: AgUiProjectionService
   /** Durable source-consumer control plane exposed by the live store. */

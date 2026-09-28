@@ -27,7 +27,7 @@ test("public personal upload declares one bounded file, stable errors and no int
     "'503':",
   ])
     assert.ok(operation.includes(marker), marker)
-  const shape = source.split("    PersonalFileUploadResponse:")[1]?.split("    LibraryFileListResponse:")[0] ?? ""
+  const shape = source.split("    PersonalFileUploadResponse:")[1]?.split("    LibraryFileItem:")[0] ?? ""
   for (const marker of ["kind", "enum: [file]", "asset_id", "filename", "mime_type", "size_bytes", "content_sha256", "scan_state"])
     assert.ok(shape.includes(marker), marker)
   assert.doesNotMatch(shape, /upload_id|download_url|created_at|artifact_id/u)

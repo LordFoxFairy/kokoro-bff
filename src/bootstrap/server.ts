@@ -2,6 +2,8 @@ import { projectResourceListRoute } from "../http/routes/project-resource-list.j
 import { libraryFileListRoute } from "../http/routes/library-file-list.js"
 import { personalFileUploadRoute } from "../http/routes/personal-file-upload.js"
 import { personalFileDownloadRoute } from "../http/routes/personal-file-download.js"
+import { libraryArtifactRoute } from "../http/routes/library-artifact.js"
+import { libraryArtifactDownloadRoute } from "../http/routes/library-artifact-download.js"
 import { projectResourceRoute } from "../http/routes/project-resource.js"
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http"
 
@@ -226,7 +228,15 @@ async function handle(
     return
   }
   if (composition.routeHandler === undefined && method === "GET" && businessPath.length === 1 && businessPath[0] === "library") {
-    await libraryFileListRoute(request, response, config, context)
+    await libraryFileListRoute(request, response, config, context, undefined, composition.businessStore?.artifactLibrary)
+    return
+  }
+  if (composition.routeHandler === undefined && method === "GET" && businessPath.length === 4 && businessPath[0] === "library" && businessPath[1] === "artifacts") {
+    await libraryArtifactRoute(request, response, config, context, composition.businessStore?.artifactLibrary, businessPath[2] ?? "", businessPath[3] ?? "")
+    return
+  }
+  if (composition.routeHandler === undefined && method === "GET" && businessPath.length === 5 && businessPath[0] === "library" && businessPath[1] === "artifacts" && businessPath[4] === "content") {
+    await libraryArtifactDownloadRoute(request, response, config, context, composition.businessStore?.artifactLibrary, businessPath[2] ?? "", businessPath[3] ?? "")
     return
   }
   if (composition.routeHandler === undefined && method === "GET" && businessPath.length === 4 && businessPath[0] === "library" && businessPath[1] === "files" && businessPath[3] === "content") {

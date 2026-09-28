@@ -21,6 +21,8 @@ import type { AgentCancellationOutboxRepository } from "../../application/ports/
 import { Sha256StableIdGenerator } from "../identifiers/scheduled-task-outbox-id.js"
 import { PostgresSchedulerDispatchReceiptRepository } from "./scheduler-dispatch-receipt-repository.js"
 import type { SchedulerDispatchReceiptRepository } from "../../application/ports/scheduler-dispatch-receipt-repository.js"
+import type { ArtifactLibraryRepository } from "../../application/ports/bff-business-store.js"
+import { PostgresConversationArtifactLibrary } from "./conversation-artifact-library.js"
 
 export { PENDING_RECEIPT_STATUS }
 export type { PersistentReceipt, ReceiptClaim } from "../../application/ports/idempotency-repository.js"
@@ -38,6 +40,7 @@ export class PostgresBffRepositories {
   public readonly agentDispatchOutbox: AgentDispatchOutboxRepository
   public readonly agentCancellationOutbox: AgentCancellationOutboxRepository
   public readonly schedulerDispatchReceipts: SchedulerDispatchReceiptRepository
+  public readonly artifactLibrary: ArtifactLibraryRepository
 
   public constructor(postgresUrl: string, redisUrl: string) {
     this.database = new PostgresBffDatabase(postgresUrl, redisUrl)
@@ -53,6 +56,7 @@ export class PostgresBffRepositories {
     this.agentDispatchOutbox = agentDispatchOutbox
     this.agentCancellationOutbox = agentCancellationOutbox
     this.schedulerDispatchReceipts = new PostgresSchedulerDispatchReceiptRepository(this.database.pool)
+    this.artifactLibrary = new PostgresConversationArtifactLibrary(this.database)
     this.services = new BffApplicationServices(this.projects, this.scheduled, chat, publicShares, agentDispatchOutbox, new Sha256StableIdGenerator())
     this.agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(this.database))
     this.agUiConsumers = new PostgresAgUiConsumerRepository(this.database)

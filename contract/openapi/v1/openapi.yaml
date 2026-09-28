@@ -2677,13 +2677,13 @@ paths:
       x-kokoro-stability: beta
       x-kokoro-idempotency: none
       x-kokoro-permission: storage.library.read
-      summary: List personal library files
-      description: The first Library slice lists only the admitted subject's CLEAN personal ASSET files. Agent Artifacts are a distinct future kind. A kind is required; no implicit file default exists. Cursor is an opaque continuation, never authorization.
+      summary: List private library files or delivered Artifacts
+      description: A required kind selects either the admitted subject's CLEAN personal ASSET files or FINAL CLEAN Artifacts linked to their active Conversations. Artifact pages revalidate Storage metadata and bind the opaque cursor to kind, tenant, subject and limit; a cursor never grants access.
       parameters:
         - name: kind
           in: query
           required: true
-          schema: { type: string, enum: [file] }
+          schema: { type: string, enum: [file, artifact] }
         - name: limit
           in: query
           schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
@@ -2692,7 +2692,7 @@ paths:
           schema: { type: string, minLength: 1, maxLength: 4096 }
       responses:
         '200':
-          description: Bounded page of current subject's personal CLEAN ASSET files
+          description: Bounded private file or Artifact page, selected by kind
           headers:
             x-request-id:
               schema: { type: string }
@@ -2702,7 +2702,7 @@ paths:
               description: Private uncached page
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/LibraryFileListResponse' }
+              schema: { $ref: '#/components/schemas/LibraryListResponse' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '502':
@@ -2842,6 +2842,109 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /v1/library/artifacts/{conversation_id}/{artifact_id}:
+    get:
+      tags: [Library]
+      operationId: getLibraryArtifact
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: storage.library.read
+      summary: Read one delivered Artifact from the current subject's active Conversation
+      parameters:
+        - name: conversation_id
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 191 }
+        - name: artifact_id
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 191 }
+      responses:
+        '200':
+          description: Current FINAL CLEAN Artifact metadata after BFF owner and Storage revalidation
+          headers:
+            x-request-id:
+              schema: { type: string }
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LibraryArtifactResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '502': { $ref: '#/components/responses/BadGateway' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /v1/library/artifacts/{conversation_id}/{artifact_id}/content:
+    get:
+      tags: [Library]
+      operationId: downloadLibraryArtifact
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: storage.library.read
+      summary: Download the original verified bytes of one private delivered Artifact
+      description: The BFF admits at most two concurrent private Artifact spools per process. A third request fails before ObjectStore fetch with 503 artifact_download_busy; a slot is held through response completion or cancellation and then released.
+      parameters:
+        - name: conversation_id
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 191 }
+        - name: artifact_id
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 191 }
+      responses:
+        '200':
+          description: Complete original bytes, verified before headers and bounded to 1 GiB
+          headers:
+            x-request-id:
+              schema: { type: string }
+            Content-Type:
+              schema: { type: string }
+            Content-Length:
+              schema: { type: integer, minimum: 0, maximum: 1073741824 }
+            Content-Disposition:
+              schema: { type: string }
+            Cache-Control:
+              schema: { type: string, const: no-store }
+            Referrer-Policy:
+              schema: { type: string, const: no-referrer }
+            X-Content-Type-Options:
+              schema: { type: string, const: nosniff }
+          content:
+            '*/*':
+              schema: { type: string, format: binary }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '502': { $ref: '#/components/responses/BadGateway' }
+        '503':
+          description: Storage unavailable or both Artifact spool slots busy (artifact_download_busy)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
   /v1/billing/plans:
     get:
       tags: [Billing]
@@ -3226,33 +3329,85 @@ components:
                 content_sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
                 scan_state: { type: string, enum: [clean] }
         meta: { $ref: '#/components/schemas/RequestMeta' }
-    LibraryFileListResponse:
+    LibraryFileItem:
+      type: object
+      additionalProperties: false
+      required: [kind, asset_id, filename, mime_type, size_bytes, content_sha256, scan_state, created_at]
+      properties:
+        kind: { type: string, enum: [file] }
+        asset_id: { type: string, minLength: 1, maxLength: 191 }
+        filename: { type: string, minLength: 1, maxLength: 255 }
+        mime_type: { type: string, minLength: 1, maxLength: 191 }
+        size_bytes: { type: string, pattern: '^(0|[1-9][0-9]*)$' }
+        content_sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+        scan_state: { type: string, enum: [clean] }
+        created_at: { type: string, format: date-time }
+    LibraryArtifactItem:
+      type: object
+      additionalProperties: false
+      required: [kind, conversation_id, artifact_id, asset_id, artifact_kind, title, filename, mime_type, size_bytes, content_sha256, source_run_id, delivered_at]
+      properties:
+        kind: { type: string, enum: [artifact] }
+        conversation_id: { type: string, minLength: 1, maxLength: 191 }
+        artifact_id: { type: string, minLength: 1, maxLength: 191 }
+        asset_id: { type: string, minLength: 1, maxLength: 191 }
+        artifact_kind: { type: string, enum: [document, code, image, audio, video, data, archive, other] }
+        title: { type: string, minLength: 1, maxLength: 200 }
+        filename: { type: string, minLength: 1, maxLength: 255 }
+        mime_type: { type: string, minLength: 1, maxLength: 191 }
+        size_bytes: { type: string, pattern: '^(0|[1-9][0-9]*)$' }
+        content_sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+        source_run_id: { type: string, minLength: 1, maxLength: 191 }
+        delivered_at: { type: string, format: date-time }
+    LibraryArtifactResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/LibraryArtifactItem' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    LibraryEmptyPage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          maxItems: 0
+          items: {}
+        next_cursor: { type: [string, 'null'], minLength: 1, maxLength: 4096 }
+    LibraryFilePage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items: { $ref: '#/components/schemas/LibraryFileItem' }
+        next_cursor: { type: [string, 'null'], minLength: 1, maxLength: 4096 }
+    LibraryArtifactPage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items: { $ref: '#/components/schemas/LibraryArtifactItem' }
+        next_cursor: { type: [string, 'null'], minLength: 1, maxLength: 4096 }
+    LibraryListResponse:
       type: object
       additionalProperties: false
       required: [data, meta]
       properties:
         data:
-          type: object
-          additionalProperties: false
-          required: [items, next_cursor]
-          properties:
-            items:
-              type: array
-              maxItems: 100
-              items:
-                type: object
-                additionalProperties: false
-                required: [kind, asset_id, filename, mime_type, size_bytes, content_sha256, scan_state, created_at]
-                properties:
-                  kind: { type: string, enum: [file] }
-                  asset_id: { type: string, minLength: 1, maxLength: 191 }
-                  filename: { type: string, minLength: 1, maxLength: 255 }
-                  mime_type: { type: string, minLength: 1, maxLength: 191 }
-                  size_bytes: { type: string, pattern: '^(0|[1-9][0-9]*)$' }
-                  content_sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
-                  scan_state: { type: string, enum: [clean] }
-                  created_at: { type: string, format: date-time }
-            next_cursor: { type: [string, 'null'], minLength: 1, maxLength: 4096 }
+          oneOf:
+            - $ref: '#/components/schemas/LibraryEmptyPage'
+            - $ref: '#/components/schemas/LibraryFilePage'
+            - $ref: '#/components/schemas/LibraryArtifactPage'
         meta: { $ref: '#/components/schemas/RequestMeta' }
     ProjectResourceListResponse:
       type: object

@@ -88,12 +88,46 @@ function inspectLibraryFileContract(openapi) {
   const operation = start < 0 || end < 0 ? "" : openapi.slice(start, end)
   const errors = []
   if (!operation.includes("operationId: listLibrary")) errors.push("GET /v1/library must retain operationId=listLibrary")
-  for (const marker of ["required: true", "enum: [file]", "maximum: 100", "maxLength: 4096", "'200':", "'400':", "'502':", "'503':", "#/components/schemas/LibraryFileListResponse"])
+  for (const marker of [
+    "required: true",
+    "enum: [file, artifact]",
+    "maximum: 100",
+    "maxLength: 4096",
+    "'200':",
+    "'400':",
+    "'502':",
+    "'503':",
+    "#/components/schemas/LibraryListResponse",
+    "operationId: getLibraryArtifact",
+    "operationId: downloadLibraryArtifact",
+    "artifact_download_busy",
+  ])
     if (!operation.includes(marker)) errors.push(`GET /v1/library missing ${marker}`)
-  const shape = openapi.split("    LibraryFileListResponse:")[1]?.split("    ProjectResourceListResponse:")[0] ?? ""
-  for (const marker of ["items", "next_cursor", "kind", "enum: [file]", "asset_id", "filename", "mime_type", "size_bytes", "content_sha256", "scan_state", "created_at"])
-    if (!shape.includes(marker)) errors.push(`LibraryFileListResponse missing ${marker}`)
-  if (/artifact_id|session_id|download_url|upload_id/u.test(shape)) errors.push("Library file response must not impersonate Artifact or expose transfer references")
+  const file = openapi.split("    LibraryFileItem:")[1]?.split("    LibraryArtifactItem:")[0] ?? ""
+  for (const marker of ["kind", "enum: [file]", "asset_id", "filename", "mime_type", "size_bytes", "content_sha256", "scan_state", "created_at"])
+    if (!file.includes(marker)) errors.push(`LibraryFileItem missing ${marker}`)
+  if (/artifact_id|session_id|download_url|upload_id/u.test(file))
+    errors.push("Library file response must not impersonate Artifact or expose transfer references")
+  const artifact = openapi.split("    LibraryArtifactItem:")[1]?.split("    LibraryArtifactResponse:")[0] ?? ""
+  for (const marker of ["enum: [artifact]", "conversation_id", "artifact_id", "artifact_kind", "title", "source_run_id", "delivered_at"])
+    if (!artifact.includes(marker)) errors.push(`LibraryArtifactItem missing ${marker}`)
+  const page = openapi.split("    LibraryListResponse:")[1]?.split("    ProjectResourceListResponse:")[0] ?? ""
+  for (const marker of ["oneOf", "#/components/schemas/LibraryEmptyPage", "#/components/schemas/LibraryFilePage", "#/components/schemas/LibraryArtifactPage"])
+    if (!page.includes(marker)) errors.push(`LibraryListResponse missing ${marker}`)
+  const variants = [
+    ["LibraryEmptyPage", "LibraryFilePage", ["maxItems: 0", "next_cursor"]],
+    ["LibraryFilePage", "LibraryArtifactPage", ["minItems: 1", "maxItems: 100", "items: { $ref: '#/components/schemas/LibraryFileItem' }", "next_cursor"]],
+    [
+      "LibraryArtifactPage",
+      "LibraryListResponse",
+      ["minItems: 1", "maxItems: 100", "items: { $ref: '#/components/schemas/LibraryArtifactItem' }", "next_cursor"],
+    ],
+  ]
+  for (const [name, next, markers] of variants) {
+    const shape = openapi.split(`    ${name}:`)[1]?.split(`    ${next}:`)[0] ?? ""
+    for (const marker of markers) if (!shape.includes(marker)) errors.push(`${name} missing ${marker}`)
+    if (shape.includes("oneOf:")) errors.push(`${name} must not allow mixed item kinds`)
+  }
   if (operation.includes("storage_integration_unavailable")) errors.push("GET /v1/library retains fixed degraded response")
   return errors
 }
@@ -105,8 +139,17 @@ test("Library publishes explicit personal file 200 and rejects contract drift", 
   const libraryStart = openapi.indexOf("  /v1/library:")
   const libraryEnd = openapi.indexOf("  /v1/billing/plans:", libraryStart)
   const libraryOperation = openapi.slice(libraryStart, libraryEnd)
-  const withoutFile = openapi.replace(libraryOperation, libraryOperation.replace("enum: [file]", "enum: [artifact]"))
-  assert.ok(inspectLibraryFileContract(withoutFile).some((error) => error.includes("enum: [file]")))
+  const withoutFile = openapi.replace(libraryOperation, libraryOperation.replace("enum: [file, artifact]", "enum: [artifact]"))
+  assert.ok(inspectLibraryFileContract(withoutFile).some((error) => error.includes("enum: [file, artifact]")))
+  const filePage = openapi.split("    LibraryFilePage:")[1]?.split("    LibraryArtifactPage:")[0] ?? ""
+  const mixedPage = openapi.replace(
+    filePage,
+    filePage.replace(
+      "items: { $ref: '#/components/schemas/LibraryFileItem' }",
+      "items:\n                oneOf:\n                  - $ref: '#/components/schemas/LibraryFileItem'\n                  - $ref: '#/components/schemas/LibraryArtifactItem'",
+    ),
+  )
+  assert.ok(inspectLibraryFileContract(mixedPage).some((error) => error.includes("LibraryFilePage")))
 })
 
 test("the Capability consumer pins the accepted owner artifact and generated runtime", async () => {

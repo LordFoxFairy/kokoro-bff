@@ -3,6 +3,32 @@
 状态：2026-09-28
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。
 
+## W2-F2-S5 第二代码片：本人私有 Artifact Product 读取/下载（单仓已验，跨仓待验）
+
+基线是已验 BFF main `8f46ff6aa96b51a04088a3323d1e1f738d550480` 的来源/持久关联第一片。
+本代码片把唯一 OpenAPI 的 `listLibrary` 扩为显式 `kind=file|artifact`，新增按
+`(conversation_id,artifact_id)` 的单项与 `/content` 原字节操作；本人 active Conversation 与现有
+Project owner predicate 在 BFF SQL 的 LIMIT 前过滤，跨会话按关联时间/二元 ID 做有界 keyset。
+每个候选再用受信 conversation scope 调 Storage `GetFinalArtifact`，核对 FINAL+CLEAN owner
+返回的 artifact/asset/kind/digest/run；单项和下载同样逐次重验。签名对象 GET 只允许配置的精确
+ObjectStore origin、未过期 GET、空附加 header；原字节在发头前进入请求独占临时文件，完整校验
+SHA-256/长度、限制 1 GiB，响应完成、取消或失败均清理，不复用 1 MiB 个人 Buffer 路径。
+进程内最多两个并发 spool；满额请求在 ObjectStore GET 前返回 `503 artifact_download_busy`，
+释放由成功/失败/断开路径验证。Library OpenAPI 在页级互斥空页、纯 file 页和纯 artifact 页，
+不再允许一个 `items[]` 同时混排两种 kind。
+固定 Product tenant 外仍由既有 admission 先返回 403，固定租户内他人/错二元组统一 404。
+不做分享、`kind=all`、旧 hash/frame fallback 或 Web 入口；Storage 仍唯一拥有 Artifact metadata。
+本仓 Node 22.22.2 的 `pnpm format:check && pnpm check && pnpm schema:check` 已通过：默认
+359 项/358 pass/1 无数据库 skip，Schema 5 pass/1 无数据库 skip，OpenAPI 77 个 frozen operation；
+直接 Connect/HTTP 测试覆盖本人原字节、跨 subject 404、固定租户外 403、坏 owner 与篡改 502。
+writer 在自建临时 PostgreSQL 库、空 Redis DB15 的聚焦真 PG 测试验证跨 Conversation
+keyset、owner/Project 先筛、错 tenant/subject/二元组与 frame GC 后关联仍可读，1/1 pass，
+DB 已删除、Redis DB15 前后 0。Root 对最终代码独立 Node22 `pnpm format:check && pnpm check && pnpm schema:check` 全绿：
+默认 358 pass/1 既有无库 skip、Contract 65/65、Schema 默认 5 pass/1 skip；
+自建隔离 PostgreSQL/Redis DB8 完整 integration **44/44** 与真实 schema **6/6**，
+数据库已 DROP、Redis DB8 初末 0。真 Storage/ObjectStore/Agent 三仓组合与 Web/浏览器入口仍待验；
+**本代码片发布 Product HTTP，不等于用户当前页面已可见或 W2-F2 完成**。
+
 ## W2-F2-S5 第一代码片：上游来源与持久关联（2026-09-28；Root 已验，Product API 未发布）
 
 本片已将 Storage F2 Proto 固定到 `d5cfc442c675e32363ae767f5ec662a9e0d9eaea` 并确定性重生

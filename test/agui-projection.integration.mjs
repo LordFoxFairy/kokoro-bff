@@ -102,6 +102,52 @@ integrationTest("persists admitted Artifact deliveries with source frames and re
       artifact_id: "artifact_first", run_id: firstRun.run_id, source_event_id: "artifact_source_1",
       source_artifact_kind: "document", source_content_sha256: "a".repeat(64),
     }])
+    const secondConversation = "session_artifact_second"
+    await pool.query("INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title) VALUES ($1, $2, $3, 'Second conversation')", [
+      secondConversation,
+      tenantId,
+      ownerId,
+    ])
+    await pool.query(
+      `INSERT INTO bff_conversation_artifact
+       (tenant_id, conversation_id, artifact_id, run_id, source_event_id, source_sequence, source_digest,
+        source_asset_id, source_artifact_kind, source_content_sha256, delivered_at)
+       VALUES ($1, $2, 'artifact_second', 'run_second', 'source_second', 1, $3, 'asset_second', 'document', $3, $4)`,
+      [tenantId, secondConversation, "b".repeat(64), new Date(1000)],
+    )
+    const candidates = await store.artifactLibrary.listCandidates(tenantId, ownerId, null, 2)
+    assert.deepEqual(
+      candidates.map(({ conversationId, artifactId }) => [conversationId, artifactId]),
+      [
+        [sessionId, "artifact_first"],
+        [secondConversation, "artifact_second"],
+      ],
+    )
+    assert.deepEqual(
+      (
+        await store.artifactLibrary.listCandidates(
+          tenantId,
+          ownerId,
+          {
+            deliveredAt: candidates[0].deliveredAt,
+            conversationId: candidates[0].conversationId,
+            artifactId: candidates[0].artifactId,
+          },
+          2,
+        )
+      ).map(({ artifactId }) => artifactId),
+      ["artifact_second"],
+    )
+    assert.equal((await store.artifactLibrary.listCandidates(tenantId, "other_member", null, 2)).length, 0)
+    assert.equal(await store.artifactLibrary.findCandidate(tenantId, "other_member", sessionId, "artifact_first"), null)
+    assert.equal(await store.artifactLibrary.findCandidate("other_tenant", ownerId, sessionId, "artifact_first"), null)
+    assert.equal(await store.artifactLibrary.findCandidate(tenantId, ownerId, secondConversation, "artifact_first"), null)
+    await pool.query("UPDATE bff_conversation SET project_ref = 'missing_project' WHERE conversation_id = $1", [secondConversation])
+    assert.equal(await store.artifactLibrary.findCandidate(tenantId, ownerId, secondConversation, "artifact_second"), null)
+    assert.deepEqual(
+      (await store.artifactLibrary.listCandidates(tenantId, ownerId, null, 2)).map(({ artifactId }) => artifactId),
+      ["artifact_first"],
+    )
     assert.equal((await store.agUi.ingest(tenantId, sessionId, [first])).insertedSources, 0)
     await assert.rejects(
       store.agUi.ingest(tenantId, sessionId, [source(1, "artifact_changed")]),

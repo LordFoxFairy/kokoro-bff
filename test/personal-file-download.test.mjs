@@ -1,7 +1,9 @@
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
 import { EventEmitter } from "node:events"
-import { readFile } from "node:fs/promises"
+import { mkdtemp, readFile, readdir, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { test } from "node:test"
 
 const bytes = Buffer.from("hello")
@@ -347,4 +349,124 @@ test("bounded GET transfer rejects unsafe references, oversized bytes and cancel
     }),
     (error) => error.status === 503,
   )
+})
+
+test("Artifact transfer spools and verifies complete original bytes before release, cleaning bad bytes and cancellation", async () => {
+  const { spoolVerifiedArtifact } = await import("../dist/infrastructure/clients/storage/artifact-download-transfer.js")
+  const root = await mkdtemp(join(tmpdir(), "bff-artifact-transfer-test-"))
+  const reference = { url: "http://objects.test/original?sig=secret", method: "GET", requiredHeaders: {}, expiresAt: Date.now() + 60_000 }
+  try {
+    const fetches = []
+    const fetcher = async (url, options) => {
+      fetches.push({ url, options })
+      return new Response(bytes, { status: 200, headers: { "content-length": "5" } })
+    }
+    const spool = await spoolVerifiedArtifact(reference, 5, sha, "http://objects.test", AbortSignal.timeout(5000), fetcher, root)
+    assert.deepEqual(await readFile(spool.path), bytes)
+    assert.equal(spool.size, 5)
+    assert.equal(fetches[0].options.redirect, "manual")
+    assert.equal(fetches[0].options.credentials, "omit")
+    assert.equal(fetches[0].options.headers, undefined)
+    await spool.cleanup()
+    assert.deepEqual(await readdir(root), [])
+    await assert.rejects(
+      spoolVerifiedArtifact(reference, 5, sha, "http://objects.test", AbortSignal.timeout(5000), async () => new Response("bad!!", { status: 200 }), root),
+      (error) => error.status === 502,
+    )
+    assert.deepEqual(await readdir(root), [])
+    await assert.rejects(
+      spoolVerifiedArtifact(reference, 5, sha, "http://objects.test", AbortSignal.timeout(5000), async () => new Response("too long", { status: 200 }), root),
+      (error) => error.status === 502,
+    )
+    assert.deepEqual(await readdir(root), [])
+    await assert.rejects(
+      spoolVerifiedArtifact({ ...reference, url: "http://evil.test/x" }, 5, sha, "http://objects.test", AbortSignal.timeout(5000), fetcher, root),
+      (error) => error.status === 502,
+    )
+    assert.equal(fetches.length, 1)
+    await assert.rejects(
+      spoolVerifiedArtifact(reference, 1_073_741_825, sha, "http://objects.test", AbortSignal.timeout(5000), fetcher, root),
+      (error) => error.status === 502,
+    )
+    assert.equal(fetches.length, 1)
+    const abort = new AbortController()
+    abort.abort()
+    await assert.rejects(
+      spoolVerifiedArtifact(reference, 5, sha, "http://objects.test", abort.signal, async () => new Response(bytes, { status: 200 }), root),
+      (error) => error.status === 503,
+    )
+    assert.deepEqual(await readdir(root), [])
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test("Artifact spool admits at most two concurrent requests and releases slots on failed bytes, cleanup and abort", async () => {
+  const { spoolVerifiedArtifact } = await import("../dist/infrastructure/clients/storage/artifact-download-transfer.js")
+  const root = await mkdtemp(join(tmpdir(), "bff-artifact-admission-test-"))
+  const reference = { url: "http://objects.test/original?sig=secret", method: "GET", requiredHeaders: {}, expiresAt: Date.now() + 60_000 }
+  const fetchGood = async () => new Response(bytes, { status: 200 })
+  const gates = []
+  const heldFetch = async () => new Promise((resolve) => gates.push(resolve))
+  const first = spoolVerifiedArtifact(reference, 5, sha, "http://objects.test", AbortSignal.timeout(5000), heldFetch, root)
+  const second = spoolVerifiedArtifact(reference, 5, sha, "http://objects.test", AbortSignal.timeout(5000), heldFetch, root)
+  const firstOutcome = first.then(
+    (value) => ({ value }),
+    (error) => ({ error }),
+  )
+  const secondOutcome = second.then(
+    (value) => ({ value }),
+    (error) => ({ error }),
+  )
+  let secondSpool = null
+  let fourthSpool = null
+  try {
+    assert.equal(gates.length, 2)
+    const third = await spoolVerifiedArtifact(reference, 5, sha, "http://objects.test", AbortSignal.timeout(5000), fetchGood, root).then(
+      (value) => ({ value }),
+      (error) => ({ error }),
+    )
+    await third.value?.cleanup()
+    gates[0](new Response("bad!!", { status: 200 }))
+    gates[1](new Response(bytes, { status: 200 }))
+    const firstResult = await firstOutcome
+    const secondResult = await secondOutcome
+    secondSpool = secondResult.value ?? null
+    assert.equal(firstResult.error?.status, 502)
+    assert.equal(third.error?.status, 503)
+    assert.equal(third.error?.code, "artifact_download_busy")
+    assert.ok(secondSpool)
+    fourthSpool = await spoolVerifiedArtifact(reference, 5, sha, "http://objects.test", AbortSignal.timeout(5000), fetchGood, root)
+    await assert.rejects(
+      spoolVerifiedArtifact(reference, 5, sha, "http://objects.test", AbortSignal.timeout(5000), fetchGood, root),
+      (error) => error.status === 503 && error.code === "artifact_download_busy",
+    )
+    await fourthSpool.cleanup()
+    fourthSpool = null
+    await secondSpool.cleanup()
+    secondSpool = null
+    const abort = new AbortController()
+    const aborted = spoolVerifiedArtifact(
+      reference,
+      5,
+      sha,
+      "http://objects.test",
+      abort.signal,
+      async (_url, options) =>
+        new Promise((_resolve, reject) => options.signal.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")), { once: true })),
+      root,
+    )
+    abort.abort()
+    await assert.rejects(aborted, (error) => error.status === 503)
+    const afterAbort = await spoolVerifiedArtifact(reference, 5, sha, "http://objects.test", AbortSignal.timeout(5000), fetchGood, root)
+    await afterAbort.cleanup()
+    assert.deepEqual(await readdir(root), [])
+  } finally {
+    for (const release of gates) release(new Response(bytes, { status: 200 }))
+    const settled = await Promise.all([firstOutcome, secondOutcome])
+    await Promise.all(settled.map((outcome) => outcome.value?.cleanup()))
+    await fourthSpool?.cleanup()
+    await secondSpool?.cleanup()
+    await rm(root, { recursive: true, force: true })
+  }
 })
