@@ -35,3 +35,5 @@ Phase 2 durable AG-UI 的具体裁决见 [`ADR/ADR-002-durable-agui-ledger.md`](
 | `API_CONTRACT.md` | 可见性、版本、鉴权、错误、幂等策略 | 可编辑机器 schema |
 | `DATA_MODEL.md` | 表 owner、不变量、查询、retention | migration 历史 |
 | `ACCEPTANCE.md` | 可运行的 Given/When/Then 与命令 | 自报“生产级”结论 |
+
+- Project single-file upload: `src/http/routes/project-resource.ts` → `src/application/project-resource-upload.ts` → `src/infrastructure/clients/storage/`; source provenance `contract/dependencies/storage-connect.json`, deterministic generator `scripts/generate-storage-connect-client.mjs`, focused tests `test/project-resource-upload.test.mjs` / `test/storage-connect-contract.test.mjs`.

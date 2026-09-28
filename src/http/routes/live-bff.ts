@@ -122,10 +122,6 @@ export async function liveBffBusiness(
         }
         return true
       }
-      if (businessPath.length === 3 && projectId !== undefined && businessPath[2] === "resources" && method === "POST") {
-        await reply(response, 503, failure("storage_projection_not_configured", "Storage resource projection is not configured", context.requestId), context, idempotency, mutation)
-        return true
-      }
       if (businessPath.length === 4 && projectId !== undefined && businessPath[2] === "skills" && businessPath[3] !== undefined && method === "PATCH") {
         if (typeof json.enabled !== "boolean") {
           await reply(response, 400, failure("invalid_project_skill", "Skill enabled must be a boolean", context.requestId), context, idempotency, mutation)

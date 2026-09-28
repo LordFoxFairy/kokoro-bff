@@ -720,3 +720,11 @@ public OpenAPI、browser relay route/method/header/cookie 策略不变。新增 
 UNAUTHENTICATED/PERMISSION_DENIED/RATE_LIMITED，状态/机器码矛盾 fail closed；有效配对分别归一为
 session_invalid/skill_forbidden/skill_rate_limited，坏响应、超时、未知状态及依赖故障归一为 503 iam_admission_unavailable。
 这些是内部窄调用结果，不表示上述目标 public Skill mutation/错误 schema 已发布；旧 Session 与 Team 行为不改。
+
+## W2 项目资源单文件上传
+
+现有 `uploadProjectResources` operation 保持 multipart/form-data 的 `files` 字段与 Idempotency-Key；首片恰好一个File、无其他字段/query，总body上限1 MiB。文件名1..255 Unicode码点，无控制字符、斜杠、反斜杠及`.`/`..`；MIME为有界type/subtype，空MIME采用application/octet-stream。服务端计算真实SHA-256和size，不接收body身份、hash或Storage引用。项目path可为既有查询标识，Storage scope固定为查询返回canonical project.id。
+
+成功200 `{data:{resources:[{upload_id,asset_id,filename,mime_type,size_bytes,content_sha256,scan_state}]},meta:{request_id}}`；size_bytes为十进制string，scan_state仅clean；CompleteUpload与GetAsset均检查scan，infected稳定422 `resource_file_infected`且不可重试（终态receipt），pending/unknown稳定503 `resource_scan_pending`可用同key重查已完成资产，不返回resources或下载引用。x-request-id/no-store；不存在或非本人项目404；非法输入400、超限413、同key异义/正在执行/原上传已abort为409；配置/Storage/PUT未知失败503，坏owner响应502。响应不含签名URL、secret或provider错误。失败不得伪造资产；相同key恢复原上传，已abort时需新key明确新尝试。只有完整成功才保存外层成功receipt，当前授权先于重放。
+
+独立凭据代言固定web-bff+受信tenant/subject+project scope；owner仅从固定版本Proto生成。全局Library、Skill包和多文件不属于本片。

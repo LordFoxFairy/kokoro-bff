@@ -429,3 +429,11 @@ Agent receipt stub smoke 与 W0B-11 Root 集成后再激活。真实 Agent admis
 ## Platform Connect Proto 消费准备（2026-09-28）
 
 已从 Platform main `f26d147a09350c3a041722107d277beb93eaad60` 精确固定两份 `kokoro.platform.v1` Proto，使用本仓固定 Buf/Protobuf-ES/Connect 版本生成独立客户端类型。`contract/dependencies/platform-connect.json` 记录原始 SHA、生成器、lockfile 与 build policy；`pnpm contract:check:platform` 两次生成并核对字节。此片仅证明 wire/descriptor 可独立消费，**未实现** command digest、machine credential、public Skill route 或真实 owner 调用；既有 Capability HTTP GET 仍单独运行。Platform v3 command artifact 尚未发布，故不可把生成客户端视为 Product CreateDraft 闭环。
+
+## W2 项目资源单文件上传（待 Root 审查/真实集成）
+
+基线 BFF `61b8074ba0264a77496fee8bcb475def46430a63`，Storage `094847da9f4f03e5f3dbda06658430c74bc32f54`。本片替换 resources 503 stub，保持 multipart files 请求形态，限制为单文件 / 1 MiB；多文件、Library、Skill package、chat 关联不在范围，零 Schema 变化。
+
+W2 本片已实现单文件 route、native multipart、有界 ConnectRPC/presigned PUT、terminal create checkpoint 与最终 receipt。固定 Storage owner `094847da9f4f03e5f3dbda06658430c74bc32f54` 的两个 Proto；新增唯一依赖 `@connectrpc/connect-node@2.2.0`（peer Connect 2.2.0、protobuf ^2.7.0，与 2.14.0 兼容）。配置为 `KOKORO_STORAGE_RPC_BASE_URL` + `KOKORO_BFF_STORAGE_SECRET` + `KOKORO_STORAGE_OBJECT_ORIGIN`，旧 Storage HTTP 环境变量仍被忽略。新增测试覆盖 HTTP→Connect→PUT、最终 receipt 失败恢复与当前项目权限先于 replay；测试 owner/对象服务是进程内 double，不是 Storage 集成。Node 22 format/lint/typecheck/contract/build/schema 门已执行；最终测试数量以本次交付报告为准。Root 待验真实 PostgreSQL + Storage + ObjectStore，未运行共享基础设施。
+
+W2 审查修正：项目资源成功态收窄为 CLEAN。INFECTED 为稳定不可重试 422；PENDING/UNKNOWN 为可重试 503。Complete 和 GetAsset 都执行该检查，负例验证不返回资源/引用且同 key 不重复创建资产。

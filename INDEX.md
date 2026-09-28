@@ -72,3 +72,5 @@ Conversation/Message/Share canonical facts，以及 durable AG-UI stream/source-
 | [`test/agui-http.integration.mjs`](./test/agui-http.integration.mjs) | 后台主动摄取、opaque cursor、重启 replay 与 contract error |
 | [`scripts/check-contract.mjs`](./scripts/check-contract.mjs) | 本仓 contract gate |
 | [`scripts/lint-source.mjs`](./scripts/lint-source.mjs) | 当前静态源码规则 |
+
+- Project single-file upload: `src/http/routes/project-resource.ts` → `src/application/project-resource-upload.ts` → `src/infrastructure/clients/storage/`; source provenance `contract/dependencies/storage-connect.json`, deterministic generator `scripts/generate-storage-connect-client.mjs`, focused tests `test/project-resource-upload.test.mjs` / `test/storage-connect-contract.test.mjs`.

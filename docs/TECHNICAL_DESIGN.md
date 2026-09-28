@@ -966,3 +966,15 @@ RED→GREEN 必须锁定：strict body/key、可信 user context、伪造身份�
 1 MiB 限额、严格 response 与完整 Connect code 映射。Node 22 执行完整 `pnpm format:check && pnpm check && pnpm schema:check`；
 随后 Root 用隔离真实 IAM + BFF + Platform + PostgreSQL/Redis 验证首次 201、响应丢失后 replay、撤销 session 后同 key拒绝、
 以及 Platform 仅一条 Skill/receipt。Web adapter 仍是后续消费者，不纳入本 user-only owner 实现片。
+
+## W2 单文件项目资源上传（实施切片）
+
+BFF Project 是当前关系授权 owner，Storage main `094847da9f4f03e5f3dbda06658430c74bc32f54` 的 `kokoro.storage.v2` 是唯一 Upload/Asset owner。保留现有 POST `/v1/projects/{projectId}/resources` + multipart `files` 形态，首片只接受一个文件，总 HTTP body 不超过 1 MiB（含 multipart 开销）；多文件明确 400，不承诺批次原子性。先 IAM admission，再 `projects.find({tenantId,subjectId}, projectId)` 取 canonical project.id，之后才解析/调用 Storage。
+
+采用具名 `src/http/routes/project-resource.ts`、`src/application/project-resource-upload.ts` 与 `src/infrastructure/clients/storage/`；不把上传塞入 Library 或现有大 live-bff handler。owner Proto只读 vendor→Buf生成→窄Connect facade，generated类型止于client。Node原生FormData解析只处理已限流/有界读取的完整body，不手写multipart分隔；filename/MIME/hash/size再验证。允许独立 Storage origin/credential 与明确 ObjectStore origin；PUT只接受该origin、无userinfo/fragment、不重定向、唯一content-type，绝不携内部身份到ObjectStore。
+
+此精确route在通用receipt前自行做规范化指纹（canonical project、filename、MIME、真实size/hash），复用既有持久receipt。额外一条create-stage checkpoint只存稳定upload_id，在PUT/Complete前确认已落盘；相同身份/指纹重试用GetUploadStatus恢复completed资产，否则复用原pending上传。同key异义冲突，不从Storage私有ID算法派生Upload。每次replay先重验项目当前授权。整体预算小于既有60秒pending reclaim；超时/取消无自动业务重试。PUT/引用失败对已知pending上传尝试有界Abort；Complete结果未知不盲Abort，保留checkpoint供重试查询。创建返回丢失时依靠相同Create命令取回pending upload。
+
+删除原resources 503 stub；Library、Skill package、chat关联不动。零新Schema/跨owner SQL。验证单文件、畸形/超限multipart、tenant/subject/项目404、SSRF与secret不外发、同key/异义、receipt失败、Complete响应丢失、重启checkpoint恢复及abort。真实Storage/PG集成由Root另验；单测不表示真实owner链完成。
+
+W2 scan gate：Complete 与恢复 GetAsset 均只放行 CLEAN；INFECTED 返回终态 422，PENDING/UNKNOWN 返回可重试 503。完成资产的 checkpoint 保留，重试仅查询既有 upload/asset，不重复 PUT/Complete，不 Abort 已完成资产，不下发引用。

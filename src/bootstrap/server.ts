@@ -1,3 +1,4 @@
+import { projectResourceRoute } from "../http/routes/project-resource.js"
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http"
 
 import { loadConfig, type BffConfig } from "../config/runtime.js"
@@ -213,6 +214,10 @@ async function handle(
       send(response, 503, failure("business_store_unavailable", "The BFF business store is unavailable", id))
       return
     }
+  }
+  if (composition.routeHandler === undefined && method === "POST" && businessPath.length === 3 && businessPath[0] === "projects" && businessPath[1] !== undefined && businessPath[2] === "resources") {
+    await projectResourceRoute(request, response, config, context, businessPath[1], body ?? Buffer.alloc(0), composition.businessStore, composition.idempotency)
+    return
   }
   const durableChatAdmission = composition.routeHandler === undefined
     && composition.businessStore !== null

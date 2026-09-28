@@ -468,3 +468,11 @@ BFF 不另建 TTL/GC，也不擅删 owner rows。若后续确需异步交付或 
 验证：`pnpm schema:check` 与 schema diff 证明本片未改 schema；真正 Project/Conversation predicate 集成测试仍需
 `KOKORO_TEST_POSTGRES_URL=... KOKORO_TEST_REDIS_URL=... pnpm test:integration` 的隔离 fixture，
 Platform durable receipt/撤权恢复由 Root 真实 IAM/BFF/Platform smoke 验证，BFF unit double 不代替该证据。
+
+## W2 项目资源上传的数据边界
+
+不新增/修改canonical schema、Asset表或Project文件关联表；Storage唯一写Upload/Asset/Blob/Scan。BFF复用现有`bff_idempotency_receipt`保存规范化请求的最终响应，并为同tenant/subject/canonical project/public key保存create-stage checkpoint（稳定upload_id与同一指纹）。checkpoint先持久化并读回，才允许PUT/Complete，避免Storage成功后BFF崩溃导致重试新建资产。URL、headers、secret、原始bytes不进入receipt；文件hash/size及最终资产表示仅为请求/响应快照，不成为Storage事实副本。
+
+checkpoint 是独立 scope 的 terminal status=200（外层是 canonical route scope），不是 pending body。现有 claim 只 reclaim status=102、release 只删除 status=102，故外层 5xx 与 60 秒 reclaim 均不清除 checkpoint。checkpoint与现有receipt使用相同保留边界，不引入新后台worker/Redis缓存。未知Complete结果先通过已保存upload_id在原scope查询；completed asset关系由Storage验证，BFF核对返回metadata。错误时释放外层pending claim，稳定checkpoint保留；已知pending失败尝试Abort，不撤销已完成Asset。无跨库事务，不承诺请求失败自动删除已完成对象。真实数据库恢复验证由Root串行执行。
+
+W2 scan 错误不回滚 Storage 完成事实：感染 422 以既有外层 receipt 固化，待扫描/unknown 503 释放外层 pending 但保留 terminal upload checkpoint，因此同 key 重查同一 Asset，不新建资产。

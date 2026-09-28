@@ -19,7 +19,7 @@
     "pnpm": "11.25.0",
     "zod": "4.5.4"
   },
-  "lockfile_sha256": "2a59915460c20646f85ec2b801b66445ee8be6de38e5f1d75f90c76cfbfdd3ab",
+  "lockfile_sha256": "ab7d35aca5c299b6ff108cc1cdab5581db71d5a84a3c4147de9c3033a406eb0e",
   "generated": [
     {
       "path": "client.gen.ts",

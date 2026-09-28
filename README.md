@@ -130,3 +130,7 @@ pnpm test:integration
 
 普通 push/PR 只执行质量检查；`v*.*.*` tag 才允许发布镜像。候选镜像、漏洞扫描、SBOM、provenance、签名、
 health/ready smoke 尚未在当前治理阶段全部闭环，不应据此 README 宣称生产就绪。
+
+### Single project file upload
+
+Configure `KOKORO_STORAGE_RPC_BASE_URL`, independent `KOKORO_BFF_STORAGE_SECRET`, and exact `KOKORO_STORAGE_OBJECT_ORIGIN` together. The existing project resources POST accepts one `files` multipart part and at most 1 MiB for the entire body. It returns only CLEAN Storage asset metadata. Infected files receive terminal 422; pending/unknown scans receive retryable 503 without a usable resource. Reuse the same key/file after an uncertain response; an aborted upload requires a new key. Library listing and multi-file upload remain outside this slice. Storage provenance/generation: `pnpm contract:check:storage`.
