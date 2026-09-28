@@ -1,5 +1,33 @@
 # kokoro-bff data model
 
+## W2-BFF-LIBRARY-PERSONAL-UPLOAD：写入命令的既有 receipt 复用设计（尚未实施）
+
+当前 BFF main `a67ae2d06b52202f349305ae3723f6e296c087a1` 的个人 Library 仅 GET；
+`database/schema.sql` 中 `bff_idempotency_receipt(scope TEXT PRIMARY KEY, fingerprint, status,
+response_body JSONB, created_at)` 已供 Project 上传和普通 Product mutation 使用。下一个人 POST 不新增
+`bff_file`/Asset 镜像表、upload 表、索引、role 或跨 Storage SQL；Storage 仍唯一持久化 Upload/Asset/Scan/Blob。
+
+既有同一 canonical receipt 表内使用**两个不相撞的 scope**：
+
+1. public 终态：`[trusted tenant, trusted subject, "POST", "/library/files", key]`，指纹覆盖个人文件的
+   filename、MIME、字节长度与 SHA-256；仅保存已确认 CLEAN 的成功响应或确定性终态错误。IAM 当前准入及
+   文件指纹校验在 claim/replay 前执行，跨用户/租户绝不读取对方 receipt。
+2. Storage 恢复 checkpoint：`[trusted tenant, trusted subject, "personal-file-upload:v1", key]`，同一指纹，
+   持久 body 只存原 `upload_id`。从该 scope 哈希稳定派生 Create/Complete/Abort command identity；它不同于
+   Project 的 `project-resource-upload:v1 + projectId`，不会把 Project predicate 机械换成 subject。
+
+claim 的 pending 状态、60 秒 stale-claim 与现有主键可用于同键并发；业务请求 45 秒 timeout 和 caller
+取消不能把未知 Storage 完成结果当失败后另造 Upload。首次 Create 成功后先证明 checkpoint 写入，
+才使用受限 PUT 引用；Create 应答丢失由相同 command 重放恢复。Complete 已尝试后不 Abort：重试读取
+GetUploadStatus，completed 时再 GetAsset 核对身份、指纹、purpose/scan；pending 时沿原 upload 与相同
+command 恢复 PUT/Complete。最终 200 必须先证明 public receipt 持久化，不能只写内存 Map。
+
+当前 `src/infrastructure/postgres/idempotency-repository.ts` 的 `putReceipt` 在 `ON CONFLICT ... WHERE`
+未命中时会产生 0 行，但返回 `void`；这不满足上述“证明持久化”的条件。下一代码门须让条件写结果可见
+（affected-row 或紧随其后的带指纹/状态/内容复读），并用并发、stale claim、崩溃恢复真 PostgreSQL
+测试锁定无假成功。现有表/主键足够，若测试证明需要新的数据约束再单独评审 canonical schema，
+不为预想扩展先建表。上传后 Library GET 仍从 Storage personal CLEAN ASSET 查询，BFF 不双写列表事实。
+
 ## W2-LIBRARY-BFF-FILE：个人文件只读投影（2026-09-28，待 Root 集成验收）
 
 当前 BFF `GET /v1/library?kind=file` 通过 Connect v2 只读 Storage，不写 Library/Asset/Artifact 数据。Storage owner
@@ -20,10 +48,7 @@ retention/outbox 零变更；不创建 `bff_library`、`bff_asset` 或 `bff_arti
 摘要与短期下载引用。Agent 最终 Artifact 有另一身份/生命周期；F2 kind/title/source、可信 Run 与独立
 列表/下载尚未发布，不能把 personal ASSET 行重命名成 Artifact。
 
-后续**个人上传**不是列表数据模型：BFF 需以 `personal-file-upload:v1 + tenant + subject + key` 的
-独立幂等 namespace/持久 checkpoint 记录自己的 Product 命令恢复，Storage 继续唯一写 Upload/Asset/Scan；
-不得把现 Project receipt 的 `project-resource-upload:v1 + projectId` 或 Project owner predicate 换个路径复用。
-同键请求按文件摘要一致性检查，未知 Complete 后按原 Storage Upload/Asset 恢复，不双写 Asset。
+**个人上传**的既有 receipt 复用和未实现边界以上方独立设计门为准，不把本列表改成 BFF 写入事实。
 后续**个人下载**每次重验当次 scope，并以 GetAsset 检查 `upload_purpose=ASSET`、CLEAN 后才向 Storage
 索取新的 GetDownloadReference；短期 URL 不写 BFF receipt、列表或长期业务事实。Storage 当前
 GetDownloadReference 自身没有固定普通 ASSET purpose，单独调用它不足以保证此 Product 语义。
