@@ -3,6 +3,22 @@
 状态：2026-09-28
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。
 
+## W2-BFF-PERSONAL-DOWNLOAD 文档门（2026-09-28；代码未开始）
+
+基线 BFF main `5add506becd39715dc0a469af83e148a5a354515`：个人文件列表与上传已存在，
+`GET /v1/library/files/{asset_id}/content` **不在**当前 public OpenAPI/runtime，Web 文件卡尚无正式下载动作。
+本次仅把 [技术设计](TECHNICAL_DESIGN.md)、[API 契约策略](API_CONTRACT.md) 与
+[数据边界](DATA_MODEL.md) 的目标方案对齐；机器契约、源码、测试、Schema、生成物均未修改，
+因此此阶段不声明下载可用或跨仓通过。
+
+已裁决下一代码片由 BFF 在每次 service+Bearer/IAM 在线准入后，先在可信 personal scope `GetAsset(asset_id)`
+核对普通 ASSET/CLEAN/1 MiB 上限与摘要，再以相同 scope/摘要 `GetDownloadReference`，核对签发元数据，
+仅向配置的 ObjectStore origin 安全 GET；不重定向浏览器、不暴露签名引用。完整缓冲并验证长度和 SHA-256
+后才发带安全下载头的二进制 200，错误保持稳定 JSON；BFF 不新增 SQL/receipt/缓存/role。
+先由 Root 审查文档门，后续 owner OpenAPI + runtime + 直接测试/Node22 全门，Root 再以真 Storage/MinIO/ClamAV
+验证字节和他人私有负例；Web 精确 pin 和真 Chromium 点击属于更后续的独立切片。
+
+
 ## W2-BFF-LIBRARY-PERSONAL-UPLOAD-CODE（2026-09-28，已发布并通过个人文件真链纵切）
 
 BFF main `8a90fdd9ec3809000924229bfc7b986ba8ba1522` 已发布 public OpenAPI 和 runtime

@@ -1,5 +1,24 @@
 # kokoro-bff 技术设计
 
+## W2-BFF-PERSONAL-DOWNLOAD：个人文件受控下载设计门（2026-09-28；未实现）
+
+**当前态。** BFF main `5add506becd39715dc0a469af83e148a5a354515` 已有本人 `GET /v1/library?kind=file` 和
+`POST /v1/library/files`，但 canonical OpenAPI、HTTP route、Storage 下载 adapter 均没有公开下载操作；本文是目标设计，
+不是可运行能力或验收结果。Storage consumer 已精确固定 owner `2d87e26bbaed9a70dcd91ad1e9d126d39d275f38`
+的 v2 Proto：`GetAsset` 可按 `asset_id` 查询并返回摘要；`GetDownloadReference` 返回短期 GET 引用，但只校验
+scope/CLEAN，不固定普通 `upload_purpose=ASSET`。因此列表项、摘要及签名引用均不得独自充当下载授权。
+
+| 设计项 | 目标裁决 |
+| --- | --- |
+| Owner / 位置 | BFF 是 `GET /v1/library/files/{asset_id}/content` 的唯一 public Product owner；Storage 仍唯一拥有 Asset、Scan、对象和签名引用。沿现有 `src/bootstrap/server.ts` 精确分发，在 `src/http/routes/` 与 `src/infrastructure/clients/storage/` 各设具名个人下载职责；不塞进泛 `owner.ts`、Project adapter 或新增一级模块。 |
+| 路径取舍 | 采用同一文件资源下的 `/content` 字节响应，与已有上传 `/v1/library/files` 同族。淘汰浏览器直跳 Storage 预签 URL：ObjectStore origin 可能为内网地址，且引用会落入浏览器/历史、CORS 与跨域跳转边界；也不复用仅校验 PUT 的 `transfer.ts`。 |
+| 准入与 scope | 每次沿当前 service envelope + 单一用户 Bearer → IAM 在线 admission →固定 Product tenant 的链路；只从可信 `RequestContext` 派生 `tenant_id`、`subject_id`、`scope_kind=personal`、`scope_id=subject_id`。先严格解析单个 `asset_id` 路径段与空 query/body；不从请求头、列表 cursor、摘要或同团队身份推断 scope。 |
+| 双 RPC | `GetAsset({asset_id})` 必须先在同一 personal scope 返回相同 ID、有效小写 SHA-256、普通 `upload_purpose=ASSET`、`scan_state=CLEAN`、非空安全 filename/MIME 与 `size_bytes` 在 0–1,048,576 内；再以同 scope、同 ID 和返回摘要调用 `GetDownloadReference`。后者的 ID、摘要、大小、MIME、CLEAN 必须与前一步逐项一致。任何不可见、非 ASSET、非 CLEAN 均不得取得或发出对象字节。 |
+| 引用与字节 | 每次 GET 使用新的 Storage `CommandIdentity`（内部命令，不要求 public Idempotency-Key），不缓存/持久化引用，也不自动重试签发。仅接受有效期未过、方法 GET、配置的精确 ObjectStore origin、无 userinfo/fragment、无 required headers 的 HTTPS/本地显式配置引用；fetch 不跟随重定向、不带 Cookie/Authorization/service secret，限制网络超时与取消。完整缓冲最多 1 MiB，检查上游 200、实际字节数和 SHA-256 与两个 RPC 一致后才发 public 200；绝不先流出部分成功。 |
+| 响应/失败 | 成功返回原始二进制，不套 JSON envelope；`Content-Type` 来自已校验 MIME，`Content-Length` 用实际字节，`Content-Disposition: attachment` 使用安全编码文件名；`Cache-Control: no-store`、`Referrer-Policy: no-referrer`、`X-Content-Type-Options: nosniff`、`x-request-id` 必备，不透传 ObjectStore 响应 header。非法 selector 400；本人不可见/不存在或其他 scope 404；owner/网络不可用 503；不可信 owner 字段、引用或字节 502。错误仍为稳定 JSON、无签名 URL/owner 原文，下载失败不输出部分 200。 |
+| 数据与验证 | BFF 无新 SQL、Redis、role、schema、receipt、缓存或分布式事务；Storage 内部命令 receipt 仍属 Storage。先改唯一 public OpenAPI 和直接合同/越权/故障测试，再实现；Node22 全门与 Root 真 Storage/MinIO/ClamAV 正向、他人私有及超时/坏摘要负例才可升格 BFF 切片验收。随后 Web 精确 pin 本操作、同源窄透传和现有文件卡下载动作，最后真 Chromium 点击验收。 |
+
+
 ## W2-BFF-LIBRARY-PERSONAL-UPLOAD-CODE：正式个人文件上传（2026-09-28，待 Root 集成验收）
 
 **设计基线/代码片。** BFF main `a67ae2d06b52202f349305ae3723f6e296c087a1` 只有
@@ -50,11 +69,10 @@ Web 旧 `/api/session/artifacts` 内容哈希列表不成为此 API 的别名，
 
 **个人上传**的代码片状态以上方为准；列表 200 不代替上传的真实组合验收。
 
-**后续个人下载纵切（也不由列表 200 代替）。** Storage `GetDownloadReference` 当前校验 clean/scope，
-**并未固定 `upload_purpose=ASSET`**。BFF 必须先在当次 personal scope 用 `GetAsset` 复核稳定
-`asset_id + content_sha256`、`upload_purpose=ASSET` 与 CLEAN，再以同 scope 请求短期引用；摘要与 cursor 不是授权凭据。
-短期 URL 不入长期列表/receipt。公开动作的受限重定向或受控字节转发、Content-Disposition/Referrer-Policy
-与过期错误属于独立 Product 契约门，不能直接从列表拼 URL 或签出 package/Artifact 普通下载。
+**个人下载独立纵切**由本文顶部 `W2-BFF-PERSONAL-DOWNLOAD` 设计门裁决为 BFF 受控字节转发；
+当前列表 200 不代替下载验收。Storage `GetDownloadReference` 只校验 clean/scope，未固定
+`upload_purpose=ASSET`；必须先在当次 personal scope `GetAsset` 校验普通 ASSET/CLEAN，再签发并核对，
+短期 URL 不进入列表/receipt，也不开放 package/Artifact 普通下载。
 
 ## W1E-IAM-0.6-BFF-PIN：IAM 历史来源
 

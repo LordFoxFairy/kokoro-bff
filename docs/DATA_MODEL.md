@@ -1,5 +1,21 @@
 # kokoro-bff data model
 
+## W2-BFF-PERSONAL-DOWNLOAD：下载不新增本仓事实（2026-09-28；设计门）
+
+当前 BFF main `5add506becd39715dc0a469af83e148a5a354515` 尚无公开个人文件下载路径；下述为
+`GET /v1/library/files/{asset_id}/content` 的目标数据边界，不是已实现的数据流。BFF 每次经 IAM
+admission 后，从可信 tenant/subject 派生 personal scope；Storage `GetAsset(asset_id)` 是 Asset/Purpose/Scan/
+摘要/大小的唯一 owner 读取，`GetDownloadReference` 是同一 owner 的短期签发。BFF 仅在一次请求内暂存
+不超过 1 MiB 的对象字节，核对 owner 元数据和 SHA-256 后一次性发出，不持久化对象、引用、查询结果或授权决定。
+
+`database/schema.sql`、既有 `bff_idempotency_receipt`、`kokoro_bff` schema、索引、事务、retention、
+Redis DB 8、role、outbox、AG-UI ledger **均不变**；GET 不建立 public idempotency receipt 或缓存。
+Storage Proto 要求签发命令身份和其自身命令 receipt，这是 Storage owner 的现有事实，不是 BFF 表。
+不同租户/subject、Project、package、Artifact、非 ASSET 或非 CLEAN 对象均不形成 BFF 下载数据；
+不查询 Storage SQL，不建立跨 owner FK/JOIN，也不双写 Asset/Scan/Blob。Storage 引用过期后重新准入和
+签发，不把短期 URL 放入 Library 列表、浏览器持久状态、日志或历史回执。
+
+
 ## W2-BFF-LIBRARY-PERSONAL-UPLOAD-CODE：写入命令复用既有 receipt（待 Root 集成验收）
 
 设计基线 BFF main `a67ae2d06b52202f349305ae3723f6e296c087a1` 的个人 Library 仅 GET；本代码片新增个人 POST。
