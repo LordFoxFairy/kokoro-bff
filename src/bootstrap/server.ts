@@ -1,4 +1,5 @@
 import { projectResourceListRoute } from "../http/routes/project-resource-list.js"
+import { libraryFileListRoute } from "../http/routes/library-file-list.js"
 import { projectResourceRoute } from "../http/routes/project-resource.js"
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http"
 
@@ -219,6 +220,10 @@ async function handle(
   }
   if (composition.routeHandler === undefined && method === "GET" && businessPath.length === 3 && businessPath[0] === "projects" && businessPath[1] !== undefined && businessPath[2] === "resources") {
     await projectResourceListRoute(request, response, config, context, businessPath[1], composition.businessStore)
+    return
+  }
+  if (composition.routeHandler === undefined && method === "GET" && businessPath.length === 1 && businessPath[0] === "library") {
+    await libraryFileListRoute(request, response, config, context)
     return
   }
   if (composition.routeHandler === undefined && method === "POST" && businessPath.length === 3 && businessPath[0] === "projects" && businessPath[1] !== undefined && businessPath[2] === "resources") {

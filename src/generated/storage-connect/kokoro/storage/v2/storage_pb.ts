@@ -4,7 +4,7 @@
 // x-kokoro-scope-kind (personal|project|conversation) and x-kokoro-scope-id are required.
 // Scope is asserted by an authenticated, permitted business owner; body identity is forbidden.
 // web-bff has the product-scope operations; kokoro-platform currently has only
-// GetPackageReference. ListAssets additionally requires a project scope.
+// GetPackageReference. ListAssets permits only personal or project scope.
 // Service registration alone grants no product-scope operation.
 // Tenant, subject, caller and scope are deliberately absent from request messages.
 
@@ -377,8 +377,9 @@ export type GetAssetResponse = Message<"kokoro.storage.v2.GetAssetResponse"> & {
 export const GetAssetResponseSchema: GenMessage<GetAssetResponse> = /*@__PURE__*/ messageDesc(file_kokoro_storage_v2_storage, 10)
 
 /**
- * Project resources only: the server fixes purpose=ASSET and scan=CLEAN before pagination.
- * Caller must be web-bff with an authenticated project scope. The cursor is not an access grant.
+ * Personal files or project resources: the server fixes purpose=ASSET and scan=CLEAN before pagination.
+ * Caller must be web-bff; personal scope must match authenticated subject.
+ * Personal and project cursors use distinct kinds and are not access grants.
  *
  * @generated from message kokoro.storage.v2.ListAssetsRequest
  */

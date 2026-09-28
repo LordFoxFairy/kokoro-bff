@@ -1,12 +1,12 @@
 # kokoro-bff data model
 
-## W2-LIBRARY-BFF-FILE：个人文件只读投影目标（2026-09-28，未实施）
+## W2-LIBRARY-BFF-FILE：个人文件只读投影（2026-09-28，待 Root 集成验收）
 
-当前 BFF `GET /v1/library` 固定 503，不读 Storage，也不写 Library/Asset/Artifact 数据。Storage owner
+当前 BFF `GET /v1/library?kind=file` 通过 Connect v2 只读 Storage，不写 Library/Asset/Artifact 数据。Storage owner
 `2d87e26bbaed9a70dcd91ad1e9d126d39d275f38` 已在唯一 `kokoro_storage` canonical schema 内按
 `tenant + personal scope`、`upload_purpose=asset`、`scan_state=clean` **先过滤后 keyset 分页**发布 v2
-`ListAssets`；BFF 固定 generated 输入仍是旧 Storage `ef0fd777`。下一片只是把当前用户身份投影到该
-owner RPC，不在 BFF 复制一个文件事实。
+`ListAssets`；BFF generated 输入已固定新 Storage `2d87e26`。当前用户身份投影到该 owner RPC，
+不在 BFF 复制一个文件事实。
 
 目标 `GET /v1/library?kind=file` 的 `items` 是每次从 Storage CLEAN ASSET 映射的瞬时表示，
 `next_cursor` 是绑定受信 tenant/subject/scope/limit 的 owner opaque 翻页位置；每页重新执行 IAM
@@ -141,14 +141,14 @@ tenant/subject predicate、BFF 本地事务、retention、Redis DB 8 与跨 owne
 
 | 表                                 | Owner fact                                        | 关键键/查询                                                                                                  | 当前备注                                                                                                                                                                                                                                         |
 | ---------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `bff_project`                      | Project fact                                      | `project_id`; tenant + owner + slug 唯一；owner list 排序索引                                                 | `owner_id` 来自可信 subject；list/detail/slug/mutation 均为 tenant + owner scope                                                                                                                                                                  |
+| `bff_project`                      | Project fact                                      | `project_id`; tenant + owner + slug 唯一；owner list 排序索引                                                | `owner_id` 来自可信 subject；list/detail/slug/mutation 均为 tenant + owner scope                                                                                                                                                                 |
 | `bff_project_instruction_revision` | instruction revision                              | tenant + project + updated_at                                                                                | `current` 由应用维护                                                                                                                                                                                                                             |
 | `bff_project_skill`                | project skill state                               | tenant + project + skill PK                                                                                  | 布尔 enabled 投影                                                                                                                                                                                                                                |
 | `bff_project_task`                 | project task projection                           | task id；tenant + project 排序                                                                               | status 有有限 CHECK                                                                                                                                                                                                                              |
-| `bff_scheduled_task`               | ScheduledTask definition                          | task id；tenant + owner 用户查询索引；revision                                                               | 用户 list/find/update/delete/retry 均带 owner predicate；内部 Scheduler callback 按 tenant + task 读取 stored owner，是独立服务语义                                                                                                               |
+| `bff_scheduled_task`               | ScheduledTask definition                          | task id；tenant + owner 用户查询索引；revision                                                               | 用户 list/find/update/delete/retry 均带 owner predicate；内部 Scheduler callback 按 tenant + task 读取 stored owner，是独立服务语义                                                                                                              |
 | `bff_scheduled_task_outbox`        | ScheduledTask → Scheduler command                 | outbox id；`tenant_id + task_id + command_type + idempotency_key` 唯一；ready/task index                     | bounded register/replace/delete queue；保存版本化 payload、lineage、lease/fence、attempt/error/terminal state                                                                                                                                    |
 | `bff_idempotency_receipt`          | mutation receipt                                  | scope PK                                                                                                     | pending/terminal status 与 JSON response                                                                                                                                                                                                         |
-| `bff_conversation`                 | Conversation 产品事实                             | `conversation_id`；tenant + owner + updated_at 稳定列表排序                                                          | active/deleted tombstone；删除不物理清除，保留至 retention cleanup                                                                                                                                                                               |
+| `bff_conversation`                 | Conversation 产品事实                             | `conversation_id`；tenant + owner + updated_at 稳定列表排序                                                  | active/deleted tombstone；删除不物理清除，保留至 retention cleanup                                                                                                                                                                               |
 | `bff_message`                      | Message 产品事实                                  | `message_id`；tenant + conversation + message_seq 唯一                                                       | role/status CHECK；`run_id` 是 Agent opaque reference，不做跨仓关系约束                                                                                                                                                                          |
 | `bff_agent_dispatch_outbox`        | Chat → Agent launch command                       | outbox id；`tenant_id + conversation_id + idempotency_key` 唯一；run id 唯一；ready/lease/conversation index | 与两条 Message、expected-run registration 原子提交；保存版本化 payload、lineage、lease/fence、attempt/error/terminal state                                                                                                                       |
 | `bff_share`                        | Share 产品事实                                    | `share_id`；tenant + conversation active partial unique                                                      | revoked/expired rows retained；public lookup 只接受未撤销且未过期记录                                                                                                                                                                            |
@@ -212,12 +212,12 @@ outbox 或 cache entry。Share、runtime manifest 与 Scheduler callback 的独�
 
 Task 2 只对 fresh-install canonical schema 做 clean-slate 修改，不建立 migration、default owner 或旧数据回填：
 
-| 对象 | 当前 schema / query | 保护的不变量 |
-| --- | --- | --- |
-| `bff_project` | 新增 `owner_id TEXT NOT NULL`；唯一索引改为 `(tenant_id, owner_id, slug)`；真实 list 排序索引覆盖 `(tenant_id, owner_id, created_at ASC, project_id ASC)` | owner 来自可信 subject，body 不可指定；同 tenant 不同 owner 可复用 slug，且 list/detail/slug/mutation 不互见 |
-| Project child facts | revision/skill/task 不机械复制 owner 列 | 每次 read/write 先以 `(tenant_id, owner_id, project_id/id-or-slug)` 锁定或验证父 Project；同一事务维护无 FK 关系完整性 |
-| `bff_scheduled_task` | 复用现有 `owner_id`；用户索引/查询 scope 为 `(tenant_id, owner_id, ...)` | list/detail/update/delete/retry 只能命中 owner；create 引用 Project 时在 task + outbox 事务中验证并锁定同 scope Project |
-| Chat `project_ref` | 不新增 owner 副本 | 非空 reference 在 Conversation create/message/control/read 路径上解析为同 tenant/owner Project；外部字符串本身不是 authority |
+| 对象                 | 当前 schema / query                                                                                                                                       | 保护的不变量                                                                                                                 |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `bff_project`        | 新增 `owner_id TEXT NOT NULL`；唯一索引改为 `(tenant_id, owner_id, slug)`；真实 list 排序索引覆盖 `(tenant_id, owner_id, created_at ASC, project_id ASC)` | owner 来自可信 subject，body 不可指定；同 tenant 不同 owner 可复用 slug，且 list/detail/slug/mutation 不互见                 |
+| Project child facts  | revision/skill/task 不机械复制 owner 列                                                                                                                   | 每次 read/write 先以 `(tenant_id, owner_id, project_id/id-or-slug)` 锁定或验证父 Project；同一事务维护无 FK 关系完整性       |
+| `bff_scheduled_task` | 复用现有 `owner_id`；用户索引/查询 scope 为 `(tenant_id, owner_id, ...)`                                                                                  | list/detail/update/delete/retry 只能命中 owner；create 引用 Project 时在 task + outbox 事务中验证并锁定同 scope Project      |
+| Chat `project_ref`   | 不新增 owner 副本                                                                                                                                         | 非空 reference 在 Conversation create/message/control/read 路径上解析为同 tenant/owner Project；外部字符串本身不是 authority |
 
 Project Redis list cache `kokoro:bff:projects:${tenant}` 及其 invalidate 分支已删除，不迁移为 owner cache，也不双读旧 key；
 PostgreSQL 是唯一 Project truth。Redis 的 readiness、AG-UI publish 与其他既有职责不变。

@@ -82,33 +82,31 @@ test("the repository canonical OpenAPI passes governance and its frozen v1 surfa
   assert.deepEqual(compareOperationBaseline(openapi, baseline), [])
 })
 
-function inspectLibraryUnavailableContract(openapi) {
+function inspectLibraryFileContract(openapi) {
   const start = openapi.indexOf("  /v1/library:")
   const end = openapi.indexOf("  /v1/billing/plans:", start)
   const operation = start < 0 || end < 0 ? "" : openapi.slice(start, end)
   const errors = []
   if (!operation.includes("operationId: listLibrary")) errors.push("GET /v1/library must retain operationId=listLibrary")
-  if (!operation.includes("'503':")) errors.push("GET /v1/library must declare HTTP 503")
-  if (!operation.includes("#/components/schemas/ErrorEnvelope")) errors.push("GET /v1/library 503 must use ErrorEnvelope")
-  if (!operation.includes("const: storage_integration_unavailable")) errors.push("GET /v1/library 503 must freeze storage_integration_unavailable")
-  if (!operation.includes("const: iam_admission_unavailable")) errors.push("GET /v1/library 503 must also admit the pre-route IAM failure")
-  if (operation.includes("'200':")) errors.push("GET /v1/library must not publish an unreachable 200 response")
-  if (/^    Library(?:Item|Response):/mu.test(openapi)) errors.push("unreachable Library success schemas must be absent")
+  for (const marker of ["required: true", "enum: [file]", "maximum: 100", "maxLength: 4096", "'200':", "'400':", "'502':", "'503':", "#/components/schemas/LibraryFileListResponse"])
+    if (!operation.includes(marker)) errors.push(`GET /v1/library missing ${marker}`)
+  const shape = openapi.split("    LibraryFileListResponse:")[1]?.split("    ProjectResourceListResponse:")[0] ?? ""
+  for (const marker of ["items", "next_cursor", "kind", "enum: [file]", "asset_id", "filename", "mime_type", "size_bytes", "content_sha256", "scan_state", "created_at"])
+    if (!shape.includes(marker)) errors.push(`LibraryFileListResponse missing ${marker}`)
+  if (/artifact_id|session_id|download_url|upload_id/u.test(shape)) errors.push("Library file response must not impersonate Artifact or expose transfer references")
+  if (operation.includes("storage_integration_unavailable")) errors.push("GET /v1/library retains fixed degraded response")
   return errors
 }
 
-test("Library publishes only the corrective 503 machine contract and rejects drift", async () => {
+test("Library publishes explicit personal file 200 and rejects contract drift", async () => {
   const openapi = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
-  assert.deepEqual(inspectLibraryUnavailableContract(openapi), [])
-
-  const wrongCode = openapi.replace("const: storage_integration_unavailable", "const: upstream_not_configured")
-  assert.ok(inspectLibraryUnavailableContract(wrongCode).some((error) => error.includes("storage_integration_unavailable")))
+  assert.deepEqual(inspectLibraryFileContract(openapi), [])
 
   const libraryStart = openapi.indexOf("  /v1/library:")
   const libraryEnd = openapi.indexOf("  /v1/billing/plans:", libraryStart)
   const libraryOperation = openapi.slice(libraryStart, libraryEnd)
-  const withoutUnavailable = openapi.replace(libraryOperation, libraryOperation.replace("'503':", "'502':"))
-  assert.ok(inspectLibraryUnavailableContract(withoutUnavailable).some((error) => error.includes("HTTP 503")))
+  const withoutFile = openapi.replace(libraryOperation, libraryOperation.replace("enum: [file]", "enum: [artifact]"))
+  assert.ok(inspectLibraryFileContract(withoutFile).some((error) => error.includes("enum: [file]")))
 })
 
 test("the Capability consumer pins the accepted owner artifact and generated runtime", async () => {

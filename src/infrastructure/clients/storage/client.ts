@@ -138,49 +138,7 @@ export class StorageUploadClient implements ProjectResourceStorage {
   async listAssets(input: ProjectResourcePageInput, signal: AbortSignal): Promise<ProjectResourcePage> {
     try {
       const page = await this.client.listAssets(input, { headers: this.headers, signal })
-      if (
-        page.items.length > input.limit ||
-        (page.nextCursor !== undefined && (!/^[\x21-\x7e]{1,4096}$/u.test(page.nextCursor) || page.nextCursor === input.cursor || page.items.length === 0))
-      ) {
-        throw new ProjectResourceError("storage_response_invalid", 502)
-      }
-      const ids = new Set<string>()
-      const items = page.items.map((item) => {
-        const timestamp = item.createdAt
-        if (
-          !/^[^\x00-\x1f\x7f]{1,191}$/u.test(item.assetId) ||
-          ids.has(item.assetId) ||
-          !/^[^\x00-\x1f\x7f/\\]{1,255}$/u.test(item.filename) ||
-          [".", ".."].includes(item.filename) ||
-          item.mimeType.length > 191 ||
-          !/^[\w.+-]+\/[\w.+-]+$/u.test(item.mimeType) ||
-          !/^[0-9a-f]{64}$/u.test(item.contentSha256) ||
-          item.sizeBytes < 0n ||
-          item.sizeBytes > 18446744073709551615n ||
-          item.uploadPurpose !== UploadPurpose.ASSET ||
-          item.scanState !== ScanState.CLEAN ||
-          ![AssetOrigin.UPLOADED, AssetOrigin.GENERATED].includes(item.origin) ||
-          timestamp === undefined ||
-          timestamp.seconds < -62135596800n ||
-          timestamp.seconds > 253402300799n ||
-          timestamp.nanos < 0 ||
-          timestamp.nanos > 999999999
-        )
-          throw new ProjectResourceError("storage_response_invalid", 502)
-        ids.add(item.assetId)
-        const createdAt = toJson(TimestampSchema, timestamp)
-        if (typeof createdAt !== "string") throw new ProjectResourceError("storage_response_invalid", 502)
-        return {
-          asset_id: item.assetId,
-          filename: item.filename,
-          mime_type: item.mimeType,
-          size_bytes: String(item.sizeBytes),
-          content_sha256: item.contentSha256,
-          scan_state: "clean" as const,
-          created_at: createdAt,
-        }
-      })
-      return { items, next_cursor: page.nextCursor ?? null }
+      return parseCleanAssetPage(page, input)
     } catch (error) {
       if (error instanceof ProjectResourceError) throw error
       if (error instanceof ConnectError && error.code === Code.InvalidArgument) throw new ProjectResourceError("invalid_project_resource_page", 400)
@@ -199,4 +157,53 @@ export class StorageUploadClient implements ProjectResourceStorage {
       this.client.abortUpload({ command: { commandId, requestDigest }, uploadId, reason: "bff_project_upload_failed" }, { headers: this.headers, signal }),
     )
   }
+}
+
+export function parseCleanAssetPage(
+  page: Awaited<ReturnType<Client<typeof StorageService>["listAssets"]>>,
+  input: ProjectResourcePageInput,
+): ProjectResourcePage {
+  if (
+    page.items.length > input.limit ||
+    (page.nextCursor !== undefined && (!/^[\x21-\x7e]{1,4096}$/u.test(page.nextCursor) || page.nextCursor === input.cursor || page.items.length === 0))
+  ) {
+    throw new ProjectResourceError("storage_response_invalid", 502)
+  }
+  const ids = new Set<string>()
+  const items = page.items.map((item) => {
+    const timestamp = item.createdAt
+    if (
+      !/^[^\x00-\x1f\x7f]{1,191}$/u.test(item.assetId) ||
+      ids.has(item.assetId) ||
+      !/^[^\x00-\x1f\x7f/\\]{1,255}$/u.test(item.filename) ||
+      [".", ".."].includes(item.filename) ||
+      item.mimeType.length > 191 ||
+      !/^[\w.+-]+\/[\w.+-]+$/u.test(item.mimeType) ||
+      !/^[0-9a-f]{64}$/u.test(item.contentSha256) ||
+      item.sizeBytes < 0n ||
+      item.sizeBytes > 18446744073709551615n ||
+      item.uploadPurpose !== UploadPurpose.ASSET ||
+      item.scanState !== ScanState.CLEAN ||
+      ![AssetOrigin.UPLOADED, AssetOrigin.GENERATED].includes(item.origin) ||
+      timestamp === undefined ||
+      timestamp.seconds < -62135596800n ||
+      timestamp.seconds > 253402300799n ||
+      timestamp.nanos < 0 ||
+      timestamp.nanos > 999999999
+    )
+      throw new ProjectResourceError("storage_response_invalid", 502)
+    ids.add(item.assetId)
+    const createdAt = toJson(TimestampSchema, timestamp)
+    if (typeof createdAt !== "string") throw new ProjectResourceError("storage_response_invalid", 502)
+    return {
+      asset_id: item.assetId,
+      filename: item.filename,
+      mime_type: item.mimeType,
+      size_bytes: String(item.sizeBytes),
+      content_sha256: item.contentSha256,
+      scan_state: "clean" as const,
+      created_at: createdAt,
+    }
+  })
+  return { items, next_cursor: page.nextCursor ?? null }
 }

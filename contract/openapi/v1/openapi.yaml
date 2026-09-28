@@ -2677,35 +2677,40 @@ paths:
       x-kokoro-stability: beta
       x-kokoro-idempotency: none
       x-kokoro-permission: storage.library.read
-      summary: List library items
+      summary: List personal library files
+      description: The first Library slice lists only the admitted subject's CLEAN personal ASSET files. Agent Artifacts are a distinct future kind. A kind is required; no implicit file default exists. Cursor is an opaque continuation, never authorization.
+      parameters:
+        - name: kind
+          in: query
+          required: true
+          schema: { type: string, enum: [file] }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+        - name: cursor
+          in: query
+          schema: { type: string, minLength: 1, maxLength: 4096 }
       responses:
-        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
-        '503':
-          description: Storage integration is unavailable until the Storage v2 prerequisites are complete
+        '200':
+          description: Bounded page of current subject's personal CLEAN ASSET files
+          headers:
+            x-request-id:
+              schema: { type: string }
+              description: Request correlation ID
+            Cache-Control:
+              schema: { type: string, const: no-store }
+              description: Private uncached page
           content:
             application/json:
-              schema:
-                oneOf:
-                  - allOf:
-                      - $ref: '#/components/schemas/ErrorEnvelope'
-                      - type: object
-                        properties:
-                          error:
-                            type: object
-                            properties:
-                              code:
-                                type: string
-                                const: storage_integration_unavailable
-                  - allOf:
-                      - $ref: '#/components/schemas/ErrorEnvelope'
-                      - type: object
-                        properties:
-                          error:
-                            type: object
-                            properties:
-                              code:
-                                type: string
-                                const: iam_admission_unavailable
+              schema: { $ref: '#/components/schemas/LibraryFileListResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '502':
+          description: Storage owner page did not match the pinned v2 contract
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
         '401': { $ref: '#/components/responses/ServiceAuthFailed' }
         '429':
           description: IAM session admission is rate limited
@@ -3077,6 +3082,34 @@ components:
       schema:
         type: string
   schemas:
+    LibraryFileListResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [items, next_cursor]
+          properties:
+            items:
+              type: array
+              maxItems: 100
+              items:
+                type: object
+                additionalProperties: false
+                required: [kind, asset_id, filename, mime_type, size_bytes, content_sha256, scan_state, created_at]
+                properties:
+                  kind: { type: string, enum: [file] }
+                  asset_id: { type: string, minLength: 1, maxLength: 191 }
+                  filename: { type: string, minLength: 1, maxLength: 255 }
+                  mime_type: { type: string, minLength: 1, maxLength: 191 }
+                  size_bytes: { type: string, pattern: '^(0|[1-9][0-9]*)$' }
+                  content_sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+                  scan_state: { type: string, enum: [clean] }
+                  created_at: { type: string, format: date-time }
+            next_cursor: { type: [string, 'null'], minLength: 1, maxLength: 4096 }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
     ProjectResourceListResponse:
       type: object
       additionalProperties: false

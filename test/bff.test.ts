@@ -668,7 +668,7 @@ describe("kokoro-bff v1 mock contract", () => {
     assert.equal(received.length, 2)
   })
 
-  it("keeps Library unavailable after admission without opening a Storage connection", async () => {
+  it("requires explicit Library kind after admission and does not mistake an HTTP upstream for the Storage Connect adapter", async () => {
     let connections = 0
     let requests = 0
     const upstream = createServer((_request, response) => {
@@ -687,26 +687,26 @@ describe("kokoro-bff v1 mock contract", () => {
     assert.equal((await unauthenticated.json() as { error: { code: string } }).error.code, "service_auth_failed")
 
     const response = await fetch(`${base}/v1/library`, { headers: { ...authHeaders(), "x-domain": "evil.example", "x-kokoro-request-id": "library-live" } })
-    assert.equal(response.status, 503)
+    assert.equal(response.status, 400)
     assert.deepEqual(await response.json(), {
       error: {
-        code: "storage_integration_unavailable",
-        message: "Storage integration is unavailable",
+        code: "invalid_library_kind",
+        message: "Personal library files could not be read",
       },
       meta: { request_id: "library-live" },
     })
+    assert.equal(response.headers.get("x-request-id"), "library-live")
 
-    const explicitTestComposition = await listen(testServer(config()))
-    const testResponse = await fetch(`${explicitTestComposition}/v1/library`, {
-      headers: { ...authHeaders(), "x-kokoro-request-id": "library-test-composition" },
+    const validButUnconfigured = await fetch(`${base}/v1/library?kind=file`, {
+      headers: { ...authHeaders(), "x-kokoro-request-id": "library-unconfigured" },
     })
-    assert.equal(testResponse.status, 503)
-    assert.deepEqual(await testResponse.json(), {
+    assert.equal(validButUnconfigured.status, 503)
+    assert.deepEqual(await validButUnconfigured.json(), {
       error: {
-        code: "storage_integration_unavailable",
-        message: "Storage integration is unavailable",
+        code: "storage_unavailable",
+        message: "Personal library files could not be read",
       },
-      meta: { request_id: "library-test-composition" },
+      meta: { request_id: "library-unconfigured" },
     })
 
     await new Promise<void>((resolve) => setImmediate(resolve))

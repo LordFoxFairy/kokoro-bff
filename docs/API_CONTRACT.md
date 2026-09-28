@@ -1,20 +1,18 @@
 # kokoro-bff API contract policy
 
-## W2-LIBRARY-BFF-FILE：个人文件公开契约目标（2026-09-28，OpenAPI 尚未修改）
+## W2-LIBRARY-BFF-FILE：个人文件公开契约（2026-09-28，待 Root 集成验收）
 
-当前机器事实仍为 [`../contract/openapi/v1/openapi.yaml`](../contract/openapi/v1/openapi.yaml) 的 `GET /v1/library`、
-`listLibrary` 与 `storage.library.read` metadata：IAM admission 后固定 `503 storage_integration_unavailable`，无 200
-或成功 Library schema。BFF Storage manifest 仍 pin `ef0fd777`/combined SHA-256
-`05c6ef390c06b512218520b44e76d2d3212630df574a4fd63b6238b05631189f`；Storage 新发布的
-`2d87e26`/`11edffcdd668c59ef07c7b4c47d44b38dd95c2b8aee5a4d0c6475fba58850713` 尚未由 BFF 消费。
-本节是目标设计，不作为 generated SDK 输入或接口可用证明。
+当前机器事实为 [`../contract/openapi/v1/openapi.yaml`](../contract/openapi/v1/openapi.yaml) 的 `GET /v1/library`、
+`listLibrary` 与 `storage.library.read` metadata，已发布必填 `kind=file` 和个人文件 200。BFF Storage manifest 固定
+`2d87e26`/combined SHA-256 `11edffcdd668c59ef07c7b4c47d44b38dd95c2b8aee5a4d0c6475fba58850713`。
+本工作树代码/契约仍待 Root 独立验收；个人上传、下载、Artifact 与 Web 用户流程不由此声明完成。
 
 路径比较：**采用**原 `GET /v1/library`/`listLibrary`，将 `kind=file` 设为必填；**淘汰**另起
 `/v1/library/files` 并使旧 path/operationId 语义悬空，亦不建 alias。缺失、空值、重复或未知 kind 都是
 `400 invalid_library_kind`，无参不会静默改为个人文件。首片仅支持 file；Agent Artifact 与 all 分别在其
 owner 链/双源复合 cursor 验收后发布，不能提前给不存在的成功样本。
 
-| 目标 public wire | 语义                                                                                                                                                                                                                                                                                                                                 |
+| 当前 public wire | 语义                                                                                                                                                                                                                                                                                                                                 |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | 请求             | `GET /v1/library?kind=file&limit=50&cursor=...`；只允许这三个单值 query、无 body。`limit` 省略为 50、范围 1–100；`cursor` 可省略，存在时长度 1–4096，仅原样回传，不作为授权。                                                                                                                                                        |
 | 200              | `{data:{items:[...],next_cursor:string\|null},meta:{request_id}}`；空列表 `items:[]`/`next_cursor:null`。页最大 100，`Cache-Control:no-store`、`x-request-id`。                                                                                                                                                                      |
@@ -40,9 +38,13 @@ Product path、响应采用受限重定向或流式传输、Content-Disposition�
 摘要和 cursor 不是权限。当前 Web `/api/session/artifacts` 的 content-hash 作品形状不等于个人文件列表，
 不可作为正式 GET 或下载 fallback，也不能在失败时显示预览空列表。
 
-代码阶段必须先把本节字段/参数/错误写入唯一 public OpenAPI，精确固定 Storage 新 Proto/生成 manifest，
-再以 contract semantic、generated drift、坏 owner 页、当前 subject 重试与跨 subject cursor 负例验证；
-随后切 runtime 并删除固定 503 stub。本 Markdown 不维护第二份可编辑机器 schema。
+本片已先将字段/参数/错误写入唯一 public OpenAPI，精确固定 Storage 新 Proto/生成 manifest，再切 runtime
+并删除固定 503 stub。跨 subject cursor 的拒绝由 Storage owner 保证，BFF 每页重建当次 subject；Root 真实 owner
+组合负例仍待验。本 Markdown 不维护第二份可编辑机器 schema。
+
+现有 BFF canonical JSON envelope 仍含 `meta.request_id`，Library 与其他操作保持同一 shape；Library 路由同时
+显式写 `x-request-id`。这与 Root API 专项手册的 header-only request ID 目标不一致，属于既有全仓级技术债，
+本片不对其他 public operation 作不兼容 envelope 重构。
 
 ## W1E-IAM-0.6-BFF-PIN：历史来源
 
@@ -89,12 +91,12 @@ OpenAPI、generated client 与 policy JSON 是 Root verifier 的机器来源；p
 
 ### 精确请求矩阵
 
-| BFF request | 唯一准入形状 | 上游机器来源 |
-| --- | --- | --- |
-| `POST /iam/sign-up/email` | 无 query、Authorization、Idempotency-Key 或 issuer Session；精确 Web Origin、`Content-Type: application/json`；总 body ≤64 KiB 且 JSON 恰有 string `name,email,password,callbackURL`。`callbackURL` 逐字为 `${WEB_ORIGIN}/iam/interactions/invitation?id=<canonical-lowercase-UUID>`；额外字段、`image`、`rememberMe`、其他 callback 拒绝。 | IAM `AUTH_ROUTES["/sign-up/email"]=["POST"]` 与 Better Auth 1.7.3 snapshot；不是 Nest invitation Controller。 |
-| `GET /iam/v1/tenants/{tenant_id}/invitations/{invitation_id}/context` | 无 query/body/Authorization/Idempotency-Key；`tenant_id` 逐字等于 BFF `KOKORO_TENANT_ID`，`invitation_id` 是小写 canonical UUID；精确 Origin与非空 issuer Session Cookie。 | IAM 0.4.0 `getTenantInvitationContext`。 |
-| `POST .../{invitation_id}/accept` | 同一固定 tenant/UUID/Origin/issuer Session；无 query/body/Authorization/Idempotency-Key；Web 在调用前验证并消费一次性 CSRF。 | IAM 0.4.0 `acceptTenantInvitation`。 |
-| `POST .../{invitation_id}/reject` | 与 accept 相同；Web 在调用前验证并消费一次性 CSRF。 | IAM 0.4.0 `rejectTenantInvitation`。 |
+| BFF request                                                           | 唯一准入形状                                                                                                                                                                                                                                                                                                                                | 上游机器来源                                                                                                  |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `POST /iam/sign-up/email`                                             | 无 query、Authorization、Idempotency-Key 或 issuer Session；精确 Web Origin、`Content-Type: application/json`；总 body ≤64 KiB 且 JSON 恰有 string `name,email,password,callbackURL`。`callbackURL` 逐字为 `${WEB_ORIGIN}/iam/interactions/invitation?id=<canonical-lowercase-UUID>`；额外字段、`image`、`rememberMe`、其他 callback 拒绝。 | IAM `AUTH_ROUTES["/sign-up/email"]=["POST"]` 与 Better Auth 1.7.3 snapshot；不是 Nest invitation Controller。 |
+| `GET /iam/v1/tenants/{tenant_id}/invitations/{invitation_id}/context` | 无 query/body/Authorization/Idempotency-Key；`tenant_id` 逐字等于 BFF `KOKORO_TENANT_ID`，`invitation_id` 是小写 canonical UUID；精确 Origin与非空 issuer Session Cookie。                                                                                                                                                                  | IAM 0.4.0 `getTenantInvitationContext`。                                                                      |
+| `POST .../{invitation_id}/accept`                                     | 同一固定 tenant/UUID/Origin/issuer Session；无 query/body/Authorization/Idempotency-Key；Web 在调用前验证并消费一次性 CSRF。                                                                                                                                                                                                                | IAM 0.4.0 `acceptTenantInvitation`。                                                                          |
+| `POST .../{invitation_id}/reject`                                     | 与 accept 相同；Web 在调用前验证并消费一次性 CSRF。                                                                                                                                                                                                                                                                                         | IAM 0.4.0 `rejectTenantInvitation`。                                                                          |
 
 动态路径仅匹配上述三条完整模板；额外段、尾斜线、大小写/反斜线/双斜线、点段、percent-encoded alias、绝对 URL、fragment、
 错误方法均为 404，且零 IAM socket。固定 tenant 未配置为 503 `product_tenant_not_configured`；path tenant 错配为 403
@@ -234,20 +236,20 @@ Web route policy 与 BFF 已发布矩阵；不能只看本页 Markdown 或松散
 `b2eac1919e16fdc30a40bee0f3c4300b641bd8f674214aea7731bf10299559e1`。下面集合**比 IAM allowlist 更窄**；
 升级或增加 endpoint 必须重新固定 owner commit/digest、逐项审查用途/方法、运行真实 IAM HTTP，不从 vendor snapshot 自动开放。
 
-| BFF `/iam` 精确相对路径 | 方法 | 本片用途与 caller | 额外身份/载荷边界 |
-| --- | --- | --- | --- |
-| `/.well-known/openid-configuration`、`/.well-known/oauth-authorization-server`、`/jwks` | GET | Auth.js discovery/JWKS，Web server 或受控浏览器同源读取 | 无用户 Bearer、无 cookie mutation |
-| `/oauth2/authorize` | GET、POST | Code+S256 PKCE，Browser 经 Web | issuer cookie；唯一 `resource` 和注册 client/redirect 由 IAM 检查 |
-| `/oauth2/token` | POST | Auth.js server-only code/refresh exchange | 仅受信 Web server 生成 `client_secret_basic`；浏览器 Basic/Bearer 在 Web ingress 剔除；无 issuer/Product cookie |
-| `/oauth2/userinfo` | GET | Auth.js server-only claims fetch | 只转发 Web server 所持 user-delegated Bearer；浏览器 Bearer 不透传 |
-| `/oauth2/revoke` | POST | Auth.js server-only refresh/access revoke | 只接受 Web server 生成的 client Basic；无浏览器 Authorization |
-| `/oauth2/end-session` | GET、POST | RP logout，Browser 经 Web | issuer cookie/ID token hint 由 IAM 验证，post-logout URI 精确注册 |
-| `/oauth2/end-session/confirm` | POST | 仅 IAM 原生 logout 确认续接 | issuer cookie + 同源 mutation 检查 |
-| `/sign-in/email`、`/sign-out` | POST | Web 登录页/退出 issuer Session | issuer cookie（如有）及 IAM Origin/CSRF；Product Session 独立清理 |
-| `/get-session` | GET | Web 登录页/tenant/consent 当前 issuer Session | 只读取 issuer cookie，不建立 BFF Product identity |
-| `/organization/list` | GET | `1.1.0` 历史基线；`2.0.0` 已删除 | 当前 relay 返回 404，零 IAM socket |
-| `/organization/set-active` | POST | 固定 tenant OAuth 续接；不提供选择器 | 以本页 W1C-FIXED-TENANT-BFF-B 的精确输入准入；IAM 继续原生验签与 Session/成员校验 |
-| `/oauth2/consent`、`/oauth2/continue` | POST | Web consent/authorize 续接 | issuer Session、原生 consent/reference 校验 |
+| BFF `/iam` 精确相对路径                                                                 | 方法      | 本片用途与 caller                                       | 额外身份/载荷边界                                                                                               |
+| --------------------------------------------------------------------------------------- | --------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `/.well-known/openid-configuration`、`/.well-known/oauth-authorization-server`、`/jwks` | GET       | Auth.js discovery/JWKS，Web server 或受控浏览器同源读取 | 无用户 Bearer、无 cookie mutation                                                                               |
+| `/oauth2/authorize`                                                                     | GET、POST | Code+S256 PKCE，Browser 经 Web                          | issuer cookie；唯一 `resource` 和注册 client/redirect 由 IAM 检查                                               |
+| `/oauth2/token`                                                                         | POST      | Auth.js server-only code/refresh exchange               | 仅受信 Web server 生成 `client_secret_basic`；浏览器 Basic/Bearer 在 Web ingress 剔除；无 issuer/Product cookie |
+| `/oauth2/userinfo`                                                                      | GET       | Auth.js server-only claims fetch                        | 只转发 Web server 所持 user-delegated Bearer；浏览器 Bearer 不透传                                              |
+| `/oauth2/revoke`                                                                        | POST      | Auth.js server-only refresh/access revoke               | 只接受 Web server 生成的 client Basic；无浏览器 Authorization                                                   |
+| `/oauth2/end-session`                                                                   | GET、POST | RP logout，Browser 经 Web                               | issuer cookie/ID token hint 由 IAM 验证，post-logout URI 精确注册                                               |
+| `/oauth2/end-session/confirm`                                                           | POST      | 仅 IAM 原生 logout 确认续接                             | issuer cookie + 同源 mutation 检查                                                                              |
+| `/sign-in/email`、`/sign-out`                                                           | POST      | Web 登录页/退出 issuer Session                          | issuer cookie（如有）及 IAM Origin/CSRF；Product Session 独立清理                                               |
+| `/get-session`                                                                          | GET       | Web 登录页/tenant/consent 当前 issuer Session           | 只读取 issuer cookie，不建立 BFF Product identity                                                               |
+| `/organization/list`                                                                    | GET       | `1.1.0` 历史基线；`2.0.0` 已删除                        | 当前 relay 返回 404，零 IAM socket                                                                              |
+| `/organization/set-active`                                                              | POST      | 固定 tenant OAuth 续接；不提供选择器                    | 以本页 W1C-FIXED-TENANT-BFF-B 的精确输入准入；IAM 继续原生验签与 Session/成员校验                               |
+| `/oauth2/consent`、`/oauth2/continue`                                                   | POST      | Web consent/authorize 续接                              | issuer Session、原生 consent/reference 校验                                                                     |
 
 本片**不开放** IAM allowlist 中的 `sign-in/magic-link`、`magic-link/verify`、注册/邮件验证/密码重置、其他 Session
 管理、organization create/get/update/member/invitation/role 写入、`oauth2/introspect`；旧 Web magic-link/team-session
@@ -310,10 +312,10 @@ policy version 由 `1.0.0` 升为 `1.1.0`，生成 artifact 仍为只读。
 `731735ba8ce07c578fe04fa51783a95c7ac7daf50df33cea0ef9cefedc32d032`；路由、header 和限额语义未变。
 Web 须在 BFF policy 发布后固定其 commit/blob digest，才能增加同源入口；IAM 是 token 和验证结果唯一 owner。
 
-| BFF browser-private 请求 | 原生效果与约束 |
-| --- | --- |
-| `GET /iam/verify-email?<raw-query>` | BFF 按现有服务 envelope 与原始 path/method 准入，透传有界原始 query；IAM 校验 Better Auth 1.7.3 的有期签名 JWT `token`，邮箱已验证状态幂等，并决定原生结果。BFF 不解析/重排/记录 token，也不从 query 的 `callbackURL` 选择上游或重定向目的地。错误方法、编码 alias、越界/畸形 query 在出站前拒绝。 |
-| IAM 原生响应 | 保留原生 status、已允许 header/body 和合法独立 `Set-Cookie`；302 仅接受实际 `Location` 指向固定 Web origin 的已批准 `/auth/sign-in`，或现有允许的精确 issuer GET/Web callback/post-logout 目标。`callbackURL=${WEB_ORIGIN}/auth/sign-in` 由 IAM owner 的初次开通流程指定；其 query 字面值自身不构成 BFF 的 `Location` 授权。对该 GET 的上游响应无论缺失或带可缓存的 `Cache-Control`，BFF 均固定输出 `Cache-Control: no-store` 与 `Referrer-Policy: no-referrer`；自有拒绝/上游失败仍返回脱敏稳定 code、`x-request-id` 与 `Cache-Control: no-store`。不自动跟随 redirect、重试或缓存。 |
+| BFF browser-private 请求            | 原生效果与约束                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /iam/verify-email?<raw-query>` | BFF 按现有服务 envelope 与原始 path/method 准入，透传有界原始 query；IAM 校验 Better Auth 1.7.3 的有期签名 JWT `token`，邮箱已验证状态幂等，并决定原生结果。BFF 不解析/重排/记录 token，也不从 query 的 `callbackURL` 选择上游或重定向目的地。错误方法、编码 alias、越界/畸形 query 在出站前拒绝。                                                                                                                                                                                                                                                                                    |
+| IAM 原生响应                        | 保留原生 status、已允许 header/body 和合法独立 `Set-Cookie`；302 仅接受实际 `Location` 指向固定 Web origin 的已批准 `/auth/sign-in`，或现有允许的精确 issuer GET/Web callback/post-logout 目标。`callbackURL=${WEB_ORIGIN}/auth/sign-in` 由 IAM owner 的初次开通流程指定；其 query 字面值自身不构成 BFF 的 `Location` 授权。对该 GET 的上游响应无论缺失或带可缓存的 `Cache-Control`，BFF 均固定输出 `Cache-Control: no-store` 与 `Referrer-Policy: no-referrer`；自有拒绝/上游失败仍返回脱敏稳定 code、`x-request-id` 与 `Cache-Control: no-store`。不自动跟随 redirect、重试或缓存。 |
 
 GET 仍拒绝任意 `Authorization`，只筛选既有 issuer cookie，绝不把 Product Session cookie 或 Web service secret
 送往 IAM；现有精确 Origin、request/response header、body、timeout、大小上限、取消和非法 `Location`/`Set-Cookie`
@@ -378,14 +380,14 @@ redirect、自动重试和 admission cache 都关闭。只有 strict 200 且 `al
 
 用户 admission 失败在 body 业务解析、idempotency claim/replay、SQL、outbox、SSE 与 owner socket 之前返回：
 
-| 条件 | Public status / code | 约束 |
-| --- | --- | --- |
-| service 缺失/错误 | `403 service_auth_failed` | 不调用 IAM；shared secret 未配置属于部署错误，不改用用户凭据 |
-| Bearer 缺失、重复或格式错误 | `401 session_authentication_required` | 不调用 IAM |
-| IAM 401 | `401 session_invalid` | 不复制 owner message |
-| IAM 403/404/409 | `403 session_forbidden` | membership/session/tenant 不可用都 fail closed |
-| IAM 429 | `429 session_rate_limited` | 仅转发十进制 1..86400 秒的合法 `Retry-After` |
-| IAM timeout/transport/其他 status/非法 envelope、header 或过大响应 | `503 iam_admission_unavailable` | 零重试、无缓存 fallback |
+| 条件                                                               | Public status / code                  | 约束                                                         |
+| ------------------------------------------------------------------ | ------------------------------------- | ------------------------------------------------------------ |
+| service 缺失/错误                                                  | `403 service_auth_failed`             | 不调用 IAM；shared secret 未配置属于部署错误，不改用用户凭据 |
+| Bearer 缺失、重复或格式错误                                        | `401 session_authentication_required` | 不调用 IAM                                                   |
+| IAM 401                                                            | `401 session_invalid`                 | 不复制 owner message                                         |
+| IAM 403/404/409                                                    | `403 session_forbidden`               | membership/session/tenant 不可用都 fail closed               |
+| IAM 429                                                            | `429 session_rate_limited`            | 仅转发十进制 1..86400 秒的合法 `Retry-After`                 |
+| IAM timeout/transport/其他 status/非法 envelope、header 或过大响应 | `503 iam_admission_unavailable`       | 零重试、无缓存 fallback                                      |
 
 IAM 成功与错误都必须有合法 `x-request-id` 和 `Cache-Control: no-store`。BFF admission 响应使用本仓 canonical
 `ErrorEnvelope`、`x-request-id` 与 `Cache-Control: no-store`，不返回 IAM body、token 或 stack。请求取消或 response 提前关闭会
@@ -393,12 +395,12 @@ IAM 成功与错误都必须有合法 `x-request-id` 和 `Cache-Control: no-stor
 
 ### 显式服务边界
 
-| Operation | 身份与 authority | 与普通用户入口的关系 |
-| --- | --- | --- |
-| `GET /healthz`、`GET /readyz` | probe contract | 无用户身份；readiness 必须反映 IAM 配置缺失而不能伪装可服务用户 |
-| `GET /v1/shared/{shareId}` | `serviceHeader + internalSecret` + active/unexpired Share capability | OpenAPI 覆盖顶层 userBearer；不以额外 Authorization 授权，也不因其存在而拒绝；只读分享不授予 Run control/HITL/events/未分享文件 |
-| `GET /v1/system/runtime-manifest` | `serviceHeader + internalSecret` + server-side tenant/domain | OpenAPI 覆盖顶层 userBearer；无 fake user，不是 IAM fallback |
-| `POST /internal/bff/scheduled-tasks/dispatch` | 独立 Scheduler bearer + trusted event headers + durable receipt | 不属于 public OpenAPI 顶层 security，不接受 Web session Bearer |
+| Operation                                     | 身份与 authority                                                     | 与普通用户入口的关系                                                                                                            |
+| --------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /healthz`、`GET /readyz`                 | probe contract                                                       | 无用户身份；readiness 必须反映 IAM 配置缺失而不能伪装可服务用户                                                                 |
+| `GET /v1/shared/{shareId}`                    | `serviceHeader + internalSecret` + active/unexpired Share capability | OpenAPI 覆盖顶层 userBearer；不以额外 Authorization 授权，也不因其存在而拒绝；只读分享不授予 Run control/HITL/events/未分享文件 |
+| `GET /v1/system/runtime-manifest`             | `serviceHeader + internalSecret` + server-side tenant/domain         | OpenAPI 覆盖顶层 userBearer；无 fake user，不是 IAM fallback                                                                    |
+| `POST /internal/bff/scheduled-tasks/dispatch` | 独立 Scheduler bearer + trusted event headers + durable receipt      | 不属于 public OpenAPI 顶层 security，不接受 Web session Bearer                                                                  |
 
 四类凭据不可互换。`x-kokoro-permission` 继续表示 Product operation 的动作意图；IAM session admission 不返回也不合成
 公开 API 的业务 permission，BFF-owned facts 仍由资源 predicate 授权。
@@ -459,12 +461,12 @@ BFF 的机器事实与契约门禁；runtime mapper、Web consumer 和 `docs/api
 - `/v1` 的 breaking policy 与 provenance 见 [`../contract/README.md`](../contract/README.md)。删除 path/method、重命名
   operationId、收窄 schema 或改变 permission/idempotency 语义必须进入新版本。
 
-## Library degraded contract and Storage v2 prerequisites
+## Library degraded contract history（旧 503 阶段，已被个人文件 200 替代）
 
-`GET /v1/library` 保留既有 path、method、`listLibrary` operationId 与 operation metadata。`c5e9b3c` 在受信
+历史上 `GET /v1/library` 保留既有 path、method、`listLibrary` operationId 与 operation metadata。`c5e9b3c` 在受信
 service-envelope admission 通过后只返回 `503 storage_integration_unavailable`；Task 1 后它与其他普通用户 operation 一样，
 还必须先通过 IAM Bearer admission。认证失败使用本页稳定 401/403/429/503 语义，admission 成功后仍返回 Storage 503。
-503 使用 canonical `ErrorEnvelope`，当前 `meta.request_id` 行为保持不变。机器契约删除了
+503 使用 canonical `ErrorEnvelope`，当时的 `meta.request_id` 行为保持不变。机器契约曾删除
 不可达的 200 success 与仅服务旧 transport 的 `LibraryResponse`/`LibraryItem` schema；这不是 Library 可用性声明。
 
 此处旧全 Library 前置现已拆分：上文个人 `kind=file` 首片以已发布 Storage personal CLEAN ASSET
@@ -641,7 +643,7 @@ W0B-9 clean-slate 同时删除 jobs/job_*、旧 header 与 compact occurrence �
 
 | Public 目标                           | Platform RPC       | action / 请求与成功表示                                                                                                                                   |
 | ------------------------------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /v1/skills/drafts`              | CreateSkillDraft   | create_draft；首个 user-only 切片由受信 subject 固定 owner，不接受 owner_scope；201 skill_id/series_id/revision/status/replayed                             |
+| `POST /v1/skills/drafts`              | CreateSkillDraft   | create_draft；首个 user-only 切片由受信 subject 固定 owner，不接受 owner_scope；201 skill_id/series_id/revision/status/replayed                           |
 | `POST /v1/skills/{skill_id}/versions` | CreateSkillVersion | create_version；metadata，base_skill_id 来自 path，owner_scope 从 base 事实解析；201 新 skill_id/series_id/revision/status/replayed                       |
 | `POST /v1/skills/{skill_id}/validate` | ValidateSkillDraft | validate_draft；resource 来自 path，幂等身份来自 header，不接受 asset/digest body；200 valid/content_digest/manifest_identity/skill_id/series_id/replayed |
 | `POST /v1/skills/{skill_id}/publish`  | PublishSkill       | publish；visibility；200 source_ref/revision/status/event_id/replayed                                                                                     |
@@ -733,19 +735,19 @@ tenant/subject/key 但任一 body 值或 tag 顺序变化返回 409，BFF 不另
 `replayed=true`。所有响应带 BFF `x-request-id` 与 `Cache-Control:no-store`；错误体使用 `{ "error": { "code", "message", "retryable" } }`，不含 `meta.request_id`；不透出 machine token、Platform request/metadata、
 Connect trailers 或 owner message。
 
-| HTTP            | 稳定 code                                              | 精确来源/语义                                                                         | retryable           |
-| --------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------- | ------------------- |
-| 400             | `invalid_skill_request`                                | strict body、字段长度/重复 tag 或本地投影非法                                         | false               |
-| 400             | `idempotency_key_required` / `invalid_idempotency_key` | key 缺失或不满足上述唯一 header 规则                                                  | false               |
-| 401/403         | 既有 session admission code                            | 用户 session、服务调用资格或固定 tenant 被拒绝；发生在 body、幂等与 Platform I/O 前   | false               |
-| 429/503         | 既有 session admission code                            | IAM session 限流或不可用；发生在 body、幂等与 Platform I/O 前                        | true                |
-| 409             | `skill_idempotency_conflict`                           | Platform `ALREADY_EXISTS`：同派生命令、不同 v2 digest/operation                       | false               |
-| 409             | `skill_command_in_progress`                            | Platform `ABORTED`：相同命令正在处理或 fence 尚未收敛                                 | true                |
-| 412             | `skill_precondition_failed`                            | Platform 明确 `FAILED_PRECONDITION`；CreateDraft 正常正向链不产生该状态               | false               |
-| 413             | `request_body_too_large`                               | BFF body budget                                                                       | false               |
-| 429             | `skill_rate_limited`                                   | Platform `RESOURCE_EXHAUSTED`；只保留合法有界 Retry-After                             | true                |
-| 502             | `skill_response_invalid`                               | 非法 ID/revision/status/body、意外 PermissionDenied/NotFound、未知或矛盾 Connect code | false               |
-| 503             | `skill_dependency_unavailable`                         | catalog credential/token、Platform 配置/transport、deadline、`UNAVAILABLE` 或 machine workload 的 Connect `UNAUTHENTICATED`；不映射为用户 401、不自动重试 | true                |
+| HTTP    | 稳定 code                                              | 精确来源/语义                                                                                                                                             | retryable |
+| ------- | ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| 400     | `invalid_skill_request`                                | strict body、字段长度/重复 tag 或本地投影非法                                                                                                             | false     |
+| 400     | `idempotency_key_required` / `invalid_idempotency_key` | key 缺失或不满足上述唯一 header 规则                                                                                                                      | false     |
+| 401/403 | 既有 session admission code                            | 用户 session、服务调用资格或固定 tenant 被拒绝；发生在 body、幂等与 Platform I/O 前                                                                       | false     |
+| 429/503 | 既有 session admission code                            | IAM session 限流或不可用；发生在 body、幂等与 Platform I/O 前                                                                                             | true      |
+| 409     | `skill_idempotency_conflict`                           | Platform `ALREADY_EXISTS`：同派生命令、不同 v2 digest/operation                                                                                           | false     |
+| 409     | `skill_command_in_progress`                            | Platform `ABORTED`：相同命令正在处理或 fence 尚未收敛                                                                                                     | true      |
+| 412     | `skill_precondition_failed`                            | Platform 明确 `FAILED_PRECONDITION`；CreateDraft 正常正向链不产生该状态                                                                                   | false     |
+| 413     | `request_body_too_large`                               | BFF body budget                                                                                                                                           | false     |
+| 429     | `skill_rate_limited`                                   | Platform `RESOURCE_EXHAUSTED`；只保留合法有界 Retry-After                                                                                                 | true      |
+| 502     | `skill_response_invalid`                               | 非法 ID/revision/status/body、意外 PermissionDenied/NotFound、未知或矛盾 Connect code                                                                     | false     |
+| 503     | `skill_dependency_unavailable`                         | catalog credential/token、Platform 配置/transport、deadline、`UNAVAILABLE` 或 machine workload 的 Connect `UNAUTHENTICATED`；不映射为用户 401、不自动重试 | true      |
 
 客户端取消会贯穿 IAM token exchange/Platform RPC，不伪造一个 JSON 成功或自动重发。BFF 当前用户 Bearer 只用于 IAM session
 admission；user CreateDraft 不调用 organization Skill action，也不把该 Bearer发给 Platform。Platform consumer 精确固定

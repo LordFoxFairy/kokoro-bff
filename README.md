@@ -12,17 +12,17 @@ Browser -> kokoro same-origin /api/* -> kokoro-bff /v1/* -> owner API / Agent / 
 
 ## 当前状态摘要
 
-| 能力 | 当前事实 |
-| --- | --- |
-| Public contract | 67 个 operation，全部具备 owner/visibility/stability/idempotency/permission metadata |
-| User admission | 普通 `/v1/*` 使用 service envelope + 唯一 Bearer，并在线验证固定 IAM `0.7.0` contract；legacy identity headers 被忽略 |
-| Project / ScheduledTask | Live 使用本仓 PostgreSQL；Redis 用于 readiness/cache coordination |
-| Idempotency | business store 存在时有 PostgreSQL receipt；部分路径仍可能使用进程内 Map |
-| Chat / AG-UI | Live 先把 Agent source fact 与 AG-UI frame 原子投影到本仓 PostgreSQL，再从 ledger 输出 SSE |
-| Conversation / Message / Share | Live 产品事实由本仓 PostgreSQL 的 `bff_conversation`、`bff_message`、`bff_share` canonical tables 提供 |
-| Durable AG-UI ledger | PostgreSQL 后台 consumer 以 lease/fence 主动摄取；逐 frame opaque cursor、保留水位、GC 与 expired-cursor tombstone 已闭环 |
-| ScheduledTask durable dispatch | 已实现本仓 bounded outbox、租约/fence、重试/终态；mutation receipt 仍未与事实事务合并 |
-| Test doubles | 只存在于 `test/doubles/`，不编入生产 `src/` |
+| 能力                           | 当前事实                                                                                                                  |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| Public contract                | 67 个 operation，全部具备 owner/visibility/stability/idempotency/permission metadata                                      |
+| User admission                 | 普通 `/v1/*` 使用 service envelope + 唯一 Bearer，并在线验证固定 IAM `0.7.0` contract；legacy identity headers 被忽略     |
+| Project / ScheduledTask        | Live 使用本仓 PostgreSQL；Redis 用于 readiness/cache coordination                                                         |
+| Idempotency                    | business store 存在时有 PostgreSQL receipt；部分路径仍可能使用进程内 Map                                                  |
+| Chat / AG-UI                   | Live 先把 Agent source fact 与 AG-UI frame 原子投影到本仓 PostgreSQL，再从 ledger 输出 SSE                                |
+| Conversation / Message / Share | Live 产品事实由本仓 PostgreSQL 的 `bff_conversation`、`bff_message`、`bff_share` canonical tables 提供                    |
+| Durable AG-UI ledger           | PostgreSQL 后台 consumer 以 lease/fence 主动摄取；逐 frame opaque cursor、保留水位、GC 与 expired-cursor tombstone 已闭环 |
+| ScheduledTask durable dispatch | 已实现本仓 bounded outbox、租约/fence、重试/终态；mutation receipt 仍未与事实事务合并                                     |
+| Test doubles                   | 只存在于 `test/doubles/`，不编入生产 `src/`                                                                               |
 
 ## Owner 边界
 
@@ -133,6 +133,6 @@ health/ready smoke 尚未在当前治理阶段全部闭环，不应据此 README
 
 ### Single project file upload
 
-Configure `KOKORO_STORAGE_RPC_BASE_URL`, independent `KOKORO_BFF_STORAGE_SECRET`, and exact `KOKORO_STORAGE_OBJECT_ORIGIN` together. The existing project resources POST accepts one `files` multipart part and at most 1 MiB for the entire body. It returns only CLEAN Storage asset metadata. Infected files receive terminal 422; pending/unknown scans receive retryable 503 without a usable resource. Reuse the same key/file after an uncertain response; an aborted upload requires a new key. Library listing and multi-file upload remain outside this slice. Storage provenance/generation: `pnpm contract:check:storage`.
+Configure `KOKORO_STORAGE_RPC_BASE_URL`, independent `KOKORO_BFF_STORAGE_SECRET`, and exact `KOKORO_STORAGE_OBJECT_ORIGIN` together. The existing project resources POST accepts one `files` multipart part and at most 1 MiB for the entire body. It returns only CLEAN Storage asset metadata. Infected files receive terminal 422; pending/unknown scans receive retryable 503 without a usable resource. Reuse the same key/file after an uncertain response; an aborted upload requires a new key. `GET /v1/library?kind=file` now lists only the admitted subject's personal CLEAN ASSET files through Storage Connect; personal upload/download and Agent Artifacts remain separate slices. Storage provenance/generation: `pnpm contract:check:storage`.
 
 Project resources can be reloaded with `GET /v1/projects/{projectId}/resources?limit=50&cursor=...` using the same Storage configuration. The response contains clean asset metadata in `data.items` and opaque `data.next_cursor` (null at the end); no download URL or upload ID is fabricated. Current project ownership is rechecked on every page.

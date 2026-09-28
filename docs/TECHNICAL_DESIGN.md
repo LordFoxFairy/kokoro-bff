@@ -1,24 +1,23 @@
 # kokoro-bff 技术设计
 
-## W2-LIBRARY-BFF-FILE：个人文件 Product 列表设计门（2026-09-28，未实施）
+## W2-LIBRARY-BFF-FILE：个人文件 Product 列表实现（2026-09-28，待 Root 集成验收）
 
-**当前态。** BFF main `31c4803b3df0e90c031a97844f89df384ca1a35c` 的 `GET /v1/library` 在普通用户 IAM admission
-后由 `src/http/routes/owner.ts` 固定返回 `503 storage_integration_unavailable`；public OpenAPI 没有 200。
-`contract/dependencies/storage-connect.json` 仍 pin Storage `ef0fd7779bf434120ac1f8a58592222f534a7c45`，combined SHA-256
-`05c6ef390c06b512218520b44e76d2d3212630df574a4fd63b6238b05631189f`，既有消费仅用 project scope。
-Storage main `2d87e26bbaed9a70dcd91ad1e9d126d39d275f38` 已发布**新 owner 来源**：原 v2 `ListAssets` 现准
-`web-bff + personal` 且受信 `scope_id=subject_id`，combined SHA-256
-`11edffcdd668c59ef07c7b4c47d44b38dd95c2b8aee5a4d0c6475fba58850713`；BFF 尚未固定/调用。
+**当前工作树。** BFF 的 `GET /v1/library?kind=file` 在普通用户 IAM admission 后由具名路由调用个人范围的
+Storage Connect v2 `ListAssets`，成功返回只含 CLEAN ASSET 的 200；旧固定 503 分支已删除。OpenAPI 已发布
+必填 `kind=file`、分页和严格成功形状。consumer pin 为 Storage main
+`2d87e26bbaed9a70dcd91ad1e9d126d39d275f38`，combined SHA-256
+`11edffcdd668c59ef07c7b4c47d44b38dd95c2b8aee5a4d0c6475fba58850713`；Project scope 既有调用仍保留。
+本状态须以 Root 后续代码审查、单仓全门和真实 owner 链验收为准，尚不等于浏览器 Library 闭环。
 
-| 设计门                 | 裁决                                                                                                                                                                                                                                                                                                                                                                                     |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Owner / 目标           | BFF 唯一拥有 public Product Library、个人授权和响应投影；Storage 唯一拥有 Asset/Scan/Blob。首片只列当次本人 personal scope 的 CLEAN 普通 ASSET，不列 Agent Artifact、Project 资源、包或他人文件。                                                                                                                                                                                        |
-| 公共路径 A（采用）     | 保留 `GET /v1/library`、`listLibrary`，但 `kind=file` **必填**；缺失、重复、空值或未知 kind 返回 400。不把无参“作品资料库”暗中改为“文件柜”。未来 `kind=artifact` 待 F2/可信 Agent 链，`kind=all` 待真实双源复合分页。                                                                                                                                                                    |
-| 公共路径 B（本片淘汰） | 新 `/v1/library/files` 类型直观，但旧 `/v1/library` 和 `listLibrary` 的正式语义仍需重裁；两者共存或 alias 造成双轨。本片用原 path 加显式 kind，后续若改变须按 breaking policy 评审。                                                                                                                                                                                                     |
-| 代码位置（下一代码片） | 对比把查询/Connect/错误继续堆进泛 `owner.ts` 与在已有 `src/http/routes/` 添加具名个人 Library 列表 handler：采用后者，在 server 普通用户 admission 后精确分发，删除原 503 分支。Storage client 放在已有 `src/infrastructure/clients/storage/`，generated wire 类型止于该边界；现 `StorageUploadClient` 构造器硬编码 project，不伪造 `projectId=subjectId` 来复用。无新模块、目录或进程。 |
-| 身份与失败             | 原有 service envelope → 单一 Bearer → IAM 在线 admission → 固定 Product tenant → 严格 query → 从当次 RequestContext 组装 tenant/subject、`scope_kind=personal`、`scope_id=subject_id` → v2 Connect `ListAssets`。每页重验；浏览器 header/body、cursor、文件创建者、同 hash、Team 成员不是个人授权。缺配置/超时/依赖拒绝 fail closed，坏 owner 页 502，不以错误伪装空页。                 |
-| 分页与数据             | `limit` 省略为 50、有效 1–100；有界 opaque cursor。Storage 在 SQL 页前筛 `upload_purpose=ASSET AND scan_state=CLEAN`，按 `created_at DESC, asset_id ASC`，personal/project cursor 种类隔离。BFF 不后过滤、不自动重试、不新增 Library/Asset/Artifact 表、缓存、receipt、跨 owner SQL/角色/schema；空页 200，依赖失败非空页。                                                              |
-| 删除与验证             | 下一代码片精确重钉 Storage commit/digest，先发布唯一 public OpenAPI 200/测试，再切 runtime、删除固定 503 stub；不接 Storage 内部 HTTP 或 fallback。单仓 contract、admission/越权/坏页、Node22 全门；Root 真实 Storage/PG 与浏览器刷新/私有负例。文档门不改机器/运行。                                                                                                                    |
+| 设计门                 | 裁决                                                                                                                                                                                                                                                                                                                                                                     |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Owner / 目标           | BFF 唯一拥有 public Product Library、个人授权和响应投影；Storage 唯一拥有 Asset/Scan/Blob。首片只列当次本人 personal scope 的 CLEAN 普通 ASSET，不列 Agent Artifact、Project 资源、包或他人文件。                                                                                                                                                                        |
+| 公共路径 A（采用）     | 保留 `GET /v1/library`、`listLibrary`，但 `kind=file` **必填**；缺失、重复、空值或未知 kind 返回 400。不把无参“作品资料库”暗中改为“文件柜”。未来 `kind=artifact` 待 F2/可信 Agent 链，`kind=all` 待真实双源复合分页。                                                                                                                                                    |
+| 公共路径 B（本片淘汰） | 新 `/v1/library/files` 类型直观，但旧 `/v1/library` 和 `listLibrary` 的正式语义仍需重裁；两者共存或 alias 造成双轨。本片用原 path 加显式 kind，后续若改变须按 breaking policy 评审。                                                                                                                                                                                     |
+| 代码位置（已采用）     | 不把查询/Connect/错误堆进泛 `owner.ts`；具名 `library-file-list` handler 在 server 普通用户 admission 后精确分发。个人 client 在已有 `src/infrastructure/clients/storage/`，与 Project client 共享只读 CLEAN ASSET 页验证器而不复用 Project scope/上传命令；generated wire 类型止于 adapter。无新模块、目录或进程。                                                      |
+| 身份与失败             | 原有 service envelope → 单一 Bearer → IAM 在线 admission → 固定 Product tenant → 严格 query → 从当次 RequestContext 组装 tenant/subject、`scope_kind=personal`、`scope_id=subject_id` → v2 Connect `ListAssets`。每页重验；浏览器 header/body、cursor、文件创建者、同 hash、Team 成员不是个人授权。缺配置/超时/依赖拒绝 fail closed，坏 owner 页 502，不以错误伪装空页。 |
+| 分页与数据             | `limit` 省略为 50、有效 1–100；有界 opaque cursor。Storage 在 SQL 页前筛 `upload_purpose=ASSET AND scan_state=CLEAN`，按 `created_at DESC, asset_id ASC`，personal/project cursor 种类隔离。BFF 不后过滤、不自动重试、不新增 Library/Asset/Artifact 表、缓存、receipt、跨 owner SQL/角色/schema；空页 200，依赖失败非空页。                                              |
+| 删除与验证             | 固定旧 503 stub 已删除；不接 Storage 内部 HTTP 或 fallback。单仓 contract、admission/越权/坏页、Node22 全门由本代码片执行；Root 后续独立验证真实 Storage/PG 与浏览器刷新/私有负例。                                                                                                                                                                                      |
 
 首片 public item 以 `kind:"file"` 判别，同时保留 Storage opaque `asset_id`、`filename`、`mime_type`、十进制
 `size_bytes`、`content_sha256`、`scan_state:"clean"` 与 UTC `created_at`；没有 `artifact_id`、`title`、`session_id`、
@@ -94,25 +93,25 @@ issuer Session、Invitation、Member、recipient/expiry/role 与状态机，Web 
 新邮箱按 `sign-up → SMTP verify-email → 重新 sign-in → context → accept|reject` 前进；accept 成功后才可启动 Product `/login`，
 reject 只进入完成页。
 
-| 设计门项目 | 裁决 |
-| --- | --- |
-| Owner / 唯一 writer | BFF `src/http/routes/iam-protocol-relay*` 唯一拥有 relay admission/transport policy；IAM 拥有四个上游 operation 及业务状态；Web 拥有浏览器 interaction/CSRF。 |
-| 当前入口 | 复用 `src/bootstrap/server.ts` 的 `/iam` 先行分支、现有 relay transport、配置中的固定 `KOKORO_TENANT_ID`/Web Origin、issuer Cookie 白名单及预算。 |
-| 目录方案 | 采用同一 relay 中**独立具名精确动态 matcher**，静态 `routes` 仍只表示 Better Auth `AUTH_ROUTES` 子集；淘汰把 `{tenant_id}`/`{invitation_id}` 通配或模板硬塞进静态 map 的方案，也淘汰新 gateway/Team route/Product admission。 |
-| 粒度 | 后续实现扩展现有 policy/relay/生成链和相邻测试；动态 matcher、注册 body codec、Location 判定各自保持单一职责，是否拆文件按实现大小和独立测试边界决定，不预建目录。 |
-| 依赖 | BFF 只消费 IAM 固定 commit 的 `AUTH_ROUTES`、Better Auth snapshot 与完整 internal OpenAPI；generated IAM wire schema在 relay adapter 终止。禁止 sibling 源码 import、IAM SQL/Redis、Product Bearer、浏览器 tenant/actor、宽 `/iam/*`。 |
-| 数据/API | public `/v1` OpenAPI、`database/schema.sql`、Redis DB 8、receipt/outbox/cache 均不变；browser-private policy 目标版本为 `2.1.0`。 |
-| 删除/替代 | 不保留 `/auth/invitation`、宽 `organization/get-invitation`、动态 wildcard、开放 callback、兼容 alias 或自动写重试。旧 Better Auth 静态子集继续按原精确矩阵工作。 |
-| 验证 | policy/transport/client 单元与真实 IAM HTTP 先 RED→GREEN；Node22 `pnpm format:check && pnpm check`；Root 固定 IAM→BFF→Web 来源后验证精确模板/visibility/method、篡改负例、真 HTTPS SMTP 点击、accept/reject/注册及资源清零。 |
+| 设计门项目          | 裁决                                                                                                                                                                                                                                   |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner / 唯一 writer | BFF `src/http/routes/iam-protocol-relay*` 唯一拥有 relay admission/transport policy；IAM 拥有四个上游 operation 及业务状态；Web 拥有浏览器 interaction/CSRF。                                                                          |
+| 当前入口            | 复用 `src/bootstrap/server.ts` 的 `/iam` 先行分支、现有 relay transport、配置中的固定 `KOKORO_TENANT_ID`/Web Origin、issuer Cookie 白名单及预算。                                                                                      |
+| 目录方案            | 采用同一 relay 中**独立具名精确动态 matcher**，静态 `routes` 仍只表示 Better Auth `AUTH_ROUTES` 子集；淘汰把 `{tenant_id}`/`{invitation_id}` 通配或模板硬塞进静态 map 的方案，也淘汰新 gateway/Team route/Product admission。          |
+| 粒度                | 后续实现扩展现有 policy/relay/生成链和相邻测试；动态 matcher、注册 body codec、Location 判定各自保持单一职责，是否拆文件按实现大小和独立测试边界决定，不预建目录。                                                                     |
+| 依赖                | BFF 只消费 IAM 固定 commit 的 `AUTH_ROUTES`、Better Auth snapshot 与完整 internal OpenAPI；generated IAM wire schema在 relay adapter 终止。禁止 sibling 源码 import、IAM SQL/Redis、Product Bearer、浏览器 tenant/actor、宽 `/iam/*`。 |
+| 数据/API            | public `/v1` OpenAPI、`database/schema.sql`、Redis DB 8、receipt/outbox/cache 均不变；browser-private policy 目标版本为 `2.1.0`。                                                                                                      |
+| 删除/替代           | 不保留 `/auth/invitation`、宽 `organization/get-invitation`、动态 wildcard、开放 callback、兼容 alias 或自动写重试。旧 Better Auth 静态子集继续按原精确矩阵工作。                                                                      |
+| 验证                | policy/transport/client 单元与真实 IAM HTTP 先 RED→GREEN；Node22 `pnpm format:check && pnpm check`；Root 固定 IAM→BFF→Web 来源后验证精确模板/visibility/method、篡改负例、真 HTTPS SMTP 点击、accept/reject/注册及资源清零。           |
 
 ### 四个入口与双 matcher
 
-| BFF 精确入口 | IAM 机器来源 | 方法与目标语义 | BFF 额外准入 |
-| --- | --- | --- | --- |
-| `/iam/sign-up/email` | IAM `AUTH_ROUTES` + Better Auth 1.7.3 snapshot | `POST`；仅新邀请收件人的 email/password 注册 | 无 query/Authorization/Idempotency-Key/issuer Session；精确 Origin、JSON、64 KiB 总上限和恰好 `name,email,password,callbackURL` 四字段。`callbackURL` 必须逐字等于配置 Web Origin 下 `/iam/interactions/invitation?id=<canonical UUID>`；`image`、`rememberMe`、浏览器自报 callback 与额外字段拒绝。 |
-| `/iam/v1/tenants/{tenant_id}/invitations/{invitation_id}/context` | IAM OpenAPI 0.4.0 `getTenantInvitationContext` | `GET`；已验证 issuer Session 的 pending 邀请预览 | `tenant_id` 逐字等于 `KOKORO_TENANT_ID`；invitation 为小写 canonical UUID；无 query/body/Authorization/Idempotency-Key。 |
-| 同前缀 `.../{invitation_id}/accept` | IAM OpenAPI 0.4.0 `acceptTenantInvitation` | `POST`；pending → accepted，并由 IAM 创建 Member | 同一固定 tenant/UUID；无 query/body/Authorization/Idempotency-Key；Web 在调用 BFF 前验证一次性 CSRF。 |
-| 同前缀 `.../{invitation_id}/reject` | IAM OpenAPI 0.4.0 `rejectTenantInvitation` | `POST`；pending → rejected，不创建 Member | 与 accept 相同；Web 在调用 BFF 前验证一次性 CSRF。 |
+| BFF 精确入口                                                      | IAM 机器来源                                   | 方法与目标语义                                   | BFF 额外准入                                                                                                                                                                                                                                                                                         |
+| ----------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/iam/sign-up/email`                                              | IAM `AUTH_ROUTES` + Better Auth 1.7.3 snapshot | `POST`；仅新邀请收件人的 email/password 注册     | 无 query/Authorization/Idempotency-Key/issuer Session；精确 Origin、JSON、64 KiB 总上限和恰好 `name,email,password,callbackURL` 四字段。`callbackURL` 必须逐字等于配置 Web Origin 下 `/iam/interactions/invitation?id=<canonical UUID>`；`image`、`rememberMe`、浏览器自报 callback 与额外字段拒绝。 |
+| `/iam/v1/tenants/{tenant_id}/invitations/{invitation_id}/context` | IAM OpenAPI 0.4.0 `getTenantInvitationContext` | `GET`；已验证 issuer Session 的 pending 邀请预览 | `tenant_id` 逐字等于 `KOKORO_TENANT_ID`；invitation 为小写 canonical UUID；无 query/body/Authorization/Idempotency-Key。                                                                                                                                                                             |
+| 同前缀 `.../{invitation_id}/accept`                               | IAM OpenAPI 0.4.0 `acceptTenantInvitation`     | `POST`；pending → accepted，并由 IAM 创建 Member | 同一固定 tenant/UUID；无 query/body/Authorization/Idempotency-Key；Web 在调用 BFF 前验证一次性 CSRF。                                                                                                                                                                                                |
+| 同前缀 `.../{invitation_id}/reject`                               | IAM OpenAPI 0.4.0 `rejectTenantInvitation`     | `POST`；pending → rejected，不创建 Member        | 与 accept 相同；Web 在调用 BFF 前验证一次性 CSRF。                                                                                                                                                                                                                                                   |
 
 静态 matcher 仍对字面路径查 `routes[path]`，只增上述 `/sign-up/email`；动态 matcher 只接受三条具名模板，不接受额外段、
 尾斜线、大小写/反斜线/双斜线、点段、percent-encoded path、绝对 URL、fragment、错误方法或相似 action。两者都先验证
@@ -217,12 +216,7 @@ issuer operation；`/sign-up/email` 仍来自静态 allowlist/snapshot，不混�
     "queryParameter": "id",
     "valueFormat": "canonical-lowercase-uuid",
     "errorQueryParameter": "error",
-    "allowedErrorCodes": [
-      "TOKEN_EXPIRED",
-      "INVALID_TOKEN",
-      "USER_NOT_FOUND",
-      "INVALID_USER"
-    ]
+    "allowedErrorCodes": ["TOKEN_EXPIRED", "INVALID_TOKEN", "USER_NOT_FOUND", "INVALID_USER"]
   }
 }
 ```
@@ -440,18 +434,18 @@ IAM 缺失或提供可缓存的 `Cache-Control`，BFF 都固定覆盖 `Cache-Con
 
 ## 2. 当前物理实现（基线 `c5e9b3c`）
 
-| 区域                           | 当前职责                                                                                                  | W1B 边界                                                                                                   |
-| ------------------------------ | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `src/main.ts`                  | 进程入口                                                                                                  | 不承载身份或业务规则                                                                                       |
-| `src/bootstrap/`               | server composition、请求管线、route dispatch、worker 生命周期                                            | Task 1 只装配 IAM admission 与显式服务例外；Task 2 在 receipt/owner I/O 之前接线资源授权                   |
-| `src/config/runtime.ts`        | 运行配置与 URL/预算校验                                                                                   | Task 1 新增严格 `KOKORO_IAM_BASE_URL` origin；不增加环境变量测试旁路                                      |
-| `src/http/routes/`             | Product route、System/owner projection、Scheduler callback                                                | Task 1 抽出 runtime-manifest 服务路由；Task 2 新增 `chat-authorization.ts`，不把业务授权塞进 `src/auth/`   |
-| `src/application/`             | Project、ScheduledTask、Chat 与 AG-UI use case，必要的 repository/delivery port                           | 延续现有业务能力聚合，不为 W1B 创建 Command bus、通用 ACL 或空层                                          |
-| `src/domain/`                  | 当前确有独立不变量的 Chat、ScheduledTask、Project value 与 request context                                | 是否拆分类型按语义/生命周期决定，不机械复制 DTO/Domain/Row/Wire                                           |
-| `src/infrastructure/postgres/` | BFF-owned repository、durable ledger/outbox/receipt；Redis cache/notification 协调                        | Task 2 修改现有 Project/ScheduledTask/Chat 数据访问；不创建数据库品牌目录的第二套实现                      |
-| `src/infrastructure/clients/`  | Agent、Scheduler、Capability、Mori 等窄 owner adapter                                                     | Task 1 IAM admission 不放在这里，因为它共同负责 HTTP 入口身份建立，而不是普通业务 owner projection        |
-| `src/generated/`               | Capability/Scheduler 固定契约生成物                                                                       | Task 1 增加 `iam-http`；生成物只由固定脚本产生，业务代码不得直接依赖其 wire 类型                           |
-| `src/contracts/`               | 当前手写 BFF public transport types/envelope                                                              | W1B 不借身份切片批量重构；字段事实仍以 public OpenAPI 为准                                                 |
+| 区域                           | 当前职责                                                                           | W1B 边界                                                                                                 |
+| ------------------------------ | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `src/main.ts`                  | 进程入口                                                                           | 不承载身份或业务规则                                                                                     |
+| `src/bootstrap/`               | server composition、请求管线、route dispatch、worker 生命周期                      | Task 1 只装配 IAM admission 与显式服务例外；Task 2 在 receipt/owner I/O 之前接线资源授权                 |
+| `src/config/runtime.ts`        | 运行配置与 URL/预算校验                                                            | Task 1 新增严格 `KOKORO_IAM_BASE_URL` origin；不增加环境变量测试旁路                                     |
+| `src/http/routes/`             | Product route、System/owner projection、Scheduler callback                         | Task 1 抽出 runtime-manifest 服务路由；Task 2 新增 `chat-authorization.ts`，不把业务授权塞进 `src/auth/` |
+| `src/application/`             | Project、ScheduledTask、Chat 与 AG-UI use case，必要的 repository/delivery port    | 延续现有业务能力聚合，不为 W1B 创建 Command bus、通用 ACL 或空层                                         |
+| `src/domain/`                  | 当前确有独立不变量的 Chat、ScheduledTask、Project value 与 request context         | 是否拆分类型按语义/生命周期决定，不机械复制 DTO/Domain/Row/Wire                                          |
+| `src/infrastructure/postgres/` | BFF-owned repository、durable ledger/outbox/receipt；Redis cache/notification 协调 | Task 2 修改现有 Project/ScheduledTask/Chat 数据访问；不创建数据库品牌目录的第二套实现                    |
+| `src/infrastructure/clients/`  | Agent、Scheduler、Capability、Mori 等窄 owner adapter                              | Task 1 IAM admission 不放在这里，因为它共同负责 HTTP 入口身份建立，而不是普通业务 owner projection       |
+| `src/generated/`               | Capability/Scheduler 固定契约生成物                                                | Task 1 增加 `iam-http`；生成物只由固定脚本产生，业务代码不得直接依赖其 wire 类型                         |
+| `src/contracts/`               | 当前手写 BFF public transport types/envelope                                       | W1B 不借身份切片批量重构；字段事实仍以 public OpenAPI 为准                                               |
 
 当前目录是已运行职责的事实，不是强制四层模板。新文件按单一变化原因放置；既有 `application/ports`、
 `infrastructure/postgres` 或 `interfaces/http/agui` 不构成所有新业务必须复制的目录结构。
@@ -716,10 +710,10 @@ W1D-Chat-B3 的 Agent 出站成功 wire 在 `src/infrastructure/clients/agent/ht
 只在具备稳定幂等 identity 时重试。缺配置、不可达、HTTP error 与 schema mismatch 分别映射为稳定错误，且不返回
 provider body、SQL 或 stack。
 
-## Storage v2 handoff and interim unavailable contract
+## Storage v2 handoff history（旧 503 阶段，已由上文个人文件片替代）
 
 Storage 继续唯一拥有 Asset、Artifact、Blob、Upload 与对象生命周期事实；BFF 只拥有 public Product API 的 Library
-入口。唯一未来协议是 Storage Proto v2 over ConnectRPC，当前切片不保留旧的 `/internal/bff/library` HTTP transport，
+入口。当前唯一消费协议是 Storage Proto v2 over ConnectRPC，不保留旧的 `/internal/bff/library` HTTP transport，
 也不建立临时 adapter、fallback 或双读。
 
 在 W2 前，IAM admission 通过后的 `GET /v1/library` 固定返回 `503 storage_integration_unavailable`；准入前按 Task 1
@@ -867,17 +861,17 @@ Scheduler 采用有界重试；receiver 活跃 lease 返回 425，不返回会�
 
 ### 放置与 owner
 
-| 项       | 决定                                                                                                                                                                                                                              |
-| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Owner    | BFF 拥有 Product session admission、个人私有/显式分享策略、Project/Conversation 事实与 public API；IAM 拥有组织成员/角色/Skill 动作判断；Platform 拥有 Skill catalog/revision/install 与 receipt；Storage 拥有 package asset/scan |
+| 项         | 决定                                                                                                                                                                                                                              |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner      | BFF 拥有 Product session admission、个人私有/显式分享策略、Project/Conversation 事实与 public API；IAM 拥有组织成员/角色/Skill 动作判断；Platform 拥有 Skill catalog/revision/install 与 receipt；Storage 拥有 package asset/scan |
 | 评审时事实 | IAM manifest 固定 0.6.0；Capability HTTP manifest 固定 2.0.0；BFF 无 Skill catalog mutation 实现，无本片未提交代码                                                                                                                |
-| 目标职责 | 受信 session → 当前资源权限 → owner mutation；四 scope 全部受约束，不以 user-only 首片代表完成                                                                                                                                    |
-| 目录比较 | 采用既有 Product `src/http/routes/owner.ts` 入口与 `src/infrastructure/clients/capability/` adapter 边界演进；淘汰 generic auth/role 下另建 Skill 权限中心及 Root 可编辑 contract                                                 |
-| 粒度     | 本片只扩四份既有文档；后续 transport schema、业务授权编排、IAM/Platform client 按不同变化原因拆分，代码片另给精确放置表，不把所有职责塞入 owner.ts                                                                                |
-| 依赖     | session admission 产出可信 tenant/subject；业务授权消费 IAM SDK 和本仓 Project/Conversation 查询；generated wire 类型在 adapter 终止，禁止 sibling import/跨 owner SQL                                                            |
-| 数据/API | 目标是同步 owner command，不新增 BFF Skill 表、缓存 allow 或 durable mutation receipt；public canonical OpenAPI 由 BFF 后续发布，Platform metadata/Proto 由 Platform 先发布                                                       |
-| 删除项   | 激活对应 mutation 时删除其旧 503 占位；Platform 完整 cutover 同片删除 Capability HTTP vendor/client/manifest/config 与旧 name/enable/disable/import alias，不留 fallback 或双协议读写；不误删尚无替代的其他拒绝路径               |
-| 验证     | 下述分阶段门禁；本片仅文档检查，不把设计稿视为机器契约或运行验收                                                                                                                                                                  |
+| 目标职责   | 受信 session → 当前资源权限 → owner mutation；四 scope 全部受约束，不以 user-only 首片代表完成                                                                                                                                    |
+| 目录比较   | 采用既有 Product `src/http/routes/owner.ts` 入口与 `src/infrastructure/clients/capability/` adapter 边界演进；淘汰 generic auth/role 下另建 Skill 权限中心及 Root 可编辑 contract                                                 |
+| 粒度       | 本片只扩四份既有文档；后续 transport schema、业务授权编排、IAM/Platform client 按不同变化原因拆分，代码片另给精确放置表，不把所有职责塞入 owner.ts                                                                                |
+| 依赖       | session admission 产出可信 tenant/subject；业务授权消费 IAM SDK 和本仓 Project/Conversation 查询；generated wire 类型在 adapter 终止，禁止 sibling import/跨 owner SQL                                                            |
+| 数据/API   | 目标是同步 owner command，不新增 BFF Skill 表、缓存 allow 或 durable mutation receipt；public canonical OpenAPI 由 BFF 后续发布，Platform metadata/Proto 由 Platform 先发布                                                       |
+| 删除项     | 激活对应 mutation 时删除其旧 503 占位；Platform 完整 cutover 同片删除 Capability HTTP vendor/client/manifest/config 与旧 name/enable/disable/import alias，不留 fallback 或双协议读写；不误删尚无替代的其他拒绝路径               |
+| 验证       | 下述分阶段门禁；本片仅文档检查，不把设计稿视为机器契约或运行验收                                                                                                                                                                  |
 
 ### 四类 owner scope 的 Product 判断
 

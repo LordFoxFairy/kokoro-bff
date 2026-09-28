@@ -769,7 +769,7 @@ test("Scheduler control and receiver implement distinct owner boundaries and dur
   }
 })
 
-test("BFF freezes the Storage v2 handoff without claiming a live Library integration", async () => {
+test("BFF Library file slice uses personal Storage v2 without claiming Artifact completion", async () => {
   const [technical, api, data, current] = await Promise.all([
     readFile(path.join(root, "docs/TECHNICAL_DESIGN.md"), "utf8"),
     readFile(path.join(root, "docs/API_CONTRACT.md"), "utf8"),
@@ -777,25 +777,15 @@ test("BFF freezes the Storage v2 handoff without claiming a live Library integra
     readFile(path.join(root, "docs/CURRENT.md"), "utf8"),
   ])
 
-  assert.match(technical, /^## Storage v2 handoff and interim unavailable contract$/mu)
-  assert.match(technical, /唯一未来协议.{0,120}Storage Proto v2.{0,120}ConnectRPC/su)
-  assert.match(technical, /不打开.{0,80}Storage.{0,80}(?:socket|连接)/su)
-  assert.match(api, /^## Library degraded contract and Storage v2 prerequisites$/mu)
-  assert.match(api, /`GET \/v1\/library`.{0,120}`503 storage_integration_unavailable`/su)
-  assert.match(api, /per-kind.{0,80}composite pagination/su)
+  assert.match(technical, /GET \/v1\/library.{0,80}kind=file/su)
+  assert.match(technical, /Storage.*ConnectRPC/su)
+  assert.match(api, /kind=file.*必填/su)
+  assert.match(api, /personal_library/u)
   assert.match(data, /^## Storage projection data boundary$/mu)
   assert.match(data, /不保存.{0,120}(?:Library|Asset|Artifact).{0,120}(?:表|cursor|缓存|receipt|outbox)/su)
   assert.match(data, /不修改.{0,80}`database\/schema\.sql`/su)
-  assert.match(current, /^### Library \/ Storage degraded boundary$/mu)
-  assert.match(current, /`EDGE-BFF-STORAGE`.{0,80}(?:保持|仍为) `broken`/su)
-  for (const prerequisite of [
-    "caller × operation × scope",
-    "Capability scope mapping",
-    "Run/ExecutionIdentity",
-    "per-kind 或 BFF composite pagination",
-  ]) {
-    assert.match(current, new RegExp(prerequisite, "u"), prerequisite)
-  }
+  assert.match(current, /W2-LIBRARY-BFF-FILE/u)
+  assert.match(current, /Artifact/u)
 })
 
 test("BFF user identity crosses one pinned IAM admission boundary and service-only routes stay separate", async () => {
@@ -818,7 +808,7 @@ test("BFF user identity crosses one pinned IAM admission boundary and service-on
   assert.doesNotMatch(generatedSdk, /getMetrics|healthz|readyz/u)
 })
 
-test("Library degraded handling has no retired Storage HTTP or mock success path", async () => {
+test("Library file handling has no retired Storage HTTP or BFF shadow Asset table", async () => {
   const [owner, projections, runtime, localEnv, prodEnv, account, mockRoute, mockStore, schema] = await Promise.all([
     readFile(path.join(root, "src/http/routes/owner.ts"), "utf8"),
     readFile(path.join(root, "src/application/projections.ts"), "utf8"),
@@ -831,7 +821,7 @@ test("Library degraded handling has no retired Storage HTTP or mock success path
     readFile(path.join(root, "database/schema.sql"), "utf8"),
   ])
 
-  assert.match(owner, /storage_integration_unavailable/u)
+  assert.doesNotMatch(owner, /storage_integration_unavailable/u)
   for (const [name, source] of [
     ["owner route", owner],
     ["projection mapper", projections],

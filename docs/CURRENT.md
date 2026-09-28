@@ -3,25 +3,31 @@
 状态：2026-09-28
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。
 
-## W2-LIBRARY-BFF-FILE 文档门（2026-09-28，运行仍为 503）
+## W2-LIBRARY-BFF-FILE 代码片（2026-09-28，Root 单仓门已复验；真跨仓待验）
 
-BFF main `31c4803b3df0e90c031a97844f89df384ca1a35c` 的 `GET /v1/library` 仍在 IAM admission 后固定
-`503 storage_integration_unavailable`；public OpenAPI 无 200、无 `kind=file` 参数。BFF Storage consumer manifest
-仍 pin `ef0fd777`/combined SHA-256 `05c6ef390c06b512218520b44e76d2d3212630df574a4fd63b6238b05631189f`；
-项目 GET/POST 用它的 project scope，不能把 `projectId=subjectId` 当个人查询。
+本工作树由 BFF main `d5d7c243db4707645031943a2691d354997b3029` 起步：`GET /v1/library?kind=file`
+现已在 IAM admission 后调用 Storage personal scope 的 Connect `ListAssets`，OpenAPI 有严格文件 200、必填 kind
+及 400/502/503；旧固定 `storage_integration_unavailable` 运行分支已删除。无 kind/未知 kind 400。
+BFF Storage consumer manifest 现 pin `2d87e26`/combined SHA-256
+`11edffcdd668c59ef07c7b4c47d44b38dd95c2b8aee5a4d0c6475fba58850713`；项目 GET/POST 仍用
+独立 project scope，不把 `projectId=subjectId` 当个人查询。
 
 Storage owner main `2d87e26bbaed9a70dcd91ad1e9d126d39d275f38` 已发布原 v2 `ListAssets` 的 personal
 CLEAN ASSET 查询、隔离 `personal_library` cursor 与受信 `scope_id=subject_id`，combined SHA-256
-`11edffcdd668c59ef07c7b4c47d44b38dd95c2b8aee5a4d0c6475fba58850713`；本仓还未重钉/调用。
-本仓四文档仅裁决 BFF 首片 `GET /v1/library?kind=file`：`kind` 必填，无参/未知 400；200 只列本人个人文件并
+`11edffcdd668c59ef07c7b4c47d44b38dd95c2b8aee5a4d0c6475fba58850713`；本仓已重钉并调用。
+首片 `GET /v1/library?kind=file` 的 `kind` 必填，无参/未知 400；200 只列本人个人文件并
 标 `kind:"file"`，不是 Agent 作品。未来 `kind=artifact`/`all`、正式个人上传、下载 Product 动作和 Web
 旧 `/api/session/artifacts` 迁移仍未实现。个人上传另需本人 scope、独立 receipt/checkpoint 与未知结果恢复；
 下载另需当次 GetAsset 校验普通 ASSET/CLEAN 后再签短期引用，不能只调用 GetDownloadReference。
 Storage 单仓通过不等于 BFF/Web 用户可见闭环。
 
-Root 审查本设计门后，下一责任为精确固定 Storage 新 Proto/生成来源，先发布 BFF public OpenAPI 与契约测试，
-再切运行时并删除固定 503；Root 后续执行当前来源的真 Storage/PG、Web 浏览器刷新/同租户其他人不可见验收。
-本阶段没有修改机器契约、运行代码、Schema、服务或用户 3310，也不声明这些待验命令已通过。
+本片无 Schema/role/缓存/旧 HTTP fallback；`x-request-id` header 已写，但现有 BFF JSON envelope 仍含
+`meta.request_id`，与 Root API 手册 header-only 目标有既有全仓偏差，留独立 breaking 裁决。
+Root 在此工作树独立使用 Node 22.22.2 复验 `pnpm format:check && pnpm check && pnpm schema:check` exit0：
+全量 332 pass/1 skip、schema 5 pass/1 skip，Storage 精确来源与双次生成均 PASS；独立只读审查无 P0/P1。
+新增 live Product HTTP→Storage Connect fixture 覆盖逐页重新 IAM admission、personal header、跨 subject cursor 400，
+但仍不是 Storage 真进程/PostgreSQL/browser。Root 后续独立执行当前来源的真 Storage/PG、
+Web 浏览器刷新/同租户其他人不可见验收。未触碰用户 3310，不把本片称为完整 Library。
 
 ## W1E-BFF-PRODUCT-CREATE-DRAFT-DOC（2026-09-28，设计候选；尚未实现）
 
@@ -280,14 +286,14 @@ W1C-Team-R2 本仓源码已在 main `fd74202e69e4d40beaef9d3f9ab9b871365589a8` �
   Node `22.22.2`、pnpm `11.25.0`、generator `0.99.0`、Zod `4.5.4`、lockfile 与 16 个生成文件 digest；drift gate 做
   allowlist、两次 byte-identical generation 与 strict response normalization 检查。
 
-### Library / Storage degraded boundary
+### Library / Storage 历史 degraded boundary（已被上文 W2 文件列表替代）
 
-- `GET /v1/library` 在 service-envelope admission 后固定返回 `503 storage_integration_unavailable`；未认证请求仍返回
+- 当时 `GET /v1/library` 在 service-envelope admission 后固定返回 `503 storage_integration_unavailable`；未认证请求仍返回
   `403 service_auth_failed`。BFF 不调用旧 `/internal/bff/library`，也不打开 Storage 连接。
-- public OpenAPI 保留 path、method、`listLibrary` operationId 与 metadata，删除不可达 200 以及孤立的
-  `LibraryResponse`/`LibraryItem` schema。当前响应不是 Library success contract。
-- `EDGE-BFF-STORAGE` 保持 `broken`。上文个人 `kind=file` 首片只需已发布 Storage personal CLEAN ASSET
-  查询、本人成员准入与单 kind 分页；当前 BFF 还未接入。完整 Library/Artifact 与整边激活仍需 Agent
+- 当时 public OpenAPI 保留 path、method、`listLibrary` operationId 与 metadata，删除不可达 200 以及孤立的
+  `LibraryResponse`/`LibraryItem` schema；该历史状态已被上文正式个人文件 success contract 替代。
+- 该 503 阶段已结束，但 `EDGE-BFF-STORAGE` 在 Root 全边验收前仍按 `broken`。个人 `kind=file` 已接入
+  Storage personal CLEAN ASSET 查询、本人成员准入与单 kind 分页；完整 Library/Artifact 与整边激活仍需 Agent
   trusted Run/ExecutionIdentity、相关 Capability scope、产物列表/下载与双源分页及真实组合验收，不能用
   文件列表 200 代替。
 

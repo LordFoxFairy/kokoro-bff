@@ -5,15 +5,15 @@
 
 ## 入口
 
-| 路径 | 职责 |
-| --- | --- |
-| [`README.md`](./README.md) | 五分钟启动、边界与验证入口 |
-| [`docs/INDEX.md`](./docs/INDEX.md) | 当前文档阅读顺序 |
-| [`contract/openapi/v1/openapi.yaml`](./contract/openapi/v1/openapi.yaml) | 唯一 canonical public OpenAPI |
-| [`contract/README.md`](./contract/README.md) | owner、visibility、version、breaking 与 provenance |
-| [`database/schema.sql`](./database/schema.sql) | 本仓唯一 canonical PostgreSQL schema |
-| [`src/main.ts`](./src/main.ts) | 当前 HTTP 组合根与请求管线 |
-| [`package.json`](./package.json) | 本仓可执行质量门禁 |
+| 路径                                                                     | 职责                                               |
+| ------------------------------------------------------------------------ | -------------------------------------------------- |
+| [`README.md`](./README.md)                                               | 五分钟启动、边界与验证入口                         |
+| [`docs/INDEX.md`](./docs/INDEX.md)                                       | 当前文档阅读顺序                                   |
+| [`contract/openapi/v1/openapi.yaml`](./contract/openapi/v1/openapi.yaml) | 唯一 canonical public OpenAPI                      |
+| [`contract/README.md`](./contract/README.md)                             | owner、visibility、version、breaking 与 provenance |
+| [`database/schema.sql`](./database/schema.sql)                           | 本仓唯一 canonical PostgreSQL schema               |
+| [`src/main.ts`](./src/main.ts)                                           | 当前 HTTP 组合根与请求管线                         |
+| [`package.json`](./package.json)                                         | 本仓可执行质量门禁                                 |
 
 ## 当前源码地图
 
@@ -52,8 +52,9 @@ Conversation/Message/Share canonical facts，以及 durable AG-UI stream/source-
 - 资源说明：[`docs/api/README.md`](./docs/api/README.md)
 - AG-UI：[`docs/api/v1/agui-chat.md`](./docs/api/v1/agui-chat.md)
 - System / Model / Billing / Capability：当前由 `src/http/routes/owner.ts` 投影
-- Library：IAM admission 不可用时返回 `503 iam_admission_unavailable`；admission 成功后仍固定返回
-  `503 storage_integration_unavailable`，不调用 Storage
+- Library：IAM admission 后由 `src/http/routes/library-file-list.ts`、`src/http/library-file-list-input.ts` 与
+  `src/infrastructure/clients/storage/personal-file-list.ts` 消费 Storage personal Connect 列表；`kind=file` 必填，
+  只投影 CLEAN ASSET。Agent Artifact、个人上传/下载仍待独立切片。
 - Chat facts：`src/http/routes/chat.ts` 读取/写入 BFF PostgreSQL；`src/infrastructure/postgres/chat-repository.ts` 维护 tenant、锁和 cursor；`chat-turn-service.ts` 与 `agent-dispatch-outbox-repository.ts` 原子提交 Message/Agent command；
 - Agent Chat：`src/http/routes/agent.ts` 只承接 durable AG-UI 读取和 run control；Agent launch 由后台 outbox dispatcher 投递；`src/application/agui/` 投影；
   `src/application/agui/projector.ts` 独立消费 Agent source；`agui-projection-repository.ts` 在公开发送前持久化并分配 cursor，
@@ -63,15 +64,15 @@ Conversation/Message/Share canonical facts，以及 durable AG-UI stream/source-
 
 ## 测试与治理
 
-| 路径 | 覆盖 |
-| --- | --- |
-| [`test/architecture.test.ts`](./test/architecture.test.ts) | 目录、依赖和文档事实门禁 |
-| [`test/contract-governance.test.mjs`](./test/contract-governance.test.mjs) | OpenAPI metadata 与冻结 operation surface |
-| [`test/business-store.integration.mjs`](./test/business-store.integration.mjs) | 真实 PostgreSQL/Redis business store |
+| 路径                                                                             | 覆盖                                                                               |
+| -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| [`test/architecture.test.ts`](./test/architecture.test.ts)                       | 目录、依赖和文档事实门禁                                                           |
+| [`test/contract-governance.test.mjs`](./test/contract-governance.test.mjs)       | OpenAPI metadata 与冻结 operation surface                                          |
+| [`test/business-store.integration.mjs`](./test/business-store.integration.mjs)   | 真实 PostgreSQL/Redis business store                                               |
 | [`test/agui-projection.integration.mjs`](./test/agui-projection.integration.mjs) | ledger、并发幂等、consumer fencing、GC/expired cursor、tenant 隔离、Redis 非事实源 |
-| [`test/agui-http.integration.mjs`](./test/agui-http.integration.mjs) | 后台主动摄取、opaque cursor、重启 replay 与 contract error |
-| [`scripts/check-contract.mjs`](./scripts/check-contract.mjs) | 本仓 contract gate |
-| [`scripts/lint-source.mjs`](./scripts/lint-source.mjs) | 当前静态源码规则 |
+| [`test/agui-http.integration.mjs`](./test/agui-http.integration.mjs)             | 后台主动摄取、opaque cursor、重启 replay 与 contract error                         |
+| [`scripts/check-contract.mjs`](./scripts/check-contract.mjs)                     | 本仓 contract gate                                                                 |
+| [`scripts/lint-source.mjs`](./scripts/lint-source.mjs)                           | 当前静态源码规则                                                                   |
 
 - Project single-file upload: `src/http/routes/project-resource.ts` → `src/application/project-resource-upload.ts` → `src/infrastructure/clients/storage/`; source provenance `contract/dependencies/storage-connect.json`, deterministic generator `scripts/generate-storage-connect-client.mjs`, focused tests `test/project-resource-upload.test.mjs` / `test/storage-connect-contract.test.mjs`.
 

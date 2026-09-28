@@ -91,11 +91,6 @@ export async function liveOwnerBusiness(
     return true
   }
 
-  if (businessPath.length === 1 && businessPath[0] === "library" && method === "GET") {
-    await reply(response, 503, failure("storage_integration_unavailable", "Storage integration is unavailable", context.requestId), context, idempotency, mutation)
-    return true
-  }
-
   if (businessPath.length === 1 && businessPath[0] === "models" && method === "GET") {
     const query = queryOf(request)
     const ownerQuery = new URLSearchParams()
