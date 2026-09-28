@@ -3,10 +3,10 @@
 状态：2026-09-28
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。
 
-## W2-BFF-PERSONAL-DOWNLOAD 代码片（2026-09-28；待 Root 集成验收）
+## W2-BFF-PERSONAL-DOWNLOAD 代码片（2026-09-28；BFF→Storage owner 组合已验）
 
 设计门基线 BFF main `74bb714d5867399bc50806c158c2ffb838c27b40` clean，个人文件列表与上传已有。
-本工作树代码片现已在唯一 public OpenAPI 增加 `GET /v1/library/files/{asset_id}/content` 与 frozen operation baseline；
+当前代码片已在唯一 public OpenAPI 增加 `GET /v1/library/files/{asset_id}/content` 与 frozen operation baseline；
 `src/bootstrap/server.ts` 在每次 Product IAM admission 后精确分发具名 route，个人 Storage Connect adapter
 沿已固定 v2 owner Proto 在可信 personal scope 先 `GetAsset(asset_id)` 校验普通 ASSET/CLEAN，再用返回摘要
 `GetDownloadReference` 并核对 ID、摘要、大小、MIME、CLEAN。Web 文件卡和同源下载 adapter 尚未接线。
@@ -16,8 +16,7 @@
 签名 URL 不暴露、不入日志/receipt。直接测试用 Connect/ObjectStore double 验证本人原字节、每次 IAM
 admission、跨 subject 404、非 ASSET/非 CLEAN、坏引用/摘要/重定向及失败不出部分 200；这不是
 真实 Storage/MinIO/ClamAV 或 Web/Chromium 验收。BFF Schema、SQL、Redis、receipt、role、生成物均未改。
-Root 仍须独立复跑当前工作树门禁、真 owner 字节与私有负例后才可发布；Web 精确 pin 和真 Chromium
-点击属于后续独立切片，不能把本仓绿灯称作整体 W2 闭环。
+Root 已独立以 Node22 复跑 `pnpm format:check && pnpm check && pnpm schema:check`（347 pass/1 既有 skip、schema 5 pass/1 无库 skip）；BFF code commit `318cf6ab756801c4c80c59154c6cbd969d5a159d` 与 Storage `2d87e26` 在隔离真 PostgreSQL/Redis/MinIO/ClamAV 的 Root W2 runner `run_id=5036454fc7b1397a19695361` 通过 14/14：个人原字节下载、同租户他人 404，并回归上传/列表/Complete 响应丢失后 BFF OS 重启同键恢复。运行自有 DB/对象版本/进程清零、独占 bucket 删除；IAM 是身份桩，不等于真 Web/Chromium 下载。首次组合尝试的 PostgreSQL URL 缺显式用户名，在 owner schema 安装门失败且自有数据库未留下；修正为本机用户后重跑通过，不是 runtime 修复。Web 精确 pin、同源二进制 adapter 和真 Chromium 点击属于后续独立切片；`EDGE-BFF-STORAGE` 仍 broken。
 
 
 ## W2-BFF-LIBRARY-PERSONAL-UPLOAD-CODE（2026-09-28，已发布并通过个人文件真链纵切）
