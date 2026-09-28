@@ -412,3 +412,27 @@ W0B-10 使用真实 Scheduler + BFF 进程及 Agent receipt stub：响应丢失�
 唯一 Run 事实归 Agent-owner closure（W4），`EDGE-BFF-AGENT` 保持 broken，不增加到本波验收范围。
 不能将 memory double、文档正则检查或 build 成功称作真实 PostgreSQL 或 Agent 的持久恢复证据。
 本实现切片使用任务独占 PostgreSQL 完成 fresh install、非空拒绝与真实 receipt integration；Redis 仅复用 DB 8 且不作为 receipt 真相源。
+
+## W1E Product Skill mutation 数据边界（目标，未实现）
+
+本片仅文档，不改 `database/schema.sql`、索引、事务代码或安装器。目标六 catalog mutation 不引入 BFF Skill/revision/install、
+IAM role/permission、Storage package 表，不复制 Platform receipt 或缓存 allow；Platform 是 catalog 状态与 command receipt 的唯一 writer。
+BFF 现有 `bff_project_skill` 是 Project 产品关联事实，不升级为 Skill catalog、安装或组织授权事实源。
+
+四 scope：user 比较受信 subject；organization 在线 IAM 0.7 action check；project 查询本仓 tenant + owner 的当前 Project；
+session 查询本仓 tenant + owner + active Conversation，关联 Project 时再次检查其范围。
+`bff_project` 没有 status/deleted 字段，Project 授权依据是当前真实存在且满足 tenant + owner 的项目行，不假定 active 状态。显式 share 只按其既有权限使用，
+不能借 read share 获得 mutation；当前未实现的通用 Skill share grant 不在本片新增空表。无跨 owner SQL/JOIN/外键。
+
+已有 Skill/installation 的真实 owner 由 Platform contract 查询与执行时校验；BFF 不以 body owner_scope 建立新事实。
+这些授权查询复用现有主键/tenant/owner predicate，不新增索引；本地读取事务结束后才发远端请求，不持本地行锁等待 IAM/Platform。
+不声称 BFF Project/Conversation 删除与 Platform mutation 是跨仓原子事务。远端 Product 上下文及撤权竞态的时点必须由 owner 契约收敛。
+
+幂等事实只留 Platform：BFF 为同 public key 派生稳定 command 身份与 semantic digest，绕开通用 BFF Skill mutation receipt
+（含进程内 Map），每次重试/结果 replay 都重新检查当前权限。Platform 同 command 恢复响应丢失；BFF 无 durable enqueue，
+不得返回代表后台任务已接纳的 202。Platform receipt retention、资源删除后 replay、冲突规则以 owner 机器契约为准，
+BFF 不另建 TTL/GC，也不擅删 owner rows。若后续确需异步交付或 Skill 分享新事实，另过本仓 schema/事务/retention 设计门。
+
+验证：`pnpm schema:check` 与 schema diff 证明本片未改 schema；真正 Project/Conversation predicate 集成测试仍需
+`KOKORO_TEST_POSTGRES_URL=... KOKORO_TEST_REDIS_URL=... pnpm test:integration` 的隔离 fixture，
+Platform durable receipt/撤权恢复由 Root 真实 IAM/BFF/Platform smoke 验证，BFF unit double 不代替该证据。

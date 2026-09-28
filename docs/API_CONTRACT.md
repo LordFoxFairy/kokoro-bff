@@ -584,3 +584,53 @@ body 仍需 tenant 完整性与业务授权校验；身份摘要不是授权凭�
 producer 的 408/425/429/5xx 可重试，其他非 2xx 永久失败；BFF 不重新定义其 retry 分类。
 owner artifact 升级须更新 commit/digest/config provenance、重新生成和验证两条 consumer 边界，breaking 变更按 owner 版本策略评审；
 W0B-9 clean-slate 同时删除 jobs/job_*、旧 header 与 compact occurrence 路径，不维护 alias 或双协议 fallback。
+
+## W1E Product Skill mutation 契约目标（未发布）
+
+当前 public canonical OpenAPI 与运行时代码没有下表六 catalog mutation；已有 name/revisions、enable/disable、GitHub import 等
+声明仍不构成 owner mutation 接通。此设计不修改机器契约，不增加浏览器 IAM relay。四 scope 权限规则与 pin 顺序见
+[技术方案](TECHNICAL_DESIGN.md#w1e-product-skill-mutation-设计门2026-09-28目标态)。
+
+下表是 BFF 下一 public OpenAPI 切片的目标；字段细节以该切片发布的机器契约为准，不能拿本文充当 generated SDK 输入。
+全部使用 Product service envelope + 当前用户 admission、`Idempotency-Key`、strict body，返回 `{data: ...}` 与 `x-request-id`。
+业务 ID 使用 owner opaque Skill ID，不将旧 name 路径保留为 alias。
+
+| Public 目标                           | Platform RPC       | action / 请求与成功表示                                                                                                                                   |
+| ------------------------------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /v1/skills/drafts`              | CreateSkillDraft   | create_draft；owner_scope 选择与 metadata；201 skill_id/series_id/revision/status/replayed                                                                |
+| `POST /v1/skills/{skill_id}/versions` | CreateSkillVersion | create_version；metadata，base_skill_id 来自 path，owner_scope 从 base 事实解析；201 新 skill_id/series_id/revision/status/replayed                       |
+| `POST /v1/skills/{skill_id}/validate` | ValidateSkillDraft | validate_draft；resource 来自 path，幂等身份来自 header，不接受 asset/digest body；200 valid/content_digest/manifest_identity/skill_id/series_id/replayed |
+| `POST /v1/skills/{skill_id}/publish`  | PublishSkill       | publish；visibility；200 source_ref/revision/status/event_id/replayed                                                                                     |
+| `POST /v1/skills/withdrawals`         | WithdrawSkill      | withdraw；source_ref/reason；200 source_ref/status/event_id/replayed                                                                                      |
+| `PATCH /v1/skills/{skill_id}/status`  | SetSkillStatus     | set_status；status 白名单；200 skill_id/revision/status/replayed                                                                                          |
+
+organization 每条操作调用 IAM `POST /internal/v1/tenants/{tenant_id}/skill-authorizations/check`，body 只有准确 `action`。
+使用当前具名 user Bearer；200 仅接受 allowed=true 且 tenant_id/subject_id/action 与本请求一致；任何缺失、额外或错配字段 fail closed。
+user/project/session 使用 BFF 当前资源事实，不能把组织 skill allow 外推到个人、Project 或 Conversation。
+发布 visibility 不改变 owner_scope，也不自动创建个人分享或组织成员权限。已有资源必须先得到 Platform 真实 owner，禁止 body 自报。
+
+upload 的 begin_upload/complete_upload/abort_upload 与 installation 的 install/set_installation_enabled/remove_installation
+沿用四 scope 规则及 IAM 同名 action；安装要分别检查 source 可见性与 target owner 写权，source 可读不等于 target 可写。
+这些动作不是本片六 catalog API 的伪装复用：Storage package upload 契约、Platform installation Product admission 和 BFF public
+对应路径均需后续 owner pin/机器契约发布。Validate 只提供资源标识与幂等身份等必要输入；Platform 从已持久化的 Complete 包绑定
+读取 asset reference 与 content digest，并联合 Storage 重验 clean/归属/摘要；没有有效 Complete 绑定时拒绝 Validate。
+Storage→Platform Begin/Complete 上传链及持久包绑定必须先于 Validate/Publish 成功路径激活，Publish 还要求有效的包验证状态；
+该硬前置未就绪时两动作保持 fail closed，不把其余 catalog 操作可用宣称为六条 mutation 全部可成功。
+当前 Platform v1 Proto 仍保留旧 `package_asset_ref`/`content_digest` 请求字段；目标 owner v2 将 reserve 旧字段，
+对应机器契约尚待 Platform 发布，BFF 不提前生成 consumer，也不转发浏览器任意 asset/hash。包 bytes 不走小型 RPC JSON，
+不接受浏览器自报扫描通过。
+
+### 幂等、错误与撤权
+
+目标 BFF 不使用通用 mutation receipt/Map 缓存 Skill 成功结果。每次重试先 admission 和当前 scope/action check，再调用 Platform；
+稳定 command identity 绑定 tenant、subject、operation、真实 owner scope、目标资源与 public key，semantic digest 包含规范化 body，
+不包含 request ID、token 或每次变化的授权凭据。具体 command 编码与长度由 Platform 发布契约约束，BFF 不另造持久 receipt。
+同 key/digest 由 Platform durable receipt 返回 replayed，同 key 不同 digest 为冲突；跨 subject/tenant 不共享结果。
+超时与响应丢失不生成新 command；禁止未经证明的自动 mutation retry。owner 在当前权限与资源范围检查之前不得 replay 历史成功。
+
+目标 public 稳定映射：无效 body 400 invalid_skill_request；session 失效 401 unauthorized；当前动作拒绝 403 skill_forbidden；
+不可见或跨 tenant 的资源 404 skill_not_found；digest/状态冲突 409 skill_conflict；package/状态前置不满足 412 skill_precondition_failed；
+限流 429 skill_rate_limited；IAM 依赖不可用 503 iam_admission_unavailable，Platform/Storage 暂不可用 503 skill_dependency_unavailable；
+响应结构或绑定非法 502 skill_response_invalid。retryable 只用于契约允许的瞬时错误，不透出 token/内部 owner payload。
+这些新增 Skill code/status 须先落 canonical OpenAPI 与 contract tests；当前运行错误码保持原事实，不提前声称已实现。
+无权限时不发 mutation；跨 owner 并发撤权时点与受信 Product 上下文由 Platform 前置协议收敛，未收敛不放行 public mutation。

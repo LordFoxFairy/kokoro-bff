@@ -3,6 +3,32 @@
 状态：2026-09-26
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。
 
+## W1E-BFF-SKILL-PRODUCT-DOC（2026-09-28，四文档现状/目标评审已完成）
+
+盘点基线 BFF main `1105553cfc24d4f44a90f626132bc30323a77946`，开始时工作树 clean。
+本片仅四份既有文档的设计增量；不是代码实现、IAM pin 更新、Platform consumer 接通或四 scope 验收。
+
+- 当前 BFF `contract/dependencies/iam-http.json` 仍固定 IAM 0.6.0；IAM owner
+  `4d981441d154c83b63987f284e3a82a559595870` 已发布 0.7.0 `checkTenantSkillAuthorization`，
+  artifact SHA-256 `c8d7af8a365ad5d13eaabccf7f31133e0918ef198bdc3e7c790d90933eae91b2`，BFF 尚未消费。
+- 当前 Skill/MCP facade 仍是 Capability 2.0.0 四 GET；其余 Skill route 返回 503。Platform 当前物理仓
+  `apps/kokoro-capability`、盘点 `ee25c1f4d6df08be183ca10f7f5e852e0b21f641`，六 catalog mutation 的 workload+tenant
+  不等于受信 Product subject/owner 当前授权；不能以这些 RPC 已存在宣称 Product mutation 完成。
+- 目标四 scope 为 user/organization/project/session；BFF 负责 Product 身份与个人/Project/Conversation 当前策略，IAM 负责组织 Skill
+  当前动作，Platform 负责真实 Skill owner/状态/receipt，Storage 负责 package。详细矩阵、目标 public API、数据不变量分别见三设计文档。
+- 下一片先精确 pin IAM 0.7 SDK，落实 BFF 四 scope check；Platform Product 受信上下文/资源 owner 查询/撤权与 replay 协议先发布，
+  随后精确 pin consumer 并逐项实施；Storage→Platform Begin/Complete 与持久包绑定必须先闭环，才激活 Validate/Publish 成功路径，
+  未就绪时两动作保持 fail closed，不宣称六 mutation 均可成功。其余 installation、Web scope/UI、Root 端到端按依赖推进；
+  user-only 首片不等于全部目标。
+- 未决发布门：Platform Product admission 的可验证承载与撤权竞态时点、资源 owner 查询机器契约；Storage upload/package 消费 pin；
+  BFF public 六 mutation 机器 OpenAPI/错误码与 generated consumer；Root 专用真实三 owner Skill smoke runner/命令。
+  这些分别归 owner/Root，不用文档或 stub 替代。无 schema 变更，无应用服务启动，无共享 3310 操作。
+- 本轮四文档现状/目标评审已完成；代码前置文档门仍待 Platform owner 机器契约及 public 字段收敛，尚非完整三设计文档门通过。
+  Root 独立 Node 22 新增章节 Prettier、CURRENT 整文件检查及 `git diff --check` 通过；
+  schema governance 为 5 pass、1 skip（未提供真实数据库 fixture）。本片代码、机器契约与真实跨仓链路仍未实现。
+  代码 lint/typecheck/test/build、真实 PG/Redis、三 owner smoke 与浏览器均未在本片执行；本节不覆盖既有历史门禁记录，
+  也不提前修改 Root active dependency 库存。
+
 ## W1E-IAM-0.6-BFF-PIN 当前来源
 
 IAM owner `a4c2b61467f1fc1772d6b6d8e98f081c090289fb` 的 internal OpenAPI `0.6.0` 原始 SHA-256 为

@@ -817,3 +817,64 @@ receipt CAS 先 `FOR UPDATE` 锁定 row，再读取 PostgreSQL `clock_timestamp(
 Scheduler 采用有界重试；receiver 活跃 lease 返回 425，不返回会被 producer 当永久失败的 409。超时 receipt 可有界 reclaim，
 失败持久化 retryable 状态而不是永远 in-progress。若 producer 重试预算耗尽，需要运维按同一原始 occurrence/key 重投并审计，
 本切片不声称已有自动 reconciliation worker。缺少 durable store fail closed，绝不退回进程内 receipt。
+
+## W1E Product Skill mutation 设计门（2026-09-28，目标态）
+
+基线 BFF `1105553cfc24d4f44a90f626132bc30323a77946`；本节是后续实现约束，不改变前述当前 HTTP consumer。
+当前 `src/http/routes/owner.ts` 只实现 Skill 三个 GET 与 MCP 一个 GET，其余 Skill 路径返回
+`503 capability_projection_not_configured`。Platform 物理仓仍为 `apps/kokoro-capability`，盘点 commit
+`ee25c1f4d6df08be183ca10f7f5e852e0b21f641` 的 `SkillCatalogService` 有六条 mutation，尚不具备 Product 当前用户授权闭环。
+
+### 放置与 owner
+
+| 项       | 决定                                                                                                                                                                                                                              |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner    | BFF 拥有 Product session admission、个人私有/显式分享策略、Project/Conversation 事实与 public API；IAM 拥有组织成员/角色/Skill 动作判断；Platform 拥有 Skill catalog/revision/install 与 receipt；Storage 拥有 package asset/scan |
+| 当前事实 | IAM manifest 固定 0.6.0；Capability HTTP manifest 固定 2.0.0；BFF 无 Skill catalog mutation 实现，无本片未提交代码                                                                                                                |
+| 目标职责 | 受信 session → 当前资源权限 → owner mutation；四 scope 全部受约束，不以 user-only 首片代表完成                                                                                                                                    |
+| 目录比较 | 采用既有 Product `src/http/routes/owner.ts` 入口与 `src/infrastructure/clients/capability/` adapter 边界演进；淘汰 generic auth/role 下另建 Skill 权限中心及 Root 可编辑 contract                                                 |
+| 粒度     | 本片只扩四份既有文档；后续 transport schema、业务授权编排、IAM/Platform client 按不同变化原因拆分，代码片另给精确放置表，不把所有职责塞入 owner.ts                                                                                |
+| 依赖     | session admission 产出可信 tenant/subject；业务授权消费 IAM SDK 和本仓 Project/Conversation 查询；generated wire 类型在 adapter 终止，禁止 sibling import/跨 owner SQL                                                            |
+| 数据/API | 目标是同步 owner command，不新增 BFF Skill 表、缓存 allow 或 durable mutation receipt；public canonical OpenAPI 由 BFF 后续发布，Platform metadata/Proto 由 Platform 先发布                                                       |
+| 删除项   | 激活对应 mutation 时删除其旧 503 占位；Platform 完整 cutover 同片删除 Capability HTTP vendor/client/manifest/config 与旧 name/enable/disable/import alias，不留 fallback 或双协议读写；不误删尚无替代的其他拒绝路径               |
+| 验证     | 下述分阶段门禁；本片仅文档检查，不把设计稿视为机器契约或运行验收                                                                                                                                                                  |
+
+### 四类 owner scope 的 Product 判断
+
+`owner_scope` 是资源选择条件而非权限声明；tenant 与 subject 只来自当前 IAM admission。对已有 Skill/version/installation，
+先由 Platform tenant-scoped 事实解析真实 owner，禁止用请求 body 覆盖；Platform 在 commit 与 receipt replay 前复核相同绑定。
+
+| scope        | Product 当前权限来源                                  | 约束                                                                                                                                                                              |
+| ------------ | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| user         | BFF 比较 owner id 与当前 subject                      | 默认个人私有；显式分享只授予既定读取/使用能力，不自动授予编辑/发布；其他用户 ID 不获得写权                                                                                        |
+| organization | IAM 0.7 `checkTenantSkillAuthorization`               | owner id 必须是 admission 的当前 tenant；每次使用同一具名用户 Bearer 和准确 action 在线 check，返回 tenant/subject/action 全匹配才允许；不缓存 allow，不用 BFF machine token 代替 |
+| project      | BFF 当前 Project tenant + owner predicate             | 查询本仓真实存在且满足 tenant + owner 的当前可访问 Project 行；目前个人 owner 才有写权，组织成员资格不自动获得 Project 权限；未来协作者权限须由 BFF 独立设计，不复制 IAM role 表  |
+| session      | BFF 当前 active Conversation tenant + owner predicate | Product session 必须解析到本仓 Conversation，不能信任客户端 session_id 或 Agent Run；删除/跨 owner/跨 tenant 均拒绝；如关联 Project，同时检查当前 Project 可访问性                |
+
+调用顺序为 admission → 解析真实资源 owner → scope/action check → 注入受信 Product 上下文 → Platform owner 校验/执行。
+用户 Bearer 只送 IAM，Platform 使用自身 workload admission 加受信 Product subject/owner/action 绑定；仅 workload+tenant 不足以授权。
+该 Product 上下文的可验证承载、有效期、受众、撤权重查及 replay 语义必须由 Platform owner 发布机器契约后再消费，
+不得把 `execution_proof`、body owner_scope 或普通自报 header 当成现成 Product 授权。Project/Conversation 在远端调用前重新检查；
+本地事务不跨网络持锁。跨 owner 不宣称原子撤权：在授权检查后发生的并发撤权竞态须在 owner 协议中明确时点与拒绝策略，
+未关闭该前置前不开放 mutation。后续每次请求与重放均重验当前权限，旧 receipt 不是授权凭据。
+
+### 来源 pin 与实施次序
+
+1. BFF 先 pin IAM owner `4d981441d154c83b63987f284e3a82a559595870` 的 internal OpenAPI 0.7.0，原始 SHA-256
+   `c8d7af8a365ad5d13eaabccf7f31133e0918ef198bdc3e7c790d90933eae91b2`；更新 vendor/manifest/生成 SDK 及 relay provenance，
+   只把具名 Skill check 加入 server consumer，不加入 browser relay，不改变现有 session/Team 行为。当前 active pin 仍是 0.6.0。
+2. BFF 授权逻辑先以四 scope/action 契约测试实施；Platform owner 随后发布 Product 受信上下文、真实 owner 查询及当前权限/receipt 协议，
+   Storage owner 发布可消费的 package upload/clean/digest 契约。BFF 不自行编造 owner DTO、身份头或上传成功。
+3. 固定 Platform/Storage commit、version、digest 并生成 consumer；按各操作前置逐项接通 BFF catalog public mutation。
+   Storage→Platform Begin/Complete 上传链及已持久化包绑定是 Validate/Publish 激活的硬前置，必须先接通并以真实 owner 验证；
+   前置未就绪时 Validate/Publish 保持 fail closed，不宣称六条 mutation 均可成功，也不以任意 asset/hash 或 stub 绕过。
+   随后处理 installation 与完整 Capability HTTP cutover；不把必需的 upload 链拖到六 mutation 激活之后。
+4. Web 同源 adapter/scope UI 消费 BFF public contract；Root 验证 IAM/BFF/Platform 当前授权与撤权，以及前述真实 Storage 包绑定链和浏览器链路。
+   三 owner smoke 不替代 Storage、Web 或四 scope 全链验收。
+
+后续 Node 22：`pnpm format:check && pnpm lint && pnpm typecheck && pnpm contract:check && pnpm test:architecture && pnpm test && pnpm build`；
+本仓 schema 门为 `pnpm schema:check`，fresh install 与真实 integration 用隔离空 `kokoro_bff` schema 的
+`KOKORO_BFF_POSTGRES_URL=... pnpm db:apply-schema`、`KOKORO_TEST_POSTGRES_URL=... KOKORO_TEST_REDIS_URL=... pnpm test:integration`。
+Root 真实三 owner Skill smoke 目前尚无已批准专用命令，须在 Root 任务卡建立隔离 runner 与明确命令后执行，
+不得以现有 System smoke 或 fixture unit 替代。场景必须覆盖四 scope、六 action、tenant/subject 伪造、撤权后同 key replay、
+当前资源删除、超时、owner digest 冲突、响应丢失后同 command 恢复及无权限时零 mutation I/O。
