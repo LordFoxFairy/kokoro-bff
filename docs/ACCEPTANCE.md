@@ -42,7 +42,8 @@ Phase 2 不验收跨版本 re-projection、PG backup restore、长时间 fault i
 | Idempotency | 同 digest replay / different digest conflict / pending duplicate | 当前已覆盖；query/header/transaction gap 开放 |
 | Owner reads | System（含 Model）/Capability/Billing | 显式 projection；缺失/坏响应 fail closed |
 | Service-only exceptions | Share/runtime manifest 多带无关 Authorization | 不调用 IAM，按自身 service/share 或 System contract 处理；Scheduler callback 仍独立 |
-| Library degraded | admission 前可返回 503 `iam_admission_unavailable`；admission 后固定 503 `storage_integration_unavailable` | 两个 code 共存，Storage connection/request 均为 0 |
+| Library personal file | 本人 GET/可见上传仅投影 Storage personal CLEAN ASSET；同键重放/异义冲突、感染终态与成员隔离 | Root 固定真 IAM/Chromium/Storage/PG/MinIO/ClamAV 组合已验；未知 Complete 应答丢失后 BFF 进程重启仍需 Root 故障注入 |
+| Library restart recovery | Storage Complete 已提交但 BFF 未收到应答；或 public 200 已持久而浏览器未收到应答 | `test/personal-file-upload.integration.mjs` 使用测试自有 PostgreSQL、Connect 应答故障代理及独立 BFF 实例；真实 Storage owner/进程重启组合待 Root 验收 |
 | Chat admission | user + provisional assistant + Agent command + expected-run fence 原子提交，HTTP 随后返回 202 | unit + 真实 PG integration 已覆盖 |
 | AG-UI | Agent fact → fenced background projector → transactional PG ledger → schema-valid SSE + opaque replay | 主动摄取、retention/GC 与 expired cursor 已覆盖 |
 | Chat facts | Conversation/Message/Share BFF PostgreSQL ownership | tenant+subject、project_ref、direct scope 与 share 只读边界已实现；assistant reconciliation 开放 |
@@ -76,6 +77,8 @@ pnpm test:integration
 `POSTGRES_URL` 在 integration fixture 中必须指向本次测试自有的独立空 database；`schema=kokoro_bff` 指定
 BFF owner schema，Redis 复用共享实例的 DB 8。fixture 缺失、连接失败或测试 skip 都不
 计为通过。
+个人文件重启测试把 `KOKORO_TEST_POSTGRES_URL` 仅作为有 `CREATEDB` 权限的测试连接，随机创建并删除自己的子数据库；
+它不清空传入 URL 所指数据库，也不连接或清空共享 Redis。每次 BFF 实例都使用新的 PostgreSQL pool。
 
 Root 本仓切片：
 

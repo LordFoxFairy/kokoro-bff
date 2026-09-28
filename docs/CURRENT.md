@@ -3,12 +3,14 @@
 状态：2026-09-28
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。
 
-## W2-BFF-LIBRARY-PERSONAL-UPLOAD-CODE（2026-09-28，待 Root 集成验收）
+## W2-BFF-LIBRARY-PERSONAL-UPLOAD-CODE（2026-09-28，已发布并通过个人文件真链纵切）
 
-BFF main `f9218656462dd4bdc3e01d01b858707548ee3ed5` 的四文档设计门已通过。
-本工作树已给 public OpenAPI 和 runtime 增加 `POST /v1/library/files`、独立 personal Storage Connect
-adapter、个人上传 checkpoint saga 与直接合同/行为测试；没有修改 canonical Schema 或新增角色。
-代码片仍待 Root 审查、提交和独立复验，真实 Storage/PG/MinIO/ClamAV 及 Web 用户流程尚未验收。
+BFF main `8a90fdd9ec3809000924229bfc7b986ba8ba1522` 已发布 public OpenAPI 和 runtime
+`POST /v1/library/files`、独立 personal Storage Connect adapter、个人上传 checkpoint saga 与直接合同/行为测试；
+没有修改 canonical Schema 或新增角色。Root 已独立复验本仓 Node 22 的 `pnpm format:check && pnpm check && pnpm schema:check`
+（342 pass/1 skip；schema 5 pass/1 skip）。Root 固定 `0a9206969b2edfcf40bb8d5f0f2d85952995fb8f`
+组合的真 IAM→Chromium→Web→BFF→Storage/PG/MinIO/ClamAV 已从可见 UI 点击验个人 CLEAN 200、本人 GET/刷新、
+同租户成员私有、并发同键、同键重放/异文件冲突、EICAR 422/终态重放；测试自有资源清零。
 
 实现是一个 `files` part/1 MiB/必填 Idempotency-Key 的 Product POST：当次 IAM admission 后派生
 personal scope，Storage CreateUpload→先持久 checkpoint→安全 PUT→Complete→GetAsset；只在普通
@@ -18,15 +20,16 @@ ASSET/CLEAN 且 public 终态 receipt 确认持久后返回 200。同键同文�
 无需预建新表/角色；本片已修复/测试 `putReceipt` 条件写 0 行静默成功风险。Project owner
 predicate、`project-resource-upload:v1` namespace 不进入个人入口，Storage 仍唯一拥有文件事实。
 
-本工作树 Node 22.22.2 已执行 `pnpm format:check && pnpm check && pnpm schema:check`，三门 exit 0；
-全量 342 pass/1 skip，schema 5 pass/1 skip，新个人文件直接测试 10/10。这里的 live HTTP fixture
-使用假的 Connect 与对象 PUT，不是 Storage 真进程/PostgreSQL/MinIO/ClamAV。Root 真隔离组合验证
-POST→GET、同键/跨用户/感染/重启恢复之前，Library 写入与整条边仍为待验；未触碰用户 3310。
+上述单仓直接 HTTP fixture 使用假的 Connect 与对象 PUT；真纵切证据来自 Root 固定组合，不以单测冒充。
+现有直接测试中 Complete 丢应答的“restart-style”仍在同一实例/内存 Map 上运行，尚未证明真实 PostgreSQL
+checkpoint 在 BFF 停止/重启后的恢复。本次候选增加测试自有 PostgreSQL、独立 BFF 实例及受控应答丢失的
+`test/personal-file-upload.integration.mjs`，只证明 BFF 持久回执/恢复与 Connect fault proxy；真实 Storage
+进程已提交 Complete、BFF 重启后的当前固定组合门仍待 Root 放行。个人下载、Agent Artifact 及整条 W2 边仍未完成；
+未触碰用户 3310。
 
-## W2-LIBRARY-BFF-FILE 代码片（2026-09-28，Root 单仓门已复验；真跨仓待验）
+## W2-LIBRARY-BFF-FILE 代码片（2026-09-28，个人文件 GET 真跨仓已验）
 
-本工作树由 BFF main `d5d7c243db4707645031943a2691d354997b3029` 起步：`GET /v1/library?kind=file`
-现已在 IAM admission 后调用 Storage personal scope 的 Connect `ListAssets`，OpenAPI 有严格文件 200、必填 kind
+`GET /v1/library?kind=file` 已在 IAM admission 后调用 Storage personal scope 的 Connect `ListAssets`，OpenAPI 有严格文件 200、必填 kind
 及 400/502/503；旧固定 `storage_integration_unavailable` 运行分支已删除。无 kind/未知 kind 400。
 BFF Storage consumer manifest 现 pin `2d87e26`/combined SHA-256
 `11edffcdd668c59ef07c7b4c47d44b38dd95c2b8aee5a4d0c6475fba58850713`；项目 GET/POST 仍用
@@ -37,7 +40,7 @@ CLEAN ASSET 查询、隔离 `personal_library` cursor 与受信 `scope_id=subjec
 `11edffcdd668c59ef07c7b4c47d44b38dd95c2b8aee5a4d0c6475fba58850713`；本仓已重钉并调用。
 首片 `GET /v1/library?kind=file` 的 `kind` 必填，无参/未知 400；200 只列本人个人文件并
 标 `kind:"file"`，不是 Agent 作品。未来 `kind=artifact`/`all`、下载 Product 动作和 Web
-旧 `/api/session/artifacts` 迁移仍未实现。个人上传代码片的当前状态以上方为准，尚未真组合验收；
+旧 `/api/session/artifacts` 迁移仍未实现。个人上传代码片的当前状态以上方为准，已通过个人文件真组合正向与私有负例；
 下载另需当次 GetAsset 校验普通 ASSET/CLEAN 后再签短期引用，不能只调用 GetDownloadReference。
 Storage 单仓通过不等于 BFF/Web 用户可见闭环。
 
@@ -46,7 +49,7 @@ Storage 单仓通过不等于 BFF/Web 用户可见闭环。
 Root 在此工作树独立使用 Node 22.22.2 复验 `pnpm format:check && pnpm check && pnpm schema:check` exit0：
 全量 332 pass/1 skip、schema 5 pass/1 skip，Storage 精确来源与双次生成均 PASS；独立只读审查无 P0/P1。
 新增 live Product HTTP→Storage Connect fixture 覆盖逐页重新 IAM admission、personal header、跨 subject cursor 400，
-但仍不是 Storage 真进程/PostgreSQL/browser。Root 后续独立执行当前来源的真 Storage/PG、
+但仍不是 Storage 真进程/PostgreSQL/browser。Root 已在上方固定组合独立执行真 Storage/PG、
 Web 浏览器刷新/同租户其他人不可见验收。未触碰用户 3310，不把本片称为完整 Library。
 
 ## W1E-BFF-PRODUCT-CREATE-DRAFT-DOC（2026-09-28，设计候选；尚未实现）
