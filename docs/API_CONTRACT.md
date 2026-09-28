@@ -1,22 +1,23 @@
 # kokoro-bff API contract policy
 
-## W2-BFF-PERSONAL-DOWNLOAD：个人文件字节契约设计门（2026-09-28；机器契约未发布）
+## W2-BFF-PERSONAL-DOWNLOAD：个人文件字节契约代码片（2026-09-28；待 Root 集成验收）
 
-**当前机器事实**：[`../contract/openapi/v1/openapi.yaml`](../contract/openapi/v1/openapi.yaml) 仅有个人文件列表
-`GET /v1/library?kind=file` 和上传 `POST /v1/library/files`，没有下载 path；下表是下一片拟写入唯一 owner
-OpenAPI 的目标，不是已发布 API。Storage consumer 已固定 v2 `GetAsset` 与 `GetDownloadReference`；后者不限定
+**当前工作树机器事实**：[`../contract/openapi/v1/openapi.yaml`](../contract/openapi/v1/openapi.yaml) 已加入
+`GET /v1/library/files/{asset_id}/content`（`downloadLibraryFile`）及 frozen operation baseline，
+直接合同/行为测试通过，尚待 Root 独立验收和提交。下表为本代码片 wire 与语义，不代表真 Storage/浏览器已验。
+Storage consumer 已固定 v2 `GetAsset` 与 `GetDownloadReference`；后者不限定
 `upload_purpose=ASSET`，因此 Product 必须先做本人 scope 的 GetAsset purpose/CLEAN 校验，并核对签发结果。
 
 | 面 | 目标 public wire 与语义 |
 | --- | --- |
-| 路由/metadata | `GET /v1/library/files/{asset_id}/content`，拟用稳定 `operationId: downloadLibraryFile`、`x-kokoro-owner: kokoro-bff`、`x-kokoro-visibility: public`、`x-kokoro-stability: beta`、`x-kokoro-idempotency: none`、`x-kokoro-permission: storage.library.read`。它是 BFF 受控字节转发，不返回 302、预签 URL 或 JSON 文件内容。 |
+| 路由/metadata | `GET /v1/library/files/{asset_id}/content`，固定 `operationId: downloadLibraryFile`、`x-kokoro-owner: kokoro-bff`、`x-kokoro-visibility: public`、`x-kokoro-stability: beta`、`x-kokoro-idempotency: none`、`x-kokoro-permission: storage.library.read`。它是 BFF 受控字节转发，不返回 302、预签 URL 或 JSON 文件内容。 |
 | 输入 | 单个合法 `asset_id` 路径段；无 query/body，不接受客户端 SHA、scope、tenant、subject、Storage URL 或 `Idempotency-Key` 来扩权。每次 service+Bearer→在线 IAM admission；可信 tenant/subject 唯一决定 personal scope。 |
-| 200 | `application/octet-stream` 语义的二进制响应；实际 `Content-Type` 取已核对的 Asset MIME，完整缓冲并校验 SHA-256/长度后才发送。`Content-Length` 为实际字节数，`Content-Disposition: attachment` 采用安全 ASCII fallback + RFC 5987 `filename*`、过滤控制字符/路径分隔符；`Cache-Control: no-store`、`Referrer-Policy: no-referrer`、`X-Content-Type-Options: nosniff`、`x-request-id`。不透传 ObjectStore Cookie、ETag、Location、签名 query、缓存或安全 header。 |
+| 200 | OpenAPI 以 `*/*` + `format: binary` 描述任意经过校验的 Asset MIME；实际 `Content-Type` 取已核对的 Asset MIME，完整缓冲并校验 SHA-256/长度后才发送。`Content-Length` 为实际字节数，`Content-Disposition: attachment` 采用安全 ASCII fallback + RFC 5987 `filename*`、过滤控制字符/路径分隔符；`Cache-Control: no-store`、`Referrer-Policy: no-referrer`、`X-Content-Type-Options: nosniff`、`x-request-id`。不透传 ObjectStore Cookie、ETag、Location、签名 query、缓存或安全 header。 |
 | Owner 前置 | 同一受信 personal scope 的 `GetAsset(asset_id)` 返回相同 ID、`upload_purpose=ASSET`、CLEAN、合法摘要/MIME/文件名及 `size_bytes≤1,048,576`；再以该摘要调用 `GetDownloadReference`，逐项核对 ID/摘要/大小/MIME/CLEAN。仅接受未过期 GET、精确配置 ObjectStore origin、无危险 required headers 的签名引用；不向 public 返回引用。 |
 | 错误 | 非法 selector/多余 query/body 为 `400 invalid_library_file`；本人不可见或不存在、非本人/租户资源及非普通 ASSET/非 CLEAN 统一 `404 library_file_not_found`，避免探测；依赖配置缺失、超时或不可达为 `503 storage_unavailable`；owner 响应、签名引用、对象状态/字节长度/摘要不可信为 `502 storage_response_invalid`。保留现有 Product admission 401/403/429/503。错误是现有 `{error:{code,message,retryable,...}}` JSON envelope，`x-request-id` 必带，不含内部 URL/凭据/owner 原文；失败前不发送二进制或部分 200。 |
 | 幂等/缓存 | 安全 GET 不要求 public 幂等键，不写 BFF receipt、缓存或 SQL。Storage Proto 的 `GetDownloadReference` 要求内部 `CommandIdentity`，每次 HTTP GET 新建并交由 Storage owner 处理其命令 receipt；不得把签名 URL 写入本仓终态回执或列表。 |
 
-该设计需先进入唯一 OpenAPI 并通过 contract/生成/architecture 测试，随后 runtime 和真实对象字节验证；
+本工作树已进入唯一 OpenAPI/runtime 并通过直接合同测试；Root 仍须复验真对象字节与权限负例，
 Web 同源 adapter 只能按该二进制契约窄透传，浏览器不得跳转内部 Storage origin。现有 BFF JSON 错误
 `meta.request_id` 偏差依旧属于全仓 envelope 裁决，本片不在成功二进制中增设 JSON envelope。
 

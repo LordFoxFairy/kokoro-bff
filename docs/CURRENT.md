@@ -3,20 +3,21 @@
 状态：2026-09-28
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。
 
-## W2-BFF-PERSONAL-DOWNLOAD 文档门（2026-09-28；代码未开始）
+## W2-BFF-PERSONAL-DOWNLOAD 代码片（2026-09-28；待 Root 集成验收）
 
-基线 BFF main `5add506becd39715dc0a469af83e148a5a354515`：个人文件列表与上传已存在，
-`GET /v1/library/files/{asset_id}/content` **不在**当前 public OpenAPI/runtime，Web 文件卡尚无正式下载动作。
-本次仅把 [技术设计](TECHNICAL_DESIGN.md)、[API 契约策略](API_CONTRACT.md) 与
-[数据边界](DATA_MODEL.md) 的目标方案对齐；机器契约、源码、测试、Schema、生成物均未修改，
-因此此阶段不声明下载可用或跨仓通过。
+设计门基线 BFF main `74bb714d5867399bc50806c158c2ffb838c27b40` clean，个人文件列表与上传已有。
+本工作树代码片现已在唯一 public OpenAPI 增加 `GET /v1/library/files/{asset_id}/content` 与 frozen operation baseline；
+`src/bootstrap/server.ts` 在每次 Product IAM admission 后精确分发具名 route，个人 Storage Connect adapter
+沿已固定 v2 owner Proto 在可信 personal scope 先 `GetAsset(asset_id)` 校验普通 ASSET/CLEAN，再用返回摘要
+`GetDownloadReference` 并核对 ID、摘要、大小、MIME、CLEAN。Web 文件卡和同源下载 adapter 尚未接线。
 
-已裁决下一代码片由 BFF 在每次 service+Bearer/IAM 在线准入后，先在可信 personal scope `GetAsset(asset_id)`
-核对普通 ASSET/CLEAN/1 MiB 上限与摘要，再以相同 scope/摘要 `GetDownloadReference`，核对签发元数据，
-仅向配置的 ObjectStore origin 安全 GET；不重定向浏览器、不暴露签名引用。完整缓冲并验证长度和 SHA-256
-后才发带安全下载头的二进制 200，错误保持稳定 JSON；BFF 不新增 SQL/receipt/缓存/role。
-先由 Root 审查文档门，后续 owner OpenAPI + runtime + 直接测试/Node22 全门，Root 再以真 Storage/MinIO/ClamAV
-验证字节和他人私有负例；Web 精确 pin 和真 Chromium 点击属于更后续的独立切片。
+对象 GET 只允许配置的精确 origin、未过期 GET、空 required headers，不带 Cookie/Authorization、无重定向；
+完整缓冲不超过 1 MiB，验证长度和 SHA-256 后才发带安全下载头的二进制 200，错误为稳定 JSON，
+签名 URL 不暴露、不入日志/receipt。直接测试用 Connect/ObjectStore double 验证本人原字节、每次 IAM
+admission、跨 subject 404、非 ASSET/非 CLEAN、坏引用/摘要/重定向及失败不出部分 200；这不是
+真实 Storage/MinIO/ClamAV 或 Web/Chromium 验收。BFF Schema、SQL、Redis、receipt、role、生成物均未改。
+Root 仍须独立复跑当前工作树门禁、真 owner 字节与私有负例后才可发布；Web 精确 pin 和真 Chromium
+点击属于后续独立切片，不能把本仓绿灯称作整体 W2 闭环。
 
 
 ## W2-BFF-LIBRARY-PERSONAL-UPLOAD-CODE（2026-09-28，已发布并通过个人文件真链纵切）

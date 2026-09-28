@@ -2786,6 +2786,62 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /v1/library/files/{asset_id}/content:
+    get:
+      tags: [Library]
+      operationId: downloadLibraryFile
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: storage.library.read
+      summary: Download one admitted subject's CLEAN personal ASSET file
+      description: Re-admit the current subject, validate the personal Asset and Storage reference, then return only fully verified bytes. No presigned URL or partial success is exposed.
+      parameters:
+        - name: asset_id
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 191 }
+      responses:
+        '200':
+          description: Fully verified personal file bytes, bounded to 1048576 bytes
+          headers:
+            x-request-id:
+              schema: { type: string }
+            Content-Type:
+              schema: { type: string }
+            Content-Length:
+              schema: { type: integer, minimum: 0, maximum: 1048576 }
+            Content-Disposition:
+              schema: { type: string }
+            Cache-Control:
+              schema: { type: string, const: no-store }
+            Referrer-Policy:
+              schema: { type: string, const: no-referrer }
+            X-Content-Type-Options:
+              schema: { type: string, const: nosniff }
+          content:
+            '*/*':
+              schema: { type: string, format: binary }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded delay in seconds before retrying admission
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '502':
+          description: Storage metadata, reference or object bytes did not match the owner contract
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/billing/plans:
     get:
       tags: [Billing]

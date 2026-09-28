@@ -1,10 +1,11 @@
 # kokoro-bff 技术设计
 
-## W2-BFF-PERSONAL-DOWNLOAD：个人文件受控下载设计门（2026-09-28；未实现）
+## W2-BFF-PERSONAL-DOWNLOAD：个人文件受控下载代码片（2026-09-28；待 Root 集成验收）
 
-**当前态。** BFF main `5add506becd39715dc0a469af83e148a5a354515` 已有本人 `GET /v1/library?kind=file` 和
-`POST /v1/library/files`，但 canonical OpenAPI、HTTP route、Storage 下载 adapter 均没有公开下载操作；本文是目标设计，
-不是可运行能力或验收结果。Storage consumer 已精确固定 owner `2d87e26bbaed9a70dcd91ad1e9d126d39d275f38`
+**当前态。** 设计门基线 BFF main `74bb714d5867399bc50806c158c2ffb838c27b40` 已有本人列表与上传；
+本工作树代码片现已加入唯一 public OpenAPI、HTTP route、Storage 个人下载 adapter 与直接测试，
+但仍待 Root 独立审查及真 Storage/MinIO/ClamAV/Web/浏览器验收，不把代码片视为整体可用。
+Storage consumer 已精确固定 owner `2d87e26bbaed9a70dcd91ad1e9d126d39d275f38`
 的 v2 Proto：`GetAsset` 可按 `asset_id` 查询并返回摘要；`GetDownloadReference` 返回短期 GET 引用，但只校验
 scope/CLEAN，不固定普通 `upload_purpose=ASSET`。因此列表项、摘要及签名引用均不得独自充当下载授权。
 

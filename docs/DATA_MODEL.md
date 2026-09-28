@@ -1,9 +1,10 @@
 # kokoro-bff data model
 
-## W2-BFF-PERSONAL-DOWNLOAD：下载不新增本仓事实（2026-09-28；设计门）
+## W2-BFF-PERSONAL-DOWNLOAD：下载不新增本仓事实（2026-09-28；代码片待 Root 验收）
 
-当前 BFF main `5add506becd39715dc0a469af83e148a5a354515` 尚无公开个人文件下载路径；下述为
-`GET /v1/library/files/{asset_id}/content` 的目标数据边界，不是已实现的数据流。BFF 每次经 IAM
+设计门基线 BFF main `74bb714d5867399bc50806c158c2ffb838c27b40` 尚无公开个人文件下载路径；
+本工作树代码片已加入 `GET /v1/library/files/{asset_id}/content` 的 OpenAPI/runtime，但真 owner 与浏览器
+仍待 Root 验收。BFF 每次经 IAM
 admission 后，从可信 tenant/subject 派生 personal scope；Storage `GetAsset(asset_id)` 是 Asset/Purpose/Scan/
 摘要/大小的唯一 owner 读取，`GetDownloadReference` 是同一 owner 的短期签发。BFF 仅在一次请求内暂存
 不超过 1 MiB 的对象字节，核对 owner 元数据和 SHA-256 后一次性发出，不持久化对象、引用、查询结果或授权决定。

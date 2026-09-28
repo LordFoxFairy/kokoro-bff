@@ -1,6 +1,7 @@
 import { projectResourceListRoute } from "../http/routes/project-resource-list.js"
 import { libraryFileListRoute } from "../http/routes/library-file-list.js"
 import { personalFileUploadRoute } from "../http/routes/personal-file-upload.js"
+import { personalFileDownloadRoute } from "../http/routes/personal-file-download.js"
 import { projectResourceRoute } from "../http/routes/project-resource.js"
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http"
 
@@ -226,6 +227,10 @@ async function handle(
   }
   if (composition.routeHandler === undefined && method === "GET" && businessPath.length === 1 && businessPath[0] === "library") {
     await libraryFileListRoute(request, response, config, context)
+    return
+  }
+  if (composition.routeHandler === undefined && method === "GET" && businessPath.length === 4 && businessPath[0] === "library" && businessPath[1] === "files" && businessPath[3] === "content") {
+    await personalFileDownloadRoute(request, response, config, context, businessPath[2] ?? "")
     return
   }
   if (composition.routeHandler === undefined && method === "POST" && businessPath.length === 3 && businessPath[0] === "projects" && businessPath[1] !== undefined && businessPath[2] === "resources") {
