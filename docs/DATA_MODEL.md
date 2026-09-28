@@ -476,3 +476,5 @@ Platform durable receipt/撤权恢复由 Root 真实 IAM/BFF/Platform smoke 验�
 checkpoint 是独立 scope 的 terminal status=200（外层是 canonical route scope），不是 pending body。现有 claim 只 reclaim status=102、release 只删除 status=102，故外层 5xx 与 60 秒 reclaim 均不清除 checkpoint。checkpoint与现有receipt使用相同保留边界，不引入新后台worker/Redis缓存。未知Complete结果先通过已保存upload_id在原scope查询；completed asset关系由Storage验证，BFF核对返回metadata。错误时释放外层pending claim，稳定checkpoint保留；已知pending失败尝试Abort，不撤销已完成Asset。无跨库事务，不承诺请求失败自动删除已完成对象。真实数据库恢复验证由Root串行执行。
 
 W2 scan 错误不回滚 Storage 完成事实：感染 422 以既有外层 receipt 固化，待扫描/unknown 503 释放外层 pending 但保留 terminal upload checkpoint，因此同 key 重查同一 Asset，不新建资产。
+
+W2 资源列表目标不新增 BFF 表、索引、物化快照、缓存或 migration。Project 所有权仍来自本仓 canonical `bff_project` 的 tenant+owner 查询；Asset、purpose、scan、created_at 与排序 cursor 只来自 Storage owner。GET 不使用上传 receipt 重建列表，也不把 POST 的 upload_id 当作资产列。Storage 的 scope 索引与分页查询由其 canonical schema 验证；BFF `pnpm schema:check` 必须证明本仓数据模型零变化。跨仓读取无事务或双写，Storage 不可用时显式依赖失败而非返回空列表。

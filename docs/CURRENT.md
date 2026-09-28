@@ -437,3 +437,5 @@ Agent receipt stub smoke 与 W0B-11 Root 集成后再激活。真实 Agent admis
 W2 本片已实现单文件 route、native multipart、有界 ConnectRPC/presigned PUT、terminal create checkpoint 与最终 receipt。固定 Storage owner `094847da9f4f03e5f3dbda06658430c74bc32f54` 的两个 Proto；新增唯一依赖 `@connectrpc/connect-node@2.2.0`（peer Connect 2.2.0、protobuf ^2.7.0，与 2.14.0 兼容）。配置为 `KOKORO_STORAGE_RPC_BASE_URL` + `KOKORO_BFF_STORAGE_SECRET` + `KOKORO_STORAGE_OBJECT_ORIGIN`，旧 Storage HTTP 环境变量仍被忽略。新增测试覆盖 HTTP→Connect→PUT、最终 receipt 失败恢复与当前项目权限先于 replay；测试 owner/对象服务是进程内 double，不是 Storage 集成。Node 22 format/lint/typecheck/contract/build/schema 门已执行；最终测试数量以本次交付报告为准。Root 待验真实 PostgreSQL + Storage + ObjectStore，未运行共享基础设施。
 
 W2 审查修正：项目资源成功态收窄为 CLEAN。INFECTED 为稳定不可重试 422；PENDING/UNKNOWN 为可重试 503。Complete 和 GetAsset 都执行该检查，负例验证不返回资源/引用且同 key 不重复创建资产。
+
+W2 后续持久列表仍未发布：当前 public API 只有单文件 POST，Web 的项目资源行不能从 BFF GET 重载。三设计文档已锁定 Storage owner-first 的 v2 Connect `ListAssets` → BFF 当前 Project owner 查询与 public GET → Web 删除真实项目 preview 列表；BFF 不建 Asset 映射表、不走 Storage HTTP 旁路、不改 schema。Storage Proto、BFF OpenAPI/运行时和 Web consumer 均待相应 owner 代码与真实组合验收，本仓 POST 的进程内 doubles 不能作为真实 PG/ObjectStore 证明。

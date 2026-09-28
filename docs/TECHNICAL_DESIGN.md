@@ -978,3 +978,9 @@ BFF Project 是当前关系授权 owner，Storage main `094847da9f4f03e5f3dbda06
 删除原resources 503 stub；Library、Skill package、chat关联不动。零新Schema/跨owner SQL。验证单文件、畸形/超限multipart、tenant/subject/项目404、SSRF与secret不外发、同key/异义、receipt失败、Complete响应丢失、重启checkpoint恢复及abort。真实Storage/PG集成由Root另验；单测不表示真实owner链完成。
 
 W2 scan gate：Complete 与恢复 GetAsset 均只放行 CLEAN；INFECTED 返回终态 422，PENDING/UNKNOWN 返回可重试 503。完成资产的 checkpoint 保留，重试仅查询既有 upload/asset，不重复 PUT/Complete，不 Abort 已完成资产，不下发引用。
+
+## W2 项目资源持久列表（目标；Storage owner RPC 待发布）
+
+当前只有单文件 POST，BFF 无项目资源 GET；Web 上传后的仅内存列表不是持久视图。目标是在 Storage v2 `ListAssets` 正式发布后，扩展现有 Project route：每次先以 IAM admission 的 tenant/subject 调 `projects.find`，取本仓 canonical project.id；失败按普通不可见项目返回 404，不向 Storage 打开 socket。随后以固定 `web-bff` 服务凭据和受信 project scope 调 Storage Connect，传有界 limit/cursor，只投影 `ASSET` 且 `CLEAN` 的列表项。BFF 不接 Storage 既有 HTTP 列表、不读其 SQL/Redis，也不建本仓 Asset 映射表或第二份资产事实。
+
+列表按 Storage 的 tenant/project scope，而非按上传者过滤；BFF 当前私人 Project owner predicate 决定谁能读。cursor 由 Storage 绑定调用方、tenant、project、subject、filter 和 limit；BFF 只透传不解码，错误不降级成假空列表。返回列表不含 upload_id（Storage 资产行不提供此关联），也不返回签名下载 URL；下载另走受信、逐次授权的 owner 契约。测试先覆盖 200/空页/下一页、跨项目/跨 subject 不可见、scan/purpose 过滤、Storage 故障与恶意 cursor，最后用真实 Storage+PostgreSQL/ObjectStore 组合验证刷新仍可见。
