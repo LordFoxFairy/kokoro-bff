@@ -3,10 +3,10 @@ import { createHash } from "node:crypto"
 import { access, readFile } from "node:fs/promises"
 import { test } from "node:test"
 
-const ownerCommit = "094847da9f4f03e5f3dbda06658430c74bc32f54"
+const ownerCommit = "ef0fd7779bf434120ac1f8a58592222f534a7c45"
 const sources = {
   "kokoro/common/v1/common.proto": "4604725ec7d5896c9d74b53c6f06d19b20ee758d5ab9e1cb90177ede95bba9fd",
-  "kokoro/storage/v2/storage.proto": "e6a599c447d19f9d97b097751156ef8e84f2ce34ffe38c67f4f83dcdc22a4def",
+  "kokoro/storage/v2/storage.proto": "7add201df530ee1600a67c7fdadd9dfcd0edc1e8a0595b8977ac63b30663f049",
 }
 const root = new URL("../", import.meta.url)
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex")
@@ -37,6 +37,7 @@ async function sourceBytes() {
 test("Storage consumer pins exact owner Proto bytes and generated provenance, not an execution artifact", async () => {
   const manifest = JSON.parse(await requiredFile("contract/dependencies/storage-connect.json"))
   assert.equal(manifest.owner.repository_commit, ownerCommit)
+  assert.equal(manifest.owner.published_combined_sha256, "05c6ef390c06b512218520b44e76d2d3212630df574a4fd63b6238b05631189f")
   assert.equal(manifest.owner.package_name, "kokoro.storage.v2")
   assert.equal(manifest.owner.repository_path, "apps/kokoro-storage")
   assert.equal(manifest.execution_artifact, null)
@@ -74,4 +75,20 @@ test("all pinned consumer manifests track the same lockfile without replacing ex
     const manifest = JSON.parse(await requiredFile(`contract/dependencies/${name}.json`))
     assert.equal(manifest.lockfile_sha256, digest, `${name} lockfile pin`)
   }
+})
+
+test("Storage generated ListAssets wire contract carries only bounded query and metadata", async () => {
+  const { StorageService, ListAssetsRequestSchema, ListAssetItemSchema } = await import("../dist/generated/storage-connect/kokoro/storage/v2/storage_pb.js")
+  assert.equal(StorageService.method.listAssets.name, "ListAssets")
+  assert.deepEqual(
+    ListAssetsRequestSchema.fields.map((f) => [f.name, f.number]),
+    [
+      ["limit", 1],
+      ["cursor", 2],
+    ],
+  )
+  assert.deepEqual(
+    ListAssetItemSchema.fields.map((f) => f.name),
+    ["asset_id", "filename", "mime_type", "content_sha256", "size_bytes", "upload_purpose", "origin", "scan_state", "created_at"],
+  )
 })

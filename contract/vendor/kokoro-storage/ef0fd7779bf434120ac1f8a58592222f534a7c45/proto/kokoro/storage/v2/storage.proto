@@ -3,7 +3,9 @@
 // x-kokoro-tenant-id, x-kokoro-subject-id, and x-kokoro-request-id transport metadata.
 // x-kokoro-scope-kind (personal|project|conversation) and x-kokoro-scope-id are required.
 // Scope is asserted by an authenticated, permitted business owner; body identity is forbidden.
-// F1 permits web-bff only. Service registration alone grants no product-scope operation.
+// web-bff has the product-scope operations; kokoro-platform currently has only
+// GetPackageReference. ListAssets additionally requires a project scope.
+// Service registration alone grants no product-scope operation.
 // Tenant, subject, caller and scope are deliberately absent from request messages.
 syntax = "proto3";
 
@@ -143,6 +145,32 @@ message GetAssetResponse {
   string filename = 12;
 }
 
+// Project resources only: the server fixes purpose=ASSET and scan=CLEAN before pagination.
+// Caller must be web-bff with an authenticated project scope. The cursor is not an access grant.
+message ListAssetsRequest {
+  // Required; 1..100. Zero is invalid rather than an implicit default.
+  uint32 limit = 1;
+  string cursor = 2;
+}
+
+message ListAssetItem {
+  string asset_id = 1;
+  string filename = 2;
+  string mime_type = 3;
+  string content_sha256 = 4;
+  uint64 size_bytes = 5;
+  kokoro.storage.v2.UploadPurpose upload_purpose = 6;
+  kokoro.storage.v2.AssetOrigin origin = 7;
+  kokoro.storage.v2.ScanState scan_state = 8;
+  google.protobuf.Timestamp created_at = 9;
+}
+
+message ListAssetsResponse {
+  repeated kokoro.storage.v2.ListAssetItem items = 1;
+  // Absent when there is no following page.
+  optional string next_cursor = 2;
+}
+
 message GetPackageReferenceRequest {
   reserved 1, 3;
   reserved "request_id", "tenant_id";
@@ -231,6 +259,7 @@ service StorageService {
   rpc AbortUpload(kokoro.storage.v2.AbortUploadRequest) returns (kokoro.storage.v2.AbortUploadResponse);
   rpc GetUploadStatus(kokoro.storage.v2.GetUploadStatusRequest) returns (kokoro.storage.v2.GetUploadStatusResponse);
   rpc GetAsset(kokoro.storage.v2.GetAssetRequest) returns (kokoro.storage.v2.GetAssetResponse);
+  rpc ListAssets(kokoro.storage.v2.ListAssetsRequest) returns (kokoro.storage.v2.ListAssetsResponse);
   rpc GetPackageReference(kokoro.storage.v2.GetPackageReferenceRequest) returns (kokoro.storage.v2.GetPackageReferenceResponse);
   rpc GetScanStatus(kokoro.storage.v2.GetScanStatusRequest) returns (kokoro.storage.v2.GetScanStatusResponse);
   rpc CreateArtifact(kokoro.storage.v2.CreateArtifactRequest) returns (kokoro.storage.v2.CreateArtifactResponse);

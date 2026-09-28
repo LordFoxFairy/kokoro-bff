@@ -1,6 +1,9 @@
+import { toJson } from "@bufbuild/protobuf"
+import { TimestampSchema } from "@bufbuild/protobuf/wkt"
+import type { ProjectResourcePage, ProjectResourcePageInput } from "../../../application/project-resource-list.types.js"
 import { createClient, ConnectError, Code, type Client, type Transport } from "@connectrpc/connect"
 import { createConnectTransport } from "@connectrpc/connect-node"
-import { StorageService, UploadPurpose, UploadState, ScanState } from "../../../generated/storage-connect/kokoro/storage/v2/storage_pb.js"
+import { StorageService, UploadPurpose, UploadState, ScanState, AssetOrigin } from "../../../generated/storage-connect/kokoro/storage/v2/storage_pb.js"
 import { ProjectResourceError } from "../../../application/project-resource.error.js"
 import type {
   ProjectResourceContext,
@@ -16,7 +19,7 @@ export class StorageUploadClient implements ProjectResourceStorage {
   private readonly headers: Record<string, string>
   constructor(
     private readonly config: { baseUrl: string; secret: string; objectOrigin: string },
-    context: ProjectResourceContext,
+    context: Omit<ProjectResourceContext, "key">,
     transport?: Transport,
   ) {
     this.client = createClient(
@@ -131,6 +134,65 @@ export class StorageUploadClient implements ProjectResourceStorage {
         scan_state: this.requireCleanScan(result.scanState),
       }
     })
+  }
+  async listAssets(input: ProjectResourcePageInput, signal: AbortSignal): Promise<ProjectResourcePage> {
+    try {
+      const page = await this.client.listAssets(input, { headers: this.headers, signal })
+      if (
+        page.items.length > input.limit ||
+        (page.nextCursor !== undefined && (!/^[\x21-\x7e]{1,4096}$/u.test(page.nextCursor) || page.nextCursor === input.cursor || page.items.length === 0))
+      ) {
+        throw new ProjectResourceError("storage_response_invalid", 502)
+      }
+      const ids = new Set<string>()
+      const items = page.items.map((item) => {
+        const timestamp = item.createdAt
+        if (
+          !/^[^\x00-\x1f\x7f]{1,191}$/u.test(item.assetId) ||
+          ids.has(item.assetId) ||
+          !/^[^\x00-\x1f\x7f/\\]{1,255}$/u.test(item.filename) ||
+          [".", ".."].includes(item.filename) ||
+          item.mimeType.length > 191 ||
+          !/^[\w.+-]+\/[\w.+-]+$/u.test(item.mimeType) ||
+          !/^[0-9a-f]{64}$/u.test(item.contentSha256) ||
+          item.sizeBytes < 0n ||
+          item.sizeBytes > 18446744073709551615n ||
+          item.uploadPurpose !== UploadPurpose.ASSET ||
+          item.scanState !== ScanState.CLEAN ||
+          ![AssetOrigin.UPLOADED, AssetOrigin.GENERATED].includes(item.origin) ||
+          timestamp === undefined ||
+          timestamp.seconds < -62135596800n ||
+          timestamp.seconds > 253402300799n ||
+          timestamp.nanos < 0 ||
+          timestamp.nanos > 999999999
+        )
+          throw new ProjectResourceError("storage_response_invalid", 502)
+        ids.add(item.assetId)
+        const createdAt = toJson(TimestampSchema, timestamp)
+        if (typeof createdAt !== "string") throw new ProjectResourceError("storage_response_invalid", 502)
+        return {
+          asset_id: item.assetId,
+          filename: item.filename,
+          mime_type: item.mimeType,
+          size_bytes: String(item.sizeBytes),
+          content_sha256: item.contentSha256,
+          scan_state: "clean" as const,
+          created_at: createdAt,
+        }
+      })
+      return { items, next_cursor: page.nextCursor ?? null }
+    } catch (error) {
+      if (error instanceof ProjectResourceError) throw error
+      if (error instanceof ConnectError && error.code === Code.InvalidArgument) throw new ProjectResourceError("invalid_project_resource_page", 400)
+      if (
+        signal.aborted ||
+        (error instanceof ConnectError &&
+          [Code.Unavailable, Code.DeadlineExceeded, Code.Canceled, Code.Unauthenticated, Code.PermissionDenied, Code.ResourceExhausted].includes(error.code))
+      ) {
+        throw new ProjectResourceError("storage_unavailable", 503, true)
+      }
+      throw new ProjectResourceError("storage_response_invalid", 502)
+    }
   }
   async abortUpload(commandId: string, requestDigest: string, uploadId: string, signal: AbortSignal): Promise<void> {
     await this.rpc(() =>

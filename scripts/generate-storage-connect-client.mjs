@@ -7,13 +7,13 @@ import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-const ownerCommit = "094847da9f4f03e5f3dbda06658430c74bc32f54"
+const ownerCommit = "ef0fd7779bf434120ac1f8a58592222f534a7c45"
 const vendor = `contract/vendor/kokoro-storage/${ownerCommit}/proto`
 const output = path.join(root, "src/generated/storage-connect")
 const manifestPath = path.join(root, "contract/dependencies/storage-connect.json")
 const sourceDigests = {
   "kokoro/common/v1/common.proto": "4604725ec7d5896c9d74b53c6f06d19b20ee758d5ab9e1cb90177ede95bba9fd",
-  "kokoro/storage/v2/storage.proto": "e6a599c447d19f9d97b097751156ef8e84f2ce34ffe38c67f4f83dcdc22a4def",
+  "kokoro/storage/v2/storage.proto": "7add201df530ee1600a67c7fdadd9dfcd0edc1e8a0595b8977ac63b30663f049",
 }
 const directories = ["kokoro", "kokoro/common", "kokoro/common/v1", "kokoro/storage", "kokoro/storage/v2"]
 const generatedFiles = ["kokoro/common/v1/common_pb.ts", "kokoro/storage/v2/storage_pb.ts"]
@@ -110,6 +110,7 @@ async function manifestFor(directory) {
     owner: {
       repository_path: "apps/kokoro-storage",
       repository_commit: ownerCommit,
+      published_combined_sha256: "05c6ef390c06b512218520b44e76d2d3212630df574a4fd63b6238b05631189f",
       package_name: "kokoro.storage.v2",
       sources: Object.entries(sourceDigests).map(([file, digest]) => ({ path: `contract/proto/${file}`, sha256: digest })),
     },
@@ -130,7 +131,7 @@ async function manifestFor(directory) {
       supply_chain: "Exact package versions and lock integrity; local generation without remote plugins; the existing Buf build allowance is unchanged.",
       performance: "Connect Node HTTP/1.1 transport bounds RPC messages and deadlines; runtime performance is unmeasured.",
       failure_semantics:
-        "Generation rejects source/config/package/tree/digest drift. No automatic mutation retries; BFF project-resource adapter consumes only upload operations.",
+        "Generation rejects source/config/package/tree/digest drift. No automatic mutation retries; BFF project-resource adapter consumes upload operations and project-scoped ListAssets.",
       exit_path: "Regenerate from the pinned owner Proto with a reviewed compatible generator; generated wire types remain isolated from business code.",
       sources: ["https://connectrpc.com/docs/node/using-clients/", "https://github.com/bufbuild/protobuf-es/releases/tag/v2.14.0"],
     },

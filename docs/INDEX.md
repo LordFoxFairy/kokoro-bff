@@ -37,3 +37,5 @@ Phase 2 durable AG-UI 的具体裁决见 [`ADR/ADR-002-durable-agui-ledger.md`](
 | `ACCEPTANCE.md` | 可运行的 Given/When/Then 与命令 | 自报“生产级”结论 |
 
 - Project single-file upload: `src/http/routes/project-resource.ts` → `src/application/project-resource-upload.ts` → `src/infrastructure/clients/storage/`; source provenance `contract/dependencies/storage-connect.json`, deterministic generator `scripts/generate-storage-connect-client.mjs`, focused tests `test/project-resource-upload.test.mjs` / `test/storage-connect-contract.test.mjs`.
+
+- Project durable resource GET: `src/http/routes/project-resource-list.ts`, `src/http/project-resource-list-input.ts`, `src/application/project-resource-list.types.ts`; owner mapping remains in the Storage client, with `test/project-resource-list.test.mjs` as focused contract/HTTP coverage.

@@ -729,6 +729,6 @@ session_invalid/skill_forbidden/skill_rate_limited，坏响应、超时、未知
 
 独立凭据代言固定web-bff+受信tenant/subject+project scope；owner仅从固定版本Proto生成。全局Library、Skill包和多文件不属于本片。
 
-### W2 项目资源读取目标契约（尚未发布）
+### W2 项目资源读取契约（当前）
 
-在 Storage v2 `ListAssets` owner contract 发布后，新增 `GET /v1/projects/{projectId}/resources?limit=…&cursor=…`。它是 public Product API，由 BFF 在每次请求先校验固定租户/当前 User Bearer 与该私人 Project 的 tenant+subject predicate；不存在和无权同为 404。limit 有界，cursor opaque 且绑定受信 project/subject/filter，不接受浏览器自报 tenant/scope。成功为 `{data:{items:[{asset_id,filename,mime_type,size_bytes,content_sha256,scan_state,created_at}],next_cursor},meta:{request_id}}`；只含 `ASSET`/`CLEAN`，不含 POST 独有的 `upload_id`、下载 URL、内部状态或 package。非法分页/cursor 400，owner 失败按既有 public 错误语义返回 502/503，不用 preview/mock 200 替代。机器事实源仍是 `contract/openapi/v1/openapi.yaml`；本段是目标，未修改机器契约前不得宣称 GET 已发布。
+固定 Storage owner `ef0fd7779bf434120ac1f8a58592222f534a7c45` 的 v2 `ListAssets`，已发布 `GET /v1/projects/{projectId}/resources?limit=…&cursor=…`。它是 public Product API，由 BFF 在每次请求先校验固定租户/当前 User Bearer 与该私人 Project 的 tenant+subject predicate；不存在和无权同为 404。limit 默认50、范围1..100，cursor 长度1..4096且只含可见ASCII、opaque 且绑定受信 project/subject/filter，不接受浏览器自报 tenant/scope。成功为 `{data:{items:[{asset_id,filename,mime_type,size_bytes,content_sha256,scan_state,created_at}],next_cursor},meta:{request_id}}`；只含 `ASSET`/`CLEAN`，不含 POST 独有的 `upload_id`、下载 URL、内部状态或 package。非法分页/cursor 400，owner 失败按既有 public 错误语义返回 502/503，不用 preview/mock 200 替代。机器事实源仍是 `contract/openapi/v1/openapi.yaml`，新增 operationId `listProjectResources` 与 `ProjectResourceListResponse`；POST形态和checkpoint不变。

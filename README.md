@@ -134,3 +134,5 @@ health/ready smoke 尚未在当前治理阶段全部闭环，不应据此 README
 ### Single project file upload
 
 Configure `KOKORO_STORAGE_RPC_BASE_URL`, independent `KOKORO_BFF_STORAGE_SECRET`, and exact `KOKORO_STORAGE_OBJECT_ORIGIN` together. The existing project resources POST accepts one `files` multipart part and at most 1 MiB for the entire body. It returns only CLEAN Storage asset metadata. Infected files receive terminal 422; pending/unknown scans receive retryable 503 without a usable resource. Reuse the same key/file after an uncertain response; an aborted upload requires a new key. Library listing and multi-file upload remain outside this slice. Storage provenance/generation: `pnpm contract:check:storage`.
+
+Project resources can be reloaded with `GET /v1/projects/{projectId}/resources?limit=50&cursor=...` using the same Storage configuration. The response contains clean asset metadata in `data.items` and opaque `data.next_cursor` (null at the end); no download URL or upload ID is fabricated. Current project ownership is rechecked on every page.

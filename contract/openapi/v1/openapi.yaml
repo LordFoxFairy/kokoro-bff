@@ -1736,6 +1736,55 @@ paths:
   /v1/projects/{projectId}/resources:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
+    get:
+      tags: [Projects]
+      operationId: listProjectResources
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: project.resource.read
+      summary: List clean project resources
+      description: Current project ownership is checked on every page. Storage filters ASSET and CLEAN before pagination; ordering is created_at descending then asset_id ascending, without snapshot isolation. Cursor is opaque and bound to trusted scope, subject and limit. No upload ID or download URL is returned.
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+        - name: cursor
+          in: query
+          schema: { type: string, minLength: 1, maxLength: 4096 }
+      responses:
+        '200':
+          description: Current project resource page; an empty project returns an empty items array
+          headers:
+            x-request-id:
+              schema: { type: string }
+              description: Request correlation ID
+            Cache-Control:
+              schema: { type: string, const: no-store }
+              description: Private uncached page
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectResourceListResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429':
+          description: IAM session admission is rate limited
+          headers:
+            Retry-After:
+              description: Bounded admission retry delay in seconds
+              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '502':
+          description: Invalid Storage page or unexpected owner response
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
     post:
       tags: [Projects]
       operationId: uploadProjectResources
@@ -3028,6 +3077,33 @@ components:
       schema:
         type: string
   schemas:
+    ProjectResourceListResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [items, next_cursor]
+          properties:
+            items:
+              type: array
+              maxItems: 100
+              items:
+                type: object
+                additionalProperties: false
+                required: [asset_id, filename, mime_type, size_bytes, content_sha256, scan_state, created_at]
+                properties:
+                  asset_id: { type: string, minLength: 1, maxLength: 191 }
+                  filename: { type: string, minLength: 1, maxLength: 255 }
+                  mime_type: { type: string, minLength: 1, maxLength: 191 }
+                  size_bytes: { type: string, pattern: '^(0|[1-9][0-9]*)$' }
+                  content_sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+                  scan_state: { type: string, enum: [clean] }
+                  created_at: { type: string, format: date-time }
+            next_cursor: { type: [string, 'null'], minLength: 1, maxLength: 4096 }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
     ProjectResourceUploadResponse:
       type: object
       required: [data, meta]

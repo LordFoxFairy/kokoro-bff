@@ -438,4 +438,10 @@ W2 本片已实现单文件 route、native multipart、有界 ConnectRPC/presign
 
 W2 审查修正：项目资源成功态收窄为 CLEAN。INFECTED 为稳定不可重试 422；PENDING/UNKNOWN 为可重试 503。Complete 和 GetAsset 都执行该检查，负例验证不返回资源/引用且同 key 不重复创建资产。
 
-W2 后续持久列表仍未发布：当前 public API 只有单文件 POST，Web 的项目资源行不能从 BFF GET 重载。三设计文档已锁定 Storage owner-first 的 v2 Connect `ListAssets` → BFF 当前 Project owner 查询与 public GET → Web 删除真实项目 preview 列表；BFF 不建 Asset 映射表、不走 Storage HTTP 旁路、不改 schema。Storage Proto、BFF OpenAPI/运行时和 Web consumer 均待相应 owner 代码与真实组合验收，本仓 POST 的进程内 doubles 不能作为真实 PG/ObjectStore 证明。
+## W2 项目资源持久 GET（当前实现，待 Root 真实组合验证）
+
+基线 `main 199a183`；固定 Storage owner `ef0fd7779bf434120ac1f8a58592222f534a7c45`，published combined SHA-256 `05c6ef390c06b512218520b44e76d2d3212630df574a4fd63b6238b05631189f`。原 vendor pin 已替换并由本仓 Buf 连续两次生成一致，旧 owner vendor 删除；无依赖升级、SQL/Schema/receipt修改。
+
+新增 public GET `/v1/projects/{projectId}/resources`：每页先按可信tenant/subject查当前私人Project owner，canonical id入Storage project scope；未授权/不存在404且零Storage调用。默认limit50（1..100），opaque cursor上限4096；只返回ASSET/CLEAN metadata、next_cursor及既有RequestMeta，不含upload_id/URL。坏查询400、坏owner页502、依赖失败503，不降级空列表。空项目200空items。公开OpenAPI、baseline、生成drift与负例同步；POST/checkpoint保持原行为。
+
+聚焦测试覆盖HTTP→Connect分页、跨project/subject、cursor拒绝、owner故障/坏页、当前授权与GET/POST元数据一致；owner transport在测试中是double，不算真实Storage/PG集成。Node22 format/lint/typecheck/build全部通过；contract 40/40，test 328通过/1跳过，schema 5通过/1跳过，Storage生成/check均两轮字节一致。当前未提供隔离 KOKORO_TEST_POSTGRES_URL/REDIS_URL/POSTGRES_ADMIN_URL，故未运行真实PG integration；真实Storage/PostgreSQL/ObjectStore/Web刷新组合由Root后续串行验证，Web consumer仍属后续片。
