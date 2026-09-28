@@ -1,38 +1,38 @@
 # kokoro-bff API contract policy
 
-## W2-BFF-LIBRARY-PERSONAL-UPLOAD：个人文件写入目标契约（设计门；机器 OpenAPI 尚未修改）
+## W2-BFF-LIBRARY-PERSONAL-UPLOAD-CODE：个人文件写入契约（代码片；待 Root 集成验收）
 
-当前 BFF main `a67ae2d06b52202f349305ae3723f6e296c087a1` 的机器契约只有
-`GET /v1/library?kind=file`，没有个人 POST；下述是下一代码片的唯一 Product 目标，不是已可用接口。
-采用 `POST /v1/library/files`（目标 `operationId: uploadLibraryFile`），而不是用无 kind 的
+设计基线 BFF main `a67ae2d06b52202f349305ae3723f6e296c087a1` 只有
+`GET /v1/library?kind=file`。本代码片已在唯一 public OpenAPI 和 runtime 增加
+`POST /v1/library/files`（`operationId: uploadLibraryFile`），而不是用无 kind 的
 `POST /v1/library` 隐含文件、复用 `/v1/projects/{projectId}/resources`，或接 Storage 内部 HTTP。
 `x-kokoro-permission: storage.library.write` 只作为 BFF operation 分类 metadata，不由请求自报 grant，
 也不引入本片 IAM 角色/权限模型改造。
 
-| 面   | 目标 wire 与语义                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| 面   | 当前代码片 wire 与语义                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 请求 | `POST /v1/library/files`，无 query；`multipart/form-data` 恰好一个名为 `files` 的二进制 part，无额外 form 字段、tenant、subject、scope 或 project ID；完整 body ≤1,048,576 bytes。必填唯一 `Idempotency-Key`，长度 1–191、可打印 ASCII；同键重试必须是同一文件语义。                                                                                                                                                                                                                                              |
+| 请求 | `POST /v1/library/files`，无 query；`multipart/form-data` 恰好一个名为 `files` 的二进制 part，无额外 form 字段、tenant、subject、scope 或 project ID；完整 body ≤1,048,576 bytes。必填唯一原始 `Idempotency-Key`，长度 1–191、可打印 ASCII、无逗号或前后 OWS；同键重试必须是同一文件语义。                                                                                                                                                                                                                                              |
 | 成功 | 200，仅 Storage `upload_purpose=ASSET` 且 `scan_state=CLEAN`、本人 personal scope 及 BFF 终态 receipt 持久成功后返回。沿当前 BFF envelope：`{data:{file:{kind:"file",asset_id,filename,mime_type,size_bytes,content_sha256,scan_state:"clean"}},meta:{request_id}}`；`size_bytes` 是十进制字符串。响应带 `x-request-id`、`Cache-Control:no-store`。不返回 internal `upload_id`、ObjectStore key/PUT reference、下载 URL、Artifact/session 字段或伪造的 `created_at`（GetAsset 无此字段；列表 GET 再取权威时间）。 |
 | 幂等 | public 终态 receipt 的 scope 包含受信 tenant、subject、方法、精确 path 与 key；独立 `personal-file-upload:v1 + tenant + subject + key` checkpoint 只保存原 Storage upload ID 和文件指纹。指纹覆盖 filename、MIME、字节长度、SHA-256；相同键/同指纹重放同一已持久的最终状态，同键/不同指纹 409；处理中 409。每次 replay 前仍要在线 IAM admission。503/未知 Complete 不写假成功，客户端用同键同文件重试。                                                                                                           |
 | 错误 | 400 `invalid_library_file`/`invalid_idempotency_key`，413 `request_body_too_large`，409 `idempotency_conflict`/`idempotency_in_progress`/`file_upload_aborted`，422 `library_file_infected`（终态），502 `storage_response_invalid`，503 `library_file_scan_pending`/`storage_unavailable`/`file_checkpoint_unavailable`（可同键恢复）；保留普通 Product 401/403/429/503 admission。错误 message 不包含 owner 原文、secret 或临时引用，不把依赖故障伪装为空列表。                                                 |
 
-Storage v2 Connect 精确使用已固定 owner 的 CreateUpload、GetUploadStatus、CompleteUpload、GetAsset 与必要的
-AbortUpload；metadata 中 `service=web-bff, tenant=当次 IAM tenant, subject=当次 IAM subject,
+Storage v2 Connect 精确使用已固定 owner 的 CreateUpload、GetUploadStatus、CompleteUpload、GetAsset；
+任一创建/短期引用/PUT/checkpoint/Complete 的未知或可重试失败均不内联 Abort，保留同键稳定 Create 与原 upload 恢复；metadata 中 `service=web-bff, tenant=当次 IAM tenant, subject=当次 IAM subject,
 scope_kind=personal, scope_id=subject`，CreateUpload purpose 固定 ASSET。请求 headers/body/filename/hash/receipt
 都不是访问其他 subject 的授权依据。Complete 应答丢失后先按同一 upload ID 查询状态并复核 GetAsset，不能换键/新建
-Upload 或直接 Abort；pending 才可用同 Create command 刷新短期 PUT 引用。最终 200 前验证 Storage asset 的
+Upload；pending 才可用同 Create command 刷新短期 PUT 引用。最终 200 前验证 Storage asset 的
 asset ID、文件名、MIME、大小、SHA、purpose 和 CLEAN 状态。
 
 现有 BFF success/error JSON 仍带 `meta.request_id`，与 Root API 手册“仅 header 承载 request ID”目标有
 既有全仓偏差；本片按当前 BFF 机器契约保持同形状并显式加 `x-request-id`，不单独发明第二种 envelope。
-机器契约、生成 client/contract tests 与 runtime 必须在代码门同片落实；本设计门不修改它们。
+机器 OpenAPI、直接 contract tests 与 runtime 已在本代码片同片修改；这不是 Root 集成验收、真实 Storage/PG/MinIO/ClamAV 组合或 Web 用户流程通过的证据。
 
 ## W2-LIBRARY-BFF-FILE：个人文件公开契约（2026-09-28，待 Root 集成验收）
 
 当前机器事实为 [`../contract/openapi/v1/openapi.yaml`](../contract/openapi/v1/openapi.yaml) 的 `GET /v1/library`、
 `listLibrary` 与 `storage.library.read` metadata，已发布必填 `kind=file` 和个人文件 200。BFF Storage manifest 固定
 `2d87e26`/combined SHA-256 `11edffcdd668c59ef07c7b4c47d44b38dd95c2b8aee5a4d0c6475fba58850713`。
-Root 已复验列表单仓门；个人上传、下载、Artifact 与 Web 用户流程不由此声明完成。
+Root 已复验列表单仓门；上方个人上传代码片尚待 Root 集成验收，下载、Artifact 与 Web 用户流程不由此声明完成。
 
 路径比较：**采用**原 `GET /v1/library`/`listLibrary`，将 `kind=file` 设为必填；**淘汰**另起
 `/v1/library/files` 并使旧 path/operationId 语义悬空，亦不建 alias。缺失、空值、重复或未知 kind 都是
@@ -53,7 +53,7 @@ owner 链/双源复合 cursor 验收后发布，不能提前给不存在的成�
 及消费者，不能只改展示标签。未来 `kind:"artifact"` 有独立 `artifact_id`、Storage F2 kind/title/source、
 可信 Agent Run 与当前资源授权；新增 union 分支可能让穷尽式 generated client 破坏，必须做 breaking/consumer 检查。
 
-**个人上传**的完整目标与未实现状态以上方独立设计门为准；不能从文件列表 200 推断 POST 已可用。
+**个人上传**以上方独立代码片为准；不能从文件列表 200 推断 POST 的真实组合或 Web 用户流程已通过。
 
 **个人下载的下一独立 Product 契约。** 列表不带 URL；每次从本人 admission 重建 scope，先用 Storage
 `GetAsset(asset_id,content_sha256)` 确认 `upload_purpose=ASSET`、CLEAN、同 scope，再调用

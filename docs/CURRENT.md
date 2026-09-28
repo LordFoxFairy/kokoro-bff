@@ -3,25 +3,25 @@
 状态：2026-09-28
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。
 
-## W2-BFF-LIBRARY-PERSONAL-UPLOAD 设计门（2026-09-28，POST 尚未实现）
+## W2-BFF-LIBRARY-PERSONAL-UPLOAD-CODE（2026-09-28，待 Root 集成验收）
 
-BFF main `a67ae2d06b52202f349305ae3723f6e296c087a1` 有个人文件
-`GET /v1/library?kind=file`，但 public OpenAPI 没有 `POST /v1/library/files`，也没有正式个人上传路由、
-personal Storage 上传 adapter 或用户可用的个人文件写入流程。本次只在
-`docs/TECHNICAL_DESIGN.md`、`docs/API_CONTRACT.md`、`docs/DATA_MODEL.md` 与本文件冻结下一代码片方案；
-未修改机器 OpenAPI、Schema、运行代码、服务或数据库，不能把设计门称为上传成功。
+BFF main `f9218656462dd4bdc3e01d01b858707548ee3ed5` 的四文档设计门已通过。
+本工作树已给 public OpenAPI 和 runtime 增加 `POST /v1/library/files`、独立 personal Storage Connect
+adapter、个人上传 checkpoint saga 与直接合同/行为测试；没有修改 canonical Schema 或新增角色。
+代码片仍待 Root 审查、提交和独立复验，真实 Storage/PG/MinIO/ClamAV 及 Web 用户流程尚未验收。
 
-目标是一个 `files` part/1 MiB/必填 Idempotency-Key 的 Product POST：当次 IAM admission 后派生
+实现是一个 `files` part/1 MiB/必填 Idempotency-Key 的 Product POST：当次 IAM admission 后派生
 personal scope，Storage CreateUpload→先持久 checkpoint→安全 PUT→Complete→GetAsset；只在普通
 ASSET/CLEAN 且 public 终态 receipt 确认持久后返回 200。同键同文件恢复原 Upload，Complete 结果未知时
-绝不 Abort；感染 422、待扫/未知结果 503 同键重试、异文件 409。既有
+不内联 Abort 可恢复的 upload；感染 422、待扫/未知结果 503 同键重试、异文件 409。既有
 `bff_idempotency_receipt` 的 public 终态和 `personal-file-upload:v1` checkpoint 用独立 scope，
-无需预建新表/角色；代码门必须修复/验证 `putReceipt` 条件写 0 行静默成功风险。Project owner
+无需预建新表/角色；本片已修复/测试 `putReceipt` 条件写 0 行静默成功风险。Project owner
 predicate、`project-resource-upload:v1` namespace 不进入个人入口，Storage 仍唯一拥有文件事实。
 
-下一门先由 Root 审查四设计文档，再授权单一 BFF writer 发布机器 OpenAPI、路由/应用/Connect adapter、
-receipt CAS 测试和 Node22 单仓门。Root 真隔离 PG+Storage Connect+MinIO+ClamAV 验证 POST→GET、
-同键/跨用户/感染/重启恢复之前，Library 写入与整条边仍为待验；不碰用户 3310。
+本工作树 Node 22.22.2 已执行 `pnpm format:check && pnpm check && pnpm schema:check`，三门 exit 0；
+全量 342 pass/1 skip，schema 5 pass/1 skip，新个人文件直接测试 10/10。这里的 live HTTP fixture
+使用假的 Connect 与对象 PUT，不是 Storage 真进程/PostgreSQL/MinIO/ClamAV。Root 真隔离组合验证
+POST→GET、同键/跨用户/感染/重启恢复之前，Library 写入与整条边仍为待验；未触碰用户 3310。
 
 ## W2-LIBRARY-BFF-FILE 代码片（2026-09-28，Root 单仓门已复验；真跨仓待验）
 
@@ -36,8 +36,8 @@ Storage owner main `2d87e26bbaed9a70dcd91ad1e9d126d39d275f38` 已发布原 v2 `L
 CLEAN ASSET 查询、隔离 `personal_library` cursor 与受信 `scope_id=subject_id`，combined SHA-256
 `11edffcdd668c59ef07c7b4c47d44b38dd95c2b8aee5a4d0c6475fba58850713`；本仓已重钉并调用。
 首片 `GET /v1/library?kind=file` 的 `kind` 必填，无参/未知 400；200 只列本人个人文件并
-标 `kind:"file"`，不是 Agent 作品。未来 `kind=artifact`/`all`、正式个人上传、下载 Product 动作和 Web
-旧 `/api/session/artifacts` 迁移仍未实现。个人上传仍仅为上方设计门，需本人 scope、独立 receipt/checkpoint 与未知结果恢复；
+标 `kind:"file"`，不是 Agent 作品。未来 `kind=artifact`/`all`、下载 Product 动作和 Web
+旧 `/api/session/artifacts` 迁移仍未实现。个人上传代码片的当前状态以上方为准，尚未真组合验收；
 下载另需当次 GetAsset 校验普通 ASSET/CLEAN 后再签短期引用，不能只调用 GetDownloadReference。
 Storage 单仓通过不等于 BFF/Web 用户可见闭环。
 

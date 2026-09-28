@@ -38,7 +38,7 @@ export class PostgresIdempotencyRepository implements IdempotencyRepository {
   }
 
   public async putReceipt(scope: string, receipt: PersistentReceipt): Promise<void> {
-    await this.pool.query(
+    const result = await this.pool.query(
       `INSERT INTO bff_idempotency_receipt (scope, fingerprint, status, response_body)
        VALUES ($1, $2, $3, $4::jsonb)
        ON CONFLICT (scope) DO UPDATE
@@ -49,6 +49,7 @@ export class PostgresIdempotencyRepository implements IdempotencyRepository {
            AND bff_idempotency_receipt.fingerprint = EXCLUDED.fingerprint`,
       [scope, receipt.fingerprint, receipt.status, JSON.stringify(receipt.body), PENDING_RECEIPT_STATUS],
     )
+    if (result.rowCount !== 1) throw new Error("idempotency_receipt_cas_missed")
   }
 
   public async releaseReceipt(scope: string, fingerprint: string): Promise<void> {

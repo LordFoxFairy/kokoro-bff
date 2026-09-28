@@ -1,5 +1,6 @@
 import { projectResourceListRoute } from "../http/routes/project-resource-list.js"
 import { libraryFileListRoute } from "../http/routes/library-file-list.js"
+import { personalFileUploadRoute } from "../http/routes/personal-file-upload.js"
 import { projectResourceRoute } from "../http/routes/project-resource.js"
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http"
 
@@ -120,6 +121,7 @@ async function handle(
 
   const businessPath = segments.slice(1)
   if (request.method === "GET" && businessPath.length === 3 && businessPath[0] === "projects" && businessPath[2] === "resources") response.setHeader("x-request-id", id)
+  if (request.method === "POST" && businessPath.length === 2 && businessPath[0] === "library" && businessPath[1] === "files") response.setHeader("x-request-id", id)
   const admissionAbort = new AbortController()
   const onRequestAborted = (): void => { admissionAbort.abort() }
   const onResponseClosed = (): void => { if (!response.writableEnded) admissionAbort.abort() }
@@ -228,6 +230,10 @@ async function handle(
   }
   if (composition.routeHandler === undefined && method === "POST" && businessPath.length === 3 && businessPath[0] === "projects" && businessPath[1] !== undefined && businessPath[2] === "resources") {
     await projectResourceRoute(request, response, config, context, businessPath[1], body ?? Buffer.alloc(0), composition.businessStore, composition.idempotency)
+    return
+  }
+  if (composition.routeHandler === undefined && method === "POST" && businessPath.length === 2 && businessPath[0] === "library" && businessPath[1] === "files") {
+    await personalFileUploadRoute(request, response, config, context, body ?? Buffer.alloc(0), composition.businessStore, composition.idempotency)
     return
   }
   const durableChatAdmission = composition.routeHandler === undefined

@@ -1,25 +1,25 @@
 # kokoro-bff 技术设计
 
-## W2-BFF-LIBRARY-PERSONAL-UPLOAD：正式个人文件上传设计门（2026-09-28，尚未实现）
+## W2-BFF-LIBRARY-PERSONAL-UPLOAD-CODE：正式个人文件上传（2026-09-28，待 Root 集成验收）
 
-**当前/目标。** BFF main `a67ae2d06b52202f349305ae3723f6e296c087a1` 已有
-`GET /v1/library?kind=file` 个人 CLEAN ASSET 列表，但没有个人文件 Product 写入口。Storage
+**设计基线/代码片。** BFF main `a67ae2d06b52202f349305ae3723f6e296c087a1` 只有
+`GET /v1/library?kind=file` 个人 CLEAN ASSET 列表；本代码片已增加个人文件 Product 写入口。Storage
 `2d87e26bbaed9a70dcd91ad1e9d126d39d275f38` 已拥有 personal scope 的 CreateUpload、CompleteUpload、
-GetUploadStatus、GetAsset、Scan 与对象生命周期。目标只在 BFF 增加 `POST /v1/library/files` 的用户写入纵切；
-Web 同源入口、下载、Agent Artifact、权限模型和部署不在本门。
+GetUploadStatus、GetAsset、Scan 与对象生命周期。BFF 已增加 `POST /v1/library/files` 的用户写入纵切；
+Web 同源入口、下载、Agent Artifact、权限模型和部署不在本片。代码/直接测试已写，Root 复验及真实组合仍待验。
 
 | 设计项       | 裁决                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Owner/位置   | BFF 拥有 public Product path、本人准入、上传命令协调和 receipt；Storage 继续唯一写 Upload/Asset/Scan/Blob。采用已有 `src/http/routes/` 具名 handler、`src/application/` 个人上传用例和 `src/infrastructure/clients/storage/` 独立 personal Connect adapter。把逻辑继续放入泛 `owner.ts` 或让 Project adapter 伪造 `projectId=subjectId` 均淘汰。                                                                                                                                                                                          |
 | 请求与身份   | 一个 `files` multipart 文件，总请求体最多 1 MiB，必填有效 `Idempotency-Key`；不接受 query、额外 part 或 body 中的 tenant/subject/scope。每次 service + Bearer + IAM admission 后从受信 `RequestContext` 建 `tenant/subject`，Storage metadata 固定 `scope_kind=personal, scope_id=subject_id`，`upload_purpose=ASSET`。没有 Project owner predicate。                                                                                                                                                                                     |
-| 恢复         | 对同一 `tenant+subject+key` 建独立 `personal-file-upload:v1` checkpoint scope；文件名、MIME、长度、SHA-256 构成语义指纹，并派生稳定 Create/Complete/Abort Storage command ID。CreateUpload 后必须先持久化原 `upload_id` 才上传对象；每次同键恢复先读 GetUploadStatus 并核对摘要/大小/MIME，completed 时 GetAsset 复核本人 scope、普通 ASSET 与 CLEAN。pending 时用同一个 Create command 刷新短期 PUT reference，再安全 PUT/Complete。Complete 已调用但响应未知时绝不 Abort，重启后同键从原 upload/status/asset 恢复，不新建第二个 Asset。 |
+| 恢复         | 对同一 `tenant+subject+key` 建独立 `personal-file-upload:v1` checkpoint scope；文件名、MIME、长度、SHA-256 构成语义指纹，并派生稳定 Create/Complete Storage command ID。CreateUpload 后必须先持久化原 `upload_id` 才上传对象；每次同键恢复先读 GetUploadStatus 并核对摘要/大小/MIME，completed 时 GetAsset 复核本人 scope、普通 ASSET 与 CLEAN。pending 时用同一个 Create command 刷新短期 PUT reference，再安全 PUT/Complete。Create 已成功但 checkpoint 写入未知、短期引用/PUT/Complete 暂时失败均不内联 Abort，重启后同键恢复原 upload/status/asset，不新建第二个 Asset。 |
 | Receipt/并发 | 现有 `bff_idempotency_receipt` 的 `scope` 主键足够：一条独立 public `POST /library/files` 终态 receipt，一条独立 personal checkpoint，均按可信 tenant/subject/key 隔离，不新增表、索引、角色。必须先通过当次 IAM admission 与请求语义校验，再在专用路由内 claim/replay；不能落到 server 泛 `mutationTicket` 的先重放路径，也不能继承 Project `project-resource-upload:v1 + projectId`。同键不同指纹 409，并发处理中 409；仅 CLEAN 且终态 receipt 持久成功后返回 200。                                                                     |
-| 失败/删除    | 感染为终态 422，待扫/未知完成为可同键重试 503；配置/超时/受信范围拒绝 fail closed，坏 owner 数据 502。仅在确定 Complete 未尝试且未形成 Asset 时可安全 Abort；对象 PUT 只复用现有受限 origin/无重定向 helper，不把 Storage secret 送给对象存储。不得产生非 CLEAN success、临时下载 URL、BFF Asset 镜像表、旧 HTTP fallback。                                                                                                                                                                                                               |
+| 失败/删除    | 感染为终态 422，待扫/未知完成为可同键重试 503；配置/超时/受信范围拒绝 fail closed，坏 owner 数据 502。本 Product 请求不内联 Abort 可能恢复的 upload；对象 PUT 只复用现有受限 origin/无重定向 helper，不把 Storage secret 送给对象存储。不得产生非 CLEAN success、临时下载 URL、BFF Asset 镜像表、旧 HTTP fallback。                                                                                                                                                                                                               |
 
-代码门需先锁 Project 上传现有行为，再以 RED 测试覆盖 checkpoint、同键异义、并发、
-Create/Complete 不确定结果与重启、当前 IAM admission 先于 receipt replay。现
-`PostgresIdempotencyRepository.putReceipt` 的条件写 0 行仍返回 `void`，可能把未持久化结果当成功；代码门须让
-CAS 成功可证明（返回 affected-row/复读核验），终态 receipt 与 checkpoint 均不可默许 0 行。
+代码片先锁 Project 上传现有行为，再以 RED→GREEN 直接测试覆盖 checkpoint、同键异义、
+Complete 不确定结果与重试、当前 IAM admission 先于 receipt replay。
+`PostgresIdempotencyRepository.putReceipt` 已改为条件写 0 行即报错，终态 receipt 与 checkpoint 不默许 0 行；
+真 PostgreSQL 并发/重启仍须 Root 组合验证。
 真实组合门为隔离 PG + Storage Connect + MinIO + ClamAV 的 POST→CLEAN→个人 GET/刷新、
 同键重放/异文件冲突、Complete 丢响应后 BFF 重启、EICAR/待扫及跨 subject/tenant 负例；不触碰 3310。
 
@@ -48,7 +48,7 @@ Root 已复验列表单仓门；真实 owner/browser 组合仍待验，尚不等
 Agent 可信 Run/ExecutionIdentity 与正式产物列表为前置；新增 union 分支须评审 generated consumer breaking。
 Web 旧 `/api/session/artifacts` 内容哈希列表不成为此 API 的别名，也不把个人文件渲染成“作品”。
 
-**个人上传**的本阶段完整目标与未实现状态以上方独立设计门为准；列表 200 不代替上传。
+**个人上传**的代码片状态以上方为准；列表 200 不代替上传的真实组合验收。
 
 **后续个人下载纵切（也不由列表 200 代替）。** Storage `GetDownloadReference` 当前校验 clean/scope，
 **并未固定 `upload_purpose=ASSET`**。BFF 必须先在当次 personal scope 用 `GetAsset` 复核稳定
