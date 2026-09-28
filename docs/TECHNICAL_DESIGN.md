@@ -1,5 +1,44 @@
 # kokoro-bff 技术设计
 
+## W2-F2-S5 Product Artifact：跨会话关联与按作品读取（2026-09-28；文档门，尚未实现）
+
+**当前态。** BFF `d5c868f8ab8b8a33750e1286e9d020ca72895641` 的 `GET /v1/library` 只接受
+`kind=file`，现有个人文件上传/下载是 Asset 产品链。`src/infrastructure/clients/agent/projection.ts`
+的 `delivery` 映射仅保留 path/title/MIME/size/content_hash，丢失 Agent 已发布的
+`artifact_id`、`asset_id`、`artifact_kind`、`tool_call_id`；`src/contracts/chat.ts` 的旧 Delivery
+也是 hash-only。`src/application/agui/project-session-events.ts` 将 Agent source 交给
+`PostgresAgUiProjectionRepository.commitProjection`，同一 PostgreSQL 事务写 source identity、公开 frame、
+stream 水位；公开 frame 有限期 GC，不能充当持久跨会话 Library。BFF 当前 Storage 生成客户端仍固定
+`2d87e26` 的旧 Proto，不含 F2 三个 Final Artifact 读取 RPC；本节没有改运行代码、Schema、OpenAPI 或生成物。
+
+**固定上游目标来源，不冒充当前 consumer pin。** Agent event-protocol owner commit
+`486adb1539dd8a06ca90684e66f91be031aa70cf`，`contract/provenance.json` 的
+`combined_sha256=cae30a40d712bce39ef33ef2dc857af4f5b69c6afd1956fda065ec77379ae02e`，
+其中 `src/kokoro_agent/protocol/events.py` 原字节 SHA-256 为
+`0ba59b358db00e53490555e450af060c8a728133a9cf8bfeb49361186adc0f1c`；
+`delivery.created` 必填 `artifact_kind` 且带 `artifact_id/asset_id`。Storage F2 owner commit
+`d5cfc442c675e32363ae767f5ec662a9e0d9eaea`，v2 Proto/common 原字节 SHA-256 分别为
+`5a5dcaec2e1fd0d5eed369b8f79477fd0f8f653b32f9ebe14a8c339f4eb713ac`、
+`4604725ec7d5896c9d74b53c6f06d19b20ee758d5ab9e1cb90177ede95bba9fd`，owner
+provenance aggregate 为 `8317e644d45c8db310b44f114afa22892a6a40d6ee7d0c1c4a37a8203e79f427`。
+代码门须在本仓 consumer manifest 固定这两份来源并由现有生成器/契约检查证明；不能只在 Markdown 记 SHA。
+
+| 设计门        | 裁决                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner/目标    | BFF 唯一写 Conversation、Share、Product API 与 conversation↔artifact **关联**；Agent 唯一写 Run/journal/critical `delivery.created`，Storage 唯一写 Artifact/Asset/Blob/Scan 与签名引用。BFF 不复制 Storage Artifact canonical metadata，不跨 owner SQL/JOIN。                                                                                                                                                                                                                                                                                                                                                                                                  |
+| 两个位置      | **采用**现有 `application/agui/` 的 typed source 投影、`infrastructure/postgres/` 具名关联读写与 `http/routes/` 具名 Library Artifact handler；关联写入作为 `commitProjection` 同一事务中的窄 helper/port，列表/单项查询独立具名 repository，避免继续扩大现有约 600 行 AG-UI repository。**淘汰**从 7 日 frame/Redis 重建 Library、每个会话轮询 Storage、把 personal Asset 叫 Artifact、另建跨仓 artifacts 服务或把全部 SQL 塞进泛 `owner.ts`。新文件按一个持续变化原因设立，不建空层。                                                                                                                                                                         |
+| 来源与写入    | Agent Chat `delivery` 必须严格解析 owner event-protocol 的 ID、kind、tool_call_id、摘要和 run；禁止从 MIME/路径/hash 推断资源身份。只有 source identity、tenant/conversation、BFF 自有 Agent dispatch 中的 run/subject 与 active Conversation owner 绑定均成立，才在 `commitProjection` 写关联；关联另存最小不可变 Agent 来源声明 `source_asset_id/source_artifact_kind/source_content_sha256` 只供后续 owner 回执交叉核验，不作为可公开的 Artifact metadata 真源。source event 唯一身份/摘要冲突即整事务失败。重复页、重试与崩溃重放复用唯一 `(tenant, conversation, artifact)` 和源事件约束，不产生第二件作品；关联写入、source ledger、frame、水位同成同败。 |
+| 私有与分享    | 普通 Library 每页只查当次 IAM admission 的 tenant/subject 拥有的 active Conversation；现有 Project owner predicate 若适用仍须成立，Team/Project 成员身份不自动开放个人聊天。每次单项/下载重查 BFF Conversation owner/status 与关联，随后以 `web-bff + conversation scope` 调 Storage。显式分享仅经当前未撤销、未过期的 `bff_share.share_id` 且绑定同一 active Conversation 与 artifact 关联的专用 share-bound 读路径；无 share ID、仅知 artifact ID/hash、同团队或内部 Storage credential 都不是授权。分享读取的 Storage subject 从已验证 Conversation owner 派生，不取匿名请求自报值。                                                                         |
+| 读取与下载    | `GET /v1/library?kind=artifact` 在 BFF 关联上按 `delivered_at DESC, conversation_id ASC, artifact_id ASC` 做跨会话 keyset，先 SQL 过滤当前 owner/active，按有界候选逐项以当前 conversation scope `GetFinalArtifact` 复验 final+CLEAN，核对 artifact/asset/kind/digest/run 与不可变来源声明；不可见项不输出，cursor 按最后检查候选推进，owner 不可用不伪装空页。单项和 `/content` 先同样 ACL+关联，再 `GetFinalArtifact`、`GetFinalArtifactDownloadReference` 双重重验；只接受受限 origin/短期 GET、不转发凭据或签名 URL，完整受界限校验 bytes 长度/SHA-256 后才回原字节。                                                                                       |
+| 删除/GC/失败  | Conversation 软删除与关联清理在本仓事务内闭环，分享同事务撤销；旧 source 的迟到/重放不得复活 deleted Conversation 的关联。AG-UI frame GC 不删除关联。Storage final/clean 失效使 Product 列表不再输出、单项/下载不可见；owner 故障返回稳定依赖错误。不得用旧 hash-only Chat、AG-UI frame 或 Storage service credential 作 fallback。                                                                                                                                                                                                                                                                                                                             |
+| 数据/API/验证 | 唯一 canonical SQL `database/schema.sql` 增一张 BFF-owned 关联表，无跨 owner FK、无 Artifact metadata 镜像；公开 OpenAPI 仍以 `contract/openapi/v1/openapi.yaml` 为唯一可编辑机器源。`kind=file` 行为保持，`kind=all` 的双源复合 cursor 另切。先 RED 锁来源、重复/冲突、租户/成员/删除、GC 后列表、跨会话分页、final/CLEAN/坏 owner、原字节/分享撤销，再改机器源/代码；Node22 format/check/schema/contract/PG integration 与 Root 真 Agent→Storage→BFF→Web 浏览器组合均是代码门证据，本次仅文档门。                                                                                                                                                             |
+
+**最小后续代码文件门建议（尚未授权）：** 先由 Root 锁定唯一 OpenAPI、Storage vendor/生成 manifest、
+Agent event consumer pin 与相邻 contract 测试；随后仅改本仓 Agent Chat mapper/typed delivery、AG-UI 投影
+port+`commitProjection` 事务、`database/schema.sql`、具名关联 repository、Conversation 删除事务、Library Artifact 输入/路由与
+Storage Final Artifact adapter，以及各自直接 unit/contract/architecture/真实 PG 测试。若需新配置或改
+Share 产品面，先回报 Root 裁决；不并行写 IAM/Storage/Agent/Web。
+
 ## W2-BFF-PERSONAL-DOWNLOAD：个人文件受控下载代码片（2026-09-28；待 Root 集成验收）
 
 **当前态。** 设计门基线 BFF main `74bb714d5867399bc50806c158c2ffb838c27b40` 已有本人列表与上传；

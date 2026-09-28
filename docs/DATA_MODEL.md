@@ -1,5 +1,54 @@
 # kokoro-bff data model
 
+## W2-F2-S5 Conversation↔Artifact 关联投影（2026-09-28；文档目标，Schema 尚未修改）
+
+**当前事实。** BFF `d5c868f8ab8b8a33750e1286e9d020ca72895641` 的唯一 canonical
+`database/schema.sql` 已有 `bff_conversation`、`bff_share`、`bff_agent_dispatch_outbox`、
+`bff_agui_source_event`/`bff_agui_event`/stream 与其 lease/GC；没有 Artifact 关联表。
+`bff_agui_event` 是有限期公开重放帧，不能作为 Library 持久事实。Storage
+`d5cfc442c675e32363ae767f5ec662a9e0d9eaea` 唯一拥有 Artifact/Asset/Scan/Blob 表；
+Agent `486adb1539dd8a06ca90684e66f91be031aa70cf` 唯一拥有 Run、tool journal、critical
+`delivery.created` 与 Chat `delivery`。本节设计没有更改任一 Schema、role 或数据库。
+
+**目标唯一新表：** 在本仓唯一 `database/schema.sql` 的 `kokoro_bff` owner schema 增
+`bff_conversation_artifact`，只保存 BFF 的“已验证 Agent 交付事件把某 Artifact 关联到某 Conversation”
+这一 Product 关系；Agent 事件中的 asset/kind/digest 仅作为不可变来源声明供 Storage 交叉核验，
+不当成可公开的 Artifact metadata 真源，不保存 Storage title/MIME/size/scan/对象 key/URL 的副本。
+
+| 列/约束（目标）                                                                                | 用途                                                                                                                                                                                                                                                                       |
+| ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tenant_id`, `conversation_id`, `artifact_id` 非空 TEXT                                        | 关联 identity，`PRIMARY KEY (tenant_id,conversation_id,artifact_id)`；ID 不是授权。                                                                                                                                                                                        |
+| `run_id`, `source_owner='kokoro-agent'`, `source_event_id`, `source_sequence`, `source_digest` | 可信执行及源事件身份，`UNIQUE (tenant_id,conversation_id,source_owner,source_event_id)`；同身份异内容/异 artifact、同 artifact 异来源都须事务失败而非 `ON CONFLICT DO NOTHING` 静默吞掉。                                                                                  |
+| `source_asset_id`, `source_artifact_kind`, `source_content_sha256`                             | 必填、不可变的 Agent 交付声明；`source_artifact_kind` 仅八值、digest 小写 64hex。只用于对照当次 Storage `GetFinalArtifact` 的 asset/kind/digest，不在绕过 owner 重验时直接输出。                                                                                           |
+| `delivered_at TIMESTAMPTZ(3)`                                                                  | Agent source event 的 UTC 时间，只作 BFF 关联顺序，不冒充 Storage Artifact `created_at/finalized_at`。                                                                                                                                                                     |
+| 索引                                                                                           | `ix_bff_conversation_artifact_library (tenant_id,delivered_at DESC,conversation_id ASC,artifact_id ASC)` 服务跨会话 keyset；主键服务二元组与删除查询。若真实 EXPLAIN 显示 tenant 宽扫描不可接受，再由代码门评审 BFF owner 快照/索引，不预存 Storage metadata 或 IAM 决策。 |
+
+投影源只能是固定 Agent event-protocol 的 `delivery.created`/Chat `delivery`，严格解析 artifact ID、kind、
+asset ID、run ID 与 source identity；其来源声明不作为新表的第二 Artifact 真源。`commitProjection`
+既有 PostgreSQL 事务中先验证连续源身份、`bff_agent_dispatch_outbox` 的 tenant/conversation/run/subject
+与 active `bff_conversation.owner_id`，随后写 source ledger、关联、AG-UI frame 和 high watermark；
+全部同成同败，lease/version 冲突回滚。重复投递以源 event ID、digest、sequence 与关联主键复核同一
+含义，不双写；源内容冲突/关联冲突阻断页而非悄悄跳过。没有跨 Storage 事务、SQL、FK 或 JOIN。
+
+Library SQL **在 LIMIT 前**按当次 IAM tenant/subject JOIN 本仓 active `bff_conversation` 过滤，
+应用现有适用的 Project owner predicate，按 `(delivered_at DESC,conversation_id ASC,artifact_id ASC)`
+推进 opaque keyset；cursor 绑定 kind、tenant、subject、limit，每页重新准入/授权，不提供快照隔离。
+候选关联再以可信 conversation scope 调 Storage `GetFinalArtifact` 读取 FINAL+CLEAN 当前态，核对
+artifact/asset/kind/digest/source_run_id 与源绑定；消失/非 CLEAN 项不返回，owner 不可用返回依赖错误。
+单项/下载先查同一 BFF active Conversation+关联，再用 Storage Final Artifact RPC 重验，不能以
+`bff_conversation_artifact`、content hash 或 Storage service identity 单独放行。
+
+Conversation 软删除与关联物理清理、当前 Share 撤销同属 BFF 删除事务；历史 Agent source 迟到/重放
+对 deleted Conversation 不再插入关联。AG-UI frame 的 7 日 GC 与关联生命周期分离；未删除的 active
+Conversation 作品在 frame GC 后仍可列，删除后不通过旧 frame/Redis/hash 恢复。Share 读取每次核
+`bff_share` 未撤销、未过期、同 tenant/conversation 且 active，专用 share-bound 操作不把团队成员或
+匿名 Artifact ID 变成 owner 资格。关联 GC/删除策略只影响 BFF Product 可见性，不删除 Storage Artifact；
+若要物理删除 Storage 对象，须另立 owner 生命周期任务。
+
+代码门的 Schema 证据：`pnpm schema:check`、空 `kokoro_bff` schema 安装/drift、真实 PG 的同事务
+崩溃/重复/冲突/删除/租户 keyset 与 EXPLAIN；契约证据是本仓 OpenAPI/Storage 生成来源 checker 和
+Agent event source digest。本次只改四份设计/CURRENT，不能把新表或 Product 200 记作当前存在。
+
 ## W2-BFF-PERSONAL-DOWNLOAD：下载不新增本仓事实（2026-09-28；代码片待 Root 验收）
 
 设计门基线 BFF main `74bb714d5867399bc50806c158c2ffb838c27b40` 尚无公开个人文件下载路径；

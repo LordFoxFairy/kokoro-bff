@@ -3,6 +3,33 @@
 状态：2026-09-28
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。
 
+## W2-F2-S5 Agent 作品 Product 链：设计门，运行面未实施
+
+BFF 当前 `main` `d5c868f8ab8b8a33750e1286e9d020ca72895641` 的 public
+`GET /v1/library` 仍仅有 `kind=file`；个人文件列表/上传/下载与 Agent Artifact 是两种资源。
+`src/infrastructure/clients/agent/projection.ts` 的 Chat `delivery` 映射和
+`src/contracts/chat.ts` 旧 Delivery 仍是 hash-only，尚未消费 Agent `artifact_id/asset_id/artifact_kind`。
+`database/schema.sql` 没有 conversation↔artifact 关联表；Storage consumer manifest 仍固定
+`2d87e26`，尚无 F2 Final Artifact 三个读取 RPC；唯一 OpenAPI 尚无 Artifact Library 200、
+单项或原字节下载。AG-UI frame 有限期 GC，现有 frame/Redis 不构成持久作品列表。
+
+本次**只提交设计**：四份顶端 S5 段约定在现有 `commitProjection` PostgreSQL 事务按 Agent
+source identity 写 BFF-owned conversation↔artifact 关联，跨当前本人 active Conversation 做 keyset
+`GET /v1/library?kind=artifact`；单项和下载按 `(conversation_id,artifact_id)` 逐次核 BFF ACL、
+Storage FINAL+CLEAN 与原字节。默认个人私有，Share 只有显式 share-bound 当前有效授权才可读取，
+Project/Team 关系不自动开放；`kind=file` 保持，`kind=all` 另片。Storage 仍是 Artifact 唯一事实源，
+无旧 hash/AG-UI GC fallback。**本工作树没有改** OpenAPI、SQL、生成 client、运行代码或测试，
+这些接口与投影当前不可用。
+
+后续代码门的 owner 来源已固定为 Agent
+`486adb1539dd8a06ca90684e66f91be031aa70cf` event-protocol aggregate
+`cae30a40d712bce39ef33ef2dc857af4f5b69c6afd1956fda065ec77379ae02e` 与 Storage
+`d5cfc442c675e32363ae767f5ec662a9e0d9eaea` Proto aggregate
+`8317e644d45c8db310b44f114afa22892a6a40d6ee7d0c1c4a37a8203e79f427`；
+本仓 consumer manifest 尚未更新，不能据此宣称已 pin/生成。Root 审查文档门后须另锁精确代码文件集，
+先 RED 再改唯一 OpenAPI/Schema/消费者，跑 Node22 contract/schema/full/真实 PG 与 Root 真组合。
+本次文档检查不替代任何 Product 验收。
+
 ## W2-BFF-PERSONAL-DOWNLOAD 代码片（2026-09-28；BFF→Storage owner 组合已验）
 
 设计门基线 BFF main `74bb714d5867399bc50806c158c2ffb838c27b40` clean，个人文件列表与上传已有。
