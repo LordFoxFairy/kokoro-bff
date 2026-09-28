@@ -118,3 +118,10 @@ The Agent HTTP consumer pins the complete owner `contract/openapi/v1/openapi.jso
 under `contract/vendor/kokoro-agent/`. `pnpm contract:check:agent` verifies the fixed digest, toolchain and manifest,
 regenerates twice byte-identically, and compares every generated file. BFF validates the owner 202 receipt and 200 replay success envelopes and trusted error codes with the generated
 Zod schemas; this dependency does not make BFF the Agent contract owner.
+
+The Platform Connect consumer pins exactly `common.proto` and `platform_runtime.proto` from Platform commit
+`f26d147a09350c3a041722107d277beb93eaad60` under `contract/vendor/kokoro-platform/`. The generated Protobuf-ES
+descriptors live under `src/generated/platform-connect/`; `contract/dependencies/platform-connect.json` records exact source,
+generator, lockfile and generated digests. `pnpm contract:check:platform` regenerates twice and rejects drift. This is a
+wire-only dependency (`generated-not-activated`): no execution-operation artifact, command digest or live Product route is
+claimed.

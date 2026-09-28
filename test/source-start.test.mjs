@@ -7,9 +7,9 @@ const tsxCli = new URL("../node_modules/tsx/dist/cli.mjs", import.meta.url)
 const sourceEntry = new URL("../src/main.ts", import.meta.url)
 
 describe("BFF source runtime entry", () => {
-  it("permits only the pinned tsx binary dependency build", () => {
+  it("permits only the pinned tsx and Buf binary dependency builds", () => {
     const workspacePolicy = readFileSync(new URL("../pnpm-workspace.yaml", import.meta.url), "utf8")
-    assert.equal(workspacePolicy, "strictDepBuilds: true\nallowBuilds:\n  esbuild: true\n")
+    assert.equal(workspacePolicy, "strictDepBuilds: true\nallowBuilds:\n  '@bufbuild/buf': true\n  esbuild: true\n")
   })
 
   it("loads the TypeScript module graph before configuration validation", () => {

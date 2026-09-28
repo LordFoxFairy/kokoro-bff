@@ -425,3 +425,7 @@ Scheduler Run identity 只依赖 trusted tenant、schedule 与 canonical occurre
 `EDGE-BFF-SCHEDULER` 与 `EDGE-SCHEDULER-BFF` 仍保持 broken；本仓完成只证明 BFF/PG 行为，待 W0B-10 真实 Scheduler + BFF +
 Agent receipt stub smoke 与 W0B-11 Root 集成后再激活。真实 Agent admission、同 Run 参数冲突及 Agent 重启后唯一 Run 事实归
 后续 Agent-owner closure（W4）；`EDGE-BFF-AGENT` 保持 broken。
+
+## Platform Connect Proto 消费准备（2026-09-28）
+
+已从 Platform main `f26d147a09350c3a041722107d277beb93eaad60` 精确固定两份 `kokoro.platform.v1` Proto，使用本仓固定 Buf/Protobuf-ES/Connect 版本生成独立客户端类型。`contract/dependencies/platform-connect.json` 记录原始 SHA、生成器、lockfile 与 build policy；`pnpm contract:check:platform` 两次生成并核对字节。此片仅证明 wire/descriptor 可独立消费，**未实现** command digest、machine credential、public Skill route 或真实 owner 调用；既有 Capability HTTP GET 仍单独运行。Platform v3 command artifact 尚未发布，故不可把生成客户端视为 Product CreateDraft 闭环。

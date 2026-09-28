@@ -1,0 +1,8 @@
+{
+  "version": "v2",
+  "modules": [
+    {
+      "path": "contract/vendor/kokoro-platform/f26d147a09350c3a041722107d277beb93eaad60/proto"
+    }
+  ]
+}

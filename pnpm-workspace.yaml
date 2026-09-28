@@ -1,3 +1,4 @@
 strictDepBuilds: true
 allowBuilds:
+  '@bufbuild/buf': true
   esbuild: true

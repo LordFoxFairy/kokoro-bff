@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "status": "generated-not-activated",
+  "owner": {
+    "repository_path": "apps/kokoro-capability",
+    "repository_commit": "f26d147a09350c3a041722107d277beb93eaad60",
+    "package_name": "kokoro.platform.v1",
+    "sources": [
+      {
+        "path": "contract/proto/kokoro/common/v1/common.proto",
+        "sha256": "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08"
+      },
+      {
+        "path": "contract/proto/kokoro/platform/v1/platform_runtime.proto",
+        "sha256": "282bf886ea9648f7ce5208abd36ab47d879b2002a036d90aada2af59e74b4020"
+      }
+    ]
+  },
+  "execution_artifact": null,
+  "generator": {
+    "packages": {
+      "@bufbuild/buf": "1.72.0",
+      "@bufbuild/protoc-gen-es": "2.14.0",
+      "@bufbuild/protobuf": "2.14.0",
+      "@connectrpc/connect": "2.2.0"
+    },
+    "configs": [
+      {
+        "path": "buf.platform.json",
+        "sha256": "c327440e316bcf9f9662b8dff963f586bcec291f06df07f8a433afb69ca73a4d"
+      },
+      {
+        "path": "buf.platform.gen.json",
+        "sha256": "9888ea0808f6967ebdfb859125eb54430b89ad3f4dbee4418902bfdf6a4540ab"
+      }
+    ],
+    "script_sha256": "188bd9920372efd9c0a7c40e8ea8169e07716dd7a236647662ee3a52a5b12338",
+    "formatting": {
+      "package": "prettier",
+      "version": "3.9.6",
+      "semi": false,
+      "print_width": 160
+    }
+  },
+  "dependency_decision": {
+    "verified_on": "2026-09-28",
+    "approach": "Reuse the published owner's exact Buf/Protobuf-ES/Connect versions; no floating upgrade. Protobuf-ES v2 emits service descriptors consumed by Connect createClient.",
+    "alternatives": "Handwritten DTO/RPC serializers duplicate the owner contract; copying owner runtime/generated files lacks an independent reproducible consumer generation chain.",
+    "licenses": "Buf, Protobuf-ES and Connect-ES: Apache-2.0",
+    "supply_chain": "Exact package versions and lock integrity; local generation without remote plugins; only @bufbuild/buf install build is newly allowed.",
+    "performance": "No network calls or application startup added. Runtime performance is unmeasured; this slice validates descriptor serialization only.",
+    "failure_semantics": "Generation rejects source/config/package/tree/digest drift. No retry, authentication, command digest or production adapter is implemented.",
+    "exit_path": "Regenerate from the pinned owner Proto with a reviewed compatible generator; generated wire types remain isolated from business code.",
+    "sources": [
+      "https://connectrpc.com/docs/node/getting-started/",
+      "https://github.com/bufbuild/protobuf-es/releases/tag/v2.14.0"
+    ]
+  },
+  "runtime": {
+    "node": "22.22.2",
+    "pnpm": "11.25.0",
+    "typescript": "5.9.3"
+  },
+  "lockfile_sha256": "2a59915460c20646f85ec2b801b66445ee8be6de38e5f1d75f90c76cfbfdd3ab",
+  "build_policy_sha256": "b9cab84f3d70bbbd4712d0131e208eb8e267c154ed5879092d34bf0ccc3d2e9e",
+  "generated": [
+    {
+      "path": "kokoro/common/v1/common_pb.ts",
+      "sha256": "6614c36d9f1b2ddac1ec9e7169d7a1540342014697815a2c859bc895e41be56d"
+    },
+    {
+      "path": "kokoro/platform/v1/platform_runtime_pb.ts",
+      "sha256": "6b934c5a4bba7e9b8a583317ff88cf7eb26b7bf0e7c171950565d38c1a848d8a"
+    }
+  ]
+}
