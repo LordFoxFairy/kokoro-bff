@@ -1230,6 +1230,20 @@ export type ListTenantRolesResponses = {
         tenant?: Array<"read">
         audit?: Array<"read">
         platform?: Array<"execute">
+        skill?: Array<
+          | "create_draft"
+          | "create_version"
+          | "begin_upload"
+          | "complete_upload"
+          | "abort_upload"
+          | "validate_draft"
+          | "publish"
+          | "withdraw"
+          | "set_status"
+          | "install"
+          | "set_installation_enabled"
+          | "remove_installation"
+        >
       }
     }>
     meta: {
@@ -1582,3 +1596,90 @@ export type VerifySessionAuthorizationResponses = {
 }
 
 export type VerifySessionAuthorizationResponse = VerifySessionAuthorizationResponses[keyof VerifySessionAuthorizationResponses]
+
+export type CheckTenantSkillAuthorizationData = {
+  body: {
+    action:
+      | "create_draft"
+      | "create_version"
+      | "begin_upload"
+      | "complete_upload"
+      | "abort_upload"
+      | "validate_draft"
+      | "publish"
+      | "withdraw"
+      | "set_status"
+      | "install"
+      | "set_installation_enabled"
+      | "remove_installation"
+  }
+  headers?: {
+    /**
+     * Caller correlation identifier. Missing or invalid values are replaced by the service.
+     */
+    "x-request-id"?: string
+  }
+  path: {
+    tenant_id: string
+  }
+  query?: never
+  url: "/internal/v1/tenants/{tenant_id}/skill-authorizations/check"
+}
+
+export type CheckTenantSkillAuthorizationErrors = {
+  /**
+   * Stable internal API error envelope.
+   */
+  400: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  401: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  403: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  413: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  429: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  500: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  503: ApiErrorResponse
+}
+
+export type CheckTenantSkillAuthorizationError = CheckTenantSkillAuthorizationErrors[keyof CheckTenantSkillAuthorizationErrors]
+
+export type CheckTenantSkillAuthorizationResponses = {
+  200: {
+    data: {
+      allowed: true
+      tenant_id: string
+      subject_id: string
+      action:
+        | "create_draft"
+        | "create_version"
+        | "begin_upload"
+        | "complete_upload"
+        | "abort_upload"
+        | "validate_draft"
+        | "publish"
+        | "withdraw"
+        | "set_status"
+        | "install"
+        | "set_installation_enabled"
+        | "remove_installation"
+    }
+  }
+}
+
+export type CheckTenantSkillAuthorizationResponse = CheckTenantSkillAuthorizationResponses[keyof CheckTenantSkillAuthorizationResponses]

@@ -1,6 +1,6 @@
 # kokoro-bff API contract policy
 
-## W1E-IAM-0.6-BFF-PIN：当前来源
+## W1E-IAM-0.6-BFF-PIN：历史来源
 
 IAM owner `a4c2b61467f1fc1772d6b6d8e98f081c090289fb` 的 internal OpenAPI `0.6.0` 原始 SHA-256 为
 `392ca0e49544c0ec6e0d2fa782c46c33c1847e2c350102e7ad3b8af43f858ced`。BFF 只读 vendor 保留完整
@@ -634,3 +634,14 @@ Storage→Platform Begin/Complete 上传链及持久包绑定必须先于 Valida
 响应结构或绑定非法 502 skill_response_invalid。retryable 只用于契约允许的瞬时错误，不透出 token/内部 owner payload。
 这些新增 Skill code/status 须先落 canonical OpenAPI 与 contract tests；当前运行错误码保持原事实，不提前声称已实现。
 无权限时不发 mutation；跨 owner 并发撤权时点与受信 Product 上下文由 Platform 前置协议收敛，未收敛不放行 public mutation。
+
+## W1E IAM 0.7 pin 仓内事实
+
+本仓 IAM vendor/manifest/生成物升级至 `4d981441d154c83b63987f284e3a82a559595870` 的 0.7.0；
+public OpenAPI、browser relay route/method/header/cookie 策略不变。新增 server consumer 仅使用具名
+`POST /internal/v1/tenants/{tenant_id}/skill-authorizations/check`，body 仅 action，用户 Bearer 不转发给 Platform。
+200 的 allowed 必须为 true，tenant_id/subject_id/action 与本请求逐字一致，外层与 data 额外字段拒绝；
+所有接纳响应要求有效 x-request-id、Cache-Control no-store 与 application/json。owner 401/403/429 必须分别匹配
+UNAUTHENTICATED/PERMISSION_DENIED/RATE_LIMITED，状态/机器码矛盾 fail closed；有效配对分别归一为
+session_invalid/skill_forbidden/skill_rate_limited，坏响应、超时、未知状态及依赖故障归一为 503 iam_admission_unavailable。
+这些是内部窄调用结果，不表示上述目标 public Skill mutation/错误 schema 已发布；旧 Session 与 Team 行为不改。

@@ -1,6 +1,8 @@
 import { request as httpRequest, type ClientRequest, type IncomingHttpHeaders } from "node:http"
 import { request as httpsRequest } from "node:https"
 
+import type { SkillAuthorizationInput } from "./skill-authorization.types.js"
+
 export const IAM_ADMISSION_TIMEOUT_MAX_MS = 5000
 export const IAM_ADMISSION_RESPONSE_MAX_BYTES = 1024 * 1024
 
@@ -61,6 +63,15 @@ export class SessionAdmissionTransport {
 
   public request(input: SessionAdmissionTransportInput): Promise<SessionAdmissionTransportResponse> {
     const target = new URL("/internal/v1/session-authorizations/verify", `${this.baseUrl.replace(/\/+$/u, "")}/`)
+    return this.send(input, target, null)
+  }
+
+  public requestSkillAuthorization(input: SkillAuthorizationInput): Promise<SessionAdmissionTransportResponse> {
+    const target = new URL(`/internal/v1/tenants/${encodeURIComponent(input.tenantId)}/skill-authorizations/check`, `${this.baseUrl.replace(/\/+$/u, "")}/`)
+    return this.send(input, target, JSON.stringify({ action: input.action }))
+  }
+
+  private send(input: SessionAdmissionTransportInput, target: URL, body: string | null): Promise<SessionAdmissionTransportResponse> {
     const requestFn = target.protocol === "https:" ? httpsRequest : httpRequest
     return new Promise((resolve, reject) => {
       let settled = false
@@ -105,7 +116,8 @@ export class SessionAdmissionTransport {
             headers: {
               accept: "application/json",
               authorization: `Bearer ${input.token}`,
-              "content-length": "0",
+              "content-length": String(body === null ? 0 : Buffer.byteLength(body)),
+              ...(body === null ? {} : { "content-type": "application/json" }),
               "x-request-id": input.requestId,
             },
           },
@@ -143,7 +155,7 @@ export class SessionAdmissionTransport {
           },
         )
         client.once("error", (error) => fail("IAM admission connection failed", error))
-        client.end()
+        client.end(body)
       } catch (error) {
         fail("IAM admission request failed", error)
         client?.destroy()

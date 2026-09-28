@@ -284,6 +284,25 @@ export const zListTenantRolesResponse = z.object({
           .array(z.enum(["execute"]))
           .min(1)
           .optional(),
+        skill: z
+          .array(
+            z.enum([
+              "create_draft",
+              "create_version",
+              "begin_upload",
+              "complete_upload",
+              "abort_upload",
+              "validate_draft",
+              "publish",
+              "withdraw",
+              "set_status",
+              "install",
+              "set_installation_enabled",
+              "remove_installation",
+            ]),
+          )
+          .min(1)
+          .optional(),
       }),
     }),
   ),
@@ -430,3 +449,53 @@ export const zVerifySessionAuthorizationResponse = z
       .strict(),
   })
   .strict()
+
+export const zCheckTenantSkillAuthorizationBody = z.object({
+  action: z.enum([
+    "create_draft",
+    "create_version",
+    "begin_upload",
+    "complete_upload",
+    "abort_upload",
+    "validate_draft",
+    "publish",
+    "withdraw",
+    "set_status",
+    "install",
+    "set_installation_enabled",
+    "remove_installation",
+  ]),
+})
+
+export const zCheckTenantSkillAuthorizationHeaders = z.object({
+  "x-request-id": z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{1,128}$/)
+    .optional(),
+})
+
+export const zCheckTenantSkillAuthorizationPath = z.object({
+  tenant_id: z.string(),
+})
+
+export const zCheckTenantSkillAuthorizationResponse = z.object({
+  data: z.object({
+    allowed: z.literal(true),
+    tenant_id: z.string().min(1),
+    subject_id: z.string().min(1),
+    action: z.enum([
+      "create_draft",
+      "create_version",
+      "begin_upload",
+      "complete_upload",
+      "abort_upload",
+      "validate_draft",
+      "publish",
+      "withdraw",
+      "set_status",
+      "install",
+      "set_installation_enabled",
+      "remove_installation",
+    ]),
+  }),
+})

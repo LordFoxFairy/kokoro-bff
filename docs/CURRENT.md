@@ -3,12 +3,32 @@
 状态：2026-09-26
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。
 
+## W1E-BFF-IAM-0.7-PIN（2026-09-28，仓内验证通过；跨仓待验）
+
+基线 `9b9aff46205a7bbe486244195b81e1e87e6ec2c6`；本切片完整 vendor/manifest/generated 已固定 IAM
+`4d981441d154c83b63987f284e3a82a559595870`、OpenAPI 0.7.0、SHA-256
+`c8d7af8a365ad5d13eaabccf7f31133e0918ef198bdc3e7c790d90933eae91b2`，旧 0.6 vendor 删除。
+现有确定性生成器新增唯一 `checkTenantSkillAuthorization`；Session/Team/invitation consumer 保持原操作。
+relay policy 仍为 2.1.0，仅来源 tuple 改变，生成 JSON SHA-256 为
+`e58bf3e7992c2ac40efdf386ec2e652c021f2dd92747461207dede9d2c5d2786`，没有新增 browser-private route。
+
+窄 `SkillAuthorizationClient` 在 server auth 边界使用调用方当前 user Bearer，严格检查
+allowed/tenant/subject/action、no-store/request-id/JSON，拒绝额外字段；不缓存、不重试，也没有 BFF 机器凭据回退；用户 token 语义由 IAM 当前校验。
+有界 transport 只有 session verify 和 Skill check 两个具名入口，不开放任意 URL/body 透传。
+本片尚未挂接 Product mutation 或四 scope 编排，不改变 SQL/基础设施；Platform 受信上下文、Storage 包绑定和
+public 机器字段仍是后续实现门。下节 0.6 描述属于该设计片原始盘点，不覆盖本切片来源。
+
+Writer Node 22.22.2 / pnpm 11.25.0 验证：format:check、lint、typecheck、contract:check（28/28）、build 通过；
+最终 test 为 297 pass、1 既有 skip，schema:check 为 5 pass、1 缺数据库 fixture skip；Session/Skill 聚焦 18/18。
+IAM 生成 drift 两次 byte-identical、relay drift、diff 检查通过；relay 仅 commit/version/OpenAPI digest 三个来源键变化。
+Root 已独立按 Node22.22.2/pnpm11.25.0 复验 `pnpm format:check && pnpm check && pnpm schema:check`，结果与上行一致；真实 IAM/BFF/Platform 和浏览器未在本片验证，不把本地 HTTP double 记为真实 owner integration。
+
 ## W1E-BFF-SKILL-PRODUCT-DOC（2026-09-28，四文档现状/目标评审已完成）
 
 盘点基线 BFF main `1105553cfc24d4f44a90f626132bc30323a77946`，开始时工作树 clean。
 本片仅四份既有文档的设计增量；不是代码实现、IAM pin 更新、Platform consumer 接通或四 scope 验收。
 
-- 当前 BFF `contract/dependencies/iam-http.json` 仍固定 IAM 0.6.0；IAM owner
+- 该设计评审时，BFF `contract/dependencies/iam-http.json` 固定 IAM 0.6.0；IAM owner
   `4d981441d154c83b63987f284e3a82a559595870` 已发布 0.7.0 `checkTenantSkillAuthorization`，
   artifact SHA-256 `c8d7af8a365ad5d13eaabccf7f31133e0918ef198bdc3e7c790d90933eae91b2`，BFF 尚未消费。
 - 当前 Skill/MCP facade 仍是 Capability 2.0.0 四 GET；其余 Skill route 返回 503。Platform 当前物理仓
@@ -16,7 +36,7 @@
   不等于受信 Product subject/owner 当前授权；不能以这些 RPC 已存在宣称 Product mutation 完成。
 - 目标四 scope 为 user/organization/project/session；BFF 负责 Product 身份与个人/Project/Conversation 当前策略，IAM 负责组织 Skill
   当前动作，Platform 负责真实 Skill owner/状态/receipt，Storage 负责 package。详细矩阵、目标 public API、数据不变量分别见三设计文档。
-- 下一片先精确 pin IAM 0.7 SDK，落实 BFF 四 scope check；Platform Product 受信上下文/资源 owner 查询/撤权与 replay 协议先发布，
+- 当时计划的下一片先精确 pin IAM 0.7 SDK，落实 BFF 四 scope check；Platform Product 受信上下文/资源 owner 查询/撤权与 replay 协议先发布，
   随后精确 pin consumer 并逐项实施；Storage→Platform Begin/Complete 与持久包绑定必须先闭环，才激活 Validate/Publish 成功路径，
   未就绪时两动作保持 fail closed，不宣称六 mutation 均可成功。其余 installation、Web scope/UI、Root 端到端按依赖推进；
   user-only 首片不等于全部目标。
@@ -29,7 +49,7 @@
   代码 lint/typecheck/test/build、真实 PG/Redis、三 owner smoke 与浏览器均未在本片执行；本节不覆盖既有历史门禁记录，
   也不提前修改 Root active dependency 库存。
 
-## W1E-IAM-0.6-BFF-PIN 当前来源
+## W1E-IAM-0.6-BFF-PIN 历史来源
 
 IAM owner `a4c2b61467f1fc1772d6b6d8e98f081c090289fb` 的 internal OpenAPI `0.6.0` 原始 SHA-256 为
 `392ca0e49544c0ec6e0d2fa782c46c33c1847e2c350102e7ad3b8af43f858ced`。本仓完整只读 vendor、生成配置、manifest

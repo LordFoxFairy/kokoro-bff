@@ -221,9 +221,9 @@ test("the Capability generated allowlist rejects missing files, every extra exte
   assert.throws(() => assertGeneratedAllowlist(files, ["client", "core", "manual"], "fixture"), /directory allowlist drifted/u)
 })
 
-test("the IAM consumer pins the complete 0.6.0 owner artifact and generates only approved admission, Team and invitation operations", async () => {
-  const commit = "a4c2b61467f1fc1772d6b6d8e98f081c090289fb"
-  const digest = "392ca0e49544c0ec6e0d2fa782c46c33c1847e2c350102e7ad3b8af43f858ced"
+test("the IAM consumer pins the complete 0.7.0 owner artifact and generates only approved admission, Skill, Team and invitation operations", async () => {
+  const commit = "4d981441d154c83b63987f284e3a82a559595870"
+  const digest = "c8d7af8a365ad5d13eaabccf7f31133e0918ef198bdc3e7c790d90933eae91b2"
   const [manifestSource, vendor, config, lockfile, sdk, types] = await Promise.all([
     readFile(new URL("../contract/dependencies/iam-http.json", import.meta.url), "utf8"),
     readFile(new URL(`../contract/vendor/kokoro-iam/${commit}/iam.internal.v1.json`, import.meta.url)),
@@ -236,12 +236,12 @@ test("the IAM consumer pins the complete 0.6.0 owner artifact and generates only
   const manifest = JSON.parse(manifestSource)
   const owner = JSON.parse(vendor.toString("utf8"))
   assert.equal(sha256(vendor), digest)
-  assert.equal(owner.info.version, "0.6.0")
+  assert.equal(owner.info.version, "0.7.0")
   assert.ok(Object.keys(owner.paths).length > 1)
   assert.deepEqual(manifest.owner, {
     repository_path: "apps/kokoro-iam",
     repository_commit: commit,
-    contract_version: "0.6.0",
+    contract_version: "0.7.0",
     contract_path: "contract/openapi/iam.internal.v1.json",
     contract_sha256: digest,
   })
@@ -274,6 +274,7 @@ test("the IAM consumer pins the complete 0.6.0 owner artifact and generates only
   assert.deepEqual([...sdk.matchAll(/^export const ([A-Za-z0-9_]+)\s*=/gmu)].map((match) => match[1]).sort(), [
     "acceptTenantInvitation",
     "cancelTenantInvitation",
+    "checkTenantSkillAuthorization",
     "createTenantInvitation",
     "getTenantInvitationContext",
     "leaveTenant",

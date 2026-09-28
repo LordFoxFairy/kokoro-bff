@@ -311,3 +311,172 @@ test("IAM admission rejects a combined header and body size above its response c
     { ok: false, status: 503, code: "iam_admission_unavailable" },
   )
 })
+
+test("IAM Skill check binds current user, tenant and action without caching or expanding relay", async () => {
+  const { SkillAuthorizationClient } = await import("../dist/auth/skill-authorization.client.js")
+  const captures: Array<{ url: string | undefined; authorization: string | undefined; body: unknown }> = []
+  const baseUrl = await listen((request, response) => {
+    const chunks: Buffer[] = []
+    request.on("data", (chunk) => chunks.push(Buffer.from(chunk)))
+    request.on("end", () => {
+      captures.push({ url: request.url, authorization: request.headers.authorization, body: JSON.parse(Buffer.concat(chunks).toString()) })
+      response.writeHead(captures.length === 1 ? 200 : 403, responseHeaders())
+      response.end(
+        JSON.stringify(
+          captures.length === 1
+            ? { data: { allowed: true, tenant_id: "tenant-a", subject_id: "user-a", action: "publish" } }
+            : { error: { code: "PERMISSION_DENIED", message: "Denied", retryable: false, details: [] } },
+        ),
+      )
+    })
+  })
+  const check = new SkillAuthorizationClient({ baseUrl, timeoutMs: 1000, maxResponseBytes: 4096 })
+  const input = {
+    token: "current-user-token",
+    tenantId: "tenant-a",
+    subjectId: "user-a",
+    action: "publish" as const,
+    requestId: "skill-request",
+    signal: new AbortController().signal,
+  }
+  assert.deepEqual(await check.check(input), { ok: true })
+  assert.deepEqual(await check.check(input), { ok: false, status: 403, code: "skill_forbidden" })
+  assert.equal(captures.length, 2)
+  assert.deepEqual(captures[0], {
+    url: "/internal/v1/tenants/tenant-a/skill-authorizations/check",
+    authorization: "Bearer current-user-token",
+    body: { action: "publish" },
+  })
+})
+
+test("IAM Skill check rejects mismatched bindings, non-allow and undeclared response fields", async () => {
+  const { SkillAuthorizationClient } = await import("../dist/auth/skill-authorization.client.js")
+  for (const changed of [
+    { tenant_id: "other" },
+    { subject_id: "other" },
+    { action: "install" },
+    { allowed: false },
+    { extra: true },
+    { subject_id: undefined },
+  ]) {
+    const baseUrl = await listen((_request, response) => {
+      response.writeHead(200, responseHeaders())
+      response.end(JSON.stringify({ data: { allowed: true, tenant_id: "tenant-a", subject_id: "user-a", action: "publish", ...changed } }))
+    })
+    const check = new SkillAuthorizationClient({ baseUrl, timeoutMs: 1000, maxResponseBytes: 4096 })
+    assert.deepEqual(
+      await check.check({
+        token: "user-token",
+        tenantId: "tenant-a",
+        subjectId: "user-a",
+        action: "publish",
+        requestId: "request",
+        signal: new AbortController().signal,
+      }),
+      { ok: false, status: 503, code: "iam_admission_unavailable" },
+    )
+  }
+})
+
+test("IAM Skill check requires no-store, request-id and JSON; bounds transport and never retries", async () => {
+  const { SkillAuthorizationClient } = await import("../dist/auth/skill-authorization.client.js")
+  for (const scenario of ["cache", "request-id", "content-type", "malformed", "timeout", "oversized", "redirect", "extra-envelope", "aborted"]) {
+    let calls = 0
+    const baseUrl = await listen((_request, response) => {
+      calls++
+      if (scenario === "timeout") return
+      response.writeHead(
+        scenario === "redirect" ? 302 : 200,
+        responseHeaders({
+          ...(scenario === "cache" ? { "cache-control": "public" } : {}),
+          ...(scenario === "request-id" ? { "x-request-id": "" } : {}),
+          ...(scenario === "content-type" ? { "content-type": "text/html" } : {}),
+        }),
+      )
+      response.end(
+        scenario === "malformed"
+          ? "{"
+          : scenario === "oversized"
+            ? "x".repeat(5000)
+            : JSON.stringify({
+                data: { allowed: true, tenant_id: "tenant-a", subject_id: "user-a", action: "publish" },
+                ...(scenario === "extra-envelope" ? { extra: true } : {}),
+              }),
+      )
+    })
+    const check = new SkillAuthorizationClient({ baseUrl, timeoutMs: scenario === "timeout" ? 20 : 1000, maxResponseBytes: 4096 })
+    assert.deepEqual(
+      await check.check({
+        token: "user-token",
+        tenantId: "tenant-a",
+        subjectId: "user-a",
+        action: "publish",
+        requestId: "request",
+        signal: scenario === "aborted" ? AbortSignal.abort() : new AbortController().signal,
+      }),
+      { ok: false, status: 503, code: "iam_admission_unavailable" },
+    )
+    assert.equal(calls, scenario === "aborted" ? 0 : 1)
+  }
+})
+
+test("IAM Skill check maps denial/rate-limit, missing configuration and empty identities fail closed", async () => {
+  const { SkillAuthorizationClient } = await import("../dist/auth/skill-authorization.client.js")
+  const input = {
+    token: "user-token",
+    tenantId: "tenant-a",
+    subjectId: "user-a",
+    action: "publish" as const,
+    requestId: "request",
+    signal: new AbortController().signal,
+  }
+  for (const [status, code, expected] of [
+    [401, "UNAUTHENTICATED", "session_invalid"],
+    [403, "PERMISSION_DENIED", "skill_forbidden"],
+    [429, "RATE_LIMITED", "skill_rate_limited"],
+    [503, "DEPENDENCY_UNAVAILABLE", "iam_admission_unavailable"],
+  ] as const) {
+    const baseUrl = await listen((_request, response) => {
+      response.writeHead(status, responseHeaders())
+      response.end(JSON.stringify({ error: { code, message: "private owner detail", retryable: false, details: [] } }))
+    })
+    const check = new SkillAuthorizationClient({ baseUrl, timeoutMs: 1000, maxResponseBytes: 4096 })
+    assert.deepEqual(await check.check(input), { ok: false, status, code: expected })
+  }
+  const absent = new SkillAuthorizationClient({ baseUrl: null, timeoutMs: 1000, maxResponseBytes: 4096 })
+  assert.equal((await absent.check(input)).ok, false)
+  let calls = 0
+  const baseUrl = await listen((_request, response) => {
+    calls++
+    response.end()
+  })
+  const check = new SkillAuthorizationClient({ baseUrl, timeoutMs: 1000, maxResponseBytes: 4096 })
+  for (const identity of [{ token: "" }, { tenantId: "" }, { subjectId: "" }]) assert.equal((await check.check({ ...input, ...identity })).ok, false)
+  assert.equal(calls, 0)
+})
+
+test("IAM Skill check rejects contradictory HTTP status and owner error code", async () => {
+  const { SkillAuthorizationClient } = await import("../dist/auth/skill-authorization.client.js")
+  for (const [status, code] of [
+    [403, "UNAUTHENTICATED"],
+    [401, "PERMISSION_DENIED"],
+    [429, "PERMISSION_DENIED"],
+  ] as const) {
+    const baseUrl = await listen((_request, response) => {
+      response.writeHead(status, responseHeaders())
+      response.end(JSON.stringify({ error: { code, message: "owner drift", retryable: false, details: [] } }))
+    })
+    const check = new SkillAuthorizationClient({ baseUrl, timeoutMs: 1000, maxResponseBytes: 4096 })
+    assert.deepEqual(
+      await check.check({
+        token: "user-token",
+        tenantId: "tenant-a",
+        subjectId: "user-a",
+        action: "publish",
+        requestId: "request",
+        signal: new AbortController().signal,
+      }),
+      { ok: false, status: 503, code: "iam_admission_unavailable" },
+    )
+  }
+})

@@ -1,6 +1,12 @@
 # kokoro-bff data model
 
-## W1E-IAM-0.6-BFF-PIN：当前数据边界
+## W1E-IAM-0.7-BFF-PIN：当前数据边界
+
+IAM 0.7 仍唯一拥有 Organization Skill 授权决定。BFF 的窄 `SkillAuthorizationClient` 只作每次在线查询，
+不存储或缓存 IAM allow、成员/角色、会话或授权正文；当前 `database/schema.sql`、事务、Redis、receipt、outbox、
+AG-UI ledger 均未改变，也无跨 owner SQL。Product Skill mutation 尚未接入该 client。
+
+## W1E-IAM-0.6-BFF-PIN：历史数据边界
 
 IAM `a4c2b61467f1fc1772d6b6d8e98f081c090289fb` 唯一拥有 Platform workload 身份、资源与 token
 introspection 事实；BFF 此片只固定 OpenAPI `0.6.0` 来源，不调用该操作，不存储、投影或复制 IAM 决策。

@@ -1,6 +1,6 @@
 # kokoro-bff 技术设计
 
-## W1E-IAM-0.6-BFF-PIN：IAM 当前来源
+## W1E-IAM-0.6-BFF-PIN：IAM 历史来源
 
 IAM owner `a4c2b61467f1fc1772d6b6d8e98f081c090289fb` 的 internal OpenAPI `0.6.0` SHA-256 为
 `392ca0e49544c0ec6e0d2fa782c46c33c1847e2c350102e7ad3b8af43f858ced`。沿用本仓现有
@@ -830,7 +830,7 @@ Scheduler 采用有界重试；receiver 活跃 lease 返回 425，不返回会�
 | 项       | 决定                                                                                                                                                                                                                              |
 | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Owner    | BFF 拥有 Product session admission、个人私有/显式分享策略、Project/Conversation 事实与 public API；IAM 拥有组织成员/角色/Skill 动作判断；Platform 拥有 Skill catalog/revision/install 与 receipt；Storage 拥有 package asset/scan |
-| 当前事实 | IAM manifest 固定 0.6.0；Capability HTTP manifest 固定 2.0.0；BFF 无 Skill catalog mutation 实现，无本片未提交代码                                                                                                                |
+| 评审时事实 | IAM manifest 固定 0.6.0；Capability HTTP manifest 固定 2.0.0；BFF 无 Skill catalog mutation 实现，无本片未提交代码                                                                                                                |
 | 目标职责 | 受信 session → 当前资源权限 → owner mutation；四 scope 全部受约束，不以 user-only 首片代表完成                                                                                                                                    |
 | 目录比较 | 采用既有 Product `src/http/routes/owner.ts` 入口与 `src/infrastructure/clients/capability/` adapter 边界演进；淘汰 generic auth/role 下另建 Skill 权限中心及 Root 可编辑 contract                                                 |
 | 粒度     | 本片只扩四份既有文档；后续 transport schema、业务授权编排、IAM/Platform client 按不同变化原因拆分，代码片另给精确放置表，不把所有职责塞入 owner.ts                                                                                |
@@ -862,7 +862,7 @@ Scheduler 采用有界重试；receiver 活跃 lease 返回 425，不返回会�
 
 1. BFF 先 pin IAM owner `4d981441d154c83b63987f284e3a82a559595870` 的 internal OpenAPI 0.7.0，原始 SHA-256
    `c8d7af8a365ad5d13eaabccf7f31133e0918ef198bdc3e7c790d90933eae91b2`；更新 vendor/manifest/生成 SDK 及 relay provenance，
-   只把具名 Skill check 加入 server consumer，不加入 browser relay，不改变现有 session/Team 行为。当前 active pin 仍是 0.6.0。
+   只把具名 Skill check 加入 server consumer，不加入 browser relay，不改变现有 session/Team 行为。该设计片评审时 active pin 仍是 0.6.0；当前已按上文 W1E IAM 0.7 consumer 切片升级。
 2. BFF 授权逻辑先以四 scope/action 契约测试实施；Platform owner 随后发布 Product 受信上下文、真实 owner 查询及当前权限/receipt 协议，
    Storage owner 发布可消费的 package upload/clean/digest 契约。BFF 不自行编造 owner DTO、身份头或上传成功。
 3. 固定 Platform/Storage commit、version、digest 并生成 consumer；按各操作前置逐项接通 BFF catalog public mutation。
@@ -878,3 +878,14 @@ Scheduler 采用有界重试；receiver 活跃 lease 返回 425，不返回会�
 Root 真实三 owner Skill smoke 目前尚无已批准专用命令，须在 Root 任务卡建立隔离 runner 与明确命令后执行，
 不得以现有 System smoke 或 fixture unit 替代。场景必须覆盖四 scope、六 action、tenant/subject 伪造、撤权后同 key replay、
 当前资源删除、超时、owner digest 冲突、响应丢失后同 command 恢复及无权限时零 mutation I/O。
+
+## W1E IAM 0.7 consumer 仓内实现
+
+本片只履行前述来源 pin 第一步。`src/auth/skill-authorization.client.ts` 拥有组织 Skill action 的窄 IAM 调用；
+`skill-authorization.types.ts` 承载其输入/结果，action 由固定 owner generated type 派生。它不拥有四 scope Product 编排。
+相较塞入 `SessionAdmissionClient.verify`，独立具名 client 保持身份建立与组织业务动作检查分离；相较另建网络 transport，
+复用现有 `SessionAdmissionTransport` 的超时/取消/组合 header+body 限额更少重复。transport 新增具名 Skill 方法，
+私有 send 仅由两个固定 owner 路径调用，原 Session bodyless POST 不变，无文件搬迁或遗留双轨。
+所有 200 结果均按 generated schema 严格校验外层及 data，且匹配输入 tenant/subject/action；异常统一 fail closed。
+SDK generated operation 已发布到本仓生成物；窄 client 沿用现有 admission 有界 transport 与 generated validator，
+而非借通用 fetch 绕过响应预算。当前 client 尚无生产 Product mutation 调用者，不据此宣称组织 Skill 写已开放。

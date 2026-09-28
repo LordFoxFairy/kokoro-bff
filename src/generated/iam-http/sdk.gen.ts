@@ -9,6 +9,9 @@ import type {
   CancelTenantInvitationData,
   CancelTenantInvitationErrors,
   CancelTenantInvitationResponses,
+  CheckTenantSkillAuthorizationData,
+  CheckTenantSkillAuthorizationErrors,
+  CheckTenantSkillAuthorizationResponses,
   CreateTenantInvitationData,
   CreateTenantInvitationErrors,
   CreateTenantInvitationResponses,
@@ -46,6 +49,7 @@ import type {
 import {
   zAcceptTenantInvitationResponse,
   zCancelTenantInvitationResponse,
+  zCheckTenantSkillAuthorizationResponse,
   zCreateTenantInvitationResponse,
   zGetTenantInvitationContextResponse,
   zLeaveTenantResponse,
@@ -210,4 +214,18 @@ export const verifySessionAuthorization = <ThrowOnError extends boolean = false>
     security: [{ scheme: "bearer", type: "http" }],
     url: "/internal/v1/session-authorizations/verify",
     ...options,
+  })
+
+export const checkTenantSkillAuthorization = <ThrowOnError extends boolean = false>(
+  options: Options<CheckTenantSkillAuthorizationData, ThrowOnError>,
+): RequestResult<CheckTenantSkillAuthorizationResponses, CheckTenantSkillAuthorizationErrors, ThrowOnError> =>
+  (options.client ?? client).post<CheckTenantSkillAuthorizationResponses, CheckTenantSkillAuthorizationErrors, ThrowOnError>({
+    responseValidator: async (data) => await zCheckTenantSkillAuthorizationResponse.parseAsync(data),
+    security: [{ scheme: "bearer", type: "http" }],
+    url: "/internal/v1/tenants/{tenant_id}/skill-authorizations/check",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
   })
