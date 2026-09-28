@@ -597,7 +597,7 @@ W0B-9 clean-slate 同时删除 jobs/job_*、旧 header 与 compact occurrence �
 
 | Public 目标                           | Platform RPC       | action / 请求与成功表示                                                                                                                                   |
 | ------------------------------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /v1/skills/drafts`              | CreateSkillDraft   | create_draft；owner_scope 选择与 metadata；201 skill_id/series_id/revision/status/replayed                                                                |
+| `POST /v1/skills/drafts`              | CreateSkillDraft   | create_draft；首个 user-only 切片由受信 subject 固定 owner，不接受 owner_scope；201 skill_id/series_id/revision/status/replayed                             |
 | `POST /v1/skills/{skill_id}/versions` | CreateSkillVersion | create_version；metadata，base_skill_id 来自 path，owner_scope 从 base 事实解析；201 新 skill_id/series_id/revision/status/replayed                       |
 | `POST /v1/skills/{skill_id}/validate` | ValidateSkillDraft | validate_draft；resource 来自 path，幂等身份来自 header，不接受 asset/digest body；200 valid/content_digest/manifest_identity/skill_id/series_id/replayed |
 | `POST /v1/skills/{skill_id}/publish`  | PublishSkill       | publish；visibility；200 source_ref/revision/status/event_id/replayed                                                                                     |
@@ -616,9 +616,9 @@ upload 的 begin_upload/complete_upload/abort_upload 与 installation 的 instal
 读取 asset reference 与 content digest，并联合 Storage 重验 clean/归属/摘要；没有有效 Complete 绑定时拒绝 Validate。
 Storage→Platform Begin/Complete 上传链及持久包绑定必须先于 Validate/Publish 成功路径激活，Publish 还要求有效的包验证状态；
 该硬前置未就绪时两动作保持 fail closed，不把其余 catalog 操作可用宣称为六条 mutation 全部可成功。
-当前 Platform v1 Proto 仍保留旧 `package_asset_ref`/`content_digest` 请求字段；目标 owner v2 将 reserve 旧字段，
-对应机器契约尚待 Platform 发布，BFF 不提前生成 consumer，也不转发浏览器任意 asset/hash。包 bytes 不走小型 RPC JSON，
-不接受浏览器自报扫描通过。
+Platform owner `f26d147a09350c3a041722107d277beb93eaad60` 已发布 CreateDraft 的受信 Product context 与 execution artifact v2；
+下节首片据此固定消费。Validate/Publish 的 Storage 包绑定仍属于后续范围，不阻塞 CreateDraft，也不允许借首片转发浏览器任意
+asset/hash。包 bytes 不走小型 RPC JSON，不接受浏览器自报扫描通过。
 
 ### 幂等、错误与撤权
 
@@ -634,6 +634,81 @@ Storage→Platform Begin/Complete 上传链及持久包绑定必须先于 Valida
 响应结构或绑定非法 502 skill_response_invalid。retryable 只用于契约允许的瞬时错误，不透出 token/内部 owner payload。
 这些新增 Skill code/status 须先落 canonical OpenAPI 与 contract tests；当前运行错误码保持原事实，不提前声称已实现。
 无权限时不发 mutation；跨 owner 并发撤权时点与受信 Product 上下文由 Platform 前置协议收敛，未收敛不放行 public mutation。
+
+### 首个 user CreateSkillDraft public 契约（下一机器契约切片）
+
+本节把首个正向链收敛为一个 operation；当前 `contract/openapi/v1/openapi.yaml` 与 runtime 仍未发布它。实现片必须把以下
+形状原样写入 canonical OpenAPI、冻结 operation surface 与 contract tests，文档本身不是 SDK 输入。
+
+```http
+POST /v1/skills/drafts
+Idempotency-Key: 1..128 visible-ASCII bytes
+Content-Type: application/json
+
+{
+  "display_name": "Research assistant",
+  "summary": "Searches and synthesizes evidence",
+  "tags": ["research", "writing"]
+}
+```
+
+operation metadata 固定为 `operationId=createSkillDraft`、`x-kokoro-owner=kokoro-bff`、
+`x-kokoro-visibility=public`、`x-kokoro-stability=beta`、`x-kokoro-idempotency=required`、
+`x-kokoro-permission=product.skill.create_draft`。该值只是 BFF Product operation 分类，不新增 Web OAuth scope，也不触发 organization
+IAM action check。不接受 query、尾斜线 alias 或其他 method。body 三字段全部 required，object
+`additionalProperties:false`；因此 `tenant_id`、`subject_id`、`owner_scope`、`product_context`、`command`、
+`request_digest`、`metadata_json` 和 package/asset/hash 都是非法额外字段。`display_name` 必须含非空白字符且不超过 255
+UTF-16 code units；`summary` 可为空但不超过 65,535 UTF-16 code units；`tags` 是最多 100 项的数组，每项为含非空白字符且不超过
+128 UTF-16 code units 的 string，精确重复拒绝，顺序保留并参与命令摘要。BFF 不 trim 或重排这些值，首片给 Platform 的
+`metadata_json` 固定为 UTF-8 `{}`。
+OpenAPI `maxLength` 的 Unicode 字符计数不等同于 JavaScript/Platform 的 UTF-16 code-unit `.length`；实现与 contract tests 必须用含 emoji 的边界值锁定上述精确规则，不以机器 schema 的单个 `maxLength` 声称等价。
+
+`Idempotency-Key` 只能出现一次，不 trim；空值、OWS 之外的空白、非 ASCII、逗号合并和超过 128 bytes 都返回
+`400 invalid_idempotency_key`。缺失返回 `400 idempotency_key_required`。BFF 用已验证 `tenant_id`、`subject_id`、operation 与
+该 key 派生固定 `command_id`；Platform v2 projector从可信 tenant、个人 owner、Product context 和三项 metadata（含固定 `{}` bytes）
+生成 `request_digest`。同 tenant/subject/key/请求语义重试由 Platform durable receipt 返回原资源并把 `replayed` 置 true；同
+tenant/subject/key 但任一 body 值或 tag 顺序变化返回 409，BFF 不另存 receipt，也不自动 retry。
+
+唯一成功是 201；新 operation 按 Root API 手册只把请求关联 ID 放在 `x-request-id` header，不复制现有旧 BFF envelope 中的 `meta.request_id`：
+
+```json
+{
+  "data": {
+    "skill_id": "skill_opaque",
+    "series_id": "series_opaque",
+    "revision": 1,
+    "status": "draft",
+    "replayed": false
+  }
+}
+```
+
+`skill_id` 与 `series_id` 必须匹配 Platform v2 的 1..191 ASCII-byte opaque ID domain
+`^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$`；CreateDraft 只接受 `revision=1`、owner enum `DRAFT`，public 投影为
+`status="draft"`；`replayed` 是严格 boolean。同一 completed receipt replay 仍返回 201 和相同 ID/revision/status，仅
+`replayed=true`。所有响应带 BFF `x-request-id` 与 `Cache-Control:no-store`；错误体使用 `{ "error": { "code", "message", "retryable" } }`，不含 `meta.request_id`；不透出 machine token、Platform request/metadata、
+Connect trailers 或 owner message。
+
+| HTTP            | 稳定 code                                              | 精确来源/语义                                                                         | retryable           |
+| --------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------- | ------------------- |
+| 400             | `invalid_skill_request`                                | strict body、字段长度/重复 tag 或本地投影非法                                         | false               |
+| 400             | `idempotency_key_required` / `invalid_idempotency_key` | key 缺失或不满足上述唯一 header 规则                                                  | false               |
+| 401/403         | 既有 session admission code                            | 用户 session、服务调用资格或固定 tenant 被拒绝；发生在 body、幂等与 Platform I/O 前   | false               |
+| 429/503         | 既有 session admission code                            | IAM session 限流或不可用；发生在 body、幂等与 Platform I/O 前                        | true                |
+| 409             | `skill_idempotency_conflict`                           | Platform `ALREADY_EXISTS`：同派生命令、不同 v2 digest/operation                       | false               |
+| 409             | `skill_command_in_progress`                            | Platform `ABORTED`：相同命令正在处理或 fence 尚未收敛                                 | true                |
+| 412             | `skill_precondition_failed`                            | Platform 明确 `FAILED_PRECONDITION`；CreateDraft 正常正向链不产生该状态               | false               |
+| 413             | `request_body_too_large`                               | BFF body budget                                                                       | false               |
+| 429             | `skill_rate_limited`                                   | Platform `RESOURCE_EXHAUSTED`；只保留合法有界 Retry-After                             | true                |
+| 502             | `skill_response_invalid`                               | 非法 ID/revision/status/body、意外 PermissionDenied/NotFound、未知或矛盾 Connect code | false               |
+| 503             | `skill_dependency_unavailable`                         | catalog credential/token、Platform 配置/transport、deadline、`UNAVAILABLE` 或 machine workload 的 Connect `UNAUTHENTICATED`；不映射为用户 401、不自动重试 | true                |
+
+客户端取消会贯穿 IAM token exchange/Platform RPC，不伪造一个 JSON 成功或自动重发。BFF 当前用户 Bearer 只用于 IAM session
+admission；user CreateDraft 不调用 organization Skill action，也不把该 Bearer发给 Platform。Platform consumer 精确固定
+`kokoro-platform@f26d147a09350c3a041722107d277beb93eaad60` 的 `kokoro.platform.v1.SkillCatalogService/CreateSkillDraft`、
+Proto SHA-256 `282bf886ea9648f7ce5208abd36ab47d879b2002a036d90aada2af59e74b4020` 和 execution artifact v2 aggregate
+`f0a16f8360c075e783c244284b56a1bea5aa3113cc066b25163a60b713a7df25`；旧 Capability HTTP mutation、v1 digest或手写
+Proto DTO 都不是 fallback。
 
 ## W1E IAM 0.7 pin 仓内事实
 

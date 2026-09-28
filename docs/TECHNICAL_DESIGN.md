@@ -889,3 +889,80 @@ Root 真实三 owner Skill smoke 目前尚无已批准专用命令，须在 Root
 所有 200 结果均按 generated schema 严格校验外层及 data，且匹配输入 tenant/subject/action；异常统一 fail closed。
 SDK generated operation 已发布到本仓生成物；窄 client 沿用现有 admission 有界 transport 与 generated validator，
 而非借通用 fetch 绕过响应预算。当前 client 尚无生产 Product mutation 调用者，不据此宣称组织 Skill 写已开放。
+
+## W1E user CreateSkillDraft 实施设计门（已收敛，尚未实现）
+
+### 当前事实与本片边界
+
+当前基线是 BFF main `55b2809b2f73addbac2b56bd8a04aa0c1706521b`：IAM 0.7 用户 admission 与窄
+`SkillAuthorizationClient` 已存在，但 `src/http/routes/owner.ts` 对 Skill mutation 仍返回
+`503 capability_projection_not_configured`；BFF 没有 Platform Connect consumer、catalog workload credential 或 public
+`POST /v1/skills/drafts`。`src/bootstrap/server.ts` 还会在 `liveOwnerBusiness` 之前对普通 mutation 调用
+`mutationTicket`，其 terminal replay 会直接返回历史响应，因而不符合“每次 Product 当前授权先于 Platform receipt replay”的规则。
+
+本片只开放 **user owner 的 CreateSkillDraft**。当前用户已由每次请求的 IAM session admission 得到可信
+`tenant_id` 与 `subject_id`；BFF 固定构造 `owner_scope={kind:"user",id:subject_id}` 和完全相同的
+`ProductCatalogContext`，不接受浏览器自报 owner/subject/tenant。个人 owner 判断就是两者逐字相等，因此不调用组织 Skill action
+check，也不依赖 Project、Conversation、Storage 或 package binding。organization/project/session、CreateVersion、Validate、Publish、
+Withdraw、SetStatus 继续 fail closed；本片通过不代表四 scope 或六 mutation 完成。
+
+### 放置、来源与依赖
+
+| 项            | 决定                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner         | BFF 拥有 public request、当前 Product subject 与错误投影；Platform 唯一写 Skill/revision/command receipt；IAM 拥有用户 session 与 Platform workload token 事实。                                                                                                                                                                                                                                          |
+| 路由          | 扩展既有 `src/http/routes/owner.ts` 的精确 `POST /v1/skills/drafts` 分支，不建新进程或一级业务模块。                                                                                                                                                                                                                                                                                                      |
+| 出站 adapter  | 在既有 `src/infrastructure/clients/` 下新增具名 `platform/` adapter。把 Connect/catalog token 塞进 `capability/` 的方案淘汰：该目录当前固定旧 Capability HTTP 2.0.0、shared-secret 与四个只读 GET，协议和 credential 生命周期不同，最终还要整体删除。                                                                                                                                                     |
+| 生成物        | 固定 Platform owner `f26d147a09350c3a041722107d277beb93eaad60` 的 `kokoro.platform.v1` Proto；`platform_runtime.proto` SHA-256 `282bf886ea9648f7ce5208abd36ab47d879b2002a036d90aada2af59e74b4020`，`common.proto` SHA-256 `65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08`。只读 vendor、dependency manifest、Buf/Connect 生成配置和 `src/generated/platform-connect/` 构成单向生成链。 |
+| 摘要 artifact | 同一 owner commit 的 `contract/execution-operations/v2/` artifact/command digest version 均为 `2.0.0`，aggregate SHA-256 `f0a16f8360c075e783c244284b56a1bea5aa3113cc066b25163a60b713a7df25`。BFF 构建期生成的 typed projector 必须通过 owner `command.skill.create_draft.valid` vector；运行时不 import owner checker，也没有 v1 fallback。                                                               |
+| 配置          | 新增 `KOKORO_PLATFORM_BASE_URL` 与 tenant-indexed owner-only `KOKORO_BFF_PLATFORM_CATALOG_CREDENTIALS_FILE`。旧 `KOKORO_CAPABILITY_BASE_URL` 只供尚未 cutover 的四个 GET，不能作为 Connect URL 或凭据来源。                                                                                                                                                                                               |
+| 数据          | 不改 BFF schema/Redis，不建立 Skill 表、receipt、outbox 或授权缓存；Platform receipt 是唯一持久幂等事实。                                                                                                                                                                                                                                                                                                 |
+| 删除/替代     | 激活此 operation 时只删除其 503 分支，并让 server 的 Platform catalog mutation 分类跳过 generic `mutationTicket`；不删除其他未替代拒绝路径，不保留 HTTP mutation fallback。                                                                                                                                                                                                                               |
+
+catalog credential 文件每项固定为
+`{tenantId,generation,credentialRefVersion,clientId,clientSecret,resource,scope}`，其中 resource 逐字
+`https://kokoro.dev/resources/platform-internal`、scope 逐字 `platform:skill-catalog.manage`。文件必须是当前进程 UID
+拥有的非 symlink regular file，mode `0400|0600`；secret 不进入环境、日志或错误。BFF 以 client credentials 调固定 IAM origin 的
+`/iam/oauth2/token`，禁止 redirect，严格校验 Bearer/scope/expiry；token cache key 包含 tenant、generation、credential ref、client、
+resource 与 scope，仅剩余寿命 `>5s` 才复用，snapshot 改变立即失效，同 key single-flight。Platform RPC 只携该 machine Bearer；当前
+用户 Bearer 永不发送给 Platform。
+
+### 请求、幂等与调用顺序
+
+public body 只含 `display_name`、`summary`、`tags`；BFF 不公开 `owner_scope`、`product_context`、`command` 或
+`metadata_json`。三字段值不 trim/重排：display name 必须含非空白字符且不超过 255 UTF-16 code units，summary 不超过
+65,535 UTF-16 code units，tags 最多 100 项、每项非空白且不超过 128 UTF-16 code units、精确值不得重复，数组顺序参与摘要。
+首片固定把 UTF-8 `{}` 作为 Platform `metadata.metadata_json`，以后公开任意 metadata 必须另过 JSON schema/大小/摘要设计门。
+
+`Idempotency-Key` 必须是唯一 header，值为 1..128 bytes 的可见 ASCII，空白、逗号合并或重复 header 拒绝。BFF 以
+`hex_sha256(UTF8(JSON.stringify(["kokoro-bff","v1","skill.create_draft",tenant_id,subject_id,key])))` 计算 scope digest，
+`command_id="bff.skill.create_draft.v1."+scope_digest`。`request_digest` 不由 BFF 自造另一算法，而由固定 v2 typed projector 对完整
+CreateDraft Proto 业务投影生成：tenant、完整方法名、个人 owner scope、Product subject/owner 与完整 metadata 均在摘要内；
+`request_id`、command identity 和 machine token 排除。相同用户/key/body 得到同 command/digest；改 body 得到同 command、不同 digest，
+由 Platform 返回冲突；跨 tenant/subject/operation 不共享 command。
+
+固定顺序是：service envelope → 唯一 User Bearer → IAM session admission/固定 tenant → strict body 与 key → 当前
+`owner.id===subject` → catalog credential snapshot/token → Platform `CreateSkillDraft`。`src/bootstrap/server.ts` 必须在
+`mutationTicket` 之前识别该精确 route，并像 durable Chat admission 一样跳过 generic BFF receipt/进程 Map；route 收到的
+`mutation` 恒为 null。首次调用与相同 key replay 都重新经过 IAM admission、个人 owner 判断和 token 获取，然后才让 Platform
+current owner gate/receipt 决定执行或 replay。无权、失效或配置错误时不得读取 BFF receipt，也不得打开 Platform socket。
+
+Connect 单次 unary 调用使用固定 generated method、有界 deadline/取消与 1 MiB message 上限，不自动 retry。仅严格接受
+`SkillId`/`SkillSeriesId` owner pattern、`revision=1`、`status=DRAFT` 与 boolean `replayed`；成功映射为 public 201。
+本 operation 的 201 与所有错误只在 `x-request-id` header 携请求关联 ID，成功体为 `{data}`、错误体为
+`{error:{code,message,retryable}}`；`src/contracts/envelope.ts` 的旧 `meta.request_id` helper 不用于新 route。
+`src/bootstrap/server.ts` 的 admission 失败分支也要对这条精确 route 使用同一错误 envelope，不能仅成功时遵守新契约。
+Platform `ALREADY_EXISTS` 映射 409 `skill_idempotency_conflict`；`ABORTED` 映射 409
+`skill_command_in_progress`；有效业务前置失败映射 412 `skill_precondition_failed`；资源耗尽映射 429
+`skill_rate_limited`；workload token/IAM/Platform 不可用或超时、Platform 对 machine workload 返回的 Connect `UNAUTHENTICATED`
+均映射 503 `skill_dependency_unavailable`（不是用户 401，且不自动重试）；不可能的 owner/status/形状、
+未声明 code 或非法 response 映射 502 `skill_response_invalid`。BFF 不根据 message 分支，也不自动重发 mutation。
+
+### 实施与验证门
+
+先发布 design-first OpenAPI 与 contract tests，再实现 generated consumer、token provider、server admission cut 与 owner route。
+RED→GREEN 必须锁定：strict body/key、可信 user context、伪造身份字段拒绝、同 key replay 每次重验 IAM、同 key drift 409、
+跨 subject 不共享、generic Map/PG receipt 零调用、无权时零 Platform I/O、credential generation 变化、token/Connect timeout/取消、
+1 MiB 限额、严格 response 与完整 Connect code 映射。Node 22 执行完整 `pnpm format:check && pnpm check && pnpm schema:check`；
+随后 Root 用隔离真实 IAM + BFF + Platform + PostgreSQL/Redis 验证首次 201、响应丢失后 replay、撤销 session 后同 key拒绝、
+以及 Platform 仅一条 Skill/receipt。Web adapter 仍是后续消费者，不纳入本 user-only owner 实现片。

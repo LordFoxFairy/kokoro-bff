@@ -1,7 +1,30 @@
 # kokoro-bff 当前实现
 
-状态：2026-09-26
+状态：2026-09-28
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。
+
+## W1E-BFF-PRODUCT-CREATE-DRAFT-DOC（2026-09-28，设计候选；尚未实现）
+
+当前代码基线为 BFF main `55b2809b2f73addbac2b56bd8a04aa0c1706521b`。IAM 0.7 用户 admission 已存在；但 canonical
+OpenAPI、runtime route、Platform Connect consumer、catalog workload credential 和 server receipt bypass 均不存在。Skill mutation
+仍 fail closed，且 generic `mutationTicket` 位于业务 route 之前，terminal replay 可以跳过本次 Product 当前授权；因此当前运行态尚无
+user CreateDraft 正向链。本节记录目标，不把四份 Markdown 当作实现或验收证据。
+
+下一实现片只开放 `POST /v1/skills/drafts` 的 user owner：public body 仅含 `display_name`、`summary`、`tags`；BFF 从每次
+IAM admission 的受信 tenant/subject 派生一致的 user owner 与 Product context，固定 `metadata_json` 为 UTF-8 `{}`。同一 public
+idempotency key 派生稳定 Platform command，Platform v2 receipt 是唯一 durable 幂等事实；CreateDraft 精确绕开 BFF PostgreSQL/Map
+generic receipt，使首次请求和 replay 每次都先重验 IAM/current owner。BFF 不新增 schema、Redis、Skill catalog 或 receipt 事实。
+
+Platform consumer 目标固定 owner `f26d147a09350c3a041722107d277beb93eaad60`、Proto package
+`kokoro.platform.v1`，`platform_runtime.proto` SHA-256
+`282bf886ea9648f7ce5208abd36ab47d879b2002a036d90aada2af59e74b4020`，以及 execution artifact/digest v2
+`2.0.0` aggregate SHA-256 `f0a16f8360c075e783c244284b56a1bea5aa3113cc066b25163a60b713a7df25`。调用身份是 BFF
+tenant machine catalog workload；旧 Capability HTTP shared secret、用户 Bearer、手写 Proto DTO 和 v1 digest 都不是 fallback。
+
+仍未实现且不阻塞开始实现的范围是 organization/project/session owner、其余五个 catalog mutation、Storage/package 与 Web consumer；
+真实跨 owner smoke 是 user CreateDraft 首片验收门，不能略过。首片仍需 Root 审查后依次完成 public OpenAPI/contract test、generated Connect client、credential/token provider、
+server admission cut、route 与测试；真实 IAM+BFF+Platform 验证必须覆盖首次 201、响应丢失 replay、撤销 session 后同 key 拒绝及
+Platform 仅一条 Skill/receipt。本候选未改机器契约、代码、schema、数据库、服务或共享 3310。
 
 ## W1E-BFF-IAM-0.7-PIN（2026-09-28，仓内验证通过；跨仓待验）
 
@@ -23,7 +46,7 @@ Writer Node 22.22.2 / pnpm 11.25.0 验证：format:check、lint、typecheck、co
 IAM 生成 drift 两次 byte-identical、relay drift、diff 检查通过；relay 仅 commit/version/OpenAPI digest 三个来源键变化。
 Root 已独立按 Node22.22.2/pnpm11.25.0 复验 `pnpm format:check && pnpm check && pnpm schema:check`，结果与上行一致；真实 IAM/BFF/Platform 和浏览器未在本片验证，不把本地 HTTP double 记为真实 owner integration。
 
-## W1E-BFF-SKILL-PRODUCT-DOC（2026-09-28，四文档现状/目标评审已完成）
+## W1E-BFF-SKILL-PRODUCT-DOC 历史评审基线（已被上节首片收敛）
 
 盘点基线 BFF main `1105553cfc24d4f44a90f626132bc30323a77946`，开始时工作树 clean。
 本片仅四份既有文档的设计增量；不是代码实现、IAM pin 更新、Platform consumer 接通或四 scope 验收。

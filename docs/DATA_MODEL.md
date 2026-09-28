@@ -421,6 +421,32 @@ W0B-10 使用真实 Scheduler + BFF 进程及 Agent receipt stub：响应丢失�
 
 ## W1E Product Skill mutation 数据边界（目标，未实现）
 
+### 首个 user CreateSkillDraft 数据切口
+
+首个正向链只实现 user owner 的 `CreateSkillDraft`，不等待 organization/project/session，也不接 Storage。BFF 从每次 IAM
+session admission 的受信 `tenant_id`、`subject_id` 派生
+`owner_scope={kind:"user",id:subject_id}`，并构造 owner 完全相同的 `ProductCatalogContext`；public body 只有 Skill metadata，
+不接收或保存 tenant、subject、owner scope、Product context、Proto command 或 `metadata_json`。首片的
+`metadata_json` 是 BFF 固定产生的 UTF-8 `{}`，不是浏览器事实。
+
+此切口对 BFF canonical schema 的差异必须为零：不新增 Skill、revision、command、receipt、outbox、owner、授权、token、package、
+asset 表或索引，不写 Redis，也不把 `bff_project_skill` 升级为 catalog。BFF 派生的 `command_id` 与 v2 `request_digest` 只随当次
+Connect request 发送；Skill、revision 与 command receipt 只由 Platform 在其 owner schema 和事务中持久化。catalog credential
+文件以及按 tenant/generation 缓存的短期 machine token 是进程配置/内存，不是业务数据；token/secret 不持久化、不进入日志或错误。
+
+`src/bootstrap/server.ts` 当前在业务 route 前运行的 generic `mutationTicket`（包括 PostgreSQL
+`bff_idempotency_receipt` 与进程内 Map）必须对这个精确 operation 跳过，route 收到的 mutation context 恒为 null。首次请求和
+completed replay 都先重新执行当前 IAM user admission 与 `owner.id===subject`，再调用 Platform；BFF 不允许从自己的旧 receipt
+直接返回历史 201。Platform 是唯一 durable receipt owner，负责同 command/digest replay 与同 command/不同 digest 冲突。
+Platform 响应丢失或 BFF 崩溃后，客户端用同 key 重试，BFF 在重新 admission 后向 Platform 发送同 command；没有 BFF
+enqueue、跨库事务、补偿表或 202 接纳语义。
+
+实现门必须以 schema diff/`pnpm schema:check` 证明 BFF 零数据变更，并以测试证明 CreateDraft 路径对 generic Map/PG receipt、
+Project/Conversation store、organization action check 与 Storage client 均为零调用；撤销用户 session 后同 key replay 必须在
+Platform socket 前拒绝。Platform consumer 固定 owner `f26d147a09350c3a041722107d277beb93eaad60` 和 execution v2 aggregate
+SHA-256 `f0a16f8360c075e783c244284b56a1bea5aa3113cc066b25163a60b713a7df25`，不得以旧 Capability HTTP 或 v1 digest
+建立第二套幂等事实。
+
 本片仅文档，不改 `database/schema.sql`、索引、事务代码或安装器。目标六 catalog mutation 不引入 BFF Skill/revision/install、
 IAM role/permission、Storage package 表，不复制 Platform receipt 或缓存 allow；Platform 是 catalog 状态与 command receipt 的唯一 writer。
 BFF 现有 `bff_project_skill` 是 Project 产品关联事实，不升级为 Skill catalog、安装或组织授权事实源。
