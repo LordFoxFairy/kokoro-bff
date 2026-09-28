@@ -1,5 +1,33 @@
 # kokoro-bff data model
 
+## W2-LIBRARY-BFF-FILE：个人文件只读投影目标（2026-09-28，未实施）
+
+当前 BFF `GET /v1/library` 固定 503，不读 Storage，也不写 Library/Asset/Artifact 数据。Storage owner
+`2d87e26bbaed9a70dcd91ad1e9d126d39d275f38` 已在唯一 `kokoro_storage` canonical schema 内按
+`tenant + personal scope`、`upload_purpose=asset`、`scan_state=clean` **先过滤后 keyset 分页**发布 v2
+`ListAssets`；BFF 固定 generated 输入仍是旧 Storage `ef0fd777`。下一片只是把当前用户身份投影到该
+owner RPC，不在 BFF 复制一个文件事实。
+
+目标 `GET /v1/library?kind=file` 的 `items` 是每次从 Storage CLEAN ASSET 映射的瞬时表示，
+`next_cursor` 是绑定受信 tenant/subject/scope/limit 的 owner opaque 翻页位置；每页重新执行 IAM
+admission 与 Storage scope 授权，不保存到 BFF PostgreSQL/Redis 或浏览器长期缓存。BFF 不查询 Storage
+表/Blob/Scan SQL，不按文件创建者、相同摘要或项目成员推断本人权限；个人 `scope_id` 始终为当次可信 subject。
+无匹配返回空页，感染、待扫、package、Artifact 及其他个人/项目/会话范围行不进入此表示。
+
+本列表对 `database/schema.sql`、既有 Project 上传 receipt/事务、Redis DB 8、BFF schema、role、索引、
+retention/outbox 零变更；不创建 `bff_library`、`bff_asset` 或 `bff_artifact` 表，不持久化列表 cursor、
+缓存、receipt 或第二读模型，也不建立跨 owner FK/JOIN/双写。Storage 继续拥有对象生命周期、扫描、
+摘要与短期下载引用。Agent 最终 Artifact 有另一身份/生命周期；F2 kind/title/source、可信 Run 与独立
+列表/下载尚未发布，不能把 personal ASSET 行重命名成 Artifact。
+
+后续**个人上传**不是列表数据模型：BFF 需以 `personal-file-upload:v1 + tenant + subject + key` 的
+独立幂等 namespace/持久 checkpoint 记录自己的 Product 命令恢复，Storage 继续唯一写 Upload/Asset/Scan；
+不得把现 Project receipt 的 `project-resource-upload:v1 + projectId` 或 Project owner predicate 换个路径复用。
+同键请求按文件摘要一致性检查，未知 Complete 后按原 Storage Upload/Asset 恢复，不双写 Asset。
+后续**个人下载**每次重验当次 scope，并以 GetAsset 检查 `upload_purpose=ASSET`、CLEAN 后才向 Storage
+索取新的 GetDownloadReference；短期 URL 不写 BFF receipt、列表或长期业务事实。Storage 当前
+GetDownloadReference 自身没有固定普通 ASSET purpose，单独调用它不足以保证此 Product 语义。
+
 ## W1E-IAM-0.7-BFF-PIN：当前数据边界
 
 IAM 0.7 仍唯一拥有 Organization Skill 授权决定。BFF 的窄 `SkillAuthorizationClient` 只作每次在线查询，

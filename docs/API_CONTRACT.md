@@ -1,5 +1,49 @@
 # kokoro-bff API contract policy
 
+## W2-LIBRARY-BFF-FILE：个人文件公开契约目标（2026-09-28，OpenAPI 尚未修改）
+
+当前机器事实仍为 [`../contract/openapi/v1/openapi.yaml`](../contract/openapi/v1/openapi.yaml) 的 `GET /v1/library`、
+`listLibrary` 与 `storage.library.read` metadata：IAM admission 后固定 `503 storage_integration_unavailable`，无 200
+或成功 Library schema。BFF Storage manifest 仍 pin `ef0fd777`/combined SHA-256
+`05c6ef390c06b512218520b44e76d2d3212630df574a4fd63b6238b05631189f`；Storage 新发布的
+`2d87e26`/`11edffcdd668c59ef07c7b4c47d44b38dd95c2b8aee5a4d0c6475fba58850713` 尚未由 BFF 消费。
+本节是目标设计，不作为 generated SDK 输入或接口可用证明。
+
+路径比较：**采用**原 `GET /v1/library`/`listLibrary`，将 `kind=file` 设为必填；**淘汰**另起
+`/v1/library/files` 并使旧 path/operationId 语义悬空，亦不建 alias。缺失、空值、重复或未知 kind 都是
+`400 invalid_library_kind`，无参不会静默改为个人文件。首片仅支持 file；Agent Artifact 与 all 分别在其
+owner 链/双源复合 cursor 验收后发布，不能提前给不存在的成功样本。
+
+| 目标 public wire | 语义                                                                                                                                                                                                                                                                                                                                 |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 请求             | `GET /v1/library?kind=file&limit=50&cursor=...`；只允许这三个单值 query、无 body。`limit` 省略为 50、范围 1–100；`cursor` 可省略，存在时长度 1–4096，仅原样回传，不作为授权。                                                                                                                                                        |
+| 200              | `{data:{items:[...],next_cursor:string\|null},meta:{request_id}}`；空列表 `items:[]`/`next_cursor:null`。页最大 100，`Cache-Control:no-store`、`x-request-id`。                                                                                                                                                                      |
+| `items[]` 首片   | 严格对象：`kind:"file"`、`asset_id`、`filename`、`mime_type`、十进制字符串 `size_bytes`、小写 64hex `content_sha256`、`scan_state:"clean"`、RFC3339 UTC `created_at`。Storage `origin=generated` 也不将普通 ASSET 变成 Artifact。没有上传 ID、对象 key、短期 URL、`artifact_id`、`session_id`。                                      |
+| 分页             | Storage personal cursor kind=`personal_library`，绑定受信 tenant、scope、caller、subject、limit；SQL 先筛 CLEAN/ASSET，按 `created_at DESC, asset_id ASC`。BFF 每页重建本人 scope；cursor 是位置而非快照/权限，跨用户/租户/scope/limit 或非法 cursor 映射稳定 400。                                                                  |
+| 错误             | 普通 Product admission 的 service/Bearer/IAM/fixed-tenant 401/403/429/503 保持；本路由非法 kind 或分页为 `400 invalid_library_kind`/`400 invalid_library_page`，owner 坏页/字段为 `502 storage_response_invalid`，缺配置/不可达/超时/受信 scope 被拒为 `503 storage_unavailable`。不泄露 owner 原文/secret，不把依赖错误映射空数组。 |
+
+当前 `x-kokoro-permission: storage.library.read` 是 BFF public operation 分类 metadata，不是浏览器自报 IAM grant
+或 Storage caller 凭据。本片保留现有 metadata；真实本人授权来自当前 service+Bearer+IAM admission 与
+`scope_kind=personal, scope_id=subject_id`。若未来 File/Artifact 拆权限，需单独评审并变更 owner OpenAPI
+及消费者，不能只改展示标签。未来 `kind:"artifact"` 有独立 `artifact_id`、Storage F2 kind/title/source、
+可信 Agent Run 与当前资源授权；新增 union 分支可能让穷尽式 generated client 破坏，必须做 breaking/consumer 检查。
+
+**个人上传的下一独立 Product 契约。** 需另发布单文件、有界 multipart、Idempotency-Key、独立 personal
+命令/receipt namespace、CLEAN 成功与感染终态/待扫可重试/未知 Complete 同键恢复；请求不接受 tenant、subject
+或 scope。现 `POST /v1/projects/{projectId}/resources` 的 Project predicate 与
+`project-resource-upload:v1 + projectId` 不能复用为个人身份。Web 同源入口及浏览器选择/失败重试另验。
+
+**个人下载的下一独立 Product 契约。** 列表不带 URL；每次从本人 admission 重建 scope，先用 Storage
+`GetAsset(asset_id,content_sha256)` 确认 `upload_purpose=ASSET`、CLEAN、同 scope，再调用
+`GetDownloadReference` 签临时引用。Storage 该签发方法目前只管 clean/scope，不能单独证明普通文件用途。
+Product path、响应采用受限重定向或流式传输、Content-Disposition、短期引用过期映射须独立设计/测试；
+摘要和 cursor 不是权限。当前 Web `/api/session/artifacts` 的 content-hash 作品形状不等于个人文件列表，
+不可作为正式 GET 或下载 fallback，也不能在失败时显示预览空列表。
+
+代码阶段必须先把本节字段/参数/错误写入唯一 public OpenAPI，精确固定 Storage 新 Proto/生成 manifest，
+再以 contract semantic、generated drift、坏 owner 页、当前 subject 重试与跨 subject cursor 负例验证；
+随后切 runtime 并删除固定 503 stub。本 Markdown 不维护第二份可编辑机器 schema。
+
 ## W1E-IAM-0.6-BFF-PIN：历史来源
 
 IAM owner `a4c2b61467f1fc1772d6b6d8e98f081c090289fb` 的 internal OpenAPI `0.6.0` 原始 SHA-256 为
@@ -423,9 +467,9 @@ service-envelope admission 通过后只返回 `503 storage_integration_unavailab
 503 使用 canonical `ErrorEnvelope`，当前 `meta.request_id` 行为保持不变。机器契约删除了
 不可达的 200 success 与仅服务旧 transport 的 `LibraryResponse`/`LibraryItem` schema；这不是 Library 可用性声明。
 
-未来 W2 success contract 必须在 Storage Proto v2 over ConnectRPC、caller × operation × scope、Capability scope
-mapping、trusted Run/ExecutionIdentity 与 per-kind 或 BFF composite pagination 全部确定后重新发布；W1 IAM admission 已在
-Task 1 本变更闭环。
+此处旧全 Library 前置现已拆分：上文个人 `kind=file` 首片以已发布 Storage personal CLEAN ASSET
+ListAssets、本人 admission 和单 kind 分页定义独立 200；Agent Artifact/Capability 关联与 `kind=all` 仍待
+trusted Run/ExecutionIdentity、能力 scope 和双源复合分页分别定稿。W1 IAM admission 已在 Task 1 闭环。
 本切片不激活 Storage edge，不接受旧 HTTP fallback，也不把 placeholder 200 当作兼容承诺。
 
 ## Capability projection dependency

@@ -1,5 +1,44 @@
 # kokoro-bff 技术设计
 
+## W2-LIBRARY-BFF-FILE：个人文件 Product 列表设计门（2026-09-28，未实施）
+
+**当前态。** BFF main `31c4803b3df0e90c031a97844f89df384ca1a35c` 的 `GET /v1/library` 在普通用户 IAM admission
+后由 `src/http/routes/owner.ts` 固定返回 `503 storage_integration_unavailable`；public OpenAPI 没有 200。
+`contract/dependencies/storage-connect.json` 仍 pin Storage `ef0fd7779bf434120ac1f8a58592222f534a7c45`，combined SHA-256
+`05c6ef390c06b512218520b44e76d2d3212630df574a4fd63b6238b05631189f`，既有消费仅用 project scope。
+Storage main `2d87e26bbaed9a70dcd91ad1e9d126d39d275f38` 已发布**新 owner 来源**：原 v2 `ListAssets` 现准
+`web-bff + personal` 且受信 `scope_id=subject_id`，combined SHA-256
+`11edffcdd668c59ef07c7b4c47d44b38dd95c2b8aee5a4d0c6475fba58850713`；BFF 尚未固定/调用。
+
+| 设计门                 | 裁决                                                                                                                                                                                                                                                                                                                                                                                     |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner / 目标           | BFF 唯一拥有 public Product Library、个人授权和响应投影；Storage 唯一拥有 Asset/Scan/Blob。首片只列当次本人 personal scope 的 CLEAN 普通 ASSET，不列 Agent Artifact、Project 资源、包或他人文件。                                                                                                                                                                                        |
+| 公共路径 A（采用）     | 保留 `GET /v1/library`、`listLibrary`，但 `kind=file` **必填**；缺失、重复、空值或未知 kind 返回 400。不把无参“作品资料库”暗中改为“文件柜”。未来 `kind=artifact` 待 F2/可信 Agent 链，`kind=all` 待真实双源复合分页。                                                                                                                                                                    |
+| 公共路径 B（本片淘汰） | 新 `/v1/library/files` 类型直观，但旧 `/v1/library` 和 `listLibrary` 的正式语义仍需重裁；两者共存或 alias 造成双轨。本片用原 path 加显式 kind，后续若改变须按 breaking policy 评审。                                                                                                                                                                                                     |
+| 代码位置（下一代码片） | 对比把查询/Connect/错误继续堆进泛 `owner.ts` 与在已有 `src/http/routes/` 添加具名个人 Library 列表 handler：采用后者，在 server 普通用户 admission 后精确分发，删除原 503 分支。Storage client 放在已有 `src/infrastructure/clients/storage/`，generated wire 类型止于该边界；现 `StorageUploadClient` 构造器硬编码 project，不伪造 `projectId=subjectId` 来复用。无新模块、目录或进程。 |
+| 身份与失败             | 原有 service envelope → 单一 Bearer → IAM 在线 admission → 固定 Product tenant → 严格 query → 从当次 RequestContext 组装 tenant/subject、`scope_kind=personal`、`scope_id=subject_id` → v2 Connect `ListAssets`。每页重验；浏览器 header/body、cursor、文件创建者、同 hash、Team 成员不是个人授权。缺配置/超时/依赖拒绝 fail closed，坏 owner 页 502，不以错误伪装空页。                 |
+| 分页与数据             | `limit` 省略为 50、有效 1–100；有界 opaque cursor。Storage 在 SQL 页前筛 `upload_purpose=ASSET AND scan_state=CLEAN`，按 `created_at DESC, asset_id ASC`，personal/project cursor 种类隔离。BFF 不后过滤、不自动重试、不新增 Library/Asset/Artifact 表、缓存、receipt、跨 owner SQL/角色/schema；空页 200，依赖失败非空页。                                                              |
+| 删除与验证             | 下一代码片精确重钉 Storage commit/digest，先发布唯一 public OpenAPI 200/测试，再切 runtime、删除固定 503 stub；不接 Storage 内部 HTTP 或 fallback。单仓 contract、admission/越权/坏页、Node22 全门；Root 真实 Storage/PG 与浏览器刷新/私有负例。文档门不改机器/运行。                                                                                                                    |
+
+首片 public item 以 `kind:"file"` 判别，同时保留 Storage opaque `asset_id`、`filename`、`mime_type`、十进制
+`size_bytes`、`content_sha256`、`scan_state:"clean"` 与 UTC `created_at`；没有 `artifact_id`、`title`、`session_id`、
+`content_hash`、对象 key 或 URL。未来 `kind:"artifact"` 须以 Storage F2 的独立 Artifact 身份、kind/title/source、
+Agent 可信 Run/ExecutionIdentity 与正式产物列表为前置；新增 union 分支须评审 generated consumer breaking。
+Web 旧 `/api/session/artifacts` 内容哈希列表不成为此 API 的别名，也不把个人文件渲染成“作品”。
+
+**后续个人上传纵切（不由列表 200 代替）。** Storage 现有 personal CreateUpload/Complete/Scan/Asset owner 能力不等于
+BFF/Web 有用户入口。BFF 后续单独发布有界单文件 multipart Product POST、强制 Idempotency-Key 与独立
+`personal-file-upload:v1 + tenant + subject + key` 幂等域；从当次 IAM subject 建 personal scope，不能沿用 Project
+predicate 或 `project-resource-upload:v1 + projectId` checkpoint/receipt key。可以复用已验证的 1 MiB 上限、安全
+ObjectStore PUT、CLEAN/INFECTED/PENDING 语义和未知 Complete 的持久恢复机制，但每次重放先重验个人身份，
+同键不同文件冲突，只有 CLEAN 后才公开稳定 Asset。Web 同源适配、选择文件、失败同键重试、刷新与私有负例单独验收。
+
+**后续个人下载纵切（也不由列表 200 代替）。** Storage `GetDownloadReference` 当前校验 clean/scope，
+**并未固定 `upload_purpose=ASSET`**。BFF 必须先在当次 personal scope 用 `GetAsset` 复核稳定
+`asset_id + content_sha256`、`upload_purpose=ASSET` 与 CLEAN，再以同 scope 请求短期引用；摘要与 cursor 不是授权凭据。
+短期 URL 不入长期列表/receipt。公开动作的受限重定向或受控字节转发、Content-Disposition/Referrer-Policy
+与过期错误属于独立 Product 契约门，不能直接从列表拼 URL 或签出 package/Artifact 普通下载。
+
 ## W1E-IAM-0.6-BFF-PIN：IAM 历史来源
 
 IAM owner `a4c2b61467f1fc1772d6b6d8e98f081c090289fb` 的 internal OpenAPI `0.6.0` SHA-256 为
@@ -685,10 +724,11 @@ Storage 继续唯一拥有 Asset、Artifact、Blob、Upload 与对象生命周�
 
 在 W2 前，IAM admission 通过后的 `GET /v1/library` 固定返回 `503 storage_integration_unavailable`；准入前按 Task 1
 规则返回 401/403/429/503，其中 IAM 不可用为 `503 iam_admission_unavailable`。该响应完全在
-BFF 本地构造，不打开任何 Storage socket 或连接，不创建 PostgreSQL 事务、Redis cache、receipt 或 outbox。未来成功态
-只有在 Storage default-deny caller × operation × scope、Capability scope mapping 与拒绝规则、Agent trusted
-Run/ExecutionIdentity scope，以及 Library per-kind 或 BFF composite pagination 同时闭环后，
-才按真实 owner contract 重新设计并发布。
+BFF 本地构造，不打开任何 Storage socket 或连接，不创建 PostgreSQL 事务、Redis cache、receipt 或 outbox。
+这是当时的全 Library/Artifact 前置口径，不适用于上文已分出的个人 `kind=file` 首片：该首片只依赖
+Storage 已发布的 `web-bff + personal` CLEAN ASSET ListAssets、当次本人 admission 和单 kind 分页。
+Agent Artifact、Capability 关联与 `kind=all` 仍须分别完成可信 Run/ExecutionIdentity、能力 scope 和双源分页后发布；
+个人文件通过不等于完整 Library 或 `EDGE-BFF-STORAGE` 全边激活。
 
 ## Capability consumer cutover
 
