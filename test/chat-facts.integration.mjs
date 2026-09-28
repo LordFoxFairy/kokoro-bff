@@ -52,13 +52,13 @@ async function waitFor(predicate, timeoutMs = 5000) {
   throw new Error("condition was not met before timeout")
 }
 
-function config() {
+function config(tenantId = "tenant_test") {
   return {
     host: "127.0.0.1",
     port: 4300,
     mode: "live",
     domain: "dev.kokoro.localhost",
-    tenantId: "tenant_test",
+    tenantId,
     iamBaseUrl: null,
     sharedSecret: "web-secret",
     upstreamSecret: "bff-secret",
@@ -114,9 +114,9 @@ integrationTest("creates a Web-local first Conversation with its turn and Agent 
     store = new PostgresBffRepositories(postgresUrl, redisUrl)
     await store.ready()
     const runtimeConfig = {
-      ...config(),
+      ...config(tenant),
       agentEnabled: true,
-      upstreams: { ...config().upstreams, agents: "http://127.0.0.1:9" },
+      upstreams: { ...config(tenant).upstreams, agents: "http://127.0.0.1:9" },
     }
     bff = createBffServer(runtimeConfig, {
       businessStore: store,
@@ -379,7 +379,7 @@ integrationTest("serves tenant-scoped Chat facts from BFF PostgreSQL and revokes
       [`message_${Date.now()}_second`, tenant, conversationId, "run_opaque", "Second high sequence", "9223372036854775807"],
     )
     await redis.connect()
-    bff = createBffServer(config(), { sessionAdmission })
+    bff = createBffServer(config(tenant), { sessionAdmission })
     const base = await listen(bff)
 
     const listed = await fetch(`${base}/v1/sessions`, { headers: auth(tenant, "chat_user") })
@@ -395,8 +395,7 @@ integrationTest("serves tenant-scoped Chat facts from BFF PostgreSQL and revokes
     assert.equal((await invalidScope.json()).error.code, "invalid_scope")
 
     const otherRead = await fetch(`${base}/v1/sessions/${conversationId}`, { headers: auth(otherTenant) })
-    assert.equal(otherRead.status, 404)
-    assert.equal((await otherRead.json()).error.code, "session_not_found")
+    assert.equal(otherRead.status, 403)
 
     const messages = await fetch(`${base}/v1/sessions/${conversationId}/messages`, { headers: auth(tenant, "chat_user") })
     assert.equal(messages.status, 200)
@@ -522,7 +521,7 @@ integrationTest("serves tenant-scoped Chat facts from BFF PostgreSQL and revokes
       headers: { ...auth(otherTenant), "content-type": "application/json", "idempotency-key": "chat-cross-tenant-title" },
       body: JSON.stringify({ title: "Should not cross tenant" }),
     })
-    assert.equal(crossTenantTitle.status, 404)
+    assert.equal(crossTenantTitle.status, 403)
 
     const revoked = await fetch(`${base}/v1/sessions/${conversationId}/share`, {
       method: "DELETE",
@@ -553,7 +552,7 @@ integrationTest("accepts a Chat turn after the message and Agent dispatch are du
   let agentAvailable = false
   let launchAttempts = 0
   try {
-    await pool.query("DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE")
+    await pool.query("DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE")
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await pool.query(
       `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title)
@@ -582,7 +581,7 @@ integrationTest("accepts a Chat turn after the message and Agent dispatch are du
       }))
     })
     const agentBase = await listen(agent)
-    const runtimeConfig = config()
+    const runtimeConfig = config(tenant)
     runtimeConfig.agentEnabled = true
     runtimeConfig.upstreams.agents = agentBase
     bff = createBffServer(runtimeConfig, { sessionAdmission })
@@ -730,7 +729,7 @@ integrationTest("reclaims expired Agent dispatch leases and rejects stale or cro
   const conversationId = `conversation_fence_${Date.now()}`
   let store
   try {
-    await pool.query("DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE")
+    await pool.query("DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE")
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await pool.query(
       `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title)
@@ -813,7 +812,7 @@ integrationTest("claims Agent launches in persisted conversation FIFO and termin
   const conversationId = `conversation_fifo_${Date.now()}`
   let store
   try {
-    await pool.query("DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE")
+    await pool.query("DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE")
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await pool.query(
       `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title)
@@ -898,7 +897,7 @@ integrationTest("projects fenced dispatch failures as durable RUN_ERROR terminal
   let agent
   let agentRequests = 0
   try {
-    await pool.query("DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE")
+    await pool.query("DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE")
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await pool.query(
       `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title)
@@ -1004,7 +1003,7 @@ integrationTest("projects fenced dispatch failures as durable RUN_ERROR terminal
       response.end(JSON.stringify({ error: { code: "unexpected", message: "must not poll" } }))
     })
     const agentBase = await listen(agent)
-    const runtimeConfig = config()
+    const runtimeConfig = config(tenant)
     runtimeConfig.agentEnabled = true
     runtimeConfig.upstreams.agents = agentBase
     bff = createBffServer(runtimeConfig, { sessionAdmission })
@@ -1035,7 +1034,7 @@ integrationTest("deletion atomically fences launches and enqueues durable cancel
   const conversationId = `conversation_delete_${Date.now()}`
   let store
   try {
-    await pool.query("DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE")
+    await pool.query("DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE")
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await pool.query(
       `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title)

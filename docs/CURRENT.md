@@ -3,6 +3,32 @@
 状态：2026-09-28
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。
 
+## W2-F2-S5 第一代码片：上游来源与持久关联（2026-09-28；Root 已验，Product API 未发布）
+
+本片已将 Storage F2 Proto 固定到 `d5cfc442c675e32363ae767f5ec662a9e0d9eaea` 并确定性重生
+Connect client；Agent HTTP 旧 pin 保持不变，另列 `486adb1539dd8a06ca90684e66f91be031aa70cf`
+event-protocol 来源，并在本仓 vendor 冻结 `protocol/events.py` 原字节，生成器 `--check` 核文件
+allowlist、regular 与 SHA-256；不依赖兄弟 checkout。BFF 严格解析 Chat `delivery` 的
+artifact/asset/kind/tool-call/摘要及非负安全整数 size，在现有
+`commitProjection` PostgreSQL 事务中，先按 active Conversation 锁定删除竞态，再以已注册
+consumer subject/expected run 与本仓不可变 dispatch 的 tenant/conversation/run/subject 核对，写入
+`bff_conversation_artifact` 关联、source ledger、AG-UI frame 与水位；旧 Run 迟到交付按其历史 dispatch
+核对，不误用最新 expected run 排除。Conversation 软删除同事务清理关联，AG-UI frame GC 不清理关联。
+本表只保存 Agent 不可变来源声明，不复制 Storage Artifact metadata。
+新具名 `src/infrastructure/postgres/conversation-artifact-projection.ts` 只负责关联的 Conversation 锁与
+同事务 INSERT：采用它而非把关联 SQL 再堆进现有 AG-UI repository；调用仍由后者拥有事务和 source
+顺序，未新建业务层、进程、数据库或跨 owner import。目标 Product 读取将另由具名查询/route 承接，
+不在本片建立空目录或提前发布 API。
+
+**尚未实现 Product Artifact API。** 当前唯一 OpenAPI、Library 路由、Storage Final Artifact 读取与原字节下载
+均未在此片改动；用户不能通过 `/v1/library?kind=artifact`、单项或 `/content` 访问作品，旧 hash-only
+Chat delivery 和 frame 不是替代入口。本片 Node 22.22.2 的 `pnpm format:check && pnpm check && pnpm schema:check`
+已由 Root 独立重跑：默认全门 353 pass/1 无数据库 skip、Agent/Storage 生成器 `--check`、唯一
+OpenAPI 语义 75 个 frozen operation；自建临时 PostgreSQL 库 + 空 Redis DB8 的 `pnpm test:integration`
+**44/44**、带真实数据库的 `pnpm schema:check` **6/6**，临时库和自有 Redis 键均清零。首轮真集成揭示
+删除关联 SQL 参数序号错误与旧 HTTP fixture 固定租户不一致；同片加直接 RED 回归并修正，扩充 source
+冲突/整页回滚负例，第三轮真集成全绿。此为来源/关联代码片验收，不是 Product API 或浏览器闭环。
+
 ## W2-F2-S5 Agent 作品 Product 链：设计门，运行面未实施
 
 BFF 当前 `main` `d5c868f8ab8b8a33750e1286e9d020ca72895641` 的 public

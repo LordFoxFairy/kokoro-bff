@@ -20,6 +20,7 @@ const integrationTest = postgresUrl && redisUrl ? test : test.skip
 const TABLES = [
   "bff_agui_cursor_tombstone",
   "bff_agui_event",
+  "bff_conversation_artifact",
   "bff_agui_source_event",
   "bff_agui_stream",
   "bff_agent_cancellation_outbox",
@@ -59,6 +60,111 @@ function agentSource({ id, sequence, kind, payload, sessionId = "session_shared"
     },
   }
 }
+
+integrationTest("persists admitted Artifact deliveries with source frames and removes links on Conversation deletion", async () => {
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
+  let store = null
+  try {
+    await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
+    await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
+    await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    await store.ready()
+    const tenantId = "tenant_artifact_projection"
+    const sessionId = "session_artifact_projection"
+    const ownerId = "owner_artifact_projection"
+    await pool.query(
+      "INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title) VALUES ($1, $2, $3, 'Artifact projection')",
+      [sessionId, tenantId, ownerId],
+    )
+    const submit = (number) => store.services.chatTurns.submit({
+      tenantId, conversationId: sessionId, subjectId: ownerId, actorId: ownerId,
+      requestId: `request_artifact_${number}`, idempotencyKey: `turn_artifact_${number}`, content: `Turn ${number}`,
+    })
+    const firstRun = await submit(1)
+    const secondRun = await submit(2)
+    assert.ok(firstRun && secondRun)
+    const payload = (artifactId, hash = "a".repeat(64)) => ({
+      tool_call_id: "tool_artifact", artifact_id: artifactId, asset_id: `asset_${artifactId}`,
+      artifact_kind: "document", content_hash: hash, path: "/report.md", title: "Report", mime: "text/markdown", size: 12,
+    })
+    const source = (sequence, artifactId, runId = firstRun.run_id) => agentSource({
+      id: `artifact_source_${sequence}`, sequence, kind: "delivery.created", payload: payload(artifactId), sessionId, runId,
+    })
+    const first = source(1, "artifact_first")
+    // expected_run_id now points at turn 2, but the immutable first dispatch still admits its late delivery.
+    assert.equal((await store.agUi.ingest(tenantId, sessionId, [first])).insertedSources, 1)
+    const linked = async () => (await pool.query(
+      "SELECT artifact_id, run_id, source_event_id, source_artifact_kind, source_content_sha256 FROM bff_conversation_artifact WHERE tenant_id = $1 AND conversation_id = $2 ORDER BY artifact_id",
+      [tenantId, sessionId],
+    )).rows
+    assert.deepEqual(await linked(), [{
+      artifact_id: "artifact_first", run_id: firstRun.run_id, source_event_id: "artifact_source_1",
+      source_artifact_kind: "document", source_content_sha256: "a".repeat(64),
+    }])
+    assert.equal((await store.agUi.ingest(tenantId, sessionId, [first])).insertedSources, 0)
+    await assert.rejects(
+      store.agUi.ingest(tenantId, sessionId, [source(1, "artifact_changed")]),
+      /source identity conflict/u,
+    )
+    await assert.rejects(
+      store.agUi.ingest(tenantId, sessionId, [agentSource({
+        id: "artifact_source_1_renamed", sequence: 1, kind: "delivery.created",
+        payload: payload("artifact_first"), sessionId, runId: firstRun.run_id,
+      })]),
+      /source identity conflict/u,
+    )
+    assert.equal((await linked()).length, 1)
+    await pool.query("DELETE FROM bff_agui_event WHERE tenant_id = $1 AND session_id = $2", [tenantId, sessionId])
+    assert.equal((await linked()).length, 1)
+
+    // The first source/frame/link in this page must roll back when the second
+    // source reuses an already associated Artifact identity.
+    await assert.rejects(
+      store.agUi.ingest(tenantId, sessionId, [
+        source(2, "artifact_provisional", secondRun.run_id),
+        source(3, "artifact_first", secondRun.run_id),
+      ]),
+      /source identity conflict/u,
+    )
+    assert.equal((await store.agUi.status(tenantId, sessionId)).sourceHighWatermark, 1)
+    assert.equal((await pool.query("SELECT 1 FROM bff_agui_source_event WHERE tenant_id = $1 AND session_id = $2 AND source_sequence >= 2", [tenantId, sessionId])).rowCount, 0)
+    assert.equal((await pool.query("SELECT 1 FROM bff_agui_event WHERE tenant_id = $1 AND session_id = $2", [tenantId, sessionId])).rowCount, 0)
+    assert.deepEqual((await linked()).map((row) => row.artifact_id), ["artifact_first"])
+
+    for (const [label, runId] of [["never_dispatched", "run_not_dispatched"], ["wrong_subject", secondRun.run_id]]) {
+      if (label === "wrong_subject") {
+        await pool.query("UPDATE bff_agent_dispatch_outbox SET subject_id = 'other_member' WHERE tenant_id = $1 AND run_id = $2", [tenantId, runId])
+      }
+      await assert.rejects(
+        store.agUi.ingest(tenantId, sessionId, [source(2, `artifact_${label}`, runId)]),
+        /AGUI_ARTIFACT_BINDING_MISSING/u,
+      )
+      assert.equal((await store.agUi.status(tenantId, sessionId)).sourceHighWatermark, 1)
+      assert.equal((await pool.query("SELECT 1 FROM bff_agui_source_event WHERE tenant_id = $1 AND session_id = $2 AND source_sequence = 2", [tenantId, sessionId])).rowCount, 0)
+      if (label === "wrong_subject") {
+        await pool.query("UPDATE bff_agent_dispatch_outbox SET subject_id = $3 WHERE tenant_id = $1 AND run_id = $2", [tenantId, runId, ownerId])
+      }
+    }
+    await assert.rejects(
+      store.agUi.ingest(tenantId, sessionId, [source(2, "artifact_first", secondRun.run_id)]),
+      /source identity conflict/u,
+    )
+    assert.equal((await store.agUi.status(tenantId, sessionId)).sourceHighWatermark, 1)
+    await store.agUi.ingest(tenantId, sessionId, [source(2, "artifact_second", secondRun.run_id)])
+    assert.equal((await linked()).length, 2)
+    assert.equal(await store.services.chat.deleteConversation(tenantId, ownerId, sessionId, "delete-artifact-projection"), true)
+    assert.deepEqual(await linked(), [])
+    await assert.rejects(
+      store.agUi.ingest(tenantId, sessionId, [source(3, "artifact_late", secondRun.run_id)]),
+      /AGUI_ARTIFACT_BINDING_MISSING/u,
+    )
+    assert.deepEqual(await linked(), [])
+  } finally {
+    if (store !== null) await store.close()
+    await pool.end()
+  }
+})
 
 integrationTest("reconciles the BFF assistant Message with the committed Agent source ledger", async () => {
   const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })

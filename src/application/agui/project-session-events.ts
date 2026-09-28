@@ -24,10 +24,13 @@ import type {
   AgUiSourceIdentity,
   AgUiSourceProjection,
   AgUiConsumerLease,
+  AgUiArtifactDelivery,
 } from "./ports/agui-projection-repository.js"
 
 const MAX_COMMIT_ATTEMPTS = 5
 const OPAQUE_CURSOR_PATTERN = /^agui_[0-9a-f]{32}$/u
+const SHA256_PATTERN = /^[0-9a-f]{64}$/u
+const ARTIFACT_KINDS = new Set(["document", "code", "image", "audio", "video", "data", "archive", "other"])
 
 export type AgentProjectionSource = {
   sourceEventId: string
@@ -105,6 +108,25 @@ function orderedSources(sources: readonly AgentProjectionSource[], sessionId: st
   return ordered
 }
 
+function artifactDelivery(event: ChatEvent): AgUiArtifactDelivery {
+  const required = (value: unknown): string => {
+    if (typeof value !== "string" || value.trim() === "") throw new AgUiSourceContractError()
+    return value
+  }
+  const payload = event.payload
+  const artifactKind = required(payload.artifact_kind)
+  const contentSha256 = required(payload.content_hash)
+  if (!ARTIFACT_KINDS.has(artifactKind) || !SHA256_PATTERN.test(contentSha256)) throw new AgUiSourceContractError()
+  return {
+    runId: required(event.run_id),
+    toolCallId: required(payload.tool_call_id),
+    artifactId: required(payload.artifact_id),
+    assetId: required(payload.asset_id),
+    artifactKind: artifactKind as AgUiArtifactDelivery["artifactKind"],
+    contentSha256,
+  }
+}
+
 function projectSources(
   sources: readonly AgentProjectionSource[],
   state: AgUiProjectionState,
@@ -112,6 +134,9 @@ function projectSources(
   return sources.map((source) => {
     const frames = source.event === null ? [] : validateAgUiFrames(projectChatEvent(source.event, state))
     const event = source.event
+    if (event?.kind === "delivery.created") {
+      return { ...sourceIdentity(source), frames, artifactDelivery: artifactDelivery(event) }
+    }
     if (event === null || event.run_id === null || event.run_id === "") return { ...sourceIdentity(source), frames }
     const runId = event.run_id
     if (event.kind === "message.delta") {

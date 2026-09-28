@@ -35,6 +35,45 @@ const event = (sequence, overrides = {}) => ({
 })
 
 describe("Agent event page boundary", () => {
+  it("requires the pinned S4 delivery identity and kind instead of a hash-only success", () => {
+    const delivery = event(1, {
+      event_type: "delivery",
+      payload_json: JSON.stringify({
+        tool_call_id: "tool_1",
+        artifact_id: "artifact_1",
+        asset_id: "asset_1",
+        artifact_kind: "code",
+        path: "/report.py",
+        title: "Report",
+        mime: "text/x-python",
+        size: 6,
+        content_hash: "a".repeat(64),
+        note: "",
+      }),
+    })
+    const mapped = agentProjection.mapAgentEvent(delivery)
+    assert.equal(mapped?.kind, "delivery.created")
+    assert.equal(mapped?.payload.artifact_id, "artifact_1")
+    assert.equal(mapped?.payload.asset_id, "asset_1")
+    assert.equal(mapped?.payload.artifact_kind, "code")
+    assert.equal(mapped?.payload.tool_call_id, "tool_1")
+    for (const bad of [
+      { artifact_id: undefined },
+      { asset_id: undefined },
+      { artifact_kind: undefined },
+      { artifact_kind: "unknown" },
+      { artifact_kind: "DOCUMENT" },
+      { content_hash: "bad" },
+      { size: undefined },
+      { size: -1 },
+      { size: 1.5 },
+      { size: Number.MAX_SAFE_INTEGER + 1 },
+    ]) {
+      const payload = { ...JSON.parse(delivery.payload_json), ...bad }
+      assert.throws(() => agentProjection.mapAgentEvent({ ...delivery, payload_json: JSON.stringify(payload) }))
+    }
+  })
+
   it("accepts a contiguous partial page and preserves its source snapshot fence", () => {
     assert.equal(typeof agentProjection.agentEventPage, "function")
     assert.deepEqual(
@@ -392,5 +431,79 @@ describe("AG-UI source continuity defense", () => {
     const service = new AgUiProjectionService(repository)
 
     await assert.rejects(service.ingest("tenant_1", "session_1", [source(2), source(1)]), /source sequence is not contiguous/u)
+  })
+
+  it("projects only a complete typed Artifact delivery claim", async () => {
+    let committed
+    const repository = {
+      readStream: async () => ({ version: 0, sourceHighWatermark: 0, projectionState: { textMessageIds: [], toolCallIds: [] } }),
+      assertPersistedSources: async () => undefined,
+      commitProjection: async (command) => {
+        committed = command
+        return "committed"
+      },
+    }
+    const service = new AgUiProjectionService(repository)
+    const payload = {
+      tool_call_id: "tool_1",
+      artifact_id: "artifact_1",
+      asset_id: "asset_1",
+      artifact_kind: "document",
+      content_hash: "a".repeat(64),
+      path: "/report.md",
+      title: "Report",
+      mime: "text/markdown",
+      size: 12,
+    }
+    const delivery = {
+      sourceEventId: "delivery_1",
+      sourceSequence: 1,
+      sourceOccurredAt: "2026-09-28T00:00:00.000Z",
+      sourcePayload: { event_type: "delivery", payload_json: JSON.stringify(payload) },
+      event: {
+        event_id: "delivery_1",
+        seq: 1,
+        session_id: "session_1",
+        run_id: "run_1",
+        kind: "delivery.created",
+        timestamp: "2026-09-28T00:00:00.000Z",
+        payload,
+      },
+    }
+    await service.ingest("tenant_1", "session_1", [delivery])
+    assert.deepEqual(committed.sources[0].artifactDelivery, {
+      runId: "run_1",
+      toolCallId: "tool_1",
+      artifactId: "artifact_1",
+      assetId: "asset_1",
+      artifactKind: "document",
+      contentSha256: "a".repeat(64),
+    })
+    for (const invalid of [
+      { artifact_id: undefined },
+      { asset_id: undefined },
+      { artifact_kind: "unknown" },
+      { content_hash: "BAD" },
+      { tool_call_id: undefined },
+    ]) {
+      await assert.rejects(
+        service.ingest("tenant_1", "session_1", [
+          {
+            ...delivery,
+            event: { ...delivery.event, payload: { ...payload, ...invalid } },
+          },
+        ]),
+        AgUiSourceContractError,
+      )
+    }
+    await assert.rejects(
+      service.ingest("tenant_1", "session_1", [
+        {
+          ...delivery,
+          event: { ...delivery.event, run_id: null },
+        },
+      ]),
+      AgUiSourceContractError,
+    )
   })
 })

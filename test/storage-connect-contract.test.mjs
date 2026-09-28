@@ -3,10 +3,10 @@ import { createHash } from "node:crypto"
 import { access, readFile } from "node:fs/promises"
 import { test } from "node:test"
 
-const ownerCommit = "2d87e26bbaed9a70dcd91ad1e9d126d39d275f38"
+const ownerCommit = "d5cfc442c675e32363ae767f5ec662a9e0d9eaea"
 const sources = {
   "kokoro/common/v1/common.proto": "4604725ec7d5896c9d74b53c6f06d19b20ee758d5ab9e1cb90177ede95bba9fd",
-  "kokoro/storage/v2/storage.proto": "f5c10a92addf689c985359b7d82fdbb6d3c3ac753142620b958d1632ee8e265c",
+  "kokoro/storage/v2/storage.proto": "5a5dcaec2e1fd0d5eed369b8f79477fd0f8f653b32f9ebe14a8c339f4eb713ac",
 }
 const root = new URL("../", import.meta.url)
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex")
@@ -37,7 +37,7 @@ async function sourceBytes() {
 test("Storage consumer pins exact owner Proto bytes and generated provenance, not an execution artifact", async () => {
   const manifest = JSON.parse(await requiredFile("contract/dependencies/storage-connect.json"))
   assert.equal(manifest.owner.repository_commit, ownerCommit)
-  assert.equal(manifest.owner.published_combined_sha256, "11edffcdd668c59ef07c7b4c47d44b38dd95c2b8aee5a4d0c6475fba58850713")
+  assert.equal(manifest.owner.published_combined_sha256, "8317e644d45c8db310b44f114afa22892a6a40d6ee7d0c1c4a37a8203e79f427")
   assert.equal(manifest.owner.package_name, "kokoro.storage.v2")
   assert.equal(manifest.owner.repository_path, "apps/kokoro-storage")
   assert.equal(manifest.execution_artifact, null)
@@ -90,5 +90,49 @@ test("Storage generated ListAssets wire contract carries only bounded query and 
   assert.deepEqual(
     ListAssetItemSchema.fields.map((f) => f.name),
     ["asset_id", "filename", "mime_type", "content_sha256", "size_bytes", "upload_purpose", "origin", "scan_state", "created_at"],
+  )
+})
+
+test("Storage F2 generated Artifact reads preserve owner identity and byte-reference fields", async () => {
+  const {
+    StorageService,
+    ArtifactKind,
+    GetFinalArtifactRequestSchema,
+    FinalArtifactItemSchema,
+    GetFinalArtifactDownloadReferenceRequestSchema,
+    GetFinalArtifactDownloadReferenceResponseSchema,
+  } = await import("../dist/generated/storage-connect/kokoro/storage/v2/storage_pb.js")
+  assert.equal(StorageService.method.listFinalArtifacts.name, "ListFinalArtifacts")
+  assert.equal(StorageService.method.getFinalArtifact.name, "GetFinalArtifact")
+  assert.equal(StorageService.method.getFinalArtifactDownloadReference.name, "GetFinalArtifactDownloadReference")
+  assert.deepEqual(
+    Object.entries(ArtifactKind).filter(([name]) => Number.isNaN(Number(name))),
+    [
+      ["UNSPECIFIED", 0],
+      ["DOCUMENT", 1],
+      ["CODE", 2],
+      ["IMAGE", 3],
+      ["AUDIO", 4],
+      ["VIDEO", 5],
+      ["DATA", 6],
+      ["ARCHIVE", 7],
+      ["OTHER", 8],
+    ],
+  )
+  assert.deepEqual(
+    GetFinalArtifactRequestSchema.fields.map((field) => field.name),
+    ["artifact_id"],
+  )
+  assert.deepEqual(
+    FinalArtifactItemSchema.fields.map((field) => field.name),
+    ["artifact_id", "asset_id", "content_sha256", "kind", "title", "source_run_id", "filename", "mime_type", "size_bytes", "created_at", "finalized_at"],
+  )
+  assert.deepEqual(
+    GetFinalArtifactDownloadReferenceRequestSchema.fields.map((field) => field.name),
+    ["command", "artifact_id"],
+  )
+  assert.deepEqual(
+    GetFinalArtifactDownloadReferenceResponseSchema.fields.map((field) => field.name),
+    ["artifact_id", "asset_id", "content_sha256", "download_reference"],
   )
 })

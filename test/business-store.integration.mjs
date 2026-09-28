@@ -49,13 +49,18 @@ function auth(namespace, principal = "user_integration") {
   }
 }
 
+async function assertTenantForbidden(response) {
+  assert.equal(response.status, 403)
+  assert.equal((await response.json()).error.code, "product_tenant_forbidden")
+}
+
 function bffConfig(overrides = {}) {
   return {
     host: "127.0.0.1",
     port: 4300,
     mode: "live",
     domain: "dev.kokoro.localhost",
-    tenantId: "tenant_test",
+    tenantId: overrides.tenantId ?? "tenant_test",
     iamBaseUrl: null,
     sharedSecret: "web-secret",
     upstreamSecret: "bff-secret",
@@ -118,11 +123,11 @@ integrationTest("keeps Project and ScheduledTask facts private to the trusted su
   let bff
   try {
     await pool.query(
-      "DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_scheduled_task_outbox, bff_scheduled_task, bff_project_task, bff_idempotency_receipt, bff_project_instruction_revision, bff_project_skill, bff_project CASCADE",
+      "DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_scheduled_task_outbox, bff_scheduled_task, bff_project_task, bff_idempotency_receipt, bff_project_instruction_revision, bff_project_skill, bff_project CASCADE",
     )
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await redis.connect()
-    bff = createBffServer(bffConfig(), { sessionAdmission })
+    bff = createBffServer(bffConfig({ tenantId: tenant }), { sessionAdmission })
     const base = await listen(bff)
 
     const createProject = async (owner, key) => fetch(`${base}/v1/projects`, {
@@ -137,7 +142,7 @@ integrationTest("keeps Project and ScheduledTask facts private to the trusted su
     const ownerBProjects = await fetch(`${base}/v1/projects`, { headers: auth(tenant, ownerB) })
     assert.deepEqual((await ownerBProjects.json()).data.projects, [])
     const crossTenantProjects = await fetch(`${base}/v1/projects`, { headers: auth(crossTenant, ownerA) })
-    assert.deepEqual((await crossTenantProjects.json()).data.projects, [])
+    await assertTenantForbidden(crossTenantProjects)
 
     const projectBResponse = await createProject(ownerB, "project-b")
     assert.equal(projectBResponse.status, 200)
@@ -155,13 +160,13 @@ integrationTest("keeps Project and ScheduledTask facts private to the trusted su
       body: JSON.stringify({ instruction: "steal" }),
     })
     assert.equal(deniedProjectPatch.status, 404)
-    assert.equal((await fetch(`${base}/v1/projects/${projectA.id}`, { headers: auth(crossTenant, ownerA) })).status, 404)
+    await assertTenantForbidden(await fetch(`${base}/v1/projects/${projectA.id}`, { headers: auth(crossTenant, ownerA) }))
     const crossTenantProjectPatch = await fetch(`${base}/v1/projects/${projectA.id}`, {
       method: "PATCH",
       headers: { ...auth(crossTenant, ownerA), "content-type": "application/json", "idempotency-key": "cross-tenant-project-patch" },
       body: JSON.stringify({ instruction: "steal across tenant" }),
     })
-    assert.equal(crossTenantProjectPatch.status, 404)
+    await assertTenantForbidden(crossTenantProjectPatch)
     const afterDeniedProject = await pool.query("SELECT instruction FROM bff_project WHERE project_id = $1", [projectA.id])
     const afterDeniedProjectReceipts = await pool.query("SELECT count(*)::int AS count FROM bff_idempotency_receipt")
     assert.equal(afterDeniedProject.rows[0].instruction, beforeDeniedProject.rows[0].instruction)
@@ -203,14 +208,14 @@ integrationTest("keeps Project and ScheduledTask facts private to the trusted su
     const ownerBTasks = await fetch(`${base}/v1/scheduled-tasks`, { headers: auth(tenant, ownerB) })
     assert.deepEqual((await ownerBTasks.json()).data.tasks.map((task) => task.id), [taskB.id])
     const crossTenantTasks = await fetch(`${base}/v1/scheduled-tasks`, { headers: auth(crossTenant, ownerA) })
-    assert.deepEqual((await crossTenantTasks.json()).data.tasks, [])
+    await assertTenantForbidden(crossTenantTasks)
 
     const beforeDeniedTask = await pool.query("SELECT prompt FROM bff_scheduled_task WHERE task_id = $1", [taskA.id])
     const beforeDeniedOutbox = await pool.query("SELECT count(*)::int AS count FROM bff_scheduled_task_outbox")
     const beforeDeniedTaskReceipts = await pool.query("SELECT count(*)::int AS count FROM bff_idempotency_receipt")
     const deniedTaskDetail = await fetch(`${base}/v1/scheduled-tasks/${taskA.id}`, { headers: auth(tenant, ownerB) })
     assert.equal(deniedTaskDetail.status, 404)
-    assert.equal((await fetch(`${base}/v1/scheduled-tasks/${taskA.id}`, { headers: auth(crossTenant, ownerA) })).status, 404)
+    await assertTenantForbidden(await fetch(`${base}/v1/scheduled-tasks/${taskA.id}`, { headers: auth(crossTenant, ownerA) }))
     for (const [operation, method, body] of [
       ["patch", "PATCH", { prompt: "steal" }],
       ["retry", "POST", undefined],
@@ -229,7 +234,7 @@ integrationTest("keeps Project and ScheduledTask facts private to the trusted su
       headers: { ...auth(crossTenant, ownerA), "content-type": "application/json", "idempotency-key": "cross-tenant-task-patch" },
       body: JSON.stringify({ prompt: "steal across tenant" }),
     })
-    assert.equal(crossTenantTaskPatch.status, 404)
+    await assertTenantForbidden(crossTenantTaskPatch)
     const afterDeniedTask = await pool.query("SELECT prompt FROM bff_scheduled_task WHERE task_id = $1", [taskA.id])
     const afterDeniedOutbox = await pool.query("SELECT count(*)::int AS count FROM bff_scheduled_task_outbox")
     const afterDeniedTaskReceipts = await pool.query("SELECT count(*)::int AS count FROM bff_idempotency_receipt")
@@ -254,7 +259,7 @@ integrationTest("persists BFF facts, registers Scheduler, and replays Agent disp
   let bff
   try {
     await schemaPool.query(
-      "DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_scheduled_task_outbox, bff_scheduled_task, bff_project_task, bff_idempotency_receipt, bff_project_instruction_revision, bff_project_skill, bff_project CASCADE",
+      "DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_scheduled_task_outbox, bff_scheduled_task, bff_project_task, bff_idempotency_receipt, bff_project_instruction_revision, bff_project_skill, bff_project CASCADE",
     )
     await schemaPool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await redis.connect()
@@ -300,7 +305,7 @@ integrationTest("persists BFF facts, registers Scheduler, and replays Agent disp
     agentBase = await listen(agent)
 
     const targetUrl = "http://kokoro-bff:4300/internal/bff/scheduled-tasks/dispatch"
-    bff = createBffServer(bffConfig({ schedulerBase, agentBase, agentEnabled: true, schedulerTargetUrl: targetUrl }), { sessionAdmission })
+    bff = createBffServer(bffConfig({ tenantId: namespace, schedulerBase, agentBase, agentEnabled: true, schedulerTargetUrl: targetUrl }), { sessionAdmission })
     const base = await listen(bff)
 
     const createHeaders = { ...auth(namespace), "content-type": "application/json", "idempotency-key": "schedule-create-integration" }
@@ -326,7 +331,7 @@ integrationTest("persists BFF facts, registers Scheduler, and replays Agent disp
     assert.equal(schedulerCalls[0].schedule.body.owner_id, "user_integration")
 
     const otherTenant = await fetch(`${base}/v1/scheduled-tasks`, { headers: auth(`${namespace}_other`) })
-    assert.deepEqual((await otherTenant.json()).data.tasks, [])
+    await assertTenantForbidden(otherTenant)
 
     const patched = await fetch(`${base}/v1/scheduled-tasks/${taskId}`, {
       method: "PATCH",
@@ -435,7 +440,7 @@ integrationTest("persists BFF facts, registers Scheduler, and replays Agent disp
     assert.ok(outboxLineage.rows.every((row) => Number(row.fence) >= 1))
 
     await close(bff)
-    bff = createBffServer(bffConfig({ schedulerBase, agentBase, agentEnabled: true, schedulerTargetUrl: targetUrl }), { sessionAdmission })
+    bff = createBffServer(bffConfig({ tenantId: namespace, schedulerBase, agentBase, agentEnabled: true, schedulerTargetUrl: targetUrl }), { sessionAdmission })
     const restartedBase = await listen(bff)
     await new Promise((resolve) => setTimeout(resolve, 100))
     const listed = await fetch(`${restartedBase}/v1/scheduled-tasks`, { headers: auth(namespace) })

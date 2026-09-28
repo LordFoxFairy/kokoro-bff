@@ -21,6 +21,15 @@ export type AgUiAssistantUpdate =
   | { runId: string; kind: "replace" | "append"; content: string }
   | { runId: string; kind: "complete" | "fail" }
 
+export type AgUiArtifactDelivery = {
+  runId: string
+  toolCallId: string
+  artifactId: string
+  assetId: string
+  artifactKind: "document" | "code" | "image" | "audio" | "video" | "data" | "archive" | "other"
+  contentSha256: string
+}
+
 export type AgUiSourceProjection = {
   sourceOwner: "kokoro-agent"
   sourceEventId: string
@@ -29,9 +38,10 @@ export type AgUiSourceProjection = {
   sourceOccurredAt: string
   frames: AgUiEvent[]
   assistantUpdate?: AgUiAssistantUpdate
+  artifactDelivery?: AgUiArtifactDelivery
 }
 
-export type AgUiSourceIdentity = Omit<AgUiSourceProjection, "frames" | "assistantUpdate">
+export type AgUiSourceIdentity = Omit<AgUiSourceProjection, "frames" | "assistantUpdate" | "artifactDelivery">
 
 export type CommitAgUiProjection = {
   tenantId: string

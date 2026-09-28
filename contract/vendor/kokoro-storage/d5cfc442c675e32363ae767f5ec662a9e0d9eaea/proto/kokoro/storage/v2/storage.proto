@@ -3,7 +3,9 @@
 // x-kokoro-tenant-id, x-kokoro-subject-id, and x-kokoro-request-id transport metadata.
 // x-kokoro-scope-kind (personal|project|conversation) and x-kokoro-scope-id are required.
 // Scope is asserted by an authenticated, permitted business owner; body identity is forbidden.
-// web-bff has the product-scope operations; kokoro-platform currently has only
+// kokoro-agent has only conversation/artifact-purpose delivery operations;
+// web-bff retains ordinary personal/project Asset operations and conversation
+// final-Artifact reads, not Artifact writes. kokoro-platform has only
 // GetPackageReference. ListAssets permits only personal or project scope.
 // Service registration alone grants no product-scope operation.
 // Tenant, subject, caller and scope are deliberately absent from request messages.
@@ -18,6 +20,18 @@ enum ArtifactState {
   ARTIFACT_STATE_UNSPECIFIED = 0;
   ARTIFACT_STATE_DRAFT = 1;
   ARTIFACT_STATE_FINAL = 2;
+}
+
+enum ArtifactKind {
+  ARTIFACT_KIND_UNSPECIFIED = 0;
+  ARTIFACT_KIND_DOCUMENT = 1;
+  ARTIFACT_KIND_CODE = 2;
+  ARTIFACT_KIND_IMAGE = 3;
+  ARTIFACT_KIND_AUDIO = 4;
+  ARTIFACT_KIND_VIDEO = 5;
+  ARTIFACT_KIND_DATA = 6;
+  ARTIFACT_KIND_ARCHIVE = 7;
+  ARTIFACT_KIND_OTHER = 8;
 }
 
 enum ScanState {
@@ -216,6 +230,8 @@ message FinalizeArtifactResponse {
   string artifact_id = 1;
   kokoro.storage.v2.ArtifactState state = 2;
   bool replayed = 3;
+  string asset_id = 4;
+  string content_sha256 = 5;
 }
 
 message CreateArtifactRequest {
@@ -225,6 +241,9 @@ message CreateArtifactRequest {
   string asset_id = 4;
   string artifact_id = 5;
   string content_sha256 = 6;
+  kokoro.storage.v2.ArtifactKind kind = 7;
+  string title = 8;
+  string source_run_id = 9;
 }
 
 message CreateArtifactResponse {
@@ -233,6 +252,53 @@ message CreateArtifactResponse {
   string content_sha256 = 3;
   kokoro.storage.v2.ArtifactState state = 4;
   bool replayed = 5;
+  kokoro.storage.v2.ArtifactKind kind = 6;
+  string title = 7;
+  string source_run_id = 8;
+}
+
+message ListFinalArtifactsRequest {
+  uint32 limit = 1;
+  string cursor = 2;
+}
+
+message FinalArtifactItem {
+  string artifact_id = 1;
+  string asset_id = 2;
+  string content_sha256 = 3;
+  kokoro.storage.v2.ArtifactKind kind = 4;
+  string title = 5;
+  string source_run_id = 6;
+  string filename = 7;
+  string mime_type = 8;
+  uint64 size_bytes = 9;
+  google.protobuf.Timestamp created_at = 10;
+  google.protobuf.Timestamp finalized_at = 11;
+}
+
+message ListFinalArtifactsResponse {
+  repeated kokoro.storage.v2.FinalArtifactItem items = 1;
+  optional string next_cursor = 2;
+}
+
+message GetFinalArtifactRequest {
+  string artifact_id = 1;
+}
+
+message GetFinalArtifactResponse {
+  kokoro.storage.v2.FinalArtifactItem item = 1;
+}
+
+message GetFinalArtifactDownloadReferenceRequest {
+  kokoro.common.v1.CommandIdentity command = 1;
+  string artifact_id = 2;
+}
+
+message GetFinalArtifactDownloadReferenceResponse {
+  string artifact_id = 1;
+  string asset_id = 2;
+  string content_sha256 = 3;
+  kokoro.storage.v2.TransferReference download_reference = 4;
 }
 
 message GetDownloadReferenceRequest {
@@ -266,4 +332,7 @@ service StorageService {
   rpc CreateArtifact(kokoro.storage.v2.CreateArtifactRequest) returns (kokoro.storage.v2.CreateArtifactResponse);
   rpc FinalizeArtifact(kokoro.storage.v2.FinalizeArtifactRequest) returns (kokoro.storage.v2.FinalizeArtifactResponse);
   rpc GetDownloadReference(kokoro.storage.v2.GetDownloadReferenceRequest) returns (kokoro.storage.v2.GetDownloadReferenceResponse);
+  rpc ListFinalArtifacts(kokoro.storage.v2.ListFinalArtifactsRequest) returns (kokoro.storage.v2.ListFinalArtifactsResponse);
+  rpc GetFinalArtifact(kokoro.storage.v2.GetFinalArtifactRequest) returns (kokoro.storage.v2.GetFinalArtifactResponse);
+  rpc GetFinalArtifactDownloadReference(kokoro.storage.v2.GetFinalArtifactDownloadReferenceRequest) returns (kokoro.storage.v2.GetFinalArtifactDownloadReferenceResponse);
 }

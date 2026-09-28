@@ -54,6 +54,23 @@ const WEB_FAILURE_CODES = new Set([
   "contract_incompatible",
   "internal_error",
 ])
+const ARTIFACT_KINDS = new Set(["document", "code", "image", "audio", "video", "data", "archive", "other"])
+const SHA256 = /^[0-9a-f]{64}$/u
+
+function artifactKind(value: unknown): string {
+  if (typeof value !== "string" || !ARTIFACT_KINDS.has(value)) throw new Error("Agent delivery artifact_kind is invalid")
+  return value
+}
+
+function contentHash(value: unknown): string {
+  if (typeof value !== "string" || !SHA256.test(value)) throw new Error("Agent delivery content_hash is invalid")
+  return value
+}
+
+function deliverySize(value: unknown): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) throw new Error("Agent delivery size is invalid")
+  return value
+}
 
 export function mapAgentEvent(event: AgentChatEvent): ChatEvent | null {
   const payload = recordPayload(event)
@@ -128,11 +145,15 @@ export function mapAgentEvent(event: AgentChatEvent): ChatEvent | null {
       })
     case "delivery":
       return baseEvent(event, "delivery.created", {
+        tool_call_id: nonEmptyString(payload.tool_call_id, "tool_call_id"),
+        artifact_id: nonEmptyString(payload.artifact_id, "artifact_id"),
+        asset_id: nonEmptyString(payload.asset_id, "asset_id"),
+        artifact_kind: artifactKind(payload.artifact_kind),
         path: nonEmptyString(payload.path, "path"),
         title: nonEmptyString(payload.title, "title"),
         mime: nonEmptyString(payload.mime, "mime"),
-        size: typeof payload.size === "number" ? payload.size : 0,
-        content_hash: nonEmptyString(payload.content_hash, "content_hash"),
+        size: deliverySize(payload.size),
+        content_hash: contentHash(payload.content_hash),
         ...(typeof payload.note === "string" ? { note: payload.note } : {}),
       })
     case "run.completed":

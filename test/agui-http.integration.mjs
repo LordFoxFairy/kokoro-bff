@@ -25,6 +25,7 @@ const TABLES = [
   "bff_agent_cancellation_outbox",
   "bff_agent_dispatch_outbox",
   "bff_agui_event",
+  "bff_conversation_artifact",
   "bff_agui_source_event",
   "bff_agui_stream",
   "bff_scheduled_task",
@@ -75,7 +76,7 @@ function bffConfig({ agentEnabled, agentBase, agUi }) {
     port: 4300,
     mode: "live",
     domain: "dev.kokoro.localhost",
-    tenantId: "tenant_test",
+    tenantId: "tenant_a",
     iamBaseUrl: null,
     sharedSecret: "web-secret",
     upstreamSecret: "bff-secret",
@@ -271,8 +272,8 @@ integrationTest("serves live and restarted replay only from the tenant-scoped Po
     const foreignTenant = await fetch(`${restartedBase}/v1/sessions/session_live/events`, {
       headers: { ...auth("tenant_b"), "last-event-id": originalFrames[1].id },
     })
-    assert.equal(foreignTenant.status, 404)
-    assert.equal((await foreignTenant.json()).error.code, "session_not_found")
+    assert.equal(foreignTenant.status, 403)
+    assert.equal((await foreignTenant.json()).error.code, "product_tenant_forbidden")
 
     const sameTenantOtherSubject = await fetch(`${restartedBase}/v1/sessions/session_live/events`, {
       headers: { ...auth("tenant_a", "other_user"), "last-event-id": originalFrames[1].id },

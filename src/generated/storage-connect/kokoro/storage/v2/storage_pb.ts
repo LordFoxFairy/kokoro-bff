@@ -3,7 +3,9 @@
 // x-kokoro-tenant-id, x-kokoro-subject-id, and x-kokoro-request-id transport metadata.
 // x-kokoro-scope-kind (personal|project|conversation) and x-kokoro-scope-id are required.
 // Scope is asserted by an authenticated, permitted business owner; body identity is forbidden.
-// web-bff has the product-scope operations; kokoro-platform currently has only
+// kokoro-agent has only conversation/artifact-purpose delivery operations;
+// web-bff retains ordinary personal/project Asset operations and conversation
+// final-Artifact reads, not Artifact writes. kokoro-platform has only
 // GetPackageReference. ListAssets permits only personal or project scope.
 // Service registration alone grants no product-scope operation.
 // Tenant, subject, caller and scope are deliberately absent from request messages.
@@ -26,7 +28,7 @@ import type { Message } from "@bufbuild/protobuf"
 export const file_kokoro_storage_v2_storage: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "Ch9rb2tvcm8vc3RvcmFnZS92Mi9zdG9yYWdlLnByb3RvEhFrb2tvcm8uc3RvcmFnZS52MiLtAQoRVHJhbnNmZXJSZWZlcmVuY2USCwoDdXJsGAEgASgJEg4KBm1ldGhvZBgCIAEoCRJTChByZXF1aXJlZF9oZWFkZXJzGAMgAygLMjkua29rb3JvLnN0b3JhZ2UudjIuVHJhbnNmZXJSZWZlcmVuY2UuUmVxdWlyZWRIZWFkZXJzRW50cnkSLgoKZXhwaXJlc19hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAaNgoUUmVxdWlyZWRIZWFkZXJzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASKHAgoTQ3JlYXRlVXBsb2FkUmVxdWVzdBIyCgdjb21tYW5kGAIgASgLMiEua29rb3JvLmNvbW1vbi52MS5Db21tYW5kSWRlbnRpdHkSEAoIZmlsZW5hbWUYBSABKAkSEQoJbWltZV90eXBlGAYgASgJEhIKCnNpemVfYnl0ZXMYByABKAQSFgoOY29udGVudF9zaGEyNTYYCCABKAkSOAoOdXBsb2FkX3B1cnBvc2UYCiABKA4yIC5rb2tvcm8uc3RvcmFnZS52Mi5VcGxvYWRQdXJwb3NlSgQIARACSgQIAxAESgQIBBAFUgpyZXF1ZXN0X2lkUgl0ZW5hbnRfaWRSCG93bmVyX2lkInsKFENyZWF0ZVVwbG9hZFJlc3BvbnNlEhEKCXVwbG9hZF9pZBgBIAEoCRI+ChB1cGxvYWRfcmVmZXJlbmNlGAQgASgLMiQua29rb3JvLnN0b3JhZ2UudjIuVHJhbnNmZXJSZWZlcmVuY2VKBAgDEARSCnVwbG9hZF91cmwirQEKFUNvbXBsZXRlVXBsb2FkUmVxdWVzdBIyCgdjb21tYW5kGAIgASgLMiEua29rb3JvLmNvbW1vbi52MS5Db21tYW5kSWRlbnRpdHkSEQoJdXBsb2FkX2lkGAQgASgJEhYKDmNvbnRlbnRfc2hhMjU2GAUgASgJEhIKCnNpemVfYnl0ZXMYBiABKARKBAgBEAJKBAgDEARSCnJlcXVlc3RfaWRSCXRlbmFudF9pZCKBAQoWQ29tcGxldGVVcGxvYWRSZXNwb25zZRIRCgl1cGxvYWRfaWQYASABKAkSEAoIYXNzZXRfaWQYAiABKAkSMAoKc2Nhbl9zdGF0ZRgDIAEoDjIcLmtva29yby5zdG9yYWdlLnYyLlNjYW5TdGF0ZRIQCghyZXBsYXllZBgEIAEoCCKOAQoSQWJvcnRVcGxvYWRSZXF1ZXN0EjIKB2NvbW1hbmQYAiABKAsyIS5rb2tvcm8uY29tbW9uLnYxLkNvbW1hbmRJZGVudGl0eRIRCgl1cGxvYWRfaWQYBCABKAkSDgoGcmVhc29uGAUgASgJSgQIARACSgQIAxAEUgpyZXF1ZXN0X2lkUgl0ZW5hbnRfaWQiaQoTQWJvcnRVcGxvYWRSZXNwb25zZRIRCgl1cGxvYWRfaWQYASABKAkSLQoFc3RhdGUYAiABKA4yHi5rb2tvcm8uc3RvcmFnZS52Mi5VcGxvYWRTdGF0ZRIQCghyZXBsYXllZBgDIAEoCCI8ChZHZXRVcGxvYWRTdGF0dXNSZXF1ZXN0EhEKCXVwbG9hZF9pZBgCIAEoCUoECAEQAlIJdGVuYW50X2lkIsgBChdHZXRVcGxvYWRTdGF0dXNSZXNwb25zZRIRCgl1cGxvYWRfaWQYASABKAkSLQoFc3RhdGUYAiABKA4yHi5rb2tvcm8uc3RvcmFnZS52Mi5VcGxvYWRTdGF0ZRIXCg9leHBlY3RlZF9zaGEyNTYYBCABKAkSGwoTZXhwZWN0ZWRfc2l6ZV9ieXRlcxgFIAEoBBIRCgltaW1lX3R5cGUYBiABKAkSFQoIYXNzZXRfaWQYByABKAlIAIgBAUILCglfYXNzZXRfaWQibQoPR2V0QXNzZXRSZXF1ZXN0EhAKCGFzc2V0X2lkGAQgASgJEhYKDmNvbnRlbnRfc2hhMjU2GAUgASgJSgQIARACSgQIAhADSgQIAxAEUgpyZXF1ZXN0X2lkUgdjb21tYW5kUgl0ZW5hbnRfaWQitAIKEEdldEFzc2V0UmVzcG9uc2USEAoIYXNzZXRfaWQYASABKAkSFgoOY29udGVudF9zaGEyNTYYBSABKAkSEgoKc2l6ZV9ieXRlcxgGIAEoBBIRCgltaW1lX3R5cGUYByABKAkSMAoKc2Nhbl9zdGF0ZRgIIAEoDjIcLmtva29yby5zdG9yYWdlLnYyLlNjYW5TdGF0ZRI4Cg51cGxvYWRfcHVycG9zZRgKIAEoDjIgLmtva29yby5zdG9yYWdlLnYyLlVwbG9hZFB1cnBvc2USLgoGb3JpZ2luGAsgASgOMh4ua29rb3JvLnN0b3JhZ2UudjIuQXNzZXRPcmlnaW4SEAoIZmlsZW5hbWUYDCABKAlKBAgCEANKBAgJEApSCXRlbmFudF9pZFIKdmlzaWJpbGl0eSIyChFMaXN0QXNzZXRzUmVxdWVzdBINCgVsaW1pdBgBIAEoDRIOCgZjdXJzb3IYAiABKAkivgIKDUxpc3RBc3NldEl0ZW0SEAoIYXNzZXRfaWQYASABKAkSEAoIZmlsZW5hbWUYAiABKAkSEQoJbWltZV90eXBlGAMgASgJEhYKDmNvbnRlbnRfc2hhMjU2GAQgASgJEhIKCnNpemVfYnl0ZXMYBSABKAQSOAoOdXBsb2FkX3B1cnBvc2UYBiABKA4yIC5rb2tvcm8uc3RvcmFnZS52Mi5VcGxvYWRQdXJwb3NlEi4KBm9yaWdpbhgHIAEoDjIeLmtva29yby5zdG9yYWdlLnYyLkFzc2V0T3JpZ2luEjAKCnNjYW5fc3RhdGUYCCABKA4yHC5rb2tvcm8uc3RvcmFnZS52Mi5TY2FuU3RhdGUSLgoKY3JlYXRlZF9hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAibwoSTGlzdEFzc2V0c1Jlc3BvbnNlEi8KBWl0ZW1zGAEgAygLMiAua29rb3JvLnN0b3JhZ2UudjIuTGlzdEFzc2V0SXRlbRIYCgtuZXh0X2N1cnNvchgCIAEoCUgAiAEBQg4KDF9uZXh0X2N1cnNvciKdAQoaR2V0UGFja2FnZVJlZmVyZW5jZVJlcXVlc3QSMgoHY29tbWFuZBgCIAEoCzIhLmtva29yby5jb21tb24udjEuQ29tbWFuZElkZW50aXR5EhAKCGFzc2V0X2lkGAQgASgJEhYKDmNvbnRlbnRfc2hhMjU2GAUgASgJSgQIARACSgQIAxAEUgpyZXF1ZXN0X2lkUgl0ZW5hbnRfaWQi9gEKG0dldFBhY2thZ2VSZWZlcmVuY2VSZXNwb25zZRIQCghhc3NldF9pZBgBIAEoCRJAChJkb3dubG9hZF9yZWZlcmVuY2UYCCABKAsyJC5rb2tvcm8uc3RvcmFnZS52Mi5UcmFuc2ZlclJlZmVyZW5jZRIWCg5jb250ZW50X3NoYTI1NhgEIAEoCRISCgpzaXplX2J5dGVzGAUgASgEEhEKCW1pbWVfdHlwZRgGIAEoCRIwCgpzY2FuX3N0YXRlGAcgASgOMhwua29rb3JvLnN0b3JhZ2UudjIuU2NhblN0YXRlSgQIAxAEUgxkb3dubG9hZF91cmwiOQoUR2V0U2NhblN0YXR1c1JlcXVlc3QSEAoIYXNzZXRfaWQYAiABKAlKBAgBEAJSCXRlbmFudF9pZCJpChVHZXRTY2FuU3RhdHVzUmVzcG9uc2USEAoIYXNzZXRfaWQYASABKAkSKwoFc3RhdGUYAiABKA4yHC5rb2tvcm8uc3RvcmFnZS52Mi5TY2FuU3RhdGUSEQoJcmVwb3J0X2lkGAMgASgJIq8BChdGaW5hbGl6ZUFydGlmYWN0UmVxdWVzdBIyCgdjb21tYW5kGAIgASgLMiEua29rb3JvLmNvbW1vbi52MS5Db21tYW5kSWRlbnRpdHkSEAoIYXNzZXRfaWQYBCABKAkSEwoLYXJ0aWZhY3RfaWQYBSABKAkSFgoOY29udGVudF9zaGEyNTYYBiABKAlKBAgBEAJKBAgDEARSCnJlcXVlc3RfaWRSCXRlbmFudF9pZCJyChhGaW5hbGl6ZUFydGlmYWN0UmVzcG9uc2USEwoLYXJ0aWZhY3RfaWQYASABKAkSLwoFc3RhdGUYAiABKA4yIC5rb2tvcm8uc3RvcmFnZS52Mi5BcnRpZmFjdFN0YXRlEhAKCHJlcGxheWVkGAMgASgIIq0BChVDcmVhdGVBcnRpZmFjdFJlcXVlc3QSMgoHY29tbWFuZBgCIAEoCzIhLmtva29yby5jb21tb24udjEuQ29tbWFuZElkZW50aXR5EhAKCGFzc2V0X2lkGAQgASgJEhMKC2FydGlmYWN0X2lkGAUgASgJEhYKDmNvbnRlbnRfc2hhMjU2GAYgASgJSgQIARACSgQIAxAEUgpyZXF1ZXN0X2lkUgl0ZW5hbnRfaWQimgEKFkNyZWF0ZUFydGlmYWN0UmVzcG9uc2USEwoLYXJ0aWZhY3RfaWQYASABKAkSEAoIYXNzZXRfaWQYAiABKAkSFgoOY29udGVudF9zaGEyNTYYAyABKAkSLwoFc3RhdGUYBCABKA4yIC5rb2tvcm8uc3RvcmFnZS52Mi5BcnRpZmFjdFN0YXRlEhAKCHJlcGxheWVkGAUgASgIIp4BChtHZXREb3dubG9hZFJlZmVyZW5jZVJlcXVlc3QSMgoHY29tbWFuZBgCIAEoCzIhLmtva29yby5jb21tb24udjEuQ29tbWFuZElkZW50aXR5EhAKCGFzc2V0X2lkGAQgASgJEhYKDmNvbnRlbnRfc2hhMjU2GAUgASgJSgQIARACSgQIAxAEUgpyZXF1ZXN0X2lkUgl0ZW5hbnRfaWQi9wEKHEdldERvd25sb2FkUmVmZXJlbmNlUmVzcG9uc2USEAoIYXNzZXRfaWQYASABKAkSQAoSZG93bmxvYWRfcmVmZXJlbmNlGAcgASgLMiQua29rb3JvLnN0b3JhZ2UudjIuVHJhbnNmZXJSZWZlcmVuY2USFgoOY29udGVudF9zaGEyNTYYAyABKAkSEgoKc2l6ZV9ieXRlcxgEIAEoBBIRCgltaW1lX3R5cGUYBSABKAkSMAoKc2Nhbl9zdGF0ZRgGIAEoDjIcLmtva29yby5zdG9yYWdlLnYyLlNjYW5TdGF0ZUoECAIQA1IMZG93bmxvYWRfdXJsKmMKDUFydGlmYWN0U3RhdGUSHgoaQVJUSUZBQ1RfU1RBVEVfVU5TUEVDSUZJRUQQABIYChRBUlRJRkFDVF9TVEFURV9EUkFGVBABEhgKFEFSVElGQUNUX1NUQVRFX0ZJTkFMEAIqhgEKCVNjYW5TdGF0ZRIaChZTQ0FOX1NUQVRFX1VOU1BFQ0lGSUVEEAASFgoSU0NBTl9TVEFURV9QRU5ESU5HEAESFAoQU0NBTl9TVEFURV9DTEVBThACEhcKE1NDQU5fU1RBVEVfSU5GRUNURUQQAxIWChJTQ0FOX1NUQVRFX1VOS05PV04QBCqNAQoNVXBsb2FkUHVycG9zZRIeChpVUExPQURfUFVSUE9TRV9VTlNQRUNJRklFRBAAEiUKIVVQTE9BRF9QVVJQT1NFX0NBUEFCSUxJVFlfUEFDS0FHRRABEhgKFFVQTE9BRF9QVVJQT1NFX0FTU0VUEAISGwoXVVBMT0FEX1BVUlBPU0VfQVJUSUZBQ1QQAyp7CgtVcGxvYWRTdGF0ZRIcChhVUExPQURfU1RBVEVfVU5TUEVDSUZJRUQQABIYChRVUExPQURfU1RBVEVfUEVORElORxABEhoKFlVQTE9BRF9TVEFURV9DT01QTEVURUQQAhIYChRVUExPQURfU1RBVEVfQUJPUlRFRBADKmIKC0Fzc2V0T3JpZ2luEhwKGEFTU0VUX09SSUdJTl9VTlNQRUNJRklFRBAAEhkKFUFTU0VUX09SSUdJTl9VUExPQURFRBABEhoKFkFTU0VUX09SSUdJTl9HRU5FUkFURUQQAjL3CAoOU3RvcmFnZVNlcnZpY2USXwoMQ3JlYXRlVXBsb2FkEiYua29rb3JvLnN0b3JhZ2UudjIuQ3JlYXRlVXBsb2FkUmVxdWVzdBonLmtva29yby5zdG9yYWdlLnYyLkNyZWF0ZVVwbG9hZFJlc3BvbnNlEmUKDkNvbXBsZXRlVXBsb2FkEigua29rb3JvLnN0b3JhZ2UudjIuQ29tcGxldGVVcGxvYWRSZXF1ZXN0Gikua29rb3JvLnN0b3JhZ2UudjIuQ29tcGxldGVVcGxvYWRSZXNwb25zZRJcCgtBYm9ydFVwbG9hZBIlLmtva29yby5zdG9yYWdlLnYyLkFib3J0VXBsb2FkUmVxdWVzdBomLmtva29yby5zdG9yYWdlLnYyLkFib3J0VXBsb2FkUmVzcG9uc2USaAoPR2V0VXBsb2FkU3RhdHVzEikua29rb3JvLnN0b3JhZ2UudjIuR2V0VXBsb2FkU3RhdHVzUmVxdWVzdBoqLmtva29yby5zdG9yYWdlLnYyLkdldFVwbG9hZFN0YXR1c1Jlc3BvbnNlElMKCEdldEFzc2V0EiIua29rb3JvLnN0b3JhZ2UudjIuR2V0QXNzZXRSZXF1ZXN0GiMua29rb3JvLnN0b3JhZ2UudjIuR2V0QXNzZXRSZXNwb25zZRJZCgpMaXN0QXNzZXRzEiQua29rb3JvLnN0b3JhZ2UudjIuTGlzdEFzc2V0c1JlcXVlc3QaJS5rb2tvcm8uc3RvcmFnZS52Mi5MaXN0QXNzZXRzUmVzcG9uc2USdAoTR2V0UGFja2FnZVJlZmVyZW5jZRItLmtva29yby5zdG9yYWdlLnYyLkdldFBhY2thZ2VSZWZlcmVuY2VSZXF1ZXN0Gi4ua29rb3JvLnN0b3JhZ2UudjIuR2V0UGFja2FnZVJlZmVyZW5jZVJlc3BvbnNlEmIKDUdldFNjYW5TdGF0dXMSJy5rb2tvcm8uc3RvcmFnZS52Mi5HZXRTY2FuU3RhdHVzUmVxdWVzdBooLmtva29yby5zdG9yYWdlLnYyLkdldFNjYW5TdGF0dXNSZXNwb25zZRJlCg5DcmVhdGVBcnRpZmFjdBIoLmtva29yby5zdG9yYWdlLnYyLkNyZWF0ZUFydGlmYWN0UmVxdWVzdBopLmtva29yby5zdG9yYWdlLnYyLkNyZWF0ZUFydGlmYWN0UmVzcG9uc2USawoQRmluYWxpemVBcnRpZmFjdBIqLmtva29yby5zdG9yYWdlLnYyLkZpbmFsaXplQXJ0aWZhY3RSZXF1ZXN0Gisua29rb3JvLnN0b3JhZ2UudjIuRmluYWxpemVBcnRpZmFjdFJlc3BvbnNlEncKFEdldERvd25sb2FkUmVmZXJlbmNlEi4ua29rb3JvLnN0b3JhZ2UudjIuR2V0RG93bmxvYWRSZWZlcmVuY2VSZXF1ZXN0Gi8ua29rb3JvLnN0b3JhZ2UudjIuR2V0RG93bmxvYWRSZWZlcmVuY2VSZXNwb25zZWIGcHJvdG8z",
+    "Ch9rb2tvcm8vc3RvcmFnZS92Mi9zdG9yYWdlLnByb3RvEhFrb2tvcm8uc3RvcmFnZS52MiLtAQoRVHJhbnNmZXJSZWZlcmVuY2USCwoDdXJsGAEgASgJEg4KBm1ldGhvZBgCIAEoCRJTChByZXF1aXJlZF9oZWFkZXJzGAMgAygLMjkua29rb3JvLnN0b3JhZ2UudjIuVHJhbnNmZXJSZWZlcmVuY2UuUmVxdWlyZWRIZWFkZXJzRW50cnkSLgoKZXhwaXJlc19hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAaNgoUUmVxdWlyZWRIZWFkZXJzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASKHAgoTQ3JlYXRlVXBsb2FkUmVxdWVzdBIyCgdjb21tYW5kGAIgASgLMiEua29rb3JvLmNvbW1vbi52MS5Db21tYW5kSWRlbnRpdHkSEAoIZmlsZW5hbWUYBSABKAkSEQoJbWltZV90eXBlGAYgASgJEhIKCnNpemVfYnl0ZXMYByABKAQSFgoOY29udGVudF9zaGEyNTYYCCABKAkSOAoOdXBsb2FkX3B1cnBvc2UYCiABKA4yIC5rb2tvcm8uc3RvcmFnZS52Mi5VcGxvYWRQdXJwb3NlSgQIARACSgQIAxAESgQIBBAFUgpyZXF1ZXN0X2lkUgl0ZW5hbnRfaWRSCG93bmVyX2lkInsKFENyZWF0ZVVwbG9hZFJlc3BvbnNlEhEKCXVwbG9hZF9pZBgBIAEoCRI+ChB1cGxvYWRfcmVmZXJlbmNlGAQgASgLMiQua29rb3JvLnN0b3JhZ2UudjIuVHJhbnNmZXJSZWZlcmVuY2VKBAgDEARSCnVwbG9hZF91cmwirQEKFUNvbXBsZXRlVXBsb2FkUmVxdWVzdBIyCgdjb21tYW5kGAIgASgLMiEua29rb3JvLmNvbW1vbi52MS5Db21tYW5kSWRlbnRpdHkSEQoJdXBsb2FkX2lkGAQgASgJEhYKDmNvbnRlbnRfc2hhMjU2GAUgASgJEhIKCnNpemVfYnl0ZXMYBiABKARKBAgBEAJKBAgDEARSCnJlcXVlc3RfaWRSCXRlbmFudF9pZCKBAQoWQ29tcGxldGVVcGxvYWRSZXNwb25zZRIRCgl1cGxvYWRfaWQYASABKAkSEAoIYXNzZXRfaWQYAiABKAkSMAoKc2Nhbl9zdGF0ZRgDIAEoDjIcLmtva29yby5zdG9yYWdlLnYyLlNjYW5TdGF0ZRIQCghyZXBsYXllZBgEIAEoCCKOAQoSQWJvcnRVcGxvYWRSZXF1ZXN0EjIKB2NvbW1hbmQYAiABKAsyIS5rb2tvcm8uY29tbW9uLnYxLkNvbW1hbmRJZGVudGl0eRIRCgl1cGxvYWRfaWQYBCABKAkSDgoGcmVhc29uGAUgASgJSgQIARACSgQIAxAEUgpyZXF1ZXN0X2lkUgl0ZW5hbnRfaWQiaQoTQWJvcnRVcGxvYWRSZXNwb25zZRIRCgl1cGxvYWRfaWQYASABKAkSLQoFc3RhdGUYAiABKA4yHi5rb2tvcm8uc3RvcmFnZS52Mi5VcGxvYWRTdGF0ZRIQCghyZXBsYXllZBgDIAEoCCI8ChZHZXRVcGxvYWRTdGF0dXNSZXF1ZXN0EhEKCXVwbG9hZF9pZBgCIAEoCUoECAEQAlIJdGVuYW50X2lkIsgBChdHZXRVcGxvYWRTdGF0dXNSZXNwb25zZRIRCgl1cGxvYWRfaWQYASABKAkSLQoFc3RhdGUYAiABKA4yHi5rb2tvcm8uc3RvcmFnZS52Mi5VcGxvYWRTdGF0ZRIXCg9leHBlY3RlZF9zaGEyNTYYBCABKAkSGwoTZXhwZWN0ZWRfc2l6ZV9ieXRlcxgFIAEoBBIRCgltaW1lX3R5cGUYBiABKAkSFQoIYXNzZXRfaWQYByABKAlIAIgBAUILCglfYXNzZXRfaWQibQoPR2V0QXNzZXRSZXF1ZXN0EhAKCGFzc2V0X2lkGAQgASgJEhYKDmNvbnRlbnRfc2hhMjU2GAUgASgJSgQIARACSgQIAhADSgQIAxAEUgpyZXF1ZXN0X2lkUgdjb21tYW5kUgl0ZW5hbnRfaWQitAIKEEdldEFzc2V0UmVzcG9uc2USEAoIYXNzZXRfaWQYASABKAkSFgoOY29udGVudF9zaGEyNTYYBSABKAkSEgoKc2l6ZV9ieXRlcxgGIAEoBBIRCgltaW1lX3R5cGUYByABKAkSMAoKc2Nhbl9zdGF0ZRgIIAEoDjIcLmtva29yby5zdG9yYWdlLnYyLlNjYW5TdGF0ZRI4Cg51cGxvYWRfcHVycG9zZRgKIAEoDjIgLmtva29yby5zdG9yYWdlLnYyLlVwbG9hZFB1cnBvc2USLgoGb3JpZ2luGAsgASgOMh4ua29rb3JvLnN0b3JhZ2UudjIuQXNzZXRPcmlnaW4SEAoIZmlsZW5hbWUYDCABKAlKBAgCEANKBAgJEApSCXRlbmFudF9pZFIKdmlzaWJpbGl0eSIyChFMaXN0QXNzZXRzUmVxdWVzdBINCgVsaW1pdBgBIAEoDRIOCgZjdXJzb3IYAiABKAkivgIKDUxpc3RBc3NldEl0ZW0SEAoIYXNzZXRfaWQYASABKAkSEAoIZmlsZW5hbWUYAiABKAkSEQoJbWltZV90eXBlGAMgASgJEhYKDmNvbnRlbnRfc2hhMjU2GAQgASgJEhIKCnNpemVfYnl0ZXMYBSABKAQSOAoOdXBsb2FkX3B1cnBvc2UYBiABKA4yIC5rb2tvcm8uc3RvcmFnZS52Mi5VcGxvYWRQdXJwb3NlEi4KBm9yaWdpbhgHIAEoDjIeLmtva29yby5zdG9yYWdlLnYyLkFzc2V0T3JpZ2luEjAKCnNjYW5fc3RhdGUYCCABKA4yHC5rb2tvcm8uc3RvcmFnZS52Mi5TY2FuU3RhdGUSLgoKY3JlYXRlZF9hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAibwoSTGlzdEFzc2V0c1Jlc3BvbnNlEi8KBWl0ZW1zGAEgAygLMiAua29rb3JvLnN0b3JhZ2UudjIuTGlzdEFzc2V0SXRlbRIYCgtuZXh0X2N1cnNvchgCIAEoCUgAiAEBQg4KDF9uZXh0X2N1cnNvciKdAQoaR2V0UGFja2FnZVJlZmVyZW5jZVJlcXVlc3QSMgoHY29tbWFuZBgCIAEoCzIhLmtva29yby5jb21tb24udjEuQ29tbWFuZElkZW50aXR5EhAKCGFzc2V0X2lkGAQgASgJEhYKDmNvbnRlbnRfc2hhMjU2GAUgASgJSgQIARACSgQIAxAEUgpyZXF1ZXN0X2lkUgl0ZW5hbnRfaWQi9gEKG0dldFBhY2thZ2VSZWZlcmVuY2VSZXNwb25zZRIQCghhc3NldF9pZBgBIAEoCRJAChJkb3dubG9hZF9yZWZlcmVuY2UYCCABKAsyJC5rb2tvcm8uc3RvcmFnZS52Mi5UcmFuc2ZlclJlZmVyZW5jZRIWCg5jb250ZW50X3NoYTI1NhgEIAEoCRISCgpzaXplX2J5dGVzGAUgASgEEhEKCW1pbWVfdHlwZRgGIAEoCRIwCgpzY2FuX3N0YXRlGAcgASgOMhwua29rb3JvLnN0b3JhZ2UudjIuU2NhblN0YXRlSgQIAxAEUgxkb3dubG9hZF91cmwiOQoUR2V0U2NhblN0YXR1c1JlcXVlc3QSEAoIYXNzZXRfaWQYAiABKAlKBAgBEAJSCXRlbmFudF9pZCJpChVHZXRTY2FuU3RhdHVzUmVzcG9uc2USEAoIYXNzZXRfaWQYASABKAkSKwoFc3RhdGUYAiABKA4yHC5rb2tvcm8uc3RvcmFnZS52Mi5TY2FuU3RhdGUSEQoJcmVwb3J0X2lkGAMgASgJIq8BChdGaW5hbGl6ZUFydGlmYWN0UmVxdWVzdBIyCgdjb21tYW5kGAIgASgLMiEua29rb3JvLmNvbW1vbi52MS5Db21tYW5kSWRlbnRpdHkSEAoIYXNzZXRfaWQYBCABKAkSEwoLYXJ0aWZhY3RfaWQYBSABKAkSFgoOY29udGVudF9zaGEyNTYYBiABKAlKBAgBEAJKBAgDEARSCnJlcXVlc3RfaWRSCXRlbmFudF9pZCKcAQoYRmluYWxpemVBcnRpZmFjdFJlc3BvbnNlEhMKC2FydGlmYWN0X2lkGAEgASgJEi8KBXN0YXRlGAIgASgOMiAua29rb3JvLnN0b3JhZ2UudjIuQXJ0aWZhY3RTdGF0ZRIQCghyZXBsYXllZBgDIAEoCBIQCghhc3NldF9pZBgEIAEoCRIWCg5jb250ZW50X3NoYTI1NhgFIAEoCSKCAgoVQ3JlYXRlQXJ0aWZhY3RSZXF1ZXN0EjIKB2NvbW1hbmQYAiABKAsyIS5rb2tvcm8uY29tbW9uLnYxLkNvbW1hbmRJZGVudGl0eRIQCghhc3NldF9pZBgEIAEoCRITCgthcnRpZmFjdF9pZBgFIAEoCRIWCg5jb250ZW50X3NoYTI1NhgGIAEoCRItCgRraW5kGAcgASgOMh8ua29rb3JvLnN0b3JhZ2UudjIuQXJ0aWZhY3RLaW5kEg0KBXRpdGxlGAggASgJEhUKDXNvdXJjZV9ydW5faWQYCSABKAlKBAgBEAJKBAgDEARSCnJlcXVlc3RfaWRSCXRlbmFudF9pZCLvAQoWQ3JlYXRlQXJ0aWZhY3RSZXNwb25zZRITCgthcnRpZmFjdF9pZBgBIAEoCRIQCghhc3NldF9pZBgCIAEoCRIWCg5jb250ZW50X3NoYTI1NhgDIAEoCRIvCgVzdGF0ZRgEIAEoDjIgLmtva29yby5zdG9yYWdlLnYyLkFydGlmYWN0U3RhdGUSEAoIcmVwbGF5ZWQYBSABKAgSLQoEa2luZBgGIAEoDjIfLmtva29yby5zdG9yYWdlLnYyLkFydGlmYWN0S2luZBINCgV0aXRsZRgHIAEoCRIVCg1zb3VyY2VfcnVuX2lkGAggASgJIjoKGUxpc3RGaW5hbEFydGlmYWN0c1JlcXVlc3QSDQoFbGltaXQYASABKA0SDgoGY3Vyc29yGAIgASgJIsICChFGaW5hbEFydGlmYWN0SXRlbRITCgthcnRpZmFjdF9pZBgBIAEoCRIQCghhc3NldF9pZBgCIAEoCRIWCg5jb250ZW50X3NoYTI1NhgDIAEoCRItCgRraW5kGAQgASgOMh8ua29rb3JvLnN0b3JhZ2UudjIuQXJ0aWZhY3RLaW5kEg0KBXRpdGxlGAUgASgJEhUKDXNvdXJjZV9ydW5faWQYBiABKAkSEAoIZmlsZW5hbWUYByABKAkSEQoJbWltZV90eXBlGAggASgJEhIKCnNpemVfYnl0ZXMYCSABKAQSLgoKY3JlYXRlZF9hdBgKIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMAoMZmluYWxpemVkX2F0GAsgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJ7ChpMaXN0RmluYWxBcnRpZmFjdHNSZXNwb25zZRIzCgVpdGVtcxgBIAMoCzIkLmtva29yby5zdG9yYWdlLnYyLkZpbmFsQXJ0aWZhY3RJdGVtEhgKC25leHRfY3Vyc29yGAIgASgJSACIAQFCDgoMX25leHRfY3Vyc29yIi4KF0dldEZpbmFsQXJ0aWZhY3RSZXF1ZXN0EhMKC2FydGlmYWN0X2lkGAEgASgJIk4KGEdldEZpbmFsQXJ0aWZhY3RSZXNwb25zZRIyCgRpdGVtGAEgASgLMiQua29rb3JvLnN0b3JhZ2UudjIuRmluYWxBcnRpZmFjdEl0ZW0icwooR2V0RmluYWxBcnRpZmFjdERvd25sb2FkUmVmZXJlbmNlUmVxdWVzdBIyCgdjb21tYW5kGAEgASgLMiEua29rb3JvLmNvbW1vbi52MS5Db21tYW5kSWRlbnRpdHkSEwoLYXJ0aWZhY3RfaWQYAiABKAkirAEKKUdldEZpbmFsQXJ0aWZhY3REb3dubG9hZFJlZmVyZW5jZVJlc3BvbnNlEhMKC2FydGlmYWN0X2lkGAEgASgJEhAKCGFzc2V0X2lkGAIgASgJEhYKDmNvbnRlbnRfc2hhMjU2GAMgASgJEkAKEmRvd25sb2FkX3JlZmVyZW5jZRgEIAEoCzIkLmtva29yby5zdG9yYWdlLnYyLlRyYW5zZmVyUmVmZXJlbmNlIp4BChtHZXREb3dubG9hZFJlZmVyZW5jZVJlcXVlc3QSMgoHY29tbWFuZBgCIAEoCzIhLmtva29yby5jb21tb24udjEuQ29tbWFuZElkZW50aXR5EhAKCGFzc2V0X2lkGAQgASgJEhYKDmNvbnRlbnRfc2hhMjU2GAUgASgJSgQIARACSgQIAxAEUgpyZXF1ZXN0X2lkUgl0ZW5hbnRfaWQi9wEKHEdldERvd25sb2FkUmVmZXJlbmNlUmVzcG9uc2USEAoIYXNzZXRfaWQYASABKAkSQAoSZG93bmxvYWRfcmVmZXJlbmNlGAcgASgLMiQua29rb3JvLnN0b3JhZ2UudjIuVHJhbnNmZXJSZWZlcmVuY2USFgoOY29udGVudF9zaGEyNTYYAyABKAkSEgoKc2l6ZV9ieXRlcxgEIAEoBBIRCgltaW1lX3R5cGUYBSABKAkSMAoKc2Nhbl9zdGF0ZRgGIAEoDjIcLmtva29yby5zdG9yYWdlLnYyLlNjYW5TdGF0ZUoECAIQA1IMZG93bmxvYWRfdXJsKmMKDUFydGlmYWN0U3RhdGUSHgoaQVJUSUZBQ1RfU1RBVEVfVU5TUEVDSUZJRUQQABIYChRBUlRJRkFDVF9TVEFURV9EUkFGVBABEhgKFEFSVElGQUNUX1NUQVRFX0ZJTkFMEAIq+AEKDEFydGlmYWN0S2luZBIdChlBUlRJRkFDVF9LSU5EX1VOU1BFQ0lGSUVEEAASGgoWQVJUSUZBQ1RfS0lORF9ET0NVTUVOVBABEhYKEkFSVElGQUNUX0tJTkRfQ09ERRACEhcKE0FSVElGQUNUX0tJTkRfSU1BR0UQAxIXChNBUlRJRkFDVF9LSU5EX0FVRElPEAQSFwoTQVJUSUZBQ1RfS0lORF9WSURFTxAFEhYKEkFSVElGQUNUX0tJTkRfREFUQRAGEhkKFUFSVElGQUNUX0tJTkRfQVJDSElWRRAHEhcKE0FSVElGQUNUX0tJTkRfT1RIRVIQCCqGAQoJU2NhblN0YXRlEhoKFlNDQU5fU1RBVEVfVU5TUEVDSUZJRUQQABIWChJTQ0FOX1NUQVRFX1BFTkRJTkcQARIUChBTQ0FOX1NUQVRFX0NMRUFOEAISFwoTU0NBTl9TVEFURV9JTkZFQ1RFRBADEhYKElNDQU5fU1RBVEVfVU5LTk9XThAEKo0BCg1VcGxvYWRQdXJwb3NlEh4KGlVQTE9BRF9QVVJQT1NFX1VOU1BFQ0lGSUVEEAASJQohVVBMT0FEX1BVUlBPU0VfQ0FQQUJJTElUWV9QQUNLQUdFEAESGAoUVVBMT0FEX1BVUlBPU0VfQVNTRVQQAhIbChdVUExPQURfUFVSUE9TRV9BUlRJRkFDVBADKnsKC1VwbG9hZFN0YXRlEhwKGFVQTE9BRF9TVEFURV9VTlNQRUNJRklFRBAAEhgKFFVQTE9BRF9TVEFURV9QRU5ESU5HEAESGgoWVVBMT0FEX1NUQVRFX0NPTVBMRVRFRBACEhgKFFVQTE9BRF9TVEFURV9BQk9SVEVEEAMqYgoLQXNzZXRPcmlnaW4SHAoYQVNTRVRfT1JJR0lOX1VOU1BFQ0lGSUVEEAASGQoVQVNTRVRfT1JJR0lOX1VQTE9BREVEEAESGgoWQVNTRVRfT1JJR0lOX0dFTkVSQVRFRBACMvgLCg5TdG9yYWdlU2VydmljZRJfCgxDcmVhdGVVcGxvYWQSJi5rb2tvcm8uc3RvcmFnZS52Mi5DcmVhdGVVcGxvYWRSZXF1ZXN0Gicua29rb3JvLnN0b3JhZ2UudjIuQ3JlYXRlVXBsb2FkUmVzcG9uc2USZQoOQ29tcGxldGVVcGxvYWQSKC5rb2tvcm8uc3RvcmFnZS52Mi5Db21wbGV0ZVVwbG9hZFJlcXVlc3QaKS5rb2tvcm8uc3RvcmFnZS52Mi5Db21wbGV0ZVVwbG9hZFJlc3BvbnNlElwKC0Fib3J0VXBsb2FkEiUua29rb3JvLnN0b3JhZ2UudjIuQWJvcnRVcGxvYWRSZXF1ZXN0GiYua29rb3JvLnN0b3JhZ2UudjIuQWJvcnRVcGxvYWRSZXNwb25zZRJoCg9HZXRVcGxvYWRTdGF0dXMSKS5rb2tvcm8uc3RvcmFnZS52Mi5HZXRVcGxvYWRTdGF0dXNSZXF1ZXN0Gioua29rb3JvLnN0b3JhZ2UudjIuR2V0VXBsb2FkU3RhdHVzUmVzcG9uc2USUwoIR2V0QXNzZXQSIi5rb2tvcm8uc3RvcmFnZS52Mi5HZXRBc3NldFJlcXVlc3QaIy5rb2tvcm8uc3RvcmFnZS52Mi5HZXRBc3NldFJlc3BvbnNlElkKCkxpc3RBc3NldHMSJC5rb2tvcm8uc3RvcmFnZS52Mi5MaXN0QXNzZXRzUmVxdWVzdBolLmtva29yby5zdG9yYWdlLnYyLkxpc3RBc3NldHNSZXNwb25zZRJ0ChNHZXRQYWNrYWdlUmVmZXJlbmNlEi0ua29rb3JvLnN0b3JhZ2UudjIuR2V0UGFja2FnZVJlZmVyZW5jZVJlcXVlc3QaLi5rb2tvcm8uc3RvcmFnZS52Mi5HZXRQYWNrYWdlUmVmZXJlbmNlUmVzcG9uc2USYgoNR2V0U2NhblN0YXR1cxInLmtva29yby5zdG9yYWdlLnYyLkdldFNjYW5TdGF0dXNSZXF1ZXN0Gigua29rb3JvLnN0b3JhZ2UudjIuR2V0U2NhblN0YXR1c1Jlc3BvbnNlEmUKDkNyZWF0ZUFydGlmYWN0Eigua29rb3JvLnN0b3JhZ2UudjIuQ3JlYXRlQXJ0aWZhY3RSZXF1ZXN0Gikua29rb3JvLnN0b3JhZ2UudjIuQ3JlYXRlQXJ0aWZhY3RSZXNwb25zZRJrChBGaW5hbGl6ZUFydGlmYWN0Eioua29rb3JvLnN0b3JhZ2UudjIuRmluYWxpemVBcnRpZmFjdFJlcXVlc3QaKy5rb2tvcm8uc3RvcmFnZS52Mi5GaW5hbGl6ZUFydGlmYWN0UmVzcG9uc2USdwoUR2V0RG93bmxvYWRSZWZlcmVuY2USLi5rb2tvcm8uc3RvcmFnZS52Mi5HZXREb3dubG9hZFJlZmVyZW5jZVJlcXVlc3QaLy5rb2tvcm8uc3RvcmFnZS52Mi5HZXREb3dubG9hZFJlZmVyZW5jZVJlc3BvbnNlEnEKEkxpc3RGaW5hbEFydGlmYWN0cxIsLmtva29yby5zdG9yYWdlLnYyLkxpc3RGaW5hbEFydGlmYWN0c1JlcXVlc3QaLS5rb2tvcm8uc3RvcmFnZS52Mi5MaXN0RmluYWxBcnRpZmFjdHNSZXNwb25zZRJrChBHZXRGaW5hbEFydGlmYWN0Eioua29rb3JvLnN0b3JhZ2UudjIuR2V0RmluYWxBcnRpZmFjdFJlcXVlc3QaKy5rb2tvcm8uc3RvcmFnZS52Mi5HZXRGaW5hbEFydGlmYWN0UmVzcG9uc2USngEKIUdldEZpbmFsQXJ0aWZhY3REb3dubG9hZFJlZmVyZW5jZRI7Lmtva29yby5zdG9yYWdlLnYyLkdldEZpbmFsQXJ0aWZhY3REb3dubG9hZFJlZmVyZW5jZVJlcXVlc3QaPC5rb2tvcm8uc3RvcmFnZS52Mi5HZXRGaW5hbEFydGlmYWN0RG93bmxvYWRSZWZlcmVuY2VSZXNwb25zZWIGcHJvdG8z",
     [file_kokoro_common_v1_common, file_google_protobuf_timestamp],
   )
 
@@ -640,6 +642,16 @@ export type FinalizeArtifactResponse = Message<"kokoro.storage.v2.FinalizeArtifa
    * @generated from field: bool replayed = 3;
    */
   replayed: boolean
+
+  /**
+   * @generated from field: string asset_id = 4;
+   */
+  assetId: string
+
+  /**
+   * @generated from field: string content_sha256 = 5;
+   */
+  contentSha256: string
 }
 
 /**
@@ -671,6 +683,21 @@ export type CreateArtifactRequest = Message<"kokoro.storage.v2.CreateArtifactReq
    * @generated from field: string content_sha256 = 6;
    */
   contentSha256: string
+
+  /**
+   * @generated from field: kokoro.storage.v2.ArtifactKind kind = 7;
+   */
+  kind: ArtifactKind
+
+  /**
+   * @generated from field: string title = 8;
+   */
+  title: string
+
+  /**
+   * @generated from field: string source_run_id = 9;
+   */
+  sourceRunId: string
 }
 
 /**
@@ -707,6 +734,21 @@ export type CreateArtifactResponse = Message<"kokoro.storage.v2.CreateArtifactRe
    * @generated from field: bool replayed = 5;
    */
   replayed: boolean
+
+  /**
+   * @generated from field: kokoro.storage.v2.ArtifactKind kind = 6;
+   */
+  kind: ArtifactKind
+
+  /**
+   * @generated from field: string title = 7;
+   */
+  title: string
+
+  /**
+   * @generated from field: string source_run_id = 8;
+   */
+  sourceRunId: string
 }
 
 /**
@@ -714,6 +756,202 @@ export type CreateArtifactResponse = Message<"kokoro.storage.v2.CreateArtifactRe
  * Use `create(CreateArtifactResponseSchema)` to create a new message.
  */
 export const CreateArtifactResponseSchema: GenMessage<CreateArtifactResponse> = /*@__PURE__*/ messageDesc(file_kokoro_storage_v2_storage, 21)
+
+/**
+ * @generated from message kokoro.storage.v2.ListFinalArtifactsRequest
+ */
+export type ListFinalArtifactsRequest = Message<"kokoro.storage.v2.ListFinalArtifactsRequest"> & {
+  /**
+   * @generated from field: uint32 limit = 1;
+   */
+  limit: number
+
+  /**
+   * @generated from field: string cursor = 2;
+   */
+  cursor: string
+}
+
+/**
+ * Describes the message kokoro.storage.v2.ListFinalArtifactsRequest.
+ * Use `create(ListFinalArtifactsRequestSchema)` to create a new message.
+ */
+export const ListFinalArtifactsRequestSchema: GenMessage<ListFinalArtifactsRequest> = /*@__PURE__*/ messageDesc(file_kokoro_storage_v2_storage, 22)
+
+/**
+ * @generated from message kokoro.storage.v2.FinalArtifactItem
+ */
+export type FinalArtifactItem = Message<"kokoro.storage.v2.FinalArtifactItem"> & {
+  /**
+   * @generated from field: string artifact_id = 1;
+   */
+  artifactId: string
+
+  /**
+   * @generated from field: string asset_id = 2;
+   */
+  assetId: string
+
+  /**
+   * @generated from field: string content_sha256 = 3;
+   */
+  contentSha256: string
+
+  /**
+   * @generated from field: kokoro.storage.v2.ArtifactKind kind = 4;
+   */
+  kind: ArtifactKind
+
+  /**
+   * @generated from field: string title = 5;
+   */
+  title: string
+
+  /**
+   * @generated from field: string source_run_id = 6;
+   */
+  sourceRunId: string
+
+  /**
+   * @generated from field: string filename = 7;
+   */
+  filename: string
+
+  /**
+   * @generated from field: string mime_type = 8;
+   */
+  mimeType: string
+
+  /**
+   * @generated from field: uint64 size_bytes = 9;
+   */
+  sizeBytes: bigint
+
+  /**
+   * @generated from field: google.protobuf.Timestamp created_at = 10;
+   */
+  createdAt?: Timestamp | undefined
+
+  /**
+   * @generated from field: google.protobuf.Timestamp finalized_at = 11;
+   */
+  finalizedAt?: Timestamp | undefined
+}
+
+/**
+ * Describes the message kokoro.storage.v2.FinalArtifactItem.
+ * Use `create(FinalArtifactItemSchema)` to create a new message.
+ */
+export const FinalArtifactItemSchema: GenMessage<FinalArtifactItem> = /*@__PURE__*/ messageDesc(file_kokoro_storage_v2_storage, 23)
+
+/**
+ * @generated from message kokoro.storage.v2.ListFinalArtifactsResponse
+ */
+export type ListFinalArtifactsResponse = Message<"kokoro.storage.v2.ListFinalArtifactsResponse"> & {
+  /**
+   * @generated from field: repeated kokoro.storage.v2.FinalArtifactItem items = 1;
+   */
+  items: FinalArtifactItem[]
+
+  /**
+   * @generated from field: optional string next_cursor = 2;
+   */
+  nextCursor?: string | undefined
+}
+
+/**
+ * Describes the message kokoro.storage.v2.ListFinalArtifactsResponse.
+ * Use `create(ListFinalArtifactsResponseSchema)` to create a new message.
+ */
+export const ListFinalArtifactsResponseSchema: GenMessage<ListFinalArtifactsResponse> = /*@__PURE__*/ messageDesc(file_kokoro_storage_v2_storage, 24)
+
+/**
+ * @generated from message kokoro.storage.v2.GetFinalArtifactRequest
+ */
+export type GetFinalArtifactRequest = Message<"kokoro.storage.v2.GetFinalArtifactRequest"> & {
+  /**
+   * @generated from field: string artifact_id = 1;
+   */
+  artifactId: string
+}
+
+/**
+ * Describes the message kokoro.storage.v2.GetFinalArtifactRequest.
+ * Use `create(GetFinalArtifactRequestSchema)` to create a new message.
+ */
+export const GetFinalArtifactRequestSchema: GenMessage<GetFinalArtifactRequest> = /*@__PURE__*/ messageDesc(file_kokoro_storage_v2_storage, 25)
+
+/**
+ * @generated from message kokoro.storage.v2.GetFinalArtifactResponse
+ */
+export type GetFinalArtifactResponse = Message<"kokoro.storage.v2.GetFinalArtifactResponse"> & {
+  /**
+   * @generated from field: kokoro.storage.v2.FinalArtifactItem item = 1;
+   */
+  item?: FinalArtifactItem | undefined
+}
+
+/**
+ * Describes the message kokoro.storage.v2.GetFinalArtifactResponse.
+ * Use `create(GetFinalArtifactResponseSchema)` to create a new message.
+ */
+export const GetFinalArtifactResponseSchema: GenMessage<GetFinalArtifactResponse> = /*@__PURE__*/ messageDesc(file_kokoro_storage_v2_storage, 26)
+
+/**
+ * @generated from message kokoro.storage.v2.GetFinalArtifactDownloadReferenceRequest
+ */
+export type GetFinalArtifactDownloadReferenceRequest = Message<"kokoro.storage.v2.GetFinalArtifactDownloadReferenceRequest"> & {
+  /**
+   * @generated from field: kokoro.common.v1.CommandIdentity command = 1;
+   */
+  command?: CommandIdentity | undefined
+
+  /**
+   * @generated from field: string artifact_id = 2;
+   */
+  artifactId: string
+}
+
+/**
+ * Describes the message kokoro.storage.v2.GetFinalArtifactDownloadReferenceRequest.
+ * Use `create(GetFinalArtifactDownloadReferenceRequestSchema)` to create a new message.
+ */
+export const GetFinalArtifactDownloadReferenceRequestSchema: GenMessage<GetFinalArtifactDownloadReferenceRequest> =
+  /*@__PURE__*/
+  messageDesc(file_kokoro_storage_v2_storage, 27)
+
+/**
+ * @generated from message kokoro.storage.v2.GetFinalArtifactDownloadReferenceResponse
+ */
+export type GetFinalArtifactDownloadReferenceResponse = Message<"kokoro.storage.v2.GetFinalArtifactDownloadReferenceResponse"> & {
+  /**
+   * @generated from field: string artifact_id = 1;
+   */
+  artifactId: string
+
+  /**
+   * @generated from field: string asset_id = 2;
+   */
+  assetId: string
+
+  /**
+   * @generated from field: string content_sha256 = 3;
+   */
+  contentSha256: string
+
+  /**
+   * @generated from field: kokoro.storage.v2.TransferReference download_reference = 4;
+   */
+  downloadReference?: TransferReference | undefined
+}
+
+/**
+ * Describes the message kokoro.storage.v2.GetFinalArtifactDownloadReferenceResponse.
+ * Use `create(GetFinalArtifactDownloadReferenceResponseSchema)` to create a new message.
+ */
+export const GetFinalArtifactDownloadReferenceResponseSchema: GenMessage<GetFinalArtifactDownloadReferenceResponse> =
+  /*@__PURE__*/
+  messageDesc(file_kokoro_storage_v2_storage, 28)
 
 /**
  * @generated from message kokoro.storage.v2.GetDownloadReferenceRequest
@@ -739,7 +977,7 @@ export type GetDownloadReferenceRequest = Message<"kokoro.storage.v2.GetDownload
  * Describes the message kokoro.storage.v2.GetDownloadReferenceRequest.
  * Use `create(GetDownloadReferenceRequestSchema)` to create a new message.
  */
-export const GetDownloadReferenceRequestSchema: GenMessage<GetDownloadReferenceRequest> = /*@__PURE__*/ messageDesc(file_kokoro_storage_v2_storage, 22)
+export const GetDownloadReferenceRequestSchema: GenMessage<GetDownloadReferenceRequest> = /*@__PURE__*/ messageDesc(file_kokoro_storage_v2_storage, 29)
 
 /**
  * @generated from message kokoro.storage.v2.GetDownloadReferenceResponse
@@ -780,7 +1018,7 @@ export type GetDownloadReferenceResponse = Message<"kokoro.storage.v2.GetDownloa
  * Describes the message kokoro.storage.v2.GetDownloadReferenceResponse.
  * Use `create(GetDownloadReferenceResponseSchema)` to create a new message.
  */
-export const GetDownloadReferenceResponseSchema: GenMessage<GetDownloadReferenceResponse> = /*@__PURE__*/ messageDesc(file_kokoro_storage_v2_storage, 23)
+export const GetDownloadReferenceResponseSchema: GenMessage<GetDownloadReferenceResponse> = /*@__PURE__*/ messageDesc(file_kokoro_storage_v2_storage, 30)
 
 /**
  * @generated from enum kokoro.storage.v2.ArtifactState
@@ -806,6 +1044,61 @@ export enum ArtifactState {
  * Describes the enum kokoro.storage.v2.ArtifactState.
  */
 export const ArtifactStateSchema: GenEnum<ArtifactState> = /*@__PURE__*/ enumDesc(file_kokoro_storage_v2_storage, 0)
+
+/**
+ * @generated from enum kokoro.storage.v2.ArtifactKind
+ */
+export enum ArtifactKind {
+  /**
+   * @generated from enum value: ARTIFACT_KIND_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: ARTIFACT_KIND_DOCUMENT = 1;
+   */
+  DOCUMENT = 1,
+
+  /**
+   * @generated from enum value: ARTIFACT_KIND_CODE = 2;
+   */
+  CODE = 2,
+
+  /**
+   * @generated from enum value: ARTIFACT_KIND_IMAGE = 3;
+   */
+  IMAGE = 3,
+
+  /**
+   * @generated from enum value: ARTIFACT_KIND_AUDIO = 4;
+   */
+  AUDIO = 4,
+
+  /**
+   * @generated from enum value: ARTIFACT_KIND_VIDEO = 5;
+   */
+  VIDEO = 5,
+
+  /**
+   * @generated from enum value: ARTIFACT_KIND_DATA = 6;
+   */
+  DATA = 6,
+
+  /**
+   * @generated from enum value: ARTIFACT_KIND_ARCHIVE = 7;
+   */
+  ARCHIVE = 7,
+
+  /**
+   * @generated from enum value: ARTIFACT_KIND_OTHER = 8;
+   */
+  OTHER = 8,
+}
+
+/**
+ * Describes the enum kokoro.storage.v2.ArtifactKind.
+ */
+export const ArtifactKindSchema: GenEnum<ArtifactKind> = /*@__PURE__*/ enumDesc(file_kokoro_storage_v2_storage, 1)
 
 /**
  * @generated from enum kokoro.storage.v2.ScanState
@@ -840,7 +1133,7 @@ export enum ScanState {
 /**
  * Describes the enum kokoro.storage.v2.ScanState.
  */
-export const ScanStateSchema: GenEnum<ScanState> = /*@__PURE__*/ enumDesc(file_kokoro_storage_v2_storage, 1)
+export const ScanStateSchema: GenEnum<ScanState> = /*@__PURE__*/ enumDesc(file_kokoro_storage_v2_storage, 2)
 
 /**
  * @generated from enum kokoro.storage.v2.UploadPurpose
@@ -870,7 +1163,7 @@ export enum UploadPurpose {
 /**
  * Describes the enum kokoro.storage.v2.UploadPurpose.
  */
-export const UploadPurposeSchema: GenEnum<UploadPurpose> = /*@__PURE__*/ enumDesc(file_kokoro_storage_v2_storage, 2)
+export const UploadPurposeSchema: GenEnum<UploadPurpose> = /*@__PURE__*/ enumDesc(file_kokoro_storage_v2_storage, 3)
 
 /**
  * @generated from enum kokoro.storage.v2.UploadState
@@ -900,7 +1193,7 @@ export enum UploadState {
 /**
  * Describes the enum kokoro.storage.v2.UploadState.
  */
-export const UploadStateSchema: GenEnum<UploadState> = /*@__PURE__*/ enumDesc(file_kokoro_storage_v2_storage, 3)
+export const UploadStateSchema: GenEnum<UploadState> = /*@__PURE__*/ enumDesc(file_kokoro_storage_v2_storage, 4)
 
 /**
  * @generated from enum kokoro.storage.v2.AssetOrigin
@@ -925,7 +1218,7 @@ export enum AssetOrigin {
 /**
  * Describes the enum kokoro.storage.v2.AssetOrigin.
  */
-export const AssetOriginSchema: GenEnum<AssetOrigin> = /*@__PURE__*/ enumDesc(file_kokoro_storage_v2_storage, 4)
+export const AssetOriginSchema: GenEnum<AssetOrigin> = /*@__PURE__*/ enumDesc(file_kokoro_storage_v2_storage, 5)
 
 /**
  * @generated from service kokoro.storage.v2.StorageService
@@ -1018,5 +1311,29 @@ export const StorageService: GenService<{
     methodKind: "unary"
     input: typeof GetDownloadReferenceRequestSchema
     output: typeof GetDownloadReferenceResponseSchema
+  }
+  /**
+   * @generated from rpc kokoro.storage.v2.StorageService.ListFinalArtifacts
+   */
+  listFinalArtifacts: {
+    methodKind: "unary"
+    input: typeof ListFinalArtifactsRequestSchema
+    output: typeof ListFinalArtifactsResponseSchema
+  }
+  /**
+   * @generated from rpc kokoro.storage.v2.StorageService.GetFinalArtifact
+   */
+  getFinalArtifact: {
+    methodKind: "unary"
+    input: typeof GetFinalArtifactRequestSchema
+    output: typeof GetFinalArtifactResponseSchema
+  }
+  /**
+   * @generated from rpc kokoro.storage.v2.StorageService.GetFinalArtifactDownloadReference
+   */
+  getFinalArtifactDownloadReference: {
+    methodKind: "unary"
+    input: typeof GetFinalArtifactDownloadReferenceRequestSchema
+    output: typeof GetFinalArtifactDownloadReferenceResponseSchema
   }
 }> = /*@__PURE__*/ serviceDesc(file_kokoro_storage_v2_storage, 0)

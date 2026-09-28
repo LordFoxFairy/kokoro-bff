@@ -14,6 +14,17 @@ const lockfilePath = path.join(root, "pnpm-lock.yaml")
 const ownerCommit = "520ec181a101298b4f336aad273ce003b2735955"
 const vendorPath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/openapi.json`)
 const ownerDigest = "2b9c7aad6f38db3e20200b037e4818ae932209ba3deecabf8fc984db6bcec492"
+const eventProtocol = {
+  owner: "kokoro-agent",
+  source_commit: "486adb1539dd8a06ca90684e66f91be031aa70cf",
+  provenance_combined_sha256: "cae30a40d712bce39ef33ef2dc857af4f5b69c6afd1956fda065ec77379ae02e",
+  source_path: "src/kokoro_agent/protocol/events.py",
+  source_sha256: "0ba59b358db00e53490555e450af060c8a728133a9cf8bfeb49361186adc0f1c",
+  event_kind: "delivery.created",
+}
+const eventSourceRelativePath = eventProtocol.source_path
+const eventVendorRoot = path.join(root, "contract/vendor/kokoro-agent", eventProtocol.source_commit)
+const eventSourceDirectories = ["src", "src/kokoro_agent", "src/kokoro_agent/protocol"]
 const generatedFiles = [
   "client.gen.ts",
   "client/client.gen.ts",
@@ -185,6 +196,19 @@ export function assertGeneratedAllowlist(files, directories, label) {
   assert.deepEqual(directories.slice().sort(), generatedDirectories.slice().sort(), `${label} directory allowlist drifted`)
 }
 
+export function assertEventProtocolSource(tree, bytes) {
+  assert.deepEqual(tree.files.slice().sort(), [eventSourceRelativePath], "Agent event source file allowlist drifted")
+  assert.deepEqual(tree.directories.slice().sort(), eventSourceDirectories, "Agent event source directory allowlist drifted")
+  assert.equal(sha256(bytes), eventProtocol.source_sha256, "Agent event source digest drifted")
+}
+
+async function verifyEventProtocolSource() {
+  const tree = await generatedTree(eventVendorRoot)
+  // generatedTree rejects links and non-regular entries before reading bytes.
+  const bytes = await readFile(path.join(eventVendorRoot, eventSourceRelativePath))
+  assertEventProtocolSource(tree, bytes)
+}
+
 async function generate(directory) {
   const cli = path.join(root, "node_modules/@hey-api/openapi-ts/bin/run.js")
   await run(process.execPath, [cli, "--silent", "-f", configPath], { env: { ...process.env, AGENT_HTTP_CLIENT_OUTPUT: directory } })
@@ -227,6 +251,7 @@ async function manifestFor(directory) {
       contract_path: "contract/openapi/v1/openapi.json",
       contract_sha256: ownerDigest,
     },
+    event_protocol: eventProtocol,
     generator: {
       package: "@hey-api/openapi-ts",
       version: "0.99.0",
@@ -247,6 +272,7 @@ async function manifestFor(directory) {
 async function main() {
   const mode = process.argv[2]
   assert.ok(mode === "--write" || mode === "--check", "expected --write or --check")
+  await verifyEventProtocolSource()
   const temporaryRoot = await mkdtemp(path.join(tmpdir(), "kokoro-agent-http-"))
   const temporaryOutput = path.join(temporaryRoot, "generated")
   const repeatedOutput = path.join(temporaryRoot, "generated-again")

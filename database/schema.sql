@@ -409,6 +409,37 @@ CREATE TABLE IF NOT EXISTS bff_agui_source_event (
   CONSTRAINT ck_bff_agui_source_event_digest CHECK (length(source_digest) = 64)
 );
 
+-- BFF owns only the durable Conversation-to-Artifact relationship. Storage owns
+-- the Artifact metadata and bytes; source claims here are immutable cross-checks.
+CREATE TABLE IF NOT EXISTS bff_conversation_artifact (
+  tenant_id TEXT NOT NULL,
+  conversation_id TEXT NOT NULL,
+  artifact_id TEXT NOT NULL,
+  run_id TEXT NOT NULL,
+  source_owner TEXT NOT NULL DEFAULT 'kokoro-agent',
+  source_event_id TEXT NOT NULL,
+  source_sequence BIGINT NOT NULL,
+  source_digest TEXT NOT NULL,
+  source_asset_id TEXT NOT NULL,
+  source_artifact_kind TEXT NOT NULL,
+  source_content_sha256 TEXT NOT NULL,
+  delivered_at TIMESTAMPTZ(3) NOT NULL,
+  CONSTRAINT pk_bff_conversation_artifact PRIMARY KEY (tenant_id, conversation_id, artifact_id),
+  CONSTRAINT uq_bff_conversation_artifact_source UNIQUE (tenant_id, conversation_id, source_owner, source_event_id),
+  CONSTRAINT ck_bff_conversation_artifact_identity CHECK (
+    length(btrim(tenant_id)) > 0 AND length(btrim(conversation_id)) > 0
+    AND length(btrim(artifact_id)) > 0 AND length(btrim(run_id)) > 0
+    AND length(btrim(source_event_id)) > 0 AND length(btrim(source_asset_id)) > 0
+  ),
+  CONSTRAINT ck_bff_conversation_artifact_owner CHECK (source_owner = 'kokoro-agent'),
+  CONSTRAINT ck_bff_conversation_artifact_sequence CHECK (source_sequence >= 1),
+  CONSTRAINT ck_bff_conversation_artifact_digest CHECK (source_digest ~ '^[0-9a-f]{64}$'),
+  CONSTRAINT ck_bff_conversation_artifact_kind CHECK (source_artifact_kind IN ('document', 'code', 'image', 'audio', 'video', 'data', 'archive', 'other')),
+  CONSTRAINT ck_bff_conversation_artifact_content_sha256 CHECK (source_content_sha256 ~ '^[0-9a-f]{64}$')
+);
+CREATE INDEX IF NOT EXISTS ix_bff_conversation_artifact_library
+  ON bff_conversation_artifact (tenant_id, delivered_at DESC, conversation_id ASC, artifact_id ASC);
+
 -- One source fact may expand into multiple AG-UI frames. Each frame receives a
 -- distinct opaque cursor backed by a monotonically increasing public sequence,
 -- so reconnecting after the first expanded frame never drops the next frame.

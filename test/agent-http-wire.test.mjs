@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { readFile } from "node:fs/promises"
 import { describe, it } from "node:test"
 import { parseAgentErrorCode, parseLaunchReceipt, parseReplayPage } from "../dist/infrastructure/clients/agent/http-wire.js"
 
@@ -14,6 +15,37 @@ const event = {
   created_at: 0,
 }
 const page = { data: { events: [event], next_seq: 1, watermark: 1 }, meta: { request_id: "request_1" } }
+
+describe("Agent event-protocol provenance", () => {
+  it("pins the S4 event source separately from the unchanged generated HTTP source", async () => {
+    const manifest = JSON.parse(await readFile(new URL("../contract/dependencies/agent-http.json", import.meta.url), "utf8"))
+    assert.equal(manifest.owner.repository_commit, "520ec181a101298b4f336aad273ce003b2735955")
+    assert.equal(manifest.owner.contract_sha256, "2b9c7aad6f38db3e20200b037e4818ae932209ba3deecabf8fc984db6bcec492")
+    assert.deepEqual(manifest.event_protocol, {
+      owner: "kokoro-agent",
+      source_commit: "486adb1539dd8a06ca90684e66f91be031aa70cf",
+      provenance_combined_sha256: "cae30a40d712bce39ef33ef2dc857af4f5b69c6afd1956fda065ec77379ae02e",
+      source_path: "src/kokoro_agent/protocol/events.py",
+      source_sha256: "0ba59b358db00e53490555e450af060c8a728133a9cf8bfeb49361186adc0f1c",
+      event_kind: "delivery.created",
+    })
+  })
+
+  it("verifies the frozen owner event source bytes and exact regular-file allowlist", async () => {
+    const { assertEventProtocolSource } = await import("../scripts/generate-agent-http-client.mjs")
+    const source = await readFile(
+      new URL("../contract/vendor/kokoro-agent/486adb1539dd8a06ca90684e66f91be031aa70cf/src/kokoro_agent/protocol/events.py", import.meta.url),
+    )
+    const tree = {
+      files: ["src/kokoro_agent/protocol/events.py"],
+      directories: ["src", "src/kokoro_agent", "src/kokoro_agent/protocol"],
+    }
+    assert.doesNotThrow(() => assertEventProtocolSource(tree, source))
+    assert.throws(() => assertEventProtocolSource(tree, Buffer.concat([source, Buffer.from("\n")])), /digest/u)
+    assert.throws(() => assertEventProtocolSource({ ...tree, files: [...tree.files, "unexpected.py"] }, source), /allowlist/u)
+    assert.throws(() => assertEventProtocolSource({ ...tree, files: [] }, source), /allowlist/u)
+  })
+})
 
 describe("Agent owner HTTP success envelopes", () => {
   it("accepts only exact 202 launch receipt, including replay marker and meta", () => {

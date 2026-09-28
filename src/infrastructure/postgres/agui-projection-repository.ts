@@ -16,6 +16,7 @@ import type {
   StoredAgUiFrame,
 } from "../../application/agui/ports/agui-projection-repository.js"
 import type { PostgresBffDatabase } from "./client.js"
+import { insertArtifactDelivery, lockArtifactConversation } from "./conversation-artifact-projection.js"
 
 type StreamRow = {
   version: string
@@ -267,6 +268,9 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
     let notificationCursor: string | null = null
     try {
       await client.query("BEGIN")
+      const artifactOwner = command.sources.some((source) => source.artifactDelivery !== undefined)
+        ? await lockArtifactConversation(client, command.tenantId, command.sessionId)
+        : null
       await client.query(
         `INSERT INTO bff_agui_stream (tenant_id, session_id)
          VALUES ($1, $2)
@@ -318,6 +322,14 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
           ],
         )
         if (inserted.rows[0] === undefined) throw new AgUiSourceIdentityConflictError()
+
+        if (source.artifactDelivery !== undefined) {
+          if (artifactOwner === null) throw new Error("AGUI_ARTIFACT_BINDING_MISSING")
+          await insertArtifactDelivery(
+            client, command.tenantId, command.sessionId, artifactOwner, source,
+            stream.expected_run_id, stream.consumer_subject_id,
+          )
+        }
 
         const update = source.assistantUpdate
         if (update !== undefined && stream.expected_run_id === update.runId && stream.consumer_subject_id !== null) {
