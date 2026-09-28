@@ -3,6 +3,32 @@
 状态：2026-09-28
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。
 
+## W2-F2-S8 大作品下载时限：仅设计，代码仍为 120 秒
+
+BFF main `55d3c9cd55386d9dcc074e893cc388924dd94c13` 的
+`src/http/routes/library-artifact-download.ts` 第 42 行仍用单个
+`AbortSignal.timeout(120_000)` 覆盖本人关联/Storage 最终态与短期引用、最多 1 GiB 的对象取回/校验
+临时文件，以及已发 200 后的出站 `pipeline`。合法大件或慢消费者累计超过 120 秒即会被 BFF 截断；
+Web 精确 Artifact adapter 的 10 分钟未发头、30 分钟 200 流/30 秒 idle 不能消除 BFF 先到的时限。
+当前 1 GiB 是内容上限，不是经过慢链路验证的成功 SLA。
+
+本次只把目标写入 [`TECHNICAL_DESIGN.md`](./TECHNICAL_DESIGN.md)、
+[`API_CONTRACT.md`](./API_CONTRACT.md)、[`DATA_MODEL.md`](./DATA_MODEL.md)：BFF route 内私有准入/
+引用保留现有最多 120 秒预算，ObjectStore 取回/完整校验新设 7 分钟总/45 秒无落盘进度，
+已校验文件出站新设 28 分钟总/25 秒无 response 进度；每段独立有限预算并共用客户端取消，
+取回完成前不发成功头，已发头失败只能终止连接，所有路径清理临时目录和两份进程内 spool 名额。
+2+7 分钟为 Web 10 分钟未发头
+预算留约 1 分钟，出站低于 Web 30 分钟；取消向可取消 I/O 传播，不宣称 PostgreSQL 查询或磁盘
+syscall 严格硬取消，也不承诺任意网络速率。此方案不改变 1 GiB、本人/FINAL+CLEAN 授权、OpenAPI、
+Storage Proto、
+SQL/Redis 或个人文件路径。
+
+**尚未实施/验证：** 运行时仍是单一 120 秒信号；未改代码、测试或机器契约，未运行慢消费者、
+真 1 GiB 限速或真 owner 字节烟测。Root 审查四文档一致性后才进入代码门；代码门须先写可控时钟/
+受控流 RED 测试，再跑 Node 22 `pnpm format:check && pnpm check && pnpm schema:check` 与 Root
+真 Agent/Storage/ObjectStore/BFF 原字节、私有及取消组合门。下方 S5 单仓通过记录不代表本 P1
+下载时限已闭环。
+
 ## W2-F2-S5 第二代码片：本人私有 Artifact Product 读取/下载（单仓已验，跨仓待验）
 
 基线是已验 BFF main `8f46ff6aa96b51a04088a3323d1e1f738d550480` 的来源/持久关联第一片。
