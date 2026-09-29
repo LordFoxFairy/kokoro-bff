@@ -36,8 +36,9 @@ spool 7 分钟总/45 秒落盘 idle、出站 28 分钟总/25 秒已完成写入 
 HTTP 背压/已发头截断，以及非 200/坏长度对象流 `cancel()` 永不完成时的有限失败与名额回收。既有
 1 GiB 边界、摘要/长度和并发 busy 回归仍通过。Root 独立 Node 22
 `pnpm format:check && pnpm check && pnpm schema:check` 通过：默认测试 365 pass/1 无库 skip，
-Schema 5 pass/1 无库 skip。真 Agent/Storage/ObjectStore/BFF owner 字节与代表性 1 GiB 限速
-测试尚未为此代码片执行；不得据单仓小样本宣称大件吞吐 SLA。
+Schema 5 pass/1 无库 skip。Root `f9f5befa` 已固定本代码片 `b382642` 跑通真 IAM/HTTPS
+Chromium→Web→BFF→Agent→Storage/MinIO/ClamAV，两件真实 CLEAN 作品 UI 原生保存原字节及
+同租户其他成员私有 404、自有资源清零。代表性 1 GiB 限速尚未执行，不据小样本宣称大件吞吐 SLA。
 
 ## W2-F2-S5 Product Artifact：跨会话关联与按作品读取（2026-09-28；单仓已验，跨仓待验）
 

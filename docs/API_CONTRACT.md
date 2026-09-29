@@ -26,7 +26,7 @@ PostgreSQL 查询或磁盘 syscall 严格硬取消承诺，也不是任何大小
 临时路径；已发头失败不得伪装下载成功。机器 OpenAPI、Storage Proto、错误码与 Web 契约本次零修改，
 直接假钟与慢消费者 HTTP 测试已验证阶段预算、迟到准入 timeout 503、截断及取消释放；底层
 `body.cancel()`/`reader.cancel()` 不完成也不阻塞本地清理。Root 独立 Node 22 全门已通过；
-此代码片尚无真 owner/代表性 1 GiB 限速验收。
+Root `f9f5befa` 在本代码片 `b382642` 上已验真 IAM/HTTPS Chromium/Agent/Storage 两件原生下载原字节及他人 404；代表性 1 GiB 限速仍待验。
 
 ## W2-F2-S5 Product Artifact 公开契约（2026-09-28；单仓已验，跨仓待验）
 

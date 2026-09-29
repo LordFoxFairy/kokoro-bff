@@ -20,7 +20,8 @@ Redis，也不增加恢复队列：失败后重新 GET 必须重新进行本人�
 因此 `database/schema.sql`、`kokoro_bff` owner schema、事务、索引、receipt、outbox、AG-UI ledger、
 Redis DB 8、retention 与跨 owner 数据边界均零变更；不增加 BFF Artifact metadata 镜像或跨仓 SQL。
 单仓假钟/慢消费者及取消异常测试已回归两名额在正常/超时/断开后的释放，Root 独立 Node 22 全门
-通过；真 owner 与 1 GiB 限速仍待验。现有下节 S5 初版“目标新表/尚未修改 Schema”是历史设计基线；当前是否
+通过；Root `f9f5befa` 在本代码片 `b382642` 上已验真 owner 小件原字节/私有及自有资源清理，
+代表性 1 GiB 限速仍待验。现有下节 S5 初版“目标新表/尚未修改 Schema”是历史设计基线；当前是否
 已经落表以本仓 `database/schema.sql` 与 `docs/CURRENT.md` 顶端 S5 代码片为准。
 
 ## W2-F2-S5 Conversation↔Artifact 关联投影（2026-09-28；文档目标，Schema 尚未修改）

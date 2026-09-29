@@ -3,7 +3,7 @@
 状态：2026-09-28
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。
 
-## W2-F2-S8 大作品下载时限：BFF 单仓代码已验，真大件待验
+## W2-F2-S8 大作品下载时限：单仓与真浏览器小件已验，真大件待验
 
 基线 BFF `55d3c9cd55386d9dcc074e893cc388924dd94c13` 的单个
 `AbortSignal.timeout(120_000)` 贯穿作品取回/校验和出站，合法慢下载可能先于 Web 的独立预算被截断。
@@ -21,9 +21,11 @@ SQL/Redis、个人文件路径均未改。
 
 直接假钟/受控流与真实慢消费者 Node HTTP 测试已覆盖阶段总/idle、成功与截断、异常取消回收；
 Root 独立 Node 22 `pnpm format:check && pnpm check && pnpm schema:check` 全绿：默认测试
-365 pass/1 无库 skip，Schema 5 pass/1 无库 skip。**尚未验证**此代码片的真
-Agent/Storage/ObjectStore/BFF owner 字节和代表性 1 GiB 限速；下方 S5 单仓与早期真组合记录
-不能替代本 P1 的大件验收。
+365 pass/1 无库 skip，Schema 5 pass/1 无库 skip。Root `f9f5befa92f30c650397837120b7cc0be8bc37b0`
+固定本代码片 `b382642affa27332e91b49078e0500c6716b820e` 的真 IAM→HTTPS Chromium→Web→BFF→
+Agent→Storage/MinIO/ClamAV run exit0/PASS：两件真实 CLEAN 作品从 UI 原生下载保存原字节，另一成员
+列表空/内容 404，个人文件/Project/EICAR 回归通过，测试自有数据库、Redis 键、进程与对象版本清零。
+这证明真实 owner 小件路径与回归，不是代表性 1 GiB 限速或故障恢复验收；后两者仍待专测。
 
 ## W2-F2-S5 第二代码片：本人私有 Artifact Product 读取/下载（单仓已验，跨仓待验）
 
