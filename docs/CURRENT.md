@@ -1,5 +1,12 @@
 # kokoro-bff 当前实现
 
+## W3-BFF-PUBLISHED-SKILL-READ-PREFLIGHT：仅未激活机器/文档候选
+
+基线 BFF clean `55ca6c1d8a7fbd0a21bea8d3539667a68d67e9d9`、Platform owner clean `6a09913a96c686b316bfe707b823d039e625607a`。唯一 public OpenAPI 新增 `GET /v1/skills/{skill_id}`、operationId=`getPublishedPersonalSkill` 的未激活候选：当前 IAM Product user/tenant 将由 BFF 投影到 Platform，只有本人 PERSONAL/ACTIVE Skill 可读且不要求安装；不存在、非本人、跨 tenant、非 PERSONAL 或非 ACTIVE 统一 404。200 只有 `skill_id/source_ref/revision/status/name/summary/tags` 七个安全字段的 `{data}`；无 query/body/Idempotency-Key；400/401/403/404/429/502/503 使用状态专属错误，成功与每个错误都要求 `x-request-id` 和 `Cache-Control: no-store`。本片没有 route、owner client、credential、generated、配置、SQL/receipt/cache 或 Web 入口，因此不得声称已运行或 Web 可见。
+
+当前活跃 `listSkills` 仍是 legacy `{data,meta}`，且会丢失 Platform `source_ref/revision`；本片不预改其机器响应。下一运行 cutover 必须在一个提交中把既有 Skills/Pool/Catalog/MCP 四个 GET 原子迁到 Platform HTTP 3.1.0，使用专用 projection credential/Bearer，并删除旧 Capability secret、source selector 与 generated consumer；本人 ACTIVE list 使用 owner `/v1/skills?scope_kind=personal`，pool/catalog 不恢复 ACK。MCP 必须按 owner-native `server_id/provider_key/server_identity/transport/declaration_digest/status` 与 Web 同步重定义，或删除公开 GET 与旧 UI；不得保留伪造 `revision=1`、URL、空 allowed_tools、null secret_ref 或压扁 transport/status 的兼容映射。v4 写候选保持 default-off。
+
+
 状态：2026-09-29
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。
 

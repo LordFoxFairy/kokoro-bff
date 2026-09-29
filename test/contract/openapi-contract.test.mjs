@@ -554,7 +554,6 @@ test("PublishSkill semantic gate rejects body, state, status and legacy-operatio
     openapi.replace("x-kokoro-fixed-visibility: personal", "x-kokoro-fixed-visibility: organization"),
     openapi.replace("      operationId: publishSkill", "      operationId: publishSkill\n      requestBody:\n        required: true"),
     openapi.replace("status: { type: string, const: active }", "status: { type: string, const: draft }"),
-    openapi.replace("source_ref: { type: string, pattern: '^skill:[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }", "source_ref: { type: string }"),
     openapi.replace(
       "'412': { $ref: '#/components/responses/SkillPublishPreconditionFailed' }",
       "'412': { $ref: '#/components/responses/SkillPublishBadGateway' }",
@@ -806,4 +805,35 @@ test("the pinned Agent ControlReceipt excludes BFF-projected run_id", async () =
   assert.deepEqual(snapshot.required, ["command_id", "request_digest", "status", "replayed"])
   assert.equal(Object.hasOwn(snapshot.properties, "run_id"), false)
   assert.equal(snapshot["x-kokoro-source"].commit, "70a38138f42f29e8a482fde7890fe0e2d0c27e34")
+})
+
+test("GetPublishedPersonalSkill is an inactive strict personal ACTIVE read candidate", async () => {
+  const { openapi, baseline } = await readContract()
+  assert.ok(baseline.some(({ method, path, operation_id }) => method === "GET" && path === "/v1/skills/{skill_id}" && operation_id === "getPublishedPersonalSkill"))
+  const operation = openapi.slice(openapi.indexOf("  /v1/skills/{skill_id}:"), openapi.indexOf("  /v1/skills/pool:"))
+  for (const fragment of ["operationId: getPublishedPersonalSkill", "product.skill.read_published_personal", "x-kokoro-idempotency: none", "PublishedPersonalSkillId", "PublishedPersonalSkillOk", "PublishedPersonalSkillNotFound", "PublishedPersonalSkillRateLimited"]) assert.ok(operation.includes(fragment), fragment)
+  for (const status of ["200", "400", "401", "403", "404", "429", "502", "503"]) assert.match(operation, new RegExp(`'${status}':`, "u"))
+  assert.doesNotMatch(operation, /requestBody:|Idempotency-Key|CapabilitySkill|source_selector|secret_ref/u)
+  const resource = openapi.slice(openapi.indexOf("    PublishedPersonalSkillResource:"), openapi.indexOf("    PublishedPersonalSkillResponse:"))
+  assert.match(resource, /required: \[skill_id, source_ref, revision, status, name, summary, tags\]/u)
+  assert.match(resource, /additionalProperties: false/u)
+  assert.match(resource, /status: \{ type: string, const: active \}/u)
+  assert.deepEqual(inspectBffOpenApi(openapi, baseline), [])
+})
+
+test("GetPublishedPersonalSkill semantic gate rejects envelope, field, input, status, and header drift", async () => {
+  const { openapi, baseline } = await readContract()
+  const mutations = [
+    openapi.replace("required: [skill_id, source_ref, revision, status, name, summary, tags]", "required: [skill_id, name]"),
+    openapi.replace("      operationId: getPublishedPersonalSkill", "      operationId: getPublishedPersonalSkill\n      requestBody: { required: false }"),
+    openapi.replace("        '404': { $ref: '#/components/responses/PublishedPersonalSkillNotFound' }", "        '404': { $ref: '#/components/responses/PublishedPersonalSkillBadGateway' }"),
+    openapi.replace("        '502': { $ref: '#/components/responses/PublishedPersonalSkillBadGateway' }\n", ""),
+    openapi.replace("    PublishedPersonalSkillOk:\n      description:", "    PublishedPersonalSkillOk:\n      x-request-id-removed: true\n      description:").replace(/(    PublishedPersonalSkillOk:[\s\S]*?)        x-request-id:/u, "$1        x-request-id-removed:"),
+    openapi.replace("    PublishedPersonalSkillId:\n      name: skill_id", "    PublishedPersonalSkillId:\n      name: source_ref"),
+    openapi.replace("    PublishedPersonalSkillResponse:\n      type: object\n      required: [data]", "    PublishedPersonalSkillResponse:\n      type: object\n      required: [data, meta]"),
+  ]
+  for (const [index, broken] of mutations.entries()) {
+    assert.notEqual(broken, openapi, `mutation ${index}`)
+    assert.ok(inspectBffOpenApi(broken, baseline).some((error) => /getPublishedPersonalSkill|PublishedPersonalSkill/u.test(error)), `mutation ${index}`)
+  }
 })

@@ -286,6 +286,8 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
         "SkillValidateErrorResponse",
         "PublishSkillResponse",
         "SkillPublishErrorResponse",
+        "PublishedPersonalSkillResponse",
+        "PublishedPersonalSkillErrorResponse",
       ].includes(block.name)
     )
       continue
@@ -310,6 +312,8 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
 
   for (const operation of operations) {
     const operationId = operation.fields.get("operationId") ?? operation.name
+    const isPublishedPersonalSkill =
+      operationId === "getPublishedPersonalSkill" && operation.method === "GET" && operation.path === "/v1/skills/{skill_id}"
     const isCreateSkillDraft = operationId === "createSkillDraft"
     const isGetSkillPackageUpload =
       operationId === "getSkillPackageUpload" && operation.method === "GET" && operation.path === "/v1/skills/{skill_id}/package-upload"
@@ -373,6 +377,7 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
         if (
           !isReadinessException &&
           !isCreateSkillDraft &&
+          !isPublishedPersonalSkill &&
           !isGetSkillPackageUpload &&
           !isBeginSkillPackageUpload &&
           !isCompleteSkillPackageUpload &&
@@ -388,6 +393,7 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
           numericStatus < 400 ||
           ERROR_RESPONSE_COMPONENTS.has(match[1]) ||
           isCreateSkillDraft ||
+          (isPublishedPersonalSkill && match[1].startsWith("PublishedPersonalSkill")) ||
           (isGetSkillPackageUpload && match[1].startsWith("SkillPackageUploadGet")) ||
           (isBeginSkillPackageUpload && match[1].startsWith("SkillPackageBegin")) ||
           (isCompleteSkillPackageUpload && match[1].startsWith("SkillPackageComplete")) ||
@@ -456,6 +462,53 @@ function idempotencyErrors(parameters: Map<string, NamedBlock>, operations: Oper
       errors.push(`${operation.method} ${operation.path} (${operationId}) must not reference Idempotency-Key`)
     }
   }
+  return errors
+}
+
+function publishedPersonalSkillContractErrors(
+  parameters: Map<string, NamedBlock>,
+  schemas: Map<string, NamedBlock>,
+  operations: OperationBlock[],
+  responses: Map<string, NamedBlock>,
+): string[] {
+  const errors: string[] = []
+  const matches = operations.filter(({ fields }) => fields.get("operationId") === "getPublishedPersonalSkill")
+  if (matches.length !== 1) return ["getPublishedPersonalSkill must occur exactly once"]
+  const operation = matches[0]
+  if (operation.method !== "GET" || operation.path !== "/v1/skills/{skill_id}") errors.push("getPublishedPersonalSkill must remain the exact public GET path")
+  for (const [field, expected] of Object.entries({
+    "x-kokoro-owner": "kokoro-bff",
+    "x-kokoro-visibility": "public",
+    "x-kokoro-stability": "beta",
+    "x-kokoro-idempotency": "none",
+    "x-kokoro-permission": "product.skill.read_published_personal",
+  })) if (operation.fields.get(field) !== expected) errors.push(`getPublishedPersonalSkill ${field} must be ${expected}`)
+  for (const forbidden of ["requestBody:", "Idempotency-Key", "CapabilitySkill", "source_selector", "secret_ref"]) if (operation.text.includes(forbidden)) errors.push(`getPublishedPersonalSkill must exclude ${forbidden}`)
+  if (!operation.text.includes("#/components/parameters/PublishedPersonalSkillId")) errors.push("getPublishedPersonalSkill must use its canonical skill_id parameter")
+  const expectedResponses = new Map([
+    ["200", "PublishedPersonalSkillOk"], ["400", "PublishedPersonalSkillBadRequest"], ["401", "PublishedPersonalSkillUnauthorized"],
+    ["403", "PublishedPersonalSkillForbidden"], ["404", "PublishedPersonalSkillNotFound"], ["429", "PublishedPersonalSkillRateLimited"],
+    ["502", "PublishedPersonalSkillBadGateway"], ["503", "PublishedPersonalSkillUnavailable"],
+  ])
+  const actual = collectResponseBlocks(operation)
+  if (JSON.stringify([...actual.keys()]) !== JSON.stringify([...expectedResponses.keys()])) errors.push("getPublishedPersonalSkill status set drifted")
+  for (const [status, component] of expectedResponses) if (!actual.get(status)?.includes(`#/components/responses/${component}`)) errors.push(`getPublishedPersonalSkill ${status} must reference ${component}`)
+  const parameter = parameters.get("PublishedPersonalSkillId")
+  if (parameter === undefined || !parameter.text.includes("name: skill_id") || !parameter.text.includes("in: path") || !parameter.text.includes("required: true")) errors.push("PublishedPersonalSkillId must be a required path parameter")
+  const resource = schemas.get("PublishedPersonalSkillResource")
+  const fields = ["skill_id", "source_ref", "revision", "status", "name", "summary", "tags"]
+  if (resource === undefined || JSON.stringify(topLevelRequired(resource)) !== JSON.stringify(fields) || schemaProperties(resource).join(",") !== fields.join(",") || !resource.text.includes("additionalProperties: false") || !resource.text.includes("const: active") || !resource.text.includes("^skill:")) errors.push("PublishedPersonalSkillResource must remain the strict seven-field ACTIVE projection")
+  for (const name of ["PublishedPersonalSkillResponse", "PublishedPersonalSkillErrorResponse"]) {
+    const schema = schemas.get(name)
+    const only = name.endsWith("ErrorResponse") ? "error" : "data"
+    if (schema === undefined || topLevelRequired(schema).join(",") !== only || schemaProperties(schema).join(",") !== only || !schema.text.includes("additionalProperties: false")) errors.push(`${name} must remain ${only}-only`)
+  }
+  for (const name of expectedResponses.values()) {
+    const response = responses.get(name)
+    if (response === undefined || !response.text.includes("x-request-id:") || !response.text.includes("Cache-Control:") || !response.text.includes("const: no-store")) errors.push(`${name} must require x-request-id and no-store`)
+  }
+  const rate = responses.get("PublishedPersonalSkillRateLimited")
+  if (rate === undefined || !rate.text.includes("Retry-After:") || !rate.text.includes("required: false")) errors.push("PublishedPersonalSkillRateLimited must define optional bounded Retry-After")
   return errors
 }
 
@@ -1282,6 +1335,7 @@ export function inspectBffOpenApi(source: string, baseline: readonly BaselineOpe
     ...revisionErrors(schemas),
     ...envelopeErrors(schemas, operations, responseComponents),
     ...idempotencyErrors(parameters, operations),
+    ...publishedPersonalSkillContractErrors(parameters, schemas, operations, responseComponents),
     ...skillDraftContractErrors(parameters, schemas, operations, responseComponents),
     ...skillPackageUploadGetContractErrors(parameters, schemas, operations, responseComponents),
     ...skillPackageBeginContractErrors(parameters, schemas, operations, responseComponents),

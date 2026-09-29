@@ -1,5 +1,14 @@
 # kokoro-bff 技术设计
 
+## Published personal Skill by ID：未激活 public contract preflight
+
+**当前态。** 活跃 Skills/Pool/Catalog 与 MCP 读取仍经旧 Capability facade；`listSkills` 输出 legacy `{data,meta}` 并丢失 owner `source_ref/revision`。新 `GET /v1/skills/{skill_id}` 目前只有 BFF canonical public OpenAPI 与语义门，没有运行 route、Platform HTTP client、projection credential 或 Web caller。
+
+**目标态。** Browser 仍只走 Web same-origin adapter；BFF 每次先做 IAM Product session admission，以可信 tenant/user 调 Platform HTTP 3.1.0 `getPublishedPersonalSkill`。Platform 是 Skill 唯一事实 owner，只允许该 user 的 PERSONAL/ACTIVE 当前行且不要求安装；其他 tenant/owner/scope/state 与缺失同一 404。BFF 只投影七个安全字段，不存 Skill SQL、receipt、cache，不转发 user Bearer，不返回 package、manifest、Asset、签名 URL 或执行字段。
+
+放置采用扩展现有 public Skills surface 与 canonical OpenAPI，否决新增 BFF Skill 数据模块或复用写侧 inactive v4 Connect：前者复制 owner 事实，后者不是 read projection contract。下一运行切片必须原子迁移旧四 GET 到 Platform HTTP 3.1.0、专用 workload Bearer，并删除 Capability secret/source selector/generated 双轨；个人 ACTIVE list 使用 `scope_kind=personal`，pool/catalog 不恢复 ACK。MCP 选择 owner-native 六字段并同步 Web，或删除公开 GET/旧 UI；不保留旧伪造字段兼容层。
+
+
 ## W3 Publish 运行候选：当前态与目标态（2026-09-29；默认关闭）
 
 **当前态。** 固定 Platform `263a28f` inactive v4/3.0.0 的 BFF Publish 已在既有 Skills candidate flag 下由 `src/bootstrap/server.ts` 精确分派到具名 `src/http/routes/publish-skill.ts`；`src/http/publish-skill-input.ts` 仅负责稳定命令身份，`src/infrastructure/clients/platform/publish-skill-projector.ts` 负责唯一 v4 8 向量 JCS 投影，`catalog-connect.ts` 以独立 workload token 调 generated Publish。零字节体、单键、当次 IAM/可信 user+tenant、固定 PERSONAL(1)、严格 owner ACTIVE/event/revision/source_ref 检查在每次重放上执行。Platform 独有 package/validated/Storage CLEAN/CAS/receipt/outbox；BFF 不建 SQL/receipt/Storage RPC，也不经旧 Capability。HTTP/contract 静态门后仍待 Root 真 owner 组合与正式激活；下节保留文档门当时无路由事实。

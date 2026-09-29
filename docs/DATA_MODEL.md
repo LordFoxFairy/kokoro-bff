@@ -1,5 +1,12 @@
 # kokoro-bff data model
 
+## Published personal Skill read：无 BFF 持久化 owner
+
+新 `GET /v1/skills/{skill_id}` 未激活机器候选不新增表、列、索引、事务、receipt、outbox、Redis key 或 cache。Skill tenant、user owner、PERSONAL scope、ACTIVE state、`source_ref` 与 `revision` 都是 Platform owner 事实；BFF 只在当次 IAM admission 后读取并安全投影七字段。非本人/跨 tenant/非 PERSONAL/非 ACTIVE 与缺失均由 owner read 隐蔽为 404。
+
+后继原子 read cutover 也不得复制 Platform Skill/MCP 数据。旧四 GET 改用 Platform HTTP 3.1.0；个人 ACTIVE list 使用 `scope_kind=personal`。MCP 必须采用 owner-native 六字段并同步 Web 或删除公开 surface，禁止持久化或继续合成旧 revision/url/allowed_tools/secret_ref。
+
+
 ## W3 Publish 运行候选：无 BFF 持久化 owner（2026-09-29）
 
 Publish 现已接默认关闭的 BFF 具名 route/固定 Platform v4 Connect 调用；本仓 canonical SQL、索引、事务、Redis、receipt/outbox 仍无改动。每次含 replay 先当次 IAM，再让 Platform 按 current Skill/package/Storage CLEAN 与自身 command receipt 判定；BFF 仅做严格短暂 public 投影，不跨 owner SQL、不存签名或 ZIP。运行候选不代表产品激活或 Root 真 owner 组合已验；下节是文档门当时尚无 route 的历史状态。

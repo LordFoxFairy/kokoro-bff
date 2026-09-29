@@ -1976,6 +1976,28 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+  /v1/skills/{skill_id}:
+    get:
+      tags: [Skills]
+      operationId: getPublishedPersonalSkill
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: product.skill.read_published_personal
+      summary: Read the current ACTIVE personal Skill by canonical ID
+      description: Inactive machine-contract candidate. Current IAM Product user and tenant are projected to Platform; missing, non-owner, cross-tenant, non-PERSONAL, and non-ACTIVE Skills share the same 404 and installation is not required.
+      parameters:
+        - $ref: '#/components/parameters/PublishedPersonalSkillId'
+      responses:
+        '200': { $ref: '#/components/responses/PublishedPersonalSkillOk' }
+        '400': { $ref: '#/components/responses/PublishedPersonalSkillBadRequest' }
+        '401': { $ref: '#/components/responses/PublishedPersonalSkillUnauthorized' }
+        '403': { $ref: '#/components/responses/PublishedPersonalSkillForbidden' }
+        '404': { $ref: '#/components/responses/PublishedPersonalSkillNotFound' }
+        '429': { $ref: '#/components/responses/PublishedPersonalSkillRateLimited' }
+        '502': { $ref: '#/components/responses/PublishedPersonalSkillBadGateway' }
+        '503': { $ref: '#/components/responses/PublishedPersonalSkillUnavailable' }
   /v1/skills/pool:
     get:
       tags: [Skills]
@@ -3596,6 +3618,14 @@ components:
         minLength: 1
         maxLength: 128
         pattern: '^[\x21-\x2B\x2D-\x7E]+$'
+    PublishedPersonalSkillId:
+      name: skill_id
+      in: path
+      required: true
+      description: Canonical Platform Skill identifier; never a source_ref, package asset, or installation identifier.
+      schema:
+        type: string
+        pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$'
     IdempotencyKey:
       name: Idempotency-Key
       in: header
@@ -3903,6 +3933,42 @@ components:
       additionalProperties: false
       properties:
         error: { $ref: '#/components/schemas/SkillPublishErrorDetail' }
+    PublishedPersonalSkillResource:
+      type: object
+      required: [skill_id, source_ref, revision, status, name, summary, tags]
+      additionalProperties: false
+      properties:
+        skill_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        source_ref: { type: string, pattern: '^skill:[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        revision: { type: string, pattern: '^[1-9][0-9]*$' }
+        status: { type: string, const: active }
+        name: { type: string }
+        summary: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+    PublishedPersonalSkillResponse:
+      type: object
+      required: [data]
+      additionalProperties: false
+      properties:
+        data: { $ref: '#/components/schemas/PublishedPersonalSkillResource' }
+    PublishedPersonalSkillErrorDetail:
+      type: object
+      required: [code, message, retryable]
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          enum: [invalid_skill_request, service_auth_failed, session_authentication_required, session_invalid, session_forbidden, session_rate_limited, product_tenant_not_configured, product_tenant_forbidden, skill_not_found, skill_rate_limited, iam_admission_unavailable, skill_dependency_unavailable, skill_response_invalid]
+        message: { type: string, minLength: 1 }
+        retryable: { type: boolean }
+    PublishedPersonalSkillErrorResponse:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error: { $ref: '#/components/schemas/PublishedPersonalSkillErrorDetail' }
     PersonalFileUploadResponse:
       type: object
       additionalProperties: false
@@ -6381,6 +6447,154 @@ components:
                 properties:
                   error:
                     type: object
+                    properties:
+                      code: { type: string, enum: [product_tenant_not_configured, iam_admission_unavailable, skill_dependency_unavailable] }
+    PublishedPersonalSkillOk:
+      description: Current ACTIVE personal Skill safe projection
+      headers:
+        x-request-id:
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          required: true
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/PublishedPersonalSkillResponse' }
+    PublishedPersonalSkillBadRequest:
+      description: Malformed canonical Skill identifier
+      headers:
+        x-request-id:
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          required: true
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/PublishedPersonalSkillErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    properties:
+                      code: { type: string, enum: [invalid_skill_request] }
+    PublishedPersonalSkillUnauthorized:
+      description: Product session authentication failed
+      headers:
+        x-request-id:
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          required: true
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/PublishedPersonalSkillErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    properties:
+                      code: { type: string, enum: [session_authentication_required, session_invalid] }
+    PublishedPersonalSkillForbidden:
+      description: Trusted service or admitted Product tenant is forbidden
+      headers:
+        x-request-id:
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          required: true
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/PublishedPersonalSkillErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    properties:
+                      code: { type: string, enum: [service_auth_failed, session_forbidden, product_tenant_forbidden] }
+    PublishedPersonalSkillNotFound:
+      description: Skill is absent or hidden by ownership, tenant, scope, or ACTIVE-state policy
+      headers:
+        x-request-id:
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          required: true
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/PublishedPersonalSkillErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    properties:
+                      code: { type: string, enum: [skill_not_found] }
+    PublishedPersonalSkillRateLimited:
+      description: IAM admission or Platform projection is rate limited
+      headers:
+        x-request-id:
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          required: true
+          schema: { type: string, const: no-store }
+        Retry-After:
+          required: false
+          schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/PublishedPersonalSkillErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    properties:
+                      code: { type: string, enum: [session_rate_limited, skill_rate_limited] }
+    PublishedPersonalSkillBadGateway:
+      description: Platform returned an invalid projection
+      headers:
+        x-request-id:
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          required: true
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/PublishedPersonalSkillErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    properties:
+                      code: { type: string, enum: [skill_response_invalid] }
+    PublishedPersonalSkillUnavailable:
+      description: Required Product admission or Platform projection is unavailable
+      headers:
+        x-request-id:
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          required: true
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/PublishedPersonalSkillErrorResponse'
+              - type: object
+                properties:
+                  error:
                     properties:
                       code: { type: string, enum: [product_tenant_not_configured, iam_admission_unavailable, skill_dependency_unavailable] }
     SkillDraftBadRequest:
