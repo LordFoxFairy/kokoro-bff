@@ -804,7 +804,9 @@ producer 的 408/425/429/5xx 可重试，其他非 2xx 永久失败；BFF 不重
 owner artifact 升级须更新 commit/digest/config provenance、重新生成和验证两条 consumer 边界，breaking 变更按 owner 版本策略评审；
 W0B-9 clean-slate 同时删除 jobs/job_*、旧 header 与 compact occurrence 路径，不维护 alias 或双协议 fallback。
 
-## W1E Product Skill mutation 契约目标（未发布）
+## W1E Product Skill mutation 契约目标（已废止的历史基线）
+
+**历史基线，勿作为当前消费者契约。** 本节保留 W1E 当时的六操作规划与前置条件；当前 Validate 以[顶部 W3 Validate public 机器候选](#w3-validate-public-机器候选2026-09-29尚无运行路由)和[唯一 public OpenAPI](../contract/openapi/v1/openapi.yaml)为准。owner v4 `ValidateSkillDraftRequest.attempt_id`（Proto tag 7）对应 public strict body **必填 `attempt_id`**；下表及后文“仅资源标识与幂等身份”、尚无 Validate 机器契约等表述均只描述旧基线，不得复制为现行请求。
 
 当前 public canonical OpenAPI 与运行时代码没有下表六 catalog mutation；已有 name/revisions、enable/disable、GitHub import 等
 声明仍不构成 owner mutation 接通。此设计不修改机器契约，不增加浏览器 IAM relay。四 scope 权限规则与 pin 顺序见
@@ -823,6 +825,8 @@ W0B-9 clean-slate 同时删除 jobs/job_*、旧 header 与 compact occurrence �
 | `POST /v1/skills/withdrawals`         | WithdrawSkill      | withdraw；source_ref/reason；200 source_ref/status/event_id/replayed                                                                                      |
 | `PATCH /v1/skills/{skill_id}/status`  | SetSkillStatus     | set_status；status 白名单；200 skill_id/revision/status/replayed                                                                                          |
 
+上表 Validate 行仅记录 W1E 当时规划；当前 v4 public 请求另**必填 `attempt_id`**，以顶部 W3 契约及唯一 OpenAPI 为准。
+
 organization 每条操作调用 IAM `POST /internal/v1/tenants/{tenant_id}/skill-authorizations/check`，body 只有准确 `action`。
 使用当前具名 user Bearer；200 仅接受 allowed=true 且 tenant_id/subject_id/action 与本请求一致；任何缺失、额外或错配字段 fail closed。
 user/project/session 使用 BFF 当前资源事实，不能把组织 skill allow 外推到个人、Project 或 Conversation。
@@ -831,7 +835,7 @@ user/project/session 使用 BFF 当前资源事实，不能把组织 skill allow
 upload 的 begin_upload/complete_upload/abort_upload 与 installation 的 install/set_installation_enabled/remove_installation
 沿用四 scope 规则及 IAM 同名 action；安装要分别检查 source 可见性与 target owner 写权，source 可读不等于 target 可写。
 这些动作不是本片六 catalog API 的伪装复用：Storage package upload 契约、Platform installation Product admission 和 BFF public
-对应路径均需后续 owner pin/机器契约发布。Validate 只提供资源标识与幂等身份等必要输入；Platform 从已持久化的 Complete 包绑定
+对应路径均需后续 owner pin/机器契约发布。按本节历史基线，Validate 只提供资源标识与幂等身份等必要输入；当前 v4 请求另必填 `attempt_id`，见顶部契约。Platform 从已持久化的 Complete 包绑定
 读取 asset reference 与 content digest，并联合 Storage 重验 clean/归属/摘要；没有有效 Complete 绑定时拒绝 Validate。
 Storage→Platform Begin/Complete 上传链及持久包绑定必须先于 Validate/Publish 成功路径激活，Publish 还要求有效的包验证状态；
 该硬前置未就绪时两动作保持 fail closed，不把其余 catalog 操作可用宣称为六条 mutation 全部可成功。
