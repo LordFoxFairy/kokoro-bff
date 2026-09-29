@@ -2278,6 +2278,45 @@ paths:
         '429': { $ref: '#/components/responses/SkillValidateRateLimited' }
         '502': { $ref: '#/components/responses/SkillValidateBadGateway' }
         '503': { $ref: '#/components/responses/SkillValidateUnavailable' }
+  /v1/skills/{skill_id}/publish:
+    post:
+      tags: [Skills]
+      operationId: publishSkill
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-empty-body: required
+      x-kokoro-fixed-visibility: personal
+      x-kokoro-permission: product.skill.publish
+      summary: Publish the current validated ZIP package of a user-owned draft Skill
+      description: Inactive document-only Product candidate pinned to inactive Platform v4 owner commit 263a28f1e55745bd1829a61f68228d775751adbc and artifact aggregate SHA-256 902f8f2c2fbeb95a441820c1cf16b0a9c793eadac7106f9fcd5e41e3878b7f79; no BFF Publish runtime route exists yet. This command accepts exactly zero request-body bytes, including no JSON object, whitespace, null, visibility, asset, manifest, tenant or owner. The BFF later fixes owner visibility to PERSONAL(1) and calls Platform only after current IAM user admission, including same-key replay. Platform alone checks current user owner/draft/validated package and fresh Storage CLEAN/object health, then atomically activates the Skill, keeps one durable receipt and appends one skill.published outbox event. Same-key healthy replay returns the same event_id, while a distinct command on active Skill fails. Unknown ACK recovery re-admits the user and retries the same owner command; no BFF receipt or outbox is added. Validated is not yet active, and this candidate is not publicly activated.
+      parameters:
+        - $ref: '#/components/parameters/SkillPackageUploadSkillId'
+        - $ref: '#/components/parameters/SkillPublishIdempotencyKey'
+      responses:
+        '200':
+          description: Skill is active or the same healthy publication is durably replayed
+          headers:
+            x-request-id:
+              description: Correlation identifier for this request
+              schema: { type: string, minLength: 1, maxLength: 128 }
+            Cache-Control:
+              description: Never cache a Skill publication result
+              schema: { type: string, const: no-store }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublishSkillResponse' }
+        '400': { $ref: '#/components/responses/SkillPublishBadRequest' }
+        '401': { $ref: '#/components/responses/SkillPublishUnauthorized' }
+        '403': { $ref: '#/components/responses/SkillPublishForbidden' }
+        '404': { $ref: '#/components/responses/SkillPublishNotFound' }
+        '409': { $ref: '#/components/responses/SkillPublishConflict' }
+        '412': { $ref: '#/components/responses/SkillPublishPreconditionFailed' }
+        '413': { $ref: '#/components/responses/SkillPublishPayloadTooLarge' }
+        '429': { $ref: '#/components/responses/SkillPublishRateLimited' }
+        '502': { $ref: '#/components/responses/SkillPublishBadGateway' }
+        '503': { $ref: '#/components/responses/SkillPublishUnavailable' }
   /v1/skills/{name}/revisions:
     parameters:
       - $ref: '#/components/parameters/SkillNameOnly'
@@ -3547,6 +3586,16 @@ components:
         minLength: 1
         maxLength: 128
         pattern: '^[\x21-\x2B\x2D-\x7E]+$'
+    SkillPublishIdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: One printable 1–128 character value, never trimmed or comma-joined; scoped to publish operation, admitted tenant/user and skill_id. The body must have zero bytes.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+        pattern: '^[\x21-\x2B\x2D-\x7E]+$'
     IdempotencyKey:
       name: Idempotency-Key
       in: header
@@ -3818,6 +3867,42 @@ components:
       additionalProperties: false
       properties:
         error: { $ref: '#/components/schemas/SkillValidateErrorDetail' }
+    SkillPublishRevision:
+      type: string
+      description: Decimal unsigned 64-bit Skill revision from 1 through 18446744073709551615, without leading zeroes.
+      pattern: '^(?:[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{4}|18446744073709550[0-9]{3}|18446744073709551[0-5][0-9]{2}|1844674407370955160[0-9]{1}|1844674407370955161[0-4]|18446744073709551615)$'
+    SkillPublishResource:
+      type: object
+      required: [source_ref, revision, status, event_id, replayed]
+      additionalProperties: false
+      properties:
+        source_ref: { type: string, pattern: '^skill:[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        revision: { $ref: '#/components/schemas/SkillPublishRevision' }
+        status: { type: string, const: active }
+        event_id: { type: string, format: uuid }
+        replayed: { type: boolean }
+    PublishSkillResponse:
+      type: object
+      required: [data]
+      additionalProperties: false
+      properties:
+        data: { $ref: '#/components/schemas/SkillPublishResource' }
+    SkillPublishErrorDetail:
+      type: object
+      required: [code, message, retryable]
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          enum: [invalid_skill_request, idempotency_key_required, invalid_idempotency_key, request_body_too_large, session_authentication_required, session_invalid, service_auth_failed, session_forbidden, product_tenant_forbidden, product_tenant_not_configured, session_rate_limited, skill_rate_limited, skill_not_found, skill_idempotency_conflict, skill_command_in_progress, skill_precondition_failed, skill_response_invalid, iam_admission_unavailable, skill_dependency_unavailable]
+        message: { type: string, minLength: 1 }
+        retryable: { type: boolean }
+    SkillPublishErrorResponse:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error: { $ref: '#/components/schemas/SkillPublishErrorDetail' }
     PersonalFileUploadResponse:
       type: object
       additionalProperties: false
@@ -6088,6 +6173,210 @@ components:
           schema:
             allOf:
               - $ref: '#/components/schemas/SkillValidateErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [product_tenant_not_configured, iam_admission_unavailable, skill_dependency_unavailable] }
+    SkillPublishBadRequest:
+      description: Invalid zero-byte request body or Idempotency-Key
+      headers:
+        x-request-id:
+          description: Correlation identifier for this request
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          description: Never cache a Skill publication result
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/SkillPublishErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [invalid_skill_request, idempotency_key_required, invalid_idempotency_key] }
+    SkillPublishUnauthorized:
+      description: Current IAM user session authentication failed
+      headers:
+        x-request-id:
+          description: Correlation identifier for this request
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          description: Never cache a Skill publication result
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/SkillPublishErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [session_authentication_required, session_invalid] }
+    SkillPublishForbidden:
+      description: Service or current Product identity is forbidden
+      headers:
+        x-request-id:
+          description: Correlation identifier for this request
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          description: Never cache a Skill publication result
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/SkillPublishErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [service_auth_failed, session_forbidden, product_tenant_forbidden] }
+    SkillPublishNotFound:
+      description: Skill is absent or invisible to this tenant or owner
+      headers:
+        x-request-id:
+          description: Correlation identifier for this request
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          description: Never cache a Skill publication result
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/SkillPublishErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [skill_not_found] }
+    SkillPublishConflict:
+      description: Command identity conflicts or a current command is in progress
+      headers:
+        x-request-id:
+          description: Correlation identifier for this request
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          description: Never cache a Skill publication result
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/SkillPublishErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [skill_idempotency_conflict, skill_command_in_progress] }
+    SkillPublishPreconditionFailed:
+      description: Current Skill, package, visibility or fresh Storage state does not permit publication
+      headers:
+        x-request-id:
+          description: Correlation identifier for this request
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          description: Never cache a Skill publication result
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/SkillPublishErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [skill_precondition_failed] }
+    SkillPublishPayloadTooLarge:
+      description: The non-empty request body exceeds the bounded transport limit
+      headers:
+        x-request-id:
+          description: Correlation identifier for this request
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          description: Never cache a Skill publication result
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/SkillPublishErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [request_body_too_large] }
+    SkillPublishRateLimited:
+      description: IAM or Platform rate limited the request
+      headers:
+        x-request-id:
+          description: Correlation identifier for this request
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          description: Never cache a Skill publication result
+          schema: { type: string, const: no-store }
+        Retry-After:
+          description: Optional bounded delay in seconds before retrying; absent or malformed upstream values are not forwarded
+          required: false
+          schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/SkillPublishErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [session_rate_limited, skill_rate_limited] }
+    SkillPublishBadGateway:
+      description: Platform returned an invalid pinned publication response
+      headers:
+        x-request-id:
+          description: Correlation identifier for this request
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          description: Never cache a Skill publication result
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/SkillPublishErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [skill_response_invalid] }
+    SkillPublishUnavailable:
+      description: Current IAM, Platform or Storage dependency is unavailable
+      headers:
+        x-request-id:
+          description: Correlation identifier for this request
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          description: Never cache a Skill publication result
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/SkillPublishErrorResponse'
               - type: object
                 properties:
                   error:

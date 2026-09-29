@@ -3,6 +3,10 @@
 状态：2026-09-29
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。
 
+## W3-BFF-SKILL-PUBLISH-DOC-GATE：仅未激活机器/文档候选
+
+BFF 基线 clean `main 1264607`，owner `263a28f` inactive v4。唯一 public OpenAPI/operation inventory/语义门新增 user-only Publish 的严格零字节体、单键、固定 PERSONAL(1) 目标、200 active/source_ref/uint64 revision/UUID event/replayed 与状态专属错误；直接契约测试锁 owner 3.0.0 的 8 条命令向量、Proto 字段及旧 operation 误引。**本片不新增 Publish route、Connect 调用、projector、SQL/receipt/outbox 或配置**；CreateDraft/Get/Begin/Complete/Validate 仍默认关闭，Platform v4 inactive、产品未激活。Root 真 IAM/Storage/同 event replay/撤权、Web Chromium 与产品发布仍待后续门。下方 Validate/Complete 各节按各自切片基线理解；W1E caller visibility 是废止历史目标，不是当前 public 输入。
+
 ## W3-BFF-SKILL-VALIDATE-RUNTIME：默认关闭运行候选
 
 在固定 owner `263a28f` inactive v4 上，BFF 现有具名 `POST /v1/skills/{skill_id}/validate` route、严格 `attempt_id` 输入、固定 3.0.0 JCS/8 向量 projector 与 generated Connect 调用；复用 CreateDraft/Get/Begin/Complete 的默认关闭候选开关。当次 IAM/fixed tenant/user 在每次同键重放及 Platform 前；稳定 command ID 绑定 operation+受信 tenant/user/skill/key，owner 持有 current attempt、Storage CLEAN/ZIP V1 与 receipt。仅校验并公开 strict valid=true/digest/manifest/series/replayed；坏 owner 502，旧/感染/坏 ZIP 由 owner 前置失败 412。无 BFF SQL/receipt/Storage RPC/旧 Capability fallback。直接 HTTP 与机器向量门已覆盖本仓候选；Root 真 IAM/Platform/Storage/ZIP/撤权组合、Publish public、Web Chromium 与正式激活仍待独立验收。下节“无 Validate route”为文档门历史事实。

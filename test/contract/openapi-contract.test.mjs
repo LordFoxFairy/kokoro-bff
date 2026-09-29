@@ -461,6 +461,135 @@ test("ValidateSkillDraft semantic gate rejects schema, status, header and legacy
   }
 })
 
+test("PublishSkill exposes one inactive user-only command with no request body", async () => {
+  const { openapi, baseline } = await readContract()
+  assert.ok(baseline.some(({ method, path, operation_id }) => method === "POST" && path === "/v1/skills/{skill_id}/publish" && operation_id === "publishSkill"))
+  const start = openapi.indexOf("  /v1/skills/{skill_id}/publish:")
+  const end = openapi.indexOf("  /v1/skills/{name}/revisions:", start)
+  assert.ok(start >= 0 && end > start)
+  const operation = openapi.slice(start, end)
+  assert.match(operation, /operationId: publishSkill/u)
+  for (const fragment of [
+    "product.skill.publish",
+    "SkillPublishIdempotencyKey",
+    "PublishSkillResponse",
+    "'200':",
+    "x-request-id:",
+    "Cache-Control:",
+    "const: no-store",
+    "exactly zero request-body bytes",
+    "PERSONAL(1)",
+  ])
+    assert.ok(operation.includes(fragment), fragment)
+  assert.match(operation, /x-kokoro-empty-body: required/u)
+  assert.match(operation, /x-kokoro-fixed-visibility: personal/u)
+  assert.doesNotMatch(operation, /requestBody:/u)
+  assert.doesNotMatch(operation, /asset_id|manifest_identity|content_digest|tenant_ref/u)
+  const resource = openapi.slice(openapi.indexOf("    SkillPublishResource:"), openapi.indexOf("    PublishSkillResponse:"))
+  assert.match(resource, /required: \[source_ref, revision, status, event_id, replayed\][\s\S]*additionalProperties: false/u)
+  assert.match(resource, /status: \{ type: string, const: active \}/u)
+  assert.match(resource, /source_ref: \{ type: string, pattern: '\^skill:/u)
+  assert.doesNotMatch(resource, /visibility|asset_id|manifest_identity|signed_url/u)
+  const revision = openapi.slice(openapi.indexOf("    SkillPublishRevision:"), openapi.indexOf("    SkillPublishResource:"))
+  const pattern = /pattern: '([^']+)'/u.exec(revision)?.[1]
+  assert.ok(pattern)
+  const bounded = new RegExp(pattern, "u")
+  assert.ok(bounded.test("1"))
+  assert.ok(bounded.test("18446744073709551615"))
+  for (const invalid of ["0", "01", "18446744073709551616", "99999999999999999999"]) assert.equal(bounded.test(invalid), false, invalid)
+  assert.deepEqual(inspectBffOpenApi(openapi, baseline), [])
+})
+
+test("PublishSkill pins the inactive owner v4 PERSONAL command and all eight digest vectors", async () => {
+  const [manifest, identities, schemas, fixture, proto] = await Promise.all([
+    ...["manifest.json", "command-identities.json", "command-schemas.json", "vectors/command-projection.json"].map(async (file) =>
+      JSON.parse(await readFile(new URL(file, platformV4Url), "utf8")),
+    ),
+    readFile(new URL("../proto/kokoro/platform/v1/platform_runtime.proto", platformV4Url), "utf8"),
+  ])
+  assert.equal(manifest.artifactVersion, "4.0.0")
+  assert.equal(manifest.status, "inactive")
+  assert.equal(manifest.routable, false)
+  assert.equal(identities.commandDigestVersion, "3.0.0")
+  const command = identities.commands.find(({ operation }) => operation === "skill.publish")
+  assert.equal(command.fqMethod, "kokoro.platform.v1.SkillCatalogService/PublishSkill")
+  assert.deepEqual(
+    command.commandMembers.map(({ wireField }) => wireField),
+    ["skill_id", "product_context", "visibility"],
+  )
+  assert.deepEqual(schemas.schemas["skill.publish"].properties.command.required, ["skill_id", "product_context", "visibility"])
+  assert.match(proto, /SKILL_SCOPE_KIND_PERSONAL = 1;/u)
+  assert.match(proto, /SKILL_STATUS_ACTIVE = 2;/u)
+  assert.match(
+    proto,
+    /message PublishSkillRequest \{[\s\S]*?SkillId skill_id = 3;[\s\S]*?SkillScopeKind visibility = 4;[\s\S]*?ProductCatalogContext product_context = 5;/u,
+  )
+  assert.match(
+    proto,
+    /message PublishSkillResponse \{[\s\S]*?SkillSourceRef source_ref = 1;[\s\S]*?uint64 revision = 2;[\s\S]*?SkillStatus status = 3;[\s\S]*?string event_id = 4;[\s\S]*?bool replayed = 5;/u,
+  )
+  const vectors = fixture.vectors.filter(({ operation }) => operation === "skill.publish")
+  assert.equal(vectors.length, 8)
+  for (const vector of vectors) {
+    const raw = JSON.parse(Buffer.from(vector.rawBase64, "base64").toString("utf8"))
+    if (vector.expectedError === "none") {
+      assert.equal(raw.command_digest_version, "3.0.0")
+      assert.equal(raw.fq_method, command.fqMethod)
+      const canonical = Buffer.from(vector.canonicalBase64, "base64")
+      assert.equal(createHash("sha256").update(canonical).digest("hex"), vector.sha256)
+      assert.deepEqual(JSON.parse(canonical.toString("utf8")), vector.projection)
+      if (vector.name === "skill.publish.wire.valid") assert.equal(vector.projection.command.visibility, 1)
+    } else assert.equal(vector.canonicalBase64, undefined)
+  }
+})
+
+test("PublishSkill semantic gate rejects body, state, status and legacy-operation reference drift", async () => {
+  const { openapi, baseline } = await readContract()
+  const notFound = openapi.slice(openapi.indexOf("    SkillPublishNotFound:"), openapi.indexOf("    SkillPublishConflict:"))
+  const rateLimited = openapi.slice(openapi.indexOf("    SkillPublishRateLimited:"), openapi.indexOf("    SkillPublishBadGateway:"))
+  for (const broken of [
+    openapi.replace("x-kokoro-empty-body: required", "x-kokoro-empty-body: optional"),
+    openapi.replace("x-kokoro-fixed-visibility: personal", "x-kokoro-fixed-visibility: organization"),
+    openapi.replace("      operationId: publishSkill", "      operationId: publishSkill\n      requestBody:\n        required: true"),
+    openapi.replace("status: { type: string, const: active }", "status: { type: string, const: draft }"),
+    openapi.replace("source_ref: { type: string, pattern: '^skill:[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }", "source_ref: { type: string }"),
+    openapi.replace(
+      "'412': { $ref: '#/components/responses/SkillPublishPreconditionFailed' }",
+      "'412': { $ref: '#/components/responses/SkillPublishBadGateway' }",
+    ),
+    openapi.replace(notFound, notFound.replace("code: { type: string, enum: [skill_not_found] }", "code: { type: string, enum: [skill_response_invalid] }")),
+    openapi.replace(rateLimited, rateLimited.replace("required: false", "required: true")),
+    openapi.replace("#/components/parameters/SkillPublishIdempotencyKey", "#/components/parameters/IdempotencyKey"),
+    openapi.replace("data: { $ref: '#/components/schemas/SkillPublishResource' }", "data: { $ref: '#/components/schemas/SkillDraftResource' }"),
+  ]) {
+    assert.notEqual(broken, openapi)
+    assert.ok(inspectBffOpenApi(broken, baseline).some((error) => /publishSkill|SkillPublish|PublishSkill/u.test(error)))
+  }
+  const legacy = openapi.slice(openapi.indexOf("  /v1/me:"), openapi.indexOf("  /v1/team/members:"))
+  for (const poisoned of [
+    legacy.replace("#/components/schemas/CurrentUserResponse", "#/components/schemas/PublishSkillResponse"),
+    legacy.replace("#/components/responses/ServiceUnavailable", "#/components/responses/SkillPublishUnavailable"),
+    legacy.replace("#/components/parameters/IdempotencyKey", "#/components/parameters/SkillPublishIdempotencyKey"),
+  ]) {
+    if (poisoned === legacy) continue
+    assert.ok(
+      inspectBffOpenApi(
+        openapi.replace(legacy, () => poisoned),
+        baseline,
+      ).some((error) => error.includes("GET /v1/me must not reference PublishSkill")),
+    )
+  }
+  const oldPost = openapi.slice(openapi.indexOf("  /v1/skills/drafts:"), openapi.indexOf("  /v1/skills/{skill_id}/package-upload:"))
+  const misplacedKey = oldPost.replace("#/components/parameters/SkillDraftIdempotencyKey", "#/components/parameters/SkillPublishIdempotencyKey")
+  assert.notEqual(misplacedKey, oldPost)
+  assert.ok(
+    inspectBffOpenApi(
+      openapi.replace(oldPost, () => misplacedKey),
+      baseline,
+    ).some((error) => error.includes("POST /v1/skills/drafts must not reference PublishSkill")),
+  )
+})
+
 test("BeginSkillPackageUpload candidate names the exact inactive owner v4 command and digest version", async () => {
   const [manifest, identities, schemas, projections] = await Promise.all(
     ["manifest.json", "command-identities.json", "command-schemas.json", "vectors/command-projection.json"].map(async (file) =>

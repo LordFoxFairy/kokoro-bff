@@ -1,5 +1,11 @@
 # kokoro-bff API contract policy
 
+## W3 Publish public 机器候选（2026-09-29；尚无运行路由）
+
+唯一 public OpenAPI 新增 user-only `POST /v1/skills/{skill_id}/publish`，operationId `publishSkill`、permission `product.skill.publish`、单个 1–128 可打印 `Idempotency-Key` 必填；owner `263a28f` v4 仍 inactive，BFF 本片**不接 Publish runtime route**、产品未激活。机器扩展 `x-kokoro-empty-body: required` 且无 `requestBody` 明确原始请求体必须**恰为零字节**，并非 `{}`、`null`、空白或忽略输入；`x-kokoro-fixed-visibility: personal` 固定后续内部 owner 入参，任何 public visibility/asset/hash/manifest/tenant/owner 均不接收。未来 BFF 当次 IAM user/fixed tenant admission 后固定 owner `SKILL_SCOPE_KIND_PERSONAL(1)`，不把 legacy W1E visibility 规划当现行 body。owner v4 `command_digest_version=3.0.0` 的 8 条 JCS 向量绑定 typed SkillId、受信 Product user/user context 和 visibility=1，命令 ID 绑定 operation+tenant/user/skill/key；request ID/command identity 不参与 digest。
+
+200 strict `{data:{source_ref,revision,status:"active",event_id,replayed}}`，`source_ref=skill:<SkillId>`、revision 为正 uint64 十进制字符串、event_id 为 UUID；不含 Skill 包/Storage asset/URL/manifest 或 legacy meta。同键成功 replay 必在当次 IAM、current owner/validated 包和 fresh Storage CLEAN/健康后返回原 event_id，另键对 active 拒绝；unknown ACK 同键重新准入后交 owner receipt，BFF 无 receipt/outbox。Platform 唯一做 draft→active CAS、持久 receipt 与 `skill.published` outbox，不把 validated/CLEAN 冒称 active。每个 200/错误出口有有界 `x-request-id` 与 `Cache-Control:no-store`。状态专属 strict `{error:{code,message,retryable}}`：400 非零体/无效键，401 session missing/invalid，403 service/session/tenant forbidden，404 不可见 Skill，409 幂等冲突或命令进行中，412 visibility/current draft/validated/scan/snapshot 前置失败，413 超限非零体，429 IAM/Platform 限流且 Retry-After 可选有界，502 owner 非法响应，503 tenant 未配置/IAM、Platform 或 Storage 不可判定；不依 message 猜分支。正式 runtime、Root 真组合、Web 和激活另门；本接口无分页，公开 breaking 变更须新版本审查。下方 W1E Publish “visibility” 属废止历史规划。
+
 ## W3 Validate runtime 当前契约（2026-09-29；public 未激活）
 
 唯一 OpenAPI `validateSkillDraft` 的 strict request/200/error wire 不变，现已接默认关闭的 BFF 具名 POST route，与 CreateDraft/Get/Begin/Complete 共用候选 flag；Platform v4 仍 inactive，产品未发布。每次包括同键重放先 current IAM user/fixed tenant，再由独立 catalog workload 调 Platform；body 仅 `attempt_id` 不受信选择符，命令身份绑定 operation+可信 tenant/user/skill/key，固定 owner digest 3.0.0 JCS/8 向量。Platform current Skill/attempt、Storage fresh CLEAN/ZIP V1 和 receipt 是权威；BFF 不保存包事实/receipt，也不调用 Storage。200 仅当 owner skill/series/valid=true/lowercase digest/ZIP manifest/replayed 全核后发 strict `{data}`；错误依状态专属 `{error}`，成功/错误均有有界 `x-request-id` 与 no-store。旧/感染/未完成/坏 ZIP 由 owner 前置失败映射 412；其中 owner `Aborted` 仅在稳定 metadata `x-kokoro-error-code=package_attempt_conflict` 时映射 412，其余 `Aborted` 保持 command-in-progress 409，不从 message 猜测。坏 owner 502，未知 ACK 使用同键重新 IAM/owner；不走旧 Capability。Root 真 owner 组合、Publish public、Web 与激活另门；下节“无运行路由”为文档门历史基线。
@@ -830,6 +836,7 @@ W0B-9 clean-slate 同时删除 jobs/job_*、旧 header 与 compact occurrence �
 | `PATCH /v1/skills/{skill_id}/status`  | SetSkillStatus     | set_status；status 白名单；200 skill_id/revision/status/replayed                                                                                          |
 
 上表 Validate 行仅记录 W1E 当时规划；当前 v4 public 请求另**必填 `attempt_id`**，以顶部 W3 契约及唯一 OpenAPI 为准。
+上表 Publish 行的 caller visibility 也是 W1E 历史规划；当前 public Publish 机器候选严格零字节 body，BFF 后续运行时仅固定 PERSONAL(1)，以顶部 W3 契约及唯一 OpenAPI 为准。
 
 organization 每条操作调用 IAM `POST /internal/v1/tenants/{tenant_id}/skill-authorizations/check`，body 只有准确 `action`。
 使用当前具名 user Bearer；200 仅接受 allowed=true 且 tenant_id/subject_id/action 与本请求一致；任何缺失、额外或错配字段 fail closed。

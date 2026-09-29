@@ -1,5 +1,13 @@
 # kokoro-bff 技术设计
 
+## W3 Publish 文档门：当前态与目标态（2026-09-29；仅未激活机器候选）
+
+**当前态。** BFF clean `main 1264607` 已有默认关闭的 CreateDraft/Get/Begin/Complete/Validate 运行候选，固定 Platform owner `263a28f` inactive v4 Proto/artifact；唯一 public OpenAPI 尚无 Publish，BFF 没有 Publish route/projector/Connect adapter，旧 Capability `/hub` 不承接新包发布。owner v4 Proto 的 Publish request 含 SkillId、visibility tag 4、ProductCatalogContext tag 5；本片只新增 BFF 文档/唯一 OpenAPI/operation-scoped checker/直接契约测试，不改 `src/`、生成物或 SQL。
+
+**目标与依赖。** 未来 user-only `POST /v1/skills/{skill_id}/publish` 使用单个 Idempotency-Key 与**严格零长度请求体**：`{}`、`null`、空白和任何 visibility/asset/manifest/tenant/owner 自报均非法。BFF 在当次 IAM session/fixed tenant/user 后才以 catalog workload token 调 Platform，固定 `visibility=SKILL_SCOPE_KIND_PERSONAL(1)`，不提供浏览器选择；权限 `product.skill.publish`。稳定 command ID 绑定 operation+受信 tenant/user/skill/key，owner v4 artifact 内 digest version `3.0.0` 的 8 条 JCS 向量绑定 typed SkillId、Product user/user context、visibility=1，排除 request ID/command identity。运行片沿既有 `src/http/routes/`、`src/http/` 输入、`src/infrastructure/clients/platform/` projector/固定 generated Connect 与 `src/bootstrap/server.ts` 精确 dispatch，不复用旧 Capability/通用 BFF receipt，不建新模块。
+
+**状态、事务与恢复。** Platform 独有 current owner/draft/validated package、fresh Storage CLEAN/对象健康判定、短 Serializable CAS draft→active、持久 command receipt 与唯一 `skill.published` outbox；BFF 不写 Skill/Upload SQL/Redis/receipt/outbox，也不代理 ZIP。首次/同键 replay/未知 ACK 都须先新鲜 IAM 与 Platform 当前事实；同键健康 replay 返回原 event_id，不同新命令对 active 拒绝，撤权或包身份/安全变化 fail closed。成功 200 仅 `source_ref=skill:<skill_id>`、正 uint64 十进制 revision、`status=active`、UUID event_id、replayed，不把 validated 当 active，也不公开 Asset/签名/manifest。Owner typed state/scan/visibility/snapshot 前置失败映射 412，命令 identity/in-progress 409；未知依赖 503、无效 owner response 502，按稳定 Connect code/metadata 而非 message。请求取消/deadline 传下游，无分页；公开 breaking 变化需 BFF 唯一 OpenAPI 与消费者固定版本同步评审。本片不激活 public，真 IAM/Storage/事件重放组合、Web Chromium 与产品发布另门。
+
 ## W3 Validate runtime 当前候选（2026-09-29；默认关闭）
 
 在 owner `263a28f` inactive v4 精确 pin 下，具名 Validate route 沿现有 `src/http/routes/` 接入 `server.ts` IAM 后精确分派，复用同一 loopback 默认关闭 Skill catalog flag；`src/http/validate-skill-draft-input.ts` 校验唯一不受信 `attempt_id`/单键并生成绑定 operation+可信 tenant/user/skill/key 的稳定命令 ID，`src/infrastructure/clients/platform/validate-skill-draft-projector.ts` 按固定 3.0.0 JCS/8 owner 向量生成 digest，既有 `CatalogConnectClient` 用 generated v4 Proto 调用。每次 replay 先 IAM/current owner，BFF 不查 Platform/Storage SQL、不代理 ZIP、不存 receipt/状态或借旧 Capability 回退。owner 独有 current attempt、Storage CLEAN/ZIP V1/manifest 判定与 command receipt；BFF 只严格核 skill/series/valid=true/lowercase digest/ZIP manifest/replayed，再投影 200。上游前置失败 412、坏响应 502、未知 ACK 同键重新准入；取消传至 owner。此为本仓运行候选，不等于真 owner 组合、Web 或 public activation；下节是文档门当时基线。
