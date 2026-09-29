@@ -2119,6 +2119,40 @@ paths:
         '429': { $ref: '#/components/responses/SkillDraftRateLimited' }
         '502': { $ref: '#/components/responses/SkillDraftBadGateway' }
         '503': { $ref: '#/components/responses/SkillDraftUnavailable' }
+  /v1/skills/{skill_id}/package-upload:
+    get:
+      tags: [Skills]
+      operationId: getSkillPackageUpload
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: product.skill.get_package_upload
+      summary: Get the current user-owned draft Skill package upload state
+      description: Candidate contract only; no BFF route or Platform v4 pin yet. Current IAM user admission and Platform owner/draft checks are required on every future request. This read never signs an upload.
+      parameters:
+        - $ref: '#/components/parameters/SkillPackageUploadSkillId'
+      responses:
+        '200':
+          description: Current package attempt state
+          headers:
+            x-request-id:
+              description: Correlation identifier for this request
+              schema: { type: string, minLength: 1, maxLength: 128 }
+            Cache-Control:
+              description: Prevent storage of Skill package state
+              schema: { type: string, const: no-store }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GetSkillPackageUploadResponse' }
+        '400': { $ref: '#/components/responses/SkillPackageUploadGetError' }
+        '401': { $ref: '#/components/responses/SkillPackageUploadGetError' }
+        '403': { $ref: '#/components/responses/SkillPackageUploadGetError' }
+        '404': { $ref: '#/components/responses/SkillPackageUploadGetError' }
+        '412': { $ref: '#/components/responses/SkillPackageUploadGetError' }
+        '429': { $ref: '#/components/responses/SkillPackageUploadGetError' }
+        '502': { $ref: '#/components/responses/SkillPackageUploadGetError' }
+        '503': { $ref: '#/components/responses/SkillPackageUploadGetError' }
   /v1/skills/{name}/revisions:
     parameters:
       - $ref: '#/components/parameters/SkillNameOnly'
@@ -3353,6 +3387,11 @@ components:
         minLength: 1
         maxLength: 128
         pattern: '^[\x21-\x2B\x2D-\x7E]+$'
+    SkillPackageUploadSkillId:
+      name: skill_id
+      in: path
+      required: true
+      schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
     IdempotencyKey:
       name: Idempotency-Key
       in: header
@@ -3417,6 +3456,39 @@ components:
       additionalProperties: false
       properties:
         error: { $ref: '#/components/schemas/SkillDraftErrorDetail' }
+    SkillPackageUploadState:
+      type: object
+      required: [skill_id, attempt_epoch, phase]
+      additionalProperties: false
+      properties:
+        skill_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        attempt_epoch: { type: string, pattern: '^(0|[1-9][0-9]*)$' }
+        phase: { type: string, enum: [none, intent, upload_pending, uploaded, validated, aborted] }
+        attempt_id: { type: string, minLength: 1, maxLength: 191 }
+        upload_id: { type: string, minLength: 1, maxLength: 191 }
+      description: For none epoch is 0 and both IDs are absent; other phases require a positive epoch and attempt ID. Intent has no upload ID; upload_pending, uploaded and validated require an upload ID. Aborted may retain one.
+    GetSkillPackageUploadResponse:
+      type: object
+      required: [data]
+      additionalProperties: false
+      properties:
+        data: { $ref: '#/components/schemas/SkillPackageUploadState' }
+    SkillPackageUploadGetErrorDetail:
+      type: object
+      required: [code, message, retryable]
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          enum: [invalid_skill_request, service_auth_failed, session_authentication_required, session_invalid, session_forbidden, session_rate_limited, product_tenant_not_configured, product_tenant_forbidden, skill_not_found, skill_precondition_failed, skill_rate_limited, iam_admission_unavailable, skill_dependency_unavailable, skill_response_invalid]
+        message: { type: string, minLength: 1 }
+        retryable: { type: boolean }
+    SkillPackageUploadGetErrorResponse:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error: { $ref: '#/components/schemas/SkillPackageUploadGetErrorDetail' }
     PersonalFileUploadResponse:
       type: object
       additionalProperties: false
@@ -4917,6 +4989,18 @@ components:
               const: true
         meta: { $ref: '#/components/schemas/RequestMeta' }
   responses:
+    SkillPackageUploadGetError:
+      description: Strict user admission or owner state failure
+      headers:
+        x-request-id:
+          description: Correlation identifier for this request
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          description: Prevent storage of Skill package state
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/SkillPackageUploadGetErrorResponse' }
     SkillDraftBadRequest:
       description: Invalid strict body or Idempotency-Key
       headers:

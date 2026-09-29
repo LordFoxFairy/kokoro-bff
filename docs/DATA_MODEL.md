@@ -1,5 +1,11 @@
 # kokoro-bff data model
 
+## W3 user-only package upload Get：零 BFF 数据变更（2026-09-29）
+
+当前 BFF clean `main caa99d90f57329065eeb0e98168316b2b1874159` 的唯一 canonical `database/schema.sql` 没有 Skill catalog、package attempt、Storage Upload 或专用 Skill command receipt；已有 `bff_project_skill` 是 Project 产品关联，不是 Platform Skill 真源。BFF 当前只实现默认关闭的 CreateDraft 候选并 pin Platform `5b6eb2c` inactive v3；Platform owner `263a28f` 的 package Get/Begin/Complete/Validate/Publish 真组合已验但未由 BFF public 消费。下方 W1E 段落记录旧 CreateDraft 切片，不把“真 sandbox 未验”或“Validate/Publish 未通”延伸到 Platform 当前 owner 状态。
+
+本轮只新增 public Get 的候选 OpenAPI/设计，`database/schema.sql`、BFF Redis 与运行时均不变。未来 Get 每次在 IAM session 确认受信 tenant/user 后，向精确 pin 的 Platform 只读 RPC 取当前单行 package phase/attempt/epoch/upload；BFF 不持久化/缓存副本、不查询 `kokoro_platform` 或 `kokoro_storage` schema，也不使用 `bff_idempotency_receipt`/进程 Map。Platform 的 Skill 单行与其 receipt 仍为唯一权威状态；Storage 拥有 Upload/Asset/scan，GET 不向 Storage 签发引用。响应的 `attempt_epoch` 作为 decimal string 投影，以免 uint64/BigInt 精度丢失；`none` 的 absent ID 与 epoch 0、其他状态 presence 由后续 BFF client/route 校验，不通过新增 BFF 表或 SQL 约束承接。任何本轮 Schema diff 均属越界；下一代码片仍须在相同零 Schema 边界证明当次撤权后无 Platform I/O。
+
 ## W1E user Skill draft 数据门（2026-09-29；runtime 候选已实现、零 Schema 变更）
 
 当前 BFF main `2a95da2410fd89c300dc18064867ee66617549e2` 的 canonical `database/schema.sql` 没有 Skill catalog 或 Skill 专用 receipt 表（已有 generic BFF receipt 不用于此操作）。Platform consumer 已 pin owner `5b6eb2c1532b23b9747bc4bf6ac99f69ad453de0` 的两份 Proto 与完整 inactive v3 artifact/provenance；public CreateDraft 机器 OpenAPI 与默认关闭 runtime 候选均已实现；真实 IAM→BFF→Platform sandbox 尚未验证。以下 user-only 目标以 Platform main `5b6eb2c1532b23b9747bc4bf6ac99f69ad453de0` 的 execution artifact v3 aggregate `324e749da1bc66c1ff03de74e7299716f798f5f5bb5fa19556033b79fa09ff8d` 为离线候选来源；该 artifact 仍 inactive/routable=false；这是发布标记而非 runtime RPC kill switch。Root 可在隔离 sandbox 通过候选 route 验证真实写入/replay，但公开发布仍需六 owner sandbox、active artifact 重钉与协调激活。本片零 BFF Schema/Redis 变更；Skill/revision/command receipt 只写 Platform owner schema，每次请求先以当前 IAM session 重验受信 tenant/subject，BFF 不用自己的 generic receipt 返回 Skill replay。Storage package/Validate/Publish 和其他 owner scope 不在首片。

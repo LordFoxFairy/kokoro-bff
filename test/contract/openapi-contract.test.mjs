@@ -95,6 +95,58 @@ test("the semantic gate binds every Skill draft request, response and header com
   }
 })
 
+test("GetSkillPackageUpload is a user-only inactive candidate with a strict read envelope", async () => {
+  const { openapi, baseline } = await readContract()
+  assert.ok(
+    baseline.some(
+      ({ method, path, operation_id }) => method === "GET" && path === "/v1/skills/{skill_id}/package-upload" && operation_id === "getSkillPackageUpload",
+    ),
+  )
+  const operation = openapi.slice(openapi.indexOf("  /v1/skills/{skill_id}/package-upload:"), openapi.indexOf("  /v1/skills/{name}/revisions:"))
+  for (const expected of [
+    "operationId: getSkillPackageUpload",
+    "x-kokoro-permission: product.skill.get_package_upload",
+    "x-kokoro-idempotency: none",
+    "#/components/parameters/SkillPackageUploadSkillId",
+    "#/components/schemas/GetSkillPackageUploadResponse",
+    "x-request-id:",
+    "Cache-Control:",
+    "const: no-store",
+  ])
+    assert.ok(operation.includes(expected), expected)
+  for (const status of ["400", "401", "403", "404", "412", "429", "502", "503"])
+    assert.ok(operation.includes(`'${status}': { $ref: '#/components/responses/SkillPackageUploadGetError' }`), status)
+  assert.doesNotMatch(operation, /Idempotency-Key|requestBody:|\bmeta:|signed_url|asset_id|content_hash/u)
+  assert.deepEqual(inspectBffOpenApi(openapi, baseline), [])
+})
+
+test("GetSkillPackageUpload semantic gate rejects changed fields, envelopes, headers, statuses and input", async () => {
+  const { openapi, baseline } = await readContract()
+  const operation = openapi.slice(openapi.indexOf("  /v1/skills/{skill_id}/package-upload:"), openapi.indexOf("  /v1/skills/{name}/revisions:"))
+  const mutations = [
+    openapi.replace("required: [skill_id, attempt_epoch, phase]", "required: [skill_id, phase]"),
+    openapi.replace(
+      "phase: { type: string, enum: [none, intent, upload_pending, uploaded, validated, aborted] }",
+      "phase: { type: string, enum: [none, uploaded] }",
+    ),
+    openapi.replace("attempt_epoch: { type: string, pattern: '^(0|[1-9][0-9]*)$' }", "attempt_epoch: { type: number }"),
+    openapi.replace("data: { $ref: '#/components/schemas/SkillPackageUploadState' }", "data: { $ref: '#/components/schemas/SkillDraftResource' }"),
+    openapi.replace(
+      "error: { $ref: '#/components/schemas/SkillPackageUploadGetErrorDetail' }",
+      "error: { $ref: '#/components/schemas/SkillDraftErrorDetail' }",
+    ),
+    openapi.replace("'404': { $ref: '#/components/responses/SkillPackageUploadGetError' }", "'404': { $ref: '#/components/responses/NotFound' }"),
+    openapi.replace("      operationId: getSkillPackageUpload", "      operationId: getSkillPackageUpload\n      requestBody: { required: false }"),
+    openapi.replace("#/components/parameters/SkillPackageUploadSkillId", "#/components/parameters/IdempotencyKey"),
+    openapi.replace(operation, operation.replace("x-request-id:", "x-trace-id:")),
+    openapi.replace(operation, operation.replace("Cache-Control:", "X-Cache-Control:")),
+  ]
+  for (const broken of mutations) {
+    assert.notEqual(broken, openapi)
+    assert.ok(inspectBffOpenApi(broken, baseline).some((error) => /getSkillPackageUpload|SkillPackageUpload/u.test(error)))
+  }
+})
+
 test("current Product identity is a narrow public self-read contract", async () => {
   const { openapi, baseline } = await readContract()
   assert.ok(baseline.some((operation) => operation.method === "GET" && operation.path === "/v1/me" && operation.operation_id === "getCurrentUser"))

@@ -273,6 +273,11 @@
     },
     {
       "method": "GET",
+      "path": "/v1/skills/{skill_id}/package-upload",
+      "operation_id": "getSkillPackageUpload"
+    },
+    {
+      "method": "GET",
       "path": "/v1/skills/{name}/revisions",
       "operation_id": "listSkillRevisions"
     },

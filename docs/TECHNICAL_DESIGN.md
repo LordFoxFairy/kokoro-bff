@@ -1,5 +1,15 @@
 # kokoro-bff 技术设计
 
+## W3-BFF-SKILL-GET-DOC-GATE：当前态与 user-only 只读目标（2026-09-29）
+
+**当前态。** 本片起点为 BFF clean `main caa99d90f57329065eeb0e98168316b2b1874159`。唯一新 Platform Product 路由仍是默认关闭的 `POST /v1/skills/drafts` 候选；旧 Capability 三个 Skills GET 与 MCP GET 仍走其旧 HTTP adapter，其他旧 Skills 声明返回 503，不代表包操作。BFF consumer 仍 pin Platform `5b6eb2c` 的 inactive v3 Proto/artifact；Platform owner 当前 `263a28f` 已将正式 Get/Begin/Complete/Validate/Publish 与 inactive v4 发布并由 Root 通过隔离真实 owner 组合，但其中 Begin→Publish 是 owner CLI 调用，**不是 BFF public 包链或当次用户 session 撤权验收**。下方 W1E CreateDraft 段落是当时切片记录，不能覆盖此当前态。
+
+**本片目标仅为候选机器契约，不是运行时接线。** 在 BFF 唯一 public OpenAPI 增 `GET /v1/skills/{skill_id}/package-upload`（`getSkillPackageUpload`）；浏览器仍先到 Web 同源 adapter，未来 BFF 在每次请求以当前 IAM session 验证受信 tenant/user，再由固定 Platform catalog workload token 代言调用精确 pin 的 `SkillCatalogService/GetSkillPackageUpload`。只支持 `user` owner：BFF 构造 `ProductCatalogContext(subject_id=user_id, owner_scope=user/user_id)`，不从 path、query、header 或 body 接受 tenant/owner/subject。Platform 再按 tenant/current Skill owner/draft 校验；跨 tenant/不可见资源公开为 404，非 draft 为 412。此读操作没有 `CommandIdentity`、`Idempotency-Key`、BFF/Platform mutation receipt 或 Storage I/O；失效 session 先于 Platform socket 被拒绝，不以缓存快照返回旧状态。
+
+**响应和失败边界。** Public `{data}` 只含 opaque `skill_id`、十进制字符串 `attempt_epoch`、`phase`，以及有值时才出现的 `attempt_id`/`upload_id`；`none` 必须 epoch `"0"` 且两 ID absent，其余 phase 必有当前 attempt/正 epoch，`intent` 的 upload absent，`upload_pending/uploaded/validated` 的 upload present，`aborted` 允许已知或未知 upload。字符串 epoch 避免 Proto uint64 到 JSON number 的精度丢失。所有成功/错误只以 `x-request-id` header 回显关联，`Cache-Control: no-store`，不放 `meta`、Storage asset/hash、签名 URL/headers、服务凭据或内部 command/receipt。GET 拒绝 query/body/Idempotency-Key；取消与有界 deadline 贯穿当次 IAM/Platform，依赖未知归 503、非法 owner 响应归 502，不能用旧 Capability HTTP fallback。完整机器字段、错误码和路径由本仓 OpenAPI 唯一维护。
+
+**后续顺序与未决项。** 本轮不修改 `src/`、Platform generated client、配置、SQL 或 Redis；运行时仍没有 Get route。Root 审查后下一代码片须一次精确 pin owner `263a28f` 的两份 Proto、完整 v4 artifact/provenance、descriptor/read binding 与 generated client，再以真实 Get handler 接线；v4 当前 `inactive/routable=false`，候选 OpenAPI 不自动激活 Product。后继按 Begin→签名 PUT→Complete→Validate→Publish 分片，另审浏览器对象数据面、批准 public origin/CORS/required headers/expiry、用户当前授权与重放，不把短期 PUT 放进 Get。BFF 不新建 Skill/包状态表或第二份 receipt，也不跨 owner SQL。Storage orphan retirement、Agent pin、Source execution proof 与最终产品激活仍为独立门。
+
 ## W1E-BFF-USER-SKILL-DRAFT v3 候选设计（2026-09-29；runtime 候选已实现、默认关闭）
 
 当前 BFF main `2a95da2410fd89c300dc18064867ee66617549e2` 已精确固定 Platform

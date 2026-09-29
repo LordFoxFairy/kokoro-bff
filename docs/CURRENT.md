@@ -3,6 +3,12 @@
 状态：2026-09-29
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。
 
+## W3-BFF-SKILL-GET-DOC-GATE 候选：只有机器契约，尚无 Get 运行路由
+
+本片起点 BFF clean `main caa99d90f57329065eeb0e98168316b2b1874159`；当前新 Platform Product 入口仍仅为默认关闭的 `POST /v1/skills/drafts` 候选，另外三条旧 Capability Skills GET 与一条 MCP GET 保持原旧 HTTP 路径，旧 Skills 其他声明是 503，不是包产品。BFF generated Platform consumer/manifest 仍 pin owner `5b6eb2c` inactive v3。Platform owner 当前 `263a28f` 的正式 Get/Begin/Complete/ZIP Validate/Publish 已通过 Root 独占真实 IAM/BFF/Platform/Storage/PostgreSQL/Redis/MinIO/ClamAV 组合；组合中的 Begin→Publish 来自 owner CLI，**不是 BFF public Get/Begin/Complete/Validate/Publish 或浏览器 session 撤权闭环**。下方 W1E CreateDraft 及更早段落是当时历史切片；其中“真实三 owner sandbox 未验”不覆盖上述 Root 当前组合事实。
+
+本轮仅将 user-only `GET /v1/skills/{skill_id}/package-upload` 写入唯一 public OpenAPI 作为未激活候选，并用直接契约/语义门锁定 strict 字段与无 Idempotency-Key、无签名/Asset/hash 的边界；**不新增 route、Platform v4 pin/生成物、配置、SQL、Redis 或运行代码**。未来运行链为 Web 同源→BFF 当次 IAM session→固定 v4 Platform catalog Get，owner current draft 检查每次执行；`phase=none` 为 epoch `"0"`、attempt/upload absent，其余阶段仅投影当前 known IDs。BFF 不保存包事实或自己的 Skill receipt。下一代码片先精确 pin Platform `263a28f` 两份 Proto、完整 inactive v4 artifact/provenance/read binding，再实现 Get route 与隔离真 IAM/session/owner 负例；正式公开仍待 Root 协调 activation。后继 Begin signed PUT/CORS、Complete、Validate、Publish 按独立切片串行；Storage orphan retirement、Agent pin 与产品激活未完成。
+
 ## W1E-BFF-USER-SKILL-DRAFT 文档门（2026-09-29；仅目标设计，运行未激活）
 
 本代码片已把 Platform consumer 原子重钉到 owner `5b6eb2c1532b23b9747bc4bf6ac99f69ad453de0`：两份 Proto 原字节 SHA 保持不变，完整 inactive v3 artifact/provenance aggregate 为 `324e749da1bc66c1ff03de74e7299716f798f5f5bb5fa19556033b79fa09ff8d`。BFF 独立 CreateDraft raw projector、RFC 8785 JCS/SHA-256 已覆盖 owner 45 条正反向量；source/aggregate drift fail closed。canonical OpenAPI 已新增严格 user-only `POST /v1/skills/drafts` 候选契约；runtime 候选已实现该 route、catalog machine credential 与精确

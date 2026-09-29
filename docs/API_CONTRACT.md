@@ -1,5 +1,13 @@
 # kokoro-bff API contract policy
 
+## W3 user-only GetSkillPackageUpload 候选（2026-09-29；尚无 BFF route）
+
+当前 BFF `main caa99d90f57329065eeb0e98168316b2b1874159` 仅有默认关闭的 public CreateDraft 候选，Platform consumer 仍固定旧 owner `5b6eb2c`/inactive v3；旧 Capability 三 Skills GET 不提供包状态。Platform `263a28f` 的正式 Get/Begin/Complete/Validate/Publish 与 inactive v4 已通过 Root 的隔离 owner 组合，但 BFF 尚未消费 v4，owner CLI 不构成用户可调用的 Product API。下方 W1E v3 段落只记录 CreateDraft 切片，不覆盖本节当前事实。
+
+唯一 public OpenAPI 的新增候选是 `GET /v1/skills/{skill_id}/package-upload`，operationId `getSkillPackageUpload`、permission `product.skill.get_package_upload`、idempotency `none`。路径只接受 opaque typed Skill ID；无 query、request body 或 `Idempotency-Key`。BFF 将来每次先验当前 IAM Product session/tenant/user，只代言 `user` owner，再由 Platform current tenant/owner/draft gate 返回最新状态；不以浏览器自报身份、旧请求缓存或 Storage 服务密钥代替授权。200 为 strict `{data}`，字段仅 `skill_id`、十进制字符串 `attempt_epoch`、`phase=none|intent|upload_pending|uploaded|validated|aborted`、可选 `attempt_id`/`upload_id`；`none` 的 epoch 为 `"0"` 且两个 ID 缺席，其余阶段约束见技术设计。没有签名、Asset、hash 或扫描推断；刷新或丢失 Begin ACK 只能用此状态决定下一步，不把 GET 变成重签 PUT。成功和错误均由 `x-request-id` header 表示请求关联并 `Cache-Control: no-store`，无 legacy `meta.request_id`。
+
+候选错误由 OpenAPI 固定：400 严格路径/query/body/header 拒绝；401/403 为当次 service/IAM admission；404 为不存在、跨 tenant 或不可见 Skill；412 为非 draft/当前状态不满足 Get；429 为限流；502 为 owner 返回非法；503 为 IAM/Platform 依赖不可判定。错误体 strict `{error:{code,message,retryable}}`，不复制上游 token、SQL、签名或内部 reason 文案。GET 不使用 BFF generic mutation receipt，也不新增 command digest；Platform v4 read binding/Proto 的精确 commit、原字节 digest 和 generated client 在**下一代码片** pin。本轮 OpenAPI 是未激活候选，BFF 运行时仍无 Get route；`inactive/routable=false` 不因这份 public 声明改变。后续 Begin/Complete/Validate/Publish 的各自路径/公开字段及浏览器 signed PUT/CORS 边界另过设计与机器契约门，不复用旧 name/revisions 路径冒充。
+
 ## W1E-BFF-USER-SKILL-DRAFT v3 契约门（2026-09-29；public 未发布）
 
 当前 BFF `2a95da2410fd89c300dc18064867ee66617549e2` 已精确 pin Platform
