@@ -489,6 +489,7 @@ function publishedPersonalSkillContractErrors(
   })) if (operation.fields.get(field) !== expected) errors.push(`getPublishedPersonalSkill ${field} must be ${expected}`)
   const parameterRefs = [...operation.text.matchAll(/#\/components\/parameters\/([A-Za-z0-9_]+)/gu)].map((match) => match[1])
   if (JSON.stringify(parameterRefs) !== JSON.stringify(["PublishedPersonalSkillId"])) errors.push("getPublishedPersonalSkill must accept only PublishedPersonalSkillId")
+  if ((operation.text.match(/^ {8}- \$ref:/gmu) ?? []).length !== 1 || /^ {8}- (?:name|in|schema|required):/mu.test(operation.text) || /^ {10}(?:name|in|schema|required):/mu.test(operation.text)) errors.push("getPublishedPersonalSkill must reject inline or additional parameters")
   if (/requestBody:|Idempotency-Key|#\/components\/parameters\/IdempotencyKey|CapabilitySkill|source_selector|secret_ref/u.test(operation.text)) errors.push("getPublishedPersonalSkill must exclude query/body/idempotency and legacy Capability inputs")
   const expectedResponses = new Map([
     ["200", "PublishedPersonalSkillOk"], ["400", "PublishedPersonalSkillBadRequest"], ["401", "PublishedPersonalSkillUnauthorized"],
@@ -515,6 +516,15 @@ function publishedPersonalSkillContractErrors(
   if (resource === undefined || JSON.stringify(topLevelRequired(resource)) !== JSON.stringify(fields) || schemaProperties(resource).join(",") !== fields.join(",") || !resource.text.includes("additionalProperties: false") || resourceFragments.some((fragment) => !resource.text.includes(fragment))) errors.push("PublishedPersonalSkillResource must remain the exact strict seven-field ACTIVE projection")
   const success = schemas.get("PublishedPersonalSkillResponse")
   if (success === undefined || topLevelRequired(success).join(",") !== "data" || schemaProperties(success).join(",") !== "data" || !success.text.includes("additionalProperties: false") || !success.text.includes("data: { $ref: '#/components/schemas/PublishedPersonalSkillResource' }")) errors.push("PublishedPersonalSkillResponse must remain data-only with the exact resource ref")
+  const errorDetail = schemas.get("PublishedPersonalSkillErrorDetail")
+  if (
+    errorDetail === undefined ||
+    JSON.stringify(topLevelRequired(errorDetail)) !== JSON.stringify(["code", "message", "retryable"]) ||
+    schemaProperties(errorDetail).join(",") !== "code,message,retryable" ||
+    !errorDetail.text.includes("additionalProperties: false") ||
+    !errorDetail.text.includes("message: { type: string, minLength: 1 }") ||
+    !errorDetail.text.includes("retryable: { type: boolean }")
+  ) errors.push("PublishedPersonalSkillErrorDetail must remain the strict typed error detail")
   const error = schemas.get("PublishedPersonalSkillErrorResponse")
   if (error === undefined || topLevelRequired(error).join(",") !== "error" || schemaProperties(error).join(",") !== "error" || !error.text.includes("additionalProperties: false") || !error.text.includes("error: { $ref: '#/components/schemas/PublishedPersonalSkillErrorDetail' }")) errors.push("PublishedPersonalSkillErrorResponse must remain error-only with the exact detail ref")
   const expectedCodes = new Map([

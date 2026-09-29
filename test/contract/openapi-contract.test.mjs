@@ -558,6 +558,13 @@ test("PublishSkill semantic gate rejects body, state, status and legacy-operatio
       openapi.slice(openapi.indexOf("    SkillPublishResource:"), openapi.indexOf("    SkillPublishErrorDetail:")).replace("status: { type: string, const: active }", "status: { type: string, const: draft }"),
     ),
     openapi.replace(
+      openapi.slice(openapi.indexOf("    SkillPublishResource:"), openapi.indexOf("    SkillPublishErrorDetail:")),
+      openapi.slice(openapi.indexOf("    SkillPublishResource:"), openapi.indexOf("    SkillPublishErrorDetail:")).replace(
+        "source_ref: { type: string, pattern: '^skill:[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }",
+        "source_ref: { type: string }",
+      ),
+    ),
+    openapi.replace(
       "'412': { $ref: '#/components/responses/SkillPublishPreconditionFailed' }",
       "'412': { $ref: '#/components/responses/SkillPublishBadGateway' }",
     ),
@@ -829,6 +836,7 @@ test("GetPublishedPersonalSkill semantic gate rejects envelope, field, input, st
   const operation = openapi.slice(openapi.indexOf("  /v1/skills/{skill_id}:"), openapi.indexOf("  /v1/skills/pool:"))
   const resource = openapi.slice(openapi.indexOf("    PublishedPersonalSkillResource:"), openapi.indexOf("    PublishedPersonalSkillResponse:"))
   const success = openapi.slice(openapi.indexOf("    PublishedPersonalSkillResponse:"), openapi.indexOf("    PublishedPersonalSkillErrorDetail:"))
+  const errorDetail = openapi.slice(openapi.indexOf("    PublishedPersonalSkillErrorDetail:"), openapi.indexOf("    PublishedPersonalSkillErrorResponse:"))
   const badRequest = openapi.slice(openapi.indexOf("    PublishedPersonalSkillBadRequest:"), openapi.indexOf("    PublishedPersonalSkillUnauthorized:"))
   const ok = openapi.slice(openapi.indexOf("    PublishedPersonalSkillOk:"), openapi.indexOf("    PublishedPersonalSkillBadRequest:"))
   const legacy = openapi.slice(openapi.indexOf("  /v1/me:"), openapi.indexOf("  /v1/team/members:"))
@@ -836,8 +844,10 @@ test("GetPublishedPersonalSkill semantic gate rejects envelope, field, input, st
     openapi.replace("required: [skill_id, source_ref, revision, status, name, summary, tags]", "required: [skill_id, name]"),
     openapi.replace(operation, operation.replace("#/components/parameters/PublishedPersonalSkillId", "#/components/parameters/CapabilityCursor")),
     openapi.replace(operation, operation.replace("#/components/parameters/PublishedPersonalSkillId", "#/components/parameters/IdempotencyKey")),
+    openapi.replace(operation, operation.replace("        - $ref: '#/components/parameters/PublishedPersonalSkillId'", "        - $ref: '#/components/parameters/PublishedPersonalSkillId'\n        - name: cursor\n          in: query\n          required: false\n          schema: { type: string }")),
     openapi.replace(resource, resource.replace("revision: { type: string, pattern: '^[1-9][0-9]*$' }", "revision: { type: string }")),
     openapi.replace(success, success.replace("#/components/schemas/PublishedPersonalSkillResource", "#/components/schemas/SkillDraftResource")),
+    openapi.replace(errorDetail, errorDetail.replace("retryable: { type: boolean }", "retryable: { type: string }")),
     openapi.replace(badRequest, badRequest.replace("invalid_skill_request", "skill_response_invalid")),
     openapi.replace(ok, ok.replace("required: true", "required: false")),
     openapi.replace(ok, ok.replace("maxLength: 128", "maxLength: 255")),
