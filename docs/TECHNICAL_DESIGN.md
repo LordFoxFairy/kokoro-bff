@@ -1,6 +1,6 @@
 # kokoro-bff 技术设计
 
-## W1E-BFF-USER-SKILL-DRAFT v3 候选设计（2026-09-29；机器契约已发布，runtime 未接）
+## W1E-BFF-USER-SKILL-DRAFT v3 候选设计（2026-09-29；runtime 候选已实现、默认关闭）
 
 当前 BFF main `2a95da2410fd89c300dc18064867ee66617549e2` 已精确固定 Platform
 `5b6eb2c1532b23b9747bc4bf6ac99f69ad453de0` 的两份 `kokoro.platform.v1` Proto 原字节、完整
@@ -8,8 +8,7 @@
 `324e749da1bc66c1ff03de74e7299716f798f5f5bb5fa19556033b79fa09ff8d`。BFF 已有独立 strict raw
 CreateDraft projector、RFC 8785 JCS/SHA-256 与全部 owner vectors；canonical OpenAPI 也已有严格 user-only
 `POST /v1/skills/drafts` 候选。consumer 仍是 `generated-not-activated`，owner manifest 为
-`inactive/routable=false`；runtime route、catalog machine credential 与 Connect 调用尚未接入，正式默认入口继续
-fail closed。v1/v2 只作历史冻结；运行时不 import Platform `src/` 或 checker。
+`inactive/routable=false`；Stage B 已接入 runtime route、owner-only catalog credential/token 与 generated Connect 调用，默认配置继续 fail closed。仅 loopback+完整配置可供 Root 隔离 sandbox；真实三 owner 201/replay 尚未验证。v1/v2 只作历史冻结；运行时不 import Platform `src/` 或 checker。
 
 inactive/routable=false 是发布标记，不是 Platform runtime RPC kill switch。协调激活前 public CreateDraft 仍不发布；Root
 可按 Platform ADR 在隔离 sandbox 以候选 route 做真实 IAM→BFF→Platform 201/replay 预激活验证，但不得称为公开产品可用。
@@ -358,7 +357,12 @@ issuer operation；`/sign-up/email` 仍来自静态 allowlist/snapshot，不混�
     "queryParameter": "id",
     "valueFormat": "canonical-lowercase-uuid",
     "errorQueryParameter": "error",
-    "allowedErrorCodes": ["TOKEN_EXPIRED", "INVALID_TOKEN", "USER_NOT_FOUND", "INVALID_USER"]
+    "allowedErrorCodes": [
+      "TOKEN_EXPIRED",
+      "INVALID_TOKEN",
+      "USER_NOT_FOUND",
+      "INVALID_USER"
+    ]
   }
 }
 ```
@@ -1066,15 +1070,14 @@ Root 真实三 owner Skill smoke 目前尚无已批准专用命令，须在 Root
 SDK generated operation 已发布到本仓生成物；窄 client 沿用现有 admission 有界 transport 与 generated validator，
 而非借通用 fetch 绕过响应预算。当前 client 尚无生产 Product mutation 调用者，不据此宣称组织 Skill 写已开放。
 
-## W1E user CreateSkillDraft 实施设计门（已收敛，尚未实现）
+## W1E user CreateSkillDraft 实施设计门（候选 runtime 已实现、默认关闭、真 sandbox 未验）
 
 ### 当前事实与本片边界
 
-当前基线是 BFF main `55b2809b2f73addbac2b56bd8a04aa0c1706521b`：IAM 0.7 用户 admission 与窄
-`SkillAuthorizationClient` 已存在，但 `src/http/routes/owner.ts` 对 Skill mutation 仍返回
-`503 capability_projection_not_configured`；BFF 没有 Platform Connect consumer、catalog workload credential 或 public
-`POST /v1/skills/drafts`。`src/bootstrap/server.ts` 还会在 `liveOwnerBusiness` 之前对普通 mutation 调用
-`mutationTicket`，其 terminal replay 会直接返回历史响应，因而不符合“每次 Product 当前授权先于 Platform receipt replay”的规则。
+实施前历史基线 BFF main `55b2809b2f73addbac2b56bd8a04aa0c1706521b` 已有 IAM 0.7 用户 admission 与窄
+`SkillAuthorizationClient`，但没有 Platform Connect consumer、catalog workload credential 或 public `POST /v1/skills/drafts`，
+且普通 mutation 会先进入 BFF `mutationTicket`。Stage B 已以默认关闭的精确 route、owner-only credential/token、generated
+Connect consumer 与 receipt bypass 替代该历史状态；每次请求仍先做当前 IAM admission，真实三 owner sandbox 尚未验证。
 
 本片只开放 **user owner 的 CreateSkillDraft**。当前用户已由每次请求的 IAM session admission 得到可信
 `tenant_id` 与 `subject_id`；BFF 固定构造 `owner_scope={kind:"user",id:subject_id}` 和完全相同的

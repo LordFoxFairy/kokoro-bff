@@ -17,6 +17,9 @@ import { PostgresBffRepositories } from "../infrastructure/postgres/repositories
 import type { RequestContext } from "../domain/request-context.js"
 import { SessionAdmissionClient } from "../auth/session-admission.client.js"
 import type { SessionAdmission } from "../auth/session-admission.types.js"
+import { CatalogCredentialSource } from "../infrastructure/clients/platform/catalog-credential.js"
+import { CatalogTokenSource } from "../infrastructure/clients/platform/catalog-token.js"
+import { CatalogConnectClient } from "../infrastructure/clients/platform/catalog-connect.js"
 
 export type BffRouteInput = {
   request: IncomingMessage
@@ -33,6 +36,7 @@ export type BffRouteInput = {
 export type BffRouteHandler = (input: BffRouteInput) => Promise<boolean | void>
 
 export type BffServerComposition = {
+  skillDraftClient: CatalogConnectClient | null
   businessStore: BffBusinessStore | null
   sessionAdmission: SessionAdmission
   idempotency: Map<string, IdempotencyEntry>
@@ -52,6 +56,7 @@ export type BffServerComposition = {
 }
 
 export type BffCompositionOptions = {
+  skillDraftClient?: CatalogConnectClient | null
   /** Supplying null is an explicit test composition; omitted means real persistence. */
   businessStore?: BffBusinessStore | null
   sessionAdmission?: SessionAdmission
@@ -88,87 +93,93 @@ function createAgUiRuntime(config: BffConfig): AgUiSessionRuntime {
 
 /** Compose production infrastructure or an explicitly supplied test seam. */
 export function createBffComposition(config: BffConfig, options: BffCompositionOptions = {}): BffServerComposition {
-  const sessionAdmission = options.sessionAdmission ?? new SessionAdmissionClient({
-    baseUrl: config.iamBaseUrl,
-    timeoutMs: config.upstreamTimeoutMs,
-    maxResponseBytes: config.upstreamMaxResponseBytes,
-  })
+  const sessionAdmission =
+    options.sessionAdmission ??
+    new SessionAdmissionClient({
+      baseUrl: config.iamBaseUrl,
+      timeoutMs: config.upstreamTimeoutMs,
+      maxResponseBytes: config.upstreamMaxResponseBytes,
+    })
+  const skillDraftClient =
+    options.skillDraftClient !== undefined
+      ? options.skillDraftClient
+      : config.skillDraft?.enabled && config.skillDraft.platformBaseUrl !== null && config.skillDraft.credentialFile !== null && config.iamBaseUrl !== null
+        ? new CatalogConnectClient(
+            config.skillDraft.platformBaseUrl,
+            new CatalogTokenSource(config.iamBaseUrl, new CatalogCredentialSource(config.skillDraft.credentialFile), config.skillDraft.timeoutMs),
+            config.skillDraft.timeoutMs,
+          )
+        : null
   const explicitlySuppliedStore = Object.prototype.hasOwnProperty.call(options, "businessStore")
   const businessStore = explicitlySuppliedStore
     ? (options.businessStore ?? null)
     : config.postgresUrl !== null && config.redisUrl !== null
       ? new PostgresBffRepositories(config.postgresUrl, config.redisUrl)
-      : (() => { throw new Error("KOKORO_BFF_POSTGRES_URL and KOKORO_BFF_REDIS_URL are required for the live BFF runtime") })()
-  const storeReadiness = options.readiness ?? (businessStore === null
-    ? async (): Promise<void> => { throw new Error("BFF business store is not configured") }
-    : (): Promise<void> => businessStore.ready())
+      : (() => {
+          throw new Error("KOKORO_BFF_POSTGRES_URL and KOKORO_BFF_REDIS_URL are required for the live BFF runtime")
+        })()
+  const storeReadiness =
+    options.readiness ??
+    (businessStore === null
+      ? async (): Promise<void> => {
+          throw new Error("BFF business store is not configured")
+        }
+      : (): Promise<void> => businessStore.ready())
   const readiness = async (): Promise<void> => {
     if (options.sessionAdmission === undefined && config.iamBaseUrl === null) throw new Error("KOKORO_IAM_BASE_URL is not configured")
     await storeReadiness()
   }
   const ownsStore = !explicitlySuppliedStore
-  const scheduledTaskDispatcher = options.scheduledTaskDispatcher ?? (
-    businessStore?.scheduledTaskOutbox === undefined
+  const scheduledTaskDispatcher =
+    options.scheduledTaskDispatcher ??
+    (businessStore?.scheduledTaskOutbox === undefined
       ? undefined
-      : new ScheduledTaskOutboxDispatcher(
-        businessStore.scheduledTaskOutbox,
-        new SchedulerOutboxDelivery(config),
-        { workerId: `bff-scheduled-outbox-${process.pid}-${randomUUID()}` },
-      )
-  )
-  const agentDispatchDispatcher = options.agentDispatchDispatcher ?? (
-    !config.agentEnabled
-      || config.upstreams.agents === null
-      || businessStore?.agentDispatchOutbox === undefined
+      : new ScheduledTaskOutboxDispatcher(businessStore.scheduledTaskOutbox, new SchedulerOutboxDelivery(config), {
+          workerId: `bff-scheduled-outbox-${process.pid}-${randomUUID()}`,
+        }))
+  const agentDispatchDispatcher =
+    options.agentDispatchDispatcher ??
+    (!config.agentEnabled || config.upstreams.agents === null || businessStore?.agentDispatchOutbox === undefined
       ? undefined
-      : new AgentDispatchOutboxDispatcher(
-        businessStore.agentDispatchOutbox,
-        new AgentOutboxDelivery(config),
-        { workerId: `bff-agent-outbox-${process.pid}-${randomUUID()}` },
-      )
-  )
-  const agentCancellationDispatcher = options.agentCancellationDispatcher ?? (
-    !config.agentEnabled
-      || config.upstreams.agents === null
-      || businessStore?.agentCancellationOutbox === undefined
+      : new AgentDispatchOutboxDispatcher(businessStore.agentDispatchOutbox, new AgentOutboxDelivery(config), {
+          workerId: `bff-agent-outbox-${process.pid}-${randomUUID()}`,
+        }))
+  const agentCancellationDispatcher =
+    options.agentCancellationDispatcher ??
+    (!config.agentEnabled || config.upstreams.agents === null || businessStore?.agentCancellationOutbox === undefined
       ? undefined
-      : new AgentCancellationOutboxDispatcher(
-        businessStore.agentCancellationOutbox,
-        new AgentCancellationDelivery(config),
-        { workerId: `bff-agent-cancellation-${process.pid}-${randomUUID()}` },
-      )
-  )
+      : new AgentCancellationOutboxDispatcher(businessStore.agentCancellationOutbox, new AgentCancellationDelivery(config), {
+          workerId: `bff-agent-cancellation-${process.pid}-${randomUUID()}`,
+        }))
   const agentBaseUrl = config.upstreams.agents ?? null
-  const agUiProjector = options.agUiProjector ?? (
-    config.agentEnabled && agentBaseUrl !== null && businessStore?.agUiConsumers !== undefined
+  const agUiProjector =
+    options.agUiProjector ??
+    (config.agentEnabled && agentBaseUrl !== null && businessStore?.agUiConsumers !== undefined
       ? new AgUiProjectorRunner(
-        businessStore.agUi,
-        businessStore.agUiConsumers,
-        new AgentAgUiSourceReader(config, agentBaseUrl, {
-          maxAttempts: config.agUi.projectorSourceMaxAttempts,
-          leaseSettlementReserveMs: config.agUi.projectorLeaseSettlementReserveMs,
-        }),
-        {
-          workerId: `bff-agui-projector-${process.pid}-${randomUUID()}`,
-          maxConsumersPerCycle: config.agUi.projectorMaxConsumersPerCycle,
-          sourcePageSize: config.agUi.projectorSourcePageSize,
-          maxPagesPerConsumer: config.agUi.projectorMaxPagesPerConsumer,
-          leaseDurationMs: config.agUi.projectorLeaseDurationMs,
-          pollIntervalMs: config.agUi.projectorPollIntervalMs,
-          errorBackoffMs: config.agUi.projectorErrorBackoffMs,
-          errorBackoffMaxMs: config.agUi.projectorErrorBackoffMaxMs,
-          errorBackoffJitterPercent: config.agUi.projectorErrorBackoffJitterPercent,
-          retentionMs: config.agUi.retentionMs,
-          gcIntervalMs: config.agUi.gcIntervalMs,
-          gcBatchSize: config.agUi.gcBatchSize,
-          cursorTombstoneRetentionMs: config.agUi.cursorTombstoneRetentionMs,
-        },
-      )
-      : undefined
-  )
-  const closeStore = options.close ?? (ownsStore && businessStore !== null
-    ? (): Promise<void> => businessStore.close()
-    : async (): Promise<void> => undefined)
+          businessStore.agUi,
+          businessStore.agUiConsumers,
+          new AgentAgUiSourceReader(config, agentBaseUrl, {
+            maxAttempts: config.agUi.projectorSourceMaxAttempts,
+            leaseSettlementReserveMs: config.agUi.projectorLeaseSettlementReserveMs,
+          }),
+          {
+            workerId: `bff-agui-projector-${process.pid}-${randomUUID()}`,
+            maxConsumersPerCycle: config.agUi.projectorMaxConsumersPerCycle,
+            sourcePageSize: config.agUi.projectorSourcePageSize,
+            maxPagesPerConsumer: config.agUi.projectorMaxPagesPerConsumer,
+            leaseDurationMs: config.agUi.projectorLeaseDurationMs,
+            pollIntervalMs: config.agUi.projectorPollIntervalMs,
+            errorBackoffMs: config.agUi.projectorErrorBackoffMs,
+            errorBackoffMaxMs: config.agUi.projectorErrorBackoffMaxMs,
+            errorBackoffJitterPercent: config.agUi.projectorErrorBackoffJitterPercent,
+            retentionMs: config.agUi.retentionMs,
+            gcIntervalMs: config.agUi.gcIntervalMs,
+            gcBatchSize: config.agUi.gcBatchSize,
+            cursorTombstoneRetentionMs: config.agUi.cursorTombstoneRetentionMs,
+          },
+        )
+      : undefined)
+  const closeStore = options.close ?? (ownsStore && businessStore !== null ? (): Promise<void> => businessStore.close() : async (): Promise<void> => undefined)
   let stopWorkersPromise: Promise<void> | null = null
   const stopWorkers = (): Promise<void> => {
     if (stopWorkersPromise !== null) return stopWorkersPromise
@@ -192,6 +203,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     return closePromise
   }
   return {
+    skillDraftClient,
     businessStore,
     sessionAdmission,
     idempotency: options.idempotency ?? new Map<string, IdempotencyEntry>(),

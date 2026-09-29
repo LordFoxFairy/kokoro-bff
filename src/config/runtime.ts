@@ -86,6 +86,12 @@ export type BffConfig = {
   redisUrl: string | null
   agUi: AgUiConfig
   upstreams: Record<string, string | null>
+  skillDraft: Readonly<{
+    enabled: boolean
+    platformBaseUrl: string | null
+    credentialFile: string | null
+    timeoutMs: number
+  }>
 }
 
 export const DEFAULT_UPSTREAM_TIMEOUT_MS = 5000
@@ -96,7 +102,7 @@ function booleanFlag(value: string | undefined, fallback: boolean): boolean {
   if (!raw) return fallback
   if (["1", "true", "yes", "on"].includes(raw)) return true
   if (["0", "false", "no", "off"].includes(raw)) return false
-  throw new Error("KOKORO_AGENT_ENABLED must be a boolean")
+  throw new Error("feature flag must be a boolean")
 }
 
 function optionalUrl(value: string | undefined): string | null {
@@ -123,18 +129,37 @@ function optionalOrigin(value: string | undefined, name = "KOKORO_IAM_BASE_URL")
 function iamRelayConfig(env: NodeJS.ProcessEnv): BffConfig["iamRelay"] {
   const values = [env.KOKORO_IAM_ISSUER_URL, env.KOKORO_IAM_WEB_ORIGIN, env.KOKORO_IAM_WEB_CALLBACK_URI, env.KOKORO_IAM_WEB_POST_LOGOUT_URI]
   if (values.every((value) => value === undefined || value.trim() === "")) return undefined
-  if (values.some((value) => value === undefined || value.trim() === "")) throw new Error("IAM relay requires issuer, Web origin, callback URI and post-logout URI")
+  if (values.some((value) => value === undefined || value.trim() === ""))
+    throw new Error("IAM relay requires issuer, Web origin, callback URI and post-logout URI")
   const [issuerRaw, originRaw, callbackRaw, logoutRaw] = values as [string, string, string, string]
   const webOrigin = optionalOrigin(originRaw)
   if (webOrigin === null) throw new Error("KOKORO_IAM_WEB_ORIGIN must be an HTTP(S) origin")
   const issuer = new URL(issuerRaw)
   const callback = new URL(callbackRaw)
   const logout = new URL(logoutRaw)
-  if (issuer.toString() !== `${webOrigin}/iam` || callback.origin !== webOrigin || callback.username !== "" || callback.password !== ""
-    || !/^\/api\/auth\/callback\/[a-z0-9-]+$/u.test(callback.pathname)
-    || callback.search !== "" || callback.hash !== "" || logout.origin !== webOrigin || logout.pathname !== "/auth/sign-in"
-    || logout.username !== "" || logout.password !== "" || logout.search !== "" || logout.hash !== "") throw new Error("IAM relay URLs must bind the exact Web issuer, callback and post-logout paths")
-  return { publicIssuerUrl: issuer.toString(), webOrigin, callbackUri: callback.toString(), postLogoutUri: logout.toString(), secureCookies: env.NODE_ENV === "production" }
+  if (
+    issuer.toString() !== `${webOrigin}/iam` ||
+    callback.origin !== webOrigin ||
+    callback.username !== "" ||
+    callback.password !== "" ||
+    !/^\/api\/auth\/callback\/[a-z0-9-]+$/u.test(callback.pathname) ||
+    callback.search !== "" ||
+    callback.hash !== "" ||
+    logout.origin !== webOrigin ||
+    logout.pathname !== "/auth/sign-in" ||
+    logout.username !== "" ||
+    logout.password !== "" ||
+    logout.search !== "" ||
+    logout.hash !== ""
+  )
+    throw new Error("IAM relay URLs must bind the exact Web issuer, callback and post-logout paths")
+  return {
+    publicIssuerUrl: issuer.toString(),
+    webOrigin,
+    callbackUri: callback.toString(),
+    postLogoutUri: logout.toString(),
+    secureCookies: env.NODE_ENV === "production",
+  }
 }
 
 function requiredConnectionUrl(value: string | undefined, name: string, protocols: readonly string[]): string {
@@ -150,10 +175,12 @@ export function assertBffPostgresUrl(raw: string): void {
   const schemas = parsed.searchParams.getAll("schema")
   if (
     !["postgres:", "postgresql:"].includes(parsed.protocol) ||
-    schemas.length !== 1 || schemas[0] !== "kokoro_bff" ||
+    schemas.length !== 1 ||
+    schemas[0] !== "kokoro_bff" ||
     [...parsed.searchParams.keys()].some((key) => ["options", "search_path"].includes(key.toLowerCase())) ||
     parsed.hash !== ""
-  ) throw new Error("KOKORO_BFF_POSTGRES_URL must target the kokoro_bff schema without connection options")
+  )
+    throw new Error("KOKORO_BFF_POSTGRES_URL must target the kokoro_bff schema without connection options")
 }
 
 function requiredBffPostgresUrl(value: string | undefined): string {
@@ -212,27 +239,95 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
     streamMaxFrames: positiveInteger(env.KOKORO_AGUI_STREAM_MAX_FRAMES, "KOKORO_AGUI_STREAM_MAX_FRAMES", DEFAULT_AGUI_CONFIG.streamMaxFrames),
     streamMaxBytes: positiveInteger(env.KOKORO_AGUI_STREAM_MAX_BYTES, "KOKORO_AGUI_STREAM_MAX_BYTES", DEFAULT_AGUI_CONFIG.streamMaxBytes),
     streamMaxDurationMs: positiveInteger(env.KOKORO_AGUI_STREAM_MAX_DURATION_MS, "KOKORO_AGUI_STREAM_MAX_DURATION_MS", DEFAULT_AGUI_CONFIG.streamMaxDurationMs),
-    maxConnectionsGlobal: positiveInteger(env.KOKORO_AGUI_MAX_CONNECTIONS_GLOBAL, "KOKORO_AGUI_MAX_CONNECTIONS_GLOBAL", DEFAULT_AGUI_CONFIG.maxConnectionsGlobal),
-    maxConnectionsPerTenant: positiveInteger(env.KOKORO_AGUI_MAX_CONNECTIONS_PER_TENANT, "KOKORO_AGUI_MAX_CONNECTIONS_PER_TENANT", DEFAULT_AGUI_CONFIG.maxConnectionsPerTenant),
-    maxConnectionsPerSession: positiveInteger(env.KOKORO_AGUI_MAX_CONNECTIONS_PER_SESSION, "KOKORO_AGUI_MAX_CONNECTIONS_PER_SESSION", DEFAULT_AGUI_CONFIG.maxConnectionsPerSession),
-    ledgerPollBaseDelayMs: positiveInteger(env.KOKORO_AGUI_LEDGER_POLL_BASE_DELAY_MS, "KOKORO_AGUI_LEDGER_POLL_BASE_DELAY_MS", DEFAULT_AGUI_CONFIG.ledgerPollBaseDelayMs),
-    ledgerPollMaxDelayMs: positiveInteger(env.KOKORO_AGUI_LEDGER_POLL_MAX_DELAY_MS, "KOKORO_AGUI_LEDGER_POLL_MAX_DELAY_MS", DEFAULT_AGUI_CONFIG.ledgerPollMaxDelayMs),
-    ledgerPollJitterPercent: percentage(env.KOKORO_AGUI_LEDGER_POLL_JITTER_PERCENT, "KOKORO_AGUI_LEDGER_POLL_JITTER_PERCENT", DEFAULT_AGUI_CONFIG.ledgerPollJitterPercent),
+    maxConnectionsGlobal: positiveInteger(
+      env.KOKORO_AGUI_MAX_CONNECTIONS_GLOBAL,
+      "KOKORO_AGUI_MAX_CONNECTIONS_GLOBAL",
+      DEFAULT_AGUI_CONFIG.maxConnectionsGlobal,
+    ),
+    maxConnectionsPerTenant: positiveInteger(
+      env.KOKORO_AGUI_MAX_CONNECTIONS_PER_TENANT,
+      "KOKORO_AGUI_MAX_CONNECTIONS_PER_TENANT",
+      DEFAULT_AGUI_CONFIG.maxConnectionsPerTenant,
+    ),
+    maxConnectionsPerSession: positiveInteger(
+      env.KOKORO_AGUI_MAX_CONNECTIONS_PER_SESSION,
+      "KOKORO_AGUI_MAX_CONNECTIONS_PER_SESSION",
+      DEFAULT_AGUI_CONFIG.maxConnectionsPerSession,
+    ),
+    ledgerPollBaseDelayMs: positiveInteger(
+      env.KOKORO_AGUI_LEDGER_POLL_BASE_DELAY_MS,
+      "KOKORO_AGUI_LEDGER_POLL_BASE_DELAY_MS",
+      DEFAULT_AGUI_CONFIG.ledgerPollBaseDelayMs,
+    ),
+    ledgerPollMaxDelayMs: positiveInteger(
+      env.KOKORO_AGUI_LEDGER_POLL_MAX_DELAY_MS,
+      "KOKORO_AGUI_LEDGER_POLL_MAX_DELAY_MS",
+      DEFAULT_AGUI_CONFIG.ledgerPollMaxDelayMs,
+    ),
+    ledgerPollJitterPercent: percentage(
+      env.KOKORO_AGUI_LEDGER_POLL_JITTER_PERCENT,
+      "KOKORO_AGUI_LEDGER_POLL_JITTER_PERCENT",
+      DEFAULT_AGUI_CONFIG.ledgerPollJitterPercent,
+    ),
     replayCacheTtlMs: positiveInteger(env.KOKORO_AGUI_REPLAY_CACHE_TTL_MS, "KOKORO_AGUI_REPLAY_CACHE_TTL_MS", DEFAULT_AGUI_CONFIG.replayCacheTtlMs),
-    projectorMaxConsumersPerCycle: positiveInteger(env.KOKORO_AGUI_PROJECTOR_MAX_CONSUMERS_PER_CYCLE, "KOKORO_AGUI_PROJECTOR_MAX_CONSUMERS_PER_CYCLE", DEFAULT_AGUI_CONFIG.projectorMaxConsumersPerCycle),
-    projectorSourcePageSize: positiveInteger(env.KOKORO_AGUI_PROJECTOR_SOURCE_PAGE_SIZE, "KOKORO_AGUI_PROJECTOR_SOURCE_PAGE_SIZE", DEFAULT_AGUI_CONFIG.projectorSourcePageSize),
-    projectorMaxPagesPerConsumer: positiveInteger(env.KOKORO_AGUI_PROJECTOR_MAX_PAGES_PER_CONSUMER, "KOKORO_AGUI_PROJECTOR_MAX_PAGES_PER_CONSUMER", DEFAULT_AGUI_CONFIG.projectorMaxPagesPerConsumer),
-    projectorSourceMaxAttempts: positiveInteger(env.KOKORO_AGUI_PROJECTOR_SOURCE_MAX_ATTEMPTS, "KOKORO_AGUI_PROJECTOR_SOURCE_MAX_ATTEMPTS", DEFAULT_AGUI_CONFIG.projectorSourceMaxAttempts),
-    projectorLeaseDurationMs: positiveInteger(env.KOKORO_AGUI_PROJECTOR_LEASE_DURATION_MS, "KOKORO_AGUI_PROJECTOR_LEASE_DURATION_MS", DEFAULT_AGUI_CONFIG.projectorLeaseDurationMs),
-    projectorLeaseSettlementReserveMs: positiveInteger(env.KOKORO_AGUI_PROJECTOR_LEASE_SETTLEMENT_RESERVE_MS, "KOKORO_AGUI_PROJECTOR_LEASE_SETTLEMENT_RESERVE_MS", DEFAULT_AGUI_CONFIG.projectorLeaseSettlementReserveMs),
-    projectorPollIntervalMs: positiveInteger(env.KOKORO_AGUI_PROJECTOR_POLL_INTERVAL_MS, "KOKORO_AGUI_PROJECTOR_POLL_INTERVAL_MS", DEFAULT_AGUI_CONFIG.projectorPollIntervalMs),
-    projectorErrorBackoffMs: positiveInteger(env.KOKORO_AGUI_PROJECTOR_ERROR_BACKOFF_MS, "KOKORO_AGUI_PROJECTOR_ERROR_BACKOFF_MS", DEFAULT_AGUI_CONFIG.projectorErrorBackoffMs),
-    projectorErrorBackoffMaxMs: positiveInteger(env.KOKORO_AGUI_PROJECTOR_ERROR_BACKOFF_MAX_MS, "KOKORO_AGUI_PROJECTOR_ERROR_BACKOFF_MAX_MS", DEFAULT_AGUI_CONFIG.projectorErrorBackoffMaxMs),
-    projectorErrorBackoffJitterPercent: percentage(env.KOKORO_AGUI_PROJECTOR_ERROR_BACKOFF_JITTER_PERCENT, "KOKORO_AGUI_PROJECTOR_ERROR_BACKOFF_JITTER_PERCENT", DEFAULT_AGUI_CONFIG.projectorErrorBackoffJitterPercent),
+    projectorMaxConsumersPerCycle: positiveInteger(
+      env.KOKORO_AGUI_PROJECTOR_MAX_CONSUMERS_PER_CYCLE,
+      "KOKORO_AGUI_PROJECTOR_MAX_CONSUMERS_PER_CYCLE",
+      DEFAULT_AGUI_CONFIG.projectorMaxConsumersPerCycle,
+    ),
+    projectorSourcePageSize: positiveInteger(
+      env.KOKORO_AGUI_PROJECTOR_SOURCE_PAGE_SIZE,
+      "KOKORO_AGUI_PROJECTOR_SOURCE_PAGE_SIZE",
+      DEFAULT_AGUI_CONFIG.projectorSourcePageSize,
+    ),
+    projectorMaxPagesPerConsumer: positiveInteger(
+      env.KOKORO_AGUI_PROJECTOR_MAX_PAGES_PER_CONSUMER,
+      "KOKORO_AGUI_PROJECTOR_MAX_PAGES_PER_CONSUMER",
+      DEFAULT_AGUI_CONFIG.projectorMaxPagesPerConsumer,
+    ),
+    projectorSourceMaxAttempts: positiveInteger(
+      env.KOKORO_AGUI_PROJECTOR_SOURCE_MAX_ATTEMPTS,
+      "KOKORO_AGUI_PROJECTOR_SOURCE_MAX_ATTEMPTS",
+      DEFAULT_AGUI_CONFIG.projectorSourceMaxAttempts,
+    ),
+    projectorLeaseDurationMs: positiveInteger(
+      env.KOKORO_AGUI_PROJECTOR_LEASE_DURATION_MS,
+      "KOKORO_AGUI_PROJECTOR_LEASE_DURATION_MS",
+      DEFAULT_AGUI_CONFIG.projectorLeaseDurationMs,
+    ),
+    projectorLeaseSettlementReserveMs: positiveInteger(
+      env.KOKORO_AGUI_PROJECTOR_LEASE_SETTLEMENT_RESERVE_MS,
+      "KOKORO_AGUI_PROJECTOR_LEASE_SETTLEMENT_RESERVE_MS",
+      DEFAULT_AGUI_CONFIG.projectorLeaseSettlementReserveMs,
+    ),
+    projectorPollIntervalMs: positiveInteger(
+      env.KOKORO_AGUI_PROJECTOR_POLL_INTERVAL_MS,
+      "KOKORO_AGUI_PROJECTOR_POLL_INTERVAL_MS",
+      DEFAULT_AGUI_CONFIG.projectorPollIntervalMs,
+    ),
+    projectorErrorBackoffMs: positiveInteger(
+      env.KOKORO_AGUI_PROJECTOR_ERROR_BACKOFF_MS,
+      "KOKORO_AGUI_PROJECTOR_ERROR_BACKOFF_MS",
+      DEFAULT_AGUI_CONFIG.projectorErrorBackoffMs,
+    ),
+    projectorErrorBackoffMaxMs: positiveInteger(
+      env.KOKORO_AGUI_PROJECTOR_ERROR_BACKOFF_MAX_MS,
+      "KOKORO_AGUI_PROJECTOR_ERROR_BACKOFF_MAX_MS",
+      DEFAULT_AGUI_CONFIG.projectorErrorBackoffMaxMs,
+    ),
+    projectorErrorBackoffJitterPercent: percentage(
+      env.KOKORO_AGUI_PROJECTOR_ERROR_BACKOFF_JITTER_PERCENT,
+      "KOKORO_AGUI_PROJECTOR_ERROR_BACKOFF_JITTER_PERCENT",
+      DEFAULT_AGUI_CONFIG.projectorErrorBackoffJitterPercent,
+    ),
     retentionMs: positiveInteger(env.KOKORO_AGUI_RETENTION_MS, "KOKORO_AGUI_RETENTION_MS", DEFAULT_AGUI_CONFIG.retentionMs),
     gcIntervalMs: positiveInteger(env.KOKORO_AGUI_GC_INTERVAL_MS, "KOKORO_AGUI_GC_INTERVAL_MS", DEFAULT_AGUI_CONFIG.gcIntervalMs),
     gcBatchSize: positiveInteger(env.KOKORO_AGUI_GC_BATCH_SIZE, "KOKORO_AGUI_GC_BATCH_SIZE", DEFAULT_AGUI_CONFIG.gcBatchSize),
-    cursorTombstoneRetentionMs: positiveInteger(env.KOKORO_AGUI_CURSOR_TOMBSTONE_RETENTION_MS, "KOKORO_AGUI_CURSOR_TOMBSTONE_RETENTION_MS", DEFAULT_AGUI_CONFIG.cursorTombstoneRetentionMs),
+    cursorTombstoneRetentionMs: positiveInteger(
+      env.KOKORO_AGUI_CURSOR_TOMBSTONE_RETENTION_MS,
+      "KOKORO_AGUI_CURSOR_TOMBSTONE_RETENTION_MS",
+      DEFAULT_AGUI_CONFIG.cursorTombstoneRetentionMs,
+    ),
   }
   if (agUi.maxConnectionsPerTenant > agUi.maxConnectionsGlobal || agUi.maxConnectionsPerSession > agUi.maxConnectionsPerTenant) {
     throw new Error("AG-UI connection limits must satisfy session <= tenant <= global")
@@ -250,9 +345,23 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
   const storageBase = optionalOrigin(env.KOKORO_STORAGE_RPC_BASE_URL, "KOKORO_STORAGE_RPC_BASE_URL")
   const storageOrigin = optionalOrigin(env.KOKORO_STORAGE_OBJECT_ORIGIN, "KOKORO_STORAGE_OBJECT_ORIGIN")
   const storageSecret = env.KOKORO_BFF_STORAGE_SECRET?.trim() || null
-  if ([storageBase, storageOrigin, storageSecret].some((value) => value !== null) && [storageBase, storageOrigin, storageSecret].some((value) => value === null)) throw new Error("Storage requires base URL, object origin and independent BFF Storage secret")
+  if (
+    [storageBase, storageOrigin, storageSecret].some((value) => value !== null) &&
+    [storageBase, storageOrigin, storageSecret].some((value) => value === null)
+  )
+    throw new Error("Storage requires base URL, object origin and independent BFF Storage secret")
   if (storageSecret !== null && !/^[\x21-\x7e]+$/u.test(storageSecret)) throw new Error("Storage secret must be a visible ASCII header value")
   const relay = iamRelayConfig(env)
+  const skillDraft = {
+    enabled: booleanFlag(env.KOKORO_SKILL_DRAFT_CANDIDATE_ENABLED, false),
+    platformBaseUrl: optionalOrigin(env.KOKORO_PLATFORM_BASE_URL, "KOKORO_PLATFORM_BASE_URL"),
+    credentialFile: env.KOKORO_BFF_PLATFORM_CATALOG_CREDENTIALS_FILE?.trim() || null,
+    timeoutMs: positiveInteger(env.KOKORO_PLATFORM_CATALOG_TIMEOUT_MS, "KOKORO_PLATFORM_CATALOG_TIMEOUT_MS", upstreamTimeoutMs),
+  }
+  if (skillDraft.enabled && !["127.0.0.1", "::1", "localhost"].includes(env.KOKORO_BFF_HOST?.trim() || "127.0.0.1"))
+    throw new Error("Skill draft candidate requires a loopback BFF host")
+  if (skillDraft.enabled && (skillDraft.platformBaseUrl === null || skillDraft.credentialFile === null || optionalOrigin(env.KOKORO_IAM_BASE_URL) === null))
+    throw new Error("Skill draft candidate requires Platform, IAM and credential configuration")
   return {
     host: env.KOKORO_BFF_HOST?.trim() || "127.0.0.1",
     port,
@@ -261,11 +370,17 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
     tenantId: env.KOKORO_TENANT_ID?.trim() || null,
     iamBaseUrl: optionalOrigin(env.KOKORO_IAM_BASE_URL),
     ...(relay === undefined ? {} : { iamRelay: relay }),
-    ...(storageBase !== null && storageOrigin !== null && storageSecret !== null ? { storage: { baseUrl: storageBase, objectOrigin: storageOrigin, secret: storageSecret } } : {}),
+    ...(storageBase !== null && storageOrigin !== null && storageSecret !== null
+      ? { storage: { baseUrl: storageBase, objectOrigin: storageOrigin, secret: storageSecret } }
+      : {}),
     sharedSecret,
     upstreamSecret: env.KOKORO_INTERNAL_SECRET_BFF?.trim() || null,
     upstreamTimeoutMs,
-    upstreamMaxResponseBytes: positiveInteger(env.KOKORO_UPSTREAM_MAX_RESPONSE_BYTES, "KOKORO_UPSTREAM_MAX_RESPONSE_BYTES", DEFAULT_UPSTREAM_MAX_RESPONSE_BYTES),
+    upstreamMaxResponseBytes: positiveInteger(
+      env.KOKORO_UPSTREAM_MAX_RESPONSE_BYTES,
+      "KOKORO_UPSTREAM_MAX_RESPONSE_BYTES",
+      DEFAULT_UPSTREAM_MAX_RESPONSE_BYTES,
+    ),
     schedulerServiceToken: env.KOKORO_SCHEDULER_SERVICE_TOKEN?.trim() || null,
     schedulerTargetUrl: optionalUrl(env.KOKORO_SCHEDULER_TARGET_URL),
     agentEnabled: booleanFlag(env.KOKORO_AGENT_ENABLED, false),
@@ -273,5 +388,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
     redisUrl: requiredConnectionUrl(env.KOKORO_BFF_REDIS_URL, "KOKORO_BFF_REDIS_URL", ["redis:", "rediss:"]),
     agUi,
     upstreams,
+    skillDraft,
   }
 }

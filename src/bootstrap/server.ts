@@ -11,7 +11,18 @@ import { loadConfig, type BffConfig } from "../config/runtime.js"
 import { authorizeUserRequest } from "../auth/user-admission.js"
 import { failure, ok } from "../contracts/index.js"
 import { mutationTicket, type MutationTicket } from "../application/idempotency.js"
-import { mutationFingerprint, authorizeServerOnly, idempotencyKey, isMutation, pathOf, queryOf, readBody, requestBodyJson, requestId, requiresIdempotency } from "../http/request.js"
+import {
+  mutationFingerprint,
+  authorizeServerOnly,
+  idempotencyKey,
+  isMutation,
+  pathOf,
+  queryOf,
+  readBody,
+  requestBodyJson,
+  requestId,
+  requiresIdempotency,
+} from "../http/request.js"
 import { reply, send } from "../http/response.js"
 import { normalizeUpstreamResponse } from "../infrastructure/clients/upstream-response.js"
 import { proxyUpstream } from "../upstream.js"
@@ -27,6 +38,7 @@ import { runtimeManifest } from "../http/routes/runtime-manifest.js"
 import { iamProtocolRelay } from "../http/routes/iam-protocol-relay.js"
 import { liveTeamRead, liveTeamWrite } from "../http/routes/team.js"
 import { createBffComposition, type BffCompositionOptions, type BffRouteInput } from "./runtime.js"
+import { createSkillDraftRoute } from "../http/routes/create-skill-draft.js"
 
 async function handle(
   request: IncomingMessage,
@@ -45,8 +57,12 @@ async function handle(
     return
   }
   if (segments.length === 1 && segments[0] === "readyz" && request.method === "GET") {
-    const ready = await composition.readiness().then(() => true).catch(() => false)
-      && (!config.agentEnabled || configuredUpstream(config, "agents") !== null)
+    const ready =
+      (await composition
+        .readiness()
+        .then(() => true)
+        .catch(() => false)) &&
+      (!config.agentEnabled || configuredUpstream(config, "agents") !== null)
     send(response, ready ? 200 : 503, { status: "ok", service: "kokoro-bff", mode: config.mode })
     return
   }
@@ -74,21 +90,28 @@ async function handle(
         send(response, 404, failure("share_not_found", "Share was not found", id))
         return
       }
-      send(response, 200, ok({
-        session: {
-          session_id: shared.conversation.conversationId,
-          title: shared.conversation.title,
-          owner_id: shared.conversation.ownerId,
-          created_at: shared.conversation.createdAt.toISOString(),
-          updated_at: shared.conversation.updatedAt.toISOString(),
-        },
-        ...(messages.messages.length === 0 ? {} : { messages: messages.messages }),
-        pending_pauses: [],
-        files: [],
-        deliveries: [],
-        deliveries_has_more: false,
-        event_watermark: null,
-      }, id))
+      send(
+        response,
+        200,
+        ok(
+          {
+            session: {
+              session_id: shared.conversation.conversationId,
+              title: shared.conversation.title,
+              owner_id: shared.conversation.ownerId,
+              created_at: shared.conversation.createdAt.toISOString(),
+              updated_at: shared.conversation.updatedAt.toISOString(),
+            },
+            ...(messages.messages.length === 0 ? {} : { messages: messages.messages }),
+            pending_pauses: [],
+            files: [],
+            deliveries: [],
+            deliveries_has_more: false,
+            event_watermark: null,
+          },
+          id,
+        ),
+      )
       return
     }
     if (composition.sharedSessionReader === undefined) {
@@ -125,26 +148,56 @@ async function handle(
   }
 
   const businessPath = segments.slice(1)
-  if (request.method === "GET" && businessPath.length === 3 && businessPath[0] === "projects" && businessPath[2] === "resources") response.setHeader("x-request-id", id)
-  if (request.method === "POST" && businessPath.length === 2 && businessPath[0] === "library" && businessPath[1] === "files") response.setHeader("x-request-id", id)
+  if (request.method === "GET" && businessPath.length === 3 && businessPath[0] === "projects" && businessPath[2] === "resources")
+    response.setHeader("x-request-id", id)
+  if (request.method === "POST" && businessPath.length === 2 && businessPath[0] === "library" && businessPath[1] === "files")
+    response.setHeader("x-request-id", id)
   const admissionAbort = new AbortController()
-  const onRequestAborted = (): void => { admissionAbort.abort() }
-  const onResponseClosed = (): void => { if (!response.writableEnded) admissionAbort.abort() }
+  const onRequestAborted = (): void => {
+    admissionAbort.abort()
+  }
+  const onResponseClosed = (): void => {
+    if (!response.writableEnded) admissionAbort.abort()
+  }
   request.once("aborted", onRequestAborted)
   response.once("close", onResponseClosed)
-  const admission = await authorizeUserRequest(request, config, composition.sessionAdmission, id, admissionAbort.signal)
-    .finally(() => {
-      request.removeListener("aborted", onRequestAborted)
-      response.removeListener("close", onResponseClosed)
-    })
+  const admission = await authorizeUserRequest(request, config, composition.sessionAdmission, id, admissionAbort.signal).finally(() => {
+    request.removeListener("aborted", onRequestAborted)
+    response.removeListener("close", onResponseClosed)
+  })
   if (!admission.ok) {
     if (!response.destroyed) {
       response.setHeader("x-request-id", id)
-      send(response, admission.status, failure(admission.code, "BFF user admission failed", id), admission.retryAfter)
+      if (request.url === "/v1/skills/drafts") {
+        response.setHeader("cache-control", "no-store")
+        send(
+          response,
+          admission.status,
+          { error: { code: admission.code, message: "BFF user admission failed", retryable: admission.status === 429 || admission.status === 503 } },
+          admission.retryAfter,
+        )
+      } else send(response, admission.status, failure(admission.code, "BFF user admission failed", id), admission.retryAfter)
     }
     return
   }
   const context = admission.context
+
+  if (new URL(request.url || "/", "http://bff.local").pathname === "/v1/skills/drafts") {
+    if (request.method !== "POST" || request.url !== "/v1/skills/drafts") {
+      response.setHeader("x-request-id", id)
+      send(response, 404, failure("bff_route_not_found", "Business route was not found", id))
+      return
+    }
+    const routeAbort = new AbortController()
+    const abortRoute = (): void => routeAbort.abort()
+    request.once("aborted", abortRoute)
+    response.once("close", abortRoute)
+    await createSkillDraftRoute(request, response, context, composition.skillDraftClient, routeAbort.signal).finally(() => {
+      request.removeListener("aborted", abortRoute)
+      response.removeListener("close", abortRoute)
+    })
+    return
+  }
 
   if (businessPath.length === 1 && businessPath[0] === "me") {
     response.setHeader("x-request-id", id)
@@ -225,7 +278,14 @@ async function handle(
       return
     }
   }
-  if (composition.routeHandler === undefined && method === "GET" && businessPath.length === 3 && businessPath[0] === "projects" && businessPath[1] !== undefined && businessPath[2] === "resources") {
+  if (
+    composition.routeHandler === undefined &&
+    method === "GET" &&
+    businessPath.length === 3 &&
+    businessPath[0] === "projects" &&
+    businessPath[1] !== undefined &&
+    businessPath[2] === "resources"
+  ) {
     await projectResourceListRoute(request, response, config, context, businessPath[1], composition.businessStore)
     return
   }
@@ -233,32 +293,74 @@ async function handle(
     await libraryFileListRoute(request, response, config, context, undefined, composition.businessStore?.artifactLibrary)
     return
   }
-  if (composition.routeHandler === undefined && method === "GET" && businessPath.length === 4 && businessPath[0] === "library" && businessPath[1] === "artifacts") {
+  if (
+    composition.routeHandler === undefined &&
+    method === "GET" &&
+    businessPath.length === 4 &&
+    businessPath[0] === "library" &&
+    businessPath[1] === "artifacts"
+  ) {
     await libraryArtifactRoute(request, response, config, context, composition.businessStore?.artifactLibrary, businessPath[2] ?? "", businessPath[3] ?? "")
     return
   }
-  if (composition.routeHandler === undefined && method === "GET" && businessPath.length === 5 && businessPath[0] === "library" && businessPath[1] === "artifacts" && businessPath[4] === "content") {
-    await libraryArtifactDownloadRoute(request, response, config, context, composition.businessStore?.artifactLibrary, businessPath[2] ?? "", businessPath[3] ?? "")
+  if (
+    composition.routeHandler === undefined &&
+    method === "GET" &&
+    businessPath.length === 5 &&
+    businessPath[0] === "library" &&
+    businessPath[1] === "artifacts" &&
+    businessPath[4] === "content"
+  ) {
+    await libraryArtifactDownloadRoute(
+      request,
+      response,
+      config,
+      context,
+      composition.businessStore?.artifactLibrary,
+      businessPath[2] ?? "",
+      businessPath[3] ?? "",
+    )
     return
   }
-  if (composition.routeHandler === undefined && method === "GET" && businessPath.length === 4 && businessPath[0] === "library" && businessPath[1] === "files" && businessPath[3] === "content") {
+  if (
+    composition.routeHandler === undefined &&
+    method === "GET" &&
+    businessPath.length === 4 &&
+    businessPath[0] === "library" &&
+    businessPath[1] === "files" &&
+    businessPath[3] === "content"
+  ) {
     await personalFileDownloadRoute(request, response, config, context, businessPath[2] ?? "")
     return
   }
-  if (composition.routeHandler === undefined && method === "POST" && businessPath.length === 3 && businessPath[0] === "projects" && businessPath[1] !== undefined && businessPath[2] === "resources") {
+  if (
+    composition.routeHandler === undefined &&
+    method === "POST" &&
+    businessPath.length === 3 &&
+    businessPath[0] === "projects" &&
+    businessPath[1] !== undefined &&
+    businessPath[2] === "resources"
+  ) {
     await projectResourceRoute(request, response, config, context, businessPath[1], body ?? Buffer.alloc(0), composition.businessStore, composition.idempotency)
     return
   }
-  if (composition.routeHandler === undefined && method === "POST" && businessPath.length === 2 && businessPath[0] === "library" && businessPath[1] === "files") {
+  if (
+    composition.routeHandler === undefined &&
+    method === "POST" &&
+    businessPath.length === 2 &&
+    businessPath[0] === "library" &&
+    businessPath[1] === "files"
+  ) {
     await personalFileUploadRoute(request, response, config, context, body ?? Buffer.alloc(0), composition.businessStore, composition.idempotency)
     return
   }
-  const durableChatAdmission = composition.routeHandler === undefined
-    && composition.businessStore !== null
-    && method === "POST"
-    && businessPath.length === 3
-    && businessPath[0] === "sessions"
-    && businessPath[2] === "messages"
+  const durableChatAdmission =
+    composition.routeHandler === undefined &&
+    composition.businessStore !== null &&
+    method === "POST" &&
+    businessPath.length === 3 &&
+    businessPath[0] === "sessions" &&
+    businessPath[2] === "messages"
   if (mutationRequired && !durableChatAdmission) {
     const route = `/${businessPath.join("/")}`
     const result = await mutationTicket(
@@ -299,10 +401,10 @@ async function handle(
   }
   if (businessPath[0] === "sessions") {
     if (
-      composition.businessStore !== null
-      && chatAuthorization !== null
-      && chatAuthorization.ok
-      && await liveChatBusiness(
+      composition.businessStore !== null &&
+      chatAuthorization !== null &&
+      chatAuthorization.ok &&
+      (await liveChatBusiness(
         request,
         response,
         config,
@@ -313,8 +415,9 @@ async function handle(
         composition.idempotency,
         composition.businessStore,
         chatAuthorization,
-      )
-    ) return
+      ))
+    )
+      return
     await liveAgentSession(
       request,
       response,
@@ -336,7 +439,14 @@ async function handle(
   }
   if (await liveOwnerBusiness(request, response, config, context, businessPath, json, mutation, composition.idempotency)) return
   if (upstreamBase === null) {
-    await reply(response, 503, failure("upstream_not_configured", `No upstream is configured for ${key || "this route"}`, id), context, composition.idempotency, mutation)
+    await reply(
+      response,
+      503,
+      failure("upstream_not_configured", `No upstream is configured for ${key || "this route"}`, id),
+      context,
+      composition.idempotency,
+      mutation,
+    )
     return
   }
   try {
@@ -385,7 +495,9 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
         })
       })
       if (Number.isFinite(gracePeriodMs) && gracePeriodMs > 0) {
-        forcedCloseTimer = setTimeout(() => { server.closeAllConnections() }, gracePeriodMs)
+        forcedCloseTimer = setTimeout(() => {
+          server.closeAllConnections()
+        }, gracePeriodMs)
         forcedCloseTimer.unref()
       }
       void Promise.all([stopWorkers, closeServer]).then(
@@ -393,17 +505,19 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
           await composition.close()
           finish()
         },
-        (error: unknown) => { finish(error instanceof Error ? error : new Error(String(error))) },
+        (error: unknown) => {
+          finish(error instanceof Error ? error : new Error(String(error)))
+        },
       )
     })
     return shutdownPromise
   }
   Object.assign(server, { shutdown })
   if (
-    composition.agUiProjector !== undefined
-    || composition.scheduledTaskDispatcher !== undefined
-    || composition.agentDispatchDispatcher !== undefined
-    || composition.agentCancellationDispatcher !== undefined
+    composition.agUiProjector !== undefined ||
+    composition.scheduledTaskDispatcher !== undefined ||
+    composition.agentDispatchDispatcher !== undefined ||
+    composition.agentCancellationDispatcher !== undefined
   ) {
     server.once("listening", () => {
       composition.agUiProjector?.start()
@@ -412,6 +526,8 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
       composition.agentCancellationDispatcher?.start()
     })
   }
-  server.once("close", () => { void composition.close() })
+  server.once("close", () => {
+    void composition.close()
+  })
   return server as BffServer
 }

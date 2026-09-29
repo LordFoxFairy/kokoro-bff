@@ -5,8 +5,8 @@
 
 ## W1E-BFF-USER-SKILL-DRAFT 文档门（2026-09-29；仅目标设计，运行未激活）
 
-本代码片已把 Platform consumer 原子重钉到 owner `5b6eb2c1532b23b9747bc4bf6ac99f69ad453de0`：两份 Proto 原字节 SHA 保持不变，完整 inactive v3 artifact/provenance aggregate 为 `324e749da1bc66c1ff03de74e7299716f798f5f5bb5fa19556033b79fa09ff8d`。BFF 独立 CreateDraft raw projector、RFC 8785 JCS/SHA-256 已覆盖 owner 45 条正反向量；source/aggregate drift fail closed。canonical OpenAPI 已新增严格 user-only `POST /v1/skills/drafts` 候选契约；runtime 尚未实现该 route，仍对 Skill mutation 返回 503，catalog machine credential 与精确
-`mutationTicket` bypass 尚不存在。旧 Capability HTTP 四条 GET 仍是当前态，不因本设计而声称已删除。
+本代码片已把 Platform consumer 原子重钉到 owner `5b6eb2c1532b23b9747bc4bf6ac99f69ad453de0`：两份 Proto 原字节 SHA 保持不变，完整 inactive v3 artifact/provenance aggregate 为 `324e749da1bc66c1ff03de74e7299716f798f5f5bb5fa19556033b79fa09ff8d`。BFF 独立 CreateDraft raw projector、RFC 8785 JCS/SHA-256 已覆盖 owner 45 条正反向量；source/aggregate drift fail closed。canonical OpenAPI 已新增严格 user-only `POST /v1/skills/drafts` 候选契约；runtime 候选已实现该 route、catalog machine credential 与精确
+`mutationTicket` bypass 已在 IAM admission 后、通用 mutation receipt 前按精确 raw route 分派；候选默认关闭且真实三 owner sandbox 尚未验证。旧 Capability HTTP 四条 GET 仍是当前态，不因本设计而声称已删除。
 
 **当前已固定的机器来源** 是 Platform main `5b6eb2c1532b23b9747bc4bf6ac99f69ad453de0`：
 `kokoro.platform.v1` 的 `platform_runtime.proto` SHA-256
@@ -15,8 +15,8 @@
 `platform-execution-operations/3.0.0` aggregate SHA-256
 `324e749da1bc66c1ff03de74e7299716f798f5f5bb5fa19556033b79fa09ff8d`。
 v3 manifest 明确 `status=inactive`、`routable=false`；其 registry、逐命令 schema 与向量是后续 consumer
-生成/核验事实源，不是 BFF route 激活证据。该发布标记不是 runtime RPC kill switch：Platform 已按 v3 注册 SkillCatalogService。激活前允许 Root 在隔离 sandbox 做真实 IAM→候选 BFF→Platform 201/replay 预激活验证，但不构成 public 发布；只有六 owner sandbox 全门通过、Platform 发布 active/routable=true artifact、BFF 重钉并由 Root 协调激活后，public CreateDraft 才可用。当前阶段 A 只发布机器 OpenAPI/契约候选，不实现 route。v1/v2 仅历史冻结，不作为新 consumer 或运行 fallback。
-阶段 A 已修改 canonical OpenAPI 与 contract tests；runtime、Schema、真实三 owner smoke 均未改或未验。
+生成/核验事实源，不是 BFF route 激活证据。该发布标记不是 runtime RPC kill switch：Platform 已按 v3 注册 SkillCatalogService。激活前允许 Root 在隔离 sandbox 做真实 IAM→候选 BFF→Platform 201/replay 预激活验证，但不构成 public 发布；只有六 owner sandbox 全门通过、Platform 发布 active/routable=true artifact、BFF 重钉并由 Root 协调激活后，public CreateDraft 才可用。当前 Stage B 已实现同一生产 handler 的默认关闭候选；仅 loopback 且完整配置时可供 Root 隔离真 sandbox，当前尚未执行该 sandbox，正式 public 仍未激活。v1/v2 仅历史冻结，不作为新 consumer 或运行 fallback。
+Stage B 已增加 runtime 候选与本地短命 IAM/token/Connect/断连边界测试；Schema 未改，真实 IAM→BFF→Platform sandbox 尚未验。
 
 ## W2-F2-S9 Chat 作品快照：BFF 单仓代码门已验，Web/真链待验
 
@@ -212,7 +212,7 @@ generic receipt，使首次请求和 replay 每次都先重验 IAM/current owner
 tenant machine catalog workload；旧 Capability HTTP shared secret、用户 Bearer、手写 Proto DTO 和 v1 digest 都不是 fallback。
 
 仍未实现且不阻塞**候选代码准备**的范围是 organization/project/session owner、其余五个 catalog mutation、Storage/package 与 Web consumer。
-首片可先完成 public OpenAPI 候选/contract test、generated Connect client、credential/token provider、server admission cut、route 候选与离线测试；当前 v3 artifact inactive/routable=false 是发布标记而非 runtime kill switch；本片 public route 仍 fail closed。Root 可在隔离 sandbox 预激活验证真实 IAM+候选 BFF+Platform 201，但不得称为公开可用；六 owner sandbox 与 active artifact 重钉、协调激活仍是发布门：首次 201、响应丢失 replay、撤销 session 后同 key 拒绝及 Platform 仅一条 Skill/receipt，不能略过。本候选未改机器契约、代码、schema、数据库、服务或共享 3310。
+首片已完成 public OpenAPI 候选/contract test、generated Connect client、credential/token provider、server admission cut、默认关闭 route 候选与离线/本地短命传输测试；当前 v3 artifact inactive/routable=false 是发布标记而非 runtime kill switch。Root 尚未执行真实 IAM+候选 BFF+Platform 隔离 sandbox；验证后也不得称为公开可用。六 owner sandbox 与 active artifact 重钉、协调激活仍是发布门：首次 201、响应丢失 replay、撤销 session 后同 key 拒绝及 Platform 仅一条 Skill/receipt，不能略过。本候选未改 schema、数据库、共享服务或 3310。
 
 ## W1E-BFF-IAM-0.7-PIN（2026-09-28，仓内验证通过；跨仓待验）
 

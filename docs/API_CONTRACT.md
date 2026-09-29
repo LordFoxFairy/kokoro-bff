@@ -7,7 +7,7 @@
 `platform-execution-operations/3.0.0` artifact/provenance 与 aggregate
 `324e749da1bc66c1ff03de74e7299716f798f5f5bb5fa19556033b79fa09ff8d`；consumer 状态仍是
 `generated-not-activated`，owner manifest 为 `inactive/routable=false`。唯一 public OpenAPI 已加入
-`POST /v1/skills/drafts` 的未激活候选契约，但 runtime route/credential 尚未实现，不能据此调用 CreateDraft。v3 的 `skill.create_draft` command schema
+`POST /v1/skills/drafts` 的未激活候选契约；Stage B runtime/credential/Connect handler 已实现但默认关闭，仅完整 loopback 候选配置可供隔离验证，不能据此宣称 public CreateDraft 已激活。v3 的 `skill.create_draft` command schema
 严格要求 `command_digest_version`、完整 FQ method、受信 tenant 与 command 中的 owner scope、Product context、
 完整 metadata；排除 request ID/command identity/execution proof。旧 v2 digest 不作运行 fallback。
 当前 v3 用于离线 consumer 候选/向量校验；inactive/routable=false 是发布标记而非 runtime RPC kill switch。协调激活前本仓不得将下文 public 201 契约发布为可路由能力；Root 可在隔离 sandbox 用候选 route 做真实 IAM→BFF→Platform 201/replay 预激活验证，但该证据不等于公开发布。现有 Capability HTTP 四条 GET 保留为当前机器/运行事实；Storage package/Validate/Publish 另片。
@@ -814,7 +814,7 @@ asset/hash。包 bytes 不走小型 RPC JSON，不接受浏览器自报扫描通
 
 ### 首个 user CreateSkillDraft public 契约（下一机器契约切片）
 
-本节把首个正向链收敛为一个 operation；`contract/openapi/v1/openapi.yaml` 与冻结 surface 已发布候选机器契约，runtime route 尚未实现且默认入口仍 fail closed。
+本节把首个正向链收敛为一个 operation；`contract/openapi/v1/openapi.yaml` 与冻结 surface 已发布候选机器契约，候选 runtime route 已实现但默认入口仍 fail closed，真实 IAM→BFF→Platform sandbox 尚未验证。
 
 ```http
 POST /v1/skills/drafts

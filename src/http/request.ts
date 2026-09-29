@@ -9,7 +9,9 @@ export function stableStringify(value: unknown): string {
   if (value === undefined) return "null"
   if (value === null || typeof value !== "object") return JSON.stringify(value)
   if (Array.isArray(value)) return `[${value.map((item) => stableStringify(item)).join(",")}]`
-  const entries = Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableStringify((value as Record<string, unknown>)[key])}`)
+  const entries = Object.keys(value)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${stableStringify((value as Record<string, unknown>)[key])}`)
   return `{${entries.join(",")}}`
 }
 
@@ -88,48 +90,29 @@ function canonicalContentType(request: IncomingMessage): string {
 function canonicalQuery(request: IncomingMessage): Array<[string, string]> {
   return [...queryOf(request).entries()]
     .map(([name, value]): [string, string] => [name, value.trim()])
-    .sort(([leftName, leftValue], [rightName, rightValue]) => (
-      leftName.localeCompare(rightName) || leftValue.localeCompare(rightValue)
-    ))
+    .sort(([leftName, leftValue], [rightName, rightValue]) => leftName.localeCompare(rightName) || leftValue.localeCompare(rightValue))
 }
 
-function canonicalJsonBody(
-  request: IncomingMessage,
-  businessPath: readonly string[],
-  json: Readonly<Record<string, unknown>>,
-): unknown {
-  if (
-    request.method === "POST"
-    && businessPath.length === 3
-    && businessPath[0] === "sessions"
-    && businessPath[2] === "messages"
-  ) {
-    return parseMessageCreateRequest(
-      Object.fromEntries(Object.entries(json)),
-      queryOf(request).get("project_ref") ?? undefined,
-    ) ?? json
+function canonicalJsonBody(request: IncomingMessage, businessPath: readonly string[], json: Readonly<Record<string, unknown>>): unknown {
+  if (request.method === "POST" && businessPath.length === 3 && businessPath[0] === "sessions" && businessPath[2] === "messages") {
+    return parseMessageCreateRequest(Object.fromEntries(Object.entries(json)), queryOf(request).get("project_ref") ?? undefined) ?? json
   }
   if (
-    request.method === "PATCH"
-    && businessPath.length === 3
-    && businessPath[0] === "sessions"
-    && businessPath[2] === "title"
-    && typeof json.title === "string"
-  ) return { ...json, title: json.title.trim() }
+    request.method === "PATCH" &&
+    businessPath.length === 3 &&
+    businessPath[0] === "sessions" &&
+    businessPath[2] === "title" &&
+    typeof json.title === "string"
+  )
+    return { ...json, title: json.title.trim() }
   return json
 }
 
 /** Canonical route semantics used by the outer idempotency receipt. */
-export function mutationFingerprint(
-  request: IncomingMessage,
-  businessPath: readonly string[],
-  json: Readonly<Record<string, unknown>>,
-  body: Buffer,
-): string {
+export function mutationFingerprint(request: IncomingMessage, businessPath: readonly string[], json: Readonly<Record<string, unknown>>, body: Buffer): string {
   const contentType = canonicalContentType(request)
-  const semanticBody = contentType === "application/json" || contentType.endsWith("+json")
-    ? canonicalJsonBody(request, businessPath, json)
-    : fingerprintBody(request, body)
+  const semanticBody =
+    contentType === "application/json" || contentType.endsWith("+json") ? canonicalJsonBody(request, businessPath, json) : fingerprintBody(request, body)
   return stableStringify({
     method: request.method ?? "GET",
     path: businessPath,
@@ -154,7 +137,10 @@ export function requestId(request: IncomingMessage): string {
 
 export function pathOf(request: IncomingMessage): string[] {
   const pathname = new URL(request.url || "/", "http://bff.local").pathname
-  return pathname.split("/").filter(Boolean).map((segment) => decodeURIComponent(segment))
+  return pathname
+    .split("/")
+    .filter(Boolean)
+    .map((segment) => decodeURIComponent(segment))
 }
 
 export function queryOf(request: IncomingMessage): URLSearchParams {
@@ -176,13 +162,13 @@ export function authorizeServerOnly(request: IncomingMessage, config: BffConfig)
   return service === "web-bff" && config.sharedSecret !== null && request.headers["x-kokoro-internal-secret"] === config.sharedSecret
 }
 
-export async function readBody(request: IncomingMessage): Promise<Buffer> {
+export async function readBody(request: IncomingMessage, maxBytes = 1024 * 1024): Promise<Buffer> {
   const chunks: Buffer[] = []
   let size = 0
   for await (const chunk of request) {
     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
     size += buffer.byteLength
-    if (size > 1024 * 1024) throw new Error("request body too large")
+    if (size > maxBytes) throw new Error("request body too large")
     chunks.push(buffer)
   }
   return Buffer.concat(chunks)
