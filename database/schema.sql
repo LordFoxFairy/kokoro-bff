@@ -423,6 +423,9 @@ CREATE TABLE IF NOT EXISTS bff_conversation_artifact (
   source_asset_id TEXT NOT NULL,
   source_artifact_kind TEXT NOT NULL,
   source_content_sha256 TEXT NOT NULL,
+  source_title TEXT NOT NULL,
+  source_mime TEXT NOT NULL,
+  source_size_bytes BIGINT NOT NULL,
   delivered_at TIMESTAMPTZ(3) NOT NULL,
   CONSTRAINT pk_bff_conversation_artifact PRIMARY KEY (tenant_id, conversation_id, artifact_id),
   CONSTRAINT uq_bff_conversation_artifact_source UNIQUE (tenant_id, conversation_id, source_owner, source_event_id),
@@ -435,10 +438,16 @@ CREATE TABLE IF NOT EXISTS bff_conversation_artifact (
   CONSTRAINT ck_bff_conversation_artifact_sequence CHECK (source_sequence >= 1),
   CONSTRAINT ck_bff_conversation_artifact_digest CHECK (source_digest ~ '^[0-9a-f]{64}$'),
   CONSTRAINT ck_bff_conversation_artifact_kind CHECK (source_artifact_kind IN ('document', 'code', 'image', 'audio', 'video', 'data', 'archive', 'other')),
-  CONSTRAINT ck_bff_conversation_artifact_content_sha256 CHECK (source_content_sha256 ~ '^[0-9a-f]{64}$')
+  CONSTRAINT ck_bff_conversation_artifact_content_sha256 CHECK (source_content_sha256 ~ '^[0-9a-f]{64}$'),
+  CONSTRAINT ck_bff_conversation_artifact_display CHECK (
+    length(btrim(source_title)) > 0 AND length(btrim(source_mime)) > 0
+    AND source_size_bytes BETWEEN 0 AND 9007199254740991
+  )
 );
 CREATE INDEX IF NOT EXISTS ix_bff_conversation_artifact_library
   ON bff_conversation_artifact (tenant_id, delivered_at DESC, conversation_id ASC, artifact_id ASC);
+CREATE INDEX IF NOT EXISTS ix_bff_conversation_artifact_snapshot
+  ON bff_conversation_artifact (tenant_id, conversation_id, delivered_at DESC, artifact_id ASC);
 
 -- One source fact may expand into multiple AG-UI frames. Each frame receives a
 -- distinct opaque cursor backed by a monotonically increasing public sequence,

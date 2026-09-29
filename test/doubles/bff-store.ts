@@ -417,6 +417,7 @@ export class MockBffStore {
       pending_pauses: session.pending_pauses.map((pause) => ({ ...pause })),
       files: session.files.map((file) => ({ ...file })),
       deliveries: session.deliveries.map((delivery) => ({ ...delivery })),
+      deliveries_has_more: false,
       event_watermark: mockAgUiWatermark(session.events),
     }
   }

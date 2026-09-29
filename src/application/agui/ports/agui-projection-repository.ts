@@ -28,6 +28,9 @@ export type AgUiArtifactDelivery = {
   assetId: string
   artifactKind: "document" | "code" | "image" | "audio" | "video" | "data" | "archive" | "other"
   contentSha256: string
+  title: string
+  mime: string
+  size: number
 }
 
 export type AgUiSourceProjection = {

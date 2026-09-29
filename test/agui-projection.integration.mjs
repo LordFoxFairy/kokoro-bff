@@ -9,6 +9,7 @@ import { createClient } from "redis"
 import { PostgresBffRepositories } from "../dist/infrastructure/postgres/repositories.js"
 import { PostgresBffDatabase } from "../dist/infrastructure/postgres/client.js"
 import { PostgresAgUiProjectionRepository } from "../dist/infrastructure/postgres/agui-projection-repository.js"
+import { PostgresChatRepository } from "../dist/infrastructure/postgres/chat-repository.js"
 import { AgUiProjectionService } from "../dist/application/agui/project-session-events.js"
 import { AgUiProjectorRunner } from "../dist/application/agui/projector.js"
 import { agentEventPage, mapAgentEvent } from "../dist/infrastructure/clients/agent/projection.js"
@@ -95,13 +96,23 @@ integrationTest("persists admitted Artifact deliveries with source frames and re
     // expected_run_id now points at turn 2, but the immutable first dispatch still admits its late delivery.
     assert.equal((await store.agUi.ingest(tenantId, sessionId, [first])).insertedSources, 1)
     const linked = async () => (await pool.query(
-      "SELECT artifact_id, run_id, source_event_id, source_artifact_kind, source_content_sha256 FROM bff_conversation_artifact WHERE tenant_id = $1 AND conversation_id = $2 ORDER BY artifact_id",
+      "SELECT artifact_id, run_id, source_event_id, source_artifact_kind, source_content_sha256, source_title, source_mime, source_size_bytes FROM bff_conversation_artifact WHERE tenant_id = $1 AND conversation_id = $2 ORDER BY artifact_id",
       [tenantId, sessionId],
     )).rows
     assert.deepEqual(await linked(), [{
       artifact_id: "artifact_first", run_id: firstRun.run_id, source_event_id: "artifact_source_1",
       source_artifact_kind: "document", source_content_sha256: "a".repeat(64),
+      source_title: "Report", source_mime: "text/markdown", source_size_bytes: "12",
     }])
+    const snapshot = await store.services.chat.snapshot(tenantId, ownerId, sessionId, undefined)
+    assert.deepEqual(snapshot.deliveries, [{
+      conversation_id: sessionId, artifact_id: "artifact_first", asset_id: "asset_artifact_first",
+      artifact_kind: "document", title: "Report", mime: "text/markdown", size: 12,
+      run_id: firstRun.run_id, created_at: first.sourceOccurredAt,
+    }])
+    assert.equal(snapshot.deliveries_has_more, false)
+    assert.equal(snapshot.event_watermark, (await store.agUi.status(tenantId, sessionId)).currentCursor)
+    assert.equal((await store.services.chat.snapshot(tenantId, "other_member", sessionId, undefined)), null)
     const secondConversation = "session_artifact_second"
     await pool.query("INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title) VALUES ($1, $2, $3, 'Second conversation')", [
       secondConversation,
@@ -111,8 +122,10 @@ integrationTest("persists admitted Artifact deliveries with source frames and re
     await pool.query(
       `INSERT INTO bff_conversation_artifact
        (tenant_id, conversation_id, artifact_id, run_id, source_event_id, source_sequence, source_digest,
-        source_asset_id, source_artifact_kind, source_content_sha256, delivered_at)
-       VALUES ($1, $2, 'artifact_second', 'run_second', 'source_second', 1, $3, 'asset_second', 'document', $3, $4)`,
+        source_asset_id, source_artifact_kind, source_content_sha256,
+        source_title, source_mime, source_size_bytes, delivered_at)
+       VALUES ($1, $2, 'artifact_second', 'run_second', 'source_second', 1, $3, 'asset_second', 'document', $3,
+               'Second report', 'text/markdown', 12, $4)`,
       [tenantId, secondConversation, "b".repeat(64), new Date(1000)],
     )
     const candidates = await store.artifactLibrary.listCandidates(tenantId, ownerId, null, 2)
@@ -199,6 +212,10 @@ integrationTest("persists admitted Artifact deliveries with source frames and re
     assert.equal((await store.agUi.status(tenantId, sessionId)).sourceHighWatermark, 1)
     await store.agUi.ingest(tenantId, sessionId, [source(2, "artifact_second", secondRun.run_id)])
     assert.equal((await linked()).length, 2)
+    assert.deepEqual(
+      (await store.services.chat.snapshot(tenantId, ownerId, sessionId, undefined)).deliveries.map(({ artifact_id }) => artifact_id),
+      ["artifact_second", "artifact_first"],
+    )
     assert.equal(await store.services.chat.deleteConversation(tenantId, ownerId, sessionId, "delete-artifact-projection"), true)
     assert.deepEqual(await linked(), [])
     await assert.rejects(
@@ -208,6 +225,141 @@ integrationTest("persists admitted Artifact deliveries with source frames and re
     assert.deepEqual(await linked(), [])
   } finally {
     if (store !== null) await store.close()
+    await pool.end()
+  }
+})
+
+integrationTest("bounds Chat deliveries independently of Messages and reapplies owner and Project visibility", async () => {
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
+  let store = null
+  try {
+    await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
+    await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
+    await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    await store.ready()
+    const tenantId = "tenant_snapshot_limit"
+    const sessionId = "session_snapshot_limit"
+    const ownerId = "owner_snapshot_limit"
+    await pool.query("INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title) VALUES ($1, $2, $3, 'Bounded snapshot')", [sessionId, tenantId, ownerId])
+    await pool.query(
+      `INSERT INTO bff_conversation_artifact
+         (tenant_id, conversation_id, artifact_id, run_id, source_owner, source_event_id,
+          source_sequence, source_digest, source_asset_id, source_artifact_kind,
+          source_content_sha256, source_title, source_mime, source_size_bytes, delivered_at)
+       SELECT $1, $2, 'artifact_' || lpad(n::text, 3, '0'), 'run_snapshot', 'kokoro-agent',
+              'source_' || n::text, n, repeat('a', 64), 'asset_' || n::text, 'document',
+              repeat('b', 64), 'Report ' || n::text, 'text/plain', n,
+              '2026-09-28T00:00:00Z'::timestamptz + n * interval '1 millisecond'
+         FROM generate_series(1, 101) AS n`,
+      [tenantId, sessionId],
+    )
+    await assert.rejects(
+      pool.query(
+        `INSERT INTO bff_conversation_artifact
+           (tenant_id, conversation_id, artifact_id, run_id, source_owner, source_event_id,
+            source_sequence, source_digest, source_asset_id, source_artifact_kind,
+            source_content_sha256, source_title, source_mime, source_size_bytes, delivered_at)
+         VALUES ($1, $2, 'artifact_unsafe_size', 'run_snapshot', 'kokoro-agent', 'source_unsafe_size',
+                 102, repeat('a', 64), 'asset_unsafe_size', 'document', repeat('b', 64),
+                 'Unsafe size', 'text/plain', 9007199254740992, '2026-09-28T00:00:01Z')`,
+        [tenantId, sessionId],
+      ),
+      (error) => error?.code === "23514" && error.constraint === "ck_bff_conversation_artifact_display",
+    )
+    await pool.query(
+      `UPDATE bff_conversation_artifact
+          SET delivered_at = (SELECT delivered_at FROM bff_conversation_artifact
+                               WHERE tenant_id = $1 AND conversation_id = $2 AND artifact_id = 'artifact_101')
+        WHERE tenant_id = $1 AND conversation_id = $2 AND artifact_id = 'artifact_100'`,
+      [tenantId, sessionId],
+    )
+    const snapshot = await store.services.chat.snapshot(tenantId, ownerId, sessionId, undefined)
+    assert.equal(snapshot.deliveries.length, 100)
+    assert.equal(snapshot.deliveries_has_more, true)
+    assert.equal(snapshot.deliveries[0].artifact_id, "artifact_100")
+    assert.equal(snapshot.deliveries[1].artifact_id, "artifact_101")
+    assert.equal(snapshot.deliveries.at(-1).artifact_id, "artifact_002")
+    assert.equal(snapshot.deliveries[0].conversation_id, sessionId)
+    assert.equal(snapshot.deliveries[0].size, 100)
+    assert.equal(await store.services.chat.snapshot(tenantId, "other_member", sessionId, undefined), null)
+    await pool.query("UPDATE bff_conversation SET project_ref = 'missing_project' WHERE conversation_id = $1", [sessionId])
+    assert.equal(await store.services.chat.snapshot(tenantId, ownerId, sessionId, undefined), null)
+    await pool.query(
+      "INSERT INTO bff_project (project_id, tenant_id, owner_id, name, slug, description) VALUES ('project_snapshot', $1, $2, 'Snapshot', 'snapshot', '')",
+      [tenantId, ownerId],
+    )
+    await pool.query("UPDATE bff_conversation SET project_ref = 'project_snapshot' WHERE conversation_id = $1", [sessionId])
+    assert.equal((await store.services.chat.snapshot(tenantId, ownerId, sessionId, "project_snapshot")).deliveries.length, 100)
+    assert.equal(await store.services.chat.snapshot(tenantId, ownerId, sessionId, "wrong_project"), null)
+    assert.equal(await store.services.chat.deleteConversation(tenantId, ownerId, sessionId, "delete-snapshot-limit", "project_snapshot"), true)
+    assert.equal(await store.services.chat.snapshot(tenantId, ownerId, sessionId, undefined), null)
+  } finally {
+    if (store !== null) await store.close()
+    await pool.end()
+  }
+})
+
+integrationTest("reads Artifact deliveries and public watermark from one repeatable-read boundary", async () => {
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
+  let reader = null
+  let writer = null
+  try {
+    await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
+    await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
+    await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+    const tenantId = "tenant_snapshot_race"
+    const sessionId = "session_snapshot_race"
+    const ownerId = "owner_snapshot_race"
+    await pool.query("INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title) VALUES ($1, $2, $3, 'Race snapshot')", [sessionId, tenantId, ownerId])
+    reader = await pool.connect()
+    let allowDeliveryRead
+    const readReleased = new Promise((resolve) => { allowDeliveryRead = resolve })
+    let markConversationRead
+    const conversationRead = new Promise((resolve) => { markConversationRead = resolve })
+    const gated = new PostgresChatRepository({ pool: { connect: async () => ({
+      query: async (sql, values) => {
+        const result = await reader.query(sql, values)
+        if (sql.includes("FROM bff_conversation") && sql.includes("LIMIT 1")) {
+          markConversationRead()
+          await readReleased
+        }
+        return result
+      },
+      release: () => reader.release(),
+    }) } })
+    const pending = gated.readSnapshot(tenantId, ownerId, sessionId, undefined)
+    await conversationRead
+    writer = await pool.connect()
+    await writer.query("BEGIN")
+    await writer.query(
+      `INSERT INTO bff_conversation_artifact
+         (tenant_id, conversation_id, artifact_id, run_id, source_owner, source_event_id,
+          source_sequence, source_digest, source_asset_id, source_artifact_kind,
+          source_content_sha256, source_title, source_mime, source_size_bytes, delivered_at)
+       VALUES ($1, $2, 'artifact_race', 'run_race', 'kokoro-agent', 'source_race', 1,
+               repeat('a', 64), 'asset_race', 'document', repeat('b', 64),
+               'Race report', 'text/plain', 4, '2026-09-28T00:00:00Z')`,
+      [tenantId, sessionId],
+    )
+    await writer.query(
+      `INSERT INTO bff_agui_event
+         (tenant_id, session_id, public_sequence, cursor, source_owner, source_event_id,
+          frame_index, event_type, event_payload, source_occurred_at)
+       VALUES ($1, $2, 1, 'agui_0123456789abcdef0123456789abcdef', 'kokoro-agent',
+               'source_race', 0, 'CUSTOM', '{}'::jsonb, '2026-09-28T00:00:00Z')`,
+      [tenantId, sessionId],
+    )
+    await writer.query("COMMIT")
+    allowDeliveryRead()
+    const before = await pending
+    assert.deepEqual(before.deliveries, [])
+    assert.equal(before.eventWatermark, null)
+    const after = await new PostgresChatRepository({ pool }).readSnapshot(tenantId, ownerId, sessionId, undefined)
+    assert.deepEqual(after.deliveries.map(({ artifactId }) => artifactId), ["artifact_race"])
+    assert.equal(after.eventWatermark, "agui_0123456789abcdef0123456789abcdef")
+  } finally {
+    if (writer !== null) writer.release()
     await pool.end()
   }
 })
@@ -1015,6 +1167,19 @@ integrationTest("expires reclaimed AG-UI cursors while retaining the latest run 
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    await pool.query(
+      "INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title) VALUES ('session_gc', 'tenant_a', 'owner_gc', 'GC snapshot')",
+    )
+    // Ingestion is covered above; this durable association isolates normal frame GC from snapshot reads.
+    await pool.query(
+      `INSERT INTO bff_conversation_artifact
+         (tenant_id, conversation_id, artifact_id, run_id, source_owner, source_event_id,
+          source_sequence, source_digest, source_asset_id, source_artifact_kind,
+          source_content_sha256, source_title, source_mime, source_size_bytes, delivered_at)
+       VALUES ('tenant_a', 'session_gc', 'artifact_gc', 'run_1', 'kokoro-agent', 'source_artifact_gc',
+               1, repeat('a', 64), 'asset_gc', 'document', repeat('b', 64),
+               'GC report', 'text/plain', 8, '2026-09-28T00:00:00Z')`,
+    )
     await store.agUi.ingest("tenant_a", "session_gc", [
       agentSource({ id: "gc_1", sequence: 1, kind: "run.created", payload: { run_id: "run_1" }, sessionId: "session_gc", runId: "run_1" }),
       agentSource({ id: "gc_2", sequence: 2, kind: "run.completed", payload: { status: "completed" }, sessionId: "session_gc", runId: "run_1" }),
@@ -1044,6 +1209,10 @@ integrationTest("expires reclaimed AG-UI cursors while retaining the latest run 
     assert.equal(collected.framesDeleted, 2)
     assert.equal(collected.tombstonesInserted, 2)
     assert.deepEqual(await store.agUi.replay("tenant_a", "session_gc", expiredCursor, 100), { kind: "expired_cursor" })
+    const refreshed = await store.services.chat.snapshot("tenant_a", "owner_gc", "session_gc", undefined)
+    assert.deepEqual(refreshed.deliveries.map(({ conversation_id, artifact_id }) => [conversation_id, artifact_id]), [["session_gc", "artifact_gc"]])
+    assert.equal(refreshed.deliveries_has_more, false)
+    assert.equal(refreshed.event_watermark, headCursor)
     const retained = await store.agUi.replay("tenant_a", "session_gc", null, 100)
     assert.equal(retained.kind, "page")
     assert.deepEqual(retained.frames.map((frame) => frame.eventType), [

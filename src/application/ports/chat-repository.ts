@@ -15,7 +15,21 @@ export type MessagePage = {
 export type ChatSnapshot = {
   conversation: Conversation
   messages: Message[]
+  deliveries: ChatArtifactDelivery[]
+  deliveriesHasMore: boolean
   eventWatermark: string | null
+}
+
+export type ChatArtifactDelivery = {
+  conversationId: string
+  artifactId: string
+  assetId: string
+  artifactKind: string
+  title: string
+  mime: string
+  size: number
+  runId: string
+  deliveredAt: Date
 }
 
 export type ChatRepository = {

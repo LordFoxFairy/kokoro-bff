@@ -1,14 +1,14 @@
 # kokoro-bff data model
 
-## W2-F2-S9 Chat Delivery 快照数据边界（2026-09-28；目标，Schema 未修改）
+## W2-F2-S9 Chat Delivery 快照数据边界（2026-09-28；BFF canonical Schema 已修改，待 Root 集成审查）
 
-当前 `bff_conversation_artifact` 主键 `(tenant_id,conversation_id,artifact_id)`，存 Agent 来源 event ID/sequence/digest、run、asset/kind/hash 与 `delivered_at`；它不存 `title/mime/size`。当前 `ChatRepository.readSnapshot()` 在一个 `REPEATABLE READ READ ONLY` 事务内读本人 active Conversation（含 Project owner predicate）、最近 100 条 Message、公开 AG-UI cursor，却没有读关联，故 service 恒给空 `deliveries`。`bff_agui_event` 帧可 GC，非作品持久真源。
+代码门前 `bff_conversation_artifact` 主键 `(tenant_id,conversation_id,artifact_id)`，存 Agent 来源 event ID/sequence/digest、run、asset/kind/hash 与 `delivered_at`；它不存 `title/mime/size`。当前 `ChatRepository.readSnapshot()` 在一个 `REPEATABLE READ READ ONLY` 事务内读本人 active Conversation（含 Project owner predicate）、最近 100 条 Message、公开 AG-UI cursor，却没有读关联，故 service 恒给空 `deliveries`。`bff_agui_event` 帧可 GC，非作品持久真源。
 
-目标只在本仓 canonical `database/schema.sql` 为既有关联增必填 `source_title TEXT NOT NULL`、`source_mime TEXT NOT NULL`、`source_size_bytes BIGINT NOT NULL`（非空白、非负且为 JS 安全整数）；三者来自已受信、不可变 Agent `delivery.created` claim，随既有 `commitProjection` 的 source/关联/frame/stream 水位同事务写入，重复 source/冲突不覆盖。项目未上线，canonical schema 采用 clean-slate fresh install，隔离测试库与 fixture 随 Schema 重建，不为旧行设 nullable/占位/双轨回填；若代码门发现必须保留的真实旧数据证据，先报告 Root 再裁决。本窄展示 claim 不是 Storage 当前 Artifact metadata；不存 Agent `path`、Storage title/filename/scan/object key/签名 URL，不复制 owner 数据库。
+现已在本仓 canonical `database/schema.sql` 为既有关联增必填 `source_title TEXT NOT NULL`、`source_mime TEXT NOT NULL`、`source_size_bytes BIGINT NOT NULL`（非空白、非负且为 JS 安全整数）；三者来自已受信、不可变 Agent `delivery.created` claim，随既有 `commitProjection` 的 source/关联/frame/stream 水位同事务写入，重复 source/冲突不覆盖。项目未上线，canonical schema 采用 clean-slate fresh install，隔离测试库与 fixture 随 Schema 重建，不为旧行设 nullable/占位/双轨回填；若代码门发现必须保留的真实旧数据证据，先报告 Root 再裁决。本窄展示 claim 不是 Storage 当前 Artifact metadata；不存 Agent `path`、Storage title/filename/scan/object key/签名 URL，不复制 owner 数据库。
 
-读侧在同一 Chat snapshot 事务里先确认当前主体可见的 active Conversation/Project，再按 `(delivered_at DESC,artifact_id ASC)` 查本会话 101 行，返回最近 100 行及 `deliveries_has_more`，输出保持该稳定顺序；Message 仍按 `message_seq` 独立排序。现有全局 Library 索引以 `(tenant_id,delivered_at DESC,conversation_id,artifact_id)` 开头，不能声称它已高效服务单会话查询；真 PG `EXPLAIN` 若证明需要，再在代码门加本仓 `(tenant_id,conversation_id,delivered_at DESC,artifact_id ASC)` 具名索引。读公开 cursor 必在同一 MVCC 边界；关联与 frame/stream 的写入本来同成同败，快照前后竞态由 watermark 续流与二元去重闭环。Conversation 软删同事务清关联，frame GC 不删关联；无跨 owner SQL/FK、无新表、Redis 或 Storage metadata 镜像。
+读侧在同一 Chat snapshot 事务里先确认当前主体可见的 active Conversation/Project，再按 `(delivered_at DESC,artifact_id ASC)` 查本会话 101 行，返回最近 100 行及 `deliveries_has_more`，输出保持该稳定顺序；Message 仍按 `message_seq` 独立排序。现有全局 Library 索引以 `(tenant_id,delivered_at DESC,conversation_id,artifact_id)` 开头，不能声称它已高效服务单会话查询；隔离真 PG 20k 关联/100 会话样本中，原全局索引单会话 LIMIT 101 为 109 shared buffers/0.288ms，具名单会话索引 `(tenant_id,conversation_id,delivered_at DESC,artifact_id ASC)` 为 6 buffers/0.037ms，故本代码片已加入；仅是本次样本，不作生产性能承诺。读公开 cursor 必在同一 MVCC 边界；关联与 frame/stream 的写入本来同成同败，快照前后竞态由 watermark 续流与二元去重闭环。Conversation 软删同事务清关联，frame GC 不删关联；无跨 owner SQL/FK、无新表、Redis 或 Storage metadata 镜像。
 
-代码门验收：空 schema 安装/漂移、新行三字段全值、真 PG 同事务 watermark+交付、101 件边界/排序、重复 source、GC 后刷新、软删/本人/Project、event/snapshot 竞态与查询计划；本节不代表 Schema 已实施。
+代码门验收：空 schema 安装/漂移、新行三字段全值、真 PG 同事务 watermark+交付、101 件边界/排序、重复 source、GC 后刷新、软删/本人/Project、event/snapshot 竞态与查询计划；本仓 canonical Schema 和隔离真 PG 测试已实施，Web/跨仓链仍待验。
 
 ## W2-F2-S8 Artifact 下载时限：无持久模型变更（2026-09-28；BFF 单仓已实现）
 

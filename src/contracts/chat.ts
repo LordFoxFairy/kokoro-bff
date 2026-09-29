@@ -46,8 +46,10 @@ export type WorkspaceFile = {
 }
 
 export type Delivery = {
-  content_hash: string
-  path: string
+  conversation_id: string
+  artifact_id: string
+  asset_id: string
+  artifact_kind: string
   title: string
   mime: string
   size: number
@@ -68,5 +70,6 @@ export type ChatSessionDetail = {
   pending_pauses: Array<Record<string, unknown>>
   files: WorkspaceFile[]
   deliveries: Delivery[]
+  deliveries_has_more: boolean
   event_watermark: string | null
 }

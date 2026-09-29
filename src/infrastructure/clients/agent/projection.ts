@@ -301,44 +301,6 @@ export function mapAgentMessage(message: AgentChatMessage): ChatMessage {
   }
 }
 
-export function buildSessionDetail(
-  identity: BffIdentity,
-  sessionId: string,
-  messages: AgentChatMessage[],
-  events: AgentChatEvent[],
-  watermark: string | null,
-): ChatSessionDetail {
-  const mappedEvents = events.map(mapAgentEvent).filter((event): event is ChatEvent => event !== null)
-  const mappedMessages = messages.map(mapAgentMessage)
-  const firstCreated = messages[0]?.created_at ?? Date.now()
-  const latest = messages.reduce((value, item) => Math.max(value, item.updated_at), firstCreated)
-  const lastByRun = new Map<string, ChatEvent>()
-  for (const event of mappedEvents) lastByRun.set(event.run_id ?? "", event)
-  const active = [...lastByRun.values()].reverse().find((event) => event.kind !== "run.completed" && event.kind !== "run.failed")
-  const title = mappedMessages.find((message) => message.role === "user")?.content.slice(0, 80) || "Kokoro chat"
-  return {
-    session: {
-      session_id: sessionId,
-      title,
-      owner_id: identity.namespace,
-      created_at: isoTime(firstCreated),
-      updated_at: isoTime(latest),
-    },
-    messages: mappedMessages,
-    ...(active === undefined ? {} : { active_run: { run_id: active.run_id ?? "", status: "running" } }),
-    pending_pauses: mappedEvents.filter((event) => event.kind === "tool.awaiting_approval").map((event) => event.payload),
-    files: [],
-    deliveries: mappedEvents
-      .filter((event) => event.kind === "delivery.created")
-      .map((event) => ({
-        ...(event.payload as { content_hash: string; path: string; title: string; mime: string; size: number }),
-        run_id: event.run_id ?? sessionId,
-        created_at: event.timestamp,
-      })),
-    event_watermark: watermark,
-  }
-}
-
 export function buildSessionSummary(_identity: BffIdentity, _sessionId: string, detail: ChatSessionDetail): ChatSessionSummary {
   return {
     session_id: detail.session.session_id,

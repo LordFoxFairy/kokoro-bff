@@ -478,6 +478,9 @@ describe("AG-UI source continuity defense", () => {
       assetId: "asset_1",
       artifactKind: "document",
       contentSha256: "a".repeat(64),
+      title: "Report",
+      mime: "text/markdown",
+      size: 12,
     })
     for (const invalid of [
       { artifact_id: undefined },
@@ -485,6 +488,12 @@ describe("AG-UI source continuity defense", () => {
       { artifact_kind: "unknown" },
       { content_hash: "BAD" },
       { tool_call_id: undefined },
+      { title: undefined },
+      { mime: undefined },
+      { size: -1 },
+      { size: 1.5 },
+      { size: "12" },
+      { size: 2 ** 53 },
     ]) {
       await assert.rejects(
         service.ingest("tenant_1", "session_1", [

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 
-import type { ChatRepository, ChatSnapshot, ConversationPage, MessagePage } from "../../application/ports/chat-repository.js"
+import type { ChatArtifactDelivery, ChatRepository, ChatSnapshot, ConversationPage, MessagePage } from "../../application/ports/chat-repository.js"
 import type { Conversation } from "../../domain/chat/conversation.js"
 import type { Share } from "../../domain/chat/share.js"
 import type { PostgresBffDatabase } from "./client.js"
@@ -17,6 +17,34 @@ import {
   type MessageRow,
   type ShareRow,
 } from "./chat-repository-mappers.js"
+
+type ArtifactDeliveryRow = {
+  conversation_id: string
+  artifact_id: string
+  source_asset_id: string
+  source_artifact_kind: string
+  source_title: string
+  source_mime: string
+  source_size_bytes: string
+  run_id: string
+  delivered_at: Date | string
+}
+
+function artifactDeliveryFromRow(row: ArtifactDeliveryRow): ChatArtifactDelivery {
+  const size = Number(row.source_size_bytes)
+  if (!Number.isSafeInteger(size) || size < 0) throw new Error("CHAT_ARTIFACT_SIZE_INVALID")
+  return {
+    conversationId: row.conversation_id,
+    artifactId: row.artifact_id,
+    assetId: row.source_asset_id,
+    artifactKind: row.source_artifact_kind,
+    title: row.source_title,
+    mime: row.source_mime,
+    size,
+    runId: row.run_id,
+    deliveredAt: instant(row.delivered_at),
+  }
+}
 
 export class PostgresChatRepository implements ChatRepository {
   private readonly database: PostgresBffDatabase
@@ -121,6 +149,15 @@ export class PostgresChatRepository implements ChatRepository {
           ORDER BY latest.message_seq ASC, latest.message_id ASC`,
         [tenantId, conversationId],
       )
+      const deliveries = await client.query<ArtifactDeliveryRow>(
+        `SELECT conversation_id, artifact_id, source_asset_id, source_artifact_kind,
+                source_title, source_mime, source_size_bytes, run_id, delivered_at
+           FROM bff_conversation_artifact
+          WHERE tenant_id = $1 AND conversation_id = $2
+          ORDER BY delivered_at DESC, artifact_id ASC
+          LIMIT 101`,
+        [tenantId, conversationId],
+      )
       const cursor = await client.query<{ cursor: string }>(
         `SELECT cursor FROM bff_agui_event
           WHERE tenant_id = $1 AND session_id = $2
@@ -131,6 +168,8 @@ export class PostgresChatRepository implements ChatRepository {
       return {
         conversation: conversationFromRow(row),
         messages: messages.rows.map(messageFromRow),
+        deliveries: deliveries.rows.slice(0, 100).map(artifactDeliveryFromRow),
+        deliveriesHasMore: deliveries.rows.length > 100,
         eventWatermark: cursor.rows[0]?.cursor ?? null,
       }
     } catch (error) {

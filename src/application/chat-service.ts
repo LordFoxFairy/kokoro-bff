@@ -29,7 +29,7 @@ export class ChatApplicationService {
   public async snapshot(tenantId: string, subjectId: string, conversationId: string, projectRef: string | undefined): Promise<ChatSessionDetail | null> {
     const snapshot = await this.repository.readSnapshot(tenantId, subjectId, conversationId, projectRef)
     if (snapshot === null) return null
-    const { conversation, messages, eventWatermark } = snapshot
+    const { conversation, messages, deliveries, deliveriesHasMore, eventWatermark } = snapshot
     return {
       session: {
         session_id: conversation.conversationId,
@@ -41,7 +41,18 @@ export class ChatApplicationService {
       ...(messages.length === 0 ? {} : { messages: messages.map(chatMessage) }),
       pending_pauses: [],
       files: [],
-      deliveries: [],
+      deliveries: deliveries.map((delivery) => ({
+        conversation_id: delivery.conversationId,
+        artifact_id: delivery.artifactId,
+        asset_id: delivery.assetId,
+        artifact_kind: delivery.artifactKind,
+        title: delivery.title,
+        mime: delivery.mime,
+        size: delivery.size,
+        run_id: delivery.runId,
+        created_at: delivery.deliveredAt.toISOString(),
+      })),
+      deliveries_has_more: deliveriesHasMore,
       event_watermark: eventWatermark,
     }
   }

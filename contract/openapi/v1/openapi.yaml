@@ -629,8 +629,11 @@ paths:
       summary: Get a session snapshot
       description: >-
         Returns the owner-scoped session, the latest 100 durable Message facts in chronological
-        order, and AG-UI event watermark from one PostgreSQL read snapshot. The watermark is the latest committed public
-        ledger cursor visible with these messages, not an Agent execution cursor.
+        order, up to 100 most recent durable Artifact deliveries in delivered_at descending and
+        artifact_id ascending order, and AG-UI event watermark from one PostgreSQL read snapshot.
+        deliveries_has_more indicates older deliveries; use the owner's paginated Artifact Library
+        for complete history. The watermark is the latest committed public ledger cursor visible
+        with these facts, not an Agent execution cursor.
       parameters:
         - $ref: '#/components/parameters/DirectScopeQuery'
         - $ref: '#/components/parameters/ProjectRefQuery'
@@ -1007,6 +1010,7 @@ paths:
       x-kokoro-idempotency: none
       x-kokoro-permission: chat.share.read
       summary: Get a shared session snapshot
+      description: Shared snapshots exclude private Artifact deliveries and set deliveries_has_more to false.
       parameters:
         - $ref: '#/components/parameters/ShareScopeQuery'
         - $ref: '#/components/parameters/ProjectRefQuery'
@@ -3813,7 +3817,7 @@ components:
       properties:
         data:
           type: object
-          required: [session, pending_pauses, files, deliveries, event_watermark]
+          required: [session, pending_pauses, files, deliveries, deliveries_has_more, event_watermark]
           additionalProperties: false
           properties:
             session: { $ref: '#/components/schemas/ChatSession' }
@@ -3832,6 +3836,7 @@ components:
             deliveries:
               type: array
               items: { $ref: '#/components/schemas/Delivery' }
+            deliveries_has_more: { type: boolean }
             event_watermark: { $ref: '#/components/schemas/EventWatermark' }
         meta: { $ref: '#/components/schemas/RequestMeta' }
       example:
@@ -3849,6 +3854,7 @@ components:
           pending_pauses: []
           files: []
           deliveries: []
+          deliveries_has_more: false
           event_watermark: agui_0123456789abcdef0123456789abcdef
         meta:
           request_id: req_01JASYNC000000000000000000
@@ -3862,14 +3868,16 @@ components:
         bytes: { type: integer, minimum: 0 }
     Delivery:
       type: object
-      required: [content_hash, path, title, mime, size, run_id, created_at]
+      required: [conversation_id, artifact_id, asset_id, artifact_kind, title, mime, size, run_id, created_at]
       additionalProperties: false
       properties:
-        content_hash: { type: string }
-        path: { type: string }
+        conversation_id: { type: string }
+        artifact_id: { type: string }
+        asset_id: { type: string }
+        artifact_kind: { type: string, enum: [document, code, image, audio, video, data, archive, other] }
         title: { type: string }
         mime: { type: string }
-        size: { type: integer, minimum: 0 }
+        size: { type: integer, minimum: 0, maximum: 9007199254740991 }
         run_id: { type: string }
         created_at: { type: string, format: date-time }
     MessageCreateRequest:

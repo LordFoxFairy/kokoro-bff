@@ -86,6 +86,7 @@ async function handle(
         pending_pauses: [],
         files: [],
         deliveries: [],
+        deliveries_has_more: false,
         event_watermark: null,
       }, id))
       return
@@ -104,7 +105,8 @@ async function handle(
       send(response, 404, failure("share_not_found", "Share was not found", id))
       return
     }
-    send(response, 200, ok(detail, id))
+    // A service-only Share snapshot does not grant private Artifact visibility.
+    send(response, 200, ok({ ...(detail as object), deliveries: [], deliveries_has_more: false }, id))
     return
   }
 

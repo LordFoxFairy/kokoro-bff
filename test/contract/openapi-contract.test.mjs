@@ -48,9 +48,14 @@ test("the public snapshot contract binds Message facts and AG-UI watermark to on
   assert.ok(start >= 0 && end > start)
   const operation = openapi.slice(start, end)
   assert.match(operation, /owner-scoped session, the latest 100 durable Message facts in chronological/u)
-  assert.match(operation, /order, and AG-UI event watermark/u)
+  assert.match(operation, /up to 100 most recent durable Artifact deliveries/u)
+  assert.match(operation, /AG-UI event watermark/u)
   assert.match(operation, /one PostgreSQL read snapshot/u)
   assert.match(operation, /latest committed public\s+ledger cursor/u)
+  const snapshot = openapi.slice(openapi.indexOf("    SessionSnapshotResponse:"), openapi.indexOf("    MessageCreateRequest:"))
+  assert.match(snapshot, /deliveries_has_more: \{ type: boolean \}/u)
+  assert.match(snapshot, /required: \[conversation_id, artifact_id, asset_id, artifact_kind, title, mime, size, run_id, created_at\]/u)
+  assert.doesNotMatch(snapshot, /required: \[content_hash, path, title, mime, size, run_id, created_at\]/u)
 })
 
 test("the public contract requires IAM bearer admission while Share and runtime manifest remain service-only", async () => {

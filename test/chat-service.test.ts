@@ -42,3 +42,18 @@ test("Conversation deletion removes Artifact links using only bound tenant and c
   assert.deepEqual(linkDelete.values, ["tenant_1", "conversation_1"])
   assert.equal(calls.at(-1)?.sql, "COMMIT")
 })
+
+test("Chat snapshot exposes durable Artifact identity and bounded-history signal", async () => {
+  const conversation = { conversationId: "session_a", tenantId: "tenant_a", ownerId: "owner_a", title: "A", projectRef: null, status: "active", createdAt: new Date("2026-09-04T11:00:00.000Z"), updatedAt: new Date("2026-09-04T12:00:00.000Z"), deletedAt: null }
+  const repository = { readSnapshot: async () => ({
+    conversation,
+    messages: [],
+    deliveries: [{ conversationId: "session_a", artifactId: "artifact_a", assetId: "asset_a", artifactKind: "document", title: "Report", mime: "text/markdown", size: 12, runId: "run_a", deliveredAt: new Date("2026-09-04T12:00:00.000Z") }],
+    deliveriesHasMore: true,
+    eventWatermark: "agui_0123456789abcdef0123456789abcdef",
+  }) }
+  const result = await new ChatApplicationService(repository as never).snapshot("tenant_a", "owner_a", "session_a", undefined)
+  assert.deepEqual(result?.deliveries, [{ conversation_id: "session_a", artifact_id: "artifact_a", asset_id: "asset_a", artifact_kind: "document", title: "Report", mime: "text/markdown", size: 12, run_id: "run_a", created_at: "2026-09-04T12:00:00.000Z" }])
+  assert.equal(result?.deliveries_has_more, true)
+  assert.equal(result?.event_watermark, "agui_0123456789abcdef0123456789abcdef")
+})

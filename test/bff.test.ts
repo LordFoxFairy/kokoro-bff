@@ -1150,6 +1150,7 @@ describe("kokoro-bff v1 mock contract", () => {
         pending_pauses: unknown[]
         files: unknown[]
         deliveries: unknown[]
+        deliveries_has_more: boolean
         event_watermark: string | null
       }
       meta: { request_id: string }
@@ -1160,6 +1161,7 @@ describe("kokoro-bff v1 mock contract", () => {
     assert.equal(detailBody.data.pending_pauses.length, 0)
     assert.equal(detailBody.data.files.length, 0)
     assert.equal(detailBody.data.deliveries.length, 0)
+    assert.equal(detailBody.data.deliveries_has_more, false)
 
     const message = await fetch(`${base}/v1/sessions/${sessionId}/messages`, {
       method: "POST",
@@ -1247,11 +1249,13 @@ describe("kokoro-bff v1 mock contract", () => {
     })
     assert.equal(publicShare.status, 200)
     const publicShareBody = await publicShare.json() as {
-      data: { session: { session_id: string; title: string; owner_id: string }; pending_pauses: unknown[]; files: unknown[]; deliveries: unknown[]; event_watermark: string | null }
+      data: { session: { session_id: string; title: string; owner_id: string }; pending_pauses: unknown[]; files: unknown[]; deliveries: unknown[]; deliveries_has_more: boolean; event_watermark: string | null }
       meta: { request_id: string }
     }
     assert.equal(publicShareBody.data.session.session_id, sessionId)
     assert.equal(publicShareBody.data.session.owner_id, "ns_test")
+    assert.deepEqual(publicShareBody.data.deliveries, [])
+    assert.equal(publicShareBody.data.deliveries_has_more, false)
     assert.match(publicShareBody.data.event_watermark ?? "", /^agui_[0-9a-f]{32}$/u)
 
     const revoked = await fetch(`${base}/v1/sessions/${sessionId}/share`, {

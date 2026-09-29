@@ -3,11 +3,13 @@
 状态：2026-09-28
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。
 
-## W2-F2-S9 Chat 作品快照：设计门，运行面仍待实施
+## W2-F2-S9 Chat 作品快照：BFF 单仓代码门已验，Web/真链待验
 
-基线 BFF main `99b98040ed6ee21d49ddd6a04c9b645222245d1e`、Root `5d332e9546ac77c7467e252ed6a211068c78e798` 起始均 clean。当前 BFF AG-UI live/replay 已带二元 Artifact ID/kind，持久 `bff_conversation_artifact` 已存在；但 Chat snapshot 仍固定 `deliveries: []`，OpenAPI `Delivery` 与 Web 正式消费仍是 hash/path-only。可 GC 帧无法在刷新越过 watermark 后重建作品，已验本人 Library 不等于 Chat 卡片闭环。
+基线 BFF main `f7a4614eb75f08791a4381fc77e829b35d56be6c` 起始 clean。本代码片已在唯一 OpenAPI、canonical SQL、受信 Agent 投影与现有 Chat repeatable-read repository/service 实现二元 Artifact Delivery：`source_title/source_mime/source_size_bytes` 为必填 immutable claim 窄投影，不复制 Storage 当前 metadata；snapshot 同一事务按本人 active Conversation/Project ACL 读取最近 100 件、`deliveries_has_more` 和公开 cursor，按 `(delivered_at DESC,artifact_id ASC)` 稳定排序。Message `message_seq` 独立；正式 snapshot 不再输出 hash/path 选择器。未使用旧 hash-only `buildSessionDetail` 已删除，AG-UI live/replay 完整事件保持。
 
-四文档已收敛 **目标**：扩展现有 Chat repeatable-read snapshot，在同一 ACL/MVCC 边界有界读取最近 100 件持久关联与 cursor，`deliveries_has_more` 显示截断，“查看全部作品”走既有 Library 分页；Message 与 Delivery 各自排序、二元 ID 去重。Agent immutable claim 的 title/mime/size 作必填窄展示投影，clean-slate fresh install 不设旧行兼容，Storage 仍是当前 metadata/原字节 owner。现有 AG-UI live/replay 全量事件保持，Web 后续严格解析再归一到二元身份；Canvas 首片仅 metadata/原生下载，不全量嵌入预览。BFF 后续独占修改唯一 OpenAPI/Schema/runtime/tests 并经真 PG 验证，Web 再 pin 精确契约并删除正式 hash/旧 Blob 双轨；真浏览器 owner 链由 Root 最后验。此时 **没有** S9 机器契约、Schema、代码、Web 或真链路验收。S8 已验事实见下节，不以它替代 S9。
+直接 TDD 先 RED 4 项，再 GREEN：聚焦 34 pass/1 无库 skip；隔离真 PostgreSQL + 空 Redis DB15 的 `agui-projection.integration.mjs` 24/24 pass，数据库已删除、Redis 0→0，覆盖同 hash 两 ID、101 件边界、本人/Project/软删、重复来源、同一 MVCC 交付+水位竞态。Node22 `pnpm format:check && pnpm check && pnpm schema:check` 全绿：默认 366 pass/1 无库 skip，Schema 默认 5 pass/1 无库 skip，另以隔离 PostgreSQL 管理连接重跑 Schema 6/6 pass。隔离 PG `EXPLAIN` 20k 关联/100 会话仅示样本：原索引 109 buffers/0.288ms，新单会话索引 6 buffers/0.037ms，不冒充生产性能。正常 AG-UI GC 保留最新 Run 帧；同一真 PG fixture 已断言旧 cursor replay expired 后重取快照仍有持久 `(conversation_id,artifact_id)` 与当前 head watermark。Agent claim 的 `size=-1/1.5/字符串/2^53` 由直接测试拒绝，真 PG 的 `source_size_bytes=2^53` 被具名 CHECK 拒绝；101 件夹同一 `delivered_at` 仍按 `artifact_id ASC` 决定边界。Web 后续须处理 expired/HTTP 410 并按二元 ID 去重；null watermark 不等于作品为空。
+
+Web 尚未 pin 新契约，严格事件解析、hydration/Canvas、正式旧 hash/Blob 双轨删除及 Root 真 IAM→Chromium→Agent→Storage S9 链均待后续串行门；本片不宣称用户页面已闭环。S8 已验事实见下节。
 
 ## W2-F2-S8 大作品下载时限：单仓与真浏览器小件已验，真大件待验
 

@@ -117,6 +117,8 @@ function artifactDelivery(event: ChatEvent): AgUiArtifactDelivery {
   const artifactKind = required(payload.artifact_kind)
   const contentSha256 = required(payload.content_hash)
   if (!ARTIFACT_KINDS.has(artifactKind) || !SHA256_PATTERN.test(contentSha256)) throw new AgUiSourceContractError()
+  const size = payload.size
+  if (typeof size !== "number" || !Number.isSafeInteger(size) || size < 0) throw new AgUiSourceContractError()
   return {
     runId: required(event.run_id),
     toolCallId: required(payload.tool_call_id),
@@ -124,6 +126,9 @@ function artifactDelivery(event: ChatEvent): AgUiArtifactDelivery {
     assetId: required(payload.asset_id),
     artifactKind: artifactKind as AgUiArtifactDelivery["artifactKind"],
     contentSha256,
+    title: required(payload.title),
+    mime: required(payload.mime),
+    size,
   }
 }
 
