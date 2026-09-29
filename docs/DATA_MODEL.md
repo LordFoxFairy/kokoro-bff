@@ -1,5 +1,9 @@
 # kokoro-bff data model
 
+## W1E user Skill draft 数据门（2026-09-29；目标，未实施）
+
+当前 BFF main `bd1f794e7b1115d96965aa03d8a3a83a33c42fd7` 的 canonical `database/schema.sql` 没有 Skill catalog 或 Skill 专用 receipt 表（已有 generic BFF receipt 不用于此操作），Platform Connect 仍是 `generated-not-activated`、`execution_artifact:null`，public CreateDraft route 未发布。以下 user-only 目标以 Platform main `5b6eb2c1532b23b9747bc4bf6ac99f69ad453de0` 的 execution artifact v3 aggregate `324e749da1bc66c1ff03de74e7299716f798f5f5bb5fa19556033b79fa09ff8d` 为离线候选来源；该 artifact 仍 inactive/routable=false，真实写入/replay 需 Platform 后续提交 active/routable=true artifact、BFF 重钉并协调激活。本片零 BFF Schema/Redis 变更；Skill/revision/command receipt 只写 Platform owner schema，每次请求先以当前 IAM session 重验受信 tenant/subject，BFF 不用自己的 generic receipt 返回 Skill replay。Storage package/Validate/Publish 和其他 owner scope 不在首片。
+
 ## W2-F2-S9 Chat Delivery 快照数据边界（2026-09-28；BFF canonical Schema 已修改，待 Root 集成审查）
 
 代码门前 `bff_conversation_artifact` 主键 `(tenant_id,conversation_id,artifact_id)`，存 Agent 来源 event ID/sequence/digest、run、asset/kind/hash 与 `delivered_at`；它不存 `title/mime/size`。当前 `ChatRepository.readSnapshot()` 在一个 `REPEATABLE READ READ ONLY` 事务内读本人 active Conversation（含 Project owner predicate）、最近 100 条 Message、公开 AG-UI cursor，却没有读关联，故 service 恒给空 `deliveries`。`bff_agui_event` 帧可 GC，非作品持久真源。
@@ -582,7 +586,7 @@ session admission 的受信 `tenant_id`、`subject_id` 派生
 `metadata_json` 是 BFF 固定产生的 UTF-8 `{}`，不是浏览器事实。
 
 此切口对 BFF canonical schema 的差异必须为零：不新增 Skill、revision、command、receipt、outbox、owner、授权、token、package、
-asset 表或索引，不写 Redis，也不把 `bff_project_skill` 升级为 catalog。BFF 派生的 `command_id` 与 v2 `request_digest` 只随当次
+asset 表或索引，不写 Redis，也不把 `bff_project_skill` 升级为 catalog。BFF 派生的 `command_id` 与 v3 `request_digest` 只随当次
 Connect request 发送；Skill、revision 与 command receipt 只由 Platform 在其 owner schema 和事务中持久化。catalog credential
 文件以及按 tenant/generation 缓存的短期 machine token 是进程配置/内存，不是业务数据；token/secret 不持久化、不进入日志或错误。
 
@@ -595,8 +599,8 @@ enqueue、跨库事务、补偿表或 202 接纳语义。
 
 实现门必须以 schema diff/`pnpm schema:check` 证明 BFF 零数据变更，并以测试证明 CreateDraft 路径对 generic Map/PG receipt、
 Project/Conversation store、organization action check 与 Storage client 均为零调用；撤销用户 session 后同 key replay 必须在
-Platform socket 前拒绝。Platform consumer 固定 owner `f26d147a09350c3a041722107d277beb93eaad60` 和 execution v2 aggregate
-SHA-256 `f0a16f8360c075e783c244284b56a1bea5aa3113cc066b25163a60b713a7df25`，不得以旧 Capability HTTP 或 v1 digest
+Platform socket 前拒绝。Platform consumer 目标固定 owner `5b6eb2c1532b23b9747bc4bf6ac99f69ad453de0` 和 execution v3 aggregate
+SHA-256 `324e749da1bc66c1ff03de74e7299716f798f5f5bb5fa19556033b79fa09ff8d`（inactive/routable=false，尚未在 BFF pin/激活），不得以旧 Capability HTTP 或 v1/v2 digest
 建立第二套幂等事实。
 
 本片仅文档，不改 `database/schema.sql`、索引、事务代码或安装器。目标六 catalog mutation 不引入 BFF Skill/revision/install、
