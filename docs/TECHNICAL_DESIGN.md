@@ -1,5 +1,13 @@
 # kokoro-bff 技术设计
 
+## W3 Complete 文档门：当前态与目标态（2026-09-29；未激活）
+
+**当前态。** BFF main `571108b` 已有默认关闭的 CreateDraft、Get、Begin 运行候选，并精确 pin Platform owner `263a28f` inactive v4。Root 已在隔离真 owner 组合验证 Begin、签名直 PUT、重放/冲突/替换、撤权及旧 Validate/Publish 回归；BFF 仍没有 public Complete route，浏览器 CORS/PUT 和产品激活尚未验。本片只新增唯一 OpenAPI/三面文档的 Complete 候选，不修改运行时、配置、Proto、generated 或数据库。
+
+**目标职责和依赖。** 将来的具名 `POST /v1/skills/{skill_id}/package-upload/complete` 由 Web 同源控制面调用 BFF。每次含同键重放均先做 current IAM session、受信 tenant/user admission，随后由 BFF catalog workload 身份向 Platform `SkillCatalogService/CompleteSkillPackageUpload` 发送 Product `user/user` context；用户 Bearer、tenant/owner/subject 不来自 body，也不传 Platform。Body 的 attempt/upload/hash/size 只是 Begin 描述符的不受信回显；Platform 必须逐项核 current Skill attempt、Storage upload 的 ZIP、hash、size、scan 和 owner，而非由 BFF 推断上传完成。未来代码沿既有 `src/http/routes/` 具名包路由、`src/http/` 输入校验、`src/infrastructure/clients/platform/` v4 projector/Connect 位置扩展；不用旧 Capability、通用 mutation receipt 或 BFF Storage 代理。此片不建这些代码文件。
+
+**状态与失败恢复。** 单个 Idempotency-Key 绑定 operation、可信 tenant/user、skill_id；owner v4 artifact 中 command digest **仍为 3.0.0**，严格按其 JCS schema 与 11 条 Complete 投影向量，包含 current typed Skill ID、Product context、attempt/upload/hash/size，排除 request ID 与 command identity。Platform 自有事务/CAS、receipt 和 Storage 状态判定冲突及 replay；同键不能绕开当前 IAM/owner/scan，unknown ACK 用同键重试，异 body/身份冲突，不建 BFF SQL/Redis receipt。`pending|clean|unknown` 只允许 `phase=uploaded`，clean 不等于 ZIP validated；infected、旧/aborted attempt、非 draft 或当前状态不符为 412。成功公开严格 200 data，**不公开 owner asset_id**；未来 BFF 必须验证内部 owner asset_id 后才投影。Get 不返回 hash/size，刷新后若丢 Begin 描述符，须保留原文件并重新精确哈希/计数，或显式新 Begin 替换，不能从 Get 推造 Complete 请求。Web 浏览器 CORS/实际 PUT、Complete 运行、后续 Validate/Publish 和 active 发布另片验收。
+
 ## W3 Begin runtime 当前候选（2026-09-29；默认关闭）
 
 在已 pin 的 owner `263a28f` inactive v4/command digest 3.0.0 上，本仓以具名 `src/http/routes/begin-skill-package-upload.ts` 承接同一路径 POST，GET 继续独立只读；当前 IAM admission 始终在业务路由/Platform socket 前。输入及稳定 command ID 在 `src/http/begin-skill-package-input.ts`，owner JCS/SHA-256 投影在既有 Platform client 邻近的独立 projector，生成 Connect 只由 `CatalogConnectClient` 使用。复用原 `KOKORO_SKILL_DRAFT_CANDIDATE_ENABLED` loopback 默认关闭开关，不经旧 Capability 或 generic BFF mutation receipt。相同 key 的命令 ID 绑定 trusted tenant/user/skill；body 和 replace presence 改变 digest，由 Platform receipt 决定冲突/当前 pending 重签；每次 replay 仍先 IAM。

@@ -1,5 +1,9 @@
 # kokoro-bff data model
 
+## W3 Complete 候选：无 BFF 持久化事实（2026-09-29）
+
+本片仅为 public Complete 文档/机器 OpenAPI 候选，BFF 当前没有 Complete route。包 attempt、upload、scan、asset、command receipt/CAS 的唯一 owner 分别为 Platform/Storage；BFF `database/schema.sql`、索引、迁移、Redis 均零变化，不新增或复用通用 BFF mutation receipt 保存命令/签名 URL。每次含 replay 的 IAM/owner 检查必须读取当次权威事实，不能用 BFF 缓存命中代替。Body 的 attempt/upload/hash/size 仅供 Platform 与 current Skill/Storage 匹配；即使 owner 返回 asset_id，未来 public 投影也不持久化或公开它。Get 没有 hash/size，BFF 不建刷新恢复副本；客户端只能持原描述符/重选原文件精确重算，或新 Begin 显式替换。owner v4 inactive/产品未激活，真 Complete 运行和三方组合另验。
+
 ## W3 Begin runtime：无新增 BFF Skill 数据事实（2026-09-29）
 
 Begin 已有默认关闭运行候选，但本仓 canonical `database/schema.sql`、Redis、Skill/Upload receipt 与签名缓存均未增；稳定 command ID/owner digest 仅随当前调用发 Platform，由其持久 receipt/attempt CAS 和 Storage Upload 承接重复/冲突与签名重签。BFF 不读取其他 owner SQL、不保存 URL/query/headers、也不代理 ZIP 字节。每次 HTTP 重放仍先 IAM，撤权不靠本地 receipt 放行；真 owner 组合及浏览器数据面后续由 Root/Web 独立验。下方文档门“只有机器候选”按原切片基线理解。

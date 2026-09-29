@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { createHash } from "node:crypto"
 import { readFile } from "node:fs/promises"
 import { test } from "node:test"
 
@@ -275,6 +276,97 @@ test("BeginSkillPackageUpload publishes one inactive user-only command with a st
   const resource = openapi.slice(openapi.indexOf("    SkillPackageBeginResource:"), openapi.indexOf("    BeginSkillPackageUploadResponse:"))
   assert.match(resource, /required: \[skill_id, attempt_id, attempt_epoch, upload_id, transfer_reference, replayed\]/u)
   assert.deepEqual(inspectBffOpenApi(openapi, baseline), [])
+})
+
+test("CompleteSkillPackageUpload publishes an inactive user-only strict command", async () => {
+  const { openapi, baseline } = await readContract()
+  assert.ok(
+    baseline.some(
+      ({ method, path, operation_id }) =>
+        method === "POST" && path === "/v1/skills/{skill_id}/package-upload/complete" && operation_id === "completeSkillPackageUpload",
+    ),
+  )
+  const operation = openapi.slice(openapi.indexOf("  /v1/skills/{skill_id}/package-upload/complete:"), openapi.indexOf("  /v1/skills/{name}/revisions:"))
+  for (const fragment of [
+    "operationId: completeSkillPackageUpload",
+    "product.skill.complete_package_upload",
+    "SkillPackageCompleteIdempotencyKey",
+    "CompleteSkillPackageUploadRequest",
+    "CompleteSkillPackageUploadResponse",
+    "'200':",
+    "x-request-id:",
+    "Cache-Control:",
+    "const: no-store",
+  ])
+    assert.ok(operation.includes(fragment), fragment)
+  assert.doesNotMatch(operation, /asset_id|transfer_reference/u)
+  const request = openapi.slice(openapi.indexOf("    CompleteSkillPackageUploadRequest:"), openapi.indexOf("    SkillPackageCompleteResource:"))
+  assert.match(request, /required: \[attempt_id, upload_id, content_sha256, size_bytes\][\s\S]*additionalProperties: false/u)
+  assert.match(request, /content_sha256: \{ type: string, pattern: '\^\[a-f0-9\]\{64\}\$' \}/u)
+  assert.match(request, /size_bytes: \{ type: integer, minimum: 1, maximum: 33554432 \}/u)
+  const resource = openapi.slice(openapi.indexOf("    SkillPackageCompleteResource:"), openapi.indexOf("    CompleteSkillPackageUploadResponse:"))
+  assert.match(
+    resource,
+    /required: \[skill_id, attempt_id, attempt_epoch, upload_id, phase, replayed, content_sha256, scan_state\][\s\S]*additionalProperties: false/u,
+  )
+  assert.match(resource, /phase: \{ type: string, const: uploaded \}/u)
+  assert.match(resource, /scan_state: \{ type: string, enum: \[clean, pending, unknown\] \}/u)
+  assert.doesNotMatch(resource, /asset_id|transfer_reference/u)
+  assert.deepEqual(inspectBffOpenApi(openapi, baseline), [])
+})
+
+test("CompleteSkillPackageUpload binds owner v4 digest version and all eleven frozen command vectors", async () => {
+  const fixture = JSON.parse(await readFile(new URL("vectors/command-projection.json", platformV4Url), "utf8"))
+  const schema = JSON.parse(await readFile(new URL("command-schemas.json", platformV4Url), "utf8"))
+  const vectors = fixture.vectors.filter(({ operation }) => operation === "skill.complete_package_upload")
+  assert.equal(fixture.artifactVersion, "3.0.0")
+  assert.equal(schema.artifactVersion, "3.0.0")
+  assert.equal(schema.schemas["skill.complete_package_upload"].properties.command_digest_version.const, "3.0.0")
+  assert.equal(schema.schemas["skill.complete_package_upload"].properties.fq_method.const, "kokoro.platform.v1.SkillCatalogService/CompleteSkillPackageUpload")
+  assert.equal(vectors.length, 11)
+  for (const vector of vectors) {
+    const raw = JSON.parse(Buffer.from(vector.rawBase64, "base64").toString("utf8"))
+    if (vector.expectedError === "none") {
+      assert.equal(raw.command_digest_version, "3.0.0")
+      const canonical = Buffer.from(vector.canonicalBase64, "base64")
+      assert.equal(createHash("sha256").update(canonical).digest("hex"), vector.sha256)
+      const projection = JSON.parse(canonical.toString("utf8"))
+      assert.deepEqual(projection, vector.projection)
+      assert.equal(projection.fq_method, "kokoro.platform.v1.SkillCatalogService/CompleteSkillPackageUpload")
+    } else assert.equal(vector.canonicalBase64, undefined)
+  }
+})
+
+test("CompleteSkillPackageUpload semantic gate rejects request, response, status and legacy-reference drift", async () => {
+  const { openapi, baseline } = await readContract()
+  const mutations = [
+    openapi.replace("required: [attempt_id, upload_id, content_sha256, size_bytes]", "required: [attempt_id, upload_id]"),
+    openapi.replace("phase: { type: string, const: uploaded }", "phase: { type: string, const: validated }"),
+    openapi.replace("scan_state: { type: string, enum: [clean, pending, unknown] }", "scan_state: { type: string, enum: [clean, infected] }"),
+    openapi.replace(
+      "'412': { $ref: '#/components/responses/SkillPackageCompletePreconditionFailed' }",
+      "'412': { $ref: '#/components/responses/SkillPackageCompleteBadGateway' }",
+    ),
+    openapi.replace("#/components/parameters/SkillPackageCompleteIdempotencyKey", "#/components/parameters/IdempotencyKey"),
+    openapi.replace("data: { $ref: '#/components/schemas/SkillPackageCompleteResource' }", "data: { $ref: '#/components/schemas/SkillPackageBeginResource' }"),
+  ]
+  for (const broken of mutations) {
+    assert.notEqual(broken, openapi)
+    assert.ok(inspectBffOpenApi(broken, baseline).some((error) => /completeSkillPackageUpload|SkillPackageComplete|CompleteSkillPackageUpload/u.test(error)))
+  }
+  const legacy = openapi.slice(openapi.indexOf("  /v1/me:"), openapi.indexOf("  /v1/team/members:"))
+  for (const poisoned of [
+    legacy.replace("#/components/schemas/CurrentUserResponse", "#/components/schemas/CompleteSkillPackageUploadResponse"),
+    legacy.replace("#/components/responses/ServiceUnavailable", "#/components/responses/SkillPackageCompleteUnavailable"),
+  ]) {
+    assert.notEqual(poisoned, legacy)
+    assert.ok(
+      inspectBffOpenApi(
+        openapi.replace(legacy, () => poisoned),
+        baseline,
+      ).some((error) => error.includes("GET /v1/me must not reference CompleteSkillPackageUpload")),
+    )
+  }
 })
 
 test("BeginSkillPackageUpload candidate names the exact inactive owner v4 command and digest version", async () => {

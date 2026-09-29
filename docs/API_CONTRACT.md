@@ -1,5 +1,13 @@
 # kokoro-bff API contract policy
 
+## W3 Complete public 机器候选（2026-09-29；尚无运行路由）
+
+唯一 public OpenAPI 新增 user-only `POST /v1/skills/{skill_id}/package-upload/complete`，operationId `completeSkillPackageUpload`、permission `product.skill.complete_package_upload`、必填单个 1–128 可打印 `Idempotency-Key`。BFF 当前有默认关闭的 CreateDraft/Get/Begin 运行候选，**没有 Complete route**；Platform `263a28f` v4 manifest 仍 inactive，正式 Product API 未激活。Body strict 仅 `attempt_id`、`upload_id`（非空 owner typed ID，最多 191 字符）、小写 64hex `content_sha256`、整数 `size_bytes=1..33554432`，四者是 Begin 描述符的不受信回显，不能替代 current Skill/Storage 匹配；不接受 asset_id、scan_state、tenant/owner、URL 或传输头。
+
+每次含同键 replay 均先 IAM current user session/fixed tenant/subject，BFF 代言 user owner 后才触 Platform。稳定 command identity 按 operation+可信 tenant/user+skill_id+key；owner v4 command digest version `3.0.0` 的 JCS/11 向量覆盖完整四字段与 Product context，排除 request ID；BFF 不存 receipt。200 strict `{data:{skill_id,attempt_id,attempt_epoch,upload_id,phase:"uploaded",replayed,content_sha256,scan_state}}`，scan_state 仅 `clean|pending|unknown`，epoch 为正 uint64 decimal string；无 `asset_id`、签名 URL 或 `meta`。内部 owner asset_id 仍需未来 runtime 验证。CLEAN 只代表扫描当前干净，不代表 ZIP validated。所有成功/错误均有有界 `x-request-id` 和 `Cache-Control:no-store`。400 invalid request/key，401 session missing/invalid，403 service/session/tenant forbidden，404 不可见 Skill，409 幂等冲突/command in progress，412 infected/旧或 aborted attempt/非 draft/当前状态不符，413 body 超限，429 IAM/Platform rate limit 且 Retry-After 仅可选有界，502 owner 非法响应，503 tenant 未配置/IAM 或 Platform 依赖不可判定；各状态的 error.code 由独立 response component 收窄，错误体 strict `{error:{code,message,retryable}}`。
+
+Browser 完成 Begin 的短期签名 PUT 后才发送 Complete；签名 PUT 的批准 origin、method、headers、expiry 与 Chromium CORS 属 Begin/浏览器边界，不由 Complete 接受 URL。Get 不公开 hash/size，刷新只能保留原描述符或重选原文件重算并确认完全一致；若做不到，显式新 Begin attempt 替换，不缓存 BFF 文件摘要。Root 真 owner 组合的 Begin 证据不等于本 public Complete 已验；代码、真 IAM/Storage、Web Chromium 与产品激活仍待后续片。
+
 ## W3 Begin runtime 当前契约（2026-09-29；public 未激活）
 
 已批准的唯一 OpenAPI `beginSkillPackageUpload` 候选现接到 BFF 默认关闭运行路由，owner v4 inactive 与文档门字段/状态码不变。POST 每次先 current IAM user/固定 tenant，再以独立 catalog workload token 调 Platform；单个可打印 Idempotency-Key 与 strict JSON 文件事实形成稳定 command ID 和 owner 3.0.0 JCS digest，缺失/null replace 不等价。UTF-8 文件名按字节 ≤255 校验（255 接受、256 拒绝）。201 只含严格 `{data}` 的当前 attempt/epoch/upload 与原样短期 PUT transfer reference；失败按本机契约各状态专属 `{error}`，成功/错误均 `x-request-id`/no-store。同键 replay 不走 BFF receipt，仍由 Platform 当前 owner/attempt/Storage pending 决定是否重签；BFF 拒不受批准 origin、非 PUT/签名头/expiry 的 owner response 为 502。Begin 缺 object origin 只返回 503，不影响 CreateDraft/Get。后续 Root 真组合及浏览器 CORS/PUT 验收前不称 public 激活；下方文档门“无运行路由”为历史基线。

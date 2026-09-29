@@ -3,6 +3,10 @@
 状态：2026-09-29
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。
 
+## W3-BFF-SKILL-COMPLETE-DOC-GATE：仅未激活机器/文档候选
+
+基线 BFF clean main `571108b`，Platform owner `263a28f` inactive v4 与 command digest `3.0.0` pin 不变。唯一 public OpenAPI 新增 user-only Complete 的 strict 四字段请求、200 uploaded/scan 三态且无 asset_id 的响应、状态专属错误和 x-request-id/no-store；operation inventory/语义门/直接契约测试锁定 owner 11 条命令向量及旧 operation 误引负例。本片**不新增 Complete runtime route**，不改 SQL/receipt/Storage/config/generated；CreateDraft/Get/Begin 仍默认关闭，产品未激活。Root 既有真 owner 组合验证的是 Begin→signed PUT 及旧 Validate/Publish 回归，不是 BFF public Complete、浏览器 Chromium CORS/PUT。Get 缺 hash/size 的刷新恢复须保留 Begin 描述符或重选原文件重算，否则显式新 Begin 替换。Complete 运行与真 IAM/Storage/撤权重放、感染/旧 attempt 隔离组合仍待后续切片。
+
 ## W3-BFF-SKILL-BEGIN-RUNTIME：默认关闭运行候选
 
 本片基线 BFF `145c422c052b7409b960deeeb2d185285492e4e8`，owner pin 仍为 Platform `263a28f` inactive v4/command digest 3.0.0。新增同 Get path 的 POST Begin 具名路由、strict 输入/255 字节 UTF-8 边界、稳定命令身份及 owner 14 条投影向量相符的 JCS/SHA-256、generated Connect client 方法；当前 IAM/固定 tenant 先于 Platform。`KOKORO_STORAGE_OBJECT_ORIGIN` 可单独提供签名 PUT public origin，不启用 Storage RPC secret；缺失时 Begin 503、CreateDraft/Get 不回退。201 仅在校验完整 URL/origin/method/headers/expiry 与 attempt/epoch 后发 strict `{data}`，同键 replay 不走 BFF receipt。BFF SQL/Redis/签名缓存零变化，旧 Capability 不承接包命令。这里是本仓 HTTP/contract/静态代码门，Root 真 owner 组合、Web 真 Chromium/CORS/PUT 与正式 public activation 尚待验；下方“Begin 无 route”是文档门当时事实。
