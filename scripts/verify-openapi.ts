@@ -273,7 +273,14 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
     if (
       !block.name.endsWith("Response") ||
       block.name === "HealthResponse" ||
-      ["CreateSkillDraftResponse", "SkillDraftErrorResponse", "GetSkillPackageUploadResponse", "SkillPackageUploadGetErrorResponse"].includes(block.name)
+      [
+        "CreateSkillDraftResponse",
+        "SkillDraftErrorResponse",
+        "GetSkillPackageUploadResponse",
+        "SkillPackageUploadGetErrorResponse",
+        "BeginSkillPackageUploadResponse",
+        "SkillPackageBeginErrorResponse",
+      ].includes(block.name)
     )
       continue
     const required = topLevelRequired(block)
@@ -300,6 +307,8 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
     const isCreateSkillDraft = operationId === "createSkillDraft"
     const isGetSkillPackageUpload =
       operationId === "getSkillPackageUpload" && operation.method === "GET" && operation.path === "/v1/skills/{skill_id}/package-upload"
+    const isBeginSkillPackageUpload =
+      operationId === "beginSkillPackageUpload" && operation.method === "POST" && operation.path === "/v1/skills/{skill_id}/package-upload"
     if (
       !isGetSkillPackageUpload &&
       /#\/components\/(?:schemas\/(?:GetSkillPackageUploadResponse|SkillPackageUploadGetErrorResponse)|responses\/SkillPackageUploadGet[A-Za-z]*)/u.test(
@@ -307,6 +316,13 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
       )
     )
       errors.push(`${operation.method} ${operation.path} must not reference GetSkillPackageUpload strict envelope components`)
+    if (
+      !isBeginSkillPackageUpload &&
+      /#\/components\/(?:schemas\/(?:BeginSkillPackageUpload(?:Request|Response)|SkillPackageBegin[A-Za-z]*)|responses\/SkillPackageBegin[A-Za-z]*)/u.test(
+        operation.text.split(/^components:\s*$/mu)[0] ?? "",
+      )
+    )
+      errors.push(`${operation.method} ${operation.path} must not reference BeginSkillPackageUpload strict envelope components`)
     const responses = collectResponseBlocks(operation)
     for (const [status, response] of responses) {
       if (status === "default") continue
@@ -323,7 +339,13 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
       }
       if (numericStatus >= 400 && response.includes("application/json:")) {
         const isReadinessException = operation.path === "/readyz" && status === "503"
-        if (!isReadinessException && !isCreateSkillDraft && !isGetSkillPackageUpload && !response.includes("#/components/schemas/ErrorEnvelope")) {
+        if (
+          !isReadinessException &&
+          !isCreateSkillDraft &&
+          !isGetSkillPackageUpload &&
+          !isBeginSkillPackageUpload &&
+          !response.includes("#/components/schemas/ErrorEnvelope")
+        ) {
           errors.push(`${operation.method} ${operation.path} ${status} must use ErrorEnvelope`)
         }
       }
@@ -332,7 +354,8 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
           numericStatus < 400 ||
           ERROR_RESPONSE_COMPONENTS.has(match[1]) ||
           isCreateSkillDraft ||
-          (isGetSkillPackageUpload && match[1].startsWith("SkillPackageUploadGet"))
+          (isGetSkillPackageUpload && match[1].startsWith("SkillPackageUploadGet")) ||
+          (isBeginSkillPackageUpload && match[1].startsWith("SkillPackageBegin"))
         )
           continue
         errors.push(`${operation.method} ${operation.path} ${status} references non-error response ${match[1]}`)
@@ -379,7 +402,9 @@ function idempotencyErrors(parameters: Map<string, NamedBlock>, operations: Oper
     const hasParameter =
       operationId === "createSkillDraft"
         ? operation.text.includes("#/components/parameters/SkillDraftIdempotencyKey")
-        : operation.text.includes("#/components/parameters/IdempotencyKey")
+        : operationId === "beginSkillPackageUpload" && operation.method === "POST" && operation.path === "/v1/skills/{skill_id}/package-upload"
+          ? operation.text.includes("#/components/parameters/SkillPackageBeginIdempotencyKey")
+          : operation.text.includes("#/components/parameters/IdempotencyKey")
     if (declared !== expected) continue
     if (expected === "required" && !hasParameter) {
       errors.push(`${operation.method} ${operation.path} (${operationId}) must reference Idempotency-Key`)
@@ -496,8 +521,149 @@ function skillDraftContractErrors(
     ...frozenResponses.map((name) => responses.get(name)?.text ?? ""),
   ].join("\u0000")
   const frozenDigest = createHash("sha256").update(frozenSource).digest("hex")
-  if (frozenDigest !== "9845dd8ce10f907bdb1fbc9b64e27d7e0ffee35ba54b7aed3c312c00d45727ea")
+  // CreateDraft description now names the already-pinned inactive v4 owner; its request, response and error contract is unchanged.
+  if (frozenDigest !== "0f4d2fcf3c6c0fe55deb6c4d59a538598cd5574cb3400a9910a7eb80375490c0")
     errors.push(`createSkillDraft canonical contract digest drifted: ${frozenDigest}`)
+  return errors
+}
+
+function skillPackageBeginContractErrors(
+  parameters: Map<string, NamedBlock>,
+  schemas: Map<string, NamedBlock>,
+  operations: OperationBlock[],
+  responses: Map<string, NamedBlock>,
+): string[] {
+  const errors: string[] = []
+  const matches = operations.filter(({ fields }) => fields.get("operationId") === "beginSkillPackageUpload")
+  if (matches.length !== 1) return ["beginSkillPackageUpload must occur exactly once"]
+  const operation = matches[0]
+  if (operation.method !== "POST" || operation.path !== "/v1/skills/{skill_id}/package-upload")
+    errors.push("beginSkillPackageUpload must remain the exact public POST path")
+  for (const fragment of [
+    "x-kokoro-owner: kokoro-bff",
+    "x-kokoro-visibility: public",
+    "x-kokoro-stability: beta",
+    "x-kokoro-idempotency: required",
+    "x-kokoro-permission: product.skill.begin_package_upload",
+    "#/components/parameters/SkillPackageUploadSkillId",
+    "#/components/parameters/SkillPackageBeginIdempotencyKey",
+    "#/components/schemas/BeginSkillPackageUploadRequest",
+    "#/components/schemas/BeginSkillPackageUploadResponse",
+    "x-request-id:",
+    "Cache-Control:",
+    "const: no-store",
+  ])
+    if (!operation.text.includes(fragment)) errors.push(`beginSkillPackageUpload must define ${fragment}`)
+  const expectedStatuses = ["201", "400", "401", "403", "404", "409", "412", "413", "429", "502", "503"]
+  if (JSON.stringify([...collectResponseBlocks(operation).keys()]) !== JSON.stringify(expectedStatuses))
+    errors.push("beginSkillPackageUpload status set drifted")
+  const responseRefs = new Map([
+    ["400", ["SkillPackageBeginBadRequest", "invalid_skill_request, idempotency_key_required, invalid_idempotency_key"]],
+    ["401", ["SkillPackageBeginUnauthorized", "session_authentication_required, session_invalid"]],
+    ["403", ["SkillPackageBeginForbidden", "service_auth_failed, session_forbidden, product_tenant_forbidden"]],
+    ["404", ["SkillPackageBeginNotFound", "skill_not_found"]],
+    ["409", ["SkillPackageBeginConflict", "skill_idempotency_conflict, skill_command_in_progress"]],
+    ["412", ["SkillPackageBeginPreconditionFailed", "skill_precondition_failed"]],
+    ["413", ["SkillPackageBeginPayloadTooLarge", "request_body_too_large"]],
+    ["429", ["SkillPackageBeginRateLimited", "session_rate_limited, skill_rate_limited"]],
+    ["502", ["SkillPackageBeginBadGateway", "skill_response_invalid"]],
+    ["503", ["SkillPackageBeginUnavailable", "product_tenant_not_configured, iam_admission_unavailable, skill_dependency_unavailable"]],
+  ])
+  for (const [status, [name, codes]] of responseRefs) {
+    if (!operation.text.includes(`'${status}': { $ref: '#/components/responses/${name}' }`))
+      errors.push(`beginSkillPackageUpload ${status} must reference ${name}`)
+    const block = responses.get(name)?.text ?? ""
+    for (const fragment of [
+      "x-request-id:",
+      "Cache-Control:",
+      "const: no-store",
+      "#/components/schemas/SkillPackageBeginErrorResponse",
+      `code: { type: string, enum: [${codes}] }`,
+    ])
+      if (!block.includes(fragment)) errors.push(`${name} (${status}) must define ${fragment}`)
+  }
+  const rateLimited = responses.get("SkillPackageBeginRateLimited")?.text ?? ""
+  for (const fragment of ["Retry-After:", "required: false", "pattern: '^[1-9][0-9]{0,4}$'"])
+    if (!rateLimited.includes(fragment)) errors.push(`SkillPackageBeginRateLimited must define ${fragment}`)
+  const key = parameters.get("SkillPackageBeginIdempotencyKey")?.text ?? ""
+  for (const fragment of ["name: Idempotency-Key", "in: header", "required: true", "maxLength: 128", "pattern: '^[\\x21-\\x2B\\x2D-\\x7E]+$'"])
+    if (!key.includes(fragment)) errors.push(`SkillPackageBeginIdempotencyKey must define ${fragment}`)
+  const request = schemas.get("BeginSkillPackageUploadRequest")?.text ?? ""
+  for (const fragment of [
+    "required: [filename, mime_type, size_bytes, content_sha256]",
+    "additionalProperties: false",
+    "x-maxUtf8: 255",
+    "mime_type: { type: string, const: application/zip }",
+    "size_bytes: { type: integer, minimum: 1, maximum: 33554432 }",
+    "content_sha256: { type: string, pattern: '^[a-f0-9]{64}$' }",
+    "replaces_attempt_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }",
+  ])
+    if (!request.includes(fragment)) errors.push(`BeginSkillPackageUploadRequest must define ${fragment}`)
+  const transfer = schemas.get("SkillPackageBeginTransferReference")?.text ?? ""
+  for (const fragment of [
+    "required: [url, method, required_headers, expires_at]",
+    "additionalProperties: false",
+    "format: uri",
+    "method: { type: string, const: PUT }",
+    "minProperties: 1",
+    "maxProperties: 1",
+    "propertyNames: { const: content-type }",
+    "additionalProperties: { type: string, const: application/zip }",
+    "expires_at: { type: string, format: date-time }",
+  ])
+    if (!transfer.includes(fragment)) errors.push(`SkillPackageBeginTransferReference must define ${fragment}`)
+  const resource = schemas.get("SkillPackageBeginResource")?.text ?? ""
+  for (const fragment of [
+    "required: [skill_id, attempt_id, attempt_epoch, upload_id, transfer_reference, replayed]",
+    "additionalProperties: false",
+    "attempt_epoch: { $ref: '#/components/schemas/SkillPackageUploadPositiveEpoch' }",
+    "transfer_reference: { $ref: '#/components/schemas/SkillPackageBeginTransferReference' }",
+    "replayed: { type: boolean }",
+  ])
+    if (!resource.includes(fragment)) errors.push(`SkillPackageBeginResource must define ${fragment}`)
+  const success = schemas.get("BeginSkillPackageUploadResponse")
+  if (
+    !success ||
+    JSON.stringify(topLevelRequired(success)) !== JSON.stringify(["data"]) ||
+    schemaProperties(success).join(",") !== "data" ||
+    !success.text.includes("additionalProperties: false") ||
+    !success.text.includes("#/components/schemas/SkillPackageBeginResource")
+  )
+    errors.push("BeginSkillPackageUploadResponse must be strict data-only")
+  const failure = schemas.get("SkillPackageBeginErrorResponse")
+  if (
+    !failure ||
+    JSON.stringify(topLevelRequired(failure)) !== JSON.stringify(["error"]) ||
+    schemaProperties(failure).join(",") !== "error" ||
+    !failure.text.includes("additionalProperties: false") ||
+    !failure.text.includes("#/components/schemas/SkillPackageBeginErrorDetail")
+  )
+    errors.push("SkillPackageBeginErrorResponse must be strict error-only")
+  const detail = schemas.get("SkillPackageBeginErrorDetail")?.text ?? ""
+  for (const fragment of [
+    "required: [code, message, retryable]",
+    "additionalProperties: false",
+    "message: { type: string, minLength: 1 }",
+    "retryable: { type: boolean }",
+  ])
+    if (!detail.includes(fragment)) errors.push(`SkillPackageBeginErrorDetail must define ${fragment}`)
+  const names = [
+    "BeginSkillPackageUploadRequest",
+    "SkillPackageBeginTransferReference",
+    "SkillPackageBeginResource",
+    "BeginSkillPackageUploadResponse",
+    "SkillPackageBeginErrorDetail",
+    "SkillPackageBeginErrorResponse",
+  ]
+  const frozenSource = [
+    operation.text,
+    key,
+    ...names.map((name) => schemas.get(name)?.text ?? ""),
+    ...[...responseRefs.values()].map(([name]) => responses.get(name)?.text ?? ""),
+  ].join("\u0000")
+  const frozenDigest = createHash("sha256").update(frozenSource).digest("hex")
+  if (frozenDigest !== "694e44a12bf8b21244ab4467937ef764b48578eb028b4df3eaf8736528a4dc97")
+    errors.push(`beginSkillPackageUpload canonical contract digest drifted: ${frozenDigest}`)
   return errors
 }
 
@@ -713,6 +879,7 @@ export function inspectBffOpenApi(source: string, baseline: readonly BaselineOpe
     ...idempotencyErrors(parameters, operations),
     ...skillDraftContractErrors(parameters, schemas, operations, responseComponents),
     ...skillPackageUploadGetContractErrors(parameters, schemas, operations, responseComponents),
+    ...skillPackageBeginContractErrors(parameters, schemas, operations, responseComponents),
     ...protocolErrors(parameters, schemas, operations),
   ]
   return [...new Set(errors)]

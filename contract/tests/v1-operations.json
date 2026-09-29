@@ -277,6 +277,11 @@
       "operation_id": "getSkillPackageUpload"
     },
     {
+      "method": "POST",
+      "path": "/v1/skills/{skill_id}/package-upload",
+      "operation_id": "beginSkillPackageUpload"
+    },
+    {
       "method": "GET",
       "path": "/v1/skills/{name}/revisions",
       "operation_id": "listSkillRevisions"

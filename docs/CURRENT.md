@@ -3,6 +3,10 @@
 状态：2026-09-29
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。
 
+## W3-BFF-SKILL-BEGIN-DOC-GATE：仅未激活机器候选
+
+本片基线 BFF `f0aaf386bc7f7ca81ff4b996b84d29f0ce05e02f`。唯一 public OpenAPI 增 user-only `POST /v1/skills/{skill_id}/package-upload` 的 Begin 候选与严格请求/201 完整 PUT TransferReference/状态专属错误；owner `263a28f` inactive v4 pin 原字节和其 `command_digest_version=3.0.0` 均不改变。BFF **没有 Begin 运行路由、Connect 调用或浏览器正式入口**，CreateDraft/Get 仍默认关闭。Root 既有真组合仅验证 Get none/发布后 412/撤权 401，先前 Begin 是 Platform owner CLI，不冒称本候选 public 已验。三面文档同意 Web 同源控制面→BFF→Platform、浏览器向批准 ObjectStore public origin 直 PUT；后续 BFF 运行时做 signed URL/method/headers/expiry 严格验证，真 Chromium/CORS 和 Complete/Validate/Publish 串行。BFF Skill/Upload SQL、Redis、receipt 与签名缓存零变化；本节机器/文档门验证结果以本片提交报告为准。下方 Get/DOC-GATE/W1E 均为彼时阶段事实。
+
 ## W3-BFF-SKILL-GET-RUNTIME：v4 精确 pin 与默认关闭的真实只读候选
 
 本片基线 BFF `58bcfc7da656981c1a43a9918ab9f96d207bbecc`。BFF 现改为固定 Platform owner `263a28f1e55745bd1829a61f68228d775751adbc` 的两份原字节 Proto（`common.proto` SHA-256 `65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08`、`platform_runtime.proto` SHA-256 `8ccab4aee4efdfd8210f2e5f02ae8ec85c2c470e90451915209406e16621289a`）与完整 inactive v4 artifact/provenance aggregate `902f8f2c2fbeb95a441820c1cf16b0a9c793eadac7106f9fcd5e41e3878b7f79`；旧 v3 vendor 已删，不双轨。生成脚本核全树文件/字节/aggregate、24 request bindings、17 command identities、34 operation、唯一 Get read binding 与 descriptor，并两次独立生成字节比较。CreateDraft 仍用 owner v4 未变的 command digest v3 绑定与 45 条向量，不能误把 artifact v4 写成 digest v4。

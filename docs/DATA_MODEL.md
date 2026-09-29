@@ -1,5 +1,9 @@
 # kokoro-bff data model
 
+## W3 Begin 文档门：零 BFF Skill/Upload 数据事实（2026-09-29）
+
+BFF 当前 canonical `database/schema.sql` 与 Redis 没有 Skill 包状态、Storage Upload 或专用 Skill receipt；本片只有 inactive public Begin OpenAPI 候选，不改 schema、Prisma、迁移、索引、缓存或后台任务。未来 Begin 也不走 BFF generic `bff_idempotency_receipt`：BFF 的稳定 command ID/owner digest 传给 Platform，Platform Skill current attempt/epoch/version + durable command receipt 是唯一状态/幂等 owner，Storage v2 持有 Upload、对象与扫描；BFF 不跨 owner SQL/JOIN、不存签名 URL/headers/expiry、不把浏览器 ZIP 字节落地。每次包括 replay 都须当次 IAM session 与 Platform 当前 owner/attempt 授权，不能用本仓缓存 result 绕过撤权或过期。首次/显式替换、旧 attempt CAS、外部 Storage ACK/COMMIT unknown 与 orphan retention 均属 Platform/Storage owner 边界；短期 PUT 的浏览器 CORS/批准 origin 验证留后续真组合。下方 Get/W1E 历史段落按各自基线理解，不覆盖本节。
+
 ## W3 Get runtime：零本仓数据模型变更（2026-09-29）
 
 当前 BFF consumer 已从 Platform 旧 v3 替换为 owner `263a28f` inactive v4 原字节/生成物，且具名只读 Get runtime 候选已接线；唯一 canonical `database/schema.sql`、BFF Redis 和所有 receipt 均未改。每次请求经 IAM session 后只读 Platform canonical Skill 的 current attempt/epoch/phase/upload，由 Platform 自身持有 tenant/owner/draft 权限；BFF 不读 `kokoro_platform`/Storage schema，不缓存包事实，不把 GET 写进 `bff_idempotency_receipt`。Proto uint64 在 HTTP 转 decimal string，非法 owner 状态 fail closed 502；撤权不使用旧快照。Root 真 IAM/Platform 组合与 public activation 尚未完成。下方 DOC-GATE/W1E 是历史切片基线，其“pin v3/无 Get route”不覆盖本节。

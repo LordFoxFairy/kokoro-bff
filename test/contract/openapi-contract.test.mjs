@@ -7,6 +7,7 @@ import { inspectAgentControlSnapshot, inspectBffOpenApi } from "../../scripts/ve
 const openapiUrl = new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url)
 const baselineUrl = new URL("../../contract/tests/v1-operations.json", import.meta.url)
 const agentControlSnapshotUrl = new URL("../../contract/external/kokoro-agent/control-receipt.v1.json", import.meta.url)
+const platformV4Url = new URL("../../contract/vendor/kokoro-platform/263a28f1e55745bd1829a61f68228d775751adbc/execution-operations-v4/", import.meta.url)
 
 async function readContract() {
   const [openapi, baselineDocument] = await Promise.all([readFile(openapiUrl, "utf8"), readFile(baselineUrl, "utf8")])
@@ -102,7 +103,8 @@ test("GetSkillPackageUpload is a user-only inactive candidate with a strict read
       ({ method, path, operation_id }) => method === "GET" && path === "/v1/skills/{skill_id}/package-upload" && operation_id === "getSkillPackageUpload",
     ),
   )
-  const operation = openapi.slice(openapi.indexOf("  /v1/skills/{skill_id}/package-upload:"), openapi.indexOf("  /v1/skills/{name}/revisions:"))
+  const uploadPath = openapi.slice(openapi.indexOf("  /v1/skills/{skill_id}/package-upload:"), openapi.indexOf("  /v1/skills/{name}/revisions:"))
+  const operation = uploadPath.slice(0, uploadPath.indexOf("    post:"))
   for (const expected of [
     "operationId: getSkillPackageUpload",
     "x-kokoro-permission: product.skill.get_package_upload",
@@ -131,7 +133,8 @@ test("GetSkillPackageUpload is a user-only inactive candidate with a strict read
 
 test("GetSkillPackageUpload semantic gate rejects changed fields, envelopes, headers, statuses and input", async () => {
   const { openapi, baseline } = await readContract()
-  const operation = openapi.slice(openapi.indexOf("  /v1/skills/{skill_id}/package-upload:"), openapi.indexOf("  /v1/skills/{name}/revisions:"))
+  const uploadPath = openapi.slice(openapi.indexOf("  /v1/skills/{skill_id}/package-upload:"), openapi.indexOf("  /v1/skills/{name}/revisions:"))
+  const operation = uploadPath.slice(0, uploadPath.indexOf("    post:"))
   const mutations = [
     openapi.replace("required: [skill_id, attempt_epoch, phase]", "required: [skill_id, phase]"),
     openapi.replace(
@@ -228,6 +231,100 @@ test("GetSkillPackageUpload error components constrain codes per status and rate
     assert.ok(block.includes("#/components/schemas/SkillPackageUploadGetErrorResponse"))
     assert.ok(block.includes(`code: { type: string, enum: [${codes}] }`))
     if (name === "SkillPackageUploadGetRateLimited") assert.match(block, /Retry-After:[\s\S]*required: false[\s\S]*pattern: '\^\[1-9\]\[0-9\]\{0,4\}\$'/u)
+  }
+})
+
+test("BeginSkillPackageUpload publishes one inactive user-only command with a strict PUT reference", async () => {
+  const { openapi, baseline } = await readContract()
+  assert.ok(
+    baseline.some(
+      ({ method, path, operation_id }) => method === "POST" && path === "/v1/skills/{skill_id}/package-upload" && operation_id === "beginSkillPackageUpload",
+    ),
+  )
+  const path = openapi.slice(openapi.indexOf("  /v1/skills/{skill_id}/package-upload:"), openapi.indexOf("  /v1/skills/{name}/revisions:"))
+  const begin = path.slice(path.indexOf("    post:"))
+  for (const fragment of [
+    "operationId: beginSkillPackageUpload",
+    "x-kokoro-permission: product.skill.begin_package_upload",
+    "x-kokoro-idempotency: required",
+    "#/components/parameters/SkillPackageBeginIdempotencyKey",
+    "#/components/schemas/BeginSkillPackageUploadRequest",
+    "#/components/schemas/BeginSkillPackageUploadResponse",
+    "'201':",
+    "x-request-id:",
+    "Cache-Control:",
+    "const: no-store",
+  ])
+    assert.ok(begin.includes(fragment), fragment)
+  for (const status of ["400", "401", "403", "404", "409", "412", "413", "429", "502", "503"])
+    assert.ok(begin.includes(`'${status}': { $ref: '#/components/responses/SkillPackageBegin`), status)
+  const request = openapi.slice(openapi.indexOf("    BeginSkillPackageUploadRequest:"), openapi.indexOf("    SkillPackageBeginTransferReference:"))
+  assert.match(request, /required: \[filename, mime_type, size_bytes, content_sha256\]/u)
+  assert.match(request, /additionalProperties: false/u)
+  assert.match(request, /mime_type: \{ type: string, const: application\/zip \}/u)
+  assert.match(request, /size_bytes: \{ type: integer, minimum: 1, maximum: 33554432 \}/u)
+  assert.match(request, /replaces_attempt_id: \{ type: string, pattern:/u)
+  const transfer = openapi.slice(openapi.indexOf("    SkillPackageBeginTransferReference:"), openapi.indexOf("    SkillPackageBeginResource:"))
+  assert.match(transfer, /required: \[url, method, required_headers, expires_at\]/u)
+  assert.match(transfer, /method: \{ type: string, const: PUT \}/u)
+  assert.match(transfer, /required_headers:[\s\S]*additionalProperties:/u)
+  const resource = openapi.slice(openapi.indexOf("    SkillPackageBeginResource:"), openapi.indexOf("    BeginSkillPackageUploadResponse:"))
+  assert.match(resource, /required: \[skill_id, attempt_id, attempt_epoch, upload_id, transfer_reference, replayed\]/u)
+  assert.deepEqual(inspectBffOpenApi(openapi, baseline), [])
+})
+
+test("BeginSkillPackageUpload candidate names the exact inactive owner v4 command and digest version", async () => {
+  const [manifest, identities, schemas, projections] = await Promise.all(
+    ["manifest.json", "command-identities.json", "command-schemas.json", "vectors/command-projection.json"].map(async (file) =>
+      JSON.parse(await readFile(new URL(file, platformV4Url), "utf8")),
+    ),
+  )
+  assert.equal(manifest.artifactVersion, "4.0.0")
+  assert.equal(manifest.status, "inactive")
+  assert.equal(manifest.routable, false)
+  assert.equal(identities.commandDigestVersion, "3.0.0")
+  const begin = identities.commands.find((command) => command.operation === "skill.begin_package_upload")
+  assert.equal(begin?.fqMethod, "kokoro.platform.v1.SkillCatalogService/BeginSkillPackageUpload")
+  assert.deepEqual(
+    begin.commandMembers.map(({ wireField }) => wireField),
+    ["skill_id", "product_context", "filename", "mime_type", "size_bytes", "content_sha256", "replaces_attempt_id"],
+  )
+  assert.equal(schemas.schemas["skill.begin_package_upload"].properties.command_digest_version.const, "3.0.0")
+  assert.equal(projections.vectors.filter((vector) => vector.operation === "skill.begin_package_upload").length, 14)
+})
+
+test("BeginSkillPackageUpload semantic gate rejects transfer, envelope, status and legacy-reference drift", async () => {
+  const { openapi, baseline } = await readContract()
+  for (const broken of [
+    openapi.replace("method: { type: string, const: PUT }", "method: { type: string, const: GET }"),
+    openapi.replace("required: [url, method, required_headers, expires_at]", "required: [url, method, expires_at]"),
+    openapi.replace(
+      "required: [skill_id, attempt_id, attempt_epoch, upload_id, transfer_reference, replayed]",
+      "required: [skill_id, attempt_id, attempt_epoch, upload_id, replayed]",
+    ),
+    openapi.replace(
+      "'409': { $ref: '#/components/responses/SkillPackageBeginConflict' }",
+      "'409': { $ref: '#/components/responses/SkillPackageBeginBadGateway' }",
+    ),
+    openapi.replace("#/components/parameters/SkillPackageBeginIdempotencyKey", "#/components/parameters/IdempotencyKey"),
+    openapi.replace("#/components/schemas/BeginSkillPackageUploadResponse", "#/components/schemas/CreateSkillDraftResponse"),
+  ]) {
+    assert.notEqual(broken, openapi)
+    assert.ok(inspectBffOpenApi(broken, baseline).some((error) => /beginSkillPackageUpload|SkillPackageBegin|BeginSkillPackageUpload/u.test(error)))
+  }
+  const legacy = openapi.slice(openapi.indexOf("  /v1/me:"), openapi.indexOf("  /v1/team/members:"))
+  for (const poisoned of [
+    legacy.replace("#/components/schemas/CurrentUserResponse", "#/components/schemas/BeginSkillPackageUploadResponse"),
+    legacy.replace("#/components/responses/ServiceUnavailable", "#/components/responses/SkillPackageBeginUnavailable"),
+    legacy.replace("#/components/schemas/CurrentUserResponse", "#/components/schemas/SkillPackageBeginTransferReference"),
+  ]) {
+    assert.notEqual(poisoned, legacy)
+    assert.ok(
+      inspectBffOpenApi(
+        openapi.replace(legacy, () => poisoned),
+        baseline,
+      ).some((error) => error.includes("GET /v1/me")),
+    )
   }
 })
 
