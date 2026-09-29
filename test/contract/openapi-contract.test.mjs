@@ -165,8 +165,20 @@ test("GetSkillPackageUpload semantic gate rejects changed fields, envelopes, hea
     openapi.replace("18446744073709551615)$'", "18446744073709551616)$'"),
     openapi.replace("code: { type: string, enum: [skill_not_found] }", "code: { type: string, enum: [skill_response_invalid] }"),
     openapi.replace(
-      "          required: true\n          schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }",
+      "code: { type: string, enum: [session_authentication_required, session_invalid] }",
+      "code: { type: string, enum: [service_auth_failed, session_invalid] }",
+    ),
+    openapi.replace(
+      "code: { type: string, enum: [service_auth_failed, session_forbidden, product_tenant_forbidden] }",
+      "code: { type: string, enum: [session_forbidden, product_tenant_not_configured] }",
+    ),
+    openapi.replace(
+      "code: { type: string, enum: [product_tenant_not_configured, iam_admission_unavailable, skill_dependency_unavailable] }",
+      "code: { type: string, enum: [iam_admission_unavailable, skill_dependency_unavailable] }",
+    ),
+    openapi.replace(
       "          required: false\n          schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }",
+      "          required: true\n          schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }",
     ),
   ]
   for (const broken of mutations) {
@@ -202,20 +214,20 @@ test("GetSkillPackageUpload error components constrain codes per status and rate
   const { openapi } = await readContract()
   const cases = [
     ["SkillPackageUploadGetBadRequest", "invalid_skill_request"],
-    ["SkillPackageUploadGetUnauthorized", "service_auth_failed, session_authentication_required, session_invalid"],
-    ["SkillPackageUploadGetForbidden", "session_forbidden, product_tenant_not_configured, product_tenant_forbidden"],
+    ["SkillPackageUploadGetUnauthorized", "session_authentication_required, session_invalid"],
+    ["SkillPackageUploadGetForbidden", "service_auth_failed, session_forbidden, product_tenant_forbidden"],
     ["SkillPackageUploadGetNotFound", "skill_not_found"],
     ["SkillPackageUploadGetPreconditionFailed", "skill_precondition_failed"],
     ["SkillPackageUploadGetRateLimited", "session_rate_limited, skill_rate_limited"],
     ["SkillPackageUploadGetBadGateway", "skill_response_invalid"],
-    ["SkillPackageUploadGetUnavailable", "iam_admission_unavailable, skill_dependency_unavailable"],
+    ["SkillPackageUploadGetUnavailable", "product_tenant_not_configured, iam_admission_unavailable, skill_dependency_unavailable"],
   ]
   for (const [index, [name, codes]] of cases.entries()) {
     const block = openapi.slice(openapi.indexOf(`    ${name}:`), openapi.indexOf(`    ${cases[index + 1]?.[0] ?? "SkillDraftBadRequest"}:`))
     assert.match(block, /x-request-id:[\s\S]*Cache-Control:[\s\S]*const: no-store/u)
     assert.ok(block.includes("#/components/schemas/SkillPackageUploadGetErrorResponse"))
     assert.ok(block.includes(`code: { type: string, enum: [${codes}] }`))
-    if (name === "SkillPackageUploadGetRateLimited") assert.match(block, /Retry-After:[\s\S]*required: true[\s\S]*pattern: '\^\[1-9\]\[0-9\]\{0,4\}\$'/u)
+    if (name === "SkillPackageUploadGetRateLimited") assert.match(block, /Retry-After:[\s\S]*required: false[\s\S]*pattern: '\^\[1-9\]\[0-9\]\{0,4\}\$'/u)
   }
 })
 

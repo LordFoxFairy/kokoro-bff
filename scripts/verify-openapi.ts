@@ -533,13 +533,13 @@ function skillPackageUploadGetContractErrors(
   if (JSON.stringify(actualStatuses) !== JSON.stringify(expectedStatuses)) errors.push("getSkillPackageUpload status set drifted")
   const responseRefs = new Map([
     ["400", ["SkillPackageUploadGetBadRequest", "invalid_skill_request"]],
-    ["401", ["SkillPackageUploadGetUnauthorized", "service_auth_failed, session_authentication_required, session_invalid"]],
-    ["403", ["SkillPackageUploadGetForbidden", "session_forbidden, product_tenant_not_configured, product_tenant_forbidden"]],
+    ["401", ["SkillPackageUploadGetUnauthorized", "session_authentication_required, session_invalid"]],
+    ["403", ["SkillPackageUploadGetForbidden", "service_auth_failed, session_forbidden, product_tenant_forbidden"]],
     ["404", ["SkillPackageUploadGetNotFound", "skill_not_found"]],
     ["412", ["SkillPackageUploadGetPreconditionFailed", "skill_precondition_failed"]],
     ["429", ["SkillPackageUploadGetRateLimited", "session_rate_limited, skill_rate_limited"]],
     ["502", ["SkillPackageUploadGetBadGateway", "skill_response_invalid"]],
-    ["503", ["SkillPackageUploadGetUnavailable", "iam_admission_unavailable, skill_dependency_unavailable"]],
+    ["503", ["SkillPackageUploadGetUnavailable", "product_tenant_not_configured, iam_admission_unavailable, skill_dependency_unavailable"]],
   ])
   for (const [status, [component, codes]] of responseRefs) {
     if (!operation.text.includes(`'${status}': { $ref: '#/components/responses/${component}' }`))
@@ -555,7 +555,7 @@ function skillPackageUploadGetContractErrors(
       if (!block.includes(fragment)) errors.push(`${component} (${status}) must define ${fragment}`)
   }
   const rateLimited = responses.get("SkillPackageUploadGetRateLimited")?.text ?? ""
-  for (const fragment of ["Retry-After:", "required: true", "pattern: '^[1-9][0-9]{0,4}$'"])
+  for (const fragment of ["Retry-After:", "required: false", "pattern: '^[1-9][0-9]{0,4}$'"])
     if (!rateLimited.includes(fragment)) errors.push(`SkillPackageUploadGetRateLimited must define ${fragment}`)
   const parameter = parameters.get("SkillPackageUploadSkillId")?.text ?? ""
   for (const fragment of ["name: skill_id", "in: path", "required: true", "pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$'"])
@@ -592,7 +592,7 @@ function skillPackageUploadGetContractErrors(
     ...[...responseRefs.values()].map(([name]) => responses.get(name)?.text ?? ""),
   ].join("\u0000")
   const frozenDigest = createHash("sha256").update(frozenSource).digest("hex")
-  if (frozenDigest !== "8afe7a679d85954ca059d411be35766a542cae72a602afb49d405e16a84d1250")
+  if (frozenDigest !== "7b204e1accd902837c5ba8c1d6f5cdc6c08f24fe72a402993f78f850169ff135")
     errors.push(`getSkillPackageUpload canonical contract digest drifted: ${frozenDigest}`)
   return errors
 }

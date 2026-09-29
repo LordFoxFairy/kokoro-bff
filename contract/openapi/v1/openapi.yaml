@@ -5054,7 +5054,7 @@ components:
                   error:
                     type: object
                     properties:
-                      code: { type: string, enum: [service_auth_failed, session_authentication_required, session_invalid] }
+                      code: { type: string, enum: [session_authentication_required, session_invalid] }
     SkillPackageUploadGetForbidden:
       description: Current Product identity is forbidden
       headers:
@@ -5074,7 +5074,7 @@ components:
                   error:
                     type: object
                     properties:
-                      code: { type: string, enum: [session_forbidden, product_tenant_not_configured, product_tenant_forbidden] }
+                      code: { type: string, enum: [service_auth_failed, session_forbidden, product_tenant_forbidden] }
     SkillPackageUploadGetNotFound:
       description: Skill is absent or invisible to this tenant or owner
       headers:
@@ -5125,8 +5125,8 @@ components:
           description: Prevent storage of Skill package state
           schema: { type: string, const: no-store }
         Retry-After:
-          description: Bounded delay in seconds before retrying
-          required: true
+          description: Optional bounded delay in seconds before retrying; malformed or absent IAM headers are not forwarded
+          required: false
           schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
       content:
         application/json:
@@ -5178,7 +5178,7 @@ components:
                   error:
                     type: object
                     properties:
-                      code: { type: string, enum: [iam_admission_unavailable, skill_dependency_unavailable] }
+                      code: { type: string, enum: [product_tenant_not_configured, iam_admission_unavailable, skill_dependency_unavailable] }
     SkillDraftBadRequest:
       description: Invalid strict body or Idempotency-Key
       headers:
