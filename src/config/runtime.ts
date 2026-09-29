@@ -75,6 +75,7 @@ export type BffConfig = {
     secureCookies: boolean
   }>
   storage?: Readonly<{ baseUrl: string; secret: string; objectOrigin: string }>
+  storageObjectOrigin?: string | null
   sharedSecret: string | null
   upstreamSecret: string | null
   upstreamTimeoutMs: number
@@ -345,10 +346,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
   const storageBase = optionalOrigin(env.KOKORO_STORAGE_RPC_BASE_URL, "KOKORO_STORAGE_RPC_BASE_URL")
   const storageOrigin = optionalOrigin(env.KOKORO_STORAGE_OBJECT_ORIGIN, "KOKORO_STORAGE_OBJECT_ORIGIN")
   const storageSecret = env.KOKORO_BFF_STORAGE_SECRET?.trim() || null
-  if (
-    [storageBase, storageOrigin, storageSecret].some((value) => value !== null) &&
-    [storageBase, storageOrigin, storageSecret].some((value) => value === null)
-  )
+  if ((storageBase === null) !== (storageSecret === null) || (storageBase !== null && storageOrigin === null))
     throw new Error("Storage requires base URL, object origin and independent BFF Storage secret")
   if (storageSecret !== null && !/^[\x21-\x7e]+$/u.test(storageSecret)) throw new Error("Storage secret must be a visible ASCII header value")
   const relay = iamRelayConfig(env)
@@ -373,6 +371,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
     ...(storageBase !== null && storageOrigin !== null && storageSecret !== null
       ? { storage: { baseUrl: storageBase, objectOrigin: storageOrigin, secret: storageSecret } }
       : {}),
+    storageObjectOrigin: storageOrigin,
     sharedSecret,
     upstreamSecret: env.KOKORO_INTERNAL_SECRET_BFF?.trim() || null,
     upstreamTimeoutMs,

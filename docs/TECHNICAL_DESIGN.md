@@ -1,5 +1,11 @@
 # kokoro-bff 技术设计
 
+## W3 Begin runtime 当前候选（2026-09-29；默认关闭）
+
+在已 pin 的 owner `263a28f` inactive v4/command digest 3.0.0 上，本仓以具名 `src/http/routes/begin-skill-package-upload.ts` 承接同一路径 POST，GET 继续独立只读；当前 IAM admission 始终在业务路由/Platform socket 前。输入及稳定 command ID 在 `src/http/begin-skill-package-input.ts`，owner JCS/SHA-256 投影在既有 Platform client 邻近的独立 projector，生成 Connect 只由 `CatalogConnectClient` 使用。复用原 `KOKORO_SKILL_DRAFT_CANDIDATE_ENABLED` loopback 默认关闭开关，不经旧 Capability 或 generic BFF mutation receipt。相同 key 的命令 ID 绑定 trusted tenant/user/skill；body 和 replace presence 改变 digest，由 Platform receipt 决定冲突/当前 pending 重签；每次 replay 仍先 IAM。
+
+`KOKORO_STORAGE_OBJECT_ORIGIN` 可独立配置为唯一批准 ObjectStore public origin，不强制 BFF Storage RPC URL/secret；未配置时仅 Begin fail closed，CreateDraft/Get 不变。Begin 只转发经过 origin、HTTPS（隔离 loopback HTTP 例外）、无 userinfo/fragment、PUT、精确 `content-type: application/zip`、未来 ≤900 秒 expiry 校验的 owner transfer reference，保留原签名 URL/headers，不缓存、不记录敏感 query、不代理 ZIP 字节。BFF Skill SQL/Redis/receipt 不变。直接 HTTP、owner 投影向量与 Node22 静态门是本仓代码证据；Root 真 IAM/Storage/MinIO/浏览器 CORS 组合与 public activation 仍另验。下方文档门“尚无 Begin route”只记录当时基线。
+
 ## W3 Begin 文档门当前态与目标态（2026-09-29；仅机器候选）
 
 **当前态。** BFF `f0aaf386bc7f7ca81ff4b996b84d29f0ce05e02f` 已精确 pin Platform owner `263a28f1e55745bd1829a61f68228d775751adbc` 的两份 Proto 和完整 inactive v4 artifact；默认关闭的 CreateDraft 与 Get package-upload 有运行路由，Begin 没有 BFF route、client 方法或浏览器正式入口。Root 已在隔离真 IAM/BFF/Platform/Storage 组合验证 Get 的 `none`/发布后 412/撤权 401，但那条链的 Begin 来自 owner CLI，不构成 public Begin。下方 Get/W1E 章节按当时阶段保留，不覆盖本节。

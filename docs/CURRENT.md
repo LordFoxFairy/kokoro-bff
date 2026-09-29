@@ -3,6 +3,10 @@
 状态：2026-09-29
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。
 
+## W3-BFF-SKILL-BEGIN-RUNTIME：默认关闭运行候选
+
+本片基线 BFF `145c422c052b7409b960deeeb2d185285492e4e8`，owner pin 仍为 Platform `263a28f` inactive v4/command digest 3.0.0。新增同 Get path 的 POST Begin 具名路由、strict 输入/255 字节 UTF-8 边界、稳定命令身份及 owner 14 条投影向量相符的 JCS/SHA-256、generated Connect client 方法；当前 IAM/固定 tenant 先于 Platform。`KOKORO_STORAGE_OBJECT_ORIGIN` 可单独提供签名 PUT public origin，不启用 Storage RPC secret；缺失时 Begin 503、CreateDraft/Get 不回退。201 仅在校验完整 URL/origin/method/headers/expiry 与 attempt/epoch 后发 strict `{data}`，同键 replay 不走 BFF receipt。BFF SQL/Redis/签名缓存零变化，旧 Capability 不承接包命令。这里是本仓 HTTP/contract/静态代码门，Root 真 owner 组合、Web 真 Chromium/CORS/PUT 与正式 public activation 尚待验；下方“Begin 无 route”是文档门当时事实。
+
 ## W3-BFF-SKILL-BEGIN-DOC-GATE：仅未激活机器候选
 
 本片基线 BFF `f0aaf386bc7f7ca81ff4b996b84d29f0ce05e02f`。唯一 public OpenAPI 增 user-only `POST /v1/skills/{skill_id}/package-upload` 的 Begin 候选与严格请求/201 完整 PUT TransferReference/状态专属错误；owner `263a28f` inactive v4 pin 原字节和其 `command_digest_version=3.0.0` 均不改变。BFF **没有 Begin 运行路由、Connect 调用或浏览器正式入口**，CreateDraft/Get 仍默认关闭。Root 既有真组合仅验证 Get none/发布后 412/撤权 401，先前 Begin 是 Platform owner CLI，不冒称本候选 public 已验。三面文档同意 Web 同源控制面→BFF→Platform、浏览器向批准 ObjectStore public origin 直 PUT；后续 BFF 运行时做 signed URL/method/headers/expiry 严格验证，真 Chromium/CORS 和 Complete/Validate/Publish 串行。BFF Skill/Upload SQL、Redis、receipt 与签名缓存零变化；本节机器/文档门验证结果以本片提交报告为准。下方 Get/DOC-GATE/W1E 均为彼时阶段事实。

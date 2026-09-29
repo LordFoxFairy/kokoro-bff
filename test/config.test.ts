@@ -156,6 +156,14 @@ describe("kokoro-bff optional Agent configuration", () => {
     assert.equal("storage" in config.upstreams, false)
   })
 
+  it("allows an approved Skill Begin object origin without Storage RPC credentials", () => {
+    const config = loadConfig({ ...runtimeEnv, KOKORO_DOMAIN: "dev.kokoro.localhost", KOKORO_STORAGE_OBJECT_ORIGIN: "https://objects.example.test" })
+    assert.equal(config.storageObjectOrigin, "https://objects.example.test")
+    assert.equal(config.storage, undefined)
+    assert.throws(() => loadConfig({ ...runtimeEnv, KOKORO_STORAGE_RPC_BASE_URL: "http://127.0.0.1:8085" }), /Storage requires/u)
+    assert.throws(() => loadConfig({ ...runtimeEnv, KOKORO_BFF_STORAGE_SECRET: "secret" }), /Storage requires/u)
+  })
+
   it("loads AG-UI replay and stream budgets from the environment", () => {
     const config = loadConfig({
       ...runtimeEnv,

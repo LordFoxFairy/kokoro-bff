@@ -1,5 +1,9 @@
 # kokoro-bff API contract policy
 
+## W3 Begin runtime 当前契约（2026-09-29；public 未激活）
+
+已批准的唯一 OpenAPI `beginSkillPackageUpload` 候选现接到 BFF 默认关闭运行路由，owner v4 inactive 与文档门字段/状态码不变。POST 每次先 current IAM user/固定 tenant，再以独立 catalog workload token 调 Platform；单个可打印 Idempotency-Key 与 strict JSON 文件事实形成稳定 command ID 和 owner 3.0.0 JCS digest，缺失/null replace 不等价。UTF-8 文件名按字节 ≤255 校验（255 接受、256 拒绝）。201 只含严格 `{data}` 的当前 attempt/epoch/upload 与原样短期 PUT transfer reference；失败按本机契约各状态专属 `{error}`，成功/错误均 `x-request-id`/no-store。同键 replay 不走 BFF receipt，仍由 Platform 当前 owner/attempt/Storage pending 决定是否重签；BFF 拒不受批准 origin、非 PUT/签名头/expiry 的 owner response 为 502。Begin 缺 object origin 只返回 503，不影响 CreateDraft/Get。后续 Root 真组合及浏览器 CORS/PUT 验收前不称 public 激活；下方文档门“无运行路由”为历史基线。
+
 ## W3 Begin public 候选契约（2026-09-29；无运行路由）
 
 当前 BFF 已 pin Platform owner `263a28f1e55745bd1829a61f68228d775751adbc` 完整 inactive v4 artifact/provenance，aggregate `902f8f2c2fbeb95a441820c1cf16b0a9c793eadac7106f9fcd5e41e3878b7f79`；CreateDraft 与 Get 为默认关闭运行候选，**Begin 仅新增唯一 public OpenAPI 机器候选**，没有 BFF Connect 调用或已激活产品。`POST /v1/skills/{skill_id}/package-upload`、`beginSkillPackageUpload`、`product.skill.begin_package_upload`、`x-kokoro-idempotency: required`；路径复用 Get 的 typed Skill ID。单个有效 Idempotency-Key 必填，Content-Type 固定 JSON；strict body 仅 `filename`（非空、非 `.`/`..`、无分隔/控制、无首尾空白、UTF-8≤255 bytes）、`mime_type=application/zip`、整数 `size_bytes=1..33554432`、小写 64 hex `content_sha256`、可选非空 typed `replaces_attempt_id`（缺失与 null 不等价）。不从公开输入接收 tenant/owner/subject/command、upload/asset 或 URL。

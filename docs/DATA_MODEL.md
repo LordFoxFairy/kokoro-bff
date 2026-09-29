@@ -1,5 +1,9 @@
 # kokoro-bff data model
 
+## W3 Begin runtime：无新增 BFF Skill 数据事实（2026-09-29）
+
+Begin 已有默认关闭运行候选，但本仓 canonical `database/schema.sql`、Redis、Skill/Upload receipt 与签名缓存均未增；稳定 command ID/owner digest 仅随当前调用发 Platform，由其持久 receipt/attempt CAS 和 Storage Upload 承接重复/冲突与签名重签。BFF 不读取其他 owner SQL、不保存 URL/query/headers、也不代理 ZIP 字节。每次 HTTP 重放仍先 IAM，撤权不靠本地 receipt 放行；真 owner 组合及浏览器数据面后续由 Root/Web 独立验。下方文档门“只有机器候选”按原切片基线理解。
+
 ## W3 Begin 文档门：零 BFF Skill/Upload 数据事实（2026-09-29）
 
 BFF 当前 canonical `database/schema.sql` 与 Redis 没有 Skill 包状态、Storage Upload 或专用 Skill receipt；本片只有 inactive public Begin OpenAPI 候选，不改 schema、Prisma、迁移、索引、缓存或后台任务。未来 Begin 也不走 BFF generic `bff_idempotency_receipt`：BFF 的稳定 command ID/owner digest 传给 Platform，Platform Skill current attempt/epoch/version + durable command receipt 是唯一状态/幂等 owner，Storage v2 持有 Upload、对象与扫描；BFF 不跨 owner SQL/JOIN、不存签名 URL/headers/expiry、不把浏览器 ZIP 字节落地。每次包括 replay 都须当次 IAM session 与 Platform 当前 owner/attempt 授权，不能用本仓缓存 result 绕过撤权或过期。首次/显式替换、旧 attempt CAS、外部 Storage ACK/COMMIT unknown 与 orphan retention 均属 Platform/Storage owner 边界；短期 PUT 的浏览器 CORS/批准 origin 验证留后续真组合。下方 Get/W1E 历史段落按各自基线理解，不覆盖本节。

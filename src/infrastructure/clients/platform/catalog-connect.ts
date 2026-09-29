@@ -3,6 +3,7 @@ import { createClient } from "@connectrpc/connect"
 import { createConnectTransport } from "@connectrpc/connect-node"
 import { CommandIdentitySchema } from "../../../generated/platform-connect/kokoro/common/v1/common_pb.js"
 import {
+  BeginSkillPackageUploadRequestSchema,
   CreateSkillDraftRequestSchema,
   GetSkillPackageUploadRequestSchema,
   OwnerScopeSchema,
@@ -58,6 +59,43 @@ export class CatalogConnectClient {
         requestId: input.requestId,
         skillId: create(SkillIdSchema, { value: input.skillId }),
         productContext: create(ProductCatalogContextSchema, { subjectId: input.user, ownerScope: create(OwnerScopeSchema, { kind: "user", id: input.user }) }),
+      }),
+      {
+        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(this.timeoutMs)]) : AbortSignal.timeout(this.timeoutMs),
+        headers: { authorization: `Bearer ${token}`, "x-tenant-ref": input.tenant },
+        timeoutMs: this.timeoutMs,
+      },
+    )
+  }
+
+  async beginPackageUpload(
+    input: {
+      requestId: string
+      commandId: string
+      digest: string
+      tenant: string
+      user: string
+      skillId: string
+      filename: string
+      mimeType: "application/zip"
+      sizeBytes: number
+      contentSha256: string
+      replacesAttemptId?: string
+    },
+    signal?: AbortSignal,
+  ) {
+    const token = await this.tokens.get(input.tenant, signal)
+    return this.#client.beginSkillPackageUpload(
+      create(BeginSkillPackageUploadRequestSchema, {
+        requestId: input.requestId,
+        command: create(CommandIdentitySchema, { commandId: input.commandId, requestDigest: input.digest }),
+        skillId: create(SkillIdSchema, { value: input.skillId }),
+        productContext: create(ProductCatalogContextSchema, { subjectId: input.user, ownerScope: create(OwnerScopeSchema, { kind: "user", id: input.user }) }),
+        filename: input.filename,
+        mimeType: input.mimeType,
+        sizeBytes: BigInt(input.sizeBytes),
+        contentSha256: input.contentSha256,
+        ...(input.replacesAttemptId === undefined ? {} : { replacesAttemptId: input.replacesAttemptId }),
       }),
       {
         signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(this.timeoutMs)]) : AbortSignal.timeout(this.timeoutMs),
