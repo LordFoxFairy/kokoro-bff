@@ -2236,6 +2236,48 @@ paths:
         '429': { $ref: '#/components/responses/SkillPackageCompleteRateLimited' }
         '502': { $ref: '#/components/responses/SkillPackageCompleteBadGateway' }
         '503': { $ref: '#/components/responses/SkillPackageCompleteUnavailable' }
+  /v1/skills/{skill_id}/validate:
+    post:
+      tags: [Skills]
+      operationId: validateSkillDraft
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: product.skill.validate_draft
+      summary: Validate the current uploaded ZIP package of a user-owned draft Skill
+      description: Inactive document-only Product candidate pinned to inactive Platform v4 owner commit 263a28f1e55745bd1829a61f68228d775751adbc and artifact aggregate SHA-256 902f8f2c2fbeb95a441820c1cf16b0a9c793eadac7106f9fcd5e41e3878b7f79; no BFF Validate runtime route exists yet. The required attempt_id is an untrusted current-attempt selector, not authority; owner v4 Proto tag 7 and command digest 3.0.0 bind it. Every request including same-key replay first requires current IAM user admission, and Platform checks current tenant/user owner/draft/attempt, complete package binding, fresh Storage CLEAN/object health and ZIP V1 manifest. Scan clean or Complete uploaded does not imply validated; no caller asset/hash/size/manifest is accepted. Same-key unknown ACK recovery goes to the owner receipt with current admission, never a BFF receipt.
+      parameters:
+        - $ref: '#/components/parameters/SkillPackageUploadSkillId'
+        - $ref: '#/components/parameters/SkillValidateIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ValidateSkillDraftRequest' }
+      responses:
+        '200':
+          description: Current draft package validated or durably replayed; not published
+          headers:
+            x-request-id:
+              description: Correlation identifier for this request
+              schema: { type: string, minLength: 1, maxLength: 128 }
+            Cache-Control:
+              description: Never cache a Skill validation result
+              schema: { type: string, const: no-store }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ValidateSkillDraftResponse' }
+        '400': { $ref: '#/components/responses/SkillValidateBadRequest' }
+        '401': { $ref: '#/components/responses/SkillValidateUnauthorized' }
+        '403': { $ref: '#/components/responses/SkillValidateForbidden' }
+        '404': { $ref: '#/components/responses/SkillValidateNotFound' }
+        '409': { $ref: '#/components/responses/SkillValidateConflict' }
+        '412': { $ref: '#/components/responses/SkillValidatePreconditionFailed' }
+        '413': { $ref: '#/components/responses/SkillValidatePayloadTooLarge' }
+        '429': { $ref: '#/components/responses/SkillValidateRateLimited' }
+        '502': { $ref: '#/components/responses/SkillValidateBadGateway' }
+        '503': { $ref: '#/components/responses/SkillValidateUnavailable' }
   /v1/skills/{name}/revisions:
     parameters:
       - $ref: '#/components/parameters/SkillNameOnly'
@@ -3495,6 +3537,16 @@ components:
         minLength: 1
         maxLength: 128
         pattern: '^[\x21-\x2B\x2D-\x7E]+$'
+    SkillValidateIdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: One printable 1–128 character value, never trimmed or comma-joined; scoped to validation operation, admitted tenant/user and skill_id.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+        pattern: '^[\x21-\x2B\x2D-\x7E]+$'
     IdempotencyKey:
       name: Idempotency-Key
       in: header
@@ -3727,6 +3779,45 @@ components:
       additionalProperties: false
       properties:
         error: { $ref: '#/components/schemas/SkillPackageCompleteErrorDetail' }
+    ValidateSkillDraftRequest:
+      type: object
+      required: [attempt_id]
+      additionalProperties: false
+      properties:
+        attempt_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+    SkillValidateResource:
+      type: object
+      required: [skill_id, series_id, valid, content_digest, manifest_identity, replayed]
+      additionalProperties: false
+      properties:
+        skill_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        series_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        valid: { type: boolean, const: true }
+        content_digest: { type: string, pattern: '^[a-f0-9]{64}$' }
+        manifest_identity: { type: string, pattern: '^zip-v1:sha256:[a-f0-9]{64}$' }
+        replayed: { type: boolean }
+    ValidateSkillDraftResponse:
+      type: object
+      required: [data]
+      additionalProperties: false
+      properties:
+        data: { $ref: '#/components/schemas/SkillValidateResource' }
+    SkillValidateErrorDetail:
+      type: object
+      required: [code, message, retryable]
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          enum: [invalid_skill_request, idempotency_key_required, invalid_idempotency_key, request_body_too_large, session_authentication_required, session_invalid, service_auth_failed, session_forbidden, product_tenant_forbidden, product_tenant_not_configured, session_rate_limited, skill_rate_limited, skill_not_found, skill_idempotency_conflict, skill_command_in_progress, skill_precondition_failed, skill_response_invalid, iam_admission_unavailable, skill_dependency_unavailable]
+        message: { type: string, minLength: 1 }
+        retryable: { type: boolean }
+    SkillValidateErrorResponse:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error: { $ref: '#/components/schemas/SkillValidateErrorDetail' }
     PersonalFileUploadResponse:
       type: object
       additionalProperties: false
@@ -5793,6 +5884,210 @@ components:
           schema:
             allOf:
               - $ref: '#/components/schemas/SkillPackageCompleteErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [product_tenant_not_configured, iam_admission_unavailable, skill_dependency_unavailable] }
+    SkillValidateBadRequest:
+      description: Invalid strict request or Idempotency-Key
+      headers:
+        x-request-id:
+          description: Correlation identifier for this request
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          description: Never cache a Skill package command result
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/SkillValidateErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [invalid_skill_request, idempotency_key_required, invalid_idempotency_key] }
+    SkillValidateUnauthorized:
+      description: Current IAM user session authentication failed
+      headers:
+        x-request-id:
+          description: Correlation identifier for this request
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          description: Never cache a Skill package command result
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/SkillValidateErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [session_authentication_required, session_invalid] }
+    SkillValidateForbidden:
+      description: Service or current Product identity is forbidden
+      headers:
+        x-request-id:
+          description: Correlation identifier for this request
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          description: Never cache a Skill package command result
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/SkillValidateErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [service_auth_failed, session_forbidden, product_tenant_forbidden] }
+    SkillValidateNotFound:
+      description: Skill is absent or invisible to this tenant or owner
+      headers:
+        x-request-id:
+          description: Correlation identifier for this request
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          description: Never cache a Skill package command result
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/SkillValidateErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [skill_not_found] }
+    SkillValidateConflict:
+      description: Command identity conflicts or a current command is in progress
+      headers:
+        x-request-id:
+          description: Correlation identifier for this request
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          description: Never cache a Skill package command result
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/SkillValidateErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [skill_idempotency_conflict, skill_command_in_progress] }
+    SkillValidatePreconditionFailed:
+      description: Current draft, attempt, scan or ZIP V1 manifest does not satisfy validation
+      headers:
+        x-request-id:
+          description: Correlation identifier for this request
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          description: Never cache a Skill package command result
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/SkillValidateErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [skill_precondition_failed] }
+    SkillValidatePayloadTooLarge:
+      description: The bounded JSON command body is too large
+      headers:
+        x-request-id:
+          description: Correlation identifier for this request
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          description: Never cache a Skill package command result
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/SkillValidateErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [request_body_too_large] }
+    SkillValidateRateLimited:
+      description: IAM or Platform rate limited the request
+      headers:
+        x-request-id:
+          description: Correlation identifier for this request
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          description: Never cache a Skill package command result
+          schema: { type: string, const: no-store }
+        Retry-After:
+          description: Optional bounded delay in seconds before retrying; absent or malformed upstream values are not forwarded
+          required: false
+          schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/SkillValidateErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [session_rate_limited, skill_rate_limited] }
+    SkillValidateBadGateway:
+      description: Platform returned an invalid pinned validation response
+      headers:
+        x-request-id:
+          description: Correlation identifier for this request
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          description: Never cache a Skill package command result
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/SkillValidateErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [skill_response_invalid] }
+    SkillValidateUnavailable:
+      description: Current IAM or Platform dependency is unavailable
+      headers:
+        x-request-id:
+          description: Correlation identifier for this request
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          description: Never cache a Skill package command result
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/SkillValidateErrorResponse'
               - type: object
                 properties:
                   error:

@@ -282,6 +282,8 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
         "SkillPackageBeginErrorResponse",
         "CompleteSkillPackageUploadResponse",
         "SkillPackageCompleteErrorResponse",
+        "ValidateSkillDraftResponse",
+        "SkillValidateErrorResponse",
       ].includes(block.name)
     )
       continue
@@ -313,6 +315,7 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
       operationId === "beginSkillPackageUpload" && operation.method === "POST" && operation.path === "/v1/skills/{skill_id}/package-upload"
     const isCompleteSkillPackageUpload =
       operationId === "completeSkillPackageUpload" && operation.method === "POST" && operation.path === "/v1/skills/{skill_id}/package-upload/complete"
+    const isValidateSkillDraft = operationId === "validateSkillDraft" && operation.method === "POST" && operation.path === "/v1/skills/{skill_id}/validate"
     if (
       !isGetSkillPackageUpload &&
       /#\/components\/(?:schemas\/(?:GetSkillPackageUploadResponse|SkillPackageUploadGetErrorResponse)|responses\/SkillPackageUploadGet[A-Za-z]*)/u.test(
@@ -334,6 +337,13 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
       )
     )
       errors.push(`${operation.method} ${operation.path} must not reference CompleteSkillPackageUpload strict envelope components`)
+    if (
+      !isValidateSkillDraft &&
+      /#\/components\/(?:schemas\/(?:ValidateSkillDraft(?:Request|Response)|SkillValidate[A-Za-z]*)|responses\/SkillValidate[A-Za-z]*)/u.test(
+        operation.text.split(/^components:\s*$/mu)[0] ?? "",
+      )
+    )
+      errors.push(`${operation.method} ${operation.path} must not reference ValidateSkillDraft strict envelope components`)
     const responses = collectResponseBlocks(operation)
     for (const [status, response] of responses) {
       if (status === "default") continue
@@ -356,6 +366,7 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
           !isGetSkillPackageUpload &&
           !isBeginSkillPackageUpload &&
           !isCompleteSkillPackageUpload &&
+          !isValidateSkillDraft &&
           !response.includes("#/components/schemas/ErrorEnvelope")
         ) {
           errors.push(`${operation.method} ${operation.path} ${status} must use ErrorEnvelope`)
@@ -368,7 +379,8 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
           isCreateSkillDraft ||
           (isGetSkillPackageUpload && match[1].startsWith("SkillPackageUploadGet")) ||
           (isBeginSkillPackageUpload && match[1].startsWith("SkillPackageBegin")) ||
-          (isCompleteSkillPackageUpload && match[1].startsWith("SkillPackageComplete"))
+          (isCompleteSkillPackageUpload && match[1].startsWith("SkillPackageComplete")) ||
+          (isValidateSkillDraft && match[1].startsWith("SkillValidate"))
         )
           continue
         errors.push(`${operation.method} ${operation.path} ${status} references non-error response ${match[1]}`)
@@ -419,7 +431,9 @@ function idempotencyErrors(parameters: Map<string, NamedBlock>, operations: Oper
           ? operation.text.includes("#/components/parameters/SkillPackageBeginIdempotencyKey")
           : operationId === "completeSkillPackageUpload" && operation.method === "POST" && operation.path === "/v1/skills/{skill_id}/package-upload/complete"
             ? operation.text.includes("#/components/parameters/SkillPackageCompleteIdempotencyKey")
-            : operation.text.includes("#/components/parameters/IdempotencyKey")
+            : operationId === "validateSkillDraft" && operation.method === "POST" && operation.path === "/v1/skills/{skill_id}/validate"
+              ? operation.text.includes("#/components/parameters/SkillValidateIdempotencyKey")
+              : operation.text.includes("#/components/parameters/IdempotencyKey")
     if (declared !== expected) continue
     if (expected === "required" && !hasParameter) {
       errors.push(`${operation.method} ${operation.path} (${operationId}) must reference Idempotency-Key`)
@@ -680,6 +694,129 @@ function skillPackageBeginContractErrors(
   // Begin description now reflects the real default-closed route; request, response and error wire semantics are unchanged.
   if (frozenDigest !== "9a42147d4c1733e46effc4d511ad53b86e7cf5bd0a07c5fb1bc0d096481c1337")
     errors.push(`beginSkillPackageUpload canonical contract digest drifted: ${frozenDigest}`)
+  return errors
+}
+
+function skillValidateContractErrors(
+  parameters: Map<string, NamedBlock>,
+  schemas: Map<string, NamedBlock>,
+  operations: OperationBlock[],
+  responses: Map<string, NamedBlock>,
+): string[] {
+  const errors: string[] = []
+  const matches = operations.filter(({ fields }) => fields.get("operationId") === "validateSkillDraft")
+  if (matches.length !== 1) return ["validateSkillDraft must occur exactly once"]
+  const operation = matches[0]
+  if (operation.method !== "POST" || operation.path !== "/v1/skills/{skill_id}/validate")
+    errors.push("validateSkillDraft must remain the exact public POST path")
+  for (const fragment of [
+    "x-kokoro-owner: kokoro-bff",
+    "x-kokoro-visibility: public",
+    "x-kokoro-stability: beta",
+    "x-kokoro-idempotency: required",
+    "x-kokoro-permission: product.skill.validate_draft",
+    "#/components/parameters/SkillPackageUploadSkillId",
+    "#/components/parameters/SkillValidateIdempotencyKey",
+    "#/components/schemas/ValidateSkillDraftRequest",
+    "#/components/schemas/ValidateSkillDraftResponse",
+    "x-request-id:",
+    "Cache-Control:",
+    "const: no-store",
+  ])
+    if (!operation.text.includes(fragment)) errors.push(`validateSkillDraft must define ${fragment}`)
+  const responseRefs = new Map([
+    ["400", ["SkillValidateBadRequest", "invalid_skill_request, idempotency_key_required, invalid_idempotency_key"]],
+    ["401", ["SkillValidateUnauthorized", "session_authentication_required, session_invalid"]],
+    ["403", ["SkillValidateForbidden", "service_auth_failed, session_forbidden, product_tenant_forbidden"]],
+    ["404", ["SkillValidateNotFound", "skill_not_found"]],
+    ["409", ["SkillValidateConflict", "skill_idempotency_conflict, skill_command_in_progress"]],
+    ["412", ["SkillValidatePreconditionFailed", "skill_precondition_failed"]],
+    ["413", ["SkillValidatePayloadTooLarge", "request_body_too_large"]],
+    ["429", ["SkillValidateRateLimited", "session_rate_limited, skill_rate_limited"]],
+    ["502", ["SkillValidateBadGateway", "skill_response_invalid"]],
+    ["503", ["SkillValidateUnavailable", "product_tenant_not_configured, iam_admission_unavailable, skill_dependency_unavailable"]],
+  ])
+  if (JSON.stringify([...collectResponseBlocks(operation).keys()]) !== JSON.stringify(["200", ...responseRefs.keys()]))
+    errors.push("validateSkillDraft status set drifted")
+  for (const [status, [component, codes]] of responseRefs) {
+    if (!operation.text.includes(`'${status}': { $ref: '#/components/responses/${component}' }`))
+      errors.push(`validateSkillDraft ${status} must reference ${component}`)
+    const block = responses.get(component)?.text ?? ""
+    for (const fragment of [
+      "x-request-id:",
+      "Cache-Control:",
+      "const: no-store",
+      "#/components/schemas/SkillValidateErrorResponse",
+      `code: { type: string, enum: [${codes}] }`,
+    ])
+      if (!block.includes(fragment)) errors.push(`${component} (${status}) must define ${fragment}`)
+  }
+  const rateLimited = responses.get("SkillValidateRateLimited")?.text ?? ""
+  for (const fragment of ["Retry-After:", "required: false", "pattern: '^[1-9][0-9]{0,4}$'"])
+    if (!rateLimited.includes(fragment)) errors.push(`SkillValidateRateLimited must define ${fragment}`)
+  const key = parameters.get("SkillValidateIdempotencyKey")?.text ?? ""
+  for (const fragment of ["name: Idempotency-Key", "in: header", "required: true", "maxLength: 128", "pattern: '^[\\x21-\\x2B\\x2D-\\x7E]+$'"])
+    if (!key.includes(fragment)) errors.push(`SkillValidateIdempotencyKey must define ${fragment}`)
+  const request = schemas.get("ValidateSkillDraftRequest")?.text ?? ""
+  for (const fragment of [
+    "required: [attempt_id]",
+    "additionalProperties: false",
+    "attempt_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }",
+  ])
+    if (!request.includes(fragment)) errors.push(`ValidateSkillDraftRequest must define ${fragment}`)
+  const resource = schemas.get("SkillValidateResource")?.text ?? ""
+  for (const fragment of [
+    "required: [skill_id, series_id, valid, content_digest, manifest_identity, replayed]",
+    "additionalProperties: false",
+    "skill_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }",
+    "series_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }",
+    "valid: { type: boolean, const: true }",
+    "content_digest: { type: string, pattern: '^[a-f0-9]{64}$' }",
+    "manifest_identity: { type: string, pattern: '^zip-v1:sha256:[a-f0-9]{64}$' }",
+    "replayed: { type: boolean }",
+  ])
+    if (!resource.includes(fragment)) errors.push(`SkillValidateResource must define ${fragment}`)
+  for (const forbidden of ["asset_id", "upload_id", "size_bytes", "transfer_reference", "signed_url"])
+    if (request.includes(forbidden) || resource.includes(forbidden)) errors.push(`Validate public wire must exclude ${forbidden}`)
+  for (const [name, required, ref] of [
+    ["ValidateSkillDraftResponse", "data", "SkillValidateResource"],
+    ["SkillValidateErrorResponse", "error", "SkillValidateErrorDetail"],
+  ]) {
+    const block = schemas.get(name)
+    if (
+      !block ||
+      JSON.stringify(topLevelRequired(block)) !== JSON.stringify([required]) ||
+      schemaProperties(block).join(",") !== required ||
+      !block.text.includes("additionalProperties: false") ||
+      !block.text.includes(`#/components/schemas/${ref}`)
+    )
+      errors.push(`${name} must remain strict ${required}-only`)
+  }
+  const detail = schemas.get("SkillValidateErrorDetail")?.text ?? ""
+  for (const fragment of [
+    "required: [code, message, retryable]",
+    "additionalProperties: false",
+    "message: { type: string, minLength: 1 }",
+    "retryable: { type: boolean }",
+  ])
+    if (!detail.includes(fragment)) errors.push(`SkillValidateErrorDetail must define ${fragment}`)
+  const frozenNames = [
+    "ValidateSkillDraftRequest",
+    "SkillValidateResource",
+    "ValidateSkillDraftResponse",
+    "SkillValidateErrorDetail",
+    "SkillValidateErrorResponse",
+  ]
+  const frozenSource = [
+    operation.text,
+    key,
+    ...frozenNames.map((name) => schemas.get(name)?.text ?? ""),
+    ...[...responseRefs.values()].map(([name]) => responses.get(name)?.text ?? ""),
+  ].join("\u0000")
+  const frozenDigest = createHash("sha256").update(frozenSource).digest("hex")
+  // Validate remains an inactive document-only candidate; only its exact operation and direct components are exempted.
+  if (frozenDigest !== "48b55b6d095400023a8f66f951fb37bccff156ee7440f8e88e8e4356df5f345c")
+    errors.push(`validateSkillDraft canonical contract digest drifted: ${frozenDigest}`)
   return errors
 }
 
@@ -1021,6 +1158,7 @@ export function inspectBffOpenApi(source: string, baseline: readonly BaselineOpe
     ...skillPackageUploadGetContractErrors(parameters, schemas, operations, responseComponents),
     ...skillPackageBeginContractErrors(parameters, schemas, operations, responseComponents),
     ...skillPackageCompleteContractErrors(parameters, schemas, operations, responseComponents),
+    ...skillValidateContractErrors(parameters, schemas, operations, responseComponents),
     ...protocolErrors(parameters, schemas, operations),
   ]
   return [...new Set(errors)]

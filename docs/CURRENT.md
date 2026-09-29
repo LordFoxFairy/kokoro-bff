@@ -3,6 +3,10 @@
 状态：2026-09-29
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。
 
+## W3-BFF-SKILL-VALIDATE-DOC-GATE：仅未激活机器/文档候选
+
+基线 BFF clean main `1aee402`；唯一 public OpenAPI 新增 user-only Validate 的 strict `attempt_id` 请求、200 valid=true/digest/manifest/series 与状态专属错误，operation inventory/semantic checker/直接 contract test 锁 owner v4 Proto tag 7、command digest `3.0.0` 的 8 条向量和旧 operation 误引。BFF **未新增 Validate route、Connect 方法、projector 或 SQL/receipt**，CreateDraft/Get/Begin/Complete 仍默认关闭；Platform v4 inactive、产品未激活。下方“Complete 只有文档候选”等按各自历史切片理解；旧“Validate 无 body”与 v4 tag 7 冲突，以上述当前机器合同为准。Root 真 IAM/Storage/ZIP Validate、撤权重放、Publish public 与 Web Chromium 尚待后续门。
+
 ## W3-BFF-SKILL-COMPLETE-RUNTIME：默认关闭运行候选
 
 基线 BFF clean main `457472d`；已在既有 Skills candidate flag 下接入 user-only `/v1/skills/{skill_id}/package-upload/complete`，当前 IAM/fixed tenant/user 每次先于 Platform，且不走旧 Capability。strict 四字段输入、固定 owner v4 command digest `3.0.0` JCS/11 向量与 Connect Complete、稳定 command ID、owner response 的 skill/attempt/upload/hash/asset/epoch/phase/scan 全核后投影 strict 200（不公开 asset_id）；无 BFF SQL/receipt/Storage RPC 或字节代理。直接 HTTP RED 证明原路径缺新路由并无 x-request-id，GREEN 覆盖默认关闭、重放/冲突/撤权、坏 owner、超时/取消和 request ID/no-store。Platform v4 inactive、产品未激活；Root 真 IAM/Storage Complete 与 Web 真 Chromium/CORS/PUT 仍待验。下节“仅机器候选、没有 route”为文档门当时事实。

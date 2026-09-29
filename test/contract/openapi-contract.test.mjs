@@ -371,6 +371,93 @@ test("CompleteSkillPackageUpload semantic gate rejects request, response, status
   }
 })
 
+test("ValidateSkillDraft publishes one inactive user-only attempt-bound command", async () => {
+  const { openapi, baseline } = await readContract()
+  assert.ok(
+    baseline.some(({ method, path, operation_id }) => method === "POST" && path === "/v1/skills/{skill_id}/validate" && operation_id === "validateSkillDraft"),
+  )
+  const operation = openapi.slice(openapi.indexOf("  /v1/skills/{skill_id}/validate:"), openapi.indexOf("  /v1/skills/{name}/revisions:"))
+  for (const fragment of [
+    "operationId: validateSkillDraft",
+    "product.skill.validate_draft",
+    "SkillValidateIdempotencyKey",
+    "ValidateSkillDraftRequest",
+    "ValidateSkillDraftResponse",
+    "'200':",
+    "x-request-id:",
+    "Cache-Control:",
+    "const: no-store",
+  ])
+    assert.ok(operation.includes(fragment), fragment)
+  assert.doesNotMatch(operation, /asset_id|upload_id|signed_url|transfer_reference/u)
+  const request = openapi.slice(openapi.indexOf("    ValidateSkillDraftRequest:"), openapi.indexOf("    SkillValidateResource:"))
+  assert.match(request, /required: \[attempt_id\][\s\S]*additionalProperties: false/u)
+  assert.match(request, /attempt_id: \{ type: string, pattern: '\^\[A-Za-z0-9\]/u)
+  const resource = openapi.slice(openapi.indexOf("    SkillValidateResource:"), openapi.indexOf("    ValidateSkillDraftResponse:"))
+  assert.match(resource, /required: \[skill_id, series_id, valid, content_digest, manifest_identity, replayed\][\s\S]*additionalProperties: false/u)
+  assert.match(resource, /valid: \{ type: boolean, const: true \}/u)
+  assert.match(resource, /manifest_identity: \{ type: string, pattern: '\^zip-v1:sha256:/u)
+  assert.doesNotMatch(resource, /asset_id|upload_id|transfer_reference/u)
+  assert.deepEqual(inspectBffOpenApi(openapi, baseline), [])
+})
+
+test("ValidateSkillDraft pins owner v4 tag 7 and all eight command digest vectors", async () => {
+  const fixture = JSON.parse(await readFile(new URL("vectors/command-projection.json", platformV4Url), "utf8"))
+  const schema = JSON.parse(await readFile(new URL("command-schemas.json", platformV4Url), "utf8"))
+  const vectors = fixture.vectors.filter(({ operation }) => operation === "skill.validate_draft")
+  assert.equal(fixture.artifactVersion, "3.0.0")
+  assert.equal(schema.artifactVersion, "3.0.0")
+  assert.equal(schema.schemas["skill.validate_draft"].properties.command_digest_version.const, "3.0.0")
+  assert.equal(schema.schemas["skill.validate_draft"].properties.fq_method.const, "kokoro.platform.v1.SkillCatalogService/ValidateSkillDraft")
+  assert.deepEqual(schema.schemas["skill.validate_draft"].properties.command.required, ["skill_id", "product_context", "attempt_id"])
+  assert.equal(vectors.length, 8)
+  for (const vector of vectors) {
+    const raw = JSON.parse(Buffer.from(vector.rawBase64, "base64").toString("utf8"))
+    if (vector.expectedError === "none") {
+      assert.equal(raw.command_digest_version, "3.0.0")
+      assert.equal(raw.fq_method, "kokoro.platform.v1.SkillCatalogService/ValidateSkillDraft")
+      const canonical = Buffer.from(vector.canonicalBase64, "base64")
+      assert.equal(createHash("sha256").update(canonical).digest("hex"), vector.sha256)
+      assert.deepEqual(JSON.parse(canonical.toString("utf8")), vector.projection)
+    } else assert.equal(vector.canonicalBase64, undefined)
+  }
+  const proto = await readFile(new URL("../proto/kokoro/platform/v1/platform_runtime.proto", platformV4Url), "utf8")
+  assert.match(proto, /message ValidateSkillDraftRequest \{[\s\S]*?string attempt_id = 7;[\s\S]*?\}/u)
+  const generated = await readFile(new URL("../../src/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.ts", import.meta.url), "utf8")
+  assert.match(generated, /ValidateSkillDraftRequest[\s\S]*?field: string attempt_id = 7;/u)
+})
+
+test("ValidateSkillDraft semantic gate rejects schema, status, header and legacy-operation drift", async () => {
+  const { openapi, baseline } = await readContract()
+  for (const broken of [
+    openapi.replace("required: [attempt_id]\n      additionalProperties: false", "required: []\n      additionalProperties: false"),
+    openapi.replace("valid: { type: boolean, const: true }", "valid: { type: boolean }"),
+    openapi.replace("manifest_identity: { type: string, pattern: '^zip-v1:sha256:[a-f0-9]{64}$' }", "manifest_identity: { type: string }"),
+    openapi.replace(
+      "'412': { $ref: '#/components/responses/SkillValidatePreconditionFailed' }",
+      "'412': { $ref: '#/components/responses/SkillValidateBadGateway' }",
+    ),
+    openapi.replace("#/components/parameters/SkillValidateIdempotencyKey", "#/components/parameters/IdempotencyKey"),
+    openapi.replace("data: { $ref: '#/components/schemas/SkillValidateResource' }", "data: { $ref: '#/components/schemas/SkillDraftResource' }"),
+  ]) {
+    assert.notEqual(broken, openapi)
+    assert.ok(inspectBffOpenApi(broken, baseline).some((error) => /validateSkillDraft|SkillValidate|ValidateSkillDraft/u.test(error)))
+  }
+  const legacy = openapi.slice(openapi.indexOf("  /v1/me:"), openapi.indexOf("  /v1/team/members:"))
+  for (const poisoned of [
+    legacy.replace("#/components/schemas/CurrentUserResponse", "#/components/schemas/ValidateSkillDraftResponse"),
+    legacy.replace("#/components/responses/ServiceUnavailable", "#/components/responses/SkillValidateUnavailable"),
+  ]) {
+    assert.notEqual(poisoned, legacy)
+    assert.ok(
+      inspectBffOpenApi(
+        openapi.replace(legacy, () => poisoned),
+        baseline,
+      ).some((error) => error.includes("GET /v1/me must not reference ValidateSkillDraft")),
+    )
+  }
+})
+
 test("BeginSkillPackageUpload candidate names the exact inactive owner v4 command and digest version", async () => {
   const [manifest, identities, schemas, projections] = await Promise.all(
     ["manifest.json", "command-identities.json", "command-schemas.json", "vectors/command-projection.json"].map(async (file) =>

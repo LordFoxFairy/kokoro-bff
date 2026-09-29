@@ -1,5 +1,11 @@
 # kokoro-bff API contract policy
 
+## W3 Validate public 机器候选（2026-09-29；尚无运行路由）
+
+唯一 public OpenAPI 增 user-only `POST /v1/skills/{skill_id}/validate`，operationId `validateSkillDraft`、permission `product.skill.validate_draft`、单个 1–128 可打印 `Idempotency-Key` 必填。BFF 当前没有 Validate route；owner `263a28f` v4 inactive、产品未激活。strict JSON body **必须仅有 `attempt_id`**（非空、owner typed ID ≤191 字符），对应 owner v4 Proto tag 7；下方历史“Validate 无 body”已被该机器事实替代。Get/Complete 返回当前 attempt ID 只帮助客户端选择，Platform 仍按 current tenant/user/Skill/attempt、Storage 已完成绑定与 fresh CLEAN/ZIP V1 重新判定；不接受 asset_id、content_digest/size、manifest、tenant/owner 或 URL 自报。
+
+每次含同键 replay 均先 current IAM session/fixed tenant/user，再经 BFF catalog workload 调 Platform；稳定 command ID 绑定 operation+可信 tenant/user+skill+key，owner v4 command digest **仍为 3.0.0** 且 JCS/8 向量绑定 attempt_id。200 strict `{data:{skill_id,series_id,valid:true,content_digest,manifest_identity,replayed}}`；content_digest 为小写 64hex，ZIP V1 manifest_identity 为 `zip-v1:sha256:<64hex>`，无 asset/scan/签名/legacy meta；valid=false 不伪装成功。每个出口 `x-request-id` ≤128、`Cache-Control:no-store`。错误 strict `{error:{code,message,retryable}}`，分状态收窄：400 invalid request/key，401 session missing/invalid，403 service/session/tenant forbidden，404 不可见 Skill，409 幂等冲突/command in progress，412 stale attempt/非 draft/包未完成或扫描、ZIP/manifest 不合格，413 body 过大，429 IAM/Platform 限流且 Retry-After 可选有界，502 owner 非法响应，503 tenant 未配置/IAM、Platform 或 Storage 不可判定。未知 ACK 使用同键重新 IAM/owner，不存 BFF receipt；Validate 不等于 Publish，发布另切片。
+
 ## W3 Complete runtime 当前契约（2026-09-29；public 未激活）
 
 唯一 OpenAPI `completeSkillPackageUpload` 的 strict request/200/error wire 不变，现已接默认关闭的 BFF 具名 POST route，与 CreateDraft/Get/Begin 共用 loopback 候选 flag；Platform `263a28f` v4 仍 inactive，产品未发布。每次同键重放先 IAM current user/fixed tenant，再调 Platform owner；header-only `x-request-id` 与 `Cache-Control:no-store` 在成功、拒绝和默认关闭出口一致。四字段仅不受信描述符回显，owner 当前 Skill/Storage 是唯一判定；BFF 完整核验 owner asset_id 但 200 不公开，CLEAN 仍只等于 uploaded 非 validated。命令 ID/digest 由固定 3.0.0 JCS/11 owner 向量验证；旧 Capability 和通用 BFF receipt 不承接此命令。下节“无 Complete route”是文档门历史基线；真 owner Complete、浏览器链及正式激活待 Root/Web 后续门。

@@ -1,5 +1,13 @@
 # kokoro-bff 技术设计
 
+## W3 Validate 文档门：当前态与目标态（2026-09-29；仅未激活机器候选）
+
+**当前态。** BFF main `1aee402` 已有默认关闭的 CreateDraft/Get/Begin/Complete 运行候选与 owner `263a28f` inactive v4 精确 pin，尚无 public Validate route、Connect adapter 或浏览器正式入口。Platform v4 Proto `ValidateSkillDraftRequest.attempt_id=7`、3.0.0 command schema 与 8 条投影向量是机器事实；本仓旧“Validate 无 body”目标不再适用。本片只改唯一 OpenAPI、operation inventory/semantic gate、直接 contract test 与三面文档；不改运行代码、生成物、Proto 或 SQL。
+
+**目标与依赖。** public `POST /v1/skills/{skill_id}/validate` 仅接本人 user-owned draft，strict body 只有当前 `attempt_id`（非空 owner typed ID），它是未受信 current-attempt selector，不能取代 Platform 当前 Skill/attempt/owner 校验；不接受浏览器 asset/hash/size/manifest、tenant/owner/subject。每次含同键 replay 先 BFF current IAM session/fixed tenant/user，再以 catalog workload token 调 owner `ValidateSkillDraft`。命令 ID 绑定 operation+受信 tenant/user/skill+单个 Idempotency-Key；digest 使用 owner v4 artifact 内 `command_digest_version=3.0.0`、JCS 与 8 条正反向量，绑定 typed Skill ID、Product context 与 attempt_id，排除 request ID/command identity。不用旧 Capability、通用 BFF receipt、Storage RPC/跨 owner SQL；未来运行片沿既有 `src/http/routes/`、`src/http/`、`src/infrastructure/clients/platform/` 的具名文件和 `src/bootstrap/server.ts` 精确 dispatch，不造兼容 alias。
+
+**状态、事务与恢复。** owner 唯一拥有包 attempt/CAS、Validate receipt、Storage fresh CLEAN/对象健康和 ZIP V1/manifest 校验；Complete 的 `uploaded` 或 scan CLEAN 不是 validated。旧/错 attempt、未完成/感染/待扫、坏 ZIP/manifest、错 owner 或非 draft 均 fail closed；unknown ACK 使用同键、每次 IAM 后交 owner receipt 恢复，异 body/身份冲突不从 BFF 缓存重放。成功 200 strict `{data:{skill_id,series_id,valid:true,content_digest,manifest_identity,replayed}}`，只是 validated，不是 published；无 asset/URL/内部 reason。无 BFF Skill/Upload SQL、Redis、receipt、签名缓存或新事务。Root 真 IAM→Platform→Storage/ZIP、Publish 和 Web Chromium/产品激活另门。
+
 ## W3 Complete runtime 当前候选（2026-09-29；默认关闭）
 
 BFF 已沿既有 Skills 控制面新增具名 Complete route、strict 四字段输入、独立 owner v4 command digest `3.0.0` JCS projector 和 generated Connect 调用；同一 `KOKORO_SKILL_DRAFT_CANDIDATE_ENABLED` 默认关闭开关，且 Complete 不依赖 Begin 的 ObjectStore origin 配置。`server.ts` 精确 `/complete` 分派在旧 Capability 前，当次 IAM/fixed tenant/user 先于 Platform；单键 command ID 绑定 operation+可信 tenant/user/skill/key，digest 绑定四字段与 Product context，每次 replay 再验 IAM/owner。内部 owner response 核 skill/attempt/upload/hash 与请求、正 uint64 epoch、非空合法 asset_id、UPLOADED 和 CLEAN/PENDING/UNKNOWN，才投影不含 asset_id 的 200；不按上游 message 猜感染/旧 attempt，而以 FailedPrecondition 412。无 BFF Skill SQL/receipt/Storage RPC/字节代理，取消传至 owner。此为默认关闭的运行候选、非 public activation；Root 真 IAM/Storage Complete 与 Web Chromium/CORS/PUT 尚待独立验。
