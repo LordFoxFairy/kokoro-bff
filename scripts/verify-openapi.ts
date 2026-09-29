@@ -801,8 +801,8 @@ function skillPackageCompleteContractErrors(
     ...[...responseRefs.values()].map(([name]) => responses.get(name)?.text ?? ""),
   ].join("\u0000")
   const frozenDigest = createHash("sha256").update(frozenSource).digest("hex")
-  // Complete is an inactive document-only candidate; this exact operation and its direct components are review-frozen.
-  if (frozenDigest !== "f9788de2bdcde2649aa4c5b77172533674b18a180874ac5e141174d3c9424448")
+  // Complete description now records the real default-closed runtime; its request, response and status semantics are unchanged.
+  if (frozenDigest !== "d91017e0547b38daa3810a51c29e997660132d31f9bc46051600330833e5f657")
     errors.push(`completeSkillPackageUpload canonical contract digest drifted: ${frozenDigest}`)
   return errors
 }

@@ -287,6 +287,8 @@ test("CompleteSkillPackageUpload publishes an inactive user-only strict command"
     ),
   )
   const operation = openapi.slice(openapi.indexOf("  /v1/skills/{skill_id}/package-upload/complete:"), openapi.indexOf("  /v1/skills/{name}/revisions:"))
+  assert.match(operation, /real default-closed BFF Complete runtime route/u)
+  assert.doesNotMatch(operation, /no BFF Complete runtime route exists yet/u)
   for (const fragment of [
     "operationId: completeSkillPackageUpload",
     "product.skill.complete_package_upload",

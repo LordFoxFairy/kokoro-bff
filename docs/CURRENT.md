@@ -3,6 +3,10 @@
 状态：2026-09-29
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。
 
+## W3-BFF-SKILL-COMPLETE-RUNTIME：默认关闭运行候选
+
+基线 BFF clean main `457472d`；已在既有 Skills candidate flag 下接入 user-only `/v1/skills/{skill_id}/package-upload/complete`，当前 IAM/fixed tenant/user 每次先于 Platform，且不走旧 Capability。strict 四字段输入、固定 owner v4 command digest `3.0.0` JCS/11 向量与 Connect Complete、稳定 command ID、owner response 的 skill/attempt/upload/hash/asset/epoch/phase/scan 全核后投影 strict 200（不公开 asset_id）；无 BFF SQL/receipt/Storage RPC 或字节代理。直接 HTTP RED 证明原路径缺新路由并无 x-request-id，GREEN 覆盖默认关闭、重放/冲突/撤权、坏 owner、超时/取消和 request ID/no-store。Platform v4 inactive、产品未激活；Root 真 IAM/Storage Complete 与 Web 真 Chromium/CORS/PUT 仍待验。下节“仅机器候选、没有 route”为文档门当时事实。
+
 ## W3-BFF-SKILL-COMPLETE-DOC-GATE：仅未激活机器/文档候选
 
 基线 BFF clean main `571108b`，Platform owner `263a28f` inactive v4 与 command digest `3.0.0` pin 不变。唯一 public OpenAPI 新增 user-only Complete 的 strict 四字段请求、200 uploaded/scan 三态且无 asset_id 的响应、状态专属错误和 x-request-id/no-store；operation inventory/语义门/直接契约测试锁定 owner 11 条命令向量及旧 operation 误引负例。本片**不新增 Complete runtime route**，不改 SQL/receipt/Storage/config/generated；CreateDraft/Get/Begin 仍默认关闭，产品未激活。Root 既有真 owner 组合验证的是 Begin→signed PUT 及旧 Validate/Publish 回归，不是 BFF public Complete、浏览器 Chromium CORS/PUT。Get 缺 hash/size 的刷新恢复须保留 Begin 描述符或重选原文件重算，否则显式新 Begin 替换。Complete 运行与真 IAM/Storage/撤权重放、感染/旧 attempt 隔离组合仍待后续切片。

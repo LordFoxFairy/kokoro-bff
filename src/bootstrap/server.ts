@@ -41,6 +41,7 @@ import { createBffComposition, type BffCompositionOptions, type BffRouteInput } 
 import { createSkillDraftRoute } from "../http/routes/create-skill-draft.js"
 import { getSkillPackageUploadRoute } from "../http/routes/get-skill-package-upload.js"
 import { beginSkillPackageUploadRoute } from "../http/routes/begin-skill-package-upload.js"
+import { completeSkillPackageUploadRoute } from "../http/routes/complete-skill-package-upload.js"
 
 async function handle(
   request: IncomingMessage,
@@ -151,6 +152,7 @@ async function handle(
 
   const businessPath = segments.slice(1)
   const isSkillPackagePath = segments.length === 4 && segments[1] === "skills" && segments[3] === "package-upload"
+  const isSkillPackageCompletePath = segments.length === 5 && segments[1] === "skills" && segments[3] === "package-upload" && segments[4] === "complete"
   if (request.method === "GET" && businessPath.length === 3 && businessPath[0] === "projects" && businessPath[2] === "resources")
     response.setHeader("x-request-id", id)
   if (request.method === "POST" && businessPath.length === 2 && businessPath[0] === "library" && businessPath[1] === "files")
@@ -171,7 +173,7 @@ async function handle(
   if (!admission.ok) {
     if (!response.destroyed) {
       response.setHeader("x-request-id", id)
-      if (request.url === "/v1/skills/drafts" || isSkillPackagePath) {
+      if (request.url === "/v1/skills/drafts" || isSkillPackagePath || isSkillPackageCompletePath) {
         response.setHeader("cache-control", "no-store")
         send(
           response,
@@ -184,6 +186,18 @@ async function handle(
     return
   }
   const context = admission.context
+
+  if (isSkillPackageCompletePath) {
+    const routeAbort = new AbortController()
+    const abortRoute = (): void => routeAbort.abort()
+    request.once("aborted", abortRoute)
+    response.once("close", abortRoute)
+    await completeSkillPackageUploadRoute(request, response, context, segments[2] ?? "", composition.skillDraftClient, routeAbort.signal).finally(() => {
+      request.removeListener("aborted", abortRoute)
+      response.removeListener("close", abortRoute)
+    })
+    return
+  }
 
   if (isSkillPackagePath) {
     const routeAbort = new AbortController()

@@ -1,5 +1,9 @@
 # kokoro-bff data model
 
+## W3 Complete runtime：无新增 BFF 包数据事实（2026-09-29）
+
+默认关闭的 Complete route 已接 owner v4 generated Connect，但本仓 `database/schema.sql`、索引、Redis、receipt、对象字节缓存均零变更；Platform/Storage 仍分别拥有 current attempt/command receipt 与上传/Asset/scan。每次重放先当次 IAM/owner，BFF 只短暂校验并投影 owner response，内部 asset_id 不写入也不公开。无跨 owner SQL/Storage RPC/上传代理；文档门“无 route”是前片基线，产品未激活，真 owner Complete 组合待 Root 独立验证。
+
 ## W3 Complete 候选：无 BFF 持久化事实（2026-09-29）
 
 本片仅为 public Complete 文档/机器 OpenAPI 候选，BFF 当前没有 Complete route。包 attempt、upload、scan、asset、command receipt/CAS 的唯一 owner 分别为 Platform/Storage；BFF `database/schema.sql`、索引、迁移、Redis 均零变化，不新增或复用通用 BFF mutation receipt 保存命令/签名 URL。每次含 replay 的 IAM/owner 检查必须读取当次权威事实，不能用 BFF 缓存命中代替。Body 的 attempt/upload/hash/size 仅供 Platform 与 current Skill/Storage 匹配；即使 owner 返回 asset_id，未来 public 投影也不持久化或公开它。Get 没有 hash/size，BFF 不建刷新恢复副本；客户端只能持原描述符/重选原文件精确重算，或新 Begin 显式替换。owner v4 inactive/产品未激活，真 Complete 运行和三方组合另验。

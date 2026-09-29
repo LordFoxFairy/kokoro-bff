@@ -1,5 +1,9 @@
 # kokoro-bff 技术设计
 
+## W3 Complete runtime 当前候选（2026-09-29；默认关闭）
+
+BFF 已沿既有 Skills 控制面新增具名 Complete route、strict 四字段输入、独立 owner v4 command digest `3.0.0` JCS projector 和 generated Connect 调用；同一 `KOKORO_SKILL_DRAFT_CANDIDATE_ENABLED` 默认关闭开关，且 Complete 不依赖 Begin 的 ObjectStore origin 配置。`server.ts` 精确 `/complete` 分派在旧 Capability 前，当次 IAM/fixed tenant/user 先于 Platform；单键 command ID 绑定 operation+可信 tenant/user/skill/key，digest 绑定四字段与 Product context，每次 replay 再验 IAM/owner。内部 owner response 核 skill/attempt/upload/hash 与请求、正 uint64 epoch、非空合法 asset_id、UPLOADED 和 CLEAN/PENDING/UNKNOWN，才投影不含 asset_id 的 200；不按上游 message 猜感染/旧 attempt，而以 FailedPrecondition 412。无 BFF Skill SQL/receipt/Storage RPC/字节代理，取消传至 owner。此为默认关闭的运行候选、非 public activation；Root 真 IAM/Storage Complete 与 Web Chromium/CORS/PUT 尚待独立验。
+
 ## W3 Complete 文档门：当前态与目标态（2026-09-29；未激活）
 
 **当前态。** BFF main `571108b` 已有默认关闭的 CreateDraft、Get、Begin 运行候选，并精确 pin Platform owner `263a28f` inactive v4。Root 已在隔离真 owner 组合验证 Begin、签名直 PUT、重放/冲突/替换、撤权及旧 Validate/Publish 回归；BFF 仍没有 public Complete route，浏览器 CORS/PUT 和产品激活尚未验。本片只新增唯一 OpenAPI/三面文档的 Complete 候选，不修改运行时、配置、Proto、generated 或数据库。
