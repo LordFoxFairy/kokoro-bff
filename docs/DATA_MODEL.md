@@ -6,7 +6,7 @@ BFF 当前 canonical `database/schema.sql` 与 Redis 没有 Skill 包状态、St
 
 ## W3 Get runtime：零本仓数据模型变更（2026-09-29）
 
-当前 BFF consumer 已从 Platform 旧 v3 替换为 owner `263a28f` inactive v4 原字节/生成物，且具名只读 Get runtime 候选已接线；唯一 canonical `database/schema.sql`、BFF Redis 和所有 receipt 均未改。每次请求经 IAM session 后只读 Platform canonical Skill 的 current attempt/epoch/phase/upload，由 Platform 自身持有 tenant/owner/draft 权限；BFF 不读 `kokoro_platform`/Storage schema，不缓存包事实，不把 GET 写进 `bff_idempotency_receipt`。Proto uint64 在 HTTP 转 decimal string，非法 owner 状态 fail closed 502；撤权不使用旧快照。Root 真 IAM/Platform 组合与 public activation 尚未完成。下方 DOC-GATE/W1E 是历史切片基线，其“pin v3/无 Get route”不覆盖本节。
+当前 BFF consumer 已从 Platform 旧 v3 替换为 owner `263a28f` inactive v4 原字节/生成物，且具名只读 Get runtime 候选已接线；唯一 canonical `database/schema.sql`、BFF Redis 和所有 receipt 均未改。每次请求经 IAM session 后只读 Platform canonical Skill 的 current attempt/epoch/phase/upload，由 Platform 自身持有 tenant/owner/draft 权限；BFF 不读 `kokoro_platform`/Storage schema，不缓存包事实，不把 GET 写进 `bff_idempotency_receipt`。Proto uint64 在 HTTP 转 decimal string，非法 owner 状态 fail closed 502；撤权不使用旧快照。Root `4300f4fc` 真 IAM/BFF/Platform 隔离组合已验 fresh draft `none` 200、Publish 后 412、同一 session 撤权后 401 且零新增 Platform socket；中间各 phase 尚未由 BFF public Get 真 owner 组合逐一采样，public activation 尚未完成。下方 DOC-GATE/W1E 是历史切片基线，其“pin v3/无 Get route”不覆盖本节。
 
 ## W3 user-only package upload Get：零 BFF 数据变更（2026-09-29）
 
