@@ -387,6 +387,30 @@ test("Validate maps owner precondition, conflicts, privacy and dependency errors
     )
 })
 
+test("Validate maps only owner package_attempt_conflict Aborted metadata to stale-attempt 412", async () => {
+  for (const [reason, status, code] of [
+    ["package_attempt_conflict", 412, "skill_precondition_failed"],
+    ["command_in_progress", 409, "skill_command_in_progress"],
+    [null, 409, "skill_command_in_progress"],
+  ])
+    await withServer(
+      {
+        validateDraft: async () => {
+          const error = new ConnectError("private stale attempt or busy command", Code.Aborted)
+          if (reason !== null) error.metadata.set("x-kokoro-error-code", reason)
+          throw error
+        },
+      },
+      async (base) => {
+        const response = await post(base)
+        assert.equal(response.status, status, String(reason))
+        const body = await response.json()
+        assert.equal(body.error.code, code)
+        assert.equal(JSON.stringify(body).includes("private"), false)
+      },
+    )
+})
+
 test("Validate rejects malformed owner result instead of partial public success", async () => {
   for (const invalid of [
     { skillId: { value: "other" } },

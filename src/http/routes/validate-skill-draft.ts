@@ -20,7 +20,11 @@ function mapFailure(error: unknown): { status: number; body: ReturnType<typeof f
       : { status: 503, body: failure("skill_dependency_unavailable", "Skill catalog is unavailable", true) }
   if (error.code === Code.NotFound || error.code === Code.PermissionDenied) return { status: 404, body: failure("skill_not_found", "Skill was not found") }
   if (error.code === Code.AlreadyExists) return { status: 409, body: failure("skill_idempotency_conflict", "Skill command conflicts with an existing command") }
-  if (error.code === Code.Aborted) return { status: 409, body: failure("skill_command_in_progress", "Skill command is already in progress", true) }
+  if (error.code === Code.Aborted) {
+    if (error.metadata.get("x-kokoro-error-code") === "package_attempt_conflict")
+      return { status: 412, body: failure("skill_precondition_failed", "Skill validation precondition failed") }
+    return { status: 409, body: failure("skill_command_in_progress", "Skill command is already in progress", true) }
+  }
   if (error.code === Code.FailedPrecondition) return { status: 412, body: failure("skill_precondition_failed", "Skill validation precondition failed") }
   if (error.code === Code.ResourceExhausted) {
     const retryAfter = error.metadata.get("retry-after")
