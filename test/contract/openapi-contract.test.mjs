@@ -243,6 +243,8 @@ test("BeginSkillPackageUpload publishes one inactive user-only command with a st
   )
   const path = openapi.slice(openapi.indexOf("  /v1/skills/{skill_id}/package-upload:"), openapi.indexOf("  /v1/skills/{name}/revisions:"))
   const begin = path.slice(path.indexOf("    post:"))
+  assert.match(begin, /default-closed candidate runtime route pinned to inactive Platform v4/u)
+  assert.doesNotMatch(begin, /no BFF runtime route yet|future BFF runtime/u)
   for (const fragment of [
     "operationId: beginSkillPackageUpload",
     "x-kokoro-permission: product.skill.begin_package_upload",
@@ -265,6 +267,8 @@ test("BeginSkillPackageUpload publishes one inactive user-only command with a st
   assert.match(request, /size_bytes: \{ type: integer, minimum: 1, maximum: 33554432 \}/u)
   assert.match(request, /replaces_attempt_id: \{ type: string, pattern:/u)
   const transfer = openapi.slice(openapi.indexOf("    SkillPackageBeginTransferReference:"), openapi.indexOf("    SkillPackageBeginResource:"))
+  assert.match(transfer, /default-closed BFF candidate runtime matches an approved exact origin/u)
+  assert.doesNotMatch(transfer, /future BFF runtime/u)
   assert.match(transfer, /required: \[url, method, required_headers, expires_at\]/u)
   assert.match(transfer, /method: \{ type: string, const: PUT \}/u)
   assert.match(transfer, /required_headers:[\s\S]*additionalProperties:/u)

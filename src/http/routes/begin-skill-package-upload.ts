@@ -60,7 +60,9 @@ function project(result: Awaited<ReturnType<CatalogConnectClient["beginPackageUp
       : NaN
   if (
     result.skillId?.value !== skillId ||
+    typeof result.attemptId !== "string" ||
     !ID.test(result.attemptId) ||
+    typeof result.uploadId !== "string" ||
     !ID.test(result.uploadId) ||
     typeof result.attemptEpoch !== "bigint" ||
     result.attemptEpoch < 1n ||

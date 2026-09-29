@@ -203,6 +203,15 @@ test("Begin rejects invalid transfer references without leaking signed query", a
     })
 })
 
+test("Begin treats missing and non-string owner attempt/upload IDs as invalid responses", async () => {
+  for (const invalid of [{ attemptId: undefined }, { attemptId: null }, { attemptId: 123 }, { uploadId: undefined }, { uploadId: null }, { uploadId: 123 }])
+    await withServer({ beginPackageUpload: async () => ({ ...result(), ...invalid }) }, async (base) => {
+      const response = await post(base)
+      assert.equal(response.status, 502, JSON.stringify(invalid))
+      assert.equal((await response.json()).error.code, "skill_response_invalid")
+    })
+})
+
 test("Begin accepts a configured HTTPS origin but rejects non-loopback HTTP even when configured", async () => {
   await withServer(
     {

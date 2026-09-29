@@ -662,7 +662,8 @@ function skillPackageBeginContractErrors(
     ...[...responseRefs.values()].map(([name]) => responses.get(name)?.text ?? ""),
   ].join("\u0000")
   const frozenDigest = createHash("sha256").update(frozenSource).digest("hex")
-  if (frozenDigest !== "694e44a12bf8b21244ab4467937ef764b48578eb028b4df3eaf8736528a4dc97")
+  // Begin description now reflects the real default-closed route; request, response and error wire semantics are unchanged.
+  if (frozenDigest !== "9a42147d4c1733e46effc4d511ad53b86e7cf5bd0a07c5fb1bc0d096481c1337")
     errors.push(`beginSkillPackageUpload canonical contract digest drifted: ${frozenDigest}`)
   return errors
 }

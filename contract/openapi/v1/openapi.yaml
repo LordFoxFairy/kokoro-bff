@@ -2162,7 +2162,7 @@ paths:
       x-kokoro-idempotency: required
       x-kokoro-permission: product.skill.begin_package_upload
       summary: Begin or explicitly replace a user-owned draft Skill package upload
-      description: Inactive, default-closed candidate pinned to Platform owner commit 263a28f1e55745bd1829a61f68228d775751adbc and v4 artifact aggregate SHA-256 902f8f2c2fbeb95a441820c1cf16b0a9c793eadac7106f9fcd5e41e3878b7f79; no BFF runtime route yet. A single Idempotency-Key is required. Every call including same-key replay requires current IAM session and Platform owner/draft/attempt admission. A current pending replay may return a freshly signed short-lived PUT reference; it is never persisted in a BFF receipt. First Begin omits replaces_attempt_id and requires phase none. A new command may explicitly replace the current attempt in intent, upload_pending, uploaded or aborted, but not validated. The browser sends the ZIP bytes directly to the approved public ObjectStore origin using the exact required headers, credentials omit and redirects disabled; the BFF does not proxy bytes.
+      description: Inactive, default-closed candidate runtime route pinned to inactive Platform v4 owner commit 263a28f1e55745bd1829a61f68228d775751adbc and artifact aggregate SHA-256 902f8f2c2fbeb95a441820c1cf16b0a9c793eadac7106f9fcd5e41e3878b7f79; the public Product API is not activated. A single Idempotency-Key is required. Every call including same-key replay requires current IAM session and Platform owner/draft/attempt admission. A current pending replay may return a freshly signed short-lived PUT reference; it is never persisted in a BFF receipt. First Begin omits replaces_attempt_id and requires phase none. A new command may explicitly replace the current attempt in intent, upload_pending, uploaded or aborted, but not validated. The browser sends the ZIP bytes directly to the approved public ObjectStore origin using the exact required headers, credentials omit and redirects disabled; the BFF does not proxy bytes.
       parameters:
         - $ref: '#/components/parameters/SkillPackageUploadSkillId'
         - $ref: '#/components/parameters/SkillPackageBeginIdempotencyKey'
@@ -3589,7 +3589,7 @@ components:
         url:
           type: string
           format: uri
-          description: Short-lived signed ObjectStore public URL; the future BFF runtime must match an approved exact origin and reject credentials, fragment and redirect.
+          description: Short-lived signed ObjectStore public URL; the default-closed BFF candidate runtime matches an approved exact origin and rejects credentials and fragments. Browser PUT must reject redirects.
         method: { type: string, const: PUT }
         required_headers:
           type: object
