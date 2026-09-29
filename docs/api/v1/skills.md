@@ -1,111 +1,14 @@
-# Skills API v1
+# Skills API v1：当前读投影
 
-Skills 由 BFF 负责聚合、配额、启停和 GitHub skill 导入；具体包字节和安装事实由 Skills/PG adapter 或对应 upstream 提供。
+浏览器经 Web 同源 adapter 到 BFF；BFF 每次验证当前 IAM Product session，再用独立 `platform:projection.read` workload 身份读取 Platform。唯一机器事实源为 `contract/openapi/v1/openapi.yaml`。
 
-## 资源模型
+| GET | 当前返回 |
+| --- | --- |
+| `/v1/skills` | `{data:{skills:[...],next_cursor?}}` |
+| `/v1/skills/{skill_id}` | `{data:{skill_id,source_ref,revision,status,name,summary,tags}}`；仅本人 PERSONAL/ACTIVE，未安装也可读 |
+| `/v1/skills/pool` | owner-native `{data:{skills:[...],next_cursor?}}` |
+| `/v1/skills/catalog` | owner-native `{data:{skills:[...],next_cursor?}}` |
 
-```json
-{
-  "name": "contract-review",
-  "description": "Review a versioned business API contract.",
-  "content_hash": "sha256:fixture-contract-review",
-  "scope": "official",
-  "installed": true,
-  "enabled": true,
-  "categories": ["coding", "business"],
-  "updated_at": 1767225600
-}
-```
+列表 Skill 保留 `source_ref`、十进制字符串 `revision`、`enabled`、`categories`，不再合成旧 selector/默认 revision。请求只接受机器契约列明的参数；by-ID 不接受 query、body、幂等键。成功/错误均有 `x-request-id`、`Cache-Control: no-store`，错误严格 `{error:{code,message,retryable}}`。
 
-## GET `/v1/skills`
-
-返回当前 namespace 可见技能投影。
-
-### Response `200`
-
-```json
-{ "data": { "skills": [] }, "meta": { "request_id": "req_skills_1" } }
-```
-
-## GET `/v1/skills/pool`
-
-返回已启用技能池投影。
-
-## GET `/v1/skills/catalog`
-
-返回技能目录与 `next_cursor: null`。
-
-## GET `/v1/skills/quota`
-
-返回 namespace 配额。
-
-```json
-{
-  "data": {
-    "namespace": "ns_demo",
-    "package_count": 1,
-    "package_bytes": 122880,
-    "max_packages": 20,
-    "max_bytes": 52428800
-  },
-  "meta": { "request_id": "req_skills_quota_1" }
-}
-```
-
-## GET `/v1/skills/:name/revisions[?scope=...]`
-
-返回版本历史。`scope` 可选；未传时返回所有 scope。
-
-## POST `/v1/skills/:name/enable[?scope=...]`
-## POST `/v1/skills/:name/disable[?scope=...]`
-
-启停技能，必须携带 `Idempotency-Key`。同 key 同 payload 重放原 receipt；同 key 不同 payload 返回 `409 idempotency_conflict`；相同 key 的原请求尚未完成时返回 `409 idempotency_in_progress`，不会重复触发状态变更。
-
-### Response `200`
-
-```json
-{ "data": { "ok": true }, "meta": { "request_id": "req_skill_toggle_1" } }
-```
-
-## POST `/v1/skills/github/preview`
-
-预览 GitHub skill，不要求 `Idempotency-Key`。
-
-### Request
-
-```json
-{ "repository": "https://github.com/OWNER/REPO" }
-```
-
-### Response `200`
-
-```json
-{
-  "data": {
-    "repository": "https://github.com/OWNER/REPO",
-    "default_branch": "main",
-    "skill": { "name": "REPO", "description": "Mock GitHub skill from OWNER/REPO" }
-  },
-  "meta": { "request_id": "req_github_preview_1" }
-}
-```
-
-## POST `/v1/skills/github/import`
-
-导入 GitHub skill，必须携带 `Idempotency-Key`。
-
-### Response `200`
-
-与 preview 相同的 data 形状。
-
-## Errors
-
-- `invalid_github_url`
-- `skill_not_found`
-- `idempotency_key_required`
-- `idempotency_conflict`
-- `idempotency_in_progress`
-
-## Live upstream
-
-Skills live 模式走 Capability owner 的 `KOKORO_CAPABILITY_BASE_URL`，返回必须是 JSON；HTTP error、空 body、非 JSON、错误 envelope 都不得当作成功数据。
+`POST /v1/skills/drafts` 与包上传、验证、发布属于默认关闭的 v4 候选；`/v1/skills/quota`、旧 enable/disable/import/revisions 尚无当前生产 owner 路由，返回 503，不应作为 Web 正式控件。Web 读契约及真实 IAM/BFF/Platform 组合仍待验。

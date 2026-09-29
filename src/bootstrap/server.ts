@@ -157,6 +157,12 @@ async function handle(
   const isSkillPackageCompletePath = segments.length === 5 && segments[1] === "skills" && segments[3] === "package-upload" && segments[4] === "complete"
   const isSkillValidatePath = segments.length === 4 && segments[1] === "skills" && segments[3] === "validate"
   const isSkillPublishPath = segments.length === 4 && segments[1] === "skills" && segments[3] === "publish"
+  const isPlatformProjectionRead =
+    request.method === "GET" &&
+    ((businessPath[0] === "skills" &&
+      (businessPath.length === 1 ||
+        (businessPath.length === 2 && businessPath[1] !== "quota" && businessPath[1] !== "drafts" && businessPath[1] !== "github"))) ||
+      (businessPath.length === 2 && businessPath[0] === "mcp" && businessPath[1] === "servers"))
   if (request.method === "GET" && businessPath.length === 3 && businessPath[0] === "projects" && businessPath[2] === "resources")
     response.setHeader("x-request-id", id)
   if (request.method === "POST" && businessPath.length === 2 && businessPath[0] === "library" && businessPath[1] === "files")
@@ -177,7 +183,14 @@ async function handle(
   if (!admission.ok) {
     if (!response.destroyed) {
       response.setHeader("x-request-id", id)
-      if (request.url === "/v1/skills/drafts" || isSkillPackagePath || isSkillPackageCompletePath || isSkillValidatePath || isSkillPublishPath) {
+      if (
+        request.url === "/v1/skills/drafts" ||
+        isSkillPackagePath ||
+        isSkillPackageCompletePath ||
+        isSkillValidatePath ||
+        isSkillPublishPath ||
+        isPlatformProjectionRead
+      ) {
         response.setHeader("cache-control", "no-store")
         send(
           response,

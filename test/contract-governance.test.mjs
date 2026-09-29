@@ -4,11 +4,8 @@ import { readFile, readdir, stat } from "node:fs/promises"
 import { test } from "node:test"
 
 import { compareOperationBaseline, inspectOpenApiGovernance } from "../scripts/check-contract.mjs"
-import * as capabilityGenerator from "../scripts/generate-capability-http-client.mjs"
 import * as iamGenerator from "../scripts/generate-iam-http-client.mjs"
 import * as schedulerGenerator from "../scripts/generate-scheduler-contracts.mjs"
-
-const { replaceExactInSource } = capabilityGenerator
 
 const governedOperation = `openapi: 3.1.0
 paths:
@@ -152,116 +149,6 @@ test("Library publishes explicit personal file 200 and rejects contract drift", 
   assert.ok(inspectLibraryFileContract(mixedPage).some((error) => error.includes("LibraryFilePage")))
 })
 
-test("the Capability consumer pins the accepted owner artifact and generated runtime", async () => {
-  const ownerCommit = "7f89a267d745cbb9870f52d6edb23dec1a3c469b"
-  const ownerDigest = "e0b7c4b57ac030efb73878b51da2a3595ec0172bce0608a88ea925b57a69761a"
-  const vendorPath = `../contract/vendor/kokoro-capability/${ownerCommit}/capability-http.openapi.json`
-  const [manifestDocument, vendorDocument, configSource, lockfile] = await Promise.all([
-    readFile(new URL("../contract/dependencies/capability-http.json", import.meta.url), "utf8"),
-    readFile(new URL(vendorPath, import.meta.url)),
-    readFile(new URL("../openapi-ts.capability.config.ts", import.meta.url), "utf8"),
-    readFile(new URL("../pnpm-lock.yaml", import.meta.url)),
-  ])
-  const manifest = JSON.parse(manifestDocument)
-  const openapi = JSON.parse(vendorDocument.toString("utf8"))
-  const sha256 = (value) => createHash("sha256").update(value).digest("hex")
-
-  assert.deepEqual(Object.keys(manifest).sort(), ["generated", "generator", "lockfile_sha256", "owner", "runtime", "schema_version", "status"])
-  const generatedFiles = [
-    "client.gen.ts",
-    "client/client.gen.ts",
-    "client/index.ts",
-    "client/types.gen.ts",
-    "client/utils.gen.ts",
-    "core/auth.gen.ts",
-    "core/bodySerializer.gen.ts",
-    "core/params.gen.ts",
-    "core/pathSerializer.gen.ts",
-    "core/queryKeySerializer.gen.ts",
-    "core/serverSentEvents.gen.ts",
-    "core/types.gen.ts",
-    "core/utils.gen.ts",
-    "sdk.gen.ts",
-    "types.gen.ts",
-    "zod.gen.ts",
-  ]
-  const generatedSources = await Promise.all(generatedFiles.map((file) => readFile(new URL(`../src/generated/capability-http/${file}`, import.meta.url))))
-  const generated = generatedFiles.map((file, index) => ({
-    path: file,
-    sha256: sha256(generatedSources[index]),
-  }))
-  assert.deepEqual(manifest, {
-    schema_version: 1,
-    status: "generated",
-    owner: {
-      repository_path: "apps/kokoro-capability",
-      repository_commit: ownerCommit,
-      contract_version: "2.0.0",
-      contract_path: "contract/openapi/capability-http.openapi.json",
-      contract_sha256: ownerDigest,
-    },
-    generator: {
-      package: "@hey-api/openapi-ts",
-      version: "0.99.0",
-      config_path: "openapi-ts.capability.config.ts",
-      config_sha256: sha256(configSource),
-    },
-    runtime: { node: "22.22.2", pnpm: "11.25.0", zod: "4.5.4" },
-    lockfile_sha256: sha256(lockfile),
-    generated,
-  })
-  assert.equal(sha256(vendorDocument), ownerDigest)
-  assert.equal(openapi.info.version, "2.0.0")
-  assert.deepEqual(Object.keys(openapi.paths).sort(), ["/v1/mcp/servers", "/v1/skills", "/v1/skills/catalog", "/v1/skills/pool"])
-  for (const pathItem of Object.values(openapi.paths)) {
-    assert.deepEqual(Object.keys(pathItem), ["get"])
-  }
-  assert.equal(openapi.components.parameters.SkillQuery.name, "query")
-  assert.equal(
-    Object.values(openapi.components.parameters).some((parameter) => parameter.name === "q"),
-    false,
-  )
-  assert.equal(openapi.components.parameters.RequestId.name, "x-kokoro-request-id")
-  for (const responseName of ["SkillList", "McpServerList", "Error"]) {
-    const responseHeaders = openapi.components.responses[responseName].headers
-    assert.deepEqual(Object.keys(responseHeaders), ["x-kokoro-request-id"], responseName)
-    assert.deepEqual(
-      Object.entries(responseHeaders)
-        .filter(([, header]) => header.required === true)
-        .map(([name]) => name),
-      ["x-kokoro-request-id"],
-      `${responseName} must require exactly the canonical request-id response header`,
-    )
-  }
-  assert.equal(JSON.stringify(openapi).includes("/bff/"), false)
-  for (const source of generatedSources) {
-    assert.doesNotMatch(source.toString("utf8"), /@ts-[^\s]+|eslint-disable(?:-next-line)?/u)
-  }
-  const generatedRoot = new URL("../src/generated/capability-http/", import.meta.url)
-  const regularFiles = []
-  for (const file of await readdir(generatedRoot, { recursive: true })) {
-    if ((await stat(new URL(file, generatedRoot))).isFile()) regularFiles.push(file)
-  }
-  assert.deepEqual(regularFiles.sort(), generatedFiles.slice().sort())
-})
-
-test("the Capability generator compatibility normalizer fails closed on template drift", () => {
-  assert.equal(replaceExactInSource("before TOKEN after", "TOKEN", "FIXED", 1, "fixture"), "before FIXED after")
-  assert.throws(() => replaceExactInSource("TOKEN", "TOKEN", "FIXED", 2, "fixture"), /fixture: expected 2 generator matches, found 1/u)
-  assert.throws(() => replaceExactInSource("no marker", "TOKEN", "FIXED", 1, "fixture"), /fixture: expected 1 generator matches, found 0/u)
-})
-
-test("the Capability generated allowlist rejects missing files, every extra extension, and extra directories", async () => {
-  const manifest = JSON.parse(await readFile(new URL("../contract/dependencies/capability-http.json", import.meta.url), "utf8"))
-  const files = manifest.generated.map(({ path }) => path)
-  const assertGeneratedAllowlist = capabilityGenerator.assertGeneratedAllowlist
-  assert.equal(typeof assertGeneratedAllowlist, "function")
-  assert.doesNotThrow(() => assertGeneratedAllowlist(files, ["client", "core"], "fixture"))
-  assert.throws(() => assertGeneratedAllowlist(files.slice(1), ["client", "core"], "fixture"), /file allowlist drifted/u)
-  assert.throws(() => assertGeneratedAllowlist([...files, "manual.md"], ["client", "core"], "fixture"), /file allowlist drifted/u)
-  assert.throws(() => assertGeneratedAllowlist(files, ["client", "core", "manual"], "fixture"), /directory allowlist drifted/u)
-})
-
 test("the IAM consumer pins the complete 0.7.0 owner artifact and generates only approved admission, Skill, Team and invitation operations", async () => {
   const commit = "4d981441d154c83b63987f284e3a82a559595870"
   const digest = "c8d7af8a365ad5d13eaabccf7f31133e0918ef198bdc3e7c790d90933eae91b2"
@@ -346,39 +233,32 @@ test("the IAM generator normalizer and generated-tree allowlist fail closed on d
   assert.throws(() => iamGenerator.assertGeneratedAllowlist([...files, "manual.ts"], ["client", "core"], "fixture"), /file allowlist drifted/u)
 })
 
-test("the public Capability facade documents only canonical query parameters and stable gateway failures", async () => {
+test("the public Platform projection reads expose strict native pages and error envelopes", async () => {
   const openapi = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
   for (const [start, end] of [
-    ["  /v1/skills:\n", "  /v1/skills/pool:\n"],
+    ["  /v1/skills:\n", "  /v1/skills/{skill_id}:\n"],
     ["  /v1/skills/pool:\n", "  /v1/skills/catalog:\n"],
     ["  /v1/skills/catalog:\n", "  /v1/skills/quota:\n"],
     ["  /v1/mcp/servers:\n", "  /v1/mcp/servers/{name}/enable:\n"],
   ]) {
-    const operation = openapi.slice(openapi.indexOf(start), openapi.indexOf(end))
-    assert.match(operation, /'400': \{ \$ref: '#\/components\/responses\/BadRequest' \}/u)
-    assert.match(operation, /'502': \{ \$ref: '#\/components\/responses\/BadGateway' \}/u)
-    assert.match(operation, /'503': \{ \$ref: '#\/components\/responses\/ServiceUnavailable' \}/u)
-    assert.doesNotMatch(operation, /name: q\b/u)
+    const operation = openapi.slice(openapi.indexOf(start), openapi.indexOf(end)).split("\n    post:")[0]
+    for (const status of ["400", "401", "403", "502", "503"])
+      assert.ok(operation.includes(`'${status}': { $ref: '#/components/responses/PlatformProjectionReadError' }`), `${start} ${status}`)
+    assert.match(operation, /'429': \{ \$ref: '#\/components\/responses\/PlatformProjectionReadRateLimited' \}/u)
   }
-  assert.match(openapi, /name: query\n\s+in: query\n\s+required: false\n\s+schema:\n\s+type: string\n\s+minLength: 1\n\s+maxLength: 1024/u)
-  assert.match(openapi, /name: tags\n\s+in: query[\s\S]*?style: form\n\s+explode: true/u)
-  assert.match(openapi, /name: provider_key\n\s+in: query[\s\S]*?maxLength: 191/u)
-
-  const schema = (name, next) => openapi.slice(openapi.indexOf(`    ${name}:\n`), openapi.indexOf(`    ${next}:\n`))
   for (const [name, next] of [
     ["SkillListResponse", "SkillPoolResponse"],
     ["SkillPoolResponse", "SkillCatalogResponse"],
+    ["SkillCatalogResponse", "SkillQuotaResponse"],
+    ["McpServerListResponse", "McpServerResponse"],
   ]) {
-    const response = schema(name, next)
-    assert.match(response, /required: \[skills\]/u)
-    assert.match(response, /next_cursor:\n\s+type: \[string, 'null'\]/u)
+    const schema = openapi.slice(openapi.indexOf(`    ${name}:\n`), openapi.indexOf(`    ${next}:\n`))
+    assert.match(schema, /required: \[data\]/u)
+    assert.match(schema, /additionalProperties: false/u)
+    assert.doesNotMatch(schema, /meta:/u)
   }
-  const catalog = schema("SkillCatalogResponse", "SkillQuotaResponse")
-  assert.match(catalog, /required: \[skills, next_cursor\]/u)
-  assert.match(catalog, /next_cursor:\n\s+type: \[string, 'null'\]/u)
-  const mcp = schema("McpServerListResponse", "McpServerResponse")
-  assert.match(mcp, /required: \[servers\]/u)
-  assert.match(mcp, /next_cursor:\n\s+type: string/u)
+  assert.match(openapi, /McpServerProjection:[\s\S]*?required: \[server_id, provider_key, server_identity, transport, declaration_digest, status\]/u)
+  assert.match(openapi, /PlatformProjectionReadErrorResponse:[\s\S]*?required: \[error\]/u)
 })
 
 test("the public AG-UI contract exposes only durable opaque BFF cursors", async () => {
@@ -415,12 +295,10 @@ test("the repository exposes executable contract, schema, and strictness gates",
   assert.match(packageJson.scripts["contract:test"], /test\/contract\/openapi-contract\.test\.mjs/u)
   assert.match(packageJson.scripts["contract:test"], /test\/agent-control-adapter\.test\.ts/u)
   assert.match(packageJson.scripts["format:check"], /^prettier --check/u)
-  assert.match(packageJson.scripts["format:check"], /src\/generated\/capability-http/u)
+  assert.match(packageJson.scripts["format:check"], /src\/http\/routes\/platform-projection\.ts/u)
   assert.match(packageJson.scripts["format:check"], /src\/generated\/scheduler/u)
   assert.match(packageJson.scripts["format:check"], /src\/generated\/iam-http/u)
-  assert.equal(packageJson.scripts["contract:generate:capability"], "node scripts/generate-capability-http-client.mjs --write")
   assert.equal(packageJson.scripts["contract:check:agent"], "node scripts/generate-agent-http-client.mjs --check")
-  assert.equal(packageJson.scripts["contract:check:capability"], "node scripts/generate-capability-http-client.mjs --check")
   assert.equal(packageJson.scripts["contract:check:platform-http"], "node scripts/generate-platform-http-client.mjs --check")
   assert.equal(packageJson.scripts["contract:generate:iam"], "node scripts/generate-iam-http-client.mjs --write")
   assert.equal(packageJson.scripts["contract:check:iam"], "node scripts/generate-iam-http-client.mjs --check")
@@ -428,7 +306,7 @@ test("the repository exposes executable contract, schema, and strictness gates",
   assert.equal(packageJson.scripts["contract:check:scheduler"], "node scripts/generate-scheduler-contracts.mjs --check")
   assert.equal(
     packageJson.scripts["contract:check"],
-    "pnpm contract:check:agent && pnpm contract:check:capability && pnpm contract:check:platform-http && pnpm contract:check:iam && pnpm contract:check:iam-relay && pnpm contract:check:scheduler && pnpm contract:check:platform && pnpm contract:check:storage && pnpm contract:lint && pnpm contract:semantic && pnpm contract:test",
+    "pnpm contract:check:agent && pnpm contract:check:platform-http && pnpm contract:check:iam && pnpm contract:check:iam-relay && pnpm contract:check:scheduler && pnpm contract:check:platform && pnpm contract:check:storage && pnpm contract:lint && pnpm contract:semantic && pnpm contract:test",
   )
   assert.equal(packageJson.devDependencies["@hey-api/openapi-ts"], "0.99.0")
   assert.equal(packageJson.devDependencies.prettier, "3.9.6")

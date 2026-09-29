@@ -1962,20 +1962,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SkillListResponse'
-        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '502': { $ref: '#/components/responses/BadGateway' }
-        '503': { $ref: '#/components/responses/ServiceUnavailable' }
-        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
-        '429':
-          description: IAM session admission is rate limited
-          headers:
-            Retry-After:
-              description: Bounded delay in seconds before retrying admission
-              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '403': { $ref: '#/components/responses/PlatformProjectionReadError' }
+        '400': { $ref: '#/components/responses/PlatformProjectionReadError' }
+        '502': { $ref: '#/components/responses/PlatformProjectionReadError' }
+        '503': { $ref: '#/components/responses/PlatformProjectionReadError' }
+        '401': { $ref: '#/components/responses/PlatformProjectionReadError' }
+        '429': { $ref: '#/components/responses/PlatformProjectionReadRateLimited' }
   /v1/skills/{skill_id}:
     get:
       tags: [Skills]
@@ -1986,7 +1978,7 @@ paths:
       x-kokoro-idempotency: none
       x-kokoro-permission: product.skill.read_published_personal
       summary: Read the current ACTIVE personal Skill by canonical ID
-      description: Inactive machine-contract candidate. Current IAM Product user and tenant are projected to Platform; missing, non-owner, cross-tenant, non-PERSONAL, and non-ACTIVE Skills share the same 404 and installation is not required.
+      description: Current IAM Product user and tenant are projected to Platform; missing, non-owner, cross-tenant, non-PERSONAL, and non-ACTIVE Skills share the same 404 and installation is not required.
       parameters:
         - $ref: '#/components/parameters/PublishedPersonalSkillId'
       responses:
@@ -2021,20 +2013,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SkillPoolResponse'
-        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '502': { $ref: '#/components/responses/BadGateway' }
-        '503': { $ref: '#/components/responses/ServiceUnavailable' }
-        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
-        '429':
-          description: IAM session admission is rate limited
-          headers:
-            Retry-After:
-              description: Bounded delay in seconds before retrying admission
-              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '403': { $ref: '#/components/responses/PlatformProjectionReadError' }
+        '400': { $ref: '#/components/responses/PlatformProjectionReadError' }
+        '502': { $ref: '#/components/responses/PlatformProjectionReadError' }
+        '503': { $ref: '#/components/responses/PlatformProjectionReadError' }
+        '401': { $ref: '#/components/responses/PlatformProjectionReadError' }
+        '429': { $ref: '#/components/responses/PlatformProjectionReadRateLimited' }
   /v1/skills/catalog:
     get:
       tags: [Skills]
@@ -2058,20 +2042,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SkillCatalogResponse'
-        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '502': { $ref: '#/components/responses/BadGateway' }
-        '503': { $ref: '#/components/responses/ServiceUnavailable' }
-        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
-        '429':
-          description: IAM session admission is rate limited
-          headers:
-            Retry-After:
-              description: Bounded delay in seconds before retrying admission
-              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '403': { $ref: '#/components/responses/PlatformProjectionReadError' }
+        '400': { $ref: '#/components/responses/PlatformProjectionReadError' }
+        '502': { $ref: '#/components/responses/PlatformProjectionReadError' }
+        '503': { $ref: '#/components/responses/PlatformProjectionReadError' }
+        '401': { $ref: '#/components/responses/PlatformProjectionReadError' }
+        '429': { $ref: '#/components/responses/PlatformProjectionReadRateLimited' }
   /v1/skills/quota:
     get:
       tags: [Skills]
@@ -2539,20 +2515,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/McpServerListResponse'
-        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '502': { $ref: '#/components/responses/BadGateway' }
-        '503': { $ref: '#/components/responses/ServiceUnavailable' }
-        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
-        '429':
-          description: IAM session admission is rate limited
-          headers:
-            Retry-After:
-              description: Bounded delay in seconds before retrying admission
-              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '403': { $ref: '#/components/responses/PlatformProjectionReadError' }
+        '400': { $ref: '#/components/responses/PlatformProjectionReadError' }
+        '502': { $ref: '#/components/responses/PlatformProjectionReadError' }
+        '503': { $ref: '#/components/responses/PlatformProjectionReadError' }
+        '401': { $ref: '#/components/responses/PlatformProjectionReadError' }
+        '429': { $ref: '#/components/responses/PlatformProjectionReadRateLimited' }
     post:
       tags: [MCP]
       operationId: registerMcpServer
@@ -5161,61 +5129,80 @@ components:
       additionalProperties: true
     Skill:
       type: object
-      required: [name, description, content_hash, scope]
+      required: [source_ref, name, description, content_hash, scope, revision, enabled, categories]
+      additionalProperties: false
       properties:
+        source_ref: { type: string }
         name: { type: string }
         description: { type: string }
         content_hash: { type: string }
-        scope: { type: string }
-        source_url: { type: string }
+        scope: { type: string, enum: [personal, project, organization, session, unknown] }
+        revision: { type: string, pattern: '^[1-9][0-9]*$' }
         enabled: { type: boolean }
         installed: { type: boolean }
         categories:
           type: array
           items: { type: string }
-        updated_at: { type: integer }
+    PlatformProjectionReadErrorResponse:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error:
+          type: object
+          required: [code, message, retryable]
+          additionalProperties: false
+          properties:
+            code:
+              type: string
+              enum: [invalid_query_parameter, service_auth_failed, session_authentication_required, session_invalid, session_forbidden, session_rate_limited, product_tenant_not_configured, product_tenant_forbidden, iam_admission_unavailable, skill_dependency_unavailable, skill_response_invalid]
+            message: { type: string, minLength: 1 }
+            retryable: { type: boolean }
     SkillListResponse:
       type: object
-      required: [data, meta]
+      required: [data]
+      additionalProperties: false
       properties:
         data:
           type: object
           required: [skills]
+          additionalProperties: false
           properties:
             skills:
               type: array
               items: { $ref: '#/components/schemas/Skill' }
             next_cursor:
               type: [string, 'null']
-        meta: { $ref: '#/components/schemas/RequestMeta' }
     SkillPoolResponse:
       type: object
-      required: [data, meta]
+      required: [data]
+      additionalProperties: false
       properties:
         data:
           type: object
           required: [skills]
+          additionalProperties: false
           properties:
             skills:
               type: array
               items: { $ref: '#/components/schemas/Skill' }
             next_cursor:
               type: [string, 'null']
-        meta: { $ref: '#/components/schemas/RequestMeta' }
     SkillCatalogResponse:
       type: object
-      required: [data, meta]
+      required: [data]
+      additionalProperties: false
       properties:
         data:
           type: object
-          required: [skills, next_cursor]
+          required: [skills]
+          additionalProperties: false
           properties:
             skills:
               type: array
               items: { $ref: '#/components/schemas/Skill' }
             next_cursor:
               type: [string, 'null']
-        meta: { $ref: '#/components/schemas/RequestMeta' }
     SkillQuotaResponse:
       type: object
       required: [data, meta]
@@ -5293,6 +5280,19 @@ components:
         secret_ref:
           type: [string, 'null']
         enabled: { type: boolean }
+    McpServerProjection:
+      type: object
+      required: [server_id, provider_key, server_identity, transport, declaration_digest, status]
+      additionalProperties: false
+      properties:
+        server_id: { type: string }
+        provider_key: { type: string }
+        server_identity: { type: string }
+        transport:
+          type: string
+          enum: [stdio, streamable_http, sse_compat, unknown]
+        declaration_digest: { type: string, pattern: '^[a-f0-9]{64}$' }
+        status: { type: string, enum: [registered, disabled, unknown] }
     McpServerRequest:
       type: object
       required: [name, transport, url, allowed_tools]
@@ -5310,18 +5310,19 @@ components:
           type: [string, 'null']
     McpServerListResponse:
       type: object
-      required: [data, meta]
+      required: [data]
+      additionalProperties: false
       properties:
         data:
           type: object
           required: [servers]
+          additionalProperties: false
           properties:
             servers:
               type: array
-              items: { $ref: '#/components/schemas/McpServer' }
+              items: { $ref: '#/components/schemas/McpServerProjection' }
             next_cursor:
               type: string
-        meta: { $ref: '#/components/schemas/RequestMeta' }
     McpServerResponse:
       type: object
       required: [data, meta]
@@ -5469,6 +5470,33 @@ components:
               const: true
         meta: { $ref: '#/components/schemas/RequestMeta' }
   responses:
+    PlatformProjectionReadError:
+      description: Product projection read was rejected or its owner dependency failed
+      headers:
+        x-request-id:
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          required: true
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/PlatformProjectionReadErrorResponse' }
+    PlatformProjectionReadRateLimited:
+      description: IAM session admission was rate limited
+      headers:
+        x-request-id:
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          required: true
+          schema: { type: string, const: no-store }
+        Retry-After:
+          required: false
+          schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/PlatformProjectionReadErrorResponse' }
     SkillPackageUploadGetBadRequest:
       description: Invalid strict path, query, body or header
       headers:

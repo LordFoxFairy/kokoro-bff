@@ -1,8 +1,11 @@
 # kokoro-bff 技术设计
 
-后继 public list 还必须保留 `source_ref=skill:<id>`、正十进制 `revision`，并证明本人 PERSONAL/ACTIVE Skill 在未安装时仍可见及 cursor/刷新恢复；不能只做 transport 迁移。读投影只用独立 `platform:projection.read` workload scope，和 catalog manage/write scope 分离。IAM introspection 得到的 tenant 是 authority，subject 只来自当次 Product user admission；下游 `x-kokoro-tenant-id` 仅作与已认证 workload tenant 的一致性断言，绝不下传用户 Bearer。public 429 只表示 IAM Product admission 限流，不假定 Platform 3.1.0 by-ID owner 支持 429。
+## 当前 Platform HTTP 3.1.0 读投影
 
-## Published personal Skill by ID：未激活 public contract preflight
+放置沿既有 `src/http/routes/owner.ts` 精确分派到 `platform-projection.ts`，后者校验五个 GET 路径/查询/无 body 与幂等键；`src/infrastructure/clients/platform/projection-http.ts` 为唯一 owner wire adapter，固定 generated HTTP contract、1 MiB 响应上限、请求 deadline/取消和响应 envelope 验证。IAM 当前 Product session 是 tenant/user authority；独立 `platform:projection.read` workload token 不转发浏览器 Bearer，读路径不复用默认关闭的 v4 catalog write candidate。旧 Capability HTTP 2.0.0 facade/vendor/generated/manifest 已删除，无双读 fallback。BFF 不拥有 Skill/MCP SQL、receipt、Redis cache，Platform 仍为唯一事实 writer。替代位置“BFF 自建 Skill 表”和“复用 v4 catalog Connect 作 read projection”均因 owner 重复/契约边界不同而淘汰。以下 preflight 为历史切片，不再表示当前运行态。
+
+
+## 历史快照：Published personal Skill by ID preflight（已由上文替代）
 
 **当前态。** 活跃 Skills/Pool/Catalog 与 MCP 读取仍经旧 Capability facade；`listSkills` 输出 legacy `{data,meta}` 并丢失 owner `source_ref/revision`。新 `GET /v1/skills/{skill_id}` 目前只有 BFF canonical public OpenAPI 与语义门，没有运行 route、Platform HTTP client、projection credential 或 Web caller。
 
@@ -949,38 +952,9 @@ Storage 已发布的 `web-bff + personal` CLEAN ASSET ListAssets、当次本人 
 Agent Artifact、Capability 关联与 `kind=all` 仍须分别完成可信 Run/ExecutionIdentity、能力 scope 和双源分页后发布；
 个人文件通过不等于完整 Library 或 `EDGE-BFF-STORAGE` 全边激活。
 
-## Capability consumer cutover
+## Platform 3.1 read consumer cutover（当前实现）
 
-Capability 是 Skill 与 MCP server 只读事实的唯一 owner；BFF 只拥有 public Product API projection 和消费适配。
-本切片冻结 accepted owner commit
-`7f89a267d745cbb9870f52d6edb23dec1a3c469b` 的 `2.0.0` HTTP OpenAPI，consumer 只消费
-Capability HTTP OpenAPI，不消费现有 Capability Proto，也不直连 Capability PostgreSQL/数据库或 Redis。固定 owner
-surface 只有四个 GET：`/v1/skills`、`/v1/skills/pool`、`/v1/skills/catalog`、`/v1/mcp/servers`。
-
-当前 generated Capability HTTP consumer 已从 vendored commit blob 生成到 `src/generated/capability-http/`，
-`src/infrastructure/clients/capability/` 是唯一 facade。generated wire 类型在 facade 终止，application 与 HTTP route
-只接触 BFF projection 类型；runtime 已原子切到四个 canonical `/v1/*` owner GET，旧路径、fallback 和 alias 已删除，
-不存在双轨。`contract:check:capability` 在临时目录重新生成并校验 exact file allow-list、bytes 与所有 provenance digest。
-固定的 `@hey-api/openapi-ts@0.99.0` transport 模板会为 optional property 显式赋 `undefined`，与本仓
-`exactOptionalPropertyTypes` 冲突；生成流水线因此在 Prettier 前执行固定模式、固定命中数的 compatibility normalization，
-任一模板命中数漂移即失败。该步骤不手改 generated output、不使用 TypeScript suppression，drift gate 会连续生成两次并验证
-byte-identical，再与 checked-in 16 files 比较。升级到原生生成 exact-optional-compatible output 的固定 generator 版本并通过
-regeneration、drift、typecheck 与 build 后，删除该 normalization。
-同一固定计数流水线把 owner contract 中所有 `additionalProperties:false` 对应的 generated Zod object validator 收紧为
-`strict()`；top-level response、nested data/item 与 error envelope 出现未声明字段时一律 fail closed。
-
-请求管线只接受每个 operation 的 query allow-list。Skills 三个列表仅允许 `query`、重复 `tags`、`scope_kind`、
-`limit`、`cursor`；MCP 列表仅允许 `provider_key`、`limit`、`cursor`。BFF 从受信 Web envelope 构造
-`x-kokoro-service: web-bff`、owner token、tenant、subject 和 request id，不透传浏览器 Authorization、Host、
-X-Forwarded-*、body identity 或任意 header。调用总预算固定 5 秒，响应 body 上限固定 1 MiB；read-only GET 不自动
-重试，也没有本地数据库事务或 outbox。owner 400/401/503 与 transport/schema failure 在 facade 归一为 BFF 稳定错误，
-不返回 owner payload、token 或 stack。Skills cursor scope 固定为 `tenant + subject + operation + normalized filters`。
-MCP cursor scope 固定为 `tenant + operation + provider_key filters`；Capability MCP owner 不提供 subject binding，BFF 不自造该 binding。
-两类 opaque cursor 都只原样回传；BFF 不解析、不持久化也不把 cursor 当作 authority。
-
-Wave 3 由 BFF consumer owner 在 Platform `kokoro.platform.v1` ConnectRPC consumer 激活的同一切片删除 Capability HTTP
-facade、generated client、vendor 与 dependency manifest；Platform owner 负责发布替代 contract。切换不得保留 HTTP
-fallback、双读或 alias。
+五个 GET 已统一沿 `src/http/routes/platform-projection.ts` 到 `src/infrastructure/clients/platform/projection-http.ts`；唯一 pin 是 owner 3.1.0 OpenAPI/generated HTTP，旧 Capability 2.0.0 manifest、vendor、generated 与 facade 已删。current IAM Product user/tenant 每次入站先验，出站独立 `platform:projection.read` 短期 workload token；list/MCP 用 owner-native 字段，by-ID 严格七字段。未创建 BFF Skill/MCP SQL 或兼容 fallback。真 owner 组合与 Web consumer 尚待 Root 验收。
 
 ## 8. 启动与关闭
 

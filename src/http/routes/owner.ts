@@ -5,8 +5,6 @@ import type { Skill } from "../../contracts/index.js"
 import { failure, ok } from "../../contracts/index.js"
 import { proxyUpstream } from "../../upstream.js"
 import { billingPlansData, checkoutUrlData, modelCatalogData } from "../../application/projections.js"
-import { requestCapability } from "../../infrastructure/clients/capability/client.js"
-import type { CapabilityOperation } from "../../infrastructure/clients/capability/types.js"
 import { ownerIdentityHeaders } from "../../infrastructure/clients/owner/identity.js"
 import { reply } from "../response.js"
 import { normalizeSystemUpstreamResponse, normalizeUpstreamResponse } from "../../infrastructure/clients/upstream-response.js"
@@ -14,6 +12,7 @@ import { incomingHeaders, queryOf } from "../request.js"
 import type { RequestContext } from "../../domain/request-context.js"
 import type { IdempotencyEntry, MutationTicket } from "../../application/idempotency.js"
 import type { LiveOwnerResult } from "./types.js"
+import { livePlatformProjectionRead } from "./platform-projection.js"
 
 export async function liveOwnerRequest(
   request: IncomingMessage,
@@ -41,9 +40,7 @@ export async function liveOwnerRequest(
       ownerIdentityHeaders(context),
       "web-bff",
     )
-    return strictSystemEnvelope
-      ? normalizeSystemUpstreamResponse(upstream, context.requestId)
-      : normalizeUpstreamResponse(upstream, context.requestId)
+    return strictSystemEnvelope ? normalizeSystemUpstreamResponse(upstream, context.requestId) : normalizeUpstreamResponse(upstream, context.requestId)
   } catch {
     return { status: 502, body: failure("upstream_unreachable", `The configured ${owner} upstream is unavailable`, context.requestId) }
   }
@@ -61,33 +58,29 @@ export async function liveOwnerBusiness(
 ): Promise<boolean> {
   const method = request.method || "GET"
 
+  if (await livePlatformProjectionRead(request, response, config, context, businessPath)) return true
+
   if (businessPath[0] === "system") {
-    await reply(response, 503, failure("system_projection_not_configured", "This System operation is not exposed by the BFF owner adapter", context.requestId), context, idempotency, mutation)
+    await reply(
+      response,
+      503,
+      failure("system_projection_not_configured", "This System operation is not exposed by the BFF owner adapter", context.requestId),
+      context,
+      idempotency,
+      mutation,
+    )
     return true
   }
 
-  const capabilityOperation: CapabilityOperation | null = businessPath[0] === "skills"
-    ? businessPath.length === 1 && method === "GET"
-      ? "skills"
-      : businessPath.length === 2 && businessPath[1] === "pool" && method === "GET"
-        ? "skillPool"
-        : businessPath.length === 2 && businessPath[1] === "catalog" && method === "GET"
-          ? "skillCatalog"
-          : null
-    : businessPath.length === 2 && businessPath[0] === "mcp" && businessPath[1] === "servers" && method === "GET"
-      ? "mcpServers"
-      : null
-  if (capabilityOperation !== null) {
-    const result = await requestCapability(config, context, capabilityOperation, queryOf(request))
-    if (!result.ok) {
-      await reply(response, result.status, failure(result.code, result.message, context.requestId), context, idempotency, mutation)
-      return true
-    }
-    await reply(response, result.status, ok(result.data, context.requestId), context, idempotency, mutation)
-    return true
-  }
   if (businessPath[0] === "skills" || businessPath[0] === "mcp") {
-    await reply(response, 503, failure("capability_projection_not_configured", "This Capability operation is not exposed by the BFF owner adapter", context.requestId), context, idempotency, mutation)
+    await reply(
+      response,
+      503,
+      failure("platform_operation_not_available", "This Platform operation is not exposed by the BFF owner adapter", context.requestId),
+      context,
+      idempotency,
+      mutation,
+    )
     return true
   }
 
@@ -106,7 +99,14 @@ export async function liveOwnerBusiness(
     }
     const projected = modelCatalogData(result.body)
     if (projected === null) {
-      await reply(response, 502, failure("upstream_response_invalid", "Model catalog did not match the v1 owner contract", context.requestId), context, idempotency, mutation)
+      await reply(
+        response,
+        502,
+        failure("upstream_response_invalid", "Model catalog did not match the v1 owner contract", context.requestId),
+        context,
+        idempotency,
+        mutation,
+      )
       return true
     }
     await reply(response, result.status, ok(projected, context.requestId), context, idempotency, mutation)
@@ -121,7 +121,14 @@ export async function liveOwnerBusiness(
     }
     const projected = billingPlansData(result.body)
     if (projected === null) {
-      await reply(response, 502, failure("upstream_response_invalid", "Billing catalog did not match the v1 owner contract", context.requestId), context, idempotency, mutation)
+      await reply(
+        response,
+        502,
+        failure("upstream_response_invalid", "Billing catalog did not match the v1 owner contract", context.requestId),
+        context,
+        idempotency,
+        mutation,
+      )
       return true
     }
     await reply(response, result.status, ok(projected, context.requestId), context, idempotency, mutation)
@@ -142,20 +149,22 @@ export async function liveOwnerBusiness(
     const catalog = billingPlansData(catalogResult.body)
     const plan = catalog?.plans.find((candidate) => candidate.id === planId)
     if (plan === undefined) {
-      await reply(response, 404, failure("plan_not_found", "Billing plan was not found", context.requestId, ), context, idempotency, mutation)
+      await reply(response, 404, failure("plan_not_found", "Billing plan was not found", context.requestId), context, idempotency, mutation)
       return true
     }
-    const checkoutBody = Buffer.from(JSON.stringify({
-      offer_revision_id: plan.id,
-      amount_minor: plan.amount_minor,
-      currency: plan.currency,
-      quote_snapshot: {
-        key: plan.key,
-        credit_micros: plan.credit_micros,
-        name: plan.name,
-        plan_id: plan.id,
-      },
-    }))
+    const checkoutBody = Buffer.from(
+      JSON.stringify({
+        offer_revision_id: plan.id,
+        amount_minor: plan.amount_minor,
+        currency: plan.currency,
+        quote_snapshot: {
+          key: plan.key,
+          credit_micros: plan.credit_micros,
+          name: plan.name,
+          plan_id: plan.id,
+        },
+      }),
+    )
     const checkoutResult = await liveOwnerRequest(request, config, context, "billing", "/v1/billing/checkout", method, checkoutBody)
     if (checkoutResult.status >= 400) {
       await reply(response, checkoutResult.status, checkoutResult.body, context, idempotency, mutation)
@@ -163,7 +172,14 @@ export async function liveOwnerBusiness(
     }
     const projected = checkoutUrlData(checkoutResult.body)
     if (projected === null) {
-      await reply(response, 502, failure("upstream_response_invalid", "Billing checkout did not return a checkout URL", context.requestId), context, idempotency, mutation)
+      await reply(
+        response,
+        502,
+        failure("upstream_response_invalid", "Billing checkout did not return a checkout URL", context.requestId),
+        context,
+        idempotency,
+        mutation,
+      )
       return true
     }
     await reply(response, checkoutResult.status, ok(projected, context.requestId), context, idempotency, mutation)
@@ -173,15 +189,17 @@ export async function liveOwnerBusiness(
   return false
 }
 
-export function skillPoolData(skills: Skill[]): { skills: Array<{
-  name: string
-  description: string
-  content_hash: string
-  scope: string
-  enabled?: boolean
-  categories?: string[]
-  updated_at?: number
-}> } {
+export function skillPoolData(skills: Skill[]): {
+  skills: Array<{
+    name: string
+    description: string
+    content_hash: string
+    scope: string
+    enabled?: boolean
+    categories?: string[]
+    updated_at?: number
+  }>
+} {
   return {
     skills: skills.map((skill) => ({
       name: skill.name,
@@ -195,16 +213,19 @@ export function skillPoolData(skills: Skill[]): { skills: Array<{
   }
 }
 
-export function skillCatalogData(skills: Skill[]): { skills: Array<{
-  name: string
-  description: string
-  content_hash: string
-  scope: string
-  installed: boolean
-  enabled: boolean
-  categories?: string[]
-  updated_at?: number
-}>; next_cursor: null } {
+export function skillCatalogData(skills: Skill[]): {
+  skills: Array<{
+    name: string
+    description: string
+    content_hash: string
+    scope: string
+    installed: boolean
+    enabled: boolean
+    categories?: string[]
+    updated_at?: number
+  }>
+  next_cursor: null
+} {
   return {
     skills: skills.map((skill) => ({
       name: skill.name,

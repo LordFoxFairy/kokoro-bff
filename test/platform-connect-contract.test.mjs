@@ -185,7 +185,7 @@ test("production artifact directory enumeration rejects undeclared filesystem en
 
 test("all pinned consumer manifests track the same lockfile without replacing existing owners", async () => {
   const digest = sha256(await readFile(new URL("pnpm-lock.yaml", root)))
-  for (const name of ["agent-http", "capability-http", "iam-http", "scheduler", "platform-connect"]) {
+  for (const name of ["agent-http", "platform-http", "iam-http", "scheduler", "platform-connect"]) {
     const manifest = JSON.parse(await requiredFile(`contract/dependencies/${name}.json`))
     assert.equal(manifest.lockfile_sha256, digest, `${name} lockfile pin`)
   }

@@ -1,8 +1,11 @@
 # kokoro-bff API contract policy
 
-后继 public list 还必须保留 `source_ref=skill:<id>`、正十进制 `revision`，并证明本人 PERSONAL/ACTIVE Skill 在未安装时仍可见及 cursor/刷新恢复；不能只做 transport 迁移。读投影只用独立 `platform:projection.read` workload scope，和 catalog manage/write scope 分离。IAM introspection 得到的 tenant 是 authority，subject 只来自当次 Product user admission；下游 `x-kokoro-tenant-id` 仅作与已认证 workload tenant 的一致性断言，绝不下传用户 Bearer。public 429 只表示 IAM Product admission 限流，不假定 Platform 3.1.0 by-ID owner 支持 429。
+## 当前 Platform projection public read
 
-## `GET /v1/skills/{skill_id}` 未激活候选
+唯一机器契约 `contract/openapi/v1/openapi.yaml` 的 `GET /v1/skills`、`/v1/skills/{skill_id}`、`/v1/skills/pool`、`/v1/skills/catalog`、`/v1/mcp/servers` 已按 Platform HTTP 3.1.0 运行切换。成功严格 `{data}` 且 `x-request-id`、`Cache-Control: no-store`；list 保留 owner `source_ref`、十进制 `revision`、`next_cursor`，MCP 保留六个 owner-native 字段。by-ID 只接 canonical `skill_id`，当前 IAM user/tenant 可见的 PERSONAL/ACTIVE 未安装 Skill 也可读，其余统一 404。错误只含 `{error:{code,message,retryable}}`；先当前 IAM admission，再用独立 projection workload token 调 Platform。旧四 GET 的 `{data,meta}` 和 Capability 2.0.0 客户端已删除。Web 同源消费与 Root 真组合验收仍待后续；下方“未激活候选”是历史门记录。
+
+
+## 历史快照：`GET /v1/skills/{skill_id}` 未激活候选（已由上文替代）
 
 canonical OpenAPI 现声明唯一 `getPublishedPersonalSkill` public read candidate。输入只有 canonical `skill_id` path；无 query、body 或幂等键。IAM-admitted Product tenant/user 是唯一身份来源；本人 PERSONAL/ACTIVE 且未安装也可读，非本人、跨 tenant、非 PERSONAL、非 ACTIVE 与缺失统一 404。成功严格为 `{data:{skill_id,source_ref,revision,status,name,summary,tags}}`，`status=active`、`source_ref=skill:<skill_id>` 形状、revision 为正十进制字符串；错误严格 `{error}`。状态集合精确为 200/400/401/403/404/429/502/503，所有出口要求 `x-request-id` 与 `Cache-Control: no-store`，429 可带有界 `Retry-After`。本片不激活 route。
 
@@ -670,41 +673,9 @@ ListAssets、本人 admission 和单 kind 分页定义独立 200；Agent Artifac
 trusted Run/ExecutionIdentity、能力 scope 和双源复合分页分别定稿。W1 IAM admission 已在 Task 1 闭环。
 本切片不激活 Storage edge，不接受旧 HTTP fallback，也不把 placeholder 200 当作兼容承诺。
 
-## Capability projection dependency
+## Platform projection dependency（当前实现）
 
-Capability internal-owner contract 已在 BFF runtime 内生成并接线，固定为 commit
-`7f89a267d745cbb9870f52d6edb23dec1a3c469b`、version `2.0.0`、artifact
-`contract/openapi/capability-http.openapi.json`、SHA-256
-`e0b7c4b57ac030efb73878b51da2a3595ec0172bce0608a88ea925b57a69761a`。BFF vendored artifact 是只读生成输入；
-Capability 仍拥有 wire schema 与四个 internal-owner GET，BFF 拥有 public `/v1/skills`、`/v1/skills/pool`、
-`/v1/skills/catalog`、`/v1/mcp/servers` 的 projection contract。
-
-public Skills 查询中 `query` 是唯一 canonical 搜索参数；旧搜索参数返回 `400 invalid_query_parameter`，不作为 alias、
-不转发。Skills 请求只允许 `query`、`tags`、`scope_kind`、`limit`、`cursor`，MCP 请求只允许
-`provider_key`、`limit`、`cursor`；未知 query parameter fail closed。Skills cursor scope 固定为 `tenant + subject + operation + normalized filters`。
-MCP cursor scope 固定为 `tenant + operation + provider_key filters`；MCP owner contract 不提供 subject binding，BFF 不自造 subject binding。
-两类 cursor 都是 owner 生成的 opaque continuation，BFF 只原样传递，不解析、不持久化。四个 GET 无副作用，
-`x-kokoro-idempotency=none`，不新增 mutation receipt 或事件协议。
-
-BFF 在 `c5e9b3c` 从 Web service context 构造 Capability 的 `web-bff` service identity、tenant、subject 和 request id；
-Task 1 后 tenant/subject 必须来自 IAM admission 建立的 context，legacy identity header 不得参与。
-浏览器的 Authorization、Host、X-Domain、X-Forwarded-* 与 body identity 不转发。Capability `200 {data}` 在 BFF
-边界映射为 canonical public `{data, meta}`；owner response `x-kokoro-request-id` 只用于关联，不进入 owner data，且按 Unicode
-code point 校验长度为 1..255，缺失、空值或过长均映射为 `502 capability_response_invalid`。BFF 参数错误与
-owner 400 映射为稳定 public 400；owner 401 视为内部 service credential/configuration failure 并映射为
-`503 capability_unavailable`；owner 503 映射为 `503 capability_unavailable` 并保留可重试语义；非法 envelope、过大
-响应或其他 owner 5xx 映射为 `502 capability_response_invalid`。所有 public 错误仍遵守本仓 canonical OpenAPI；
-四个 GET 的 canonical query 与 400/502/503 已同步到 public OpenAPI，path/method/operationId 保持冻结基线不变。
-owner `additionalProperties:false` 的 response/data/item/error object 均由 strict generated validator 执行；任何 legacy
-`meta`、混合资源字段或 nested extra 都映射为 `502 capability_response_invalid`。
-Catalog owner 省略 cursor 时 public projection 固定返回 `next_cursor:null`；其他列表不自造 cursor。MCP transport
-显式映射 `stdio → http`、`streamable_http → streamable_http`、`sse_compat → streamable_http`，`unknown` fail closed 为 502。
-
-BFF runtime 的 Capability generated consumer、facade 与 route 已实现；Root
-`EDGE-BFF-CAPABILITY` 仍为 broken，必须由 W0B-5 real smoke 与 W0B-6 integration 闭环后才能标记 active。
-
-Capability HTTP 是 Wave 0B 的临时 hard-link closure；Wave 3 以 Platform ConnectRPC 原子替换并删除 HTTP consumer，
-不承诺 HTTP/Proto 双协议兼容。
+五个 public read 的唯一机器定义是本仓 OpenAPI；内部 consumer 由 Platform owner 3.1.0 artifact 固定生成，`contract/dependencies/platform-http.json` pin 完整来源与生成结果。严格 `{data}`/`{error}`，不再提供旧 `{data,meta}` read envelope、Capability 2.0.0 双读、伪造 MCP 字段。请求 tenant/user 来自当次 IAM Product admission，不从 body 或浏览器自报；BFF 使用专用 projection workload token。Root 真组合与 Web caller 待验。
 
 ## 幂等：当前事实与目标
 

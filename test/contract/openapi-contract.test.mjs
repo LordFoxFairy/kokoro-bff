@@ -136,6 +136,7 @@ test("GetSkillPackageUpload semantic gate rejects changed fields, envelopes, hea
   const { openapi, baseline } = await readContract()
   const uploadPath = openapi.slice(openapi.indexOf("  /v1/skills/{skill_id}/package-upload:"), openapi.indexOf("  /v1/skills/{name}/revisions:"))
   const operation = uploadPath.slice(0, uploadPath.indexOf("    post:"))
+  const getRate = openapi.slice(openapi.indexOf("    SkillPackageUploadGetRateLimited:"), openapi.indexOf("    SkillPackageUploadGetBadGateway:"))
   const mutations = [
     openapi.replace("required: [skill_id, attempt_epoch, phase]", "required: [skill_id, phase]"),
     openapi.replace(
@@ -180,14 +181,11 @@ test("GetSkillPackageUpload semantic gate rejects changed fields, envelopes, hea
       "code: { type: string, enum: [product_tenant_not_configured, iam_admission_unavailable, skill_dependency_unavailable] }",
       "code: { type: string, enum: [iam_admission_unavailable, skill_dependency_unavailable] }",
     ),
-    openapi.replace(
-      "          required: false\n          schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }",
-      "          required: true\n          schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }",
-    ),
+    openapi.replace(getRate, getRate.replace("          required: false", "          required: true")),
   ]
-  for (const broken of mutations) {
+  for (const [index, broken] of mutations.entries()) {
     assert.notEqual(broken, openapi)
-    assert.ok(inspectBffOpenApi(broken, baseline).some((error) => /getSkillPackageUpload|SkillPackageUpload/u.test(error)))
+    assert.ok(inspectBffOpenApi(broken, baseline).some((error) => /getSkillPackageUpload|SkillPackageUpload/u.test(error)), `mutation ${index}`)
   }
 })
 

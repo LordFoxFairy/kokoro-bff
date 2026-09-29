@@ -199,7 +199,7 @@ async function manifestFor(directory) {
   assert.equal(packageJson.dependencies.zod, "4.5.4")
   return {
     schema_version: 1,
-    status: "generated-not-activated",
+    status: "generated",
     owner: {
       repository_path: "apps/kokoro-capability",
       repository_commit: ownerCommit,

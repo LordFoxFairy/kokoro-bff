@@ -1,8 +1,10 @@
 # kokoro-bff 当前实现
 
-后继 public list 还必须保留 `source_ref=skill:<id>`、正十进制 `revision`，并证明本人 PERSONAL/ACTIVE Skill 在未安装时仍可见及 cursor/刷新恢复；不能只做 transport 迁移。读投影只用独立 `platform:projection.read` workload scope，和 catalog manage/write scope 分离。IAM introspection 得到的 tenant 是 authority，subject 只来自当次 Product user admission；下游 `x-kokoro-tenant-id` 仅作与已认证 workload tenant 的一致性断言，绝不下传用户 Bearer。public 429 只表示 IAM Product admission 限流，不假定 Platform 3.1.0 by-ID owner 支持 429。
+## 当前读投影切换（待 Root 真组合验收）
 
-## W3-BFF-PUBLISHED-SKILL-READ-PREFLIGHT：仅未激活机器/文档候选
+本仓当前实现已将五个 public GET（Skills、by-ID、Pool、Catalog、MCP）统一接到 Platform HTTP 3.1.0；独立 `platform:projection.read` IAM workload credential、当前 Product user/tenant admission、owner-native 字段与严格 `{data}`/`{error}` 均由 BFF 负责。旧 Capability HTTP facade、2.0.0 vendor/generated/manifest、旧 shared-secret read 路径已删除。无 BFF Skill/MCP SQL、receipt 或缓存。Node22 单仓门与 Root 真 IAM/BFF/Platform 组合证据分开记录；Web 读契约尚未更新，不能宣称页面闭环。以下 W3-PREFLIGHT 和更早段落是提交时点历史记录，不覆盖本节。
+
+## 历史快照：W3-BFF-PUBLISHED-SKILL-READ-PREFLIGHT（已由上文运行实现替代）
 
 基线 BFF clean `55ca6c1d8a7fbd0a21bea8d3539667a68d67e9d9`、Platform owner clean `6a09913a96c686b316bfe707b823d039e625607a`。唯一 public OpenAPI 新增 `GET /v1/skills/{skill_id}`、operationId=`getPublishedPersonalSkill` 的未激活候选：当前 IAM Product user/tenant 将由 BFF 投影到 Platform，只有本人 PERSONAL/ACTIVE Skill 可读且不要求安装；不存在、非本人、跨 tenant、非 PERSONAL 或非 ACTIVE 统一 404。200 只有 `skill_id/source_ref/revision/status/name/summary/tags` 七个安全字段的 `{data}`；无 query/body/Idempotency-Key；400/401/403/404/429/502/503 使用状态专属错误，成功与每个错误都要求 `x-request-id` 和 `Cache-Control: no-store`。本片没有 route、owner client、credential、generated、配置、SQL/receipt/cache 或 Web 入口，因此不得声称已运行或 Web 可见。
 

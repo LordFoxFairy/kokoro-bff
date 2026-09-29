@@ -1,8 +1,11 @@
 # kokoro-bff data model
 
-后继 public list 还必须保留 `source_ref=skill:<id>`、正十进制 `revision`，并证明本人 PERSONAL/ACTIVE Skill 在未安装时仍可见及 cursor/刷新恢复；不能只做 transport 迁移。读投影只用独立 `platform:projection.read` workload scope，和 catalog manage/write scope 分离。IAM introspection 得到的 tenant 是 authority，subject 只来自当次 Product user admission；下游 `x-kokoro-tenant-id` 仅作与已认证 workload tenant 的一致性断言，绝不下传用户 Bearer。public 429 只表示 IAM Product admission 限流，不假定 Platform 3.1.0 by-ID owner 支持 429。
+## 当前 Platform projection 数据边界
 
-## Published personal Skill read：无 BFF 持久化 owner
+五个 GET 使用当前 IAM Product tenant/user 与独立 Platform projection credential 获取 owner 当前事实；BFF 没有新增 Skill/MCP 表、索引、事务、Redis key、receipt 或投影缓存，也不跨 owner SQL。`source_ref`、`revision`、status 与 cursor 来自 Platform；BFF 只校验并透出公开安全字段。旧 Capability HTTP transport 删除不触及本仓 canonical `database/schema.sql`。下方“未激活机器候选”为历史记录。
+
+
+## 历史快照：Published personal Skill read（已由上文替代）
 
 新 `GET /v1/skills/{skill_id}` 未激活机器候选不新增表、列、索引、事务、receipt、outbox、Redis key 或 cache。Skill tenant、user owner、PERSONAL scope、ACTIVE state、`source_ref` 与 `revision` 都是 Platform owner 事实；BFF 只在当次 IAM admission 后读取并安全投影七字段。非本人/跨 tenant/非 PERSONAL/非 ACTIVE 与缺失均由 owner read 隐蔽为 404。
 
@@ -555,16 +558,9 @@ Store 或 Storage network endpoint，不形成可恢复的业务事实。
 本切片不修改 `database/schema.sql`，不新增 migration、索引、Redis namespace 或跨 owner foreign key。未来 W2 若需
 durable BFF projection，必须先重新通过 owner、API、事务、retention 与 canonical schema 设计门。
 
-## Capability projection data boundary
+## Platform projection data boundary（当前实现）
 
-Capability Skill、Skill Pool、Skill Catalog 与 MCP server 是 Capability owner fact，不是 BFF 持久化事实。该 consumer
-不新增 Capability 表、缓存事实或 schema，不读取 Capability 数据库/Redis，不建立跨仓 foreign key，也不把 owner
-cursor、响应或 generated wire type 写入 BFF PostgreSQL。列表 GET 在单次请求生命周期内完成校验、owner HTTP read 与
-public projection，没有 BFF 数据库事务、outbox、幂等 receipt、retention 或 GC。
-本设计切片不修改 [`../database/schema.sql`](../database/schema.sql)；其基线 SHA-256 为
-`8dcb1b3194ed4d4c50c42cdb9a199fec5e253793dd3ca062e92094ab68436da1`。fresh install、现有查询/index、tenant predicate
-与删除策略均保持不变。若 Capability projection 后续需要本地 durable fact，必须重新通过 owner、API 与 canonical
-schema 设计门，不能把 client cache 升格为事实源。
+Platform 独占 Skill/MCP 事实、owner 查询和 cursor；BFF 的五个 public GET 只作当前 IAM 用户的短暂投影，不新增表、缓存、receipt、Redis key、跨 owner JOIN 或 SQL。旧 Capability HTTP 客户端删除不影响 canonical schema。
 
 ## Scheduler receiver receipt design
 

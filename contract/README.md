@@ -3,7 +3,7 @@
 ## Owner
 
 `kokoro-bff` owns the Web-facing Product API contract. Root catalogs released artifacts but does not keep an editable
-copy. IAM, System, Model, Billing, Capability, Storage, Agent, Scheduler, and Music retain their own internal contracts;
+copy. IAM, System, Model, Billing, Platform, Storage, Agent, Scheduler, and Music retain their own internal contracts;
 this repository documents only the BFF projection exposed to callers.
 
 ## Visibility

@@ -225,7 +225,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
 
   const upstreams: Record<string, string | null> = {
     system: optionalUrl(env.KOKORO_SYSTEM_BASE_URL),
-    capability: optionalUrl(env.KOKORO_CAPABILITY_BASE_URL),
+    platform: optionalUrl(env.KOKORO_PLATFORM_BASE_URL),
     scheduler: optionalUrl(env.KOKORO_SCHEDULER_BASE_URL),
     agents: optionalUrl(env.KOKORO_AGENT_BASE_URL),
     billing: optionalUrl(env.KOKORO_BILLING_BASE_URL),
@@ -388,7 +388,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
     redisUrl: requiredConnectionUrl(env.KOKORO_BFF_REDIS_URL, "KOKORO_BFF_REDIS_URL", ["redis:", "rediss:"]),
     agUi,
     upstreams,
-    platformProjection: { baseUrl: skillDraft.platformBaseUrl, credentialFile: env.KOKORO_PLATFORM_PROJECTION_CREDENTIAL_FILE?.trim() || null, timeoutMs: upstreamTimeoutMs },
+    platformProjection: {
+      baseUrl: skillDraft.platformBaseUrl,
+      credentialFile: env.KOKORO_PLATFORM_PROJECTION_CREDENTIAL_FILE?.trim() || null,
+      timeoutMs: upstreamTimeoutMs,
+    },
     skillDraft,
   }
 }

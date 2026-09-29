@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "status": "generated-not-activated",
+  "status": "generated",
   "owner": {
     "repository_path": "apps/kokoro-capability",
     "repository_commit": "6a09913a96c686b316bfe707b823d039e625607a",

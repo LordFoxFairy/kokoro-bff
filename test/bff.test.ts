@@ -41,7 +41,7 @@ function config(overrides: Partial<BffConfig> = {}): BffConfig {
     agUi: DEFAULT_AGUI_CONFIG,
     upstreams: {
       system: null,
-      capability: null,
+      platform: null,
       storage: null,
       scheduler: null,
       agents: null,
@@ -81,14 +81,14 @@ describe("kokoro-bff v1 mock contract", () => {
 
     const response = await fetch(`${base}/v1/projects`, { headers: { "x-domain": "evil.example" } })
     assert.equal(response.status, 403)
-    assert.equal((await response.json() as { error: { code: string } }).error.code, "service_auth_failed")
+    assert.equal(((await response.json()) as { error: { code: string } }).error.code, "service_auth_failed")
   })
 
   it("returns a versioned project projection and replays idempotent creation", async () => {
     const base = await listen(testServer(config()))
     const headers = { ...authHeaders(), "x-kokoro-request-id": "request-projects" }
     const list = await fetch(`${base}/v1/projects`, { headers })
-    const listBody = await list.json() as { data: { projects: Array<{ id: string }> }; meta: { request_id: string } }
+    const listBody = (await list.json()) as { data: { projects: Array<{ id: string }> }; meta: { request_id: string } }
     assert.equal(list.status, 200)
     assert.equal(listBody.data.projects[0]?.id, "project_kokoro")
     assert.equal(listBody.meta.request_id, "request-projects")
@@ -109,14 +109,14 @@ describe("kokoro-bff v1 mock contract", () => {
       body: JSON.stringify({ name: "Design system", description: "Different payload" }),
     })
     assert.equal(conflict.status, 409)
-    assert.equal((await conflict.json() as { error: { code: string } }).error.code, "idempotency_conflict")
+    assert.equal(((await conflict.json()) as { error: { code: string } }).error.code, "idempotency_conflict")
   })
 
   it("closes the project instruction read, update, and revision history flow", async () => {
     const base = await listen(testServer(config()))
     const projectId = "project_kokoro"
     const read = await fetch(`${base}/v1/projects/${projectId}`, { headers: authHeaders() })
-    const readBody = await read.json() as {
+    const readBody = (await read.json()) as {
       data: { project: { id: string; instruction: string } }
       meta: { request_id: string }
     }
@@ -131,7 +131,7 @@ describe("kokoro-bff v1 mock contract", () => {
       body: JSON.stringify({ instruction: nextInstruction }),
     })
     assert.equal(missingKey.status, 400)
-    assert.equal((await missingKey.json() as { error: { code: string } }).error.code, "idempotency_key_required")
+    assert.equal(((await missingKey.json()) as { error: { code: string } }).error.code, "idempotency_key_required")
 
     const init = {
       method: "PATCH",
@@ -144,11 +144,11 @@ describe("kokoro-bff v1 mock contract", () => {
     assert.deepEqual(await updated.json(), await replayed.json())
 
     const afterUpdate = await fetch(`${base}/v1/projects/${projectId}`, { headers: authHeaders() })
-    const afterUpdateBody = await afterUpdate.json() as { data: { project: { instruction: string } } }
+    const afterUpdateBody = (await afterUpdate.json()) as { data: { project: { instruction: string } } }
     assert.equal(afterUpdateBody.data.project.instruction, nextInstruction)
 
     const revisions = await fetch(`${base}/v1/projects/${projectId}/instruction-revisions`, { headers: authHeaders() })
-    const revisionsBody = await revisions.json() as {
+    const revisionsBody = (await revisions.json()) as {
       data: { items: Array<{ id: string; instruction: string; updated_at: string; actor_name: string; current: boolean }> }
       meta: { request_id: string }
     }
@@ -175,7 +175,7 @@ describe("kokoro-bff v1 mock contract", () => {
       body: missingKeyBody,
     })
     assert.equal(missingKey.status, 400)
-    assert.equal((await missingKey.json() as { error: { code: string } }).error.code, "idempotency_key_required")
+    assert.equal(((await missingKey.json()) as { error: { code: string } }).error.code, "idempotency_key_required")
 
     const makeBody = () => {
       const form = new FormData()
@@ -185,8 +185,8 @@ describe("kokoro-bff v1 mock contract", () => {
     const init = { method: "POST", headers: { ...authHeaders(), "idempotency-key": "project-resource-flow" }, body: makeBody() }
     const first = await fetch(`${base}${path}`, init)
     const second = await fetch(`${base}${path}`, init)
-    const firstBody = await first.json() as { data: { ok: boolean } }
-    const secondBody = await second.json() as { data: { ok: boolean } }
+    const firstBody = (await first.json()) as { data: { ok: boolean } }
+    const secondBody = (await second.json()) as { data: { ok: boolean } }
     assert.equal(first.status, 200)
     assert.deepEqual(firstBody, secondBody)
     assert.deepEqual(firstBody.data, { ok: true })
@@ -202,14 +202,14 @@ describe("kokoro-bff v1 mock contract", () => {
       body: JSON.stringify({ enabled: false }),
     })
     assert.equal(missingSkillKey.status, 400)
-    assert.equal((await missingSkillKey.json() as { error: { code: string } }).error.code, "idempotency_key_required")
+    assert.equal(((await missingSkillKey.json()) as { error: { code: string } }).error.code, "idempotency_key_required")
 
     const disabled = await fetch(skillPath, {
       method: "PATCH",
       headers: { ...authHeaders(), "content-type": "application/json", "idempotency-key": "project-skill-disable" },
       body: JSON.stringify({ enabled: false }),
     })
-    const disabledBody = await disabled.json() as { data: { skill: { project_id: string; name: string; enabled: boolean } } }
+    const disabledBody = (await disabled.json()) as { data: { skill: { project_id: string; name: string; enabled: boolean } } }
     assert.equal(disabled.status, 200)
     assert.deepEqual(disabledBody.data.skill, { project_id: projectId, name: "skill-builder", enabled: false })
 
@@ -226,7 +226,7 @@ describe("kokoro-bff v1 mock contract", () => {
         auto_approve: true,
       }),
     })
-    const scheduledBody = await scheduled.json() as {
+    const scheduledBody = (await scheduled.json()) as {
       data: { task: { project_id: string; title: string; expires_at?: string; auto_approve: boolean } }
     }
     assert.equal(scheduled.status, 200)
@@ -240,7 +240,7 @@ describe("kokoro-bff v1 mock contract", () => {
     const base = await listen(testServer(config()))
     const response = await fetch(`${base}/v1/agents/connections/setup?platform=telegram`, { headers: authHeaders() })
     assert.equal(response.status, 200)
-    const agentBody = await response.json() as { data: { platform: string; status: string }; meta: { request_id: string } }
+    const agentBody = (await response.json()) as { data: { platform: string; status: string }; meta: { request_id: string } }
     assert.equal(agentBody.data.platform, "telegram")
     assert.equal(agentBody.data.status, "disconnected")
     assert.ok(agentBody.meta.request_id.length > 0)
@@ -258,9 +258,9 @@ describe("kokoro-bff v1 mock contract", () => {
       body: JSON.stringify({ title: "Daily review", prompt: "Review", frequency: "daily", time: "10:00", timezone: "UTC", auto_approve: false }),
     })
     assert.equal(created.status, 200)
-    const createdBody = await created.json() as { data: { task: { id: string } } }
+    const createdBody = (await created.json()) as { data: { task: { id: string } } }
     const listed = await fetch(`${base}/v1/scheduled-tasks`, { headers: authHeaders() })
-    assert.ok((await listed.json() as { data: { tasks: unknown[] } }).data.tasks.length >= 2)
+    assert.ok(((await listed.json()) as { data: { tasks: unknown[] } }).data.tasks.length >= 2)
     assert.match(createdBody.data.task.id, /^scheduled_/)
   })
 
@@ -275,30 +275,48 @@ describe("kokoro-bff v1 mock contract", () => {
       response.end(JSON.stringify({ data: { ok: true }, meta: { request_id: "readyz-live" } }))
     })
     const upstreamBase = await listen(upstream)
-    const liveReadyBase = await listen(liveServer(config({
-      mode: "live",
-      upstreams: {
-        system: upstreamBase,
-        model: upstreamBase,
-        capability: upstreamBase,
-        storage: upstreamBase,
-        scheduler: upstreamBase,
-        agents: null,
-        billing: upstreamBase,
-      },
-    }), { readiness: async (): Promise<void> => { throw new Error("database unavailable") } }))
+    const liveReadyBase = await listen(
+      liveServer(
+        config({
+          mode: "live",
+          upstreams: {
+            system: upstreamBase,
+            model: upstreamBase,
+            capability: upstreamBase,
+            storage: upstreamBase,
+            scheduler: upstreamBase,
+            agents: null,
+            billing: upstreamBase,
+          },
+        }),
+        {
+          readiness: async (): Promise<void> => {
+            throw new Error("database unavailable")
+          },
+        },
+      ),
+    )
     const liveReady = await fetch(`${liveReadyBase}/readyz`)
     assert.equal(liveReady.status, 503)
     assert.deepEqual(await liveReady.json(), { status: "ok", service: "kokoro-bff", mode: "live" })
 
     const liveAgentRoute = await fetch(`${liveReadyBase}/v1/sessions`, { headers: authHeaders() })
     assert.equal(liveAgentRoute.status, 503)
-    assert.equal((await liveAgentRoute.json() as { error: { code: string } }).error.code, "business_store_not_configured")
+    assert.equal(((await liveAgentRoute.json()) as { error: { code: string } }).error.code, "business_store_not_configured")
 
-    const livePartialBase = await listen(liveServer(config({
-      mode: "live",
-      upstreams: { ...config().upstreams, system: upstreamBase },
-    }), { readiness: async (): Promise<void> => { throw new Error("database unavailable") } }))
+    const livePartialBase = await listen(
+      liveServer(
+        config({
+          mode: "live",
+          upstreams: { ...config().upstreams, system: upstreamBase },
+        }),
+        {
+          readiness: async (): Promise<void> => {
+            throw new Error("database unavailable")
+          },
+        },
+      ),
+    )
     const livePartial = await fetch(`${livePartialBase}/readyz`)
     assert.equal(livePartial.status, 503)
   })
@@ -311,7 +329,7 @@ describe("kokoro-bff v1 mock contract", () => {
       headers: { ...authHeaders(), "content-type": "application/json" },
       body: JSON.stringify({ repository }),
     })
-    const body = await response.json() as {
+    const body = (await response.json()) as {
       data: { repository: string; default_branch: string; skill: { name: string; description: string } }
       meta: { request_id: string }
     }
@@ -337,7 +355,7 @@ describe("kokoro-bff v1 mock contract", () => {
       body: JSON.stringify({ repository }),
     })
     assert.equal(missingKey.status, 400)
-    assert.equal((await missingKey.json() as { error: { code: string } }).error.code, "idempotency_key_required")
+    assert.equal(((await missingKey.json()) as { error: { code: string } }).error.code, "idempotency_key_required")
 
     const init = {
       method: "POST",
@@ -346,7 +364,7 @@ describe("kokoro-bff v1 mock contract", () => {
     }
     const first = await fetch(`${base}/v1/skills/github/import`, init)
     const second = await fetch(`${base}/v1/skills/github/import`, init)
-    const firstBody = await first.json() as {
+    const firstBody = (await first.json()) as {
       data: { repository: string; default_branch: string; skill: { name: string; description: string } }
       meta: { request_id: string }
     }
@@ -373,7 +391,7 @@ describe("kokoro-bff v1 mock contract", () => {
         body: JSON.stringify({ repository: "https://example.com/acme/skill-pack" }),
       })
       assert.equal(response.status, 400)
-      assert.equal((await response.json() as { error: { code: string } }).error.code, "invalid_github_url")
+      assert.equal(((await response.json()) as { error: { code: string } }).error.code, "invalid_github_url")
     }
   })
 
@@ -382,7 +400,7 @@ describe("kokoro-bff v1 mock contract", () => {
     const quotaResponse = await fetch(`${base}/v1/skills/quota`, {
       headers: { ...authHeaders(), "x-kokoro-request-id": "skills-quota-request" },
     })
-    const quotaBody = await quotaResponse.json() as {
+    const quotaBody = (await quotaResponse.json()) as {
       data: {
         namespace: string
         package_count: number
@@ -403,7 +421,7 @@ describe("kokoro-bff v1 mock contract", () => {
     const revisionsResponse = await fetch(`${base}/v1/skills/contract-review/revisions?scope=official`, {
       headers: authHeaders(),
     })
-    const revisionsBody = await revisionsResponse.json() as {
+    const revisionsBody = (await revisionsResponse.json()) as {
       data: { revisions: Array<Record<string, unknown>> }
       meta: { request_id: string }
     }
@@ -429,11 +447,12 @@ describe("kokoro-bff v1 mock contract", () => {
       headers: toggleHeaders,
     })
     assert.equal(disabled.status, 200)
-    assert.deepEqual((await disabled.json() as { data: { ok: boolean } }).data, { ok: true })
+    assert.deepEqual(((await disabled.json()) as { data: { ok: boolean } }).data, { ok: true })
 
     const afterDisable = await fetch(`${base}/v1/skills`, { headers: authHeaders() })
-    const disabledSkill = ((await afterDisable.json() as { data: { skills: Array<{ name: string; enabled?: boolean }> } }).data.skills)
-      .find((skill) => skill.name === "contract-review")
+    const disabledSkill = ((await afterDisable.json()) as { data: { skills: Array<{ name: string; enabled?: boolean }> } }).data.skills.find(
+      (skill) => skill.name === "contract-review",
+    )
     assert.equal(disabledSkill?.enabled, false)
 
     const enabled = await fetch(`${base}/v1/skills/contract-review/enable?scope=official`, {
@@ -441,7 +460,7 @@ describe("kokoro-bff v1 mock contract", () => {
       headers: { ...authHeaders(), "idempotency-key": "skills-toggle-contract-review-enable" },
     })
     assert.equal(enabled.status, 200)
-    assert.deepEqual((await enabled.json() as { data: { ok: boolean } }).data, { ok: true })
+    assert.deepEqual(((await enabled.json()) as { data: { ok: boolean } }).data, { ok: true })
   })
 
   it("completes the MCP server register, toggle, list, and delete mock flow", async () => {
@@ -460,14 +479,14 @@ describe("kokoro-bff v1 mock contract", () => {
       body: JSON.stringify(registration),
     })
     assert.equal(missingKey.status, 400)
-    assert.equal((await missingKey.json() as { error: { code: string } }).error.code, "idempotency_key_required")
+    assert.equal(((await missingKey.json()) as { error: { code: string } }).error.code, "idempotency_key_required")
 
     const registered = await fetch(`${base}/v1/mcp/servers`, {
       method: "POST",
       headers: { ...authHeaders(), "content-type": "application/json", "idempotency-key": "mcp-register-phase-one" },
       body: JSON.stringify(registration),
     })
-    const registeredBody = await registered.json() as {
+    const registeredBody = (await registered.json()) as {
       data: { server: Record<string, unknown> }
       meta: { request_id: string }
     }
@@ -485,7 +504,7 @@ describe("kokoro-bff v1 mock contract", () => {
     assert.ok(registeredBody.meta.request_id.length > 0)
 
     const listed = await fetch(`${base}/v1/mcp/servers`, { headers: authHeaders() })
-    const listedBody = await listed.json() as {
+    const listedBody = (await listed.json()) as {
       data: { servers: Array<{ name: string; enabled: boolean }> }
       meta: { request_id: string }
     }
@@ -498,174 +517,27 @@ describe("kokoro-bff v1 mock contract", () => {
       headers: { ...authHeaders(), "idempotency-key": "mcp-toggle-phase-one-disable" },
     })
     assert.equal(disabled.status, 200)
-    assert.deepEqual((await disabled.json() as { data: { ok: boolean } }).data, { ok: true })
+    assert.deepEqual(((await disabled.json()) as { data: { ok: boolean } }).data, { ok: true })
 
     const enabled = await fetch(`${base}/v1/mcp/servers/${name}/enable`, {
       method: "POST",
       headers: { ...authHeaders(), "idempotency-key": "mcp-toggle-phase-one-enable" },
     })
     assert.equal(enabled.status, 200)
-    assert.deepEqual((await enabled.json() as { data: { ok: boolean } }).data, { ok: true })
+    assert.deepEqual(((await enabled.json()) as { data: { ok: boolean } }).data, { ok: true })
 
     const deleted = await fetch(`${base}/v1/mcp/servers/${name}`, {
       method: "DELETE",
       headers: { ...authHeaders(), "idempotency-key": "mcp-delete-phase-one" },
     })
     assert.equal(deleted.status, 200)
-    assert.deepEqual((await deleted.json() as { data: { ok: boolean } }).data, { ok: true })
+    assert.deepEqual(((await deleted.json()) as { data: { ok: boolean } }).data, { ok: true })
 
     const afterDelete = await fetch(`${base}/v1/mcp/servers`, { headers: authHeaders() })
-    assert.equal(((await afterDelete.json() as { data: { servers: Array<{ name: string }> } }).data.servers)
-      .some((server) => server.name === name), false)
-  })
-
-  it("routes live Skills traffic to the explicit Capability projection", async () => {
-    const upstream = createServer((_request, response) => {
-      response.setHeader("content-type", "application/json")
-      response.setHeader("x-kokoro-request-id", "skills-live")
-      response.end(JSON.stringify({
-        data: {
-          skills: [{
-            source_selector: "skill:contract-review",
-            name: "contract-review",
-            description: "Review contracts",
-            content_hash: "sha256:abc",
-            scope: "personal",
-            revision: "1",
-            enabled: true,
-            categories: ["review"],
-          }],
-          next_cursor: "pool-next",
-        },
-      }))
-    })
-    const upstreamBase = await listen(upstream)
-    const base = await listen(liveServer(config({
-      mode: "live",
-      upstreams: { ...config().upstreams, capability: upstreamBase },
-    })))
-    const response = await fetch(`${base}/v1/skills/pool`, { headers: { ...authHeaders(), "x-kokoro-request-id": "skills-live" } })
-    assert.equal(response.status, 200)
-    assert.deepEqual(await response.json(), {
-      data: {
-        skills: [{
-          name: "contract-review",
-          description: "Review contracts",
-          content_hash: "sha256:abc",
-          scope: "personal",
-          enabled: true,
-          categories: ["review"],
-        }],
-        next_cursor: "pool-next",
-      },
-      meta: { request_id: "skills-live" },
-    })
-  })
-
-  it("generates standard Forwarded context for live upstream calls", async () => {
-    let received: Record<string, string | undefined> = {}
-    const upstream = createServer((request, response) => {
-      received = {
-        forwarded: request.headers.forwarded,
-        service: request.headers["x-kokoro-service"]?.toString(),
-        secret: request.headers["x-kokoro-internal-secret"]?.toString(),
-        authorization: request.headers.authorization?.toString(),
-        xForwardedFor: request.headers["x-forwarded-for"]?.toString(),
-        requestIdAlias: request.headers["x-request-id"]?.toString(),
-        xDomain: request.headers["x-domain"]?.toString(),
-      }
-      response.setHeader("content-type", "application/json")
-      response.setHeader("x-kokoro-request-id", "live-request")
-      response.end(JSON.stringify({
-        data: {
-          skills: [{
-            source_selector: "skill:project-live",
-            name: "project-live",
-            description: "Live project skill",
-            content_hash: "sha256:live",
-            scope: "personal",
-            revision: "1",
-            enabled: true,
-            categories: [],
-          }],
-        },
-      }))
-    })
-    const upstreamBase = await listen(upstream)
-    const base = await listen(liveServer(config({
-      mode: "live",
-      upstreamTimeoutMs: 10000,
-      upstreams: { ...config().upstreams, capability: upstreamBase },
-    })))
-    const response = await fetch(`${base}/v1/skills`, { headers: { ...authHeaders(), forwarded: "for=198.51.100.7", "x-forwarded-for": "198.51.100.8", "x-domain": "evil.example", "x-kokoro-request-id": "live-request" } })
-    assert.equal(response.status, 200)
-    assert.deepEqual(received, {
-      forwarded: undefined,
-      service: "web-bff",
-      secret: "bff-upstream-secret",
-      authorization: undefined,
-      xForwardedFor: undefined,
-      requestIdAlias: undefined,
-      xDomain: undefined,
-    })
-    assert.equal((await response.json() as { meta: { request_id: string } }).meta.request_id, "live-request")
-  })
-
-  it("routes Skills and MCP through the single Capability owner projection", async () => {
-    const received: string[] = []
-    const hubUpstream = createServer((request, response) => {
-      received.push(`capability:${request.url}`)
-      response.setHeader("content-type", "application/json")
-      response.setHeader("x-kokoro-request-id", "upstream")
-      response.end(request.url?.startsWith("/v1/mcp/servers")
-        ? JSON.stringify({ data: { servers: [], next_cursor: "mcp-next" } })
-        : JSON.stringify({ data: { skills: [], next_cursor: "skills-next" } }))
-    })
-    const capabilityBase = await listen(hubUpstream)
-    const base = await listen(liveServer(config({
-      mode: "live",
-      upstreams: { ...config().upstreams, capability: capabilityBase },
-    })))
-
-    const skills = await fetch(`${base}/v1/skills`, { headers: authHeaders() })
-    const mcp = await fetch(`${base}/v1/mcp/servers`, { headers: authHeaders() })
-    assert.equal(skills.status, 200)
-    assert.equal(mcp.status, 200)
-    assert.deepEqual((await skills.json() as { data: unknown }).data, { skills: [], next_cursor: "skills-next" })
-    assert.deepEqual((await mcp.json() as { data: unknown }).data, { servers: [], next_cursor: "mcp-next" })
-    assert.deepEqual(received, ["capability:/v1/skills", "capability:/v1/mcp/servers"])
-  })
-
-  it("forwards allowlisted Capability queries and preserves owner cursors", async () => {
-    const received: string[] = []
-    const upstream = createServer((request, response) => {
-      received.push(request.url ?? "")
-      response.setHeader("content-type", "application/json")
-      response.setHeader("x-kokoro-request-id", "capability-query")
-      response.end(request.url?.startsWith("/v1/mcp/servers")
-        ? JSON.stringify({ data: { servers: [], next_cursor: "capability-cursor-next" } })
-        : JSON.stringify({ data: { skills: [], next_cursor: "capability-cursor-next" } }))
-    })
-    const upstreamBase = await listen(upstream)
-    const base = await listen(liveServer(config({ mode: "live", upstreams: { ...config().upstreams, capability: upstreamBase } })))
-
-    const skills = await fetch(`${base}/v1/skills/catalog?query=contract%20review&tags=review&tags=security&scope_kind=personal&limit=10&cursor=cursor-1`, { headers: { ...authHeaders(), "x-kokoro-request-id": "capability-query" } })
-    assert.equal(skills.status, 200)
-    assert.deepEqual(await skills.json(), {
-      data: { skills: [], next_cursor: "capability-cursor-next" },
-      meta: { request_id: "capability-query" },
-    })
-    assert.equal(received[0], "/v1/skills/catalog?query=contract%20review&tags=review&tags=security&scope_kind=personal&limit=10&cursor=cursor-1")
-
-    const mcp = await fetch(`${base}/v1/mcp/servers?provider_key=github&limit=5&cursor=mcp-1`, { headers: authHeaders() })
-    assert.equal(mcp.status, 200)
-    assert.equal(received[1], "/v1/mcp/servers?provider_key=github&limit=5&cursor=mcp-1")
-
-    const aliasQuery = new URLSearchParams([["q", "legacy"]])
-    const alias = await fetch(`${base}/v1/skills?${aliasQuery.toString()}`, { headers: authHeaders() })
-    assert.equal(alias.status, 400)
-    assert.equal((await alias.json() as { error: { code: string } }).error.code, "invalid_query_parameter")
-    assert.equal(received.length, 2)
+    assert.equal(
+      ((await afterDelete.json()) as { data: { servers: Array<{ name: string }> } }).data.servers.some((server) => server.name === name),
+      false,
+    )
   })
 
   it("requires explicit Library kind after admission and does not mistake an HTTP upstream for the Storage Connect adapter", async () => {
@@ -684,7 +556,7 @@ describe("kokoro-bff v1 mock contract", () => {
 
     const unauthenticated = await fetch(`${base}/v1/library`, { headers: { "x-kokoro-request-id": "library-unauthenticated" } })
     assert.equal(unauthenticated.status, 403)
-    assert.equal((await unauthenticated.json() as { error: { code: string } }).error.code, "service_auth_failed")
+    assert.equal(((await unauthenticated.json()) as { error: { code: string } }).error.code, "service_auth_failed")
 
     const response = await fetch(`${base}/v1/library`, { headers: { ...authHeaders(), "x-domain": "evil.example", "x-kokoro-request-id": "library-live" } })
     assert.equal(response.status, 400)
@@ -715,7 +587,16 @@ describe("kokoro-bff v1 mock contract", () => {
   })
 
   it("projects the canonical runtime manifest through System using configured tenant context", async () => {
-    let received: { url: string | undefined; service: string | undefined; secret: string | undefined; forwarded: string | undefined; tenant: string | undefined; subject: string | undefined; actor: string | undefined; authorization: string | undefined } = {
+    let received: {
+      url: string | undefined
+      service: string | undefined
+      secret: string | undefined
+      forwarded: string | undefined
+      tenant: string | undefined
+      subject: string | undefined
+      actor: string | undefined
+      authorization: string | undefined
+    } = {
       url: undefined,
       service: undefined,
       secret: undefined,
@@ -737,21 +618,23 @@ describe("kokoro-bff v1 mock contract", () => {
         authorization: request.headers.authorization?.toString(),
       }
       response.setHeader("content-type", "application/json")
-      response.end(JSON.stringify({
-        data: {
-          tenant_id: "tenant_manifest",
-          product_id: "kokoro",
-          locale: "en-US",
-          navigation: [],
-          locale_namespaces: [],
-          theme: {},
-          feature_flags: [],
-          references: [],
-          config_version: "1",
-          release_id: null,
-          digest: "sha256:manifest",
-        },
-      }))
+      response.end(
+        JSON.stringify({
+          data: {
+            tenant_id: "tenant_manifest",
+            product_id: "kokoro",
+            locale: "en-US",
+            navigation: [],
+            locale_namespaces: [],
+            theme: {},
+            feature_flags: [],
+            references: [],
+            config_version: "1",
+            release_id: null,
+            digest: "sha256:manifest",
+          },
+        }),
+      )
     })
     const upstreamBase = await listen(upstream)
     const runtimeConfig = config({ mode: "live", upstreams: { ...config().upstreams, system: upstreamBase } }) as BffConfig & { tenantId: string }
@@ -759,7 +642,12 @@ describe("kokoro-bff v1 mock contract", () => {
     const base = await listen(liveServer(runtimeConfig))
 
     const response = await fetch(`${base}/v1/system/runtime-manifest?product_id=kokoro&locale=en-US&surface_id=user-web`, {
-      headers: { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "test-secret", "x-kokoro-request-id": "manifest-live", authorization: "Bearer irrelevant-user-session" },
+      headers: {
+        "x-kokoro-service": "web-bff",
+        "x-kokoro-internal-secret": "test-secret",
+        "x-kokoro-request-id": "manifest-live",
+        authorization: "Bearer irrelevant-user-session",
+      },
     })
     assert.equal(response.status, 200)
     assert.deepEqual(received, {
@@ -791,7 +679,14 @@ describe("kokoro-bff v1 mock contract", () => {
   })
 
   it("projects the Model catalog through its owner contract", async () => {
-    const received: { url: string | undefined; service: string | undefined; tenant: string | undefined; subject: string | undefined; requestId: string | undefined; permissions: string | undefined } = {
+    const received: {
+      url: string | undefined
+      service: string | undefined
+      tenant: string | undefined
+      subject: string | undefined
+      requestId: string | undefined
+      permissions: string | undefined
+    } = {
       url: undefined,
       service: undefined,
       tenant: undefined,
@@ -807,20 +702,28 @@ describe("kokoro-bff v1 mock contract", () => {
       received.requestId = request.headers["x-request-id"]?.toString()
       received.permissions = request.headers["x-kokoro-iam-permissions"]?.toString()
       response.setHeader("content-type", "application/json")
-      response.end(JSON.stringify({
-        data: {
-          items: [{ key: "claude-sonnet", display_name: "Claude Sonnet", is_default: true }],
-          next_cursor: "model-cursor-next",
-        },
-      }))
+      response.end(
+        JSON.stringify({
+          data: {
+            items: [{ key: "claude-sonnet", display_name: "Claude Sonnet", is_default: true }],
+            next_cursor: "model-cursor-next",
+          },
+        }),
+      )
     })
     const upstreamBase = await listen(upstream)
-    const base = await listen(liveServer(config({
-      mode: "live",
-      upstreams: { ...config().upstreams, system: upstreamBase },
-    })))
+    const base = await listen(
+      liveServer(
+        config({
+          mode: "live",
+          upstreams: { ...config().upstreams, system: upstreamBase },
+        }),
+      ),
+    )
 
-    const response = await fetch(`${base}/v1/models?feature_key=chat&limit=20&cursor=cursor-1`, { headers: { ...authHeaders(), "x-kokoro-request-id": "model-owner-request" } })
+    const response = await fetch(`${base}/v1/models?feature_key=chat&limit=20&cursor=cursor-1`, {
+      headers: { ...authHeaders(), "x-kokoro-request-id": "model-owner-request" },
+    })
     assert.equal(response.status, 200)
     assert.deepEqual(await response.json(), {
       data: { models: [{ provider: "kokoro", name: "claude-sonnet", is_default: true, display_name: "Claude Sonnet" }], next_cursor: "model-cursor-next" },
@@ -852,7 +755,7 @@ describe("kokoro-bff v1 mock contract", () => {
       const base = await listen(liveServer(config({ upstreams: { ...config().upstreams, system: upstreamBase } })))
       const response = await fetch(`${base}/v1/models?feature_key=chat`, { headers: { ...authHeaders(), "x-kokoro-request-id": "invalid-model-owner" } })
       assert.equal(response.status, 502)
-      const responseBody = await response.json() as { error: { code: string }; meta: { request_id: string } }
+      const responseBody = (await response.json()) as { error: { code: string }; meta: { request_id: string } }
       assert.equal(responseBody.error.code, "upstream_response_invalid")
       assert.equal(responseBody.meta.request_id, "invalid-model-owner")
       assert.equal("data" in responseBody, false)
@@ -865,15 +768,57 @@ describe("kokoro-bff v1 mock contract", () => {
       { status: 403, body: { error: { code: "forbidden", message: "denied", retryable: "false" } } },
       {
         status: 201,
-        body: { data: { tenant_id: "tenant_manifest", product_id: "kokoro", locale: "en-US", navigation: [], locale_namespaces: [], theme: {}, feature_flags: [], references: [], config_version: "1", release_id: null, digest: "sha256:manifest" } },
+        body: {
+          data: {
+            tenant_id: "tenant_manifest",
+            product_id: "kokoro",
+            locale: "en-US",
+            navigation: [],
+            locale_namespaces: [],
+            theme: {},
+            feature_flags: [],
+            references: [],
+            config_version: "1",
+            release_id: null,
+            digest: "sha256:manifest",
+          },
+        },
       },
       {
         status: 302,
-        body: { data: { tenant_id: "tenant_manifest", product_id: "kokoro", locale: "en-US", navigation: [], locale_namespaces: [], theme: {}, feature_flags: [], references: [], config_version: "1", release_id: null, digest: "sha256:manifest" } },
+        body: {
+          data: {
+            tenant_id: "tenant_manifest",
+            product_id: "kokoro",
+            locale: "en-US",
+            navigation: [],
+            locale_namespaces: [],
+            theme: {},
+            feature_flags: [],
+            references: [],
+            config_version: "1",
+            release_id: null,
+            digest: "sha256:manifest",
+          },
+        },
       },
       {
         status: 200,
-        body: { data: { tenant_id: "tenant_other", product_id: "kokoro", locale: "en-US", navigation: [], locale_namespaces: [], theme: {}, feature_flags: [], references: [], config_version: "1", release_id: null, digest: "sha256:manifest" } },
+        body: {
+          data: {
+            tenant_id: "tenant_other",
+            product_id: "kokoro",
+            locale: "en-US",
+            navigation: [],
+            locale_namespaces: [],
+            theme: {},
+            feature_flags: [],
+            references: [],
+            config_version: "1",
+            release_id: null,
+            digest: "sha256:manifest",
+          },
+        },
       },
     ]) {
       const upstream = createServer((_request, response) => {
@@ -889,7 +834,7 @@ describe("kokoro-bff v1 mock contract", () => {
         headers: { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "test-secret", "x-kokoro-request-id": "invalid-system-owner" },
       })
       assert.equal(response.status, 502)
-      assert.equal((await response.json() as { error: { code: string } }).error.code, "upstream_response_invalid")
+      assert.equal(((await response.json()) as { error: { code: string } }).error.code, "upstream_response_invalid")
     }
   })
 
@@ -902,23 +847,50 @@ describe("kokoro-bff v1 mock contract", () => {
         received.push({ url: request.url, body: Buffer.concat(chunks).toString("utf8"), service: request.headers["x-kokoro-service"]?.toString() })
         response.setHeader("content-type", "application/json")
         if (request.url === "/v1/commerce/catalog") {
-          response.end(JSON.stringify({ data: { offers: [{ id: "offer-revision-1", key: "pro", name: "Pro", currency: "USD", amount_minor: "1999", credit_micros: "1000000", billing_interval: "month" }] }, meta: { request_id: "billing-catalog" } }))
+          response.end(
+            JSON.stringify({
+              data: {
+                offers: [
+                  {
+                    id: "offer-revision-1",
+                    key: "pro",
+                    name: "Pro",
+                    currency: "USD",
+                    amount_minor: "1999",
+                    credit_micros: "1000000",
+                    billing_interval: "month",
+                  },
+                ],
+              },
+              meta: { request_id: "billing-catalog" },
+            }),
+          )
           return
         }
         response.statusCode = 201
-        response.end(JSON.stringify({ data: { checkout_id: "checkout-1", checkout_url: "https://pay.test/checkout-1" }, meta: { request_id: "billing-checkout" } }))
+        response.end(
+          JSON.stringify({ data: { checkout_id: "checkout-1", checkout_url: "https://pay.test/checkout-1" }, meta: { request_id: "billing-checkout" } }),
+        )
       })
     })
     const upstreamBase = await listen(upstream)
-    const base = await listen(liveServer(config({
-      mode: "live",
-      upstreams: { ...config().upstreams, billing: upstreamBase },
-    })))
+    const base = await listen(
+      liveServer(
+        config({
+          mode: "live",
+          upstreams: { ...config().upstreams, billing: upstreamBase },
+        }),
+      ),
+    )
 
     const plans = await fetch(`${base}/v1/billing/plans`, { headers: { ...authHeaders(), "x-kokoro-request-id": "billing-catalog" } })
     assert.equal(plans.status, 200)
     assert.deepEqual(await plans.json(), {
-      data: { plans: [{ id: "offer-revision-1", key: "pro", name: "Pro", currency: "USD", amount_minor: "1999", credit_micros: "1000000", billing_interval: "month" }] },
+      data: {
+        plans: [
+          { id: "offer-revision-1", key: "pro", name: "Pro", currency: "USD", amount_minor: "1999", credit_micros: "1000000", billing_interval: "month" },
+        ],
+      },
       meta: { request_id: "billing-catalog" },
     })
 
@@ -948,15 +920,19 @@ describe("kokoro-bff v1 mock contract", () => {
       response.end(JSON.stringify({ data: { items: [] }, meta: { request_id: "should-not-be-called" } }))
     })
     const upstreamBase = await listen(upstream)
-    const base = await listen(liveServer(config({
-      mode: "live",
-      upstreams: { ...config().upstreams, system: upstreamBase, scheduler: upstreamBase },
-    })))
+    const base = await listen(
+      liveServer(
+        config({
+          mode: "live",
+          upstreams: { ...config().upstreams, system: upstreamBase, scheduler: upstreamBase },
+        }),
+      ),
+    )
 
     for (const path of ["/v1/projects", "/v1/scheduled-tasks"]) {
       const response = await fetch(`${base}${path}`, { headers: authHeaders() })
       assert.equal(response.status, 503)
-      assert.equal((await response.json() as { error: { code: string } }).error.code, "business_store_not_configured")
+      assert.equal(((await response.json()) as { error: { code: string } }).error.code, "business_store_not_configured")
     }
   })
 
@@ -964,7 +940,7 @@ describe("kokoro-bff v1 mock contract", () => {
     const unauthBase = await listen(liveServer(config()))
     const missingService = await fetch(`${unauthBase}/v1/projects`)
     assert.equal(missingService.status, 403)
-    assert.equal((await missingService.json() as { error: { code: string } }).error.code, "service_auth_failed")
+    assert.equal(((await missingService.json()) as { error: { code: string } }).error.code, "service_auth_failed")
 
     const secretlessBase = await listen(liveServer(config({ sharedSecret: null })))
     const missingServiceOnSecretless = await fetch(`${secretlessBase}/v1/projects`, {
@@ -990,87 +966,6 @@ describe("kokoro-bff v1 mock contract", () => {
       },
     })
     assert.equal(missingBearer.status, 401)
-
-    const missingUpstreamBase = await listen(liveServer(config({
-      mode: "live",
-      upstreams: { ...config().upstreams, capability: null },
-    })))
-    const missingUpstream = await fetch(`${missingUpstreamBase}/v1/skills`, { headers: authHeaders() })
-    assert.equal(missingUpstream.status, 503)
-    assert.equal((await missingUpstream.json() as { error: { code: string } }).error.code, "capability_unavailable")
-
-    const unreachableBase = await listen(liveServer(config({
-      mode: "live",
-      upstreams: { ...config().upstreams, capability: "http://127.0.0.1:1" },
-    })))
-    const unreachable = await fetch(`${unreachableBase}/v1/skills/pool`, { headers: authHeaders() })
-    assert.equal(unreachable.status, 502)
-    assert.equal((await unreachable.json() as { error: { code: string } }).error.code, "capability_response_invalid")
-
-    const malformedUpstream = createServer((_request, response) => {
-      response.statusCode = 200
-      response.setHeader("content-type", "text/plain")
-      response.setHeader("x-kokoro-request-id", "malformed")
-      response.end("not json")
-    })
-    const malformedBase = await listen(malformedUpstream)
-    const malformedBff = await listen(liveServer(config({
-      mode: "live",
-      upstreams: { ...config().upstreams, capability: malformedBase },
-    })))
-    const malformed = await fetch(`${malformedBff}/v1/skills/pool`, { headers: authHeaders() })
-    assert.equal(malformed.status, 502)
-    assert.equal((await malformed.json() as { error: { code: string } }).error.code, "capability_response_invalid")
-
-    const emptyUpstream = createServer((_request, response) => {
-      response.statusCode = 200
-      response.setHeader("content-type", "application/json")
-      response.setHeader("x-kokoro-request-id", "empty")
-      response.end("")
-    })
-    const emptyBase = await listen(emptyUpstream)
-    const emptyBff = await listen(liveServer(config({
-      mode: "live",
-      upstreams: { ...config().upstreams, capability: emptyBase },
-    })))
-    const empty = await fetch(`${emptyBff}/v1/skills/pool`, { headers: authHeaders() })
-    assert.equal(empty.status, 502)
-    assert.equal((await empty.json() as { error: { code: string } }).error.code, "capability_response_invalid")
-
-    const errorEnvelopeUpstream = createServer((_request, response) => {
-      response.statusCode = 503
-      response.setHeader("content-type", "application/json")
-      response.setHeader("x-kokoro-request-id", "skills-upstream-503")
-      response.end(JSON.stringify({
-        error: { code: "skills_unavailable", message: "Skills are down", retryable: true },
-      }))
-    })
-    const errorEnvelopeBase = await listen(errorEnvelopeUpstream)
-    const errorEnvelopeBff = await listen(liveServer(config({
-      mode: "live",
-      upstreams: { ...config().upstreams, capability: errorEnvelopeBase },
-    })))
-    const errorEnvelope = await fetch(`${errorEnvelopeBff}/v1/skills/pool`, { headers: { ...authHeaders(), "x-kokoro-request-id": "public-capability-503" } })
-    assert.equal(errorEnvelope.status, 503)
-    assert.deepEqual(await errorEnvelope.json(), {
-      error: { code: "capability_unavailable", message: "Capability is temporarily unavailable" },
-      meta: { request_id: "public-capability-503" },
-    })
-
-    const httpErrorUpstream = createServer((_request, response) => {
-      response.statusCode = 500
-      response.setHeader("content-type", "text/plain")
-      response.setHeader("x-kokoro-request-id", "owner-500")
-      response.end("boom")
-    })
-    const httpErrorBase = await listen(httpErrorUpstream)
-    const httpErrorBff = await listen(liveServer(config({
-      mode: "live",
-      upstreams: { ...config().upstreams, capability: httpErrorBase },
-    })))
-    const httpError = await fetch(`${httpErrorBff}/v1/skills/pool`, { headers: authHeaders() })
-    assert.equal(httpError.status, 502)
-    assert.equal((await httpError.json() as { error: { code: string } }).error.code, "capability_response_invalid")
 
     const baseDir = fileURLToPath(new URL("../docs/api/v1/", import.meta.url))
     for (const file of ["README.md", "projects.md", "system.md", "models.md", "skills.md", "mcp.md", "scheduled.md", "agents.md", "library.md", "billing.md"]) {
@@ -1129,7 +1024,10 @@ describe("kokoro-bff v1 mock contract", () => {
 
     const list = await fetch(`${base}/v1/sessions`, { headers })
     assert.equal(list.status, 200)
-    const listBody = await list.json() as { data: { sessions: Array<{ session_id: string; title: string; updated_at: string }>; next_cursor: string | null }; meta: { request_id: string } }
+    const listBody = (await list.json()) as {
+      data: { sessions: Array<{ session_id: string; title: string; updated_at: string }>; next_cursor: string | null }
+      meta: { request_id: string }
+    }
     assert.ok(listBody.data.sessions.length >= 1)
     assert.equal(listBody.data.next_cursor, null)
 
@@ -1138,11 +1036,11 @@ describe("kokoro-bff v1 mock contract", () => {
 
     const isolated = await fetch(`${base}/v1/sessions?scope=other-scope&project_ref=project_kokoro`, { headers })
     assert.equal(isolated.status, 400)
-    assert.equal((await isolated.json() as { error: { code: string } }).error.code, "invalid_session_scope")
+    assert.equal(((await isolated.json()) as { error: { code: string } }).error.code, "invalid_session_scope")
 
     const detail = await fetch(`${base}/v1/sessions/${sessionId}`, { headers })
     assert.equal(detail.status, 200)
-    const detailBody = await detail.json() as {
+    const detailBody = (await detail.json()) as {
       data: {
         session: { session_id: string; title: string; owner_id: string; created_at: string; updated_at: string }
         messages?: Array<{ message_id: string; role: string; content: string; status: string; created_at: string; run_id?: string }>
@@ -1169,7 +1067,7 @@ describe("kokoro-bff v1 mock contract", () => {
       body: JSON.stringify({ content: "Hello from mock chat" }),
     })
     assert.equal(message.status, 202)
-    const messageBody = await message.json() as {
+    const messageBody = (await message.json()) as {
       data: { run_id: string; user_message_id: string; assistant_message_id: string }
       meta: { request_id: string }
     }
@@ -1180,7 +1078,7 @@ describe("kokoro-bff v1 mock contract", () => {
     await new Promise((resolve) => setTimeout(resolve, 30))
     const messagePage = await fetch(`${base}/v1/sessions/${sessionId}/messages?limit=1`, { headers })
     assert.equal(messagePage.status, 200)
-    const messagePageBody = await messagePage.json() as { data: { messages: Array<{ role: string }>; next_cursor: string | null } }
+    const messagePageBody = (await messagePage.json()) as { data: { messages: Array<{ role: string }>; next_cursor: string | null } }
     assert.equal(messagePageBody.data.messages.length, 1)
     assert.equal(messagePageBody.data.messages[0]?.role, "user")
     assert.ok(messagePageBody.data.next_cursor)
@@ -1192,11 +1090,18 @@ describe("kokoro-bff v1 mock contract", () => {
     const frames = eventsText.trim().split(/\n\n/u).filter(Boolean)
     assert.ok(frames.length >= 2)
     assert.match(frames[0] || "", /"type":"CUSTOM"/u)
-    const firstFrameData = frames[0]?.split("\n").find((line) => line.startsWith("data: "))?.slice("data: ".length) || ""
+    const firstFrameData =
+      frames[0]
+        ?.split("\n")
+        .find((line) => line.startsWith("data: "))
+        ?.slice("data: ".length) || ""
     const firstEvent = JSON.parse(firstFrameData) as { name: string; value: { owner_id: string } }
     assert.equal(firstEvent.name, "kokoro.session.created")
     assert.equal(firstEvent.value.owner_id, "ns_test")
-    const firstFrameId = frames[0]?.split("\n").find((line) => line.startsWith("id: "))?.slice("id: ".length)
+    const firstFrameId = frames[0]
+      ?.split("\n")
+      .find((line) => line.startsWith("id: "))
+      ?.slice("id: ".length)
     assert.match(firstFrameId ?? "", /^agui_[0-9a-f]{32}$/u)
     const resumedEvents = await fetch(`${base}/v1/sessions/${sessionId}/events`, {
       headers: { ...headers, "last-event-id": firstFrameId ?? "" },
@@ -1208,7 +1113,7 @@ describe("kokoro-bff v1 mock contract", () => {
       headers: { ...headers, "last-event-id": "4" },
     })
     assert.equal(invalidEventCursor.status, 400)
-    assert.equal((await invalidEventCursor.json() as { error: { code: string } }).error.code, "invalid_event_cursor")
+    assert.equal(((await invalidEventCursor.json()) as { error: { code: string } }).error.code, "invalid_event_cursor")
 
     const control = await fetch(`${base}/v1/sessions/${sessionId}/runs/${messageBody.data.run_id}/control`, {
       method: "POST",
@@ -1216,7 +1121,10 @@ describe("kokoro-bff v1 mock contract", () => {
       body: JSON.stringify({ kind: "run.cancel" }),
     })
     assert.equal(control.status, 202)
-    const controlBody = await control.json() as { data: { run_id: string; command_id: string; request_digest: string; status: string; replayed: boolean }; meta: { request_id: string } }
+    const controlBody = (await control.json()) as {
+      data: { run_id: string; command_id: string; request_digest: string; status: string; replayed: boolean }
+      meta: { request_id: string }
+    }
     assert.equal(controlBody.data.run_id, messageBody.data.run_id)
     assert.equal(controlBody.data.command_id, "chat-control-1")
     assert.match(controlBody.data.request_digest, /^sha256:/u)
@@ -1229,7 +1137,7 @@ describe("kokoro-bff v1 mock contract", () => {
       body: JSON.stringify({ title: "Mock chat title" }),
     })
     assert.equal(renamed.status, 200)
-    const renamedBody = await renamed.json() as { data: { ok: true }; meta: { request_id: string } }
+    const renamedBody = (await renamed.json()) as { data: { ok: true }; meta: { request_id: string } }
     assert.equal(renamedBody.data.ok, true)
 
     const shared = await fetch(`${base}/v1/sessions/${sessionId}/share`, {
@@ -1238,7 +1146,7 @@ describe("kokoro-bff v1 mock contract", () => {
       body: JSON.stringify({}),
     })
     assert.equal(shared.status, 200)
-    const sharedBody = await shared.json() as { data: { share_id: string } }
+    const sharedBody = (await shared.json()) as { data: { share_id: string } }
     assert.ok(sharedBody.data.share_id.length > 0)
 
     const publicShare = await fetch(`${base}/v1/shared/${sharedBody.data.share_id}`, {
@@ -1248,8 +1156,15 @@ describe("kokoro-bff v1 mock contract", () => {
       },
     })
     assert.equal(publicShare.status, 200)
-    const publicShareBody = await publicShare.json() as {
-      data: { session: { session_id: string; title: string; owner_id: string }; pending_pauses: unknown[]; files: unknown[]; deliveries: unknown[]; deliveries_has_more: boolean; event_watermark: string | null }
+    const publicShareBody = (await publicShare.json()) as {
+      data: {
+        session: { session_id: string; title: string; owner_id: string }
+        pending_pauses: unknown[]
+        files: unknown[]
+        deliveries: unknown[]
+        deliveries_has_more: boolean
+        event_watermark: string | null
+      }
       meta: { request_id: string }
     }
     assert.equal(publicShareBody.data.session.session_id, sessionId)
@@ -1263,7 +1178,7 @@ describe("kokoro-bff v1 mock contract", () => {
       headers: { ...headers, "idempotency-key": "chat-share-delete-1" },
     })
     assert.equal(revoked.status, 200)
-    const revokedBody = await revoked.json() as { data: { share_id: string }; meta: { request_id: string } }
+    const revokedBody = (await revoked.json()) as { data: { share_id: string }; meta: { request_id: string } }
     assert.equal(revokedBody.data.share_id, sharedBody.data.share_id)
 
     const deleted = await fetch(`${base}/v1/sessions/${sessionId}`, {
@@ -1271,12 +1186,12 @@ describe("kokoro-bff v1 mock contract", () => {
       headers: { ...headers, "idempotency-key": "chat-delete-1" },
     })
     assert.equal(deleted.status, 200)
-    const deletedBody = await deleted.json() as { data: { status: string }; meta: { request_id: string } }
+    const deletedBody = (await deleted.json()) as { data: { status: string }; meta: { request_id: string } }
     assert.equal(deletedBody.data.status, "deleted")
 
     const missing = await fetch(`${base}/v1/sessions/${sessionId}`, { headers })
     assert.equal(missing.status, 404)
-    assert.equal((await missing.json() as { error: { code: string } }).error.code, "session_not_found")
+    assert.equal(((await missing.json()) as { error: { code: string } }).error.code, "session_not_found")
   })
 
   it("requires the durable BFF Chat store and never falls back to Agent-owned history or launch", async () => {
@@ -1287,11 +1202,15 @@ describe("kokoro-bff v1 mock contract", () => {
       response.end(JSON.stringify({ data: { ok: true }, meta: { request_id: "agent" } }))
     })
     const agentBase = await listen(agent)
-    const base = await listen(liveServer(config({
-      mode: "live",
-      agentEnabled: true,
-      upstreams: { ...config().upstreams, agents: agentBase },
-    })))
+    const base = await listen(
+      liveServer(
+        config({
+          mode: "live",
+          agentEnabled: true,
+          upstreams: { ...config().upstreams, agents: agentBase },
+        }),
+      ),
+    )
     const requests: Array<{ path: string; init?: RequestInit }> = [
       { path: "/v1/sessions" },
       { path: "/v1/sessions/session-live" },
@@ -1321,7 +1240,7 @@ describe("kokoro-bff v1 mock contract", () => {
         headers: { ...authHeaders(), ...item.init?.headers },
       })
       assert.equal(response.status, 503, item.path)
-      assert.equal((await response.json() as { error: { code: string } }).error.code, "business_store_not_configured", item.path)
+      assert.equal(((await response.json()) as { error: { code: string } }).error.code, "business_store_not_configured", item.path)
     }
     assert.equal(received, 0)
   })
@@ -1334,15 +1253,19 @@ describe("kokoro-bff v1 mock contract", () => {
       response.end(JSON.stringify({ data: { servers: [] }, meta: { request_id: "capability" } }))
     })
     const capabilityBase = await listen(capability)
-    const base = await listen(liveServer(config({
-      mode: "live",
-      upstreams: { ...config().upstreams, capability: capabilityBase },
-    })))
+    const base = await listen(
+      liveServer(
+        config({
+          mode: "live",
+          upstreams: { ...config().upstreams, capability: capabilityBase },
+        }),
+      ),
+    )
 
     for (const path of ["/v1/connectors", "/v1/preferences", "/v1/cloud-computers", "/v1/integrations"]) {
       const response = await fetch(`${base}${path}`, { headers: authHeaders() })
       assert.equal(response.status, 404, path)
-      assert.equal((await response.json() as { error: { code: string } }).error.code, "bff_route_not_found")
+      assert.equal(((await response.json()) as { error: { code: string } }).error.code, "bff_route_not_found")
     }
     const guardedRequests: Array<{ path: string; init: RequestInit }> = [
       { path: "/v1/mcp/servers", init: { method: "POST", headers: { "content-type": "application/json", "idempotency-key": "mcp-register" }, body: "{}" } },
@@ -1351,7 +1274,7 @@ describe("kokoro-bff v1 mock contract", () => {
     for (const { path, init } of guardedRequests) {
       const response = await fetch(`${base}${path}`, { ...init, headers: { ...authHeaders(), ...init.headers } })
       assert.equal(response.status, 503, path)
-      assert.equal((await response.json() as { error: { code: string } }).error.code, "capability_projection_not_configured", path)
+      assert.equal(((await response.json()) as { error: { code: string } }).error.code, "platform_operation_not_available", path)
     }
     assert.equal(ownerCalls, 0)
   })
