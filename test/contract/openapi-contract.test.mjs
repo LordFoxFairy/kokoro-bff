@@ -553,7 +553,10 @@ test("PublishSkill semantic gate rejects body, state, status and legacy-operatio
     openapi.replace("x-kokoro-empty-body: required", "x-kokoro-empty-body: optional"),
     openapi.replace("x-kokoro-fixed-visibility: personal", "x-kokoro-fixed-visibility: organization"),
     openapi.replace("      operationId: publishSkill", "      operationId: publishSkill\n      requestBody:\n        required: true"),
-    openapi.replace("status: { type: string, const: active }", "status: { type: string, const: draft }"),
+    openapi.replace(
+      openapi.slice(openapi.indexOf("    SkillPublishResource:"), openapi.indexOf("    SkillPublishErrorDetail:")),
+      openapi.slice(openapi.indexOf("    SkillPublishResource:"), openapi.indexOf("    SkillPublishErrorDetail:")).replace("status: { type: string, const: active }", "status: { type: string, const: draft }"),
+    ),
     openapi.replace(
       "'412': { $ref: '#/components/responses/SkillPublishPreconditionFailed' }",
       "'412': { $ref: '#/components/responses/SkillPublishBadGateway' }",
@@ -823,8 +826,22 @@ test("GetPublishedPersonalSkill is an inactive strict personal ACTIVE read candi
 
 test("GetPublishedPersonalSkill semantic gate rejects envelope, field, input, status, and header drift", async () => {
   const { openapi, baseline } = await readContract()
+  const operation = openapi.slice(openapi.indexOf("  /v1/skills/{skill_id}:"), openapi.indexOf("  /v1/skills/pool:"))
+  const resource = openapi.slice(openapi.indexOf("    PublishedPersonalSkillResource:"), openapi.indexOf("    PublishedPersonalSkillResponse:"))
+  const success = openapi.slice(openapi.indexOf("    PublishedPersonalSkillResponse:"), openapi.indexOf("    PublishedPersonalSkillErrorDetail:"))
+  const badRequest = openapi.slice(openapi.indexOf("    PublishedPersonalSkillBadRequest:"), openapi.indexOf("    PublishedPersonalSkillUnauthorized:"))
+  const ok = openapi.slice(openapi.indexOf("    PublishedPersonalSkillOk:"), openapi.indexOf("    PublishedPersonalSkillBadRequest:"))
+  const legacy = openapi.slice(openapi.indexOf("  /v1/me:"), openapi.indexOf("  /v1/team/members:"))
   const mutations = [
     openapi.replace("required: [skill_id, source_ref, revision, status, name, summary, tags]", "required: [skill_id, name]"),
+    openapi.replace(operation, operation.replace("#/components/parameters/PublishedPersonalSkillId", "#/components/parameters/CapabilityCursor")),
+    openapi.replace(operation, operation.replace("#/components/parameters/PublishedPersonalSkillId", "#/components/parameters/IdempotencyKey")),
+    openapi.replace(resource, resource.replace("revision: { type: string, pattern: '^[1-9][0-9]*$' }", "revision: { type: string }")),
+    openapi.replace(success, success.replace("#/components/schemas/PublishedPersonalSkillResource", "#/components/schemas/SkillDraftResource")),
+    openapi.replace(badRequest, badRequest.replace("invalid_skill_request", "skill_response_invalid")),
+    openapi.replace(ok, ok.replace("required: true", "required: false")),
+    openapi.replace(ok, ok.replace("maxLength: 128", "maxLength: 255")),
+    openapi.replace(legacy, legacy.replace("#/components/schemas/CurrentUserResponse", "#/components/schemas/PublishedPersonalSkillResponse")),
     openapi.replace("      operationId: getPublishedPersonalSkill", "      operationId: getPublishedPersonalSkill\n      requestBody: { required: false }"),
     openapi.replace("        '404': { $ref: '#/components/responses/PublishedPersonalSkillNotFound' }", "        '404': { $ref: '#/components/responses/PublishedPersonalSkillBadGateway' }"),
     openapi.replace("        '502': { $ref: '#/components/responses/PublishedPersonalSkillBadGateway' }\n", ""),

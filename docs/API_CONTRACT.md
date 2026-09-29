@@ -1,10 +1,12 @@
 # kokoro-bff API contract policy
 
+后继 public list 还必须保留 `source_ref=skill:<id>`、正十进制 `revision`，并证明本人 PERSONAL/ACTIVE Skill 在未安装时仍可见及 cursor/刷新恢复；不能只做 transport 迁移。读投影只用独立 `platform:projection.read` workload scope，和 catalog manage/write scope 分离。IAM introspection 得到的 tenant 是 authority，subject 只来自当次 Product user admission；下游 `x-kokoro-tenant-id` 仅作与已认证 workload tenant 的一致性断言，绝不下传用户 Bearer。public 429 只表示 IAM Product admission 限流，不假定 Platform 3.1.0 by-ID owner 支持 429。
+
 ## `GET /v1/skills/{skill_id}` 未激活候选
 
 canonical OpenAPI 现声明唯一 `getPublishedPersonalSkill` public read candidate。输入只有 canonical `skill_id` path；无 query、body 或幂等键。IAM-admitted Product tenant/user 是唯一身份来源；本人 PERSONAL/ACTIVE 且未安装也可读，非本人、跨 tenant、非 PERSONAL、非 ACTIVE 与缺失统一 404。成功严格为 `{data:{skill_id,source_ref,revision,status,name,summary,tags}}`，`status=active`、`source_ref=skill:<skill_id>` 形状、revision 为正十进制字符串；错误严格 `{error}`。状态集合精确为 200/400/401/403/404/429/502/503，所有出口要求 `x-request-id` 与 `Cache-Control: no-store`，429 可带有界 `Retry-After`。本片不激活 route。
 
-现有 `listSkills` 机器合同仍为 legacy `{data,meta}` 且丢 `source_ref/revision`，本片不改变它。下一运行 cutover 与旧 Skills/Pool/Catalog/MCP 四 GET 的 Platform HTTP 3.1.0 迁移必须同提交完成，并删除旧 credential/source selector/generated。MCP 只能发布 owner-native `server_id/provider_key/server_identity/transport/declaration_digest/status` 并同步 Web，或删除旧 public GET/UI；旧伪造 revision/url/allowed_tools/secret_ref 映射没有兼容期。
+现有 `listSkills` 机器合同仍为 legacy `{data,meta}` 且丢 `source_ref/revision`，本片不改变它。下一运行 cutover 与旧 Skills/Pool/Catalog/MCP 四 GET 的 Platform HTTP 3.1.0 迁移必须同提交完成，并删除旧 credential/source selector/generated。MCP 只发布 owner-native `server_id/provider_key/server_identity/transport/declaration_digest/status` 并同步 Web、移除当前实际 503 的旧控件；旧伪造 revision/url/allowed_tools/secret_ref 映射没有兼容期。
 
 
 ## W3 Publish public 默认关闭运行候选（2026-09-29）

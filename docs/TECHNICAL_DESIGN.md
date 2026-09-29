@@ -1,12 +1,14 @@
 # kokoro-bff 技术设计
 
+后继 public list 还必须保留 `source_ref=skill:<id>`、正十进制 `revision`，并证明本人 PERSONAL/ACTIVE Skill 在未安装时仍可见及 cursor/刷新恢复；不能只做 transport 迁移。读投影只用独立 `platform:projection.read` workload scope，和 catalog manage/write scope 分离。IAM introspection 得到的 tenant 是 authority，subject 只来自当次 Product user admission；下游 `x-kokoro-tenant-id` 仅作与已认证 workload tenant 的一致性断言，绝不下传用户 Bearer。public 429 只表示 IAM Product admission 限流，不假定 Platform 3.1.0 by-ID owner 支持 429。
+
 ## Published personal Skill by ID：未激活 public contract preflight
 
 **当前态。** 活跃 Skills/Pool/Catalog 与 MCP 读取仍经旧 Capability facade；`listSkills` 输出 legacy `{data,meta}` 并丢失 owner `source_ref/revision`。新 `GET /v1/skills/{skill_id}` 目前只有 BFF canonical public OpenAPI 与语义门，没有运行 route、Platform HTTP client、projection credential 或 Web caller。
 
 **目标态。** Browser 仍只走 Web same-origin adapter；BFF 每次先做 IAM Product session admission，以可信 tenant/user 调 Platform HTTP 3.1.0 `getPublishedPersonalSkill`。Platform 是 Skill 唯一事实 owner，只允许该 user 的 PERSONAL/ACTIVE 当前行且不要求安装；其他 tenant/owner/scope/state 与缺失同一 404。BFF 只投影七个安全字段，不存 Skill SQL、receipt、cache，不转发 user Bearer，不返回 package、manifest、Asset、签名 URL 或执行字段。
 
-放置采用扩展现有 public Skills surface 与 canonical OpenAPI，否决新增 BFF Skill 数据模块或复用写侧 inactive v4 Connect：前者复制 owner 事实，后者不是 read projection contract。下一运行切片必须原子迁移旧四 GET 到 Platform HTTP 3.1.0、专用 workload Bearer，并删除 Capability secret/source selector/generated 双轨；个人 ACTIVE list 使用 `scope_kind=personal`，pool/catalog 不恢复 ACK。MCP 选择 owner-native 六字段并同步 Web，或删除公开 GET/旧 UI；不保留旧伪造字段兼容层。
+放置采用扩展现有 public Skills surface 与 canonical OpenAPI，否决新增 BFF Skill 数据模块或复用写侧 inactive v4 Connect：前者复制 owner 事实，后者不是 read projection contract。下一运行切片必须原子迁移旧四 GET 到 Platform HTTP 3.1.0、专用 workload Bearer，并删除 Capability secret/source selector/generated 双轨；个人 ACTIVE list 使用 `scope_kind=personal`，pool/catalog 不恢复 ACK。MCP 采用 owner-native 六字段并同步 Web、移除当前实际 503 的旧控件；不保留旧伪造字段兼容层。
 
 
 ## W3 Publish 运行候选：当前态与目标态（2026-09-29；默认关闭）

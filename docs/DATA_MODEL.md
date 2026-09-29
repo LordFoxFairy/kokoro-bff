@@ -1,10 +1,12 @@
 # kokoro-bff data model
 
+后继 public list 还必须保留 `source_ref=skill:<id>`、正十进制 `revision`，并证明本人 PERSONAL/ACTIVE Skill 在未安装时仍可见及 cursor/刷新恢复；不能只做 transport 迁移。读投影只用独立 `platform:projection.read` workload scope，和 catalog manage/write scope 分离。IAM introspection 得到的 tenant 是 authority，subject 只来自当次 Product user admission；下游 `x-kokoro-tenant-id` 仅作与已认证 workload tenant 的一致性断言，绝不下传用户 Bearer。public 429 只表示 IAM Product admission 限流，不假定 Platform 3.1.0 by-ID owner 支持 429。
+
 ## Published personal Skill read：无 BFF 持久化 owner
 
 新 `GET /v1/skills/{skill_id}` 未激活机器候选不新增表、列、索引、事务、receipt、outbox、Redis key 或 cache。Skill tenant、user owner、PERSONAL scope、ACTIVE state、`source_ref` 与 `revision` 都是 Platform owner 事实；BFF 只在当次 IAM admission 后读取并安全投影七字段。非本人/跨 tenant/非 PERSONAL/非 ACTIVE 与缺失均由 owner read 隐蔽为 404。
 
-后继原子 read cutover 也不得复制 Platform Skill/MCP 数据。旧四 GET 改用 Platform HTTP 3.1.0；个人 ACTIVE list 使用 `scope_kind=personal`。MCP 必须采用 owner-native 六字段并同步 Web 或删除公开 surface，禁止持久化或继续合成旧 revision/url/allowed_tools/secret_ref。
+后继原子 read cutover 也不得复制 Platform Skill/MCP 数据。旧四 GET 改用 Platform HTTP 3.1.0；个人 ACTIVE list 使用 `scope_kind=personal`。MCP 必须采用 owner-native 六字段、同步 Web 并移除当前实际 503 的旧控件，禁止持久化或继续合成旧 revision/url/allowed_tools/secret_ref。
 
 
 ## W3 Publish 运行候选：无 BFF 持久化 owner（2026-09-29）

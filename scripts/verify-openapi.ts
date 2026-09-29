@@ -324,6 +324,13 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
     const isValidateSkillDraft = operationId === "validateSkillDraft" && operation.method === "POST" && operation.path === "/v1/skills/{skill_id}/validate"
     const isPublishSkill = operationId === "publishSkill" && operation.method === "POST" && operation.path === "/v1/skills/{skill_id}/publish"
     if (
+      !isPublishedPersonalSkill &&
+      /#\/components\/(?:schemas\/(?:PublishedPersonalSkill(?:Resource|Response|ErrorDetail|ErrorResponse))|responses\/PublishedPersonalSkill[A-Za-z]*|parameters\/PublishedPersonalSkillId)/u.test(
+        operation.text.split(/^components:\s*$/mu)[0] ?? "",
+      )
+    )
+      errors.push(`${operation.method} ${operation.path} must not reference PublishedPersonalSkill strict components`)
+    if (
       !isGetSkillPackageUpload &&
       /#\/components\/(?:schemas\/(?:GetSkillPackageUploadResponse|SkillPackageUploadGetErrorResponse)|responses\/SkillPackageUploadGet[A-Za-z]*)/u.test(
         operation.text.split(/^components:\s*$/mu)[0] ?? "",
@@ -477,14 +484,12 @@ function publishedPersonalSkillContractErrors(
   const operation = matches[0]
   if (operation.method !== "GET" || operation.path !== "/v1/skills/{skill_id}") errors.push("getPublishedPersonalSkill must remain the exact public GET path")
   for (const [field, expected] of Object.entries({
-    "x-kokoro-owner": "kokoro-bff",
-    "x-kokoro-visibility": "public",
-    "x-kokoro-stability": "beta",
-    "x-kokoro-idempotency": "none",
-    "x-kokoro-permission": "product.skill.read_published_personal",
+    "x-kokoro-owner": "kokoro-bff", "x-kokoro-visibility": "public", "x-kokoro-stability": "beta",
+    "x-kokoro-idempotency": "none", "x-kokoro-permission": "product.skill.read_published_personal",
   })) if (operation.fields.get(field) !== expected) errors.push(`getPublishedPersonalSkill ${field} must be ${expected}`)
-  for (const forbidden of ["requestBody:", "Idempotency-Key", "CapabilitySkill", "source_selector", "secret_ref"]) if (operation.text.includes(forbidden)) errors.push(`getPublishedPersonalSkill must exclude ${forbidden}`)
-  if (!operation.text.includes("#/components/parameters/PublishedPersonalSkillId")) errors.push("getPublishedPersonalSkill must use its canonical skill_id parameter")
+  const parameterRefs = [...operation.text.matchAll(/#\/components\/parameters\/([A-Za-z0-9_]+)/gu)].map((match) => match[1])
+  if (JSON.stringify(parameterRefs) !== JSON.stringify(["PublishedPersonalSkillId"])) errors.push("getPublishedPersonalSkill must accept only PublishedPersonalSkillId")
+  if (/requestBody:|Idempotency-Key|#\/components\/parameters\/IdempotencyKey|CapabilitySkill|source_selector|secret_ref/u.test(operation.text)) errors.push("getPublishedPersonalSkill must exclude query/body/idempotency and legacy Capability inputs")
   const expectedResponses = new Map([
     ["200", "PublishedPersonalSkillOk"], ["400", "PublishedPersonalSkillBadRequest"], ["401", "PublishedPersonalSkillUnauthorized"],
     ["403", "PublishedPersonalSkillForbidden"], ["404", "PublishedPersonalSkillNotFound"], ["429", "PublishedPersonalSkillRateLimited"],
@@ -492,23 +497,50 @@ function publishedPersonalSkillContractErrors(
   ])
   const actual = collectResponseBlocks(operation)
   if (JSON.stringify([...actual.keys()]) !== JSON.stringify([...expectedResponses.keys()])) errors.push("getPublishedPersonalSkill status set drifted")
-  for (const [status, component] of expectedResponses) if (!actual.get(status)?.includes(`#/components/responses/${component}`)) errors.push(`getPublishedPersonalSkill ${status} must reference ${component}`)
+  for (const [status, component] of expectedResponses) {
+    const expected = `'${status}': { $ref: '#/components/responses/${component}' }`
+    if (!actual.get(status)?.includes(expected)) errors.push(`getPublishedPersonalSkill ${status} must reference only ${component}`)
+  }
   const parameter = parameters.get("PublishedPersonalSkillId")
-  if (parameter === undefined || !parameter.text.includes("name: skill_id") || !parameter.text.includes("in: path") || !parameter.text.includes("required: true")) errors.push("PublishedPersonalSkillId must be a required path parameter")
+  for (const fragment of ["name: skill_id", "in: path", "required: true", "type: string", "pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$'"])
+    if (!parameter?.text.includes(fragment)) errors.push(`PublishedPersonalSkillId must define ${fragment}`)
   const resource = schemas.get("PublishedPersonalSkillResource")
   const fields = ["skill_id", "source_ref", "revision", "status", "name", "summary", "tags"]
-  if (resource === undefined || JSON.stringify(topLevelRequired(resource)) !== JSON.stringify(fields) || schemaProperties(resource).join(",") !== fields.join(",") || !resource.text.includes("additionalProperties: false") || !resource.text.includes("const: active") || !resource.text.includes("^skill:")) errors.push("PublishedPersonalSkillResource must remain the strict seven-field ACTIVE projection")
-  for (const name of ["PublishedPersonalSkillResponse", "PublishedPersonalSkillErrorResponse"]) {
-    const schema = schemas.get(name)
-    const only = name.endsWith("ErrorResponse") ? "error" : "data"
-    if (schema === undefined || topLevelRequired(schema).join(",") !== only || schemaProperties(schema).join(",") !== only || !schema.text.includes("additionalProperties: false")) errors.push(`${name} must remain ${only}-only`)
-  }
+  const resourceFragments = [
+    "skill_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }",
+    "source_ref: { type: string, pattern: '^skill:[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }",
+    "revision: { type: string, pattern: '^[1-9][0-9]*$' }", "status: { type: string, const: active }",
+    "name: { type: string }", "summary: { type: string }", "items: { type: string }",
+  ]
+  if (resource === undefined || JSON.stringify(topLevelRequired(resource)) !== JSON.stringify(fields) || schemaProperties(resource).join(",") !== fields.join(",") || !resource.text.includes("additionalProperties: false") || resourceFragments.some((fragment) => !resource.text.includes(fragment))) errors.push("PublishedPersonalSkillResource must remain the exact strict seven-field ACTIVE projection")
+  const success = schemas.get("PublishedPersonalSkillResponse")
+  if (success === undefined || topLevelRequired(success).join(",") !== "data" || schemaProperties(success).join(",") !== "data" || !success.text.includes("additionalProperties: false") || !success.text.includes("data: { $ref: '#/components/schemas/PublishedPersonalSkillResource' }")) errors.push("PublishedPersonalSkillResponse must remain data-only with the exact resource ref")
+  const error = schemas.get("PublishedPersonalSkillErrorResponse")
+  if (error === undefined || topLevelRequired(error).join(",") !== "error" || schemaProperties(error).join(",") !== "error" || !error.text.includes("additionalProperties: false") || !error.text.includes("error: { $ref: '#/components/schemas/PublishedPersonalSkillErrorDetail' }")) errors.push("PublishedPersonalSkillErrorResponse must remain error-only with the exact detail ref")
+  const expectedCodes = new Map([
+    ["PublishedPersonalSkillBadRequest", "invalid_skill_request"],
+    ["PublishedPersonalSkillUnauthorized", "session_authentication_required, session_invalid"],
+    ["PublishedPersonalSkillForbidden", "service_auth_failed, session_forbidden, product_tenant_forbidden"],
+    ["PublishedPersonalSkillNotFound", "skill_not_found"],
+    ["PublishedPersonalSkillRateLimited", "session_rate_limited"],
+    ["PublishedPersonalSkillBadGateway", "skill_response_invalid"],
+    ["PublishedPersonalSkillUnavailable", "product_tenant_not_configured, iam_admission_unavailable, skill_dependency_unavailable"],
+  ])
   for (const name of expectedResponses.values()) {
     const response = responses.get(name)
-    if (response === undefined || !response.text.includes("x-request-id:") || !response.text.includes("Cache-Control:") || !response.text.includes("const: no-store")) errors.push(`${name} must require x-request-id and no-store`)
+    for (const fragment of ["x-request-id:", "maxLength: 128", "Cache-Control:", "const: no-store"])
+      if (!response?.text.includes(fragment)) errors.push(`${name} must define ${fragment}`)
+    if ((response?.text.match(/required: true/gu) ?? []).length !== 2) errors.push(`${name} must require both x-request-id and Cache-Control headers`)
+    if (name === "PublishedPersonalSkillOk") {
+      if (!response?.text.includes("schema: { $ref: '#/components/schemas/PublishedPersonalSkillResponse' }")) errors.push(`${name} must use PublishedPersonalSkillResponse`)
+    } else {
+      if (!response?.text.includes("#/components/schemas/PublishedPersonalSkillErrorResponse")) errors.push(`${name} must use PublishedPersonalSkillErrorResponse`)
+      const codes = expectedCodes.get(name)
+      if (codes !== undefined && !response?.text.includes(`code: { type: string, enum: [${codes}] }`)) errors.push(`${name} code enum drifted`)
+    }
   }
   const rate = responses.get("PublishedPersonalSkillRateLimited")
-  if (rate === undefined || !rate.text.includes("Retry-After:") || !rate.text.includes("required: false")) errors.push("PublishedPersonalSkillRateLimited must define optional bounded Retry-After")
+  if (rate === undefined || !rate.text.includes("Retry-After:") || !rate.text.includes("required: false") || !rate.text.includes("pattern: '^[1-9][0-9]{0,4}$'")) errors.push("PublishedPersonalSkillRateLimited must define optional bounded Retry-After")
   return errors
 }
 

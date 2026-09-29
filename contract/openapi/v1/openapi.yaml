@@ -6538,7 +6538,7 @@ components:
                     properties:
                       code: { type: string, enum: [skill_not_found] }
     PublishedPersonalSkillRateLimited:
-      description: IAM admission or Platform projection is rate limited
+      description: IAM Product session admission is rate limited
       headers:
         x-request-id:
           required: true
@@ -6558,7 +6558,7 @@ components:
                 properties:
                   error:
                     properties:
-                      code: { type: string, enum: [session_rate_limited, skill_rate_limited] }
+                      code: { type: string, enum: [session_rate_limited] }
     PublishedPersonalSkillBadGateway:
       description: Platform returned an invalid projection
       headers:
