@@ -3,6 +3,12 @@
 状态：2026-09-28
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。
 
+## W2-F2-S9 Chat 作品快照：设计门，运行面仍待实施
+
+基线 BFF main `99b98040ed6ee21d49ddd6a04c9b645222245d1e`、Root `5d332e9546ac77c7467e252ed6a211068c78e798` 起始均 clean。当前 BFF AG-UI live/replay 已带二元 Artifact ID/kind，持久 `bff_conversation_artifact` 已存在；但 Chat snapshot 仍固定 `deliveries: []`，OpenAPI `Delivery` 与 Web 正式消费仍是 hash/path-only。可 GC 帧无法在刷新越过 watermark 后重建作品，已验本人 Library 不等于 Chat 卡片闭环。
+
+四文档已收敛 **目标**：扩展现有 Chat repeatable-read snapshot，在同一 ACL/MVCC 边界有界读取最近 100 件持久关联与 cursor，`deliveries_has_more` 显示截断，“查看全部作品”走既有 Library 分页；Message 与 Delivery 各自排序、二元 ID 去重。Agent immutable claim 的 title/mime/size 作必填窄展示投影，clean-slate fresh install 不设旧行兼容，Storage 仍是当前 metadata/原字节 owner。现有 AG-UI live/replay 全量事件保持，Web 后续严格解析再归一到二元身份；Canvas 首片仅 metadata/原生下载，不全量嵌入预览。BFF 后续独占修改唯一 OpenAPI/Schema/runtime/tests 并经真 PG 验证，Web 再 pin 精确契约并删除正式 hash/旧 Blob 双轨；真浏览器 owner 链由 Root 最后验。此时 **没有** S9 机器契约、Schema、代码、Web 或真链路验收。S8 已验事实见下节，不以它替代 S9。
+
 ## W2-F2-S8 大作品下载时限：单仓与真浏览器小件已验，真大件待验
 
 基线 BFF `55d3c9cd55386d9dcc074e893cc388924dd94c13` 的单个

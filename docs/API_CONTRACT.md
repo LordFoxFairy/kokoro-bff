@@ -1,5 +1,13 @@
 # kokoro-bff API contract policy
 
+## W2-F2-S9 Chat Delivery 身份契约（2026-09-28；目标，机器契约未修改）
+
+当前 [`../contract/openapi/v1/openapi.yaml`](../contract/openapi/v1/openapi.yaml) 的 Chat snapshot `Delivery` 仍是必填 `content_hash/path/title/mime/size/run_id/created_at` 的 hash-only 形状，运行时 `deliveries: []`；AG-UI `kokoro.delivery.created` live/replay 已携 Agent 二元 ID/kind，但这不使严格 Web 消费方自动兼容。目标由 BFF 唯一修改机器 OpenAPI：snapshot 每件 Delivery 必有 `conversation_id`、`artifact_id`、`asset_id`、`artifact_kind`、`title`、`mime`、非负安全整数 `size`、`run_id`、UTC `created_at`；`conversation_id` 来自已准入会话，展示值来自已验证 Agent immutable claim，`created_at` 对应交付时间而非 Storage 创建时间。去掉 snapshot `path/content_hash`；旧 hash 不能合成 Artifact ID 或下载路径。现有 AG-UI CUSTOM live/replay 保留完整受信 payload，包括 `tool_call_id/path/title/mime/size/content_hash` 和三 ID/kind；Web 严格解析该完整事件，以事件会话 ID 和 `artifact_id` 归一，snapshot 不虚构 `tool_call_id`，path/hash 不作正式选择器，`asset_id`、hash 或 title 也不替代二元身份。
+
+`ChatSessionDetail.data` 保留最近 100 条 Message 和同一事务的 `event_watermark`，新增最多 100 件、按 `(delivered_at DESC,artifact_id ASC)` 稳定排序的 `deliveries[]` 与必填 `deliveries_has_more: boolean`。后者为 true 只表示本会话还有较早交付，Chat/Canvas 应显示“查看全部作品”；既有本人 `GET /v1/library?kind=artifact` 可用 opaque cursor 逐页查旧件及二元详情/原字节，但不是会话专用 cursor。快照 Message 的 `message_seq` 与交付时间/ID 分别排序，不新增虚假的共同序号。active Conversation/Project owner 准入失败仍按现有 404/403，不新增 IAM 权限或分享资格；Artifact detail/content 仍在点击时向 Storage 核 FINAL+CLEAN，卡片 claim 不作下载授权。BFF OpenAPI/行为/真 PG 提交后 Web 才 pin 精确版本并删正式 hash/旧 Blob 双轨；本设计门不宣称机器契约或 Web 已更新。
+
+目标合同门：OpenAPI strict schema 与 generated drift、AG-UI live/replay/snapshot 同一 identity、坏/缺字段拒绝、两件同 hash 不合并、`deliveries_has_more`/GC 后刷新、cursor 后新事件无漏/重、本人/Project/软删负例；Web 后续另验 Canvas metadata/详情/原生下载/取消，首片不把 attachment URL 全量 iframe/blob 加载，内嵌预览另需小件 cap 与 `+1` 有界流。真 IAM→Chromium→BFF→Agent→Storage 链仍为 Root 集成门。
+
 ## W2-F2-S8 Artifact `/content` 时限与失败语义（2026-09-28；BFF 单仓已实现）
 
 唯一机器契约仍是 [`../contract/openapi/v1/openapi.yaml`](../contract/openapi/v1/openapi.yaml) 的
