@@ -845,6 +845,7 @@ test("GetPublishedPersonalSkill semantic gate rejects envelope, field, input, st
     openapi.replace(operation, operation.replace("#/components/parameters/PublishedPersonalSkillId", "#/components/parameters/CapabilityCursor")),
     openapi.replace(operation, operation.replace("#/components/parameters/PublishedPersonalSkillId", "#/components/parameters/IdempotencyKey")),
     openapi.replace(operation, operation.replace("        - $ref: '#/components/parameters/PublishedPersonalSkillId'", "        - $ref: '#/components/parameters/PublishedPersonalSkillId'\n        - name: cursor\n          in: query\n          required: false\n          schema: { type: string }")),
+    openapi.replace(operation, operation.replace("        - $ref: '#/components/parameters/PublishedPersonalSkillId'", "        - $ref: '#/components/parameters/PublishedPersonalSkillId'\n        - { name: cursor, in: query, schema: { type: string } }")),
     openapi.replace(resource, resource.replace("revision: { type: string, pattern: '^[1-9][0-9]*$' }", "revision: { type: string }")),
     openapi.replace(success, success.replace("#/components/schemas/PublishedPersonalSkillResource", "#/components/schemas/SkillDraftResource")),
     openapi.replace(errorDetail, errorDetail.replace("retryable: { type: boolean }", "retryable: { type: string }")),

@@ -489,7 +489,8 @@ function publishedPersonalSkillContractErrors(
   })) if (operation.fields.get(field) !== expected) errors.push(`getPublishedPersonalSkill ${field} must be ${expected}`)
   const parameterRefs = [...operation.text.matchAll(/#\/components\/parameters\/([A-Za-z0-9_]+)/gu)].map((match) => match[1])
   if (JSON.stringify(parameterRefs) !== JSON.stringify(["PublishedPersonalSkillId"])) errors.push("getPublishedPersonalSkill must accept only PublishedPersonalSkillId")
-  if ((operation.text.match(/^ {8}- \$ref:/gmu) ?? []).length !== 1 || /^ {8}- (?:name|in|schema|required):/mu.test(operation.text) || /^ {10}(?:name|in|schema|required):/mu.test(operation.text)) errors.push("getPublishedPersonalSkill must reject inline or additional parameters")
+  const parametersBlock = /(?:^|\n) {6}parameters:\n([\s\S]*?)(?=\n {6}responses:)/u.exec(operation.text)?.[1]
+  if (parametersBlock !== "        - $ref: '#/components/parameters/PublishedPersonalSkillId'") errors.push("getPublishedPersonalSkill parameters block must be the exact single PublishedPersonalSkillId ref")
   if (/requestBody:|Idempotency-Key|#\/components\/parameters\/IdempotencyKey|CapabilitySkill|source_selector|secret_ref/u.test(operation.text)) errors.push("getPublishedPersonalSkill must exclude query/body/idempotency and legacy Capability inputs")
   const expectedResponses = new Map([
     ["200", "PublishedPersonalSkillOk"], ["400", "PublishedPersonalSkillBadRequest"], ["401", "PublishedPersonalSkillUnauthorized"],
