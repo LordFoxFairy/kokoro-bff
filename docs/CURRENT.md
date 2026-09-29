@@ -3,6 +3,12 @@
 状态：2026-09-29
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。
 
+## W3-BFF-SKILL-GET-RUNTIME：v4 精确 pin 与默认关闭的真实只读候选
+
+本片基线 BFF `58bcfc7da656981c1a43a9918ab9f96d207bbecc`。BFF 现改为固定 Platform owner `263a28f1e55745bd1829a61f68228d775751adbc` 的两份原字节 Proto（`common.proto` SHA-256 `65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08`、`platform_runtime.proto` SHA-256 `8ccab4aee4efdfd8210f2e5f02ae8ec85c2c470e90451915209406e16621289a`）与完整 inactive v4 artifact/provenance aggregate `902f8f2c2fbeb95a441820c1cf16b0a9c793eadac7106f9fcd5e41e3878b7f79`；旧 v3 vendor 已删，不双轨。生成脚本核全树文件/字节/aggregate、24 request bindings、17 command identities、34 operation、唯一 Get read binding 与 descriptor，并两次独立生成字节比较。CreateDraft 仍用 owner v4 未变的 command digest v3 绑定与 45 条向量，不能误把 artifact v4 写成 digest v4。
+
+运行时 `GET /v1/skills/{skill_id}/package-upload` 与 CreateDraft 复用同一个 `KOKORO_SKILL_DRAFT_CANDIDATE_ENABLED` loopback-only 默认关闭 catalog client。每次 IAM session/user/固定 tenant 先于 Platform socket；只有受信上下文构造 `ProductCatalogContext(user,user)`，再以短期 catalog workload token 调 owner Get。public 仅 strict `{data:{skill_id,attempt_epoch,phase,attempt_id?,upload_id?}}`，正整数 epoch 保持 decimal string；对 owner 错 ID/phase/epoch/presence/格式返回 502，不返回半成品。404 掩蔽非本 user/tenant、412 非 draft、429 可选有界 Retry-After；成功/错误均 `x-request-id` header 与 no-store。无 BFF Skill SQL/receipt、Storage I/O/签名、浏览器 bearer 透传或旧 Capability fallback。此为可供 Root 隔离组合的**运行候选**而非产品激活；Root 的真实 IAM/BFF/Platform none→后续状态/撤权零 socket 验收、Begin/Complete/Validate/Publish public 与最终 activation 尚未完成。下方 DOC-GATE/W1E 各节按其当时基线保留，不覆盖本节当前态。
+
 ## W3-BFF-SKILL-GET-DOC-GATE 候选：只有机器契约，尚无 Get 运行路由
 
 本片起点 BFF clean `main caa99d90f57329065eeb0e98168316b2b1874159`；当前新 Platform Product 入口仍仅为默认关闭的 `POST /v1/skills/drafts` 候选，另外三条旧 Capability Skills GET 与一条 MCP GET 保持原旧 HTTP 路径，旧 Skills 其他声明是 503，不是包产品。BFF generated Platform consumer/manifest 仍 pin owner `5b6eb2c` inactive v3。Platform owner 当前 `263a28f` 的正式 Get/Begin/Complete/ZIP Validate/Publish 已通过 Root 独占真实 IAM/BFF/Platform/Storage/PostgreSQL/Redis/MinIO/ClamAV 组合；组合中的 Begin→Publish 来自 owner CLI，**不是 BFF public Get/Begin/Complete/Validate/Publish 或浏览器 session 撤权闭环**。下方 W1E CreateDraft 及更早段落是当时历史切片；其中“真实三 owner sandbox 未验”不覆盖上述 Root 当前组合事实。

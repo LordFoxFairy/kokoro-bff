@@ -39,6 +39,7 @@ import { iamProtocolRelay } from "../http/routes/iam-protocol-relay.js"
 import { liveTeamRead, liveTeamWrite } from "../http/routes/team.js"
 import { createBffComposition, type BffCompositionOptions, type BffRouteInput } from "./runtime.js"
 import { createSkillDraftRoute } from "../http/routes/create-skill-draft.js"
+import { getSkillPackageUploadRoute } from "../http/routes/get-skill-package-upload.js"
 
 async function handle(
   request: IncomingMessage,
@@ -148,6 +149,7 @@ async function handle(
   }
 
   const businessPath = segments.slice(1)
+  const isSkillPackageGetPath = segments.length === 4 && segments[1] === "skills" && segments[3] === "package-upload"
   if (request.method === "GET" && businessPath.length === 3 && businessPath[0] === "projects" && businessPath[2] === "resources")
     response.setHeader("x-request-id", id)
   if (request.method === "POST" && businessPath.length === 2 && businessPath[0] === "library" && businessPath[1] === "files")
@@ -168,7 +170,7 @@ async function handle(
   if (!admission.ok) {
     if (!response.destroyed) {
       response.setHeader("x-request-id", id)
-      if (request.url === "/v1/skills/drafts") {
+      if (request.url === "/v1/skills/drafts" || isSkillPackageGetPath) {
         response.setHeader("cache-control", "no-store")
         send(
           response,
@@ -181,6 +183,18 @@ async function handle(
     return
   }
   const context = admission.context
+
+  if (isSkillPackageGetPath) {
+    const routeAbort = new AbortController()
+    const abortRoute = (): void => routeAbort.abort()
+    request.once("aborted", abortRoute)
+    response.once("close", abortRoute)
+    await getSkillPackageUploadRoute(request, response, context, segments[2] ?? "", composition.skillDraftClient, routeAbort.signal).finally(() => {
+      request.removeListener("aborted", abortRoute)
+      response.removeListener("close", abortRoute)
+    })
+    return
+  }
 
   if (new URL(request.url || "/", "http://bff.local").pathname === "/v1/skills/drafts") {
     if (request.method !== "POST" || request.url !== "/v1/skills/drafts") {

@@ -1,5 +1,9 @@
 # kokoro-bff data model
 
+## W3 Get runtime：零本仓数据模型变更（2026-09-29）
+
+当前 BFF consumer 已从 Platform 旧 v3 替换为 owner `263a28f` inactive v4 原字节/生成物，且具名只读 Get runtime 候选已接线；唯一 canonical `database/schema.sql`、BFF Redis 和所有 receipt 均未改。每次请求经 IAM session 后只读 Platform canonical Skill 的 current attempt/epoch/phase/upload，由 Platform 自身持有 tenant/owner/draft 权限；BFF 不读 `kokoro_platform`/Storage schema，不缓存包事实，不把 GET 写进 `bff_idempotency_receipt`。Proto uint64 在 HTTP 转 decimal string，非法 owner 状态 fail closed 502；撤权不使用旧快照。Root 真 IAM/Platform 组合与 public activation 尚未完成。下方 DOC-GATE/W1E 是历史切片基线，其“pin v3/无 Get route”不覆盖本节。
+
 ## W3 user-only package upload Get：零 BFF 数据变更（2026-09-29）
 
 当前 BFF clean `main caa99d90f57329065eeb0e98168316b2b1874159` 的唯一 canonical `database/schema.sql` 没有 Skill catalog、package attempt、Storage Upload 或专用 Skill command receipt；已有 `bff_project_skill` 是 Project 产品关联，不是 Platform Skill 真源。BFF 当前只实现默认关闭的 CreateDraft 候选并 pin Platform `5b6eb2c` inactive v3；Platform owner `263a28f` 的 package Get/Begin/Complete/Validate/Publish 真组合已验但未由 BFF public 消费。下方 W1E 段落记录旧 CreateDraft 切片，不把“真 sandbox 未验”或“Validate/Publish 未通”延伸到 Platform 当前 owner 状态。

@@ -1,5 +1,11 @@
 # kokoro-bff API contract policy
 
+## W3 Get runtime 当前契约（2026-09-29；public 仍未激活）
+
+唯一 public `GET /v1/skills/{skill_id}/package-upload` OpenAPI 候选已接到 BFF 默认关闭的真实 route；与 CreateDraft 共用 `KOKORO_SKILL_DRAFT_CANDIDATE_ENABLED`，只供 loopback 隔离验证，Platform v4 仍 `inactive/routable=false`。BFF 精确消费 owner `263a28f1e55745bd1829a61f68228d775751adbc` 两份 Proto 与完整 v4 aggregate `902f8f2c2fbeb95a441820c1cf16b0a9c793eadac7106f9fcd5e41e3878b7f79`；`readBinding.version=1.0.0`、`bindingVersion=3.0.0`，Get 不引入 command/proof。旧 v3 vendor 删除，CreateDraft 保留 owner v4 中不变的 v3 command digest/vector，不有旧服务 fallback。
+
+每次 GET 包括重复读都先 current IAM user session/fixed tenant，再用 catalog workload token 调 `SkillCatalogService/GetSkillPackageUpload`；公开不能输入 owner/subject/tenant，不能把 bearer 传 Platform。200 strict `{data}` 中 epoch 为 uint64 十进制字符串、phase/ID presence 按本仓 OpenAPI `oneOf`；错误 strict `{error}` 按状态专属 code，429 的 Retry-After 可选有界，所有出口 `x-request-id` header/no-store。404 隐去其他 tenant/user，412 非 draft，502 拒非法 owner response；GET 不发 Storage 签名、不持久化 receipt。Root 真 IAM/session 撤权/owner 状态组合尚待独立验，不能据候选 route 称公开产品已激活。下方 DOC-GATE/W1E 的旧 pin 与“尚无 route”只记录当时状态。
+
 ## W3 user-only GetSkillPackageUpload 候选（2026-09-29；尚无 BFF route）
 
 当前 BFF `main caa99d90f57329065eeb0e98168316b2b1874159` 仅有默认关闭的 public CreateDraft 候选，Platform consumer 仍固定旧 owner `5b6eb2c`/inactive v3；旧 Capability 三 Skills GET 不提供包状态。Platform `263a28f` 的正式 Get/Begin/Complete/Validate/Publish 与 inactive v4 已通过 Root 的隔离 owner 组合，但 BFF 尚未消费 v4，owner CLI 不构成用户可调用的 Product API。下方 W1E v3 段落只记录 CreateDraft 切片，不覆盖本节当前事实。

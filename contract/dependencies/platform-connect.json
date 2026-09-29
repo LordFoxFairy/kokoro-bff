@@ -3,7 +3,7 @@
   "status": "generated-not-activated",
   "owner": {
     "repository_path": "apps/kokoro-capability",
-    "repository_commit": "5b6eb2c1532b23b9747bc4bf6ac99f69ad453de0",
+    "repository_commit": "263a28f1e55745bd1829a61f68228d775751adbc",
     "package_name": "kokoro.platform.v1",
     "sources": [
       {
@@ -12,17 +12,17 @@
       },
       {
         "path": "contract/proto/kokoro/platform/v1/platform_runtime.proto",
-        "sha256": "282bf886ea9648f7ce5208abd36ab47d879b2002a036d90aada2af59e74b4020"
+        "sha256": "8ccab4aee4efdfd8210f2e5f02ae8ec85c2c470e90451915209406e16621289a"
       }
     ]
   },
   "execution_artifact": {
-    "path": "contract/vendor/kokoro-platform/5b6eb2c1532b23b9747bc4bf6ac99f69ad453de0/execution-operations-v3",
-    "artifact_version": "3.0.0",
+    "path": "contract/vendor/kokoro-platform/263a28f1e55745bd1829a61f68228d775751adbc/execution-operations-v4",
+    "artifact_version": "4.0.0",
     "status": "inactive",
     "routable": false,
-    "provenance_path": "contract/vendor/kokoro-platform/5b6eb2c1532b23b9747bc4bf6ac99f69ad453de0/execution-operations-v3/provenance.json",
-    "aggregate_sha256": "324e749da1bc66c1ff03de74e7299716f798f5f5bb5fa19556033b79fa09ff8d"
+    "provenance_path": "contract/vendor/kokoro-platform/263a28f1e55745bd1829a61f68228d775751adbc/execution-operations-v4/provenance.json",
+    "aggregate_sha256": "902f8f2c2fbeb95a441820c1cf16b0a9c793eadac7106f9fcd5e41e3878b7f79"
   },
   "generator": {
     "packages": {
@@ -34,14 +34,14 @@
     "configs": [
       {
         "path": "buf.platform.json",
-        "sha256": "665703797ff8a9a755e82a55bc293ae181bc7555804fb9af278d7f4c7f8cb732"
+        "sha256": "36d6346845aac87c8af4386f26de008fcf14c7de6dd17bd10afcd7c2affedf38"
       },
       {
         "path": "buf.platform.gen.json",
         "sha256": "9888ea0808f6967ebdfb859125eb54430b89ad3f4dbee4418902bfdf6a4540ab"
       }
     ],
-    "script_sha256": "412f936ffcf65dfcb96953133d9440124374bbd8000c0828a222dab6333bbd6b",
+    "script_sha256": "f404dc8e42e7af312859026fb5b41cad0867b3682f10898d9ff7484f055cd52a",
     "formatting": {
       "package": "prettier",
       "version": "3.9.6",
@@ -56,7 +56,7 @@
     "licenses": "Buf, Protobuf-ES and Connect-ES: Apache-2.0",
     "supply_chain": "Exact package versions and lock integrity; local generation without remote plugins; only @bufbuild/buf install build is newly allowed.",
     "performance": "No network calls or application startup added. Runtime performance is unmeasured; this slice validates descriptor serialization only.",
-    "failure_semantics": "Generation rejects source/config/package/tree/digest drift. Artifact/source drift fails closed. No retry, authentication or production adapter is implemented.",
+    "failure_semantics": "Generation rejects source/config/package/tree/digest drift. Artifact/source drift and Get read binding drift fail closed; runtime adapter admits current user before Platform Connect.",
     "exit_path": "Regenerate from the pinned owner Proto with a reviewed compatible generator; generated wire types remain isolated from business code.",
     "sources": [
       "https://connectrpc.com/docs/node/getting-started/",
@@ -77,7 +77,7 @@
     },
     {
       "path": "kokoro/platform/v1/platform_runtime_pb.ts",
-      "sha256": "6b934c5a4bba7e9b8a583317ff88cf7eb26b7bf0e7c171950565d38c1a848d8a"
+      "sha256": "42e7753076f1e61a7571cb0ad1ee5df0755d1c17b88ad9dff1522556e2e9b22a"
     }
   ]
 }

@@ -4,9 +4,11 @@ import { createConnectTransport } from "@connectrpc/connect-node"
 import { CommandIdentitySchema } from "../../../generated/platform-connect/kokoro/common/v1/common_pb.js"
 import {
   CreateSkillDraftRequestSchema,
+  GetSkillPackageUploadRequestSchema,
   OwnerScopeSchema,
   ProductCatalogContextSchema,
   SkillCatalogService,
+  SkillIdSchema,
   SkillMetadataSchema,
 } from "../../../generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
 import type { CatalogTokenSource } from "./catalog-token.js"
@@ -39,6 +41,22 @@ export class CatalogConnectClient {
           tags: input.tags,
           metadataJson: Buffer.from("{}", "utf8"),
         }),
+        productContext: create(ProductCatalogContextSchema, { subjectId: input.user, ownerScope: create(OwnerScopeSchema, { kind: "user", id: input.user }) }),
+      }),
+      {
+        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(this.timeoutMs)]) : AbortSignal.timeout(this.timeoutMs),
+        headers: { authorization: `Bearer ${token}`, "x-tenant-ref": input.tenant },
+        timeoutMs: this.timeoutMs,
+      },
+    )
+  }
+
+  async getPackageUpload(input: { requestId: string; skillId: string; tenant: string; user: string }, signal?: AbortSignal) {
+    const token = await this.tokens.get(input.tenant, signal)
+    return this.#client.getSkillPackageUpload(
+      create(GetSkillPackageUploadRequestSchema, {
+        requestId: input.requestId,
+        skillId: create(SkillIdSchema, { value: input.skillId }),
         productContext: create(ProductCatalogContextSchema, { subjectId: input.user, ownerScope: create(OwnerScopeSchema, { kind: "user", id: input.user }) }),
       }),
       {

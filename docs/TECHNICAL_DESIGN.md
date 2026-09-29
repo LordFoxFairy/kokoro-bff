@@ -1,5 +1,11 @@
 # kokoro-bff 技术设计
 
+## W3 Get runtime 当前态（2026-09-29；候选默认关闭）
+
+本片将唯一 catalog Connect consumer 从 Platform `5b6eb2c` v3 **替换**为 owner `263a28f` 的完整 inactive v4 Proto/artifact/generated；来源树、digest、Get read binding/descriptor 与双生成都由既有 `scripts/generate-platform-connect-client.mjs` 锁定，旧 vendor 删除。`CatalogConnectClient` 仍是唯一 catalog 工作负载凭据与 Connect 边界，扩只读 `getPackageUpload`；`src/http/routes/get-skill-package-upload.ts` 单独负责输入、owner PB→strict public 状态投影和错误映射，`src/bootstrap/server.ts` 在现有 IAM admission 成功后直达该具名 route。不使用 `owner.ts` 旧 Capability HTTP 或通用 proxy。`KOKORO_SKILL_DRAFT_CANDIDATE_ENABLED` 是同一 catalog 候选开关，默认关闭且仅 loopback 配齐 Platform/IAM/credential 可启，不新增第二环境开关。
+
+请求不带 command/receipt/idempotency：先当次 IAM session/fixed tenant/user，再用 BFF catalog token、`x-tenant-ref`、受信 `ProductCatalogContext(user/user)` 读 Platform current draft。无本仓 SQL/Redis 包副本、Storage I/O、签名与浏览器 bearer 透传。Get response 逐字段校验 `skill_id`、Proto uint64、phase/attempt/upload presence 与 typed ID，违反 OpenAPI `oneOf` 即 502；先前读结果不缓存，撤权后不建立新的 Platform 调用。公开 401/403/503 使用既有 admission 状态码，owner NotFound/owner mismatch 对外 404，非 draft 412；429 可选有界 Retry-After。所有出口 strict data/error envelope、`x-request-id` 与 no-store。Root 真 IAM/Platform 组合与产品 activation 仍独立门；下方 DOC-GATE 的“未实现 route/仍 pin v3”是当时基线，不再是当前事实。
+
 ## W3-BFF-SKILL-GET-DOC-GATE：当前态与 user-only 只读目标（2026-09-29）
 
 **当前态。** 本片起点为 BFF clean `main caa99d90f57329065eeb0e98168316b2b1874159`。唯一新 Platform Product 路由仍是默认关闭的 `POST /v1/skills/drafts` 候选；旧 Capability 三个 Skills GET 与 MCP GET 仍走其旧 HTTP adapter，其他旧 Skills 声明返回 503，不代表包操作。BFF consumer 仍 pin Platform `5b6eb2c` 的 inactive v3 Proto/artifact；Platform owner 当前 `263a28f` 已将正式 Get/Begin/Complete/Validate/Publish 与 inactive v4 发布并由 Root 通过隔离真实 owner 组合，但其中 Begin→Publish 是 owner CLI 调用，**不是 BFF public 包链或当次用户 session 撤权验收**。下方 W1E CreateDraft 段落是当时切片记录，不能覆盖此当前态。
