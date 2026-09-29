@@ -1,5 +1,9 @@
 # kokoro-bff data model
 
+## W3 Publish 运行候选：无 BFF 持久化 owner（2026-09-29）
+
+Publish 现已接默认关闭的 BFF 具名 route/固定 Platform v4 Connect 调用；本仓 canonical SQL、索引、事务、Redis、receipt/outbox 仍无改动。每次含 replay 先当次 IAM，再让 Platform 按 current Skill/package/Storage CLEAN 与自身 command receipt 判定；BFF 仅做严格短暂 public 投影，不跨 owner SQL、不存签名或 ZIP。运行候选不代表产品激活或 Root 真 owner 组合已验；下节是文档门当时尚无 route 的历史状态。
+
 ## W3 Publish 候选：无 BFF 持久化 owner（2026-09-29）
 
 本片仅新增唯一 public Publish OpenAPI/文档候选，BFF 还没有 Publish route；`database/schema.sql`、索引、事务、Redis、receipt、outbox 与角色均零变更。Platform 唯一拥有 current Skill/package、validated→active CAS、command receipt 与 `skill.published` 内部 outbox；Storage 唯一拥有 Asset/scan/对象健康。BFF 不读取其他 owner SQL、不复制 Skill/包/事件事实、不存成功 replay 或签名 URL，不代理 ZIP；未来每次包括同键 replay 先当次 IAM，再交 Platform current owner/fresh Storage 判定。公开 source_ref/revision/status/event_id/replayed 只是 owner 已提交事实的短暂投影，不新建 BFF 表或跨仓事务。Web/真组合/激活另门。

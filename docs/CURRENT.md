@@ -3,6 +3,10 @@
 状态：2026-09-29
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。
 
+## W3-BFF-SKILL-PUBLISH-RUNTIME：默认关闭运行候选
+
+基线 BFF clean `b357c190`，固定 owner `263a28f` inactive v4、command digest `3.0.0`。现有同一 Skill catalog candidate flag 下接入 user-only `POST /v1/skills/{skill_id}/publish` 具名路由；严格零字节体/单个 Idempotency-Key、当次 IAM/fixed tenant/user 先于 Platform，固定 PERSONAL(1)，独立 JCS projector 对齐 owner 8 向量、generated Connect Publish。200 仅投影经核对的 `source_ref=skill:<id>`、正 uint64 revision、ACTIVE、UUID event、replayed；`publish_snapshot_conflict` 的稳定 Aborted metadata 精确映射 412，其他 Aborted 409，坏 owner 502。重放/未知 ACK 不经 BFF receipt，撤权不调用 Platform；无 BFF SQL/Storage RPC/ZIP 代理/旧 Capability fallback。HTTP 聚焦和本仓门是运行候选证据，Root 真 IAM/Platform/Storage/同 event 重放与产品激活仍待独立门；下节“无 Publish route”仅为文档门历史状态。
+
 ## W3-BFF-SKILL-PUBLISH-DOC-GATE：仅未激活机器/文档候选
 
 BFF 基线 clean `main 1264607`，owner `263a28f` inactive v4。唯一 public OpenAPI/operation inventory/语义门新增 user-only Publish 的严格零字节体、单键、固定 PERSONAL(1) 目标、200 active/source_ref/uint64 revision/UUID event/replayed 与状态专属错误；直接契约测试锁 owner 3.0.0 的 8 条命令向量、Proto 字段及旧 operation 误引。**本片不新增 Publish route、Connect 调用、projector、SQL/receipt/outbox 或配置**；CreateDraft/Get/Begin/Complete/Validate 仍默认关闭，Platform v4 inactive、产品未激活。Root 真 IAM/Storage/同 event replay/撤权、Web Chromium 与产品发布仍待后续门。下方 Validate/Complete 各节按各自切片基线理解；W1E caller visibility 是废止历史目标，不是当前 public 输入。

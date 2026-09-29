@@ -1,5 +1,9 @@
 # kokoro-bff 技术设计
 
+## W3 Publish 运行候选：当前态与目标态（2026-09-29；默认关闭）
+
+**当前态。** 固定 Platform `263a28f` inactive v4/3.0.0 的 BFF Publish 已在既有 Skills candidate flag 下由 `src/bootstrap/server.ts` 精确分派到具名 `src/http/routes/publish-skill.ts`；`src/http/publish-skill-input.ts` 仅负责稳定命令身份，`src/infrastructure/clients/platform/publish-skill-projector.ts` 负责唯一 v4 8 向量 JCS 投影，`catalog-connect.ts` 以独立 workload token 调 generated Publish。零字节体、单键、当次 IAM/可信 user+tenant、固定 PERSONAL(1)、严格 owner ACTIVE/event/revision/source_ref 检查在每次重放上执行。Platform 独有 package/validated/Storage CLEAN/CAS/receipt/outbox；BFF 不建 SQL/receipt/Storage RPC，也不经旧 Capability。HTTP/contract 静态门后仍待 Root 真 owner 组合与正式激活；下节保留文档门当时无路由事实。
+
 ## W3 Publish 文档门：当前态与目标态（2026-09-29；仅未激活机器候选）
 
 **当前态。** BFF clean `main 1264607` 已有默认关闭的 CreateDraft/Get/Begin/Complete/Validate 运行候选，固定 Platform owner `263a28f` inactive v4 Proto/artifact；唯一 public OpenAPI 尚无 Publish，BFF 没有 Publish route/projector/Connect adapter，旧 Capability `/hub` 不承接新包发布。owner v4 Proto 的 Publish request 含 SkillId、visibility tag 4、ProductCatalogContext tag 5；本片只新增 BFF 文档/唯一 OpenAPI/operation-scoped checker/直接契约测试，不改 `src/`、生成物或 SQL。

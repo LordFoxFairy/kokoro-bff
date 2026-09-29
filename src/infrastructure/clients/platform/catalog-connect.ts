@@ -9,9 +9,11 @@ import {
   GetSkillPackageUploadRequestSchema,
   OwnerScopeSchema,
   ProductCatalogContextSchema,
+  PublishSkillRequestSchema,
   SkillCatalogService,
   SkillIdSchema,
   SkillMetadataSchema,
+  SkillScopeKind,
   ValidateSkillDraftRequestSchema,
 } from "../../../generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
 import type { CatalogTokenSource } from "./catalog-token.js"
@@ -154,6 +156,24 @@ export class CatalogConnectClient {
         skillId: create(SkillIdSchema, { value: input.skillId }),
         productContext: create(ProductCatalogContextSchema, { subjectId: input.user, ownerScope: create(OwnerScopeSchema, { kind: "user", id: input.user }) }),
         attemptId: input.attemptId,
+      }),
+      {
+        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(this.timeoutMs)]) : AbortSignal.timeout(this.timeoutMs),
+        headers: { authorization: `Bearer ${token}`, "x-tenant-ref": input.tenant },
+        timeoutMs: this.timeoutMs,
+      },
+    )
+  }
+
+  async publish(input: { requestId: string; commandId: string; digest: string; tenant: string; user: string; skillId: string }, signal?: AbortSignal) {
+    const token = await this.tokens.get(input.tenant, signal)
+    return this.#client.publishSkill(
+      create(PublishSkillRequestSchema, {
+        requestId: input.requestId,
+        command: create(CommandIdentitySchema, { commandId: input.commandId, requestDigest: input.digest }),
+        skillId: create(SkillIdSchema, { value: input.skillId }),
+        visibility: SkillScopeKind.PERSONAL,
+        productContext: create(ProductCatalogContextSchema, { subjectId: input.user, ownerScope: create(OwnerScopeSchema, { kind: "user", id: input.user }) }),
       }),
       {
         signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(this.timeoutMs)]) : AbortSignal.timeout(this.timeoutMs),

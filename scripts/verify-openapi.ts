@@ -942,8 +942,8 @@ function skillPublishContractErrors(
     ...[...responseRefs.values()].map(([name]) => responses.get(name)?.text ?? ""),
   ].join("\u0000")
   const frozenDigest = createHash("sha256").update(frozenSource).digest("hex")
-  // This exact inactive Publish operation and its direct components are the only new strict-envelope exception.
-  if (frozenDigest !== "053d87058d9cd2dff3a95ed4a256cf64dd19b537c9191282880810330163892e")
+  // The exact Publish operation now describes a default-closed runtime candidate; wire/status/components and this operation-scoped exception are unchanged.
+  if (frozenDigest !== "b66d494d63d5c1a63196d3c4c99b2ad366c725bc4c02d705ea237d00a7f3b24b")
     errors.push(`publishSkill canonical contract digest drifted: ${frozenDigest}`)
   return errors
 }

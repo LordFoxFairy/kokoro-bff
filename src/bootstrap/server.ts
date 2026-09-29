@@ -43,6 +43,7 @@ import { getSkillPackageUploadRoute } from "../http/routes/get-skill-package-upl
 import { beginSkillPackageUploadRoute } from "../http/routes/begin-skill-package-upload.js"
 import { completeSkillPackageUploadRoute } from "../http/routes/complete-skill-package-upload.js"
 import { validateSkillDraftRoute } from "../http/routes/validate-skill-draft.js"
+import { publishSkillRoute } from "../http/routes/publish-skill.js"
 
 async function handle(
   request: IncomingMessage,
@@ -155,6 +156,7 @@ async function handle(
   const isSkillPackagePath = segments.length === 4 && segments[1] === "skills" && segments[3] === "package-upload"
   const isSkillPackageCompletePath = segments.length === 5 && segments[1] === "skills" && segments[3] === "package-upload" && segments[4] === "complete"
   const isSkillValidatePath = segments.length === 4 && segments[1] === "skills" && segments[3] === "validate"
+  const isSkillPublishPath = segments.length === 4 && segments[1] === "skills" && segments[3] === "publish"
   if (request.method === "GET" && businessPath.length === 3 && businessPath[0] === "projects" && businessPath[2] === "resources")
     response.setHeader("x-request-id", id)
   if (request.method === "POST" && businessPath.length === 2 && businessPath[0] === "library" && businessPath[1] === "files")
@@ -175,7 +177,7 @@ async function handle(
   if (!admission.ok) {
     if (!response.destroyed) {
       response.setHeader("x-request-id", id)
-      if (request.url === "/v1/skills/drafts" || isSkillPackagePath || isSkillPackageCompletePath || isSkillValidatePath) {
+      if (request.url === "/v1/skills/drafts" || isSkillPackagePath || isSkillPackageCompletePath || isSkillValidatePath || isSkillPublishPath) {
         response.setHeader("cache-control", "no-store")
         send(
           response,
@@ -188,6 +190,18 @@ async function handle(
     return
   }
   const context = admission.context
+
+  if (isSkillPublishPath) {
+    const routeAbort = new AbortController()
+    const abortRoute = (): void => routeAbort.abort()
+    request.once("aborted", abortRoute)
+    response.once("close", abortRoute)
+    await publishSkillRoute(request, response, context, segments[2] ?? "", composition.skillDraftClient, routeAbort.signal).finally(() => {
+      request.removeListener("aborted", abortRoute)
+      response.removeListener("close", abortRoute)
+    })
+    return
+  }
 
   if (isSkillValidatePath) {
     const routeAbort = new AbortController()

@@ -1,5 +1,9 @@
 # kokoro-bff API contract policy
 
+## W3 Publish public 默认关闭运行候选（2026-09-29）
+
+唯一 OpenAPI 的 `publishSkill` 现有同路径具名 BFF route，仍固定 inactive owner v4/3.0.0 且产品未激活；当前 IAM/fixed user+tenant 每次含 replay 先于 Platform，原始 body 恰零字节、单个 Idempotency-Key，内部固定 PERSONAL(1)。owner 8 向量投影、严格 200 `{data}`、状态专属 `{error}`、有界 request ID/no-store 已由直接 HTTP/contract 门覆盖；`Aborted` 只在 metadata `publish_snapshot_conflict` 时为 412，其余为 409，不解析 message。BFF 不持有 receipt/SQL/Storage，真 owner/IAM 组合及激活另门。下节为文档门历史状态。
+
 ## W3 Publish public 机器候选（2026-09-29；尚无运行路由）
 
 唯一 public OpenAPI 新增 user-only `POST /v1/skills/{skill_id}/publish`，operationId `publishSkill`、permission `product.skill.publish`、单个 1–128 可打印 `Idempotency-Key` 必填；owner `263a28f` v4 仍 inactive，BFF 本片**不接 Publish runtime route**、产品未激活。机器扩展 `x-kokoro-empty-body: required` 且无 `requestBody` 明确原始请求体必须**恰为零字节**，并非 `{}`、`null`、空白或忽略输入；`x-kokoro-fixed-visibility: personal` 固定后续内部 owner 入参，任何 public visibility/asset/hash/manifest/tenant/owner 均不接收。未来 BFF 当次 IAM user/fixed tenant admission 后固定 owner `SKILL_SCOPE_KIND_PERSONAL(1)`，不把 legacy W1E visibility 规划当现行 body。owner v4 `command_digest_version=3.0.0` 的 8 条 JCS 向量绑定 typed SkillId、受信 Product user/user context 和 visibility=1，命令 ID 绑定 operation+tenant/user/skill/key；request ID/command identity 不参与 digest。

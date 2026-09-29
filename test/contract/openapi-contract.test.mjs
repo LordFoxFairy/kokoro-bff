@@ -461,7 +461,7 @@ test("ValidateSkillDraft semantic gate rejects schema, status, header and legacy
   }
 })
 
-test("PublishSkill exposes one inactive user-only command with no request body", async () => {
+test("PublishSkill exposes one default-closed user-only command with no request body", async () => {
   const { openapi, baseline } = await readContract()
   assert.ok(baseline.some(({ method, path, operation_id }) => method === "POST" && path === "/v1/skills/{skill_id}/publish" && operation_id === "publishSkill"))
   const start = openapi.indexOf("  /v1/skills/{skill_id}/publish:")
@@ -469,6 +469,8 @@ test("PublishSkill exposes one inactive user-only command with no request body",
   assert.ok(start >= 0 && end > start)
   const operation = openapi.slice(start, end)
   assert.match(operation, /operationId: publishSkill/u)
+  assert.match(operation, /Default-closed BFF runtime candidate pinned to inactive Platform v4/u)
+  assert.match(operation, /the named Publish route exists but the candidate is not publicly activated/u)
   for (const fragment of [
     "product.skill.publish",
     "SkillPublishIdempotencyKey",
