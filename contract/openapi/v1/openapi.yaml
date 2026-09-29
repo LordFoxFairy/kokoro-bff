@@ -2129,7 +2129,7 @@ paths:
       x-kokoro-idempotency: none
       x-kokoro-permission: product.skill.get_package_upload
       summary: Get the current user-owned draft Skill package upload state
-      description: Candidate contract only; no BFF route or Platform v4 pin yet. Current IAM user admission and Platform owner/draft checks are required on every future request. This read never signs an upload.
+      description: Default-closed, inactive candidate route pinned to Platform owner commit 263a28f1e55745bd1829a61f68228d775751adbc and v4 artifact aggregate SHA-256 902f8f2c2fbeb95a441820c1cf16b0a9c793eadac7106f9fcd5e41e3878b7f79; not publicly activated. Every request requires current IAM user admission and Platform owner/draft checks. This read never signs an upload.
       parameters:
         - $ref: '#/components/parameters/SkillPackageUploadSkillId'
       responses:

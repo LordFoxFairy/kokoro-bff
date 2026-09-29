@@ -130,9 +130,20 @@ export function idempotencyKey(request: IncomingMessage): string | null {
   return key === "" ? null : key
 }
 
+const requestIds = new WeakMap<IncomingMessage, string>()
+
 export function requestId(request: IncomingMessage): string {
-  const value = request.headers["x-kokoro-request-id"] ?? request.headers["x-request-id"]
-  return typeof value === "string" && value.trim() ? value.trim() : randomUUID()
+  const existing = requestIds.get(request)
+  if (existing !== undefined) return existing
+  const values: string[] = []
+  for (let index = 0; index < request.rawHeaders.length; index += 2) {
+    const name = request.rawHeaders[index]?.toLowerCase()
+    if (name === "x-kokoro-request-id" || name === "x-request-id") values.push(request.rawHeaders[index + 1] ?? "")
+  }
+  const value = values.length === 1 ? values[0]?.trim() : undefined
+  const id = value !== undefined && value.length > 0 && value.length <= 128 && /^[\x20-\x7e]+$/u.test(value) ? value : randomUUID()
+  requestIds.set(request, id)
+  return id
 }
 
 export function pathOf(request: IncomingMessage): string[] {

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import { once } from "node:events"
+import { request as httpRequest } from "node:http"
 import test from "node:test"
 import { Code, ConnectError } from "@connectrpc/connect"
 
@@ -62,6 +63,65 @@ test("candidate Get projects current package state from trusted user and tenant"
   )
   assert.equal(calls.length, 1)
   assert.deepEqual({ ...calls[0], requestId: undefined }, { skillId: "skill-1", tenant: "tenant", user: "user", requestId: undefined })
+})
+
+test("candidate Get keeps the echoed request ID within the public 128-character header bound", async () => {
+  const seen = []
+  await withServer(
+    {
+      getPackageUpload: async ({ requestId }) => {
+        seen.push(requestId)
+        return { skillId: { value: "skill-1" }, attemptEpoch: 0n, phase: 1 }
+      },
+    },
+    async (base) => {
+      const valid = "v".repeat(128)
+      const accepted = await fetch(`${base}/v1/skills/skill-1/package-upload`, { headers: { ...headers, "x-request-id": valid } })
+      assert.equal(accepted.status, 200)
+      assert.equal(accepted.headers.get("x-request-id"), valid)
+      const oversized = await fetch(`${base}/v1/skills/skill-1/package-upload`, { headers: { ...headers, "x-request-id": "x".repeat(129) } })
+      assert.equal(oversized.status, 200)
+      const normalized = oversized.headers.get("x-request-id")
+      assert.match(normalized, /^[0-9a-f-]{36}$/u)
+      assert.notEqual(normalized, "x".repeat(129))
+      assert.deepEqual(seen, [valid, normalized])
+    },
+  )
+})
+
+test("candidate Get does not echo duplicate or control-bearing request IDs", async () => {
+  const seen = []
+  await withServer(
+    {
+      getPackageUpload: async ({ requestId }) => {
+        seen.push(requestId)
+        return { skillId: { value: "skill-1" }, attemptEpoch: 0n, phase: 1 }
+      },
+    },
+    async (base) => {
+      for (const extra of [
+        { "x-request-id": ["one", "two"] },
+        { "x-kokoro-request-id": "internal", "x-request-id": "public" },
+        { "x-request-id": "has\ttab" },
+      ]) {
+        const result = await new Promise((resolve, reject) => {
+          const req = httpRequest(`${base}/v1/skills/skill-1/package-upload`, { headers: { ...headers, ...extra } }, (response) => {
+            const chunks = []
+            response.on("data", (chunk) => chunks.push(chunk))
+            response.once("end", () =>
+              resolve({ status: response.statusCode, requestId: response.headers["x-request-id"], body: Buffer.concat(chunks).toString() }),
+            )
+          })
+          req.once("error", reject)
+          req.end()
+        })
+        assert.equal(result.status, 200, `${JSON.stringify(extra)} ${result.body}`)
+        assert.match(result.requestId, /^[0-9a-f-]{36}$/u)
+        assert.equal(seen.at(-1), result.requestId)
+      }
+    },
+  )
+  assert.equal(seen.length, 3)
 })
 
 test("candidate Get stays closed after IAM admission when catalog client is absent", async () =>

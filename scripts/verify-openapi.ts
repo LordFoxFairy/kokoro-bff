@@ -592,7 +592,8 @@ function skillPackageUploadGetContractErrors(
     ...[...responseRefs.values()].map(([name]) => responses.get(name)?.text ?? ""),
   ].join("\u0000")
   const frozenDigest = createHash("sha256").update(frozenSource).digest("hex")
-  if (frozenDigest !== "7b204e1accd902837c5ba8c1d6f5cdc6c08f24fe72a402993f78f850169ff135")
+  // Reviewed Get description now records the implemented, default-closed v4-pinned candidate; wire/status semantics are unchanged.
+  if (frozenDigest !== "91fad412f4ffc493a67aaecc3860dfcd83c43468bc16ff3f9e7c188d9b2b75f0")
     errors.push(`getSkillPackageUpload canonical contract digest drifted: ${frozenDigest}`)
   return errors
 }
