@@ -135,7 +135,7 @@ BFF 通过显式环境变量选择业务服务：
 | 业务资源 | 环境变量 |
 | --- | --- |
 | System / Site / Workspace / Policy | `KOKORO_SYSTEM_BASE_URL` |
-| Capability / Skills / MCP | `KOKORO_CAPABILITY_BASE_URL` |
+| Platform / Skills / MCP read projection | `KOKORO_PLATFORM_BASE_URL` + `KOKORO_IAM_BASE_URL` + `KOKORO_PLATFORM_PROJECTION_CREDENTIAL_FILE` |
 | Scheduler / Scheduled | `KOKORO_SCHEDULER_BASE_URL` |
 | Billing | `KOKORO_BILLING_BASE_URL` |
 | Model catalog | `KOKORO_SYSTEM_BASE_URL` |
@@ -164,7 +164,7 @@ Model/Billing 的 owner HTTP 面明确注册为 `web-bff` caller；Agent ingress
 | Mori Music | 已定义 | 有 | 已接入 `KOKORO_MUSIC_BASE_URL`；缺失时 fail closed |
 | Chat | 已定义 | 有 | BFF Chat facts + transactional Agent outbox + fenced AG-UI projector/ledger/GC 已接；assistant reconciliation 开放 |
 | Model | 已定义 | 有 | catalog read projection 已接 |
-| Skills / MCP | 已定义 | 有 | Capability read projection 已接；未接写操作返回 503 |
+| Skills / MCP | 已定义 | 有 | 五条 Platform 3.1.0 读投影已接；发布后的个人 Skill 精确读取已接，未接写操作固定返回 503 且不 claim BFF receipt |
 | Scheduled | 已定义 | 有 | PostgreSQL fact + bounded transactional Scheduler outbox/dispatcher 已接 |
 | Agents setup | 已定义 | 有 | Live adapter 未接 |
 | Billing | 已定义 | 有 | plans/checkout 已接；summary 等 surface 未全部接线 |
@@ -182,7 +182,7 @@ Model/Billing 的 owner HTTP 面明确注册为 `web-bff` caller；Agent ingress
 | --- | --- | --- |
 | Chat/session/run/SSE | `src/infrastructure/clients/agent/` + `src/application/agui/` + PostgreSQL | Agent supplies execution facts; BFF owns Chat product facts, the public contract, fenced consumer and durable AG-UI projection. |
 | Project/workspace projection | BFF business adapter | BFF projection; System owns Site/Workspace/Policy |
-| Skills/MCP | Capability Connect adapter | Capability |
+| Skills/MCP | `src/http/routes/platform-projection.ts` + `src/infrastructure/clients/platform/` | Platform |
 | Model selection | `liveOwnerBusiness` Model projection | Model |
 | Billing/credit | `liveOwnerBusiness` Billing projection | Billing |
 | Library/assets/artifacts | W2 pending；未来只接 Storage Proto v2 over ConnectRPC | Storage |

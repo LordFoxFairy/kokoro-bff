@@ -14,8 +14,37 @@ import type { IdempotencyEntry, MutationTicket } from "../../src/application/ide
 import { chatSessionDetailData, chatSessionsData, githubSkillSource, mcpRegisterInput, mockControlReceipt, PLATFORMS, projectData, scheduledData, sessionScope, skillData, taskData } from "./helpers.ts"
 import { agUiSseFrame } from "../../dist/interfaces/http/agui/sse.js"
 import { mockAgUiFrames } from "./agui.ts"
-import { skillCatalogData, skillPoolData } from "../../dist/http/routes/owner.js"
 import { mockMoriBusiness } from "./mori-route.ts"
+
+function skillPoolData(skills: Skill[]) {
+  return {
+    skills: skills.map((skill) => ({
+      name: skill.name,
+      description: skill.description,
+      content_hash: skill.content_hash,
+      scope: skill.scope,
+      ...(skill.enabled === undefined ? {} : { enabled: skill.enabled }),
+      ...(skill.categories === undefined ? {} : { categories: skill.categories }),
+      ...(skill.updated_at === undefined ? {} : { updated_at: skill.updated_at }),
+    })),
+  }
+}
+
+function skillCatalogData(skills: Skill[]) {
+  return {
+    skills: skills.map((skill) => ({
+      name: skill.name,
+      description: skill.description,
+      content_hash: skill.content_hash,
+      scope: skill.scope,
+      installed: skill.installed ?? true,
+      enabled: skill.enabled ?? true,
+      ...(skill.categories === undefined ? {} : { categories: skill.categories }),
+      ...(skill.updated_at === undefined ? {} : { updated_at: skill.updated_at }),
+    })),
+    next_cursor: null,
+  }
+}
 
 export async function mockBusiness(
   request: IncomingMessage,

@@ -1418,6 +1418,77 @@ function protocolErrors(parameters: Map<string, NamedBlock>, schemas: Map<string
   return errors
 }
 
+function platformProjectionReadContractErrors(
+  schemas: Map<string, NamedBlock>,
+  operations: OperationBlock[],
+  responseComponents: Map<string, NamedBlock>,
+): string[] {
+  const errors: string[] = []
+  const reads = [
+    ["listSkills", "/v1/skills", "SkillListResponse"],
+    ["listSkillPool", "/v1/skills/pool", "SkillPoolResponse"],
+    ["listSkillCatalog", "/v1/skills/catalog", "SkillCatalogResponse"],
+    ["listMcpServers", "/v1/mcp/servers", "McpServerListResponse"],
+  ] as const
+  const failures = {
+    "400": "PlatformProjectionReadBadRequest",
+    "401": "PlatformProjectionReadUnauthorized",
+    "403": "PlatformProjectionReadForbidden",
+    "429": "PlatformProjectionReadRateLimited",
+    "502": "PlatformProjectionReadBadGateway",
+    "503": "PlatformProjectionReadUnavailable",
+  } as const
+  const allowedCodes = {
+    PlatformProjectionReadBadRequest: ["invalid_query_parameter"],
+    PlatformProjectionReadUnauthorized: ["session_authentication_required", "session_invalid"],
+    PlatformProjectionReadForbidden: ["service_auth_failed", "session_forbidden", "product_tenant_forbidden"],
+    PlatformProjectionReadRateLimited: ["session_rate_limited"],
+    PlatformProjectionReadBadGateway: ["skill_response_invalid"],
+    PlatformProjectionReadUnavailable: ["product_tenant_not_configured", "iam_admission_unavailable", "skill_dependency_unavailable"],
+  } as const
+  const requiredHeaders = (text: string): boolean =>
+    /x-request-id:\s*\n\s+required: true/u.test(text) &&
+    /Cache-Control:\s*\n\s+required: true\s*\n\s+schema: \{ type: string, const: no-store \}/u.test(text)
+  for (const [operationId, path, responseSchema] of reads) {
+    const operation = operations.find((item) => item.method === "GET" && item.path === path && item.fields.get("operationId") === operationId)
+    if (!operation) {
+      errors.push(`Platform projection read ${operationId} is missing`)
+      continue
+    }
+    const responses = collectResponseBlocks(operation)
+    const success = responses.get("200") ?? ""
+    if (!success.includes(`#/components/schemas/${responseSchema}`) || !requiredHeaders(success)) {
+      errors.push(`${operationId} 200 must expose ${responseSchema} with required no-store and request ID headers`)
+    }
+    for (const [status, component] of Object.entries(failures)) {
+      if (!responses.get(status)?.includes(`#/components/responses/${component}`)) {
+        errors.push(`${operationId} ${status} must use ${component}`)
+      }
+    }
+  }
+  const quota = operations.find((item) => item.method === "GET" && item.path === "/v1/skills/quota")
+  if (!quota || collectResponseBlocks(quota).has("200") || !collectResponseBlocks(quota).has("503")) {
+    errors.push("retired skill quota GET must expose only its unavailable result")
+  }
+  const skill = schemas.get("Skill")
+  if (!skill || !["source_ref", "name", "description", "content_hash", "scope", "revision", "enabled", "categories"].every((field) => topLevelRequired(skill).includes(field))) {
+    errors.push("Skill projection must require native Platform fields")
+  }
+  for (const responseSchema of reads.map((item) => item[2])) {
+    const schema = schemas.get(responseSchema)
+    if (!schema || JSON.stringify(topLevelRequired(schema)) !== JSON.stringify(["data"]) || !schema.text.includes("additionalProperties: false")) {
+      errors.push(`${responseSchema} must expose a strict data-only envelope`)
+    }
+  }
+  for (const [name, codes] of Object.entries(allowedCodes)) {
+    const component = responseComponents.get(name)
+    if (!component || !requiredHeaders(component.text) || !component.text.includes("#/components/schemas/PlatformProjectionReadErrorResponse") || !component.text.includes(`enum: [${codes.join(", ")}]`)) {
+      errors.push(`${name} must constrain error codes and cache headers`)
+    }
+  }
+  return errors
+}
+
 export function inspectBffOpenApi(source: string, baseline: readonly BaselineOperation[]): string[] {
   const operations = collectOperationBlocks(source)
   const schemas = collectSectionBlocks(source, "schemas")
@@ -1429,6 +1500,7 @@ export function inspectBffOpenApi(source: string, baseline: readonly BaselineOpe
     ...wireNameErrors(schemas, source),
     ...revisionErrors(schemas),
     ...envelopeErrors(schemas, operations, responseComponents),
+    ...platformProjectionReadContractErrors(schemas, operations, responseComponents),
     ...idempotencyErrors(parameters, operations),
     ...publishedPersonalSkillContractErrors(parameters, schemas, operations, responseComponents),
     ...skillDraftContractErrors(parameters, schemas, operations, responseComponents),

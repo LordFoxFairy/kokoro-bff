@@ -68,7 +68,7 @@ export class ProjectionTokenSource {
       body: new URLSearchParams({ grant_type: "client_credentials", resource: credential.resource, scope: credential.scope }),
     })
     if (!response.ok || !response.body || !response.headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
-      await response.body?.cancel()
+      void response.body?.cancel().catch(() => undefined)
       throw new Error("projection_token_failed")
     }
     const reader = response.body.getReader()
@@ -83,7 +83,7 @@ export class ProjectionTokenSource {
         chunks.push(part.value)
       }
     } finally {
-      await reader.cancel()
+      void reader.cancel().catch(() => undefined)
       reader.releaseLock()
     }
     let value: Record<string, unknown>

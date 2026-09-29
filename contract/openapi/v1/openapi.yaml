@@ -1958,15 +1958,22 @@ paths:
       responses:
         '200':
           description: Skill projections
+          headers:
+            x-request-id:
+              required: true
+              schema: { type: string, minLength: 1, maxLength: 128 }
+            Cache-Control:
+              required: true
+              schema: { type: string, const: no-store }
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/SkillListResponse'
-        '403': { $ref: '#/components/responses/PlatformProjectionReadError' }
-        '400': { $ref: '#/components/responses/PlatformProjectionReadError' }
-        '502': { $ref: '#/components/responses/PlatformProjectionReadError' }
-        '503': { $ref: '#/components/responses/PlatformProjectionReadError' }
-        '401': { $ref: '#/components/responses/PlatformProjectionReadError' }
+        '403': { $ref: '#/components/responses/PlatformProjectionReadForbidden' }
+        '400': { $ref: '#/components/responses/PlatformProjectionReadBadRequest' }
+        '502': { $ref: '#/components/responses/PlatformProjectionReadBadGateway' }
+        '503': { $ref: '#/components/responses/PlatformProjectionReadUnavailable' }
+        '401': { $ref: '#/components/responses/PlatformProjectionReadUnauthorized' }
         '429': { $ref: '#/components/responses/PlatformProjectionReadRateLimited' }
   /v1/skills/{skill_id}:
     get:
@@ -2009,15 +2016,22 @@ paths:
       responses:
         '200':
           description: Skill pool
+          headers:
+            x-request-id:
+              required: true
+              schema: { type: string, minLength: 1, maxLength: 128 }
+            Cache-Control:
+              required: true
+              schema: { type: string, const: no-store }
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/SkillPoolResponse'
-        '403': { $ref: '#/components/responses/PlatformProjectionReadError' }
-        '400': { $ref: '#/components/responses/PlatformProjectionReadError' }
-        '502': { $ref: '#/components/responses/PlatformProjectionReadError' }
-        '503': { $ref: '#/components/responses/PlatformProjectionReadError' }
-        '401': { $ref: '#/components/responses/PlatformProjectionReadError' }
+        '403': { $ref: '#/components/responses/PlatformProjectionReadForbidden' }
+        '400': { $ref: '#/components/responses/PlatformProjectionReadBadRequest' }
+        '502': { $ref: '#/components/responses/PlatformProjectionReadBadGateway' }
+        '503': { $ref: '#/components/responses/PlatformProjectionReadUnavailable' }
+        '401': { $ref: '#/components/responses/PlatformProjectionReadUnauthorized' }
         '429': { $ref: '#/components/responses/PlatformProjectionReadRateLimited' }
   /v1/skills/catalog:
     get:
@@ -2038,15 +2052,22 @@ paths:
       responses:
         '200':
           description: Skill catalog
+          headers:
+            x-request-id:
+              required: true
+              schema: { type: string, minLength: 1, maxLength: 128 }
+            Cache-Control:
+              required: true
+              schema: { type: string, const: no-store }
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/SkillCatalogResponse'
-        '403': { $ref: '#/components/responses/PlatformProjectionReadError' }
-        '400': { $ref: '#/components/responses/PlatformProjectionReadError' }
-        '502': { $ref: '#/components/responses/PlatformProjectionReadError' }
-        '503': { $ref: '#/components/responses/PlatformProjectionReadError' }
-        '401': { $ref: '#/components/responses/PlatformProjectionReadError' }
+        '403': { $ref: '#/components/responses/PlatformProjectionReadForbidden' }
+        '400': { $ref: '#/components/responses/PlatformProjectionReadBadRequest' }
+        '502': { $ref: '#/components/responses/PlatformProjectionReadBadGateway' }
+        '503': { $ref: '#/components/responses/PlatformProjectionReadUnavailable' }
+        '401': { $ref: '#/components/responses/PlatformProjectionReadUnauthorized' }
         '429': { $ref: '#/components/responses/PlatformProjectionReadRateLimited' }
   /v1/skills/quota:
     get:
@@ -2057,14 +2078,8 @@ paths:
       x-kokoro-stability: beta
       x-kokoro-idempotency: none
       x-kokoro-permission: capability.skill.read
-      summary: Get skill quota
+      summary: Skill quota route is not exposed by the current Platform projection
       responses:
-        '200':
-          description: Skill quota
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SkillQuotaResponse'
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '401': { $ref: '#/components/responses/ServiceAuthFailed' }
         '429':
@@ -2511,15 +2526,22 @@ paths:
       responses:
         '200':
           description: MCP server list
+          headers:
+            x-request-id:
+              required: true
+              schema: { type: string, minLength: 1, maxLength: 128 }
+            Cache-Control:
+              required: true
+              schema: { type: string, const: no-store }
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/McpServerListResponse'
-        '403': { $ref: '#/components/responses/PlatformProjectionReadError' }
-        '400': { $ref: '#/components/responses/PlatformProjectionReadError' }
-        '502': { $ref: '#/components/responses/PlatformProjectionReadError' }
-        '503': { $ref: '#/components/responses/PlatformProjectionReadError' }
-        '401': { $ref: '#/components/responses/PlatformProjectionReadError' }
+        '403': { $ref: '#/components/responses/PlatformProjectionReadForbidden' }
+        '400': { $ref: '#/components/responses/PlatformProjectionReadBadRequest' }
+        '502': { $ref: '#/components/responses/PlatformProjectionReadBadGateway' }
+        '503': { $ref: '#/components/responses/PlatformProjectionReadUnavailable' }
+        '401': { $ref: '#/components/responses/PlatformProjectionReadUnauthorized' }
         '429': { $ref: '#/components/responses/PlatformProjectionReadRateLimited' }
     post:
       tags: [MCP]
@@ -5203,20 +5225,6 @@ components:
               items: { $ref: '#/components/schemas/Skill' }
             next_cursor:
               type: [string, 'null']
-    SkillQuotaResponse:
-      type: object
-      required: [data, meta]
-      properties:
-        data:
-          type: object
-          required: [namespace, package_count, package_bytes, max_packages, max_bytes]
-          properties:
-            namespace: { type: string }
-            package_count: { type: integer }
-            package_bytes: { type: integer }
-            max_packages: { type: integer }
-            max_bytes: { type: integer }
-        meta: { $ref: '#/components/schemas/RequestMeta' }
     SkillRevision:
       type: object
       required: [scope, name, revision, content_hash, package_size, source, created_at]
@@ -5470,8 +5478,8 @@ components:
               const: true
         meta: { $ref: '#/components/schemas/RequestMeta' }
   responses:
-    PlatformProjectionReadError:
-      description: Product projection read was rejected or its owner dependency failed
+    PlatformProjectionReadBadRequest:
+      description: Product projection read returned HTTP 400
       headers:
         x-request-id:
           required: true
@@ -5481,9 +5489,57 @@ components:
           schema: { type: string, const: no-store }
       content:
         application/json:
-          schema: { $ref: '#/components/schemas/PlatformProjectionReadErrorResponse' }
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/PlatformProjectionReadErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [invalid_query_parameter] }
+    PlatformProjectionReadUnauthorized:
+      description: Product projection read returned HTTP 401
+      headers:
+        x-request-id:
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          required: true
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/PlatformProjectionReadErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [session_authentication_required, session_invalid] }
+    PlatformProjectionReadForbidden:
+      description: Product projection read returned HTTP 403
+      headers:
+        x-request-id:
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          required: true
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/PlatformProjectionReadErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [service_auth_failed, session_forbidden, product_tenant_forbidden] }
     PlatformProjectionReadRateLimited:
-      description: IAM session admission was rate limited
+      description: Product projection read returned HTTP 429
       headers:
         x-request-id:
           required: true
@@ -5496,7 +5552,55 @@ components:
           schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
       content:
         application/json:
-          schema: { $ref: '#/components/schemas/PlatformProjectionReadErrorResponse' }
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/PlatformProjectionReadErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [session_rate_limited] }
+    PlatformProjectionReadBadGateway:
+      description: Product projection read returned HTTP 502
+      headers:
+        x-request-id:
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          required: true
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/PlatformProjectionReadErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [skill_response_invalid] }
+    PlatformProjectionReadUnavailable:
+      description: Product projection read returned HTTP 503
+      headers:
+        x-request-id:
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          required: true
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/PlatformProjectionReadErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [product_tenant_not_configured, iam_admission_unavailable, skill_dependency_unavailable] }
     SkillPackageUploadGetBadRequest:
       description: Invalid strict path, query, body or header
       headers:

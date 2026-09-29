@@ -242,14 +242,14 @@ test("the public Platform projection reads expose strict native pages and error 
     ["  /v1/mcp/servers:\n", "  /v1/mcp/servers/{name}/enable:\n"],
   ]) {
     const operation = openapi.slice(openapi.indexOf(start), openapi.indexOf(end)).split("\n    post:")[0]
-    for (const status of ["400", "401", "403", "502", "503"])
-      assert.ok(operation.includes(`'${status}': { $ref: '#/components/responses/PlatformProjectionReadError' }`), `${start} ${status}`)
+    for (const [status, component] of [["400", "BadRequest"], ["401", "Unauthorized"], ["403", "Forbidden"], ["502", "BadGateway"], ["503", "Unavailable"]])
+      assert.ok(operation.includes(`'${status}': { $ref: '#/components/responses/PlatformProjectionRead${component}' }`), `${start} ${status}`)
     assert.match(operation, /'429': \{ \$ref: '#\/components\/responses\/PlatformProjectionReadRateLimited' \}/u)
   }
   for (const [name, next] of [
     ["SkillListResponse", "SkillPoolResponse"],
     ["SkillPoolResponse", "SkillCatalogResponse"],
-    ["SkillCatalogResponse", "SkillQuotaResponse"],
+    ["SkillCatalogResponse", "SkillRevision"],
     ["McpServerListResponse", "McpServerResponse"],
   ]) {
     const schema = openapi.slice(openapi.indexOf(`    ${name}:\n`), openapi.indexOf(`    ${next}:\n`))

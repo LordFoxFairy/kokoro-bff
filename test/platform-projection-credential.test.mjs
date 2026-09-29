@@ -86,6 +86,32 @@ test("token exchange rejects malformed type, scope, expiry and oversized respons
   }
 })
 
+test("token exchange does not await a response stream whose cancellation never settles", async () => {
+  const original = globalThis.fetch
+  const credentials = { read: async () => ({ ...item(1), cacheKey: "pending-cancel" }) }
+  const unresolvedCancel = () =>
+    new ReadableStream({
+      start(controller) {
+        controller.enqueue(new Uint8Array(65_537))
+      },
+      cancel() {
+        return new Promise(() => {})
+      },
+    })
+  try {
+    for (const status of [503, 200]) {
+      globalThis.fetch = async () => new Response(unresolvedCancel(), { status, headers: { "content-type": "application/json" } })
+      const result = new ProjectionTokenSource("http://iam", credentials, 100).get("tenant")
+      await assert.rejects(
+        Promise.race([result, new Promise((_, reject) => setTimeout(() => reject(new Error("cancel-wait-exceeded")), 250))]),
+        status === 503 ? /projection_token_failed/u : /projection_token_response_too_large/u,
+      )
+    }
+  } finally {
+    globalThis.fetch = original
+  }
+})
+
 test("token single-flight lets one waiter cancel while another succeeds and aborts only after all cancel", async () => {
   const original = globalThis.fetch
   const credentials = { read: async () => ({ ...item(1), cacheKey: "shared" }) }

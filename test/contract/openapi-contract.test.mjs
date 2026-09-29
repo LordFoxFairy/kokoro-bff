@@ -21,6 +21,21 @@ test("the canonical BFF OpenAPI passes field and protocol invariants", async () 
   assert.deepEqual(inspectBffOpenApi(openapi, baseline), [])
 })
 
+test("Platform projection read gate detects status, cache and error-code drift", async () => {
+  const { openapi, baseline } = await readContract()
+  const list = openapi.slice(openapi.indexOf("  /v1/skills:\n"), openapi.indexOf("  /v1/skills/{skill_id}:\n"))
+  const forbidden = openapi.slice(openapi.indexOf("    PlatformProjectionReadForbidden:\n"), openapi.indexOf("    PlatformProjectionReadRateLimited:\n"))
+  const mutations = [
+    openapi.replace(list, list.replace("'403': { $ref: '#/components/responses/PlatformProjectionReadForbidden' }", "'403': { $ref: '#/components/responses/PlatformProjectionReadBadRequest' }")),
+    openapi.replace(list, list.replace("schema: { type: string, const: no-store }", "schema: { type: string, const: public }")),
+    openapi.replace(forbidden, forbidden.replace("service_auth_failed, session_forbidden, product_tenant_forbidden", "service_auth_failed, session_invalid")),
+  ]
+  for (const [index, broken] of mutations.entries()) {
+    assert.notEqual(broken, openapi, `mutation ${index} must change the contract`)
+    assert.ok(inspectBffOpenApi(broken, baseline).some((error) => /Platform projection|PlatformProjectionRead|listSkills/u.test(error)), `mutation ${index}`)
+  }
+})
+
 test("CreateSkillDraft publishes the strict user-only candidate contract without legacy meta", async () => {
   const { openapi, baseline } = await readContract()
   assert.ok(baseline.some(({ method, path, operation_id }) => method === "POST" && path === "/v1/skills/drafts" && operation_id === "createSkillDraft"))
@@ -137,6 +152,9 @@ test("GetSkillPackageUpload semantic gate rejects changed fields, envelopes, hea
   const uploadPath = openapi.slice(openapi.indexOf("  /v1/skills/{skill_id}/package-upload:"), openapi.indexOf("  /v1/skills/{name}/revisions:"))
   const operation = uploadPath.slice(0, uploadPath.indexOf("    post:"))
   const getRate = openapi.slice(openapi.indexOf("    SkillPackageUploadGetRateLimited:"), openapi.indexOf("    SkillPackageUploadGetBadGateway:"))
+  const getUnauthorized = openapi.slice(openapi.indexOf("    SkillPackageUploadGetUnauthorized:"), openapi.indexOf("    SkillPackageUploadGetForbidden:"))
+  const getForbidden = openapi.slice(openapi.indexOf("    SkillPackageUploadGetForbidden:"), openapi.indexOf("    SkillPackageUploadGetNotFound:"))
+  const getUnavailable = openapi.slice(openapi.indexOf("    SkillPackageUploadGetUnavailable:"), openapi.indexOf("    SkillPackageBeginBadRequest:"))
   const mutations = [
     openapi.replace("required: [skill_id, attempt_epoch, phase]", "required: [skill_id, phase]"),
     openapi.replace(
@@ -169,18 +187,18 @@ test("GetSkillPackageUpload semantic gate rejects changed fields, envelopes, hea
     openapi.replace("            phase: { const: aborted }", "            phase: { const: validated }"),
     openapi.replace("18446744073709551615)$'", "18446744073709551616)$'"),
     openapi.replace("code: { type: string, enum: [skill_not_found] }", "code: { type: string, enum: [skill_response_invalid] }"),
-    openapi.replace(
+    openapi.replace(getUnauthorized, getUnauthorized.replace(
       "code: { type: string, enum: [session_authentication_required, session_invalid] }",
       "code: { type: string, enum: [service_auth_failed, session_invalid] }",
-    ),
-    openapi.replace(
+    )),
+    openapi.replace(getForbidden, getForbidden.replace(
       "code: { type: string, enum: [service_auth_failed, session_forbidden, product_tenant_forbidden] }",
       "code: { type: string, enum: [session_forbidden, product_tenant_not_configured] }",
-    ),
-    openapi.replace(
+    )),
+    openapi.replace(getUnavailable, getUnavailable.replace(
       "code: { type: string, enum: [product_tenant_not_configured, iam_admission_unavailable, skill_dependency_unavailable] }",
       "code: { type: string, enum: [iam_admission_unavailable, skill_dependency_unavailable] }",
-    ),
+    )),
     openapi.replace(getRate, getRate.replace("          required: false", "          required: true")),
   ]
   for (const [index, broken] of mutations.entries()) {

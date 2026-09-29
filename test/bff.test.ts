@@ -56,7 +56,7 @@ function testServer(configValue: BffConfig, options: { moriAutoProgress?: boolea
   return createTestBffServer(configValue, options).server
 }
 
-function liveServer(configValue: BffConfig, options: { readiness?: () => Promise<void> } = {}): Server {
+function liveServer(configValue: BffConfig, options: Parameters<typeof createLiveTestBffServer>[1] = {}): Server {
   return createLiveTestBffServer(configValue, options)
 }
 
@@ -1247,6 +1247,7 @@ describe("kokoro-bff v1 mock contract", () => {
 
   it("does not expose deprecated capability compatibility paths", async () => {
     let ownerCalls = 0
+    const receipts = new Map()
     const capability = createServer((_request, response) => {
       ownerCalls += 1
       response.setHeader("content-type", "application/json")
@@ -1259,6 +1260,7 @@ describe("kokoro-bff v1 mock contract", () => {
           mode: "live",
           upstreams: { ...config().upstreams, capability: capabilityBase },
         }),
+        { idempotency: receipts },
       ),
     )
 
@@ -1277,5 +1279,6 @@ describe("kokoro-bff v1 mock contract", () => {
       assert.equal(((await response.json()) as { error: { code: string } }).error.code, "platform_operation_not_available", path)
     }
     assert.equal(ownerCalls, 0)
+    assert.equal(receipts.size, 0)
   })
 })

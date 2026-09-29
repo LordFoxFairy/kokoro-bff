@@ -1,7 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 
 import type { BffConfig } from "../../config/runtime.js"
-import type { Skill } from "../../contracts/index.js"
 import { failure, ok } from "../../contracts/index.js"
 import { proxyUpstream } from "../../upstream.js"
 import { billingPlansData, checkoutUrlData, modelCatalogData } from "../../application/projections.js"
@@ -187,56 +186,4 @@ export async function liveOwnerBusiness(
   }
 
   return false
-}
-
-export function skillPoolData(skills: Skill[]): {
-  skills: Array<{
-    name: string
-    description: string
-    content_hash: string
-    scope: string
-    enabled?: boolean
-    categories?: string[]
-    updated_at?: number
-  }>
-} {
-  return {
-    skills: skills.map((skill) => ({
-      name: skill.name,
-      description: skill.description,
-      content_hash: skill.content_hash,
-      scope: skill.scope,
-      ...(skill.enabled === undefined ? {} : { enabled: skill.enabled }),
-      ...(skill.categories === undefined ? {} : { categories: skill.categories }),
-      ...(skill.updated_at === undefined ? {} : { updated_at: skill.updated_at }),
-    })),
-  }
-}
-
-export function skillCatalogData(skills: Skill[]): {
-  skills: Array<{
-    name: string
-    description: string
-    content_hash: string
-    scope: string
-    installed: boolean
-    enabled: boolean
-    categories?: string[]
-    updated_at?: number
-  }>
-  next_cursor: null
-} {
-  return {
-    skills: skills.map((skill) => ({
-      name: skill.name,
-      description: skill.description,
-      content_hash: skill.content_hash,
-      scope: skill.scope,
-      installed: skill.installed ?? true,
-      enabled: skill.enabled ?? true,
-      ...(skill.categories === undefined ? {} : { categories: skill.categories }),
-      ...(skill.updated_at === undefined ? {} : { updated_at: skill.updated_at }),
-    })),
-    next_cursor: null,
-  }
 }

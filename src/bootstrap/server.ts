@@ -305,6 +305,13 @@ async function handle(
     return
   }
 
+  // Retired Skills/MCP mutations must not claim a BFF receipt or touch owner SQL.
+  // The named v4 candidate routes above have already returned.
+  if (composition.routeHandler === undefined && (businessPath[0] === "skills" || businessPath[0] === "mcp") && request.method !== "GET") {
+    send(response, 503, failure("platform_operation_not_available", "This Platform operation is not exposed by the BFF owner adapter", id))
+    return
+  }
+
   if (composition.routeHandler === undefined && bffOwnedBusinessPath(businessPath) && composition.businessStore === null) {
     send(response, 503, failure("business_store_not_configured", "BFF business fact store is not configured", id))
     return
