@@ -87,6 +87,7 @@ export type BffConfig = {
   redisUrl: string | null
   agUi: AgUiConfig
   upstreams: Record<string, string | null>
+  platformProjection: Readonly<{ baseUrl: string | null; credentialFile: string | null; timeoutMs: number }>
   skillDraft: Readonly<{
     enabled: boolean
     platformBaseUrl: string | null
@@ -387,6 +388,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
     redisUrl: requiredConnectionUrl(env.KOKORO_BFF_REDIS_URL, "KOKORO_BFF_REDIS_URL", ["redis:", "rediss:"]),
     agUi,
     upstreams,
+    platformProjection: { baseUrl: skillDraft.platformBaseUrl, credentialFile: env.KOKORO_PLATFORM_PROJECTION_CREDENTIAL_FILE?.trim() || null, timeoutMs: upstreamTimeoutMs },
     skillDraft,
   }
 }
