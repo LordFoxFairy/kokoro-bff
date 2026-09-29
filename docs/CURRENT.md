@@ -5,9 +5,7 @@
 
 ## W1E-BFF-USER-SKILL-DRAFT 文档门（2026-09-29；仅目标设计，运行未激活）
 
-BFF main `bd1f794e7b1115d96965aa03d8a3a83a33c42fd7` 当前仅有 `kokoro.platform.v1` Proto 的
-`generated-not-activated` Connect 生成物；`contract/dependencies/platform-connect.json` 的 owner commit 仍是旧
-`f26d147a09350c3a041722107d277beb93eaad60`，`execution_artifact:null`。public OpenAPI 尚无
+本代码片已把 Platform consumer 原子重钉到 owner `5b6eb2c1532b23b9747bc4bf6ac99f69ad453de0`：两份 Proto 原字节 SHA 保持不变，完整 inactive v3 artifact/provenance aggregate 为 `324e749da1bc66c1ff03de74e7299716f798f5f5bb5fa19556033b79fa09ff8d`。BFF 独立 CreateDraft raw projector、RFC 8785 JCS/SHA-256 已覆盖 owner 45 条正反向量；source/aggregate drift fail closed。public OpenAPI 尚无
 `POST /v1/skills/drafts`，runtime 仍对 Skill mutation 返回 503，catalog machine credential 与精确
 `mutationTicket` bypass 尚不存在。旧 Capability HTTP 四条 GET 仍是当前态，不因本设计而声称已删除。
 
@@ -18,7 +16,7 @@ BFF main `bd1f794e7b1115d96965aa03d8a3a83a33c42fd7` 当前仅有 `kokoro.platfor
 `platform-execution-operations/3.0.0` aggregate SHA-256
 `324e749da1bc66c1ff03de74e7299716f798f5f5bb5fa19556033b79fa09ff8d`。
 v3 manifest 明确 `status=inactive`、`routable=false`；其 registry、逐命令 schema 与向量是后续 consumer
-生成/核验事实源，不是 BFF route 激活证据。只有 Platform owner 后续提交 active/routable=true artifact、BFF 重钉该 commit/aggregate、Root 完成协调激活后，public CreateDraft 才能发布和以真实 201 验收；当前仅能构建候选并离线校验。v1/v2 仅历史冻结，不作为新 consumer 或运行 fallback。
+生成/核验事实源，不是 BFF route 激活证据。该发布标记不是 runtime RPC kill switch：Platform 已按 v3 注册 SkillCatalogService。激活前允许 Root 在隔离 sandbox 做真实 IAM→候选 BFF→Platform 201/replay 预激活验证，但不构成 public 发布；只有六 owner sandbox 全门通过、Platform 发布 active/routable=true artifact、BFF 重钉并由 Root 协调激活后，public CreateDraft 才可用。当前代码片仍只构建离线 consumer，不实现 route。v1/v2 仅历史冻结，不作为新 consumer 或运行 fallback。
 本次只收敛四份既有文档；OpenAPI、BFF manifest/generated、代码、Schema、真实三 owner smoke 均未改或未验。
 
 ## W2-F2-S9 Chat 作品快照：BFF 单仓代码门已验，Web/真链待验
@@ -147,7 +145,6 @@ admission、跨 subject 404、非 ASSET/非 CLEAN、坏引用/摘要/重定向�
 真实 Storage/MinIO/ClamAV 或 Web/Chromium 验收。BFF Schema、SQL、Redis、receipt、role、生成物均未改。
 Root 已独立以 Node22 复跑 `pnpm format:check && pnpm check && pnpm schema:check`（347 pass/1 既有 skip、schema 5 pass/1 无库 skip）；BFF code commit `318cf6ab756801c4c80c59154c6cbd969d5a159d` 与 Storage `2d87e26` 在隔离真 PostgreSQL/Redis/MinIO/ClamAV 的 Root W2 runner `run_id=5036454fc7b1397a19695361` 通过 14/14：个人原字节下载、同租户他人 404，并回归上传/列表/Complete 响应丢失后 BFF OS 重启同键恢复。运行自有 DB/对象版本/进程清零、独占 bucket 删除；IAM 是身份桩，不等于真 Web/Chromium 下载。首次组合尝试的 PostgreSQL URL 缺显式用户名，在 owner schema 安装门失败且自有数据库未留下；修正为本机用户后重跑通过，不是 runtime 修复。Web 精确 pin、同源二进制 adapter 和真 Chromium 点击属于后续独立切片；`EDGE-BFF-STORAGE` 仍 broken。
 
-
 ## W2-BFF-LIBRARY-PERSONAL-UPLOAD-CODE（2026-09-28，已发布并通过个人文件真链纵切）
 
 BFF main `8a90fdd9ec3809000924229bfc7b986ba8ba1522` 已发布 public OpenAPI 和 runtime
@@ -216,7 +213,7 @@ generic receipt，使首次请求和 replay 每次都先重验 IAM/current owner
 tenant machine catalog workload；旧 Capability HTTP shared secret、用户 Bearer、手写 Proto DTO 和 v1 digest 都不是 fallback。
 
 仍未实现且不阻塞**候选代码准备**的范围是 organization/project/session owner、其余五个 catalog mutation、Storage/package 与 Web consumer。
-首片可先完成 public OpenAPI 候选/contract test、generated Connect client、credential/token provider、server admission cut、route 候选与离线测试；当前 v3 artifact inactive/routable=false，public route 必须继续 fail closed，不把它发布为可用 Product API。Platform owner 后续提交 active/routable=true artifact、BFF 重钉 commit/aggregate 并经 Root 协调激活后，真实 IAM+BFF+Platform smoke 才是发布验收门：首次 201、响应丢失 replay、撤销 session 后同 key 拒绝及 Platform 仅一条 Skill/receipt，不能略过。本候选未改机器契约、代码、schema、数据库、服务或共享 3310。
+首片可先完成 public OpenAPI 候选/contract test、generated Connect client、credential/token provider、server admission cut、route 候选与离线测试；当前 v3 artifact inactive/routable=false 是发布标记而非 runtime kill switch；本片 public route 仍 fail closed。Root 可在隔离 sandbox 预激活验证真实 IAM+候选 BFF+Platform 201，但不得称为公开可用；六 owner sandbox 与 active artifact 重钉、协调激活仍是发布门：首次 201、响应丢失 replay、撤销 session 后同 key 拒绝及 Platform 仅一条 Skill/receipt，不能略过。本候选未改机器契约、代码、schema、数据库、服务或共享 3310。
 
 ## W1E-BFF-IAM-0.7-PIN（2026-09-28，仓内验证通过；跨仓待验）
 

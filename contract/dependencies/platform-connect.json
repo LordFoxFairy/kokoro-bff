@@ -3,7 +3,7 @@
   "status": "generated-not-activated",
   "owner": {
     "repository_path": "apps/kokoro-capability",
-    "repository_commit": "f26d147a09350c3a041722107d277beb93eaad60",
+    "repository_commit": "5b6eb2c1532b23b9747bc4bf6ac99f69ad453de0",
     "package_name": "kokoro.platform.v1",
     "sources": [
       {
@@ -16,7 +16,14 @@
       }
     ]
   },
-  "execution_artifact": null,
+  "execution_artifact": {
+    "path": "contract/vendor/kokoro-platform/5b6eb2c1532b23b9747bc4bf6ac99f69ad453de0/execution-operations-v3",
+    "artifact_version": "3.0.0",
+    "status": "inactive",
+    "routable": false,
+    "provenance_path": "contract/vendor/kokoro-platform/5b6eb2c1532b23b9747bc4bf6ac99f69ad453de0/execution-operations-v3/provenance.json",
+    "aggregate_sha256": "324e749da1bc66c1ff03de74e7299716f798f5f5bb5fa19556033b79fa09ff8d"
+  },
   "generator": {
     "packages": {
       "@bufbuild/buf": "1.72.0",
@@ -27,14 +34,14 @@
     "configs": [
       {
         "path": "buf.platform.json",
-        "sha256": "c327440e316bcf9f9662b8dff963f586bcec291f06df07f8a433afb69ca73a4d"
+        "sha256": "665703797ff8a9a755e82a55bc293ae181bc7555804fb9af278d7f4c7f8cb732"
       },
       {
         "path": "buf.platform.gen.json",
         "sha256": "9888ea0808f6967ebdfb859125eb54430b89ad3f4dbee4418902bfdf6a4540ab"
       }
     ],
-    "script_sha256": "188bd9920372efd9c0a7c40e8ea8169e07716dd7a236647662ee3a52a5b12338",
+    "script_sha256": "412f936ffcf65dfcb96953133d9440124374bbd8000c0828a222dab6333bbd6b",
     "formatting": {
       "package": "prettier",
       "version": "3.9.6",
@@ -49,7 +56,7 @@
     "licenses": "Buf, Protobuf-ES and Connect-ES: Apache-2.0",
     "supply_chain": "Exact package versions and lock integrity; local generation without remote plugins; only @bufbuild/buf install build is newly allowed.",
     "performance": "No network calls or application startup added. Runtime performance is unmeasured; this slice validates descriptor serialization only.",
-    "failure_semantics": "Generation rejects source/config/package/tree/digest drift. No retry, authentication, command digest or production adapter is implemented.",
+    "failure_semantics": "Generation rejects source/config/package/tree/digest drift. Artifact/source drift fails closed. No retry, authentication or production adapter is implemented.",
     "exit_path": "Regenerate from the pinned owner Proto with a reviewed compatible generator; generated wire types remain isolated from business code.",
     "sources": [
       "https://connectrpc.com/docs/node/getting-started/",

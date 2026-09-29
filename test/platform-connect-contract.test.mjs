@@ -1,9 +1,11 @@
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
-import { access, readFile } from "node:fs/promises"
+import { access, cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import path from "node:path"
 import { test } from "node:test"
 
-const ownerCommit = "f26d147a09350c3a041722107d277beb93eaad60"
+const ownerCommit = "5b6eb2c1532b23b9747bc4bf6ac99f69ad453de0"
 const sources = {
   "kokoro/common/v1/common.proto": "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08",
   "kokoro/platform/v1/platform_runtime.proto": "282bf886ea9648f7ce5208abd36ab47d879b2002a036d90aada2af59e74b4020",
@@ -34,15 +36,25 @@ async function sourceBytes() {
   )
 }
 
-test("Platform consumer pins exact owner Proto bytes and generated provenance, not an execution artifact", async () => {
+test("Platform consumer pins exact owner Proto bytes and inactive v3 provenance", async () => {
   const manifest = JSON.parse(await requiredFile("contract/dependencies/platform-connect.json"))
   assert.equal(manifest.owner.repository_commit, ownerCommit)
   assert.equal(manifest.owner.package_name, "kokoro.platform.v1")
   assert.equal(manifest.owner.repository_path, "apps/kokoro-capability")
-  assert.equal(manifest.execution_artifact, null)
+  assert.deepEqual(manifest.execution_artifact, {
+    path: `contract/vendor/kokoro-platform/${ownerCommit}/execution-operations-v3`,
+    artifact_version: "3.0.0",
+    status: "inactive",
+    routable: false,
+    provenance_path: `contract/vendor/kokoro-platform/${ownerCommit}/execution-operations-v3/provenance.json`,
+    aggregate_sha256: "324e749da1bc66c1ff03de74e7299716f798f5f5bb5fa19556033b79fa09ff8d",
+  })
   assert.deepEqual(
     manifest.owner.sources,
-    Object.entries(sources).map(([file, digest]) => ({ path: `contract/proto/${file}`, sha256: digest })),
+    Object.entries(sources).map(([file, digest]) => ({
+      path: `contract/proto/${file}`,
+      sha256: digest,
+    })),
   )
   for (const [file, bytes] of Object.entries(await sourceBytes())) assert.equal(sha256(bytes), sources[file])
   assert.equal(manifest.lockfile_sha256, sha256(await readFile(new URL("pnpm-lock.yaml", root))))
@@ -50,22 +62,66 @@ test("Platform consumer pins exact owner Proto bytes and generated provenance, n
 })
 
 test("Platform generator rejects source tamper, missing source, extra source and generated tree drift", async () => {
-  const { assertSourceDigests, assertGeneratedTree } = await generator()
+  const { assertSourceDigests, assertGeneratedTree, assertExecutionArtifact } = await generator()
   const bytes = await sourceBytes()
   assert.doesNotThrow(() => assertSourceDigests(bytes))
   for (const file of Object.keys(sources)) {
-    assert.throws(() => assertSourceDigests({ ...bytes, [file]: Buffer.concat([bytes[file], Buffer.from("\n")]) }), /digest/)
+    assert.throws(
+      () =>
+        assertSourceDigests({
+          ...bytes,
+          [file]: Buffer.concat([bytes[file], Buffer.from("\n")]),
+        }),
+      /digest/,
+    )
     const missing = { ...bytes }
     delete missing[file]
     assert.throws(() => assertSourceDigests(missing), /source allowlist/)
   }
-  assert.throws(() => assertSourceDigests({ ...bytes, "kokoro/storage/v1/storage.proto": Buffer.from("") }), /source allowlist/)
+  assert.throws(
+    () =>
+      assertSourceDigests({
+        ...bytes,
+        "kokoro/storage/v1/storage.proto": Buffer.from(""),
+      }),
+    /source allowlist/,
+  )
   const files = ["kokoro/common/v1/common_pb.ts", "kokoro/platform/v1/platform_runtime_pb.ts"]
   const directories = ["kokoro", "kokoro/common", "kokoro/common/v1", "kokoro/platform", "kokoro/platform/v1"]
   assert.doesNotThrow(() => assertGeneratedTree({ files, directories }))
   assert.throws(() => assertGeneratedTree({ files: files.slice(1), directories }), /file allowlist/)
   assert.throws(() => assertGeneratedTree({ files: [...files, "manual.ts"], directories }), /file allowlist/)
   assert.throws(() => assertGeneratedTree({ files, directories: [...directories, "extra"] }), /directory allowlist/)
+
+  const artifactRoot = `contract/vendor/kokoro-platform/${ownerCommit}/execution-operations-v3/`
+  const provenance = JSON.parse(await requiredFile(`${artifactRoot}provenance.json`))
+  const artifactFiles = Object.fromEntries(
+    await Promise.all(provenance.files.map(async (entry) => [entry.path, await requiredFile(`${artifactRoot}${entry.path}`)])),
+  )
+  assert.doesNotThrow(() => assertExecutionArtifact(provenance, artifactFiles))
+  assert.throws(() => assertExecutionArtifact(provenance, { ...artifactFiles, [provenance.files[0].path]: Buffer.from("tampered") }), /byte length drifted/)
+  assert.throws(() => assertExecutionArtifact({ ...provenance, aggregateSha256: "0".repeat(64) }, artifactFiles), /aggregate pin drifted/)
+  assert.throws(() => assertExecutionArtifact(provenance, { ...artifactFiles, "unexpected.json": Buffer.from("{}") }), /file allowlist drifted/)
+})
+
+test("production artifact directory enumeration rejects undeclared filesystem entries", async (t) => {
+  const { verifyExecutionArtifactDirectory } = await generator()
+  const source = new URL(`contract/vendor/kokoro-platform/${ownerCommit}/execution-operations-v3`, root)
+  for (const kind of ["file", "directory", "symlink"]) {
+    await t.test(kind, async () => {
+      const temporary = await mkdtemp(path.join(tmpdir(), "bff-platform-artifact-"))
+      t.after(() => rm(temporary, { recursive: true, force: true }))
+      const artifact = path.join(temporary, "artifact")
+      await cp(source, artifact, { recursive: true })
+      if (kind === "file") await writeFile(path.join(artifact, "unexpected.json"), "{}")
+      if (kind === "directory") {
+        await mkdir(path.join(artifact, "unexpected"))
+        await writeFile(path.join(artifact, "unexpected", "nested.json"), "{}")
+      }
+      if (kind === "symlink") await symlink(path.join(artifact, "manifest.json"), path.join(artifact, "unexpected-link.json"))
+      await assert.rejects(() => verifyExecutionArtifactDirectory(artifact), /unsupported entry|allowlist drifted/)
+    })
+  }
 })
 
 test("all pinned consumer manifests track the same lockfile without replacing existing owners", async () => {
@@ -98,8 +154,16 @@ test("generated Platform descriptor preserves CreateDraft wire tags, bytes, Prod
     requestId: "request-1",
     command: { commandId: "command-1", requestDigest: "a".repeat(64) },
     ownerScope: { kind: "user", id: "user-1" },
-    metadata: { displayName: "Draft 🦊", summary: "", tags: ["z", "a"], metadataJson: new Uint8Array([0, 255, 123, 125]) },
-    productContext: { subjectId: "user-1", ownerScope: { kind: "user", id: "user-1" } },
+    metadata: {
+      displayName: "Draft 🦊",
+      summary: "",
+      tags: ["z", "a"],
+      metadataJson: new Uint8Array([0, 255, 123, 125]),
+    },
+    productContext: {
+      subjectId: "user-1",
+      ownerScope: { kind: "user", id: "user-1" },
+    },
   })
   assert.deepEqual(fromBinary(CreateSkillDraftRequestSchema, toBinary(CreateSkillDraftRequestSchema, request)), request)
   const response = create(CreateSkillDraftResponseSchema, {
@@ -124,18 +188,86 @@ test("Connect consumes the generated service descriptor without a handwritten RP
         assert.equal(request.productContext.subjectId, "user-1")
         assert.equal(request.ownerScope.id, "user-1")
         assert.deepEqual([...request.metadata.metadataJson], [123, 125])
-        return { skillId: { value: "skill-1" }, seriesId: { value: "series-1" }, revision: 1n, status: SkillStatus.DRAFT, replayed: false }
+        return {
+          skillId: { value: "skill-1" },
+          seriesId: { value: "series-1" },
+          revision: 1n,
+          status: SkillStatus.DRAFT,
+          replayed: false,
+        }
       },
     }),
   )
   const client = createClient(SkillCatalogService, transport)
   const response = await client.createSkillDraft({
     requestId: "request-1",
-    productContext: { subjectId: "user-1", ownerScope: { kind: "user", id: "user-1" } },
+    productContext: {
+      subjectId: "user-1",
+      ownerScope: { kind: "user", id: "user-1" },
+    },
     ownerScope: { kind: "user", id: "user-1" },
-    metadata: { displayName: "Draft", metadataJson: new TextEncoder().encode("{}") },
+    metadata: {
+      displayName: "Draft",
+      metadataJson: new TextEncoder().encode("{}"),
+    },
   })
   assert.equal(response.revision, 1n)
   assert.equal(response.status, SkillStatus.DRAFT)
   assert.equal(calls, 1)
+})
+
+test("all owner v3 CreateDraft raw vectors pass the independent projector", async () => {
+  const { projectCreateSkillDraft } = await import("../dist/infrastructure/clients/platform/create-skill-draft-projector.js")
+  const inventory = JSON.parse(await requiredFile(`contract/vendor/kokoro-platform/${ownerCommit}/execution-operations-v3/vectors/command-projection.json`))
+  const vectors = inventory.vectors.filter((vector) => vector.operation === "skill.create_draft")
+  assert.equal(vectors.length, 45)
+  for (const vector of vectors) {
+    const raw = Buffer.from(vector.rawBase64, "base64")
+    if (vector.expectedError !== "none")
+      assert.throws(() => projectCreateSkillDraft(raw, vector.stage === "admission"), { message: vector.expectedError }, vector.name)
+    else {
+      const actual = projectCreateSkillDraft(raw, vector.stage === "admission")
+      assert.deepEqual(actual.projection, vector.projection, vector.name)
+      assert.deepEqual(actual.canonical, Buffer.from(vector.canonicalBase64, "base64"), vector.name)
+      assert.equal(actual.sha256, vector.sha256, vector.name)
+    }
+  }
+})
+
+test("CreateDraft preserves catalog nonblank identifiers without weakening Product identifiers", async () => {
+  const { projectCreateSkillDraft } = await import("../dist/infrastructure/clients/platform/create-skill-draft-projector.js")
+  const input = {
+    command_digest_version: "3.0.0",
+    fq_method: "kokoro.platform.v1.SkillCatalogService/CreateSkillDraft",
+    tenant_ref: "tenant / east",
+    request: {
+      owner_scope: { kind: "organization", id: "catalog owner / east" },
+      product_context: { subject_id: "user-1", owner_scope: { kind: "organization", id: "organization-1" } },
+      metadata: { display_name: "Draft" },
+    },
+  }
+  const projected = projectCreateSkillDraft(JSON.stringify(input)).projection
+  assert.equal(projected.tenant_ref, "tenant / east")
+  assert.equal(projected.command.owner_scope.id, "catalog owner / east")
+  assert.throws(
+    () =>
+      projectCreateSkillDraft(
+        JSON.stringify({
+          ...input,
+          request: {
+            ...input.request,
+            product_context: { ...input.request.product_context, owner_scope: { kind: "organization", id: "product owner / east" } },
+          },
+        }),
+      ),
+    /projection schema string domain/,
+  )
+})
+
+test("independent JCS rejects values outside the plain dense JSON domain", async () => {
+  const { canonicalizeJcs } = await import("../dist/infrastructure/clients/platform/jcs.js")
+  const sparse = Array(1)
+  assert.throws(() => canonicalizeJcs(sparse), /array element 0 is absent or undefined/)
+  assert.throws(() => canonicalizeJcs([undefined]), /array element 0 is absent or undefined/)
+  assert.throws(() => canonicalizeJcs(new Date(0)), /plain JSON/)
 })

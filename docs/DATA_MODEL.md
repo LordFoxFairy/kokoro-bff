@@ -2,7 +2,7 @@
 
 ## W1E user Skill draft 数据门（2026-09-29；目标，未实施）
 
-当前 BFF main `bd1f794e7b1115d96965aa03d8a3a83a33c42fd7` 的 canonical `database/schema.sql` 没有 Skill catalog 或 Skill 专用 receipt 表（已有 generic BFF receipt 不用于此操作），Platform Connect 仍是 `generated-not-activated`、`execution_artifact:null`，public CreateDraft route 未发布。以下 user-only 目标以 Platform main `5b6eb2c1532b23b9747bc4bf6ac99f69ad453de0` 的 execution artifact v3 aggregate `324e749da1bc66c1ff03de74e7299716f798f5f5bb5fa19556033b79fa09ff8d` 为离线候选来源；该 artifact 仍 inactive/routable=false，真实写入/replay 需 Platform 后续提交 active/routable=true artifact、BFF 重钉并协调激活。本片零 BFF Schema/Redis 变更；Skill/revision/command receipt 只写 Platform owner schema，每次请求先以当前 IAM session 重验受信 tenant/subject，BFF 不用自己的 generic receipt 返回 Skill replay。Storage package/Validate/Publish 和其他 owner scope 不在首片。
+当前 BFF main `bd1f794e7b1115d96965aa03d8a3a83a33c42fd7` 的 canonical `database/schema.sql` 没有 Skill catalog 或 Skill 专用 receipt 表（已有 generic BFF receipt 不用于此操作），Platform Connect 仍是 `generated-not-activated`、`execution_artifact:null`，public CreateDraft route 未发布。以下 user-only 目标以 Platform main `5b6eb2c1532b23b9747bc4bf6ac99f69ad453de0` 的 execution artifact v3 aggregate `324e749da1bc66c1ff03de74e7299716f798f5f5bb5fa19556033b79fa09ff8d` 为离线候选来源；该 artifact 仍 inactive/routable=false；这是发布标记而非 runtime RPC kill switch。Root 可在隔离 sandbox 通过候选 route 验证真实写入/replay，但公开发布仍需六 owner sandbox、active artifact 重钉与协调激活。本片零 BFF Schema/Redis 变更；Skill/revision/command receipt 只写 Platform owner schema，每次请求先以当前 IAM session 重验受信 tenant/subject，BFF 不用自己的 generic receipt 返回 Skill replay。Storage package/Validate/Publish 和其他 owner scope 不在首片。
 
 ## W2-F2-S9 Chat Delivery 快照数据边界（2026-09-28；BFF canonical Schema 已修改，待 Root 集成审查）
 
@@ -102,7 +102,6 @@ Storage Proto 要求签发命令身份和其自身命令 receipt，这是 Storag
 不同租户/subject、Project、package、Artifact、非 ASSET 或非 CLEAN 对象均不形成 BFF 下载数据；
 不查询 Storage SQL，不建立跨 owner FK/JOIN，也不双写 Asset/Scan/Blob。Storage 引用过期后重新准入和
 签发，不把短期 URL 放入 Library 列表、浏览器持久状态、日志或历史回执。
-
 
 ## W2-BFF-LIBRARY-PERSONAL-UPLOAD-CODE：写入命令复用既有 receipt（待 Root 集成验收）
 
