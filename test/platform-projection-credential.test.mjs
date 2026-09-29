@@ -27,6 +27,18 @@ test("projection credential source rejects broad permissions and reads exact ten
   assert.equal((await source.read("tenant")).generation, 1)
 })
 
+test("projection credential cache key changes on secret-only rotation", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "bff-projection-rotation-"))
+  const file = path.join(dir, "credential.json")
+  await writeFile(file, JSON.stringify([item(1)]), { mode: 0o600 })
+  const source = new ProjectionCredentialSource(file)
+  const before = await source.read("tenant")
+  await writeFile(file, JSON.stringify([{ ...item(1), clientSecret: "rotated-secret" }]))
+  const after = await source.read("tenant")
+  assert.notEqual(before.cacheKey, after.cacheKey)
+  assert.equal(after.cacheKey.includes("rotated-secret"), false)
+})
+
 test("token exchange uses frozen IAM contract, coalesces, and invalidates on generation rotation", async () => {
   const original = globalThis.fetch
   const calls = []

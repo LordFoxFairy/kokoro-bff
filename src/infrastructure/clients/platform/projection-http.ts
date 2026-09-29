@@ -83,8 +83,8 @@ export class PlatformProjectionHttpClient {
       const declaredLength = response.headers.get("content-length")
       if (declaredLength !== null && /^[0-9]+$/u.test(declaredLength) && Number(declaredLength) > this.maxBytes) {
         invalidOwnerResponse = true
-        await response.body?.cancel()
         controller.abort()
+        void response.body?.cancel().catch(() => undefined)
         throw new Error("projection_response_too_large")
       }
       if (response.body === null) return response
@@ -104,7 +104,7 @@ export class PlatformProjectionHttpClient {
           chunks.push(next.value)
         }
       } finally {
-        await reader.cancel().catch(() => undefined)
+        void reader.cancel().catch(() => undefined)
         reader.releaseLock()
       }
       const bytes = new Uint8Array(size)

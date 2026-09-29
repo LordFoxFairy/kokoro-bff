@@ -1,5 +1,6 @@
 import { open } from "node:fs/promises"
 import { constants } from "node:fs"
+import { createHash } from "node:crypto"
 
 export type ProjectionCredential = Readonly<{
   tenantId: string
@@ -41,7 +42,15 @@ export class ProjectionCredentialSource {
     const result = value as unknown as Omit<ProjectionCredential, "cacheKey">
     return {
       ...result,
-      cacheKey: JSON.stringify([result.tenantId, result.generation, result.credentialRefVersion, result.clientId, result.resource, result.scope]),
+      cacheKey: JSON.stringify([
+        result.tenantId,
+        result.generation,
+        result.credentialRefVersion,
+        result.clientId,
+        result.resource,
+        result.scope,
+        createHash("sha256").update(result.clientSecret).digest("hex"),
+      ]),
     }
   }
 }

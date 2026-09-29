@@ -168,3 +168,32 @@ test("projection by-ID response must bind requested identity and exact public fi
     assert.deepEqual(result, { ok: false, status: 502, code: "skill_response_invalid", retryable: false })
   }
 })
+
+test("projection oversized Content-Length returns without waiting for a stuck cancel", async () => {
+  const stream = new ReadableStream({ cancel: () => new Promise(() => undefined) })
+  const outcome = await Promise.race([
+    withProjectionOwner(
+      async () => new Response(stream, { status: 200, headers: { ...ownerHeaders, "content-length": "9999999" } }),
+      (client) => client.read("skills", "t", "u", "r"),
+    ),
+    new Promise((resolve) => setTimeout(() => resolve("timed_out"), 200)),
+  ])
+  assert.deepEqual(outcome, { ok: false, status: 502, code: "skill_response_invalid", retryable: false })
+})
+
+test("projection streamed overflow returns without waiting for a stuck reader cancel", async () => {
+  const stream = new ReadableStream({
+    pull(controller) {
+      controller.enqueue(new Uint8Array(1024 * 1024 + 1))
+    },
+    cancel: () => new Promise(() => undefined),
+  })
+  const outcome = await Promise.race([
+    withProjectionOwner(
+      async () => new Response(stream, { status: 200, headers: ownerHeaders }),
+      (client) => client.read("skills", "t", "u", "r"),
+    ),
+    new Promise((resolve) => setTimeout(() => resolve("timed_out"), 200)),
+  ])
+  assert.deepEqual(outcome, { ok: false, status: 502, code: "skill_response_invalid", retryable: false })
+})
