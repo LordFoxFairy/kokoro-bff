@@ -26,6 +26,7 @@ test("Platform projection read gate detects status, cache and error-code drift",
   const list = openapi.slice(openapi.indexOf("  /v1/skills:\n"), openapi.indexOf("  /v1/skills/{skill_id}:\n"))
   const forbidden = openapi.slice(openapi.indexOf("    PlatformProjectionReadForbidden:\n"), openapi.indexOf("    PlatformProjectionReadRateLimited:\n"))
   const mutations = [
+    openapi.replace(list, list.replace("        '429': { $ref: '#/components/responses/PlatformProjectionReadRateLimited' }", "        '429': { $ref: '#/components/responses/PlatformProjectionReadRateLimited' }\n        '404': { $ref: '#/components/responses/PlatformProjectionReadBadGateway' }")),
     openapi.replace(list, list.replace("'403': { $ref: '#/components/responses/PlatformProjectionReadForbidden' }", "'403': { $ref: '#/components/responses/PlatformProjectionReadBadRequest' }")),
     openapi.replace(list, list.replace("schema: { type: string, const: no-store }", "schema: { type: string, const: public }")),
     openapi.replace(forbidden, forbidden.replace("service_auth_failed, session_forbidden, product_tenant_forbidden", "service_auth_failed, session_invalid")),

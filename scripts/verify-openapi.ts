@@ -1456,12 +1456,16 @@ function platformProjectionReadContractErrors(
       continue
     }
     const responses = collectResponseBlocks(operation)
+    const expectedStatuses = ["200", ...Object.keys(failures)].sort()
+    if (JSON.stringify([...responses.keys()].sort()) !== JSON.stringify(expectedStatuses)) {
+      errors.push(`${operationId} Platform projection read must declare exactly ${expectedStatuses.join(", ")}`)
+    }
     const success = responses.get("200") ?? ""
     if (!success.includes(`#/components/schemas/${responseSchema}`) || !requiredHeaders(success)) {
       errors.push(`${operationId} 200 must expose ${responseSchema} with required no-store and request ID headers`)
     }
     for (const [status, component] of Object.entries(failures)) {
-      if (!responses.get(status)?.includes(`#/components/responses/${component}`)) {
+      if (responses.get(status)?.trim() !== `'${status}': { $ref: '#/components/responses/${component}' }`) {
         errors.push(`${operationId} ${status} must use ${component}`)
       }
     }
