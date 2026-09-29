@@ -371,7 +371,7 @@ test("CompleteSkillPackageUpload semantic gate rejects request, response, status
   }
 })
 
-test("ValidateSkillDraft publishes one inactive user-only attempt-bound command", async () => {
+test("ValidateSkillDraft describes one default-closed user-only attempt-bound command", async () => {
   const { openapi, baseline } = await readContract()
   assert.ok(
     baseline.some(({ method, path, operation_id }) => method === "POST" && path === "/v1/skills/{skill_id}/validate" && operation_id === "validateSkillDraft"),
@@ -379,6 +379,8 @@ test("ValidateSkillDraft publishes one inactive user-only attempt-bound command"
   const operation = openapi.slice(openapi.indexOf("  /v1/skills/{skill_id}/validate:"), openapi.indexOf("  /v1/skills/{name}/revisions:"))
   for (const fragment of [
     "operationId: validateSkillDraft",
+    "default-closed BFF Validate runtime route",
+    "not publicly activated",
     "product.skill.validate_draft",
     "SkillValidateIdempotencyKey",
     "ValidateSkillDraftRequest",
@@ -430,6 +432,7 @@ test("ValidateSkillDraft pins owner v4 tag 7 and all eight command digest vector
 test("ValidateSkillDraft semantic gate rejects schema, status, header and legacy-operation drift", async () => {
   const { openapi, baseline } = await readContract()
   for (const broken of [
+    openapi.replace("default-closed BFF Validate runtime route", "active BFF Validate route"),
     openapi.replace("required: [attempt_id]\n      additionalProperties: false", "required: []\n      additionalProperties: false"),
     openapi.replace("valid: { type: boolean, const: true }", "valid: { type: boolean }"),
     openapi.replace("manifest_identity: { type: string, pattern: '^zip-v1:sha256:[a-f0-9]{64}$' }", "manifest_identity: { type: string }"),

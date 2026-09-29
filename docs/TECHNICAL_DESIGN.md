@@ -1,5 +1,9 @@
 # kokoro-bff 技术设计
 
+## W3 Validate runtime 当前候选（2026-09-29；默认关闭）
+
+在 owner `263a28f` inactive v4 精确 pin 下，具名 Validate route 沿现有 `src/http/routes/` 接入 `server.ts` IAM 后精确分派，复用同一 loopback 默认关闭 Skill catalog flag；`src/http/validate-skill-draft-input.ts` 校验唯一不受信 `attempt_id`/单键并生成绑定 operation+可信 tenant/user/skill/key 的稳定命令 ID，`src/infrastructure/clients/platform/validate-skill-draft-projector.ts` 按固定 3.0.0 JCS/8 owner 向量生成 digest，既有 `CatalogConnectClient` 用 generated v4 Proto 调用。每次 replay 先 IAM/current owner，BFF 不查 Platform/Storage SQL、不代理 ZIP、不存 receipt/状态或借旧 Capability 回退。owner 独有 current attempt、Storage CLEAN/ZIP V1/manifest 判定与 command receipt；BFF 只严格核 skill/series/valid=true/lowercase digest/ZIP manifest/replayed，再投影 200。上游前置失败 412、坏响应 502、未知 ACK 同键重新准入；取消传至 owner。此为本仓运行候选，不等于真 owner 组合、Web 或 public activation；下节是文档门当时基线。
+
 ## W3 Validate 文档门：当前态与目标态（2026-09-29；仅未激活机器候选）
 
 **当前态。** BFF main `1aee402` 已有默认关闭的 CreateDraft/Get/Begin/Complete 运行候选与 owner `263a28f` inactive v4 精确 pin，尚无 public Validate route、Connect adapter 或浏览器正式入口。Platform v4 Proto `ValidateSkillDraftRequest.attempt_id=7`、3.0.0 command schema 与 8 条投影向量是机器事实；本仓旧“Validate 无 body”目标不再适用。本片只改唯一 OpenAPI、operation inventory/semantic gate、直接 contract test 与三面文档；不改运行代码、生成物、Proto 或 SQL。

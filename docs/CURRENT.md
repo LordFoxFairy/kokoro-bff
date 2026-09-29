@@ -3,6 +3,10 @@
 状态：2026-09-29
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。
 
+## W3-BFF-SKILL-VALIDATE-RUNTIME：默认关闭运行候选
+
+在固定 owner `263a28f` inactive v4 上，BFF 现有具名 `POST /v1/skills/{skill_id}/validate` route、严格 `attempt_id` 输入、固定 3.0.0 JCS/8 向量 projector 与 generated Connect 调用；复用 CreateDraft/Get/Begin/Complete 的默认关闭候选开关。当次 IAM/fixed tenant/user 在每次同键重放及 Platform 前；稳定 command ID 绑定 operation+受信 tenant/user/skill/key，owner 持有 current attempt、Storage CLEAN/ZIP V1 与 receipt。仅校验并公开 strict valid=true/digest/manifest/series/replayed；坏 owner 502，旧/感染/坏 ZIP 由 owner 前置失败 412。无 BFF SQL/receipt/Storage RPC/旧 Capability fallback。直接 HTTP 与机器向量门已覆盖本仓候选；Root 真 IAM/Platform/Storage/ZIP/撤权组合、Publish public、Web Chromium 与正式激活仍待独立验收。下节“无 Validate route”为文档门历史事实。
+
 ## W3-BFF-SKILL-VALIDATE-DOC-GATE：仅未激活机器/文档候选
 
 基线 BFF clean main `1aee402`；唯一 public OpenAPI 新增 user-only Validate 的 strict `attempt_id` 请求、200 valid=true/digest/manifest/series 与状态专属错误，operation inventory/semantic checker/直接 contract test 锁 owner v4 Proto tag 7、command digest `3.0.0` 的 8 条向量和旧 operation 误引。BFF **未新增 Validate route、Connect 方法、projector 或 SQL/receipt**，CreateDraft/Get/Begin/Complete 仍默认关闭；Platform v4 inactive、产品未激活。下方“Complete 只有文档候选”等按各自历史切片理解；旧“Validate 无 body”与 v4 tag 7 冲突，以上述当前机器合同为准。Root 真 IAM/Storage/ZIP Validate、撤权重放、Publish public 与 Web Chromium 尚待后续门。

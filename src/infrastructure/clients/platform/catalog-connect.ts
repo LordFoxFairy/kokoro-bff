@@ -12,6 +12,7 @@ import {
   SkillCatalogService,
   SkillIdSchema,
   SkillMetadataSchema,
+  ValidateSkillDraftRequestSchema,
 } from "../../../generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
 import type { CatalogTokenSource } from "./catalog-token.js"
 
@@ -132,6 +133,27 @@ export class CatalogConnectClient {
         uploadId: input.uploadId,
         contentSha256: input.contentSha256,
         sizeBytes: BigInt(input.sizeBytes),
+      }),
+      {
+        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(this.timeoutMs)]) : AbortSignal.timeout(this.timeoutMs),
+        headers: { authorization: `Bearer ${token}`, "x-tenant-ref": input.tenant },
+        timeoutMs: this.timeoutMs,
+      },
+    )
+  }
+
+  async validateDraft(
+    input: { requestId: string; commandId: string; digest: string; tenant: string; user: string; skillId: string; attemptId: string },
+    signal?: AbortSignal,
+  ) {
+    const token = await this.tokens.get(input.tenant, signal)
+    return this.#client.validateSkillDraft(
+      create(ValidateSkillDraftRequestSchema, {
+        requestId: input.requestId,
+        command: create(CommandIdentitySchema, { commandId: input.commandId, requestDigest: input.digest }),
+        skillId: create(SkillIdSchema, { value: input.skillId }),
+        productContext: create(ProductCatalogContextSchema, { subjectId: input.user, ownerScope: create(OwnerScopeSchema, { kind: "user", id: input.user }) }),
+        attemptId: input.attemptId,
       }),
       {
         signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(this.timeoutMs)]) : AbortSignal.timeout(this.timeoutMs),

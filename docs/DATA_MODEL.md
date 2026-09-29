@@ -1,5 +1,9 @@
 # kokoro-bff data model
 
+## W3 Validate runtime：无新增 BFF 数据事实（2026-09-29）
+
+默认关闭的 Validate route 已接 owner v4 generated Connect，但本仓 canonical `database/schema.sql`、索引、Redis、Skill/Upload receipt 与对象字节缓存均零变更。每次 replay 先当次 IAM/Platform；`attempt_id` 只在请求内用于 owner current-attempt 匹配，不能成为 BFF 事实。Platform/Storage 仍分别拥有验证状态/manifest/command receipt 与 Asset/scan/对象，BFF 不跨 owner SQL、无 Storage RPC/ZIP 字节代理；下节“无 route”是文档门历史基线，Root 真 owner 组合和产品激活待验。
+
 ## W3 Validate 候选：无 BFF 持久化 owner（2026-09-29）
 
 本片只有唯一 public Validate OpenAPI/文档候选，无 BFF Validate route。Skill current draft/attempt、Storage Asset/scan/ZIP、manifest、验证状态与 owner command receipt/CAS 均留在 Platform/Storage；本仓 `database/schema.sql`、表/索引/事务/Redis 不变，不新增 BFF receipt、asset/hash 镜像或跨 owner SQL。每次包括重放仍先 current IAM 与 owner fresh 检查；`attempt_id` body 仅未受信选择符，不能把它持久化为本仓权威事实。200 的 digest/manifest 是 owner 已验证投影，ZIP `uploaded`/CLEAN 不是 validated，Validate 也不是 published。后续运行片、真组合和 Web 才能给产品完成证据。

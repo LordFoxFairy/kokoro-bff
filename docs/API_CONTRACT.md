@@ -1,5 +1,9 @@
 # kokoro-bff API contract policy
 
+## W3 Validate runtime 当前契约（2026-09-29；public 未激活）
+
+唯一 OpenAPI `validateSkillDraft` 的 strict request/200/error wire 不变，现已接默认关闭的 BFF 具名 POST route，与 CreateDraft/Get/Begin/Complete 共用候选 flag；Platform v4 仍 inactive，产品未发布。每次包括同键重放先 current IAM user/fixed tenant，再由独立 catalog workload 调 Platform；body 仅 `attempt_id` 不受信选择符，命令身份绑定 operation+可信 tenant/user/skill/key，固定 owner digest 3.0.0 JCS/8 向量。Platform current Skill/attempt、Storage fresh CLEAN/ZIP V1 和 receipt 是权威；BFF 不保存包事实/receipt，也不调用 Storage。200 仅当 owner skill/series/valid=true/lowercase digest/ZIP manifest/replayed 全核后发 strict `{data}`；错误依状态专属 `{error}`，成功/错误均有有界 `x-request-id` 与 no-store。旧/感染/未完成/坏 ZIP 由 owner 前置失败映射 412，坏 owner 502，未知 ACK 使用同键重新 IAM/owner；不按 message 分支、不走旧 Capability。Root 真 owner 组合、Publish public、Web 与激活另门；下节“无运行路由”为文档门历史基线。
+
 ## W3 Validate public 机器候选（2026-09-29；尚无运行路由）
 
 唯一 public OpenAPI 增 user-only `POST /v1/skills/{skill_id}/validate`，operationId `validateSkillDraft`、permission `product.skill.validate_draft`、单个 1–128 可打印 `Idempotency-Key` 必填。BFF 当前没有 Validate route；owner `263a28f` v4 inactive、产品未激活。strict JSON body **必须仅有 `attempt_id`**（非空、owner typed ID ≤191 字符），对应 owner v4 Proto tag 7；下方历史“Validate 无 body”已被该机器事实替代。Get/Complete 返回当前 attempt ID 只帮助客户端选择，Platform 仍按 current tenant/user/Skill/attempt、Storage 已完成绑定与 fresh CLEAN/ZIP V1 重新判定；不接受 asset_id、content_digest/size、manifest、tenant/owner 或 URL 自报。

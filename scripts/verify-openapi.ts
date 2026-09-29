@@ -814,8 +814,8 @@ function skillValidateContractErrors(
     ...[...responseRefs.values()].map(([name]) => responses.get(name)?.text ?? ""),
   ].join("\u0000")
   const frozenDigest = createHash("sha256").update(frozenSource).digest("hex")
-  // Validate remains an inactive document-only candidate; only its exact operation and direct components are exempted.
-  if (frozenDigest !== "48b55b6d095400023a8f66f951fb37bccff156ee7440f8e88e8e4356df5f345c")
+  // Validate now has a default-closed candidate route; only its description changed, and the exact operation/components remain frozen.
+  if (frozenDigest !== "741e30a623081aa7bb9e4981a412fa412d74f75b42e5bcf4d1ee4ff05865e987")
     errors.push(`validateSkillDraft canonical contract digest drifted: ${frozenDigest}`)
   return errors
 }
