@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
 import { EventEmitter } from "node:events"
-import { mkdtemp, readFile, readdir, rm } from "node:fs/promises"
+import { mkdtemp, readFile, readdir, rm, truncate, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { test } from "node:test"
@@ -10,6 +10,36 @@ const bytes = Buffer.from("hello")
 const sha = createHash("sha256").update(bytes).digest("hex")
 const storage = { baseUrl: "http://storage.test", secret: "storage-secret", objectOrigin: "http://objects.test" }
 const identity = { namespace: "tenant-1", userId: "subject-1" }
+
+function controllableClock() {
+  let now = 0
+  let nextId = 1
+  const pending = new Map()
+  const scheduled = new Map()
+  return {
+    schedule(callback, milliseconds) {
+      const id = nextId++
+      pending.set(id, { at: now + milliseconds, callback })
+      scheduled.set(milliseconds, (scheduled.get(milliseconds) ?? 0) + 1)
+      return id
+    },
+    clear(id) {
+      pending.delete(id)
+    },
+    scheduledCount(milliseconds) {
+      return scheduled.get(milliseconds) ?? 0
+    },
+    advance(milliseconds) {
+      now += milliseconds
+      while (true) {
+        const due = [...pending].filter(([, timer]) => timer.at <= now).sort((left, right) => left[1].at - right[1].at)[0]
+        if (due === undefined) break
+        pending.delete(due[0])
+        due[1].callback()
+      }
+    },
+  }
+}
 
 test("personal download is a versioned binary Product operation with stable errors", async () => {
   const source = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
@@ -467,6 +497,472 @@ test("Artifact spool admits at most two concurrent requests and releases slots o
     await Promise.all(settled.map((outcome) => outcome.value?.cleanup()))
     await fourthSpool?.cleanup()
     await secondSpool?.cleanup()
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test("Artifact spool has independent total and persisted-byte idle budgets, then releases its slot", async () => {
+  const { spoolVerifiedArtifact } = await import("../dist/infrastructure/clients/storage/artifact-download-transfer.js")
+  const root = await mkdtemp(join(tmpdir(), "bff-artifact-deadline-test-"))
+  const reference = { url: "http://objects.test/original?sig=secret", method: "GET", requiredHeaders: {}, expiresAt: Date.now() + 60_000 }
+  const stalled = () => new Response(new ReadableStream({ start() {} }), { status: 200 })
+  try {
+    const idleClock = controllableClock()
+    const idleAttempt = spoolVerifiedArtifact(reference, 5, sha, storage.objectOrigin, new AbortController().signal, async () => stalled(), root, {
+      totalMs: 7 * 60_000,
+      idleMs: 45_000,
+      clock: idleClock,
+    })
+    idleClock.advance(45_000)
+    await assert.rejects(idleAttempt, (error) => error.status === 503 && error.code === "storage_unavailable")
+    assert.deepEqual(await readdir(root), [])
+    const totalClock = controllableClock()
+    const totalAttempt = spoolVerifiedArtifact(reference, 5, sha, storage.objectOrigin, new AbortController().signal, async () => stalled(), root, {
+      totalMs: 7 * 60_000,
+      idleMs: 8 * 60_000,
+      clock: totalClock,
+    })
+    totalClock.advance(7 * 60_000)
+    await assert.rejects(totalAttempt, (error) => error.status === 503 && error.code === "storage_unavailable")
+    assert.deepEqual(await readdir(root), [])
+    const progressClock = controllableClock()
+    let controller
+    const progressStream = new ReadableStream({
+      start(value) {
+        controller = value
+      },
+    })
+    const tenBytes = Buffer.concat([bytes, bytes])
+    const tenSha = createHash("sha256").update(tenBytes).digest("hex")
+    const progressAttempt = spoolVerifiedArtifact(
+      reference,
+      10,
+      tenSha,
+      storage.objectOrigin,
+      new AbortController().signal,
+      async () => new Response(progressStream, { status: 200 }),
+      root,
+      { totalMs: 7 * 60_000, idleMs: 45_000, clock: progressClock },
+    )
+    progressClock.advance(40_000)
+    controller.enqueue(bytes)
+    for (let attempt = 0; attempt < 100 && progressClock.scheduledCount(45_000) < 2; attempt++) await new Promise((resolve) => setImmediate(resolve))
+    assert.equal(progressClock.scheduledCount(45_000), 2, "idle resets only after the first chunk is persisted")
+    progressClock.advance(40_000)
+    controller.enqueue(bytes)
+    controller.close()
+    const progressed = await progressAttempt
+    await progressed.cleanup()
+    assert.deepEqual(await readdir(root), [])
+    const success = await spoolVerifiedArtifact(
+      reference,
+      5,
+      sha,
+      storage.objectOrigin,
+      new AbortController().signal,
+      async () => new Response(bytes, { status: 200 }),
+      root,
+    )
+    await success.cleanup()
+    assert.deepEqual(await readdir(root), [])
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test("Artifact spool releases a slot even when rejecting an object whose body cancel never settles", async () => {
+  const { spoolVerifiedArtifact } = await import("../dist/infrastructure/clients/storage/artifact-download-transfer.js")
+  const root = await mkdtemp(join(tmpdir(), "bff-artifact-stuck-cancel-test-"))
+  const reference = { url: "http://objects.test/original?sig=secret", method: "GET", requiredHeaders: {}, expiresAt: Date.now() + 60_000 }
+  const neverCancels = () => new ReadableStream({ cancel: () => new Promise(() => {}) })
+  const settleWithin = async (promise) => {
+    let timer
+    try {
+      return await Promise.race([
+        promise,
+        new Promise((resolve) => {
+          timer = setTimeout(() => resolve("timed-out"), 1_000)
+        }),
+      ])
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+  try {
+    for (const fetcher of [
+      async () => new Response(neverCancels(), { status: 404 }),
+      async () => new Response(neverCancels(), { status: 200, headers: { "content-length": "6" } }),
+    ]) {
+      const result = await settleWithin(
+        spoolVerifiedArtifact(reference, 5, sha, storage.objectOrigin, new AbortController().signal, fetcher, root).then(
+          () => ({ status: "unexpected-success" }),
+          (error) => ({ status: error.status, code: error.code }),
+        ),
+      )
+      assert.deepEqual(result, { status: 502, code: "storage_response_invalid" })
+      assert.deepEqual(await readdir(root), [])
+    }
+    const success = await settleWithin(
+      spoolVerifiedArtifact(reference, 5, sha, storage.objectOrigin, new AbortController().signal, async () => new Response(bytes, { status: 200 }), root),
+    )
+    assert.notEqual(success, "timed-out")
+    await success.cleanup()
+    assert.deepEqual(await readdir(root), [])
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test("Artifact route preserves its 120-second admission budget and a pre-header JSON error", async () => {
+  const { createServer } = await import("node:http")
+  const { once } = await import("node:events")
+  const { libraryArtifactDownloadRoute } = await import("../dist/http/routes/library-artifact-download.js")
+  const clock = controllableClock()
+  let admissionStarted
+  const started = new Promise((resolve) => {
+    admissionStarted = resolve
+  })
+  const repository = { findCandidate: async () => ({}) }
+  const clientFactory = () => ({
+    get: (_association, signal) => {
+      admissionStarted()
+      return new Promise((_resolve, reject) => signal.addEventListener("abort", () => reject(new Error("cancelled")), { once: true }))
+    },
+    downloadReference: async () => {
+      throw new Error("unreachable")
+    },
+  })
+  const server = createServer((request, response) => {
+    void libraryArtifactDownloadRoute(
+      request,
+      response,
+      { storage },
+      { requestId: "req-admission", identity },
+      repository,
+      "conversation-1",
+      "artifact-1",
+      clientFactory,
+      async () => {
+        throw new Error("spool must not start")
+      },
+      { admissionMs: 120_000, outboundTotalMs: 28 * 60_000, outboundIdleMs: 25_000, clock },
+    )
+  })
+  server.listen(0, "127.0.0.1")
+  await once(server, "listening")
+  try {
+    const responsePromise = fetch(`http://127.0.0.1:${server.address().port}/v1/library/artifacts/conversation-1/artifact-1/content`)
+    await started
+    clock.advance(120_000)
+    const response = await responsePromise
+    assert.equal(response.status, 503)
+    assert.equal(response.headers.get("x-request-id"), "req-admission")
+    assert.equal((await response.json()).error.code, "storage_unavailable")
+  } finally {
+    server.closeAllConnections()
+    server.close()
+  }
+})
+
+test("Artifact admission timeout wins over a late missing association", async () => {
+  const { createServer } = await import("node:http")
+  const { once } = await import("node:events")
+  const { libraryArtifactDownloadRoute } = await import("../dist/http/routes/library-artifact-download.js")
+  const clock = controllableClock()
+  let queryStarted
+  let returnMissing
+  const started = new Promise((resolve) => {
+    queryStarted = resolve
+  })
+  const pendingQuery = new Promise((resolve) => {
+    returnMissing = resolve
+  })
+  const repository = {
+    findCandidate: () => {
+      queryStarted()
+      return pendingQuery
+    },
+  }
+  const server = createServer((request, response) => {
+    void libraryArtifactDownloadRoute(
+      request,
+      response,
+      { storage },
+      { requestId: "req-late-404", identity },
+      repository,
+      "conversation-1",
+      "artifact-1",
+      () => {
+        throw new Error("Storage must not run")
+      },
+      async () => {
+        throw new Error("spool must not run")
+      },
+      { admissionMs: 120_000, outboundTotalMs: 28 * 60_000, outboundIdleMs: 25_000, clock },
+    )
+  })
+  server.listen(0, "127.0.0.1")
+  await once(server, "listening")
+  try {
+    const responsePromise = fetch(`http://127.0.0.1:${server.address().port}/v1/library/artifacts/conversation-1/artifact-1/content`)
+    await started
+    clock.advance(120_000)
+    returnMissing(null)
+    const response = await responsePromise
+    assert.equal(response.status, 503)
+    assert.equal((await response.json()).error.code, "storage_unavailable")
+  } finally {
+    server.closeAllConnections()
+    server.close()
+  }
+})
+
+test("Artifact route streams verified bytes after the admission clock ends and cleans the spool once", async () => {
+  const { createServer } = await import("node:http")
+  const { once } = await import("node:events")
+  const { libraryArtifactDownloadRoute } = await import("../dist/http/routes/library-artifact-download.js")
+  const root = await mkdtemp(join(tmpdir(), "bff-artifact-success-test-"))
+  const path = join(root, "content")
+  await writeFile(path, bytes)
+  const clock = controllableClock()
+  let cleanups = 0
+  const item = {
+    kind: "artifact",
+    conversation_id: "conversation-1",
+    artifact_id: "artifact-1",
+    asset_id: "asset-1",
+    artifact_kind: "code",
+    title: "test",
+    filename: "test.txt",
+    mime_type: "text/plain",
+    size_bytes: "5",
+    content_sha256: sha,
+    source_run_id: "run-1",
+    delivered_at: "2026-09-28T00:00:00Z",
+  }
+  const server = createServer((request, response) => {
+    void libraryArtifactDownloadRoute(
+      request,
+      response,
+      { storage },
+      { requestId: "req-success", identity },
+      { findCandidate: async () => ({}) },
+      "conversation-1",
+      "artifact-1",
+      () => ({ get: async () => item, downloadReference: async () => ({}) }),
+      async () => {
+        clock.advance(120_000)
+        return {
+          path,
+          size: 5,
+          cleanup: async () => {
+            cleanups++
+          },
+        }
+      },
+      { admissionMs: 120_000, outboundTotalMs: 28 * 60_000, outboundIdleMs: 25_000, clock },
+    )
+  })
+  server.listen(0, "127.0.0.1")
+  await once(server, "listening")
+  try {
+    const response = await fetch(`http://127.0.0.1:${server.address().port}/v1/library/artifacts/conversation-1/artifact-1/content`)
+    assert.equal(response.status, 200)
+    assert.equal(response.headers.get("content-disposition"), "attachment; filename=\"test.txt\"; filename*=UTF-8''test.txt")
+    assert.equal(Buffer.from(await response.arrayBuffer()).toString(), "hello")
+    for (let attempt = 0; attempt < 100 && cleanups === 0; attempt++) await new Promise((resolve) => setImmediate(resolve))
+    assert.equal(cleanups, 1)
+  } finally {
+    server.closeAllConnections()
+    server.close()
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test("Artifact outbound total and idle clocks count completed writes, not queued file reads", async () => {
+  const { libraryArtifactDownloadRoute } = await import("../dist/http/routes/library-artifact-download.js")
+  const root = await mkdtemp(join(tmpdir(), "bff-artifact-outbound-clock-test-"))
+  const path = join(root, "content")
+  await writeFile(path, Buffer.alloc(128 * 1024))
+  const item = {
+    kind: "artifact",
+    conversation_id: "conversation-1",
+    artifact_id: "artifact-1",
+    asset_id: "asset-1",
+    artifact_kind: "code",
+    title: "test",
+    filename: "test.bin",
+    mime_type: "application/octet-stream",
+    size_bytes: String(128 * 1024),
+    content_sha256: sha,
+    source_run_id: "run-1",
+    delivered_at: "2026-09-28T00:00:00Z",
+  }
+  const run = async (idleMs, totalMs, advanceMs, finishWrite) => {
+    const clock = controllableClock()
+    const request = new EventEmitter()
+    request.url = "/v1/library/artifacts/conversation-1/artifact-1/content"
+    request.headers = {}
+    const response = new EventEmitter()
+    response.headersSent = false
+    response.destroyed = false
+    response.writableFinished = false
+    response.setHeader = () => {}
+    response.writeHead = () => {
+      response.headersSent = true
+    }
+    response.destroy = () => {
+      response.destroyed = true
+      response.emit("close")
+    }
+    response.end = (callback) => {
+      response.writableFinished = true
+      callback?.()
+    }
+    const writes = []
+    let firstWrite
+    const first = new Promise((resolve) => {
+      firstWrite = resolve
+    })
+    response.write = (_chunk, callback) => {
+      writes.push(callback)
+      firstWrite()
+      return false
+    }
+    let cleanups = 0
+    const route = libraryArtifactDownloadRoute(
+      request,
+      response,
+      { storage },
+      { requestId: "req-clock", identity },
+      { findCandidate: async () => ({}) },
+      "conversation-1",
+      "artifact-1",
+      () => ({ get: async () => item, downloadReference: async () => ({}) }),
+      async () => ({
+        path,
+        size: 128 * 1024,
+        cleanup: async () => {
+          cleanups++
+        },
+      }),
+      { admissionMs: 120_000, outboundTotalMs: totalMs, outboundIdleMs: idleMs, clock },
+    )
+    await first
+    if (finishWrite) {
+      writes.shift()()
+      for (let attempt = 0; attempt < 100 && writes.length === 0; attempt++) await new Promise((resolve) => setImmediate(resolve))
+      assert.equal(writes.length, 1)
+    }
+    clock.advance(advanceMs)
+    if (finishWrite) writes.shift()()
+    let timer
+    const outcome = await Promise.race([
+      route.then(() => "settled"),
+      new Promise((resolve) => {
+        timer = setTimeout(() => resolve("timed-out"), 1_000)
+      }),
+    ])
+    clearTimeout(timer)
+    return { outcome, response, cleanups }
+  }
+  try {
+    const progressed = await run(25_000, 28 * 60_000, 20_000, true)
+    assert.equal(progressed.outcome, "settled")
+    assert.equal(progressed.response.destroyed, false)
+    assert.equal(progressed.response.writableFinished, true)
+    assert.equal(progressed.cleanups, 1)
+    const idle = await run(25_000, 28 * 60_000, 25_000, false)
+    assert.equal(idle.outcome, "settled")
+    assert.equal(idle.response.destroyed, true)
+    assert.equal(idle.response.writableFinished, false)
+    assert.equal(idle.cleanups, 1)
+    const total = await run(29 * 60_000, 28 * 60_000, 28 * 60_000, false)
+    assert.equal(total.outcome, "settled")
+    assert.equal(total.response.destroyed, true)
+    assert.equal(total.cleanups, 1)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test("Artifact route ends a stalled consumer socket after headers without reporting success", async () => {
+  const { createServer, request: httpRequest } = await import("node:http")
+  const { once } = await import("node:events")
+  const { libraryArtifactDownloadRoute } = await import("../dist/http/routes/library-artifact-download.js")
+  const root = await mkdtemp(join(tmpdir(), "bff-artifact-socket-test-"))
+  const path = join(root, "content")
+  await writeFile(path, "")
+  await truncate(path, 64 * 1024 * 1024)
+  let cleanups = 0
+  const item = {
+    kind: "artifact",
+    conversation_id: "conversation-1",
+    artifact_id: "artifact-1",
+    asset_id: "asset-1",
+    artifact_kind: "code",
+    title: "test",
+    filename: "test.bin",
+    mime_type: "application/octet-stream",
+    size_bytes: String(64 * 1024 * 1024),
+    content_sha256: sha,
+    source_run_id: "run-1",
+    delivered_at: "2026-09-28T00:00:00Z",
+  }
+  const repository = { findCandidate: async () => ({}) }
+  const clientFactory = () => ({ get: async () => item, downloadReference: async () => ({}) })
+  const spooler = async () => ({
+    path,
+    size: 64 * 1024 * 1024,
+    cleanup: async () => {
+      cleanups++
+    },
+  })
+  const context = { requestId: "req-artifact", identity }
+  const server = createServer((request, response) => {
+    void libraryArtifactDownloadRoute(request, response, { storage }, context, repository, "conversation-1", "artifact-1", clientFactory, spooler, {
+      admissionMs: 120_000,
+      outboundTotalMs: 5_000,
+      outboundIdleMs: 500,
+    })
+  })
+  server.listen(0, "127.0.0.1")
+  await once(server, "listening")
+  const port = server.address().port
+  const openDownload = () =>
+    new Promise((resolve, reject) => {
+      const request = httpRequest({ host: "127.0.0.1", port, path: "/v1/library/artifacts/conversation-1/artifact-1/content" }, resolve)
+      request.once("error", reject)
+      request.end()
+    })
+  const waitForClose = (response) =>
+    new Promise((resolve) => {
+      const timer = setTimeout(() => resolve(false), 3_000)
+      const close = () => {
+        clearTimeout(timer)
+        resolve(true)
+      }
+      response.once("close", close)
+      response.once("error", close)
+    })
+  try {
+    const response = await openDownload()
+    assert.equal(response.statusCode, 200)
+    assert.equal(response.headers["content-length"], String(64 * 1024 * 1024))
+    response.pause()
+    const cleanupDeadline = Date.now() + 4_000
+    while (cleanups === 0 && Date.now() < cleanupDeadline) await new Promise((resolve) => setTimeout(resolve, 50))
+    assert.equal(cleanups, 1)
+    const closedPromise = waitForClose(response)
+    response.resume()
+    const closed = await closedPromise
+    response.destroy()
+    assert.equal(closed, true)
+    assert.equal(response.complete, false)
+    assert.equal(cleanups, 1)
+  } finally {
+    server.closeAllConnections()
+    server.close()
     await rm(root, { recursive: true, force: true })
   }
 })

@@ -1,6 +1,6 @@
 # kokoro-bff API contract policy
 
-## W2-F2-S8 Artifact `/content` 时限与失败语义（2026-09-28；文档目标，尚未实施）
+## W2-F2-S8 Artifact `/content` 时限与失败语义（2026-09-28；BFF 单仓已实现）
 
 唯一机器契约仍是 [`../contract/openapi/v1/openapi.yaml`](../contract/openapi/v1/openapi.yaml) 的
 `downloadLibraryArtifact`：路径、GET 输入、本人二元授权、`storage.library.read` 分类、200 原字节及
@@ -8,23 +8,25 @@
 `X-Content-Type-Options:nosniff`、`x-request-id` 均不变。本时限调整不增 query、header、身份、角色、
 幂等键、状态码或错误码，不改个人 `kind=file` 下载与 Hub 全局 budget。
 
-**当前运行事实：** BFF 一个 120 秒 `AbortSignal` 同时限制取回/校验和出站，即使 Web 精确 Artifact
-adapter 有 10 分钟未发头、30 分钟 200 流上限也可能先截断。**目标内部预算：** BFF route 内本人
+**起始问题：** BFF 原先一个 120 秒 `AbortSignal` 同时限制取回/校验和出站，即使 Web 精确 Artifact
+adapter 有 10 分钟未发头、30 分钟 200 流上限也可能先截断。**当前内部预算：** BFF route 内本人
 关联/Storage final+reference 保留现有最多 120 秒信号，准入语义不变；对象取回至完整校验/文件关闭为 7 分钟总、45 秒无落盘进度；
 出站为 28 分钟总、25 秒无 response 写入/排空进度。各阶段独立计时、共同响应/请求断开取消；Web 的
 10/30 分钟及 30 秒 idle 仍是单独上界，2+7 分钟为未发头阶段留约 1 分钟。预算不是新的公开请求参数、
 PostgreSQL 查询或磁盘 syscall 严格硬取消承诺，也不是任何大小对象的传输成功保证。
 
-| 目标失败点 | HTTP 可观察结果 |
-| --- | --- |
-| 准入、引用、取回/校验在发头前失败 | 保留现有稳定 JSON error envelope 与 `x-request-id`；不可见仍 404，错误对象/摘要/长度仍 502，依赖不可达或阶段超时仍 `503 storage_unavailable`，名额已满仍 `503 artifact_download_busy`。不得先发部分 200 或把 owner 故障伪装 404。 |
-| 200 头已发后客户端断开、BFF 出站总/idle 超时或本地读取/管道失败 | 停止读取并终止响应连接；不再发送 JSON 或另一个状态码，不添加成功尾帧/回执，也不把部分 `Content-Length` 视为完成。客户端须把截断/长度不符当失败；Web 同源 adapter 的长度与完整结束检查仍是独立下游门。 |
-| 正常完成 | 只有已校验文件全量经背压管道结束且响应完成才结束请求并释放 spool；完整原字节与原安全头保持。 |
+| 失败点                                                          | HTTP 可观察结果                                                                                                                                                                                                                   |
+| --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 准入、引用、取回/校验在发头前失败                               | 保留现有稳定 JSON error envelope 与 `x-request-id`；不可见仍 404，错误对象/摘要/长度仍 502，依赖不可达或阶段超时仍 `503 storage_unavailable`，名额已满仍 `503 artifact_download_busy`。不得先发部分 200 或把 owner 故障伪装 404。 |
+| 200 头已发后客户端断开、BFF 出站总/idle 超时或本地读取/管道失败 | 停止读取并终止响应连接；不再发送 JSON 或另一个状态码，不添加成功尾帧/回执，也不把部分 `Content-Length` 视为完成。客户端须把截断/长度不符当失败；Web 同源 adapter 的长度与完整结束检查仍是独立下游门。                             |
+| 正常完成                                                        | 只有已校验文件全量经背压管道结束且响应完成才结束请求并释放 spool；完整原字节与原安全头保持。                                                                                                                                      |
 
 最多两个同时占用的本进程 spool 名额从 ObjectStore GET 前到正常/取消/失败清理后保留，第三个请求在
 对象 GET 前返回同一 `503 artifact_download_busy`。未发头时限/取消不得泄露内部 URL、secret 或
 临时路径；已发头失败不得伪装下载成功。机器 OpenAPI、Storage Proto、错误码与 Web 契约本次零修改，
-代码门才以受控慢消费者、直接 HTTP、owner 原字节/私有负例验证这些语义。
+直接假钟与慢消费者 HTTP 测试已验证阶段预算、迟到准入 timeout 503、截断及取消释放；底层
+`body.cancel()`/`reader.cancel()` 不完成也不阻塞本地清理。Root 独立 Node 22 全门已通过；
+此代码片尚无真 owner/代表性 1 GiB 限速验收。
 
 ## W2-F2-S5 Product Artifact 公开契约（2026-09-28；单仓已验，跨仓待验）
 

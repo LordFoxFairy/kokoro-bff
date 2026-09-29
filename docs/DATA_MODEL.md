@@ -1,26 +1,26 @@
 # kokoro-bff data model
 
-## W2-F2-S8 Artifact 下载时限：无持久模型变更（2026-09-28；文档目标）
+## W2-F2-S8 Artifact 下载时限：无持久模型变更（2026-09-28；BFF 单仓已实现）
 
 当前 `GET /v1/library/artifacts/{conversation_id}/{artifact_id}/content` 逐次按当次 IAM 身份查询本仓
 active Conversation 与 `bff_conversation_artifact` 关联，再读 Storage 唯一拥有的 FINAL+CLEAN metadata/
-签名引用；最多 1 GiB 原字节进入请求独占临时文件，校验后才出站。当前同一 120 秒信号覆盖取回和
-出站，是请求生命周期问题，不是缺少数据库状态。已存在的 `bff_conversation_artifact` 只保存受信交付
+签名引用；最多 1 GiB 原字节进入请求独占临时文件，校验后才出站。基线同一 120 秒信号覆盖取回和
+出站的问题现已按阶段拆分，属于请求生命周期而非数据库状态。已存在的 `bff_conversation_artifact` 只保存受信交付
 关联；临时文件、计时器、活动名额和已发送字节不属于可持久化 Product 事实。
 
-目标只把该 route 的生命周期划为保留现有最多 120 秒的本人关联/最终态/引用阶段、7 分钟总/
+当前该 route 的生命周期分为保留最多 120 秒的本人关联/最终态/引用阶段、7 分钟总/
 45 秒无落盘进度的对象取回校验、28 分钟总/25 秒无出站进度的响应管道；2+7 分钟为 Web
-10 分钟未发头预算留约 1 分钟。共用客户端取消向可取消的 I/O 传播，不把普通 PG query 或磁盘
-syscall 冒称严格硬取消；临时目录
-与文件句柄在成功、未发头失败、已发头失败、取消时都释放，每进程同时保留的 spool 名额仍为两份，
+10 分钟未发头预算留约 1 分钟。共用客户端取消向可取消的 I/O 传播，异常对象流的取消 Promise
+不会阻塞本地清理，不把普通 PG query 或磁盘 syscall 冒称严格硬取消；临时目录与文件句柄在
+成功、未发头失败、已发头失败、取消时都释放，每进程同时保留的 spool 名额仍为两份，
 清理后可复用。对象字节、预签 URL、阶段 deadline、出站偏移、计数器和权限结论均不写 PostgreSQL/
 Redis，也不增加恢复队列：失败后重新 GET 必须重新进行本人授权与 Storage 当前态/引用核验，不能
 从残留 spool 恢复或复用旧签名引用。
 
 因此 `database/schema.sql`、`kokoro_bff` owner schema、事务、索引、receipt、outbox、AG-UI ledger、
 Redis DB 8、retention 与跨 owner 数据边界均零变更；不增加 BFF Artifact metadata 镜像或跨仓 SQL。
-文档门以现有 Schema 与机器 contract 不变为证，代码门仍需回归关联/删除/私有边界与两个名额在
-正常/超时/断开后的释放。现有下节 S5 初版“目标新表/尚未修改 Schema”是历史设计基线；当前是否
+单仓假钟/慢消费者及取消异常测试已回归两名额在正常/超时/断开后的释放，Root 独立 Node 22 全门
+通过；真 owner 与 1 GiB 限速仍待验。现有下节 S5 初版“目标新表/尚未修改 Schema”是历史设计基线；当前是否
 已经落表以本仓 `database/schema.sql` 与 `docs/CURRENT.md` 顶端 S5 代码片为准。
 
 ## W2-F2-S5 Conversation↔Artifact 关联投影（2026-09-28；文档目标，Schema 尚未修改）

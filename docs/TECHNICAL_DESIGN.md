@@ -1,41 +1,43 @@
 # kokoro-bff 技术设计
 
-## W2-F2-S8 Artifact 原字节下载时限设计门（2026-09-28；仅文档，代码待授权）
+## W2-F2-S8 Artifact 原字节下载时限（2026-09-28；BFF 单仓代码已验，真大件待验）
 
-**当前态。** `src/http/routes/library-artifact-download.ts` 在 route 内以同一
+**起始问题。** 基线 `src/http/routes/library-artifact-download.ts` 在 route 内以同一
 `AbortSignal.timeout(120_000)` 覆盖 BFF 关联/Storage 最终态与引用读取、最多 1 GiB 的对象取回/校验/临时文件
 `fsync`，以及随后对浏览器的 `pipeline`。因此一次合法慢速传输累计超过 120 秒会被截断；Web 的精确 Artifact
 同源路径虽将未发头等待设为 10 分钟、200 流总时限设为 30 分钟且空闲设为 30 秒，仍不能延长 BFF 先到的
-120 秒。现有完整取回后才发 200、SHA-256/长度校验、每进程两份 spool、断连取消与 `finally` 清理必须保留。
+120 秒。代码片已保留完整取回后才发 200、SHA-256/长度校验、每进程两份 spool 与断连清理，并按下表拆分预算。
 
-**目标态与边界。** 只改精确的 `GET /v1/library/artifacts/{conversation_id}/{artifact_id}/content`：
-在现有具名 route 与 `src/infrastructure/clients/storage/artifact-download-transfer.ts` 中为同一次请求使用共同的
-客户端取消信号，但按阶段新建并释放有限预算；不用一个 120 秒总信号贯穿全程，也不
+**当前实现与边界。** 只对精确的 `GET /v1/library/artifacts/{conversation_id}/{artifact_id}/content`，
+在现有具名 route 与 `src/infrastructure/clients/storage/artifact-download-transfer.ts` 中使用共同的
+客户端取消信号，并按阶段新建/释放有限预算；不再用一个 120 秒总信号贯穿全程，也不
 放宽 BFF 全局 HTTP、个人文件或 Hub 路径。Web/IAM admission 在此 route 之前，仍由各自既有预算约束；下表
 从进入此 route 起计，并为 Web 10 分钟未发头、30 分钟 200 流各留缓冲，而非宣称完整浏览器链路的 SLA。
 
-| 阶段 | 目标总预算 / 无进度预算 | 成功边界与失败处理 |
-| --- | --- | --- |
-| BFF 私有准入与引用 | 保留现有最多 120 秒 `AbortSignal` 预算，只在 selector、BFF 关联、Storage FINAL+CLEAN 与短期引用阶段使用；Storage RPC 原有单次 10 秒上限不放宽；无字节流 idle timer | 准入、授权与引用语义不变，阶段完成后清除此信号才开始 spool。超时停止后续 I/O 并取消可取消的待决操作，未发头按现有错误映射返回；普通 PostgreSQL 查询目前不接 signal，不宣称计时器能硬取消查询。 |
-| ObjectStore 取回与校验 | 从申请 spool 名额/开始 GET 到完整文件校验及 `fsync`，7 分钟总预算、45 秒无进度预算；首个持久化字节前也计 idle | 进度定义为合法对象字节成功写入临时文件，不以收到 header、`reader.read()` 返回但磁盘未写完或仅重启 timer 充数。200、声明/实际长度、≤1 GiB、SHA-256 全部符合且文件已关闭，才允许发 public 200；超时/断连向可取消 fetch/reader 传播，待文件操作收敛后关闭文件、删除目录并释放名额。无效 owner/对象字节仍是 502，依赖/时限失败仍是 503。 |
-| 已校验文件出站 | 从准备发 200 头至 `pipeline` 完整结束，28 分钟总上限、25 秒无出站进度上限；计时独立于前两阶段 | 保留 Node 流背压；进度以 response writable 接受并完成写入/排空为准，不以只读临时文件或排入内存为准。客户端关闭、超时、读文件/写 socket 失败立即停止 read stream 并 destroy response；已发头后只终止连接，绝不补 JSON、改状态或把截断正文当成功。只有 pipeline 完成且响应完成才算成功；所有终态删除临时目录并恰好释放一次名额。 |
+| 阶段                   | 当前总预算 / 无进度预算                                                                                                                                            | 成功边界与失败处理                                                                                                                                                                                                                                                                                                                   |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| BFF 私有准入与引用     | 保留现有最多 120 秒 `AbortSignal` 预算，只在 selector、BFF 关联、Storage FINAL+CLEAN 与短期引用阶段使用；Storage RPC 原有单次 10 秒上限不放宽；无字节流 idle timer | 准入、授权与引用语义不变，阶段完成后清除此信号才开始 spool。超时停止后续 I/O 并取消可取消的待决操作，未发头按现有错误映射返回；普通 PostgreSQL 查询目前不接 signal，不宣称计时器能硬取消查询。                                                                                                                                       |
+| ObjectStore 取回与校验 | 从申请 spool 名额/开始 GET 到完整文件校验及 `fsync`，7 分钟总预算、45 秒无进度预算；首个持久化字节前也计 idle                                                      | 进度定义为合法对象字节成功写入临时文件，不以收到 header、`reader.read()` 返回但磁盘未写完或仅重启 timer 充数。200、声明/实际长度、≤1 GiB、SHA-256 全部符合且文件已关闭，才允许发 public 200；超时/断连向可取消 fetch/reader 传播，待文件操作收敛后关闭文件、删除目录并释放名额。无效 owner/对象字节仍是 502，依赖/时限失败仍是 503。 |
+| 已校验文件出站         | 从准备发 200 头至 `pipeline` 完整结束，28 分钟总上限、25 秒无出站进度上限；计时独立于前两阶段                                                                      | 保留 Node 流背压；进度以 response writable 接受并完成写入/排空为准，不以只读临时文件或排入内存为准。客户端关闭、超时、读文件/写 socket 失败立即停止 read stream 并 destroy response；已发头后只终止连接，绝不补 JSON、改状态或把截断正文当成功。只有 pipeline 完成且响应完成才算成功；所有终态删除临时目录并恰好释放一次名额。       |
 
 Web 200 流 idle 为 30 秒，故 BFF 出站 25 秒 idle 先收敛；BFF 现有最多 2 分钟准入/引用预算加
 7 分钟取回预算小于 Web 10 分钟未发头预算，留约 1 分钟；出站 28 分钟小于 Web 30 分钟预算。
 这些是应用层有限预算而非对不可取消 syscall 的硬截止或最低网络速率承诺：1 GiB 在 7 分钟
 取回阶段需要约 2.44 MiB/s，在 28 分钟出站阶段需要约 0.61 MiB/s 的平均有效速率，
 更慢或超过 idle 的合法链路会按时限失败，不以 5 字节 fixture 推导 1 GiB SLA。阶段切换须清除旧 timer/
-listener；共同客户端取消在任何阶段向可取消的待决 I/O 传播，并在 `finally` 释放 reader、文件句柄、
-临时目录及 socket；不可取消的文件系统调用返回后再完成清理，不宣称严格毫秒级硬 deadline。spool 名额仍仅
+listener；共同客户端取消在任何阶段向可取消的待决 I/O 传播。异常对象流的 `body.cancel()`/
+`reader.cancel()` 仅 best-effort，不等待其永不完成的 Promise 才清理本地临时目录/名额；文件句柄在
+文件操作收敛后关闭，不宣称不可取消 syscall 的严格毫秒级硬 deadline。spool 名额仍仅
 从对象 GET 前取得到清理完成保留两份，第三份在 ObjectStore GET 前返回 `503 artifact_download_busy`；
 不引入队列、Redis 配额、跨进程锁或新配置面。
 
-**代码门验证。** 先用可控时钟/受控流写 RED：覆盖保留准入预算、取回总/idle、出站总/idle，慢消费者暂停/
-恢复和真实 Node HTTP 背压，取回未完整不发 200，已发头断开不报成功；取消与每类超时后等待清理并
-确认临时目录为空、两个名额均可再次取得。保留 1 GiB 边界、摘要、长度、私有二元授权及第三请求
-busy 回归。Node 22 执行 `pnpm format:check && pnpm check && pnpm schema:check`；Root 在独立
-真 Agent/Storage/ObjectStore/BFF 组合中复验原字节、私有与取消，代表性大对象/限速测试未实跑前
-不得宣称容量或吞吐 SLA。本次四文档门不改运行代码、测试、OpenAPI 或 Schema。
+**单仓验证与剩余门。** 直接假钟/受控流测试已覆盖准入 120 秒、迟到 SQL 缺失仍按 timeout 返回 503、
+spool 7 分钟总/45 秒落盘 idle、出站 28 分钟总/25 秒已完成写入 idle 的正反分支、慢消费者真实 Node
+HTTP 背压/已发头截断，以及非 200/坏长度对象流 `cancel()` 永不完成时的有限失败与名额回收。既有
+1 GiB 边界、摘要/长度和并发 busy 回归仍通过。Root 独立 Node 22
+`pnpm format:check && pnpm check && pnpm schema:check` 通过：默认测试 365 pass/1 无库 skip，
+Schema 5 pass/1 无库 skip。真 Agent/Storage/ObjectStore/BFF owner 字节与代表性 1 GiB 限速
+测试尚未为此代码片执行；不得据单仓小样本宣称大件吞吐 SLA。
 
 ## W2-F2-S5 Product Artifact：跨会话关联与按作品读取（2026-09-28；单仓已验，跨仓待验）
 
