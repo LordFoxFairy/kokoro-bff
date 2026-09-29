@@ -2145,14 +2145,14 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/GetSkillPackageUploadResponse' }
-        '400': { $ref: '#/components/responses/SkillPackageUploadGetError' }
-        '401': { $ref: '#/components/responses/SkillPackageUploadGetError' }
-        '403': { $ref: '#/components/responses/SkillPackageUploadGetError' }
-        '404': { $ref: '#/components/responses/SkillPackageUploadGetError' }
-        '412': { $ref: '#/components/responses/SkillPackageUploadGetError' }
-        '429': { $ref: '#/components/responses/SkillPackageUploadGetError' }
-        '502': { $ref: '#/components/responses/SkillPackageUploadGetError' }
-        '503': { $ref: '#/components/responses/SkillPackageUploadGetError' }
+        '400': { $ref: '#/components/responses/SkillPackageUploadGetBadRequest' }
+        '401': { $ref: '#/components/responses/SkillPackageUploadGetUnauthorized' }
+        '403': { $ref: '#/components/responses/SkillPackageUploadGetForbidden' }
+        '404': { $ref: '#/components/responses/SkillPackageUploadGetNotFound' }
+        '412': { $ref: '#/components/responses/SkillPackageUploadGetPreconditionFailed' }
+        '429': { $ref: '#/components/responses/SkillPackageUploadGetRateLimited' }
+        '502': { $ref: '#/components/responses/SkillPackageUploadGetBadGateway' }
+        '503': { $ref: '#/components/responses/SkillPackageUploadGetUnavailable' }
   /v1/skills/{name}/revisions:
     parameters:
       - $ref: '#/components/parameters/SkillNameOnly'
@@ -3462,11 +3462,37 @@ components:
       additionalProperties: false
       properties:
         skill_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
-        attempt_epoch: { type: string, pattern: '^(0|[1-9][0-9]*)$' }
+        attempt_epoch: { type: string }
         phase: { type: string, enum: [none, intent, upload_pending, uploaded, validated, aborted] }
-        attempt_id: { type: string, minLength: 1, maxLength: 191 }
-        upload_id: { type: string, minLength: 1, maxLength: 191 }
-      description: For none epoch is 0 and both IDs are absent; other phases require a positive epoch and attempt ID. Intent has no upload ID; upload_pending, uploaded and validated require an upload ID. Aborted may retain one.
+        attempt_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        upload_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+      oneOf:
+        - properties:
+            phase: { const: none }
+            attempt_epoch: { const: '0' }
+            attempt_id: false
+            upload_id: false
+        - required: [attempt_id]
+          properties:
+            phase: { const: intent }
+            attempt_epoch: { $ref: '#/components/schemas/SkillPackageUploadPositiveEpoch' }
+            attempt_id: { type: string }
+            upload_id: false
+        - required: [attempt_id, upload_id]
+          properties:
+            phase: { enum: [upload_pending, uploaded, validated] }
+            attempt_epoch: { $ref: '#/components/schemas/SkillPackageUploadPositiveEpoch' }
+            attempt_id: { type: string }
+            upload_id: { type: string }
+        - required: [attempt_id]
+          properties:
+            phase: { const: aborted }
+            attempt_epoch: { $ref: '#/components/schemas/SkillPackageUploadPositiveEpoch' }
+            attempt_id: { type: string }
+    SkillPackageUploadPositiveEpoch:
+      type: string
+      description: Decimal unsigned 64-bit value from 1 through 18446744073709551615, without leading zeroes.
+      pattern: '^(?:[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{4}|18446744073709550[0-9]{3}|18446744073709551[0-5][0-9]{2}|1844674407370955160[0-9]{1}|1844674407370955161[0-4]|18446744073709551615)$'
     GetSkillPackageUploadResponse:
       type: object
       required: [data]
@@ -4989,8 +5015,8 @@ components:
               const: true
         meta: { $ref: '#/components/schemas/RequestMeta' }
   responses:
-    SkillPackageUploadGetError:
-      description: Strict user admission or owner state failure
+    SkillPackageUploadGetBadRequest:
+      description: Invalid strict path, query, body or header
       headers:
         x-request-id:
           description: Correlation identifier for this request
@@ -5000,7 +5026,159 @@ components:
           schema: { type: string, const: no-store }
       content:
         application/json:
-          schema: { $ref: '#/components/schemas/SkillPackageUploadGetErrorResponse' }
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/SkillPackageUploadGetErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [invalid_skill_request] }
+    SkillPackageUploadGetUnauthorized:
+      description: Service or current IAM session authentication failed
+      headers:
+        x-request-id:
+          description: Correlation identifier for this request
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          description: Prevent storage of Skill package state
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/SkillPackageUploadGetErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [service_auth_failed, session_authentication_required, session_invalid] }
+    SkillPackageUploadGetForbidden:
+      description: Current Product identity is forbidden
+      headers:
+        x-request-id:
+          description: Correlation identifier for this request
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          description: Prevent storage of Skill package state
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/SkillPackageUploadGetErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [session_forbidden, product_tenant_not_configured, product_tenant_forbidden] }
+    SkillPackageUploadGetNotFound:
+      description: Skill is absent or invisible to this tenant or owner
+      headers:
+        x-request-id:
+          description: Correlation identifier for this request
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          description: Prevent storage of Skill package state
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/SkillPackageUploadGetErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [skill_not_found] }
+    SkillPackageUploadGetPreconditionFailed:
+      description: Skill is not a current draft
+      headers:
+        x-request-id:
+          description: Correlation identifier for this request
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          description: Prevent storage of Skill package state
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/SkillPackageUploadGetErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [skill_precondition_failed] }
+    SkillPackageUploadGetRateLimited:
+      description: IAM or Platform rate limited the request
+      headers:
+        x-request-id:
+          description: Correlation identifier for this request
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          description: Prevent storage of Skill package state
+          schema: { type: string, const: no-store }
+        Retry-After:
+          description: Bounded delay in seconds before retrying
+          required: true
+          schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/SkillPackageUploadGetErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [session_rate_limited, skill_rate_limited] }
+    SkillPackageUploadGetBadGateway:
+      description: Platform returned invalid pinned data
+      headers:
+        x-request-id:
+          description: Correlation identifier for this request
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          description: Prevent storage of Skill package state
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/SkillPackageUploadGetErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [skill_response_invalid] }
+    SkillPackageUploadGetUnavailable:
+      description: Current IAM or Platform dependency is unavailable
+      headers:
+        x-request-id:
+          description: Correlation identifier for this request
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          description: Prevent storage of Skill package state
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/SkillPackageUploadGetErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [iam_admission_unavailable, skill_dependency_unavailable] }
     SkillDraftBadRequest:
       description: Invalid strict body or Idempotency-Key
       headers:

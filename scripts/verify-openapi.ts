@@ -300,6 +300,13 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
     const isCreateSkillDraft = operationId === "createSkillDraft"
     const isGetSkillPackageUpload =
       operationId === "getSkillPackageUpload" && operation.method === "GET" && operation.path === "/v1/skills/{skill_id}/package-upload"
+    if (
+      !isGetSkillPackageUpload &&
+      /#\/components\/(?:schemas\/(?:GetSkillPackageUploadResponse|SkillPackageUploadGetErrorResponse)|responses\/SkillPackageUploadGet[A-Za-z]*)/u.test(
+        operation.text.split(/^components:\s*$/mu)[0] ?? "",
+      )
+    )
+      errors.push(`${operation.method} ${operation.path} must not reference GetSkillPackageUpload strict envelope components`)
     const responses = collectResponseBlocks(operation)
     for (const [status, response] of responses) {
       if (status === "default") continue
@@ -325,7 +332,7 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
           numericStatus < 400 ||
           ERROR_RESPONSE_COMPONENTS.has(match[1]) ||
           isCreateSkillDraft ||
-          (isGetSkillPackageUpload && match[1] === "SkillPackageUploadGetError")
+          (isGetSkillPackageUpload && match[1].startsWith("SkillPackageUploadGet"))
         )
           continue
         errors.push(`${operation.method} ${operation.path} ${status} references non-error response ${match[1]}`)
@@ -524,10 +531,32 @@ function skillPackageUploadGetContractErrors(
   const expectedStatuses = ["200", "400", "401", "403", "404", "412", "429", "502", "503"]
   const actualStatuses = [...collectResponseBlocks(operation).keys()]
   if (JSON.stringify(actualStatuses) !== JSON.stringify(expectedStatuses)) errors.push("getSkillPackageUpload status set drifted")
-  for (const status of expectedStatuses.slice(1)) {
-    if (!operation.text.includes(`'${status}': { $ref: '#/components/responses/SkillPackageUploadGetError' }`))
-      errors.push(`getSkillPackageUpload ${status} must reference SkillPackageUploadGetError`)
+  const responseRefs = new Map([
+    ["400", ["SkillPackageUploadGetBadRequest", "invalid_skill_request"]],
+    ["401", ["SkillPackageUploadGetUnauthorized", "service_auth_failed, session_authentication_required, session_invalid"]],
+    ["403", ["SkillPackageUploadGetForbidden", "session_forbidden, product_tenant_not_configured, product_tenant_forbidden"]],
+    ["404", ["SkillPackageUploadGetNotFound", "skill_not_found"]],
+    ["412", ["SkillPackageUploadGetPreconditionFailed", "skill_precondition_failed"]],
+    ["429", ["SkillPackageUploadGetRateLimited", "session_rate_limited, skill_rate_limited"]],
+    ["502", ["SkillPackageUploadGetBadGateway", "skill_response_invalid"]],
+    ["503", ["SkillPackageUploadGetUnavailable", "iam_admission_unavailable, skill_dependency_unavailable"]],
+  ])
+  for (const [status, [component, codes]] of responseRefs) {
+    if (!operation.text.includes(`'${status}': { $ref: '#/components/responses/${component}' }`))
+      errors.push(`getSkillPackageUpload ${status} must reference ${component}`)
+    const block = responses.get(component)?.text ?? ""
+    for (const fragment of [
+      "x-request-id:",
+      "Cache-Control:",
+      "const: no-store",
+      "#/components/schemas/SkillPackageUploadGetErrorResponse",
+      `code: { type: string, enum: [${codes}] }`,
+    ])
+      if (!block.includes(fragment)) errors.push(`${component} (${status}) must define ${fragment}`)
   }
+  const rateLimited = responses.get("SkillPackageUploadGetRateLimited")?.text ?? ""
+  for (const fragment of ["Retry-After:", "required: true", "pattern: '^[1-9][0-9]{0,4}$'"])
+    if (!rateLimited.includes(fragment)) errors.push(`SkillPackageUploadGetRateLimited must define ${fragment}`)
   const parameter = parameters.get("SkillPackageUploadSkillId")?.text ?? ""
   for (const fragment of ["name: skill_id", "in: path", "required: true", "pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$'"])
     if (!parameter.includes(fragment)) errors.push(`SkillPackageUploadSkillId must define ${fragment}`)
@@ -549,15 +578,21 @@ function skillPackageUploadGetContractErrors(
     !failure.text.includes("#/components/schemas/SkillPackageUploadGetErrorDetail")
   )
     errors.push("SkillPackageUploadGetErrorResponse must be strict error-only")
-  const names = ["SkillPackageUploadState", "GetSkillPackageUploadResponse", "SkillPackageUploadGetErrorDetail", "SkillPackageUploadGetErrorResponse"]
+  const names = [
+    "SkillPackageUploadState",
+    "SkillPackageUploadPositiveEpoch",
+    "GetSkillPackageUploadResponse",
+    "SkillPackageUploadGetErrorDetail",
+    "SkillPackageUploadGetErrorResponse",
+  ]
   const frozenSource = [
     operation.text,
     parameter,
     ...names.map((name) => schemas.get(name)?.text ?? ""),
-    responses.get("SkillPackageUploadGetError")?.text ?? "",
+    ...[...responseRefs.values()].map(([name]) => responses.get(name)?.text ?? ""),
   ].join("\u0000")
   const frozenDigest = createHash("sha256").update(frozenSource).digest("hex")
-  if (frozenDigest !== "120d1cfe60a4af42a5c9adc4d1cbb97b14bfdaf65a932ed3f3bdc06ea4d9855f")
+  if (frozenDigest !== "8afe7a679d85954ca059d411be35766a542cae72a602afb49d405e16a84d1250")
     errors.push(`getSkillPackageUpload canonical contract digest drifted: ${frozenDigest}`)
   return errors
 }

@@ -114,8 +114,17 @@ test("GetSkillPackageUpload is a user-only inactive candidate with a strict read
     "const: no-store",
   ])
     assert.ok(operation.includes(expected), expected)
-  for (const status of ["400", "401", "403", "404", "412", "429", "502", "503"])
-    assert.ok(operation.includes(`'${status}': { $ref: '#/components/responses/SkillPackageUploadGetError' }`), status)
+  const responseRefs = new Map([
+    ["400", "SkillPackageUploadGetBadRequest"],
+    ["401", "SkillPackageUploadGetUnauthorized"],
+    ["403", "SkillPackageUploadGetForbidden"],
+    ["404", "SkillPackageUploadGetNotFound"],
+    ["412", "SkillPackageUploadGetPreconditionFailed"],
+    ["429", "SkillPackageUploadGetRateLimited"],
+    ["502", "SkillPackageUploadGetBadGateway"],
+    ["503", "SkillPackageUploadGetUnavailable"],
+  ])
+  for (const [status, component] of responseRefs) assert.ok(operation.includes(`'${status}': { $ref: '#/components/responses/${component}' }`), status)
   assert.doesNotMatch(operation, /Idempotency-Key|requestBody:|\bmeta:|signed_url|asset_id|content_hash/u)
   assert.deepEqual(inspectBffOpenApi(openapi, baseline), [])
 })
@@ -129,21 +138,100 @@ test("GetSkillPackageUpload semantic gate rejects changed fields, envelopes, hea
       "phase: { type: string, enum: [none, intent, upload_pending, uploaded, validated, aborted] }",
       "phase: { type: string, enum: [none, uploaded] }",
     ),
-    openapi.replace("attempt_epoch: { type: string, pattern: '^(0|[1-9][0-9]*)$' }", "attempt_epoch: { type: number }"),
+    openapi.replace("attempt_epoch: { type: string }", "attempt_epoch: { type: number }"),
     openapi.replace("data: { $ref: '#/components/schemas/SkillPackageUploadState' }", "data: { $ref: '#/components/schemas/SkillDraftResource' }"),
     openapi.replace(
       "error: { $ref: '#/components/schemas/SkillPackageUploadGetErrorDetail' }",
       "error: { $ref: '#/components/schemas/SkillDraftErrorDetail' }",
     ),
-    openapi.replace("'404': { $ref: '#/components/responses/SkillPackageUploadGetError' }", "'404': { $ref: '#/components/responses/NotFound' }"),
+    openapi.replace(
+      "'404': { $ref: '#/components/responses/SkillPackageUploadGetNotFound' }",
+      "'404': { $ref: '#/components/responses/SkillPackageUploadGetBadGateway' }",
+    ),
     openapi.replace("      operationId: getSkillPackageUpload", "      operationId: getSkillPackageUpload\n      requestBody: { required: false }"),
     openapi.replace("#/components/parameters/SkillPackageUploadSkillId", "#/components/parameters/IdempotencyKey"),
     openapi.replace(operation, operation.replace("x-request-id:", "x-trace-id:")),
     openapi.replace(operation, operation.replace("Cache-Control:", "X-Cache-Control:")),
+    openapi.replace("            attempt_id: false", "            attempt_id: { type: string }"),
+    openapi.replace("            upload_id: false", "            upload_id: { type: string }"),
+    openapi.replace("attempt_epoch: { const: '0' }", "attempt_epoch: { const: '1' }"),
+    openapi.replace("        - required: [attempt_id]", "        - required: []"),
+    openapi.replace("        - required: [attempt_id, upload_id]", "        - required: [attempt_id]"),
+    openapi.replace(
+      "        - required: [attempt_id]\n          properties:\n            phase: { const: aborted }",
+      "        - properties:\n            phase: { const: aborted }",
+    ),
+    openapi.replace("            phase: { const: aborted }", "            phase: { const: validated }"),
+    openapi.replace("18446744073709551615)$'", "18446744073709551616)$'"),
+    openapi.replace("code: { type: string, enum: [skill_not_found] }", "code: { type: string, enum: [skill_response_invalid] }"),
+    openapi.replace(
+      "          required: true\n          schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }",
+      "          required: false\n          schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }",
+    ),
   ]
   for (const broken of mutations) {
     assert.notEqual(broken, openapi)
     assert.ok(inspectBffOpenApi(broken, baseline).some((error) => /getSkillPackageUpload|SkillPackageUpload/u.test(error)))
+  }
+})
+
+test("GetSkillPackageUpload machine state partitions phases and bounds decimal uint64", async () => {
+  const { openapi } = await readContract()
+  const state = openapi.slice(openapi.indexOf("    SkillPackageUploadState:"), openapi.indexOf("    GetSkillPackageUploadResponse:"))
+  assert.match(state, /required: \[skill_id, attempt_epoch, phase\][\s\S]*additionalProperties: false/u)
+  assert.match(state, /oneOf:[\s\S]*phase: \{ const: none \}[\s\S]*attempt_epoch: \{ const: '0' \}[\s\S]*attempt_id: false[\s\S]*upload_id: false/u)
+  assert.match(state, /required: \[attempt_id\][\s\S]*phase: \{ const: intent \}[\s\S]*upload_id: false/u)
+  assert.match(state, /required: \[attempt_id, upload_id\][\s\S]*phase: \{ enum: \[upload_pending, uploaded, validated\] \}/u)
+  assert.match(state, /required: \[attempt_id\][\s\S]*phase: \{ const: aborted \}/u)
+  assert.match(state, /attempt_id: \{ type: string, pattern: '\^\[A-Za-z0-9\]/u)
+  assert.match(state, /upload_id: \{ type: string, pattern: '\^\[A-Za-z0-9\]/u)
+  const idPatterns = [...state.matchAll(/(?:attempt_id|upload_id): \{ type: string, pattern: '([^']+)' \}/gu)].map((match) => new RegExp(match[1], "u"))
+  assert.equal(idPatterns.length, 2)
+  for (const pattern of idPatterns) {
+    for (const accepted of ["b297e109-a17a-452f-93ee-923727729b96", "upload_1", "a".repeat(191)]) assert.equal(pattern.test(accepted), true, accepted)
+    for (const rejected of ["", " ", " attempt", "upload id", "a".repeat(192)]) assert.equal(pattern.test(rejected), false, rejected)
+  }
+  const epoch = state.match(/SkillPackageUploadPositiveEpoch:[\s\S]*?pattern: '([^']+)'/u)?.[1]
+  assert.ok(epoch)
+  const pattern = new RegExp(epoch, "u")
+  for (const accepted of ["1", "18446744073709551614", "18446744073709551615"]) assert.equal(pattern.test(accepted), true, accepted)
+  for (const rejected of ["0", "01", "18446744073709551616", "99999999999999999999", "-1", " "]) assert.equal(pattern.test(rejected), false, rejected)
+})
+
+test("GetSkillPackageUpload error components constrain codes per status and rate limit retry", async () => {
+  const { openapi } = await readContract()
+  const cases = [
+    ["SkillPackageUploadGetBadRequest", "invalid_skill_request"],
+    ["SkillPackageUploadGetUnauthorized", "service_auth_failed, session_authentication_required, session_invalid"],
+    ["SkillPackageUploadGetForbidden", "session_forbidden, product_tenant_not_configured, product_tenant_forbidden"],
+    ["SkillPackageUploadGetNotFound", "skill_not_found"],
+    ["SkillPackageUploadGetPreconditionFailed", "skill_precondition_failed"],
+    ["SkillPackageUploadGetRateLimited", "session_rate_limited, skill_rate_limited"],
+    ["SkillPackageUploadGetBadGateway", "skill_response_invalid"],
+    ["SkillPackageUploadGetUnavailable", "iam_admission_unavailable, skill_dependency_unavailable"],
+  ]
+  for (const [index, [name, codes]] of cases.entries()) {
+    const block = openapi.slice(openapi.indexOf(`    ${name}:`), openapi.indexOf(`    ${cases[index + 1]?.[0] ?? "SkillDraftBadRequest"}:`))
+    assert.match(block, /x-request-id:[\s\S]*Cache-Control:[\s\S]*const: no-store/u)
+    assert.ok(block.includes("#/components/schemas/SkillPackageUploadGetErrorResponse"))
+    assert.ok(block.includes(`code: { type: string, enum: [${codes}] }`))
+    if (name === "SkillPackageUploadGetRateLimited") assert.match(block, /Retry-After:[\s\S]*required: true[\s\S]*pattern: '\^\[1-9\]\[0-9\]\{0,4\}\$'/u)
+  }
+})
+
+test("legacy operations cannot reuse the Get-only strict envelopes", async () => {
+  const { openapi, baseline } = await readContract()
+  const legacy = openapi.slice(openapi.indexOf("  /v1/me:"), openapi.indexOf("  /v1/team/members:"))
+  for (const brokenLegacy of [
+    legacy.replace("#/components/schemas/CurrentUserResponse", "#/components/schemas/GetSkillPackageUploadResponse"),
+    legacy.replace("#/components/responses/ServiceUnavailable", "#/components/responses/SkillPackageUploadGetUnavailable"),
+  ]) {
+    assert.notEqual(brokenLegacy, legacy)
+    const errors = inspectBffOpenApi(
+      openapi.replace(legacy, () => brokenLegacy),
+      baseline,
+    )
+    assert.ok(errors.some((error) => error.includes("GET /v1/me must not reference GetSkillPackageUpload strict envelope components")))
   }
 })
 
