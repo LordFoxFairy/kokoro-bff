@@ -416,7 +416,10 @@ test("IAM Skill check requires no-store, request-id and JSON; bounds transport a
       }),
       { ok: false, status: 503, code: "iam_admission_unavailable" },
     )
-    assert.equal(calls, scenario === "aborted" ? 0 : 1)
+    // A 20 ms deadline may fire before the socket reaches this handler under full-suite load.
+    // Both observations prove fail-closed with no retry; all other non-aborted cases still reach exactly once.
+    if (scenario === "timeout") assert.ok(calls === 0 || calls === 1)
+    else assert.equal(calls, scenario === "aborted" ? 0 : 1)
   }
 })
 
