@@ -2,20 +2,14 @@ import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { test } from "node:test"
 
-import {
-  inspectAgentControlSnapshot,
-  inspectBffOpenApi,
-} from "../../scripts/verify-openapi.ts"
+import { inspectAgentControlSnapshot, inspectBffOpenApi } from "../../scripts/verify-openapi.ts"
 
 const openapiUrl = new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url)
 const baselineUrl = new URL("../../contract/tests/v1-operations.json", import.meta.url)
 const agentControlSnapshotUrl = new URL("../../contract/external/kokoro-agent/control-receipt.v1.json", import.meta.url)
 
 async function readContract() {
-  const [openapi, baselineDocument] = await Promise.all([
-    readFile(openapiUrl, "utf8"),
-    readFile(baselineUrl, "utf8"),
-  ])
+  const [openapi, baselineDocument] = await Promise.all([readFile(openapiUrl, "utf8"), readFile(baselineUrl, "utf8")])
   return { openapi, baseline: JSON.parse(baselineDocument).operations }
 }
 
@@ -23,6 +17,82 @@ test("the canonical BFF OpenAPI passes field and protocol invariants", async () 
   const { openapi, baseline } = await readContract()
 
   assert.deepEqual(inspectBffOpenApi(openapi, baseline), [])
+})
+
+test("CreateSkillDraft publishes the strict user-only candidate contract without legacy meta", async () => {
+  const { openapi, baseline } = await readContract()
+  assert.ok(baseline.some(({ method, path, operation_id }) => method === "POST" && path === "/v1/skills/drafts" && operation_id === "createSkillDraft"))
+  const start = openapi.indexOf("  /v1/skills/drafts:")
+  const end = openapi.indexOf("  /v1/skills/{name}/revisions:", start)
+  assert.ok(start >= 0 && end > start)
+  const operation = openapi.slice(start, end)
+  for (const assertion of [
+    /operationId: createSkillDraft/u,
+    /x-kokoro-permission: product\.skill\.create_draft/u,
+    /x-kokoro-idempotency: required/u,
+    /'201':/u,
+    /'400':/u,
+    /'401':/u,
+    /'403':/u,
+    /'409':/u,
+    /'412':/u,
+    /'429':/u,
+    /'502':/u,
+    /'503':/u,
+    /Cache-Control:/u,
+    /x-request-id:/u,
+  ])
+    assert.match(operation, assertion)
+  assert.match(operation, /\$ref: '#\/components\/parameters\/SkillDraftIdempotencyKey'/u)
+  const request = openapi.slice(openapi.indexOf("    CreateSkillDraftRequest:"), openapi.indexOf("    SkillDraftResource:"))
+  assert.match(request, /required: \[display_name, summary, tags\]/u)
+  assert.match(request, /additionalProperties: false/u)
+  assert.match(request, /display_name:[\s\S]*maxLength: 255/u)
+  assert.match(request, /summary:[\s\S]*maxLength: 65535/u)
+  assert.match(request, /tags:[\s\S]*maxItems: 100[\s\S]*uniqueItems: true/u)
+  const response = openapi.slice(openapi.indexOf("    CreateSkillDraftResponse:"), openapi.indexOf("    SkillDraftErrorDetail:"))
+  assert.match(response, /required: \[data\]/u)
+  assert.doesNotMatch(response, /\bmeta\b/u)
+  const error = openapi.slice(openapi.indexOf("    SkillDraftErrorDetail:"), openapi.indexOf("    SkillDraftErrorResponse:"))
+  assert.match(error, /required: \[code, message, retryable\]/u)
+  assert.match(error, /additionalProperties: false/u)
+})
+
+test("the semantic gate rejects legacy Skill draft envelopes and the generic idempotency header", async () => {
+  const { openapi, baseline } = await readContract()
+  const broken = openapi
+    .replace(
+      "required: [data]\n      additionalProperties: false\n      properties:\n        data: { $ref: '#/components/schemas/SkillDraftResource' }",
+      "required: [data, meta]\n      additionalProperties: false\n      properties:\n        data: { $ref: '#/components/schemas/SkillDraftResource' }\n        meta: { $ref: '#/components/schemas/RequestMeta' }",
+    )
+    .replace("#/components/parameters/SkillDraftIdempotencyKey", "#/components/parameters/IdempotencyKey")
+  assert.notEqual(broken, openapi)
+  const errors = inspectBffOpenApi(broken, baseline)
+  assert.ok(errors.some((error) => error.includes("CreateSkillDraftResponse") && error.includes("data-only")))
+  assert.ok(errors.some((error) => error.includes("createSkillDraft") && error.includes("Idempotency-Key")))
+})
+
+test("the semantic gate binds every Skill draft request, response and header component", async () => {
+  const { openapi, baseline } = await readContract()
+  const mutations = [
+    openapi.replace("'400': { $ref: '#/components/responses/SkillDraftBadRequest' }", "'400': { $ref: '#/components/responses/BadRequest' }"),
+    openapi.replace("schema: { $ref: '#/components/schemas/CreateSkillDraftResponse' }", "schema: { $ref: '#/components/schemas/OkResponse' }"),
+    openapi.replace("schema: { $ref: '#/components/schemas/SkillDraftErrorResponse' }", "schema: { $ref: '#/components/schemas/ErrorEnvelope' }"),
+    openapi.replaceAll("Cache-Control:", "Removed-Cache-Control:"),
+    openapi.replace("        maxLength: 128\n        pattern: '^[\\x21-\\x2B\\x2D-\\x7E]+$'", "        maxLength: 1024\n        pattern: '.*'"),
+    openapi.replace("      required: [display_name, summary, tags]", "      required: [display_name]"),
+    openapi.replace("status: { type: string, enum: [draft] }", "status: { type: string, enum: [published] }"),
+    openapi.replace("required: [skill_id, series_id, revision, status, replayed]", "required: [skill_id, series_id, revision, status]"),
+    openapi.replace(
+      "    SkillDraftErrorResponse:\n      type: object\n      required: [error]\n      additionalProperties: false",
+      "    SkillDraftErrorResponse:\n      type: object\n      required: [error]\n      additionalProperties: true",
+    ),
+    openapi.replace(/enum: \[invalid_skill_request, idempotency_key_required,[^\n]+\]/u, "enum: [invalid_skill_request]"),
+  ]
+  for (const broken of mutations) {
+    assert.notEqual(broken, openapi)
+    assert.ok(inspectBffOpenApi(broken, baseline).some((error) => /createSkillDraft|SkillDraft|CreateSkillDraft/u.test(error)))
+  }
 })
 
 test("current Product identity is a narrow public self-read contract", async () => {
@@ -82,10 +152,7 @@ test("the public contract requires IAM bearer admission while Share and runtime 
 
 test("ProjectInstructionRevision publishes snake_case RFC3339 fields and an aligned example", async () => {
   const { openapi } = await readContract()
-  const revision = openapi.slice(
-    openapi.indexOf("    ProjectInstructionRevision:"),
-    openapi.indexOf("    CreateProjectRequest:"),
-  )
+  const revision = openapi.slice(openapi.indexOf("    ProjectInstructionRevision:"), openapi.indexOf("    CreateProjectRequest:"))
 
   assert.match(revision, /required: \[id, instruction, updated_at, actor_name, current\]/u)
   assert.match(revision, /updated_at: \{ type: string, format: date-time \}/u)
@@ -117,14 +184,8 @@ test("the contract gate rejects missing mutation idempotency and AG-UI status co
 
   const messageBlock = openapi.slice(messageStart, eventStart)
   const eventBlock = openapi.slice(eventStart, controlStart)
-  const withoutIdempotency = messageBlock.replace(
-    "        - $ref: '#/components/parameters/IdempotencyKey'\n",
-    "",
-  )
-  const withoutAgui503 = eventBlock.replace(
-    "        '503': { $ref: '#/components/responses/ServiceUnavailable' }\n",
-    "",
-  )
+  const withoutIdempotency = messageBlock.replace("        - $ref: '#/components/parameters/IdempotencyKey'\n", "")
+  const withoutAgui503 = eventBlock.replace("        '503': { $ref: '#/components/responses/ServiceUnavailable' }\n", "")
   const broken = `${openapi.slice(0, messageStart)}${withoutIdempotency}${withoutAgui503}${openapi.slice(controlStart)}`
 
   assert.notEqual(broken, openapi)
@@ -135,14 +196,8 @@ test("the contract gate rejects missing mutation idempotency and AG-UI status co
 
 test("MessageCreateRequest and runtime failure statuses stay strict", async () => {
   const { openapi } = await readContract()
-  const messageOperation = openapi.slice(
-    openapi.indexOf("  /v1/sessions/{id}/messages:"),
-    openapi.indexOf("  /v1/sessions/{id}/events:"),
-  )
-  const messageRequest = openapi.slice(
-    openapi.indexOf("    MessageCreateRequest:"),
-    openapi.indexOf("    MessageReceipt:"),
-  )
+  const messageOperation = openapi.slice(openapi.indexOf("  /v1/sessions/{id}/messages:"), openapi.indexOf("  /v1/sessions/{id}/events:"))
+  const messageRequest = openapi.slice(openapi.indexOf("    MessageCreateRequest:"), openapi.indexOf("    MessageReceipt:"))
 
   assert.match(messageOperation, /'413': \{ \$ref: '#\/components\/responses\/PayloadTooLarge' \}/u)
   assert.match(messageOperation, /'503': \{ \$ref: '#\/components\/responses\/ServiceUnavailable' \}/u)
@@ -159,7 +214,8 @@ test("semantic gates enforce Gone, admission overload, and control upstream fail
   const { openapi, baseline } = await readContract()
   const controlStart = openapi.indexOf("  /v1/sessions/{id}/runs/{runId}/control:")
   const controlEnd = openapi.indexOf("  /v1/sessions/{id}/title:", controlStart)
-  const control = openapi.slice(controlStart, controlEnd)
+  const control = openapi
+    .slice(controlStart, controlEnd)
     .replace("        '502': { $ref: '#/components/responses/BadGateway' }\n", "")
     .replace("        '503': { $ref: '#/components/responses/ServiceUnavailable' }\n", "")
   const broken = openapi

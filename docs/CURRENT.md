@@ -5,19 +5,18 @@
 
 ## W1E-BFF-USER-SKILL-DRAFT 文档门（2026-09-29；仅目标设计，运行未激活）
 
-本代码片已把 Platform consumer 原子重钉到 owner `5b6eb2c1532b23b9747bc4bf6ac99f69ad453de0`：两份 Proto 原字节 SHA 保持不变，完整 inactive v3 artifact/provenance aggregate 为 `324e749da1bc66c1ff03de74e7299716f798f5f5bb5fa19556033b79fa09ff8d`。BFF 独立 CreateDraft raw projector、RFC 8785 JCS/SHA-256 已覆盖 owner 45 条正反向量；source/aggregate drift fail closed。public OpenAPI 尚无
-`POST /v1/skills/drafts`，runtime 仍对 Skill mutation 返回 503，catalog machine credential 与精确
+本代码片已把 Platform consumer 原子重钉到 owner `5b6eb2c1532b23b9747bc4bf6ac99f69ad453de0`：两份 Proto 原字节 SHA 保持不变，完整 inactive v3 artifact/provenance aggregate 为 `324e749da1bc66c1ff03de74e7299716f798f5f5bb5fa19556033b79fa09ff8d`。BFF 独立 CreateDraft raw projector、RFC 8785 JCS/SHA-256 已覆盖 owner 45 条正反向量；source/aggregate drift fail closed。canonical OpenAPI 已新增严格 user-only `POST /v1/skills/drafts` 候选契约；runtime 尚未实现该 route，仍对 Skill mutation 返回 503，catalog machine credential 与精确
 `mutationTicket` bypass 尚不存在。旧 Capability HTTP 四条 GET 仍是当前态，不因本设计而声称已删除。
 
-**下一代码片目标 pin** 是 Platform main `5b6eb2c1532b23b9747bc4bf6ac99f69ad453de0`：
+**当前已固定的机器来源** 是 Platform main `5b6eb2c1532b23b9747bc4bf6ac99f69ad453de0`：
 `kokoro.platform.v1` 的 `platform_runtime.proto` SHA-256
 `282bf886ea9648f7ce5208abd36ab47d879b2002a036d90aada2af59e74b4020`、`common.proto` SHA-256
 `65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08`，以及
 `platform-execution-operations/3.0.0` aggregate SHA-256
 `324e749da1bc66c1ff03de74e7299716f798f5f5bb5fa19556033b79fa09ff8d`。
 v3 manifest 明确 `status=inactive`、`routable=false`；其 registry、逐命令 schema 与向量是后续 consumer
-生成/核验事实源，不是 BFF route 激活证据。该发布标记不是 runtime RPC kill switch：Platform 已按 v3 注册 SkillCatalogService。激活前允许 Root 在隔离 sandbox 做真实 IAM→候选 BFF→Platform 201/replay 预激活验证，但不构成 public 发布；只有六 owner sandbox 全门通过、Platform 发布 active/routable=true artifact、BFF 重钉并由 Root 协调激活后，public CreateDraft 才可用。当前代码片仍只构建离线 consumer，不实现 route。v1/v2 仅历史冻结，不作为新 consumer 或运行 fallback。
-本次只收敛四份既有文档；OpenAPI、BFF manifest/generated、代码、Schema、真实三 owner smoke 均未改或未验。
+生成/核验事实源，不是 BFF route 激活证据。该发布标记不是 runtime RPC kill switch：Platform 已按 v3 注册 SkillCatalogService。激活前允许 Root 在隔离 sandbox 做真实 IAM→候选 BFF→Platform 201/replay 预激活验证，但不构成 public 发布；只有六 owner sandbox 全门通过、Platform 发布 active/routable=true artifact、BFF 重钉并由 Root 协调激活后，public CreateDraft 才可用。当前阶段 A 只发布机器 OpenAPI/契约候选，不实现 route。v1/v2 仅历史冻结，不作为新 consumer 或运行 fallback。
+阶段 A 已修改 canonical OpenAPI 与 contract tests；runtime、Schema、真实三 owner smoke 均未改或未验。
 
 ## W2-F2-S9 Chat 作品快照：BFF 单仓代码门已验，Web/真链待验
 
@@ -616,7 +615,7 @@ Agent receipt stub smoke 与 W0B-11 Root 集成后再激活。真实 Agent admis
 
 ## Platform Connect Proto 消费准备（2026-09-28）
 
-当时已从 Platform main `f26d147a09350c3a041722107d277beb93eaad60` 精确固定两份 `kokoro.platform.v1` Proto，使用本仓固定 Buf/Protobuf-ES/Connect 版本生成独立客户端类型。`contract/dependencies/platform-connect.json` 记录原始 SHA、生成器、lockfile 与 build policy；`pnpm contract:check:platform` 两次生成并核对字节。此片仅证明 wire/descriptor 可独立消费，**未实现** command digest、machine credential、public Skill route 或真实 owner 调用；既有 Capability HTTP GET 仍单独运行。该切片时 Platform v3 command artifact 尚未发布；现 owner 已发布 inactive v3，BFF 仍未 pin/消费，故不能把生成客户端视为 Product CreateDraft 闭环。
+当时已从 Platform main `f26d147a09350c3a041722107d277beb93eaad60` 精确固定两份 `kokoro.platform.v1` Proto，使用本仓固定 Buf/Protobuf-ES/Connect 版本生成独立客户端类型。`contract/dependencies/platform-connect.json` 记录原始 SHA、生成器、lockfile 与 build policy；`pnpm contract:check:platform` 两次生成并核对字节。此片当时仅证明 wire/descriptor 可独立消费。后续 BFF `2a95da2410fd89c300dc18064867ee66617549e2` 已重钉新 owner commit、完整 inactive v3 artifact，并实现离线 projector/JCS；当前仍未实现 machine credential、runtime route 或真实 owner 调用，既有 Capability HTTP GET 继续单独运行，因此不能把生成客户端视为 Product CreateDraft 闭环。
 
 ## W2 项目资源单文件上传（待 Root 审查/真实集成）
 

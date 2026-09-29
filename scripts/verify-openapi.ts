@@ -1,11 +1,9 @@
+import { createHash } from "node:crypto"
 import { readFile } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
-import {
-  compareOperationBaseline,
-  inspectOpenApiGovernance,
-} from "./check-contract.mjs"
+import { compareOperationBaseline, inspectOpenApiGovernance } from "./check-contract.mjs"
 
 const HTTP_METHODS = new Set(["get", "post", "put", "patch", "delete", "head", "options", "trace"])
 const SNAKE_CASE = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/u
@@ -52,7 +50,10 @@ function canonicalValue(value: unknown): string {
   if (value === undefined) return "undefined"
   if (value === null || typeof value !== "object") return JSON.stringify(value)
   if (Array.isArray(value)) return `[${value.map(canonicalValue).join(",")}]`
-  return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalValue(Reflect.get(value, key))}`).join(",")}}`
+  return `{${Object.keys(value)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${canonicalValue(Reflect.get(value, key))}`)
+    .join(",")}}`
 }
 
 export function inspectAgentControlSnapshot(snapshot: unknown): string[] {
@@ -131,11 +132,7 @@ function collectOperationBlocks(source: string): OperationBlock[] {
   return starts.map((start) => {
     let end = lines.length
     for (let index = start.index + 1; index < lines.length; index += 1) {
-      if (
-        /^  components:\s*$/u.test(lines[index] ?? "")
-        || pathPattern.test(lines[index] ?? "")
-        || methodPattern.test(lines[index] ?? "")
-      ) {
+      if (/^  components:\s*$/u.test(lines[index] ?? "") || pathPattern.test(lines[index] ?? "") || methodPattern.test(lines[index] ?? "")) {
         end = index
         break
       }
@@ -249,18 +246,22 @@ function revisionErrors(schemas: Map<string, NamedBlock>): string[] {
   if (!/^        actor_name:\s*\{\s*type: string\s*\}\s*$/mu.test(revision.text)) {
     errors.push("ProjectInstructionRevision.actor_name must be a string")
   }
-  if (!/^      example:\s*$/mu.test(revision.text)
-    || !/^        updated_at:\s*'[^']+'\s*$/mu.test(revision.text)
-    || !/^        actor_name:\s*[^\s]+\s*$/mu.test(revision.text)) {
+  if (
+    !/^      example:\s*$/mu.test(revision.text) ||
+    !/^        updated_at:\s*'[^']+'\s*$/mu.test(revision.text) ||
+    !/^        actor_name:\s*[^\s]+\s*$/mu.test(revision.text)
+  ) {
     errors.push("ProjectInstructionRevision example must use updated_at and actor_name")
   }
 
   const response = schemas.get("ProjectInstructionRevisionResponse")
   if (response === undefined) {
     errors.push("ProjectInstructionRevisionResponse schema is missing")
-  } else if (!/^      example:\s*$/mu.test(response.text)
-    || !/^              updated_at:\s*'[^']+'\s*$/mu.test(response.text)
-    || !/^              actor_name:\s*[^\s]+\s*$/mu.test(response.text)) {
+  } else if (
+    !/^      example:\s*$/mu.test(response.text) ||
+    !/^              updated_at:\s*'[^']+'\s*$/mu.test(response.text) ||
+    !/^              actor_name:\s*[^\s]+\s*$/mu.test(response.text)
+  ) {
     errors.push("ProjectInstructionRevisionResponse example must use updated_at and actor_name")
   }
   return errors
@@ -269,7 +270,8 @@ function revisionErrors(schemas: Map<string, NamedBlock>): string[] {
 function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationBlock[], responseComponents: Map<string, NamedBlock>): string[] {
   const errors: string[] = []
   for (const block of schemas.values()) {
-    if (!block.name.endsWith("Response") || block.name === "HealthResponse") continue
+    if (!block.name.endsWith("Response") || block.name === "HealthResponse" || ["CreateSkillDraftResponse", "SkillDraftErrorResponse"].includes(block.name))
+      continue
     const required = topLevelRequired(block)
     if (!required.includes("data") || !required.includes("meta")) {
       errors.push(`${block.name} must require data and meta`)
@@ -290,6 +292,8 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
   }
 
   for (const operation of operations) {
+    const operationId = operation.fields.get("operationId") ?? operation.name
+    const isCreateSkillDraft = operationId === "createSkillDraft"
     const responses = collectResponseBlocks(operation)
     for (const [status, response] of responses) {
       if (status === "default") continue
@@ -306,16 +310,30 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
       }
       if (numericStatus >= 400 && response.includes("application/json:")) {
         const isReadinessException = operation.path === "/readyz" && status === "503"
-        if (!isReadinessException && !response.includes("#/components/schemas/ErrorEnvelope")) {
+        if (!isReadinessException && !isCreateSkillDraft && !response.includes("#/components/schemas/ErrorEnvelope")) {
           errors.push(`${operation.method} ${operation.path} ${status} must use ErrorEnvelope`)
         }
       }
       for (const match of response.matchAll(/#\/components\/responses\/([A-Za-z0-9_]+)/gu)) {
-        if (numericStatus < 400 || ERROR_RESPONSE_COMPONENTS.has(match[1])) continue
+        if (numericStatus < 400 || ERROR_RESPONSE_COMPONENTS.has(match[1]) || isCreateSkillDraft) continue
         errors.push(`${operation.method} ${operation.path} ${status} references non-error response ${match[1]}`)
       }
     }
   }
+  const draftSuccess = schemas.get("CreateSkillDraftResponse")
+  if (
+    draftSuccess === undefined ||
+    JSON.stringify(topLevelRequired(draftSuccess)) !== JSON.stringify(["data"]) ||
+    schemaProperties(draftSuccess).join(",") !== "data"
+  )
+    errors.push("CreateSkillDraftResponse must be the strict data-only envelope")
+  const draftError = schemas.get("SkillDraftErrorResponse")
+  if (
+    draftError === undefined ||
+    JSON.stringify(topLevelRequired(draftError)) !== JSON.stringify(["error"]) ||
+    schemaProperties(draftError).join(",") !== "error"
+  )
+    errors.push("SkillDraftErrorResponse must be the strict error-only envelope")
   for (const name of ERROR_RESPONSE_COMPONENTS) {
     if (!responseComponents.get(name)?.text.includes("#/components/schemas/ErrorEnvelope")) errors.push(`${name} must reference ErrorEnvelope`)
   }
@@ -326,20 +344,23 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
 function idempotencyErrors(parameters: Map<string, NamedBlock>, operations: OperationBlock[]): string[] {
   const errors: string[] = []
   const parameter = parameters.get("IdempotencyKey")
-  if (parameter === undefined
-    || !/^      name:\s*Idempotency-Key\s*$/mu.test(parameter.text)
-    || !/^      in:\s*header\s*$/mu.test(parameter.text)
-    || !/^      required:\s*true\s*$/mu.test(parameter.text)) {
+  if (
+    parameter === undefined ||
+    !/^      name:\s*Idempotency-Key\s*$/mu.test(parameter.text) ||
+    !/^      in:\s*header\s*$/mu.test(parameter.text) ||
+    !/^      required:\s*true\s*$/mu.test(parameter.text)
+  ) {
     errors.push("IdempotencyKey must be a required Idempotency-Key header parameter")
   }
 
   for (const operation of operations) {
     const operationId = operation.fields.get("operationId") ?? operation.name
-    const expected = ["GET", "HEAD", "OPTIONS"].includes(operation.method) || operationId === "previewGithubSkill"
-      ? "none"
-      : "required"
+    const expected = ["GET", "HEAD", "OPTIONS"].includes(operation.method) || operationId === "previewGithubSkill" ? "none" : "required"
     const declared = operation.fields.get("x-kokoro-idempotency")
-    const hasParameter = operation.text.includes("#/components/parameters/IdempotencyKey")
+    const hasParameter =
+      operationId === "createSkillDraft"
+        ? operation.text.includes("#/components/parameters/SkillDraftIdempotencyKey")
+        : operation.text.includes("#/components/parameters/IdempotencyKey")
     if (declared !== expected) continue
     if (expected === "required" && !hasParameter) {
       errors.push(`${operation.method} ${operation.path} (${operationId}) must reference Idempotency-Key`)
@@ -348,6 +369,116 @@ function idempotencyErrors(parameters: Map<string, NamedBlock>, operations: Oper
       errors.push(`${operation.method} ${operation.path} (${operationId}) must not reference Idempotency-Key`)
     }
   }
+  return errors
+}
+
+function skillDraftContractErrors(
+  parameters: Map<string, NamedBlock>,
+  schemas: Map<string, NamedBlock>,
+  operations: OperationBlock[],
+  responses: Map<string, NamedBlock>,
+): string[] {
+  const errors: string[] = []
+  const operation = operations.find(({ fields }) => fields.get("operationId") === "createSkillDraft")
+  if (operation === undefined) return ["createSkillDraft operation is missing"]
+  const requiredOperationFragments = [
+    "#/components/parameters/SkillDraftIdempotencyKey",
+    "#/components/schemas/CreateSkillDraftRequest",
+    "#/components/schemas/CreateSkillDraftResponse",
+  ]
+  const responseRefs = new Map([
+    ["400", "SkillDraftBadRequest"],
+    ["401", "SkillDraftUnauthorized"],
+    ["403", "SkillDraftForbidden"],
+    ["409", "SkillDraftConflict"],
+    ["412", "SkillDraftPreconditionFailed"],
+    ["413", "SkillDraftPayloadTooLarge"],
+    ["429", "SkillDraftRateLimited"],
+    ["502", "SkillDraftBadGateway"],
+    ["503", "SkillDraftUnavailable"],
+  ])
+  for (const fragment of requiredOperationFragments) if (!operation.text.includes(fragment)) errors.push(`createSkillDraft must reference ${fragment}`)
+  for (const [status, component] of responseRefs) {
+    if (!operation.text.includes(`'${status}': { $ref: '#/components/responses/${component}' }`))
+      errors.push(`createSkillDraft ${status} must reference ${component}`)
+  }
+  if (!/^\s+x-request-id:\s*$/mu.test(operation.text)) errors.push("createSkillDraft 201 must define x-request-id")
+  if (!/^\s+Cache-Control:\s*$/mu.test(operation.text)) errors.push("createSkillDraft 201 must define Cache-Control")
+  if (!operation.text.includes("const: no-store")) errors.push("createSkillDraft 201 must define no-store")
+
+  const key = parameters.get("SkillDraftIdempotencyKey")
+  for (const fragment of ["name: Idempotency-Key", "in: header", "required: true", "minLength: 1", "maxLength: 128", "pattern: '^[\\x21-\\x2B\\x2D-\\x7E]+$'"])
+    if (!key?.text.includes(fragment)) errors.push(`SkillDraftIdempotencyKey must define ${fragment}`)
+  const request = schemas.get("CreateSkillDraftRequest")
+  for (const fragment of [
+    "required: [display_name, summary, tags]",
+    "additionalProperties: false",
+    "maxLength: 255",
+    "maxLength: 65535",
+    "maxItems: 100",
+    "uniqueItems: true",
+    "maxLength: 128",
+  ])
+    if (!request?.text.includes(fragment)) errors.push(`CreateSkillDraftRequest must define ${fragment}`)
+  const resource = schemas.get("SkillDraftResource")
+  for (const fragment of [
+    "required: [skill_id, series_id, revision, status, replayed]",
+    "additionalProperties: false",
+    "skill_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }",
+    "series_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }",
+    "revision: { type: integer, const: 1 }",
+    "status: { type: string, enum: [draft] }",
+    "replayed: { type: boolean }",
+  ])
+    if (!resource?.text.includes(fragment)) errors.push(`SkillDraftResource must define ${fragment}`)
+  const success = schemas.get("CreateSkillDraftResponse")
+  if (
+    !success?.text.includes("required: [data]") ||
+    !success.text.includes("additionalProperties: false") ||
+    !success.text.includes("#/components/schemas/SkillDraftResource") ||
+    success.text.includes("meta:")
+  )
+    errors.push("CreateSkillDraftResponse must stay strict data-only")
+  const errorCodes =
+    "enum: [invalid_skill_request, idempotency_key_required, invalid_idempotency_key, request_body_too_large, service_auth_failed, session_authentication_required, session_invalid, session_forbidden, session_rate_limited, product_tenant_not_configured, product_tenant_forbidden, skill_idempotency_conflict, skill_command_in_progress, skill_precondition_failed, skill_rate_limited, iam_admission_unavailable, skill_dependency_unavailable, skill_response_invalid]"
+  const errorDetail = schemas.get("SkillDraftErrorDetail")
+  for (const fragment of [
+    "required: [code, message, retryable]",
+    "additionalProperties: false",
+    errorCodes,
+    "message: { type: string, minLength: 1 }",
+    "retryable: { type: boolean }",
+  ])
+    if (!errorDetail?.text.includes(fragment)) errors.push(`SkillDraftErrorDetail must define ${fragment}`)
+  const error = schemas.get("SkillDraftErrorResponse")
+  if (
+    !error?.text.includes("required: [error]") ||
+    !error.text.includes("additionalProperties: false") ||
+    !error.text.includes("#/components/schemas/SkillDraftErrorDetail") ||
+    error.text.includes("meta:")
+  )
+    errors.push("SkillDraftErrorResponse must stay strict error-only")
+  for (const [status, component] of responseRefs) {
+    const block = responses.get(component)?.text ?? ""
+    if (!/^\s+x-request-id:\s*$/mu.test(block)) errors.push(`${component} (${status}) must define x-request-id`)
+    if (!/^\s+Cache-Control:\s*$/mu.test(block)) errors.push(`${component} (${status}) must define Cache-Control`)
+    for (const fragment of ["const: no-store", "#/components/schemas/SkillDraftErrorResponse"])
+      if (!block.includes(fragment)) errors.push(`${component} (${status}) must define ${fragment}`)
+  }
+  const rateLimited = responses.get("SkillDraftRateLimited")?.text ?? ""
+  if (!rateLimited.includes("Retry-After:") || !rateLimited.includes("pattern: '^[1-9][0-9]{0,4}$'"))
+    errors.push("SkillDraftRateLimited must define bounded optional Retry-After")
+  const frozenNames = ["CreateSkillDraftRequest", "SkillDraftResource", "CreateSkillDraftResponse", "SkillDraftErrorDetail", "SkillDraftErrorResponse"]
+  const frozenResponses = [...responseRefs.values()]
+  const frozenSource = [
+    operation.text,
+    key?.text ?? "",
+    ...frozenNames.map((name) => schemas.get(name)?.text ?? ""),
+    ...frozenResponses.map((name) => responses.get(name)?.text ?? ""),
+  ].join("\u0000")
+  const frozenDigest = createHash("sha256").update(frozenSource).digest("hex")
+  if (frozenDigest !== "9845dd8ce10f907bdb1fbc9b64e27d7e0ffee35ba54b7aed3c312c00d45727ea")
+    errors.push(`createSkillDraft canonical contract digest drifted: ${frozenDigest}`)
   return errors
 }
 
@@ -413,32 +544,40 @@ function protocolErrors(parameters: Map<string, NamedBlock>, schemas: Map<string
   }
 
   const eventCursor = schemas.get("EventCursor")
-  if (eventCursor === undefined
-    || !/^      type:\s*string\s*$/mu.test(eventCursor.text)
-    || !/^      minLength:\s*37\s*$/mu.test(eventCursor.text)
-    || !/^      maxLength:\s*37\s*$/mu.test(eventCursor.text)
-    || !/^      pattern:\s*'\^agui_\[0-9a-f\]\{32\}\$'\s*$/mu.test(eventCursor.text)
-    || !eventCursor.text.includes("Clients must not parse or construct")) {
+  if (
+    eventCursor === undefined ||
+    !/^      type:\s*string\s*$/mu.test(eventCursor.text) ||
+    !/^      minLength:\s*37\s*$/mu.test(eventCursor.text) ||
+    !/^      maxLength:\s*37\s*$/mu.test(eventCursor.text) ||
+    !/^      pattern:\s*'\^agui_\[0-9a-f\]\{32\}\$'\s*$/mu.test(eventCursor.text) ||
+    !eventCursor.text.includes("Clients must not parse or construct")
+  ) {
     errors.push("EventCursor must remain a 37-character opaque agui_ cursor")
   }
   const paginationCursor = schemas.get("Cursor")
-  if (paginationCursor === undefined
-    || !/^      type:\s*string\s*$/mu.test(paginationCursor.text)
-    || !paginationCursor.text.includes("Opaque pagination cursor")) {
+  if (
+    paginationCursor === undefined ||
+    !/^      type:\s*string\s*$/mu.test(paginationCursor.text) ||
+    !paginationCursor.text.includes("Opaque pagination cursor")
+  ) {
     errors.push("Cursor must remain an opaque string pagination cursor")
   }
   const lastEventId = parameters.get("LastEventId")
-  if (lastEventId === undefined
-    || !/^      name:\s*Last-Event-ID\s*$/mu.test(lastEventId.text)
-    || !lastEventId.text.includes("#/components/schemas/EventCursor")) {
+  if (
+    lastEventId === undefined ||
+    !/^      name:\s*Last-Event-ID\s*$/mu.test(lastEventId.text) ||
+    !lastEventId.text.includes("#/components/schemas/EventCursor")
+  ) {
     errors.push("LastEventId must use the public EventCursor header shape")
   }
   const stream = schemas.get("SessionEventStream")
-  if (stream === undefined
-    || !/^      example:\s*\|-\s*$/mu.test(stream.text)
-    || !/id: agui_[0-9a-f]{32}/u.test(stream.text)
-    || !/"type":"RUN_FINISHED"/u.test(stream.text)
-    || /"kind":"run\.completed"/u.test(stream.text)) {
+  if (
+    stream === undefined ||
+    !/^      example:\s*\|-\s*$/mu.test(stream.text) ||
+    !/id: agui_[0-9a-f]{32}/u.test(stream.text) ||
+    !/"type":"RUN_FINISHED"/u.test(stream.text) ||
+    /"kind":"run\.completed"/u.test(stream.text)
+  ) {
     errors.push("SessionEventStream example must show AG-UI with an opaque frame id")
   }
   return errors
@@ -456,6 +595,7 @@ export function inspectBffOpenApi(source: string, baseline: readonly BaselineOpe
     ...revisionErrors(schemas),
     ...envelopeErrors(schemas, operations, responseComponents),
     ...idempotencyErrors(parameters, operations),
+    ...skillDraftContractErrors(parameters, schemas, operations, responseComponents),
     ...protocolErrors(parameters, schemas, operations),
   ]
   return [...new Set(errors)]
@@ -472,19 +612,12 @@ async function main(): Promise<void> {
     readFile(agentControlSnapshotPath, "utf8"),
   ])
   const parsedBaseline: unknown = JSON.parse(baselineDocument)
-  if (
-    parsedBaseline === null
-    || typeof parsedBaseline !== "object"
-    || !Array.isArray(Reflect.get(parsedBaseline, "operations"))
-  ) {
+  if (parsedBaseline === null || typeof parsedBaseline !== "object" || !Array.isArray(Reflect.get(parsedBaseline, "operations"))) {
     throw new TypeError("contract/tests/v1-operations.json must contain an operations array")
   }
   const baseline = Reflect.get(parsedBaseline, "operations") as BaselineOperation[]
   const agentControlSnapshot: unknown = JSON.parse(agentControlSnapshotDocument)
-  const errors = [
-    ...inspectBffOpenApi(source, baseline),
-    ...inspectAgentControlSnapshot(agentControlSnapshot),
-  ]
+  const errors = [...inspectBffOpenApi(source, baseline), ...inspectAgentControlSnapshot(agentControlSnapshot)]
   if (errors.length > 0) {
     console.error(errors.join("\n"))
     process.exitCode = 1

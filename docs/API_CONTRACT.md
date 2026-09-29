@@ -2,13 +2,12 @@
 
 ## W1E-BFF-USER-SKILL-DRAFT v3 契约门（2026-09-29；public 未发布）
 
-当前唯一 public OpenAPI 尚无 `POST /v1/skills/drafts`；`contract/dependencies/platform-connect.json`
-只固定旧 Platform Proto、`status=generated-not-activated`、`execution_artifact:null`，不能据此生成 public SDK
-或调用 CreateDraft。下文 user-only 首片使用 Platform main
-`5b6eb2c1532b23b9747bc4bf6ac99f69ad453de0` 的 `kokoro.platform.v1` Proto 与
-`contract/execution-operations/v3/`（3.0.0，aggregate
-`324e749da1bc66c1ff03de74e7299716f798f5f5bb5fa19556033b79fa09ff8d`）作**目标机器源**；
-owner manifest `inactive/routable=false`，BFF 消费尚未 pin/激活。v3 的 `skill.create_draft` command schema
+当前 BFF `2a95da2410fd89c300dc18064867ee66617549e2` 已精确 pin Platform
+`5b6eb2c1532b23b9747bc4bf6ac99f69ad453de0` 的两份 `kokoro.platform.v1` Proto 原字节、完整
+`platform-execution-operations/3.0.0` artifact/provenance 与 aggregate
+`324e749da1bc66c1ff03de74e7299716f798f5f5bb5fa19556033b79fa09ff8d`；consumer 状态仍是
+`generated-not-activated`，owner manifest 为 `inactive/routable=false`。唯一 public OpenAPI 已加入
+`POST /v1/skills/drafts` 的未激活候选契约，但 runtime route/credential 尚未实现，不能据此调用 CreateDraft。v3 的 `skill.create_draft` command schema
 严格要求 `command_digest_version`、完整 FQ method、受信 tenant 与 command 中的 owner scope、Product context、
 完整 metadata；排除 request ID/command identity/execution proof。旧 v2 digest 不作运行 fallback。
 当前 v3 用于离线 consumer 候选/向量校验；inactive/routable=false 是发布标记而非 runtime RPC kill switch。协调激活前本仓不得将下文 public 201 契约发布为可路由能力；Root 可在隔离 sandbox 用候选 route 做真实 IAM→BFF→Platform 201/replay 预激活验证，但该证据不等于公开发布。现有 Capability HTTP 四条 GET 保留为当前机器/运行事实；Storage package/Validate/Publish 另片。
@@ -804,6 +803,8 @@ asset/hash。包 bytes 不走小型 RPC JSON，不接受浏览器自报扫描通
 同 key/digest 由 Platform durable receipt 返回 replayed，同 key 不同 digest 为冲突；跨 subject/tenant 不共享结果。
 超时与响应丢失不生成新 command；禁止未经证明的自动 mutation retry。owner 在当前权限与资源范围检查之前不得 replay 历史成功。
 
+阶段 B HTTP 映射固定为：413 `request_body_too_large`；入口准入只沿用 `service_auth_failed`、`session_authentication_required`、`session_invalid`、`session_forbidden`、`session_rate_limited`、`product_tenant_not_configured`、`product_tenant_forbidden`、`iam_admission_unavailable`，不新增 `unauthorized` 等 alias。429 可带 1..99999 秒的可选 `Retry-After`。
+
 目标 public 稳定映射：无效 body 400 invalid_skill_request；session 失效 401 unauthorized；当前动作拒绝 403 skill_forbidden；
 不可见或跨 tenant 的资源 404 skill_not_found；digest/状态冲突 409 skill_conflict；package/状态前置不满足 412 skill_precondition_failed；
 限流 429 skill_rate_limited；IAM 依赖不可用 503 iam_admission_unavailable，Platform/Storage 暂不可用 503 skill_dependency_unavailable；
@@ -813,8 +814,7 @@ asset/hash。包 bytes 不走小型 RPC JSON，不接受浏览器自报扫描通
 
 ### 首个 user CreateSkillDraft public 契约（下一机器契约切片）
 
-本节把首个正向链收敛为一个 operation；当前 `contract/openapi/v1/openapi.yaml` 与 runtime 仍未发布它。实现片必须把以下
-形状原样写入 canonical OpenAPI、冻结 operation surface 与 contract tests，文档本身不是 SDK 输入。
+本节把首个正向链收敛为一个 operation；`contract/openapi/v1/openapi.yaml` 与冻结 surface 已发布候选机器契约，runtime route 尚未实现且默认入口仍 fail closed。
 
 ```http
 POST /v1/skills/drafts

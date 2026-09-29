@@ -1,16 +1,19 @@
 # kokoro-bff 技术设计
 
-## W1E-BFF-USER-SKILL-DRAFT v3 文档门（2026-09-29；目标，未实施）
+## W1E-BFF-USER-SKILL-DRAFT v3 候选设计（2026-09-29；机器契约已发布，runtime 未接）
 
-当前 BFF main `bd1f794e7b1115d96965aa03d8a3a83a33c42fd7` 只固定旧 Proto generated-not-activated；
-`contract/dependencies/platform-connect.json` 仍为 `f26d147a09350c3a041722107d277beb93eaad60` 且
-`execution_artifact:null`。下文首片设计以 Platform main `5b6eb2c1532b23b9747bc4bf6ac99f69ad453de0`
-的 `platform-execution-operations/3.0.0` aggregate
-`324e749da1bc66c1ff03de74e7299716f798f5f5bb5fa19556033b79fa09ff8d` 为**目标**，而非已激活事实；
-owner manifest 为 `inactive/routable=false`，v1/v2 只作历史冻结。Proto 两个 SHA 保持下文所列原值，
-CreateDraft wire tag 1–5 未变；v3 的 registry、command schema 与 raw vectors 取代 v2 字符串成员，
-新 consumer 必须独立生成 typed projector、调用唯一受审 RFC 8785 JCS encoder，不 import Platform `src/` 或 checker。
-该 pin 用于离线生成、向量和实现候选；inactive/routable=false 是发布标记，不是 Platform runtime RPC kill switch。协调激活前 public CreateDraft 仍不发布；Root 可按 Platform ADR 在隔离 sandbox 以候选 route 做真实 IAM→BFF→Platform 201/replay 预激活验证，但不得称为公开产品可用。六 owner sandbox、active artifact 重钉与协调激活仍是正式发布门；本片只交付离线 consumer，不改 Schema、route 或旧 Capability 四条 GET。
+当前 BFF main `2a95da2410fd89c300dc18064867ee66617549e2` 已精确固定 Platform
+`5b6eb2c1532b23b9747bc4bf6ac99f69ad453de0` 的两份 `kokoro.platform.v1` Proto 原字节、完整
+`platform-execution-operations/3.0.0` artifact/provenance 与 aggregate
+`324e749da1bc66c1ff03de74e7299716f798f5f5bb5fa19556033b79fa09ff8d`。BFF 已有独立 strict raw
+CreateDraft projector、RFC 8785 JCS/SHA-256 与全部 owner vectors；canonical OpenAPI 也已有严格 user-only
+`POST /v1/skills/drafts` 候选。consumer 仍是 `generated-not-activated`，owner manifest 为
+`inactive/routable=false`；runtime route、catalog machine credential 与 Connect 调用尚未接入，正式默认入口继续
+fail closed。v1/v2 只作历史冻结；运行时不 import Platform `src/` 或 checker。
+
+inactive/routable=false 是发布标记，不是 Platform runtime RPC kill switch。协调激活前 public CreateDraft 仍不发布；Root
+可按 Platform ADR 在隔离 sandbox 以候选 route 做真实 IAM→BFF→Platform 201/replay 预激活验证，但不得称为公开产品可用。
+六 owner sandbox、active artifact 重钉与协调激活仍是正式发布门。
 
 ## W2-F2-S9 Chat 作品快照闭环（2026-09-28；BFF 代码门已实现，待 Root 集成审查）
 
@@ -1133,12 +1136,11 @@ Platform `ALREADY_EXISTS` 映射 409 `skill_idempotency_conflict`；`ABORTED` �
 
 ### 实施与验证门
 
-先准备 design-first OpenAPI 候选与 contract tests，再实现 generated consumer、token provider、server admission cut 与 owner route 候选；当前 inactive artifact 不准使 public route 可路由成功。BFF 发布/激活门另需 Platform owner 提交 active/routable=true 的机器 artifact、BFF 重新固定精确 commit/aggregate，并由 Root 按消费者依赖顺序协调激活；不得仅改本地配置绕开 manifest。
+先准备 design-first OpenAPI 候选与 contract tests，再实现 generated consumer、token provider、server admission cut 与 owner route 候选。inactive/routable=false 是发布标记，不是 Platform runtime kill switch；正式默认入口继续 fail closed，只有 loopback 隔离候选配置可在协调激活前使用同一生产代码做真实 201/replay sandbox。
 RED→GREEN 必须锁定：strict body/key、可信 user context、伪造身份字段拒绝、同 key replay 每次重验 IAM、同 key drift 409、
 跨 subject 不共享、generic Map/PG receipt 零调用、无权时零 Platform I/O、credential generation 变化、token/Connect timeout/取消、
 1 MiB 限额、严格 response 与完整 Connect code 映射。Node 22 执行完整 `pnpm format:check && pnpm check && pnpm schema:check`；
-**仅在上述 active artifact 与 BFF 新 pin 的发布门通过后**，Root 才用隔离真实 IAM + BFF + Platform + PostgreSQL/Redis 验证首次 201、响应丢失后 replay、撤销 session 后同 key 拒绝、
-以及 Platform 仅一条 Skill/receipt。在此之前只可报告候选代码/离线 contract 通过，不能把 test double 或 inactive artifact 伪装为真实正链。Web adapter 仍是后续消费者，不纳入本 user-only owner 实现片。
+Root 可在 active artifact 发布前用隔离真实 IAM + 候选 BFF + Platform + PostgreSQL/Redis 验证首次 201、响应丢失后 replay、撤销 session 后同 key 拒绝以及 Platform 仅一条 Skill/receipt；这是 ADR-002 要求的预激活证据，不是 public 产品激活。正式发布仍需六 owner sandbox、Platform active/routable=true artifact、BFF 重新固定精确 commit/aggregate并由 Root 协调切换。Web adapter 仍是后续消费者。
 
 ## W2 单文件项目资源上传（实施切片）
 

@@ -2079,6 +2079,46 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /v1/skills/drafts:
+    post:
+      tags: [Skills]
+      operationId: createSkillDraft
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: product.skill.create_draft
+      summary: Create a user-owned Skill draft
+      description: Candidate contract. The admitted IAM tenant and subject determine the user owner. The inactive Platform v3 artifact permits isolated pre-activation sandbox verification but does not activate the public Product route.
+      parameters:
+        - $ref: '#/components/parameters/SkillDraftIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateSkillDraftRequest' }
+      responses:
+        '201':
+          description: Draft created or durably replayed by Platform
+          headers:
+            x-request-id:
+              description: Correlation identifier for this request
+              schema: { type: string, minLength: 1, maxLength: 128 }
+            Cache-Control:
+              description: Prevent storage of Skill mutation responses
+              schema: { type: string, const: no-store }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CreateSkillDraftResponse' }
+        '400': { $ref: '#/components/responses/SkillDraftBadRequest' }
+        '401': { $ref: '#/components/responses/SkillDraftUnauthorized' }
+        '403': { $ref: '#/components/responses/SkillDraftForbidden' }
+        '409': { $ref: '#/components/responses/SkillDraftConflict' }
+        '412': { $ref: '#/components/responses/SkillDraftPreconditionFailed' }
+        '413': { $ref: '#/components/responses/SkillDraftPayloadTooLarge' }
+        '429': { $ref: '#/components/responses/SkillDraftRateLimited' }
+        '502': { $ref: '#/components/responses/SkillDraftBadGateway' }
+        '503': { $ref: '#/components/responses/SkillDraftUnavailable' }
   /v1/skills/{name}/revisions:
     parameters:
       - $ref: '#/components/parameters/SkillNameOnly'
@@ -3303,6 +3343,16 @@ components:
       schema:
         type: string
         enum: [telegram, line, slack]
+    SkillDraftIdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Must occur exactly once. It is not trimmed or comma-joined.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+        pattern: '^[\x21-\x2B\x2D-\x7E]+$'
     IdempotencyKey:
       name: Idempotency-Key
       in: header
@@ -3310,6 +3360,63 @@ components:
       schema:
         type: string
   schemas:
+    CreateSkillDraftRequest:
+      type: object
+      required: [display_name, summary, tags]
+      additionalProperties: false
+      properties:
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          pattern: '.*\S.*'
+          description: Runtime enforcement counts UTF-16 code units; OpenAPI maxLength alone is not the implementation rule.
+        summary:
+          type: string
+          maxLength: 65535
+          description: Runtime enforcement counts UTF-16 code units.
+        tags:
+          type: array
+          maxItems: 100
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 1
+            maxLength: 128
+            pattern: '.*\S.*'
+          description: Order is preserved and participates in the command digest; runtime lengths use UTF-16 code units.
+    SkillDraftResource:
+      type: object
+      required: [skill_id, series_id, revision, status, replayed]
+      additionalProperties: false
+      properties:
+        skill_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        series_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        revision: { type: integer, const: 1 }
+        status: { type: string, enum: [draft] }
+        replayed: { type: boolean }
+    CreateSkillDraftResponse:
+      type: object
+      required: [data]
+      additionalProperties: false
+      properties:
+        data: { $ref: '#/components/schemas/SkillDraftResource' }
+    SkillDraftErrorDetail:
+      type: object
+      required: [code, message, retryable]
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          enum: [invalid_skill_request, idempotency_key_required, invalid_idempotency_key, request_body_too_large, service_auth_failed, session_authentication_required, session_invalid, session_forbidden, session_rate_limited, product_tenant_not_configured, product_tenant_forbidden, skill_idempotency_conflict, skill_command_in_progress, skill_precondition_failed, skill_rate_limited, iam_admission_unavailable, skill_dependency_unavailable, skill_response_invalid]
+        message: { type: string, minLength: 1 }
+        retryable: { type: boolean }
+    SkillDraftErrorResponse:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error: { $ref: '#/components/schemas/SkillDraftErrorDetail' }
     PersonalFileUploadResponse:
       type: object
       additionalProperties: false
@@ -4810,6 +4917,118 @@ components:
               const: true
         meta: { $ref: '#/components/schemas/RequestMeta' }
   responses:
+    SkillDraftBadRequest:
+      description: Invalid strict body or Idempotency-Key
+      headers:
+        x-request-id:
+          description: Correlation identifier for this request
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          description: Prevent storage of Skill mutation responses
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/SkillDraftErrorResponse' }
+    SkillDraftUnauthorized:
+      description: Service or IAM session authentication rejected the request
+      headers:
+        x-request-id:
+          description: Correlation identifier for this request
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          description: Prevent storage of Skill mutation responses
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/SkillDraftErrorResponse' }
+    SkillDraftForbidden:
+      description: The admitted Product identity may not create this draft
+      headers:
+        x-request-id:
+          description: Correlation identifier for this request
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          description: Prevent storage of Skill mutation responses
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/SkillDraftErrorResponse' }
+    SkillDraftConflict:
+      description: Platform command identity conflict or command in progress
+      headers:
+        x-request-id:
+          description: Correlation identifier for this request
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          description: Prevent storage of Skill mutation responses
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/SkillDraftErrorResponse' }
+    SkillDraftPreconditionFailed:
+      description: The owner state does not permit draft creation
+      headers:
+        x-request-id:
+          description: Correlation identifier for this request
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          description: Prevent storage of Skill mutation responses
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/SkillDraftErrorResponse' }
+    SkillDraftPayloadTooLarge:
+      description: The request body exceeded the bounded admission limit
+      headers:
+        x-request-id:
+          description: Correlation identifier for this request
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          description: Prevent storage of Skill mutation responses
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/SkillDraftErrorResponse' }
+    SkillDraftRateLimited:
+      description: IAM or Platform rate limited the request
+      headers:
+        x-request-id:
+          description: Correlation identifier for this request
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          description: Prevent storage of Skill mutation responses
+          schema: { type: string, const: no-store }
+        Retry-After:
+          description: Optional bounded delay in seconds before retrying
+          required: false
+          schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/SkillDraftErrorResponse' }
+    SkillDraftBadGateway:
+      description: Platform returned a response outside the pinned contract
+      headers:
+        x-request-id:
+          description: Correlation identifier for this request
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          description: Prevent storage of Skill mutation responses
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/SkillDraftErrorResponse' }
+    SkillDraftUnavailable:
+      description: IAM admission or the Platform dependency is unavailable
+      headers:
+        x-request-id:
+          description: Correlation identifier for this request
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          description: Prevent storage of Skill mutation responses
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/SkillDraftErrorResponse' }
     BadRequest:
       description: Invalid request
       content:

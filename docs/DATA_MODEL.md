@@ -2,7 +2,7 @@
 
 ## W1E user Skill draft 数据门（2026-09-29；目标，未实施）
 
-当前 BFF main `bd1f794e7b1115d96965aa03d8a3a83a33c42fd7` 的 canonical `database/schema.sql` 没有 Skill catalog 或 Skill 专用 receipt 表（已有 generic BFF receipt 不用于此操作），Platform Connect 仍是 `generated-not-activated`、`execution_artifact:null`，public CreateDraft route 未发布。以下 user-only 目标以 Platform main `5b6eb2c1532b23b9747bc4bf6ac99f69ad453de0` 的 execution artifact v3 aggregate `324e749da1bc66c1ff03de74e7299716f798f5f5bb5fa19556033b79fa09ff8d` 为离线候选来源；该 artifact 仍 inactive/routable=false；这是发布标记而非 runtime RPC kill switch。Root 可在隔离 sandbox 通过候选 route 验证真实写入/replay，但公开发布仍需六 owner sandbox、active artifact 重钉与协调激活。本片零 BFF Schema/Redis 变更；Skill/revision/command receipt 只写 Platform owner schema，每次请求先以当前 IAM session 重验受信 tenant/subject，BFF 不用自己的 generic receipt 返回 Skill replay。Storage package/Validate/Publish 和其他 owner scope 不在首片。
+当前 BFF main `2a95da2410fd89c300dc18064867ee66617549e2` 的 canonical `database/schema.sql` 没有 Skill catalog 或 Skill 专用 receipt 表（已有 generic BFF receipt 不用于此操作）。Platform consumer 已 pin owner `5b6eb2c1532b23b9747bc4bf6ac99f69ad453de0` 的两份 Proto 与完整 inactive v3 artifact/provenance；public CreateDraft 机器 OpenAPI 候选已发布，但 runtime route 未实现。以下 user-only 目标以 Platform main `5b6eb2c1532b23b9747bc4bf6ac99f69ad453de0` 的 execution artifact v3 aggregate `324e749da1bc66c1ff03de74e7299716f798f5f5bb5fa19556033b79fa09ff8d` 为离线候选来源；该 artifact 仍 inactive/routable=false；这是发布标记而非 runtime RPC kill switch。Root 可在隔离 sandbox 通过候选 route 验证真实写入/replay，但公开发布仍需六 owner sandbox、active artifact 重钉与协调激活。本片零 BFF Schema/Redis 变更；Skill/revision/command receipt 只写 Platform owner schema，每次请求先以当前 IAM session 重验受信 tenant/subject，BFF 不用自己的 generic receipt 返回 Skill replay。Storage package/Validate/Publish 和其他 owner scope 不在首片。
 
 ## W2-F2-S9 Chat Delivery 快照数据边界（2026-09-28；BFF canonical Schema 已修改，待 Root 集成审查）
 
@@ -599,7 +599,7 @@ enqueue、跨库事务、补偿表或 202 接纳语义。
 实现门必须以 schema diff/`pnpm schema:check` 证明 BFF 零数据变更，并以测试证明 CreateDraft 路径对 generic Map/PG receipt、
 Project/Conversation store、organization action check 与 Storage client 均为零调用；撤销用户 session 后同 key replay 必须在
 Platform socket 前拒绝。Platform consumer 目标固定 owner `5b6eb2c1532b23b9747bc4bf6ac99f69ad453de0` 和 execution v3 aggregate
-SHA-256 `324e749da1bc66c1ff03de74e7299716f798f5f5bb5fa19556033b79fa09ff8d`（inactive/routable=false，尚未在 BFF pin/激活），不得以旧 Capability HTTP 或 v1/v2 digest
+SHA-256 `324e749da1bc66c1ff03de74e7299716f798f5f5bb5fa19556033b79fa09ff8d`（已在 BFF pin；inactive/routable=false，尚未激活），不得以旧 Capability HTTP 或 v1/v2 digest
 建立第二套幂等事实。
 
 本片仅文档，不改 `database/schema.sql`、索引、事务代码或安装器。目标六 catalog mutation 不引入 BFF Skill/revision/install、
