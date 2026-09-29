@@ -201,7 +201,7 @@ async function manifestFor(directory) {
     schema_version: 1,
     status: "generated-not-activated",
     owner: {
-      repository_path: "apps/kokoro-platform",
+      repository_path: "apps/kokoro-capability",
       repository_commit: ownerCommit,
       contract_version: "3.1.0",
       contract_path: "contract/openapi/platform-http.openapi.json",
