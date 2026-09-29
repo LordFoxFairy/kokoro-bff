@@ -1,0 +1,747 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Kokoro Platform Business HTTP API",
+    "version": "3.1.0",
+    "description": "Platform read-only projections. IAM projection bearer authentication establishes caller and tenant; authenticated BFF then supplies its Product Session subject."
+  },
+  "servers": [
+    {
+      "url": "http://kokoro-platform:8086"
+    }
+  ],
+  "x-kokoro-runtime": {
+    "default_surfaces": ["skill-catalog"],
+    "surface_requirements": {
+      "skill-source": ["storage", "iam_projection_introspection"],
+      "mcp-server": ["provider_catalog", "iam_projection_introspection"]
+    },
+    "startup_policy": "Missing configuration or a failed readiness probe prevents the process from listening."
+  },
+  "paths": {
+    "/v1/skills": {
+      "get": {
+        "operationId": "listVisibleSkills",
+        "x-kokoro-owner": "kokoro-platform",
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-stability": "stable",
+        "x-kokoro-idempotency": "read-only",
+        "x-kokoro-permission": "platform:projection.read",
+        "x-kokoro-surface": "skill-source",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/TenantId"
+          },
+          {
+            "$ref": "#/components/parameters/SubjectId"
+          },
+          {
+            "$ref": "#/components/parameters/SkillQuery"
+          },
+          {
+            "$ref": "#/components/parameters/SkillTags"
+          },
+          {
+            "$ref": "#/components/parameters/SkillScope"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/SkillList"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/skills/{skill_id}": {
+      "get": {
+        "operationId": "getPublishedPersonalSkill",
+        "summary": "Read the current ACTIVE personal Skill by canonical skill_id, without requiring installation.",
+        "description": "Only the authenticated BFF workload may project its current Product Session subject. The IAM tenant and that subject must match the Skill tenant and user owner. Missing, non-owner, cross-tenant, non-personal, or non-ACTIVE Skills are indistinguishable 404 responses. This read never returns package assets, manifests, signed URLs, or execution-only details.",
+        "x-kokoro-owner": "kokoro-platform",
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-stability": "stable",
+        "x-kokoro-idempotency": "read-only",
+        "x-kokoro-permission": "platform:projection.read",
+        "x-kokoro-surface": "skill-source",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/TenantId"
+          },
+          {
+            "$ref": "#/components/parameters/SubjectId"
+          },
+          {
+            "$ref": "#/components/parameters/SkillId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PublishedPersonalSkill"
+          },
+          "400": {
+            "$ref": "#/components/responses/PublishedPersonalSkillError"
+          },
+          "401": {
+            "$ref": "#/components/responses/PublishedPersonalSkillError"
+          },
+          "403": {
+            "$ref": "#/components/responses/PublishedPersonalSkillError"
+          },
+          "404": {
+            "$ref": "#/components/responses/PublishedPersonalSkillError"
+          },
+          "500": {
+            "$ref": "#/components/responses/PublishedPersonalSkillError"
+          },
+          "503": {
+            "$ref": "#/components/responses/PublishedPersonalSkillError"
+          }
+        }
+      }
+    },
+    "/v1/skills/pool": {
+      "get": {
+        "operationId": "listVisibleSkillPool",
+        "x-kokoro-owner": "kokoro-platform",
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-stability": "stable",
+        "x-kokoro-idempotency": "read-only",
+        "x-kokoro-permission": "platform:projection.read",
+        "x-kokoro-surface": "skill-source",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/TenantId"
+          },
+          {
+            "$ref": "#/components/parameters/SubjectId"
+          },
+          {
+            "$ref": "#/components/parameters/SkillQuery"
+          },
+          {
+            "$ref": "#/components/parameters/SkillTags"
+          },
+          {
+            "$ref": "#/components/parameters/SkillScope"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/SkillList"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/skills/catalog": {
+      "get": {
+        "operationId": "listVisibleSkillCatalog",
+        "x-kokoro-owner": "kokoro-platform",
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-stability": "stable",
+        "x-kokoro-idempotency": "read-only",
+        "x-kokoro-permission": "platform:projection.read",
+        "x-kokoro-surface": "skill-source",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/TenantId"
+          },
+          {
+            "$ref": "#/components/parameters/SubjectId"
+          },
+          {
+            "$ref": "#/components/parameters/SkillQuery"
+          },
+          {
+            "$ref": "#/components/parameters/SkillTags"
+          },
+          {
+            "$ref": "#/components/parameters/SkillScope"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/SkillList"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/mcp/servers": {
+      "get": {
+        "operationId": "listMcpServers",
+        "x-kokoro-owner": "kokoro-platform",
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-stability": "stable",
+        "x-kokoro-idempotency": "read-only",
+        "x-kokoro-permission": "platform:projection.read",
+        "x-kokoro-surface": "mcp-server",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/TenantId"
+          },
+          {
+            "$ref": "#/components/parameters/SubjectId"
+          },
+          {
+            "name": "provider_key",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 191
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/McpServerList"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "RequestId": {
+        "name": "x-kokoro-request-id",
+        "in": "header",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        }
+      },
+      "TenantId": {
+        "name": "x-kokoro-tenant-id",
+        "in": "header",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "description": "Optional consistency assertion only; tenant authority is IAM introspection."
+      },
+      "SubjectId": {
+        "name": "x-kokoro-subject",
+        "in": "header",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,254}$"
+        },
+        "description": "Product Session subject projected by the authenticated kokoro-bff workload after IAM admission; never a browser-supplied tenant identity."
+      },
+      "SkillQuery": {
+        "name": "query",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        }
+      },
+      "SkillTags": {
+        "name": "tags",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "style": "form",
+        "explode": true
+      },
+      "SkillScope": {
+        "name": "scope_kind",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "enum": [
+            "personal",
+            "project",
+            "organization",
+            "session",
+            "1",
+            "2",
+            "3",
+            "4"
+          ]
+        }
+      },
+      "Limit": {
+        "name": "limit",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 50
+        }
+      },
+      "Cursor": {
+        "name": "cursor",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        }
+      },
+      "SkillId": {
+        "name": "skill_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 191,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$"
+        },
+        "description": "Canonical Platform Skill ID, not a source_ref or package asset ID."
+      }
+    },
+    "schemas": {
+      "Skill": {
+        "type": "object",
+        "required": [
+          "source_ref",
+          "name",
+          "description",
+          "content_hash",
+          "scope",
+          "revision",
+          "enabled",
+          "categories"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "source_ref": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "content_hash": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "personal",
+              "project",
+              "organization",
+              "session",
+              "unknown"
+            ]
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "installed": {
+            "type": "boolean"
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "McpServer": {
+        "type": "object",
+        "required": [
+          "server_id",
+          "provider_key",
+          "server_identity",
+          "transport",
+          "declaration_digest",
+          "status"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "server_id": {
+            "type": "string"
+          },
+          "provider_key": {
+            "type": "string"
+          },
+          "server_identity": {
+            "type": "string"
+          },
+          "transport": {
+            "type": "string",
+            "enum": ["stdio", "streamable_http", "sse_compat", "unknown"]
+          },
+          "declaration_digest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["registered", "disabled", "unknown"]
+          }
+        }
+      },
+      "ErrorEnvelope": {
+        "type": "object",
+        "required": ["error"],
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": ["code", "message", "retryable"],
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "PublishedPersonalSkill": {
+        "type": "object",
+        "required": [
+          "skill_id",
+          "source_ref",
+          "revision",
+          "status",
+          "name",
+          "summary",
+          "tags"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "skill_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source_ref": {
+            "type": "string",
+            "pattern": "^skill:[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$"
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["active"]
+          },
+          "name": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "responses": {
+      "SkillList": {
+        "description": "Visible Skill page",
+        "headers": {
+          "x-kokoro-request-id": {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "required": ["data"],
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "type": "object",
+                  "required": ["skills"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "skills": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Skill"
+                      }
+                    },
+                    "next_cursor": {
+                      "type": ["string", "null"]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "McpServerList": {
+        "description": "MCP server page",
+        "headers": {
+          "x-kokoro-request-id": {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "required": ["data"],
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "type": "object",
+                  "required": ["servers"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "servers": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/McpServer"
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "Error": {
+        "description": "Stable error envelope",
+        "headers": {
+          "x-kokoro-request-id": {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      },
+      "PublishedPersonalSkill": {
+        "description": "Current ACTIVE personal Skill safe summary",
+        "headers": {
+          "x-kokoro-request-id": {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          },
+          "Cache-Control": {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["no-store"]
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "required": ["data"],
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/PublishedPersonalSkill"
+                }
+              }
+            }
+          }
+        }
+      },
+      "PublishedPersonalSkillError": {
+        "description": "Published personal Skill error without cache reuse",
+        "headers": {
+          "x-kokoro-request-id": {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          },
+          "Cache-Control": {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["no-store"]
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "PlatformWorkload": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "IAM tenant-machine Platform projection token: kokoro-bff / platform:projection.read."
+      }
+    }
+  },
+  "security": [
+    {
+      "PlatformWorkload": []
+    }
+  ]
+}

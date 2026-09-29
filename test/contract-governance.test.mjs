@@ -421,13 +421,14 @@ test("the repository exposes executable contract, schema, and strictness gates",
   assert.equal(packageJson.scripts["contract:generate:capability"], "node scripts/generate-capability-http-client.mjs --write")
   assert.equal(packageJson.scripts["contract:check:agent"], "node scripts/generate-agent-http-client.mjs --check")
   assert.equal(packageJson.scripts["contract:check:capability"], "node scripts/generate-capability-http-client.mjs --check")
+  assert.equal(packageJson.scripts["contract:check:platform-http"], "node scripts/generate-platform-http-client.mjs --check")
   assert.equal(packageJson.scripts["contract:generate:iam"], "node scripts/generate-iam-http-client.mjs --write")
   assert.equal(packageJson.scripts["contract:check:iam"], "node scripts/generate-iam-http-client.mjs --check")
   assert.equal(packageJson.scripts["contract:generate:scheduler"], "node scripts/generate-scheduler-contracts.mjs --write")
   assert.equal(packageJson.scripts["contract:check:scheduler"], "node scripts/generate-scheduler-contracts.mjs --check")
   assert.equal(
     packageJson.scripts["contract:check"],
-    "pnpm contract:check:agent && pnpm contract:check:capability && pnpm contract:check:iam && pnpm contract:check:iam-relay && pnpm contract:check:scheduler && pnpm contract:check:platform && pnpm contract:check:storage && pnpm contract:lint && pnpm contract:semantic && pnpm contract:test",
+    "pnpm contract:check:agent && pnpm contract:check:capability && pnpm contract:check:platform-http && pnpm contract:check:iam && pnpm contract:check:iam-relay && pnpm contract:check:scheduler && pnpm contract:check:platform && pnpm contract:check:storage && pnpm contract:lint && pnpm contract:semantic && pnpm contract:test",
   )
   assert.equal(packageJson.devDependencies["@hey-api/openapi-ts"], "0.99.0")
   assert.equal(packageJson.devDependencies.prettier, "3.9.6")

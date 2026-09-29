@@ -18,12 +18,12 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "contract:lint": "redocly lint contract/openapi/v1/openapi.yaml",
     "contract:semantic": "node scripts/verify-openapi.ts",
-    "contract:test": "pnpm build && node --test test/contract-governance.test.mjs test/contract/openapi-contract.test.mjs test/agent-control-adapter.test.ts test/project-resource-list.test.mjs test/storage-connect-contract.test.mjs test/library-file-list.test.mjs test/personal-file-upload.test.mjs test/personal-file-download.test.mjs test/skill-package-get-http.test.mjs test/skill-package-begin-http.test.mjs test/skill-package-complete-http.test.mjs test/skill-validate-http.test.mjs test/skill-publish-http.test.mjs",
+    "contract:test": "pnpm build && node --test test/contract-governance.test.mjs test/contract/openapi-contract.test.mjs test/agent-control-adapter.test.ts test/project-resource-list.test.mjs test/storage-connect-contract.test.mjs test/library-file-list.test.mjs test/personal-file-upload.test.mjs test/personal-file-download.test.mjs test/skill-package-get-http.test.mjs test/skill-package-begin-http.test.mjs test/skill-package-complete-http.test.mjs test/skill-validate-http.test.mjs test/skill-publish-http.test.mjs test/platform-http-contract.test.mjs",
     "contract:generate:capability": "node scripts/generate-capability-http-client.mjs --write",
     "contract:check:capability": "node scripts/generate-capability-http-client.mjs --check",
     "contract:generate:scheduler": "node scripts/generate-scheduler-contracts.mjs --write",
     "contract:check:scheduler": "node scripts/generate-scheduler-contracts.mjs --check",
-    "contract:check": "pnpm contract:check:agent && pnpm contract:check:capability && pnpm contract:check:iam && pnpm contract:check:iam-relay && pnpm contract:check:scheduler && pnpm contract:check:platform && pnpm contract:check:storage && pnpm contract:lint && pnpm contract:semantic && pnpm contract:test",
+    "contract:check": "pnpm contract:check:agent && pnpm contract:check:capability && pnpm contract:check:platform-http && pnpm contract:check:iam && pnpm contract:check:iam-relay && pnpm contract:check:scheduler && pnpm contract:check:platform && pnpm contract:check:storage && pnpm contract:lint && pnpm contract:semantic && pnpm contract:test",
     "contract:generate:iam-relay": "node --import tsx scripts/generate-iam-relay-policy.mjs --write",
     "contract:check:iam-relay": "node --import tsx scripts/generate-iam-relay-policy.mjs --check",
     "contract:update-baseline": "node scripts/check-contract.mjs --write-baseline",
@@ -39,7 +39,8 @@
     "contract:generate:platform": "node scripts/generate-platform-connect-client.mjs --write",
     "contract:check:platform": "node scripts/generate-platform-connect-client.mjs --check",
     "contract:generate:storage": "node scripts/generate-storage-connect-client.mjs --write",
-    "contract:check:storage": "node scripts/generate-storage-connect-client.mjs --check"
+    "contract:check:storage": "node scripts/generate-storage-connect-client.mjs --check",
+    "contract:check:platform-http": "node scripts/generate-platform-http-client.mjs --check"
   },
   "devDependencies": {
     "@bufbuild/buf": "1.72.0",
