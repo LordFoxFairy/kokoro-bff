@@ -148,11 +148,10 @@ test("candidate enforces JSON content type and the 65,536 byte streaming boundar
   ))
 
 test("generated CatalogConnectClient rejects a unary response larger than one MiB", async () => {
-  const { createServer } = await import("node:http2")
+  const { createServer } = await import("node:http")
   const { connectNodeAdapter } = await import("@connectrpc/connect-node")
   const { CatalogConnectClient } = await import("../dist/infrastructure/clients/platform/catalog-connect.js")
   const { SkillCatalogService, SkillStatus } = await import("../dist/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
-  const ownerSessions = []
   const owner = createServer(
     connectNodeAdapter({
       writeMaxBytes: 2 * 1024 * 1024,
@@ -165,7 +164,6 @@ test("generated CatalogConnectClient rejects a unary response larger than one Mi
       },
     }),
   )
-  owner.on("session", (session) => ownerSessions.push(session))
   owner.listen(0, "127.0.0.1")
   await once(owner, "listening")
   try {
@@ -175,9 +173,7 @@ test("generated CatalogConnectClient rejects a unary response larger than one Mi
       (error) => error instanceof ConnectError && error.code === Code.ResourceExhausted && /readMaxBytes|larger than.*1048576/iu.test(error.message),
     )
   } finally {
-    for (const session of ownerSessions) session.destroy()
-    owner.close()
-    owner.closeAllConnections?.()
+    await new Promise((resolve) => owner.close(resolve))
   }
 })
 

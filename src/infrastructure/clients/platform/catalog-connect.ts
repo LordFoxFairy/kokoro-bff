@@ -20,7 +20,7 @@ export class CatalogConnectClient {
   ) {
     this.#client = createClient(
       SkillCatalogService,
-      createConnectTransport({ baseUrl, httpVersion: "2", useBinaryFormat: true, readMaxBytes: 1024 * 1024, writeMaxBytes: 1024 * 1024 }),
+      createConnectTransport({ baseUrl, httpVersion: "1.1", useBinaryFormat: true, readMaxBytes: 1024 * 1024, writeMaxBytes: 1024 * 1024 }),
     )
   }
   async create(
