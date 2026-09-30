@@ -1,8 +1,33 @@
 # kokoro-bff API contract policy
 
+## BFF-PERSONAL-DOC-GATE：本人安装 public 目标（2026-09-30；canonical OpenAPI 待后继片）
+
+当前 canonical OpenAPI 与 runtime **尚未**发布本人安装；BFF consumer 仍是 Platform v4/`263a28f`，旧 enable/disable 安装声明实际为 503。后继机器片必须 clean-slate 删除旧按 name 路径/stub/alias，以本仓唯一 `contract/openapi/v1/openapi.yaml` 发布以下 public `/v1` 资源，并固定 Platform `0dd60af4799cb2f0b410ded5ffb9c1402a55c641` v5 aggregate `bc233fe33d1acce81c2fdcda4062843b98d06bd46164d8710751d28d01b4d6ca`；本文不是第二份机器 schema。
+
+| Method/path | 输入与语义 | 成功 |
+| --- | --- | --- |
+| `POST /v1/skill-installations` | strict body 只含原样 canonical `source_ref`；单个 Idempotency-Key；显式安装，不由 Publish 触发 | 200 owner receipt ACK |
+| `GET /v1/skill-installations` | optional `enabled`/`installed` 保留 presence；optional `limit`/`cursor` 不 trim | 200 当前本人页 |
+| `GET /v1/skill-installations/{installation_id}` | canonical exact ID；无 body/query/idempotency key | 200 当前本人表示 |
+| `DELETE /v1/skill-installations/{installation_id}` | canonical exact ID；单个 Idempotency-Key；不接 body | 200 receipt；installation 为 `installed=false`、`enabled=false`、`removed_at` present |
+| `PUT /v1/skill-installations/{installation_id}/enabled` | strict body 只含 required boolean `enabled`；单个 Idempotency-Key | 200 owner receipt ACK |
+
+身份只来自 current IAM session 的可信 tenant/user；BFF workload metadata 使用精确 `x-kokoro-subject`，public body/header 不接受 tenant、subject、owner scope、target、execution proof、package/hash 或 command identity。资源缺失或对当前可信 tenant/subject 不可见统一 404，不泄漏存在性；缺失/失效 session 是 401，service/session/tenant 或 workload 已认证但无权是 403；organization/project/session/global/shared 不在此版本。POST 只能安装本人 PERSONAL/ACTIVE source，且发布不自动安装。读权限不等于执行权限；安装/true-enable 的 source/package/fresh health 与 current generation 由 Platform owner 每次判定。
+
+安装安全表示精确为九个 snake_case 字段：`installation_id`、`source_ref`、`series_id`、`revision`、`installed`、`enabled`、`installed_at`、`updated_at`、`removed_at`。revision 必须是 `1..2^64-1` 十进制字符串；时间必须为合法 UTC RFC3339 `Z`；optional 时间缺失保持缺失，禁止把缺失、null、epoch 或本地时间互换。owner 不存在 `removed` boolean；移除态必须是 `installed=false`、`enabled=false`、`removed_at` present。安全响应不得出现 tenant/subject/target、package asset、content digest/hash、manifest、signed URL、proof 或内部 reason。
+
+GET 成功精确为 `{data:<九字段 installation>}`。三种写成功精确为 `{data:{installation:<九字段>,change:'installed'|'upgraded'|'reinstalled'|'enabled'|'disabled'|'removed'|'unchanged',event_id?:string,replayed:boolean}}`：owner enum 1..7 逐项映射小写，0/未知拒绝为 502；`unchanged` 必须没有 `event_id`，其他 change 必须有首个合法 `event_id`。首次 ACK 的 installation/change/event_id 由 owner receipt 固定；同键 replay 只把 `replayed` 置 true，禁止用当前状态重算。DELETE 首次有效移除返回 change `removed`，自然 no-op 返回 `unchanged`，两者 installation 均用 owner-native removed state，不发明 `removed` 字段。
+
+List 成功沿现有 BFF list 规范：`{data:[<九字段 installation>],meta?:{next_cursor:string}}`。owner `PageResult.next_cursor` 是 optional string；只有 present 且非空时 public 才出现 `meta.next_cursor`，absent 时整个 `meta` 缺失，present 空串或非法 presence 为 502。默认 limit 50，合法范围 1..100；cursor 最大 4096 UTF-8 bytes，opaque、原样转发，按 `installation_id ASC`，非 snapshot。cursor 绑定 product surface、可信 tenant/subject、派生 target、`enabled`/`installed` 的 presence+value 与排序；缺失 filter 表示包括 removed，显式 false 不等于缺失。调用者不得解码 cursor，BFF 不 trim、重签或缓存它。
+
+所有响应包含有界 `x-request-id` 与 `Cache-Control: no-store`。稳定错误 envelope 仍为 `{error:{code,message,retryable}}`：400 非法 path/body/query/key/cursor，401 session 缺失或失效，403 service/session/tenant 或 workload 被拒，404 installation/source 不可见，409 同键异 digest/命令进行中，412 source 不可安装、stale generation 或非法状态前置，429 IAM/Platform 限流（合法时转发有界 Retry-After），502 owner 响应违反九字段/receipt/presence，503 tenant 未配置或 IAM/Platform 依赖不可判定，504 deadline。错误按 owner code+stable reason 映射，不解析 message。请求 AbortSignal/deadline 必须贯穿；写请求发生 unknown ACK 时只允许同 key 重试，不降级本地成功或切换旧服务。
+
+三写操作的 command digest 分别使用 Platform v5 artifact 中独立的 `skill.product.install`、`skill.product.set_installation_enabled`、`skill.product.remove_installation` 定义，digest version 均为 `product-personal-installation/1.0.0`；source/installation/boolean presence 与可信 subject/target 按 owner machine binding 投影，不把 request ID、token、command ID 纳入 digest。GET/List 不制造命令或 receipt。Breaking/activation：本仓 canonical OpenAPI、operation inventory、语义门、生成 client 与 runtime 必须同一后继切片更新；旧 503 paths 删除而非 alias/fallback，Web 再固定新 BFF commit/digest。
+
+
 ## W3 Chat typed Skill 选择契约（已实现，组合待验）
 
-唯一 public `MessageCreateRequest` 已移除 name `pinned_skills` 与对应 trace 字段；Agent required `LaunchRequest.selected_skill_source_refs` 已在 HTTP 2.0.0 commit `dd34a4800b4ce0cc61eb80dd715e528b9d4517da` 发布，`contract/openapi/v1/openapi.json` SHA-256 `20398c59f42031c1b6ae2e2c3708e63ec8b5645baf741bf831bc67e14625ef99`。本片机器契约一次替换旧字段为 `selected_skill_source_refs?: string[]`，每项原样匹配 owner `^skill:(?!skill:)[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])`、7–197 ASCII 字符（不 trim、不接受 display name/裸 ID）、最多 16 项、禁止重复、保留顺序、整个数组以无额外空白的 JSON 编码为 UTF-8 后最多 4096 bytes；缺失 public 值等同空数组，非法形状 400 `invalid_message`，同 `Idempotency-Key` 改变选择或顺序 409 `idempotency_conflict`。BFF 对 Agent 的 Chat 与 Scheduler `POST /v1/runs` 必须始终显式发送该字段，包括 `[]`，不得通过 `trace`、name 或别名补选。当前 IAM tenant/user admission 不变；目标 Agent 在 Run 执行时经 Platform 校验 installed/enabled/current；当前固定 Agent 非空选择会 fail closed，reader 尚未接入，而 BFF public 已发布本人 ACTIVE 读回**不证明可执行**。正式 Agent 2.0.0 来源 pin 与生成 drift 已接入；真实双边测试仍由 Root 在隔离组合验收。本人发布后是否自动可用仍待用户裁决，不构成基础无 Skill Chat wire 的前置条件。
+唯一 public `MessageCreateRequest` 已移除 name `pinned_skills` 与对应 trace 字段；Agent required `LaunchRequest.selected_skill_source_refs` 已在 HTTP 2.0.0 commit `dd34a4800b4ce0cc61eb80dd715e528b9d4517da` 发布，`contract/openapi/v1/openapi.json` SHA-256 `20398c59f42031c1b6ae2e2c3708e63ec8b5645baf741bf831bc67e14625ef99`。本片机器契约一次替换旧字段为 `selected_skill_source_refs?: string[]`，每项原样匹配 owner `^skill:(?!skill:)[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])`、7–197 ASCII 字符（不 trim、不接受 display name/裸 ID）、最多 16 项、禁止重复、保留顺序、整个数组以无额外空白的 JSON 编码为 UTF-8 后最多 4096 bytes；缺失 public 值等同空数组，非法形状 400 `invalid_message`，同 `Idempotency-Key` 改变选择或顺序 409 `idempotency_conflict`。BFF 对 Agent 的 Chat 与 Scheduler `POST /v1/runs` 必须始终显式发送该字段，包括 `[]`，不得通过 `trace`、name 或别名补选。当前 IAM tenant/user admission 不变；目标 Agent 在 Run 执行时经 Platform 校验 installed/enabled/current；当前固定 Agent 非空选择会 fail closed，reader 尚未接入，而 BFF public 已发布本人 ACTIVE 读回**不证明可执行**。正式 Agent 2.0.0 来源 pin 与生成 drift 已接入；真实双边测试仍由 Root 在隔离组合验收。本人发布后不自动可用；用户须显式安装/启用。该裁决不构成基础无 Skill Chat wire 的前置条件。
 
 ## 当前 Platform projection public read
 

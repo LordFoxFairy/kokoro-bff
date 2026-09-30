@@ -1,8 +1,19 @@
 # kokoro-bff data model
 
+## BFF-PERSONAL-DOC-GATE：本人安装不新增 BFF 数据事实（2026-09-30）
+
+Platform `skills/installation` 是安装资源、enabled/removed 状态、generation、命令 receipt 与 outbox 的唯一 owner/writer。BFF 当前 `571b51de2057905c74c78ac966c8cf5ac11eca93` 仍消费 Platform v4，尚无本人 installation runtime；目标固定 Platform `0dd60af4799cb2f0b410ded5ffb9c1402a55c641` v5 aggregate `bc233fe33d1acce81c2fdcda4062843b98d06bd46164d8710751d28d01b4d6ca` 后只做逐请求 public 投影。`database/schema.sql`、`kokoro_bff` schema、现有表/索引/role、Redis DB 8、retention 与 fresh install 均不变。
+
+BFF 不创建 `bff_skill_installation`、安装 projection/cache、command receipt、outbox 或 cursor 表，不复用 `bff_idempotency_receipt` 保存安装 ACK，也不查询/连接 Platform SQL。三个写命令的幂等、CAS、generation 与 original-safe-ACK replay 均由 Platform receipt 事务拥有；BFF 只在单次请求内验证并映射安全结果。unknown ACK 使用同一个 owner command identity 恢复，caller 取消不产生 BFF terminal row。GET/List 每次从 owner 读取，cursor 不持久化；Publish 不写安装事实，也不自动插入安装。
+
+九字段安装安全表示是传输投影而非 BFF Row，精确字段为 `installation_id`、`source_ref`、`series_id`、`revision`、`installed`、`enabled`、`installed_at`、`updated_at`、`removed_at`。typed IDs/source 保持 opaque；revision 只以正 uint64 十进制 JSON string 输出；三个时间只接受 UTC RFC3339 `Z` 并保留 optional presence。owner 没有 `removed` boolean：移除态由 `installed=false`、`enabled=false`、`removed_at` present 表达。DELETE 的 200 receipt 首次有效移除为 change `removed`，自然 no-op 为 `unchanged`；写 ACK 保持 receipt 的 installation/change/event_id，同键 replay 只令 `replayed=true`。这不会转换为本地软删除。BFF 不保存 tenant/subject/target、package asset、digest/hash、manifest、签名 URL、execution proof 或 owner internal reason。GET 只包 `{data:<installation>}`；List 的 owner optional `PageResult.next_cursor` 仅在 present 且非空时映射为 public optional `meta.next_cursor`，非法 presence 502，不形成 BFF cursor Row。
+
+本设计没有 BFF 数据事务、跨 owner FK/JOIN、双写、retention/GC 或 migration。后继实现的 schema 证据是 `git diff -- database/schema.sql` 必须为空，加 `pnpm schema:check`/`pnpm db:apply-schema` 回归现有 canonical schema；真实组合必须证明首次/replay/冲突/撤权/跨用户、disable/remove 在 unhealthy source 下仍可降权、分页 presence/cursor 与 BFF 重启后由 Platform receipt 恢复，而不是检查 BFF 新行。旧 503 installation stub/按 name route 删除不会迁移旧数据，因为它从未拥有 installation 数据。
+
+
 ## W3 Chat typed Skill 选择（已实现，零 SQL Schema 改动）
 
-`bff_agent_dispatch_outbox.payload JSONB` 已是不可变 Agent launch 快照；本片将有序 `selected_skill_source_refs` 与 Chat 用户/助手消息、expected-run registration 在同一事务写入，并将相同有序数组纳入 `request_digest`。同键同摘要只重放原 receipt，异 ref/顺序 409；claim、lease takeover、HTTP 重试与进程重启只读取该 JSONB 原文语义，不从用户当前本地偏好或 Platform 列表重算。Chat payload `schema_version` 1→2，旧版解析确定失败，不双解旧 `trace.pinned_skills`。Scheduler 的现有 `bff_idempotency_receipt.response_body` envelope `schema_version` 1→2，`snapshot.launch.body` 首次持久化显式 `[]`、恢复原值重发；旧版 snapshot 拒绝而非补值。仅重建任务自有旧 fixture，不自动清理共享数据。没有新 Skill 事实、BFF 安装表、额外 SQL 列/索引/Redis key、跨 owner JOIN 或 BFF→Platform 预授权缓存；Agent/Platform 保留 Run/安装/执行权限真源。安装产品问题未决，本数据门只保证基础 Chat 与 Scheduler 不因 Agent required 字段断链。
+`bff_agent_dispatch_outbox.payload JSONB` 已是不可变 Agent launch 快照；本片将有序 `selected_skill_source_refs` 与 Chat 用户/助手消息、expected-run registration 在同一事务写入，并将相同有序数组纳入 `request_digest`。同键同摘要只重放原 receipt，异 ref/顺序 409；claim、lease takeover、HTTP 重试与进程重启只读取该 JSONB 原文语义，不从用户当前本地偏好或 Platform 列表重算。Chat payload `schema_version` 1→2，旧版解析确定失败，不双解旧 `trace.pinned_skills`。Scheduler 的现有 `bff_idempotency_receipt.response_body` envelope `schema_version` 1→2，`snapshot.launch.body` 首次持久化显式 `[]`、恢复原值重发；旧版 snapshot 拒绝而非补值。仅重建任务自有旧 fixture，不自动清理共享数据。没有新 Skill 事实、BFF 安装表、额外 SQL 列/索引/Redis key、跨 owner JOIN 或 BFF→Platform 预授权缓存；Agent/Platform 保留 Run/安装/执行权限真源。发布不自动安装/启用；用户须显式创建 installation。本数据门只保证基础 Chat 与 Scheduler 不因 Agent required 字段断链。
 
 ## 当前 Platform projection 数据边界
 

@@ -1,10 +1,20 @@
 # kokoro-bff 当前实现
 
+## BFF-PERSONAL-DOC-GATE：本人安装当前态与已定目标（2026-09-30）
+
+- **当前态：** 本仓 clean 基线 `571b51de2057905c74c78ac966c8cf5ac11eca93`；Platform Connect consumer 仍固定 `263a28f1e55745bd1829a61f68228d775751adbc` v4 aggregate `902f8f2c2fbeb95a441820c1cf16b0a9c793eadac7106f9fcd5e41e3878b7f79`。Product installation 五方法、canonical `/v1/skill-installations`、运行 adapter 与 Web consumer 均不存在；旧 enable/disable 安装声明是 503 stub，不是部分可用能力。
+- **固定 owner 机器源：** Platform `0dd60af4799cb2f0b410ded5ffb9c1402a55c641` 已发布 v5 aggregate `bc233fe33d1acce81c2fdcda4062843b98d06bd46164d8710751d28d01b4d6ca`，包含五个 PERSONAL Product 方法、九字段安全投影、三份 `product-personal-installation/1.0.0` 独立命令 digest 与 optional-presence pagination。Platform runtime admission 正由 owner 独立实现；BFF 本文档不把 machine artifact 或并行 runtime 冒称为本仓已接线。
+- **已裁决目标：** public 路径为 `/v1/skill-installations` POST+GET、`/{installation_id}` GET+DELETE、`/{installation_id}/enabled` PUT；current IAM tenant/user → BFF workload + `x-kokoro-subject` → Platform 派生 PERSONAL target。Publish 显式**不自动安装**。写成功均为精确 `{data:{installation,change,event_id?,replayed}}` 的 200 owner-receipt 语义；DELETE 返回 owner-native `installed=false`、`enabled=false`、`removed_at` present，change 为首次 `removed` 或自然 no-op `unchanged`；BFF 不建 installation 表、receipt、cache 或跨 owner SQL。
+- **clean-slate 后继：** 先精确替换 v4 consumer/vendor/provenance/generated 为 v5，再发布 canonical BFF OpenAPI、具名 route/input/projector 与测试；同片删除旧安装 503 stub、按 name path、旧 generated/vendor 和 fallback，不保留 alias/双轨。随后 Web 固定新 BFF artifact，并由 Root 做真实 IAM→BFF→Platform 本人/撤权/重放/分页组合。
+- **映射与失败：** source、installation ID 与 opaque cursor 原样且不 trim；optional filter/cursor presence 保留；GET 为 `{data:<九字段 installation>}`，List 为 data array 且只在 owner optional next_cursor present/non-empty 时出现 `meta.next_cursor`；revision 用正 uint64 十进制 string，时间只用 UTC RFC3339 `Z`。三写使用 owner 独立 digest；每次 receipt replay 重新 current authorization、重放原 safe ACK。取消/deadline贯穿，unknown ACK 同 key 恢复；owner enum 0/未知、event presence、分页 presence 或非法九字段/receipt 为 502，依赖不可判定不降级旧服务。
+- **本片证据边界：** 仅改 `docs/TECHNICAL_DESIGN.md`、`docs/API_CONTRACT.md`、`docs/DATA_MODEL.md`、`docs/CURRENT.md`；未改 OpenAPI、contract、src、generated、vendor、schema、lockfile，未启动服务/基础设施/3310。当前仍未交付可调用个人安装 API。
+
+
 ## W3-BFF-CHAT-SKILL-SELECTION-CONSUMER：代码已接，真实组合待验
 
 从文档基线 `78c92c09ea056e5b9901342fd6cd875cd9de5ce0` 实施：唯一 public OpenAPI 使用 optional exact `selected_skill_source_refs`，缺失与 `[]` 同语义；普通 Chat 输入、请求摘要、v2 durable outbox 与 Agent launch 保留选择顺序。Scheduler launch 显式 `[]`，receipt envelope v2 与 snapshot 恢复拒绝旧版/缺字段，不在重试时补值。旧 name/trace `pinned_skills` 和无生产调用 `buildAgentLaunch` 删除；无 SQL/角色/lockfile 改动。
 
-Agent HTTP 2.0.0 固定 `dd34a4800b4ce0cc61eb80dd715e528b9d4517da`，OpenAPI SHA-256 `20398c59f42031c1b6ae2e2c3708e63ec8b5645baf741bf831bc67e14625ef99`，vendor 与 generated 由工具更新。非空选择当前 Agent reader 仍 fail closed；本片不代表 Skill 执行已闭环。Web 必须另片停止发送旧字段并使用 exact refs；本人 Publish 后自动安装/启用尚待产品决定，不影响无 Skill Chat 消费修复。
+Agent HTTP 2.0.0 固定 `dd34a4800b4ce0cc61eb80dd715e528b9d4517da`，OpenAPI SHA-256 `20398c59f42031c1b6ae2e2c3708e63ec8b5645baf741bf831bc67e14625ef99`，vendor 与 generated 由工具更新。非空选择当前 Agent reader 仍 fail closed；本片不代表 Skill 执行已闭环。Web 必须另片停止发送旧字段并使用 exact refs；本人 Publish 后不自动安装/启用；用户须显式创建 installation，不影响无 Skill Chat 消费修复。
 
 实测：新增测试先 RED（3 fail）后聚焦 27 pass，owner/public/runtime 语法一致性与旧 Scheduler snapshot 拒绝 12 pass。Node 22 `pnpm format:check`、`pnpm check`（lint/typecheck/contract/488 pass、1 既有 skip/build）及 `pnpm schema:check`（5 pass、1 无 PG fixture skip）PASS。Root 真 PostgreSQL/Agent HTTP 组合尚未执行；未操作用户 3310 或共享数据库。
 
