@@ -1114,9 +1114,9 @@ Scheduler 采用有界重试；receiver 活跃 lease 返回 425，不返回会�
 
 ### 来源 pin 与实施次序
 
-1. BFF 先 pin IAM owner `4d981441d154c83b63987f284e3a82a559595870` 的 internal OpenAPI 0.7.0，原始 SHA-256
+1. BFF 当前 pin IAM owner `e3c035b99cf9479ac8357c7d38147f1541dcbcac` 的 internal OpenAPI 0.7.0，原始 SHA-256
    `c8d7af8a365ad5d13eaabccf7f31133e0918ef198bdc3e7c790d90933eae91b2`；更新 vendor/manifest/生成 SDK 及 relay provenance，
-   只把具名 Skill check 加入 server consumer，不加入 browser relay，不改变现有 session/Team 行为。该设计片评审时 active pin 仍是 0.6.0；当前已按上文 W1E IAM 0.7 consumer 切片升级。
+   四项 owner 输入与前一 `4d981441` pin 逐 byte 相同；本次只更新 vendor/provenance，不加入 browser relay，不改变现有 session/Team/Skill 行为。
 2. BFF 授权逻辑先以四 scope/action 契约测试实施；Platform owner 随后发布 Product 受信上下文、真实 owner 查询及当前权限/receipt 协议，
    Storage owner 发布可消费的 package upload/clean/digest 契约。BFF 不自行编造 owner DTO、身份头或上传成功。
 3. 固定 Platform/Storage commit、version、digest 并生成 consumer；按各操作前置逐项接通 BFF catalog public mutation。

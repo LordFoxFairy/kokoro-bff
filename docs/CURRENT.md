@@ -1,5 +1,9 @@
 # kokoro-bff 当前实现
 
+## BFF-IAM-REPIN：当前 IAM owner provenance（2026-09-30）
+
+当前 IAM consumer 唯一固定 owner `e3c035b99cf9479ac8357c7d38147f1541dcbcac`、internal OpenAPI 0.7.0、SHA-256 `c8d7af8a365ad5d13eaabccf7f31133e0918ef198bdc3e7c790d90933eae91b2`。该 owner 的四项输入与前一 `4d981441d154c83b63987f284e3a82a559595870` pin 逐 byte 相同；vendor 只保留当前 commit 路径，manifest、生成配置及 relay policy provenance 已重钉。public OpenAPI、relay policy 2.1.0 的 route/method/header/cookie/limit、16 个 generated SDK 文件、数据库与运行语义均未变化。当前受管旧 BFF 进程仍加载已验收 `67755d16`，本片提交不等于该进程已重启或 Web/Root inventory 已完成后继 repin。
+
 ## BFF-PERSONAL-CONSUMER：本人安装消费者在途，真实组合待验（2026-09-30)
 
 - **当前代码：** 工作树已唯一固定 Platform `6519ae9a7dba63586474d2860f6725d3165b701e` v5.0.1 aggregate `3f97b3c98fd8e7ce46e4a8ea73237ddb85e764849d2b15dd28d0a3a58a69e42f`，官方工具生成五个 `ProductSkillInstallationService` 方法并接线 public POST+GET `/v1/skill-installations`、GET+DELETE `/{installation_id}` 与 PUT `/{installation_id}/enabled`。旧 v4 vendor、按 name enable/disable、503 stub、alias 与 fallback 已删除。
@@ -7,7 +11,6 @@
 - **严格失败：** source、installation ID、cursor 不 trim；uint64 输出十进制 string，时间输出 UTC `Z`。owner enum/event/page/九字段异常为 502；权限为 403，资源缺失为 404，依赖不可用为 503，统一绝对预算耗尽为 504；五个操作的可达 body 上限均以专属 413 `request_body_too_large` 表达。caller cancel 不伪装为 deadline。
 - **验证状态：** Node 22 的 format、lint、typecheck、build、默认 test、contract test/check 与 operation/schema 门已覆盖本片新增 input/HTTP 测试及 status→error.code 约束。fixture 不启动共享服务、PostgreSQL、Redis 或 3310。
 - **未完成：** 当前仍是待 Root 审查/提交的代码，真实 IAM→BFF→Platform 组合与产品激活尚未验收；后续历史章节只记录各自当时切片，不覆盖本节当前事实。
-
 
 ## W3-BFF-CHAT-SKILL-SELECTION-CONSUMER：代码已接，真实组合待验
 
@@ -26,7 +29,6 @@ Agent HTTP 2.0.0 固定 `dd34a4800b4ce0cc61eb80dd715e528b9d4517da`，OpenAPI SHA
 基线 BFF clean `55ca6c1d8a7fbd0a21bea8d3539667a68d67e9d9`、Platform owner clean `6a09913a96c686b316bfe707b823d039e625607a`。唯一 public OpenAPI 新增 `GET /v1/skills/{skill_id}`、operationId=`getPublishedPersonalSkill` 的未激活候选：当前 IAM Product user/tenant 将由 BFF 投影到 Platform，只有本人 PERSONAL/ACTIVE Skill 可读且不要求安装；不存在、非本人、跨 tenant、非 PERSONAL 或非 ACTIVE 统一 404。200 只有 `skill_id/source_ref/revision/status/name/summary/tags` 七个安全字段的 `{data}`；无 query/body/Idempotency-Key；400/401/403/404/429/502/503 使用状态专属错误，成功与每个错误都要求 `x-request-id` 和 `Cache-Control: no-store`。本片没有 route、owner client、credential、generated、配置、SQL/receipt/cache 或 Web 入口，因此不得声称已运行或 Web 可见。
 
 当前活跃 `listSkills` 仍是 legacy `{data,meta}`，且会丢失 Platform `source_ref/revision`；本片不预改其机器响应。下一运行 cutover 必须在一个提交中把既有 Skills/Pool/Catalog/MCP 四个 GET 原子迁到 Platform HTTP 3.1.0，使用专用 projection credential/Bearer，并删除旧 Capability secret、source selector 与 generated consumer；本人 ACTIVE list 使用 owner `/v1/skills?scope_kind=personal`，pool/catalog 不恢复 ACK。MCP 必须按 owner-native `server_id/provider_key/server_identity/transport/declaration_digest/status` 与 Web 同步重定义，并移除当前实际 503 的旧控件；不得保留伪造 `revision=1`、URL、空 allowed_tools、null secret_ref 或压扁 transport/status 的兼容映射。v4 写候选保持 default-off。
-
 
 状态：2026-09-29
 适用范围：当前分支代码、`database/schema.sql` 与 `contract/openapi/v1/openapi.yaml`。历史报告不作当前证据。

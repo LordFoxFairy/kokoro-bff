@@ -150,7 +150,7 @@ test("Library publishes explicit personal file 200 and rejects contract drift", 
 })
 
 test("the IAM consumer pins the complete 0.7.0 owner artifact and generates only approved admission, Skill, Team and invitation operations", async () => {
-  const commit = "4d981441d154c83b63987f284e3a82a559595870"
+  const commit = "e3c035b99cf9479ac8357c7d38147f1541dcbcac"
   const digest = "c8d7af8a365ad5d13eaabccf7f31133e0918ef198bdc3e7c790d90933eae91b2"
   const [manifestSource, vendor, config, lockfile, sdk, types] = await Promise.all([
     readFile(new URL("../contract/dependencies/iam-http.json", import.meta.url), "utf8"),

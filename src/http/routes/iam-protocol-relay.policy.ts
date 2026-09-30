@@ -1,7 +1,7 @@
 /** BFF-owned browser-private relay policy; IAM owns the endpoint schemas. */
 export const IAM_RELAY_POLICY = {
   version: "2.1.0",
-  iamOwnerCommit: "4d981441d154c83b63987f284e3a82a559595870",
+  iamOwnerCommit: "e3c035b99cf9479ac8357c7d38147f1541dcbcac",
   iamAllowlistSha256: "f63dacfa8a7bcec3c56efb8ffb762a3f8bd82bb380eff40a1462db1e77d61ead",
   iamSnapshotSha256: "b2eac1919e16fdc30a40bee0f3c4300b641bd8f674214aea7731bf10299559e1",
   iamOpenapiPath: "contract/openapi/iam.internal.v1.json",

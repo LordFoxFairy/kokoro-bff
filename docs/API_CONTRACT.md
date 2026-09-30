@@ -960,7 +960,7 @@ Proto DTO 都不是 fallback。
 
 ## W1E IAM 0.7 pin 仓内事实
 
-本仓 IAM vendor/manifest/生成物升级至 `4d981441d154c83b63987f284e3a82a559595870` 的 0.7.0；
+本仓 IAM vendor/manifest/provenance 当前固定 `e3c035b99cf9479ac8357c7d38147f1541dcbcac` 的 0.7.0；四项 owner 输入与前一 `4d981441d154c83b63987f284e3a82a559595870` pin 逐 byte 相同，16 个生成 SDK 文件保持原始字节不变；
 public OpenAPI、browser relay route/method/header/cookie 策略不变。新增 server consumer 仅使用具名
 `POST /internal/v1/tenants/{tenant_id}/skill-authorizations/check`，body 仅 action，用户 Bearer 不转发给 Platform。
 200 的 allowed 必须为 true，tenant_id/subject_id/action 与本请求逐字一致，外层与 data 额外字段拒绝；

@@ -14,7 +14,7 @@ test("published browser-private policy is a deterministic read-only projection o
   const bytes = await readFile(new URL("../contract/iam-relay-policy.json", import.meta.url))
   const published = JSON.parse(bytes.toString("utf8")) as unknown
   assert.deepEqual(published, IAM_RELAY_POLICY)
-  assert.equal(createHash("sha256").update(bytes).digest("hex"), "e58bf3e7992c2ac40efdf386ec2e652c021f2dd92747461207dede9d2c5d2786")
+  assert.equal(createHash("sha256").update(bytes).digest("hex"), "66515865d56f718ecba1b591cf4b238f050048031444b5e5ab0dac02d1d05ce7")
   const oldProjection = {
     ...IAM_RELAY_POLICY,
     iamOwnerCommit: "b720b6dc095b883237682102ca0a87ed6451a968",
@@ -30,7 +30,7 @@ test("published browser-private policy is a deterministic read-only projection o
   )
   assert.equal(IAM_RELAY_POLICY.version, "2.1.0")
   assert.equal(IAM_RELAY_POLICY.iamOpenapiVersion, "0.7.0")
-  assert.equal(IAM_RELAY_POLICY.iamOwnerCommit, "4d981441d154c83b63987f284e3a82a559595870")
+  assert.equal(IAM_RELAY_POLICY.iamOwnerCommit, "e3c035b99cf9479ac8357c7d38147f1541dcbcac")
   assert.equal(IAM_RELAY_POLICY.iamAllowlistSha256, "f63dacfa8a7bcec3c56efb8ffb762a3f8bd82bb380eff40a1462db1e77d61ead")
   assert.equal(
     (IAM_RELAY_POLICY as unknown as { iamOpenapiSha256?: string }).iamOpenapiSha256,
@@ -81,13 +81,13 @@ test("published browser-private policy is a deterministic read-only projection o
 })
 
 test("vendored IAM 0.7.0 contract and generated-client manifest pin the execution owner bytes", async () => {
-  const ownerCommit = "4d981441d154c83b63987f284e3a82a559595870"
+  const ownerCommit = "e3c035b99cf9479ac8357c7d38147f1541dcbcac"
   const expectedDigest = "c8d7af8a365ad5d13eaabccf7f31133e0918ef198bdc3e7c790d90933eae91b2"
   const vendor = await readFile(new URL(`../contract/vendor/kokoro-iam/${ownerCommit}/iam.internal.v1.json`, import.meta.url)).catch(() => null)
   assert.notEqual(vendor, null)
   assert.equal(createHash("sha256").update(vendor!).digest("hex"), expectedDigest)
   const oldVendor = await readFile(
-    new URL("../contract/vendor/kokoro-iam/b720b6dc095b883237682102ca0a87ed6451a968/iam.internal.v1.json", import.meta.url),
+    new URL("../contract/vendor/kokoro-iam/4d981441d154c83b63987f284e3a82a559595870/iam.internal.v1.json", import.meta.url),
   ).catch(() => null)
   assert.equal(oldVendor, null, "old owner vendor path must be removed")
   const contract = JSON.parse(vendor!.toString("utf8")) as { info?: { version?: string } }
