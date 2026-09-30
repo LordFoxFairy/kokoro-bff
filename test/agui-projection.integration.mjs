@@ -282,6 +282,8 @@ integrationTest("bounds Chat deliveries independently of Messages and reapplies 
     assert.equal(snapshot.deliveries.at(-1).artifact_id, "artifact_002")
     assert.equal(snapshot.deliveries[0].conversation_id, sessionId)
     assert.equal(snapshot.deliveries[0].size, 100)
+    await pool.query(`INSERT INTO bff_agui_stream (tenant_id, session_id, consumer_subject_id, expected_run_id, latest_run_id, terminal_run_id) VALUES ($1, $2, $3, 'run_visible', 'run_visible', NULL)`, [tenantId, sessionId, ownerId])
+    assert.deepEqual((await store.services.chat.snapshot(tenantId, ownerId, sessionId, undefined)).active_run, { run_id: "run_visible", status: "running" })
     assert.equal(await store.services.chat.snapshot(tenantId, "other_member", sessionId, undefined), null)
     await pool.query("UPDATE bff_conversation SET project_ref = 'missing_project' WHERE conversation_id = $1", [sessionId])
     assert.equal(await store.services.chat.snapshot(tenantId, ownerId, sessionId, undefined), null)
@@ -350,14 +352,17 @@ integrationTest("reads Artifact deliveries and public watermark from one repeata
                'source_race', 0, 'CUSTOM', '{}'::jsonb, '2026-09-28T00:00:00Z')`,
       [tenantId, sessionId],
     )
+    await writer.query(`INSERT INTO bff_agui_stream (tenant_id, session_id, consumer_subject_id, expected_run_id, latest_run_id, terminal_run_id) VALUES ($1, $2, $3, 'run_race', 'run_race', NULL)`, [tenantId, sessionId, ownerId])
     await writer.query("COMMIT")
     allowDeliveryRead()
     const before = await pending
     assert.deepEqual(before.deliveries, [])
     assert.equal(before.eventWatermark, null)
+    assert.equal(before.activeRun, undefined)
     const after = await new PostgresChatRepository({ pool }).readSnapshot(tenantId, ownerId, sessionId, undefined)
     assert.deepEqual(after.deliveries.map(({ artifactId }) => artifactId), ["artifact_race"])
     assert.equal(after.eventWatermark, "agui_0123456789abcdef0123456789abcdef")
+    assert.deepEqual(after.activeRun, { runId: "run_race", status: "running" })
   } finally {
     if (writer !== null) writer.release()
     await pool.end()
@@ -1188,6 +1193,7 @@ integrationTest("expires reclaimed AG-UI cursors while retaining the latest run 
       agentSource({ id: "gc_5", sequence: 5, kind: "message.completed", payload: { segment_id: "message_2", content: "hello" }, sessionId: "session_gc", runId: "run_2" }),
       agentSource({ id: "gc_6", sequence: 6, kind: "run.completed", payload: { status: "completed" }, sessionId: "session_gc", runId: "run_2" }),
     ])
+    await pool.query(`UPDATE bff_agui_stream SET consumer_subject_id = 'owner_gc', expected_run_id = 'run_2' WHERE tenant_id = 'tenant_a' AND session_id = 'session_gc'`)
     const before = await store.agUi.replay("tenant_a", "session_gc", null, 100)
     assert.equal(before.kind, "page")
     assert.equal(before.frames.length, 7)
@@ -1213,6 +1219,9 @@ integrationTest("expires reclaimed AG-UI cursors while retaining the latest run 
     assert.deepEqual(refreshed.deliveries.map(({ conversation_id, artifact_id }) => [conversation_id, artifact_id]), [["session_gc", "artifact_gc"]])
     assert.equal(refreshed.deliveries_has_more, false)
     assert.equal(refreshed.event_watermark, headCursor)
+    assert.equal(refreshed.active_run, undefined)
+    const marker = await pool.query(`SELECT expected_run_id, latest_run_id, terminal_run_id FROM bff_agui_stream WHERE tenant_id = 'tenant_a' AND session_id = 'session_gc'`)
+    assert.deepEqual(marker.rows, [{ expected_run_id: "run_2", latest_run_id: "run_2", terminal_run_id: "run_2" }])
     const retained = await store.agUi.replay("tenant_a", "session_gc", null, 100)
     assert.equal(retained.kind, "page")
     assert.deepEqual(retained.frames.map((frame) => frame.eventType), [
@@ -1384,11 +1393,58 @@ integrationTest("registering a newer run clears the prior terminal before source
     assert.equal(before.kind, "page")
     assert.equal(before.terminalRunId, "run_old")
 
-    await store.agUiConsumers.registerConsumer("tenant_a", "session_next_run", "user_a", "run_new")
+    const admitted = await store.services.chatTurns.submit({
+      tenantId: "tenant_a",
+      conversationId: "session_next_run",
+      subjectId: "user_a",
+      actorId: "user_a",
+      requestId: "request_next_run",
+      idempotencyKey: "turn_next_run",
+      content: "Start the next run",
+    })
+    assert.ok(admitted)
+    const newRunId = admitted.run_id
 
     const awaitingSource = await store.agUi.replay("tenant_a", "session_next_run", before.frames.at(-1).cursor, 100)
     assert.equal(awaitingSource.kind, "page")
     assert.equal(awaitingSource.terminalRunId, null)
+    assert.equal((await store.services.chat.snapshot("tenant_a", "user_a", "session_next_run", undefined)).active_run, undefined)
+    await store.agUi.ingest("tenant_a", "session_next_run", [
+      agentSource({ id: "new_run_started", sequence: 3, kind: "run.created", payload: { run_id: newRunId }, sessionId: "session_next_run", runId: newRunId }),
+    ])
+    assert.deepEqual((await store.services.chat.snapshot("tenant_a", "user_a", "session_next_run", undefined)).active_run, { run_id: newRunId, status: "running" })
+    await store.agUi.ingest("tenant_a", "session_next_run", [
+      agentSource({ id: "late_old_started_while_active", sequence: 4, kind: "run.created", payload: { run_id: "run_old" }, sessionId: "session_next_run", runId: "run_old" }),
+    ])
+    assert.equal((await store.services.chat.snapshot("tenant_a", "user_a", "session_next_run", undefined)).active_run, undefined)
+    await store.agUi.ingest("tenant_a", "session_next_run", [
+      agentSource({ id: "new_run_reobserved", sequence: 5, kind: "run.created", payload: { run_id: newRunId }, sessionId: "session_next_run", runId: newRunId }),
+      agentSource({ id: "new_run_finished", sequence: 6, kind: "run.completed", payload: { status: "completed" }, sessionId: "session_next_run", runId: newRunId }),
+      agentSource({ id: "late_old_started_after_terminal", sequence: 7, kind: "run.created", payload: { run_id: "run_old" }, sessionId: "session_next_run", runId: "run_old" }),
+    ])
+    assert.equal((await store.services.chat.snapshot("tenant_a", "user_a", "session_next_run", undefined)).active_run, undefined)
+  } finally {
+    if (store !== null) await store.close().catch(() => undefined)
+    await pool.end()
+  }
+})
+
+integrationTest("rejects blank markers and a foreign terminal without rejecting unadmitted history", async () => {
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
+  let store = null
+  try {
+    await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
+    await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+    await pool.query(`INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title) VALUES ('session_invalid_markers', 'tenant_a', 'user_a', 'Invalid markers')`)
+    await pool.query(`INSERT INTO bff_agui_stream (tenant_id, session_id, consumer_subject_id, expected_run_id, latest_run_id, terminal_run_id) VALUES ('tenant_a', 'session_invalid_markers', 'user_a', 'run_expected', '', NULL)`)
+    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    await assert.rejects(store.services.chat.snapshot("tenant_a", "user_a", "session_invalid_markers", undefined), /CHAT_ACTIVE_RUN_STATE_INVALID/u)
+    await pool.query(`UPDATE bff_agui_stream SET latest_run_id = 'run_expected', terminal_run_id = ' ' WHERE tenant_id = 'tenant_a' AND session_id = 'session_invalid_markers'`)
+    await assert.rejects(store.services.chat.snapshot("tenant_a", "user_a", "session_invalid_markers", undefined), /CHAT_ACTIVE_RUN_STATE_INVALID/u)
+    await pool.query(`UPDATE bff_agui_stream SET latest_run_id = 'run_expected', terminal_run_id = 'run_foreign' WHERE tenant_id = 'tenant_a' AND session_id = 'session_invalid_markers'`)
+    await assert.rejects(store.services.chat.snapshot("tenant_a", "user_a", "session_invalid_markers", undefined), /CHAT_ACTIVE_RUN_STATE_INVALID/u)
+    await pool.query(`UPDATE bff_agui_stream SET expected_run_id = NULL, latest_run_id = 'run_history', terminal_run_id = 'run_history' WHERE tenant_id = 'tenant_a' AND session_id = 'session_invalid_markers'`)
+    assert.equal((await store.services.chat.snapshot("tenant_a", "user_a", "session_invalid_markers", undefined)).active_run, undefined)
   } finally {
     if (store !== null) await store.close().catch(() => undefined)
     await pool.end()

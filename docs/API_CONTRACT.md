@@ -716,6 +716,18 @@ business store 配置时 receipt 持久化到 PostgreSQL；否则部分
 目标仍需按 operation 确认更多 selected headers，并让普通 receipt、BFF business fact 与 outbox 在同一事务提交；该目标
 尚未统一。现有资源 owner predicate 先于通用 receipt replay/claim，防止同 tenant 其他用户重放已存在结果；repository/事务继续重验。
 
+## Chat snapshot `active_run`（首片不改机器契约）
+
+`GET /v1/sessions/{id}` 已有 optional strict `{run_id,status}` 的 `active_run`，且现 enum 已包含 `running`。Root 首片裁决保持 v1 OpenAPI 原字节：runtime 只恢复既有 `running` 表示，不增加 `queued`、不删除 terminal enum、不建立 alias，也不要求消费者版本升级。机器契约中其他 status 的既有声明不等于本片有 durable owner事实或会输出；queued/waiting/pending 的完整语义另过版本与数据门。
+
+snapshot 从一个 PostgreSQL read snapshot 返回 Conversation、Message、Delivery、`event_watermark` 与可证明的 active run。先通过可信 tenant/subject/Project Conversation predicate，再按同一 tenant/session 读取 durable stream。设 E=`expected_run_id`、L=`latest_run_id`、T=`terminal_run_id`：仅 `E!=null && T==null && L==E` 输出 `{run_id:E,status:"running"}`；`E==null`、`T==E`（无论L为何值）及 `T==null && L!=E` 均省略。不得从 Message status、outbox、consumer state 或 frame presence 推断，也不得把 latest old run 当 active identity。
+
+当前 writer 的可达矩阵必须作为实现依据：`E=null` 的初始/历史 stream 可有 `(L,T)=(null,null),(R,null),(R,R)`，均省略；新 expected 可有 `(X,null,null)` 或 `(X,O,null)`；current start 为 `(X,X,null)` 并输出 running；current terminal/permanent dispatch failure 为 `(X,X,X)`；terminal 后晚到旧 start 可达 `(X,O,X)`，仍终态省略；active期间晚到旧 start 可达 `(X,O,null)`，保守省略。非 null marker 空白，或 `E=X` 且 `T=O` 的未知冲突抛 `CHAT_ACTIVE_RUN_STATE_INVALID` 并沿现内部失败响应，不自行新增 public error code。`E=null` 的历史组合不因无法认领而任意503。
+
+下一片不改 contract tests 的 schema bytes，只增加行为断言：normal mid-run 输出 existing running；start前、new expected+old latest、active期间late old start、finished/error、terminal后late old start与permanent dispatch failure均省略或输出如上；覆盖同一RR快照、GC、跨tenant/subject/Project与deleted Conversation。`queued`、`waiting`、非空 `pending_pauses` 和 `files` 仍未闭环。
+
+runtime 已实现该既有 shape 的 service 映射且 contract bytes 未变；Root 最终 Node22 format/lint/typecheck/contract191/architecture27/test506pass1skip/build 通过。Root 在自有临时库完成 canonical fresh install、定向8/8及全部7文件真实PG/Redis/localhost HTTP integration 47/47、0失败/0跳过；资源回收DB0、Redis新增0/baseline保留，日志 `/tmp/kokoro-bff-active-run-real-pg-final-green.log`。浏览器刷新续流/终态全文和完整生命周期仍未验收。
+
 ## AG-UI
 
 W1D-Chat-B2 目标语义：`GET /v1/sessions/{id}` 的 `messages` 是最新至多 100 条、按

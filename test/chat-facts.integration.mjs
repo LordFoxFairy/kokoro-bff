@@ -1016,6 +1016,7 @@ integrationTest("projects fenced dispatch failures as durable RUN_ERROR terminal
       { run_id: firstReceipt.run_id, status: "failed" },
       { run_id: secondReceipt.run_id, status: "failed" },
     ])
+    assert.equal((await store.services.chat.snapshot(tenant, "chat_user", conversationId, undefined)).active_run, undefined)
 
     await store.close()
     store = undefined

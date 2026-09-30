@@ -234,6 +234,10 @@ integrationTest("serves live and restarted replay only from the tenant-scoped Po
       ["a".repeat(64)],
     )
     await admissionStore.agUiConsumers.registerConsumer("tenant_a", "session_live", "user_integration", "run_2")
+    await pool.query(`UPDATE bff_agui_stream SET latest_run_id = 'run_2' WHERE tenant_id = 'tenant_a' AND session_id = 'session_live'`)
+    const runningDetail = await fetch(`${base}/v1/sessions/session_live`, { headers: auth("tenant_a") })
+    assert.equal(runningDetail.status, 200)
+    assert.deepEqual((await runningDetail.json()).data.active_run, { run_id: "run_2", status: "running" })
     events.push(
       { chat_event_id: "source_run_2", session_id: "session_live", run_id: "run_2", source_index: 4, event_type: "run.started", payload_json: '{"status":"running"}', seq: 5, created_at: 5000 },
       { chat_event_id: "source_terminal_2", session_id: "session_live", run_id: "run_2", source_index: 5, event_type: "run.completed", payload_json: '{"status":"completed","token_usage":null}', seq: 6, created_at: 6000 },

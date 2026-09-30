@@ -1219,6 +1219,20 @@ RED→GREEN 必须锁定：strict body/key、可信 user context、伪造身份�
 1 MiB 限额、严格 response 与完整 Connect code 映射。Node 22 执行完整 `pnpm format:check && pnpm check && pnpm schema:check`；
 Root 可在 active artifact 发布前用隔离真实 IAM + 候选 BFF + Platform + PostgreSQL/Redis 验证首次 201、响应丢失后 replay、撤销 session 后同 key 拒绝以及 Platform 仅一条 Skill/receipt；这是 ADR-002 要求的预激活证据，不是 public 产品激活。正式发布仍需六 owner sandbox、Platform active/routable=true artifact、BFF 重新固定精确 commit/aggregate并由 Root 协调切换。Web adapter 仍是后续消费者。
 
+## BFF-CHAT-ACTIVE-DOC：同一读快照中的 existing running（已实现，owner真实GREEN已验）
+
+**Owner、当前态与裁决。** BFF 是 public Chat snapshot 与 durable AG-UI projection 的唯一 owner。基线d654的 OpenAPI 已有 optional `active_run` 和 `running` status，但该基线 `ChatApplicationService.snapshot()` 从不输出；本片已实现下述读映射。Root 首片保持 v1机器原字节，只恢复可证明的 existing running；不加queued、不收窄enum、不改`src/contracts/chat.ts`/generated、不要求Web contract升级，也不拼造`RUN_STARTED`或增加Web fallback。
+
+**真实 writer 与矩阵。** `agUiConsumerRegistration` 写expected；换新expected清terminal但保留latest。`runProjectionState`对任意run的`RUN_STARTED`都把latest改为该run，仅E为空或start属于E才清terminal；只有E的FINISHED/ERROR把latest/terminal写E。permanent dispatch failure同样仅在失败run为E时写latest/terminal=E。故合法状态包括：历史`E=null`配null/started/terminal marker；新expected的`(E=X,L=null|O,T=null)`；running的`(X,X,null)`；terminal的`(X,X,X)`；以及terminal后late old start的`(X,O,X)`。最后一种必须省略而非错误；active期间late old start`(X,O,null)`也合法且保守省略。
+
+**读映射与失败。** 采用现有`PostgresChatRepository.readSnapshot()`，在同一连接/MVCC snapshot和Conversation ACL成功后增加一行tenant/session stream查询，并通过`ChatSnapshot.activeRun`交给service映射snake_case。E为空全部省略；T=E全部省略且不看L；T为空且L=E才输出`{run_id:E,status:"running"}`；T为空而L为空/其他值省略。任一非null marker为空白，或E非空而T非空且T!=E，抛固定内部`CHAT_ACTIVE_RUN_STATE_INVALID`；E=null历史流不因无法认领而任意503。淘汰service另开AgUiRepository事务及扫描Message/outbox/frame。
+
+**并发、GC和权限。** 读取不锁stream；Message、Delivery、cursor、E/L/T来自同一repeatable-read边界。GC只删event/frame，不删stream fence。所有stream读取都在现有tenant/subject/Project/active Conversation predicate后执行；cursor/run ID不授予权限。晚到old start导致running暂时不输出是已知保守缺口，不在read侧猜测或改writer。
+
+**后继与精确代码门。** 首片源码允许集仅`src/application/ports/chat-repository.ts`、`src/infrastructure/postgres/chat-repository.ts`、`src/application/chat-service.ts`；测试为现有`test/chat-service.test.ts`、`test/agui-http.integration.mjs`、`test/agui-projection.integration.mjs`、`test/agent-dispatch-outbox.test.ts`及真实PG `test/chat-facts.integration.mjs`。RED→GREEN覆盖上列全部可达矩阵、blank/foreign-terminal非法row、permanent failure writer→snapshot、RR barrier、GC、tenant/subject/Project/deleted Conversation；不改OpenAPI、`src/contracts/chat.ts`、Schema或generated。`queued`、`waiting`、durable pending、旧start覆写及files另片，running首片不称整个能力完成。
+
+实现已严格落在上述三个源码文件与五个测试文件；纯 Node 22 门通过，Root 的隔离 PostgreSQL RED 证据为 3 pass/5 expected fail。实现后的真实 PostgreSQL/Redis/localhost fake Agent GREEN 由 Root 自有临时资源复验，当前文档不把纯门替代为组合验收。
+
 ## W2 单文件项目资源上传（实施切片）
 
 BFF Project 是当前关系授权 owner，Storage main `094847da9f4f03e5f3dbda06658430c74bc32f54` 的 `kokoro.storage.v2` 是唯一 Upload/Asset owner。保留现有 POST `/v1/projects/{projectId}/resources` + multipart `files` 形态，首片只接受一个文件，总 HTTP body 不超过 1 MiB（含 multipart 开销）；多文件明确 400，不承诺批次原子性。先 IAM admission，再 `projects.find({tenantId,subjectId}, projectId)` 取 canonical project.id，之后才解析/调用 Storage。
@@ -1238,3 +1252,7 @@ Storage v2 `ListAssets` 已固定 owner commit `ef0fd7779bf434120ac1f8a58592222f
 列表按 Storage 的 tenant/project scope，而非按上传者过滤；BFF 当前私人 Project owner predicate 决定谁能读。cursor 由 Storage 绑定调用方、tenant、project、subject、filter 和 limit；BFF 只透传不解码，错误不降级成假空列表。返回列表不含 upload_id（Storage 资产行不提供此关联），也不返回签名下载 URL；下载另走受信、逐次授权的 owner 契约。测试先覆盖 200/空页/下一页、跨项目/跨 subject 不可见、scan/purpose 过滤、Storage 故障与恶意 cursor，最后用真实 Storage+PostgreSQL/ObjectStore 组合验证刷新仍可见。
 
 GET 专用响应 gate 验证 page 数量/唯一 Asset ID、purpose/scan/origin enum、filename/MIME/SHA/uint64 与 Timestamp范围；RFC3339 UTC保留owner纳秒精度。非法owner页为502，不本地过滤伪造部分页；owner INVALID_ARGUMENT为400，认证/权限/超时/不可用为503，其余未知RPC错误为502。HTTP外层在admission前对精确GET设置request ID，no-store沿现response helper。零自动retry，10秒总调用预算及request断开取消，不改POST/checkpoint。
+
+### BFF activeRun running首片 Root最终证据（2026-09-30）
+
+同一个ACL先行RR snapshot实现已通过Root Node22完整纯门（contract191、architecture27、test506pass1skip、format/lint/typecheck/build）及canonical fresh install、定向8/8与全7文件真实PG/Redis/localhost HTTP integration47/47、0失败/0跳过。日志 `/tmp/kokoro-bff-active-run-root-pg-fixture-final-gates.log`、`/tmp/kokoro-bff-active-run-real-pg-final-green.log`；自有/新增临时库0、Redis新增0/baseline保留。首次PG7/1因fixture缺正常assistant/dispatch binding失败，改由ChatTurn.submit建立绑定后复验，不改生产guard。公开OpenAPI/schema/generated字节未变；浏览器终态全文与queued/waiting/pending/files仍后继，不能据47项owner integration宣布全产品完成。

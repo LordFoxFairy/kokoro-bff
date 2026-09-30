@@ -18,7 +18,10 @@ export type ChatSnapshot = {
   deliveries: ChatArtifactDelivery[]
   deliveriesHasMore: boolean
   eventWatermark: string | null
+  activeRun?: ChatActiveRun
 }
+
+export type ChatActiveRun = { runId: string; status: "running" }
 
 export type ChatArtifactDelivery = {
   conversationId: string

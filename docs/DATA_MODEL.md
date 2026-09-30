@@ -429,6 +429,18 @@ Conversation projection；撤销、过期或 tombstone 后拒绝，且不授权 
 
 ### AG-UI 不变量
 
+#### Chat snapshot active Run 读模型（running 首片目标）
+
+不新增表、列或索引。现有 `bff_agui_stream.expected_run_id` 是最新准入 run fence，`latest_run_id` 是最近收到 `RUN_STARTED` 或 expected terminal 的 run marker，`terminal_run_id` 只记录 expected run 的终态。Chat repository 在 owner-scoped Conversation/Project predicate 成功后，于读取 Message、Delivery 和 ledger cursor 的同一 `REPEATABLE READ READ ONLY` 事务内按 `(tenant_id,session_id)` 读取三字段。
+
+三个实际 writer 决定可达矩阵，而不是读侧理想状态机：consumer registration 换 expected 会清 terminal 但保留 latest；projection 的任意 `RUN_STARTED` 都覆盖 latest，仅 current expected start 才清 terminal；current expected terminal与permanent dispatch failure同时写 latest/terminal=expected。因此 `E=X,L=O,T=null` 可表示新 run 尚未开始或晚到旧 start，`E=X,L=O,T=X` 可由终态后晚到旧 start产生，二者都合法。`E=null` 是 seed/历史未准入 stream，合法持有 null、started 或 terminal marker。
+
+首片映射为：E为空全部省略；E非空且T=E全部省略，不看L；T为空且L=E输出running；T为空且L为null/其他值省略。所有非 null marker 必须是非空白string；E非空时T非空却不等于E是当前writer不可达冲突，抛固定 `CHAT_ACTIVE_RUN_STATE_INVALID` 并回滚/失败，不伪装running或503合法历史。读取不加锁、不写projection、不延长retention；GC不删除stream fence。tenant、subject、Project和soft-delete权限仍由先行Chat owner predicate决定。
+
+该首片不持久queued/waiting/pending facts，也不修复旧 `RUN_STARTED` 覆写latest；后继若要稳定输出queued/waiting，须定义current expected lifecycle、等待/恢复/终态清除与pending metadata，并重新通过DATA/SQL/API门。`pending_pauses`和`files`空数组不代表能力完成。
+
+当前 repository 已在既有只读 RR 事务与 ACL 之后读取三 marker，不增加 schema、索引或写路径；非法 row 的纯 connection 测试已证明 rollback/release。Root 隔离 PostgreSQL 已完成 canonical fresh install、定向8/8与完整owner integration47/47、0失败/0跳过，包含RR barrier、GC fence、正常ChatTurn binding、late START、权限拒绝与永久dispatch失败。临时数据库/Redis新资源均回收；日志 `/tmp/kokoro-bff-active-run-real-pg-final-green.log`。此证据不覆盖浏览器或queued/waiting/pending后继。
+
 W1D-Chat-B2 目标态不增加表、列或跨 owner SQL。`bff_agent_dispatch_outbox` 持有
 `(tenant_id, conversation_id, run_id, subject_id, assistant_message_id)` 的本地绑定，
 `bff_agui_stream.expected_run_id` 持有当前 run fence；在同一 stream row lock/version/lease

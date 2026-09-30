@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 
-import type { ChatArtifactDelivery, ChatRepository, ChatSnapshot, ConversationPage, MessagePage } from "../../application/ports/chat-repository.js"
+import type { ChatActiveRun, ChatArtifactDelivery, ChatRepository, ChatSnapshot, ConversationPage, MessagePage } from "../../application/ports/chat-repository.js"
 import type { Conversation } from "../../domain/chat/conversation.js"
 import type { Share } from "../../domain/chat/share.js"
 import type { PostgresBffDatabase } from "./client.js"
@@ -28,6 +28,27 @@ type ArtifactDeliveryRow = {
   source_size_bytes: string
   run_id: string
   delivered_at: Date | string
+}
+
+type ActiveRunRow = {
+  expected_run_id: unknown
+  latest_run_id: unknown
+  terminal_run_id: unknown
+}
+
+function activeRunFromRow(row: ActiveRunRow | undefined): ChatActiveRun | undefined {
+  if (row === undefined) return undefined
+  const markers = [row.expected_run_id, row.latest_run_id, row.terminal_run_id]
+  if (markers.some((value) => value !== null && (typeof value !== "string" || value.trim() === ""))) {
+    throw new Error("CHAT_ACTIVE_RUN_STATE_INVALID")
+  }
+  const expected = row.expected_run_id as string | null
+  const latest = row.latest_run_id as string | null
+  const terminal = row.terminal_run_id as string | null
+  if (expected === null) return undefined
+  if (terminal !== null && terminal !== expected) throw new Error("CHAT_ACTIVE_RUN_STATE_INVALID")
+  if (terminal === expected) return undefined
+  return latest === expected ? { runId: expected, status: "running" } : undefined
 }
 
 function artifactDeliveryFromRow(row: ArtifactDeliveryRow): ChatArtifactDelivery {
@@ -164,6 +185,14 @@ export class PostgresChatRepository implements ChatRepository {
           ORDER BY public_sequence DESC LIMIT 1`,
         [tenantId, conversationId],
       )
+      const activeRunResult = await client.query<ActiveRunRow>(
+        `SELECT expected_run_id, latest_run_id, terminal_run_id
+           FROM bff_agui_stream
+          WHERE tenant_id = $1 AND session_id = $2
+          LIMIT 1`,
+        [tenantId, conversationId],
+      )
+      const activeRun = activeRunFromRow(activeRunResult.rows[0])
       await client.query("COMMIT")
       return {
         conversation: conversationFromRow(row),
@@ -171,6 +200,7 @@ export class PostgresChatRepository implements ChatRepository {
         deliveries: deliveries.rows.slice(0, 100).map(artifactDeliveryFromRow),
         deliveriesHasMore: deliveries.rows.length > 100,
         eventWatermark: cursor.rows[0]?.cursor ?? null,
+        ...(activeRun === undefined ? {} : { activeRun }),
       }
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined)

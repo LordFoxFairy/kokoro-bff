@@ -57,3 +57,51 @@ test("Chat snapshot exposes durable Artifact identity and bounded-history signal
   assert.equal(result?.deliveries_has_more, true)
   assert.equal(result?.event_watermark, "agui_0123456789abcdef0123456789abcdef")
 })
+
+test("Chat snapshot maps only a repository-proven active running Run", async () => {
+  const conversation = { conversationId: "session_running", tenantId: "tenant_a", ownerId: "owner_a", title: "Running", projectRef: null, status: "active", createdAt: new Date("2026-09-04T11:00:00.000Z"), updatedAt: new Date("2026-09-04T12:00:00.000Z"), deletedAt: null }
+  const repository = { readSnapshot: async () => ({ conversation, messages: [], deliveries: [], deliveriesHasMore: false, eventWatermark: null, activeRun: { runId: "run_current", status: "running" } }) }
+  const result = await new ChatApplicationService(repository as never).snapshot("tenant_a", "owner_a", "session_running", undefined)
+  assert.deepEqual(result?.active_run, { run_id: "run_current", status: "running" })
+})
+
+for (const [name, marker] of [
+  ["expected blank", { expected_run_id: " ", latest_run_id: null, terminal_run_id: null }],
+  ["latest blank", { expected_run_id: "run_expected", latest_run_id: " ", terminal_run_id: null }],
+  ["terminal blank", { expected_run_id: "run_expected", latest_run_id: "run_expected", terminal_run_id: " " }],
+  ["expected non-string", { expected_run_id: 7, latest_run_id: null, terminal_run_id: null }],
+  ["latest non-string", { expected_run_id: "run_expected", latest_run_id: 7, terminal_run_id: null }],
+  ["terminal non-string", { expected_run_id: "run_expected", latest_run_id: "run_expected", terminal_run_id: 7 }],
+] as const) {
+  test(`Chat snapshot rejects ${name} and rolls back and releases its connection`, async () => {
+    const calls: Array<{ sql: string; values?: unknown[] }> = []
+    let released = false
+    const client = {
+      query: async (sql: string, values?: unknown[]) => {
+        calls.push({ sql, values })
+        if (sql.includes("FROM bff_conversation") && sql.includes("LIMIT 1")) return { rows: [{ conversation_id: "session_invalid", tenant_id: "tenant_a", owner_id: "owner_a", title: "Invalid", project_ref: null, status: "active", created_at: new Date("2026-09-30T00:00:00Z"), updated_at: new Date("2026-09-30T00:00:00Z"), deleted_at: null }] }
+        if (sql.includes("FROM bff_agui_stream")) return { rows: [marker] }
+        return { rows: [] }
+      },
+      release: () => { released = true },
+    }
+    const repository = new PostgresChatRepository({ pool: { connect: async () => client } } as never)
+
+    await assert.rejects(repository.readSnapshot("tenant_a", "owner_a", "session_invalid", undefined), /CHAT_ACTIVE_RUN_STATE_INVALID/u)
+    const streamRead = calls.find(({ sql }) => sql.includes("FROM bff_agui_stream"))
+    assert.deepEqual(streamRead?.values, ["tenant_a", "session_invalid"])
+    assert.equal(calls.at(-1)?.sql, "ROLLBACK")
+    assert.equal(released, true)
+  })
+}
+
+test("Chat snapshot performs no stream read when the Conversation ACL rejects access", async () => {
+  const calls: string[] = []
+  let released = false
+  const client = { query: async (sql: string) => { calls.push(sql); return { rows: [] } }, release: () => { released = true } }
+  const repository = new PostgresChatRepository({ pool: { connect: async () => client } } as never)
+  assert.equal(await repository.readSnapshot("tenant_a", "other_subject", "session_hidden", undefined), null)
+  assert.equal(calls.some((sql) => sql.includes("FROM bff_agui_stream")), false)
+  assert.equal(calls.at(-1), "COMMIT")
+  assert.equal(released, true)
+})

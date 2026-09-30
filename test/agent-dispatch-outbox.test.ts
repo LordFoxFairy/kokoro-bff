@@ -186,7 +186,8 @@ describe("Agent dispatch outbox worker", () => {
 
     await dispatcher.runOnce()
     assert.equal(repository.retryable.length, 0)
-    assert.equal(repository.failed[0]?.errorCode, "agent_http_503")
+    assert.deepEqual(repository.failed, [{ lease: { tenantId: "tenant_fixture", outboxId: "agent_outbox_fixture", leaseOwner: "worker_fixture", leaseToken: "lease_fixture", fence: 7 }, errorCode: "agent_http_503" }])
+    assert.equal(repository.succeeded.length, 0)
   })
 
   it("claims one command at a time and delivers it before claiming the next FIFO item", async () => {

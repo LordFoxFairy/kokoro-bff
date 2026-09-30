@@ -1,5 +1,15 @@
 # kokoro-bff 当前实现
 
+## BFF-CHAT-ACTIVE-DOC：`active_run` 一致快照实现与owner验收（2026-09-30）
+
+Root 已裁决首片保持现有 v1 OpenAPI 原字节，只恢复契约已经定义的 `active_run.status=running`；不新增 `queued`、不收窄 enum、不修改手写 `src/contracts/chat.ts` 或要求 Web contract repin。基线 `d654a1bc6ce0347e28dd90a0ce0ee1553b8d67ed` 的 `ChatApplicationService.snapshot()` 从不输出 `active_run`；本候选已由 Chat repository 在读取 Conversation、最近 100 条 Message、Delivery 与 AG-UI watermark 的同一 PostgreSQL `REPEATABLE READ READ ONLY` 事务中读取本仓 `bff_agui_stream.expected_run_id/latest_run_id/terminal_run_id`，并映射可证明的 running。
+
+映射只输出可证明事实：expected 为空时不认领任何历史 run；expected 非空且 terminal 等于 expected 时，无论 latest 是 expected、其他 run 或 null，均省略终态；terminal 为空且 latest 等于 expected 时输出 `{run_id:expected,status:"running"}`；terminal 为空且 latest 为 null 或其他 run 时保守省略。新 expected 保留旧 latest、晚到旧 `RUN_STARTED` 覆盖 latest、终态后晚到旧 start 形成 `expected=X,terminal=X,latest=O` 都是三个真实 writer 可达状态，不得报损坏。任一非 null run marker 为空白，或 expected 非空而 terminal 是另一个 run，抛固定内部 `CHAT_ACTIVE_RUN_STATE_INVALID`，不降级为假状态。
+
+当前源码已在 `ChatSnapshot.activeRun`、`PostgresChatRepository.readSnapshot()` 与 `ChatApplicationService.snapshot()` 实现上述 running 首片：ACL 成功后在同一只读 RR 事务读取 stream marker，非法 marker 回滚并释放连接，service 只映射既有 v1 running shape。Node 22 纯门已通过 format、lint、typecheck、contract、architecture、506 pass/1 skip test 与 build。Root 隔离 PostgreSQL GREEN 候选运行得到 7 pass/1 fail；唯一失败确认是 newer-run fixture 只注册 consumer、未通过 Chat turn admission 建立 assistant/dispatch binding，因而被既有 projection guard 正确拒绝，不是 active-run 读逻辑失败。fixture 已改为使用正式 `chatTurns.submit()` receipt run identity；修复后的真实 PostgreSQL/localhost GREEN 仍待 Root 复验，因此不声称真实组合完成。`queued`、`waiting`、durable `pending_pauses`、旧 start 覆写风险和 `files` 仍是开放后继。
+
+Root最终复验已通过：Node22 format/lint/typecheck/contract191/architecture27/test506pass1skip/build，日志 `/tmp/kokoro-bff-active-run-root-pg-fixture-final-gates.log`；canonical `db:apply-schema` fresh install、同RED定向8/8及全部7文件真实PG/Redis/localhost HTTP integration47/47、0失败/0跳过，日志 `/tmp/kokoro-bff-active-run-real-pg-final-green.log`。新fixture经正常ChatTurn.submit创建assistant/dispatch binding，未放宽guard；原7/1失败记录保留。临时数据库/新增数据库0、Redis新增0且baseline完整。Root接受该running snapshot片；浏览器终态全文/全产品计费及queued/waiting/pending/files仍未验收。
+
 ## BFF-IAM-REPIN：当前 IAM owner provenance（2026-09-30）
 
 当前 IAM consumer 唯一固定 owner `e3c035b99cf9479ac8357c7d38147f1541dcbcac`、internal OpenAPI 0.7.0、SHA-256 `c8d7af8a365ad5d13eaabccf7f31133e0918ef198bdc3e7c790d90933eae91b2`。该 owner 的四项输入与前一 `4d981441d154c83b63987f284e3a82a559595870` pin 逐 byte 相同；vendor 只保留当前 commit 路径，manifest、生成配置及 relay policy provenance 已重钉。public OpenAPI、relay policy 2.1.0 的 route/method/header/cookie/limit、16 个 generated SDK 文件、数据库与运行语义均未变化。当前受管旧 BFF 进程仍加载已验收 `67755d16`，本片提交不等于该进程已重启或 Web/Root inventory 已完成后继 repin。
