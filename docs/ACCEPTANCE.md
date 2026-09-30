@@ -1,5 +1,19 @@
 # kokoro-bff acceptance
 
+## W3 Chat typed Skill 选择目标验收（尚未运行）
+
+| ID | Given / When / Then | Evidence |
+| --- | --- | --- |
+| CHAT-SKILL-01 | Given 当前 IAM 用户的普通 Chat 未选择 Skill，When 首次提交与同键重放，Then public 202 返回唯一 receipt，持久 outbox 与真实 Agent HTTP 都有显式 `selected_skill_source_refs: []`，Run 成功准入而非异步 400 | BFF contract/unit + 隔离真 PostgreSQL/Agent HTTP |
+| CHAT-SKILL-02 | Given 有序 exact refs，When 同键同选择/异 ref/异顺序重放或进程重启，Then 原 JSONB launch/Run identity 不漂移；变化 409，重试只发原请求 | Chat outbox 真 PostgreSQL + dispatcher 重启测试 |
+| CHAT-SKILL-03 | Given name、裸 ID、重复、>16、>4 KiB 或旧 `pinned_skills`，When public 提交，Then 400 且零 Message/outbox；旧 `trace.pinned_skills` 不作为后门 | BFF direct contract/HTTP 负例 + 架构门 |
+| CHAT-SKILL-04 | Given Scheduler 无 Skill 选择，When 首次 snapshot、响应丢失与恢复，Then body 恒为显式 `[]` 且 occurrence/Run 身份不变 | Scheduler receipt/恢复测试 + Agent HTTP |
+| CHAT-SKILL-05 | Given Agent 2.0.0 固定发布，When BFF 固定 exact commit/digest 并生成 consumer，Then contract drift/typecheck/build 通过，仍不把已发布 ACTIVE 的未安装 Skill 当已执行 | `pnpm contract:check:agent && pnpm format:check && pnpm check && pnpm schema:check && pnpm build` + 真 owner 负例 |
+| CHAT-SKILL-06 | Given 旧 Chat payload 或旧 Scheduler receipt/snapshot，When 恢复投递，Then 版本/字段校验明确失败、零 Agent 请求；不补 `[]`、不读旧 trace；新 v2 snapshot 在 lease takeover 后仍原样发送 | payload/parser 负例 + PostgreSQL 恢复测试 |
+| CHAT-SKILL-07 | Given 非空合法 refs，When 固定 Agent 当前执行，Then 显式 reader-unavailable 而非忽略选择执行普通 Chat；此预期失败不计 Skill 执行闭环 | Agent/BFF 组合负例；reader 接入后另行更新验收 |
+
+本表是未执行的后续代码/集成门；本文档变更不构成任一通过证据。
+
 ## 1. 本阶段：文档与契约治理
 
 | ID | Given / When / Then | Evidence |

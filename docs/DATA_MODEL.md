@@ -1,5 +1,9 @@
 # kokoro-bff data model
 
+## W3 Chat typed Skill 选择数据门（目标，零 Schema 改动）
+
+`bff_agent_dispatch_outbox.payload JSONB` 已是不可变 Agent launch 快照；下一切片将有序 `selected_skill_source_refs` 与 Chat 用户/助手消息、expected-run registration 在同一事务写入，并将相同有序数组纳入 `request_digest`。同键同摘要只重放原 receipt，异 ref/顺序 409；claim、lease takeover、HTTP 重试与进程重启只读取该 JSONB 原文语义，不从用户当前本地偏好或 Platform 列表重算。Chat payload `schema_version` 1→2，旧版解析确定失败，不双解旧 `trace.pinned_skills`。Scheduler 的现有 `bff_idempotency_receipt.response_body` envelope `schema_version` 1→2，`snapshot.launch.body` 首次持久化显式 `[]`、恢复原值重发；旧版 snapshot 拒绝而非补值。仅重建任务自有旧 fixture，不自动清理共享数据。没有新 Skill 事实、BFF 安装表、额外 SQL 列/索引/Redis key、跨 owner JOIN 或 BFF→Platform 预授权缓存；Agent/Platform 保留 Run/安装/执行权限真源。安装产品问题未决，本数据门只保证基础 Chat 与 Scheduler 不因 Agent required 字段断链。
+
 ## 当前 Platform projection 数据边界
 
 五个 GET 使用当前 IAM Product tenant/user 与独立 Platform projection credential 获取 owner 当前事实；BFF 没有新增 Skill/MCP 表、索引、事务、Redis key、receipt 或投影缓存，也不跨 owner SQL。`source_ref`、`revision`、status 与 cursor 来自 Platform；BFF 只校验并透出公开安全字段。旧 Capability HTTP transport 删除不触及本仓 canonical `database/schema.sql`。下方“未激活机器候选”为历史记录。

@@ -1,5 +1,11 @@
 # kokoro-bff 当前实现
 
+## W3-BFF-CHAT-SKILL-SELECTION-DESIGN：仅设计门，运行未切换
+
+基线 clean `62daba37fc0267830d73590bb5a3499807d46fc6`：public `pinned_skills` 仍是名字，Chat outbox launch 只写 `trace.pinned_skills`；Agent HTTP generated 仍 pin owner 1.1.0/`520ec181a101298b4f336aad273ce003b2735955`，Scheduler launch 也无 typed 字段。Agent 2.0.0 required 字段使当前 BFF 已接纳的普通 Chat 202 后异步启动失败，Scheduler 同样失配。此提交只在五份文档定义 clean-slate 目标：public exact `selected_skill_source_refs`、Chat digest/JSONB 有序 fence、Chat/Scheduler Agent body 显式 `[]`、删除旧 name/trace 双轨；未改唯一 OpenAPI、generated、SQL、代码或测试，不能称为修复。已核 Agent 2.0.0 owner `2d03689cb3cfe1bf72c63accc8ebc45ebdc93cdb`，OpenAPI SHA-256 `fce03385232ec9fc541476c087ba3a4b7ce591022da0bf18d9835f11d2345b79`；BFF pin/generated 仍未更新。Agent 非空选择当前 fail closed，真实 Skill 包读取另片；本人 Publish 后自动安装/启用是未决产品选择，不能以可读 ACTIVE 冒充可执行。以下历史段落不覆盖本节当前事实。
+
+文档片实测：`git diff --check` PASS；Node 22 `pnpm contract:check:agent` PASS（当前旧 1.1.0 生成物两次一致，并非已升级 2.0.0）；`pnpm schema:check` 5 pass / 1 skip（未配置真实 PostgreSQL fixture）。此片未启动服务、未运行代码全门或端到端。
+
 ## 当前读投影切换（待 Root 真组合验收）
 
 本仓当前实现已将五个 public GET（Skills、by-ID、Pool、Catalog、MCP）统一接到 Platform HTTP 3.1.0；独立 `platform:projection.read` IAM workload credential、当前 Product user/tenant admission、owner-native 字段与严格 `{data}`/`{error}` 均由 BFF 负责。旧 Capability HTTP facade、2.0.0 vendor/generated/manifest、旧 shared-secret read 路径已删除。无 BFF Skill/MCP SQL、receipt 或缓存。Node22 单仓门与 Root 真 IAM/BFF/Platform 组合证据分开记录；Web 读契约尚未更新，不能宣称页面闭环。以下 W3-PREFLIGHT 和更早段落是提交时点历史记录，不覆盖本节。
