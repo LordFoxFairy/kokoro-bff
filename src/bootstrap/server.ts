@@ -44,6 +44,7 @@ import { beginSkillPackageUploadRoute } from "../http/routes/begin-skill-package
 import { completeSkillPackageUploadRoute } from "../http/routes/complete-skill-package-upload.js"
 import { validateSkillDraftRoute } from "../http/routes/validate-skill-draft.js"
 import { publishSkillRoute } from "../http/routes/publish-skill.js"
+import { skillInstallationRoute } from "../http/routes/skill-installations.js"
 
 async function handle(
   request: IncomingMessage,
@@ -157,6 +158,7 @@ async function handle(
   const isSkillPackageCompletePath = segments.length === 5 && segments[1] === "skills" && segments[3] === "package-upload" && segments[4] === "complete"
   const isSkillValidatePath = segments.length === 4 && segments[1] === "skills" && segments[3] === "validate"
   const isSkillPublishPath = segments.length === 4 && segments[1] === "skills" && segments[3] === "publish"
+  const isSkillInstallationPath = businessPath[0] === "skill-installations"
   const isPlatformProjectionRead =
     request.method === "GET" &&
     ((businessPath[0] === "skills" &&
@@ -189,6 +191,7 @@ async function handle(
         isSkillPackageCompletePath ||
         isSkillValidatePath ||
         isSkillPublishPath ||
+        isSkillInstallationPath ||
         isPlatformProjectionRead
       ) {
         response.setHeader("cache-control", "no-store")
@@ -203,6 +206,23 @@ async function handle(
     return
   }
   const context = admission.context
+
+  if (isSkillInstallationPath) {
+    const routeAbort = new AbortController()
+    const abortRoute = (): void => routeAbort.abort()
+    request.once("aborted", abortRoute)
+    response.once("close", abortRoute)
+    await skillInstallationRoute(request, response, context, businessPath, composition.personalInstallationClient, routeAbort.signal).finally(() => {
+      request.removeListener("aborted", abortRoute)
+      response.removeListener("close", abortRoute)
+    })
+    return
+  }
+
+  if (businessPath.length === 3 && businessPath[0] === "skills" && ["enable", "disable"].includes(businessPath[2] ?? "")) {
+    send(response, 404, failure("bff_route_not_found", "Business route was not found", id))
+    return
+  }
 
   if (isSkillPublishPath) {
     const routeAbort = new AbortController()

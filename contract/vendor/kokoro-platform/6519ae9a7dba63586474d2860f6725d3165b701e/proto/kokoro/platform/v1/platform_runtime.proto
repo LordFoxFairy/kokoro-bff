@@ -823,3 +823,103 @@ message ListMcpConnectorProvidersResponse {
 service McpConnectorProviderService {
   rpc ListMcpConnectorProviders(kokoro.platform.v1.ListMcpConnectorProvidersRequest) returns (kokoro.platform.v1.ListMcpConnectorProvidersResponse);
 }
+
+// Candidate PERSONAL Product surface. Not registered until runtime admission is verified.
+// Subject comes only from authenticated BFF metadata; target is derived, never body-supplied.
+message ProductSkillInstallation {
+  kokoro.platform.v1.SkillInstallationId installation_id = 1;
+  kokoro.platform.v1.SkillSourceRef source_ref = 2;
+  kokoro.platform.v1.SkillSeriesId series_id = 3;
+  uint64 revision = 4;
+  bool installed = 5;
+  bool enabled = 6;
+  google.protobuf.Timestamp installed_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+  google.protobuf.Timestamp removed_at = 9;
+}
+
+message InstallPersonalSkillRequest {
+  reserved 100;
+  reserved "execution_proof", "tenant_id", "actor_id", "subject_id", "owner_scope", "target_owner_scope", "product_context";
+  string request_id = 1;
+  kokoro.common.v1.CommandIdentity command = 2;
+  kokoro.platform.v1.SkillSourceRef source_ref = 3;
+}
+
+message InstallPersonalSkillResponse {
+  kokoro.platform.v1.ProductSkillInstallation installation = 1;
+  kokoro.platform.v1.SkillInstallationChange change = 2;
+  optional string event_id = 3;
+  bool replayed = 4;
+}
+
+message SetPersonalSkillInstallationEnabledRequest {
+  reserved 100;
+  reserved "execution_proof", "tenant_id", "actor_id", "subject_id", "owner_scope", "target_owner_scope", "product_context";
+  string request_id = 1;
+  kokoro.common.v1.CommandIdentity command = 2;
+  kokoro.platform.v1.SkillInstallationId installation_id = 3;
+  optional bool enabled = 4;
+}
+
+message SetPersonalSkillInstallationEnabledResponse {
+  kokoro.platform.v1.ProductSkillInstallation installation = 1;
+  kokoro.platform.v1.SkillInstallationChange change = 2;
+  optional string event_id = 3;
+  bool replayed = 4;
+}
+
+message RemovePersonalSkillInstallationRequest {
+  reserved 100;
+  reserved "execution_proof", "tenant_id", "actor_id", "subject_id", "owner_scope", "target_owner_scope", "product_context";
+  string request_id = 1;
+  kokoro.common.v1.CommandIdentity command = 2;
+  kokoro.platform.v1.SkillInstallationId installation_id = 3;
+}
+
+message RemovePersonalSkillInstallationResponse {
+  kokoro.platform.v1.ProductSkillInstallation installation = 1;
+  kokoro.platform.v1.SkillInstallationChange change = 2;
+  optional string event_id = 3;
+  bool replayed = 4;
+}
+
+message GetPersonalSkillInstallationRequest {
+  reserved 100;
+  reserved "execution_proof", "tenant_id", "actor_id", "subject_id", "owner_scope", "target_owner_scope", "product_context";
+  string request_id = 1;
+  kokoro.platform.v1.SkillInstallationId installation_id = 2;
+}
+
+message GetPersonalSkillInstallationResponse {
+  kokoro.platform.v1.ProductSkillInstallation installation = 1;
+}
+
+message ListPersonalSkillInstallationsRequest {
+  reserved 100;
+  reserved "execution_proof", "tenant_id", "actor_id", "subject_id", "owner_scope", "target_owner_scope", "product_context";
+  string request_id = 1;
+  optional bool enabled = 2;
+  optional bool installed = 3;
+  kokoro.platform.v1.ProductSkillInstallationPageRequest page = 4;
+}
+
+message ListPersonalSkillInstallationsResponse {
+  repeated kokoro.platform.v1.ProductSkillInstallation installations = 1;
+  kokoro.common.v1.PageResult page = 2;
+}
+
+service ProductSkillInstallationService {
+  rpc InstallPersonalSkill(kokoro.platform.v1.InstallPersonalSkillRequest) returns (kokoro.platform.v1.InstallPersonalSkillResponse);
+  rpc SetPersonalSkillInstallationEnabled(kokoro.platform.v1.SetPersonalSkillInstallationEnabledRequest) returns (kokoro.platform.v1.SetPersonalSkillInstallationEnabledResponse);
+  rpc RemovePersonalSkillInstallation(kokoro.platform.v1.RemovePersonalSkillInstallationRequest) returns (kokoro.platform.v1.RemovePersonalSkillInstallationResponse);
+  rpc GetPersonalSkillInstallation(kokoro.platform.v1.GetPersonalSkillInstallationRequest) returns (kokoro.platform.v1.GetPersonalSkillInstallationResponse);
+  rpc ListPersonalSkillInstallations(kokoro.platform.v1.ListPersonalSkillInstallationsRequest) returns (kokoro.platform.v1.ListPersonalSkillInstallationsResponse);
+}
+
+// Product pagination requires presence: omitted limit is 50; explicit zero is invalid.
+// Frozen Common PageRequest remains unchanged.
+message ProductSkillInstallationPageRequest {
+  optional uint32 limit = 1;
+  optional string cursor = 2;
+}

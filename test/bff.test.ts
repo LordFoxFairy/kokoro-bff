@@ -446,21 +446,19 @@ describe("kokoro-bff v1 mock contract", () => {
       method: "POST",
       headers: toggleHeaders,
     })
-    assert.equal(disabled.status, 200)
-    assert.deepEqual(((await disabled.json()) as { data: { ok: boolean } }).data, { ok: true })
+    assert.equal(disabled.status, 404)
 
     const afterDisable = await fetch(`${base}/v1/skills`, { headers: authHeaders() })
     const disabledSkill = ((await afterDisable.json()) as { data: { skills: Array<{ name: string; enabled?: boolean }> } }).data.skills.find(
       (skill) => skill.name === "contract-review",
     )
-    assert.equal(disabledSkill?.enabled, false)
+    assert.equal(disabledSkill?.enabled, true)
 
     const enabled = await fetch(`${base}/v1/skills/contract-review/enable?scope=official`, {
       method: "POST",
       headers: { ...authHeaders(), "idempotency-key": "skills-toggle-contract-review-enable" },
     })
-    assert.equal(enabled.status, 200)
-    assert.deepEqual(((await enabled.json()) as { data: { ok: boolean } }).data, { ok: true })
+    assert.equal(enabled.status, 404)
   })
 
   it("completes the MCP server register, toggle, list, and delete mock flow", async () => {
@@ -986,8 +984,9 @@ describe("kokoro-bff v1 mock contract", () => {
       "/v1/skills/catalog",
       "/v1/skills/quota",
       "/v1/skills/{name}/revisions",
-      "/v1/skills/{name}/enable",
-      "/v1/skills/{name}/disable",
+      "/v1/skill-installations",
+      "/v1/skill-installations/{installation_id}",
+      "/v1/skill-installations/{installation_id}/enabled",
       "/v1/skills/github/preview",
       "/v1/skills/github/import",
       "/v1/mcp/servers",

@@ -20,6 +20,9 @@ import type { SessionAdmission } from "../auth/session-admission.types.js"
 import { CatalogCredentialSource } from "../infrastructure/clients/platform/catalog-credential.js"
 import { CatalogTokenSource } from "../infrastructure/clients/platform/catalog-token.js"
 import { CatalogConnectClient } from "../infrastructure/clients/platform/catalog-connect.js"
+import { PersonalInstallationConnectClient } from "../infrastructure/clients/platform/personal-installation-connect.js"
+import { ProjectionCredentialSource } from "../infrastructure/clients/platform/projection-credential.js"
+import { ProjectionTokenSource } from "../infrastructure/clients/platform/projection-token.js"
 
 export type BffRouteInput = {
   request: IncomingMessage
@@ -37,6 +40,7 @@ export type BffRouteHandler = (input: BffRouteInput) => Promise<boolean | void>
 
 export type BffServerComposition = {
   skillDraftClient: CatalogConnectClient | null
+  personalInstallationClient: PersonalInstallationConnectClient | null
   businessStore: BffBusinessStore | null
   sessionAdmission: SessionAdmission
   idempotency: Map<string, IdempotencyEntry>
@@ -57,6 +61,7 @@ export type BffServerComposition = {
 
 export type BffCompositionOptions = {
   skillDraftClient?: CatalogConnectClient | null
+  personalInstallationClient?: PersonalInstallationConnectClient | null
   /** Supplying null is an explicit test composition; omitted means real persistence. */
   businessStore?: BffBusinessStore | null
   sessionAdmission?: SessionAdmission
@@ -107,6 +112,26 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
         ? new CatalogConnectClient(
             config.skillDraft.platformBaseUrl,
             new CatalogTokenSource(config.iamBaseUrl, new CatalogCredentialSource(config.skillDraft.credentialFile), config.skillDraft.timeoutMs),
+            config.skillDraft.timeoutMs,
+          )
+        : null
+  const personalInstallationClient =
+    options.personalInstallationClient !== undefined
+      ? options.personalInstallationClient
+      : config.skillDraft?.enabled &&
+          config.skillDraft.platformBaseUrl !== null &&
+          config.skillDraft.credentialFile !== null &&
+          config.platformProjection?.credentialFile !== null &&
+          config.platformProjection?.credentialFile !== undefined &&
+          config.iamBaseUrl !== null
+        ? new PersonalInstallationConnectClient(
+            config.skillDraft.platformBaseUrl,
+            new CatalogTokenSource(config.iamBaseUrl, new CatalogCredentialSource(config.skillDraft.credentialFile), config.skillDraft.timeoutMs),
+            new ProjectionTokenSource(
+              config.iamBaseUrl,
+              new ProjectionCredentialSource(config.platformProjection.credentialFile),
+              config.platformProjection.timeoutMs,
+            ),
             config.skillDraft.timeoutMs,
           )
         : null
@@ -204,6 +229,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
   }
   return {
     skillDraftClient,
+    personalInstallationClient,
     businessStore,
     sessionAdmission,
     idempotency: options.idempotency ?? new Map<string, IdempotencyEntry>(),

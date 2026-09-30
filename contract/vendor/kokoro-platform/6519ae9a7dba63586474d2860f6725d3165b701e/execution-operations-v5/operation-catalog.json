@@ -1,6 +1,6 @@
 {
-  "artifactVersion": "4.0.0",
-  "catalogVersion": "4.0.0",
+  "artifactVersion": "5.0.1",
+  "catalogVersion": "5.0.1",
   "packageName": "kokoro.platform.v1",
   "operations": [
     {
@@ -274,6 +274,46 @@
       "proof": "required",
       "permission": "platform:execute",
       "idempotency": "idempotency_key"
+    },
+    {
+      "class": "workload-only",
+      "fqMethod": "kokoro.platform.v1.ProductSkillInstallationService/InstallPersonalSkill",
+      "operation": "skill.product.install",
+      "proof": "forbidden",
+      "permission": "platform:skill-catalog.manage",
+      "idempotency": "command_identity"
+    },
+    {
+      "class": "workload-only",
+      "fqMethod": "kokoro.platform.v1.ProductSkillInstallationService/SetPersonalSkillInstallationEnabled",
+      "operation": "skill.product.set_installation_enabled",
+      "proof": "forbidden",
+      "permission": "platform:skill-catalog.manage",
+      "idempotency": "command_identity"
+    },
+    {
+      "class": "workload-only",
+      "fqMethod": "kokoro.platform.v1.ProductSkillInstallationService/RemovePersonalSkillInstallation",
+      "operation": "skill.product.remove_installation",
+      "proof": "forbidden",
+      "permission": "platform:skill-catalog.manage",
+      "idempotency": "command_identity"
+    },
+    {
+      "class": "workload-only",
+      "fqMethod": "kokoro.platform.v1.ProductSkillInstallationService/GetPersonalSkillInstallation",
+      "operation": "skill.product.get_installation",
+      "proof": "forbidden",
+      "permission": "platform:projection.read",
+      "idempotency": "none"
+    },
+    {
+      "class": "workload-only",
+      "fqMethod": "kokoro.platform.v1.ProductSkillInstallationService/ListPersonalSkillInstallations",
+      "operation": "skill.product.list_installations",
+      "proof": "forbidden",
+      "permission": "platform:projection.read",
+      "idempotency": "none"
     }
   ]
 }

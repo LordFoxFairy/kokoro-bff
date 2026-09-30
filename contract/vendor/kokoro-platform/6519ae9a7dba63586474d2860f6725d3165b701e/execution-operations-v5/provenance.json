@@ -1,0 +1,57 @@
+{
+  "algorithm": "sha256",
+  "aggregateRecord": "path + NUL + length + NUL + sha256 + LF",
+  "files": [
+    {
+      "path": "command-identities.json",
+      "bytes": 32532,
+      "sha256": "33d356f224de6c2c58bda6d414858013a295e442773887c7e196cdcd67f13b82"
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 13371,
+      "sha256": "43768f526cf4465e1316a696484cb482da581fe7c00c29ca84de816cc956730c"
+    },
+    {
+      "path": "operation-catalog.json",
+      "bytes": 11230,
+      "sha256": "b39ff94ab27215dcd9122361ca7a9e000ddc7e723c0b598d16544d420774ddd9"
+    },
+    {
+      "path": "product-installation-v1.json",
+      "bytes": 10347,
+      "sha256": "699d2fd002581f9161c6ac737728a5480e68e121a4f46663b1395ea9e7a96fe0"
+    },
+    {
+      "path": "schemas/command-identities.schema.json",
+      "bytes": 37395,
+      "sha256": "4f9b9112afe2bd08f6189e1fc30050771b0a9eb508450a7e83080eba5a2df123"
+    },
+    {
+      "path": "schemas/manifest.schema.json",
+      "bytes": 17524,
+      "sha256": "39ee548bcfdd02745434e95420edca0699c1dbeb4f67d79e75aec2e5e812e8f4"
+    },
+    {
+      "path": "schemas/operation-catalog.schema.json",
+      "bytes": 12935,
+      "sha256": "bd9b987377cdd1cc9fc794f57c306d399bb28c0ffd0b7330122d888834958055"
+    },
+    {
+      "path": "schemas/product-installation.schema.json",
+      "bytes": 15222,
+      "sha256": "e1062ad73f2cf3ca1028e4ceff2c837d18dbd4885a3b6e8a08fa0639ebe97911"
+    },
+    {
+      "path": "schemas/vector-inventory.schema.json",
+      "bytes": 121741,
+      "sha256": "a70ef2767ed1cc90f6fb20cfa2fff5ef6bbf14ae00dac48235a8d06006be6f3e"
+    },
+    {
+      "path": "vectors/product-installation.json",
+      "bytes": 112930,
+      "sha256": "31efd14da208dffef6785b64cf42ed44c9875d40cf3013349fd6d1fd85cab62e"
+    }
+  ],
+  "aggregateSha256": "3f97b3c98fd8e7ce46e4a8ea73237ddb85e764849d2b15dd28d0a3a58a69e42f"
+}

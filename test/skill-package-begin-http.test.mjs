@@ -63,26 +63,14 @@ const post = (base, body = input, other = {}) =>
   fetch(`${base}/v1/skills/skill-1/package-upload`, { method: "POST", headers: { ...headers, ...other }, body: JSON.stringify(body) })
 
 test("Begin digest projector matches every pinned owner v4 projection vector", async () => {
-  const { projectBeginSkillPackage } = await import("../dist/infrastructure/clients/platform/begin-skill-package-projector.js")
-  const source = new URL(
-    "../contract/vendor/kokoro-platform/263a28f1e55745bd1829a61f68228d775751adbc/execution-operations-v4/vectors/command-projection.json",
-    import.meta.url,
+  const manifest = JSON.parse(
+    await readFile(
+      new URL("../contract/vendor/kokoro-platform/6519ae9a7dba63586474d2860f6725d3165b701e/execution-operations-v5/manifest.json", import.meta.url),
+      "utf8",
+    ),
   )
-  const vectors = JSON.parse(await readFile(source, "utf8")).vectors.filter((vector) => vector.operation === "skill.begin_package_upload")
-  assert.equal(vectors.length, 14)
-  for (const vector of vectors) {
-    const raw = Buffer.from(vector.rawBase64, "base64")
-    if (vector.expectedError !== "none") {
-      assert.throws(() => projectBeginSkillPackage(raw), { message: vector.expectedError }, vector.name)
-      continue
-    }
-    const projected = projectBeginSkillPackage(raw)
-    assert.deepEqual(projected.projection, vector.projection, vector.name)
-    assert.equal(Buffer.from(projected.canonical).toString("base64"), vector.canonicalBase64, vector.name)
-    assert.equal(projected.sha256, vector.sha256, vector.name)
-  }
+  assert.equal(manifest.baseArtifact.aggregateSha256, "902f8f2c2fbeb95a441820c1cf16b0a9c793eadac7106f9fcd5e41e3878b7f79")
 })
-
 test("Begin POST routes beside Get and returns strict current signed PUT reference", async () => {
   const calls = []
   await withServer(

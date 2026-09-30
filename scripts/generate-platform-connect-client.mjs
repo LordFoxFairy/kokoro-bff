@@ -7,15 +7,15 @@ import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-const ownerCommit = "263a28f1e55745bd1829a61f68228d775751adbc"
+const ownerCommit = "6519ae9a7dba63586474d2860f6725d3165b701e"
 const vendor = `contract/vendor/kokoro-platform/${ownerCommit}/proto`
-const artifact = `contract/vendor/kokoro-platform/${ownerCommit}/execution-operations-v4`
-const artifactAggregate = "902f8f2c2fbeb95a441820c1cf16b0a9c793eadac7106f9fcd5e41e3878b7f79"
+const artifact = `contract/vendor/kokoro-platform/${ownerCommit}/execution-operations-v5`
+const artifactAggregate = "3f97b3c98fd8e7ce46e4a8ea73237ddb85e764849d2b15dd28d0a3a58a69e42f"
 const output = path.join(root, "src/generated/platform-connect")
 const manifestPath = path.join(root, "contract/dependencies/platform-connect.json")
 const sourceDigests = {
   "kokoro/common/v1/common.proto": "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08",
-  "kokoro/platform/v1/platform_runtime.proto": "8ccab4aee4efdfd8210f2e5f02ae8ec85c2c470e90451915209406e16621289a",
+  "kokoro/platform/v1/platform_runtime.proto": "841d0e146d6fe25728fac967862ff5969a2cbc9c1ad4cde3d35e0e1ef61ea0e0",
 }
 const directories = ["kokoro", "kokoro/common", "kokoro/common/v1", "kokoro/platform", "kokoro/platform/v1"]
 const generatedFiles = ["kokoro/common/v1/common_pb.ts", "kokoro/platform/v1/platform_runtime_pb.ts"]
@@ -47,7 +47,7 @@ export function assertVendorPins(entries) {
 }
 
 export function assertVendorLayout(entries) {
-  assert.deepEqual(entries.map((entry) => entry.name).sort(), ["execution-operations-v4", "proto"], "Platform vendor layout allowlist drifted")
+  assert.deepEqual(entries.map((entry) => entry.name).sort(), ["execution-operations-v5", "proto"], "Platform vendor layout allowlist drifted")
   assert.ok(
     entries.every((entry) => entry.isDirectory()),
     "Platform vendor inputs must be real directories",
@@ -111,26 +111,33 @@ export async function verifyExecutionArtifactDirectory(directory) {
     },
     {
       artifact: "platform-execution-operations",
-      artifactVersion: "4.0.0",
+      artifactVersion: "5.0.1",
       status: "inactive",
       routable: false,
     },
   )
-  assert.equal(manifest.bindingVersion, "3.0.0", "Platform command binding version drifted")
+  assert.equal(manifest.inventories.operations, 39, "Platform operation inventory drifted")
   assert.equal(manifest.inventories.readBindings, 1, "Platform Get read binding inventory drifted")
   assert.equal(manifest.inventories.bindings, 24, "Platform request binding inventory drifted")
-  assert.equal(manifest.inventories.commandIdentities, 17, "Platform command identity inventory drifted")
-  assert.deepEqual(manifest.inventories.operations, { tenantExecution: 24, workloadOnly: 9, globalReserved: 1 }, "Platform operation inventory drifted")
-  assert.equal(manifest.inventories.positiveVectors.length, 55, "Platform positive vector inventory drifted")
-  assert.equal(manifest.inventories.negativeVectors.length, 142, "Platform negative vector inventory drifted")
-  assertGetReadBinding(files)
+  assert.equal(manifest.inventories.commandIdentities, 20, "Platform command identity inventory drifted")
+  assert.equal(manifest.inventories.productCommands, 3, "Platform product command inventory drifted")
+  assert.equal(manifest.inventories.safeFields, 9, "Platform safe projection inventory drifted")
+  const product = JSON.parse(files["product-installation-v1.json"].toString("utf8"))
+  assert.equal(product.productVersion, "product-personal-installation/1.0.0")
+  assert.equal(product.requests.length, 5)
+  assert.equal(product.safeProjection.fields.length, 9)
+  assert.equal(
+    manifest.baseArtifact.aggregateSha256,
+    "902f8f2c2fbeb95a441820c1cf16b0a9c793eadac7106f9fcd5e41e3878b7f79",
+    "Platform v4 base artifact pin drifted",
+  )
 }
 
 export function assertGetReadBinding(files) {
   const bindings = JSON.parse(files["request-bindings.json"].toString("utf8"))
   const catalog = JSON.parse(files["operation-catalog.json"].toString("utf8"))
   const read = bindings.readBinding
-  assert.equal(bindings.artifactVersion, "4.0.0", "Platform read binding artifact version drifted")
+  assert.equal(bindings.artifactVersion, "5.0.1", "Platform read binding artifact version drifted")
   assert.equal(bindings.bindingVersion, "3.0.0", "Platform request binding version drifted")
   assert.equal(bindings.bindings.length, 24, "Platform request bindings drifted")
   assert.equal(read.version, "1.0.0", "Platform Get read binding version drifted")
@@ -254,7 +261,7 @@ async function manifestFor(directory) {
     },
     execution_artifact: {
       path: artifact,
-      artifact_version: "4.0.0",
+      artifact_version: "5.0.1",
       status: "inactive",
       routable: false,
       provenance_path: `${artifact}/provenance.json`,
@@ -325,7 +332,9 @@ async function main() {
         assert.deepEqual(await readFile(path.join(output, file)), await readFile(path.join(first, file)), `generated file drifted: ${file}`)
       assert.deepEqual(JSON.parse(await readFile(manifestPath, "utf8")), manifest, "Platform dependency manifest drifted")
     }
-    console.log(`PASS Platform Connect ${mode.slice(2)} (${generatedFiles.length} files, two byte-identical generations; inactive v4 artifact; no activation)`)
+    console.log(
+      `PASS Platform Connect ${mode.slice(2)} (${generatedFiles.length} files, two byte-identical generations; published v5.0.1 artifact; consumer activation remains gated)`,
+    )
   } finally {
     await rm(temporary, { recursive: true, force: true })
   }

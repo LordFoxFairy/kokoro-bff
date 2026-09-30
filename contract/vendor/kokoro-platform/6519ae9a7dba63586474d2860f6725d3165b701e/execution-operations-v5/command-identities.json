@@ -1,6 +1,9 @@
 {
-  "artifactVersion": "4.0.0",
-  "commandDigestVersion": "3.0.0",
+  "artifactVersion": "5.0.1",
+  "commandDigestVersions": {
+    "inherited": "3.0.0",
+    "product": "product-personal-installation/1.0.0"
+  },
   "packageName": "kokoro.platform.v1",
   "commands": [
     {
@@ -946,8 +949,104 @@
         "fresh-E2-operation-and-binding",
         "fresh-current-state-before-receipt"
       ]
+    },
+    {
+      "operation": "skill.product.install",
+      "fqMethod": "kokoro.platform.v1.ProductSkillInstallationService/InstallPersonalSkill",
+      "requestMessage": "kokoro.platform.v1.InstallPersonalSkillRequest",
+      "commandField": {
+        "field": "command",
+        "tag": 2,
+        "type": "kokoro.common.v1.CommandIdentity"
+      },
+      "commandDigestVersion": "product-personal-installation/1.0.0",
+      "rootMembers": [
+        "command_digest_version",
+        "fq_method",
+        "tenant_ref",
+        "command"
+      ],
+      "commandMembers": ["subject_id", "target_owner_scope", "source_ref"],
+      "requiredTypedPresence": {
+        "present": true,
+        "value": "exact wrapper scalar"
+      },
+      "excludedMembers": [
+        "request_id",
+        "command_id",
+        "request_digest",
+        "token",
+        "execution_proof"
+      ],
+      "trustedContext": "authenticated metadata only; never body",
+      "profile": "product-installation-v1.json"
+    },
+    {
+      "operation": "skill.product.set_installation_enabled",
+      "fqMethod": "kokoro.platform.v1.ProductSkillInstallationService/SetPersonalSkillInstallationEnabled",
+      "requestMessage": "kokoro.platform.v1.SetPersonalSkillInstallationEnabledRequest",
+      "commandField": {
+        "field": "command",
+        "tag": 2,
+        "type": "kokoro.common.v1.CommandIdentity"
+      },
+      "commandDigestVersion": "product-personal-installation/1.0.0",
+      "rootMembers": [
+        "command_digest_version",
+        "fq_method",
+        "tenant_ref",
+        "command"
+      ],
+      "commandMembers": [
+        "subject_id",
+        "target_owner_scope",
+        "installation_id",
+        "enabled"
+      ],
+      "requiredTypedPresence": {
+        "present": true,
+        "value": "exact wrapper scalar"
+      },
+      "excludedMembers": [
+        "request_id",
+        "command_id",
+        "request_digest",
+        "token",
+        "execution_proof"
+      ],
+      "trustedContext": "authenticated metadata only; never body",
+      "profile": "product-installation-v1.json"
+    },
+    {
+      "operation": "skill.product.remove_installation",
+      "fqMethod": "kokoro.platform.v1.ProductSkillInstallationService/RemovePersonalSkillInstallation",
+      "requestMessage": "kokoro.platform.v1.RemovePersonalSkillInstallationRequest",
+      "commandField": {
+        "field": "command",
+        "tag": 2,
+        "type": "kokoro.common.v1.CommandIdentity"
+      },
+      "commandDigestVersion": "product-personal-installation/1.0.0",
+      "rootMembers": [
+        "command_digest_version",
+        "fq_method",
+        "tenant_ref",
+        "command"
+      ],
+      "commandMembers": ["subject_id", "target_owner_scope", "installation_id"],
+      "requiredTypedPresence": {
+        "present": true,
+        "value": "exact wrapper scalar"
+      },
+      "excludedMembers": [
+        "request_id",
+        "command_id",
+        "request_digest",
+        "token",
+        "execution_proof"
+      ],
+      "trustedContext": "authenticated metadata only; never body",
+      "profile": "product-installation-v1.json"
     }
-  ],
-  "authorizeMcpToolIdempotency": "idempotency_key",
-  "globalCommandIdentity": "forbidden"
+  ]
 }

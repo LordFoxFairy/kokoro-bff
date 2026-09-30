@@ -1,13 +1,12 @@
 # kokoro-bff 当前实现
 
-## BFF-PERSONAL-DOC-GATE：本人安装当前态与已定目标（2026-09-30）
+## BFF-PERSONAL-CONSUMER：本人安装消费者在途，真实组合待验（2026-09-30)
 
-- **当前态：** 本仓 clean 基线 `571b51de2057905c74c78ac966c8cf5ac11eca93`；Platform Connect consumer 仍固定 `263a28f1e55745bd1829a61f68228d775751adbc` v4 aggregate `902f8f2c2fbeb95a441820c1cf16b0a9c793eadac7106f9fcd5e41e3878b7f79`。Product installation 五方法、canonical `/v1/skill-installations`、运行 adapter 与 Web consumer 均不存在；旧 enable/disable 安装声明是 503 stub，不是部分可用能力。
-- **固定 owner 机器源：** Platform `0dd60af4799cb2f0b410ded5ffb9c1402a55c641` 已发布 v5 aggregate `bc233fe33d1acce81c2fdcda4062843b98d06bd46164d8710751d28d01b4d6ca`，包含五个 PERSONAL Product 方法、九字段安全投影、三份 `product-personal-installation/1.0.0` 独立命令 digest 与 optional-presence pagination。Platform runtime admission 正由 owner 独立实现；BFF 本文档不把 machine artifact 或并行 runtime 冒称为本仓已接线。
-- **已裁决目标：** public 路径为 `/v1/skill-installations` POST+GET、`/{installation_id}` GET+DELETE、`/{installation_id}/enabled` PUT；current IAM tenant/user → BFF workload + `x-kokoro-subject` → Platform 派生 PERSONAL target。Publish 显式**不自动安装**。写成功均为精确 `{data:{installation,change,event_id?,replayed}}` 的 200 owner-receipt 语义；DELETE 返回 owner-native `installed=false`、`enabled=false`、`removed_at` present，change 为首次 `removed` 或自然 no-op `unchanged`；BFF 不建 installation 表、receipt、cache 或跨 owner SQL。
-- **clean-slate 后继：** 先精确替换 v4 consumer/vendor/provenance/generated 为 v5，再发布 canonical BFF OpenAPI、具名 route/input/projector 与测试；同片删除旧安装 503 stub、按 name path、旧 generated/vendor 和 fallback，不保留 alias/双轨。随后 Web 固定新 BFF artifact，并由 Root 做真实 IAM→BFF→Platform 本人/撤权/重放/分页组合。
-- **映射与失败：** source、installation ID 与 opaque cursor 原样且不 trim；optional filter/cursor presence 保留；GET 为 `{data:<九字段 installation>}`，List 为 data array 且只在 owner optional next_cursor present/non-empty 时出现 `meta.next_cursor`；revision 用正 uint64 十进制 string，时间只用 UTC RFC3339 `Z`。三写使用 owner 独立 digest；每次 receipt replay 重新 current authorization、重放原 safe ACK。取消/deadline贯穿，unknown ACK 同 key 恢复；owner enum 0/未知、event presence、分页 presence 或非法九字段/receipt 为 502，依赖不可判定不降级旧服务。
-- **本片证据边界：** 仅改 `docs/TECHNICAL_DESIGN.md`、`docs/API_CONTRACT.md`、`docs/DATA_MODEL.md`、`docs/CURRENT.md`；未改 OpenAPI、contract、src、generated、vendor、schema、lockfile，未启动服务/基础设施/3310。当前仍未交付可调用个人安装 API。
+- **当前代码：** 工作树已唯一固定 Platform `6519ae9a7dba63586474d2860f6725d3165b701e` v5.0.1 aggregate `3f97b3c98fd8e7ce46e4a8ea73237ddb85e764849d2b15dd28d0a3a58a69e42f`，官方工具生成五个 `ProductSkillInstallationService` 方法并接线 public POST+GET `/v1/skill-installations`、GET+DELETE `/{installation_id}` 与 PUT `/{installation_id}/enabled`。旧 v4 vendor、按 name enable/disable、503 stub、alias 与 fallback 已删除。
+- **边界：** current IAM tenant/user 映射为 BFF workload token、可信 `x-tenant-ref` 与 `x-kokoro-subject`；三写使用 catalog scope，二读使用 projection scope。BFF 只投影 owner 九字段、ACK 与 optional `next_cursor`，不建 installation 表、receipt、cache 或跨 owner SQL；Publish 不自动安装。
+- **严格失败：** source、installation ID、cursor 不 trim；uint64 输出十进制 string，时间输出 UTC `Z`。owner enum/event/page/九字段异常为 502；权限为 403，资源缺失为 404，依赖不可用为 503，统一绝对预算耗尽为 504；五个操作的可达 body 上限均以专属 413 `request_body_too_large` 表达。caller cancel 不伪装为 deadline。
+- **验证状态：** Node 22 的 format、lint、typecheck、build、默认 test、contract test/check 与 operation/schema 门已覆盖本片新增 input/HTTP 测试及 status→error.code 约束。fixture 不启动共享服务、PostgreSQL、Redis 或 3310。
+- **未完成：** 当前仍是待 Root 审查/提交的代码，真实 IAM→BFF→Platform 组合与产品激活尚未验收；后续历史章节只记录各自当时切片，不覆盖本节当前事实。
 
 
 ## W3-BFF-CHAT-SKILL-SELECTION-CONSUMER：代码已接，真实组合待验

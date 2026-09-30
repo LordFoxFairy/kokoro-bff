@@ -308,13 +308,28 @@
     },
     {
       "method": "POST",
-      "path": "/v1/skills/{name}/enable",
-      "operation_id": "enableSkill"
+      "path": "/v1/skill-installations",
+      "operation_id": "installPersonalSkill"
     },
     {
-      "method": "POST",
-      "path": "/v1/skills/{name}/disable",
-      "operation_id": "disableSkill"
+      "method": "GET",
+      "path": "/v1/skill-installations",
+      "operation_id": "listPersonalSkillInstallations"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/skill-installations/{installation_id}",
+      "operation_id": "getPersonalSkillInstallation"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/skill-installations/{installation_id}",
+      "operation_id": "removePersonalSkillInstallation"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/skill-installations/{installation_id}/enabled",
+      "operation_id": "setPersonalSkillInstallationEnabled"
     },
     {
       "method": "POST",
@@ -390,6 +405,11 @@
       "method": "GET",
       "path": "/v1/library",
       "operation_id": "listLibrary"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/library/files",
+      "operation_id": "uploadLibraryFile"
     },
     {
       "method": "GET",

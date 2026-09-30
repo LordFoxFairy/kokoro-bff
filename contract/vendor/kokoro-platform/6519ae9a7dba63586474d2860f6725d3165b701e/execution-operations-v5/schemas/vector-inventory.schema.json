@@ -1,0 +1,2124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kokoro.dev/contracts/platform-execution-operations/5.0.1/schemas/vector-inventory.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["artifactVersion", "wireEncoding", "vectors"],
+  "properties": {
+    "artifactVersion": {
+      "const": "5.0.1"
+    },
+    "wireEncoding": {
+      "const": "strict UTF-8 raw JSON; snake_case protobuf field profile; uint64 decimal string; UTC RFC3339 Z timestamps"
+    },
+    "vectors": {
+      "const": [
+        {
+          "name": "InstallPersonalSkill.valid",
+          "stage": "projection",
+          "method": "InstallPersonalSkill",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sInNvdXJjZV9yZWYiOnsidmFsdWUiOiJza2lsbDpza2lsbC0xIn19",
+          "expectedError": "",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          },
+          "projection": {
+            "command_digest_version": "product-personal-installation/1.0.0",
+            "fq_method": "kokoro.platform.v1.ProductSkillInstallationService/InstallPersonalSkill",
+            "tenant_ref": "tenant-1",
+            "command": {
+              "subject_id": "user-1",
+              "target_owner_scope": {
+                "kind": "user",
+                "id": "user-1"
+              },
+              "source_ref": {
+                "present": true,
+                "value": "skill:skill-1"
+              }
+            }
+          },
+          "canonicalBase64": "eyJjb21tYW5kIjp7InNvdXJjZV9yZWYiOnsicHJlc2VudCI6dHJ1ZSwidmFsdWUiOiJza2lsbDpza2lsbC0xIn0sInN1YmplY3RfaWQiOiJ1c2VyLTEiLCJ0YXJnZXRfb3duZXJfc2NvcGUiOnsiaWQiOiJ1c2VyLTEiLCJraW5kIjoidXNlciJ9fSwiY29tbWFuZF9kaWdlc3RfdmVyc2lvbiI6InByb2R1Y3QtcGVyc29uYWwtaW5zdGFsbGF0aW9uLzEuMC4wIiwiZnFfbWV0aG9kIjoia29rb3JvLnBsYXRmb3JtLnYxLlByb2R1Y3RTa2lsbEluc3RhbGxhdGlvblNlcnZpY2UvSW5zdGFsbFBlcnNvbmFsU2tpbGwiLCJ0ZW5hbnRfcmVmIjoidGVuYW50LTEifQ==",
+          "sha256": "b650d78bd30165dc687184ede47aa1e845b3fc612b4a7323f31e095e9ceb811b"
+        },
+        {
+          "name": "InstallPersonalSkill.body.tenant_id",
+          "stage": "request",
+          "method": "InstallPersonalSkill",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sInNvdXJjZV9yZWYiOnsidmFsdWUiOiJza2lsbDpza2lsbC0xIn0sInRlbmFudF9pZCI6InVudHJ1c3RlZCJ9",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "InstallPersonalSkill.body.actor_id",
+          "stage": "request",
+          "method": "InstallPersonalSkill",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sInNvdXJjZV9yZWYiOnsidmFsdWUiOiJza2lsbDpza2lsbC0xIn0sImFjdG9yX2lkIjoidW50cnVzdGVkIn0=",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "InstallPersonalSkill.body.subject_id",
+          "stage": "request",
+          "method": "InstallPersonalSkill",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sInNvdXJjZV9yZWYiOnsidmFsdWUiOiJza2lsbDpza2lsbC0xIn0sInN1YmplY3RfaWQiOiJ1bnRydXN0ZWQifQ==",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "InstallPersonalSkill.body.owner_scope",
+          "stage": "request",
+          "method": "InstallPersonalSkill",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sInNvdXJjZV9yZWYiOnsidmFsdWUiOiJza2lsbDpza2lsbC0xIn0sIm93bmVyX3Njb3BlIjp7ImtpbmQiOiJ1c2VyIiwiaWQiOiJvdGhlciJ9fQ==",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "InstallPersonalSkill.body.target_owner_scope",
+          "stage": "request",
+          "method": "InstallPersonalSkill",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sInNvdXJjZV9yZWYiOnsidmFsdWUiOiJza2lsbDpza2lsbC0xIn0sInRhcmdldF9vd25lcl9zY29wZSI6eyJraW5kIjoidXNlciIsImlkIjoib3RoZXIifX0=",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "InstallPersonalSkill.body.product_context",
+          "stage": "request",
+          "method": "InstallPersonalSkill",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sInNvdXJjZV9yZWYiOnsidmFsdWUiOiJza2lsbDpza2lsbC0xIn0sInByb2R1Y3RfY29udGV4dCI6InVudHJ1c3RlZCJ9",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "InstallPersonalSkill.body.execution_proof",
+          "stage": "request",
+          "method": "InstallPersonalSkill",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sInNvdXJjZV9yZWYiOnsidmFsdWUiOiJza2lsbDpza2lsbC0xIn0sImV4ZWN1dGlvbl9wcm9vZiI6InVudHJ1c3RlZCJ9",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "InstallPersonalSkill.body.package_asset_ref",
+          "stage": "request",
+          "method": "InstallPersonalSkill",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sInNvdXJjZV9yZWYiOnsidmFsdWUiOiJza2lsbDpza2lsbC0xIn0sInBhY2thZ2VfYXNzZXRfcmVmIjoidW50cnVzdGVkIn0=",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "InstallPersonalSkill.body.content_digest",
+          "stage": "request",
+          "method": "InstallPersonalSkill",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sInNvdXJjZV9yZWYiOnsidmFsdWUiOiJza2lsbDpza2lsbC0xIn0sImNvbnRlbnRfZGlnZXN0IjoidW50cnVzdGVkIn0=",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "InstallPersonalSkill.metadata.caller",
+          "stage": "context",
+          "method": "InstallPersonalSkill",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sInNvdXJjZV9yZWYiOnsidmFsdWUiOiJza2lsbDpza2lsbC0xIn19",
+          "expectedError": "PERMISSION_DENIED",
+          "trustedMetadata": {
+            "caller": "kokoro-agent",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "InstallPersonalSkill.metadata.resource",
+          "stage": "context",
+          "method": "InstallPersonalSkill",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sInNvdXJjZV9yZWYiOnsidmFsdWUiOiJza2lsbDpza2lsbC0xIn19",
+          "expectedError": "PERMISSION_DENIED",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "global",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "InstallPersonalSkill.metadata.scope",
+          "stage": "context",
+          "method": "InstallPersonalSkill",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sInNvdXJjZV9yZWYiOnsidmFsdWUiOiJza2lsbDpza2lsbC0xIn19",
+          "expectedError": "PERMISSION_DENIED",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:execute"
+          }
+        },
+        {
+          "name": "InstallPersonalSkill.metadata.subject_id",
+          "stage": "context",
+          "method": "InstallPersonalSkill",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sInNvdXJjZV9yZWYiOnsidmFsdWUiOiJza2lsbDpza2lsbC0xIn19",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1\n",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "InstallPersonalSkill.metadata.tenant_ref",
+          "stage": "context",
+          "method": "InstallPersonalSkill",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sInNvdXJjZV9yZWYiOnsidmFsdWUiOiJza2lsbDpza2lsbC0xIn19",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1\n",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "InstallPersonalSkill.request-id-newline",
+          "stage": "request",
+          "method": "InstallPersonalSkill",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xXG4iLCJjb21tYW5kIjp7ImNvbW1hbmRfaWQiOiJjb21tYW5kLTEiLCJyZXF1ZXN0X2RpZ2VzdCI6IjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAifSwic291cmNlX3JlZiI6eyJ2YWx1ZSI6InNraWxsOnNraWxsLTEifX0=",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "InstallPersonalSkill.source_ref.absent",
+          "stage": "request",
+          "method": "InstallPersonalSkill",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn19",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "InstallPersonalSkill.source_ref.null",
+          "stage": "request",
+          "method": "InstallPersonalSkill",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sInNvdXJjZV9yZWYiOm51bGx9",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "InstallPersonalSkill.source_ref.newline",
+          "stage": "request",
+          "method": "InstallPersonalSkill",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sInNvdXJjZV9yZWYiOnsidmFsdWUiOiJza2lsbDpza2lsbC0xXG4ifX0=",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "InstallPersonalSkill.source_ref.blank",
+          "stage": "request",
+          "method": "InstallPersonalSkill",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sInNvdXJjZV9yZWYiOnsidmFsdWUiOiIifX0=",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "InstallPersonalSkill.source_ref.unknown",
+          "stage": "request",
+          "method": "InstallPersonalSkill",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sInNvdXJjZV9yZWYiOnsidmFsdWUiOiJza2lsbDpza2lsbC0xIiwiZXh0cmEiOnRydWV9fQ==",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "SetPersonalSkillInstallationEnabled.valid",
+          "stage": "projection",
+          "method": "SetPersonalSkillInstallationEnabled",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImluc3RhbGxhdGlvbl9pZCI6eyJ2YWx1ZSI6Imluc3RhbGxhdGlvbi0xIn0sImVuYWJsZWQiOmZhbHNlfQ==",
+          "expectedError": "",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          },
+          "projection": {
+            "command_digest_version": "product-personal-installation/1.0.0",
+            "fq_method": "kokoro.platform.v1.ProductSkillInstallationService/SetPersonalSkillInstallationEnabled",
+            "tenant_ref": "tenant-1",
+            "command": {
+              "subject_id": "user-1",
+              "target_owner_scope": {
+                "kind": "user",
+                "id": "user-1"
+              },
+              "installation_id": {
+                "present": true,
+                "value": "installation-1"
+              },
+              "enabled": false
+            }
+          },
+          "canonicalBase64": "eyJjb21tYW5kIjp7ImVuYWJsZWQiOmZhbHNlLCJpbnN0YWxsYXRpb25faWQiOnsicHJlc2VudCI6dHJ1ZSwidmFsdWUiOiJpbnN0YWxsYXRpb24tMSJ9LCJzdWJqZWN0X2lkIjoidXNlci0xIiwidGFyZ2V0X293bmVyX3Njb3BlIjp7ImlkIjoidXNlci0xIiwia2luZCI6InVzZXIifX0sImNvbW1hbmRfZGlnZXN0X3ZlcnNpb24iOiJwcm9kdWN0LXBlcnNvbmFsLWluc3RhbGxhdGlvbi8xLjAuMCIsImZxX21ldGhvZCI6Imtva29yby5wbGF0Zm9ybS52MS5Qcm9kdWN0U2tpbGxJbnN0YWxsYXRpb25TZXJ2aWNlL1NldFBlcnNvbmFsU2tpbGxJbnN0YWxsYXRpb25FbmFibGVkIiwidGVuYW50X3JlZiI6InRlbmFudC0xIn0=",
+          "sha256": "4d4d03fbb7adcc5fec6dfb2d5a49df1116a1d5959e43c26233eea158c82e7d08"
+        },
+        {
+          "name": "SetPersonalSkillInstallationEnabled.body.tenant_id",
+          "stage": "request",
+          "method": "SetPersonalSkillInstallationEnabled",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImluc3RhbGxhdGlvbl9pZCI6eyJ2YWx1ZSI6Imluc3RhbGxhdGlvbi0xIn0sImVuYWJsZWQiOmZhbHNlLCJ0ZW5hbnRfaWQiOiJ1bnRydXN0ZWQifQ==",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "SetPersonalSkillInstallationEnabled.body.actor_id",
+          "stage": "request",
+          "method": "SetPersonalSkillInstallationEnabled",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImluc3RhbGxhdGlvbl9pZCI6eyJ2YWx1ZSI6Imluc3RhbGxhdGlvbi0xIn0sImVuYWJsZWQiOmZhbHNlLCJhY3Rvcl9pZCI6InVudHJ1c3RlZCJ9",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "SetPersonalSkillInstallationEnabled.body.subject_id",
+          "stage": "request",
+          "method": "SetPersonalSkillInstallationEnabled",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImluc3RhbGxhdGlvbl9pZCI6eyJ2YWx1ZSI6Imluc3RhbGxhdGlvbi0xIn0sImVuYWJsZWQiOmZhbHNlLCJzdWJqZWN0X2lkIjoidW50cnVzdGVkIn0=",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "SetPersonalSkillInstallationEnabled.body.owner_scope",
+          "stage": "request",
+          "method": "SetPersonalSkillInstallationEnabled",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImluc3RhbGxhdGlvbl9pZCI6eyJ2YWx1ZSI6Imluc3RhbGxhdGlvbi0xIn0sImVuYWJsZWQiOmZhbHNlLCJvd25lcl9zY29wZSI6eyJraW5kIjoidXNlciIsImlkIjoib3RoZXIifX0=",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "SetPersonalSkillInstallationEnabled.body.target_owner_scope",
+          "stage": "request",
+          "method": "SetPersonalSkillInstallationEnabled",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImluc3RhbGxhdGlvbl9pZCI6eyJ2YWx1ZSI6Imluc3RhbGxhdGlvbi0xIn0sImVuYWJsZWQiOmZhbHNlLCJ0YXJnZXRfb3duZXJfc2NvcGUiOnsia2luZCI6InVzZXIiLCJpZCI6Im90aGVyIn19",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "SetPersonalSkillInstallationEnabled.body.product_context",
+          "stage": "request",
+          "method": "SetPersonalSkillInstallationEnabled",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImluc3RhbGxhdGlvbl9pZCI6eyJ2YWx1ZSI6Imluc3RhbGxhdGlvbi0xIn0sImVuYWJsZWQiOmZhbHNlLCJwcm9kdWN0X2NvbnRleHQiOiJ1bnRydXN0ZWQifQ==",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "SetPersonalSkillInstallationEnabled.body.execution_proof",
+          "stage": "request",
+          "method": "SetPersonalSkillInstallationEnabled",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImluc3RhbGxhdGlvbl9pZCI6eyJ2YWx1ZSI6Imluc3RhbGxhdGlvbi0xIn0sImVuYWJsZWQiOmZhbHNlLCJleGVjdXRpb25fcHJvb2YiOiJ1bnRydXN0ZWQifQ==",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "SetPersonalSkillInstallationEnabled.body.package_asset_ref",
+          "stage": "request",
+          "method": "SetPersonalSkillInstallationEnabled",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImluc3RhbGxhdGlvbl9pZCI6eyJ2YWx1ZSI6Imluc3RhbGxhdGlvbi0xIn0sImVuYWJsZWQiOmZhbHNlLCJwYWNrYWdlX2Fzc2V0X3JlZiI6InVudHJ1c3RlZCJ9",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "SetPersonalSkillInstallationEnabled.body.content_digest",
+          "stage": "request",
+          "method": "SetPersonalSkillInstallationEnabled",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImluc3RhbGxhdGlvbl9pZCI6eyJ2YWx1ZSI6Imluc3RhbGxhdGlvbi0xIn0sImVuYWJsZWQiOmZhbHNlLCJjb250ZW50X2RpZ2VzdCI6InVudHJ1c3RlZCJ9",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "SetPersonalSkillInstallationEnabled.metadata.caller",
+          "stage": "context",
+          "method": "SetPersonalSkillInstallationEnabled",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImluc3RhbGxhdGlvbl9pZCI6eyJ2YWx1ZSI6Imluc3RhbGxhdGlvbi0xIn0sImVuYWJsZWQiOmZhbHNlfQ==",
+          "expectedError": "PERMISSION_DENIED",
+          "trustedMetadata": {
+            "caller": "kokoro-agent",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "SetPersonalSkillInstallationEnabled.metadata.resource",
+          "stage": "context",
+          "method": "SetPersonalSkillInstallationEnabled",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImluc3RhbGxhdGlvbl9pZCI6eyJ2YWx1ZSI6Imluc3RhbGxhdGlvbi0xIn0sImVuYWJsZWQiOmZhbHNlfQ==",
+          "expectedError": "PERMISSION_DENIED",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "global",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "SetPersonalSkillInstallationEnabled.metadata.scope",
+          "stage": "context",
+          "method": "SetPersonalSkillInstallationEnabled",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImluc3RhbGxhdGlvbl9pZCI6eyJ2YWx1ZSI6Imluc3RhbGxhdGlvbi0xIn0sImVuYWJsZWQiOmZhbHNlfQ==",
+          "expectedError": "PERMISSION_DENIED",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:execute"
+          }
+        },
+        {
+          "name": "SetPersonalSkillInstallationEnabled.metadata.subject_id",
+          "stage": "context",
+          "method": "SetPersonalSkillInstallationEnabled",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImluc3RhbGxhdGlvbl9pZCI6eyJ2YWx1ZSI6Imluc3RhbGxhdGlvbi0xIn0sImVuYWJsZWQiOmZhbHNlfQ==",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1\n",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "SetPersonalSkillInstallationEnabled.metadata.tenant_ref",
+          "stage": "context",
+          "method": "SetPersonalSkillInstallationEnabled",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImluc3RhbGxhdGlvbl9pZCI6eyJ2YWx1ZSI6Imluc3RhbGxhdGlvbi0xIn0sImVuYWJsZWQiOmZhbHNlfQ==",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1\n",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "SetPersonalSkillInstallationEnabled.request-id-newline",
+          "stage": "request",
+          "method": "SetPersonalSkillInstallationEnabled",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xXG4iLCJjb21tYW5kIjp7ImNvbW1hbmRfaWQiOiJjb21tYW5kLTEiLCJyZXF1ZXN0X2RpZ2VzdCI6IjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAifSwiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTEifSwiZW5hYmxlZCI6ZmFsc2V9",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "SetPersonalSkillInstallationEnabled.installation_id.absent",
+          "stage": "request",
+          "method": "SetPersonalSkillInstallationEnabled",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImVuYWJsZWQiOmZhbHNlfQ==",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "SetPersonalSkillInstallationEnabled.installation_id.null",
+          "stage": "request",
+          "method": "SetPersonalSkillInstallationEnabled",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImluc3RhbGxhdGlvbl9pZCI6bnVsbCwiZW5hYmxlZCI6ZmFsc2V9",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "SetPersonalSkillInstallationEnabled.installation_id.newline",
+          "stage": "request",
+          "method": "SetPersonalSkillInstallationEnabled",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImluc3RhbGxhdGlvbl9pZCI6eyJ2YWx1ZSI6Imluc3RhbGxhdGlvbi0xXG4ifSwiZW5hYmxlZCI6ZmFsc2V9",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "SetPersonalSkillInstallationEnabled.installation_id.blank",
+          "stage": "request",
+          "method": "SetPersonalSkillInstallationEnabled",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImluc3RhbGxhdGlvbl9pZCI6eyJ2YWx1ZSI6IiJ9LCJlbmFibGVkIjpmYWxzZX0=",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "SetPersonalSkillInstallationEnabled.installation_id.unknown",
+          "stage": "request",
+          "method": "SetPersonalSkillInstallationEnabled",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImluc3RhbGxhdGlvbl9pZCI6eyJ2YWx1ZSI6Imluc3RhbGxhdGlvbi0xIiwiZXh0cmEiOnRydWV9LCJlbmFibGVkIjpmYWxzZX0=",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "RemovePersonalSkillInstallation.valid",
+          "stage": "projection",
+          "method": "RemovePersonalSkillInstallation",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImluc3RhbGxhdGlvbl9pZCI6eyJ2YWx1ZSI6Imluc3RhbGxhdGlvbi0xIn19",
+          "expectedError": "",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          },
+          "projection": {
+            "command_digest_version": "product-personal-installation/1.0.0",
+            "fq_method": "kokoro.platform.v1.ProductSkillInstallationService/RemovePersonalSkillInstallation",
+            "tenant_ref": "tenant-1",
+            "command": {
+              "subject_id": "user-1",
+              "target_owner_scope": {
+                "kind": "user",
+                "id": "user-1"
+              },
+              "installation_id": {
+                "present": true,
+                "value": "installation-1"
+              }
+            }
+          },
+          "canonicalBase64": "eyJjb21tYW5kIjp7Imluc3RhbGxhdGlvbl9pZCI6eyJwcmVzZW50Ijp0cnVlLCJ2YWx1ZSI6Imluc3RhbGxhdGlvbi0xIn0sInN1YmplY3RfaWQiOiJ1c2VyLTEiLCJ0YXJnZXRfb3duZXJfc2NvcGUiOnsiaWQiOiJ1c2VyLTEiLCJraW5kIjoidXNlciJ9fSwiY29tbWFuZF9kaWdlc3RfdmVyc2lvbiI6InByb2R1Y3QtcGVyc29uYWwtaW5zdGFsbGF0aW9uLzEuMC4wIiwiZnFfbWV0aG9kIjoia29rb3JvLnBsYXRmb3JtLnYxLlByb2R1Y3RTa2lsbEluc3RhbGxhdGlvblNlcnZpY2UvUmVtb3ZlUGVyc29uYWxTa2lsbEluc3RhbGxhdGlvbiIsInRlbmFudF9yZWYiOiJ0ZW5hbnQtMSJ9",
+          "sha256": "f605e6212fe5286128ca7a96e2b006db29554d33a763f7775a765ff8bebb151b"
+        },
+        {
+          "name": "RemovePersonalSkillInstallation.body.tenant_id",
+          "stage": "request",
+          "method": "RemovePersonalSkillInstallation",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImluc3RhbGxhdGlvbl9pZCI6eyJ2YWx1ZSI6Imluc3RhbGxhdGlvbi0xIn0sInRlbmFudF9pZCI6InVudHJ1c3RlZCJ9",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "RemovePersonalSkillInstallation.body.actor_id",
+          "stage": "request",
+          "method": "RemovePersonalSkillInstallation",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImluc3RhbGxhdGlvbl9pZCI6eyJ2YWx1ZSI6Imluc3RhbGxhdGlvbi0xIn0sImFjdG9yX2lkIjoidW50cnVzdGVkIn0=",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "RemovePersonalSkillInstallation.body.subject_id",
+          "stage": "request",
+          "method": "RemovePersonalSkillInstallation",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImluc3RhbGxhdGlvbl9pZCI6eyJ2YWx1ZSI6Imluc3RhbGxhdGlvbi0xIn0sInN1YmplY3RfaWQiOiJ1bnRydXN0ZWQifQ==",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "RemovePersonalSkillInstallation.body.owner_scope",
+          "stage": "request",
+          "method": "RemovePersonalSkillInstallation",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImluc3RhbGxhdGlvbl9pZCI6eyJ2YWx1ZSI6Imluc3RhbGxhdGlvbi0xIn0sIm93bmVyX3Njb3BlIjp7ImtpbmQiOiJ1c2VyIiwiaWQiOiJvdGhlciJ9fQ==",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "RemovePersonalSkillInstallation.body.target_owner_scope",
+          "stage": "request",
+          "method": "RemovePersonalSkillInstallation",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImluc3RhbGxhdGlvbl9pZCI6eyJ2YWx1ZSI6Imluc3RhbGxhdGlvbi0xIn0sInRhcmdldF9vd25lcl9zY29wZSI6eyJraW5kIjoidXNlciIsImlkIjoib3RoZXIifX0=",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "RemovePersonalSkillInstallation.body.product_context",
+          "stage": "request",
+          "method": "RemovePersonalSkillInstallation",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImluc3RhbGxhdGlvbl9pZCI6eyJ2YWx1ZSI6Imluc3RhbGxhdGlvbi0xIn0sInByb2R1Y3RfY29udGV4dCI6InVudHJ1c3RlZCJ9",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "RemovePersonalSkillInstallation.body.execution_proof",
+          "stage": "request",
+          "method": "RemovePersonalSkillInstallation",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImluc3RhbGxhdGlvbl9pZCI6eyJ2YWx1ZSI6Imluc3RhbGxhdGlvbi0xIn0sImV4ZWN1dGlvbl9wcm9vZiI6InVudHJ1c3RlZCJ9",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "RemovePersonalSkillInstallation.body.package_asset_ref",
+          "stage": "request",
+          "method": "RemovePersonalSkillInstallation",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImluc3RhbGxhdGlvbl9pZCI6eyJ2YWx1ZSI6Imluc3RhbGxhdGlvbi0xIn0sInBhY2thZ2VfYXNzZXRfcmVmIjoidW50cnVzdGVkIn0=",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "RemovePersonalSkillInstallation.body.content_digest",
+          "stage": "request",
+          "method": "RemovePersonalSkillInstallation",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImluc3RhbGxhdGlvbl9pZCI6eyJ2YWx1ZSI6Imluc3RhbGxhdGlvbi0xIn0sImNvbnRlbnRfZGlnZXN0IjoidW50cnVzdGVkIn0=",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "RemovePersonalSkillInstallation.metadata.caller",
+          "stage": "context",
+          "method": "RemovePersonalSkillInstallation",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImluc3RhbGxhdGlvbl9pZCI6eyJ2YWx1ZSI6Imluc3RhbGxhdGlvbi0xIn19",
+          "expectedError": "PERMISSION_DENIED",
+          "trustedMetadata": {
+            "caller": "kokoro-agent",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "RemovePersonalSkillInstallation.metadata.resource",
+          "stage": "context",
+          "method": "RemovePersonalSkillInstallation",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImluc3RhbGxhdGlvbl9pZCI6eyJ2YWx1ZSI6Imluc3RhbGxhdGlvbi0xIn19",
+          "expectedError": "PERMISSION_DENIED",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "global",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "RemovePersonalSkillInstallation.metadata.scope",
+          "stage": "context",
+          "method": "RemovePersonalSkillInstallation",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImluc3RhbGxhdGlvbl9pZCI6eyJ2YWx1ZSI6Imluc3RhbGxhdGlvbi0xIn19",
+          "expectedError": "PERMISSION_DENIED",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:execute"
+          }
+        },
+        {
+          "name": "RemovePersonalSkillInstallation.metadata.subject_id",
+          "stage": "context",
+          "method": "RemovePersonalSkillInstallation",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImluc3RhbGxhdGlvbl9pZCI6eyJ2YWx1ZSI6Imluc3RhbGxhdGlvbi0xIn19",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1\n",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "RemovePersonalSkillInstallation.metadata.tenant_ref",
+          "stage": "context",
+          "method": "RemovePersonalSkillInstallation",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImluc3RhbGxhdGlvbl9pZCI6eyJ2YWx1ZSI6Imluc3RhbGxhdGlvbi0xIn19",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1\n",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "RemovePersonalSkillInstallation.request-id-newline",
+          "stage": "request",
+          "method": "RemovePersonalSkillInstallation",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xXG4iLCJjb21tYW5kIjp7ImNvbW1hbmRfaWQiOiJjb21tYW5kLTEiLCJyZXF1ZXN0X2RpZ2VzdCI6IjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAifSwiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTEifX0=",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "RemovePersonalSkillInstallation.installation_id.absent",
+          "stage": "request",
+          "method": "RemovePersonalSkillInstallation",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn19",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "RemovePersonalSkillInstallation.installation_id.null",
+          "stage": "request",
+          "method": "RemovePersonalSkillInstallation",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImluc3RhbGxhdGlvbl9pZCI6bnVsbH0=",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "RemovePersonalSkillInstallation.installation_id.newline",
+          "stage": "request",
+          "method": "RemovePersonalSkillInstallation",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImluc3RhbGxhdGlvbl9pZCI6eyJ2YWx1ZSI6Imluc3RhbGxhdGlvbi0xXG4ifX0=",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "RemovePersonalSkillInstallation.installation_id.blank",
+          "stage": "request",
+          "method": "RemovePersonalSkillInstallation",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImluc3RhbGxhdGlvbl9pZCI6eyJ2YWx1ZSI6IiJ9fQ==",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "RemovePersonalSkillInstallation.installation_id.unknown",
+          "stage": "request",
+          "method": "RemovePersonalSkillInstallation",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImluc3RhbGxhdGlvbl9pZCI6eyJ2YWx1ZSI6Imluc3RhbGxhdGlvbi0xIiwiZXh0cmEiOnRydWV9fQ==",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "GetPersonalSkillInstallation.valid",
+          "stage": "request",
+          "method": "GetPersonalSkillInstallation",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTEifX0=",
+          "expectedError": "",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:projection.read"
+          }
+        },
+        {
+          "name": "GetPersonalSkillInstallation.body.tenant_id",
+          "stage": "request",
+          "method": "GetPersonalSkillInstallation",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTEifSwidGVuYW50X2lkIjoidW50cnVzdGVkIn0=",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:projection.read"
+          }
+        },
+        {
+          "name": "GetPersonalSkillInstallation.body.actor_id",
+          "stage": "request",
+          "method": "GetPersonalSkillInstallation",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTEifSwiYWN0b3JfaWQiOiJ1bnRydXN0ZWQifQ==",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:projection.read"
+          }
+        },
+        {
+          "name": "GetPersonalSkillInstallation.body.subject_id",
+          "stage": "request",
+          "method": "GetPersonalSkillInstallation",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTEifSwic3ViamVjdF9pZCI6InVudHJ1c3RlZCJ9",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:projection.read"
+          }
+        },
+        {
+          "name": "GetPersonalSkillInstallation.body.owner_scope",
+          "stage": "request",
+          "method": "GetPersonalSkillInstallation",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTEifSwib3duZXJfc2NvcGUiOnsia2luZCI6InVzZXIiLCJpZCI6Im90aGVyIn19",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:projection.read"
+          }
+        },
+        {
+          "name": "GetPersonalSkillInstallation.body.target_owner_scope",
+          "stage": "request",
+          "method": "GetPersonalSkillInstallation",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTEifSwidGFyZ2V0X293bmVyX3Njb3BlIjp7ImtpbmQiOiJ1c2VyIiwiaWQiOiJvdGhlciJ9fQ==",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:projection.read"
+          }
+        },
+        {
+          "name": "GetPersonalSkillInstallation.body.product_context",
+          "stage": "request",
+          "method": "GetPersonalSkillInstallation",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTEifSwicHJvZHVjdF9jb250ZXh0IjoidW50cnVzdGVkIn0=",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:projection.read"
+          }
+        },
+        {
+          "name": "GetPersonalSkillInstallation.body.execution_proof",
+          "stage": "request",
+          "method": "GetPersonalSkillInstallation",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTEifSwiZXhlY3V0aW9uX3Byb29mIjoidW50cnVzdGVkIn0=",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:projection.read"
+          }
+        },
+        {
+          "name": "GetPersonalSkillInstallation.body.package_asset_ref",
+          "stage": "request",
+          "method": "GetPersonalSkillInstallation",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTEifSwicGFja2FnZV9hc3NldF9yZWYiOiJ1bnRydXN0ZWQifQ==",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:projection.read"
+          }
+        },
+        {
+          "name": "GetPersonalSkillInstallation.body.content_digest",
+          "stage": "request",
+          "method": "GetPersonalSkillInstallation",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTEifSwiY29udGVudF9kaWdlc3QiOiJ1bnRydXN0ZWQifQ==",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:projection.read"
+          }
+        },
+        {
+          "name": "GetPersonalSkillInstallation.metadata.caller",
+          "stage": "context",
+          "method": "GetPersonalSkillInstallation",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTEifX0=",
+          "expectedError": "PERMISSION_DENIED",
+          "trustedMetadata": {
+            "caller": "kokoro-agent",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:projection.read"
+          }
+        },
+        {
+          "name": "GetPersonalSkillInstallation.metadata.resource",
+          "stage": "context",
+          "method": "GetPersonalSkillInstallation",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTEifX0=",
+          "expectedError": "PERMISSION_DENIED",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "global",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:projection.read"
+          }
+        },
+        {
+          "name": "GetPersonalSkillInstallation.metadata.scope",
+          "stage": "context",
+          "method": "GetPersonalSkillInstallation",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTEifX0=",
+          "expectedError": "PERMISSION_DENIED",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:execute"
+          }
+        },
+        {
+          "name": "GetPersonalSkillInstallation.metadata.subject_id",
+          "stage": "context",
+          "method": "GetPersonalSkillInstallation",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTEifX0=",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1\n",
+            "scope": "platform:projection.read"
+          }
+        },
+        {
+          "name": "GetPersonalSkillInstallation.metadata.tenant_ref",
+          "stage": "context",
+          "method": "GetPersonalSkillInstallation",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTEifX0=",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1\n",
+            "subject_id": "user-1",
+            "scope": "platform:projection.read"
+          }
+        },
+        {
+          "name": "GetPersonalSkillInstallation.request-id-newline",
+          "stage": "request",
+          "method": "GetPersonalSkillInstallation",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xXG4iLCJpbnN0YWxsYXRpb25faWQiOnsidmFsdWUiOiJpbnN0YWxsYXRpb24tMSJ9fQ==",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:projection.read"
+          }
+        },
+        {
+          "name": "GetPersonalSkillInstallation.installation_id.absent",
+          "stage": "request",
+          "method": "GetPersonalSkillInstallation",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIn0=",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:projection.read"
+          }
+        },
+        {
+          "name": "GetPersonalSkillInstallation.installation_id.null",
+          "stage": "request",
+          "method": "GetPersonalSkillInstallation",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiaW5zdGFsbGF0aW9uX2lkIjpudWxsfQ==",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:projection.read"
+          }
+        },
+        {
+          "name": "GetPersonalSkillInstallation.installation_id.newline",
+          "stage": "request",
+          "method": "GetPersonalSkillInstallation",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTFcbiJ9fQ==",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:projection.read"
+          }
+        },
+        {
+          "name": "GetPersonalSkillInstallation.installation_id.blank",
+          "stage": "request",
+          "method": "GetPersonalSkillInstallation",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiIn19",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:projection.read"
+          }
+        },
+        {
+          "name": "GetPersonalSkillInstallation.installation_id.unknown",
+          "stage": "request",
+          "method": "GetPersonalSkillInstallation",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTEiLCJleHRyYSI6dHJ1ZX19",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:projection.read"
+          }
+        },
+        {
+          "name": "ListPersonalSkillInstallations.valid",
+          "stage": "request",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIn0=",
+          "expectedError": "",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:projection.read"
+          },
+          "binding": {
+            "surface_version": "product-personal-installation/1.0.0",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "target_owner_scope": {
+              "kind": "user",
+              "id": "user-1"
+            },
+            "enabled": {
+              "present": false
+            },
+            "installed": {
+              "present": false
+            },
+            "order": "installation_id ASC",
+            "limit": 50,
+            "cursor": {
+              "present": false
+            }
+          }
+        },
+        {
+          "name": "ListPersonalSkillInstallations.body.tenant_id",
+          "stage": "request",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwidGVuYW50X2lkIjoidW50cnVzdGVkIn0=",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:projection.read"
+          }
+        },
+        {
+          "name": "ListPersonalSkillInstallations.body.actor_id",
+          "stage": "request",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiYWN0b3JfaWQiOiJ1bnRydXN0ZWQifQ==",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:projection.read"
+          }
+        },
+        {
+          "name": "ListPersonalSkillInstallations.body.subject_id",
+          "stage": "request",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwic3ViamVjdF9pZCI6InVudHJ1c3RlZCJ9",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:projection.read"
+          }
+        },
+        {
+          "name": "ListPersonalSkillInstallations.body.owner_scope",
+          "stage": "request",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwib3duZXJfc2NvcGUiOnsia2luZCI6InVzZXIiLCJpZCI6Im90aGVyIn19",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:projection.read"
+          }
+        },
+        {
+          "name": "ListPersonalSkillInstallations.body.target_owner_scope",
+          "stage": "request",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwidGFyZ2V0X293bmVyX3Njb3BlIjp7ImtpbmQiOiJ1c2VyIiwiaWQiOiJvdGhlciJ9fQ==",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:projection.read"
+          }
+        },
+        {
+          "name": "ListPersonalSkillInstallations.body.product_context",
+          "stage": "request",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwicHJvZHVjdF9jb250ZXh0IjoidW50cnVzdGVkIn0=",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:projection.read"
+          }
+        },
+        {
+          "name": "ListPersonalSkillInstallations.body.execution_proof",
+          "stage": "request",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiZXhlY3V0aW9uX3Byb29mIjoidW50cnVzdGVkIn0=",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:projection.read"
+          }
+        },
+        {
+          "name": "ListPersonalSkillInstallations.body.package_asset_ref",
+          "stage": "request",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwicGFja2FnZV9hc3NldF9yZWYiOiJ1bnRydXN0ZWQifQ==",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:projection.read"
+          }
+        },
+        {
+          "name": "ListPersonalSkillInstallations.body.content_digest",
+          "stage": "request",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29udGVudF9kaWdlc3QiOiJ1bnRydXN0ZWQifQ==",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:projection.read"
+          }
+        },
+        {
+          "name": "ListPersonalSkillInstallations.metadata.caller",
+          "stage": "context",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIn0=",
+          "expectedError": "PERMISSION_DENIED",
+          "trustedMetadata": {
+            "caller": "kokoro-agent",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:projection.read"
+          }
+        },
+        {
+          "name": "ListPersonalSkillInstallations.metadata.resource",
+          "stage": "context",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIn0=",
+          "expectedError": "PERMISSION_DENIED",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "global",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:projection.read"
+          }
+        },
+        {
+          "name": "ListPersonalSkillInstallations.metadata.scope",
+          "stage": "context",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIn0=",
+          "expectedError": "PERMISSION_DENIED",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:execute"
+          }
+        },
+        {
+          "name": "ListPersonalSkillInstallations.metadata.subject_id",
+          "stage": "context",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIn0=",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1\n",
+            "scope": "platform:projection.read"
+          }
+        },
+        {
+          "name": "ListPersonalSkillInstallations.metadata.tenant_ref",
+          "stage": "context",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIn0=",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1\n",
+            "subject_id": "user-1",
+            "scope": "platform:projection.read"
+          }
+        },
+        {
+          "name": "ListPersonalSkillInstallations.request-id-newline",
+          "stage": "request",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xXG4ifQ==",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:projection.read"
+          }
+        },
+        {
+          "name": "set.enabled.missing",
+          "stage": "request",
+          "method": "SetPersonalSkillInstallationEnabled",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImluc3RhbGxhdGlvbl9pZCI6eyJ2YWx1ZSI6Imluc3RhbGxhdGlvbi0xIn19",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "set.enabled.null",
+          "stage": "request",
+          "method": "SetPersonalSkillInstallationEnabled",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImluc3RhbGxhdGlvbl9pZCI6eyJ2YWx1ZSI6Imluc3RhbGxhdGlvbi0xIn0sImVuYWJsZWQiOm51bGx9",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "set.enabled.string",
+          "stage": "request",
+          "method": "SetPersonalSkillInstallationEnabled",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImluc3RhbGxhdGlvbl9pZCI6eyJ2YWx1ZSI6Imluc3RhbGxhdGlvbi0xIn0sImVuYWJsZWQiOiJmYWxzZSJ9",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "set.enabled.integer",
+          "stage": "request",
+          "method": "SetPersonalSkillInstallationEnabled",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImluc3RhbGxhdGlvbl9pZCI6eyJ2YWx1ZSI6Imluc3RhbGxhdGlvbi0xIn0sImVuYWJsZWQiOjB9",
+          "expectedError": "INVALID_ARGUMENT",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          }
+        },
+        {
+          "name": "set.enabled.true",
+          "stage": "projection",
+          "method": "SetPersonalSkillInstallationEnabled",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sImluc3RhbGxhdGlvbl9pZCI6eyJ2YWx1ZSI6Imluc3RhbGxhdGlvbi0xIn0sImVuYWJsZWQiOnRydWV9",
+          "expectedError": "",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:skill-catalog.manage"
+          },
+          "projection": {
+            "command_digest_version": "product-personal-installation/1.0.0",
+            "fq_method": "kokoro.platform.v1.ProductSkillInstallationService/SetPersonalSkillInstallationEnabled",
+            "tenant_ref": "tenant-1",
+            "command": {
+              "subject_id": "user-1",
+              "target_owner_scope": {
+                "kind": "user",
+                "id": "user-1"
+              },
+              "installation_id": {
+                "present": true,
+                "value": "installation-1"
+              },
+              "enabled": true
+            }
+          },
+          "canonicalBase64": "eyJjb21tYW5kIjp7ImVuYWJsZWQiOnRydWUsImluc3RhbGxhdGlvbl9pZCI6eyJwcmVzZW50Ijp0cnVlLCJ2YWx1ZSI6Imluc3RhbGxhdGlvbi0xIn0sInN1YmplY3RfaWQiOiJ1c2VyLTEiLCJ0YXJnZXRfb3duZXJfc2NvcGUiOnsiaWQiOiJ1c2VyLTEiLCJraW5kIjoidXNlciJ9fSwiY29tbWFuZF9kaWdlc3RfdmVyc2lvbiI6InByb2R1Y3QtcGVyc29uYWwtaW5zdGFsbGF0aW9uLzEuMC4wIiwiZnFfbWV0aG9kIjoia29rb3JvLnBsYXRmb3JtLnYxLlByb2R1Y3RTa2lsbEluc3RhbGxhdGlvblNlcnZpY2UvU2V0UGVyc29uYWxTa2lsbEluc3RhbGxhdGlvbkVuYWJsZWQiLCJ0ZW5hbnRfcmVmIjoidGVuYW50LTEifQ==",
+          "sha256": "d8531be61fd8a5823235bf24ddbe81b30ff1a6405a355e37ab708ef69e6639cc"
+        },
+        {
+          "name": "install.source.105",
+          "stage": "request",
+          "method": "InstallPersonalSkill",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sInNvdXJjZV9yZWYiOnsidmFsdWUiOiJza2lsbDpza2lsbDpza2lsbC0xIn19",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "install.source.106",
+          "stage": "request",
+          "method": "InstallPersonalSkill",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sInNvdXJjZV9yZWYiOnsidmFsdWUiOiIgc2tpbGw6c2tpbGwtMSJ9fQ==",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "install.source.107",
+          "stage": "request",
+          "method": "InstallPersonalSkill",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sInNvdXJjZV9yZWYiOnsidmFsdWUiOiJza2lsbDpza2lsbC0xICJ9fQ==",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "install.source.108",
+          "stage": "request",
+          "method": "InstallPersonalSkill",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiY29tbWFuZCI6eyJjb21tYW5kX2lkIjoiY29tbWFuZC0xIiwicmVxdWVzdF9kaWdlc3QiOiIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIn0sInNvdXJjZV9yZWYiOnsidmFsdWUiOiJza2lsbDphYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEifX0=",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "list.page.109",
+          "stage": "request",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwicGFnZSI6eyJsaW1pdCI6MH19",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "list.page.110",
+          "stage": "request",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwicGFnZSI6eyJsaW1pdCI6MTAxfX0=",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "list.page.111",
+          "stage": "request",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwicGFnZSI6eyJsaW1pdCI6bnVsbH19",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "list.page.112",
+          "stage": "request",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwicGFnZSI6eyJsaW1pdCI6IjUwIn19",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "list.page.113",
+          "stage": "request",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwicGFnZSI6eyJjdXJzb3IiOiIifX0=",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "list.page.114",
+          "stage": "request",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwicGFnZSI6eyJjdXJzb3IiOm51bGx9fQ==",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "list.page.115",
+          "stage": "request",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwicGFnZSI6eyJjdXJzb3IiOiJhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYSJ9fQ==",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "list.page.116",
+          "stage": "request",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwicGFnZSI6eyJjdXJzb3IiOiJ4PSJ9fQ==",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "list.presence.117",
+          "stage": "request",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiZW5hYmxlZCI6ZmFsc2V9",
+          "expectedError": "",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:projection.read"
+          },
+          "binding": {
+            "surface_version": "product-personal-installation/1.0.0",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "target_owner_scope": {
+              "kind": "user",
+              "id": "user-1"
+            },
+            "enabled": {
+              "present": true,
+              "value": false
+            },
+            "installed": {
+              "present": false
+            },
+            "order": "installation_id ASC",
+            "limit": 50,
+            "cursor": {
+              "present": false
+            }
+          }
+        },
+        {
+          "name": "list.presence.118",
+          "stage": "request",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiaW5zdGFsbGVkIjpmYWxzZX0=",
+          "expectedError": "",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:projection.read"
+          },
+          "binding": {
+            "surface_version": "product-personal-installation/1.0.0",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "target_owner_scope": {
+              "kind": "user",
+              "id": "user-1"
+            },
+            "enabled": {
+              "present": false
+            },
+            "installed": {
+              "present": true,
+              "value": false
+            },
+            "order": "installation_id ASC",
+            "limit": 50,
+            "cursor": {
+              "present": false
+            }
+          }
+        },
+        {
+          "name": "list.presence.119",
+          "stage": "request",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiZW5hYmxlZCI6ZmFsc2UsImluc3RhbGxlZCI6ZmFsc2V9",
+          "expectedError": "",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:projection.read"
+          },
+          "binding": {
+            "surface_version": "product-personal-installation/1.0.0",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "target_owner_scope": {
+              "kind": "user",
+              "id": "user-1"
+            },
+            "enabled": {
+              "present": true,
+              "value": false
+            },
+            "installed": {
+              "present": true,
+              "value": false
+            },
+            "order": "installation_id ASC",
+            "limit": 50,
+            "cursor": {
+              "present": false
+            }
+          }
+        },
+        {
+          "name": "list.presence.120",
+          "stage": "request",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoicmVxdWVzdC0xIiwiZW5hYmxlZCI6dHJ1ZSwiaW5zdGFsbGVkIjpmYWxzZX0=",
+          "expectedError": "",
+          "trustedMetadata": {
+            "caller": "kokoro-bff",
+            "resource": "tenant_machine",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "scope": "platform:projection.read"
+          },
+          "binding": {
+            "surface_version": "product-personal-installation/1.0.0",
+            "tenant_ref": "tenant-1",
+            "subject_id": "user-1",
+            "target_owner_scope": {
+              "kind": "user",
+              "id": "user-1"
+            },
+            "enabled": {
+              "present": true,
+              "value": true
+            },
+            "installed": {
+              "present": true,
+              "value": false
+            },
+            "order": "installation_id ASC",
+            "limit": 50,
+            "cursor": {
+              "present": false
+            }
+          }
+        },
+        {
+          "name": "safe.active",
+          "stage": "response",
+          "method": "GetPersonalSkillInstallation",
+          "rawBase64": "eyJpbnN0YWxsYXRpb24iOnsiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTEifSwic291cmNlX3JlZiI6eyJ2YWx1ZSI6InNraWxsOnNraWxsLTEifSwic2VyaWVzX2lkIjp7InZhbHVlIjoic2VyaWVzLTEifSwicmV2aXNpb24iOiIxIiwiaW5zdGFsbGVkIjp0cnVlLCJlbmFibGVkIjp0cnVlLCJpbnN0YWxsZWRfYXQiOiIyMDI2LTA5LTMwVDAwOjAwOjAwWiIsInVwZGF0ZWRfYXQiOiIyMDI2LTA5LTMwVDAwOjAwOjAwWiJ9fQ==",
+          "expectedError": ""
+        },
+        {
+          "name": "safe.removed",
+          "stage": "response",
+          "method": "GetPersonalSkillInstallation",
+          "rawBase64": "eyJpbnN0YWxsYXRpb24iOnsiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTEifSwic291cmNlX3JlZiI6eyJ2YWx1ZSI6InNraWxsOnNraWxsLTEifSwic2VyaWVzX2lkIjp7InZhbHVlIjoic2VyaWVzLTEifSwicmV2aXNpb24iOiIxIiwiaW5zdGFsbGVkIjpmYWxzZSwiZW5hYmxlZCI6ZmFsc2UsImluc3RhbGxlZF9hdCI6IjIwMjYtMDktMzBUMDA6MDA6MDBaIiwidXBkYXRlZF9hdCI6IjIwMjYtMDktMzBUMDA6MDA6MDBaIiwicmVtb3ZlZF9hdCI6IjIwMjYtMDktMzBUMDA6MDA6MDBaIn19",
+          "expectedError": ""
+        },
+        {
+          "name": "safe.leak.package_asset_ref",
+          "stage": "response",
+          "method": "GetPersonalSkillInstallation",
+          "rawBase64": "eyJpbnN0YWxsYXRpb24iOnsiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTEifSwic291cmNlX3JlZiI6eyJ2YWx1ZSI6InNraWxsOnNraWxsLTEifSwic2VyaWVzX2lkIjp7InZhbHVlIjoic2VyaWVzLTEifSwicmV2aXNpb24iOiIxIiwiaW5zdGFsbGVkIjp0cnVlLCJlbmFibGVkIjp0cnVlLCJpbnN0YWxsZWRfYXQiOiIyMDI2LTA5LTMwVDAwOjAwOjAwWiIsInVwZGF0ZWRfYXQiOiIyMDI2LTA5LTMwVDAwOjAwOjAwWiIsInBhY2thZ2VfYXNzZXRfcmVmIjoiZm9yYmlkZGVuIn19",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "safe.leak.content_digest",
+          "stage": "response",
+          "method": "GetPersonalSkillInstallation",
+          "rawBase64": "eyJpbnN0YWxsYXRpb24iOnsiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTEifSwic291cmNlX3JlZiI6eyJ2YWx1ZSI6InNraWxsOnNraWxsLTEifSwic2VyaWVzX2lkIjp7InZhbHVlIjoic2VyaWVzLTEifSwicmV2aXNpb24iOiIxIiwiaW5zdGFsbGVkIjp0cnVlLCJlbmFibGVkIjp0cnVlLCJpbnN0YWxsZWRfYXQiOiIyMDI2LTA5LTMwVDAwOjAwOjAwWiIsInVwZGF0ZWRfYXQiOiIyMDI2LTA5LTMwVDAwOjAwOjAwWiIsImNvbnRlbnRfZGlnZXN0IjoiZm9yYmlkZGVuIn19",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "safe.leak.hash",
+          "stage": "response",
+          "method": "GetPersonalSkillInstallation",
+          "rawBase64": "eyJpbnN0YWxsYXRpb24iOnsiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTEifSwic291cmNlX3JlZiI6eyJ2YWx1ZSI6InNraWxsOnNraWxsLTEifSwic2VyaWVzX2lkIjp7InZhbHVlIjoic2VyaWVzLTEifSwicmV2aXNpb24iOiIxIiwiaW5zdGFsbGVkIjp0cnVlLCJlbmFibGVkIjp0cnVlLCJpbnN0YWxsZWRfYXQiOiIyMDI2LTA5LTMwVDAwOjAwOjAwWiIsInVwZGF0ZWRfYXQiOiIyMDI2LTA5LTMwVDAwOjAwOjAwWiIsImhhc2giOiJmb3JiaWRkZW4ifX0=",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "safe.leak.tenant_id",
+          "stage": "response",
+          "method": "GetPersonalSkillInstallation",
+          "rawBase64": "eyJpbnN0YWxsYXRpb24iOnsiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTEifSwic291cmNlX3JlZiI6eyJ2YWx1ZSI6InNraWxsOnNraWxsLTEifSwic2VyaWVzX2lkIjp7InZhbHVlIjoic2VyaWVzLTEifSwicmV2aXNpb24iOiIxIiwiaW5zdGFsbGVkIjp0cnVlLCJlbmFibGVkIjp0cnVlLCJpbnN0YWxsZWRfYXQiOiIyMDI2LTA5LTMwVDAwOjAwOjAwWiIsInVwZGF0ZWRfYXQiOiIyMDI2LTA5LTMwVDAwOjAwOjAwWiIsInRlbmFudF9pZCI6ImZvcmJpZGRlbiJ9fQ==",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "safe.leak.subject_id",
+          "stage": "response",
+          "method": "GetPersonalSkillInstallation",
+          "rawBase64": "eyJpbnN0YWxsYXRpb24iOnsiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTEifSwic291cmNlX3JlZiI6eyJ2YWx1ZSI6InNraWxsOnNraWxsLTEifSwic2VyaWVzX2lkIjp7InZhbHVlIjoic2VyaWVzLTEifSwicmV2aXNpb24iOiIxIiwiaW5zdGFsbGVkIjp0cnVlLCJlbmFibGVkIjp0cnVlLCJpbnN0YWxsZWRfYXQiOiIyMDI2LTA5LTMwVDAwOjAwOjAwWiIsInVwZGF0ZWRfYXQiOiIyMDI2LTA5LTMwVDAwOjAwOjAwWiIsInN1YmplY3RfaWQiOiJmb3JiaWRkZW4ifX0=",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "safe.leak.target_owner_scope",
+          "stage": "response",
+          "method": "GetPersonalSkillInstallation",
+          "rawBase64": "eyJpbnN0YWxsYXRpb24iOnsiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTEifSwic291cmNlX3JlZiI6eyJ2YWx1ZSI6InNraWxsOnNraWxsLTEifSwic2VyaWVzX2lkIjp7InZhbHVlIjoic2VyaWVzLTEifSwicmV2aXNpb24iOiIxIiwiaW5zdGFsbGVkIjp0cnVlLCJlbmFibGVkIjp0cnVlLCJpbnN0YWxsZWRfYXQiOiIyMDI2LTA5LTMwVDAwOjAwOjAwWiIsInVwZGF0ZWRfYXQiOiIyMDI2LTA5LTMwVDAwOjAwOjAwWiIsInRhcmdldF9vd25lcl9zY29wZSI6ImZvcmJpZGRlbiJ9fQ==",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "safe.leak.execution_proof",
+          "stage": "response",
+          "method": "GetPersonalSkillInstallation",
+          "rawBase64": "eyJpbnN0YWxsYXRpb24iOnsiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTEifSwic291cmNlX3JlZiI6eyJ2YWx1ZSI6InNraWxsOnNraWxsLTEifSwic2VyaWVzX2lkIjp7InZhbHVlIjoic2VyaWVzLTEifSwicmV2aXNpb24iOiIxIiwiaW5zdGFsbGVkIjp0cnVlLCJlbmFibGVkIjp0cnVlLCJpbnN0YWxsZWRfYXQiOiIyMDI2LTA5LTMwVDAwOjAwOjAwWiIsInVwZGF0ZWRfYXQiOiIyMDI2LTA5LTMwVDAwOjAwOjAwWiIsImV4ZWN1dGlvbl9wcm9vZiI6ImZvcmJpZGRlbiJ9fQ==",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "safe.leak.manifest",
+          "stage": "response",
+          "method": "GetPersonalSkillInstallation",
+          "rawBase64": "eyJpbnN0YWxsYXRpb24iOnsiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTEifSwic291cmNlX3JlZiI6eyJ2YWx1ZSI6InNraWxsOnNraWxsLTEifSwic2VyaWVzX2lkIjp7InZhbHVlIjoic2VyaWVzLTEifSwicmV2aXNpb24iOiIxIiwiaW5zdGFsbGVkIjp0cnVlLCJlbmFibGVkIjp0cnVlLCJpbnN0YWxsZWRfYXQiOiIyMDI2LTA5LTMwVDAwOjAwOjAwWiIsInVwZGF0ZWRfYXQiOiIyMDI2LTA5LTMwVDAwOjAwOjAwWiIsIm1hbmlmZXN0IjoiZm9yYmlkZGVuIn19",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "safe.leak.signed_url",
+          "stage": "response",
+          "method": "GetPersonalSkillInstallation",
+          "rawBase64": "eyJpbnN0YWxsYXRpb24iOnsiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTEifSwic291cmNlX3JlZiI6eyJ2YWx1ZSI6InNraWxsOnNraWxsLTEifSwic2VyaWVzX2lkIjp7InZhbHVlIjoic2VyaWVzLTEifSwicmV2aXNpb24iOiIxIiwiaW5zdGFsbGVkIjp0cnVlLCJlbmFibGVkIjp0cnVlLCJpbnN0YWxsZWRfYXQiOiIyMDI2LTA5LTMwVDAwOjAwOjAwWiIsInVwZGF0ZWRfYXQiOiIyMDI2LTA5LTMwVDAwOjAwOjAwWiIsInNpZ25lZF91cmwiOiJmb3JiaWRkZW4ifX0=",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "safe.removed-enabled",
+          "stage": "response",
+          "method": "GetPersonalSkillInstallation",
+          "rawBase64": "eyJpbnN0YWxsYXRpb24iOnsiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTEifSwic291cmNlX3JlZiI6eyJ2YWx1ZSI6InNraWxsOnNraWxsLTEifSwic2VyaWVzX2lkIjp7InZhbHVlIjoic2VyaWVzLTEifSwicmV2aXNpb24iOiIxIiwiaW5zdGFsbGVkIjpmYWxzZSwiZW5hYmxlZCI6dHJ1ZSwiaW5zdGFsbGVkX2F0IjoiMjAyNi0wOS0zMFQwMDowMDowMFoiLCJ1cGRhdGVkX2F0IjoiMjAyNi0wOS0zMFQwMDowMDowMFoiLCJyZW1vdmVkX2F0IjoiMjAyNi0wOS0zMFQwMDowMDowMFoifX0=",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "safe.active-removed",
+          "stage": "response",
+          "method": "GetPersonalSkillInstallation",
+          "rawBase64": "eyJpbnN0YWxsYXRpb24iOnsiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTEifSwic291cmNlX3JlZiI6eyJ2YWx1ZSI6InNraWxsOnNraWxsLTEifSwic2VyaWVzX2lkIjp7InZhbHVlIjoic2VyaWVzLTEifSwicmV2aXNpb24iOiIxIiwiaW5zdGFsbGVkIjp0cnVlLCJlbmFibGVkIjp0cnVlLCJpbnN0YWxsZWRfYXQiOiIyMDI2LTA5LTMwVDAwOjAwOjAwWiIsInVwZGF0ZWRfYXQiOiIyMDI2LTA5LTMwVDAwOjAwOjAwWiIsInJlbW92ZWRfYXQiOiIyMDI2LTA5LTMwVDAwOjAwOjAwWiJ9fQ==",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "safe.zero-revision",
+          "stage": "response",
+          "method": "GetPersonalSkillInstallation",
+          "rawBase64": "eyJpbnN0YWxsYXRpb24iOnsiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTEifSwic291cmNlX3JlZiI6eyJ2YWx1ZSI6InNraWxsOnNraWxsLTEifSwic2VyaWVzX2lkIjp7InZhbHVlIjoic2VyaWVzLTEifSwicmV2aXNpb24iOiIwIiwiaW5zdGFsbGVkIjp0cnVlLCJlbmFibGVkIjp0cnVlLCJpbnN0YWxsZWRfYXQiOiIyMDI2LTA5LTMwVDAwOjAwOjAwWiIsInVwZGF0ZWRfYXQiOiIyMDI2LTA5LTMwVDAwOjAwOjAwWiJ9fQ==",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "safe.overflow",
+          "stage": "response",
+          "method": "GetPersonalSkillInstallation",
+          "rawBase64": "eyJpbnN0YWxsYXRpb24iOnsiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTEifSwic291cmNlX3JlZiI6eyJ2YWx1ZSI6InNraWxsOnNraWxsLTEifSwic2VyaWVzX2lkIjp7InZhbHVlIjoic2VyaWVzLTEifSwicmV2aXNpb24iOiIxODQ0Njc0NDA3MzcwOTU1MTYxNiIsImluc3RhbGxlZCI6dHJ1ZSwiZW5hYmxlZCI6dHJ1ZSwiaW5zdGFsbGVkX2F0IjoiMjAyNi0wOS0zMFQwMDowMDowMFoiLCJ1cGRhdGVkX2F0IjoiMjAyNi0wOS0zMFQwMDowMDowMFoifX0=",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "safe.non-utc",
+          "stage": "response",
+          "method": "GetPersonalSkillInstallation",
+          "rawBase64": "eyJpbnN0YWxsYXRpb24iOnsiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTEifSwic291cmNlX3JlZiI6eyJ2YWx1ZSI6InNraWxsOnNraWxsLTEifSwic2VyaWVzX2lkIjp7InZhbHVlIjoic2VyaWVzLTEifSwicmV2aXNpb24iOiIxIiwiaW5zdGFsbGVkIjp0cnVlLCJlbmFibGVkIjp0cnVlLCJpbnN0YWxsZWRfYXQiOiIyMDI2LTA5LTMwVDAwOjAwOjAwWiIsInVwZGF0ZWRfYXQiOiIyMDI2LTA5LTMwVDAwOjAwOjAwKzAwOjAwIn19",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "safe.calendar",
+          "stage": "response",
+          "method": "GetPersonalSkillInstallation",
+          "rawBase64": "eyJpbnN0YWxsYXRpb24iOnsiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTEifSwic291cmNlX3JlZiI6eyJ2YWx1ZSI6InNraWxsOnNraWxsLTEifSwic2VyaWVzX2lkIjp7InZhbHVlIjoic2VyaWVzLTEifSwicmV2aXNpb24iOiIxIiwiaW5zdGFsbGVkIjp0cnVlLCJlbmFibGVkIjp0cnVlLCJpbnN0YWxsZWRfYXQiOiIyMDI2LTA5LTMwVDAwOjAwOjAwWiIsInVwZGF0ZWRfYXQiOiIyMDI2LTAyLTMwVDAwOjAwOjAwWiJ9fQ==",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "safe.time-reversed",
+          "stage": "response",
+          "method": "GetPersonalSkillInstallation",
+          "rawBase64": "eyJpbnN0YWxsYXRpb24iOnsiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTEifSwic291cmNlX3JlZiI6eyJ2YWx1ZSI6InNraWxsOnNraWxsLTEifSwic2VyaWVzX2lkIjp7InZhbHVlIjoic2VyaWVzLTEifSwicmV2aXNpb24iOiIxIiwiaW5zdGFsbGVkIjp0cnVlLCJlbmFibGVkIjp0cnVlLCJpbnN0YWxsZWRfYXQiOiIyMDI2LTA5LTMwVDAwOjAwOjAwWiIsInVwZGF0ZWRfYXQiOiIyMDI2LTA5LTI5VDAwOjAwOjAwWiJ9fQ==",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "InstallPersonalSkill.response.changed",
+          "stage": "response",
+          "method": "InstallPersonalSkill",
+          "rawBase64": "eyJpbnN0YWxsYXRpb24iOnsiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTEifSwic291cmNlX3JlZiI6eyJ2YWx1ZSI6InNraWxsOnNraWxsLTEifSwic2VyaWVzX2lkIjp7InZhbHVlIjoic2VyaWVzLTEifSwicmV2aXNpb24iOiIxIiwiaW5zdGFsbGVkIjp0cnVlLCJlbmFibGVkIjp0cnVlLCJpbnN0YWxsZWRfYXQiOiIyMDI2LTA5LTMwVDAwOjAwOjAwWiIsInVwZGF0ZWRfYXQiOiIyMDI2LTA5LTMwVDAwOjAwOjAwWiJ9LCJjaGFuZ2UiOjEsImV2ZW50X2lkIjoiZXZlbnQtMSIsInJlcGxheWVkIjpmYWxzZX0=",
+          "expectedError": ""
+        },
+        {
+          "name": "InstallPersonalSkill.response.unchanged",
+          "stage": "response",
+          "method": "InstallPersonalSkill",
+          "rawBase64": "eyJpbnN0YWxsYXRpb24iOnsiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTEifSwic291cmNlX3JlZiI6eyJ2YWx1ZSI6InNraWxsOnNraWxsLTEifSwic2VyaWVzX2lkIjp7InZhbHVlIjoic2VyaWVzLTEifSwicmV2aXNpb24iOiIxIiwiaW5zdGFsbGVkIjp0cnVlLCJlbmFibGVkIjp0cnVlLCJpbnN0YWxsZWRfYXQiOiIyMDI2LTA5LTMwVDAwOjAwOjAwWiIsInVwZGF0ZWRfYXQiOiIyMDI2LTA5LTMwVDAwOjAwOjAwWiJ9LCJjaGFuZ2UiOjcsInJlcGxheWVkIjp0cnVlfQ==",
+          "expectedError": ""
+        },
+        {
+          "name": "InstallPersonalSkill.response.noop-event",
+          "stage": "response",
+          "method": "InstallPersonalSkill",
+          "rawBase64": "eyJpbnN0YWxsYXRpb24iOnsiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTEifSwic291cmNlX3JlZiI6eyJ2YWx1ZSI6InNraWxsOnNraWxsLTEifSwic2VyaWVzX2lkIjp7InZhbHVlIjoic2VyaWVzLTEifSwicmV2aXNpb24iOiIxIiwiaW5zdGFsbGVkIjp0cnVlLCJlbmFibGVkIjp0cnVlLCJpbnN0YWxsZWRfYXQiOiIyMDI2LTA5LTMwVDAwOjAwOjAwWiIsInVwZGF0ZWRfYXQiOiIyMDI2LTA5LTMwVDAwOjAwOjAwWiJ9LCJjaGFuZ2UiOjcsImV2ZW50X2lkIjoiZXZlbnQtMSIsInJlcGxheWVkIjpmYWxzZX0=",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "SetPersonalSkillInstallationEnabled.response.changed",
+          "stage": "response",
+          "method": "SetPersonalSkillInstallationEnabled",
+          "rawBase64": "eyJpbnN0YWxsYXRpb24iOnsiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTEifSwic291cmNlX3JlZiI6eyJ2YWx1ZSI6InNraWxsOnNraWxsLTEifSwic2VyaWVzX2lkIjp7InZhbHVlIjoic2VyaWVzLTEifSwicmV2aXNpb24iOiIxIiwiaW5zdGFsbGVkIjp0cnVlLCJlbmFibGVkIjpmYWxzZSwiaW5zdGFsbGVkX2F0IjoiMjAyNi0wOS0zMFQwMDowMDowMFoiLCJ1cGRhdGVkX2F0IjoiMjAyNi0wOS0zMFQwMDowMDowMFoifSwiY2hhbmdlIjo1LCJldmVudF9pZCI6ImV2ZW50LTEiLCJyZXBsYXllZCI6ZmFsc2V9",
+          "expectedError": ""
+        },
+        {
+          "name": "SetPersonalSkillInstallationEnabled.response.unchanged",
+          "stage": "response",
+          "method": "SetPersonalSkillInstallationEnabled",
+          "rawBase64": "eyJpbnN0YWxsYXRpb24iOnsiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTEifSwic291cmNlX3JlZiI6eyJ2YWx1ZSI6InNraWxsOnNraWxsLTEifSwic2VyaWVzX2lkIjp7InZhbHVlIjoic2VyaWVzLTEifSwicmV2aXNpb24iOiIxIiwiaW5zdGFsbGVkIjp0cnVlLCJlbmFibGVkIjp0cnVlLCJpbnN0YWxsZWRfYXQiOiIyMDI2LTA5LTMwVDAwOjAwOjAwWiIsInVwZGF0ZWRfYXQiOiIyMDI2LTA5LTMwVDAwOjAwOjAwWiJ9LCJjaGFuZ2UiOjcsInJlcGxheWVkIjp0cnVlfQ==",
+          "expectedError": ""
+        },
+        {
+          "name": "SetPersonalSkillInstallationEnabled.response.noop-event",
+          "stage": "response",
+          "method": "SetPersonalSkillInstallationEnabled",
+          "rawBase64": "eyJpbnN0YWxsYXRpb24iOnsiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTEifSwic291cmNlX3JlZiI6eyJ2YWx1ZSI6InNraWxsOnNraWxsLTEifSwic2VyaWVzX2lkIjp7InZhbHVlIjoic2VyaWVzLTEifSwicmV2aXNpb24iOiIxIiwiaW5zdGFsbGVkIjp0cnVlLCJlbmFibGVkIjp0cnVlLCJpbnN0YWxsZWRfYXQiOiIyMDI2LTA5LTMwVDAwOjAwOjAwWiIsInVwZGF0ZWRfYXQiOiIyMDI2LTA5LTMwVDAwOjAwOjAwWiJ9LCJjaGFuZ2UiOjcsImV2ZW50X2lkIjoiZXZlbnQtMSIsInJlcGxheWVkIjpmYWxzZX0=",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "RemovePersonalSkillInstallation.response.changed",
+          "stage": "response",
+          "method": "RemovePersonalSkillInstallation",
+          "rawBase64": "eyJpbnN0YWxsYXRpb24iOnsiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTEifSwic291cmNlX3JlZiI6eyJ2YWx1ZSI6InNraWxsOnNraWxsLTEifSwic2VyaWVzX2lkIjp7InZhbHVlIjoic2VyaWVzLTEifSwicmV2aXNpb24iOiIxIiwiaW5zdGFsbGVkIjpmYWxzZSwiZW5hYmxlZCI6ZmFsc2UsImluc3RhbGxlZF9hdCI6IjIwMjYtMDktMzBUMDA6MDA6MDBaIiwidXBkYXRlZF9hdCI6IjIwMjYtMDktMzBUMDA6MDA6MDBaIiwicmVtb3ZlZF9hdCI6IjIwMjYtMDktMzBUMDA6MDA6MDBaIn0sImNoYW5nZSI6NiwiZXZlbnRfaWQiOiJldmVudC0xIiwicmVwbGF5ZWQiOmZhbHNlfQ==",
+          "expectedError": ""
+        },
+        {
+          "name": "RemovePersonalSkillInstallation.response.unchanged",
+          "stage": "response",
+          "method": "RemovePersonalSkillInstallation",
+          "rawBase64": "eyJpbnN0YWxsYXRpb24iOnsiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTEifSwic291cmNlX3JlZiI6eyJ2YWx1ZSI6InNraWxsOnNraWxsLTEifSwic2VyaWVzX2lkIjp7InZhbHVlIjoic2VyaWVzLTEifSwicmV2aXNpb24iOiIxIiwiaW5zdGFsbGVkIjp0cnVlLCJlbmFibGVkIjp0cnVlLCJpbnN0YWxsZWRfYXQiOiIyMDI2LTA5LTMwVDAwOjAwOjAwWiIsInVwZGF0ZWRfYXQiOiIyMDI2LTA5LTMwVDAwOjAwOjAwWiJ9LCJjaGFuZ2UiOjcsInJlcGxheWVkIjp0cnVlfQ==",
+          "expectedError": ""
+        },
+        {
+          "name": "RemovePersonalSkillInstallation.response.noop-event",
+          "stage": "response",
+          "method": "RemovePersonalSkillInstallation",
+          "rawBase64": "eyJpbnN0YWxsYXRpb24iOnsiaW5zdGFsbGF0aW9uX2lkIjp7InZhbHVlIjoiaW5zdGFsbGF0aW9uLTEifSwic291cmNlX3JlZiI6eyJ2YWx1ZSI6InNraWxsOnNraWxsLTEifSwic2VyaWVzX2lkIjp7InZhbHVlIjoic2VyaWVzLTEifSwicmV2aXNpb24iOiIxIiwiaW5zdGFsbGVkIjp0cnVlLCJlbmFibGVkIjp0cnVlLCJpbnN0YWxsZWRfYXQiOiIyMDI2LTA5LTMwVDAwOjAwOjAwWiIsInVwZGF0ZWRfYXQiOiIyMDI2LTA5LTMwVDAwOjAwOjAwWiJ9LCJjaGFuZ2UiOjcsImV2ZW50X2lkIjoiZXZlbnQtMSIsInJlcGxheWVkIjpmYWxzZX0=",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "list.empty",
+          "stage": "response",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "eyJpbnN0YWxsYXRpb25zIjpbXSwicGFnZSI6e319",
+          "expectedError": ""
+        },
+        {
+          "name": "list.safe",
+          "stage": "response",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "eyJpbnN0YWxsYXRpb25zIjpbeyJpbnN0YWxsYXRpb25faWQiOnsidmFsdWUiOiJpbnN0YWxsYXRpb24tMSJ9LCJzb3VyY2VfcmVmIjp7InZhbHVlIjoic2tpbGw6c2tpbGwtMSJ9LCJzZXJpZXNfaWQiOnsidmFsdWUiOiJzZXJpZXMtMSJ9LCJyZXZpc2lvbiI6IjEiLCJpbnN0YWxsZWQiOnRydWUsImVuYWJsZWQiOnRydWUsImluc3RhbGxlZF9hdCI6IjIwMjYtMDktMzBUMDA6MDA6MDBaIiwidXBkYXRlZF9hdCI6IjIwMjYtMDktMzBUMDA6MDA6MDBaIn1dLCJwYWdlIjp7Im5leHRfY3Vyc29yIjoib3BhcXVlX2N1cnNvciJ9fQ==",
+          "expectedError": ""
+        },
+        {
+          "name": "list.duplicate",
+          "stage": "response",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "eyJpbnN0YWxsYXRpb25zIjpbeyJpbnN0YWxsYXRpb25faWQiOnsidmFsdWUiOiJpbnN0YWxsYXRpb24tMSJ9LCJzb3VyY2VfcmVmIjp7InZhbHVlIjoic2tpbGw6c2tpbGwtMSJ9LCJzZXJpZXNfaWQiOnsidmFsdWUiOiJzZXJpZXMtMSJ9LCJyZXZpc2lvbiI6IjEiLCJpbnN0YWxsZWQiOnRydWUsImVuYWJsZWQiOnRydWUsImluc3RhbGxlZF9hdCI6IjIwMjYtMDktMzBUMDA6MDA6MDBaIiwidXBkYXRlZF9hdCI6IjIwMjYtMDktMzBUMDA6MDA6MDBaIn0seyJpbnN0YWxsYXRpb25faWQiOnsidmFsdWUiOiJpbnN0YWxsYXRpb24tMSJ9LCJzb3VyY2VfcmVmIjp7InZhbHVlIjoic2tpbGw6c2tpbGwtMSJ9LCJzZXJpZXNfaWQiOnsidmFsdWUiOiJzZXJpZXMtMSJ9LCJyZXZpc2lvbiI6IjEiLCJpbnN0YWxsZWQiOnRydWUsImVuYWJsZWQiOnRydWUsImluc3RhbGxlZF9hdCI6IjIwMjYtMDktMzBUMDA6MDA6MDBaIiwidXBkYXRlZF9hdCI6IjIwMjYtMDktMzBUMDA6MDA6MDBaIn1dLCJwYWdlIjp7fX0=",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "list.cursor-inconsistent",
+          "stage": "response",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "eyJpbnN0YWxsYXRpb25zIjpbXSwicGFnZSI6eyJoYXNfbW9yZSI6dHJ1ZX19",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "raw.152",
+          "stage": "raw-parser",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoiYSIsInJlcXVlc3RfaWQiOiJiIn0=",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "raw.153",
+          "stage": "raw-parser",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "eyJwYWdlIjp7ImxpbWl0IjoxLjB9fQ==",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "raw.154",
+          "stage": "raw-parser",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "eyJwYWdlIjp7ImxpbWl0IjoxZTF9fQ==",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "raw.155",
+          "stage": "raw-parser",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "eyJwYWdlIjp7ImxpbWl0IjotMH19",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "raw.156",
+          "stage": "raw-parser",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "eyJyZXF1ZXN0X2lkIjoiXHVkODAwIn0=",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "raw.invalid-utf8",
+          "stage": "raw-parser",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "/w==",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "list.page-absent",
+          "stage": "response",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "eyJpbnN0YWxsYXRpb25zIjpbXX0=",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "list.page-null",
+          "stage": "response",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "eyJpbnN0YWxsYXRpb25zIjpbXSwicGFnZSI6bnVsbH0=",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "list.cursor-null",
+          "stage": "response",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "eyJpbnN0YWxsYXRpb25zIjpbXSwicGFnZSI6eyJuZXh0X2N1cnNvciI6bnVsbH19",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "list.cursor-empty",
+          "stage": "response",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "eyJpbnN0YWxsYXRpb25zIjpbXSwicGFnZSI6eyJuZXh0X2N1cnNvciI6IiJ9fQ==",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "list.cursor-unsafe",
+          "stage": "response",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "eyJpbnN0YWxsYXRpb25zIjpbXSwicGFnZSI6eyJuZXh0X2N1cnNvciI6ImN1cnNvcj09PSJ9fQ==",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "list.cursor-oversized",
+          "stage": "response",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "eyJpbnN0YWxsYXRpb25zIjpbXSwicGFnZSI6eyJuZXh0X2N1cnNvciI6Inh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4In19",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "list.reverse-order",
+          "stage": "response",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "eyJpbnN0YWxsYXRpb25zIjpbeyJpbnN0YWxsYXRpb25faWQiOnsidmFsdWUiOiJpbnN0YWxsYXRpb24tMiJ9LCJzb3VyY2VfcmVmIjp7InZhbHVlIjoic2tpbGw6c2tpbGwtMSJ9LCJzZXJpZXNfaWQiOnsidmFsdWUiOiJzZXJpZXMtMSJ9LCJyZXZpc2lvbiI6IjEiLCJpbnN0YWxsZWQiOnRydWUsImVuYWJsZWQiOnRydWUsImluc3RhbGxlZF9hdCI6IjIwMjYtMDktMzBUMDA6MDA6MDBaIiwidXBkYXRlZF9hdCI6IjIwMjYtMDktMzBUMDA6MDA6MDBaIn0seyJpbnN0YWxsYXRpb25faWQiOnsidmFsdWUiOiJpbnN0YWxsYXRpb24tMSJ9LCJzb3VyY2VfcmVmIjp7InZhbHVlIjoic2tpbGw6c2tpbGwtMSJ9LCJzZXJpZXNfaWQiOnsidmFsdWUiOiJzZXJpZXMtMSJ9LCJyZXZpc2lvbiI6IjEiLCJpbnN0YWxsZWQiOnRydWUsImVuYWJsZWQiOnRydWUsImluc3RhbGxlZF9hdCI6IjIwMjYtMDktMzBUMDA6MDA6MDBaIiwidXBkYXRlZF9hdCI6IjIwMjYtMDktMzBUMDA6MDA6MDBaIn1dLCJwYWdlIjp7fX0=",
+          "expectedError": "INVALID_ARGUMENT"
+        },
+        {
+          "name": "list.unknown-has-more-false",
+          "stage": "response",
+          "method": "ListPersonalSkillInstallations",
+          "rawBase64": "eyJpbnN0YWxsYXRpb25zIjpbXSwicGFnZSI6eyJoYXNfbW9yZSI6ZmFsc2V9fQ==",
+          "expectedError": "INVALID_ARGUMENT"
+        }
+      ]
+    }
+  }
+}

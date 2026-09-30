@@ -1,0 +1,451 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kokoro.dev/contracts/platform-execution-operations/5.0.1/schemas/manifest.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "artifact",
+    "artifactVersion",
+    "status",
+    "routable",
+    "packageName",
+    "sourcePins",
+    "baseArtifact",
+    "payloadFiles",
+    "schemas",
+    "inventories"
+  ],
+  "properties": {
+    "artifact": {
+      "const": "platform-execution-operations"
+    },
+    "artifactVersion": {
+      "const": "5.0.1"
+    },
+    "status": {
+      "const": "inactive"
+    },
+    "routable": {
+      "const": false
+    },
+    "packageName": {
+      "const": "kokoro.platform.v1"
+    },
+    "sourcePins": {
+      "const": [
+        {
+          "path": "contract/proto/kokoro/platform/v1/platform_runtime.proto",
+          "sha256": "841d0e146d6fe25728fac967862ff5969a2cbc9c1ad4cde3d35e0e1ef61ea0e0"
+        },
+        {
+          "path": "contract/descriptor/platform-v1.binpb",
+          "sha256": "a994d0f2e54d5bcf6926e14bbb5bd725254050f8a6a2451125f7650912a22aa5"
+        },
+        {
+          "path": "contract/provenance.json",
+          "sha256": "c09ee77ffdc7b97e0207354666c939f4bedb764fcfbfe3944a1db0d7e83ea595"
+        },
+        {
+          "path": "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts",
+          "sha256": "8a65398a29a22831c2dca10dc929f2e3aecfd86a9e2e484cb995bb0dad5b916a"
+        }
+      ]
+    },
+    "baseArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "artifactVersion",
+        "aggregateSha256",
+        "files",
+        "descriptor"
+      ],
+      "properties": {
+        "path": {
+          "const": "../v4"
+        },
+        "artifactVersion": {
+          "const": "4.0.0"
+        },
+        "aggregateSha256": {
+          "const": "902f8f2c2fbeb95a441820c1cf16b0a9c793eadac7106f9fcd5e41e3878b7f79"
+        },
+        "files": {
+          "const": [
+            {
+              "path": "command-identities.json",
+              "bytes": 29413,
+              "sha256": "63e3a355f277c1ffefed82f4716fd91bc4a4c64e8a5b183b4eaa8d0a92a6e6bd"
+            },
+            {
+              "path": "command-schemas.json",
+              "bytes": 46661,
+              "sha256": "20a48aaa2e591f6e3941b7695cccd2719b34c3eeaefc984ec13c1bfa43d4b1cc"
+            },
+            {
+              "path": "identities.json",
+              "bytes": 19350,
+              "sha256": "d52564167b932153c8434015df5cb7c3b53e7e1d5c4e059264479fb47323ea01"
+            },
+            {
+              "path": "manifest.json",
+              "bytes": 13692,
+              "sha256": "7058e2d2e11c885765ceb4e813e1f4f208e170c97a9b27e8d5f0178fcffc8d5d"
+            },
+            {
+              "path": "operation-catalog.json",
+              "bytes": 9656,
+              "sha256": "ae4708cd4a9c05d90904222859e93a4ea3d7ec384e419416bb3c61a5ae2cd6d0"
+            },
+            {
+              "path": "projection-registry.json",
+              "bytes": 7481,
+              "sha256": "6101ee717c1c313de294cfa25b99e631153480bf27daaccedae98178e8ac1fcb"
+            },
+            {
+              "path": "publish-v1.json",
+              "bytes": 2472,
+              "sha256": "14c76f1793ea0a8c8d430095481912cad45b17d72345c213a82fe6e58e026ae9"
+            },
+            {
+              "path": "request-bindings.json",
+              "bytes": 17759,
+              "sha256": "9c8d3c3005f688172c664a12fbd25555504f2817cb488b68a5e0d821d47b1da2"
+            },
+            {
+              "path": "schemas/command-identities.schema.json",
+              "bytes": 16267,
+              "sha256": "601eb6c170bda98f4635f05451ab7a3bb534b8c4bef0d6cfd6f31e33a48c8d20"
+            },
+            {
+              "path": "schemas/identities.schema.json",
+              "bytes": 4204,
+              "sha256": "693b4134154516133a1494115a8e10cb37702d1b1210d6417497954f7d7e468d"
+            },
+            {
+              "path": "schemas/manifest.schema.json",
+              "bytes": 15096,
+              "sha256": "cd638c946a2073a35397dd44fa3b5ca9cfbcb9a80a522a54d042bb2d61bd3481"
+            },
+            {
+              "path": "schemas/operation-catalog.schema.json",
+              "bytes": 1567,
+              "sha256": "4fecc7f29be0c05812665d787fd6471f86ea0d85f6fcd6664c44685f1fde720e"
+            },
+            {
+              "path": "schemas/request-bindings.schema.json",
+              "bytes": 14838,
+              "sha256": "7e39cc320dbdb929ad47e448262aff5ea5a43368987ffe1a38e39de90b446aa0"
+            },
+            {
+              "path": "schemas/vector-inventory.schema.json",
+              "bytes": 2890,
+              "sha256": "5afa2f259245348f4ad76ceb4356632b7084ab0da3382cc77168fec71e3f71ba"
+            },
+            {
+              "path": "schemas/zip-profile-v1.schema.json",
+              "bytes": 3133,
+              "sha256": "97928b92dac7dabf6b51662af2b19741474377c564aaff9411a9ad8ab58d6712"
+            },
+            {
+              "path": "vectors/command-projection.json",
+              "bytes": 993575,
+              "sha256": "2dc336ff4da132ebf0551dc6c74fb4b8a286adb52f4831fa98379a9436af612c"
+            },
+            {
+              "path": "vectors/negative.json",
+              "bytes": 126591,
+              "sha256": "20e0823dedb82449789cf3ff698705fc9d59e1dad52a54f3518a59ea7514432a"
+            },
+            {
+              "path": "vectors/positive.json",
+              "bytes": 60971,
+              "sha256": "33941b076d6588e80aa13cd339b3eb2b439617ba05c28a50549377c09f2ce909"
+            },
+            {
+              "path": "vectors/zip-v1.json",
+              "bytes": 16636,
+              "sha256": "d0d37e7b1ef8b88daede645c4d826f95fac38c25f374fdf2d41d090231d6f943"
+            },
+            {
+              "path": "zip-profile-v1.json",
+              "bytes": 1673,
+              "sha256": "18ef03a3d7ea84f0e2a38c6e625146f607b96689957210052116b557008024fc"
+            }
+          ]
+        },
+        "descriptor": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "sha256"],
+          "properties": {
+            "path": {
+              "const": "../../descriptor/platform-v4.binpb"
+            },
+            "sha256": {
+              "const": "81f06be6ee4867676e13c3146dd21b69a61ef07e02dbdd483891427ee53b95a5"
+            }
+          }
+        }
+      }
+    },
+    "payloadFiles": {
+      "const": [
+        "manifest.json",
+        "operation-catalog.json",
+        "command-identities.json",
+        "product-installation-v1.json",
+        "schemas/manifest.schema.json",
+        "schemas/operation-catalog.schema.json",
+        "schemas/command-identities.schema.json",
+        "schemas/product-installation.schema.json",
+        "schemas/vector-inventory.schema.json",
+        "vectors/product-installation.json"
+      ]
+    },
+    "schemas": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "manifest.json",
+        "operation-catalog.json",
+        "command-identities.json",
+        "product-installation-v1.json",
+        "vectors/product-installation.json"
+      ],
+      "properties": {
+        "manifest.json": {
+          "const": "schemas/manifest.schema.json"
+        },
+        "operation-catalog.json": {
+          "const": "schemas/operation-catalog.schema.json"
+        },
+        "command-identities.json": {
+          "const": "schemas/command-identities.schema.json"
+        },
+        "product-installation-v1.json": {
+          "const": "schemas/product-installation.schema.json"
+        },
+        "vectors/product-installation.json": {
+          "const": "schemas/vector-inventory.schema.json"
+        }
+      }
+    },
+    "inventories": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operations",
+        "tenantExecution",
+        "workloadOnly",
+        "globalReserved",
+        "bindings",
+        "readBindings",
+        "commandIdentities",
+        "productCommands",
+        "safeFields",
+        "productVectors"
+      ],
+      "properties": {
+        "operations": {
+          "const": 39
+        },
+        "tenantExecution": {
+          "const": 24
+        },
+        "workloadOnly": {
+          "const": 14
+        },
+        "globalReserved": {
+          "const": 1
+        },
+        "bindings": {
+          "const": 24
+        },
+        "readBindings": {
+          "const": 1
+        },
+        "commandIdentities": {
+          "const": 20
+        },
+        "productCommands": {
+          "const": 3
+        },
+        "safeFields": {
+          "const": 9
+        },
+        "productVectors": {
+          "const": [
+            "InstallPersonalSkill.valid",
+            "InstallPersonalSkill.body.tenant_id",
+            "InstallPersonalSkill.body.actor_id",
+            "InstallPersonalSkill.body.subject_id",
+            "InstallPersonalSkill.body.owner_scope",
+            "InstallPersonalSkill.body.target_owner_scope",
+            "InstallPersonalSkill.body.product_context",
+            "InstallPersonalSkill.body.execution_proof",
+            "InstallPersonalSkill.body.package_asset_ref",
+            "InstallPersonalSkill.body.content_digest",
+            "InstallPersonalSkill.metadata.caller",
+            "InstallPersonalSkill.metadata.resource",
+            "InstallPersonalSkill.metadata.scope",
+            "InstallPersonalSkill.metadata.subject_id",
+            "InstallPersonalSkill.metadata.tenant_ref",
+            "InstallPersonalSkill.request-id-newline",
+            "InstallPersonalSkill.source_ref.absent",
+            "InstallPersonalSkill.source_ref.null",
+            "InstallPersonalSkill.source_ref.newline",
+            "InstallPersonalSkill.source_ref.blank",
+            "InstallPersonalSkill.source_ref.unknown",
+            "SetPersonalSkillInstallationEnabled.valid",
+            "SetPersonalSkillInstallationEnabled.body.tenant_id",
+            "SetPersonalSkillInstallationEnabled.body.actor_id",
+            "SetPersonalSkillInstallationEnabled.body.subject_id",
+            "SetPersonalSkillInstallationEnabled.body.owner_scope",
+            "SetPersonalSkillInstallationEnabled.body.target_owner_scope",
+            "SetPersonalSkillInstallationEnabled.body.product_context",
+            "SetPersonalSkillInstallationEnabled.body.execution_proof",
+            "SetPersonalSkillInstallationEnabled.body.package_asset_ref",
+            "SetPersonalSkillInstallationEnabled.body.content_digest",
+            "SetPersonalSkillInstallationEnabled.metadata.caller",
+            "SetPersonalSkillInstallationEnabled.metadata.resource",
+            "SetPersonalSkillInstallationEnabled.metadata.scope",
+            "SetPersonalSkillInstallationEnabled.metadata.subject_id",
+            "SetPersonalSkillInstallationEnabled.metadata.tenant_ref",
+            "SetPersonalSkillInstallationEnabled.request-id-newline",
+            "SetPersonalSkillInstallationEnabled.installation_id.absent",
+            "SetPersonalSkillInstallationEnabled.installation_id.null",
+            "SetPersonalSkillInstallationEnabled.installation_id.newline",
+            "SetPersonalSkillInstallationEnabled.installation_id.blank",
+            "SetPersonalSkillInstallationEnabled.installation_id.unknown",
+            "RemovePersonalSkillInstallation.valid",
+            "RemovePersonalSkillInstallation.body.tenant_id",
+            "RemovePersonalSkillInstallation.body.actor_id",
+            "RemovePersonalSkillInstallation.body.subject_id",
+            "RemovePersonalSkillInstallation.body.owner_scope",
+            "RemovePersonalSkillInstallation.body.target_owner_scope",
+            "RemovePersonalSkillInstallation.body.product_context",
+            "RemovePersonalSkillInstallation.body.execution_proof",
+            "RemovePersonalSkillInstallation.body.package_asset_ref",
+            "RemovePersonalSkillInstallation.body.content_digest",
+            "RemovePersonalSkillInstallation.metadata.caller",
+            "RemovePersonalSkillInstallation.metadata.resource",
+            "RemovePersonalSkillInstallation.metadata.scope",
+            "RemovePersonalSkillInstallation.metadata.subject_id",
+            "RemovePersonalSkillInstallation.metadata.tenant_ref",
+            "RemovePersonalSkillInstallation.request-id-newline",
+            "RemovePersonalSkillInstallation.installation_id.absent",
+            "RemovePersonalSkillInstallation.installation_id.null",
+            "RemovePersonalSkillInstallation.installation_id.newline",
+            "RemovePersonalSkillInstallation.installation_id.blank",
+            "RemovePersonalSkillInstallation.installation_id.unknown",
+            "GetPersonalSkillInstallation.valid",
+            "GetPersonalSkillInstallation.body.tenant_id",
+            "GetPersonalSkillInstallation.body.actor_id",
+            "GetPersonalSkillInstallation.body.subject_id",
+            "GetPersonalSkillInstallation.body.owner_scope",
+            "GetPersonalSkillInstallation.body.target_owner_scope",
+            "GetPersonalSkillInstallation.body.product_context",
+            "GetPersonalSkillInstallation.body.execution_proof",
+            "GetPersonalSkillInstallation.body.package_asset_ref",
+            "GetPersonalSkillInstallation.body.content_digest",
+            "GetPersonalSkillInstallation.metadata.caller",
+            "GetPersonalSkillInstallation.metadata.resource",
+            "GetPersonalSkillInstallation.metadata.scope",
+            "GetPersonalSkillInstallation.metadata.subject_id",
+            "GetPersonalSkillInstallation.metadata.tenant_ref",
+            "GetPersonalSkillInstallation.request-id-newline",
+            "GetPersonalSkillInstallation.installation_id.absent",
+            "GetPersonalSkillInstallation.installation_id.null",
+            "GetPersonalSkillInstallation.installation_id.newline",
+            "GetPersonalSkillInstallation.installation_id.blank",
+            "GetPersonalSkillInstallation.installation_id.unknown",
+            "ListPersonalSkillInstallations.valid",
+            "ListPersonalSkillInstallations.body.tenant_id",
+            "ListPersonalSkillInstallations.body.actor_id",
+            "ListPersonalSkillInstallations.body.subject_id",
+            "ListPersonalSkillInstallations.body.owner_scope",
+            "ListPersonalSkillInstallations.body.target_owner_scope",
+            "ListPersonalSkillInstallations.body.product_context",
+            "ListPersonalSkillInstallations.body.execution_proof",
+            "ListPersonalSkillInstallations.body.package_asset_ref",
+            "ListPersonalSkillInstallations.body.content_digest",
+            "ListPersonalSkillInstallations.metadata.caller",
+            "ListPersonalSkillInstallations.metadata.resource",
+            "ListPersonalSkillInstallations.metadata.scope",
+            "ListPersonalSkillInstallations.metadata.subject_id",
+            "ListPersonalSkillInstallations.metadata.tenant_ref",
+            "ListPersonalSkillInstallations.request-id-newline",
+            "set.enabled.missing",
+            "set.enabled.null",
+            "set.enabled.string",
+            "set.enabled.integer",
+            "set.enabled.true",
+            "install.source.105",
+            "install.source.106",
+            "install.source.107",
+            "install.source.108",
+            "list.page.109",
+            "list.page.110",
+            "list.page.111",
+            "list.page.112",
+            "list.page.113",
+            "list.page.114",
+            "list.page.115",
+            "list.page.116",
+            "list.presence.117",
+            "list.presence.118",
+            "list.presence.119",
+            "list.presence.120",
+            "safe.active",
+            "safe.removed",
+            "safe.leak.package_asset_ref",
+            "safe.leak.content_digest",
+            "safe.leak.hash",
+            "safe.leak.tenant_id",
+            "safe.leak.subject_id",
+            "safe.leak.target_owner_scope",
+            "safe.leak.execution_proof",
+            "safe.leak.manifest",
+            "safe.leak.signed_url",
+            "safe.removed-enabled",
+            "safe.active-removed",
+            "safe.zero-revision",
+            "safe.overflow",
+            "safe.non-utc",
+            "safe.calendar",
+            "safe.time-reversed",
+            "InstallPersonalSkill.response.changed",
+            "InstallPersonalSkill.response.unchanged",
+            "InstallPersonalSkill.response.noop-event",
+            "SetPersonalSkillInstallationEnabled.response.changed",
+            "SetPersonalSkillInstallationEnabled.response.unchanged",
+            "SetPersonalSkillInstallationEnabled.response.noop-event",
+            "RemovePersonalSkillInstallation.response.changed",
+            "RemovePersonalSkillInstallation.response.unchanged",
+            "RemovePersonalSkillInstallation.response.noop-event",
+            "list.empty",
+            "list.safe",
+            "list.duplicate",
+            "list.cursor-inconsistent",
+            "raw.152",
+            "raw.153",
+            "raw.154",
+            "raw.155",
+            "raw.156",
+            "raw.invalid-utf8",
+            "list.page-absent",
+            "list.page-null",
+            "list.cursor-null",
+            "list.cursor-empty",
+            "list.cursor-unsafe",
+            "list.cursor-oversized",
+            "list.reverse-order",
+            "list.unknown-has-more-false"
+          ]
+        }
+      }
+    }
+  }
+}

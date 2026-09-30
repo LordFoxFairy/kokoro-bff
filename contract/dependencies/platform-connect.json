@@ -3,7 +3,7 @@
   "status": "generated-not-activated",
   "owner": {
     "repository_path": "apps/kokoro-capability",
-    "repository_commit": "263a28f1e55745bd1829a61f68228d775751adbc",
+    "repository_commit": "6519ae9a7dba63586474d2860f6725d3165b701e",
     "package_name": "kokoro.platform.v1",
     "sources": [
       {
@@ -12,17 +12,17 @@
       },
       {
         "path": "contract/proto/kokoro/platform/v1/platform_runtime.proto",
-        "sha256": "8ccab4aee4efdfd8210f2e5f02ae8ec85c2c470e90451915209406e16621289a"
+        "sha256": "841d0e146d6fe25728fac967862ff5969a2cbc9c1ad4cde3d35e0e1ef61ea0e0"
       }
     ]
   },
   "execution_artifact": {
-    "path": "contract/vendor/kokoro-platform/263a28f1e55745bd1829a61f68228d775751adbc/execution-operations-v4",
-    "artifact_version": "4.0.0",
+    "path": "contract/vendor/kokoro-platform/6519ae9a7dba63586474d2860f6725d3165b701e/execution-operations-v5",
+    "artifact_version": "5.0.1",
     "status": "inactive",
     "routable": false,
-    "provenance_path": "contract/vendor/kokoro-platform/263a28f1e55745bd1829a61f68228d775751adbc/execution-operations-v4/provenance.json",
-    "aggregate_sha256": "902f8f2c2fbeb95a441820c1cf16b0a9c793eadac7106f9fcd5e41e3878b7f79"
+    "provenance_path": "contract/vendor/kokoro-platform/6519ae9a7dba63586474d2860f6725d3165b701e/execution-operations-v5/provenance.json",
+    "aggregate_sha256": "3f97b3c98fd8e7ce46e4a8ea73237ddb85e764849d2b15dd28d0a3a58a69e42f"
   },
   "generator": {
     "packages": {
@@ -34,14 +34,14 @@
     "configs": [
       {
         "path": "buf.platform.json",
-        "sha256": "36d6346845aac87c8af4386f26de008fcf14c7de6dd17bd10afcd7c2affedf38"
+        "sha256": "06283034a76aa6d0361982fd536531d1dc11d03b2c40c7293c4e0c82d4bc7660"
       },
       {
         "path": "buf.platform.gen.json",
         "sha256": "9888ea0808f6967ebdfb859125eb54430b89ad3f4dbee4418902bfdf6a4540ab"
       }
     ],
-    "script_sha256": "f404dc8e42e7af312859026fb5b41cad0867b3682f10898d9ff7484f055cd52a",
+    "script_sha256": "42b53e405423f6414c96b28490d67de667ce3e66459b40bfb1bf3c8f48288a2c",
     "formatting": {
       "package": "prettier",
       "version": "3.9.6",
@@ -77,7 +77,7 @@
     },
     {
       "path": "kokoro/platform/v1/platform_runtime_pb.ts",
-      "sha256": "42e7753076f1e61a7571cb0ad1ee5df0755d1c17b88ad9dff1522556e2e9b22a"
+      "sha256": "46a4c17788dd00627e2d2fe33889f4996c5126a05e37fcd734778f8fcc0644e0"
     }
   ]
 }

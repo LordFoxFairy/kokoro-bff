@@ -1,8 +1,8 @@
 # kokoro-bff API contract policy
 
-## BFF-PERSONAL-DOC-GATE：本人安装 public 目标（2026-09-30；canonical OpenAPI 待后继片）
+## BFF-PERSONAL-DOC-GATE：本人安装 public 目标（2026-09-30；canonical OpenAPI 已接线，真实组合待验）
 
-当前 canonical OpenAPI 与 runtime **尚未**发布本人安装；BFF consumer 仍是 Platform v4/`263a28f`，旧 enable/disable 安装声明实际为 503。后继机器片必须 clean-slate 删除旧按 name 路径/stub/alias，以本仓唯一 `contract/openapi/v1/openapi.yaml` 发布以下 public `/v1` 资源，并固定 Platform `0dd60af4799cb2f0b410ded5ffb9c1402a55c641` v5 aggregate `bc233fe33d1acce81c2fdcda4062843b98d06bd46164d8710751d28d01b4d6ca`；本文不是第二份机器 schema。
+当前 canonical OpenAPI 与在途 runtime 已唯一固定 Platform `6519ae9a7dba63586474d2860f6725d3165b701e` v5.0.1 aggregate `3f97b3c98fd8e7ce46e4a8ea73237ddb85e764849d2b15dd28d0a3a58a69e42f`，并接线以下 public `/v1` 本人安装资源及五个 owner 方法；旧按 name enable/disable contract、stub、alias 与 v4 fallback 已删除。该消费者代码尚待 Root 提交及真实 IAM→BFF→Platform 组合验收，产品未激活；本文链接本仓唯一 `contract/openapi/v1/openapi.yaml`，不是第二份机器 schema。
 
 | Method/path | 输入与语义 | 成功 |
 | --- | --- | --- |
@@ -20,9 +20,9 @@ GET 成功精确为 `{data:<九字段 installation>}`。三种写成功精确为
 
 List 成功沿现有 BFF list 规范：`{data:[<九字段 installation>],meta?:{next_cursor:string}}`。owner `PageResult.next_cursor` 是 optional string；只有 present 且非空时 public 才出现 `meta.next_cursor`，absent 时整个 `meta` 缺失，present 空串或非法 presence 为 502。默认 limit 50，合法范围 1..100；cursor 最大 4096 UTF-8 bytes，opaque、原样转发，按 `installation_id ASC`，非 snapshot。cursor 绑定 product surface、可信 tenant/subject、派生 target、`enabled`/`installed` 的 presence+value 与排序；缺失 filter 表示包括 removed，显式 false 不等于缺失。调用者不得解码 cursor，BFF 不 trim、重签或缓存它。
 
-所有响应包含有界 `x-request-id` 与 `Cache-Control: no-store`。稳定错误 envelope 仍为 `{error:{code,message,retryable}}`：400 非法 path/body/query/key/cursor，401 session 缺失或失效，403 service/session/tenant 或 workload 被拒，404 installation/source 不可见，409 同键异 digest/命令进行中，412 source 不可安装、stale generation 或非法状态前置，429 IAM/Platform 限流（合法时转发有界 Retry-After），502 owner 响应违反九字段/receipt/presence，503 tenant 未配置或 IAM/Platform 依赖不可判定，504 deadline。错误按 owner code+stable reason 映射，不解析 message。请求 AbortSignal/deadline 必须贯穿；写请求发生 unknown ACK 时只允许同 key 重试，不降级本地成功或切换旧服务。
+所有响应包含有界 `x-request-id` 与 `Cache-Control: no-store`。稳定错误 envelope 仍为 `{error:{code,message,retryable}}`：400 非法 path/body/query/key/cursor，413 请求体超过各操作固定上限，401 session 缺失或失效，403 service/session/tenant 或 workload 被拒，404 installation/source 不可见，409 同键异 digest/命令进行中，412 source 不可安装、stale generation 或非法状态前置，429 IAM/Platform 限流（合法时转发有界 Retry-After），502 owner 响应违反九字段/receipt/presence，503 tenant 未配置或 IAM/Platform 依赖不可判定，504 deadline。错误按 owner code+stable reason 映射，不解析 message。请求 AbortSignal/deadline 必须贯穿；写请求发生 unknown ACK 时只允许同 key 重试，不降级本地成功或切换旧服务。
 
-三写操作的 command digest 分别使用 Platform v5 artifact 中独立的 `skill.product.install`、`skill.product.set_installation_enabled`、`skill.product.remove_installation` 定义，digest version 均为 `product-personal-installation/1.0.0`；source/installation/boolean presence 与可信 subject/target 按 owner machine binding 投影，不把 request ID、token、command ID 纳入 digest。GET/List 不制造命令或 receipt。Breaking/activation：本仓 canonical OpenAPI、operation inventory、语义门、生成 client 与 runtime 必须同一后继切片更新；旧 503 paths 删除而非 alias/fallback，Web 再固定新 BFF commit/digest。
+三写操作的 command digest 分别使用 Platform v5 artifact 中独立的 `skill.product.install`、`skill.product.set_installation_enabled`、`skill.product.remove_installation` 定义，digest version 均为 `product-personal-installation/1.0.0`；source/installation/boolean presence 与可信 subject/target 按 owner machine binding 投影，不把 request ID、token、command ID 纳入 digest。GET/List 不制造命令或 receipt。Breaking/activation：本仓 canonical OpenAPI、operation inventory、语义门、生成 client 与 runtime 已在同一在途切片更新；旧 503 paths 删除而非 alias/fallback，Web 再固定新 BFF commit/digest。
 
 
 ## W3 Chat typed Skill 选择契约（已实现，组合待验）

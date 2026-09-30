@@ -1,0 +1,368 @@
+{
+  "artifactVersion": "5.0.1",
+  "productVersion": "product-personal-installation/1.0.0",
+  "service": "kokoro.platform.v1.ProductSkillInstallationService",
+  "visibility": "internal-owner",
+  "status": "inactive",
+  "routable": false,
+  "requests": [
+    {
+      "method": "InstallPersonalSkill",
+      "requestMessage": "InstallPersonalSkillRequest",
+      "fields": [
+        ["request_id", 1, "string", "implicit"],
+        ["command", 2, "kokoro.common.v1.CommandIdentity", "message"],
+        ["source_ref", 3, "kokoro.platform.v1.SkillSourceRef", "message"]
+      ],
+      "forbiddenBodyMembers": [
+        "tenant_id",
+        "actor_id",
+        "subject_id",
+        "owner_scope",
+        "target_owner_scope",
+        "product_context",
+        "execution_proof",
+        "package_asset_ref",
+        "content_digest"
+      ]
+    },
+    {
+      "method": "SetPersonalSkillInstallationEnabled",
+      "requestMessage": "SetPersonalSkillInstallationEnabledRequest",
+      "fields": [
+        ["request_id", 1, "string", "implicit"],
+        ["command", 2, "kokoro.common.v1.CommandIdentity", "message"],
+        [
+          "installation_id",
+          3,
+          "kokoro.platform.v1.SkillInstallationId",
+          "message"
+        ],
+        ["enabled", 4, "bool", "optional"]
+      ],
+      "forbiddenBodyMembers": [
+        "tenant_id",
+        "actor_id",
+        "subject_id",
+        "owner_scope",
+        "target_owner_scope",
+        "product_context",
+        "execution_proof",
+        "package_asset_ref",
+        "content_digest"
+      ]
+    },
+    {
+      "method": "RemovePersonalSkillInstallation",
+      "requestMessage": "RemovePersonalSkillInstallationRequest",
+      "fields": [
+        ["request_id", 1, "string", "implicit"],
+        ["command", 2, "kokoro.common.v1.CommandIdentity", "message"],
+        [
+          "installation_id",
+          3,
+          "kokoro.platform.v1.SkillInstallationId",
+          "message"
+        ]
+      ],
+      "forbiddenBodyMembers": [
+        "tenant_id",
+        "actor_id",
+        "subject_id",
+        "owner_scope",
+        "target_owner_scope",
+        "product_context",
+        "execution_proof",
+        "package_asset_ref",
+        "content_digest"
+      ]
+    },
+    {
+      "method": "GetPersonalSkillInstallation",
+      "requestMessage": "GetPersonalSkillInstallationRequest",
+      "fields": [
+        ["request_id", 1, "string", "implicit"],
+        [
+          "installation_id",
+          2,
+          "kokoro.platform.v1.SkillInstallationId",
+          "message"
+        ]
+      ],
+      "forbiddenBodyMembers": [
+        "tenant_id",
+        "actor_id",
+        "subject_id",
+        "owner_scope",
+        "target_owner_scope",
+        "product_context",
+        "execution_proof",
+        "package_asset_ref",
+        "content_digest"
+      ]
+    },
+    {
+      "method": "ListPersonalSkillInstallations",
+      "requestMessage": "ListPersonalSkillInstallationsRequest",
+      "fields": [
+        ["request_id", 1, "string", "implicit"],
+        ["enabled", 2, "bool", "optional"],
+        ["installed", 3, "bool", "optional"],
+        [
+          "page",
+          4,
+          "kokoro.platform.v1.ProductSkillInstallationPageRequest",
+          "message"
+        ]
+      ],
+      "forbiddenBodyMembers": [
+        "tenant_id",
+        "actor_id",
+        "subject_id",
+        "owner_scope",
+        "target_owner_scope",
+        "product_context",
+        "execution_proof",
+        "package_asset_ref",
+        "content_digest"
+      ]
+    }
+  ],
+  "safeProjection": {
+    "message": "ProductSkillInstallation",
+    "fields": [
+      {
+        "field": "installation_id",
+        "tag": 1
+      },
+      {
+        "field": "source_ref",
+        "tag": 2
+      },
+      {
+        "field": "series_id",
+        "tag": 3
+      },
+      {
+        "field": "revision",
+        "tag": 4
+      },
+      {
+        "field": "installed",
+        "tag": 5
+      },
+      {
+        "field": "enabled",
+        "tag": 6
+      },
+      {
+        "field": "installed_at",
+        "tag": 7
+      },
+      {
+        "field": "updated_at",
+        "tag": 8
+      },
+      {
+        "field": "removed_at",
+        "tag": 9
+      }
+    ],
+    "wireEncoding": "uint64 positive decimal string / typed wrappers / UTC RFC3339 Z",
+    "removedInvariant": "installed iff removed_at absent; removed implies enabled=false"
+  },
+  "admission": {
+    "caller": "kokoro-bff",
+    "workloadResource": "tenant_machine",
+    "tenant": "fresh-online-IAM-decision",
+    "subjectMetadata": "x-kokoro-subject",
+    "subjectProfile": "exact 1..191 ASCII token",
+    "target": "derive user=subject",
+    "source": "current tenant PERSONAL user=subject only",
+    "scopes": {
+      "write": "platform:skill-catalog.manage",
+      "read": "platform:projection.read"
+    },
+    "closed": ["organization", "project", "session", "global", "shared"],
+    "noBodyIdentity": true,
+    "noExecutionProof": true,
+    "noFakeRun": true,
+    "receipt": "current authorization at every receipt exit; original safe ACK, not current state",
+    "permissiveWrites": "install/true-enable: ACTIVE/validated/fresh-CLEAN/health/CAS before replay and commit",
+    "restrictiveWrites": "disable/remove permitted without healthy source/package",
+    "timing": {
+      "deadlineSeconds": 20,
+      "freshSeconds": 5
+    }
+  },
+  "pagination": {
+    "wireMessage": "ProductSkillInstallationPageRequest",
+    "fields": [
+      ["limit", 1, "uint32", "optional"],
+      ["cursor", 2, "string", "optional"]
+    ],
+    "defaultLimit": 50,
+    "minimumLimit": 1,
+    "maximumLimit": 100,
+    "maximumCursorBytes": 4096,
+    "order": "installation_id ASC",
+    "snapshot": false,
+    "filters": "explicit boolean presence; absent means all including removed",
+    "cursorBinding": [
+      "product-surface-version",
+      "tenant_ref",
+      "subject_id",
+      "derived-target",
+      "enabled-presence",
+      "installed-presence",
+      "order"
+    ]
+  },
+  "commands": [
+    {
+      "operation": "skill.product.install",
+      "fqMethod": "kokoro.platform.v1.ProductSkillInstallationService/InstallPersonalSkill",
+      "requestMessage": "kokoro.platform.v1.InstallPersonalSkillRequest",
+      "commandField": {
+        "field": "command",
+        "tag": 2,
+        "type": "kokoro.common.v1.CommandIdentity"
+      },
+      "commandDigestVersion": "product-personal-installation/1.0.0",
+      "rootMembers": [
+        "command_digest_version",
+        "fq_method",
+        "tenant_ref",
+        "command"
+      ],
+      "commandMembers": ["subject_id", "target_owner_scope", "source_ref"],
+      "requiredTypedPresence": {
+        "present": true,
+        "value": "exact wrapper scalar"
+      },
+      "excludedMembers": [
+        "request_id",
+        "command_id",
+        "request_digest",
+        "token",
+        "execution_proof"
+      ],
+      "trustedContext": "authenticated metadata only; never body",
+      "profile": "product-installation-v1.json"
+    },
+    {
+      "operation": "skill.product.set_installation_enabled",
+      "fqMethod": "kokoro.platform.v1.ProductSkillInstallationService/SetPersonalSkillInstallationEnabled",
+      "requestMessage": "kokoro.platform.v1.SetPersonalSkillInstallationEnabledRequest",
+      "commandField": {
+        "field": "command",
+        "tag": 2,
+        "type": "kokoro.common.v1.CommandIdentity"
+      },
+      "commandDigestVersion": "product-personal-installation/1.0.0",
+      "rootMembers": [
+        "command_digest_version",
+        "fq_method",
+        "tenant_ref",
+        "command"
+      ],
+      "commandMembers": [
+        "subject_id",
+        "target_owner_scope",
+        "installation_id",
+        "enabled"
+      ],
+      "requiredTypedPresence": {
+        "present": true,
+        "value": "exact wrapper scalar"
+      },
+      "excludedMembers": [
+        "request_id",
+        "command_id",
+        "request_digest",
+        "token",
+        "execution_proof"
+      ],
+      "trustedContext": "authenticated metadata only; never body",
+      "profile": "product-installation-v1.json"
+    },
+    {
+      "operation": "skill.product.remove_installation",
+      "fqMethod": "kokoro.platform.v1.ProductSkillInstallationService/RemovePersonalSkillInstallation",
+      "requestMessage": "kokoro.platform.v1.RemovePersonalSkillInstallationRequest",
+      "commandField": {
+        "field": "command",
+        "tag": 2,
+        "type": "kokoro.common.v1.CommandIdentity"
+      },
+      "commandDigestVersion": "product-personal-installation/1.0.0",
+      "rootMembers": [
+        "command_digest_version",
+        "fq_method",
+        "tenant_ref",
+        "command"
+      ],
+      "commandMembers": ["subject_id", "target_owner_scope", "installation_id"],
+      "requiredTypedPresence": {
+        "present": true,
+        "value": "exact wrapper scalar"
+      },
+      "excludedMembers": [
+        "request_id",
+        "command_id",
+        "request_digest",
+        "token",
+        "execution_proof"
+      ],
+      "trustedContext": "authenticated metadata only; never body",
+      "profile": "product-installation-v1.json"
+    }
+  ],
+  "successMetadata": {
+    "requestId": "x-request-id",
+    "cacheControl": "no-store",
+    "errorDisclosure": "stable code/reason only; no asset/hash/proof/identity/internal state"
+  },
+  "errors": [
+    {
+      "code": "INVALID_ARGUMENT",
+      "reason": "PRODUCT_INSTALLATION_INVALID_REQUEST"
+    },
+    {
+      "code": "UNAUTHENTICATED",
+      "reason": "PRODUCT_INSTALLATION_UNAUTHENTICATED"
+    },
+    {
+      "code": "PERMISSION_DENIED",
+      "reason": "PRODUCT_INSTALLATION_PERMISSION_DENIED"
+    },
+    {
+      "code": "NOT_FOUND",
+      "reason": "PRODUCT_INSTALLATION_NOT_FOUND"
+    },
+    {
+      "code": "ALREADY_EXISTS",
+      "reason": "PRODUCT_INSTALLATION_COMMAND_CONFLICT"
+    },
+    {
+      "code": "FAILED_PRECONDITION",
+      "reason": "PRODUCT_INSTALLATION_SOURCE_NOT_INSTALLABLE"
+    },
+    {
+      "code": "ABORTED",
+      "reason": "PRODUCT_INSTALLATION_STALE_GENERATION"
+    },
+    {
+      "code": "UNAVAILABLE",
+      "reason": "PRODUCT_INSTALLATION_DEPENDENCY_UNAVAILABLE"
+    },
+    {
+      "code": "DEADLINE_EXCEEDED",
+      "reason": "PRODUCT_INSTALLATION_DEADLINE_EXCEEDED"
+    },
+    {
+      "code": "INTERNAL",
+      "reason": "PRODUCT_INSTALLATION_INTERNAL"
+    }
+  ]
+}

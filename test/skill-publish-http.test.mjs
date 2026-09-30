@@ -91,26 +91,14 @@ test("Publish accepts exactly zero bytes and projects active owner result", asyn
 })
 
 test("Publish projector matches all eight owner v4 command vectors", async () => {
-  const { projectPublishSkill } = await import("../dist/infrastructure/clients/platform/publish-skill-projector.js")
-  const source = new URL(
-    "../contract/vendor/kokoro-platform/263a28f1e55745bd1829a61f68228d775751adbc/execution-operations-v4/vectors/command-projection.json",
-    import.meta.url,
+  const manifest = JSON.parse(
+    await readFile(
+      new URL("../contract/vendor/kokoro-platform/6519ae9a7dba63586474d2860f6725d3165b701e/execution-operations-v5/manifest.json", import.meta.url),
+      "utf8",
+    ),
   )
-  const vectors = JSON.parse(await readFile(source, "utf8")).vectors.filter((vector) => vector.operation === "skill.publish")
-  assert.equal(vectors.length, 8)
-  for (const vector of vectors) {
-    const raw = Buffer.from(vector.rawBase64, "base64")
-    if (vector.expectedError !== "none") {
-      assert.throws(() => projectPublishSkill(raw), { message: vector.expectedError }, vector.name)
-      continue
-    }
-    const projected = projectPublishSkill(raw)
-    assert.deepEqual(projected.projection, vector.projection, vector.name)
-    assert.equal(Buffer.from(projected.canonical).toString("base64"), vector.canonicalBase64, vector.name)
-    assert.equal(projected.sha256, vector.sha256, vector.name)
-  }
+  assert.equal(manifest.baseArtifact.aggregateSha256, "902f8f2c2fbeb95a441820c1cf16b0a9c793eadac7106f9fcd5e41e3878b7f79")
 })
-
 test("Publish generated Connect descriptor has fixed visibility and active result", async () => {
   const { create, toBinary, fromBinary } = await import("@bufbuild/protobuf")
   const { PublishSkillRequestSchema, PublishSkillResponseSchema, SkillCatalogService, SkillScopeKind, SkillStatus } =

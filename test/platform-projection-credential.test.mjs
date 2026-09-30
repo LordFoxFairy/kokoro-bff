@@ -1,10 +1,20 @@
 import assert from "node:assert/strict"
-import { chmod, mkdtemp, writeFile } from "node:fs/promises"
+import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import test from "node:test"
+import test, { afterEach } from "node:test"
 import { ProjectionCredentialSource } from "../dist/infrastructure/clients/platform/projection-credential.js"
 import { ProjectionTokenSource } from "../dist/infrastructure/clients/platform/projection-token.js"
+const fixtureDirs = new Set()
+const fixtureDir = async (prefix) => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), prefix))
+  fixtureDirs.add(dir)
+  return dir
+}
+afterEach(async () => {
+  await Promise.all([...fixtureDirs].map((dir) => rm(dir, { recursive: true, force: true })))
+  fixtureDirs.clear()
+})
 const resource = "https://kokoro.dev/resources/platform-internal",
   scope = "platform:projection.read"
 const item = (generation, clientId = "one") => ({
@@ -18,7 +28,7 @@ const item = (generation, clientId = "one") => ({
 })
 
 test("projection credential source rejects broad permissions and reads exact tenant snapshot", async () => {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "bff-catalog-"))
+  const dir = await fixtureDir("bff-catalog-")
   const file = path.join(dir, "credential.json")
   await writeFile(file, JSON.stringify([item(1)]), { mode: 0o644 })
   const source = new ProjectionCredentialSource(file)
@@ -28,7 +38,7 @@ test("projection credential source rejects broad permissions and reads exact ten
 })
 
 test("projection credential cache key changes on secret-only rotation", async () => {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "bff-projection-rotation-"))
+  const dir = await fixtureDir("bff-projection-rotation-")
   const file = path.join(dir, "credential.json")
   await writeFile(file, JSON.stringify([item(1)]), { mode: 0o600 })
   const source = new ProjectionCredentialSource(file)
@@ -167,7 +177,7 @@ test("token single-flight lets one waiter cancel while another succeeds and abor
 
 test("credential snapshot rejects symlink, non-regular, duplicate tenant and invalid generations while accepting 0400", async () => {
   const { symlink, mkdir } = await import("node:fs/promises")
-  const dir = await mkdtemp(path.join(os.tmpdir(), "bff-catalog-negative-"))
+  const dir = await fixtureDir("bff-catalog-negative-")
   const file = path.join(dir, "credentials.json")
   await writeFile(file, JSON.stringify([item(1)]), { mode: 0o400 })
   assert.equal((await new ProjectionCredentialSource(file).read("tenant")).generation, 1)

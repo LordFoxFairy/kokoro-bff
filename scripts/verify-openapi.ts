@@ -20,7 +20,11 @@ const ERROR_RESPONSE_COMPONENTS = new Set([
 
 type BaselineOperation = { method: string; path: string; operation_id: string }
 type NamedBlock = { name: string; text: string }
-type OperationBlock = NamedBlock & { method: string; path: string; fields: Map<string, string> }
+type OperationBlock = NamedBlock & {
+  method: string
+  path: string
+  fields: Map<string, string>
+}
 
 const AGENT_CONTROL_SOURCE = {
   version: "1.0.0",
@@ -125,7 +129,11 @@ function collectOperationBlocks(source: string): OperationBlock[] {
 
     const methodMatch = methodPattern.exec(lines[index] ?? "")
     if (currentPath !== null && methodMatch !== null && HTTP_METHODS.has(methodMatch[1])) {
-      starts.push({ path: currentPath, method: methodMatch[1].toUpperCase(), index })
+      starts.push({
+        path: currentPath,
+        method: methodMatch[1].toUpperCase(),
+        index,
+      })
     }
   }
 
@@ -328,6 +336,86 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
       operationId === "completeSkillPackageUpload" && operation.method === "POST" && operation.path === "/v1/skills/{skill_id}/package-upload/complete"
     const isValidateSkillDraft = operationId === "validateSkillDraft" && operation.method === "POST" && operation.path === "/v1/skills/{skill_id}/validate"
     const isPublishSkill = operationId === "publishSkill" && operation.method === "POST" && operation.path === "/v1/skills/{skill_id}/publish"
+    const installationResponses: Record<string, Record<string, string>> = {
+      installPersonalSkill: {
+        "200": "SkillInstallationMutationSuccess",
+        "400": "SkillInstallationBadRequest",
+        "413": "SkillInstallationPayloadTooLarge",
+        "401": "SkillInstallationUnauthorized",
+        "403": "SkillInstallationForbidden",
+        "404": "SkillInstallationNotFound",
+        "409": "SkillInstallationConflict",
+        "412": "SkillInstallationPreconditionFailed",
+        "429": "SkillInstallationRateLimited",
+        "502": "SkillInstallationBadGateway",
+        "503": "SkillInstallationUnavailable",
+        "504": "SkillInstallationTimeout",
+      },
+      listPersonalSkillInstallations: {
+        "200": "SkillInstallationListSuccess",
+        "400": "SkillInstallationBadRequest",
+        "413": "SkillInstallationPayloadTooLarge",
+        "401": "SkillInstallationUnauthorized",
+        "403": "SkillInstallationForbidden",
+        "429": "SkillInstallationRateLimited",
+        "502": "SkillInstallationBadGateway",
+        "503": "SkillInstallationUnavailable",
+        "504": "SkillInstallationTimeout",
+      },
+      getPersonalSkillInstallation: {
+        "200": "SkillInstallationReadSuccess",
+        "400": "SkillInstallationBadRequest",
+        "413": "SkillInstallationPayloadTooLarge",
+        "401": "SkillInstallationUnauthorized",
+        "403": "SkillInstallationForbidden",
+        "404": "SkillInstallationNotFound",
+        "429": "SkillInstallationRateLimited",
+        "502": "SkillInstallationBadGateway",
+        "503": "SkillInstallationUnavailable",
+        "504": "SkillInstallationTimeout",
+      },
+      removePersonalSkillInstallation: {
+        "200": "SkillInstallationMutationSuccess",
+        "400": "SkillInstallationBadRequest",
+        "413": "SkillInstallationPayloadTooLarge",
+        "401": "SkillInstallationUnauthorized",
+        "403": "SkillInstallationForbidden",
+        "404": "SkillInstallationNotFound",
+        "409": "SkillInstallationConflict",
+        "412": "SkillInstallationPreconditionFailed",
+        "429": "SkillInstallationRateLimited",
+        "502": "SkillInstallationBadGateway",
+        "503": "SkillInstallationUnavailable",
+        "504": "SkillInstallationTimeout",
+      },
+      setPersonalSkillInstallationEnabled: {
+        "200": "SkillInstallationMutationSuccess",
+        "400": "SkillInstallationBadRequest",
+        "413": "SkillInstallationPayloadTooLarge",
+        "401": "SkillInstallationUnauthorized",
+        "403": "SkillInstallationForbidden",
+        "404": "SkillInstallationNotFound",
+        "409": "SkillInstallationConflict",
+        "412": "SkillInstallationPreconditionFailed",
+        "429": "SkillInstallationRateLimited",
+        "502": "SkillInstallationBadGateway",
+        "503": "SkillInstallationUnavailable",
+        "504": "SkillInstallationTimeout",
+      },
+    }
+    const installationErrorCodes: Record<string, string[]> = {
+      "400": ["invalid_skill_installation_request", "skill_installation_idempotency_key_required"],
+      "413": ["request_body_too_large"],
+      "401": ["session_authentication_required", "session_invalid"],
+      "403": ["service_auth_failed", "session_forbidden", "product_tenant_forbidden", "skill_installation_forbidden"],
+      "404": ["skill_installation_not_found"],
+      "409": ["skill_installation_idempotency_conflict", "skill_installation_command_in_progress"],
+      "412": ["skill_installation_precondition_failed"],
+      "429": ["session_rate_limited", "skill_installation_rate_limited"],
+      "502": ["skill_installation_response_invalid"],
+      "503": ["product_tenant_not_configured", "iam_admission_unavailable", "skill_installation_dependency_unavailable"],
+      "504": ["skill_installation_dependency_timeout"],
+    }
     if (
       !isPublishedPersonalSkill &&
       /#\/components\/(?:schemas\/(?:PublishedPersonalSkill(?:Resource|Response|ErrorDetail|ErrorResponse))|responses\/PublishedPersonalSkill[A-Za-z]*|parameters\/PublishedPersonalSkillId)/u.test(
@@ -371,6 +459,33 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
     )
       errors.push(`${operation.method} ${operation.path} must not reference PublishSkill strict envelope components`)
     const responses = collectResponseBlocks(operation)
+    const expectedInstallationResponses = installationResponses[operationId]
+    if (expectedInstallationResponses !== undefined) {
+      if (JSON.stringify([...responses.keys()].sort()) !== JSON.stringify(Object.keys(expectedInstallationResponses).sort()))
+        errors.push(`${operation.method} ${operation.path} has an invalid installation response status set`)
+      for (const [status, component] of Object.entries(expectedInstallationResponses)) {
+        const response = responses.get(status) ?? ""
+        if (!response.includes(`#/components/responses/${component}`))
+          errors.push(`${operation.method} ${operation.path} ${status} must reference ${component}`)
+        const definition = responseComponents.get(component)?.text ?? ""
+        if (!definition.includes("x-request-id:") || !definition.includes("Cache-Control:") || !definition.includes("required: true"))
+          errors.push(`${component} must require x-request-id and Cache-Control`)
+        const schema =
+          status !== "200"
+            ? "SkillInstallationErrorEnvelope"
+            : component === "SkillInstallationListSuccess"
+              ? "SkillInstallationListEnvelope"
+              : component === "SkillInstallationReadSuccess"
+                ? "SkillInstallation"
+                : "SkillInstallationMutation"
+        if (!definition.includes(`#/components/schemas/${schema}`)) errors.push(`${component} must use the dedicated installation ${schema}`)
+        if (status !== "200") {
+          const expectedCodes = `enum: [${installationErrorCodes[status]?.join(", ")}]`
+          if (!definition.includes(expectedCodes)) errors.push(`${component} must constrain error.code to ${expectedCodes}`)
+        }
+      }
+      continue
+    }
     for (const [status, response] of responses) {
       if (status === "default") continue
       const numericStatus = Number(status)
@@ -1447,8 +1562,7 @@ function platformProjectionReadContractErrors(
     PlatformProjectionReadUnavailable: ["product_tenant_not_configured", "iam_admission_unavailable", "skill_dependency_unavailable"],
   } as const
   const requiredHeaders = (text: string): boolean =>
-    /x-request-id:\s*\n\s+required: true/u.test(text) &&
-    /Cache-Control:\s*\n\s+required: true\s*\n\s+schema: \{ type: string, const: no-store \}/u.test(text)
+    /x-request-id:\s*\n\s+required: true/u.test(text) && /Cache-Control:\s*\n\s+required: true\s*\n\s+schema: \{ type: string, const: no-store \}/u.test(text)
   for (const [operationId, path, responseSchema] of reads) {
     const operation = operations.find((item) => item.method === "GET" && item.path === path && item.fields.get("operationId") === operationId)
     if (!operation) {
@@ -1475,7 +1589,12 @@ function platformProjectionReadContractErrors(
     errors.push("retired skill quota GET must expose only its unavailable result")
   }
   const skill = schemas.get("Skill")
-  if (!skill || !["source_ref", "name", "description", "content_hash", "scope", "revision", "enabled", "categories"].every((field) => topLevelRequired(skill).includes(field))) {
+  if (
+    !skill ||
+    !["source_ref", "name", "description", "content_hash", "scope", "revision", "enabled", "categories"].every((field) =>
+      topLevelRequired(skill).includes(field),
+    )
+  ) {
     errors.push("Skill projection must require native Platform fields")
   }
   for (const responseSchema of reads.map((item) => item[2])) {
@@ -1486,7 +1605,12 @@ function platformProjectionReadContractErrors(
   }
   for (const [name, codes] of Object.entries(allowedCodes)) {
     const component = responseComponents.get(name)
-    if (!component || !requiredHeaders(component.text) || !component.text.includes("#/components/schemas/PlatformProjectionReadErrorResponse") || !component.text.includes(`enum: [${codes.join(", ")}]`)) {
+    if (
+      !component ||
+      !requiredHeaders(component.text) ||
+      !component.text.includes("#/components/schemas/PlatformProjectionReadErrorResponse") ||
+      !component.text.includes(`enum: [${codes.join(", ")}]`)
+    ) {
       errors.push(`${name} must constrain error codes and cache headers`)
     }
   }
