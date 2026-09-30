@@ -51,3 +51,57 @@ describe("Scheduler dispatch identity", () => {
     assert.notEqual(schedulerOccurrenceIdentity(input), schedulerOccurrenceIdentity({ ...input, schedule: "kokoro.scheduled.task-b" }))
   })
 })
+
+it("rejects legacy receipt envelopes and snapshots lacking explicit empty selection", async () => {
+  const { PostgresSchedulerDispatchReceiptRepository } = await import("../dist/infrastructure/postgres/scheduler-dispatch-receipt-repository.js")
+  const base = {
+    schema_version: 2,
+    state: "pending",
+    claim_token: "old",
+    lease_until: "2099-01-01T00:00:00Z",
+    retry_at: null,
+    last_error_code: null,
+    response: null,
+    snapshot: {
+      tenantId: "t",
+      schedule: "s",
+      occurrence: "o",
+      idempotencyKey: "k",
+      actorId: "a",
+      taskId: "task",
+      launch: {
+        requestId: "r",
+        body: { selected_skill_source_refs: [] },
+        identityAssertionRef: "i",
+        receipt: { run_id: "r", user_message_id: "u", assistant_message_id: "a" },
+      },
+    },
+  }
+  const observations: string[] = []
+  const repository = (envelope: unknown) =>
+    new PostgresSchedulerDispatchReceiptRepository({
+      connect: async () => ({
+        query: async (sql: string) => {
+          observations.push(sql)
+          if (sql.startsWith("SELECT fingerprint")) return { rows: [{ fingerprint: "digest", status: 102, response_body: envelope }] }
+          if (sql.startsWith("SELECT clock_timestamp")) return { rows: [{ now: new Date("2026-01-01") }] }
+          return { rowCount: 0, rows: [] }
+        },
+        release: () => undefined,
+      }),
+    } as never)
+  assert.deepEqual(await repository(base).claim("scope", "digest"), { outcome: "pending" })
+  for (const envelope of [
+    { ...base, schema_version: 1 },
+    ...[{}, { selected_skill_source_refs: null }, { selected_skill_source_refs: ["skill:a"] }].map((body) => ({
+      ...base,
+      snapshot: { ...base.snapshot, launch: { ...base.snapshot.launch, body } },
+    })),
+  ]) {
+    await assert.rejects(repository(envelope).claim("scope", "digest"), /envelope is invalid/)
+  }
+  assert.equal(
+    observations.some((sql) => sql.startsWith("UPDATE")),
+    false,
+  )
+})

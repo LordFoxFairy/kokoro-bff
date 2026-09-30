@@ -28,6 +28,15 @@ export const zLaunchRequest = z.object({
   run_id: z.string().min(1),
   session_id: z.string().min(1),
   feature_key: z.string().min(1),
+  selected_skill_source_refs: z
+    .array(
+      z
+        .string()
+        .min(7)
+        .max(197)
+        .regex(/^skill:(?!skill:)[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])/),
+    )
+    .max(16),
   message_id: z.string().min(1),
   content: z.string().min(1),
   requested_model_label: z.string().min(1).optional(),

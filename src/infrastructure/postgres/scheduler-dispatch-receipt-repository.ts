@@ -14,7 +14,7 @@ const PENDING_STATUS = 102
 const LEASE_MILLISECONDS = 60_000
 
 type ReceiptEnvelope = {
-  schema_version: 1
+  schema_version: 2
   state: "pending" | "retryable" | "terminal"
   claim_token: string | null
   lease_until: string | null
@@ -40,6 +40,8 @@ function parseSnapshot(value: unknown): SchedulerDispatchSnapshot | null {
     !isRecord(value.launch) ||
     !isString(value.launch.requestId) ||
     !isRecord(value.launch.body) ||
+    !Array.isArray(value.launch.body.selected_skill_source_refs) ||
+    value.launch.body.selected_skill_source_refs.length !== 0 ||
     !isString(value.launch.identityAssertionRef) ||
     !isRecord(value.launch.receipt) ||
     !isString(value.launch.receipt.run_id) ||
@@ -57,7 +59,7 @@ function parseResponse(value: unknown): SchedulerDispatchResponse | null {
 }
 
 function parseEnvelope(value: unknown): ReceiptEnvelope {
-  if (!isRecord(value) || value.schema_version !== 1 || (value.state !== "pending" && value.state !== "retryable" && value.state !== "terminal")) {
+  if (!isRecord(value) || value.schema_version !== 2 || (value.state !== "pending" && value.state !== "retryable" && value.state !== "terminal")) {
     throw new Error("Scheduler dispatch receipt envelope is invalid")
   }
   const claimToken = value.claim_token === null || isString(value.claim_token) ? value.claim_token : undefined
@@ -77,7 +79,7 @@ function parseEnvelope(value: unknown): ReceiptEnvelope {
     throw new Error("Scheduler dispatch receipt envelope is invalid")
   if (value.state === "terminal" && response === null) throw new Error("Scheduler terminal receipt response is invalid")
   return {
-    schema_version: 1,
+    schema_version: 2,
     state: value.state,
     claim_token: claimToken,
     lease_until: leaseUntil,
@@ -90,7 +92,7 @@ function parseEnvelope(value: unknown): ReceiptEnvelope {
 
 function claimedEnvelope(claimToken: string, leaseUntil: string | null, snapshot: SchedulerDispatchSnapshot | null): ReceiptEnvelope {
   return {
-    schema_version: 1,
+    schema_version: 2,
     state: "pending",
     claim_token: claimToken,
     lease_until: leaseUntil,
@@ -203,6 +205,7 @@ export class PostgresSchedulerDispatchReceiptRepository implements SchedulerDisp
     claim: SchedulerDispatchClaim,
     snapshot: SchedulerDispatchSnapshot,
   ): Promise<{ leaseRemainingMs: number; leaseObservedAt: number } | null> {
+    if (parseSnapshot(snapshot) === null) throw new Error("Scheduler dispatch snapshot is invalid")
     const client = await this.pool.connect()
     try {
       await client.query("BEGIN")
@@ -246,7 +249,7 @@ export class PostgresSchedulerDispatchReceiptRepository implements SchedulerDisp
 
   public async complete(claim: SchedulerDispatchClaim, response: SchedulerDispatchResponse): Promise<boolean> {
     const envelope: ReceiptEnvelope = {
-      schema_version: 1,
+      schema_version: 2,
       state: "terminal",
       claim_token: null,
       lease_until: null,
@@ -310,7 +313,7 @@ export class PostgresSchedulerDispatchReceiptRepository implements SchedulerDisp
         return false
       }
       const retryable: ReceiptEnvelope = {
-        schema_version: 1,
+        schema_version: 2,
         state: "retryable",
         claim_token: null,
         lease_until: null,

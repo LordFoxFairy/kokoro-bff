@@ -4541,9 +4541,17 @@ components:
         model: { type: string, minLength: 1 }
         agent: { type: string, minLength: 1 }
         thinking: { type: boolean }
-        pinned_skills:
+        selected_skill_source_refs:
           type: array
-          items: { type: string, minLength: 1 }
+          maxItems: 16
+          uniqueItems: true
+          x-kokoro-json-byte-limit: 4096
+          description: Exact ordered Skill source references; omission means []. Compact UTF-8 JSON must not exceed 4096 bytes.
+          items:
+            type: string
+            minLength: 7
+            maxLength: 197
+            pattern: '^skill:(?!skill:)[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])'
         mcp_servers:
           type: array
           items: { type: string, minLength: 1 }

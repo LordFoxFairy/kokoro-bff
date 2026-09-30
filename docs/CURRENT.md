@@ -1,10 +1,12 @@
 # kokoro-bff 当前实现
 
-## W3-BFF-CHAT-SKILL-SELECTION-DESIGN：仅设计门，运行未切换
+## W3-BFF-CHAT-SKILL-SELECTION-CONSUMER：代码已接，真实组合待验
 
-基线 clean `62daba37fc0267830d73590bb5a3499807d46fc6`：public `pinned_skills` 仍是名字，Chat outbox launch 只写 `trace.pinned_skills`；Agent HTTP generated 仍 pin owner 1.1.0/`520ec181a101298b4f336aad273ce003b2735955`，Scheduler launch 也无 typed 字段。Agent 2.0.0 required 字段使当前 BFF 已接纳的普通 Chat 202 后异步启动失败，Scheduler 同样失配。此提交只在五份文档定义 clean-slate 目标：public exact `selected_skill_source_refs`、Chat digest/JSONB 有序 fence、Chat/Scheduler Agent body 显式 `[]`、删除旧 name/trace 双轨；未改唯一 OpenAPI、generated、SQL、代码或测试，不能称为修复。已核 Agent 2.0.0 owner `2d03689cb3cfe1bf72c63accc8ebc45ebdc93cdb`，OpenAPI SHA-256 `fce03385232ec9fc541476c087ba3a4b7ce591022da0bf18d9835f11d2345b79`；BFF pin/generated 仍未更新。Agent 非空选择当前 fail closed，真实 Skill 包读取另片；本人 Publish 后自动安装/启用是未决产品选择，不能以可读 ACTIVE 冒充可执行。以下历史段落不覆盖本节当前事实。
+从文档基线 `78c92c09ea056e5b9901342fd6cd875cd9de5ce0` 实施：唯一 public OpenAPI 使用 optional exact `selected_skill_source_refs`，缺失与 `[]` 同语义；普通 Chat 输入、请求摘要、v2 durable outbox 与 Agent launch 保留选择顺序。Scheduler launch 显式 `[]`，receipt envelope v2 与 snapshot 恢复拒绝旧版/缺字段，不在重试时补值。旧 name/trace `pinned_skills` 和无生产调用 `buildAgentLaunch` 删除；无 SQL/角色/lockfile 改动。
 
-文档片实测：`git diff --check` PASS；Node 22 `pnpm contract:check:agent` PASS（当前旧 1.1.0 生成物两次一致，并非已升级 2.0.0）；`pnpm schema:check` 5 pass / 1 skip（未配置真实 PostgreSQL fixture）。此片未启动服务、未运行代码全门或端到端。
+Agent HTTP 2.0.0 固定 `dd34a4800b4ce0cc61eb80dd715e528b9d4517da`，OpenAPI SHA-256 `20398c59f42031c1b6ae2e2c3708e63ec8b5645baf741bf831bc67e14625ef99`，vendor 与 generated 由工具更新。非空选择当前 Agent reader 仍 fail closed；本片不代表 Skill 执行已闭环。Web 必须另片停止发送旧字段并使用 exact refs；本人 Publish 后自动安装/启用尚待产品决定，不影响无 Skill Chat 消费修复。
+
+实测：新增测试先 RED（3 fail）后聚焦 27 pass，owner/public/runtime 语法一致性与旧 Scheduler snapshot 拒绝 12 pass。Node 22 `pnpm format:check`、`pnpm check`（lint/typecheck/contract/488 pass、1 既有 skip/build）及 `pnpm schema:check`（5 pass、1 无 PG fixture skip）PASS。Root 真 PostgreSQL/Agent HTTP 组合尚未执行；未操作用户 3310 或共享数据库。
 
 ## 当前读投影切换（待 Root 真组合验收）
 

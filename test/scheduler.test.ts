@@ -6,7 +6,7 @@ import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 import { createBffServer } from "../dist/main.js"
 import { schedulerDispatchDigest } from "../dist/infrastructure/clients/scheduler/dispatch-identity.js"
 import { parseSchedulerDispatchWebhook } from "../dist/infrastructure/clients/scheduler/webhook-contract.js"
-import { buildAgentLaunch, buildScheduledAgentLaunch } from "../dist/infrastructure/clients/agent/index.js"
+import { buildScheduledAgentLaunch } from "../dist/infrastructure/clients/agent/index.js"
 import { scheduledTaskId } from "../dist/http/routes/scheduler.js"
 
 function headers(overrides: Record<string, string> = {}) {
@@ -379,17 +379,11 @@ describe("Agent launch identities", () => {
     )
   })
 
-  it("keeps ordinary Chat launch identity actor-dependent", () => {
-    const common = { requestId: "request", sessionId: "session", idempotencyKey: "key", content: "hello" }
-    const left = buildAgentLaunch({ ...common, identity: { namespace: "tenant", userId: "actor-a" } })
-    const right = buildAgentLaunch({ ...common, identity: { namespace: "tenant", userId: "actor-b" } })
-    assert.notEqual(left.receipt.run_id, right.receipt.run_id)
-  })
-
   it("uses only the supplied canonical occurrence identity for Scheduler execution ids", () => {
     const common = { requestId: "request", sessionId: "scheduled:task", occurrenceIdentity: "a".repeat(64), content: "hello" }
     const left = buildScheduledAgentLaunch({ ...common, identity: { namespace: "tenant", userId: "actor-a" } })
     const right = buildScheduledAgentLaunch({ ...common, requestId: "other-request", identity: { namespace: "tenant", userId: "actor-b" } })
+    assert.deepEqual(left.body.selected_skill_source_refs, [])
     assert.equal(left.receipt.run_id, right.receipt.run_id)
     assert.equal(left.identityAssertionRef, right.identityAssertionRef)
     assert.notEqual(left.body.request_id, right.body.request_id)

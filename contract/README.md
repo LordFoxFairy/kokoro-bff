@@ -111,9 +111,9 @@ surface to BFF admission, Skill authorization check, Team, and invitation operat
 introspection and execution authorization remain excluded. Exact generated-file digests and toolchain provenance are
 recorded in `contract/dependencies/iam-http.json`.
 
-The Agent HTTP consumer pins the complete owner `contract/openapi/v1/openapi.json` v1.1.0 at Agent commit
-`520ec181a101298b4f336aad273ce003b2735955`, SHA-256
-`2b9c7aad6f38db3e20200b037e4818ae932209ba3deecabf8fc984db6bcec492`.
+The Agent HTTP consumer pins the complete owner `contract/openapi/v1/openapi.json` v2.0.0 at Agent commit
+`dd34a4800b4ce0cc61eb80dd715e528b9d4517da`, SHA-256
+`20398c59f42031c1b6ae2e2c3708e63ec8b5645baf741bf831bc67e14625ef99`.
 `openapi-ts.agent.config.ts` filters only `createRun` and `replaySessionEvents`; the full source bytes are vendored read-only
 under `contract/vendor/kokoro-agent/`. `pnpm contract:check:agent` verifies the fixed digest, toolchain and manifest,
 regenerates twice byte-identically, and compares every generated file. BFF validates the owner 202 receipt and 200 replay success envelopes and trusted error codes with the generated

@@ -1,6 +1,7 @@
 import { isRecord } from "../json.js"
+import { parseSkillSourceSelection } from "./skill-source-selection.js"
 
-export const AGENT_DISPATCH_SCHEMA_VERSION = 1 as const
+export const AGENT_DISPATCH_SCHEMA_VERSION = 2 as const
 
 export type AgentLaunchBody = {
   request_id: string
@@ -9,13 +10,13 @@ export type AgentLaunchBody = {
   feature_key: "chat"
   message_id: string
   content: string
+  selected_skill_source_refs: string[]
   requested_model_label?: string
   trace: {
     source: "kokoro-bff"
     project_ref?: string
     agent?: string
     thinking?: boolean
-    pinned_skills?: string[]
     mcp_servers?: string[]
   }
 }
@@ -73,7 +74,7 @@ export type AgentDispatchInput = {
   model?: string
   agent?: string
   thinking?: boolean
-  pinnedSkills?: string[]
+  selectedSkillSourceRefs?: string[]
   mcpServers?: string[]
 }
 
@@ -98,21 +99,15 @@ function optionalStringArray(record: Record<string, unknown>, key: string): stri
 }
 
 export function assertAgentDispatchInput(input: AgentDispatchInput): void {
-  for (const value of [
-    input.tenantId,
-    input.conversationId,
-    input.subjectId,
-    input.actorId,
-    input.requestId,
-    input.idempotencyKey,
-    input.content,
-  ]) {
+  for (const value of [input.tenantId, input.conversationId, input.subjectId, input.actorId, input.requestId, input.idempotencyKey, input.content]) {
     if (value.trim() === "") throw new Error("CHAT_TURN_INPUT_INVALID")
   }
   for (const value of [input.projectRef, input.model, input.agent]) {
     if (value !== undefined && value.trim() === "") throw new Error("CHAT_TURN_INPUT_INVALID")
   }
-  for (const values of [input.pinnedSkills, input.mcpServers]) {
+  if (parseSkillSourceSelection(input.selectedSkillSourceRefs === undefined ? [] : input.selectedSkillSourceRefs) === null)
+    throw new Error("CHAT_TURN_INPUT_INVALID")
+  for (const values of [input.mcpServers]) {
     if (values?.some((value) => value.trim() === "")) throw new Error("CHAT_TURN_INPUT_INVALID")
   }
 }
@@ -136,22 +131,18 @@ export function agentDispatchRequestMaterial(input: AgentDispatchInput): string 
     input.model ?? null,
     input.agent ?? null,
     input.thinking ?? null,
-    input.pinnedSkills ?? null,
+    input.selectedSkillSourceRefs ?? [],
     input.mcpServers ?? null,
   ])
 }
 
-export function buildAgentDispatchPayload(
-  input: AgentDispatchInput,
-  ids: { runId: string; userMessageId: string },
-): AgentDispatchPayload {
+export function buildAgentDispatchPayload(input: AgentDispatchInput, ids: { runId: string; userMessageId: string }): AgentDispatchPayload {
   assertAgentDispatchInput(input)
   const trace: AgentLaunchBody["trace"] = {
     source: "kokoro-bff",
     ...(input.projectRef === undefined ? {} : { project_ref: input.projectRef }),
     ...(input.agent === undefined ? {} : { agent: input.agent }),
     ...(input.thinking === undefined ? {} : { thinking: input.thinking }),
-    ...(input.pinnedSkills === undefined ? {} : { pinned_skills: [...input.pinnedSkills] }),
     ...(input.mcpServers === undefined ? {} : { mcp_servers: [...input.mcpServers] }),
   }
   return {
@@ -163,6 +154,7 @@ export function buildAgentDispatchPayload(
       feature_key: "chat",
       message_id: ids.userMessageId,
       content: input.content,
+      selected_skill_source_refs: [...(input.selectedSkillSourceRefs ?? [])],
       ...(input.model === undefined ? {} : { requested_model_label: input.model }),
       trace,
     },
@@ -174,13 +166,34 @@ export function parseAgentDispatchPayload(value: unknown): AgentDispatchPayload 
   if (!isRecord(value) || value.schema_version !== AGENT_DISPATCH_SCHEMA_VERSION || !isRecord(value.launch)) {
     throw new Error("AGENT_DISPATCH_PAYLOAD_INVALID")
   }
+  if (Object.keys(value).some((key) => !["schema_version", "launch"].includes(key))) throw new Error("AGENT_DISPATCH_PAYLOAD_INVALID")
   const launchValue = value.launch
+  if (
+    Object.keys(launchValue).some(
+      (key) =>
+        ![
+          "request_id",
+          "run_id",
+          "session_id",
+          "feature_key",
+          "message_id",
+          "content",
+          "selected_skill_source_refs",
+          "requested_model_label",
+          "trace",
+        ].includes(key),
+    )
+  )
+    throw new Error("AGENT_DISPATCH_PAYLOAD_INVALID")
   if (!isRecord(launchValue.trace) || launchValue.feature_key !== "chat") throw new Error("AGENT_DISPATCH_PAYLOAD_INVALID")
   const traceValue = launchValue.trace
+  if (Object.keys(traceValue).some((key) => !["source", "project_ref", "agent", "thinking", "mcp_servers"].includes(key)))
+    throw new Error("AGENT_DISPATCH_PAYLOAD_INVALID")
   if (traceValue.source !== "kokoro-bff") throw new Error("AGENT_DISPATCH_PAYLOAD_INVALID")
   const projectRef = optionalString(traceValue, "project_ref")
   const agent = optionalString(traceValue, "agent")
-  const pinnedSkills = optionalStringArray(traceValue, "pinned_skills")
+  const selectedSkillSourceRefs = parseSkillSourceSelection(launchValue.selected_skill_source_refs)
+  if (selectedSkillSourceRefs === null) throw new Error("AGENT_DISPATCH_PAYLOAD_INVALID")
   const mcpServers = optionalStringArray(traceValue, "mcp_servers")
   const thinking = traceValue.thinking
   if (thinking !== undefined && typeof thinking !== "boolean") throw new Error("AGENT_DISPATCH_PAYLOAD_INVALID")
@@ -194,13 +207,13 @@ export function parseAgentDispatchPayload(value: unknown): AgentDispatchPayload 
       feature_key: "chat",
       message_id: requiredString(launchValue.message_id, "AGENT_DISPATCH_PAYLOAD_INVALID"),
       content: requiredString(launchValue.content, "AGENT_DISPATCH_PAYLOAD_INVALID"),
+      selected_skill_source_refs: selectedSkillSourceRefs,
       ...(requestedModel === undefined ? {} : { requested_model_label: requestedModel }),
       trace: {
         source: "kokoro-bff",
         ...(projectRef === undefined ? {} : { project_ref: projectRef }),
         ...(agent === undefined ? {} : { agent }),
         ...(thinking === undefined ? {} : { thinking }),
-        ...(pinnedSkills === undefined ? {} : { pinned_skills: pinnedSkills }),
         ...(mcpServers === undefined ? {} : { mcp_servers: mcpServers }),
       },
     },
@@ -210,6 +223,6 @@ export function parseAgentDispatchPayload(value: unknown): AgentDispatchPayload 
 export function agentDispatchRetryDelayMs(attemptCount: number, random: number, baseMs = 500, maxMs = 30_000): number {
   if (!Number.isSafeInteger(attemptCount) || attemptCount < 1) throw new Error("AGENT_DISPATCH_ATTEMPT_INVALID")
   if (!Number.isFinite(random) || random < 0 || random > 1) throw new Error("AGENT_DISPATCH_RANDOM_INVALID")
-  const capped = Math.min(maxMs, baseMs * (2 ** Math.min(attemptCount - 1, 30)))
+  const capped = Math.min(maxMs, baseMs * 2 ** Math.min(attemptCount - 1, 30))
   return Math.max(1, Math.min(maxMs, Math.floor(capped * (0.8 + random * 0.4))))
 }

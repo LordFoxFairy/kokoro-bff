@@ -11,9 +11,9 @@ const output = path.join(root, "src/generated/agent-http")
 const manifestPath = path.join(root, "contract/dependencies/agent-http.json")
 const configPath = path.join(root, "openapi-ts.agent.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "520ec181a101298b4f336aad273ce003b2735955"
+const ownerCommit = "dd34a4800b4ce0cc61eb80dd715e528b9d4517da"
 const vendorPath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/openapi.json`)
-const ownerDigest = "2b9c7aad6f38db3e20200b037e4818ae932209ba3deecabf8fc984db6bcec492"
+const ownerDigest = "20398c59f42031c1b6ae2e2c3708e63ec8b5645baf741bf831bc67e14625ef99"
 const eventProtocol = {
   owner: "kokoro-agent",
   source_commit: "486adb1539dd8a06ca90684e66f91be031aa70cf",
@@ -247,7 +247,7 @@ async function manifestFor(directory) {
     owner: {
       repository_path: "apps/kokoro-agent",
       repository_commit: ownerCommit,
-      contract_version: "1.1.0",
+      contract_version: "2.0.0",
       contract_path: "contract/openapi/v1/openapi.json",
       contract_sha256: ownerDigest,
     },

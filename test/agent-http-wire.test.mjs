@@ -19,8 +19,8 @@ const page = { data: { events: [event], next_seq: 1, watermark: 1 }, meta: { req
 describe("Agent event-protocol provenance", () => {
   it("pins the S4 event source separately from the unchanged generated HTTP source", async () => {
     const manifest = JSON.parse(await readFile(new URL("../contract/dependencies/agent-http.json", import.meta.url), "utf8"))
-    assert.equal(manifest.owner.repository_commit, "520ec181a101298b4f336aad273ce003b2735955")
-    assert.equal(manifest.owner.contract_sha256, "2b9c7aad6f38db3e20200b037e4818ae932209ba3deecabf8fc984db6bcec492")
+    assert.equal(manifest.owner.repository_commit, "dd34a4800b4ce0cc61eb80dd715e528b9d4517da")
+    assert.equal(manifest.owner.contract_sha256, "20398c59f42031c1b6ae2e2c3708e63ec8b5645baf741bf831bc67e14625ef99")
     assert.deepEqual(manifest.event_protocol, {
       owner: "kokoro-agent",
       source_commit: "486adb1539dd8a06ca90684e66f91be031aa70cf",
@@ -97,4 +97,43 @@ describe("Agent owner HTTP success envelopes", () => {
       assert.equal(parseReplayPage(200, candidate), null)
     for (const status of [202, 204]) assert.equal(parseReplayPage(status, page), null)
   })
+})
+
+it("typed selection runtime and public limits match the fixed Agent machine contract", async () => {
+  const { parseSkillSourceSelection } = await import("../dist/domain/chat/skill-source-selection.js")
+  const owner = JSON.parse(
+    await readFile(new URL("../contract/vendor/kokoro-agent/dd34a4800b4ce0cc61eb80dd715e528b9d4517da/openapi.json", import.meta.url), "utf8"),
+  )
+  const schema = owner.components.schemas.LaunchRequest.properties.selected_skill_source_refs
+  const pattern = new RegExp(schema.items.pattern, "u")
+  const publicContract = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
+  const section = publicContract.split("    MessageCreateRequest:\n")[1].split("    MessageReceipt:\n")[0]
+  assert.match(section, new RegExp(`maxItems: ${schema.maxItems}`))
+  assert.match(section, new RegExp(`x-kokoro-json-byte-limit: ${schema["x-kokoro-json-byte-limit"]}`))
+  assert.match(section, /uniqueItems: true/)
+  const publicPattern = new RegExp(section.match(/pattern: '([^']+)'/)[1], "u")
+  for (const value of [
+    "skill:a",
+    "skill:a.b:c-d_e",
+    "skill:" + "a".repeat(191),
+    "skill:" + "a".repeat(192),
+    "skill:skill:a",
+    "skill:a\n",
+    "skill:a\r",
+    "skill:a\u2028",
+    "skill:a\u2029",
+    "skill:中",
+    " skill:a",
+    "skill:a ",
+    "skill:a!",
+    "a",
+  ]) {
+    assert.equal(parseSkillSourceSelection([value]) !== null, pattern.test(value), `owner mismatch: ${JSON.stringify(value)}`)
+    assert.equal(publicPattern.test(value), pattern.test(value), `public mismatch: ${JSON.stringify(value)}`)
+  }
+  const max = Array.from({ length: schema.maxItems }, (_, i) => `skill:a${i}`)
+  assert.deepEqual(parseSkillSourceSelection(max), max)
+  assert.equal(parseSkillSourceSelection([...max, "skill:extra"]), null)
+  assert.equal(parseSkillSourceSelection(["skill:a", "skill:a"]), null)
+  assert.equal(parseSkillSourceSelection(new Array(1)), null)
 })

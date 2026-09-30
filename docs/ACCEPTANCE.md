@@ -1,6 +1,6 @@
 # kokoro-bff acceptance
 
-## W3 Chat typed Skill 选择目标验收（尚未运行）
+## W3 Chat typed Skill 选择验收（单仓与真组合分开）
 
 | ID | Given / When / Then | Evidence |
 | --- | --- | --- |
@@ -12,7 +12,7 @@
 | CHAT-SKILL-06 | Given 旧 Chat payload 或旧 Scheduler receipt/snapshot，When 恢复投递，Then 版本/字段校验明确失败、零 Agent 请求；不补 `[]`、不读旧 trace；新 v2 snapshot 在 lease takeover 后仍原样发送 | payload/parser 负例 + PostgreSQL 恢复测试 |
 | CHAT-SKILL-07 | Given 非空合法 refs，When 固定 Agent 当前执行，Then 显式 reader-unavailable 而非忽略选择执行普通 Chat；此预期失败不计 Skill 执行闭环 | Agent/BFF 组合负例；reader 接入后另行更新验收 |
 
-本表是未执行的后续代码/集成门；本文档变更不构成任一通过证据。
+语法、摘要、v2 parser、Scheduler builder 与 owner contract 一致性的单仓测试已执行；PostgreSQL/真实 Agent HTTP 组合及实际 Skill 执行尚未验收，表内混合门不得整体标通过。
 
 ## 1. 本阶段：文档与契约治理
 

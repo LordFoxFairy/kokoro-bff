@@ -267,6 +267,24 @@ integrationTest("creates a Web-local first Conversation with its turn and Agent 
     )
     assert.deepEqual(sameKeyMessages.rows.map((row) => Number(row.message_seq)), [1, 2])
 
+    const selectedId = `conv_${randomUUID()}`
+    const selectedBody = { selected_skill_source_refs: ["skill:b", "skill:a"] }
+    const selectedResponse = await send("selected-turn", "Selected", selectedId, selectedBody)
+    assert.equal(selectedResponse.status, 202)
+    const selectedReceipt = (await selectedResponse.json()).data
+    const selectedReplay = await send("selected-turn", "Selected", selectedId, selectedBody)
+    assert.deepEqual((await selectedReplay.json()).data, selectedReceipt)
+    for (const refs of [["skill:a", "skill:b"], ["skill:c"], []]) {
+      const changedSelection = await send("selected-turn", "Selected", selectedId, { selected_skill_source_refs: refs })
+      assert.equal(changedSelection.status, 409)
+    }
+    const persistedSelection = await pool.query("SELECT payload FROM bff_agent_dispatch_outbox WHERE tenant_id = $1 AND conversation_id = $2", [tenant, selectedId])
+    assert.equal(persistedSelection.rows[0].payload.schema_version, 2)
+    assert.deepEqual(persistedSelection.rows[0].payload.launch.selected_skill_source_refs, selectedBody.selected_skill_source_refs)
+    const explicitEmptyReplay = await send("first-turn", titleSource, conversationId, { selected_skill_source_refs: [] })
+    assert.equal(explicitEmptyReplay.status, 202)
+    assert.deepEqual((await explicitEmptyReplay.json()).data, receipt)
+
     const rollbackId = `conv_${randomUUID()}`
     const rollbackRunId = `run_${randomUUID()}`
     await assert.rejects(store.agentDispatchOutbox.commitChatTurn({
@@ -284,7 +302,7 @@ integrationTest("creates a Web-local first Conversation with its turn and Agent 
       identityAssertionRef: "bff:rollback",
       content: "Rollback this first turn",
       payload: {
-        schema_version: 1,
+        schema_version: 2,
         launch: {
           request_id: "rollback-request",
           run_id: rollbackRunId,
@@ -292,6 +310,7 @@ integrationTest("creates a Web-local first Conversation with its turn and Agent 
           feature_key: "chat",
           message_id: receipt.user_message_id,
           content: "Rollback this first turn",
+          selected_skill_source_refs: [],
           trace: { source: "kokoro-bff" },
         },
       },
@@ -568,6 +587,7 @@ integrationTest("accepts a Chat turn after the message and Agent dispatch are du
       const chunks = []
       for await (const chunk of request) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
       const launch = JSON.parse(Buffer.concat(chunks).toString("utf8"))
+      assert.deepEqual(launch.selected_skill_source_refs, [])
       launchAttempts += 1
       if (!agentAvailable) {
         response.writeHead(503, { "content-type": "application/json" })
@@ -599,6 +619,8 @@ integrationTest("accepts a Chat turn after the message and Agent dispatch are du
       { content: "hello", extra: true },
       { content: "hello", model: " " },
       { content: "hello", pinned_skills: ["valid", 7] },
+      { content: "hello", selected_skill_source_refs: ["skill:a\n"] },
+      { content: "hello", selected_skill_source_refs: ["skill:a", "skill:a"] },
       { content: "x".repeat(100_001) },
     ]
     for (const [index, invalidBody] of invalidBodies.entries()) {

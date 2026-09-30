@@ -1,8 +1,8 @@
 # kokoro-bff API contract policy
 
-## W3 Chat typed Skill 选择契约门（目标，未实现）
+## W3 Chat typed Skill 选择契约（已实现，组合待验）
 
-当前唯一 public `MessageCreateRequest.pinned_skills` 是 name 数组，运行时只落到 `trace.pinned_skills`；Agent required `LaunchRequest.selected_skill_source_refs` 已在 HTTP 2.0.0 commit `2d03689cb3cfe1bf72c63accc8ebc45ebdc93cdb` 发布，`contract/openapi/v1/openapi.json` SHA-256 `fce03385232ec9fc541476c087ba3a4b7ce591022da0bf18d9835f11d2345b79`。下一 BFF 机器契约切片**一次替换**旧字段为 `selected_skill_source_refs?: string[]`，每项原样匹配 owner `^skill:(?!skill:)[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$`、7–197 ASCII 字符（不 trim、不接受 display name/裸 ID）、最多 16 项、禁止重复、保留顺序、整个数组以无额外空白的 JSON 编码为 UTF-8 后最多 4096 bytes；缺失 public 值等同空数组，非法形状 400 `invalid_message`，同 `Idempotency-Key` 改变选择或顺序 409 `idempotency_conflict`。BFF 对 Agent 的 Chat 与 Scheduler `POST /v1/runs` 必须始终显式发送该字段，包括 `[]`，不得通过 `trace`、name 或别名补选。当前 IAM tenant/user admission 不变；目标 Agent 在 Run 执行时经 Platform 校验 installed/enabled/current；当前固定 Agent 非空选择会 fail closed，reader 尚未接入，而 BFF public 已发布本人 ACTIVE 读回**不证明可执行**。正式 Agent 2.0.0 来源 pin、生成 drift 与真实双边测试是代码门；本次没有修改 canonical OpenAPI、生成物或运行时。本人发布后是否自动可用仍待用户裁决，不构成基础无 Skill Chat wire 的前置条件。
+唯一 public `MessageCreateRequest` 已移除 name `pinned_skills` 与对应 trace 字段；Agent required `LaunchRequest.selected_skill_source_refs` 已在 HTTP 2.0.0 commit `dd34a4800b4ce0cc61eb80dd715e528b9d4517da` 发布，`contract/openapi/v1/openapi.json` SHA-256 `20398c59f42031c1b6ae2e2c3708e63ec8b5645baf741bf831bc67e14625ef99`。本片机器契约一次替换旧字段为 `selected_skill_source_refs?: string[]`，每项原样匹配 owner `^skill:(?!skill:)[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])`、7–197 ASCII 字符（不 trim、不接受 display name/裸 ID）、最多 16 项、禁止重复、保留顺序、整个数组以无额外空白的 JSON 编码为 UTF-8 后最多 4096 bytes；缺失 public 值等同空数组，非法形状 400 `invalid_message`，同 `Idempotency-Key` 改变选择或顺序 409 `idempotency_conflict`。BFF 对 Agent 的 Chat 与 Scheduler `POST /v1/runs` 必须始终显式发送该字段，包括 `[]`，不得通过 `trace`、name 或别名补选。当前 IAM tenant/user admission 不变；目标 Agent 在 Run 执行时经 Platform 校验 installed/enabled/current；当前固定 Agent 非空选择会 fail closed，reader 尚未接入，而 BFF public 已发布本人 ACTIVE 读回**不证明可执行**。正式 Agent 2.0.0 来源 pin 与生成 drift 已接入；真实双边测试仍由 Root 在隔离组合验收。本人发布后是否自动可用仍待用户裁决，不构成基础无 Skill Chat wire 的前置条件。
 
 ## 当前 Platform projection public read
 
@@ -907,7 +907,7 @@ tenant/subject/key 但任一 body 值或 tag 顺序变化返回 409，BFF 不另
 ```
 
 `skill_id` 与 `series_id` 必须匹配 Platform Proto 的 1..191 ASCII-byte opaque ID domain
-`^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$`；CreateDraft 只接受 `revision=1`、owner enum `DRAFT`，public 投影为
+`^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])`；CreateDraft 只接受 `revision=1`、owner enum `DRAFT`，public 投影为
 `status="draft"`；`replayed` 是严格 boolean。同一 completed receipt replay 仍返回 201 和相同 ID/revision/status，仅
 `replayed=true`。所有响应带 BFF `x-request-id` 与 `Cache-Control:no-store`；错误体使用 `{ "error": { "code", "message", "retryable" } }`，不含 `meta.request_id`；不透出 machine token、Platform request/metadata、
 Connect trailers 或 owner message。

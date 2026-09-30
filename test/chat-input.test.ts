@@ -5,29 +5,36 @@ import { parseMessageCreateRequest } from "../dist/application/chat/message-crea
 
 describe("canonical MessageCreateRequest parsing", () => {
   it("normalizes every trimmed Chat semantic before admission", () => {
-    assert.deepEqual(parseMessageCreateRequest({
-      content: "  hello  ",
-      model: " default ",
-      agent: " reviewer ",
-      thinking: true,
-      pinned_skills: [" skill-a ", "skill-b"],
-      mcp_servers: [" github "],
-      project_ref: " project-body ",
-    }, " project-body "), {
-      content: "hello",
-      model: "default",
-      agent: "reviewer",
-      thinking: true,
-      pinnedSkills: ["skill-a", "skill-b"],
-      mcpServers: ["github"],
-      projectRef: "project-body",
-    })
+    assert.deepEqual(
+      parseMessageCreateRequest(
+        {
+          content: "  hello  ",
+          model: " default ",
+          agent: " reviewer ",
+          thinking: true,
+          selected_skill_source_refs: ["skill:a", "skill:b"],
+          mcp_servers: [" github "],
+          project_ref: " project-body ",
+        },
+        " project-body ",
+      ),
+      {
+        content: "hello",
+        model: "default",
+        agent: "reviewer",
+        thinking: true,
+        selectedSkillSourceRefs: ["skill:a", "skill:b"],
+        mcpServers: ["github"],
+        projectRef: "project-body",
+      },
+    )
   })
 
   it("uses the trimmed query project when the body omits project_ref", () => {
     assert.deepEqual(parseMessageCreateRequest({ content: "hello" }, " project-query "), {
       content: "hello",
       projectRef: "project-query",
+      selectedSkillSourceRefs: [],
     })
   })
 
@@ -43,4 +50,37 @@ describe("canonical MessageCreateRequest parsing", () => {
     assert.equal(parseMessageCreateRequest({ content: "hello", mcp_servers: [""] }, undefined), null)
     assert.equal(parseMessageCreateRequest({ content: "hello", thinking: "yes" }, undefined), null)
   })
+})
+
+it("preserves exact ordered Skill refs and normalizes omitted selection to []", () => {
+  const empty = parseMessageCreateRequest({ content: "hello" }, undefined)
+  assert.deepEqual(empty, { content: "hello", selectedSkillSourceRefs: [] })
+  assert.deepEqual(empty, parseMessageCreateRequest({ content: "hello", selected_skill_source_refs: [] }, undefined))
+  assert.deepEqual(parseMessageCreateRequest({ content: "hello", selected_skill_source_refs: ["skill:b", "skill:a"] }, undefined), {
+    content: "hello",
+    selectedSkillSourceRefs: ["skill:b", "skill:a"],
+  })
+})
+
+it("rejects Skill aliases, whitespace, line endings, Unicode, duplicates and oversize selections", () => {
+  for (const value of [
+    null,
+    "skill:a",
+    ["a"],
+    ["skill:skill:a"],
+    ["skill:a\n"],
+    ["skill:a\r"],
+    ["skill:a\r\n"],
+    ["skill:a\u2028"],
+    ["skill:中"],
+    [" skill:a"],
+    ["skill:a "],
+    ["skill:a", "skill:a"],
+    ["skill:"],
+    ["skill:" + "a".repeat(192)],
+    Array.from({ length: 17 }, (_, i) => `skill:a${i}`),
+  ]) {
+    assert.equal(parseMessageCreateRequest({ content: "hello", selected_skill_source_refs: value }, undefined), null, JSON.stringify(value))
+  }
+  assert.equal(parseMessageCreateRequest({ content: "hello", pinned_skills: [] }, undefined), null)
 })

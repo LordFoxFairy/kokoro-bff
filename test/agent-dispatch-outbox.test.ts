@@ -77,7 +77,7 @@ function command(attemptCount = 1, suffix = "fixture", leaseRemainingMs = 30_000
     assistantMessageId: "message_assistant_fixture",
     identityAssertionRef: "bff:fixture",
     payload: {
-      schema_version: 1,
+      schema_version: 2,
       launch: {
         request_id: "request_fixture",
         run_id: "run_fixture",
@@ -85,6 +85,7 @@ function command(attemptCount = 1, suffix = "fixture", leaseRemainingMs = 30_000
         feature_key: "chat",
         message_id: "message_user_fixture",
         content: "hello",
+        selected_skill_source_refs: [],
         trace: { source: "kokoro-bff" },
       },
     },
@@ -284,4 +285,34 @@ describe("Agent dispatch HTTP classification", () => {
       errorCode: "upstream_response_too_large",
     })
   })
+})
+
+it("freezes ordered Skill selection in v2 payload and digest, rejecting old durable payloads", async () => {
+  const { buildAgentDispatchPayload, parseAgentDispatchPayload, agentDispatchRequestMaterial } = await import("../dist/domain/chat/agent-dispatch.js")
+  const input = {
+    tenantId: "tenant",
+    conversationId: "conversation",
+    subjectId: "subject",
+    actorId: "actor",
+    requestId: "request",
+    idempotencyKey: "key",
+    content: "hello",
+  }
+  const ids = { runId: "run", userMessageId: "message" }
+  const empty = buildAgentDispatchPayload(input, ids)
+  assert.equal(empty.schema_version, 2)
+  assert.deepEqual(empty.launch.selected_skill_source_refs, [])
+  assert.equal(agentDispatchRequestMaterial(input), agentDispatchRequestMaterial({ ...input, selectedSkillSourceRefs: [] }))
+  const selected = { ...input, selectedSkillSourceRefs: ["skill:b", "skill:a"] }
+  const payload = buildAgentDispatchPayload(selected, ids)
+  assert.deepEqual(parseAgentDispatchPayload(JSON.parse(JSON.stringify(payload))), payload)
+  assert.notEqual(agentDispatchRequestMaterial(selected), agentDispatchRequestMaterial({ ...selected, selectedSkillSourceRefs: ["skill:a", "skill:b"] }))
+  assert.throws(() => parseAgentDispatchPayload({ ...payload, schema_version: 1 }), /PAYLOAD_INVALID/)
+  for (const bad of [undefined, ["skill:a\n"], ["skill:a", "skill:a"]]) {
+    assert.throws(() => parseAgentDispatchPayload({ ...payload, launch: { ...payload.launch, selected_skill_source_refs: bad } }), /PAYLOAD_INVALID/)
+  }
+  assert.throws(
+    () => parseAgentDispatchPayload({ ...payload, launch: { ...payload.launch, trace: { source: "kokoro-bff", pinned_skills: [] } } }),
+    /PAYLOAD_INVALID/,
+  )
 })

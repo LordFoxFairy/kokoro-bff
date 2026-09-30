@@ -28,7 +28,7 @@ function snapshot(tenantId, suffix) {
     taskId: `task-${suffix}`,
     launch: {
       requestId: `request-${suffix}`,
-      body: { request_id: `request-${suffix}`, run_id: `run-${suffix}`, content: "go" },
+      body: { request_id: `request-${suffix}`, run_id: `run-${suffix}`, content: "go", selected_skill_source_refs: [] },
       identityAssertionRef: `bff:${suffix}`,
       receipt: { run_id: `run-${suffix}`, user_message_id: `user-${suffix}`, assistant_message_id: `assistant-${suffix}` },
     },
@@ -133,6 +133,13 @@ integrationTest("Scheduler dispatch receipts preserve digest, snapshot, and fenc
 
     const otherTenantScope = JSON.stringify([`${tenant}-other`, "scheduler-dispatch:v1", ` key-${suffix} `])
     assert.equal((await repository.claim(otherTenantScope, digest)).outcome, "claimed")
+    const persisted = await pool.query("SELECT response_body FROM bff_idempotency_receipt WHERE scope = $1", [scope])
+    assert.equal(persisted.rows[0].response_body.schema_version, 2)
+    assert.deepEqual(persisted.rows[0].response_body.snapshot.launch.body.selected_skill_source_refs, [])
+    await pool.query("UPDATE bff_idempotency_receipt SET response_body = jsonb_set(response_body, '{schema_version}', '1'::jsonb) WHERE scope = $1", [
+      otherTenantScope,
+    ])
+    await assert.rejects(repository.claim(otherTenantScope, digest), /envelope is invalid/)
   } finally {
     await pool.query("DELETE FROM bff_idempotency_receipt WHERE scope LIKE $1", [`%${suffix}%`])
     await pool.end()

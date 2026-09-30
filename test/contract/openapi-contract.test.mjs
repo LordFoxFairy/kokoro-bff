@@ -800,7 +800,8 @@ test("MessageCreateRequest and runtime failure statuses stay strict", async () =
   assert.match(messageOperation, /Replaying the same idempotency key and request returns the original receipt/u)
   assert.match(messageRequest, /additionalProperties: false/u)
   assert.match(messageRequest, /maxLength: 100000/u)
-  assert.match(messageRequest, /pinned_skills:[\s\S]*items: \{ type: string, minLength: 1 \}/u)
+  assert.match(messageRequest, /selected_skill_source_refs:[\s\S]*maxItems: 16[\s\S]*uniqueItems: true/u)
+  assert.doesNotMatch(messageRequest, /pinned_skills/u)
   assert.match(messageRequest, /mcp_servers:[\s\S]*items: \{ type: string, minLength: 1 \}/u)
 })
 

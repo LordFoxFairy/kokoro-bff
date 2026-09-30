@@ -26,6 +26,10 @@ export type LaunchRequest = {
   run_id: string
   session_id: string
   feature_key: string
+  /**
+   * Exact Platform SkillSourceRef values for this Run, in caller-selected order; explicit [] means no external Skill. The JSON array must encode to at most 4096 bytes.
+   */
+  selected_skill_source_refs: Array<string>
   message_id: string
   content: string
   requested_model_label?: string
