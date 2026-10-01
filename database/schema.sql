@@ -159,7 +159,7 @@ CREATE TABLE IF NOT EXISTS bff_message (
   tenant_id TEXT NOT NULL,
   conversation_id TEXT NOT NULL,
   run_id TEXT,
-  role TEXT NOT NULL CONSTRAINT ck_bff_message_role CHECK (role IN ('user', 'assistant', 'system')),
+  role TEXT NOT NULL CONSTRAINT ck_bff_message_role CHECK (role IN ('user', 'assistant')),
   content TEXT NOT NULL,
   status TEXT NOT NULL CONSTRAINT ck_bff_message_status CHECK (status IN ('pending', 'streaming', 'completed', 'failed')),
   agent_failure_code TEXT,

@@ -27,10 +27,12 @@ security; an irrelevant extra Authorization header does not become an additional
 
 ## Version
 
-The current contract version is `2.0.0` on the unchanged `/v1` HTTP namespace. Version 2 adds the closed optional
-Agent-owned failure profile to durable `ChatMessage` projections; this coordinated beta break does not add a `/v2`
-alias or preserve a 1.0 response fallback. Its operation stability is `beta`; that marker describes compatibility
-expectations, not proof that every Live adapter or persistence path is complete.
+The current machine contract remains `2.0.0` on the unchanged `/v1` HTTP namespace. The next approved pre-release
+target is `3.0.0`, also on `/v1`: it narrows `ChatMessage.role` from `user | assistant | system` to the only produced set,
+`user | assistant`, without changing the operation inventory. This source target is not yet published or activated.
+Version 2 added the closed optional Agent-owned failure profile to durable `ChatMessage` projections; operation stability
+remains `beta` and is not proof that every Live adapter or persistence path is complete. Future retry is an additive
+`3.1.0` target gated on the ROLE2 publication/consumer cutover and the still-unpublished Agent `4.0.0`; it is not callable now.
 
 `GET /v1/sessions/{id}/events` issues one opaque `agui_*` cursor per durable public frame. Agent source sequences remain
 internal projection metadata and are not valid public resume cursors. Callers persist the last SSE `id` verbatim and send
@@ -60,6 +62,12 @@ pnpm contract:update-baseline
 ## Breaking policy
 
 ### Corrective pre-release baseline
+
+For BFF-CHAT-ROLE2 only, before the first public release, public `3.0.0` may remain on `/v1` while narrowing
+`ChatMessage.role` to `user | assistant`. The removed `system` value has no product producer in BFF, Agent, or Web, but
+narrowing a response enum is still breaking and is not described as backward compatible. This is a one-time corrective
+baseline exception; after the first public release, the `/v2` rule below applies unchanged. Existing databases are not
+migrated or filtered by this publication, and source publication does not activate the managed runtime.
 
 Before the first public release, the previously declared Library `200` response was unreachable and depended on a dead
 Storage HTTP transport. The explicitly authorized clean-slate correction removes that response and its orphaned schemas,

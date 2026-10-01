@@ -40,8 +40,13 @@ function inspectChatFailureContract(openapi) {
     if (!condition) errors.push(label)
   }
 
-  require(/^info:\n(?:.*\n){0,3}?  version: 2\.0\.0$/mu.test(openapi), "public info.version must be 2.0.0")
+  require(/^info:\n(?:.*\n){0,3}?  version: 3\.0\.0$/mu.test(openapi), "public info.version must be 3.0.0")
   require(/^      required: \[message_id, role, content, status, created_at\]$/mu.test(message), "failure must stay optional")
+  const roles = [...(message.match(/role:\n\s+type: string\n\s+enum: \[([^\]]+)\]/u)?.[1] ?? "").matchAll(/[a-z_]+/gu)].map(
+    (match) => match[0],
+  )
+  require(JSON.stringify(roles) === JSON.stringify(["user", "assistant"]), "Message roles must equal user and assistant")
+  require(new Set(roles).size === roles.length, "Message roles must not contain duplicates")
   require(/failure:\n\s+type: object\n\s+required: \[source, code, retryable\]\n\s+additionalProperties: false/u.test(
     failure,
   ), "failure must be closed and complete")
@@ -94,6 +99,7 @@ test("ChatMessage failure contract detects closed-shape, retryability, and prese
     openapi.replace("          run_id: { type: string, minLength: 1 }", "          run_id: { type: string, minLength: 0 }"),
     openapi.replace("                - model_access_denied", "                - model_access_denied\n                - unexpected_failure"),
     openapi.replace("                - internal_error", "                - internal_error\n                - internal_error"),
+    openapi.replace("          enum: [user, assistant]", "          enum: [user, assistant, system]"),
     openapi.replace(
       "      required: [message_id, role, content, status, created_at]",
       "      required: [message_id, role, content, status, created_at, failure]",

@@ -25,6 +25,15 @@ const SAFE_FAILURE_CODES = [
 ]
 const RETRYABLE_FAILURE_CODES = ["model_unavailable", "dependency_unavailable"]
 
+function inspectMessageRoleConstraint(schema) {
+  const start = schema.indexOf("CREATE TABLE IF NOT EXISTS bff_message")
+  const end = schema.indexOf("CREATE TABLE IF NOT EXISTS", start + 1)
+  const message = start >= 0 && end > start ? schema.slice(start, end) : ""
+  return /role TEXT NOT NULL CONSTRAINT ck_bff_message_role CHECK \(role IN \('user', 'assistant'\)\),/u.test(message)
+    ? []
+    : ["ck_bff_message_role must allow exactly user and assistant"]
+}
+
 test("schema application reads the repository canonical schema", async () => {
   const schema = await loadCanonicalSchema()
 
@@ -87,6 +96,18 @@ test("canonical Message failure columns use the complete nullable-pair CHECK", a
   assert.match(message, /status = 'failed'/u)
   assert.match(message, /run_id IS NOT NULL/u)
   assert.match(message, /length\(btrim\(run_id\)\) > 0/u)
+})
+
+test("canonical Message role CHECK allows exactly user and assistant and detects system drift", async () => {
+  const schema = await loadCanonicalSchema()
+
+  assert.deepEqual(inspectMessageRoleConstraint(schema), [])
+  const withSystem = schema.replace(
+    "role IN ('user', 'assistant')",
+    "role IN ('user', 'assistant', 'system')",
+  )
+  assert.notEqual(withSystem, schema)
+  assert.notDeepEqual(inspectMessageRoleConstraint(withSystem), [])
 })
 
 test("canonical schema uses stable diagnostic names for indexes and constraints", async () => {
@@ -219,6 +240,23 @@ databaseTest("owner schema install coexists with other schemas and rolls back on
     }
 
     await insertFailure({ code: null, retryable: null, role: "user", status: "completed", runId: null })
+    let roleSequence = 10_000
+    const insertPlainRole = async (role) => {
+      roleSequence += 1
+      return client.query(
+        `INSERT INTO kokoro_bff.bff_message
+           (message_id, tenant_id, conversation_id, run_id, role, content, status, message_seq,
+            agent_failure_code, agent_failure_retryable)
+         VALUES ($1, 'tenant_role_check', 'conversation_role_check', NULL, $2, '', 'completed', $3, NULL, NULL)`,
+        [`message_role_${roleSequence}`, role, roleSequence],
+      )
+    }
+    await insertPlainRole("user")
+    await insertPlainRole("assistant")
+    await assert.rejects(
+      insertPlainRole("system"),
+      (error) => error?.code === "23514" && error?.constraint === "ck_bff_message_role",
+    )
     for (const code of SAFE_FAILURE_CODES) await insertFailure({ code, retryable: false })
     for (const code of RETRYABLE_FAILURE_CODES) await insertFailure({ code, retryable: true })
     for (const code of SAFE_FAILURE_CODES.filter((candidate) => !RETRYABLE_FAILURE_CODES.includes(candidate))) {
@@ -229,7 +267,7 @@ databaseTest("owner schema install coexists with other schemas and rolls back on
     await expectFailureCheck({ code: "  ", retryable: false })
     await expectFailureCheck({ code: null, retryable: false })
     await expectFailureCheck({ code: "internal_error", retryable: null })
-    for (const role of ["user", "system"]) await expectFailureCheck({ code: "internal_error", retryable: false, role })
+    await expectFailureCheck({ code: "internal_error", retryable: false, role: "user" })
     for (const status of ["pending", "streaming", "completed"]) {
       await expectFailureCheck({ code: "internal_error", retryable: false, status })
     }

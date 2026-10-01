@@ -1,4 +1,4 @@
-export type MessageRole = "user" | "assistant" | "system"
+export type MessageRole = "user" | "assistant"
 export type MessageStatus = "pending" | "streaming" | "completed" | "failed"
 export type AgentFailureCode =
   | "token_budget_exceeded"

@@ -1,5 +1,40 @@
 # kokoro-bff 技术设计
 
+## BFF-CHAT-ROLE2：Message 角色声明收敛（2026-10-01；设计门，未实施）
+
+### 当前态与目标态
+
+当前唯一产品 Message INSERT 只产生 `user` 与 `assistant`；Agent owner contract 与 Web parser 也只有这两个角色。当前
+`database/schema.sql`、domain/public TypeScript 与 canonical OpenAPI 仍额外声明 `system`，PostgreSQL row mapper 还信任
+数据库字符串，因此数据库、运行时与 public contract 尚未闭合。目标 public `3.0.0` 保持 HTTP `/v1` 与 operation inventory
+不变，只把 Message role 收窄为精确 `user | assistant`；不新增通知/prompt producer，不过滤、改写或伪装已有用户数据。
+source publication 不等于激活 3310；当前用户数据库、旧 schema 与 rows 不作任何变更，旧三角色 CHECK 也不会被 fresh
+installer 自动修复。
+
+### 放置表
+
+| 项 | ROLE2 结论 |
+| --- | --- |
+| Owner | `kokoro-bff` Chat 模块拥有 Conversation/Message public projection 与 `bff_message`，是唯一 writer；Root 负责发布编排、真实 PostgreSQL 与最终 Git。 |
+| 当前事实 | 唯一 INSERT 路径只写 `user`/`assistant`；canonical SQL、`src/domain/chat/message.ts`、`src/contracts/chat.ts` 和 OpenAPI 多声明 `system`；row mapper 未独立拒绝数据库非法角色；本轮开始时四份 docs 另有未验 retry 候选，必须隔离。 |
+| 目标职责 | 既有 Message 事实在 fresh schema、domain、public TypeScript 与 canonical OpenAPI 中共享精确两角色集合；公开 API 仍是现 `/v1` Chat operation，不增加 operation。 |
+| 目录方案 | 采用现有 schema/domain/public contract/OpenAPI 与两项现有测试；相比新建 role 目录、通用 parser 或第二 contract，此问题只是既有声明漂移，后者会制造重复事实源和空职责。 |
+| 粒度 | 后续只修改现有声明与现有测试，不新建文件、目录、模块或进程；每个文件仍承担原变化原因。 |
+| 依赖 | 允许 Chat route/application → domain/public type → PostgreSQL adapter 的既有方向；禁止 Web/Agent 源码 import、第二 role 常量、generated/vendor 手改与跨 owner 数据访问。 |
+| 数据/API | fresh `kokoro_bff` schema 的命名 CHECK 只接受两角色；tenant/事务/幂等/Redis/查询与 writer 不变。public 目标 `3.0.0` 同 `/v1` 是一次 pre-release corrective breaking 例外，不称兼容；正式发布后的 breaking 仍要求 `/v2`。 |
+| 删除项 | 后续删除 SQL/domain/public/OpenAPI 中无 producer 的 `system` 声明；不保留 alias、fallback、过滤、`system -> assistant` 映射或 ALTER/migration 兼容链。 |
+| 验证 | 先定点 OpenAPI/schema RED，再改声明 GREEN；Root 随后用同一现 PostgreSQL 实例/role、随机临时数据库和 fresh `kokoro_bff` schema 跑 apply/check，最后执行 contract、architecture、lint、typecheck、build、full test。 |
+
+### 状态、失败恢复与阶段门
+
+Message 本身没有新增状态；`user`/`assistant` 的既有 status、failure、run 约束保持。fresh apply 任一步失败即回滚并回收
+Root 自有临时资源，不触碰当前用户 schema。已有数据库若含旧 CHECK 或历史/manual `system` rows，本片不迁移、不删除、
+不查询后伪装；激活前必须由 Root 另行裁决数据生命周期。ROLE2 文档门通过后才允许现有 tests 进入 RED；真实 RED 后才允许
+schema/domain/public/OpenAPI GREEN。待执行命令：`pnpm contract:check`、`pnpm test:architecture`、定点两测试、
+`pnpm lint`、`pnpm typecheck`、`pnpm build`、`pnpm test`，以及由 Root 提供随机临时库 URL 的
+`pnpm db:apply-schema`/真实 PostgreSQL CHECK；当前均未作为本阶段通过证据。
+
+
 ## BFF-AGENT-FAILURE3：安全失败投影当前实现（2026-09-30；owner隔离集成已验，Web组合待闭环）
 
 ### 当前态、owner 与目标

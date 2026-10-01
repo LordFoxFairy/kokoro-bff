@@ -1,5 +1,21 @@
 # kokoro-bff 当前实现
 
+## BFF-CHAT-ROLE2：两角色源码与 fresh schema 已验证（2026-10-01）
+
+实施基线 main `ccb8e144d72e35d90f9edc23f8b3ed0c82fde98d` 的 public contract 为 `2.0.0`，四项声明含无 producer
+的 `system`。当前候选仅把 canonical SQL、domain/public TypeScript 与 OpenAPI 统一为 `user`/`assistant`，public
+artifact 为 `3.0.0`，保持 `/v1` 和 operation inventory；这是首次公开发布前仅本次 corrective breaking 例外，不称兼容，
+正式发布后 breaking 仍走 `/v2`。Message writer、mapper、failure guards、owner pins 和查询不变。
+
+Root 已取得真实 RED：OpenAPI 35通过/2失败；实际 PostgreSQL schema 6通过/2失败（其中普通system未被约束拒绝）。
+GREEN 后 `pnpm check` exit0，lint/typecheck/contract/build通过，全test **546通过/1跳过/0失败**；该次全test未带PG URL，
+跳过的是动态schema用例，Root单独带现PG admin URL执行同schema门 **8通过/0跳过**，随机临时数据库finally清理。
+日志 `/tmp/kokoro-bff-role2-{red-openapi,red-schema,green-schema,check}.log`。独立终审与Root选择性源码提交仍待执行。
+
+旧 schema 不会被 fresh installer 自动更新，当前用户 DB/rows 不修改、不过滤、不伪装。源码发布不等于运行激活；3310
+未切换，Web exact public3 repin、fresh跨仓组合与实际浏览器整链仍待验。未来 retry 目标仅候选 additive `3.1.0`，依赖
+ROLE2 发布/消费和未发布 Agent `4.0.0`，本片没有实现 retry，也没有新增 production migration/fallback。
+
 ## BFF-AGENT-FAILURE3：源码与 owner 隔离集成已验收，Web/运行组合待闭环（2026-09-30）
 
 起始基线是 BFF main `15e07fa44670bc13705ce3f6f700e73afcb72ccc`；本节覆盖下方历史章节中的旧 Agent

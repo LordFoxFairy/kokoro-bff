@@ -1,5 +1,25 @@
 # kokoro-bff data model
 
+## BFF-CHAT-ROLE2：`bff_message.role` 两角色约束（2026-10-01；目标态，未实施）
+
+`bff_message` 仍由 BFF Chat 唯一写入。当前 canonical SQL、domain/public TypeScript 与 OpenAPI 一致声明
+`user | assistant | system`，row mapper 信任 row 字符串；真实漂移是这四项三角色声明相对于唯一 BFF writer、Agent contract
+与 Web consumer 的两角色事实。目标 fresh canonical schema 把命名 CHECK 收窄为
+`role IN ('user', 'assistant')`，不新增列、表、索引、状态、事务、receipt、缓存或
+retention 规则。Message status/failure/run CHECK 与现查询、锁序和 tenant 过滤保持不变。
+
+本仓采用 fresh schema，不提供 ALTER/migration；通用 fresh installer 的既有能力不变。本片验收中，Root 仅在自有随机
+临时数据库内的空 `kokoro_bff` schema 运行 `db:apply-schema`，旧三角色 CHECK 不会自动更新。当前用户数据库与 rows
+不修改、不删除、不扫描过滤；若激活前发现 historical/manual `system` row，必须由 Root 另立生命周期裁决，不得改为
+assistant 或在读取时隐藏。fresh CHECK 承担精确两角色约束，row mapper 继续信任 canonical 数据库约束；本片不授权新增
+mapper parser、过滤或 fallback。
+
+待验：现 schema governance 测试先证明 `system` 可写的真实 RED，随后证明普通 user/assistant 成功、普通 system 以
+`ck_bff_message_role` CHECK violation 失败；Root 使用同一现 PostgreSQL 实例/role与随机临时库执行 fresh
+`pnpm db:apply-schema`，并执行定点测试、`pnpm contract:check`、architecture、lint、typecheck、build、full test。当前文档门
+未运行数据库或服务，不构成 schema 已应用或用户数据已兼容的证据。
+
+
 当前验收范围（2026-09-30）：BFF-AGENT-FAILURE3的canonical fresh install、动态CHECK7/7与真实七integration47/47已由Root
 在自有隔离fixture执行通过。GC后snapshot/list/合法Share同safe profile矩阵已锁定；source/test冻结hash与资源回收见CURRENT。
 这不是所有owner单库组合、真实provider或Web端到端的验收证据；下文目标约束由现canonical schema与实现承担。

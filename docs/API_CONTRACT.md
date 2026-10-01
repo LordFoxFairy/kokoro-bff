@@ -1,5 +1,25 @@
 # kokoro-bff API contract policy
 
+## BFF-CHAT-ROLE2：Message role public 收窄（2026-10-01；目标 `3.0.0`，未发布）
+
+当前 canonical OpenAPI 仍为 public `2.0.0`，`ChatMessage.role` 声明 `user | assistant | system`；实际 BFF writer、Agent
+contract 与 Web consumer 只有 `user | assistant`。目标机器契约将 `info.version` 设为 `3.0.0`，保持 `/v1`、路径、方法、
+operationId、权限、幂等、分页、错误与 AG-UI 语义不变，只把响应 role 收窄为精确两值。不增加 system notification/prompt
+能力，也不把 system 过滤或映射为 assistant。source publication 不激活 3310，Web 必须在后继 owner 切片固定已发布 BFF
+commit/version/digest 后才可协调 fresh 组合。
+
+该响应 enum 收窄是 breaking，不称 backward compatible。Root 已批准它作为首次公开发布前、仅本次 role 漂移修正的
+corrective baseline：目标 public `3.0.0` 仍使用 `/v1`。正式发布后，本文常规 breaking policy 继续要求 `/v2`，不得引用
+本次例外。未来正式 retry 是以 ROLE2 发布完成且 Web 消费锁步为前置的 additive public `3.1.0`；Agent `4.0.0` 仍未实现/
+发布，当前不声明 retry operation 可调用。
+
+API、SQL 与运行时必须同片一致：OpenAPI 两角色、domain/public TypeScript 两角色、fresh canonical SQL CHECK 两角色。
+row mapper 当前信任 canonical 数据库约束；本片不为旧三角色 schema 新增 parser、过滤或 fallback，也不把 source 用于旧
+schema。旧数据库不会由 installer 自动修复。待验：OpenAPI 定点 RED/GREEN与 `pnpm contract:check`、
+`pnpm test:architecture`、`pnpm lint`、`pnpm typecheck`、`pnpm build`、`pnpm test`；发布 commit/digest、Web repin 与 fresh
+组合均待后继，不以本次文档编辑冒充机器契约已发布。
+
+
 ## BFF-AGENT-FAILURE3：Message 安全失败与 RUN_ERROR（2026-09-30；当前机器事实，消费者协调待完成）
 
 ### 当前机器事实与协调版本
