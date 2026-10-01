@@ -1,3 +1,25 @@
+## Scheduled dispatch Root 源码与真实数据库验收（2026-10-01）
+
+最终31路径r4 manifest1c5923d9已Root hash/范围核验，独立复审0P0/0P1/0P2；Root Node22完整pnpm check exit0：563 passed/0 failed/1既定skip、contract/generation/lint/typecheck/build成功，日志 /tmp/kokoro-bff-scheduled-r26-r4-root-static.log。Root真实PG/Redis八文件 **59 passed/0 failed/0 cancelled/0 skipped（16.88s）**，包括Scheduled跨页terminal drain、预算/fence、精确PID双赢家/queue soft chain、rollback/重启/非零cursor/digest与身份冲突/expired lease/跨scope与stop drain。日志 /tmp/kokoro-bff-scheduled-r26-r4-root-integration.log；自有DBbff_fifo_a432245aad4f4e40已drop、Redis14=0。此前真实56/2、58/1诊断保留，不以错误夹具通过或测试数量代替源码审查。
+
+本切片不代表所有Product能力、queued reload identity/实时跨tab、完整scope/native/retention或浏览器组合已闭环。当前应用没有新DDL/后台源码热切换；正式fresh schema组合验证后继。Root只提交四docs批准prefix+HEAD，原495行草案完整留工作树未暂存，保护suffix4/4保持；支付最后，积分owner正式流程未冒称通过。
+
+## BFF-SCHEDULED-R24：terminal-gated Scheduled occurrence 候选（2026-10-01；真实 PostgreSQL 矩阵已通过，待独立复审/提交）
+
+当前`main e7a325ce` callback直接POST Agent并以2xx固化receipt202，不等待共享`scheduled:<task_id>`的Run terminal；Chat FIFO不覆盖。另有三项已确认事实：task delete在现repository物理DELETE；Agent Chat event seq/cursor属于整个session而非run；已经leased/admitted的active不能被迟到更早occurrence替换。
+
+修正目标采用Scheduled专用三表：无task FK的durable scope anchor、dispatch rows、session级source ledger。scope在task删除后保存active identity与连续cursor；无active才按accepted occurrence纳秒顺序选head，active A固定后迟到B排其后。source adapter读取整个session并在任何过滤前保存sourceRunId，历史/零frame事件也推进ledger，只有active run terminal释放。
+
+callback原子scope/enqueue+receipt202、三表schema、dispatcher、session source consumer与runtime生命周期已形成R22工作树候选；pause/delete只阻止未来接纳，现物理delete与Scheduler delete outbox保持，不取消/释放已accepted。Root最终以隔离自有数据库/Redis namespace执行八文件矩阵，结果为51 passed/0 failed/0 cancelled/0 skipped（16.66s，日志`/tmp/kokoro-bff-scheduled-r24-root-integration-r3.log`，数据库与Redis资源均回收）；离线`pnpm check`为555 passed/0 failed/1 skipped。该证据仍待独立复审与Root提交，不等于完整产品发布。Agent4仍只是未来第二防线。public `active_run` 仍只在受信 `RUN_STARTED` source投影后可见；dispatch已admitted但尚无`RUN_STARTED`的窗口不会公开queued/inflight run identity，本Scheduled切片不声称补齐Chat刷新时的完整queued状态。该public queue契约属于后续独立owner切片。TTL、最终scope/source回收与未来Scheduled run query/cancel仍未决，当前不purge、不新增API。
+
+### R25-P1 独立复审拒收与当前边界
+
+R26独立复审新增的source digest缺口已进入返修：digest算法移至Scheduled application ledger唯一helper，adapter与repository共同使用，wrong-digest及已存sequence/event-id冲突需要真实PostgreSQL零写证据；Root复验前仍不标记Scheduled gate验收。
+
+R24曾取得隔离真实PG 51 passed与离线555 passed，但独立复审确认五组P1，故该结果只作为历史候选证据，不是完整Scheduled gate验收：terminal非末页过早释放；COMMIT前/网络前预算边界不完整；runner缺有界多scope并行；周期错误静默且缺正式退避观测；15项矩阵多为代码行映射而非真实故障注入。
+
+R25冻结目标是不改公开wire/owner/DDL，在现三表与runner内补terminal drain anchor、最终预算与fenced never-sent release、有界worker pool、runtime结构化log hook及全参数严格校验。必须以真实多连接证明enqueue-receipt rollback、callback/delete两个赢家、精确backend PID barrier、N+1 cursor、terminal跨页、冲突批零写、expired/never-sent、慢scope隔离与错误退避。R25代码与新真实矩阵完成前保持“返修中”。public queued/inflight identity、TTL/purge、Scheduled query/cancel仍属后续。
+
 ## BFF-FIFO-ATOMIC：Conversation terminal gate 源码与真实owner门已验证（2026-10-01）
 
 锁后数据库时钟补强：dispatch 与 AG-UI consumer 的 claim/renew/settle 必须先按既定 stream→dispatch 顺序取得目标行锁，再由同一连接读取一次 `clock_timestamp()`，并把该值传入最终 lease expiry CAS 与写入；禁止用事务起点 `CURRENT_TIMESTAMP`、worker 时间或 `GREATEST/Math.max(1)` 把已耗尽预算伪装为可用。普通 Agent terminal source 不受 dispatch HTTP lease expiry 限制。

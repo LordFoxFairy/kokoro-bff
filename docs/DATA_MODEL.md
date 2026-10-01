@@ -1,3 +1,23 @@
+## BFF-SCHEDULED-D0：独立 execution scope、dispatch 与 session source ledger（2026-10-01；canonical schema 候选，fresh install 待 Root 验证）
+
+采用三表而非原两表草图。`bff_scheduled_agent_scope`以`(tenant_id,task_id)`为PK，保存稳定session/subject、可空且同空同非空的`active_dispatch_id/active_run_id`、session级`source_high_watermark`及consumer lease/fence/poll/failure。它不对会被物理删除的`bff_scheduled_task`建FK；task删除后仍是head/cursor恢复锚点。
+
+`bff_scheduled_agent_dispatch`冻结occurrence与launch identity，生命周期`pending|leased|retryable|admitted|terminal|failed`，包含sticky unknown、lease/fence/attempt/backoff/timestamps。唯一 `(tenant,task,occurrence)`、`(tenant,task,idempotency_key)`、`(tenant,run)`。三表一律不建 `FOREIGN KEY`/`REFERENCES`；scope存在、身份/active一致与orphan防护由同事务scope锁后predicate维护。固定九位`occurrence_order_key`保持纳秒排序。scope无active时选已accepted最早row并固定；active A存在时迟到更早B不得替换，A释放后才参与剩余排序。
+
+`bff_scheduled_agent_source_event`按session事实建模，主键`(tenant,task,source_sequence)`，唯一`(tenant,task,source_event_id)`，保存required `source_run_id`、owner/digest/time/kind/完整受信payload。cursor在scope而非dispatch/run。Agent Chat seq是session级；历史run、foreign run和不产生public frame的event仍连续落ledger。仅精确active run terminal改变dispatch/scope；identity/digest/gap/混批错误全rollback。
+
+锁序callback为receipt→task→scope→dispatch；worker为scope→dispatch→source。delete维持task→Scheduler outbox→物理DELETE且不碰scope，故无反锁。callback先锁task并commit后，后续delete不影响accepted执行；delete先commit则callback拒绝。pause/delete不级联、不取消或释放已接纳head。canonical fresh schema建CHECK/partial indexes，不建migration/兼容层/跨ownerSQL；锁后`clock_timestamp()`做lease CAS。TTL/最终scope回收未裁决，当前不purge。
+
+### R25-P1 terminal drain anchor 与最终CAS
+
+`bff_scheduled_agent_source_event.source_digest`写入前必须由repository基于完整`source_payload`使用唯一canonical JSON（对象键递归排序、数组保序）重算SHA-256并匹配；错误digest、重复sequence或event-id碰撞均使整批事务回滚，不推进scope cursor、不改变active dispatch。
+
+不新增表、列、索引或外键。`bff_scheduled_agent_dispatch.status='terminal'`可以在source session尚未drain时继续被`bff_scheduled_agent_scope.active_dispatch_id/active_run_id`引用；这不是可执行head，而是唯一drain anchor。consumer candidate必须包含该terminal anchor。`source_high_watermark`逐页连续推进，只有本次合法页`exhausted=true`且active dispatch已terminal时才原子清空active tuple。任何同active post-terminal source、duplicate/gap/id/digest/run冲突使整页与cursor/marker更新回滚。
+
+锁序保持scope→dispatch→source。claim/consumer lease在锁后取DB时钟，写lease后、COMMIT前再取同连接最终DB时钟并核预算；不足则ROLLBACK。已提交但尚未网络I/O的lease通过token/fence CAS做never-sent release；该路径永不清active/head；`admission_unknown_seen`无论真假均原值保持，consumer lease清理不受dispatch unknown标记限制。无新DDL，fresh schema仍是唯一事实源。
+
+R25数据库测试必须使用真实多连接及精确`pg_blocking_pids`，并覆盖非零cursor N→N+1、terminal跨页/restart drain、callback/delete双赢家、故障注入原子rollback、冲突批零写、expired/never-sent CAS以及多scope并行而同scope单租约。
+
 ## BFF-FIFO-ATOMIC：terminal-gated Conversation queue 目标数据模型（2026-10-01；源码与真实PG门已验证）
 
 `lease_until` 判定使用目标行锁之后、同连接读取的单一 PostgreSQL `clock_timestamp()` 值；事务起点时钟不得用于跨锁等待的 expiry 判断。claim 只有在提交前数据库观测剩余预算大于零时才能返回，不使用最小 1ms 夹值。该规则不改变 terminal dispatch 的历史事实状态机。

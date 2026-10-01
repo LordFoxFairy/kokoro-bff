@@ -6,18 +6,13 @@ import type { RequestContext } from "../../domain/request-context.js"
 import { failure, ok } from "../../contracts/index.js"
 import type { BffBusinessStore } from "../../application/ports/bff-business-store.js"
 import type { SchedulerDispatchClaim, SchedulerDispatchResponse } from "../../application/ports/scheduler-dispatch-receipt-repository.js"
-import { agentIdentityHeaders, buildScheduledAgentLaunch } from "../../infrastructure/clients/agent/index.js"
+import { buildScheduledAgentLaunch } from "../../infrastructure/clients/agent/index.js"
 import { schedulerDispatchDigest, schedulerDispatchScope, schedulerOccurrenceIdentity } from "../../infrastructure/clients/scheduler/dispatch-identity.js"
 import { schedulerScheduleName } from "../../infrastructure/clients/scheduler/schedule.js"
 import { parseSchedulerDispatchWebhook } from "../../infrastructure/clients/scheduler/webhook-contract.js"
-import { normalizeUpstreamResponse } from "../../infrastructure/clients/upstream-response.js"
-import { proxyUpstream } from "../../upstream.js"
 import type { IdempotencyEntry } from "../../application/idempotency.js"
-import { dataOf } from "../../application/projections.js"
 import { send } from "../response.js"
-import { headerString, incomingHeaders, readBody, requestBodyJson, requestId } from "../request.js"
-
-const SCHEDULER_RECEIPT_SETTLEMENT_RESERVE_MS = 5_000
+import { headerString, readBody, requestBodyJson, requestId } from "../request.js"
 
 export function scheduledTaskId(context: RequestContext, path: string, key: string): string {
   const material = JSON.stringify([context.identity.namespace, context.identity.userId, path, key])
@@ -184,6 +179,7 @@ export async function schedulerDispatch(
       idempotencyKey: wire.idempotencyKey,
       actorId: record.ownerId,
       taskId,
+      taskRevision: record.task.revision,
       launch: { requestId: wire.requestId, ...launch },
     }
     const prepared = await receipts.prepareSnapshot(claim, snapshot)
@@ -194,69 +190,13 @@ export async function schedulerDispatch(
     claim = { ...claim, ...prepared, snapshot }
   }
 
-  const agentUrl = config.upstreams.agents ?? null
-  if (!config.agentEnabled || agentUrl === null) {
-    if (await receipts.releaseRetryable(claim, "agent_not_configured"))
-      send(response, 503, failure("agent_not_configured", "Agent upstream is not configured", responseRequestId))
-    else send(response, 503, failure("scheduler_receipt_claim_lost", "Scheduler dispatch receipt claim was lost", responseRequestId))
+  const dispatch = businessStore.scheduledAgentDispatch
+  if (dispatch === undefined) {
+    await releaseUnknown(response, receipts, claim, responseRequestId, "business_store_unavailable", "The BFF business store is unavailable")
     return true
   }
-  const timeoutBudgetMs = Math.floor(claim.leaseRemainingMs - (performance.now() - claim.leaseObservedAt) - SCHEDULER_RECEIPT_SETTLEMENT_RESERVE_MS)
-  if (timeoutBudgetMs < 1) {
-    await releaseUnknown(
-      response,
-      receipts,
-      claim,
-      responseRequestId,
-      "scheduler_lease_budget_exhausted",
-      "Scheduler dispatch receipt lease cannot safely admit Agent I/O",
-    )
-    return true
-  }
-  try {
-    const upstream = await proxyUpstream(
-      config,
-      agentUrl,
-      "/v1/runs",
-      "POST",
-      snapshot.launch.requestId,
-      incomingHeaders(request),
-      Buffer.from(JSON.stringify(snapshot.launch.body)),
-      agentIdentityHeaders({ namespace: snapshot.tenantId, userId: snapshot.actorId }, snapshot.launch.identityAssertionRef),
-      "kokoro-bff",
-      config.upstreamSecret,
-      timeoutBudgetMs,
-    )
-    const result = normalizeUpstreamResponse(upstream, snapshot.launch.requestId)
-    if (result.status >= 500 || result.status === 408 || result.status === 425 || result.status === 429) {
-      await releaseUnknown(response, receipts, claim, responseRequestId, "agent_response_unknown", "The Agent launch result is unknown")
-      return true
-    }
-    if (result.status >= 400) {
-      await settle(response, receipts, claim, { status: result.status, body: result.body }, responseRequestId)
-      return true
-    }
-    const data = dataOf(result.body)
-    if (data === null || data.run_id !== snapshot.launch.receipt.run_id) {
-      await releaseUnknown(
-        response,
-        receipts,
-        claim,
-        responseRequestId,
-        "upstream_response_invalid",
-        "Scheduled Agent launch receipt did not match the requested run",
-      )
-      return true
-    }
-    await settle(
-      response,
-      receipts,
-      claim,
-      { status: 202, body: ok({ task_id: snapshot.taskId, run_id: snapshot.launch.receipt.run_id }, responseRequestId) },
-      responseRequestId,
-    )
-  } catch {
-    await releaseUnknown(response, receipts, claim, responseRequestId, "agent_unreachable", "The configured Agent upstream is unavailable")
-  }
+  const accepted = { status: 202, body: ok({ task_id: snapshot.taskId, run_id: snapshot.launch.receipt.run_id }, responseRequestId) }
+  if (await dispatch.accept({ claim, snapshot, response: accepted })) send(response, accepted.status, accepted.body)
+  else send(response, 503, failure("scheduler_receipt_claim_lost", "Scheduler dispatch receipt claim was lost", responseRequestId))
   return true
 }

@@ -5,6 +5,7 @@ export type SchedulerDispatchSnapshot = {
   idempotencyKey: string
   actorId: string
   taskId: string
+  taskRevision: number
   launch: {
     requestId: string
     body: Record<string, unknown>

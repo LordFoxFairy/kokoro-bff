@@ -37,6 +37,8 @@ function parseSnapshot(value: unknown): SchedulerDispatchSnapshot | null {
     !isString(value.idempotencyKey) ||
     !isString(value.actorId) ||
     !isString(value.taskId) ||
+    !Number.isSafeInteger(value.taskRevision) ||
+    (value.taskRevision as number) < 1 ||
     !isRecord(value.launch) ||
     !isString(value.launch.requestId) ||
     !isRecord(value.launch.body) ||

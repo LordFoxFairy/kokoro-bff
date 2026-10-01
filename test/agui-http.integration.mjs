@@ -172,8 +172,20 @@ integrationTest("serves live and restarted replay only from the tenant-scoped Po
     await admissionStore.ready()
     await admissionStore.agUiConsumers.registerConsumer("tenant_a", "session_live", "user_integration", "run_1")
     const eventRequests = []
+    const launchRequests = []
     agent = createServer((request, response) => {
       response.setHeader("content-type", "application/json")
+      if (request.url === "/v1/runs" && request.method === "POST") {
+        const chunks = []
+        request.on("data", (chunk) => chunks.push(Buffer.from(chunk)))
+        request.on("end", () => {
+          const body = JSON.parse(Buffer.concat(chunks).toString("utf8"))
+          launchRequests.push({ body, tenant: request.headers["x-kokoro-tenant-ref"], subject: request.headers["x-kokoro-subject-ref"], assertion: request.headers["x-kokoro-identity-assertion-ref"] })
+          response.statusCode = 202
+          response.end(JSON.stringify({ data: { run_id: body.run_id, session_id: body.session_id, replayed: false }, meta: { request_id: request.headers["x-request-id"] ?? body.request_id } }))
+        })
+        return
+      }
       if (request.url?.includes("/events") && request.method === "GET") {
         const url = new URL(request.url, "http://agent.local")
         const afterSequence = Number(url.searchParams.get("after_seq") ?? "0")
@@ -237,13 +249,26 @@ integrationTest("serves live and restarted replay only from the tenant-scoped Po
       requestId: "request_run_2", idempotencyKey: "turn_run_2", content: "Second run",
     })
     assert.ok(secondTurn)
-    const [secondClaim] = await admissionStore.agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: "worker_http_run_2", limit: 1, leaseDurationMs: 5000, maxAttempts: 8 })
-    assert.equal(secondClaim.runId, secondTurn.run_id)
-    assert.equal(await admissionStore.agentDispatchOutbox.markAgentDispatchAdmitted(secondClaim), true)
-    await pool.query(`UPDATE bff_agui_stream SET latest_run_id = $1 WHERE tenant_id = 'tenant_a' AND session_id = 'session_live'`, [secondTurn.run_id])
-    const runningDetail = await fetch(`${base}/v1/sessions/session_live`, { headers: auth("tenant_a") })
-    assert.equal(runningDetail.status, 200)
-    assert.deepEqual((await runningDetail.json()).data.active_run, { run_id: secondTurn.run_id, status: "running" })
+    const admissionDeadline = Date.now() + 3000
+    let admitted = false
+    while (!admitted && Date.now() < admissionDeadline) {
+      const result = await pool.query("SELECT status FROM bff_agent_dispatch_outbox WHERE tenant_id='tenant_a' AND conversation_id='session_live' AND run_id=$1", [secondTurn.run_id])
+      admitted = result.rows[0]?.status === "admitted"
+      if (!admitted) await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+    assert.equal(admitted, true)
+    assert.equal(launchRequests.length, 1)
+    assert.equal(launchRequests[0].body.run_id, secondTurn.run_id)
+    assert.equal(launchRequests[0].body.session_id, "session_live")
+    assert.equal(launchRequests[0].tenant, "tenant_a")
+    assert.equal(launchRequests[0].subject, "user_integration")
+    assert.match(launchRequests[0].assertion, /^bff:[0-9a-f]{64}$/u)
+    const streamMarker = await pool.query("SELECT expected_run_id,latest_run_id FROM bff_agui_stream WHERE tenant_id='tenant_a' AND session_id='session_live'")
+    assert.equal(streamMarker.rows[0].expected_run_id, secondTurn.run_id)
+    assert.equal(streamMarker.rows[0].latest_run_id, "run_1")
+    const admittedDetail = await fetch(`${base}/v1/sessions/session_live`, { headers: auth("tenant_a") })
+    assert.equal(admittedDetail.status, 200)
+    assert.equal((await admittedDetail.json()).data.active_run, undefined)
     events.push(
       { chat_event_id: "source_run_2", session_id: "session_live", run_id: secondTurn.run_id, source_index: 4, event_type: "run.started", payload_json: '{"status":"running"}', seq: 5, created_at: 5000 },
       { chat_event_id: "source_terminal_2", session_id: "session_live", run_id: secondTurn.run_id, source_index: 5, event_type: "run.completed", payload_json: '{"status":"completed","token_usage":null}', seq: 6, created_at: 6000 },
@@ -255,6 +280,8 @@ integrationTest("serves live and restarted replay only from the tenant-scoped Po
     const nextRunFrames = parseSse(await nextRun.text())
     assert.deepEqual(nextRunFrames.map((frame) => frame.event.type), ["RUN_STARTED", "RUN_FINISHED"])
     assert.ok(nextRunFrames.every((frame) => /^agui_[0-9a-f]{32}$/u.test(frame.id)))
+    const terminalMarker = await pool.query("SELECT expected_run_id,latest_run_id,terminal_run_id FROM bff_agui_stream WHERE tenant_id='tenant_a' AND session_id='session_live'")
+    assert.deepEqual(terminalMarker.rows, [{ expected_run_id: null, latest_run_id: secondTurn.run_id, terminal_run_id: secondTurn.run_id }])
 
     await close(bff)
     bff = null

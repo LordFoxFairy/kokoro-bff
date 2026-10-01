@@ -69,6 +69,7 @@ it("rejects legacy receipt envelopes and snapshots lacking explicit empty select
       idempotencyKey: "k",
       actorId: "a",
       taskId: "task",
+      taskRevision: 1,
       launch: {
         requestId: "r",
         body: { selected_skill_source_refs: [] },

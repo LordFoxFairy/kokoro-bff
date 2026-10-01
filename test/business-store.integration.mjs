@@ -123,18 +123,19 @@ integrationTest("keeps Project and ScheduledTask facts private to the trusted su
   let bff
   try {
     await pool.query(
-      "DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_scheduled_task_outbox, bff_scheduled_task, bff_project_task, bff_idempotency_receipt, bff_project_instruction_revision, bff_project_skill, bff_project CASCADE",
+      "DROP TABLE IF EXISTS bff_scheduled_agent_source_event, bff_scheduled_agent_dispatch, bff_scheduled_agent_scope, bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_scheduled_task_outbox, bff_scheduled_task, bff_project_task, bff_idempotency_receipt, bff_project_instruction_revision, bff_project_skill, bff_project CASCADE",
     )
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await redis.connect()
     bff = createBffServer(bffConfig({ tenantId: tenant }), { sessionAdmission })
     const base = await listen(bff)
 
-    const createProject = async (owner, key) => fetch(`${base}/v1/projects`, {
-      method: "POST",
-      headers: { ...auth(tenant, owner), "content-type": "application/json", "idempotency-key": key },
-      body: JSON.stringify({ name: "Private plan", description: owner }),
-    })
+    const createProject = async (owner, key) =>
+      fetch(`${base}/v1/projects`, {
+        method: "POST",
+        headers: { ...auth(tenant, owner), "content-type": "application/json", "idempotency-key": key },
+        body: JSON.stringify({ name: "Private plan", description: owner }),
+      })
     const projectAResponse = await createProject(ownerA, "project-a")
     assert.equal(projectAResponse.status, 200)
     const projectA = (await projectAResponse.json()).data.project
@@ -182,11 +183,12 @@ integrationTest("keeps Project and ScheduledTask facts private to the trusted su
       next_run_at: "2026-09-01T08:00:00.000Z",
       auto_approve: false,
     })
-    const createScheduled = async (owner, projectId) => fetch(`${base}/v1/scheduled-tasks`, {
-      method: "POST",
-      headers: { ...auth(tenant, owner), "content-type": "application/json", "idempotency-key": "same-scheduled-key" },
-      body: JSON.stringify(scheduledPayload(projectId)),
-    })
+    const createScheduled = async (owner, projectId) =>
+      fetch(`${base}/v1/scheduled-tasks`, {
+        method: "POST",
+        headers: { ...auth(tenant, owner), "content-type": "application/json", "idempotency-key": "same-scheduled-key" },
+        body: JSON.stringify(scheduledPayload(projectId)),
+      })
     const taskAResponse = await createScheduled(ownerA, projectA.id)
     const taskBResponse = await createScheduled(ownerB, projectB.id)
     assert.equal(taskAResponse.status, 200)
@@ -206,7 +208,10 @@ integrationTest("keeps Project and ScheduledTask facts private to the trusted su
     assert.equal(storedSlugTask.rows[0].project_id, projectA.id)
 
     const ownerBTasks = await fetch(`${base}/v1/scheduled-tasks`, { headers: auth(tenant, ownerB) })
-    assert.deepEqual((await ownerBTasks.json()).data.tasks.map((task) => task.id), [taskB.id])
+    assert.deepEqual(
+      (await ownerBTasks.json()).data.tasks.map((task) => task.id),
+      [taskB.id],
+    )
     const crossTenantTasks = await fetch(`${base}/v1/scheduled-tasks`, { headers: auth(crossTenant, ownerA) })
     await assertTenantForbidden(crossTenantTasks)
 
@@ -259,7 +264,7 @@ integrationTest("persists BFF facts, registers Scheduler, and replays Agent disp
   let bff
   try {
     await schemaPool.query(
-      "DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_scheduled_task_outbox, bff_scheduled_task, bff_project_task, bff_idempotency_receipt, bff_project_instruction_revision, bff_project_skill, bff_project CASCADE",
+      "DROP TABLE IF EXISTS bff_scheduled_agent_source_event, bff_scheduled_agent_dispatch, bff_scheduled_agent_scope, bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_scheduled_task_outbox, bff_scheduled_task, bff_project_task, bff_idempotency_receipt, bff_project_instruction_revision, bff_project_skill, bff_project CASCADE",
     )
     await schemaPool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await redis.connect()
@@ -286,6 +291,17 @@ integrationTest("persists BFF facts, registers Scheduler, and replays Agent disp
     schedulerBase = await listen(scheduler)
 
     const agent = createServer((request, response) => {
+      if (request.method === "GET" && request.url?.startsWith("/v1/sessions/")) {
+        const after = Number(new URL(request.url, "http://agent.test").searchParams.get("after_seq") ?? "0")
+        response.setHeader("content-type", "application/json")
+        response.end(
+          JSON.stringify({
+            data: { events: [], next_seq: after, watermark: after },
+            meta: { request_id: request.headers["x-request-id"] ?? "scheduled-source" },
+          }),
+        )
+        return
+      }
       const chunks = []
       request.on("data", (chunk) => chunks.push(Buffer.from(chunk)))
       request.on("end", () => {
@@ -367,7 +383,8 @@ integrationTest("persists BFF facts, registers Scheduler, and replays Agent disp
       body: JSON.stringify(dispatchBody),
     })
     assert.equal(dispatched.status, 202)
-    assert.equal(agentCalls.length, 1)
+    assert.equal(agentCalls.length, 0)
+    await waitFor(() => agentCalls.length === 1)
     assert.equal(agentCalls[0].authorization, "Bearer bff-secret")
     assert.equal(agentCalls[0].service, "kokoro-bff")
     assert.equal(agentCalls[0].tenant, namespace)

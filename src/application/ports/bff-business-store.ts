@@ -6,6 +6,7 @@ import type { ScheduledTaskOutboxRepository } from "./scheduled-task-outbox-repo
 import type { AgentDispatchOutboxRepository } from "./agent-dispatch-outbox-repository.js"
 import type { AgentCancellationOutboxRepository } from "./agent-cancellation-outbox-repository.js"
 import type { SchedulerDispatchReceiptRepository } from "./scheduler-dispatch-receipt-repository.js"
+import type { ScheduledAgentDispatchRepository } from "./scheduled-agent-dispatch-repository.js"
 
 export type ArtifactAssociation = Readonly<{
   conversationId: string
@@ -39,6 +40,8 @@ export interface BffBusinessStore extends IdempotencyRepository {
   readonly agentCancellationOutbox?: AgentCancellationOutboxRepository
   /** Scheduler event-protocol receipt state; separate from public mutation receipts. */
   readonly schedulerDispatchReceipts?: SchedulerDispatchReceiptRepository
+  /** ScheduledTask-owned terminal-gated Agent queue. */
+  readonly scheduledAgentDispatch?: ScheduledAgentDispatchRepository
   ready(): Promise<void>
   close(): Promise<void>
 }

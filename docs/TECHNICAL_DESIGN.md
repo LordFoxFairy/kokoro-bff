@@ -1,3 +1,79 @@
+## BFF-SCHEDULED-D0：ScheduledTask 自有 terminal-gated dispatch 设计门（2026-10-01；源码候选，真实 PostgreSQL 待 Root 验证）
+
+### 当前事实与目标边界
+
+当前 Scheduler callback 以 occurrence 的幂等 key 领取 `bff_idempotency_receipt`，冻结 launch snapshot 后在 HTTP 请求内直接调用 Agent；匹配的 2xx 随即把 receipt 固化为 202。该 202 只证明一次 Agent admission HTTP 成功，不是 Run terminal。不同 occurrence 使用不同 receipt 与 run id，却共享 `scheduled:<task_id>` session；上一 occurrence 已返回 202 但 Run 仍 active 时，下一 occurrence可以再次跨 Agent。Chat 的 Conversation/Message/outbox/AG-UI gate 不拥有 ScheduledTask，不得用隐藏 Conversation、伪 Message 或 public ledger 复用来掩盖缺口。
+
+现 `deleteScheduledTask` 在同事务先写Scheduler delete outbox、再物理 `DELETE bff_scheduled_task`；目标不得偷改为soft-delete。执行串行身份因此由独立 `bff_scheduled_agent_scope` 持久锚定，task删除后scope/head/cursor仍可恢复，且不对task建FK。BFF ScheduledTask capability唯一拥有该scope、dispatch与Agent Chat source terminal内部ledger。callback原子冻结snapshot、创建scope/入队并固化receipt202；后台复用现runtime生命周期，不新增进程、Redis权威事实、公开协议或Agent wire。只有受信durable terminal或确认从未跨Agent的failed释放active。Agent4 scope未来是第二道防线，不是当前实现前置，也不猜测未发布busy code。
+
+### Root AGENTS 第 8 节放置表
+
+| 项                | 结论                                                                                                                                                                                                                                     |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner             | `kokoro-bff` ScheduledTask capability唯一写scheduled execution scope/head/source ledger；Scheduler仍拥有occurrence/outbox，Agent仍拥有Run与session级Chat source。                                                                        |
+| 当前事实          | receiver `src/http/routes/scheduler.ts`；receipt现port/repository；task delete在`scheduled-task-repository.ts`物理删row；Agent reader从`/v1/sessions/{session}/events`读取session级连续seq。现callback内Agent I/O且无跨occurrence head。 |
+| 目标职责          | callback只验证并原子持久接纳；scope保存task删除后仍稳定的active identity与session cursor；dispatcher发送scope active或最早待选row；terminal consumer无过滤地连续记录session source并只以精确active run terminal释放。                    |
+| 目录方案A（淘汰） | 扩展Chat outbox/AG-UI：强迫Scheduled伪造Conversation/Message或污染public ledger。                                                                                                                                                        |
+| 目录方案B（不足） | 仅dispatch+source两表并每次锁`bff_scheduled_task`：task物理删除后没有稳定门，restart worker无法证明同task active/head；per-run cursor也会错误跳过同session历史。                                                                         |
+| 目录方案C（采用） | Scheduled专用scope anchor + dispatch + session source ledger三表；scope `(tenant,task)` 唯一、无task FK，保存active dispatch/run及session cursor/consumer lease。位于现Scheduled capability，不新一级模块/进程。                         |
+| 粒度              | receipt repository继续管理callback claim；新增scheduled repository集中scope/head/source事务；launch runner与terminal runner分开，source adapter独立于AG-UI映射/过滤。                                                                    |
+| 依赖              | domain/application不importPG/HTTP/generated；adapter实现port。禁止Agent DB、跨owner SQL、Chat repository、Redis head或公开AG-UI投影。                                                                                                    |
+| 数据/API          | canonical BFF SQL新增三表；public OpenAPI、Scheduler webhook、Agent3 wire不变。callback202=durable acceptance。                                                                                                                          |
+| 删除项            | 删除receiver同步Agent POST和按其响应settle路径；不保留双轨/fallback；task delete仍物理删除且现Scheduler delete outbox恢复不依赖新scope。                                                                                                 |
+| 验证              | 精确unit/integration/architecture/schema路径如下；真实PG双连接、restart、物理delete、session source分页/rollback；完整Node22门。                                                                                                         |
+
+### canonical SQL、active与队列顺序
+
+`bff_scheduled_agent_scope`：`tenant_id,task_id`复合主键，稳定`session_id=scheduled:<task_id>`、`subject_id`，`active_dispatch_id/active_run_id`可空且同空同非空，session级`source_high_watermark`，consumer poll/lease/fence/failure字段及timestamps。无`bff_scheduled_task` FK。scope只由首次合法callback原子创建；重复必须精确subject/session一致。task物理删除不删除scope。
+
+`bff_scheduled_agent_dispatch`：`dispatch_id`、tenant/task、canonical occurrence、固定九位纳秒`occurrence_order_key`、冻结identity/request/idempotency/digest/run/payload、状态`pending|leased|retryable|admitted|terminal|failed`、sticky unknown、lease/fence/attempt/backoff与时点。三张正式表均不使用 `FOREIGN KEY`/`REFERENCES`；scope存在、身份一致、active引用与orphan防护都在同一事务先锁scope后重验。唯一 `(tenant,task,occurrence)`、`(tenant,task,idempotency_key)`、`(tenant,run)`。ready/lease/head partial indexes使用tenant/task/order/id。
+
+scope的active身份与待选排序分离：无active时，在scope锁下从已持久接纳的nonterminal rows按`(occurrence_order_key,dispatch_id)`选最早并原子固定`active_dispatch_id/run_id`；一旦A已leased/admitted/unknown，后来才到达且时间更早的B只能入队，绝不替换A。A terminal/确定never-admitted failed清active；下一次再从剩余accepted rows按纳秒顺序选择。该规则承认协议边界：不为尚未到达BFF的任意更早occurrence无限等待，但不会让迟到row抢占已经固定的active。
+
+`occurrence_order_key`由已验证RFC3339Nano UTC构造固定`YYYY-MM-DDTHH:mm:ss.nnnnnnnnnZ`，不降为PG微秒/JS毫秒。Scheduler正常`overlap=forbid`不会并发投不同open occurrence；BFF仍严格排序已accepted集合。
+
+### session级source cursor与ledger
+
+Agent endpoint返回整个`scheduled:<task_id>` session的连续seq，不是per-run流。`bff_scheduled_agent_source_event`以`(tenant_id,task_id,source_sequence)`为主身份，并唯一约束同scope `source_event_id`；保存`source_run_id`（required nonempty）、owner、digest、occurred_at、event kind及完整受信payload。scope的`source_high_watermark`是session级唯一cursor。
+
+新增精确adapter `src/infrastructure/clients/agent/scheduled-terminal-source.ts`：复用现HTTP envelope与`classifyAgentEventPage`的session/连续seq校验，但不调用`mapAgentEvent`，不做AG-UI kind/frame过滤；每一source在任何业务判断前保留`run_id/event_id/seq/payload`。terminal repository先按session cursor写完整page：历史run、active run、零public-frame kind都lossless入ledger。只有`sourceRunId===scope.active_run_id`且严格terminal payload才结算active；foreign/historical terminal只推进合法session ledger，绝不改active。event identity/digest冲突、gap或混批任一错误整批回滚cursor/ledger/dispatch。
+
+### 事务、锁序、delete与恢复
+
+锁序：callback receipt→task row（验证仍存在/active/frozen）→scope→dispatch；delete保持现task→Scheduler control outbox后物理删除，永不触碰execution scope，因此无反向锁。worker统一scope→dispatch按order→source按seq；不反锁task/receipt。callback与delete竞争由task row决定：callback先锁并commit则occurrence已接纳且随后delete不影响；delete先commit则callback找不到task并按现错误拒绝。
+
+callback enqueue+receipt202同事务；回滚同生同灭。相同scope/digest重放202不重复；冲突409。pause/delete只阻止未来callback/未来Scheduler注册，已accepted的pending/leased/retryable/admitted不删除、不failed、不取消、不释放。现Scheduler delete outbox仍由其独立表快照恢复，和新scope无FK/调用依赖。
+
+pending/leased/retryable/admitted都阻塞后继。strict 2xx仅admitted。timeout/连接中断/5xx/408/425/429/坏2xx/expired lease置sticky unknown，同run/request/key恢复；unknown后4xx不能证明历史未接纳。仅send前失败或owner明确且从未unknown的not-admitted可failed清active。terminal可早于ACK；late settlement因token/fence/status不符no-op。重启扫描scope active、pending/retryable/expired leased、admitted due poll；Redis仅wakeup。外部HTTP不持DB锁。
+
+terminal/failed dispatch、scope、source与receipt保留用于审计/重放。TTL和task物理删除后的最终引用释放未裁决；D1-D3不purge、不cascade、不回收scope。
+
+### 精确实现文件集
+
+现文件：`database/schema.sql`；`src/http/routes/scheduler.ts`；`src/bootstrap/runtime.ts`；`src/infrastructure/postgres/{repositories.ts,scheduler-dispatch-receipt-repository.ts}`；`src/application/ports/{bff-business-store.ts,scheduler-dispatch-receipt-repository.ts}`；`src/infrastructure/clients/agent/{index.ts,http-wire.ts,projection.ts}`仅在抽取无过滤page parser确有必要时修改；`test/{scheduler.test.ts,scheduler-dispatch-receipt.integration.mjs,business-store.integration.mjs,schema-governance.test.mjs,architecture.test.ts,agent-http-wire.test.mjs}`；本四docs。
+
+Root批准后新增：`src/domain/scheduled-task/agent-dispatch.ts`；`src/application/ports/scheduled-agent-dispatch-repository.ts`；`src/application/scheduled-agent-dispatcher.ts`；`src/application/scheduled-agent-terminal-consumer.ts`；`src/infrastructure/postgres/scheduled-agent-dispatch-repository.ts`；`src/infrastructure/clients/agent/scheduled-terminal-source.ts`；`test/scheduled-agent-dispatch.test.ts`；`test/scheduled-agent-dispatch.integration.mjs`；`test/scheduled-agent-terminal-source.test.mjs`。无新依赖/generated/进程/顶层目录。
+
+### 真实 PostgreSQL RED→GREEN矩阵
+
+1. 同occurrence双callback：同digest一dispatch/同202，冲突全rollback。2. enqueue/receipt finalize故障同生同灭。3. scope首次创建与物理task delete竞争：callback先赢则delete后scope/head仍恢复；delete先赢则无queue；Scheduler delete outbox照常恢复。4. 无active时纳秒反序accepted rows选最早。5. 已固定A leased/admitted时迟到更早B不替换A；A结算后B才可成为active。6. claim↔claim、terminal A↔next claim用精确backend PID barrier，单赢家无死锁。7. session已有old run seq1..N，新active从N继续；不从1/per-run重置。8. 一页交错historical/active/foreign run与零frame kinds全部ledger，只有active terminal释放。9. duplicate/gap/event或run identity冲突/混批整批回滚scope cursor、ledger、dispatch。10. unknown/expired同run/key恢复，unknown后4xx不释放；never-sent只fenced结束本次lease，保持active与sticky unknown并以同run/key重试。11. terminal早于ACK及late settlement no-op。12. pause/delete与pending/admitted并发不取消不释放；restart无task row仍poll/terminal/next。13. 两scope无全局HOL。14. Redis通知丢失仍由PG scan收敛。15. 无purge时无孤立source，未来purge须先裁决引用。
+
+### R25-P1 返修冻结：跨页 drain、最终预算、并行与可观测性
+
+R26补充唯一source digest表示：`src/application/scheduled-source-event-digest.ts`对递归排序对象键后的JSON计算SHA-256，source adapter与repository共同调用；repository在任何ledger写入前重算并比较，不保留client侧旧算法或alias。格式正确但内容错误的64位hex、重复sequence及event-id碰撞均须整批零写。
+
+R24 的51项真实PG矩阵只证明当时用例通过，不关闭独立复审发现的五组P1。R25仍沿现Scheduled capability、三表、两个runner与两个port收口，不新增进程、公开/owner wire、目录、依赖或兼容层。精确代码面限定现文件：`scheduled-agent-dispatch-repository.ts`、两个scheduled runner、两个scheduled port、`runtime.ts`及现三个scheduled tests/已授权integration fixtures。
+
+terminal source采用两阶段drain：page内识别active terminal后，dispatch先持久为terminal但scope继续保存该dispatch/run作为drain anchor；`exhausted=false`绝不清active。consumer允许terminal anchor继续按session cursor读取后续page，跨页foreign/history/零frame全部lossless；同active run在terminal后的source仍整批拒绝。只有受信连续页`exhausted=true`且本scope已有terminal anchor时，才在同事务清active并允许下一head；重启时即使无后继也从terminal anchor继续drain。
+
+claim与consumer claim在COMMIT前必须同连接再次读取`clock_timestamp()`并以最初monotonic observation扣除查询/事务/reserve；预算不足回滚，不提交lease。COMMIT后到runner网络前若预算耗尽，调用Scheduled私有port的fenced `releaseNeverSent`，只对当前lease token/fence并只结束本次nonce/fence lease，恢复同run/key retryable而不伪造新的unknown；历史`admission_unknown_seen`保持sticky，never-sent不得清active/head；真正开始I/O后的timeout/坏响应继续sticky unknown，late CAS保持no-op。
+
+runner在单进程内使用有界scope worker pool：每轮最多`concurrency`个并行claim/执行任务，repository的scope锁与active lease仍保证同scope串行；慢scope A不阻塞B。`stop()`停止新claim并等待当前有限任务drain，不创建无限Promise/interval任务。repository/runner周期错误不得空catch；用runtime注入的正式结构化log hook记录operation/result/error_code/attempt/backoff，不记录payload/token。周期失败按有界指数退避+jitter恢复。
+
+所有`workerId/pollIntervalMs/leaseDurationMs/maxAttempts/pageSize/concurrency/retryBaseMs/retryMaxMs/retryJitterPercent/settlementReserveMs`在构造时做精确类型、safe integer、非空、上限及关系校验；`leaseDurationMs > settlementReserveMs`，page/concurrency有固定有限上限，jitter后的delay仍不超过max。
+
+R25真实RED→GREEN必须分别覆盖：enqueue与receipt在故障注入下同回滚；callback↔delete两个锁赢家；精确backend PID的claim/terminal/consumer barrier；非零N cursor到N+1；active terminal在非末页、跨页foreign与最终exhausted释放；duplicate/gap/event id/digest/run冲突整批零写；expired lease与COMMIT后never-sent release；两个scope中慢A不挡B且同scope单赢家；周期repository失败被记录并按有界退避，stop完整drain。
+
 ## BFF-FIFO-ATOMIC：Conversation terminal-gated dispatch 设计门（2026-10-01；源码与真实PG门已验证）
 
 租约时钟规则：所有可能等待行锁的 dispatch/consumer claim、续租与结算，先取得目标行锁，再在同一连接读取一次 PostgreSQL `clock_timestamp()` 作为该次决定的唯一 `db_now`，最终 CAS 以参数比较 expiry。claim 在返回前再次以数据库时钟确认剩余预算严格大于零；零预算回滚且不返回。terminal projection 只验证 durable run/subject/head/fence，不错误附加 HTTP dispatch lease expiry。

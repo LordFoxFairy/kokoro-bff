@@ -1,3 +1,23 @@
+## BFF-SCHEDULED-D0：内部 durable acceptance 与 terminal gate（2026-10-01；内部源码候选，真实 PostgreSQL 待 Root 验证）
+
+public Product OpenAPI、Scheduler webhook与Agent3 launch/session-events wire不变。`POST /internal/bff/scheduled-tasks/dispatch`的202收敛为：BFF已在同事务保存冻结occurrence snapshot、execution scope/dispatch及幂等结果；不表示Agent admitted、Run started或terminal。重放同scope+digest返回同202且不重复入队；冲突仍409。
+
+receiver不再同步代理Agent。内部worker只发送scope已固定active；无active时从已accepted rows按RFC3339Nano固定九位key选最早。一旦A固定，迟到的更早B只排队、不能抢占A。Agent2xx只admitted；terminal来自`/v1/sessions/{scheduled:<task>}/events`的session级连续source。reader保存所有事件的sourceRunId/seq/id/payload后才判断；只有精确active run terminal释放，历史/foreign事件只推进合法cursor。
+
+现task delete仍物理删除；独立scope无task FK并继续恢复已202 occurrence。pause/delete不取消、不failed、不释放已accepted/admitted head，只阻止未来接纳。现Scheduler delete outbox语义不变。unknown固定同run/key恢复；只有明确never-admitted失败释放。Agent4非前置，未发布busy code不进入分支。
+
+callback自身同claim处理中仍425，基础设施503，身份/shape400/401，幂等冲突409。202后异步结果不改写receipt。无新增Scheduled run public查询/取消协议；scope/dispatch/source ledger均internal。
+
+### R25-P1 内部状态与响应边界
+
+Scheduled session source的`source_digest`是内部完整性字段：唯一表示为递归键排序JSON的SHA-256；adapter生成与repository重算必须使用同一application ledger helper，格式正确但内容不匹配的64位hex同样整页拒绝且cursor/ledger/dispatch零写。此项不新增或改变公开/owner wire。
+
+公开Product API、Scheduler callback及Agent3 wire均不变；`202`仍只表示BFF已durable acceptance。内部Scheduled状态新增明确的drain语义：active terminal在source尚未exhausted时只把dispatch记为terminal，scope active identity继续作为session drain anchor；后续合法foreign/history/零frame page继续推进cursor。只有连续source页确认`exhausted=true`才释放scope并允许下一dispatch。该内部状态不新增public字段。
+
+网络前预算耗尽不是Agent admission unknown。Scheduled私有repository port提供fenced never-sent release；它要求当前owner/token/fence且未开始I/O，失败或late调用为no-op；历史`admission_unknown_seen`保持sticky，但不妨碍结束这次确定未发送的lease并以同run/key重试，绝不清active/head。开始I/O后的timeout、5xx、坏2xx仍按sticky unknown恢复同run/key。public `active_run`仍只在受信`RUN_STARTED`后可见；本片不新增queued/inflight public identity。
+
+R24的51项真实PG结果为历史候选证据，并未覆盖上述P1故障注入与跨页状态，因此R25完成前不得称完整Scheduled gate验收。
+
 ## BFF-FIFO-ATOMIC：内部 Conversation gate，不改变 public 3.0.0（2026-10-01；源码与真实PG门已验证）
 
 内部 lease/fence 不采用调用方时间。实现须在目标行锁之后读取同连接数据库实时时钟，以该 `db_now` 完成 expiry CAS；锁等待跨过 expiry 的 ACK、unknown、not-admitted、consumer renew/settle 均为 no-op，projection consumer commit 为 lease conflict 且整批回滚。Agent durable terminal 仍可在 HTTP lease 结束后提交。

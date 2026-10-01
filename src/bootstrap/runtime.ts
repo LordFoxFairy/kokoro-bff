@@ -13,6 +13,10 @@ import { SchedulerOutboxDelivery } from "../infrastructure/clients/scheduler/out
 import { AgentOutboxDelivery } from "../infrastructure/clients/agent/outbox-delivery.js"
 import { AgentCancellationDelivery } from "../infrastructure/clients/agent/cancellation-delivery.js"
 import { AgentAgUiSourceReader } from "../infrastructure/clients/agent/projector-source.js"
+import { ScheduledAgentDispatcher } from "../application/scheduled-agent-dispatcher.js"
+import { ScheduledAgentTerminalConsumer } from "../application/scheduled-agent-terminal-consumer.js"
+import { ScheduledAgentDispatchDelivery } from "../infrastructure/clients/agent/scheduled-dispatch-delivery.js"
+import { ScheduledAgentTerminalSource } from "../infrastructure/clients/agent/scheduled-terminal-source.js"
 import { PostgresBffRepositories } from "../infrastructure/postgres/repositories.js"
 import type { RequestContext } from "../domain/request-context.js"
 import { SessionAdmissionClient } from "../auth/session-admission.client.js"
@@ -23,6 +27,11 @@ import { CatalogConnectClient } from "../infrastructure/clients/platform/catalog
 import { PersonalInstallationConnectClient } from "../infrastructure/clients/platform/personal-installation-connect.js"
 import { ProjectionCredentialSource } from "../infrastructure/clients/platform/projection-credential.js"
 import { ProjectionTokenSource } from "../infrastructure/clients/platform/projection-token.js"
+
+type ScheduledWorkerErrorEvent = { operation: string; result: "error"; errorCode: string; attempt: number; backoffMs: number }
+function scheduledWorkerLog(event: ScheduledWorkerErrorEvent): void {
+  process.stderr.write(`${JSON.stringify({ service: "kokoro-bff", ...event })}\n`)
+}
 
 export type BffRouteInput = {
   request: IncomingMessage
@@ -49,6 +58,8 @@ export type BffServerComposition = {
   scheduledTaskDispatcher?: ScheduledTaskOutboxDispatcher
   agentDispatchDispatcher?: AgentDispatchOutboxDispatcher
   agentCancellationDispatcher?: AgentCancellationOutboxDispatcher
+  scheduledAgentDispatcher?: ScheduledAgentDispatcher
+  scheduledAgentTerminalConsumer?: ScheduledAgentTerminalConsumer
   readiness: () => Promise<void>
   stopWorkers: () => Promise<void>
   close: () => Promise<void>
@@ -71,6 +82,8 @@ export type BffCompositionOptions = {
   scheduledTaskDispatcher?: ScheduledTaskOutboxDispatcher
   agentDispatchDispatcher?: AgentDispatchOutboxDispatcher
   agentCancellationDispatcher?: AgentCancellationOutboxDispatcher
+  scheduledAgentDispatcher?: ScheduledAgentDispatcher
+  scheduledAgentTerminalConsumer?: ScheduledAgentTerminalConsumer
   readiness?: () => Promise<void>
   close?: () => Promise<void>
   routeHandler?: BffRouteHandler
@@ -176,6 +189,26 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
       : new AgentCancellationOutboxDispatcher(businessStore.agentCancellationOutbox, new AgentCancellationDelivery(config), {
           workerId: `bff-agent-cancellation-${process.pid}-${randomUUID()}`,
         }))
+  const scheduledAgentDispatcher =
+    options.scheduledAgentDispatcher ??
+    (!config.agentEnabled || config.upstreams.agents === null || businessStore?.scheduledAgentDispatch === undefined
+      ? undefined
+      : new ScheduledAgentDispatcher(businessStore.scheduledAgentDispatch, new ScheduledAgentDispatchDelivery(config), {
+          workerId: `bff-scheduled-agent-${process.pid}-${randomUUID()}`,
+          concurrency: 4,
+          settlementReserveMs: 500,
+          onError: scheduledWorkerLog,
+        }))
+  const scheduledAgentTerminalConsumer =
+    options.scheduledAgentTerminalConsumer ??
+    (!config.agentEnabled || config.upstreams.agents === null || businessStore?.scheduledAgentDispatch === undefined
+      ? undefined
+      : new ScheduledAgentTerminalConsumer(businessStore.scheduledAgentDispatch, new ScheduledAgentTerminalSource(config, config.upstreams.agents as string), {
+          workerId: `bff-scheduled-terminal-${process.pid}-${randomUUID()}`,
+          concurrency: 4,
+          settlementReserveMs: 500,
+          onError: scheduledWorkerLog,
+        }))
   const agentBaseUrl = config.upstreams.agents ?? null
   const agUiProjector =
     options.agUiProjector ??
@@ -212,6 +245,8 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
       // Stop claimers first; stop() drains in-flight source reads and outbox
       // deliveries before their shared persistence connections are closed.
       await agUiProjector?.stop()
+      await scheduledAgentTerminalConsumer?.stop()
+      await scheduledAgentDispatcher?.stop()
       await agentCancellationDispatcher?.stop()
       await agentDispatchDispatcher?.stop()
       await scheduledTaskDispatcher?.stop()
@@ -238,6 +273,8 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     ...(scheduledTaskDispatcher === undefined ? {} : { scheduledTaskDispatcher }),
     ...(agentDispatchDispatcher === undefined ? {} : { agentDispatchDispatcher }),
     ...(agentCancellationDispatcher === undefined ? {} : { agentCancellationDispatcher }),
+    ...(scheduledAgentDispatcher === undefined ? {} : { scheduledAgentDispatcher }),
+    ...(scheduledAgentTerminalConsumer === undefined ? {} : { scheduledAgentTerminalConsumer }),
     readiness,
     stopWorkers,
     close,

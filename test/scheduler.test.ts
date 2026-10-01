@@ -242,7 +242,7 @@ describe("Scheduler receiver admission", () => {
     }
   })
 
-  it("caps slow Scheduler Agent I/O by remaining lease despite a 70s global timeout", async () => {
+  it("durably accepts without performing Agent I/O in the callback", async () => {
     let agentCalls = 0
     const agent = createServer((_request, response) => {
       agentCalls += 1
@@ -260,6 +260,7 @@ describe("Scheduler receiver admission", () => {
     const store = {
       services: { scheduledTasks: { findRecord: async () => null } },
       schedulerDispatchReceipts: receipts,
+      scheduledAgentDispatch: { accept: async () => true },
       ready: async () => undefined,
       close: async () => undefined,
     }
@@ -268,8 +269,8 @@ describe("Scheduler receiver admission", () => {
     try {
       const startedAt = Date.now()
       const result = await fetch(`${base}/internal/bff/scheduled-tasks/dispatch`, { method: "POST", headers: dispatchHeaders(), body: dispatchBody() })
-      assert.equal(result.status, 502)
-      assert.equal(agentCalls, 1)
+      assert.equal(result.status, 202)
+      assert.equal(agentCalls, 0)
       assert.ok(Date.now() - startedAt < 900)
     } finally {
       await close(bff)
