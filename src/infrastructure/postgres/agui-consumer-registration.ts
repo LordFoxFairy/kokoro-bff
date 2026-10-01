@@ -80,7 +80,10 @@ export function agUiConsumerRegistration(
              consumer_next_poll_at = LEAST(bff_agui_stream.consumer_next_poll_at, CURRENT_TIMESTAMP(3)),
              updated_at = CURRENT_TIMESTAMP(3)
        WHERE bff_agui_stream.consumer_subject_id IS NULL
-          OR bff_agui_stream.consumer_subject_id = EXCLUDED.consumer_subject_id
+          OR (bff_agui_stream.consumer_subject_id = EXCLUDED.consumer_subject_id
+              AND (EXCLUDED.expected_run_id IS NULL
+                   OR bff_agui_stream.expected_run_id IS NULL
+                   OR bff_agui_stream.expected_run_id = EXCLUDED.expected_run_id))
        RETURNING session_id`,
     values: [tenantId, sessionId, subjectId, expectedRunId ?? null],
   }

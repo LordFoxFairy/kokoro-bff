@@ -154,6 +154,23 @@ integrationTest("serves live and restarted replay only from the tenant-scoped Po
       { chat_event_id: "source_terminal", session_id: "session_live", run_id: "run_1", source_index: 3, event_type: "run.completed", payload_json: '{"status":"completed","token_usage":null}', seq: 4, created_at: 4000 },
     ]
     await insertConversation(pool, "session_live", "Live Chat")
+    await pool.query(
+      `INSERT INTO bff_message (message_id, tenant_id, conversation_id, run_id, role, content, status, message_seq)
+       VALUES ('assistant_run_1', 'tenant_a', 'session_live', 'run_1', 'assistant', '', 'pending', 1)`,
+    )
+    await pool.query(
+      `INSERT INTO bff_agent_dispatch_outbox
+         (outbox_id, tenant_id, conversation_id, conversation_dispatch_seq, subject_id, actor_id,
+          request_id, idempotency_key, request_digest, run_id, user_message_id, assistant_message_id,
+          identity_assertion_ref, payload, status, admitted_at)
+       VALUES ('dispatch_run_1', 'tenant_a', 'session_live', 1, 'user_integration', 'user_integration',
+               'request_run_1', 'turn_run_1', $1, 'run_1', 'user_run_1', 'assistant_run_1',
+               'assertion_run_1', '{}'::jsonb, 'admitted', CURRENT_TIMESTAMP(3))`,
+      ["a".repeat(64)],
+    )
+    admissionStore = new PostgresBffRepositories(postgresUrl, redisUrl)
+    await admissionStore.ready()
+    await admissionStore.agUiConsumers.registerConsumer("tenant_a", "session_live", "user_integration", "run_1")
     const eventRequests = []
     agent = createServer((request, response) => {
       response.setHeader("content-type", "application/json")
@@ -215,32 +232,21 @@ integrationTest("serves live and restarted replay only from the tenant-scoped Po
     )
     assert.deepEqual(ledger.rows.map((row) => row.cursor), originalFrames.map((frame) => frame.id))
 
-    admissionStore = new PostgresBffRepositories(postgresUrl, redisUrl)
-    await admissionStore.ready()
-    // The second source run is already dispatched: provide its durable product binding
-    // without creating a pending outbox command for the live background dispatcher.
-    await pool.query(
-      `INSERT INTO bff_message (message_id, tenant_id, conversation_id, run_id, role, content, status, message_seq)
-       VALUES ('assistant_run_2', 'tenant_a', 'session_live', 'run_2', 'assistant', '', 'pending', 1)`,
-    )
-    await pool.query(
-      `INSERT INTO bff_agent_dispatch_outbox
-         (outbox_id, tenant_id, conversation_id, conversation_dispatch_seq, subject_id, actor_id,
-          request_id, idempotency_key, request_digest, run_id, user_message_id, assistant_message_id,
-          identity_assertion_ref, payload, status, completed_at)
-       VALUES ('dispatch_run_2', 'tenant_a', 'session_live', 1, 'user_integration', 'user_integration',
-               'request_run_2', 'turn_run_2', $1, 'run_2', 'user_run_2', 'assistant_run_2',
-               'assertion_run_2', '{}'::jsonb, 'succeeded', CURRENT_TIMESTAMP(3))`,
-      ["a".repeat(64)],
-    )
-    await admissionStore.agUiConsumers.registerConsumer("tenant_a", "session_live", "user_integration", "run_2")
-    await pool.query(`UPDATE bff_agui_stream SET latest_run_id = 'run_2' WHERE tenant_id = 'tenant_a' AND session_id = 'session_live'`)
+    const secondTurn = await admissionStore.services.chatTurns.submit({
+      tenantId: "tenant_a", conversationId: "session_live", subjectId: "user_integration", actorId: "user_integration",
+      requestId: "request_run_2", idempotencyKey: "turn_run_2", content: "Second run",
+    })
+    assert.ok(secondTurn)
+    const [secondClaim] = await admissionStore.agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: "worker_http_run_2", limit: 1, leaseDurationMs: 5000, maxAttempts: 8 })
+    assert.equal(secondClaim.runId, secondTurn.run_id)
+    assert.equal(await admissionStore.agentDispatchOutbox.markAgentDispatchAdmitted(secondClaim), true)
+    await pool.query(`UPDATE bff_agui_stream SET latest_run_id = $1 WHERE tenant_id = 'tenant_a' AND session_id = 'session_live'`, [secondTurn.run_id])
     const runningDetail = await fetch(`${base}/v1/sessions/session_live`, { headers: auth("tenant_a") })
     assert.equal(runningDetail.status, 200)
-    assert.deepEqual((await runningDetail.json()).data.active_run, { run_id: "run_2", status: "running" })
+    assert.deepEqual((await runningDetail.json()).data.active_run, { run_id: secondTurn.run_id, status: "running" })
     events.push(
-      { chat_event_id: "source_run_2", session_id: "session_live", run_id: "run_2", source_index: 4, event_type: "run.started", payload_json: '{"status":"running"}', seq: 5, created_at: 5000 },
-      { chat_event_id: "source_terminal_2", session_id: "session_live", run_id: "run_2", source_index: 5, event_type: "run.completed", payload_json: '{"status":"completed","token_usage":null}', seq: 6, created_at: 6000 },
+      { chat_event_id: "source_run_2", session_id: "session_live", run_id: secondTurn.run_id, source_index: 4, event_type: "run.started", payload_json: '{"status":"running"}', seq: 5, created_at: 5000 },
+      { chat_event_id: "source_terminal_2", session_id: "session_live", run_id: secondTurn.run_id, source_index: 5, event_type: "run.completed", payload_json: '{"status":"completed","token_usage":null}', seq: 6, created_at: 6000 },
     )
     const nextRun = await fetch(`${base}/v1/sessions/session_live/events`, {
       headers: { ...auth("tenant_a"), "last-event-id": originalFrames.at(-1).id },
@@ -299,25 +305,33 @@ integrationTest("drains the complete Agent source snapshot before ending at a ru
   const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   let bff = null
   let agent = null
+  let admissionStore = null
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await insertConversation(pool, "session_boundary", "Boundary Chat")
+    admissionStore = new PostgresBffRepositories(postgresUrl, redisUrl)
+    const turn = await admissionStore.services.chatTurns.submit({
+      tenantId: "tenant_a", conversationId: "session_boundary", subjectId: "user_integration", actorId: "user_integration",
+      requestId: "request_boundary", idempotencyKey: "turn_boundary", content: "Boundary",
+    })
+    assert.ok(turn)
+    const [claim] = await admissionStore.agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: "worker_boundary", limit: 1, leaseDurationMs: 5000, maxAttempts: 8 })
+    assert.equal(claim.runId, turn.run_id)
+    assert.equal(await admissionStore.agentDispatchOutbox.markAgentDispatchAdmitted(claim), true)
     const events = [
-      { chat_event_id: "run_1_started", session_id: "session_boundary", run_id: "run_1", source_index: 0, event_type: "run.started", payload_json: '{"status":"running"}', seq: 1, created_at: 1000 },
-      { chat_event_id: "run_1_finished", session_id: "session_boundary", run_id: "run_1", source_index: 1, event_type: "run.completed", payload_json: '{"status":"completed"}', seq: 2, created_at: 2000 },
-      { chat_event_id: "run_2_started", session_id: "session_boundary", run_id: "run_2", source_index: 2, event_type: "run.started", payload_json: '{"status":"running"}', seq: 3, created_at: 3000 },
-      { chat_event_id: "run_2_finished", session_id: "session_boundary", run_id: "run_2", source_index: 3, event_type: "run.completed", payload_json: '{"status":"completed"}', seq: 4, created_at: 4000 },
+      { chat_event_id: "run_started", session_id: "session_boundary", run_id: turn.run_id, source_index: 0, event_type: "run.started", payload_json: '{"status":"running"}', seq: 1, created_at: 1000 },
+      { chat_event_id: "run_finished", session_id: "session_boundary", run_id: turn.run_id, source_index: 1, event_type: "run.completed", payload_json: '{"status":"completed"}', seq: 2, created_at: 2000 },
     ]
     const requestedAfter = []
     agent = createServer((request, response) => {
       const url = new URL(request.url ?? "/", "http://agent.local")
       const afterSequence = Number(url.searchParams.get("after_seq") ?? "0")
       requestedAfter.push(afterSequence)
-      const page = events.filter((candidate) => candidate.seq > afterSequence).slice(0, 2)
+      const page = events.filter((candidate) => candidate.seq > afterSequence).slice(0, 1)
       response.setHeader("content-type", "application/json")
       response.end(JSON.stringify({
-        data: { events: page, next_seq: page.at(-1)?.seq ?? afterSequence, watermark: 4 },
+        data: { events: page, next_seq: page.at(-1)?.seq ?? afterSequence, watermark: 2 },
         meta: { request_id: "agent" },
       }))
     })
@@ -329,14 +343,13 @@ integrationTest("drains the complete Agent source snapshot before ending at a ru
     assert.equal(streamed.status, 200)
     const frames = parseSse(await streamed.text())
     assert.deepEqual(frames.map((frame) => [frame.event.type, frame.event.metadata.kokoro.run_id]), [
-      ["RUN_STARTED", "run_1"],
-      ["RUN_FINISHED", "run_1"],
-      ["RUN_STARTED", "run_2"],
-      ["RUN_FINISHED", "run_2"],
+      ["RUN_STARTED", turn.run_id],
+      ["RUN_FINISHED", turn.run_id],
     ])
-    assert.deepEqual(requestedAfter.slice(0, 2), [0, 2])
-    assert.ok(requestedAfter.slice(2).every((sequence) => sequence === 4))
+    assert.deepEqual(requestedAfter.slice(0, 2), [0, 1])
+    assert.ok(requestedAfter.slice(2).every((sequence) => sequence === 2))
   } finally {
+    if (admissionStore !== null) await admissionStore.close().catch(() => undefined)
     if (bff !== null) await close(bff)
     if (agent !== null) await close(agent)
     for (const server of servers.splice(0)) {
@@ -401,15 +414,25 @@ integrationTest("ends at the SSE frame budget and resumes strictly after the las
   const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   let bff = null
   let agent = null
+  let admissionStore = null
   try {
     await pool.query(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE`)
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await insertConversation(pool, "session_budget", "Budget Chat")
+    admissionStore = new PostgresBffRepositories(postgresUrl, redisUrl)
+    const currentTurn = await admissionStore.services.chatTurns.submit({
+      tenantId: "tenant_a", conversationId: "session_budget", subjectId: "user_integration", actorId: "user_integration",
+      requestId: "request_budget", idempotencyKey: "turn_budget", content: "Budget current run",
+    })
+    assert.ok(currentTurn)
+    const [currentClaim] = await admissionStore.agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: "worker_budget", limit: 1, leaseDurationMs: 5000, maxAttempts: 8 })
+    assert.equal(currentClaim.runId, currentTurn.run_id)
+    assert.equal(await admissionStore.agentDispatchOutbox.markAgentDispatchAdmitted(currentClaim), true)
     const events = [
-      { chat_event_id: "budget_run_1_started", session_id: "session_budget", run_id: "run_1", source_index: 0, event_type: "run.started", payload_json: '{"status":"running"}', seq: 1, created_at: 1000 },
-      { chat_event_id: "budget_run_1_finished", session_id: "session_budget", run_id: "run_1", source_index: 1, event_type: "run.completed", payload_json: '{"status":"completed"}', seq: 2, created_at: 2000 },
-      { chat_event_id: "budget_run_2_started", session_id: "session_budget", run_id: "run_2", source_index: 2, event_type: "run.started", payload_json: '{"status":"running"}', seq: 3, created_at: 3000 },
-      { chat_event_id: "budget_run_2_finished", session_id: "session_budget", run_id: "run_2", source_index: 3, event_type: "run.completed", payload_json: '{"status":"completed"}', seq: 4, created_at: 4000 },
+      { chat_event_id: "budget_history_started", session_id: "session_budget", run_id: "run_history", source_index: 0, event_type: "run.started", payload_json: '{"status":"running"}', seq: 1, created_at: 1000 },
+      { chat_event_id: "budget_history_finished", session_id: "session_budget", run_id: "run_history", source_index: 1, event_type: "run.completed", payload_json: '{"status":"completed"}', seq: 2, created_at: 2000 },
+      { chat_event_id: "budget_current_started", session_id: "session_budget", run_id: currentTurn.run_id, source_index: 2, event_type: "run.started", payload_json: '{"status":"running"}', seq: 3, created_at: 3000 },
+      { chat_event_id: "budget_current_finished", session_id: "session_budget", run_id: currentTurn.run_id, source_index: 3, event_type: "run.completed", payload_json: '{"status":"completed"}', seq: 4, created_at: 4000 },
     ]
     agent = createServer((request, response) => {
       const url = new URL(request.url ?? "/", "http://agent.local")
@@ -466,6 +489,7 @@ integrationTest("ends at the SSE frame budget and resumes strictly after the las
     assert.deepEqual(resumedFrames.map((frame) => frame.event.type), ["RUN_STARTED", "RUN_FINISHED"])
     assert.equal(new Set([...firstFrames, ...resumedFrames].map((frame) => frame.id)).size, 4)
   } finally {
+    if (admissionStore !== null) await admissionStore.close().catch(() => undefined)
     if (bff !== null) await close(bff)
     if (agent !== null) await close(agent)
     for (const server of servers.splice(0)) {

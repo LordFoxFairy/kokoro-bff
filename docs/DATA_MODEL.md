@@ -1,3 +1,30 @@
+## BFF-FIFO-ATOMIC：terminal-gated Conversation queue 目标数据模型（2026-10-01；源码与真实PG门已验证）
+
+`lease_until` 判定使用目标行锁之后、同连接读取的单一 PostgreSQL `clock_timestamp()` 值；事务起点时钟不得用于跨锁等待的 expiry 判断。claim 只有在提交前数据库观测剩余预算大于零时才能返回，不使用最小 1ms 夹值。该规则不改变 terminal dispatch 的历史事实状态机。
+
+canonical `bff_agent_dispatch_outbox` 后续把status收敛为
+`pending|leased|retryable|admitted|terminal|failed`，新增
+`admission_unknown_seen BOOLEAN NOT NULL DEFAULT FALSE`与`admitted_at TIMESTAMPTZ(3)`；保留`completed_at`作为terminal/failed
+时点。约束为：pending/retryable无lease且未完成；leased三项lease齐全且未完成；admitted无lease、admitted_at非null、
+completed_at null；terminal无lease且admitted_at/completed_at均非null；failed无lease、admitted_at null、completed_at非null。
+unknown flag可在leased/retryable/admitted/terminal为true且只允许false→true；failed必须false。
+
+expired leased重领前原子置unknown=true。ready/lease索引仍只覆盖可claim pending/retryable与过期leased；更早
+pending/retryable/leased/admitted全是Conversation barrier，terminal/确定未接纳的failed不阻塞。unknown快速预算耗尽保持retryable与expected fence，不进入failed；`available_at`按现backoff cap写为30秒后，使同一row/run/key
+跨cycle有界重新claim并单次POST。现`bff_agui_stream.consumer_next_poll_at`同时是受信terminal读取的durable唤醒；两条恢复路径都不
+新建queue/process、不产生tight loop。unknown=false且本地never-sent耗尽才可failed。
+
+耗尽head探测以独立短事务完成并无条件释放锁；普通claim随后按tenant/session确定序先锁全部候选stream，再锁/重验dispatch并安装expected；enqueue只注册consumer subject。terminal source可把leased/retryable/admitted
+head在同一事务更新assistant Message、source/public events、stream version/watermark/terminal，并设置dispatch terminal；极速terminal
+以`COALESCE(admitted_at,CURRENT_TIMESTAMP(3))`补全，且把current expected清null。迟到delivery settlement因status、lease token与fence
+不匹配不再写。各入口禁止在取得stream/dispatch后回锁Conversation。
+
+post-terminal检测以历史dispatch `(tenant_id,conversation_id,run_id,status=terminal)` 为真源，不依赖会被下一claim改变的
+`expected_run_id/terminal_run_id`。exact duplicate只核已有source row的owner/event-id/sequence/digest；其他旧run source在任何insert/
+watermark update前失败。无新表、Redis key、跨owner FK/JOIN或Scheduler复用；fresh DDL不建migration/alias/旧succeeded兼容。
+
+正式Agent source reader在任何UI frame过滤前保存owner `run_id`为内部`sourceRunId: string|null`；即使该source投影零frame，也以此历史dispatch terminal/failed守卫。非空event/assistant/artifact/frame run必须与sourceRunId一致；明确session级null才不按run守卫，不改变owner wire。
+
 ## BFF-CHAT-PAGING1：keyset谓词与索引同向（2026-10-01；源码与回归已验证）
 
 唯一schema database/schema.sql逐字节保持。bff_conversation.updated_at是TIMESTAMPTZ(3)，现JavaScript Date cursor毫秒精度与schema一致。

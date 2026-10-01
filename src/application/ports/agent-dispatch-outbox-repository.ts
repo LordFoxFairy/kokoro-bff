@@ -34,7 +34,7 @@ export type AgentDispatchOutboxClaimInput = {
 export interface AgentDispatchOutboxRepository {
   commitChatTurn(command: CommitChatTurn): Promise<AgentDispatchReceipt | null>
   claimAgentDispatchOutbox(input: AgentDispatchOutboxClaimInput): Promise<AgentDispatchCommand[]>
-  markAgentDispatchSucceeded(lease: AgentDispatchLease): Promise<boolean>
-  markAgentDispatchRetryable(lease: AgentDispatchLease, delayMs: number, errorCode: string): Promise<boolean>
-  markAgentDispatchFailed(lease: AgentDispatchLease, errorCode: string): Promise<boolean>
+  markAgentDispatchAdmitted(lease: AgentDispatchLease): Promise<boolean>
+  markAgentDispatchUnknown(lease: AgentDispatchLease, delayMs: number, errorCode: string): Promise<boolean>
+  markAgentDispatchNotAdmitted(lease: AgentDispatchLease, delayMs: number, errorCode: string): Promise<boolean>
 }

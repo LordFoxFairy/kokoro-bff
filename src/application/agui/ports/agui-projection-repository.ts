@@ -36,6 +36,7 @@ export type AgUiArtifactDelivery = {
 }
 
 export type AgUiSourceProjection = {
+  sourceRunId: string | null
   sourceOwner: "kokoro-agent"
   sourceEventId: string
   sourceSequence: number

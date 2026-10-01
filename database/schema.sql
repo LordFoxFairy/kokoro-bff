@@ -216,6 +216,7 @@ CREATE TABLE IF NOT EXISTS bff_agent_dispatch_outbox (
   identity_assertion_ref TEXT NOT NULL,
   payload JSONB NOT NULL,
   status TEXT NOT NULL DEFAULT 'pending',
+  admission_unknown_seen BOOLEAN NOT NULL DEFAULT FALSE,
   attempt_count INTEGER NOT NULL DEFAULT 0,
   available_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   lease_owner TEXT,
@@ -225,6 +226,7 @@ CREATE TABLE IF NOT EXISTS bff_agent_dispatch_outbox (
   last_error_code TEXT,
   last_error_at TIMESTAMPTZ(3),
   completed_at TIMESTAMPTZ(3),
+  admitted_at TIMESTAMPTZ(3),
   created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   CONSTRAINT pk_bff_agent_dispatch_outbox PRIMARY KEY (outbox_id),
@@ -245,7 +247,7 @@ CREATE TABLE IF NOT EXISTS bff_agent_dispatch_outbox (
   ),
   CONSTRAINT ck_bff_agent_dispatch_digest CHECK (request_digest ~ '^[0-9a-f]{64}$'),
   CONSTRAINT ck_bff_agent_dispatch_payload CHECK (jsonb_typeof(payload) = 'object'),
-  CONSTRAINT ck_bff_agent_dispatch_status CHECK (status IN ('pending', 'leased', 'retryable', 'succeeded', 'failed')),
+  CONSTRAINT ck_bff_agent_dispatch_status CHECK (status IN ('pending', 'leased', 'retryable', 'admitted', 'terminal', 'failed')),
   CONSTRAINT ck_bff_agent_dispatch_attempt CHECK (attempt_count >= 0),
   CONSTRAINT ck_bff_agent_dispatch_sequence CHECK (conversation_dispatch_seq >= 1),
   CONSTRAINT ck_bff_agent_dispatch_fence CHECK (fence >= 0),
@@ -254,8 +256,10 @@ CREATE TABLE IF NOT EXISTS bff_agent_dispatch_outbox (
     OR (status <> 'leased' AND lease_owner IS NULL AND lease_token IS NULL AND lease_until IS NULL)
   ),
   CONSTRAINT ck_bff_agent_dispatch_completion CHECK (
-    (status IN ('succeeded', 'failed') AND completed_at IS NOT NULL)
-    OR (status NOT IN ('succeeded', 'failed') AND completed_at IS NULL)
+    (status = 'admitted' AND admitted_at IS NOT NULL AND completed_at IS NULL)
+    OR (status = 'terminal' AND admitted_at IS NOT NULL AND completed_at IS NOT NULL)
+    OR (status = 'failed' AND admitted_at IS NULL AND completed_at IS NOT NULL AND admission_unknown_seen = FALSE)
+    OR (status IN ('pending', 'leased', 'retryable') AND admitted_at IS NULL AND completed_at IS NULL)
   )
 );
 CREATE INDEX IF NOT EXISTS ix_bff_agent_dispatch_ready

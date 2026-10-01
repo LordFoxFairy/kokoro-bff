@@ -1,3 +1,14 @@
+## BFF-FIFO-ATOMIC：Conversation terminal gate 源码与真实owner门已验证（2026-10-01）
+
+锁后数据库时钟补强：dispatch 与 AG-UI consumer 的 claim/renew/settle 必须先按既定 stream→dispatch 顺序取得目标行锁，再由同一连接读取一次 `clock_timestamp()`，并把该值传入最终 lease expiry CAS 与写入；禁止用事务起点 `CURRENT_TIMESTAMP`、worker 时间或 `GREATEST/Math.max(1)` 把已耗尽预算伪装为可用。普通 Agent terminal source 不受 dispatch HTTP lease expiry 限制。
+
+当前main `88c54dbc`仍由enqueue覆盖expected、HTTP2xx=`succeeded`，且invalid2xx/oversize可能被误判permanent failed。
+返修目标已纳入：terminal可早于ACK并从leased/retryable/admitted原子收口；迟到settlement fenced no-op；sticky
+`admission_unknown_seen`覆盖expired lease及所有不确定网络/响应，unknown后4xx与快速预算耗尽都不failed放行；同row/run/key按现30秒cap跨cyclepaced POST，AG-UI consumer durable poll并行恢复；terminal清current expected，但历史dispatch继续阻断旧run新source。public3.0、Agent现wire与retry4草案不变。
+Scheduled direct receiver的同session FIFO是独立P0缺口，本片不冒称覆盖。当前源码/DDL候选已实现，Node22 build/lint/typecheck与聚焦unit通过；Root真PG R3/R4均为2通过/1失败，依次暴露拒绝后fixture跳号与cancel fixture未正式claim；现候选已修正连续source及三个run正式claim绑定。耗尽探测无论settled与否均在独立事务释放stream锁，普通claim才按tenant/session确定序执行stream→dispatch，避免X→A与A→X反序。正式reader现于frame过滤前保留nullable sourceRunId，零frame旧run同样受terminal/failed历史dispatch守卫；所有派生run identity须一致。最终真PG、完整门与运行激活仍待Root复验。
+
+Root R17实际验证：完整七integration文件50/50、0失败/取消/跳过，16.41s；`/tmp/kokoro-bff-fifo-root-full-integration-r17.log`。最终remaining正预算后真实COMMIT延迟分别证明dispatch/consumer空claim与过期重领，不伪造SQL结果；仅仓储行为，不声称完整sender网络验收。format/lint/typecheck/contract191/architecture27/build成功；默认测试549/549、0跳过，2.72s，`/tmp/kokoro-bff-fifo-root-full-gates-r17.log`。自有DB603074e8766f432f与4789659a6d0042d1均closed、Redis14剩0；独立R17冻结审查0 P0/P1。原四文档495行retry草案未纳本片提交；完整Agent4/queued/retry、Scheduled同session及真实provider浏览器组合仍待后继。
+
 ## BFF-CHAT-PAGING1：源码与真实owner门已验证（2026-10-01）
 
 源码基线 main293dfe7；public canonical仍3.0.0，机器contract/DDL/generated/Scope/Retry/FIFO没有变更。

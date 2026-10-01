@@ -16,22 +16,20 @@ function transportErrorCode(error: unknown): string {
 
 export function classifyAgentDispatchAttempt(attempt: AgentDispatchAttempt, command: AgentDispatchCommand): AgentDispatchDeliveryResult {
   if (attempt.kind === "transport") {
-    return attempt.errorCode === "upstream_response_too_large"
-      ? { outcome: "failed", errorCode: attempt.errorCode }
-      : { outcome: "retryable", errorCode: attempt.errorCode }
+    return { outcome: "unknown", errorCode: attempt.errorCode }
   }
   if (attempt.status >= 200 && attempt.status < 300) {
     const receipt = parseLaunchReceipt(attempt.status, attempt.body)
     return receipt !== null && receipt.data.run_id === command.runId && receipt.data.session_id === command.conversationId
-      ? { outcome: "succeeded" }
-      : { outcome: "failed", errorCode: "agent_receipt_invalid" }
+      ? { outcome: "admitted" }
+      : { outcome: "unknown", errorCode: "agent_receipt_invalid" }
   }
   // Unknown owner error payloads never become trusted BFF error codes.
   const errorCode = parseAgentErrorCode(attempt.body) ?? `agent_http_${attempt.status}`
   if (attempt.status === 408 || attempt.status === 425 || attempt.status === 429 || attempt.status >= 500) {
-    return { outcome: "retryable", errorCode }
+    return { outcome: "unknown", errorCode }
   }
-  return { outcome: "failed", errorCode }
+  return { outcome: "not_admitted", errorCode }
 }
 
 /** Delivers one previously committed Agent command; it never owns retry state. */
@@ -44,7 +42,7 @@ export class AgentOutboxDelivery implements AgentDispatchDeliveryPort {
     }
     const baseUrl = this.config.upstreams.agents ?? null
     if (!this.config.agentEnabled || baseUrl === null) {
-      return { outcome: "retryable", errorCode: "agent_not_configured" }
+      return { outcome: "not_admitted", errorCode: "agent_not_configured" }
     }
     const headers = new Headers({
       accept: "application/json",

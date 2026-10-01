@@ -1,3 +1,24 @@
+## BFF-FIFO-ATOMIC：内部 Conversation gate，不改变 public 3.0.0（2026-10-01；源码与真实PG门已验证）
+
+内部 lease/fence 不采用调用方时间。实现须在目标行锁之后读取同连接数据库实时时钟，以该 `db_now` 完成 expiry CAS；锁等待跨过 expiry 的 ACK、unknown、not-admitted、consumer renew/settle 均为 no-op，projection consumer commit 为 lease conflict 且整批回滚。Agent durable terminal 仍可在 HTTP lease 结束后提交。
+
+本片不修改canonical OpenAPI、operation、HTTP status/envelope、幂等key、Message/AG-UI frame schema或Agent owner wire。
+`POST /v1/sessions/{id}/messages` 的202仍只表示BFF已原子持久化Message与dispatch receipt，不表示Agent admitted、queued或
+terminal；public响应不暴露内部dispatch状态。严格匹配的Agent 2xx只形成内部admitted，后继仍等待durable terminal source。
+terminal可先于HTTP ACK；后到ACK/timeout/4xx受lease+fence+terminal CAS约束为no-op。内部耗尽探测与普通claim分成两个事务，前者无论settled与否都先释放stream锁，后者按tenant/session确定序执行stream→dispatch。
+
+内部delivery结果必须区分 admitted / owner证明not-admitted / unknown。timeout、5xx、408/425/429、连接异常、invalid或oversized
+2xx均属unknown；一次unknown发生后，后续4xx不证明历史请求未接纳。只有从未unknown且owner严格4xx或send前本地失败可形成
+pre-admission failed。unknown快速预算耗尽后，同一durable outbox仍以同run/idempotency按现30秒backoff cap有界重新POST；每claim
+一个timeout、每worker cycle现16条上限，AG-UI terminal reader并行恢复。public不新增该分类，也不把BFF dispatch failure伪装成Agent failure profile。
+
+连续source wire不变。历史dispatch terminal是post-terminal守卫真源：即使stream已释放expected并接纳下一head，旧run也只接受
+完全相同source identity/sequence/digest的幂等duplicate；任何新/冲突source拒绝且不推进cursor。未发布terminal retry、required
+parent、Agent4 artifact和durable queued均不在本片。Scheduled callback虽同样可产生相同`scheduled:<task_id>`，当前不经过Chat
+gate；这是必须独立闭环的P0，不以本片public/API描述掩盖。
+
+正式Agent source reader在任何UI frame过滤前保存owner `run_id`为内部`sourceRunId: string|null`；即使该source投影零frame，也以此历史dispatch terminal/failed守卫。非空event/assistant/artifact/frame run必须与sourceRunId一致；明确session级null才不按run守卫，不改变owner wire。
+
 ## BFF-CHAT-PAGING1：响应与cursor协议保持（2026-10-01；源码与回归已验证）
 
 唯一 public机器事实源仍为 HEAD293dfe7 的 contract/openapi/v1/openapi.yaml 3.0.0；本片不修改机器版本、schema、operation或生成客户端。

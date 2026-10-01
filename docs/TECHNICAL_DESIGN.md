@@ -1,3 +1,74 @@
+## BFF-FIFO-ATOMIC：Conversation terminal-gated dispatch 设计门（2026-10-01；源码与真实PG门已验证）
+
+租约时钟规则：所有可能等待行锁的 dispatch/consumer claim、续租与结算，先取得目标行锁，再在同一连接读取一次 PostgreSQL `clock_timestamp()` 作为该次决定的唯一 `db_now`，最终 CAS 以参数比较 expiry。claim 在返回前再次以数据库时钟确认剩余预算严格大于零；零预算回滚且不返回。terminal projection 只验证 durable run/subject/head/fence，不错误附加 HTTP dispatch lease expiry。
+
+正式Agent source reader在任何UI frame过滤前保存owner `run_id`为内部`sourceRunId: string|null`；即使该source投影零frame，也以此历史dispatch terminal/failed守卫。非空event/assistant/artifact/frame run必须与sourceRunId一致；明确session级null才不按run守卫，不改变owner wire。
+
+### 当前缺口、owner 与放置
+
+当前 Chat admission 在 enqueue 时把新 run 写入 `bff_agui_stream.expected_run_id`；dispatcher 又把匹配 Agent HTTP 2xx
+直接记为 `succeeded`，claim 只把较早 `pending/retryable/leased` 当 barrier。于是第一轮尚未 terminal 时第二轮可以跨 Agent，
+并且第二轮 enqueue 已覆盖第一轮 expected fence。目标在现 public 3.0.0 和现 Agent launch/event wire 下实现每个
+`tenant_id + conversation_id` 的 terminal-gated FIFO：enqueue 只持久化；claim 最早 head 时在同一 PostgreSQL 事务先安装
+expected fence，commit 后才跨 Agent；2xx 只是 `admitted`；受信 terminal source 即使早于 HTTP ACK，也把精确 head 与
+assistant/AG-UI/stream 原子结算为 `terminal` 并释放 expected，后继才可安装自己的 fence。
+
+| 项 | 结论 |
+| --- | --- |
+| Owner | BFF Chat 唯一拥有 Conversation Message、dispatch queue 与 durable AG-UI projection；Agent 继续拥有 Run terminal source fact。 |
+| 采用 | 扩展现 Chat dispatch domain/port/dispatcher、Agent delivery client、PostgreSQL outbox/consumer registration/AG-UI projection 与 canonical schema；这些已拥有 immutable launch lineage、lease fence及terminal投影。 |
+| 淘汰 | 不建第二 outbox、通用 queue service、Redis gate、进程内 mutex或Web过滤；它们无法与Message/AG-UI原子结算。 |
+| Scheduled | 现 `routes/scheduler.ts` 以独立 `bff_idempotency_receipt` 直接 launch `scheduled:<task_id>`，不进入Conversation/Message/Chat AG-UI gate；它仍缺同 scheduled session 的 terminal FIFO，必须作为独立P0任务由Scheduled receiver/Agent source边界闭环，本片不伪称覆盖。 |
+| API | public OpenAPI、HTTP 202 receipt、Agent owner wire、generated/vendor与lockfile不变；不偷发queued/retry/required parent或Agent 4 contract。 |
+
+### 状态、结果分类与恢复
+
+目标 dispatch 状态为 `pending | leased | retryable | admitted | terminal | failed`，并新增 sticky
+`admission_unknown_seen BOOLEAN NOT NULL DEFAULT FALSE`。delivery port 结果改为内部三分类：`admitted`（严格匹配的2xx receipt）、
+`not_admitted`（请求明确未跨网络，或 owner 明确声明未接纳的严格4xx）与 `unknown`。timeout、连接中断、5xx、408/425/429、
+invalid/oversized 2xx response 都是 unknown；现 client 把 invalid 2xx/oversize 归 permanent failed 是必须由RED杀死的错误。
+expired leased 被重领前先把 sticky flag置true，因为旧 worker可能已跨边界。flag一旦true，任何后续4xx或本地结果都不能清除，
+也不能把该 row改failed释放。
+
+只有 `admission_unknown_seen=false` 且当前结果确定 `not_admitted` 时可 `failed`；unknown进入带退避的retryable并保持 barrier。
+达到正常快速重试预算且unknown_seen=true时不得走现 `failOneExhaustedHead`。同一 durable row保持retryable barrier与expected，
+`available_at`设为现 `agentDispatchRetryDelayMs` cap **30,000ms**；到期重新claim同run/idempotency并向正式owner入口最多POST一次。
+现dispatcher每cycle最多16条、每claim单HTTP timeout，故这是跨cycle持久化的paced admission reconciliation，不是一个请求内无界loop。
+AG-UI consumer同时按`consumer_next_poll_at`读取受信terminal；2xx可转admitted，terminal先到可直接terminal。告警只是观测，
+不算恢复/放行；禁止新run、换key或释放head。unknown=false的本地never-sent若耗尽才可确定failed。
+
+terminal允许从 `leased | retryable | admitted` 进入，但必须匹配当前 expected、最早未终态 dispatch、immutable
+run/subject/conversation/assistant lineage及至少一次真实claim attempt。事务用`admitted_at=COALESCE(admitted_at, now)`补全极速run的
+接纳时点，再写terminal。后到2xx、timeout、4xx或旧lease settlement都只能因status/lease/fence CAS不匹配而幂等no-op，
+不得覆写terminal、重设retryable或重新阻塞。
+
+### 分入口锁序与 source 防线
+
+- admission/delete：先锁 Conversation；enqueue只确保stream/subject存在，不写expected；若继续接触stream/dispatch，不得随后回锁Conversation。
+- claim/reclaim：耗尽head探测使用独立短事务，无论重验是否settled都先提交并释放stream锁；普通claim再无锁读取候选identity，按tenant/session确定序锁全部`bff_agui_stream`，再锁并重验最早dispatch。不得把耗尽X的stream锁带入后续A..X claim，也不得先锁dispatch再等stream。只有expected为null或同candidate才安装。
+- source projection：先stream，再精确dispatch，再assistant Message；不回锁Conversation，所需owner/status用immutable lineage与已持有行验证。
+- pre-admission failure projection：同样stream→dispatch→Message；普通delivery settlement只做精确lease/fence CAS，不取得stream。
+
+terminal事务把 `expected_run_id` 清为null，同时保留 dispatch `terminal` 作为历史run证据。post-terminal保护不能依赖随后会被下一head
+替换的current marker：任何source先按tenant/session/run查历史dispatch；若该dispatch已terminal，仅完全相同
+owner/event-id/sequence/digest的既有source可幂等跳过，任何新identity、冲突重放或frame都在写前拒绝，且stream source/public
+watermark、Message和当前next expected逐字节不变。
+
+### 后续文件与RED矩阵
+
+源码计划：`database/schema.sql`；`src/domain/chat/agent-dispatch.ts`；
+`src/application/ports/{agent-dispatch-delivery,agent-dispatch-outbox-repository}.ts`；
+`src/application/agent-dispatch-outbox-dispatcher.ts`；`src/infrastructure/clients/agent/outbox-delivery.ts`；
+`src/infrastructure/postgres/{agent-dispatch-outbox-repository,agui-consumer-registration,agui-projection-repository}.ts`。
+不新建模块；若需越出这些现职责先回设计门。
+
+tests-only RED使用现 `test/agent-dispatch-outbox.test.ts`、`test/architecture.test.ts`、`test/schema-governance.test.mjs`、现 Chat
+PostgreSQL/AG-UI integration文件（实际文件名由下一阶段盘点后锁定）：覆盖两轮同Conversation首轮2xx仍阻塞；terminal早于ACK从
+leased/retryable原子结算且迟到settlement no-op；unknown sticky后4xx不放行；expired lease置unknown；invalid2xx/oversize为unknown；
+unknown快速预算耗尽后30秒paced同run reconciliation且consumer durable wake并行；pre-send/首次严格4xx才failed；terminal清expected后次head claim；旧run terminal后
+注册新expected仍拒新source且exact duplicate幂等；双worker无越序/双claim、跨Conversation并行、tenant/subject/project隔离及事务
+rollback。Root负责真实PG/Redis；本阶段不运行测试、DDL或设施。
+
 ## BFF-CHAT-PAGING1：既有会话排序的分页修复（2026-10-01；源码与回归已验证）
 
 Owner 为 BFF Conversation；复用现 PostgreSQL ChatRepository，不新增文件、目录、表、进程或契约。

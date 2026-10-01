@@ -32,7 +32,7 @@ export type AgentDispatchReceipt = {
   assistant_message_id: string
 }
 
-export type AgentDispatchStatus = "pending" | "leased" | "retryable" | "succeeded" | "failed"
+export type AgentDispatchStatus = "pending" | "leased" | "retryable" | "admitted" | "terminal" | "failed"
 
 export type AgentDispatchLease = {
   tenantId: string
@@ -58,6 +58,7 @@ export type AgentDispatchCommand = AgentDispatchLease & {
   payload: AgentDispatchPayload
   status: "leased"
   attemptCount: number
+  admissionUnknownSeen: boolean
   leaseUntil: Date
   leaseRemainingMs: number
 }

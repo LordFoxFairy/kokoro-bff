@@ -148,6 +148,12 @@ describe("Agent owner HTTP success envelopes", () => {
     for (const status of [200, 201, 204]) assert.equal(parseLaunchReceipt(status, receipt), null)
   })
 
+  it("leaves malformed success bodies untrusted so dispatch can preserve admission uncertainty", () => {
+    assert.equal(parseLaunchReceipt(202, { data: { run_id: "run_1", session_id: "session_1" } }), null)
+    assert.equal(parseLaunchReceipt(202, undefined), null)
+    assert.equal(parseLaunchReceipt(204, receipt), null)
+  })
+
   it("trusts only exact owner error envelopes with safe code syntax", () => {
     assert.equal(parseAgentErrorCode({ error: { code: "agent_unavailable", message: "retry" }, meta: { request_id: "request_1" } }), "agent_unavailable")
     for (const body of [

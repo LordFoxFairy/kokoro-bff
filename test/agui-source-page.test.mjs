@@ -576,6 +576,7 @@ describe("Agent event page boundary", () => {
 
 describe("AG-UI source continuity defense", () => {
   const source = (sequence) => ({
+    sourceRunId: null,
     sourceEventId: `source_${sequence}`,
     sourceSequence: sequence,
     sourceOccurredAt: new Date(sequence * 1000).toISOString(),
@@ -640,6 +641,7 @@ describe("AG-UI source continuity defense", () => {
       size: 12,
     }
     const delivery = {
+      sourceRunId: "run_1",
       sourceEventId: "delivery_1",
       sourceSequence: 1,
       sourceOccurredAt: "2026-09-28T00:00:00.000Z",

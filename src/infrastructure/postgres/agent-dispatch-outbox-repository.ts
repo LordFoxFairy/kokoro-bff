@@ -36,6 +36,7 @@ type AgentDispatchRow = {
   payload: unknown
   status: AgentDispatchStatus
   attempt_count: string | number
+  admission_unknown_seen: boolean
   lease_owner: string | null
   lease_token: string | null
   lease_until: Date | string | null
@@ -76,6 +77,7 @@ const AGENT_DISPATCH_COLUMN_NAMES = [
   "payload",
   "status",
   "attempt_count",
+  "admission_unknown_seen",
   "lease_owner",
   "lease_token",
   "lease_until",
@@ -90,6 +92,12 @@ const CLAIMED_AGENT_DISPATCH_COLUMNS = AGENT_DISPATCH_COLUMN_NAMES
 function safeInteger(value: string | number, code: string): number {
   const parsed = typeof value === "number" ? value : Number(value)
   if (!Number.isSafeInteger(parsed) || parsed < 0) throw new Error(code)
+  return parsed
+}
+
+function signedSafeInteger(value: string | number, code: string): number {
+  const parsed = typeof value === "number" ? value : Number(value)
+  if (!Number.isSafeInteger(parsed)) throw new Error(code)
   return parsed
 }
 
@@ -111,15 +119,13 @@ function receiptOf(row: Pick<AgentDispatchRow, "run_id" | "user_message_id" | "a
   }
 }
 
-function claimedAgentDispatch(row: AgentDispatchRow, queryElapsedMs: number): AgentDispatchCommand {
+function claimedAgentDispatch(row: AgentDispatchRow): AgentDispatchCommand {
   if (row.status !== "leased" || row.lease_owner === null || row.lease_token === null || row.lease_until === null) {
     throw new Error("AGENT_DISPATCH_LEASE_INVALID")
   }
   if (row.lease_remaining_ms === undefined) throw new Error("AGENT_DISPATCH_LEASE_BUDGET_INVALID")
-  const leaseRemainingMs = Math.max(
-    1,
-    safeInteger(row.lease_remaining_ms, "AGENT_DISPATCH_LEASE_BUDGET_INVALID") - queryElapsedMs,
-  )
+  const leaseRemainingMs = safeInteger(row.lease_remaining_ms, "AGENT_DISPATCH_LEASE_BUDGET_INVALID")
+  if (leaseRemainingMs < 1) throw new Error("AGENT_DISPATCH_LEASE_BUDGET_EXHAUSTED")
   const payload = parseAgentDispatchPayload(row.payload)
   if (
     payload.launch.request_id !== row.request_id
@@ -144,6 +150,7 @@ function claimedAgentDispatch(row: AgentDispatchRow, queryElapsedMs: number): Ag
     payload,
     status: "leased",
     attemptCount: safeInteger(row.attempt_count, "AGENT_DISPATCH_ATTEMPT_INVALID"),
+    admissionUnknownSeen: row.admission_unknown_seen,
     leaseOwner: row.lease_owner,
     leaseToken: row.lease_token,
     leaseUntil: instant(row.lease_until),
@@ -307,7 +314,7 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
         command.tenantId,
         command.conversationId,
         command.subjectId,
-        command.runId,
+        undefined,
       )
       const registered = await client.query(registration.text, registration.values)
       if (registered.rowCount !== 1) throw new Error("AGENT_DISPATCH_CONSUMER_REGISTRATION_FAILED")
@@ -341,19 +348,75 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
       throw new Error("AGENT_DISPATCH_MAX_ATTEMPTS_INVALID")
     }
     const client = await this.database.pool.connect()
-    const queryStartedAt = performance.now()
     try {
       await client.query("BEGIN")
       const exhausted = await this.failOneExhaustedHead(client, input)
+      if (exhausted.settled) {
+        await client.query("COMMIT")
+        if (exhausted.notificationCursor !== null && exhausted.tenantId !== null && exhausted.sessionId !== null) {
+          await this.database.notifyAgUiProjection(
+            exhausted.tenantId,
+            exhausted.sessionId,
+            exhausted.notificationCursor,
+          ).catch(() => undefined)
+        }
+        return []
+      }
+      // Exhaustion probing is its own lock phase even when a concurrent worker
+      // wins the revalidation. Release that stream lock before selecting the
+      // globally ordered claim set, otherwise X -> A can deadlock A -> X.
+      await client.query("COMMIT")
+      await client.query("BEGIN")
+      const identities = await client.query<{ outbox_id: string; tenant_id: string; conversation_id: string }>(
+        `SELECT current.outbox_id, current.tenant_id, current.conversation_id
+           FROM bff_agent_dispatch_outbox AS current
+          WHERE (((current.status IN ('pending', 'retryable') AND current.available_at <= CURRENT_TIMESTAMP(3))
+                   OR (current.status = 'leased' AND current.lease_until <= CURRENT_TIMESTAMP(3)))
+             AND (current.attempt_count < $2 OR current.admission_unknown_seen OR current.status = 'leased'))
+            AND EXISTS (SELECT 1 FROM bff_conversation AS conversation
+                         WHERE conversation.tenant_id=current.tenant_id
+                           AND conversation.conversation_id=current.conversation_id
+                           AND conversation.owner_id=current.subject_id AND conversation.status='active')
+            AND NOT EXISTS (SELECT 1 FROM bff_agent_dispatch_outbox AS earlier
+                             WHERE earlier.tenant_id=current.tenant_id
+                               AND earlier.conversation_id=current.conversation_id
+                               AND (earlier.conversation_dispatch_seq, earlier.outbox_id)
+                                   < (current.conversation_dispatch_seq, current.outbox_id)
+                               AND earlier.status IN ('pending','retryable','leased','admitted'))
+          ORDER BY current.tenant_id, current.conversation_id, current.conversation_dispatch_seq, current.outbox_id
+          LIMIT $1`,
+        [input.limit, input.maxAttempts],
+      )
+      for (const identity of identities.rows) {
+        await client.query(
+          `SELECT 1 FROM bff_agui_stream WHERE tenant_id=$1 AND session_id=$2 FOR UPDATE`,
+          [identity.tenant_id, identity.conversation_id],
+        )
+      }
+      const candidateIds = identities.rows.map((row) => row.outbox_id)
+      if (candidateIds.length === 0) {
+        await client.query("COMMIT")
+        return []
+      }
+      await client.query(
+        `SELECT outbox_id FROM bff_agent_dispatch_outbox
+          WHERE outbox_id = ANY($1::text[]) ORDER BY tenant_id, conversation_id, conversation_dispatch_seq, outbox_id
+          FOR UPDATE`,
+        [candidateIds],
+      )
+      const claimClock = await client.query<{ db_now: Date }>("SELECT clock_timestamp() AS db_now")
+      const claimDbNow = claimClock.rows[0]?.db_now
+      if (claimDbNow === undefined) throw new Error("AGENT_DISPATCH_DATABASE_CLOCK_UNAVAILABLE")
       const result = await client.query<AgentDispatchRow>(
         `WITH candidates AS MATERIALIZED (
            SELECT current.outbox_id
              FROM bff_agent_dispatch_outbox AS current
             WHERE (
-                (current.status IN ('pending', 'retryable') AND current.available_at <= CURRENT_TIMESTAMP(3))
-                OR (current.status = 'leased' AND current.lease_until <= CURRENT_TIMESTAMP(3))
+                (current.status IN ('pending', 'retryable') AND current.available_at <= $6::timestamptz)
+                OR (current.status = 'leased' AND current.lease_until <= $6::timestamptz)
               )
-              AND current.attempt_count < $4
+              AND (current.attempt_count < $4 OR current.admission_unknown_seen OR current.status = 'leased')
+              AND current.outbox_id = ANY($5::text[])
               AND EXISTS (
                 SELECT 1
                   FROM bff_conversation AS conversation
@@ -369,30 +432,54 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
                    AND earlier.conversation_id = current.conversation_id
                    AND (earlier.conversation_dispatch_seq, earlier.outbox_id)
                        < (current.conversation_dispatch_seq, current.outbox_id)
-                   AND earlier.status IN ('pending', 'retryable', 'leased')
+                   AND earlier.status IN ('pending', 'retryable', 'leased', 'admitted')
               )
             ORDER BY current.available_at ASC, current.tenant_id ASC, current.conversation_id ASC,
                      current.conversation_dispatch_seq ASC, current.outbox_id ASC
-            FOR UPDATE SKIP LOCKED
             LIMIT $1
          )
          UPDATE bff_agent_dispatch_outbox AS dispatch
             SET status = 'leased',
+                admission_unknown_seen = dispatch.admission_unknown_seen OR dispatch.status = 'leased',
                 attempt_count = dispatch.attempt_count + 1,
                 lease_owner = $2,
                 lease_token = gen_random_uuid()::text,
-                lease_until = CURRENT_TIMESTAMP(3) + ($3::double precision * INTERVAL '1 millisecond'),
+                lease_until = $6::timestamptz + ($3::double precision * INTERVAL '1 millisecond'),
                 fence = dispatch.fence + 1,
-                updated_at = CURRENT_TIMESTAMP(3)
+                updated_at = $6::timestamptz
            FROM candidates
           WHERE dispatch.outbox_id = candidates.outbox_id
          RETURNING ${CLAIMED_AGENT_DISPATCH_COLUMNS},
-                   GREATEST(1, FLOOR(EXTRACT(EPOCH FROM (
-                     dispatch.lease_until - CURRENT_TIMESTAMP(3)
-                   )) * 1000))::bigint AS lease_remaining_ms`,
-        [input.limit, input.workerId, input.leaseDurationMs, input.maxAttempts],
+                   FLOOR(EXTRACT(EPOCH FROM (dispatch.lease_until - $6::timestamptz)) * 1000)::bigint AS lease_remaining_ms`,
+        [input.limit, input.workerId, input.leaseDurationMs, input.maxAttempts, candidateIds, claimDbNow],
       )
+      for (const row of result.rows) {
+        const registration = agUiConsumerRegistration(row.tenant_id, row.conversation_id, row.subject_id, row.run_id)
+        const registered = await client.query(registration.text, registration.values)
+        if (registered.rowCount !== 1) throw new Error("AGENT_DISPATCH_CONSUMER_REGISTRATION_FAILED")
+      }
+      const finalObservedAt = performance.now()
+      const finalClock = await client.query<{ db_now: Date }>("SELECT clock_timestamp() AS db_now")
+      const finalDbNow = finalClock.rows[0]?.db_now
+      if (finalDbNow === undefined) throw new Error("AGENT_DISPATCH_DATABASE_CLOCK_UNAVAILABLE")
+      const remaining = await client.query<{ outbox_id: string; lease_remaining_ms: string }>(
+        `SELECT outbox_id, FLOOR(EXTRACT(EPOCH FROM (lease_until - $2::timestamptz)) * 1000)::bigint AS lease_remaining_ms
+           FROM bff_agent_dispatch_outbox WHERE outbox_id = ANY($1::text[])`,
+        [result.rows.map((row) => row.outbox_id), finalDbNow],
+      )
+      const remainingById = new Map(remaining.rows.map((row) => [row.outbox_id, row.lease_remaining_ms]))
+      if (result.rows.some((row) => signedSafeInteger(remainingById.get(row.outbox_id) ?? "0", "AGENT_DISPATCH_LEASE_BUDGET_INVALID") < 1)) {
+        await client.query("ROLLBACK")
+        return []
+      }
+      for (const row of result.rows) row.lease_remaining_ms = remainingById.get(row.outbox_id) ?? "0"
       await client.query("COMMIT")
+      const commitElapsedMs = Math.ceil(performance.now() - finalObservedAt)
+      const liveRows = result.rows.filter((row) => {
+        const remainingMs = signedSafeInteger(row.lease_remaining_ms ?? "0", "AGENT_DISPATCH_LEASE_BUDGET_INVALID") - commitElapsedMs
+        row.lease_remaining_ms = remainingMs
+        return remainingMs > 0
+      })
       if (exhausted.notificationCursor !== null && exhausted.tenantId !== null && exhausted.sessionId !== null) {
         await this.database.notifyAgUiProjection(
           exhausted.tenantId,
@@ -400,8 +487,7 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
           exhausted.notificationCursor,
         ).catch(() => undefined)
       }
-      const queryElapsedMs = Math.max(0, Math.ceil(performance.now() - queryStartedAt))
-      return result.rows.map((row) => claimedAgentDispatch(row, queryElapsedMs))
+      return liveRows.map((row) => claimedAgentDispatch(row))
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined)
       throw error
@@ -414,15 +500,39 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
     client: PoolClient,
     input: AgentDispatchOutboxClaimInput,
   ): Promise<DispatchFailureSettlement> {
+    const identity = await client.query<{ outbox_id: string; tenant_id: string; conversation_id: string }>(
+      `SELECT current.outbox_id, current.tenant_id, current.conversation_id
+         FROM bff_agent_dispatch_outbox AS current
+        WHERE current.status IN ('pending','retryable') AND current.available_at <= CURRENT_TIMESTAMP(3)
+          AND current.attempt_count >= $1 AND current.admission_unknown_seen = FALSE
+          AND EXISTS (SELECT 1 FROM bff_conversation AS conversation
+                       WHERE conversation.tenant_id=current.tenant_id
+                         AND conversation.conversation_id=current.conversation_id
+                         AND conversation.owner_id=current.subject_id AND conversation.status='active')
+          AND NOT EXISTS (SELECT 1 FROM bff_agent_dispatch_outbox AS earlier
+                           WHERE earlier.tenant_id=current.tenant_id
+                             AND earlier.conversation_id=current.conversation_id
+                             AND (earlier.conversation_dispatch_seq, earlier.outbox_id)
+                                 < (current.conversation_dispatch_seq, current.outbox_id)
+                             AND earlier.status IN ('pending','retryable','leased','admitted'))
+        ORDER BY current.tenant_id, current.conversation_id, current.conversation_dispatch_seq, current.outbox_id LIMIT 1`,
+      [input.maxAttempts],
+    )
+    const candidate = identity.rows[0]
+    if (candidate === undefined) return { settled: false, notificationCursor: null, tenantId: null, sessionId: null }
+    await client.query(
+      `SELECT 1 FROM bff_agui_stream WHERE tenant_id=$1 AND session_id=$2 FOR UPDATE`,
+      [candidate.tenant_id, candidate.conversation_id],
+    )
     const exhausted = await client.query<AgentDispatchRow>(
       `WITH candidate AS MATERIALIZED (
          SELECT current.outbox_id
            FROM bff_agent_dispatch_outbox AS current
-          WHERE (
-              (current.status IN ('pending', 'retryable') AND current.available_at <= CURRENT_TIMESTAMP(3))
-              OR (current.status = 'leased' AND current.lease_until <= CURRENT_TIMESTAMP(3))
-            )
+          WHERE current.status IN ('pending', 'retryable')
+            AND current.available_at <= CURRENT_TIMESTAMP(3)
             AND current.attempt_count >= $1
+            AND current.admission_unknown_seen = FALSE
+            AND current.outbox_id = $4
             AND EXISTS (
               SELECT 1
                 FROM bff_conversation AS conversation
@@ -438,56 +548,74 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
                  AND earlier.conversation_id = current.conversation_id
                  AND (earlier.conversation_dispatch_seq, earlier.outbox_id)
                      < (current.conversation_dispatch_seq, current.outbox_id)
-                 AND earlier.status IN ('pending', 'retryable', 'leased')
+                 AND earlier.status IN ('pending', 'retryable', 'leased', 'admitted')
             )
           ORDER BY current.available_at ASC, current.tenant_id ASC, current.conversation_id ASC,
                    current.conversation_dispatch_seq ASC, current.outbox_id ASC
-          FOR UPDATE SKIP LOCKED
           LIMIT 1
        )
        UPDATE bff_agent_dispatch_outbox AS dispatch
           SET status = 'leased',
               lease_owner = $2,
               lease_token = gen_random_uuid()::text,
-              lease_until = CURRENT_TIMESTAMP(3) + ($3::double precision * INTERVAL '1 millisecond'),
+              lease_until = clock_timestamp() + ($3::double precision * INTERVAL '1 millisecond'),
               fence = dispatch.fence + 1,
               updated_at = CURRENT_TIMESTAMP(3)
          FROM candidate
         WHERE dispatch.outbox_id = candidate.outbox_id
        RETURNING ${CLAIMED_AGENT_DISPATCH_COLUMNS}`,
-      [input.maxAttempts, input.workerId, input.leaseDurationMs],
+      [input.maxAttempts, input.workerId, input.leaseDurationMs, candidate.outbox_id],
     )
     const row = exhausted.rows[0]
     if (row === undefined || row.lease_owner === null || row.lease_token === null) {
       return { settled: false, notificationCursor: null, tenantId: null, sessionId: null }
     }
+    const failureClock = await client.query<{ db_now: Date }>("SELECT clock_timestamp() AS db_now")
+    const failureDbNow = failureClock.rows[0]?.db_now
+    if (failureDbNow === undefined) throw new Error("AGENT_DISPATCH_DATABASE_CLOCK_UNAVAILABLE")
     const settled = await this.markAgentDispatchFailedInTransaction(client, {
       tenantId: row.tenant_id,
       outboxId: row.outbox_id,
       leaseOwner: row.lease_owner,
       leaseToken: row.lease_token,
       fence: safeInteger(row.fence, "AGENT_DISPATCH_FENCE_INVALID"),
-    }, "agent_dispatch_attempts_exhausted")
+    }, "agent_dispatch_attempts_exhausted", failureDbNow)
     if (!settled.settled) throw new Error("AGENT_DISPATCH_EXHAUSTED_SETTLEMENT_FAILED")
     return settled
   }
 
-  public async markAgentDispatchSucceeded(lease: AgentDispatchLease): Promise<boolean> {
+  public async markAgentDispatchAdmitted(lease: AgentDispatchLease): Promise<boolean> {
     this.assertAgentDispatchLease(lease)
-    const result = await this.database.pool.query(
-      `UPDATE bff_agent_dispatch_outbox
-          SET status = 'succeeded', completed_at = CURRENT_TIMESTAMP(3),
-              last_error_code = NULL, last_error_at = NULL,
-              lease_owner = NULL, lease_token = NULL, lease_until = NULL,
-              updated_at = CURRENT_TIMESTAMP(3)
-        WHERE tenant_id = $1 AND outbox_id = $2 AND status = 'leased' AND lease_owner = $3
-          AND lease_token = $4 AND fence = $5 AND lease_until > CURRENT_TIMESTAMP(3)`,
-      [lease.tenantId, lease.outboxId, lease.leaseOwner, lease.leaseToken, lease.fence],
-    )
-    return result.rowCount === 1
+    const client = await this.database.pool.connect()
+    try {
+      await client.query("BEGIN")
+      await client.query(
+        `SELECT 1 FROM bff_agent_dispatch_outbox
+          WHERE tenant_id=$1 AND outbox_id=$2 AND status='leased' AND lease_owner=$3 AND lease_token=$4 AND fence=$5
+          FOR UPDATE`,
+        [lease.tenantId, lease.outboxId, lease.leaseOwner, lease.leaseToken, lease.fence],
+      )
+      const clock = await client.query<{ db_now: Date }>("SELECT clock_timestamp() AS db_now")
+      const dbNow = clock.rows[0]?.db_now
+      if (dbNow === undefined) throw new Error("AGENT_DISPATCH_DATABASE_CLOCK_UNAVAILABLE")
+      const result = await client.query(
+        `UPDATE bff_agent_dispatch_outbox
+            SET status='admitted', admitted_at=$6::timestamptz, completed_at=NULL,
+                last_error_code=NULL, last_error_at=NULL, lease_owner=NULL, lease_token=NULL, lease_until=NULL,
+                updated_at=$6::timestamptz
+          WHERE tenant_id=$1 AND outbox_id=$2 AND status='leased' AND lease_owner=$3
+            AND lease_token=$4 AND fence=$5 AND lease_until>$6::timestamptz`,
+        [lease.tenantId, lease.outboxId, lease.leaseOwner, lease.leaseToken, lease.fence, dbNow],
+      )
+      await client.query("COMMIT")
+      return result.rowCount === 1
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined)
+      throw error
+    } finally { client.release() }
   }
 
-  public async markAgentDispatchRetryable(
+  public async markAgentDispatchUnknown(
     lease: AgentDispatchLease,
     delayMs: number,
     errorCode: string,
@@ -495,27 +623,76 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
     this.assertAgentDispatchLease(lease)
     if (!Number.isSafeInteger(delayMs) || delayMs < 1) throw new Error("AGENT_DISPATCH_RETRY_DELAY_INVALID")
     requiredIdentity(errorCode, "AGENT_DISPATCH_ERROR_CODE_REQUIRED")
-    const result = await this.database.pool.query(
-      `UPDATE bff_agent_dispatch_outbox
-          SET status = 'retryable',
-              available_at = CURRENT_TIMESTAMP(3) + ($6::double precision * INTERVAL '1 millisecond'),
-              last_error_code = $7, last_error_at = CURRENT_TIMESTAMP(3), completed_at = NULL,
-              lease_owner = NULL, lease_token = NULL, lease_until = NULL,
-              updated_at = CURRENT_TIMESTAMP(3)
-        WHERE tenant_id = $1 AND outbox_id = $2 AND status = 'leased' AND lease_owner = $3
-          AND lease_token = $4 AND fence = $5 AND lease_until > CURRENT_TIMESTAMP(3)`,
-      [lease.tenantId, lease.outboxId, lease.leaseOwner, lease.leaseToken, lease.fence, delayMs, errorCode],
-    )
-    return result.rowCount === 1
+    const client = await this.database.pool.connect()
+    try {
+      await client.query("BEGIN")
+      await client.query(
+        `SELECT 1 FROM bff_agent_dispatch_outbox
+          WHERE tenant_id=$1 AND outbox_id=$2 AND status='leased' AND lease_owner=$3 AND lease_token=$4 AND fence=$5
+          FOR UPDATE`,
+        [lease.tenantId, lease.outboxId, lease.leaseOwner, lease.leaseToken, lease.fence],
+      )
+      const clock = await client.query<{ db_now: Date }>("SELECT clock_timestamp() AS db_now")
+      const dbNow = clock.rows[0]?.db_now
+      if (dbNow === undefined) throw new Error("AGENT_DISPATCH_DATABASE_CLOCK_UNAVAILABLE")
+      const result = await client.query(
+        `UPDATE bff_agent_dispatch_outbox
+            SET status='retryable', admission_unknown_seen=TRUE,
+                available_at=$8::timestamptz + ($6::double precision * INTERVAL '1 millisecond'),
+                last_error_code=$7, last_error_at=$8::timestamptz, completed_at=NULL,
+                lease_owner=NULL, lease_token=NULL, lease_until=NULL, updated_at=$8::timestamptz
+          WHERE tenant_id=$1 AND outbox_id=$2 AND status='leased' AND lease_owner=$3
+            AND lease_token=$4 AND fence=$5 AND lease_until>$8::timestamptz`,
+        [lease.tenantId, lease.outboxId, lease.leaseOwner, lease.leaseToken, lease.fence, delayMs, errorCode, dbNow],
+      )
+      await client.query("COMMIT")
+      return result.rowCount === 1
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined)
+      throw error
+    } finally { client.release() }
   }
 
-  public async markAgentDispatchFailed(lease: AgentDispatchLease, errorCode: string): Promise<boolean> {
+  public async markAgentDispatchNotAdmitted(lease: AgentDispatchLease, delayMs: number, errorCode: string): Promise<boolean> {
     this.assertAgentDispatchLease(lease)
+    if (!Number.isSafeInteger(delayMs) || delayMs < 1) throw new Error("AGENT_DISPATCH_RETRY_DELAY_INVALID")
     requiredIdentity(errorCode, "AGENT_DISPATCH_ERROR_CODE_REQUIRED")
     const client = await this.database.pool.connect()
     try {
       await client.query("BEGIN")
-      const settled = await this.markAgentDispatchFailedInTransaction(client, lease, errorCode)
+      const identity = await client.query<{ conversation_id: string }>(
+        `SELECT conversation_id FROM bff_agent_dispatch_outbox
+          WHERE tenant_id=$1 AND outbox_id=$2 AND status='leased' AND lease_owner=$3
+            AND lease_token=$4 AND fence=$5`,
+        [lease.tenantId, lease.outboxId, lease.leaseOwner, lease.leaseToken, lease.fence],
+      )
+      if (identity.rows[0] !== undefined) {
+        await client.query(
+          `SELECT 1 FROM bff_agui_stream WHERE tenant_id=$1 AND session_id=$2 FOR UPDATE`,
+          [lease.tenantId, identity.rows[0].conversation_id],
+        )
+      }
+      await client.query(
+        `SELECT 1 FROM bff_agent_dispatch_outbox
+          WHERE tenant_id=$1 AND outbox_id=$2 AND status='leased' AND lease_owner=$3 AND lease_token=$4 AND fence=$5
+          FOR UPDATE`,
+        [lease.tenantId, lease.outboxId, lease.leaseOwner, lease.leaseToken, lease.fence],
+      )
+      const clock = await client.query<{ db_now: Date }>("SELECT clock_timestamp() AS db_now")
+      const dbNow = clock.rows[0]?.db_now
+      if (dbNow === undefined) throw new Error("AGENT_DISPATCH_DATABASE_CLOCK_UNAVAILABLE")
+      const sticky = await client.query(
+        `UPDATE bff_agent_dispatch_outbox SET status = 'retryable',
+                available_at = $8::timestamptz + ($6::double precision * INTERVAL '1 millisecond'),
+                last_error_code = $7, last_error_at = $8::timestamptz,
+                lease_owner = NULL, lease_token = NULL, lease_until = NULL, updated_at = $8::timestamptz
+          WHERE tenant_id=$1 AND outbox_id=$2 AND status='leased' AND lease_owner=$3 AND lease_token=$4
+            AND fence=$5 AND lease_until > $8::timestamptz AND admission_unknown_seen`,
+        [lease.tenantId, lease.outboxId, lease.leaseOwner, lease.leaseToken, lease.fence, delayMs, errorCode, dbNow],
+      )
+      const settled = sticky.rowCount === 1
+        ? { settled: true, notificationCursor: null, tenantId: null, sessionId: null }
+        : await this.markAgentDispatchFailedInTransaction(client, lease, errorCode, dbNow)
       await client.query("COMMIT")
       if (settled.notificationCursor !== null && settled.tenantId !== null && settled.sessionId !== null) {
         await this.database.notifyAgUiProjection(
@@ -537,18 +714,20 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
     client: PoolClient,
     lease: AgentDispatchLease,
     errorCode: string,
+    dbNow: Date,
   ): Promise<DispatchFailureSettlement> {
     const settled = await client.query<FailedDispatchRow>(
       `UPDATE bff_agent_dispatch_outbox
-          SET status = 'failed', completed_at = CURRENT_TIMESTAMP(3),
-              last_error_code = $6, last_error_at = CURRENT_TIMESTAMP(3),
+          SET status = 'failed', completed_at = $7::timestamptz,
+              last_error_code = $6, last_error_at = $7::timestamptz,
               lease_owner = NULL, lease_token = NULL, lease_until = NULL,
-              updated_at = CURRENT_TIMESTAMP(3)
+              updated_at = $7::timestamptz
         WHERE tenant_id = $1 AND outbox_id = $2 AND status = 'leased' AND lease_owner = $3
-          AND lease_token = $4 AND fence = $5 AND lease_until > CURRENT_TIMESTAMP(3)
+          AND lease_token = $4 AND fence = $5 AND lease_until > $7::timestamptz
+          AND admission_unknown_seen = FALSE
         RETURNING outbox_id, tenant_id, conversation_id, conversation_dispatch_seq, run_id,
-                  CURRENT_TIMESTAMP(3) AS failed_at`,
-      [lease.tenantId, lease.outboxId, lease.leaseOwner, lease.leaseToken, lease.fence, errorCode],
+                  $7::timestamptz AS failed_at`,
+      [lease.tenantId, lease.outboxId, lease.leaseOwner, lease.leaseToken, lease.fence, errorCode, dbNow],
     )
     const row = settled.rows[0]
     if (row === undefined) {
@@ -619,6 +798,7 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
               next_public_sequence = next_public_sequence + 1,
               latest_run_id = CASE WHEN expected_run_id = $3 THEN $3 ELSE latest_run_id END,
               terminal_run_id = CASE WHEN expected_run_id = $3 THEN $3 ELSE terminal_run_id END,
+              expected_run_id = CASE WHEN expected_run_id = $3 THEN NULL ELSE expected_run_id END,
               consumer_state = CASE WHEN expected_run_id = $3 THEN 'stopped' ELSE consumer_state END,
               consumer_fence = consumer_fence + CASE WHEN expected_run_id = $3 THEN 1 ELSE 0 END,
               consumer_failure_count = consumer_failure_count + CASE WHEN expected_run_id = $3 THEN 1 ELSE 0 END,

@@ -33,6 +33,7 @@ const SHA256_PATTERN = /^[0-9a-f]{64}$/u
 const ARTIFACT_KINDS = new Set(["document", "code", "image", "audio", "video", "data", "archive", "other"])
 
 export type AgentProjectionSource = {
+  sourceRunId: string | null
   sourceEventId: string
   sourceSequence: number
   sourceOccurredAt: string
@@ -83,14 +84,16 @@ function assertSource(source: AgentProjectionSource, sessionId: string): void {
     throw new Error("AG-UI source sequence must be a positive safe integer")
   }
   if (!Number.isFinite(Date.parse(source.sourceOccurredAt))) throw new Error("AG-UI source timestamp is invalid")
+  if (source.sourceRunId !== null && source.sourceRunId.trim() === "") throw new AgUiSourceContractError()
   if (source.event === null) return
   if (
     source.event.event_id !== source.sourceEventId
     || source.event.seq !== source.sourceSequence
     || source.event.session_id !== sessionId
     || source.event.timestamp !== source.sourceOccurredAt
+    || source.event.run_id !== source.sourceRunId
   ) {
-    throw new Error("AG-UI source identity does not match its projected Chat event")
+    throw new AgUiSourceContractError()
   }
 }
 
@@ -215,8 +218,10 @@ function runProjectionState(
     for (const frame of source.frames) {
       const runId = frame.runId ?? frame.metadata.kokoro.run_id
       if (frame.type === "RUN_STARTED" && runId !== null && runId !== undefined && runId !== "") {
-        latestRunId = runId
-        if (expectedRunId === null || expectedRunId === runId) terminalRunId = null
+        if (expectedRunId === null || expectedRunId === runId) {
+          latestRunId = runId
+          terminalRunId = null
+        }
       } else if ((frame.type === "RUN_FINISHED" || frame.type === "RUN_ERROR") && runId !== null && runId !== undefined && runId !== "") {
         if (expectedRunId !== null && expectedRunId === runId) {
           latestRunId = runId
@@ -233,6 +238,7 @@ function runProjectionState(
 
 function sourceIdentity(source: AgentProjectionSource): AgUiSourceIdentity {
   return {
+    sourceRunId: source.sourceRunId,
     sourceOwner: "kokoro-agent",
     sourceEventId: source.sourceEventId,
     sourceSequence: source.sourceSequence,

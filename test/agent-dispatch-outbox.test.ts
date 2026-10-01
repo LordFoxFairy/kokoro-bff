@@ -25,9 +25,9 @@ class RecordingRepository implements AgentDispatchOutboxRepository {
   public readonly claimInputs: AgentDispatchOutboxClaimInput[] = []
   public readonly events: string[] = []
   public claims: AgentDispatchCommand[] = []
-  public succeeded: AgentDispatchLease[] = []
-  public retryable: Array<{ lease: AgentDispatchLease; delayMs: number; errorCode: string }> = []
-  public failed: Array<{ lease: AgentDispatchLease; errorCode: string }> = []
+  public admitted: AgentDispatchLease[] = []
+  public unknown: Array<{ lease: AgentDispatchLease; delayMs: number; errorCode: string }> = []
+  public notAdmitted: Array<{ lease: AgentDispatchLease; errorCode: string }> = []
 
   public async commitChatTurn(command: CommitChatTurn): Promise<AgentDispatchReceipt> {
     this.commits.push(command)
@@ -45,18 +45,18 @@ class RecordingRepository implements AgentDispatchOutboxRepository {
     return claimed
   }
 
-  public async markAgentDispatchSucceeded(lease: AgentDispatchLease): Promise<boolean> {
-    this.succeeded.push(lease)
+  public async markAgentDispatchAdmitted(lease: AgentDispatchLease): Promise<boolean> {
+    this.admitted.push(lease)
     return true
   }
 
-  public async markAgentDispatchRetryable(lease: AgentDispatchLease, delayMs: number, errorCode: string): Promise<boolean> {
-    this.retryable.push({ lease, delayMs, errorCode })
+  public async markAgentDispatchUnknown(lease: AgentDispatchLease, delayMs: number, errorCode: string): Promise<boolean> {
+    this.unknown.push({ lease, delayMs, errorCode })
     return true
   }
 
-  public async markAgentDispatchFailed(lease: AgentDispatchLease, errorCode: string): Promise<boolean> {
-    this.failed.push({ lease, errorCode })
+  public async markAgentDispatchNotAdmitted(lease: AgentDispatchLease, _delayMs: number, errorCode: string): Promise<boolean> {
+    this.notAdmitted.push({ lease, errorCode })
     return true
   }
 }
@@ -91,6 +91,7 @@ function command(attemptCount = 1, suffix = "fixture", leaseRemainingMs = 30_000
     },
     status: "leased",
     attemptCount,
+    admissionUnknownSeen: false,
     leaseOwner: "worker_fixture",
     leaseToken: "lease_fixture",
     leaseUntil: new Date("2099-01-01T00:00:00.000Z"),
@@ -131,11 +132,11 @@ describe("Agent dispatch outbox worker", () => {
   it("settles a successful delivery with the full tenant and fence identity", async () => {
     const repository = new RecordingRepository()
     repository.claims = [command()]
-    const delivery: AgentDispatchDeliveryPort = { deliver: async () => ({ outcome: "succeeded" }) }
+    const delivery: AgentDispatchDeliveryPort = { deliver: async () => ({ outcome: "admitted" }) }
     const dispatcher = new AgentDispatchOutboxDispatcher(repository, delivery, { workerId: "worker_fixture" })
 
     assert.equal(await dispatcher.runOnce(), 1)
-    assert.deepEqual(repository.succeeded, [
+    assert.deepEqual(repository.admitted, [
       {
         tenantId: "tenant_fixture",
         outboxId: "agent_outbox_fixture",
@@ -144,8 +145,8 @@ describe("Agent dispatch outbox worker", () => {
         fence: 7,
       },
     ])
-    assert.equal(repository.retryable.length, 0)
-    assert.equal(repository.failed.length, 0)
+    assert.equal(repository.unknown.length, 0)
+    assert.equal(repository.notAdmitted.length, 0)
     assert.deepEqual(
       repository.claimInputs.map(({ limit, maxAttempts }) => ({ limit, maxAttempts })),
       [
@@ -159,7 +160,7 @@ describe("Agent dispatch outbox worker", () => {
     const repository = new RecordingRepository()
     repository.claims = [command()]
     const delivery: AgentDispatchDeliveryPort = {
-      deliver: async () => ({ outcome: "retryable", errorCode: "agent_http_503" }),
+      deliver: async () => ({ outcome: "unknown", errorCode: "agent_http_503" }),
     }
     const dispatcher = new AgentDispatchOutboxDispatcher(repository, delivery, {
       workerId: "worker_fixture",
@@ -167,17 +168,17 @@ describe("Agent dispatch outbox worker", () => {
     })
 
     await dispatcher.runOnce()
-    assert.equal(repository.retryable[0]?.delayMs, 500)
-    assert.equal(repository.retryable[0]?.errorCode, "agent_http_503")
-    assert.equal(repository.succeeded.length, 0)
-    assert.equal(repository.failed.length, 0)
+    assert.equal(repository.unknown[0]?.delayMs, 500)
+    assert.equal(repository.unknown[0]?.errorCode, "agent_http_503")
+    assert.equal(repository.admitted.length, 0)
+    assert.equal(repository.notAdmitted.length, 0)
   })
 
-  it("moves exhausted retryable commands to the terminal failure path", async () => {
+  it("paces an exhausted unknown admission at the 30 second cap without releasing the FIFO head", async () => {
     const repository = new RecordingRepository()
     repository.claims = [command(8)]
     const delivery: AgentDispatchDeliveryPort = {
-      deliver: async () => ({ outcome: "retryable", errorCode: "agent_http_503" }),
+      deliver: async () => ({ outcome: "unknown", errorCode: "agent_http_503" }),
     }
     const dispatcher = new AgentDispatchOutboxDispatcher(repository, delivery, {
       workerId: "worker_fixture",
@@ -185,9 +186,11 @@ describe("Agent dispatch outbox worker", () => {
     })
 
     await dispatcher.runOnce()
-    assert.equal(repository.retryable.length, 0)
-    assert.deepEqual(repository.failed, [{ lease: { tenantId: "tenant_fixture", outboxId: "agent_outbox_fixture", leaseOwner: "worker_fixture", leaseToken: "lease_fixture", fence: 7 }, errorCode: "agent_http_503" }])
-    assert.equal(repository.succeeded.length, 0)
+    assert.equal(repository.unknown.length, 1)
+    assert.equal(repository.unknown[0]?.delayMs, 30_000)
+    assert.equal(repository.unknown[0]?.errorCode, "agent_http_503")
+    assert.deepEqual(repository.notAdmitted, [])
+    assert.equal(repository.admitted.length, 0)
   })
 
   it("claims one command at a time and delivers it before claiming the next FIFO item", async () => {
@@ -196,7 +199,7 @@ describe("Agent dispatch outbox worker", () => {
     const delivery: AgentDispatchDeliveryPort = {
       deliver: async (claimed) => {
         repository.events.push(`deliver:${claimed.outboxId}`)
-        return { outcome: "succeeded" }
+        return { outcome: "admitted" }
       },
     }
     const dispatcher = new AgentDispatchOutboxDispatcher(repository, delivery, {
@@ -220,7 +223,7 @@ describe("Agent dispatch outbox worker", () => {
     const delivery: AgentDispatchDeliveryPort = {
       deliver: async (_claimed, budget) => {
         timeoutBudgetMs = budget
-        return { outcome: "succeeded" }
+        return { outcome: "admitted" }
       },
     }
     const dispatcher = new AgentDispatchOutboxDispatcher(repository, delivery, {
@@ -235,7 +238,7 @@ describe("Agent dispatch outbox worker", () => {
 })
 
 describe("Agent dispatch HTTP classification", () => {
-  it("accepts only a matching run/session receipt and makes malformed 2xx permanent", () => {
+  it("accepts only a matching run/session receipt and keeps malformed 2xx admission unknown", () => {
     const leased = command()
     assert.deepEqual(
       classifyAgentDispatchAttempt(
@@ -246,7 +249,7 @@ describe("Agent dispatch HTTP classification", () => {
         },
         leased,
       ),
-      { outcome: "succeeded" },
+      { outcome: "admitted" },
     )
     assert.deepEqual(
       classifyAgentDispatchAttempt(
@@ -257,32 +260,32 @@ describe("Agent dispatch HTTP classification", () => {
         },
         leased,
       ),
-      { outcome: "failed", errorCode: "agent_receipt_invalid" },
+      { outcome: "unknown", errorCode: "agent_receipt_invalid" },
     )
     assert.deepEqual(classifyAgentDispatchAttempt({ kind: "response", status: 204, body: undefined }, leased), {
-      outcome: "failed",
+      outcome: "unknown",
       errorCode: "agent_receipt_invalid",
     })
   })
 
-  it("retries only transient statuses and transport failures", () => {
+  it("distinguishes owner-declared non-admission from sticky unknown transport outcomes", () => {
     const leased = command()
     for (const status of [408, 425, 429, 500, 503]) {
-      assert.equal(classifyAgentDispatchAttempt({ kind: "response", status, body: {} }, leased).outcome, "retryable")
+      assert.equal(classifyAgentDispatchAttempt({ kind: "response", status, body: {} }, leased).outcome, "unknown")
     }
     for (const status of [400, 401, 403, 404, 409, 422]) {
-      assert.equal(classifyAgentDispatchAttempt({ kind: "response", status, body: {} }, leased).outcome, "failed")
+      assert.equal(classifyAgentDispatchAttempt({ kind: "response", status, body: {} }, leased).outcome, "not_admitted")
     }
     assert.deepEqual(classifyAgentDispatchAttempt({ kind: "response", status: 503, body: { error: { code: "evil\nheader", message: "secret" } } }, leased), {
-      outcome: "retryable",
+      outcome: "unknown",
       errorCode: "agent_http_503",
     })
     assert.deepEqual(classifyAgentDispatchAttempt({ kind: "transport", errorCode: "upstream_timeout" }, leased), {
-      outcome: "retryable",
+      outcome: "unknown",
       errorCode: "upstream_timeout",
     })
     assert.deepEqual(classifyAgentDispatchAttempt({ kind: "transport", errorCode: "upstream_response_too_large" }, leased), {
-      outcome: "failed",
+      outcome: "unknown",
       errorCode: "upstream_response_too_large",
     })
   })

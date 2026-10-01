@@ -119,22 +119,21 @@ export class AgentDispatchOutboxDispatcher {
       const leaseDeadline = this.monotonicTimestamp() + command.leaseRemainingMs
       result = await this.delivery.deliver(command, this.remainingLeaseBudget(leaseDeadline))
     } catch {
-      result = { outcome: "retryable" as const, errorCode: "agent_dispatch_delivery_error" }
+      result = { outcome: "unknown" as const, errorCode: "agent_dispatch_delivery_error" }
     }
     const lease = leaseOf(command)
-    if (result.outcome === "succeeded") {
-      await this.repository.markAgentDispatchSucceeded(lease).catch(() => false)
+    if (result.outcome === "admitted") {
+      await this.repository.markAgentDispatchAdmitted(lease).catch(() => false)
       return
     }
-    if (result.outcome === "failed" || command.attemptCount >= this.maxAttempts) {
-      await this.repository.markAgentDispatchFailed(lease, result.errorCode).catch(() => false)
+    const delayMs = command.attemptCount >= this.maxAttempts
+      ? 30_000
+      : agentDispatchRetryDelayMs(command.attemptCount, this.random())
+    if (result.outcome === "not_admitted") {
+      await this.repository.markAgentDispatchNotAdmitted(lease, delayMs, result.errorCode).catch(() => false)
       return
     }
-    await this.repository.markAgentDispatchRetryable(
-      lease,
-      agentDispatchRetryDelayMs(command.attemptCount, this.random()),
-      result.errorCode,
-    ).catch(() => false)
+    await this.repository.markAgentDispatchUnknown(lease, delayMs, result.errorCode).catch(() => false)
   }
 
   private monotonicTimestamp(): number {

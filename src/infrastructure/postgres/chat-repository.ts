@@ -372,12 +372,23 @@ export class PostgresChatRepository implements ChatRepository {
       )
       await client.query(
         `UPDATE bff_agent_dispatch_outbox
+            SET status = 'retryable', admission_unknown_seen = TRUE,
+                last_error_code = 'conversation_deleted', last_error_at = CURRENT_TIMESTAMP(3),
+                lease_owner = NULL, lease_token = NULL, lease_until = NULL,
+                fence = fence + 1, updated_at = CURRENT_TIMESTAMP(3)
+          WHERE tenant_id = $1 AND subject_id = $2 AND conversation_id = $3
+            AND status IN ('leased', 'retryable') AND attempt_count > 0`,
+        [tenantId, subjectId, conversationId],
+      )
+      await client.query(
+        `UPDATE bff_agent_dispatch_outbox
             SET status = 'failed', completed_at = CURRENT_TIMESTAMP(3),
                 last_error_code = 'conversation_deleted', last_error_at = CURRENT_TIMESTAMP(3),
                 lease_owner = NULL, lease_token = NULL, lease_until = NULL,
                 fence = fence + 1, updated_at = CURRENT_TIMESTAMP(3)
           WHERE tenant_id = $1 AND subject_id = $2 AND conversation_id = $3
-            AND status IN ('pending', 'retryable', 'leased')`,
+            AND status IN ('pending', 'retryable', 'leased')
+            AND attempt_count = 0 AND admission_unknown_seen = FALSE`,
         [tenantId, subjectId, conversationId],
       )
       await client.query(

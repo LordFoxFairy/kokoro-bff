@@ -300,6 +300,29 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
         await client.query("ROLLBACK")
         return "version_conflict"
       }
+      const sourceRunIds = new Set<string>()
+      for (const source of command.sources) {
+        const derivedRunIds = new Set<string>()
+        if (source.assistantUpdate !== undefined) derivedRunIds.add(source.assistantUpdate.runId)
+        if (source.artifactDelivery !== undefined) derivedRunIds.add(source.artifactDelivery.runId)
+        for (const frame of source.frames) {
+          const runId = frame.runId ?? frame.metadata.kokoro.run_id
+          if (runId !== null && runId !== undefined && runId !== "") derivedRunIds.add(runId)
+        }
+        if ([...derivedRunIds].some((runId) => runId !== source.sourceRunId)) throw new Error("AGUI_SOURCE_RUN_MISMATCH")
+        if (source.sourceRunId !== null) sourceRunIds.add(source.sourceRunId)
+      }
+      for (const runId of sourceRunIds) {
+        const historical = await client.query<{ status: string }>(
+          `SELECT status FROM bff_agent_dispatch_outbox
+            WHERE tenant_id = $1 AND conversation_id = $2 AND run_id = $3
+            FOR UPDATE`,
+          [command.tenantId, command.sessionId, runId],
+        )
+        if (historical.rows[0]?.status === "terminal" || historical.rows[0]?.status === "failed") {
+          throw new Error("AGUI_POST_TERMINAL_SOURCE")
+        }
+      }
       let nextPublicSequence = safeInteger(stream.next_public_sequence, "next public sequence")
       let latestRunStartSequence = stream.latest_run_start_sequence === null
         ? null
@@ -356,7 +379,7 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
                 AND dispatch.conversation_id = $2
                 AND dispatch.run_id = $3
                 AND dispatch.subject_id = $4
-                AND dispatch.status <> 'failed'
+                AND dispatch.status IN ('leased', 'retryable', 'admitted', 'terminal')
                 AND conversation.tenant_id = dispatch.tenant_id
                 AND conversation.conversation_id = dispatch.conversation_id
                 AND conversation.owner_id = dispatch.subject_id
@@ -385,7 +408,12 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
 
         for (const [frameIndex, frame] of source.frames.entries()) {
           const frameCursor = newCursor()
-          if (frame.type === "RUN_STARTED") latestRunStartSequence = nextPublicSequence
+          const frameRunId = frame.runId ?? frame.metadata.kokoro.run_id
+          if (
+            frame.type === "RUN_STARTED"
+            && frameRunId !== null && frameRunId !== undefined && frameRunId !== ""
+            && (stream.expected_run_id === null ? command.latestRunId === frameRunId : stream.expected_run_id === frameRunId)
+          ) latestRunStartSequence = nextPublicSequence
           await client.query(
             `INSERT INTO bff_agui_event
                (tenant_id, session_id, public_sequence, cursor, source_owner, source_event_id,
@@ -409,6 +437,24 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
         }
       }
 
+      if (
+        command.terminalRunId !== undefined
+        && command.terminalRunId !== null
+        && command.terminalRunId !== stream.terminal_run_id
+      ) {
+        const terminal = await client.query(
+          `UPDATE bff_agent_dispatch_outbox
+              SET status = 'terminal', admitted_at = COALESCE(admitted_at, CURRENT_TIMESTAMP(3)),
+                  completed_at = CURRENT_TIMESTAMP(3), lease_owner = NULL, lease_token = NULL,
+                  lease_until = NULL, last_error_code = NULL, last_error_at = NULL,
+                  fence = fence + 1, updated_at = CURRENT_TIMESTAMP(3)
+            WHERE tenant_id = $1 AND conversation_id = $2 AND run_id = $3
+              AND subject_id = $4 AND status IN ('leased', 'retryable', 'admitted')`,
+          [command.tenantId, command.sessionId, command.terminalRunId, stream.consumer_subject_id],
+        )
+        if (terminal.rowCount !== 1) throw new Error("AGUI_TERMINAL_DISPATCH_MISSING")
+      }
+
       const updated = await client.query(
         `UPDATE bff_agui_stream
             SET version = version + 1,
@@ -421,6 +467,7 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
                   WHEN $8::text IS NULL OR expected_run_id IS NULL OR expected_run_id = $8 THEN $8
                   ELSE terminal_run_id
                 END,
+                expected_run_id = CASE WHEN $8::text IS NOT NULL AND expected_run_id = $8 THEN NULL ELSE expected_run_id END,
                 updated_at = CURRENT_TIMESTAMP(3)
           WHERE tenant_id = $1
             AND session_id = $2
@@ -429,7 +476,7 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
               consumer_lease_owner = $10
               AND consumer_lease_token = $11
               AND consumer_fence = $12
-              AND consumer_lease_until > CURRENT_TIMESTAMP(3)
+              AND consumer_lease_until > clock_timestamp()
             ))`,
         [
           command.tenantId,

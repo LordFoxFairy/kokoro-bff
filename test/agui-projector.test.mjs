@@ -18,6 +18,7 @@ const base = {
 
 function lease(overrides = {}) {
   return {
+    sourceRunId: null,
     tenantId: "tenant_1",
     sessionId: "session_1",
     subjectId: "user_1",

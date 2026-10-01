@@ -42,6 +42,12 @@ function safeInteger(value: string | number, label: string): number {
   return parsed
 }
 
+function signedSafeInteger(value: string | number, label: string): number {
+  const parsed = typeof value === "number" ? value : Number(value)
+  if (!Number.isSafeInteger(parsed)) throw new Error(`Stored AG-UI ${label} is invalid`)
+  return parsed
+}
+
 function positiveInteger(value: number, label: string): void {
   if (!Number.isSafeInteger(value) || value < 1) throw new Error(`${label} must be a positive safe integer`)
 }
@@ -129,13 +135,16 @@ export class PostgresAgUiConsumerRepository implements AgUiProjectionConsumerRep
           LIMIT $1`,
         [input.limit],
       )
+      const clock = await client.query<{ db_now: Date }>("SELECT clock_timestamp() AS db_now")
+      const dbNow = clock.rows[0]?.db_now
+      if (dbNow === undefined) throw new Error("AG-UI database clock unavailable")
       for (const candidate of candidates.rows) {
         const token = randomUUID()
         const updated = await client.query<ClaimedConsumerRow>(
           `UPDATE bff_agui_stream
               SET consumer_lease_owner = $3,
                   consumer_lease_token = $4,
-                  consumer_lease_until = CURRENT_TIMESTAMP(3) + ($5::double precision * INTERVAL '1 millisecond'),
+                  consumer_lease_until = $7::timestamptz + ($5::double precision * INTERVAL '1 millisecond'),
                   consumer_fence = consumer_fence + 1,
                   updated_at = CURRENT_TIMESTAMP(3)
             WHERE tenant_id = $1
@@ -144,11 +153,14 @@ export class PostgresAgUiConsumerRepository implements AgUiProjectionConsumerRep
               AND consumer_subject_id = $6
             RETURNING consumer_fence AS fence,
                       consumer_lease_until AS lease_until,
-                      GREATEST(1, floor(EXTRACT(EPOCH FROM (consumer_lease_until - CURRENT_TIMESTAMP(3))) * 1000))::bigint AS lease_remaining_ms`,
-          [candidate.tenant_id, candidate.session_id, input.workerId, token, leaseDurationMs, candidate.consumer_subject_id],
+                      floor(EXTRACT(EPOCH FROM (consumer_lease_until - $7::timestamptz)) * 1000)::bigint AS lease_remaining_ms`,
+          [candidate.tenant_id, candidate.session_id, input.workerId, token, leaseDurationMs, candidate.consumer_subject_id, dbNow],
         )
         const row = updated.rows[0]
-        if (row === undefined) continue
+        if (row === undefined || signedSafeInteger(row.lease_remaining_ms, "consumer lease remaining budget") < 1) {
+          await client.query("ROLLBACK")
+          return []
+        }
         leases.push({
           tenantId: candidate.tenant_id,
           sessionId: candidate.session_id,
@@ -162,8 +174,26 @@ export class PostgresAgUiConsumerRepository implements AgUiProjectionConsumerRep
           failureCount: safeInteger(candidate.consumer_failure_count, "consumer failure count"),
         })
       }
+      const finalObservedAt = performance.now()
+      const finalClock = await client.query<{ db_now: Date }>("SELECT clock_timestamp() AS db_now")
+      const finalDbNow = finalClock.rows[0]?.db_now
+      if (finalDbNow === undefined) throw new Error("AG-UI database clock unavailable")
+      const remaining = await client.query<{ tenant_id: string; session_id: string; lease_remaining_ms: string }>(
+        `SELECT tenant_id, session_id, FLOOR(EXTRACT(EPOCH FROM (consumer_lease_until - $2::timestamptz)) * 1000)::bigint AS lease_remaining_ms
+           FROM bff_agui_stream WHERE (tenant_id || E'\x1f' || session_id) = ANY($1::text[])`,
+        [leases.map((lease) => `${lease.tenantId}\u001f${lease.sessionId}`), finalDbNow],
+      )
+      const remainingBySession = new Map(remaining.rows.map((row) => [`${row.tenant_id}\u001f${row.session_id}`, row.lease_remaining_ms]))
+      if (leases.some((lease) => signedSafeInteger(remainingBySession.get(`${lease.tenantId}\u001f${lease.sessionId}`) ?? "0", "consumer lease remaining budget") < 1)) {
+        await client.query("ROLLBACK")
+        return []
+      }
       await client.query("COMMIT")
-      return leases
+      const commitElapsedMs = Math.ceil(performance.now() - finalObservedAt)
+      return leases.flatMap((lease) => {
+        const remainingMs = signedSafeInteger(remainingBySession.get(`${lease.tenantId}\u001f${lease.sessionId}`) ?? "0", "consumer lease remaining budget") - commitElapsedMs
+        return remainingMs > 0 ? [{ ...lease, leaseRemainingMs: remainingMs }] : []
+      })
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined)
       throw error
@@ -175,21 +205,36 @@ export class PostgresAgUiConsumerRepository implements AgUiProjectionConsumerRep
   public async renewConsumerLease(lease: AgUiConsumerLease, now: string, leaseUntil: string): Promise<boolean> {
     const renewalDurationMs = Date.parse(instant(leaseUntil, "AG-UI lease expiry")) - Date.parse(instant(now, "AG-UI lease time"))
     positiveInteger(renewalDurationMs, "AG-UI lease renewal duration")
-    const result = await this.database.pool.query(
-      `UPDATE bff_agui_stream
-          SET consumer_lease_until = CURRENT_TIMESTAMP(3) + ($7::double precision * INTERVAL '1 millisecond'),
-              updated_at = CURRENT_TIMESTAMP(3)
-        WHERE tenant_id = $1
-          AND session_id = $2
-          AND consumer_state = 'active'
-          AND consumer_subject_id = $3
-          AND consumer_lease_owner = $4
-          AND consumer_lease_token = $5
-          AND consumer_fence = $6
-          AND consumer_lease_until > CURRENT_TIMESTAMP(3)`,
-      [lease.tenantId, lease.sessionId, lease.subjectId, lease.leaseOwner, lease.leaseToken, lease.fence, renewalDurationMs],
-    )
-    return result.rowCount === 1
+    const client = await this.database.pool.connect()
+    try {
+      await client.query("BEGIN")
+      await client.query(
+        `SELECT 1 FROM bff_agui_stream
+          WHERE tenant_id=$1 AND session_id=$2 AND consumer_subject_id=$3
+            AND consumer_lease_owner=$4 AND consumer_lease_token=$5 AND consumer_fence=$6
+          FOR UPDATE`,
+        [lease.tenantId, lease.sessionId, lease.subjectId, lease.leaseOwner, lease.leaseToken, lease.fence],
+      )
+      const clock = await client.query<{ db_now: Date }>("SELECT clock_timestamp() AS db_now")
+      const dbNow = clock.rows[0]?.db_now
+      if (dbNow === undefined) throw new Error("AG-UI database clock unavailable")
+      const result = await client.query(
+        `UPDATE bff_agui_stream
+            SET consumer_lease_until = $8::timestamptz + ($7::double precision * INTERVAL '1 millisecond'),
+                updated_at = $8::timestamptz
+          WHERE tenant_id=$1 AND session_id=$2 AND consumer_state='active' AND consumer_subject_id=$3
+            AND consumer_lease_owner=$4 AND consumer_lease_token=$5 AND consumer_fence=$6
+            AND consumer_lease_until > $8::timestamptz`,
+        [lease.tenantId, lease.sessionId, lease.subjectId, lease.leaseOwner, lease.leaseToken, lease.fence, renewalDurationMs, dbNow],
+      )
+      await client.query("COMMIT")
+      return result.rowCount === 1
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined)
+      throw error
+    } finally {
+      client.release()
+    }
   }
 
   public async markConsumerProgress(lease: AgUiConsumerLease, nextPollAt: string, now: string): Promise<boolean> {
@@ -260,39 +305,43 @@ export class PostgresAgUiConsumerRepository implements AgUiProjectionConsumerRep
     const nextPollAt = instant(values.nextPollAt, "AG-UI next poll time")
     const nextPollDelayMs = Math.max(0, Date.parse(nextPollAt) - Date.parse(now))
     if (values.errorAt !== null) instant(values.errorAt, "AG-UI error time")
-    const result = await this.database.pool.query(
-      `UPDATE bff_agui_stream
-          SET consumer_state = $7,
-              consumer_next_poll_at = CURRENT_TIMESTAMP(3) + ($8::double precision * INTERVAL '1 millisecond'),
-              consumer_last_error_code = $9,
-              consumer_last_error_at = CASE WHEN $9::text IS NULL THEN NULL ELSE CURRENT_TIMESTAMP(3) END,
-              consumer_last_polled_at = CURRENT_TIMESTAMP(3),
-              consumer_failure_count = CASE WHEN $10::boolean THEN 0 ELSE consumer_failure_count + 1 END,
-              consumer_lease_owner = NULL,
-              consumer_lease_token = NULL,
-              consumer_lease_until = NULL,
-              updated_at = CURRENT_TIMESTAMP(3)
-        WHERE tenant_id = $1
-          AND session_id = $2
-          AND consumer_subject_id = $3
-          AND consumer_lease_owner = $4
-          AND consumer_lease_token = $5
-          AND consumer_fence = $6
-          AND consumer_lease_until > CURRENT_TIMESTAMP(3)`,
-      [
-        lease.tenantId,
-        lease.sessionId,
-        lease.subjectId,
-        lease.leaseOwner,
-        lease.leaseToken,
-        lease.fence,
-        values.state,
-        nextPollDelayMs,
-        values.errorCode,
-        values.resetFailures,
-      ],
-    )
-    return result.rowCount === 1
+    const client = await this.database.pool.connect()
+    try {
+      await client.query("BEGIN")
+      await client.query(
+        `SELECT 1 FROM bff_agui_stream
+          WHERE tenant_id=$1 AND session_id=$2 AND consumer_subject_id=$3
+            AND consumer_lease_owner=$4 AND consumer_lease_token=$5 AND consumer_fence=$6
+          FOR UPDATE`,
+        [lease.tenantId, lease.sessionId, lease.subjectId, lease.leaseOwner, lease.leaseToken, lease.fence],
+      )
+      const clock = await client.query<{ db_now: Date }>("SELECT clock_timestamp() AS db_now")
+      const dbNow = clock.rows[0]?.db_now
+      if (dbNow === undefined) throw new Error("AG-UI database clock unavailable")
+      const result = await client.query(
+        `UPDATE bff_agui_stream
+            SET consumer_state=$7,
+                consumer_next_poll_at=$11::timestamptz + ($8::double precision * INTERVAL '1 millisecond'),
+                consumer_last_error_code=$9,
+                consumer_last_error_at=CASE WHEN $9::text IS NULL THEN NULL ELSE $11::timestamptz END,
+                consumer_last_polled_at=$11::timestamptz,
+                consumer_failure_count=CASE WHEN $10::boolean THEN 0 ELSE consumer_failure_count + 1 END,
+                consumer_lease_owner=NULL, consumer_lease_token=NULL, consumer_lease_until=NULL,
+                updated_at=$11::timestamptz
+          WHERE tenant_id=$1 AND session_id=$2 AND consumer_subject_id=$3
+            AND consumer_lease_owner=$4 AND consumer_lease_token=$5 AND consumer_fence=$6
+            AND consumer_lease_until > $11::timestamptz`,
+        [lease.tenantId, lease.sessionId, lease.subjectId, lease.leaseOwner, lease.leaseToken, lease.fence,
+          values.state, nextPollDelayMs, values.errorCode, values.resetFailures, dbNow],
+      )
+      await client.query("COMMIT")
+      return result.rowCount === 1
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined)
+      throw error
+    } finally {
+      client.release()
+    }
   }
 
   public async collectGarbage(command: AgUiGarbageCollectionCommand): Promise<AgUiGarbageCollectionResult> {

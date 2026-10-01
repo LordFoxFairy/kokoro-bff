@@ -46,6 +46,15 @@ test("schema application reads the repository canonical schema", async () => {
   assert.match(schema, /CREATE TABLE IF NOT EXISTS bff_message/u)
   assert.match(schema, /CREATE TABLE IF NOT EXISTS bff_agent_cancellation_outbox/u)
   assert.match(schema, /conversation_dispatch_seq BIGINT NOT NULL/u)
+  assert.match(schema, /admission_unknown_seen BOOLEAN NOT NULL DEFAULT FALSE/u)
+  assert.match(schema, /admitted_at TIMESTAMPTZ\(3\)/u)
+  const scheduledOutbox = schema.match(/CREATE TABLE IF NOT EXISTS bff_scheduled_task_outbox \([\s\S]*?\n\);/u)?.[0] ?? ""
+  const agentDispatchOutbox = schema.match(/CREATE TABLE IF NOT EXISTS bff_agent_dispatch_outbox \([\s\S]*?\n\);/u)?.[0] ?? ""
+  assert.doesNotMatch(scheduledOutbox, /admission_unknown_seen|admitted_at/u)
+  assert.match(agentDispatchOutbox, /admission_unknown_seen BOOLEAN NOT NULL DEFAULT FALSE/u)
+  assert.match(agentDispatchOutbox, /admitted_at TIMESTAMPTZ\(3\)/u)
+  assert.match(agentDispatchOutbox, /status IN \('pending', 'leased', 'retryable', 'admitted', 'terminal', 'failed'\)/u)
+  assert.doesNotMatch(agentDispatchOutbox, /status IN \([^)]*'succeeded'/u)
   assert.match(schema, /UNIQUE \(tenant_id, conversation_id, conversation_dispatch_seq\)/u)
   assert.match(schema, /CREATE TABLE IF NOT EXISTS bff_share/u)
   assert.match(schema, /CREATE TABLE IF NOT EXISTS bff_agui_stream/u)
