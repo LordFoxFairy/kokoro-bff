@@ -1,4 +1,5 @@
 import type { AgUiEvent } from "../project-chat-event.js"
+import type { AgentFailureProfile } from "../../../domain/chat/message.js"
 
 export type AgUiProjectionStateSnapshot = {
   textMessageIds: string[]
@@ -19,7 +20,8 @@ export type AgUiStreamState = {
 
 export type AgUiAssistantUpdate =
   | { runId: string; kind: "replace" | "append"; content: string }
-  | { runId: string; kind: "complete" | "fail" }
+  | { runId: string; kind: "complete" | "cancel" }
+  | { runId: string; kind: "fail"; failure: AgentFailureProfile }
 
 export type AgUiArtifactDelivery = {
   runId: string

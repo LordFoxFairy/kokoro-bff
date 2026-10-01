@@ -9,16 +9,111 @@ const openapiUrl = new URL("../../contract/openapi/v1/openapi.yaml", import.meta
 const baselineUrl = new URL("../../contract/tests/v1-operations.json", import.meta.url)
 const agentControlSnapshotUrl = new URL("../../contract/external/kokoro-agent/control-receipt.v1.json", import.meta.url)
 const platformV4Url = new URL("../../contract/vendor/kokoro-platform/263a28f1e55745bd1829a61f68228d775751adbc/execution-operations-v4/", import.meta.url)
+const SAFE_FAILURE_CODES = [
+  "token_budget_exceeded",
+  "recursion_limit_exceeded",
+  "assembly_failed",
+  "enqueue_failed",
+  "dispatch_exhausted",
+  "contract_incompatible",
+  "internal_error",
+  "model_unavailable",
+  "dependency_unavailable",
+  "model_access_denied",
+]
 
 async function readContract() {
   const [openapi, baselineDocument] = await Promise.all([readFile(openapiUrl, "utf8"), readFile(baselineUrl, "utf8")])
   return { openapi, baseline: JSON.parse(baselineDocument).operations }
 }
 
+function inspectChatFailureContract(openapi) {
+  const errors = []
+  const start = openapi.indexOf("    ChatMessage:\n")
+  const end = openapi.indexOf("    ChatRun:\n", start)
+  const message = start >= 0 && end > start ? openapi.slice(start, end) : ""
+  const failureStart = message.indexOf("        failure:\n")
+  const guardStart = message.indexOf("      allOf:\n", failureStart)
+  const failure = failureStart >= 0 && guardStart > failureStart ? message.slice(failureStart, guardStart) : ""
+  const guard = guardStart >= 0 ? message.slice(guardStart) : ""
+  const require = (condition, label) => {
+    if (!condition) errors.push(label)
+  }
+
+  require(/^info:\n(?:.*\n){0,3}?  version: 2\.0\.0$/mu.test(openapi), "public info.version must be 2.0.0")
+  require(/^      required: \[message_id, role, content, status, created_at\]$/mu.test(message), "failure must stay optional")
+  require(/failure:\n\s+type: object\n\s+required: \[source, code, retryable\]\n\s+additionalProperties: false/u.test(
+    failure,
+  ), "failure must be closed and complete")
+  require(/source: \{ type: string, const: agent \}/u.test(failure), "failure source must be agent")
+  const codeLines = failure.match(/code:\n\s+type: string\n\s+enum:\n((?:\s+- [a-z_]+\n)+)/u)?.[1] ?? ""
+  const codes = [...codeLines.matchAll(/^\s+- ([a-z_]+)$/gmu)].map((match) => match[1])
+  require(JSON.stringify(codes) === JSON.stringify(SAFE_FAILURE_CODES), "failure codes must equal the ordered ten-code owner set")
+  require(new Set(codes).size === codes.length, "failure codes must not contain duplicates")
+  require(/retryable: \{ type: boolean \}/u.test(failure), "failure retryable must be boolean")
+  require(/if:\n\s+properties:\n\s+retryable: \{ const: true \}\n\s+then:\n\s+properties:\n\s+code: \{ enum: \[model_unavailable, dependency_unavailable\] \}/u.test(
+    failure,
+  ), "retryable=true must allow exactly two codes")
+  require(/allOf:\n\s+- if:\n\s+required: \[failure\]\n\s+then:\n\s+required: \[run_id\]\n\s+properties:\n\s+role: \{ const: assistant \}\n\s+status: \{ const: failed \}\n\s+run_id: \{ type: string, minLength: 1 \}/u.test(
+    guard,
+  ), "failure presence guard must require assistant failed and non-empty run")
+  require((guard.match(/required: \[failure\]/gu) ?? []).length === 1, "failure presence must be one-way only")
+  require(!/\n\s+else:/u.test(guard), "failure presence guard must not have a reverse else")
+  return errors
+}
+
 test("the canonical BFF OpenAPI passes field and protocol invariants", async () => {
   const { openapi, baseline } = await readContract()
 
   assert.deepEqual(inspectBffOpenApi(openapi, baseline), [])
+})
+
+test("ChatMessage publishes one closed optional Agent failure profile with the exact presence guard", async () => {
+  const { openapi } = await readContract()
+
+  assert.deepEqual(inspectChatFailureContract(openapi), [])
+})
+
+test("ChatMessage failure contract detects closed-shape, retryability, and presence-guard drift", async () => {
+  const { openapi } = await readContract()
+  assert.deepEqual(inspectChatFailureContract(openapi), [])
+  const mutations = [
+    openapi.replace("        required: [source, code, retryable]", "        required: [source, code]"),
+    openapi.replace(
+      "          additionalProperties: false\n          properties:\n            source: { type: string, const: agent }",
+      "          additionalProperties: true\n          properties:\n            source: { type: string, const: agent }",
+    ),
+    openapi.replace(
+      "code: { enum: [model_unavailable, dependency_unavailable] }",
+      "code: { enum: [model_unavailable, dependency_unavailable, internal_error] }",
+    ),
+    openapi.replace("        required: [failure]", "        required: []"),
+    openapi.replace("          role: { const: assistant }", "          role: { type: string }"),
+    openapi.replace("          status: { const: failed }", "          status: { type: string }"),
+    openapi.replace("        required: [run_id]", "        required: []"),
+    openapi.replace("          run_id: { type: string, minLength: 1 }", "          run_id: { type: string, minLength: 0 }"),
+    openapi.replace("                - model_access_denied", "                - model_access_denied\n                - unexpected_failure"),
+    openapi.replace("                - internal_error", "                - internal_error\n                - internal_error"),
+    openapi.replace(
+      "      required: [message_id, role, content, status, created_at]",
+      "      required: [message_id, role, content, status, created_at, failure]",
+    ),
+    openapi.replace(
+      "          run_id: { type: string, minLength: 1 }",
+      `          run_id: { type: string, minLength: 1 }
+        - if:
+            required: [role, status, run_id]
+            properties:
+              role: { const: assistant }
+              status: { const: failed }
+          then:
+            required: [failure]`,
+    ),
+  ]
+  for (const [index, broken] of mutations.entries()) {
+    assert.notEqual(broken, openapi, `mutation ${index} must change the contract`)
+    assert.notDeepEqual(inspectChatFailureContract(broken), [], `mutation ${index} must be rejected`)
+  }
 })
 
 test("Platform projection read gate detects status, cache and error-code drift", async () => {

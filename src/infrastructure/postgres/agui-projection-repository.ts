@@ -347,6 +347,8 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
                       WHEN $5::text = 'complete' THEN 'completed'
                       ELSE 'failed'
                     END,
+                    agent_failure_code = CASE WHEN $5::text = 'fail' THEN $7::text ELSE NULL END,
+                    agent_failure_retryable = CASE WHEN $5::text = 'fail' THEN $8::boolean ELSE NULL END,
                     updated_at = CURRENT_TIMESTAMP(3)
                FROM bff_agent_dispatch_outbox AS dispatch,
                     bff_conversation AS conversation
@@ -365,7 +367,16 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
                 AND message.run_id = dispatch.run_id
                 AND message.role = 'assistant'
                 AND message.status IN ('pending', 'streaming')`,
-            [command.tenantId, command.sessionId, update.runId, stream.consumer_subject_id, update.kind, "content" in update ? update.content : null],
+            [
+              command.tenantId,
+              command.sessionId,
+              update.runId,
+              stream.consumer_subject_id,
+              update.kind,
+              "content" in update ? update.content : null,
+              update.kind === "fail" ? update.failure.code : null,
+              update.kind === "fail" ? update.failure.retryable : null,
+            ],
           )
           if (changed.rowCount !== 1) {
             await assertAssistantBindingOrLegitimateSkip(client, command.tenantId, command.sessionId, update.runId, stream.consumer_subject_id)

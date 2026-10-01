@@ -1,5 +1,5 @@
 import type { Conversation } from "../../domain/chat/conversation.js"
-import type { Message, MessageRole, MessageStatus } from "../../domain/chat/message.js"
+import type { AgentFailureCode, Message, MessageRole, MessageStatus } from "../../domain/chat/message.js"
 import type { Share } from "../../domain/chat/share.js"
 
 export type ConversationRow = {
@@ -22,6 +22,8 @@ export type MessageRow = {
   role: MessageRole
   content: string
   status: MessageStatus
+  agent_failure_code: AgentFailureCode | null
+  agent_failure_retryable: boolean | null
   message_seq: string | number
   created_at: Date | string
   updated_at: Date | string
@@ -108,6 +110,7 @@ export function conversationFromRow(row: ConversationRow): Conversation {
 export function messageFromRow(row: MessageRow): Message {
   const sequence = String(row.message_seq)
   if (!/^[1-9][0-9]*$/u.test(sequence)) throw new Error("CHAT_MESSAGE_SEQUENCE_INVALID")
+  if ((row.agent_failure_code === null) !== (row.agent_failure_retryable === null)) throw new Error("CHAT_MESSAGE_FAILURE_INVALID")
   return {
     messageId: row.message_id,
     tenantId: row.tenant_id,
@@ -116,6 +119,9 @@ export function messageFromRow(row: MessageRow): Message {
     role: row.role,
     content: row.content,
     status: row.status,
+    failure: row.agent_failure_code === null
+      ? null
+      : { source: "agent", code: row.agent_failure_code, retryable: row.agent_failure_retryable as boolean },
     messageSeq: sequence,
     createdAt: instant(row.created_at),
     updatedAt: instant(row.updated_at),
@@ -135,5 +141,5 @@ export function shareFromRow(row: ShareRow): Share {
 }
 
 export const conversationColumns = "conversation_id, tenant_id, owner_id, project_ref, title, status, created_at, updated_at, deleted_at"
-export const messageColumns = "message_id, tenant_id, conversation_id, run_id, role, content, status, message_seq, created_at, updated_at"
+export const messageColumns = "message_id, tenant_id, conversation_id, run_id, role, content, status, agent_failure_code, agent_failure_retryable, message_seq, created_at, updated_at"
 export const shareColumns = "share_id, tenant_id, conversation_id, url, created_at, expires_at, revoked_at"

@@ -1,5 +1,205 @@
 # kokoro-bff 技术设计
 
+## BFF-AGENT-FAILURE3：安全失败投影当前实现（2026-09-30；owner隔离集成已验，Web组合待闭环）
+
+### 当前态、owner 与目标
+
+本节是机器契约、Schema、测试与源码的当前实施依据；起始基线是 BFF main
+`15e07fa44670bc13705ce3f6f700e73afcb72ccc`。当前实现已经删除旧 Agent HTTP 2.0 vendor 与手写七码
+fallback，固定下述 Agent 3.0 owner，生成严格 failure validator，并把 Message、public snapshot、Share 与
+durable AG-UI 投影接入同一安全失败事实。Root 已在隔离fixture执行真实 PostgreSQL/Redis/localhost HTTP 七文件47/47、动态Schema7/7与完整Node门；
+具体冻结hash、资源回收与日志见 CURRENT。Web/真实owner/provider浏览器组合仍未验收，不能扩大该证据范围。
+
+目标固定 Agent owner 已先发布 commit `f3be3b97dd67df69ed3c6cb88c59f3bc2db97703`、HTTP contract
+`3.0.0`、OpenAPI SHA-256 `e9f0a543f74dee34212f0ea4fe366d46218268462ac54dce08e41965f34d2d2c`，
+`contract/provenance.json` 文件 SHA-256 为
+`d116657f65027de8bd829dc0408fd86046da0ac0a1d2934bd2a87e835c897b5f`。Agent 继续拥有失败分类；BFF
+只在固定 owner `run.failed` source 的完整 `ChatFailure` 通过严格验证后，拥有并写入 Message 的安全失败快照和
+durable AG-UI public projection。BFF 不保存 exception 名、message、stack、provider body 或其他 diagnostics，也不从
+HTTP status、投递错误或本地异常猜一个 Agent failure。
+
+目标 Agent `run.failed.payload_json` 必须先按 owner 的严格闭合 `ChatFailure={status:"failed",code,retryable}`
+验证；验证后才丢弃 owner discriminator `status` 并投影 public safe failure。`code` 只允许
+`token_budget_exceeded`、`recursion_limit_exceeded`、`assembly_failed`、`enqueue_failed`、
+`dispatch_exhausted`、`contract_incompatible`、`internal_error`、`model_unavailable`、
+`dependency_unavailable`、`model_access_denied`。十个 code 与 `retryable=false` 的组合全部合法；
+`retryable=true` 只允许 `model_unavailable` 或 `dependency_unavailable`。缺字段、多字段、未知 code、非 boolean、
+缺失/错误/null `status`、或其他八码搭配 `true` 都是完整 source page 的 contract failure，禁止 fallback。
+
+### 失败 writer 与单一投影事务
+
+必须保留四种当前可达的 Message `failed` writer，只有第一种携带 Agent failure：
+
+| writer | 当前触发 | 目标 `agent_failure_code` / `agent_failure_retryable` |
+| --- | --- | --- |
+| verified Agent terminal | 固定 3.0 owner 的 `run.failed` | 同一 projection 事务写严格验证的二元组 |
+| Agent cancellation terminal | `run.completed(status=cancelled)` | 两列都为 `NULL`；取消不是 Agent failure profile |
+| BFF dispatch permanent failure | `agent-dispatch-outbox-repository.ts` 写本地 `RUN_ERROR` | 两列都为 `NULL`；BFF launch error code 不冒充 Agent code |
+| Conversation delete | `chat-repository.ts` 终止 pending/streaming assistant | 两列都为 `NULL`；删除是产品生命周期动作 |
+
+`agent-cancellation-outbox` 自身的 `failed` 是取消命令投递状态，不写 Message；不得把它映射成 Message failure。
+所有 user/system、非 `failed` Message、assistant 无 `run_id`、以及上述三个非 Agent failure writer 的两列必须同时为
+`NULL`。不建立独立 failure 表：安全失败与 assistant Message 同生命周期、同 ACL、同删除/保留策略，拆表会制造第二
+真源与额外一致性窗口。
+
+`AgUiAssistantUpdate` 的目标 union 必须在类型层判别来源：verified `run.failed` 使用
+`{kind:"fail",failure:<完整已验证 safe profile>}`，cancel 使用独立 `{kind:"cancel"}`；不得保留
+`{kind:"fail",failure?:...}` 这种 optional profile，让同一分支猜来源。projection SQL 的
+`fail` 分支写 `failed` 加二元组，`cancel` 分支只写 `failed` 并显式保持两列 `NULL`；dispatch/delete 的直接
+writer 同样保持 `NULL`。
+
+内部投影表示也只有一个安全事实：`mapAgentEvent` 对 verified `run.failed` 生成的 `ChatEvent.payload.failure` 承载
+`{source:"agent",code,retryable}`，可同时保留固定安全 message；`projectChatEvent` 的顶层 `code` 必须从
+`payload.failure.code` 导出，`metadata.kokoro.failure` 复用同一已验证值，`projectSources` 再把同一对象放入
+`{kind:"fail",failure}`。不得继续把旧 `payload.code` allowlist/fallback 当第二判据，也不得在各层复制两套 code
+来源；这是 BFF 内部投影表示，不是新增网络协议。
+
+verified `run.failed` 沿现有 `PostgresAgUiProjectionRepository.commitProjection()` 的唯一事务写入：先持有
+`bff_agui_stream` row lock 并校验 version/consumer lease，再登记 Agent source identity/digest，更新由本仓
+outbox 绑定的 assistant Message 的正文/status/failure，写所有 AG-UI frames，最后推进 projection state、run marker
+与 source high-watermark；任一步失败全部回滚。tenant/session/expected run/consumer subject、active Conversation owner、
+dispatch assistant ID、Message run/role/mutable status 的现有 predicate 不放宽。旧 run、failed dispatch、deleted
+Conversation、错误 subject 或无绑定 source 不得写 failure。
+
+Agent HTTP source reader 必须先以固定 owner OpenAPI 验证整个 `ReplayPageEnvelope`，再对页内每个 `run.failed`
+的 `payload_json` 使用由 owner `ChatFailure` schema 派生的严格 validator；整页所有 event 都验证并映射成功后才调用
+`ingest()`。任一 event 的完整 failure shape 非法时，本页 source identity、Message、frame、stream version 与 watermark
+保持零写，runner 以现有 `source_contract_invalid` 只 block 该 `(tenant,session,subject)` consumer；同 cycle 的其他
+consumer 独立继续。禁止逐 event 边验证边提交、跳过坏 event、把 unknown 降为 `internal_error`，或推进到坏页之后。
+
+### public snapshot、Share 与实时 AG-UI
+
+public safe shape 唯一为：
+
+```json
+{ "source": "agent", "code": "model_unavailable", "retryable": true }
+```
+
+target `ChatMessage.failure` 是 optional 且 closed；存在时必须同时满足 `role=assistant`、`status=failed`、`run_id`
+非空。canonical OpenAPI 必须用 `if: {required: [failure]}` 才进入 then，并在 then 固定 assistant/failed、
+`required:[run_id]` 与 `run_id.minLength:1`；不能只写 `if.properties`，也不写反向 else，所以 cancel/dispatch/delete
+形成的 assistant+failed+run 不被强制带 failure。mutation tests 必须分别删除 presence required、role/status guard、run
+required/minLength 并 RED。`GET /v1/sessions/{id}` 与 `GET /v1/sessions/{id}/messages` 都从 Message 两列映射同一 shape；snapshot
+继续在 ACL 成功后的单连接 `REPEATABLE READ READ ONLY` 事务中读取 Conversation、Message、Delivery、AG-UI
+watermark/active-run，因而 failure、正文、status 与 watermark 属于同一 committed snapshot。分页 Message query 继续用
+tenant/subject/active Conversation/Project predicate。service-only Share 只有 active、未撤销、未过期且绑定同
+tenant/conversation 的 capability 才可读取 Message，并明确投影同一 safe shape；Share 不返回 raw Agent payload，
+不因知道 Message/run ID 获得访问资格。
+
+AG-UI ledger GC 只回收旧 `bff_agui_event` frame 并写 cursor tombstone，不清除或从 ledger 重建
+`bff_message.agent_failure_*`；因此刷新、Message list 和合法 Share 在旧 `RUN_ERROR` frame 被 GC 后仍返回 failure。
+Conversation 删除仍使私有读与 Share 读不可达并撤销 active Share；保留的 Message row/failure 只服从既有
+Message retention，不引入新索引、缓存或 Redis truth。
+
+实时事件继续只使用标准 AG-UI `RUN_ERROR`，不增加 `CUSTOM`、第二 stream 或 legacy envelope。verified Agent
+failure 的 `RUN_ERROR.code` 等于 safe failure `code`，`message` 使用 BFF 固定安全文本 `Agent run failed`，并在现有
+`metadata.kokoro` 下增加 `failure`，其 shape 与 `ChatMessage.failure` 完全相同；不复制 raw owner payload 或
+diagnostics。dispatch failure 的既有 BFF-owned `RUN_ERROR` 保持独立：不加 `metadata.kokoro.failure`，其本地 code
+也不进入 Message failure。当前 `@ag-ui/core 0.0.59` 的 `BaseEvent.metadata` 与 `EventSchemas` 可承载该 metadata；
+仍必须由 runtime schema test 锁定，不以类型断言替代验证。
+
+### 来源生成、放置与删除
+
+Agent 3.0 完整 OpenAPI 只读 vendored 到
+`contract/vendor/kokoro-agent/f3be3b97dd67df69ed3c6cb88c59f3bc2db97703/openapi.json`，同一目录还必须保存
+owner 已发布的只读 `provenance.json`。后者完整文件 SHA-256 固定为
+`d116657f65027de8bd829dc0408fd86046da0ac0a1d2934bd2a87e835c897b5f`；manifest/generator 必须解析并断言
+`http_contract.version=3.0.0`、`http_contract.path=contract/openapi/v1/openapi.json`、
+`http_contract.sha256=e9f0a543f74dee34212f0ea4fe366d46218268462ac54dce08e41965f34d2d2c`，以及 failure generated
+artifact 的 `source_sha256` 同为该 OpenAPI SHA，不以人工审查文字代替 published provenance。固定 commit 目录只允许
+这两份 owner bytes。更新现有
+`openapi-ts.agent.config.ts`、`scripts/generate-agent-http-client.mjs` 与
+`contract/dependencies/agent-http.json`；同一 generator 除现有 `@hey-api/openapi-ts` 输出外，从 owner
+`#/components/schemas/ChatFailure` 确定性派生单个只读
+`src/generated/agent-http/failure-profile.gen.ts`。该文件是 infrastructure Agent client 的 runtime validator，
+不由 domain/HTTP route 直接 import；generator 必须把它加入完整文件 allowlist、manifest digest、双次 byte-identical
+生成和 committed drift 比对。generator 还必须结构化断言 owner `Failure.required=[code,retryable]`、true→两码的
+`if/then`、`ChatFailure` 对 `Failure` 的引用、`status` 的 required+const `failed` 与
+`unevaluatedProperties:false`；任一结构 mutant 必须令生成失败。禁止在 `projection.ts` 重写十码 Set，禁止把
+`orphans:true` 拉入全部 owner schema，也禁止手改 generated 文件。
+
+删除旧 HTTP 2.0 vendor
+`contract/vendor/kokoro-agent/dd34a4800b4ce0cc61eb80dd715e528b9d4517da/openapi.json` 及 manifest/config 中
+对应 consumer pin，不保留双轨或 fallback。独立 delivery event-protocol pin
+`contract/vendor/kokoro-agent/486adb1539dd8a06ca90684e66f91be031aa70cf/src/kokoro_agent/protocol/events.py`
+及其 aggregate `cae30a40d712bce39ef33ef2dc857af4f5b69c6afd1956fda065ec77379ae02e` 保持原字节；HTTP
+3.0 repin 不得误删或改写该独立来源。
+
+### 实施阶段记录（已完成）：两阶段允许集与 RED 验证
+
+本阶段记录原文保留当时的授写与RED/GREEN顺序，不是当前待实施状态；最终Root门与证据以CURRENT顶部为准。
+
+Root/独立审查放行后的**第二门只授权既有 tests 写稳定 RED**；canonical OpenAPI、Schema、vendor、manifest、
+generator、generated 与 runtime 全部保持 15e bytes。精确允许集只有：`test/agent-http-wire.test.mjs`、
+`test/agui-source-page.test.mjs`、
+  `test/agui.test.ts`、`test/agui-projector.test.mjs`、`test/chat-service.test.ts`、
+  `test/contract/openapi-contract.test.mjs`、`test/contract-governance.test.mjs`、
+  `test/schema-governance.test.mjs`、`test/chat-facts.integration.mjs`、
+  `test/agui-projection.integration.mjs`、`test/agui-http.integration.mjs`、`test/architecture.test.ts`。
+
+RED 必须来自对当前行为/contract/Schema bytes 的真实断言失败：mapAgentEvent strict failure 负例、当前 RUN_ERROR 缺
+safe metadata、public version/field/presence guard 目标、canonical 两列/CHECK 目标等；测试不得 import 尚不存在的
+`failure-profile.gen.ts`，不得以 missing-module/编译错误代替 RED。数据库 integration test 同时写出 partial NULL
+两方向的直接 insert 案例，但 tests-only RED 期间 canonical 仍无列；Root 先以字段/constraint 预期的稳定断言确认 RED，
+GREEN 后才以真实 PostgreSQL 证明两个 insert 都被 CHECK 拒绝。
+
+Root 接受 tests-only RED 后，**同一单 owner GREEN 才一次授权完整目标并在一个切片删除旧来源**：
+
+- machine/docs/Schema：`contract/openapi/v1/openapi.yaml`、`contract/README.md`、
+  `contract/vendor/kokoro-agent/dd34a4800b4ce0cc61eb80dd715e528b9d4517da/openapi.json`（删除）、
+  `contract/vendor/kokoro-agent/f3be3b97dd67df69ed3c6cb88c59f3bc2db97703/{openapi.json,provenance.json}`（新增）、
+  `contract/dependencies/agent-http.json`、`database/schema.sql`；`contract/README.md` 同步 public 2.0、Agent 3.0、
+  provenance 与 breaking `/v1` 结论；
+
+- generator/generated：`openapi-ts.agent.config.ts`、`scripts/generate-agent-http-client.mjs`、
+  `src/generated/agent-http/**`；
+- strict client/projection runtime：`src/infrastructure/clients/agent/http-wire.ts`、
+  `src/infrastructure/clients/agent/projection.ts`、`src/infrastructure/clients/agent/projector-source.ts`、
+  `src/application/agui/project-chat-event.ts`、`src/application/agui/project-session-events.ts`、
+  `src/application/agui/ports/agui-projection-repository.ts`、
+  `src/infrastructure/postgres/agui-projection-repository.ts`；
+- Message/read/Share runtime：`src/domain/chat/message.ts`、`src/contracts/chat.ts`、
+  `src/application/ports/chat-repository.ts`、`src/application/chat/mappers.ts`、
+  `src/application/chat-service.ts`、`src/infrastructure/postgres/chat-repository-mappers.ts`、
+  `src/infrastructure/postgres/chat-repository.ts`、`src/infrastructure/postgres/public-share-repository.ts`、
+  `src/bootstrap/server.ts`；
+- local failure writers：`src/application/agui/agent-dispatch-failure.ts`、
+  `src/infrastructure/postgres/agent-dispatch-outbox-repository.ts`、
+  `src/infrastructure/postgres/chat-repository.ts`。
+
+GREEN 继续拥有并修正上述 tests；禁止提交/发布过渡态的旧新双轨 vendor、虚假 generated manifest 或只有 machine
+没有 runtime 的半套组合。
+
+若实施证明需要此清单外文件，先回报 Root 调整任务卡，不自行扩写。tests-only 稳定 RED 必须以当前 mapper/frame/
+canonical bytes 覆盖 10 code × false、2 code × true 的目标接受断言，以及其余 8 code × true、unknown、缺字段、extra、
+非 boolean、owner `status` 缺失/错误/null 的目标拒绝断言；还要覆盖 public version/field/presence guard、坏 event 页首/中/末
+零写、RUN_ERROR safe metadata 和 canonical 两列/CHECK 预期。GREEN 最终验收在此基础上补齐 owner schema
+required/if-then/ref/status/unevaluated 结构 mutants，并通过真实 generator helper 证明每个 mutant 令生成失败，而非靠
+missing import。完整 RED→GREEN 矩阵要求坏 event 位于页首/中/末时
+全页零写且只 block 对应 consumer；数据库 CHECK 的两 NULL/两非 NULL、角色/status/run/tuple 全矩阵；verified
+failure 与 source/frame/watermark/Message 同事务回滚；snapshot RR barrier、Message list ACL、Share capability、GC 后保留；
+cancel/dispatch/delete 与所有非 Agent failure 保持两列 NULL；实时与 snapshot 的 code/retryable/source 完全一致且无
+raw diagnostics。`EventSchemas.parse()` 的 metadata passthrough 本身不是安全证明：测试必须断言最终持久化/序列化
+`RUN_ERROR` 没有顶层 `retryable`，`metadata.kokoro.failure` 恰有 `source/code/retryable` 三键且无 owner `status`、raw
+字段或 extra，code 与顶层 code 同值、message 等于固定 `Agent run failed`；删除任一上述 guard 的 mutant 必须 RED。
+
+所有后继命令必须显式使用 `PATH=/Users/nako/.nvm/versions/node/v22.22.2/bin:$PATH`（非 login shell 或命令内
+`export`）并先记录 `node --version`=`v22.22.2`；当前默认 shell 的 Node 24/engine warning 不构成 Node 22 证据。
+预定验证命令为 `pnpm contract:check:agent`（两次确定生成）、`pnpm contract:check`、
+`pnpm schema:check`、`pnpm format:check`、`pnpm lint`、`pnpm typecheck`、`pnpm test:architecture`、
+`pnpm test`、`pnpm build`，并在 Root 提供的 owner-scoped fixture 上执行 canonical fresh install、全部 7 个真实
+PostgreSQL/Redis/localhost HTTP integration 文件及 rollback/RR/GC/ACL/Share 定向矩阵。初始docs-only时点没有执行这些门；
+现Root已完成该源码切片完整门与隔离七文件47/47，实际日志见CURRENT。Web与真实owner/provider组合仍未验。
+
+### 仍需后续 owner 闭环的边界
+
+- public `info.version` 从 `1.0.0` 升为 `2.0.0` 是协调 breaking repin，但 HTTP namespace 仍为 `/v1`；Web 必须在
+  BFF 发布后固定新 commit/digest，并把 snapshot/实时 failure 当一组事实，不能先放宽 schema。
+- `ChatRun` 仍只服务 `active_run`；本片不从 terminal Message 合成 `active_run=failed`，不删除其现有其他声明状态，
+  也不借 failure profile 补 queued/waiting/pending/files。
+- Message/failure 的实际 retention、Share 产品披露确认、Web reload/断线/GC 后展示与真实 Agent 3.0 组合均要在后继
+  实施及 Root 验收中给出实际证据；本片已执行隔离fixture上的localhost HTTP测试，但未启动真实owner/provider组合或重启3310。
+
 ## BFF-PERSONAL-DOC-GATE：本人 Skill 安装（2026-09-30；消费者实现中，真实组合待验）
 
 **Owner、当前事实与目标职责。** Platform `skills/installation` 是安装、启用状态、命令 receipt 与事件的唯一 writer；BFF 只拥有 public Product HTTP 投影。当前在途消费者代码已唯一固定 Platform `6519ae9a7dba63586474d2860f6725d3165b701e` v5.0.1 aggregate `3f97b3c98fd8e7ce46e4a8ea73237ddb85e764849d2b15dd28d0a3a58a69e42f`，生成并接线 `ProductSkillInstallationService` 五方法，在唯一 public `/v1/skill-installations` surface 提供 POST+GET、`/{installation_id}` GET+DELETE 与 `/{installation_id}/enabled` PUT；旧按名称 enable/disable 路径、v4 vendor 与 fallback 已删除。Publish 只令 Skill ACTIVE，**不自动安装或启用**；安装是用户随后发起的显式命令。该代码尚待 Root 提交和真实 IAM→BFF→Platform 组合验收，产品仍未激活。

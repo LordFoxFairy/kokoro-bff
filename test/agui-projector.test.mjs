@@ -6,6 +6,7 @@ import { EventSchemas, EventType } from "@ag-ui/core"
 import { AgUiConsumerLeaseLostError, AgUiSourceContinuityError, AgUiSourceReadError } from "../dist/application/agui/errors.js"
 import { AgUiProjectorRunner } from "../dist/application/agui/projector.js"
 import { createAgUiProjectionState, projectChatEvent } from "../dist/application/agui/project-chat-event.js"
+import { mapAgentEvent } from "../dist/infrastructure/clients/agent/projection.js"
 
 const base = {
   event_id: "evt_terminal",
@@ -42,6 +43,43 @@ function source(sequence) {
 }
 
 describe("AG-UI terminal and tool semantics", () => {
+  it("serializes one verified Agent failure into the exact safe RUN_ERROR shape", () => {
+    const mapped = mapAgentEvent({
+      chat_event_id: "evt_safe_failure",
+      session_id: "session_1",
+      run_id: "run_1",
+      source_index: 2,
+      event_type: "run.failed",
+      payload_json: JSON.stringify({ status: "failed", code: "model_unavailable", retryable: true }),
+      seq: 3,
+      created_at: Date.parse("2026-09-02T12:00:00.000Z"),
+    })
+    assert.notEqual(mapped, null)
+    assert.deepEqual(mapped?.payload, {
+      failure: { source: "agent", code: "model_unavailable", retryable: true },
+      message: "Agent run failed",
+    })
+
+    const [projected] = projectChatEvent(mapped, createAgUiProjectionState())
+    const serialized = JSON.parse(JSON.stringify(projected))
+    assert.deepEqual({
+      type: serialized.type,
+      code: serialized.code,
+      message: serialized.message,
+      failure: serialized.metadata?.kokoro?.failure,
+    }, {
+      type: EventType.RUN_ERROR,
+      code: "model_unavailable",
+      message: "Agent run failed",
+      failure: { source: "agent", code: "model_unavailable", retryable: true },
+    })
+    assert.equal(Object.hasOwn(serialized, "retryable"), false)
+    assert.deepEqual(Object.keys(serialized.metadata.kokoro.failure).sort(), ["code", "retryable", "source"])
+    assert.equal(serialized.metadata.kokoro.failure.code, serialized.code)
+    assert.equal(Object.hasOwn(serialized.metadata.kokoro.failure, "status"), false)
+    assert.doesNotThrow(() => EventSchemas.parse(serialized))
+  })
+
   it("preserves tool errors and emits canonical cancellation and failure terminals", () => {
     const tool = projectChatEvent({
       ...base,
@@ -64,7 +102,7 @@ describe("AG-UI terminal and tool semantics", () => {
     const failed = projectChatEvent({
       ...base,
       kind: "run.failed",
-      payload: { code: "internal_error", message: "failed" },
+      payload: { failure: { source: "agent", code: "internal_error", retryable: false }, message: "Agent run failed" },
     }, createAgUiProjectionState())
     assert.equal(failed[0]?.type, EventType.RUN_ERROR)
     assert.equal(failed[0]?.threadId, "session_1")

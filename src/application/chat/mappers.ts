@@ -22,5 +22,6 @@ export function chatMessage(message: Message): ChatMessage {
     status: message.status,
     created_at: iso(message.createdAt),
     ...(message.runId === null ? {} : { run_id: message.runId }),
+    ...(message.failure === null ? {} : { failure: message.failure }),
   }
 }

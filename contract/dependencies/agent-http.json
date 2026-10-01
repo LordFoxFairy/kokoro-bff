@@ -3,10 +3,12 @@
   "status": "generated",
   "owner": {
     "repository_path": "apps/kokoro-agent",
-    "repository_commit": "dd34a4800b4ce0cc61eb80dd715e528b9d4517da",
-    "contract_version": "2.0.0",
+    "repository_commit": "f3be3b97dd67df69ed3c6cb88c59f3bc2db97703",
+    "contract_version": "3.0.0",
     "contract_path": "contract/openapi/v1/openapi.json",
-    "contract_sha256": "20398c59f42031c1b6ae2e2c3708e63ec8b5645baf741bf831bc67e14625ef99"
+    "contract_sha256": "e9f0a543f74dee34212f0ea4fe366d46218268462ac54dce08e41965f34d2d2c",
+    "provenance_path": "contract/provenance.json",
+    "provenance_sha256": "d116657f65027de8bd829dc0408fd86046da0ac0a1d2934bd2a87e835c897b5f"
   },
   "event_protocol": {
     "owner": "kokoro-agent",
@@ -20,7 +22,7 @@
     "package": "@hey-api/openapi-ts",
     "version": "0.99.0",
     "config_path": "openapi-ts.agent.config.ts",
-    "config_sha256": "bd95b53cb9e41b61588a61e398993fc2d8887eb0674345000921c7eefaefb108"
+    "config_sha256": "fae4ad04b771875b48c8a0c735d157f84a7b75fdafdac1e28a16b694706afe13"
   },
   "runtime": {
     "node": "22.22.2",
@@ -80,6 +82,11 @@
     {
       "path": "core/utils.gen.ts",
       "sha256": "c506702ae2cd031ca21665e78d90bcc18d65daf3e8d3f8280983c5f873242774"
+    },
+    {
+      "path": "failure-profile.gen.ts",
+      "source_sha256": "e9f0a543f74dee34212f0ea4fe366d46218268462ac54dce08e41965f34d2d2c",
+      "sha256": "7109099419791e05c418f217c733abb4c7aa64c76165587550c96b8da7506454"
     },
     {
       "path": "sdk.gen.ts",

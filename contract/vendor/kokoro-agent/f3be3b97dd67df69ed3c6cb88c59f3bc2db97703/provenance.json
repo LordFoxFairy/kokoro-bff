@@ -1,0 +1,55 @@
+{
+  "owner": "kokoro-agent",
+  "contract": "openapi/v1/openapi.json",
+  "source_files": [
+    "contract/openapi/v1/openapi.json",
+    "contract/execution-proof/v1/schema.json",
+    "contract/execution-proof/v1/vectors.json",
+    "src/kokoro_agent/protocol/control.py",
+    "src/kokoro_agent/protocol/events.py",
+    "src/kokoro_agent/protocol/streams.py",
+    "scripts/generate_failure_models.py",
+    "src/kokoro_agent/contract_check.py",
+    "src/kokoro_agent/chat_contract_check.py",
+    "src/kokoro_agent/protocol/run_failure_generated.py"
+  ],
+  "combined_sha256": "d5260b1a013be17d9b3297e942d91fe3d197972e6656ae876d5bba6bb5452a16",
+  "generated_artifacts": [
+    {
+      "path": "src/kokoro_agent/protocol/run_failure_generated.py",
+      "sha256": "f62279cb38d59a0b70cd104ec2f9c55c8aa49922c7f1b2f3ad85025e98131057",
+      "source": "contract/openapi/v1/openapi.json",
+      "source_sha256": "e9f0a543f74dee34212f0ea4fe366d46218268462ac54dce08e41965f34d2d2c",
+      "generator": "scripts/generate_failure_models.py"
+    }
+  ],
+  "source_revision": "same Git commit as the listed files",
+  "consumer_dependencies": [
+    {
+      "owner": "kokoro-system",
+      "contract": "contract/openapi/system.openapi.json",
+      "version": "2.0.0",
+      "source_commit": "f5702068d4416ad90b1bd02af57d2825c32be916",
+      "sha256": "f9ea76f107e1ea0fc19df20ee7c59032c0fbac66e640e9a16a1b770ab27c1f37",
+      "operations": [
+        "POST /v1/system/model-catalog/resolve"
+      ]
+    }
+  ],
+  "execution_proof": {
+    "version": "1.0.0",
+    "schema": {
+      "path": "contract/execution-proof/v1/schema.json",
+      "sha256": "264f2a86230ccdc20c46ff8664407c2a6f382c664970539274cca569f178ab5f"
+    },
+    "vectors": {
+      "path": "contract/execution-proof/v1/vectors.json",
+      "sha256": "a65b9b4a1c6da8c25bf012ec0aa9c04de037f5e166c1cd7cbee7df340dc17c41"
+    }
+  },
+  "http_contract": {
+    "version": "3.0.0",
+    "path": "contract/openapi/v1/openapi.json",
+    "sha256": "e9f0a543f74dee34212f0ea4fe366d46218268462ac54dce08e41965f34d2d2c"
+  }
+}

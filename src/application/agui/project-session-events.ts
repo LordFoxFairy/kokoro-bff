@@ -163,10 +163,23 @@ function projectSources(
     }
     if (event.kind === "run.completed") {
       if (event.payload.status !== "completed" && event.payload.status !== "cancelled") throw new AgUiSourceContractError()
-      return { ...sourceIdentity(source), frames, assistantUpdate: { runId, kind: event.payload.status === "cancelled" ? "fail" as const : "complete" as const } }
+      return { ...sourceIdentity(source), frames, assistantUpdate: { runId, kind: event.payload.status === "cancelled" ? "cancel" as const : "complete" as const } }
     }
     if (event.kind === "run.failed") {
-      return { ...sourceIdentity(source), frames, assistantUpdate: { runId, kind: "fail" as const } }
+      const failure = event.payload.failure
+      if (typeof failure !== "object" || failure === null || Array.isArray(failure)) throw new AgUiSourceContractError()
+      const candidate = failure as Record<string, unknown>
+      if (Object.keys(candidate).sort().join(",") !== "code,retryable,source") throw new AgUiSourceContractError()
+      if (candidate.source !== "agent" || typeof candidate.code !== "string" || typeof candidate.retryable !== "boolean") throw new AgUiSourceContractError()
+      return {
+        ...sourceIdentity(source),
+        frames,
+        assistantUpdate: {
+          runId,
+          kind: "fail" as const,
+          failure: candidate as import("../../domain/chat/message.js").AgentFailureProfile,
+        },
+      }
     }
     return { ...sourceIdentity(source), frames }
   })

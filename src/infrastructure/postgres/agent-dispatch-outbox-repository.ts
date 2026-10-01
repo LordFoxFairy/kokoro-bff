@@ -566,7 +566,8 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
     // Keep the same stream -> Message lock order as source projection.
     await client.query(
       `UPDATE bff_message
-          SET status = 'failed', updated_at = CURRENT_TIMESTAMP(3)
+          SET status = 'failed', agent_failure_code = NULL, agent_failure_retryable = NULL,
+              updated_at = CURRENT_TIMESTAMP(3)
         WHERE tenant_id = $1 AND conversation_id = $2 AND run_id = $3
           AND role = 'assistant' AND status IN ('pending', 'streaming')`,
       [row.tenant_id, row.conversation_id, row.run_id],

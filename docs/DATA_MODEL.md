@@ -1,5 +1,147 @@
 # kokoro-bff data model
 
+当前验收范围（2026-09-30）：BFF-AGENT-FAILURE3的canonical fresh install、动态CHECK7/7与真实七integration47/47已由Root
+在自有隔离fixture执行通过。GC后snapshot/list/合法Share同safe profile矩阵已锁定；source/test冻结hash与资源回收见CURRENT。
+这不是所有owner单库组合、真实provider或Web端到端的验收证据；下文目标约束由现canonical schema与实现承担。
+
+## BFF-AGENT-FAILURE3：Message 安全失败数据设计（2026-09-30；canonical 与隔离数据库已验）
+
+### 当前态与 owner
+
+起始基线 BFF main `15e07fa44670bc13705ce3f6f700e73afcb72ccc` 的唯一 canonical
+[`../database/schema.sql`](../database/schema.sql) 没有 failure 列，Agent 2.0 的 `retryable` 会被丢弃。当前
+实现已在同一个 `bff_message` CREATE TABLE 内加入两列和本节完整命名 CHECK；没有 migration、第二张表、
+新索引、默认值、role、retention 或 Redis truth。fresh install 与真实约束矩阵已经由 Root 的隔离 PostgreSQL fixture
+验收，实际schema7/7及七integration47/47见CURRENT，不以静态schema test代替。
+
+Agent owner commit `f3be3b97dd67df69ed3c6cb88c59f3bc2db97703` 唯一拥有 failure code 与 retryability 分类；BFF
+目标固定其 HTTP `3.0.0` OpenAPI SHA-256
+`e9f0a543f74dee34212f0ea4fe366d46218268462ac54dce08e41965f34d2d2c` 与 provenance 文件 SHA-256
+`d116657f65027de8bd829dc0408fd86046da0ac0a1d2934bd2a87e835c897b5f`。BFF 拥有 Conversation/Message
+和 durable public projection，目标只在已绑定 Message 保存安全、闭合的 Agent failure
+快照。采用扩展既有 `bff_message`，不建 `bff_message_failure`：failure 没有独立身份、查询、权限或生命周期，拆表会给同一
+Message 终态制造第二 writer/真源。新增两列都是 nullable，且不新增索引：当前读取始终先按既有
+tenant/conversation/sequence 找 Message，不按 failure code 搜索。
+
+后继固定来源时，`openapi.json` 与已发布 `provenance.json` 必须同存于
+`contract/vendor/kokoro-agent/f3be3b97dd67df69ed3c6cb88c59f3bc2db97703/`，dependency manifest 固定两份文件
+SHA，并由 generator 验证 provenance `http_contract.version/path/sha256` 及 failure generated artifact 的
+`source_sha256` 都指向上述 3.0 contract；不能只凭文档文字接受数据码集。独立 delivery 旧来源仍保持原字节。
+
+### 目标列与完整 CHECK
+
+```sql
+ALTER TABLE bff_message
+  ADD COLUMN agent_failure_code TEXT,
+  ADD COLUMN agent_failure_retryable BOOLEAN,
+  ADD CONSTRAINT ck_bff_message_agent_failure
+  CHECK (
+    (
+      agent_failure_code IS NULL
+      AND agent_failure_retryable IS NULL
+    )
+    OR
+    (
+      agent_failure_code IS NOT NULL
+      AND agent_failure_retryable IS NOT NULL
+      AND agent_failure_code IN (
+        'token_budget_exceeded',
+        'recursion_limit_exceeded',
+        'assembly_failed',
+        'enqueue_failed',
+        'dispatch_exhausted',
+        'contract_incompatible',
+        'internal_error',
+        'model_unavailable',
+        'dependency_unavailable',
+        'model_access_denied'
+      )
+      AND (
+        agent_failure_retryable = FALSE
+        OR agent_failure_code IN ('model_unavailable', 'dependency_unavailable')
+      )
+      AND role = 'assistant'
+      AND status = 'failed'
+      AND run_id IS NOT NULL
+      AND length(btrim(run_id)) > 0
+    )
+  );
+```
+
+项目 canonical schema 采用 fresh install，实际实现是在现有 `CREATE TABLE bff_message` 内加入两列和命名 CHECK，
+上面的 `ALTER TABLE` 只精确说明目标 SQL 语义，不建立 migration。CHECK 保证两列同为 NULL 或同为非 NULL；10 个 code
+都允许 `false`，仅 `model_unavailable` / `dependency_unavailable` 可为 `true`；非空 failure 还必须绑定
+assistant + failed + 非空 run。user/system、pending/streaming/completed、run-less assistant 及所有非 Agent failure
+终态必须两列均 NULL。BOOLEAN 不给 default，TEXT 不使用任意字符串、JSONB 或数据库 enum；owner 码集的下一次演进须先改
+owner contract、BFF consumer/public contract、CHECK 与 Web consumer，不能只放宽应用 parser。
+
+两个 `IS NOT NULL` 都是完整约束的一部分，不能依赖 `IN`/boolean expression 的 SQL `UNKNOWN`：PostgreSQL `CHECK`
+会接受不为 `FALSE` 的 `UNKNOWN`，缺任一显式非 NULL guard 都可能让 partial-NULL row 通过。tests-only RED 必须写出分别直接插入
+`(agent_failure_code=NULL,agent_failure_retryable=false)` 与
+`(agent_failure_code='internal_error',agent_failure_retryable=NULL)` 的两个独立用例；当前 15e Schema 先因目标列/约束缺失而
+稳定 RED，GREEN 安装目标 Schema 后两例必须各自以 CHECK violation 被拒绝，不能只靠静态字符串匹配。
+
+### writer、事务与失败恢复
+
+`bff_message.status='failed'` 当前有四类可达来源，目标数据语义如下：
+
+| writer | status | failure 列 |
+| --- | --- | --- |
+| strict verified Agent `run.failed` | `failed` | 同一 source projection transaction 写二元组 |
+| Agent `run.completed(status=cancelled)` | `failed` | 两列保持/显式设为 NULL |
+| BFF dispatch permanent failure | `failed` | 两列保持/显式设为 NULL |
+| Conversation delete 对 mutable assistant 的终止 | `failed` | 两列保持/显式设为 NULL |
+
+`agent-cancellation-outbox.status='failed'` 只是取消命令自身失败，不更新 Message。禁止把 dispatch/cancel/delete 的本地
+error code 转写为 `agent_failure_code`，禁止以 `internal_error` 补齐 unknown owner code。只有固定 Agent 3.0
+`ChatFailure` 严格验证成功的 source 才能写二元组。
+
+application→repository 的目标 assistant update union 也必须强判别：Agent terminal 为
+`{kind:"fail",failure:<required safe profile>}`，取消为 `{kind:"cancel"}`。禁止让 `fail` 携 optional failure；
+否则新增 writer 很容易在数据库 CHECK 之前丢失来源语义。`fail` 分支写两列，`cancel` 分支和
+dispatch/delete writers 显式保持两列 NULL。
+
+目标写入复用现有 `PostgresAgUiProjectionRepository.commitProjection()` 本地事务与锁顺序：可选 Artifact
+Conversation lock → `bff_agui_stream FOR UPDATE` → source identity → bound Message → AG-UI frames → stream/version/
+watermark。Message update 仍必须同时匹配 tenant、conversation、expected run、consumer subject、active Conversation
+owner、非 failed dispatch、assistant ID、run、role 和 mutable status。verified failure 的两列、Message status/body、
+`bff_agui_source_event`、`bff_agui_event`、projection state、run terminal marker 与 source high-watermark 同成同败；CHECK
+或任一后续 insert/update 失败时全部回滚。重复 source 继续由 event ID/sequence/digest 证明同义，不产生第二 Message 写入。
+
+完整 Agent source page 在进入事务前先验证 envelope、identity/sequence/watermark 与每个 failure payload。坏 event 在页首、
+中间或末尾都不得产生 source row、Message 更新、frame、version 或 watermark；runner 沿现有 blocked settlement 只阻断该
+consumer，其他 tenant/session consumer 不回滚。不存在坏页的部分接受或“跳过后继续”。
+
+### reads、ACL、Share、GC 与 retention
+
+- snapshot：先以 trusted tenant/subject/Project predicate 找 active Conversation，再在同一
+  `REPEATABLE READ READ ONLY` transaction 读取 Message、Delivery、AG-UI cursor/active-run；Message SELECT 增加两列，
+  failure/status/body/watermark 因此来自同一 committed snapshot。
+- Message list：单条 query 继续以 tenant + owner + active Conversation + Project predicate 约束，再按
+  `(message_seq,message_id)` keyset；cursor 不是权限凭据。
+- Share：每页/读取继续检查 share ID、同 tenant/conversation、未撤销、未过期和 active Conversation，才读取相同两列；
+  failure 不扩大 Share capability，也不泄露 raw payload。
+- GC：现有 AG-UI GC 只删除旧 `bff_agui_event` 并维护 tombstone/retention floor，不删除或重建 Message failure；故旧
+  `RUN_ERROR` frame 被回收后，合法 snapshot/list/Share 仍由 Message 返回安全 failure。
+- delete/retention：Conversation delete 仍软删 Conversation、撤销 Share、保留 Message 供既有 retention/audit cleanup；
+  本片不新增 legal hold、独立 failure retention、cache、Redis copy 或跨 owner SQL/FK/JOIN。
+
+### 实施阶段记录（已完成）：tests-only RED 与 GREEN 真实数据库矩阵
+
+以下记录已完成的实施顺序，不是当前未实施状态。tests-only阶段当时保持canonical Schema为15e bytes，先让 governance/integration tests 对目标列、完整 CHECK 与
+直接 insert 矩阵形成稳定 RED；不先改 `database/schema.sql`。Root 接受 RED 后的单 owner GREEN 才写 actual canonical
+`CREATE TABLE`，再以真实 PostgreSQL 执行：两 NULL 接受；code NULL + retryable false、code value + retryable NULL
+两个方向都直接拒绝；10 code×false 和 2 availability code×true
+接受；其余 8 code×true、unknown、空白拒绝；非 assistant、非 failed、NULL/空 run 携 failure 均拒绝；四类 writer 中
+只有 verified Agent failure 非 NULL。真实 PostgreSQL 还要证明 projection 后段故障回滚 Message/source/frame/watermark、
+并发/重复 source 收敛、RR barrier、tenant/subject/Project/deleted ACL、Share revoke/expiry、GC 后 Message failure 保留。
+
+所有后继命令显式使用 `PATH=/Users/nako/.nvm/versions/node/v22.22.2/bin:$PATH` 并先记录
+`node --version`=`v22.22.2`；默认 shell 的 Node 24/engine warning 不作为 Node 22 证据。预定门禁为
+`pnpm schema:check`、空 `kokoro_bff` schema 的 `pnpm db:apply-schema` 与 drift、
+`pnpm test:integration`（全部7个owner integration文件）及`pnpm test`中的schema/architecture checks。初始文档时点尚未执行这些门；
+现canonical两列/CHECK已存在，Root fresh install、动态schema7/7、architecture27/27与真实七integration47/47证据见CURRENT。
+
 ## BFF-PERSONAL-DOC-GATE：本人安装不新增 BFF 数据事实（2026-09-30）
 
 Platform `skills/installation` 是安装资源、enabled/removed 状态、generation、命令 receipt 与 outbox 的唯一 owner/writer。BFF 当前在途消费者已唯一固定 Platform `6519ae9a7dba63586474d2860f6725d3165b701e` v5.0.1 aggregate `3f97b3c98fd8e7ce46e4a8ea73237ddb85e764849d2b15dd28d0a3a58a69e42f`，五个本人 installation 方法只做逐请求 public 投影，不保存第二份安装表或 receipt；旧 v4 vendor/fallback 已删除。代码尚待 Root 提交和真实 owner 组合验收，产品未激活。`database/schema.sql`、`kokoro_bff` schema、现有表/索引/role、Redis DB 8、retention 与 fresh install 均不变。

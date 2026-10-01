@@ -11,9 +11,25 @@ const output = path.join(root, "src/generated/agent-http")
 const manifestPath = path.join(root, "contract/dependencies/agent-http.json")
 const configPath = path.join(root, "openapi-ts.agent.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "dd34a4800b4ce0cc61eb80dd715e528b9d4517da"
+const ownerCommit = "f3be3b97dd67df69ed3c6cb88c59f3bc2db97703"
 const vendorPath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/openapi.json`)
-const ownerDigest = "20398c59f42031c1b6ae2e2c3708e63ec8b5645baf741bf831bc67e14625ef99"
+const provenancePath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/provenance.json`)
+const ownerDigest = "e9f0a543f74dee34212f0ea4fe366d46218268462ac54dce08e41965f34d2d2c"
+const provenanceDigest = "d116657f65027de8bd829dc0408fd86046da0ac0a1d2934bd2a87e835c897b5f"
+const ownerContractVersion = "3.0.0"
+const failureCodes = [
+  "token_budget_exceeded",
+  "recursion_limit_exceeded",
+  "assembly_failed",
+  "enqueue_failed",
+  "dispatch_exhausted",
+  "contract_incompatible",
+  "internal_error",
+  "model_unavailable",
+  "dependency_unavailable",
+  "model_access_denied",
+]
+const retryableFailureCodes = ["model_unavailable", "dependency_unavailable"]
 const eventProtocol = {
   owner: "kokoro-agent",
   source_commit: "486adb1539dd8a06ca90684e66f91be031aa70cf",
@@ -39,6 +55,7 @@ const generatedFiles = [
   "core/serverSentEvents.gen.ts",
   "core/types.gen.ts",
   "core/utils.gen.ts",
+  "failure-profile.gen.ts",
   "sdk.gen.ts",
   "types.gen.ts",
   "zod.gen.ts",
@@ -47,6 +64,101 @@ const generatedDirectories = ["client", "core"]
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex")
+}
+
+function record(value, label) {
+  assert.ok(typeof value === "object" && value !== null && !Array.isArray(value), `${label} must be an object`)
+  return value
+}
+
+export function assertFailureContractSchema(document) {
+  const schemas = record(record(record(document, "Agent OpenAPI").components, "components").schemas, "components.schemas")
+  assert.deepEqual(
+    schemas.Failure,
+    {
+      type: "object",
+      required: ["code", "retryable"],
+      properties: {
+        code: { type: "string", enum: failureCodes },
+        retryable: { type: "boolean" },
+      },
+      if: { properties: { retryable: { const: true } } },
+      then: { properties: { code: { enum: retryableFailureCodes } } },
+    },
+    "Failure schema drifted",
+  )
+  assert.deepEqual(
+    schemas.ChatFailure,
+    {
+      allOf: [
+        { $ref: "#/components/schemas/Failure" },
+        {
+          type: "object",
+          required: ["status"],
+          properties: { status: { type: "string", const: "failed" } },
+        },
+      ],
+      unevaluatedProperties: false,
+    },
+    "ChatFailure schema drifted",
+  )
+
+  const chatEvent = record(schemas.ChatEvent, "ChatEvent")
+  assert.equal(
+    record(chatEvent["x-kokoro-decoded-payloads"], "ChatEvent decoded payloads").mapping?.["run.failed"],
+    "#/components/schemas/ChatFailure",
+    "ChatEvent run.failed mapping drifted",
+  )
+  return { failureCodes: [...failureCodes], retryableFailureCodes: [...retryableFailureCodes] }
+}
+
+function failureProfileSource(document) {
+  const profile = assertFailureContractSchema(document)
+  return `// This file is generated from the fixed kokoro-agent ChatFailure schema. Do not edit.
+import { z } from "zod"
+
+export const AGENT_FAILURE_CODES = ${JSON.stringify(profile.failureCodes, null, 2)} as const
+export const RETRYABLE_AGENT_FAILURE_CODES = ${JSON.stringify(profile.retryableFailureCodes, null, 2)} as const
+
+export type AgentFailureCode = (typeof AGENT_FAILURE_CODES)[number]
+export type AgentFailureProfile = { source: "agent"; code: AgentFailureCode; retryable: boolean }
+
+const retryableCodes = new Set<AgentFailureCode>(RETRYABLE_AGENT_FAILURE_CODES)
+const chatFailureSchema = z
+  .object({ status: z.literal("failed"), code: z.enum(AGENT_FAILURE_CODES), retryable: z.boolean() })
+  .strict()
+  .refine((failure) => !failure.retryable || retryableCodes.has(failure.code), { message: "retryable Agent failure code is invalid" })
+
+export function parseAgentFailure(value: unknown): AgentFailureProfile | null {
+  const result = chatFailureSchema.safeParse(value)
+  return result.success ? { source: "agent", code: result.data.code, retryable: result.data.retryable } : null
+}
+`
+}
+
+async function verifyOwnerSources() {
+  const tree = await generatedTree(path.dirname(vendorPath))
+  assert.deepEqual(tree, { files: ["openapi.json", "provenance.json"], directories: [] }, "Agent HTTP vendor allowlist drifted")
+  const [vendor, provenanceBytes] = await Promise.all([readFile(vendorPath), readFile(provenancePath)])
+  assert.equal(sha256(vendor), ownerDigest, "vendored Agent HTTP contract digest drifted")
+  assert.equal(sha256(provenanceBytes), provenanceDigest, "vendored Agent provenance digest drifted")
+  const provenance = JSON.parse(provenanceBytes.toString("utf8"))
+  assert.deepEqual(
+    provenance.http_contract,
+    {
+      version: ownerContractVersion,
+      path: "contract/openapi/v1/openapi.json",
+      sha256: ownerDigest,
+    },
+    "Agent published HTTP provenance drifted",
+  )
+  const failureArtifact = provenance.generated_artifacts?.find((artifact) => artifact.path === "src/kokoro_agent/protocol/run_failure_generated.py")
+  assert.equal(failureArtifact?.source, "contract/openapi/v1/openapi.json", "Agent failure artifact source path drifted")
+  assert.equal(failureArtifact?.source_sha256, ownerDigest, "Agent failure artifact source digest drifted")
+  const document = JSON.parse(vendor.toString("utf8"))
+  assert.equal(document.info?.version, ownerContractVersion, "Agent HTTP contract version drifted")
+  assertFailureContractSchema(document)
+  return document
 }
 
 export function replaceExactInSource(source, from, to, expectedCount, label) {
@@ -212,6 +324,8 @@ async function verifyEventProtocolSource() {
 async function generate(directory) {
   const cli = path.join(root, "node_modules/@hey-api/openapi-ts/bin/run.js")
   await run(process.execPath, [cli, "--silent", "-f", configPath], { env: { ...process.env, AGENT_HTTP_CLIENT_OUTPUT: directory } })
+  const ownerDocument = JSON.parse(await readFile(vendorPath, "utf8"))
+  await writeFile(path.join(directory, "failure-profile.gen.ts"), failureProfileSource(ownerDocument))
   const tree = await generatedTree(directory)
   assertGeneratedAllowlist(tree.files, tree.directories, "generated")
   await normalizeGeneratorCompatibility(directory)
@@ -226,8 +340,9 @@ async function generate(directory) {
 }
 
 async function manifestFor(directory) {
-  const [vendor, config, lockfile, packageDocument, nodeVersion] = await Promise.all([
+  const [vendor, provenance, config, lockfile, packageDocument, nodeVersion] = await Promise.all([
     readFile(vendorPath),
+    readFile(provenancePath),
     readFile(configPath),
     readFile(lockfilePath),
     readFile(path.join(root, "package.json"), "utf8"),
@@ -235,6 +350,7 @@ async function manifestFor(directory) {
   ])
   const packageJson = JSON.parse(packageDocument)
   assert.equal(sha256(vendor), ownerDigest, "vendored AGENT contract digest drifted")
+  assert.equal(sha256(provenance), provenanceDigest, "vendored AGENT provenance digest drifted")
   assert.equal(nodeVersion, "22.22.2\n", ".node-version must pin Node 22.22.2")
   assert.equal(packageJson.packageManager, "pnpm@11.25.0")
   assert.equal(packageJson.devDependencies["@hey-api/openapi-ts"], "0.99.0")
@@ -247,9 +363,11 @@ async function manifestFor(directory) {
     owner: {
       repository_path: "apps/kokoro-agent",
       repository_commit: ownerCommit,
-      contract_version: "2.0.0",
+      contract_version: ownerContractVersion,
       contract_path: "contract/openapi/v1/openapi.json",
       contract_sha256: ownerDigest,
+      provenance_path: "contract/provenance.json",
+      provenance_sha256: provenanceDigest,
     },
     event_protocol: eventProtocol,
     generator: {
@@ -263,6 +381,7 @@ async function manifestFor(directory) {
     generated: await Promise.all(
       generatedFiles.map(async (file) => ({
         path: file,
+        ...(file === "failure-profile.gen.ts" ? { source_sha256: ownerDigest } : {}),
         sha256: sha256(await readFile(path.join(directory, file))),
       })),
     ),
@@ -272,6 +391,7 @@ async function manifestFor(directory) {
 async function main() {
   const mode = process.argv[2]
   assert.ok(mode === "--write" || mode === "--check", "expected --write or --check")
+  await verifyOwnerSources()
   await verifyEventProtocolSource()
   const temporaryRoot = await mkdtemp(path.join(tmpdir(), "kokoro-agent-http-"))
   const temporaryOutput = path.join(temporaryRoot, "generated")

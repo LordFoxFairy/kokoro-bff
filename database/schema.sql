@@ -162,12 +162,38 @@ CREATE TABLE IF NOT EXISTS bff_message (
   role TEXT NOT NULL CONSTRAINT ck_bff_message_role CHECK (role IN ('user', 'assistant', 'system')),
   content TEXT NOT NULL,
   status TEXT NOT NULL CONSTRAINT ck_bff_message_status CHECK (status IN ('pending', 'streaming', 'completed', 'failed')),
+  agent_failure_code TEXT,
+  agent_failure_retryable BOOLEAN,
   message_seq BIGINT NOT NULL,
   created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   CONSTRAINT uq_bff_message_conversation_sequence UNIQUE (tenant_id, conversation_id, message_seq),
   CONSTRAINT ck_bff_message_identity CHECK (length(btrim(tenant_id)) > 0 AND length(btrim(conversation_id)) > 0),
-  CONSTRAINT ck_bff_message_sequence CHECK (message_seq >= 1)
+  CONSTRAINT ck_bff_message_sequence CHECK (message_seq >= 1),
+  CONSTRAINT ck_bff_message_agent_failure CHECK (
+    (agent_failure_code IS NULL AND agent_failure_retryable IS NULL)
+    OR (
+      agent_failure_code IS NOT NULL
+      AND agent_failure_retryable IS NOT NULL
+      AND agent_failure_code IN (
+        'token_budget_exceeded',
+        'recursion_limit_exceeded',
+        'assembly_failed',
+        'enqueue_failed',
+        'dispatch_exhausted',
+        'contract_incompatible',
+        'internal_error',
+        'model_unavailable',
+        'dependency_unavailable',
+        'model_access_denied'
+      )
+      AND (agent_failure_retryable = FALSE OR agent_failure_code IN ('model_unavailable', 'dependency_unavailable'))
+      AND role = 'assistant'
+      AND status = 'failed'
+      AND run_id IS NOT NULL
+      AND length(btrim(run_id)) > 0
+    )
+  )
 );
 CREATE INDEX IF NOT EXISTS ix_bff_message_tenant_conversation_sequence
   ON bff_message (tenant_id, conversation_id, message_seq ASC, message_id ASC);

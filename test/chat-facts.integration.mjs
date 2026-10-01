@@ -127,24 +127,24 @@ integrationTest("creates a Web-local first Conversation with its turn and Agent 
       scheduledTaskDispatcher: idleWorker,
     })
     const base = await listen(bff)
-    const send = (key, content, id = conversationId, body = {}) => fetch(`${base}/v1/sessions/${id}/messages`, {
-      method: "POST",
-      headers: { ...auth(tenant, "first_user"), "idempotency-key": key, "content-type": "application/json" },
-      body: JSON.stringify({ content, ...body }),
-    })
+    const send = (key, content, id = conversationId, body = {}) =>
+      fetch(`${base}/v1/sessions/${id}/messages`, {
+        method: "POST",
+        headers: { ...auth(tenant, "first_user"), "idempotency-key": key, "content-type": "application/json" },
+        body: JSON.stringify({ content, ...body }),
+      })
     const response = await send("first-turn", titleSource)
     assert.equal(response.status, 202)
     const receipt = (await response.json()).data
-    const conversation = await pool.query(
-      "SELECT tenant_id, owner_id, status, title FROM bff_conversation WHERE conversation_id = $1",
-      [conversationId],
-    )
-    assert.deepEqual(conversation.rows, [{
-      tenant_id: tenant,
-      owner_id: "first_user",
-      status: "active",
-      title: "🌟 First message creates …",
-    }])
+    const conversation = await pool.query("SELECT tenant_id, owner_id, status, title FROM bff_conversation WHERE conversation_id = $1", [conversationId])
+    assert.deepEqual(conversation.rows, [
+      {
+        tenant_id: tenant,
+        owner_id: "first_user",
+        status: "active",
+        title: "🌟 First message creates …",
+      },
+    ])
     const messages = await pool.query(
       "SELECT message_id, role, status, content FROM bff_message WHERE tenant_id = $1 AND conversation_id = $2 ORDER BY message_seq",
       [tenant, conversationId],
@@ -153,15 +153,15 @@ integrationTest("creates a Web-local first Conversation with its turn and Agent 
       { message_id: receipt.user_message_id, role: "user", status: "completed", content: titleSource.trim() },
       { message_id: receipt.assistant_message_id, role: "assistant", status: "pending", content: "" },
     ])
-    const outbox = await pool.query(
-      "SELECT run_id, status FROM bff_agent_dispatch_outbox WHERE tenant_id = $1 AND conversation_id = $2",
-      [tenant, conversationId],
-    )
+    const outbox = await pool.query("SELECT run_id, status FROM bff_agent_dispatch_outbox WHERE tenant_id = $1 AND conversation_id = $2", [
+      tenant,
+      conversationId,
+    ])
     assert.deepEqual(outbox.rows, [{ run_id: receipt.run_id, status: "pending" }])
-    const consumer = await pool.query(
-      "SELECT expected_run_id, consumer_subject_id FROM bff_agui_stream WHERE tenant_id = $1 AND session_id = $2",
-      [tenant, conversationId],
-    )
+    const consumer = await pool.query("SELECT expected_run_id, consumer_subject_id FROM bff_agui_stream WHERE tenant_id = $1 AND session_id = $2", [
+      tenant,
+      conversationId,
+    ])
     assert.deepEqual(consumer.rows, [{ expected_run_id: receipt.run_id, consumer_subject_id: "first_user" }])
 
     const replay = await send("first-turn", titleSource)
@@ -172,18 +172,22 @@ integrationTest("creates a Web-local first Conversation with its turn and Agent 
     assert.equal((await changed.json()).error.code, "idempotency_conflict")
 
     const foreignId = `conv_${randomUUID()}`
-    await pool.query(
-      "INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title) VALUES ($1, $2, $3, $4)",
-      [foreignId, `${tenant}_foreign`, "other_user", "Foreign"],
-    )
+    await pool.query("INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title) VALUES ($1, $2, $3, $4)", [
+      foreignId,
+      `${tenant}_foreign`,
+      "other_user",
+      "Foreign",
+    ])
     const foreign = await send("foreign-turn", "Must not touch foreign", foreignId)
     assert.equal(foreign.status, 404)
     assert.equal((await foreign.json()).error.code, "session_not_found")
     const otherOwnerId = `conv_${randomUUID()}`
-    await pool.query(
-      "INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title) VALUES ($1, $2, $3, $4)",
-      [otherOwnerId, tenant, "other_user", "Same tenant, other owner"],
-    )
+    await pool.query("INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title) VALUES ($1, $2, $3, $4)", [
+      otherOwnerId,
+      tenant,
+      "other_user",
+      "Same tenant, other owner",
+    ])
     const otherOwner = await send("other-owner-turn", "Must not touch other user", otherOwnerId)
     assert.equal(otherOwner.status, 404)
     assert.equal((await otherOwner.json()).error.code, "session_not_found")
@@ -203,36 +207,35 @@ integrationTest("creates a Web-local first Conversation with its turn and Agent 
     const absentProject = await send("project-absent", "No project access", absentProjectId, { project_ref: "not_a_project" })
     assert.equal(absentProject.status, 404)
     assert.equal((await absentProject.json()).error.code, "project_not_found")
-    const absentRows = await pool.query(
-      "SELECT conversation_id FROM bff_conversation WHERE conversation_id = $1",
-      [absentProjectId],
-    )
+    const absentRows = await pool.query("SELECT conversation_id FROM bff_conversation WHERE conversation_id = $1", [absentProjectId])
     assert.equal(absentRows.rowCount, 0)
 
     const projectId = `project_${randomUUID()}`
-    await pool.query(
-      "INSERT INTO bff_project (project_id, tenant_id, owner_id, name, slug) VALUES ($1, $2, $3, $4, $5)",
-      [projectId, tenant, "first_user", "Owned project", `owned-${randomUUID()}`],
-    )
+    await pool.query("INSERT INTO bff_project (project_id, tenant_id, owner_id, name, slug) VALUES ($1, $2, $3, $4, $5)", [
+      projectId,
+      tenant,
+      "first_user",
+      "Owned project",
+      `owned-${randomUUID()}`,
+    ])
     const projectConversationId = `conv_${randomUUID()}`
     assert.equal((await send("project-first", "Project first turn", projectConversationId, { project_ref: projectId })).status, 202)
-    const projectConversation = await pool.query(
-      "SELECT project_ref FROM bff_conversation WHERE conversation_id = $1",
-      [projectConversationId],
-    )
+    const projectConversation = await pool.query("SELECT project_ref FROM bff_conversation WHERE conversation_id = $1", [projectConversationId])
     assert.equal(projectConversation.rows[0].project_ref, projectId)
 
     const foreignProjectId = `project_${randomUUID()}`
-    await pool.query(
-      "INSERT INTO bff_project (project_id, tenant_id, owner_id, name, slug) VALUES ($1, $2, $3, $4, $5)",
-      [foreignProjectId, `${tenant}_foreign`, "other_user", "Foreign project", `foreign-${randomUUID()}`],
-    )
+    await pool.query("INSERT INTO bff_project (project_id, tenant_id, owner_id, name, slug) VALUES ($1, $2, $3, $4, $5)", [
+      foreignProjectId,
+      `${tenant}_foreign`,
+      "other_user",
+      "Foreign project",
+      `foreign-${randomUUID()}`,
+    ])
     const foreignProjectConversationId = `conv_${randomUUID()}`
     assert.equal((await send("project-foreign", "Not my project", foreignProjectConversationId, { project_ref: foreignProjectId })).status, 404)
-    const foreignProjectConversation = await pool.query(
-      "SELECT conversation_id FROM bff_conversation WHERE conversation_id = $1",
-      [foreignProjectConversationId],
-    )
+    const foreignProjectConversation = await pool.query("SELECT conversation_id FROM bff_conversation WHERE conversation_id = $1", [
+      foreignProjectConversationId,
+    ])
     assert.equal(foreignProjectConversation.rowCount, 0)
 
     const concurrentId = `conv_${randomUUID()}`
@@ -242,16 +245,16 @@ integrationTest("creates a Web-local first Conversation with its turn and Agent 
     ])
     assert.equal(parallelOne.status, 202)
     assert.equal(parallelTwo.status, 202)
-    const concurrentRows = await pool.query(
-      "SELECT conversation_id, owner_id FROM bff_conversation WHERE conversation_id = $1",
-      [concurrentId],
-    )
+    const concurrentRows = await pool.query("SELECT conversation_id, owner_id FROM bff_conversation WHERE conversation_id = $1", [concurrentId])
     assert.deepEqual(concurrentRows.rows, [{ conversation_id: concurrentId, owner_id: "first_user" }])
-    const concurrentMessages = await pool.query(
-      "SELECT message_seq FROM bff_message WHERE tenant_id = $1 AND conversation_id = $2 ORDER BY message_seq",
-      [tenant, concurrentId],
+    const concurrentMessages = await pool.query("SELECT message_seq FROM bff_message WHERE tenant_id = $1 AND conversation_id = $2 ORDER BY message_seq", [
+      tenant,
+      concurrentId,
+    ])
+    assert.deepEqual(
+      concurrentMessages.rows.map((row) => Number(row.message_seq)),
+      [1, 2, 3, 4],
     )
-    assert.deepEqual(concurrentMessages.rows.map((row) => Number(row.message_seq)), [1, 2, 3, 4])
 
     const sameKeyId = `conv_${randomUUID()}`
     const [duplicateOne, duplicateTwo] = await Promise.all([
@@ -261,11 +264,14 @@ integrationTest("creates a Web-local first Conversation with its turn and Agent 
     assert.equal(duplicateOne.status, 202)
     assert.equal(duplicateTwo.status, 202)
     assert.deepEqual((await duplicateOne.json()).data, (await duplicateTwo.json()).data)
-    const sameKeyMessages = await pool.query(
-      "SELECT message_seq FROM bff_message WHERE tenant_id = $1 AND conversation_id = $2 ORDER BY message_seq",
-      [tenant, sameKeyId],
+    const sameKeyMessages = await pool.query("SELECT message_seq FROM bff_message WHERE tenant_id = $1 AND conversation_id = $2 ORDER BY message_seq", [
+      tenant,
+      sameKeyId,
+    ])
+    assert.deepEqual(
+      sameKeyMessages.rows.map((row) => Number(row.message_seq)),
+      [1, 2],
     )
-    assert.deepEqual(sameKeyMessages.rows.map((row) => Number(row.message_seq)), [1, 2])
 
     const selectedId = `conv_${randomUUID()}`
     const selectedBody = { selected_skill_source_refs: ["skill:b", "skill:a"] }
@@ -278,7 +284,10 @@ integrationTest("creates a Web-local first Conversation with its turn and Agent 
       const changedSelection = await send("selected-turn", "Selected", selectedId, { selected_skill_source_refs: refs })
       assert.equal(changedSelection.status, 409)
     }
-    const persistedSelection = await pool.query("SELECT payload FROM bff_agent_dispatch_outbox WHERE tenant_id = $1 AND conversation_id = $2", [tenant, selectedId])
+    const persistedSelection = await pool.query("SELECT payload FROM bff_agent_dispatch_outbox WHERE tenant_id = $1 AND conversation_id = $2", [
+      tenant,
+      selectedId,
+    ])
     assert.equal(persistedSelection.rows[0].payload.schema_version, 2)
     assert.deepEqual(persistedSelection.rows[0].payload.launch.selected_skill_source_refs, selectedBody.selected_skill_source_refs)
     const explicitEmptyReplay = await send("first-turn", titleSource, conversationId, { selected_skill_source_refs: [] })
@@ -287,42 +296,47 @@ integrationTest("creates a Web-local first Conversation with its turn and Agent 
 
     const rollbackId = `conv_${randomUUID()}`
     const rollbackRunId = `run_${randomUUID()}`
-    await assert.rejects(store.agentDispatchOutbox.commitChatTurn({
-      outboxId: `rollback_${randomUUID()}`,
-      tenantId: tenant,
-      conversationId: rollbackId,
-      subjectId: "first_user",
-      actorId: "first_user",
-      requestId: "rollback-request",
-      idempotencyKey: "rollback-key",
-      requestDigest: "a".repeat(64),
-      runId: rollbackRunId,
-      userMessageId: receipt.user_message_id,
-      assistantMessageId: `assistant_${randomUUID()}`,
-      identityAssertionRef: "bff:rollback",
-      content: "Rollback this first turn",
-      payload: {
-        schema_version: 2,
-        launch: {
-          request_id: "rollback-request",
-          run_id: rollbackRunId,
-          session_id: rollbackId,
-          feature_key: "chat",
-          message_id: receipt.user_message_id,
-          content: "Rollback this first turn",
-          selected_skill_source_refs: [],
-          trace: { source: "kokoro-bff" },
+    await assert.rejects(
+      store.agentDispatchOutbox.commitChatTurn({
+        outboxId: `rollback_${randomUUID()}`,
+        tenantId: tenant,
+        conversationId: rollbackId,
+        subjectId: "first_user",
+        actorId: "first_user",
+        requestId: "rollback-request",
+        idempotencyKey: "rollback-key",
+        requestDigest: "a".repeat(64),
+        runId: rollbackRunId,
+        userMessageId: receipt.user_message_id,
+        assistantMessageId: `assistant_${randomUUID()}`,
+        identityAssertionRef: "bff:rollback",
+        content: "Rollback this first turn",
+        payload: {
+          schema_version: 2,
+          launch: {
+            request_id: "rollback-request",
+            run_id: rollbackRunId,
+            session_id: rollbackId,
+            feature_key: "chat",
+            message_id: receipt.user_message_id,
+            content: "Rollback this first turn",
+            selected_skill_source_refs: [],
+            trace: { source: "kokoro-bff" },
+          },
         },
-      },
-    }), { code: "23505" })
+      }),
+      { code: "23505" },
+    )
     const rolledBack = await pool.query("SELECT conversation_id FROM bff_conversation WHERE conversation_id = $1", [rollbackId])
     assert.equal(rolledBack.rowCount, 0)
 
     const existingId = `session_${randomUUID()}`
-    await pool.query(
-      "INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title) VALUES ($1, $2, $3, $4)",
-      [existingId, tenant, "first_user", "Existing"],
-    )
+    await pool.query("INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title) VALUES ($1, $2, $3, $4)", [
+      existingId,
+      tenant,
+      "first_user",
+      "Existing",
+    ])
     assert.equal((await send("existing-turn", "Continue existing", existingId)).status, 202)
     const existing = await pool.query("SELECT title FROM bff_conversation WHERE conversation_id = $1", [existingId])
     assert.equal(existing.rows[0].title, "Existing")
@@ -393,8 +407,10 @@ integrationTest("serves tenant-scoped Chat facts from BFF PostgreSQL and revokes
       [`message_${Date.now()}`, tenant, conversationId, "run_opaque", "Persisted in BFF", "9223372036854775806"],
     )
     await pool.query(
-      `INSERT INTO bff_message (message_id, tenant_id, conversation_id, run_id, role, content, status, message_seq)
-       VALUES ($1, $2, $3, $4, 'assistant', $5, 'completed', $6)`,
+      `INSERT INTO bff_message
+         (message_id, tenant_id, conversation_id, run_id, role, content, status, message_seq,
+          agent_failure_code, agent_failure_retryable)
+       VALUES ($1, $2, $3, $4, 'assistant', $5, 'failed', $6, 'model_unavailable', TRUE)`,
       [`message_${Date.now()}_second`, tenant, conversationId, "run_opaque", "Second high sequence", "9223372036854775807"],
     )
     await redis.connect()
@@ -405,10 +421,15 @@ integrationTest("serves tenant-scoped Chat facts from BFF PostgreSQL and revokes
     assert.equal(listed.status, 200)
     assert.equal((await listed.json()).data.sessions[0].session_id, conversationId)
 
+    let directSnapshotBody
     for (const query of ["scope=direct", "scope="]) {
       const scoped = await fetch(`${base}/v1/sessions/${conversationId}?${query}`, { headers: auth(tenant, "chat_user") })
       assert.equal(scoped.status, 200)
+      const body = await scoped.json()
+      if (query === "scope=direct") directSnapshotBody = body
     }
+    assert.deepEqual(directSnapshotBody.data.messages.at(-1).failure, { source: "agent", code: "model_unavailable", retryable: true })
+    assert.equal(Object.hasOwn(directSnapshotBody.data.messages[0], "failure"), false)
     const invalidScope = await fetch(`${base}/v1/sessions/${conversationId}?scope=team`, { headers: auth(tenant, "chat_user") })
     assert.equal(invalidScope.status, 400)
     assert.equal((await invalidScope.json()).error.code, "invalid_scope")
@@ -418,7 +439,10 @@ integrationTest("serves tenant-scoped Chat facts from BFF PostgreSQL and revokes
 
     const messages = await fetch(`${base}/v1/sessions/${conversationId}/messages`, { headers: auth(tenant, "chat_user") })
     assert.equal(messages.status, 200)
-    assert.equal((await messages.json()).data.messages[0].content, "Persisted in BFF")
+    const messagesBody = await messages.json()
+    assert.equal(messagesBody.data.messages[0].content, "Persisted in BFF")
+    assert.equal(Object.hasOwn(messagesBody.data.messages[0], "failure"), false)
+    assert.deepEqual(messagesBody.data.messages[1].failure, { source: "agent", code: "model_unavailable", retryable: true })
 
     const firstMessagePage = await fetch(`${base}/v1/sessions/${conversationId}/messages?limit=1`, { headers: auth(tenant, "chat_user") })
     const firstMessagePageBody = await firstMessagePage.json()
@@ -429,6 +453,7 @@ integrationTest("serves tenant-scoped Chat facts from BFF PostgreSQL and revokes
     )
     const secondMessagePageBody = await secondMessagePage.json()
     assert.equal(secondMessagePageBody.data.messages[0].content, "Second high sequence")
+    assert.deepEqual(secondMessagePageBody.data.messages[0].failure, { source: "agent", code: "model_unavailable", retryable: true })
     assert.equal(secondMessagePageBody.data.next_cursor, null)
 
     const disabledAdmission = await fetch(`${base}/v1/sessions/${conversationId}/messages`, {
@@ -449,7 +474,9 @@ integrationTest("serves tenant-scoped Chat facts from BFF PostgreSQL and revokes
       headers: { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "web-secret" },
     })
     assert.equal(publicShare.status, 200)
-    assert.equal((await publicShare.json()).data.session.session_id, conversationId)
+    const publicShareBody = await publicShare.json()
+    assert.equal(publicShareBody.data.session.session_id, conversationId)
+    assert.deepEqual(publicShareBody.data.messages.at(-1).failure, { source: "agent", code: "model_unavailable", retryable: true })
 
     const otherSubject = "other_chat_user"
     const factsBeforeDeniedAccess = await pool.query(
@@ -547,10 +574,12 @@ integrationTest("serves tenant-scoped Chat facts from BFF PostgreSQL and revokes
       headers: { ...auth(tenant, "chat_user"), "idempotency-key": "chat-revoke-integration" },
     })
     assert.equal(revoked.status, 200)
-    const afterRevoke = await fetch(`${base}/v1/shared/${shareId}`, {
+    const afterRevoke = await fetch(`${base}/v1/shared/${replacementId}`, {
       headers: { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "web-secret" },
     })
     assert.equal(afterRevoke.status, 404)
+    const retainedReplacement = await pool.query("SELECT revoked_at FROM bff_share WHERE share_id = $1", [replacementId])
+    assert.ok(retainedReplacement.rows[0].revoked_at)
   } finally {
     if (bff) await close(bff)
     await pool.query("DELETE FROM bff_share WHERE tenant_id IN ($1, $2)", [tenant, otherTenant]).catch(() => undefined)
@@ -571,7 +600,9 @@ integrationTest("accepts a Chat turn after the message and Agent dispatch are du
   let agentAvailable = false
   let launchAttempts = 0
   try {
-    await pool.query("DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE")
+    await pool.query(
+      "DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE",
+    )
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await pool.query(
       `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title)
@@ -595,10 +626,12 @@ integrationTest("accepts a Chat turn after the message and Agent dispatch are du
         return
       }
       response.writeHead(202, { "content-type": "application/json" })
-      response.end(JSON.stringify({
-        data: { run_id: launch.run_id, session_id: launch.session_id, replayed: false },
-        meta: { request_id: "agent" },
-      }))
+      response.end(
+        JSON.stringify({
+          data: { run_id: launch.run_id, session_id: launch.session_id, replayed: false },
+          meta: { request_id: "agent" },
+        }),
+      )
     })
     const agentBase = await listen(agent)
     const runtimeConfig = config(tenant)
@@ -641,7 +674,12 @@ integrationTest("accepts a Chat turn after the message and Agent dispatch are du
 
     const submitted = await fetch(`${base}/v1/sessions/${conversationId}/messages`, {
       method: "POST",
-      headers: { ...auth(tenant, "chat_user"), "content-type": "application/json", "idempotency-key": "durable-chat-turn", "x-kokoro-request-id": "request-first" },
+      headers: {
+        ...auth(tenant, "chat_user"),
+        "content-type": "application/json",
+        "idempotency-key": "durable-chat-turn",
+        "x-kokoro-request-id": "request-first",
+      },
       body: JSON.stringify({ content: "Persist before dispatch" }),
     })
 
@@ -651,7 +689,12 @@ integrationTest("accepts a Chat turn after the message and Agent dispatch are du
 
     const replay = await fetch(`${base}/v1/sessions/${conversationId}/messages`, {
       method: "POST",
-      headers: { ...auth(tenant, "chat_user"), "content-type": "application/json", "idempotency-key": "durable-chat-turn", "x-kokoro-request-id": "request-replay" },
+      headers: {
+        ...auth(tenant, "chat_user"),
+        "content-type": "application/json",
+        "idempotency-key": "durable-chat-turn",
+        "x-kokoro-request-id": "request-replay",
+      },
       body: JSON.stringify({ content: "Persist before dispatch" }),
     })
     assert.equal(replay.status, 202)
@@ -751,7 +794,9 @@ integrationTest("reclaims expired Agent dispatch leases and rejects stale or cro
   const conversationId = `conversation_fence_${Date.now()}`
   let store
   try {
-    await pool.query("DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE")
+    await pool.query(
+      "DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE",
+    )
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await pool.query(
       `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title)
@@ -789,27 +834,36 @@ integrationTest("reclaims expired Agent dispatch leases and rejects stale or cro
     assert.equal(second[0].fence, first[0].fence + 1)
     assert.ok(second[0].leaseRemainingMs > 0 && second[0].leaseRemainingMs <= 5000)
 
-    assert.equal(await store.agentDispatchOutbox.markAgentDispatchSucceeded({
-      tenantId: `${tenant}_other`,
-      outboxId: second[0].outboxId,
-      leaseOwner: second[0].leaseOwner,
-      leaseToken: second[0].leaseToken,
-      fence: second[0].fence,
-    }), false)
-    assert.equal(await store.agentDispatchOutbox.markAgentDispatchSucceeded({
-      tenantId: first[0].tenantId,
-      outboxId: first[0].outboxId,
-      leaseOwner: first[0].leaseOwner,
-      leaseToken: first[0].leaseToken,
-      fence: first[0].fence,
-    }), false)
-    assert.equal(await store.agentDispatchOutbox.markAgentDispatchSucceeded({
-      tenantId: second[0].tenantId,
-      outboxId: second[0].outboxId,
-      leaseOwner: second[0].leaseOwner,
-      leaseToken: second[0].leaseToken,
-      fence: second[0].fence,
-    }), true)
+    assert.equal(
+      await store.agentDispatchOutbox.markAgentDispatchSucceeded({
+        tenantId: `${tenant}_other`,
+        outboxId: second[0].outboxId,
+        leaseOwner: second[0].leaseOwner,
+        leaseToken: second[0].leaseToken,
+        fence: second[0].fence,
+      }),
+      false,
+    )
+    assert.equal(
+      await store.agentDispatchOutbox.markAgentDispatchSucceeded({
+        tenantId: first[0].tenantId,
+        outboxId: first[0].outboxId,
+        leaseOwner: first[0].leaseOwner,
+        leaseToken: first[0].leaseToken,
+        fence: first[0].fence,
+      }),
+      false,
+    )
+    assert.equal(
+      await store.agentDispatchOutbox.markAgentDispatchSucceeded({
+        tenantId: second[0].tenantId,
+        outboxId: second[0].outboxId,
+        leaseOwner: second[0].leaseOwner,
+        leaseToken: second[0].leaseToken,
+        fence: second[0].fence,
+      }),
+      true,
+    )
 
     const state = await pool.query(
       `SELECT status, attempt_count, fence
@@ -834,7 +888,9 @@ integrationTest("claims Agent launches in persisted conversation FIFO and termin
   const conversationId = `conversation_fifo_${Date.now()}`
   let store
   try {
-    await pool.query("DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE")
+    await pool.query(
+      "DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE",
+    )
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await pool.query(
       `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title)
@@ -844,15 +900,17 @@ integrationTest("claims Agent launches in persisted conversation FIFO and termin
     store = new PostgresBffRepositories(postgresUrl, redisUrl)
     await store.ready()
     for (const suffix of ["first", "second", "third"]) {
-      assert.ok(await store.services.chatTurns.submit({
-        tenantId: tenant,
-        conversationId,
-        subjectId: "chat_user",
-        actorId: "chat_user",
-        requestId: `request_${suffix}`,
-        idempotencyKey: `chat-fifo-${suffix}`,
-        content: `Dispatch ${suffix}`,
-      }))
+      assert.ok(
+        await store.services.chatTurns.submit({
+          tenantId: tenant,
+          conversationId,
+          subjectId: "chat_user",
+          actorId: "chat_user",
+          requestId: `request_${suffix}`,
+          idempotencyKey: `chat-fifo-${suffix}`,
+          content: `Dispatch ${suffix}`,
+        }),
+      )
     }
 
     const first = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
@@ -919,7 +977,9 @@ integrationTest("projects fenced dispatch failures as durable RUN_ERROR terminal
   let agent
   let agentRequests = 0
   try {
-    await pool.query("DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE")
+    await pool.query(
+      "DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE",
+    )
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await pool.query(
       `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title)
@@ -962,11 +1022,13 @@ integrationTest("projects fenced dispatch failures as durable RUN_ERROR terminal
          FROM bff_agui_stream WHERE tenant_id = $1 AND session_id = $2`,
       [tenant, conversationId],
     )
-    assert.deepEqual(stream.rows, [{
-      expected_run_id: secondReceipt.run_id,
-      terminal_run_id: null,
-      consumer_state: "active",
-    }])
+    assert.deepEqual(stream.rows, [
+      {
+        expected_run_id: secondReceipt.run_id,
+        terminal_run_id: null,
+        consumer_state: "active",
+      },
+    ])
 
     const [second] = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
       workerId: "worker_failure",
@@ -1000,21 +1062,30 @@ integrationTest("projects fenced dispatch failures as durable RUN_ERROR terminal
         ORDER BY event.public_sequence ASC`,
       [tenant, conversationId],
     )
-    assert.deepEqual(failures.rows.map((row) => [row.source_owner, row.source_sequence, row.event_type]), [
-      ["kokoro-bff", "1", "RUN_ERROR"],
-      ["kokoro-bff", "3", "RUN_ERROR"],
-    ])
-    assert.deepEqual(failures.rows.map((row) => row.event_payload.runId), [firstReceipt.run_id, secondReceipt.run_id])
-    assert.deepEqual(failures.rows.map((row) => row.event_payload.code), ["agent_receipt_invalid", "agent_http_400"])
+    assert.deepEqual(
+      failures.rows.map((row) => [row.source_owner, row.source_sequence, row.event_type]),
+      [
+        ["kokoro-bff", "1", "RUN_ERROR"],
+        ["kokoro-bff", "3", "RUN_ERROR"],
+      ],
+    )
+    assert.deepEqual(
+      failures.rows.map((row) => row.event_payload.runId),
+      [firstReceipt.run_id, secondReceipt.run_id],
+    )
+    assert.deepEqual(
+      failures.rows.map((row) => row.event_payload.code),
+      ["agent_receipt_invalid", "agent_http_400"],
+    )
     const assistants = await pool.query(
-      `SELECT run_id, status FROM bff_message
+      `SELECT run_id, status, agent_failure_code, agent_failure_retryable FROM bff_message
         WHERE tenant_id = $1 AND conversation_id = $2 AND role = 'assistant'
         ORDER BY message_seq ASC`,
       [tenant, conversationId],
     )
     assert.deepEqual(assistants.rows, [
-      { run_id: firstReceipt.run_id, status: "failed" },
-      { run_id: secondReceipt.run_id, status: "failed" },
+      { run_id: firstReceipt.run_id, status: "failed", agent_failure_code: null, agent_failure_retryable: null },
+      { run_id: secondReceipt.run_id, status: "failed", agent_failure_code: null, agent_failure_retryable: null },
     ])
     assert.equal((await store.services.chat.snapshot(tenant, "chat_user", conversationId, undefined)).active_run, undefined)
 
@@ -1057,7 +1128,9 @@ integrationTest("deletion atomically fences launches and enqueues durable cancel
   const conversationId = `conversation_delete_${Date.now()}`
   let store
   try {
-    await pool.query("DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE")
+    await pool.query(
+      "DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE",
+    )
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await pool.query(
       `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title)
@@ -1067,15 +1140,17 @@ integrationTest("deletion atomically fences launches and enqueues durable cancel
     store = new PostgresBffRepositories(postgresUrl, redisUrl)
     await store.ready()
     for (const suffix of ["admitted", "inflight", "local_only"]) {
-      assert.ok(await store.services.chatTurns.submit({
-        tenantId: tenant,
-        conversationId,
-        subjectId: "chat_user",
-        actorId: "chat_user",
-        requestId: `request_${suffix}`,
-        idempotencyKey: `delete-${suffix}`,
-        content: `Delete ${suffix}`,
-      }))
+      assert.ok(
+        await store.services.chatTurns.submit({
+          tenantId: tenant,
+          conversationId,
+          subjectId: "chat_user",
+          actorId: "chat_user",
+          requestId: `request_${suffix}`,
+          idempotencyKey: `delete-${suffix}`,
+          content: `Delete ${suffix}`,
+        }),
+      )
     }
     const [admitted] = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
       workerId: "worker_delete",
@@ -1093,12 +1168,7 @@ integrationTest("deletion atomically fences launches and enqueues durable cancel
     })
     assert.ok(inflight)
 
-    assert.equal(await store.services.chat.deleteConversation(
-      tenant,
-      "chat_user",
-      conversationId,
-      "request_delete_conversation",
-    ), true)
+    assert.equal(await store.services.chat.deleteConversation(tenant, "chat_user", conversationId, "request_delete_conversation"), true)
     assert.equal(await store.agentDispatchOutbox.markAgentDispatchSucceeded(inflight), false)
 
     const dispatch = await pool.query(
@@ -1106,11 +1176,14 @@ integrationTest("deletion atomically fences launches and enqueues durable cancel
         WHERE tenant_id = $1 AND conversation_id = $2 ORDER BY conversation_dispatch_seq ASC`,
       [tenant, conversationId],
     )
-    assert.deepEqual(dispatch.rows.map((row) => [row.conversation_dispatch_seq, row.status]), [
-      ["1", "succeeded"],
-      ["3", "failed"],
-      ["5", "failed"],
-    ])
+    assert.deepEqual(
+      dispatch.rows.map((row) => [row.conversation_dispatch_seq, row.status]),
+      [
+        ["1", "succeeded"],
+        ["3", "failed"],
+        ["5", "failed"],
+      ],
+    )
     assert.ok(Number(dispatch.rows[1].fence) > inflight.fence)
     const cancellations = await pool.query(
       `SELECT cancellation_id, command_id, conversation_dispatch_seq, request_id, status, payload
@@ -1119,10 +1192,13 @@ integrationTest("deletion atomically fences launches and enqueues durable cancel
         ORDER BY conversation_dispatch_seq ASC`,
       [tenant, conversationId],
     )
-    assert.deepEqual(cancellations.rows.map((row) => [row.conversation_dispatch_seq, row.status]), [
-      ["1", "cancel_requested"],
-      ["3", "cancel_requested"],
-    ])
+    assert.deepEqual(
+      cancellations.rows.map((row) => [row.conversation_dispatch_seq, row.status]),
+      [
+        ["1", "cancel_requested"],
+        ["3", "cancel_requested"],
+      ],
+    )
     assert.ok(cancellations.rows.every((row) => row.cancellation_id === row.command_id))
     assert.ok(cancellations.rows.every((row) => row.request_id === "request_delete_conversation"))
     assert.ok(cancellations.rows.every((row) => row.payload.kind === "run.cancel" && row.payload.session_id === conversationId))
@@ -1135,10 +1211,13 @@ integrationTest("deletion atomically fences launches and enqueues durable cancel
     })
     assert.equal(firstCancel.length, 1)
     assert.equal(firstCancel[0].conversationDispatchSeq, "1")
-    assert.equal(await store.agentCancellationOutbox.markAgentCancellationSucceeded({
-      ...firstCancel[0],
-      tenantId: `${tenant}_other`,
-    }), false)
+    assert.equal(
+      await store.agentCancellationOutbox.markAgentCancellationSucceeded({
+        ...firstCancel[0],
+        tenantId: `${tenant}_other`,
+      }),
+      false,
+    )
     assert.equal(await store.agentCancellationOutbox.markAgentCancellationSucceeded(firstCancel[0]), true)
     const secondCancel = await store.agentCancellationOutbox.claimAgentCancellationOutbox({
       workerId: "worker_cancel",
@@ -1149,12 +1228,10 @@ integrationTest("deletion atomically fences launches and enqueues durable cancel
     assert.equal(secondCancel.length, 1)
     assert.equal(secondCancel[0].conversationDispatchSeq, "3")
 
-    const conversation = await pool.query(
-      "SELECT status FROM bff_conversation WHERE tenant_id = $1 AND conversation_id = $2",
-      [tenant, conversationId],
-    )
+    const conversation = await pool.query("SELECT status FROM bff_conversation WHERE tenant_id = $1 AND conversation_id = $2", [tenant, conversationId])
     const assistants = await pool.query(
-      `SELECT status FROM bff_message WHERE tenant_id = $1 AND conversation_id = $2 AND role = 'assistant'`,
+      `SELECT status, agent_failure_code, agent_failure_retryable
+         FROM bff_message WHERE tenant_id = $1 AND conversation_id = $2 AND role = 'assistant'`,
       [tenant, conversationId],
     )
     const stream = await pool.query(
@@ -1163,13 +1240,15 @@ integrationTest("deletion atomically fences launches and enqueues durable cancel
       [tenant, conversationId],
     )
     assert.equal(conversation.rows[0].status, "deleted")
-    assert.ok(assistants.rows.every((row) => row.status === "failed"))
-    assert.deepEqual(stream.rows, [{
-      consumer_state: "stopped",
-      consumer_lease_owner: null,
-      consumer_lease_token: null,
-      consumer_lease_until: null,
-    }])
+    assert.ok(assistants.rows.every((row) => row.status === "failed" && row.agent_failure_code === null && row.agent_failure_retryable === null))
+    assert.deepEqual(stream.rows, [
+      {
+        consumer_state: "stopped",
+        consumer_lease_owner: null,
+        consumer_lease_token: null,
+        consumer_lease_until: null,
+      },
+    ])
   } finally {
     if (store) await store.close()
     await pool.query("DELETE FROM bff_agent_cancellation_outbox WHERE tenant_id = $1", [tenant]).catch(() => undefined)

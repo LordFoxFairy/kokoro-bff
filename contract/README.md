@@ -27,8 +27,10 @@ security; an irrelevant extra Authorization header does not become an additional
 
 ## Version
 
-The current contract version is `1.0.0` on the `/v1` HTTP namespace. Its operation stability is `beta`; that marker
-describes compatibility expectations, not proof that every Live adapter or persistence path is complete.
+The current contract version is `2.0.0` on the unchanged `/v1` HTTP namespace. Version 2 adds the closed optional
+Agent-owned failure profile to durable `ChatMessage` projections; this coordinated beta break does not add a `/v2`
+alias or preserve a 1.0 response fallback. Its operation stability is `beta`; that marker describes compatibility
+expectations, not proof that every Live adapter or persistence path is complete.
 
 `GET /v1/sessions/{id}/events` issues one opaque `agui_*` cursor per durable public frame. Agent source sequences remain
 internal projection metadata and are not valid public resume cursors. Callers persist the last SSE `id` verbatim and send
@@ -111,13 +113,16 @@ surface to BFF admission, Skill authorization check, Team, and invitation operat
 introspection and execution authorization remain excluded. Exact generated-file digests and toolchain provenance are
 recorded in `contract/dependencies/iam-http.json`.
 
-The Agent HTTP consumer pins the complete owner `contract/openapi/v1/openapi.json` v2.0.0 at Agent commit
-`dd34a4800b4ce0cc61eb80dd715e528b9d4517da`, SHA-256
-`20398c59f42031c1b6ae2e2c3708e63ec8b5645baf741bf831bc67e14625ef99`.
+The Agent HTTP consumer pins the complete owner `contract/openapi/v1/openapi.json` v3.0.0 at Agent commit
+`f3be3b97dd67df69ed3c6cb88c59f3bc2db97703`, SHA-256
+`e9f0a543f74dee34212f0ea4fe366d46218268462ac54dce08e41965f34d2d2c`, plus that publication's
+`contract/provenance.json` bytes at SHA-256
+`d116657f65027de8bd829dc0408fd86046da0ac0a1d2934bd2a87e835c897b5f`.
 `openapi-ts.agent.config.ts` filters only `createRun` and `replaySessionEvents`; the full source bytes are vendored read-only
-under `contract/vendor/kokoro-agent/`. `pnpm contract:check:agent` verifies the fixed digest, toolchain and manifest,
-regenerates twice byte-identically, and compares every generated file. BFF validates the owner 202 receipt and 200 replay success envelopes and trusted error codes with the generated
-Zod schemas; this dependency does not make BFF the Agent contract owner.
+under `contract/vendor/kokoro-agent/`. `pnpm contract:check:agent` verifies the two-file fixed-commit allowlist,
+published HTTP provenance, strict `ChatFailure` schema graph, toolchain and manifest, regenerates all 17 files twice
+byte-identically, and compares every generated file. BFF validates the owner 202 receipt, 200 replay envelope, and
+decoded `run.failed` payload with generated runtime schemas; this dependency does not make BFF the Agent contract owner.
 
 The Platform Connect consumer pins exact `common.proto` and `platform_runtime.proto` bytes plus the complete
 `platform-execution-operations/4.0.0` artifact from Platform commit `263a28f1e55745bd1829a61f68228d775751adbc`

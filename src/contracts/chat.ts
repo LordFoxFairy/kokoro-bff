@@ -1,6 +1,21 @@
 export type ChatSessionStatus = "active" | "deleted"
 export type ChatRunStatus = "queued" | "running" | "waiting" | "stopped" | "completed" | "cancelled" | "error"
 export type ChatMessageRole = "user" | "assistant" | "system"
+export type ChatFailure = {
+  source: "agent"
+  code:
+    | "token_budget_exceeded"
+    | "recursion_limit_exceeded"
+    | "assembly_failed"
+    | "enqueue_failed"
+    | "dispatch_exhausted"
+    | "contract_incompatible"
+    | "internal_error"
+    | "model_unavailable"
+    | "dependency_unavailable"
+    | "model_access_denied"
+  retryable: boolean
+}
 
 export type ChatSessionSummary = {
   session_id: string
@@ -15,6 +30,7 @@ export type ChatMessage = {
   status: "pending" | "streaming" | "completed" | "failed"
   created_at: string
   run_id?: string
+  failure?: ChatFailure
 }
 
 export type ChatEvent = {

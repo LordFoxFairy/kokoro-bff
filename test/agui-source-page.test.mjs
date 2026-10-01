@@ -5,6 +5,7 @@ import { describe, it } from "node:test"
 import * as agentProjection from "../dist/infrastructure/clients/agent/projection.js"
 import { AgUiConsumerLeaseLostError, AgUiSourceContractError, AgUiSourceReadError } from "../dist/application/agui/errors.js"
 import { AgUiProjectionService } from "../dist/application/agui/project-session-events.js"
+import { AgUiProjectorRunner } from "../dist/application/agui/projector.js"
 import { AgentAgUiSourceReader } from "../dist/infrastructure/clients/agent/projector-source.js"
 import { loadConfig } from "../dist/config/runtime.js"
 
@@ -34,7 +35,103 @@ const event = (sequence, overrides = {}) => ({
   ...overrides,
 })
 
+const FAILURE_CODES = [
+  "token_budget_exceeded",
+  "recursion_limit_exceeded",
+  "assembly_failed",
+  "enqueue_failed",
+  "dispatch_exhausted",
+  "contract_incompatible",
+  "internal_error",
+  "model_unavailable",
+  "dependency_unavailable",
+  "model_access_denied",
+]
+const RETRYABLE_FAILURE_CODES = new Set(["model_unavailable", "dependency_unavailable"])
+
+function failureEvent(sequence, failure) {
+  return event(sequence, { event_type: "run.failed", payload_json: JSON.stringify(failure) })
+}
+
+function assertMappedFailure(failure) {
+  const mapped = agentProjection.mapAgentEvent(failureEvent(1, failure))
+  assert.equal(mapped?.kind, "run.failed")
+  assert.deepEqual(mapped?.payload, {
+    failure: { source: "agent", code: failure.code, retryable: failure.retryable },
+    message: "Agent run failed",
+  })
+}
+
+function projectorLease(sessionId) {
+  return {
+    tenantId: "tenant_1",
+    sessionId,
+    subjectId: "user_1",
+    leaseOwner: "worker_1",
+    leaseToken: `lease_${sessionId}`,
+    fence: 1,
+    leaseUntil: "2026-09-30T00:01:00.000Z",
+    leaseRemainingMs: 60_000,
+    sourceHighWatermark: 0,
+    failureCount: 0,
+  }
+}
+
+function projectorOptions() {
+  return {
+    workerId: "worker_1",
+    now: () => new Date("2026-09-30T00:00:00.000Z"),
+    maxConsumersPerCycle: 2,
+    sourcePageSize: 10,
+    maxPagesPerConsumer: 1,
+    leaseDurationMs: 30_000,
+    pollIntervalMs: 60_000,
+    errorBackoffMs: 1_000,
+    errorBackoffMaxMs: 8_000,
+    errorBackoffJitterPercent: 0,
+    retentionMs: 86_400_000,
+    gcIntervalMs: 60_000,
+    gcBatchSize: 10,
+    cursorTombstoneRetentionMs: 172_800_000,
+  }
+}
+
 describe("Agent event page boundary", () => {
+  for (const code of FAILURE_CODES) {
+    it(`maps the complete owner failure ${code}/false to one safe profile`, () => {
+      assertMappedFailure({ status: "failed", code, retryable: false })
+    })
+  }
+
+  for (const code of RETRYABLE_FAILURE_CODES) {
+    it(`maps the complete owner failure ${code}/true to one safe profile`, () => {
+      assertMappedFailure({ status: "failed", code, retryable: true })
+    })
+  }
+
+  for (const code of FAILURE_CODES.filter((candidate) => !RETRYABLE_FAILURE_CODES.has(candidate))) {
+    it(`rejects the illegal owner failure ${code}/true`, () => {
+      assert.throws(() => agentProjection.mapAgentEvent(failureEvent(1, { status: "failed", code, retryable: true })))
+    })
+  }
+
+  for (const [name, failure] of [
+    ["unknown code", { status: "failed", code: "unknown", retryable: false }],
+    ["extra property", { status: "failed", code: "internal_error", retryable: false, diagnostic: "secret" }],
+    ["missing code", { status: "failed", retryable: false }],
+    ["missing retryable", { status: "failed", code: "internal_error" }],
+    ["string retryable", { status: "failed", code: "internal_error", retryable: "false" }],
+    ["number retryable", { status: "failed", code: "internal_error", retryable: 0 }],
+    ["null retryable", { status: "failed", code: "internal_error", retryable: null }],
+    ["missing status", { code: "internal_error", retryable: false }],
+    ["wrong status", { status: "completed", code: "internal_error", retryable: false }],
+    ["null status", { status: null, code: "internal_error", retryable: false }],
+  ]) {
+    it(`rejects an owner failure with ${name}`, () => {
+      assert.throws(() => agentProjection.mapAgentEvent(failureEvent(1, failure)))
+    })
+  }
+
   it("requires the pinned S4 delivery identity and kind instead of a hash-only success", () => {
     const delivery = event(1, {
       event_type: "delivery",
@@ -223,6 +320,93 @@ describe("Agent event page boundary", () => {
       await close(server)
     }
   })
+
+  for (const [positionName, invalidIndex] of [
+    ["first", 0],
+    ["middle", 1],
+    ["last", 2],
+  ]) {
+    it(`rejects a ${positionName} malformed failure before ingest and blocks only its consumer`, async () => {
+      const badPage = [event(1), event(2), event(3)]
+      badPage[invalidIndex] = failureEvent(invalidIndex + 1, {
+        code: "model_unavailable",
+        retryable: true,
+      })
+      const server = createServer((request, response) => {
+        response.setHeader("content-type", "application/json")
+        response.end(
+          JSON.stringify(
+            request.url?.includes("session_2")
+              ? { data: { events: [], next_seq: 0, watermark: 0 }, meta: { request_id: "valid-consumer" } }
+              : { data: { events: badPage, next_seq: 3, watermark: 3 }, meta: { request_id: `bad-${positionName}` } },
+          ),
+        )
+      })
+      const baseUrl = await listen(server)
+      const blocked = []
+      const progressed = []
+      let ingests = 0
+      try {
+        const config = loadConfig({
+          KOKORO_BFF_SHARED_SECRET: "test-secret",
+          KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/kokoro_bff?schema=kokoro_bff",
+          KOKORO_BFF_REDIS_URL: "redis://localhost:6379/8",
+          KOKORO_INTERNAL_SECRET_BFF: "upstream-secret",
+        })
+        const reader = new AgentAgUiSourceReader(config, baseUrl, { maxAttempts: 1 })
+        const consumers = {
+          seedConsumers: async () => 0,
+          claimConsumers: async () => [projectorLease("session_1"), projectorLease("session_2")],
+          renewConsumerLease: async () => true,
+          markConsumerProgress: async (lease) => {
+            progressed.push(lease.sessionId)
+            return true
+          },
+          markConsumerRetryable: async () => assert.fail("contract failures must not retry"),
+          markConsumerBlocked: async (lease, code) => {
+            blocked.push([lease.sessionId, code])
+            return true
+          },
+          releaseConsumer: async () => true,
+          collectGarbage: async () => ({ streamsScanned: 0, framesDeleted: 0, tombstonesInserted: 0, tombstonesDeleted: 0 }),
+        }
+        const runner = new AgUiProjectorRunner(
+          {
+            ingest: async (_tenantId, _sessionId, sources) => {
+              ingests += 1
+              return { insertedSources: sources.length, insertedFrames: 0, sourceHighWatermark: sources.at(-1)?.sourceSequence ?? 0 }
+            },
+          },
+          consumers,
+          reader,
+          projectorOptions(),
+        )
+
+        const result = await runner.runOnce()
+
+        assert.deepEqual(
+          {
+            blocked: result.consumersBlocked,
+            succeeded: result.consumersSucceeded,
+            sourceEvents: result.sourceEvents,
+            ingests,
+            blockedConsumers: blocked,
+            progressed,
+          },
+          {
+            blocked: 1,
+            succeeded: 1,
+            sourceEvents: 0,
+            ingests: 0,
+            blockedConsumers: [["session_1", "source_contract_invalid"]],
+            progressed: ["session_2"],
+          },
+        )
+      } finally {
+        await close(server)
+      }
+    })
+  }
 
   it("classifies authentication failures as permanent and does not retry them", async () => {
     let requests = 0

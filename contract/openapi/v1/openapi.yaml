@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 1.0.0
+  version: 2.0.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -4533,6 +4533,41 @@ components:
           enum: [pending, streaming, completed, failed]
         created_at: { type: string, format: date-time }
         run_id: { type: string }
+        failure:
+          type: object
+          required: [source, code, retryable]
+          additionalProperties: false
+          properties:
+            source: { type: string, const: agent }
+            code:
+              type: string
+              enum:
+                - token_budget_exceeded
+                - recursion_limit_exceeded
+                - assembly_failed
+                - enqueue_failed
+                - dispatch_exhausted
+                - contract_incompatible
+                - internal_error
+                - model_unavailable
+                - dependency_unavailable
+                - model_access_denied
+            retryable: { type: boolean }
+          if:
+            properties:
+              retryable: { const: true }
+          then:
+            properties:
+              code: { enum: [model_unavailable, dependency_unavailable] }
+      allOf:
+        - if:
+            required: [failure]
+          then:
+            required: [run_id]
+            properties:
+              role: { const: assistant }
+              status: { const: failed }
+              run_id: { type: string, minLength: 1 }
       example:
         message_id: msg_01JUSER
         role: user

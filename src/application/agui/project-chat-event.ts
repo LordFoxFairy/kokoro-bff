@@ -1,4 +1,5 @@
 import type { ChatEvent } from "../../contracts/chat.js"
+import type { AgentFailureProfile } from "../../domain/chat/message.js"
 import { EventType } from "@ag-ui/core"
 
 /**
@@ -29,6 +30,7 @@ export type AgUiEvent = {
       session_id: string
       run_id: string | null
       timestamp: string
+      failure?: AgentFailureProfile
     }
   }
   threadId?: string
@@ -77,6 +79,17 @@ function metadataOf(event: ChatEvent): AgUiEvent["metadata"] {
       timestamp: event.timestamp,
     },
   }
+}
+
+function failureField(payload: Record<string, unknown>): AgentFailureProfile {
+  const failure = payload.failure
+  if (typeof failure !== "object" || failure === null || Array.isArray(failure)) throw new Error("Agent failure profile is invalid")
+  const candidate = failure as Record<string, unknown>
+  if (Object.keys(candidate).sort().join(",") !== "code,retryable,source") throw new Error("Agent failure profile is invalid")
+  if (candidate.source !== "agent" || typeof candidate.code !== "string" || typeof candidate.retryable !== "boolean") {
+    throw new Error("Agent failure profile is invalid")
+  }
+  return candidate as AgentFailureProfile
 }
 
 function base(event: ChatEvent, type: AgUiEventType, fields: Omit<AgUiEvent, "type" | "timestamp" | "metadata"> = {}): AgUiEvent {
@@ -195,14 +208,17 @@ export function projectChatEvent(event: ChatEvent, state: AgUiProjectionState): 
         ...(usage === undefined ? {} : { usage }),
       })]
     }
-    case "run.failed":
+    case "run.failed": {
+      const failure = failureField(payload)
       clearRunState(state, event.run_id)
-      return [base(event, EventType.RUN_ERROR, {
+      const projected = base(event, EventType.RUN_ERROR, {
         threadId: event.session_id,
         runId: event.run_id ?? "",
-        message: stringField(payload, "message", "Agent run failed"),
-        code: stringField(payload, "code", "internal_error"),
-      })]
+        message: "Agent run failed",
+        code: failure.code,
+      })
+      return [{ ...projected, metadata: { kokoro: { ...projected.metadata.kokoro, failure } } }]
+    }
     case "tool.awaiting_approval":
       return [base(event, EventType.CUSTOM, { name: "kokoro.interaction.awaiting_approval", value: payload })]
     case "delivery.created":

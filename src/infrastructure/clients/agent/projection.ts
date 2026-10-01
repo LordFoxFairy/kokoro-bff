@@ -1,4 +1,5 @@
 import type { ChatEvent, ChatMessage, ChatSessionDetail, ChatSessionSummary } from "../../../contracts/index.js"
+import { parseAgentFailure } from "../../../generated/agent-http/failure-profile.gen.js"
 import type { AgentChatEvent, AgentChatMessage, AgentEventPage, BffIdentity } from "./types.js"
 
 function recordPayload(event: AgentChatEvent): Record<string, unknown> {
@@ -45,15 +46,6 @@ function sourceOf(value: unknown): "built-in" | "config-custom" | "runtime-custo
   throw new Error("Agent subagent source is invalid")
 }
 
-const WEB_FAILURE_CODES = new Set([
-  "token_budget_exceeded",
-  "recursion_limit_exceeded",
-  "assembly_failed",
-  "enqueue_failed",
-  "dispatch_exhausted",
-  "contract_incompatible",
-  "internal_error",
-])
 const ARTIFACT_KINDS = new Set(["document", "code", "image", "audio", "video", "data", "archive", "other"])
 const SHA256 = /^[0-9a-f]{64}$/u
 
@@ -161,12 +153,14 @@ export function mapAgentEvent(event: AgentChatEvent): ChatEvent | null {
         status: payload.status === "cancelled" ? "cancelled" : "completed",
         token_usage: payload.token_usage ?? null,
       })
-    case "run.failed":
+    case "run.failed": {
+      const failure = parseAgentFailure(payload)
+      if (failure === null) throw new Error("Agent run failure payload is invalid")
       return baseEvent(event, "run.failed", {
-        code: typeof payload.code === "string" && WEB_FAILURE_CODES.has(payload.code) ? payload.code : "internal_error",
-        error_kind: "agent_error",
+        failure,
         message: "Agent run failed",
       })
+    }
     default:
       return null
   }

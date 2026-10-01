@@ -11,6 +11,19 @@ import {
 } from "../scripts/apply-schema.mjs"
 
 const { Client } = pg
+const SAFE_FAILURE_CODES = [
+  "token_budget_exceeded",
+  "recursion_limit_exceeded",
+  "assembly_failed",
+  "enqueue_failed",
+  "dispatch_exhausted",
+  "contract_incompatible",
+  "internal_error",
+  "model_unavailable",
+  "dependency_unavailable",
+  "model_access_denied",
+]
+const RETRYABLE_FAILURE_CODES = ["model_unavailable", "dependency_unavailable"]
 
 test("schema application reads the repository canonical schema", async () => {
   const schema = await loadCanonicalSchema()
@@ -40,6 +53,40 @@ test("schema application reads the repository canonical schema", async () => {
   assert.match(schema, /PRIMARY KEY \(tenant_id, session_id, source_owner, source_event_id\)/u)
   assert.match(schema, /UNIQUE \(tenant_id, session_id, source_owner, source_sequence\)/u)
   assert.equal(/FOREIGN KEY|REFERENCES/iu.test(schema), false)
+})
+
+test("canonical Message failure columns use the complete nullable-pair CHECK", async () => {
+  const schema = await loadCanonicalSchema()
+  const start = schema.indexOf("CREATE TABLE IF NOT EXISTS bff_message")
+  const end = schema.indexOf("CREATE TABLE IF NOT EXISTS", start + 1)
+  const message = start >= 0 && end > start ? schema.slice(start, end) : ""
+
+  assert.match(message, /agent_failure_code TEXT(?:,|\n)/u)
+  assert.match(message, /agent_failure_retryable BOOLEAN(?:,|\n)/u)
+  assert.doesNotMatch(message, /agent_failure_(?:code|retryable)[^,\n]*\bDEFAULT\b/iu)
+  assert.match(message, /CONSTRAINT ck_bff_message_agent_failure CHECK/u)
+  assert.match(message, /agent_failure_code IS NULL\s+AND agent_failure_retryable IS NULL/u)
+  assert.match(message, /agent_failure_code IS NOT NULL\s+AND agent_failure_retryable IS NOT NULL/u)
+  const codeLists = [...message.matchAll(/agent_failure_code IN \(([^)]*)\)/gu)].map((match) => [
+    ...match[1].matchAll(/'([a-z_]+)'/gu),
+  ].map((code) => code[1]))
+  assert.deepEqual(codeLists, [SAFE_FAILURE_CODES, RETRYABLE_FAILURE_CODES])
+  assert.equal(new Set(codeLists[0]).size, SAFE_FAILURE_CODES.length)
+  for (const broken of [
+    message.replace("'model_access_denied'", "'model_access_denied', 'unexpected_failure'"),
+    message.replace("'internal_error'", "'internal_error', 'internal_error'"),
+  ]) {
+    assert.notEqual(broken, message)
+    const [brokenCodes] = [...broken.matchAll(/agent_failure_code IN \(([^)]*)\)/gu)].map((match) => [
+      ...match[1].matchAll(/'([a-z_]+)'/gu),
+    ].map((code) => code[1]))
+    assert.notDeepEqual(brokenCodes, SAFE_FAILURE_CODES)
+  }
+  assert.match(message, /agent_failure_retryable = FALSE\s+OR\s+agent_failure_code IN/u)
+  assert.match(message, /role = 'assistant'/u)
+  assert.match(message, /status = 'failed'/u)
+  assert.match(message, /run_id IS NOT NULL/u)
+  assert.match(message, /length\(btrim\(run_id\)\) > 0/u)
 })
 
 test("canonical schema uses stable diagnostic names for indexes and constraints", async () => {
@@ -132,6 +179,62 @@ databaseTest("owner schema install coexists with other schemas and rolls back on
     await applyCanonicalSchema(databaseUrl, await loadCanonicalSchema())
     const bffTables = await client.query("SELECT count(*)::int AS count FROM pg_tables WHERE schemaname = 'kokoro_bff'")
     assert.ok(bffTables.rows[0].count >= 10)
+    const failureColumns = await client.query(
+      `SELECT column_name, data_type, is_nullable, column_default
+         FROM information_schema.columns
+        WHERE table_schema = 'kokoro_bff'
+          AND table_name = 'bff_message'
+          AND column_name IN ('agent_failure_code', 'agent_failure_retryable')
+        ORDER BY column_name`,
+    )
+    assert.deepEqual(failureColumns.rows, [
+      { column_name: "agent_failure_code", data_type: "text", is_nullable: "YES", column_default: null },
+      { column_name: "agent_failure_retryable", data_type: "boolean", is_nullable: "YES", column_default: null },
+    ])
+    const failureConstraint = await client.query(
+      `SELECT pg_get_constraintdef(oid) AS definition
+         FROM pg_constraint
+        WHERE connamespace = 'kokoro_bff'::regnamespace
+          AND conrelid = 'kokoro_bff.bff_message'::regclass
+          AND conname = 'ck_bff_message_agent_failure'`,
+    )
+    assert.equal(failureConstraint.rowCount, 1)
+
+    let failureSequence = 0
+    const insertFailure = async ({ code, retryable, role = "assistant", status = "failed", runId = "run_failure" }) => {
+      failureSequence += 1
+      return client.query(
+        `INSERT INTO kokoro_bff.bff_message
+           (message_id, tenant_id, conversation_id, run_id, role, content, status, message_seq,
+            agent_failure_code, agent_failure_retryable)
+         VALUES ($1, 'tenant_failure_check', 'conversation_failure_check', $2, $3, '', $4, $5, $6, $7)`,
+        [`message_failure_${failureSequence}`, runId, role, status, failureSequence, code, retryable],
+      )
+    }
+    const expectFailureCheck = async (candidate) => {
+      await assert.rejects(
+        insertFailure(candidate),
+        (error) => error?.code === "23514" && error?.constraint === "ck_bff_message_agent_failure",
+      )
+    }
+
+    await insertFailure({ code: null, retryable: null, role: "user", status: "completed", runId: null })
+    for (const code of SAFE_FAILURE_CODES) await insertFailure({ code, retryable: false })
+    for (const code of RETRYABLE_FAILURE_CODES) await insertFailure({ code, retryable: true })
+    for (const code of SAFE_FAILURE_CODES.filter((candidate) => !RETRYABLE_FAILURE_CODES.includes(candidate))) {
+      await expectFailureCheck({ code, retryable: true })
+    }
+    await expectFailureCheck({ code: "unknown", retryable: false })
+    await expectFailureCheck({ code: "", retryable: false })
+    await expectFailureCheck({ code: "  ", retryable: false })
+    await expectFailureCheck({ code: null, retryable: false })
+    await expectFailureCheck({ code: "internal_error", retryable: null })
+    for (const role of ["user", "system"]) await expectFailureCheck({ code: "internal_error", retryable: false, role })
+    for (const status of ["pending", "streaming", "completed"]) {
+      await expectFailureCheck({ code: "internal_error", retryable: false, status })
+    }
+    for (const runId of [null, "", "  "]) await expectFailureCheck({ code: "internal_error", retryable: false, runId })
+
     assert.equal((await client.query("SELECT count(*)::int AS count FROM pg_tables WHERE schemaname = 'public' AND tablename = 'other_owner_guard'")).rows[0].count, 1)
     assert.equal((await client.query("SELECT count(*)::int AS count FROM pg_tables WHERE schemaname = 'kokoro_iam' AND tablename = 'other_owner_guard'")).rows[0].count, 1)
     await assert.rejects(applyCanonicalSchema(databaseUrl, await loadCanonicalSchema()), /empty kokoro_bff schema/u)

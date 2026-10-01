@@ -1,5 +1,48 @@
 # kokoro-bff 当前实现
 
+## BFF-AGENT-FAILURE3：源码与 owner 隔离集成已验收，Web/运行组合待闭环（2026-09-30）
+
+起始基线是 BFF main `15e07fa44670bc13705ce3f6f700e73afcb72ccc`；本节覆盖下方历史章节中的旧 Agent
+pin、七码 fallback 与“待实施”文字，但不改写历史。当前源码已经形成单一路径：
+
+- public canonical `info.version=2.0.0`，HTTP `/v1` 不变；`ChatMessage.failure` 是 optional closed
+  `{source:"agent",code,retryable}`，只有 failure 存在时单向要求 assistant + failed + 非空 `run_id`；
+- Agent HTTP 固定 `f3be3b97dd67df69ed3c6cb88c59f3bc2db97703` / `3.0.0` / OpenAPI SHA-256
+  `e9f0a543f74dee34212f0ea4fe366d46218268462ac54dce08e41965f34d2d2c` / provenance SHA-256
+  `d116657f65027de8bd829dc0408fd86046da0ac0a1d2934bd2a87e835c897b5f`；固定目录只有两份 regular file，旧
+  `dd34` HTTP vendor 已删除，独立 delivery `486adb` pin 原字节不变；
+- generator 从 owner `Failure` / `ChatFailure` / `ChatEvent` schema 图派生唯一
+  `src/generated/agent-http/failure-profile.gen.ts`，17 文件 allowlist、manifest digest、published provenance、双次
+  byte-identical generation 与 required/enum/if-then/ref/status/closed mutants 都有可执行门；
+- `bff_message` 有 nullable `agent_failure_code` / `agent_failure_retryable` 与完整 CHECK：两列同 NULL/同非 NULL、
+  十码 false、仅两码 true、assistant/failed/非空 run；verified Agent failure 沿现 projection transaction 同写
+  Message/source/frame/version/watermark，cancel/dispatch/delete 明确保持 NULL；
+- source reader 在返回 page 前完整映射并严格验证所有 `run.failed`，坏页首/中/末都不进入 ingest，只按既有 runner
+  语义 block 对应 consumer；没有 unknown→`internal_error`、逐 event skip 或 raw diagnostics；
+- snapshot、Message list 与合法 Share 都由 Message 两列映射同一 safe shape；实时标准 `RUN_ERROR` 使用固定
+  `Agent run failed`、同值顶层 code 与 `metadata.kokoro.failure`，无顶层 retryable/status/raw/extra；AG-UI GC 不清
+  Message failure。
+
+Root 在最终冻结32文件manifest `c12ced8d6d6d30dc1a8e6be5bb6a7595c461912412b7fadeaa71a3e809bd0b41` 上
+独立完成当前门禁：Node `v22.22.2` / pnpm `11.25.0`，`pnpm format:check` 与完整 `pnpm check` exit0，
+contract193/193、主测试545 pass / 0 fail / 1 schema-fixture skip、lint/typecheck/build通过；
+`contract:check:agent` 的17生成文件与双次生成字节一致也包含在完整check内。随后在同一现有PG/Redis实例、同一role的
+Root-owned随机临时数据库与原子占有Redis15，canonical fresh `db:apply-schema`、动态schema7/7、architecture27/27、
+全部七文件真实PostgreSQL/Redis/localhost HTTP integration47/47均通过，0跳过。PG CHECK/rollback/RR/lease fence、坏页零写、
+ACL与当前Share撤销、实际旧RUN_ERROR GC后snapshot/list/active Share保留safe profile均执行；System/IAM/Agent等上游仍为
+测试double，不冒充真实owner浏览器或模型E2E。
+
+独立契约与SQL审查最终均P0/P1/P2=0/0/0；曾发现的reachable-schema额外限制漂移、当前Share撤销误查旧ID、
+GC后list/Share缺断言均已本片修复后重跑。Root最终资源run `f1db3932a3edbe3f195580f1`：source/test hash前后稳定，
+自有DB残留false、owner临时fixture增量[]、Redis15剩余keys0、cleanup_errors[]；独立残留查询同为0。
+日志 `/tmp/kokoro-bff-failure3-root-final-{format,full-check}.log` 与
+`/tmp/kokoro-bff-failure3-root-real-acceptance-r2{.log,-result.json}`。随后Root只更新四份设计文档的验收metadata，
+源码/机器/SQL/测试不改变；发布commit由Root组合台账记录。
+
+这只放行BFF-AGENT-FAILURE3切片，不宣称整个BFF或全产品完成。Root全工程标准门仍FAIL137（BFF31项），
+日志 `/tmp/kokoro-bff-failure3-root-standard.json`，不放宽门或建立绿baseline。Web public2/实时与hydration消费者、正式同user重试、
+管理运行组协调切换、fresh输入框视觉、真实IAM/Agent/provider/browser全矩阵仍待闭环；3310原运行组未重启或半套热切，Payment最后。
+
 ## BFF-CHAT-ACTIVE-DOC：`active_run` 一致快照实现与owner验收（2026-09-30）
 
 Root 已裁决首片保持现有 v1 OpenAPI 原字节，只恢复契约已经定义的 `active_run.status=running`；不新增 `queued`、不收窄 enum、不修改手写 `src/contracts/chat.ts` 或要求 Web contract repin。基线 `d654a1bc6ce0347e28dd90a0ce0ee1553b8d67ed` 的 `ChatApplicationService.snapshot()` 从不输出 `active_run`；本候选已由 Chat repository 在读取 Conversation、最近 100 条 Message、Delivery 与 AG-UI watermark 的同一 PostgreSQL `REPEATABLE READ READ ONLY` 事务中读取本仓 `bff_agui_stream.expected_run_id/latest_run_id/terminal_run_id`，并映射可证明的 running。
