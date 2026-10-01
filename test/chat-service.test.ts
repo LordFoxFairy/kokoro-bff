@@ -24,6 +24,32 @@ test("passes the trusted subject through the private Chat application port", asy
   assert.deepEqual(calls, [["tenant_a", "owner_a", "project_a", 20, null]])
 })
 
+test("Conversation keyset advances ascending IDs when updated_at ties", async () => {
+  const calls: Array<{ sql: string; values: unknown[] | undefined }> = []
+  const repository = new PostgresChatRepository({
+    pool: {
+      query: async (sql: string, values?: unknown[]) => {
+        calls.push({ sql, values })
+        return { rows: [] }
+      },
+    },
+  } as never)
+
+  await repository.listConversations(
+    "tenant_1",
+    "owner_1",
+    "project_1",
+    2,
+    `conv_${Buffer.from(JSON.stringify({ timestamp: "2026-10-01T12:00:00.000Z", id: "conversation_a" })).toString("base64url")}`,
+  )
+
+  assert.equal(calls.length, 1)
+  assert.match(calls[0].sql, /updated_at\s*<\s*\$4/u)
+  assert.match(calls[0].sql, /updated_at\s*=\s*\$4\s+AND\s+conversation_id\s*>\s*\$5/u)
+  assert.doesNotMatch(calls[0].sql, /\(updated_at,\s*conversation_id\)\s*<\s*\(\$4,\s*\$5\)/u)
+  assert.deepEqual(calls[0].values, ["tenant_1", "owner_1", "project_1", "2026-10-01T12:00:00.000Z", "conversation_a", 3])
+})
+
 test("Conversation deletion removes Artifact links using only bound tenant and conversation parameters", async () => {
   const calls: Array<{ sql: string; values: unknown[] | undefined }> = []
   const client = {

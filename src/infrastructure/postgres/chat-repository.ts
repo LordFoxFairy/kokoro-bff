@@ -93,7 +93,7 @@ export class PostgresChatRepository implements ChatRepository {
             )
           )
           AND ($3::text IS NULL OR project_ref = $3)
-          AND ($4::timestamptz IS NULL OR (updated_at, conversation_id) < ($4, $5))
+          AND ($4::timestamptz IS NULL OR updated_at < $4 OR (updated_at = $4 AND conversation_id > $5))
         ORDER BY updated_at DESC, conversation_id ASC
         LIMIT $6`,
       [tenantId, subjectId, projectRef ?? null, position?.timestamp ?? null, position?.id ?? null, limit + 1],

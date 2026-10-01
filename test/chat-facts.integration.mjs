@@ -101,6 +101,135 @@ function config(tenantId = "tenant_test") {
   }
 }
 
+integrationTest("paginates Conversation ties completely through the production HTTP chain", { timeout: 30_000 }, async () => {
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
+  const suffix = `${Date.now()}_${randomUUID()}`
+  const tenant = `chat_page_${suffix}`
+  const otherTenant = `${tenant}_other`
+  const subject = `subject_${suffix}`
+  const otherSubject = `${subject}_other`
+  const projectId = `project_${suffix}`
+  const projectBId = `project_b_${suffix}`
+  const emptyProjectId = `project_empty_${suffix}`
+  const otherProjectId = `project_other_${suffix}`
+  const expected = ["newer", "tie_a", "tie_b", "tie_c", "older"].map((name) => `conversation_${name}_${suffix}`)
+  const projectBConversation = `conversation_project_b_${suffix}`
+  const unassignedConversation = `conversation_unassigned_${suffix}`
+  let bff
+  try {
+    await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
+    await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+    await pool.query(
+      `INSERT INTO bff_project (project_id, tenant_id, owner_id, name, slug)
+       VALUES
+         ($1, $2, $3, 'Paging project', $4),
+         ($5, $2, $3, 'Project B', $6),
+         ($7, $2, $3, 'Empty project', $8),
+         ($9, $2, $10, 'Other project', $11)`,
+      [
+        projectId,
+        tenant,
+        subject,
+        `paging-${suffix}`,
+        projectBId,
+        `paging-b-${suffix}`,
+        emptyProjectId,
+        `paging-empty-${suffix}`,
+        otherProjectId,
+        otherSubject,
+        `other-${suffix}`,
+      ],
+    )
+    await pool.query(
+      `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, project_ref, title, status, created_at, updated_at, deleted_at)
+       VALUES
+         ($1, $6, $7, $8, 'newer', 'active', '2026-10-01T12:00:01.000Z', '2026-10-01T12:00:01.000Z', NULL),
+         ($3, $6, $7, $8, 'tie b', 'active', '2026-10-01T12:00:00.000Z', '2026-10-01T12:00:00.000Z', NULL),
+         ($4, $6, $7, $8, 'tie c', 'active', '2026-10-01T12:00:00.000Z', '2026-10-01T12:00:00.000Z', NULL),
+         ($2, $6, $7, $8, 'tie a', 'active', '2026-10-01T12:00:00.000Z', '2026-10-01T12:00:00.000Z', NULL),
+         ($5, $6, $7, $8, 'older', 'active', '2026-10-01T11:59:59.000Z', '2026-10-01T11:59:59.000Z', NULL)`,
+      [...expected, tenant, subject, projectId],
+    )
+    await pool.query(
+      `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, project_ref, title, status, deleted_at)
+       VALUES
+         ($1, $5, $6, $7, 'deleted', 'deleted', CURRENT_TIMESTAMP(3)),
+         ($2, $5, $8, $7, 'other subject', 'active', NULL),
+         ($3, $9, $6, $7, 'other tenant', 'active', NULL),
+         ($4, $5, $6, $10, 'unowned project', 'active', NULL),
+         ($11, $5, $6, $12, 'project b', 'active', NULL),
+         ($13, $5, $6, NULL, 'unassigned', 'active', NULL)`,
+      [
+        `conversation_deleted_${suffix}`,
+        `conversation_other_subject_${suffix}`,
+        `conversation_other_tenant_${suffix}`,
+        `conversation_unowned_project_${suffix}`,
+        tenant,
+        subject,
+        projectId,
+        otherSubject,
+        otherTenant,
+        otherProjectId,
+        projectBConversation,
+        projectBId,
+        unassignedConversation,
+      ],
+    )
+    await pool.query(
+      `UPDATE bff_conversation
+          SET created_at = CASE conversation_id WHEN $1 THEN '2026-10-01T11:59:58.000Z'::timestamptz ELSE '2026-10-01T11:59:57.000Z'::timestamptz END,
+              updated_at = CASE conversation_id WHEN $1 THEN '2026-10-01T11:59:58.000Z'::timestamptz ELSE '2026-10-01T11:59:57.000Z'::timestamptz END
+        WHERE conversation_id IN ($1, $2)`,
+      [projectBConversation, unassignedConversation],
+    )
+    bff = createBffServer(config(tenant), { sessionAdmission })
+    const base = await listen(bff)
+
+    for (const limit of [1, 2]) {
+      const seen = []
+      const seenCursors = new Set()
+      let cursor = null
+      do {
+        assert.ok(seenCursors.size <= expected.length, "Conversation pagination exceeded the bounded static result set")
+        const query = new URLSearchParams({ project_ref: projectId, limit: String(limit) })
+        if (cursor !== null) query.set("cursor", cursor)
+        const response = await fetch(`${base}/v1/sessions?${query}`, { headers: auth(tenant, subject), signal: AbortSignal.timeout(5000) })
+        assert.equal(response.status, 200)
+        const body = await response.json()
+        seen.push(...body.data.sessions.map((session) => session.session_id))
+        cursor = body.data.next_cursor
+        if (cursor !== null) {
+          assert.equal(seenCursors.has(cursor), false, "Conversation pagination repeated a cursor")
+          seenCursors.add(cursor)
+        }
+      } while (cursor !== null)
+
+      assert.deepEqual(seen, expected)
+      assert.equal(new Set(seen).size, expected.length)
+      assert.equal(cursor, null)
+    }
+
+    const projectB = await fetch(`${base}/v1/sessions?project_ref=${encodeURIComponent(projectBId)}&limit=2`, { headers: auth(tenant, subject), signal: AbortSignal.timeout(5000) })
+    assert.equal(projectB.status, 200)
+    assert.deepEqual((await projectB.json()).data, {
+      sessions: [{ session_id: projectBConversation, title: "project b", updated_at: "2026-10-01T11:59:58.000Z" }],
+      next_cursor: null,
+    })
+    const emptyProject = await fetch(`${base}/v1/sessions?project_ref=${encodeURIComponent(emptyProjectId)}&limit=1`, { headers: auth(tenant, subject), signal: AbortSignal.timeout(5000) })
+    assert.equal(emptyProject.status, 200)
+    assert.deepEqual((await emptyProject.json()).data, { sessions: [], next_cursor: null })
+
+    const ownerWide = await fetch(`${base}/v1/sessions?limit=100`, { headers: auth(tenant, subject), signal: AbortSignal.timeout(5000) })
+    assert.equal(ownerWide.status, 200)
+    assert.deepEqual((await ownerWide.json()).data.sessions.map((session) => session.session_id), [...expected, projectBConversation, unassignedConversation])
+  } finally {
+    if (bff) await close(bff)
+    await pool.query("DELETE FROM bff_conversation WHERE tenant_id IN ($1, $2)", [tenant, otherTenant]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_project WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+    await pool.end()
+  }
+})
+
 integrationTest("creates a Web-local first Conversation with its turn and Agent command atomically", async () => {
   const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
   const tenant = `chat_first_${Date.now()}`

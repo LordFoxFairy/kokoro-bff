@@ -1,3 +1,11 @@
+## BFF-CHAT-PAGING1：响应与cursor协议保持（2026-10-01；源码与回归已验证）
+
+唯一 public机器事实源仍为 HEAD293dfe7 的 contract/openapi/v1/openapi.yaml 3.0.0；本片不修改机器版本、schema、operation或生成客户端。
+GET /v1/sessions仍返回 sessions与required string|null next_cursor，按 updated_at DESC、conversation_id ASC继续分页。
+cursor只作为位置，不授予权限；每页重新应用tenant/subject/active/Project筛选。筛选改变时消费者丢弃cursor；本片不新增filter绑定协议。
+修复同timestamp续页遗漏是恢复既有排序，不更改 direct/omitted/project_ref语义，不引入未发布retry mutation。
+下方ROLE2历史待发布与retry候选不是当前机器状态；Root真实HTTP/PG与完整contract门验证后才记录本片通过。
+
 # kokoro-bff API contract policy
 
 ## BFF-CHAT-ROLE2：Message role public 收窄（2026-10-01；目标 `3.0.0`，未发布）

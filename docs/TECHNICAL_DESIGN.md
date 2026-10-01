@@ -1,3 +1,14 @@
+## BFF-CHAT-PAGING1：既有会话排序的分页修复（2026-10-01；源码与回归已验证）
+
+Owner 为 BFF Conversation；复用现 PostgreSQL ChatRepository，不新增文件、目录、表、进程或契约。
+当前 public canonical 是 HEAD293dfe7 的3.0.0，下方 ROLE2“待发布”属于历史阶段记录；未提交 retry 草案仍未发布。
+现 listConversations 按 updated_at DESC、conversation_id ASC 排序，却用两列整体小于的 cursor 条件，导致相同毫秒漏项。
+无漏项/无重复的验收限定静态可见集合；跨页更新不提供snapshot一致性。
+目标仅把 continuation 条件改为 updated_at 小于位置时间，或时间相等且 conversation_id 大于位置ID；limit+1与opaque cursor保持。
+采用修复现 adapter 的具名查询；淘汰新分页模块、改成ID倒序及Web过滤，因为它们改变职责或列表行为。
+权限、项目存在性、tenant/subject绑定、非snapshot语义、cancel/retry/FIFO均不变。先现unit/真实PG HTTP测试RED，再源码GREEN。
+验证绑定本片源码：Root自有随机临时库/现PG与Redis，固定毫秒ties、多页、末页null、过滤/删除/身份隔离；完整BFF门。
+
 # kokoro-bff 技术设计
 
 ## BFF-CHAT-ROLE2：Message 角色声明收敛（2026-10-01；设计门，未实施）

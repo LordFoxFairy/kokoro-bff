@@ -1,3 +1,16 @@
+## BFF-CHAT-PAGING1：源码与真实owner门已验证（2026-10-01）
+
+源码基线 main293dfe7；public canonical仍3.0.0，机器contract/DDL/generated/Scope/Retry/FIFO没有变更。
+唯一生产diff是 listConversations keyset：时间降序的下一页用updated_at小于，tie时ID升序用conversation_id大于。
+Root实际RED：unit11通过/1失败，真实PG HTTP0通过/1失败，旧SQL明确漏tie_b、tie_c；不是fixture或mock失败。
+GREEN：unit12/12；真实PostgreSQL/Redis Chat9/9；format、lint、typecheck、contract193/193、build、architecture27/27均exit0。
+第一full无admin fixture为547通过/1既定schema skip；随后提供现实例/同role的自有SQL fixture，fresh full为548/548、零skip，完整owner integration48/48（13.95秒）。
+日志 /tmp/kokoro-bff-chat-paging1-{red-unit,red-pg,green-unit,green-pg,full,full-real}.log；canonical fresh apply和真实catalog验证TIMESTAMPTZ(3)/原索引。
+静态可见集合ties与时间边界、limit1/2、cursor终页、Project A/B/空、tenant/subject/deleted/orphan回归已验；不承诺跨页更新snapshot一致性。
+PG/Redis是真实，IAM/Agent/Storage等外部边界按既有owner测试double；这不是全产品真实IAM、外部存储、模型或浏览器验收。
+Root只创建/回收自有临时测试库，不重启3310、不flush共享Redis。原4doc495行retry草案保留且不纳入本片提交。
+独立候选源码review0/0/0；早期CURRENT阶段文字P1由本段实际证据更新。主控最终提交与集成以Root CURRENT/task/progress为准。
+
 # kokoro-bff 当前实现
 
 ## BFF-CHAT-ROLE2：两角色源码与 fresh schema 已验证（2026-10-01）

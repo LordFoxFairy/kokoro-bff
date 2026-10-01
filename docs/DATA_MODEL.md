@@ -1,3 +1,11 @@
+## BFF-CHAT-PAGING1：keyset谓词与索引同向（2026-10-01；源码与回归已验证）
+
+唯一schema database/schema.sql逐字节保持。bff_conversation.updated_at是TIMESTAMPTZ(3)，现JavaScript Date cursor毫秒精度与schema一致。
+现两个active索引以tenant/owner及可选project_ref分区，updated_at DESC、conversation_id ASC；目标谓词
+updated_at < cursor_timestamp OR (updated_at = cursor_timestamp AND conversation_id > cursor_id)，不用两列同向row comparison。
+所有值仍参数化，同owner Project存在性与active/tenant/subject门不变。无DDL、migration、兼容表、跨owner SQL或新事务。
+Root用现实例与同role的自有临时数据库验证canonical fresh apply及真实分页；只回收自有库，不清共享Redis或用户应用数据。
+
 # kokoro-bff data model
 
 ## BFF-CHAT-ROLE2：`bff_message.role` 两角色约束（2026-10-01；目标态，未实施）
