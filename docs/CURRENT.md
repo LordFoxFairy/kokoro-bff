@@ -1,3 +1,11 @@
+## R33 scheduled accept 锁后租约复验局部已验
+
+沿现 ScheduledTask owner，receipt→task→scope→dispatch 全部潜在锁等待后、terminal receipt UPDATE 前同连接再取 DB clock；原 lease 失效即整个事务 ROLLBACK/false，保 pending ACK/零新scope或dispatch。无延lease/Nodeclock/旧fallback，API/schema/envelope未变。Root frozen source8662196e0fbb34f046229c900d30492ffd6771bb7ef00747bf3e5ae4095eb5df，test64dc829477124d76e4e4228653be8582a98e5c9d3cc07e7df68ec8ebc5f58abd；独立Sol终审0P0/P1/P2。
+
+Root Node22真实完整file RED9pass/2fail→GREEN11/11、三相关PG file **19/19、0skip**（4.65s）；三个自有随机数据库全drop，Redis14余0。首pattern未跑旧首例schema安装所致4启动错误保留，不计业务RED。Root lint/typecheck/build退出0及四相关pure **26/26**。日志 /tmp/kokoro-bff-scheduled-lease-r33-root-{red,red-r2,green,related-pg,pure}.log；431其他tracked和原8dirty内容独立hash核保持。
+
+仅本两个源码/测试及CURRENT新记录prefix可提交，原4docs/4Chat RED内容不接。完整Chat waiting/head/Agent4依赖和实际浏览器/IAM/Billing链仍未完成，不称全BFF或产品闭环；保当前后继目标，不以定时任务组件替代个人会话。
+
 ## Scheduled dispatch Root 源码与真实数据库验收（2026-10-01）
 
 最终31路径r4 manifest1c5923d9已Root hash/范围核验，独立复审0P0/0P1/0P2；Root Node22完整pnpm check exit0：563 passed/0 failed/1既定skip、contract/generation/lint/typecheck/build成功，日志 /tmp/kokoro-bff-scheduled-r26-r4-root-static.log。Root真实PG/Redis八文件 **59 passed/0 failed/0 cancelled/0 skipped（16.88s）**，包括Scheduled跨页terminal drain、预算/fence、精确PID双赢家/queue soft chain、rollback/重启/非零cursor/digest与身份冲突/expired lease/跨scope与stop drain。日志 /tmp/kokoro-bff-scheduled-r26-r4-root-integration.log；自有DBbff_fifo_a432245aad4f4e40已drop、Redis14=0。此前真实56/2、58/1诊断保留，不以错误夹具通过或测试数量代替源码审查。

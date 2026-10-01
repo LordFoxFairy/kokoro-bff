@@ -1,9 +1,13 @@
 import assert from "node:assert/strict"
+import { randomUUID } from "node:crypto"
 import { readFile } from "node:fs/promises"
 import { test } from "node:test"
 import { Pool } from "pg"
 import { PostgresBffRepositories } from "../dist/infrastructure/postgres/repositories.js"
 import { scheduledSourceEventDigest } from "../dist/application/scheduled-source-event-digest.js"
+import { buildScheduledAgentLaunch } from "../dist/infrastructure/clients/agent/launch.js"
+import { schedulerDispatchDigest, schedulerDispatchScope, schedulerOccurrenceIdentity } from "../dist/infrastructure/clients/scheduler/dispatch-identity.js"
+import { schedulerScheduleName } from "../dist/infrastructure/clients/scheduler/schedule.js"
 const postgresUrl = process.env.KOKORO_TEST_POSTGRES_URL,
   redisUrl = process.env.KOKORO_TEST_REDIS_URL
 const integrationTest = postgresUrl && redisUrl ? test : test.skip
@@ -1035,3 +1039,199 @@ integrationTest("active terminal and next claim serialize behind the exact scope
     await pool.end()
   }
 })
+
+async function waitForScheduledAcceptBlock(pool, blockerPid, resource) {
+  const deadline = Date.now() + 5000
+  while (Date.now() < deadline) {
+    const result = await pool.query(
+      `SELECT a.pid FROM pg_stat_activity a
+        WHERE $1 = ANY(pg_blocking_pids(a.pid)) AND a.wait_event_type = 'Lock'
+          AND strpos(a.query, $2) > 0`,
+      [blockerPid, resource],
+    )
+    if (result.rowCount === 1) return result.rows[0].pid
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+  throw new Error(`scheduled accept did not block on the exact ${resource} backend`)
+}
+
+async function waitForScheduledAcceptLeaseExpiry(pool, blockerPid, acceptPid, resource, leaseUntil) {
+  const deadline = Date.now() + 5000
+  while (Date.now() < deadline) {
+    const result = await pool.query(
+      `SELECT clock_timestamp() >= $1::timestamptz AS expired,
+              EXISTS(SELECT 1 FROM pg_stat_activity a WHERE a.pid = $2
+                AND $3 = ANY(pg_blocking_pids(a.pid)) AND a.wait_event_type = 'Lock'
+                AND strpos(a.query, $4) > 0) AS blocked`,
+      [leaseUntil, acceptPid, blockerPid, resource],
+    )
+    assert.equal(result.rows[0].blocked, true, "the same accept must remain blocked until the database confirms lease expiry")
+    if (result.rows[0].expired) return
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+  throw new Error("scheduled accept lease did not expire according to the database clock")
+}
+
+async function scheduledAcceptFacts(pool, tenant, task, receiptScope) {
+  const receipt = await pool.query("SELECT fingerprint,status,response_body FROM bff_idempotency_receipt WHERE scope=$1", [receiptScope])
+  const scope = await pool.query("SELECT row_to_json(s) AS fact FROM bff_scheduled_agent_scope s WHERE tenant_id=$1 AND task_id=$2", [tenant, task])
+  const dispatch = await pool.query(
+    "SELECT row_to_json(d) AS fact FROM bff_scheduled_agent_dispatch d WHERE tenant_id=$1 AND task_id=$2 ORDER BY dispatch_id",
+    [tenant, task],
+  )
+  const source = await pool.query(
+    "SELECT row_to_json(e) AS fact FROM bff_scheduled_agent_source_event e WHERE tenant_id=$1 AND task_id=$2 ORDER BY source_sequence",
+    [tenant, task],
+  )
+  return { receipt: receipt.rows, scope: scope.rows, dispatch: dispatch.rows, source: source.rows }
+}
+
+for (const resource of ["bff_scheduled_task", "bff_scheduled_agent_scope"]) {
+  for (const expired of [false, true]) {
+    integrationTest(
+      `scheduled accept ${expired ? "rejects an expired receipt lease" : "preserves unexpired acceptance and exact ACK replay"} after the ${resource} lock barrier`,
+      { timeout: 15_000 },
+      async () => {
+        const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC", max: 10 })
+        const suffix = randomUUID()
+        const tenant = `scheduled_accept_${suffix}`
+        const task = `task_${suffix}`
+        const owner = `owner_${suffix}`
+        const key = `key_${suffix}`
+        const receiptScope = schedulerDispatchScope(tenant, key)
+        let store
+        let locker
+        let acceptOperation
+        try {
+          await pool.query(
+            `INSERT INTO bff_scheduled_task(task_id,tenant_id,owner_id,title,prompt,frequency,task_time,timezone,next_run_at,status)
+             VALUES($1,$2,$3,'Accept lease','go','daily','08:00','UTC','2026-09-01T08:00:00Z','active')`,
+            [task, tenant, owner],
+          )
+          if (resource === "bff_scheduled_agent_scope") {
+            await pool.query("INSERT INTO bff_scheduled_agent_scope(tenant_id,task_id,session_id,subject_id) VALUES($1,$2,$3,$4)", [
+              tenant,
+              task,
+              `scheduled:${task}`,
+              owner,
+            ])
+          }
+          store = new PostgresBffRepositories(postgresUrl, redisUrl)
+          const schedule = schedulerScheduleName(task)
+          const occurrence = "2026-09-01T12:00:00.123456789Z"
+          const digest = schedulerDispatchDigest({
+            tenantId: tenant,
+            schedule,
+            occurrence,
+            body: { tenant_id: tenant, task_id: task, owner_id: owner, prompt: "go", auto_approve: false, timezone: "UTC" },
+          })
+          const claimed = await store.schedulerDispatchReceipts.claim(receiptScope, digest)
+          assert.equal(claimed.outcome, "claimed")
+          const launch = buildScheduledAgentLaunch({
+            identity: { namespace: tenant, userId: owner },
+            requestId: `request_${suffix}`,
+            sessionId: `scheduled:${task}`,
+            occurrenceIdentity: schedulerOccurrenceIdentity({ tenantId: tenant, schedule, occurrence }),
+            content: "go",
+          })
+          const snapshot = {
+            tenantId: tenant,
+            schedule,
+            occurrence,
+            idempotencyKey: key,
+            actorId: owner,
+            taskId: task,
+            taskRevision: 1,
+            launch: { requestId: `request_${suffix}`, ...launch },
+          }
+          const prepared = await store.schedulerDispatchReceipts.prepareSnapshot(claimed.claim, snapshot)
+          assert.ok(prepared)
+          const input = {
+            claim: { ...claimed.claim, ...prepared, snapshot },
+            snapshot,
+            response: { status: 202, body: { data: { task_id: task, run_id: launch.receipt.run_id }, meta: { request_id: `request_${suffix}` } } },
+          }
+          locker = await pool.connect()
+          await locker.query("BEGIN")
+          const blockerPid = (await locker.query("SELECT pg_backend_pid() AS pid")).rows[0].pid
+          // The table name is selected solely from the two fixed test cases above.
+          await locker.query(`SELECT 1 FROM ${resource} WHERE tenant_id=$1 AND task_id=$2 FOR UPDATE`, [tenant, task])
+          if (expired) {
+            await pool.query(
+              `UPDATE bff_idempotency_receipt
+                  SET response_body=jsonb_set(response_body,'{lease_until}',to_jsonb((clock_timestamp()+interval '1 second')::text))
+                WHERE scope=$1`,
+              [receiptScope],
+            )
+          }
+          const before = await scheduledAcceptFacts(pool, tenant, task, receiptScope)
+          assert.equal(before.receipt[0].status, 102)
+          assert.equal(before.receipt[0].response_body.state, "pending")
+          assert.deepEqual(before.dispatch, [])
+          assert.deepEqual(before.source, [])
+          const leaseUntil = before.receipt[0].response_body.lease_until
+          const validBeforeAccept = await pool.query("SELECT clock_timestamp() < $1::timestamptz AS valid", [leaseUntil])
+          assert.equal(validBeforeAccept.rows[0].valid, true, "accept must start with a live receipt lease")
+          // Settle failures immediately as data so barrier failures cannot leave an unhandled rejection.
+          acceptOperation = store.scheduledAgentDispatch.accept(input).then(
+            (accepted) => ({ accepted }),
+            (error) => ({ error }),
+          )
+          const acceptPid = await waitForScheduledAcceptBlock(pool, blockerPid, resource)
+          if (expired) {
+            await waitForScheduledAcceptLeaseExpiry(pool, blockerPid, acceptPid, resource, leaseUntil)
+          } else {
+            const validAtRelease = await pool.query("SELECT clock_timestamp() < $1::timestamptz AS valid", [leaseUntil])
+            assert.equal(validAtRelease.rows[0].valid, true)
+          }
+          await locker.query("COMMIT")
+          locker.release()
+          locker = undefined
+          const outcome = await acceptOperation
+          acceptOperation = undefined
+          if (outcome.error) throw outcome.error
+          const after = await scheduledAcceptFacts(pool, tenant, task, receiptScope)
+          if (expired) {
+            assert.deepEqual(
+              { accepted: outcome.accepted, ...after },
+              { accepted: false, ...before },
+              "an expired accept must roll back all scope/dispatch writes and preserve the original pending receipt",
+            )
+          } else {
+            assert.equal(outcome.accepted, true)
+            assert.equal(after.scope.length, 1)
+            assert.equal(after.scope[0].fact.session_id, `scheduled:${task}`)
+            assert.equal(after.scope[0].fact.subject_id, owner)
+            assert.equal(after.dispatch.length, 1)
+            assert.equal(after.dispatch[0].fact.run_id, launch.receipt.run_id)
+            assert.equal(after.dispatch[0].fact.status, "pending")
+            assert.equal(after.dispatch[0].fact.attempt_count, 0)
+            assert.deepEqual(after.source, [])
+            assert.equal(after.receipt[0].status, 202)
+            assert.equal(after.receipt[0].response_body.state, "terminal")
+            assert.deepEqual(after.receipt[0].response_body.response, input.response)
+            await store.close()
+            store = new PostgresBffRepositories(postgresUrl, redisUrl)
+            // This is the same terminal claim branch that returns the original callback ACK.
+            assert.deepEqual(await store.schedulerDispatchReceipts.claim(receiptScope, digest), { outcome: "terminal", response: input.response })
+            assert.equal(await store.scheduledAgentDispatch.accept(input), false)
+            assert.deepEqual(await scheduledAcceptFacts(pool, tenant, task, receiptScope), after)
+          }
+        } finally {
+          if (locker) {
+            await locker.query("ROLLBACK").catch(() => undefined)
+            locker.release()
+          }
+          if (acceptOperation) await acceptOperation
+          if (store) await store.close()
+          await pool.query("DELETE FROM bff_scheduled_agent_source_event WHERE tenant_id=$1 AND task_id=$2", [tenant, task])
+          await pool.query("DELETE FROM bff_scheduled_agent_dispatch WHERE tenant_id=$1 AND task_id=$2", [tenant, task])
+          await pool.query("DELETE FROM bff_scheduled_agent_scope WHERE tenant_id=$1 AND task_id=$2", [tenant, task])
+          await pool.query("DELETE FROM bff_scheduled_task WHERE tenant_id=$1 AND task_id=$2", [tenant, task])
+          await pool.query("DELETE FROM bff_idempotency_receipt WHERE scope=$1", [receiptScope])
+          await pool.end()
+        }
+      },
+    )
+  }
+}

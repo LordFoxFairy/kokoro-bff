@@ -224,6 +224,11 @@ export class PostgresScheduledAgentDispatchRepository implements ScheduledAgentD
         last_error_code: null,
         response: input.response,
       }
+      const finalNow = (await client.query<{ now: Date }>("SELECT clock_timestamp() AS now")).rows[0]?.now
+      if (!finalNow || Date.parse(envelope.lease_until) <= finalNow.getTime()) {
+        await client.query("ROLLBACK")
+        return false
+      }
       const completed = await client.query(
         "UPDATE bff_idempotency_receipt SET status=$4,response_body=$5::jsonb WHERE scope=$1 AND fingerprint=$2 AND status=$3",
         [input.claim.scope, input.claim.digest, RECEIPT_PENDING, input.response.status, JSON.stringify(terminal)],
