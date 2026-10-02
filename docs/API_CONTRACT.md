@@ -1,3 +1,15 @@
+## R83-BFF-DIRECT：`GET /v1/sessions` direct filter / public6 D0（机器契约未修改）
+
+当前唯一 canonical `contract/openapi/v1/openapi.yaml` 仍是已发布 public `5.0.0`，其 bytes/digest 本阶段冻结；当前 runtime 仍把 `scope=direct` 与 omitted/empty 合并，本节只记录 Root 已裁定的 public `6.0.0` 目标，不冒称实现、发布或消费者升级。该可见结果收窄不在 public5 原位换 digest、不提供 5/6 双读、alias、fallback 或兼容层，路径仍为唯一 `/v1`。
+
+目标仅对 `GET /v1/sessions`：省略 `scope` 且无 project_ref 返回 admitted owner 的全部可见 active Conversation；`scope=` 同值；`scope=direct` 且无 project_ref 只返回 `project_ref IS NULL`；省略/空 scope 配非空 `project_ref=P` 只返回同 tenant/subject 的 P；显式 `scope=direct` 配任一非空 `project_ref` 在 Project lookup/repository read 前返回 400、稳定 code `invalid_scope`。重复 scope/project_ref、其他 scope、Project 404、IAM admission、limit/cursor错误继续沿现规则。
+
+共享 `DirectScopeQuery` 当前也被 resource operations 引用；后继 canonical 必须给 `listSessions` operation-specific 机器语义，不能用全局描述暗示 detail/message/events/control/title/delete/share 也要求 `project_ref IS NULL`。所有 resource path 的 omitted/empty/direct 与 project_ref 授权行为保持 public5 现状；本片不新增 move/archive/delete-project 或 Project ACL。
+
+响应 schema、status 200 envelope、排序 `updated_at DESC, conversation_id ASC`、limit 1..100 与 opaque cursor wire 均不变。cursor 不授予权限、不新增 filter digest/version；消费者改变 all/direct/project filter 时丢弃旧 cursor 并从首页读取，这是消费行为而非新 cursor protocol。静态集合验收无漏项/重复；跨页并发更新仍不承诺 snapshot。
+
+后继 canonical 同片更新 OpenAPI info.version=`6.0.0`、listSessions 精确说明/参数、400 `invalid_scope` 可见性、contract README 与机器治理测试；生产与机器事实必须同 commit 验收。发布后 Web 才可复制新 canonical 并更新 exact BFF owner commit、version、SHA-256 pins；当前 Web `479d4e8`/`5.0.0` pin 不自动兼容。当前文件、canonical、generated 与消费者均未修改。
+
 ## R74：ScheduledTask create / public5 源码 GREEN 候选（未发布）
 
 R75 当前更正：CreateScheduledTaskRequest.required 精确为 title、prompt、frequency、time、timezone；project_id、next_run_at、expires_at、auto_approve 仍optional。两个现 POST 继续引用这一个机器schema；requestBody.required 只约束body存在，不能代替属性presence。Root已确认原缺失是发布阻塞P1，批准同一未发布 public5.0.0 的机器事实规范化；不改其他值域/default、版本、路径、immutable baseArtifact4或生成输入。现EOF机器exact-set RED及production合法/逐项缺字段/空对象controls锁定本结论。Root修复前真实149pass、supported Node22完整offline全部exit0与native冻结0审已完成；日志 `/tmp/kokoro-bff-r75-root-supported-node22.log`。本次新hash的最终复验/提交/发布仍属Root，不声称public5已发布。

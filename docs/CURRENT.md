@@ -1,3 +1,13 @@
+## R83-BFF-DIRECT：public6 collection direct D0（当前仅四文档，未实施）
+
+基线 `main / 479d4e8b0aeb438d2ec9cb3d4472130fc1a29972` clean。R82 已证 Web 发 `scope=direct`、BFF validation 后丢弃该信息、repository 在 projectRef undefined 时返回 admitted owner 的项目及未归属会话。Root 已裁决：只修 `GET /v1/sessions`；explicit direct 只列 `project_ref IS NULL`，omitted/empty 保 owner 全集，project_ref 保本人项目；explicit direct+非空 project_ref 在数据库前 400 `invalid_scope`；全部 resource authorization 不改。
+
+这是 public 返回集合的外部收窄，目标唯一 artifact 为 `6.0.0`、仍用 `/v1`；已发布 public5 canonical/digest 与当前 Web pins 本阶段冻结，不同版本换 bytes、不建兼容双轨。cursor 换 filter 由消费者丢弃并重开首页，不新增 cursor wire 字段或绑定协议。canonical public6 发布后 Web 才正规更新 owner commit/version/SHA-256 snapshot。
+
+当前阶段唯一写集是本仓现 `docs/TECHNICAL_DESIGN.md`、`docs/API_CONTRACT.md`、`docs/DATA_MODEL.md`、`docs/CURRENT.md` 的新顶部 D0；四文件原正文完整保留。生产源码、tests、`contract/openapi/v1/openapi.yaml`、`contract/README.md`、`database/schema.sql`、generated、依赖与 Git 均未授权/未修改；未运行服务、PostgreSQL、Redis 或浏览器，不宣称缺陷关闭。
+
+Root 门审后直接进入一次 RED→GREEN，不再建立第二设计中心：pure真实函数传播/冲突 RED；真实PG D/P/Q、其他subject/tenant与分页 RED；五现生产文件 GREEN；public6 canonical/治理；Node22完整门；Root 独占 fixture 复验和精准回收；不可变发布；Web 后继 repin。实际 application 文件是 `src/application/chat-service.ts`，不是旧任务卡所列不存在路径。Root 独占 Git、真实资源、集成、发布；BFF writer 不清 Redis DB8。
+
 ## R76 Root 精确冻结验收：public5 首次发布候选通过
 
 Root 实核 R75 十二文件冻结 b916b9adc5808222a8fa46fca5992094f1eee25cf0295b21802702a04e5f7885，独立 Sol 0P0/P1/P2，required 属性缺失 P1 关闭。fresh Node22 两纯文件93pass/0fail/0skip、完整契约230pass/0fail/0skip；fresh owner canonical install/build exit0、完整八文件真实 HTTP/PG/Redis integration149pass/0fail/0skip，24.317s。日志 /tmp/kokoro-bff-r76-root-pure.tap、/tmp/kokoro-bff-r76-root-contract.log、/tmp/kokoro-bff-r76-full-root-integration.log；owned bff_full_r76_3400ae666fb0412f 完整回收、tracked未变、Redis15余0、无他库删除或新库剩余。上一轮 supported Node22 完整离线门 exit0；本轮只补 required/canonical测试与当前证据，没有修改生产源码或SQL。

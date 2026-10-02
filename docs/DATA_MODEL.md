@@ -1,3 +1,15 @@
+## R83-BFF-DIRECT：Conversation collection filter / public6 数据 D0（无 DDL，未实施）
+
+Owner 是 BFF Conversation。当前 `listConversations` 在 tenant+owner+active 与可见 Project EXISTS 后使用 `($3 IS NULL OR project_ref=$3)`；authorization 丢弃 direct，故 undefined 同时表示 owner-wide 与 direct。目标以显式 collection filter 消除该歧义，不改变 `bff_conversation.project_ref` 事实、NULL 含义、Project owner 关系、删除 tombstone、排序或 cursor 编码。
+
+目标查询语义：all 不增加 project_ref 限制；direct 增加 `project_ref IS NULL`；project(P) 增加参数化 `project_ref=P`，并保非空 project_ref 必须解析到同 tenant/owner active可见 Project 的现 EXISTS/前置授权。任何分支都保 `tenant_id`、`owner_id`、`status='active'`；其他 subject、其他 tenant、deleted、引用非本人/缺失 Project 的行不进入结果。direct+非空 project_ref 在 SQL 前由 HTTP 400 `invalid_scope` 拒绝，不定义数据库优先级。
+
+过滤必须先于既有 continuation：`updated_at < cursor_timestamp OR (updated_at = cursor_timestamp AND conversation_id > cursor_id)`，随后 `ORDER BY updated_at DESC, conversation_id ASC LIMIT limit+1`；next_cursor 只从过滤后多取的一行决定。all/direct/project 换过滤器时消费者弃 cursor；数据库与 wire 不存 filter identity，不新增 snapshot 承诺。
+
+唯一 canonical `database/schema.sql` 全字节保持；现 active owner 与 owner+project keyset indexes 先保留，无 table/column/CHECK/index/migration/data repair、跨 owner SQL、Redis key 或 cache。后继只有真实 PostgreSQL EXPLAIN/门禁显示目标查询不满足预算时，才另立数据设计，不在本局部修复预建索引。
+
+真实 PG RED/GREEN 使用同 owner D1/D2、Project P 的 P1/P2、Project Q 的 Q1，另建同 tenant 其他 subject 的 direct/project 行、其他 tenant direct 行、deleted 与无本人 Project 行；跨 D/P/Q 固定同毫秒 tie。limit=1/2 遍历 direct 只得 D，omitted/empty 得 owner-wide D+P+Q，P/Q 各自隔离，末页 null 且无重复/漏项；故障/清理只操作 Root 自有临时数据库，不清 Redis DB8 或共享数据。
+
 ## R74：ScheduledTask create / public5 源码 GREEN 候选（未发布）
 
 R75 当前更正仅机器presence：创建必须提供 title/prompt/frequency/time/timezone，另四字段保持optional，与现 production parser 的既有行为一致。无 SQL/DDL、事务、默认值、clock、源码或integration fixture变更；唯一 canonical database/schema.sql 原字节保护。Root修复前真实full integration已149pass/0fail/0skip并完整owned回收，supported Node22完整offline全部exit0（`/tmp/kokoro-bff-r75-root-supported-node22.log`）、native十二文件审0。P1原因是OpenAPI缺属性required而非数据层缺实现；public5仍未发布，补行后的精确hash由Root再验，不用旧149代表新hash已验。

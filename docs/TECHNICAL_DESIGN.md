@@ -1,3 +1,15 @@
+## R83-BFF-DIRECT：Conversation collection direct scope / public6 D0（仅文档，未实施）
+
+基线 `main / 479d4e8b0aeb438d2ec9cb3d4472130fc1a29972` clean。Root 已裁决本片只修 `GET /v1/sessions` collection：显式 `scope=direct` 只列 admitted tenant+subject 的 active 且 `project_ref IS NULL` Conversation；省略或空 `scope` 保持 owner 全集；非空 `project_ref` 保持本人项目过滤；显式 direct 与非空 project_ref 同时出现，在任何 Project 查询前返回 HTTP 400 `invalid_scope`。detail/message/events/control/title/delete/share 等 resource authorization 语义逐字节保持，不把 direct 解释扩散到资源 gate。
+
+当前 `src/http/routes/chat-authorization.ts` 已校验 scope，但成功值只保留 `projectRef`；`src/http/routes/chat.ts`、`src/application/chat-service.ts`、`src/application/ports/chat-repository.ts` 与 PostgreSQL repository 用 `projectRef: string|undefined`，把 direct 与 owner-wide 合并。目标只在现文件沿链传递显式 `all | direct | project` collection filter：all 不加归属过滤，direct 加 `project_ref IS NULL`，project 加参数化等值；tenant、subject、active、同 owner Project EXISTS 与既有 keyset 顺序每页重验。禁止在 Web 或 application 对已分页结果后过滤。
+
+放置结论：Owner/唯一 writer 是 BFF Conversation；扩现 authorization、route、application port/service 与 PostgreSQL repository，优于新模块、通用 scope 层或兼容 adapter。无新文件、目录、进程、依赖、缓存、事务、schema、migration 或索引；`database/schema.sql` 保持原字节，是否需要索引只能由后继真实 EXPLAIN 证明，不能预建。resource 路径继续只消费现 `projectRef`，collection filter 不成为新的授权凭据。
+
+后继生产写集精确为 `src/http/routes/chat-authorization.ts`、`src/http/routes/chat.ts`、`src/application/ports/chat-repository.ts`、`src/application/chat-service.ts`（任务卡旧 `src/application/services/chat-application-service.ts` 路径不存在）、`src/infrastructure/postgres/chat-repository.ts`。测试写集为 `test/chat-service.test.ts`、`test/chat-facts.integration.mjs`；canonical/治理写集为 `contract/openapi/v1/openapi.yaml`、`contract/README.md`、`test/contract/openapi-contract.test.mjs`、`test/architecture.test.ts`。本 D0 未授权也未修改这些文件。
+
+阶段门固定为：四 D0 一致并由 Root 放行 → 真实函数 pure RED（omitted/empty/direct/project 显式传播，冲突400）→ 真实 PostgreSQL D/P/Q、其他 subject/tenant、tie pagination RED → production GREEN → public6 canonical/contract tests → Node22 完整 BFF 门 → Root 独占真实 fixture 回归与资源回收 → 发布不可变 owner commit/version/digest → Web 独立正规 repin。不得以 D0、source-string 检查或旧 public5 结果宣称过滤已修。
+
 ## R74：ScheduledTask create / public5 源码 GREEN 候选（未发布）
 
 R75 当前更正：Root final 已执行真实 full integration 149pass/0fail/0skip（23.395s）并完整回收 owned 资源；supported Node22 完整离线门全部exit0，日志 `/tmp/kokoro-bff-r75-root-supported-node22.log`，native Sol 十二路径冻结审0。其后发现发布阻塞P1：共享 CreateScheduledTaskRequest 没有属性 required，虽两个 POST 的 requestBody.required=true，空对象仍被机器schema接受，与现 production parser 不一致。本片只在同一个未发布 public5.0.0 schema 补 title/prompt/frequency/time/timezone 五项 required，保另外四属性optional；无新增业务规则、文件、依赖、clock或生产源码修改。现契约测试EOF先实际RED再补机器GREEN，不重复架构规划。Root原149/离线结果是修复前冻结证据，新hash待Root定点/contract/149复验后发布。
