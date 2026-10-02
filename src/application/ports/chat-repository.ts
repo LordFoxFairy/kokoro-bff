@@ -8,6 +8,11 @@ export type ConversationPage = {
   next_cursor: string | null
 }
 
+export type ConversationCollectionFilter =
+  | Readonly<{ kind: "all" }>
+  | Readonly<{ kind: "direct" }>
+  | Readonly<{ kind: "project"; projectRef: string }>
+
 export type MessagePage = {
   messages: Message[]
   next_cursor: string | null
@@ -38,7 +43,7 @@ export type ChatArtifactDelivery = {
 }
 
 export type ChatRepository = {
-  listConversations(tenantId: string, subjectId: string, projectRef: string | undefined, limit: number, cursor: string | null): Promise<ConversationPage>
+  listConversations(tenantId: string, subjectId: string, filter: ConversationCollectionFilter, limit: number, cursor: string | null): Promise<ConversationPage>
   findConversation(tenantId: string, subjectId: string, conversationId: string, projectRef: string | undefined): Promise<Conversation | null>
   readSnapshot(tenantId: string, subjectId: string, conversationId: string, projectRef: string | undefined): Promise<ChatSnapshot | null>
   readRunControlState(tenantId: string, subjectId: string, conversationId: string, projectRef: string | undefined): Promise<ChatRunControlState | null>

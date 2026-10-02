@@ -1,5 +1,5 @@
 import type { ChatMessage, ChatSessionDetail, ChatSessionSummary } from "../contracts/index.js"
-import type { ChatRepository } from "./ports/chat-repository.js"
+import type { ChatRepository, ConversationCollectionFilter } from "./ports/chat-repository.js"
 import { chatMessage, conversationSummary } from "./chat/mappers.js"
 
 export class ChatApplicationService {
@@ -9,8 +9,8 @@ export class ChatApplicationService {
     this.repository = repository
   }
 
-  public async listConversations(tenantId: string, subjectId: string, projectRef: string | undefined, limit: number, cursor: string | null): Promise<{ sessions: ChatSessionSummary[]; next_cursor: string | null }> {
-    const page = await this.repository.listConversations(tenantId, subjectId, projectRef, limit, cursor)
+  public async listConversations(tenantId: string, subjectId: string, filter: ConversationCollectionFilter, limit: number, cursor: string | null): Promise<{ sessions: ChatSessionSummary[]; next_cursor: string | null }> {
+    const page = await this.repository.listConversations(tenantId, subjectId, filter, limit, cursor)
     return { sessions: page.conversations.map(conversationSummary), next_cursor: page.next_cursor }
   }
 

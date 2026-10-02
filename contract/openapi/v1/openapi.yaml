@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 5.0.0
+  version: 6.0.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -552,6 +552,7 @@ paths:
       x-kokoro-idempotency: none
       x-kokoro-permission: chat.session.read
       summary: List chat sessions
+      description: Omitted or empty scope lists every active Conversation visible to the admitted tenant and subject. Explicit scope=direct lists only Conversations without a project_ref. A nonempty project_ref lists only that owned Project. scope=direct and a nonempty project_ref are mutually exclusive and return invalid_scope before Project lookup. Changing any filter requires discarding the previous cursor and starting from the first page.
       parameters:
         - $ref: '#/components/parameters/DirectScopeQuery'
         - $ref: '#/components/parameters/ProjectRefQuery'
@@ -564,6 +565,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SessionListResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/ServiceAuthFailed' }
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '429':
@@ -3445,7 +3447,7 @@ components:
       name: scope
       in: query
       required: false
-      description: Private Chat filtering only; omitted, empty, or direct never overrides the admitted tenant and subject.
+      description: On the Conversation collection, omitted or empty keeps the admitted owner's full visible set while direct restricts results to project_ref IS NULL. On resource routes it does not alter the existing project-bound authorization. It never overrides the admitted tenant and subject.
       schema:
         type: string
         enum: ['', direct]
@@ -3463,7 +3465,7 @@ components:
       name: project_ref
       in: query
       required: false
-      description: Filter sessions to a project reference.
+      description: Filter the Conversation collection to an owned project reference. A nonempty value cannot be combined with scope=direct on GET /v1/sessions; resource routes retain their existing project-bound authorization.
       schema:
         type: string
         minLength: 1

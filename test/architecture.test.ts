@@ -557,6 +557,29 @@ test("private BFF resources use named owner scopes before receipts and keep serv
   assert.doesNotMatch(schema, /project_(?:acl|member)|authorization_grant/iu)
 })
 
+test("Conversation collection filtering stays one BFF-owned discriminated path without resource authorization drift", async () => {
+  const [port, authorization, route, service, repository, openapi] = await Promise.all([
+    readFile(path.join(root, "src/application/ports/chat-repository.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/chat-authorization.ts"), "utf8"),
+    readFile(path.join(root, "src/http/routes/chat.ts"), "utf8"),
+    readFile(path.join(root, "src/application/chat-service.ts"), "utf8"),
+    readFile(path.join(root, "src/infrastructure/postgres/chat-repository.ts"), "utf8"),
+    readFile(path.join(root, "contract/openapi/v1/openapi.yaml"), "utf8"),
+  ])
+
+  assert.match(port, /ConversationCollectionFilter[\s\S]*kind: "all"[\s\S]*kind: "direct"[\s\S]*kind: "project"; projectRef: string/u)
+  assert.match(authorization, /isConversationCollection && queryScope\.scope === "direct" && projectRef !== undefined/u)
+  assert.ok(authorization.indexOf("scope=direct cannot be combined with project_ref") < authorization.indexOf("services.projects.find"))
+  assert.match(authorization, /collectionFilter: ConversationCollectionFilter/u)
+  assert.match(route, /authorization\.collectionFilter/u)
+  assert.match(service, /filter: ConversationCollectionFilter/u)
+  assert.match(repository, /filter\.kind === "direct"[\s\S]*project_ref IS NULL/u)
+  assert.match(repository, /filter\.kind === "project" \? filter\.projectRef : null/u)
+  assert.match(openapi, /^  version: 6\.0\.0$/mu)
+  assert.match(openapi, /scope=direct and a nonempty project_ref are mutually exclusive/u)
+  assert.doesNotMatch(port, /ConversationCollectionFilter\s*=\s*string/u)
+})
+
 test("ScheduledTask mutations use an owner-scoped transactional outbox and fenced dispatcher", async () => {
   const [scheduledRepository, outboxRepository, dispatcher, delivery, controlClient, liveRoute, schema] = await Promise.all([
     readFile(path.join(root, "src/infrastructure/postgres/scheduled-task-repository.ts"), "utf8"),

@@ -40,7 +40,7 @@ function inspectChatFailureContract(openapi) {
     if (!condition) errors.push(label)
   }
 
-  require(/^info:\n(?:.*\n){0,3}?  version: 5\.0\.0$/mu.test(openapi), "public info.version must be 5.0.0")
+  require(/^info:\n(?:.*\n){0,3}?  version: 6\.0\.0$/mu.test(openapi), "public info.version must be 6.0.0")
   require(/^      required: \[message_id, role, content, status, created_at\]$/mu.test(message), "failure must stay optional")
   const roles = [...(message.match(/role:\n\s+type: string\n\s+enum: \[([^\]]+)\]/u)?.[1] ?? "").matchAll(/[a-z_]+/gu)].map(
     (match) => match[0],
@@ -1017,14 +1017,14 @@ test("personal Skill installation gate binds stable error.code enums to each HTT
   }
 })
 
-test("public5 retains the closed full execution head, five current-locator decisions and full interaction CUSTOM", async () => {
+test("public6 retains the closed full execution head, five current-locator decisions and full interaction CUSTOM", async () => {
   const { createRequire } = await import("node:module")
   // Parse with the YAML implementation already locked by the contract linter.
   const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
   const { openapi } = await readContract()
   const document = load(openapi)
   const schemas = document.components.schemas
-  assert.equal(document.info.version, "5.0.0")
+  assert.equal(document.info.version, "6.0.0")
   const snapshot = schemas.SessionSnapshotResponse.properties.data
   assert.equal(Object.hasOwn(snapshot.properties, "active_run"), false)
   assert.equal(Object.hasOwn(snapshot.properties, "pending_pauses"), false)
@@ -1050,6 +1050,31 @@ test("public5 retains the closed full execution head, five current-locator decis
   assert.equal(operation.requestBody.content["application/json"].examples.resume.value.decisions[0].item_id, "item_01J")
   assert.equal(operation.requestBody.content["application/json"].examples.resume.value.expected_pause_revision, 1)
   assert.equal(operation.requestBody.content["application/json"].examples.resume.value.pause_ref, "pause_01J")
+})
+
+test("public6 defines the single Conversation collection all, direct and project filter boundary", async () => {
+  const { createRequire } = await import("node:module")
+  const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
+  const { openapi } = await readContract()
+  const document = load(openapi)
+  const operation = document.paths["/v1/sessions"].get
+  const parameterRefs = operation.parameters.map((parameter) => parameter.$ref)
+
+  assert.deepEqual(parameterRefs, [
+    "#/components/parameters/DirectScopeQuery",
+    "#/components/parameters/ProjectRefQuery",
+    "#/components/parameters/LimitQuery",
+    "#/components/parameters/CursorQuery",
+  ])
+  assert.match(operation.description, /Omitted or empty scope lists every active Conversation/u)
+  assert.match(operation.description, /Explicit scope=direct lists only Conversations without a project_ref/u)
+  assert.match(operation.description, /mutually exclusive and return invalid_scope before Project lookup/u)
+  assert.match(operation.description, /discarding the previous cursor/u)
+  assert.deepEqual(operation.responses["400"], { $ref: "#/components/responses/BadRequest" })
+  assert.deepEqual(document.components.parameters.DirectScopeQuery.schema.enum, ["", "direct"])
+  assert.match(document.components.parameters.DirectScopeQuery.description, /project_ref IS NULL/u)
+  assert.match(document.components.parameters.DirectScopeQuery.description, /resource routes it does not alter/u)
+  assert.match(document.components.parameters.ProjectRefQuery.description, /cannot be combined with scope=direct on GET \/v1\/sessions/u)
 })
 
 async function r71ScheduledCreateSource() {
@@ -1131,7 +1156,7 @@ test("R71 closed ScheduledTask creation schema declares optional nonempty projec
   assert.deepEqual(
     properties,
     ["title", "prompt", "frequency", "time", "timezone", "next_run_at", "expires_at", "auto_approve", "project_id"].sort(),
-    "closed public5 creation schema retains optional project_id while excluding create-only state controls and Conversation linkage",
+    "closed public6 creation schema retains optional project_id while excluding create-only state controls and Conversation linkage",
   )
   const project = schema.properties.project_id
   assert.ok(project !== undefined, "project_id must be declared, not admitted by opening the schema")

@@ -114,7 +114,22 @@ integrationTest("paginates Conversation ties completely through the production H
   const otherProjectId = `project_other_${suffix}`
   const expected = ["newer", "tie_a", "tie_b", "tie_c", "older"].map((name) => `conversation_${name}_${suffix}`)
   const projectBConversation = `conversation_project_b_${suffix}`
+  const directTieConversation = `conversation_direct_tie_${suffix}`
   const unassignedConversation = `conversation_unassigned_${suffix}`
+  const otherSubjectDirectConversation = `conversation_other_subject_direct_${suffix}`
+  const otherTenantDirectConversation = `conversation_other_tenant_direct_${suffix}`
+  const deletedDirectConversation = `conversation_deleted_direct_${suffix}`
+  const directExpected = [directTieConversation, unassignedConversation]
+  const ownerWideExpected = [
+    expected[0],
+    directTieConversation,
+    expected[1],
+    expected[2],
+    expected[3],
+    expected[4],
+    projectBConversation,
+    unassignedConversation,
+  ]
   let bff
   try {
     await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
@@ -182,6 +197,24 @@ integrationTest("paginates Conversation ties completely through the production H
         WHERE conversation_id IN ($1, $2)`,
       [projectBConversation, unassignedConversation],
     )
+    await pool.query(
+      `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, project_ref, title, status, created_at, updated_at, deleted_at)
+       VALUES
+         ($1, $5, $6, NULL, 'direct tie', 'active', '2026-10-01T12:00:00.000Z', '2026-10-01T12:00:00.000Z', NULL),
+         ($2, $5, $7, NULL, 'other subject direct', 'active', '2026-10-01T12:00:00.000Z', '2026-10-01T12:00:00.000Z', NULL),
+         ($3, $8, $6, NULL, 'other tenant direct', 'active', '2026-10-01T12:00:00.000Z', '2026-10-01T12:00:00.000Z', NULL),
+         ($4, $5, $6, NULL, 'deleted direct', 'deleted', '2026-10-01T12:00:00.000Z', '2026-10-01T12:00:00.000Z', '2026-10-01T12:00:00.000Z')`,
+      [
+        directTieConversation,
+        otherSubjectDirectConversation,
+        otherTenantDirectConversation,
+        deletedDirectConversation,
+        tenant,
+        subject,
+        otherSubject,
+        otherTenant,
+      ],
+    )
     bff = createBffServer(config(tenant), { sessionAdmission })
     const base = await listen(bff)
 
@@ -209,19 +242,71 @@ integrationTest("paginates Conversation ties completely through the production H
       assert.equal(cursor, null)
     }
 
-    const projectB = await fetch(`${base}/v1/sessions?project_ref=${encodeURIComponent(projectBId)}&limit=2`, { headers: auth(tenant, subject), signal: AbortSignal.timeout(5000) })
+    const projectB = await fetch(`${base}/v1/sessions?project_ref=${encodeURIComponent(projectBId)}&limit=2`, {
+      headers: auth(tenant, subject),
+      signal: AbortSignal.timeout(5000),
+    })
     assert.equal(projectB.status, 200)
     assert.deepEqual((await projectB.json()).data, {
       sessions: [{ session_id: projectBConversation, title: "project b", updated_at: "2026-10-01T11:59:58.000Z" }],
       next_cursor: null,
     })
-    const emptyProject = await fetch(`${base}/v1/sessions?project_ref=${encodeURIComponent(emptyProjectId)}&limit=1`, { headers: auth(tenant, subject), signal: AbortSignal.timeout(5000) })
+    const emptyProject = await fetch(`${base}/v1/sessions?project_ref=${encodeURIComponent(emptyProjectId)}&limit=1`, {
+      headers: auth(tenant, subject),
+      signal: AbortSignal.timeout(5000),
+    })
     assert.equal(emptyProject.status, 200)
     assert.deepEqual((await emptyProject.json()).data, { sessions: [], next_cursor: null })
 
     const ownerWide = await fetch(`${base}/v1/sessions?limit=100`, { headers: auth(tenant, subject), signal: AbortSignal.timeout(5000) })
     assert.equal(ownerWide.status, 200)
-    assert.deepEqual((await ownerWide.json()).data.sessions.map((session) => session.session_id), [...expected, projectBConversation, unassignedConversation])
+    assert.deepEqual(
+      (await ownerWide.json()).data.sessions.map((session) => session.session_id),
+      ownerWideExpected,
+    )
+    const ownerWideEmptyScope = await fetch(`${base}/v1/sessions?scope=&limit=100`, { headers: auth(tenant, subject), signal: AbortSignal.timeout(5000) })
+    assert.equal(ownerWideEmptyScope.status, 200)
+    assert.deepEqual(
+      (await ownerWideEmptyScope.json()).data.sessions.map((session) => session.session_id),
+      ownerWideExpected,
+    )
+
+    const collectDirect = async (principal, limit) => {
+      const seen = []
+      const seenCursors = new Set()
+      let cursor = null
+      do {
+        const query = new URLSearchParams({ scope: "direct", limit: String(limit) })
+        if (cursor !== null) query.set("cursor", cursor)
+        const response = await fetch(`${base}/v1/sessions?${query}`, { headers: auth(tenant, principal), signal: AbortSignal.timeout(5000) })
+        assert.equal(response.status, 200)
+        const body = await response.json()
+        seen.push(...body.data.sessions.map((session) => session.session_id))
+        cursor = body.data.next_cursor
+        if (cursor !== null) {
+          assert.equal(seenCursors.has(cursor), false, "Direct Conversation pagination repeated a cursor")
+          seenCursors.add(cursor)
+        }
+      } while (cursor !== null)
+      return { seen, unique: new Set(seen).size, finalCursor: cursor }
+    }
+    const conflict = await fetch(`${base}/v1/sessions?scope=direct&project_ref=${encodeURIComponent(projectId)}`, {
+      headers: auth(tenant, subject),
+      signal: AbortSignal.timeout(5000),
+    })
+    const conflictBody = await conflict.json()
+    const directEvidence = {
+      limit1: await collectDirect(subject, 1),
+      limit2: await collectDirect(subject, 2),
+      otherSubject: await collectDirect(otherSubject, 1),
+      conflict: { status: conflict.status, code: conflictBody.error?.code ?? null },
+    }
+    assert.deepEqual(directEvidence, {
+      limit1: { seen: directExpected, unique: directExpected.length, finalCursor: null },
+      limit2: { seen: directExpected, unique: directExpected.length, finalCursor: null },
+      otherSubject: { seen: [otherSubjectDirectConversation], unique: 1, finalCursor: null },
+      conflict: { status: 400, code: "invalid_scope" },
+    })
   } finally {
     if (bff) await close(bff)
     await pool.query("DELETE FROM bff_conversation WHERE tenant_id IN ($1, $2)", [tenant, otherTenant]).catch(() => undefined)

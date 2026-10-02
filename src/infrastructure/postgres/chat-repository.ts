@@ -1,7 +1,7 @@
 import { readRunInteraction } from "./agui-interaction-projection.js"
 import { randomUUID } from "node:crypto"
 
-import type { ChatExecutionHead, ChatArtifactDelivery, ChatRepository, ChatSnapshot, ConversationPage, MessagePage } from "../../application/ports/chat-repository.js"
+import type { ChatExecutionHead, ChatArtifactDelivery, ChatRepository, ChatSnapshot, ConversationCollectionFilter, ConversationPage, MessagePage } from "../../application/ports/chat-repository.js"
 import type { Conversation } from "../../domain/chat/conversation.js"
 import type { Share } from "../../domain/chat/share.js"
 import type { PostgresBffDatabase } from "./client.js"
@@ -89,9 +89,15 @@ export class PostgresChatRepository implements ChatRepository {
     this.database = database
   }
 
-  public async listConversations(tenantId: string, subjectId: string, projectRef: string | undefined, limit: number, cursor: string | null): Promise<ConversationPage> {
+  public async listConversations(tenantId: string, subjectId: string, filter: ConversationCollectionFilter, limit: number, cursor: string | null): Promise<ConversationPage> {
     const position = decodeCursor(cursor, "conv")
     if (position !== null && !("timestamp" in position)) throw new Error("CHAT_CURSOR_INVALID")
+    const collectionPredicate = filter.kind === "all"
+      ? "$3::text IS NULL"
+      : filter.kind === "direct"
+        ? "$3::text IS NULL AND project_ref IS NULL"
+        : "project_ref = $3::text"
+    const projectRef = filter.kind === "project" ? filter.projectRef : null
     const result = await this.database.pool.query<ConversationRow>(
       `SELECT ${conversationColumns}
          FROM bff_conversation
@@ -107,7 +113,7 @@ export class PostgresChatRepository implements ChatRepository {
                  AND (project.project_id = bff_conversation.project_ref OR project.slug = bff_conversation.project_ref)
             )
           )
-          AND ($3::text IS NULL OR project_ref = $3)
+          AND (${collectionPredicate})
           AND ($4::timestamptz IS NULL OR updated_at < $4 OR (updated_at = $4 AND conversation_id > $5))
         ORDER BY updated_at DESC, conversation_id ASC
         LIMIT $6`,

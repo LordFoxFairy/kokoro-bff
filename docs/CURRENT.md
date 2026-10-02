@@ -1,12 +1,18 @@
-## R83-BFF-DIRECT：public6 collection direct D0（当前仅四文档，未实施）
+## R87 Root Conversation collection 验收（2026-10-02）
 
-基线 `main / 479d4e8b0aeb438d2ec9cb3d4472130fc1a29972` clean。R82 已证 Web 发 `scope=direct`、BFF validation 后丢弃该信息、repository 在 projectRef undefined 时返回 admitted owner 的项目及未归属会话。Root 已裁决：只修 `GET /v1/sessions`；explicit direct 只列 `project_ref IS NULL`，omitted/empty 保 owner 全集，project_ref 保本人项目；explicit direct+非空 project_ref 在数据库前 400 `invalid_scope`；全部 resource authorization 不改。
+Root在b1ea063/public6冻结候选重跑完整pnpm check：contract231、architecture28、unit688pass/0fail/1既定资源skip，lint/typecheck/build均0；另format与schema门通过（schema8pass/0fail/1既定资源skip）。独立Astra审0P0/P1/P2；436冻结hash全部相同、425外围保留、原integration514c不变。
 
-这是 public 返回集合的外部收窄，目标唯一 artifact 为 `6.0.0`、仍用 `/v1`；已发布 public5 canonical/digest 与当前 Web pins 本阶段冻结，不同版本换 bytes、不建兼容双轨。cursor 换 filter 由消费者丢弃并重开首页，不新增 cursor wire 字段或绑定协议。canonical public6 发布后 Web 才正规更新 owner commit/version/SHA-256 snapshot。
+真实owner资源门：新建且只回收本次独有临时库，复用既有Redis、不清空共享状态，生产HTTP paginates Conversation ties completely 1pass/0fail/0skip，覆盖direct/project/owner全集、tie分页、另主体/租户/deleted及冲突400。owned临时库removed=true、cleanup=[]，日志/tmp/kokoro-r87-bff-direct-pg.tap与/tmp/kokoro-r87-bff-owned-resource.json。此为BFF过滤切片验收，不是IAM真实登录、Agent推理、Web端到端或收费全链；Web须在发布后再固定public6的commit/digest。
 
-当前阶段唯一写集是本仓现 `docs/TECHNICAL_DESIGN.md`、`docs/API_CONTRACT.md`、`docs/DATA_MODEL.md`、`docs/CURRENT.md` 的新顶部 D0；四文件原正文完整保留。生产源码、tests、`contract/openapi/v1/openapi.yaml`、`contract/README.md`、`database/schema.sql`、generated、依赖与 Git 均未授权/未修改；未运行服务、PostgreSQL、Redis 或浏览器，不宣称缺陷关闭。
+## R83-BFF-DIRECT：public6 collection direct GREEN 候选（待 Root 资源验收与发布）
 
-Root 门审后直接进入一次 RED→GREEN，不再建立第二设计中心：pure真实函数传播/冲突 RED；真实PG D/P/Q、其他subject/tenant与分页 RED；五现生产文件 GREEN；public6 canonical/治理；Node22完整门；Root 独占 fixture 复验和精准回收；不可变发布；Web 后继 repin。实际 application 文件是 `src/application/chat-service.ts`，不是旧任务卡所列不存在路径。Root 独占 Git、真实资源、集成、发布；BFF writer 不清 Redis DB8。
+基线 `main / b1ea063d4020b983e11f9243078fb17814e808b7`，Root 已复跑冻结 RED 为 27 项中 22 pass / 5 fail。当前候选只修 `GET /v1/sessions`：authorization、route、application port/service 与 PostgreSQL repository 沿单一判别联合传递 `all | direct | project`；explicit direct 在 SQL 中加 `project_ref IS NULL`，omitted/empty 保 admitted tenant+subject 的全部可见 active Conversation，project 保本人 Project 参数化等值过滤。direct 与非空 project_ref 在 Project/Conversation 查询前 400 `invalid_scope`。resource detail/message/events/control/title/delete/share 仍只消费既有 projectRef 授权，不解释 collection filter。
+
+canonical source candidate 已升为 public `6.0.0` 且仍只有 `/v1`；collection operation 明确三种过滤、冲突 400 与换 filter 丢弃旧 cursor。已发布 public5 bytes/digest 不改，不建兼容分支、string/internal 双轨、alias、fallback 或 cursor 新字段。ScheduledTask、execution head、operation inventory、database/schema.sql、索引、依赖与 generated 保持。Web 必须等 Root 发布不可变 public6 commit/version/SHA-256 后再独立正规 repin。
+
+本切片的纯行为测试覆盖 omitted、empty、direct、project 判别传播、冲突在 Project lookup 前拒绝及 resource 正控；真实 PostgreSQL fixture 已覆盖 owner-wide、direct、other subject/tenant、deleted、同 timestamp 的 limit 1/2 keyset、无重复与 cursor 终止，但仍由 Root 独占运行。固定 Node 22.22.2 的 format、lint、typecheck、contract、architecture、schema、unit、build 与 diff check 均 exit 0：contract 231 pass，architecture 28 pass，unit 688 pass / 1 既定资源 skip，schema 8 pass / 1 既定资源 skip，定点 Chat 27 pass。日志在 `/tmp/kokoro-r83-bff-direct-green/node22/`。当前 writer 未启动服务、PostgreSQL、Redis、provider 或浏览器，未操作 Git，不以纯门宣称资源链或消费者闭环。
+
+后继门：Root 冻结审查 → Root 独占临时 PostgreSQL/Redis DB8 fixture 复验和精准回收 → 发布 public6 不可变 owner artifact → Web 独立 repin/生成/用户旅程验收。任何资源门或发布证据只能在实际完成后追加；当前阶段仍是待验收候选。
 
 ## R76 Root 精确冻结验收：public5 首次发布候选通过
 

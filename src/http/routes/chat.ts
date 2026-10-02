@@ -102,7 +102,8 @@ export async function liveChatBusiness(
         await reply(response, 400, failure("invalid_pagination", "limit must be between 1 and 100", context.requestId), context, idempotency, mutation)
         return true
       }
-      await reply(response, 200, ok(await chat.listConversations(tenantId, subjectId, projectRef, page.limit, page.cursor), context.requestId), context, idempotency, mutation)
+      if (authorization.collectionFilter === undefined) throw new Error("CHAT_COLLECTION_FILTER_MISSING")
+      await reply(response, 200, ok(await chat.listConversations(tenantId, subjectId, authorization.collectionFilter, page.limit, page.cursor), context.requestId), context, idempotency, mutation)
       return true
     }
 

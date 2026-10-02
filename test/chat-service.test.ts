@@ -2,26 +2,155 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 
 import { ChatApplicationService } from "../dist/application/chat-service.js"
+import { authorizeChatRequest } from "../dist/http/routes/chat-authorization.js"
+import { liveChatBusiness } from "../dist/http/routes/chat.js"
 import { PostgresChatRepository } from "../dist/infrastructure/postgres/chat-repository.js"
-import type { ChatRepository, ConversationPage } from "../src/application/ports/chat-repository.ts"
+import type { ChatRepository, ConversationCollectionFilter, ConversationPage } from "../src/application/ports/chat-repository.ts"
+
+const collectionContext = { requestId: "request_collection_scope", identity: { namespace: "tenant_a", userId: "owner_a" } }
+
+function collectionRequest(query: string): never {
+  return { method: "GET", url: `/v1/sessions${query}` } as never
+}
+
+function responseDouble(): never {
+  return { writeHead() {}, end() {} } as never
+}
+
+async function collectionRepositoryCall(query: string): Promise<{ calls: unknown[][]; projectReads: number }> {
+  const calls: unknown[][] = []
+  let projectReads = 0
+  const page: ConversationPage = { conversations: [], next_cursor: null }
+  const repository = {
+    listConversations: async (...args: unknown[]) => {
+      calls.push(args)
+      return page
+    },
+  }
+  const chat = new ChatApplicationService(repository as never)
+  const store = {
+    services: {
+      chat,
+      projects: {
+        find: async () => {
+          projectReads += 1
+          return {}
+        },
+      },
+    },
+  } as never
+  const request = collectionRequest(query)
+  const authorization = await authorizeChatRequest(request, collectionContext, ["sessions"], {}, store)
+  assert.ok(authorization?.ok)
+  assert.equal(await liveChatBusiness(request, responseDouble(), {} as never, collectionContext, ["sessions"], {}, null, new Map(), store, authorization), true)
+  return { calls, projectReads }
+}
 
 test("passes the trusted subject through the private Chat application port", async () => {
-  const calls: Array<[string, string, string | undefined, number, string | null]> = []
+  const calls: Array<[string, string, ConversationCollectionFilter, number, string | null]> = []
   const page: ConversationPage = {
-    conversations: [{ conversationId: "session_a", tenantId: "tenant_a", ownerId: "owner_a", title: "A", projectRef: null, status: "active", createdAt: new Date("2026-09-04T11:00:00.000Z"), updatedAt: new Date("2026-09-04T12:00:00.000Z"), deletedAt: null }],
+    conversations: [
+      {
+        conversationId: "session_a",
+        tenantId: "tenant_a",
+        ownerId: "owner_a",
+        title: "A",
+        projectRef: null,
+        status: "active",
+        createdAt: new Date("2026-09-04T11:00:00.000Z"),
+        updatedAt: new Date("2026-09-04T12:00:00.000Z"),
+        deletedAt: null,
+      },
+    ],
     next_cursor: null,
   }
   const repository: ChatRepository = {
-    listConversations: async (tenantId, subjectId, projectRef, limit, cursor) => {
-      calls.push([tenantId, subjectId, projectRef, limit, cursor])
+    listConversations: async (tenantId, subjectId, filter, limit, cursor) => {
+      calls.push([tenantId, subjectId, filter, limit, cursor])
       return page
     },
   }
 
-  const result = await new ChatApplicationService(repository).listConversations("tenant_a", "owner_a", "project_a", 20, null)
+  const result = await new ChatApplicationService(repository).listConversations("tenant_a", "owner_a", { kind: "project", projectRef: "project_a" }, 20, null)
 
   assert.deepEqual(result, { sessions: [{ session_id: "session_a", title: "A", updated_at: "2026-09-04T12:00:00.000Z" }], next_cursor: null })
-  assert.deepEqual(calls, [["tenant_a", "owner_a", "project_a", 20, null]])
+  assert.deepEqual(calls, [["tenant_a", "owner_a", { kind: "project", projectRef: "project_a" }, 20, null]])
+})
+
+for (const [name, query, expectedFilter, expectedProjectReads] of [
+  ["omitted scope", "", { kind: "all" }, 0],
+  ["empty scope", "?scope=", { kind: "all" }, 0],
+  ["explicit direct scope", "?scope=direct", { kind: "direct" }, 0],
+  ["project scope", "?project_ref=project_a", { kind: "project", projectRef: "project_a" }, 1],
+] as const) {
+  test(`passes ${name} distinctly through authorization and service to the Conversation repository`, async () => {
+    const result = await collectionRepositoryCall(query)
+
+    assert.deepEqual(result.calls, [["tenant_a", "owner_a", expectedFilter, 20, null]])
+    assert.equal(result.projectReads, expectedProjectReads)
+  })
+}
+
+test("rejects direct plus project collection filters before Project lookup", async () => {
+  let projectReads = 0
+  const store = {
+    services: {
+      projects: {
+        find: async () => {
+          projectReads += 1
+          return {}
+        },
+      },
+    },
+  } as never
+
+  const authorization = await authorizeChatRequest(collectionRequest("?scope=direct&project_ref=project_a"), collectionContext, ["sessions"], {}, store)
+
+  assert.deepEqual(
+    {
+      authorization: authorization === null || authorization.ok ? authorization : { ok: false, status: authorization.status, code: authorization.code },
+      projectReads,
+    },
+    { authorization: { ok: false, status: 400, code: "invalid_scope" }, projectReads: 0 },
+  )
+})
+
+test("keeps direct plus project resource authorization on the existing project-bound path", async () => {
+  let projectReads = 0
+  let conversationReads = 0
+  const store = {
+    services: {
+      projects: {
+        find: async () => {
+          projectReads += 1
+          return {}
+        },
+      },
+      chat: {
+        findConversation: async () => {
+          conversationReads += 1
+          return {}
+        },
+      },
+    },
+  } as never
+
+  const authorization = await authorizeChatRequest(
+    collectionRequest("?scope=direct&project_ref=project_a"),
+    collectionContext,
+    ["sessions", "conversation_a"],
+    {},
+    store,
+  )
+
+  assert.deepEqual(
+    { authorization, projectReads, conversationReads },
+    {
+      authorization: { ok: true, projectRef: "project_a" },
+      projectReads: 1,
+      conversationReads: 1,
+    },
+  )
 })
 
 test("Conversation keyset advances ascending IDs when updated_at ties", async () => {
@@ -38,7 +167,7 @@ test("Conversation keyset advances ascending IDs when updated_at ties", async ()
   await repository.listConversations(
     "tenant_1",
     "owner_1",
-    "project_1",
+    { kind: "project", projectRef: "project_1" },
     2,
     `conv_${Buffer.from(JSON.stringify({ timestamp: "2026-10-01T12:00:00.000Z", id: "conversation_a" })).toString("base64url")}`,
   )

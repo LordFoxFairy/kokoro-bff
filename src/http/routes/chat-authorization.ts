@@ -2,17 +2,22 @@ import type { IncomingMessage } from "node:http"
 
 import { parseMessageCreateRequest } from "../../application/chat/message-create-input.js"
 import type { BffBusinessStore } from "../../application/ports/bff-business-store.js"
+import type { ConversationCollectionFilter } from "../../application/ports/chat-repository.js"
 import type { RequestContext } from "../../domain/request-context.js"
 import { isClientCreatedConversationId } from "../../domain/chat/conversation.js"
 import { queryOf } from "../request.js"
 
 export type ChatAuthorization =
-  | Readonly<{ ok: true; projectRef?: string }>
+  | Readonly<{ ok: true; projectRef?: string; collectionFilter?: ConversationCollectionFilter }>
   | Readonly<{ ok: false; status: 400 | 404; code: "invalid_scope" | "invalid_message" | "project_not_found" | "session_not_found"; message: string }>
 
 export type AuthorizedChatRequest = Extract<ChatAuthorization, { ok: true }>
 
-function privateChatProjectRef(request: IncomingMessage): ChatAuthorization {
+type PrivateChatQuery =
+  | Readonly<{ ok: true; scope: "all" | "direct"; projectRef?: string }>
+  | Extract<ChatAuthorization, { ok: false }>
+
+function privateChatQuery(request: IncomingMessage): PrivateChatQuery {
   const query = queryOf(request)
   const scopeValues = query.getAll("scope")
   if (scopeValues.length > 1) {
@@ -27,7 +32,8 @@ function privateChatProjectRef(request: IncomingMessage): ChatAuthorization {
     return { ok: false, status: 400, code: "invalid_message", message: "project_ref must be provided at most once" }
   }
   const projectRef = projectValues[0]?.trim()
-  return projectRef === undefined || projectRef === "" ? { ok: true } : { ok: true, projectRef }
+  const scopeKind = scope === "direct" ? "direct" : "all"
+  return projectRef === undefined || projectRef === "" ? { ok: true, scope: scopeKind } : { ok: true, scope: scopeKind, projectRef }
 }
 
 /** Authorize a private Chat resource before generic mutation receipt admission or Agent I/O. */
@@ -39,10 +45,14 @@ export async function authorizeChatRequest(
   store: BffBusinessStore,
 ): Promise<ChatAuthorization | null> {
   if (businessPath[0] !== "sessions") return null
-  const queryScope = privateChatProjectRef(request)
+  const queryScope = privateChatQuery(request)
   if (!queryScope.ok) return queryScope
 
   let projectRef = queryScope.projectRef
+  const isConversationCollection = request.method === "GET" && businessPath.length === 1
+  if (isConversationCollection && queryScope.scope === "direct" && projectRef !== undefined) {
+    return { ok: false, status: 400, code: "invalid_scope", message: "scope=direct cannot be combined with project_ref" }
+  }
   if (request.method === "POST" && businessPath.length === 3 && businessPath[2] === "messages") {
     const message = parseMessageCreateRequest({ ...json }, projectRef)
     if (message === null) {
@@ -54,6 +64,13 @@ export async function authorizeChatRequest(
   const ownerScope = { tenantId: context.identity.namespace, subjectId: context.identity.userId }
   if (projectRef !== undefined && await store.services.projects.find(ownerScope, projectRef) === null) {
     return { ok: false, status: 404, code: "project_not_found", message: "Project was not found" }
+  }
+
+  if (isConversationCollection) {
+    const collectionFilter: ConversationCollectionFilter = projectRef === undefined
+      ? { kind: queryScope.scope }
+      : { kind: "project", projectRef }
+    return projectRef === undefined ? { ok: true, collectionFilter } : { ok: true, projectRef, collectionFilter }
   }
 
   if (businessPath.length >= 2) {
