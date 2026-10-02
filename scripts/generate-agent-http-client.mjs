@@ -11,12 +11,12 @@ const output = path.join(root, "src/generated/agent-http")
 const manifestPath = path.join(root, "contract/dependencies/agent-http.json")
 const configPath = path.join(root, "openapi-ts.agent.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "f3be3b97dd67df69ed3c6cb88c59f3bc2db97703"
+const ownerCommit = "e977923ea9992cbddaf0cdbc6c8f8d23b3af120e"
 const vendorPath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/openapi.json`)
 const provenancePath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/provenance.json`)
-const ownerDigest = "e9f0a543f74dee34212f0ea4fe366d46218268462ac54dce08e41965f34d2d2c"
-const provenanceDigest = "d116657f65027de8bd829dc0408fd86046da0ac0a1d2934bd2a87e835c897b5f"
-const ownerContractVersion = "3.0.0"
+const ownerDigest = "763ff7a9cf668eb59ae7cfb59b2fd4f84fafde124063d9a365f138b6a30cf04f"
+const provenanceDigest = "e2e6cd9f2228900d0c0a8d795f19815a145bd8f0d18c785ffbe059214b5ed99a"
+const ownerContractVersion = "4.0.0"
 const failureCodes = [
   "token_budget_exceeded",
   "recursion_limit_exceeded",
@@ -30,17 +30,6 @@ const failureCodes = [
   "model_access_denied",
 ]
 const retryableFailureCodes = ["model_unavailable", "dependency_unavailable"]
-const eventProtocol = {
-  owner: "kokoro-agent",
-  source_commit: "486adb1539dd8a06ca90684e66f91be031aa70cf",
-  provenance_combined_sha256: "cae30a40d712bce39ef33ef2dc857af4f5b69c6afd1956fda065ec77379ae02e",
-  source_path: "src/kokoro_agent/protocol/events.py",
-  source_sha256: "0ba59b358db00e53490555e450af060c8a728133a9cf8bfeb49361186adc0f1c",
-  event_kind: "delivery.created",
-}
-const eventSourceRelativePath = eventProtocol.source_path
-const eventVendorRoot = path.join(root, "contract/vendor/kokoro-agent", eventProtocol.source_commit)
-const eventSourceDirectories = ["src", "src/kokoro_agent", "src/kokoro_agent/protocol"]
 const generatedFiles = [
   "client.gen.ts",
   "client/client.gen.ts",
@@ -112,6 +101,113 @@ export function assertFailureContractSchema(document) {
   return { failureCodes: [...failureCodes], retryableFailureCodes: [...retryableFailureCodes] }
 }
 
+// Decode only the published schema graph referenced by ChatEvent's payload mapping.
+// The generator does not follow extension refs; derive these validators from the pinned bytes,
+// rather than maintaining another editable schema or enabling every orphan owner component.
+export function assertInteractionContractSchema(document) {
+  const schemas = record(document.components?.schemas, "Agent schemas")
+  assert.deepEqual(schemas.ChatEvent["x-kokoro-decoded-payloads"], {
+    discriminator: "event_type",
+    property: "payload_json",
+    mapping: {
+      "run.failed": "#/components/schemas/ChatFailure",
+      "interaction.state": "#/components/schemas/ChatInteractionState",
+    },
+  })
+  assert.deepEqual(schemas.ChatEvent.properties.event_type.enum, [
+    "run.started",
+    "assistant.delta",
+    "assistant.completed",
+    "activity",
+    "interaction.state",
+    "delivery",
+    "run.completed",
+    "run.failed",
+  ])
+  for (const [name, required] of [
+    ["ChatInteractionState", ["interaction_revision", "pause_revision", "pause_ref", "phase", "groups", "action_result"]],
+    ["InteractionGroup", ["group_id", "items"]],
+    ["InteractionItem", ["item_id", "request_id", "kind", "allowed_decisions", "display"]],
+    ["InteractionDisplay", ["name", "description", "editable", "input_schema"]],
+    ["InteractionValidation", ["code", "instance_path"]],
+    ["InteractionActionResult", ["command_id", "pause_revision", "kind"]],
+    ["ResumeControl", ["kind", "session_id", "decisions", "expected_pause_revision", "pause_ref"]],
+  ]) {
+    assert.equal(schemas[name].additionalProperties, false, name + " must be closed")
+    assert.deepEqual(schemas[name].required, required, name + " required fields drifted")
+  }
+  assert.deepEqual(schemas.ChatInteractionState.properties.phase.enum, ["active", "waiting", "resuming", "terminal"])
+  assert.equal(schemas.ChatInteractionState.allOf.length, 3)
+  assert.equal(schemas.InteractionDisplay.allOf.length, 1)
+  assert.equal(schemas.InteractionItem.properties.allowed_decisions.uniqueItems, true)
+  assert.equal(schemas.ResumeControl.properties.expected_pause_revision.minimum, 1)
+  assert.equal(schemas.ResumeControl.properties.pause_ref.minLength, 1)
+  assert.deepEqual(
+    schemas.ResumeDecision.oneOf.map((branch) => branch.properties.type.const),
+    ["approve", "edit", "reject", "respond", "submit"],
+  )
+  for (const branch of schemas.ResumeDecision.oneOf) assert.equal(branch.additionalProperties, false)
+  assert.deepEqual(schemas.ResumeDecision.oneOf[0].properties.args.type, ["object", "null"])
+  assert.deepEqual(schemas.ResumeDecision.oneOf[2].properties.reason.type, ["string", "null"])
+  return schemas
+}
+
+function schemaZod(schema) {
+  if (schema.$ref) return "z" + schema.$ref.split("/").at(-1)
+  if (schema.oneOf || schema.anyOf) return "z.union([" + (schema.oneOf ?? schema.anyOf).map(schemaZod).join(",") + "])"
+  if (schema.const !== undefined) return "z.literal(" + JSON.stringify(schema.const) + ")"
+  if (schema.enum) return "z.enum(" + JSON.stringify(schema.enum) + ")"
+  if (Array.isArray(schema.type)) return "z.union([" + schema.type.map((type) => schemaZod({ ...schema, type })).join(",") + "])"
+  if (schema.type === "null") return "z.null()"
+  if (schema.type === "boolean") return "z.boolean()"
+  if (schema.type === "string") return "z.string()" + (schema.minLength === undefined ? "" : ".min(" + schema.minLength + ")")
+  if (schema.type === "integer") return "z.number().int().max(Number.MAX_SAFE_INTEGER)" + (schema.minimum === undefined ? "" : ".min(" + schema.minimum + ")")
+  if (schema.type === "array") return "z.array(" + schemaZod(schema.items) + ")" + (schema.minItems === undefined ? "" : ".min(" + schema.minItems + ")")
+  if (schema.type === "object") {
+    if (!schema.properties && schema.additionalProperties === true) return "z.record(z.string(),z.unknown())"
+    const fields = Object.entries(schema.properties ?? {}).map(
+      ([name, value]) => JSON.stringify(name) + ":" + schemaZod(value) + ((schema.required ?? []).includes(name) ? "" : ".optional()"),
+    )
+    return "z.object({" + fields.join(",") + "})" + (schema.additionalProperties === false ? ".strict()" : "")
+  }
+  throw new Error("Unsupported published interaction schema node: " + JSON.stringify(schema))
+}
+
+async function generateDecodedValidators(directory, document) {
+  const schemas = assertInteractionContractSchema(document)
+  const file = path.join(directory, "zod.gen.ts")
+  let source = await readFile(file, "utf8")
+  for (const name of ["CancelControl", "SteerControl", "ResumeDecision", "ResumeControl"]) {
+    const start = source.indexOf("export const z" + name + " =")
+    const end = source.indexOf("export const ", start + 1)
+    assert.ok(start >= 0 && end > start, "generated control validator missing: " + name)
+    source = source.slice(0, start) + "export const z" + name + " = " + schemaZod(schemas[name]) + ";\n\n" + source.slice(end)
+  }
+  for (const name of [
+    "InteractionValidation",
+    "InteractionDisplay",
+    "InteractionItem",
+    "InteractionGroup",
+    "InteractionActionResult",
+    "ChatInteractionState",
+  ]) {
+    assert.ok(!source.includes("export const z" + name + " ="), "decoded schema is already generated: " + name)
+    source += "\nexport const z" + name + " = " + schemaZod(schemas[name]) + ";\n"
+  }
+  await writeFile(file, source)
+  // The owner's oneOf uses const kind values; the generator incorrectly intersects
+  // them with schema names when discriminator.mapping is absent.
+  const typesFile = path.join(directory, "types.gen.ts")
+  let types = await readFile(typesFile, "utf8")
+  const start = types.indexOf("export type ControlRequest =")
+  const end = types.indexOf("export type ", start + 1)
+  assert.ok(start >= 0 && end > start, "generated ControlRequest is missing")
+  const variants = schemas.ControlRequest.oneOf.map((variant) => variant.$ref.split("/").at(-1))
+  assert.deepEqual(variants, ["CancelControl", "SteerControl", "ResumeControl"])
+  types = types.slice(0, start) + "export type ControlRequest = " + variants.join(" | ") + ";\n\n" + types.slice(end)
+  await writeFile(typesFile, types)
+}
+
 function failureProfileSource(document) {
   const profile = assertFailureContractSchema(document)
   return `// This file is generated from the fixed kokoro-agent ChatFailure schema. Do not edit.
@@ -158,6 +254,7 @@ async function verifyOwnerSources() {
   const document = JSON.parse(vendor.toString("utf8"))
   assert.equal(document.info?.version, ownerContractVersion, "Agent HTTP contract version drifted")
   assertFailureContractSchema(document)
+  assertInteractionContractSchema(document)
   return document
 }
 
@@ -308,19 +405,6 @@ export function assertGeneratedAllowlist(files, directories, label) {
   assert.deepEqual(directories.slice().sort(), generatedDirectories.slice().sort(), `${label} directory allowlist drifted`)
 }
 
-export function assertEventProtocolSource(tree, bytes) {
-  assert.deepEqual(tree.files.slice().sort(), [eventSourceRelativePath], "Agent event source file allowlist drifted")
-  assert.deepEqual(tree.directories.slice().sort(), eventSourceDirectories, "Agent event source directory allowlist drifted")
-  assert.equal(sha256(bytes), eventProtocol.source_sha256, "Agent event source digest drifted")
-}
-
-async function verifyEventProtocolSource() {
-  const tree = await generatedTree(eventVendorRoot)
-  // generatedTree rejects links and non-regular entries before reading bytes.
-  const bytes = await readFile(path.join(eventVendorRoot, eventSourceRelativePath))
-  assertEventProtocolSource(tree, bytes)
-}
-
 async function generate(directory) {
   const cli = path.join(root, "node_modules/@hey-api/openapi-ts/bin/run.js")
   await run(process.execPath, [cli, "--silent", "-f", configPath], { env: { ...process.env, AGENT_HTTP_CLIENT_OUTPUT: directory } })
@@ -329,10 +413,11 @@ async function generate(directory) {
   const tree = await generatedTree(directory)
   assertGeneratedAllowlist(tree.files, tree.directories, "generated")
   await normalizeGeneratorCompatibility(directory)
+  await generateDecodedValidators(directory, ownerDocument)
   const sdk = await readFile(path.join(directory, "sdk.gen.ts"), "utf8")
   assert.deepEqual(
     [...sdk.matchAll(/^export const (\w+) =/gmu)].map((match) => match[1]).sort(),
-    ["createRun", "replaySessionEvents"],
+    ["controlRun", "createRun", "replaySessionEvents"],
     "Agent HTTP generated operation surface drifted",
   )
   const prettier = path.join(root, "node_modules/prettier/bin/prettier.cjs")
@@ -369,7 +454,6 @@ async function manifestFor(directory) {
       provenance_path: "contract/provenance.json",
       provenance_sha256: provenanceDigest,
     },
-    event_protocol: eventProtocol,
     generator: {
       package: "@hey-api/openapi-ts",
       version: "0.99.0",
@@ -392,7 +476,6 @@ async function main() {
   const mode = process.argv[2]
   assert.ok(mode === "--write" || mode === "--check", "expected --write or --check")
   await verifyOwnerSources()
-  await verifyEventProtocolSource()
   const temporaryRoot = await mkdtemp(path.join(tmpdir(), "kokoro-agent-http-"))
   const temporaryOutput = path.join(temporaryRoot, "generated")
   const repeatedOutput = path.join(temporaryRoot, "generated-again")

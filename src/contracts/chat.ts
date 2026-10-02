@@ -82,10 +82,27 @@ export type ChatSessionDetail = {
     updated_at: string
   }
   messages?: ChatMessage[]
-  active_run?: ChatRun
-  pending_pauses: Array<Record<string, unknown>>
+  execution_head?: { run_id: string; state: "queued" | "active" | "waiting" | "resuming"; pending_pauses: InteractionState[] }
   files: WorkspaceFile[]
   deliveries: Delivery[]
   deliveries_has_more: boolean
   event_watermark: string | null
+}
+
+/** Public read projection of the published owner full state; no private decision values. */
+export type InteractionState = {
+  interaction_revision: number
+  pause_revision: number
+  pause_ref: string | null
+  phase: "active" | "waiting" | "resuming" | "terminal"
+  groups: Array<{ group_id: string; items: Array<{
+    item_id: string
+    request_id: string
+    kind: "tool_approval" | "ask_user_question" | "result_review" | "input"
+    allowed_decisions: Array<"approve" | "edit" | "reject" | "respond" | "submit">
+    display: { name: string; description: string; editable: boolean; input_schema: Record<string, unknown>;
+      result_preview?: string | null | undefined; truncated?: boolean | null | undefined; source?: string | null | undefined }
+    validation?: { code: "json_schema_invalid"; instance_path: Array<string | number> } | null | undefined
+  }> }>
+  action_result: { command_id: string; pause_revision: number; kind: "accepted" | "native_consumed" | "validation_failed" | "unknown" | "cancelled" } | null
 }

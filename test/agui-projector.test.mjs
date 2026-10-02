@@ -361,3 +361,21 @@ describe("AG-UI durable projector runner", () => {
     assert.equal(collections, 2)
   })
 })
+
+it("a new START identity after a full interaction is rejected before committing any source prefix", async () => {
+  const { AgUiProjectionService } = await import("../dist/application/agui/project-session-events.js")
+  const state = { interaction_revision: 1, pause_revision: 0, pause_ref: null, phase: "active", groups: [], action_result: null }
+  let commits = 0
+  const service = new AgUiProjectionService({
+    readStream: async () => ({ version: 2, sourceHighWatermark: 2, projectionState: { textMessageIds: [], toolCallIds: [] },
+      expectedRunId: "run_1", latestRunId: "run_1", terminalRunId: null, interaction: { runId: "run_1", state } }),
+    assertPersistedSources: async () => {},
+    commitProjection: async () => { commits++; return "committed" },
+  })
+  const timestamp = new Date(3000).toISOString()
+  await assert.rejects(service.ingest("tenant_1", "session_1", [{
+    sourceRunId: "run_1", sourceEventId: "new_start_identity", sourceSequence: 3, sourceOccurredAt: timestamp,
+    sourcePayload: { kind: "run.started" }, event: { event_id: "new_start_identity", seq: 3, timestamp, session_id: "session_1", run_id: "run_1", kind: "run.created", payload: { run_id: "run_1" } },
+  }]), /source identity conflict/u)
+  assert.equal(commits, 0)
+})

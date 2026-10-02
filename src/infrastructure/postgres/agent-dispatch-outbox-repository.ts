@@ -1,4 +1,6 @@
-import { randomUUID } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
+
+import { EventSchemas, EventType } from "@ag-ui/core"
 
 import type {
   AgentDispatchOutboxClaimInput,
@@ -163,6 +165,110 @@ function claimedAgentDispatch(row: AgentDispatchRow): AgentDispatchCommand {
 export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutboxRepository {
   public constructor(private readonly database: PostgresBffDatabase) {}
 
+  /** Every batch locks all parent Conversations before entering any stream/tail. */
+  public static async lockConversationsInTransaction(
+    client: PoolClient,
+    scopes: readonly { tenantId: string; conversationId: string }[],
+    skipLocked = false,
+  ): Promise<{ tenant_id: string; conversation_id: string; owner_id: string; status: string }[]> {
+    if (scopes.length === 0) return []
+    const result = await client.query<{ tenant_id: string; conversation_id: string; owner_id: string; status: string }>(
+      [
+        "SELECT conversation.tenant_id, conversation.conversation_id, conversation.owner_id, conversation.status",
+        "FROM bff_conversation AS conversation",
+        "WHERE EXISTS (SELECT 1 FROM jsonb_to_recordset($1::jsonb)",
+        "AS scope(tenant_id text, conversation_id text)",
+        "WHERE scope.tenant_id=conversation.tenant_id AND scope.conversation_id=conversation.conversation_id)",
+        "ORDER BY conversation.tenant_id, conversation.conversation_id FOR UPDATE OF conversation",
+      ].join("\n") + (skipLocked ? " SKIP LOCKED" : ""),
+      [JSON.stringify(scopes.map((scope) => ({ tenant_id: scope.tenantId, conversation_id: scope.conversationId })))],
+    )
+    return result.rows
+  }
+
+  /** Caller owns Conversation -> stream; writes no Agent source/fence and never commits. */
+  public static async projectQueuedHeadInTransaction(
+    client: PoolClient,
+    tenantId: string,
+    conversationId: string,
+  ): Promise<string | null> {
+    const heads = await client.query<{
+      outbox_id: string; run_id: string; subject_id: string; owner_id: string;
+      conversation_dispatch_seq: string; created_at: Date | string;
+    }>(
+      [
+        "SELECT dispatch.outbox_id, dispatch.run_id, dispatch.subject_id, conversation.owner_id,",
+        "dispatch.conversation_dispatch_seq, dispatch.created_at",
+        "FROM bff_agent_dispatch_outbox AS dispatch JOIN bff_conversation AS conversation",
+        "ON conversation.tenant_id=dispatch.tenant_id AND conversation.conversation_id=dispatch.conversation_id",
+        "WHERE dispatch.tenant_id=$1 AND dispatch.conversation_id=$2 AND conversation.status='active'",
+        "AND dispatch.status IN ('pending','leased','retryable','admitted')",
+        "ORDER BY dispatch.conversation_dispatch_seq, dispatch.outbox_id LIMIT 1",
+      ].join("\n"),
+      [tenantId, conversationId],
+    )
+    const head = heads.rows[0]
+    if (head === undefined) return null
+    if (head.subject_id !== head.owner_id) throw new Error("CHAT_EXECUTION_HEAD_IDENTITY_INVALID")
+    const streams = await client.query<{
+      next_public_sequence: string; consumer_subject_id: string | null; expected_run_id: string | null;
+    }>(
+      "SELECT next_public_sequence,consumer_subject_id,expected_run_id FROM bff_agui_stream WHERE tenant_id=$1 AND session_id=$2 FOR UPDATE",
+      [tenantId, conversationId],
+    )
+    const stream = streams.rows[0]
+    if (stream === undefined || stream.consumer_subject_id !== head.subject_id
+      || (stream.expected_run_id !== null && stream.expected_run_id !== head.run_id)) {
+      throw new Error("CHAT_EXECUTION_HEAD_IDENTITY_INVALID")
+    }
+    const sequence = positiveDecimal(head.conversation_dispatch_seq, "AGENT_DISPATCH_SEQUENCE_INVALID")
+    const sourceEventId = "dispatch_queued:" + head.outbox_id
+    const cursor = "agui_" + createHash("sha256")
+      .update(JSON.stringify([tenantId, conversationId, sourceEventId])).digest("hex").slice(0, 32)
+    const value = { run_id: head.run_id, dispatch_sequence: sequence }
+    const existing = await client.query<{ cursor: string; event_type: string; name: string; matches_value: boolean }>(
+      [
+        "SELECT cursor,event_type,event_payload->>'name' AS name,event_payload->'value'=$4::jsonb AS matches_value",
+        "FROM bff_agui_event WHERE tenant_id=$1 AND session_id=$2 AND source_owner='kokoro-bff'",
+        "AND source_event_id=$3 AND frame_index=0",
+      ].join("\n"),
+      [tenantId, conversationId, sourceEventId, JSON.stringify(value)],
+    )
+    const recorded = existing.rows[0]
+    if (recorded !== undefined) {
+      if (recorded.cursor !== cursor || recorded.event_type !== "CUSTOM"
+        || recorded.name !== "kokoro.run.queued" || !recorded.matches_value) {
+        throw new Error("CHAT_QUEUED_EVENT_IDENTITY_CONFLICT")
+      }
+      return null
+    }
+    const occurredAt = instant(head.created_at).toISOString()
+    const payload = EventSchemas.parse({
+      type: EventType.CUSTOM, timestamp: Date.parse(occurredAt), name: "kokoro.run.queued", value,
+      metadata: { kokoro: {
+        event_id: sourceEventId, seq: sequence, session_id: conversationId, run_id: head.run_id,
+        timestamp: occurredAt, source_owner: "kokoro-bff",
+      } },
+    })
+    await client.query(
+      [
+        "INSERT INTO bff_agui_event",
+        "(tenant_id,session_id,public_sequence,cursor,source_owner,source_event_id,frame_index,event_type,event_payload,source_occurred_at)",
+        "VALUES ($1,$2,$3::bigint,$4,'kokoro-bff',$5,0,'CUSTOM',$6::jsonb,$7::timestamptz)",
+      ].join("\n"),
+      [tenantId, conversationId, stream.next_public_sequence, cursor, sourceEventId, JSON.stringify(payload), occurredAt],
+    )
+    const advanced = await client.query(
+      [
+        "UPDATE bff_agui_stream SET version=version+1,next_public_sequence=next_public_sequence+1,updated_at=CURRENT_TIMESTAMP(3)",
+        "WHERE tenant_id=$1 AND session_id=$2 AND next_public_sequence=$3::bigint",
+      ].join("\n"),
+      [tenantId, conversationId, stream.next_public_sequence],
+    )
+    if (advanced.rowCount !== 1) throw new Error("CHAT_QUEUED_CURSOR_ALLOCATION_FAILED")
+    return cursor
+  }
+
   public async commitChatTurn(command: CommitChatTurn): Promise<AgentDispatchReceipt | null> {
     for (const value of [
       command.outboxId,
@@ -257,6 +363,16 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
         return receiptOf(existingRow)
       }
 
+      const registration = agUiConsumerRegistration(
+        command.tenantId,
+        command.conversationId,
+        command.subjectId,
+        undefined,
+      )
+      const registered = await client.query(registration.text, registration.values)
+      if (registered.rowCount !== 1) throw new Error("AGENT_DISPATCH_CONSUMER_REGISTRATION_FAILED")
+      await client.query("SELECT 1 FROM bff_agui_stream WHERE tenant_id=$1 AND session_id=$2 FOR UPDATE", [command.tenantId, command.conversationId])
+
       const sequence = await client.query<{ next_seq: string | number }>(
         `SELECT COALESCE(MAX(message_seq), 0) + 1 AS next_seq
            FROM bff_message
@@ -266,23 +382,6 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
       const nextSequenceRow = sequence.rows[0]
       if (nextSequenceRow === undefined) throw new Error("CHAT_MESSAGE_SEQUENCE_INVALID")
       const nextSequence = positiveDecimal(nextSequenceRow.next_seq, "CHAT_MESSAGE_SEQUENCE_INVALID")
-
-      const inserted = await client.query(
-        `INSERT INTO bff_message
-         (message_id, tenant_id, conversation_id, run_id, role, content, status, message_seq)
-         VALUES ($1, $2, $3, $4, 'user', $5, 'completed', $6::bigint),
-                ($7, $2, $3, $4, 'assistant', '', 'pending', $6::bigint + 1)`,
-        [
-          command.userMessageId,
-          command.tenantId,
-          command.conversationId,
-          command.runId,
-          command.content,
-          nextSequence,
-          command.assistantMessageId,
-        ],
-      )
-      if (inserted.rowCount !== 2) throw new Error("CHAT_MESSAGE_INSERT_FAILED")
 
       const outbox = await client.query(
         `INSERT INTO bff_agent_dispatch_outbox
@@ -310,14 +409,24 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
       )
       if (outbox.rowCount !== 1) throw new Error("AGENT_DISPATCH_INSERT_FAILED")
 
-      const registration = agUiConsumerRegistration(
-        command.tenantId,
-        command.conversationId,
-        command.subjectId,
-        undefined,
+      const inserted = await client.query(
+        `INSERT INTO bff_message
+         (message_id, tenant_id, conversation_id, run_id, role, content, status, message_seq)
+         VALUES ($1, $2, $3, $4, 'user', $5, 'completed', $6::bigint),
+                ($7, $2, $3, $4, 'assistant', '', 'pending', $6::bigint + 1)`,
+        [
+          command.userMessageId,
+          command.tenantId,
+          command.conversationId,
+          command.runId,
+          command.content,
+          nextSequence,
+          command.assistantMessageId,
+        ],
       )
-      const registered = await client.query(registration.text, registration.values)
-      if (registered.rowCount !== 1) throw new Error("AGENT_DISPATCH_CONSUMER_REGISTRATION_FAILED")
+      if (inserted.rowCount !== 2) throw new Error("CHAT_MESSAGE_INSERT_FAILED")
+
+      const queuedCursor = await PostgresAgentDispatchOutboxRepository.projectQueuedHeadInTransaction(client, command.tenantId, command.conversationId)
       await client.query(
         `UPDATE bff_conversation
             SET updated_at = CURRENT_TIMESTAMP(3)
@@ -325,6 +434,7 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
         [command.tenantId, command.conversationId],
       )
       await client.query("COMMIT")
+      if (queuedCursor !== null) await this.database.notifyAgUiProjection(command.tenantId, command.conversationId, queuedCursor).catch(() => undefined)
       return {
         run_id: command.runId,
         user_message_id: command.userMessageId,
@@ -387,6 +497,9 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
           LIMIT $1`,
         [input.limit, input.maxAttempts],
       )
+      await PostgresAgentDispatchOutboxRepository.lockConversationsInTransaction(client, identities.rows.map((identity) => ({
+        tenantId: identity.tenant_id, conversationId: identity.conversation_id,
+      })))
       for (const identity of identities.rows) {
         await client.query(
           `SELECT 1 FROM bff_agui_stream WHERE tenant_id=$1 AND session_id=$2 FOR UPDATE`,
@@ -520,6 +633,7 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
     )
     const candidate = identity.rows[0]
     if (candidate === undefined) return { settled: false, notificationCursor: null, tenantId: null, sessionId: null }
+    await PostgresAgentDispatchOutboxRepository.lockConversationsInTransaction(client, [{ tenantId: candidate.tenant_id, conversationId: candidate.conversation_id }])
     await client.query(
       `SELECT 1 FROM bff_agui_stream WHERE tenant_id=$1 AND session_id=$2 FOR UPDATE`,
       [candidate.tenant_id, candidate.conversation_id],
@@ -667,6 +781,7 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
         [lease.tenantId, lease.outboxId, lease.leaseOwner, lease.leaseToken, lease.fence],
       )
       if (identity.rows[0] !== undefined) {
+        await PostgresAgentDispatchOutboxRepository.lockConversationsInTransaction(client, [{ tenantId: lease.tenantId, conversationId: identity.rows[0].conversation_id }])
         await client.query(
           `SELECT 1 FROM bff_agui_stream WHERE tenant_id=$1 AND session_id=$2 FOR UPDATE`,
           [lease.tenantId, identity.rows[0].conversation_id],
@@ -742,7 +857,7 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
     )
     const streamRow = stream.rows[0]
     if (streamRow === undefined) throw new Error("AGENT_DISPATCH_AGUI_STREAM_MISSING")
-    // Keep the same stream -> Message lock order as source projection.
+    // Caller already owns Conversation -> stream, then settles Message/ledger.
     await client.query(
       `UPDATE bff_message
           SET status = 'failed', agent_failure_code = NULL, agent_failure_retryable = NULL,
@@ -796,8 +911,8 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
       `UPDATE bff_agui_stream
           SET version = version + 1,
               next_public_sequence = next_public_sequence + 1,
-              latest_run_id = CASE WHEN expected_run_id = $3 THEN $3 ELSE latest_run_id END,
-              terminal_run_id = CASE WHEN expected_run_id = $3 THEN $3 ELSE terminal_run_id END,
+              latest_run_id = CASE WHEN expected_run_id IS NULL OR expected_run_id = $3 THEN $3 ELSE latest_run_id END,
+              terminal_run_id = CASE WHEN expected_run_id IS NULL OR expected_run_id = $3 THEN $3 ELSE terminal_run_id END,
               expected_run_id = CASE WHEN expected_run_id = $3 THEN NULL ELSE expected_run_id END,
               consumer_state = CASE WHEN expected_run_id = $3 THEN 'stopped' ELSE consumer_state END,
               consumer_fence = consumer_fence + CASE WHEN expected_run_id = $3 THEN 1 ELSE 0 END,
@@ -813,9 +928,10 @@ export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutbo
       [row.tenant_id, row.conversation_id, row.run_id, errorCode],
     )
     if (updated.rowCount !== 1) throw new Error("AGENT_DISPATCH_AGUI_SETTLEMENT_FAILED")
+    const nextCursor = await PostgresAgentDispatchOutboxRepository.projectQueuedHeadInTransaction(client, row.tenant_id, row.conversation_id)
     return {
       settled: true,
-      notificationCursor: cursor,
+      notificationCursor: nextCursor ?? cursor,
       tenantId: row.tenant_id,
       sessionId: row.conversation_id,
     }

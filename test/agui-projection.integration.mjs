@@ -19,6 +19,7 @@ const redisUrl = process.env.KOKORO_TEST_REDIS_URL
 const integrationTest = postgresUrl && redisUrl ? test : test.skip
 
 const TABLES = [
+  "bff_agui_run_interaction",
   "bff_agui_cursor_tombstone",
   "bff_agui_event",
   "bff_conversation_artifact",
@@ -355,11 +356,14 @@ integrationTest("bounds Chat deliveries independently of Messages and reapplies 
     assert.equal(snapshot.deliveries.at(-1).artifact_id, "artifact_002")
     assert.equal(snapshot.deliveries[0].conversation_id, sessionId)
     assert.equal(snapshot.deliveries[0].size, 100)
-    await pool.query(
-      `INSERT INTO bff_agui_stream (tenant_id, session_id, consumer_subject_id, expected_run_id, latest_run_id, terminal_run_id) VALUES ($1, $2, $3, 'run_visible', 'run_visible', NULL)`,
-      [tenantId, sessionId, ownerId],
-    )
-    assert.deepEqual((await store.services.chat.snapshot(tenantId, ownerId, sessionId, undefined)).active_run, { run_id: "run_visible", status: "running" })
+    const visibleRun = await submitAndAdmit(store, pool, { tenantId, sessionId, ownerId, suffix: "snapshot_limit_visible" })
+    await store.agUi.ingest(tenantId, sessionId, [agentSource({
+      id: "source_snapshot_limit_visible_start", sequence: 1, kind: "run.created",
+      payload: { run_id: visibleRun }, sessionId, runId: visibleRun,
+    })])
+    assert.deepEqual((await store.services.chat.snapshot(tenantId, ownerId, sessionId, undefined)).execution_head, {
+      run_id: visibleRun, state: "active", pending_pauses: [],
+    })
     assert.equal(await store.services.chat.snapshot(tenantId, "other_member", sessionId, undefined), null)
     await pool.query("UPDATE bff_conversation SET project_ref = 'missing_project' WHERE conversation_id = $1", [sessionId])
     assert.equal(await store.services.chat.snapshot(tenantId, ownerId, sessionId, undefined), null)
@@ -422,15 +426,72 @@ integrationTest("reads Artifact deliveries and public watermark from one repeata
     await conversationRead
     writer = await pool.connect()
     await writer.query("BEGIN")
+    await writer.query("SELECT 1 FROM bff_conversation WHERE tenant_id=$1 AND conversation_id=$2 FOR UPDATE", [tenantId, sessionId])
+    const { createHash } = await import("node:crypto")
+    const { buildAgentDispatchPayload, agentDispatchRequestMaterial } = await import("../dist/domain/chat/agent-dispatch.js")
+    const { PostgresAgentDispatchOutboxRepository } = await import("../dist/infrastructure/postgres/agent-dispatch-outbox-repository.js")
+    const { createAgUiProjectionState, projectChatEvent } = await import("../dist/application/agui/project-chat-event.js")
+    const dispatchInput = {
+      tenantId, conversationId: sessionId, subjectId: ownerId, actorId: ownerId,
+      requestId: "request_race", idempotencyKey: "turn_race", content: "Race turn",
+    }
+    const deliveryPayload = {
+      artifact_id: "artifact_race", artifact_kind: "document", asset_id: "asset_race",
+      content_hash: "b".repeat(64), mime: "text/plain", path: "/race.txt", size: 4,
+      title: "Race report", tool_call_id: "tool_race",
+    }
+    const deliveryDigest = createHash("sha256").update(JSON.stringify(deliveryPayload)).digest("hex")
+    await writer.query(
+      `INSERT INTO bff_message (message_id, tenant_id, conversation_id, run_id, role, content, status, message_seq)
+       VALUES ('user_race', $1, $2, 'run_race', 'user', 'Race turn', 'completed', 2),
+              ('assistant_race', $1, $2, 'run_race', 'assistant', '', 'pending', 3)`,
+      [tenantId, sessionId],
+    )
+    await writer.query(
+      `INSERT INTO bff_agent_dispatch_outbox
+         (outbox_id,tenant_id,conversation_id,conversation_dispatch_seq,subject_id,actor_id,request_id,
+          idempotency_key,request_digest,run_id,user_message_id,assistant_message_id,identity_assertion_ref,payload,status,admitted_at)
+       VALUES ('dispatch_race',$1,$2,2,$3,$3,'request_race','turn_race',$4,'run_race','user_race','assistant_race',
+               'assertion_race',$5::jsonb,'admitted',CURRENT_TIMESTAMP(3))`,
+      [tenantId, sessionId, ownerId, createHash("sha256").update(agentDispatchRequestMaterial(dispatchInput)).digest("hex"),
+        JSON.stringify(buildAgentDispatchPayload(dispatchInput, { runId: "run_race", userMessageId: "user_race" }))],
+    )
+    await writer.query(
+      `INSERT INTO bff_agui_stream (tenant_id,session_id,consumer_subject_id,expected_run_id)
+       VALUES ($1,$2,$3,'run_race')`, [tenantId, sessionId, ownerId],
+    )
+    assert.ok(await PostgresAgentDispatchOutboxRepository.projectQueuedHeadInTransaction(writer, tenantId, sessionId))
+    const projectionState = createAgUiProjectionState()
+    for (const [sequence, id, kind, payload, cursor] of [
+      [1, "source_start_race", "run.created", { run_id: "run_race" }, "agui_11111111111111111111111111111111"],
+      [2, "source_race", "delivery.created", deliveryPayload, "agui_0123456789abcdef0123456789abcdef"],
+    ]) {
+      const timestamp = "2026-09-28T00:00:00.000Z"
+      const [frame] = projectChatEvent({ event_id: id, seq: sequence, session_id: sessionId, run_id: "run_race", kind, timestamp, payload }, projectionState)
+      await writer.query(
+        `INSERT INTO bff_agui_source_event (tenant_id,session_id,source_owner,source_event_id,source_sequence,source_digest,source_occurred_at)
+         VALUES ($1,$2,'kokoro-agent',$3,$4,$5,$6::timestamptz)`,
+        [tenantId, sessionId, id, sequence, createHash("sha256").update(JSON.stringify(payload)).digest("hex"), timestamp],
+      )
+      await writer.query(
+        `INSERT INTO bff_agui_event (tenant_id,session_id,public_sequence,cursor,source_owner,source_event_id,frame_index,event_type,event_payload,source_occurred_at)
+         VALUES ($1,$2,$3,$4,'kokoro-agent',$5,0,$6,$7::jsonb,$8::timestamptz)`,
+        [tenantId, sessionId, sequence + 1, cursor, id, frame.type, JSON.stringify(frame), timestamp],
+      )
+    }
+    await writer.query(
+      `UPDATE bff_agui_stream SET latest_run_id='run_race',latest_run_start_sequence=2,source_high_watermark=2,
+         next_public_sequence=4,version=version+1 WHERE tenant_id=$1 AND session_id=$2`, [tenantId, sessionId],
+    )
     await writer.query(
       `INSERT INTO bff_conversation_artifact
          (tenant_id, conversation_id, artifact_id, run_id, source_owner, source_event_id,
           source_sequence, source_digest, source_asset_id, source_artifact_kind,
           source_content_sha256, source_title, source_mime, source_size_bytes, delivered_at)
-       VALUES ($1, $2, 'artifact_race', 'run_race', 'kokoro-agent', 'source_race', 1,
-               repeat('a', 64), 'asset_race', 'document', repeat('b', 64),
+       VALUES ($1, $2, 'artifact_race', 'run_race', 'kokoro-agent', 'source_race', 2,
+               $3, 'asset_race', 'document', repeat('b', 64),
                'Race report', 'text/plain', 4, '2026-09-28T00:00:00Z')`,
-      [tenantId, sessionId],
+      [tenantId, sessionId, deliveryDigest],
     )
     await writer.query(
       `INSERT INTO bff_message
@@ -440,25 +501,13 @@ integrationTest("reads Artifact deliveries and public watermark from one repeata
                'model_unavailable', TRUE)`,
       [tenantId, sessionId],
     )
-    await writer.query(
-      `INSERT INTO bff_agui_event
-         (tenant_id, session_id, public_sequence, cursor, source_owner, source_event_id,
-          frame_index, event_type, event_payload, source_occurred_at)
-       VALUES ($1, $2, 1, 'agui_0123456789abcdef0123456789abcdef', 'kokoro-agent',
-               'source_race', 0, 'CUSTOM', '{}'::jsonb, '2026-09-28T00:00:00Z')`,
-      [tenantId, sessionId],
-    )
-    await writer.query(
-      `INSERT INTO bff_agui_stream (tenant_id, session_id, consumer_subject_id, expected_run_id, latest_run_id, terminal_run_id) VALUES ($1, $2, $3, 'run_race', 'run_race', NULL)`,
-      [tenantId, sessionId, ownerId],
-    )
     await writer.query("COMMIT")
     allowDeliveryRead()
     const before = await pending
     assert.deepEqual(before.deliveries, [])
     assert.deepEqual(before.messages ?? [], [])
     assert.equal(before.eventWatermark, null)
-    assert.equal(before.activeRun, undefined)
+    assert.equal(before.executionHead, undefined)
     const after = await new PostgresChatRepository({ pool }).readSnapshot(tenantId, ownerId, sessionId, undefined)
     assert.deepEqual(
       after.deliveries.map(({ artifactId }) => artifactId),
@@ -466,10 +515,15 @@ integrationTest("reads Artifact deliveries and public watermark from one repeata
     )
     assert.deepEqual(
       after.messages.map(({ failure }) => failure),
-      [{ source: "agent", code: "model_unavailable", retryable: true }],
+      [{ source: "agent", code: "model_unavailable", retryable: true }, null, null],
     )
+    assert.deepEqual(after.messages.map(({ messageId, runId, role, status }) => ({ messageId, runId, role, status })), [
+      { messageId: "message_failure_race", runId: "run_failure_race", role: "assistant", status: "failed" },
+      { messageId: "user_race", runId: "run_race", role: "user", status: "completed" },
+      { messageId: "assistant_race", runId: "run_race", role: "assistant", status: "pending" },
+    ])
     assert.equal(after.eventWatermark, "agui_0123456789abcdef0123456789abcdef")
-    assert.deepEqual(after.activeRun, { runId: "run_race", status: "running" })
+    assert.deepEqual(after.executionHead, { runId: "run_race", state: "active", pendingPauses: [] })
   } finally {
     if (writer !== null) writer.release()
     await pool.end()
@@ -898,6 +952,7 @@ integrationTest("replays an Agent draft, tool, and empty final completion into t
     assert.deepEqual(
       replay.frames.map((frame) => frame.eventType),
       [
+        "CUSTOM",
         "RUN_STARTED",
         "TEXT_MESSAGE_START",
         "TEXT_MESSAGE_CONTENT",
@@ -910,6 +965,9 @@ integrationTest("replays an Agent draft, tool, and empty final completion into t
         "RUN_FINISHED",
       ],
     )
+    assert.equal(replay.frames[0].payload.name, "kokoro.run.queued")
+    assert.deepEqual(replay.frames[0].payload.value, { run_id: turn.run_id, dispatch_sequence: "1" })
+    assert.deepEqual(replay.frames.map((frame) => frame.publicSequence), Array.from({ length: 11 }, (_, index) => index + 1))
     const watermark = replay.frames.at(-1).cursor
     const snapshot = await reopened.services.chat.snapshot(tenantId, subjectId, sessionId, undefined)
     assert.equal(snapshot.event_watermark, watermark)
@@ -1306,12 +1364,15 @@ integrationTest("keeps replay page boundaries and terminal state tied to the lat
     const secondRun = await submitAndAdmit(store, pool, { tenantId: "tenant_a", sessionId: "session_runs", ownerId: "owner_runs", suffix: "page_second" })
     await store.agUi.ingest("tenant_a", "session_runs", [agentSource({ id: "run_2_started", sequence: 3, kind: "run.created", payload: { run_id: secondRun }, sessionId: "session_runs", runId: secondRun })])
 
-    const pageAtOldTerminal = await store.agUi.replay("tenant_a", "session_runs", null, 2)
+    const pageAtOldTerminal = await store.agUi.replay("tenant_a", "session_runs", null, 3)
     assert.equal(pageAtOldTerminal.kind, "page")
     assert.deepEqual(
       pageAtOldTerminal.frames.map((frame) => frame.eventType),
-      ["RUN_STARTED", "RUN_FINISHED"],
+      ["CUSTOM", "RUN_STARTED", "RUN_FINISHED"],
     )
+    assert.equal(pageAtOldTerminal.frames[0].payload.name, "kokoro.run.queued")
+    assert.deepEqual(pageAtOldTerminal.frames[0].payload.value, { run_id: firstRun, dispatch_sequence: "1" })
+    assert.deepEqual(pageAtOldTerminal.frames.map((frame) => frame.publicSequence), [1,2,3])
     assert.equal(pageAtOldTerminal.atHead, false)
     assert.equal(pageAtOldTerminal.terminalRunId, null)
 
@@ -1319,8 +1380,11 @@ integrationTest("keeps replay page boundaries and terminal state tied to the lat
     assert.equal(activeHead.kind, "page")
     assert.deepEqual(
       activeHead.frames.map((frame) => frame.eventType),
-      ["RUN_STARTED"],
+      ["CUSTOM", "RUN_STARTED"],
     )
+    assert.equal(activeHead.frames[0].payload.name, "kokoro.run.queued")
+    assert.deepEqual(activeHead.frames[0].payload.value, { run_id: secondRun, dispatch_sequence: "3" })
+    assert.deepEqual(activeHead.frames.map((frame) => frame.publicSequence), [4,5])
     assert.equal(activeHead.atHead, true)
     assert.equal(activeHead.terminalRunId, null)
 
@@ -1649,9 +1713,12 @@ integrationTest("expires reclaimed AG-UI cursors while retaining the latest run 
     assert.ok(share)
     const before = await store.agUi.replay("tenant_a", "session_gc", null, 100)
     assert.equal(before.kind, "page")
-    assert.equal(before.frames.length, 7)
-    assert.equal(before.frames[1].eventType, "RUN_ERROR")
-    assert.deepEqual(before.frames[1].payload.metadata.kokoro.failure, {
+    assert.equal(before.frames.length, 8)
+    assert.deepEqual(before.frames.map((frame) => frame.eventType), ["CUSTOM", "RUN_STARTED", "RUN_ERROR", "RUN_STARTED", "TEXT_MESSAGE_START", "TEXT_MESSAGE_CONTENT", "TEXT_MESSAGE_END", "RUN_FINISHED"])
+    assert.equal(before.frames[0].payload.name, "kokoro.run.queued")
+    assert.deepEqual(before.frames[0].payload.value, { run_id: latestRun, dispatch_sequence: "1" })
+    assert.equal(before.frames[2].eventType, "RUN_ERROR")
+    assert.deepEqual(before.frames[2].payload.metadata.kokoro.failure, {
       source: "agent",
       code: "dependency_unavailable",
       retryable: true,
@@ -1671,8 +1738,8 @@ integrationTest("expires reclaimed AG-UI cursors while retaining the latest run 
       tombstoneRetentionMs: 24 * 60 * 60 * 1000,
       batchSize: 100,
     })
-    assert.equal(collected.framesDeleted, 2)
-    assert.equal(collected.tombstonesInserted, 2)
+    assert.equal(collected.framesDeleted, 3)
+    assert.equal(collected.tombstonesInserted, 3)
     assert.deepEqual(await store.agUi.replay("tenant_a", "session_gc", expiredCursor, 100), { kind: "expired_cursor" })
     const refreshed = await store.services.chat.snapshot("tenant_a", "owner_gc", "session_gc", undefined)
     assert.deepEqual(
@@ -1710,6 +1777,7 @@ integrationTest("expires reclaimed AG-UI cursors while retaining the latest run 
     assert.equal(refreshed.deliveries_has_more, false)
     assert.equal(refreshed.event_watermark, headCursor)
     assert.equal(refreshed.active_run, undefined)
+    assert.equal(refreshed.execution_head, undefined)
     const marker = await pool.query(
       `SELECT expected_run_id, latest_run_id, terminal_run_id FROM bff_agui_stream WHERE tenant_id = 'tenant_a' AND session_id = 'session_gc'`,
     )
@@ -1725,7 +1793,7 @@ integrationTest("expires reclaimed AG-UI cursors while retaining the latest run 
       false,
     )
     assert.equal(retained.frames.at(-1).cursor, headCursor)
-    assert.equal((await store.agUi.status("tenant_a", "session_gc")).retentionFloorSequence, 2)
+    assert.equal((await store.agUi.status("tenant_a", "session_gc")).retentionFloorSequence, 3)
 
     await store.agUiConsumers.collectGarbage({
       now: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
@@ -1785,9 +1853,11 @@ integrationTest("skips GC when interleaved runs would leave an event without its
     assert.equal(collected.framesDeleted, 0)
     const retained = await store.agUi.replay("tenant_a", "session_interleaved_gc", null, 100)
     assert.equal(retained.kind, "page")
+    assert.equal(retained.frames[0].payload.name, "kokoro.run.queued")
+    assert.deepEqual(retained.frames[0].payload.value, { run_id: runB, dispatch_sequence: "1" })
     assert.deepEqual(
       retained.frames.map((frame) => frame.eventType),
-      ["RUN_STARTED", "RUN_STARTED", "RUN_FINISHED", "RUN_FINISHED"],
+      ["CUSTOM", "RUN_STARTED", "RUN_STARTED", "RUN_FINISHED", "RUN_FINISHED"],
     )
   } finally {
     if (store !== null) await store.close().catch(() => undefined)
@@ -1806,6 +1876,7 @@ integrationTest("garbage collection skips ineligible streams instead of starving
        SELECT 'tenant_a', 'inert_' || lpad(series::text, 3, '0'), CURRENT_TIMESTAMP(3) - INTERVAL '10 days'
          FROM generate_series(1, 100) AS series`,
     )
+    await pool.query("INSERT INTO bff_conversation (tenant_id,conversation_id,owner_id,title) VALUES ('tenant_a','session_gc_later','user_gc_later','GC eligible parent')")
     store = new PostgresBffRepositories(postgresUrl, redisUrl)
     await store.agUi.ingest("tenant_a", "session_gc_later", [
       agentSource({ id: "gc_later_1", sequence: 1, kind: "run.created", payload: { run_id: "run_1" }, sessionId: "session_gc_later", runId: "run_1" }),
@@ -1935,7 +2006,12 @@ integrationTest("registering a newer run clears the prior terminal before source
 
     const awaitingSource = await store.agUi.replay("tenant_a", "session_next_run", before.frames.at(-1).cursor, 100)
     assert.equal(awaitingSource.kind, "page")
-    assert.equal(awaitingSource.terminalRunId, oldTurn.run_id)
+    assert.equal(awaitingSource.terminalRunId, null)
+    assert.deepEqual(awaitingSource.frames.map((frame) => frame.eventType), ["CUSTOM"])
+    assert.equal(awaitingSource.frames[0].payload.name, "kokoro.run.queued")
+    assert.deepEqual(awaitingSource.frames[0].payload.value, { run_id: newRunId, dispatch_sequence: "3" })
+    assert.equal((await pool.query("SELECT terminal_run_id FROM bff_agui_stream WHERE tenant_id='tenant_a' AND session_id='session_next_run'")).rows[0].terminal_run_id, oldTurn.run_id)
+    assert.deepEqual((await store.services.chat.snapshot("tenant_a", "user_a", "session_next_run", undefined)).execution_head, { run_id: newRunId, state: "queued", pending_pauses: [] })
     assert.equal((await store.services.chat.snapshot("tenant_a", "user_a", "session_next_run", undefined)).active_run, undefined)
     const [newClaim] = await store.agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: "worker_new_run", limit: 1, leaseDurationMs: 5000, maxAttempts: 8 })
     assert.equal(newClaim.runId, newRunId)
@@ -1944,9 +2020,9 @@ integrationTest("registering a newer run clears the prior terminal before source
     await store.agUi.ingest("tenant_a", "session_next_run", [
       agentSource({ id: "new_run_started", sequence: 3, kind: "run.created", payload: { run_id: newRunId }, sessionId: "session_next_run", runId: newRunId }),
     ])
-    assert.deepEqual((await store.services.chat.snapshot("tenant_a", "user_a", "session_next_run", undefined)).active_run, {
+    assert.deepEqual((await store.services.chat.snapshot("tenant_a", "user_a", "session_next_run", undefined)).execution_head, {
       run_id: newRunId,
-      status: "running",
+      state: "active", pending_pauses: [],
     })
     await assert.rejects(store.agUi.ingest("tenant_a", "session_next_run", [
       agentSource({
@@ -1958,7 +2034,7 @@ integrationTest("registering a newer run clears the prior terminal before source
         runId: oldTurn.run_id,
       }),
     ]), /AGUI_POST_TERMINAL_SOURCE/u)
-    assert.deepEqual((await store.services.chat.snapshot("tenant_a", "user_a", "session_next_run", undefined)).active_run, { run_id: newRunId, status: "running" })
+    assert.deepEqual((await store.services.chat.snapshot("tenant_a", "user_a", "session_next_run", undefined)).execution_head, { run_id: newRunId, state: "active", pending_pauses: [] })
     await store.agUi.ingest("tenant_a", "session_next_run", [
       agentSource({
         id: "new_run_reobserved",
@@ -2087,7 +2163,11 @@ integrationTest("registering a newer run fences a stale projector commit", async
     assert.equal(current.terminalRunId, null)
     const replay = await store.agUi.replay("tenant_a", "session_run_fence", null, 100)
     assert.equal(replay.kind, "page")
-    assert.deepEqual(replay.frames.map((frame) => frame.eventType), ["RUN_STARTED", "RUN_FINISHED"])
+    assert.deepEqual(replay.frames.map((frame) => frame.eventType), ["CUSTOM", "RUN_STARTED", "RUN_FINISHED", "CUSTOM"])
+    assert.equal(replay.frames[0].payload.name, "kokoro.run.queued")
+    assert.deepEqual(replay.frames[0].payload.value, { run_id: oldRun, dispatch_sequence: "1" })
+    assert.equal(replay.frames[3].payload.name, "kokoro.run.queued")
+    assert.deepEqual(replay.frames[3].payload.value, { run_id: newRun, dispatch_sequence: "3" })
   } finally {
     if (store !== null) await store.close().catch(() => undefined)
     if (database !== null) await database.close().catch(() => undefined)
@@ -2259,6 +2339,14 @@ integrationTest("the expected run can finish while source runs are interleaved",
     })
     assert.ok(lease)
 
+    const facts = async () => {
+      const result = {}
+      for (const [table,column,order] of [["bff_agui_stream","session_id","session_id"],["bff_agui_source_event","session_id","source_event_id"],["bff_agui_event","session_id","public_sequence"],["bff_agui_run_interaction","session_id","run_id"],["bff_agent_dispatch_outbox","conversation_id","outbox_id"],["bff_message","conversation_id","message_id"]]) {
+        result[table] = (await pool.query("SELECT * FROM " + table + " WHERE tenant_id=$1 AND " + column + "=$2 ORDER BY " + order,["tenant_a","session_expected_interleaved"])).rows
+      }
+      return result
+    }
+    const factsBeforeInvalid = await facts()
     const markerBeforeInvalid = (await pool.query(
       "SELECT version::text, source_high_watermark::text FROM bff_agui_stream WHERE tenant_id=$1 AND session_id=$2",
       ["tenant_a", "session_expected_interleaved"],
@@ -2287,8 +2375,9 @@ integrationTest("the expected run can finish while source runs are interleaved",
               (SELECT count(*)::int FROM bff_agui_event WHERE tenant_id=$1 AND session_id=$2) AS frame_count
          FROM bff_agui_stream WHERE tenant_id=$1 AND session_id=$2`,
       ["tenant_a", "session_expected_interleaved"],
-    )).rows, [{ ...markerBeforeInvalid, expected_run_id: turn.run_id, latest_run_id: null, terminal_run_id: null, source_count: 0, frame_count: 0 }])
+    )).rows, [{ ...markerBeforeInvalid, expected_run_id: turn.run_id, latest_run_id: null, terminal_run_id: null, source_count: 0, frame_count: 1 }])
 
+    assert.deepEqual(await facts(), factsBeforeInvalid)
     await store.agUi.ingest("tenant_a", "session_expected_interleaved", [
       agentSource({ id: "expected_interleaved_start", sequence: 1, kind: "run.created", payload: { run_id: turn.run_id }, sessionId: "session_expected_interleaved", runId: turn.run_id }),
       agentSource({ id: "other_interleaved_start", sequence: 2, kind: "run.created", payload: { run_id: "run_other" }, sessionId: "session_expected_interleaved", runId: "run_other" }),
@@ -2299,7 +2388,7 @@ integrationTest("the expected run can finish while source runs are interleaved",
     assert.deepEqual((await pool.query(
       "SELECT expected_run_id, latest_run_id, terminal_run_id, latest_run_start_sequence FROM bff_agui_stream WHERE tenant_id=$1 AND session_id=$2",
       ["tenant_a", "session_expected_interleaved"],
-    )).rows, [{ expected_run_id: turn.run_id, latest_run_id: turn.run_id, terminal_run_id: null, latest_run_start_sequence: "1" }])
+    )).rows, [{ expected_run_id: turn.run_id, latest_run_id: turn.run_id, terminal_run_id: null, latest_run_start_sequence: "2" }])
     await store.agUi.ingest("tenant_a", "session_expected_interleaved", [
       agentSource({ id: "expected_interleaved_end", sequence: 4, kind: "run.completed", payload: { status: "completed" }, sessionId: "session_expected_interleaved", runId: turn.run_id }),
     ], lease)
@@ -2394,4 +2483,1000 @@ integrationTest("a skewed worker releases a lease back to the PostgreSQL clock",
     if (store !== null) await store.close().catch(() => undefined)
     await pool.end()
   }
+})
+
+
+integrationTest("R43 keeps old A and old cursor in an authorized RR snapshot while production terminal atomically hands off to queued B", { timeout: 30_000 }, async () => {
+  const { randomUUID } = await import("node:crypto")
+  const { ChatApplicationService } = await import("../dist/application/chat-service.js")
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
+  const suffix = randomUUID()
+  const tenantId = "r43_rr_" + suffix
+  const sessionId = "conv_" + randomUUID()
+  const ownerId = "r43_rr_owner"
+  let store = null
+  let reader = null
+  let readerReleased = false
+  let pending = null
+  let releaseRead
+  const readReleased = new Promise((resolve) => { releaseRead = resolve })
+  let markAuthorized
+  const authorized = new Promise((resolve) => { markAuthorized = resolve })
+  const bounded = async (promise, label) => {
+    let timer
+    try {
+      return await Promise.race([
+        promise,
+        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(label)), 5000) }),
+      ])
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+  try {
+    await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
+    await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    await store.ready()
+    const submit = (name) => store.services.chatTurns.submit({
+      tenantId, conversationId: sessionId, subjectId: ownerId, actorId: ownerId,
+      requestId: "r43_rr_request_" + name + suffix,
+      idempotencyKey: "r43_rr_key_" + name + suffix, content: "RR turn " + name,
+    })
+    const a = await submit("A")
+    const b = await submit("B")
+    assert.ok(a)
+    assert.ok(b)
+    const claims = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
+      workerId: "r43_rr_worker_" + suffix, limit: 1, leaseDurationMs: 5000, maxAttempts: 8,
+    })
+    assert.equal(claims[0]?.runId, a.run_id, "isolated fixture must claim A through the production repository")
+    assert.equal(await store.agentDispatchOutbox.markAgentDispatchAdmitted(claims[0]), true)
+    await store.agUi.ingest(tenantId, sessionId, [agentSource({
+      id: "r43_rr_started_" + suffix, sequence: 1, kind: "run.created",
+      sessionId, runId: a.run_id, payload: { run_id: a.run_id },
+    })])
+    const before = await store.services.chat.snapshot(tenantId, ownerId, sessionId, undefined)
+    assert.ok(before)
+    assert.match(before.event_watermark, /^agui_[0-9a-f]{32}$/u)
+    reader = await pool.connect()
+    let authorizationCount = 0
+    const gated = new PostgresChatRepository({
+      pool: {
+        connect: async () => ({
+          query: async (sql, values) => {
+            const result = await reader.query(sql, values)
+            if (sql.includes("FROM bff_conversation") && sql.includes("LIMIT 1") && authorizationCount++ === 0) {
+              assert.equal(result.rows[0]?.conversation_id, sessionId, "barrier follows real successful Conversation authorization")
+              const isolation = await reader.query("SHOW transaction_isolation")
+              assert.equal(isolation.rows[0]?.transaction_isolation, "repeatable read")
+              markAuthorized()
+              await readReleased
+            }
+            return result
+          },
+          release: () => {
+            readerReleased = true
+            reader.release()
+          },
+        }),
+      },
+    })
+    pending = new ChatApplicationService(gated).snapshot(tenantId, ownerId, sessionId, undefined)
+    void pending.catch(() => undefined)
+    await bounded(Promise.race([authorized, pending.then(() => { throw new Error("snapshot finished before authorization barrier") })]), "authorization barrier timed out")
+    // The real reader's RR transaction stays open; a separate production connection commits.
+    await bounded(store.agUi.ingest(tenantId, sessionId, [agentSource({
+      id: "r43_rr_terminal_" + suffix, sequence: 2, kind: "run.completed",
+      sessionId, runId: a.run_id, payload: { status: "completed" },
+    })]), "independent production terminal writer timed out")
+    const fresh = await store.services.chat.snapshot(tenantId, ownerId, sessionId, undefined)
+    const dispatches = await pool.query(
+      "SELECT run_id,status FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND conversation_id=$2 ORDER BY conversation_dispatch_seq,outbox_id",
+      [tenantId, sessionId],
+    )
+    releaseRead()
+    const old = await bounded(pending, "RR reader did not finish after release")
+    assert.deepEqual(dispatches.rows, [{ run_id: a.run_id, status: "terminal" }, { run_id: b.run_id, status: "pending" }])
+    assert.deepEqual(old.execution_head, { run_id: a.run_id, state: "active", pending_pauses: [] })
+    assert.equal(old.event_watermark, before.event_watermark, "old A must not be combined with the new cursor")
+    const oldAssistant = old.messages?.find((message) => message.message_id === a.assistant_message_id)
+    assert.ok(oldAssistant, "RR snapshot must retain A's admitted assistant identity")
+    assert.equal(oldAssistant.status, "pending")
+    assert.deepEqual(fresh.execution_head, { run_id: b.run_id, state: "queued", pending_pauses: [] })
+    assert.notEqual(fresh.event_watermark, before.event_watermark, "new B must not be combined with the old cursor")
+    const freshAssistant = fresh.messages?.find((message) => message.message_id === a.assistant_message_id)
+    assert.ok(freshAssistant, "new snapshot must retain A's terminal assistant identity")
+    assert.equal(freshAssistant.status, "completed")
+    const replay = await store.agUi.replay(tenantId, sessionId, before.event_watermark, 100)
+    assert.equal(replay.kind, "page")
+    assert.deepEqual(replay.frames.map(({ eventType }) => eventType), ["RUN_FINISHED", "CUSTOM"])
+    assert.equal(replay.frames[0].payload.runId, a.run_id)
+    assert.equal(replay.frames[1].payload.name, "kokoro.run.queued")
+    assert.deepEqual(replay.frames[1].payload.value, { run_id: b.run_id, dispatch_sequence: "3" })
+    assert.equal(replay.frames.at(-1).cursor, fresh.event_watermark)
+    assert.equal(new Set(replay.frames.map(({ cursor }) => cursor)).size, 2)
+    const duplicate = await store.agUi.ingest(tenantId, sessionId, [agentSource({
+      id: "r43_rr_terminal_" + suffix, sequence: 2, kind: "run.completed",
+      sessionId, runId: a.run_id, payload: { status: "completed" },
+    })])
+    assert.equal(duplicate.insertedFrames, 0)
+    assert.equal((await store.services.chat.snapshot(tenantId, ownerId, sessionId, undefined)).event_watermark, fresh.event_watermark)
+  } finally {
+    releaseRead()
+    if (pending !== null) await pending.catch(() => undefined)
+    if (reader !== null && !readerReleased) reader.release()
+    if (store !== null) await store.close()
+    for (const [table, column] of [
+      ["bff_agui_event", "session_id"], ["bff_agui_source_event", "session_id"],
+      ["bff_agui_stream", "session_id"], ["bff_agent_dispatch_outbox", "conversation_id"],
+      ["bff_message", "conversation_id"], ["bff_conversation", "conversation_id"],
+    ]) {
+      await pool.query("DELETE FROM " + table + " WHERE tenant_id=$1 AND " + column + "=$2", [tenantId, sessionId])
+    }
+    await pool.end()
+  }
+})
+
+
+// R46 scoped authority regressions: Root runs these against its owned PostgreSQL/Redis fixture.
+function r46AuthorityCleanup(context, pool, currentStore, scopes) {
+  context.after(async () => {
+    const failures = []
+    const store = currentStore()
+    if (store !== null) {
+      try { await store.close() } catch (error) { failures.push(error) }
+    }
+    for (const [table, column] of [
+      ["bff_agui_cursor_tombstone", "session_id"],
+      ["bff_agui_event", "session_id"],
+      ["bff_agui_source_event", "session_id"],
+      ["bff_agui_stream", "session_id"],
+      ["bff_conversation", "conversation_id"],
+    ]) {
+      try {
+        await pool.query(
+          "DELETE FROM " + table + " AS owned WHERE EXISTS (" +
+          "SELECT 1 FROM jsonb_to_recordset($1::jsonb) AS scope(tenant_id text,session_id text) " +
+          "WHERE scope.tenant_id=owned.tenant_id AND scope.session_id=owned." + column + ")",
+          [JSON.stringify(scopes)],
+        )
+      } catch (error) { failures.push(error) }
+    }
+    try { await pool.end() } catch (error) { failures.push(error) }
+    if (failures.length > 0) throw new AggregateError(failures, "R46 scoped authority fixture cleanup failed")
+  })
+}
+
+for (const parentCase of ["missing", "wrong tenant", "wrong subject"]) {
+  integrationTest("R46 direct-register rejects " + parentCase + " Conversation authority without writing a stream", { timeout: 30_000 }, async (context) => {
+    const { randomUUID } = await import("node:crypto")
+    const suffix = randomUUID()
+    const tenantId = "r46_register_" + suffix
+    const foreignTenantId = "r46_register_foreign_" + suffix
+    const sessionId = "conv_" + randomUUID()
+    const ownerId = "r46_register_owner"
+    const parentTenantId = parentCase === "wrong tenant" ? foreignTenantId : tenantId
+    const callerSubjectId = parentCase === "wrong subject" ? "r46_register_other_subject" : ownerId
+    const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC", statement_timeout: 5000 })
+    let store = null
+    r46AuthorityCleanup(context, pool, () => store, [
+      { tenant_id: tenantId, session_id: sessionId },
+      { tenant_id: foreignTenantId, session_id: sessionId },
+    ])
+    await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
+    await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+    if (parentCase !== "missing") {
+      await pool.query(
+        "INSERT INTO bff_conversation (conversation_id,tenant_id,owner_id,title) VALUES ($1,$2,$3,'R46 authority fixture')",
+        [sessionId, parentTenantId, ownerId],
+      )
+    }
+    const parents = await pool.query(
+      "SELECT tenant_id,owner_id,status FROM bff_conversation WHERE conversation_id=$1 ORDER BY tenant_id",
+      [sessionId],
+    )
+    assert.deepEqual(parents.rows, parentCase === "missing" ? [] : [{ tenant_id: parentTenantId, owner_id: ownerId, status: "active" }])
+    const streams = () => pool.query(
+      "SELECT to_jsonb(stream) AS row FROM bff_agui_stream AS stream WHERE session_id=$1 AND tenant_id=ANY($2::text[]) ORDER BY tenant_id",
+      [sessionId, [tenantId, foreignTenantId]],
+    )
+    assert.deepEqual((await streams()).rows, [])
+    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    await store.ready()
+    assert.equal(typeof store.agUiConsumers.registerConsumer, "function", "production direct-register method must exist")
+    let failure
+    try {
+      await store.agUiConsumers.registerConsumer(tenantId, sessionId, callerSubjectId)
+    } catch (error) {
+      failure = error
+    }
+    // Read real state even when the call wrongly succeeded; both rejection and zero writes are contractual.
+    const after = (await streams()).rows
+    assert.deepEqual(
+      { error: failure instanceof Error ? failure.message : null, streams: after },
+      { error: "AG-UI consumer subject does not match the registered session owner", streams: [] },
+      "direct-register must require a matching active parent, use the existing stable error, and roll back every stream write",
+    )
+  })
+}
+
+integrationTest("R46 garbage collection preserves a historical orphan stream tail without parent authority while collecting an eligible owned control", { timeout: 30_000 }, async (context) => {
+  const { randomUUID, createHash } = await import("node:crypto")
+  const suffix = randomUUID()
+  const tenantId = "r46_gc_" + suffix
+  const orphanSessionId = "conv_" + randomUUID()
+  const controlSessionId = "conv_" + randomUUID()
+  const ownerId = "r46_gc_owner"
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC", statement_timeout: 5000 })
+  let store = null
+  r46AuthorityCleanup(context, pool, () => store, [
+    { tenant_id: tenantId, session_id: orphanSessionId },
+    { tenant_id: tenantId, session_id: controlSessionId },
+  ])
+  await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
+  await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+  const occurredAt = "2026-01-01T00:00:00.000Z"
+  // Explicit historical fixture, not a replacement repository or mocked return.
+  for (const sessionId of [orphanSessionId, controlSessionId]) {
+    const oldRunId = "r46_old_" + sessionId
+    const currentRunId = "r46_current_" + sessionId
+    await pool.query(
+      "INSERT INTO bff_conversation (conversation_id,tenant_id,owner_id,title) VALUES ($1,$2,$3,'R46 GC authority fixture')",
+      [sessionId, tenantId, ownerId],
+    )
+    await pool.query(
+      "INSERT INTO bff_agui_stream (tenant_id,session_id,consumer_subject_id,source_high_watermark,next_public_sequence,latest_run_id,latest_run_start_sequence) " +
+      "VALUES ($1,$2,$3,3,4,$4,3)",
+      [tenantId, sessionId, ownerId, currentRunId],
+    )
+    for (const [sequence, type, runId] of [[1, "RUN_STARTED", oldRunId], [2, "RUN_FINISHED", oldRunId], [3, "RUN_STARTED", currentRunId]]) {
+      const sourceEventId = "r46_gc_source_" + sessionId + "_" + sequence
+      const cursor = "agui_" + createHash("sha256").update(sourceEventId).digest("hex").slice(0, 32)
+      const payload = { type, threadId: sessionId, runId, metadata: { kokoro: {
+        event_id: sourceEventId, seq: sequence, session_id: sessionId, run_id: runId,
+        timestamp: occurredAt, source_owner: "kokoro-agent",
+      } } }
+      const serialized = JSON.stringify(payload)
+      await pool.query(
+        "INSERT INTO bff_agui_source_event (tenant_id,session_id,source_owner,source_event_id,source_sequence,source_digest,source_occurred_at) " +
+        "VALUES ($1,$2,'kokoro-agent',$3,$4,$5,$6)",
+        [tenantId, sessionId, sourceEventId, sequence, createHash("sha256").update(serialized).digest("hex"), occurredAt],
+      )
+      await pool.query(
+        "INSERT INTO bff_agui_event (tenant_id,session_id,public_sequence,cursor,source_owner,source_event_id,frame_index,event_type,event_payload,source_occurred_at,recorded_at) " +
+        "VALUES ($1,$2,$3,$4,'kokoro-agent',$5,0,$6,$7::jsonb,$8,CURRENT_TIMESTAMP(3)-INTERVAL '2 days')",
+        [tenantId, sessionId, sequence, cursor, sourceEventId, type, serialized, occurredAt],
+      )
+    }
+  }
+  // Model a historical missing parent precisely; leave its real durable tail intact.
+  const deleted = await pool.query("DELETE FROM bff_conversation WHERE tenant_id=$1 AND conversation_id=$2", [tenantId, orphanSessionId])
+  assert.equal(deleted.rowCount, 1)
+  const parents = await pool.query(
+    "SELECT conversation_id,owner_id,status FROM bff_conversation WHERE tenant_id=$1 AND conversation_id=ANY($2::text[]) ORDER BY conversation_id",
+    [tenantId, [orphanSessionId, controlSessionId]],
+  )
+  assert.deepEqual(parents.rows, [{ conversation_id: controlSessionId, owner_id: ownerId, status: "active" }])
+  const fingerprint = async (sessionId) => {
+    const facts = {}
+    for (const [table, order] of [
+      ["bff_agui_run_interaction", "run_id"],
+      ["bff_agui_stream", "tenant_id,session_id"],
+      ["bff_agui_event", "public_sequence"],
+      ["bff_agui_source_event", "source_sequence"],
+      ["bff_agui_cursor_tombstone", "public_sequence,cursor"],
+    ]) {
+      facts[table] = (await pool.query(
+        "SELECT to_jsonb(fact) AS row FROM " + table + " AS fact WHERE tenant_id=$1 AND session_id=$2 ORDER BY " + order,
+        [tenantId, sessionId],
+      )).rows.map(({ row }) => row)
+    }
+    return facts
+  }
+  const before = await fingerprint(orphanSessionId)
+  assert.equal(before.bff_agui_stream[0]?.latest_run_start_sequence, 3)
+  assert.equal(before.bff_agui_stream[0]?.retention_floor_sequence, 0)
+  assert.deepEqual(before.bff_agui_event.map(({ public_sequence }) => public_sequence), [1, 2, 3])
+  assert.equal(before.bff_agui_source_event.length, 3)
+  assert.deepEqual(before.bff_agui_cursor_tombstone, [])
+  store = new PostgresBffRepositories(postgresUrl, redisUrl)
+  await store.ready()
+  assert.equal(typeof store.agUiConsumers.collectGarbage, "function", "production GC method must exist")
+  const collected = await store.agUiConsumers.collectGarbage({
+    now: new Date().toISOString(), retentionMs: 1, tombstoneRetentionMs: 24 * 60 * 60 * 1000, batchSize: 100,
+  })
+  const after = await fingerprint(orphanSessionId)
+  const control = await fingerprint(controlSessionId)
+  // A real eligible parent-backed stream must still collect; skipping every stream is not a fix.
+  assert.deepEqual(control.bff_agui_event.map(({ public_sequence }) => public_sequence), [3])
+  assert.deepEqual(control.bff_agui_cursor_tombstone.map(({ public_sequence }) => public_sequence), [1, 2])
+  assert.equal(control.bff_agui_stream[0]?.retention_floor_sequence, 2)
+  assert.equal(control.bff_agui_source_event.length, 3, "source identity ledger must survive public frame GC")
+  assert.deepEqual(after, before, "without an existing same-tenant parent lock, GC must not mutate orphan stream/events/source/tombstones")
+  assert.deepEqual(collected, { streamsScanned: 1, framesDeleted: 2, tombstonesInserted: 2, tombstonesDeleted: 0 })
+})
+
+
+integrationTest("R52 GC batch one skips a valid queued-pinned A with no deletable prefix and collects eligible B history", { timeout: 30_000 }, async (context) => {
+  const { randomUUID } = await import("node:crypto")
+  const suffix = randomUUID()
+  const tenantId = "000_r52_gc_" + suffix
+  const ownerId = "r52_gc_owner_" + suffix
+  const aSessionId = "conv_a_" + suffix
+  const bSessionId = "conv_b_" + suffix
+  const sessionIds = [aSessionId, bSessionId]
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC", statement_timeout: 5000 })
+  let store = null
+  context.after(async () => {
+    const failures = []
+    if (store !== null) {
+      try { await store.close() } catch (error) { failures.push(error) }
+    }
+    // Attempt every owned cleanup and pool close, even if an earlier step fails.
+    for (const [table, column] of [
+      ["bff_agui_cursor_tombstone", "session_id"], ["bff_agui_event", "session_id"],
+      ["bff_conversation_artifact", "conversation_id"], ["bff_agui_source_event", "session_id"],
+      ["bff_agui_stream", "session_id"], ["bff_agent_cancellation_outbox", "conversation_id"],
+      ["bff_agent_dispatch_outbox", "conversation_id"], ["bff_message", "conversation_id"],
+      ["bff_conversation", "conversation_id"],
+    ]) {
+      try {
+        await pool.query("DELETE FROM " + table + " WHERE tenant_id=$1 AND " + column + "=ANY($2::text[])", [tenantId, sessionIds])
+      } catch (error) { failures.push(error) }
+    }
+    try { await pool.end() } catch (error) { failures.push(error) }
+    if (failures.length > 0) throw new AggregateError(failures, "R52 scoped GC fairness fixture cleanup failed")
+  })
+  await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
+  await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+  await pool.query(
+    "INSERT INTO bff_conversation (conversation_id,tenant_id,owner_id,title) VALUES ($1,$3,$4,'R52 A'),($2,$3,$4,'R52 B')",
+    [aSessionId, bSessionId, tenantId, ownerId],
+  )
+  const parents = await pool.query(
+    "SELECT conversation_id,tenant_id,owner_id,status FROM bff_conversation WHERE tenant_id=$1 AND conversation_id=ANY($2::text[]) ORDER BY conversation_id",
+    [tenantId, sessionIds],
+  )
+  assert.deepEqual(parents.rows, sessionIds.map((conversation_id) => ({ conversation_id, tenant_id: tenantId, owner_id: ownerId, status: "active" })))
+  store = new PostgresBffRepositories(postgresUrl, redisUrl)
+  await store.ready()
+  const submitAndClaim = async (sessionId, name) => {
+    const turn = await store.services.chatTurns.submit({
+      tenantId, conversationId: sessionId, subjectId: ownerId, actorId: ownerId,
+      requestId: "r52_request_" + name + suffix, idempotencyKey: "r52_turn_" + name + suffix,
+      content: "R52 GC fairness " + name,
+    })
+    assert.ok(turn, "a real authorized production Chat submit must create the turn")
+    const claims = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
+      workerId: "r52_worker_" + name + suffix, limit: 1, leaseDurationMs: 5000, maxAttempts: 8,
+    })
+    assert.equal(claims.length, 1)
+    assert.equal(claims[0].runId, turn.run_id, "production claim must select this fixture's pending head")
+    assert.equal(await store.agentDispatchOutbox.markAgentDispatchAdmitted(claims[0]), true)
+    return turn
+  }
+  const a = await submitAndClaim(aSessionId, "A")
+  await store.agUi.ingest(tenantId, aSessionId, [agentSource({
+    id: "r52_a_started_" + suffix, sequence: 1, kind: "run.created",
+    sessionId: aSessionId, runId: a.run_id, payload: { run_id: a.run_id },
+  })])
+  const bOld = await submitAndClaim(bSessionId, "B_old")
+  await store.agUi.ingest(tenantId, bSessionId, [
+    agentSource({ id: "r52_b_old_started_" + suffix, sequence: 1, kind: "run.created", sessionId: bSessionId, runId: bOld.run_id, payload: { run_id: bOld.run_id } }),
+    agentSource({ id: "r52_b_old_terminal_" + suffix, sequence: 2, kind: "run.completed", sessionId: bSessionId, runId: bOld.run_id, payload: { status: "completed" } }),
+  ])
+  const b = await submitAndClaim(bSessionId, "B_current")
+  await store.agUi.ingest(tenantId, bSessionId, [agentSource({
+    id: "r52_b_started_" + suffix, sequence: 3, kind: "run.created",
+    sessionId: bSessionId, runId: b.run_id, payload: { run_id: b.run_id },
+  })])
+  // Only age this run's actual production frames; live queued pins and STARTs stay intact.
+  const matured = await pool.query(
+    "UPDATE bff_agui_event SET recorded_at=CURRENT_TIMESTAMP(3)-INTERVAL '2 days' WHERE tenant_id=$1 AND session_id=ANY($2::text[])",
+    [tenantId, sessionIds],
+  )
+  assert.equal(matured.rowCount, 7)
+  const fingerprint = async (sessionId) => {
+    const facts = {}
+    for (const [table, column, order] of [
+      ["bff_conversation", "conversation_id", "conversation_id"],
+      ["bff_agent_dispatch_outbox", "conversation_id", "conversation_dispatch_seq,outbox_id"],
+      ["bff_message", "conversation_id", "message_seq,message_id"],
+      ["bff_agui_run_interaction", "session_id", "run_id"],
+      ["bff_agui_stream", "session_id", "tenant_id,session_id"],
+      ["bff_agui_event", "session_id", "public_sequence"],
+      ["bff_agui_source_event", "session_id", "source_sequence,source_owner,source_event_id"],
+      ["bff_agui_cursor_tombstone", "session_id", "public_sequence,cursor"],
+    ]) {
+      facts[table] = (await pool.query(
+        "SELECT to_jsonb(fact) AS row FROM " + table + " AS fact WHERE tenant_id=$1 AND " + column + "=$2 ORDER BY " + order,
+        [tenantId, sessionId],
+      )).rows.map(({ row }) => row)
+    }
+    return facts
+  }
+  const beforeA = await fingerprint(aSessionId)
+  const beforeB = await fingerprint(bSessionId)
+  assert.deepEqual(beforeA.bff_agui_event.map(({ public_sequence, event_type }) => [public_sequence, event_type]), [[1, "CUSTOM"], [2, "RUN_STARTED"]])
+  assert.equal(beforeA.bff_agui_event[0].event_payload.name, "kokoro.run.queued")
+  assert.equal(beforeA.bff_agui_event[0].event_payload.value.run_id, a.run_id)
+  assert.equal(beforeA.bff_agui_event[1].event_payload.runId, a.run_id)
+  assert.deepEqual(beforeA.bff_agent_dispatch_outbox.map(({ run_id, status }) => [run_id, status]), [[a.run_id, "admitted"]])
+  assert.equal(beforeA.bff_agui_stream[0].latest_run_start_sequence, 2)
+  assert.equal(beforeA.bff_agui_stream[0].retention_floor_sequence, 0)
+  assert.deepEqual(beforeA.bff_agui_cursor_tombstone, [])
+  assert.deepEqual(beforeB.bff_agui_event.map(({ public_sequence, event_type }) => [public_sequence, event_type]), [[1, "CUSTOM"], [2, "RUN_STARTED"], [3, "RUN_FINISHED"], [4, "CUSTOM"], [5, "RUN_STARTED"]])
+  assert.equal(beforeB.bff_agui_event[0].event_payload.value.run_id, bOld.run_id)
+  assert.equal(beforeB.bff_agui_event[1].event_payload.runId, bOld.run_id)
+  assert.equal(beforeB.bff_agui_event[2].event_payload.runId, bOld.run_id)
+  assert.equal(beforeB.bff_agui_event[3].event_payload.name, "kokoro.run.queued")
+  assert.equal(beforeB.bff_agui_event[3].event_payload.value.run_id, b.run_id)
+  assert.equal(beforeB.bff_agui_event[4].event_payload.runId, b.run_id)
+  assert.deepEqual(beforeB.bff_agent_dispatch_outbox.map(({ run_id, status }) => [run_id, status]), [[bOld.run_id, "terminal"], [b.run_id, "admitted"]])
+  assert.equal(beforeB.bff_agui_stream[0].latest_run_start_sequence, 5)
+  assert.equal(beforeB.bff_agui_stream[0].retention_floor_sequence, 0)
+  assert.deepEqual(beforeB.bff_agui_cursor_tombstone, [])
+  // This reader uses the real Pool and production RR query, with no query or return replacement.
+  const reader = new PostgresChatRepository({ pool })
+  const snapshotA = await reader.readSnapshot(tenantId, ownerId, aSessionId, undefined)
+  const snapshotB = await reader.readSnapshot(tenantId, ownerId, bSessionId, undefined)
+  assert.deepEqual(snapshotA?.executionHead, { runId: a.run_id, state: "active", pendingPauses: [] })
+  assert.deepEqual(snapshotB?.executionHead, { runId: b.run_id, state: "active", pendingPauses: [] })
+  const now = new Date().toISOString()
+  const cutoff = Date.parse(now) - 1000
+  assert.ok([...beforeA.bff_agui_event, ...beforeB.bff_agui_event].every(({ recorded_at }) => Date.parse(recorded_at) < cutoff))
+  // A sorts before B and meets old START-only discovery, but its live pin at 1 permits no prefix deletion.
+  assert.ok(aSessionId < bSessionId)
+  const collected = await store.agUiConsumers.collectGarbage({
+    now, retentionMs: 1000, tombstoneRetentionMs: 24 * 60 * 60 * 1000, batchSize: 1,
+  })
+  const afterA = await fingerprint(aSessionId)
+  const afterB = await fingerprint(bSessionId)
+  assert.deepEqual(afterA, beforeA, "GC must leave every A fact unchanged, including the queued pin and head")
+  assert.deepEqual(await reader.readSnapshot(tenantId, ownerId, aSessionId, undefined), snapshotA)
+  assert.deepEqual(afterB.bff_agui_event, beforeB.bff_agui_event.slice(1), "batchSize=1 must skip non-deletable A and delete exactly B's oldest expired prefix frame")
+  assert.deepEqual(afterB.bff_agui_cursor_tombstone.map(({ expired_at, ...fact }) => fact), [{
+    tenant_id: tenantId, session_id: bSessionId, cursor: beforeB.bff_agui_event[0].cursor, public_sequence: 1,
+  }])
+  assert.equal(Date.parse(afterB.bff_agui_cursor_tombstone[0].expired_at), Date.parse(now))
+  assert.equal(afterB.bff_agui_stream[0].retention_floor_sequence, 1)
+  const { updated_at: beforeUpdated, retention_floor_sequence: beforeFloor, ...beforeStream } = beforeB.bff_agui_stream[0]
+  const { updated_at: afterUpdated, retention_floor_sequence: afterFloor, ...afterStream } = afterB.bff_agui_stream[0]
+  assert.equal(beforeFloor, 0)
+  assert.equal(afterFloor, 1)
+  assert.ok(Date.parse(afterUpdated) >= Date.parse(beforeUpdated))
+  assert.deepEqual(afterStream, beforeStream, "GC may advance B's floor/time, not its source watermark, current START, version or identity")
+  for (const table of ["bff_conversation", "bff_agent_dispatch_outbox", "bff_message", "bff_agui_source_event"]) {
+    assert.deepEqual(afterB[table], beforeB[table], "B production facts must survive public prefix GC: " + table)
+  }
+  assert.deepEqual(await reader.readSnapshot(tenantId, ownerId, bSessionId, undefined), snapshotB, "B's current head, messages and opaque watermark must be preserved")
+  assert.deepEqual(collected, { streamsScanned: 1, framesDeleted: 1, tombstonesInserted: 1, tombstonesDeleted: 0 }, "eligible B must be served rather than returning an all-skipped batch")
+})
+
+
+// R57: production PostgreSQL operations only; Root supplies isolated PG/Redis. No global DROP/reset.
+
+function r57Waiting() {
+  return {
+    interaction_revision: 7,
+    pause_revision: 7,
+    pause_ref: "pause:run_hitl_1:7",
+    phase: "waiting",
+    groups: [
+      {
+        group_id: "group_tools",
+        items: [
+          {
+            item_id: "item_approve",
+            request_id: "request_tool_1",
+            kind: "tool_approval",
+            allowed_decisions: ["approve", "edit", "reject"],
+            display: {
+              name: "search",
+              description: "Search approved index",
+              editable: true,
+              input_schema: { type: "object", properties: { query: { type: "string" } } },
+              result_preview: null,
+              truncated: null,
+              source: null,
+            },
+          },
+          {
+            item_id: "item_edit",
+            request_id: "request_tool_2",
+            kind: "tool_approval",
+            allowed_decisions: ["edit", "reject"],
+            display: { name: "edit", description: "Edit parameters", editable: true, input_schema: { type: "object" } },
+          },
+          {
+            item_id: "item_reject",
+            request_id: "request_review_1",
+            kind: "result_review",
+            allowed_decisions: ["approve", "reject"],
+            display: {
+              name: "review",
+              description: "Review result",
+              editable: false,
+              input_schema: { type: "object" },
+              result_preview: "bounded result",
+              truncated: false,
+              source: "tool",
+            },
+          },
+        ],
+      },
+      {
+        group_id: "group_inputs",
+        items: [
+          {
+            item_id: "item_respond",
+            request_id: "request_question_1",
+            kind: "ask_user_question",
+            allowed_decisions: ["respond", "reject"],
+            display: { name: "question", description: "Choose a region", editable: false, input_schema: { type: "object" } },
+            validation: { code: "json_schema_invalid", instance_path: ["region", 0] },
+          },
+          {
+            item_id: "item_submit",
+            request_id: "request_input_1",
+            kind: "input",
+            allowed_decisions: ["submit"],
+            display: { name: "form", description: "Confirm values", editable: true, input_schema: { type: "object" } },
+          },
+        ],
+      },
+    ],
+    action_result: null,
+  }
+}
+function r57Control() {
+  return {
+    kind: "run.resume",
+    expected_pause_revision: 7,
+    pause_ref: "pause:run_hitl_1:7",
+    decisions: [
+      { type: "approve", item_id: "item_approve" },
+      { type: "edit", item_id: "item_edit", args: { count: 2, note: null } },
+      { type: "reject", item_id: "item_reject" },
+      { type: "respond", item_id: "item_respond", response: "continue" },
+      { type: "submit", item_id: "item_submit", value: { confirmed: true, comment: null } },
+    ],
+  }
+}
+
+async function r57Bounded(promise, label) {
+  let timer
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(label)), 5000)
+      }),
+    ])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+async function r57ProjectionContext(context) {
+  const { randomUUID } = await import("node:crypto")
+  const suffix = randomUUID().replaceAll("-", "")
+  const tenantId = "r57_projection_" + suffix,
+    sessionId = "r57_session_" + suffix,
+    ownerId = "r57_owner_" + suffix
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC", statement_timeout: 5000 })
+  let store = null
+  context.after(async () => {
+    const failures = []
+    if (store !== null) {
+      try {
+        await store.close()
+      } catch (error) {
+        failures.push(error)
+      }
+    }
+    for (const [table, column] of [
+      ["bff_agui_run_interaction", "session_id"],
+      ["bff_agui_cursor_tombstone", "session_id"],
+      ["bff_agui_event", "session_id"],
+      ["bff_conversation_artifact", "conversation_id"],
+      ["bff_agui_source_event", "session_id"],
+      ["bff_agui_stream", "session_id"],
+      ["bff_agent_cancellation_outbox", "conversation_id"],
+      ["bff_agent_dispatch_outbox", "conversation_id"],
+      ["bff_message", "conversation_id"],
+      ["bff_share", "conversation_id"],
+      ["bff_conversation", "conversation_id"],
+    ]) {
+      try {
+        if (
+          table === "bff_agui_run_interaction" &&
+          (await pool.query("SELECT to_regclass('kokoro_bff.bff_agui_run_interaction') AS name")).rows[0].name === null
+        )
+          continue
+        await pool.query(
+          "DELETE FROM " + table + " WHERE tenant_id=$1" + (column === null ? "" : " AND " + column + "=$2"),
+          column === null ? [tenantId] : [tenantId, sessionId],
+        )
+      } catch (error) {
+        failures.push(error)
+      }
+    }
+    try {
+      await pool.query("DELETE FROM bff_idempotency_receipt WHERE left(scope,length($1))=$1", [JSON.stringify([tenantId, ownerId]).slice(0, -1) + ","])
+    } catch (error) {
+      failures.push(error)
+    }
+    try {
+      await pool.end()
+    } catch (error) {
+      failures.push(error)
+    }
+    if (failures.length) throw new AggregateError(failures, "R57 scoped projection cleanup failed")
+  })
+  await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
+  await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+  store = new PostgresBffRepositories(postgresUrl, redisUrl)
+  await store.ready()
+  const runId = await submitAndAdmit(store, pool, { tenantId, sessionId, ownerId, suffix })
+  const source = (sequence, payload, kind = "interaction.state", run = runId) => {
+    const id = "r57_source_" + suffix + "_" + sequence
+    const occurredAt = new Date(sequence * 1000).toISOString()
+    const eventType = kind === "run.created" ? "run.started" : kind
+    return {
+      sourceRunId: run,
+      sourceEventId: id,
+      sourceSequence: sequence,
+      sourceOccurredAt: occurredAt,
+      sourcePayload: {
+        chat_event_id: id,
+        session_id: sessionId,
+        run_id: run,
+        source_index: sequence - 1,
+        event_type: eventType,
+        payload_json: JSON.stringify(payload),
+        seq: sequence,
+        created_at: sequence * 1000,
+      },
+      event: { event_id: id, seq: sequence, session_id: sessionId, run_id: run, kind, timestamp: occurredAt, payload },
+    }
+  }
+  const ingest = (sources) => store.agUi.ingest(tenantId, sessionId, sources)
+  const snapshot = () => store.services.chat.snapshot(tenantId, ownerId, sessionId, undefined)
+  const fingerprint = async () => {
+    const facts = {}
+    for (const [table, column, order] of [
+      ["bff_conversation", "conversation_id", "conversation_id"],
+      ["bff_message", "conversation_id", "message_id"],
+      ["bff_agent_dispatch_outbox", "conversation_id", "outbox_id"],
+      ["bff_agui_stream", "session_id", "session_id"],
+      ["bff_agui_source_event", "session_id", "source_sequence"],
+      ["bff_agui_event", "session_id", "public_sequence"],
+      ["bff_agui_cursor_tombstone", "session_id", "public_sequence"],
+      ["bff_agui_run_interaction", "session_id", "run_id"],
+    ]) {
+      if (
+        table === "bff_agui_run_interaction" &&
+        (await pool.query("SELECT to_regclass('kokoro_bff.bff_agui_run_interaction') AS name")).rows[0].name === null
+      ) {
+        facts[table] = null
+        continue
+      }
+      facts[table] = (await pool.query("SELECT * FROM " + table + " WHERE tenant_id=$1 AND " + column + "=$2 ORDER BY " + order, [tenantId, sessionId])).rows
+    }
+    return facts
+  }
+  await ingest([source(1, { run_id: runId }, "run.created")])
+  return { pool, store, tenantId, sessionId, ownerId, runId, suffix, source, ingest, snapshot, fingerprint }
+}
+function r57ExpectedHead(runId, state, pause) {
+  return { run_id: runId, state, pending_pauses: pause === undefined ? [] : [pause] }
+}
+
+integrationTest(
+  "R57 durable full revision lifecycle preserves complete resuming groups and releases FIFO only on Run terminal",
+  { timeout: 30_000 },
+  async (context) => {
+    const c = await r57ProjectionContext(context)
+    const activeBefore = await c.snapshot()
+    const queued = await c.store.services.chatTurns.submit({
+      tenantId: c.tenantId,
+      conversationId: c.sessionId,
+      subjectId: c.ownerId,
+      actorId: c.ownerId,
+      requestId: "r57_next_" + c.suffix,
+      idempotencyKey: "r57_next_key_" + c.suffix,
+      content: "Queued next Run",
+    })
+    assert.ok(queued)
+    const waiting = r57Waiting()
+    assert.equal((await c.ingest([c.source(2, waiting)])).insertedFrames, 1, "full HTTP4 revision must durably emit one CUSTOM")
+    assert.deepEqual(activeBefore.execution_head, r57ExpectedHead(c.runId, "active"))
+    const check = async (state, payload, priorCursor) => {
+      const current = await c.snapshot()
+      assert.deepEqual(current.execution_head, r57ExpectedHead(c.runId, state, state === "waiting" || state === "resuming" ? payload : undefined))
+      assert.equal(Object.hasOwn(current, "active_run"), false)
+      assert.equal(Object.hasOwn(current, "pending_pauses"), false)
+      assert.match(current.event_watermark, /^agui_[0-9a-f]{32}$/u)
+      if (priorCursor !== undefined) assert.notEqual(current.event_watermark, priorCursor)
+      const replay = await c.store.agUi.replay(c.tenantId, c.sessionId, priorCursor ?? activeBefore.event_watermark, 100)
+      assert.equal(replay.kind, "page")
+      assert.equal(replay.frames.at(-1).payload.name, "kokoro.interaction.state")
+      assert.deepEqual(replay.frames.at(-1).payload.value, payload)
+      assert.equal(replay.frames.at(-1).cursor, current.event_watermark)
+      const rows = (
+        await c.pool.query("SELECT * FROM bff_agui_run_interaction WHERE tenant_id=$1 AND session_id=$2 AND run_id=$3", [c.tenantId, c.sessionId, c.runId])
+      ).rows
+      assert.equal(rows.length, 1)
+      assert.equal(String(rows[0].interaction_revision), String(payload.interaction_revision))
+      assert.equal(rows[0].public_cursor, current.event_watermark)
+      return current
+    }
+    let previous = await check("waiting", waiting, activeBefore.event_watermark)
+    const accepted = {
+      ...waiting,
+      interaction_revision: 8,
+      phase: "resuming",
+      action_result: { command_id: "r57_resume", pause_revision: 7, kind: "accepted" },
+    }
+    await c.ingest([c.source(3, accepted)])
+    previous = await check("resuming", accepted, previous.event_watermark)
+    const unknown = { ...accepted, interaction_revision: 9, action_result: { ...accepted.action_result, kind: "unknown" } }
+    await c.ingest([c.source(4, unknown)])
+    previous = await check("resuming", unknown, previous.event_watermark)
+    const consumed = { ...unknown, interaction_revision: 10, phase: "active", groups: [], action_result: { ...unknown.action_result, kind: "native_consumed" } }
+    await c.ingest([c.source(5, consumed)])
+    previous = await check("active", consumed, previous.event_watermark)
+    assert.equal(consumed.pause_ref, waiting.pause_ref, "consumed active legitimately retains its historical locator")
+    const repause = {
+      ...waiting,
+      interaction_revision: 11,
+      pause_revision: 11,
+      pause_ref: "pause:run_hitl_1:11",
+      groups: [waiting.groups[1]],
+      action_result: consumed.action_result,
+    }
+    await c.ingest([c.source(6, repause)])
+    previous = await check("waiting", repause, previous.event_watermark)
+    const resumedAgain = {
+      ...repause,
+      interaction_revision: 12,
+      phase: "resuming",
+      action_result: { command_id: "r57_resume_again", pause_revision: 11, kind: "accepted" },
+    }
+    await c.ingest([c.source(7, resumedAgain)])
+    previous = await check("resuming", resumedAgain, previous.event_watermark)
+    const validationFailed = {
+      ...repause,
+      interaction_revision: 13,
+      pause_revision: 13,
+      pause_ref: "pause:run_hitl_1:13",
+      action_result: { command_id: "r57_resume_again", pause_revision: 11, kind: "validation_failed" },
+    }
+    await c.ingest([c.source(8, validationFailed)])
+    previous = await check("waiting", validationFailed, previous.event_watermark)
+    const interactionTerminal = {
+      ...validationFailed,
+      interaction_revision: 14,
+      phase: "terminal",
+      groups: [],
+      action_result: { command_id: "r57_cancel", pause_revision: 13, kind: "cancelled" },
+    }
+    await c.ingest([c.source(9, interactionTerminal)])
+    previous = await check("active", interactionTerminal, previous.event_watermark)
+    const beforeTerminal = await c.fingerprint()
+    assert.equal(beforeTerminal.bff_agent_dispatch_outbox.find((row) => row.run_id === c.runId).status, "admitted")
+    assert.ok(beforeTerminal.bff_agui_event.every((row) => row.event_type !== "RUN_FINISHED"))
+    await c.ingest([c.source(10, { status: "completed" }, "run.completed")])
+    const final = await c.snapshot()
+    assert.deepEqual(final.execution_head, r57ExpectedHead(queued.run_id, "queued"))
+    const finalReplay = await c.store.agUi.replay(c.tenantId, c.sessionId, previous.event_watermark, 100)
+    assert.equal(finalReplay.kind, "page")
+    assert.deepEqual(
+      finalReplay.frames.map((frame) => frame.eventType),
+      ["RUN_FINISHED", "CUSTOM"],
+    )
+    assert.equal(finalReplay.frames[1].payload.name, "kokoro.run.queued")
+    assert.equal(finalReplay.frames.at(-1).cursor, final.event_watermark)
+  },
+)
+integrationTest(
+  "R57 same full revision is a frame no-op but optional presence or stale revision is an atomic conflict",
+  { timeout: 30_000 },
+  async (context) => {
+    const c = await r57ProjectionContext(context),
+      waiting = r57Waiting()
+    assert.equal((await c.ingest([c.source(2, waiting)])).insertedFrames, 1)
+    const before = await c.snapshot()
+    const repeated = await c.ingest([c.source(3, structuredClone(waiting))])
+    assert.equal(repeated.insertedSources, 1)
+    assert.equal(repeated.insertedFrames, 0)
+    assert.equal(repeated.sourceHighWatermark, 3)
+    assert.deepEqual(await c.snapshot(), before)
+    const facts = await c.fingerprint()
+    const omitted = structuredClone(waiting)
+    for (const key of ["result_preview", "truncated", "source"]) delete omitted.groups[0].items[0].display[key]
+    await assert.rejects(c.ingest([c.source(4, omitted)]))
+    assert.deepEqual(await c.fingerprint(), facts, "same revision with different optional presence must write nothing")
+    const stale = { ...waiting, interaction_revision: 6, pause_revision: 6, pause_ref: "pause:run_hitl_1:6" }
+    await assert.rejects(c.ingest([c.source(4, stale)]))
+    assert.deepEqual(await c.fingerprint(), facts)
+    const newer = { ...omitted, interaction_revision: 8 }
+    assert.equal((await c.ingest([c.source(4, newer)])).insertedFrames, 1)
+    const after = await c.snapshot()
+    assert.deepEqual(after.execution_head, r57ExpectedHead(c.runId, "waiting", newer))
+    assert.notEqual(after.event_watermark, before.event_watermark)
+  },
+)
+integrationTest(
+  "R57 malformed full-state in a mixed production ingest rolls back preceding valid revision and every fact",
+  { timeout: 30_000 },
+  async (context) => {
+    const c = await r57ProjectionContext(context)
+    const before = await c.fingerprint()
+    const invalid = r57Waiting()
+    invalid.groups[1].items[0].item_id = invalid.groups[0].items[0].item_id
+    await assert.rejects(c.ingest([c.source(2, r57Waiting()), c.source(3, { ...invalid, interaction_revision: 8 })]))
+    assert.deepEqual(await c.fingerprint(), before, "mixed invalid page cannot write a source prefix, state, assistant, dispatch, stream CAS or cursor")
+  },
+)
+integrationTest("R57 interaction CUSTOM insertion failure rolls back source row typed state CAS and public watermark", { timeout: 30_000 }, async (context) => {
+  const c = await r57ProjectionContext(context)
+  const before = await c.fingerprint(),
+    snapshot = await c.snapshot()
+  const fn = "r57_frame_fail_" + c.suffix,
+    trigger = "r57_frame_trigger_" + c.suffix
+  try {
+    await c.pool.query(
+      "CREATE FUNCTION " +
+        fn +
+        "() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id = '" +
+        c.tenantId +
+        "' AND NEW.session_id = '" +
+        c.sessionId +
+        "' AND NEW.event_type = 'CUSTOM' AND NEW.event_payload->>'name' = 'kokoro.interaction.state' THEN RAISE EXCEPTION 'r57_owned_custom_insert_failure'; END IF; RETURN NEW; END $$",
+    )
+    await c.pool.query("CREATE TRIGGER " + trigger + " BEFORE INSERT ON bff_agui_event FOR EACH ROW EXECUTE FUNCTION " + fn + "()")
+    await assert.rejects(c.ingest([c.source(2, r57Waiting())]), /r57_owned_custom_insert_failure/u)
+    assert.deepEqual(await c.fingerprint(), before)
+    assert.deepEqual(await c.snapshot(), snapshot)
+  } finally {
+    const failures = []
+    try {
+      await c.pool.query("DROP TRIGGER IF EXISTS " + trigger + " ON bff_agui_event")
+    } catch (error) {
+      failures.push(error)
+    }
+    try {
+      await c.pool.query("DROP FUNCTION IF EXISTS " + fn + "()")
+    } catch (error) {
+      failures.push(error)
+    }
+    if (failures.length) throw new AggregateError(failures, "R57 owned trigger cleanup failed")
+  }
+  assert.equal((await c.ingest([c.source(2, r57Waiting())])).insertedFrames, 1, "healthy same source must succeed after rollback")
+})
+integrationTest(
+  "R57 authorized RR snapshot keeps old complete pause and cursor while a genuine independent revision commits",
+  { timeout: 30_000 },
+  async (context) => {
+    const c = await r57ProjectionContext(context)
+    const { ChatApplicationService } = await import("../dist/application/chat-service.js")
+    const waiting = r57Waiting()
+    assert.equal((await c.ingest([c.source(2, waiting)])).insertedFrames, 1)
+    const before = await c.snapshot()
+    let authorize, release
+    const authorized = new Promise((resolve) => {
+      authorize = resolve
+    })
+    const released = new Promise((resolve) => {
+      release = resolve
+    })
+    const reader = await c.pool.connect()
+    let returned = false,
+      pending = null,
+      gatedOnce = false
+    try {
+      const repository = new PostgresChatRepository({
+        pool: {
+          connect: async () => ({
+            query: async (sql, values) => {
+              const result = await reader.query(sql, values)
+              if (!gatedOnce && sql.includes("FROM bff_conversation") && sql.includes("LIMIT 1")) {
+                gatedOnce = true
+                assert.equal(result.rows[0]?.conversation_id, c.sessionId)
+                assert.equal((await reader.query("SHOW transaction_isolation")).rows[0].transaction_isolation, "repeatable read")
+                authorize()
+                await released
+              }
+              return result
+            },
+            release: () => {
+              returned = true
+              reader.release()
+            },
+          }),
+        },
+      })
+      pending = new ChatApplicationService(repository).snapshot(c.tenantId, c.ownerId, c.sessionId, undefined)
+      void pending.catch(() => undefined)
+      await r57Bounded(
+        Promise.race([
+          authorized,
+          pending.then(() => {
+            throw new Error("snapshot finished before real authorization barrier")
+          }),
+        ]),
+        "R57 RR authorization timeout",
+      )
+      const accepted = {
+        ...waiting,
+        interaction_revision: 8,
+        phase: "resuming",
+        action_result: { command_id: "r57_rr_control", pause_revision: 7, kind: "accepted" },
+      }
+      await r57Bounded(c.ingest([c.source(3, accepted)]), "R57 independent production revision writer timeout")
+      const fresh = await c.snapshot()
+      release()
+      const old = await r57Bounded(pending, "R57 RR reader release timeout")
+      assert.deepEqual(old.execution_head, r57ExpectedHead(c.runId, "waiting", waiting))
+      assert.equal(old.event_watermark, before.event_watermark)
+      assert.deepEqual(fresh.execution_head, r57ExpectedHead(c.runId, "resuming", accepted))
+      assert.notEqual(fresh.event_watermark, before.event_watermark)
+    } finally {
+      release()
+      if (pending !== null) await pending.catch(() => undefined)
+      if (!returned) reader.release()
+    }
+  },
+)
+
+integrationTest(
+  "R57 full interaction ingestion rejects foreign run source gap and stale lease without changing any durable fact",
+  { timeout: 30_000 },
+  async (context) => {
+    const c = await r57ProjectionContext(context)
+    assert.equal((await c.ingest([c.source(2, r57Waiting())])).insertedFrames, 1)
+    const before = await c.fingerprint()
+    const newer = { ...r57Waiting(), interaction_revision: 8 }
+    await assert.rejects(c.ingest([c.source(3, newer, "interaction.state", "foreign_unadmitted_run")]))
+    assert.deepEqual(await c.fingerprint(), before)
+    await assert.rejects(c.ingest([c.source(4, newer)]))
+    assert.deepEqual(await c.fingerprint(), before)
+    const [lease] = await c.store.agUiConsumers.claimConsumers({
+      workerId: "r57_lease_" + c.suffix,
+      now: new Date().toISOString(),
+      leaseUntil: new Date(Date.now() + 5000).toISOString(),
+      limit: 1,
+    })
+    assert.equal(lease?.tenantId, c.tenantId)
+    assert.equal(lease?.sessionId, c.sessionId)
+    const leasedBefore = await c.fingerprint()
+    await assert.rejects(c.store.agUi.ingest(c.tenantId, c.sessionId, [c.source(3, newer)], { ...lease, fence: lease.fence + 1 }))
+    assert.deepEqual(await c.fingerprint(), leasedBefore)
+    assert.equal(
+      (await c.store.agUi.ingest(c.tenantId, c.sessionId, [c.source(3, newer)], lease)).insertedFrames,
+      1,
+      "the genuine current lease and contiguous source must still commit",
+    )
+    assert.equal(await c.store.agUiConsumers.releaseConsumer(lease, new Date().toISOString()), true)
+  },
+)
+
+integrationTest("R61 a distinct START after full interaction is atomically rejected while exact START replay is idempotent", { timeout: 30_000 }, async (context) => {
+  const c = await r57ProjectionContext(context)
+  await c.ingest([c.source(2, r57Waiting())])
+  const before = await c.fingerprint()
+  const snapshot = await c.snapshot()
+  await assert.rejects(c.ingest([c.source(3, { run_id: c.runId }, "run.created")]), /source identity conflict/u)
+  assert.deepEqual(await c.fingerprint(), before)
+  assert.deepEqual(await c.snapshot(), snapshot)
+  const replay = await c.ingest([c.source(1, { run_id: c.runId }, "run.created")])
+  assert.equal(replay.insertedSources, 0)
+  assert.equal(replay.insertedFrames, 0)
+  assert.deepEqual(await c.fingerprint(), before)
+  // Prove the rejected source did not damage the current stream's future write boundary.
+  const next = { ...r57Waiting(), interaction_revision: 8 }
+  assert.equal((await c.ingest([c.source(3, next)])).insertedFrames, 1)
+  assert.deepEqual((await c.snapshot()).execution_head, r57ExpectedHead(c.runId, "waiting", next))
 })

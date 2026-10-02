@@ -14,6 +14,7 @@ it("resolves cursor, frame page, head, and run terminal state in one database st
         if (sql.includes("cursor_position")) {
           return {
             rows: [{
+              head_identity_valid: true,
               cursor_valid: true,
               after_sequence: "4",
               head_sequence: "5",

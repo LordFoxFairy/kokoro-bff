@@ -29,50 +29,68 @@ describe("Agent event-protocol provenance", () => {
         provenance_sha256: manifest.owner.provenance_sha256,
       },
       {
-        repository_commit: "f3be3b97dd67df69ed3c6cb88c59f3bc2db97703",
-        contract_version: "3.0.0",
+        repository_commit: "e977923ea9992cbddaf0cdbc6c8f8d23b3af120e",
+        contract_version: "4.0.0",
         contract_path: "contract/openapi/v1/openapi.json",
-        contract_sha256: "e9f0a543f74dee34212f0ea4fe366d46218268462ac54dce08e41965f34d2d2c",
+        contract_sha256: "763ff7a9cf668eb59ae7cfb59b2fd4f84fafde124063d9a365f138b6a30cf04f",
         provenance_path: "contract/provenance.json",
-        provenance_sha256: "d116657f65027de8bd829dc0408fd86046da0ac0a1d2934bd2a87e835c897b5f",
+        provenance_sha256: "e2e6cd9f2228900d0c0a8d795f19815a145bd8f0d18c785ffbe059214b5ed99a",
       },
     )
     assert.deepEqual(
       manifest.generated.find(({ path }) => path === "failure-profile.gen.ts"),
       {
         path: "failure-profile.gen.ts",
-        source_sha256: "e9f0a543f74dee34212f0ea4fe366d46218268462ac54dce08e41965f34d2d2c",
+        source_sha256: "763ff7a9cf668eb59ae7cfb59b2fd4f84fafde124063d9a365f138b6a30cf04f",
         sha256: manifest.generated.find(({ path }) => path === "failure-profile.gen.ts")?.sha256,
       },
     )
     assert.match(manifest.generated.find(({ path }) => path === "failure-profile.gen.ts")?.sha256 ?? "", /^[0-9a-f]{64}$/u)
   })
 
-  it("keeps the independently published S4 delivery source pinned across the HTTP repin", async () => {
+  it("uses one HTTP4 publication for delivery and interaction with no split source pin", async () => {
     const manifest = JSON.parse(await readFile(new URL("../contract/dependencies/agent-http.json", import.meta.url), "utf8"))
-    assert.deepEqual(manifest.event_protocol, {
-      owner: "kokoro-agent",
-      source_commit: "486adb1539dd8a06ca90684e66f91be031aa70cf",
-      provenance_combined_sha256: "cae30a40d712bce39ef33ef2dc857af4f5b69c6afd1956fda065ec77379ae02e",
-      source_path: "src/kokoro_agent/protocol/events.py",
-      source_sha256: "0ba59b358db00e53490555e450af060c8a728133a9cf8bfeb49361186adc0f1c",
-      event_kind: "delivery.created",
-    })
+    assert.equal(Object.hasOwn(manifest, "event_protocol"), false)
+    assert.equal(manifest.owner.repository_commit, "e977923ea9992cbddaf0cdbc6c8f8d23b3af120e")
+    assert.equal(manifest.generated.length, 17)
   })
 
-  it("verifies the frozen owner event source bytes and exact regular-file allowlist", async () => {
-    const { assertEventProtocolSource } = await import("../scripts/generate-agent-http-client.mjs")
-    const source = await readFile(
-      new URL("../contract/vendor/kokoro-agent/486adb1539dd8a06ca90684e66f91be031aa70cf/src/kokoro_agent/protocol/events.py", import.meta.url),
+  it("verifies the published full-state graph and rejects weakened required, closed, enum and decision schemas", async () => {
+    const { assertInteractionContractSchema } = await import("../scripts/generate-agent-http-client.mjs")
+    const owner = JSON.parse(
+      await readFile(new URL("../contract/vendor/kokoro-agent/e977923ea9992cbddaf0cdbc6c8f8d23b3af120e/openapi.json", import.meta.url), "utf8"),
     )
-    const tree = {
-      files: ["src/kokoro_agent/protocol/events.py"],
-      directories: ["src", "src/kokoro_agent", "src/kokoro_agent/protocol"],
+    assert.doesNotThrow(() => assertInteractionContractSchema(owner))
+    for (const change of [
+      (s) => {
+        delete s.ChatEvent["x-kokoro-decoded-payloads"].mapping["interaction.state"]
+      },
+      (s) => {
+        s.ChatEvent.properties.event_type.enum.push("interaction")
+      },
+      (s) => {
+        s.ChatInteractionState.required.pop()
+      },
+      (s) => {
+        s.InteractionDisplay.additionalProperties = true
+      },
+      (s) => {
+        s.InteractionItem.properties.allowed_decisions.uniqueItems = false
+      },
+      (s) => {
+        s.ResumeControl.properties.expected_pause_revision.minimum = 0
+      },
+      (s) => {
+        s.ResumeDecision.oneOf[0].additionalProperties = true
+      },
+      (s) => {
+        s.ResumeDecision.oneOf[1].properties.type.const = "approve"
+      },
+    ]) {
+      const candidate = structuredClone(owner)
+      change(candidate.components.schemas)
+      assert.throws(() => assertInteractionContractSchema(candidate))
     }
-    assert.doesNotThrow(() => assertEventProtocolSource(tree, source))
-    assert.throws(() => assertEventProtocolSource(tree, Buffer.concat([source, Buffer.from("\n")])), /digest/u)
-    assert.throws(() => assertEventProtocolSource({ ...tree, files: [...tree.files, "unexpected.py"] }, source), /allowlist/u)
-    assert.throws(() => assertEventProtocolSource({ ...tree, files: [] }, source), /allowlist/u)
   })
 
   it("rejects every strict failure-schema graph mutant before generation", async () => {
@@ -226,4 +244,23 @@ it("typed selection runtime and public limits match the fixed Agent machine cont
   assert.equal(parseSkillSourceSelection([...max, "skill:extra"]), null)
   assert.equal(parseSkillSourceSelection(["skill:a", "skill:a"]), null)
   assert.equal(parseSkillSourceSelection(new Array(1)), null)
+})
+
+it("Agent4 receipt digest matches owner Unicode code-point ordering and JSON float representation without deleting business null", async () => {
+  const { agentControlRequestDigest } = await import("../dist/infrastructure/clients/agent/control-receipt.js")
+  const body = {
+    kind: "run.resume",
+    session_id: "session_1",
+    expected_pause_revision: 7,
+    pause_ref: "pause_7",
+    decisions: [{ type: "submit", item_id: "item_1", value: { "\u{10000}": null, "\ue000": 1e-7, small: 1e-5 } }],
+  }
+  const { buildAgentControl } = await import("../dist/infrastructure/clients/agent/control.js")
+  const { session_id, ...controlInput } = body
+  assert.deepEqual(buildAgentControl(session_id, controlInput), body, "golden digest input first passes the pinned owner control schema")
+  // Fixed owner protocol/control.py: json.dumps(ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).
+  assert.equal(agentControlRequestDigest("run_unicode", body), "sha256:6144ae19555668d96796dc9fd2851aa3b79ad4ca88af35c2352003a26b39d9b3")
+  const withoutNull = structuredClone(body)
+  delete withoutNull.decisions[0].value["\u{10000}"]
+  assert.notEqual(agentControlRequestDigest("run_unicode", withoutNull), agentControlRequestDigest("run_unicode", body))
 })

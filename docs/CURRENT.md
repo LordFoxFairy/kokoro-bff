@@ -1,3 +1,64 @@
+## Root R64：public4 / Agent4 切片实际验收
+
+Root冻结全436、六R57保护区、四D0旧body、3删除核对；生产源码独立0P0/P1/P2，最终fixture/HTTP断言独立0P0/P1/P2。Node22完整真实PG/Redis/localhost HTTP81pass/0fail/0skip22.9486s，/tmp/kokoro-bff-r64b-full-root-integration.log。owned bff_full_r64b_73945ee6216a480e closed/tracked_unchanged=true/cleanup_errors=[]/unrelated_databases_removed=[]/new_databases_remaining=[]/Redis15余0；owner资源是临时库/同现PG Redis实例，不清共享状态。
+
+此前R62完整71pass10fail，R64首轮77pass4fail均保原日志：先修owner schema/合法RR父事实/精确持久dispatch序号/exhausted terminal，再修三HTTP queued/预算2的五帧三页断言。首轮另Scheduled ready单次null，最终同源码例通过，当前仅默认毫秒available_at舍入的假设，诊断仍待，未声称该风险已修。不能以最终81绿删除该历史失败或声称全用户旅程完成。
+
+本片删除旧public active_run/顶层pending及旧Agent3 artifact/legacy selectors，仅public4完整execution_head/fullpause和固定Agent HTTP4。真实Agent端消费、Web准确发布消费者、IAM→真实模型双轮/刷新及正式积分/文件/独立任务能力仍各门待验，当前owner组件验收不代替整链。Root最后完整离线门日志/tmp/kokoro-bff-r64-root-offline-final.log；源码及机器由先前冻结固定，只有本段CURRENT追加证据。
+
+## R62 / R59 实施状态：public4 完整候选已离线验证，未发布或资源验收
+
+当前 BFF 分支/基线 main / 759bfe0a8c521946cae31a74b6426f43b063bae1；WIN02 唯一写入、Root 独占 Git/共享资源/集成验收。R59 与 R61/R62 精准追加写集形成当前候选；以下 R48 原 body 逐字节保留，不以历史阶段句替代当前事实。
+
+- canonical public OpenAPI 4.0.0：唯一 execution_head 四态与完整 pending collection，删除 active_run/顶层 pending；required revision/ref、五类 closed decisions。Agent HTTP4 固定 e977923ea9992cbddaf0cdbc6c8f8d23b3af120e，旧两个 vendor/split event pin 已删除，17 文件仅正规生成。
+- 一张 bff_agui_run_interaction；完整 state 与 source/CUSTOM/cursor/HWM/CAS 同事务，no-op 只推进 source；授权 RR 核验 head、START、完整 state/source/frame 的存在性与 digest。GC 保留活跃依赖，ACK 不消费 pause，resume 读取完整集合后才调用 owner。
+- R57 六段冻结断言原字节保持；R59 旧九项、R61 配送合法 FIFO/START fixture 与 R62 两个无 pause active head 断言仅按批准语义迁移。重复 START 问题已加 app/事务拒绝及纯回归；exact START replay/拒绝后合法写集的真实回归追加在现 integration 文件末尾，待 Root 执行。
+- Root R62 授权的普通 interaction persistence helper 已抽出：原 projection repository 739 行、helper 165 行；父锁/lease/CAS/事务提交留原 repo，无反向 repo import。职责表见 TECHNICAL_DESIGN 当前前缀。
+- 本轮实际 Node 22.22.2 / pnpm 11.25.0：pnpm format:check、lint、typecheck、contract:check、test:architecture、schema:check、test、build 均 exit 0。pnpm test 628 pass / 0 fail / 1 resource skip；contract:test 214 pass / 0 skip；architecture 27 pass；schema:check 8 pass / 1 resource skip。Agent 17 文件两次生成 byte-identical；OpenAPI 88 operations，保留两个既有 lint warnings，未放宽门。日志 /tmp/kokoro-bff-r62-offline-results.json 及各项引用。
+- 三个获准 Scheduled 文件仅固定 Prettier 机械格式化：HEAD 重放精确相等；TS 与 emit JS 结构（节点/标识符/字面量/operator/顺序及 ASI 语句结构，忽略位置/trivia/冗余括号）相等；emit JS 经同一 Prettier 后字节相等。最初 raw emit JS 比对因换行差异失败，明确不是 raw byte-equal；Root 已接受此修订证据口径。详见 /tmp/kokoro-bff-r62-scheduled-format-proof.json 与原 emit 文件。
+- control receipt 对齐固定 owner Python JSON 的 Unicode code-point key 排序和数字表示；业务 null 保留，外层 fingerprint 与 interaction_digest 不变。9,991 有限数字纯交叉向量 0 差异，Unicode/null 固定 expected digest 输入先通过 pinned control schema；不替代 owner HTTP/资源验收。
+
+本窗口未执行真实 PostgreSQL/Redis/HTTP、fresh catalog、双连接 RR/lease/CAS/GC 或真实 Agent admission/消费、Web 发布消费者验收；未启动共享服务、创建数据库/角色、操作 Git。整片文件、R57 区域、四文档历史 body、格式证明及本轮日志收录 /tmp/kokoro-bff-r62-final-freeze.json 后停写，后续 owner 为 Root。源码候选/离线通过不代表 public4 发布或用户端到端闭环。
+
+---
+
+## R48-BFF-D0：Agent4/full pause/public4 三面已形成设计候选，等待 Root 放行
+
+本前缀是当前阶段记录；以下原正文全部保留历史，包括旧“等待 Agent 发布”状态，后继不得据其继续猜 owner。WIN02 为 BFF 唯一 writer；基线 main 759bfe0a8c521946cae31a74b6426f43b063bae1，本轮仅 docs/TECHNICAL_DESIGN.md、docs/API_CONTRACT.md、docs/DATA_MODEL.md、docs/CURRENT.md 前置当前方案，旧 body 逐字节保留。没有 Git/index/commit、共享服务、PG/Redis、源码/测试/SQL/contract/pin/generated 写入。
+
+### 当前 owner 与三面决定
+
+Agent main e977923ea9992cbddaf0cdbc6c8f8d23b3af120e 的 HTTP4.0.0 已由 Root 发布；机器 contract SHA-256 763ff7a9cf668eb59ae7cfb59b2fd4f84fafde124063d9a365f138b6a30cf04f、provenance SHA-256 e2e6cd9f2228900d0c0a8d795f19815a145bd8f0d18c785ffbe059214b5ed99a、combined 7710ec0e88b55c15279503d6d4aa9494f3ee91c5411284f255df8f107fdc5806。interaction.state 必须携带完整 revision/groups/action_result；ResumeControl 必须 expected_pause_revision/pause_ref 与完整 decisions。LaunchRequest 没有 retry_of_run_id，未发布 retry4.1 不纳入本 cut。
+
+三面已对齐为待审设计：execution_head 的 queued|active|waiting|resuming（active 对应 UI streaming）、当前 full PendingPause 与 event_watermark 同一授权 RR；waiting/resuming 保留完整集合，不做 partial merge、不用固定[]冒充有效无 pause；202 ACK 不是 native consumption。新 bff_agui_run_interaction 最新 run-scoped read model 与 source/CUSTOM/cursor/CAS 同事务，canonical schema 唯一；resume reuse 现 receipt/auth/幂等，owner 最终复核 locator/整集合，不持数据库锁跨网络。public4 在原 /v1 corrective 发布，删除 active_run/旧顶层 pending/旧 Agent3消费，无双轨 fallback；BFF 全切片发布后 Web 才固定 artifact/fresh 激活。精确文件集、放置表、状态/失败恢复与 RED 在 TECH/API/DATA 的 R48 前缀，不新建计划中心。
+
+### R56 P2：digest 文案返修，源码/向量仍未迁移
+
+BFF mutation fingerprint 绑定本仓外层 durable receipt scope（可信 tenant/subject/method/path/key）及现 method/path/query/canonical headers/semantic body 请求语义；它是现 stableStringify 指纹，不是 Agent request_digest，也不是 interaction_digest。不同请求表示是否在 BFF receipt 层冲突仍按本仓规则；owner 的 null/omitted 等值不自动使两份 BFF mutation fingerprint 或 receipt 可互换，不重写全站幂等策略。
+
+Agent4 control request digest 基于固定 owner 的 RunResume typed normalization：material 含 kind/run_id/session_id/expected_pause_revision/pause_ref/decisions，排除 command_id/request_digest；只在 owner 声明的可选 nullable model 字段 approve.args、reject.reason 上将 null 与 omitted 归为同值。其余 required locator/item identity 不默认、不省略；decisions 保序；对象键排序、紧凑 UTF-8 JSON 后输出 sha256:<hex>。不得递归删除 submit.value、edit.args 或非空 approve.args 内的业务 null；业务字典中的 {"x":null} 与 {} 是不同 material。
+
+interaction_digest 仅绑定 owner 完整六字段 full state：对象键递归排序、groups/items 等数组保序，optional 字段的实际存在性与 null 值保持；不套用 control 的 optional-null 归一规则。同 revision 的 full-state digest 相等才允许 no-op，mutation fingerprint/control digest 均不能证明 state/source 相等。
+
+现 src/infrastructure/clients/agent/control.ts、control-receipt.ts 与 control route 仍消费旧逻辑，后继必须在已列精准写集迁移 required locator、typed normalization 和 receipt digest 对照；对应现 test/agent-control-adapter.test.ts 的 owner-fixed 向量至少覆盖 approve.args/reject.reason null↔omitted 同 digest、submit.value/edit.args/非空 approve.args 内业务 null 保留且不同 digest、排除 delivery IDs、required revision/ref 与决策顺序。full-state 同 revision optional omitted↔null 不等值的投影向量独立保留，不用 control 向量替代。当前仅修正文档，未迁移 adapter/向量，不构成 public4 完成。
+
+本轮仅改四份当前前缀的 digest 语义；旧 body 完整保护。GC source 0fce9906d35f5922d5f9841ba803e2fb6e2e81369ef9efe1471e00954fc6705c 与 R52 test 6e1f1a78c1bf64d9abc3eabbe774ed9dcb5944c3b12d575c06e387eed56adb05 保持冻结、由 Root 另行审验；以下 R48 实测是原阶段记录，不据其冒称当前完整 public4 或投影矩阵已过。
+
+### 实测证据与冻结范围
+
+- Root R47 authority 真 PG **4passed/0failed/0skip，281.213ms**；独立审 0P0/P1/P2。对应 consumer source b0741f1055cc6832b0d0886a062ff546f7548718562a097b9943f61ec4b3785f、R46 authority test 55cc7cfdb31a462db285df6188e240edae022b3c6705ed1d3ba370d1fcd4a731 全文继续冻结。该门只证明 register/GC 父边界，不证明 public4 或 GC公平性。
+- Root 现完整 test/agui-projection.integration.mjs **21passed/9failed/0skip，1661.549ms**，实际30顶层；日志 /tmp/kokoro-bff-projection-r48-root-regression.log。owned bff_projection_r48_329b89a26d64411e 已关闭、Redis15余0、无 cleanup 错误。WIN03 只读归因为7项 queued/head-aware 精确语义迁移、1项 eligible-later 合法 fixture 缺父、1项 public head 能力缺失；Root独立审核/精确写卡仍待完成，原断言未改。
+- 新独立 P1：candidate 以 sequence<START 挑入，但 delete 以 min(START,live queued) 删除，会让 A boundary1 无可删帧占满 batchSize1、饿死后续可删 B。后继唯一 A/B 真父、真实 submit/claim/admitted/ingest 的 tests-only RED 卡在 TECH；candidate/requery/delete 的 effective boundary 与 LIMIT 前完整 eligibility 必须一致。尚未追加测试、未执行真实 RED、未修源码。
+- 本轮无资源检查：固定 Agent owner JSON 的版本/digest/required six-field full state/required ResumeControl 与无 retry 字段检查通过；Node22 node scripts/check-contract.mjs 与 node --import tsx scripts/verify-openapi.ts 各 PASS（88 frozen operations）。这是冻结 public3 的治理/语义检查，不是 public4 验收。四旧 body 尾部 hash 与其余429 tracked 文件保护在写入后独立校验；没有把 Markdown 一致性称作运行门。
+
+### 未决与后续 owner
+
+状态为 D0待审，不是实现完成：Root/独立审先裁决当前三面与九失败精确迁移，再逐卡授 tests-only（先独立GC公平性实际RED）、source/机器/SQL/固定生成消费；所有发布字段与完整 pending/source/transaction 需真正同片转绿。Root 后继执行 contract:check、schema:check、test:architecture、完整 test/build、自有空 kokoro_bff schema db:apply-schema/catalog drift、串行真实 integration、完整 pause/control/unknown/re-pause/rollback/RR/restart/GC与精确锁 barrier，再独立审、提交发布。未执行门明确待验，不靠 skip/过滤CUSTOM/删除安全断言消除失败。
+
+当前 public canonical 仍3.0.0、Agent3消费仍未切换，新表不存在；四内部源与 consumer、原测试、所有机器/SQL/generated/pin字节保持。本轮不宣称全 BFF GREEN、Web/fresh schema组合或正式 IAM→模型多轮→余额预占/结算/释放旅程已通过；后续 owner为 BFF WIN02（精准写卡）、Root（审查/资源/Git/发布）、Web（已发布 artifact 消费）。
+
+---
+
 ## R33 scheduled accept 锁后租约复验局部已验
 
 沿现 ScheduledTask owner，receipt→task→scope→dispatch 全部潜在锁等待后、terminal receipt UPDATE 前同连接再取 DB clock；原 lease 失效即整个事务 ROLLBACK/false，保 pending ACK/零新scope或dispatch。无延lease/Nodeclock/旧fallback，API/schema/envelope未变。Root frozen source8662196e0fbb34f046229c900d30492ffd6771bb7ef00747bf3e5ae4095eb5df，test64dc829477124d76e4e4228653be8582a98e5c9d3cc07e7df68ec8ebc5f58abd；独立Sol终审0P0/P1/P2。
@@ -27,6 +88,28 @@ R26独立复审新增的source digest缺口已进入返修：digest算法移至S
 R24曾取得隔离真实PG 51 passed与离线555 passed，但独立复审确认五组P1，故该结果只作为历史候选证据，不是完整Scheduled gate验收：terminal非末页过早释放；COMMIT前/网络前预算边界不完整；runner缺有界多scope并行；周期错误静默且缺正式退避观测；15项矩阵多为代码行映射而非真实故障注入。
 
 R25冻结目标是不改公开wire/owner/DDL，在现三表与runner内补terminal drain anchor、最终预算与fenced never-sent release、有界worker pool、runtime结构化log hook及全参数严格校验。必须以真实多连接证明enqueue-receipt rollback、callback/delete两个赢家、精确backend PID barrier、N+1 cursor、terminal跨页、冲突批零写、expired/never-sent、慢scope隔离与错误退避。R25代码与新真实矩阵完成前保持“返修中”。public queued/inflight identity、TTL/purge、Scheduled query/cancel仍属后续。
+
+## BFF-EXECUTION-HEAD-D0 当前状态（R27 设计候选）
+
+### BFF-QUEUED-RED-R27 测试卡（tests-only，预期RED）
+
+本波只在现`test/chat-service.test.ts`、`test/chat-facts.integration.mjs`、`test/agui-projection.integration.mjs`、`test/agui-http.integration.mjs`写public 4.0 queued head RED：精确run identity、四个nonterminal state映射、submit时Message/outbox/queued frame/cursor同事务、幂等replay不增cursor、FIFO A head/B waiting、terminal handoff及GC不伪造terminal head。Agent HITL full revision、waiting/resuming machine/source/DDL不在本波猜测或实现。
+
+当前生产/OpenAPI/Schema仍为3.0旧行为，因此这些新增断言必须真实失败；不使用skip/xfail/弱断言，也不把既有3.0门当4.0验收。Root独占自有PostgreSQL/Redis运行四integration文件；本Agent只运行无基础设施的unit RED并交精确失败。
+
+当前commit `d6b7da5200784ed1838de396011d3ed6a8934124`的Chat snapshot仍只在latest=expected时返回`active_run`；durable enqueue/claim/admitted到RUN_STARTED前没有public run identity，enqueue也不推进cursor。尚未修改OpenAPI、Schema、TypeScript、测试或Web。
+
+Root已裁决首次上线前public `4.0.0` corrective：保留`/v1`但只发布breaking新schema；ROLE2 3.0为正式基线，删除旧consumer，不建v2/双轨。BFF owner artifact先固定，Web后repin/fresh组合；future BFF retry为4.1并依赖Agent实际retry发布。Agent HITL 4.0仍是D0候选，版本号一致不代表依赖能力已完成。
+
+锁图已精确到函数：submit/delete/artifact为Conversation-first；claim/failure及consumer/GC尚未统一。目标Conversation→stream→dispatch→Message/Artifact/ledger；同Conversation锁完全串行tail，跨conversation batch先按tenant/conversation一次锁全。未来写集明确包含`agui-consumer-repository.ts`和`conversation-artifact-projection.ts`；独立cancellation outbox不触Chat事实，retry不在本片。
+
+Agent awaiting已有Chat interaction durable入口，但没有可信完整解除revision。waiting/resuming依赖Agent owner发布full revisioned pending collection与durable decision-accepted/effective-native-consumed/re-pause语义；waiting表示未提交，resuming保留同一完整集合并标记submitted以禁止重复decide。BFF不发明逐项event或partial merge，browser/unknown ACK与普通activity不改变状态。`pending_pauses`必须与head、四态state、submitted marker、watermark同RR读取最新authoritative revision。该artifact未交付前为hard阻塞，现固定`pending_pauses=[]`仍是产品缺口。
+
+本轮仅更新四docs批准prefix；machine/production/SQL/README/Git/服务/数据库均未改。源码实施与真实PG矩阵仍待Root后续授权。
+
+R43 doc-only收敛：上述FIFO/RR目标明确durable queued head存在时，历史`terminal_run_id`不表示Conversation流结束；replay须同一一致性读边界推导head-aware有效结束结果，先drain ledger且仅无head/合法terminal时结束，不伪造下一Run的RUN_STARTED或清除历史source守卫。当前`agui-projection-repository.ts`仍直接返回stream terminal marker，`routes/agent.ts`据此在ledger head结束SSE，故此语义尚未实施或验收。本片仅在四现D0文档段补充设计；原四Chat测试字节保持，新增queued故障回滚/同key重放、RR barrier交接及restart opaque cursor RED仍待Root授tests-only。Agent main e977923ea9992cbddaf0cdbc6c8f8d23b3af120e / HTTP4.0.0已由Root验收发布，但BFF尚未固定消费；本片pin/source/schema/generated不变；未运行Git、数据库、Redis、服务或测试，不据文档声明public4能力完成。
+
+R44 内部源码候选：基线 main 759bfe0a8c521946cae31a74b6426f43b063bae1；WIN02 仅五现内部源及四 doc 的本 R43 前缀阶段说明。queued 同事务写入、terminal/never-admitted failure 交接、Conversation-first batch、RR 内部 typed head、head-aware replay 与 GC 已形成待审查候选；public3 schema/service、canonical SQL、pin/generated/parser 与四 Chat 测试字节不变。Root 前序实际三 R43 行为 RED 保留（RR 隔离断言已通过）；本片不运行共享资源，完整三例均仍含后继公开 execution_head 断言，不宣称全部 GREEN。Agent e977923 / HTTP4 已正式发布但 BFF 未消费；内部冻结后同 owner 立即承接 full pause/四态公开4 三面 D0，不无限延期消费者升级。本片实际 Node v22.22.2 顺序执行 node scripts/lint-source.mjs、node node_modules/typescript/bin/tsc -p tsconfig.json --noEmit、node node_modules/typescript/bin/tsc -p tsconfig.json，3 命令 exit0（合计4.84s，无诊断）；没有运行测试，0 条测试通过声明。真实 PG/Redis、完整测试、独立审查与 Git 提交由 Root 执行。
 
 ## BFF-FIFO-ATOMIC：Conversation terminal gate 源码与真实owner门已验证（2026-10-01）
 
@@ -69,6 +152,79 @@ GREEN 后 `pnpm check` exit0，lint/typecheck/contract/build通过，全test **5
 旧 schema 不会被 fresh installer 自动更新，当前用户 DB/rows 不修改、不过滤、不伪装。源码发布不等于运行激活；3310
 未切换，Web exact public3 repin、fresh跨仓组合与实际浏览器整链仍待验。未来 retry 目标仅候选 additive `3.1.0`，依赖
 ROLE2 发布/消费和未发布 Agent `4.0.0`，本片没有实现 retry，也没有新增 production migration/fallback。
+
+## BFF-RETRY-DESIGN：三设计候选已写，生产未实施（2026-09-30）
+
+当前 BFF main 是 `ccb8e144d72e35d90f9edc23f8b3ed0c82fde98d`；Root 任务基线是
+`e27ae2077068475bbe8f26d375d271375ec542b0`。public contract 仍是 `2.0.0`，当前没有
+`POST /v1/sessions/{session_id}/messages/{assistant_message_id}/retry`、retry application command 或 retry SQL
+writer。本轮只更新 TECHNICAL_DESIGN/API_CONTRACT/DATA_MODEL/CURRENT 四份设计文档；没有修改
+OpenAPI、schema、source、generated、vendor 或 tests，也没有运行服务、PostgreSQL、Redis、浏览器或模型。
+
+已裁决的目标是 additive public `3.1.0`（以 BFF-CHAT-ROLE2 的 public `3.0.0` 发布及 consumer 锁步完成为前置），且 HTTP `/v1` 不变：请求只有精确 `{}`、private
+`scope` / `project_ref` 与唯一 `Idempotency-Key`，202 复用现
+`{run_id,user_message_id,assistant_message_id}` receipt。首次请求只接受最新、严格已验 Agent
+failure 且 `retryable=true` 的 assistant；原 user/content/model/agent/thinking/Skill/MCP/project 都从原 BFF
+outbox 恢复，保留原 user、failed assistant、run/outbox，只新建 assistant/run/outbox 并在同事务
+重置 consumer fence。BFF 零 DDL，不新建 retry 表。
+
+幂等权威为 committed Agent dispatch outbox：当前 ACL/project/target visibility 通过后，同 key +
+operation/target digest 回收早于 tail/run/HITL 动态拒绝，以便恢复 commit 后丢失的 HTTP reply。
+`bff_idempotency_receipt` 与业务事实不原子，所以目标 `durableChatAdmission` 必须包含 retry，
+不使用 generic pending receipt。同 key 并发只能有一 attempt；同 key 用于 submit/另 target 冲突。
+
+当前阻塞在 Agent owner，不在 BFF DDL。Root 无网络复现得到
+`SAME_RUN_REPLAY=PASS`、`SAME_USER_NEW_RUN=ChatIdentityConflict`、
+`CURRENT_NATIVE_IDS_DUPLICATE_HUMAN=2`。当前 Agent 3.0 `f3be3b97dd67df69ed3c6cb88c59f3bc2db97703`
+不能支持同 original user 的新 attempt。Agent owner 需先发布 typed `retry_of_run_id`、稳定 user
+origin、native pre-turn checkpoint 与单 HumanMessage 语义。Agent `4.0.0` 已是 owner 四文档冻结的
+breaking 目标设计候选，但尚未实施/发布，因而无 commit、OpenAPI/provenance digest 可 pin。
+BFF 不会用伪 user ID、identity 放宽、optional wire 或部分 phase
+retry 绕过该前置。
+
+R2 补全了 BFF 内部实际 consumer inventory：Agent 4.0 的 `retry_of_run_id` 是 required nullable，
+normal 不能省略，必须显式发 JSON null。BFF 不只有 Chat `outbox-delivery.ts`，
+`scheduler.ts`→`clients/agent/launch.ts` 也是 Agent `/v1/runs` producer；两者必须在同一 BFF
+consumer cutover 中更新，Scheduler 不是下一个独立仓阶段。Chat persisted
+`AGENT_DISPATCH_SCHEMA_VERSION` 目标从 2 升为 3；Scheduler `bff_idempotency_receipt.response_body`
+envelope 从实际 2 升为 3。两个 v3 parser 都 closed/fail closed：旧 v2、missing/extra/错类型不读；
+Chat normal/retry 分别要求 null/非空 parent，Scheduler 只允许 null，并重验 canonical occurrence 与
+run/user/assistant/session/request/assertion receipt identity。public 202 receipt 形状不改。
+
+权限不新增 IAM 角色或权限名；目标 OpenAPI 复用 `chat.message.create` 能力描述。当前实际
+enforcement 是 Web→BFF service + Bearer online session verify + fixed tenant + Conversation/project/target private
+owner 检查，不冒称当前 IAM session verify 已做 action-specific grant 判定。这一“标准权限命名 vs
+当前 enforcement”差异是已知边界，本片不引入假 stub。
+
+后续只能按 TECHNICAL_DESIGN 的精确阶段门推进：Agent 先发布具体 immutable 4.0
+artifact 但不 activate；Root 再把具体 owner path/version/SHA 写入任务卡；先仅改现有 tests 获得真行为
+RED；独立复核后才授机器契约/generated/runtime GREEN。真实验收必须包含随机临时
+PostgreSQL 的单事务/并发/rollback/fence 矩阵，以及真 Agent owner 的同 original user/new run、
+`retry_of_run_id`、完整 pre-turn context 与唯一 native HumanMessage。当前阶段没有上述 PASS
+证据，不宣称 retry 完成。
+
+激活还有一个明示未决生命周期边界：Root-owned 验收可用 fresh fixture，但现受管运行组必须
+先决定 fresh 替换或在无新 admission 窗口 drain 非终态 Chat/Scheduler v2，并明确已终态 v2 的
+same-key replay/retry 政策。旧 v2 不在 v3 parser 内自动补 null、升级或删除。本文档片未清理任何
+用户/共享数据，也未将该问题扩成 scope/会话删除 SQL 或新 retention contract。
+
+后续验证命令必须显式使用 Node `v22.22.2`：
+
+```bash
+export PATH=/Users/nako/.nvm/versions/node/v22.22.2/bin:$PATH
+node --version
+pnpm format:check
+pnpm contract:check
+pnpm test:architecture
+pnpm test
+pnpm build
+# Root 独占随机临时库/自有 Redis namespace 后才运行：
+pnpm db:apply-schema
+pnpm test:integration
+```
+
+本文档阶段只能执行 Markdown/hash/diff 检查；上述 source/contract/PG/Agent 命令尚未运行。
+下方已验收 BFF-AGENT-FAILURE3 和更早章节保持各自历史证据，不代表本 retry 功能已存在。
 
 ## BFF-AGENT-FAILURE3：源码与 owner 隔离集成已验收，Web/运行组合待闭环（2026-09-30）
 

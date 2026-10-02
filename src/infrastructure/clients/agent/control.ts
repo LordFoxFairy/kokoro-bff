@@ -1,34 +1,15 @@
+import { zControlRequest } from "../../../generated/agent-http/zod.gen.js"
 import type { AgentControl } from "./types.js"
 
-function jsonValue(value: unknown): unknown {
-  return value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean"
-    ? value
-    : Array.isArray(value)
-      ? value.map(jsonValue)
-      : typeof value === "object" && value !== null
-        ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, jsonValue(item)]))
-        : String(value)
-}
-
-function hasOnlyKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
-  const allowed = new Set(keys)
-  return Object.keys(value).every((key) => allowed.has(key))
-}
-
-export function buildAgentControl(
-  sessionId: string,
-  body: Record<string, unknown>,
-): AgentControl | null {
-  const kind = body.kind
-  if (kind === "run.cancel" && hasOnlyKeys(body, ["kind"])) {
-    return { kind, session_id: sessionId }
+export function buildAgentControl(sessionId: string, body: Record<string, unknown>): AgentControl | null {
+  if (Object.hasOwn(body, "session_id") || sessionId.trim() === "") return null
+  const parsed = zControlRequest.safeParse({ ...body, session_id: sessionId })
+  if (!parsed.success) return null
+  const control = parsed.data
+  if (control.kind === "run.resume") {
+    if (!Number.isSafeInteger(control.expected_pause_revision) || control.expected_pause_revision < 1 || control.pause_ref.trim() === "") return null
+    const items = control.decisions.map((decision) => decision.item_id)
+    if (items.some((item) => item.trim() === "") || new Set(items).size !== items.length) return null
   }
-  if (kind === "run.resume" && hasOnlyKeys(body, ["kind", "decisions"]) && Array.isArray(body.decisions) && body.decisions.length > 0) {
-    return { kind, session_id: sessionId, decisions: body.decisions.map(jsonValue) }
-  }
-  if (kind === "run.steer" && hasOnlyKeys(body, ["kind", "message_id", "content"]) && typeof body.message_id === "string" && typeof body.content === "string" && body.message_id.trim() !== "" && body.content.trim() !== "") {
-    return { kind, session_id: sessionId, message_id: body.message_id, content: body.content }
-  }
-  return null
+  return control as AgentControl
 }
-

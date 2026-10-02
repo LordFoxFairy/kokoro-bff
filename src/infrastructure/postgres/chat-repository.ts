@@ -1,6 +1,7 @@
+import { readRunInteraction } from "./agui-interaction-projection.js"
 import { randomUUID } from "node:crypto"
 
-import type { ChatActiveRun, ChatArtifactDelivery, ChatRepository, ChatSnapshot, ConversationPage, MessagePage } from "../../application/ports/chat-repository.js"
+import type { ChatExecutionHead, ChatArtifactDelivery, ChatRepository, ChatSnapshot, ConversationPage, MessagePage } from "../../application/ports/chat-repository.js"
 import type { Conversation } from "../../domain/chat/conversation.js"
 import type { Share } from "../../domain/chat/share.js"
 import type { PostgresBffDatabase } from "./client.js"
@@ -31,24 +32,38 @@ type ArtifactDeliveryRow = {
 }
 
 type ActiveRunRow = {
+  consumer_subject_id: unknown
   expected_run_id: unknown
   latest_run_id: unknown
   terminal_run_id: unknown
+  latest_run_start_sequence: string | null
+  source_high_watermark: string
 }
 
-function activeRunFromRow(row: ActiveRunRow | undefined): ChatActiveRun | undefined {
-  if (row === undefined) return undefined
-  const markers = [row.expected_run_id, row.latest_run_id, row.terminal_run_id]
-  if (markers.some((value) => value !== null && (typeof value !== "string" || value.trim() === ""))) {
-    throw new Error("CHAT_ACTIVE_RUN_STATE_INVALID")
+type ExecutionHeadRow = { run_id: string; subject_id: string }
+
+function executionHeadFromRows(
+  head: ExecutionHeadRow | undefined,
+  stream: ActiveRunRow | undefined,
+  subjectId: string,
+): ChatExecutionHead | undefined {
+  if (stream !== undefined && [stream.expected_run_id, stream.latest_run_id, stream.terminal_run_id].some((value) => value !== null && (typeof value !== "string" || value.trim() === ""))) throw new Error("CHAT_ACTIVE_RUN_STATE_INVALID")
+  if (head === undefined) {
+    if (stream?.expected_run_id !== null && stream?.expected_run_id !== undefined) throw new Error("CHAT_ACTIVE_RUN_STATE_INVALID")
+    return undefined
   }
-  const expected = row.expected_run_id as string | null
-  const latest = row.latest_run_id as string | null
-  const terminal = row.terminal_run_id as string | null
-  if (expected === null) return undefined
-  if (terminal !== null && terminal !== expected) throw new Error("CHAT_ACTIVE_RUN_STATE_INVALID")
-  if (terminal === expected) return undefined
-  return latest === expected ? { runId: expected, status: "running" } : undefined
+  if (head.run_id.trim() === "" || head.subject_id !== subjectId || stream === undefined || stream.consumer_subject_id !== subjectId) {
+    throw new Error("CHAT_EXECUTION_HEAD_IDENTITY_INVALID")
+  }
+  if (stream.expected_run_id !== null && stream.expected_run_id !== head.run_id) {
+    throw new Error("CHAT_EXECUTION_HEAD_STATE_INVALID")
+  }
+  if (stream.terminal_run_id === head.run_id) throw new Error("CHAT_EXECUTION_HEAD_STATE_INVALID")
+  if (stream.latest_run_id === head.run_id) {
+    if (stream.expected_run_id !== head.run_id) throw new Error("CHAT_EXECUTION_HEAD_STATE_INVALID")
+    return { runId: head.run_id, state: "active", pendingPauses: [] }
+  }
+  return { runId: head.run_id, state: "queued", pendingPauses: [] }
 }
 
 function artifactDeliveryFromRow(row: ArtifactDeliveryRow): ChatArtifactDelivery {
@@ -129,6 +144,15 @@ export class PostgresChatRepository implements ChatRepository {
   }
 
   public async readSnapshot(tenantId: string, subjectId: string, conversationId: string, projectRef: string | undefined): Promise<ChatSnapshot | null> {
+    return this.readSnapshotState(tenantId, subjectId, conversationId, projectRef, true)
+  }
+
+  public async readRunControlState(tenantId: string, subjectId: string, conversationId: string, projectRef: string | undefined): Promise<import("../../application/ports/chat-repository.js").ChatRunControlState | null> {
+    const state = await this.readSnapshotState(tenantId, subjectId, conversationId, projectRef, false)
+    return state === null ? null : state.executionHead === undefined ? {} : { executionHead: state.executionHead }
+  }
+
+  private async readSnapshotState(tenantId: string, subjectId: string, conversationId: string, projectRef: string | undefined, includeHistory: boolean): Promise<ChatSnapshot | null> {
     const client = await this.database.pool.connect()
     try {
       // Every read, including the cursor, observes one committed projection boundary.
@@ -155,7 +179,7 @@ export class PostgresChatRepository implements ChatRepository {
         await client.query("COMMIT")
         return null
       }
-      const messages = await client.query<MessageRow>(
+      const messages = includeHistory ? await client.query<MessageRow>(
         `SELECT latest.message_id, latest.tenant_id, latest.conversation_id, latest.run_id,
                 latest.role, latest.content, latest.status, latest.agent_failure_code, latest.agent_failure_retryable, latest.message_seq,
                 latest.created_at, latest.updated_at
@@ -169,8 +193,8 @@ export class PostgresChatRepository implements ChatRepository {
            ) AS latest
           ORDER BY latest.message_seq ASC, latest.message_id ASC`,
         [tenantId, conversationId],
-      )
-      const deliveries = await client.query<ArtifactDeliveryRow>(
+      ) : { rows: [] }
+      const deliveries = includeHistory ? await client.query<ArtifactDeliveryRow>(
         `SELECT conversation_id, artifact_id, source_asset_id, source_artifact_kind,
                 source_title, source_mime, source_size_bytes, run_id, delivered_at
            FROM bff_conversation_artifact
@@ -178,21 +202,40 @@ export class PostgresChatRepository implements ChatRepository {
           ORDER BY delivered_at DESC, artifact_id ASC
           LIMIT 101`,
         [tenantId, conversationId],
-      )
-      const cursor = await client.query<{ cursor: string }>(
-        `SELECT cursor FROM bff_agui_event
+      ) : { rows: [] }
+      const cursor = await client.query<{ cursor: string; public_sequence: string }>(
+        `SELECT cursor, public_sequence FROM bff_agui_event
           WHERE tenant_id = $1 AND session_id = $2
           ORDER BY public_sequence DESC LIMIT 1`,
         [tenantId, conversationId],
       )
       const activeRunResult = await client.query<ActiveRunRow>(
-        `SELECT expected_run_id, latest_run_id, terminal_run_id
+        `SELECT consumer_subject_id, expected_run_id, latest_run_id, terminal_run_id, latest_run_start_sequence, source_high_watermark
            FROM bff_agui_stream
           WHERE tenant_id = $1 AND session_id = $2
           LIMIT 1`,
         [tenantId, conversationId],
       )
-      const activeRun = activeRunFromRow(activeRunResult.rows[0])
+      const heads = await client.query<ExecutionHeadRow>(
+        [
+          "SELECT run_id,subject_id FROM bff_agent_dispatch_outbox",
+          "WHERE tenant_id=$1 AND conversation_id=$2 AND status IN ('pending','leased','retryable','admitted')",
+          "ORDER BY conversation_dispatch_seq,outbox_id LIMIT 1",
+        ].join("\n"),
+        [tenantId, conversationId],
+      )
+      let executionHead = executionHeadFromRows(heads.rows[0], activeRunResult.rows[0], subjectId)
+      if (executionHead !== undefined && executionHead.state === "active") {
+        const stream = activeRunResult.rows[0]
+        const start = Number(stream?.latest_run_start_sequence), watermark = Number(cursor.rows[0]?.public_sequence)
+        const sourceWatermark = Number(stream?.source_high_watermark)
+        if (!Number.isSafeInteger(start) || !Number.isSafeInteger(watermark) || !Number.isSafeInteger(sourceWatermark)) throw new Error("CHAT_EXECUTION_HEAD_WATERMARK_INVALID")
+        const state = await readRunInteraction(client, tenantId, conversationId, executionHead.runId, subjectId, start, watermark, sourceWatermark)
+        if (state?.phase === "waiting" || state?.phase === "resuming") executionHead = { runId: executionHead.runId, state: state.phase, pendingPauses: [state] }
+      } else if (executionHead !== undefined) {
+        const unexpected = await client.query(`SELECT 1 FROM bff_agui_run_interaction WHERE tenant_id=$1 AND session_id=$2 AND run_id=$3`, [tenantId,conversationId,executionHead.runId])
+        if (unexpected.rows.length !== 0) throw new Error("CHAT_QUEUED_INTERACTION_INVALID")
+      }
       await client.query("COMMIT")
       return {
         conversation: conversationFromRow(row),
@@ -200,7 +243,7 @@ export class PostgresChatRepository implements ChatRepository {
         deliveries: deliveries.rows.slice(0, 100).map(artifactDeliveryFromRow),
         deliveriesHasMore: deliveries.rows.length > 100,
         eventWatermark: cursor.rows[0]?.cursor ?? null,
-        ...(activeRun === undefined ? {} : { activeRun }),
+        ...(executionHead === undefined ? {} : { executionHead }),
       }
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined)
@@ -316,6 +359,7 @@ export class PostgresChatRepository implements ChatRepository {
         await client.query("ROLLBACK")
         return false
       }
+      await client.query(`DELETE FROM bff_agui_run_interaction WHERE tenant_id=$1 AND session_id=$2`, [tenantId, conversationId])
       await client.query(
         `DELETE FROM bff_conversation_artifact
           WHERE tenant_id = $1 AND conversation_id = $2`,

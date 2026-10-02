@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto"
 import { EventSchemas } from "@ag-ui/core"
 
-import type { ChatEvent } from "../../contracts/chat.js"
+import { replaceInteraction } from "./interaction-state.js"
+import type { InteractionState, ChatEvent } from "../../contracts/chat.js"
 import {
   AgUiConsumerLeaseLostError,
   AgUiProjectionContentionError,
@@ -138,8 +139,14 @@ function artifactDelivery(event: ChatEvent): AgUiArtifactDelivery {
 function projectSources(
   sources: readonly AgentProjectionSource[],
   state: AgUiProjectionState,
+  interactions: Map<string, InteractionState>,
 ): AgUiSourceProjection[] {
   return sources.map((source) => {
+    if (source.event?.kind === "run.created" && source.sourceRunId !== null && interactions.has(source.sourceRunId)) {
+      // A new START identity must not move the retained boundary past a complete state.
+      // Exact source replay has already been handled by the durable identity ledger.
+      throw new AgUiSourceIdentityConflictError()
+    }
     const frames = source.event === null ? [] : validateAgUiFrames(projectChatEvent(source.event, state))
     const event = source.event
     if (event?.kind === "delivery.created") {
@@ -147,6 +154,12 @@ function projectSources(
     }
     if (event === null || event.run_id === null || event.run_id === "") return { ...sourceIdentity(source), frames }
     const runId = event.run_id
+    if (event.kind === "interaction.state") {
+      const interactionState = event.payload as InteractionState
+      const changed = replaceInteraction(interactions.get(runId), interactionState)
+      interactions.set(runId, interactionState)
+      return { ...sourceIdentity(source), frames: changed ? frames : [], interactionState }
+    }
     if (event.kind === "message.delta") {
       const content = event.payload.delta
       if (typeof content !== "string") throw new AgUiSourceContractError()
@@ -281,7 +294,7 @@ export class AgUiProjectionService {
       if (pending[0]?.sourceSequence !== stream.sourceHighWatermark + 1) throw new AgUiSourceContinuityError()
 
       const state = mutableState(stream.projectionState)
-      const projections = projectSources(pending, state)
+      const projections = projectSources(pending, state, new Map(stream.interaction === undefined ? [] : [[stream.interaction.runId, stream.interaction.state]]))
       const sourceHighWatermark = pending.at(-1)?.sourceSequence ?? stream.sourceHighWatermark
       const runState = runProjectionState(stream, projections)
       const result = await this.repository.commitProjection({

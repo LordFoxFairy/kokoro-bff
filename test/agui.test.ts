@@ -124,3 +124,124 @@ describe("AG-UI projection", () => {
     assert.deepEqual(continued.map((event) => event.type), ["TEXT_MESSAGE_CONTENT"])
   })
 })
+
+
+// R57: full owner interaction is one canonical CUSTOM, not a second item-resolution protocol.
+
+function r57Waiting() {
+  return {
+    interaction_revision: 7,
+    pause_revision: 7,
+    pause_ref: "pause:run_hitl_1:7",
+    phase: "waiting",
+    groups: [
+      {
+        group_id: "group_tools",
+        items: [
+          {
+            item_id: "item_approve",
+            request_id: "request_tool_1",
+            kind: "tool_approval",
+            allowed_decisions: ["approve", "edit", "reject"],
+            display: {
+              name: "search",
+              description: "Search approved index",
+              editable: true,
+              input_schema: { type: "object", properties: { query: { type: "string" } } },
+              result_preview: null,
+              truncated: null,
+              source: null,
+            },
+          },
+          {
+            item_id: "item_edit",
+            request_id: "request_tool_2",
+            kind: "tool_approval",
+            allowed_decisions: ["edit", "reject"],
+            display: { name: "edit", description: "Edit parameters", editable: true, input_schema: { type: "object" } },
+          },
+          {
+            item_id: "item_reject",
+            request_id: "request_review_1",
+            kind: "result_review",
+            allowed_decisions: ["approve", "reject"],
+            display: {
+              name: "review",
+              description: "Review result",
+              editable: false,
+              input_schema: { type: "object" },
+              result_preview: "bounded result",
+              truncated: false,
+              source: "tool",
+            },
+          },
+        ],
+      },
+      {
+        group_id: "group_inputs",
+        items: [
+          {
+            item_id: "item_respond",
+            request_id: "request_question_1",
+            kind: "ask_user_question",
+            allowed_decisions: ["respond", "reject"],
+            display: { name: "question", description: "Choose a region", editable: false, input_schema: { type: "object" } },
+            validation: { code: "json_schema_invalid", instance_path: ["region", 0] },
+          },
+          {
+            item_id: "item_submit",
+            request_id: "request_input_1",
+            kind: "input",
+            allowed_decisions: ["submit"],
+            display: { name: "form", description: "Confirm values", editable: true, input_schema: { type: "object" } },
+          },
+        ],
+      },
+    ],
+    action_result: null,
+  }
+}
+function r57Control() {
+  return {
+    kind: "run.resume",
+    expected_pause_revision: 7,
+    pause_ref: "pause:run_hitl_1:7",
+    decisions: [
+      { type: "approve", item_id: "item_approve" },
+      { type: "edit", item_id: "item_edit", args: { count: 2, note: null } },
+      { type: "reject", item_id: "item_reject" },
+      { type: "respond", item_id: "item_respond", response: "continue" },
+      { type: "submit", item_id: "item_submit", value: { confirmed: true, comment: null } },
+    ],
+  }
+}
+
+for (const phase of ["waiting", "resuming", "active", "terminal"] as const) {
+  it(`R57 AG-UI publishes one complete ${phase} interaction revision and never a Run terminal`, () => {
+    const payload = {
+      ...r57Waiting(),
+      interaction_revision: 8,
+      phase,
+      groups: phase === "active" || phase === "terminal" ? [] : r57Waiting().groups,
+      action_result: phase === "resuming" ? { command_id: "command_resume_1", pause_revision: 7, kind: "accepted" } : null,
+    }
+    const frames = projectChatEvent({ ...base, kind: "interaction.state", payload } as never, createAgUiProjectionState())
+    assert.equal(frames.length, 1, "every full revision must emit exactly one atomic public frame")
+    assert.equal(frames[0].type, "CUSTOM")
+    assert.equal(frames[0].name, "kokoro.interaction.state")
+    assert.deepEqual(frames[0].value, payload)
+    assert.deepEqual(frames[0].metadata.kokoro, base)
+    assert.doesNotThrow(() => EventSchemas.parse(frames[0]))
+    assert.ok(frames.every((frame) => frame.type !== "RUN_FINISHED" && frame.type !== "RUN_ERROR"))
+  })
+}
+it("R57 AG-UI retains absent versus null display keys and business input-schema null", () => {
+  const payload = r57Waiting()
+  payload.groups[1].items[1].display.input_schema = { type: "object", properties: { comment: { default: null } } }
+  const frames = projectChatEvent({ ...base, kind: "interaction.state", payload } as never, createAgUiProjectionState())
+  assert.equal(frames.length, 1)
+  const actual = frames[0].value as ReturnType<typeof r57Waiting>
+  assert.deepEqual(actual, payload)
+  assert.equal(Object.hasOwn(actual.groups[0].items[0].display, "result_preview"), true)
+  assert.equal(Object.hasOwn(actual.groups[1].items[1].display, "result_preview"), false)
+})

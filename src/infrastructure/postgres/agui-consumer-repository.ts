@@ -9,6 +9,7 @@ import type {
 } from "../../application/agui/ports/agui-projection-repository.js"
 import type { PostgresBffDatabase } from "./client.js"
 import { agUiConsumerRegistration } from "./agui-consumer-registration.js"
+import { PostgresAgentDispatchOutboxRepository } from "./agent-dispatch-outbox-repository.js"
 
 type ConsumerRow = {
   tenant_id: string
@@ -27,7 +28,7 @@ type ClaimedConsumerRow = {
 type GarbageStreamRow = {
   tenant_id: string
   session_id: string
-  latest_run_start_sequence: string
+  effective_retain_from: string
 }
 
 type GarbageBatchRow = {
@@ -63,45 +64,56 @@ export class PostgresAgUiConsumerRepository implements AgUiProjectionConsumerRep
 
   public async registerConsumer(tenantId: string, sessionId: string, subjectId: string, expectedRunId?: string): Promise<void> {
     const registration = agUiConsumerRegistration(tenantId, sessionId, subjectId, expectedRunId)
-    const result = await this.database.pool.query(registration.text, registration.values)
-    if (result.rowCount !== 1) throw new Error("AG-UI consumer subject does not match the registered session owner")
+    const client = await this.database.pool.connect()
+    try {
+      await client.query("BEGIN")
+      const conversations = await PostgresAgentDispatchOutboxRepository.lockConversationsInTransaction(client, [{ tenantId, conversationId: sessionId }])
+      const conversation = conversations[0]
+      if (conversation === undefined || conversation.status !== "active" || conversation.owner_id !== subjectId) {
+        throw new Error("AG-UI consumer subject does not match the registered session owner")
+      }
+      const result = await client.query(registration.text, registration.values)
+      if (result.rowCount !== 1) throw new Error("AG-UI consumer subject does not match the registered session owner")
+      await client.query("COMMIT")
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined)
+      throw error
+    } finally {
+      client.release()
+    }
   }
 
   public async seedConsumers(limit: number): Promise<number> {
     positiveInteger(limit, "AG-UI consumer seed limit")
-    const result = await this.database.pool.query<{ conversation_id: string }>(
-      `WITH candidates AS (
-         SELECT conversation_id, tenant_id, owner_id
-           FROM bff_conversation
-          WHERE status = 'active'
-            AND tenant_id <> ''
-            AND owner_id <> ''
-            AND EXISTS (
-              SELECT 1
-                FROM bff_message AS message
-               WHERE message.tenant_id = bff_conversation.tenant_id
-                 AND message.conversation_id = bff_conversation.conversation_id
-                 AND message.run_id IS NOT NULL
-            )
-            AND NOT EXISTS (
-              SELECT 1
-                FROM bff_agui_stream AS stream
-               WHERE stream.tenant_id = bff_conversation.tenant_id
-                 AND stream.session_id = bff_conversation.conversation_id
-                 AND stream.consumer_subject_id IS NOT NULL
-            )
-          ORDER BY tenant_id ASC, conversation_id ASC
-          LIMIT $1
-       )
-       INSERT INTO bff_agui_stream (tenant_id, session_id, consumer_subject_id)
-       SELECT candidates.tenant_id, candidates.conversation_id, candidates.owner_id
-         FROM candidates
-       ON CONFLICT (tenant_id, session_id) DO UPDATE
-         SET consumer_subject_id = COALESCE(bff_agui_stream.consumer_subject_id, EXCLUDED.consumer_subject_id)
-       RETURNING session_id AS conversation_id`,
-      [limit],
-    )
-    return result.rowCount ?? result.rows.length
+    const client = await this.database.pool.connect()
+    try {
+      await client.query("BEGIN")
+      const candidates = await client.query<{ tenant_id: string; conversation_id: string; owner_id: string }>(
+        [
+          "SELECT conversation_id,tenant_id,owner_id FROM bff_conversation",
+          "WHERE status='active' AND tenant_id<>'' AND owner_id<>''",
+          "AND EXISTS (SELECT 1 FROM bff_message AS message",
+          "WHERE message.tenant_id=bff_conversation.tenant_id AND message.conversation_id=bff_conversation.conversation_id AND message.run_id IS NOT NULL)",
+          "AND NOT EXISTS (SELECT 1 FROM bff_agui_stream AS stream",
+          "WHERE stream.tenant_id=bff_conversation.tenant_id AND stream.session_id=bff_conversation.conversation_id AND stream.consumer_subject_id IS NOT NULL)",
+          "ORDER BY tenant_id,conversation_id FOR UPDATE SKIP LOCKED LIMIT $1",
+        ].join("\n"),
+        [limit],
+      )
+      // The whole ordered parent result is materialized before the first stream write.
+      for (const candidate of candidates.rows) {
+        const registration = agUiConsumerRegistration(candidate.tenant_id, candidate.conversation_id, candidate.owner_id)
+        const registered = await client.query(registration.text, registration.values)
+        if (registered.rowCount !== 1) throw new Error("AG-UI consumer subject does not match the registered session owner")
+      }
+      await client.query("COMMIT")
+      return candidates.rows.length
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined)
+      throw error
+    } finally {
+      client.release()
+    }
   }
 
   public async claimConsumers(input: AgUiConsumerClaimInput): Promise<AgUiConsumerLease[]> {
@@ -115,25 +127,32 @@ export class PostgresAgUiConsumerRepository implements AgUiProjectionConsumerRep
     const leases: AgUiConsumerLease[] = []
     try {
       await client.query("BEGIN")
-      const candidates = await client.query<ConsumerRow>(
-        `SELECT tenant_id, session_id, consumer_subject_id, source_high_watermark, consumer_failure_count
-           FROM bff_agui_stream
-          WHERE consumer_state = 'active'
-            AND consumer_subject_id IS NOT NULL
-            AND consumer_next_poll_at <= CURRENT_TIMESTAMP(3)
-            AND (consumer_lease_until IS NULL OR consumer_lease_until <= CURRENT_TIMESTAMP(3))
-            AND EXISTS (
-              SELECT 1
-                FROM bff_conversation AS conversation
-               WHERE conversation.tenant_id = bff_agui_stream.tenant_id
-                 AND conversation.conversation_id = bff_agui_stream.session_id
-                 AND conversation.owner_id = bff_agui_stream.consumer_subject_id
-                 AND conversation.status = 'active'
-            )
-          ORDER BY consumer_next_poll_at ASC, tenant_id ASC, session_id ASC
-          FOR UPDATE SKIP LOCKED
-          LIMIT $1`,
+      const parents = await client.query<{ tenant_id: string; conversation_id: string }>(
+        [
+          "SELECT conversation.tenant_id,conversation.conversation_id FROM bff_conversation AS conversation",
+          "JOIN bff_agui_stream AS stream ON stream.tenant_id=conversation.tenant_id AND stream.session_id=conversation.conversation_id",
+          "WHERE conversation.status='active' AND conversation.owner_id=stream.consumer_subject_id",
+          "AND stream.consumer_state='active' AND stream.consumer_subject_id IS NOT NULL",
+          "AND stream.consumer_next_poll_at<=CURRENT_TIMESTAMP(3)",
+          "AND (stream.consumer_lease_until IS NULL OR stream.consumer_lease_until<=CURRENT_TIMESTAMP(3))",
+          "ORDER BY conversation.tenant_id,conversation.conversation_id FOR UPDATE OF conversation SKIP LOCKED LIMIT $1",
+        ].join("\n"),
         [input.limit],
+      )
+      const candidates = await client.query<ConsumerRow>(
+        [
+          "SELECT tenant_id,session_id,consumer_subject_id,source_high_watermark,consumer_failure_count FROM bff_agui_stream",
+          "WHERE consumer_state='active' AND consumer_subject_id IS NOT NULL",
+          "AND consumer_next_poll_at<=CURRENT_TIMESTAMP(3)",
+          "AND (consumer_lease_until IS NULL OR consumer_lease_until<=CURRENT_TIMESTAMP(3))",
+          "AND EXISTS (SELECT 1 FROM jsonb_to_recordset($1::jsonb) AS scope(tenant_id text,conversation_id text)",
+          "WHERE scope.tenant_id=bff_agui_stream.tenant_id AND scope.conversation_id=bff_agui_stream.session_id)",
+          "AND EXISTS (SELECT 1 FROM bff_conversation AS conversation",
+          "WHERE conversation.tenant_id=bff_agui_stream.tenant_id AND conversation.conversation_id=bff_agui_stream.session_id",
+          "AND conversation.owner_id=bff_agui_stream.consumer_subject_id AND conversation.status='active')",
+          "ORDER BY tenant_id,session_id FOR UPDATE SKIP LOCKED",
+        ].join("\n"),
+        [JSON.stringify(parents.rows)],
       )
       const clock = await client.query<{ db_now: Date }>("SELECT clock_timestamp() AS db_now")
       const dbNow = clock.rows[0]?.db_now
@@ -151,6 +170,8 @@ export class PostgresAgUiConsumerRepository implements AgUiProjectionConsumerRep
               AND session_id = $2
               AND consumer_state = 'active'
               AND consumer_subject_id = $6
+              AND consumer_next_poll_at <= $7::timestamptz
+              AND (consumer_lease_until IS NULL OR consumer_lease_until <= $7::timestamptz)
             RETURNING consumer_fence AS fence,
                       consumer_lease_until AS lease_until,
                       floor(EXTRACT(EPOCH FROM (consumer_lease_until - $7::timestamptz)) * 1000)::bigint AS lease_remaining_ms`,
@@ -208,6 +229,7 @@ export class PostgresAgUiConsumerRepository implements AgUiProjectionConsumerRep
     const client = await this.database.pool.connect()
     try {
       await client.query("BEGIN")
+      await PostgresAgentDispatchOutboxRepository.lockConversationsInTransaction(client, [{ tenantId: lease.tenantId, conversationId: lease.sessionId }])
       await client.query(
         `SELECT 1 FROM bff_agui_stream
           WHERE tenant_id=$1 AND session_id=$2 AND consumer_subject_id=$3
@@ -272,8 +294,12 @@ export class PostgresAgUiConsumerRepository implements AgUiProjectionConsumerRep
 
   public async releaseConsumer(lease: AgUiConsumerLease, now: string): Promise<boolean> {
     instant(now, "AG-UI release time")
-    const result = await this.database.pool.query(
-      `UPDATE bff_agui_stream
+    const client = await this.database.pool.connect()
+    try {
+      await client.query("BEGIN")
+      await PostgresAgentDispatchOutboxRepository.lockConversationsInTransaction(client, [{ tenantId: lease.tenantId, conversationId: lease.sessionId }])
+      const result = await client.query(
+        `UPDATE bff_agui_stream
           SET consumer_lease_owner = NULL,
               consumer_lease_token = NULL,
               consumer_lease_until = NULL,
@@ -285,9 +311,16 @@ export class PostgresAgUiConsumerRepository implements AgUiProjectionConsumerRep
           AND consumer_lease_owner = $4
           AND consumer_lease_token = $5
           AND consumer_fence = $6`,
-      [lease.tenantId, lease.sessionId, lease.subjectId, lease.leaseOwner, lease.leaseToken, lease.fence],
-    )
-    return result.rowCount === 1
+        [lease.tenantId, lease.sessionId, lease.subjectId, lease.leaseOwner, lease.leaseToken, lease.fence],
+      )
+      await client.query("COMMIT")
+      return result.rowCount === 1
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined)
+      throw error
+    } finally {
+      client.release()
+    }
   }
 
   private async settleConsumer(
@@ -308,6 +341,7 @@ export class PostgresAgUiConsumerRepository implements AgUiProjectionConsumerRep
     const client = await this.database.pool.connect()
     try {
       await client.query("BEGIN")
+      await PostgresAgentDispatchOutboxRepository.lockConversationsInTransaction(client, [{ tenantId: lease.tenantId, conversationId: lease.sessionId }])
       await client.query(
         `SELECT 1 FROM bff_agui_stream
           WHERE tenant_id=$1 AND session_id=$2 AND consumer_subject_id=$3
@@ -358,10 +392,34 @@ export class PostgresAgUiConsumerRepository implements AgUiProjectionConsumerRep
     let streamsScanned = 0
     try {
       await client.query("BEGIN")
-      const streams = await client.query<GarbageStreamRow>(
-        `SELECT tenant_id, session_id, latest_run_start_sequence
+      // Discovery and locked requery must exclude streams with no deletable prefix
+      // before LIMIT; deletion consumes this same boundary, preserving live queued pins.
+      const effectiveRetainFrom = `LEAST(bff_agui_stream.latest_run_start_sequence, COALESCE(
+                (SELECT min(queued.public_sequence)
+                   FROM bff_agui_event AS queued
+                   JOIN bff_agent_dispatch_outbox AS dispatch
+                     ON dispatch.tenant_id=queued.tenant_id AND dispatch.conversation_id=queued.session_id
+                    AND dispatch.run_id=queued.event_payload #>> '{value,run_id}'
+                  WHERE queued.tenant_id=bff_agui_stream.tenant_id AND queued.session_id=bff_agui_stream.session_id
+                    AND queued.source_owner='kokoro-bff' AND queued.event_type='CUSTOM'
+                    AND queued.event_payload->>'name'='kokoro.run.queued'
+                    AND dispatch.status IN ('pending','leased','retryable','admitted')),
+                bff_agui_stream.latest_run_start_sequence), COALESCE(
+                (SELECT min(interaction.public_sequence)
+                   FROM bff_agui_run_interaction AS interaction
+                   JOIN bff_agent_dispatch_outbox AS dispatch
+                     ON dispatch.tenant_id=interaction.tenant_id AND dispatch.conversation_id=interaction.session_id AND dispatch.run_id=interaction.run_id
+                  WHERE interaction.tenant_id=bff_agui_stream.tenant_id AND interaction.session_id=bff_agui_stream.session_id
+                    AND dispatch.status IN ('pending','leased','retryable','admitted')),
+                bff_agui_stream.latest_run_start_sequence))`
+      const streamCandidatesQuery = `SELECT tenant_id, session_id, ${effectiveRetainFrom}::text AS effective_retain_from
            FROM bff_agui_stream
           WHERE latest_run_start_sequence IS NOT NULL
+            AND EXISTS (
+              SELECT 1 FROM bff_conversation AS conversation
+               WHERE conversation.tenant_id=bff_agui_stream.tenant_id
+                 AND conversation.conversation_id=bff_agui_stream.session_id
+            )
             AND NOT EXISTS (
               SELECT 1
                 FROM bff_agui_event AS retained
@@ -375,6 +433,8 @@ export class PostgresAgUiConsumerRepository implements AgUiProjectionConsumerRep
                  AND retained.session_id = bff_agui_stream.session_id
                  AND retained.public_sequence >= bff_agui_stream.latest_run_start_sequence
                  AND retained.event_type <> 'RUN_STARTED'
+                 AND NOT (retained.source_owner='kokoro-bff' AND retained.event_type='CUSTOM'
+                   AND COALESCE(retained.event_payload->>'name','')='kokoro.run.queued')
                  AND (
                    retained_ref.run_id IS NULL
                    OR NOT EXISTS (
@@ -398,16 +458,29 @@ export class PostgresAgUiConsumerRepository implements AgUiProjectionConsumerRep
              WHERE event.tenant_id = bff_agui_stream.tenant_id
                AND event.session_id = bff_agui_stream.session_id
                AND event.recorded_at < $1::timestamptz
-               AND event.public_sequence < bff_agui_stream.latest_run_start_sequence
+               AND event.public_sequence < ${effectiveRetainFrom}
           )
-          ORDER BY updated_at ASC, tenant_id ASC, session_id ASC
-          FOR UPDATE SKIP LOCKED
-          LIMIT $2`,
-        [cutoff, command.batchSize],
+            AND ($3::jsonb IS NULL OR EXISTS (
+              SELECT 1 FROM jsonb_to_recordset($3::jsonb) AS scope(tenant_id text,conversation_id text)
+               WHERE scope.tenant_id=bff_agui_stream.tenant_id AND scope.conversation_id=bff_agui_stream.session_id
+            ))
+          ORDER BY tenant_id ASC, session_id ASC`
+      const streamCandidates = await client.query<GarbageStreamRow>(
+        streamCandidatesQuery + "\nLIMIT $2",
+        [cutoff, command.batchSize, null],
+      )
+      const scopes = streamCandidates.rows.map((stream) => ({ tenantId: stream.tenant_id, conversationId: stream.session_id }))
+      const parents = await PostgresAgentDispatchOutboxRepository.lockConversationsInTransaction(client, scopes)
+      // A parent may disappear between discovery and locking. Only actually locked
+      // identities may enter; a newly inserted parent outside that result is excluded.
+      const lockedScopes = parents.map((parent) => ({ tenant_id: parent.tenant_id, conversation_id: parent.conversation_id }))
+      const streams = await client.query<GarbageStreamRow>(
+        streamCandidatesQuery + "\nFOR UPDATE SKIP LOCKED LIMIT $2",
+        [cutoff, command.batchSize, JSON.stringify(lockedScopes)],
       )
       streamsScanned = streams.rows.length
       for (const stream of streams.rows) {
-        const latestRunStart = safeInteger(stream.latest_run_start_sequence, "latest run start sequence")
+        const retainFrom = safeInteger(stream.effective_retain_from, "effective retain-from sequence")
         const collected = await client.query<GarbageBatchRow>(
           `WITH candidates AS MATERIALIZED (
              SELECT tenant_id, session_id, cursor, public_sequence
@@ -438,7 +511,7 @@ export class PostgresAgUiConsumerRepository implements AgUiProjectionConsumerRep
            SELECT (SELECT count(*)::text FROM inserted) AS tombstones_inserted,
                   (SELECT count(*)::text FROM deleted) AS frames_deleted,
                   (SELECT max(public_sequence)::text FROM deleted) AS retention_floor`,
-          [stream.tenant_id, stream.session_id, cutoff, latestRunStart, command.batchSize, now],
+          [stream.tenant_id, stream.session_id, cutoff, retainFrom, command.batchSize, now],
         )
         const batch = collected.rows[0]
         if (batch === undefined) throw new Error("AG-UI garbage collection did not return its settlement")
@@ -446,6 +519,16 @@ export class PostgresAgUiConsumerRepository implements AgUiProjectionConsumerRep
         framesDeleted += batchFrames
         tombstonesInserted += safeInteger(batch.tombstones_inserted, "garbage-collected tombstone count")
         if (batchFrames === 0 || batch.retention_floor === null) continue
+        await client.query(
+          `DELETE FROM bff_agui_run_interaction AS interaction
+            WHERE tenant_id=$1 AND session_id=$2
+              AND EXISTS (SELECT 1 FROM bff_agent_dispatch_outbox AS dispatch
+                WHERE dispatch.tenant_id=interaction.tenant_id AND dispatch.conversation_id=interaction.session_id
+                  AND dispatch.run_id=interaction.run_id AND dispatch.status IN ('terminal','failed'))
+              AND NOT EXISTS (SELECT 1 FROM bff_agui_event AS frame
+                WHERE frame.tenant_id=interaction.tenant_id AND frame.session_id=interaction.session_id AND frame.public_sequence=interaction.public_sequence)`,
+          [stream.tenant_id, stream.session_id],
+        )
         const floor = safeInteger(batch.retention_floor, "retention floor")
         await client.query(
           `UPDATE bff_agui_stream

@@ -1,3 +1,5 @@
+import { zChatEvent } from "../../../generated/agent-http/zod.gen.js"
+import { parseAgentInteractionState } from "./interaction-state.js"
 import type { ChatEvent, ChatMessage, ChatSessionDetail, ChatSessionSummary } from "../../../contracts/index.js"
 import { parseAgentFailure } from "../../../generated/agent-http/failure-profile.gen.js"
 import type { AgentChatEvent, AgentChatMessage, AgentEventPage, BffIdentity } from "./types.js"
@@ -118,23 +120,10 @@ export function mapAgentEvent(event: AgentChatEvent): ChatEvent | null {
       }
       return null
     }
+    case "interaction.state":
+      return baseEvent(event, "interaction.state", parseAgentInteractionState(payload))
     case "interaction":
-      return baseEvent(event, "tool.awaiting_approval", {
-        segment_id: nonEmptyString(payload.segment_id, "segment_id"),
-        tool_id: nonEmptyString(payload.tool_id, "tool_id"),
-        name: nonEmptyString(payload.name, "name"),
-        args: {},
-        description: typeof payload.description === "string" ? payload.description : "",
-        allowed_decisions: Array.isArray(payload.allowed_decisions) ? payload.allowed_decisions : [],
-        kind: nonEmptyString(payload.kind, "kind"),
-        editable: payload.editable === true,
-        pending_tool_ids: Array.isArray(payload.pending_tool_ids) ? payload.pending_tool_ids : [],
-        ...(typeof payload.result === "string" ? { result: payload.result } : {}),
-        ...(typeof payload.input_schema === "object" && payload.input_schema !== null && !Array.isArray(payload.input_schema)
-          ? { input_schema: payload.input_schema }
-          : {}),
-        ...(typeof payload.risk === "object" && payload.risk !== null && !Array.isArray(payload.risk) ? { risk: payload.risk } : {}),
-      })
+      throw new Error("Retired Agent interaction event")
     case "delivery":
       return baseEvent(event, "delivery.created", {
         tool_call_id: nonEmptyString(payload.tool_call_id, "tool_call_id"),
@@ -171,7 +160,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function agentEvent(value: unknown, expectedSessionId: string): AgentChatEvent | null {
-  if (!isRecord(value)) return null
+  if (!isRecord(value) || !zChatEvent.safeParse(value).success) return null
   const chatEventId = value.chat_event_id
   const sessionId = value.session_id
   const runId = value.run_id

@@ -58,6 +58,32 @@ export const zLaunchReceiptEnvelope = z
   })
   .strict()
 
+export const zCancelControl = z.object({ kind: z.literal("run.cancel"), session_id: z.string().min(1) }).strict()
+
+export const zSteerControl = z
+  .object({ kind: z.literal("run.steer"), session_id: z.string().min(1), message_id: z.string().min(1), content: z.string().min(1) })
+  .strict()
+
+export const zResumeDecision = z.union([
+  z.object({ type: z.literal("approve"), args: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(), item_id: z.string().min(1) }).strict(),
+  z.object({ type: z.literal("edit"), args: z.record(z.string(), z.unknown()), item_id: z.string().min(1) }).strict(),
+  z.object({ type: z.literal("reject"), reason: z.union([z.string(), z.null()]).optional(), item_id: z.string().min(1) }).strict(),
+  z.object({ type: z.literal("respond"), response: z.string().min(1), item_id: z.string().min(1) }).strict(),
+  z.object({ type: z.literal("submit"), value: z.record(z.string(), z.unknown()), item_id: z.string().min(1) }).strict(),
+])
+
+export const zResumeControl = z
+  .object({
+    kind: z.literal("run.resume"),
+    session_id: z.string().min(1),
+    decisions: z.array(zResumeDecision).min(1),
+    expected_pause_revision: z.number().int().max(Number.MAX_SAFE_INTEGER).min(1),
+    pause_ref: z.string().min(1),
+  })
+  .strict()
+
+export const zControlRequest = z.discriminatedUnion("kind", [zCancelControl, zSteerControl, zResumeControl])
+
 export const zChatEvent = z
   .object({
     chat_event_id: z.string().min(1),
@@ -65,7 +91,7 @@ export const zChatEvent = z
     run_id: z.string().min(1),
     source_index: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
     chat_message_id: z.string().min(1).nullish(),
-    event_type: z.enum(["run.started", "assistant.delta", "assistant.completed", "activity", "interaction", "delivery", "run.completed", "run.failed"]),
+    event_type: z.enum(["run.started", "assistant.delta", "assistant.completed", "activity", "interaction.state", "delivery", "run.completed", "run.failed"]),
     payload_json: z.string(),
     seq: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
     created_at: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
@@ -87,6 +113,11 @@ export const zReplayPageEnvelope = z
   })
   .strict()
 
+export const zDataEnvelope = z.object({
+  data: z.unknown(),
+  meta: zMeta,
+})
+
 /**
  * Caller correlation identifier. The Agent creates one when absent.
  */
@@ -103,6 +134,11 @@ export const zActorRef = z.string().min(1)
 export const zActorKind = z.enum(["user", "project", "service"]).default("user")
 
 export const zAssertionRef = z.string().min(1)
+
+/**
+ * Stable command identity. Reusing it with a different request body is rejected.
+ */
+export const zIdempotencyKey = z.string().min(1).max(200)
 
 export const zAfterSeq = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).default(0)
 
@@ -124,6 +160,28 @@ export const zCreateRunHeaders = z.object({
  * Admission persisted and notification published or replayable.
  */
 export const zCreateRunResponse = zLaunchReceiptEnvelope
+
+export const zControlRunBody = zControlRequest
+
+export const zControlRunHeaders = z.object({
+  "Idempotency-Key": z.string().min(1).max(200),
+  "X-Request-Id": z.string().min(1).optional(),
+  "X-Kokoro-Tenant-Ref": z.string().min(1),
+  "X-Kokoro-Subject-Ref": z.string().min(1),
+  "X-Kokoro-Subject-Kind": z.enum(["user", "project", "service"]).optional().default("user"),
+  "X-Kokoro-Actor-Ref": z.string().min(1),
+  "X-Kokoro-Actor-Kind": z.enum(["user", "project", "service"]).optional().default("user"),
+  "X-Kokoro-Identity-Assertion-Ref": z.string().min(1),
+})
+
+export const zControlRunPath = z.object({
+  run_id: z.string().min(1),
+})
+
+/**
+ * Command receipt admitted or replayed.
+ */
+export const zControlRunResponse = zDataEnvelope
 
 export const zReplaySessionEventsHeaders = z.object({
   "X-Request-Id": z.string().min(1).optional(),
@@ -148,3 +206,51 @@ export const zReplaySessionEventsQuery = z.object({
  * Replay page.
  */
 export const zReplaySessionEventsResponse = zReplayPageEnvelope
+
+export const zInteractionValidation = z
+  .object({ code: z.literal("json_schema_invalid"), instance_path: z.array(z.union([z.string(), z.number().int().max(Number.MAX_SAFE_INTEGER)])) })
+  .strict()
+
+export const zInteractionDisplay = z
+  .object({
+    name: z.string().min(1),
+    description: z.string(),
+    editable: z.boolean(),
+    input_schema: z.record(z.string(), z.unknown()),
+    result_preview: z.union([z.string(), z.null()]).optional(),
+    truncated: z.union([z.boolean(), z.null()]).optional(),
+    source: z.union([z.string(), z.null()]).optional(),
+  })
+  .strict()
+
+export const zInteractionItem = z
+  .object({
+    item_id: z.string().min(1),
+    request_id: z.string().min(1),
+    kind: z.enum(["tool_approval", "ask_user_question", "result_review", "input"]),
+    allowed_decisions: z.array(z.enum(["approve", "edit", "reject", "respond", "submit"])).min(1),
+    display: zInteractionDisplay,
+    validation: z.union([zInteractionValidation, z.null()]).optional(),
+  })
+  .strict()
+
+export const zInteractionGroup = z.object({ group_id: z.string().min(1), items: z.array(zInteractionItem).min(1) }).strict()
+
+export const zInteractionActionResult = z
+  .object({
+    command_id: z.string().min(1),
+    pause_revision: z.number().int().max(Number.MAX_SAFE_INTEGER).min(1),
+    kind: z.enum(["accepted", "native_consumed", "validation_failed", "unknown", "cancelled"]),
+  })
+  .strict()
+
+export const zChatInteractionState = z
+  .object({
+    interaction_revision: z.number().int().max(Number.MAX_SAFE_INTEGER).min(1),
+    pause_revision: z.number().int().max(Number.MAX_SAFE_INTEGER).min(0),
+    pause_ref: z.union([z.string().min(1), z.null()]),
+    phase: z.enum(["active", "waiting", "resuming", "terminal"]),
+    groups: z.array(zInteractionGroup),
+    action_result: z.union([zInteractionActionResult, z.null()]),
+  })
+  .strict()

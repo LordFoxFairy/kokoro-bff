@@ -30,7 +30,7 @@ async function readContract() {
 function inspectChatFailureContract(openapi) {
   const errors = []
   const start = openapi.indexOf("    ChatMessage:\n")
-  const end = openapi.indexOf("    ChatRun:\n", start)
+  const end = openapi.indexOf("    InteractionValidation:\n", start)
   const message = start >= 0 && end > start ? openapi.slice(start, end) : ""
   const failureStart = message.indexOf("        failure:\n")
   const guardStart = message.indexOf("      allOf:\n", failureStart)
@@ -40,7 +40,7 @@ function inspectChatFailureContract(openapi) {
     if (!condition) errors.push(label)
   }
 
-  require(/^info:\n(?:.*\n){0,3}?  version: 3\.0\.0$/mu.test(openapi), "public info.version must be 3.0.0")
+  require(/^info:\n(?:.*\n){0,3}?  version: 4\.0\.0$/mu.test(openapi), "public info.version must be 4.0.0")
   require(/^      required: \[message_id, role, content, status, created_at\]$/mu.test(message), "failure must stay optional")
   const roles = [...(message.match(/role:\n\s+type: string\n\s+enum: \[([^\]]+)\]/u)?.[1] ?? "").matchAll(/[a-z_]+/gu)].map(
     (match) => match[0],
@@ -1015,4 +1015,39 @@ test("personal Skill installation gate binds stable error.code enums to each HTT
       mutation.join(" -> "),
     )
   }
+})
+
+test("public4 has only the closed full execution head, five current-locator decisions and full interaction CUSTOM", async () => {
+  const { createRequire } = await import("node:module")
+  // Parse with the YAML implementation already locked by the contract linter.
+  const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
+  const { openapi } = await readContract()
+  const document = load(openapi)
+  const schemas = document.components.schemas
+  assert.equal(document.info.version, "4.0.0")
+  const snapshot = schemas.SessionSnapshotResponse.properties.data
+  assert.equal(Object.hasOwn(snapshot.properties, "active_run"), false)
+  assert.equal(Object.hasOwn(snapshot.properties, "pending_pauses"), false)
+  assert.deepEqual(snapshot.properties.execution_head, { $ref: "#/components/schemas/ExecutionHead" })
+  assert.equal(schemas.ExecutionHead.additionalProperties, false)
+  assert.deepEqual(schemas.ExecutionHead.required, ["run_id", "state", "pending_pauses"])
+  assert.deepEqual(schemas.ExecutionHead.properties.state.enum, ["queued", "active", "waiting", "resuming"])
+  assert.deepEqual(schemas.ExecutionHead.properties.pending_pauses, { type: "array", items: { $ref: "#/components/schemas/PendingPause" }, maxItems: 1 })
+  assert.equal(schemas.ExecutionHead.allOf[0].then.properties.pending_pauses.minItems, 1)
+  assert.equal(schemas.ExecutionHead.allOf[0].else.properties.pending_pauses.maxItems, 0)
+  assert.equal(schemas.ChatInteractionState.additionalProperties, false)
+  assert.deepEqual(schemas.ChatInteractionState.required, ["interaction_revision", "pause_revision", "pause_ref", "phase", "groups", "action_result"])
+  assert.equal(schemas.ChatInteractionState.properties.interaction_revision.maximum, Number.MAX_SAFE_INTEGER)
+  assert.equal(schemas.ChatInteractionState.properties.pause_revision.maximum, Number.MAX_SAFE_INTEGER)
+  assert.equal(schemas.RunResumeRequest.additionalProperties, false)
+  assert.deepEqual(schemas.RunResumeRequest.required, ["kind", "decisions", "expected_pause_revision", "pause_ref"])
+  assert.equal(schemas.RunResumeRequest.properties.expected_pause_revision.minimum, 1)
+  assert.equal(schemas.RunResumeRequest.properties.expected_pause_revision.maximum, Number.MAX_SAFE_INTEGER)
+  const owner = JSON.parse(await readFile(new URL("../../contract/vendor/kokoro-agent/e977923ea9992cbddaf0cdbc6c8f8d23b3af120e/openapi.json", import.meta.url), "utf8"))
+  assert.deepEqual(schemas.ResumeDecision, owner.components.schemas.ResumeDecision)
+  assert.equal(schemas.SessionEventStream["x-kokoro-custom-event-values"]["kokoro.interaction.state"].$ref, "#/components/schemas/ChatInteractionState")
+  const operation = document.paths["/v1/sessions/{id}/runs/{runId}/control"].post
+  assert.equal(operation.requestBody.content["application/json"].examples.resume.value.decisions[0].item_id, "item_01J")
+  assert.equal(operation.requestBody.content["application/json"].examples.resume.value.expected_pause_revision, 1)
+  assert.equal(operation.requestBody.content["application/json"].examples.resume.value.pause_ref, "pause_01J")
 })

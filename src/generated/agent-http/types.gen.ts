@@ -49,13 +49,71 @@ export type LaunchReceiptEnvelope = {
   meta: Meta
 }
 
+export type CancelControl = {
+  kind: "run.cancel"
+  session_id: string
+}
+
+export type SteerControl = {
+  kind: "run.steer"
+  session_id: string
+  message_id: string
+  content: string
+}
+
+export type ResumeDecision =
+  | {
+      type: "approve"
+      args?: {
+        [key: string]: unknown
+      } | null
+      item_id: string
+    }
+  | {
+      type: "edit"
+      args: {
+        [key: string]: unknown
+      }
+      item_id: string
+    }
+  | {
+      type: "reject"
+      reason?: string | null
+      item_id: string
+    }
+  | {
+      type: "respond"
+      response: string
+      item_id: string
+    }
+  | {
+      type: "submit"
+      value: {
+        [key: string]: unknown
+      }
+      item_id: string
+    }
+
+/**
+ * Full pending collection submission for one exact pause. The owner rejects duplicate, missing, extra or stale item identities as a whole; HTTP admission is not native consumption.
+ */
+export type ResumeControl = {
+  kind: "run.resume"
+  session_id: string
+  decisions: Array<ResumeDecision>
+  expected_pause_revision: number
+  pause_ref: string
+}
+
+export type ControlRequest = CancelControl | SteerControl | ResumeControl
+
 export type ChatEvent = {
   chat_event_id: string
   session_id: string
   run_id: string
   source_index: number
   chat_message_id?: string | null
-  event_type: "run.started" | "assistant.delta" | "assistant.completed" | "activity" | "interaction" | "delivery" | "run.completed" | "run.failed"
+  event_type: "run.started" | "assistant.delta" | "assistant.completed" | "activity" | "interaction.state" | "delivery" | "run.completed" | "run.failed"
   payload_json: string
   seq: number
   /**
@@ -75,6 +133,11 @@ export type ReplayPageEnvelope = {
   meta: Meta
 }
 
+export type DataEnvelope = {
+  data: unknown
+  meta: Meta
+}
+
 /**
  * Caller correlation identifier. The Agent creates one when absent.
  */
@@ -91,6 +154,11 @@ export type ActorRef = string
 export type ActorKind = "user" | "project" | "service"
 
 export type AssertionRef = string
+
+/**
+ * Stable command identity. Reusing it with a different request body is rejected.
+ */
+export type IdempotencyKey = string
 
 export type AfterSeq = number
 
@@ -144,6 +212,65 @@ export type CreateRunResponses = {
 }
 
 export type CreateRunResponse = CreateRunResponses[keyof CreateRunResponses]
+
+export type ControlRunData = {
+  body: ControlRequest
+  headers: {
+    /**
+     * Stable command identity. Reusing it with a different request body is rejected.
+     */
+    "Idempotency-Key": string
+    /**
+     * Caller correlation identifier. The Agent creates one when absent.
+     */
+    "X-Request-Id"?: string
+    "X-Kokoro-Tenant-Ref": string
+    "X-Kokoro-Subject-Ref": string
+    "X-Kokoro-Subject-Kind"?: "user" | "project" | "service"
+    "X-Kokoro-Actor-Ref": string
+    "X-Kokoro-Actor-Kind"?: "user" | "project" | "service"
+    "X-Kokoro-Identity-Assertion-Ref": string
+  }
+  path: {
+    run_id: string
+  }
+  query?: never
+  url: "/v1/runs/{run_id}/control"
+}
+
+export type ControlRunErrors = {
+  /**
+   * Request validation failed.
+   */
+  400: ErrorEnvelope
+  /**
+   * Service credential or trusted identity is missing or invalid.
+   */
+  401: ErrorEnvelope
+  /**
+   * The identity-scoped resource does not exist.
+   */
+  404: ErrorEnvelope
+  /**
+   * The idempotency identity was reused with a different request.
+   */
+  409: ErrorEnvelope
+  /**
+   * A required Agent dependency is unavailable.
+   */
+  503: ErrorEnvelope
+}
+
+export type ControlRunError = ControlRunErrors[keyof ControlRunErrors]
+
+export type ControlRunResponses = {
+  /**
+   * Command receipt admitted or replayed.
+   */
+  202: DataEnvelope
+}
+
+export type ControlRunResponse = ControlRunResponses[keyof ControlRunResponses]
 
 export type ReplaySessionEventsData = {
   body?: never

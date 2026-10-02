@@ -222,3 +222,171 @@ test("does not call Agent control when private Chat authorization is absent", as
   assert.equal(body.error.code, "session_not_found")
   assert.equal(calls, 0)
 })
+
+
+// R57: published Agent e977923 HTTP4; append-only behavior RED, no production substitutes.
+
+function r57Waiting() {
+  return {
+    interaction_revision: 7,
+    pause_revision: 7,
+    pause_ref: "pause:run_hitl_1:7",
+    phase: "waiting",
+    groups: [
+      {
+        group_id: "group_tools",
+        items: [
+          {
+            item_id: "item_approve",
+            request_id: "request_tool_1",
+            kind: "tool_approval",
+            allowed_decisions: ["approve", "edit", "reject"],
+            display: {
+              name: "search",
+              description: "Search approved index",
+              editable: true,
+              input_schema: { type: "object", properties: { query: { type: "string" } } },
+              result_preview: null,
+              truncated: null,
+              source: null,
+            },
+          },
+          {
+            item_id: "item_edit",
+            request_id: "request_tool_2",
+            kind: "tool_approval",
+            allowed_decisions: ["edit", "reject"],
+            display: { name: "edit", description: "Edit parameters", editable: true, input_schema: { type: "object" } },
+          },
+          {
+            item_id: "item_reject",
+            request_id: "request_review_1",
+            kind: "result_review",
+            allowed_decisions: ["approve", "reject"],
+            display: {
+              name: "review",
+              description: "Review result",
+              editable: false,
+              input_schema: { type: "object" },
+              result_preview: "bounded result",
+              truncated: false,
+              source: "tool",
+            },
+          },
+        ],
+      },
+      {
+        group_id: "group_inputs",
+        items: [
+          {
+            item_id: "item_respond",
+            request_id: "request_question_1",
+            kind: "ask_user_question",
+            allowed_decisions: ["respond", "reject"],
+            display: { name: "question", description: "Choose a region", editable: false, input_schema: { type: "object" } },
+            validation: { code: "json_schema_invalid", instance_path: ["region", 0] },
+          },
+          {
+            item_id: "item_submit",
+            request_id: "request_input_1",
+            kind: "input",
+            allowed_decisions: ["submit"],
+            display: { name: "form", description: "Confirm values", editable: true, input_schema: { type: "object" } },
+          },
+        ],
+      },
+    ],
+    action_result: null,
+  }
+}
+function r57Control() {
+  return {
+    kind: "run.resume",
+    expected_pause_revision: 7,
+    pause_ref: "pause:run_hitl_1:7",
+    decisions: [
+      { type: "approve", item_id: "item_approve" },
+      { type: "edit", item_id: "item_edit", args: { count: 2, note: null } },
+      { type: "reject", item_id: "item_reject" },
+      { type: "respond", item_id: "item_respond", response: "continue" },
+      { type: "submit", item_id: "item_submit", value: { confirmed: true, comment: null } },
+    ],
+  }
+}
+
+test("R57 resume requires the published pause locator and forwards all five closed decision shapes", async () => {
+  const { buildAgentControl } = await import("../dist/infrastructure/clients/agent/control.js")
+  const body = r57Control()
+  assert.deepEqual(buildAgentControl("session_1", body), { ...body, session_id: "session_1" })
+})
+for (const [name, locator] of [
+  ["both omitted", {}],
+  ["revision omitted", { pause_ref: "pause:run_hitl_1:7" }],
+  ["ref omitted", { expected_pause_revision: 7 }],
+  ["zero revision", { expected_pause_revision: 0, pause_ref: "pause:run_hitl_1:7" }],
+  ["unsafe revision", { expected_pause_revision: Number.MAX_SAFE_INTEGER + 1, pause_ref: "pause:run_hitl_1:7" }],
+  ["fractional revision", { expected_pause_revision: 1.5, pause_ref: "pause:run_hitl_1:7" }],
+  ["blank ref", { expected_pause_revision: 7, pause_ref: " " }],
+] as const) {
+  test(`R57 resume rejects ${name} without inventing defaults`, async () => {
+    const { buildAgentControl } = await import("../dist/infrastructure/clients/agent/control.js")
+    assert.equal(buildAgentControl("session_1", { kind: "run.resume", decisions: r57Control().decisions, ...locator }), null)
+  })
+}
+for (const [name, decisions] of [
+  ["unknown discriminator", [{ type: "decide", item_id: "item_approve" }]],
+  ["tool_id alias", [{ type: "approve", tool_id: "item_approve" }]],
+  ["approve extra key", [{ type: "approve", item_id: "item_approve", response: "private" }]],
+  ["edit missing args", [{ type: "edit", item_id: "item_edit" }]],
+  ["edit null args", [{ type: "edit", item_id: "item_edit", args: null }]],
+  ["reject nonstring reason", [{ type: "reject", item_id: "item_reject", reason: 3 }]],
+  ["respond empty response", [{ type: "respond", item_id: "item_respond", response: "" }]],
+  ["submit array value", [{ type: "submit", item_id: "item_submit", value: [] }]],
+  [
+    "duplicate item",
+    [
+      { type: "approve", item_id: "item_approve" },
+      { type: "reject", item_id: "item_approve" },
+    ],
+  ],
+] as const) {
+  test(`R57 strict decision rejects ${name} after a valid control positive`, async () => {
+    const { buildAgentControl } = await import("../dist/infrastructure/clients/agent/control.js")
+    assert.ok(buildAgentControl("session_1", r57Control()), "valid HTTP4 control must first be supported")
+    assert.equal(buildAgentControl("session_1", { ...r57Control(), decisions }), null)
+  })
+}
+test("R57 owner-fixed typed control digest preserves business null and omits delivery identity", async () => {
+  const { agentControlRequestDigest } = await import("../dist/infrastructure/clients/agent/control-receipt.js")
+  const body = { ...r57Control(), session_id: "session_1" }
+  const expected = "sha256:68e6ec9a211ba18dc32e94876db9ac8b793339157e613b4a966ca057c9b0f1d5"
+  assert.equal(agentControlRequestDigest("run_hitl_1", body), expected)
+  assert.equal(agentControlRequestDigest("run_hitl_1", { ...body, command_id: "delivery_1", request_digest: "delivery-only" }), expected)
+})
+test("R57 owner-fixed approve args and reject reason null equal omitted without erasing nested business null", async () => {
+  const { agentControlRequestDigest } = await import("../dist/infrastructure/clients/agent/control-receipt.js")
+  const body = { ...r57Control(), session_id: "session_1" }
+  const nullable = {
+    ...body,
+    decisions: body.decisions.map((decision) =>
+      decision.type === "approve" ? { ...decision, args: null } : decision.type === "reject" ? { ...decision, reason: null } : decision,
+    ),
+  }
+  assert.equal(agentControlRequestDigest("run_hitl_1", nullable), "sha256:68e6ec9a211ba18dc32e94876db9ac8b793339157e613b4a966ca057c9b0f1d5")
+})
+test("R57 business dictionary nulls and decision order remain distinct owner digest material", async () => {
+  const { agentControlRequestDigest } = await import("../dist/infrastructure/clients/agent/control-receipt.js")
+  const body = { ...r57Control(), session_id: "session_1" }
+  const withoutBusinessNull = {
+    ...body,
+    decisions: body.decisions.map((decision) =>
+      decision.type === "edit" ? { ...decision, args: { count: 2 } } : decision.type === "submit" ? { ...decision, value: { confirmed: true } } : decision,
+    ),
+  }
+  assert.equal(agentControlRequestDigest("run_hitl_1", withoutBusinessNull), "sha256:dd32fcc73d0ee1486f06124c573cb2f583e78a2e8be312add3e6cea21ee454d5")
+  assert.notEqual(agentControlRequestDigest("run_hitl_1", body), agentControlRequestDigest("run_hitl_1", withoutBusinessNull))
+  assert.notEqual(agentControlRequestDigest("run_hitl_1", body), agentControlRequestDigest("run_hitl_1", { ...body, decisions: [...body.decisions].reverse() }))
+  const approveNull = { ...body, decisions: [{ type: "approve", item_id: "item_approve", args: { note: null } }] }
+  const approveEmpty = { ...body, decisions: [{ type: "approve", item_id: "item_approve", args: {} }] }
+  assert.notEqual(agentControlRequestDigest("run_hitl_1", approveNull), agentControlRequestDigest("run_hitl_1", approveEmpty))
+})

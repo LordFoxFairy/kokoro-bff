@@ -1,3 +1,5 @@
+import { assertInteractionState } from "./interaction-state.js"
+import type { InteractionState } from "../../contracts/chat.js"
 import type { ChatEvent } from "../../contracts/chat.js"
 import type { AgentFailureProfile } from "../../domain/chat/message.js"
 import { EventType } from "@ag-ui/core"
@@ -219,8 +221,9 @@ export function projectChatEvent(event: ChatEvent, state: AgUiProjectionState): 
       })
       return [{ ...projected, metadata: { kokoro: { ...projected.metadata.kokoro, failure } } }]
     }
-    case "tool.awaiting_approval":
-      return [base(event, EventType.CUSTOM, { name: "kokoro.interaction.awaiting_approval", value: payload })]
+    case "interaction.state":
+      assertInteractionState(payload as InteractionState)
+      return [base(event, EventType.CUSTOM, { name: "kokoro.interaction.state", value: payload })]
     case "delivery.created":
       return [base(event, EventType.CUSTOM, { name: "kokoro.delivery.created", value: payload })]
     case "subagent.started":

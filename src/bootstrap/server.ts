@@ -109,7 +109,6 @@ async function handle(
               updated_at: shared.conversation.updatedAt.toISOString(),
             },
             ...(messages.messages.length === 0 ? {} : { messages: messages.messages }),
-            pending_pauses: [],
             files: [],
             deliveries: [],
             deliveries_has_more: false,
@@ -540,6 +539,7 @@ async function handle(
       composition.agUiRuntime,
       composition.agUiProjector !== undefined,
       chatAuthorization,
+      composition.businessStore?.services.chat ?? null,
     )
     return
   }

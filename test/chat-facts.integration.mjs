@@ -473,6 +473,7 @@ integrationTest("creates a Web-local first Conversation with its turn and Agent 
     if (bff) await close(bff)
     if (store) await store.close()
     await pool.query("DELETE FROM bff_agent_dispatch_outbox WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_agui_run_interaction WHERE tenant_id = $1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_agui_stream WHERE tenant_id = $1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_message WHERE tenant_id = $1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_conversation WHERE tenant_id IN ($1, $2)", [tenant, `${tenant}_foreign`]).catch(() => undefined)
@@ -730,7 +731,7 @@ integrationTest("accepts a Chat turn after the message and Agent dispatch are du
   let launchAttempts = 0
   try {
     await pool.query(
-      "DROP TABLE IF EXISTS bff_scheduled_agent_source_event, bff_scheduled_agent_dispatch, bff_scheduled_agent_scope, bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE",
+      "DROP TABLE IF EXISTS bff_scheduled_agent_source_event, bff_scheduled_agent_dispatch, bff_scheduled_agent_scope, bff_agui_run_interaction, bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE",
     )
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await pool.query(
@@ -910,6 +911,7 @@ integrationTest("accepts a Chat turn after the message and Agent dispatch are du
     if (bff) await close(bff)
     if (agent) await close(agent)
     await pool.query("DELETE FROM bff_agent_dispatch_outbox WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_agui_run_interaction WHERE tenant_id = $1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_agui_stream WHERE tenant_id = $1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_message WHERE tenant_id = $1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_conversation WHERE tenant_id = $1", [tenant]).catch(() => undefined)
@@ -924,7 +926,7 @@ integrationTest("reclaims expired Agent dispatch leases as sticky admission-unkn
   let store
   try {
     await pool.query(
-      "DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE",
+      "DROP TABLE IF EXISTS bff_agui_run_interaction, bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE",
     )
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await pool.query(
@@ -1004,6 +1006,7 @@ integrationTest("reclaims expired Agent dispatch leases as sticky admission-unkn
   } finally {
     if (store) await store.close()
     await pool.query("DELETE FROM bff_agent_dispatch_outbox WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_agui_run_interaction WHERE tenant_id = $1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_agui_stream WHERE tenant_id = $1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_message WHERE tenant_id = $1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_conversation WHERE tenant_id = $1", [tenant]).catch(() => undefined)
@@ -1018,7 +1021,7 @@ integrationTest("keeps an admitted Conversation head blocking every later launch
   let store
   try {
     await pool.query(
-      "DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE",
+      "DROP TABLE IF EXISTS bff_agui_run_interaction, bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE",
     )
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await pool.query(
@@ -1042,6 +1045,42 @@ integrationTest("keeps an admitted Conversation head blocking every later launch
       )
     }
 
+    const queuedSnapshot = await store.services.chat.snapshot(tenant, "chat_user", conversationId, undefined)
+    const queuedRows = await pool.query(
+      `SELECT run_id, conversation_dispatch_seq
+         FROM bff_agent_dispatch_outbox
+        WHERE tenant_id=$1 AND conversation_id=$2
+        ORDER BY conversation_dispatch_seq,outbox_id`,
+      [tenant, conversationId],
+    )
+    assert.deepEqual(queuedSnapshot.execution_head, {
+      run_id: queuedRows.rows[0].run_id,
+      state: "queued",
+      pending_pauses: [],
+    })
+    const queuedReplay = await store.agUi.replay(tenant, conversationId, null, 100)
+    assert.equal(queuedReplay.kind, "page")
+    assert.deepEqual(
+      queuedReplay.frames.map(({ eventType, payload }) => ({ eventType, value: payload.value })),
+      [{
+        eventType: "CUSTOM",
+        value: { run_id: queuedRows.rows[0].run_id, dispatch_sequence: queuedRows.rows[0].conversation_dispatch_seq },
+      }],
+    )
+    const queuedWatermark = queuedSnapshot.event_watermark
+
+    const replayedFirst = await store.services.chatTurns.submit({
+      tenantId: tenant,
+      conversationId,
+      subjectId: "chat_user",
+      actorId: "chat_user",
+      requestId: "request_first",
+      idempotencyKey: "chat-fifo-first",
+      content: "Dispatch first",
+    })
+    assert.equal(replayedFirst.run_id, queuedRows.rows[0].run_id)
+    assert.equal((await store.services.chat.snapshot(tenant, "chat_user", conversationId, undefined)).event_watermark, queuedWatermark)
+
     const beforeClaim = await pool.query(
       "SELECT expected_run_id FROM bff_agui_stream WHERE tenant_id = $1 AND session_id = $2",
       [tenant, conversationId],
@@ -1058,6 +1097,11 @@ integrationTest("keeps an admitted Conversation head blocking every later launch
     assert.equal(first[0].conversationDispatchSeq, "1")
     assert.equal((await pool.query("SELECT expected_run_id FROM bff_agui_stream WHERE tenant_id = $1 AND session_id = $2", [tenant, conversationId])).rows[0].expected_run_id, first[0].runId)
     assert.equal(await store.agentDispatchOutbox.markAgentDispatchAdmitted(first[0]), true)
+    assert.deepEqual((await store.services.chat.snapshot(tenant, "chat_user", conversationId, undefined)).execution_head, {
+      run_id: first[0].runId,
+      state: "queued",
+      pending_pauses: [],
+    })
     const blocked = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
       workerId: "worker_fifo",
       limit: 10,
@@ -1085,9 +1129,57 @@ integrationTest("keeps an admitted Conversation head blocking every later launch
       [tenant, conversationId],
     )
     assert.equal(pendingAssistant.rows[0].status, "pending")
+
+    const terminalAt = new Date().toISOString()
+    await store.agUi.ingest(tenant, conversationId, [
+      {
+        sourceRunId: first[0].runId,
+        sourceEventId: "fifo_first_started",
+        sourceSequence: 1,
+        sourceOccurredAt: terminalAt,
+        sourcePayload: { run_id: first[0].runId },
+        event: { event_id: "fifo_first_started", seq: 1, session_id: conversationId, run_id: first[0].runId, kind: "run.created", timestamp: terminalAt, payload: { run_id: first[0].runId } },
+      },
+      {
+        sourceRunId: first[0].runId,
+        sourceEventId: "fifo_first_terminal",
+        sourceSequence: 2,
+        sourceOccurredAt: terminalAt,
+        sourcePayload: { run_id: first[0].runId },
+        event: { event_id: "fifo_first_terminal", seq: 2, session_id: conversationId, run_id: first[0].runId, kind: "run.completed", timestamp: terminalAt, payload: { status: "completed" } },
+      },
+    ])
+    const handedOff = await store.services.chat.snapshot(tenant, "chat_user", conversationId, undefined)
+    assert.deepEqual(handedOff.execution_head, {
+      run_id: queuedRows.rows[1].run_id,
+      state: "queued",
+      pending_pauses: [],
+    })
+    const afterHandoff = await store.agUi.replay(tenant, conversationId, null, 100)
+    assert.equal(afterHandoff.kind, "page")
+    const queuedFrames = afterHandoff.frames.filter(({ eventType }) => eventType === "CUSTOM")
+    assert.deepEqual(queuedFrames.map(({ payload }) => payload.value.run_id), [queuedRows.rows[0].run_id, queuedRows.rows[1].run_id])
+
+    await pool.query(
+      "UPDATE bff_agui_event SET recorded_at=CURRENT_TIMESTAMP(3)-INTERVAL '2 days' WHERE tenant_id=$1 AND session_id=$2",
+      [tenant, conversationId],
+    )
+    await store.agUiConsumers.collectGarbage({
+      now: new Date().toISOString(),
+      retentionMs: 1,
+      tombstoneRetentionMs: 24 * 60 * 60 * 1000,
+      batchSize: 100,
+    })
+    const retainedHead = await store.agUi.replay(tenant, conversationId, null, 100)
+    assert.equal(retainedHead.kind, "page")
+    assert.equal(
+      retainedHead.frames.some(({ eventType, payload }) => eventType === "CUSTOM" && payload.value.run_id === queuedRows.rows[1].run_id),
+      true,
+    )
   } finally {
     if (store) await store.close()
     await pool.query("DELETE FROM bff_agent_dispatch_outbox WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_agui_run_interaction WHERE tenant_id = $1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_agui_stream WHERE tenant_id = $1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_message WHERE tenant_id = $1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_conversation WHERE tenant_id = $1", [tenant]).catch(() => undefined)
@@ -1105,7 +1197,7 @@ integrationTest("projects fenced dispatch failures as durable RUN_ERROR terminal
   let agentRequests = 0
   try {
     await pool.query(
-      "DROP TABLE IF EXISTS bff_scheduled_agent_source_event, bff_scheduled_agent_dispatch, bff_scheduled_agent_scope, bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE",
+      "DROP TABLE IF EXISTS bff_scheduled_agent_source_event, bff_scheduled_agent_dispatch, bff_scheduled_agent_scope, bff_agui_run_interaction, bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE",
     )
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await pool.query(
@@ -1242,6 +1334,7 @@ integrationTest("projects fenced dispatch failures as durable RUN_ERROR terminal
     await pool.query("DELETE FROM bff_agent_dispatch_outbox WHERE tenant_id = $1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_agui_event WHERE tenant_id = $1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_agui_source_event WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_agui_run_interaction WHERE tenant_id = $1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_agui_stream WHERE tenant_id = $1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_message WHERE tenant_id = $1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_conversation WHERE tenant_id = $1", [tenant]).catch(() => undefined)
@@ -1256,7 +1349,7 @@ integrationTest("deletion atomically fences launches and enqueues durable cancel
   let store
   try {
     await pool.query(
-      "DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE",
+      "DROP TABLE IF EXISTS bff_agui_run_interaction, bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE",
     )
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await pool.query(
@@ -1361,6 +1454,7 @@ integrationTest("deletion atomically fences launches and enqueues durable cancel
     if (store) await store.close()
     await pool.query("DELETE FROM bff_agent_cancellation_outbox WHERE tenant_id = $1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_agent_dispatch_outbox WHERE tenant_id = $1", [tenant]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_agui_run_interaction WHERE tenant_id = $1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_agui_stream WHERE tenant_id = $1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_message WHERE tenant_id = $1", [tenant]).catch(() => undefined)
     await pool.query("DELETE FROM bff_conversation WHERE tenant_id = $1", [tenant]).catch(() => undefined)
@@ -1408,7 +1502,7 @@ integrationTest("serializes terminal, deletion, failure, and exhausted-head race
     return { lease, now }
   }
   try {
-    await pool.query("DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE")
+    await pool.query("DROP TABLE IF EXISTS bff_agui_run_interaction, bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE")
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     store = new PostgresBffRepositories(postgresUrl, redisUrl)
     await store.ready()
@@ -1490,7 +1584,7 @@ integrationTest("serializes terminal, deletion, failure, and exhausted-head race
     }
 
     const exhaustedX = `${tenant}_x`; const availableA = `${tenant}_a`
-    await submit(exhaustedX, "exhausted_x"); await submit(availableA, "available_a")
+    const exhaustedTurn = await submit(exhaustedX, "exhausted_x"); await submit(availableA, "available_a")
     await pool.query("UPDATE bff_agent_dispatch_outbox SET attempt_count=8, status='retryable', available_at=CURRENT_TIMESTAMP(3) WHERE tenant_id=$1 AND conversation_id=$2", [tenant, exhaustedX])
     const exhaustedLock = await lockStream(exhaustedX)
     const firstCycle = store.agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: "barrier_x", limit: 1, leaseDurationMs: 5000, maxAttempts: 8 })
@@ -1503,8 +1597,31 @@ integrationTest("serializes terminal, deletion, failure, and exhausted-head race
     assert.equal(availableClaims.length, 1)
     assert.equal([...firstClaims, ...secondClaims, ...remainingClaims].filter((claim) => claim.conversationId === exhaustedX).length, 0)
     assert.deepEqual((await pool.query("SELECT status FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND conversation_id=$2", [tenant, exhaustedX])).rows, [{ status: "failed" }])
-    assert.deepEqual((await pool.query("SELECT terminal_run_id, expected_run_id FROM bff_agui_stream WHERE tenant_id=$1 AND session_id=$2", [tenant, exhaustedX])).rows, [{ terminal_run_id: null, expected_run_id: null }])
+    assert.deepEqual((await pool.query("SELECT terminal_run_id, expected_run_id FROM bff_agui_stream WHERE tenant_id=$1 AND session_id=$2", [tenant, exhaustedX])).rows, [{ terminal_run_id: exhaustedTurn.run_id, expected_run_id: null }])
     assert.deepEqual((await pool.query("SELECT status, agent_failure_code, agent_failure_retryable FROM bff_message WHERE tenant_id=$1 AND conversation_id=$2 AND role='assistant'", [tenant, exhaustedX])).rows, [{ status: "failed", agent_failure_code: null, agent_failure_retryable: null }])
+    const [failedDispatch] = (await pool.query(
+      "SELECT outbox_id, run_id FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND conversation_id=$2", [tenant, exhaustedX],
+    )).rows
+    assert.equal(failedDispatch.run_id, exhaustedTurn.run_id)
+    const failureSourceId = `dispatch_failure:${failedDispatch.outbox_id}`
+    assert.deepEqual((await pool.query(
+      "SELECT source_owner,source_event_id,source_sequence FROM bff_agui_source_event WHERE tenant_id=$1 AND session_id=$2", [tenant, exhaustedX],
+    )).rows, [{ source_owner: "kokoro-bff", source_event_id: failureSourceId, source_sequence: "1" }])
+    const failureFrames = (await pool.query(
+      "SELECT event_type,source_owner,source_event_id,event_payload FROM bff_agui_event WHERE tenant_id=$1 AND session_id=$2 ORDER BY public_sequence", [tenant, exhaustedX],
+    )).rows
+    assert.deepEqual(failureFrames.map(({ event_type }) => event_type), ["CUSTOM", "RUN_ERROR"])
+    assert.equal(failureFrames[0].event_payload.name, "kokoro.run.queued")
+    assert.deepEqual(failureFrames[0].event_payload.value, { run_id: exhaustedTurn.run_id, dispatch_sequence: "1" })
+    assert.equal(failureFrames[1].source_owner, "kokoro-bff")
+    assert.equal(failureFrames[1].source_event_id, failureSourceId)
+    assert.equal(failureFrames[1].event_payload.runId, exhaustedTurn.run_id)
+    assert.equal(failureFrames[1].event_payload.code, "agent_dispatch_attempts_exhausted")
+    assert.deepEqual((await pool.query(
+      "SELECT run_id FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND conversation_id=$2 AND status IN ('pending','leased','retryable','admitted')", [tenant, exhaustedX],
+    )).rows, [])
+    const exhaustedSnapshot = await store.services.chat.snapshot(tenant, owner, exhaustedX, undefined)
+    assert.equal(exhaustedSnapshot.execution_head, undefined)
   } finally {
     for (const locker of lockers) {
       await locker.query("ROLLBACK").catch(() => undefined)
@@ -1562,7 +1679,7 @@ integrationTest("does not return dispatch or consumer leases exhausted by the re
     }
   }
   try {
-    await pool.query("DROP TABLE IF EXISTS bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE")
+    await pool.query("DROP TABLE IF EXISTS bff_agui_run_interaction, bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE")
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     store = new PostgresBffRepositories(postgresUrl, redisUrl); await store.ready()
     const tenant = `commit_budget_${Date.now()}`; const owner = "commit_budget_user"
@@ -1597,6 +1714,128 @@ integrationTest("does not return dispatch or consumer leases exhausted by the re
     assert.equal((await store.agUiConsumers.claimConsumers({ workerId: "commit_consumer_reclaim", now: new Date().toISOString(), leaseUntil: new Date(Date.now()+5000).toISOString(), limit: 1 })).length, 1)
   } finally {
     if (store) await store.close().catch(() => undefined)
+    await pool.end()
+  }
+})
+
+
+integrationTest("R43 rolls back all queued-head facts on a scoped queued CUSTOM insert fault and replays one key without new facts", { timeout: 30_000 }, async () => {
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
+  const suffix = randomUUID().replaceAll("-", "")
+  const tenantId = "r43_queued_fault_" + suffix
+  const conversationId = "conv_" + randomUUID()
+  const subjectId = "r43_queued_owner"
+  const functionName = "r43_queued_fault_" + suffix
+  const triggerName = "r43_queued_trigger_" + suffix
+  const scopedTables = [
+    ["bff_conversation", "conversation_id"],
+    ["bff_message", "conversation_id"],
+    ["bff_agent_dispatch_outbox", "conversation_id"],
+    ["bff_agui_stream", "session_id"],
+    ["bff_agui_source_event", "session_id"],
+    ["bff_agui_event", "session_id"],
+  ]
+  const input = {
+    tenantId, conversationId, subjectId, actorId: subjectId,
+    requestId: "r43_queued_request_" + suffix,
+    idempotencyKey: "r43_queued_key_" + suffix,
+    content: "One atomic first turn",
+  }
+  let store = null
+  let functionInstalled = false
+  let triggerInstalled = false
+  const fingerprint = async () => {
+    const facts = {}
+    for (const [table, column] of scopedTables) {
+      const result = await pool.query(
+        "SELECT to_jsonb(fact) AS fact FROM " + table + " AS fact WHERE tenant_id=$1 AND " + column + "=$2 ORDER BY to_jsonb(fact)::text",
+        [tenantId, conversationId],
+      )
+      facts[table] = result.rows.map(({ fact }) => fact)
+    }
+    const watermark = await pool.query(
+      "SELECT cursor FROM bff_agui_event WHERE tenant_id=$1 AND session_id=$2 ORDER BY public_sequence DESC LIMIT 1",
+      [tenantId, conversationId],
+    )
+    return { facts, cursor: watermark.rows[0]?.cursor ?? null }
+  }
+  const removeFault = async () => {
+    if (triggerInstalled) {
+      await pool.query("DROP TRIGGER " + triggerName + " ON bff_agui_event")
+      triggerInstalled = false
+    }
+    if (functionInstalled) {
+      await pool.query("DROP FUNCTION " + functionName + "()")
+      functionInstalled = false
+    }
+  }
+  try {
+    await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
+    await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    await store.ready()
+    const before = await fingerprint()
+    assert.ok(Object.values(before.facts).every((rows) => rows.length === 0))
+    assert.equal(before.cursor, null)
+    // Real PostgreSQL failure, restricted to this tenant/conversation and queued CUSTOM.
+    await pool.query(
+      "CREATE FUNCTION " + functionName + "() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN " +
+      "IF NEW.tenant_id=TG_ARGV[0] AND NEW.session_id=TG_ARGV[1] AND NEW.event_type='CUSTOM' " +
+      "AND NEW.event_payload->>'name'='kokoro.run.queued' THEN " +
+      "RAISE EXCEPTION USING ERRCODE='P0001', MESSAGE='R43_QUEUED_INSERT_FAULT'; END IF; RETURN NEW; END; $$",
+    )
+    functionInstalled = true
+    await pool.query(
+      "CREATE TRIGGER " + triggerName + " BEFORE INSERT ON bff_agui_event FOR EACH ROW EXECUTE FUNCTION " +
+      functionName + "('" + tenantId + "','" + conversationId + "')",
+    )
+    triggerInstalled = true
+    let failure
+    try {
+      await store.services.chatTurns.submit(input)
+    } catch (error) {
+      failure = error
+    }
+    const afterFailure = await fingerprint()
+    assert.equal(failure?.code, "P0001", "queued insert fault must propagate through production submit")
+    assert.equal(failure?.message, "R43_QUEUED_INSERT_FAULT")
+    assert.deepEqual(afterFailure, before, "Conversation/Message/outbox/stream/source/public ledger and cursor must all roll back")
+
+    await removeFault()
+    const accepted = await store.services.chatTurns.submit(input)
+    assert.ok(accepted)
+    const committed = await fingerprint()
+    assert.equal(committed.facts.bff_conversation.length, 1)
+    assert.equal(committed.facts.bff_message.length, 2)
+    assert.equal(committed.facts.bff_agent_dispatch_outbox.length, 1)
+    assert.equal(committed.facts.bff_agui_stream.length, 1)
+    assert.equal(committed.facts.bff_agui_source_event.length, 0)
+    assert.equal(committed.facts.bff_agui_event.length, 1)
+    const outbox = committed.facts.bff_agent_dispatch_outbox[0]
+    const queued = committed.facts.bff_agui_event[0]
+    assert.equal(outbox.run_id, accepted.run_id)
+    assert.equal(outbox.status, "pending")
+    assert.equal(queued.event_type, "CUSTOM")
+    assert.equal(queued.event_payload.name, "kokoro.run.queued")
+    assert.deepEqual(queued.event_payload.value, {
+      run_id: accepted.run_id, dispatch_sequence: String(outbox.conversation_dispatch_seq),
+    })
+    assert.match(committed.cursor, /^agui_[0-9a-f]{32}$/u)
+    const snapshot = await store.services.chat.snapshot(tenantId, subjectId, conversationId, undefined)
+    assert.deepEqual(snapshot.execution_head, { run_id: accepted.run_id, state: "queued", pending_pauses: [] })
+    assert.equal(snapshot.event_watermark, committed.cursor)
+    await store.close()
+    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    await store.ready()
+    assert.deepEqual(await store.services.chatTurns.submit(input), accepted)
+    assert.deepEqual(await store.services.chatTurns.submit(input), accepted)
+    assert.deepEqual(await fingerprint(), committed, "same key after reconnect must not add facts, alter markers or advance cursor")
+  } finally {
+    await removeFault()
+    if (store !== null) await store.close()
+    for (const [table, column] of [...scopedTables].reverse()) {
+      await pool.query("DELETE FROM " + table + " WHERE tenant_id=$1 AND " + column + "=$2", [tenantId, conversationId])
+    }
     await pool.end()
   }
 })

@@ -24,13 +24,7 @@ export type AgentLaunch = {
   }
 }
 
-export type AgentControl = {
-  kind: "run.cancel" | "run.resume" | "run.steer"
-  session_id: string
-  decisions?: unknown[]
-  message_id?: string
-  content?: string
-}
+export type AgentControl = import("../../../generated/agent-http/types.gen.js").ControlRequest
 
 export type AgentChatEvent = {
   chat_event_id: string

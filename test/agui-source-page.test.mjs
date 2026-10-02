@@ -702,3 +702,327 @@ describe("AG-UI source continuity defense", () => {
     )
   })
 })
+
+
+// R57: the real source decoder must consume only the published HTTP4 full-state surface.
+
+function r57Waiting() {
+  return {
+    interaction_revision: 7,
+    pause_revision: 7,
+    pause_ref: "pause:run_hitl_1:7",
+    phase: "waiting",
+    groups: [
+      {
+        group_id: "group_tools",
+        items: [
+          {
+            item_id: "item_approve",
+            request_id: "request_tool_1",
+            kind: "tool_approval",
+            allowed_decisions: ["approve", "edit", "reject"],
+            display: {
+              name: "search",
+              description: "Search approved index",
+              editable: true,
+              input_schema: { type: "object", properties: { query: { type: "string" } } },
+              result_preview: null,
+              truncated: null,
+              source: null,
+            },
+          },
+          {
+            item_id: "item_edit",
+            request_id: "request_tool_2",
+            kind: "tool_approval",
+            allowed_decisions: ["edit", "reject"],
+            display: { name: "edit", description: "Edit parameters", editable: true, input_schema: { type: "object" } },
+          },
+          {
+            item_id: "item_reject",
+            request_id: "request_review_1",
+            kind: "result_review",
+            allowed_decisions: ["approve", "reject"],
+            display: {
+              name: "review",
+              description: "Review result",
+              editable: false,
+              input_schema: { type: "object" },
+              result_preview: "bounded result",
+              truncated: false,
+              source: "tool",
+            },
+          },
+        ],
+      },
+      {
+        group_id: "group_inputs",
+        items: [
+          {
+            item_id: "item_respond",
+            request_id: "request_question_1",
+            kind: "ask_user_question",
+            allowed_decisions: ["respond", "reject"],
+            display: { name: "question", description: "Choose a region", editable: false, input_schema: { type: "object" } },
+            validation: { code: "json_schema_invalid", instance_path: ["region", 0] },
+          },
+          {
+            item_id: "item_submit",
+            request_id: "request_input_1",
+            kind: "input",
+            allowed_decisions: ["submit"],
+            display: { name: "form", description: "Confirm values", editable: true, input_schema: { type: "object" } },
+          },
+        ],
+      },
+    ],
+    action_result: null,
+  }
+}
+function r57Control() {
+  return {
+    kind: "run.resume",
+    expected_pause_revision: 7,
+    pause_ref: "pause:run_hitl_1:7",
+    decisions: [
+      { type: "approve", item_id: "item_approve" },
+      { type: "edit", item_id: "item_edit", args: { count: 2, note: null } },
+      { type: "reject", item_id: "item_reject" },
+      { type: "respond", item_id: "item_respond", response: "continue" },
+      { type: "submit", item_id: "item_submit", value: { confirmed: true, comment: null } },
+    ],
+  }
+}
+
+function r57Source(payload, sequence = 1, eventType = "interaction.state") {
+  return event(sequence, { event_type: eventType, payload_json: JSON.stringify(payload) })
+}
+it("R57 source maps the full six-field waiting state without flattening groups or optional presence", () => {
+  const payload = r57Waiting()
+  const mapped = agentProjection.mapAgentEvent(r57Source(payload))
+  assert.deepEqual(mapped, {
+    event_id: "source_1",
+    seq: 1,
+    session_id: "session_1",
+    run_id: "run_1",
+    kind: "interaction.state",
+    timestamp: "1970-01-01T00:00:01.000Z",
+    payload,
+  })
+})
+for (const phase of ["active", "resuming", "terminal"]) {
+  it(`R57 source accepts published ${phase} with historical positive pause locator`, () => {
+    const payload = {
+      ...r57Waiting(),
+      interaction_revision: 8,
+      phase,
+      groups: phase === "resuming" ? r57Waiting().groups : [],
+      action_result: { command_id: "command_resume_1", pause_revision: 7, kind: phase === "resuming" ? "unknown" : "native_consumed" },
+    }
+    assert.deepEqual(agentProjection.mapAgentEvent(r57Source(payload))?.payload, payload)
+  })
+}
+it("R57 source preserves optional null versus omitted as different full-state content", () => {
+  const explicit = r57Waiting()
+  const omitted = structuredClone(explicit)
+  for (const key of ["result_preview", "truncated", "source"]) delete omitted.groups[0].items[0].display[key]
+  assert.deepEqual(agentProjection.mapAgentEvent(r57Source(explicit))?.payload, explicit)
+  assert.deepEqual(agentProjection.mapAgentEvent(r57Source(omitted))?.payload, omitted)
+  assert.notDeepEqual(explicit, omitted)
+})
+it("R57 strict source page rejects retired interaction even when its legacy payload is otherwise valid", () => {
+  const legacy = r57Source(
+    { segment_id: "segment_1", tool_id: "tool_1", name: "legacy", kind: "tool_approval", allowed_decisions: ["approve"], pending_tool_ids: ["tool_1"] },
+    1,
+    "interaction",
+  )
+  assert.equal(agentProjection.agentEventPage({ events: [legacy], next_seq: 1, watermark: 1 }, "session_1", 0, 10), null)
+})
+const r57InvalidStates = [
+  [
+    "missing required field",
+    (p) => {
+      delete p.pause_ref
+    },
+  ],
+  [
+    "unknown top-level field",
+    (p) => {
+      p.owner_digest = "not-published"
+    },
+  ],
+  [
+    "unsafe revision",
+    (p) => {
+      p.interaction_revision = Number.MAX_SAFE_INTEGER + 1
+    },
+  ],
+  [
+    "pause newer than interaction",
+    (p) => {
+      p.pause_revision = 8
+    },
+  ],
+  [
+    "zero revision with ref",
+    (p) => {
+      p.pause_revision = 0
+    },
+  ],
+  [
+    "positive revision null ref",
+    (p) => {
+      p.pause_ref = null
+    },
+  ],
+  [
+    "waiting empty groups",
+    (p) => {
+      p.groups = []
+    },
+  ],
+  [
+    "active nonempty groups",
+    (p) => {
+      p.phase = "active"
+    },
+  ],
+  [
+    "duplicate group identity",
+    (p) => {
+      p.groups[1].group_id = p.groups[0].group_id
+    },
+  ],
+  [
+    "duplicate cross-group item identity",
+    (p) => {
+      p.groups[1].items[0].item_id = p.groups[0].items[0].item_id
+    },
+  ],
+  [
+    "unknown item kind",
+    (p) => {
+      p.groups[0].items[0].kind = "legacy_tool"
+    },
+  ],
+  [
+    "duplicate allowed decision",
+    (p) => {
+      p.groups[0].items[0].allowed_decisions = ["approve", "approve"]
+    },
+  ],
+  [
+    "empty allowed decisions",
+    (p) => {
+      p.groups[0].items[0].allowed_decisions = []
+    },
+  ],
+  [
+    "private item argument",
+    (p) => {
+      p.groups[0].items[0].args = { secret: "private" }
+    },
+  ],
+  [
+    "preview without source",
+    (p) => {
+      delete p.groups[0].items[2].display.source
+    },
+  ],
+  [
+    "bad validation path",
+    (p) => {
+      p.groups[1].items[0].validation.instance_path = [false]
+    },
+  ],
+  [
+    "resuming without result",
+    (p) => {
+      p.phase = "resuming"
+    },
+  ],
+  [
+    "resuming mismatched action revision",
+    (p) => {
+      p.phase = "resuming"
+      p.action_result = { command_id: "c", pause_revision: 6, kind: "accepted" }
+    },
+  ],
+  [
+    "waiting validation failure not older",
+    (p) => {
+      p.action_result = { command_id: "c", pause_revision: 7, kind: "validation_failed" }
+    },
+  ],
+]
+for (const [name, mutate] of r57InvalidStates) {
+  it(`R57 strict full-state decoder rejects ${name}`, () => {
+    const invalid = r57Waiting()
+    mutate(invalid)
+    assert.throws(
+      () => agentProjection.mapAgentEvent(r57Source(invalid)),
+      undefined,
+      "invalid owner state must fail closed, not silently become a zero-frame source",
+    )
+  })
+}
+it("R57 real HTTP source reader rejects a mixed valid start and malformed interaction before returning any page", async () => {
+  const invalid = r57Waiting()
+  invalid.groups[1].items[0].item_id = invalid.groups[0].items[0].item_id
+  let publishInvalid = false
+  const server = createServer((_request, response) => {
+    response.setHeader("content-type", "application/json")
+    response.end(
+      JSON.stringify({
+        data: { events: [event(1), r57Source(publishInvalid ? invalid : r57Waiting(), 2)], next_seq: 2, watermark: 2 },
+        meta: { request_id: "r57_source" },
+      }),
+    )
+  })
+  const base = await listen(server)
+  try {
+    const reader = new AgentAgUiSourceReader(
+      loadConfig({
+        KOKORO_BFF_SHARED_SECRET: "r57-web-secret",
+        KOKORO_INTERNAL_SECRET_BFF: "r57-owner-secret",
+        KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/kokoro_bff?schema=kokoro_bff",
+        KOKORO_BFF_REDIS_URL: "redis://localhost:6379/8",
+      }),
+      base,
+      { maxAttempts: 1 },
+    )
+    const scope = { tenantId: "tenant_1", subjectId: "user_1", sessionId: "session_1" }
+    const positive = await reader.read(scope, 0, 10)
+    assert.equal(positive.events.length, 2)
+    assert.deepEqual(positive.events[1].event?.payload, r57Waiting(), "valid HTTP4 full state must be accepted before testing the negative")
+    publishInvalid = true
+    await assert.rejects(reader.read(scope, 0, 10), AgUiSourceContractError)
+  } finally {
+    await close(server)
+  }
+})
+
+it("R57 source optional-presence vectors keep the two independent owner full-state digests distinct", async () => {
+  const { createHash } = await import("node:crypto")
+  const canonical = (value) =>
+    Array.isArray(value)
+      ? "[" + value.map(canonical).join(",") + "]"
+      : value !== null && typeof value === "object"
+        ? "{" +
+          Object.keys(value)
+            .sort()
+            .map((key) => JSON.stringify(key) + ":" + canonical(value[key]))
+            .join(",") +
+          "}"
+        : JSON.stringify(value)
+  const explicit = r57Waiting()
+  explicit.groups[0].items = explicit.groups[0].items.slice(0, 1)
+  const omitted = structuredClone(explicit)
+  for (const key of ["result_preview", "truncated", "source"]) delete omitted.groups[0].items[0].display[key]
+  const mappedExplicit = agentProjection.mapAgentEvent(r57Source(explicit))
+  const mappedOmitted = agentProjection.mapAgentEvent(r57Source(omitted))
+  assert.deepEqual(mappedExplicit?.payload, explicit)
+  assert.deepEqual(mappedOmitted?.payload, omitted)
+  assert.equal(createHash("sha256").update(canonical(mappedExplicit.payload)).digest("hex"), "1f189ebdc6434757949ae96350ba4b6a0c92f3a26a8e2e0d99f9e8ff6af1a22e")
+  assert.equal(createHash("sha256").update(canonical(mappedOmitted.payload)).digest("hex"), "4d8573e1211c7aaa33a6d37cde0bf830e2fb9e7bf52e7d214229fd30e05ab9aa")
+})

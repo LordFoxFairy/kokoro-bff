@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 3.0.0
+  version: 4.0.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -840,6 +840,7 @@ paths:
       x-kokoro-idempotency: required
       x-kokoro-permission: chat.run.control
       summary: Control an asynchronous run
+      description: Resume submits every pending item for the exact pause revision and reference. Invalid collections return 400 invalid_run_control; stale or non-waiting pauses return 409 run_control_conflict; a different current Run returns 404 run_not_found. A 202 receipt admits the command but does not resolve the durable pause.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
         - $ref: '#/components/parameters/DirectScopeQuery'
@@ -857,9 +858,11 @@ paths:
               resume:
                 value:
                   kind: run.resume
+                  expected_pause_revision: 1
+                  pause_ref: pause_01J
                   decisions:
                     - type: approve
-                      tool_id: tool_01J
+                      item_id: item_01J
       responses:
         '202':
           description: Run control receipt
@@ -4575,18 +4578,412 @@ components:
         status: completed
         created_at: '2026-01-01T00:00:00.000Z'
         run_id: run_01JASYNC
-    ChatRun:
+    InteractionValidation:
       type: object
-      required: [run_id, status]
+      required:
+      - code
+      - instance_path
+      properties:
+        code:
+          type: string
+          const: json_schema_invalid
+        instance_path:
+          type: array
+          items:
+            type:
+            - string
+            - integer
+            minimum: -9007199254740991
+            maximum: 9007199254740991
+      additionalProperties: false
+    InteractionDisplay:
+      type: object
+      required:
+      - name
+      - description
+      - editable
+      - input_schema
+      properties:
+        name:
+          type: string
+          minLength: 1
+        description:
+          type: string
+        editable:
+          type: boolean
+        input_schema:
+          type: object
+          additionalProperties: true
+        result_preview:
+          type:
+          - string
+          - 'null'
+        truncated:
+          type:
+          - boolean
+          - 'null'
+        source:
+          type:
+          - string
+          - 'null'
+      additionalProperties: false
+      allOf:
+      - if:
+          required:
+          - result_preview
+          properties:
+            result_preview:
+              type: string
+          additionalProperties: true
+        then:
+          required:
+          - truncated
+          - source
+          properties:
+            truncated:
+              type: boolean
+            source:
+              type: string
+              minLength: 1
+          additionalProperties: true
+    InteractionItem:
+      type: object
+      required:
+      - item_id
+      - request_id
+      - kind
+      - allowed_decisions
+      - display
+      properties:
+        item_id:
+          type: string
+          minLength: 1
+        request_id:
+          type: string
+          minLength: 1
+        kind:
+          type: string
+          enum:
+          - tool_approval
+          - ask_user_question
+          - result_review
+          - input
+        allowed_decisions:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+            - approve
+            - edit
+            - reject
+            - respond
+            - submit
+        display:
+          $ref: '#/components/schemas/InteractionDisplay'
+        validation:
+          anyOf:
+          - $ref: '#/components/schemas/InteractionValidation'
+          - type: 'null'
+      additionalProperties: false
+    InteractionGroup:
+      type: object
+      required:
+      - group_id
+      - items
+      properties:
+        group_id:
+          type: string
+          minLength: 1
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/InteractionItem'
+      additionalProperties: false
+    InteractionActionResult:
+      type: object
+      required:
+      - command_id
+      - pause_revision
+      - kind
+      properties:
+        command_id:
+          type: string
+          minLength: 1
+        pause_revision:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+        kind:
+          type: string
+          enum:
+          - accepted
+          - native_consumed
+          - validation_failed
+          - unknown
+          - cancelled
+      additionalProperties: false
+    ChatInteractionState:
+      type: object
+      required:
+      - interaction_revision
+      - pause_revision
+      - pause_ref
+      - phase
+      - groups
+      - action_result
+      properties:
+        interaction_revision:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+        pause_revision:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        pause_ref:
+          type:
+          - string
+          - 'null'
+          minLength: 1
+        phase:
+          type: string
+          enum:
+          - active
+          - waiting
+          - resuming
+          - terminal
+        groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/InteractionGroup'
+        action_result:
+          anyOf:
+          - $ref: '#/components/schemas/InteractionActionResult'
+          - type: 'null'
+      additionalProperties: false
+      allOf:
+      - if:
+          properties:
+            phase:
+              enum:
+              - waiting
+              - resuming
+          additionalProperties: true
+        then:
+          properties:
+            groups:
+              minItems: 1
+            pause_revision:
+              minimum: 1
+          additionalProperties: true
+        else:
+          properties:
+            groups:
+              maxItems: 0
+          additionalProperties: true
+      - if:
+          properties:
+            pause_revision:
+              const: 0
+          additionalProperties: true
+        then:
+          properties:
+            pause_ref:
+              type: 'null'
+          additionalProperties: true
+        else:
+          properties:
+            pause_ref:
+              type: string
+              minLength: 1
+          additionalProperties: true
+      - if:
+          properties:
+            phase:
+              const: resuming
+          additionalProperties: true
+        then:
+          properties:
+            action_result:
+              allOf:
+              - $ref: '#/components/schemas/InteractionActionResult'
+              - properties:
+                  kind:
+                    enum:
+                    - accepted
+                    - unknown
+                additionalProperties: true
+          additionalProperties: true
+      description: Complete replacement of the pending collection, never a delta. Runtime additionally enforces globally unique group/item IDs, pause_revision
+        <= interaction_revision, action_result.pause_revision <= pause_revision, exact current revision for resuming, and an earlier action revision for validation_failed
+        waiting. Locator, arguments and submitted values are private and absent.
+    ResumeDecision:
+      oneOf:
+      - type: object
+        required:
+        - type
+        - item_id
+        properties:
+          type:
+            const: approve
+          args:
+            type:
+            - object
+            - 'null'
+            additionalProperties: true
+          item_id:
+            type: string
+            minLength: 1
+        additionalProperties: false
+      - type: object
+        required:
+        - type
+        - item_id
+        - args
+        properties:
+          type:
+            const: edit
+          args:
+            type: object
+            additionalProperties: true
+          item_id:
+            type: string
+            minLength: 1
+        additionalProperties: false
+      - type: object
+        required:
+        - type
+        - item_id
+        properties:
+          type:
+            const: reject
+          reason:
+            type:
+            - string
+            - 'null'
+          item_id:
+            type: string
+            minLength: 1
+        additionalProperties: false
+      - type: object
+        required:
+        - type
+        - item_id
+        - response
+        properties:
+          type:
+            const: respond
+          response:
+            type: string
+            minLength: 1
+          item_id:
+            type: string
+            minLength: 1
+        additionalProperties: false
+      - type: object
+        required:
+        - type
+        - item_id
+        - value
+        properties:
+          type:
+            const: submit
+          value:
+            type: object
+            additionalProperties: true
+          item_id:
+            type: string
+            minLength: 1
+        additionalProperties: false
+    PendingPause:
+      allOf:
+      - $ref: '#/components/schemas/ChatInteractionState'
+      - type: object
+        properties:
+          phase:
+            enum:
+            - waiting
+            - resuming
+          pause_revision:
+            type: integer
+            minimum: 1
+            maximum: 9007199254740991
+          pause_ref:
+            type: string
+            minLength: 1
+        additionalProperties: true
+    ExecutionHead:
+      type: object
+      required:
+      - run_id
+      - state
+      - pending_pauses
       additionalProperties: false
       properties:
-        run_id: { type: string, minLength: 1 }
-        status:
+        run_id:
           type: string
-          enum: [running, completed, cancelled, failed, waiting]
-      example:
-        run_id: run_01JASYNC
-        status: running
+          minLength: 1
+        state:
+          type: string
+          enum:
+          - queued
+          - active
+          - waiting
+          - resuming
+        pending_pauses:
+          type: array
+          items:
+            $ref: '#/components/schemas/PendingPause'
+          maxItems: 1
+      allOf:
+      - if:
+          properties:
+            state:
+              enum:
+              - waiting
+              - resuming
+          additionalProperties: true
+        then:
+          properties:
+            pending_pauses:
+              minItems: 1
+          additionalProperties: true
+        else:
+          properties:
+            pending_pauses:
+              maxItems: 0
+          additionalProperties: true
+      - if:
+          properties:
+            state:
+              const: waiting
+          additionalProperties: true
+        then:
+          properties:
+            pending_pauses:
+              items:
+                properties:
+                  phase:
+                    const: waiting
+                additionalProperties: true
+          additionalProperties: true
+      - if:
+          properties:
+            state:
+              const: resuming
+          additionalProperties: true
+        then:
+          properties:
+            pending_pauses:
+              items:
+                properties:
+                  phase:
+                    const: resuming
+                additionalProperties: true
+          additionalProperties: true
     SessionSnapshotResponse:
       type: object
       required: [data, meta]
@@ -4594,19 +4991,14 @@ components:
       properties:
         data:
           type: object
-          required: [session, pending_pauses, files, deliveries, deliveries_has_more, event_watermark]
+          required: [session, files, deliveries, deliveries_has_more, event_watermark]
           additionalProperties: false
           properties:
             session: { $ref: '#/components/schemas/ChatSession' }
             messages:
               type: array
               items: { $ref: '#/components/schemas/ChatMessage' }
-            active_run: { $ref: '#/components/schemas/ChatRun' }
-            pending_pauses:
-              type: array
-              items:
-                type: object
-                additionalProperties: true
+            execution_head: { $ref: '#/components/schemas/ExecutionHead' }
             files:
               type: array
               items: { $ref: '#/components/schemas/WorkspaceFile' }
@@ -4625,10 +5017,10 @@ components:
             created_at: '2026-01-01T00:00:00.000Z'
             updated_at: '2026-01-01T00:00:00.000Z'
           messages: []
-          active_run:
+          execution_head:
             run_id: run_01JASYNC
-            status: running
-          pending_pauses: []
+            state: active
+            pending_pauses: []
           files: []
           deliveries: []
           deliveries_has_more: false
@@ -4724,21 +5116,38 @@ components:
         kind: run.cancel
     RunResumeRequest:
       type: object
-      required: [kind, decisions]
-      additionalProperties: false
+      required:
+      - kind
+      - decisions
+      - expected_pause_revision
+      - pause_ref
       properties:
-        kind: { type: string, const: run.resume }
+        kind:
+          type: string
+          const: run.resume
         decisions:
           type: array
           minItems: 1
           items:
-            type: object
-            additionalProperties: true
+            $ref: '#/components/schemas/ResumeDecision'
+        expected_pause_revision:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+        pause_ref:
+          type: string
+          minLength: 1
+      additionalProperties: false
+      description: Full pending collection submission for one exact pause. The owner rejects
+        duplicate, missing, extra or stale item identities as a whole; HTTP admission
+        is not native consumption.
       example:
         kind: run.resume
+        expected_pause_revision: 1
+        pause_ref: pause_01J
         decisions:
-          - type: approve
-            tool_id: tool_01J
+        - type: approve
+          item_id: item_01J
     RunSteerRequest:
       type: object
       required: [kind, message_id, content]
@@ -4761,9 +5170,11 @@ components:
       examples:
         - kind: run.cancel
         - kind: run.resume
+          expected_pause_revision: 1
+          pause_ref: pause_01J
           decisions:
             - type: approve
-              tool_id: tool_01J
+              item_id: item_01J
     ControlReceipt:
       type: object
       required: [run_id, command_id, request_digest, status, replayed]
@@ -4802,10 +5213,16 @@ components:
           request_id: req_01JASYNC000000000000000000
     SessionEventStream:
       type: string
-      description: AG-UI server-sent event frames read from the BFF PostgreSQL ledger. Each id is a distinct opaque resume cursor.
+      description: AG-UI server-sent event frames read from the BFF PostgreSQL ledger. Each id is a distinct opaque resume cursor. CUSTOM kokoro.interaction.state carries one complete ChatInteractionState in value; HTTP control admission does not resolve it.
+      x-kokoro-custom-event-values:
+        kokoro.interaction.state:
+          $ref: '#/components/schemas/ChatInteractionState'
       example: |-
         id: agui_0123456789abcdef0123456789abcdef
-        data: {"type":"RUN_FINISHED","timestamp":1767225604000,"threadId":"session_kokoro","runId":"run_01JASYNC","metadata":{"kokoro":{"event_id":"agent_event_4","seq":4,"session_id":"session_kokoro","run_id":"run_01JASYNC","timestamp":"2026-01-01T00:00:04.000Z"}}}
+        data: {"type":"CUSTOM","name":"kokoro.interaction.state","timestamp":1767225604000,"value":{"interaction_revision":1,"pause_revision":1,"pause_ref":"pause_01J","phase":"waiting","groups":[{"group_id":"group_01J","items":[{"item_id":"item_01J","request_id":"request_01J","kind":"tool_approval","allowed_decisions":["approve","reject"],"display":{"name":"Review","description":"Approve this action","editable":false,"input_schema":{"type":"object"}}}]}],"action_result":null},"metadata":{"kokoro":{"event_id":"agent_event_4","seq":4,"session_id":"session_kokoro","run_id":"run_01JASYNC","timestamp":"2026-01-01T00:00:04.000Z"}}}
+
+        id: agui_abcdef0123456789abcdef0123456789ab
+        data: {"type":"RUN_FINISHED","timestamp":1767225605000,"threadId":"session_kokoro","runId":"run_01JASYNC","metadata":{"kokoro":{"event_id":"agent_event_5","seq":5,"session_id":"session_kokoro","run_id":"run_01JASYNC","timestamp":"2026-01-01T00:00:05.000Z"}}}
     RenameSessionRequest:
       type: object
       required: [title]

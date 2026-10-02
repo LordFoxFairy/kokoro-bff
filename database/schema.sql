@@ -622,6 +622,75 @@ CREATE INDEX IF NOT EXISTS ix_bff_agui_event_retention
 -- A compact tombstone keeps a scope-bound answer for cursors whose frame was
 -- reclaimed. It prevents an expired cursor from being confused with an
 -- unknown/foreign cursor while the tombstone retention window is active.
+-- Full interaction read projection. History remains in the AG-UI ledger.
+CREATE TABLE IF NOT EXISTS bff_agui_run_interaction (
+  tenant_id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  run_id TEXT NOT NULL,
+  subject_id TEXT NOT NULL,
+  projection_schema_version INTEGER NOT NULL DEFAULT 1,
+  interaction_revision BIGINT NOT NULL,
+  pause_revision BIGINT NOT NULL,
+  pause_ref TEXT,
+  phase TEXT NOT NULL,
+  groups JSONB NOT NULL,
+  action_command_id TEXT,
+  action_pause_revision BIGINT,
+  action_kind TEXT,
+  interaction_digest TEXT NOT NULL,
+  source_owner TEXT NOT NULL,
+  source_event_id TEXT NOT NULL,
+  source_sequence BIGINT NOT NULL,
+  source_digest TEXT NOT NULL,
+  source_occurred_at TIMESTAMPTZ(3) NOT NULL,
+  public_sequence BIGINT NOT NULL,
+  public_cursor TEXT NOT NULL,
+  created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT pk_bff_agui_run_interaction PRIMARY KEY (tenant_id, session_id, run_id),
+  CONSTRAINT ck_bff_agui_run_interaction_identity CHECK (
+    length(btrim(tenant_id)) > 0 AND length(btrim(session_id)) > 0
+    AND length(btrim(run_id)) > 0 AND length(btrim(subject_id)) > 0
+  ),
+  CONSTRAINT ck_bff_agui_run_interaction_version CHECK (projection_schema_version = 1),
+  CONSTRAINT ck_bff_agui_run_interaction_revision CHECK (
+    interaction_revision BETWEEN 1 AND 9007199254740991
+    AND pause_revision BETWEEN 0 AND interaction_revision
+  ),
+  CONSTRAINT ck_bff_agui_run_interaction_locator CHECK (
+    (pause_revision = 0 AND pause_ref IS NULL)
+    OR (pause_revision > 0 AND pause_ref IS NOT NULL AND length(btrim(pause_ref)) > 0)
+  ),
+  CONSTRAINT ck_bff_agui_run_interaction_phase CHECK (phase IN ('active', 'waiting', 'resuming', 'terminal')),
+  CONSTRAINT ck_bff_agui_run_interaction_groups CHECK (
+    jsonb_typeof(groups) = 'array' AND
+    CASE WHEN jsonb_typeof(groups) = 'array' THEN
+      CASE WHEN phase IN ('waiting', 'resuming') THEN jsonb_array_length(groups) > 0 AND pause_revision > 0
+           ELSE jsonb_array_length(groups) = 0 END
+    ELSE FALSE END
+  ),
+  CONSTRAINT ck_bff_agui_run_interaction_action CHECK (
+    (action_command_id IS NULL AND action_pause_revision IS NULL AND action_kind IS NULL)
+    OR (action_command_id IS NOT NULL AND length(btrim(action_command_id)) > 0
+        AND action_pause_revision IS NOT NULL AND action_pause_revision BETWEEN 1 AND pause_revision
+        AND action_kind IS NOT NULL AND action_kind IN ('accepted', 'native_consumed', 'validation_failed', 'unknown', 'cancelled'))
+  ),
+  CONSTRAINT ck_bff_agui_run_interaction_resuming CHECK (
+    phase <> 'resuming' OR (action_kind IS NOT NULL AND action_kind IN ('accepted', 'unknown') AND action_pause_revision = pause_revision)
+  ),
+  CONSTRAINT ck_bff_agui_run_interaction_validation CHECK (
+    phase <> 'waiting' OR action_kind IS NULL OR action_kind <> 'validation_failed' OR action_pause_revision < pause_revision
+  ),
+  CONSTRAINT ck_bff_agui_run_interaction_digest CHECK (interaction_digest ~ '^[0-9a-f]{64}$' AND source_digest ~ '^[0-9a-f]{64}$'),
+  CONSTRAINT ck_bff_agui_run_interaction_source CHECK (
+    source_owner = 'kokoro-agent' AND length(btrim(source_event_id)) > 0
+    AND source_sequence BETWEEN 1 AND 9007199254740991
+  ),
+  CONSTRAINT ck_bff_agui_run_interaction_public CHECK (
+    public_sequence BETWEEN 1 AND 9007199254740991 AND public_cursor ~ '^agui_[0-9a-f]{32}$'
+  )
+);
+
 CREATE TABLE IF NOT EXISTS bff_agui_cursor_tombstone (
   tenant_id TEXT NOT NULL,
   session_id TEXT NOT NULL,

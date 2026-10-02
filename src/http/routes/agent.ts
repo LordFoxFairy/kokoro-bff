@@ -1,3 +1,5 @@
+import type { ChatApplicationService } from "../../application/chat-service.js"
+import { resumeControlFailure } from "../../application/chat-run-control.js"
 import type { IncomingMessage, ServerResponse } from "node:http"
 
 import type { BffConfig } from "../../config/runtime.js"
@@ -218,6 +220,7 @@ export async function liveAgentSession(
   agUiRuntime: AgUiSessionRuntime,
   sourceProjectionActive: boolean,
   authorization: AuthorizedChatRequest | null,
+  chat: ChatApplicationService | null = null,
 ): Promise<boolean> {
   const baseUrl = config.upstreams.agents ?? null
   const method = request.method || "GET"
@@ -250,6 +253,27 @@ export async function liveAgentSession(
     if (commandId === null) {
       reply(response, 400, failure("idempotency_key_required", "Control requests require Idempotency-Key", context.requestId), context, idempotency, mutation)
       return true
+    }
+    if (control.kind === "run.resume") {
+      if (chat === null) {
+        reply(response, 503, failure("business_store_not_configured", "BFF chat fact storage is not configured", context.requestId), context, idempotency, mutation)
+        return true
+      }
+      try {
+        const snapshot = await chat.readRunControlState(context.identity.namespace, context.identity.userId, sessionId, authorization.projectRef)
+        if (snapshot === null) {
+          reply(response, 404, failure("session_not_found", "Session was not found", context.requestId), context, idempotency, mutation)
+          return true
+        }
+        const rejected = resumeControlFailure(snapshot.executionHead, runId, commandId, control)
+        if (rejected !== null) {
+          reply(response, rejected.status, failure(rejected.code, "Control does not match the current complete pause", context.requestId), context, idempotency, mutation)
+          return true
+        }
+      } catch {
+        reply(response, 503, failure("chat_projection_unavailable", "The durable chat projection is unavailable", context.requestId), context, idempotency, mutation)
+        return true
+      }
     }
     try {
       const result = await callAgent(config, baseUrl, `/v1/runs/${encodeURIComponent(runId)}/control`, "POST", context.requestId, request, Buffer.from(JSON.stringify(control)), context, assertion)

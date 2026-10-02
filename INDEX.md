@@ -15,6 +15,8 @@
 | [`src/main.ts`](./src/main.ts)                                           | 当前 HTTP 组合根与请求管线                         |
 | [`package.json`](./package.json)                                         | 本仓可执行质量门禁                                 |
 
+R62 interaction 持久化职责位于 `src/infrastructure/postgres/agui-interaction-projection.ts`；projection/chat repository 调用，父锁、lease、CAS 与事务提交留原 repository。当前候选未发布，真实资源门由 Root 验证。
+
 ## 当前源码地图
 
 ```text
@@ -81,3 +83,10 @@ Conversation/Message/Share canonical facts，以及 durable AG-UI stream/source-
 
 - Project durable resource GET: `src/http/routes/project-resource-list.ts`, `src/http/project-resource-list-input.ts`, `src/application/project-resource-list.types.ts`; owner mapping remains in the Storage client, with `test/project-resource-list.test.mjs` as focused contract/HTTP coverage.
 - Personal Library upload: `test/personal-file-upload.test.mjs` covers direct contract/application/HTTP; `test/personal-file-upload.integration.mjs` is opt-in real PostgreSQL with a controlled Connect response fault and independent BFF instances. Root separately owns true Storage/MinIO/ClamAV/browser composition evidence.
+
+## R59 public4 实现候选（未发布）
+
+- 唯一公开事实源为 `contract/openapi/v1/openapi.yaml` public4；Agent HTTP4 固定 e977923ea9992cbddaf0cdbc6c8f8d23b3af120e，生成来源见 `contract/dependencies/agent-http.json`。
+- `src/infrastructure/clients/agent/interaction-state.ts` 严格解码固定 owner schema；`src/application/agui/interaction-state.ts` 校验完整 revision/no-op；`src/application/chat-run-control.ts` 校验当前 pause 的完整 decision 集合。
+- `bff_agui_run_interaction` 是最新 run read projection；source/CUSTOM/cursor 与它同事务。`chat-repository.ts` 在授权 RR 中校验 head、完整 state 与 ledger provenance；ACK 不清除 pause。
+- 本轮静态/纯测试证据与未决 fixture 见 `docs/CURRENT.md`。真实 PG/Redis/HTTP、发布及 Web 消费归 Root 后续验收，不能以源码候选代替。

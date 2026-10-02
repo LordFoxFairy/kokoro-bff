@@ -29,7 +29,7 @@ export class ChatApplicationService {
   public async snapshot(tenantId: string, subjectId: string, conversationId: string, projectRef: string | undefined): Promise<ChatSessionDetail | null> {
     const snapshot = await this.repository.readSnapshot(tenantId, subjectId, conversationId, projectRef)
     if (snapshot === null) return null
-    const { conversation, messages, deliveries, deliveriesHasMore, eventWatermark, activeRun } = snapshot
+    const { conversation, messages, deliveries, deliveriesHasMore, eventWatermark, executionHead } = snapshot
     return {
       session: {
         session_id: conversation.conversationId,
@@ -39,7 +39,6 @@ export class ChatApplicationService {
         updated_at: conversation.updatedAt.toISOString(),
       },
       ...(messages.length === 0 ? {} : { messages: messages.map(chatMessage) }),
-      pending_pauses: [],
       files: [],
       deliveries: deliveries.map((delivery) => ({
         conversation_id: delivery.conversationId,
@@ -54,8 +53,12 @@ export class ChatApplicationService {
       })),
       deliveries_has_more: deliveriesHasMore,
       event_watermark: eventWatermark,
-      ...(activeRun === undefined ? {} : { active_run: { run_id: activeRun.runId, status: activeRun.status } }),
+      ...(executionHead === undefined ? {} : { execution_head: { run_id: executionHead.runId, state: executionHead.state, pending_pauses: executionHead.pendingPauses } }),
     }
+  }
+
+  public readRunControlState(tenantId: string, subjectId: string, conversationId: string, projectRef: string | undefined): ReturnType<ChatRepository["readRunControlState"]> {
+    return this.repository.readRunControlState(tenantId, subjectId, conversationId, projectRef)
   }
 
   public async listMessages(tenantId: string, subjectId: string, conversationId: string, limit: number, cursor: string | null, projectRef?: string): Promise<{ messages: ChatMessage[]; next_cursor: string | null } | null> {

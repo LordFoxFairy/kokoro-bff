@@ -1,3 +1,110 @@
+## R62 / R59 实施候选（未发布）
+
+Root R62 已批准在现 postgres 目录抽取 interaction 持久化职责；当前 projection repository 739 行、普通 helper 165 行。R59 decoder、纯 revision/control policy、projection/RR/control 及重复 START 原子拒绝已形成工作树候选；真实资源及发布仍待 Root。基线 main / 759bfe0a8c521946cae31a74b6426f43b063bae1；以下 R48 原 body 逐字节保留，阶段状态以本前缀及 CURRENT 为准。
+
+| 项 | R62 已批准并实施的最小放置结论 |
+|---|---|
+| Owner | BFF Chat / durable AG-UI projection，WIN02 唯一 writer；Root 独占集成、资源与 Git |
+| 当前事实 | 现 projection/chat repository 共同读取完整 interaction；新增逻辑使原 projection repository 达 830 行，既有事务和锁边界不得搬迁 |
+| 目标职责 | src/infrastructure/postgres/agui-interaction-projection.ts 只承载 interaction Row 解码、source/ledger 完整性读取及事务内写入 |
+| 目录方案 | 采用现 postgres 目录普通 helper；淘汰拆旧 replay 的方案，避免扩大 cursor、分页和旧 replay 边界，不建目录/模块/进程 |
+| 粒度 | interaction 持久化是本片独立变化原因；原 repository 留 739 行，未以压行或放宽门禁达标 |
+| 依赖 | projection/chat repo → helper → 本仓 interaction 类型/纯 digest/严格 decoder；helper 不回 import repo，不管理 Pool 或提交事务 |
+| 数据/API | 无第二 schema/contract；父锁、stream/outbox 锁、lease、CAS、source/frame 和 commit 仍由原 repository 管理；读 helper 仅在已授权 RR 或原锁内使用 |
+| 删除项 | 原 projection repository 内对应 decode/read/write 函数已抽出，不保留重复实现/alias；旧 replay 保持原职责 |
+| 验证 | Node22 format/lint/typecheck、contract:check、test:architecture、schema:check、test、build；Root 冻结后完整真实 PG/Redis/HTTP；本窗口未执行资源门 |
+
+---
+
+## R48-BFF-D0：已发布 Agent4 的完整 pause / public4 消费设计（当前目标，未实施）
+
+本前缀是本轮唯一当前方案；下方原正文及 R27/R43/R44 的“owner 未发布/旧锁图/待实现”保留为历史阶段，不与本前缀并列作实现依据。BFF 基线 main 759bfe0a8c521946cae31a74b6426f43b063bae1；本轮仅四 doc 插入前缀，所有生产、测试、机器、SQL、pin/generated 与 Git/资源保持冻结。TS 手册 §1、4–6、8.4 与 SQL 手册为规范入口，不进行框架/目录重构。
+
+### 已核验事实、owner 与放置门
+
+Agent main e977923ea9992cbddaf0cdbc6c8f8d23b3af120e 已由 Root 发布。唯一 HTTP4 机器源为 Agent 的 contract/openapi/v1/openapi.json，version 4.0.0、SHA-256 763ff7a9cf668eb59ae7cfb59b2fd4f84fafde124063d9a365f138b6a30cf04f；contract/provenance.json SHA-256 e2e6cd9f2228900d0c0a8d795f19815a145bd8f0d18c785ffbe059214b5ed99a，combined_sha256 7710ec0e88b55c15279503d6d4aa9494f3ee91c5411284f255df8f107fdc5806。ChatEvent 使用 interaction.state→ChatInteractionState，不再发布旧 interaction。ResumeControl 必须携带 expected_pause_revision/pause_ref；HTTP admission 不证明 native consumption。已发布 LaunchRequest 没有 retry_of_run_id，不能把历史 retry4 草案混入本 cut。selected_skill_source_refs 的既有 required 选择语义保持，合法无外部 Skill 的显式空数组不是 pending 空集合证明。
+
+BFF 当前 contract/dependencies/agent-http.json 仍固定 Agent3 f3be3b97/e9f0a543；生成器及 config 同样固定旧 commit，并只生成 launch/session-events，不生成 control。public canonical OpenAPI 仍为3.0.0。内部 head 候选已写 queued/交接/RR/head-aware replay，但 ChatApplicationService 仍发 active_run 与顶层固定 pending_pauses=[]，旧 mapper 仍把 interaction 当单项 awaiting，不能宣称完整 pause。
+
+| 项 | 当前设计结论 |
+|---|---|
+| Owner | Agent 唯一拥有 Run/native pause/decision consumption；BFF Chat 唯一写 durable public projection、FIFO head、完整 interaction read model；Web 只消费发布的 BFF artifact |
+| 当前事实 | 现 application/agui、clients/agent、postgres、Chat service/ports 与 owner canonical/vendor/generated 路径；五内部源、R46/R43 与原 dirty 测试冻结；未提交变更不覆盖 |
+| 目标职责 | snapshot 四态/full pause 与 watermark 同 RR；同一 durable ledger 支撑 AG-UI/replay/restart；resume 携带整个当前 pause 的 decisions 与 required locator，不以 ACK 改状态 |
+| 目录方案 | 扩展现 Chat/AG-UI/client/repository 边界，并在现目录放普通 decoder/reducer/collection validator 文件；淘汰新 modules/chat/hitl 顶层搬迁与 stream projection_state 塞任意状态，前者无必要重构、后者混淆 projector cache 与 durable run fact |
+| 粒度 | 新普通文件仅承担外部 interaction decode、纯 revision transition、纯 resume collection policy 三个独立变化原因；Service 编排、Repository SQL、wire schema 各保现角色，不建新目录/进程/Repository abstraction |
+| 依赖 | owner HTTP/generated→窄 decoder→内部 typed projection→本仓 Repository；Web→BFF；禁止业务 import sibling Agent 源码/数据库、框架/Pool 类型上泄、runtime import scripts、直接把 generated wire 当本仓 Row |
+| 数据/API | 选本仓 run-scoped 最新完整 interaction 投影一表，唯一 canonical database/schema.sql；public4 原 /v1 corrective；tenant/subject/project 来自可信授权；既有 durable receipt/lease/fence、source ledger 与 opaque cursor 保持 |
+| 删除项 | 切换片删除旧 Agent3 vendor/pin/event-protocol split pin、旧 interaction/tool.awaiting_approval adapter、active_run/ChatActiveRun/顶层固定 pending_pauses 及其消费者；不保留 alias、双枚举、旧3 fallback；保留通用 AG-UI Message/Tool 事件和历史 source guards |
+| 验证 | RED→机器/pin+DDL+source 同片→Root 真 PG/HTTP/SSE/重启与旧完整投影矩阵→完整 lint/typecheck/contract/schema/architecture/test/build→独立审/Git 发布→Web repin/fresh 激活 |
+
+### 四态、完整 revision 与事务
+
+公开 execution_head.state 为 queued|active|waiting|resuming；active 是 UI streaming 的执行态，不另发 streaming alias/第五态。head 仍为同 tenant/Conversation 原 FIFO 最早 nonterminal outbox，snapshot 先授权 Conversation，再在一个 checked-out REPEATABLE READ READ ONLY client 读 head、stream、最新 run interaction、Message/Artifact 与 event_watermark。raw head identity/owner/subject/expected 错误 fail closed，不过滤后猜下一条。RR 内另沿现 public ledger 的 tenant/session/sequence 主键范围，从 matching START 到当前 watermark 查当前 run 最新 kokoro.interaction.state CUSTOM；其存在性/revision/digest/cursor须与 run projection 对等。无 projection 仅在该已验证前缀无任何 full-state CUSTOM 时才是合法初始态；已有 CUSTOM 却丢 Row、Row 无 frame 或落后最新 frame均 fail closed，不引入额外 has_pause boolean。
+
+- queued：尚未匹配 RUN_STARTED，即便 leased/retryable/admitted；无当前 pause，pending_pauses 为空。有效 waiting/resuming source 必须绑定当前已 started run，非法前置/foreign revision 不被转为空。
+- active：匹配 started，尚未出现任何 interaction revision 时由连续已验证 source 前缀证明初始无 pause；已有 revision 后仅其明确空集合 phase active/terminal 才无 pending。不得因 Row 缺字段、parser 忽略事件或普通 activity 默认空。
+- waiting：最新完整 source phase waiting、groups 非空；新 pause/re-pause/validation_failed 仍为完整 waiting，不 merge 旧 items。
+- resuming：最新 source phase resuming，groups 保留原全集，action_result 为 accepted 或 unknown 且精确当前 pause_revision；HTTP/browser ACK 不使 waiting 转移。unknown durable source 仍保留全集并阻止新 key 重复决定。
+- interaction phase terminal 关闭 interaction，不单凭它发明 RUN_FINISHED、释放 dispatch 或关闭 SSE；到受信 run.completed/run.failed 再结算 FIFO。两类 source 跨 page 时已 started head 保持 active/无 pending 的 drain 中间态，待真正 run terminal；下一 queued head 与 cursor 保持同事务。
+
+最新 interaction 以 owner interaction_revision 严格前进：较低拒绝；同 revision 同完整规范化内容不重复 frame/投影，仍按 source ledger 连续性处理合法 source；同 revision 异内容整批回滚。pause_revision 不倒退，pause_ref 与当前/新 pause 关系、groups/item 全局唯一及 action_result 交叉约束按 owner 运行时规则校验；不自行要求 interaction revision 必须 +1，也不假设两个 revision 相同。owner wire 没有可自报的 Run fence 字段；本仓以现 consumer lease/fence、stream version、raw run identity 与 source provenance CAS，不添加假 wire fence。
+
+完整 state、source identity/digest、CUSTOM frame、public cursor/version、source watermark、Message/Artifact 与 terminal→下一 head 由现 commitProjection 同一 Conversation→stream→dispatch→tail 事务写入，任一校验/SQL/lease CAS 失败全回滚。跨 Conversation batch 仍先一次锁全排序父集合；no-parent register/GC 的 authority 修复保留。网络调用不持父锁或 RR transaction。GC 不丢当前 head 的 queued cursor、latest full-revision public frame/source 引用或原 START 边界；delete 的既有 soft-delete/取消 outbox 语义不变。GC candidate 与锁后 requery 必须共享 effective retention boundary：min(latest START、live queued sequence、live head latest full-revision sequence)，并在 LIMIT 前完成父存在/START引用/至少一条过期且sequence小于该boundary的完整 eligibility。不能先按sequence<START挑入、再在删除时用更小retainFrom，从而让无可删帧的A占满batch、永远挡B。该公平性独立于已通过的authority四例，尚待真实RED。
+
+resume 用既有 ChatApplicationService 编排窄 readRunControlState RR 查询；纯 collection policy 在 src/application/chat-run-control.ts，不把业务规则塞 route 或 outbound decoder。BFF 在可信 Conversation/当前 head 内校验完整 item ID 集合、allowed_decisions 与 decision shape；动态 input_schema 的实际业务验证仍由 Agent 原生执行，validation_failed 通过下一完整 source 呈现，不新增第二套 JSON Schema 执行器。关闭 RR 后才发 owner control，race 最终由 Agent required revision/ref 与幂等 key 拒绝。不同 key 在 resuming 拒绝；同 key recovery 先用既有 durable receipt/digest 重放，receipt 尚未可得而已观察相同 action_result.command_id 时，只允许同 pause 的完整幂等重试并继续由 owner 验 digest，不伪造 BFF 已掌握私有旧参数。
+
+### R56 P2：三种 digest 的不同身份与归一边界
+
+BFF mutation fingerprint 绑定本仓外层 durable receipt scope（可信 tenant/subject/method/path/key）及现 method/path/query/canonical headers/semantic body 请求语义；它是现 stableStringify 指纹，不是 Agent request_digest，也不是 interaction_digest。不同请求表示是否在 BFF receipt 层冲突仍按本仓规则；owner 的 null/omitted 等值不自动使两份 BFF mutation fingerprint 或 receipt 可互换，不重写全站幂等策略。
+
+Agent4 control request digest 基于固定 owner 的 RunResume typed normalization：material 含 kind/run_id/session_id/expected_pause_revision/pause_ref/decisions，排除 command_id/request_digest；只在 owner 声明的可选 nullable model 字段 approve.args、reject.reason 上将 null 与 omitted 归为同值。其余 required locator/item identity 不默认、不省略；decisions 保序；对象键排序、紧凑 UTF-8 JSON 后输出 sha256:<hex>。不得递归删除 submit.value、edit.args 或非空 approve.args 内的业务 null；业务字典中的 {"x":null} 与 {} 是不同 material。
+
+interaction_digest 仅绑定 owner 完整六字段 full state：对象键递归排序、groups/items 等数组保序，optional 字段的实际存在性与 null 值保持；不套用 control 的 optional-null 归一规则。同 revision 的 full-state digest 相等才允许 no-op，mutation fingerprint/control digest 均不能证明 state/source 相等。
+
+现 src/infrastructure/clients/agent/control.ts、control-receipt.ts 与 control route 仍消费旧逻辑，后继必须在已列精准写集迁移 required locator、typed normalization 和 receipt digest 对照；对应现 test/agent-control-adapter.test.ts 的 owner-fixed 向量至少覆盖 approve.args/reject.reason null↔omitted 同 digest、submit.value/edit.args/非空 approve.args 内业务 null 保留且不同 digest、排除 delivery IDs、required revision/ref 与决策顺序。full-state 同 revision optional omitted↔null 不等值的投影向量独立保留，不用 control 向量替代。当前仅修正文档，未迁移 adapter/向量，不构成 public4 完成。
+
+### 精确后继文件集（本轮全部未授权写）
+
+| 切片 | 精确路径与变化原因 |
+|---|---|
+| 最小先 RED | 现 test/agent-control-adapter.test.ts（required revision/ref、五 decision shape、整集合与 ACK 无状态效果）、test/agui-source-page.test.mjs（HTTP4 interaction.state 严格 decode/拒旧 interaction）、test/agui.test.ts（一完整 CUSTOM）、test/chat-service.test.ts（四态公开 snapshot）；现 test/agui-projection.integration.mjs、test/agui-http.integration.mjs（真实完整 revision/RR/rollback/restart/control） |
+| 公共机器 | contract/openapi/v1/openapi.yaml：public4、ExecutionHead/PendingPause/ResumeDecision/RunResumeRequest/interaction CUSTOM 值与示例；contract/tests/v1-operations.json 仅批准 breaking baseline，operation/path/permission 不变；contract/README.md、README.md、INDEX.md、docs/INDEX.md 同步唯一入口 |
+| Agent 固定消费 | 新 contract/vendor/kokoro-agent/e977923ea9992cbddaf0cdbc6c8f8d23b3af120e/{openapi.json,provenance.json} 只拷发布 bytes；删除两旧 commit vendor；现 openapi-ts.agent.config.ts、scripts/generate-agent-http-client.mjs、contract/dependencies/agent-http.json 同时固定 HTTP4/provenance，生成 control+launch+session-events，删除仅 delivery.created 的旧 split event pin；src/generated/agent-http/** 只由现生成器重建，不手改 |
+| 窄 source decoder | 现 clients/agent/{projection,types,http-wire,control,control-receipt,index}.ts；新 src/infrastructure/clients/agent/interaction-state.ts 只做 generated schema+owner 跨字段校验；projector-source.ts 保 continuity/错误/预算接线，仅真正必要的 typed source 变化，不改 Scheduled 业务状态机 |
+| 纯投影与 ports | 新 src/application/agui/interaction-state.ts 只做全量 revision 校验/替换；现 application/agui/{project-chat-event,project-session-events}.ts 与 ports/agui-projection-repository.ts 携带内部 typed interaction mutation；现 application/ports/chat-repository.ts 扩展 full head/窄 resume read，并删除 ChatActiveRun |
+| 持久化 | database/schema.sql 一新 run interaction 投影表；现 postgres/{agui-projection-repository,chat-repository,agui-consumer-repository}.ts 分别原子写/RR读与delete/保护GC；不重写已冻 outbox、cancellation、artifact helper 或 Scheduled 表 |
+| 公开映射/control | 现 src/contracts/chat.ts、src/application/chat-service.ts、src/http/routes/agent.ts、src/bootstrap/server.ts；新 src/application/chat-run-control.ts 是纯 policy；server 仅传现 Chat service 给 route，reuse receipt/auth/HTTP transport，不新增进程或隐式 network |
+| schema/contract/回归 | 现 test/schema-governance.test.mjs、test/architecture.test.ts、test/agent-http-wire.test.mjs、test/agui-projector.test.mjs、test/agui-replay.test.mjs、test/contract/openapi-contract.test.mjs、test/contract-governance.test.mjs；三 integration fixture 的 TABLES/零写 fingerprint/own cleanup 仅补新表。Scheduled 仅检查 shared HTTP4 generated consumer，若发现必需变更先报告，不扩大 owner 业务写集 |
+
+### R48 GC公平性最小真实RED（仅后继精准授权，当前不改测试）
+
+只在现 test/agui-projection.integration.mjs 追加一个具名 R48 GC effective-boundary-before-LIMIT A/B 用例，保当前55cc7cfd整前缀。用真实生产 submit/claim/admitted/ingest 创建两个排序为A<B的同owner合法父：A live queued sequence1、START2且admitted，effective boundary1、没有sequence<1的可删帧；B完成旧Run后enqueue/start新Run，其live queued4/START5，旧prefix1–3过期可删。只精确成熟两owned scope的recorded_at，调用现collectGarbage batchSize=1。断言A stream/queued/source/public/tombstone完整fingerprint不变；B恰收一条合法旧prefix帧/同cursor tombstone与floor，B当前queued/START/watermark/full source不损；禁止用缺父、假返回、filter隐藏CUSTOM或all skip作为RED。Root fresh PG/Redis跑到真实删除断言后，才授 agui-consumer-repository.ts 的共享candidate/requery eligibility。新表引用到来后将同effective boundary纳入该查询，不复制第二算法。
+
+### R48 完整旧矩阵的精准迁移门
+
+Root 日志 /tmp/kokoro-bff-projection-r48-root-regression.log 实际21passed/9failed/0skip、1661.549ms；四 authority 例全通过。这九项是当前失败证据，非“全部 fixture”；WIN03 已交只读归因：7项 queued/head-aware 批准语义迁移、1项eligible-later缺真实父、1项publichead缺能力；仍待 Root独立审与精确写卡，未修改原断言。另发现上述GC公平性独立缺口，不把所有GC失败归fixture。下列是拟批准的语义迁移，不是本轮已修改：
+
+| 原失败位置（test/agui-projection.integration.mjs） | 后继批准动作与仍须保持的断言 |
+|---|---|
+| 898 draft/tool/final replay；1311 page boundary | 把真实 queued CUSTOM 纳入精确完整 frame 列表和分页/cursor，显式核 name/value/run/sequence；原全文、Tool、RUN_STARTED/FINISHED 与丢帧/重复断言保持，不通过过滤 CUSTOM 恢复旧计数 |
+| 1652 retention 长度/旧 offset；1789 interleaved 列表 | 从实际 enqueue/handoff 列表逐帧核 queued 与 START/terminal；按合法新的 sequence 校准 GC floor/tombstone/cursor；interleaved START 引用不完整仍禁止GC，不能放宽成非零任意值 |
+| 1830 eligible-later 0 vs 1 | 现 fixture 无父 Conversation，按新 authority 本应不进入GC；后继仅给合法 control 建真实同 tenant parent/subject，保 inert starvation 及2帧回收，另保 R46 orphan 零写负例。该例 fixture 归因与独立 effective-boundary 算法缺口分别处理，不把所有GC失败归 fixture |
+| 1939 newer-run marker | B queued 存在时有效 replay terminal 必须 null，DB 历史 A terminal 仍保留；明确新 head/cursor，原 old-source guard/正式B START/terminal断言保持，禁止清历史 marker 或提前 launch B |
+| 2091 stale-projector replay | 纳入 queued frame，保原 stale lease/version commit 拒绝、source/frame/cursor零非法写；若 fence 行为也失败则先修生产，不删 fenced 断言 |
+| 2285 invalid mixed batch frame_count | queued 已在故障前存在，应与故障前完整 fingerprint 相同而非硬编码0；source HWM不动、整批 source/assistant/interaction/ledger零新增全部保持 |
+| 2493 R43 public head | 等真正 public4/full pause 源码映射后原 R43 assertion 原样转绿；RR barrier 与新旧 head/cursor/Message一致不降级；另外两文件 R43 queued回滚/重启后公开 head 后段同样保留 |
+
+以上迁移须绑定发布 cut 的行为定义，先在原冻结基线记录 RED，再独立审准精确 assert/fixture/cleanup 行；不得更新快照吞掉未知失败、改 selector/skip/xfail、删除旧安全/一致性保障。
+
+### 放行、验证与未决项
+
+D0 只有此三面一致方案，待 Root/独立审正式放行；canonical SQL/public4/pin/generated 与测试仍未实施。未决执行项为 WIN03 九失败报告的 Root独立审/批准的精确旧测试行、GC公平性独立真实RED与修复、后继写入卡、真实 fresh catalog/完整 revision/并发锁 barrier 与 Web 消费证据；不是等待 Agent 再发布 pause，也不借本版本加入未发布 retry/MCP typed connection 目标。
+
+后继 worker 仅 Node22 format/lint/typecheck/build/无资源纯门；Root 运行 pnpm contract:check、pnpm test:architecture、pnpm schema:check、pnpm test、pnpm build，自有空 kokoro_bff schema 的 pnpm db:apply-schema 与 catalog drift、串行 pnpm test:integration（含完整三文件/R43/R46/R48）、真实 owner control/全 pending/restart/GC/双连接精确 pg_blocking_pids barrier、SSE frame/byte/backpressure/取消门。全部结果与当前 commit/原始SHA绑定；4.0不是仅版本号升级。Root 先发布已验 BFF public4/SQL/Agent4 consumer 同一完整切片，Web 再固定 BFF commit/version/digest、删除旧消费并 fresh 组合，最后正式用户/IAM/模型多轮/费用链。无服务启动或共享资源动作在此 D0 内。
+
+---
+
 ## BFF-SCHEDULED-D0：ScheduledTask 自有 terminal-gated dispatch 设计门（2026-10-01；源码候选，真实 PostgreSQL 待 Root 验证）
 
 ### 当前事实与目标边界
@@ -73,6 +180,55 @@ runner在单进程内使用有界scope worker pool：每轮最多`concurrency`�
 所有`workerId/pollIntervalMs/leaseDurationMs/maxAttempts/pageSize/concurrency/retryBaseMs/retryMaxMs/retryJitterPercent/settlementReserveMs`在构造时做精确类型、safe integer、非空、上限及关系校验；`leaseDurationMs > settlementReserveMs`，page/concurrency有固定有限上限，jitter后的delay仍不超过max。
 
 R25真实RED→GREEN必须分别覆盖：enqueue与receipt在故障注入下同回滚；callback↔delete两个锁赢家；精确backend PID的claim/terminal/consumer barrier；非零N cursor到N+1；active terminal在非末页、跨页foreign与最终exhausted释放；duplicate/gap/event id/digest/run冲突整批零写；expired lease与COMMIT后never-sent release；两个scope中慢A不挡B且同scope单赢家；周期repository失败被记录并按有界退避，stop完整drain。
+
+## BFF-EXECUTION-HEAD-D0：首次快照的 durable execution head（R27 设计候选，未实施）
+
+### Owner、版本与边界
+
+BFF Chat capability唯一拥有public execution-head projection、FIFO dispatch head、queued cursor与pending集合投影；Agent仍拥有Run与HITL事实，Web只消费发布artifact。当前submit已同事务写Message/outbox，但enqueue不推进public cursor，snapshot只在`latest_run_id=expected_run_id`时返回active，故accepted到`RUN_STARTED`前身份缺失。
+
+Root裁决首次上线前采用public **4.0.0 corrective单路径**：保留原`/v1`路径，但artifact只发布breaking新schema；ROLE2当前3.0是正式基线而非兼容版本。删除旧`active_run` schema/generated consumer，不建`/v2`、双字段、双route、fallback或Web双读。BFF owner先发布并固定artifact commit/version/digest，Web再单路径repin并做fresh组合激活。未来user retry为BFF 4.1独立目标，且必须等待Agent实际发布retry；Agent HITL 4.0候选尚未落machine contract，不能因版本号相同冒称能力完成。
+
+head是同tenant/conversation按`(conversation_dispatch_seq,outbox_id)`最早且status为`pending|leased|retryable|admitted`的显式outbox row。queued=durable accepted且未见匹配RUN_STARTED（2xx admitted仍queued）；active=expected/latest/head一致且pending集合为空；waiting=当前完整集合非空且尚未提交decision；resuming=Agent已durable受理该revision的decision、集合仍完整保留并标记submitted，直到下一owner revision。terminal或明确never-admitted failed释放A后，同事务选择B并写B的queued CUSTOM/cursor；sticky unknown保持A。
+
+### 真实writer锁图与唯一全局顺序
+
+现代码不是stream-first：
+
+- submit：`PostgresAgentDispatchOutboxRepository.commitChatTurn`先锁/创建Conversation，再写Message/outbox并注册stream；
+- delete/cancel creation：`PostgresChatRepository.deleteConversation`先更新并锁Conversation，再删Artifact、停止stream、更新dispatch/Message并写cancellation outbox；
+- artifact/terminal：`PostgresAgUiProjectionRepository.commitProjection`在artifact场景先调用`lockArtifactConversation`，再锁stream/dispatch并写Message/Artifact/ledger；
+- claim/failure/exhaustion：`claimAgentDispatchOutbox`、`failOneExhaustedHead`、`markAgentDispatchNotAdmitted`/`markAgentDispatchFailedInTransaction`当前先stream/dispatch，失败再写Message；
+- consumer/GC：`PostgresAgUiConsumerRepository.claimConsumers`,`renewConsumerLease`,`markConsumerProgress/Retryable/Blocked`,`releaseConsumer`,`collectGarbage`当前只从stream起锁；
+- `markAgentDispatchAdmitted/Unknown`是纯dispatch CAS；独立`PostgresAgentCancellationOutboxRepository`只写冻结cancellation row，不回写Chat head。
+
+目标唯一顺序为Conversation→stream→dispatch→Message/Artifact/source/public ledger。无锁发现候选后先锁Conversation。单Conversation锁已经完全串行该conversation的tail，其后无需内部排序；跨conversation claim/consumer/GC batch必须先按`(tenant_id,conversation_id)`一次锁完本批全部Conversation，再按同序进入任一stream/tail，禁止`Conversation A→stream A→Conversation B`。新Conversation由本事务INSERT持有后才创建stream。纯dispatch ACK可停在dispatch；一旦结算head/Message必须走完整顺序。网络I/O不持锁。stream-first方案会反转现submit/delete/artifact授权锚点，改面更大，淘汰。
+
+queued CUSTOM（候选`kokoro.run.queued`）只含`run_id`和正十进制`dispatch_sequence`，event identity稳定派生自outbox。submit在一个Conversation-first事务写Message、outbox、queued frame与cursor，任一失败全回滚；重复submit/claim/handoff不重复推进。RR snapshot在授权Conversation后从同一快照读取head、stream、cursor和pending集合；非法组合fail closed。GC保护当前watermark、queued transition与pending revision引用。
+
+### R43 FIFO/RR 收敛：Run terminal 不等于会话流结束（目标，未实施）
+
+`terminal_run_id`是最近已投影Run的历史terminal marker，不是Conversation关闭标志。A terminal与B head/queued CUSTOM/cursor必须同事务交接；B处于pending/leased/retryable/admitted任一状态时，即使stream仍记录`terminal_run_id=A`，也不得据此结束SSE。replay在同一一致性读边界取得授权范围内的durable head、ledger watermark与历史terminal事实，向现内部page提供head-aware的有效结束结果：有head时不得返回会导致route判terminal的结果；无head且存在合法terminal事实时，先送完该页及后续已持久化frame，到ledger head才可按现规则结束。snapshot仍在授权Conversation后的同一RR事务读取head/state/watermark；不同HTTP请求不承诺共用一个数据库快照。
+
+这是BFF现replay查询/结果投影的职责，不新增公开结束字段、Redis gate或第二协议；保留历史dispatch terminal/failed对旧run新source的拒绝与exact duplicate幂等规则，不为保持连接伪造B的RUN_STARTED、提前claim/launch B或清除历史terminal事实。刷新、重启及`Last-Event-ID`原样续读同一durable ledger；poll/byte/frame/总等待预算与取消保持有界。后继RED须用真实reader barrier与生产terminal writer证明旧快照只见A/旧cursor、新快照只见B queued/新cursor，并证明重启后从B queued opaque cursor等待正式B start/terminal、不因历史A marker提前EOF、不重复queued frame。
+
+R44 内部第一源码片（候选，待 Root 集成验证）：本仓唯一 writer WIN02 只修改现 outbox、AG-UI projection、consumer、Chat PostgreSQL repository 与内部 ChatRepository port。submit 的 queued CUSTOM/public cursor 与 Conversation、Message、outbox 同事务；terminal/never-admitted failure 结算后在原事务选择下一 FIFO head 并投影稳定 queued identity。多 Conversation batch 先按 tenant/conversation 锁完父行，再进入 stream/tail；纯 dispatch ACK 保留现 CAS。replay 单 SQL 快照关联 raw FIFO head、owner/stream subject、watermark 与历史 terminal；有 head 时内部 page 不宣告终流。授权后 RR snapshot 增加内部 typed queued/active head，GC 保留所有 nonterminal dispatch 的 queued cursor，并仅豁免 BFF-owned queued frame 的 RUN_STARTED 引用要求。旧 source/terminal/failed、duplicate、sticky unknown、DB-clock/lease fence 守卫保持；不制造下一 Run start。本片没有完整 HITL state/revision，既有 activeRun 仅供锁定的 public3 service 使用，未新增 wire alias。Agent e977923 / HTTP4 已发布；内部冻结后由同 owner 紧接三面 D0 与完整消费，不把此片当作公开4/完整 pause 完成。
+
+### HITL full-revision hard dependency
+
+awaiting虽不在Agent Run CRITICAL outbox，但emitter会先`_persist_chat`，Chat projection已持久化interaction及`pending_tool_ids/schema/result`，所以durable awaiting入口存在。缺口是现source没有可证明全部pending解除的完整revision；普通tool返回/control applied、HTTP resume 2xx或任意activity均不等于resume完成。
+
+BFF等待Agent owner发布完整、带revision的pending collection及run/session/fence语义。BFF只以每个受信revision整体替换投影，不发明逐项opened/resolved事件，不自行merge partial。浏览器ACK不改变状态；只有Agent durable source确认已受理当前revision的decision，才以revision/fence CAS从waiting进入resuming，同时保留完整集合并标记submitted，阻止对同revision重复decide。只有owner确认effective native resume已consumed并给出下一完整revision才整体替换：新集合非空表示re-pause并进入waiting，明确空且run非terminal才active；run cancel/terminal按owner事实关闭投影并结算head。unknown ACK不变，重复revision/source no-op，revision倒退、同revision异内容、foreign/stale/fence冲突整批回滚，restart从PostgreSQL最新完整revision恢复。
+
+public `pending_pauses`必须与head/state（含resuming submitted marker）/watermark来自同一RR快照且对应最新authoritative full revision，不能固定`[]`；waiting与resuming都返回同一集合。具体item/action字段、resuming/native-consumed映射与retention等待Agent HITL artifact；该hard依赖未交付前不落BFF machine/SQL/production。
+
+### 下一代码片精确文件集（本轮未授权写）
+
+需要修改的精确路径：`contract/openapi/v1/openapi.yaml`、`contract/README.md`、`README.md`、`database/schema.sql`；`src/contracts/chat.ts`、`src/application/ports/chat-repository.ts`、`src/application/chat-service.ts`；`src/application/agui/project-chat-event.ts`（待Agent artifact后严格解析full revision）、`src/application/agui/project-session-events.ts`（authoritative revision/resuming projection）、`src/application/agui/ports/agui-projection-repository.ts`；`src/infrastructure/postgres/agent-dispatch-outbox-repository.ts`、`agui-projection-repository.ts`、`agui-consumer-repository.ts`、`chat-repository.ts`、`conversation-artifact-projection.ts`；`src/bootstrap/server.ts`（public-share snapshot也不能继续固定`pending_pauses:[]`）。现`src/http/routes/chat.ts`只透传ChatService snapshot，不构造旧shape，预计无需修改但须contract test证明；`src/interfaces/http/agui/sse.ts`只replay durable frames，无需修改；`agui-consumer-registration.ts`仍由Conversation-first caller包围，无需修改；`agent-cancellation-outbox-repository.ts`不触Chat事实，不修改；retry留4.1。测试精确为`test/chat-service.test.ts`、`test/chat-facts.integration.mjs`、`test/agui-projection.integration.mjs`、`test/agui-http.integration.mjs`及现contract/schema/architecture tests。
+
+### 真实PostgreSQL RED矩阵
+
+1. submit四事实同生同灭、重放不增cursor；2. pending/leased/retryable/admitted均为同head queued；3. matching RUN_STARTED原子active，foreign/stale start零影响；4. authoritative full revision集合、Agent durable decision受理后waiting→resuming且同revision禁止重复decide、browser/unknown ACK零影响、native-consumed后空集合active/新pause revision waiting、cancel/terminal、revision replay/fence/restart严格一致；5. A active+B queued只返回A；6. submit↔claim、delete↔terminal、artifact↔failure的Conversation持锁双连接barrier；7. 跨conversation claim/consumer/GC相反候选顺序先锁全Conversation，无死锁/错head/孤立事实；8. terminalA↔handoffB只能观察A或B及匹配cursor；9. never-admitted failed释放而sticky unknown不释放；10. late ACK/terminal/source不回退新head；11. tenant/owner/project/subject drift fail closed；12. SSE恰好一次重放、分页/byte边界与GC保护revision/queued引用。
 
 ## BFF-FIFO-ATOMIC：Conversation terminal-gated dispatch 设计门（2026-10-01；源码与真实PG门已验证）
 
@@ -192,6 +348,171 @@ schema/domain/public/OpenAPI GREEN。待执行命令：`pnpm contract:check`、`
 `pnpm lint`、`pnpm typecheck`、`pnpm build`、`pnpm test`，以及由 Root 提供随机临时库 URL 的
 `pnpm db:apply-schema`/真实 PostgreSQL CHECK；当前均未作为本阶段通过证据。
 
+
+## BFF-RETRY-DESIGN：失败 assistant 的正式原消息重试（2026-09-30；仅设计，未实施）
+
+### 当前态、owner 与前置阻塞
+
+当前基线是 BFF main `ccb8e144d72e35d90f9edc23f8b3ed0c82fde98d`。public OpenAPI 仍是 `2.0.0`，
+`/v1` 下只有 `POST /v1/sessions/{id}/messages` 的新消息提交；不存在
+`POST /v1/sessions/{session_id}/messages/{assistant_message_id}/retry`路由、重试 application command 或重试事务。
+现有 submit 会在一个 BFF PostgreSQL 事务中新建 user/assistant/run/outbox 并重置 AG-UI consumer
+fence；这不是原消息重试，Web 重发相同 content 也不得冒充本命令。
+
+BFF 继续是 Conversation、Message、Share、Agent dispatch outbox 与 durable AG-UI ledger 的唯一 writer。
+Agent 是 Run、checkpoint、native chat history 与重试 attempt 语义的 owner。目标 BFF 命令必须复用原 user
+Message，只新建 assistant/run/outbox；但当前 Agent `f3be3b97dd67df69ed3c6cb88c59f3bc2db97703`
+尚不支持该语义。Root 的无网络复现是 `SAME_RUN_REPLAY=PASS`、
+`SAME_USER_NEW_RUN=ChatIdentityConflict`、`CURRENT_NATIVE_IDS_DUPLICATE_HUMAN=2`：Agent 在 build 前保存原
+`message_id`，新 run 会命中现有 `(tenant,message_id)` 全行 identity 冲突，且当前 LangGraph reducer 会为
+两个 run 保留两条 native HumanMessage。`RunRequest.message_id` 存在不能证明可重试。
+
+因此生产实施前的强前置是：Agent owner 先发布不可变的新 HTTP contract/provenance，
+`RunRequest` 中用 typed `retry_of_run_id` 表达完整 attempt 重试，并保证同 scoped thread 下的稳定
+user origin、native pre-turn checkpoint、新 run fence 和单一 HumanMessage 语义。具体 owner commit、版本、digest
+尚未因实现而生成。Agent `4.0.0` 已是 owner 四文档冻结的目标设计候选，但尚未实施、发布，
+因而没有可 pin 的 commit/OpenAPI/provenance digest，也不是当前可调用契约。
+本仓不先写 fallback、不创建替代 user id、不放宽 Agent identity，
+也不用“只重试部分 phase”或重分类 failure 缩小目标。
+
+### §8 放置表
+
+| 项 | 结论 |
+| --- | --- |
+| Owner | `kokoro-bff` Chat 能力是 public retry command、Message/outbox/AG-UI 事务的唯一 writer；`kokoro-agent` 唯一拥有 Run/checkpoint/native history 的 retry-attempt 语义。 |
+| 当前事实 | 入口在 `src/bootstrap/server.ts` 与 `src/http/routes/chat.ts`；授权预检在 `chat-authorization.ts`；命令在 `chat-turn-service.ts`；原子写在 `agent-dispatch-outbox-repository.ts`；canonical 表是 `bff_conversation`/`bff_message`/`bff_agent_dispatch_outbox`/`bff_agui_stream`。BFF 还有第二个 Agent `/v1/runs` producer：`src/http/routes/scheduler.ts` 通过 `src/infrastructure/clients/agent/launch.ts` 生成 normal Scheduler launch，并由 `scheduler-dispatch-receipt-repository.ts` 持久化/恢复快照。现无 retry route。 |
+| 目标职责 | 对当前 IAM admission 下的本人 private Conversation，把最新、已验 Agent failure 且 `retryable=true` 的 assistant 变为一个新 attempt；公开 API 只是指定 retry target 的 command，不接受内容或配置。 |
+| 目录方案 | **采用**：扩展现有 Chat route/service/outbox repository/domain payload，因为它们已共同拥有 submit 的锁、序列、幂等和 worker 边界。**淘汰**：新建 `retry/` 目录或 retry 表，会复制 Chat 状态机与 receipt。**淘汰**：改写旧 run/outbox 或新建伪 user，会破坏历史、identity 与审计。 |
+| 粒度 | 扩展现有文件，不新建目录。retry 是 `ChatTurnApplicationService` 的第二个 command，事务是现 repository 的第二个 atomic method；不抽象 BaseRepository/command bus/通用 retry helper。 |
+| 依赖 | HTTP 只依赖 Chat application port；application 只依赖 domain/port/stable-id；PostgreSQL 实现事务；worker 事务外调用 fixed Agent generated contract。BFF 中 Chat outbox delivery 和 Scheduler receiver 是同一 Agent owner contract 的两个 sender，必须同片切换，不把 Scheduler 留给“后续其他仓”。禁止 BFF 读 Agent DB/checkpoint，禁止 Web 直连 Agent，禁止用 generic HTTP receipt 拼接业务事实。 |
+| 数据/API | public `3.1.0`、HTTP `/v1` 不变；新 POST 只接受 `{}` 与唯一 `Idempotency-Key`，202 复用现 receipt。零 BFF DDL；复用 Message/outbox/stream 并在一个事务中新建 assistant/run/outbox 和 consumer fence。tenant/actor 只来自受信 admission。 |
+| 删除项 | Agent 发布后，新 HTTP owner pin 在同一切片替换当前 `f3be…` HTTP vendor/generated 来源，删除旧 HTTP vendor 目录；独立 `delivery.created` 的 `486adb…` event-protocol pin 保持。不保留无 `retry_of_run_id` 的 wire，不接受旧 Chat payload v2 或 Scheduler receipt v2，不增 alias/fallback。 |
+| 验证 | 先机器契约与纯测试 RED，再在固定 owner artifact 上 GREEN；Node 22 运行 contract/architecture/unit/build，Root 独占随机 PostgreSQL fixture 串行运行真事务/HTTP/worker/Agent owner 矩阵。本文档阶段不运行这些命令。 |
+
+### 命令与状态机
+
+目标 endpoint 是
+`POST /v1/sessions/{session_id}/messages/{assistant_message_id}/retry`。它复用现 private `scope` / `project_ref`
+语义和 `chat.message.create` 能力描述，不新增 IAM role/permission。当前实际 enforcement 是 Web→BFF service
+boundary、Bearer online session verify、fixed tenant，以及 Conversation/project/target 的 private owner 检查；
+`x-kokoro-permission` 是契约能力描述，不冒称当前 session verify 已对该 action 做独立 grant 判定。
+retry 不扩大 create 授权范围。
+
+首次接受必须同时满足：
+
+1. target 是当前 tenant/owner/project 下 active Conversation 的最新 assistant Message，`status='failed'`，
+   `run_id` 非空，且严格 Agent failure profile 为 `{source:'agent',retryable:true}`；只有现有
+   `model_unavailable` / `dependency_unavailable` 可达到该状态。
+2. 原 source outbox 精确绑定同 tenant/conversation/subject/user/assistant/run，状态必须是 `succeeded`；
+   其严格解析后的 content、model、agent、thinking、selected Skill source refs、MCP servers、project 与原
+   user Message 完全一致。请求 body 不能补值或覆盖它们。
+3. 没有之后的 pending/leased/retryable dispatch，没有 pending/streaming assistant，且 stream
+   `expected_run_id = terminal_run_id = target.run_id`。不要求 `latest_run_id=target.run_id`：Agent 可在
+   `RUN_STARTED` 前终止；也不要求 `consumer_state='stopped'`。未终态的 HITL/approval 自然因
+   expected 与 terminal 不等而 fail closed。
+
+成功后保留原 user、旧 failed assistant、旧 run 和旧 outbox；新建一条 pending assistant、一个 run、
+一条 pending outbox，并让 stream 期待新 run。新 outbox 继续指向原 `user_message_id`，但使用新
+request ID、当前 admitted actor 和新 identity assertion；Agent launch 复制原严格 payload 中的冻结参数，
+只替换新 request/run 字段并增加 owner 发布的 typed `retry_of_run_id=old_run_id`。网络调用仍在
+commit 之后由 worker 执行，worker 每次交付都使用当前有效授权，不复用旧 Bearer/token。
+
+### Agent 4.0 双 sender 与持久 envelope 原子切换
+
+Agent 4.0 目标 `LaunchRequest` / `LaunchBody` / `RunRequest` 的 `retry_of_run_id` 是 **required nullable**：
+normal launch 必须编码 JSON `null`，retry launch 必须编码非空 parent run ID；缺失、空串、错类型、
+自引用和 unknown field 都 fail closed。BFF 当前有两个 `/v1/runs` producer，必须在一个 consumer
+cutover 中同时更新：
+
+1. Chat `AgentOutboxDelivery` 只交付已持久的严格 launch。normal `ChatTurnApplicationService.submit`
+   也必须显式写 `retry_of_run_id:null`；正式 retry 写 target 旧 run ID。
+2. BFF internal Scheduler receiver 的 `buildScheduledAgentLaunch` 永远是 normal producer，必须显式写
+   `retry_of_run_id:null`。`src/http/routes/scheduler.ts` 的发送和恢复必须只接受该新快照，
+   不能在 Agent 4.0 后继续发缺字段的 3.0 JSON。
+
+Chat persisted payload 从 `AGENT_DISPATCH_SCHEMA_VERSION=2` 升为 **3**。v3 envelope 仍只有
+`schema_version` / `launch` 两个顶层键，但 `launch.retry_of_run_id` 为 required nullable；strict parser 拒绝
+v2、缺字段、extra 和非法 parent。normal/retry 的 canonical request material 都必须包含该值；仓储层再校验
+request/run/session/message/content、row user/assistant/run、retry parent 与 operation-target digest。public receipt 形状不变，
+但其 run/user/assistant 三个 identity 必须来自同一个已验 v3 outbox row，不从 launch response 重组。
+
+Scheduler 的 `bff_idempotency_receipt.response_body` envelope 从实际 **2** 升为 **3**。v3 parser 对
+envelope、snapshot、launch、Agent body、receipt 和 trace 每层都校验 exact key set；只接受
+`retry_of_run_id:null`。恢复时必须重验 canonical occurrence identity：`run_id` / `user_message_id` /
+`assistant_message_id` / `identityAssertionRef`、`session_id=scheduled:{taskId}`、`request_id`、tenant/actor 绑定与
+snapshot/receipt 必须相等。v2 和“新版 parser 给缺字段补 null”都明确拒绝。
+
+切换顺序固定为：Agent 4.0 machine/runtime/schema 发布但不 activate → BFF 在同一切片
+repin/generate 并更新 Chat normal+retry、Chat v3 parser/worker、Scheduler normal sender+v3 receipt parser → 扫描
+BFF 其他 `/v1/runs` sender 为零漏项 → Web 固定 public 3.1 → Root 协调运行组切换。Scheduler
+在 BFF 同片，不是下一个独立仓阶段。
+
+本设计不重写或删除共享/用户 v2 数据。Root 验收使用自有 fresh fixture；已有受管运行组在
+activate 前必须另行决定“新环境 fresh”或“先有界 drain 所有非终态 Chat v2 outbox / Scheduler v2
+receipt 再停机切换”。旧 v2 即使终态也不会被 v3 parser 当作可重试/replay 事实；该历史幂等/
+retention 生命周期是 activate 前必须由 Root 与 owner 明确的未决依赖，不在本 docs 片擅自清理、
+升级或延伸为 scope/会话删除 SQL。
+
+### 原子幂等、并发与失败恢复
+
+retry 使用现有 `bff_agent_dispatch_outbox` 的
+`(tenant_id,conversation_id,idempotency_key)` 唯一约束做业务 receipt，不使用
+`bff_idempotency_receipt`。`src/bootstrap/server.ts` 必须把新 route 加入 `durableChatAdmission`，否则 generic
+receipt 的 pending/commit 崩溃窗口会在业务事务已提交后锁死恢复。不宣称 generic receipt 与 Chat
+事实原子；本命令的 receipt 权威来源只是同事务的 outbox row。
+
+语义 digest 固定包含 operation=`chat.message.retry`、admitted tenant/subject、conversation、project scope 与 target
+assistant ID，不包含每次请求的 request ID/token。在 ACL、project、Conversation owner 和 target visibility
+成功后，事务先查同 key：同 operation/target/digest 直接返回已提交的
+`{run_id,user_message_id,assistant_message_id}`，必须早于“target 已不是最新/stream 已换成新 run”
+等动态拒绝。这保证 commit 后 HTTP reply 丢失可恢复。同 key 用于 submit、另一 target
+或不同 digest 返回冲突。Conversation row lock 使并发首请求串行；后到者只能看到已提交
+outbox 并回收同 receipt，不会创建第二 attempt。
+
+首次命令在单一 PostgreSQL 事务中执行详细锁序与 rollback 规则，以 DATA_MODEL 本任务章节为准。
+新 assistant 只占一个 `message_seq=MAX(message_seq)+1`；新 outbox 的 `conversation_dispatch_seq` 复用该值，
+不为原 user 再占序列。consumer registration 在同事务增加 version/fence、清理旧 lease 并指向新 run。
+
+### 后续精确文件门（现在不授权源码写入）
+
+当前可执行写集仍只是本任务四份文档。Agent 4.0 目标设计已冻结，但 owner artifact/commit/digest 未实施发布；下列只是 Root
+后续可以放行的精确候选，不构成当前写入授权：
+
+- public/owner 契约：`contract/openapi/v1/openapi.yaml`、`contract/tests/v1-operations.json`、
+  `contract/README.md`、`contract/dependencies/agent-http.json`、`openapi-ts.agent.config.ts`、
+  `scripts/generate-agent-http-client.mjs`，以及新 owner commit 目录中唯一 `openapi.json` / `provenance.json`。
+  新 owner SHA 未发布，所以不用占位目录冒充“精确 pin”；Root 必须在授 GREEN 前把具体目录、
+  版本和 SHA 写入任务卡。生成输出只允许现 17 个 manifest 路径与同目录的
+  `client.gen.ts`、`sdk.gen.ts`、`types.gen.ts`、`zod.gen.ts`、`failure-profile.gen.ts`、
+  `client/{client.gen.ts,index.ts,types.gen.ts,utils.gen.ts}` 和
+  `core/{auth.gen.ts,bodySerializer.gen.ts,params.gen.ts,pathSerializer.gen.ts,queryKeySerializer.gen.ts,serverSentEvents.gen.ts,types.gen.ts,utils.gen.ts}`。
+- runtime：`src/bootstrap/server.ts`、`src/http/request.ts`、`src/http/routes/chat-authorization.ts`、
+  `src/http/routes/chat.ts`、`src/application/chat-turn-service.ts`、
+  `src/application/ports/agent-dispatch-outbox-repository.ts`、`src/domain/chat/agent-dispatch.ts`、
+  `src/infrastructure/postgres/agent-dispatch-outbox-repository.ts`、
+  `src/infrastructure/clients/agent/outbox-delivery.ts`、`src/infrastructure/clients/agent/launch.ts`、
+  `src/infrastructure/clients/agent/types.ts`、`src/http/routes/scheduler.ts`、
+  `src/application/ports/scheduler-dispatch-receipt-repository.ts`、
+  `src/infrastructure/postgres/scheduler-dispatch-receipt-repository.ts`。这些是 Chat/Scheduler 双 sender、
+  Chat payload v3 与 Scheduler receipt v3 的同一 atomic consumer cutover；不新建 helper/目录，不修改
+  `database/schema.sql`。
+- tests-only RED：`test/chat-input.test.ts`、`test/chat-service.test.ts`、
+  `test/agent-dispatch-outbox.test.ts`、`test/bff.test.ts`、`test/idempotency.test.ts`、
+  `test/agent-http-wire.test.mjs`、`test/contract/openapi-contract.test.mjs`、
+  `test/contract-governance.test.mjs`、`test/schema-governance.test.mjs`、`test/architecture.test.ts`、
+  `test/chat-facts.integration.mjs`、`test/agui-projection.integration.mjs`、`test/scheduler.test.ts`、
+  `test/scheduler-dispatch-identity.test.ts`、`test/scheduler-dispatch-receipt.integration.mjs`。
+  先只改现有测试并得到行为 RED；
+  不 import 尚未生成的文件，不用 ENOENT/缺列伪造 RED。GREEN 仅能在 Agent 前置闭环后由 Root 重新授权。
+
+RED 必须锁定：版本/route/body/header/202 契约；缺失、重复或非法 key；非 `{}` body；
+同 key 丢 reply 回收、并发只一 attempt、跨 target/submit 冲突；最新严格 retryable profile；原 outbox
+binding/payload/status；无 active/HITL；冻结选项；原 user/failed assistant/run 不变；只新增 assistant/run/outbox；
+stream version/fence/lease；注入点 rollback 零部分事实；跨 tenant/owner/project/target 统一隐藏；以及 generic receipt
+完全不介入。还必须锁定 Chat normal/retry 与 Scheduler normal 都发 required field，Chat v3/Scheduler
+v3 对旧 v2、missing/null错位/non-null Scheduler parent/extra 全部拒绝，并重验 Scheduler canonical
+occurrence 与 receipt 三 identity。真 PostgreSQL + 真 Agent owner 验收还必须证明同一 original user/new run 成功、原 pre-turn
+context 完整、native HumanMessage 只一条，不能只用 mock HTTP 202 替代。
 
 ## BFF-AGENT-FAILURE3：安全失败投影当前实现（2026-09-30；owner隔离集成已验，Web组合待闭环）
 

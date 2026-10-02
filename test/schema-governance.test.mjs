@@ -209,6 +209,20 @@ databaseTest("owner schema install coexists with other schemas and rolls back on
     await applyCanonicalSchema(databaseUrl, await loadCanonicalSchema())
     const bffTables = await client.query("SELECT count(*)::int AS count FROM pg_tables WHERE schemaname = 'kokoro_bff'")
     assert.ok(bffTables.rows[0].count >= 10)
+    const interactionColumns = await client.query(
+      `SELECT column_name FROM information_schema.columns
+        WHERE table_schema='kokoro_bff' AND table_name='bff_agui_run_interaction' ORDER BY ordinal_position`,
+    )
+    assert.deepEqual(interactionColumns.rows.map(({ column_name }) => column_name), [
+      "tenant_id", "session_id", "run_id", "subject_id", "projection_schema_version", "interaction_revision", "pause_revision", "pause_ref", "phase", "groups",
+      "action_command_id", "action_pause_revision", "action_kind", "interaction_digest", "source_owner", "source_event_id", "source_sequence", "source_digest",
+      "source_occurred_at", "public_sequence", "public_cursor", "created_at", "updated_at",
+    ])
+    const interactionKey = await client.query(
+      `SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint
+        WHERE conrelid='kokoro_bff.bff_agui_run_interaction'::regclass AND contype='p'`,
+    )
+    assert.deepEqual(interactionKey.rows, [{ definition: "PRIMARY KEY (tenant_id, session_id, run_id)" }])
     const failureColumns = await client.query(
       `SELECT column_name, data_type, is_nullable, column_default
          FROM information_schema.columns
@@ -297,4 +311,23 @@ databaseTest("owner schema install coexists with other schemas and rolls back on
       }
     }
   }
+})
+
+test("full interaction projection has one run key and explicit revision, locator, action, provenance and cursor constraints", async () => {
+  const schema = await loadCanonicalSchema()
+  const block = schema.match(/CREATE TABLE IF NOT EXISTS bff_agui_run_interaction \([\s\S]*?\n\);/u)?.[0]
+  assert.ok(block)
+  assert.equal((schema.match(/CREATE TABLE IF NOT EXISTS bff_agui_run_interaction\b/gu) ?? []).length, 1)
+  assert.match(block, /PRIMARY KEY \(tenant_id, session_id, run_id\)/u)
+  for (const name of ["identity", "version", "revision", "locator", "phase", "groups", "action", "resuming", "validation", "digest", "source", "public"]) {
+    assert.ok(block.includes("CONSTRAINT ck_bff_agui_run_interaction_" + name + " CHECK"), name)
+  }
+  assert.match(block, /interaction_revision BETWEEN 1 AND 9007199254740991/u)
+  assert.match(block, /pause_revision BETWEEN 0 AND interaction_revision/u)
+  assert.match(block, /pause_revision = 0 AND pause_ref IS NULL/u)
+  assert.match(block, /action_command_id IS NULL AND action_pause_revision IS NULL AND action_kind IS NULL/u)
+  assert.match(block, /action_pause_revision IS NOT NULL AND action_pause_revision BETWEEN 1 AND pause_revision/u)
+  assert.match(block, /source_owner = 'kokoro-agent'/u)
+  assert.doesNotMatch(block, /FOREIGN KEY|REFERENCES|checkpoint|lease_token/iu)
+  assert.doesNotMatch(schema, /CREATE (?:UNIQUE )?INDEX[^;]*ON bff_agui_run_interaction/iu)
 })

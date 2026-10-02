@@ -1,3 +1,4 @@
+import type { InteractionState } from "../../../contracts/chat.js"
 import type { AgUiEvent } from "../project-chat-event.js"
 import type { AgentFailureProfile } from "../../../domain/chat/message.js"
 
@@ -10,6 +11,7 @@ export type AgUiStreamState = {
   version: number
   sourceHighWatermark: number
   projectionState: AgUiProjectionStateSnapshot
+  interaction?: { runId: string; state: InteractionState }
   /** Most recently admitted run; only its terminal may close the public stream. */
   expectedRunId?: string | null
   /** Most recently projected run marker; separate from the admitted-run fence. */
@@ -44,10 +46,11 @@ export type AgUiSourceProjection = {
   sourceOccurredAt: string
   frames: AgUiEvent[]
   assistantUpdate?: AgUiAssistantUpdate
+  interactionState?: InteractionState
   artifactDelivery?: AgUiArtifactDelivery
 }
 
-export type AgUiSourceIdentity = Omit<AgUiSourceProjection, "frames" | "assistantUpdate" | "artifactDelivery">
+export type AgUiSourceIdentity = Omit<AgUiSourceProjection, "frames" | "assistantUpdate" | "artifactDelivery" | "interactionState">
 
 export type CommitAgUiProjection = {
   tenantId: string

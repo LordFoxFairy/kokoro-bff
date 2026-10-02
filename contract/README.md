@@ -27,12 +27,7 @@ security; an irrelevant extra Authorization header does not become an additional
 
 ## Version
 
-The current machine contract remains `2.0.0` on the unchanged `/v1` HTTP namespace. The next approved pre-release
-target is `3.0.0`, also on `/v1`: it narrows `ChatMessage.role` from `user | assistant | system` to the only produced set,
-`user | assistant`, without changing the operation inventory. This source target is not yet published or activated.
-Version 2 added the closed optional Agent-owned failure profile to durable `ChatMessage` projections; operation stability
-remains `beta` and is not proof that every Live adapter or persistence path is complete. Future retry is an additive
-`3.1.0` target gated on the ROLE2 publication/consumer cutover and the still-unpublished Agent `4.0.0`; it is not callable now.
+The current source candidate is public `4.0.0` on the unchanged `/v1` HTTP namespace, under the approved pre-release corrective cut. It replaces `active_run` and top-level `pending_pauses` with one optional `execution_head` (`queued | active | waiting | resuming`) and an exact full pending collection. Run resume requires the current pause revision/reference and all pending item decisions. HTTP admission never changes the interaction read projection. The operation inventory and permissions remain unchanged; this working-tree candidate is not a published consumer pin. Root owns PostgreSQL/Redis/HTTP acceptance and publication; Web repins only after publication. Retry remains outside this cut because the fixed Agent artifact has no `retry_of_run_id`.
 
 `GET /v1/sessions/{id}/events` issues one opaque `agui_*` cursor per durable public frame. Agent source sequences remain
 internal projection metadata and are not valid public resume cursors. Callers persist the last SSE `id` verbatim and send
@@ -121,16 +116,16 @@ surface to BFF admission, Skill authorization check, Team, and invitation operat
 introspection and execution authorization remain excluded. Exact generated-file digests and toolchain provenance are
 recorded in `contract/dependencies/iam-http.json`.
 
-The Agent HTTP consumer pins the complete owner `contract/openapi/v1/openapi.json` v3.0.0 at Agent commit
-`f3be3b97dd67df69ed3c6cb88c59f3bc2db97703`, SHA-256
-`e9f0a543f74dee34212f0ea4fe366d46218268462ac54dce08e41965f34d2d2c`, plus that publication's
+The Agent HTTP consumer pins the complete owner `contract/openapi/v1/openapi.json` v4.0.0 at Agent commit
+`e977923ea9992cbddaf0cdbc6c8f8d23b3af120e`, SHA-256
+`763ff7a9cf668eb59ae7cfb59b2fd4f84fafde124063d9a365f138b6a30cf04f`, plus that publication's
 `contract/provenance.json` bytes at SHA-256
-`d116657f65027de8bd829dc0408fd86046da0ac0a1d2934bd2a87e835c897b5f`.
-`openapi-ts.agent.config.ts` filters only `createRun` and `replaySessionEvents`; the full source bytes are vendored read-only
+`e2e6cd9f2228900d0c0a8d795f19815a145bd8f0d18c785ffbe059214b5ed99a`.
+`openapi-ts.agent.config.ts` filters only `createRun`, `replaySessionEvents`, and `controlRun`; the full source bytes are vendored read-only
 under `contract/vendor/kokoro-agent/`. `pnpm contract:check:agent` verifies the two-file fixed-commit allowlist,
-published HTTP provenance, strict `ChatFailure` schema graph, toolchain and manifest, regenerates all 17 files twice
+published HTTP provenance, strict `ChatFailure` and full interaction/control schema graphs, toolchain and manifest, regenerates all 17 files twice
 byte-identically, and compares every generated file. BFF validates the owner 202 receipt, 200 replay envelope, and
-decoded `run.failed` payload with generated runtime schemas; this dependency does not make BFF the Agent contract owner.
+decoded `run.failed` / `interaction.state` payloads with generated runtime schemas; this dependency does not make BFF the Agent contract owner.
 
 The Platform Connect consumer pins exact `common.proto` and `platform_runtime.proto` bytes plus the complete
 `platform-execution-operations/4.0.0` artifact from Platform commit `263a28f1e55745bd1829a61f68228d775751adbc`

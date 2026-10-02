@@ -1,4 +1,7 @@
 import { randomUUID } from "node:crypto"
+import { interactionFromRow, readRunInteraction, writeRunInteraction } from "./agui-interaction-projection.js"
+import { interactionDigest, replaceInteraction } from "../../application/agui/interaction-state.js"
+import { parseAgentInteractionState } from "../clients/agent/interaction-state.js"
 import type { PoolClient } from "pg"
 
 import { AgUiSourceIdentityConflictError } from "../../application/agui/errors.js"
@@ -17,8 +20,10 @@ import type {
 } from "../../application/agui/ports/agui-projection-repository.js"
 import type { PostgresBffDatabase } from "./client.js"
 import { insertArtifactDelivery, lockArtifactConversation } from "./conversation-artifact-projection.js"
+import { PostgresAgentDispatchOutboxRepository } from "./agent-dispatch-outbox-repository.js"
 
 type StreamRow = {
+  interaction_row?: unknown
   version: string
   source_high_watermark: string
   next_public_sequence: string
@@ -54,6 +59,7 @@ type StatusRow = {
 }
 
 type ReplayRow = {
+  head_identity_valid: boolean
   cursor_valid: boolean
   cursor_expired: boolean
   after_sequence: string
@@ -200,7 +206,10 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
 
   public async readStream(tenantId: string, sessionId: string): Promise<AgUiStreamState> {
     const result = await this.database.pool.query<StreamRow>(
-      `SELECT ${streamColumns()}
+      `SELECT ${streamColumns()},
+              (SELECT to_jsonb(interaction) FROM bff_agui_run_interaction AS interaction
+                WHERE interaction.tenant_id=bff_agui_stream.tenant_id AND interaction.session_id=bff_agui_stream.session_id
+                  AND interaction.run_id=bff_agui_stream.latest_run_id) AS interaction_row
          FROM bff_agui_stream
         WHERE tenant_id = $1 AND session_id = $2`,
       [tenantId, sessionId],
@@ -218,6 +227,8 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
       }
     }
     return {
+      ...(isRecord(row.interaction_row) && row.latest_run_id !== null
+        ? { interaction: { runId: row.latest_run_id, state: interactionFromRow(row.interaction_row) } } : {}),
       version: safeInteger(row.version, "stream version"),
       sourceHighWatermark: safeInteger(row.source_high_watermark, "source high watermark"),
       projectionState: projectionState(row.projection_state),
@@ -268,6 +279,7 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
     let notificationCursor: string | null = null
     try {
       await client.query("BEGIN")
+      await PostgresAgentDispatchOutboxRepository.lockConversationsInTransaction(client, [{ tenantId: command.tenantId, conversationId: command.sessionId }])
       const artifactOwner = command.sources.some((source) => source.artifactDelivery !== undefined)
         ? await lockArtifactConversation(client, command.tenantId, command.sessionId)
         : null
@@ -327,7 +339,29 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
       let latestRunStartSequence = stream.latest_run_start_sequence === null
         ? null
         : safeInteger(stream.latest_run_start_sequence, "latest run start sequence")
+      let startedRunId = stream.latest_run_id
       for (const source of command.sources) {
+        let interactionChanged = false
+        if (source.interactionState !== undefined) {
+          if (source.sourceRunId === null || source.sourceRunId !== stream.expected_run_id
+            || source.sourceRunId !== startedRunId || latestRunStartSequence === null || stream.consumer_subject_id === null) throw new Error("AGUI_INTERACTION_RUN_INVALID")
+          const head = await client.query<{ run_id: string; subject_id: string; owner_id: string; status: string }>(
+            `SELECT dispatch.run_id, dispatch.subject_id, conversation.owner_id, conversation.status
+               FROM bff_agent_dispatch_outbox AS dispatch
+               JOIN bff_conversation AS conversation ON conversation.tenant_id=dispatch.tenant_id AND conversation.conversation_id=dispatch.conversation_id
+              WHERE dispatch.tenant_id=$1 AND dispatch.conversation_id=$2 AND dispatch.status IN ('pending','leased','retryable','admitted')
+              ORDER BY dispatch.conversation_dispatch_seq,dispatch.outbox_id LIMIT 1`, [command.tenantId, command.sessionId],
+          )
+          const binding = head.rows[0]
+          if (binding?.run_id !== source.sourceRunId || binding.subject_id !== stream.consumer_subject_id
+            || binding.owner_id !== stream.consumer_subject_id || binding.status !== "active") throw new Error("AGUI_INTERACTION_BINDING_INVALID")
+          const previous = await readRunInteraction(client, command.tenantId, command.sessionId, source.sourceRunId,
+            stream.consumer_subject_id, latestRunStartSequence, nextPublicSequence - 1, source.sourceSequence - 1)
+          interactionChanged = replaceInteraction(previous, parseAgentInteractionState(source.interactionState))
+          if (source.frames.length !== (interactionChanged ? 1 : 0)
+            || (interactionChanged && (source.frames[0]?.name !== "kokoro.interaction.state"
+              || interactionDigest(parseAgentInteractionState(source.frames[0].value)) !== interactionDigest(source.interactionState)))) throw new Error("AGUI_INTERACTION_FRAME_MISMATCH")
+        } else if (source.frames.some((frame) => frame.name === "kokoro.interaction.state")) throw new Error("AGUI_INTERACTION_MUTATION_MISSING")
         const inserted = await client.query<{ source_event_id: string }>(
           `INSERT INTO bff_agui_source_event
              (tenant_id, session_id, source_owner, source_event_id, source_sequence, source_digest, source_occurred_at)
@@ -413,7 +447,19 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
             frame.type === "RUN_STARTED"
             && frameRunId !== null && frameRunId !== undefined && frameRunId !== ""
             && (stream.expected_run_id === null ? command.latestRunId === frameRunId : stream.expected_run_id === frameRunId)
-          ) latestRunStartSequence = nextPublicSequence
+          ) {
+            const priorInteraction = await client.query(
+              `SELECT 1 FROM bff_agui_run_interaction WHERE tenant_id=$1 AND session_id=$2 AND run_id=$3
+               UNION ALL
+               SELECT 1 FROM bff_agui_event WHERE tenant_id=$1 AND session_id=$2
+                 AND event_type='CUSTOM' AND event_payload->>'name'='kokoro.interaction.state'
+                 AND event_payload #>> '{metadata,kokoro,run_id}'=$3 LIMIT 1`,
+              [command.tenantId,command.sessionId,frameRunId],
+            )
+            if (priorInteraction.rows.length !== 0) throw new AgUiSourceIdentityConflictError()
+            latestRunStartSequence = nextPublicSequence
+            startedRunId = frameRunId
+          }
           await client.query(
             `INSERT INTO bff_agui_event
                (tenant_id, session_id, public_sequence, cursor, source_owner, source_event_id,
@@ -432,16 +478,18 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
               instant(source.sourceOccurredAt, "source occurred at"),
             ],
           )
+          if (interactionChanged && source.interactionState !== undefined) {
+            await writeRunInteraction(client, command.tenantId, command.sessionId, stream.consumer_subject_id, source, nextPublicSequence, frameCursor)
+          }
           nextPublicSequence += 1
           notificationCursor = frameCursor
         }
       }
 
-      if (
-        command.terminalRunId !== undefined
+      const settlesHead = command.terminalRunId !== undefined
         && command.terminalRunId !== null
         && command.terminalRunId !== stream.terminal_run_id
-      ) {
+      if (settlesHead) {
         const terminal = await client.query(
           `UPDATE bff_agent_dispatch_outbox
               SET status = 'terminal', admitted_at = COALESCE(admitted_at, CURRENT_TIMESTAMP(3)),
@@ -500,6 +548,10 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
         await client.query("ROLLBACK")
         return command.consumerLease === undefined ? "version_conflict" : "lease_conflict"
       }
+      if (settlesHead) {
+        const nextCursor = await PostgresAgentDispatchOutboxRepository.projectQueuedHeadInTransaction(client, command.tenantId, command.sessionId)
+        notificationCursor = nextCursor ?? notificationCursor
+      }
       await client.query("COMMIT")
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined)
@@ -546,6 +598,18 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
                      AND tombstone.cursor = $3
                 )) AS cursor_expired
        ),
+       execution_head AS MATERIALIZED (
+         SELECT dispatch.run_id, dispatch.subject_id, conversation.owner_id, conversation.status,
+                stream.consumer_subject_id, stream.expected_run_id
+           FROM bff_agent_dispatch_outbox AS dispatch
+           LEFT JOIN bff_conversation AS conversation
+             ON conversation.tenant_id=dispatch.tenant_id AND conversation.conversation_id=dispatch.conversation_id
+           LEFT JOIN bff_agui_stream AS stream
+             ON stream.tenant_id=dispatch.tenant_id AND stream.session_id=dispatch.conversation_id
+          WHERE dispatch.tenant_id=$1 AND dispatch.conversation_id=$2
+            AND dispatch.status IN ('pending','leased','retryable','admitted')
+          ORDER BY dispatch.conversation_dispatch_seq,dispatch.outbox_id LIMIT 1
+       ),
        stream_head AS (
          SELECT COALESCE((
            SELECT stream.next_public_sequence - 1
@@ -553,10 +617,17 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
             WHERE stream.tenant_id = $1 AND stream.session_id = $2
          ), 0::bigint) AS head_sequence,
          (
-           SELECT stream.terminal_run_id
+           SELECT CASE WHEN EXISTS (SELECT 1 FROM execution_head) THEN NULL ELSE stream.terminal_run_id END
              FROM bff_agui_stream AS stream
             WHERE stream.tenant_id = $1 AND stream.session_id = $2
-         ) AS terminal_run_id
+         ) AS terminal_run_id,
+         NOT EXISTS (
+           SELECT 1 FROM execution_head AS execution
+            WHERE execution.owner_id IS NULL OR execution.status IS DISTINCT FROM 'active'
+               OR execution.subject_id IS DISTINCT FROM execution.owner_id
+               OR execution.consumer_subject_id IS DISTINCT FROM execution.subject_id
+               OR (execution.expected_run_id IS NOT NULL AND execution.expected_run_id<>execution.run_id)
+         ) AS head_identity_valid
        ),
        frame_candidates AS (
          SELECT event.public_sequence,
@@ -593,6 +664,7 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
               position.after_sequence::text AS after_sequence,
               head.head_sequence::text AS head_sequence,
               head.terminal_run_id,
+              head.head_identity_valid,
               frame.public_sequence::text AS public_sequence,
               frame.cursor,
               frame.event_type,
@@ -604,6 +676,7 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
       [tenantId, sessionId, cursorValue, limit, maxBytes],
     )
     const snapshot = result.rows[0]
+    if (snapshot !== undefined && !snapshot.head_identity_valid) throw new Error("CHAT_EXECUTION_HEAD_IDENTITY_INVALID")
     if (snapshot === undefined || snapshot.cursor_expired === true) return { kind: "expired_cursor" }
     if (!snapshot.cursor_valid) return { kind: "invalid_cursor" }
     const afterSequence = safeInteger(snapshot.after_sequence, "cursor sequence")

@@ -86,10 +86,34 @@ test("Chat snapshot exposes durable Artifact identity and bounded-history signal
 
 test("Chat snapshot maps only a repository-proven active running Run", async () => {
   const conversation = { conversationId: "session_running", tenantId: "tenant_a", ownerId: "owner_a", title: "Running", projectRef: null, status: "active", createdAt: new Date("2026-09-04T11:00:00.000Z"), updatedAt: new Date("2026-09-04T12:00:00.000Z"), deletedAt: null }
-  const repository = { readSnapshot: async () => ({ conversation, messages: [], deliveries: [], deliveriesHasMore: false, eventWatermark: null, activeRun: { runId: "run_current", status: "running" } }) }
+  const repository = { readSnapshot: async () => ({ conversation, messages: [], deliveries: [], deliveriesHasMore: false, eventWatermark: null, executionHead: { runId: "run_current", state: "active", pendingPauses: [] } }) }
   const result = await new ChatApplicationService(repository as never).snapshot("tenant_a", "owner_a", "session_running", undefined)
-  assert.deepEqual(result?.active_run, { run_id: "run_current", status: "running" })
+  assert.deepEqual(result?.execution_head, { run_id: "run_current", state: "active", pending_pauses: [] })
 })
+
+for (const dispatchStatus of ["pending", "leased", "retryable", "admitted"] as const) {
+  test(`Chat snapshot maps the ${dispatchStatus} durable FIFO head to queued`, async () => {
+    const conversation = { conversationId: `session_${dispatchStatus}`, tenantId: "tenant_a", ownerId: "owner_a", title: dispatchStatus, projectRef: null, status: "active", createdAt: new Date("2026-09-04T11:00:00.000Z"), updatedAt: new Date("2026-09-04T12:00:00.000Z"), deletedAt: null }
+    const repository = { readSnapshot: async () => ({
+      conversation,
+      messages: [],
+      deliveries: [],
+      deliveriesHasMore: false,
+      eventWatermark: "agui_0123456789abcdef0123456789abcdef",
+      executionHead: { runId: "run_current", state: "queued", pendingPauses: [] },
+    }) }
+
+    const result = await new ChatApplicationService(repository as never).snapshot("tenant_a", "owner_a", conversation.conversationId, undefined)
+
+    const publicSnapshot = result as unknown as Record<string, unknown> | null
+    assert.deepEqual(publicSnapshot?.execution_head, {
+      run_id: "run_current",
+      state: "queued",
+      pending_pauses: [],
+    })
+    assert.equal(publicSnapshot?.active_run, undefined)
+  })
+}
 
 for (const [name, marker] of [
   ["expected blank", { expected_run_id: " ", latest_run_id: null, terminal_run_id: null }],
@@ -130,4 +154,165 @@ test("Chat snapshot performs no stream read when the Conversation ACL rejects ac
   assert.equal(calls.some((sql) => sql.includes("FROM bff_agui_stream")), false)
   assert.equal(calls.at(-1), "COMMIT")
   assert.equal(released, true)
+})
+
+
+// R57: public4 exposes one complete execution head and deletes both legacy snapshot fields.
+
+function r57Waiting() {
+  return {
+    interaction_revision: 7,
+    pause_revision: 7,
+    pause_ref: "pause:run_hitl_1:7",
+    phase: "waiting",
+    groups: [
+      {
+        group_id: "group_tools",
+        items: [
+          {
+            item_id: "item_approve",
+            request_id: "request_tool_1",
+            kind: "tool_approval",
+            allowed_decisions: ["approve", "edit", "reject"],
+            display: {
+              name: "search",
+              description: "Search approved index",
+              editable: true,
+              input_schema: { type: "object", properties: { query: { type: "string" } } },
+              result_preview: null,
+              truncated: null,
+              source: null,
+            },
+          },
+          {
+            item_id: "item_edit",
+            request_id: "request_tool_2",
+            kind: "tool_approval",
+            allowed_decisions: ["edit", "reject"],
+            display: { name: "edit", description: "Edit parameters", editable: true, input_schema: { type: "object" } },
+          },
+          {
+            item_id: "item_reject",
+            request_id: "request_review_1",
+            kind: "result_review",
+            allowed_decisions: ["approve", "reject"],
+            display: {
+              name: "review",
+              description: "Review result",
+              editable: false,
+              input_schema: { type: "object" },
+              result_preview: "bounded result",
+              truncated: false,
+              source: "tool",
+            },
+          },
+        ],
+      },
+      {
+        group_id: "group_inputs",
+        items: [
+          {
+            item_id: "item_respond",
+            request_id: "request_question_1",
+            kind: "ask_user_question",
+            allowed_decisions: ["respond", "reject"],
+            display: { name: "question", description: "Choose a region", editable: false, input_schema: { type: "object" } },
+            validation: { code: "json_schema_invalid", instance_path: ["region", 0] },
+          },
+          {
+            item_id: "item_submit",
+            request_id: "request_input_1",
+            kind: "input",
+            allowed_decisions: ["submit"],
+            display: { name: "form", description: "Confirm values", editable: true, input_schema: { type: "object" } },
+          },
+        ],
+      },
+    ],
+    action_result: null,
+  }
+}
+function r57Control() {
+  return {
+    kind: "run.resume",
+    expected_pause_revision: 7,
+    pause_ref: "pause:run_hitl_1:7",
+    decisions: [
+      { type: "approve", item_id: "item_approve" },
+      { type: "edit", item_id: "item_edit", args: { count: 2, note: null } },
+      { type: "reject", item_id: "item_reject" },
+      { type: "respond", item_id: "item_respond", response: "continue" },
+      { type: "submit", item_id: "item_submit", value: { confirmed: true, comment: null } },
+    ],
+  }
+}
+
+for (const state of ["queued", "active", "waiting", "resuming"] as const) {
+  test(`R57 Chat snapshot maps the full ${state} execution head from one repository read`, async () => {
+    const pause = {
+      ...r57Waiting(),
+      phase: state === "resuming" ? "resuming" : "waiting",
+      interaction_revision: state === "resuming" ? 8 : 7,
+      action_result: state === "resuming" ? { command_id: "command_resume_1", pause_revision: 7, kind: "accepted" } : null,
+    }
+    const pendingPauses = state === "waiting" || state === "resuming" ? [pause] : []
+    const conversation = {
+      conversationId: "session_r57",
+      tenantId: "tenant_r57",
+      ownerId: "owner_r57",
+      title: "R57",
+      projectRef: null,
+      status: "active",
+      createdAt: new Date("2026-10-01T00:00:00.000Z"),
+      updatedAt: new Date("2026-10-01T00:00:01.000Z"),
+      deletedAt: null,
+    }
+    let reads = 0
+    const calls: unknown[][] = []
+    const repository = {
+      readSnapshot: async (...args: unknown[]) => {
+        reads++
+        calls.push(args)
+        return {
+          conversation,
+          messages: [],
+          deliveries: [],
+          deliveriesHasMore: false,
+          eventWatermark: "agui_0123456789abcdef0123456789abcdef",
+          executionHead: { runId: "run_hitl_1", state, pendingPauses },
+        }
+      },
+    }
+    const actual = (await new ChatApplicationService(repository as never).snapshot("tenant_r57", "owner_r57", "session_r57", undefined)) as unknown as Record<
+      string,
+      unknown
+    >
+    assert.deepEqual(actual.execution_head, { run_id: "run_hitl_1", state, pending_pauses: pendingPauses })
+    assert.equal(Object.hasOwn(actual, "active_run"), false)
+    assert.equal(Object.hasOwn(actual, "pending_pauses"), false)
+    assert.equal(actual.event_watermark, "agui_0123456789abcdef0123456789abcdef")
+    assert.equal(reads, 1)
+    assert.deepEqual(calls, [["tenant_r57", "owner_r57", "session_r57", undefined]])
+  })
+}
+test("R57 no-head snapshot omits execution head rather than fabricating a pause or exposing a historical active Run", async () => {
+  const conversation = {
+    conversationId: "session_r57",
+    tenantId: "tenant_r57",
+    ownerId: "owner_r57",
+    title: "R57",
+    projectRef: null,
+    status: "active",
+    createdAt: new Date(0),
+    updatedAt: new Date(1000),
+    deletedAt: null,
+  }
+  const repository = { readSnapshot: async () => ({ conversation, messages: [], deliveries: [], deliveriesHasMore: false, eventWatermark: null }) }
+  const actual = (await new ChatApplicationService(repository as never).snapshot("tenant_r57", "owner_r57", "session_r57", undefined)) as unknown as Record<
+    string,
+    unknown
+  >
+  assert.equal(Object.hasOwn(actual, "execution_head"), false)
+  assert.equal(Object.hasOwn(actual, "active_run"), false)
+  assert.equal(Object.hasOwn(actual, "pending_pauses"), false)
 })

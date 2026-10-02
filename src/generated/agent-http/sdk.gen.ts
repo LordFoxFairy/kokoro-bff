@@ -3,6 +3,9 @@
 import { client } from "./client.gen.js"
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from "./client/index.js"
 import type {
+  ControlRunData,
+  ControlRunErrors,
+  ControlRunResponses,
   CreateRunData,
   CreateRunErrors,
   CreateRunResponses,
@@ -10,7 +13,7 @@ import type {
   ReplaySessionEventsErrors,
   ReplaySessionEventsResponses,
 } from "./types.gen.js"
-import { zCreateRunResponse, zReplaySessionEventsResponse } from "./zod.gen.js"
+import { zControlRunResponse, zCreateRunResponse, zReplaySessionEventsResponse } from "./zod.gen.js"
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<
   TData,
@@ -40,6 +43,23 @@ export const createRun = <ThrowOnError extends boolean = false>(
     responseValidator: async (data) => await zCreateRunResponse.parseAsync(data),
     security: [{ scheme: "bearer", type: "http" }],
     url: "/v1/runs",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  })
+
+/**
+ * Admit an idempotent run control command
+ */
+export const controlRun = <ThrowOnError extends boolean = false>(
+  options: Options<ControlRunData, ThrowOnError>,
+): RequestResult<ControlRunResponses, ControlRunErrors, ThrowOnError> =>
+  (options.client ?? client).post<ControlRunResponses, ControlRunErrors, ThrowOnError>({
+    responseValidator: async (data) => await zControlRunResponse.parseAsync(data),
+    security: [{ scheme: "bearer", type: "http" }],
+    url: "/v1/runs/{run_id}/control",
     ...options,
     headers: {
       "Content-Type": "application/json",

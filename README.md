@@ -136,3 +136,10 @@ health/ready smoke 尚未在当前治理阶段全部闭环，不应据此 README
 Configure `KOKORO_STORAGE_RPC_BASE_URL`, independent `KOKORO_BFF_STORAGE_SECRET`, and exact `KOKORO_STORAGE_OBJECT_ORIGIN` together. The existing project resources POST accepts one `files` multipart part and at most 1 MiB for the entire body. It returns only CLEAN Storage asset metadata. Infected files receive terminal 422; pending/unknown scans receive retryable 503 without a usable resource. Reuse the same key/file after an uncertain response; an aborted upload requires a new key. `GET /v1/library?kind=file` now lists only the admitted subject's personal CLEAN ASSET files through Storage Connect; personal upload/download and Agent Artifacts remain separate slices. Storage provenance/generation: `pnpm contract:check:storage`.
 
 Project resources can be reloaded with `GET /v1/projects/{projectId}/resources?limit=50&cursor=...` using the same Storage configuration. The response contains clean asset metadata in `data.items` and opaque `data.next_cursor` (null at the end); no download URL or upload ID is fabricated. Current project ownership is rechecked on every page.
+
+## R59 public4 实现候选（未发布）
+
+- 唯一公开事实源为 `contract/openapi/v1/openapi.yaml` public4；Agent HTTP4 固定 e977923ea9992cbddaf0cdbc6c8f8d23b3af120e，生成来源见 `contract/dependencies/agent-http.json`。
+- `src/infrastructure/clients/agent/interaction-state.ts` 严格解码固定 owner schema；`src/application/agui/interaction-state.ts` 校验完整 revision/no-op；`src/application/chat-run-control.ts` 校验当前 pause 的完整 decision 集合。
+- `bff_agui_run_interaction` 是最新 run read projection；source/CUSTOM/cursor 与它同事务。`chat-repository.ts` 在授权 RR 中校验 head、完整 state 与 ledger provenance；ACK 不清除 pause。
+- 本轮静态/纯测试证据与未决 fixture 见 `docs/CURRENT.md`。真实 PG/Redis/HTTP、发布及 Web 消费归 Root 后续验收，不能以源码候选代替。
