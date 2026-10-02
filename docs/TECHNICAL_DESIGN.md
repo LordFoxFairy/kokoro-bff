@@ -1,3 +1,9 @@
+## R71：独立 ScheduledTask 可选项目关联契约补齐（待发布）
+
+基线 main / 3928043ec243eaec28af32c231a0bbf75a8b19ec。本片唯一 owner 仍为 BFF ScheduledTask；沿既有 `/v1/scheduled-tasks` → scheduledTask service → repository 边界，仅在 canonical `CreateScheduledTaskRequest` 补充可选 `project_id`，对齐已存在的 parser 和同 tenant/subject Project 校验，不新建模块、进程或调用链。ScheduledTask 独立于 Conversation；省略 Project 可独立创建，引用 Project 不把任务变为会话。
+
+本片不改运行时源码、事务、Scheduler callback、accept/head、SQL 或依赖；机器 schema 的 closed 声明不等于已增加运行时全字段严格校验。正式发布及消费者升级由 Root 后续串行处理，当前 Web 继续固定旧 published artifact。下文历史正文完整保留。
+
 ## R62 / R59 实施候选（未发布）
 
 Root R62 已批准在现 postgres 目录抽取 interaction 持久化职责；当前 projection repository 739 行、普通 helper 165 行。R59 decoder、纯 revision/control policy、projection/RR/control 及重复 START 原子拒绝已形成工作树候选；真实资源及发布仍待 Root。基线 main / 759bfe0a8c521946cae31a74b6426f43b063bae1；以下 R48 原 body 逐字节保留，阶段状态以本前缀及 CURRENT 为准。

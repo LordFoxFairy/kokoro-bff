@@ -1,3 +1,9 @@
+## R71：CreateScheduledTaskRequest 可选 project_id（待发布）
+
+基线 main / 3928043ec243eaec28af32c231a0bbf75a8b19ec。唯一机器事实源 `contract/openapi/v1/openapi.yaml` 的 `CreateScheduledTaskRequest.properties.project_id` 补为 `type: string, minLength: 1`；字段可省略、非 nullable，不加入 required。`additionalProperties: false`、全部既有字段、operation、版本边界保持；不添加 Conversation/session 关联。此为既有可选 Project 创建行为的契约对齐，不改变身份来源、权限或错误处理。
+
+本片没有新增运行时 closed validation：现 production parser 的输入处理与 owner 校验保持原实现，不能据此宣称所有非法字段均在 HTTP 入口拒绝。Web 仍消费固定的旧 published blob；新 owner artifact 发布后再独立更新消费者，不读取此在途契约。下文历史正文完整保留。
+
 ## R62 / R59 实施候选（未发布）
 
 当前 canonical 已为 public4.0.0 工作树候选：execution_head 是唯一当前 Run/pause 公开字段，resume 必须完整集合与 revision/ref，ACK 不消费 pause；Agent HTTP4 固定 e977923ea9992cbddaf0cdbc6c8f8d23b3af120e 并完成正规生成。control receipt 仅对齐固定 owner 的 typed-null/Unicode/数字表示，不改变外层 fingerprint 或 state digest。 基线 main / 759bfe0a8c521946cae31a74b6426f43b063bae1；本轮八项离线门均 exit 0；资源门未运行，精确数量与格式证明记录在 docs/CURRENT.md 的 R62 前缀。以下 R48 设计及原 body 逐字节保留，阶段句以本前缀为准。

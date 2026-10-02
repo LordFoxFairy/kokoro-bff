@@ -1,3 +1,9 @@
+## R71：独立 ScheduledTask 可选项目关联的数据事实（无 DDL）
+
+基线 main / 3928043ec243eaec28af32c231a0bbf75a8b19ec。本片仅补公开创建 schema 的可选 `project_id`。现 repository 在字段省略时把 `bff_scheduled_task.project_id` 写为 NULL；提供引用时，在既有事务内解析并验证同 tenant/subject Project，持久化解析所得 project ID。ScheduledTask 独立持久化，不创建或依赖 Conversation/Message。
+
+唯一 canonical `database/schema.sql`、repository、事务/锁序、幂等、outbox 与 retention 全部保持原字节；没有新表、迁移、跨 owner SQL 或数据修复。本片纯契约回归不替代数据库或完整用户旅程验收。下文历史正文完整保留。
+
 ## R62 / R59 实施候选（未发布）
 
 当前 canonical 已增加一张 bff_agui_run_interaction 最新 Run read projection；同 source/frame/HWM/CAS 事务写入，授权 RR 读取核验完整 state 与 START/ledger/source provenance，GC 保护活跃依赖，删除在原父事务内完成。DDL 的真实 fresh catalog 与完整并发验收仍由 Root 执行，未声明通过。 基线 main / 759bfe0a8c521946cae31a74b6426f43b063bae1；本轮八项离线门均 exit 0；资源门未运行，精确数量与格式证明记录在 docs/CURRENT.md 的 R62 前缀。以下 R48 设计及原 body 逐字节保留，阶段句以本前缀为准。

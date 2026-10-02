@@ -1,3 +1,9 @@
+## R71：独立 ScheduledTask 可选项目契约补齐候选，待 Root 发布
+
+基线 main / 3928043ec243eaec28af32c231a0bbf75a8b19ec；本轮仅 canonical `CreateScheduledTaskRequest` 补 optional、非 nullable 的 `project_id: string / minLength: 1`，不加入 required，不绑定 Conversation，不改其他字段/operation/version。三设计面同步记录既有 parser 与同 owner Project 校验，不改 SQL、运行时源码或依赖。
+
+tests-only 定点真实 RED：41 tests / 40 pass / 1 fail / 0 skip，原 38 例和两个直接加载生产 TypeScript parser 的合法对照通过，失败为 closed schema 缺 `project_id`；原测试全文及新增三例保持。修复后定点 41 pass / 0 fail / 0 skip，已到达 optional/type/minLength 断言；Node 22.22.2 八项离线门均 exit 0：contract 217 pass、architecture 27 pass、unit 631 pass / 1 既定资源 skip、schema 8 pass / 1 既定资源 skip，format/lint/typecheck/build 通过。命令与日志索引 `/tmp/kokoro-bff-r71-green-results.json`。整份 OpenAPI 解析后移除新增 property 即与 HEAD 完全一致，未改变其他机器语义；六路径仍为待 Root 审查/提交候选。本片未运行 HTTP/PG/Redis，不以 schema 声明冒称运行时 closed validation、真实资源或完整项目功能已通过。Web 当前仍固定旧 published artifact，消费者切换留待 owner 发布后串行执行。下文历史正文完整保留。
+
 ## R68：Scheduled prepared receipt 生命周期已通过 Root 组件验收
 
 基线 main / 3c08a422f3a6aa3cf204c308716cfa64f6d61bb2；本节随本次 R68 源码/测试切片提交，发布记录以本仓 Git 为准。恢复 prepared occurrence 时，缺失或非本人 task 持久拒绝 404，inactive 或 revision drift 持久拒绝 409；receipt→task 锁事务内保存原 terminal response，重启/恢复后同 key 精确重放。accept 具名区分 accepted、rejected 与 claim_lost；真正租约丢失仍返回 503 并回滚候选事实。已 accepted/admitted 的原 202、run/dispatch/head 保留，暂停不取消或释放 head。

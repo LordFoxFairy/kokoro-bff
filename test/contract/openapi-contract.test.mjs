@@ -1051,3 +1051,94 @@ test("public4 has only the closed full execution head, five current-locator deci
   assert.equal(operation.requestBody.content["application/json"].examples.resume.value.expected_pause_revision, 1)
   assert.equal(operation.requestBody.content["application/json"].examples.resume.value.pause_ref, "pause_01J")
 })
+
+async function r71ScheduledCreateSource() {
+  const { tsImport } = await import("tsx/esm/api")
+  return tsImport("../../src/application/scheduled/input.ts", import.meta.url)
+}
+
+function r71ScheduledCreatePayload() {
+  return {
+    title: "Independent scheduled task",
+    prompt: "Summarize the next steps",
+    frequency: "daily",
+    time: "08:00",
+    timezone: "UTC",
+    next_run_at: "2026-10-03T08:00:00.000Z",
+    expires_at: "2026-11-03T08:00:00.000Z",
+    auto_approve: false,
+  }
+}
+
+async function r71ScheduledCreateSchema() {
+  const { createRequire } = await import("node:module")
+  // Reuse the installed YAML loader already used by this file's public4 assertions.
+  const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
+  const { openapi } = await readContract()
+  const schema = load(openapi).components.schemas.CreateScheduledTaskRequest
+  assert.ok(schema !== undefined, "the canonical ScheduledTask creation schema must exist")
+  return schema
+}
+
+function r71AssertScheduledInput(input, payload) {
+  assert.ok(input !== null, "the production source parser must accept the legal control")
+  assert.equal(input.title, payload.title)
+  assert.equal(input.prompt, payload.prompt)
+  assert.equal(input.frequency, payload.frequency)
+  assert.equal(input.time, payload.time)
+  assert.equal(input.timezone, payload.timezone)
+  assert.equal(input.nextRunAt.toISOString(), payload.next_run_at)
+  assert.equal(input.expiresAt.toISOString(), payload.expires_at)
+  assert.equal(input.autoApprove, payload.auto_approve)
+  assert.equal(Object.hasOwn(input, "conversationId"), false)
+  assert.equal(Object.hasOwn(input, "sessionId"), false)
+}
+
+// Load production TypeScript, not a possibly stale dist parser.
+test("R71 independent ScheduledTask creation needs neither Project nor Conversation", async () => {
+  const { scheduledCreateInput } = await r71ScheduledCreateSource()
+  const payload = r71ScheduledCreatePayload()
+  const input = scheduledCreateInput(payload)
+  r71AssertScheduledInput(input, payload)
+  assert.equal(Object.hasOwn(input, "projectId"), false)
+  const schema = await r71ScheduledCreateSchema()
+  assert.equal(schema.type, "object")
+  assert.equal(schema.additionalProperties, false)
+  for (const field of ["project_id", "conversation_id", "session_id"]) assert.equal((schema.required ?? []).includes(field), false)
+  for (const field of ["conversation_id", "conversation_ref", "session_id", "session_ref"]) assert.equal(Object.hasOwn(schema.properties, field), false)
+})
+
+test("R71 source parser preserves the optional Project reference without changing independent task fields", async () => {
+  const { scheduledCreateInput } = await r71ScheduledCreateSource()
+  const payload = { ...r71ScheduledCreatePayload(), project_id: "project_owned" }
+  // Match the public route's existing second argument, rather than inventing a parser overload.
+  const linked = scheduledCreateInput(payload, typeof payload.project_id === "string" ? payload.project_id : undefined)
+  r71AssertScheduledInput(linked, payload)
+  assert.equal(linked.projectId, "project_owned")
+  const { projectId: _projectId, ...withoutProject } = linked
+  assert.deepEqual(withoutProject, scheduledCreateInput(r71ScheduledCreatePayload()))
+})
+
+test("R71 closed ScheduledTask creation schema declares optional nonempty project_id accepted by the source parser", async () => {
+  const { scheduledCreateInput } = await r71ScheduledCreateSource()
+  const payload = { ...r71ScheduledCreatePayload(), project_id: "project_owned" }
+  const linked = scheduledCreateInput(payload, payload.project_id)
+  r71AssertScheduledInput(linked, payload)
+  assert.equal(linked.projectId, payload.project_id)
+  const schema = await r71ScheduledCreateSchema()
+  assert.equal(schema.additionalProperties, false)
+  const properties = Object.keys(schema.properties).sort()
+  assert.deepEqual(
+    properties,
+    ["title", "prompt", "frequency", "time", "timezone", "next_run_at", "expires_at", "auto_approve", "enabled", "status", "project_id"].sort(),
+    "closed public creation schema must include project_id while retaining its original fields and excluding Conversation linkage",
+  )
+  const project = schema.properties.project_id
+  assert.ok(project !== undefined, "project_id must be declared, not admitted by opening the schema")
+  assert.equal(project.type, "string")
+  assert.equal(project.minLength, 1)
+  assert.notEqual(project.nullable, true)
+  assert.equal(project.oneOf, undefined)
+  assert.equal(project.anyOf, undefined)
+  for (const field of ["project_id", "conversation_id", "session_id"]) assert.equal((schema.required ?? []).includes(field), false)
+})

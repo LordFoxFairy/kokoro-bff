@@ -5685,6 +5685,7 @@ components:
       type: object
       additionalProperties: false
       properties:
+        project_id: { type: string, minLength: 1 }
         title: { type: string }
         prompt: { type: string }
         frequency:
