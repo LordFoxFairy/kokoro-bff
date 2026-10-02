@@ -196,7 +196,18 @@ export async function schedulerDispatch(
     return true
   }
   const accepted = { status: 202, body: ok({ task_id: snapshot.taskId, run_id: snapshot.launch.receipt.run_id }, responseRequestId) }
-  if (await dispatch.accept({ claim, snapshot, response: accepted })) send(response, accepted.status, accepted.body)
+  const result = await dispatch.accept({
+    claim,
+    snapshot,
+    response: accepted,
+    rejections: {
+      task_not_found: { status: 404, body: failure("scheduled_task_not_found", "Scheduled task was not found", responseRequestId) },
+      task_not_active: { status: 409, body: failure("scheduled_task_not_active", "Scheduled task is not active", responseRequestId) },
+      task_changed: { status: 409, body: failure("invalid_scheduler_dispatch", "Scheduler dispatch does not match the stored task", responseRequestId) },
+    },
+  })
+  if (result.outcome === "accepted") send(response, accepted.status, accepted.body)
+  else if (result.outcome === "rejected") send(response, result.response.status, result.response.body)
   else send(response, 503, failure("scheduler_receipt_claim_lost", "Scheduler dispatch receipt claim was lost", responseRequestId))
   return true
 }

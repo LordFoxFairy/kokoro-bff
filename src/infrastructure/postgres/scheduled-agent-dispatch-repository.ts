@@ -2,6 +2,8 @@ import { createHash, randomUUID } from "node:crypto"
 import type { PostgresBffDatabase } from "./client.js"
 import type {
   ScheduledAgentAcceptInput,
+  ScheduledAgentAcceptResult,
+  ScheduledAgentRejectionReason,
   ScheduledAgentConsumerLease,
   ScheduledAgentDispatchRepository,
 } from "../../application/ports/scheduled-agent-dispatch-repository.js"
@@ -135,7 +137,7 @@ function validSourceEvent(event: ScheduledAgentSourceEvent, sessionId: string): 
 export class PostgresScheduledAgentDispatchRepository implements ScheduledAgentDispatchRepository {
   public constructor(private readonly database: PostgresBffDatabase) {}
 
-  public async accept(input: ScheduledAgentAcceptInput): Promise<boolean> {
+  public async accept(input: ScheduledAgentAcceptInput): Promise<ScheduledAgentAcceptResult> {
     const client = await this.database.pool.connect()
     try {
       await client.query("BEGIN")
@@ -156,63 +158,61 @@ export class PostgresScheduledAgentDispatchRepository implements ScheduledAgentD
         Date.parse(envelope.lease_until) <= now.getTime()
       ) {
         await client.query("ROLLBACK")
-        return false
+        return { outcome: "claim_lost" }
       }
       const task = await client.query<TaskRow>("SELECT owner_id,enabled,status,revision FROM bff_scheduled_task WHERE tenant_id=$1 AND task_id=$2 FOR UPDATE", [
         input.snapshot.tenantId,
         input.snapshot.taskId,
       ])
       const taskRow = task.rows[0]
-      if (
-        !taskRow ||
-        taskRow.owner_id !== input.snapshot.actorId ||
-        !taskRow.enabled ||
-        taskRow.status !== "active" ||
-        Number(taskRow.revision) !== input.snapshot.taskRevision
-      ) {
-        await client.query("ROLLBACK")
-        return false
-      }
-      const sessionId = String(input.snapshot.launch.body.session_id ?? "")
-      const runId = input.snapshot.launch.receipt.run_id
-      if (sessionId !== `scheduled:${input.snapshot.taskId}` || String(input.snapshot.launch.body.run_id ?? "") !== runId)
-        throw new Error("SCHEDULED_AGENT_SNAPSHOT_INVALID")
-      await client.query(
-        `INSERT INTO bff_scheduled_agent_scope(tenant_id,task_id,session_id,subject_id) VALUES($1,$2,$3,$4)
-        ON CONFLICT(tenant_id,task_id) DO NOTHING`,
-        [input.snapshot.tenantId, input.snapshot.taskId, sessionId, input.snapshot.actorId],
-      )
-      const scope = await client.query<ScopeIdentityRow>(
-        "SELECT subject_id,session_id FROM bff_scheduled_agent_scope WHERE tenant_id=$1 AND task_id=$2 FOR UPDATE",
-        [input.snapshot.tenantId, input.snapshot.taskId],
-      )
-      if (scope.rows[0]?.subject_id !== input.snapshot.actorId || scope.rows[0]?.session_id !== sessionId) throw new Error("SCHEDULED_AGENT_SCOPE_CONFLICT")
-      const dispatchId = id(input.snapshot.tenantId, input.snapshot.taskId, input.snapshot.occurrence)
-      const inserted = await client.query(
-        `INSERT INTO bff_scheduled_agent_dispatch(
-        dispatch_id,tenant_id,task_id,occurrence,occurrence_order_key,subject_id,request_id,idempotency_key,request_digest,run_id,identity_assertion_ref,payload)
-        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb) ON CONFLICT(tenant_id,task_id,occurrence) DO NOTHING`,
-        [
-          dispatchId,
-          input.snapshot.tenantId,
-          input.snapshot.taskId,
-          input.snapshot.occurrence,
-          scheduledOccurrenceOrderKey(input.snapshot.occurrence),
-          input.snapshot.actorId,
-          input.snapshot.launch.requestId,
-          input.snapshot.idempotencyKey,
-          input.claim.digest,
-          runId,
-          input.snapshot.launch.identityAssertionRef,
-          JSON.stringify(input.snapshot.launch.body),
-        ],
-      )
-      if (inserted.rowCount !== 1) {
-        const exact = await client.query(
-          "SELECT 1 FROM bff_scheduled_agent_dispatch WHERE tenant_id=$1 AND task_id=$2 AND occurrence=$3 AND request_digest=$4 AND run_id=$5",
-          [input.snapshot.tenantId, input.snapshot.taskId, input.snapshot.occurrence, input.claim.digest, runId],
+      // Classify while holding both locks; never re-read task state after this transaction.
+      let rejection: ScheduledAgentRejectionReason | null = null
+      if (!taskRow || taskRow.owner_id !== input.snapshot.actorId) rejection = "task_not_found"
+      else if (!taskRow.enabled || taskRow.status !== "active") rejection = "task_not_active"
+      else if (Number(taskRow.revision) !== input.snapshot.taskRevision) rejection = "task_changed"
+      const response = rejection === null ? input.response : input.rejections[rejection]
+      if (rejection === null) {
+        const sessionId = String(input.snapshot.launch.body.session_id ?? "")
+        const runId = input.snapshot.launch.receipt.run_id
+        if (sessionId !== `scheduled:${input.snapshot.taskId}` || String(input.snapshot.launch.body.run_id ?? "") !== runId)
+          throw new Error("SCHEDULED_AGENT_SNAPSHOT_INVALID")
+        await client.query(
+          `INSERT INTO bff_scheduled_agent_scope(tenant_id,task_id,session_id,subject_id) VALUES($1,$2,$3,$4)
+          ON CONFLICT(tenant_id,task_id) DO NOTHING`,
+          [input.snapshot.tenantId, input.snapshot.taskId, sessionId, input.snapshot.actorId],
         )
-        if (exact.rowCount !== 1) throw new Error("SCHEDULED_AGENT_DISPATCH_CONFLICT")
+        const scope = await client.query<ScopeIdentityRow>(
+          "SELECT subject_id,session_id FROM bff_scheduled_agent_scope WHERE tenant_id=$1 AND task_id=$2 FOR UPDATE",
+          [input.snapshot.tenantId, input.snapshot.taskId],
+        )
+        if (scope.rows[0]?.subject_id !== input.snapshot.actorId || scope.rows[0]?.session_id !== sessionId) throw new Error("SCHEDULED_AGENT_SCOPE_CONFLICT")
+        const dispatchId = id(input.snapshot.tenantId, input.snapshot.taskId, input.snapshot.occurrence)
+        const inserted = await client.query(
+          `INSERT INTO bff_scheduled_agent_dispatch(
+          dispatch_id,tenant_id,task_id,occurrence,occurrence_order_key,subject_id,request_id,idempotency_key,request_digest,run_id,identity_assertion_ref,payload)
+          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb) ON CONFLICT(tenant_id,task_id,occurrence) DO NOTHING`,
+          [
+            dispatchId,
+            input.snapshot.tenantId,
+            input.snapshot.taskId,
+            input.snapshot.occurrence,
+            scheduledOccurrenceOrderKey(input.snapshot.occurrence),
+            input.snapshot.actorId,
+            input.snapshot.launch.requestId,
+            input.snapshot.idempotencyKey,
+            input.claim.digest,
+            runId,
+            input.snapshot.launch.identityAssertionRef,
+            JSON.stringify(input.snapshot.launch.body),
+          ],
+        )
+        if (inserted.rowCount !== 1) {
+          const exact = await client.query(
+            "SELECT 1 FROM bff_scheduled_agent_dispatch WHERE tenant_id=$1 AND task_id=$2 AND occurrence=$3 AND request_digest=$4 AND run_id=$5",
+            [input.snapshot.tenantId, input.snapshot.taskId, input.snapshot.occurrence, input.claim.digest, runId],
+          )
+          if (exact.rowCount !== 1) throw new Error("SCHEDULED_AGENT_DISPATCH_CONFLICT")
+        }
       }
       const terminal = {
         schema_version: 2,
@@ -222,20 +222,20 @@ export class PostgresScheduledAgentDispatchRepository implements ScheduledAgentD
         retry_at: null,
         snapshot: input.snapshot,
         last_error_code: null,
-        response: input.response,
+        response,
       }
       const finalNow = (await client.query<{ now: Date }>("SELECT clock_timestamp() AS now")).rows[0]?.now
       if (!finalNow || Date.parse(envelope.lease_until) <= finalNow.getTime()) {
         await client.query("ROLLBACK")
-        return false
+        return { outcome: "claim_lost" }
       }
       const completed = await client.query(
         "UPDATE bff_idempotency_receipt SET status=$4,response_body=$5::jsonb WHERE scope=$1 AND fingerprint=$2 AND status=$3",
-        [input.claim.scope, input.claim.digest, RECEIPT_PENDING, input.response.status, JSON.stringify(terminal)],
+        [input.claim.scope, input.claim.digest, RECEIPT_PENDING, response.status, JSON.stringify(terminal)],
       )
       if (completed.rowCount !== 1) throw new Error("SCHEDULED_AGENT_RECEIPT_LOST")
       await client.query("COMMIT")
-      return true
+      return rejection === null ? { outcome: "accepted" } : { outcome: "rejected", response }
     } catch (e) {
       await client.query("ROLLBACK").catch(() => undefined)
       throw e

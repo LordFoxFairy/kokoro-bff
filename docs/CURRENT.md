@@ -1,3 +1,11 @@
+## R68：Scheduled prepared receipt 生命周期已通过 Root 组件验收
+
+基线 main / 3c08a422f3a6aa3cf204c308716cfa64f6d61bb2；本节随本次 R68 源码/测试切片提交，发布记录以本仓 Git 为准。恢复 prepared occurrence 时，缺失或非本人 task 持久拒绝 404，inactive 或 revision drift 持久拒绝 409；receipt→task 锁事务内保存原 terminal response，重启/恢复后同 key 精确重放。accept 具名区分 accepted、rejected 与 claim_lost；真正租约丢失仍返回 503 并回滚候选事实。已 accepted/admitted 的原 202、run/dispatch/head 保留，暂停不取消或释放 head。
+
+Root 对冻结六文件实际执行正式八份 integration：90 pass / 0 fail / 0 skip，22.741750 秒；日志 `/tmp/kokoro-bff-r68-full-root-integration.log`。资源证据 `/tmp/kokoro-bff-r68-full-owned-resource.json`：owned 资源已关闭、tracked 保持、cleanup_errors=[]、Redis15 剩余键 0，未删除无关数据库。独立源码审查 0 P0/P1/P2。此前 receiver 缺表前提失败及 canonical install 后 9 pass / 2 fail 的业务 RED 日志保留，不以最终通过覆盖历史。
+
+本窗口离线八门全部 exit 0：unit 628 pass / 1 既定资源 skip，contract 214 pass，architecture 27 pass，schema 8 pass / 1 既定资源 skip；日志索引 `/tmp/kokoro-bff-r68-pure-results.json`。上述证明本仓组件，不证明真实 IAM/模型/浏览器整链；历史 Scheduled ready-null 风险仍未闭环。Git、最终离线复验与发布由 Root 执行；下文原正文完整保留为历史记录。
+
 ## Root R64：public4 / Agent4 切片实际验收
 
 Root冻结全436、六R57保护区、四D0旧body、3删除核对；生产源码独立0P0/P1/P2，最终fixture/HTTP断言独立0P0/P1/P2。Node22完整真实PG/Redis/localhost HTTP81pass/0fail/0skip22.9486s，/tmp/kokoro-bff-r64b-full-root-integration.log。owned bff_full_r64b_73945ee6216a480e closed/tracked_unchanged=true/cleanup_errors=[]/unrelated_databases_removed=[]/new_databases_remaining=[]/Redis15余0；owner资源是临时库/同现PG Redis实例，不清共享状态。

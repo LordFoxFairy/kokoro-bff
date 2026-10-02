@@ -260,7 +260,7 @@ describe("Scheduler receiver admission", () => {
     const store = {
       services: { scheduledTasks: { findRecord: async () => null } },
       schedulerDispatchReceipts: receipts,
-      scheduledAgentDispatch: { accept: async () => true },
+      scheduledAgentDispatch: { accept: async () => ({ outcome: "accepted" }) },
       ready: async () => undefined,
       close: async () => undefined,
     }

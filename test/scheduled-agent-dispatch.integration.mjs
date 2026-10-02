@@ -1149,6 +1149,7 @@ for (const resource of ["bff_scheduled_task", "bff_scheduled_agent_scope"]) {
           const input = {
             claim: { ...claimed.claim, ...prepared, snapshot },
             snapshot,
+            rejections: r67AcceptanceRejections(`request_${suffix}`),
             response: { status: 202, body: { data: { task_id: task, run_id: launch.receipt.run_id }, meta: { request_id: `request_${suffix}` } } },
           }
           locker = await pool.connect()
@@ -1194,11 +1195,11 @@ for (const resource of ["bff_scheduled_task", "bff_scheduled_agent_scope"]) {
           if (expired) {
             assert.deepEqual(
               { accepted: outcome.accepted, ...after },
-              { accepted: false, ...before },
+              { accepted: { outcome: "claim_lost" }, ...before },
               "an expired accept must roll back all scope/dispatch writes and preserve the original pending receipt",
             )
           } else {
-            assert.equal(outcome.accepted, true)
+            assert.deepEqual(outcome.accepted, { outcome: "accepted" })
             assert.equal(after.scope.length, 1)
             assert.equal(after.scope[0].fact.session_id, `scheduled:${task}`)
             assert.equal(after.scope[0].fact.subject_id, owner)
@@ -1214,7 +1215,157 @@ for (const resource of ["bff_scheduled_task", "bff_scheduled_agent_scope"]) {
             store = new PostgresBffRepositories(postgresUrl, redisUrl)
             // This is the same terminal claim branch that returns the original callback ACK.
             assert.deepEqual(await store.schedulerDispatchReceipts.claim(receiptScope, digest), { outcome: "terminal", response: input.response })
-            assert.equal(await store.scheduledAgentDispatch.accept(input), false)
+            assert.deepEqual(await store.scheduledAgentDispatch.accept(input), { outcome: "claim_lost" })
+            assert.deepEqual(await scheduledAcceptFacts(pool, tenant, task, receiptScope), after)
+          }
+        } finally {
+          if (locker) {
+            await locker.query("ROLLBACK").catch(() => undefined)
+            locker.release()
+          }
+          if (acceptOperation) await acceptOperation
+          if (store) await store.close()
+          await pool.query("DELETE FROM bff_scheduled_agent_source_event WHERE tenant_id=$1 AND task_id=$2", [tenant, task])
+          await pool.query("DELETE FROM bff_scheduled_agent_dispatch WHERE tenant_id=$1 AND task_id=$2", [tenant, task])
+          await pool.query("DELETE FROM bff_scheduled_agent_scope WHERE tenant_id=$1 AND task_id=$2", [tenant, task])
+          await pool.query("DELETE FROM bff_scheduled_task WHERE tenant_id=$1 AND task_id=$2", [tenant, task])
+          await pool.query("DELETE FROM bff_idempotency_receipt WHERE scope=$1", [receiptScope])
+          await pool.end()
+        }
+      },
+    )
+  }
+}
+
+function r67AcceptanceRejections(requestId) {
+  const response = (status, code, message) => ({ status, body: { error: { code, message }, meta: { request_id: requestId } } })
+  return {
+    task_not_found: response(404, "scheduled_task_not_found", "Scheduled task was not found"),
+    task_not_active: response(409, "scheduled_task_not_active", "Scheduled task is not active"),
+    task_changed: response(409, "invalid_scheduler_dispatch", "Scheduler dispatch does not match the stored task"),
+  }
+}
+
+{
+  const resource = "bff_scheduled_task"
+  for (const expired of [false, true]) {
+    integrationTest(
+      `R67 paused rejection ${expired ? "does not settle an expired receipt lease" : "is terminal with an unexpired lease"} after the task lock barrier`,
+      async () => {
+        const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC", max: 10 })
+        const suffix = randomUUID()
+        const tenant = `scheduled_rejection_${suffix}`
+        const task = `task_${suffix}`
+        const owner = `owner_${suffix}`
+        const key = `key_${suffix}`
+        const receiptScope = schedulerDispatchScope(tenant, key)
+        let store
+        let locker
+        let acceptOperation
+        try {
+          await pool.query(
+            `INSERT INTO bff_scheduled_task(task_id,tenant_id,owner_id,title,prompt,frequency,task_time,timezone,next_run_at,status,enabled)
+             VALUES($1,$2,$3,'Rejection lease','go','daily','08:00','UTC','2026-09-01T08:00:00Z','paused',false)`,
+            [task, tenant, owner],
+          )
+          store = new PostgresBffRepositories(postgresUrl, redisUrl)
+          const schedule = schedulerScheduleName(task)
+          const occurrence = "2026-09-01T12:00:00.123456789Z"
+          const digest = schedulerDispatchDigest({
+            tenantId: tenant,
+            schedule,
+            occurrence,
+            body: { tenant_id: tenant, task_id: task, owner_id: owner, prompt: "go", auto_approve: false, timezone: "UTC" },
+          })
+          const claimed = await store.schedulerDispatchReceipts.claim(receiptScope, digest)
+          assert.equal(claimed.outcome, "claimed")
+          const launch = buildScheduledAgentLaunch({
+            identity: { namespace: tenant, userId: owner },
+            requestId: `request_${suffix}`,
+            sessionId: `scheduled:${task}`,
+            occurrenceIdentity: schedulerOccurrenceIdentity({ tenantId: tenant, schedule, occurrence }),
+            content: "go",
+          })
+          const snapshot = {
+            tenantId: tenant,
+            schedule,
+            occurrence,
+            idempotencyKey: key,
+            actorId: owner,
+            taskId: task,
+            taskRevision: 1,
+            launch: { requestId: `request_${suffix}`, ...launch },
+          }
+          const prepared = await store.schedulerDispatchReceipts.prepareSnapshot(claimed.claim, snapshot)
+          assert.ok(prepared)
+          const input = {
+            claim: { ...claimed.claim, ...prepared, snapshot },
+            snapshot,
+            rejections: r67AcceptanceRejections(`request_${suffix}`),
+            response: { status: 202, body: { data: { task_id: task, run_id: launch.receipt.run_id }, meta: { request_id: `request_${suffix}` } } },
+          }
+          locker = await pool.connect()
+          await locker.query("BEGIN")
+          const blockerPid = (await locker.query("SELECT pg_backend_pid() AS pid")).rows[0].pid
+          // The table name is selected solely from the two fixed test cases above.
+          await locker.query(`SELECT 1 FROM ${resource} WHERE tenant_id=$1 AND task_id=$2 FOR UPDATE`, [tenant, task])
+          if (expired) {
+            await pool.query(
+              `UPDATE bff_idempotency_receipt
+                  SET response_body=jsonb_set(response_body,'{lease_until}',to_jsonb((clock_timestamp()+interval '1 second')::text))
+                WHERE scope=$1`,
+              [receiptScope],
+            )
+          }
+          const before = await scheduledAcceptFacts(pool, tenant, task, receiptScope)
+          assert.equal(before.receipt[0].status, 102)
+          assert.equal(before.receipt[0].response_body.state, "pending")
+          assert.deepEqual(before.dispatch, [])
+          assert.deepEqual(before.source, [])
+          const leaseUntil = before.receipt[0].response_body.lease_until
+          const validBeforeAccept = await pool.query("SELECT clock_timestamp() < $1::timestamptz AS valid", [leaseUntil])
+          assert.equal(validBeforeAccept.rows[0].valid, true, "accept must start with a live receipt lease")
+          // Settle failures immediately as data so barrier failures cannot leave an unhandled rejection.
+          acceptOperation = store.scheduledAgentDispatch.accept(input).then(
+            (accepted) => ({ accepted }),
+            (error) => ({ error }),
+          )
+          const acceptPid = await waitForScheduledAcceptBlock(pool, blockerPid, resource)
+          if (expired) {
+            await waitForScheduledAcceptLeaseExpiry(pool, blockerPid, acceptPid, resource, leaseUntil)
+          } else {
+            const validAtRelease = await pool.query("SELECT clock_timestamp() < $1::timestamptz AS valid", [leaseUntil])
+            assert.equal(validAtRelease.rows[0].valid, true)
+          }
+          await locker.query("COMMIT")
+          locker.release()
+          locker = undefined
+          const outcome = await acceptOperation
+          acceptOperation = undefined
+          if (outcome.error) throw outcome.error
+          const after = await scheduledAcceptFacts(pool, tenant, task, receiptScope)
+          if (expired) {
+            assert.deepEqual(
+              { accepted: outcome.accepted, ...after },
+              { accepted: { outcome: "claim_lost" }, ...before },
+              "an expired rejection must preserve the original pending receipt and all execution facts",
+            )
+          } else {
+            assert.deepEqual(outcome.accepted, { outcome: "rejected", response: input.rejections.task_not_active })
+            assert.deepEqual(after.scope, before.scope)
+            assert.deepEqual(after.dispatch, before.dispatch)
+            assert.deepEqual(after.source, before.source)
+            assert.equal(after.receipt[0].status, 409)
+            assert.equal(after.receipt[0].response_body.state, "terminal")
+            assert.deepEqual(after.receipt[0].response_body.response, input.rejections.task_not_active)
+            await store.close()
+            store = new PostgresBffRepositories(postgresUrl, redisUrl)
+            // Reopening must return the same durable rejection, not attempt to enqueue again.
+            assert.deepEqual(await store.schedulerDispatchReceipts.claim(receiptScope, digest), {
+              outcome: "terminal",
+              response: input.rejections.task_not_active,
+            })
+            assert.deepEqual(await store.scheduledAgentDispatch.accept(input), { outcome: "claim_lost" })
             assert.deepEqual(await scheduledAcceptFacts(pool, tenant, task, receiptScope), after)
           }
         } finally {
