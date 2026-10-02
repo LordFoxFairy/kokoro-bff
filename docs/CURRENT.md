@@ -1,3 +1,62 @@
+## R76 Root 精确冻结验收：public5 首次发布候选通过
+
+Root 实核 R75 十二文件冻结 b916b9adc5808222a8fa46fca5992094f1eee25cf0295b21802702a04e5f7885，独立 Sol 0P0/P1/P2，required 属性缺失 P1 关闭。fresh Node22 两纯文件93pass/0fail/0skip、完整契约230pass/0fail/0skip；fresh owner canonical install/build exit0、完整八文件真实 HTTP/PG/Redis integration149pass/0fail/0skip，24.317s。日志 /tmp/kokoro-bff-r76-root-pure.tap、/tmp/kokoro-bff-r76-root-contract.log、/tmp/kokoro-bff-r76-full-root-integration.log；owned bff_full_r76_3400ae666fb0412f 完整回收、tracked未变、Redis15余0、无他库删除或新库剩余。上一轮 supported Node22 完整离线门 exit0；本轮只补 required/canonical测试与当前证据，没有修改生产源码或SQL。
+
+Root 接管十二文件提交/public5.0.0 发布；尚未完成 Web public5 消费、Root composition 或浏览器/真实模型/积分整链，原 RED 与 skip 不清零。这是 owner 创建输入/任务边界组件验收，不是 Wave0–7 完成。
+
+## R74：ScheduledTask create / public5 源码 GREEN 候选（未发布）
+
+R75 当前阶段：Root修复前final真实full integration 149pass/0fail/0skip（23.395s）且owned完整回收；supported Node22 format/lint/typecheck/architecture27/schema8+1skip/contract222/unit672+1skip/build全部exit0，日志 `/tmp/kokoro-bff-r75-root-supported-node22.log`；native Sol十二冻结0。以上是Root报告的修复前证据，本窗口未重跑资源。随后Root精准机器一致性审及独立确认P1：CreateScheduledTaskRequest缺属性required，{}机器合法而现production拒绝。当前public5未发布，获准同5.0.0只补五字段required，不改其他语义。
+
+本片实际Node22 RED：两纯文件93tests/92pass/1fail/0skip，唯一失败为canonical required=[]而期待五字段；合法最小独立任务、删除各必填项与{}七项production controls全部通过。日志 `/tmp/kokoro-bff-r75-required/pure-red.tap`。随即只补canonical required:[title,prompt,frequency,time,timezone]；project_id/next_run_at/expires_at/auto_approve仍optional，EOF原测试不动。本片GREEN已实测：Node22两纯文件93pass/0fail/0skip（pure-green.tap），完整 pnpm contract:check 230pass/0fail/0skip、exit0（contract-check.log），Node语法与git diff --check均exit0。机器解析差异证明仅新增该required数组，其他schema值、版本/default/clock声明完全一致。原contract测试全文保EOF前缀；源码、SQL、integration测试、其余版本/生成/pin保持，430个本阶段非目标tracked字节保护。未重跑非必要整套门或资源。Root唯一Git/发布owner；十二路径完整hash与保护见 /tmp/kokoro-bff-r75-required/freeze.json，停写交付，待Root按新hash复验并发布。
+
+基线 main / d695fcbc0cd3f0376c34f64f6217d9d8e74c1b3c；Root 已复验 R73 纯 RED 83=51pass/32fail/0skip，以及 owned canonical fixture 上真实 HTTP+PG+Redis 53=14pass/39fail/0skip（含父/嵌套 failure，不是 39 个独立缺陷）。资源已由 Root 回收。本节覆盖下方 R73 的「版本待裁定/生产未修改」阶段描述；全部下方原正文保留，不作为当前完成证据。
+
+| 任务 | 责任/写集 | 当前阶段 |
+|---|---|---|
+| R74-BFF-CREATE-PUBLIC5-GREEN | WIN02 单 writer；Root Git/资源/发布；仅三生产文件、canonical OpenAPI/contract README、四当前D0前缀、三已授权测试 | 源码与纯GREEN候选已冻结待Root全owner资源复验；未提交/发布 |
+
+Root实际证据：/tmp/kokoro-bff-r74-root-pure-red-explicit.tap；/tmp/kokoro-bff-r74-full-root-integration.log；/tmp/kokoro-bff-r74-full-owned-resource.json。owned bff_full_r74_fc8e901688aa40f0 已回收、Redis15余0、tracked保持；此为Root报告，本窗口未重复跑资源。独立7文件/429保护审0P0/P1/P2。
+
+public5 /v1 pre-release breaking已裁定，正式公共发布后版本政策不变。当前只接 create 单次严格解析与前置拒绝，保 PATCH、同tenant/subject项目事务、通用幂等及原 replay/撤权控制。实际实现：scheduledCreateInput closed allowed keys、exact project/boolean校验；server 对任意 query component（含裸 ? /空pairs）400，单次parse在Project查询及receipt前；同对象传authorize/create，无重复trim。shared Project-path仍保原path binding，PATCH parser字节不变，仓储/通用幂等/SQL/生成均不改。新增两纯control与六项（含父）真实HTTP query/前置语法测试；新增资源测试只写未跑。
+
+本窗口实际证据（Node24.20.0，pnpm11.25.0；未更改仓Node22 engine声明）：
+
+| 实际命令 | 结果 | 日志（/tmp/kokoro-bff-r74-green/） |
+|---|---|---|
+| node --test --test-reporter=tap test/scheduled-input.test.ts test/contract/openapi-contract.test.mjs | 85pass/0fail/0skip；原83回归先已83/83 | pure-green.tap / pure-initial.tap |
+| pnpm format:check / lint / typecheck | 各exit0 | format-check.log / lint.log / typecheck.log |
+| pnpm contract:check（Node24） | exit1：既有Platform生成器要求精确Node22.22.2；非业务RED，未放宽pin | contract-check.log |
+| pnpm test:architecture | 27pass/0fail/0skip | test-architecture.log |
+| pnpm test | 672pass/0fail/1既定资源skip，共673 | test.log |
+| pnpm schema:check | 8pass/0fail/1既定资源skip | schema-check.log |
+| pnpm build | exit0 | build.log |
+| pnpm contract:check（固定Node22.22.2补跑） | 222pass/0fail/0skip，完整生成drift/lint/semantic门exit0 | contract-check-node22.log |
+
+Node24 engine warning与contract失败均保留；Node22补跑不算Node24八门全绿。无需修改 scripts/verify-openapi.ts 或 contract-governance。机器解析后除当前version、create schema/description/404外与原完全相同，immutable baseArtifact4/vendor/生成输入保持；contract测试仅五处授权文本机械迁移。原R73两个测试全文保prefix、四文档全部保suffix；最终精确hash/424非目标tracked保护见freeze.json，gates.json列每条结果。
+
+本窗口未执行真实PG/Redis/owner integration、installer、应用预览或浏览器，未进行Git写入。只读独立预审0P0/P1/P2，最终冻结待复核；后继Root按冻结运行原全owner集成及R74新增原始query测试、审查并发布精确public5 commit/digest，Web当前R74切片验收后独立repin/生成。不能以纯门冒称资源或整体闭环。
+
+## R73：ScheduledTask create D0 + tests RED（未实施 / 未发布）
+
+基线 `main / d695fcbc0cd3f0376c34f64f6217d9d8e74c1b3c`，R71 已由 Root 发布。本节为 R73 ScheduledTask create 的唯一当前目标；下方全部旧正文逐字节保留，其 R71「待发布」和宽松输入描述仅是历史阶段，不覆盖本节。当前阶段仅 D0 + tests RED，生产实现、canonical contract、SQL、package/pin/generated 尚未修改。
+
+| 任务 | Owner / 执行 / 审查 | 基线与写集 | 验收 / 状态 |
+|---|---|---|---|
+| R73-BFF-PROJECT-RUNTIME-D0-RED | BFF / WIN02 唯一 writer / 原 native 只读审查员、Root | 本仓绝对目录 /Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/apps/kokoro-bff；main/d695fcbc；起点无未提交变更。仅本仓 TECHNICAL_DESIGN、API_CONTRACT、DATA_MODEL、CURRENT 四 doc 前缀及 test/scheduled-input.test.ts、test/business-store.integration.mjs、test/contract/openapi-contract.test.mjs EOF | 纯定点行为 RED、合法 control、旧正文/测试前缀及所有非目标 tracked 字节保持；集成只冻结由 Root 真跑。当前待独立审查 / Root 资源复验，未提交 |
+
+Root 已裁定：独立 ScheduledTask 的 optional project_id 为精确非空无边缘空白 string，保可见 ID/slug；未知 body/query（含重复）、非法引用类型/null/数组/空白、非 bool auto_approve 与 create enabled/status 拒绝 400。创建默认 active/enabled=true，PATCH 保留。拒绝与项目预检在 receipt 前；其他 owner/缺失/跨 tenant 项目同 404，原不匹配 tenant admission 403 不变。合法重启 replay200、另一可见项目 same-key409、撤权 replay404，以及拒绝零写/事务回滚均进入新增测试。
+
+三个设计前缀使用相同 owner/契约/SQL 目标，原正文完整保留；机器与源码仍旧态。删除 create 字段为 breaking，正式 GREEN 前需 Root 裁定唯一版本/consumer 顺序并授权迁移旧 R71 exact properties 断言；当前不扩写契约、源码、SQL、依赖、generated 或 Web pin，不重写 generic idempotency/PATCH。Root 唯一 Git/共享资源 owner。
+
+本窗口实际 Node 22.22.2 定点：`node --test --test-reporter=tap test/scheduled-input.test.ts test/contract/openapi-contract.test.mjs` → 83 tests / 51 pass / 32 fail / 0 skip（1383.411458ms）；旧 44 项全部通过，新增 7 项合法/契约对照通过，29 项输入拒绝失败＋3 项机器目标失败（create 旧 enabled/status、缺引用空白 pattern、缺 404）。均为行为/契约断言 RED，非 missing import/collection。日志 `/tmp/kokoro-bff-r73-red/pure-red.tap`。
+
+首次在 Root 目录使用 pnpm --dir 构建触发 package-manager version 检查，exit1，保留 `/tmp/kokoro-bff-r73-red/build.log`；进入本仓执行 `pnpm build` exit0，日志 build-bff.log。三测试文件 Node --check 均 exit0；business-store integration 的现 format 检查 exit0。四文档只 prepend、三测试只 EOF append，七原始 bytes 与非目标 tracked hash 证明随 `/tmp/kokoro-bff-r73-red/freeze.json` 冻结。
+
+新增五个真实资源 integration 入口已写，含逐项拒绝零写、两种合法关联/独立 control、隐私/tenant403 对照、完整响应重启 replay/冲突/撤权、tenant/subject 同 key 隔离、outbox 真实 SQL 故障回滚与同 key 恢复。只暂停 delivery 调度，不 mock HTTP/仓储；Root 需先安装 owned canonical fixture，以 `node --test --test-name-pattern='R73' test/business-store.integration.mjs` 定点，然后完整回归。原有旧 integration 包含 installer/reset，不在本窗口执行。
+
+本窗口未执行 HTTP/PG/Redis/installer，无深层资源 RED 或修复通过宣称；未重复 schema/Scheduler accept 门，未提交、未发布。完整 D0/机器门与版本策略仍 pending，后续 owner：Root 真实资源 RED/独立审后授权同负责人 contract/source GREEN。
+
 ## R71：独立 ScheduledTask 可选项目契约补齐候选，待 Root 发布
 
 基线 main / 3928043ec243eaec28af32c231a0bbf75a8b19ec；本轮仅 canonical `CreateScheduledTaskRequest` 补 optional、非 nullable 的 `project_id: string / minLength: 1`，不加入 required，不绑定 Conversation，不改其他字段/operation/version。三设计面同步记录既有 parser 与同 owner Project 校验，不改 SQL、运行时源码或依赖。

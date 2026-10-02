@@ -27,7 +27,7 @@ security; an irrelevant extra Authorization header does not become an additional
 
 ## Version
 
-The current source candidate is public `4.0.0` on the unchanged `/v1` HTTP namespace, under the approved pre-release corrective cut. It replaces `active_run` and top-level `pending_pauses` with one optional `execution_head` (`queued | active | waiting | resuming`) and an exact full pending collection. Run resume requires the current pause revision/reference and all pending item decisions. HTTP admission never changes the interaction read projection. The operation inventory and permissions remain unchanged; this working-tree candidate is not a published consumer pin. Root owns PostgreSQL/Redis/HTTP acceptance and publication; Web repins only after publication. Retry remains outside this cut because the fixed Agent artifact has no `retry_of_run_id`.
+The current source candidate is public `5.0.0` on the unchanged `/v1` namespace under the explicitly approved R74 pre-release corrective cut. ScheduledTask creation rejects unknown body/query inputs, requires exact nonempty Project references without edge whitespace, and removes caller-set `enabled`/`status`; tasks start active and enabled, while PATCH retains state changes. The existing full execution head, pause decisions, cursor, permissions and operation inventory remain unchanged. This is breaking, not backward compatible. Immutable inherited `baseArtifact`/vendor version pins remain unchanged. Root owns final resource acceptance and publication; Web repins the exact released commit/version/digest only after its current R74 slice is accepted. No consumer upgrade or managed-runtime activation is implied by this source candidate.
 
 `GET /v1/sessions/{id}/events` issues one opaque `agui_*` cursor per durable public frame. Agent source sequences remain
 internal projection metadata and are not valid public resume cursors. Callers persist the last SSE `id` verbatim and send
@@ -57,6 +57,10 @@ pnpm contract:update-baseline
 ## Breaking policy
 
 ### Corrective pre-release baseline
+
+R74 adds one explicitly approved first-public-launch clean-slate boundary: publish canonical artifact `5.0.0` in the single `/v1` namespace for strict ScheduledTask creation. Remove creation-only `enabled` and `status`, reject undeclared body/query parameters and malformed Project references before receipt admission, and document the existing Project 404. This approval does not introduce `/v2`, a dual public4/public5 parser, compatibility aliases, or changes to PATCH/generic idempotency. Both creation operations already share `CreateScheduledTaskRequest`; the project path retains its existing path binding, while the new no-query/pre-receipt admission flow applies to `createScheduledTask`.
+
+Release order is BFF source/contract/design/tests alignment and Root real-resource gates, then Root publication of the immutable public5 commit/digest, then an independently verified Web repin and normal generation. Do not edit a consumer's existing immutable public4 artifact. The following post-public-release breaking policy remains in force; this exception must not be silently generalized to future changes.
 
 For BFF-CHAT-ROLE2 only, before the first public release, public `3.0.0` may remain on `/v1` while narrowing
 `ChatMessage.role` to `user | assistant`. The removed `system` value has no product producer in BFF, Agent, or Web, but

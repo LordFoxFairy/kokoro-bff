@@ -1,3 +1,46 @@
+## R74：ScheduledTask create / public5 源码 GREEN 候选（未发布）
+
+R75 当前更正：Root final 已执行真实 full integration 149pass/0fail/0skip（23.395s）并完整回收 owned 资源；supported Node22 完整离线门全部exit0，日志 `/tmp/kokoro-bff-r75-root-supported-node22.log`，native Sol 十二路径冻结审0。其后发现发布阻塞P1：共享 CreateScheduledTaskRequest 没有属性 required，虽两个 POST 的 requestBody.required=true，空对象仍被机器schema接受，与现 production parser 不一致。本片只在同一个未发布 public5.0.0 schema 补 title/prompt/frequency/time/timezone 五项 required，保另外四属性optional；无新增业务规则、文件、依赖、clock或生产源码修改。现契约测试EOF先实际RED再补机器GREEN，不重复架构规划。Root原149/离线结果是修复前冻结证据，新hash待Root定点/contract/149复验后发布。
+
+基线 main / d695fcbc0cd3f0376c34f64f6217d9d8e74c1b3c；Root 已复验 R73 纯 RED 83=51pass/32fail/0skip，以及 owned canonical fixture 上真实 HTTP+PG+Redis 53=14pass/39fail/0skip（含父/嵌套 failure，不是 39 个独立缺陷）。资源已由 Root 回收。本节覆盖下方 R73 的「版本待裁定/生产未修改」阶段描述；全部下方原正文保留，不作为当前完成证据。
+
+Root 已批准 public5.0.0 作为首次公共上线前 clean-slate breaking artifact，保唯一 /v1、不建 /v2 或4/5双读；正式公共发布后仍按既有 breaking 策略。允许原 parser/route/server、canonical OpenAPI/contract README、四 D0 与三测试；本窗口唯一 writer，Root 独占 Git/资源。目录方案沿 R73：扩现输入模块优于新通用 validation 层，无新文件/进程/依赖。类型复用现 ScheduledTaskCreateInput，不建重复 DTO。
+
+实施方案：scheduled/input.ts 负责 closed body、auto_approve boolean 和精确非空无边缘空白 project_id；server 在 create 的 query/body 预验后，把同一解析对象传给 live-bff 项目授权和 create，均先于 receipt claim/replay。route 不再对该入口重新 trim/解析。项目路径 create 现也消费同一 schema/parser，保 path 项目绑定；不扩其 query/receipt 策略。PATCH、首次 Project FOR SHARE/task+outbox 同事务、外层 receipt 与 commandAlreadyExists 恢复顺序保持。
+
+验证顺序：既有真实 RED→本片纯定点 GREEN→Node24 format/lint/typecheck/contract/architecture/unit/schema/build→完整冻结/只读独立审→Root 全 owner 资源回归→发布 artifact→Web 后继独立 repin。当前源码候选已形成：Node24 纯定点85/85、architecture27/27、unit672pass/1skip、schema8pass/1skip；Node24 contract:check 因既定 Node22 生成器 pin 失败，保留exit1，固定Node22完整contract222/222通过。未宣称修改后的资源HTTP GREEN或整链完成。
+
+## R73：ScheduledTask create 严格输入与项目引用（D0 / tests RED）
+
+基线 `main / d695fcbc0cd3f0376c34f64f6217d9d8e74c1b3c`，R71 已由 Root 发布。本节为 R73 ScheduledTask create 的唯一当前目标；下方全部旧正文逐字节保留，其 R71「待发布」和宽松输入描述仅是历史阶段，不覆盖本节。当前阶段仅 D0 + tests RED，生产实现、canonical contract、SQL、package/pin/generated 尚未修改。
+
+### 已裁定边界与放置
+
+仅 `POST /v1/scheduled-tasks`：ScheduledTask 保持独立，可省略 `project_id`，不绑定 Conversation/Message/session。提供时必须是精确非空 string，禁止 null、非 string、数组、空串、纯空白及前后空白；不 trim 后放行、不静默降级成独立任务。合法可见 Project ID/slug 仍由 BFF 同 tenant/subject 解析。一个已校验引用供权限预检和实际 create 共用，身份只来自受信上下文。
+
+Root 明确决定创建端无 query：任何 query 参数（含重复、空值或 project_id）均 400，这是本次产品策略，不是由 OpenAPI 未列 query 自动推导。unknown body、auto_approve 非 boolean、create enabled/status 均 400；创建固定 active/enabled=true，后续暂停/启用仍走既有 PATCH。语法拒绝和项目权限检查均先于 generic receipt claim/replay；不可见/不存在/跨租户项目统一 404，不修改全站幂等。
+
+| 项 | 本片结论 |
+|---|---|
+| Owner / writer | BFF ScheduledTask；WIN02 唯一文件 writer，Root 唯一 Git/资源/集成 owner；独立审查员只读 |
+| 当前事实 | src/application/scheduled/input.ts 宽松解析；src/http/routes/live-bff.ts 预检 trim、create 原值；src/bootstrap/server.ts 先项目预检后 receipt；工作树起点干净 |
+| 目标职责 | 在原 create 入口关闭输入并复用一个已验证引用；不新增 API、模块、进程或跨 owner 访问 |
+| 目录比较 | 采用现 parser/route/server 和现测试文件；淘汰新通用 validation 层或新 Scheduled 模块目录，避免把一次 create 修复扩为全站重构 |
+| 粒度 / 依赖 | parser 只负责输入，HTTP 负责错误/准入次序，service/repository 保持事实事务；无依赖升级、框架/driver 类型上泄 |
+| 数据/API | 唯一 contract/openapi/v1/openapi.yaml 与 database/schema.sql；当前均冻结。后继 contract 删除 create enabled/status、约束 project_id 边缘空白、补现有 404；不改 PATCH |
+| 删除项 | 本阶段无；GREEN 删除 create silent-ignore 与重复引用解析，不增加 alias/fallback/双轨 |
+| 验证 | 本窗口 build + 两纯定点、语法检查、原前缀/非目标 hash；Root owned fixture 跑 business-store integration，再执行 contract/architecture/unit/schema/build 与完整回归 |
+
+### 事务、重放与失败恢复
+
+首次关联创建在原 ScheduledTask repository 事务内按 tenant/owner 读取并 FOR SHARE 锁定 Project，写 task+outbox；任何 SQL 失败全回滚。terminal HTTP replay 仍先校验当前项目可见性：原 key/body 在合法引用下原响应 200；同 key 改另一可见项目 409；撤权后原请求 404，保留既有事实与 receipt。租户准入不符仍 403，与已准入者引用跨 tenant 项目 404 分开。
+
+外层 receipt 尚未保存、task/outbox 已提交时，repository 的 commandAlreadyExists 早于 ownedProjectId，这是现实现事实，不声称该恢复分支再次锁定 Project。R73 不重写 generic idempotency 或 Scheduler accept/head。非法输入/预检拒绝证明三表零新增；真实 outbox 故障触发器证明 task/outbox 回滚及 5xx pending receipt 释放；重建 BFF 实例证明 terminal replay，无 mock HTTP response 代替数据库。
+
+### 阶段与发布门
+
+三 D0 已记录同一目标，但机器契约与实现保持旧态，完整文档/机器一致性门尚未通过。删除 create enabled/status 是 breaking；contract/README.md 的既有版本规则与一次性 corrective 例外不能自行延伸。正式 GREEN/发布前由 Root 裁定唯一版本策略、精确授权机器/实现写集与旧 R71 全字段断言迁移。先 owner 完整门并发布不可变 commit/version/digest，后 Web 单独 repin/生成/验收；不修改 Web 已固定旧 artifact，不声称兼容。
+
 ## R71：独立 ScheduledTask 可选项目关联契约补齐（待发布）
 
 基线 main / 3928043ec243eaec28af32c231a0bbf75a8b19ec。本片唯一 owner 仍为 BFF ScheduledTask；沿既有 `/v1/scheduled-tasks` → scheduledTask service → repository 边界，仅在 canonical `CreateScheduledTaskRequest` 补充可选 `project_id`，对齐已存在的 parser 和同 tenant/subject Project 校验，不新建模块、进程或调用链。ScheduledTask 独立于 Conversation；省略 Project 可独立创建，引用 Project 不把任务变为会话。

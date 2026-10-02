@@ -29,6 +29,8 @@ import { proxyUpstream } from "../upstream.js"
 import { liveAgentSession } from "../http/routes/agent.js"
 import { liveChatBusiness } from "../http/routes/chat.js"
 import { authorizeLiveBffMutation, liveBffBusiness } from "../http/routes/live-bff.js"
+import { scheduledCreateInput } from "../application/scheduled/input.js"
+import type { ScheduledTaskCreateInput } from "../application/ports/scheduled-task-repository.js"
 import { authorizeChatRequest, type ChatAuthorization } from "../http/routes/chat-authorization.js"
 import { liveOwnerBusiness } from "../http/routes/owner.js"
 import { liveMoriBusiness } from "../http/routes/music.js"
@@ -368,6 +370,18 @@ async function handle(
     }
     json = parsed
   }
+  let scheduledCreate: ScheduledTaskCreateInput | null = null
+  if (composition.routeHandler === undefined && method === "POST" && businessPath.length === 1 && businessPath[0] === "scheduled-tasks") {
+    if ((request.url ?? "").includes("?")) {
+      send(response, 400, failure("invalid_scheduled_task", "Scheduled task creation does not accept query parameters", id))
+      return
+    }
+    scheduledCreate = scheduledCreateInput(json)
+    if (scheduledCreate === null) {
+      send(response, 400, failure("invalid_scheduled_task", "Scheduled task fields are invalid", id))
+      return
+    }
+  }
   let chatAuthorization: ChatAuthorization | null = null
   if (composition.routeHandler === undefined && composition.businessStore !== null) {
     try {
@@ -376,7 +390,7 @@ async function handle(
         send(response, chatAuthorization.status, failure(chatAuthorization.code, chatAuthorization.message, id))
         return
       }
-      const resourceAuthorization = await authorizeLiveBffMutation(method, context, businessPath, json, composition.businessStore)
+      const resourceAuthorization = await authorizeLiveBffMutation(method, context, businessPath, scheduledCreate, composition.businessStore)
       if (resourceAuthorization !== null && !resourceAuthorization.ok) {
         send(response, resourceAuthorization.status, failure(resourceAuthorization.code, resourceAuthorization.message, id))
         return
@@ -544,7 +558,8 @@ async function handle(
     return
   }
   if (composition.businessStore !== null && bffOwnedBusinessPath(businessPath)) {
-    if (await liveBffBusiness(request, response, context, businessPath, json, mutation, composition.idempotency, composition.businessStore)) return
+    if (await liveBffBusiness(request, response, context, businessPath, json, mutation, composition.idempotency, composition.businessStore, scheduledCreate))
+      return
   }
   if (await liveOwnerBusiness(request, response, config, context, businessPath, json, mutation, composition.idempotency)) return
   if (upstreamBase === null) {

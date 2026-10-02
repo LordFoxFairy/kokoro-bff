@@ -1,3 +1,36 @@
+## R74：ScheduledTask create / public5 源码 GREEN 候选（未发布）
+
+R75 当前更正：CreateScheduledTaskRequest.required 精确为 title、prompt、frequency、time、timezone；project_id、next_run_at、expires_at、auto_approve 仍optional。两个现 POST 继续引用这一个机器schema；requestBody.required 只约束body存在，不能代替属性presence。Root已确认原缺失是发布阻塞P1，批准同一未发布 public5.0.0 的机器事实规范化；不改其他值域/default、版本、路径、immutable baseArtifact4或生成输入。现EOF机器exact-set RED及production合法/逐项缺字段/空对象controls锁定本结论。Root修复前真实149pass、supported Node22完整offline全部exit0与native冻结0审已完成；日志 `/tmp/kokoro-bff-r75-root-supported-node22.log`。本次新hash的最终复验/提交/发布仍属Root，不声称public5已发布。
+
+基线 main / d695fcbc0cd3f0376c34f64f6217d9d8e74c1b3c；Root 已复验 R73 纯 RED 83=51pass/32fail/0skip，以及 owned canonical fixture 上真实 HTTP+PG+Redis 53=14pass/39fail/0skip（含父/嵌套 failure，不是 39 个独立缺陷）。资源已由 Root 回收。本节覆盖下方 R73 的「版本待裁定/生产未修改」阶段描述；全部下方原正文保留，不作为当前完成证据。
+
+Root 本轮明确批准唯一 canonical artifact 升 public5.0.0、保 /v1 namespace；这是本片限定 pre-release breaking，不延伸为兼容承诺。create 删除 enabled/status，保 PATCH；project_id optional string/minLength=1 且禁止边缘空白；未知 body/query（含重复）、非法 auto_approve 在 receipt/项目查询前 400；可见 ID/slug 或无项目成功，隐私404/身份403/冲突409/重放与撤权语义沿 R73。机器补 create 的既有 404，description 明示 no-query 和默认 active/enabled=true。
+
+只修改当前 info.version 及其两条现测试期待；immutable baseArtifact4/vendor/生成输入/十项安全 failure tuple 保持。R71 旧 property 全集断言仅删 enabled/status 并改准确文案，其 closed/optional/nonnullable/独立/关联断言保持。contract/README.md 记录本次批准例外与正式发布后版本策略。
+
+发布顺序锁定 BFF source/contract/三D0/tests 一致＋Root真实资源门→Root发布精确 public5 commit/digest→Web当前R74切片验收后独立repin/生成/回归。本阶段不改 Web 已固定 artifact，不伪造发布commit或消费者已升级。当前public5机器与源码候选已形成，纯契约222/222通过；未发布且资源验收仍待Root。
+
+## R73：ScheduledTask create closed admission（当前目标，机器未修改）
+
+基线 `main / d695fcbc0cd3f0376c34f64f6217d9d8e74c1b3c`，R71 已由 Root 发布。本节为 R73 ScheduledTask create 的唯一当前目标；下方全部旧正文逐字节保留，其 R71「待发布」和宽松输入描述仅是历史阶段，不覆盖本节。当前阶段仅 D0 + tests RED，生产实现、canonical contract、SQL、package/pin/generated 尚未修改。
+
+唯一公开机器事实源仍为 `contract/openapi/v1/openapi.yaml`；本节记录 Root 已裁定目标，不复制第二可编辑 schema。仅 create operation，其他方法/PATCH/权限/路由与全站幂等保持。
+
+- Body 只保留既有 title/prompt/frequency/time/timezone/next_run_at/expires_at/auto_approve，加 optional project_id；移除 create enabled/status，不接受它们的任何值。初始状态固定 active/enabled=true，PATCH 继续负责暂停/启用，不允许 create failed。
+- project_id 可省略、非 nullable；提供时精确非空 string，禁非 string、数组、空串、纯空白、前后空白；保现可见 Project ID/slug，绝不 trim 后授权另一值。机器后继须以 minLength/type/pattern 明示相同边缘空白语义。
+- Body 未声明字段、auto_approve 非 boolean 返回 400；项目关联不扩展为 conversation_id/session_id。tenant/subject 不从 body 接收。
+- Root 明确 create 禁止所有 query 参数（含重复/空值/看似 project_id）；400 先于 receipt。这是本片明确新目标，不从 no-query OpenAPI 反推通用规则。
+- 有效输入＋可见项目或无项目返回 200；其他 owner、缺失或另一 tenant 的项目返回同 `project_not_found` 404。调用者 tenant 本身未准入仍保持原 403。
+- 保 required Idempotency-Key。相同合法请求在重启后重放原 200；同 key 改另一可见项目 409；撤权后原 body/key 404，禁止先返回旧 terminal receipt。拒绝输入/预检时不新增 task/outbox/receipt，不把 body 注入身份视为 authority。
+
+当前 runtime 仍忽略 unknown keys/query、非 string project 静默无关联，schema 仍含 enabled/status 且 create 无 404；这些是 RED 基线而非已修复事实。后继 contract 同片删除两个 create 字段、添加引用边界与 404，原 PATCH contract/parser 不扩写。
+
+### Breaking / consumer 前置门
+
+本次删除已广告字段与收紧输入属于 breaking，不冒称 R71 additive 修复。现 contract/README.md 要求新 API 版本，历史 public4 /v1 corrective 是先前限定例外。Root 必须先裁定本片唯一版本/路径策略，才进入正式机器/源码 GREEN；本阶段不自行设新版本或并列双轨。R71 精确 property 集合断言仍原样保留；后继授权仅机械删其 enabled/status 期待，保其独立/关联/type/minLength/closed 保障。发布顺序为 BFF source/contract/tests/三 D0 一致并完整验收→Root 发布不可变 artifact→Web 独立 repin/正规生成/回归；现固定 Web blob 不改。
+
+验证入口：本仓 `test/contract/openapi-contract.test.mjs` 的新增 R73 schema 断言与 `test/scheduled-input.test.ts` 纯输入；真实 HTTP/PG 的 `test/business-store.integration.mjs` 仅由 Root 在 owned fixture 执行。当前机器/源码未改，不宣称 D0+RED 即契约门通过。
+
 ## R71：CreateScheduledTaskRequest 可选 project_id（待发布）
 
 基线 main / 3928043ec243eaec28af32c231a0bbf75a8b19ec。唯一机器事实源 `contract/openapi/v1/openapi.yaml` 的 `CreateScheduledTaskRequest.properties.project_id` 补为 `type: string, minLength: 1`；字段可省略、非 nullable，不加入 required。`additionalProperties: false`、全部既有字段、operation、版本边界保持；不添加 Conversation/session 关联。此为既有可选 Project 创建行为的契约对齐，不改变身份来源、权限或错误处理。

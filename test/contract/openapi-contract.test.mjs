@@ -40,7 +40,7 @@ function inspectChatFailureContract(openapi) {
     if (!condition) errors.push(label)
   }
 
-  require(/^info:\n(?:.*\n){0,3}?  version: 4\.0\.0$/mu.test(openapi), "public info.version must be 4.0.0")
+  require(/^info:\n(?:.*\n){0,3}?  version: 5\.0\.0$/mu.test(openapi), "public info.version must be 5.0.0")
   require(/^      required: \[message_id, role, content, status, created_at\]$/mu.test(message), "failure must stay optional")
   const roles = [...(message.match(/role:\n\s+type: string\n\s+enum: \[([^\]]+)\]/u)?.[1] ?? "").matchAll(/[a-z_]+/gu)].map(
     (match) => match[0],
@@ -1017,14 +1017,14 @@ test("personal Skill installation gate binds stable error.code enums to each HTT
   }
 })
 
-test("public4 has only the closed full execution head, five current-locator decisions and full interaction CUSTOM", async () => {
+test("public5 retains the closed full execution head, five current-locator decisions and full interaction CUSTOM", async () => {
   const { createRequire } = await import("node:module")
   // Parse with the YAML implementation already locked by the contract linter.
   const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
   const { openapi } = await readContract()
   const document = load(openapi)
   const schemas = document.components.schemas
-  assert.equal(document.info.version, "4.0.0")
+  assert.equal(document.info.version, "5.0.0")
   const snapshot = schemas.SessionSnapshotResponse.properties.data
   assert.equal(Object.hasOwn(snapshot.properties, "active_run"), false)
   assert.equal(Object.hasOwn(snapshot.properties, "pending_pauses"), false)
@@ -1130,8 +1130,8 @@ test("R71 closed ScheduledTask creation schema declares optional nonempty projec
   const properties = Object.keys(schema.properties).sort()
   assert.deepEqual(
     properties,
-    ["title", "prompt", "frequency", "time", "timezone", "next_run_at", "expires_at", "auto_approve", "enabled", "status", "project_id"].sort(),
-    "closed public creation schema must include project_id while retaining its original fields and excluding Conversation linkage",
+    ["title", "prompt", "frequency", "time", "timezone", "next_run_at", "expires_at", "auto_approve", "project_id"].sort(),
+    "closed public5 creation schema retains optional project_id while excluding create-only state controls and Conversation linkage",
   )
   const project = schema.properties.project_id
   assert.ok(project !== undefined, "project_id must be declared, not admitted by opening the schema")
@@ -1141,4 +1141,128 @@ test("R71 closed ScheduledTask creation schema declares optional nonempty projec
   assert.equal(project.oneOf, undefined)
   assert.equal(project.anyOf, undefined)
   for (const field of ["project_id", "conversation_id", "session_id"]) assert.equal((schema.required ?? []).includes(field), false)
+})
+
+// R73 target comes from the current D0 prefixes, not from interpreting absent query declarations.
+async function r73ScheduledContract() {
+  const { createRequire } = await import("node:module")
+  const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
+  const { openapi } = await readContract()
+  return load(openapi)
+}
+
+test("R73 create retains the closed independent-task contract and optional nonnullable Project reference", async () => {
+  const document = await r73ScheduledContract()
+  const schema = document.components.schemas.CreateScheduledTaskRequest
+  assert.equal(schema.type, "object")
+  assert.equal(schema.additionalProperties, false)
+  assert.equal((schema.required ?? []).includes("project_id"), false)
+  assert.equal(schema.properties.project_id.type, "string")
+  assert.equal(schema.properties.project_id.minLength, 1)
+  assert.notEqual(schema.properties.project_id.nullable, true)
+  assert.equal(schema.properties.auto_approve.type, "boolean")
+  for (const field of ["conversation_id", "session_id", "tenant_id", "owner_id"]) assert.equal(Object.hasOwn(schema.properties, field), false)
+})
+
+test("R73 create no longer advertises caller-set enabled/status or silent-ignore fields", async () => {
+  const schema = (await r73ScheduledContract()).components.schemas.CreateScheduledTaskRequest
+  assert.deepEqual(
+    Object.keys(schema.properties).sort(),
+    ["title", "prompt", "frequency", "time", "timezone", "next_run_at", "expires_at", "auto_approve", "project_id"].sort(),
+  )
+})
+
+test("R73 Project reference schema rejects empty and all edge whitespace without excluding legal IDs or slugs", async () => {
+  const project = (await r73ScheduledContract()).components.schemas.CreateScheduledTaskRequest.properties.project_id
+  assert.equal(typeof project.pattern, "string", "the published reference policy must express edge-whitespace rejection")
+  const pattern = new RegExp(project.pattern, "u")
+  for (const value of ["project_owned", "owned-project-slug", "a", "项目"]) assert.equal(pattern.test(value), true, JSON.stringify(value))
+  for (const value of [
+    "",
+    "   ",
+    "\t",
+    " project_owned",
+    "project_owned ",
+    "\nproject_owned",
+    "project_owned\n",
+    "\u00a0project_owned",
+    "project_owned\ufeff",
+  ]) {
+    assert.equal(pattern.test(value), false, JSON.stringify(value))
+  }
+})
+
+test("R73 create documents the existing invisible Project 404 alongside admission and idempotency responses", async () => {
+  const document = await r73ScheduledContract()
+  const operation = document.paths["/v1/scheduled-tasks"].post
+  for (const status of ["200", "400", "401", "403", "404", "409", "429", "503"]) assert.ok(operation.responses[status], `create response ${status}`)
+  const response = operation.responses["404"]
+  const resolved = response.$ref === undefined ? response : document.components.responses[response.$ref.split("/").at(-1)]
+  assert.ok(resolved.content["application/json"].schema)
+})
+
+test("R73 create still declares no query input and keeps the existing PATCH contract separate", async () => {
+  const document = await r73ScheduledContract()
+  const collection = document.paths["/v1/scheduled-tasks"]
+  const parameters = [...(collection.parameters ?? []), ...(collection.post.parameters ?? [])].map((parameter) =>
+    parameter.$ref === undefined ? parameter : document.components.parameters[parameter.$ref.split("/").at(-1)],
+  )
+  assert.equal(
+    parameters.some((parameter) => parameter.in === "query"),
+    false,
+  )
+  const patch = document.paths["/v1/scheduled-tasks/{id}"].patch
+  assert.equal(patch.requestBody.content["application/json"].schema.$ref, "#/components/schemas/ScheduledTaskPatchRequest")
+  assert.deepEqual(document.components.schemas.ScheduledTaskPatchRequest, { type: "object", additionalProperties: true })
+})
+
+function r75RequiredScheduledPayload() {
+  return {
+    title: "R75 independent task",
+    prompt: "Review the next steps.",
+    frequency: "daily",
+    time: "08:00",
+    timezone: "UTC",
+  }
+}
+
+test("R75 creation schema requires exactly the five production-required properties on both creation operations", async () => {
+  const document = await r73ScheduledContract()
+  const schema = document.components.schemas.CreateScheduledTaskRequest
+  assert.deepEqual([...(schema.required ?? [])].sort(), ["title", "prompt", "frequency", "time", "timezone"].sort())
+  for (const field of ["project_id", "next_run_at", "expires_at", "auto_approve"]) {
+    assert.equal(schema.required.includes(field), false, `${field} must remain optional`)
+    assert.ok(Object.hasOwn(schema.properties, field), `${field} must remain declared`)
+  }
+  for (const path of ["/v1/scheduled-tasks", "/v1/projects/{projectId}/scheduled-tasks"]) {
+    const requestBody = document.paths[path].post.requestBody
+    assert.equal(requestBody.required, true)
+    assert.equal(requestBody.content["application/json"].schema.$ref, "#/components/schemas/CreateScheduledTaskRequest")
+  }
+})
+
+test("R75 production accepts an independent task with only the five required properties", async () => {
+  const { scheduledCreateInput: parse } = await r71ScheduledCreateSource()
+  const payload = r75RequiredScheduledPayload()
+  const input = parse(payload)
+  assert.ok(input !== null)
+  for (const field of ["title", "prompt", "frequency", "time", "timezone"]) assert.equal(input[field], payload[field])
+  assert.equal(input.autoApprove, false)
+  assert.ok(input.nextRunAt instanceof Date)
+  assert.ok(Number.isFinite(input.nextRunAt.getTime()))
+  for (const field of ["projectId", "expiresAt", "conversationId", "sessionId"]) assert.equal(Object.hasOwn(input, field), false)
+})
+
+for (const field of ["title", "prompt", "frequency", "time", "timezone"]) {
+  test(`R75 production rejects creation without required ${field}`, async () => {
+    const { scheduledCreateInput: parse } = await r71ScheduledCreateSource()
+    const payload = r75RequiredScheduledPayload()
+    delete payload[field]
+    assert.equal(parse(payload), null)
+  })
+}
+
+test("R75 production rejects an empty creation object despite a present HTTP body", async () => {
+  const { scheduledCreateInput: parse } = await r71ScheduledCreateSource()
+  assert.equal(parse({}), null)
 })

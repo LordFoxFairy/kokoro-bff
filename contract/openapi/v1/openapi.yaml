@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 4.0.0
+  version: 5.0.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -2820,6 +2820,11 @@ paths:
       x-kokoro-idempotency: required
       x-kokoro-permission: scheduled_task.create
       summary: Create a scheduled task
+      description: >-
+        Creates an independent task, optionally associated with a Project visible to the admitted tenant and subject.
+        No query parameters are accepted, including repeated or empty-valued parameters.
+        Unknown body fields and invalid Project references are rejected before Project lookup and idempotency admission.
+        Tasks start active and enabled; state changes belong to PATCH, not this creation request.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -2837,6 +2842,7 @@ paths:
                 $ref: '#/components/schemas/ScheduledTaskResponse'
         '400': { $ref: '#/components/responses/BadRequest' }
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
         '401': { $ref: '#/components/responses/ServiceAuthFailed' }
         '429':
@@ -5683,9 +5689,14 @@ components:
         meta: { $ref: '#/components/schemas/RequestMeta' }
     CreateScheduledTaskRequest:
       type: object
+      required: [title, prompt, frequency, time, timezone]
       additionalProperties: false
       properties:
-        project_id: { type: string, minLength: 1 }
+        project_id:
+          type: string
+          minLength: 1
+          pattern: '^\S(?:[\s\S]*\S)?(?![\s\S])'
+          description: Exact nonempty visible Project ID or slug; leading and trailing whitespace are rejected, not trimmed.
         title: { type: string }
         prompt: { type: string }
         frequency:
@@ -5696,10 +5707,6 @@ components:
         next_run_at: { type: string, format: date-time }
         expires_at: { type: string, format: date-time }
         auto_approve: { type: boolean }
-        enabled: { type: boolean }
-        status:
-          type: string
-          enum: [active, paused, failed]
     ScheduledTaskPatchRequest:
       type: object
       additionalProperties: true

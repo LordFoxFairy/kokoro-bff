@@ -1,6 +1,12 @@
 import type { ScheduledTaskCreateInput, ScheduledTaskPatch } from "../ports/scheduled-task-repository.js"
 import { isIanaTimezone, parseUtcTimestamp } from "../../domain/scheduled-task/task.js"
 
+const CREATE_FIELDS = new Set(["project_id", "title", "prompt", "frequency", "time", "timezone", "next_run_at", "expires_at", "auto_approve"])
+
+function exactProjectReference(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value.trim() === value
+}
+
 function instant(value: unknown, errorCode: string): Date | null {
   if (typeof value !== "string" || value.trim() === "") return null
   try {
@@ -11,6 +17,11 @@ function instant(value: unknown, errorCode: string): Date | null {
 }
 
 export function scheduledCreateInput(json: Record<string, unknown>, projectId?: string): ScheduledTaskCreateInput | null {
+  if (Object.keys(json).some((key) => !CREATE_FIELDS.has(key))) return null
+  if (Object.hasOwn(json, "project_id") && !exactProjectReference(json.project_id)) return null
+  if (Object.hasOwn(json, "auto_approve") && typeof json.auto_approve !== "boolean") return null
+  if (projectId !== undefined && !exactProjectReference(projectId)) return null
+  const projectReference = projectId ?? (typeof json.project_id === "string" ? json.project_id : undefined)
   const title = typeof json.title === "string" ? json.title.trim() : ""
   const prompt = typeof json.prompt === "string" ? json.prompt.trim() : ""
   const frequency = json.frequency
@@ -28,7 +39,7 @@ export function scheduledCreateInput(json: Record<string, unknown>, projectId?: 
     || nextRunAt === null || expiresAt === null
   ) return null
   return {
-    ...(projectId === undefined ? {} : { projectId }),
+    ...(projectReference === undefined ? {} : { projectId: projectReference }),
     title,
     prompt,
     frequency,

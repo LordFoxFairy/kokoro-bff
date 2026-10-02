@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from "node:http"
 
 import { failure, ok } from "../../contracts/index.js"
 import type { BffBusinessStore } from "../../application/ports/bff-business-store.js"
-import type { ScheduledTaskMutationLineage } from "../../application/ports/scheduled-task-repository.js"
+import type { ScheduledTaskCreateInput, ScheduledTaskMutationLineage } from "../../application/ports/scheduled-task-repository.js"
 import { idempotencyKey } from "../request.js"
 import type { RequestContext } from "../../domain/request-context.js"
 import { reply } from "../response.js"
@@ -15,6 +15,7 @@ import { projectName } from "../../domain/project/name.js"
 
 export type LiveBffAuthorization =
   | Readonly<{ ok: true }>
+  | Readonly<{ ok: false; status: 400; code: "invalid_scheduled_task"; message: string }>
   | Readonly<{ ok: false; status: 404; code: "project_not_found" | "scheduled_task_not_found"; message: string }>
 
 /** Gate existing private resources before generic mutation receipt admission. */
@@ -22,7 +23,7 @@ export async function authorizeLiveBffMutation(
   method: string,
   context: RequestContext,
   businessPath: readonly string[],
-  json: Readonly<Record<string, unknown>>,
+  scheduledCreate: ScheduledTaskCreateInput | null,
   store: BffBusinessStore,
 ): Promise<LiveBffAuthorization | null> {
   if (!new Set(["POST", "PATCH", "DELETE"]).has(method)) return null
@@ -44,9 +45,13 @@ export async function authorizeLiveBffMutation(
       }
       return { ok: true }
     }
-    const projectId = typeof json.project_id === "string" ? json.project_id.trim() : ""
-    if (projectId !== "" && await store.services.projects.find(scope, projectId) === null) {
-      return { ok: false, status: 404, code: "project_not_found", message: "Project was not found" }
+    if (method === "POST") {
+      if (scheduledCreate === null) {
+        return { ok: false, status: 400, code: "invalid_scheduled_task", message: "Scheduled task fields are invalid" }
+      }
+      if (scheduledCreate.projectId !== undefined && await store.services.projects.find(scope, scheduledCreate.projectId) === null) {
+        return { ok: false, status: 404, code: "project_not_found", message: "Project was not found" }
+      }
     }
     return { ok: true }
   }
@@ -73,6 +78,7 @@ export async function liveBffBusiness(
   mutation: MutationTicket | null,
   idempotency: Map<string, IdempotencyEntry>,
   store: BffBusinessStore,
+  scheduledCreate: ScheduledTaskCreateInput | null,
 ): Promise<boolean> {
   const method = request.method || "GET"
   const tenantId = context.identity.namespace
@@ -164,7 +170,7 @@ export async function liveBffBusiness(
         return true
       }
       if (businessPath.length === 1 && method === "POST") {
-        const input = scheduledCreateInput(json, typeof json.project_id === "string" ? json.project_id : undefined)
+        const input = scheduledCreate
         if (input === null) {
           await reply(response, 400, failure("invalid_scheduled_task", "Scheduled task fields are invalid", context.requestId), context, idempotency, mutation)
           return true

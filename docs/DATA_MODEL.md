@@ -1,3 +1,29 @@
+## R74：ScheduledTask create / public5 源码 GREEN 候选（未发布）
+
+R75 当前更正仅机器presence：创建必须提供 title/prompt/frequency/time/timezone，另四字段保持optional，与现 production parser 的既有行为一致。无 SQL/DDL、事务、默认值、clock、源码或integration fixture变更；唯一 canonical database/schema.sql 原字节保护。Root修复前真实full integration已149pass/0fail/0skip并完整owned回收，supported Node22完整offline全部exit0（`/tmp/kokoro-bff-r75-root-supported-node22.log`）、native十二文件审0。P1原因是OpenAPI缺属性required而非数据层缺实现；public5仍未发布，补行后的精确hash由Root再验，不用旧149代表新hash已验。
+
+基线 main / d695fcbc0cd3f0376c34f64f6217d9d8e74c1b3c；Root 已复验 R73 纯 RED 83=51pass/32fail/0skip，以及 owned canonical fixture 上真实 HTTP+PG+Redis 53=14pass/39fail/0skip（含父/嵌套 failure，不是 39 个独立缺陷）。资源已由 Root 回收。本节覆盖下方 R73 的「版本待裁定/生产未修改」阶段描述；全部下方原正文保留，不作为当前完成证据。
+
+本片无 DDL，database/schema.sql 与仓储均保护。create 同一解析对象只携带可信范围下的精确项目引用：省略仍存NULL，合法ID/slug经现 Project FOR SHARE 查询存canonical ID；task+outbox 首次写入事务不变，外层 receipt 保独立事务。闭合输入/query拒绝先于receipt，权限404/准入403不混淆。项目路径原 path binding 保留，无新业务事实/跨ownerSQL。
+
+创建固定 active/enabled=true，删除 public create 的两个广告字段不改数据库状态枚举或 PATCH。Root 已批准 public5 /v1 breaking；发布顺序同 API_CONTRACT。真实 RED 的 rollback/recovery、合法linked/independent、隐私/重放/撤权 controls 已通过，仅说明旧基线控制有效；本轮修改后仍须 Root 重新执行完整资源回归。当前不安装schema、不启动服务/PG/Redis、不重复宣称旧证据为GREEN。
+
+## R73：ScheduledTask create 输入拒绝与事务证据（无 DDL）
+
+基线 `main / d695fcbc0cd3f0376c34f64f6217d9d8e74c1b3c`，R71 已由 Root 发布。本节为 R73 ScheduledTask create 的唯一当前目标；下方全部旧正文逐字节保留，其 R71「待发布」和宽松输入描述仅是历史阶段，不覆盖本节。当前阶段仅 D0 + tests RED，生产实现、canonical contract、SQL、package/pin/generated 尚未修改。
+
+Owner 为 BFF ScheduledTask，Project 与 ScheduledTask 均是本仓事实。唯一 canonical `database/schema.sql` 不变：无项目时 bff_scheduled_task.project_id 为 NULL；合法可见 ID/slug 经同 tenant/owner 查询后存 canonical project ID。任务独立，不创建 Conversation/Message，无新表/索引/迁移、跨 owner SQL 或缓存事实。
+
+目标输入为 optional 精确非空、无边缘空白的 string project_id；非法类型/null/数组/空白不降级成 NULL。unknown body/query（含重复）、非 boolean auto_approve、create enabled/status 在 receipt 前 400；有效引用不可见/缺失/跨 tenant 在 receipt 前 404。初始 active/enabled=true 已是仓储事实；删掉 create 广告字段不改 SQL，后续状态变化仍既有 PATCH。
+
+首次创建沿现 src/infrastructure/postgres/scheduled-task-repository.ts 的一个 checked-out client 事务：outbox 去重→同 tenant/subject Project 查询 FOR SHARE→task INSERT→outbox INSERT→COMMIT。outbox 写失败回滚 task+outbox；HTTP 5xx 释放 generic pending receipt。外层 receipt 独立事务仍是当前架构，不能写成三表同事务。已提交 task/outbox 的恢复早返分支位于 Project 重验前，不能把首次写入锁保证推广到全部恢复路径。
+
+本片测试用精确 tenant/subject/key 快照证明拒绝零新增；成功 linked/independent controls 同时核 task 默认值、canonical project、register outbox/lineage 与 terminal receipt。重启重放比较原完整响应及三表内容；同 key 换另一可见项目 409，项目撤权后原 key/body 404且原记录不变。跨 tenant fixture 只操作 BFF 自有表，仍走正确 tenant admission；不更改原错 tenant 的 403。
+
+回滚测试复用现 scheduled-outbox integration 的真实 PostgreSQL BEFORE INSERT 故障触发器，只匹配本例唯一 key；对象名唯一、finally 精确回收自有 trigger/function。新例不安装 schema、不 DROP/TRUNCATE 业务表、不重置共享 Redis；Root 先用现 owner installer 创建 owned fixture。create HTTP/仓储/receipt 为真实实现，暂停 delivery worker 仅隔离后台投递，不用 mock response 代替事务。未运行资源前，所有深层断言只标待验，不伪称数据库 RED。
+
+本阶段无 canonical schema 变动，因此不重复已通过 schema gate；完整发布前仍由 Root 按阶段跑 schema:check、fresh fixture/业务集成与回归。版本/consumer 前置门同 API_CONTRACT.md；三 D0 目标一致不代表机器实现一致性已通过。retention、既有 Scheduler callback/accept/head 与其他 owner 生命周期均不在本片。
+
 ## R71：独立 ScheduledTask 可选项目关联的数据事实（无 DDL）
 
 基线 main / 3928043ec243eaec28af32c231a0bbf75a8b19ec。本片仅补公开创建 schema 的可选 `project_id`。现 repository 在字段省略时把 `bff_scheduled_task.project_id` 写为 NULL；提供引用时，在既有事务内解析并验证同 tenant/subject Project，持久化解析所得 project ID。ScheduledTask 独立持久化，不创建或依赖 Conversation/Message。
