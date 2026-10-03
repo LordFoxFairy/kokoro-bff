@@ -47,6 +47,7 @@ import { completeSkillPackageUploadRoute } from "../http/routes/complete-skill-p
 import { validateSkillDraftRoute } from "../http/routes/validate-skill-draft.js"
 import { publishSkillRoute } from "../http/routes/publish-skill.js"
 import { skillInstallationRoute } from "../http/routes/skill-installations.js"
+import { moveSessionRoute } from "../http/routes/move-session.js"
 
 async function handle(
   request: IncomingMessage,
@@ -155,6 +156,13 @@ async function handle(
   }
 
   const businessPath = segments.slice(1)
+  const isMoveSessionPath =
+    composition.routeHandler === undefined &&
+    request.method === "POST" &&
+    businessPath.length === 3 &&
+    businessPath[0] === "sessions" &&
+    businessPath[2] === "move"
+  if (isMoveSessionPath) response.setHeader("x-request-id", id)
   const isSkillPackagePath = segments.length === 4 && segments[1] === "skills" && segments[3] === "package-upload"
   const isSkillPackageCompletePath = segments.length === 5 && segments[1] === "skills" && segments[3] === "package-upload" && segments[4] === "complete"
   const isSkillValidatePath = segments.length === 4 && segments[1] === "skills" && segments[3] === "validate"
@@ -193,7 +201,8 @@ async function handle(
         isSkillValidatePath ||
         isSkillPublishPath ||
         isSkillInstallationPath ||
-        isPlatformProjectionRead
+        isPlatformProjectionRead ||
+        isMoveSessionPath
       ) {
         response.setHeader("cache-control", "no-store")
         send(
@@ -207,6 +216,11 @@ async function handle(
     return
   }
   const context = admission.context
+
+  if (isMoveSessionPath) {
+    await moveSessionRoute(request, response, context, businessPath[1] ?? "", composition.businessStore)
+    return
+  }
 
   if (isSkillInstallationPath) {
     const routeAbort = new AbortController()

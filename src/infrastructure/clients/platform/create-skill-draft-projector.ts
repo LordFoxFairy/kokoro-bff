@@ -1,5 +1,5 @@
 import { sha256Jcs } from "./jcs.js"
-import { strictParseRawJson } from "./raw-json.js"
+import { strictParseRawJson } from "../../raw-json.js"
 
 type RecordValue = Record<string, unknown>
 const fail = (message: string): never => {

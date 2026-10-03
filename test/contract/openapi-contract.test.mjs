@@ -40,7 +40,7 @@ function inspectChatFailureContract(openapi) {
     if (!condition) errors.push(label)
   }
 
-  require(/^info:\n(?:.*\n){0,3}?  version: 7\.0\.0$/mu.test(openapi), "public info.version must be 7.0.0")
+  require(/^info:\n(?:.*\n){0,3}?  version: 7\.1\.0$/mu.test(openapi), "public info.version must be 7.1.0")
   require(/^      required: \[message_id, role, content, status, created_at\]$/mu.test(message), "failure must stay optional")
   const roles = [...(message.match(/role:\n\s+type: string\n\s+enum: \[([^\]]+)\]/u)?.[1] ?? "").matchAll(/[a-z_]+/gu)].map((match) => match[0])
   require(JSON.stringify(roles) === JSON.stringify(["user", "assistant"]), "Message roles must equal user and assistant")
@@ -1025,7 +1025,7 @@ test("public7 retains the closed full execution head, five current-locator decis
   const { openapi } = await readContract()
   const document = load(openapi)
   const schemas = document.components.schemas
-  assert.equal(document.info.version, "7.0.0")
+  assert.equal(document.info.version, "7.1.0")
   const snapshot = schemas.SessionSnapshotResponse.properties.data
   assert.equal(Object.hasOwn(snapshot.properties, "active_run"), false)
   assert.equal(Object.hasOwn(snapshot.properties, "pending_pauses"), false)
@@ -1300,7 +1300,7 @@ test("R124 public7 publishes nullable snapshot process and the anchored Run proc
   const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
   const { openapi } = await readContract()
   const document = load(openapi)
-  assert.equal(document.info.version, "7.0.0")
+  assert.equal(document.info.version, "7.1.0")
   const snapshot = document.components.schemas.SessionSnapshotResponse.properties.data
   assert.ok(snapshot.required.includes("execution_process"))
   assert.deepEqual(snapshot.properties.execution_process, { oneOf: [{ $ref: "#/components/schemas/RunExecutionProcess" }, { type: "null" }] })
@@ -1330,4 +1330,188 @@ test("R124 public7 publishes nullable snapshot process and the anchored Run proc
   assert.equal(parameters.limit.schema.minimum, 1)
   assert.equal(parameters.limit.schema.maximum, 100)
   for (const status of ["200", "400", "401", "403", "404", "410", "429", "503"]) assert.ok(operation.responses[status])
+})
+
+test("R146 Move is one strict additive public command with a durable synchronous receipt", async () => {
+  const { createRequire } = await import("node:module")
+  const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
+  const { openapi, baseline } = await readContract()
+  const document = load(openapi)
+  const resolve = (value) => {
+    if (value?.$ref === undefined) return value
+    assert.match(value.$ref, /^#\/components\/(?:schemas|parameters|responses)\/[^/]+$/u)
+    const [, , section, name] = value.$ref.split("/")
+    const resolved = document.components[section][name]
+    assert.ok(resolved, `missing ${value.$ref}`)
+    return resolved
+  }
+  const canonicalConversation = "conv_12345678-1234-1234-1234-123456789abc"
+  const canonicalProject = "project_12345678-1234-1234-1234-123456789abc"
+  const path = "/v1/sessions/{id}/move"
+  const pathItem = document.paths[path]
+  assert.ok(pathItem, "Move must be one named /v1/sessions/{id}/move path")
+  assert.deepEqual(
+    Object.keys(pathItem).filter((key) => ["get", "post", "put", "patch", "delete"].includes(key)),
+    ["post"],
+  )
+  assert.equal(document.info.version, "7.1.0", "a new additive /v1 command advances public7 minor, not a breaking alias")
+  assert.ok(baseline.some((entry) => entry.method === "POST" && entry.path === path && entry.operation_id === "moveSession"))
+
+  const operation = pathItem.post
+  assert.equal(operation.operationId, "moveSession")
+  assert.equal(operation["x-kokoro-owner"], "kokoro-bff")
+  assert.equal(operation["x-kokoro-visibility"], "public")
+  assert.equal(operation["x-kokoro-stability"], "beta")
+  assert.equal(operation["x-kokoro-idempotency"], "required")
+  assert.equal(operation["x-kokoro-permission"], "chat.session.update")
+  assert.match(operation.description, /running|Run|streaming/iu)
+  assert.match(operation.description, /next|subsequent|后续/iu)
+  assert.match(operation.description, /replay|重放/iu)
+  assert.match(operation.description, /current IAM|重新 IAM|re-admission/iu)
+
+  const parameters = [...(pathItem.parameters ?? []), ...(operation.parameters ?? [])].map(resolve)
+  assert.equal(parameters.filter((parameter) => parameter.in === "query").length, 0, "Move has no project_ref or source query alias")
+  assert.equal(parameters.length, 2, "only canonical path ID and one Idempotency-Key header")
+  const pathParameter = parameters.find((parameter) => parameter.in === "path")
+  assert.equal(pathParameter?.name, "id")
+  assert.equal(pathParameter.required, true)
+  assert.ok(new RegExp(pathParameter.schema.pattern, "u").test(canonicalConversation))
+  assert.equal(new RegExp(pathParameter.schema.pattern, "u").test("session_slug"), false)
+  const key = parameters.find((parameter) => parameter.in === "header")
+  assert.equal(key?.name, "Idempotency-Key")
+  assert.equal(key.required, true)
+  assert.equal(key.schema.minLength, 1)
+  assert.equal(key.schema.maxLength, 128)
+  assert.match(key.description, /exactly once|single|单值/iu)
+  const keyPattern = new RegExp(key.schema.pattern, "u")
+  assert.equal(keyPattern.test("move-key-1"), true)
+  for (const invalid of ["", "two, keys", "with space", "bad\nkey"]) assert.equal(keyPattern.test(invalid), false)
+
+  assert.equal(operation.requestBody.required, true)
+  assert.deepEqual(Object.keys(operation.requestBody.content), ["application/json"])
+  const request = resolve(operation.requestBody.content["application/json"].schema)
+  assert.equal(request.type, "object")
+  assert.equal(request.additionalProperties, false)
+  assert.deepEqual(request.required, ["target_project_id"])
+  assert.deepEqual(Object.keys(request.properties), ["target_project_id"])
+  const target = request.properties.target_project_id
+  assert.equal(target.oneOf.length, 2)
+  const project = target.oneOf.find((variant) => variant.type === "string")
+  assert.ok(target.oneOf.some((variant) => variant.type === "null"))
+  assert.ok(project)
+  const projectPattern = new RegExp(project.pattern, "u")
+  assert.equal(projectPattern.test(canonicalProject), true)
+  for (const invalid of ["project_slug", "project_", " other", "", "12345678-1234-1234-1234-123456789abc"]) assert.equal(projectPattern.test(invalid), false)
+
+  assert.deepEqual(Object.keys(operation.responses).sort(), ["200", "400", "401", "403", "404", "409", "429", "503"])
+  const success = resolve(operation.responses["200"])
+  const receipt = resolve(success.content?.["application/json"]?.schema)
+  assert.equal(receipt.type, "object")
+  assert.equal(receipt.additionalProperties, false)
+  assert.deepEqual(receipt.required, ["data"])
+  assert.deepEqual(Object.keys(receipt.properties), ["data"], "request ID is a header, never JSON meta")
+  const data = resolve(receipt.properties.data)
+  assert.equal(data.type, "object")
+  assert.equal(data.additionalProperties, false)
+  assert.deepEqual(data.required, ["session_id", "project_ref"])
+  assert.deepEqual(Object.keys(data.properties).sort(), ["project_ref", "session_id"])
+  assert.equal(data.properties.session_id.type, "string")
+  assert.ok(data.properties.project_ref.oneOf.some((variant) => variant.type === "null"))
+  const responseProject = data.properties.project_ref.oneOf.find((variant) => variant.type === "string")
+  assert.ok(responseProject)
+  const responseProjectPattern = new RegExp(responseProject.pattern, "u")
+  assert.equal(responseProjectPattern.test(canonicalProject), true, "the published 200 schema must accept a real canonical target Project ID")
+  const uuidParts = canonicalProject.slice("project_".length).split("-")
+  assert.deepEqual(
+    uuidParts.map((part) => part.length),
+    [8, 4, 4, 4, 12],
+  )
+  for (let omitted = 0; omitted < uuidParts.length; omitted += 1) {
+    const malformed = `project_${uuidParts.filter((_, index) => index !== omitted).join("-")}`
+    assert.equal(responseProjectPattern.test(malformed), false, `a 200 Project ID missing UUID segment ${omitted + 1} must be rejected`)
+  }
+
+  const codeEnums = (value) => {
+    const schema = resolve(value)
+    if (schema === undefined) return []
+    const local = schema.properties?.error?.properties?.code?.enum
+    if (local !== undefined) return local
+    for (const branch of [...(schema.allOf ?? [])].reverse()) {
+      const narrowed = codeEnums(branch)
+      if (narrowed.length > 0) return narrowed
+    }
+    return (schema.oneOf ?? []).flatMap(codeEnums)
+  }
+  for (const [status, responseRef] of Object.entries(operation.responses)) {
+    const response = resolve(responseRef)
+    const requestId = resolve(response.headers?.["x-request-id"]?.schema)
+    const cache = resolve(response.headers?.["Cache-Control"]?.schema)
+    assert.equal(response.headers?.["x-request-id"]?.required, true, `${status} requires x-request-id`)
+    assert.equal(requestId.type, "string")
+    assert.equal(requestId.minLength, 1)
+    assert.equal(requestId.maxLength, 128)
+    assert.equal(response.headers?.["Cache-Control"]?.required, true, `${status} requires no-store`)
+    assert.ok(cache.const === "no-store" || ((cache.enum ?? []).length === 1 && cache.enum[0] === "no-store"))
+    if (status === "200") continue
+    const codes = codeEnums(response.content?.["application/json"]?.schema)
+    assert.ok(codes.length > 0, `${status} must narrow stable error codes, not reuse untyped ErrorEnvelope`)
+    assert.equal(new Set(codes).size, codes.length)
+  }
+  assert.ok(codeEnums(resolve(operation.responses["404"]).content["application/json"].schema).includes("session_not_found"))
+  assert.ok(codeEnums(resolve(operation.responses["409"]).content["application/json"].schema).includes("idempotency_conflict"))
+  const retry = resolve(operation.responses["429"]).headers["Retry-After"]
+  assert.equal(retry.required, false)
+  assert.equal(new RegExp(retry.schema.pattern, "u").test("1"), true)
+  assert.equal(new RegExp(retry.schema.pattern, "u").test("0"), false)
+  assert.equal(new RegExp(retry.schema.pattern, "u").test("999999"), false)
+})
+
+test("R146 Move semantic gate rejects local drift without relaxing older operations", async () => {
+  const { openapi, baseline } = await readContract()
+  assert.deepEqual(inspectBffOpenApi(openapi, baseline), [])
+  const moveStart = openapi.indexOf("  /v1/sessions/{id}/move:")
+  const moveEnd = openapi.indexOf("  /v1/sessions/{id}/title:", moveStart)
+  const requestStart = openapi.indexOf("    MoveSessionRequest:")
+  const requestEnd = openapi.indexOf("    MoveSessionResponse:", requestStart)
+  const successStart = requestEnd
+  const successEnd = openapi.indexOf("    MoveSessionErrorResponse:", successStart)
+  const responseStart = openapi.indexOf("    MoveSessionNotFound:")
+  const responseEnd = openapi.indexOf("    MoveSessionConflict:", responseStart)
+  assert.ok(
+    moveStart >= 0 &&
+      moveEnd > moveStart &&
+      requestStart >= 0 &&
+      requestEnd > requestStart &&
+      successEnd > successStart &&
+      responseStart >= 0 &&
+      responseEnd > responseStart,
+  )
+  const replaceBlock = (start, end, oldText, newText) => {
+    const block = openapi.slice(start, end)
+    assert.ok(block.includes(oldText), `mutation marker missing: ${oldText}`)
+    return `${openapi.slice(0, start)}${block.replace(oldText, newText)}${openapi.slice(end)}`
+  }
+  const mutations = [
+    replaceBlock(moveStart, moveEnd, "operationId: moveSession", "operationId: moveConversationAlias"),
+    replaceBlock(moveStart, moveEnd, "#/components/parameters/MoveSessionIdempotencyKey", "#/components/parameters/IdempotencyKey"),
+    replaceBlock(moveStart, moveEnd, "'404': { $ref: '#/components/responses/MoveSessionNotFound' }", "'404': { $ref: '#/components/responses/NotFound' }"),
+    replaceBlock(requestStart, requestEnd, "required: [target_project_id]", "required: []"),
+    replaceBlock(requestStart, requestEnd, "additionalProperties: false", "additionalProperties: true"),
+    replaceBlock(requestStart, requestEnd, "type: 'null'", "type: string"),
+    replaceBlock(
+      successStart,
+      successEnd,
+      "pattern: '^project_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'",
+      "pattern: '^project_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'",
+    ),
+    replaceBlock(responseStart, responseEnd, "code: { type: string, enum: [session_not_found] }", "code: { type: string, enum: [idempotency_conflict] }"),
+    openapi.replace("'200': { $ref: '#/components/responses/MoveSessionSuccess' }", "'200': { $ref: '#/components/responses/MoveSessionNotFound' }"),
+  ]
+  for (const [index, broken] of mutations.entries()) {
+    assert.notEqual(broken, openapi)
+    assert.ok(
+      inspectBffOpenApi(broken, baseline).some((error) => /moveSession|MoveSession/u.test(error)),
+      `Move mutation ${index} must fail closed`,
+    )
+  }
 })

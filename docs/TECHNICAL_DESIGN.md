@@ -1,3 +1,65 @@
+## R146 Conversation Move 独立切片（2026-10-03；已实现候选，未发布）
+
+**当前态/边界。** `main a68cbe55cde709f9b21f3d5803bfbd3ca5d14e2b` 是 public `7.0.0`、无 Move 的已提交基线；当前未提交候选已在唯一 OpenAPI 加 `7.1.0` Move operation，并在独立 `src/http/routes/move-session.ts`、Chat service/repository 实现本人 Conversation 归属与同事务最终 receipt。既有其他操作的通用 `mutationTicket()` 仍在业务事务外，Move 专属路径不使用它。`database/schema.sql` 未改，`bff_conversation.project_ref` 可空且现有读写事实可为本人 Project ID 或 slug。Root Node22 `pnpm check && pnpm format:check` exit 0（741 pass、1 个既有资源 skip；contract 4 条已知 warning），聚焦真 HTTP/PG Move 9/9、完整八文件真 PG/Redis integration 173/173，详见 `docs/CURRENT.md` 的 R150 最终日志；Git 提交/发布与 Web pin 尚待 Root，故不是已发布或用户界面可用。它不消费 Storage；Project DELETE 的 Storage 依赖、ScheduledTask 产品选择与 T-C05 继续开放。
+
+| §8 项 | Move 独立切片的放置裁决 |
+|---|---|
+| Owner/职责 | BFF Conversation 唯一写会话归属；Project 是同仓被校验的源/目标事实，Agent Run、Storage Asset、Scheduler Schedule 均非 Move writer。 |
+| 设计时入口/当前扩展 | 原 Chat route/authorization、Chat service/port/repository 与 `src/bootstrap/server.ts` 保持各自职责；当前候选另有 `src/http/move-session-input.ts` 和专用 `src/http/routes/move-session.ts`。外层 query `project_ref` 授权和通用事务外 receipt 均不充当 Move 权威。 |
+| 方案 A（采用） | 在现 Chat route/service/port 增具名 Move，在现 Chat repository 用一个 checked-out `PoolClient` 锁 Project→Conversation、更新归属并写现 receipt；HTTP 只解析和传递受信上下文。Conversation 是唯一被移动 aggregate。 |
+| 方案 B（淘汰） | 放入 Project repository 或 HTTP 先查源/目标再调用 Chat 更新：两 repository/route 难共享同一 client，出现 TOCTOU、反向锁和 receipt 分裂；不为 Move 新建一级模块、通用 bus、Storage outbox或机械 `chat/` 目录。 |
+| 粒度/依赖/删除项 | 扩现文件即可；Move 输入解析独立于路由，既有 strict JSON 原字节解析器移至中立 `src/infrastructure/raw-json.ts` 并机械更新消费者，不让 Chat 依赖 Platform client。禁止跨 owner SQL、复制 owner Proto、旧 API alias 或双轨 generic receipt；只对本操作绕开 `mutationTicket()` 的事务外 claim/after-response put，其余操作保持原路。 |
+| 数据/API | 单个 `POST /v1/sessions/{id}/move`，`id` 限 canonical Conversation ID；闭集 body 的 `target_project_id` 为 canonical Project ID 或 `null`；同事务更新 `project_ref`、最终 200 receipt，无新表/列/索引推荐。详见本仓 API_CONTRACT/DATA_MODEL 的 R146 段。 |
+| 验证 | OpenAPI/operation inventory/语义负例、Node22 纯门与 format 已通过；聚焦真 HTTP/PG Move 9/9、完整八文件 PG/Redis integration 173/173，contract 仍有 4 条已知 warning。最终文档复审、Git 发布与 Web consumer 仍是独立门。 |
+
+**命令与运行中语义。** 当前 IAM 对首次及每次同键重放都先重新准入；tenant、actor、owner仅取受信上下文。Move 可在 Run streaming 时执行，但只改变后续 message/Run admission 看到的 Project 归属；既有 Run 继续原 admission context。Conversation ID、Message、Share、AG-UI stream/cursor、Run 与 Artifact association 原样保留；不得复用 `deleteConversation()`，不发 cancel、不停 consumer、不重启 stream、不复制 Storage 或 Agent 事实。新 key 且已在目标归属是合法 no-op，写该 key 的稳定 receipt，但不改 Conversation `updated_at` 或历史事实。
+
+**唯一事务线性化点。** `PostgresChatRepository.moveConversation()` 用单个 `PoolClient`：先按可信 tenant/owner/canonical Conversation ID 预读 active 行以发现源 `project_ref`（可能是历史 slug），再解析本人源 Project 的 canonical ID；源、目标 Project 去重并按 canonical ID 升序逐个 `FOR UPDATE`，锁内重验 tenant/owner/active；随后锁 Conversation `FOR UPDATE`，重新验证 active/owner/tenant、当前源仍与预读一致。预读竞争失败则整事务回滚、以相同幂等身份有界重试；不能以外层 `authorizeChatRequest()` 的 query lookup 代替锁内检查，也不能先 Conversation 后 Project，避免与未来 DELETE 反序。更新 `project_ref` 为 canonical target 或 NULL（成功触及历史 slug 即收敛），同一事务以既有 receipt 表的同一 scope/fingerprint 规则写最终 `{data:{session_id,project_ref}}` 200 响应，最后 COMMIT；任一步失败归属和 receipt 均不改变。每次重放先 IAM，再从受信scope读取 final receipt；同 key 异 target 409，不在外层先 claim 一条 pending。现 receipt 表的 `scope TEXT PRIMARY KEY`、`fingerprint`、`status`、`response_body JSONB` 足以存 final 200；无需编造新表或放宽旧 receipt CAS。
+
+**同键并发终态 receipt 冲突收口（独立审 P1）。** 两个首次请求可同时读到“无 receipt”并在尾部争抢现 `scope` PK；终态 INSERT 的 unique 冲突绝不能被当成可提交的 replay。输家必须**整笔回滚**其 Project/Conversation/归属更新时间与 receipt 写入，随后以新的短事务，在当次 IAM/会话可见性再次确认后的受信scope读取赢家 final receipt并严格比较 fingerprint：相同语义返回赢家原始200，异 target 返回409；若赢家回滚导致该 row 不存在，保持原 key 做有界整命令重试。DB竞争/结果未知不得猜成功或生成 pending 双轨；达到重试上界按不可判定故障返回。真 PG RED须用双连接证明同key同target仅一笔归属写且响应相同、同key异target仅赢家归属且输家不改 `updated_at`、赢家在 unique wait 后回滚可恢复、成功 ACK 丢失重试取同一 final receipt。
+
+**Move 私有等待预算（C5 候选源码已实现并聚焦验真，未发布）。** 单次正式 HTTP 命令从获取 PoolClient、每轮事务锁与SQL、重试到最终结算总计须在5秒内结束；每轮本地 Project/Conversation/receipt 锁等待最多1秒，transaction-local `lock_timeout` 与 `statement_timeout` 均不得超过剩余总预算，最多4轮。连接池等待和客户端断开也必须受控释放，不留下占用Client/事务；锁超时/序列化冲突可在剩余预算内整命令重试，耗尽返回 typed retryable 503，未知COMMIT只报503并由原key恢复，不猜成功。仅Move私有设置，不放宽全局Pool或其他Chat行为；真PG由独立blocker PID与`pg_blocking_pids`证明目标Project锁下有界失败、归属和receipt零变化。
+
+**删除/提交竞态。** Move先拿源 Project 锁并提交，则旧 Project DELETE 锁定成员快照不含已移出的会话；DELETE先锁并提交墓碑，则 Move 锁内 active fence 返回不可见 404。当前 Project 尚无 `deleted_at`，Move 源码片须用当前存在性/owner检查，未来 DELETE SQL 片必须把 `deleted_at IS NULL` 同步加在源/目标与新 admission 的事务谓词，并以双连接验证。两个 Project 逆向 Move 按 ID 排序防死锁；与发消息并发以 Conversation row 线性化，新消息不得从不受信 body/query取归属。Move 不删除独立 ScheduledTask，亦不关闭 Project DELETE 的 Storage N+1 release、损坏图 blocked 或 T-C05。
+
+**R146 D0 原 tests-first 写集（历史阶段，非当前授权）。** 机器门：`contract/openapi/v1/openapi.yaml`、`scripts/verify-openapi.ts`、`test/contract/openapi-contract.test.mjs`、`test/contract-governance.test.mjs`、`test/bff.test.ts`；业务门：现 `src/http/request.ts`、`src/http/routes/chat-authorization.ts`、`src/http/routes/chat.ts`、`src/bootstrap/server.ts`、`src/application/chat-service.ts`、`src/application/ports/chat-repository.ts`、`src/infrastructure/postgres/chat-repository.ts`及直接 `test/chat-service.test.ts`、`test/chat-facts.integration.mjs`、必要的现解析单测/替身。若 SQL/receipt schema 实际变动，才纳入 `database/schema.sql` 和 schema governance；当前不推荐变动。真 PG RED 覆盖 A→direct/A→B/direct→B、运行中Run零取消、同/异key和ACK丢失、撤权/越权、历史slug源、双Move/DELETE与message竞态、故障全回滚；Root应在机器/source正式发布后再让Web消费。
+
+## R145 Project DELETE 文档门：当前态、目标态与放置（2026-10-03；未实施）
+
+**R145 设计时基线与当前候选。** BFF 已提交 `main a68cbe55cde709f9b21f3d5803bfbd3ca5d14e2b` 的 Project path 只有 GET/PATCH；`ProjectService`/`ProjectRepository` 无 DELETE，当时 Chat 无正式 Move。当前工作树已有未发布的独立 Move 候选，但仍没有 Project DELETE。`bff_project` 无删除墓碑，现通用 mutation receipt 的 claim 与最终 put 不和 Project 写事务同提交。`PostgresChatRepository.deleteConversation()` 只处理单个 Conversation，虽有 tombstone、Share revoke、AG-UI consumer fence、compact/Artifact关联清理、Agent dispatch settlement 与 durable cancellation outbox，却不能循环调用来宣称整 Project 原子删除。Storage `main 2f855816347b56b3b8dd594366b001548441e0dc`已发布现有`ReleaseProjectScope`，但具名`ReleaseConversationScope`及Project合法Artifact graph安全释放仍只是Storage已审D0目标、尚未发布行为/机器产物；BFF不能pin该在途候选。本节不改机器契约、schema、源码或生成物，T-C05仍未验。
+
+**原两项P1的Storage owner后继依赖，D0文本不算关闭。** Project-scope logical release**不会**释放成员Conversation的`conversation` scope Agent Artifact/Asset/Blob，清BFF `bff_conversation_artifact`关联也只关闭产品可见性。已审Storage目标新增具名`ReleaseConversationScope`：只受信`web-bff + conversation`、body仅`CommandIdentity`，同事务复用既有永久scope fence、全部Upload/staging cleanup、Asset/Blob lifecycle与receipt；合法Artifact保最小审计身份并清title，所有读/写/replay受released fence。Project release的目标增强同样在scope锁内先验证完整Artifact graph，再原子释放合法图；损坏/孤儿/跨scope/部分状态整事务`FAILED_PRECONDITION`回滚。当前行为尚非该目标：只有Storage发布真实contract/实现与graph正反例、fence/重放证明且BFF固定commit/digest，才进入BFF机器/源码门。损坏graph是显式**blocked integrity anomaly**，不自动当成功或GC等待；后续若owner事实经合法修复，再用原命令重投，本文不发明remediation RPC/表、事务外预检或逐项ListAssets绕过。D0不宣称全部项目可删除闭环，T-C05继续未验。
+
+| §8 项 | 本切片目标裁决 |
+|---|---|
+| Owner / 职责 | BFF Project 唯一写本地删除命令、Project/Conversation关系与公开 ACK；Storage 唯一写 project-scope Upload/Asset/Blob logical release；Agent/Scheduler 分别写 Run 与 Schedule。BFF 不读其他 owner SQL。 |
+| 放置方案 A（采用） | 现 `src/http/routes/live-bff.ts` 做薄入口，`src/application/project-service.ts`/Project port 承载用例，`src/infrastructure/postgres/project-repository.ts` 用一个 BFF `PoolClient` 持整个事务；现 Chat 删除 SQL 抽具名同-client helper供单会话和Project批量复用。独立的 Storage release 投递有具名 port、现 postgres 目录 outbox repository 与窄 Storage generated-client adapter，复用既有 BFF worker 生命周期。 |
+| 放置方案 B（淘汰） | 在 HTTP handler 内循环单会话 delete 或同步调用 Storage；这会在部分会话成功、网络超时和本地事务提交间失去原子性与恢复身份。也不新建 Project 一级模块、通用 cleanup bus、跨owner SQL或旧API fallback。 |
+| 粒度 / 依赖 | Project 事务、同-client Chat lifecycle helper、Storage outbox/worker 各有独立变化原因；HTTP 不持 PG 锁做网络调用，Storage 命令只能消费其发布后固定commit/digest的 Proto/generated。 |
+| 数据 / API / 删除项 | 单个 Project 墓碑、同事务 public receipt与锁定成员N条Conversation-scope加1条Project-scope稳定Storage命令；只在Storage正式发布后固定身份。会话沿现 tombstone，删除 Project instruction revisions/Project skill/task。独立 Library、ScheduledTask、Message/不可变审计 ledger 不级联删；不复制 Storage 可编辑 Proto/SQL。准确 schema、身份与 ACK 见本仓 DATA_MODEL/API_CONTRACT 新节。 |
+| 验证 | 先同一 OpenAPI/operation inventory/语义负例与真 HTTP+PG RED，再实现并跑 Node22 本仓门；Storage正式发布后才pin/两轮生成check/真实Connect+PG unknown ACK；Root独立资源验收，Web最后消费。 |
+
+**本地线性化点。** 当前 IAM/fixed tenant/user 必须在每次请求（包括同键重放）先准入；DELETE path 只接受 canonical `project_id`，现 GET/PATCH 的 slug 读写保持，不能把 slug 变成删除 alias。请求零 body、无 query、单个有效 `Idempotency-Key`；route 的前置 find 不能代替事务内授权。事务先按可信 tenant+owner+canonical ID 锁 Project `FOR UPDATE`，再按稳定 ID 顺序锁该 Project 的 Conversation 和关联 ScheduledTask，与现 Chat 首次发 Run、ScheduledTask create 的 Project `FOR SHARE`互斥。Move 是**独立前置命令**：须保原 Conversation ID/Message，源/目标授权与 Project/Conversation 锁同事务；Move 先提交则会话不属于删除集合，DELETE 先提交则 Move 失败关闭。当前仅有未发布 Move 候选，Project DELETE 仍未实现；本 DELETE 文档门不冒充删除竞态已验。
+
+同一 BFF PostgreSQL 事务先冻结锁定成员集合N，将其Conversation通过现完整生命周期的**同一个 PoolClient helper**置 deleted、撤销其 Share、停止/加 fence 的 AG-UI consumer、清现 compact/Artifact association、按已越过 Agent 边界的 dispatch 写 durable `run.cancel`，并收敛未发 dispatch/未终 assistant；随后移除 Project instruction revisions/Project skill/task，写最小不可恢复 Project 墓碑、本地固定202 receipt、N条分别绑定各canonical Conversation scope及1条Project scope的稳定durable Storage命令，最后COMMIT。各scope命令身份、调用与回执只以Storage正式发布契约为准，不能由BFF猜测或把同一Project命令重用于Conversation。任一步失败整笔回滚；已移出会话、其他Project、独立Library不在删除集合。Agent Run的真实terminal仍由Agent，BFF只承诺现durable cancel意图与迟到投影不复活已删会话。不能删除Message/不可变ledger来伪装事务成功。
+
+**墓碑与并发。** 建议保留 `bff_project` 原 row 作为仅受信 tenant+owner 可查的最小墓碑：`deleted_at` 非空，清 instruction/name/description 产品内容，保 canonical ID 与原 slug 作同 owner 预约，原slug不复用，防旧slug链接误指新项目。所有 Project 可见性/成员/上传/任务预检及现 `EXISTS` 统一要求 `deleted_at IS NULL`；同键 DELETE 的专门 receipt 路径可查墓碑，但正常 GET/PATCH/slug API 都返回不可见。此为 clean-slate 目标，Root 在机器/SQL门最终确认原slug保留与隐私/retention，不引入旧数据兼容层。若不保原slug，必须改用等价持久预约而非允许无声复用。
+
+**外部恢复。** 本地receipt与N+1 Storage durable命令在上述事务一起提交；不能用现通用`mutationTicket()`的事务外claim/put制造“已删除但receipt pending”的崩溃窗口。每个scope的`command_id`对同一tenant+canonical Project删除稳定，digest绑定受信actor/精确scope/operation，不能每次HTTP重试造新命令；各命令独立有界退避、lease/fence、ACK丢失后重投。只有每个对应Storage owner响应被验证`scope_released=true`，该scope才记logical released；**N+1全部确认后**Project删除的聚合logical状态才可为released。任一scope损坏graph`FAILED_PRECONDITION`显式blocked integrity anomaly，未知/超时仍pending；不能因Project scope先ACK而掩盖成员Conversation。Storage logical ACK不证明物理GC：先签GET/PUT可能仍有效，晚PUT cleanup可能保持owner`pending_observation`，BFF不制造terminal GC状态或同步删Blob。
+
+后台worker只执行**已由当前IAM授权并本地durable提交**的命令，不因用户随后登出或session撤销而丢弃清理意图；这与每次公开DELETE重放/状态查询仍须重新IAM准入不同。worker用已封存的受信tenant、actor、scope和workload身份，不重放用户Bearer，也不重新决定Project成员集合。
+
+**独立任务尚待用户异步答复。** 已定仅“独立ScheduledTask不级联删除”；推荐同一BFF事务对引用P的任务清`project_id`、暂停、revision+1并写既有`scheduler.replace` outbox，保task ID/历史，旧project callback由context/revision/active fence拒绝。另一个可行产品规则是要求用户先处理关联任务再允许Project DELETE；二者不可混为已定，最终公开DELETE前必须选定并据此测试。现阶段Storage机器门、Chat helper与N+1事务设计不因此停工。已admitted Scheduled Agent Run仍由Agent终结，不因任务暂停伪造终态。
+
+**后续实施精确写集（本 D0 不授权写入）。** 先取得正式Storage producer commit/Proto/digest与真实行为门，再由唯一writer按RED→实现→本仓验收推进；ScheduledTask用户答复只阻挡其关联规则和最终公开DELETE，不阻挡可独立验证的机器/Chat/Storage后继切片。不能先生成未发布的消费者。
+
+| 切片 | 预期唯一写集与先行 RED |
+|---|---|
+| BFF 机器门 | `contract/openapi/v1/openapi.yaml`、operation inventory/`scripts/verify-openapi.ts` 及其直接 contract 负例；确认版本、202/状态查询、错误、no-store/request ID，不放宽既有操作。 |
+| BFF 本地事务 | `database/schema.sql`、`src/application/project-service.ts`、`src/application/ports/project-repository.ts`、`src/infrastructure/postgres/project-repository.ts`、现 Chat repository 同-client helper、`src/http/routes/live-bff.ts`；先建真 PG 回滚、并发 Move/create/run、越权与同key重放 RED。 |
+| BFF Storage 后继 | Project删除聚合receipt与N+1精确scope durable命令、窄Storage adapter/固定provenance generated artifact、现worker入口；先取得Storage owner的Conversation release与Project完整graph安全释放真实证明，再做lease/fence、重复/未知ACK、损坏graph blocked与重启恢复RED；producer未发布前不写生成物。 |
+| 独立依赖片 | Conversation Move 的候选 API/事务与测试待独立发布、ScheduledTask detach/fence 与对应 Scheduler replace 测试、Web 消费；各自另有机器/实现验收门，不在本 D0 伪装完成。 |
+
 ## R133 当前切片 Root 验收事实（2026-10-03）
 
 HTTP5 正式消费、public7 过程契约、两 canonical process 表、同事务 RR 快照、immutable anchor 分页、START 与分批 GC 完整性切片已由 Root 复验。真实 PG/HTTP：15 焦点和完整 74 项全部通过、0 skip；完整默认纯门 736 pass/1 既定 PG schema resource skip，四 pure 149 pass；format（含全部变更 TS/MJS）、lint、typecheck、build、全 contract pipeline 与 233 contract tests 通过。最新证据：资源19016f31、纯门7c8284b1、contract f7e3519c；两独立限定源码审0/0/0。

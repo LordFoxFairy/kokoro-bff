@@ -1,5 +1,8 @@
 import type { ChatMessage, ChatSessionDetail, ChatSessionSummary } from "../contracts/index.js"
 import type { ChatRepository, ConversationCollectionFilter } from "./ports/chat-repository.js"
+import { createHash } from "node:crypto"
+import { mutationScope } from "./idempotency.js"
+import type { RequestContext } from "../domain/request-context.js"
 import { chatMessage, conversationSummary } from "./chat/mappers.js"
 
 export class ChatApplicationService {
@@ -113,6 +116,22 @@ export class ChatApplicationService {
     projectRef?: string,
   ): ReturnType<ChatRepository["renameConversation"]> {
     return this.repository.renameConversation(tenantId, subjectId, conversationId, title, projectRef)
+  }
+
+  public moveConversation(context: RequestContext, conversationId: string, targetProjectId: string | null, key: string, signal: AbortSignal) {
+    const scope = mutationScope(context, "POST", `/sessions/${conversationId}/move`, key)
+    const fingerprint = createHash("sha256")
+      .update(JSON.stringify(["moveSession", targetProjectId]))
+      .digest("hex")
+    return this.repository.moveConversation({
+      tenantId: context.identity.namespace,
+      subjectId: context.identity.userId,
+      conversationId,
+      targetProjectId,
+      scope,
+      fingerprint,
+      signal,
+    })
   }
 
   public deleteConversation(

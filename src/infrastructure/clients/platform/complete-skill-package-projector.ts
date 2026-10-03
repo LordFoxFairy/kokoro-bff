@@ -1,5 +1,5 @@
 import { sha256Jcs } from "./jcs.js"
-import { strictParseRawJson } from "./raw-json.js"
+import { strictParseRawJson } from "../../raw-json.js"
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u
 const SHA256 = /^[a-f0-9]{64}$/u

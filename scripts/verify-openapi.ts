@@ -297,6 +297,8 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
         "PublishedPersonalSkillResponse",
         "PublishedPersonalSkillErrorResponse",
         "PlatformProjectionReadErrorResponse",
+        "MoveSessionResponse",
+        "MoveSessionErrorResponse",
         "SkillListResponse",
         "SkillPoolResponse",
         "SkillCatalogResponse",
@@ -328,6 +330,7 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
     const isPublishedPersonalSkill = operationId === "getPublishedPersonalSkill" && operation.method === "GET" && operation.path === "/v1/skills/{skill_id}"
     const isPlatformProjectionRead = operation.method === "GET" && ["listSkills", "listSkillPool", "listSkillCatalog", "listMcpServers"].includes(operationId)
     const isCreateSkillDraft = operationId === "createSkillDraft"
+    const isMoveSession = operationId === "moveSession" && operation.method === "POST" && operation.path === "/v1/sessions/{id}/move"
     const isGetSkillPackageUpload =
       operationId === "getSkillPackageUpload" && operation.method === "GET" && operation.path === "/v1/skills/{skill_id}/package-upload"
     const isBeginSkillPackageUpload =
@@ -458,6 +461,13 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
       )
     )
       errors.push(`${operation.method} ${operation.path} must not reference PublishSkill strict envelope components`)
+    if (
+      !isMoveSession &&
+      /#\/components\/(?:schemas\/MoveSession(?:Request|Response|ErrorResponse)|responses\/MoveSession[A-Za-z]*|parameters\/MoveSession[A-Za-z]*)/u.test(
+        operation.text.split(/^components:\s*$/mu)[0] ?? "",
+      )
+    )
+      errors.push(`${operation.method} ${operation.path} must not reference MoveSession strict components`)
     const responses = collectResponseBlocks(operation)
     const expectedInstallationResponses = installationResponses[operationId]
     if (expectedInstallationResponses !== undefined) {
@@ -511,6 +521,7 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
           !isCompleteSkillPackageUpload &&
           !isValidateSkillDraft &&
           !isPublishSkill &&
+          !isMoveSession &&
           !response.includes("#/components/schemas/ErrorEnvelope")
         ) {
           errors.push(`${operation.method} ${operation.path} ${status} must use ErrorEnvelope`)
@@ -527,7 +538,8 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
           (isBeginSkillPackageUpload && match[1].startsWith("SkillPackageBegin")) ||
           (isCompleteSkillPackageUpload && match[1].startsWith("SkillPackageComplete")) ||
           (isValidateSkillDraft && match[1].startsWith("SkillValidate")) ||
-          (isPublishSkill && match[1].startsWith("SkillPublish"))
+          (isPublishSkill && match[1].startsWith("SkillPublish")) ||
+          (isMoveSession && match[1].startsWith("MoveSession"))
         )
           continue
         errors.push(`${operation.method} ${operation.path} ${status} references non-error response ${match[1]}`)
@@ -574,15 +586,17 @@ function idempotencyErrors(parameters: Map<string, NamedBlock>, operations: Oper
     const hasParameter =
       operationId === "createSkillDraft"
         ? operation.text.includes("#/components/parameters/SkillDraftIdempotencyKey")
-        : operationId === "beginSkillPackageUpload" && operation.method === "POST" && operation.path === "/v1/skills/{skill_id}/package-upload"
-          ? operation.text.includes("#/components/parameters/SkillPackageBeginIdempotencyKey")
-          : operationId === "completeSkillPackageUpload" && operation.method === "POST" && operation.path === "/v1/skills/{skill_id}/package-upload/complete"
-            ? operation.text.includes("#/components/parameters/SkillPackageCompleteIdempotencyKey")
-            : operationId === "validateSkillDraft" && operation.method === "POST" && operation.path === "/v1/skills/{skill_id}/validate"
-              ? operation.text.includes("#/components/parameters/SkillValidateIdempotencyKey")
-              : operationId === "publishSkill" && operation.method === "POST" && operation.path === "/v1/skills/{skill_id}/publish"
-                ? operation.text.includes("#/components/parameters/SkillPublishIdempotencyKey")
-                : operation.text.includes("#/components/parameters/IdempotencyKey")
+        : operationId === "moveSession" && operation.method === "POST" && operation.path === "/v1/sessions/{id}/move"
+          ? operation.text.includes("#/components/parameters/MoveSessionIdempotencyKey")
+          : operationId === "beginSkillPackageUpload" && operation.method === "POST" && operation.path === "/v1/skills/{skill_id}/package-upload"
+            ? operation.text.includes("#/components/parameters/SkillPackageBeginIdempotencyKey")
+            : operationId === "completeSkillPackageUpload" && operation.method === "POST" && operation.path === "/v1/skills/{skill_id}/package-upload/complete"
+              ? operation.text.includes("#/components/parameters/SkillPackageCompleteIdempotencyKey")
+              : operationId === "validateSkillDraft" && operation.method === "POST" && operation.path === "/v1/skills/{skill_id}/validate"
+                ? operation.text.includes("#/components/parameters/SkillValidateIdempotencyKey")
+                : operationId === "publishSkill" && operation.method === "POST" && operation.path === "/v1/skills/{skill_id}/publish"
+                  ? operation.text.includes("#/components/parameters/SkillPublishIdempotencyKey")
+                  : operation.text.includes("#/components/parameters/IdempotencyKey")
     if (declared !== expected) continue
     if (expected === "required" && !hasParameter) {
       errors.push(`${operation.method} ${operation.path} (${operationId}) must reference Idempotency-Key`)
@@ -1533,6 +1547,123 @@ function protocolErrors(parameters: Map<string, NamedBlock>, schemas: Map<string
   return errors
 }
 
+function moveSessionContractErrors(
+  source: string,
+  parameters: Map<string, NamedBlock>,
+  schemas: Map<string, NamedBlock>,
+  operations: OperationBlock[],
+  responseComponents: Map<string, NamedBlock>,
+): string[] {
+  const errors: string[] = []
+  if (!/^  version: 7\.1\.0$/mu.test(source)) errors.push("moveSession additive public contract must be version 7.1.0")
+  const matches = operations.filter((operation) => operation.fields.get("operationId") === "moveSession")
+  const operation = matches.length === 1 ? matches[0] : undefined
+  if (operation?.method !== "POST" || operation.path !== "/v1/sessions/{id}/move") {
+    errors.push("moveSession must be one POST /v1/sessions/{id}/move operation")
+    return errors
+  }
+  for (const [field, value] of [
+    ["x-kokoro-owner", "kokoro-bff"],
+    ["x-kokoro-visibility", "public"],
+    ["x-kokoro-stability", "beta"],
+    ["x-kokoro-idempotency", "required"],
+    ["x-kokoro-permission", "chat.session.update"],
+  ]) {
+    if (operation.fields.get(field) !== value) errors.push(`moveSession ${field} must equal ${value}`)
+  }
+  if (
+    !operation.text.includes("#/components/parameters/MoveSessionIdempotencyKey") ||
+    !operation.text.includes("#/components/schemas/MoveSessionRequest") ||
+    /ProjectRefQuery|DirectScopeQuery|in: query/u.test(operation.text)
+  )
+    errors.push("moveSession must have one dedicated key, strict body and no query alias")
+  const sessionId = parameters.get("MoveSessionId")?.text ?? ""
+  const key = parameters.get("MoveSessionIdempotencyKey")?.text ?? ""
+  const request = schemas.get("MoveSessionRequest")?.text ?? ""
+  const successSchema = schemas.get("MoveSessionResponse")?.text ?? ""
+  const errorSchema = schemas.get("MoveSessionErrorResponse")?.text ?? ""
+  const canonicalProjectPattern = "pattern: '^project_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'"
+  if (!sessionId.includes("name: id") || !sessionId.includes("in: path") || !sessionId.includes("^conv_[0-9a-f]{8}"))
+    errors.push("MoveSessionId must be a canonical Conversation path ID")
+  if (
+    !key.includes("name: Idempotency-Key") ||
+    !key.includes("in: header") ||
+    !key.includes("required: true") ||
+    !key.includes("maxLength: 128") ||
+    !key.includes("\\x21-\\x2B\\x2D-\\x7E") ||
+    !/exactly once/iu.test(key)
+  )
+    errors.push("MoveSessionIdempotencyKey must be one printable bounded header")
+  if (
+    !request.includes("required: [target_project_id]") ||
+    !request.includes("additionalProperties: false") ||
+    !request.includes("^project_[0-9a-f]{8}") ||
+    !request.includes("type: 'null'") ||
+    schemaProperties({ name: "MoveSessionRequest", text: request }).join(",") !== "target_project_id"
+  )
+    errors.push("MoveSessionRequest must be one closed canonical Project ID or null")
+  if (
+    JSON.stringify(topLevelRequired({ name: "MoveSessionResponse", text: successSchema })) !== JSON.stringify(["data"]) ||
+    !successSchema.includes("additionalProperties: false") ||
+    !successSchema.includes("required: [session_id, project_ref]") ||
+    !successSchema.includes("type: 'null'") ||
+    !successSchema.includes(canonicalProjectPattern) ||
+    /\bmeta:/u.test(successSchema)
+  )
+    errors.push("MoveSessionResponse must contain only a closed session_id/project_ref data envelope")
+  if (
+    JSON.stringify(topLevelRequired({ name: "MoveSessionErrorResponse", text: errorSchema })) !== JSON.stringify(["error"]) ||
+    !errorSchema.includes("required: [code, message, retryable]") ||
+    !errorSchema.includes("additionalProperties: false") ||
+    /\bmeta:/u.test(errorSchema)
+  )
+    errors.push("MoveSessionErrorResponse must be a closed error-only envelope")
+  const statusComponents = {
+    "200": "MoveSessionSuccess",
+    "400": "MoveSessionBadRequest",
+    "401": "MoveSessionUnauthorized",
+    "403": "MoveSessionForbidden",
+    "404": "MoveSessionNotFound",
+    "409": "MoveSessionConflict",
+    "429": "MoveSessionRateLimited",
+    "503": "MoveSessionUnavailable",
+  } as const
+  const codes = {
+    MoveSessionBadRequest: ["invalid_move_request", "idempotency_key_required"],
+    MoveSessionUnauthorized: ["session_authentication_required", "session_invalid"],
+    MoveSessionForbidden: ["service_auth_failed", "session_forbidden", "product_tenant_forbidden"],
+    MoveSessionNotFound: ["session_not_found"],
+    MoveSessionConflict: ["idempotency_conflict", "idempotency_in_progress"],
+    MoveSessionRateLimited: ["session_rate_limited"],
+    MoveSessionUnavailable: ["business_store_unavailable", "iam_admission_unavailable"],
+  } as const
+  const responses = collectResponseBlocks(operation)
+  if (JSON.stringify([...responses.keys()].sort()) !== JSON.stringify(Object.keys(statusComponents).sort()))
+    errors.push("moveSession must declare exactly 200/400/401/403/404/409/429/503")
+  for (const [status, component] of Object.entries(statusComponents)) {
+    if (responses.get(status)?.trim() !== `'${status}': { $ref: '#/components/responses/${component}' }`)
+      errors.push(`moveSession ${status} must use ${component}`)
+    const response = responseComponents.get(component)?.text ?? ""
+    if (
+      !response.includes("x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }") ||
+      !response.includes("Cache-Control: { required: true, schema: { type: string, const: no-store } }")
+    )
+      errors.push(`${component} must require bounded request ID and no-store headers`)
+    if (status === "200") {
+      if (!response.includes("#/components/schemas/MoveSessionResponse")) errors.push("MoveSessionSuccess must use the data-only receipt")
+    } else if (
+      !response.includes("#/components/schemas/MoveSessionErrorResponse") ||
+      !response.includes(`code: { type: string, enum: [${codes[component as keyof typeof codes].join(", ")}] }`)
+    )
+      errors.push(`${component} must narrow stable status-specific error codes`)
+  }
+  if (
+    !responseComponents.get("MoveSessionRateLimited")?.text.includes("Retry-After: { required: false, schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' } }")
+  )
+    errors.push("MoveSessionRateLimited Retry-After must be optional and bounded")
+  return errors
+}
+
 function platformProjectionReadContractErrors(
   schemas: Map<string, NamedBlock>,
   operations: OperationBlock[],
@@ -1629,6 +1760,7 @@ export function inspectBffOpenApi(source: string, baseline: readonly BaselineOpe
     ...revisionErrors(schemas),
     ...envelopeErrors(schemas, operations, responseComponents),
     ...platformProjectionReadContractErrors(schemas, operations, responseComponents),
+    ...moveSessionContractErrors(source, parameters, schemas, operations, responseComponents),
     ...idempotencyErrors(parameters, operations),
     ...publishedPersonalSkillContractErrors(parameters, schemas, operations, responseComponents),
     ...skillDraftContractErrors(parameters, schemas, operations, responseComponents),

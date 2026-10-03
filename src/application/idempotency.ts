@@ -6,7 +6,7 @@ export type IdempotencyReceipt = { status: number; body: unknown }
 export type IdempotencyEntry = { fingerprint: string; receipt: IdempotencyReceipt }
 export type MutationTicket = { scope: string; fingerprint: string; persistent?: IdempotencyRepository }
 
-function mutationScope(context: RequestContext, method: string, path: string, key: string): string {
+export function mutationScope(context: RequestContext, method: string, path: string, key: string): string {
   return JSON.stringify([context.identity.namespace, context.identity.userId, method, path, key])
 }
 

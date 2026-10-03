@@ -52,6 +52,52 @@ async function waitFor(predicate, timeoutMs = 5000) {
   throw new Error("condition was not met before timeout")
 }
 
+async function blockedPgQueries(pool, blockerPid, pattern, count = 1) {
+  return waitFor(async () => {
+    const blocked = await pool.query(
+      `SELECT activity.pid, activity.query
+         FROM pg_stat_activity AS activity
+        WHERE activity.datname = current_database()
+          AND activity.pid <> $1
+          AND $1 = ANY(pg_blocking_pids(activity.pid))`,
+      [blockerPid],
+    )
+    const matching = blocked.rows.filter((row) => pattern.test(row.query))
+    return matching.length === count ? matching : null
+  })
+}
+
+async function blockedPgQueriesThroughQueue(pool, ownerBlockerPid, pattern, count) {
+  return waitFor(async () => {
+    const activity = await pool.query(
+      `SELECT pid,query,pg_blocking_pids(pid) AS blockers
+         FROM pg_stat_activity
+        WHERE datname=current_database() AND wait_event_type='Lock'`,
+    )
+    const byPid = new Map(activity.rows.map((row) => [row.pid, row]))
+    const reachesOwnedBlocker = (startPid) => {
+      const visited = new Set([startPid])
+      let frontier = [startPid]
+      for (let depth = 0; depth < 8 && frontier.length > 0; depth += 1) {
+        const next = []
+        for (const pid of frontier) {
+          for (const blockerPid of byPid.get(pid)?.blockers ?? []) {
+            if (blockerPid === ownerBlockerPid) return true
+            if (!visited.has(blockerPid) && byPid.has(blockerPid)) {
+              visited.add(blockerPid)
+              next.push(blockerPid)
+            }
+          }
+        }
+        frontier = next
+      }
+      return false
+    }
+    const matching = activity.rows.filter((row) => row.pid !== ownerBlockerPid && pattern.test(row.query) && reachesOwnedBlocker(row.pid))
+    return matching.length === count && new Set(matching.map((row) => row.pid)).size === count ? matching : null
+  })
+}
+
 function config(tenantId = "tenant_test") {
   return {
     host: "127.0.0.1",
@@ -2265,6 +2311,1226 @@ integrationTest("R124 Conversation deletion removes owned compact process rows w
     for (const table of ["bff_agui_run_activity", "bff_agui_run_process", "bff_conversation"]) {
       await pool.query("DELETE FROM " + table + " WHERE tenant_id=$1", [tenantId]).catch(() => undefined)
     }
+    await pool.end()
+  }
+})
+
+integrationTest("R146 Move changes only the canonical Conversation Project in a real HTTP and PostgreSQL transaction", { timeout: 30_000 }, async () => {
+  const suffix = randomUUID()
+  const tenant = `r146_move_${suffix}`
+  const subject = `move_owner_${suffix}`
+  const projectA = `project_${randomUUID()}`
+  const projectB = `project_${randomUUID()}`
+  const conversationId = `conv_${randomUUID()}`
+  const directId = `conv_${randomUUID()}`
+  const raceSameId = `conv_${randomUUID()}`
+  const raceDifferentId = `conv_${randomUUID()}`
+  const slugId = `conv_${randomUUID()}`
+  const foreignId = `conv_${randomUUID()}`
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC", statement_timeout: 5000 })
+  let store = null
+  let bff = null
+  try {
+    await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
+    await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+    await pool.query(
+      `INSERT INTO bff_project (project_id, tenant_id, owner_id, name, slug)
+       VALUES ($1,$3,$4,'Move source',$5),($2,$3,$4,'Move target',$6)`,
+      [projectA, projectB, tenant, subject, `source-${suffix}`, `target-${suffix}`],
+    )
+    await pool.query(
+      `INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, project_ref, title)
+       VALUES ($1,$3,$4,$5,'Move source session'),($2,$3,$4,NULL,'Direct session')`,
+      [conversationId, directId, tenant, subject, projectA],
+    )
+    await pool.query(
+      `INSERT INTO bff_conversation (conversation_id,tenant_id,owner_id,project_ref,title)
+       VALUES ($1,$6,$7,NULL,'Same-key race'),($2,$6,$7,NULL,'Different-key race'),
+              ($3,$6,$7,$8,'Legacy slug source'),($4,$6,$5,NULL,'Foreign owner')`,
+      [raceSameId, raceDifferentId, slugId, foreignId, `foreign_${suffix}`, tenant, subject, `source-${suffix}`],
+    )
+    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    await store.ready()
+    const admittedRun = await store.services.chatTurns.submit({
+      tenantId: tenant,
+      conversationId,
+      projectRef: projectA,
+      subjectId: subject,
+      actorId: subject,
+      requestId: `r146_run_${suffix}`,
+      idempotencyKey: `r146-run-${suffix}`,
+      content: "An admitted run keeps its original context after Move",
+    })
+    assert.ok(admittedRun)
+    await pool.query("INSERT INTO bff_share (share_id,tenant_id,conversation_id,url) VALUES ($1,$2,$3,$4)", [
+      `share_${suffix}`,
+      tenant,
+      conversationId,
+      `https://share.kokoro.invalid/${suffix}`,
+    ])
+    await pool.query(
+      `INSERT INTO bff_conversation_artifact
+       (tenant_id,conversation_id,artifact_id,run_id,source_event_id,source_sequence,source_digest,
+        source_asset_id,source_artifact_kind,source_content_sha256,source_title,source_mime,source_size_bytes,delivered_at)
+       VALUES ($1,$2,$3,$4,$5,1,$6,$7,'document',$8,'Admitted artifact','text/plain',12,CURRENT_TIMESTAMP(3))`,
+      [tenant, conversationId, `artifact_${suffix}`, admittedRun.run_id, `event_${suffix}`, "a".repeat(64), `asset_${suffix}`, "b".repeat(64)],
+    )
+    const preservedTables = [
+      "bff_message",
+      "bff_agent_dispatch_outbox",
+      "bff_agui_stream",
+      "bff_share",
+      "bff_conversation_artifact",
+      "bff_agent_cancellation_outbox",
+    ]
+    const preservedRows = async () => {
+      const rows = {}
+      for (const table of preservedTables) {
+        const result = await pool.query(
+          `SELECT row_to_json(fact)::text AS value FROM ${table} AS fact WHERE tenant_id=$1 AND ${table === "bff_agui_stream" ? "session_id" : "conversation_id"}=$2 ORDER BY value`,
+          [tenant, conversationId],
+        )
+        rows[table] = result.rows.map((row) => row.value)
+      }
+      return rows
+    }
+    const beforeMoveFacts = await preservedRows()
+    bff = createBffServer(config(tenant), {
+      businessStore: store,
+      sessionAdmission,
+      agentDispatchDispatcher: idleWorker,
+      agentCancellationDispatcher: idleWorker,
+      agUiProjector: idleWorker,
+      scheduledTaskDispatcher: idleWorker,
+    })
+    const base = await listen(bff)
+    const headers = auth(tenant, subject)
+    const sendMove = async (id, key, target) => {
+      const response = await fetch(`${base}/v1/sessions/${id}/move`, {
+        method: "POST",
+        headers: { ...headers, "idempotency-key": key, "content-type": "application/json" },
+        body: JSON.stringify({ target_project_id: target }),
+      })
+      return { response, body: await response.json() }
+    }
+    const projectRef = async (id) => {
+      const result = await pool.query(
+        "SELECT project_ref FROM bff_conversation WHERE tenant_id=$1 AND owner_id=$2 AND conversation_id=$3 AND status='active'",
+        [tenant, subject, id],
+      )
+      assert.equal(result.rowCount, 1)
+      return result.rows[0].project_ref
+    }
+
+    assert.equal(await projectRef(conversationId), projectA)
+    const movedOut = await sendMove(conversationId, "r146-move-out", null)
+    assert.equal(movedOut.response.status, 200, JSON.stringify(movedOut.body))
+    assert.deepEqual(movedOut.body, { data: { session_id: conversationId, project_ref: null } })
+    assert.equal(movedOut.response.headers.get("cache-control"), "no-store")
+    assert.match(movedOut.response.headers.get("x-request-id") ?? "", /^[\x20-\x7E]{1,128}$/u)
+    assert.equal(await projectRef(conversationId), null)
+    assert.deepEqual(await preservedRows(), beforeMoveFacts, "Move must not alter an admitted Run, Message, Share, AG-UI, Artifact or cancel outbox")
+
+    const replay = await sendMove(conversationId, "r146-move-out", null)
+    assert.equal(replay.response.status, 200, JSON.stringify(replay.body))
+    assert.deepEqual(replay.body, movedOut.body, "same key must replay the original final 200 without another move")
+    const conflict = await sendMove(conversationId, "r146-move-out", projectB)
+    assert.equal(conflict.response.status, 409, JSON.stringify(conflict.body))
+    assert.equal(conflict.body.error?.code, "idempotency_conflict")
+    assert.equal(await projectRef(conversationId), null, "conflicting target must not change the committed direct scope")
+
+    const token = headers.authorization.slice("Bearer ".length)
+    sessionAdmission.deny(token, { ok: false, status: 401, code: "session_invalid" })
+    const revokedReplay = await sendMove(conversationId, "r146-move-out", null)
+    assert.equal(revokedReplay.response.status, 401, JSON.stringify(revokedReplay.body))
+    assert.equal(revokedReplay.body.error?.code, "session_invalid")
+    assert.equal(revokedReplay.response.headers.get("cache-control"), "no-store")
+    assert.match(revokedReplay.response.headers.get("x-request-id") ?? "", /^[\x20-\x7E]{1,128}$/u)
+    sessionAdmission.allow(token, { namespace: tenant, userId: subject })
+
+    const movedInto = await sendMove(directId, "r146-move-into", projectB)
+    assert.equal(movedInto.response.status, 200, JSON.stringify(movedInto.body))
+    assert.deepEqual(movedInto.body, { data: { session_id: directId, project_ref: projectB } })
+    assert.equal(await projectRef(directId), projectB)
+    const timestamp = (await pool.query("SELECT updated_at::text AS value FROM bff_conversation WHERE conversation_id=$1", [directId])).rows[0].value
+    const noOp = await sendMove(directId, "r146-move-noop", projectB)
+    assert.equal(noOp.response.status, 200, JSON.stringify(noOp.body))
+    assert.deepEqual(noOp.body, movedInto.body)
+    assert.equal((await pool.query("SELECT updated_at::text AS value FROM bff_conversation WHERE conversation_id=$1", [directId])).rows[0].value, timestamp)
+
+    const convergedSlug = await sendMove(slugId, "r146-move-slug", projectA)
+    assert.equal(convergedSlug.response.status, 200, JSON.stringify(convergedSlug.body))
+    assert.equal(await projectRef(slugId), projectA, "a touched legacy slug converges to canonical Project ID")
+    for (const [id, target] of [
+      [foreignId, projectA],
+      [conversationId, `project_${randomUUID()}`],
+    ]) {
+      const hidden = await sendMove(id, `r146-hidden-${randomUUID()}`, target)
+      assert.equal(hidden.response.status, 404, JSON.stringify(hidden.body))
+      assert.equal(hidden.body.error?.code, "session_not_found")
+    }
+
+    const sameRace = await Promise.all([sendMove(raceSameId, "r146-race-same", projectA), sendMove(raceSameId, "r146-race-same", projectA)])
+    assert.deepEqual(
+      sameRace.map(({ response }) => response.status),
+      [200, 200],
+    )
+    assert.deepEqual(sameRace[0].body, sameRace[1].body)
+    assert.equal(await projectRef(raceSameId), projectA)
+    const differentRace = await Promise.all([
+      sendMove(raceDifferentId, "r146-race-different", projectA),
+      sendMove(raceDifferentId, "r146-race-different", projectB),
+    ])
+    assert.deepEqual(differentRace.map(({ response }) => response.status).sort(), [200, 409])
+    const winner = differentRace.find(({ response }) => response.status === 200)
+    assert.ok(winner)
+    assert.equal(await projectRef(raceDifferentId), winner.body.data.project_ref)
+    assert.deepEqual(await preservedRows(), beforeMoveFacts, "concurrent Move must leave historical facts unchanged")
+  } finally {
+    if (bff !== null) await close(bff)
+    if (store !== null) await store.close().catch(() => undefined)
+    await pool.query("DELETE FROM bff_idempotency_receipt WHERE position($1 in scope) > 0", [tenant]).catch(() => undefined)
+    for (const table of [
+      "bff_agent_cancellation_outbox",
+      "bff_conversation_artifact",
+      "bff_share",
+      "bff_agent_dispatch_outbox",
+      "bff_agui_stream",
+      "bff_message",
+    ]) {
+      await pool.query(`DELETE FROM ${table} WHERE tenant_id=$1`, [tenant]).catch(() => undefined)
+    }
+    await pool.query("DELETE FROM bff_conversation WHERE tenant_id=$1", [tenant]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_project WHERE tenant_id=$1", [tenant]).catch(() => undefined)
+    await pool.end()
+  }
+})
+
+integrationTest("R146 Move target Project lock wait has a bounded typed HTTP failure without a partial receipt", { timeout: 15_000 }, async () => {
+  const suffix = randomUUID()
+  const tenant = `r146_move_block_${suffix}`
+  const subject = `move_owner_${suffix}`
+  const projectId = `project_${randomUUID()}`
+  const conversationId = `conv_${randomUUID()}`
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
+  let store = null
+  let bff = null
+  let blocker = null
+  let pendingMove = null
+  const controller = new AbortController()
+  try {
+    await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
+    await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+    await pool.query("INSERT INTO bff_project (project_id,tenant_id,owner_id,name,slug) VALUES ($1,$2,$3,'Blocked target',$4)", [
+      projectId,
+      tenant,
+      subject,
+      `blocked-${suffix}`,
+    ])
+    await pool.query("INSERT INTO bff_conversation (conversation_id,tenant_id,owner_id,project_ref,title) VALUES ($1,$2,$3,NULL,'Blocked Move')", [
+      conversationId,
+      tenant,
+      subject,
+    ])
+    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    await store.ready()
+    bff = createBffServer(config(tenant), {
+      businessStore: store,
+      sessionAdmission,
+      agentDispatchDispatcher: idleWorker,
+      agentCancellationDispatcher: idleWorker,
+      agUiProjector: idleWorker,
+      scheduledTaskDispatcher: idleWorker,
+    })
+    const base = await listen(bff)
+    const headers = auth(tenant, subject)
+    blocker = await pool.connect()
+    await blocker.query("BEGIN")
+    await blocker.query("SELECT project_id FROM bff_project WHERE tenant_id=$1 AND owner_id=$2 AND project_id=$3 FOR UPDATE", [tenant, subject, projectId])
+    const blockerPid = (await blocker.query("SELECT pg_backend_pid()::int AS pid")).rows[0].pid
+
+    const startedAt = Date.now()
+    pendingMove = fetch(`${base}/v1/sessions/${conversationId}/move`, {
+      method: "POST",
+      headers: { ...headers, "idempotency-key": `r146-block-${suffix}`, "content-type": "application/json" },
+      body: JSON.stringify({ target_project_id: projectId }),
+      signal: controller.signal,
+    }).then(async (response) => ({ response, body: await response.json() }))
+    await waitFor(async () => {
+      const result = await pool.query(
+        `SELECT EXISTS (
+           SELECT 1 FROM pg_stat_activity AS activity
+            WHERE activity.pid <> $1
+              AND $1 = ANY(pg_blocking_pids(activity.pid))
+              AND activity.query LIKE '%bff_project%FOR UPDATE%'
+         ) AS blocked`,
+        [blockerPid],
+      )
+      return result.rows[0].blocked
+    }, 2500)
+    const result = await Promise.race([pendingMove, new Promise((resolve) => setTimeout(() => resolve(null), Math.max(1, 5200 - (Date.now() - startedAt))))])
+    assert.notEqual(result, null, "a Move blocked on its target Project must complete within the total budget, not hang in the first retry")
+    assert.ok(Date.now() - startedAt < 5000, "the formal Move lock budget includes pool and SQL waits")
+    assert.equal(result.response.status, 503, JSON.stringify(result.body))
+    assert.deepEqual(result.body, { error: { code: "business_store_unavailable", message: "Conversation result is unavailable", retryable: true } })
+    assert.equal(result.response.headers.get("cache-control"), "no-store")
+    assert.match(result.response.headers.get("x-request-id") ?? "", /^[\x20-\x7E]{1,128}$/u)
+    const conversation = await pool.query("SELECT project_ref FROM bff_conversation WHERE tenant_id=$1 AND conversation_id=$2", [tenant, conversationId])
+    assert.equal(conversation.rows[0].project_ref, null)
+    const receipt = await pool.query("SELECT count(*)::int AS count FROM bff_idempotency_receipt WHERE position($1 in scope)>0", [tenant])
+    assert.equal(receipt.rows[0].count, 0, "timed-out Move must not leave a success or pending receipt")
+  } finally {
+    controller.abort()
+    if (blocker !== null) {
+      await blocker.query("ROLLBACK").catch(() => undefined)
+      blocker.release()
+    }
+    if (pendingMove !== null) await pendingMove.catch(() => undefined)
+    if (bff !== null) await close(bff)
+    if (store !== null) await store.close().catch(() => undefined)
+    await pool.query("DELETE FROM bff_idempotency_receipt WHERE position($1 in scope)>0", [tenant]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_conversation WHERE tenant_id=$1", [tenant]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_project WHERE tenant_id=$1", [tenant]).catch(() => undefined)
+    await pool.end()
+  }
+})
+
+integrationTest("R146 Move pool acquire timeout discards the late real Client and leaves no receipt", { timeout: 15_000 }, async () => {
+  const suffix = randomUUID()
+  const tenant = `r146_move_pool_${suffix}`
+  const subject = `move_owner_${suffix}`
+  const projectId = `project_${randomUUID()}`
+  const conversationId = `conv_${randomUUID()}`
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
+  let store = null
+  let bff = null
+  let pendingMove = null
+  const held = []
+  const controller = new AbortController()
+  try {
+    await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
+    await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+    await pool.query("INSERT INTO bff_project (project_id,tenant_id,owner_id,name,slug) VALUES ($1,$2,$3,'Pool target',$4)", [
+      projectId,
+      tenant,
+      subject,
+      `pool-${suffix}`,
+    ])
+    await pool.query("INSERT INTO bff_conversation (conversation_id,tenant_id,owner_id,project_ref,title) VALUES ($1,$2,$3,NULL,'Pool Move')", [
+      conversationId,
+      tenant,
+      subject,
+    ])
+    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    await store.ready()
+    const ownerPool = store.database.pool
+    assert.equal(ownerPool.options.max, 10, "this case saturates the real BFF owner Pool rather than a fake repository")
+    for (let index = 0; index < ownerPool.options.max; index += 1) held.push(await ownerPool.connect())
+    assert.equal(ownerPool.totalCount, ownerPool.options.max)
+    bff = createBffServer(config(tenant), {
+      businessStore: store,
+      sessionAdmission,
+      agentDispatchDispatcher: idleWorker,
+      agentCancellationDispatcher: idleWorker,
+      agUiProjector: idleWorker,
+      scheduledTaskDispatcher: idleWorker,
+    })
+    const base = await listen(bff)
+    const startedAt = Date.now()
+    pendingMove = fetch(`${base}/v1/sessions/${conversationId}/move`, {
+      method: "POST",
+      headers: { ...auth(tenant, subject), "idempotency-key": `r146-pool-${suffix}`, "content-type": "application/json" },
+      body: JSON.stringify({ target_project_id: projectId }),
+      signal: controller.signal,
+    })
+      .then(async (response) => ({ response, body: await response.json() }))
+      .catch((error) => ({ error }))
+    await waitFor(() => ownerPool.waitingCount === 1, 1500)
+    const result = await Promise.race([pendingMove, new Promise((resolve) => setTimeout(() => resolve(null), Math.max(1, 5200 - (Date.now() - startedAt))))])
+    assert.notEqual(result, null, "pool acquire must be covered by the Move total budget")
+    assert.ok(Date.now() - startedAt < 5000)
+    assert.ok(!result.error, String(result.error))
+    assert.equal(result.response.status, 503, JSON.stringify(result.body))
+    assert.deepEqual(result.body, { error: { code: "business_store_unavailable", message: "Conversation result is unavailable", retryable: true } })
+    assert.equal(result.response.headers.get("cache-control"), "no-store")
+    assert.match(result.response.headers.get("x-request-id") ?? "", /^[\x20-\x7E]{1,128}$/u)
+    assert.equal(ownerPool.waitingCount, 1, "the timed-out acquire is still queued until the real Pool returns its late Client")
+    held.shift().release()
+    await waitFor(() => ownerPool.waitingCount === 0 && ownerPool.totalCount === ownerPool.options.max - 1, 1500)
+    assert.equal((await ownerPool.query("SELECT 1::int AS value")).rows[0].value, 1, "a replacement Client remains usable while other slots stay held")
+    assert.equal((await pool.query("SELECT project_ref FROM bff_conversation WHERE conversation_id=$1", [conversationId])).rows[0].project_ref, null)
+    assert.equal((await pool.query("SELECT count(*)::int AS count FROM bff_idempotency_receipt WHERE position($1 in scope)>0", [tenant])).rows[0].count, 0)
+  } finally {
+    controller.abort()
+    for (const client of held) client.release()
+    if (pendingMove !== null) await pendingMove.catch(() => undefined)
+    if (bff !== null) await close(bff)
+    if (store !== null) await store.close().catch(() => undefined)
+    await pool.query("DELETE FROM bff_idempotency_receipt WHERE position($1 in scope)>0", [tenant]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_conversation WHERE tenant_id=$1", [tenant]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_project WHERE tenant_id=$1", [tenant]).catch(() => undefined)
+    await pool.end()
+  }
+})
+
+integrationTest("R146 Move client abort destroys the exact blocked backend and preserves the owner Pool", { timeout: 10_000 }, async () => {
+  const suffix = randomUUID()
+  const tenant = `r146_move_abort_${suffix}`
+  const subject = `move_owner_${suffix}`
+  const projectId = `project_${randomUUID()}`
+  const conversationId = `conv_${randomUUID()}`
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
+  let store = null
+  let bff = null
+  let blocker = null
+  let pendingMove = null
+  const controller = new AbortController()
+  try {
+    await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
+    await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+    await pool.query("INSERT INTO bff_project (project_id,tenant_id,owner_id,name,slug) VALUES ($1,$2,$3,'Abort target',$4)", [
+      projectId,
+      tenant,
+      subject,
+      `abort-${suffix}`,
+    ])
+    await pool.query("INSERT INTO bff_conversation (conversation_id,tenant_id,owner_id,project_ref,title) VALUES ($1,$2,$3,NULL,'Abort Move')", [
+      conversationId,
+      tenant,
+      subject,
+    ])
+    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    await store.ready()
+    bff = createBffServer(config(tenant), {
+      businessStore: store,
+      sessionAdmission,
+      agentDispatchDispatcher: idleWorker,
+      agentCancellationDispatcher: idleWorker,
+      agUiProjector: idleWorker,
+      scheduledTaskDispatcher: idleWorker,
+    })
+    const base = await listen(bff)
+    blocker = await pool.connect()
+    await blocker.query("BEGIN")
+    await blocker.query("SELECT project_id FROM bff_project WHERE tenant_id=$1 AND owner_id=$2 AND project_id=$3 FOR UPDATE", [tenant, subject, projectId])
+    const blockerPid = (await blocker.query("SELECT pg_backend_pid()::int AS pid")).rows[0].pid
+    pendingMove = fetch(`${base}/v1/sessions/${conversationId}/move`, {
+      method: "POST",
+      headers: { ...auth(tenant, subject), "idempotency-key": `r146-abort-${suffix}`, "content-type": "application/json" },
+      body: JSON.stringify({ target_project_id: projectId }),
+      signal: controller.signal,
+    })
+      .then(async (response) => ({ response, body: await response.json() }))
+      .catch((error) => ({ error }))
+    const blockedPid = await waitFor(async () => {
+      const result = await pool.query(
+        `SELECT activity.pid::int AS pid FROM pg_stat_activity AS activity
+          WHERE activity.pid <> $1 AND $1 = ANY(pg_blocking_pids(activity.pid))
+            AND activity.query LIKE '%bff_project%FOR UPDATE%'`,
+        [blockerPid],
+      )
+      assert.ok(result.rowCount <= 1, "the owned Project blocker must identify only this Move backend")
+      return result.rows[0]?.pid ?? false
+    }, 2500)
+    controller.abort()
+    const aborted = await Promise.race([pendingMove, new Promise((resolve) => setTimeout(() => resolve(null), 1500))])
+    assert.notEqual(aborted, null, "the browser request must settle promptly after abort")
+    assert.ok(aborted.error, "aborted browser request must not receive a fabricated successful Move")
+    await waitFor(async () => {
+      const result = await pool.query("SELECT count(*)::int AS count FROM pg_stat_activity WHERE pid=$1", [blockedPid])
+      return result.rows[0].count === 0
+    }, 2500)
+    assert.equal(
+      (await store.database.pool.query("SELECT 1::int AS value")).rows[0].value,
+      1,
+      "the BFF owner Pool must serve a new real query before blocker release",
+    )
+    assert.equal((await pool.query("SELECT project_ref FROM bff_conversation WHERE conversation_id=$1", [conversationId])).rows[0].project_ref, null)
+    assert.equal((await pool.query("SELECT count(*)::int AS count FROM bff_idempotency_receipt WHERE position($1 in scope)>0", [tenant])).rows[0].count, 0)
+  } finally {
+    controller.abort()
+    if (blocker !== null) {
+      await blocker.query("ROLLBACK").catch(() => undefined)
+      blocker.release()
+    }
+    if (pendingMove !== null) await pendingMove.catch(() => undefined)
+    if (bff !== null) await close(bff)
+    if (store !== null) await store.close().catch(() => undefined)
+    await pool.query("DELETE FROM bff_idempotency_receipt WHERE position($1 in scope)>0", [tenant]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_conversation WHERE tenant_id=$1", [tenant]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_project WHERE tenant_id=$1", [tenant]).catch(() => undefined)
+    await pool.end()
+  }
+})
+
+integrationTest(
+  "R148 Move recovers the original committed receipt after a fixture drops only the final COMMIT acknowledgement",
+  { timeout: 15_000 },
+  async () => {
+    const suffix = randomUUID()
+    const tenant = `r148_move_ack_${suffix}`
+    const subject = `move_owner_${suffix}`
+    const projectId = `project_${randomUUID()}`
+    const conversationId = `conv_${randomUUID()}`
+    const key = `r148-ack-${suffix}`
+    const scope = JSON.stringify([tenant, subject, "POST", `/sessions/${conversationId}/move`, key])
+    const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
+    let store = null
+    let bff = null
+    let restoreAckFixture = () => {}
+    try {
+      await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
+      await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+      await pool.query("INSERT INTO bff_project (project_id,tenant_id,owner_id,name,slug) VALUES ($1,$2,$3,'ACK target',$4)", [
+        projectId,
+        tenant,
+        subject,
+        `ack-${suffix}`,
+      ])
+      await pool.query("INSERT INTO bff_conversation (conversation_id,tenant_id,owner_id,project_ref,title) VALUES ($1,$2,$3,NULL,'ACK Move')", [
+        conversationId,
+        tenant,
+        subject,
+      ])
+      store = new PostgresBffRepositories(postgresUrl, redisUrl)
+      await store.ready()
+
+      // This fixture forwards every SQL query to the real PostgreSQL client. Only after the
+      // final COMMIT has actually succeeded does it discard the client-side acknowledgement.
+      const ownerPool = store.database.pool
+      const originalConnect = ownerPool.connect
+      const patchedClients = new Map()
+      let insertedReceipt = false
+      let droppedAck = false
+      ownerPool.connect = async function (...args) {
+        const client = await originalConnect.apply(this, args)
+        if (!patchedClients.has(client)) {
+          const originalQuery = client.query
+          patchedClients.set(client, originalQuery)
+          client.query = async function (...queryArgs) {
+            const result = await originalQuery.apply(this, queryArgs)
+            const sql = queryArgs[0]
+            if (typeof sql === "string" && sql.includes("INSERT INTO bff_idempotency_receipt") && queryArgs[1]?.[0] === scope && result.rowCount === 1)
+              insertedReceipt = true
+            if (insertedReceipt && !droppedAck && sql === "COMMIT") {
+              assert.equal(result.command, "COMMIT", "the real server must commit before the fixture drops the ACK")
+              droppedAck = true
+              throw new Error("R148_FIXTURE_FINAL_COMMIT_ACK_DROPPED")
+            }
+            return result
+          }
+        }
+        return client
+      }
+      restoreAckFixture = () => {
+        ownerPool.connect = originalConnect
+        for (const [client, originalQuery] of patchedClients) client.query = originalQuery
+      }
+
+      bff = createBffServer(config(tenant), {
+        businessStore: store,
+        sessionAdmission,
+        agentDispatchDispatcher: idleWorker,
+        agentCancellationDispatcher: idleWorker,
+        agUiProjector: idleWorker,
+        scheduledTaskDispatcher: idleWorker,
+      })
+      const base = await listen(bff)
+      const headers = { ...auth(tenant, subject), "idempotency-key": key, "content-type": "application/json" }
+      const token = headers.authorization.slice("Bearer ".length)
+      const admissionsBefore = sessionAdmission.calls.filter((call) => call.token === token).length
+      const sendMove = async () => {
+        const response = await fetch(`${base}/v1/sessions/${conversationId}/move`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ target_project_id: projectId }),
+          signal: AbortSignal.timeout(7000),
+        })
+        return { response, body: await response.json() }
+      }
+      const unknown = await sendMove()
+      assert.equal(droppedAck, true, "the fixture must intercept only the final successful COMMIT acknowledgement")
+      assert.equal(unknown.response.status, 503, JSON.stringify(unknown.body))
+      assert.deepEqual(unknown.body, { error: { code: "business_store_unavailable", message: "Conversation result is unavailable", retryable: true } })
+      assert.equal(unknown.response.headers.get("cache-control"), "no-store")
+      assert.match(unknown.response.headers.get("x-request-id") ?? "", /^[\x20-\x7E]{1,128}$/u)
+      assert.equal(sessionAdmission.calls.filter((call) => call.token === token).length, admissionsBefore + 1)
+      const committed = await pool.query("SELECT project_ref,updated_at FROM bff_conversation WHERE tenant_id=$1 AND conversation_id=$2", [
+        tenant,
+        conversationId,
+      ])
+      assert.equal(committed.rows[0].project_ref, projectId, "the real PG Move must have committed despite the lost ACK")
+      const receipt = await pool.query("SELECT status,response_body FROM bff_idempotency_receipt WHERE scope=$1", [scope])
+      assert.equal(receipt.rowCount, 1, "the final receipt must be durable in the same committed transaction")
+      assert.equal(receipt.rows[0].status, 200)
+      assert.deepEqual(receipt.rows[0].response_body, { data: { session_id: conversationId, project_ref: projectId } })
+
+      restoreAckFixture()
+      const replay = await sendMove()
+      assert.equal(replay.response.status, 200, JSON.stringify(replay.body))
+      assert.deepEqual(replay.body, receipt.rows[0].response_body, "same-key recovery must use the original final receipt")
+      assert.equal(replay.response.headers.get("cache-control"), "no-store")
+      assert.match(replay.response.headers.get("x-request-id") ?? "", /^[\x20-\x7E]{1,128}$/u)
+      assert.equal(sessionAdmission.calls.filter((call) => call.token === token).length, admissionsBefore + 2, "replay must pass current IAM admission again")
+      const afterReplay = await pool.query("SELECT project_ref,updated_at FROM bff_conversation WHERE tenant_id=$1 AND conversation_id=$2", [
+        tenant,
+        conversationId,
+      ])
+      assert.equal(afterReplay.rows[0].project_ref, projectId)
+      assert.equal(afterReplay.rows[0].updated_at.getTime(), committed.rows[0].updated_at.getTime(), "replay must not move or touch the Conversation again")
+      assert.equal((await pool.query("SELECT count(*)::int AS count FROM bff_idempotency_receipt WHERE scope=$1", [scope])).rows[0].count, 1)
+    } finally {
+      restoreAckFixture()
+      if (bff !== null) await close(bff)
+      if (store !== null) await store.close().catch(() => undefined)
+      await pool.query("DELETE FROM bff_idempotency_receipt WHERE scope=$1", [scope]).catch(() => undefined)
+      await pool.query("DELETE FROM bff_conversation WHERE tenant_id=$1", [tenant]).catch(() => undefined)
+      await pool.query("DELETE FROM bff_project WHERE tenant_id=$1", [tenant]).catch(() => undefined)
+      await pool.end()
+    }
+  },
+)
+
+integrationTest("R150 Move discards a broken client after an unknown real COMMIT and recovers the durable receipt", { timeout: 15_000 }, async () => {
+  const suffix = randomUUID()
+  const tenant = `r150_move_commit_${suffix}`
+  const subject = `move_owner_${suffix}`
+  const projectId = `project_${randomUUID()}`
+  const conversationId = `conv_${randomUUID()}`
+  const key = `r150-commit-${suffix}`
+  const scope = JSON.stringify([tenant, subject, "POST", `/sessions/${conversationId}/move`, key])
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
+  let store = null
+  let bff = null
+  let restoreCommitFixture = () => {}
+  try {
+    await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
+    await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+    await pool.query("INSERT INTO bff_project (project_id,tenant_id,owner_id,name,slug) VALUES ($1,$2,$3,'Unknown COMMIT target',$4)", [
+      projectId,
+      tenant,
+      subject,
+      `commit-${suffix}`,
+    ])
+    await pool.query("INSERT INTO bff_conversation (conversation_id,tenant_id,owner_id,project_ref,title) VALUES ($1,$2,$3,NULL,'Unknown COMMIT Move')", [
+      conversationId,
+      tenant,
+      subject,
+    ])
+    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    await store.ready()
+
+    // All SQL, including the final COMMIT, executes against real PostgreSQL. The
+    // fixture only removes the transport and its acknowledgement after COMMIT.
+    const ownerPool = store.database.pool
+    const originalConnect = ownerPool.connect
+    const patchedClients = new Map()
+    let insertedReceipt = false
+    let droppedAck = false
+    let brokenPid = null
+    const commitReleases = []
+    const expectedSocketEvents = []
+    const unexpectedSocketEvents = []
+    const onOwnerPoolError = (error, client) => {
+      if (droppedAck && client?.processID === brokenPid && error?.message === "Connection terminated unexpectedly") {
+        expectedSocketEvents.push("pool")
+      } else {
+        unexpectedSocketEvents.push("pool")
+      }
+    }
+    ownerPool.on("error", onOwnerPoolError)
+    ownerPool.connect = async function (...args) {
+      const client = await originalConnect.apply(this, args)
+      if (!patchedClients.has(client)) {
+        const originalQuery = client.query
+        patchedClients.set(client, { originalQuery, latestRelease: null })
+        client.query = async function (...queryArgs) {
+          const result = await originalQuery.apply(this, queryArgs)
+          const sql = queryArgs[0]
+          if (typeof sql === "string" && sql.includes("INSERT INTO bff_idempotency_receipt") && queryArgs[1]?.[0] === scope && result.rowCount === 1)
+            insertedReceipt = true
+          if (insertedReceipt && !droppedAck && sql === "COMMIT") {
+            assert.equal(result.command, "COMMIT", "the real server must commit before the transport is lost")
+            brokenPid = this.processID
+            assert.ok(Number.isInteger(brokenPid) && brokenPid > 0)
+            assert.ok(this.connection?.stream, "the checked-out real PG client must own a socket")
+            droppedAck = true
+            const onBrokenClientError = (error) => {
+              if (this.processID === brokenPid && error?.message === "Connection terminated unexpectedly") {
+                expectedSocketEvents.push("client")
+              } else {
+                unexpectedSocketEvents.push("client")
+              }
+            }
+            patchedClients.get(this).onBrokenClientError = onBrokenClientError
+            this.on("error", onBrokenClientError)
+            this.connection.stream.destroy()
+            throw new Error("R150_FIXTURE_UNKNOWN_COMMIT_TRANSPORT_LOST")
+          }
+          return result
+        }
+      }
+      // pg-pool installs a fresh release closure at every checkout, including
+      // a reused client after the earlier receipt read. Wrap this lease, not
+      // only the first client object observed by the fixture.
+      const checkoutRelease = client.release
+      patchedClients.get(client).latestRelease = checkoutRelease
+      client.release = function (destroy) {
+        if (droppedAck && this.processID === brokenPid) commitReleases.push(destroy === true)
+        return checkoutRelease.call(this, destroy)
+      }
+      return client
+    }
+    restoreCommitFixture = () => {
+      ownerPool.connect = originalConnect
+      ownerPool.removeListener("error", onOwnerPoolError)
+      for (const [client, original] of patchedClients) {
+        if (original.onBrokenClientError) client.removeListener("error", original.onBrokenClientError)
+        client.query = original.originalQuery
+        client.release = original.latestRelease
+      }
+    }
+
+    bff = createBffServer(config(tenant), {
+      businessStore: store,
+      sessionAdmission,
+      agentDispatchDispatcher: idleWorker,
+      agentCancellationDispatcher: idleWorker,
+      agUiProjector: idleWorker,
+      scheduledTaskDispatcher: idleWorker,
+    })
+    const base = await listen(bff)
+    const headers = { ...auth(tenant, subject), "idempotency-key": key, "content-type": "application/json" }
+    const token = headers.authorization.slice("Bearer ".length)
+    const admissionsBefore = sessionAdmission.calls.filter((call) => call.token === token).length
+    const sendMove = async () => {
+      const response = await fetch(`${base}/v1/sessions/${conversationId}/move`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ target_project_id: projectId }),
+        signal: AbortSignal.timeout(7000),
+      })
+      return { response, body: await response.json() }
+    }
+    const unknown = await sendMove()
+    assert.equal(droppedAck, true, "the fixture must cut only the real final COMMIT acknowledgement")
+    assert.equal(unknown.response.status, 503, JSON.stringify(unknown.body))
+    assert.deepEqual(unknown.body, { error: { code: "business_store_unavailable", message: "Conversation result is unavailable", retryable: true } })
+    assert.equal(unknown.response.headers.get("cache-control"), "no-store")
+    assert.match(unknown.response.headers.get("x-request-id") ?? "", /^[\x20-\x7E]{1,128}$/u)
+    assert.equal(sessionAdmission.calls.filter((call) => call.token === token).length, admissionsBefore + 1)
+    const committed = await pool.query("SELECT project_ref,updated_at FROM bff_conversation WHERE tenant_id=$1 AND conversation_id=$2", [
+      tenant,
+      conversationId,
+    ])
+    assert.equal(committed.rows[0].project_ref, projectId, "the real PostgreSQL COMMIT must persist the Move despite lost transport")
+    const receipt = await pool.query("SELECT status,response_body FROM bff_idempotency_receipt WHERE scope=$1", [scope])
+    assert.equal(receipt.rowCount, 1)
+    assert.equal(receipt.rows[0].status, 200)
+    assert.deepEqual(receipt.rows[0].response_body, { data: { session_id: conversationId, project_ref: projectId } })
+    await waitFor(async () => (await pool.query("SELECT count(*)::int AS count FROM pg_stat_activity WHERE pid=$1", [brokenPid])).rows[0].count === 0, 2500)
+    assert.deepEqual(unexpectedSocketEvents, [], "only the deliberately severed COMMIT connection may report an error")
+    assert.ok(expectedSocketEvents.length <= 2, "the fixture must not hide an unbounded client/Pool error stream")
+    assert.deepEqual(commitReleases, [true], "an unknown COMMIT must release(true) the exact broken PoolClient")
+    // pg-pool.query uses a callback-style connect internally; the fixture
+    // intercepts only Promise-style checkouts used by the Move repository.
+    const nextClient = await ownerPool.connect()
+    let nextBackend
+    try {
+      nextBackend = await nextClient.query("SELECT pg_backend_pid()::int AS pid")
+    } finally {
+      nextClient.release()
+    }
+    assert.notEqual(nextBackend.rows[0].pid, brokenPid, "the owner Pool must serve a new real backend")
+
+    restoreCommitFixture()
+    const replay = await sendMove()
+    assert.equal(replay.response.status, 200, JSON.stringify(replay.body))
+    assert.deepEqual(replay.body, receipt.rows[0].response_body)
+    assert.equal(sessionAdmission.calls.filter((call) => call.token === token).length, admissionsBefore + 2, "replay must pass current IAM admission again")
+    const afterReplay = await pool.query("SELECT project_ref,updated_at FROM bff_conversation WHERE tenant_id=$1 AND conversation_id=$2", [
+      tenant,
+      conversationId,
+    ])
+    assert.equal(afterReplay.rows[0].project_ref, projectId)
+    assert.equal(afterReplay.rows[0].updated_at.getTime(), committed.rows[0].updated_at.getTime())
+    assert.equal((await pool.query("SELECT count(*)::int AS count FROM bff_idempotency_receipt WHERE scope=$1", [scope])).rows[0].count, 1)
+  } finally {
+    restoreCommitFixture()
+    if (bff !== null) await close(bff)
+    if (store !== null) await store.close().catch(() => undefined)
+    await pool.query("DELETE FROM bff_idempotency_receipt WHERE scope=$1", [scope]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_conversation WHERE tenant_id=$1", [tenant]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_project WHERE tenant_id=$1", [tenant]).catch(() => undefined)
+    await pool.end()
+  }
+})
+
+integrationTest(
+  "R148 Move rolls back a real PostgreSQL transaction after a scope-specific receipt INSERT fault and recovers with the original key",
+  { timeout: 15_000 },
+  async () => {
+    const suffix = randomUUID()
+    const tenant = `r148_move_fault_${suffix}`
+    const subject = `move_owner_${suffix}`
+    const projectId = `project_${randomUUID()}`
+    const conversationId = `conv_${randomUUID()}`
+    const key = `r148-fault-${suffix}`
+    const scope = JSON.stringify([tenant, subject, "POST", `/sessions/${conversationId}/move`, key])
+    const fixtureName = `r148_fault_${suffix.replaceAll("-", "")}`
+    const quotedScope = scope.replaceAll("'", "''")
+    const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
+    let store = null
+    let bff = null
+    let restoreFaultObserver = () => {}
+    try {
+      await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
+      await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+      await pool.query("INSERT INTO bff_project (project_id,tenant_id,owner_id,name,slug) VALUES ($1,$2,$3,'Fault target',$4)", [
+        projectId,
+        tenant,
+        subject,
+        `fault-${suffix}`,
+      ])
+      await pool.query("INSERT INTO bff_conversation (conversation_id,tenant_id,owner_id,project_ref,title) VALUES ($1,$2,$3,NULL,'Fault Move')", [
+        conversationId,
+        tenant,
+        subject,
+      ])
+      // The trigger exists only for this exact generated receipt scope; it is removed
+      // before the retry and in finally. PostgreSQL, not a mock, aborts the write transaction.
+      await pool.query(
+        `CREATE FUNCTION ${fixtureName}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'R148_MOVE_SQL_FAULT' USING ERRCODE='P0001'; END $$`,
+      )
+      await pool.query(
+        `CREATE TRIGGER ${fixtureName} BEFORE INSERT ON bff_idempotency_receipt FOR EACH ROW WHEN (NEW.scope = '${quotedScope}') EXECUTE FUNCTION ${fixtureName}()`,
+      )
+      store = new PostgresBffRepositories(postgresUrl, redisUrl)
+      await store.ready()
+      const ownerPool = store.database.pool
+      const originalConnect = ownerPool.connect
+      const patchedClients = new Map()
+      let observedRealFault = false
+      ownerPool.connect = async function (...args) {
+        const client = await originalConnect.apply(this, args)
+        if (!patchedClients.has(client)) {
+          const originalQuery = client.query
+          patchedClients.set(client, originalQuery)
+          client.query = async function (...queryArgs) {
+            try {
+              return await originalQuery.apply(this, queryArgs)
+            } catch (error) {
+              if (error?.code === "P0001" && error.message?.includes("R148_MOVE_SQL_FAULT")) observedRealFault = true
+              throw error
+            }
+          }
+        }
+        return client
+      }
+      restoreFaultObserver = () => {
+        ownerPool.connect = originalConnect
+        for (const [client, originalQuery] of patchedClients) client.query = originalQuery
+      }
+      bff = createBffServer(config(tenant), {
+        businessStore: store,
+        sessionAdmission,
+        agentDispatchDispatcher: idleWorker,
+        agentCancellationDispatcher: idleWorker,
+        agUiProjector: idleWorker,
+        scheduledTaskDispatcher: idleWorker,
+      })
+      const base = await listen(bff)
+      const headers = { ...auth(tenant, subject), "idempotency-key": key, "content-type": "application/json" }
+      const token = headers.authorization.slice("Bearer ".length)
+      const admissionsBefore = sessionAdmission.calls.filter((call) => call.token === token).length
+      const sendMove = async () => {
+        const response = await fetch(`${base}/v1/sessions/${conversationId}/move`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ target_project_id: projectId }),
+          signal: AbortSignal.timeout(7000),
+        })
+        return { response, body: await response.json() }
+      }
+      const failed = await sendMove()
+      assert.equal(observedRealFault, true, "the real PG trigger must raise the scoped SQL error")
+      assert.equal(failed.response.status, 503, JSON.stringify(failed.body))
+      assert.deepEqual(failed.body, { error: { code: "business_store_unavailable", message: "Conversation result is unavailable", retryable: true } })
+      assert.equal(failed.response.headers.get("cache-control"), "no-store")
+      assert.match(failed.response.headers.get("x-request-id") ?? "", /^[\x20-\x7E]{1,128}$/u)
+      assert.equal(sessionAdmission.calls.filter((call) => call.token === token).length, admissionsBefore + 1)
+      assert.equal(
+        (await pool.query("SELECT project_ref FROM bff_conversation WHERE tenant_id=$1 AND conversation_id=$2", [tenant, conversationId])).rows[0].project_ref,
+        null,
+        "PG must roll back the Move update",
+      )
+      assert.equal(
+        (await pool.query("SELECT count(*)::int AS count FROM bff_idempotency_receipt WHERE scope=$1", [scope])).rows[0].count,
+        0,
+        "PG must roll back the final receipt too",
+      )
+
+      await pool.query(`DROP TRIGGER ${fixtureName} ON bff_idempotency_receipt`)
+      await pool.query(`DROP FUNCTION ${fixtureName}()`)
+      restoreFaultObserver()
+      const recovered = await sendMove()
+      assert.equal(recovered.response.status, 200, JSON.stringify(recovered.body))
+      assert.deepEqual(recovered.body, { data: { session_id: conversationId, project_ref: projectId } })
+      assert.equal(sessionAdmission.calls.filter((call) => call.token === token).length, admissionsBefore + 2, "recovery must pass current IAM admission again")
+      assert.equal(
+        (await pool.query("SELECT project_ref FROM bff_conversation WHERE tenant_id=$1 AND conversation_id=$2", [tenant, conversationId])).rows[0].project_ref,
+        projectId,
+      )
+      assert.equal((await pool.query("SELECT count(*)::int AS count FROM bff_idempotency_receipt WHERE scope=$1", [scope])).rows[0].count, 1)
+    } finally {
+      restoreFaultObserver()
+      if (bff !== null) await close(bff)
+      if (store !== null) await store.close().catch(() => undefined)
+      await pool.query(`DROP TRIGGER IF EXISTS ${fixtureName} ON bff_idempotency_receipt`).catch(() => undefined)
+      await pool.query(`DROP FUNCTION IF EXISTS ${fixtureName}()`).catch(() => undefined)
+      await pool.query("DELETE FROM bff_idempotency_receipt WHERE scope=$1", [scope]).catch(() => undefined)
+      await pool.query("DELETE FROM bff_conversation WHERE tenant_id=$1", [tenant]).catch(() => undefined)
+      await pool.query("DELETE FROM bff_project WHERE tenant_id=$1", [tenant]).catch(() => undefined)
+      await pool.end()
+    }
+  },
+)
+
+integrationTest(
+  "R149 Message and Move serialize in both orders on the same Conversation and the next admission sees its new Project",
+  { timeout: 30_000 },
+  async () => {
+    const suffix = randomUUID()
+    const tenant = `r149_move_message_${suffix}`
+    const subject = `move_owner_${suffix}`
+    const [sourceProject, targetProject] = [`project_${randomUUID()}`, `project_${randomUUID()}`].sort()
+    const messageFirstId = `conv_${randomUUID()}`
+    const moveFirstId = `conv_${randomUUID()}`
+    const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
+    let store = null
+    let bff = null
+    let conversationBlocker = null
+    let targetBlocker = null
+    const pending = []
+    try {
+      await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
+      await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+      await pool.query(
+        `INSERT INTO bff_project (project_id,tenant_id,owner_id,name,slug)
+       VALUES ($1,$3,$4,'Move source',$5),($2,$3,$4,'Move target',$6)`,
+        [sourceProject, targetProject, tenant, subject, `r149-source-${suffix}`, `r149-target-${suffix}`],
+      )
+      await pool.query(
+        `INSERT INTO bff_conversation (conversation_id,tenant_id,owner_id,project_ref,title)
+       VALUES ($1,$3,$4,$5,'Message first'),($2,$3,$4,$5,'Move first')`,
+        [messageFirstId, moveFirstId, tenant, subject, sourceProject],
+      )
+      await pool.query("INSERT INTO bff_share (share_id,tenant_id,conversation_id,url) VALUES ($1,$2,$3,$4)", [
+        `share_${suffix}`,
+        tenant,
+        messageFirstId,
+        `https://share.kokoro.invalid/${suffix}`,
+      ])
+      store = new PostgresBffRepositories(postgresUrl, redisUrl)
+      await store.ready()
+      const runtimeConfig = config(tenant)
+      runtimeConfig.agentEnabled = true
+      runtimeConfig.upstreams.agents = "http://127.0.0.1:9"
+      bff = createBffServer(runtimeConfig, {
+        businessStore: store,
+        sessionAdmission,
+        agentDispatchDispatcher: idleWorker,
+        agentCancellationDispatcher: idleWorker,
+        agUiProjector: idleWorker,
+        scheduledTaskDispatcher: idleWorker,
+      })
+      const base = await listen(bff)
+      const identity = auth(tenant, subject)
+      const sendMessage = async (conversationId, key, projectRef) => {
+        const response = await fetch(`${base}/v1/sessions/${conversationId}/messages`, {
+          method: "POST",
+          headers: { ...identity, "idempotency-key": key, "content-type": "application/json" },
+          body: JSON.stringify({ content: `R149 ${key}`, project_ref: projectRef }),
+          signal: AbortSignal.timeout(9000),
+        })
+        return { response, body: await response.json() }
+      }
+      const sendMove = async (conversationId, key) => {
+        const response = await fetch(`${base}/v1/sessions/${conversationId}/move`, {
+          method: "POST",
+          headers: { ...identity, "idempotency-key": key, "content-type": "application/json" },
+          body: JSON.stringify({ target_project_id: targetProject }),
+          signal: AbortSignal.timeout(9000),
+        })
+        return { response, body: await response.json() }
+      }
+      const historicalFacts = async (conversationId) => {
+        const facts = {}
+        for (const table of [
+          "bff_message",
+          "bff_agent_dispatch_outbox",
+          "bff_agui_stream",
+          "bff_agui_event",
+          "bff_share",
+          "bff_conversation_artifact",
+          "bff_agent_cancellation_outbox",
+        ]) {
+          const idColumn = table === "bff_agui_stream" || table === "bff_agui_event" ? "session_id" : "conversation_id"
+          const rows = await pool.query(`SELECT row_to_json(fact)::text AS value FROM ${table} AS fact WHERE tenant_id=$1 AND ${idColumn}=$2 ORDER BY value`, [
+            tenant,
+            conversationId,
+          ])
+          facts[table] = rows.rows.map((row) => row.value)
+        }
+        return facts
+      }
+
+      // Message takes the source Project FOR SHARE, then waits for the Conversation.
+      // Move cannot take source Project FOR UPDATE until that real admission commits.
+      conversationBlocker = await pool.connect()
+      await conversationBlocker.query("BEGIN")
+      await conversationBlocker.query("SELECT conversation_id FROM bff_conversation WHERE tenant_id=$1 AND conversation_id=$2 FOR UPDATE", [
+        tenant,
+        messageFirstId,
+      ])
+      const conversationBlockerPid = (await conversationBlocker.query("SELECT pg_backend_pid() AS pid")).rows[0].pid
+      targetBlocker = await pool.connect()
+      await targetBlocker.query("BEGIN")
+      await targetBlocker.query("SELECT project_id FROM bff_project WHERE tenant_id=$1 AND project_id=$2 FOR UPDATE", [tenant, targetProject])
+      const targetBlockerPid = (await targetBlocker.query("SELECT pg_backend_pid() AS pid")).rows[0].pid
+
+      const firstMessage = sendMessage(messageFirstId, `r149-message-first-${suffix}`, sourceProject)
+      pending.push(firstMessage)
+      const [messageBackend] = await blockedPgQueries(pool, conversationBlockerPid, /FROM bff_conversation[\s\S]*FOR UPDATE/u)
+      const firstMove = sendMove(messageFirstId, `r149-move-after-message-${suffix}`)
+      pending.push(firstMove)
+      await blockedPgQueries(pool, messageBackend.pid, /FROM bff_project[\s\S]*FOR UPDATE/u)
+      await conversationBlocker.query("COMMIT")
+      conversationBlocker.release()
+      conversationBlocker = null
+      const admittedBeforeMove = await firstMessage
+      assert.equal(admittedBeforeMove.response.status, 202, JSON.stringify(admittedBeforeMove.body))
+      await blockedPgQueries(pool, targetBlockerPid, /FROM bff_project[\s\S]*FOR UPDATE/u)
+      const admittedRun = admittedBeforeMove.body.data.run_id
+      const launchBeforeMove = await pool.query("SELECT payload FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND conversation_id=$2 AND run_id=$3", [
+        tenant,
+        messageFirstId,
+        admittedRun,
+      ])
+      assert.equal(launchBeforeMove.rowCount, 1)
+      assert.equal(launchBeforeMove.rows[0].payload.launch.trace.project_ref, sourceProject)
+      const beforeMoveFacts = await historicalFacts(messageFirstId)
+      assert.equal(beforeMoveFacts.bff_message.length, 2)
+      assert.ok(beforeMoveFacts.bff_agui_event.length > 0, "the admitted Run must have a durable AG-UI event before Move")
+      assert.equal(beforeMoveFacts.bff_share.length, 1)
+      await targetBlocker.query("COMMIT")
+      targetBlocker.release()
+      targetBlocker = null
+      const movedAfterMessage = await firstMove
+      assert.equal(movedAfterMessage.response.status, 200, JSON.stringify(movedAfterMessage.body))
+      assert.deepEqual(movedAfterMessage.body, { data: { session_id: messageFirstId, project_ref: targetProject } })
+      assert.deepEqual(await historicalFacts(messageFirstId), beforeMoveFacts, "Move must not rewrite an admitted Run, Message, AG-UI, Share or Artifact")
+
+      // Move owns source Project FOR UPDATE while target is blocked; the stale
+      // Message waits on that source lock and cannot commit into the old Project.
+      targetBlocker = await pool.connect()
+      await targetBlocker.query("BEGIN")
+      await targetBlocker.query("SELECT project_id FROM bff_project WHERE tenant_id=$1 AND project_id=$2 FOR UPDATE", [tenant, targetProject])
+      const secondTargetBlockerPid = (await targetBlocker.query("SELECT pg_backend_pid() AS pid")).rows[0].pid
+      const secondMove = sendMove(moveFirstId, `r149-move-first-${suffix}`)
+      pending.push(secondMove)
+      const [moveBackend] = await blockedPgQueries(pool, secondTargetBlockerPid, /FROM bff_project[\s\S]*FOR UPDATE/u)
+      const staleMessage = sendMessage(moveFirstId, `r149-stale-message-${suffix}`, sourceProject)
+      pending.push(staleMessage)
+      await blockedPgQueries(pool, moveBackend.pid, /FROM bff_project[\s\S]*FOR SHARE/u)
+      await targetBlocker.query("COMMIT")
+      targetBlocker.release()
+      targetBlocker = null
+      const movedBeforeMessage = await secondMove
+      assert.equal(movedBeforeMessage.response.status, 200, JSON.stringify(movedBeforeMessage.body))
+      const rejectedStale = await staleMessage
+      assert.equal(rejectedStale.response.status, 404, JSON.stringify(rejectedStale.body))
+      assert.equal(rejectedStale.body.error?.code, "session_not_found")
+      assert.equal(
+        (await pool.query("SELECT count(*)::int AS count FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND conversation_id=$2", [tenant, moveFirstId]))
+          .rows[0].count,
+        0,
+      )
+      assert.equal(
+        (await pool.query("SELECT count(*)::int AS count FROM bff_message WHERE tenant_id=$1 AND conversation_id=$2", [tenant, moveFirstId])).rows[0].count,
+        0,
+      )
+      const nextAdmission = await sendMessage(moveFirstId, `r149-next-admission-${suffix}`, targetProject)
+      assert.equal(nextAdmission.response.status, 202, JSON.stringify(nextAdmission.body))
+      const nextLaunch = await pool.query("SELECT payload FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND conversation_id=$2 AND run_id=$3", [
+        tenant,
+        moveFirstId,
+        nextAdmission.body.data.run_id,
+      ])
+      assert.equal(nextLaunch.rowCount, 1)
+      assert.equal(nextLaunch.rows[0].payload.launch.trace.project_ref, targetProject, "next admission must bind the post-Move canonical Project")
+    } finally {
+      if (conversationBlocker !== null) {
+        await conversationBlocker.query("ROLLBACK").catch(() => undefined)
+        conversationBlocker.release()
+      }
+      if (targetBlocker !== null) {
+        await targetBlocker.query("ROLLBACK").catch(() => undefined)
+        targetBlocker.release()
+      }
+      await Promise.allSettled(pending)
+      if (bff !== null) await close(bff)
+      if (store !== null) await store.close().catch(() => undefined)
+      await pool.query("DELETE FROM bff_idempotency_receipt WHERE position($1 in scope)>0", [tenant]).catch(() => undefined)
+      for (const table of [
+        "bff_agent_cancellation_outbox",
+        "bff_conversation_artifact",
+        "bff_share",
+        "bff_agui_event",
+        "bff_agui_stream",
+        "bff_agent_dispatch_outbox",
+        "bff_message",
+      ]) {
+        await pool.query(`DELETE FROM ${table} WHERE tenant_id=$1`, [tenant]).catch(() => undefined)
+      }
+      await pool.query("DELETE FROM bff_conversation WHERE tenant_id=$1", [tenant]).catch(() => undefined)
+      await pool.query("DELETE FROM bff_project WHERE tenant_id=$1", [tenant]).catch(() => undefined)
+      await pool.end()
+    }
+  },
+)
+
+integrationTest("R149 identical concurrent Move keys read one real PostgreSQL winner and preserve historical facts", { timeout: 15_000 }, async () => {
+  const suffix = randomUUID()
+  const tenant = `r149_move_same_${suffix}`
+  const subject = `move_owner_${suffix}`
+  const conversationId = `conv_${randomUUID()}`
+  const targetProject = `project_${randomUUID()}`
+  const key = `r149-same-${suffix}`
+  const scope = JSON.stringify([tenant, subject, "POST", `/sessions/${conversationId}/move`, key])
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
+  let store = null
+  let bff = null
+  let blocker = null
+  const pending = []
+  try {
+    await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
+    await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+    await pool.query("INSERT INTO bff_project (project_id,tenant_id,owner_id,name,slug) VALUES ($1,$2,$3,'Same-key target',$4)", [
+      targetProject,
+      tenant,
+      subject,
+      `same-${suffix}`,
+    ])
+    await pool.query("INSERT INTO bff_conversation (conversation_id,tenant_id,owner_id,project_ref,title) VALUES ($1,$2,$3,NULL,'Same-key Move')", [
+      conversationId,
+      tenant,
+      subject,
+    ])
+    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    await store.ready()
+    const existingRun = await store.services.chatTurns.submit({
+      tenantId: tenant,
+      conversationId,
+      subjectId: subject,
+      actorId: subject,
+      requestId: `r149-run-${suffix}`,
+      idempotencyKey: `r149-run-${suffix}`,
+      content: "Historical Run survives both same-key requests",
+    })
+    assert.ok(existingRun)
+    await pool.query("INSERT INTO bff_share (share_id,tenant_id,conversation_id,url) VALUES ($1,$2,$3,$4)", [
+      `share_${suffix}`,
+      tenant,
+      conversationId,
+      `https://share.kokoro.invalid/${suffix}`,
+    ])
+    const historical = {}
+    for (const table of ["bff_message", "bff_agent_dispatch_outbox", "bff_agui_stream", "bff_agui_event", "bff_share", "bff_agent_cancellation_outbox"]) {
+      const idColumn = table === "bff_agui_stream" || table === "bff_agui_event" ? "session_id" : "conversation_id"
+      historical[table] = (
+        await pool.query(`SELECT row_to_json(fact)::text AS value FROM ${table} AS fact WHERE tenant_id=$1 AND ${idColumn}=$2 ORDER BY value`, [
+          tenant,
+          conversationId,
+        ])
+      ).rows.map((row) => row.value)
+    }
+    assert.equal(historical.bff_message.length, 2)
+    assert.ok(historical.bff_agui_event.length > 0, "the existing Run must have a durable AG-UI event")
+    assert.equal(historical.bff_share.length, 1)
+    bff = createBffServer(config(tenant), {
+      businessStore: store,
+      sessionAdmission,
+      agentDispatchDispatcher: idleWorker,
+      agentCancellationDispatcher: idleWorker,
+      agUiProjector: idleWorker,
+      scheduledTaskDispatcher: idleWorker,
+    })
+    const base = await listen(bff)
+    const headers = { ...auth(tenant, subject), "idempotency-key": key, "content-type": "application/json" }
+    const token = headers.authorization.slice("Bearer ".length)
+    const admissionsBefore = sessionAdmission.calls.filter((call) => call.token === token).length
+    const sendMove = async () => {
+      const response = await fetch(`${base}/v1/sessions/${conversationId}/move`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ target_project_id: targetProject }),
+        signal: AbortSignal.timeout(8000),
+      })
+      return { response, body: await response.json() }
+    }
+    blocker = await pool.connect()
+    await blocker.query("BEGIN")
+    await blocker.query("SELECT project_id FROM bff_project WHERE tenant_id=$1 AND project_id=$2 FOR UPDATE", [tenant, targetProject])
+    const blockerPid = (await blocker.query("SELECT pg_backend_pid() AS pid")).rows[0].pid
+    const first = sendMove()
+    const second = sendMove()
+    pending.push(first, second)
+    const queued = await blockedPgQueriesThroughQueue(pool, blockerPid, /FROM bff_project[\s\S]*FOR UPDATE/u, 2)
+    assert.equal(queued.length, 2, "both distinct Move backends must reach the owned Project lock through the real PG wait queue")
+    await blocker.query("COMMIT")
+    blocker.release()
+    blocker = null
+    const results = await Promise.all([first, second])
+    assert.deepEqual(
+      results.map(({ response }) => response.status),
+      [200, 200],
+    )
+    assert.deepEqual(results[0].body, results[1].body)
+    assert.deepEqual(results[0].body, { data: { session_id: conversationId, project_ref: targetProject } })
+    assert.equal(sessionAdmission.calls.filter((call) => call.token === token).length, admissionsBefore + 2, "both requests need current IAM admission")
+    assert.equal(
+      (await pool.query("SELECT project_ref FROM bff_conversation WHERE tenant_id=$1 AND conversation_id=$2", [tenant, conversationId])).rows[0].project_ref,
+      targetProject,
+    )
+    const receipts = await pool.query("SELECT status,response_body FROM bff_idempotency_receipt WHERE scope=$1", [scope])
+    assert.equal(receipts.rowCount, 1, "both responses must resolve through one durable final receipt")
+    assert.equal(receipts.rows[0].status, 200)
+    assert.deepEqual(receipts.rows[0].response_body, results[0].body)
+    for (const [table, before] of Object.entries(historical)) {
+      const idColumn = table === "bff_agui_stream" || table === "bff_agui_event" ? "session_id" : "conversation_id"
+      const after = (
+        await pool.query(`SELECT row_to_json(fact)::text AS value FROM ${table} AS fact WHERE tenant_id=$1 AND ${idColumn}=$2 ORDER BY value`, [
+          tenant,
+          conversationId,
+        ])
+      ).rows.map((row) => row.value)
+      assert.deepEqual(after, before, `same-key Move must not rewrite ${table}`)
+    }
+  } finally {
+    if (blocker !== null) {
+      await blocker.query("ROLLBACK").catch(() => undefined)
+      blocker.release()
+    }
+    await Promise.allSettled(pending)
+    if (bff !== null) await close(bff)
+    if (store !== null) await store.close().catch(() => undefined)
+    await pool.query("DELETE FROM bff_idempotency_receipt WHERE scope=$1", [scope]).catch(() => undefined)
+    for (const table of ["bff_agent_cancellation_outbox", "bff_share", "bff_agui_event", "bff_agui_stream", "bff_agent_dispatch_outbox", "bff_message"]) {
+      await pool.query(`DELETE FROM ${table} WHERE tenant_id=$1`, [tenant]).catch(() => undefined)
+    }
+    await pool.query("DELETE FROM bff_conversation WHERE tenant_id=$1", [tenant]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_project WHERE tenant_id=$1", [tenant]).catch(() => undefined)
     await pool.end()
   }
 })

@@ -1,4 +1,8 @@
-## R126 public7 Run process candidate（待 Root 资源验收）
+## R150 当前 public 7.1.0 Move 候选（未发布）
+
+唯一可编辑 Product API 机器事实源为 `openapi/v1/openapi.yaml`；当前工作树版本 `7.1.0`，在已提交 public `7.0.0` 基线上新增独立 `POST /v1/sessions/{id}/move`。BFF HTTP/PG 候选已实现，Root Node22 `pnpm check && pnpm format:check` exit 0（741 pass、1 个既有资源 skip；contract 4 条已知 warning）、聚焦真 HTTP/PG Move 9/9及完整八文件 PG/Redis integration 173/173；Git 发布、Web 固定 BFF commit/digest 与浏览器消费尚未完成。Move 不代表 Project DELETE、Storage release 或 T-C05 已闭环。下面 R126/R83 段落是各阶段历史事实，不描述当前工作树版本。
+
+## R126 public7 Run process candidate（历史阶段）
 
 The single `/v1` source candidate is now `7.0.0`. Session snapshots require nullable `execution_process`; Run process pages use the authorized immutable watermark route, bounded safe Todo/activity projection, and no raw tool payload or compatibility alias. The canonical SQL owns the two compact provenance tables while the immutable AG-UI ledger remains the as-of page source. Root resource verification and publication remain pending.
 
@@ -31,7 +35,7 @@ security; an irrelevant extra Authorization header does not become an additional
 
 ## Version
 
-The current source candidate is public `6.0.0` on the unchanged `/v1` namespace under the explicitly approved R83 pre-release corrective cut. Only `GET /v1/sessions` changes: omitted or empty `scope` keeps the admitted owner's complete visible active set, explicit `scope=direct` returns only Conversations with `project_ref IS NULL`, and nonempty `project_ref` keeps the owned-Project filter. Combining explicit direct with a nonempty Project reference returns `400 invalid_scope` before Project lookup. Resource authorization, keyset cursor wire shape, operation inventory, ScheduledTask creation and the full execution-head contract remain unchanged. This is breaking, not backward compatible. Published public `5.0.0` bytes and digest remain immutable; this source file is the new public6 candidate rather than a compatibility branch. Root owns final resource acceptance and publication, and Web repins only the exact released public6 commit/version/digest. No consumer upgrade or managed-runtime activation is implied by this source candidate.
+R83 历史阶段的 public `6.0.0` 在相同 `/v1` namespace 修正 `GET /v1/sessions`：省略或空 `scope` 读取本人完整可见活动集合，`scope=direct` 仅取 `project_ref IS NULL`，非空 `project_ref` 保本人 Project 过滤，两者组合返回 `400 invalid_scope`。该修正当时是 breaking corrective cut，不是当前 `7.1.0` 工作树；已发布版本的原字节与 digest 不因本次 Move 候选而修改。新 consumer 只能在 BFF 正式发布后固定精确 commit/version/digest。
 
 `GET /v1/sessions/{id}/events` issues one opaque `agui_*` cursor per durable public frame. Agent source sequences remain
 internal projection metadata and are not valid public resume cursors. Callers persist the last SSE `id` verbatim and send

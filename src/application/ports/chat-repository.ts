@@ -49,6 +49,18 @@ export type ChatArtifactDelivery = {
   deliveredAt: Date
 }
 
+export type MoveConversationReceipt = Readonly<{ data: Readonly<{ session_id: string; project_ref: string | null }> }>
+export type MoveConversationResult = Readonly<{ kind: "moved"; receipt: MoveConversationReceipt }> | Readonly<{ kind: "not_found" | "conflict" }>
+export type MoveConversationCommand = Readonly<{
+  tenantId: string
+  subjectId: string
+  conversationId: string
+  targetProjectId: string | null
+  scope: string
+  fingerprint: string
+  signal: AbortSignal
+}>
+
 export type ChatRepository = {
   listConversations(tenantId: string, subjectId: string, filter: ConversationCollectionFilter, limit: number, cursor: string | null): Promise<ConversationPage>
   findConversation(tenantId: string, subjectId: string, conversationId: string, projectRef: string | undefined): Promise<Conversation | null>
@@ -73,6 +85,7 @@ export type ChatRepository = {
     projectRef?: string,
   ): Promise<MessagePage | null>
   renameConversation(tenantId: string, subjectId: string, conversationId: string, title: string, projectRef?: string): Promise<Conversation | null>
+  moveConversation(command: MoveConversationCommand): Promise<MoveConversationResult>
   deleteConversation(tenantId: string, subjectId: string, conversationId: string, requestId: string, projectRef?: string): Promise<boolean>
   createShare(tenantId: string, subjectId: string, conversationId: string, projectRef?: string): Promise<Share | null>
   revokeShare(tenantId: string, subjectId: string, conversationId: string, projectRef?: string): Promise<Share | null>

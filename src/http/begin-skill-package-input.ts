@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto"
-import { strictParseRawJson } from "../infrastructure/clients/platform/raw-json.js"
+import { strictParseRawJson } from "../infrastructure/raw-json.js"
 
 export type BeginSkillPackageInput = Readonly<{
   filename: string

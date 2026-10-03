@@ -118,6 +118,11 @@
     },
     {
       "method": "POST",
+      "path": "/v1/sessions/{id}/move",
+      "operation_id": "moveSession"
+    },
+    {
+      "method": "POST",
       "path": "/v1/sessions/{id}/share",
       "operation_id": "createShare"
     },

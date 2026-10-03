@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 7.0.0
+  version: 7.1.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -933,6 +933,41 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+  /v1/sessions/{id}/move:
+    parameters:
+      - $ref: '#/components/parameters/MoveSessionId'
+    post:
+      tags: [Chat]
+      operationId: moveSession
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: chat.session.update
+      summary: Move a Conversation to a Project or direct scope
+      description: >-
+        Current IAM admission and owner visibility are rechecked even for an idempotent replay.
+        The synchronous receipt covers one atomic BFF Conversation move and final idempotency result,
+        not a Storage or Agent command. A running Run or streaming session keeps its already admitted
+        context, Message, Share, AG-UI cursor and Artifact associations; only the next message or Run
+        admission uses the new Project. The same key and target replay the original 200 response;
+        the same key with a different target conflicts. There is no query alias or source Project input.
+      parameters:
+        - $ref: '#/components/parameters/MoveSessionIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MoveSessionRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/MoveSessionSuccess' }
+        '400': { $ref: '#/components/responses/MoveSessionBadRequest' }
+        '401': { $ref: '#/components/responses/MoveSessionUnauthorized' }
+        '403': { $ref: '#/components/responses/MoveSessionForbidden' }
+        '404': { $ref: '#/components/responses/MoveSessionNotFound' }
+        '409': { $ref: '#/components/responses/MoveSessionConflict' }
+        '429': { $ref: '#/components/responses/MoveSessionRateLimited' }
+        '503': { $ref: '#/components/responses/MoveSessionUnavailable' }
   /v1/sessions/{id}/title:
     parameters:
       - $ref: '#/components/parameters/SessionId'
@@ -3461,6 +3496,14 @@ components:
       scheme: bearer
       bearerFormat: opaque-session-token
   parameters:
+    MoveSessionId:
+      name: id
+      in: path
+      required: true
+      description: Canonical Conversation ID; aliases and slugs are not accepted by Move.
+      schema:
+        type: string
+        pattern: '^conv_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
     SessionId:
       name: id
       in: path
@@ -3765,6 +3808,16 @@ components:
       schema:
         type: string
         pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$'
+    MoveSessionIdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Exactly once; one printable 1–128 character value, never trimmed or comma-joined.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+        pattern: '^[\x21-\x2B\x2D-\x7E]+$'
     IdempotencyKey:
       name: Idempotency-Key
       in: header
@@ -5393,6 +5446,48 @@ components:
 
         id: agui_abcdef0123456789abcdef0123456789ab
         data: {"type":"RUN_FINISHED","timestamp":1767225605000,"threadId":"session_kokoro","runId":"run_01JASYNC","metadata":{"kokoro":{"event_id":"agent_event_5","seq":5,"session_id":"session_kokoro","run_id":"run_01JASYNC","timestamp":"2026-01-01T00:00:05.000Z"}}}
+    MoveSessionRequest:
+      type: object
+      required: [target_project_id]
+      additionalProperties: false
+      properties:
+        target_project_id:
+          description: Canonical Project ID, or null for a direct Conversation; no slug or source Project.
+          oneOf:
+            - type: string
+              pattern: '^project_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            - type: 'null'
+    MoveSessionResponse:
+      type: object
+      required: [data]
+      additionalProperties: false
+      properties:
+        data:
+          type: object
+          required: [session_id, project_ref]
+          additionalProperties: false
+          properties:
+            session_id: { type: string, pattern: '^conv_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' }
+            project_ref:
+              oneOf:
+                - type: string
+                  pattern: '^project_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                - type: 'null'
+    MoveSessionErrorResponse:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error:
+          type: object
+          required: [code, message, retryable]
+          additionalProperties: false
+          properties:
+            code:
+              type: string
+              enum: [invalid_move_request, idempotency_key_required, session_authentication_required, session_invalid, service_auth_failed, session_forbidden, product_tenant_forbidden, session_not_found, idempotency_conflict, idempotency_in_progress, session_rate_limited, business_store_unavailable, iam_admission_unavailable]
+            message: { type: string, minLength: 1 }
+            retryable: { type: boolean }
     RenameSessionRequest:
       type: object
       required: [title]
@@ -7934,6 +8029,127 @@ components:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/SkillDraftErrorResponse' }
+    MoveSessionSuccess:
+      description: Atomic Conversation move and final idempotency receipt
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/MoveSessionResponse' }
+    MoveSessionBadRequest:
+      description: Invalid canonical ID, key, query or closed Move body
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/MoveSessionErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [invalid_move_request, idempotency_key_required] }
+    MoveSessionUnauthorized:
+      description: Current IAM user admission failed
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/MoveSessionErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [session_authentication_required, session_invalid] }
+    MoveSessionForbidden:
+      description: Trusted service or tenant admission denied
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/MoveSessionErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [service_auth_failed, session_forbidden, product_tenant_forbidden] }
+    MoveSessionNotFound:
+      description: Conversation or source/target Project is not visible to this owner
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/MoveSessionErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [session_not_found] }
+    MoveSessionConflict:
+      description: Idempotency fingerprint conflicts or a bounded concurrent Move is in progress
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/MoveSessionErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [idempotency_conflict, idempotency_in_progress] }
+    MoveSessionRateLimited:
+      description: Current IAM session admission is rate limited
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+        Retry-After: { required: false, schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/MoveSessionErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [session_rate_limited] }
+    MoveSessionUnavailable:
+      description: BFF fact store or current IAM admission is unavailable or result is unknown
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/MoveSessionErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [business_store_unavailable, iam_admission_unavailable] }
     BadRequest:
       description: Invalid request
       content:

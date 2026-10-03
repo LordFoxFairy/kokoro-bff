@@ -575,9 +575,15 @@ test("Conversation collection filtering stays one BFF-owned discriminated path w
   assert.match(service, /filter: ConversationCollectionFilter/u)
   assert.match(repository, /filter\.kind === "direct"[\s\S]*project_ref IS NULL/u)
   assert.match(repository, /filter\.kind === "project" \? filter\.projectRef : null/u)
-  assert.match(openapi, /^  version: 7\.0\.0$/mu)
+  assert.match(openapi, /^  version: 7\.1\.0$/mu)
   assert.match(openapi, /scope=direct and a nonempty project_ref are mutually exclusive/u)
   assert.doesNotMatch(port, /ConversationCollectionFilter\s*=\s*string/u)
+})
+
+test("Move input uses the neutral strict JSON decoder, not a Platform client dependency", async () => {
+  const moveInput = await readFile(path.join(root, "src/http/move-session-input.ts"), "utf8")
+  assert.match(moveInput, /from "\.\.\/infrastructure\/raw-json\.js"/u)
+  assert.doesNotMatch(moveInput, /clients\/platform/u)
 })
 
 test("ScheduledTask mutations use an owner-scoped transactional outbox and fenced dispatcher", async () => {

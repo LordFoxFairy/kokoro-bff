@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto"
-import { strictParseRawJson } from "../infrastructure/clients/platform/raw-json.js"
+import { strictParseRawJson } from "../infrastructure/raw-json.js"
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u
 
