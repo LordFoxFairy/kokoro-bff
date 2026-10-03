@@ -1,3 +1,11 @@
+## R118 Root 四事实 RR 组合回归（2026-10-02）
+
+Root已接收原WIN02唯一EOF测试交付并负责本节/最终Git，原writer cursor150 completed/idle。production、canonical public6、SQL、generated与locks未改；新增现test/agui-projection.integration.mjs用真实ingest在另一PG连接同事务提交assistant delta及完整interaction revision，已授权RR旧读四事实保旧集合，fresh读四事实为新集合，从旧opaque cursor精确replay本批delta/完整CUSTOM envelope到同watermark。
+
+Root实际Node22.22.2 build/本仓installer各0、新node1pass/0fail/0skip、完整projection file39pass/0fail/0skip；另lint/typecheck/Node语法/diff门各0。冻结test SHA01ae22f3d786858fbc5ffa5f26ba71fa143a1ebf4289526323975b9f864c18dd，原166102bytes前缀/435外围保持；资源运行前后436源hash一致。自有随机fixture库已CREATE/DROP ACK并独立精确确认不存在，Redis仅连接/PING/PUBLISH及本机proxy、不写业务key，精确marker已回收/前后集合0→0；全部owned PGID自然终态。资源manifest /var/folders/gn/wbk8wfbd047_wvwkwtyn331r0000gn/T/kokoro-r118-bff-root-1j4ynzrc/manifest.json SHA6a2fc482e0a4f21aa373432fadb5a9cb15a6dcc44b43fe39d594a3a5267d8b51；独立r3静态审586edff4为0/0/0。
+
+首次新node失败因测试expected遗漏合法AGUI type/timestamp/metadata，原日志/manifest f6b24375保留；仅补精确全schema断言后Root重跑，不改生产或放宽门。此验收只覆盖该完整投影file和同次RR组合分支，不证明完整BFF integration、浏览器刷新展示、Agent候选、真实模型或积分。T-C09用户全范围仍未验收，Root E90/E91测试台账为权威运行证据。
+
 ## R87 Root Conversation collection 验收（2026-10-02）
 
 Root在b1ea063/public6冻结候选重跑完整pnpm check：contract231、architecture28、unit688pass/0fail/1既定资源skip，lint/typecheck/build均0；另format与schema门通过（schema8pass/0fail/1既定资源skip）。独立Astra审0P0/P1/P2；436冻结hash全部相同、425外围保留、原integration514c不变。

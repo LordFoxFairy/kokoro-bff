@@ -3480,3 +3480,211 @@ integrationTest("R61 a distinct START after full interaction is atomically rejec
   assert.equal((await c.ingest([c.source(3, next)])).insertedFrames, 1)
   assert.deepEqual((await c.snapshot()).execution_head, r57ExpectedHead(c.runId, "waiting", next))
 })
+
+integrationTest(
+  "R118 authorized RR snapshot keeps assistant interaction head and watermark on one committed boundary",
+  { timeout: 30_000 },
+  async (context) => {
+    const c = await r57ProjectionContext(context)
+    const { ChatApplicationService } = await import("../dist/application/chat-service.js")
+    const waiting = r57Waiting()
+    const segmentId = "r118_segment_" + c.suffix
+    assert.equal(
+      (
+        await c.ingest([
+          c.source(2, { segment_id: segmentId, delta: "R118 old partial" }, "message.delta"),
+          c.source(3, waiting),
+        ])
+      ).insertedSources,
+      2,
+    )
+    const before = await c.snapshot()
+    const beforeAssistant = before.messages.find((message) => message.role === "assistant" && message.run_id === c.runId)
+    assert.ok(beforeAssistant)
+    assert.deepEqual(
+      {
+        message_id: beforeAssistant.message_id,
+        run_id: beforeAssistant.run_id,
+        content: beforeAssistant.content,
+        status: beforeAssistant.status,
+      },
+      { message_id: beforeAssistant.message_id, run_id: c.runId, content: "R118 old partial", status: "streaming" },
+    )
+    assert.deepEqual(before.execution_head, r57ExpectedHead(c.runId, "waiting", waiting))
+    assert.match(before.event_watermark, /^agui_[0-9a-f]{32}$/u)
+
+    let authorize, release
+    const authorized = new Promise((resolve) => {
+      authorize = resolve
+    })
+    const released = new Promise((resolve) => {
+      release = resolve
+    })
+    const reader = await c.pool.connect()
+    let returned = false,
+      pending = null,
+      gatedOnce = false,
+      primaryFailure = null
+    try {
+      const repository = new PostgresChatRepository({
+        pool: {
+          connect: async () => ({
+            query: async (sql, values) => {
+              const result = await reader.query(sql, values)
+              if (!gatedOnce && sql.includes("FROM bff_conversation") && sql.includes("LIMIT 1")) {
+                gatedOnce = true
+                assert.equal(result.rows[0]?.conversation_id, c.sessionId)
+                assert.equal((await reader.query("SHOW transaction_isolation")).rows[0].transaction_isolation, "repeatable read")
+                authorize()
+                await released
+              }
+              return result
+            },
+            release: () => {
+              returned = true
+              reader.release()
+            },
+          }),
+        },
+      })
+      pending = new ChatApplicationService(repository).snapshot(c.tenantId, c.ownerId, c.sessionId, undefined)
+      void pending.catch(() => undefined)
+      await r57Bounded(
+        Promise.race([
+          authorized,
+          pending.then(() => {
+            throw new Error("R118 snapshot finished before real authorization barrier")
+          }),
+        ]),
+        "R118 RR authorization timeout",
+      )
+
+      const accepted = {
+        ...waiting,
+        interaction_revision: 8,
+        phase: "resuming",
+        action_result: { command_id: "r118_resume_" + c.suffix, pause_revision: 7, kind: "accepted" },
+      }
+      const committed = await r57Bounded(
+        c.ingest([
+          c.source(4, { segment_id: segmentId, delta: " + committed" }, "message.delta"),
+          c.source(5, accepted),
+        ]),
+        "R118 independent production ingest timeout",
+      )
+      assert.deepEqual(
+        { insertedSources: committed.insertedSources, insertedFrames: committed.insertedFrames, sourceHighWatermark: committed.sourceHighWatermark },
+        { insertedSources: 2, insertedFrames: 2, sourceHighWatermark: 5 },
+      )
+      const committedStatus = await c.store.agUi.status(c.tenantId, c.sessionId)
+      const fresh = await c.snapshot()
+      release()
+      const old = await r57Bounded(pending, "R118 RR reader release timeout")
+
+      const oldAssistant = old.messages.find((message) => message.message_id === beforeAssistant.message_id)
+      const freshAssistant = fresh.messages.find((message) => message.message_id === beforeAssistant.message_id)
+      assert.deepEqual(
+        {
+          message_id: oldAssistant?.message_id,
+          run_id: oldAssistant?.run_id,
+          content: oldAssistant?.content,
+          status: oldAssistant?.status,
+          execution_head: old.execution_head,
+          event_watermark: old.event_watermark,
+        },
+        {
+          message_id: beforeAssistant.message_id,
+          run_id: c.runId,
+          content: "R118 old partial",
+          status: "streaming",
+          execution_head: r57ExpectedHead(c.runId, "waiting", waiting),
+          event_watermark: before.event_watermark,
+        },
+      )
+      assert.deepEqual(
+        {
+          message_id: freshAssistant?.message_id,
+          run_id: freshAssistant?.run_id,
+          content: freshAssistant?.content,
+          status: freshAssistant?.status,
+          execution_head: fresh.execution_head,
+          event_watermark: fresh.event_watermark,
+        },
+        {
+          message_id: beforeAssistant.message_id,
+          run_id: c.runId,
+          content: "R118 old partial + committed",
+          status: "streaming",
+          execution_head: r57ExpectedHead(c.runId, "resuming", accepted),
+          event_watermark: committedStatus.currentCursor,
+        },
+      )
+      assert.match(fresh.event_watermark, /^agui_[0-9a-f]{32}$/u)
+      assert.notEqual(fresh.event_watermark, before.event_watermark)
+
+      const replay = await c.store.agUi.replay(c.tenantId, c.sessionId, before.event_watermark, 100)
+      assert.equal(replay.kind, "page")
+      assert.deepEqual(
+        replay.frames.map(({ eventType, payload }) => ({ eventType, payload })),
+        [
+          {
+            eventType: "TEXT_MESSAGE_CONTENT",
+            payload: {
+              type: "TEXT_MESSAGE_CONTENT",
+              delta: " + committed",
+              metadata: {
+                kokoro: {
+                  seq: 4,
+                  run_id: c.runId,
+                  event_id: "r57_source_" + c.suffix + "_4",
+                  timestamp: "1970-01-01T00:00:04.000Z",
+                  session_id: c.sessionId,
+                },
+              },
+              messageId: segmentId,
+              timestamp: 4000,
+            },
+          },
+          {
+            eventType: "CUSTOM",
+            payload: {
+              name: "kokoro.interaction.state",
+              type: "CUSTOM",
+              value: accepted,
+              metadata: {
+                kokoro: {
+                  seq: 5,
+                  run_id: c.runId,
+                  event_id: "r57_source_" + c.suffix + "_5",
+                  timestamp: "1970-01-01T00:00:05.000Z",
+                  session_id: c.sessionId,
+                },
+              },
+              timestamp: 5000,
+            },
+          },
+        ],
+      )
+      assert.equal(replay.frames.at(-1).cursor, fresh.event_watermark)
+      assert.equal(new Set(replay.frames.map(({ cursor }) => cursor)).size, 2)
+    } catch (error) {
+      primaryFailure = error
+    } finally {
+      release()
+      const cleanupFailures = []
+      try {
+        if (pending !== null) await r57Bounded(pending, "R118 pending reader cleanup timeout")
+      } catch (error) {
+        if (error !== primaryFailure) cleanupFailures.push(error)
+      }
+      try {
+        if (!returned) reader.release()
+      } catch (error) {
+        cleanupFailures.push(error)
+      }
+      if (primaryFailure !== null) cleanupFailures.unshift(primaryFailure)
+      if (cleanupFailures.length === 1) throw cleanupFailures[0]
+      if (cleanupFailures.length > 1) throw new AggregateError(cleanupFailures, "R118 snapshot or reader cleanup failed")
+    }
+  },
+)
