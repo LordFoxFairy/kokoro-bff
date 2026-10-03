@@ -1,3 +1,9 @@
+## R152 Move 内部拆分的 public 契约边界（2026-10-03；仅文档，未实施）
+
+**当前态/目标态。** 已发布的 BFF `main 0333cd7c515846e977b1b05d8349e8c04d2a49dd` 仍以唯一 `contract/openapi/v1/openapi.yaml` 发布 public `7.1.0` `POST /v1/sessions/{id}/move`；源码身份为 `284b5e04c4c09759787ef239b1a19fcdcd5ed8fa`。R152 只把已存在的 PostgreSQL Move 事务、连接租约与 receipt Row 映射按职责归位，**不修改** operation/version、canonical path/body、permission、Idempotency-Key、200 与错误 code/envelope/header、每次 IAM 准入、unknown COMMIT 返回或 Web 可见时序。Move 的 final receipt 仍与归属同事务，same-key 重放仍在当次准入后返回原结果；不能以内部模块拆分建立第二条外部/内部协议。
+
+**验证与开放边界。** 机器契约、operation inventory、semantic checker、generated/pin 本片均保持原字节；后继 Root 须在源码落地后重跑原 public contract/负例、741 纯测试基线及 9 项真 HTTP/PG Move、完整 173 项集成，确认等价而不是单靠文档。BFF producer 已发布不代表 Web 已固定 BFF commit/digest 或浏览器消费；Project DELETE、Storage release 消费、T-C05 与原用户界面仍开放。下节 R146 描述现已发布的业务协议，本节仅更新内部放置目标。
+
 ## R146 Conversation Move 公共契约（2026-10-03；7.1.0 BFF producer 已发布）
 
 **当前态。** 已提交并推送的 `main 284b5e04c4c09759787ef239b1a19fcdcd5ed8fa` 包含 public `7.1.0` 唯一 canonical `contract/openapi/v1/openapi.yaml`、具名 Move operation 与 HTTP/PG 实现；此前 public `7.0.0` 基线无 Move。Root Node22 `pnpm check && pnpm format:check` exit 0（741 pass、1 个既有资源 skip；contract 4 条已知 warning），真 HTTP/PG Move 9/9、完整八文件 PG/Redis integration 173/173；BFF producer 已发布，Web 固定 commit/digest 与浏览器消费尚待验，不能称用户界面可用。Move 是 Project DELETE 的“保留会话先移出”独立前置能力，不替 DELETE 搬会话。Storage 的 Conversation/Project release 依赖、Project DELETE 原两 P1、独立 ScheduledTask 关联规则及 T-C05 仍未闭合。

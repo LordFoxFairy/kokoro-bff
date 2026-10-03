@@ -1,3 +1,18 @@
+## R152 Conversation Move 持久化职责拆分设计门（2026-10-03；仅文档，未实施）
+
+**当前态与触发证据。** BFF `main 0333cd7c515846e977b1b05d8349e8c04d2a49dd` 已发布 public `7.1.0` Move（源码提交 `284b5e04c4c09759787ef239b1a19fcdcd5ed8fa`），当前源码无未提交变更。`src/infrastructure/postgres/chat-repository.ts` 从先前 `a68cbe55` 的 671 行增至 979 行，超过 Root 标准门的 800 行上限；Root 全仓标准门实际 153 项失败中，本 Move 新引入的这一项是独立 P1，不能拿已通过的 BFF 741 纯测试/1 个既有资源 skip、173 真 PG/Redis integration 或 9 项 Move 真 HTTP/PG 行为门冒充架构合规。现同一文件同时含 Move 的有界连接租约、整事务/赢家重放及其他 Chat Repository 查询写入；既有 `chat-repository-mappers.ts` 已负责纯 Row 映射，但尚未承接 Move receipt Row 的严格解码。Web 固定契约与浏览器消费、Project DELETE、Storage release 消费和原用户界面验收不属于本拆分。
+
+| §8 项 | R152 已裁决的目标与边界 |
+|---|---|
+| Owner/唯一 writer | BFF Conversation Move 的 PostgreSQL 实现；原 `PostgresChatRepository` 保留现有 ChatRepository port 的具名 `moveConversation(command)` 入口，不产生第二个业务 writer。 |
+| 方案 A（采用） | 在现 `src/infrastructure/postgres/` 新建 `conversation-move.ts`，独占当前 Move 整事务、本人可见性重查、排序 Project→Conversation 锁、final receipt 写入、赢家读取及有界重试；新建 `conversation-move-lease.ts`，独占 Move 私有 deadline、PoolClient 获取/迟到归还、SQL/rollback/取消预算与未知 COMMIT 时销毁租约；现 `chat-repository-mappers.ts` 增纯同步 receipt Row 校验/转换。原 Chat Repository 方法只具名委派，不复制 SQL 或重放分支。 |
+| 方案 B（淘汰） | 仅外移 lease 而把事务/赢家读取留在 979 行 Chat Repository，或按行数拆成 `chat-part-N`：前者未解除业务变化耦合，后者没有稳定 owner/测试边界。也不新增目录、port、service、BaseRepository 或运行进程。 |
+| 粒度/依赖 | 两个新文件各有单一变化原因并复用现 `postgres/` 目录。`conversation-move.ts` 仅依现 port 的 `MoveConversationCommand/Result`、`PostgresBffDatabase`、本仓 pg lease 与既有 mapper；lease 只依现 DB/pg 和取消时钟，不含 Chat 授权/receipt 语义；mapper 无 I/O。Application/HTTP 不见 `pg` 或 `PoolClient`，不引入循环依赖。 |
+| 数据/API/删除项 | 不改 `database/schema.sql`、OpenAPI `7.1.0`、operation inventory、generated/pin、现 port 形状或任何表/索引。原文件中的 Move lease、事务、receipt 解码移走且删原实现，不留 alias、双路径或 fallback；SQL 字面值、受信 tenant/owner 与 current IAM 准入、scope/fingerprint、排序锁、4500ms 内部预算及对外 5 秒门、同键重放/冲突、unknown COMMIT `release(true)` 均须逐项保持。 |
+| 验证与阶段门 | 本 D0 不改源码或重跑资源。Root 已取得原文件 979 行越 800 的真实架构 RED；后继做等价迁移，Root 在同一最终源码上重跑该 800 行标准门、Node22 `pnpm check && pnpm format:check`、OpenAPI/Schema drift、本仓完整八文件 173 项真实 PG/Redis integration 与 9 项 Move 真 HTTP/PG（锁预算、same-key、故障回滚、未知 COMMIT 销毁/恢复）。所有受影响旧 Chat 查询及测试保持；独立审与 Root 集成通过后才提交。 |
+
+**不变性与未决。** R146 下节是已发布业务契约/原实现设计，不是要求永久把 Move SQL 留在 `chat-repository.ts`。R152 只变更内部文件边界；任何因提取而出现的 SQL/错误/预算语义差异应先作为行为缺陷修正，不借架构切片扩展 Project DELETE 或收敛其他标准门失败项。新文件具体导出名、测试增补的最小范围由后继源码门依真实 import/architecture 结果固定，当前不预先创造新公开 API。
+
 ## R146 Conversation Move 独立切片（2026-10-03；BFF producer 已发布）
 
 **当前态/边界。** 已提交并推送的 `main 284b5e04c4c09759787ef239b1a19fcdcd5ed8fa` 是 public `7.1.0`、包含 Move 的 BFF producer；`main a68cbe55cde709f9b21f3d5803bfbd3ca5d14e2b` 是此前 public `7.0.0`、无 Move 的基线。唯一 OpenAPI 已加 `7.1.0` Move operation，并在独立 `src/http/routes/move-session.ts`、Chat service/repository 实现本人 Conversation 归属与同事务最终 receipt。既有其他操作的通用 `mutationTicket()` 仍在业务事务外，Move 专属路径不使用它。`database/schema.sql` 未改，`bff_conversation.project_ref` 可空且现有读写事实可为本人 Project ID 或 slug。Root Node22 `pnpm check && pnpm format:check` exit 0（741 pass、1 个既有资源 skip；contract 4 条已知 warning），聚焦真 HTTP/PG Move 9/9、完整八文件真 PG/Redis integration 173/173，详见 `docs/CURRENT.md` 的 R150 最终日志；Web pin 与浏览器消费尚待验，故 BFF producer 发布不等于用户界面可用。它不消费 Storage；Project DELETE 的 Storage 依赖、ScheduledTask 产品选择与 T-C05 继续开放。

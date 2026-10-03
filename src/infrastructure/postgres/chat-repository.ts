@@ -1,7 +1,5 @@
 import { readRunInteraction } from "./agui-interaction-projection.js"
 import { randomUUID } from "node:crypto"
-import { performance } from "node:perf_hooks"
-import type { PoolClient, QueryResult, QueryResultRow } from "pg"
 
 import type {
   ChatExecutionHead,
@@ -12,7 +10,6 @@ import type {
   ConversationPage,
   MessagePage,
   MoveConversationCommand,
-  MoveConversationReceipt,
   MoveConversationResult,
   RunProcessPage,
 } from "../../application/ports/chat-repository.js"
@@ -33,6 +30,7 @@ import {
   type ShareRow,
 } from "./chat-repository-mappers.js"
 import { readRunProcessPage } from "./agui-process-page.js"
+import { moveConversation } from "./conversation-move.js"
 
 type ArtifactDeliveryRow = {
   conversation_id: string
@@ -56,135 +54,6 @@ type ActiveRunRow = {
 }
 
 type ExecutionHeadRow = { run_id: string; subject_id: string }
-
-const MOVE_BUDGET_MS = 4500
-const MOVE_LOCK_WAIT_MS = 1000
-
-function moveRemaining(deadline: number, signal: AbortSignal): number {
-  if (signal.aborted || performance.now() >= deadline) throw new Error("MOVE_SESSION_UNAVAILABLE")
-  return Math.max(1, Math.floor(deadline - performance.now()))
-}
-
-class MoveSqlLease {
-  private released = false
-
-  public constructor(
-    private readonly client: PoolClient,
-    private readonly deadline: number,
-    private readonly signal: AbortSignal,
-  ) {}
-
-  public release(destroy = false): void {
-    if (this.released) return
-    this.released = true
-    this.client.release(destroy)
-  }
-
-  private bounded<Row extends QueryResultRow>(sql: string, params?: unknown[], limitMs?: number): Promise<QueryResult<Row>> {
-    const budget = Math.min(moveRemaining(this.deadline, this.signal), limitMs ?? Number.POSITIVE_INFINITY)
-    return new Promise((resolve, reject) => {
-      let settled = false
-      const finish = (): void => {
-        clearTimeout(timer)
-        this.signal.removeEventListener("abort", abort)
-      }
-      const fail = (): void => {
-        if (settled) return
-        settled = true
-        finish()
-        this.release(true)
-        reject(new Error("MOVE_SESSION_UNAVAILABLE"))
-      }
-      const abort = (): void => fail()
-      const timer = setTimeout(fail, budget)
-      this.signal.addEventListener("abort", abort, { once: true })
-      if (this.signal.aborted) {
-        fail()
-        return
-      }
-      Promise.resolve()
-        .then(() => {
-          if (settled) throw new Error("MOVE_SESSION_UNAVAILABLE")
-          return this.client.query<Row>(sql, params ?? [])
-        })
-        .then(
-          (result) => {
-            if (settled) return
-            settled = true
-            finish()
-            resolve(result)
-          },
-          (error: unknown) => {
-            if (settled) return
-            settled = true
-            finish()
-            reject(error)
-          },
-        )
-    })
-  }
-
-  public command(sql: string): Promise<QueryResult> {
-    return this.bounded(sql)
-  }
-
-  public async query<Row extends QueryResultRow = QueryResultRow>(sql: string, params?: unknown[]): Promise<QueryResult<Row>> {
-    const budget = moveRemaining(this.deadline, this.signal)
-    const lockBudget = Math.min(MOVE_LOCK_WAIT_MS, budget)
-    await this.bounded("SELECT set_config('statement_timeout',$1,true),set_config('lock_timeout',$2,true)", [`${budget}ms`, `${lockBudget}ms`])
-    return this.bounded<Row>(sql, params)
-  }
-
-  public async rollback(): Promise<void> {
-    if (this.released) return
-    try {
-      await this.bounded("ROLLBACK", undefined, 250)
-    } catch {
-      this.release(true)
-    }
-  }
-}
-
-function acquireMoveLease(pool: PostgresBffDatabase["pool"], deadline: number, signal: AbortSignal): Promise<MoveSqlLease> {
-  const budget = moveRemaining(deadline, signal)
-  return new Promise((resolve, reject) => {
-    let settled = false
-    const finish = (): void => {
-      clearTimeout(timer)
-      signal.removeEventListener("abort", abort)
-    }
-    const fail = (): void => {
-      if (settled) return
-      settled = true
-      finish()
-      reject(new Error("MOVE_SESSION_UNAVAILABLE"))
-    }
-    const abort = (): void => fail()
-    const timer = setTimeout(fail, budget)
-    signal.addEventListener("abort", abort, { once: true })
-    if (signal.aborted) {
-      fail()
-      return
-    }
-    pool.connect().then(
-      (client) => {
-        if (settled) {
-          client.release(true)
-          return
-        }
-        settled = true
-        finish()
-        resolve(new MoveSqlLease(client, deadline, signal))
-      },
-      (error: unknown) => {
-        if (settled) return
-        settled = true
-        finish()
-        reject(error)
-      },
-    )
-  })
-}
 
 function executionHeadFromRows(head: ExecutionHeadRow | undefined, stream: ActiveRunRow | undefined, subjectId: string): ChatExecutionHead | undefined {
   if (
@@ -233,178 +102,8 @@ export class PostgresChatRepository implements ChatRepository {
     this.database = database
   }
 
-  private moveReceipt(
-    row: { fingerprint: string; status: number; response_body: unknown },
-    fingerprint: string,
-    conversationId: string,
-    targetProjectId: string | null,
-  ): MoveConversationResult {
-    if (row.fingerprint !== fingerprint) return { kind: "conflict" }
-    const value = row.response_body
-    if (row.status !== 200 || typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("MOVE_RECEIPT_INVALID")
-    const data: unknown = Reflect.get(value, "data")
-    if (
-      Object.keys(value).length !== 1 ||
-      typeof data !== "object" ||
-      data === null ||
-      Array.isArray(data) ||
-      Object.keys(data).sort().join(",") !== "project_ref,session_id" ||
-      Reflect.get(data, "session_id") !== conversationId ||
-      Reflect.get(data, "project_ref") !== targetProjectId
-    )
-      throw new Error("MOVE_RECEIPT_INVALID")
-    return { kind: "moved", receipt: value as MoveConversationReceipt }
-  }
-
-  private async moveWinnerReceipt(
-    tenantId: string,
-    subjectId: string,
-    conversationId: string,
-    targetProjectId: string | null,
-    scope: string,
-    fingerprint: string,
-    deadline: number,
-    signal: AbortSignal,
-  ): Promise<MoveConversationResult | null> {
-    const lease = await acquireMoveLease(this.database.pool, deadline, signal)
-    try {
-      await lease.command("BEGIN")
-      const visible = await lease.query<{ project_ref: string | null }>(
-        "SELECT project_ref FROM bff_conversation WHERE tenant_id=$1 AND owner_id=$2 AND conversation_id=$3 AND status='active'",
-        [tenantId, subjectId, conversationId],
-      )
-      if (visible.rowCount !== 1) {
-        await lease.rollback()
-        return { kind: "not_found" }
-      }
-      const currentRef = visible.rows[0]!.project_ref
-      if (currentRef !== null) {
-        const source = await lease.query("SELECT project_id FROM bff_project WHERE tenant_id=$1 AND owner_id=$2 AND (project_id=$3 OR slug=$3) LIMIT 2", [
-          tenantId,
-          subjectId,
-          currentRef,
-        ])
-        if (source.rows.length === 0) {
-          await lease.rollback()
-          return { kind: "not_found" }
-        }
-        if (source.rows.length !== 1) throw new Error("MOVE_PROJECT_REFERENCE_AMBIGUOUS")
-      }
-      const receipt = await lease.query<{ fingerprint: string; status: number; response_body: unknown }>(
-        "SELECT fingerprint,status,response_body FROM bff_idempotency_receipt WHERE scope=$1",
-        [scope],
-      )
-      await lease.command("COMMIT")
-      const row = receipt.rows[0]
-      return row === undefined ? null : this.moveReceipt(row, fingerprint, conversationId, targetProjectId)
-    } catch (error) {
-      await lease.rollback()
-      throw error
-    } finally {
-      lease.release()
-    }
-  }
-
   public async moveConversation(command: MoveConversationCommand): Promise<MoveConversationResult> {
-    const { tenantId, subjectId, conversationId, targetProjectId, scope, fingerprint, signal } = command
-    const deadline = performance.now() + MOVE_BUDGET_MS
-    for (let attempt = 0; attempt < 4; attempt += 1) {
-      if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, attempt * 10 + Math.floor(Math.random() * 7)))
-      moveRemaining(deadline, signal)
-      const priorReceipt = await this.moveWinnerReceipt(tenantId, subjectId, conversationId, targetProjectId, scope, fingerprint, deadline, signal)
-      if (priorReceipt !== null) return priorReceipt
-      const lease = await acquireMoveLease(this.database.pool, deadline, signal)
-      let committing = false
-      try {
-        await lease.command("BEGIN")
-        const prior = await lease.query<{ project_ref: string | null }>(
-          "SELECT project_ref FROM bff_conversation WHERE tenant_id=$1 AND owner_id=$2 AND conversation_id=$3 AND status='active'",
-          [tenantId, subjectId, conversationId],
-        )
-        const sourceRef = prior.rows[0]?.project_ref
-        if (sourceRef === undefined) {
-          await lease.rollback()
-          return { kind: "not_found" }
-        }
-        let sourceProjectId: string | null = null
-        if (sourceRef !== null) {
-          const source = await lease.query<{ project_id: string }>(
-            "SELECT project_id FROM bff_project WHERE tenant_id=$1 AND owner_id=$2 AND (project_id=$3 OR slug=$3) LIMIT 2",
-            [tenantId, subjectId, sourceRef],
-          )
-          if (source.rows.length === 0) {
-            await lease.rollback()
-            return { kind: "not_found" }
-          }
-          if (source.rows.length !== 1) throw new Error("MOVE_PROJECT_REFERENCE_AMBIGUOUS")
-          sourceProjectId = source.rows[0]!.project_id
-        }
-        const projectIds = [...new Set([sourceProjectId, targetProjectId].filter((id): id is string => id !== null))].sort()
-        for (const projectId of projectIds) {
-          const locked = await lease.query("SELECT project_id FROM bff_project WHERE tenant_id=$1 AND owner_id=$2 AND project_id=$3 FOR UPDATE", [
-            tenantId,
-            subjectId,
-            projectId,
-          ])
-          if (locked.rowCount !== 1) {
-            await lease.rollback()
-            return { kind: "not_found" }
-          }
-        }
-        const conversation = await lease.query<{ project_ref: string | null }>(
-          "SELECT project_ref FROM bff_conversation WHERE tenant_id=$1 AND owner_id=$2 AND conversation_id=$3 AND status='active' FOR UPDATE",
-          [tenantId, subjectId, conversationId],
-        )
-        const currentRef = conversation.rows[0]?.project_ref
-        if (currentRef === undefined) {
-          await lease.rollback()
-          return { kind: "not_found" }
-        }
-        if (currentRef !== sourceRef) {
-          await lease.rollback()
-          continue
-        }
-        const existing = await lease.query<{ fingerprint: string; status: number; response_body: unknown }>(
-          "SELECT fingerprint,status,response_body FROM bff_idempotency_receipt WHERE scope=$1",
-          [scope],
-        )
-        if (existing.rows[0] !== undefined) {
-          await lease.rollback()
-          return this.moveReceipt(existing.rows[0], fingerprint, conversationId, targetProjectId)
-        }
-        if (currentRef !== targetProjectId) {
-          await lease.query(
-            "UPDATE bff_conversation SET project_ref=$4,updated_at=CURRENT_TIMESTAMP(3) WHERE tenant_id=$1 AND owner_id=$2 AND conversation_id=$3 AND status='active'",
-            [tenantId, subjectId, conversationId, targetProjectId],
-          )
-        }
-        const receipt: MoveConversationReceipt = { data: { session_id: conversationId, project_ref: targetProjectId } }
-        const inserted = await lease.query(
-          `INSERT INTO bff_idempotency_receipt (scope,fingerprint,status,response_body)
-           VALUES ($1,$2,200,$3::jsonb) ON CONFLICT (scope) DO NOTHING RETURNING scope`,
-          [scope, fingerprint, JSON.stringify(receipt)],
-        )
-        if (inserted.rowCount !== 1) {
-          await lease.rollback()
-          lease.release()
-          const winner = await this.moveWinnerReceipt(tenantId, subjectId, conversationId, targetProjectId, scope, fingerprint, deadline, signal)
-          if (winner !== null) return winner
-          continue
-        }
-        committing = true
-        await lease.command("COMMIT")
-        return { kind: "moved", receipt }
-      } catch (error) {
-        if (committing) lease.release(true)
-        if (!committing) await lease.rollback()
-        if (!committing && typeof error === "object" && error !== null && ["40P01", "40001", "55P03", "57014"].includes(String(Reflect.get(error, "code"))))
-          continue
-        throw error
-      } finally {
-        lease.release()
-      }
-    }
-    throw new Error("MOVE_SESSION_UNAVAILABLE")
+    return moveConversation(this.database, command)
   }
 
   public async listConversations(

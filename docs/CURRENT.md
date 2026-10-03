@@ -1,3 +1,11 @@
+## R155 Move 持久化职责拆分候选（2026-10-03；源码待发布）
+
+已发布基线仍是 `main 0333cd7c515846e977b1b05d8349e8c04d2a49dd`（public `7.1.0`，Move producer 源码提交 `284b5e04c4c09759787ef239b1a19fcdcd5ed8fa`）。当前未提交的 R154/R155 候选只按已审三设计面重新放置同一 Move 实现：`src/infrastructure/postgres/conversation-move.ts` 独占单一事务与赢家 receipt 重放，`conversation-move-lease.ts` 独占有界 PoolClient 生命周期，既有 `chat-repository-mappers.ts` 承接纯 receipt Row 校验；`PostgresChatRepository.moveConversation()` 仅具名委派。原 `chat-repository.ts` 从 979 降至 678 行，新两文件分别 158/133 行，Root 800 行门的本项已由真实 153→152 证明关闭；全仓标准门仍 exit 1，其他 152 项不据此转绿。唯一 public OpenAPI `7.1.0`、canonical SQL、现 port、generated/pin 与所有 Move 行为语义未变。
+
+Root `73539` 在冻结候选上完成八文件真实 PostgreSQL/Redis integration 173 pass、0 skip、37.730 秒；自有数据库已删除，运行前后源码 hash、Redis key 集合及另建数据库集合一致。Root `27938` Node22 完整 `pnpm check && pnpm format:check` exit 0：纯测试 742 pass、1 个既有资源 skip，lint/typecheck/contract/build/format 均通过；contract lint 的 4 条既有 warning 仍在。Root `1462` 九项 Move 真 HTTP/PG 9 pass、0 skip、14.0297 秒，自有数据库已删除，源码 hash 与 Redis key 集合不变。独立源码审 `89c280f0` 为 0 P0/P1/P2。这些是本仓候选的行为与架构证据，不是当前未提交源码已发布、整个 152 项标准债务合规或用户端闭环。
+
+后继由 Root 核冻结路径/来源并独占 Git 提交发布；Web 尚未固定 BFF commit/digest 或验浏览器 Move 消费，Project DELETE、Storage Conversation/Project scope release 消费、ScheduledTask 关联、T-C05 和原用户首屏 P0 继续开放。下方 R150 描述已发布的原 Move producer 与当时源码布局，不覆盖本候选的新职责或验收状态。
+
 ## R150 Move 7.1.0 BFF producer 已发布（2026-10-03；Web 尚未消费）
 
 已提交并推送的 `main 284b5e04c4c09759787ef239b1a19fcdcd5ed8fa` 是 public `7.1.0`；此前 `main a68cbe55cde709f9b21f3d5803bfbd3ca5d14e2b` 是 public `7.0.0` 基线。当前唯一 OpenAPI 已加 `7.1.0` `POST /v1/sessions/{id}/move`，BFF 专用 HTTP handler、Chat service/repository 和同事务最终 receipt 已实现。`database/schema.sql`、owner generated/pin 与 Project DELETE 源码均未改；既有 Skill strict raw JSON 解析器只作原字节中立位置迁移和 import 更新，不是第二个业务能力。

@@ -146,6 +146,8 @@ test("BFF keeps contract, application, client, and repository boundaries explici
     "src/infrastructure/postgres/agui-projection-repository.ts",
     "src/infrastructure/postgres/project-repository.ts",
     "src/infrastructure/postgres/chat-repository.ts",
+    "src/infrastructure/postgres/conversation-move.ts",
+    "src/infrastructure/postgres/conversation-move-lease.ts",
     "src/infrastructure/postgres/agent-dispatch-outbox-repository.ts",
     "src/infrastructure/postgres/agui-consumer-registration.ts",
     "src/infrastructure/postgres/scheduled-task-repository.ts",
@@ -584,6 +586,38 @@ test("Move input uses the neutral strict JSON decoder, not a Platform client dep
   const moveInput = await readFile(path.join(root, "src/http/move-session-input.ts"), "utf8")
   assert.match(moveInput, /from "\.\.\/infrastructure\/raw-json\.js"/u)
   assert.doesNotMatch(moveInput, /clients\/platform/u)
+})
+
+test("Conversation Move keeps one PostgreSQL implementation and a bounded driver-only lease", async () => {
+  const [repository, move, lease, mappers] = await Promise.all([
+    readFile(path.join(root, "src/infrastructure/postgres/chat-repository.ts"), "utf8"),
+    readFile(path.join(root, "src/infrastructure/postgres/conversation-move.ts"), "utf8"),
+    readFile(path.join(root, "src/infrastructure/postgres/conversation-move-lease.ts"), "utf8"),
+    readFile(path.join(root, "src/infrastructure/postgres/chat-repository-mappers.ts"), "utf8"),
+  ])
+
+  assert.ok(repository.trimEnd().split("\n").length <= 800, "Chat Repository must stay within the Root source-size gate")
+  assert.ok(move.trimEnd().split("\n").length <= 800)
+  assert.ok(lease.trimEnd().split("\n").length <= 800)
+  assert.match(repository, /from "\.\/conversation-move\.js"/u)
+  assert.match(
+    repository,
+    /public async moveConversation\(command: MoveConversationCommand\): Promise<MoveConversationResult> \{\s*return moveConversation\(this\.database, command\)\s*\}/u,
+  )
+  assert.doesNotMatch(repository, /MOVE_BUDGET_MS|MOVE_LOCK_WAIT_MS|MoveSqlLease|acquireMoveLease|MOVE_RECEIPT_INVALID|INSERT INTO bff_idempotency_receipt/u)
+  assert.match(move, /from "\.\/conversation-move-lease\.js"/u)
+  assert.match(move, /from "\.\/chat-repository-mappers\.js"/u)
+  assert.match(move, /SELECT project_id FROM bff_project/u)
+  assert.match(move, /FOR UPDATE/u)
+  assert.match(move, /INSERT INTO bff_idempotency_receipt/u)
+  assert.equal((move.match(/INSERT INTO bff_idempotency_receipt/gu) ?? []).length, 1)
+  assert.match(move, /release\(true\)/u)
+  assert.match(lease, /MOVE_BUDGET_MS = 4500/u)
+  assert.match(lease, /MOVE_LOCK_WAIT_MS = 1000/u)
+  assert.match(lease, /client\.release\(destroy\)/u)
+  assert.doesNotMatch(lease, /bff_|tenant_id|owner_id|fingerprint|scope|FOR UPDATE/u)
+  assert.match(mappers, /moveReceiptFromRow/u)
+  assert.doesNotMatch(mappers, /from "pg"|\.query\(|\b(?:SELECT|INSERT|UPDATE|DELETE)\b/u)
 })
 
 test("ScheduledTask mutations use an owner-scoped transactional outbox and fenced dispatcher", async () => {

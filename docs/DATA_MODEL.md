@@ -1,3 +1,11 @@
+## R152 Move 持久化实现拆分的数据边界（2026-10-03；仅文档，未实施）
+
+**当前事实与目标位置。** BFF `main 0333cd7c515846e977b1b05d8349e8c04d2a49dd` 的唯一 `database/schema.sql` 与 public `7.1.0` 已发布；`src/infrastructure/postgres/chat-repository.ts` 当前 979 行，内含 Move 租约/事务/重放，越 Root 800 行标准门（原 `a68cbe55` 为 671 行），这是本 Move 引入的架构 P1。目标在同一 `postgres/` 目录把 Move 事务与赢家重放归 `conversation-move.ts`，有界 PoolClient 生命周期归 `conversation-move-lease.ts`，严格 receipt Row 解析归现 `chat-repository-mappers.ts`；原 Chat Repository 仅委派，Application port 不暴露 pg。此为文件职责移动，不新增第二事实源、数据库表、migration、receipt 状态或外部 owner 查询。
+
+**事务与物理不变量。** 继续使用同一 checked-out `PoolClient` 完成受信 tenant/owner/canonical Conversation 可见性与源 Project 解析、canonical Project ID 排序 `FOR UPDATE`→Conversation `FOR UPDATE`、归属更新与既有 `bff_idempotency_receipt` final 200 同事务提交。严格保持当前 SQL 字面值、参数绑定、source ID/slug 现行受信事实解释、scope/fingerprint 与 receipt Row 结构校验；同键冲突输家完整回滚后短事务重读赢家，no-op 不改 Conversation `updated_at`，UNKNOWN COMMIT 只返回 retryable 503 并销毁该租约、原 key 可由权威 receipt 恢复。Pool 获取、锁、每句 SQL、取消、迟到 client 归还及 rollback 均保现私有期限；目标不放宽 4500ms 内部预算/对外 5 秒、每轮锁 1 秒或最多 4 轮，不改变其他 Chat 操作的 Pool 行为。
+
+**Schema/门禁。** canonical `database/schema.sql`、索引、列、owner/tenant 边界均不改；Root 后继须在等价源码上先核架构 800 行门，再重跑本仓 schema/contract/check/format 与同一完整真 PG/Redis 173 项、Move 真 HTTP/PG 9 项，检查锁等待、same-key 竞争、SQL 故障全回滚、unknown COMMIT backend discard/恢复和无资源泄漏。R146 下节是现已发布业务数据语义，R152 只是尚未实施的内部归位；它不关闭 Project DELETE、Storage release、Web 消费或原用户界面缺口。
+
 ## R146 Conversation Move 数据边界（2026-10-03；BFF producer 已发布，canonical SQL 未改）
 
 **当前事实。** 已提交并推送的 BFF `main 284b5e04c4c09759787ef239b1a19fcdcd5ed8fa` 沿用唯一 `database/schema.sql`；此前 `main a68cbe55cde709f9b21f3d5803bfbd3ca5d14e2b` 是 public `7.0.0` 基线。canonical SQL 未改：`bff_conversation.project_ref TEXT NULL`，现可为本人 Project canonical ID、slug 或 NULL；`bff_project`以 `project_id` 为 PK、`(tenant_id,owner_id,slug)` 唯一，仍无删除墓碑；`bff_idempotency_receipt(scope TEXT PRIMARY KEY,fingerprint TEXT,status INTEGER,response_body JSONB,created_at)`承载最终200。已发布 Move 源码已用单一 `PoolClient` 将归属与最终 receipt 同事务提交；其他操作的外层 generic claim/put 不等于 Move 事务。Root 真 HTTP/PG Move 9/9、完整八文件 PG/Redis integration 173/173、Node22 `pnpm check && pnpm format:check` exit 0（741 pass、1 个既有资源 skip；contract 4 条已知 warning）；BFF producer 已发布，Web pin 与浏览器消费仍待验。本切片无 DDL 或新表，不冒称 Project DELETE 已实现。

@@ -1,3 +1,4 @@
+import type { MoveConversationReceipt, MoveConversationResult } from "../../application/ports/chat-repository.js"
 import type { Conversation } from "../../domain/chat/conversation.js"
 import type { AgentFailureCode, Message, MessageRole, MessageStatus } from "../../domain/chat/message.js"
 import type { Share } from "../../domain/chat/share.js"
@@ -119,9 +120,7 @@ export function messageFromRow(row: MessageRow): Message {
     role: row.role,
     content: row.content,
     status: row.status,
-    failure: row.agent_failure_code === null
-      ? null
-      : { source: "agent", code: row.agent_failure_code, retryable: row.agent_failure_retryable as boolean },
+    failure: row.agent_failure_code === null ? null : { source: "agent", code: row.agent_failure_code, retryable: row.agent_failure_retryable as boolean },
     messageSeq: sequence,
     createdAt: instant(row.created_at),
     updatedAt: instant(row.updated_at),
@@ -141,5 +140,29 @@ export function shareFromRow(row: ShareRow): Share {
 }
 
 export const conversationColumns = "conversation_id, tenant_id, owner_id, project_ref, title, status, created_at, updated_at, deleted_at"
-export const messageColumns = "message_id, tenant_id, conversation_id, run_id, role, content, status, agent_failure_code, agent_failure_retryable, message_seq, created_at, updated_at"
+export const messageColumns =
+  "message_id, tenant_id, conversation_id, run_id, role, content, status, agent_failure_code, agent_failure_retryable, message_seq, created_at, updated_at"
 export const shareColumns = "share_id, tenant_id, conversation_id, url, created_at, expires_at, revoked_at"
+
+export function moveReceiptFromRow(
+  row: { fingerprint: string; status: number; response_body: unknown },
+  fingerprint: string,
+  conversationId: string,
+  targetProjectId: string | null,
+): MoveConversationResult {
+  if (row.fingerprint !== fingerprint) return { kind: "conflict" }
+  const value = row.response_body
+  if (row.status !== 200 || typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("MOVE_RECEIPT_INVALID")
+  const data: unknown = Reflect.get(value, "data")
+  if (
+    Object.keys(value).length !== 1 ||
+    typeof data !== "object" ||
+    data === null ||
+    Array.isArray(data) ||
+    Object.keys(data).sort().join(",") !== "project_ref,session_id" ||
+    Reflect.get(data, "session_id") !== conversationId ||
+    Reflect.get(data, "project_ref") !== targetProjectId
+  )
+    throw new Error("MOVE_RECEIPT_INVALID")
+  return { kind: "moved", receipt: value as MoveConversationReceipt }
+}
