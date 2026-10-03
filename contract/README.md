@@ -1,6 +1,6 @@
-## R150 当前 public 7.1.0 Move 候选（未发布）
+## R150 当前 public 7.1.0 Move BFF producer（已发布）
 
-唯一可编辑 Product API 机器事实源为 `openapi/v1/openapi.yaml`；当前工作树版本 `7.1.0`，在已提交 public `7.0.0` 基线上新增独立 `POST /v1/sessions/{id}/move`。BFF HTTP/PG 候选已实现，Root Node22 `pnpm check && pnpm format:check` exit 0（741 pass、1 个既有资源 skip；contract 4 条已知 warning）、聚焦真 HTTP/PG Move 9/9及完整八文件 PG/Redis integration 173/173；Git 发布、Web 固定 BFF commit/digest 与浏览器消费尚未完成。Move 不代表 Project DELETE、Storage release 或 T-C05 已闭环。下面 R126/R83 段落是各阶段历史事实，不描述当前工作树版本。
+唯一可编辑 Product API 机器事实源为 `openapi/v1/openapi.yaml`；已提交并推送的 `main 284b5e04c4c09759787ef239b1a19fcdcd5ed8fa` 为 public `7.1.0`，在此前 public `7.0.0` 基线上新增独立 `POST /v1/sessions/{id}/move`。BFF HTTP/PG 源码已实现，Root Node22 `pnpm check && pnpm format:check` exit 0（741 pass、1 个既有资源 skip；contract 4 条已知 warning）、聚焦真 HTTP/PG Move 9/9及完整八文件 PG/Redis integration 173/173；BFF producer 已发布；Web 固定 BFF commit/digest 与浏览器消费尚未完成。Move 不代表 Project DELETE、Storage release 或 T-C05 已闭环。下面 R126/R83 段落是各阶段历史事实，不描述当前已发布版本。
 
 ## R126 public7 Run process candidate（历史阶段）
 

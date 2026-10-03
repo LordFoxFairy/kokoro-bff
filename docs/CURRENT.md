@@ -1,12 +1,12 @@
-## R150 Move 7.1.0 当前候选（2026-10-03；未发布）
+## R150 Move 7.1.0 BFF producer 已发布（2026-10-03；Web 尚未消费）
 
-已提交 `main a68cbe55cde709f9b21f3d5803bfbd3ca5d14e2b` 是 public `7.0.0`；当前未提交的唯一 OpenAPI 已加 `7.1.0` `POST /v1/sessions/{id}/move`，BFF 专用 HTTP handler、Chat service/repository 和同事务最终 receipt 已实现。`database/schema.sql`、owner generated/pin 与 Project DELETE 源码均未改；既有 Skill strict raw JSON 解析器只作原字节中立位置迁移和 import 更新，不是第二个业务能力。
+已提交并推送的 `main 284b5e04c4c09759787ef239b1a19fcdcd5ed8fa` 是 public `7.1.0`；此前 `main a68cbe55cde709f9b21f3d5803bfbd3ca5d14e2b` 是 public `7.0.0` 基线。当前唯一 OpenAPI 已加 `7.1.0` `POST /v1/sessions/{id}/move`，BFF 专用 HTTP handler、Chat service/repository 和同事务最终 receipt 已实现。`database/schema.sql`、owner generated/pin 与 Project DELETE 源码均未改；既有 Skill strict raw JSON 解析器只作原字节中立位置迁移和 import 更新，不是第二个业务能力。
 
 Root 对当前源 `219c2268…`、测试 `c3575c67…` 的最终门：Node22 `pnpm check && pnpm format:check` exit 0，纯测试 741 pass、1 个既有资源 skip，lint/typecheck/contract/build/format 均通过；contract lint 保留 4 条已知 warning，不称零 warning。完整八文件真实 PG/Redis integration 173 pass、0 skip、37.305 秒，installer/build exit 0；自有主数据库已删除，392 个源文件 hash 与运行前相同，Redis key 集合及测试另建数据库集合未变。日志 `/tmp/kokoro-r151-bff-check-root.log`、`/tmp/kokoro-r151-bff-format-root.log`、`/tmp/kokoro-r151-bff-full-integration-root.log`，资源 manifest `/var/folders/gn/wbk8wfbd047_wvwkwtyn331r0000gn/T/kokoro-r150-bff-full-fn4_9w4m/manifest.json`。
 
-Root 聚焦真 HTTP/PG Move 9/9、0 skip、14.051 秒：先以真实 COMMIT 成功后受控 socket/ACK 丢失证明原源码将 broken client `release(false)` 的 RED，再以仅 Move catch 的 `release(true)` 返修证明 typed 503、精确 backend 淘汰、新 backend 可用、同 key 权威 receipt 恢复且事实仅一份；日志 `/tmp/kokoro-r150-bff-move-final-nine-r2-root.log`。这是真 PostgreSQL/HTTP 与 fixture 传输故障，不冒称独立网络代理验证。unknown COMMIT 源码差异独立静态复审 0 P0/P1/P2，完整候选仍待最终审；本候选未提交/发布，Web 尚未固定 BFF commit/digest，不能把测试服务器能力称为正式用户可用 API。
+Root 聚焦真 HTTP/PG Move 9/9、0 skip、14.051 秒：先以真实 COMMIT 成功后受控 socket/ACK 丢失证明原源码将 broken client `release(false)` 的 RED，再以仅 Move catch 的 `release(true)` 返修证明 typed 503、精确 backend 淘汰、新 backend 可用、同 key 权威 receipt 恢复且事实仅一份；日志 `/tmp/kokoro-r150-bff-move-final-nine-r2-root.log`。这是真 PostgreSQL/HTTP 与 fixture 传输故障，不冒称独立网络代理验证。unknown COMMIT 源码差异独立静态复审 0 P0/P1/P2；BFF producer 源码已提交推送，Web 尚未固定 BFF commit/digest 或完成浏览器消费，不能把 BFF 发布等同于正式用户界面可用。
 
-Move 可以独立作为 BFF producer 发布切片；未实现的 Project DELETE、Storage Conversation/Project scope release 消费、ScheduledTask 关联规则、DELETE 竞态、Web 先移出再删界面及 T-C05 均继续开放。下方 R133 与更早段落保留当时已发布/候选的历史证据，不覆盖此当前态。
+Move 已作为独立 BFF producer 切片发布；未实现的 Project DELETE、Storage Conversation/Project scope release 消费、ScheduledTask 关联规则、DELETE 竞态、Web 先移出再删界面及 T-C05 均继续开放。下方 R133 与更早段落保留当时已发布/候选的历史证据，不覆盖此当前态。
 
 ## R133 当前切片 Root 验收事实（2026-10-03）
 

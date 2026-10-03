@@ -1,16 +1,16 @@
-## R146 Conversation Move 独立切片（2026-10-03；已实现候选，未发布）
+## R146 Conversation Move 独立切片（2026-10-03；BFF producer 已发布）
 
-**当前态/边界。** `main a68cbe55cde709f9b21f3d5803bfbd3ca5d14e2b` 是 public `7.0.0`、无 Move 的已提交基线；当前未提交候选已在唯一 OpenAPI 加 `7.1.0` Move operation，并在独立 `src/http/routes/move-session.ts`、Chat service/repository 实现本人 Conversation 归属与同事务最终 receipt。既有其他操作的通用 `mutationTicket()` 仍在业务事务外，Move 专属路径不使用它。`database/schema.sql` 未改，`bff_conversation.project_ref` 可空且现有读写事实可为本人 Project ID 或 slug。Root Node22 `pnpm check && pnpm format:check` exit 0（741 pass、1 个既有资源 skip；contract 4 条已知 warning），聚焦真 HTTP/PG Move 9/9、完整八文件真 PG/Redis integration 173/173，详见 `docs/CURRENT.md` 的 R150 最终日志；Git 提交/发布与 Web pin 尚待 Root，故不是已发布或用户界面可用。它不消费 Storage；Project DELETE 的 Storage 依赖、ScheduledTask 产品选择与 T-C05 继续开放。
+**当前态/边界。** 已提交并推送的 `main 284b5e04c4c09759787ef239b1a19fcdcd5ed8fa` 是 public `7.1.0`、包含 Move 的 BFF producer；`main a68cbe55cde709f9b21f3d5803bfbd3ca5d14e2b` 是此前 public `7.0.0`、无 Move 的基线。唯一 OpenAPI 已加 `7.1.0` Move operation，并在独立 `src/http/routes/move-session.ts`、Chat service/repository 实现本人 Conversation 归属与同事务最终 receipt。既有其他操作的通用 `mutationTicket()` 仍在业务事务外，Move 专属路径不使用它。`database/schema.sql` 未改，`bff_conversation.project_ref` 可空且现有读写事实可为本人 Project ID 或 slug。Root Node22 `pnpm check && pnpm format:check` exit 0（741 pass、1 个既有资源 skip；contract 4 条已知 warning），聚焦真 HTTP/PG Move 9/9、完整八文件真 PG/Redis integration 173/173，详见 `docs/CURRENT.md` 的 R150 最终日志；Web pin 与浏览器消费尚待验，故 BFF producer 发布不等于用户界面可用。它不消费 Storage；Project DELETE 的 Storage 依赖、ScheduledTask 产品选择与 T-C05 继续开放。
 
 | §8 项 | Move 独立切片的放置裁决 |
 |---|---|
 | Owner/职责 | BFF Conversation 唯一写会话归属；Project 是同仓被校验的源/目标事实，Agent Run、Storage Asset、Scheduler Schedule 均非 Move writer。 |
-| 设计时入口/当前扩展 | 原 Chat route/authorization、Chat service/port/repository 与 `src/bootstrap/server.ts` 保持各自职责；当前候选另有 `src/http/move-session-input.ts` 和专用 `src/http/routes/move-session.ts`。外层 query `project_ref` 授权和通用事务外 receipt 均不充当 Move 权威。 |
+| 设计时入口/当前扩展 | 原 Chat route/authorization、Chat service/port/repository 与 `src/bootstrap/server.ts` 保持各自职责；当前实现另有 `src/http/move-session-input.ts` 和专用 `src/http/routes/move-session.ts`。外层 query `project_ref` 授权和通用事务外 receipt 均不充当 Move 权威。 |
 | 方案 A（采用） | 在现 Chat route/service/port 增具名 Move，在现 Chat repository 用一个 checked-out `PoolClient` 锁 Project→Conversation、更新归属并写现 receipt；HTTP 只解析和传递受信上下文。Conversation 是唯一被移动 aggregate。 |
 | 方案 B（淘汰） | 放入 Project repository 或 HTTP 先查源/目标再调用 Chat 更新：两 repository/route 难共享同一 client，出现 TOCTOU、反向锁和 receipt 分裂；不为 Move 新建一级模块、通用 bus、Storage outbox或机械 `chat/` 目录。 |
 | 粒度/依赖/删除项 | 扩现文件即可；Move 输入解析独立于路由，既有 strict JSON 原字节解析器移至中立 `src/infrastructure/raw-json.ts` 并机械更新消费者，不让 Chat 依赖 Platform client。禁止跨 owner SQL、复制 owner Proto、旧 API alias 或双轨 generic receipt；只对本操作绕开 `mutationTicket()` 的事务外 claim/after-response put，其余操作保持原路。 |
 | 数据/API | 单个 `POST /v1/sessions/{id}/move`，`id` 限 canonical Conversation ID；闭集 body 的 `target_project_id` 为 canonical Project ID 或 `null`；同事务更新 `project_ref`、最终 200 receipt，无新表/列/索引推荐。详见本仓 API_CONTRACT/DATA_MODEL 的 R146 段。 |
-| 验证 | OpenAPI/operation inventory/语义负例、Node22 纯门与 format 已通过；聚焦真 HTTP/PG Move 9/9、完整八文件 PG/Redis integration 173/173，contract 仍有 4 条已知 warning。最终文档复审、Git 发布与 Web consumer 仍是独立门。 |
+| 验证 | OpenAPI/operation inventory/语义负例、Node22 纯门与 format 已通过；聚焦真 HTTP/PG Move 9/9、完整八文件 PG/Redis integration 173/173，contract 仍有 4 条已知 warning。BFF producer 已提交推送；Web consumer 仍是独立门。 |
 
 **命令与运行中语义。** 当前 IAM 对首次及每次同键重放都先重新准入；tenant、actor、owner仅取受信上下文。Move 可在 Run streaming 时执行，但只改变后续 message/Run admission 看到的 Project 归属；既有 Run 继续原 admission context。Conversation ID、Message、Share、AG-UI stream/cursor、Run 与 Artifact association 原样保留；不得复用 `deleteConversation()`，不发 cancel、不停 consumer、不重启 stream、不复制 Storage 或 Agent 事实。新 key 且已在目标归属是合法 no-op，写该 key 的稳定 receipt，但不改 Conversation `updated_at` 或历史事实。
 
@@ -18,7 +18,7 @@
 
 **同键并发终态 receipt 冲突收口（独立审 P1）。** 两个首次请求可同时读到“无 receipt”并在尾部争抢现 `scope` PK；终态 INSERT 的 unique 冲突绝不能被当成可提交的 replay。输家必须**整笔回滚**其 Project/Conversation/归属更新时间与 receipt 写入，随后以新的短事务，在当次 IAM/会话可见性再次确认后的受信scope读取赢家 final receipt并严格比较 fingerprint：相同语义返回赢家原始200，异 target 返回409；若赢家回滚导致该 row 不存在，保持原 key 做有界整命令重试。DB竞争/结果未知不得猜成功或生成 pending 双轨；达到重试上界按不可判定故障返回。真 PG RED须用双连接证明同key同target仅一笔归属写且响应相同、同key异target仅赢家归属且输家不改 `updated_at`、赢家在 unique wait 后回滚可恢复、成功 ACK 丢失重试取同一 final receipt。
 
-**Move 私有等待预算（C5 候选源码已实现并聚焦验真，未发布）。** 单次正式 HTTP 命令从获取 PoolClient、每轮事务锁与SQL、重试到最终结算总计须在5秒内结束；每轮本地 Project/Conversation/receipt 锁等待最多1秒，transaction-local `lock_timeout` 与 `statement_timeout` 均不得超过剩余总预算，最多4轮。连接池等待和客户端断开也必须受控释放，不留下占用Client/事务；锁超时/序列化冲突可在剩余预算内整命令重试，耗尽返回 typed retryable 503，未知COMMIT只报503并由原key恢复，不猜成功。仅Move私有设置，不放宽全局Pool或其他Chat行为；真PG由独立blocker PID与`pg_blocking_pids`证明目标Project锁下有界失败、归属和receipt零变化。
+**Move 私有等待预算（C5 已实现并聚焦验真，随 BFF producer 发布）。** 单次正式 HTTP 命令从获取 PoolClient、每轮事务锁与SQL、重试到最终结算总计须在5秒内结束；每轮本地 Project/Conversation/receipt 锁等待最多1秒，transaction-local `lock_timeout` 与 `statement_timeout` 均不得超过剩余总预算，最多4轮。连接池等待和客户端断开也必须受控释放，不留下占用Client/事务；锁超时/序列化冲突可在剩余预算内整命令重试，耗尽返回 typed retryable 503，未知COMMIT只报503并由原key恢复，不猜成功。仅Move私有设置，不放宽全局Pool或其他Chat行为；真PG由独立blocker PID与`pg_blocking_pids`证明目标Project锁下有界失败、归属和receipt零变化。
 
 **删除/提交竞态。** Move先拿源 Project 锁并提交，则旧 Project DELETE 锁定成员快照不含已移出的会话；DELETE先锁并提交墓碑，则 Move 锁内 active fence 返回不可见 404。当前 Project 尚无 `deleted_at`，Move 源码片须用当前存在性/owner检查，未来 DELETE SQL 片必须把 `deleted_at IS NULL` 同步加在源/目标与新 admission 的事务谓词，并以双连接验证。两个 Project 逆向 Move 按 ID 排序防死锁；与发消息并发以 Conversation row 线性化，新消息不得从不受信 body/query取归属。Move 不删除独立 ScheduledTask，亦不关闭 Project DELETE 的 Storage N+1 release、损坏图 blocked 或 T-C05。
 
