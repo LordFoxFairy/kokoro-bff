@@ -4,12 +4,7 @@ export type AgUiConsumerRegistration = {
 }
 
 /** One canonical upsert shared by HTTP admission and the background consumer port. */
-export function agUiConsumerRegistration(
-  tenantId: string,
-  sessionId: string,
-  subjectId: string,
-  expectedRunId?: string,
-): AgUiConsumerRegistration {
+export function agUiConsumerRegistration(tenantId: string, sessionId: string, subjectId: string, expectedRunId?: string): AgUiConsumerRegistration {
   if (tenantId.trim() === "" || sessionId.trim() === "" || subjectId.trim() === "") {
     throw new Error("AG-UI consumer identity is required")
   }
@@ -31,11 +26,7 @@ export function agUiConsumerRegistration(
                  THEN bff_agui_stream.terminal_run_id
                ELSE NULL
              END,
-             latest_run_start_sequence = CASE
-               WHEN EXCLUDED.expected_run_id IS NULL OR bff_agui_stream.expected_run_id = EXCLUDED.expected_run_id
-                 THEN bff_agui_stream.latest_run_start_sequence
-               ELSE NULL
-             END,
+             latest_run_start_sequence = bff_agui_stream.latest_run_start_sequence,
              expected_run_id = COALESCE(EXCLUDED.expected_run_id, bff_agui_stream.expected_run_id),
              consumer_state = CASE
                WHEN EXCLUDED.expected_run_id IS NOT NULL

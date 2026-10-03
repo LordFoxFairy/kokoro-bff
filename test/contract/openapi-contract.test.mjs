@@ -40,11 +40,9 @@ function inspectChatFailureContract(openapi) {
     if (!condition) errors.push(label)
   }
 
-  require(/^info:\n(?:.*\n){0,3}?  version: 6\.0\.0$/mu.test(openapi), "public info.version must be 6.0.0")
+  require(/^info:\n(?:.*\n){0,3}?  version: 7\.0\.0$/mu.test(openapi), "public info.version must be 7.0.0")
   require(/^      required: \[message_id, role, content, status, created_at\]$/mu.test(message), "failure must stay optional")
-  const roles = [...(message.match(/role:\n\s+type: string\n\s+enum: \[([^\]]+)\]/u)?.[1] ?? "").matchAll(/[a-z_]+/gu)].map(
-    (match) => match[0],
-  )
+  const roles = [...(message.match(/role:\n\s+type: string\n\s+enum: \[([^\]]+)\]/u)?.[1] ?? "").matchAll(/[a-z_]+/gu)].map((match) => match[0])
   require(JSON.stringify(roles) === JSON.stringify(["user", "assistant"]), "Message roles must equal user and assistant")
   require(new Set(roles).size === roles.length, "Message roles must not contain duplicates")
   require(/failure:\n\s+type: object\n\s+required: \[source, code, retryable\]\n\s+additionalProperties: false/u.test(
@@ -875,10 +873,13 @@ test("semantic gates enforce Gone, admission overload, and control upstream fail
     .slice(controlStart, controlEnd)
     .replace("        '502': { $ref: '#/components/responses/BadGateway' }\n", "")
     .replace("        '503': { $ref: '#/components/responses/ServiceUnavailable' }\n", "")
+  const eventsStart = openapi.indexOf("  /v1/sessions/{id}/events:")
+  const eventsEnd = openapi.indexOf("  /v1/sessions/{id}/runs/{runId}/control:", eventsStart)
+  const brokenEvents = openapi.slice(eventsStart, eventsEnd).replace("        '410': { $ref: '#/components/responses/Gone' }\n", "")
   const broken = openapi
-    .replace("        '410': { $ref: '#/components/responses/Gone' }\n", "")
+    .replace(openapi.slice(eventsStart, eventsEnd), () => brokenEvents)
     .replace("        '413': { $ref: '#/components/responses/PayloadTooLarge' }\n", "")
-    .replace(openapi.slice(controlStart, controlEnd), control)
+    .replace(openapi.slice(controlStart, controlEnd), () => control)
 
   assert.notEqual(broken, openapi)
   const errors = inspectBffOpenApi(broken, baseline)
@@ -1017,14 +1018,14 @@ test("personal Skill installation gate binds stable error.code enums to each HTT
   }
 })
 
-test("public6 retains the closed full execution head, five current-locator decisions and full interaction CUSTOM", async () => {
+test("public7 retains the closed full execution head, five current-locator decisions and full interaction CUSTOM", async () => {
   const { createRequire } = await import("node:module")
   // Parse with the YAML implementation already locked by the contract linter.
   const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
   const { openapi } = await readContract()
   const document = load(openapi)
   const schemas = document.components.schemas
-  assert.equal(document.info.version, "6.0.0")
+  assert.equal(document.info.version, "7.0.0")
   const snapshot = schemas.SessionSnapshotResponse.properties.data
   assert.equal(Object.hasOwn(snapshot.properties, "active_run"), false)
   assert.equal(Object.hasOwn(snapshot.properties, "pending_pauses"), false)
@@ -1043,7 +1044,9 @@ test("public6 retains the closed full execution head, five current-locator decis
   assert.deepEqual(schemas.RunResumeRequest.required, ["kind", "decisions", "expected_pause_revision", "pause_ref"])
   assert.equal(schemas.RunResumeRequest.properties.expected_pause_revision.minimum, 1)
   assert.equal(schemas.RunResumeRequest.properties.expected_pause_revision.maximum, Number.MAX_SAFE_INTEGER)
-  const owner = JSON.parse(await readFile(new URL("../../contract/vendor/kokoro-agent/e977923ea9992cbddaf0cdbc6c8f8d23b3af120e/openapi.json", import.meta.url), "utf8"))
+  const owner = JSON.parse(
+    await readFile(new URL("../../contract/vendor/kokoro-agent/79bf98c5aa63b9bace207afdf42d8c7aefee4fe8/openapi.json", import.meta.url), "utf8"),
+  )
   assert.deepEqual(schemas.ResumeDecision, owner.components.schemas.ResumeDecision)
   assert.equal(schemas.SessionEventStream["x-kokoro-custom-event-values"]["kokoro.interaction.state"].$ref, "#/components/schemas/ChatInteractionState")
   const operation = document.paths["/v1/sessions/{id}/runs/{runId}/control"].post
@@ -1290,4 +1293,41 @@ for (const field of ["title", "prompt", "frequency", "time", "timezone"]) {
 test("R75 production rejects an empty creation object despite a present HTTP body", async () => {
   const { scheduledCreateInput: parse } = await r71ScheduledCreateSource()
   assert.equal(parse({}), null)
+})
+
+test("R124 public7 publishes nullable snapshot process and the anchored Run process page as closed schemas", async () => {
+  const { createRequire } = await import("node:module")
+  const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
+  const { openapi } = await readContract()
+  const document = load(openapi)
+  assert.equal(document.info.version, "7.0.0")
+  const snapshot = document.components.schemas.SessionSnapshotResponse.properties.data
+  assert.ok(snapshot.required.includes("execution_process"))
+  assert.deepEqual(snapshot.properties.execution_process, { oneOf: [{ $ref: "#/components/schemas/RunExecutionProcess" }, { type: "null" }] })
+  const snapshotProcess = document.components.schemas.RunExecutionProcess
+  assert.equal(snapshotProcess.additionalProperties, false)
+  assert.deepEqual(snapshotProcess.required, ["run_id", "todos", "activities", "next_cursor"])
+  const exampleData = document.components.schemas.SessionSnapshotResponse.example.data
+  assert.equal(typeof exampleData.event_watermark, "string")
+  assert.ok(exampleData.event_watermark.length > 0)
+  assert.deepEqual(exampleData.execution_process, {
+    run_id: exampleData.execution_head.run_id,
+    todos: null,
+    activities: [],
+    next_cursor: null,
+  })
+  const page = document.components.schemas.RunProcessPage
+  assert.equal(page.additionalProperties, false)
+  assert.deepEqual(page.required, ["run_id", "todos", "activities", "next_cursor", "event_watermark"])
+  assert.equal(page.properties.activities.maxItems, 100)
+  const operation = document.paths["/v1/sessions/{id}/runs/{runId}/process"].get
+  assert.equal(operation.operationId, "getRunProcess")
+  assert.equal(operation["x-kokoro-permission"], "session.read")
+  const parameters = Object.fromEntries(operation.parameters.map((parameter) => [parameter.name, parameter]))
+  assert.equal(parameters.watermark.required, true)
+  assert.equal(parameters.cursor.required, false)
+  assert.equal(parameters.limit.schema.default, 100)
+  assert.equal(parameters.limit.schema.minimum, 1)
+  assert.equal(parameters.limit.schema.maximum, 100)
+  for (const status of ["200", "400", "401", "403", "404", "410", "429", "503"]) assert.ok(operation.responses[status])
 })

@@ -17,41 +17,74 @@ const base = {
 describe("AG-UI projection", () => {
   it("uses the canonical start/content/end text lifecycle", () => {
     const state = createAgUiProjectionState()
-    const startAndContent = projectChatEvent({
-      ...base,
-      kind: "message.delta",
-      payload: { segment_id: "message_1", delta: "Hello" },
-    }, state)
-    assert.deepEqual(startAndContent.map((event) => event.type), ["TEXT_MESSAGE_START", "TEXT_MESSAGE_CONTENT"])
+    const startAndContent = projectChatEvent(
+      {
+        ...base,
+        kind: "message.delta",
+        payload: { segment_id: "message_1", delta: "Hello" },
+      },
+      state,
+    )
+    assert.deepEqual(
+      startAndContent.map((event) => event.type),
+      ["TEXT_MESSAGE_START", "TEXT_MESSAGE_CONTENT"],
+    )
     assert.equal(startAndContent[1]?.messageId, "message_1")
     for (const event of startAndContent) assert.doesNotThrow(() => EventSchemas.parse(event))
 
-    const next = projectChatEvent({
-      ...base,
-      event_id: "evt_2",
-      seq: 4,
-      kind: "message.delta",
-      payload: { segment_id: "message_1", delta: " world" },
-    }, state)
-    assert.deepEqual(next.map((event) => event.type), ["TEXT_MESSAGE_CONTENT"])
+    const next = projectChatEvent(
+      {
+        ...base,
+        event_id: "evt_2",
+        seq: 4,
+        kind: "message.delta",
+        payload: { segment_id: "message_1", delta: " world" },
+      },
+      state,
+    )
+    assert.deepEqual(
+      next.map((event) => event.type),
+      ["TEXT_MESSAGE_CONTENT"],
+    )
 
-    const end = projectChatEvent({
-      ...base,
-      event_id: "evt_3",
-      seq: 5,
-      kind: "message.completed",
-      payload: { segment_id: "message_1", content: "Hello world" },
-    }, state)
-    assert.deepEqual(end.map((event) => event.type), ["TEXT_MESSAGE_END"])
+    const end = projectChatEvent(
+      {
+        ...base,
+        event_id: "evt_3",
+        seq: 5,
+        kind: "message.completed",
+        payload: { segment_id: "message_1", content: "Hello world" },
+      },
+      state,
+    )
+    assert.deepEqual(
+      end.map((event) => event.type),
+      ["TEXT_MESSAGE_END"],
+    )
   })
 
-  it("keeps the tool lifecycle and replay metadata explicit", () => {
-    const events = projectChatEvent({
-      ...base,
-      kind: "tool.invoked",
-      payload: { segment_id: "message_1", tool_id: "tool_1", name: "search", args: { query: "AG-UI" } },
-    }, createAgUiProjectionState())
-    assert.deepEqual(events.map((event) => event.type), ["TOOL_CALL_START", "TOOL_CALL_ARGS"])
+  it("keeps safe tool activity and replay metadata explicit without raw arguments", () => {
+    const activity = {
+      activity: "tool",
+      activity_id: `act_${"a".repeat(64)}`,
+      segment_id: `seg_${"b".repeat(64)}`,
+      status: "running",
+      display_code: "tool.execution",
+    }
+    const events = projectChatEvent(
+      {
+        ...base,
+        kind: "activity.updated",
+        payload: activity,
+      },
+      createAgUiProjectionState(),
+    )
+    assert.deepEqual(
+      events.map((event) => event.type),
+      ["CUSTOM"],
+    )
+    assert.equal(events[0]?.name, "kokoro.activity.updated")
+    assert.deepEqual(events[0]?.value, activity)
     assert.equal(events[0]?.metadata.kokoro.event_id, "evt_1")
     assert.equal(events[0]?.metadata.kokoro.seq, 3)
     for (const event of events) assert.doesNotThrow(() => EventSchemas.parse(event))
@@ -75,10 +108,7 @@ describe("AG-UI projection", () => {
   })
 
   it("rejects a non-canonical frame before the repository can persist it", () => {
-    assert.throws(
-      () => validateAgUiFrames([{ type: "RUN_STARTED", timestamp: "not-a-number" }]),
-      /source response did not match its contract/u,
-    )
+    assert.throws(() => validateAgUiFrames([{ type: "RUN_STARTED", timestamp: "not-a-number" }]), /source response did not match its contract/u)
   })
 
   it("persists the schema parser result rather than the unchecked input reference", () => {
@@ -105,26 +135,37 @@ describe("AG-UI projection", () => {
       payload: { segment_id: "message_b", delta: "first" },
     }
     const first = projectChatEvent(runB, state)
-    assert.deepEqual(first.map((event) => event.type), ["TEXT_MESSAGE_START", "TEXT_MESSAGE_CONTENT"])
+    assert.deepEqual(
+      first.map((event) => event.type),
+      ["TEXT_MESSAGE_START", "TEXT_MESSAGE_CONTENT"],
+    )
 
-    projectChatEvent({
-      ...base,
-      event_id: "evt_run_a_terminal",
-      run_id: "run_a",
-      kind: "run.completed",
-      payload: { status: "completed" },
-    }, state)
+    projectChatEvent(
+      {
+        ...base,
+        event_id: "evt_run_a_terminal",
+        run_id: "run_a",
+        kind: "run.completed",
+        payload: { status: "completed" },
+      },
+      state,
+    )
 
-    const continued = projectChatEvent({
-      ...runB,
-      event_id: "evt_run_b_2",
-      seq: runB.seq + 1,
-      payload: { segment_id: "message_b", delta: " second" },
-    }, state)
-    assert.deepEqual(continued.map((event) => event.type), ["TEXT_MESSAGE_CONTENT"])
+    const continued = projectChatEvent(
+      {
+        ...runB,
+        event_id: "evt_run_b_2",
+        seq: runB.seq + 1,
+        payload: { segment_id: "message_b", delta: " second" },
+      },
+      state,
+    )
+    assert.deepEqual(
+      continued.map((event) => event.type),
+      ["TEXT_MESSAGE_CONTENT"],
+    )
   })
 })
-
 
 // R57: full owner interaction is one canonical CUSTOM, not a second item-resolution protocol.
 
@@ -244,4 +285,40 @@ it("R57 AG-UI retains absent versus null display keys and business input-schema 
   assert.deepEqual(actual, payload)
   assert.equal(Object.hasOwn(actual.groups[0].items[0].display, "result_preview"), true)
   assert.equal(Object.hasOwn(actual.groups[1].items[1].display, "result_preview"), false)
+})
+
+it("R123 projects the complete safe Todo table with original metadata", () => {
+  const todo = {
+    todos: [
+      { content: "first", status: "pending" },
+      { content: "done", status: "completed" },
+    ],
+  }
+  const [todoFrame] = projectChatEvent({ ...base, kind: "todo.updated", payload: todo }, createAgUiProjectionState())
+  assert.deepEqual(todoFrame, { type: "CUSTOM", timestamp: Date.parse(base.timestamp), name: "kokoro.todo.updated", value: todo, metadata: { kokoro: base } })
+  assert.doesNotThrow(() => EventSchemas.parse(todoFrame))
+})
+
+it("R123 projects compact safe activity without raw fields or assistant identity substitution", () => {
+  const activity = {
+    activity: "tool",
+    activity_id: `act_${"a".repeat(64)}`,
+    segment_id: `seg_${"b".repeat(64)}`,
+    status: "failed",
+    display_code: "tool.execution",
+  }
+  const [activityFrame] = projectChatEvent({ ...base, event_id: "evt_2", seq: 4, kind: "activity.updated", payload: activity }, createAgUiProjectionState())
+  assert.deepEqual(activityFrame, {
+    type: "CUSTOM",
+    timestamp: Date.parse(base.timestamp),
+    name: "kokoro.activity.updated",
+    value: activity,
+    metadata: { kokoro: { ...base, event_id: "evt_2", seq: 4 } },
+  })
+  assert.doesNotThrow(() => EventSchemas.parse(activityFrame))
+  for (const forbiddenField of ["args", "result", "name", "description", "error", "tool_id", "subagent_id"]) {
+    assert.equal(Object.hasOwn(activityFrame.value, forbiddenField), false)
+  }
+  assert.equal(JSON.stringify(activityFrame.value).includes("assistant_identity_canary"), false)
+  assert.equal(Object.hasOwn(activityFrame, "messageId"), false)
 })

@@ -1147,10 +1147,12 @@ integrationTest("keeps an admitted Conversation head blocking every later launch
     assert.equal(queuedReplay.kind, "page")
     assert.deepEqual(
       queuedReplay.frames.map(({ eventType, payload }) => ({ eventType, value: payload.value })),
-      [{
-        eventType: "CUSTOM",
-        value: { run_id: queuedRows.rows[0].run_id, dispatch_sequence: queuedRows.rows[0].conversation_dispatch_seq },
-      }],
+      [
+        {
+          eventType: "CUSTOM",
+          value: { run_id: queuedRows.rows[0].run_id, dispatch_sequence: queuedRows.rows[0].conversation_dispatch_seq },
+        },
+      ],
     )
     const queuedWatermark = queuedSnapshot.event_watermark
 
@@ -1166,10 +1168,7 @@ integrationTest("keeps an admitted Conversation head blocking every later launch
     assert.equal(replayedFirst.run_id, queuedRows.rows[0].run_id)
     assert.equal((await store.services.chat.snapshot(tenant, "chat_user", conversationId, undefined)).event_watermark, queuedWatermark)
 
-    const beforeClaim = await pool.query(
-      "SELECT expected_run_id FROM bff_agui_stream WHERE tenant_id = $1 AND session_id = $2",
-      [tenant, conversationId],
-    )
+    const beforeClaim = await pool.query("SELECT expected_run_id FROM bff_agui_stream WHERE tenant_id = $1 AND session_id = $2", [tenant, conversationId])
     assert.equal(beforeClaim.rows[0].expected_run_id, null)
 
     const first = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
@@ -1180,7 +1179,11 @@ integrationTest("keeps an admitted Conversation head blocking every later launch
     })
     assert.equal(first.length, 1)
     assert.equal(first[0].conversationDispatchSeq, "1")
-    assert.equal((await pool.query("SELECT expected_run_id FROM bff_agui_stream WHERE tenant_id = $1 AND session_id = $2", [tenant, conversationId])).rows[0].expected_run_id, first[0].runId)
+    assert.equal(
+      (await pool.query("SELECT expected_run_id FROM bff_agui_stream WHERE tenant_id = $1 AND session_id = $2", [tenant, conversationId])).rows[0]
+        .expected_run_id,
+      first[0].runId,
+    )
     assert.equal(await store.agentDispatchOutbox.markAgentDispatchAdmitted(first[0]), true)
     assert.deepEqual((await store.services.chat.snapshot(tenant, "chat_user", conversationId, undefined)).execution_head, {
       run_id: first[0].runId,
@@ -1223,7 +1226,15 @@ integrationTest("keeps an admitted Conversation head blocking every later launch
         sourceSequence: 1,
         sourceOccurredAt: terminalAt,
         sourcePayload: { run_id: first[0].runId },
-        event: { event_id: "fifo_first_started", seq: 1, session_id: conversationId, run_id: first[0].runId, kind: "run.created", timestamp: terminalAt, payload: { run_id: first[0].runId } },
+        event: {
+          event_id: "fifo_first_started",
+          seq: 1,
+          session_id: conversationId,
+          run_id: first[0].runId,
+          kind: "run.created",
+          timestamp: terminalAt,
+          payload: { run_id: first[0].runId },
+        },
       },
       {
         sourceRunId: first[0].runId,
@@ -1231,7 +1242,15 @@ integrationTest("keeps an admitted Conversation head blocking every later launch
         sourceSequence: 2,
         sourceOccurredAt: terminalAt,
         sourcePayload: { run_id: first[0].runId },
-        event: { event_id: "fifo_first_terminal", seq: 2, session_id: conversationId, run_id: first[0].runId, kind: "run.completed", timestamp: terminalAt, payload: { status: "completed" } },
+        event: {
+          event_id: "fifo_first_terminal",
+          seq: 2,
+          session_id: conversationId,
+          run_id: first[0].runId,
+          kind: "run.completed",
+          timestamp: terminalAt,
+          payload: { status: "completed" },
+        },
       },
     ])
     const handedOff = await store.services.chat.snapshot(tenant, "chat_user", conversationId, undefined)
@@ -1243,12 +1262,15 @@ integrationTest("keeps an admitted Conversation head blocking every later launch
     const afterHandoff = await store.agUi.replay(tenant, conversationId, null, 100)
     assert.equal(afterHandoff.kind, "page")
     const queuedFrames = afterHandoff.frames.filter(({ eventType }) => eventType === "CUSTOM")
-    assert.deepEqual(queuedFrames.map(({ payload }) => payload.value.run_id), [queuedRows.rows[0].run_id, queuedRows.rows[1].run_id])
-
-    await pool.query(
-      "UPDATE bff_agui_event SET recorded_at=CURRENT_TIMESTAMP(3)-INTERVAL '2 days' WHERE tenant_id=$1 AND session_id=$2",
-      [tenant, conversationId],
+    assert.deepEqual(
+      queuedFrames.map(({ payload }) => payload.value.run_id),
+      [queuedRows.rows[0].run_id, queuedRows.rows[1].run_id],
     )
+
+    await pool.query("UPDATE bff_agui_event SET recorded_at=CURRENT_TIMESTAMP(3)-INTERVAL '2 days' WHERE tenant_id=$1 AND session_id=$2", [
+      tenant,
+      conversationId,
+    ])
     await store.agUiConsumers.collectGarbage({
       now: new Date().toISOString(),
       retentionMs: 1,
@@ -1466,7 +1488,10 @@ integrationTest("deletion atomically fences launches and enqueues durable cancel
     assert.ok(admitted)
     assert.equal(await store.agentDispatchOutbox.markAgentDispatchAdmitted(admitted), true)
     assert.equal(await store.services.chat.deleteConversation(tenant, "chat_user", conversationId, "request_delete_conversation"), true)
-    assert.deepEqual(await store.agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: "worker_after_delete", limit: 10, leaseDurationMs: 5000, maxAttempts: 8 }), [])
+    assert.deepEqual(
+      await store.agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: "worker_after_delete", limit: 10, leaseDurationMs: 5000, maxAttempts: 8 }),
+      [],
+    )
 
     const dispatch = await pool.query(
       `SELECT conversation_dispatch_seq, status, fence FROM bff_agent_dispatch_outbox
@@ -1512,7 +1537,10 @@ integrationTest("deletion atomically fences launches and enqueues durable cancel
       false,
     )
     assert.equal(await store.agentCancellationOutbox.markAgentCancellationSucceeded(firstCancel[0]), true)
-    assert.deepEqual(await store.agentCancellationOutbox.claimAgentCancellationOutbox({ workerId: "worker_cancel", limit: 10, leaseDurationMs: 5000, maxAttempts: 8 }), [])
+    assert.deepEqual(
+      await store.agentCancellationOutbox.claimAgentCancellationOutbox({ workerId: "worker_cancel", limit: 10, leaseDurationMs: 5000, maxAttempts: 8 }),
+      [],
+    )
 
     const conversation = await pool.query("SELECT status FROM bff_conversation WHERE tenant_id = $1 AND conversation_id = $2", [tenant, conversationId])
     const assistants = await pool.query(
@@ -1547,177 +1575,346 @@ integrationTest("deletion atomically fences launches and enqueues durable cancel
   }
 })
 
-integrationTest("serializes terminal, deletion, failure, and exhausted-head races without reversing stream and dispatch locks", { timeout: 30_000 }, async () => {
-  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
-  let store
-  const tenant = `chat_barrier_${Date.now()}`
-  const owner = "barrier_user"
-  const submit = async (conversationId, suffix) => {
-    await pool.query("INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title) VALUES ($1,$2,$3,$4)", [conversationId, tenant, owner, suffix])
-    return store.services.chatTurns.submit({ tenantId: tenant, conversationId, subjectId: owner, actorId: owner, requestId: `request_${suffix}`, idempotencyKey: `turn_${suffix}`, content: suffix })
-  }
-  const lockers = new Set()
-  const pendingOperations = new Set()
-  const track = (operation) => { pendingOperations.add(operation); operation.finally(() => pendingOperations.delete(operation)); return operation }
-  const lockStream = async (conversationId) => {
-    const client = await pool.connect(); lockers.add(client)
-    await client.query("BEGIN")
-    const pid = Number((await client.query("SELECT pg_backend_pid()::int AS pid")).rows[0].pid)
-    await client.query("SELECT 1 FROM bff_agui_stream WHERE tenant_id=$1 AND session_id=$2 FOR UPDATE", [tenant, conversationId])
-    client.barrierPid = pid
-    return client
-  }
-  const releaseLocker = async (client) => { await client.query("COMMIT"); lockers.delete(client); client.release() }
-  const lockDispatch = async (outboxId) => {
-    const client = await pool.connect(); lockers.add(client)
-    await client.query("BEGIN")
-    client.barrierPid = Number((await client.query("SELECT pg_backend_pid()::int AS pid")).rows[0].pid)
-    await client.query("SELECT 1 FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND outbox_id=$2 FOR UPDATE", [tenant, outboxId])
-    return client
-  }
-  const waitForBlockedStream = (locker) => waitFor(async () => Number((await pool.query(
-    `SELECT count(*)::int AS count FROM pg_stat_activity
-      WHERE datname=current_database() AND wait_event_type='Lock' AND $1::int = ANY(pg_blocking_pids(pid))`, [locker.barrierPid],
-  )).rows[0].count) > 0)
-  const claimTargetConsumer = async (conversationId, workerId, durationMs = 40) => {
-    await pool.query("UPDATE bff_agui_stream SET consumer_state='stopped' WHERE tenant_id=$1 AND session_id<>$2", [tenant, conversationId])
-    const now = new Date()
-    const [lease] = await store.agUiConsumers.claimConsumers({ workerId, now: now.toISOString(), leaseUntil: new Date(now.getTime()+durationMs).toISOString(), limit: 1 })
-    assert.equal(lease.sessionId, conversationId)
-    return { lease, now }
-  }
-  try {
-    await pool.query("DROP TABLE IF EXISTS bff_agui_run_interaction, bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE")
-    await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
-    await store.ready()
+integrationTest(
+  "serializes terminal, deletion, failure, and exhausted-head races without reversing stream and dispatch locks",
+  { timeout: 30_000 },
+  async () => {
+    const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
+    let store
+    const tenant = `chat_barrier_${Date.now()}`
+    const owner = "barrier_user"
+    const submit = async (conversationId, suffix) => {
+      await pool.query("INSERT INTO bff_conversation (conversation_id, tenant_id, owner_id, title) VALUES ($1,$2,$3,$4)", [
+        conversationId,
+        tenant,
+        owner,
+        suffix,
+      ])
+      return store.services.chatTurns.submit({
+        tenantId: tenant,
+        conversationId,
+        subjectId: owner,
+        actorId: owner,
+        requestId: `request_${suffix}`,
+        idempotencyKey: `turn_${suffix}`,
+        content: suffix,
+      })
+    }
+    const lockers = new Set()
+    const pendingOperations = new Set()
+    const track = (operation) => {
+      pendingOperations.add(operation)
+      operation.finally(() => pendingOperations.delete(operation))
+      return operation
+    }
+    const lockStream = async (conversationId) => {
+      const client = await pool.connect()
+      lockers.add(client)
+      await client.query("BEGIN")
+      const pid = Number((await client.query("SELECT pg_backend_pid()::int AS pid")).rows[0].pid)
+      await client.query("SELECT 1 FROM bff_agui_stream WHERE tenant_id=$1 AND session_id=$2 FOR UPDATE", [tenant, conversationId])
+      client.barrierPid = pid
+      return client
+    }
+    const releaseLocker = async (client) => {
+      await client.query("COMMIT")
+      lockers.delete(client)
+      client.release()
+    }
+    const lockDispatch = async (outboxId) => {
+      const client = await pool.connect()
+      lockers.add(client)
+      await client.query("BEGIN")
+      client.barrierPid = Number((await client.query("SELECT pg_backend_pid()::int AS pid")).rows[0].pid)
+      await client.query("SELECT 1 FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND outbox_id=$2 FOR UPDATE", [tenant, outboxId])
+      return client
+    }
+    const waitForBlockedStream = (locker) =>
+      waitFor(
+        async () =>
+          Number(
+            (
+              await pool.query(
+                `SELECT count(*)::int AS count FROM pg_stat_activity
+      WHERE datname=current_database() AND wait_event_type='Lock' AND $1::int = ANY(pg_blocking_pids(pid))`,
+                [locker.barrierPid],
+              )
+            ).rows[0].count,
+          ) > 0,
+      )
+    const claimTargetConsumer = async (conversationId, workerId, durationMs = 40) => {
+      await pool.query("UPDATE bff_agui_stream SET consumer_state='stopped' WHERE tenant_id=$1 AND session_id<>$2", [tenant, conversationId])
+      const now = new Date()
+      const [lease] = await store.agUiConsumers.claimConsumers({
+        workerId,
+        now: now.toISOString(),
+        leaseUntil: new Date(now.getTime() + durationMs).toISOString(),
+        limit: 1,
+      })
+      assert.equal(lease.sessionId, conversationId)
+      return { lease, now }
+    }
+    try {
+      await pool.query(
+        "DROP TABLE IF EXISTS bff_agui_run_interaction, bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE",
+      )
+      await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+      store = new PostgresBffRepositories(postgresUrl, redisUrl)
+      await store.ready()
 
-    const terminalConversation = `${tenant}_terminal`
-    const terminalTurn = await submit(terminalConversation, "terminal_claim")
-    const terminalLock = await lockStream(terminalConversation)
-    const terminalClaimPromise = track(store.agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: "barrier_terminal_claim", limit: 1, leaseDurationMs: 5000, maxAttempts: 8 }))
-    await waitForBlockedStream(terminalLock)
-    await releaseLocker(terminalLock)
-    const [terminalClaim] = await terminalClaimPromise
-    assert.equal(terminalClaim.runId, terminalTurn.run_id)
-    assert.equal(await store.agentDispatchOutbox.markAgentDispatchAdmitted(terminalClaim), true)
-    await store.agUi.ingest(tenant, terminalConversation, [
-      { sourceRunId: terminalTurn.run_id, sourceEventId: "barrier_terminal", sourceSequence: 1, sourceOccurredAt: new Date().toISOString(), sourcePayload: { run_id: terminalTurn.run_id }, event: { event_id: "barrier_terminal", seq: 1, session_id: terminalConversation, run_id: terminalTurn.run_id, kind: "run.completed", timestamp: new Date().toISOString(), payload: { status: "completed" } } },
-    ])
-    assert.deepEqual(await store.agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: "after_terminal", limit: 1, leaseDurationMs: 5000, maxAttempts: 8 }), [])
+      const terminalConversation = `${tenant}_terminal`
+      const terminalTurn = await submit(terminalConversation, "terminal_claim")
+      const terminalLock = await lockStream(terminalConversation)
+      const terminalClaimPromise = track(
+        store.agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: "barrier_terminal_claim", limit: 1, leaseDurationMs: 5000, maxAttempts: 8 }),
+      )
+      await waitForBlockedStream(terminalLock)
+      await releaseLocker(terminalLock)
+      const [terminalClaim] = await terminalClaimPromise
+      assert.equal(terminalClaim.runId, terminalTurn.run_id)
+      assert.equal(await store.agentDispatchOutbox.markAgentDispatchAdmitted(terminalClaim), true)
+      const terminalOccurredAt = new Date().toISOString()
+      await store.agUi.ingest(tenant, terminalConversation, [
+        {
+          sourceRunId: terminalTurn.run_id,
+          sourceEventId: "barrier_terminal",
+          sourceSequence: 1,
+          sourceOccurredAt: terminalOccurredAt,
+          sourcePayload: { run_id: terminalTurn.run_id },
+          event: {
+            event_id: "barrier_terminal",
+            seq: 1,
+            session_id: terminalConversation,
+            run_id: terminalTurn.run_id,
+            kind: "run.completed",
+            timestamp: terminalOccurredAt,
+            payload: { status: "completed" },
+          },
+        },
+      ])
+      assert.deepEqual(
+        await store.agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: "after_terminal", limit: 1, leaseDurationMs: 5000, maxAttempts: 8 }),
+        [],
+      )
 
-    const deleteConversation = `${tenant}_delete`
-    await submit(deleteConversation, "delete_claim")
-    const deleteLock = await lockStream(deleteConversation)
-    const deleteClaimPromise = track(store.agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: "barrier_delete_claim", limit: 1, leaseDurationMs: 5000, maxAttempts: 8 }))
-    await waitForBlockedStream(deleteLock)
-    const deletePromise = track(store.services.chat.deleteConversation(tenant, owner, deleteConversation, "barrier_delete"))
-    await releaseLocker(deleteLock)
-    await Promise.all([deleteClaimPromise, deletePromise])
-    assert.deepEqual(await store.agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: "after_delete", limit: 1, leaseDurationMs: 5000, maxAttempts: 8 }), [])
+      const deleteConversation = `${tenant}_delete`
+      await submit(deleteConversation, "delete_claim")
+      const deleteLock = await lockStream(deleteConversation)
+      const deleteClaimPromise = track(
+        store.agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: "barrier_delete_claim", limit: 1, leaseDurationMs: 5000, maxAttempts: 8 }),
+      )
+      await waitForBlockedStream(deleteLock)
+      const deletePromise = track(store.services.chat.deleteConversation(tenant, owner, deleteConversation, "barrier_delete"))
+      await releaseLocker(deleteLock)
+      await Promise.all([deleteClaimPromise, deletePromise])
+      assert.deepEqual(
+        await store.agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: "after_delete", limit: 1, leaseDurationMs: 5000, maxAttempts: 8 }),
+        [],
+      )
 
-    const failureConversation = `${tenant}_failure`
-    const failureTurn = await submit(failureConversation, "failure_terminal")
-    const [failureClaim] = await store.agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: "barrier_failure", limit: 1, leaseDurationMs: 40, maxAttempts: 8 })
-    const failureLock = await lockStream(failureConversation)
-    const failurePromise = track(store.agentDispatchOutbox.markAgentDispatchNotAdmitted(failureClaim, 100, "definite_reject"))
-    await waitForBlockedStream(failureLock)
-    await pool.query("SELECT pg_sleep(0.06)")
-    await releaseLocker(failureLock)
-    assert.equal(await failurePromise, false)
-    await store.agUi.ingest(tenant, failureConversation, [
-      { sourceRunId: failureTurn.run_id, sourceEventId: "late_terminal", sourceSequence: 1, sourceOccurredAt: new Date().toISOString(), sourcePayload: { run_id: failureTurn.run_id }, event: { event_id: "late_terminal", seq: 1, session_id: failureConversation, run_id: failureTurn.run_id, kind: "run.completed", timestamp: new Date().toISOString(), payload: { status: "completed" } } },
-    ])
-
-    for (const outcome of ["admitted", "unknown"]) {
-      const conversationId = `${tenant}_${outcome}`
-      await submit(conversationId, `expiry_${outcome}`)
-      const [claim] = await store.agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: `expiry_${outcome}`, limit: 1, leaseDurationMs: 40, maxAttempts: 8 })
-      const locker = await lockDispatch(claim.outboxId)
-      const settlement = track(outcome === "admitted"
-        ? store.agentDispatchOutbox.markAgentDispatchAdmitted(claim)
-        : store.agentDispatchOutbox.markAgentDispatchUnknown(claim, 100, "unknown"))
-      await waitForBlockedStream(locker)
+      const failureConversation = `${tenant}_failure`
+      const failureTurn = await submit(failureConversation, "failure_terminal")
+      const [failureClaim] = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
+        workerId: "barrier_failure",
+        limit: 1,
+        leaseDurationMs: 40,
+        maxAttempts: 8,
+      })
+      const failureLock = await lockStream(failureConversation)
+      const failurePromise = track(store.agentDispatchOutbox.markAgentDispatchNotAdmitted(failureClaim, 100, "definite_reject"))
+      await waitForBlockedStream(failureLock)
       await pool.query("SELECT pg_sleep(0.06)")
-      await releaseLocker(locker)
-      assert.equal(await settlement, false)
-    }
+      await releaseLocker(failureLock)
+      assert.equal(await failurePromise, false)
+      const lateTerminalOccurredAt = new Date().toISOString()
+      await store.agUi.ingest(tenant, failureConversation, [
+        {
+          sourceRunId: failureTurn.run_id,
+          sourceEventId: "late_terminal",
+          sourceSequence: 1,
+          sourceOccurredAt: lateTerminalOccurredAt,
+          sourcePayload: { run_id: failureTurn.run_id },
+          event: {
+            event_id: "late_terminal",
+            seq: 1,
+            session_id: failureConversation,
+            run_id: failureTurn.run_id,
+            kind: "run.completed",
+            timestamp: lateTerminalOccurredAt,
+            payload: { status: "completed" },
+          },
+        },
+      ])
 
-    const consumerConversation = `${tenant}_consumer_expiry`
-    await submit(consumerConversation, "consumer_expiry")
-    const { lease: consumerLease, now } = await claimTargetConsumer(consumerConversation, "consumer_expiry")
-    const consumerLock = await lockStream(consumerConversation)
-    const renewal = track(store.agUiConsumers.renewConsumerLease(consumerLease, now.toISOString(), new Date(now.getTime() + 5000).toISOString()))
-    await waitForBlockedStream(consumerLock); await pool.query("SELECT pg_sleep(0.06)")
-    await releaseLocker(consumerLock)
-    assert.equal(await renewal, false)
-    await pool.query("UPDATE bff_agui_stream SET consumer_state='stopped' WHERE tenant_id=$1 AND session_id=$2", [tenant, consumerConversation])
-    for (const mode of ["settle", "projection"]) {
-      const conversationId = `${tenant}_consumer_${mode}`
-      const turn = await submit(conversationId, `consumer_${mode}`)
-      const { lease, now: started } = await claimTargetConsumer(conversationId, `consumer_${mode}`)
-      const locker = await lockStream(conversationId)
-      const operation = mode === "settle"
-        ? store.agUiConsumers.markConsumerProgress(lease, started.toISOString(), started.toISOString())
-        : store.agUi.ingest(tenant, conversationId, [{ sourceRunId: turn.run_id, sourceEventId: "expired_projection", sourceSequence: 1, sourceOccurredAt: started.toISOString(), sourcePayload: { run_id: turn.run_id }, event: { event_id: "expired_projection", seq: 1, session_id: conversationId, run_id: turn.run_id, kind: "run.created", timestamp: started.toISOString(), payload: { run_id: turn.run_id } } }], lease)
-      await waitForBlockedStream(locker); await pool.query("SELECT pg_sleep(0.06)")
-      await releaseLocker(locker)
-      if (mode === "settle") assert.equal(await operation, false)
-      else await assert.rejects(operation, /consumer lease was lost/u)
-      if (mode === "projection") assert.equal((await pool.query("SELECT count(*)::int AS count FROM bff_agui_source_event WHERE tenant_id=$1 AND session_id=$2", [tenant, conversationId])).rows[0].count, 0)
-      await pool.query("UPDATE bff_agui_stream SET consumer_state='stopped' WHERE tenant_id=$1 AND session_id=$2", [tenant, conversationId])
-    }
+      for (const outcome of ["admitted", "unknown"]) {
+        const conversationId = `${tenant}_${outcome}`
+        await submit(conversationId, `expiry_${outcome}`)
+        const [claim] = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
+          workerId: `expiry_${outcome}`,
+          limit: 1,
+          leaseDurationMs: 40,
+          maxAttempts: 8,
+        })
+        const locker = await lockDispatch(claim.outboxId)
+        const settlement = track(
+          outcome === "admitted"
+            ? store.agentDispatchOutbox.markAgentDispatchAdmitted(claim)
+            : store.agentDispatchOutbox.markAgentDispatchUnknown(claim, 100, "unknown"),
+        )
+        await waitForBlockedStream(locker)
+        await pool.query("SELECT pg_sleep(0.06)")
+        await releaseLocker(locker)
+        assert.equal(await settlement, false)
+      }
 
-    const exhaustedX = `${tenant}_x`; const availableA = `${tenant}_a`
-    const exhaustedTurn = await submit(exhaustedX, "exhausted_x"); await submit(availableA, "available_a")
-    await pool.query("UPDATE bff_agent_dispatch_outbox SET attempt_count=8, status='retryable', available_at=CURRENT_TIMESTAMP(3) WHERE tenant_id=$1 AND conversation_id=$2", [tenant, exhaustedX])
-    const exhaustedLock = await lockStream(exhaustedX)
-    const firstCycle = store.agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: "barrier_x", limit: 1, leaseDurationMs: 5000, maxAttempts: 8 })
-    await waitForBlockedStream(exhaustedLock)
-    const secondCycle = store.agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: "barrier_a", limit: 1, leaseDurationMs: 5000, maxAttempts: 8 })
-    await releaseLocker(exhaustedLock)
-    const [firstClaims, secondClaims] = await Promise.all([firstCycle, secondCycle])
-    const remainingClaims = await store.agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: "barrier_remaining", limit: 10, leaseDurationMs: 5000, maxAttempts: 8 })
-    const availableClaims = [...firstClaims, ...secondClaims, ...remainingClaims].filter((claim) => claim.conversationId === availableA)
-    assert.equal(availableClaims.length, 1)
-    assert.equal([...firstClaims, ...secondClaims, ...remainingClaims].filter((claim) => claim.conversationId === exhaustedX).length, 0)
-    assert.deepEqual((await pool.query("SELECT status FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND conversation_id=$2", [tenant, exhaustedX])).rows, [{ status: "failed" }])
-    assert.deepEqual((await pool.query("SELECT terminal_run_id, expected_run_id FROM bff_agui_stream WHERE tenant_id=$1 AND session_id=$2", [tenant, exhaustedX])).rows, [{ terminal_run_id: exhaustedTurn.run_id, expected_run_id: null }])
-    assert.deepEqual((await pool.query("SELECT status, agent_failure_code, agent_failure_retryable FROM bff_message WHERE tenant_id=$1 AND conversation_id=$2 AND role='assistant'", [tenant, exhaustedX])).rows, [{ status: "failed", agent_failure_code: null, agent_failure_retryable: null }])
-    const [failedDispatch] = (await pool.query(
-      "SELECT outbox_id, run_id FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND conversation_id=$2", [tenant, exhaustedX],
-    )).rows
-    assert.equal(failedDispatch.run_id, exhaustedTurn.run_id)
-    const failureSourceId = `dispatch_failure:${failedDispatch.outbox_id}`
-    assert.deepEqual((await pool.query(
-      "SELECT source_owner,source_event_id,source_sequence FROM bff_agui_source_event WHERE tenant_id=$1 AND session_id=$2", [tenant, exhaustedX],
-    )).rows, [{ source_owner: "kokoro-bff", source_event_id: failureSourceId, source_sequence: "1" }])
-    const failureFrames = (await pool.query(
-      "SELECT event_type,source_owner,source_event_id,event_payload FROM bff_agui_event WHERE tenant_id=$1 AND session_id=$2 ORDER BY public_sequence", [tenant, exhaustedX],
-    )).rows
-    assert.deepEqual(failureFrames.map(({ event_type }) => event_type), ["CUSTOM", "RUN_ERROR"])
-    assert.equal(failureFrames[0].event_payload.name, "kokoro.run.queued")
-    assert.deepEqual(failureFrames[0].event_payload.value, { run_id: exhaustedTurn.run_id, dispatch_sequence: "1" })
-    assert.equal(failureFrames[1].source_owner, "kokoro-bff")
-    assert.equal(failureFrames[1].source_event_id, failureSourceId)
-    assert.equal(failureFrames[1].event_payload.runId, exhaustedTurn.run_id)
-    assert.equal(failureFrames[1].event_payload.code, "agent_dispatch_attempts_exhausted")
-    assert.deepEqual((await pool.query(
-      "SELECT run_id FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND conversation_id=$2 AND status IN ('pending','leased','retryable','admitted')", [tenant, exhaustedX],
-    )).rows, [])
-    const exhaustedSnapshot = await store.services.chat.snapshot(tenant, owner, exhaustedX, undefined)
-    assert.equal(exhaustedSnapshot.execution_head, undefined)
-  } finally {
-    for (const locker of lockers) {
-      await locker.query("ROLLBACK").catch(() => undefined)
-      locker.release()
+      const consumerConversation = `${tenant}_consumer_expiry`
+      await submit(consumerConversation, "consumer_expiry")
+      const { lease: consumerLease, now } = await claimTargetConsumer(consumerConversation, "consumer_expiry")
+      const consumerLock = await lockStream(consumerConversation)
+      const renewal = track(store.agUiConsumers.renewConsumerLease(consumerLease, now.toISOString(), new Date(now.getTime() + 5000).toISOString()))
+      await waitForBlockedStream(consumerLock)
+      await pool.query("SELECT pg_sleep(0.06)")
+      await releaseLocker(consumerLock)
+      assert.equal(await renewal, false)
+      await pool.query("UPDATE bff_agui_stream SET consumer_state='stopped' WHERE tenant_id=$1 AND session_id=$2", [tenant, consumerConversation])
+      for (const mode of ["settle", "projection"]) {
+        const conversationId = `${tenant}_consumer_${mode}`
+        const turn = await submit(conversationId, `consumer_${mode}`)
+        const { lease, now: started } = await claimTargetConsumer(conversationId, `consumer_${mode}`)
+        const locker = await lockStream(conversationId)
+        const operation =
+          mode === "settle"
+            ? store.agUiConsumers.markConsumerProgress(lease, started.toISOString(), started.toISOString())
+            : store.agUi.ingest(
+                tenant,
+                conversationId,
+                [
+                  {
+                    sourceRunId: turn.run_id,
+                    sourceEventId: "expired_projection",
+                    sourceSequence: 1,
+                    sourceOccurredAt: started.toISOString(),
+                    sourcePayload: { run_id: turn.run_id },
+                    event: {
+                      event_id: "expired_projection",
+                      seq: 1,
+                      session_id: conversationId,
+                      run_id: turn.run_id,
+                      kind: "run.created",
+                      timestamp: started.toISOString(),
+                      payload: { run_id: turn.run_id },
+                    },
+                  },
+                ],
+                lease,
+              )
+        await waitForBlockedStream(locker)
+        await pool.query("SELECT pg_sleep(0.06)")
+        await releaseLocker(locker)
+        if (mode === "settle") assert.equal(await operation, false)
+        else await assert.rejects(operation, /consumer lease was lost/u)
+        if (mode === "projection")
+          assert.equal(
+            (await pool.query("SELECT count(*)::int AS count FROM bff_agui_source_event WHERE tenant_id=$1 AND session_id=$2", [tenant, conversationId]))
+              .rows[0].count,
+            0,
+          )
+        await pool.query("UPDATE bff_agui_stream SET consumer_state='stopped' WHERE tenant_id=$1 AND session_id=$2", [tenant, conversationId])
+      }
+
+      const exhaustedX = `${tenant}_x`
+      const availableA = `${tenant}_a`
+      const exhaustedTurn = await submit(exhaustedX, "exhausted_x")
+      await submit(availableA, "available_a")
+      await pool.query(
+        "UPDATE bff_agent_dispatch_outbox SET attempt_count=8, status='retryable', available_at=CURRENT_TIMESTAMP(3) WHERE tenant_id=$1 AND conversation_id=$2",
+        [tenant, exhaustedX],
+      )
+      const exhaustedLock = await lockStream(exhaustedX)
+      const firstCycle = store.agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: "barrier_x", limit: 1, leaseDurationMs: 5000, maxAttempts: 8 })
+      await waitForBlockedStream(exhaustedLock)
+      const secondCycle = store.agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: "barrier_a", limit: 1, leaseDurationMs: 5000, maxAttempts: 8 })
+      await releaseLocker(exhaustedLock)
+      const [firstClaims, secondClaims] = await Promise.all([firstCycle, secondCycle])
+      const remainingClaims = await store.agentDispatchOutbox.claimAgentDispatchOutbox({
+        workerId: "barrier_remaining",
+        limit: 10,
+        leaseDurationMs: 5000,
+        maxAttempts: 8,
+      })
+      const availableClaims = [...firstClaims, ...secondClaims, ...remainingClaims].filter((claim) => claim.conversationId === availableA)
+      assert.equal(availableClaims.length, 1)
+      assert.equal([...firstClaims, ...secondClaims, ...remainingClaims].filter((claim) => claim.conversationId === exhaustedX).length, 0)
+      assert.deepEqual(
+        (await pool.query("SELECT status FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND conversation_id=$2", [tenant, exhaustedX])).rows,
+        [{ status: "failed" }],
+      )
+      assert.deepEqual(
+        (await pool.query("SELECT terminal_run_id, expected_run_id FROM bff_agui_stream WHERE tenant_id=$1 AND session_id=$2", [tenant, exhaustedX])).rows,
+        [{ terminal_run_id: exhaustedTurn.run_id, expected_run_id: null }],
+      )
+      assert.deepEqual(
+        (
+          await pool.query(
+            "SELECT status, agent_failure_code, agent_failure_retryable FROM bff_message WHERE tenant_id=$1 AND conversation_id=$2 AND role='assistant'",
+            [tenant, exhaustedX],
+          )
+        ).rows,
+        [{ status: "failed", agent_failure_code: null, agent_failure_retryable: null }],
+      )
+      const [failedDispatch] = (
+        await pool.query("SELECT outbox_id, run_id FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND conversation_id=$2", [tenant, exhaustedX])
+      ).rows
+      assert.equal(failedDispatch.run_id, exhaustedTurn.run_id)
+      const failureSourceId = `dispatch_failure:${failedDispatch.outbox_id}`
+      assert.deepEqual(
+        (
+          await pool.query("SELECT source_owner,source_event_id,source_sequence FROM bff_agui_source_event WHERE tenant_id=$1 AND session_id=$2", [
+            tenant,
+            exhaustedX,
+          ])
+        ).rows,
+        [{ source_owner: "kokoro-bff", source_event_id: failureSourceId, source_sequence: "1" }],
+      )
+      const failureFrames = (
+        await pool.query(
+          "SELECT event_type,source_owner,source_event_id,event_payload FROM bff_agui_event WHERE tenant_id=$1 AND session_id=$2 ORDER BY public_sequence",
+          [tenant, exhaustedX],
+        )
+      ).rows
+      assert.deepEqual(
+        failureFrames.map(({ event_type }) => event_type),
+        ["CUSTOM", "RUN_ERROR"],
+      )
+      assert.equal(failureFrames[0].event_payload.name, "kokoro.run.queued")
+      assert.deepEqual(failureFrames[0].event_payload.value, { run_id: exhaustedTurn.run_id, dispatch_sequence: "1" })
+      assert.equal(failureFrames[1].source_owner, "kokoro-bff")
+      assert.equal(failureFrames[1].source_event_id, failureSourceId)
+      assert.equal(failureFrames[1].event_payload.runId, exhaustedTurn.run_id)
+      assert.equal(failureFrames[1].event_payload.code, "agent_dispatch_attempts_exhausted")
+      assert.deepEqual(
+        (
+          await pool.query(
+            "SELECT run_id FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND conversation_id=$2 AND status IN ('pending','leased','retryable','admitted')",
+            [tenant, exhaustedX],
+          )
+        ).rows,
+        [],
+      )
+      const exhaustedSnapshot = await store.services.chat.snapshot(tenant, owner, exhaustedX, undefined)
+      assert.equal(exhaustedSnapshot.execution_head, undefined)
+    } finally {
+      for (const locker of lockers) {
+        await locker.query("ROLLBACK").catch(() => undefined)
+        locker.release()
+      }
+      lockers.clear()
+      await Promise.allSettled([...pendingOperations])
+      if (store) await store.close().catch(() => undefined)
+      await pool.end()
     }
-    lockers.clear()
-    await Promise.allSettled([...pendingOperations])
-    if (store) await store.close().catch(() => undefined)
-    await pool.end()
-  }
-})
+  },
+)
 
 integrationTest("does not return dispatch or consumer leases exhausted by the real commit boundary", async () => {
   const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
@@ -1764,162 +1961,309 @@ integrationTest("does not return dispatch or consumer leases exhausted by the re
     }
   }
   try {
-    await pool.query("DROP TABLE IF EXISTS bff_agui_run_interaction, bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE")
+    await pool.query(
+      "DROP TABLE IF EXISTS bff_agui_run_interaction, bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_idempotency_receipt CASCADE",
+    )
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
-    store = new PostgresBffRepositories(postgresUrl, redisUrl); await store.ready()
-    const tenant = `commit_budget_${Date.now()}`; const owner = "commit_budget_user"
+    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    await store.ready()
+    const tenant = `commit_budget_${Date.now()}`
+    const owner = "commit_budget_user"
     const createTurn = async (conversationId, suffix) => {
       await pool.query("INSERT INTO bff_conversation (conversation_id,tenant_id,owner_id,title) VALUES ($1,$2,$3,$4)", [conversationId, tenant, owner, suffix])
-      return store.services.chatTurns.submit({ tenantId: tenant, conversationId, subjectId: owner, actorId: owner, requestId: `request_${suffix}`, idempotencyKey: `turn_${suffix}`, content: suffix })
+      return store.services.chatTurns.submit({
+        tenantId: tenant,
+        conversationId,
+        subjectId: owner,
+        actorId: owner,
+        requestId: `request_${suffix}`,
+        idempotencyKey: `turn_${suffix}`,
+        content: suffix,
+      })
     }
 
-    const dispatchConversation = `${tenant}_dispatch`; await createTurn(dispatchConversation, "dispatch")
+    const dispatchConversation = `${tenant}_dispatch`
+    await createTurn(dispatchConversation, "dispatch")
     let delay = delayClaimCommitAfterFinalBudget(store, 0.06, "FROM bff_agent_dispatch_outbox WHERE outbox_id = ANY")
     try {
-      assert.deepEqual(await store.agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: "commit_dispatch", limit: 1, leaseDurationMs: 20, maxAttempts: 8 }), [])
+      assert.deepEqual(
+        await store.agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: "commit_dispatch", limit: 1, leaseDurationMs: 20, maxAttempts: 8 }),
+        [],
+      )
       assert.equal(delay.observation.matchingQueries, 1)
       assert.equal(delay.observation.delayedCommits, 1)
       assert.ok(delay.observation.observedRemainingMs > 0)
-    } finally { delay.restore() }
-    assert.deepEqual((await pool.query("SELECT status, lease_owner IS NOT NULL AS leased FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND conversation_id=$2", [tenant, dispatchConversation])).rows, [{ status: "leased", leased: true }])
+    } finally {
+      delay.restore()
+    }
+    assert.deepEqual(
+      (
+        await pool.query("SELECT status, lease_owner IS NOT NULL AS leased FROM bff_agent_dispatch_outbox WHERE tenant_id=$1 AND conversation_id=$2", [
+          tenant,
+          dispatchConversation,
+        ])
+      ).rows,
+      [{ status: "leased", leased: true }],
+    )
     await pool.query("SELECT pg_sleep(0.03)")
-    assert.equal((await store.agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: "commit_dispatch_reclaim", limit: 1, leaseDurationMs: 5000, maxAttempts: 8 })).length, 1)
+    assert.equal(
+      (await store.agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: "commit_dispatch_reclaim", limit: 1, leaseDurationMs: 5000, maxAttempts: 8 }))
+        .length,
+      1,
+    )
 
-    const consumerConversation = `${tenant}_consumer`; await createTurn(consumerConversation, "consumer")
+    const consumerConversation = `${tenant}_consumer`
+    await createTurn(consumerConversation, "consumer")
     await pool.query("UPDATE bff_agui_stream SET consumer_state='stopped' WHERE tenant_id=$1 AND session_id<>$2", [tenant, consumerConversation])
-    const now = new Date(); delay = delayClaimCommitAfterFinalBudget(store, 0.06, "FROM bff_agui_stream WHERE (tenant_id ||")
+    const now = new Date()
+    delay = delayClaimCommitAfterFinalBudget(store, 0.06, "FROM bff_agui_stream WHERE (tenant_id ||")
     try {
-      assert.deepEqual(await store.agUiConsumers.claimConsumers({ workerId: "commit_consumer", now: now.toISOString(), leaseUntil: new Date(now.getTime()+20).toISOString(), limit: 1 }), [])
+      assert.deepEqual(
+        await store.agUiConsumers.claimConsumers({
+          workerId: "commit_consumer",
+          now: now.toISOString(),
+          leaseUntil: new Date(now.getTime() + 20).toISOString(),
+          limit: 1,
+        }),
+        [],
+      )
       assert.equal(delay.observation.matchingQueries, 1)
       assert.equal(delay.observation.delayedCommits, 1)
       assert.ok(delay.observation.observedRemainingMs > 0)
-    } finally { delay.restore() }
-    assert.deepEqual((await pool.query("SELECT consumer_lease_owner IS NOT NULL AS leased FROM bff_agui_stream WHERE tenant_id=$1 AND session_id=$2", [tenant, consumerConversation])).rows, [{ leased: true }])
+    } finally {
+      delay.restore()
+    }
+    assert.deepEqual(
+      (
+        await pool.query("SELECT consumer_lease_owner IS NOT NULL AS leased FROM bff_agui_stream WHERE tenant_id=$1 AND session_id=$2", [
+          tenant,
+          consumerConversation,
+        ])
+      ).rows,
+      [{ leased: true }],
+    )
     await pool.query("SELECT pg_sleep(0.03)")
-    assert.equal((await store.agUiConsumers.claimConsumers({ workerId: "commit_consumer_reclaim", now: new Date().toISOString(), leaseUntil: new Date(Date.now()+5000).toISOString(), limit: 1 })).length, 1)
+    assert.equal(
+      (
+        await store.agUiConsumers.claimConsumers({
+          workerId: "commit_consumer_reclaim",
+          now: new Date().toISOString(),
+          leaseUntil: new Date(Date.now() + 5000).toISOString(),
+          limit: 1,
+        })
+      ).length,
+      1,
+    )
   } finally {
     if (store) await store.close().catch(() => undefined)
     await pool.end()
   }
 })
 
-
-integrationTest("R43 rolls back all queued-head facts on a scoped queued CUSTOM insert fault and replays one key without new facts", { timeout: 30_000 }, async () => {
-  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
-  const suffix = randomUUID().replaceAll("-", "")
-  const tenantId = "r43_queued_fault_" + suffix
-  const conversationId = "conv_" + randomUUID()
-  const subjectId = "r43_queued_owner"
-  const functionName = "r43_queued_fault_" + suffix
-  const triggerName = "r43_queued_trigger_" + suffix
-  const scopedTables = [
-    ["bff_conversation", "conversation_id"],
-    ["bff_message", "conversation_id"],
-    ["bff_agent_dispatch_outbox", "conversation_id"],
-    ["bff_agui_stream", "session_id"],
-    ["bff_agui_source_event", "session_id"],
-    ["bff_agui_event", "session_id"],
-  ]
-  const input = {
-    tenantId, conversationId, subjectId, actorId: subjectId,
-    requestId: "r43_queued_request_" + suffix,
-    idempotencyKey: "r43_queued_key_" + suffix,
-    content: "One atomic first turn",
-  }
-  let store = null
-  let functionInstalled = false
-  let triggerInstalled = false
-  const fingerprint = async () => {
-    const facts = {}
-    for (const [table, column] of scopedTables) {
-      const result = await pool.query(
-        "SELECT to_jsonb(fact) AS fact FROM " + table + " AS fact WHERE tenant_id=$1 AND " + column + "=$2 ORDER BY to_jsonb(fact)::text",
-        [tenantId, conversationId],
+integrationTest(
+  "R43 rolls back all queued-head facts on a scoped queued CUSTOM insert fault and replays one key without new facts",
+  { timeout: 30_000 },
+  async () => {
+    const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
+    const suffix = randomUUID().replaceAll("-", "")
+    const tenantId = "r43_queued_fault_" + suffix
+    const conversationId = "conv_" + randomUUID()
+    const subjectId = "r43_queued_owner"
+    const functionName = "r43_queued_fault_" + suffix
+    const triggerName = "r43_queued_trigger_" + suffix
+    const scopedTables = [
+      ["bff_conversation", "conversation_id"],
+      ["bff_message", "conversation_id"],
+      ["bff_agent_dispatch_outbox", "conversation_id"],
+      ["bff_agui_stream", "session_id"],
+      ["bff_agui_source_event", "session_id"],
+      ["bff_agui_event", "session_id"],
+    ]
+    const input = {
+      tenantId,
+      conversationId,
+      subjectId,
+      actorId: subjectId,
+      requestId: "r43_queued_request_" + suffix,
+      idempotencyKey: "r43_queued_key_" + suffix,
+      content: "One atomic first turn",
+    }
+    let store = null
+    let functionInstalled = false
+    let triggerInstalled = false
+    const fingerprint = async () => {
+      const facts = {}
+      for (const [table, column] of scopedTables) {
+        const result = await pool.query(
+          "SELECT to_jsonb(fact) AS fact FROM " + table + " AS fact WHERE tenant_id=$1 AND " + column + "=$2 ORDER BY to_jsonb(fact)::text",
+          [tenantId, conversationId],
+        )
+        facts[table] = result.rows.map(({ fact }) => fact)
+      }
+      const watermark = await pool.query("SELECT cursor FROM bff_agui_event WHERE tenant_id=$1 AND session_id=$2 ORDER BY public_sequence DESC LIMIT 1", [
+        tenantId,
+        conversationId,
+      ])
+      return { facts, cursor: watermark.rows[0]?.cursor ?? null }
+    }
+    const removeFault = async () => {
+      if (triggerInstalled) {
+        await pool.query("DROP TRIGGER " + triggerName + " ON bff_agui_event")
+        triggerInstalled = false
+      }
+      if (functionInstalled) {
+        await pool.query("DROP FUNCTION " + functionName + "()")
+        functionInstalled = false
+      }
+    }
+    try {
+      await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
+      await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+      store = new PostgresBffRepositories(postgresUrl, redisUrl)
+      await store.ready()
+      const before = await fingerprint()
+      assert.ok(Object.values(before.facts).every((rows) => rows.length === 0))
+      assert.equal(before.cursor, null)
+      // Real PostgreSQL failure, restricted to this tenant/conversation and queued CUSTOM.
+      await pool.query(
+        "CREATE FUNCTION " +
+          functionName +
+          "() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN " +
+          "IF NEW.tenant_id=TG_ARGV[0] AND NEW.session_id=TG_ARGV[1] AND NEW.event_type='CUSTOM' " +
+          "AND NEW.event_payload->>'name'='kokoro.run.queued' THEN " +
+          "RAISE EXCEPTION USING ERRCODE='P0001', MESSAGE='R43_QUEUED_INSERT_FAULT'; END IF; RETURN NEW; END; $$",
       )
-      facts[table] = result.rows.map(({ fact }) => fact)
+      functionInstalled = true
+      await pool.query(
+        "CREATE TRIGGER " +
+          triggerName +
+          " BEFORE INSERT ON bff_agui_event FOR EACH ROW EXECUTE FUNCTION " +
+          functionName +
+          "('" +
+          tenantId +
+          "','" +
+          conversationId +
+          "')",
+      )
+      triggerInstalled = true
+      let failure
+      try {
+        await store.services.chatTurns.submit(input)
+      } catch (error) {
+        failure = error
+      }
+      const afterFailure = await fingerprint()
+      assert.equal(failure?.code, "P0001", "queued insert fault must propagate through production submit")
+      assert.equal(failure?.message, "R43_QUEUED_INSERT_FAULT")
+      assert.deepEqual(afterFailure, before, "Conversation/Message/outbox/stream/source/public ledger and cursor must all roll back")
+
+      await removeFault()
+      const accepted = await store.services.chatTurns.submit(input)
+      assert.ok(accepted)
+      const committed = await fingerprint()
+      assert.equal(committed.facts.bff_conversation.length, 1)
+      assert.equal(committed.facts.bff_message.length, 2)
+      assert.equal(committed.facts.bff_agent_dispatch_outbox.length, 1)
+      assert.equal(committed.facts.bff_agui_stream.length, 1)
+      assert.equal(committed.facts.bff_agui_source_event.length, 0)
+      assert.equal(committed.facts.bff_agui_event.length, 1)
+      const outbox = committed.facts.bff_agent_dispatch_outbox[0]
+      const queued = committed.facts.bff_agui_event[0]
+      assert.equal(outbox.run_id, accepted.run_id)
+      assert.equal(outbox.status, "pending")
+      assert.equal(queued.event_type, "CUSTOM")
+      assert.equal(queued.event_payload.name, "kokoro.run.queued")
+      assert.deepEqual(queued.event_payload.value, {
+        run_id: accepted.run_id,
+        dispatch_sequence: String(outbox.conversation_dispatch_seq),
+      })
+      assert.match(committed.cursor, /^agui_[0-9a-f]{32}$/u)
+      const snapshot = await store.services.chat.snapshot(tenantId, subjectId, conversationId, undefined)
+      assert.deepEqual(snapshot.execution_head, { run_id: accepted.run_id, state: "queued", pending_pauses: [] })
+      assert.equal(snapshot.event_watermark, committed.cursor)
+      await store.close()
+      store = new PostgresBffRepositories(postgresUrl, redisUrl)
+      await store.ready()
+      assert.deepEqual(await store.services.chatTurns.submit(input), accepted)
+      assert.deepEqual(await store.services.chatTurns.submit(input), accepted)
+      assert.deepEqual(await fingerprint(), committed, "same key after reconnect must not add facts, alter markers or advance cursor")
+    } finally {
+      await removeFault()
+      if (store !== null) await store.close()
+      for (const [table, column] of [...scopedTables].reverse()) {
+        await pool.query("DELETE FROM " + table + " WHERE tenant_id=$1 AND " + column + "=$2", [tenantId, conversationId])
+      }
+      await pool.end()
     }
-    const watermark = await pool.query(
-      "SELECT cursor FROM bff_agui_event WHERE tenant_id=$1 AND session_id=$2 ORDER BY public_sequence DESC LIMIT 1",
-      [tenantId, conversationId],
-    )
-    return { facts, cursor: watermark.rows[0]?.cursor ?? null }
-  }
-  const removeFault = async () => {
-    if (triggerInstalled) {
-      await pool.query("DROP TRIGGER " + triggerName + " ON bff_agui_event")
-      triggerInstalled = false
-    }
-    if (functionInstalled) {
-      await pool.query("DROP FUNCTION " + functionName + "()")
-      functionInstalled = false
-    }
-  }
+  },
+)
+
+integrationTest("R124 Conversation deletion removes owned compact process rows without cross-owner SQL", { timeout: 30_000 }, async () => {
+  const suffix = randomUUID().replaceAll("-", "")
+  const tenantId = "r124_delete_" + suffix
+  const conversationId = "r124_session_" + suffix
+  const ownerId = "r124_owner_" + suffix
+  const runId = "r124_run_" + suffix
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC", statement_timeout: 5000 })
+  let store = null
   try {
     await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     store = new PostgresBffRepositories(postgresUrl, redisUrl)
     await store.ready()
-    const before = await fingerprint()
-    assert.ok(Object.values(before.facts).every((rows) => rows.length === 0))
-    assert.equal(before.cursor, null)
-    // Real PostgreSQL failure, restricted to this tenant/conversation and queued CUSTOM.
-    await pool.query(
-      "CREATE FUNCTION " + functionName + "() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN " +
-      "IF NEW.tenant_id=TG_ARGV[0] AND NEW.session_id=TG_ARGV[1] AND NEW.event_type='CUSTOM' " +
-      "AND NEW.event_payload->>'name'='kokoro.run.queued' THEN " +
-      "RAISE EXCEPTION USING ERRCODE='P0001', MESSAGE='R43_QUEUED_INSERT_FAULT'; END IF; RETURN NEW; END; $$",
+    assert.equal(
+      (await pool.query("SELECT to_regclass('kokoro_bff.bff_agui_run_process') AS process, to_regclass('kokoro_bff.bff_agui_run_activity') AS activity"))
+        .rows[0].process,
+      "bff_agui_run_process",
     )
-    functionInstalled = true
+    assert.equal((await pool.query("SELECT to_regclass('kokoro_bff.bff_agui_run_activity') AS activity")).rows[0].activity, "bff_agui_run_activity")
+    await pool.query("INSERT INTO bff_conversation (conversation_id,tenant_id,owner_id,title) VALUES ($1,$2,$3,'R124 delete')", [
+      conversationId,
+      tenantId,
+      ownerId,
+    ])
     await pool.query(
-      "CREATE TRIGGER " + triggerName + " BEFORE INSERT ON bff_agui_event FOR EACH ROW EXECUTE FUNCTION " +
-      functionName + "('" + tenantId + "','" + conversationId + "')",
+      `INSERT INTO bff_agui_run_process
+       (tenant_id,session_id,run_id,subject_id,start_source_owner,start_source_event_id,start_source_sequence,start_source_digest,start_source_occurred_at,start_public_sequence,start_public_cursor,created_at,updated_at)
+       VALUES ($1,$2,$3,$4,'kokoro-agent','source_start',1,$5,CURRENT_TIMESTAMP(3),1,$6,CURRENT_TIMESTAMP(3),CURRENT_TIMESTAMP(3))`,
+      [tenantId, conversationId, runId, ownerId, "a".repeat(64), "agui_" + "a".repeat(32)],
     )
-    triggerInstalled = true
-    let failure
-    try {
-      await store.services.chatTurns.submit(input)
-    } catch (error) {
-      failure = error
-    }
-    const afterFailure = await fingerprint()
-    assert.equal(failure?.code, "P0001", "queued insert fault must propagate through production submit")
-    assert.equal(failure?.message, "R43_QUEUED_INSERT_FAULT")
-    assert.deepEqual(afterFailure, before, "Conversation/Message/outbox/stream/source/public ledger and cursor must all roll back")
-
-    await removeFault()
-    const accepted = await store.services.chatTurns.submit(input)
-    assert.ok(accepted)
-    const committed = await fingerprint()
-    assert.equal(committed.facts.bff_conversation.length, 1)
-    assert.equal(committed.facts.bff_message.length, 2)
-    assert.equal(committed.facts.bff_agent_dispatch_outbox.length, 1)
-    assert.equal(committed.facts.bff_agui_stream.length, 1)
-    assert.equal(committed.facts.bff_agui_source_event.length, 0)
-    assert.equal(committed.facts.bff_agui_event.length, 1)
-    const outbox = committed.facts.bff_agent_dispatch_outbox[0]
-    const queued = committed.facts.bff_agui_event[0]
-    assert.equal(outbox.run_id, accepted.run_id)
-    assert.equal(outbox.status, "pending")
-    assert.equal(queued.event_type, "CUSTOM")
-    assert.equal(queued.event_payload.name, "kokoro.run.queued")
-    assert.deepEqual(queued.event_payload.value, {
-      run_id: accepted.run_id, dispatch_sequence: String(outbox.conversation_dispatch_seq),
-    })
-    assert.match(committed.cursor, /^agui_[0-9a-f]{32}$/u)
-    const snapshot = await store.services.chat.snapshot(tenantId, subjectId, conversationId, undefined)
-    assert.deepEqual(snapshot.execution_head, { run_id: accepted.run_id, state: "queued", pending_pauses: [] })
-    assert.equal(snapshot.event_watermark, committed.cursor)
-    await store.close()
-    store = new PostgresBffRepositories(postgresUrl, redisUrl)
-    await store.ready()
-    assert.deepEqual(await store.services.chatTurns.submit(input), accepted)
-    assert.deepEqual(await store.services.chatTurns.submit(input), accepted)
-    assert.deepEqual(await fingerprint(), committed, "same key after reconnect must not add facts, alter markers or advance cursor")
+    await pool.query(
+      `INSERT INTO bff_agui_run_activity
+       (tenant_id,session_id,run_id,activity_id,subject_id,activity_kind,safe_payload,payload_digest,first_source_owner,first_source_event_id,first_source_sequence,first_source_digest,first_source_occurred_at,first_public_sequence,first_public_cursor,latest_source_owner,latest_source_event_id,latest_source_sequence,latest_source_digest,latest_source_occurred_at,latest_public_sequence,latest_public_cursor,created_at,updated_at)
+       VALUES ($1,$2,$3,$4,$5,'tool',$6::jsonb,$7,'kokoro-agent','source_activity',2,$7,CURRENT_TIMESTAMP(3),2,$8,'kokoro-agent','source_activity',2,$7,CURRENT_TIMESTAMP(3),2,$8,CURRENT_TIMESTAMP(3),CURRENT_TIMESTAMP(3))`,
+      [
+        tenantId,
+        conversationId,
+        runId,
+        "act_" + "d".repeat(64),
+        ownerId,
+        JSON.stringify({
+          activity: "tool",
+          activity_id: "act_" + "d".repeat(64),
+          segment_id: "seg_" + "d".repeat(64),
+          status: "completed",
+          display_code: "tool.execution",
+        }),
+        "d".repeat(64),
+        "agui_" + "d".repeat(32),
+      ],
+    )
+    assert.equal(await store.services.chat.deleteConversation(tenantId, ownerId, conversationId, "r124_delete_request_" + suffix), true)
+    assert.equal(
+      (await pool.query("SELECT count(*)::int AS count FROM bff_agui_run_process WHERE tenant_id=$1 AND session_id=$2", [tenantId, conversationId])).rows[0]
+        .count,
+      0,
+    )
+    assert.equal(
+      (await pool.query("SELECT count(*)::int AS count FROM bff_agui_run_activity WHERE tenant_id=$1 AND session_id=$2", [tenantId, conversationId])).rows[0]
+        .count,
+      0,
+    )
   } finally {
-    await removeFault()
-    if (store !== null) await store.close()
-    for (const [table, column] of [...scopedTables].reverse()) {
-      await pool.query("DELETE FROM " + table + " WHERE tenant_id=$1 AND " + column + "=$2", [tenantId, conversationId])
+    if (store !== null) await store.close().catch(() => undefined)
+    for (const table of ["bff_agui_run_activity", "bff_agui_run_process", "bff_conversation"]) {
+      await pool.query("DELETE FROM " + table + " WHERE tenant_id=$1", [tenantId]).catch(() => undefined)
     }
     await pool.end()
   }

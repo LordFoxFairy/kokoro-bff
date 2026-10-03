@@ -205,14 +205,19 @@ export class PostgresAgUiConsumerRepository implements AgUiProjectionConsumerRep
         [leases.map((lease) => `${lease.tenantId}\u001f${lease.sessionId}`), finalDbNow],
       )
       const remainingBySession = new Map(remaining.rows.map((row) => [`${row.tenant_id}\u001f${row.session_id}`, row.lease_remaining_ms]))
-      if (leases.some((lease) => signedSafeInteger(remainingBySession.get(`${lease.tenantId}\u001f${lease.sessionId}`) ?? "0", "consumer lease remaining budget") < 1)) {
+      if (
+        leases.some(
+          (lease) => signedSafeInteger(remainingBySession.get(`${lease.tenantId}\u001f${lease.sessionId}`) ?? "0", "consumer lease remaining budget") < 1,
+        )
+      ) {
         await client.query("ROLLBACK")
         return []
       }
       await client.query("COMMIT")
       const commitElapsedMs = Math.ceil(performance.now() - finalObservedAt)
       return leases.flatMap((lease) => {
-        const remainingMs = signedSafeInteger(remainingBySession.get(`${lease.tenantId}\u001f${lease.sessionId}`) ?? "0", "consumer lease remaining budget") - commitElapsedMs
+        const remainingMs =
+          signedSafeInteger(remainingBySession.get(`${lease.tenantId}\u001f${lease.sessionId}`) ?? "0", "consumer lease remaining budget") - commitElapsedMs
         return remainingMs > 0 ? [{ ...lease, leaseRemainingMs: remainingMs }] : []
       })
     } catch (error) {
@@ -365,8 +370,19 @@ export class PostgresAgUiConsumerRepository implements AgUiProjectionConsumerRep
           WHERE tenant_id=$1 AND session_id=$2 AND consumer_subject_id=$3
             AND consumer_lease_owner=$4 AND consumer_lease_token=$5 AND consumer_fence=$6
             AND consumer_lease_until > $11::timestamptz`,
-        [lease.tenantId, lease.sessionId, lease.subjectId, lease.leaseOwner, lease.leaseToken, lease.fence,
-          values.state, nextPollDelayMs, values.errorCode, values.resetFailures, dbNow],
+        [
+          lease.tenantId,
+          lease.sessionId,
+          lease.subjectId,
+          lease.leaseOwner,
+          lease.leaseToken,
+          lease.fence,
+          values.state,
+          nextPollDelayMs,
+          values.errorCode,
+          values.resetFailures,
+          dbNow,
+        ],
       )
       await client.query("COMMIT")
       return result.rowCount === 1
@@ -465,19 +481,17 @@ export class PostgresAgUiConsumerRepository implements AgUiProjectionConsumerRep
                WHERE scope.tenant_id=bff_agui_stream.tenant_id AND scope.conversation_id=bff_agui_stream.session_id
             ))
           ORDER BY tenant_id ASC, session_id ASC`
-      const streamCandidates = await client.query<GarbageStreamRow>(
-        streamCandidatesQuery + "\nLIMIT $2",
-        [cutoff, command.batchSize, null],
-      )
+      const streamCandidates = await client.query<GarbageStreamRow>(streamCandidatesQuery + "\nLIMIT $2", [cutoff, command.batchSize, null])
       const scopes = streamCandidates.rows.map((stream) => ({ tenantId: stream.tenant_id, conversationId: stream.session_id }))
       const parents = await PostgresAgentDispatchOutboxRepository.lockConversationsInTransaction(client, scopes)
       // A parent may disappear between discovery and locking. Only actually locked
       // identities may enter; a newly inserted parent outside that result is excluded.
       const lockedScopes = parents.map((parent) => ({ tenant_id: parent.tenant_id, conversation_id: parent.conversation_id }))
-      const streams = await client.query<GarbageStreamRow>(
-        streamCandidatesQuery + "\nFOR UPDATE SKIP LOCKED LIMIT $2",
-        [cutoff, command.batchSize, JSON.stringify(lockedScopes)],
-      )
+      const streams = await client.query<GarbageStreamRow>(streamCandidatesQuery + "\nFOR UPDATE SKIP LOCKED LIMIT $2", [
+        cutoff,
+        command.batchSize,
+        JSON.stringify(lockedScopes),
+      ])
       streamsScanned = streams.rows.length
       for (const stream of streams.rows) {
         const retainFrom = safeInteger(stream.effective_retain_from, "effective retain-from sequence")
@@ -527,6 +541,22 @@ export class PostgresAgUiConsumerRepository implements AgUiProjectionConsumerRep
                   AND dispatch.run_id=interaction.run_id AND dispatch.status IN ('terminal','failed'))
               AND NOT EXISTS (SELECT 1 FROM bff_agui_event AS frame
                 WHERE frame.tenant_id=interaction.tenant_id AND frame.session_id=interaction.session_id AND frame.public_sequence=interaction.public_sequence)`,
+          [stream.tenant_id, stream.session_id],
+        )
+        await client.query(
+          `DELETE FROM bff_agui_run_activity AS activity
+            WHERE tenant_id=$1 AND session_id=$2
+              AND NOT EXISTS (SELECT 1 FROM bff_agui_event AS frame
+                WHERE frame.tenant_id=activity.tenant_id AND frame.session_id=activity.session_id
+                  AND COALESCE(NULLIF(frame.event_payload->>'runId',''),NULLIF(frame.event_payload #>> '{metadata,kokoro,run_id}',''))=activity.run_id)`,
+          [stream.tenant_id, stream.session_id],
+        )
+        await client.query(
+          `DELETE FROM bff_agui_run_process AS process
+            WHERE tenant_id=$1 AND session_id=$2
+              AND NOT EXISTS (SELECT 1 FROM bff_agui_event AS frame
+                WHERE frame.tenant_id=process.tenant_id AND frame.session_id=process.session_id
+                  AND COALESCE(NULLIF(frame.event_payload->>'runId',''),NULLIF(frame.event_payload #>> '{metadata,kokoro,run_id}',''))=process.run_id)`,
           [stream.tenant_id, stream.session_id],
         )
         const floor = safeInteger(batch.retention_floor, "retention floor")

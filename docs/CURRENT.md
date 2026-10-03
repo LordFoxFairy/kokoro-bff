@@ -1,3 +1,47 @@
+## R133 当前切片 Root 验收事实（2026-10-03）
+
+HTTP5 正式消费、public7 过程契约、两 canonical process 表、同事务 RR 快照、immutable anchor 分页、START 与分批 GC 完整性切片已由 Root 复验。真实 PG/HTTP：15 焦点和完整 74 项全部通过、0 skip；完整默认纯门 736 pass/1 既定 PG schema resource skip，四 pure 149 pass；format（含全部变更 TS/MJS）、lint、typecheck、build、全 contract pipeline 与 233 contract tests 通过。最新证据：资源19016f31、纯门7c8284b1、contract f7e3519c；两独立限定源码审0/0/0。
+
+两个 fixture 的时间戳/umask 假前置及 public7 Snapshot 示例缺字段已修并真实复测。当前 contract lint 剩4条 warning：3条 conditional-schema局部 required-properties提示、1条既有特殊操作无2xx提示；不称零warning或整个owner集成通过。下方“5条全既有/待Root”是历史阶段，不作为最新状态。集成提交身份以本仓 Git 与 Root progress E108 为准；Web7消费、当前真实浏览器、外部模型、正规积分及完整BFF其他资源/镜像验收仍未完成。
+
+以下为此前阶段与已批准技术方案。
+
+## R132 snapshot example 更正候选（2026-10-03，待 Root 复验）
+
+Root 真实 RED 已确认 public7 `SessionSnapshotResponse.example.data.execution_process` 缺失；下方把 5 条 contract lint warning 全记为既有并不准确。本片已补 active head 同 Run 的四字段安全过程示例，机器 schema、版本与 API 不变；实际剩余 warning 数、contract 结果、Git 提交与发布均待 Root 重跑后记录。
+
+## R132 BFF HTTP5 / public7 本片 Root 验收事实（2026-10-03，Git 发布待 Root）
+
+HTTP5 安全过程消费、public `7.0.0`、两张 canonical process 表、授权 RR、immutable anchor 分页、START successor 保留及 provenance/partial-GC 已完成本片有限验收。Root 证据为资源 `19016f31`（15 焦点与完整 74 全通过）、pure/default `3b926e2d`（149 pure；default 736 pass + 1 既定 PostgreSQL schema resource skip）及完整 format/contract `4811c5e9`（233 contract pass / 0 skip，保留 5 条既有 lint warning）；两次 R131 独立源码终审均为 0/0/0。原 73/1 timestamp 与 232/1 permission fixture 失败经精确窄 ACK 修正后，Root 已复测关闭。BFF7 Git 提交/推送仍待 Root；全部 BFF 业务、其余资源、镜像、用户 Web/浏览器、真实 provider/外部模型及正式积分仍未验。
+
+## R129 provenance / partial-GC 当前候选事实（2026-10-03）
+
+当前工作树已补 Run process Todo/activity 的双向 provenance fail-closed 与历史 START 分批回收语义，并保留 immutable anchor、未知 Run 404 和现有 GC 锁/retention 边界。writer 的 lint、typecheck、build 与默认纯门通过；真实 PostgreSQL 新三例、完整 74 项、独立终审、Git 与发布尚由 Root 接续，当前不称正式发布。
+
+## R126-GREEN-C 当前候选事实（2026-10-02）
+
+当前工作树已实现 public7 安全过程 snapshot/page、两张 canonical compact 表、START successor 保留、GC 与旧 tool-call cache 删除。writer授权定点纯门及静态/build通过；architecture public7 ACK 已应用；writer 完整默认门 737 tests / 736 pass / 0 fail / 1 既定资源 skip。PG/Redis/resource、独立审查、Git 与正式发布尚未执行，均由 Root 接续。
+
+## R123-GREEN-A 当前实现候选（2026-10-02，待 Root 最终全门）
+
+BFF 已单轨固定 Agent main `79bf98c5aa63b9bace207afdf42d8c7aefee4fe8` / HTTP `5.0.0`，严格解码完整 Todo 与安全 Skill/tool/subagent activity，并输出 `kokoro.todo.updated` / `kokoro.activity.updated` CUSTOM；旧 HTTP4 raw activity 网络路径已删除。writer 验证为 generator check、format/lint/typecheck/build 全 0，四 pure 149 pass / 0 fail / 0 skip；Root 最终全门与提交仍待完成。public machine 仍为 `6.0.0`，SQL、snapshot/process 分页、GC、START registration 与旧 private `toolCalls` 持久字段均未修改。
+
+## R123-BFF-HTTP5-D0 当前状态（2026-10-02，三P1已裁决，仍未实施）
+
+BFF基线仍为 main `02276b623f8390288fbf86d6efaa0f5152256afa`；public machine仍`6.0.0`，Agent pin仍HTTP4 `e977923ea9992cbddaf0cdbc6c8f8d23b3af120e`。Agent正式main `79bf98c5aa63b9bace207afdf42d8c7aefee4fe8`已发布HTTP5，canonical OpenAPI SHA-256 `bca8e4f4fd613e4325f594266893d5b089168cf14f2ad7a7df03f3f116af85f2`。现snapshot虽同一RR读取Message、FIFO head、完整HITL、Delivery与opaque watermark，但Todo未解码、activity仍旧raw映射、Skill phase/preflight无compact安全投影。
+
+Root已裁决public唯一后继为breaking`7.0.0`：snapshot `execution_process` required nullable，非null必含`run_id,todos,activities,next_cursor`；activities只是`event_watermark`锚定的≤100项/≤1MiB第一页。1MiB只预算序列化process对象，不含同snapshot的Message/Delivery等字段。授权`GET /v1/sessions/{sessionId}/runs/{runId}/process`要求watermark、cursor可省略：省略可读任意已授权历史Run第一锚定页，提供则续上一页；每页重验scope并从不可变safe CUSTOM ledger作as-of还原，opaque cursor不泄source/public sequence，过期410且不从0或latest Row猜恢复。
+
+`execution_process`与FIFO `execution_head`独立：选择最近durable START，terminal后及successor仅queued时保留旧Run，直到新START才切换，从未START才null。当前`agui-consumer-registration.ts`在expected Run变化时清`latest_run_start_sequence`是已确认生产缺口；后继只保START至新START，原version/fence/lease规则不变。采用两表RunProcessProjection；不建activity revision/cursor表，不从Agent5 enum发明Skill phase或tool/subagent status单向transition。
+
+Root已独立复现R123-RED1：Node22 build exit0；四pure 148 tests / 120 pass / 28预期行为fail / 0skip，既有106正控通过。当前四测试SHA-256：`ff865fe5a1f6f1862e952870e86b8ba535f5fbe005fe7bd265e1d9cb5c2f6f1b`、`fdd557c0771fb1d126f1ac4e7cca9439128545148f531fae44c1a2642c91572c`、`195135e3e6d8a46536721a4857965cc0ff4493f38e0cfcf08f922dcdccefceb3`、`f95e592fbd2c09b731862c3dff066b4d25f8c7044ebe0d81c3a3d9e1c3b5f505`。这些是wire/reader/mapper/projector与strict fail-closed的真实RED，不是修复证据。
+
+后继先行GREEN只允许owner artifact/pin/generated、strict process decoder与安全CUSTOM projector，使现RED转绿；不实施SQL、public7 machine、snapshot分页或GC。Root审后再授权public/SQL/RR/page/registration/GC RED与实现。精确文件、§8位置比较、事务/CAS、错误和资源门见本轮TECHNICAL_DESIGN/API_CONTRACT/DATA_MODEL前缀。
+
+本D0仅改四份现文档前缀，production、四tests、public machine、canonical SQL、vendor/generated、lock、Git与资源均冻结；D0不是功能、发布或验收完成。
+
+---
+
 ## R118 Root 四事实 RR 组合回归（2026-10-02）
 
 Root已接收原WIN02唯一EOF测试交付并负责本节/最终Git，原writer cursor150 completed/idle。production、canonical public6、SQL、generated与locks未改；新增现test/agui-projection.integration.mjs用真实ingest在另一PG连接同事务提交assistant delta及完整interaction revision，已授权RR旧读四事实保旧集合，fresh读四事实为新集合，从旧opaque cursor精确replay本批delta/完整CUSTOM envelope到同watermark。

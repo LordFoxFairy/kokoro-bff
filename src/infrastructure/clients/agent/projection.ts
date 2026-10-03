@@ -3,6 +3,7 @@ import { parseAgentInteractionState } from "./interaction-state.js"
 import type { ChatEvent, ChatMessage, ChatSessionDetail, ChatSessionSummary } from "../../../contracts/index.js"
 import { parseAgentFailure } from "../../../generated/agent-http/failure-profile.gen.js"
 import type { AgentChatEvent, AgentChatMessage, AgentEventPage, BffIdentity } from "./types.js"
+import { parseAgentProcessPayload } from "./process-state.js"
 
 function recordPayload(event: AgentChatEvent): Record<string, unknown> {
   let parsed: unknown
@@ -43,11 +44,6 @@ function baseEvent(event: AgentChatEvent, kind: string, payload: Record<string, 
   }
 }
 
-function sourceOf(value: unknown): "built-in" | "config-custom" | "runtime-custom" {
-  if (value === "built-in" || value === "config-custom" || value === "runtime-custom") return value
-  throw new Error("Agent subagent source is invalid")
-}
-
 const ARTIFACT_KINDS = new Set(["document", "code", "image", "audio", "video", "data", "archive", "other"])
 const SHA256 = /^[0-9a-f]{64}$/u
 
@@ -66,7 +62,9 @@ function deliverySize(value: unknown): number {
   return value
 }
 
-export function mapAgentEvent(event: AgentChatEvent): ChatEvent | null {
+export function mapAgentEvent(event: AgentChatEvent): ChatEvent {
+  const process = parseAgentProcessPayload(event.event_type, event.payload_json)
+  if (process !== null) return baseEvent(event, process.kind, { ...process.value })
   const payload = recordPayload(event)
   const segmentId = event.chat_message_id ?? event.chat_event_id
   switch (event.event_type) {
@@ -82,48 +80,8 @@ export function mapAgentEvent(event: AgentChatEvent): ChatEvent | null {
         segment_id: nonEmptyString(segmentId, "chat_message_id"),
         content: stringValue(payload.content, "content"),
       })
-    case "activity": {
-      const activity = payload.activity
-      if (activity === "tool") {
-        const toolId = nonEmptyString(payload.tool_id, "tool_id")
-        const toolPayload = {
-          segment_id: nonEmptyString(payload.segment_id, "segment_id"),
-          tool_id: toolId,
-          name: nonEmptyString(payload.name, "name"),
-        }
-        if (payload.status === "started") return baseEvent(event, "tool.invoked", { ...toolPayload, args: {} })
-        return baseEvent(event, "tool.returned", {
-          ...toolPayload,
-          result: typeof payload.result === "string" ? payload.result : "",
-          is_error: payload.is_error === true,
-          ...(payload.truncated === true ? { truncated: true } : {}),
-        })
-      }
-      if (activity === "subagent") {
-        const subagentPayload = {
-          segment_id: nonEmptyString(payload.segment_id, "segment_id"),
-          subagent_id: nonEmptyString(payload.subagent_id, "subagent_id"),
-          name: nonEmptyString(payload.name, "name"),
-          subagent_type: nonEmptyString(payload.subagent_type, "subagent_type"),
-          source: sourceOf(payload.source),
-        }
-        if (payload.status === "started")
-          return baseEvent(event, "subagent.started", {
-            ...subagentPayload,
-            description: typeof payload.description === "string" ? payload.description : "",
-          })
-        return baseEvent(event, "subagent.finished", {
-          ...subagentPayload,
-          ...(payload.status === "failed" ? { failed: true } : {}),
-          ...(typeof payload.error === "string" ? { error: payload.error } : {}),
-        })
-      }
-      return null
-    }
     case "interaction.state":
       return baseEvent(event, "interaction.state", parseAgentInteractionState(payload))
-    case "interaction":
-      throw new Error("Retired Agent interaction event")
     case "delivery":
       return baseEvent(event, "delivery.created", {
         tool_call_id: nonEmptyString(payload.tool_call_id, "tool_call_id"),
@@ -151,7 +109,7 @@ export function mapAgentEvent(event: AgentChatEvent): ChatEvent | null {
       })
     }
     default:
-      return null
+      throw new Error("Agent chat projection event type is unsupported")
   }
 }
 
@@ -160,46 +118,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function agentEvent(value: unknown, expectedSessionId: string): AgentChatEvent | null {
-  if (!isRecord(value) || !zChatEvent.safeParse(value).success) return null
-  const chatEventId = value.chat_event_id
-  const sessionId = value.session_id
-  const runId = value.run_id
-  const eventType = value.event_type
-  const payloadJson = value.payload_json
-  const sequence = value.seq
-  const createdAt = value.created_at
-  const sourceIndex = value.source_index
-  const chatMessageId = value.chat_message_id
-  if (
-    typeof chatEventId !== "string" ||
-    chatEventId.trim() === "" ||
-    sessionId !== expectedSessionId ||
-    typeof runId !== "string" ||
-    runId.trim() === "" ||
-    typeof eventType !== "string" ||
-    eventType.trim() === "" ||
-    typeof payloadJson !== "string" ||
-    typeof sequence !== "number" ||
-    !Number.isSafeInteger(sequence) ||
-    sequence < 1 ||
-    typeof createdAt !== "number" ||
-    !Number.isFinite(createdAt) ||
-    typeof sourceIndex !== "number" ||
-    !Number.isSafeInteger(sourceIndex) ||
-    sourceIndex < 0 ||
-    (chatMessageId !== undefined && chatMessageId !== null && (typeof chatMessageId !== "string" || chatMessageId.trim() === ""))
-  )
-    return null
+  const result = zChatEvent.safeParse(value)
+  if (!result.success || result.data.session_id !== expectedSessionId) return null
+  const event = result.data
   return {
-    chat_event_id: chatEventId,
-    session_id: sessionId,
-    run_id: runId,
-    source_index: sourceIndex,
-    event_type: eventType,
-    payload_json: payloadJson,
-    seq: sequence,
-    created_at: createdAt,
-    ...(chatMessageId === undefined ? {} : { chat_message_id: typeof chatMessageId === "string" ? chatMessageId : null }),
+    chat_event_id: event.chat_event_id,
+    session_id: event.session_id,
+    run_id: event.run_id,
+    source_index: event.source_index,
+    event_type: event.event_type,
+    payload_json: event.payload_json,
+    seq: event.seq,
+    created_at: event.created_at,
+    ...(event.chat_message_id === undefined ? {} : { chat_message_id: event.chat_message_id }),
   }
 }
 

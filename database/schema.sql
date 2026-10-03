@@ -489,7 +489,7 @@ CREATE TABLE IF NOT EXISTS bff_agui_stream (
   version BIGINT NOT NULL DEFAULT 0,
   source_high_watermark BIGINT NOT NULL DEFAULT 0,
   next_public_sequence BIGINT NOT NULL DEFAULT 1,
-  projection_state JSONB NOT NULL DEFAULT '{"text_message_ids":[],"tool_call_ids":[]}'::jsonb,
+  projection_state JSONB NOT NULL DEFAULT '{"text_message_ids":[]}'::jsonb,
   expected_run_id TEXT,
   latest_run_id TEXT,
   latest_run_start_sequence BIGINT,
@@ -618,6 +618,81 @@ CREATE TABLE IF NOT EXISTS bff_agui_event (
 );
 CREATE INDEX IF NOT EXISTS ix_bff_agui_event_retention
   ON bff_agui_event (tenant_id, session_id, recorded_at ASC, public_sequence ASC);
+
+-- Compact safe Run process state. Immutable as-of pages are reconstructed from
+-- bff_agui_event; these rows provide current integrity/provenance and GC pins.
+CREATE TABLE IF NOT EXISTS bff_agui_run_process (
+  tenant_id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  run_id TEXT NOT NULL,
+  subject_id TEXT NOT NULL,
+  projection_schema_version INTEGER NOT NULL DEFAULT 1,
+  start_source_owner TEXT NOT NULL,
+  start_source_event_id TEXT NOT NULL,
+  start_source_sequence BIGINT NOT NULL,
+  start_source_digest TEXT NOT NULL,
+  start_source_occurred_at TIMESTAMPTZ(3) NOT NULL,
+  start_public_sequence BIGINT NOT NULL,
+  start_public_cursor TEXT NOT NULL,
+  todo_observed BOOLEAN NOT NULL DEFAULT FALSE,
+  todos JSONB,
+  todo_digest TEXT,
+  todo_source_owner TEXT,
+  todo_source_event_id TEXT,
+  todo_source_sequence BIGINT,
+  todo_source_digest TEXT,
+  todo_source_occurred_at TIMESTAMPTZ(3),
+  todo_public_sequence BIGINT,
+  todo_public_cursor TEXT,
+  created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (tenant_id, session_id, run_id),
+  CONSTRAINT ck_bff_agui_run_process_identity CHECK (length(btrim(subject_id)) > 0 AND length(btrim(run_id)) > 0),
+  CONSTRAINT ck_bff_agui_run_process_schema CHECK (projection_schema_version = 1),
+  CONSTRAINT ck_bff_agui_run_process_start CHECK (start_source_owner = 'kokoro-agent' AND start_source_sequence >= 1 AND start_public_sequence >= 1 AND start_source_digest ~ '^[0-9a-f]{64}$'),
+  CONSTRAINT ck_bff_agui_run_process_todo CHECK (
+    (NOT todo_observed AND todos IS NULL AND todo_digest IS NULL AND todo_source_owner IS NULL AND todo_source_event_id IS NULL AND todo_source_sequence IS NULL AND todo_source_digest IS NULL AND todo_source_occurred_at IS NULL AND todo_public_sequence IS NULL AND todo_public_cursor IS NULL)
+    OR (todo_observed AND todos IS NOT NULL AND jsonb_typeof(todos) = 'array' AND todo_digest IS NOT NULL
+      AND todo_source_owner IS NOT NULL AND todo_source_owner = 'kokoro-agent' AND todo_source_event_id IS NOT NULL
+      AND todo_source_sequence IS NOT NULL AND todo_source_sequence >= 1 AND todo_source_digest IS NOT NULL
+      AND todo_source_digest ~ '^[0-9a-f]{64}$' AND todo_source_occurred_at IS NOT NULL
+      AND todo_public_sequence IS NOT NULL AND todo_public_sequence >= start_public_sequence AND todo_public_cursor IS NOT NULL)
+  )
+);
+
+CREATE TABLE IF NOT EXISTS bff_agui_run_activity (
+  tenant_id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  run_id TEXT NOT NULL,
+  activity_id TEXT NOT NULL,
+  subject_id TEXT NOT NULL,
+  projection_schema_version INTEGER NOT NULL DEFAULT 1,
+  activity_kind TEXT NOT NULL,
+  safe_payload JSONB NOT NULL,
+  payload_digest TEXT NOT NULL,
+  first_source_owner TEXT NOT NULL,
+  first_source_event_id TEXT NOT NULL,
+  first_source_sequence BIGINT NOT NULL,
+  first_source_digest TEXT NOT NULL,
+  first_source_occurred_at TIMESTAMPTZ(3) NOT NULL,
+  first_public_sequence BIGINT NOT NULL,
+  first_public_cursor TEXT NOT NULL,
+  latest_source_owner TEXT NOT NULL,
+  latest_source_event_id TEXT NOT NULL,
+  latest_source_sequence BIGINT NOT NULL,
+  latest_source_digest TEXT NOT NULL,
+  latest_source_occurred_at TIMESTAMPTZ(3) NOT NULL,
+  latest_public_sequence BIGINT NOT NULL,
+  latest_public_cursor TEXT NOT NULL,
+  created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (tenant_id, session_id, run_id, activity_id),
+  CONSTRAINT ck_bff_agui_run_activity_schema CHECK (projection_schema_version = 1),
+  CONSTRAINT ck_bff_agui_run_activity_payload CHECK (jsonb_typeof(safe_payload) = 'object' AND activity_kind IN ('skill','tool','subagent')),
+  CONSTRAINT ck_bff_agui_run_activity_provenance CHECK (first_source_owner = 'kokoro-agent' AND latest_source_owner = 'kokoro-agent' AND first_source_sequence >= 1 AND latest_source_sequence >= first_source_sequence AND first_public_sequence >= 1 AND latest_public_sequence >= first_public_sequence AND payload_digest ~ '^[0-9a-f]{64}$' AND first_source_digest ~ '^[0-9a-f]{64}$' AND latest_source_digest ~ '^[0-9a-f]{64}$')
+);
+CREATE INDEX IF NOT EXISTS ix_bff_agui_run_activity_page
+  ON bff_agui_run_activity (tenant_id, session_id, run_id, first_public_sequence, activity_id);
 
 -- A compact tombstone keeps a scope-bound answer for cursors whose frame was
 -- reclaimed. It prevents an expired cursor from being confused with an

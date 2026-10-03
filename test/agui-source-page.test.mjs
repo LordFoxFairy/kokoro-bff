@@ -589,7 +589,7 @@ describe("AG-UI source continuity defense", () => {
       readStream: async () => ({
         version: 0,
         sourceHighWatermark: 0,
-        projectionState: { textMessageIds: [], toolCallIds: [] },
+        projectionState: { textMessageIds: [] },
       }),
       assertPersistedSources: async () => undefined,
       commitProjection: async () => "committed",
@@ -606,7 +606,7 @@ describe("AG-UI source continuity defense", () => {
       readStream: async () => ({
         version: 0,
         sourceHighWatermark: 0,
-        projectionState: { textMessageIds: [], toolCallIds: [] },
+        projectionState: { textMessageIds: [] },
       }),
       assertPersistedSources: async () => undefined,
       commitProjection: async () => "committed",
@@ -621,7 +621,7 @@ describe("AG-UI source continuity defense", () => {
   it("projects only a complete typed Artifact delivery claim", async () => {
     let committed
     const repository = {
-      readStream: async () => ({ version: 0, sourceHighWatermark: 0, projectionState: { textMessageIds: [], toolCallIds: [] } }),
+      readStream: async () => ({ version: 0, sourceHighWatermark: 0, projectionState: { textMessageIds: [] } }),
       assertPersistedSources: async () => undefined,
       commitProjection: async (command) => {
         committed = command
@@ -703,8 +703,7 @@ describe("AG-UI source continuity defense", () => {
   })
 })
 
-
-// R57: the real source decoder must consume only the published HTTP4 full-state surface.
+// R57: the real source decoder must consume only the published full-state surface.
 
 function r57Waiting() {
   return {
@@ -994,7 +993,7 @@ it("R57 real HTTP source reader rejects a mixed valid start and malformed intera
     const scope = { tenantId: "tenant_1", subjectId: "user_1", sessionId: "session_1" }
     const positive = await reader.read(scope, 0, 10)
     assert.equal(positive.events.length, 2)
-    assert.deepEqual(positive.events[1].event?.payload, r57Waiting(), "valid HTTP4 full state must be accepted before testing the negative")
+    assert.deepEqual(positive.events[1].event?.payload, r57Waiting(), "valid published full state must be accepted before testing the negative")
     publishInvalid = true
     await assert.rejects(reader.read(scope, 0, 10), AgUiSourceContractError)
   } finally {
@@ -1026,3 +1025,346 @@ it("R57 source optional-presence vectors keep the two independent owner full-sta
   assert.equal(createHash("sha256").update(canonical(mappedExplicit.payload)).digest("hex"), "1f189ebdc6434757949ae96350ba4b6a0c92f3a26a8e2e0d99f9e8ff6af1a22e")
   assert.equal(createHash("sha256").update(canonical(mappedOmitted.payload)).digest("hex"), "4d8573e1211c7aaa33a6d37cde0bf830e2fb9e7bf52e7d214229fd30e05ab9aa")
 })
+
+// R123: published HTTP5 safe process payloads must cross the real HTTP reader and strict decoder.
+const r123ActivityId = (hex) => `act_${hex.repeat(64)}`
+const r123SegmentId = (hex) => `seg_${hex.repeat(64)}`
+const r123PreflightId = (hex) => `spf_${hex.repeat(64)}`
+
+function r123SafeSource(sequence, eventType, payload, overrides = {}) {
+  return event(sequence, {
+    event_type: eventType,
+    payload_json: JSON.stringify(payload),
+    ...overrides,
+  })
+}
+
+function r123TodoAtUtf8Bytes(targetBytes) {
+  const todos = Array.from({ length: 64 }, (_, index) => ({
+    content: `item${index}`,
+    status: index % 3 === 0 ? "pending" : index % 3 === 1 ? "in_progress" : "completed",
+  }))
+  let payload = { todos }
+  let remaining = targetBytes - Buffer.byteLength(JSON.stringify(payload), "utf8")
+  assert.ok(remaining >= 0, "target must fit the valid minimum Todo table")
+  for (const todo of todos) {
+    if (remaining === 0) break
+    const capacity = 1024 - Array.from(todo.content).length
+    const foxes = Math.min(capacity, Math.floor(remaining / 4))
+    todo.content += "🦊".repeat(foxes)
+    remaining -= foxes * 4
+    const ascii = Math.min(1024 - Array.from(todo.content).length, remaining)
+    todo.content += "x".repeat(ascii)
+    remaining -= ascii
+  }
+  payload = { todos }
+  assert.equal(remaining, 0, "fixture must reach the exact UTF-8 byte boundary without violating scalar limits")
+  assert.equal(Buffer.byteLength(JSON.stringify(payload), "utf8"), targetBytes)
+  assert.ok(todos.every(({ content }) => Array.from(content).length >= 1 && Array.from(content).length <= 1024))
+  return payload
+}
+
+async function r123ReadOwnerEvents(events) {
+  const server = createServer((_request, response) => {
+    response.setHeader("content-type", "application/json")
+    response.end(JSON.stringify({ data: { events, next_seq: events.length, watermark: events.length }, meta: { request_id: "r123_http5" } }))
+  })
+  const baseUrl = await listen(server)
+  try {
+    const reader = new AgentAgUiSourceReader(
+      loadConfig({
+        KOKORO_BFF_SHARED_SECRET: "r123-web-secret",
+        KOKORO_INTERNAL_SECRET_BFF: "r123-owner-secret",
+        KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/kokoro_bff?schema=kokoro_bff",
+        KOKORO_BFF_REDIS_URL: "redis://localhost:6379/8",
+      }),
+      baseUrl,
+      { maxAttempts: 1 },
+    )
+    return await reader.read({ tenantId: "tenant_1", subjectId: "user_1", sessionId: "session_1" }, 0, 100)
+  } finally {
+    await close(server)
+  }
+}
+
+it("R123 real owner reader maps complete Todo replacement and every published safe activity variant", async () => {
+  const todo = {
+    todos: [
+      { content: "先检查 🦊", status: "pending" },
+      { content: "repeat", status: "in_progress" },
+      { content: "repeat", status: "completed" },
+    ],
+  }
+  const emptyTodo = { todos: [] }
+  const activities = [
+    ...["running", "completed", "failed"].map((status) => ({
+      activity: "tool",
+      activity_id: r123ActivityId("a"),
+      segment_id: r123SegmentId("b"),
+      status,
+      display_code: "tool.execution",
+    })),
+    ...["running", "completed", "failed"].map((status) => ({
+      activity: "subagent",
+      activity_id: r123ActivityId("c"),
+      segment_id: r123SegmentId("d"),
+      status,
+      display_code: "subagent.execution",
+    })),
+    { activity: "skill", activity_id: r123ActivityId("e"), preflight_id: r123PreflightId("1"), source_refs: ["skill:alpha"], phase: "resolving" },
+    { activity: "skill", activity_id: r123ActivityId("e"), preflight_id: r123PreflightId("1"), source_refs: ["skill:alpha"], phase: "loading" },
+    { activity: "skill", activity_id: r123ActivityId("e"), preflight_id: r123PreflightId("1"), source_refs: ["skill:alpha"], phase: "ready" },
+    {
+      activity: "skill",
+      activity_id: r123ActivityId("e"),
+      preflight_id: r123PreflightId("2"),
+      source_refs: ["skill:alpha"],
+      phase: "failed",
+      error_code: "skill_load_failed",
+    },
+  ]
+  const sources = [
+    r123SafeSource(1, "todo.updated", todo),
+    r123SafeSource(2, "todo.updated", emptyTodo),
+    ...activities.map((payload, index) => r123SafeSource(index + 3, "activity", payload, { chat_message_id: "assistant_identity_canary" })),
+  ]
+
+  const page = await r123ReadOwnerEvents(sources)
+  assert.deepEqual(
+    page.events.slice(0, 2).map(({ event: mapped }) => mapped),
+    [
+      { event_id: "source_1", seq: 1, session_id: "session_1", run_id: "run_1", kind: "todo.updated", timestamp: "1970-01-01T00:00:01.000Z", payload: todo },
+      {
+        event_id: "source_2",
+        seq: 2,
+        session_id: "session_1",
+        run_id: "run_1",
+        kind: "todo.updated",
+        timestamp: "1970-01-01T00:00:02.000Z",
+        payload: emptyTodo,
+      },
+    ],
+  )
+  assert.deepEqual(
+    page.events.slice(2).map(({ event: mapped }) => mapped?.payload),
+    activities,
+  )
+  assert.ok(page.events.slice(2).every(({ event: mapped }) => mapped?.kind === "activity.updated"))
+  assert.ok(page.events.slice(2).every(({ event: mapped }) => !JSON.stringify(mapped).includes("assistant_identity_canary")))
+
+  const { createAgUiProjectionState, projectChatEvent } = await import("../dist/application/agui/project-chat-event.js")
+  const frames = page.events.flatMap(({ event: mapped }) => projectChatEvent(mapped, createAgUiProjectionState()))
+  assert.deepEqual(
+    frames.map(({ name }) => name),
+    ["kokoro.todo.updated", "kokoro.todo.updated", ...activities.map(() => "kokoro.activity.updated")],
+  )
+  assert.deepEqual(
+    frames.map(({ value }) => value),
+    [todo, emptyTodo, ...activities],
+  )
+  assert.ok(frames.every(({ metadata }) => metadata?.kokoro?.session_id === "session_1" && metadata.kokoro.run_id === "run_1"))
+  assert.ok(
+    frames.every((frame) => !Object.hasOwn(frame, "messageId")),
+    "seg_ identities must not become assistant message ids",
+  )
+  assert.ok(frames.every((frame) => !JSON.stringify(frame).includes("assistant_identity_canary")))
+})
+
+for (const [activity, displayCode] of [
+  ["tool", "tool.execution"],
+  ["subagent", "subagent.execution"],
+]) {
+  for (const status of ["running", "completed", "failed"]) {
+    it(`R123 real owner reader maps and projects ${activity}/${status} safe activity`, async () => {
+      const payload = {
+        activity,
+        activity_id: activity === "tool" ? r123ActivityId("a") : r123ActivityId("c"),
+        segment_id: activity === "tool" ? r123SegmentId("b") : r123SegmentId("d"),
+        status,
+        display_code: displayCode,
+      }
+      const page = await r123ReadOwnerEvents([r123SafeSource(1, "activity", payload, { chat_message_id: "assistant_identity_canary" })])
+      const mapped = page.events[0].event
+      assert.equal(mapped?.kind, "activity.updated")
+      assert.deepEqual(mapped?.payload, payload)
+      const { createAgUiProjectionState, projectChatEvent } = await import("../dist/application/agui/project-chat-event.js")
+      const [frame] = projectChatEvent(mapped, createAgUiProjectionState())
+      assert.deepEqual(frame?.value, payload)
+      assert.equal(frame?.name, "kokoro.activity.updated")
+      assert.equal(frame?.metadata?.kokoro?.event_id, "source_1")
+      assert.equal(frame?.metadata?.kokoro?.seq, 1)
+      assert.equal(Object.hasOwn(frame, "messageId"), false)
+      assert.equal(JSON.stringify(frame).includes("assistant_identity_canary"), false)
+    })
+  }
+}
+
+it("R123 real owner reader accepts exact Todo scalar/count/UTF-8 boundaries", async () => {
+  const hundred = { todos: Array.from({ length: 100 }, (_, index) => ({ content: index === 0 ? "🦊".repeat(1024) : `todo-${index}`, status: "in_progress" })) }
+  const exactBytes = r123TodoAtUtf8Bytes(65536)
+  const page = await r123ReadOwnerEvents([r123SafeSource(1, "todo.updated", hundred), r123SafeSource(2, "todo.updated", exactBytes)])
+  assert.deepEqual(page.events[0].event?.payload, hundred)
+  assert.deepEqual(page.events[1].event?.payload, exactBytes)
+})
+
+const r123InvalidOwnerEvents = [
+  ["Todo rejects 101 items", "todo.updated", { todos: Array.from({ length: 101 }, (_, index) => ({ content: `todo-${index}`, status: "pending" })) }],
+  ["Todo rejects 1025 Unicode scalars", "todo.updated", { todos: [{ content: "x".repeat(1025), status: "pending" }] }],
+  ["Todo rejects isolated surrogate", "todo.updated", { todos: [{ content: "\ud800", status: "pending" }] }],
+  ["Todo rejects 65537 UTF-8 payload bytes", "todo.updated", r123TodoAtUtf8Bytes(65537)],
+  ["Todo rejects unknown fields", "todo.updated", { todos: [], extra: true }],
+  [
+    "tool activity rejects raw name",
+    "activity",
+    {
+      activity: "tool",
+      activity_id: r123ActivityId("a"),
+      segment_id: r123SegmentId("b"),
+      status: "running",
+      display_code: "tool.execution",
+      name: "raw-name-canary",
+    },
+  ],
+  [
+    "tool activity rejects raw args",
+    "activity",
+    {
+      activity: "tool",
+      activity_id: r123ActivityId("a"),
+      segment_id: r123SegmentId("b"),
+      status: "running",
+      display_code: "tool.execution",
+      args: { secret: "raw-args-canary" },
+    },
+  ],
+  [
+    "tool activity rejects raw result",
+    "activity",
+    {
+      activity: "tool",
+      activity_id: r123ActivityId("a"),
+      segment_id: r123SegmentId("b"),
+      status: "running",
+      display_code: "tool.execution",
+      result: "raw-result-canary",
+    },
+  ],
+  [
+    "subagent activity rejects raw source",
+    "activity",
+    {
+      activity: "subagent",
+      activity_id: r123ActivityId("a"),
+      segment_id: r123SegmentId("b"),
+      status: "running",
+      display_code: "subagent.execution",
+      source: "raw-source-canary",
+    },
+  ],
+  [
+    "activity rejects missing discriminator-required field",
+    "activity",
+    { activity: "tool", activity_id: r123ActivityId("a"), segment_id: r123SegmentId("b"), status: "running" },
+  ],
+  [
+    "activity rejects wrong fixed display code",
+    "activity",
+    { activity: "tool", activity_id: r123ActivityId("a"), segment_id: r123SegmentId("b"), status: "running", display_code: "subagent.execution" },
+  ],
+  [
+    "activity rejects uppercase opaque identity",
+    "activity",
+    { activity: "tool", activity_id: `act_${"A".repeat(64)}`, segment_id: r123SegmentId("b"), status: "running", display_code: "tool.execution" },
+  ],
+  [
+    "activity rejects short opaque identity",
+    "activity",
+    { activity: "tool", activity_id: r123ActivityId("a"), segment_id: "seg_short", status: "running", display_code: "tool.execution" },
+  ],
+  ["activity rejects legacy HTTP4 shape", "activity", { activity: "tool", tool_id: "tool_raw", segment_id: "segment_raw", name: "legacy", status: "started" }],
+]
+for (const [name, eventType, payload] of r123InvalidOwnerEvents) {
+  it(`R123 real owner reader ${name}`, async () => {
+    await assert.rejects(r123ReadOwnerEvents([r123SafeSource(1, eventType, payload)]), AgUiSourceContractError)
+  })
+}
+
+it("R123 real owner reader accepts Skill 1/16 refs, both failure codes, and same-activity distinct-preflight identity", async () => {
+  const refs = Array.from({ length: 16 }, (_, index) => `skill:s${index}`)
+  const baseSkill = { activity: "skill", activity_id: r123ActivityId("e"), preflight_id: r123PreflightId("f"), source_refs: ["skill:alpha"], phase: "ready" }
+  const positives = [
+    { ...baseSkill, source_refs: ["skill:one"] },
+    { ...baseSkill, source_refs: refs },
+    { ...baseSkill, preflight_id: r123PreflightId("1"), phase: "failed", error_code: "skill_resolve_failed" },
+    { ...baseSkill, preflight_id: r123PreflightId("2"), phase: "failed", error_code: "skill_load_failed" },
+  ]
+  const positive = await r123ReadOwnerEvents(positives.map((payload, index) => r123SafeSource(index + 1, "activity", payload)))
+  assert.deepEqual(
+    positive.events.map(({ event: mapped }) => mapped?.payload),
+    positives,
+  )
+})
+
+const r123InvalidSkillActivities = [
+  ["rejects zero refs", { activity: "skill", activity_id: r123ActivityId("e"), preflight_id: r123PreflightId("f"), source_refs: [], phase: "ready" }],
+  [
+    "rejects 17 refs",
+    {
+      activity: "skill",
+      activity_id: r123ActivityId("e"),
+      preflight_id: r123PreflightId("f"),
+      source_refs: [...Array.from({ length: 16 }, (_, index) => `skill:s${index}`), "skill:overflow"],
+      phase: "ready",
+    },
+  ],
+  [
+    "rejects duplicate refs",
+    { activity: "skill", activity_id: r123ActivityId("e"), preflight_id: r123PreflightId("f"), source_refs: ["skill:dup", "skill:dup"], phase: "ready" },
+  ],
+  [
+    "rejects newline-suffixed ref",
+    { activity: "skill", activity_id: r123ActivityId("e"), preflight_id: r123PreflightId("f"), source_refs: ["skill:alpha\n"], phase: "ready" },
+  ],
+  [
+    "requires failure code presence",
+    { activity: "skill", activity_id: r123ActivityId("e"), preflight_id: r123PreflightId("f"), source_refs: ["skill:alpha"], phase: "failed" },
+  ],
+  [
+    "rejects null failure code",
+    {
+      activity: "skill",
+      activity_id: r123ActivityId("e"),
+      preflight_id: r123PreflightId("f"),
+      source_refs: ["skill:alpha"],
+      phase: "failed",
+      error_code: null,
+    },
+  ],
+  [
+    "rejects unknown failure code",
+    {
+      activity: "skill",
+      activity_id: r123ActivityId("e"),
+      preflight_id: r123PreflightId("f"),
+      source_refs: ["skill:alpha"],
+      phase: "failed",
+      error_code: "unknown",
+    },
+  ],
+  [
+    "forbids failure code on non-failed phase",
+    {
+      activity: "skill",
+      activity_id: r123ActivityId("e"),
+      preflight_id: r123PreflightId("f"),
+      source_refs: ["skill:alpha"],
+      phase: "ready",
+      error_code: "skill_load_failed",
+    },
+  ],
+]
+for (const [name, payload] of r123InvalidSkillActivities) {
+  it(`R123 real owner reader Skill ${name}`, async () => {
+    await assert.rejects(r123ReadOwnerEvents([r123SafeSource(1, "activity", payload)]), AgUiSourceContractError)
+  })
+}

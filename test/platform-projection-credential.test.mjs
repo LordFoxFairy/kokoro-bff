@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { chmod, mkdtemp, rm, stat, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import test, { afterEach } from "node:test"
@@ -31,9 +31,12 @@ test("projection credential source rejects broad permissions and reads exact ten
   const dir = await fixtureDir("bff-catalog-")
   const file = path.join(dir, "credential.json")
   await writeFile(file, JSON.stringify([item(1)]), { mode: 0o644 })
+  await chmod(file, 0o644)
+  assert.equal((await stat(file)).mode & 0o777, 0o644)
   const source = new ProjectionCredentialSource(file)
   await assert.rejects(source.read("tenant"), /insecure/u)
   await chmod(file, 0o600)
+  assert.equal((await stat(file)).mode & 0o777, 0o600)
   assert.equal((await source.read("tenant")).generation, 1)
 })
 

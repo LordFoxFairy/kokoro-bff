@@ -11,12 +11,12 @@ const output = path.join(root, "src/generated/agent-http")
 const manifestPath = path.join(root, "contract/dependencies/agent-http.json")
 const configPath = path.join(root, "openapi-ts.agent.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "e977923ea9992cbddaf0cdbc6c8f8d23b3af120e"
+const ownerCommit = "79bf98c5aa63b9bace207afdf42d8c7aefee4fe8"
 const vendorPath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/openapi.json`)
 const provenancePath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/provenance.json`)
-const ownerDigest = "763ff7a9cf668eb59ae7cfb59b2fd4f84fafde124063d9a365f138b6a30cf04f"
-const provenanceDigest = "e2e6cd9f2228900d0c0a8d795f19815a145bd8f0d18c785ffbe059214b5ed99a"
-const ownerContractVersion = "4.0.0"
+const ownerDigest = "bca8e4f4fd613e4325f594266893d5b089168cf14f2ad7a7df03f3f116af85f2"
+const provenanceDigest = "12c0f7ad3e6f7de6ff2183410fdae986119e99bd6975e9f07ee71f23dc2d22ca"
+const ownerContractVersion = "5.0.0"
 const failureCodes = [
   "token_budget_exceeded",
   "recursion_limit_exceeded",
@@ -45,6 +45,7 @@ const generatedFiles = [
   "core/types.gen.ts",
   "core/utils.gen.ts",
   "failure-profile.gen.ts",
+  "process-profile.gen.ts",
   "sdk.gen.ts",
   "types.gen.ts",
   "zod.gen.ts",
@@ -112,6 +113,8 @@ export function assertInteractionContractSchema(document) {
     mapping: {
       "run.failed": "#/components/schemas/ChatFailure",
       "interaction.state": "#/components/schemas/ChatInteractionState",
+      activity: "#/components/schemas/ChatActivity",
+      "todo.updated": "#/components/schemas/ChatTodo",
     },
   })
   assert.deepEqual(schemas.ChatEvent.properties.event_type.enum, [
@@ -119,6 +122,7 @@ export function assertInteractionContractSchema(document) {
     "assistant.delta",
     "assistant.completed",
     "activity",
+    "todo.updated",
     "interaction.state",
     "delivery",
     "run.completed",
@@ -149,6 +153,23 @@ export function assertInteractionContractSchema(document) {
   for (const branch of schemas.ResumeDecision.oneOf) assert.equal(branch.additionalProperties, false)
   assert.deepEqual(schemas.ResumeDecision.oneOf[0].properties.args.type, ["object", "null"])
   assert.deepEqual(schemas.ResumeDecision.oneOf[2].properties.reason.type, ["string", "null"])
+  assert.equal(schemas.ChatTodo.additionalProperties, false)
+  assert.deepEqual(schemas.ChatTodo.required, ["todos"])
+  assert.equal(schemas.ChatTodo.properties.todos.maxItems, 100)
+  assert.equal(schemas.ChatTodo["x-kokoro-json-byte-limit"], 65_536)
+  assert.equal(schemas.ChatActivity.oneOf.length, 3)
+  assert.deepEqual(
+    schemas.ChatActivity.oneOf.map((branch) => branch.properties.activity.const),
+    ["tool", "subagent", "skill"],
+  )
+  for (const branch of schemas.ChatActivity.oneOf) assert.equal(branch.additionalProperties, false)
+  const skill = schemas.ChatActivity.oneOf[2]
+  assert.equal(skill.properties.source_refs.minItems, 1)
+  assert.equal(skill.properties.source_refs.maxItems, 16)
+  assert.equal(skill.properties.source_refs.uniqueItems, true)
+  assert.equal(skill.properties.source_refs["x-kokoro-json-byte-limit"], 4096)
+  assert.deepEqual(skill.then, { required: ["error_code"] })
+  assert.deepEqual(skill.else, { not: { required: ["error_code"] } })
   return schemas
 }
 
@@ -162,7 +183,15 @@ function schemaZod(schema) {
   if (schema.type === "boolean") return "z.boolean()"
   if (schema.type === "string") return "z.string()" + (schema.minLength === undefined ? "" : ".min(" + schema.minLength + ")")
   if (schema.type === "integer") return "z.number().int().max(Number.MAX_SAFE_INTEGER)" + (schema.minimum === undefined ? "" : ".min(" + schema.minimum + ")")
-  if (schema.type === "array") return "z.array(" + schemaZod(schema.items) + ")" + (schema.minItems === undefined ? "" : ".min(" + schema.minItems + ")")
+  if (schema.type === "array") {
+    return (
+      "z.array(" +
+      schemaZod(schema.items) +
+      ")" +
+      (schema.minItems === undefined ? "" : ".min(" + schema.minItems + ")") +
+      (schema.maxItems === undefined ? "" : ".max(" + schema.maxItems + ")")
+    )
+  }
   if (schema.type === "object") {
     if (!schema.properties && schema.additionalProperties === true) return "z.record(z.string(),z.unknown())"
     const fields = Object.entries(schema.properties ?? {}).map(
@@ -190,6 +219,8 @@ async function generateDecodedValidators(directory, document) {
     "InteractionGroup",
     "InteractionActionResult",
     "ChatInteractionState",
+    "ChatTodo",
+    "ChatActivity",
   ]) {
     assert.ok(!source.includes("export const z" + name + " ="), "decoded schema is already generated: " + name)
     source += "\nexport const z" + name + " = " + schemaZod(schemas[name]) + ";\n"
@@ -229,6 +260,62 @@ export function parseAgentFailure(value: unknown): AgentFailureProfile | null {
   const result = chatFailureSchema.safeParse(value)
   return result.success ? { source: "agent", code: result.data.code, retryable: result.data.retryable } : null
 }
+`
+}
+
+function processProfileSource(document) {
+  const schemas = assertInteractionContractSchema(document)
+  const todo = schemas.ChatTodo
+  const todoItems = todo.properties.todos
+  const todoContent = todoItems.items.properties.content
+  const activities = schemas.ChatActivity.oneOf
+  const tool = activities[0]
+  const subagent = activities[1]
+  const skill = activities[2]
+  assert.deepEqual(tool.properties.activity_id, subagent.properties.activity_id)
+  assert.deepEqual(tool.properties.activity_id, skill.properties.activity_id)
+  assert.deepEqual(tool.properties.segment_id, subagent.properties.segment_id)
+  const profile = {
+    todo: {
+      jsonByteLimit: todo["x-kokoro-json-byte-limit"],
+      maxItems: todoItems.maxItems,
+      content: {
+        minScalars: todoContent.minLength,
+        maxScalars: todoContent.maxLength,
+        pattern: todoContent.pattern,
+      },
+    },
+    activityId: {
+      minLength: tool.properties.activity_id.minLength,
+      maxLength: tool.properties.activity_id.maxLength,
+      pattern: tool.properties.activity_id.pattern,
+    },
+    segmentId: {
+      minLength: tool.properties.segment_id.minLength,
+      maxLength: tool.properties.segment_id.maxLength,
+      pattern: tool.properties.segment_id.pattern,
+    },
+    skill: {
+      preflightId: {
+        minLength: skill.properties.preflight_id.minLength,
+        maxLength: skill.properties.preflight_id.maxLength,
+        pattern: skill.properties.preflight_id.pattern,
+      },
+      sourceRefs: {
+        minItems: skill.properties.source_refs.minItems,
+        maxItems: skill.properties.source_refs.maxItems,
+        uniqueItems: skill.properties.source_refs.uniqueItems,
+        jsonByteLimit: skill.properties.source_refs["x-kokoro-json-byte-limit"],
+        minLength: skill.properties.source_refs.items.minLength,
+        maxLength: skill.properties.source_refs.items.maxLength,
+        pattern: skill.properties.source_refs.items.pattern,
+      },
+      failedPhase: skill.if.properties.phase.const,
+      errorCodes: skill.properties.error_code.enum,
+    },
+  }
+  return `// This file is generated from the fixed kokoro-agent ChatTodo and ChatActivity schemas. Do not edit.
+export const AGENT_PROCESS_CONSTRAINTS = ${JSON.stringify(profile, null, 2)} as const
 `
 }
 
@@ -410,6 +497,7 @@ async function generate(directory) {
   await run(process.execPath, [cli, "--silent", "-f", configPath], { env: { ...process.env, AGENT_HTTP_CLIENT_OUTPUT: directory } })
   const ownerDocument = JSON.parse(await readFile(vendorPath, "utf8"))
   await writeFile(path.join(directory, "failure-profile.gen.ts"), failureProfileSource(ownerDocument))
+  await writeFile(path.join(directory, "process-profile.gen.ts"), processProfileSource(ownerDocument))
   const tree = await generatedTree(directory)
   assertGeneratedAllowlist(tree.files, tree.directories, "generated")
   await normalizeGeneratorCompatibility(directory)
@@ -465,7 +553,7 @@ async function manifestFor(directory) {
     generated: await Promise.all(
       generatedFiles.map(async (file) => ({
         path: file,
-        ...(file === "failure-profile.gen.ts" ? { source_sha256: ownerDigest } : {}),
+        ...(["failure-profile.gen.ts", "process-profile.gen.ts"].includes(file) ? { source_sha256: ownerDigest } : {}),
         sha256: sha256(await readFile(path.join(directory, file))),
       })),
     ),

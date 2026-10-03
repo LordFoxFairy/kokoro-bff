@@ -242,7 +242,13 @@ test("the public Platform projection reads expose strict native pages and error 
     ["  /v1/mcp/servers:\n", "  /v1/mcp/servers/{name}/enable:\n"],
   ]) {
     const operation = openapi.slice(openapi.indexOf(start), openapi.indexOf(end)).split("\n    post:")[0]
-    for (const [status, component] of [["400", "BadRequest"], ["401", "Unauthorized"], ["403", "Forbidden"], ["502", "BadGateway"], ["503", "Unavailable"]])
+    for (const [status, component] of [
+      ["400", "BadRequest"],
+      ["401", "Unauthorized"],
+      ["403", "Forbidden"],
+      ["502", "BadGateway"],
+      ["503", "Unavailable"],
+    ])
       assert.ok(operation.includes(`'${status}': { $ref: '#/components/responses/PlatformProjectionRead${component}' }`), `${start} ${status}`)
     assert.match(operation, /'429': \{ \$ref: '#\/components\/responses\/PlatformProjectionReadRateLimited' \}/u)
   }
@@ -413,4 +419,22 @@ test("the Scheduler consumer pins immutable producer-owned control and webhook c
   assert.match(config, new RegExp(ownerCommit, "u"))
   assert.doesNotThrow(() => schedulerGenerator.assertGeneratedAllowlist(generatedFiles, ["client", "core"], "fixture"))
   assert.throws(() => schedulerGenerator.assertGeneratedAllowlist(generatedFiles.slice(1), ["client", "core"], "fixture"), /file allowlist drifted/u)
+})
+
+test("R124 operation inventory has one governed public Run process page and no legacy process alias", async () => {
+  const [openapi, baselineDocument] = await Promise.all([
+    readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"),
+    readFile(new URL("../contract/tests/v1-operations.json", import.meta.url), "utf8"),
+  ])
+  const baseline = JSON.parse(baselineDocument).operations
+  const matches = baseline.filter(
+    ({ method, path, operation_id }) => method === "GET" && path === "/v1/sessions/{id}/runs/{runId}/process" && operation_id === "getRunProcess",
+  )
+  assert.equal(matches.length, 1)
+  assert.equal(
+    baseline.some(({ path }) => /process-(?:latest|legacy)|execution-process/u.test(path)),
+    false,
+  )
+  assert.deepEqual(inspectOpenApiGovernance(openapi), [])
+  assert.deepEqual(compareOperationBaseline(openapi, baseline), [])
 })

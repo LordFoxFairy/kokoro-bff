@@ -38,13 +38,14 @@ function positiveInteger(value: number, label: string): void {
 
 function sourceOf(event: AgentChatEvent): AgentProjectionSource {
   try {
+    const mapped = mapAgentEvent(event)
     return {
       sourceRunId: event.run_id,
       sourceEventId: event.chat_event_id,
       sourceSequence: event.seq,
       sourceOccurredAt: new Date(event.created_at).toISOString(),
       sourcePayload: event,
-      event: mapAgentEvent(event),
+      event: mapped,
     }
   } catch {
     throw new AgUiSourceContractError()

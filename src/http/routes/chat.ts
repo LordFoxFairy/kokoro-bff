@@ -9,6 +9,7 @@ import { idempotencyKey, queryOf } from "../request.js"
 import { reply } from "../response.js"
 import { parseMessageCreateRequest } from "../../application/chat/message-create-input.js"
 import type { AuthorizedChatRequest } from "./chat-authorization.js"
+import { parseChatProcessPageInput } from "../chat-process-page-input.js"
 
 function pageInput(request: IncomingMessage, defaultLimit: number): { limit: number; cursor: string | null } | null {
   const query = queryOf(request)
@@ -29,9 +30,9 @@ function chatError(error: unknown): { status: number; code: string; message: str
     return { status: 409, code: "idempotency_conflict", message: "Idempotency key was already used with different Chat input" }
   }
   if (
-    error.message === "CHAT_TURN_INPUT_INVALID"
-    || error.message === "AGENT_DISPATCH_PAYLOAD_INVALID"
-    || error.message === "AGENT_DISPATCH_LINEAGE_MISMATCH"
+    error.message === "CHAT_TURN_INPUT_INVALID" ||
+    error.message === "AGENT_DISPATCH_PAYLOAD_INVALID" ||
+    error.message === "AGENT_DISPATCH_LINEAGE_MISMATCH"
   ) {
     return { status: 400, code: "invalid_message", message: "Chat message input is invalid" }
   }
@@ -45,14 +46,33 @@ async function sendChatError(
   idempotency: Map<string, IdempotencyEntry>,
   mutation: MutationTicket | null,
 ): Promise<void> {
+  const processInvalid = error instanceof Error && error.message === "PROCESS_CURSOR_INVALID"
+  const processExpired = error instanceof Error && error.message === "PROCESS_CURSOR_EXPIRED"
+  const processUnavailable = error instanceof Error && error.message === "PROCESS_PROJECTION_UNAVAILABLE"
   const invalidCursor = isInvalidCursor(error)
   const known = chatError(error)
   await reply(
     response,
-    invalidCursor ? 400 : known?.status ?? 503,
+    processInvalid ? 400 : processExpired ? 410 : processUnavailable ? 503 : invalidCursor ? 400 : (known?.status ?? 503),
     failure(
-      invalidCursor ? "invalid_cursor" : known?.code ?? "business_store_unavailable",
-      invalidCursor ? "cursor is invalid" : known?.message ?? "The BFF business store is unavailable",
+      processInvalid
+        ? "invalid_process_cursor"
+        : processExpired
+          ? "process_cursor_expired"
+          : processUnavailable
+            ? "process_projection_unavailable"
+            : invalidCursor
+              ? "invalid_cursor"
+              : (known?.code ?? "business_store_unavailable"),
+      processInvalid
+        ? "process cursor is invalid"
+        : processExpired
+          ? "process cursor has expired"
+          : processUnavailable
+            ? "process projection is unavailable"
+            : invalidCursor
+              ? "cursor is invalid"
+              : (known?.message ?? "The BFF business store is unavailable"),
       context.requestId,
     ),
     context,
@@ -82,6 +102,29 @@ export async function liveChatBusiness(
   const chat = store.services.chat
 
   try {
+    if (businessPath.length === 5 && businessPath[2] === "runs" && businessPath[4] === "process" && method === "GET") {
+      const input = parseChatProcessPageInput(request)
+      if (input === null) {
+        await reply(response, 400, failure("invalid_process_cursor", "process page query is invalid", context.requestId), context, idempotency, mutation)
+        return true
+      }
+      const page = await chat.readRunProcessPage(
+        tenantId,
+        subjectId,
+        conversationId,
+        businessPath[3] ?? "",
+        projectRef,
+        input.watermark,
+        input.cursor,
+        input.limit,
+      )
+      if (page === null) {
+        await reply(response, 404, failure("session_not_found", "Session or Run was not found", context.requestId), context, idempotency, mutation)
+      } else {
+        await reply(response, 200, ok(page, context.requestId), context, idempotency, mutation)
+      }
+      return true
+    }
     if (businessPath.length === 3 && businessPath[2] === "events" && method === "GET") {
       const conversation = await chat.findConversation(tenantId, subjectId, conversationId, projectRef)
       if (conversation === null) {
@@ -89,7 +132,14 @@ export async function liveChatBusiness(
         return true
       }
       if (store.agUiConsumers === undefined) {
-        await reply(response, 503, failure("agui_projector_not_configured", "The durable AG-UI projector is not configured", context.requestId), context, idempotency, mutation)
+        await reply(
+          response,
+          503,
+          failure("agui_projector_not_configured", "The durable AG-UI projector is not configured", context.requestId),
+          context,
+          idempotency,
+          mutation,
+        )
         return true
       }
       await store.agUiConsumers.registerConsumer(tenantId, conversationId, conversation.owner_id)
@@ -103,7 +153,14 @@ export async function liveChatBusiness(
         return true
       }
       if (authorization.collectionFilter === undefined) throw new Error("CHAT_COLLECTION_FILTER_MISSING")
-      await reply(response, 200, ok(await chat.listConversations(tenantId, subjectId, authorization.collectionFilter, page.limit, page.cursor), context.requestId), context, idempotency, mutation)
+      await reply(
+        response,
+        200,
+        ok(await chat.listConversations(tenantId, subjectId, authorization.collectionFilter, page.limit, page.cursor), context.requestId),
+        context,
+        idempotency,
+        mutation,
+      )
       return true
     }
 
@@ -135,7 +192,14 @@ export async function liveChatBusiness(
     if (businessPath.length === 3 && businessPath[2] === "messages" && method === "POST") {
       const input = parseMessageCreateRequest(json, projectRef)
       if (input === null) {
-        await reply(response, 400, failure("invalid_message", "Message request does not match the v1 contract", context.requestId), context, idempotency, mutation)
+        await reply(
+          response,
+          400,
+          failure("invalid_message", "Message request does not match the v1 contract", context.requestId),
+          context,
+          idempotency,
+          mutation,
+        )
         return true
       }
       const key = idempotencyKey(request)
@@ -145,7 +209,14 @@ export async function liveChatBusiness(
       }
       const agentBase = config.upstreams.agents ?? null
       if (!config.agentEnabled || agentBase === null) {
-        await reply(response, 503, failure("agent_not_configured", "Agent execution is disabled or not configured", context.requestId), context, idempotency, mutation)
+        await reply(
+          response,
+          503,
+          failure("agent_not_configured", "Agent execution is disabled or not configured", context.requestId),
+          context,
+          idempotency,
+          mutation,
+        )
         return true
       }
       const receipt = await store.services.chatTurns.submit({
@@ -171,31 +242,53 @@ export async function liveChatBusiness(
         return true
       }
       const conversation = await chat.renameConversation(tenantId, subjectId, conversationId, json.title.trim(), projectRef)
-      await reply(response, conversation === null ? 404 : 200, conversation === null ? failure("session_not_found", "Session was not found", context.requestId) : ok({ ok: true }, context.requestId), context, idempotency, mutation)
+      await reply(
+        response,
+        conversation === null ? 404 : 200,
+        conversation === null ? failure("session_not_found", "Session was not found", context.requestId) : ok({ ok: true }, context.requestId),
+        context,
+        idempotency,
+        mutation,
+      )
       return true
     }
 
     if (businessPath.length === 2 && method === "DELETE") {
-      const deleted = await chat.deleteConversation(
-        tenantId,
-        subjectId,
-        conversationId,
-        context.requestId,
-        projectRef,
+      const deleted = await chat.deleteConversation(tenantId, subjectId, conversationId, context.requestId, projectRef)
+      await reply(
+        response,
+        deleted ? 200 : 404,
+        deleted ? ok({ status: "deleted" }, context.requestId) : failure("session_not_found", "Session was not found", context.requestId),
+        context,
+        idempotency,
+        mutation,
       )
-      await reply(response, deleted ? 200 : 404, deleted ? ok({ status: "deleted" }, context.requestId) : failure("session_not_found", "Session was not found", context.requestId), context, idempotency, mutation)
       return true
     }
 
     if (businessPath.length === 3 && businessPath[2] === "share" && method === "POST") {
       const share = await chat.createShare(tenantId, subjectId, conversationId, projectRef)
-      await reply(response, share === null ? 404 : 200, share === null ? failure("session_not_found", "Session was not found", context.requestId) : ok({ share_id: share.shareId }, context.requestId), context, idempotency, mutation)
+      await reply(
+        response,
+        share === null ? 404 : 200,
+        share === null ? failure("session_not_found", "Session was not found", context.requestId) : ok({ share_id: share.shareId }, context.requestId),
+        context,
+        idempotency,
+        mutation,
+      )
       return true
     }
 
     if (businessPath.length === 3 && businessPath[2] === "share" && method === "DELETE") {
       const share = await chat.revokeShare(tenantId, subjectId, conversationId, projectRef)
-      await reply(response, share === null ? 404 : 200, share === null ? failure("share_not_found", "Share was not found", context.requestId) : ok({ share_id: share.shareId }, context.requestId), context, idempotency, mutation)
+      await reply(
+        response,
+        share === null ? 404 : 200,
+        share === null ? failure("share_not_found", "Share was not found", context.requestId) : ok({ share_id: share.shareId }, context.requestId),
+        context,
+        idempotency,
+        mutation,
+      )
       return true
     }
   } catch (error) {

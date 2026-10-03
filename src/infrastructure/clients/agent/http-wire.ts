@@ -4,7 +4,7 @@ import type { LaunchReceiptEnvelope } from "../../../generated/agent-http/types.
 /** The owner OpenAPI is the sole source of both successful HTTP response schemas. */
 export function parseAgentHttpJson(body: Buffer): unknown {
   try {
-    return JSON.parse(body.toString("utf8")) as unknown
+    return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(body)) as unknown
   } catch {
     return undefined
   }

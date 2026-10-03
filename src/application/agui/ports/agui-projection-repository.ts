@@ -4,7 +4,6 @@ import type { AgentFailureProfile } from "../../../domain/chat/message.js"
 
 export type AgUiProjectionStateSnapshot = {
   textMessageIds: string[]
-  toolCallIds: string[]
 }
 
 export type AgUiStreamState = {
@@ -147,6 +146,12 @@ export interface AgUiProjectionRepository {
   readStream(tenantId: string, sessionId: string): Promise<AgUiStreamState>
   assertPersistedSources(tenantId: string, sessionId: string, sources: readonly AgUiSourceIdentity[]): Promise<void>
   commitProjection(command: CommitAgUiProjection): Promise<"committed" | "version_conflict" | "lease_conflict">
-  replay(tenantId: string, sessionId: string, cursor: string | null, limit: number, maxBytes: number): Promise<AgUiReplayPage | AgUiInvalidCursor | AgUiExpiredCursor>
+  replay(
+    tenantId: string,
+    sessionId: string,
+    cursor: string | null,
+    limit: number,
+    maxBytes: number,
+  ): Promise<AgUiReplayPage | AgUiInvalidCursor | AgUiExpiredCursor>
   status(tenantId: string, sessionId: string): Promise<AgUiProjectionStatus>
 }

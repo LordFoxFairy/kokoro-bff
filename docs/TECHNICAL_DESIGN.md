@@ -1,3 +1,93 @@
+## R133 当前切片 Root 验收事实（2026-10-03）
+
+HTTP5 正式消费、public7 过程契约、两 canonical process 表、同事务 RR 快照、immutable anchor 分页、START 与分批 GC 完整性切片已由 Root 复验。真实 PG/HTTP：15 焦点和完整 74 项全部通过、0 skip；完整默认纯门 736 pass/1 既定 PG schema resource skip，四 pure 149 pass；format（含全部变更 TS/MJS）、lint、typecheck、build、全 contract pipeline 与 233 contract tests 通过。最新证据：资源19016f31、纯门7c8284b1、contract f7e3519c；两独立限定源码审0/0/0。
+
+两个 fixture 的时间戳/umask 假前置及 public7 Snapshot 示例缺字段已修并真实复测。当前 contract lint 剩4条 warning：3条 conditional-schema局部 required-properties提示、1条既有特殊操作无2xx提示；不称零warning或整个owner集成通过。下方“5条全既有/待Root”是历史阶段，不作为最新状态。集成提交身份以本仓 Git 与 Root progress E108 为准；Web7消费、当前真实浏览器、外部模型、正规积分及完整BFF其他资源/镜像验收仍未完成。
+
+以下为此前阶段与已批准技术方案。
+
+## R132 snapshot example 更正候选（2026-10-03，待 Root 复验）
+
+Root 复核确认下方把 5 条 contract lint warning 全记为既有并不准确：其中一条来自 public7 `SessionSnapshotResponse.example.data` 缺少新增 required `execution_process`。本片已为 active head 的同一 Run 补齐四字段安全过程示例，机器 schema、版本与 API 语义不变；实际剩余 warning 数与通过状态等待 Root 重跑后记录。
+
+## R132 HTTP5 / public7 本片 Root 验收事实（2026-10-03，Git 发布待 Root）
+
+Agent HTTP5 单轨消费、public `7.0.0`、两张 canonical RunProcessProjection 表、同事务投影、授权 RR snapshot/Run page、immutable anchor 分页、START successor 保留及 provenance/partial-GC 语义已完成本片有限验收。证据绑定资源 `19016f31`（15 焦点与完整 74 全通过）、pure/default `3b926e2d`（149 pure；default 736 pass + 1 既定 PostgreSQL schema resource skip）及完整 format/contract `4811c5e9`（233 contract pass / 0 skip，保留 5 条既有 lint warning）；两次 R131 独立源码终审均为 0/0/0。原 timestamp 与 permission fixture 失败经窄 ACK 修正并由 Root 复测关闭。BFF7 Git 提交/推送仍待 Root；这些证据不覆盖全部 BFF 业务、其余资源、镜像、用户 Web/浏览器、真实 provider/外部模型或正式积分。
+
+## R129 provenance / partial-GC 候选实现（2026-10-03，待 Root 资源验收）
+
+Run process reader 现于同一 RR client 无条件核验 compact Todo/activity 与 ledger frame、source、Run/activity identity 的双向对应；历史页仍返回 anchor 上的不可变 ledger 值，不用 mutable current 覆盖。GC 仅在某 Run 的全部 ledger frames 回收后删除其 process/activity compact；START 已回收但同 Run terminal frame 尚存时，持久 START cursor、tombstone 与 retention floor 共同产生 410，缺回收证据的坏引用仍为 503、未知 Run 仍为 404。当前仅通过 writer 静态与纯门，真实 PostgreSQL 损坏矩阵和 batch-1 GC 仍待 Root 验收。
+
+## R126-GREEN-C 当前实现候选（2026-10-02，待 Root 资源验收）
+
+public7、RunProcessProjection 两表、同事务安全过程写入、授权 RR snapshot/Run page、START 保留、GC compact 回收与退役 tool-call cache 删除已落到当前工作树。当前已通过 writer 的授权定点纯测试、contract/schema、lint/type/build；完整默认门的 architecture 版本断言已按 Root ACK 切至 public7；真实 PostgreSQL 并发、GC、恢复与发布仍由 Root 验收，未据此宣称正式发布。
+
+## R123-GREEN-A 当前实现事实（2026-10-02，待 Root 最终全门）
+
+BFF 已单轨固定 Agent main `79bf98c5aa63b9bace207afdf42d8c7aefee4fe8` 的 HTTP `5.0.0` owner artifact，并实现 strict Todo/activity decoder 与 `kokoro.todo.updated` / `kokoro.activity.updated` 安全 CUSTOM 投影；旧 HTTP4 raw Tool/subagent 网络映射已删除。Root 最终全门与提交仍待完成；public machine 仍为 `6.0.0`，canonical SQL、snapshot/process 分页、GC 与 START registration 尚未修改，继续按下方已批准目标实施。
+
+## R123-BFF-HTTP5-D0：Agent5 消费、RunProcessProjection 与 public7 锚定分页（2026-10-02，未实施）
+
+本节替换上一版 R123 前缀；下方历史正文保持逐字不变。基线仍为 BFF main
+`02276b623f8390288fbf86d6efaa0f5152256afa`，当前 public OpenAPI 仍是 `6.0.0`（SHA-256
+`75ef9f7a3b28018d9c7a3ca5899f75afe561dd40b794e7f71b0e3d078b29c129`），BFF 仍固定 Agent HTTP4
+`e977923ea9992cbddaf0cdbc6c8f8d23b3af120e`。已发布 Agent main
+`79bf98c5aa63b9bace207afdf42d8c7aefee4fe8` 的 canonical HTTP5 OpenAPI version `5.0.0`、SHA-256
+`bca8e4f4fd613e4325f594266893d5b089168cf14f2ad7a7df03f3f116af85f2`，provenance SHA-256
+`12c0f7ad3e6f7de6ff2183410fdae986119e99bd6975e9f07ee71f23dc2d22ca`；distribution2、HTTP5 与 proof1 是不同身份。
+
+Root 已裁决独立评审的三个 P1：public 唯一目标是 breaking `7.0.0`；snapshot 的安全过程是有界第一页而非伪完整数组；`execution_process` 与 FIFO `execution_head` 独立；BFF 不从 Agent5 enum 发明 activity transition graph。本 D0 仍未修改 production、public machine、SQL、vendor/generated、lock 或 Git。
+
+### §8 放置表、目录比较与阶段边界
+
+| 项 | 当前裁决 |
+|---|---|
+| Owner | Agent 唯一写 Run、Todo、Skill/tool/subagent、HITL 与 Delivery；BFF Chat 唯一写 durable AG-UI ledger、compact `RunProcessProjection` 与授权 public read model；Web 只读 BFF。 |
+| 当前事实 | HTTP4 mapper 仍读取 raw tool/subagent 且没有 Todo/Skill；public6 snapshot 的 Message/head/HITL/Delivery/watermark 已同一 RR，但没有安全过程。`agui-consumer-registration.ts` 在 `expected_run_id` 变化时把 `latest_run_start_sequence` 清 NULL，实际会在后继只 queued 时丢失上一 durable START。 |
+| 目标职责 | 固定 Agent5 owner artifact；严格 decode closed Todo/activity；同 source/frame/HWM 事务写 compact；snapshot 在其 `event_watermark` 上返回 selected Run 的 Todo 与 activity 第一页；后续 `/runs/{runId}/process` 从不可变 safe CUSTOM ledger 读取同 anchor 页。 |
+| 表方案 | 淘汰“扩 interaction Row”与“一个无界 JSON aggregate Row”。采用 `bff_agui_run_process`（每 Run START+Todo）和 `bff_agui_run_activity`（每 Run/activity 当前安全值）；interaction 表继续只管 HITL。 |
+| 锚定页来源 | 淘汰“只读 mutable latest activity Row”：并发更新会污染下一页。采用现不可变 `bff_agui_event` 中 `kokoro.activity.updated` frames，在 `public_sequence <= anchor` 取每 activity 截止 anchor 的最后值，按其首次 public sequence + activity_id 排序；compact activity Row只做当前态/完整性/GC引用。 |
+| decoder 放置 | 比较继续膨胀 `clients/agent/projection.ts` 与新 `clients/agent/process-state.ts`；采用后者，只承担 Agent5 Todo/activity 的 generated-schema 后语义门（Unicode scalar、原始 payload UTF-8、conditional presence）和 wire→安全内部值，mapper编排留原文件。单文件单变化原因，不新模块/目录。 |
+| reducer 放置 | 比较把规则塞进 `project-chat-event.ts` 与新 `application/agui/process-state.ts`；采用后者做无副作用 replace/replay/conflict reducer，projector只映射安全 CUSTOM。这里“replace”不含 phase/status 单向校验。 |
+| SQL helper 放置 | 比较继续加长 `agui-projection-repository.ts`/`chat-repository.ts` 与现 postgres 目录两个窄 helper；后继采用 `agui-process-projection.ts`（父事务内写/核验）和 `agui-process-page.ts`（RR anchor 查询）。helper只收 caller `PoolClient`，不建 pool、不 commit/rollback、不反向 import repository。 |
+| 页输入/route/codec | route 留在现 `src/http/routes/chat.ts`，不新 router；新 `src/http/chat-process-page-input.ts` 只解析 exact query `watermark`、`cursor`、`limit`。比较复用会暴露 sequence 的 `conv/msg` base64 codec、另建持久 cursor 表、使用现 ledger opaque IDs：采用第三项；`watermark` 与 `cursor` 只接受 `agui_...` opaque wire ID，repository在当前 scope/run内解析 anchor与 after activity，不把 source/public sequence编码到wire。typed mapping留 `chat-service.ts`/port，不建新业务模块。 |
+| 依赖 | owner bytes→generated client→窄 decoder→纯 reducer→现 projection port/repository；public页只读 BFF ledger/compact。禁止 Agent source import、跨 owner SQL/FK、Redis或浏览器缓存事实、raw/generated类型穿透public。 |
+| 机器目标 | 公共唯一编辑点 `contract/openapi/v1/openapi.yaml`，版本一次切 `7.0.0`；SQL唯一编辑点 `database/schema.sql`。不保 public6 alias、HTTP4/5双pin或fallback。 |
+| 删除项 | GREEN 同片删除 e977 HTTP4 vendor/pin、旧 raw activity mapper和 raw Tool frames；不迁移历史 raw ledger为safe，不输出 args/result/name/description/error原文/path/stack/hidden reasoning。 |
+
+### 唯一状态、事务、幂等与故障规则
+
+1. Agent page 继续按 consumer lease/fence、stream version CAS 与连续 source HWM接纳。每批在一个 `commitProjection` 事务中完成 exact decode、source identity、全部 frames、process/activity compact、Message/HITL/Delivery、HWM/version；任一 schema、scope/run、digest、frame correspondence、CAS/fence错误全部回滚。网络请求不持PG锁。
+2. Todo只接受完整有序 `todos` 表，0..100项；content 1..1024 Unicode scalar，status三值，原始 `payload_json` UTF-8≤65536。缺事件表示 `todos:null`；显式 `[]` 才是已观察清空。每个合法后继Todo source按seq替换并保存新provenance。
+3. activity只接受 Agent5三个closed union。每个合法、连续、Run绑定的后继source都替换该 `activity_id` 当前安全值；相同 source identity+digest no-op，相同identity不同digest冲突。不得拒绝合法 phase回退、terminal后合法status、kind/segment变化或同activity新preflight；若要这些不变量须Agent先发布机器规则与向量。
+4. 安全网络只发 `CUSTOM kokoro.todo.updated` / `CUSTOM kokoro.activity.updated`；value是白名单payload并保完整AG-UI metadata。`segment_id`、activity/preflight都只是opaque owner identity，不伪装assistant message id。HITL/Delivery/Run标准frames语义不变。
+5. `execution_head`继续描述FIFO queued/active/waiting/resuming；`execution_process`选择不依赖head是否active：选择截至snapshot anchor最近的 durable `RUN_STARTED` Run。terminal后保留；下一Run仅queued时仍返回旧Run process；只在新Run durable START与其process anchor同事务提交后切换；从未START才为null。selected `run_id`允许不同于queued head。
+6. `agui-consumer-registration.ts` 后继只纠正START保存：注册新 `expected_run_id` 不清上一 `latest_run_start_sequence`，直到新 `RUN_STARTED` 原子覆盖；现version bump、consumer fence、lease清理、failure reset与subject条件保持原语义，不能为了process选择放宽。
+7. snapshot仍在单个 `BEGIN ... REPEATABLE READ READ ONLY` client授权tenant+subject+active Conversation并读取Message、head、selected process、HITL、Delivery、ledger head。`event_watermark`是anchor；process START/Todo/current references须同Run且不晚于source HWM/anchor。safe ledger存在而compact缺失、foreign scope、digest/frame不符为503，不猜null/空。
+8. process page每次重新做相同授权RR。`watermark`必填；`cursor`可省略：省略时读取任意已授权历史Run在该anchor的第一页，提供时必须是上一页`next_cursor`并从稳定keyset续读。anchor/position都须在当前tenant+subject+session+run内解析。unknown/foreign/malformed为400；frame或anchor已越retention且有tombstone为410并要求重取snapshot；完整性损坏为503。共享链接不授予process route。
+9. snapshot内`execution_process`对象与独立process response各自按同一page预算：每页activity默认/最多100，序列化的process page对象（Todo、activities、cursor等）≤现1 MiB；该预算不包含snapshot的Message/Delivery等其他字段，不能因长聊天正文拒绝process。达到count或byte边界即返回next_cursor，不截断单条；单条无法装入空页时typed 503。分页耗尽（`next_cursor:null`）才证明该Run过程恢复完成。
+10. cancel/resume ACK、Todo `[]`、Skill failed、tool/subagent status都不结算FIFO；只有owner terminal source结算head。timeout/429/5xx沿现有界重试；401/403/410/invalid/oversize阻塞。Redis publish丢失不影响DB恢复。
+11. GC不发明天数或客户端永久refcount。locked discovery/requery建立内部引用集合：selected Run START、其最新Todo/current activity provenance、HITL/Delivery/Message需要的frames不得先删；terminal且后继queued仍是selected。新START后旧Run只有在不再selected/live/queued且source+frames跨既有批准retention boundary才可删compact。public cursor不无限pin；anchor/after frame被回收后以tombstone返回410，绝不从0或最新Row猜页。
+
+### public7 已裁机器形状
+
+- `GET /v1/sessions/{sessionId}` 的 `execution_process` 是 **required nullable**。非null时四字段全部required：`run_id`、`todos`、`activities`、`next_cursor`。`todos`为nullable完整表；`activities`是anchor下第一有界页；`next_cursor`为opaque string或null。顶层required `event_watermark`（opaque string或null）与该页共同组成snapshot anchor。
+- `GET /v1/sessions/{sessionId}/runs/{runId}/process?watermark=...[&cursor=...&limit=...]` 是owner授权锚定page；`watermark` required，`cursor` optional（省略=该历史Run第一页，提供=continuation），`limit` omitted默认100且范围1..100。200返回required `run_id,todos,activities,next_cursor,event_watermark`，watermark必须与请求anchor相同。
+- 页只含Todo与safe activities，不含source seq、public sequence、digest、lease/fence。replay仍是独立AG-UI cursor接口，1000 frames/1 MiB；process页不改变replay语义。
+
+### 后继切片与精确写集（均需Root另授权）
+
+1. **先行 GREEN-A：仅 owner wire / generated / strict decoder / projector。** 写 `contract/vendor/kokoro-agent/79bf98c.../{openapi.json,provenance.json}`、删除 e977 vendor，改 `contract/dependencies/agent-http.json`、`openapi-ts.agent.config.ts`、`scripts/generate-agent-http-client.mjs`，只由生成器写 `src/generated/agent-http/**`；生产只改 `src/infrastructure/clients/agent/{http-wire,projection,projector-source,types}.ts`、新 `process-state.ts`，以及 `src/application/agui/project-chat-event.ts`；复用本轮四RED测试。此片只让已发布HTTP5闭集安全穿过 reader→decoder→CUSTOM，不改SQL、snapshot、public7 machine、process分页或GC。
+2. **RED-B：public/SQL/RR/分页/GC。** 精确测试目标：`test/contract/openapi-contract.test.mjs`、`test/contract-governance.test.mjs`、`test/chat-service.test.ts`、`test/schema-governance.test.mjs`、`test/chat-facts.integration.mjs`、`test/agui-projection.integration.mjs`、`test/agui-http.integration.mjs`。覆盖first queued process=null、terminal→successor queued仍旧process、新START切换、101 activity两页、页间新update仍as-of、anchor/scope/run/position非法、410、单条超限、全事务rollback、registration保START、GC locked requery引用保护。
+3. **GREEN-C：机器/public/SQL。** 改 `contract/openapi/v1/openapi.yaml`、baseline/operations/contract README；`contracts/chat.ts`、`application/ports/chat-repository.ts`、`application/chat-service.ts`、`http/routes/chat.ts`，新 `http/chat-process-page-input.ts`；`database/schema.sql`、`infrastructure/postgres/{agui-projection-repository,agui-consumer-registration,agui-consumer-repository,chat-repository}.ts`，新 `agui-process-projection.ts` 与 `agui-process-page.ts`。bootstrap只在现composition无法接线时纳入，不预授权新模块/进程/依赖。
+4. **验证顺序：** GREEN-A先跑Node22生成/四pure/build；Root审后才开RED-B。GREEN-C再跑format/lint/typecheck/contract/schema/architecture/full test/build；Root独占fresh空`kokoro_bff` schema、真实PG/RR/GC/restart与正式Agent5 HTTP。D0与RED都不算功能完成。
+
+### 当前RED事实（不是修复证据）
+
+Root独立以Node `v22.22.2`复现：build exit 0；四pure文件148 tests / 120 pass / 28预期行为fail / 0 skip，日志manifest位于Root临时目录。120个通过包含既有106正控，以及14个新Todo/raw/extra/required/display/identity负控与现Todo direct CUSTOM正控；28个RED分为1个HTTP5 wire、9个mapper/projector、9个真实reader合法端到端、9个旧raw/Skill strict fail-closed。四测试SHA-256依次为 `ff865fe5a1f6f1862e952870e86b8ba535f5fbe005fe7bd265e1d9cb5c2f6f1b`、`fdd557c0771fb1d126f1ac4e7cca9439128545148f531fae44c1a2642c91572c`、`195135e3e6d8a46536721a4857965cc0ff4493f38e0cfcf08f922dcdccefceb3`、`f95e592fbd2c09b731862c3dff066b4d25f8c7044ebe0d81c3a3d9e1c3b5f505`。本D0不把RED描述为已修。
+
+---
+
 ## R83-BFF-DIRECT：Conversation collection direct scope / public6 D0（仅文档，未实施）
 
 基线 `main / 479d4e8b0aeb438d2ec9cb3d4472130fc1a29972` clean。Root 已裁决本片只修 `GET /v1/sessions` collection：显式 `scope=direct` 只列 admitted tenant+subject 的 active 且 `project_ref IS NULL` Conversation；省略或空 `scope` 保持 owner 全集；非空 `project_ref` 保持本人项目过滤；显式 direct 与非空 project_ref 同时出现，在任何 Project 查询前返回 HTTP 400 `invalid_scope`。detail/message/events/control/title/delete/share 等 resource authorization 语义逐字节保持，不把 direct 解释扩散到资源 gate。

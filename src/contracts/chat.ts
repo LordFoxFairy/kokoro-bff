@@ -87,6 +87,12 @@ export type ChatSessionDetail = {
   deliveries: Delivery[]
   deliveries_has_more: boolean
   event_watermark: string | null
+  execution_process: {
+    run_id: string
+    todos: unknown[] | null
+    activities: Array<Record<string, unknown>>
+    next_cursor: string | null
+  } | null
 }
 
 /** Public read projection of the published owner full state; no private decision values. */
@@ -95,14 +101,24 @@ export type InteractionState = {
   pause_revision: number
   pause_ref: string | null
   phase: "active" | "waiting" | "resuming" | "terminal"
-  groups: Array<{ group_id: string; items: Array<{
-    item_id: string
-    request_id: string
-    kind: "tool_approval" | "ask_user_question" | "result_review" | "input"
-    allowed_decisions: Array<"approve" | "edit" | "reject" | "respond" | "submit">
-    display: { name: string; description: string; editable: boolean; input_schema: Record<string, unknown>;
-      result_preview?: string | null | undefined; truncated?: boolean | null | undefined; source?: string | null | undefined }
-    validation?: { code: "json_schema_invalid"; instance_path: Array<string | number> } | null | undefined
-  }> }>
+  groups: Array<{
+    group_id: string
+    items: Array<{
+      item_id: string
+      request_id: string
+      kind: "tool_approval" | "ask_user_question" | "result_review" | "input"
+      allowed_decisions: Array<"approve" | "edit" | "reject" | "respond" | "submit">
+      display: {
+        name: string
+        description: string
+        editable: boolean
+        input_schema: Record<string, unknown>
+        result_preview?: string | null | undefined
+        truncated?: boolean | null | undefined
+        source?: string | null | undefined
+      }
+      validation?: { code: "json_schema_invalid"; instance_path: Array<string | number> } | null | undefined
+    }>
+  }>
   action_result: { command_id: string; pause_revision: number; kind: "accepted" | "native_consumed" | "validation_failed" | "unknown" | "cancelled" } | null
 }

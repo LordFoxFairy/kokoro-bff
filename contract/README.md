@@ -1,3 +1,7 @@
+## R126 public7 Run process candidate（待 Root 资源验收）
+
+The single `/v1` source candidate is now `7.0.0`. Session snapshots require nullable `execution_process`; Run process pages use the authorized immutable watermark route, bounded safe Todo/activity projection, and no raw tool payload or compatibility alias. The canonical SQL owns the two compact provenance tables while the immutable AG-UI ledger remains the as-of page source. Root resource verification and publication remain pending.
+
 # Kokoro BFF contract
 
 ## Owner

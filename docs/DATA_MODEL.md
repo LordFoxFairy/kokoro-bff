@@ -1,3 +1,93 @@
+## R133 当前切片 Root 验收事实（2026-10-03）
+
+HTTP5 正式消费、public7 过程契约、两 canonical process 表、同事务 RR 快照、immutable anchor 分页、START 与分批 GC 完整性切片已由 Root 复验。真实 PG/HTTP：15 焦点和完整 74 项全部通过、0 skip；完整默认纯门 736 pass/1 既定 PG schema resource skip，四 pure 149 pass；format（含全部变更 TS/MJS）、lint、typecheck、build、全 contract pipeline 与 233 contract tests 通过。最新证据：资源19016f31、纯门7c8284b1、contract f7e3519c；两独立限定源码审0/0/0。
+
+两个 fixture 的时间戳/umask 假前置及 public7 Snapshot 示例缺字段已修并真实复测。当前 contract lint 剩4条 warning：3条 conditional-schema局部 required-properties提示、1条既有特殊操作无2xx提示；不称零warning或整个owner集成通过。下方“5条全既有/待Root”是历史阶段，不作为最新状态。集成提交身份以本仓 Git 与 Root progress E108 为准；Web7消费、当前真实浏览器、外部模型、正规积分及完整BFF其他资源/镜像验收仍未完成。
+
+以下为此前阶段与已批准技术方案。
+
+## R132 snapshot example 更正候选（2026-10-03，待 Root 复验）
+
+Root 复核确认下方把 5 条 contract lint warning 全记为既有并不准确：其中一条是 public7 snapshot example 缺少 required 安全过程，而非数据模型或 canonical SQL 缺口。本片已补同一 active Run 的四字段 example，schema、事务与 GC 语义不变；实际剩余 warning 数与通过状态等待 Root 重跑后记录。
+
+## R132 canonical process 数据本片 Root 验收事实（2026-10-03，Git 发布待 Root）
+
+两张 canonical RunProcessProjection 表、同 source/frame/HWM 事务投影、RR immutable as-of page、START successor 保留与 provenance/partial-GC 已完成本片有限验收。证据绑定资源 `19016f31`（15 焦点与完整 74 全通过）、pure/default `3b926e2d`（149 pure；default 736 pass + 1 既定 PostgreSQL schema resource skip）及完整 format/contract `4811c5e9`（233 contract pass / 0 skip，保留 5 条既有 lint warning）；两次 R131 独立源码终审均为 0/0/0，原 timestamp 与 permission fixture 失败经窄 ACK 后已复测关闭。BFF7 Git 提交/推送仍待 Root；本片不构成全部 BFF 业务、其余资源、镜像、用户 Web/浏览器、真实 provider/外部模型或正式积分验收。
+
+## R129 provenance / GC 当前候选（2026-10-03，待 Root 资源验收）
+
+canonical schema 不变。读取在同一 RR snapshot 中核 compact 的全部 current provenance 与不可变 ledger/source 双向集合；旧 anchor 只决定返回值版本，不跳过 current provenance 完整性。GC 沿现锁后重查与 retention 规则保留仍有任一同 Run ledger frame 的 process/activity compact；全部同 Run frames 回收后才清 compact，START 的既有 cursor+tombstone 与 stream retention floor 提供中间态 410 证据，不新增表或长期 pin。
+
+## R126-GREEN-C 当前数据候选（2026-10-02，待 Root 资源验收）
+
+canonical SQL 已加入 `bff_agui_run_process` 与 `bff_agui_run_activity`，安全 Todo/activity 与 source/frame/HWM 在同一 projection 事务写入；immutable ledger 负责 as-of page，compact rows 负责当前完整性与 GC provenance。退役 `tool_call_ids` 已删除。静态schema门已通过；fresh schema、并发 rollback 与 GC locked-requery 仍待 Root 真实 PostgreSQL 验收。
+
+## R123-GREEN-A 当前数据事实（2026-10-02，待 Root 最终全门）
+
+Agent HTTP5 safe process 已在 reader/decoder/projector 边界实现，但本片没有修改 canonical SQL、事务、compact process rows、锚定分页或 GC。public machine 仍为 `6.0.0`；下方两表、同事务 CAS、immutable ledger as-of 与 retention 保护仍是已批准后继目标，不是当前数据库事实。
+
+## R123-BFF-HTTP5-D0：RunProcessProjection 与锚定 ledger page canonical SQL目标（2026-10-02，未实施）
+
+当前唯一canonical `database/schema.sql` SHA-256仍为
+`e5538a55d3d851b011e5c330632133bf94838b7cac88c4bdedcb36089f666b75`，本D0未改SQL。Agent DB、Redis和browser都不是BFF read model；禁止跨owner SQL/JOIN/FK。目标只增加两个BFF表，不建cursor表、revision表、migration目录、连接池或worker。
+
+### 两个具名表与精确列
+
+**`bff_agui_run_process`**（一Run一Row；durable START与Todo）：
+
+- scope/identity：`tenant_id TEXT NOT NULL, session_id TEXT NOT NULL, run_id TEXT NOT NULL, subject_id TEXT NOT NULL`，PK `(tenant_id,session_id,run_id)`；`projection_schema_version INTEGER NOT NULL DEFAULT 1`。
+- START provenance（全部NOT NULL）：`start_source_owner TEXT, start_source_event_id TEXT, start_source_sequence BIGINT, start_source_digest TEXT, start_source_occurred_at TIMESTAMPTZ(3), start_public_sequence BIGINT, start_public_cursor TEXT`。
+- Todo：`todo_observed BOOLEAN NOT NULL DEFAULT FALSE, todos JSONB NULL, todo_digest TEXT NULL`；nullable provenance列为`todo_source_owner TEXT, todo_source_event_id TEXT, todo_source_sequence BIGINT, todo_source_digest TEXT, todo_source_occurred_at TIMESTAMPTZ(3), todo_public_sequence BIGINT, todo_public_cursor TEXT`。
+- audit：`created_at,updated_at TIMESTAMPTZ(3) NOT NULL`。`todo_observed=false`强制todos/digest/provenance全NULL；true强制todos为array且完整provenance非NULL。应用层再做100项/Unicode scalar/65536 raw JSON精确门。
+
+**`bff_agui_run_activity`**（一Run/activity当前安全Row）：
+
+- scope/identity：`tenant_id,session_id,run_id,activity_id,subject_id TEXT NOT NULL`，PK `(tenant_id,session_id,run_id,activity_id)`；`projection_schema_version INTEGER NOT NULL DEFAULT 1`。
+- current value：`activity_kind TEXT NOT NULL, safe_payload JSONB NOT NULL, payload_digest TEXT NOT NULL`。
+- first provenance全部NOT NULL：`first_source_owner TEXT, first_source_event_id TEXT, first_source_sequence BIGINT, first_source_digest TEXT, first_source_occurred_at TIMESTAMPTZ(3), first_public_sequence BIGINT, first_public_cursor TEXT`。
+- latest provenance全部NOT NULL：`latest_source_owner TEXT, latest_source_event_id TEXT, latest_source_sequence BIGINT, latest_source_digest TEXT, latest_source_occurred_at TIMESTAMPTZ(3), latest_public_sequence BIGINT, latest_public_cursor TEXT`；另有`created_at,updated_at TIMESTAMPTZ(3) NOT NULL`。
+- index `(tenant_id,session_id,run_id,first_public_sequence,activity_id)`服务当前态稳定顺序。CHECK只约束类型/ID/payload object/positive safe integer/first≤latest；closed union/presence/Unicode由唯一decoder复验，不在SQL复制第二套复杂schema。
+
+不把Todo拆item表，因为owner是完整表原子替换；不把activity集合塞process JSON，因为会无界整行重写；不新增activity revision表，因为as-of历史的唯一事实已是不可变`bff_agui_event`。
+
+### 写事务、replace与START选择
+
+- `commitProjection`沿Conversation→stream→dispatch锁序，锁stream并核version/lease/fence。对连续source：strict decode→source identity→safe frames→process/activity helper→Message/HITL/Delivery；最后CAS推进HWM/version。任一失败整批rollback；Agent网络在事务外。
+- `RUN_STARTED`在同事务insert/upsert process START anchor并更新stream最新START；Todo整表replace；activity按activity_id覆盖current value并保first provenance。相同source+digest replay no-op；相同identity异digest冲突。
+- 不设activity transition CHECK/reducer：later合法source可以改变phase/status、terminal后再发合法status、同activity换preflight或其他union字段；只保持first provenance用于排序，latest provenance/value替换。
+- `agui-consumer-registration.ts`接受successor queued时不得把上一`latest_run_start_sequence`清NULL；只有新Run的durable START提交才覆盖。原version/fence/lease/failure/subject条件不变。
+
+### 授权RR与锚定page查询
+
+snapshot RR先读Conversation授权与ledger head anchor，再分别读FIFO head和`start_public_sequence <= anchor`的最近process；因此从未START为null，terminal及successor queued仍选旧process，新START才切换。process START/Todo/activity provenance必须同scope/run、≤source HWM且≤anchor，并匹配source ledger与safe CUSTOM frame；safe frame存在但row缺失为503。
+
+历史Run第一页与continuation的activities都不从mutable latest rows直接分页。`agui-process-page.ts`在同一RR内：
+
+1. 在`bff_agui_event`筛选当前scope、selected run、`CUSTOM/kokoro.activity.updated`且`public_sequence <= anchor`；
+2. 按activity_id求first public sequence并取截至anchor最后revision；
+3. 以`(first_public_sequence,activity_id)`稳定排序；optional cursor省略时从该历史Run第一页开始，存在时在当前scope/run解析到after activity并复得其first position；
+4. 拉`limit+1`并累计序列化process page对象（Todo、activities、cursor等）的bytes，最多100项/1 MiB；该预算不含session snapshot的Message/Delivery等其他字段。返回最后已发activity对应的opaque ledger cursor；anchor后的update不参与；单条超限typed 503。
+
+request必须给opaque watermark；previous opaque cursor可省略（第一页）或提供（continuation）。DB内部可以解析其public sequence，但wire不返回/编码source sequence、public sequence、digest或fence。unknown/foreign/malformed为400；cursor/anchor tombstone或低于retention floor为410；缺frame/compact/provenance为503。Todo按同anchor选最后revision，不能拿anchor后的current process值冒充。
+
+### GC引用、retention与删除
+
+不发明保留天数，也不设客户端永久refcount。现GC locked candidate/requery必须使用同一effective boundary并建立projection reference集合：
+
+- 当前selected Run（包括terminal且successor仅queued）的START；
+- selected process截至current anchor的最新Todo和每个current activity provenance/frame；
+- 现HITL、Delivery、Message和其他既有安全引用。
+
+locked requery对上述引用集合计算逻辑refcount；refcount非零的frame/source不可删，不新增易漂移的计数列或第三张引用表。新Run START后，旧Run只有在不再selected/live/queued且其source/frame越过已批准retention boundary时，才在同一受锁GC切片删除compact row并回收ledger；不得删share事实。public page cursor不无限延长retention：被回收cursor写/保现tombstone并返回410，绝不改读最新Row、从0 replay或猜空。
+
+### schema门与后继切片
+
+先行GREEN-A不改本SQL。SQL/public切片必须同步`database/schema.sql`、schema governance、fixture表清单、installer/catalog drift；生产写集为现`agui-projection-repository.ts`、`agui-consumer-registration.ts`、`agui-consumer-repository.ts`、`chat-repository.ts`及新`agui-process-projection.ts`、`agui-process-page.ts`，不另建postgres模块。Root用fresh空`kokoro_bff` schema验证列/NULL/CHECK/index/零跨owner FK、rollback、两个连接CAS、101 activity锚定分页、terminal→queued→START、GC locked requery与精确资源回收。
+
+当前Root RED为build 0及四pure 148/120 pass/28行为fail/0skip，只证明待修缺口；未新增表、未运行schema/PG/Redis，不能声称public7或projection完成。
+
+---
+
 ## R83-BFF-DIRECT：Conversation collection filter / public6 数据 D0（无 DDL，未实施）
 
 Owner 是 BFF Conversation。当前 `listConversations` 在 tenant+owner+active 与可见 Project EXISTS 后使用 `($3 IS NULL OR project_ref=$3)`；authorization 丢弃 direct，故 undefined 同时表示 owner-wide 与 direct。目标以显式 collection filter 消除该歧义，不改变 `bff_conversation.project_ref` 事实、NULL 含义、Project owner 关系、删除 tombstone、排序或 cursor 编码。

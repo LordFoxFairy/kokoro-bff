@@ -10,11 +10,7 @@ import {
   AgUiSourceContinuityError,
   AgUiSourceIdentityConflictError,
 } from "./errors.js"
-import {
-  projectChatEvent,
-  type AgUiEvent,
-  type AgUiProjectionState,
-} from "./project-chat-event.js"
+import { projectChatEvent, type AgUiEvent, type AgUiProjectionState } from "./project-chat-event.js"
 import type {
   AgUiProjectionRepository,
   AgUiProjectionStateSnapshot,
@@ -58,7 +54,10 @@ function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`
   if (typeof value !== "object") throw new Error("AG-UI source payload is not JSON-compatible")
   const record = value as Record<string, unknown>
-  return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`).join(",")}}`
+  return `{${Object.keys(record)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`)
+    .join(",")}}`
 }
 
 function digestOf(value: unknown): string {
@@ -68,14 +67,12 @@ function digestOf(value: unknown): string {
 function mutableState(snapshot: AgUiProjectionStateSnapshot): AgUiProjectionState {
   return {
     textMessages: new Set(snapshot.textMessageIds),
-    toolCalls: new Set(snapshot.toolCallIds),
   }
 }
 
 function snapshotOf(state: AgUiProjectionState): AgUiProjectionStateSnapshot {
   return {
     textMessageIds: [...state.textMessages].sort(),
-    toolCallIds: [...state.toolCalls].sort(),
   }
 }
 
@@ -88,11 +85,11 @@ function assertSource(source: AgentProjectionSource, sessionId: string): void {
   if (source.sourceRunId !== null && source.sourceRunId.trim() === "") throw new AgUiSourceContractError()
   if (source.event === null) return
   if (
-    source.event.event_id !== source.sourceEventId
-    || source.event.seq !== source.sourceSequence
-    || source.event.session_id !== sessionId
-    || source.event.timestamp !== source.sourceOccurredAt
-    || source.event.run_id !== source.sourceRunId
+    source.event.event_id !== source.sourceEventId ||
+    source.event.seq !== source.sourceSequence ||
+    source.event.session_id !== sessionId ||
+    source.event.timestamp !== source.sourceOccurredAt ||
+    source.event.run_id !== source.sourceRunId
   ) {
     throw new AgUiSourceContractError()
   }
@@ -164,7 +161,8 @@ function projectSources(
       const content = event.payload.delta
       if (typeof content !== "string") throw new AgUiSourceContractError()
       return {
-        ...sourceIdentity(source), frames,
+        ...sourceIdentity(source),
+        frames,
         assistantUpdate: {
           runId,
           kind: frames.some((frame) => frame.type === "TEXT_MESSAGE_START") ? "replace" : "append",
@@ -179,7 +177,11 @@ function projectSources(
     }
     if (event.kind === "run.completed") {
       if (event.payload.status !== "completed" && event.payload.status !== "cancelled") throw new AgUiSourceContractError()
-      return { ...sourceIdentity(source), frames, assistantUpdate: { runId, kind: event.payload.status === "cancelled" ? "cancel" as const : "complete" as const } }
+      return {
+        ...sourceIdentity(source),
+        frames,
+        assistantUpdate: { runId, kind: event.payload.status === "cancelled" ? ("cancel" as const) : ("complete" as const) },
+      }
     }
     if (event.kind === "run.failed") {
       const failure = event.payload.failure
@@ -294,7 +296,11 @@ export class AgUiProjectionService {
       if (pending[0]?.sourceSequence !== stream.sourceHighWatermark + 1) throw new AgUiSourceContinuityError()
 
       const state = mutableState(stream.projectionState)
-      const projections = projectSources(pending, state, new Map(stream.interaction === undefined ? [] : [[stream.interaction.runId, stream.interaction.state]]))
+      const projections = projectSources(
+        pending,
+        state,
+        new Map(stream.interaction === undefined ? [] : [[stream.interaction.runId, stream.interaction.state]]),
+      )
       const sourceHighWatermark = pending.at(-1)?.sourceSequence ?? stream.sourceHighWatermark
       const runState = runProjectionState(stream, projections)
       const result = await this.repository.commitProjection({

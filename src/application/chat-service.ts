@@ -9,12 +9,23 @@ export class ChatApplicationService {
     this.repository = repository
   }
 
-  public async listConversations(tenantId: string, subjectId: string, filter: ConversationCollectionFilter, limit: number, cursor: string | null): Promise<{ sessions: ChatSessionSummary[]; next_cursor: string | null }> {
+  public async listConversations(
+    tenantId: string,
+    subjectId: string,
+    filter: ConversationCollectionFilter,
+    limit: number,
+    cursor: string | null,
+  ): Promise<{ sessions: ChatSessionSummary[]; next_cursor: string | null }> {
     const page = await this.repository.listConversations(tenantId, subjectId, filter, limit, cursor)
     return { sessions: page.conversations.map(conversationSummary), next_cursor: page.next_cursor }
   }
 
-  public async findConversation(tenantId: string, subjectId: string, conversationId: string, projectRef: string | undefined): Promise<ChatSessionDetail["session"] | null> {
+  public async findConversation(
+    tenantId: string,
+    subjectId: string,
+    conversationId: string,
+    projectRef: string | undefined,
+  ): Promise<ChatSessionDetail["session"] | null> {
     const conversation = await this.repository.findConversation(tenantId, subjectId, conversationId, projectRef)
     if (conversation === null) return null
     return {
@@ -29,7 +40,7 @@ export class ChatApplicationService {
   public async snapshot(tenantId: string, subjectId: string, conversationId: string, projectRef: string | undefined): Promise<ChatSessionDetail | null> {
     const snapshot = await this.repository.readSnapshot(tenantId, subjectId, conversationId, projectRef)
     if (snapshot === null) return null
-    const { conversation, messages, deliveries, deliveriesHasMore, eventWatermark, executionHead } = snapshot
+    const { conversation, messages, deliveries, deliveriesHasMore, eventWatermark, executionHead, executionProcess } = snapshot
     return {
       session: {
         session_id: conversation.conversationId,
@@ -53,24 +64,64 @@ export class ChatApplicationService {
       })),
       deliveries_has_more: deliveriesHasMore,
       event_watermark: eventWatermark,
-      ...(executionHead === undefined ? {} : { execution_head: { run_id: executionHead.runId, state: executionHead.state, pending_pauses: executionHead.pendingPauses } }),
+      execution_process: executionProcess,
+      ...(executionHead === undefined
+        ? {}
+        : { execution_head: { run_id: executionHead.runId, state: executionHead.state, pending_pauses: executionHead.pendingPauses } }),
     }
   }
 
-  public readRunControlState(tenantId: string, subjectId: string, conversationId: string, projectRef: string | undefined): ReturnType<ChatRepository["readRunControlState"]> {
+  public readRunProcessPage(
+    tenantId: string,
+    subjectId: string,
+    conversationId: string,
+    runId: string,
+    projectRef: string | undefined,
+    watermark: string,
+    cursor: string | null,
+    limit: number,
+  ): ReturnType<ChatRepository["readRunProcessPage"]> {
+    return this.repository.readRunProcessPage(tenantId, subjectId, conversationId, runId, projectRef, watermark, cursor, limit)
+  }
+
+  public readRunControlState(
+    tenantId: string,
+    subjectId: string,
+    conversationId: string,
+    projectRef: string | undefined,
+  ): ReturnType<ChatRepository["readRunControlState"]> {
     return this.repository.readRunControlState(tenantId, subjectId, conversationId, projectRef)
   }
 
-  public async listMessages(tenantId: string, subjectId: string, conversationId: string, limit: number, cursor: string | null, projectRef?: string): Promise<{ messages: ChatMessage[]; next_cursor: string | null } | null> {
+  public async listMessages(
+    tenantId: string,
+    subjectId: string,
+    conversationId: string,
+    limit: number,
+    cursor: string | null,
+    projectRef?: string,
+  ): Promise<{ messages: ChatMessage[]; next_cursor: string | null } | null> {
     const page = await this.repository.listMessages(tenantId, subjectId, conversationId, limit, cursor, projectRef)
     return page === null ? null : { messages: page.messages.map(chatMessage), next_cursor: page.next_cursor }
   }
 
-  public renameConversation(tenantId: string, subjectId: string, conversationId: string, title: string, projectRef?: string): ReturnType<ChatRepository["renameConversation"]> {
+  public renameConversation(
+    tenantId: string,
+    subjectId: string,
+    conversationId: string,
+    title: string,
+    projectRef?: string,
+  ): ReturnType<ChatRepository["renameConversation"]> {
     return this.repository.renameConversation(tenantId, subjectId, conversationId, title, projectRef)
   }
 
-  public deleteConversation(tenantId: string, subjectId: string, conversationId: string, requestId: string, projectRef?: string): ReturnType<ChatRepository["deleteConversation"]> {
+  public deleteConversation(
+    tenantId: string,
+    subjectId: string,
+    conversationId: string,
+    requestId: string,
+    projectRef?: string,
+  ): ReturnType<ChatRepository["deleteConversation"]> {
     return this.repository.deleteConversation(tenantId, subjectId, conversationId, requestId, projectRef)
   }
 

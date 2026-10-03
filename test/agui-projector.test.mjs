@@ -43,7 +43,7 @@ function source(sequence) {
   }
 }
 
-describe("AG-UI terminal and tool semantics", () => {
+describe("AG-UI terminal and safe activity semantics", () => {
   it("serializes one verified Agent failure into the exact safe RUN_ERROR shape", () => {
     const mapped = mapAgentEvent({
       chat_event_id: "evt_safe_failure",
@@ -63,17 +63,20 @@ describe("AG-UI terminal and tool semantics", () => {
 
     const [projected] = projectChatEvent(mapped, createAgUiProjectionState())
     const serialized = JSON.parse(JSON.stringify(projected))
-    assert.deepEqual({
-      type: serialized.type,
-      code: serialized.code,
-      message: serialized.message,
-      failure: serialized.metadata?.kokoro?.failure,
-    }, {
-      type: EventType.RUN_ERROR,
-      code: "model_unavailable",
-      message: "Agent run failed",
-      failure: { source: "agent", code: "model_unavailable", retryable: true },
-    })
+    assert.deepEqual(
+      {
+        type: serialized.type,
+        code: serialized.code,
+        message: serialized.message,
+        failure: serialized.metadata?.kokoro?.failure,
+      },
+      {
+        type: EventType.RUN_ERROR,
+        code: "model_unavailable",
+        message: "Agent run failed",
+        failure: { source: "agent", code: "model_unavailable", retryable: true },
+      },
+    )
     assert.equal(Object.hasOwn(serialized, "retryable"), false)
     assert.deepEqual(Object.keys(serialized.metadata.kokoro.failure).sort(), ["code", "retryable", "source"])
     assert.equal(serialized.metadata.kokoro.failure.code, serialized.code)
@@ -81,30 +84,43 @@ describe("AG-UI terminal and tool semantics", () => {
     assert.doesNotThrow(() => EventSchemas.parse(serialized))
   })
 
-  it("preserves tool errors and emits canonical cancellation and failure terminals", () => {
-    const tool = projectChatEvent({
-      ...base,
-      kind: "tool.returned",
-      payload: { segment_id: "message_1", tool_id: "tool_1", result: "denied", is_error: true },
-    }, createAgUiProjectionState())
-    const result = tool.find((event) => event.type === EventType.TOOL_CALL_RESULT)
-    assert.equal(result?.isError, true)
-    for (const event of tool) assert.doesNotThrow(() => EventSchemas.parse(event))
+  it("preserves safe failed activity status and emits canonical cancellation and failure terminals", () => {
+    const safeActivity = {
+      activity: "tool",
+      activity_id: `act_${"a".repeat(64)}`,
+      segment_id: `seg_${"b".repeat(64)}`,
+      status: "failed",
+      display_code: "tool.execution",
+    }
+    const activity = projectChatEvent({ ...base, kind: "activity.updated", payload: safeActivity }, createAgUiProjectionState())
+    assert.deepEqual(
+      activity.map(({ type }) => type),
+      [EventType.CUSTOM],
+    )
+    assert.deepEqual(activity[0]?.value, safeActivity)
+    assert.equal(Object.hasOwn(activity[0]?.value, "error"), false)
+    for (const event of activity) assert.doesNotThrow(() => EventSchemas.parse(event))
 
-    const cancelled = projectChatEvent({
-      ...base,
-      kind: "run.completed",
-      payload: { status: "cancelled" },
-    }, createAgUiProjectionState())
+    const cancelled = projectChatEvent(
+      {
+        ...base,
+        kind: "run.completed",
+        payload: { status: "cancelled" },
+      },
+      createAgUiProjectionState(),
+    )
     assert.equal(cancelled[0]?.type, EventType.RUN_FINISHED)
     assert.deepEqual(cancelled[0]?.outcome?.type, "interrupt")
     assert.doesNotThrow(() => EventSchemas.parse(cancelled[0]))
 
-    const failed = projectChatEvent({
-      ...base,
-      kind: "run.failed",
-      payload: { failure: { source: "agent", code: "internal_error", retryable: false }, message: "Agent run failed" },
-    }, createAgUiProjectionState())
+    const failed = projectChatEvent(
+      {
+        ...base,
+        kind: "run.failed",
+        payload: { failure: { source: "agent", code: "internal_error", retryable: false }, message: "Agent run failed" },
+      },
+      createAgUiProjectionState(),
+    )
     assert.equal(failed[0]?.type, EventType.RUN_ERROR)
     assert.equal(failed[0]?.threadId, "session_1")
     assert.equal(failed[0]?.runId, "run_1")
@@ -123,14 +139,26 @@ describe("AG-UI durable projector runner", () => {
       seedConsumers: async () => 0,
       claimConsumers: async () => [lease()],
       renewConsumerLease: async () => true,
-      markConsumerProgress: async (...args) => { progress.push(args); return true },
-      markConsumerRetryable: async (...args) => { retries.push(args); return true },
-      markConsumerBlocked: async (...args) => { blocked.push(args); return true },
+      markConsumerProgress: async (...args) => {
+        progress.push(args)
+        return true
+      },
+      markConsumerRetryable: async (...args) => {
+        retries.push(args)
+        return true
+      },
+      markConsumerBlocked: async (...args) => {
+        blocked.push(args)
+        return true
+      },
       releaseConsumer: async () => true,
       collectGarbage: async () => ({ streamsScanned: 0, framesDeleted: 0, tombstonesInserted: 0, tombstonesDeleted: 0 }),
     }
     const projection = {
-      ingest: async (...args) => { ingested.push(args); return { insertedSources: 1, insertedFrames: 0, sourceHighWatermark: 1 } },
+      ingest: async (...args) => {
+        ingested.push(args)
+        return { insertedSources: 1, insertedFrames: 0, sourceHighWatermark: 1 }
+      },
     }
     const sourceReader = {
       read: async () => {
@@ -170,14 +198,22 @@ describe("AG-UI durable projector runner", () => {
       seedConsumers: async () => 0,
       claimConsumers: async () => [lease()],
       renewConsumerLease: async () => false,
-      markConsumerProgress: async () => { progressCalls += 1; return true },
-      markConsumerRetryable: async () => { retryCalls += 1; return true },
+      markConsumerProgress: async () => {
+        progressCalls += 1
+        return true
+      },
+      markConsumerRetryable: async () => {
+        retryCalls += 1
+        return true
+      },
       markConsumerBlocked: async () => true,
       releaseConsumer: async () => true,
       collectGarbage: async () => ({ streamsScanned: 0, framesDeleted: 0, tombstonesInserted: 0, tombstonesDeleted: 0 }),
     }
     const projection = {
-      ingest: async () => { throw new AgUiConsumerLeaseLostError() },
+      ingest: async () => {
+        throw new AgUiConsumerLeaseLostError()
+      },
     }
     const sourceReader = { read: async () => ({ events: [source(1)], nextSequence: 1, watermark: 1, exhausted: true }) }
     const runner = new AgUiProjectorRunner(projection, consumer, sourceReader, {
@@ -208,13 +244,18 @@ describe("AG-UI durable projector runner", () => {
       claimConsumers: async () => [lease({ failureCount: 3 })],
       renewConsumerLease: async () => true,
       markConsumerProgress: async () => true,
-      markConsumerRetryable: async (...args) => { retries.push(args); return true },
+      markConsumerRetryable: async (...args) => {
+        retries.push(args)
+        return true
+      },
       markConsumerBlocked: async () => true,
       releaseConsumer: async () => true,
       collectGarbage: async () => ({ streamsScanned: 0, framesDeleted: 0, tombstonesInserted: 0, tombstonesDeleted: 0 }),
     }
     const sourceReader = {
-      read: async () => { throw new AgUiSourceReadError("agent_source_unavailable", true) },
+      read: async () => {
+        throw new AgUiSourceReadError("agent_source_unavailable", true)
+      },
     }
     const runner = new AgUiProjectorRunner({ ingest: async () => assert.fail("ingest must not run") }, consumer, sourceReader, {
       workerId: "worker_1",
@@ -249,13 +290,21 @@ describe("AG-UI durable projector runner", () => {
       claimConsumers: async () => [lease()],
       renewConsumerLease: async () => true,
       markConsumerProgress: async () => true,
-      markConsumerRetryable: async () => { retries += 1; return true },
-      markConsumerBlocked: async (...args) => { blocked.push(args); return true },
+      markConsumerRetryable: async () => {
+        retries += 1
+        return true
+      },
+      markConsumerBlocked: async (...args) => {
+        blocked.push(args)
+        return true
+      },
       releaseConsumer: async () => true,
       collectGarbage: async () => ({ streamsScanned: 0, framesDeleted: 0, tombstonesInserted: 0, tombstonesDeleted: 0 }),
     }
     const sourceReader = {
-      read: async () => { throw new AgUiSourceReadError("agent_source_forbidden", false) },
+      read: async () => {
+        throw new AgUiSourceReadError("agent_source_forbidden", false)
+      },
     }
     const runner = new AgUiProjectorRunner({ ingest: async () => assert.fail("ingest must not run") }, consumer, sourceReader, {
       workerId: "worker_1",
@@ -288,13 +337,18 @@ describe("AG-UI durable projector runner", () => {
       claimConsumers: async () => [lease()],
       renewConsumerLease: async () => true,
       markConsumerProgress: async () => true,
-      markConsumerRetryable: async (...args) => { retries.push(args); return true },
+      markConsumerRetryable: async (...args) => {
+        retries.push(args)
+        return true
+      },
       markConsumerBlocked: async () => true,
       releaseConsumer: async () => true,
       collectGarbage: async () => ({ streamsScanned: 0, framesDeleted: 0, tombstonesInserted: 0, tombstonesDeleted: 0 }),
     }
     const sourceReader = {
-      read: async () => { throw new AgUiSourceReadError("agent_source_rate_limited", true, 5_000) },
+      read: async () => {
+        throw new AgUiSourceReadError("agent_source_rate_limited", true, 5_000)
+      },
     }
     const runner = new AgUiProjectorRunner({ ingest: async () => assert.fail("ingest must not run") }, consumer, sourceReader, {
       workerId: "worker_1",
@@ -367,15 +421,121 @@ it("a new START identity after a full interaction is rejected before committing 
   const state = { interaction_revision: 1, pause_revision: 0, pause_ref: null, phase: "active", groups: [], action_result: null }
   let commits = 0
   const service = new AgUiProjectionService({
-    readStream: async () => ({ version: 2, sourceHighWatermark: 2, projectionState: { textMessageIds: [], toolCallIds: [] },
-      expectedRunId: "run_1", latestRunId: "run_1", terminalRunId: null, interaction: { runId: "run_1", state } }),
+    readStream: async () => ({
+      version: 2,
+      sourceHighWatermark: 2,
+      projectionState: { textMessageIds: [] },
+      expectedRunId: "run_1",
+      latestRunId: "run_1",
+      terminalRunId: null,
+      interaction: { runId: "run_1", state },
+    }),
     assertPersistedSources: async () => {},
-    commitProjection: async () => { commits++; return "committed" },
+    commitProjection: async () => {
+      commits++
+      return "committed"
+    },
   })
   const timestamp = new Date(3000).toISOString()
-  await assert.rejects(service.ingest("tenant_1", "session_1", [{
-    sourceRunId: "run_1", sourceEventId: "new_start_identity", sourceSequence: 3, sourceOccurredAt: timestamp,
-    sourcePayload: { kind: "run.started" }, event: { event_id: "new_start_identity", seq: 3, timestamp, session_id: "session_1", run_id: "run_1", kind: "run.created", payload: { run_id: "run_1" } },
-  }]), /source identity conflict/u)
+  await assert.rejects(
+    service.ingest("tenant_1", "session_1", [
+      {
+        sourceRunId: "run_1",
+        sourceEventId: "new_start_identity",
+        sourceSequence: 3,
+        sourceOccurredAt: timestamp,
+        sourcePayload: { kind: "run.started" },
+        event: {
+          event_id: "new_start_identity",
+          seq: 3,
+          timestamp,
+          session_id: "session_1",
+          run_id: "run_1",
+          kind: "run.created",
+          payload: { run_id: "run_1" },
+        },
+      },
+    ]),
+    /source identity conflict/u,
+  )
   assert.equal(commits, 0)
 })
+
+for (const [activity, displayCode] of [
+  ["tool", "tool.execution"],
+  ["subagent", "subagent.execution"],
+]) {
+  for (const status of ["running", "completed", "failed"]) {
+    it(`R123 maps ${activity}/${status} through the actual mapper and projector as one safe activity CUSTOM`, () => {
+      const payload = {
+        activity,
+        activity_id: `act_${activity === "tool" ? "a".repeat(64) : "b".repeat(64)}`,
+        segment_id: `seg_${activity === "tool" ? "c".repeat(64) : "d".repeat(64)}`,
+        status,
+        display_code: displayCode,
+      }
+      const mapped = mapAgentEvent({
+        chat_event_id: `r123_${activity}_${status}`,
+        session_id: "session_1",
+        run_id: "run_1",
+        source_index: 4,
+        chat_message_id: "assistant_identity_canary",
+        event_type: "activity",
+        payload_json: JSON.stringify(payload),
+        seq: 5,
+        created_at: Date.parse("2026-09-02T12:00:00.000Z"),
+      })
+      assert.notEqual(mapped, null)
+      const [frame] = projectChatEvent(mapped, createAgUiProjectionState())
+      assert.deepEqual(frame, {
+        type: EventType.CUSTOM,
+        timestamp: Date.parse("2026-09-02T12:00:00.000Z"),
+        name: "kokoro.activity.updated",
+        value: payload,
+        metadata: {
+          kokoro: { event_id: `r123_${activity}_${status}`, seq: 5, session_id: "session_1", run_id: "run_1", timestamp: "2026-09-02T12:00:00.000Z" },
+        },
+      })
+      assert.equal(JSON.stringify(frame).includes("assistant_identity_canary"), false)
+      assert.doesNotThrow(() => EventSchemas.parse(frame))
+    })
+  }
+}
+
+const r123TodoAndSkillProjectionCases = [
+  ["Todo", "todo.updated", { todos: [{ content: "plan", status: "pending" }] }, "todo.updated", "kokoro.todo.updated"],
+  [
+    "Skill",
+    "activity",
+    {
+      activity: "skill",
+      activity_id: `act_${"e".repeat(64)}`,
+      preflight_id: `spf_${"f".repeat(64)}`,
+      source_refs: ["skill:alpha"],
+      phase: "failed",
+      error_code: "skill_resolve_failed",
+    },
+    "activity.updated",
+    "kokoro.activity.updated",
+  ],
+]
+for (const [label, eventType, payload, kind, name] of r123TodoAndSkillProjectionCases) {
+  it(`R123 maps safe ${label} through the actual mapper/projector without raw fields`, () => {
+    const mapped = mapAgentEvent({
+      chat_event_id: `r123_${eventType}`,
+      session_id: "session_1",
+      run_id: "run_1",
+      source_index: 1,
+      event_type: eventType,
+      payload_json: JSON.stringify(payload),
+      seq: 2,
+      created_at: 2_000,
+    })
+    assert.equal(mapped?.kind, kind)
+    const [frame] = projectChatEvent(mapped, createAgUiProjectionState())
+    assert.equal(frame?.type, EventType.CUSTOM)
+    assert.equal(frame?.name, name)
+    assert.deepEqual(frame?.value, payload)
+    assert.deepEqual(Object.keys(frame?.value ?? {}).sort(), Object.keys(payload).sort())
+  })
+}

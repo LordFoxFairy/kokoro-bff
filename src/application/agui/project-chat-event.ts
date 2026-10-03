@@ -16,10 +16,6 @@ export type AgUiEventType =
   | EventType.TEXT_MESSAGE_START
   | EventType.TEXT_MESSAGE_CONTENT
   | EventType.TEXT_MESSAGE_END
-  | EventType.TOOL_CALL_START
-  | EventType.TOOL_CALL_ARGS
-  | EventType.TOOL_CALL_END
-  | EventType.TOOL_CALL_RESULT
   | EventType.CUSTOM
 
 export type AgUiEvent = {
@@ -38,32 +34,24 @@ export type AgUiEvent = {
   threadId?: string
   runId?: string
   messageId?: string
-  role?: "assistant" | "tool"
+  role?: "assistant"
   delta?: string
-  toolCallId?: string
-  toolCallName?: string
-  parentMessageId?: string
-  content?: string
   code?: string
   message?: string
   result?: unknown
   name?: string
   value?: unknown
   usage?: Array<Record<string, unknown>>
-  isError?: boolean
-  outcome?:
-    | { type: "success" }
-    | { type: "interrupt"; interrupts: Array<{ id: string; reason: string; message?: string }> }
+  outcome?: { type: "success" } | { type: "interrupt"; interrupts: Array<{ id: string; reason: string; message?: string }> }
   status?: string
 }
 
 export type AgUiProjectionState = {
   textMessages: Set<string>
-  toolCalls: Set<string>
 }
 
 export function createAgUiProjectionState(): AgUiProjectionState {
-  return { textMessages: new Set(), toolCalls: new Set() }
+  return { textMessages: new Set() }
 }
 
 function timestampOf(event: ChatEvent): number {
@@ -104,9 +92,7 @@ function stringField(payload: Record<string, unknown>, name: string, fallback = 
 
 function recordField(payload: Record<string, unknown>, name: string): Record<string, unknown> {
   const value = payload[name]
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? Object.fromEntries(Object.entries(value))
-    : {}
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? Object.fromEntries(Object.entries(value)) : {}
 }
 
 function usageField(payload: Record<string, unknown>): Array<Record<string, unknown>> | undefined {
@@ -129,9 +115,6 @@ function clearRunState(state: AgUiProjectionState, runId: string | null): void {
   const prefix = runStatePrefix(runId)
   for (const key of state.textMessages) {
     if (key.startsWith(prefix)) state.textMessages.delete(key)
-  }
-  for (const key of state.toolCalls) {
-    if (key.startsWith(prefix)) state.toolCalls.delete(key)
   }
 }
 
@@ -163,52 +146,27 @@ export function projectChatEvent(event: ChatEvent, state: AgUiProjectionState): 
       state.textMessages.delete(runStateKey(event.run_id, messageId))
       return [base(event, EventType.TEXT_MESSAGE_END, { messageId })]
     }
-    case "tool.invoked": {
-      const toolCallId = stringField(payload, "tool_id", event.event_id)
-      state.toolCalls.add(runStateKey(event.run_id, toolCallId))
-      const args = JSON.stringify(recordField(payload, "args"))
-      return [
-        base(event, EventType.TOOL_CALL_START, {
-          toolCallId,
-          toolCallName: stringField(payload, "name", "tool"),
-          parentMessageId: stringField(payload, "segment_id", event.event_id),
-        }),
-        base(event, EventType.TOOL_CALL_ARGS, { toolCallId, delta: args }),
-      ]
-    }
-    case "tool.returned": {
-      const toolCallId = stringField(payload, "tool_id", event.event_id)
-      state.toolCalls.delete(runStateKey(event.run_id, toolCallId))
-      return [
-        base(event, EventType.TOOL_CALL_END, { toolCallId }),
-        base(event, EventType.TOOL_CALL_RESULT, {
-          messageId: stringField(payload, "segment_id", event.event_id),
-          toolCallId,
-          role: "tool",
-          content: stringField(payload, "result"),
-          isError: payload.is_error === true,
-        }),
-      ]
-    }
     case "run.completed": {
       const usage = usageField(payload)
       const cancelled = stringField(payload, "status") === "cancelled"
       clearRunState(state, event.run_id)
-      return [base(event, EventType.RUN_FINISHED, {
-        threadId: event.session_id,
-        runId: event.run_id ?? "",
-        status: cancelled ? "cancelled" : "completed",
-        ...(cancelled
-          ? {
-              result: { status: "cancelled" },
-              outcome: {
-                type: "interrupt",
-                interrupts: [{ id: `cancelled:${event.event_id}`, reason: "cancelled", message: "Agent run cancelled" }],
-              },
-            }
-          : { outcome: { type: "success" } }),
-        ...(usage === undefined ? {} : { usage }),
-      })]
+      return [
+        base(event, EventType.RUN_FINISHED, {
+          threadId: event.session_id,
+          runId: event.run_id ?? "",
+          status: cancelled ? "cancelled" : "completed",
+          ...(cancelled
+            ? {
+                result: { status: "cancelled" },
+                outcome: {
+                  type: "interrupt",
+                  interrupts: [{ id: `cancelled:${event.event_id}`, reason: "cancelled", message: "Agent run cancelled" }],
+                },
+              }
+            : { outcome: { type: "success" } }),
+          ...(usage === undefined ? {} : { usage }),
+        }),
+      ]
     }
     case "run.failed": {
       const failure = failureField(payload)
@@ -226,12 +184,10 @@ export function projectChatEvent(event: ChatEvent, state: AgUiProjectionState): 
       return [base(event, EventType.CUSTOM, { name: "kokoro.interaction.state", value: payload })]
     case "delivery.created":
       return [base(event, EventType.CUSTOM, { name: "kokoro.delivery.created", value: payload })]
-    case "subagent.started":
-      return [base(event, EventType.CUSTOM, { name: "kokoro.subagent.started", value: payload })]
-    case "subagent.finished":
-      return [base(event, EventType.CUSTOM, { name: "kokoro.subagent.finished", value: payload })]
     case "todo.updated":
       return [base(event, EventType.CUSTOM, { name: "kokoro.todo.updated", value: payload })]
+    case "activity.updated":
+      return [base(event, EventType.CUSTOM, { name: "kokoro.activity.updated", value: payload })]
     case "message.user":
       return [base(event, EventType.CUSTOM, { name: "kokoro.message.user", value: payload })]
     default:

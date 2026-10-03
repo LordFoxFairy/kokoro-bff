@@ -3,12 +3,7 @@ import { randomUUID } from "node:crypto"
 import { test } from "node:test"
 import pg from "pg"
 
-import {
-  applyCanonicalSchema,
-  assertEmptyOwnerSchema,
-  assertBffSchemaUrl,
-  loadCanonicalSchema,
-} from "../scripts/apply-schema.mjs"
+import { applyCanonicalSchema, assertEmptyOwnerSchema, assertBffSchemaUrl, loadCanonicalSchema } from "../scripts/apply-schema.mjs"
 
 const { Client } = pg
 const SAFE_FAILURE_CODES = [
@@ -85,9 +80,7 @@ test("canonical Message failure columns use the complete nullable-pair CHECK", a
   assert.match(message, /CONSTRAINT ck_bff_message_agent_failure CHECK/u)
   assert.match(message, /agent_failure_code IS NULL\s+AND agent_failure_retryable IS NULL/u)
   assert.match(message, /agent_failure_code IS NOT NULL\s+AND agent_failure_retryable IS NOT NULL/u)
-  const codeLists = [...message.matchAll(/agent_failure_code IN \(([^)]*)\)/gu)].map((match) => [
-    ...match[1].matchAll(/'([a-z_]+)'/gu),
-  ].map((code) => code[1]))
+  const codeLists = [...message.matchAll(/agent_failure_code IN \(([^)]*)\)/gu)].map((match) => [...match[1].matchAll(/'([a-z_]+)'/gu)].map((code) => code[1]))
   assert.deepEqual(codeLists, [SAFE_FAILURE_CODES, RETRYABLE_FAILURE_CODES])
   assert.equal(new Set(codeLists[0]).size, SAFE_FAILURE_CODES.length)
   for (const broken of [
@@ -95,9 +88,9 @@ test("canonical Message failure columns use the complete nullable-pair CHECK", a
     message.replace("'internal_error'", "'internal_error', 'internal_error'"),
   ]) {
     assert.notEqual(broken, message)
-    const [brokenCodes] = [...broken.matchAll(/agent_failure_code IN \(([^)]*)\)/gu)].map((match) => [
-      ...match[1].matchAll(/'([a-z_]+)'/gu),
-    ].map((code) => code[1]))
+    const [brokenCodes] = [...broken.matchAll(/agent_failure_code IN \(([^)]*)\)/gu)].map((match) =>
+      [...match[1].matchAll(/'([a-z_]+)'/gu)].map((code) => code[1]),
+    )
     assert.notDeepEqual(brokenCodes, SAFE_FAILURE_CODES)
   }
   assert.match(message, /agent_failure_retryable = FALSE\s+OR\s+agent_failure_code IN/u)
@@ -111,10 +104,7 @@ test("canonical Message role CHECK allows exactly user and assistant and detects
   const schema = await loadCanonicalSchema()
 
   assert.deepEqual(inspectMessageRoleConstraint(schema), [])
-  const withSystem = schema.replace(
-    "role IN ('user', 'assistant')",
-    "role IN ('user', 'assistant', 'system')",
-  )
+  const withSystem = schema.replace("role IN ('user', 'assistant')", "role IN ('user', 'assistant', 'system')")
   assert.notEqual(withSystem, schema)
   assert.notDeepEqual(inspectMessageRoleConstraint(withSystem), [])
 })
@@ -158,10 +148,7 @@ test("canonical schema uses millisecond precision for every database instant", a
 
 test("schema application rejects a non-empty BFF owner schema", () => {
   assert.doesNotThrow(() => assertEmptyOwnerSchema([]))
-  assert.throws(
-    () => assertEmptyOwnerSchema(["existing_table"]),
-    /db:apply-schema requires an empty kokoro_bff schema; found objects: existing_table/u,
-  )
+  assert.throws(() => assertEmptyOwnerSchema(["existing_table"]), /db:apply-schema requires an empty kokoro_bff schema; found objects: existing_table/u)
 })
 
 test("schema installer accepts only a URL targeting the fixed BFF owner schema", () => {
@@ -172,7 +159,8 @@ test("schema installer accepts only a URL targeting the fixed BFF owner schema",
     "postgresql://localhost/app?schema=kokoro_iam",
     "postgresql://localhost/app?schema=kokoro_bff&schema=kokoro_bff",
     "postgresql://localhost/app?schema=kokoro_bff&options=-c%20search_path%3Dpublic",
-  ]) assert.throws(() => assertBffSchemaUrl(url), /kokoro_bff schema/u, url)
+  ])
+    assert.throws(() => assertBffSchemaUrl(url), /kokoro_bff schema/u, url)
 })
 
 const adminUrl = process.env.KOKORO_TEST_POSTGRES_ADMIN_URL
@@ -192,10 +180,7 @@ databaseTest("owner schema install coexists with other schemas and rolls back on
     await admin.connect()
     await admin.query(`CREATE DATABASE ${name}`)
     created = true
-    await assert.rejects(
-      applyCanonicalSchema(databaseUrl, "CREATE TABLE bff_partial (id integer); SELECT 1 / 0"),
-      /division by zero/u,
-    )
+    await assert.rejects(applyCanonicalSchema(databaseUrl, "CREATE TABLE bff_partial (id integer); SELECT 1 / 0"), /division by zero/u)
     client = new Client({ connectionString: databaseUrl })
     await client.connect()
     assert.equal((await client.query("SELECT count(*)::int AS count FROM pg_namespace WHERE nspname = 'kokoro_bff'")).rows[0].count, 0)
@@ -213,11 +198,34 @@ databaseTest("owner schema install coexists with other schemas and rolls back on
       `SELECT column_name FROM information_schema.columns
         WHERE table_schema='kokoro_bff' AND table_name='bff_agui_run_interaction' ORDER BY ordinal_position`,
     )
-    assert.deepEqual(interactionColumns.rows.map(({ column_name }) => column_name), [
-      "tenant_id", "session_id", "run_id", "subject_id", "projection_schema_version", "interaction_revision", "pause_revision", "pause_ref", "phase", "groups",
-      "action_command_id", "action_pause_revision", "action_kind", "interaction_digest", "source_owner", "source_event_id", "source_sequence", "source_digest",
-      "source_occurred_at", "public_sequence", "public_cursor", "created_at", "updated_at",
-    ])
+    assert.deepEqual(
+      interactionColumns.rows.map(({ column_name }) => column_name),
+      [
+        "tenant_id",
+        "session_id",
+        "run_id",
+        "subject_id",
+        "projection_schema_version",
+        "interaction_revision",
+        "pause_revision",
+        "pause_ref",
+        "phase",
+        "groups",
+        "action_command_id",
+        "action_pause_revision",
+        "action_kind",
+        "interaction_digest",
+        "source_owner",
+        "source_event_id",
+        "source_sequence",
+        "source_digest",
+        "source_occurred_at",
+        "public_sequence",
+        "public_cursor",
+        "created_at",
+        "updated_at",
+      ],
+    )
     const interactionKey = await client.query(
       `SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint
         WHERE conrelid='kokoro_bff.bff_agui_run_interaction'::regclass AND contype='p'`,
@@ -256,10 +264,7 @@ databaseTest("owner schema install coexists with other schemas and rolls back on
       )
     }
     const expectFailureCheck = async (candidate) => {
-      await assert.rejects(
-        insertFailure(candidate),
-        (error) => error?.code === "23514" && error?.constraint === "ck_bff_message_agent_failure",
-      )
+      await assert.rejects(insertFailure(candidate), (error) => error?.code === "23514" && error?.constraint === "ck_bff_message_agent_failure")
     }
 
     await insertFailure({ code: null, retryable: null, role: "user", status: "completed", runId: null })
@@ -276,10 +281,7 @@ databaseTest("owner schema install coexists with other schemas and rolls back on
     }
     await insertPlainRole("user")
     await insertPlainRole("assistant")
-    await assert.rejects(
-      insertPlainRole("system"),
-      (error) => error?.code === "23514" && error?.constraint === "ck_bff_message_role",
-    )
+    await assert.rejects(insertPlainRole("system"), (error) => error?.code === "23514" && error?.constraint === "ck_bff_message_role")
     for (const code of SAFE_FAILURE_CODES) await insertFailure({ code, retryable: false })
     for (const code of RETRYABLE_FAILURE_CODES) await insertFailure({ code, retryable: true })
     for (const code of SAFE_FAILURE_CODES.filter((candidate) => !RETRYABLE_FAILURE_CODES.includes(candidate))) {
@@ -296,8 +298,14 @@ databaseTest("owner schema install coexists with other schemas and rolls back on
     }
     for (const runId of [null, "", "  "]) await expectFailureCheck({ code: "internal_error", retryable: false, runId })
 
-    assert.equal((await client.query("SELECT count(*)::int AS count FROM pg_tables WHERE schemaname = 'public' AND tablename = 'other_owner_guard'")).rows[0].count, 1)
-    assert.equal((await client.query("SELECT count(*)::int AS count FROM pg_tables WHERE schemaname = 'kokoro_iam' AND tablename = 'other_owner_guard'")).rows[0].count, 1)
+    assert.equal(
+      (await client.query("SELECT count(*)::int AS count FROM pg_tables WHERE schemaname = 'public' AND tablename = 'other_owner_guard'")).rows[0].count,
+      1,
+    )
+    assert.equal(
+      (await client.query("SELECT count(*)::int AS count FROM pg_tables WHERE schemaname = 'kokoro_iam' AND tablename = 'other_owner_guard'")).rows[0].count,
+      1,
+    )
     await assert.rejects(applyCanonicalSchema(databaseUrl, await loadCanonicalSchema()), /empty kokoro_bff schema/u)
     await assert.rejects(applyCanonicalSchema(databaseUrl.replace("schema=kokoro_bff", "schema=public"), await loadCanonicalSchema()), /kokoro_bff schema/u)
   } finally {
@@ -330,4 +338,27 @@ test("full interaction projection has one run key and explicit revision, locator
   assert.match(block, /source_owner = 'kokoro-agent'/u)
   assert.doesNotMatch(block, /FOREIGN KEY|REFERENCES|checkpoint|lease_token/iu)
   assert.doesNotMatch(schema, /CREATE (?:UNIQUE )?INDEX[^;]*ON bff_agui_run_interaction/iu)
+})
+
+test("R124 canonical schema owns compact Run process and activity rows without a cursor table", async () => {
+  const schema = await loadCanonicalSchema()
+  const process = schema.match(/CREATE TABLE IF NOT EXISTS bff_agui_run_process \([\s\S]*?\n\);/u)?.[0] ?? ""
+  const activity = schema.match(/CREATE TABLE IF NOT EXISTS bff_agui_run_activity \([\s\S]*?\n\);/u)?.[0] ?? ""
+  assert.match(process, /PRIMARY KEY \(tenant_id, session_id, run_id\)/u)
+  assert.match(process, /todo_observed BOOLEAN NOT NULL DEFAULT FALSE/u)
+  assert.match(process, /start_public_cursor TEXT NOT NULL/u)
+  assert.match(activity, /PRIMARY KEY \(tenant_id, session_id, run_id, activity_id\)/u)
+  assert.match(activity, /first_public_sequence BIGINT NOT NULL/u)
+  assert.match(activity, /latest_public_sequence BIGINT NOT NULL/u)
+  assert.match(schema, /ix_bff_agui_run_activity_page[\s\S]*?\(tenant_id, session_id, run_id, first_public_sequence, activity_id\)/u)
+  assert.doesNotMatch(schema, /CREATE TABLE IF NOT EXISTS bff_agui_(?:process_)?cursor\b/u)
+  assert.equal(/FOREIGN KEY|REFERENCES/iu.test(process + activity), false)
+})
+
+test("R124 fresh projection state removes the retired private tool-call cache while retaining text reconnect state", async () => {
+  const schema = await loadCanonicalSchema()
+  const stream = schema.match(/CREATE TABLE IF NOT EXISTS bff_agui_stream \([\s\S]*?\n\);/u)?.[0] ?? ""
+  assert.doesNotMatch(stream, /tool_call_ids/u)
+  assert.match(stream, /text_message_ids/u)
+  assert.doesNotMatch(schema, /tool_call_ids/u)
 })

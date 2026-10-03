@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 6.0.0
+  version: 7.0.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -689,6 +689,51 @@ paths:
             Retry-After:
               description: Bounded delay in seconds before retrying admission
               schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /v1/sessions/{id}/runs/{runId}/process:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+      - $ref: '#/components/parameters/RunId'
+    get:
+      tags: [Chat]
+      operationId: getRunProcess
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: session.read
+      summary: Read one immutable Run process page
+      parameters:
+        - $ref: '#/components/parameters/DirectScopeQuery'
+        - $ref: '#/components/parameters/ProjectRefQuery'
+        - name: watermark
+          in: query
+          required: true
+          schema: { $ref: '#/components/schemas/EventCursor' }
+        - name: cursor
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/EventCursor' }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 100 }
+      responses:
+        '200':
+          description: Immutable process page at the requested watermark
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RunProcessPageResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '410': { $ref: '#/components/responses/Gone' }
+        '429':
+          description: IAM session admission is rate limited
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
@@ -4992,6 +5037,114 @@ components:
                     const: resuming
                 additionalProperties: true
           additionalProperties: true
+    RunExecutionProcess:
+      type: object
+      required: [run_id, todos, activities, next_cursor]
+      additionalProperties: false
+      properties:
+        run_id: { type: string, minLength: 1 }
+        todos:
+          oneOf:
+            - type: array
+              maxItems: 100
+              items:
+                type: object
+                required: [content, status]
+                additionalProperties: false
+                properties:
+                  content: { type: string, minLength: 1, maxLength: 1024 }
+                  status: { type: string, enum: [pending, in_progress, completed] }
+            - type: 'null'
+        activities:
+          type: array
+          maxItems: 100
+          items: { $ref: '#/components/schemas/RunProcessActivity' }
+        next_cursor:
+          oneOf:
+            - $ref: '#/components/schemas/EventCursor'
+            - type: 'null'
+    RunProcessPage:
+      type: object
+      required: [run_id, todos, activities, next_cursor, event_watermark]
+      additionalProperties: false
+      properties:
+        run_id: { type: string, minLength: 1 }
+        todos:
+          oneOf:
+            - type: array
+              maxItems: 100
+              items:
+                type: object
+                required: [content, status]
+                additionalProperties: false
+                properties:
+                  content: { type: string, minLength: 1, maxLength: 1024 }
+                  status: { type: string, enum: [pending, in_progress, completed] }
+            - type: 'null'
+        activities:
+          type: array
+          maxItems: 100
+          items: { $ref: '#/components/schemas/RunProcessActivity' }
+        next_cursor:
+          oneOf:
+            - $ref: '#/components/schemas/EventCursor'
+            - type: 'null'
+        event_watermark: { $ref: '#/components/schemas/EventCursor' }
+    RunProcessPageResponse:
+      type: object
+      required: [data, meta]
+      additionalProperties: false
+      properties:
+        data: { $ref: '#/components/schemas/RunProcessPage' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    RunProcessActivity:
+      oneOf:
+        - $ref: '#/components/schemas/RunToolActivity'
+        - $ref: '#/components/schemas/RunSubagentActivity'
+        - $ref: '#/components/schemas/RunSkillActivity'
+    RunToolActivity:
+      type: object
+      required: [activity, activity_id, segment_id, status, display_code]
+      additionalProperties: false
+      properties:
+        activity: { const: tool }
+        activity_id: { type: string, pattern: '^act_[0-9a-f]{64}$' }
+        segment_id: { type: string, pattern: '^seg_[0-9a-f]{64}$' }
+        status: { type: string, enum: [running, completed, failed] }
+        display_code: { const: tool.execution }
+    RunSubagentActivity:
+      type: object
+      required: [activity, activity_id, segment_id, status, display_code]
+      additionalProperties: false
+      properties:
+        activity: { const: subagent }
+        activity_id: { type: string, pattern: '^act_[0-9a-f]{64}$' }
+        segment_id: { type: string, pattern: '^seg_[0-9a-f]{64}$' }
+        status: { type: string, enum: [running, completed, failed] }
+        display_code: { const: subagent.execution }
+    RunSkillActivity:
+      type: object
+      required: [activity, activity_id, preflight_id, source_refs, phase]
+      additionalProperties: false
+      properties:
+        activity: { const: skill }
+        activity_id: { type: string, pattern: '^act_[0-9a-f]{64}$' }
+        preflight_id: { type: string, pattern: '^spf_[0-9a-f]{64}$' }
+        source_refs:
+          type: array
+          minItems: 1
+          maxItems: 16
+          uniqueItems: true
+          items: { type: string, pattern: '^skill:(?!skill:)[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        phase: { type: string, enum: [resolving, loading, ready, failed] }
+        error_code: { type: string, enum: [skill_resolve_failed, skill_load_failed] }
+      allOf:
+        - if:
+            properties: { phase: { const: failed } }
+          then:
+            required: [error_code]
+          else:
+            not: { required: [error_code] }
     SessionSnapshotResponse:
       type: object
       required: [data, meta]
@@ -4999,7 +5152,7 @@ components:
       properties:
         data:
           type: object
-          required: [session, files, deliveries, deliveries_has_more, event_watermark]
+          required: [session, files, deliveries, deliveries_has_more, event_watermark, execution_process]
           additionalProperties: false
           properties:
             session: { $ref: '#/components/schemas/ChatSession' }
@@ -5007,6 +5160,10 @@ components:
               type: array
               items: { $ref: '#/components/schemas/ChatMessage' }
             execution_head: { $ref: '#/components/schemas/ExecutionHead' }
+            execution_process:
+              oneOf:
+                - $ref: '#/components/schemas/RunExecutionProcess'
+                - type: 'null'
             files:
               type: array
               items: { $ref: '#/components/schemas/WorkspaceFile' }
@@ -5029,6 +5186,11 @@ components:
             run_id: run_01JASYNC
             state: active
             pending_pauses: []
+          execution_process:
+            run_id: run_01JASYNC
+            todos: null
+            activities: []
+            next_cursor: null
           files: []
           deliveries: []
           deliveries_has_more: false

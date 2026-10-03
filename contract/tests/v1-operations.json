@@ -88,6 +88,11 @@
     },
     {
       "method": "GET",
+      "path": "/v1/sessions/{id}/runs/{runId}/process",
+      "operation_id": "getRunProcess"
+    },
+    {
+      "method": "GET",
       "path": "/v1/sessions/{id}/messages",
       "operation_id": "listSessionMessages"
     },

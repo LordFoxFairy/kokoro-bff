@@ -91,7 +91,17 @@ export const zChatEvent = z
     run_id: z.string().min(1),
     source_index: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
     chat_message_id: z.string().min(1).nullish(),
-    event_type: z.enum(["run.started", "assistant.delta", "assistant.completed", "activity", "interaction.state", "delivery", "run.completed", "run.failed"]),
+    event_type: z.enum([
+      "run.started",
+      "assistant.delta",
+      "assistant.completed",
+      "activity",
+      "todo.updated",
+      "interaction.state",
+      "delivery",
+      "run.completed",
+      "run.failed",
+    ]),
     payload_json: z.string(),
     seq: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
     created_at: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
@@ -254,3 +264,38 @@ export const zChatInteractionState = z
     action_result: z.union([zInteractionActionResult, z.null()]),
   })
   .strict()
+
+export const zChatTodo = z
+  .object({ todos: z.array(z.object({ content: z.string().min(1), status: z.enum(["pending", "in_progress", "completed"]) }).strict()).max(100) })
+  .strict()
+
+export const zChatActivity = z.union([
+  z
+    .object({
+      activity: z.literal("tool"),
+      activity_id: z.string().min(68),
+      segment_id: z.string().min(68),
+      status: z.enum(["running", "completed", "failed"]),
+      display_code: z.literal("tool.execution"),
+    })
+    .strict(),
+  z
+    .object({
+      activity: z.literal("subagent"),
+      activity_id: z.string().min(68),
+      segment_id: z.string().min(68),
+      status: z.enum(["running", "completed", "failed"]),
+      display_code: z.literal("subagent.execution"),
+    })
+    .strict(),
+  z
+    .object({
+      activity: z.literal("skill"),
+      activity_id: z.string().min(68),
+      preflight_id: z.string().min(68),
+      source_refs: z.array(z.string().min(7)).min(1).max(16),
+      phase: z.enum(["resolving", "loading", "ready", "failed"]),
+      error_code: z.enum(["skill_resolve_failed", "skill_load_failed"]).optional(),
+    })
+    .strict(),
+])

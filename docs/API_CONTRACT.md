@@ -1,3 +1,91 @@
+## R133 当前切片 Root 验收事实（2026-10-03）
+
+HTTP5 正式消费、public7 过程契约、两 canonical process 表、同事务 RR 快照、immutable anchor 分页、START 与分批 GC 完整性切片已由 Root 复验。真实 PG/HTTP：15 焦点和完整 74 项全部通过、0 skip；完整默认纯门 736 pass/1 既定 PG schema resource skip，四 pure 149 pass；format（含全部变更 TS/MJS）、lint、typecheck、build、全 contract pipeline 与 233 contract tests 通过。最新证据：资源19016f31、纯门7c8284b1、contract f7e3519c；两独立限定源码审0/0/0。
+
+两个 fixture 的时间戳/umask 假前置及 public7 Snapshot 示例缺字段已修并真实复测。当前 contract lint 剩4条 warning：3条 conditional-schema局部 required-properties提示、1条既有特殊操作无2xx提示；不称零warning或整个owner集成通过。下方“5条全既有/待Root”是历史阶段，不作为最新状态。集成提交身份以本仓 Git 与 Root progress E108 为准；Web7消费、当前真实浏览器、外部模型、正规积分及完整BFF其他资源/镜像验收仍未完成。
+
+以下为此前阶段与已批准技术方案。
+
+## R132 snapshot example 更正候选（2026-10-03，待 Root 复验）
+
+Root 复核确认下方把 5 条 contract lint warning 全记为既有并不准确：其中一条来自 public7 `SessionSnapshotResponse.example.data` 缺少新增 required `execution_process`。本片已为 active head 的同一 Run 补齐 `run_id`、`todos`、`activities`、`next_cursor` 四字段闭集示例，未改变机器 schema、版本或 API；实际剩余 warning 数与通过状态等待 Root 重跑后记录。
+
+## R132 public7 本片 Root 验收事实（2026-10-03，Git 发布待 Root）
+
+Agent HTTP5 安全过程消费与 public `7.0.0` snapshot/Run process 单轨契约已完成本片有限验收，包含授权 RR、immutable anchor 分页以及既定 400/403/404/410/503 错误语义。证据绑定资源 `19016f31`（15 焦点与完整 74 全通过）、pure/default `3b926e2d`（149 pure；default 736 pass + 1 既定 PostgreSQL schema resource skip）及完整 format/contract `4811c5e9`（233 contract pass / 0 skip，保留 5 条既有 lint warning）；两次 R131 独立源码终审均为 0/0/0，原 timestamp 与 permission fixture 失败也已由 Root 窄修复测关闭。BFF7 Git 提交/推送仍待 Root；这些结果不代表全部 BFF 业务、其余资源、镜像、用户 Web/浏览器、真实 provider/外部模型或正式积分已验。
+
+## R129 过程完整性错误语义候选（2026-10-03，待 Root 资源验收）
+
+public `7.0.0` 字段与 route 不变：已授权历史 Run 的 START 若有 durable tombstone/floor 回收证据则返回既有 410 `process_cursor_expired`；compact↔ledger/source/frame 或 Run/activity identity 损坏且没有回收证据时返回既有 503 `process_projection_unavailable`；未知 Run 保持 404。未新增 cursor 状态、发行链、secret、alias 或兼容响应。
+
+## R126-GREEN-C 当前契约候选（2026-10-02，待 Root 资源验收）
+
+机器契约已切单轨 public `7.0.0`：snapshot required nullable 四字段 `execution_process`，Run process route 返回含同一 required watermark 的五字段锚定页。无 public6 alias、旧过程协议或 raw tool payload；正式不可变发布仍等待 Root 完整资源门。
+
+## R123-GREEN-A 当前契约事实（2026-10-02，待 Root 最终全门）
+
+内部 Agent consumer 已单轨固定正式 HTTP `5.0.0` owner artifact，严格接纳 Todo 与三类安全 activity，并只投影 `kokoro.todo.updated` / `kokoro.activity.updated`；旧 HTTP4 raw activity 不再兼容。BFF public machine 仍为 `6.0.0`，本片未修改 public snapshot、process route、分页或错误契约；下方 public `7.0.0` 仍是已批准后继目标。
+
+## R123-BFF-HTTP5-D0：public `7.0.0` / Agent5 契约目标（2026-10-02，未实施）
+
+当前机器仍是 BFF public `6.0.0` / Agent HTTP4；本节只冻结后继单轨目标。Agent owner固定
+`79bf98c5aa63b9bace207afdf42d8c7aefee4fe8`、HTTP `5.0.0` OpenAPI SHA-256
+`bca8e4f4fd613e4325f594266893d5b089168cf14f2ad7a7df03f3f116af85f2`、provenance
+`12c0f7ad3e6f7de6ff2183410fdae986119e99bd6975e9f07ee71f23dc2d22ca`。只复制owner artifact并生成窄client；不import Agent source，不把distribution2/proof1当HTTP5。
+
+### 内部 owner decode 与公开安全映射
+
+- HTTP5 `ChatEvent`九值和decoded mapping是唯一wire闭集。外壳及Todo/activity payload必须 exact presence、`additionalProperties=false`、safe integer/epoch、Unicode scalar与原始payload UTF-8 byte门；unknown discriminator、旧raw shape和extra key整条source fail closed，不能map null后推进HWM。
+- Todo是完整有序替换；缺事件公开为`todos:null`，`[]`为已观察清空。CUSTOM固定`kokoro.todo.updated`，value只含`todos[{content,status}]`。
+- activity CUSTOM固定`kokoro.activity.updated`。tool/subagent只含opaque activity/segment、status与固定display_code；Skill只含opaque activity/preflight、source_refs、phase及failed条件error_code。raw name/args/result/description/error原文/path/stack/tool_id/subagent_id/hidden reasoning均禁止。
+- BFF只按source sequence采用每个合法closed值；Agent5未发布phase/status单向transition，因此不得拒合法回退、terminal后新状态或同activity新preflight。source identity+digest仍负责replay no-op与漂移冲突。
+
+### `GET /v1/sessions/{sessionId}`（public `7.0.0`）
+
+`execution_process`在response中required且nullable；从未有durable START时为null。非null对象的四字段全部required：
+
+```json
+{
+  "run_id": "run_opaque",
+  "todos": null,
+  "activities": [],
+  "next_cursor": null
+}
+```
+
+- `todos`为`null | ChatTodo.todos`：null=selected Run尚未观察Todo；`[]`=owner明确清空。
+- `activities`只是该snapshot anchor下的**第一页**，不是Run总量；最多100项，且`execution_process`对象本身（Todo、activities、cursor等）的序列化bytes≤1 MiB，稳定按activity首次public顺序、再`activity_id`排序。该page预算不包含同一session snapshot的Message、Delivery等其他字段，长聊天正文不因此拒绝。
+- `next_cursor` required nullable；非null表示仍有锚定activities，只有null表示耗尽。
+- 顶层`event_watermark`继续required nullable opaque `agui_...`。非null process必有非nullwatermark；四process字段与Message、execution_head、HITL、Delivery均来自同一授权RR snapshot。
+- `execution_head`与`execution_process`可指向不同Run：terminal process在successor仅queued时保留，直到successor durable `RUN_STARTED`才切换。
+
+### `GET /v1/sessions/{sessionId}/runs/{runId}/process`
+
+这是认证session owner的锚定page，不是share API。它既能恢复snapshot所选Run的后续页，也能读取任意已授权历史Run在指定anchor的第一页。exact query仅：
+
+- `watermark` required：opaque snapshot `event_watermark`，也是本次历史视图anchor；
+- `cursor` optional：省略表示该path Run在anchor下的第一页；存在时必须是上一页opaque `next_cursor`，表示continuation；
+- `limit` optional，默认100，范围1..100。
+
+200 data字段全部required：`run_id,todos,activities,next_cursor,event_watermark`。`run_id`等于path Run，`event_watermark`逐页等于请求anchor；Todo和每activity值都按该anchor还原。每页≤limit，且序列化process response对象（Todo、activities、cursor等）≤1 MiB；达到任一界即给next_cursor，不截断单条。单条无法装入空页返回typed `503 process_page_item_too_large`，不返回空成功页。
+
+cursor在wire只是不透明ID；不得含可见source seq/public sequence/digest/fence。服务在每次RR内验证tenant、subject、active session、run、anchor cursor、after-activity cursor与稳定keyset属于同一scope。malformed/unknown/foreign anchor或position为`400 invalid_process_cursor`；session/run不可授权按现404防枚举；anchor/position已被retention回收且有tombstone为`410 process_cursor_expired`并要求重取snapshot；ledger/compact/provenance损坏为`503 process_projection_unavailable`。不得从0、mutable latest Row或新snapshot静默续旧页。
+
+### 一致性、权限与breaking策略
+
+- 页从不可变safe CUSTOM ledger在`public_sequence <= anchor`取每activity最后revision；anchor之后的source不会污染旧页。compact row只核当前完整性与GC引用，不单独证明as-of。
+- 每次page重新执行与snapshot相同tenant+subject+Conversation授权；project membership按现规则；public share不授process route。
+- AG-UI replay仍以opaque Last-Event-ID strictly-after、1000 frames/1 MiB运行，和process page cursor不同；HTTP5不改变HITL resume/cancel幂等与Delivery identity。
+- `7.0.0`是唯一后继public machine identity；删除public6过程旧形状，不留alias、双版本或fallback。canonical编辑点仅`contract/openapi/v1/openapi.yaml`；Agent bytes仅放commit命名vendor并由唯一generator产出client。
+
+### 准入次序与当前事实
+
+先行GREEN只更新Agent owner pin/vendor/generated、strict decoder和安全projector，使现四RED穿过真实reader；**不**在该片修改public7 YAML、SQL、snapshot或分页。之后先追加public/SQL/RR/分页/GC RED，再一次实现machine+route+SQL。完整文件集与§8比较见TECHNICAL_DESIGN。
+
+Root独立RED现状：Node22 build exit0；四pure文件148 tests / 120 pass / 28行为fail / 0skip；既有106正控通过。失败证明当前HTTP4 wire、旧mapper和Skill fail-closed缺口，未证明任何HTTP5/public7能力已实现。本D0未运行测试或资源命令。
+
+---
+
 ## R83-BFF-DIRECT：`GET /v1/sessions` direct filter / public6 D0（机器契约未修改）
 
 当前唯一 canonical `contract/openapi/v1/openapi.yaml` 仍是已发布 public `5.0.0`，其 bytes/digest 本阶段冻结；当前 runtime 仍把 `scope=direct` 与 omitted/empty 合并，本节只记录 Root 已裁定的 public `6.0.0` 目标，不冒称实现、发布或消费者升级。该可见结果收窄不在 public5 原位换 digest、不提供 5/6 双读、alias、fallback 或兼容层，路径仍为唯一 `/v1`。

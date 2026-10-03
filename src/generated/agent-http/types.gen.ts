@@ -113,7 +113,8 @@ export type ChatEvent = {
   run_id: string
   source_index: number
   chat_message_id?: string | null
-  event_type: "run.started" | "assistant.delta" | "assistant.completed" | "activity" | "interaction.state" | "delivery" | "run.completed" | "run.failed"
+  event_type:
+    "run.started" | "assistant.delta" | "assistant.completed" | "activity" | "todo.updated" | "interaction.state" | "delivery" | "run.completed" | "run.failed"
   payload_json: string
   seq: number
   /**

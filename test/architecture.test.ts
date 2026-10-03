@@ -575,7 +575,7 @@ test("Conversation collection filtering stays one BFF-owned discriminated path w
   assert.match(service, /filter: ConversationCollectionFilter/u)
   assert.match(repository, /filter\.kind === "direct"[\s\S]*project_ref IS NULL/u)
   assert.match(repository, /filter\.kind === "project" \? filter\.projectRef : null/u)
-  assert.match(openapi, /^  version: 6\.0\.0$/mu)
+  assert.match(openapi, /^  version: 7\.0\.0$/mu)
   assert.match(openapi, /scope=direct and a nonempty project_ref are mutually exclusive/u)
   assert.doesNotMatch(port, /ConversationCollectionFilter\s*=\s*string/u)
 })
