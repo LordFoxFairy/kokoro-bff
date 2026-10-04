@@ -3,8 +3,8 @@
   "status": "generated",
   "owner": {
     "repository_path": "apps/kokoro-storage",
-    "repository_commit": "d5cfc442c675e32363ae767f5ec662a9e0d9eaea",
-    "published_combined_sha256": "8317e644d45c8db310b44f114afa22892a6a40d6ee7d0c1c4a37a8203e79f427",
+    "repository_commit": "e8b9928418924812587b7ac07900aee4be5bc27f",
+    "published_combined_sha256": "c22b5c10ee698d579753dcac370be371d8dba1df8fead1a12883f5443fbad18a",
     "package_name": "kokoro.storage.v2",
     "sources": [
       {
@@ -13,7 +13,7 @@
       },
       {
         "path": "contract/proto/kokoro/storage/v2/storage.proto",
-        "sha256": "5a5dcaec2e1fd0d5eed369b8f79477fd0f8f653b32f9ebe14a8c339f4eb713ac"
+        "sha256": "7960312aa9879d17af17dbd68f25df1a61edb67f1f7d9613ea3e97b404c75bef"
       }
     ]
   },
@@ -29,14 +29,14 @@
     "configs": [
       {
         "path": "buf.storage.json",
-        "sha256": "6685ad41df6462f938e7ba3a11c79253623f2adbe8ebccb69cf0b1599d406e24"
+        "sha256": "a09651cb1f18f4b31e9d09363e7ae5cd727714eed060e33bd32add711e796b38"
       },
       {
         "path": "buf.storage.gen.json",
         "sha256": "9888ea0808f6967ebdfb859125eb54430b89ad3f4dbee4418902bfdf6a4540ab"
       }
     ],
-    "script_sha256": "ae88acaa583a92f7038163dc69c6192b03cf1672c84c981469dd887103272821",
+    "script_sha256": "01d1dfde51e7c4c0445e7f36fe3d80064c7759ddfeeb6ae0b985c36b23159917",
     "formatting": {
       "package": "prettier",
       "version": "3.9.6",
@@ -51,7 +51,7 @@
     "licenses": "Buf, Protobuf-ES and Connect-ES: Apache-2.0",
     "supply_chain": "Exact package versions and lock integrity; local generation without remote plugins; the existing Buf build allowance is unchanged.",
     "performance": "Connect Node HTTP/1.1 transport bounds RPC messages and deadlines; runtime performance is unmeasured.",
-    "failure_semantics": "Generation rejects source/config/package/tree/digest drift. No automatic mutation retries; BFF project-resource and personal-file adapters consume scoped ListAssets.",
+    "failure_semantics": "Generation rejects source/config/package/tree/digest drift. No automatic mutation retries; BFF adapters consume scoped asset operations, while project/conversation release requests carry only CommandIdentity and trusted scope metadata.",
     "exit_path": "Regenerate from the pinned owner Proto with a reviewed compatible generator; generated wire types remain isolated from business code.",
     "sources": [
       "https://connectrpc.com/docs/node/using-clients/",
@@ -72,7 +72,7 @@
     },
     {
       "path": "kokoro/storage/v2/storage_pb.ts",
-      "sha256": "b0f777106927245c72923a1ee12d39ba9a186107445a50420d357bb4d52d7ee9"
+      "sha256": "e2832491c506b4f02bb578f58a0730fe697864f69506c12e49ce131c0a150056"
     }
   ]
 }

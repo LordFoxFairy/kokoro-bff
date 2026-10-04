@@ -1,3 +1,7 @@
+## R176 Storage scope-release pin 放置（2026-10-03；无运行时实现）
+
+Storage 是 scope/object lifecycle contract owner；BFF 只在既有 `contract/vendor/kokoro-storage/<commit>/proto` 保存已发布 `e8b9928` immutable source snapshot，并由现有 generator 生成隔离的 `src/generated/storage-connect` wire 类型。采用现有 artifact 目录而不新建 Project DTO，是因为 release request/response 与 upload/list 同属一个 Storage v2 owner contract/lifecycle；手写类型或并存旧 snapshot 会形成第二事实源。本片不改 Project/Chat/SQL/runtime。
+
 ## R152 Conversation Move 持久化职责拆分设计门（2026-10-03；仅文档，未实施）
 
 **当前态与触发证据。** BFF `main 0333cd7c515846e977b1b05d8349e8c04d2a49dd` 已发布 public `7.1.0` Move（源码提交 `284b5e04c4c09759787ef239b1a19fcdcd5ed8fa`），当前源码无未提交变更。`src/infrastructure/postgres/chat-repository.ts` 从先前 `a68cbe55` 的 671 行增至 979 行，超过 Root 标准门的 800 行上限；Root 全仓标准门实际 153 项失败中，本 Move 新引入的这一项是独立 P1，不能拿已通过的 BFF 741 纯测试/1 个既有资源 skip、173 真 PG/Redis integration 或 9 项 Move 真 HTTP/PG 行为门冒充架构合规。现同一文件同时含 Move 的有界连接租约、整事务/赢家重放及其他 Chat Repository 查询写入；既有 `chat-repository-mappers.ts` 已负责纯 Row 映射，但尚未承接 Move receipt Row 的严格解码。Web 固定契约与浏览器消费、Project DELETE、Storage release 消费和原用户界面验收不属于本拆分。

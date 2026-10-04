@@ -1,3 +1,7 @@
+## R176 Storage scope-release pin 的数据边界（2026-10-03；零 schema 差异）
+
+固定 Storage `e8b9928` / `c22b...` 只新增生成的 wire 类型，不新增或修改 BFF 表、索引、receipt、Redis key或跨 owner关系。Storage仍独占 Asset/Blob/object lifecycle；BFF后继仅在自己的 command事实中保存稳定身份、投递生命周期和有界ACK计数，不复制Storage数据模型。
+
 ## R152 Move 持久化实现拆分的数据边界（2026-10-03；仅文档，未实施）
 
 **当前事实与目标位置。** BFF `main 0333cd7c515846e977b1b05d8349e8c04d2a49dd` 的唯一 `database/schema.sql` 与 public `7.1.0` 已发布；`src/infrastructure/postgres/chat-repository.ts` 当前 979 行，内含 Move 租约/事务/重放，越 Root 800 行标准门（原 `a68cbe55` 为 671 行），这是本 Move 引入的架构 P1。目标在同一 `postgres/` 目录把 Move 事务与赢家重放归 `conversation-move.ts`，有界 PoolClient 生命周期归 `conversation-move-lease.ts`，严格 receipt Row 解析归现 `chat-repository-mappers.ts`；原 Chat Repository 仅委派，Application port 不暴露 pg。此为文件职责移动，不新增第二事实源、数据库表、migration、receipt 状态或外部 owner 查询。

@@ -1,3 +1,7 @@
+## R176 Storage scope-release consumer pin（2026-10-03；仅机器消费基线）
+
+BFF 固定 Storage 已发布 `e8b9928418924812587b7ac07900aee4be5bc27f` 与 combined SHA-256 `c22b5c10ee698d579753dcac370be371d8dba1df8fead1a12883f5443fbad18a`，从该 immutable owner commit 的两份 Proto 原字节确定性生成唯一 Connect client。新增 wire 面只有 `ReleaseProjectScope`、`ReleaseConversationScope` 及各自 command-only request/有界计数 response；tenant、subject、request 与 project/conversation scope 仍只来自受信 metadata。此 pin 不实现 Project DELETE、dispatcher 或网络调用，也不证明外部 provider/跨 owner/最终用户 release 链已验收。
+
 ## R150 当前 public 7.1.0 Move BFF producer（已发布）
 
 唯一可编辑 Product API 机器事实源为 `openapi/v1/openapi.yaml`；已提交并推送的 `main 284b5e04c4c09759787ef239b1a19fcdcd5ed8fa` 为 public `7.1.0`，在此前 public `7.0.0` 基线上新增独立 `POST /v1/sessions/{id}/move`。BFF HTTP/PG 源码已实现，Root Node22 `pnpm check && pnpm format:check` exit 0（741 pass、1 个既有资源 skip；contract 4 条已知 warning）、聚焦真 HTTP/PG Move 9/9及完整八文件 PG/Redis integration 173/173；BFF producer 已发布；Web 固定 BFF commit/digest 与浏览器消费尚未完成。Move 不代表 Project DELETE、Storage release 或 T-C05 已闭环。下面 R126/R83 段落是各阶段历史事实，不描述当前已发布版本。

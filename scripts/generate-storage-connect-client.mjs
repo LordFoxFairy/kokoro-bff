@@ -7,13 +7,13 @@ import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-const ownerCommit = "d5cfc442c675e32363ae767f5ec662a9e0d9eaea"
+const ownerCommit = "e8b9928418924812587b7ac07900aee4be5bc27f"
 const vendor = `contract/vendor/kokoro-storage/${ownerCommit}/proto`
 const output = path.join(root, "src/generated/storage-connect")
 const manifestPath = path.join(root, "contract/dependencies/storage-connect.json")
 const sourceDigests = {
   "kokoro/common/v1/common.proto": "4604725ec7d5896c9d74b53c6f06d19b20ee758d5ab9e1cb90177ede95bba9fd",
-  "kokoro/storage/v2/storage.proto": "5a5dcaec2e1fd0d5eed369b8f79477fd0f8f653b32f9ebe14a8c339f4eb713ac",
+  "kokoro/storage/v2/storage.proto": "7960312aa9879d17af17dbd68f25df1a61edb67f1f7d9613ea3e97b404c75bef",
 }
 const directories = ["kokoro", "kokoro/common", "kokoro/common/v1", "kokoro/storage", "kokoro/storage/v2"]
 const generatedFiles = ["kokoro/common/v1/common_pb.ts", "kokoro/storage/v2/storage_pb.ts"]
@@ -110,7 +110,7 @@ async function manifestFor(directory) {
     owner: {
       repository_path: "apps/kokoro-storage",
       repository_commit: ownerCommit,
-      published_combined_sha256: "8317e644d45c8db310b44f114afa22892a6a40d6ee7d0c1c4a37a8203e79f427",
+      published_combined_sha256: "c22b5c10ee698d579753dcac370be371d8dba1df8fead1a12883f5443fbad18a",
       package_name: "kokoro.storage.v2",
       sources: Object.entries(sourceDigests).map(([file, digest]) => ({ path: `contract/proto/${file}`, sha256: digest })),
     },
@@ -131,7 +131,7 @@ async function manifestFor(directory) {
       supply_chain: "Exact package versions and lock integrity; local generation without remote plugins; the existing Buf build allowance is unchanged.",
       performance: "Connect Node HTTP/1.1 transport bounds RPC messages and deadlines; runtime performance is unmeasured.",
       failure_semantics:
-        "Generation rejects source/config/package/tree/digest drift. No automatic mutation retries; BFF project-resource and personal-file adapters consume scoped ListAssets.",
+        "Generation rejects source/config/package/tree/digest drift. No automatic mutation retries; BFF adapters consume scoped asset operations, while project/conversation release requests carry only CommandIdentity and trusted scope metadata.",
       exit_path: "Regenerate from the pinned owner Proto with a reviewed compatible generator; generated wire types remain isolated from business code.",
       sources: ["https://connectrpc.com/docs/node/using-clients/", "https://github.com/bufbuild/protobuf-es/releases/tag/v2.14.0"],
     },

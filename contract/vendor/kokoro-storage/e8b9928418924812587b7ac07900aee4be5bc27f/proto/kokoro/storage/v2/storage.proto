@@ -1,11 +1,15 @@
 // Canonical contract source owned by kokoro-storage; generated clients are derived from this file.
 // Every RPC requires authenticated x-kokoro-service, x-kokoro-internal-secret,
 // x-kokoro-tenant-id, x-kokoro-subject-id, and x-kokoro-request-id transport metadata.
-// x-kokoro-scope-kind (personal|project|conversation) and x-kokoro-scope-id are required.
+// x-kokoro-scope-kind (personal|project|conversation|skill_package) and
+// x-kokoro-scope-id are required. For skill_package, scope-id is the exact
+// Platform revision skill_id, not a series ID; Storage does not decide Skill authorization.
 // Scope is asserted by an authenticated, permitted business owner; body identity is forbidden.
 // kokoro-agent has only conversation/artifact-purpose delivery operations;
 // web-bff retains ordinary personal/project Asset operations and conversation
-// final-Artifact reads, not Artifact writes. kokoro-platform has only
+// final-Artifact reads, not Artifact writes or package access. kokoro-platform
+// has only six package operations in skill_package scope: CreateUpload,
+// CompleteUpload, AbortUpload, GetUploadStatus, GetScanStatus, and
 // GetPackageReference. ListAssets permits only personal or project scope.
 // Service registration alone grants no product-scope operation.
 // Tenant, subject, caller and scope are deliberately absent from request messages.
@@ -13,8 +17,8 @@ syntax = "proto3";
 
 package kokoro.storage.v2;
 
-import "kokoro/common/v1/common.proto";
 import "google/protobuf/timestamp.proto";
+import "kokoro/common/v1/common.proto";
 
 enum ArtifactState {
   ARTIFACT_STATE_UNSPECIFIED = 0;
@@ -320,6 +324,30 @@ message GetDownloadReferenceResponse {
   kokoro.storage.v2.ScanState scan_state = 6;
 }
 
+message ReleaseProjectScopeRequest {
+  kokoro.common.v1.CommandIdentity command = 1;
+}
+
+message ReleaseProjectScopeResponse {
+  bool scope_released = 1;
+  bool replayed = 2;
+  uint64 aborted_upload_count = 3;
+  uint64 released_asset_count = 4;
+  uint64 queued_object_cleanup_count = 5;
+}
+
+message ReleaseConversationScopeRequest {
+  kokoro.common.v1.CommandIdentity command = 1;
+}
+
+message ReleaseConversationScopeResponse {
+  bool scope_released = 1;
+  bool replayed = 2;
+  uint64 aborted_upload_count = 3;
+  uint64 released_asset_count = 4;
+  uint64 queued_object_cleanup_count = 5;
+}
+
 service StorageService {
   rpc CreateUpload(kokoro.storage.v2.CreateUploadRequest) returns (kokoro.storage.v2.CreateUploadResponse);
   rpc CompleteUpload(kokoro.storage.v2.CompleteUploadRequest) returns (kokoro.storage.v2.CompleteUploadResponse);
@@ -335,4 +363,6 @@ service StorageService {
   rpc ListFinalArtifacts(kokoro.storage.v2.ListFinalArtifactsRequest) returns (kokoro.storage.v2.ListFinalArtifactsResponse);
   rpc GetFinalArtifact(kokoro.storage.v2.GetFinalArtifactRequest) returns (kokoro.storage.v2.GetFinalArtifactResponse);
   rpc GetFinalArtifactDownloadReference(kokoro.storage.v2.GetFinalArtifactDownloadReferenceRequest) returns (kokoro.storage.v2.GetFinalArtifactDownloadReferenceResponse);
+  rpc ReleaseProjectScope(kokoro.storage.v2.ReleaseProjectScopeRequest) returns (kokoro.storage.v2.ReleaseProjectScopeResponse);
+  rpc ReleaseConversationScope(kokoro.storage.v2.ReleaseConversationScopeRequest) returns (kokoro.storage.v2.ReleaseConversationScopeResponse);
 }

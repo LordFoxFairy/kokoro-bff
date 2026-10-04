@@ -1,3 +1,7 @@
+## R176 Storage scope-release internal consumer（2026-10-03；public机器契约冻结）
+
+BFF 已固定 Storage 正式发布 `e8b9928418924812587b7ac07900aee4be5bc27f` / digest `c22b5c10ee698d579753dcac370be371d8dba1df8fead1a12883f5443fbad18a` 的两个 release RPC wire shape。它只是 `internal-owner` consumer artifact，不新增或修改 BFF public OpenAPI operation/version；Project DELETE route、状态查询、permission/error与Web仍未发布。
+
 ## R152 Move 内部拆分的 public 契约边界（2026-10-03；仅文档，未实施）
 
 **当前态/目标态。** 已发布的 BFF `main 0333cd7c515846e977b1b05d8349e8c04d2a49dd` 仍以唯一 `contract/openapi/v1/openapi.yaml` 发布 public `7.1.0` `POST /v1/sessions/{id}/move`；源码身份为 `284b5e04c4c09759787ef239b1a19fcdcd5ed8fa`。R152 只把已存在的 PostgreSQL Move 事务、连接租约与 receipt Row 映射按职责归位，**不修改** operation/version、canonical path/body、permission、Idempotency-Key、200 与错误 code/envelope/header、每次 IAM 准入、unknown COMMIT 返回或 Web 可见时序。Move 的 final receipt 仍与归属同事务，same-key 重放仍在当次准入后返回原结果；不能以内部模块拆分建立第二条外部/内部协议。

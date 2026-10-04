@@ -1,3 +1,7 @@
+## R176 Storage scope-release consumer pin（2026-10-03；实现仍未接线）
+
+Storage producer 已正式发布 `e8b9928418924812587b7ac07900aee4be5bc27f`，BFF 唯一 vendor/generator/manifest/generated consumer 固定该 commit 与 digest `c22b5c10ee698d579753dcac370be371d8dba1df8fead1a12883f5443fbad18a`。本切片只建立 `ReleaseProjectScope`/`ReleaseConversationScope` wire 类型基线；Project DELETE SQL/service、release command repository/dispatcher/runtime/route均未实现，外部 provider与最终用户链未验收。
+
 ## R155 Move 持久化职责拆分已发布（2026-10-03；Web 尚未消费）
 
 已提交并推送的 `main 6c5cee0ca5b64dd7e1a855eae1022290eb16cd9a` 是 public `7.1.0` Move producer 的职责拆分源码；此前 `0333cd7c515846e977b1b05d8349e8c04d2a49dd` 是原已发布布局。R154/R155 只按已审三设计面重新放置同一 Move 实现：`src/infrastructure/postgres/conversation-move.ts` 独占单一事务与赢家 receipt 重放，`conversation-move-lease.ts` 独占有界 PoolClient 生命周期，既有 `chat-repository-mappers.ts` 承接纯 receipt Row 校验；`PostgresChatRepository.moveConversation()` 仅具名委派。原 `chat-repository.ts` 从 979 降至 678 行，新两文件分别 158/133 行，Root 800 行门的本项已由真实 153→152 证明关闭；全仓标准门仍 exit 1，其他 152 项不据此转绿。唯一 public OpenAPI `7.1.0`、canonical SQL、现 port、generated/pin 与所有 Move 行为语义未变。
