@@ -1,3 +1,19 @@
+## R217 Message 有限准入切片已获Root验收
+
+基于正式BFF `8e33bc0a64d2f92ab2fcd113b1951f490487a8d3`重建的15路径clean候选，现Message准入以`chat-turn-commit.ts`承接单一4.5秒绝对期限、Project→Conversation锁、canonical replay及exact checked-out client error租约。首次真实四矩阵为3通过/1失败：真实backend terminate触发`Connection terminated unexpectedly` uncaught；窄修只增加operation listener标记destroy并在Pool release后卸载，不改预算/API/schema。Root随后四真实HTTP/PG矩阵4通过0失败（5.462秒），独审0P0/P1/P2；最终完整owner门182个真实PG/Redis测试0失败0跳过（58.539秒），743默认测试/1既定资源skip、236 contract及schema/format/lint/typecheck/build全部通过。资源manifest为`/var/folders/gn/wbk8wfbd047_wvwkwtyn331r0000gn/T/kokoro-r217-bff-full-ygz0gcao/manifest.json`，源码、自有数据库、Redis与secondary集合终态保持。
+
+准确交付commit、Root gitlink与启用状态由Root CURRENT/progress维护；当前3310仍是旧组合，未取得当前UI消费证据。主动HTTP取消、Project DELETE/Storage release、Agent实际消费与用户全链继续开放；不以182测试泛称全部产品能力闭环。
+
+以下R213段是实现前的历史D0；现实现与验收状态以上方R217段为准。
+
+## R213 Message 单一有界准入D0（2026-10-04；实现待验）
+
+Root真实R211 pool饱和RED为HTTP 5225.8ms/202，确认现Message在`commitChatTurn`4.5秒期限之前仍有无界Conversation授权预读。已裁决目标为：保IAM与strict wire门，删除仅Message POST的授权DB预读，由现单一事务按Project→Conversation锁序完成tenant/owner/active/current Project、首次Project与replay判断；缺key/Agent配置继续静态零DB，首次Project不可见映射既有404。当前三生产文件尚未修改，R211仍RED；本D0不代表行为、资源门或发布完成。
+
+## R205/R189 Message scope 独立提取候选（2026-10-04）
+
+基于正式`8e33bc0`，本候选只包含Message当前Conversation scope、same-key Move后replay、首次client-created绑定及Project→Conversation锁序；无SQL/OpenAPI/route/generated差异，也不依赖尚未提交的Project `deleted_at`。聚焦纯payload反例与R189/R190真实PG/HTTP测试尚待Root在clean提取树执行；候选不等于已提交、已发布或R203 Project DELETE前置已闭环。
+
 ## R176 Storage scope-release consumer pin（2026-10-03；实现仍未接线）
 
 Storage producer 已正式发布 `e8b9928418924812587b7ac07900aee4be5bc27f`，BFF 唯一 vendor/generator/manifest/generated consumer 固定该 commit 与 digest `c22b5c10ee698d579753dcac370be371d8dba1df8fead1a12883f5443fbad18a`。本切片只建立 `ReleaseProjectScope`/`ReleaseConversationScope` wire 类型基线；Project DELETE SQL/service、release command repository/dispatcher/runtime/route均未实现，外部 provider与最终用户链未验收。

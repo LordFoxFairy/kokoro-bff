@@ -1,3 +1,23 @@
+## R217 Message 准入当前候选（2026-10-04；wire不变）
+
+公开Message请求/202 receipt、404与503 envelope、`Idempotency-Key`、`x-request-id`和`no-store`均未变；OpenAPI版本、operation inventory、generated与错误码无差异。候选只把Message owner授权/写事务纳入单一4.5秒内部期限，并在checked-out PostgreSQL连接断开时稳定返回既有retryable 503而非进程级uncaught。COMMIT已执行但ACK丢失仍只返回503，不猜成功；同key/body重试从immutable dispatch读取原`run_id/user_message_id/assistant_message_id`并返回202，异body仍冲突。通知失败不反转已提交receipt。
+
+Root真实HTTP/PG四故障矩阵4/4和完整182资源门已通过，API独审0P0/P1/P2。Message有限准入切片已获Root验收；准确交付commit、Root gitlink与启用状态由Root CURRENT/progress维护，当前3310仍是旧组合。Web/UI、Agent接收和收费链不因本节成立。
+
+以下R213段是实现前的历史D0；现实现与验收状态以上方R217段为准。
+
+## R213 Message 单一准入错误与次序（2026-10-04；目标，未实施）
+
+`POST /v1/sessions/{sessionId}/messages`的wire、响应envelope和公开错误集合不变。IAM/session与strict JSON/query仍在数据库之前；invalid Message为400，缺Idempotency-Key为现400，Agent disabled/unconfigured为现503，且后二者不触库。随后单个有界Message事务决定资源事实：client-created首次Message的显式Project不可见返回现404`project_not_found`；foreign tenant/subject、deleted Conversation及非client-created legacy/missing ID返回现404`session_not_found`；same-key异body仍409，同key/body在Move后仍返回原receipt，新key stale Project仍404且零写。多个同时非法条件采用上述静态门优先，但该交叉优先级不新增为契约保证。
+
+本D0不新增endpoint、header、body字段、alias、兼容路径或机器契约版本。pool/SQL期限耗尽继续使用现503`business_store_unavailable`、`cache-control: no-store`与`x-request-id`，不得用超时后迟到读取猜202。
+
+## R205/R189 Message replay 的外部不变边界（2026-10-04；无机器契约差异）
+
+现Message path/body/key/status/envelope与public OpenAPI保持原字节。每次请求仍先IAM session admission；same-key同body可在Conversation已Move后返回原结果，因为授权读取当前本人Conversation而不是把旧caller Project当当前归属。same-key不同body冲突；新key显式旧Project或不可见Project失败，不产生Message、dispatch或receipt。省略Project时，新命令绑定锁内Conversation当前canonical Project或direct；首次client-created Conversation只接受当次可见Project。
+
+本片不增加Project DELETE operation、permission、route、兼容alias或HTTP状态，不把`project.delete`引入IAM。
+
 ## R176 Storage scope-release internal consumer（2026-10-03；public机器契约冻结）
 
 BFF 已固定 Storage 正式发布 `e8b9928418924812587b7ac07900aee4be5bc27f` / digest `c22b5c10ee698d579753dcac370be371d8dba1df8fead1a12883f5443fbad18a` 的两个 release RPC wire shape。它只是 `internal-owner` consumer artifact，不新增或修改 BFF public OpenAPI operation/version；Project DELETE route、状态查询、permission/error与Web仍未发布。

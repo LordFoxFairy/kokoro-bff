@@ -292,7 +292,8 @@ describe("Agent dispatch HTTP classification", () => {
 })
 
 it("freezes ordered Skill selection in v2 payload and digest, rejecting old durable payloads", async () => {
-  const { buildAgentDispatchPayload, parseAgentDispatchPayload, agentDispatchRequestMaterial } = await import("../dist/domain/chat/agent-dispatch.js")
+  const { bindAgentDispatchPayloadProjectScope, buildAgentDispatchPayload, parseAgentDispatchPayload, agentDispatchRequestMaterial } =
+    await import("../dist/domain/chat/agent-dispatch.js")
   const input = {
     tenantId: "tenant",
     conversationId: "conversation",
@@ -307,6 +308,15 @@ it("freezes ordered Skill selection in v2 payload and digest, rejecting old dura
   assert.equal(empty.schema_version, 2)
   assert.deepEqual(empty.launch.selected_skill_source_refs, [])
   assert.equal(agentDispatchRequestMaterial(input), agentDispatchRequestMaterial({ ...input, selectedSkillSourceRefs: [] }))
+  assert.equal(bindAgentDispatchPayloadProjectScope(empty, "project-canonical").launch.trace.project_ref, "project-canonical")
+  assert.equal(
+    Object.hasOwn(
+      bindAgentDispatchPayloadProjectScope({ ...empty, launch: { ...empty.launch, trace: { ...empty.launch.trace, project_ref: "caller-slug" } } }, null).launch
+        .trace,
+      "project_ref",
+    ),
+    false,
+  )
   const selected = { ...input, selectedSkillSourceRefs: ["skill:b", "skill:a"] }
   const payload = buildAgentDispatchPayload(selected, ids)
   assert.deepEqual(parseAgentDispatchPayload(JSON.parse(JSON.stringify(payload))), payload)

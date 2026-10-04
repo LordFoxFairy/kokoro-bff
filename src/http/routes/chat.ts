@@ -29,6 +29,9 @@ function chatError(error: unknown): { status: number; code: string; message: str
   if (error.message === "CHAT_TURN_IDEMPOTENCY_CONFLICT") {
     return { status: 409, code: "idempotency_conflict", message: "Idempotency key was already used with different Chat input" }
   }
+  if (error.message === "CHAT_TURN_PROJECT_NOT_FOUND") {
+    return { status: 404, code: "project_not_found", message: "Project was not found" }
+  }
   if (
     error.message === "CHAT_TURN_INPUT_INVALID" ||
     error.message === "AGENT_DISPATCH_PAYLOAD_INVALID" ||

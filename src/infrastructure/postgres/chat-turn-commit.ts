@@ -1,0 +1,379 @@
+import { performance } from "node:perf_hooks"
+
+import type { PoolClient, QueryResult, QueryResultRow } from "pg"
+
+import type { CommitChatTurn } from "../../application/ports/agent-dispatch-outbox-repository.js"
+import { bindAgentDispatchPayloadProjectScope, parseAgentDispatchPayload, type AgentDispatchReceipt } from "../../domain/chat/agent-dispatch.js"
+import { firstMessageConversationTitle, isClientCreatedConversationId } from "../../domain/chat/conversation.js"
+import { agUiConsumerRegistration } from "./agui-consumer-registration.js"
+import { AGUI_NOTIFICATION_DEADLINE_MS, type PostgresBffDatabase } from "./client.js"
+
+const CHAT_TURN_TOTAL_BUDGET_MS = 4500
+const CHAT_TURN_LOCK_BUDGET_MS = 1000
+const CHAT_TURN_MAX_SCOPE_ATTEMPTS = 4
+
+type LockedChatScope =
+  | Readonly<{ kind: "locked"; canonicalProjectId: string | null; callerProjectId: string | null | undefined }>
+  | Readonly<{ kind: "retry" }>
+  | Readonly<{ kind: "project_not_found" }>
+  | Readonly<{ kind: "not_found" }>
+
+type ExistingDispatchRow = {
+  request_digest: string
+  run_id: string
+  user_message_id: string
+  assistant_message_id: string
+}
+
+type QueuedHeadProjector = (client: PoolClient, tenantId: string, conversationId: string) => Promise<string | null>
+type DeadlineQuery = <Row extends QueryResultRow = QueryResultRow>(text: string, values?: unknown[]) => Promise<QueryResult<Row>>
+
+function requiredIdentity(value: string): void {
+  if (value.trim() === "") throw new Error("CHAT_TURN_INPUT_INVALID")
+}
+
+function positiveDecimal(value: string | number): string {
+  const normalized = String(value)
+  if (!/^[1-9][0-9]*$/u.test(normalized)) throw new Error("CHAT_MESSAGE_SEQUENCE_INVALID")
+  return normalized
+}
+
+function remainingMilliseconds(deadline: number, code = "CHAT_TURN_BUDGET_EXHAUSTED"): number {
+  const remaining = Math.floor(deadline - performance.now())
+  if (remaining < 1) throw new Error(code)
+  return remaining
+}
+
+async function startWithin<T>(deadline: number, code: string, start: () => Promise<T>, onTimeout?: () => void, maximumMs?: number): Promise<T> {
+  const milliseconds = Math.min(remainingMilliseconds(deadline, code), maximumMs ?? Number.MAX_SAFE_INTEGER)
+  let timer: NodeJS.Timeout | undefined
+  let operation: Promise<T> | undefined
+  try {
+    operation = start()
+    return await Promise.race([
+      operation,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => {
+          onTimeout?.()
+          reject(new Error(code))
+        }, milliseconds)
+      }),
+    ])
+  } finally {
+    if (timer !== undefined) clearTimeout(timer)
+  }
+}
+
+async function acquireClient(database: PostgresBffDatabase, deadline: number): Promise<PoolClient> {
+  const acquisition: { promise: Promise<PoolClient> | null } = { promise: null }
+  try {
+    return await startWithin(deadline, "CHAT_TURN_POOL_TIMEOUT", () => {
+      acquisition.promise = database.pool.connect()
+      return acquisition.promise
+    })
+  } catch (error) {
+    if (acquisition.promise !== null) {
+      void acquisition.promise.then(
+        (lateClient) => lateClient.release(),
+        () => undefined,
+      )
+    }
+    throw error
+  }
+}
+
+async function resolveActiveProject(query: DeadlineQuery, tenantId: string, subjectId: string, projectRef: string): Promise<string | null> {
+  const result = await query<{ project_id: string }>(
+    `SELECT project_id FROM bff_project
+      WHERE tenant_id=$1 AND owner_id=$2 AND (project_id=$3 OR slug=$3)
+      LIMIT 1`,
+    [tenantId, subjectId, projectRef],
+  )
+  return result.rows[0]?.project_id ?? null
+}
+
+async function lockChatScope(query: DeadlineQuery, command: CommitChatTurn): Promise<LockedChatScope> {
+  const preRead = await query<{ project_ref: string | null }>(
+    `SELECT project_ref FROM bff_conversation
+      WHERE tenant_id=$1 AND conversation_id=$2 AND owner_id=$3 AND status='active'`,
+    [command.tenantId, command.conversationId, command.subjectId],
+  )
+  const preReadRow = preRead.rows[0]
+  const callerProjectId =
+    command.projectRef === undefined ? undefined : await resolveActiveProject(query, command.tenantId, command.subjectId, command.projectRef)
+
+  if (preReadRow === undefined) {
+    if (!isClientCreatedConversationId(command.conversationId)) return { kind: "not_found" }
+    if (command.projectRef !== undefined && callerProjectId === null) return { kind: "project_not_found" }
+    if (callerProjectId !== undefined && callerProjectId !== null) {
+      const locked = await query<{ project_id: string }>(
+        `SELECT project_id FROM bff_project
+          WHERE tenant_id=$1 AND owner_id=$2 AND project_id=$3
+          FOR SHARE`,
+        [command.tenantId, command.subjectId, callerProjectId],
+      )
+      if (locked.rows[0] === undefined) return { kind: "not_found" }
+    }
+    const inserted = await query(
+      `INSERT INTO bff_conversation (conversation_id,tenant_id,owner_id,project_ref,title,status)
+       VALUES ($1,$2,$3,$4,$5,'active') ON CONFLICT (conversation_id) DO NOTHING`,
+      [command.conversationId, command.tenantId, command.subjectId, callerProjectId ?? null, firstMessageConversationTitle(command.content)],
+    )
+    if (inserted.rowCount !== 1) {
+      const concurrentWinner = await query(
+        `SELECT 1 FROM bff_conversation
+          WHERE tenant_id=$1 AND conversation_id=$2 AND owner_id=$3 AND status='active'`,
+        [command.tenantId, command.conversationId, command.subjectId],
+      )
+      return concurrentWinner.rows[0] === undefined ? { kind: "not_found" } : { kind: "retry" }
+    }
+    await query(
+      `SELECT conversation_id FROM bff_conversation
+        WHERE tenant_id=$1 AND conversation_id=$2 AND owner_id=$3 AND status='active'
+        FOR UPDATE`,
+      [command.tenantId, command.conversationId, command.subjectId],
+    )
+    return { kind: "locked", canonicalProjectId: callerProjectId ?? null, callerProjectId }
+  }
+
+  const canonicalProjectId =
+    preReadRow.project_ref === null ? null : await resolveActiveProject(query, command.tenantId, command.subjectId, preReadRow.project_ref)
+  if (preReadRow.project_ref !== null && canonicalProjectId === null) return { kind: "not_found" }
+  const projectIds = [...new Set([canonicalProjectId, callerProjectId].filter((value): value is string => typeof value === "string"))].sort()
+  if (projectIds.length > 0) {
+    const locked = await query<{ project_id: string }>(
+      `SELECT project_id FROM bff_project
+        WHERE tenant_id=$1 AND owner_id=$2 AND project_id=ANY($3::text[])
+        ORDER BY project_id FOR SHARE`,
+      [command.tenantId, command.subjectId, projectIds],
+    )
+    if (canonicalProjectId !== null && !locked.rows.some((row) => row.project_id === canonicalProjectId)) return { kind: "not_found" }
+  }
+  const conversation = await query<{ project_ref: string | null }>(
+    `SELECT project_ref FROM bff_conversation
+      WHERE tenant_id=$1 AND conversation_id=$2 AND owner_id=$3 AND status='active'
+      FOR UPDATE`,
+    [command.tenantId, command.conversationId, command.subjectId],
+  )
+  const lockedConversation = conversation.rows[0]
+  if (lockedConversation === undefined) return { kind: "not_found" }
+  if (lockedConversation.project_ref !== preReadRow.project_ref) return { kind: "retry" }
+  return { kind: "locked", canonicalProjectId, callerProjectId }
+}
+
+export async function commitChatTurn(
+  database: PostgresBffDatabase,
+  command: CommitChatTurn,
+  projectQueuedHead: QueuedHeadProjector,
+): Promise<AgentDispatchReceipt | null> {
+  const deadline = performance.now() + CHAT_TURN_TOTAL_BUDGET_MS
+  for (const value of [
+    command.outboxId,
+    command.tenantId,
+    command.conversationId,
+    command.subjectId,
+    command.actorId,
+    command.requestId,
+    command.idempotencyKey,
+    command.runId,
+    command.userMessageId,
+    command.assistantMessageId,
+    command.identityAssertionRef,
+    command.content,
+  ])
+    requiredIdentity(value)
+  if (!/^[0-9a-f]{64}$/u.test(command.requestDigest)) throw new Error("CHAT_TURN_DIGEST_INVALID")
+  const callerPayload = parseAgentDispatchPayload(command.payload)
+  if (
+    callerPayload.launch.request_id !== command.requestId ||
+    callerPayload.launch.run_id !== command.runId ||
+    callerPayload.launch.session_id !== command.conversationId ||
+    callerPayload.launch.message_id !== command.userMessageId ||
+    callerPayload.launch.content !== command.content
+  )
+    throw new Error("AGENT_DISPATCH_LINEAGE_MISMATCH")
+
+  const client = await acquireClient(database, deadline)
+  let transactionOpen = false
+  let destroyClient = false
+  const onLeaseClientError = (): void => {
+    destroyClient = true
+  }
+  client.on("error", onLeaseClientError)
+  async function query<Row extends QueryResultRow = QueryResultRow>(text: string, values?: unknown[]): Promise<QueryResult<Row>> {
+    return startWithin(
+      deadline,
+      "CHAT_TURN_BUDGET_EXHAUSTED",
+      () => client.query<Row>(text, values),
+      () => {
+        destroyClient = true
+      },
+    )
+  }
+  async function rollback(): Promise<void> {
+    try {
+      await startWithin(
+        deadline,
+        "CHAT_TURN_ROLLBACK_TIMEOUT",
+        () => client.query("ROLLBACK").then(() => undefined),
+        () => {
+          destroyClient = true
+        },
+      )
+      transactionOpen = false
+    } catch (error) {
+      destroyClient = true
+      transactionOpen = false
+      throw error
+    }
+  }
+  async function commit(): Promise<void> {
+    let commitDispatched = false
+    try {
+      await startWithin(
+        deadline,
+        "CHAT_TURN_BUDGET_EXHAUSTED",
+        () => {
+          commitDispatched = true
+          return client.query("COMMIT").then(() => undefined)
+        },
+        () => {
+          destroyClient = true
+        },
+      )
+      transactionOpen = false
+    } catch (error) {
+      destroyClient = true
+      transactionOpen = false
+      if (!commitDispatched) throw error
+      throw new Error("CHAT_TURN_COMMIT_UNKNOWN", { cause: error })
+    }
+  }
+  try {
+    for (let scopeAttempt = 0; scopeAttempt < CHAT_TURN_MAX_SCOPE_ATTEMPTS; scopeAttempt += 1) {
+      const remaining = remainingMilliseconds(deadline)
+      await query("BEGIN")
+      transactionOpen = true
+      await query("SELECT set_config('lock_timeout',$1,true),set_config('statement_timeout',$2,true)", [
+        `${Math.min(CHAT_TURN_LOCK_BUDGET_MS, remaining)}ms`,
+        `${remaining}ms`,
+      ])
+      const scope = await lockChatScope(query, command)
+      if (scope.kind === "retry") {
+        await rollback()
+        continue
+      }
+      if (scope.kind === "not_found") {
+        await rollback()
+        return null
+      }
+      if (scope.kind === "project_not_found") {
+        await rollback()
+        throw new Error("CHAT_TURN_PROJECT_NOT_FOUND")
+      }
+
+      const existing = await query<ExistingDispatchRow>(
+        `SELECT request_digest,run_id,user_message_id,assistant_message_id
+           FROM bff_agent_dispatch_outbox
+          WHERE tenant_id=$1 AND conversation_id=$2 AND idempotency_key=$3
+          LIMIT 1`,
+        [command.tenantId, command.conversationId, command.idempotencyKey],
+      )
+      const existingRow = existing.rows[0]
+      if (existingRow !== undefined) {
+        if (existingRow.request_digest !== command.requestDigest) throw new Error("CHAT_TURN_IDEMPOTENCY_CONFLICT")
+        await commit()
+        return {
+          run_id: existingRow.run_id,
+          user_message_id: existingRow.user_message_id,
+          assistant_message_id: existingRow.assistant_message_id,
+        }
+      }
+      if (command.projectRef !== undefined && (scope.callerProjectId === null || scope.callerProjectId !== scope.canonicalProjectId)) {
+        await rollback()
+        return null
+      }
+      const payload = bindAgentDispatchPayloadProjectScope(callerPayload, scope.canonicalProjectId)
+      const registration = agUiConsumerRegistration(command.tenantId, command.conversationId, command.subjectId, undefined)
+      const registered = await query(registration.text, registration.values)
+      if (registered.rowCount !== 1) throw new Error("AGENT_DISPATCH_CONSUMER_REGISTRATION_FAILED")
+      await query("SELECT 1 FROM bff_agui_stream WHERE tenant_id=$1 AND session_id=$2 FOR UPDATE", [command.tenantId, command.conversationId])
+
+      const sequence = await query<{ next_seq: string | number }>(
+        `SELECT COALESCE(MAX(message_seq),0)+1 AS next_seq FROM bff_message WHERE tenant_id=$1 AND conversation_id=$2`,
+        [command.tenantId, command.conversationId],
+      )
+      const nextSequenceRow = sequence.rows[0]
+      if (nextSequenceRow === undefined) throw new Error("CHAT_MESSAGE_SEQUENCE_INVALID")
+      const nextSequence = positiveDecimal(nextSequenceRow.next_seq)
+      const outbox = await query(
+        `INSERT INTO bff_agent_dispatch_outbox
+          (outbox_id,tenant_id,conversation_id,conversation_dispatch_seq,subject_id,actor_id,request_id,idempotency_key,request_digest,
+           run_id,user_message_id,assistant_message_id,identity_assertion_ref,payload,status,attempt_count,available_at,fence)
+         VALUES ($1,$2,$3,$4::bigint,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,'pending',0,CURRENT_TIMESTAMP(3),0)`,
+        [
+          command.outboxId,
+          command.tenantId,
+          command.conversationId,
+          nextSequence,
+          command.subjectId,
+          command.actorId,
+          command.requestId,
+          command.idempotencyKey,
+          command.requestDigest,
+          command.runId,
+          command.userMessageId,
+          command.assistantMessageId,
+          command.identityAssertionRef,
+          JSON.stringify(payload),
+        ],
+      )
+      if (outbox.rowCount !== 1) throw new Error("AGENT_DISPATCH_INSERT_FAILED")
+      const inserted = await query(
+        `INSERT INTO bff_message (message_id,tenant_id,conversation_id,run_id,role,content,status,message_seq)
+         VALUES ($1,$2,$3,$4,'user',$5,'completed',$6::bigint),($7,$2,$3,$4,'assistant','','pending',$6::bigint+1)`,
+        [command.userMessageId, command.tenantId, command.conversationId, command.runId, command.content, nextSequence, command.assistantMessageId],
+      )
+      if (inserted.rowCount !== 2) throw new Error("CHAT_MESSAGE_INSERT_FAILED")
+      const queuedCursor = await startWithin(
+        deadline,
+        "CHAT_TURN_BUDGET_EXHAUSTED",
+        () => projectQueuedHead(client, command.tenantId, command.conversationId),
+        () => {
+          destroyClient = true
+        },
+      )
+      await query("UPDATE bff_conversation SET updated_at=CURRENT_TIMESTAMP(3) WHERE tenant_id=$1 AND conversation_id=$2", [
+        command.tenantId,
+        command.conversationId,
+      ])
+      await commit()
+      if (queuedCursor !== null && deadline > performance.now()) {
+        await startWithin(
+          deadline,
+          "CHAT_TURN_NOTIFICATION_TIMEOUT",
+          () => database.notifyAgUiProjection(command.tenantId, command.conversationId, queuedCursor),
+          undefined,
+          AGUI_NOTIFICATION_DEADLINE_MS,
+        ).catch(() => undefined)
+      }
+      return { run_id: command.runId, user_message_id: command.userMessageId, assistant_message_id: command.assistantMessageId }
+    }
+    throw new Error("CHAT_TURN_SCOPE_CHANGED")
+  } catch (error) {
+    if (transactionOpen && !destroyClient) {
+      try {
+        await rollback()
+      } catch {
+        // Preserve the original failure; rollback() already fenced the client.
+      }
+    }
+    throw error
+  } finally {
+    try {
+      client.release(destroyClient)
+    } finally {
+      client.removeListener("error", onLeaseClientError)
+    }
+  }
+}

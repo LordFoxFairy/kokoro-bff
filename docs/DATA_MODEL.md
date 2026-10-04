@@ -1,3 +1,23 @@
+## R217 Message 原子事实与失败窗口（2026-10-04；schema不变）
+
+本切片不改canonical SQL、表、列、索引、约束或retention。单个Message事务继续原子写`bff_agent_dispatch_outbox`、两条`bff_message`、`bff_agui_stream`/queued投影与Conversation更新时间；`bff_idempotency_receipt`不是Message命令receipt且保持零增量。same-key authority是dispatch唯一键、`request_digest`及冻结Run/Message IDs。
+
+中段SQL异常、真实backend终止、pool等待超时和四次scope变化耗尽总期限时，未提交事务事实为零；断链由PostgreSQL终止事务并销毁exact client，不向坏连接追加rollback。真实COMMIT成功但ACK丢失时已提交事实不可逆，坏client销毁后same-key读取同一canonical dispatch，不重复Message/AG-UI。Redis通知throw/late只影响best-effort wakeup，不回滚数据库事实。Root真实矩阵与完整182 PG/Redis门已验证上述窗口。Message有限准入切片已获Root验收；准确交付commit、Root gitlink与启用状态由Root CURRENT/progress维护，当前3310仍是旧组合。Project DELETE和跨owner最终投递不在本数据切片。
+
+以下R213段是实现前的历史D0；现实现与验收状态以上方R217段为准。
+
+## R213 Message 授权事实与事务边界（2026-10-04；目标，未实施）
+
+Message admission不再在HTTP authorization层读取Conversation/Project。唯一事实判断位于现`commitChatTurn`事务：可信tenant/subject与active Conversation predicate，无锁pre-read只用于确定candidate/current Project；随后canonical Project去重排序并`FOR SHARE`，再锁Conversation `FOR UPDATE`重验current scope。故锁序为Project→Conversation，pre-read不构成相反锁序。首次client-created Conversation的Project必须在同事务解析且可见，否则rollback并报告内部Project-not-found；foreign/deleted/legacy Session为not-found。same-key immutable dispatch、Message、AG-UI registration、queued projection与Conversation更新时间仍原子提交，失败/期限耗尽全回滚且不得留下receipt或迟到写。
+
+本片不改canonical schema、表、列、索引、DDL、retention或跨owner关系，也不增加授权缓存/影子表。
+
+## R205/R189 Message scope 的事务数据边界（2026-10-04；零DDL）
+
+唯一Conversation `project_ref`仍是归属事实；Message/dispatch payload在同一现有事务中冻结锁内canonical Project，receipt继续使用既有`bff_idempotency_receipt`。锁序为canonical Project ID排序`FOR SHARE`→Conversation `FOR UPDATE`，Move保持Project→Conversation，从而Message/Move两序线性化；失败全部rollback，same-key replay零新写。
+
+本片基于`8e33bc0`唯一canonical schema，不读取`deleted_at`、不新增Project删除表/索引/Storage command，也不保slug fallback为第二归属事实。Project DELETE active fence与墓碑串行是后继独立切片。
+
 ## R176 Storage scope-release pin 的数据边界（2026-10-03；零 schema 差异）
 
 固定 Storage `e8b9928` / `c22b...` 只新增生成的 wire 类型，不新增或修改 BFF 表、索引、receipt、Redis key或跨 owner关系。Storage仍独占 Asset/Blob/object lifecycle；BFF后继仅在自己的 command事实中保存稳定身份、投递生命周期和有界ACK计数，不复制Storage数据模型。

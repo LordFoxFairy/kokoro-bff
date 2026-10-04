@@ -4,7 +4,6 @@ import { parseMessageCreateRequest } from "../../application/chat/message-create
 import type { BffBusinessStore } from "../../application/ports/bff-business-store.js"
 import type { ConversationCollectionFilter } from "../../application/ports/chat-repository.js"
 import type { RequestContext } from "../../domain/request-context.js"
-import { isClientCreatedConversationId } from "../../domain/chat/conversation.js"
 import { queryOf } from "../request.js"
 
 export type ChatAuthorization =
@@ -13,9 +12,7 @@ export type ChatAuthorization =
 
 export type AuthorizedChatRequest = Extract<ChatAuthorization, { ok: true }>
 
-type PrivateChatQuery =
-  | Readonly<{ ok: true; scope: "all" | "direct"; projectRef?: string }>
-  | Extract<ChatAuthorization, { ok: false }>
+type PrivateChatQuery = Readonly<{ ok: true; scope: "all" | "direct"; projectRef?: string }> | Extract<ChatAuthorization, { ok: false }>
 
 function privateChatQuery(request: IncomingMessage): PrivateChatQuery {
   const query = queryOf(request)
@@ -59,33 +56,29 @@ export async function authorizeChatRequest(
       return { ok: false, status: 400, code: "invalid_message", message: "Message request does not match the v1 contract" }
     }
     projectRef = message.projectRef
+    return projectRef === undefined ? { ok: true } : { ok: true, projectRef }
   }
 
   const ownerScope = { tenantId: context.identity.namespace, subjectId: context.identity.userId }
-  if (projectRef !== undefined && await store.services.projects.find(ownerScope, projectRef) === null) {
+  // Existing Message resources are authorized by their current Conversation owner.
+  // The raw Project ref remains a new-command precondition in the locked repository;
+  // applying it here would reject an exact replay after a successful Move.
+  if (projectRef !== undefined && (await store.services.projects.find(ownerScope, projectRef)) === null) {
     return { ok: false, status: 404, code: "project_not_found", message: "Project was not found" }
   }
 
   if (isConversationCollection) {
-    const collectionFilter: ConversationCollectionFilter = projectRef === undefined
-      ? { kind: queryScope.scope }
-      : { kind: "project", projectRef }
+    const collectionFilter: ConversationCollectionFilter = projectRef === undefined ? { kind: queryScope.scope } : { kind: "project", projectRef }
     return projectRef === undefined ? { ok: true, collectionFilter } : { ok: true, projectRef, collectionFilter }
   }
 
   if (businessPath.length >= 2) {
     const conversationId = businessPath[1]
-    const firstMessageCandidate = request.method === "POST"
-      && businessPath.length === 3
-      && businessPath[2] === "messages"
-      && conversationId !== undefined
-      && isClientCreatedConversationId(conversationId)
-    if (
-      conversationId === undefined
-      || conversationId === ""
-      || (await store.services.chat.findConversation(ownerScope.tenantId, ownerScope.subjectId, conversationId, projectRef) === null
-        && !firstMessageCandidate)
-    ) {
+    const currentConversation =
+      conversationId === undefined || conversationId === ""
+        ? null
+        : await store.services.chat.findConversation(ownerScope.tenantId, ownerScope.subjectId, conversationId, projectRef)
+    if (conversationId === undefined || conversationId === "" || currentConversation === null) {
       return { ok: false, status: 404, code: "session_not_found", message: "Session was not found" }
     }
   }

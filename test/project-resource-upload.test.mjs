@@ -244,6 +244,10 @@ test("project resource route resolves current ownership before replay and uses c
     const req = new EventEmitter()
     req.headers = { "content-type": wire.headers.get("content-type"), "idempotency-key": "public-key" }
     const res = new EventEmitter()
+    res.headers = new Map()
+    res.setHeader = (name, value) => {
+      res.headers.set(name.toLowerCase(), value)
+    }
     res.writeHead = (status) => {
       res.status = status
     }
@@ -268,7 +272,9 @@ test("project resource route resolves current ownership before replay and uses c
     )
     return res
   }
-  assert.equal((await invoke()).status, 200)
+  const accepted = await invoke()
+  assert.equal(accepted.status, 200)
+  assert.equal(accepted.headers.get("x-request-id"), context.requestId)
   assert.equal((await invoke()).status, 200)
   assert.equal(calls, 1)
   visible = false
@@ -604,6 +610,10 @@ test("quarantined completion returns no resource; same-key retries retain one as
       const request = new EventEmitter()
       request.headers = { "content-type": contentType, "idempotency-key": "same-key" }
       const response = new EventEmitter()
+      response.headers = new Map()
+      response.setHeader = (name, value) => {
+        response.headers.set(name.toLowerCase(), value)
+      }
       response.writeHead = (status) => {
         response.status = status
       }
@@ -633,6 +643,7 @@ test("quarantined completion returns no resource; same-key retries retain one as
     const expected = initialScan === ScanState.INFECTED ? [422, "resource_file_infected"] : [503, "resource_scan_pending"]
     const first = await invoke()
     assert.equal(first.status, expected[0])
+    assert.equal(first.headers.get("x-request-id"), "request")
     assert.equal(first.body.error.code, expected[1])
     assert.equal(first.body.data, undefined)
     assert.equal(reads, 0, "Complete scan is checked before asset lookup")

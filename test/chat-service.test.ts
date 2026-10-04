@@ -13,8 +13,18 @@ function collectionRequest(query: string): never {
   return { method: "GET", url: `/v1/sessions${query}` } as never
 }
 
-function responseDouble(): never {
-  return { writeHead() {}, end() {} } as never
+function responseDouble(): { response: never; headers: Map<string, string> } {
+  const headers = new Map<string, string>()
+  return {
+    response: {
+      setHeader(name: string, value: string) {
+        headers.set(name.toLowerCase(), value)
+      },
+      writeHead() {},
+      end() {},
+    } as never,
+    headers,
+  }
 }
 
 async function collectionRepositoryCall(query: string): Promise<{ calls: unknown[][]; projectReads: number }> {
@@ -42,7 +52,12 @@ async function collectionRepositoryCall(query: string): Promise<{ calls: unknown
   const request = collectionRequest(query)
   const authorization = await authorizeChatRequest(request, collectionContext, ["sessions"], {}, store)
   assert.ok(authorization?.ok)
-  assert.equal(await liveChatBusiness(request, responseDouble(), {} as never, collectionContext, ["sessions"], {}, null, new Map(), store, authorization), true)
+  const response = responseDouble()
+  assert.equal(
+    await liveChatBusiness(request, response.response, {} as never, collectionContext, ["sessions"], {}, null, new Map(), store, authorization),
+    true,
+  )
+  assert.equal(response.headers.get("x-request-id"), collectionContext.requestId)
   return { calls, projectReads }
 }
 

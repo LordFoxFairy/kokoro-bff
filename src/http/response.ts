@@ -25,6 +25,7 @@ export async function reply(
   idempotency: Map<string, IdempotencyEntry>,
   mutation: MutationTicket | null,
 ): Promise<void> {
+  response.setHeader("x-request-id", context.requestId)
   try {
     await commitReceipt(idempotency, mutation, status, body)
     send(response, status, body)

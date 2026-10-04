@@ -1,3 +1,27 @@
+## R217 Message 有界准入与断链租约（2026-10-04；隔离候选已验收）
+
+隔离clean候选已把正式Message POST的owner读取、Project→Conversation锁、dispatch/Message/AG-UI写入与COMMIT收进同一个4.5秒绝对期限；Pool取得、最多四次scope变化、每条SQL、rollback、COMMIT与50ms通知均共享剩余期限。HTTP仍先完成可信IAM/session admission与严格wire/静态配置门，其他Chat读写授权路径不变。client-created缺Project沿既有404，foreign/deleted/legacy Conversation仍404；same-key/body只从canonical dispatch恢复原Run/Message identity，不新增generic receipt、协议或schema。
+
+`commitChatTurn`现在拥有checked-out exact `PoolClient`的error-event生命周期。`pg-pool` checkout移除idle listener后，本函数安装具名operation listener；真实断链只标记client必须销毁，query rejection仍保primary failure。finally同步先`release(destroy)`把生命周期交还Pool，再精确卸载operation listener；普通SQL错误仍有界rollback，实际派发后的unknown COMMIT仍503并由same-key canonical事实恢复。没有global error handler、共享Pool配置、第二deadline、通用UoW或敏感错误日志。
+
+Root真实门：先得到backend terminate的uncaught真实RED，再以exact PID/client listener、`release(true)`、旧PID消失、replacement backend及全facts零差转GREEN；四故障矩阵4/4通过（含真实COMMIT后ACK丢失、四scope总物理延迟大于4.5秒、notify throw/late）。最终完整owner门182个真实PG/Redis测试0失败0跳过，743默认测试/1既定资源skip、236 contract与schema/format/lint/typecheck/build均通过；独审0P0/P1/P2。Message有限准入切片已获Root验收；准确交付commit、Root gitlink与启用状态由Root CURRENT/progress维护，当前3310仍是旧组合。主动HTTP AbortSignal贯通、Project DELETE及完整用户链仍是后继。
+
+以下R213段是实现前的历史D0；现实现与验收状态以上方R217段为准。
+
+## R213 Message 单一有界准入设计门（2026-10-04；仅D0，源码未实施）
+
+当前Message POST在正式IAM/session admission和严格wire解析之后，仍由`authorizeChatRequest()`执行无期限的Conversation/Project数据库预读，再进入`commitChatTurn()`自己的4.5秒期限。Root真实pool饱和RED为5225.8ms/202，证明HTTP请求尚未进入有界事务。目标删除**仅Message POST**的授权数据库预读：HTTP仍先完成可信IAM身份、query/body闭集解析；缺`Idempotency-Key`和Agent未配置继续作为不触库的静态400/503门。其他Chat read、Move、PATCH、DELETE、collection授权全部保持现路径。多个同时非法条件的静态错误优先级不是公开契约保证，不为维持资源探测顺序保留第二次DB读取。
+
+Message唯一数据库准入由现`chat-turn-commit.ts`完成：在同一4.5秒绝对期限内获取PoolClient，先无锁预读Conversation/current Project引用以确定候选，再按canonical Project ID升序`FOR SHARE`，最后锁Conversation `FOR UPDATE`；因此正式锁序是**Project→Conversation**，不能把pre-read描述成Conversation行锁。锁内以可信tenant/subject、`status='active'`、canonical current Project与caller Project完成授权，新命令不得把Move前scope重新绑定；same-key/body重放仍读取immutable dispatch并在caller/current mismatch拒绝前返回原receipt。client-created首次Message所带Project不存在/越权时，事务rollback后抛具名内部`CHAT_TURN_PROJECT_NOT_FOUND`，HTTP只映射既有404`project_not_found`；foreign/deleted/legacy Conversation仍统一404`session_not_found`。不新增wire code、schema、receipt、服务、deadline或通用repository port。
+
+§8采用现`src/http/routes/chat-authorization.ts`（Message wire-only authorization）、`src/infrastructure/postgres/chat-turn-commit.ts`（唯一owner/project/active/replay事实）与`src/http/routes/chat.ts`（既有错误映射）三文件窄改；淘汰server/普通ChatRepository贯通deadline的方案，后者会复制锁外授权并保留TOCTOU。tests只允许现R211 block及既有first-message/Message-Move真实HTTP邻例的必要加强；其他原301测试字节冻结。主动HTTP AbortSignal贯通仍是独立后继，不在本片虚称完成。
+
+## R205/R189 Message scope snapshot 与 replay 前置（2026-10-04；独立提取候选）
+
+本切片只收敛现Message admission与Move并发/replay：在单个dispatch事务内先解析caller可见Project，再按canonical Project ID排序取`FOR SHARE`，随后锁Conversation；既有Conversation以锁内current `project_ref`为唯一执行scope，caller显式Project只作新命令前置与same-key fingerprint，不覆盖已Move后的权威scope。client-created首次Message在同事务创建Conversation、冻结canonical Project并写Message/dispatch/idempotency事实。same-key重放每次仍先现IAM session admission与本人Conversation可见性，Move后旧caller Project可恢复原receipt，但新key不得把旧Project重新绑定。
+
+采用现`agent-dispatch-outbox-repository.ts`事务和`chat-authorization.ts`边界，纯payload规范化留在`domain/chat/agent-dispatch.ts`；不新建模块、receipt、schema或协议。该切片基于正式`8e33bc0`，明确不依赖`bff_project.deleted_at`或Project DELETE表/active fence；Project墓碑与DELETE/Message串行由后继R203事务切片加入。
+
 ## R176 Storage scope-release pin 放置（2026-10-03；无运行时实现）
 
 Storage 是 scope/object lifecycle contract owner；BFF 只在既有 `contract/vendor/kokoro-storage/<commit>/proto` 保存已发布 `e8b9928` immutable source snapshot，并由现有 generator 生成隔离的 `src/generated/storage-connect` wire 类型。采用现有 artifact 目录而不新建 Project DTO，是因为 release request/response 与 upload/list 同属一个 Storage v2 owner contract/lifecycle；手写类型或并存旧 snapshot 会形成第二事实源。本片不改 Project/Chat/SQL/runtime。

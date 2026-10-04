@@ -456,10 +456,11 @@ test("BFF durable AG-UI persistence is parameterized, tenant/session scoped, and
 })
 
 test("Chat admission commits messages, AG-UI lineage, and Agent delivery before asynchronous dispatch", async () => {
-  const [route, chatRepository, dispatchRepository, registration, dispatcher, runtime, schema] = await Promise.all([
+  const [route, chatRepository, dispatchRepository, chatTurnCommit, registration, dispatcher, runtime, schema] = await Promise.all([
     readFile(path.join(root, "src/http/routes/chat.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/postgres/chat-repository.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/postgres/agent-dispatch-outbox-repository.ts"), "utf8"),
+    readFile(path.join(root, "src/infrastructure/postgres/chat-turn-commit.ts"), "utf8"),
     readFile(path.join(root, "src/infrastructure/postgres/agui-consumer-registration.ts"), "utf8"),
     readFile(path.join(root, "src/application/agent-dispatch-outbox-dispatcher.ts"), "utf8"),
     readFile(path.join(root, "src/bootstrap/runtime.ts"), "utf8"),
@@ -469,12 +470,14 @@ test("Chat admission commits messages, AG-UI lineage, and Agent delivery before 
   assert.match(route, /services\.chatTurns\.submit/u)
   assert.doesNotMatch(route, /callAgent|buildAgentLaunch/u)
   assert.doesNotMatch(chatRepository, /commitChatTurn|claimAgentDispatchOutbox/u)
-  assert.match(dispatchRepository, /BEGIN/u)
-  assert.match(dispatchRepository, /INSERT INTO bff_message/u)
-  assert.match(dispatchRepository, /INSERT INTO bff_agent_dispatch_outbox/u)
-  assert.match(dispatchRepository, /agUiConsumerRegistration/u)
+  assert.equal(dispatchRepository.match(/return commitChatTurn\(/gu)?.length, 1)
+  assert.doesNotMatch(dispatchRepository, /INSERT INTO bff_message/u)
+  assert.match(chatTurnCommit, /BEGIN/u)
+  assert.equal(chatTurnCommit.match(/INSERT INTO bff_message/gu)?.length, 1)
+  assert.match(chatTurnCommit, /INSERT INTO bff_agent_dispatch_outbox/u)
+  assert.match(chatTurnCommit, /agUiConsumerRegistration/u)
   assert.match(registration, /INSERT INTO bff_agui_stream/u)
-  assert.match(dispatchRepository, /SELECT 1 FROM bff_agui_stream[^`]*FOR UPDATE/u)
+  assert.match(chatTurnCommit, /SELECT 1 FROM bff_agui_stream[^`]*FOR UPDATE/u)
   assert.match(dispatchRepository, /current\.outbox_id = ANY\(\$5::text\[\]\)/u)
   assert.match(dispatchRepository, /conversation_dispatch_seq/u)
   assert.match(dispatchRepository, /lease_remaining_ms/u)

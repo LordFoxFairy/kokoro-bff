@@ -162,6 +162,19 @@ export function buildAgentDispatchPayload(input: AgentDispatchInput, ids: { runI
   }
 }
 
+/** Bind the durable Conversation scope only after its parent/Conversation locks agree. */
+export function bindAgentDispatchPayloadProjectScope(value: AgentDispatchPayload, canonicalProjectId: string | null): AgentDispatchPayload {
+  const payload = parseAgentDispatchPayload(value)
+  const { project_ref: _callerProjectRef, ...trace } = payload.launch.trace
+  return {
+    ...payload,
+    launch: {
+      ...payload.launch,
+      trace: canonicalProjectId === null ? trace : { ...trace, project_ref: canonicalProjectId },
+    },
+  }
+}
+
 /** Parse JSONB before an outbox worker may call the Agent owner. */
 export function parseAgentDispatchPayload(value: unknown): AgentDispatchPayload {
   if (!isRecord(value) || value.schema_version !== AGENT_DISPATCH_SCHEMA_VERSION || !isRecord(value.launch)) {
