@@ -1,3 +1,38 @@
+## R255-BILLING-CONSUMER-D0：个人 Credit public read 合同（目标，尚未发布）
+
+BFF public `8.0.0` 尚未正式发布，目标在同一clean-slate发布内删除旧float `BillingSummary {balance,currency,period,usage}`，不保兼容字段。固定Billing owner依赖为commit `244b2810c0cc043d29fffb2b3301eebf2d390b3d`、target artifact `3.0.0-experimental.3`、v2 source SHA-256 `ecaceefd3fd09d5106b364593dd513506622ca011bb0436b74f0928ffd8dcf00`；owner artifact当前仍标注未发布/部署/消费，正式consumer activation必须等Root固定owner runtime验收。
+
+### public operations与闭集DTO
+
+- `GET /v1/billing/summary`：保路径/operationId，成功data严格改为 `{credit_account_id:uuid,status:"active"|"disabled",available_micros:nonnegative decimal integer string,held_micros:nonnegative decimal integer string}`。
+- `GET /v1/billing/ledger?limit=&cursor=`：新增唯一read operation；`limit`缺省50、范围1..100且仅十进制整数，`cursor`为owner opaque字符串、长度1..2048、不得解码/重编码。成功data严格为 `{items:[{journal_id:uuid,sequence:nonnegative decimal integer string,delta_micros:signed decimal integer string,balance_after_micros:nonnegative decimal integer string,source_kind:string,source_ref:string,created_at:UTC ISO-8601 Z}],page:{next_cursor:string|null}}`。
+
+两者继续使用BFF `{data,meta:{request_id}}` envelope，响应含有界 `x-request-id` 与 `Cache-Control:no-store`。所有micros/sequence保持字符串；1 Credit = 1,000,000 micros只用于显示单位，不授权BFF/Web计算金额、费率或余额。BFF不把`journal_id`改成entry_id、不把source_kind改成reason、不把instant改成epoch，也不合成quota/period/plan/free/daily字段。Web必须随固定public artifact更新，不能以本地旧Zod shape反向定义BFF事实。
+
+summary无body/query；ledger无body，拒重复/未知query、非法limit、空或过长cursor。tenant/subject只来自每次现IAM session admission的可信RequestContext；public caller不提供owner u1 header、service identity或Billing credential。两operation沿现authenticated-session admission，public治理metadata统一复用已定义的 `billing.summary.read`；它表示同一个人账务读取面，不新造ledger/admin权限。该OpenAPI治理标记不等于IAM已登记逐operation grant：当前IAM没有对应`billing.*` policy事实，实际授权仍是现session admission加owner本人u1运输，必须以IAM准入/撤权组合正负控放行，不能凭metadata假定grant。
+
+### owner transport与错误映射
+
+BFF内部只调用owner `GET /v2/billing/me/credit-account` 与 `GET /v2/billing/me/credit-ledger`，用固定五因素：`web-bff`、internal secret、独立Billing BFF service bearer、tenant u1、subject u1。用户Bearer不下传，partial machine profile不降级。owner 200先按固定generated schema验证再重包，owner request-id只作观测且不替换BFF public request-id。
+
+| 条件 | public结果 |
+|---|---|
+| IAM session缺失/拒绝/限流/不可用 | 保现401/403/429/503与Retry-After语义，且不调用Billing |
+| public ledger query非法 | 400稳定invalid request，零owner调用 |
+| Billing本人账户不存在 | 404 `billing_account_not_found`；不返回零余额或空流水 |
+| Billing 200不符合固定schema | 502 `upstream_response_invalid`，不透传部分数据 |
+| Billing credential缺失、401/403、timeout、不可达、500/503 | 503 `billing_unavailable`、retryable true；不把服务认证失败误报为用户401/403 |
+
+错误仍遵API05的本仓唯一实际error envelope（具体字段以现public机器合同为准），不得透传owner内部message/header/credential。GET read-only、无Idempotency-Key、无BFF receipt；no-store适用于成功与错误。
+
+### 真实验收矩阵
+
+Root先对固定Billing runtime做直接owner HTTP：合法本人账户与至少两条正负delta流水200、decimal/sequence/UTC/cursor逐值一致；missing wallet 404；错tenant/subject不能读另一身份；非法limit/cursor400；所有响应no-store。u1须逐项验证无padding canonical base64url tail、严格UTF-8：191/255 code points与最长四字节编码后1022/1363 header边界正控，padding、noncanonical tail bits、非法UTF-8、空值、编码NUL、孤立surrogate及任一超限负控。认证分支须精确断言：任一 `x-kokoro-service`/`x-kokoro-internal-secret`/`x-kokoro-subject` machine marker或service bearer出现即选择machine，缺/错任一五因素为403且不回退user；完全无machine marker与service bearer且无user bearer为401；合法user bearer为200，撤权/无效user bearer按owner user分支拒绝。每个拒绝前后Billing账户/ledger事实摘要相等。该矩阵必须含真实Billing进程与PostgreSQL，mock JWT/local test signer只证明测试profile，不冒正式IAM签发。
+
+组合E2E再以同一真实用户：Web硬刷新→现IAM session→BFF summary/ledger→Billing；余额卡等于owner `available_micros`，held单独显示，分页按owner cursor无重复/遗漏，刷新仍一致。撤session在Billing调用前失败；跨subject/tenant、missing wallet、Billing停机/坏credential、畸形owner响应均显示错误且绝不出现旧假100/零余额/其他用户数据。浏览器开发者网络不得出现Billing URL、service token或u1内部头。payment/top-up、quota/grant、计价、hold/capture/release不在本片，不能用它们的缺失判本两读失败或冒其成功。
+
+当前只修改D0；public YAML、operation inventory、generated consumer、route和Web均未改，也未执行上述验收。
+
 ## R251-SKILLS-V2-CONSUMER：public 8.0.0 值域切换（目标，尚未发布）
 
 Validate请求字段与路径不变，调用者仍不自报manifest identity、asset、tenant或subject。成功响应字段shape不变，但`manifest_identity`唯一pattern由`zip-v1`替换为`zip-v2:sha256:<64 lowercase hex>`；旧V1、错误长度、uppercase及前后缀均拒绝。`/v1`资源路径保持，唯一public OpenAPI升`8.0.0`；这是发布前同步breaking replacement，不是7.x兼容扩展，也不创建`/v2`或fallback。

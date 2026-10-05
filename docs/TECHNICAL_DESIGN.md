@@ -1,3 +1,38 @@
+## R255-BILLING-CONSUMER-D0：个人 Credit 只读链（目标，尚未实施）
+
+### 当前事实与唯一方向
+
+BFF `f3c64d90` 的 public `8.0.0` 仍声明 `GET /v1/billing/summary`，但其 `balance/currency/period/usage` 为浮点/现金样式旧合同；live owner route 只接 Billing v1 catalog/checkout，summary 仅由 test double 返回假余额，ledger 没有 public operation。Web 当前却请求同源 summary/ledger，并按十进制字符串 `*_micros` 展示 Credits；其 quota、赠送与daily refresh字段没有当前 Billing owner 事实。旧两端都不是可兼容保留的权威实现。
+
+目标只接 Billing `244b2810c0cc043d29fffb2b3301eebf2d390b3d` 的内部 v2 本人两读：固定 `contract/openapi/v2/openapi.yaml`、artifact `3.0.0-experimental.3`、SHA-256 `ecaceefd3fd09d5106b364593dd513506622ca011bb0436b74f0928ffd8dcf00`，调用 `/v2/billing/me/credit-account` 与 `/v2/billing/me/credit-ledger`。owner README仍明确该artifact未发布/部署/消费，因此 pin、生成和源码GREEN不能代替Root对该固定owner runtime的发布/启动验收；BFF不得从移动工作树动态读取合同。
+
+public保持现资源路径 `/v1/billing/summary`，但在尚未正式发布的public `8.0.0` 内clean-slate替换旧float DTO为owner语义的decimal-string Credit DTO，并新增唯一 `/v1/billing/ledger`。不保旧字段、alias、dual read或假零余额；不把Credit换算成现金。Web后继须同步固定BFF发布artifact并使用 `available_micros/held_micros` 与owner ledger字段，删除无owner依据的quota/free/daily展示分支；这不是BFF本片实现范围。
+
+### 放置与依赖裁决
+
+| 项 | 裁决 |
+|---|---|
+| Owner/调用方向 | Billing唯一拥有余额与流水；Browser→Web same-origin→BFF→Billing。BFF只投影已验证owner结果，不读Billing数据库、不创建wallet、不计算费率/赠送/充值。 |
+| contract pin/generated | 沿现Agent HTTP consumer模式：vendor固定owner YAML、dependency manifest、独立固定生成脚本/config及只读 `src/generated/billing-http/`；只过滤上述2个operation并使用现有 `@hey-api/openapi-ts 0.99.0`/Zod4/fetch client。淘汰手抄owner DTO与运行时跨仓import。 |
+| 普通源码位置 | 采用现 `src/infrastructure/clients/owner/billing-personal-read.ts` 单文件：只负责该两读的u1身份编码、五因素请求、generated response校验和有限错误分类；两个GET共享同一合同/身份/credential生命周期，当前无需新目录。向 `routes/owner.ts` 继续混入认证codec或另建`billing/`目录都会制造第二变化中心，均淘汰。若实现使该文件超过TS08职责预算，再由Root另卡拆codec，不预建空层。 |
+| HTTP route | 现 `src/http/routes/owner.ts` 只做public path/query准入、调用client及BFF envelope；不复用现 `liveOwnerRequest/proxyUpstream`，因为其单一bearer与plain identity不满足Billing专用五因素/u1。 |
+| config | `src/config/runtime.ts` 增具名 `KOKORO_BILLING_BFF_SERVICE_TOKEN` 字段；与现internal secret必须分别存在且不得相等。配置Billing upstream时缺任一因素fail closed，不退到用户JWT、plain header或v1。 |
+| 数据/API | BFF数据库、receipt、幂等、Redis和事务零变化；公开wire见API R255。读响应始终`no-store`。 |
+| 删除项 | 删除旧 `BillingSummary` float type与test double假100余额；public YAML原float schema原位替换，不留deprecated兼容。现plans/checkout与其v1链不随本片扩展或宣称可用。 |
+
+可信身份只来自每次现IAM session admission后的 `RequestContext.identity.namespace/userId`；分别按Billing `personal-identity-u1`执行严格UTF-8、无paddingbase64url编码，绝不接受浏览器body/query/header自报tenant/subject。owner调用恰带 `x-kokoro-service:web-bff`、internal secret、独立service bearer、编码tenant与subject；partial/malformed credential不降级。public query只接受ledger的`limit` 1..100与单一opaque `cursor`（最多2048字符），原值一次转发；summary不接query/body。
+
+owner 200必须通过固定generated schema后才由BFF重包 `{data,meta}`；不改decimal string、sequence、source或UTC instant。owner 404映射本人账户不存在；Billing 401/403是服务装配故障而非已准入用户的新鉴权结果，fail closed为BFF dependency unavailable；owner 500/503、timeout与不可达同为可重试503；畸形200为502。不得把404变空账户、把错误变200或缓存private结果。
+
+### 精确后继写集与阶段门
+
+1. **固定合同/生成RED→GREEN：** `contract/vendor/kokoro-billing/244b2810c0cc043d29fffb2b3301eebf2d390b3d/openapi.yaml`、`contract/dependencies/billing-http.json`、`openapi-ts.billing.config.ts`、`scripts/generate-billing-http-client.mjs`、`src/generated/billing-http/{client.gen.ts,client/{client.gen.ts,index.ts,types.gen.ts,utils.gen.ts},core/{auth.gen.ts,bodySerializer.gen.ts,params.gen.ts,pathSerializer.gen.ts,queryKeySerializer.gen.ts,serverSentEvents.gen.ts,types.gen.ts,utils.gen.ts},sdk.gen.ts,types.gen.ts,zod.gen.ts}`、`package.json`，以及新 `test/billing-http-contract.test.mjs`。不新增依赖/lock变更。
+2. **consumer/config：** `src/config/runtime.ts`、`src/infrastructure/clients/owner/billing-personal-read.ts`、`src/http/routes/owner.ts`、`src/contracts/account.ts`；测试只用现 `test/config.test.ts`、`test/bff.test.ts`，新增 `test/billing-personal-read.test.mjs`。`src/bootstrap/server.ts`现已统一进入owner route，不预改；若实际接线证明必须修改，先报Root扩集。
+3. **public合同：** `contract/openapi/v1/openapi.yaml`、`scripts/verify-openapi.ts`、`test/contract/openapi-contract.test.mjs`、`test/contract-governance.test.mjs`、生成的 `contract/tests/v1-operations.json`，并移除/改写 `test/doubles/bff-store.ts`、`test/doubles/mock-route.ts` 的旧假summary分支。public仍为预发布 `8.0.0`；若Root发现该artifact已对外发布，须先裁新的major，不能在已发布8.0.0内静默破坏。
+4. **Web串行后继（非本仓写集）：** 固定BFF commit/version/digest后改同源adapter contract/client与Credits UI，移除fake zero及无owner字段；不得由BFF先造quota/free/daily DTO迁就当前UI。
+
+tests-first须先证明旧实现对合法owner五因素/u1及两真实route失败、旧float/fake合同被拒；不能用缺vendor ENOENT、未配置环境或404入口冒深层RED。现 `test/billing-personal-read.test.mjs` 与 `test/bff.test.ts` 的table必须覆盖：tenant/subject语义边界191/255 code points合法、192/256拒绝，最长四字节字符编码后header分别1022/1363字符；空值、NUL、孤立high/low surrogate在owner调用前拒绝且零调用；owner transport另验带padding、noncanonical tail bits、非法UTF-8、编码后空/NUL及超限u1均拒绝，不得回退plain identity。认证选择精确为：任一machine marker或service bearer出现即选择machine，缺/错任一五因素为403且不回退user；所有machine marker与service bearer均无且无user bearer才是401，合法user bearer与撤权/无效user bearer另走owner user分支正负控。Root随后运行生成可重复性、contract/architecture、lint/typecheck/test/build及真实owner HTTP组合。本D0没有运行测试、启动服务或修改机器合同。
+
 ## R251-SKILLS-V2-CONSUMER：Platform V7 到 BFF public 8.0.0（目标，尚未实施）
 
 当前 BFF 的 Platform Connect consumer 仍固定旧 owner/V5，Validate route 与 public OpenAPI 只接受 `zip-v1`；Platform producer 已固定为 `494b118ae7c29f1fc1005122d72c6c2bbf2640b6`，V7 `7.0.0` aggregate `3384a88f31be1fdd3e15bcbceb33e4fd7d62b04dfbfef65fcc35c24ce7afbb72`，但该 artifact 仍 inactive/unroutable，不能写成已激活。目标沿现 `generate-platform-connect-client.mjs` 的唯一生成方向固定该owner source，并验证 V7→V6→V5 immutable证明链、原39 RPC/20 commands/24 proofs与descriptor；不新建通用artifact框架或第二runtime。

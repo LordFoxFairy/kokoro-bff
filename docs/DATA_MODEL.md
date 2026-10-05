@@ -1,3 +1,11 @@
+## R255-BILLING-CONSUMER-D0：个人 Credit 读取无本仓数据变化（目标，尚未实施）
+
+Billing唯一拥有Credit account与ledger；BFF只对固定owner v2响应做合同验证并投影到public read，不复制余额、流水、sequence、hold、grant、quota、价格或现金事实。本片不修改 `database/schema.sql`，不新增表/列/索引/receipt/outbox/缓存/Redis key/事务或retention，也不读取 `kokoro_billing` schema。
+
+`available_micros`、`held_micros`、`delta_micros`、`balance_after_micros`与`sequence`始终作为owner decimal integer string保存在线路内，禁止转JavaScript Number、浮点或现金单位；`created_at`保持owner UTC ISO `Z`，cursor保持opaque。BFF不从ledger重算余额，不用空ledger推断零余额，不由404创建钱包，不以当前Web quota/free/daily字段补NULL或默认值。每次请求在IAM准入后由可信RequestContext生成tenant/subject u1，只存在于单次owner调用内，不持久化映射或凭据。
+
+现BFF Project/Conversation/Message/Share/ScheduledTask、AG-UI、业务receipt与删除生命周期均不受影响。真实PostgreSQL验收只对Billing owner事实做请求前后只读摘要相等，并验证跨tenant/subject不可见；BFF schema fresh-install/hash必须保持。本D0没有SQL、资源或数据迁移动作。
+
 ## R251-SKILLS-V2-CONSUMER：无数据模型变化（目标，尚未实施）
 
 Platform拥有manifest/profile与Validate事实；BFF只在owner响应和public wire边界严格校验、透传`zip-v2` identity，不持久化V1/V2映射、不从ZIP计算identity、不读取Platform数据库。此次consumer cutover不修改`database/schema.sql`，不新增表、列、索引、migration、receipt/outbox、Redis projection、权限或事务。
