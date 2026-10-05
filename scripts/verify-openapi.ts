@@ -604,7 +604,9 @@ function idempotencyErrors(parameters: Map<string, NamedBlock>, operations: Oper
             ? operation.text.includes("#/components/parameters/RenameProjectIdempotencyKey")
             : operationId === "beginSkillPackageUpload" && operation.method === "POST" && operation.path === "/v1/skills/{skill_id}/package-upload"
               ? operation.text.includes("#/components/parameters/SkillPackageBeginIdempotencyKey")
-              : operationId === "completeSkillPackageUpload" && operation.method === "POST" && operation.path === "/v1/skills/{skill_id}/package-upload/complete"
+              : operationId === "completeSkillPackageUpload" &&
+                  operation.method === "POST" &&
+                  operation.path === "/v1/skills/{skill_id}/package-upload/complete"
                 ? operation.text.includes("#/components/parameters/SkillPackageCompleteIdempotencyKey")
                 : operationId === "validateSkillDraft" && operation.method === "POST" && operation.path === "/v1/skills/{skill_id}/validate"
                   ? operation.text.includes("#/components/parameters/SkillValidateIdempotencyKey")

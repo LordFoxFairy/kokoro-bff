@@ -11,7 +11,19 @@ import { headerString, idempotencyKey, queryOf } from "../../dist/http/request.j
 import { isRecord } from "../../dist/domain/json.js"
 import type { RequestContext } from "../../src/domain/request-context.ts"
 import type { IdempotencyEntry, MutationTicket } from "../../src/application/idempotency.ts"
-import { chatSessionDetailData, chatSessionsData, githubSkillSource, mcpRegisterInput, mockControlReceipt, PLATFORMS, projectData, scheduledData, sessionScope, skillData, taskData } from "./helpers.ts"
+import {
+  chatSessionDetailData,
+  chatSessionsData,
+  githubSkillSource,
+  mcpRegisterInput,
+  mockControlReceipt,
+  PLATFORMS,
+  projectData,
+  scheduledData,
+  sessionScope,
+  skillData,
+  taskData,
+} from "./helpers.ts"
 import { agUiSseFrame } from "../../dist/interfaces/http/agui/sse.js"
 import { mockAgUiFrames } from "./agui.ts"
 import { mockMoriBusiness } from "./mori-route.ts"
@@ -73,8 +85,7 @@ export async function mockBusiness(
       payload = failure("invalid_session_scope", scoped.error, context.requestId)
     } else if (segments.length === 1 && method === "GET") {
       payload = chatSessionsData(store.listSessions(scoped.scope, scoped.projectRef))
-    }
-    else if (segments.length === 2 && method === "GET") {
+    } else if (segments.length === 2 && method === "GET") {
       const detail = store.readSession(sessionId, scoped.scope, scoped.projectRef)
       if (detail === undefined) {
         status = 404
@@ -84,9 +95,8 @@ export async function mockBusiness(
       const query = queryOf(request)
       const limit = Number(query.get("limit") || "20")
       const cursor = query.get("cursor")?.trim() || undefined
-      const result = Number.isInteger(limit) && limit >= 1 && limit <= 100
-        ? store.listSessionMessages(sessionId, scoped.scope, scoped.projectRef, cursor, limit)
-        : undefined
+      const result =
+        Number.isInteger(limit) && limit >= 1 && limit <= 100 ? store.listSessionMessages(sessionId, scoped.scope, scoped.projectRef, cursor, limit) : undefined
       if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
         status = 400
         payload = failure("invalid_pagination", "limit must be between 1 and 100", context.requestId)
@@ -109,7 +119,9 @@ export async function mockBusiness(
         } else {
           status = 202
           payload = result
-          setTimeout(() => { store.completeSessionRun(sessionId, result.run_id, json.content as string, scoped.scope, scoped.projectRef) }, 10)
+          setTimeout(() => {
+            store.completeSessionRun(sessionId, result.run_id, json.content as string, scoped.scope, scoped.projectRef)
+          }, 10)
         }
       }
     } else if (segments.length === 3 && segments[2] === "events" && method === "GET") {
@@ -143,15 +155,9 @@ export async function mockBusiness(
       }
     } else if (segments.length === 5 && segments[2] === "runs" && segments[4] === "control" && method === "POST") {
       const control = buildAgentControl(sessionId, json)
-      const action = control?.kind === "run.cancel"
-        ? "cancel"
-        : control?.kind === "run.resume"
-          ? "resume"
-          : control?.kind === "run.steer"
-            ? "steer"
-            : ""
+      const action = control?.kind === "run.cancel" ? "cancel" : control?.kind === "run.resume" ? "resume" : control?.kind === "run.steer" ? "steer" : ""
       const decisions = Array.isArray(json.decisions)
-        ? json.decisions.map((decision) => typeof decision === "string" ? decision : JSON.stringify(decision))
+        ? json.decisions.map((decision) => (typeof decision === "string" ? decision : JSON.stringify(decision)))
         : undefined
       if (control === null || action === "") {
         status = 400
@@ -214,11 +220,14 @@ export async function mockBusiness(
       if (typeof json.name !== "string" || json.name.trim() === "") {
         status = 400
         payload = failure("invalid_project", "Project name is required", context.requestId)
-      } else payload = { project: store.createProject({ name: json.name.trim(), description: typeof json.description === "string" ? json.description : undefined }) }
+      } else
+        payload = { project: store.createProject({ name: json.name.trim(), description: typeof json.description === "string" ? json.description : undefined }) }
     } else if (segments.length === 2 && (method === "GET" || method === "PATCH")) {
       const project = store.findProject(segments[1] || "")
-      if (project === undefined) { status = 404; payload = failure("project_not_found", "Project was not found", context.requestId) }
-      else if (method === "GET") payload = { project }
+      if (project === undefined) {
+        status = 404
+        payload = failure("project_not_found", "Project was not found", context.requestId)
+      } else if (method === "GET") payload = { project }
       else if (typeof json.instruction !== "string") {
         status = 400
         payload = failure("invalid_project_instruction", "Project instruction must be a string", context.requestId)
@@ -259,11 +268,15 @@ export async function mockBusiness(
       }
     } else if (segments.length === 3 && segments[2] === "tasks" && method === "GET") {
       payload = taskData(store.projectTasks(segments[1] || ""))
-    } else { status = 404; payload = failure("bff_route_not_found", "Business route was not found", context.requestId) }
+    } else {
+      status = 404
+      payload = failure("bff_route_not_found", "Business route was not found", context.requestId)
+    }
   } else if (segments[0] === "skills") {
     if (segments.length === 1 && method === "GET") payload = skillData(store.skills)
     else if (segments.length === 2 && segments[1] === "catalog" && method === "GET") payload = skillCatalogData(store.skills)
-    else if (segments.length === 2 && segments[1] === "pool" && method === "GET") payload = skillPoolData(store.skills.filter((skill) => skill.enabled !== false))
+    else if (segments.length === 2 && segments[1] === "pool" && method === "GET")
+      payload = skillPoolData(store.skills.filter((skill) => skill.enabled !== false))
     else if (segments.length === 2 && segments[1] === "quota" && method === "GET") payload = store.skillQuota(context.identity.namespace)
     else if (segments.length === 3 && segments[2] === "revisions" && method === "GET") {
       payload = { revisions: store.skillRevisions(segments[1] || "", queryOf(request).get("scope")?.trim() || undefined) }
@@ -274,8 +287,7 @@ export async function mockBusiness(
         status = 404
         payload = failure("skill_not_found", "Skill was not found", context.requestId)
       } else payload = { ok: true }
-    }
-    else if (segments.length === 3 && segments[1] === "github" && (segments[2] === "preview" || segments[2] === "import") && method === "POST") {
+    } else if (segments.length === 3 && segments[1] === "github" && (segments[2] === "preview" || segments[2] === "import") && method === "POST") {
       const source = githubSkillSource(json.repository)
       if (source === null) {
         status = 400
@@ -286,7 +298,10 @@ export async function mockBusiness(
         const skill = store.importGithubSkill(source)
         payload = { repository: source.source_url, default_branch: "main", skill: { name: skill.name, description: skill.description } }
       }
-    } else { status = 404; payload = failure("bff_route_not_found", "Business route was not found", context.requestId) }
+    } else {
+      status = 404
+      payload = failure("bff_route_not_found", "Business route was not found", context.requestId)
+    }
   } else if (segments[0] === "mcp" && segments[1] === "servers") {
     const name = segments[2]
     if (segments.length === 2 && method === "GET") payload = { servers: store.mcpServers }
@@ -313,28 +328,52 @@ export async function mockBusiness(
         status = 404
         payload = failure("mcp_server_not_found", "MCP server was not found", context.requestId)
       } else payload = { ok: true }
-    } else { status = 404; payload = failure("bff_route_not_found", "Business route was not found", context.requestId) }
+    } else {
+      status = 404
+      payload = failure("bff_route_not_found", "Business route was not found", context.requestId)
+    }
   } else if (segments[0] === "scheduled-tasks") {
     const id = segments[1]
     if (segments.length === 1 && method === "GET") payload = scheduledData(store.scheduledTasks)
     else if (segments.length === 1 && method === "POST") payload = { task: store.createScheduledTask(json as Partial<ScheduledTask>) }
     else if (segments.length === 2 && method === "GET") {
       const task = id === undefined ? undefined : store.findScheduledTask(id)
-      if (task === undefined) { status = 404; payload = failure("scheduled_task_not_found", "Scheduled task was not found", context.requestId) }
-      else payload = { task }
+      if (task === undefined) {
+        status = 404
+        payload = failure("scheduled_task_not_found", "Scheduled task was not found", context.requestId)
+      } else payload = { task }
     } else if (segments.length === 2 && method === "PATCH") {
       const task = id === undefined ? undefined : store.findScheduledTask(id)
-      if (task === undefined) { status = 404; payload = failure("scheduled_task_not_found", "Scheduled task was not found", context.requestId) }
-      else { Object.assign(task, json); payload = { task } }
+      if (task === undefined) {
+        status = 404
+        payload = failure("scheduled_task_not_found", "Scheduled task was not found", context.requestId)
+      } else {
+        Object.assign(task, json)
+        payload = { task }
+      }
     } else if (segments.length === 2 && method === "DELETE") {
       const index = id === undefined ? -1 : store.scheduledTasks.findIndex((task) => task.id === id)
-      if (index < 0) { status = 404; payload = failure("scheduled_task_not_found", "Scheduled task was not found", context.requestId) }
-      else { store.scheduledTasks.splice(index, 1); payload = { ok: true } }
+      if (index < 0) {
+        status = 404
+        payload = failure("scheduled_task_not_found", "Scheduled task was not found", context.requestId)
+      } else {
+        store.scheduledTasks.splice(index, 1)
+        payload = { ok: true }
+      }
     } else if (segments.length === 3 && segments[2] === "retry" && method === "POST") {
       const task = id === undefined ? undefined : store.findScheduledTask(id)
-      if (task === undefined) { status = 404; payload = failure("scheduled_task_not_found", "Scheduled task was not found", context.requestId) }
-      else { task.status = "active"; task.enabled = true; payload = { task } }
-    } else { status = 404; payload = failure("bff_route_not_found", "Business route was not found", context.requestId) }
+      if (task === undefined) {
+        status = 404
+        payload = failure("scheduled_task_not_found", "Scheduled task was not found", context.requestId)
+      } else {
+        task.status = "active"
+        task.enabled = true
+        payload = { task }
+      }
+    } else {
+      status = 404
+      payload = failure("bff_route_not_found", "Business route was not found", context.requestId)
+    }
   } else if (segments[0] === "agents" && segments[1] === "connections" && segments[2] === "setup" && method === "GET") {
     const platform = queryOf(request).get("platform")
     if (platform === null || !PLATFORMS.has(platform as AgentConnectionSetup["platform"])) {

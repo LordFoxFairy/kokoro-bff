@@ -43,112 +43,130 @@ type ChatSessionRecord = {
 }
 
 export class MockBffStore {
-  readonly projects: Project[] = [{
-    id: "project_kokoro",
-    name: "Kokoro",
-    slug: "kokoro",
-    description: "Kokoro product workspace",
-    instruction: "Keep implementation notes scoped to this project.",
-    created_at: now,
-    updated_at: now,
-  }]
+  readonly projects: Project[] = [
+    {
+      id: "project_kokoro",
+      name: "Kokoro",
+      slug: "kokoro",
+      description: "Kokoro product workspace",
+      instruction: "Keep implementation notes scoped to this project.",
+      created_at: now,
+      updated_at: now,
+    },
+  ]
 
-  readonly tasks: Task[] = [{
-    id: "task_contract",
-    project_id: "project_kokoro",
-    title: "Review business API contract",
-    status: "in_progress",
-    updated_at: now,
-  }]
+  readonly tasks: Task[] = [
+    {
+      id: "task_contract",
+      project_id: "project_kokoro",
+      title: "Review business API contract",
+      status: "in_progress",
+      updated_at: now,
+    },
+  ]
 
-  readonly scheduledTasks: ScheduledTask[] = [{
-    id: "scheduled_contract_review",
-    title: "Review the API contract",
-    prompt: "Review the current business API contract.",
-    frequency: "daily",
-    time: "09:00",
-    timezone: "UTC",
-    next_run_at: "2026-01-02T09:00:00.000Z",
-    auto_approve: false,
-    enabled: true,
-    status: "active",
-  }]
+  readonly scheduledTasks: ScheduledTask[] = [
+    {
+      id: "scheduled_contract_review",
+      title: "Review the API contract",
+      prompt: "Review the current business API contract.",
+      frequency: "daily",
+      time: "09:00",
+      timezone: "UTC",
+      next_run_at: "2026-01-02T09:00:00.000Z",
+      auto_approve: false,
+      enabled: true,
+      status: "active",
+    },
+  ]
 
-  readonly skills: Skill[] = [{
-    name: "contract-review",
-    description: "Review a versioned business API contract.",
-    content_hash: "sha256:fixture-contract-review",
-    scope: "official",
-    installed: true,
-    enabled: true,
-    categories: ["coding", "business"],
-    updated_at: 1767225600,
-  }]
+  readonly skills: Skill[] = [
+    {
+      name: "contract-review",
+      description: "Review a versioned business API contract.",
+      content_hash: "sha256:fixture-contract-review",
+      scope: "official",
+      installed: true,
+      enabled: true,
+      categories: ["coding", "business"],
+      updated_at: 1767225600,
+    },
+  ]
 
   readonly mcpServers: McpServer[] = []
 
   readonly projectInstructionHistory = new Map<string, ProjectInstructionRevision[]>([
-    ["project_kokoro", [{
-      id: "project-instruction-initial",
-      instruction: "Keep implementation notes scoped to this project.",
-      updated_at: now,
-      actor_name: "Kokoro",
-      current: true,
-    }]],
+    [
+      "project_kokoro",
+      [
+        {
+          id: "project-instruction-initial",
+          instruction: "Keep implementation notes scoped to this project.",
+          updated_at: now,
+          actor_name: "Kokoro",
+          current: true,
+        },
+      ],
+    ],
   ])
 
-  readonly projectSkills = new Map<string, Map<string, boolean>>([
-    ["project_kokoro", new Map([["skill-builder", true]])],
-  ])
+  readonly projectSkills = new Map<string, Map<string, boolean>>([["project_kokoro", new Map([["skill-builder", true]])]])
 
   readonly billing: BillingSummary = { balance: 100, currency: "USD", period: "2026-01", usage: 0 }
 
-  readonly plans: BillingPlan[] = [{
-    id: "plan_starter",
-    key: "starter",
-    name: "Starter",
-    currency: "USD",
-    amount_minor: "900",
-    credit_micros: "1000000",
-    billing_interval: "once",
-  }]
-
-  readonly sessions: ChatSessionRecord[] = [{
-    session_id: "session_kokoro",
-    title: "Review business API contract",
-    owner_id: "ns_test",
-    project_ref: "project_kokoro",
-    created_at: now,
-    updated_at: now,
-    deleted_at: null,
-    messages: [],
-    active_run: {
-      run_id: "run_1",
-      status: "running",
+  readonly plans: BillingPlan[] = [
+    {
+      id: "plan_starter",
+      key: "starter",
+      name: "Starter",
+      currency: "USD",
+      amount_minor: "900",
+      credit_micros: "1000000",
+      billing_interval: "once",
     },
-    events: [{
-      event_id: "event_1",
-      seq: 1,
+  ]
+
+  readonly sessions: ChatSessionRecord[] = [
+    {
       session_id: "session_kokoro",
-      run_id: "run_1",
-      kind: "session.created",
-      timestamp: now,
-      payload: { title: "Review business API contract", owner_id: "ns_test" },
-    }, {
-      event_id: "event_2",
-      seq: 2,
-      session_id: "session_kokoro",
-      run_id: "run_1",
-      kind: "run.created",
-      timestamp: now,
-      payload: { run_id: "run_1" },
-    }],
-    pending_pauses: [],
-    files: [],
-    deliveries: [],
-    share_id: null,
-    share_revoked_at: null,
-  }]
+      title: "Review business API contract",
+      owner_id: "ns_test",
+      project_ref: "project_kokoro",
+      created_at: now,
+      updated_at: now,
+      deleted_at: null,
+      messages: [],
+      active_run: {
+        run_id: "run_1",
+        status: "running",
+      },
+      events: [
+        {
+          event_id: "event_1",
+          seq: 1,
+          session_id: "session_kokoro",
+          run_id: "run_1",
+          kind: "session.created",
+          timestamp: now,
+          payload: { title: "Review business API contract", owner_id: "ns_test" },
+        },
+        {
+          event_id: "event_2",
+          seq: 2,
+          session_id: "session_kokoro",
+          run_id: "run_1",
+          kind: "run.created",
+          timestamp: now,
+          payload: { run_id: "run_1" },
+        },
+      ],
+      pending_pauses: [],
+      files: [],
+      deliveries: [],
+      share_id: null,
+      share_revoked_at: null,
+    },
+  ]
 
   projectTasks(projectId: string): Task[] {
     return this.tasks.filter((task) => task.project_id === projectId)
@@ -270,7 +288,11 @@ export class MockBffStore {
 
   createProject(input: { name: string; description?: string }): Project {
     const timestamp = new Date().toISOString()
-    const slug = input.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "project"
+    const slug =
+      input.name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "") || "project"
     const project: Project = {
       id: `project_${this.projects.length + 1}`,
       name: input.name,
@@ -304,13 +326,7 @@ export class MockBffStore {
     return task
   }
 
-  importGithubSkill(input: {
-    source_url: string
-    owner: string
-    repository: string
-    name: string
-    description: string
-  }): Skill {
+  importGithubSkill(input: { source_url: string; owner: string; repository: string; name: string; description: string }): Skill {
     const existing = this.skills.find((skill) => skill.source_url === input.source_url)
     if (existing !== undefined) return existing
 
@@ -382,21 +398,23 @@ export class MockBffStore {
   }
 
   findSession(id: string, scope?: string, projectRef?: string): ChatSessionRecord | undefined {
-    return this.sessions.find((session) =>
-      session.session_id === id
-      && session.deleted_at === null
-      && (scope === undefined || session.owner_id === scope)
-      && (projectRef === undefined || session.project_ref === projectRef),
+    return this.sessions.find(
+      (session) =>
+        session.session_id === id &&
+        session.deleted_at === null &&
+        (scope === undefined || session.owner_id === scope) &&
+        (projectRef === undefined || session.project_ref === projectRef),
     )
   }
 
   findSharedSession(shareId: string, scope?: string, projectRef?: string): ChatSessionRecord | undefined {
-    return this.sessions.find((session) =>
-      session.share_id === shareId
-      && session.share_revoked_at === null
-      && session.deleted_at === null
-      && (scope === undefined || session.owner_id === scope)
-      && (projectRef === undefined || session.project_ref === projectRef),
+    return this.sessions.find(
+      (session) =>
+        session.share_id === shareId &&
+        session.share_revoked_at === null &&
+        session.deleted_at === null &&
+        (scope === undefined || session.owner_id === scope) &&
+        (projectRef === undefined || session.project_ref === projectRef),
     )
   }
 
@@ -422,7 +440,12 @@ export class MockBffStore {
     }
   }
 
-  submitSessionMessage(sessionId: string, content: string, scope?: string, projectRef?: string): { run_id: string; user_message_id: string; assistant_message_id: string } | null {
+  submitSessionMessage(
+    sessionId: string,
+    content: string,
+    scope?: string,
+    projectRef?: string,
+  ): { run_id: string; user_message_id: string; assistant_message_id: string } | null {
     const session = this.findSession(sessionId, scope, projectRef)
     if (session === undefined) return null
     const timestamp = new Date().toISOString()
@@ -500,7 +523,14 @@ export class MockBffStore {
     return true
   }
 
-  controlSessionRun(sessionId: string, runId: string, action: "cancel" | "resume" | "steer", decisions?: string[], scope?: string, projectRef?: string): { ok: true } | null {
+  controlSessionRun(
+    sessionId: string,
+    runId: string,
+    action: "cancel" | "resume" | "steer",
+    decisions?: string[],
+    scope?: string,
+    projectRef?: string,
+  ): { ok: true } | null {
     const session = this.findSession(sessionId, scope, projectRef)
     if (session === undefined) return null
     if (session.active_run === null || session.active_run.run_id !== runId) return null
