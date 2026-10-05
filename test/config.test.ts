@@ -20,11 +20,17 @@ describe("BFF owner PostgreSQL schema", () => {
       "postgresql://localhost/app?schema=kokoro_iam",
       "postgresql://localhost/app?schema=kokoro_bff&schema=kokoro_bff",
       "postgresql://localhost/app?schema=kokoro_bff&options=-c%20search_path%3Dpublic",
-    ]) assert.throws(() => loadConfig({ ...runtimeEnv, KOKORO_BFF_POSTGRES_URL: url }), /kokoro_bff schema/u, url)
+    ])
+      assert.throws(() => loadConfig({ ...runtimeEnv, KOKORO_BFF_POSTGRES_URL: url }), /kokoro_bff schema/u, url)
   })
 
   it("fails readiness before Redis I/O when the owner schema or a key table is missing", async () => {
-    for (const [schema, installed] of [[null, false], ["public", false], ["kokoro_iam", false], ["kokoro_bff", false]] as const) {
+    for (const [schema, installed] of [
+      [null, false],
+      ["public", false],
+      ["kokoro_iam", false],
+      ["kokoro_bff", false],
+    ] as const) {
       const db = new PostgresBffDatabase(runtimeEnv.KOKORO_BFF_POSTGRES_URL, "redis://127.0.0.1:1/8")
       db.pool.query = async () => ({ rows: [{ schema, installed }] })
       try {
@@ -37,7 +43,10 @@ describe("BFF owner PostgreSQL schema", () => {
   })
 
   it("keeps CI and release PostgreSQL URLs on the fixed owner schema", async () => {
-    for (const [name, count] of [["ci.yml", 2], ["release-image.yml", 3]] as const) {
+    for (const [name, count] of [
+      ["ci.yml", 2],
+      ["release-image.yml", 3],
+    ] as const) {
       const source = await readFile(new URL(`../.github/workflows/${name}`, import.meta.url), "utf8")
       const urls = [...source.matchAll(/^\s*KOKORO_(?:BFF|TEST)_POSTGRES_URL:\s*(\S+)\s*$/gmu)].map((match) => match[1])
       assert.equal(urls.length, count, name)
@@ -226,37 +235,57 @@ describe("kokoro-bff optional Agent configuration", () => {
   })
 
   it("requires the projector lease to exceed one upstream request timeout", () => {
-    assert.throws(() => loadConfig({
-      ...runtimeEnv,
-      KOKORO_UPSTREAM_TIMEOUT_MS: "5000",
-      KOKORO_AGUI_PROJECTOR_LEASE_DURATION_MS: "5000",
-    }), /projector lease duration must exceed the upstream timeout/u)
+    assert.throws(
+      () =>
+        loadConfig({
+          ...runtimeEnv,
+          KOKORO_UPSTREAM_TIMEOUT_MS: "5000",
+          KOKORO_AGUI_PROJECTOR_LEASE_DURATION_MS: "5000",
+        }),
+      /projector lease duration must exceed the upstream timeout/u,
+    )
   })
 
   it("requires room for source settlement and a monotonic projector backoff range", () => {
-    assert.throws(() => loadConfig({
-      ...runtimeEnv,
-      KOKORO_UPSTREAM_TIMEOUT_MS: "5000",
-      KOKORO_AGUI_PROJECTOR_LEASE_DURATION_MS: "5400",
-      KOKORO_AGUI_PROJECTOR_LEASE_SETTLEMENT_RESERVE_MS: "500",
-    }), /lease duration must exceed the upstream timeout plus settlement reserve/u)
-    assert.throws(() => loadConfig({
-      ...runtimeEnv,
-      KOKORO_AGUI_PROJECTOR_ERROR_BACKOFF_MS: "1001",
-      KOKORO_AGUI_PROJECTOR_ERROR_BACKOFF_MAX_MS: "1000",
-    }), /error backoff base must not exceed its maximum/u)
+    assert.throws(
+      () =>
+        loadConfig({
+          ...runtimeEnv,
+          KOKORO_UPSTREAM_TIMEOUT_MS: "5000",
+          KOKORO_AGUI_PROJECTOR_LEASE_DURATION_MS: "5400",
+          KOKORO_AGUI_PROJECTOR_LEASE_SETTLEMENT_RESERVE_MS: "500",
+        }),
+      /lease duration must exceed the upstream timeout plus settlement reserve/u,
+    )
+    assert.throws(
+      () =>
+        loadConfig({
+          ...runtimeEnv,
+          KOKORO_AGUI_PROJECTOR_ERROR_BACKOFF_MS: "1001",
+          KOKORO_AGUI_PROJECTOR_ERROR_BACKOFF_MAX_MS: "1000",
+        }),
+      /error backoff base must not exceed its maximum/u,
+    )
   })
 
   it("rejects source pages above the Agent contract and tombstones shorter than ledger retention", () => {
-    assert.throws(() => loadConfig({
-      ...runtimeEnv,
-      KOKORO_AGUI_PROJECTOR_SOURCE_PAGE_SIZE: "1001",
-    }), /source page size must not exceed 1000/u)
-    assert.throws(() => loadConfig({
-      ...runtimeEnv,
-      KOKORO_AGUI_RETENTION_MS: "1000",
-      KOKORO_AGUI_CURSOR_TOMBSTONE_RETENTION_MS: "999",
-    }), /cursor tombstone retention must not be shorter than ledger retention/u)
+    assert.throws(
+      () =>
+        loadConfig({
+          ...runtimeEnv,
+          KOKORO_AGUI_PROJECTOR_SOURCE_PAGE_SIZE: "1001",
+        }),
+      /source page size must not exceed 1000/u,
+    )
+    assert.throws(
+      () =>
+        loadConfig({
+          ...runtimeEnv,
+          KOKORO_AGUI_RETENTION_MS: "1000",
+          KOKORO_AGUI_CURSOR_TOMBSTONE_RETENTION_MS: "999",
+        }),
+      /cursor tombstone retention must not be shorter than ledger retention/u,
+    )
   })
 
   it("requires explicit live persistence and rejects the removed mode", () => {
