@@ -13,11 +13,11 @@ function collectionRequest(query: string): never {
   return { method: "GET", url: `/v1/sessions${query}` } as never
 }
 
-function responseDouble(): { response: never; headers: Map<string, string> } {
-  const headers = new Map<string, string>()
+function responseDouble(): { response: never; headers: Map<string, unknown> } {
+  const headers = new Map<string, unknown>()
   return {
     response: {
-      setHeader(name: string, value: string) {
+      setHeader(name: string, value: unknown) {
         headers.set(name.toLowerCase(), value)
       },
       writeHead() {},
@@ -27,7 +27,7 @@ function responseDouble(): { response: never; headers: Map<string, string> } {
   }
 }
 
-async function collectionRepositoryCall(query: string): Promise<{ calls: unknown[][]; projectReads: number }> {
+async function collectionRepositoryCall(query: string): Promise<{ calls: unknown[][]; projectReads: number; responseHeaders: Map<string, unknown> }> {
   const calls: unknown[][] = []
   let projectReads = 0
   const page: ConversationPage = { conversations: [], next_cursor: null }
@@ -57,8 +57,7 @@ async function collectionRepositoryCall(query: string): Promise<{ calls: unknown
     await liveChatBusiness(request, response.response, {} as never, collectionContext, ["sessions"], {}, null, new Map(), store, authorization),
     true,
   )
-  assert.equal(response.headers.get("x-request-id"), collectionContext.requestId)
-  return { calls, projectReads }
+  return { calls, projectReads, responseHeaders: response.headers }
 }
 
 test("passes the trusted subject through the private Chat application port", async () => {
@@ -103,6 +102,7 @@ for (const [name, query, expectedFilter, expectedProjectReads] of [
 
     assert.deepEqual(result.calls, [["tenant_a", "owner_a", expectedFilter, 20, null]])
     assert.equal(result.projectReads, expectedProjectReads)
+    assert.equal(result.responseHeaders.get("x-request-id"), collectionContext.requestId)
   })
 }
 
