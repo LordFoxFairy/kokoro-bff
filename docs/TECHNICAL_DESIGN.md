@@ -1,3 +1,27 @@
+## R241 Project rename 已实现候选与限定验收（2026-10-05；待 Root Git 交付）
+
+当前候选已实现 Project name PATCH；本节替代下方 R240“仅合同/尚未实施/待复测”的阶段时态，旧正文原样保留作为历史。正式基线仍为 `cdad0ad6580dcbca18b75fdfbdbac4aa61f750d2`，本次尚无新的交付 commit，不代表 Web 消费或用户 3310 已启用。
+
+现具名输入解析、rename route、ProjectService/port 与 Project PostgreSQL 事务已接通，server 在当前 IAM 后、generic mutation/upstream 前分流；raw JSON/header/名称边界在 rename 职责内处理，未修改通用 create 规则或引入 Move helper/第二 writer。receipt 原子性与资格先重放见 DATA 当前节，唯一公开 wire 见 API 当前节。
+
+4.5 秒 acquire 起算绝对预算、每锁至多 1 秒及 exact-client error/release 生命周期已经纳入所选真实矩阵；BEGIN 后同 SQL 的 transaction-local `client_connection_check_interval=100ms` 配合客户端连接销毁，通过原 L6 1500ms PID 消失 oracle。100ms 是内核已报告断链后的检查间隔，不是所有取消或静默 network partition 的 SLA；Linux/macOS 是本轮研发/CI平台边界，未宣称两种 OS 都已实跑或其它 OS 已验证。
+
+Root 所选矩阵与完整 owner 门证据、准确 source/test SHA、尚未选择的 C4/C5/F3/L4/L5/L7及发布边界统一见 CURRENT R241；完整 CRUD、生产删除生命周期、真实 IAM/Web 全链仍非本片已完成范围。
+
+## R240 Project rename 合同候选与后继实现边界（2026-10-05）
+
+R241 取消窄修（待 Root 复测）：rename 的 BEGIN 后同一 timeout SQL 仅以 transaction-local `client_connection_check_interval=100ms` 配合 exact-client 销毁，使长查询能检测已关闭连接，4.5 秒总预算/1 秒锁界不变；本轮平台边界为 Linux/macOS 研发与 CI，其它 OS 未验证，不修改全局/pool/role 或引入 CancelRequest/fallback。
+
+正式 active 前置已本地交付于 `cdad0ad6580dcbca18b75fdfbdbac4aa61f750d2`；以下旧阶段时态以此为准。本片只发布设计/机器合同候选，不实施或启用 rename。原 20 mixed 不进入切片。
+
+BFF Project 唯一 owner；采用既有目录内 `src/http/project-rename-input.ts`、`src/http/routes/project-rename.ts` 与 `src/infrastructure/postgres/project-rename.ts` 的后继具名职责，优于把严格输入/原子 receipt 混进 live-bff 或 Row mapper。现 ProjectService/port/repository 仅增加具名委派；不建 mutation 框架、新目录、第二 writer 或兼容 alias。
+
+唯一入口及 wire 细节由 API 当前节和 OpenAPI 定义。后继复用 `projectName`、`strictParseRawJson` 与现 trusted IAM scope；NUL 只在 rename 输入拒绝，不改变 create 规则。每次当前 IAM→同 client 锁内 active/tenant/owner/canonical ID 资格→receipt；重放不跳过授权。最小 name 事实 LWW，无 version/CAS；事务及 no-op/旧 key 对账见 DATA 当前节。
+
+后继 PG 总预算从 pool acquire 前开始为 4.5 秒，每锁至多 1 秒，SQL/rollback/COMMIT 共享剩余时间，无自动业务重试。沿 R217 exact-client error 生命周期；未 BEGIN 晚到连接归还，不确定 rollback 或已发 COMMIT 异常销毁 client 并返回 503，下一新请求重新准入对账，不猜成功。
+
+本阶段只有十个合同/文档/静态门路径。Root 独审后另授真实 HTTP/PG RED 与实现：合法改名→最小 ACK→GET/list/旧 slug 权威新名→重建服务后保持；覆盖授权零差、旧 key、真并发、父锁竞争、原子 rollback、unknown COMMIT 与预算，保全 R217/active 旧门。当前不代表用户页刷新旅程、正式 IAM 组合或 Project DELETE 已完成。
+
 ## R239 Project active前置实施事实（2026-10-05）
 
 本节为当前已验证候选事实；下方R236为实施前设计记录，其“未实施/未验证”时态由本节替代，位置及边界说明仍有效。基线main 7289b3a4ae8f2df5c249350d59b9405c33fb4083，本地交付身份以本仓Git与Root收据为准，尚未启用用户3310组合。

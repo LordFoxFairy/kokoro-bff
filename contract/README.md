@@ -1,3 +1,9 @@
+## R240 public 7.2.0 rename 候选（2026-10-05；未发布）
+
+唯一可编辑 `openapi/v1/openapi.yaml` 从正式 `cdad0ad6580dcbca18b75fdfbdbac4aa61f750d2` 的 public 7.1.0 增加独立 `PATCH /v1/projects/{projectId}/name` / `renameProject`，候选 7.2.0、91 operations；原 90 项保持，inventory 由既有 `contract:update-baseline` 生成。专用 RenameProject 组件不改变旧 instruction 或 envelope。
+
+这是 owner 合同/设计与静态门切片，不含 rename 生产实现、真实 HTTP/PG 验收或消费者 pin。Root 完成后继实施/验收并发布 immutable commit/digest 后再消费；不以候选文件 SHA 冒充已发布身份。下方 R150 为此前已发布 7.1.0 的历史记录，当前正式运行能力尚未因此增加 rename。
+
 ## R176 Storage scope-release consumer pin（2026-10-03；仅机器消费基线）
 
 BFF 固定 Storage 已发布 `e8b9928418924812587b7ac07900aee4be5bc27f` 与 combined SHA-256 `c22b5c10ee698d579753dcac370be371d8dba1df8fead1a12883f5443fbad18a`，从该 immutable owner commit 的两份 Proto 原字节确定性生成唯一 Connect client。新增 wire 面只有 `ReleaseProjectScope`、`ReleaseConversationScope` 及各自 command-only request/有界计数 response；tenant、subject、request 与 project/conversation scope 仍只来自受信 metadata。此 pin 不实现 Project DELETE、dispatcher 或网络调用，也不证明外部 provider/跨 owner/最终用户 release 链已验收。

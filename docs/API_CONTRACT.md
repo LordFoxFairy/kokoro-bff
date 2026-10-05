@@ -1,3 +1,25 @@
+## R241 Project name PATCH 当前已实现候选（2026-10-05；未发布）
+
+本节覆盖下方 R240“仅机器合同/尚未接入”的旧时态；当前源码已实现 `PATCH /v1/projects/{projectId}/name` / `renameProject`，唯一 OpenAPI 候选为 public `7.2.0`、91 operations，原 90 项和 instruction PATCH 保持。Root 精确 Git 交付及发布身份待定，未更新 Web 消费 pin，未启用 3310。
+
+最小闭集 ACK、rename 专属闭集错误及 request-ID/no-store 已贯通正常 route 和 IAM admission 拒绝分支；名称 trim/UTF-16/NUL、raw Host 正确的 65536/65537 body 边界、strict key/header/JSON、缺配置 tenant 的 503 等在真实 BFF HTTP/PG 基础五组验证。IAM 在这些 owner 测试中仍为边界 double，不冒正式认证组合。
+
+旧 key 只回原 ACK、权威 GET/list/旧 slug 与重建 store/server 持久读回均已验证；ACK 不承诺覆盖其它随后合法提交。所选并发/故障/取消矩阵遵守同一机器合同，准确27父子统计及完整244资源门见 CURRENT。已断开 HTTP 不伪造成功，100ms PG检查不增加网络分区检测或取消时延公开承诺。
+
+机器合同仍为未发布候选；消费者只在 Root 实际交付 immutable commit/version/digest 后接入。用户页面 ACK→GET→刷新、正式 IAM、未选失败窗口和公开 DELETE 仍待后继，不因本后端通过自动关闭。
+
+## R240 public 7.2.0 Project name PATCH（2026-10-05；合同候选）
+
+R241 取消窄修（待 Root 复测）：TECH 当前节的事务内 `client_connection_check_interval=100ms` 只改断连检测，Linux/macOS 研发与 CI 为本轮平台边界、其它 OS 未验证，既有 ACK/错误/header 与未知 COMMIT 后重新准入对账合同不变，也不向已断开的 HTTP socket 伪造成功。
+
+唯一机器事实源 `contract/openapi/v1/openapi.yaml` 由正式 `cdad0ad6580dcbca18b75fdfbdbac4aa61f750d2` 的 public 7.1.0 加法演进到候选 7.2.0：91 operations，保全部原 90 项。只有 `PATCH /v1/projects/{projectId}/name` / `renameProject`，使用专用 RenameProject 参数/请求/ACK/错误组件；原 instruction PATCH 与 ID/slug GET 不变，无 alias。
+
+闭集输入、canonical ID、raw header/body 边界、trim 后 UTF-16 名称规则、NUL→400、八状态错误码/重试性与每响应 request ID/no-store 都只在机器合同维护。ACK 是首次成功的最小 name receipt，不是当前整资源；旧 key 返回旧 ACK 后应 GET 当前资源。503 保现有 `product_tenant_not_configured`，不重写 IAM 来源码；旧 operation 的 meta/envelope 不迁移。
+
+后继服务端必须在现 server 精确分流及 IAM 拒绝 envelope 分类中接入该 route；统一 request ID header 已由 active 前置提供，但不等于新 route 或准入错误已实现。receipt 及当前授权先于重放见 DATA/TECH 当前节。
+
+本片只进行无资源合同检查；真实 HTTP/PG RED、原子失败和授权矩阵、完整 owner 门及 Root 审查另行准入。只有 Root 发布 immutable version/commit/digest 后消费者才 repin；本候选不宣称 rename 可用、公开 DELETE、Web 刷新或正式 IAM 全链通过。
+
 ## R239 Project资格与HTTP响应边界当前态（2026-10-05）
 
 本节为当前已验证候选事实；下方R236为实施前设计记录，其“未实施/未验证”时态由本节替代，位置及边界说明仍有效。基线main 7289b3a4ae8f2df5c249350d59b9405c33fb4083，本地交付身份以本仓Git与Root收据为准，尚未启用用户3310组合。

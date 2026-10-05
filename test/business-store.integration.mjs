@@ -1443,3 +1443,987 @@ integrationTest("R237 Message existing active and Direct positive controls and t
     "session_not_found",
   )
 })
+// R241: real HTTP / owner PostgreSQL rename acceptance. IAM alone is the boundary double.
+// Root supplies the already-installed isolated database; no schema mutation or fake store here.
+async function r241Fixture(t) {
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
+  const tenant = `r241_${randomUUID().replaceAll("-", "")}`
+  const owner = "r241_owner"
+  const admission = new SessionAdmissionDouble()
+  const token = `r241-${randomUUID()}`
+  admission.allow(token, { namespace: tenant, userId: owner })
+  const headers = { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "web-secret", authorization: `Bearer ${token}` }
+  let store
+  let server
+  let base
+  let tables = []
+  const stop = async () => {
+    if (server) {
+      await server.shutdown(1000)
+      server = undefined
+    }
+    if (store) {
+      await store.close()
+      store = undefined
+    }
+  }
+  t.after(async () => {
+    try {
+      await stop()
+    } finally {
+      try {
+        for (const table of tables) {
+          if (table === "bff_idempotency_receipt") await pool.query(`DELETE FROM ${table} WHERE position($1 in scope)>0`, [tenant])
+          else await pool.query(`DELETE FROM ${table} WHERE tenant_id=$1 OR tenant_id=$2`, [tenant, `${tenant}_other`])
+        }
+      } finally {
+        await pool.end()
+      }
+    }
+  })
+  tables = (
+    await pool.query(`SELECT table_name FROM information_schema.tables WHERE table_schema='kokoro_bff' AND table_type='BASE TABLE'
+    AND (table_name='bff_idempotency_receipt' OR table_name IN
+      (SELECT table_name FROM information_schema.columns WHERE table_schema='kokoro_bff' AND column_name='tenant_id')) ORDER BY table_name`)
+  ).rows.map((row) => row.table_name)
+  assert.ok(tables.includes("bff_project") && tables.includes("bff_idempotency_receipt"), "Root must install the existing canonical schema")
+  assert.ok(tables.every((name) => /^bff_[a-z_]+$/u.test(name)))
+  const start = async (configTenant = tenant) => {
+    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    await store.ready()
+    server = createBffServer(bffConfig({ tenantId: configTenant }), {
+      businessStore: store,
+      sessionAdmission: admission,
+      agentDispatchDispatcher: r237IdleWorker,
+      agentCancellationDispatcher: r237IdleWorker,
+      agUiProjector: r237IdleWorker,
+      scheduledTaskDispatcher: r237IdleWorker,
+      scheduledAgentDispatcher: r237IdleWorker,
+      scheduledAgentTerminalConsumer: r237IdleWorker,
+    })
+    base = await listen(server)
+  }
+  await start()
+  const request = async (path, method = "GET", payload, extra = {}, signal) => {
+    const response = await fetch(`${base}/v1/${path}`, {
+      method,
+      headers: { ...headers, "content-type": "application/json", ...extra },
+      ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+      signal: signal ?? AbortSignal.timeout(6000),
+    })
+    return { status: response.status, body: await response.json(), headers: response.headers }
+  }
+  const raw = async (path, body, rawExtra = []) => {
+    const { request: httpRequest } = await import("node:http")
+    const url = new URL(base)
+    return new Promise((resolve, reject) => {
+      const outgoing = httpRequest(
+        {
+          hostname: url.hostname,
+          port: url.port,
+          method: "PATCH",
+          path: `/v1/${path}`,
+          headers: ["Host", url.host, ...Object.entries(headers).flat(), ...rawExtra, "Content-Length", String(Buffer.byteLength(body))],
+          signal: AbortSignal.timeout(6000),
+        },
+        (response) => {
+          const chunks = []
+          response.on("data", (chunk) => chunks.push(Buffer.from(chunk)))
+          response.once("error", reject)
+          response.once("end", () => {
+            try {
+              resolve({ status: response.statusCode, body: JSON.parse(Buffer.concat(chunks).toString("utf8")), headers: new Headers(response.headers) })
+            } catch (error) {
+              reject(
+                new Error(
+                  `R241 raw JSON response diagnostic: ${JSON.stringify({
+                    status: response.statusCode,
+                    requestBytes: Buffer.byteLength(body),
+                    rawExtra,
+                    responseBytes: Buffer.concat(chunks).byteLength,
+                  })}`,
+                  { cause: error },
+                ),
+              )
+            }
+          })
+        },
+      )
+      outgoing.once("error", reject)
+      outgoing.end(body)
+    })
+  }
+  const facts = async () => {
+    const result = {}
+    for (const table of tables)
+      result[table] = (await pool.query(`SELECT to_jsonb(fact) AS row FROM ${table} fact ORDER BY to_jsonb(fact)::text`)).rows.map(({ row }) => row)
+    return result
+  }
+  const project = async (name = "改名前项目") => {
+    const result = await request("projects", "POST", { name }, { "idempotency-key": `create-${randomUUID()}` })
+    assert.equal(result.status, 200, JSON.stringify(result.body))
+    const value = result.body.data.project
+    assert.match(value.id, /^project_[0-9a-f-]{36}$/u)
+    return value
+  }
+  const rename = (id, name, key = `rename-${randomUUID()}`, signal) => request(`projects/${id}/name`, "PATCH", { name }, { "idempotency-key": key }, signal)
+  const denied = async (run, status, code, retryable = false) => {
+    const before = await facts()
+    const result = await run()
+    assert.equal(result.status, status, JSON.stringify(result.body))
+    r241Headers(result)
+    assert.deepEqual(Object.keys(result.body), ["error"])
+    assert.deepEqual(Object.keys(result.body.error).sort(), ["code", "message", "retryable"])
+    assert.equal(result.body.error.code, code)
+    assert.equal(result.body.error.retryable, retryable)
+    assert.equal(typeof result.body.error.message, "string")
+    assert.ok(result.body.error.message.length > 0)
+    assert.deepEqual(await facts(), before, "rejected request mutated owner facts/receipt")
+  }
+  return {
+    get ownerPool() {
+      return store.database.pool
+    },
+    pool,
+    tenant,
+    owner,
+    token,
+    admission,
+    request,
+    raw,
+    facts,
+    project,
+    rename,
+    denied,
+    restart: async (configTenant = tenant) => {
+      await stop()
+      await start(configTenant)
+    },
+  }
+}
+
+function r241Headers(result) {
+  const id = result.headers.get("x-request-id")
+  assert.ok(id && id.length <= 128, "response requires bounded request ID")
+  assert.equal(result.headers.get("cache-control"), "no-store")
+}
+
+function r241Ack(result, projectId, name) {
+  assert.equal(result.status, 200, `valid rename requires real HTTP 200: ${JSON.stringify(result.body)}`)
+  r241Headers(result)
+  assert.deepEqual(result.body, { data: { project_id: projectId, name } })
+}
+
+integrationTest("R241 rename first legal HTTP ACK and authoritative GET list slug restart", async (t) => {
+  const f = await r241Fixture(t)
+  const project = await f.project()
+  const before = (await f.pool.query("SELECT to_jsonb(p) AS row FROM bff_project p WHERE project_id=$1", [project.id])).rows[0].row
+  r241Ack(await f.rename(project.id, "  中文项目 新名称  ", "r241-first"), project.id, "中文项目 新名称")
+  const verify = async () => {
+    for (const ref of [project.id, project.slug]) {
+      const result = await f.request(`projects/${ref}`)
+      assert.equal(result.status, 200)
+      assert.equal(result.body.data.project.name, "中文项目 新名称")
+      assert.equal(result.body.data.project.id, project.id)
+      assert.equal(result.body.data.project.slug, project.slug)
+    }
+    const list = await f.request("projects")
+    assert.equal(list.status, 200)
+    assert.deepEqual(
+      list.body.data.projects.map(({ id, name, slug }) => ({ id, name, slug })),
+      [{ id: project.id, name: "中文项目 新名称", slug: project.slug }],
+    )
+    const after = (await f.pool.query("SELECT to_jsonb(p) AS row FROM bff_project p WHERE project_id=$1", [project.id])).rows[0].row
+    const { name: oldName, updated_at: oldTime, ...oldRest } = before
+    const { name, updated_at: newTime, ...rest } = after
+    assert.equal(name, "中文项目 新名称")
+    assert.deepEqual(rest, oldRest, "rename changed fields beyond name/updated_at")
+  }
+  await verify()
+  await f.restart() // New actual repository pool and HTTP server, not a cached object read.
+  await verify()
+})
+
+integrationTest("R241 rename no-op receipt equivalent trim conflict and delayed old-key replay", async (t) => {
+  const f = await r241Fixture(t)
+  const project = await f.project()
+  r241Ack(await f.rename(project.id, "名称 A", "key-a"), project.id, "名称 A")
+  const beforeNoop = await f.facts()
+  r241Ack(await f.rename(project.id, " 名称 A ", "key-noop"), project.id, "名称 A")
+  const afterNoop = await f.facts()
+  const receiptRows = afterNoop.bff_idempotency_receipt
+  assert.equal(receiptRows.length, beforeNoop.bff_idempotency_receipt.length + 1)
+  assert.deepEqual(
+    { ...afterNoop, bff_idempotency_receipt: [] },
+    { ...beforeNoop, bff_idempotency_receipt: [] },
+    "same-name new-key changed Project including updated_at",
+  )
+  for (const row of beforeNoop.bff_idempotency_receipt) assert.ok(receiptRows.some((value) => JSON.stringify(value) === JSON.stringify(row)))
+  const beforeReplay = await f.facts()
+  r241Ack(await f.rename(project.id, "\t名称 A\n", "key-a"), project.id, "名称 A")
+  assert.deepEqual(await f.facts(), beforeReplay)
+  await f.denied(() => f.rename(project.id, "其他名", "key-a"), 409, "idempotency_conflict")
+  r241Ack(await f.rename(project.id, "名称 B", "key-b"), project.id, "名称 B")
+  const beforeOld = await f.facts()
+  r241Ack(await f.rename(project.id, "名称 A", "key-a"), project.id, "名称 A")
+  assert.deepEqual(await f.facts(), beforeOld, "late old key rewrote later facts")
+  assert.equal((await f.request(`projects/${project.id}`)).body.data.project.name, "名称 B")
+})
+
+integrationTest("R241 rename normalized name and raw input boundaries leave all facts unchanged", async (t) => {
+  const f = await r241Fixture(t)
+  const project = await f.project()
+  for (const name of [" 中文  内部空白 ", "x".repeat(160), "😀".repeat(80), ` ${"x".repeat(160)} `, "e\u0301", "é"])
+    r241Ack(await f.rename(project.id, name), project.id, name.trim())
+  const other = await f.project("r241-second-project")
+  r241Ack(await f.rename(project.id, other.name), project.id, other.name)
+  for (const name of ["", " \t\n", null, 1, [], {}, "x".repeat(161), "😀".repeat(81), "a\u0000b"])
+    await f.denied(() => f.rename(project.id, name), 400, "invalid_project_rename")
+  const path = `projects/${project.id}/name`
+  for (const payload of [{}, { name: "合法", owner_id: f.owner }, { name: "合法", instruction: "不要写入" }])
+    await f.denied(() => f.request(path, "PATCH", payload, { "idempotency-key": randomUUID() }), 400, "invalid_project_rename")
+  const rawKey = ["Content-Type", "application/json", "Idempotency-Key", "r241-raw"]
+  const boundedJson = JSON.stringify({ name: "字节边界" })
+  const exactBody = boundedJson + " ".repeat(65536 - Buffer.byteLength(boundedJson))
+  r241Ack(await f.raw(path, exactBody, ["Content-Type", "application/json", "Idempotency-Key", "K".repeat(128)]), project.id, "字节边界")
+  await f.denied(() => f.raw(path, exactBody + " ", rawKey), 400, "invalid_project_rename")
+  for (const body of [
+    '{"name":"a","name":"b"}',
+    '{"name":"\\ud800"}',
+    '{"name":',
+    Buffer.from([123, 34, 110, 97, 109, 101, 34, 58, 34, 0xff, 34, 125]),
+    JSON.stringify({ name: "x".repeat(65536) }),
+  ])
+    await f.denied(() => f.raw(path, body, rawKey), 400, "invalid_project_rename")
+  await f.denied(() => f.raw(path, '{"name":"合法"}', ["Content-Type", "application/json"]), 400, "idempotency_key_required")
+  for (const key of ["", "a,b", "a b", "a\tb", "x".repeat(129)])
+    await f.denied(() => f.raw(path, '{"name":"合法"}', ["Content-Type", "application/json", "Idempotency-Key", key]), 400, "invalid_project_rename")
+  await f.denied(() => f.raw(path, '{"name":"合法"}', [...rawKey, "Idempotency-Key", "duplicate"]), 400, "invalid_project_rename")
+  await f.denied(() => f.raw(path, '{"name":"合法"}', [...rawKey, "Content-Type", "application/json"]), 400, "invalid_project_rename")
+  await f.denied(() => f.raw(path, '{"name":"合法"}', ["Content-Type", "text/plain", "Idempotency-Key", "plain"]), 400, "invalid_project_rename")
+  for (const ref of [project.slug, "project_bad"]) await f.denied(() => f.rename(ref, "合法"), 400, "invalid_project_rename")
+  for (const suffix of ["?", "?extra=1"]) await f.denied(() => f.raw(path + suffix, '{"name":"合法"}', rawKey), 400, "invalid_project_rename")
+})
+
+integrationTest("R241 rename current owner tenant active and IAM admission precede replay", async (t) => {
+  const f = await r241Fixture(t)
+  const project = await f.project()
+  r241Ack(await f.rename(project.id, "已提交", "replay-key"), project.id, "已提交")
+  const path = `projects/${project.id}/name`
+  for (const [label, identity, status, code] of [
+    ["foreign", { namespace: f.tenant, userId: "other_owner" }, 404, "project_not_found"],
+    ["tenant", { namespace: `${f.tenant}_other`, userId: f.owner }, 403, "product_tenant_forbidden"],
+  ]) {
+    const token = `r241-${label}-${randomUUID()}`
+    f.admission.allow(token, identity)
+    await f.denied(() => f.request(path, "PATCH", { name: "已提交" }, { authorization: `Bearer ${token}`, "idempotency-key": "replay-key" }), status, code)
+  }
+  await f.denied(() => f.rename(`project_${randomUUID()}`, "合法"), 404, "project_not_found")
+  for (const [status, code] of [
+    [401, "session_invalid"],
+    [403, "session_forbidden"],
+    [429, "session_rate_limited"],
+    [503, "iam_admission_unavailable"],
+  ]) {
+    f.admission.deny(f.token, { ok: false, status, code })
+    await f.denied(() => f.rename(project.id, "已提交", "replay-key"), status, code, status === 429 || status === 503)
+  }
+  f.admission.allow(f.token, { namespace: f.tenant, userId: f.owner })
+  await f.denied(
+    () => f.request(path, "PATCH", { name: "合法" }, { authorization: "", "idempotency-key": "missing-session" }),
+    401,
+    "session_authentication_required",
+  )
+  await f.denied(
+    () => f.request(path, "PATCH", { name: "合法" }, { "x-kokoro-internal-secret": "wrong", "idempotency-key": "wrong-service" }),
+    403,
+    "service_auth_failed",
+  )
+  await f.pool.query("UPDATE bff_project SET deleted_at=$2 WHERE project_id=$1", [project.id, r237Tombstone])
+  await f.denied(() => f.rename(project.id, "已提交", "replay-key"), 404, "project_not_found")
+  await f.denied(() => f.rename(project.id, "新名称"), 404, "project_not_found")
+})
+
+integrationTest("R241 rename missing configured tenant returns closed 503 before IAM without facts", async (t) => {
+  const f = await r241Fixture(t)
+  const project = await f.project()
+  r241Ack(await f.rename(project.id, "已提交配置前置", "tenant-config-key"), project.id, "已提交配置前置")
+  const beforeRestart = await f.facts()
+  const calls = f.admission.calls.length
+  await f.restart("") // Empty is intentional: null falls back to the default tenant in bffConfig.
+  for (const key of ["tenant-config-key", "tenant-config-new-key"]) {
+    await f.denied(() => f.rename(project.id, "已提交配置前置", key), 503, "product_tenant_not_configured", true)
+    assert.equal(f.admission.calls.length, calls, "missing configured tenant must reject before IAM verification")
+  }
+  assert.deepEqual(await f.facts(), beforeRestart, "configuration failure changed owner facts across restart")
+})
+// R241 lifecycle: scheduling/fault seams forward every SQL to the real owned PG client.
+async function r241Until(read, timeout = 800) {
+  const end = performance.now() + timeout
+  while (performance.now() < end) {
+    const value = await read()
+    if (value) return value
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+  throw new Error("R241 real PostgreSQL phase was not observed before deadline")
+}
+
+function r241ObservePool(pool, afterQuery = async () => {}) {
+  const connect = pool.connect
+  const originals = new Map()
+  const leases = []
+  let sequence = 0
+  let restored = false
+  pool.connect = async function (...args) {
+    assert.equal(args.length, 0, "this seam observes production promise-based checkouts, not callback pool queries")
+    const client = await connect.apply(this, args)
+    if (!originals.has(client)) originals.set(client, { query: client.query, release: client.release, fixtureErrors: [] })
+    const original = originals.get(client)
+    original.release = client.release // pg-pool replaces this closure for every checkout.
+    const release = client.release
+    const lease = {
+      client,
+      acquiredAt: performance.now(),
+      pid: client.processID,
+      events: [],
+      releases: [],
+      listeners: [],
+      fixtureErrors: original.fixtureErrors,
+    }
+    leases.push(lease)
+    client.query = async function (...queryArgs) {
+      const [sql, values] = queryArgs
+      const event = { sql, values, started: performance.now(), result: null, order: null }
+      lease.events.push(event)
+      if (sql === "BEGIN") lease.listeners = this.listeners("error")
+      let result
+      try {
+        result = await original.query.apply(this, queryArgs)
+      } catch (error) {
+        event.errorCode = error.code
+        event.finished = performance.now()
+        throw error
+      }
+      event.finished = performance.now()
+      event.result = result
+      event.order = ++sequence
+      await afterQuery(lease, event)
+      return result
+    }
+    client.release = function (destroy) {
+      lease.releases.push({ destroy: destroy === true, listeners: this.listeners("error") })
+      return release.call(this, destroy)
+    }
+    return client
+  }
+  return {
+    leases,
+    restore() {
+      if (restored) return
+      restored = true
+      pool.connect = connect
+      for (const [client, original] of originals) {
+        client.query = original.query
+        client.release = original.release
+        for (const listener of original.fixtureErrors) client.removeListener("error", listener)
+      }
+      process.stdout.write(
+        `# R241_LEASE_OBSERVATION ${JSON.stringify({
+          pool: { total: pool.totalCount, idle: pool.idleCount, waiting: pool.waitingCount },
+          leases: leases.map((lease) => ({
+            pid: lease.pid,
+            phases: lease.events.map((event) => ({
+              sql: event.sql.slice(0, 65),
+              completed: event.result !== null,
+              order: event.order,
+              elapsedMs: event.finished === undefined ? null : event.finished - event.started,
+            })),
+            releases: lease.releases.map((value) => value.destroy),
+            productionListeners: lease.listeners.length,
+            productionListenersAfter: lease.listeners.filter((listener) => lease.client.listeners("error").includes(listener)).length,
+          })),
+        })}\n`,
+      )
+      for (const [client, original] of originals) {
+        assert.equal(client.query, original.query)
+        for (const lease of leases.filter((item) => item.client === client))
+          for (const listener of lease.listeners)
+            assert.equal(client.listeners("error").includes(listener), false, "production lease listener survived release")
+      }
+      assert.equal(pool.connect, connect)
+    },
+  }
+}
+
+function r241StorageError(result) {
+  assert.equal(result.status, 503, JSON.stringify(result.body))
+  r241Headers(result)
+  assert.deepEqual(Object.keys(result.body), ["error"])
+  assert.deepEqual(Object.keys(result.body.error).sort(), ["code", "message", "retryable"])
+  assert.equal(result.body.error.code, "business_store_unavailable")
+  assert.equal(result.body.error.retryable, true)
+  assert.ok(typeof result.body.error.message === "string" && result.body.error.message.length > 0)
+}
+
+const r241Scope = (f, project, key) => JSON.stringify([f.tenant, f.owner, "project.rename:v1", project.id, key])
+const r241Observed = (promise) =>
+  promise.then(
+    (value) => ({ value }),
+    (error) => ({ error }),
+  )
+function r241Value(result) {
+  assert.equal(result.error, undefined, String(result.error))
+  return result.value
+}
+
+async function r241CommittedFacts(f, before, project, name, receipts) {
+  const { createHash } = await import("node:crypto")
+  const after = await f.facts()
+  const { bff_project: oldProjects, bff_idempotency_receipt: oldReceipts, ...oldOther } = before
+  const { bff_project: projects, bff_idempotency_receipt: stored, ...other } = after
+  assert.deepEqual(other, oldOther, "rename changed unrelated owner facts")
+  assert.deepEqual(
+    projects.filter((row) => row.project_id !== project.id),
+    oldProjects.filter((row) => row.project_id !== project.id),
+  )
+  const { name: oldName, updated_at: oldTime, ...oldRest } = oldProjects.find((row) => row.project_id === project.id)
+  const { name: currentName, updated_at: currentTime, ...rest } = projects.find((row) => row.project_id === project.id)
+  assert.equal(currentName, name)
+  assert.deepEqual(rest, oldRest)
+  assert.equal(stored.length, oldReceipts.length + receipts.length)
+  for (const old of oldReceipts) assert.ok(stored.some((row) => JSON.stringify(row) === JSON.stringify(old)))
+  for (const [key, receiptName] of receipts) {
+    const rows = stored.filter((row) => row.scope === r241Scope(f, project, key))
+    assert.equal(rows.length, 1)
+    assert.deepEqual(rows[0], {
+      scope: r241Scope(f, project, key),
+      fingerprint: createHash("sha256")
+        .update(JSON.stringify(["project.rename:v1", project.id, receiptName]), "utf8")
+        .digest("hex"),
+      status: 200,
+      response_body: { data: { project_id: project.id, name: receiptName } },
+      created_at: rows[0].created_at,
+    })
+    assert.equal(typeof rows[0].created_at, "string")
+  }
+  return after
+}
+
+async function r241Block(f, project, change) {
+  const client = await f.pool.connect()
+  try {
+    await client.query("BEGIN")
+    if (change === "tombstone")
+      await client.query("UPDATE bff_project SET deleted_at=$2 WHERE project_id=$1 AND tenant_id=$3", [project.id, r237Tombstone, f.tenant])
+    else if (change === "owner")
+      await client.query("UPDATE bff_project SET owner_id='r241_reassigned' WHERE project_id=$1 AND tenant_id=$2", [project.id, f.tenant])
+    else await client.query("SELECT project_id FROM bff_project WHERE tenant_id=$1 AND project_id=$2 FOR UPDATE", [f.tenant, project.id])
+    return client
+  } catch (error) {
+    client.release(true)
+    throw error
+  }
+}
+
+async function r241Blocked(f, blocker, expected = 1) {
+  return r241Until(async () => {
+    const rows = (
+      await f.pool.query(
+        `WITH RECURSIVE waiting AS (
+      SELECT pid FROM pg_stat_activity WHERE datname=current_database() AND $1=ANY(pg_blocking_pids(pid))
+      UNION SELECT a.pid FROM pg_stat_activity a JOIN waiting w ON w.pid=ANY(pg_blocking_pids(a.pid))
+      WHERE a.datname=current_database())
+      SELECT a.pid FROM pg_stat_activity a JOIN waiting w USING(pid)
+      WHERE a.query LIKE '%bff_project%' AND a.query LIKE '%FOR UPDATE%'`,
+        [blocker.processID ?? blocker],
+      )
+    ).rows
+    return rows.length === expected ? rows.map((row) => row.pid) : null
+  })
+}
+
+async function r241Fault(f, scope, mode, seconds = 10) {
+  const name = `r241_${randomUUID().replaceAll("-", "")}`
+  const escaped = scope.replaceAll("'", "''")
+  const action =
+    mode === "raise"
+      ? "RAISE EXCEPTION 'R241_RECEIPT_SQL_FAULT' USING ERRCODE='P0001';"
+      : `PERFORM set_config('application_name','${name}',true); PERFORM pg_sleep(${seconds});`
+  await f.pool.query(
+    `CREATE FUNCTION ${name}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.scope='${escaped}' THEN ${action} END IF; RETURN NEW; END $$`,
+  )
+  try {
+    await f.pool.query(`CREATE TRIGGER ${name} BEFORE INSERT ON bff_idempotency_receipt FOR EACH ROW EXECUTE FUNCTION ${name}()`)
+  } catch (error) {
+    await f.pool.query(`DROP FUNCTION ${name}()`)
+    throw error
+  }
+  let removed = false
+  return {
+    name,
+    async sleeping() {
+      return r241Until(async () => {
+        const rows = (
+          await f.pool.query("SELECT pid FROM pg_stat_activity WHERE datname=current_database() AND application_name=$1 AND wait_event='PgSleep'", [name])
+        ).rows
+        assert.ok(rows.length <= 1)
+        return rows[0]?.pid
+      }, 1500)
+    },
+    async remove() {
+      if (removed) return
+      await f.pool.query(`DROP TRIGGER ${name} ON bff_idempotency_receipt`)
+      await f.pool.query(`DROP FUNCTION ${name}()`)
+      assert.equal((await f.pool.query("SELECT count(*)::int AS n FROM pg_trigger WHERE tgname=$1", [name])).rows[0].n, 0)
+      assert.equal((await f.pool.query("SELECT to_regprocedure($1) AS fn", [`kokoro_bff.${name}()`])).rows[0].fn, null)
+      removed = true
+    },
+  }
+}
+
+async function r241Released(f, observer, pid, destroyed) {
+  const lease = observer.leases.find((item) => item.pid === pid)
+  assert.ok(lease, "fault PID must be the exact observed checkout")
+  await r241Until(() => lease.releases.length === 1, 1500)
+  assert.deepEqual(
+    lease.releases.map((item) => item.destroy),
+    [destroyed],
+  )
+  assert.equal(lease.listeners.length, 1, "checked-out transaction has exactly one production error listener")
+  assert.ok(lease.releases[0].listeners.includes(lease.listeners[0]), "production listener remains through release")
+  assert.equal(lease.client.listeners("error").includes(lease.listeners[0]), false)
+  if (destroyed) await r241Until(async () => (await f.pool.query("SELECT count(*)::int AS n FROM pg_stat_activity WHERE pid=$1", [pid])).rows[0].n === 0, 1500)
+  return lease
+}
+
+async function r241PoolUsable(pool, brokenPid) {
+  const client = await pool.connect()
+  try {
+    const pid = (await client.query("SELECT pg_backend_pid() AS pid")).rows[0].pid
+    if (brokenPid !== undefined) assert.notEqual(pid, brokenPid)
+  } finally {
+    client.release()
+  }
+  await r241Until(() => pool.waitingCount === 0 && pool.totalCount === pool.idleCount, 1500)
+  process.stdout.write(`# R241_POOL_QUIESCENT ${JSON.stringify({ total: pool.totalCount, idle: pool.idleCount, waiting: pool.waitingCount })}\n`)
+}
+
+integrationTest("R241 lifecycle C1 C2 same-key concurrent rename uses two real clients and one write", async (t) => {
+  for (const different of [false, true])
+    await t.test(different ? "C2 different bodies" : "C1 same bodies", async (t) => {
+      const f = await r241Fixture(t)
+      const project = await f.project()
+      const before = await f.facts()
+      const blocker = await r241Block(f, project)
+      const observer = r241ObservePool(f.ownerPool)
+      const names = different ? ["并发 A", "并发 B"] : ["并发同名", "并发同名"]
+      const pending = names.map((name) => r241Observed(f.rename(project.id, name, "same-key")))
+      try {
+        const pids = await r241Blocked(f, blocker, 2)
+        assert.equal(new Set(pids).size, 2)
+        await blocker.query("COMMIT")
+        const responses = (await Promise.all(pending)).map(r241Value)
+        assert.deepEqual(responses.map((result) => result.status).sort(), different ? [200, 409] : [200, 200])
+        const winner = responses.find((result) => result.status === 200).body.data.name
+        for (const result of responses) {
+          if (result.status === 200) r241Ack(result, project.id, winner)
+          else {
+            r241Headers(result)
+            assert.deepEqual(Object.keys(result.body), ["error"])
+            assert.deepEqual(Object.keys(result.body.error).sort(), ["code", "message", "retryable"])
+            assert.equal(result.body.error.code, "idempotency_conflict")
+            assert.equal(result.body.error.retryable, false)
+          }
+        }
+        assert.equal(
+          observer.leases.flatMap((lease) => lease.events).filter((event) => event.sql.startsWith("UPDATE bff_project") && event.result?.rowCount === 1).length,
+          1,
+        )
+        await r241CommittedFacts(f, before, project, winner, [["same-key", winner]])
+        for (const pid of pids) await r241Released(f, observer, pid, false)
+      } finally {
+        await blocker.query("ROLLBACK")
+        blocker.release()
+        await Promise.all(pending)
+        observer.restore()
+      }
+      await r241PoolUsable(f.ownerPool)
+    })
+})
+
+integrationTest("R241 lifecycle C3 different-key LWW follows real Project lock order both ways", async (t) => {
+  for (const names of [
+    ["A", "B"],
+    ["B", "A"],
+  ])
+    await t.test(names.join(" then "), async (t) => {
+      const f = await r241Fixture(t)
+      const project = await f.project()
+      const before = await f.facts()
+      let firstPid
+      let releaseGate
+      const gate = new Promise((resolve) => {
+        releaseGate = resolve
+      })
+      const observer = r241ObservePool(f.ownerPool, async (lease, event) => {
+        if (firstPid === undefined && event.sql.includes("FOR UPDATE") && event.result.rowCount === 1) {
+          firstPid = lease.pid
+          await gate
+        }
+      })
+      const first = r241Observed(f.rename(project.id, names[0], "first"))
+      let second
+      try {
+        await r241Until(() => firstPid)
+        second = r241Observed(f.rename(project.id, names[1], "second"))
+        const [secondPid] = await r241Blocked(f, firstPid)
+        releaseGate()
+        r241Ack(r241Value(await first), project.id, names[0])
+        r241Ack(r241Value(await second), project.id, names[1])
+        const firstLease = await r241Released(f, observer, firstPid, false)
+        const secondLease = await r241Released(f, observer, secondPid, false)
+        assert.ok(firstLease.events.find((e) => e.sql === "COMMIT").order < secondLease.events.find((e) => e.sql === "COMMIT").order)
+        await r241CommittedFacts(f, before, project, names[1], [
+          ["first", names[0]],
+          ["second", names[1]],
+        ])
+      } finally {
+        releaseGate()
+        await first
+        if (second) await second
+        observer.restore()
+      }
+      await r241PoolUsable(f.ownerPool)
+    })
+})
+
+integrationTest("R241 lifecycle Q1-Q4 current locked owner and tombstone beat new or replay receipt", async (t) => {
+  for (const change of ["tombstone", "owner"])
+    for (const replay of [false, true])
+      await t.test(`${change} ${replay ? "old" : "new"} key`, async (t) => {
+        const f = await r241Fixture(t)
+        const project = await f.project()
+        r241Ack(await f.rename(project.id, "原ACK", "old"), project.id, "原ACK")
+        const before = await f.facts()
+        const blocker = await r241Block(f, project, change)
+        const fixtureRow = (await blocker.query("SELECT to_jsonb(p) AS row FROM bff_project p WHERE project_id=$1", [project.id])).rows[0].row
+        const observer = r241ObservePool(f.ownerPool)
+        const pending = r241Observed(f.rename(project.id, "原ACK", replay ? "old" : "new"))
+        try {
+          const [pid] = await r241Blocked(f, blocker)
+          await blocker.query("COMMIT")
+          const result = r241Value(await pending)
+          assert.equal(result.status, 404)
+          r241Headers(result)
+          assert.deepEqual(Object.keys(result.body), ["error"])
+          assert.deepEqual(Object.keys(result.body.error).sort(), ["code", "message", "retryable"])
+          assert.equal(result.body.error.code, "project_not_found")
+          assert.equal(result.body.error.retryable, false)
+          const expected = structuredClone(before)
+          const index = expected.bff_project.findIndex((row) => row.project_id === project.id)
+          expected.bff_project[index] = fixtureRow
+          const actual = await f.facts()
+          const byId = (a, b) => a.project_id.localeCompare(b.project_id)
+          expected.bff_project.sort(byId)
+          actual.bff_project.sort(byId)
+          assert.deepEqual(actual, expected)
+          await r241Released(f, observer, pid, false)
+          assert.equal(
+            observer.leases.flatMap((l) => l.events).some((e) => e.sql.startsWith("SELECT fingerprint")),
+            false,
+            "qualification must precede receipt lookup",
+          )
+        } finally {
+          await blocker.query("ROLLBACK")
+          blocker.release()
+          await pending
+          observer.restore()
+        }
+        await r241PoolUsable(f.ownerPool)
+      })
+})
+
+integrationTest("R241 lifecycle F1 receipt SQL exception rolls back Project and permits same-key recovery", async (t) => {
+  const f = await r241Fixture(t)
+  const project = await f.project()
+  const before = await f.facts()
+  const fault = await r241Fault(f, r241Scope(f, project, "fault"), "raise")
+  const observer = r241ObservePool(f.ownerPool)
+  try {
+    r241StorageError(await f.rename(project.id, "回滚后新名", "fault"))
+    assert.deepEqual(await f.facts(), before)
+    const lease = observer.leases[0]
+    assert.ok(lease.events.some((e) => e.sql.startsWith("UPDATE bff_project") && e.result?.rowCount === 1))
+    assert.ok(lease.events.some((e) => e.sql === "ROLLBACK" && e.result?.command === "ROLLBACK"))
+    assert.ok(
+      lease.events.some((e) => e.sql.startsWith("INSERT INTO bff_idempotency_receipt") && e.errorCode === "P0001"),
+      "precise receipt trigger must raise real PG error",
+    )
+    await r241Released(f, observer, lease.pid, false)
+  } finally {
+    try {
+      await fault.remove()
+    } finally {
+      observer.restore()
+    }
+  }
+  r241Ack(await f.rename(project.id, "回滚后新名", "fault"), project.id, "回滚后新名")
+  await r241CommittedFacts(f, before, project, "回滚后新名", [["fault", "回滚后新名"]])
+  await r241PoolUsable(f.ownerPool)
+})
+
+integrationTest("R241 lifecycle F2 real receipt backend termination destroys exact client and fully rolls back", async (t) => {
+  const f = await r241Fixture(t)
+  const project = await f.project()
+  const before = await f.facts()
+  const fault = await r241Fault(f, r241Scope(f, project, "terminate"), "sleep")
+  const observer = r241ObservePool(f.ownerPool)
+  const started = performance.now()
+  const pending = r241Observed(f.rename(project.id, "终止恢复", "terminate"))
+  let pid
+  try {
+    pid = await fault.sleeping()
+    const lease = observer.leases.find((l) => l.pid === pid)
+    assert.ok(lease)
+    assert.ok(lease.events.some((e) => e.sql.startsWith("UPDATE bff_project") && e.result?.rowCount === 1))
+    assert.equal((await f.pool.query("SELECT pg_terminate_backend($1) AS done", [pid])).rows[0].done, true)
+    r241StorageError(r241Value(await pending))
+    assert.ok(performance.now() - started < 5000)
+    await r241Released(f, observer, pid, true)
+    assert.deepEqual(await f.facts(), before)
+  } finally {
+    await pending
+    try {
+      await fault.remove()
+    } finally {
+      observer.restore()
+    }
+  }
+  await r241PoolUsable(f.ownerPool, pid)
+  r241Ack(await f.rename(project.id, "终止恢复", "terminate"), project.id, "终止恢复")
+  await r241CommittedFacts(f, before, project, "终止恢复", [["terminate", "终止恢复"]])
+})
+
+integrationTest("R241 lifecycle F4 real COMMIT result lost ACK reconciles once and never overwrites later B", async (t) => {
+  for (const laterB of [false, true])
+    await t.test(laterB ? "B then old A" : "same-key A recovery", async (t) => {
+      const f = await r241Fixture(t)
+      const project = await f.project()
+      const before = await f.facts()
+      let brokenPid
+      const observer = r241ObservePool(f.ownerPool, async (lease, event) => {
+        if (event.sql.startsWith("INSERT INTO bff_idempotency_receipt") && event.values[0] === r241Scope(f, project, "A") && event.result.rowCount === 1)
+          lease.inserted = true
+        if (lease.inserted && brokenPid === undefined && event.sql === "COMMIT") {
+          assert.equal(event.result.command, "COMMIT")
+          brokenPid = lease.pid
+          const absorb = () => {}
+          lease.fixtureErrors.push(absorb)
+          lease.client.on("error", absorb)
+          lease.client.connection.stream.destroy()
+          throw new Error("R241_REAL_COMMIT_ACK_LOST")
+        }
+      })
+      try {
+        r241StorageError(await f.rename(project.id, "A", "A"))
+        assert.ok(brokenPid)
+        const lease = await r241Released(f, observer, brokenPid, true)
+        assert.equal(
+          lease.events.some((e) => e.sql === "ROLLBACK"),
+          false,
+        )
+        await r241CommittedFacts(f, before, project, "A", [["A", "A"]])
+      } finally {
+        observer.restore()
+      }
+      await r241PoolUsable(f.ownerPool, brokenPid)
+      if (laterB) r241Ack(await f.rename(project.id, "B", "B"), project.id, "B")
+      const beforeReplay = await f.facts()
+      const calls = f.admission.calls.length
+      r241Ack(await f.rename(project.id, "A", "A"), project.id, "A")
+      assert.equal(f.admission.calls.length, calls + 1)
+      assert.deepEqual(await f.facts(), beforeReplay)
+      await r241CommittedFacts(
+        f,
+        before,
+        project,
+        laterB ? "B" : "A",
+        laterB
+          ? [
+              ["A", "A"],
+              ["B", "B"],
+            ]
+          : [["A", "A"]],
+      )
+      await f.restart()
+      assert.equal((await f.request(`projects/${project.id}`)).body.data.project.name, laterB ? "B" : "A")
+    })
+})
+
+integrationTest("R241 lifecycle L1 saturated max10 pool spends one budget and normally returns late unbegun client", { timeout: 12000 }, async (t) => {
+  const f = await r241Fixture(t)
+  const project = await f.project()
+  const before = await f.facts()
+  const pool = f.ownerPool
+  assert.equal(pool.options.max, 10)
+  const held = []
+  let pending
+  let observer
+  try {
+    for (let i = 0; i < 10; i++) held.push(await pool.connect())
+    assert.equal(pool.totalCount, 10)
+    assert.equal(pool.idleCount, 0)
+    observer = r241ObservePool(pool)
+    const started = performance.now()
+    pending = r241Observed(f.rename(project.id, "等待恢复", "pool"))
+    await r241Until(() => pool.waitingCount === 1, 1500)
+    r241StorageError(r241Value(await pending))
+    const elapsed = performance.now() - started
+    t.diagnostic(`L1 elapsed_ms=${elapsed}`)
+    assert.ok(elapsed >= 4200 && elapsed < 5000, `single acquire budget elapsed ${elapsed}`)
+    assert.deepEqual(await f.facts(), before)
+    assert.equal(observer.leases.length, 0, "no acquired client means no BEGIN")
+    held.shift().release()
+    await r241Until(() => observer.leases.length === 1 && observer.leases[0].releases.length === 1 && pool.waitingCount === 0, 1500)
+    assert.deepEqual(observer.leases[0].events, [])
+    assert.deepEqual(
+      observer.leases[0].releases.map((x) => x.destroy),
+      [false],
+    )
+    assert.equal(pool.totalCount, 10)
+    assert.equal(pool.idleCount, 1, "late client returns normally while nine slots remain held")
+    assert.deepEqual(await f.facts(), before)
+  } finally {
+    for (const client of held) client.release()
+    if (pending) await pending
+    if (observer) observer.restore()
+  }
+  await r241PoolUsable(pool)
+  r241Ack(await f.rename(project.id, "等待恢复", "pool"), project.id, "等待恢复")
+  await r241CommittedFacts(f, before, project, "等待恢复", [["pool", "等待恢复"]])
+})
+
+integrationTest("R241 lifecycle L2 real Project lock expires within one second and same key recovers", async (t) => {
+  const f = await r241Fixture(t)
+  const project = await f.project()
+  const before = await f.facts()
+  const blocker = await r241Block(f, project)
+  const observer = r241ObservePool(f.ownerPool)
+  const started = performance.now()
+  const pending = r241Observed(f.rename(project.id, "锁恢复", "lock"))
+  try {
+    const [pid] = await r241Blocked(f, blocker)
+    r241StorageError(r241Value(await pending))
+    const elapsed = performance.now() - started
+    t.diagnostic(`L2 elapsed_ms=${elapsed}`)
+    assert.ok(elapsed >= 800 && elapsed < 2000, `lock timeout elapsed ${elapsed}`)
+    assert.deepEqual(await f.facts(), before)
+    await r241Released(f, observer, pid, false)
+    assert.equal((await blocker.query("SELECT 1 AS value")).rows[0].value, 1, "unrelated owned blocker is not killed")
+  } finally {
+    await blocker.query("ROLLBACK")
+    blocker.release()
+    await pending
+    observer.restore()
+  }
+  await r241PoolUsable(f.ownerPool)
+  r241Ack(await f.rename(project.id, "锁恢复", "lock"), project.id, "锁恢复")
+  await r241CommittedFacts(f, before, project, "锁恢复", [["lock", "锁恢复"]])
+})
+
+integrationTest("R241 lifecycle L3 acquire lock and real PgSleep share one cumulative 4.5 second deadline", { timeout: 12000 }, async (t) => {
+  const f = await r241Fixture(t)
+  const project = await f.project()
+  const before = await f.facts()
+  const pool = f.ownerPool
+  const fault = await r241Fault(f, r241Scope(f, project, "cumulative"), "sleep", 3)
+  const blocker = await r241Block(f, project)
+  const held = []
+  let observer
+  let pending
+  let pid
+  try {
+    assert.equal(pool.options.max, 10)
+    for (let i = 0; i < 10; i++) held.push(await pool.connect())
+    observer = r241ObservePool(pool)
+    const started = performance.now()
+    pending = r241Observed(f.rename(project.id, "累计恢复", "cumulative"))
+    await r241Until(() => pool.waitingCount === 1, 1500)
+    await new Promise((resolve) => setTimeout(resolve, 1500))
+    held.shift().release()
+    ;[pid] = await r241Blocked(f, blocker)
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    await blocker.query("COMMIT")
+    assert.equal(await fault.sleeping(), pid)
+    r241StorageError(r241Value(await pending))
+    const elapsed = performance.now() - started
+    t.diagnostic(`L3 elapsed_ms=${elapsed}`)
+    assert.ok(elapsed >= 4200 && elapsed < 5000, `cumulative deadline elapsed ${elapsed}`)
+    const lease = await r241Released(f, observer, pid, true)
+    assert.ok(lease.acquiredAt - started >= 1400, "real pool phase consumed the shared budget")
+    const lock = lease.events.find((e) => e.sql.includes("FOR UPDATE"))
+    assert.ok(lock.finished - lock.started >= 400 && lock.finished - lock.started < 1000, "real parent lock phase consumed the same budget")
+    assert.ok(lease.events.some((e) => e.sql.startsWith("UPDATE bff_project") && e.result?.rowCount === 1))
+    assert.equal(
+      lease.events.some((e) => e.sql === "COMMIT"),
+      false,
+    )
+    assert.deepEqual(await f.facts(), before)
+  } finally {
+    await blocker.query("ROLLBACK")
+    blocker.release()
+    for (const client of held) client.release()
+    if (pending) await pending
+    try {
+      await fault.remove()
+    } finally {
+      if (observer) observer.restore()
+    }
+  }
+  await r241PoolUsable(pool, pid)
+  assert.deepEqual(await f.facts(), before, "no late SQL write after real sleeping backend disappearance")
+  r241Ack(await f.rename(project.id, "累计恢复", "cumulative"), project.id, "累计恢复")
+  await r241CommittedFacts(f, before, project, "累计恢复", [["cumulative", "累计恢复"]])
+})
+
+integrationTest("R241 lifecycle L6 HTTP abort during real Project lock or receipt SQL kills exact backend", async (t) => {
+  for (const phase of ["lock", "receipt"])
+    await t.test(phase, async (t) => {
+      const f = await r241Fixture(t)
+      const project = await f.project()
+      const before = await f.facts()
+      const blocker = phase === "lock" ? await r241Block(f, project) : null
+      const fault = phase === "receipt" ? await r241Fault(f, r241Scope(f, project, "abort"), "sleep") : null
+      const observer = r241ObservePool(f.ownerPool)
+      const controller = new AbortController()
+      const pending = r241Observed(f.rename(project.id, "取消恢复", "abort", controller.signal))
+      let pid
+      try {
+        pid = blocker ? (await r241Blocked(f, blocker))[0] : await fault.sleeping()
+        const started = performance.now()
+        controller.abort()
+        const result = await pending
+        assert.ok(result.error, "aborted HTTP must not receive a successful response")
+        assert.ok(performance.now() - started < 1500)
+        const lease = await r241Released(f, observer, pid, true)
+        if (phase === "receipt") assert.ok(lease.events.some((e) => e.sql.startsWith("UPDATE bff_project") && e.result?.rowCount === 1))
+        assert.deepEqual(await f.facts(), before)
+        observer.restore()
+        await r241PoolUsable(f.ownerPool, pid) // Replacement succeeds before the parent blocker is released.
+      } finally {
+        controller.abort()
+        if (blocker) {
+          await blocker.query("ROLLBACK")
+          blocker.release()
+        }
+        await pending
+        try {
+          if (fault) await fault.remove()
+        } finally {
+          observer.restore()
+        }
+      }
+      r241Ack(await f.rename(project.id, "取消恢复", "abort"), project.id, "取消恢复")
+      await r241CommittedFacts(f, before, project, "取消恢复", [["abort", "取消恢复"]])
+    })
+})

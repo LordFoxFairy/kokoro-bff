@@ -1,3 +1,25 @@
+## R241 Project rename 候选完整 owner 验收（2026-10-05；待精确 Git 交付）
+
+当前已实现 canonical Project name PATCH，public OpenAPI 候选 `7.2.0` / 91 operations；本节覆盖下方 R240“仅合同/未实施/待复测”的旧阶段时态。正式基线 `cdad0ad6580dcbca18b75fdfbdbac4aa61f750d2` 不变，新交付 commit 尚未产生；原20protected mixed不进入切片。
+
+有限功能：name严格输入/最小ACK、当前IAM→锁内active owner→同事务receipt、LWW/no-op、旧key不覆盖、权威GET/list/旧slug/重建服务读回及所选系统失败恢复均已形成候选。源码事务 SHA `aa4da6fc75e1732e240d0cf59afdc62a7bdafb81b7b2b156c15e6570f6792cb8`；测试 SHA `b480f9d2455d279b1d26df6903577eba74de465d0a7464effc50fc74f772021a`。
+
+Root7719原样基础五组+所选17叶：TAP含父子27pass/0fail/0skip；旧L6 receipt取消失败经transaction-local100ms窄修关闭，原1500ms oracle未放宽。该证据不是27个独立用例或取消300ms SLA；Linux/macOS研发CI平台边界不等于两种OS均已实跑，静默network partition不在断链检查保证内。
+
+Root82423完整门终态0：installer/build/check/format均0；默认check745pass/2资源skip，另行真实PG/Redis integration244pass/0fail/0skip（TAP约73.820秒，进程step约76.898秒）。manifest `/var/folders/gn/wbk8wfbd047_wvwkwtyn331r0000gn/T/kokoro-r241-bff-full-27__lc_g/manifest.json` 记录source_hashes_equal、redis_keys_equal、secondary_dbs_unchanged均true，自有DB已回收；默认skip不冒资源通过。定点27证据 `/var/folders/gn/wbk8wfbd047_wvwkwtyn331r0000gn/T/kokoro-r241-bff-http-green-t7yto45m/manifest.json`。
+
+当前独审 `/tmp/r241-rename-lifecycle-review.md` 为0P0/0P1/1P2，剩余P2仅R240旧时态；本四前缀供Root窄审关闭该文档项，不预写已关闭。未选C4/C5/F3/L4/L5/L7、同PID后继setting实测、正式IAM/Web组合仍OPEN；无生产DELETE或Task/Storage/Run完整删除完成声明。
+
+后继owner：Root独占四文档复审、精确Git交付/发布commit与digest；Web owner在正式owner发布后另卡接入并验证ACK→GET→刷新。当前未发布producer、未消费者repin、未启用3310、无push；本轮docs-only，不重跑或冒领Root资源验收。
+
+## R240 rename 机器合同候选（2026-10-05；待 Root 独审）
+
+正式基线为本地 main `cdad0ad6580dcbca18b75fdfbdbac4aa61f750d2`，active 前置已交付；下方历史“候选/未实施”描述不再否定该 commit。此次从该 HEAD 的 clean artifact 构建，原 20 protected mixed 完全不进入交付。
+
+候选只将唯一 public OpenAPI 升为 7.2.0/91 operations，增加 `renameProject` 独立 name PATCH；原 90 项与 instruction 合同保持。同步正常生成的 inventory、窄语义/合同门及四设计当前前缀；无 source/schema/installer/依赖/消费者 pin 变更。
+
+本次无资源合同检查结果以 `/tmp/r240-bff-rename-contract-handoff.md` 与 JSON manifest 为准，Root 仍需独立复验。机器合同不等于 endpoint 可用：真实 HTTP/PG RED、实现、失败恢复、完整 owner 门、正式发布和 Web ACK→权威 GET→刷新保持均待后继卡。没有生产 DELETE writer，完整 Task/Storage/Run 删除生命周期仍 OPEN；不启用用户 3310 组合、不 push。
+
 ## R239 Project active前置Root完整验收（2026-10-05；本地交付身份以Git与Root收据为准）
 
 本节为当前已验证候选事实；下方R236为实施前设计记录，其“未实施/未验证”时态由本节替代，位置及边界说明仍有效。基线main 7289b3a4ae8f2df5c249350d59b9405c33fb4083，本地交付身份以本仓Git与Root收据为准，尚未启用用户3310组合。

@@ -1,3 +1,4 @@
+import { projectRenameRoute } from "../http/routes/project-rename.js"
 import { projectResourceListRoute } from "../http/routes/project-resource-list.js"
 import { libraryFileListRoute } from "../http/routes/library-file-list.js"
 import { personalFileUploadRoute } from "../http/routes/personal-file-upload.js"
@@ -157,6 +158,12 @@ async function handle(
   }
 
   const businessPath = segments.slice(1)
+  const isProjectRenamePath =
+    composition.routeHandler === undefined &&
+    request.method === "PATCH" &&
+    businessPath.length === 3 &&
+    businessPath[0] === "projects" &&
+    businessPath[2] === "name"
   const isMoveSessionPath =
     composition.routeHandler === undefined &&
     request.method === "POST" &&
@@ -203,7 +210,8 @@ async function handle(
         isSkillPublishPath ||
         isSkillInstallationPath ||
         isPlatformProjectionRead ||
-        isMoveSessionPath
+        isMoveSessionPath ||
+        isProjectRenamePath
       ) {
         response.setHeader("cache-control", "no-store")
         send(
@@ -217,6 +225,11 @@ async function handle(
     return
   }
   const context = admission.context
+
+  if (isProjectRenamePath) {
+    await projectRenameRoute(request, response, context, businessPath[1] ?? "", composition.businessStore)
+    return
+  }
 
   if (isMoveSessionPath) {
     await moveSessionRoute(request, response, context, businessPath[1] ?? "", composition.businessStore)

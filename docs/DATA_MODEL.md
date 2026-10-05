@@ -1,3 +1,27 @@
+## R241 rename 原子数据当前实现（2026-10-05；零 DDL）
+
+本节替代下方 R240“没有生产 name writer/尚未实施”的旧时态：当前候选已实现具名 name writer，仍没有生产墓碑/DELETE writer；唯一 canonical schema、installer、ID/slug/instruction与其它关联模型保持不变。准确候选身份及 Root 资源收据见 CURRENT R241。
+
+同一 checked-out client 事务现在执行可信 tenant/owner/canonical active Project FOR UPDATE→receipt→必要 name/updated_at 定列更新→终态200 receipt→COMMIT；scope/fingerprint沿已批定义。no-op不改任何Project字段含updated_at，旧key不覆盖新名，资格失败先于receipt。所选真双连接锁序、墓碑/owner×新旧key、receipt触发器异常、backend终止、真实COMMIT后调用者ACK丢失及同key恢复已验收，full-owner facts oracle限定只有合法目标变化。
+
+取消窄修仅transaction-local100ms断链检查；原L6长SQL取消后PID消失/全回滚/精确client销毁与listener卸载/替换查询/同key恢复通过。事务结束恢复配置属于local=true语义，当前未直接实测同PID后继checkout的setting零外泄；不将其写成新增实证，也不承诺静默网络分区SLA。
+
+本片无新表/列/version/CAS/DDL或跨owner SQL。C4/C5/F3/L4/L5/L7仍OPEN；Task/Storage/Run/Share/stream完整删除生命周期和真实用户组合仍待对应owner后继。
+
+## R240 Project rename 数据设计（2026-10-05；零 DDL）
+
+R241 取消窄修（待 Root 复测）：现 rename 的 BEGIN 后 timeout SQL 增加 `set_config('client_connection_check_interval','100ms',true)`，仅本事务生效、不污染 pool 后继事务且零 DDL，沿 exact-client 销毁回滚未提交事实；平台边界限 Linux/macOS 研发与 CI，其它 OS 未验证，未知 COMMIT 对账与原预算不变。
+
+正式 `cdad0ad6580dcbca18b75fdfbdbac4aa61f750d2` 已有 nullable `bff_project.deleted_at` 与 owner_list partial index；该 active 前置满足 rename，无 canonical SQL/installer/表/列/索引变化。本片没有生产 name 或墓碑 writer。
+
+后继用现 `bff_project` 与 `bff_idempotency_receipt` 的一个 client/事务：BEGIN→可信 tenant/subject/canonical ID/active 的 Project FOR UPDATE→receipt→必要 name/updated_at 定列更新→终态 200 receipt→COMMIT。保 ID/slug/instruction/所有关联；normalized name 相同则 Project 全列含 updated_at 不变，新 key 仍写一 receipt。不同 key 按锁串行的最后合法提交生效，无 version/ETag/CAS。
+
+scope 为 JSON `[tenant,subject,"project.rename:v1",projectId,key]`；fingerprint 为 UTF-8 SHA-256(JSON `["project.rename:v1",projectId,normalizedName]`)。不调用事务外 claim/put/pending helper，不建 Map fallback。当前 active/owner 资格总在 receipt 前；同 key 异 normalized name 409，旧 key 只回原 ACK，绝不覆盖后来名称。腐坏/错资源/非 200 receipt 为存储 503，不重写事实。
+
+未知 COMMIT 允许事实已提交而 HTTP 503；后续新请求重验授权并按原 receipt 对账，零额外 UPDATE。有限预算/连接处置见 TECH 当前节。Root 后继真 PG oracle：no-op 只多 receipt；重放/权限/非法输入失败全 owner 事实零差；中段异常全回滚；COMMIT ACK 丢失后只一提交；父锁改变 owner/墓碑后拒绝；rename 与 instruction 并发各自保字段。
+
+本次未运行数据库测试；旧 active 的 217 资源门不是 rename 证据。Task/Storage/Run/Share/stream 的完整删除生命周期未完成，不引入删除三表、外 owner SQL 或公开 DELETE。
+
 ## R239 Project active canonical当前态（2026-10-05）
 
 本节为当前已验证候选事实；下方R236为实施前设计记录，其“未实施/未验证”时态由本节替代，位置及边界说明仍有效。基线main 7289b3a4ae8f2df5c249350d59b9405c33fb4083，本地交付身份以本仓Git与Root收据为准，尚未启用用户3310组合。

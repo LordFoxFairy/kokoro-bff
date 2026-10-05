@@ -1,12 +1,31 @@
+import { createHash } from "node:crypto"
+
 import type { Project, ProjectInstructionRevision, Task } from "../contracts/index.js"
-import type { ProjectOwnerScope, ProjectRepository } from "./ports/project-repository.js"
+import type { ProjectOwnerScope, ProjectRepository, RenameProjectResult } from "./ports/project-repository.js"
 
 /** Project use cases. HTTP handlers depend on this service, not on SQL adapters. */
 export class ProjectService {
   public constructor(private readonly repository: ProjectRepository) {}
 
-  public list(scope: ProjectOwnerScope): Promise<Project[]> { return this.repository.listProjects(scope) }
-  public find(scope: ProjectOwnerScope, idOrSlug: string): Promise<Project | null> { return this.repository.findProject(scope, idOrSlug) }
+  public rename(scope: ProjectOwnerScope, projectId: string, name: string, key: string, signal: AbortSignal): Promise<RenameProjectResult> {
+    return this.repository.renameProject({
+      ...scope,
+      projectId,
+      name,
+      signal,
+      receiptScope: JSON.stringify([scope.tenantId, scope.subjectId, "project.rename:v1", projectId, key]),
+      fingerprint: createHash("sha256")
+        .update(JSON.stringify(["project.rename:v1", projectId, name]), "utf8")
+        .digest("hex"),
+    })
+  }
+
+  public list(scope: ProjectOwnerScope): Promise<Project[]> {
+    return this.repository.listProjects(scope)
+  }
+  public find(scope: ProjectOwnerScope, idOrSlug: string): Promise<Project | null> {
+    return this.repository.findProject(scope, idOrSlug)
+  }
   public create(scope: ProjectOwnerScope, name: string, description: string): Promise<Project> {
     return this.repository.createProject(scope, name, description)
   }
@@ -19,5 +38,7 @@ export class ProjectService {
   public setSkill(scope: ProjectOwnerScope, projectId: string, skillName: string, enabled: boolean): Promise<boolean> {
     return this.repository.setProjectSkill(scope, projectId, skillName, enabled)
   }
-  public tasks(scope: ProjectOwnerScope, projectId: string): Promise<Task[] | null> { return this.repository.listTasks(scope, projectId) }
+  public tasks(scope: ProjectOwnerScope, projectId: string): Promise<Task[] | null> {
+    return this.repository.listTasks(scope, projectId)
+  }
 }

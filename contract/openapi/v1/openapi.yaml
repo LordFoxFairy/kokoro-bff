@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 7.1.0
+  version: 7.2.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -1178,6 +1178,52 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /v1/projects/{projectId}/name:
+    parameters:
+      - $ref: '#/components/parameters/RenameProjectId'
+    patch:
+      tags: [Projects]
+      operationId: renameProject
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: project.update
+      summary: Set the display name of an owned active Project
+      description: >-
+        Accepts exactly one application/json Content-Type and at most 65536 raw body bytes;
+        no query (including a bare question mark), slug alias, duplicate JSON keys,
+        malformed UTF-8, lone surrogate, extra fields or U+0000 are accepted.
+        Missing Idempotency-Key is idempotency_key_required; a malformed or repeated key,
+        invalid canonical ID, body or oversized body is invalid_project_rename (400).
+        Every request, including replay, requires current IAM admission and locked active
+        tenant/owner qualification before reading the receipt; invisible Projects return 404.
+        Only name and, when changed, updated_at are written; ID, slug, instruction and all
+        associations remain unchanged. Setting the current normalized name is a no-op for
+        Project facts, but a new key still records its final receipt in the same transaction.
+        Different keys use last legal serialized commit wins, without version, ETag or If-Match.
+        An old key returns only its original ACK and never rewrites a newer name; GET/list
+        after ACK is authoritative and may already reflect a subsequent legal commit.
+        The same scoped key with a different normalized name returns 409 idempotency_conflict.
+        Name and the existing durable receipt commit atomically. An unknown COMMIT returns
+        503; a later same-key request repeats admission and current authorization before
+        reconciling the original receipt. Request IDs exist only in response headers.
+      parameters:
+        - $ref: '#/components/parameters/RenameProjectIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RenameProjectRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/RenameProjectSuccess' }
+        '400': { $ref: '#/components/responses/RenameProjectBadRequest' }
+        '401': { $ref: '#/components/responses/RenameProjectUnauthorized' }
+        '403': { $ref: '#/components/responses/RenameProjectForbidden' }
+        '404': { $ref: '#/components/responses/RenameProjectNotFound' }
+        '409': { $ref: '#/components/responses/RenameProjectConflict' }
+        '429': { $ref: '#/components/responses/RenameProjectRateLimited' }
+        '503': { $ref: '#/components/responses/RenameProjectUnavailable' }
   /v1/projects/{projectId}:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -3649,6 +3695,24 @@ components:
       schema:
         $ref: '#/components/schemas/EventCursor'
       example: agui_0123456789abcdef0123456789abcdef
+    RenameProjectId:
+      name: projectId
+      in: path
+      required: true
+      description: Canonical Project ID only; existing GET by ID or slug is unchanged.
+      schema:
+        type: string
+        pattern: '^project_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    RenameProjectIdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Must occur exactly once; 1..128 printable ASCII characters excluding whitespace and comma, without trimming or merging.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+        pattern: '^[\x21-\x2B\x2D-\x7E]{1,128}$'
     ProjectId:
       name: projectId
       in: path
@@ -5446,6 +5510,54 @@ components:
 
         id: agui_abcdef0123456789abcdef0123456789ab
         data: {"type":"RUN_FINISHED","timestamp":1767225605000,"threadId":"session_kokoro","runId":"run_01JASYNC","metadata":{"kokoro":{"event_id":"agent_event_5","seq":5,"session_id":"session_kokoro","run_id":"run_01JASYNC","timestamp":"2026-01-01T00:00:05.000Z"}}}
+    RenameProjectRequest:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          description: >-
+            Apply ECMAScript trim, then require 1..160 UTF-16 code units. U+0000 is invalid.
+            Internal whitespace, case and Unicode normalization remain unchanged; duplicate
+            display names are allowed. The limit applies after trimming, not to raw Unicode
+            code points; 80 astral characters fit, 81 do not. Existing creation rules are unchanged.
+          pattern: '^[^\u0000]*$'
+      example: { name: '  我的项目  ' }
+    RenameProjectResponse:
+      type: object
+      required: [data]
+      additionalProperties: false
+      properties:
+        data:
+          type: object
+          required: [project_id, name]
+          additionalProperties: false
+          properties:
+            project_id: { type: string, pattern: '^project_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' }
+            name:
+              type: string
+              minLength: 1
+              maxLength: 160
+              pattern: '^[^\u0000]*$'
+              description: Normalized first-success name, 1..160 UTF-16 code units; replay never substitutes the current Project name.
+      example:
+        data: { project_id: project_12345678-1234-1234-1234-123456789abc, name: 我的项目 }
+    RenameProjectErrorResponse:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error:
+          type: object
+          required: [code, message, retryable]
+          additionalProperties: false
+          properties:
+            code:
+              type: string
+              enum: [invalid_project_rename, idempotency_key_required, session_authentication_required, session_invalid, service_auth_failed, session_forbidden, product_tenant_forbidden, project_not_found, idempotency_conflict, session_rate_limited, business_store_unavailable, iam_admission_unavailable, product_tenant_not_configured]
+            message: { type: string, minLength: 1 }
+            retryable: { type: boolean }
     MoveSessionRequest:
       type: object
       required: [target_project_id]
@@ -8029,6 +8141,135 @@ components:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/SkillDraftErrorResponse' }
+    RenameProjectSuccess:
+      description: Atomic name and final receipt ACK; use GET for the current Project
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RenameProjectResponse'
+    RenameProjectBadRequest:
+      description: Project rename BadRequest; no resource or receipt mutation
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/RenameProjectErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [invalid_project_rename, idempotency_key_required] }
+                      retryable: { type: boolean, const: false }
+    RenameProjectUnauthorized:
+      description: Project rename Unauthorized; no resource or receipt mutation
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/RenameProjectErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [session_authentication_required, session_invalid] }
+                      retryable: { type: boolean, const: false }
+    RenameProjectForbidden:
+      description: Project rename Forbidden; no resource or receipt mutation
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/RenameProjectErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [service_auth_failed, session_forbidden, product_tenant_forbidden] }
+                      retryable: { type: boolean, const: false }
+    RenameProjectNotFound:
+      description: Project rename NotFound; no resource or receipt mutation
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/RenameProjectErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [project_not_found] }
+                      retryable: { type: boolean, const: false }
+    RenameProjectConflict:
+      description: Project rename Conflict; no resource or receipt mutation
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/RenameProjectErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [idempotency_conflict] }
+                      retryable: { type: boolean, const: false }
+    RenameProjectRateLimited:
+      description: Project rename RateLimited; no resource or receipt mutation
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+        Retry-After: { required: false, schema: { type: string, pattern: '^(?:[1-9][0-9]{0,3}|[1-7][0-9]{4}|8[0-5][0-9]{3}|86[0-3][0-9]{2}|86400)(?![\s\S])' } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/RenameProjectErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [session_rate_limited] }
+                      retryable: { type: boolean, const: true }
+    RenameProjectUnavailable:
+      description: Storage, admission or configuration unavailable, or COMMIT outcome unknown; retry with the same key
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/RenameProjectErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [business_store_unavailable, iam_admission_unavailable, product_tenant_not_configured] }
+                      retryable: { type: boolean, const: true }
     MoveSessionSuccess:
       description: Atomic Conversation move and final idempotency receipt
       headers:

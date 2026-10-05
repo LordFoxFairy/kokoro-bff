@@ -5,8 +5,21 @@ export type ProjectOwnerScope = Readonly<{
   subjectId: string
 }>
 
+export type RenameProjectCommand = ProjectOwnerScope &
+  Readonly<{
+    projectId: string
+    name: string
+    receiptScope: string
+    fingerprint: string
+    signal: AbortSignal
+  }>
+
+export type RenameProjectReceipt = Readonly<{ data: Readonly<{ project_id: string; name: string }> }>
+export type RenameProjectResult = Readonly<{ kind: "renamed"; receipt: RenameProjectReceipt }> | Readonly<{ kind: "not_found" | "conflict" }>
+
 /** Port consumed by the BFF application layer. It contains no SQL or driver types. */
 export interface ProjectRepository {
+  renameProject(command: RenameProjectCommand): Promise<RenameProjectResult>
   listProjects(scope: ProjectOwnerScope): Promise<Project[]>
   findProject(scope: ProjectOwnerScope, idOrSlug: string): Promise<Project | null>
   createProject(scope: ProjectOwnerScope, name: string, description: string): Promise<Project>

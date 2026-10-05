@@ -299,6 +299,8 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
         "PlatformProjectionReadErrorResponse",
         "MoveSessionResponse",
         "MoveSessionErrorResponse",
+        "RenameProjectResponse",
+        "RenameProjectErrorResponse",
         "SkillListResponse",
         "SkillPoolResponse",
         "SkillCatalogResponse",
@@ -331,6 +333,7 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
     const isPlatformProjectionRead = operation.method === "GET" && ["listSkills", "listSkillPool", "listSkillCatalog", "listMcpServers"].includes(operationId)
     const isCreateSkillDraft = operationId === "createSkillDraft"
     const isMoveSession = operationId === "moveSession" && operation.method === "POST" && operation.path === "/v1/sessions/{id}/move"
+    const isRenameProject = operationId === "renameProject" && operation.method === "PATCH" && operation.path === "/v1/projects/{projectId}/name"
     const isGetSkillPackageUpload =
       operationId === "getSkillPackageUpload" && operation.method === "GET" && operation.path === "/v1/skills/{skill_id}/package-upload"
     const isBeginSkillPackageUpload =
@@ -462,6 +465,13 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
     )
       errors.push(`${operation.method} ${operation.path} must not reference PublishSkill strict envelope components`)
     if (
+      !isRenameProject &&
+      /#\/components\/(?:schemas\/RenameProject(?:Request|Response|ErrorResponse)|responses\/RenameProject[A-Za-z]*|parameters\/RenameProject[A-Za-z]*)/u.test(
+        operation.text.split(/^components:\s*$/mu)[0] ?? "",
+      )
+    )
+      errors.push(`${operation.method} ${operation.path} must not reference RenameProject strict components`)
+    if (
       !isMoveSession &&
       /#\/components\/(?:schemas\/MoveSession(?:Request|Response|ErrorResponse)|responses\/MoveSession[A-Za-z]*|parameters\/MoveSession[A-Za-z]*)/u.test(
         operation.text.split(/^components:\s*$/mu)[0] ?? "",
@@ -522,6 +532,7 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
           !isValidateSkillDraft &&
           !isPublishSkill &&
           !isMoveSession &&
+          !isRenameProject &&
           !response.includes("#/components/schemas/ErrorEnvelope")
         ) {
           errors.push(`${operation.method} ${operation.path} ${status} must use ErrorEnvelope`)
@@ -539,7 +550,8 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
           (isCompleteSkillPackageUpload && match[1].startsWith("SkillPackageComplete")) ||
           (isValidateSkillDraft && match[1].startsWith("SkillValidate")) ||
           (isPublishSkill && match[1].startsWith("SkillPublish")) ||
-          (isMoveSession && match[1].startsWith("MoveSession"))
+          (isMoveSession && match[1].startsWith("MoveSession")) ||
+          (isRenameProject && match[1].startsWith("RenameProject"))
         )
           continue
         errors.push(`${operation.method} ${operation.path} ${status} references non-error response ${match[1]}`)
@@ -588,15 +600,17 @@ function idempotencyErrors(parameters: Map<string, NamedBlock>, operations: Oper
         ? operation.text.includes("#/components/parameters/SkillDraftIdempotencyKey")
         : operationId === "moveSession" && operation.method === "POST" && operation.path === "/v1/sessions/{id}/move"
           ? operation.text.includes("#/components/parameters/MoveSessionIdempotencyKey")
-          : operationId === "beginSkillPackageUpload" && operation.method === "POST" && operation.path === "/v1/skills/{skill_id}/package-upload"
-            ? operation.text.includes("#/components/parameters/SkillPackageBeginIdempotencyKey")
-            : operationId === "completeSkillPackageUpload" && operation.method === "POST" && operation.path === "/v1/skills/{skill_id}/package-upload/complete"
-              ? operation.text.includes("#/components/parameters/SkillPackageCompleteIdempotencyKey")
-              : operationId === "validateSkillDraft" && operation.method === "POST" && operation.path === "/v1/skills/{skill_id}/validate"
-                ? operation.text.includes("#/components/parameters/SkillValidateIdempotencyKey")
-                : operationId === "publishSkill" && operation.method === "POST" && operation.path === "/v1/skills/{skill_id}/publish"
-                  ? operation.text.includes("#/components/parameters/SkillPublishIdempotencyKey")
-                  : operation.text.includes("#/components/parameters/IdempotencyKey")
+          : operationId === "renameProject" && operation.method === "PATCH" && operation.path === "/v1/projects/{projectId}/name"
+            ? operation.text.includes("#/components/parameters/RenameProjectIdempotencyKey")
+            : operationId === "beginSkillPackageUpload" && operation.method === "POST" && operation.path === "/v1/skills/{skill_id}/package-upload"
+              ? operation.text.includes("#/components/parameters/SkillPackageBeginIdempotencyKey")
+              : operationId === "completeSkillPackageUpload" && operation.method === "POST" && operation.path === "/v1/skills/{skill_id}/package-upload/complete"
+                ? operation.text.includes("#/components/parameters/SkillPackageCompleteIdempotencyKey")
+                : operationId === "validateSkillDraft" && operation.method === "POST" && operation.path === "/v1/skills/{skill_id}/validate"
+                  ? operation.text.includes("#/components/parameters/SkillValidateIdempotencyKey")
+                  : operationId === "publishSkill" && operation.method === "POST" && operation.path === "/v1/skills/{skill_id}/publish"
+                    ? operation.text.includes("#/components/parameters/SkillPublishIdempotencyKey")
+                    : operation.text.includes("#/components/parameters/IdempotencyKey")
     if (declared !== expected) continue
     if (expected === "required" && !hasParameter) {
       errors.push(`${operation.method} ${operation.path} (${operationId}) must reference Idempotency-Key`)
@@ -1555,7 +1569,7 @@ function moveSessionContractErrors(
   responseComponents: Map<string, NamedBlock>,
 ): string[] {
   const errors: string[] = []
-  if (!/^  version: 7\.1\.0$/mu.test(source)) errors.push("moveSession additive public contract must be version 7.1.0")
+  if (!/^  version: 7\.2\.0$/mu.test(source)) errors.push("moveSession must remain in current public contract version 7.2.0")
   const matches = operations.filter((operation) => operation.fields.get("operationId") === "moveSession")
   const operation = matches.length === 1 ? matches[0] : undefined
   if (operation?.method !== "POST" || operation.path !== "/v1/sessions/{id}/move") {
@@ -1664,6 +1678,120 @@ function moveSessionContractErrors(
   return errors
 }
 
+function renameProjectContractErrors(
+  source: string,
+  parameters: Map<string, NamedBlock>,
+  schemas: Map<string, NamedBlock>,
+  operations: OperationBlock[],
+  responseComponents: Map<string, NamedBlock>,
+): string[] {
+  const errors: string[] = []
+  const require = (condition: boolean, message: string): void => {
+    if (!condition) errors.push(`renameProject ${message}`)
+  }
+  require(/^  version: 7\.2\.0$/mu.test(source), "additive contract must be version 7.2.0")
+  const matches = operations.filter((operation) => operation.fields.get("operationId") === "renameProject")
+  const operation = matches.length === 1 ? matches[0] : undefined
+  if (operation?.method !== "PATCH" || operation.path !== "/v1/projects/{projectId}/name")
+    return [...errors, "renameProject must be one PATCH /v1/projects/{projectId}/name"]
+  require(operations.filter((item) => item.path === operation.path).length === 1, "must not publish another method on the name path")
+  require(!operations.some((item) => /\/v1\/projects\/[^/]+\/rename$/u.test(item.path)), "must not publish a rename action alias")
+  for (const [field, value] of Object.entries({
+    "x-kokoro-owner": "kokoro-bff",
+    "x-kokoro-visibility": "public",
+    "x-kokoro-stability": "beta",
+    "x-kokoro-idempotency": "required",
+    "x-kokoro-permission": "project.update",
+  }))
+    require(operation.fields.get(field) === value, `${field} must equal ${value}`)
+  require(operation.text.includes("#/components/parameters/RenameProjectIdempotencyKey") &&
+    operation.text.includes("#/components/schemas/RenameProjectRequest") &&
+    !/in: query|ProjectRefQuery|DirectScopeQuery/u.test(operation.text), "must require its dedicated key and body without query aliases")
+  require(/requestBody:\n\s+required: true\n\s+content:\n\s+application\/json:/u.test(operation.text), "must require an application/json body")
+  for (const clause of ["65536", "no query", "duplicate JSON keys", "current IAM", "last legal serialized commit", "no-op", "old key", "unknown COMMIT"])
+    require(operation.text.includes(clause), `must preserve semantic clause: ${clause}`)
+  const id = parameters.get("RenameProjectId")?.text ?? ""
+  const key = parameters.get("RenameProjectIdempotencyKey")?.text ?? ""
+  const projectPattern = "pattern: '^project_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'"
+  require(id.includes("name: projectId") &&
+    id.includes("in: path") &&
+    id.includes("required: true") &&
+    id.includes(projectPattern), "path must be a required canonical Project ID")
+  require(source.includes(
+    "  /v1/projects/{projectId}/name:\n    parameters:\n      - $ref: '#/components/parameters/RenameProjectId'",
+  ), "path must bind RenameProjectId")
+  require(key.includes("name: Idempotency-Key") &&
+    key.includes("in: header") &&
+    key.includes("required: true") &&
+    key.includes("minLength: 1") &&
+    key.includes("maxLength: 128") &&
+    key.includes("pattern: '^[\\x21-\\x2B\\x2D-\\x7E]{1,128}$'") &&
+    key.includes("exactly once"), "key must be one bounded printable header excluding whitespace and comma")
+  const request = schemas.get("RenameProjectRequest")
+  const success = schemas.get("RenameProjectResponse")
+  const error = schemas.get("RenameProjectErrorResponse")
+  require(request !== undefined &&
+    JSON.stringify(topLevelRequired(request)) === '["name"]' &&
+    schemaProperties(request).join(",") === "name" &&
+    /^      additionalProperties: false$/mu.test(request.text), "request must contain only required name")
+  require(request !== undefined &&
+    /name:\n\s+type: string/u.test(request.text) &&
+    request.text.includes("ECMAScript trim") &&
+    request.text.includes("1..160 UTF-16 code units") &&
+    request.text.includes("U+0000") &&
+    request.text.includes("pattern: '^[^\\u0000]*$'") &&
+    !/maxLength:/u.test(request.text), "name must retain normalized UTF-16 length and NUL rejection without a raw maxLength")
+  require(success !== undefined &&
+    JSON.stringify(topLevelRequired(success)) === '["data"]' &&
+    schemaProperties(success).join(",") === "data,project_id,name" &&
+    (success.text.match(/additionalProperties: false/gu) ?? []).length === 2 &&
+    success.text.includes("required: [project_id, name]") &&
+    success.text.includes(projectPattern) &&
+    /name:\n\s+type: string\n\s+minLength: 1\n\s+maxLength: 160/u.test(success.text) &&
+    success.text.includes("pattern: '^[^\\u0000]*$'"), "success must be the closed canonical project_id and normalized name ACK only")
+  require(error !== undefined &&
+    JSON.stringify(topLevelRequired(error)) === '["error"]' &&
+    schemaProperties(error).join(",") === "error,code,message,retryable" &&
+    (error.text.match(/additionalProperties: false/gu) ?? []).length === 2 &&
+    error.text.includes("required: [code, message, retryable]") &&
+    error.text.includes("message: { type: string, minLength: 1 }") &&
+    error.text.includes("retryable: { type: boolean }"), "errors must be closed code/message/retryable without meta")
+  const statuses = {
+    "200": ["Success", []],
+    "400": ["BadRequest", ["invalid_project_rename", "idempotency_key_required"]],
+    "401": ["Unauthorized", ["session_authentication_required", "session_invalid"]],
+    "403": ["Forbidden", ["service_auth_failed", "session_forbidden", "product_tenant_forbidden"]],
+    "404": ["NotFound", ["project_not_found"]],
+    "409": ["Conflict", ["idempotency_conflict"]],
+    "429": ["RateLimited", ["session_rate_limited"]],
+    "503": ["Unavailable", ["business_store_unavailable", "iam_admission_unavailable", "product_tenant_not_configured"]],
+  } as const
+  const responses = collectResponseBlocks(operation)
+  require(JSON.stringify([...responses.keys()].sort()) === JSON.stringify(Object.keys(statuses).sort()), "must declare exactly 200/400/401/403/404/409/429/503")
+  const allCodes = Object.values(statuses).flatMap(([, codes]) => [...codes])
+  require(error?.text.includes(`enum: [${allCodes.join(", ")}]`) === true, "error code union must match all status profiles")
+  for (const [status, [suffix, codes]] of Object.entries(statuses)) {
+    const component = `RenameProject${suffix}`
+    require(responses.get(status)?.trim() === `'${status}': { $ref: '#/components/responses/${component}' }`, `${status} must use ${component}`)
+    const response = responseComponents.get(component)?.text ?? ""
+    require(response.includes("x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }") &&
+      response.includes(
+        "Cache-Control: { required: true, schema: { type: string, const: no-store } }",
+      ), `${component} must require request ID and no-store headers`)
+    if (status === "200") require(response.includes("#/components/schemas/RenameProjectResponse"), "200 must use the data-only ACK")
+    else
+      require(response.includes("#/components/schemas/RenameProjectErrorResponse") &&
+        response.includes(`code: { type: string, enum: [${codes.join(", ")}] }`) &&
+        response.includes(`retryable: { type: boolean, const: ${status === "429" || status === "503"} }`), `${component} must narrow codes and retryability`)
+  }
+  require(responseComponents
+    .get("RenameProjectRateLimited")
+    ?.text.includes(
+      "Retry-After: { required: false, schema: { type: string, pattern: '^(?:[1-9][0-9]{0,3}|[1-7][0-9]{4}|8[0-5][0-9]{3}|86[0-3][0-9]{2}|86400)(?![\\s\\S])' } }",
+    ) === true, "Retry-After must be optional and bounded to 1..86400")
+  return errors
+}
+
 function platformProjectionReadContractErrors(
   schemas: Map<string, NamedBlock>,
   operations: OperationBlock[],
@@ -1761,6 +1889,7 @@ export function inspectBffOpenApi(source: string, baseline: readonly BaselineOpe
     ...envelopeErrors(schemas, operations, responseComponents),
     ...platformProjectionReadContractErrors(schemas, operations, responseComponents),
     ...moveSessionContractErrors(source, parameters, schemas, operations, responseComponents),
+    ...renameProjectContractErrors(source, parameters, schemas, operations, responseComponents),
     ...idempotencyErrors(parameters, operations),
     ...publishedPersonalSkillContractErrors(parameters, schemas, operations, responseComponents),
     ...skillDraftContractErrors(parameters, schemas, operations, responseComponents),

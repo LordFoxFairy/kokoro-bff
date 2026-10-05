@@ -1,8 +1,9 @@
+import { renameProject } from "./project-rename.js"
 import { randomUUID } from "node:crypto"
 
 import type { Project, ProjectInstructionRevision, Task } from "../../contracts/index.js"
 import type { PostgresBffDatabase } from "./client.js"
-import type { ProjectOwnerScope, ProjectRepository } from "../../application/ports/project-repository.js"
+import type { ProjectOwnerScope, ProjectRepository, RenameProjectCommand, RenameProjectResult } from "../../application/ports/project-repository.js"
 
 type ProjectRow = {
   project_id: string
@@ -32,7 +33,6 @@ type ProjectTaskRow = {
   status: "todo" | "in_progress" | "done"
   updated_at: Date | string
 }
-
 
 function timestamp(value: Date | string): string {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString()
@@ -70,10 +70,12 @@ function revisionFromRow(row: RevisionRow): ProjectInstructionRevision {
   }
 }
 
-
-
 export class PostgresProjectRepository implements ProjectRepository {
   public constructor(private readonly database: PostgresBffDatabase) {}
+
+  public renameProject(command: RenameProjectCommand): Promise<RenameProjectResult> {
+    return renameProject(this.database, command)
+  }
 
   public async listProjects(scope: ProjectOwnerScope): Promise<Project[]> {
     const result = await this.database.pool.query<ProjectRow>(
@@ -99,7 +101,11 @@ export class PostgresProjectRepository implements ProjectRepository {
 
   public async createProject(scope: ProjectOwnerScope, name: string, description: string): Promise<Project> {
     const projectId = `project_${randomUUID()}`
-    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "project"
+    const slug =
+      name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "") || "project"
     try {
       const result = await this.database.pool.query<ProjectRow>(
         `INSERT INTO bff_project (project_id, tenant_id, owner_id, name, slug, description, instruction)
