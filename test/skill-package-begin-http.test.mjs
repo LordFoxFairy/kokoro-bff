@@ -65,7 +65,7 @@ const post = (base, body = input, other = {}) =>
 test("Begin digest projector matches every pinned owner v4 projection vector", async () => {
   const manifest = JSON.parse(
     await readFile(
-      new URL("../contract/vendor/kokoro-platform/6519ae9a7dba63586474d2860f6725d3165b701e/execution-operations-v5/manifest.json", import.meta.url),
+      new URL("../contract/vendor/kokoro-platform/494b118ae7c29f1fc1005122d72c6c2bbf2640b6/execution-operations-v5/manifest.json", import.meta.url),
       "utf8",
     ),
   )

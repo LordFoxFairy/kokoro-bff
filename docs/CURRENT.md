@@ -1,3 +1,11 @@
+# R251 Skills V2 consumer 候选（2026-10-05，未发布）
+
+当前隔离候选把唯一 Platform Connect source 固定到 `494b118ae7c29f1fc1005122d72c6c2bbf2640b6`，验证 V7 `3384a88f…` → V6 `0d728881…` → V5 `3f97b3c9…` 继承、当前 Proto/descriptor，并由现 generator 正常生成；V7 仍为 inactive/routable=false，不表示 activation。
+
+Validate localhost HTTP 只接受 `zip-v2:sha256:<64 lowercase hex>`，拒绝旧 V1、错误长度、大小写与前后缀；public 路径保持 `/v1`，唯一 OpenAPI 候选为 `8.0.0`/91 operations。请求 shape、IAM、权限、幂等、错误、数据库和 receipt 均未改变。
+
+当前 Node 22.22.2 实证：原 6-failure HTTP RED 已为 14/14 GREEN；Platform 双次生成/check、OpenAPI semantic 91 项、OpenAPI lint（保留 4 个既有 warning）、相关 137 tests、contract 238 tests 均通过。最终 `format:check` 与完整 `check` 均 exit 0，完整纯测试 745 pass/0 fail/2 resource skip，lint/typecheck/build 均通过。未运行真实 IAM/Storage/Platform/BFF/Web 发布安装旅程、PG/Redis、provider 或 browser；未提交、未发布。
+
 ## R241 Project rename 候选完整 owner 验收（2026-10-05；待精确 Git 交付）
 
 当前已实现 canonical Project name PATCH，public OpenAPI 候选 `7.2.0` / 91 operations；本节覆盖下方 R240“仅合同/未实施/待复测”的旧阶段时态。正式基线 `cdad0ad6580dcbca18b75fdfbdbac4aa61f750d2` 不变，新交付 commit 尚未产生；原20protected mixed不进入切片。

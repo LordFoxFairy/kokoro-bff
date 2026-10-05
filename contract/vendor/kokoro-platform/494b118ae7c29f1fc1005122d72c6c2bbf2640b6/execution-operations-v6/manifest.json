@@ -1,0 +1,38 @@
+{
+  "artifact": "platform-execution-operations",
+  "artifactVersion": "6.0.0",
+  "status": "inactive",
+  "routable": false,
+  "packageName": "kokoro.platform.v1",
+  "inherits": {
+    "version": "5.0.1",
+    "aggregateSha256": "3f97b3c98fd8e7ce46e4a8ea73237ddb85e764849d2b15dd28d0a3a58a69e42f"
+  },
+  "counts": {
+    "rpc": 39,
+    "command": 20,
+    "proof": 24
+  },
+  "sourcePins": [
+    {
+      "path": "contract/proto/kokoro/platform/v1/platform_runtime.proto",
+      "sha256": "2e1c0d19b986b43f05efd5ab8c2e9800d7b9f6785e93e25780006ae19007b502"
+    },
+    {
+      "path": "contract/descriptor/platform-v1.binpb",
+      "sha256": "ae2683134d6b780a003c9c485177fbab06632ecbfaeeb548f96fc440f2b2048c"
+    },
+    {
+      "path": "contract/provenance.json",
+      "sha256": "1f04cc50707d075893ff0e95e5c25f5a686d1206be26f67ce86ffe3f38bb696c"
+    },
+    {
+      "path": "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts",
+      "sha256": "a8e5124e38f8bff1aa3838f9bec0e0e1f70f894b30161675b0f5f6b6308d1c7f"
+    },
+    {
+      "path": "contract/openapi/platform-http.openapi.json",
+      "sha256": "4b42dd161c972b3447cfea3a6f80a949bbdb573c46213dbf8ef4c3ecb58e72da"
+    }
+  ]
+}

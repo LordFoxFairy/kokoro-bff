@@ -5,10 +5,10 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { test } from "node:test"
 
-const ownerCommit = "6519ae9a7dba63586474d2860f6725d3165b701e"
+const ownerCommit = "494b118ae7c29f1fc1005122d72c6c2bbf2640b6"
 const sources = {
   "kokoro/common/v1/common.proto": "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08",
-  "kokoro/platform/v1/platform_runtime.proto": "841d0e146d6fe25728fac967862ff5969a2cbc9c1ad4cde3d35e0e1ef61ea0e0",
+  "kokoro/platform/v1/platform_runtime.proto": "2e1c0d19b986b43f05efd5ab8c2e9800d7b9f6785e93e25780006ae19007b502",
 }
 const root = new URL("../", import.meta.url)
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex")
@@ -36,18 +36,44 @@ async function sourceBytes() {
   )
 }
 
-test("Platform consumer pins exact owner Proto bytes and inactive v5 provenance", async () => {
+test("Platform consumer pins exact owner Proto bytes and inactive V7 to V6 to V5 proof", async () => {
   const manifest = JSON.parse(await requiredFile("contract/dependencies/platform-connect.json"))
   assert.equal(manifest.owner.repository_commit, ownerCommit)
   assert.equal(manifest.owner.package_name, "kokoro.platform.v1")
   assert.equal(manifest.owner.repository_path, "apps/kokoro-capability")
   assert.deepEqual(manifest.execution_artifact, {
-    path: `contract/vendor/kokoro-platform/${ownerCommit}/execution-operations-v5`,
-    artifact_version: "5.0.1",
+    path: `contract/vendor/kokoro-platform/${ownerCommit}/execution-operations-v7`,
+    artifact_version: "7.0.0",
     status: "inactive",
     routable: false,
-    provenance_path: `contract/vendor/kokoro-platform/${ownerCommit}/execution-operations-v5/provenance.json`,
-    aggregate_sha256: "3f97b3c98fd8e7ce46e4a8ea73237ddb85e764849d2b15dd28d0a3a58a69e42f",
+    provenance_path: `contract/vendor/kokoro-platform/${ownerCommit}/execution-operations-v7/provenance.json`,
+    aggregate_sha256: "3384a88f31be1fdd3e15bcbceb33e4fd7d62b04dfbfef65fcc35c24ce7afbb72",
+  })
+  assert.deepEqual(
+    manifest.execution_proof_chain.map(({ artifact_version, aggregate_sha256, inherits_version, inherits_aggregate_sha256 }) => ({
+      artifact_version,
+      aggregate_sha256,
+      ...(inherits_version === undefined ? {} : { inherits_version, inherits_aggregate_sha256 }),
+    })),
+    [
+      {
+        artifact_version: "7.0.0",
+        aggregate_sha256: "3384a88f31be1fdd3e15bcbceb33e4fd7d62b04dfbfef65fcc35c24ce7afbb72",
+        inherits_version: "6.0.0",
+        inherits_aggregate_sha256: "0d728881ba1046dc566131d63de71f6821ec636cf45837b5d937fee9872d5f91",
+      },
+      {
+        artifact_version: "6.0.0",
+        aggregate_sha256: "0d728881ba1046dc566131d63de71f6821ec636cf45837b5d937fee9872d5f91",
+        inherits_version: "5.0.1",
+        inherits_aggregate_sha256: "3f97b3c98fd8e7ce46e4a8ea73237ddb85e764849d2b15dd28d0a3a58a69e42f",
+      },
+      { artifact_version: "5.0.1", aggregate_sha256: "3f97b3c98fd8e7ce46e4a8ea73237ddb85e764849d2b15dd28d0a3a58a69e42f" },
+    ],
+  )
+  assert.deepEqual(manifest.descriptor, {
+    path: `contract/vendor/kokoro-platform/${ownerCommit}/descriptor/platform-v1.binpb`,
+    sha256: "ae2683134d6b780a003c9c485177fbab06632ecbfaeeb548f96fc440f2b2048c",
   })
   assert.deepEqual(
     manifest.owner.sources,
@@ -61,8 +87,8 @@ test("Platform consumer pins exact owner Proto bytes and inactive v5 provenance"
   for (const file of manifest.generated) assert.equal(sha256(await requiredFile(`src/generated/platform-connect/${file.path}`)), file.sha256)
 })
 
-test("Platform generator rejects source tamper, missing source, extra source and generated tree drift", async () => {
-  const { assertSourceDigests, assertGeneratedTree, assertVendorPins, assertVendorLayout, assertExecutionArtifact, assertGetReadBinding } = await generator()
+test("Platform generator rejects source, proof-chain and generated tree drift", async () => {
+  const { assertSourceDigests, assertGeneratedTree, assertVendorPins, assertVendorLayout, assertExecutionArtifact, assertProofChain } = await generator()
   const bytes = await sourceBytes()
   assert.doesNotThrow(() => assertSourceDigests(bytes))
   for (const file of Object.keys(sources)) {
@@ -96,10 +122,16 @@ test("Platform generator rejects source tamper, missing source, extra source and
   assert.doesNotThrow(() => assertVendorPins([vendorEntry]))
   assert.throws(() => assertVendorPins([vendorEntry, { name: "5b6eb2c1532b23b9747bc4bf6ac99f69ad453de0", isDirectory: () => true }]), /commit allowlist/)
   assert.throws(() => assertVendorPins([{ name: ownerCommit, isDirectory: () => false }]), /real directory/)
-  const vendorInputs = ["execution-operations-v5", "proto"].map((name) => ({ name, isDirectory: () => true }))
+  const vendorInputs = ["descriptor", "execution-operations-v5", "execution-operations-v6", "execution-operations-v7", "proto"].map((name) => ({
+    name,
+    isDirectory: () => true,
+  }))
   assert.doesNotThrow(() => assertVendorLayout(vendorInputs))
   assert.throws(() => assertVendorLayout([...vendorInputs, { name: "execution-operations-v3", isDirectory: () => true }]), /layout allowlist/)
-  assert.throws(() => assertVendorLayout([{ name: "proto", isDirectory: () => false }, vendorInputs[0]]), /real directories/)
+  assert.throws(
+    () => assertVendorLayout(vendorInputs.map((entry) => (entry.name === "proto" ? { name: "proto", isDirectory: () => false } : entry))),
+    /real directories/,
+  )
 
   const artifactRoot = `contract/vendor/kokoro-platform/${ownerCommit}/execution-operations-v5/`
   const provenance = JSON.parse(await requiredFile(`${artifactRoot}provenance.json`))
@@ -112,6 +144,10 @@ test("Platform generator rejects source tamper, missing source, extra source and
   assert.throws(() => assertExecutionArtifact(provenance, { ...artifactFiles, "unexpected.json": Buffer.from("{}") }), /file allowlist drifted/)
   const manifest = JSON.parse(artifactFiles["manifest.json"])
   assert.equal(manifest.baseArtifact.aggregateSha256, "902f8f2c2fbeb95a441820c1cf16b0a9c793eadac7106f9fcd5e41e3878b7f79")
+  const v6 = JSON.parse(await requiredFile(`contract/vendor/kokoro-platform/${ownerCommit}/execution-operations-v6/manifest.json`))
+  const v7 = JSON.parse(await requiredFile(`contract/vendor/kokoro-platform/${ownerCommit}/execution-operations-v7/manifest.json`))
+  assert.doesNotThrow(() => assertProofChain(manifest, v6, v7))
+  assert.throws(() => assertProofChain(manifest, { ...v6, inherits: { ...v6.inherits, aggregateSha256: "0".repeat(64) } }, v7), /v6 proof drifted/)
 })
 
 test("production artifact directory enumeration rejects undeclared filesystem entries", async (t) => {
@@ -145,11 +181,25 @@ test("all pinned consumer manifests track the same lockfile without replacing ex
 test("generated Platform descriptor preserves CreateDraft wire tags, bytes, Product context and uint64", async () => {
   await requiredFile("src/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.ts")
   const { create, toBinary, fromBinary } = await import("@bufbuild/protobuf")
-  const { CreateSkillDraftRequestSchema, CreateSkillDraftResponseSchema, SkillCatalogService, SkillStatus } =
+  const { AuthorizeMcpToolResponseSchema, CreateSkillDraftRequestSchema, CreateSkillDraftResponseSchema, SkillCatalogService, SkillStatus } =
     await import("../dist/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
   assert.equal(SkillCatalogService.typeName, "kokoro.platform.v1.SkillCatalogService")
   assert.equal(SkillCatalogService.method.createSkillDraft.name, "CreateSkillDraft")
   assert.equal(SkillCatalogService.method.createSkillDraft.methodKind, "unary")
+  assert.deepEqual(
+    AuthorizeMcpToolResponseSchema.fields.map((field) => [field.name, field.number]),
+    [
+      ["invocation_grant", 1],
+      ["connector_id", 2],
+      ["tool_ref", 3],
+      ["typed_arguments_digest", 4],
+      ["expires_at_unix_seconds", 5],
+      ["audit_ref", 6],
+      ["connection_id", 7],
+      ["server_id", 8],
+    ],
+    "current Proto source must include the V6 MCP authorization identity tags without adding BFF MCP behavior",
+  )
   assert.deepEqual(
     CreateSkillDraftRequestSchema.fields.map((f) => [f.name, f.number]),
     [

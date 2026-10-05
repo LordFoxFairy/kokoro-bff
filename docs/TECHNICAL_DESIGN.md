@@ -1,3 +1,11 @@
+## R251-SKILLS-V2-CONSUMER：Platform V7 到 BFF public 8.0.0（目标，尚未实施）
+
+当前 BFF 的 Platform Connect consumer 仍固定旧 owner/V5，Validate route 与 public OpenAPI 只接受 `zip-v1`；Platform producer 已固定为 `494b118ae7c29f1fc1005122d72c6c2bbf2640b6`，V7 `7.0.0` aggregate `3384a88f31be1fdd3e15bcbceb33e4fd7d62b04dfbfef65fcc35c24ce7afbb72`，但该 artifact 仍 inactive/unroutable，不能写成已激活。目标沿现 `generate-platform-connect-client.mjs` 的唯一生成方向固定该owner source，并验证 V7→V6→V5 immutable证明链、原39 RPC/20 commands/24 proofs与descriptor；不新建通用artifact框架或第二runtime。
+
+BFF现Validate边界只把manifest identity值域切为`^zip-v2:sha256:[a-f0-9]{64}$`，保skill/series/valid/content digest/replayed、IAM、幂等、错误与取消边界。public资源路径保持`/v1`，唯一OpenAPI同步升major `8.0.0`并切V2 pattern；这是Root批准的首次正式发布前clean-slate例外，不保7.x、`/v2`、双读、alias或fallback，也不泛化post-release policy。Platform Proto字段shape不因本切换变化，但public值域仍是breaking contract，必须正常生成、验证并由Web后续精确repin。
+
+本片无数据库、SQL、权限、receipt/outbox、缓存、服务或路由新增；BFF不解析或重写ZIP，不读取Platform数据库。当前只是D0：consumer源码、public contract、生成物、正式发布和真实页面均未实施。
+
 ## R241 Project rename 已实现候选与限定验收（2026-10-05；待 Root Git 交付）
 
 当前候选已实现 Project name PATCH；本节替代下方 R240“仅合同/尚未实施/待复测”的阶段时态，旧正文原样保留作为历史。正式基线仍为 `cdad0ad6580dcbca18b75fdfbdbac4aa61f750d2`，本次尚无新的交付 commit，不代表 Web 消费或用户 3310 已启用。

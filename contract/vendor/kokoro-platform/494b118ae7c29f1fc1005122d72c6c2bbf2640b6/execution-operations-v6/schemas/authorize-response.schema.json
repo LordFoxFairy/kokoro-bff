@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kokoro.dev/contracts/platform-execution-operations/6.0.0/schemas/authorize-response.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "fqMethod",
+    "operation",
+    "requestBindingVersion",
+    "unchanged",
+    "requiredFields",
+    "addedFields",
+    "binding",
+    "receipt",
+    "grant"
+  ],
+  "properties": {
+    "version": {
+      "const": "mcp-authorize-response/1.0.0"
+    },
+    "fqMethod": {
+      "const": "kokoro.platform.v1.McpAuthorizationService/AuthorizeMcpTool"
+    },
+    "operation": {
+      "const": "mcp.authorize_tool"
+    },
+    "requestBindingVersion": {
+      "const": "3.0.0"
+    },
+    "unchanged": {
+      "const": [
+        "request",
+        "command identity",
+        "decision digest",
+        "selector uniqueness",
+        "fresh execution proof"
+      ]
+    },
+    "requiredFields": {
+      "const": [
+        "invocation_grant",
+        "connector_id",
+        "tool_ref",
+        "typed_arguments_digest",
+        "expires_at_unix_seconds",
+        "audit_ref",
+        "connection_id",
+        "server_id"
+      ]
+    },
+    "addedFields": {
+      "const": [
+        {
+          "name": "connection_id",
+          "tag": 7,
+          "type": "kokoro.platform.v1.McpConnectionId"
+        },
+        {
+          "name": "server_id",
+          "tag": 8,
+          "type": "kokoro.platform.v1.McpServerId"
+        }
+      ]
+    },
+    "binding": {
+      "const": [
+        "prepared actual match",
+        "atomic result/receipt/audit",
+        "current state",
+        "consumer frozen selection"
+      ]
+    },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "storage",
+        "missingOrMalformedIdentity",
+        "repair",
+        "regrant"
+      ],
+      "properties": {
+        "storage": {
+          "const": "closed camelCase protobuf JSON"
+        },
+        "missingOrMalformedIdentity": {
+          "const": "FAILED_PRECONDITION"
+        },
+        "repair": {
+          "const": false
+        },
+        "regrant": {
+          "const": false
+        }
+      }
+    },
+    "grant": {
+      "const": "opaque decision ID; never provider bearer"
+    }
+  }
+}

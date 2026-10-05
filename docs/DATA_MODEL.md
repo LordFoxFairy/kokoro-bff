@@ -1,3 +1,9 @@
+## R251-SKILLS-V2-CONSUMER：无数据模型变化（目标，尚未实施）
+
+Platform拥有manifest/profile与Validate事实；BFF只在owner响应和public wire边界严格校验、透传`zip-v2` identity，不持久化V1/V2映射、不从ZIP计算identity、不读取Platform数据库。此次consumer cutover不修改`database/schema.sql`，不新增表、列、索引、migration、receipt/outbox、Redis projection、权限或事务。
+
+Conversation、Message、Share、Project、ScheduledTask及durable AG-UI的现有owner、锁、retention与幂等事实全部不变。当前Project删除等混合工作与本片无关，不得夹带；真实实现仍待后继源码/contract切片与资源验收。
+
 ## R241 rename 原子数据当前实现（2026-10-05；零 DDL）
 
 本节替代下方 R240“没有生产 name writer/尚未实施”的旧时态：当前候选已实现具名 name writer，仍没有生产墓碑/DELETE writer；唯一 canonical schema、installer、ID/slug/instruction与其它关联模型保持不变。准确候选身份及 Root 资源收据见 CURRENT R241。

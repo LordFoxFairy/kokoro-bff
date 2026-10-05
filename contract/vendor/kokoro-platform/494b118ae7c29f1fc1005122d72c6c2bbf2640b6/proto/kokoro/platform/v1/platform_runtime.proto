@@ -729,6 +729,8 @@ message AuthorizeMcpToolResponse {
   string typed_arguments_digest = 4;
   int64 expires_at_unix_seconds = 5;
   string audit_ref = 6;
+  kokoro.platform.v1.McpConnectionId connection_id = 7;
+  kokoro.platform.v1.McpServerId server_id = 8;
 }
 
 service SkillCatalogService {

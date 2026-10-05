@@ -35,12 +35,13 @@ const headers = {
   "idempotency-key": "validate-1",
 }
 const input = { attempt_id: "attempt-1" }
+const manifestIdentityV2 = `zip-v2:sha256:${"b".repeat(64)}`
 const result = () => ({
   skillId: { value: "skill-1" },
   seriesId: { value: "series-1" },
   valid: true,
   contentDigest: "a".repeat(64),
-  manifestIdentity: `zip-v1:sha256:${"b".repeat(64)}`,
+  manifestIdentity: manifestIdentityV2,
   replayed: false,
 })
 async function withServer(client, run, admission = { verify: async () => ({ ok: true, identity: { namespace: "tenant", userId: "user" } }) }) {
@@ -73,13 +74,13 @@ test("Validate default-off candidate does not reach Platform", async () => {
 test("Validate projector matches all eight owner v4 command vectors", async () => {
   const manifest = JSON.parse(
     await readFile(
-      new URL("../contract/vendor/kokoro-platform/6519ae9a7dba63586474d2860f6725d3165b701e/execution-operations-v5/manifest.json", import.meta.url),
+      new URL("../contract/vendor/kokoro-platform/494b118ae7c29f1fc1005122d72c6c2bbf2640b6/execution-operations-v5/manifest.json", import.meta.url),
       "utf8",
     ),
   )
   assert.equal(manifest.baseArtifact.aggregateSha256, "902f8f2c2fbeb95a441820c1cf16b0a9c793eadac7106f9fcd5e41e3878b7f79")
 })
-test("Validate returns strict validated owner projection", async () => {
+test("Validate returns strict V2 validated owner projection", async () => {
   const calls = []
   await withServer(
     {
@@ -99,7 +100,7 @@ test("Validate returns strict validated owner projection", async () => {
           series_id: "series-1",
           valid: true,
           content_digest: "a".repeat(64),
-          manifest_identity: `zip-v1:sha256:${"b".repeat(64)}`,
+          manifest_identity: manifestIdentityV2,
           replayed: false,
         },
       })
@@ -410,7 +411,14 @@ test("Validate rejects malformed owner result instead of partial public success"
     { contentDigest: "" },
     { manifestIdentity: "zip-v1:sha256:bad" },
     { manifestIdentity: "ZIP-V1:SHA256:" + "b".repeat(64) },
+    { manifestIdentity: `zip-v2:sha256:${"b".repeat(63)}` },
+    { manifestIdentity: `zip-v2:sha256:${"b".repeat(65)}` },
+    { manifestIdentity: `zip-v2:sha256:${"B".repeat(64)}` },
+    { manifestIdentity: `ZIP-V2:SHA256:${"b".repeat(64)}` },
+    { manifestIdentity: `prefix-${manifestIdentityV2}` },
+    { manifestIdentity: `${manifestIdentityV2}-suffix` },
     { replayed: "true" },
+    { manifestIdentity: `zip-v1:sha256:${"b".repeat(64)}` },
   ])
     await withServer({ validateDraft: async () => ({ ...result(), ...invalid }) }, async (base) => {
       const response = await post(base)

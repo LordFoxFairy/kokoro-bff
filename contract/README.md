@@ -1,3 +1,9 @@
+## R251 发布前 Skills V2 clean-slate 例外（目标，尚未发布）
+
+Platform producer `494b118ae7c29f1fc1005122d72c6c2bbf2640b6` 的inactive V7把Validate `manifest_identity`值域从`zip-v1`替换为`zip-v2`。BFF保持现`/v1`资源路径，但唯一public contract以major `8.0.0`同步发布；旧7.x不并存、不路由、不fallback。该例外只适用于此次首次正式发布前的clean-slate cutover，后续breaking仍遵守本README的一般版本/路径策略，除非另有明确裁决。
+
+唯一public机器事实源仍是`contract/openapi/v1/openapi.yaml`；本README不复制字段全集。Platform dependency的单一来源、V7→V6→V5证明链、39 RPC/20 commands/24 proofs与descriptor由`contract/dependencies/platform-connect.json`及现generator/checker固定。V7 inactive证明不构成activation；当前route、OpenAPI、generated client、正式发布与Web repin尚未实施。
+
 ## R240 public 7.2.0 rename 候选（2026-10-05；未发布）
 
 唯一可编辑 `openapi/v1/openapi.yaml` 从正式 `cdad0ad6580dcbca18b75fdfbdbac4aa61f750d2` 的 public 7.1.0 增加独立 `PATCH /v1/projects/{projectId}/name` / `renameProject`，候选 7.2.0、91 operations；原 90 项保持，inventory 由既有 `contract:update-baseline` 生成。专用 RenameProject 组件不改变旧 instruction 或 envelope。

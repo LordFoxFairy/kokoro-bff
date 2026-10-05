@@ -1077,7 +1077,7 @@ function skillValidateContractErrors(
     "series_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }",
     "valid: { type: boolean, const: true }",
     "content_digest: { type: string, pattern: '^[a-f0-9]{64}$' }",
-    "manifest_identity: { type: string, pattern: '^zip-v1:sha256:[a-f0-9]{64}$' }",
+    "manifest_identity: { type: string, pattern: '^zip-v2:sha256:[a-f0-9]{64}$' }",
     "replayed: { type: boolean }",
   ])
     if (!resource.includes(fragment)) errors.push(`SkillValidateResource must define ${fragment}`)
@@ -1119,8 +1119,8 @@ function skillValidateContractErrors(
     ...[...responseRefs.values()].map(([name]) => responses.get(name)?.text ?? ""),
   ].join("\u0000")
   const frozenDigest = createHash("sha256").update(frozenSource).digest("hex")
-  // Validate now has a default-closed candidate route; only its description changed, and the exact operation/components remain frozen.
-  if (frozenDigest !== "741e30a623081aa7bb9e4981a412fa412d74f75b42e5bcf4d1ee4ff05865e987")
+  // The prelaunch V2 cutover changes only manifest_identity to the strict zip-v2 value domain; the remaining operation and components stay frozen.
+  if (frozenDigest !== "144bac325db4d6e82e6cccc47e051f430ca41e08bc7c23cb1d3cc87b828e46ee")
     errors.push(`validateSkillDraft canonical contract digest drifted: ${frozenDigest}`)
   return errors
 }
@@ -1569,7 +1569,7 @@ function moveSessionContractErrors(
   responseComponents: Map<string, NamedBlock>,
 ): string[] {
   const errors: string[] = []
-  if (!/^  version: 7\.2\.0$/mu.test(source)) errors.push("moveSession must remain in current public contract version 7.2.0")
+  if (!/^  version: 8\.0\.0$/mu.test(source)) errors.push("moveSession must remain in current public contract version 8.0.0")
   const matches = operations.filter((operation) => operation.fields.get("operationId") === "moveSession")
   const operation = matches.length === 1 ? matches[0] : undefined
   if (operation?.method !== "POST" || operation.path !== "/v1/sessions/{id}/move") {
@@ -1689,7 +1689,7 @@ function renameProjectContractErrors(
   const require = (condition: boolean, message: string): void => {
     if (!condition) errors.push(`renameProject ${message}`)
   }
-  require(/^  version: 7\.2\.0$/mu.test(source), "additive contract must be version 7.2.0")
+  require(/^  version: 8\.0\.0$/mu.test(source), "current public contract must be version 8.0.0")
   const matches = operations.filter((operation) => operation.fields.get("operationId") === "renameProject")
   const operation = matches.length === 1 ? matches[0] : undefined
   if (operation?.method !== "PATCH" || operation.path !== "/v1/projects/{projectId}/name")

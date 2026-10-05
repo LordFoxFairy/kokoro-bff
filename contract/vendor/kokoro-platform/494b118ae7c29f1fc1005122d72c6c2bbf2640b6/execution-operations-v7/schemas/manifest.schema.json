@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kokoro.dev/contracts/platform-execution-operations/7.0.0/schemas/manifest.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "artifact",
+    "artifactVersion",
+    "status",
+    "routable",
+    "packageName",
+    "inherits",
+    "counts",
+    "profile"
+  ],
+  "properties": {
+    "artifact": {
+      "const": "platform-execution-operations"
+    },
+    "artifactVersion": {
+      "const": "7.0.0"
+    },
+    "status": {
+      "const": "inactive"
+    },
+    "routable": {
+      "const": false
+    },
+    "packageName": {
+      "const": "kokoro.platform.v1"
+    },
+    "inherits": {
+      "const": {
+        "version": "6.0.0",
+        "aggregateSha256": "0d728881ba1046dc566131d63de71f6821ec636cf45837b5d937fee9872d5f91"
+      }
+    },
+    "counts": {
+      "const": {
+        "rpc": 39,
+        "command": 20,
+        "proof": 24
+      }
+    },
+    "profile": {
+      "const": "zip-v2"
+    }
+  }
+}

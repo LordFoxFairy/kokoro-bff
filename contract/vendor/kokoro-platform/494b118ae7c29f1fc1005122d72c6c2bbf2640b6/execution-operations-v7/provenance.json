@@ -1,0 +1,37 @@
+{
+  "algorithm": "sha256",
+  "aggregateRecord": "path + NUL + length + NUL + sha256 + LF",
+  "files": [
+    {
+      "path": "manifest.json",
+      "bytes": 391,
+      "sha256": "09ae832c861d0106986e15a0302574f33b4d9c89375f1284050d1d540b3f1b34"
+    },
+    {
+      "path": "publish-v2.json",
+      "bytes": 2472,
+      "sha256": "551b0f4ccec56b64644fcdce9eec0ff1c4020d0dc48eccdf02833cc74225de35"
+    },
+    {
+      "path": "schemas/manifest.schema.json",
+      "bytes": 1014,
+      "sha256": "c67b0173c36172d7f3870ac442567ac64c1b570535dda84b07bdbdcdc9583988"
+    },
+    {
+      "path": "schemas/zip-profile-v2.schema.json",
+      "bytes": 3090,
+      "sha256": "1204e84b628829e037a4e0f44f691d1eed07233c78bdf6b1a8ee5bbbc67613d1"
+    },
+    {
+      "path": "vectors/zip-v2.json",
+      "bytes": 4533,
+      "sha256": "66421e76274cca5b0d0ed3248d2c75151fea348341b250e523112ccfb151ad2c"
+    },
+    {
+      "path": "zip-profile-v2.json",
+      "bytes": 1630,
+      "sha256": "077b9a40d5525a77c7fe0814ed0afa4b48fc1c22dad72187c7aea10d9f6116a9"
+    }
+  ],
+  "aggregateSha256": "3384a88f31be1fdd3e15bcbceb33e4fd7d62b04dfbfef65fcc35c24ce7afbb72"
+}

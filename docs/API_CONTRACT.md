@@ -1,3 +1,11 @@
+## R251-SKILLS-V2-CONSUMER：public 8.0.0 值域切换（目标，尚未发布）
+
+Validate请求字段与路径不变，调用者仍不自报manifest identity、asset、tenant或subject。成功响应字段shape不变，但`manifest_identity`唯一pattern由`zip-v1`替换为`zip-v2:sha256:<64 lowercase hex>`；旧V1、错误长度、uppercase及前后缀均拒绝。`/v1`资源路径保持，唯一public OpenAPI升`8.0.0`；这是发布前同步breaking replacement，不是7.x兼容扩展，也不创建`/v2`或fallback。
+
+BFF generated Platform client与来源证明必须固定producer `494b118ae7c29f1fc1005122d72c6c2bbf2640b6`：V7 aggregate `3384a88f31be1fdd3e15bcbceb33e4fd7d62b04dfbfef65fcc35c24ce7afbb72`→V6 `0d728881ba1046dc566131d63de71f6821ec636cf45837b5d937fee9872d5f91`→V5 `3f97b3c98fd8e7ce46e4a8ea73237ddb85e764849d2b15dd28d0a3a58a69e42f`，并保持39/20/24与descriptor检查。V7的inactive状态只作机器证明，不等于产品activation。错误、IAM/session、command/retry语义不变；Validate ACK不等于Publish或Install ACK。
+
+正式BFF 8.0.0发布后，Web才可固定该commit/version/digest并正常生成；不得提前手改consumer生成物。当前未修改机器OpenAPI、route或generated client。
+
 ## R241 Project name PATCH 当前已实现候选（2026-10-05；未发布）
 
 本节覆盖下方 R240“仅机器合同/尚未接入”的旧时态；当前源码已实现 `PATCH /v1/projects/{projectId}/name` / `renameProject`，唯一 OpenAPI 候选为 public `7.2.0`、91 operations，原 90 项和 instruction PATCH 保持。Root 精确 Git 交付及发布身份待定，未更新 Web 消费 pin，未启用 3310。

@@ -141,7 +141,7 @@ test("response rejects unknown enum, unchanged event and invalid page presence",
 })
 test("all owner product installation projection vectors keep their published digests", async () => {
   const source = new URL(
-    "../contract/vendor/kokoro-platform/6519ae9a7dba63586474d2860f6725d3165b701e/execution-operations-v5/vectors/product-installation.json",
+    "../contract/vendor/kokoro-platform/494b118ae7c29f1fc1005122d72c6c2bbf2640b6/execution-operations-v5/vectors/product-installation.json",
     import.meta.url,
   )
   const vectors = JSON.parse(await readFile(source, "utf8")).vectors.filter((vector) => vector.stage === "projection")

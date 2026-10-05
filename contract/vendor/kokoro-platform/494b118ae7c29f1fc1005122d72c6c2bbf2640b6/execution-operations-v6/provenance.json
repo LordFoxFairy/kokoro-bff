@@ -1,0 +1,47 @@
+{
+  "algorithm": "sha256",
+  "aggregateRecord": "path + NUL + length + NUL + sha256 + LF",
+  "files": [
+    {
+      "path": "authorize-response-v1.json",
+      "bytes": 1137,
+      "sha256": "b09776cceeda7d36ecc49e43b1ef4ccb9b426c9914825ec317805a5aa876174d"
+    },
+    {
+      "path": "connection-projection-v1.json",
+      "bytes": 1954,
+      "sha256": "3e29005afb0856936f6361f59ae197b76d59324d0a37c6c03f711756c891d29c"
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 1181,
+      "sha256": "2f5adda27ca7de30771dfe2a0422797f3c8b8d3eeff7f2e870868b508792fa0a"
+    },
+    {
+      "path": "schemas/authorize-response.schema.json",
+      "bytes": 2293,
+      "sha256": "8cd877313c9e6ad60cae1f8c3d722cf3e3b47678bbbc60041a53c0df3f70a6db"
+    },
+    {
+      "path": "schemas/connection-projection.schema.json",
+      "bytes": 5637,
+      "sha256": "e33ef29a89c562ce74b3871522d004c5502709a70ad4afb1fe1647affa8418ce"
+    },
+    {
+      "path": "schemas/manifest.schema.json",
+      "bytes": 2275,
+      "sha256": "b6cecac8d80d78354b351cc5e4dde8f7dc9ef6bd89356e84aa8ed4fbb7d3c8e3"
+    },
+    {
+      "path": "vectors/authorize-response.json",
+      "bytes": 12300,
+      "sha256": "2bf8751822d4db00d053ceb41b60749ab452dd38db22b081a4e4e5e7b0ab147e"
+    },
+    {
+      "path": "vectors/connection-projection.json",
+      "bytes": 7474,
+      "sha256": "6c83cebd8006349d3e17c63d0e9f97209385f8b363822dc20869afbf39c8ae5a"
+    }
+  ],
+  "aggregateSha256": "0d728881ba1046dc566131d63de71f6821ec636cf45837b5d937fee9872d5f91"
+}

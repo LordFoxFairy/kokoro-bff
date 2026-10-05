@@ -1,0 +1,48 @@
+{
+  "version": "mcp-authorize-response/1.0.0",
+  "fqMethod": "kokoro.platform.v1.McpAuthorizationService/AuthorizeMcpTool",
+  "operation": "mcp.authorize_tool",
+  "requestBindingVersion": "3.0.0",
+  "unchanged": [
+    "request",
+    "command identity",
+    "decision digest",
+    "selector uniqueness",
+    "fresh execution proof"
+  ],
+  "requiredFields": [
+    "invocation_grant",
+    "connector_id",
+    "tool_ref",
+    "typed_arguments_digest",
+    "expires_at_unix_seconds",
+    "audit_ref",
+    "connection_id",
+    "server_id"
+  ],
+  "addedFields": [
+    {
+      "name": "connection_id",
+      "tag": 7,
+      "type": "kokoro.platform.v1.McpConnectionId"
+    },
+    {
+      "name": "server_id",
+      "tag": 8,
+      "type": "kokoro.platform.v1.McpServerId"
+    }
+  ],
+  "binding": [
+    "prepared actual match",
+    "atomic result/receipt/audit",
+    "current state",
+    "consumer frozen selection"
+  ],
+  "receipt": {
+    "storage": "closed camelCase protobuf JSON",
+    "missingOrMalformedIdentity": "FAILED_PRECONDITION",
+    "repair": false,
+    "regrant": false
+  },
+  "grant": "opaque decision ID; never provider bearer"
+}

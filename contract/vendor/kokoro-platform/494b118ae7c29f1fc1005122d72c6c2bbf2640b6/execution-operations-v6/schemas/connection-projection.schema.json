@@ -1,0 +1,244 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kokoro.dev/contracts/platform-execution-operations/6.0.0/schemas/connection-projection.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "httpVersion",
+    "method",
+    "path",
+    "visibility",
+    "surface",
+    "identity",
+    "permission",
+    "humanPermissionAdded",
+    "executionGrant",
+    "requiredFields",
+    "query",
+    "cursor",
+    "eligibility",
+    "scan",
+    "writes",
+    "providerCalls",
+    "secretCalls"
+  ],
+  "properties": {
+    "version": {
+      "const": "mcp-self-connection-projection/1.0.0"
+    },
+    "httpVersion": {
+      "const": "3.2.0"
+    },
+    "method": {
+      "const": "GET"
+    },
+    "path": {
+      "const": "/v1/mcp/connections"
+    },
+    "visibility": {
+      "const": "internal-owner"
+    },
+    "surface": {
+      "const": "mcp-connection"
+    },
+    "identity": {
+      "const": [
+        "IAM tenant",
+        "authenticated BFF workload",
+        "trusted Product Session subject",
+        "user/self"
+      ]
+    },
+    "permission": {
+      "const": "platform:projection.read"
+    },
+    "humanPermissionAdded": {
+      "const": false
+    },
+    "executionGrant": {
+      "const": false
+    },
+    "requiredFields": {
+      "const": [
+        "connection_id",
+        "connector_id",
+        "server_id",
+        "provider_key",
+        "transport",
+        "status"
+      ]
+    },
+    "query": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["connection_id", "provider_key", "limit", "cursor"],
+      "properties": {
+        "connection_id": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["required", "type", "minLength", "maxLength", "pattern"],
+          "properties": {
+            "required": {
+              "const": false
+            },
+            "type": {
+              "const": "string"
+            },
+            "minLength": {
+              "const": 1
+            },
+            "maxLength": {
+              "const": 191
+            },
+            "pattern": {
+              "const": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$"
+            }
+          }
+        },
+        "provider_key": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["required", "type", "minLength", "maxLength"],
+          "properties": {
+            "required": {
+              "const": false
+            },
+            "type": {
+              "const": "string"
+            },
+            "minLength": {
+              "const": 1
+            },
+            "maxLength": {
+              "const": 191
+            }
+          }
+        },
+        "limit": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["required", "type", "default", "minimum", "maximum"],
+          "properties": {
+            "required": {
+              "const": false
+            },
+            "type": {
+              "const": "integer"
+            },
+            "default": {
+              "const": 50
+            },
+            "minimum": {
+              "const": 1
+            },
+            "maximum": {
+              "const": 100
+            }
+          }
+        },
+        "cursor": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["required", "type", "minLength", "maxLength"],
+          "properties": {
+            "required": {
+              "const": false
+            },
+            "type": {
+              "const": "string"
+            },
+            "minLength": {
+              "const": 1
+            },
+            "maxLength": {
+              "const": 2048
+            }
+          }
+        }
+      }
+    },
+    "cursor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["surface", "binding", "order"],
+      "properties": {
+        "surface": {
+          "const": "mcp-self-connections"
+        },
+        "binding": {
+          "const": [
+            "tenant",
+            "subject",
+            "connection_id presence/value",
+            "provider_key presence/value"
+          ]
+        },
+        "order": {
+          "const": ["server_id", "connection_id"]
+        }
+      }
+    },
+    "eligibility": {
+      "const": [
+        "same-tenant active connection",
+        "same-tenant active user/self connector",
+        "current same-tenant same-connector approved authorization",
+        "registered streamable_http server with matching provider"
+      ]
+    },
+    "scan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "batchSize",
+        "maxBatches",
+        "maxCandidates",
+        "maxQueries",
+        "isolation",
+        "transactionMs",
+        "softMs",
+        "overflow",
+        "partialSuccess"
+      ],
+      "properties": {
+        "batchSize": {
+          "const": 100
+        },
+        "maxBatches": {
+          "const": 10
+        },
+        "maxCandidates": {
+          "const": 1000
+        },
+        "maxQueries": {
+          "const": 40
+        },
+        "isolation": {
+          "const": "RepeatableRead"
+        },
+        "transactionMs": {
+          "const": 2000
+        },
+        "softMs": {
+          "const": 1000
+        },
+        "overflow": {
+          "const": "503 capability.dependencies_unavailable"
+        },
+        "partialSuccess": {
+          "const": false
+        }
+      }
+    },
+    "writes": {
+      "const": false
+    },
+    "providerCalls": {
+      "const": false
+    },
+    "secretCalls": {
+      "const": false
+    }
+  }
+}

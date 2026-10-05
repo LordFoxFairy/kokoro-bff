@@ -1,0 +1,17 @@
+{
+  "artifact": "platform-execution-operations",
+  "artifactVersion": "7.0.0",
+  "status": "inactive",
+  "routable": false,
+  "packageName": "kokoro.platform.v1",
+  "inherits": {
+    "version": "6.0.0",
+    "aggregateSha256": "0d728881ba1046dc566131d63de71f6821ec636cf45837b5d937fee9872d5f91"
+  },
+  "counts": {
+    "rpc": 39,
+    "command": 20,
+    "proof": 24
+  },
+  "profile": "zip-v2"
+}
