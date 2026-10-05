@@ -1,3 +1,31 @@
+## R239 Project active前置实施事实（2026-10-05）
+
+本节为当前已验证候选事实；下方R236为实施前设计记录，其“未实施/未验证”时态由本节替代，位置及边界说明仍有效。基线main 7289b3a4ae8f2df5c249350d59b9405c33fb4083，本地交付身份以本仓Git与Root收据为准，尚未启用用户3310组合。
+
+沿原业务位置实施：canonical Project nullable deleted_at及原owner-list partial index，六既有repository共25条active资格谓词；新增bootstrap/server.ts非IAM已缓存requestId后一行统一响应标识。事务、排序父锁、Message委派、4.5秒预算、精确client释放和既有API不变。无新文件/模块/状态写入口；无兼容层。
+
+实现与两既有测试形成唯一切片，Root真实schema12、完整HTTP/PG/Redis217项无失败/跳过，工程check及format通过，独审零发现。完整Project rename/delete、Task政策、Storage释放与Run/Share收口仍独立后继，资格过滤不等于完整删除协议。
+
+## R236 Project active 最小前置（2026-10-04；docs-only，待独审/真实RED）
+
+Root选择R235路径A：在正式 `7289b3a4ae8f2df5c249350d59b9405c33fb4083` 上独立交付Project墓碑列与现有资格查询的active条件，为R234改名及完整删除后继提供前置；不缩减完整CRUD目标。HEAD尚无Project.deleted_at；现20mixed包含未交付候选及会回退R217的旧实现，不作为可整体接入的基线。
+
+| 放置/范围 | 唯一目标 |
+|---|---|
+| Owner/依赖 | BFF拥有Project资格；现IAM准入→可信tenant/subject→本仓repository，保持现事务与父Project→Conversation锁序，不新增HTTP身份协议。 |
+| `database/schema.sql` | 唯一canonical：仅Project nullable墓碑列及原owner-list索引partial predicate；数据语义见DATA_MODEL R236。 |
+| `src/infrastructure/postgres/project-repository.ts` | 6处：list、find、instruction UPDATE、revision父EXISTS、skill父锁、tasks父EXISTS。 |
+| `src/infrastructure/postgres/chat-repository.ts` | 10处：list/find/snapshot/process、messages两查、rename/delete、create/revoke share的Project EXISTS；保HEAD内联Conversation生命周期。 |
+| `src/infrastructure/postgres/conversation-artifact-library.ts` | 2处：列表与空页授权Project EXISTS。 |
+| `src/infrastructure/postgres/conversation-move.ts` | 3处：winner当前Project、源解析、排序Project锁；保Move原lease/receipt。 |
+| `src/infrastructure/postgres/scheduled-task-repository.ts` | 1处：ownedProjectId父FOR SHARE，不改Task生命周期。 |
+| `src/infrastructure/postgres/chat-turn-commit.ts` | 3处：resolveActiveProject、首次Project锁、既有Conversation排序Project锁；保持正式R217有界事务。 |
+| 粒度/比较 | 共7生产/schema位置、25处资格predicate；采用现文件窄增量，淘汰整体接入mixed、删除lifecycle先片及第二schema/fallback，不建文件/目录/框架。 |
+
+后继tests-first只用现 `test/schema-governance.test.mjs` 与 `test/business-store.integration.mjs` 的HEAD增量；前者真fresh catalog，后者真实HTTP/PG正负矩阵，详见API/DATA R236。Root冻结clean artifact后另授代码，原20mixed字节保留。保全部HEAD测试，尤其R207/R209/R211/R215共7个Message期限/断链/unknown case及request-id断言；保outbox对chat-turn-commit委派、Message合法解析后早返回，禁止恢复mixed无界内联事务/owner预读。
+
+本片无生产tombstone writer、公开DELETE、删除三表、Service/port/installer变更、兼容路径或机器合同变更。Project/Task/Storage/Run删除生命周期仍未完成；单置墓碑不等于撤Share/停止后台Run。R234 name合同与实现保持独立后继，本设计不预报任何门通过。
+
 ## R217 Message 有界准入与断链租约（2026-10-04；隔离候选已验收）
 
 隔离clean候选已把正式Message POST的owner读取、Project→Conversation锁、dispatch/Message/AG-UI写入与COMMIT收进同一个4.5秒绝对期限；Pool取得、最多四次scope变化、每条SQL、rollback、COMMIT与50ms通知均共享剩余期限。HTTP仍先完成可信IAM/session admission与严格wire/静态配置门，其他Chat读写授权路径不变。client-created缺Project沿既有404，foreign/deleted/legacy Conversation仍404；same-key/body只从canonical dispatch恢复原Run/Message identity，不新增generic receipt、协议或schema。

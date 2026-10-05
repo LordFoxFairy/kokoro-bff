@@ -362,3 +362,65 @@ test("R124 fresh projection state removes the retired private tool-call cache wh
   assert.match(stream, /text_message_ids/u)
   assert.doesNotMatch(schema, /tool_call_ids/u)
 })
+
+// R237 stage 1: an actual fresh owner catalog, not a regex spanning another table.
+databaseTest("R237 fresh catalog has the single nullable Project tombstone and exact active owner index", async () => {
+  const name = `kokoro_bff_r237_${randomUUID().replaceAll("-", "")}`
+  const admin = new Client({ connectionString: adminUrl })
+  const target = new URL(adminUrl)
+  target.pathname = `/${name}`
+  target.search = ""
+  target.searchParams.set("schema", "kokoro_bff")
+  let created = false
+  let client
+  try {
+    await admin.connect()
+    await admin.query(`CREATE DATABASE ${name}`)
+    created = true
+    await applyCanonicalSchema(target.toString(), await loadCanonicalSchema())
+    client = new Client({ connectionString: target.toString() })
+    await client.connect()
+    const column = await client.query(
+      `SELECT format_type(attribute.atttypid, attribute.atttypmod) AS type,
+              attribute.attnotnull AS not_null, pg_get_expr(default_value.adbin, default_value.adrelid) AS default_value
+         FROM pg_attribute AS attribute
+         LEFT JOIN pg_attrdef AS default_value
+           ON default_value.adrelid=attribute.attrelid AND default_value.adnum=attribute.attnum
+        WHERE attribute.attrelid='kokoro_bff.bff_project'::regclass
+          AND attribute.attname='deleted_at' AND NOT attribute.attisdropped`,
+    )
+    assert.deepEqual(column.rows, [{ type: "timestamp(3) with time zone", not_null: false, default_value: null }], "schema prerequisite: Project.deleted_at")
+    const indexes = await client.query(
+      `SELECT index_class.relname AS name, access_method.amname AS method,
+              index_row.indisunique AS unique, index_row.indisvalid AS valid,
+              index_row.indnkeyatts AS key_count, index_row.indnatts AS total_count,
+              ARRAY(SELECT pg_get_indexdef(index_row.indexrelid, number, true)
+                      FROM generate_series(1, index_row.indnkeyatts) AS number ORDER BY number) AS keys,
+              index_row.indoption::text AS options,
+              pg_get_expr(index_row.indpred, index_row.indrelid) AS predicate
+         FROM pg_index AS index_row
+         JOIN pg_class AS index_class ON index_class.oid=index_row.indexrelid
+         JOIN pg_am AS access_method ON access_method.oid=index_class.relam
+        WHERE index_row.indrelid='kokoro_bff.bff_project'::regclass ORDER BY index_class.relname`,
+    )
+    assert.deepEqual(indexes.rows, [
+      { name: "bff_project_pkey", method: "btree", unique: true, valid: true, key_count: 1, total_count: 1, keys: ["project_id"], options: "0", predicate: null },
+      { name: "ix_bff_project_owner_list", method: "btree", unique: false, valid: true, key_count: 4, total_count: 4,
+        keys: ["tenant_id", "owner_id", "created_at", "project_id"], options: "0 0 0 0", predicate: "(deleted_at IS NULL)" },
+      { name: "uq_bff_project_owner_slug", method: "btree", unique: true, valid: true, key_count: 3, total_count: 3,
+        keys: ["tenant_id", "owner_id", "slug"], options: "0 0 0", predicate: null },
+    ])
+    await client.query("INSERT INTO kokoro_bff.bff_project (project_id,tenant_id,owner_id,name,slug) VALUES ('r237','r237','owner','Active','active')")
+    assert.deepEqual((await client.query("SELECT deleted_at FROM kokoro_bff.bff_project WHERE project_id='r237'")).rows, [{ deleted_at: null }])
+  } finally {
+    try {
+      await client?.end()
+    } finally {
+      try {
+        if (created) await admin.query(`DROP DATABASE ${name} WITH (FORCE)`)
+      } finally {
+        await admin.end()
+      }
+    }
+  }
+})

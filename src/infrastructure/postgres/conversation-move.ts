@@ -29,7 +29,7 @@ async function moveWinnerReceipt(
     }
     const currentRef = visible.rows[0]!.project_ref
     if (currentRef !== null) {
-      const source = await lease.query("SELECT project_id FROM bff_project WHERE tenant_id=$1 AND owner_id=$2 AND (project_id=$3 OR slug=$3) LIMIT 2", [
+      const source = await lease.query("SELECT project_id FROM bff_project WHERE bff_project.deleted_at IS NULL AND tenant_id=$1 AND owner_id=$2 AND (project_id=$3 OR slug=$3) LIMIT 2", [
         tenantId,
         subjectId,
         currentRef,
@@ -79,7 +79,7 @@ export async function moveConversation(database: PostgresBffDatabase, command: M
       let sourceProjectId: string | null = null
       if (sourceRef !== null) {
         const source = await lease.query<{ project_id: string }>(
-          "SELECT project_id FROM bff_project WHERE tenant_id=$1 AND owner_id=$2 AND (project_id=$3 OR slug=$3) LIMIT 2",
+          "SELECT project_id FROM bff_project WHERE bff_project.deleted_at IS NULL AND tenant_id=$1 AND owner_id=$2 AND (project_id=$3 OR slug=$3) LIMIT 2",
           [tenantId, subjectId, sourceRef],
         )
         if (source.rows.length === 0) {
@@ -91,7 +91,7 @@ export async function moveConversation(database: PostgresBffDatabase, command: M
       }
       const projectIds = [...new Set([sourceProjectId, targetProjectId].filter((id): id is string => id !== null))].sort()
       for (const projectId of projectIds) {
-        const locked = await lease.query("SELECT project_id FROM bff_project WHERE tenant_id=$1 AND owner_id=$2 AND project_id=$3 FOR UPDATE", [
+        const locked = await lease.query("SELECT project_id FROM bff_project WHERE bff_project.deleted_at IS NULL AND tenant_id=$1 AND owner_id=$2 AND project_id=$3 FOR UPDATE", [
           tenantId,
           subjectId,
           projectId,

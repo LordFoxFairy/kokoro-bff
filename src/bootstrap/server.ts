@@ -60,6 +60,7 @@ async function handle(
     return
   }
   const id = requestId(request)
+  response.setHeader("x-request-id", id)
   const segments = pathOf(request)
   if (segments.length === 1 && segments[0] === "healthz" && request.method === "GET") {
     send(response, 200, { status: "ok", service: "kokoro-bff", mode: config.mode })

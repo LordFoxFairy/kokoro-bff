@@ -1,3 +1,23 @@
+## R239 Project资格与HTTP响应边界当前态（2026-10-05）
+
+本节为当前已验证候选事实；下方R236为实施前设计记录，其“未实施/未验证”时态由本节替代，位置及边界说明仍有效。基线main 7289b3a4ae8f2df5c249350d59b9405c33fb4083，本地交付身份以本仓Git与Root收据为准，尚未启用用户3310组合。
+
+现public7.1.0、机器OpenAPI、错误码、身份、operation、generated均不变。现25资格查询排除墓碑Project并保原tenant/owner；统一x-request-id使原错误响应具备既有required标识，IAM专属验证分流不改。真实HTTP/PG矩阵含active/Direct正控、同tenant foreign/跨tenant/墓碑拒绝、零副作用、六父锁竞争及既有Message/Move重放。
+
+SessionAdmissionDouble只证明BFF HTTP/PG，不是正式IAM/浏览器整链。无生产Project tombstone writer/DELETE/name PATCH；公开Share与后台Run完整生命周期继续待验。完整资源证据见CURRENT R239。
+
+## R236 Project active 资格前置（2026-10-04；现public7.1.0不变）
+
+正式HEAD `7289b3a4ae8f2df5c249350d59b9405c33fb4083` 无Project.deleted_at；Root已选最小active前置，当前仅文档。唯一机器OpenAPI、operation/version、现错误/envelope、IAM契约、ID/slug读取语义不改；R234 `PATCH /v1/projects/{projectId}/name` 仍是独立后继，未因本片成为正式能力。
+
+目标在既有25处Project资格条件上增加active过滤：每次现IAM准入后只用可信tenant/subject，详情/写入按原不可见错误语义拒绝墓碑/foreign，不泄漏其存在；集合沿原协议排除不可见项。现父锁查询在锁内检查active，Message不增加HTTP owner预读；重复请求/Move重放保持各自已发布协议，不发明新status/code或统一改变receipt语义。Project资源上传/列表经原projects.find继承资格，不另加route/alias。
+
+**后继真实HTTP＋PG矩阵：** 本人active P/墓碑D、同tenant其他owner、跨tenant；分别以既有ID/slug引用测试Project list/get/instruction/revisions/skill/tasks、Task创建关联、Conversation list/detail/messages/snapshot/process/rename/share、Artifact列表、Move源/目标/重放及首次/既有Message准入。P与Direct正控保持，D/foreign按原协议拒绝或集合排除，拒绝后Project/子事实/Message/dispatch/receipt全量快照零差；不以“返回404”或字符串predicate计数代替正负业务oracle。
+
+资格矩阵放现 `test/business-store.integration.mjs`，schema放现 `test/schema-governance.test.mjs`；保HEAD全部R217测试。HTTP使用SessionAdmissionDouble时只证明BFF HTTP/PG，正式IAM组合另由Root验证，不能冒真人认证全链通过。先Root独审D0，再真实RED→最小GREEN→完整门；本片未运行测试。
+
+本片没有生产墓碑writer/公开DELETE；Share公开能力与后台Run原有Conversation/stream生命周期不因单列自动终止。独立Task政策、Storage释放、Run收口仍OPEN；无新增Service/port/installer、删除三表、generated/lock、兼容路径或新公共API。
+
 ## R217 Message 准入当前候选（2026-10-04；wire不变）
 
 公开Message请求/202 receipt、404与503 envelope、`Idempotency-Key`、`x-request-id`和`no-store`均未变；OpenAPI版本、operation inventory、generated与错误码无差异。候选只把Message owner授权/写事务纳入单一4.5秒内部期限，并在checked-out PostgreSQL连接断开时稳定返回既有retryable 503而非进程级uncaught。COMMIT已执行但ACK丢失仍只返回503，不猜成功；同key/body重试从immutable dispatch读取原`run_id/user_message_id/assistant_message_id`并返回202，异body仍冲突。通知失败不反转已提交receipt。

@@ -128,7 +128,7 @@ export class PostgresChatRepository implements ChatRepository {
             project_ref IS NULL
             OR EXISTS (
               SELECT 1 FROM bff_project AS project
-               WHERE project.tenant_id = bff_conversation.tenant_id
+               WHERE project.deleted_at IS NULL AND project.tenant_id = bff_conversation.tenant_id
                  AND project.owner_id = bff_conversation.owner_id
                  AND (project.project_id = bff_conversation.project_ref OR project.slug = bff_conversation.project_ref)
             )
@@ -156,7 +156,7 @@ export class PostgresChatRepository implements ChatRepository {
             project_ref IS NULL
             OR EXISTS (
               SELECT 1 FROM bff_project AS project
-               WHERE project.tenant_id = bff_conversation.tenant_id
+               WHERE project.deleted_at IS NULL AND project.tenant_id = bff_conversation.tenant_id
                  AND project.owner_id = bff_conversation.owner_id
                  AND (project.project_id = bff_conversation.project_ref OR project.slug = bff_conversation.project_ref)
             )
@@ -202,7 +202,7 @@ export class PostgresChatRepository implements ChatRepository {
               project_ref IS NULL
               OR EXISTS (
                 SELECT 1 FROM bff_project AS project
-                 WHERE project.tenant_id = bff_conversation.tenant_id
+                 WHERE project.deleted_at IS NULL AND project.tenant_id = bff_conversation.tenant_id
                    AND project.owner_id = bff_conversation.owner_id
                    AND (project.project_id = bff_conversation.project_ref OR project.slug = bff_conversation.project_ref)
               )
@@ -339,7 +339,7 @@ export class PostgresChatRepository implements ChatRepository {
         `SELECT 1 FROM bff_conversation
           WHERE tenant_id=$1 AND owner_id=$2 AND conversation_id=$3 AND status='active'
             AND (project_ref IS NULL OR EXISTS (SELECT 1 FROM bff_project AS project
-              WHERE project.tenant_id=bff_conversation.tenant_id AND project.owner_id=bff_conversation.owner_id
+              WHERE project.deleted_at IS NULL AND project.tenant_id=bff_conversation.tenant_id AND project.owner_id=bff_conversation.owner_id
                 AND (project.project_id=bff_conversation.project_ref OR project.slug=bff_conversation.project_ref)))
             AND ($4::text IS NULL OR project_ref=$4)`,
         [tenantId, subjectId, conversationId, projectRef ?? null],
@@ -376,7 +376,7 @@ export class PostgresChatRepository implements ChatRepository {
             project_ref IS NULL
             OR EXISTS (
               SELECT 1 FROM bff_project AS project
-               WHERE project.tenant_id = bff_conversation.tenant_id
+               WHERE project.deleted_at IS NULL AND project.tenant_id = bff_conversation.tenant_id
                  AND project.owner_id = bff_conversation.owner_id
                  AND (project.project_id = bff_conversation.project_ref OR project.slug = bff_conversation.project_ref)
             )
@@ -401,7 +401,7 @@ export class PostgresChatRepository implements ChatRepository {
                  conversation.project_ref IS NULL
                  OR EXISTS (
                    SELECT 1 FROM bff_project AS project
-                    WHERE project.tenant_id = conversation.tenant_id
+                    WHERE project.deleted_at IS NULL AND project.tenant_id = conversation.tenant_id
                       AND project.owner_id = conversation.owner_id
                       AND (project.project_id = conversation.project_ref OR project.slug = conversation.project_ref)
                  )
@@ -435,7 +435,7 @@ export class PostgresChatRepository implements ChatRepository {
             project_ref IS NULL
             OR EXISTS (
               SELECT 1 FROM bff_project AS project
-               WHERE project.tenant_id = bff_conversation.tenant_id
+               WHERE project.deleted_at IS NULL AND project.tenant_id = bff_conversation.tenant_id
                  AND project.owner_id = bff_conversation.owner_id
                  AND (project.project_id = bff_conversation.project_ref OR project.slug = bff_conversation.project_ref)
             )
@@ -460,7 +460,7 @@ export class PostgresChatRepository implements ChatRepository {
               project_ref IS NULL
               OR EXISTS (
                 SELECT 1 FROM bff_project AS project
-                 WHERE project.tenant_id = bff_conversation.tenant_id
+                 WHERE project.deleted_at IS NULL AND project.tenant_id = bff_conversation.tenant_id
                    AND project.owner_id = bff_conversation.owner_id
                    AND (project.project_id = bff_conversation.project_ref OR project.slug = bff_conversation.project_ref)
               )
@@ -585,7 +585,7 @@ export class PostgresChatRepository implements ChatRepository {
               project_ref IS NULL
               OR EXISTS (
                 SELECT 1 FROM bff_project AS project
-                 WHERE project.tenant_id = bff_conversation.tenant_id
+                 WHERE project.deleted_at IS NULL AND project.tenant_id = bff_conversation.tenant_id
                    AND project.owner_id = bff_conversation.owner_id
                    AND (project.project_id = bff_conversation.project_ref OR project.slug = bff_conversation.project_ref)
               )
@@ -661,7 +661,7 @@ export class PostgresChatRepository implements ChatRepository {
                  conversation.project_ref IS NULL
                  OR EXISTS (
                    SELECT 1 FROM bff_project AS project
-                    WHERE project.tenant_id = conversation.tenant_id
+                    WHERE project.deleted_at IS NULL AND project.tenant_id = conversation.tenant_id
                       AND project.owner_id = conversation.owner_id
                       AND (project.project_id = conversation.project_ref OR project.slug = conversation.project_ref)
                  )

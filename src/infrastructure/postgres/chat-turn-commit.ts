@@ -85,7 +85,7 @@ async function acquireClient(database: PostgresBffDatabase, deadline: number): P
 async function resolveActiveProject(query: DeadlineQuery, tenantId: string, subjectId: string, projectRef: string): Promise<string | null> {
   const result = await query<{ project_id: string }>(
     `SELECT project_id FROM bff_project
-      WHERE tenant_id=$1 AND owner_id=$2 AND (project_id=$3 OR slug=$3)
+      WHERE bff_project.deleted_at IS NULL AND tenant_id=$1 AND owner_id=$2 AND (project_id=$3 OR slug=$3)
       LIMIT 1`,
     [tenantId, subjectId, projectRef],
   )
@@ -108,7 +108,7 @@ async function lockChatScope(query: DeadlineQuery, command: CommitChatTurn): Pro
     if (callerProjectId !== undefined && callerProjectId !== null) {
       const locked = await query<{ project_id: string }>(
         `SELECT project_id FROM bff_project
-          WHERE tenant_id=$1 AND owner_id=$2 AND project_id=$3
+          WHERE bff_project.deleted_at IS NULL AND tenant_id=$1 AND owner_id=$2 AND project_id=$3
           FOR SHARE`,
         [command.tenantId, command.subjectId, callerProjectId],
       )
@@ -143,7 +143,7 @@ async function lockChatScope(query: DeadlineQuery, command: CommitChatTurn): Pro
   if (projectIds.length > 0) {
     const locked = await query<{ project_id: string }>(
       `SELECT project_id FROM bff_project
-        WHERE tenant_id=$1 AND owner_id=$2 AND project_id=ANY($3::text[])
+        WHERE bff_project.deleted_at IS NULL AND tenant_id=$1 AND owner_id=$2 AND project_id=ANY($3::text[])
         ORDER BY project_id FOR SHARE`,
       [command.tenantId, command.subjectId, projectIds],
     )

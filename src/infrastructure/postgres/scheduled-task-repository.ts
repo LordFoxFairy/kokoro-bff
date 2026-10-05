@@ -438,7 +438,7 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskRepository,
   private async ownedProjectId(client: PoolClient, scope: ScheduledTaskOwnerScope, idOrSlug: string): Promise<string | null> {
     const result = await client.query<{ project_id: string }>(
       `SELECT project_id FROM bff_project
-        WHERE tenant_id = $1 AND owner_id = $2 AND (project_id = $3 OR slug = $3)
+        WHERE bff_project.deleted_at IS NULL AND tenant_id = $1 AND owner_id = $2 AND (project_id = $3 OR slug = $3)
         LIMIT 1 FOR SHARE`,
       [scope.tenantId, scope.subjectId, idOrSlug],
     )

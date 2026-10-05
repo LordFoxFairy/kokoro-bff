@@ -43,7 +43,7 @@ export class PostgresConversationArtifactLibrary implements ArtifactLibraryRepos
             conversation.project_ref IS NULL
             OR EXISTS (
               SELECT 1 FROM bff_project AS project
-               WHERE project.tenant_id = conversation.tenant_id
+               WHERE project.deleted_at IS NULL AND project.tenant_id = conversation.tenant_id
                  AND project.owner_id = conversation.owner_id
                  AND (project.project_id = conversation.project_ref OR project.slug = conversation.project_ref)
             )
@@ -74,7 +74,7 @@ export class PostgresConversationArtifactLibrary implements ArtifactLibraryRepos
             conversation.project_ref IS NULL
             OR EXISTS (
               SELECT 1 FROM bff_project AS project
-               WHERE project.tenant_id = conversation.tenant_id
+               WHERE project.deleted_at IS NULL AND project.tenant_id = conversation.tenant_id
                  AND project.owner_id = conversation.owner_id
                  AND (project.project_id = conversation.project_ref OR project.slug = conversation.project_ref)
             )

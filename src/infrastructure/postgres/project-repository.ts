@@ -79,7 +79,7 @@ export class PostgresProjectRepository implements ProjectRepository {
     const result = await this.database.pool.query<ProjectRow>(
       `SELECT project_id, tenant_id, owner_id, name, slug, description, instruction, created_at, updated_at
          FROM bff_project
-        WHERE tenant_id = $1 AND owner_id = $2
+        WHERE tenant_id = $1 AND owner_id = $2 AND bff_project.deleted_at IS NULL
         ORDER BY created_at ASC, project_id ASC`,
       [scope.tenantId, scope.subjectId],
     )
@@ -90,7 +90,7 @@ export class PostgresProjectRepository implements ProjectRepository {
     const result = await this.database.pool.query<ProjectRow>(
       `SELECT project_id, tenant_id, owner_id, name, slug, description, instruction, created_at, updated_at
          FROM bff_project
-        WHERE tenant_id = $1 AND owner_id = $2 AND (project_id = $3 OR slug = $3)
+        WHERE tenant_id = $1 AND owner_id = $2 AND bff_project.deleted_at IS NULL AND (project_id = $3 OR slug = $3)
          LIMIT 1`,
       [scope.tenantId, scope.subjectId, idOrSlug],
     )
@@ -122,7 +122,7 @@ export class PostgresProjectRepository implements ProjectRepository {
       await client.query("BEGIN")
       const project = await client.query<ProjectRow>(
         `UPDATE bff_project SET instruction = $4, updated_at = CURRENT_TIMESTAMP(3)
-          WHERE tenant_id = $1 AND owner_id = $2 AND (project_id = $3 OR slug = $3)
+          WHERE tenant_id = $1 AND owner_id = $2 AND bff_project.deleted_at IS NULL AND (project_id = $3 OR slug = $3)
           RETURNING project_id, tenant_id, owner_id, name, slug, description, instruction, created_at, updated_at`,
         [scope.tenantId, scope.subjectId, idOrSlug, instruction],
       )
@@ -163,7 +163,7 @@ export class PostgresProjectRepository implements ProjectRepository {
             SELECT 1 FROM bff_project
              WHERE bff_project.tenant_id = bff_project_instruction_revision.tenant_id
                AND bff_project.project_id = bff_project_instruction_revision.project_id
-               AND bff_project.owner_id = $3
+               AND bff_project.owner_id = $3 AND bff_project.deleted_at IS NULL
           )
         ORDER BY updated_at DESC, revision_id DESC`,
       [scope.tenantId, project.id, scope.subjectId],
@@ -177,7 +177,7 @@ export class PostgresProjectRepository implements ProjectRepository {
       await client.query("BEGIN")
       const project = await client.query<{ project_id: string }>(
         `SELECT project_id FROM bff_project
-          WHERE tenant_id = $1 AND owner_id = $2 AND (project_id = $3 OR slug = $3)
+          WHERE tenant_id = $1 AND owner_id = $2 AND bff_project.deleted_at IS NULL AND (project_id = $3 OR slug = $3)
           FOR UPDATE`,
         [scope.tenantId, scope.subjectId, projectId],
       )
@@ -214,7 +214,7 @@ export class PostgresProjectRepository implements ProjectRepository {
             SELECT 1 FROM bff_project
              WHERE bff_project.tenant_id = bff_project_task.tenant_id
                AND bff_project.project_id = bff_project_task.project_id
-               AND bff_project.owner_id = $3
+               AND bff_project.owner_id = $3 AND bff_project.deleted_at IS NULL
           )
         ORDER BY updated_at DESC, task_id ASC`,
       [scope.tenantId, project.id, scope.subjectId],

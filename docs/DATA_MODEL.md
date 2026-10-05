@@ -1,3 +1,23 @@
+## R239 Project active canonical当前态（2026-10-05）
+
+本节为当前已验证候选事实；下方R236为实施前设计记录，其“未实施/未验证”时态由本节替代，位置及边界说明仍有效。基线main 7289b3a4ae8f2df5c249350d59b9405c33fb4083，本地交付身份以本仓Git与Root收据为准，尚未启用用户3310组合。
+
+唯一database/schema.sql现增bff_project.deleted_at TIMESTAMPTZ(3) nullable且无default，原owner_list同列序改partial WHERE deleted_at IS NULL；其它列、两唯一索引、slug/ID语义及表不变。六repository共25条件在现租户/owner和事务父锁边界内校验active；无外键、migration、新schema/版本表或删除三表。
+
+Root真fresh catalog完整schema12项及完整真实集成217项通过；schema指定owner共存/安装失败回滚保留。fixture写墓碑不构成生产删除能力；独立Task、Storage、Run/Share/stream引用释放仍待后继。完整资源收据见CURRENT R239。
+
+## R236 Project active canonical数据前置（2026-10-04；仅设计，未改SQL）
+
+当前正式HEAD `7289b3a4ae8f2df5c249350d59b9405c33fb4083` 的bff_project没有deleted_at；20mixed已有未交付删除候选，不能由其存在推导正式schema具备该列。Root选择R235路径A，在HEAD基底的唯一 `database/schema.sql` 只新增 `bff_project.deleted_at TIMESTAMPTZ(3) NULL`（无非空默认），并把现 `ix_bff_project_owner_list(tenant_id,owner_id,created_at ASC,project_id ASC)` 改为 `WHERE deleted_at IS NULL`。这是同一索引的active查询范围，不新建重复索引；slug unique、name、ID及所有原事实/receipt保持。
+
+业务资格为可信tenant+owner且deleted_at为空；非空仅用于资格排除，本片不提供生产状态writer/restore API。TECH R236所列6个现TS位置共25处现Project资格查询/更新加active：Project6、Chat10、Artifact2、Move3、ScheduledTask1、正式chat-turn-commit3。父锁查询在原同client事务锁内重验，更新保定列与原affected-row/错误语义；不改变锁序、事务隔离、重放或R217有限预算。Message仍沿正式outbox委派，保4.5秒总界及精确client listener/unknown销毁，不接mixed旧内联事务。
+
+**数据验证：** 现 `test/schema-governance.test.mjs` 限定Project表块，并以真fresh安装后的catalog核列所属表、timestamptz(3)/nullable、原索引列序和partial表达式；证明其他owner schema保留、安装失败回滚、无FK/删除三表。HEAD安装器已读取唯一canonical schema，无需增加删除表存在要求；不建migration/第二SQL、缺列fallback、version、新状态表或Service/port。
+
+现 `test/business-store.integration.mjs` 只在自有fixture Project行设置墓碑，验证API R236的HTTP/PG正负与权限零差；该fixture不是生产删除流程。保全部HEAD七个R217故障case，Root重跑fresh catalog、Message/Move回归与全owner门。锁后资格检查不等于已实现完整Project删除并发协议；未来生产writer仍须独立收口Conversation/Share/stream/dispatch。当前Task/Storage/Run删除生命周期和receipt内容保留治理未完成，不通过给所有后台表加EXISTS假装闭环。
+
+本片仅独立active前置：零删除三表/command、installer改动、公开DELETE、机器合同/version/lock变更；R234 rename的name+receipt事务另片。源码与SQL尚未实施，当前无资源或测试通过证据。
+
 ## R217 Message 原子事实与失败窗口（2026-10-04；schema不变）
 
 本切片不改canonical SQL、表、列、索引、约束或retention。单个Message事务继续原子写`bff_agent_dispatch_outbox`、两条`bff_message`、`bff_agui_stream`/queued投影与Conversation更新时间；`bff_idempotency_receipt`不是Message命令receipt且保持零增量。same-key authority是dispatch唯一键、`request_digest`及冻结Run/Message IDs。

@@ -9,13 +9,15 @@ CREATE TABLE IF NOT EXISTS bff_project (
   slug TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
   instruction TEXT,
+  deleted_at TIMESTAMPTZ(3),
   created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_bff_project_owner_slug
   ON bff_project (tenant_id, owner_id, slug);
 CREATE INDEX IF NOT EXISTS ix_bff_project_owner_list
-  ON bff_project (tenant_id, owner_id, created_at ASC, project_id ASC);
+  ON bff_project (tenant_id, owner_id, created_at ASC, project_id ASC)
+  WHERE deleted_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS bff_project_instruction_revision (
   revision_id TEXT PRIMARY KEY,

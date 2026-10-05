@@ -1,3 +1,25 @@
+## R239 Project active前置Root完整验收（2026-10-05；本地交付身份以Git与Root收据为准）
+
+本节为当前已验证候选事实；下方R236为实施前设计记录，其“未实施/未验证”时态由本节替代，位置及边界说明仍有效。基线main 7289b3a4ae8f2df5c249350d59b9405c33fb4083，本地交付身份以本仓Git与Root收据为准，尚未启用用户3310组合。
+
+真实RED→schema完整12/0/0skip→同8业务组35父子统计GREEN→最终owner完整门：installer/build/check/format均exit0，默认743pass/2资源skip，236contract pass；全部真实PG/Redis integration217pass/0fail/0skip（65.592秒）。不可把默认资源skip算真实通过，完整资源门另有实际证据。七TS独审P0/P1/P2=0，business格式调整仅AST等价。
+
+资源manifest：`/var/folders/gn/wbk8wfbd047_wvwkwtyn331r0000gn/T/kokoro-r238-bff-full-4wxzajt6/manifest.json`；source_hashes_equal/redis_keys_equal/secondary_dbs_unchanged均true，自有数据库已不存在。schema治理收据沿Root progress R238。
+
+候选10 code/schema/tests路径及四现行设计前缀从HEAD重建，不整包20mixed；Root独占Git，提交身份以本仓Git与Root收据为准。生产删除writer、rename/delete、正式IAM、用户3310与模型费用完整旅程均尚未闭环；无push/组合重启/清共享数据。
+
+## R236 Project active 前置当前门（2026-10-04；docs-only）
+
+当前正式 `main 7289b3a4ae8f2df5c249350d59b9405c33fb4083` 无Project.deleted_at；20protected mixed及原R234全文保持。本轮仅四D0顶端追加短R236前缀，Root已选R235路径A，未改source/schema/test/contract/lock。完整CRUD目标不变，active前置不等于Project删除或改名完成。
+
+后继范围固定为TECH R236的7生产/schema位置（nullable墓碑列/原索引partial＋25处资格predicate）及现schema-governance/business-store两测试。必须从HEAD构成Root自有clean artifact，保正式chat-turn-commit三处及其有限事务、outbox委派/Message早返回，保全部HEAD测试和7个R217期限/断链/unknown case、request-id断言；不整包mixed回退。
+
+当前无生产tombstone writer、公开DELETE、删除三表、Service/port/installer变更或兼容路径。独立Task政策、Storage释放、Run/Share/stream完整删除生命周期仍OPEN；R234 name合同与实现另卡，本片不改public7.1.0或发布状态。
+
+**下一阶段：** Root独审三面一致性→单独授clean artifact和两测试范围→真实HTTP/PG与fresh catalog RED→7位置最小GREEN→独审/完整门→精确commit，再推进rename或完整删除后继。本次0测试执行/0通过/0失败（未执行）；禁止把设计、缺列报错或历史R217数量当本片通过。
+
+Root后继在自有随机数据库/owner schema、复用现PG/Redis且不清共享数据，执行 `pnpm db:apply-schema`、`pnpm schema:check`（显式KOKORO_TEST_POSTGRES_ADMIN_URL以运行真catalog）、`pnpm check`、`pnpm format:check`、`pnpm test:architecture`、`pnpm test:integration`；保R207/R209/R211/R215定点与完整门、源码hash/资源回收收据。HTTP/PG负例需全事实零差并有P/Direct正控，正式IAM/浏览器另验。后续BFF单writer按新卡工作，Root独占资源验收/Git/发布；本次交接后停写。
+
 ## R217 Message 有限准入切片已获Root验收
 
 基于正式BFF `8e33bc0a64d2f92ab2fcd113b1951f490487a8d3`重建的15路径clean候选，现Message准入以`chat-turn-commit.ts`承接单一4.5秒绝对期限、Project→Conversation锁、canonical replay及exact checked-out client error租约。首次真实四矩阵为3通过/1失败：真实backend terminate触发`Connection terminated unexpectedly` uncaught；窄修只增加operation listener标记destroy并在Pool release后卸载，不改预算/API/schema。Root随后四真实HTTP/PG矩阵4通过0失败（5.462秒），独审0P0/P1/P2；最终完整owner门182个真实PG/Redis测试0失败0跳过（58.539秒），743默认测试/1既定资源skip、236 contract及schema/format/lint/typecheck/build全部通过。资源manifest为`/var/folders/gn/wbk8wfbd047_wvwkwtyn331r0000gn/T/kokoro-r217-bff-full-ygz0gcao/manifest.json`，源码、自有数据库、Redis与secondary集合终态保持。
