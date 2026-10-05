@@ -151,6 +151,47 @@ test("Platform projection read gate detects status, cache and error-code drift",
   }
 })
 
+test("Billing personal reads publish only the fixed Credit account and ledger contract", async () => {
+  const { openapi, baseline } = await readContract()
+  assert.ok(baseline.some(({ method, path, operation_id }) => method === "GET" && path === "/v1/billing/summary" && operation_id === "getBillingSummary"))
+  assert.ok(baseline.some(({ method, path, operation_id }) => method === "GET" && path === "/v1/billing/ledger" && operation_id === "getBillingLedger"))
+  const billing = openapi.slice(openapi.indexOf("  /v1/billing/summary:\n"), openapi.indexOf("  /v1/billing/checkout:\n"))
+  assert.match(billing, /x-kokoro-permission: billing\.summary\.read/gu)
+  assert.match(billing, /minimum: 1, maximum: 100, default: 50/u)
+  assert.match(billing, /minLength: 1, maxLength: 2048/u)
+  for (const field of ["credit_account_id", "available_micros", "held_micros", "journal_id", "delta_micros", "balance_after_micros"])
+    assert.match(openapi, new RegExp(`\\b${field}:`, "u"))
+  for (const removed of ["balance", "currency", "period", "usage"])
+    assert.doesNotMatch(
+      openapi.slice(openapi.indexOf("    BillingSummary:\n"), openapi.indexOf("    BillingSummaryResponse:\n")),
+      new RegExp(`\\b${removed}:`, "u"),
+    )
+})
+
+test("Billing personal read semantic gate rejects shape, pagination, permission and error drift", async () => {
+  const { openapi, baseline } = await readContract()
+  const billingPaths = openapi.slice(openapi.indexOf("  /v1/billing/summary:\n"), openapi.indexOf("  /v1/billing/checkout:\n"))
+  const billingSchemas = openapi.slice(openapi.indexOf("    BillingSummary:\n"), openapi.indexOf("    BillingCheckoutRequest:\n"))
+  const unavailable = openapi.slice(openapi.indexOf("    BillingReadUnavailable:\n"), openapi.indexOf("    SkillInstallationListSuccess:\n"))
+  const mutations = [
+    openapi.replace(billingSchemas, billingSchemas.replace("additionalProperties: false", "additionalProperties: true")),
+    openapi.replace(billingSchemas, billingSchemas.replace("available_micros: { type: string", "available_micros: { type: number")),
+    openapi.replace(billingSchemas, billingSchemas.replace("format: date-time, pattern: 'Z$'", "format: date-time")),
+    openapi.replace(billingPaths, billingPaths.replace("maximum: 100, default: 50", "maximum: 1000, default: 50")),
+    openapi.replace(billingPaths, billingPaths.replace("minLength: 1, maxLength: 2048", "minLength: 0, maxLength: 4096")),
+    openapi.replace(billingPaths, billingPaths.replace("x-kokoro-permission: billing.summary.read", "x-kokoro-permission: billing.ledger.admin")),
+    openapi.replace(billingPaths, billingPaths.replace("#/components/responses/BillingReadNotFound", "#/components/responses/NotFound")),
+    openapi.replace(unavailable, unavailable.replace("billing_unavailable", "upstream_http_error")),
+  ]
+  for (const [index, broken] of mutations.entries()) {
+    assert.notEqual(broken, openapi, `mutation ${index} must change the contract`)
+    assert.ok(
+      inspectBffOpenApi(broken, baseline).some((error) => error.includes("Billing personal read")),
+      `mutation ${index} must be rejected by the Billing gate`,
+    )
+  }
+})
+
 test("CreateSkillDraft publishes the strict user-only candidate contract without legacy meta", async () => {
   const { openapi, baseline } = await readContract()
   assert.ok(baseline.some(({ method, path, operation_id }) => method === "POST" && path === "/v1/skills/drafts" && operation_id === "createSkillDraft"))
@@ -1029,11 +1070,17 @@ test("public7 retains the closed full execution head, five current-locator decis
   const snapshot = schemas.SessionSnapshotResponse.properties.data
   assert.equal(Object.hasOwn(snapshot.properties, "active_run"), false)
   assert.equal(Object.hasOwn(snapshot.properties, "pending_pauses"), false)
-  assert.deepEqual(snapshot.properties.execution_head, { $ref: "#/components/schemas/ExecutionHead" })
+  assert.deepEqual(snapshot.properties.execution_head, {
+    $ref: "#/components/schemas/ExecutionHead",
+  })
   assert.equal(schemas.ExecutionHead.additionalProperties, false)
   assert.deepEqual(schemas.ExecutionHead.required, ["run_id", "state", "pending_pauses"])
   assert.deepEqual(schemas.ExecutionHead.properties.state.enum, ["queued", "active", "waiting", "resuming"])
-  assert.deepEqual(schemas.ExecutionHead.properties.pending_pauses, { type: "array", items: { $ref: "#/components/schemas/PendingPause" }, maxItems: 1 })
+  assert.deepEqual(schemas.ExecutionHead.properties.pending_pauses, {
+    type: "array",
+    items: { $ref: "#/components/schemas/PendingPause" },
+    maxItems: 1,
+  })
   assert.equal(schemas.ExecutionHead.allOf[0].then.properties.pending_pauses.minItems, 1)
   assert.equal(schemas.ExecutionHead.allOf[0].else.properties.pending_pauses.maxItems, 0)
   assert.equal(schemas.ChatInteractionState.additionalProperties, false)
@@ -1073,7 +1120,9 @@ test("public6 defines the single Conversation collection all, direct and project
   assert.match(operation.description, /Explicit scope=direct lists only Conversations without a project_ref/u)
   assert.match(operation.description, /mutually exclusive and return invalid_scope before Project lookup/u)
   assert.match(operation.description, /discarding the previous cursor/u)
-  assert.deepEqual(operation.responses["400"], { $ref: "#/components/responses/BadRequest" })
+  assert.deepEqual(operation.responses["400"], {
+    $ref: "#/components/responses/BadRequest",
+  })
   assert.deepEqual(document.components.parameters.DirectScopeQuery.schema.enum, ["", "direct"])
   assert.match(document.components.parameters.DirectScopeQuery.description, /project_ref IS NULL/u)
   assert.match(document.components.parameters.DirectScopeQuery.description, /resource routes it does not alter/u)
@@ -1138,7 +1187,10 @@ test("R71 independent ScheduledTask creation needs neither Project nor Conversat
 
 test("R71 source parser preserves the optional Project reference without changing independent task fields", async () => {
   const { scheduledCreateInput } = await r71ScheduledCreateSource()
-  const payload = { ...r71ScheduledCreatePayload(), project_id: "project_owned" }
+  const payload = {
+    ...r71ScheduledCreatePayload(),
+    project_id: "project_owned",
+  }
   // Match the public route's existing second argument, rather than inventing a parser overload.
   const linked = scheduledCreateInput(payload, typeof payload.project_id === "string" ? payload.project_id : undefined)
   r71AssertScheduledInput(linked, payload)
@@ -1149,7 +1201,10 @@ test("R71 source parser preserves the optional Project reference without changin
 
 test("R71 closed ScheduledTask creation schema declares optional nonempty project_id accepted by the source parser", async () => {
   const { scheduledCreateInput } = await r71ScheduledCreateSource()
-  const payload = { ...r71ScheduledCreatePayload(), project_id: "project_owned" }
+  const payload = {
+    ...r71ScheduledCreatePayload(),
+    project_id: "project_owned",
+  }
   const linked = scheduledCreateInput(payload, payload.project_id)
   r71AssertScheduledInput(linked, payload)
   assert.equal(linked.projectId, payload.project_id)
@@ -1241,7 +1296,10 @@ test("R73 create still declares no query input and keeps the existing PATCH cont
   )
   const patch = document.paths["/v1/scheduled-tasks/{id}"].patch
   assert.equal(patch.requestBody.content["application/json"].schema.$ref, "#/components/schemas/ScheduledTaskPatchRequest")
-  assert.deepEqual(document.components.schemas.ScheduledTaskPatchRequest, { type: "object", additionalProperties: true })
+  assert.deepEqual(document.components.schemas.ScheduledTaskPatchRequest, {
+    type: "object",
+    additionalProperties: true,
+  })
 })
 
 function r75RequiredScheduledPayload() {
@@ -1303,7 +1361,9 @@ test("R124 public7 publishes nullable snapshot process and the anchored Run proc
   assert.equal(document.info.version, "8.0.0")
   const snapshot = document.components.schemas.SessionSnapshotResponse.properties.data
   assert.ok(snapshot.required.includes("execution_process"))
-  assert.deepEqual(snapshot.properties.execution_process, { oneOf: [{ $ref: "#/components/schemas/RunExecutionProcess" }, { type: "null" }] })
+  assert.deepEqual(snapshot.properties.execution_process, {
+    oneOf: [{ $ref: "#/components/schemas/RunExecutionProcess" }, { type: "null" }],
+  })
   const snapshotProcess = document.components.schemas.RunExecutionProcess
   assert.equal(snapshotProcess.additionalProperties, false)
   assert.deepEqual(snapshotProcess.required, ["run_id", "todos", "activities", "next_cursor"])
@@ -1516,7 +1576,7 @@ test("R146 Move semantic gate rejects local drift without relaxing older operati
   }
 })
 
-test("R240 rename contract is one strict additive name PATCH preserving all ninety existing operations", async () => {
+test("R240 rename contract remains one strict name PATCH beside the approved Billing read replacement", async () => {
   const { createRequire } = await import("node:module")
   const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
   const { openapi, baseline } = await readContract()
@@ -1530,10 +1590,10 @@ test("R240 rename contract is one strict additive name PATCH preserving all nine
   delete priorPaths[route]
   assert.equal(
     createHash("sha256").update(JSON.stringify(priorPaths)).digest("hex"),
-    "055921d63150902e0821afbcf766680f194fd3104ff7ccdaf12730860a5ddb61",
-    "all original path definitions stay byte-semantically unchanged",
+    "0a609a0020b6a0d6914c585621275899cc4beece19240a94dd5092fa7f4006ba",
+    "all non-rename path definitions stay byte-semantically frozen after the Billing read replacement",
   )
-  assert.equal(baseline.length, 91)
+  assert.equal(baseline.length, 92)
   assert.deepEqual(
     baseline.filter((item) => item.operation_id === "renameProject"),
     [{ method: "PATCH", path: route, operation_id: "renameProject" }],
@@ -1633,8 +1693,14 @@ test("R240 rename contract is one strict additive name PATCH preserving all nine
   assert.deepEqual(error.properties.error.properties.code.enum, Object.values(codes).flat())
   for (const status of statuses) {
     const response = resolve(operation.responses[status])
-    assert.deepEqual(response.headers["x-request-id"], { required: true, schema: { type: "string", minLength: 1, maxLength: 128 } })
-    assert.deepEqual(response.headers["Cache-Control"], { required: true, schema: { type: "string", const: "no-store" } })
+    assert.deepEqual(response.headers["x-request-id"], {
+      required: true,
+      schema: { type: "string", minLength: 1, maxLength: 128 },
+    })
+    assert.deepEqual(response.headers["Cache-Control"], {
+      required: true,
+      schema: { type: "string", const: "no-store" },
+    })
     if (status === "200") continue
     const schema = response.content["application/json"].schema
     assert.equal(schema.allOf[0].$ref, "#/components/schemas/RenameProjectErrorResponse")

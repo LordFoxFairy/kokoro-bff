@@ -1,7 +1,6 @@
 import type {
   AgentConnectionSetup,
   BillingPlan,
-  BillingSummary,
   ChatEvent,
   Delivery,
   ChatMessage,
@@ -111,8 +110,6 @@ export class MockBffStore {
   ])
 
   readonly projectSkills = new Map<string, Map<string, boolean>>([["project_kokoro", new Map([["skill-builder", true]])]])
-
-  readonly billing: BillingSummary = { balance: 100, currency: "USD", period: "2026-01", usage: 0 }
 
   readonly plans: BillingPlan[] = [
     {

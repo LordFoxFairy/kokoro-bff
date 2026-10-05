@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 
-import type { AgentConnectionSetup, BillingSummary, Project, ScheduledTask, Skill } from "../../src/contracts/index.ts"
+import type { AgentConnectionSetup, Project, ScheduledTask, Skill } from "../../src/contracts/index.ts"
 import { failure, ok } from "../../dist/contracts/index.js"
 import type { ChatSessionDetail } from "../../src/contracts/index.ts"
 import { MockBffStore } from "./bff-store.ts"
@@ -395,8 +395,6 @@ export async function mockBusiness(
     }
   } else if (segments[0] === "billing" && segments[1] === "mock-pay" && method === "POST") {
     payload = { ok: true }
-  } else if (segments[0] === "billing" && segments[1] === "summary" && method === "GET") {
-    payload = store.billing satisfies BillingSummary
   } else {
     status = 404
     payload = failure("bff_route_not_found", "Business route was not found", context.requestId)

@@ -16,6 +16,13 @@ const ERROR_RESPONSE_COMPONENTS = new Set([
   "PayloadTooLarge",
   "BadGateway",
   "ServiceUnavailable",
+  "BillingReadBadRequest",
+  "BillingReadUnauthorized",
+  "BillingReadForbidden",
+  "BillingReadNotFound",
+  "BillingReadRateLimited",
+  "BillingReadBadGateway",
+  "BillingReadUnavailable",
 ])
 
 type BaselineOperation = { method: string; path: string; operation_id: string }
@@ -1878,6 +1885,128 @@ function platformProjectionReadContractErrors(
   return errors
 }
 
+function billingPersonalReadContractErrors(
+  schemas: Map<string, NamedBlock>,
+  operations: OperationBlock[],
+  responseComponents: Map<string, NamedBlock>,
+): string[] {
+  const errors: string[] = []
+  const require = (condition: boolean, message: string): void => {
+    if (!condition) errors.push(`Billing personal read ${message}`)
+  }
+  const summary = schemas.get("BillingSummary")
+  require(summary !== undefined &&
+    JSON.stringify(topLevelRequired(summary)) === JSON.stringify(["credit_account_id", "status", "available_micros", "held_micros"]) &&
+    schemaProperties(summary).join(",") === "credit_account_id,status,available_micros,held_micros" &&
+    summary.text.includes("additionalProperties: false") &&
+    summary.text.includes("credit_account_id: { type: string, format: uuid }") &&
+    summary.text.includes("status: { type: string, enum: [active, disabled] }") &&
+    (summary.text.match(/pattern: '\^\(\?:0\|\[1-9\]\[0-9\]\*\)\$'/gu) ?? []).length === 2, "summary must be the closed fixed Credit account schema")
+  const entry = schemas.get("BillingLedgerEntry")
+  const ledgerFields = ["journal_id", "sequence", "delta_micros", "balance_after_micros", "source_kind", "source_ref", "created_at"]
+  require(entry !== undefined &&
+    JSON.stringify(topLevelRequired(entry)) === JSON.stringify(ledgerFields) &&
+    schemaProperties(entry).join(",") === ledgerFields.join(",") &&
+    entry.text.includes("additionalProperties: false") &&
+    entry.text.includes("journal_id: { type: string, format: uuid }") &&
+    entry.text.includes("sequence: { type: string, pattern: '^(?:0|[1-9][0-9]*)$' }") &&
+    entry.text.includes("delta_micros: { type: string, pattern: '^-?(?:0|[1-9][0-9]*)$' }") &&
+    entry.text.includes("balance_after_micros: { type: string, pattern: '^(?:0|[1-9][0-9]*)$' }") &&
+    entry.text.includes("source_kind: { type: string, minLength: 1 }") &&
+    entry.text.includes("source_ref: { type: string, minLength: 1, maxLength: 255 }") &&
+    entry.text.includes(
+      "created_at: { type: string, format: date-time, pattern: 'Z$' }",
+    ), "ledger entry must preserve every fixed owner field and decimal-string value")
+  for (const [name, required, properties] of [
+    ["BillingSummaryResponse", ["data", "meta"], ["data", "meta"]],
+    ["BillingLedgerPage", ["next_cursor"], ["next_cursor"]],
+    ["BillingLedgerData", ["items", "page"], ["items", "page"]],
+    ["BillingLedgerResponse", ["data", "meta"], ["data", "meta"]],
+  ] as const) {
+    const schema = schemas.get(name)
+    require(schema !== undefined &&
+      JSON.stringify(topLevelRequired(schema)) === JSON.stringify(required) &&
+      schemaProperties(schema).join(",") === properties.join(",") &&
+      schema.text.includes("additionalProperties: false"), `${name} must be a closed complete envelope`)
+  }
+  require(schemas.get("BillingLedgerPage")?.text.includes("next_cursor: { type: [string, 'null'], maxLength: 2048 }") ===
+    true, "ledger page cursor must remain opaque, nullable and bounded")
+  require(schemas.get("BillingLedgerData")?.text.includes("items: { $ref: '#/components/schemas/BillingLedgerEntry' }") === true &&
+    schemas.get("BillingLedgerData")?.text.includes("page: { $ref: '#/components/schemas/BillingLedgerPage' }") ===
+      true, "ledger data must contain only the fixed entry list and owner page")
+
+  const expectedOperations = [
+    ["getBillingSummary", "/v1/billing/summary", "BillingSummarySuccess", false],
+    ["getBillingLedger", "/v1/billing/ledger", "BillingLedgerSuccess", true],
+  ] as const
+  const failures = {
+    "401": "BillingReadUnauthorized",
+    "403": "BillingReadForbidden",
+    "404": "BillingReadNotFound",
+    "429": "BillingReadRateLimited",
+    "502": "BillingReadBadGateway",
+    "503": "BillingReadUnavailable",
+  } as const
+  for (const [operationId, path, successComponent, hasQuery] of expectedOperations) {
+    const operation = operations.find((item) => item.method === "GET" && item.path === path && item.fields.get("operationId") === operationId)
+    if (!operation) {
+      errors.push(`Billing personal read ${operationId} is missing`)
+      continue
+    }
+    require(operation.fields.get("x-kokoro-permission") === "billing.summary.read", `${operationId} must use the approved personal read permission metadata`)
+    require(!operation.text.includes("requestBody:"), `${operationId} must not accept a request body`)
+    const responses = collectResponseBlocks(operation)
+    const expectedStatuses = ["200", ...(hasQuery ? ["400"] : []), ...Object.keys(failures)].sort()
+    require(JSON.stringify([...responses.keys()].sort()) ===
+      JSON.stringify(expectedStatuses), `${operationId} must declare exactly ${expectedStatuses.join(", ")}`)
+    require(responses.get("200")?.trim() === `'200': { $ref: '#/components/responses/${successComponent}' }`, `${operationId} must use ${successComponent}`)
+    if (hasQuery) {
+      require(/name: limit\n\s+in: query\n\s+schema: \{ type: integer, minimum: 1, maximum: 100, default: 50 \}/u.test(operation.text) &&
+        /name: cursor\n\s+in: query\n\s+schema: \{ type: string, minLength: 1, maxLength: 2048 \}/u.test(
+          operation.text,
+        ), "getBillingLedger must expose only the bounded limit and opaque cursor query")
+      require(responses.get("400")?.trim() ===
+        "'400': { $ref: '#/components/responses/BillingReadBadRequest' }", "getBillingLedger 400 must use BillingReadBadRequest")
+    } else {
+      require(!operation.text.includes("parameters:"), "getBillingSummary must not accept query parameters")
+    }
+    for (const [status, component] of Object.entries(failures)) {
+      require(responses.get(status)?.trim() ===
+        `'${status}': { $ref: '#/components/responses/${component}' }`, `${operationId} ${status} must use ${component}`)
+    }
+  }
+
+  const componentCodes = {
+    BillingReadBadRequest: ["invalid_query_parameter"],
+    BillingReadUnauthorized: ["session_authentication_required", "session_invalid"],
+    BillingReadForbidden: ["service_auth_failed", "session_forbidden", "product_tenant_forbidden"],
+    BillingReadNotFound: ["billing_account_not_found"],
+    BillingReadRateLimited: ["session_rate_limited"],
+    BillingReadBadGateway: ["upstream_response_invalid"],
+    BillingReadUnavailable: ["product_tenant_not_configured", "iam_admission_unavailable", "billing_unavailable"],
+  } as const
+  const requiredHeaders = (text: string): boolean =>
+    text.includes("x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }") &&
+    text.includes("Cache-Control: { required: true, schema: { type: string, const: no-store } }")
+  for (const [name, schemaName] of [
+    ["BillingSummarySuccess", "BillingSummaryResponse"],
+    ["BillingLedgerSuccess", "BillingLedgerResponse"],
+  ] as const) {
+    const response = responseComponents.get(name)?.text ?? ""
+    require(requiredHeaders(response) &&
+      response.includes(`#/components/schemas/${schemaName}`), `${name} must require request ID and no-store around ${schemaName}`)
+  }
+  for (const [name, codes] of Object.entries(componentCodes)) {
+    const response = responseComponents.get(name)?.text ?? ""
+    require(requiredHeaders(response) &&
+      response.includes("#/components/schemas/ErrorEnvelope") &&
+      response.includes(`code: { type: string, enum: [${codes.join(", ")}] }`), `${name} must constrain its stable error codes and no-store headers`)
+  }
+  require(responseComponents.get("BillingReadRateLimited")?.text.includes("Retry-After: { required: false") ===
+    true, "rate-limited response must retain Retry-After")
+  return errors
+}
+
 export function inspectBffOpenApi(source: string, baseline: readonly BaselineOperation[]): string[] {
   const operations = collectOperationBlocks(source)
   const schemas = collectSectionBlocks(source, "schemas")
@@ -1889,6 +2018,7 @@ export function inspectBffOpenApi(source: string, baseline: readonly BaselineOpe
     ...wireNameErrors(schemas, source),
     ...revisionErrors(schemas),
     ...envelopeErrors(schemas, operations, responseComponents),
+    ...billingPersonalReadContractErrors(schemas, operations, responseComponents),
     ...platformProjectionReadContractErrors(schemas, operations, responseComponents),
     ...moveSessionContractErrors(source, parameters, schemas, operations, responseComponents),
     ...renameProjectContractErrors(source, parameters, schemas, operations, responseComponents),

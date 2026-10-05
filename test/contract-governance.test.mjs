@@ -77,6 +77,8 @@ test("the repository canonical OpenAPI passes governance and its frozen v1 surfa
 
   assert.deepEqual(inspectOpenApiGovernance(openapi), [])
   assert.deepEqual(compareOperationBaseline(openapi, baseline), [])
+  assert.ok(baseline.some(({ method, path, operation_id }) => method === "GET" && path === "/v1/billing/summary" && operation_id === "getBillingSummary"))
+  assert.ok(baseline.some(({ method, path, operation_id }) => method === "GET" && path === "/v1/billing/ledger" && operation_id === "getBillingLedger"))
 })
 
 function inspectLibraryFileContract(openapi) {
@@ -179,7 +181,11 @@ test("the IAM consumer pins the complete 0.7.0 owner artifact and generates only
     config_path: "openapi-ts.iam.config.ts",
     config_sha256: sha256(config),
   })
-  assert.deepEqual(manifest.runtime, { node: "22.22.2", pnpm: "11.25.0", zod: "4.5.4" })
+  assert.deepEqual(manifest.runtime, {
+    node: "22.22.2",
+    pnpm: "11.25.0",
+    zod: "4.5.4",
+  })
   assert.equal(manifest.lockfile_sha256, sha256(lockfile))
   assert.equal(manifest.generated.length, 16)
   assert.match(sdk, /export const verifySessionAuthorization/u)
@@ -305,6 +311,7 @@ test("the repository exposes executable contract, schema, and strictness gates",
   assert.match(packageJson.scripts["format:check"], /src\/generated\/scheduler/u)
   assert.match(packageJson.scripts["format:check"], /src\/generated\/iam-http/u)
   assert.equal(packageJson.scripts["contract:check:agent"], "node scripts/generate-agent-http-client.mjs --check")
+  assert.equal(packageJson.scripts["contract:check:billing"], "node scripts/generate-billing-http-client.mjs --check")
   assert.equal(packageJson.scripts["contract:check:platform-http"], "node scripts/generate-platform-http-client.mjs --check")
   assert.equal(packageJson.scripts["contract:generate:iam"], "node scripts/generate-iam-http-client.mjs --write")
   assert.equal(packageJson.scripts["contract:check:iam"], "node scripts/generate-iam-http-client.mjs --check")
@@ -312,7 +319,7 @@ test("the repository exposes executable contract, schema, and strictness gates",
   assert.equal(packageJson.scripts["contract:check:scheduler"], "node scripts/generate-scheduler-contracts.mjs --check")
   assert.equal(
     packageJson.scripts["contract:check"],
-    "pnpm contract:check:agent && pnpm contract:check:platform-http && pnpm contract:check:iam && pnpm contract:check:iam-relay && pnpm contract:check:scheduler && pnpm contract:check:platform && pnpm contract:check:storage && pnpm contract:lint && pnpm contract:semantic && pnpm contract:test",
+    "pnpm contract:check:agent && pnpm contract:check:billing && pnpm contract:check:platform-http && pnpm contract:check:iam && pnpm contract:check:iam-relay && pnpm contract:check:scheduler && pnpm contract:check:platform && pnpm contract:check:storage && pnpm contract:lint && pnpm contract:semantic && pnpm contract:test",
   )
   assert.equal(packageJson.devDependencies["@hey-api/openapi-ts"], "0.99.0")
   assert.equal(packageJson.devDependencies.prettier, "3.9.6")
@@ -388,9 +395,15 @@ test("the Scheduler consumer pins immutable producer-owned control and webhook c
   assert.equal(control.post.operationId, "createSchedule")
   assert.equal(control.put.operationId, "replaceSchedule")
   assert.equal(control.delete.operationId, "deleteSchedule")
-  assert.deepEqual(control.post["x-kokoro-control-error-codes"], { 409: "schedule_already_exists" })
-  assert.deepEqual(control.put["x-kokoro-control-error-codes"], { 404: "schedule_not_found" })
-  assert.deepEqual(control.delete["x-kokoro-control-error-codes"], { 404: "schedule_not_found" })
+  assert.deepEqual(control.post["x-kokoro-control-error-codes"], {
+    409: "schedule_already_exists",
+  })
+  assert.deepEqual(control.put["x-kokoro-control-error-codes"], {
+    404: "schedule_not_found",
+  })
+  assert.deepEqual(control.delete["x-kokoro-control-error-codes"], {
+    404: "schedule_not_found",
+  })
   assert.equal(
     Object.keys(owner.paths).some((name) => name.includes(`/${["jo", "bs"].join("")}`)),
     false,
@@ -407,7 +420,9 @@ test("the Scheduler consumer pins immutable producer-owned control and webhook c
       ["X-Kokoro-Tenant-Id", "X-Kokoro-Scheduler-Schedule", "X-Kokoro-Scheduler-Occurrence", "X-Request-Id", "Idempotency-Key", "traceparent"],
     )
     assert.ok(webhook.parameters.every(({ $ref }) => parameters[$ref.split("/").at(-1)].required === true))
-    assert.deepEqual(webhook.requestBody.content["application/json"].schema, { type: "object" })
+    assert.deepEqual(webhook.requestBody.content["application/json"].schema, {
+      type: "object",
+    })
   }
   const packageJson = JSON.parse(packageDocument)
   assert.equal(packageJson.devDependencies["@hey-api/openapi-ts"], "0.99.0")

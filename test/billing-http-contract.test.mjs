@@ -10,6 +10,7 @@ const generatedSdkUrl = new URL("src/generated/billing-http/sdk.gen.ts", root)
 const generatedZodUrl = new URL("src/generated/billing-http/zod.gen.ts", root)
 const publicSourceUrl = new URL("contract/openapi/v1/openapi.yaml", root)
 const fakeStoreUrl = new URL("test/doubles/bff-store.ts", root)
+const mockRouteUrl = new URL("test/doubles/mock-route.ts", root)
 
 const ownerSourceSha256 = "ecaceefd3fd09d5106b364593dd513506622ca011bb0436b74f0928ffd8dcf00"
 const creditAccountFields = ["credit_account_id", "status", "available_micros", "held_micros"]
@@ -137,10 +138,11 @@ test("public Billing summary rejects the removed float and cash-like fields", as
 })
 
 test("BFF test doubles no longer provide the fake 100-Credit summary", async () => {
-  const source = await readFile(fakeStoreUrl, "utf8")
+  const [source, route] = await Promise.all([readFile(fakeStoreUrl, "utf8"), readFile(mockRouteUrl, "utf8")])
   assert.equal(
     source.includes('readonly billing: BillingSummary = { balance: 100, currency: "USD", period: "2026-01", usage: 0 }'),
     false,
     "the legacy fake balance is still wired",
   )
+  assert.doesNotMatch(route, /segments\[1\] === "summary"[\s\S]*store\.billing/u)
 })
