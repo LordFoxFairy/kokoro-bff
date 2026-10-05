@@ -78,6 +78,7 @@ export type BffConfig = {
   storageObjectOrigin?: string | null
   sharedSecret: string | null
   upstreamSecret: string | null
+  billingServiceToken?: string | null
   upstreamTimeoutMs: number
   upstreamMaxResponseBytes: number
   schedulerServiceToken: string | null
@@ -234,6 +235,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
   const domain = requiredDomain(env.KOKORO_DOMAIN || "dev.kokoro.localhost")
   const sharedSecret = env.KOKORO_BFF_SHARED_SECRET?.trim() || null
   if (sharedSecret === null) throw new Error("KOKORO_BFF_SHARED_SECRET is required for the live BFF runtime")
+  const upstreamSecret = env.KOKORO_INTERNAL_SECRET_BFF?.trim() || null
+  const billingServiceToken = env.KOKORO_BILLING_BFF_SERVICE_TOKEN?.trim() || null
+  if (upstreams.billing !== null) {
+    if (upstreamSecret === null) throw new Error("Billing internal secret is required when the Billing upstream is configured")
+    if (billingServiceToken === null || !/^[\x21-\x7e]+$/u.test(billingServiceToken)) {
+      throw new Error("Billing service token must be a non-empty visible ASCII credential")
+    }
+    if (billingServiceToken === upstreamSecret) throw new Error("Billing service token must be independent from the Billing internal secret")
+  }
   const upstreamTimeoutMs = positiveInteger(env.KOKORO_UPSTREAM_TIMEOUT_MS, "KOKORO_UPSTREAM_TIMEOUT_MS", DEFAULT_UPSTREAM_TIMEOUT_MS)
   const agUi: AgUiConfig = {
     replayPageFrames: positiveInteger(env.KOKORO_AGUI_REPLAY_PAGE_FRAMES, "KOKORO_AGUI_REPLAY_PAGE_FRAMES", DEFAULT_AGUI_CONFIG.replayPageFrames),
@@ -374,7 +384,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
       : {}),
     storageObjectOrigin: storageOrigin,
     sharedSecret,
-    upstreamSecret: env.KOKORO_INTERNAL_SECRET_BFF?.trim() || null,
+    upstreamSecret,
+    billingServiceToken,
     upstreamTimeoutMs,
     upstreamMaxResponseBytes: positiveInteger(
       env.KOKORO_UPSTREAM_MAX_RESPONSE_BYTES,

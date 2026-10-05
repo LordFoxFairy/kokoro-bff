@@ -912,6 +912,60 @@ describe("kokoro-bff v1 mock contract", () => {
     })
   })
 
+  it("projects the admitted subject's fixed Credit account and ledger without a fake balance", async () => {
+    const received: Array<{ url: string | undefined; authorization: string | undefined; tenant: string | undefined; subject: string | undefined }> = []
+    const upstream = createServer((request, response) => {
+      received.push({
+        url: request.url,
+        authorization: request.headers.authorization,
+        tenant: request.headers["x-kokoro-tenant-id"]?.toString(),
+        subject: request.headers["x-kokoro-subject"]?.toString(),
+      })
+      response.writeHead(200, { "content-type": "application/json", "cache-control": "no-store", "x-request-id": "billing-owner" })
+      if (request.url === "/v2/billing/me/credit-account") {
+        response.end(
+          JSON.stringify({
+            data: {
+              credit_account_id: "11111111-1111-4111-8111-111111111111",
+              status: "active",
+              available_micros: "42000000",
+              held_micros: "1500000",
+            },
+          }),
+        )
+        return
+      }
+      response.end(JSON.stringify({ data: { items: [], page: { next_cursor: null } } }))
+    })
+    const upstreamBase = await listen(upstream)
+    const runtimeConfig = {
+      ...config({ upstreams: { ...config().upstreams, billing: upstreamBase } }),
+      upstreamSecret: "billing-internal-secret",
+      billingServiceToken: "billing-service-token",
+    } as BffConfig
+    const base = await listen(liveServer(runtimeConfig))
+
+    const summary = await fetch(`${base}/v1/billing/summary`, { headers: { ...authHeaders(), "x-kokoro-request-id": "billing-summary" } })
+    assert.equal(summary.status, 200)
+    assert.equal(summary.headers.get("cache-control"), "no-store")
+    assert.deepEqual(await summary.json(), {
+      data: {
+        credit_account_id: "11111111-1111-4111-8111-111111111111",
+        status: "active",
+        available_micros: "42000000",
+        held_micros: "1500000",
+      },
+      meta: { request_id: "billing-summary" },
+    })
+    const ledger = await fetch(`${base}/v1/billing/ledger?limit=50`, { headers: { ...authHeaders(), "x-kokoro-request-id": "billing-ledger" } })
+    assert.equal(ledger.status, 200)
+    assert.deepEqual(await ledger.json(), { data: { items: [], page: { next_cursor: null } }, meta: { request_id: "billing-ledger" } })
+    assert.deepEqual(received, [
+      { url: "/v2/billing/me/credit-account", authorization: "Bearer billing-service-token", tenant: "u1.bnNfdGVzdA", subject: "u1.dXNlcl90ZXN0" },
+      { url: "/v2/billing/me/credit-ledger?limit=50", authorization: "Bearer billing-service-token", tenant: "u1.bnNfdGVzdA", subject: "u1.dXNlcl90ZXN0" },
+    ])
+  })
+
   it("does not misroute BFF-owned projects or scheduled definitions to an owner", async () => {
     const upstream = createServer((_request, response) => {
       response.setHeader("content-type", "application/json")

@@ -12,6 +12,72 @@ import type { RequestContext } from "../../domain/request-context.js"
 import type { IdempotencyEntry, MutationTicket } from "../../application/idempotency.js"
 import type { LiveOwnerResult } from "./types.js"
 import { livePlatformProjectionRead } from "./platform-projection.js"
+import { readBillingCreditAccount, readBillingCreditLedger } from "../../infrastructure/clients/owner/billing-personal-read.js"
+
+function billingLedgerQuery(request: IncomingMessage): Readonly<{ limit: number; cursor?: string }> | null {
+  const query = queryOf(request)
+  if ([...query.keys()].some((name) => name !== "limit" && name !== "cursor")) return null
+  const limits = query.getAll("limit")
+  const cursors = query.getAll("cursor")
+  if (limits.length > 1 || cursors.length > 1) return null
+  const rawLimit = limits[0]
+  if (rawLimit !== undefined && !/^(?:[1-9]|[1-9][0-9]|100)$/u.test(rawLimit)) return null
+  const cursor = cursors[0]
+  if (cursor !== undefined && (cursor.length < 1 || cursor.length > 2048)) return null
+  return { limit: rawLimit === undefined ? 50 : Number(rawLimit), ...(cursor === undefined ? {} : { cursor }) }
+}
+
+async function billingPersonalRead(
+  request: IncomingMessage,
+  response: ServerResponse,
+  config: BffConfig,
+  context: RequestContext,
+  businessPath: string[],
+  json: Record<string, unknown>,
+  idempotency: Map<string, IdempotencyEntry>,
+): Promise<boolean> {
+  if (request.method !== "GET" || businessPath[0] !== "billing" || businessPath.length !== 2 || !["summary", "ledger"].includes(businessPath[1] ?? "")) {
+    return false
+  }
+  if (Object.keys(json).length !== 0 || (businessPath[1] === "summary" && queryOf(request).size !== 0)) {
+    await reply(response, 400, failure("invalid_query_parameter", "Billing read parameters are invalid", context.requestId), context, idempotency, null)
+    return true
+  }
+  const ledgerQuery = businessPath[1] === "ledger" ? billingLedgerQuery(request) : undefined
+  if (ledgerQuery === null) {
+    await reply(response, 400, failure("invalid_query_parameter", "Billing ledger query is invalid", context.requestId), context, idempotency, null)
+    return true
+  }
+  const abort = new AbortController()
+  const onAbort = (): void => abort.abort()
+  const onClose = (): void => {
+    if (!response.writableEnded) abort.abort()
+  }
+  request.once("aborted", onAbort)
+  response.once("close", onClose)
+  if (request.aborted || response.destroyed) abort.abort()
+  try {
+    const result =
+      businessPath[1] === "summary"
+        ? await readBillingCreditAccount(config, context, abort.signal)
+        : await readBillingCreditLedger(config, context, ledgerQuery!, abort.signal)
+    if (response.destroyed) return true
+    if (result.ok) await reply(response, 200, ok(result.data, context.requestId), context, idempotency, null)
+    else {
+      const message =
+        result.code === "billing_account_not_found"
+          ? "Billing account was not found"
+          : result.code === "upstream_response_invalid"
+            ? "Billing returned an invalid response"
+            : "Billing is unavailable"
+      await reply(response, result.status, failure(result.code, message, context.requestId), context, idempotency, null)
+    }
+    return true
+  } finally {
+    request.removeListener("aborted", onAbort)
+    response.removeListener("close", onClose)
+  }
+}
 
 export async function liveOwnerRequest(
   request: IncomingMessage,
@@ -58,6 +124,8 @@ export async function liveOwnerBusiness(
   const method = request.method || "GET"
 
   if (await livePlatformProjectionRead(request, response, config, context, businessPath)) return true
+
+  if (await billingPersonalRead(request, response, config, context, businessPath, json, idempotency)) return true
 
   if (businessPath[0] === "system") {
     await reply(

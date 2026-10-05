@@ -7,10 +7,25 @@ export type AgentConnectionSetup = {
 }
 
 export type BillingSummary = {
-  balance: number
-  currency: string
-  period: string
-  usage: number
+  credit_account_id: string
+  status: "active" | "disabled"
+  available_micros: string
+  held_micros: string
+}
+
+export type BillingLedgerEntry = {
+  journal_id: string
+  sequence: string
+  delta_micros: string
+  balance_after_micros: string
+  source_kind: string
+  source_ref: string
+  created_at: string
+}
+
+export type BillingLedger = {
+  items: BillingLedgerEntry[]
+  page: { next_cursor: string | null }
 }
 
 export type BillingPlan = {

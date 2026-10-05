@@ -145,6 +145,35 @@ describe("kokoro-bff optional Agent configuration", () => {
     assert.equal(config.upstreamMaxResponseBytes, 4096)
   })
 
+  it("loads a dedicated Billing BFF service bearer separately from the internal secret", () => {
+    const config = loadConfig({
+      ...runtimeEnv,
+      KOKORO_BILLING_BASE_URL: "https://billing.example.test/",
+      KOKORO_INTERNAL_SECRET_BFF: "billing-internal-secret",
+      KOKORO_BILLING_BFF_SERVICE_TOKEN: "billing-service-token",
+    })
+    assert.equal(config.upstreams.billing, "https://billing.example.test")
+    assert.equal(config.upstreamSecret, "billing-internal-secret")
+    assert.equal(Reflect.get(config, "billingServiceToken"), "billing-service-token")
+  })
+
+  it("fails Billing personal reads closed on missing, invalid or reused machine credentials", () => {
+    const configured = {
+      ...runtimeEnv,
+      KOKORO_BILLING_BASE_URL: "https://billing.example.test",
+      KOKORO_INTERNAL_SECRET_BFF: "billing-internal-secret",
+      KOKORO_BILLING_BFF_SERVICE_TOKEN: "billing-service-token",
+    }
+    for (const env of [
+      { ...configured, KOKORO_INTERNAL_SECRET_BFF: undefined },
+      { ...configured, KOKORO_BILLING_BFF_SERVICE_TOKEN: undefined },
+      { ...configured, KOKORO_BILLING_BFF_SERVICE_TOKEN: "billing-internal-secret" },
+      { ...configured, KOKORO_BILLING_BFF_SERVICE_TOKEN: "contains whitespace" },
+    ]) {
+      assert.throws(() => loadConfig(env), /Billing.+credential|Billing.+secret|Billing.+token/iu)
+    }
+  })
+
   it("uses System as the sole model-catalog owner upstream", () => {
     const config = loadConfig({
       ...runtimeEnv,
