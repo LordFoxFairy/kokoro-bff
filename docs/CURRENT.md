@@ -4,7 +4,7 @@
 
 Root真实PG先8 tests/1pass/7fail（父失败含在内）；修复后的混合工作树5文件174/0，再将24批准source/test精确暂存，排除三mixed原Project改动，在 index tree 77c811391c697e370cdcab888b5c427c71ae4c32 独立快照复跑真实PG/Redis175/0/0skip（含保留HEAD的R237 catalog），库目录77→77 exact。localhost网络负控13/13已在现 validator 下通过，不是新RED；先前缺validator判断正式撤回，没有扩大control-client写集。真实PG与existing Redis、localhost owner doubles不是正常IAM/Scheduler/provider/浏览器E2E。
 
-同Node22.22.2暂存快照 format/lint/types/build/semantic/schema/scheduler generated/full contract均exit0；默认779pass/0fail/2资源skip，schema纯门10pass/2资源skip，完整contract242pass/0fail/0skip。原mixed工作树 format仍exit1（两个任务外Project文件），不格式化他人修改、不放宽门。独立暂存审查625092a8零P0/P1/P2；当前源码+测试无依赖original mixed。Root只提交24source/test及本CURRENT前缀，原全文/三mixed批准外hunks/468非source tracked保护。
+同Node22.22.2暂存快照 format/lint/types/build/semantic/schema/scheduler generated/full contract均exit0；默认779pass/0fail/2资源skip，schema纯门10pass/2资源skip，完整contract242pass/0fail/0skip。原mixed工作树 format仍exit1（两个任务外Project文件），不格式化他人修改、不放宽门。独立暂存审查625092a8零P0/P1/P2；当前源码+测试无依赖original mixed。Root只提交24source/test及本CURRENT前缀，原全文/三mixed批准外hunks/提交前468非source路径（466 tracked+两原untracked）保护，追加CURRENT后467任务外路径仍exact。
 
 正常开发BFF tsx非watch，仍旧已加载源码；唯一QA暂停任务仅只读盘点，局部排程表重建请求一次待答，未删除/重启/改normal schema。Web消费者pin尚未更新，候选未发布；必须 owner artifact→Web repin→批准的局部激活→真实创建/编辑/暂停/刷新/时区/执行浏览器验收。完整70组11/8/14/36/1不变，T-P02整组FAIL保留，0主动模型/赠送/结算。证据沿Root现var/dev/r255-preserve/0202-*，本CURRENT新增只记本切片，不覆盖以下历史时点。
 
