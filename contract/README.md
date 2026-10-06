@@ -1,3 +1,7 @@
+## R256 Admin model routing public 8.2 candidate
+
+Public 8.2.0 adds four closed tenant-scoped admin model-routing operations and pins immutable System 3.0.0 commit `955bd587f46a771e43a4330d202d90a7d2d67262` / SHA-256 `94ed91655741cbba66ce80a4c41717b9179cc509cb6858534e0b78aa3e6dc059`. The generated System client is restricted to `listModelLabel`, `listModelRevision`, `listRoutingPolicy`, and `putRoutingPolicy`; runtime routes remain a later slice.
+
 ## R257 personalization public8.1 候选（未发布/未正常激活）
 
 基线 ac3cd1da4f13e9e22320efbd4dbf4009aa0a2e29 的public8.0/93operation新增GET/PUT /v1/preferences/personalization，目标8.1.0/95operation。四字段本人singleton、required expected_revision CAS、no-store/header request-id、未知保存只读核实；旧93项的wire语义保持。canonical仅追加本owner表，源/隔离PG/合同待Root最终验收与immutable commit/digest，当前不交移动工作树给Web生成。正常已有数据须正规演进且IAM0.8/Web配对，禁止半边重载；Knowledge/导入/Agent应用仍OPEN。

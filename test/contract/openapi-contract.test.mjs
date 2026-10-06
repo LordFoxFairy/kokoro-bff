@@ -40,7 +40,7 @@ function inspectChatFailureContract(openapi) {
     if (!condition) errors.push(label)
   }
 
-  require(/^info:\n(?:.*\n){0,3}?  version: 8\.1\.0$/mu.test(openapi), "public info.version must be 8.1.0")
+  require(/^info:\n(?:.*\n){0,3}?  version: 8\.2\.0$/mu.test(openapi), "public info.version must be 8.2.0")
   require(/^      required: \[message_id, role, content, status, created_at\]$/mu.test(message), "failure must stay optional")
   const roles = [...(message.match(/role:\n\s+type: string\n\s+enum: \[([^\]]+)\]/u)?.[1] ?? "").matchAll(/[a-z_]+/gu)].map((match) => match[0])
   require(JSON.stringify(roles) === JSON.stringify(["user", "assistant"]), "Message roles must equal user and assistant")
@@ -1066,7 +1066,7 @@ test("public7 retains the closed full execution head, five current-locator decis
   const { openapi } = await readContract()
   const document = load(openapi)
   const schemas = document.components.schemas
-  assert.equal(document.info.version, "8.1.0")
+  assert.equal(document.info.version, "8.2.0")
   const snapshot = schemas.SessionSnapshotResponse.properties.data
   assert.equal(Object.hasOwn(snapshot.properties, "active_run"), false)
   assert.equal(Object.hasOwn(snapshot.properties, "pending_pauses"), false)
@@ -1312,7 +1312,10 @@ test("R73 create still declares no query input and keeps the existing PATCH cont
     "title",
   ])
   assert.equal(Object.hasOwn(patchSchema.properties, "next_run_at"), false)
-  assert.deepEqual(patchSchema.properties.recurrence_anchor_at, { type: "string", format: "date-time" })
+  assert.deepEqual(patchSchema.properties.recurrence_anchor_at, {
+    type: "string",
+    format: "date-time",
+  })
 })
 
 function r75RequiredScheduledPayload() {
@@ -1348,12 +1351,18 @@ test("R255 ScheduledTask publishes an anchor-only input and a required nullable 
 
   for (const input of [create, patch]) {
     assert.equal(Object.hasOwn(input.properties, "next_run_at"), false)
-    assert.deepEqual(input.properties.recurrence_anchor_at, { type: "string", format: "date-time" })
+    assert.deepEqual(input.properties.recurrence_anchor_at, {
+      type: "string",
+      format: "date-time",
+    })
   }
   assert.equal(create.additionalProperties, false)
   assert.equal(patch.additionalProperties, false)
   assert.ok(task.required.includes("next_run_at"))
-  assert.deepEqual(task.properties.next_run_at, { type: ["string", "null"], format: "date-time" })
+  assert.deepEqual(task.properties.next_run_at, {
+    type: ["string", "null"],
+    format: "date-time",
+  })
 })
 
 test("R255 ScheduledTask semantic gate rejects anchor aliases, date-time drift, and a nonnullable or optional next projection", async () => {
@@ -1405,7 +1414,7 @@ test("R124 public7 publishes nullable snapshot process and the anchored Run proc
   const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
   const { openapi } = await readContract()
   const document = load(openapi)
-  assert.equal(document.info.version, "8.1.0")
+  assert.equal(document.info.version, "8.2.0")
   const snapshot = document.components.schemas.SessionSnapshotResponse.properties.data
   assert.ok(snapshot.required.includes("execution_process"))
   assert.deepEqual(snapshot.properties.execution_process, {
@@ -1461,7 +1470,7 @@ test("R146 Move is one strict additive public command with a durable synchronous
     Object.keys(pathItem).filter((key) => ["get", "post", "put", "patch", "delete"].includes(key)),
     ["post"],
   )
-  assert.equal(document.info.version, "8.1.0", "the prelaunch Skills V2 cutover advances the only public major without a path alias")
+  assert.equal(document.info.version, "8.2.0", "the prelaunch Skills V2 cutover advances the only public major without a path alias")
   assert.ok(baseline.some((entry) => entry.method === "POST" && entry.path === path && entry.operation_id === "moveSession"))
 
   const operation = pathItem.post
@@ -1628,7 +1637,7 @@ test("R240 rename contract remains one strict name PATCH beside the approved Bil
   const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
   const { openapi, baseline } = await readContract()
   const document = load(openapi)
-  assert.equal(document.info.version, "8.1.0")
+  assert.equal(document.info.version, "8.2.0")
   const route = "/v1/projects/{projectId}/name"
   const path = document.paths[route]
   assert.ok(path)
@@ -1637,12 +1646,30 @@ test("R240 rename contract remains one strict name PATCH beside the approved Bil
   delete priorPaths[route]
   delete priorPaths["/v1/mcp/connections"] // R257 adds only this independently governed read.
   delete priorPaths["/v1/preferences/personalization"] // R257 separately governs the new caller-owned CAS resource.
+  delete priorPaths["/v1/admin/model-routing"] // R256 separately governs the current-tenant admin read.
+  delete priorPaths["/v1/admin/model-labels"]
+  delete priorPaths["/v1/admin/model-revisions"]
+  delete priorPaths["/v1/admin/model-routing/{label_id}"]
   assert.equal(
     createHash("sha256").update(JSON.stringify(priorPaths)).digest("hex"),
     "0a609a0020b6a0d6914c585621275899cc4beece19240a94dd5092fa7f4006ba",
     "all non-rename path definitions stay byte-semantically frozen after the Billing read replacement",
   )
-  assert.equal(baseline.filter((item) => !["listSelfMcpConnections", "getSelfPersonalization", "replaceSelfPersonalization"].includes(item.operation_id)).length, 92)
+  assert.equal(
+    baseline.filter(
+      (item) =>
+        ![
+          "listSelfMcpConnections",
+          "getSelfPersonalization",
+          "replaceSelfPersonalization",
+          "listAdminModelRouting",
+          "listAdminModelLabels",
+          "listAdminModelRevisions",
+          "replaceAdminModelRouting",
+        ].includes(item.operation_id),
+    ).length,
+    92,
+  )
   assert.deepEqual(
     baseline.filter((item) => item.operation_id === "renameProject"),
     [{ method: "PATCH", path: route, operation_id: "renameProject" }],
@@ -1778,7 +1805,7 @@ test("R240 rename semantic gate rejects input, receipt, status and header drift"
   const request = (before, after) => mutate("    RenameProjectRequest:", "    RenameProjectResponse:", before, after)
   const success = (before, after) => mutate("    RenameProjectResponse:", "    RenameProjectErrorResponse:", before, after)
   const mutations = [
-    openapi.replace("  version: 8.1.0", "  version: 7.1.0"),
+    openapi.replace("  version: 8.2.0", "  version: 7.1.0"),
     route("    patch:", "    post:"),
     route("operationId: renameProject", "operationId: renameProjectAlias"),
     route("x-kokoro-permission: project.update", "x-kokoro-permission: project.read"),
@@ -1834,10 +1861,16 @@ test("R257 self MCP connection contract rejects Server substitution and error-pr
   const start = openapi.indexOf("  /v1/mcp/connections:\n")
   const end = openapi.indexOf("  /v1/mcp/servers:\n", start)
   const route = openapi.slice(start, end)
-  assert.equal(baseline.length, 95)
+  assert.equal(baseline.length, 99)
   assert.deepEqual(
     baseline.filter((item) => item.operation_id === "listSelfMcpConnections"),
-    [{ method: "GET", path: "/v1/mcp/connections", operation_id: "listSelfMcpConnections" }],
+    [
+      {
+        method: "GET",
+        path: "/v1/mcp/connections",
+        operation_id: "listSelfMcpConnections",
+      },
+    ],
   )
   assert.match(route, /operationId: listSelfMcpConnections/u)
   assert.match(route, /name: connection_id/u)
@@ -1880,7 +1913,11 @@ test("R257 personalization contract binds the two exact closed caller operations
   assert.deepEqual(inspectBffOpenApi(openapi, baseline), [])
   for (const [before, after, expected] of [
     ["expected_revision: { type: integer, minimum: 0, maximum: 9007199254740991 }", "expected_revision: { type: integer, minimum: 0 }", /safe integer CAS/u],
-    ["required: [expected_revision, nickname, occupation, about, instructions]", "required: [nickname, occupation, about, instructions]", /closed and complete/u],
+    [
+      "required: [expected_revision, nickname, occupation, about, instructions]",
+      "required: [nickname, occupation, about, instructions]",
+      /closed and complete/u,
+    ],
     ["nickname: { type: string, maxLength: 128", "nickname: { type: string, maxLength: 129", /nickname/u],
     ["revision: { type: integer, const: 0 }", "revision: { type: integer, minimum: 0 }", /null\/zero/u],
     ["PersonalizationReadSuccess'", "PersonalizationSaveSuccess'", /component drifted/u],
@@ -1893,4 +1930,88 @@ test("R257 personalization contract binds the two exact closed caller operations
   const block = openapi.slice(begin, end)
   const broken = openapi.replace(block, block.replace("const: no-store", "const: public"))
   assert.match(inspectBffOpenApi(broken, baseline).join("\n"), /strict schema and headers/u)
+})
+
+test("R256 admin model routing publishes closed pages, bounded CAS and exact transport profiles", async () => {
+  const { createRequire } = await import("node:module")
+  const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
+  const { openapi } = await readContract()
+  const document = load(openapi)
+  const operations = [
+    document.paths["/v1/admin/model-routing"].get,
+    document.paths["/v1/admin/model-labels"].get,
+    document.paths["/v1/admin/model-revisions"].get,
+    document.paths["/v1/admin/model-routing/{label_id}"].put,
+  ]
+  assert.deepEqual(
+    operations.map((operation) => operation.operationId),
+    ["listAdminModelRouting", "listAdminModelLabels", "listAdminModelRevisions", "replaceAdminModelRouting"],
+  )
+  for (const operation of operations.slice(0, 3)) {
+    const limit = operation.parameters.find((parameter) => parameter.$ref.endsWith("/AdminModelRoutingLimit"))
+    assert.ok(limit)
+    assert.deepEqual(Object.keys(operation.responses), ["200", "400", "401", "403", "429", "502", "503"])
+  }
+  assert.deepEqual(document.components.parameters.AdminModelRoutingLimit.schema, { type: "integer", minimum: 1, maximum: 100, default: 50 })
+  assert.deepEqual(document.components.parameters.AdminModelRoutingCursor.schema, { type: "string", minLength: 1, maxLength: 2048 })
+  assert.equal(document.components.parameters.AdminModelRoutingIdempotencyKey.schema.minLength, 1)
+  assert.equal(document.components.parameters.AdminModelRoutingIdempotencyKey.schema.maxLength, 128)
+  for (const schema of ["AdminModelRoutingListResponse", "AdminModelLabelListResponse", "AdminModelRevisionListResponse"]) {
+    assert.equal(document.components.schemas[schema].properties.data.type, "array")
+    assert.equal(document.components.schemas[schema].additionalProperties, false)
+  }
+  assert.equal(document.components.schemas.AdminModelRoutingWrite.properties.priority.minimum, 0)
+  assert.equal(document.components.schemas.AdminModelRoutingWrite.properties.priority.maximum, 100000)
+  assert.deepEqual(Object.keys(operations[3].responses), ["200", "400", "401", "403", "404", "409", "428", "429", "502", "503"])
+  for (const responseName of [
+    "AdminModelRoutingListSuccess",
+    "AdminModelRoutingBadRequest",
+    "AdminModelRoutingRateLimited",
+    "AdminModelRoutingInvalidResponse",
+    "AdminModelRoutingUnavailable",
+  ]) {
+    const response = document.components.responses[responseName]
+    assert.equal(response.headers["x-request-id"].required, true)
+    assert.equal(response.headers["Cache-Control"].required, true)
+    assert.equal(response.headers["Cache-Control"].schema.const, "no-store")
+  }
+  const errorCodes = (responseName) =>
+    document.components.responses[responseName].content["application/json"].schema.allOf[1].properties.error.properties.code.enum
+  assert.deepEqual(errorCodes("AdminModelRoutingUnauthorized"), ["session_authentication_required", "session_invalid"])
+  assert.deepEqual(errorCodes("AdminModelRoutingForbidden"), [
+    "service_auth_failed",
+    "product_tenant_forbidden",
+    "session_forbidden",
+    "admin_model_routing_forbidden",
+  ])
+  assert.deepEqual(errorCodes("AdminModelRoutingUnavailable"), [
+    "product_tenant_not_configured",
+    "iam_admission_unavailable",
+    "admin_model_routing_unavailable",
+  ])
+  const reject = (mutated) => {
+    const candidate = load(mutated)
+    return (
+      candidate.components.schemas.AdminModelRoutingListResponse.properties.data.type !== "array" ||
+      candidate.components.parameters.AdminModelRoutingLimit.schema.default !== 50 ||
+      candidate.components.schemas.AdminModelRoutingWrite.properties.priority.maximum !== 100000 ||
+      candidate.paths["/v1/admin/model-routing"].get.responses["502"] === undefined
+    )
+  }
+  for (const mutated of [
+    openapi.replace(
+      "        data:\n          type: array\n          items:\n            $ref: '#/components/schemas/AdminModelRouting'",
+      "        data:\n          type: object",
+    ),
+    openapi.replace(
+      "AdminModelRoutingLimit:\n      name: limit\n      in: query\n      required: false\n      schema:\n        type: integer\n        minimum: 1\n        maximum: 100\n        default: 50",
+      "AdminModelRoutingLimit:\n      name: limit\n      in: query\n      required: false\n      schema:\n        type: integer\n        minimum: 1\n        maximum: 100\n        default: 20",
+    ),
+    openapi.replace(
+      "        priority:\n          type: integer\n          minimum: 0\n          maximum: 100000",
+      "        priority:\n          type: integer",
+    ),
+    openapi.replace("        '502':\n          $ref: '#/components/responses/AdminModelRoutingInvalidResponse'\n", ""),
+  ])
+    assert.equal(reject(mutated), true)
 })

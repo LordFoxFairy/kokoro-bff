@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 8.1.0
+  version: 8.2.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -624,6 +624,154 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /v1/admin/model-routing:
+    get:
+      tags:
+        - Models
+      operationId: listAdminModelRouting
+      summary: List current tenant model routing policies
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: admin.model_routing.read
+      parameters:
+        - $ref: '#/components/parameters/AdminModelRoutingLimit'
+        - $ref: '#/components/parameters/AdminModelRoutingCursor'
+      responses:
+        '200':
+          $ref: '#/components/responses/AdminModelRoutingListSuccess'
+        '400':
+          $ref: '#/components/responses/AdminModelRoutingBadRequest'
+        '401':
+          $ref: '#/components/responses/AdminModelRoutingUnauthorized'
+        '403':
+          $ref: '#/components/responses/AdminModelRoutingForbidden'
+        '429':
+          $ref: '#/components/responses/AdminModelRoutingRateLimited'
+        '502':
+          $ref: '#/components/responses/AdminModelRoutingInvalidResponse'
+        '503':
+          $ref: '#/components/responses/AdminModelRoutingUnavailable'
+  /v1/admin/model-labels:
+    get:
+      tags:
+        - Models
+      operationId: listAdminModelLabels
+      summary: List model labels for routing administration
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: admin.model_routing.read
+      parameters:
+        - $ref: '#/components/parameters/AdminModelRoutingLimit'
+        - $ref: '#/components/parameters/AdminModelRoutingCursor'
+      responses:
+        '200':
+          $ref: '#/components/responses/AdminModelLabelListSuccess'
+        '400':
+          $ref: '#/components/responses/AdminModelRoutingBadRequest'
+        '401':
+          $ref: '#/components/responses/AdminModelRoutingUnauthorized'
+        '403':
+          $ref: '#/components/responses/AdminModelRoutingForbidden'
+        '429':
+          $ref: '#/components/responses/AdminModelRoutingRateLimited'
+        '502':
+          $ref: '#/components/responses/AdminModelRoutingInvalidResponse'
+        '503':
+          $ref: '#/components/responses/AdminModelRoutingUnavailable'
+  /v1/admin/model-revisions:
+    get:
+      tags:
+        - Models
+      operationId: listAdminModelRevisions
+      summary: List model revisions for routing administration
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: admin.model_routing.read
+      parameters:
+        - $ref: '#/components/parameters/AdminModelRoutingLimit'
+        - $ref: '#/components/parameters/AdminModelRoutingCursor'
+      responses:
+        '200':
+          $ref: '#/components/responses/AdminModelRevisionListSuccess'
+        '400':
+          $ref: '#/components/responses/AdminModelRoutingBadRequest'
+        '401':
+          $ref: '#/components/responses/AdminModelRoutingUnauthorized'
+        '403':
+          $ref: '#/components/responses/AdminModelRoutingForbidden'
+        '429':
+          $ref: '#/components/responses/AdminModelRoutingRateLimited'
+        '502':
+          $ref: '#/components/responses/AdminModelRoutingInvalidResponse'
+        '503':
+          $ref: '#/components/responses/AdminModelRoutingUnavailable'
+  /v1/admin/model-routing/{label_id}:
+    put:
+      tags:
+        - Models
+      operationId: replaceAdminModelRouting
+      summary: Replace one current tenant model routing policy
+      description: >-
+        Exactly one precondition is required: If-None-Match * for create, or If-Match with one positive quoted version for update. Missing, unsupported, or
+        combined preconditions are rejected.
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: admin.model_routing.write
+      parameters:
+        - name: label_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/AdminModelRoutingIdempotencyKey'
+        - name: If-Match
+          in: header
+          required: false
+          schema:
+            type: string
+            pattern: ^"[1-9][0-9]*"$
+        - name: If-None-Match
+          in: header
+          required: false
+          schema:
+            type: string
+            const: '*'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminModelRoutingWrite'
+      responses:
+        '200':
+          $ref: '#/components/responses/AdminModelRoutingWriteSuccess'
+        '400':
+          $ref: '#/components/responses/AdminModelRoutingBadRequest'
+        '401':
+          $ref: '#/components/responses/AdminModelRoutingUnauthorized'
+        '403':
+          $ref: '#/components/responses/AdminModelRoutingForbidden'
+        '404':
+          $ref: '#/components/responses/AdminModelRoutingNotFound'
+        '409':
+          $ref: '#/components/responses/AdminModelRoutingConflict'
+        '428':
+          $ref: '#/components/responses/AdminModelRoutingPreconditionRequired'
+        '429':
+          $ref: '#/components/responses/AdminModelRoutingRateLimited'
+        '502':
+          $ref: '#/components/responses/AdminModelRoutingInvalidResponse'
+        '503':
+          $ref: '#/components/responses/AdminModelRoutingUnavailable'
   /v1/models:
     get:
       tags: [Models]
@@ -3642,6 +3790,33 @@ components:
       scheme: bearer
       bearerFormat: opaque-session-token
   parameters:
+    AdminModelRoutingLimit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 50
+    AdminModelRoutingCursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 2048
+    AdminModelRoutingIdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Exactly one printable value; never trimmed or comma-joined.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+        pattern: ^[\x21-\x2B\x2D-\x7E]+$
     MoveSessionId:
       name: id
       in: path
@@ -6567,6 +6742,323 @@ components:
               items: { $ref: '#/components/schemas/BillingPlan' }
         meta: { $ref: '#/components/schemas/RequestMeta' }
 
+    AdminModelRoutingWrite:
+      type: object
+      required:
+        - model_revision_id
+        - visible
+        - is_default
+        - priority
+      additionalProperties: false
+      properties:
+        model_revision_id:
+          type:
+            - string
+            - 'null'
+          format: uuid
+        visible:
+          type: boolean
+        is_default:
+          type: boolean
+        priority:
+          type: integer
+          minimum: 0
+          maximum: 100000
+    AdminModelRouting:
+      type: object
+      required:
+        - model_revision_id
+        - visible
+        - is_default
+        - priority
+        - id
+        - tenant_id
+        - label_id
+        - feature_key
+        - version
+        - created_at
+        - updated_at
+      additionalProperties: false
+      properties:
+        model_revision_id:
+          type:
+            - string
+            - 'null'
+          format: uuid
+        visible:
+          type: boolean
+        is_default:
+          type: boolean
+        priority:
+          type: integer
+          minimum: 0
+          maximum: 100000
+        id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          minLength: 1
+          maxLength: 160
+        label_id:
+          type: string
+          format: uuid
+        feature_key:
+          type: string
+          minLength: 1
+          maxLength: 128
+        version:
+          type: string
+          pattern: ^[1-9][0-9]*$
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    AdminModelLabel:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - label_key
+        - display_name
+        - feature_key
+        - default_revision_id
+        - version
+        - created_at
+        - updated_at
+        - deleted_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        label_key:
+          type: string
+          minLength: 1
+          maxLength: 128
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 160
+        feature_key:
+          type: string
+          minLength: 1
+          maxLength: 128
+        default_revision_id:
+          type:
+            - string
+            - 'null'
+          format: uuid
+        version:
+          type: string
+          pattern: ^[1-9][0-9]*$
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        deleted_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+    AdminModelRevision:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - model_id
+        - provider_id
+        - revision
+        - provider_model_name
+        - display_name
+        - feature_key
+        - input_modalities
+        - output_modalities
+        - transport
+        - gateway_model_name
+        - context_window
+        - max_output_tokens
+        - priority
+        - version
+        - digest
+        - published_at
+        - retired_at
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        model_id:
+          type: string
+          format: uuid
+        provider_id:
+          type: string
+          format: uuid
+        revision:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+        provider_model_name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 160
+        feature_key:
+          type: string
+          minLength: 1
+          maxLength: 128
+        input_modalities:
+          type: array
+          minItems: 1
+          maxItems: 4
+          items:
+            type: string
+            enum:
+              - text
+              - image
+              - audio
+              - video
+        output_modalities:
+          type: array
+          minItems: 1
+          maxItems: 4
+          items:
+            type: string
+            enum:
+              - text
+              - image
+              - audio
+              - video
+        transport:
+          type: string
+          const: litellm
+        gateway_model_name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        context_window:
+          type:
+            - integer
+            - 'null'
+          minimum: 1
+          maximum: 2147483647
+        max_output_tokens:
+          type:
+            - integer
+            - 'null'
+          minimum: 1
+          maximum: 2147483647
+        priority:
+          type: integer
+          minimum: 0
+          maximum: 100000
+        version:
+          type: string
+          pattern: ^[1-9][0-9]*$
+        digest:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        published_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        retired_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    AdminPageMeta:
+      type: object
+      required:
+        - request_id
+        - next_cursor
+      additionalProperties: false
+      properties:
+        request_id:
+          type: string
+          pattern: ^[A-Za-z0-9._:-]{1,128}$
+        next_cursor:
+          type:
+            - string
+            - 'null'
+          minLength: 1
+          maxLength: 2048
+    AdminModelRoutingListResponse:
+      type: object
+      required: [data, meta]
+      additionalProperties: false
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminModelRouting'
+        meta:
+          $ref: '#/components/schemas/AdminPageMeta'
+    AdminModelLabelListResponse:
+      type: object
+      required: [data, meta]
+      additionalProperties: false
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminModelLabel'
+        meta:
+          $ref: '#/components/schemas/AdminPageMeta'
+    AdminModelRevisionListResponse:
+      type: object
+      required: [data, meta]
+      additionalProperties: false
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminModelRevision'
+        meta:
+          $ref: '#/components/schemas/AdminPageMeta'
+    AdminModelRoutingResponse:
+      type: object
+      required: [data, meta]
+      additionalProperties: false
+      properties:
+        data:
+          $ref: '#/components/schemas/AdminModelRouting'
+        meta:
+          $ref: '#/components/schemas/RequestMeta'
+    AdminModelRoutingErrorBase:
+      type: object
+      required:
+        - error
+        - meta
+      additionalProperties: false
+      properties:
+        error:
+          type: object
+          required:
+            - code
+            - message
+          additionalProperties: false
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+        meta:
+          $ref: '#/components/schemas/RequestMeta'
     ModelCandidate:
       type: object
       required: [provider, name, is_default]
@@ -6751,6 +7243,322 @@ components:
             message: { type: string, minLength: 1, maxLength: 1024 }
             retryable: { type: boolean }
   responses:
+    AdminModelRoutingListSuccess:
+      description: Current tenant routing policies
+      headers:
+        x-request-id:
+          required: true
+          schema:
+            type: string
+            pattern: ^[A-Za-z0-9._:-]{1,128}$
+        Cache-Control:
+          required: true
+          schema:
+            type: string
+            const: no-store
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AdminModelRoutingListResponse'
+    AdminModelLabelListSuccess:
+      description: Model labels
+      headers:
+        x-request-id:
+          required: true
+          schema:
+            type: string
+            pattern: ^[A-Za-z0-9._:-]{1,128}$
+        Cache-Control:
+          required: true
+          schema:
+            type: string
+            const: no-store
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AdminModelLabelListResponse'
+    AdminModelRevisionListSuccess:
+      description: Published model revisions
+      headers:
+        x-request-id:
+          required: true
+          schema:
+            type: string
+            pattern: ^[A-Za-z0-9._:-]{1,128}$
+        Cache-Control:
+          required: true
+          schema:
+            type: string
+            const: no-store
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AdminModelRevisionListResponse'
+    AdminModelRoutingWriteSuccess:
+      description: Routing command acknowledgement
+      headers:
+        x-request-id:
+          required: true
+          schema:
+            type: string
+            pattern: ^[A-Za-z0-9._:-]{1,128}$
+        Cache-Control:
+          required: true
+          schema:
+            type: string
+            const: no-store
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AdminModelRoutingResponse'
+    AdminModelRoutingBadRequest:
+      description: Invalid admin model routing request
+      headers:
+        x-request-id:
+          required: true
+          schema:
+            type: string
+            pattern: ^[A-Za-z0-9._:-]{1,128}$
+        Cache-Control:
+          required: true
+          schema:
+            type: string
+            const: no-store
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AdminModelRoutingErrorBase'
+              - type: object
+                properties:
+                  error:
+                    properties:
+                      code:
+                        type: string
+                        enum:
+                          - invalid_admin_model_routing_request
+    AdminModelRoutingUnauthorized:
+      description: Authentication or trusted service admission failed
+      headers:
+        x-request-id:
+          required: true
+          schema:
+            type: string
+            pattern: ^[A-Za-z0-9._:-]{1,128}$
+        Cache-Control:
+          required: true
+          schema:
+            type: string
+            const: no-store
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AdminModelRoutingErrorBase'
+              - type: object
+                properties:
+                  error:
+                    properties:
+                      code:
+                        type: string
+                        enum:
+                          - session_authentication_required
+                          - session_invalid
+    AdminModelRoutingForbidden:
+      description: Admin model routing permission denied
+      headers:
+        x-request-id:
+          required: true
+          schema:
+            type: string
+            pattern: ^[A-Za-z0-9._:-]{1,128}$
+        Cache-Control:
+          required: true
+          schema:
+            type: string
+            const: no-store
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AdminModelRoutingErrorBase'
+              - type: object
+                properties:
+                  error:
+                    properties:
+                      code:
+                        type: string
+                        enum:
+                          - service_auth_failed
+                          - product_tenant_forbidden
+                          - session_forbidden
+                          - admin_model_routing_forbidden
+    AdminModelRoutingNotFound:
+      description: Routing resource not found
+      headers:
+        x-request-id:
+          required: true
+          schema:
+            type: string
+            pattern: ^[A-Za-z0-9._:-]{1,128}$
+        Cache-Control:
+          required: true
+          schema:
+            type: string
+            const: no-store
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AdminModelRoutingErrorBase'
+              - type: object
+                properties:
+                  error:
+                    properties:
+                      code:
+                        type: string
+                        enum:
+                          - admin_model_routing_not_found
+    AdminModelRoutingConflict:
+      description: Routing write conflict
+      headers:
+        x-request-id:
+          required: true
+          schema:
+            type: string
+            pattern: ^[A-Za-z0-9._:-]{1,128}$
+        Cache-Control:
+          required: true
+          schema:
+            type: string
+            const: no-store
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AdminModelRoutingErrorBase'
+              - type: object
+                properties:
+                  error:
+                    properties:
+                      code:
+                        type: string
+                        enum:
+                          - admin_model_routing_version_conflict
+                          - admin_model_routing_idempotency_conflict
+                          - admin_model_routing_invalid_state
+    AdminModelRoutingPreconditionRequired:
+      description: Routing precondition required
+      headers:
+        x-request-id:
+          required: true
+          schema:
+            type: string
+            pattern: ^[A-Za-z0-9._:-]{1,128}$
+        Cache-Control:
+          required: true
+          schema:
+            type: string
+            const: no-store
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AdminModelRoutingErrorBase'
+              - type: object
+                properties:
+                  error:
+                    properties:
+                      code:
+                        type: string
+                        enum:
+                          - admin_model_routing_precondition_required
+    AdminModelRoutingRateLimited:
+      description: Current session admission is rate limited
+      headers:
+        x-request-id:
+          required: true
+          schema:
+            type: string
+            pattern: ^[A-Za-z0-9._:-]{1,128}$
+        Cache-Control:
+          required: true
+          schema:
+            type: string
+            const: no-store
+        Retry-After:
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 86400
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AdminModelRoutingErrorBase'
+              - type: object
+                properties:
+                  error:
+                    properties:
+                      code:
+                        type: string
+                        enum:
+                          - session_rate_limited
+    AdminModelRoutingInvalidResponse:
+      description: Owner response is invalid
+      headers:
+        x-request-id:
+          required: true
+          schema:
+            type: string
+            pattern: ^[A-Za-z0-9._:-]{1,128}$
+        Cache-Control:
+          required: true
+          schema:
+            type: string
+            const: no-store
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AdminModelRoutingErrorBase'
+              - type: object
+                properties:
+                  error:
+                    properties:
+                      code:
+                        type: string
+                        enum:
+                          - admin_model_routing_response_invalid
+    AdminModelRoutingUnavailable:
+      description: Admin model routing dependency unavailable
+      headers:
+        x-request-id:
+          required: true
+          schema:
+            type: string
+            pattern: ^[A-Za-z0-9._:-]{1,128}$
+        Cache-Control:
+          required: true
+          schema:
+            type: string
+            const: no-store
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AdminModelRoutingErrorBase'
+              - type: object
+                properties:
+                  error:
+                    properties:
+                      code:
+                        type: string
+                        enum:
+                          - product_tenant_not_configured
+                          - iam_admission_unavailable
+                          - admin_model_routing_unavailable
     BillingSummarySuccess:
       description: Personal Credit account
       headers:

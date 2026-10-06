@@ -1,3 +1,10 @@
+## R256-ADMIN-03 固定管理契约发布（2026-10-06，仅机器切片）
+
+Public 8.2.0新增四具名tenant-scoped model-routing管理operations；原95wire逐字节保护。System owner固定3.0.0/955bd587f46a771e43a4330d202d90a7d2d67262、原artifact SHA94ed91655741cbba66ce80a4c41717b9179cc509cb6858534e0b78aa3e6dc059，正规工具仅生成四operation/16文件；本固定artifact后处理20个对象strict、原vendor不改，无手改generated/锁升级。
+Root Node22完整check46931实际exit0：contract264PASS/0，主test814PASS/0/2既有资源skip，lint/typecheck/drift/build0、4既有OpenAPI warning。独审d125f4b6关闭四P2：data数组、字段界/默认、真实current admission错误status/code与必需header、generated closed对象；三D0原后缀/旧95事实保持。architecture最终只8.1→8.2版本oracle一行，不夹整文件格式。
+Root首门252/10及后续813/1/2skip失败证据保留。本片无production route/client/bootstrap/Schema/配置/正常资格/资金/provider变化；有效真实管理员GET404 RED仍OPEN，后台页面与CRUD未实现。后继具名HTTP实现须沿已批准三D0与合法owner RED，浏览器正向/撤权/持久读写单独验收。
+证据Root var/dev/r255-preserve/r257-admin-contract-final-root-freeze.json 与 final-exact-root-check.log；纯机器门不替代真实用户闭环。
+
 ## R257 当前排程 terminal 失败投影切片（2026-10-06）
 
 现 PostgresScheduledTaskRepository 在有效outbox lease/fence行锁下，将当前revision且active+enabled的register/replace终止失败与outbox终结同事务提交为failed、next_run_at=null；paused/stale/delete/retryable不覆盖或复活任务。无schema/contract/新状态变化。

@@ -1,3 +1,4 @@
+- 机器契约/generated 阶段不改变本结论：public 8.2/99 与固定 System 3.0 client 不引入 BFF DDL、缓存或 owner 数据副本；生产接线仍属后继切片。
 ## R256-ADMIN-03.D0：模型路由管理数据边界（2026-10-06；零 BFF DDL）
 
 System 唯一拥有 ModelLabel、ModelRevision、RoutingPolicy、版本/CAS、tenant scope 与 command receipt；BFF 只保存当前请求内的受信 admission context、冻结命令与解析结果，不复制 owner row、资格、routing 快照、receipt 或 cursor。本片不改 `database/schema.sql`，不建表/列/索引/触发器/迁移、Redis key、审计副本或 credential/permission 总表；BFF 仍禁止跨 owner SQL/JOIN。

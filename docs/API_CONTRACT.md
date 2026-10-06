@@ -1,3 +1,4 @@
+- 当前机器候选为 public `8.2.0` / 99 operations；System consumer 固定 3.0.0 commit `955bd587f46a771e43a4330d202d90a7d2d67262` 与原字节 SHA-256 `94ed91655741cbba66ce80a4c41717b9179cc509cb6858534e0b78aa3e6dc059`，生成过滤只含三读一写四具名 operations。
 ## R256-ADMIN-03.D0：四个 current-tenant 模型路由管理契约（2026-10-06；目标 8.2.0，未发布）
 
 当前 public 机器基线为 8.1.0/95 operations；唯一可编辑事实源仍是 `contract/openapi/v1/openapi.yaml`。目标 additive 升级为 8.2.0/99 operations，不覆写旧 immutable artifact，不建 `/v2`、兼容 alias 或任意 `/system` proxy。固定 owner 输入是 System 3.0.0 runtime-Zod OpenAPI（SHA256 `94ed91655741cbba66ce80a4c41717b9179cc509cb6858534e0b78aa3e6dc059`）；正式 immutable commit/digest 由 Root 开工前写入 pin。System 仍为最终授权、状态、CAS 与 receipt owner。

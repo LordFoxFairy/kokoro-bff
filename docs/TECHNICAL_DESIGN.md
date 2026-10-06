@@ -1,3 +1,4 @@
+- 机器阶段已固定 System 3.0.0 immutable artifact `955bd587f46a771e43a4330d202d90a7d2d67262` / SHA-256 `94ed91655741cbba66ce80a4c41717b9179cc509cb6858534e0b78aa3e6dc059`，仅生成四具名 owner operations；public 8.2/99 为本阶段机器候选，生产 route/client/bootstrap 未进入本切片。
 ## R256-ADMIN-03.D0：当前 tenant 模型路由管理（2026-10-06；仅设计，待 Root 放行）
 
 **证据与当前态。** 本文基于只读报告 `var/dev/r255-preserve/r257-admin-management-next-slice.md`（SHA256 `a376743747b454e1a95040ef2af7932a44056b177aa48efe07325a03a9527a1f`）及 BFF `975a2d8a538dfb1f4b83b33b98bc9262a77c00f2`。当前 BFF 已消费 IAM 0.8 的 required `platformAdmin`，但 `/system` 明确 fail closed，`/models` 只有普通 catalog read；不存在管理写路由。System 是 ModelLabel、ModelRevision、RoutingPolicy 与 command receipt 唯一 owner；其 runtime-Zod 机器源为 3.0.0、OpenAPI SHA256 `94ed91655741cbba66ce80a4c41717b9179cc509cb6858534e0b78aa3e6dc059`。本轮只增加三份文档前缀，零源码、机器合同、generated、DDL、配置、资源或资格变化；下方原文保持历史后缀。
