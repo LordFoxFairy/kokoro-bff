@@ -41,6 +41,7 @@ import { schedulerDispatch } from "../http/routes/scheduler.js"
 import { runtimeManifest } from "../http/routes/runtime-manifest.js"
 import { iamProtocolRelay } from "../http/routes/iam-protocol-relay.js"
 import { liveTeamRead, liveTeamWrite } from "../http/routes/team.js"
+import { liveModelRoutingAdmin } from "../http/routes/model-routing-admin.js"
 import { createBffComposition, type BffCompositionOptions, type BffRouteInput } from "./runtime.js"
 import { createSkillDraftRoute } from "../http/routes/create-skill-draft.js"
 import { getSkillPackageUploadRoute } from "../http/routes/get-skill-package-upload.js"
@@ -359,6 +360,11 @@ async function handle(
   if (businessPath[0] === "team") {
     if (request.method === "GET") await liveTeamRead(request, response, config, context, admission.bearerToken, businessPath)
     else await liveTeamWrite(request, response, config, context, admission.bearerToken, businessPath)
+    return
+  }
+
+  if (composition.routeHandler === undefined && businessPath[0] === "admin") {
+    await liveModelRoutingAdmin(request, response, config, context, businessPath)
     return
   }
 
