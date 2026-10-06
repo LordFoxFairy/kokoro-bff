@@ -58,6 +58,22 @@ function importsCanonicalSchemaInstaller(relativePath: string, source: string): 
   })
 }
 
+// ADR-003 permits these two read-only exports in this one operation, not the installer module as a whole.
+function isNamedPersonalizationSchemaReader(relativePath: string, source: string): boolean {
+  if (relativePath !== "scripts/personalization-schema-evolution.mjs") return false
+  const imports = [...source.matchAll(/^import\s+\{([^}]+)\}\s+from\s+["']\.\/apply-schema\.mjs["'];?[ \t]*$/gmu)]
+  if (imports.length !== 1) return false
+  const declaration = imports[0]
+  if (declaration === undefined || declaration.index === undefined) return false
+  const bindings = (declaration[1] ?? "")
+    .split(",")
+    .map((binding) => binding.trim())
+    .sort()
+  if (JSON.stringify(bindings) !== JSON.stringify(["assertBffSchemaUrl", "loadCanonicalSchema"])) return false
+  const remainder = source.slice(0, declaration.index) + source.slice(declaration.index + declaration[0].length)
+  return !importsCanonicalSchemaInstaller(relativePath, remainder)
+}
+
 function assertSingleSchemaInstaller(scripts: Record<string, string>, sourceFiles: SourceFile[]): void {
   const schemaInstallEntries = Object.entries(scripts).filter(([name, command]) => isSchemaInstallerScriptName(name) && nodeExecutionEntry(command) !== null)
   const nonCanonicalSchemaReaders = sourceFiles
@@ -65,7 +81,11 @@ function assertSingleSchemaInstaller(scripts: Record<string, string>, sourceFile
     .map(({ relativePath }) => relativePath)
     .sort()
   const nonCanonicalInstallerImports = sourceFiles
-    .filter(({ relativePath, source }) => relativePath !== canonicalInstaller.relativePath && importsCanonicalSchemaInstaller(relativePath, source))
+    .filter(({ relativePath, source }) =>
+      relativePath !== canonicalInstaller.relativePath &&
+      importsCanonicalSchemaInstaller(relativePath, source) &&
+      !isNamedPersonalizationSchemaReader(relativePath, source),
+    )
     .map(({ relativePath }) => relativePath)
     .sort()
   const installer = sourceFiles.find(({ relativePath }) => relativePath === canonicalInstaller.relativePath)?.source ?? ""
@@ -893,4 +913,84 @@ test("R257 personalization stays caller-owned and bypasses generic receipt dispa
   assert.doesNotMatch(port, /from ["'](?:pg|redis|node:http)["']/u)
   assert.doesNotMatch(repository, /bff_idempotency_receipt|kokoro_iam|kokoro_system|\.redis\./u)
   assert.ok(server.indexOf("await personalizationRoute(") < server.indexOf("const mutationRequired ="))
+})
+
+
+test("R257 named evolution may import exactly the two approved canonical read helpers", () => {
+  const namedReader: SourceFile = {
+    relativePath: "scripts/personalization-schema-evolution.mjs",
+    source: 'import { assertBffSchemaUrl, loadCanonicalSchema } from "./apply-schema.mjs"',
+  }
+  assert.doesNotThrow(() => assertSingleSchemaInstaller({ "db:apply-schema": "node scripts/apply-schema.mjs" }, [canonicalInstaller, namedReader]))
+})
+
+test("R257 named evolution exception rejects installer execution exports and alternate import forms", () => {
+  const approved = 'import { assertBffSchemaUrl, loadCanonicalSchema } from "./apply-schema.mjs"'
+  for (const source of [
+    'import { applyCanonicalSchema } from "./apply-schema.mjs"',
+    'import { assertBffSchemaUrl, loadCanonicalSchema, applyCanonicalSchema } from "./apply-schema.mjs"',
+    'import { assertBffSchemaUrl, loadCanonicalSchema as applyCanonicalSchema } from "./apply-schema.mjs"',
+    'import * as installer from "./apply-schema.mjs"',
+    'import installer from "./apply-schema.mjs"',
+    'import "./apply-schema.mjs"',
+    'export { assertBffSchemaUrl, loadCanonicalSchema } from "./apply-schema.mjs"',
+    'const { assertBffSchemaUrl, loadCanonicalSchema } = require("./apply-schema.mjs")',
+    'const { assertBffSchemaUrl, loadCanonicalSchema } = await import("./apply-schema.mjs")',
+    'import { assertBffSchemaUrl, loadCanonicalSchema } from "./apply-schema.mjs?mode=install"',
+    'import { loadCanonicalSchema } from "./apply-schema.mjs"',
+    `${approved}\n${approved}`,
+    `${approved}\nconst installer = require( /* alternate */ "./apply-schema.mjs")`,
+    `${approved}\nconst installer = await import( /* alternate */ "./apply-schema.mjs", { with: { type: "module" } })`,
+    `${approved}\nimport { applyCanonicalSchema } from "./apply-schema.mjs"`,
+  ]) {
+    assert.throws(
+      () =>
+        assertSingleSchemaInstaller({ "db:apply-schema": "node scripts/apply-schema.mjs" }, [
+          canonicalInstaller,
+          { relativePath: "scripts/personalization-schema-evolution.mjs", source },
+        ]),
+      /static schema installer import/u,
+      source,
+    )
+  }
+})
+
+test("R257 named read helpers do not admit other paths runtime loaders or another installer command", () => {
+  const source = 'import { assertBffSchemaUrl, loadCanonicalSchema } from "./apply-schema.mjs"'
+  for (const relativePath of ["scripts/personalization-schema-catalog.mjs", "scripts/evolve-personalization-schema.mjs", "scripts/other-evolution.mjs"]) {
+    assert.throws(
+      () => assertSingleSchemaInstaller({ "db:apply-schema": "node scripts/apply-schema.mjs" }, [canonicalInstaller, { relativePath, source }]),
+      /static schema installer import/u,
+    )
+  }
+  assert.throws(
+    () =>
+      assertSingleSchemaInstaller({ "db:apply-schema": "node scripts/apply-schema.mjs" }, [
+        canonicalInstaller,
+        { relativePath: "src/database/setup.ts", source: source.replace("./apply-schema.mjs", "../../scripts/apply-schema.mjs") },
+      ]),
+    /static schema installer import/u,
+  )
+  assert.throws(
+    () =>
+      assertSingleSchemaInstaller({ "db:apply-schema": "node scripts/apply-schema.mjs" }, [
+        canonicalInstaller,
+        {
+          relativePath: "scripts/personalization-schema-evolution.mjs",
+          source: `${source}\nawait readFile(new URL("../database/schema.sql", import.meta.url))`,
+        },
+      ]),
+    /single schema installer/u,
+  )
+  assert.throws(
+    () =>
+      assertSingleSchemaInstaller(
+        {
+          "db:apply-schema": "node scripts/apply-schema.mjs",
+          "db:install:personalization": "node scripts/personalization-schema-evolution.mjs",
+        },
+        [canonicalInstaller, { relativePath: "scripts/personalization-schema-evolution.mjs", source }],
+      ),
+    /single schema installer/u,
+  )
 })

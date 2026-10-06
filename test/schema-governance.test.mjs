@@ -446,3 +446,21 @@ test("R257 personalization canonical owns one bounded caller singleton without a
   assert.equal((block.match(/TIMESTAMPTZ\(3\) NOT NULL/gu) ?? []).length, 2)
   assert.doesNotMatch(block, /FOREIGN KEY|REFERENCES|JSONB|deleted_at|receipt|DEFAULT ''/iu)
 })
+
+// R257 named populated-owner evolution: canonical remains the only DDL source.
+test("R257 personalization evolution extracts exactly its canonical target and refuses extra or changed SQL", async () => {
+  const { extractPersonalizationCreate } = await import("../scripts/personalization-schema-catalog.mjs")
+  const canonical = await loadCanonicalSchema()
+  const statement = canonical.match(/^CREATE TABLE IF NOT EXISTS bff_personalization \(\n[\s\S]*?^\);/gmu)
+  assert.equal(statement?.length, 1)
+  assert.equal(extractPersonalizationCreate(canonical), statement[0].replace("CREATE TABLE IF NOT EXISTS bff_personalization", "CREATE TABLE kokoro_bff.bff_personalization"))
+  for (const invalid of [
+    canonical.replace(statement[0], ""),
+    `${canonical}\n${statement[0]}`,
+    canonical.replace("nickname TEXT NOT NULL", "nickname TEXT"),
+    canonical.replace("char_length(nickname) <= 128", "char_length(nickname) <= 129"),
+    canonical.replace("tenant_id <> '' AND owner_id <> ''", "tenant_id <> ' ' AND owner_id <> ''"),
+    canonical.replace("nickname TEXT NOT NULL", "nickname TEXT NOT NULL; SELECT 1"),
+  ]) assert.throws(() => extractPersonalizationCreate(invalid), /invalid_schema/u)
+  assert.throws(() => assertEmptyOwnerSchema(["bff_project"]), /requires an empty kokoro_bff schema/u)
+})
