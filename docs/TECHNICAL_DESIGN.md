@@ -1,3 +1,39 @@
+## R257-ADMIN-BFF-D0：当前管理员资格消费（2026-10-06；设计待实施）
+
+**基线/事实。** 本仓基线为 Root 已提交的 6d46ec8，原19 mixed全部保留；MCP本人Connection片已由Root full check 795 PASS/1 skip、独审后发布，与本片独立。本次仅三D0新前缀，下面原字节不变。BFF当前仍消费IAM0.7.0/e3c035b99cf9479ac8357c7d38147f1541dcbcac；session-admission只返回identity，GET /v1/me仅user_id/tenant_id，不存在已实现的管理员投影或后台CRUD。
+
+IAM owner已发布 d24aa2b697de59a350e8588720620df331bc5da5，internal0.8.0，contract/openapi/iam.internal.v1.json SHA256 0153a16f5c2779803d73d93d5533caf1b377d21299cefe01613d7cd1b2cbb194；本次只读重算exact。Root报告真实两integration34/0、完整verify939/0及独审；不是BFF/Web或normal管理员验收。IAM正常旧实例未重载、正常帐号未grant；旧三D0的基线目标文字按其历史时点阅读，不否认此已提交owner实现。
+
+### 唯一 owner 与最窄位置
+
+|项|当前决定|
+|---|---|
+|资格|IAM User.platformAdmin唯一事实；受控独立manager Session/CAS/Audit授撤；BFF不写资格、不解释组织role/email/OAuthoperator/financial名单。|
+|准入|现POST /internal/v1/session-authorizations/verify返回required platform_admin；IAM已限定fixed Product Web client+fixed tenant+当前User资格及全部原Session/Member/client/resource/binding。BFF保固定tenant检查，不复制owner client资格判定或新增scope。|
+|放置比较|采用现auth/session-admission client/types → user-admission → bootstrap /me；拒另建admin service/endpoint/角色引擎、解析JWT管理员claim或信自报header。|
+|受信类型|现session-admission.types.ts成功分支新增required platformAdmin:boolean；现domain/request-context.ts增具名AdmittedUserRequestContext = RequestContext & {platformAdmin:boolean}，user-admission成功context必填。基础RequestContext及service-only身份不机械扩权限字段，无optional或生产默认false。|
+|公开展示|扩现GET /v1/me的required platform_admin；false仍普通登录200。Web后片同源/admin、Settings与管理API各自消费当前投影；本BFF片不创造管理CRUD或假后台列表。|
+|数据/删除|不增加DB/Redis键/资格缓存/receipt/权限表。旧IAM0.7 active pin与generated输入替换为唯一0.8，不双读旧shape、不alias/fallback；现MCP/Team/Skill/财务边界保持。|
+
+### fresh资格、取消与正常切换停止线
+
+现SessionAdmissionClient每次verify都请求owner，没有肯定资格缓存；保持现transport最大5秒/1MiB、取消/迟到退役、no-store、错误与受控request ID边界。新布尔只能从固定generated完整strict响应取得；缺失/null/字符串/额外字段/依赖失败为iam_admission_unavailable，不假false或沿用旧true。普通false不阻普通产品路由。
+
+Web后继Settings显示只是提示：/admin每次server准入和每条管理API请求都fresh核定，明确true才准入；普通false为后台403，依赖错误保持503等真实失败，不伪装普通用户。A→B/退出/重核pending或失败立即去旧管理显示/迟到结果；Cookie/JWT/localStorage/先前页面true不授权。每个管理命令仍需目标owner当前权限/范围/审计，平台true不授跨tenant :any、财务scope或MCP调用权。撤销提交后开始的新IAM snapshot必须false；不宣称撤销原子取消早已准入的跨服务在途操作。
+
+上线门：0.7严格consumer拒0.8多字段，0.8严格consumer也拒旧响应缺字段，禁止先部署任一半边或添加兼容默认。Root先批准IAM正常有数据schema演进/备份恢复与校验（不得fresh installer/reset/seed），准备新IAM、BFF与Web固定artifact消费者，统一受控切换窗口并记录中间失败闭合/最终本人读；正常BFF仍按旧IAM配对运行，未过此门不重载。不靠本D0执行任何配置/帐号grant。
+
+### 后继精确文件与验证（须Root另准source）
+
+- 生产现5文件：src/auth/session-admission.client.ts、src/auth/session-admission.types.ts、src/auth/user-admission.ts、src/domain/request-context.ts、src/bootstrap/server.ts；现src/auth/session-admission.transport.ts仅原样回归，除非实际失败另报扩集。不动业务RequestContext调用方/普通owner routes。
+- 固定生成：contract/dependencies/iam-http.json、openapi-ts.iam.config.ts、scripts/generate-iam-http-client.mjs、contract/vendor/kokoro-iam/d24aa2b697de59a350e8588720620df331bc5da5/iam.internal.v1.json与现src/generated/iam-http/**正规16文件；退役旧active0.7 vendor。normalizer随新required字段精确更新strict嵌套匹配/计数，不手改产物、不扩原14operation过滤。
+- Public：contract/openapi/v1/openapi.yaml、scripts/verify-openapi.ts、contract/README.md；仅CurrentUserIdentity新增required boolean，operation数保持93；contract/tests/v1-operations.json应保持原字节，不无故重建。Public发布前8.0.0交新immutable commit/digest，MCP已交Web的6d46ec8原blob不改。
+- 先现行为RED/后回归：test/iam-admission-client.test.ts、test/user-admission.test.ts、test/contract/openapi-contract.test.mjs、test/contract-governance.test.mjs、test/architecture.test.ts；test/doubles/session-admission.ts和test/doubles/server.ts只补明确普通false成功fixture，保原拒绝/调用计数，不把测试缺字段兼容带入生产。其他inline admission fixture只在实际类型/行为失败后列具体扩集，不授权批量改所有tests或受保护19mixed。
+- RED应是合法IAM0.8响应/本人true-false未被正确投影，不是缺vendor/不存在方法/编译错误。覆盖普通false、true→撤权false同token每次owner调用、A/B隔离、header/query伪资格无效、固定tenant拒绝、owner字段缺失/错型/额外、timeout/body/取消/旧true不回补；保Team/Skills/MCP普通回归。
+- 后继已有命令：pnpm contract:generate:iam / contract:check:iam；pnpm build后node --test test/iam-admission-client.test.ts test/user-admission.test.ts test/contract/openapi-contract.test.mjs test/contract-governance.test.mjs；pnpm typecheck / lint / format:check / contract:check / test:architecture / check。Root真实normal IAM→BFF→Web普通/管理员入口、直链、撤权/刷新另验；本轮文档不运行命令/资源。
+
+<!-- R257-ADMIN-BFF-D0-TECH-END -->
+
 ## R257-MCP-BFF-D0：正式本人 MCP Connection 读取（2026-10-06；设计候选，未实施）
 
 **基线。** BFF main ef2d3062e7503cb443d88a972804a98e9158a321，19项原 mixed（含文档与未跟踪删除候选）由Root保护。本前缀以下旧文件全部bytes保持。正常新增页仍读全局Server而非本人Connection，Root已记录wrong-resource业务RED；不是新接口已实跑RED。BFF当前HTTP consumer仍pin Platform3.1.0/6a09913a96c686b316bfe707b823d039e625607a。Root本轮已核Platform已提交main 9ab3b653360d04fb498a238659edeec01e72f62d的 contract/openapi/platform-http.openapi.json 为3.2.0，与工作树全文SHA256 4b42dd161c972b3447cfea3a6f80a949bbdb573c46213dbf8ef4c3ecb58e72da exact。后继生成必须固定该提交完整SHA及digest，不消费移动工作树；Connect版本/aggregate不是本HTTP来源。Root已核正常Platform启用surface尚缺mcp-connection，正规启用/原句柄重载由Root独立处理；这是发布后运行前置，不改成旧Server fallback，也不由本片操作配置。

@@ -1,3 +1,21 @@
+## R257-ADMIN-BFF-D0：当前资格只读投影，无新数据事实（2026-10-06）
+
+基线BFF6d46ec8；原19 mixed与以下旧正文保持。本轮只三D0前缀；database/schema.sql、SQL/Project候选、Redis与正常资源不变。
+
+IAM User.platformAdmin/platformAdminVersion拥有资格及CAS；管理authority、当前User/Session、同tx Audit与具名CLI也归IAM。固定消费IAM0.8.0/d24aa2b697de59a350e8588720620df331bc5da5/internal artifact SHA256 0153a16f5c2779803d73d93d5533caf1b377d21299cefe01613d7cd1b2cbb194；BFF只得到当次成功会话的required boolean，不复制User表或跨owner读SQL。Root已报告owner隔离34/0与verify939/0，不等于正常schema已升级/帐号已授予。
+
+- 本片无新增表/列/索引/外键/迁移/Redis键/receipt/outbox/retention，不增加权限持久化或授权结果缓存，不把platform_admin存入Conversation/Project/Session/Token身份副本。既有业务DB仍各自owner，不能因平台管理员绕过个人scope。
+- SessionAdmissionResult成功显式required platformAdmin；现基础RequestContext不扩权限，具名AdmittedUserRequestContext在每次普通在线准入成功时承载必填布尔。service-only context没有后台资格，不以optional/默认false伪造owner判断，也不要求所有业务fixture机械带权。
+- 管理入口投影限定fixed Web client+Product tenant；全局User资格不意味着任意tenant资源管理许可。组织Member只是原普通会话检查；角色/email/operator/financial不是来源。公开/me只加boolean，不暴露资格版本/管理者集合/审计。
+- BFF每次从IAM current snapshot读取；无跨请求true缓存，无管理员JWT解析真源。Web显示状态须按subject隔离并在换人/退出/重核失败退休，迟到response不复活旧true；显示存储不授后台路由或命令权。
+- 资格grant/revoke/Audit/unknown ACK均IAM管理用例负责，BFF读取不写Audit或补写资格。撤权后新检查false；此前snapshot可能先准入，不提供跨owner执行原子撤权或权限租约。
+- 正常IAM已有User/Session的两字段演进是IAM/Root独立部署门：不使用fresh installer/reset/seed，不由BFF启动自动DDL。正常新旧严格schema必须按TECH同步consumer窗口切换；0.7/0.8缺/多字段均不做兼容回退。
+- MCP本人Connection、Skills、Billing/financial、AG-UI与现所有数据生命周期不动。未来/admin各页CRUD/命令仍逐owner定义目标scope、权限检查、审计与事务，当前读投影不关闭这些业务任务。
+
+本轮无source/schema/contract/generated/测试执行或正常帐号写入。后继验证现HTTP真假/撤权/并发窗口/取消与固定生成门，Root另做正常普通/管理员入口及每owner业务验收；本D0不是产品PASS。
+
+<!-- R257-ADMIN-BFF-D0-DATA-END -->
+
 ## R257-MCP-BFF-D0：本人 Connection读取无本仓数据变化（2026-10-06；仅设计）
 
 BFF ef2d3062e7503cb443d88a972804a98e9158a321；本轮仅三D0当前前缀，原文全部bytes及19项mixed保护，Project删除/SQL/installer候选不在此片。

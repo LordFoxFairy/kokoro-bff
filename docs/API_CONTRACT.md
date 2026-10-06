@@ -1,3 +1,36 @@
+## R257-ADMIN-BFF-D0：本人当前管理员投影（2026-10-06；未实施/未发布）
+
+本仓当前6d46ec8已发布MCP public8.0.0/93 operations；本片仅设计，原三D0全部正文为exact suffix。唯一public机器源仍contract/openapi/v1/openapi.yaml；不新增管理verify端点/服务，不复制IAM资格写契约。
+
+### 固定owner输入
+
+IAM POST /internal/v1/session-authorizations/verify / verifySessionAuthorization，internal-owner，既有iam:session-authorization.verify；固定0.8.0 commit d24aa2b697de59a350e8588720620df331bc5da5，contract/openapi/iam.internal.v1.json SHA256 0153a16f5c2779803d73d93d5533caf1b377d21299cefe01613d7cd1b2cbb194（本次只读重算exact）。BFF现active仍0.7.0/e3c035b99cf9479ac8357c7d38147f1541dcbcac，未改pin或generated。
+
+消费新成功data的required platform_admin:boolean及全部原allowed:true/tenant_id/user_id/session_id/client_id，以正规generated严格解析；不由JWT decode/自报header/body/role/email推导。true由IAM保证fixed Product client+tenant+当前User资格且原完整会话准入成立；BFF仍核已验tenant==自身fixed tenant，不另设客户端名单/权限scope。普通false是合法会话。owner缺字段/null/错型/多字段、损坏/故障不默认为false，沿503 iam_admission_unavailable；旧身份/限流/固定tenant错误语义不改。
+
+### 唯一public变化
+
+|项|目标|
+|---|---|
+|路径/operation|原GET /v1/me / getCurrentUser，owner=kokoro-bff，public/beta，idempotency=none，permission=identity.self.read；93operation保持。|
+|请求|原service envelope+唯一本人Bearer，body/query拒绝保持；不接他人user/tenant/admin selector，不新增Idempotency-Key或管理员token。|
+|200|原{data:{user_id,tenant_id},meta:{request_id}}中的data追加required platform_admin:boolean；CurrentUserIdentity保持closed，其余原字段/既有meta语义不改。|
+|普通用户|当前false仍200，不拦普通页面；Web后继隐藏Settings后台入口，访问/admin及受保护管理API按各自边界拒403。|
+|传输|沿现no-store/x-request-id/有界响应与取消；不公开IAM session_id/client_id、资格版本、管理者名单、reason、Audit或secret。|
+|错误|沿现400/401/403/429/503与envelope；资格校验未知/依赖失败保503而非伪false或回用旧true；不在/me假造新的admin403。|
+
+新字段属于strict表示演进，public仍处正式发布前8.0.0，由Root发布新的immutable commit/digest后Web固定消费；已交MCP artifact保持原字节。没有optional字段、missing→false、旧shape双读、旧权限alias或另一个可编辑contract中心。现operation inventory不增删；后继新增真实管理命令时才逐个声明它们的owner/权限/失败/审计，不用本布尔覆盖所有owner操作。
+
+### 安全时序与发布门
+
+BFF每个请求在线IAM核验，不将肯定结果作为后续请求票据。Web/admin server与管理API必须各自fresh取得本人投影，只在明确true时准入；同一个未过期token撤权后新请求读false。缓存、Cookie显示字段、先前页面200/true不允许绕过新检查。授权snapshot先于并发撤权的在途请求仍有时序窗口，后继业务执行点另验，不虚构本片expires_at/receipt或跨服务原子撤销。
+
+正常IAM现旧实例与BFF旧strict0.7保持配对。本片源未实施，Root须先完成正常IAM已有库两字段演进/验证、准备BFF0.8及Web新public消费，再同受控窗口切换；两种strict shape不兼容，不先激活一侧导致全部普通准入失败，不增加兼容fallback。正常用户管理员授予仅IAM具名管理权正式CLI，非本BFF/Web产品代码或启动seed。
+
+验收：现真实HTTP controlled owner证明true/false/同token撤权新调用、错shape/伪身份/错tenant/取消与普通回归；Root再验正式帐号普通无入口/直链拒绝、管理员当前页面、撤权/刷新/切人，以及各owner真实业务独立授权。当前没有后台CRUD或正常用户E2E通过结论。后继精确文件/命令见TECH同名前缀。
+
+<!-- R257-ADMIN-BFF-D0-API-END -->
+
 ## R257-MCP-BFF-D0：本人 Connection public只读契约（2026-10-06；仅设计，未发布/激活）
 
 唯一机器源仍是 contract/openapi/v1/openapi.yaml。目标在当前发布前8.0.0中仅新增 GET /v1/mcp/connections / listSelfMcpConnections；owner=kokoro-bff、visibility=public、stability=beta、idempotency=none、permission=capability.mcp.read（既有MCP治理分类，非新IAMgrant）。Root后继发布新immutable commit/digest，旧已交接blob不覆写；Web固定新artifact后消费。本轮机器/inventory/generated/source/config均未改。
