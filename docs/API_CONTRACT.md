@@ -1,3 +1,17 @@
+## R259-SKILLS-METADATA-BFF-D0：安装元信息契约（2026-10-06；仅设计）
+
+固定 owner 为 Platform `c94909f1c593f2b7ffd5f325786739da744ff31f` / digest `4fe862adba0d460fa23713c124ba747d457f23f777043926739d16e35d350e07`。现五个 Product installation RPC、请求、分页、幂等、错误和 V7/V6/V5 历史 artifact 均不变；只在 `ProductSkillInstallation` 增 required tag10 `display_name`、tag11 `summary`、tag12 `source_status`。BFF public五个既有安装操作同步返回 required `display_name`、`summary`、`source_status`，OpenAPI additive升8.3.0但仍99 operations；成功/错误 envelope及`meta.request_id`不变。
+
+- `display_name`与`summary`必须来自安装所绑定的精确 owner revision关联，BFF不另查catalog或缓存。`display_name`须非空白且JS `length<=255`；`summary`允许空串、JS `length<=65535`并原样投影、不trim。public JSON字段required不等于Proto implicit scalar具备独立wire presence：owner省略合法空summary时固定decoder得到`""`，不得据此判坏响应。
+- `source_status` public闭集为`active | disabled | withdrawn | quarantined`；UNSPECIFIED、draft、未知数值/名称视为坏owner响应并走既有稳定502错误，不扩新错误协议。状态只描述来源当前安全状态，不等于安装enabled，也不授权执行。
+- GET、LIST、Install/Enable/Remove ACK使用同一 `SkillInstallation` schema。receipt replay保留owner原change/event/replayed/安装状态，仅呈现owner当前权威元信息；BFF不保存或改写receipt。
+- removed、disabled、withdrawn或quarantined资源仍按owner授权可读并携带三字段；不存在第二查询、兼容optional shape或九字段fallback。
+- consumer必须一次固定新commit/descriptor/generated；旧vendor目录同切片删除。V6 `sourcePins`必须改用其发布时五个historical pins独立校验，不得随latest Proto/descriptor常量漂移；latest两项另按新pin严格校验。BFF vendor V5–V7实际27文件及三aggregate保持byte-exact，owner V1–V7历史总量93文件仍由owner发布证据约束，不发布V8。
+
+机器/RED范围与顺序以同轮TECHNICAL_DESIGN前缀为准。实现前测试须在旧BFF上证明：新owner pin失败、十二字段strict response失败、public required schema失败；测试double不得代替Root最终真实IAM→BFF→Platform回读/replay。当前正常进程不重载，Web仍不得消费未发布字段。
+
+<!-- R259-SKILLS-METADATA-BFF-D0-API-END -->
+
 ## R257 管理路由 HTTP 实施验收（2026-10-06 16:16 UTC）
 
 四个已发布public8.2操作现有具名route/client实施，System3.0固定artifact与全部旧operation不变；无BFF DDL/新owner/兼容proxy。

@@ -1,3 +1,33 @@
+## R259-SKILLS-METADATA-BFF-D0：安装元信息消费（2026-10-06；仅设计）
+
+**当前事实与固定 owner。** Platform 已由 Root 发布 `c94909f1c593f2b7ffd5f325786739da744ff31f`，contract digest `4fe862adba0d460fa23713c124ba747d457f23f777043926739d16e35d350e07`；`ProductSkillInstallation` 在原九字段后 additive 增加 required `display_name=10`、`summary=11`、`source_status=12`。owner V1–V7历史共93文件；其中BFF vendor V5–V7为27文件，三者 aggregate `3384a88f…`、`0d728881…`、`3f97b3c9…` 仍 byte-exact，不造 V8、不重算历史 pin。当前 BFF `bac0cbf` 仍固定 Platform `494b118a…`、旧 descriptor `ae268313…` 和九字段 projector/public 8.2，因此正常进程保持不重载，且不得先向 Web 声称元信息可用。
+
+### §8 放置与发布边界
+
+|项|决定|
+|---|---|
+|Owner / writer|Platform `skills/installation` 是安装、固定 revision 关联及 name/summary/status 的唯一 owner；BFF 只做受信 current-session 后的严格消费和 public 投影；Web 后继只展示。无 BFF 数据 writer。|
+|当前入口|现 `scripts/generate-platform-connect-client.mjs` 固定单一 vendor commit并正规生成 `src/generated/platform-connect/**`；`personal-installation-connect.ts` 调五个具名 Product RPC；`personal-installation-response.ts` 当前只校验/投影九字段；public OpenAPI 8.2 的 `SkillInstallation` 也只有九字段。|
+|目标职责|一次 clean repin 到 owner `c94909f…`，由正规 generator 得到 required 三字段；response projector 对 name/summary/status 做闭集、长度与 unknown 校验，五个 read/mutation ACK 均投影同一十二字段；public schema additive 升 8.3，operation 数仍 99。|
+|位置比较|采用现 `personal-installation-response.ts` 扩展既有唯一安装响应映射，并同步现生成/contract门。另建通用 Platform mapper 会复制现职责；在 route/Web 补字段会绕过 owner strict 边界，均淘汰。|
+|依赖|只依赖固定 Platform Proto/generated enum与现 owner client；禁止相对 import Platform 源、手写 Proto DTO、读取 Platform DB、缓存元信息、BFF N+1 catalog 查询或从 source_ref 猜名称。|
+|数据/API|无 BFF DDL、Redis、receipt、事务或 cursor变化。public 三字段均 required，但这不等于 Proto implicit scalar 有独立 wire presence：`display_name`须非空白且 JS `length<=255`；`summary`允许空串且 JS `length<=65535`，原样保留、不 trim，owner省略空 scalar 时固定 decoder 得到`""`亦合法；`source_status`只允许active/disabled/withdrawn/quarantined。display越界/空白、summary越界、UNSPECIFIED/draft/未知enum才是owner-response-invalid→既有502。removed installation仍可携带权威元信息，status不授权执行。|
+|删除项|repin 同一切片删除旧 `contract/vendor/kokoro-platform/494b118a…`；不得双 vendor、双 descriptor、optional字段、fallback、V8或历史 artifact 重写。|
+|验证|先新 pin/十二字段 machine与projector测试形成有效 RED，再正规 generate/check；随后 unit/HTTP/contract/architecture/full check。Root 最后用真实 IAM→BFF→Platform read与 mutation replay，Web 再固定 BFF 8.3。|
+
+### 精确后继范围（本 D0 不授权实现）
+
+- owner机器/vendor：删除旧 `contract/vendor/kokoro-platform/494b118ae7c29f1fc1005122d72c6c2bbf2640b6/**`，新增同布局 `contract/vendor/kokoro-platform/c94909f1c593f2b7ffd5f325786739da744ff31f/**`；最新 Proto/descriptor取发布 commit，`execution-operations-v5/v6/v7`的27个vendor文件须与既有目录逐字节一致。现generator第165–173行不得继续用latest `sourceDigests`/`descriptorDigest`核V6 `sourcePins`：目标把V6发布时五个historical pins独立固定并逐一比较，latest Proto/descriptor另用新pin严格校验；保aggregate和逐文件byte门，不改V6 manifest/safeFields9，也不复制owner checker框架。修改 `contract/dependencies/platform-connect.json`、`scripts/generate-platform-connect-client.mjs`，正规生成 `src/generated/platform-connect/**`；不手改 generated。
+- BFF source：仅现 `src/infrastructure/clients/platform/personal-installation-response.ts` 增严格十二字段投影；`personal-installation-connect.ts`、route、credential/projector、bootstrap无需新职责，除非 RED 证明真实类型接线缺失并先报 Root。
+- public机器：`contract/openapi/v1/openapi.yaml` additive 8.3.0、99 operations不变；按现工具要求同步 `contract/README.md`、`scripts/verify-openapi.ts`、`scripts/check-contract.mjs`、`contract/tests/v1-operations.json` 中精确版本/字段 oracle，不改路径与状态码。
+- 测试：现 `test/platform-connect-contract.test.mjs` 固定新commit/digest/generated、V5–V7 vendor 27文件不变，并验证owner历史总量93的发布证据；现 `test/skill-installation-http.test.mjs` 覆盖五RPC十二字段、合法空summary、display空白/长度边界、summary长度边界、UNSPECIFIED/draft/未知status；现 `test/contract/openapi-contract.test.mjs`、`test/contract-governance.test.mjs`、`test/architecture.test.ts` 仅同步8.3与required schema。若需新独立 response test，须先由 Root 加任务卡，不在本 D0发明。
+
+**有效 RED 与发布顺序。** tests-only先把 owner commit改为`c94909f…`并断言tag10–12、public required与projector三字段；在旧源码上应分别因旧 pin/生成类型缺字段、public8.2九字段、projector遗漏而失败，不能用404、缺环境或未启动服务冒充。之后 owner机器→BFF source/public8.3→Root真实三层→Web consumer 串行发布；任一步未绿均不重载正常进程。
+
+**停止线。** 当前无契约歧义；Root仍须在实现门固定新 Proto/descriptor实际SHA和新 dependency manifest digest，并实跑旧/新vendor tree差异只包含最新Proto/descriptor/provenance与目录commit变化、BFF vendor V5–V7共27文件原字节不变且owner V1–V7历史总量93不变。真实用户页面、removed/disabled展示文案与Web空态属消费者阶段，不在BFF D0提前裁UI。
+
+<!-- R259-SKILLS-METADATA-BFF-D0-TECH-END -->
+
 ## R257 管理路由 HTTP 实施验收（2026-10-06 16:16 UTC）
 
 四个已发布public8.2操作现有具名route/client实施，System3.0固定artifact与全部旧operation不变；无BFF DDL/新owner/兼容proxy。

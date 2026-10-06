@@ -1,3 +1,13 @@
+## R259-SKILLS-METADATA-BFF-D0：数据边界（2026-10-06；仅设计）
+
+Platform `skills/installation`继续唯一拥有安装行、精确Skill revision逻辑关联、`display_name`、`summary`、`source_status`及command receipt。BFF仅在单次五个既有RPC响应中严格校验并投影三字段；`display_name`须非空白且JS `length<=255`，`summary`允许空串且JS `length<=65535`、原样不trim；Proto省略合法空summary由固定decoder得到`""`，不构成缺关联或坏数据。不创建安装或元信息表、缓存、snapshot、receipt、outbox、Redis key、索引、FK、migration或跨owner JOIN。`database/schema.sql`必须零diff。
+
+owner当前实现以逻辑关联校验tenant/skill/series/revision并fail closed；BFF不复制该关系或从本仓Project/Skill关联推导。元信息随后变化时GET/LIST和合法replay可见owner当前值，但安装enabled/removed、change/event/replayed仍按owner事实，不形成BFF双写。缺关联、错tenant/series/revision、draft/未知status在owner或BFF strict边界关闭，不能用旧九字段缓存继续服务。
+
+repin只更换单一vendor commit与最新Proto/descriptor/generated；旧`494b118a…`目录删除，BFF vendor V5–V7实际27文件原字节/aggregate保持，owner V1–V7历史总量93文件保持，不能因最新字段变化重算历史artifact或造V8。fresh schema、现BFF表数与数据生命周期均不变；验证要求`git diff -- database/schema.sql`为空、schema治理门通过，Root真实组合前后BFF/Platform各自数据基线精确恢复。
+
+<!-- R259-SKILLS-METADATA-BFF-D0-DATA-END -->
+
 ## R257 管理路由 HTTP 实施验收（2026-10-06 16:16 UTC）
 
 四个已发布public8.2操作现有具名route/client实施，System3.0固定artifact与全部旧operation不变；无BFF DDL/新owner/兼容proxy。
