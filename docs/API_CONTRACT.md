@@ -1,3 +1,19 @@
+## R255：ScheduledTask anchor/next public contract（2026-10-05；仅设计）
+
+当前 public `/v1`、operationId、成功/错误 envelope 与 IAM admission 不变；唯一可编辑机器源仍是 `contract/openapi/v1/openapi.yaml`。在 8.0.0 发布前 clean-slate 更新同一版本，不增加 `/v2`、alias或双轨：
+
+- `CreateScheduledTaskRequest` 与 `ScheduledTaskPatchRequest` 删除输入 `next_run_at`，新增可选 `recurrence_anchor_at: string(date-time)`。create省略时由BFF冻结当次锚点；weekly继续沿现算法取该锚点在任务IANA timezone中的weekday，daily不增加日期规则。patch省略保原anchor；显式提供才改变anchor并形成新revision。旧`next_run_at`输入作为未知字段拒绝，不能静默解释成anchor。
+- `ScheduledTask.next_run_at` 保持required成员，但其schema允许 `string(date-time) | null`。它只表示当前task revision已由Scheduler成功receipt确认的`next_due_at`；不是caller输入、创建/更新时间、cache TTL或执行保证。`enabled=false`或`status=paused|failed`时固定null；`enabled=true,status=active`且null表示新建/修改后待Scheduler确认、依赖失败或当前投影未知，不表示即将立即执行。现`enabled/status`已足以区分paused，不新增sync状态字段。
+- create/patch先提交BFF任务与versioned outbox，故同步200可合法返回null。register/replace receipt经异步fenced settlement投影后，后续GET/list才返回确认instant；delete没有next projection。Scheduler timeout、畸形body、身份/rule/timezone/version/paused漂移不得产生next或把outbox标为成功。
+
+receipt正控必须来自固定generated Scheduler response，并逐值核Schedule name/rule/timezone/paused及callback body中的tenant/task/owner与本outbox command请求exact；`next_due_at`须为合法UTC instant，且active成功时存在。Scheduler `version`是Scheduler owner自己的正整数版本，只验证形状并绑定同一receipt，不要求或暗示它等于BFF task `revision`。只有outbox `aggregate_revision`匹配锁内task当前revision且lease owner/token/fence仍有效的settlement可更新投影。旧revision、迟到ACK、重放旧receipt或删除后响应均不得覆盖当前row；修改schedule字段或anchor的本地事务在revision+1时先清`next_run_at`。
+
+本契约只覆盖create/replace后的确认值。持续执行后Scheduler推进next的事实仍需其后继受认证、tenant-scoped Schedule read契约（或等价owner事件）先发布，再由BFF固定版本消费；该后继契约必须单独定义返回Schedule与BFF task当前revision/command identity的可信绑定，不能直接复用历史receipt的revision结论。现command receipt不得描述为live read；无owner来源时不通过Web/BFF计算、重复replace或callback加周期补值。
+
+后继机器范围仅现OpenAPI、semantic validator、operation inventory与contract tests，版本仍为预发布8.0.0；实现/SQL/生成/消费范围以TECH当前节为准。错误闭集与权限不扩大，不新增public endpoint、header或管理员能力。
+
+---
+
 ## R255-BILLING-CONSUMER-D0：个人 Credit public read 合同（目标，尚未发布）
 
 BFF public `8.0.0` 尚未正式发布，目标在同一clean-slate发布内删除旧float `BillingSummary {balance,currency,period,usage}`，不保兼容字段。固定Billing owner依赖为commit `244b2810c0cc043d29fffb2b3301eebf2d390b3d`、target artifact `3.0.0-experimental.3`、v2 source SHA-256 `ecaceefd3fd09d5106b364593dd513506622ca011bb0436b74f0928ffd8dcf00`；owner artifact当前仍标注未发布/部署/消费，正式consumer activation必须等Root固定owner runtime验收。

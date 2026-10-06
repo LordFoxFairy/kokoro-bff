@@ -1,3 +1,28 @@
+## R255：ScheduledTask recurrence anchor 与 Scheduler-confirmed next 投影（2026-10-05；仅设计）
+
+**当前态与目标。** 正常用户创建 weekly 08:00 America/New_York 任务后，BFF 把省略的 `next_run_at` 填为创建瞬时点并持久化，公开列表因而显示 21:16；Scheduler 实际 command receipt 已返回 owner 计算的 `next_due_at`，但现 BFF delivery 将 2xx 降成无内容 `succeeded`。目标保持 BFF 为 ScheduledTask 产品 owner、Scheduler 为 recurrence/`next_due_at` owner：把规则日期锚点 `recurrence_anchor_at` 与可空的 Scheduler-confirmed `next_run_at` 分开，复用现 task/outbox receipt 的 lease/fence/revision settlement 原子投影。本文不表示机器契约、源码、SQL或真实 Scheduler 验收已经完成。
+
+### §8 放置与后继范围
+
+| 项 | 当前裁决 |
+|---|---|
+| Owner | BFF 写任务、锚点、公开投影与 outbox；Scheduler 计算 recurrence/`next_due_at`。Web 只显示公开值，不计算日期。 |
+| 当前事实 | `application/scheduled/input.ts` 以 `new Date()` 伪成 next；task/SQL 强制 next 非空；`scheduler/schedule.ts` 又借该值选择 weekly weekday；Scheduler client 已接收 receipt，但 delivery/dispatcher/settlement 丢弃其 Schedule。 |
+| 目标职责 | create/patch 只把 `recurrence_anchor_at` 用作现 weekly weekday 选择；`next_run_at` 仅保存当前 task revision 经 Scheduler receipt 确认的 instant。pending、disabled/paused/failed 或修改后待确认时为 null，不把创建/更新时间冒成执行时刻。 |
+| 位置比较 | **采用**现 ScheduledTask outbox delivery→dispatcher→Postgres fenced settlement：网络仍在事务外，receipt projection 与 outbox 成功同事务提交。**淘汰**同步网络塞入创建事务、Web/BFF 新建 cron/date 算法或靠 callback 加周期；它们会破坏本地原子提交、重复 DST 语义或产生双写。 |
+| 粒度 | 扩现 scheduled 普通类型、port、client、dispatcher、repository；不建 sync 平台、新模块或通用 receipt framework。Scheduler 持续状态 read 是后续 owner 契约，不塞进首片。 |
+| 依赖 | 允许固定 generated Scheduler response、现 DB clock/lease/fence/revision 与 public OpenAPI；禁止 Scheduler SQL、Web 日期计算、跨 owner transaction、IP/target 绕过。正常 localhost 可沿 Scheduler 既有 exact allowlist/SSRF guard由Root配置验收，本片不改该机制。 |
+| 数据/API | public 8.0.0 发布前 clean-slate 把 create/patch 输入 `next_run_at` 替换为 `recurrence_anchor_at`，不留 alias；输出 `next_run_at` 仍为必有成员但允许 null。SQL 新增非空 anchor、next 改可空；不新增状态列/表/索引。 |
+| 并发 | register/replace 成功必须校 receipt 的Schedule name/rule/timezone/paused/next及callback body中的tenant/task/owner与本命令请求exact；Scheduler `version`只验证为正规正整数并绑定同一receipt，它是Scheduler owner版本，绝不与BFF task `revision`直接比较。同一 lease owner/token/fence 下，仅当outbox `aggregate_revision`等于锁内task当前revision才写next并settle。旧revision或迟到/旧lease ACK可按现规则失败或收束自身命令，但不得覆盖新任务、删除后复活或写入旧next。 |
+| 删除项 | 删除“now即next”、输入`next_run_at` alias及“任意2xx即丢body成功”；不删原幂等、Project/tenant admission、outbox或Scheduler SSRF保护。 |
+| 验证 | contract/schema fresh install；create/replace receipt正负、pending/null、paused/null、旧revision/lease ACK、unknown ACK、worker restart与原子rollback；最后Root真实 weekly 08:00创建→确认→刷新、编辑失效/再确认、暂停。 |
+
+后继准确源码/机器写集限于现 `contract/openapi/v1/openapi.yaml`、`scripts/verify-openapi.ts`、`contract/tests/v1-operations.json`及对应contract tests；`database/schema.sql`、现schema apply/governance测试；`src/application/scheduled/{input,mappers}.ts`、`src/domain/scheduled-task/{task,outbox}.ts`、`src/application/ports/scheduled-task-{repository,outbox-delivery,outbox-repository}.ts`、`src/application/scheduled-task-outbox-dispatcher.ts`、`src/infrastructure/clients/scheduler/{schedule,control-client,outbox-delivery}.ts`、`src/infrastructure/postgres/scheduled-task-repository.ts`及现scheduled/contract/真实PG测试。生成物只由现正规脚本重建，不手改；Web pin另卡。
+
+首片只保证 register/replace receipt 对当前BFF revision 的确认投影。Scheduler每次 occurrence 后会推进自己的 `next_due_at`，现无受认证 Schedule read/事件，所以首片receipt不是永久实时事实；持续刷新准确next仍以前置 Scheduler 在现 Schedule 边界发布最窄tenant-scoped受认证读契约为条件，且该新契约必须另行定义Schedule当前状态与BFF task当前revision/command identity的可信绑定，不能复用“曾有匹配receipt”的结论。此前BFF不得通过replace充当read、从callback推算周期或把已过期投影称为永久正确。
+
+---
+
 ## R255-BILLING-CONSUMER-D0：个人 Credit 只读链（目标，尚未实施）
 
 ### 当前事实与唯一方向

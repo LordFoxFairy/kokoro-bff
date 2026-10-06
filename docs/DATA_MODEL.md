@@ -1,3 +1,19 @@
+## R255：ScheduledTask anchor 与可空 next 投影数据边界（2026-10-05；仅设计）
+
+BFF canonical目标只改现`bff_scheduled_task`两项：新增 `recurrence_anchor_at TIMESTAMPTZ(3) NOT NULL`，把 `next_run_at TIMESTAMPTZ(3) NOT NULL` 改为 nullable。anchor是规则选择输入；next是Scheduler对当前revision的确认投影。两者不得互填，next null不得以anchor、`created_at`、`updated_at`或应用时钟补齐。无migration/compat列/alias；fresh install与正规派生同片更新。
+
+create在同一BFF事务冻结显式或缺省anchor、令next为null、revision=1，并写register outbox；patch只有显式anchor才替换它，任何frequency/time/timezone/anchor/enable/status变化均revision+1并先令next为null，再写replace outbox。disabled/paused/failed任务公开next固定null；恢复enabled+active仍须新revision的Scheduler确认。delete按现生命周期删除/墓碑与delete command处理，不接受迟到receipt复活。
+
+不新增`next_run_revision`或sync状态列：现task `revision`与outbox `aggregate_revision`已经提供最小fence。register/replace成功settlement在一个BFF事务内同时：锁定exact outbox lease owner/token/fence，严格解析Scheduler receipt，锁task并要求tenant/task/current revision等于command aggregate revision，逐值验证Schedule name/rule/timezone/paused/next与callback body中的tenant/task/owner等于本命令请求，再写`next_run_at`并把outbox置succeeded。Scheduler `version`仅须是正规正整数并绑定该receipt；它是Scheduler owner版本，不与BFF revision直接相等。任一不匹配、过期lease、旧revision、畸形/缺失next或SQL失败整组不写；旧command可以按现失败恢复收束，但不能覆盖新revision。
+
+outbox canonical payload把原`next_run_at`规则输入改为`recurrence_anchor_at`；它仍保存完整task revision、request lineage与幂等身份，不保存另一份日期算法。现ready/task/lease索引足够本查询，不新增表、索引、Redis key、跨ownerFK/JOIN或定时reconciler。Scheduler网络继续在事务外；BFF只在settlement事务存经验证projection。
+
+首片持久事实的含义是“最近一次匹配当前BFF revision的command-confirmed next”，不是永久live Schedule。每次occurrence后的持续next仍待Scheduler受认证Schedule read/事件契约，并须在该后继契约中另行定义Schedule状态与BFF task当前revision/command identity的可信绑定，不能把历史receipt或Scheduler自身version当作这个绑定。合同未发布前不从callback加周期、不读Scheduler数据库、不发replace查询，也不宣称刷新后的值始终实时。持续读取与失效语义另卡，不在首片预建sync平台。
+
+后继数据写集仅`database/schema.sql`、现schema installer/governance与生成检查、现scheduled repository/domain/ports/client/dispatcher及相关真实PG测试；公开机器字段同步唯一OpenAPI与正规contract门。当前无DDL、源码或资源验证完成。
+
+---
+
 ## R255-BILLING-CONSUMER-D0：个人 Credit 读取无本仓数据变化（目标，尚未实施）
 
 Billing唯一拥有Credit account与ledger；BFF只对固定owner v2响应做合同验证并投影到public read，不复制余额、流水、sequence、hold、grant、quota、价格或现金事实。本片不修改 `database/schema.sql`，不新增表/列/索引/receipt/outbox/缓存/Redis key/事务或retention，也不读取 `kokoro_billing` schema。
