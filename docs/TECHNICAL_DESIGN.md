@@ -1,3 +1,44 @@
+## R257-PERSONALIZATION-D0：本人四字段显式保存（2026-10-06；设计待 Root 放行，未实施）
+
+**当前态。** 基线为 Root 已发布 ac3cd1da4f13e9e22320efbd4dbf4009aa0a2e29；原 19 mixed 保留。本节以下全部原文为历史阶段的 exact suffix；管理员消费源码已发布的当前事实见 CURRENT，不再以旧段落“待实现”描述它。正常 BFF 仍旧实例，IAM/schema/Web 同步激活停止线不变。
+
+现 Web settings-sections.tsx:373–421,492–497 的四字段为 nickname、occupation、about、instructions：normal 无 GET，blur 发未发布 PATCH 且忽略非 2xx；preview localStorage 不是真保存。Root 已有正常 PATCH 404 的业务证据。BFF bootstrap/server.ts:369–372 无对应 owner 路由，canonical 无表/operation。PRD FR-14 要求正式设置保存、读回、刷新、切账号隔离；本片只闭合四字段，Knowledge、导入和 Agent 实际采用指令仍 OPEN。
+
+### §8 放置表
+
+|项|当前设计决定|
+|---|---|
+|Owner / writer|BFF Product 唯一拥有本人四字段；Web 拥有草稿与显式保存交互。Root 审批/集成/正常资源，本轮唯一 writer 仅三 D0 前缀。IAM 只提供 current Session identity，不用 User.name；System 不代存任意偏好。|
+|现入口|service+Bearer → IAM admission → bootstrap → businessStore.services；PostgresBffRepositories 复用唯一 PostgresBffDatabase.pool/search_path=kokoro_bff。现 generic mutation 管线有 receipt；本资源精确分派后提前返回，不进入它。|
+|目标|同一受信 tenant+subject 的 singleton GET 与 required expected_revision 的 PUT 全量替换；四字段真实 PG，不建任意 key/value 配置或动态字段注册。|
+|位置比较|采用现 application/ports 的窄 PersonalizationRepository 与 infrastructure/postgres 实现，挂入现 services 聚合，并使用小 input/route。另一可行方案为新 PersonalizationService 包装 port；本片没有额外编排，淘汰纯转发 wrapper。也不塞 ProjectService/IAM 或新 prefs 服务。|
+|粒度|新增四个普通文件，无新目录/框架。port 只定义 scope、四字段 snapshot、CAS 结果和两方法；PG 文件只负责本表 SQL/连接生命周期；input 只解析 wire；route 负责 HTTP 映射。无机械 DTO/Command/Row 五套复制。|
+|依赖|HTTP 只使用已验 context.identity.namespace/userId；platformAdmin 不参与本人资格。port 不泄漏 pg/framework，PG 复用 pool，严格 raw JSON 复用现 parser。禁止跨 owner SQL、Web 直读 DB、自报 actor、Admin :any、Redis 权威缓存或跨服务事务。|
+|数据/API|唯一 database/schema.sql 增本人表，public 唯一 OpenAPI 增 GET/PUT；CAS、冲突、未知 ACK 见 API/DATA。无 receipt、outbox、审计正文副本。|
+|删除/保留|后继 Web 删除 normal blur PATCH、吞错和假本地持久化；不发布旧 PATCH alias/双读 fallback。独立 preview、Knowledge/导入边界保留，正式能力仍 OPEN，不以隐藏或假成功关闭。|
+|验证|先合法保存 HTTP/PG 业务 RED，再机器、真实 PG/并发/取消/unknown 与工程门；最后 Root 正常合法 Session 保存/刷新/切人。doubles/源码门不代正常 E2E。|
+
+### 装配、状态与失败恢复
+
+现 BffApplicationServices 新增 required personalization: PersonalizationRepository 及 constructor 参数；PostgresBffRepositories 构造同 pool adapter 并注入（当前唯一 new BffApplicationServices 调用点）。不增 optional repository/fallback；BffBusinessStore.services 自动承载。bootstrap 在 IAM 准入后、generic receipt/body/proxy 分支前精确分派；不把整个 preferences 前缀开放。缺 store 真 503；GET 不 insert，PUT 不调用其他 owner/Redis。
+
+GET 为不存在 revision=0/null 或当前完整 snapshot。编辑只改内存草稿；显式保存冻结 expected_revision+四字段，PUT committed ACK 后 GET 核当前 revision/内容。两标签页同 revision 仅一笔提交成功，另一笔409，不自动覆盖/合并。未知 PUT 回执只读核实、不盲重发：GET 旧版本可能先于在途提交，不能据此断言未写；新版本不同为冲突，读失败仍 unknown。Web 后继按 tenant+subject 及 admission generation 绑定请求，pending/退出/切人同步隐藏旧私有值、取消并退役迟到响应；不同人不继承草稿/revision，不用 localStorage/sessionStorage 保存 normal 正文。
+
+准入保持现 IAM 独立有界预算；新资源从准入后进入 route 起另设单一 5s 总预算，覆盖 body、pool 排队、SQL、commit/回滚，各阶段不重置，不宣称含 IAM 的整请求仅 5s。aborted/未结束 response close 传播 signal。PG 随剩余预算设置事务内 statement_timeout，lock_timeout≤1s 且不超剩余；排队迟到取得即 release，不启动 SQL；在途 SQL/COMMIT 超时或取消销毁 exact client，不归池复用，不用假 ROLLBACK 证明未知提交失败。已知失败 rollback 也在同预算内，耗尽销毁；清理 timer/listener，不吞 primary；不写已结束响应，无自动重试。现 Project rename 有界语义只作参考，不抽新共享框架或改受保护源码。
+
+### 后继精确范围（本次只设计，须 Root 另准）
+
+- 新 source 四个：src/application/ports/personalization-repository.ts、src/infrastructure/postgres/personalization-repository.ts、src/http/personalization-input.ts、src/http/routes/personalization.ts；无新目录/process/dependency/lockfile。
+- 现 source：src/application/services.ts、src/infrastructure/postgres/repositories.ts、src/bootstrap/server.ts（精确分类/admission 错误 envelope/早分派）、src/infrastructure/postgres/client.ts（ready 最小本表要求，不改全局 pool/Redis）。routing.ts 保原分类，精确分派前返回；BffBusinessStore 不另加 optional 属性。
+- 机器/治理：database/schema.sql、contract/openapi/v1/openapi.yaml、scripts/verify-openapi.ts、scripts/check-contract.mjs、contract/tests/v1-operations.json（正规 baseline 命令）、contract/README.md、package.json（仅注册窄测试/格式门）。check-contract/verify 只为精确 PUT+path+operationId 的 CAS 例外判 none，并反向断言 required expected_revision；旧 mutation 的 required-key 负控不放宽。内部 owner pin/vendor/generated 不变，Web 后继固定新 public artifact。
+- 现测试：test/business-store.integration.mjs（真实 HTTP+PG/原 lifecycle fixture）、test/schema-governance.test.mjs、test/contract/openapi-contract.test.mjs、test/contract-governance.test.mjs、test/architecture.test.ts。新增 test/personalization-input.test.ts 只承载 strict wire 边界。其他 aggregate doubles 若实际类型失败，先列调用点再扩集，不放 optional/default。
+- schema.sql 与 schema-governance 是原 mixed：Root 先冻结已有字节，后继只追加本表/具名 case，不接收原 Project/删除/installer 候选；其余 mixed、CURRENT、normal env 保持。
+- 后继已有命令：pnpm build；node --test test/personalization-input.test.ts test/contract/openapi-contract.test.mjs test/contract-governance.test.mjs；node --test --test-concurrency=1 test/business-store.integration.mjs test/schema-governance.test.mjs（仅 Root 分配自有 PG/Redis）；pnpm contract:update-baseline（派生阶段）、pnpm contract:check、pnpm lint、pnpm typecheck、pnpm test:architecture、pnpm check。窄 format 与原 protected 全局 format 失败分开记录。本轮未运行。
+
+**发布停止线。** canonical/fresh integration 不等正常演进。Root 另审 BFF owner 具名 additive 演进、备份/恢复、schema drift 拒绝与原数据保全后才能上线；禁止正常库 fresh reset/seed、启动自动 DDL 或私 SQL。当前基线还带 IAM0.8 required /me，不能为偏好重载不兼容正常 IAM/Web 的半边。工程片可独立进行，normal 激活需现 admin 组合门与本表正规演进；不等待支付/Knowledge/Agent 应用/完整后台 CRUD 才做本片研发。
+
+<!-- R257-PERSONALIZATION-D0-TECH-END -->
+
 ## R257-ADMIN-BFF-D0：当前管理员资格消费（2026-10-06；设计待实施）
 
 **基线/事实。** 本仓基线为 Root 已提交的 6d46ec8，原19 mixed全部保留；MCP本人Connection片已由Root full check 795 PASS/1 skip、独审后发布，与本片独立。本次仅三D0新前缀，下面原字节不变。BFF当前仍消费IAM0.7.0/e3c035b99cf9479ac8357c7d38147f1541dcbcac；session-admission只返回identity，GET /v1/me仅user_id/tenant_id，不存在已实现的管理员投影或后台CRUD。

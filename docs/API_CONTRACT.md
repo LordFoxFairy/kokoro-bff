@@ -1,3 +1,33 @@
+## R257-PERSONALIZATION-D0：本人四字段 Product 契约（2026-10-06；目标未实施）
+
+正式基线 ac3cd1da4f13e9e22320efbd4dbf4009aa0a2e29 的 public 8.0.0/93 operations 无 personalization；以下旧全文为 exact suffix。唯一机器源 contract/openapi/v1/openapi.yaml 新增两个 additive operations，目标 public 8.1.0/95 operations；不修改旧 artifact 或既有 operation shape。Root 验收后交新 immutable commit/version/digest，Web 固定生成消费；本轮未改机器源。
+
+|项|目标合同|
+|---|---|
+|资源|GET /v1/preferences/personalization / getSelfPersonalization；PUT 同路径 / replaceSelfPersonalization。owner=kokoro-bff，visibility=public，stability=beta。|
+|资格|现 service envelope+唯一用户 Bearer+current IAM admission；tenant/subject 只来自受信 context。普通本人可用，无他人 selector/管理员旁路。permission metadata 为 personalization.self.read / personalization.self.write，仅 public 用例分类，不新造 IAM scope/grant。|
+|幂等|两者 x-kokoro-idempotency=none；PUT 以 required expected_revision 保证同条件至多一次效果，不要求 Idempotency-Key、不造 receipt。重复旧版本409，不承诺相同 ACK 重放。现治理默认 mutation required-key，后继只能对精确 method/path/operationId 增 CAS 例外及反向负控，不放宽其他 mutation。|
+|请求边界|唯一精确路径，无 query（未知/重复/空 selector 均400）；GET无body。PUT一个 application/json Content-Type，raw body≤65,536 bytes，严格 UTF-8/raw JSON，重复键/坏转义/孤立 surrogate/NUL 拒绝。旧 PATCH不alias；其他method405，Allow: GET, PUT。|
+|PUT body|closed {expected_revision,nickname,occupation,about,instructions}；revision为required integer 0..9007199254740991，不接受unsafe/fraction/string/coercion；四项required string，空串表示清除，不接受null/漏项/多字段/数组。|
+|字段界|nickname128、occupation256、about2000、instructions8000 Unicode code points（非UTF-16 code units）；保空白/换行/内容，不隐式trim/normalize/截断。字段和whole-body界同时成立，转义膨胀仍受raw bytes限制；正文不执行插值/Agent应用。|
+|GET200|closed {data:{personalization:null,revision:0}} 只代表owner本次确认不存在；存在为 {data:{personalization:{nickname,occupation,about,instructions},revision:N}}，N为1..9007199254740991。null+正revision/对象+0非法。GET不建行、不假空。|
+|PUT200|仅COMMIT确认后返回同结构非null snapshot；首次revision1，替换expected+1。字段取成功SQL返回值，不把请求echo当持久ACK；与旧revision相同内容仍须CAS，成功推进一次。|
+|传输|所有成功/错误no-store、x-request-id；request ID只header，不增meta/body字段。无ETag/分页/event/公开profile。Web后继保header，当前泛代理丢request-id不算已闭环。|
+
+### 失败与 ACK 未知
+
+新operation用现规范closed {error:{code,message,retryable}}，不泄raw parser/SQL/正文；400 invalid_personalization_request 覆盖query/GET body/JSON/字段/Content-Type；413 request_body_too_large；405 method_not_allowed；409 personalization_revision_conflict（首次竞争/stale）不得附私有当前内容，另GET本人值。版本安全上限拒409 personalization_revision_exhausted、零更新/不回绕。以上retryable=false。原401/403/429/503 admission code/语义保留，但本新资源统一no-store/header及无meta error shape，不改旧路由。
+
+缺表/DB故障/锁或预算耗尽/损坏Row为503 personalization_unavailable，绝不伪null/空串/零版本成功。COMMIT已派发后失败/断连/timeout如仍能响应为503 personalization_save_unknown；retryable=false指不得自动重发写，允许只读核实。客户端任何网络异常/丢失ACK也按unknown，即使没有该code。GET临时失败可retryable=true；PUT依赖失败保守false，恢复先GET。取消不保证错误body送达，也不证明提交已撤销。
+
+显式保存冻结正文和旧revision：200 ACK后GET与ACK完整四字段/revision相等，才显示“已保存并读回”。更高版本（即使同内容）如实提示当前版本变化，不冒ACK最新。ACK丢失后GET expected+1且内容一致只证明“当前值已核实”，不证明哪笔并发写；GET旧版本可能早于在途提交，不据此安全重发。值不同/更高版本为冲突，读失败仍unknown。不得自动把新revision贴旧草稿重发、无提示覆盖或无限loading。
+
+### 发布与验收
+
+合同、canonical、source同片过lint/semantic/正规inventory、真实HTTP+PG/生命周期后由Root发布。Web immutable pin/strictparse/同源CSRF/显式按钮/ACK回读与actor退休属后继片。正常既有数据正规演进和IAM0.8/Web组合门未满足不单侧激活。Root验合法普通Session A/B保存/刷新/清空/冲突/未知读回；preview/HTTP doubles/合同门不称完整FR-14 PASS。Knowledge、导入、Agent读取/应用不在两operation内，原台账保持OPEN。
+
+<!-- R257-PERSONALIZATION-D0-API-END -->
+
 ## R257-ADMIN-BFF-D0：本人当前管理员投影（2026-10-06；未实施/未发布）
 
 本仓当前6d46ec8已发布MCP public8.0.0/93 operations；本片仅设计，原三D0全部正文为exact suffix。唯一public机器源仍contract/openapi/v1/openapi.yaml；不新增管理verify端点/服务，不复制IAM资格写契约。

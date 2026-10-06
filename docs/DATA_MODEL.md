@@ -1,3 +1,37 @@
+## R257-PERSONALIZATION-D0：BFF 本人四字段单行事实（2026-10-06；仅设计）
+
+基线 ac3cd1da4f13e9e22320efbd4dbf4009aa0a2e29；当前 canonical database/schema.sql 无 personalization。目标只在本 owner kokoro_bff schema 增 bff_personalization，不改 IAM.User.name/System/Project 或其他 owner 表。原19 mixed及以下全文bytes保留，本轮无DDL/数据读写/资源执行。
+
+### 唯一表与本人查询
+
+|列/约束|目标与理由|
+|---|---|
+|tenant_id / owner_id|TEXT NOT NULL且非空，已验namespace/userId；具名复合PRIMARY KEY(tenant_id,owner_id)。没有独立外部ID/生命周期的本人singleton采用自然owner key，无额外UUID。|
+|nickname / occupation / about / instructions|各TEXT NOT NULL，无隐式默认。空串是明确清除；具名CHECK char_length上限128/256/2000/8000，与HTTP code point一致。严格wire拒坏UTF-8/孤立surrogate/NUL，PG TEXT自身不接受NUL。|
+|revision|BIGINT NOT NULL，具名CHECK 1..9007199254740991；wire为精确safe integer。0是未建行条件，不落库；首次1，每次成功CAS+1，上限拒写不回绕。PG int8字符串须验证合法安全范围才转number。|
+|created_at / updated_at|TIMESTAMPTZ(3) NOT NULL，创建时同事务时间，替换只更新updated_at，UTC。时间不当并发令牌，内部列不公开。|
+|索引/完整性|复合PK覆盖唯一的本人精确读/条件写；无冗余index/FK/JSONB/软删除/status/关系表。无跨IAM FK/JOIN；当前Session在SQL前准入。|
+
+全部SELECT/INSERT/UPDATE带受信tenant+owner，无跨人列表、搜索或Admin :any。缺行GET null/0且零写；损坏/越界Row报错，不以默认修补。只存当前四字段/版本，不保原文历史、请求正文receipt、语义hash或Redis副本。
+
+### CAS、预算与未知提交
+
+复用现PostgresBffDatabase.pool，一次有界leased client、事务LOCAL超时；不新池/全局预算框架。读用有界只读事务snapshot。首次expected=0用INSERT ... ON CONFLICT(tenant_id,owner_id) DO NOTHING RETURNING，一winner、零行409；expected>0用UPDATE ... WHERE tenant_id/owner_id/revision全匹配且未封顶 RETURNING，零行409，不read-then-write、不upsert覆盖。四字段/版本/时间同事务原子提交，无他表写入，generic receipt不参与；相同内容也不绕stale CAS。
+
+route准入后单5s预算包含body/租用/SQL/提交/清理；LOCAL lock_timeout≤1s且statement_timeout随剩余收紧；迟到租用归还、取消/超时exact client退役、failed rollback销毁、listener/timer清理见TECH。Promise.race超时不等DB已停止；COMMIT发出后不明，不在旧连接查/重试，另fresh GET核实。成功必须COMMIT确认；response丢失不补写/偷用新revision重试。
+
+冲突不附正文，无新审计表。结构化日志只记service/operation/request_id/trace_id/result/duration和安全版本/分类；禁四字段、完整request/response、parser/SQL原始错误与参数、token、正文digest（低熵hash亦泄露）。正常自有数据取证只交脱敏状态/版本/相等结果，不贴正文。
+
+### 清除、保留与正常演进
+
+显式PUT四空串清除当前四项正文，保单行/单调revision避免删除重建ABA；不声称物理擦除WAL/备份。无TTL/导出/批量后台读/账号删除流程；本事实保留至本人覆盖/清空或后继正式账号删除处理。IAM账号/租户删除后的orphan清理、备份retention/擦除承诺仍独立OPEN，不跨owner SQL扫User或假DELETE。本片不新增Agent读取/应用路径。
+
+canonical用于新隔离owner schema fresh install，schema-governance同片新增表/约束；installer不改成自动ALTER。正常已有数据须Root按SQL手册另批具名additive演进例外/备份恢复/前置schema摘要/漂移拒绝/后置保全后受控创建本表；不对正常重跑fresh installer、reset/seed、私SQL或启动自建表。具体演进入口/ADR另卡，本轮不新迁移目录/第二canonical SQL；新源ready要求本表，缺表明确拒绝而非接口空成功。现IAM0.8/normal Web协调切换门同时保持。
+
+Root后继真实PG验首次竞争/旧revision冲突/原子性/跨tenant+owner/重启读/清空/损坏失败/取消与COMMIT unknown/客户端回收；fresh catalog验schema归属/PK/check/时间精度/无FK及其他owner untouched。schema.sql/schema-governance原mixed只准本表窄增量，原删除候选不顺带集成。文档、单元替身、fresh install不证明正常演进与用户保存刷新通过。
+
+<!-- R257-PERSONALIZATION-D0-DATA-END -->
+
 ## R257-ADMIN-BFF-D0：当前资格只读投影，无新数据事实（2026-10-06）
 
 基线BFF6d46ec8；原19 mixed与以下旧正文保持。本轮只三D0前缀；database/schema.sql、SQL/Project候选、Redis与正常资源不变。
