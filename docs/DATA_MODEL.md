@@ -1,3 +1,25 @@
+## R261-BFF-FILE-DELETE-D0：唯一Storage删除事实、零BFF数据演进（仅设计）
+
+基线为正式 BFF `/Users/nako/.codex/worktrees/kokoro-r257-bff-normal`、Root给定 HEAD `7269e97`。本轮只三文档新增前缀，原全文suffix逐字节保留；未修改源、机器、生成物、配置、Schema、正常数据或untracked var。现公开8.3.0/99 operation没有单文件删除；目标8.4.0/101尚未发布。Storage现pin仍`e8b9928418924812587b7ac07900aee4be5bc27f` / combined `c22b5c10ee698d579753dcac370be371d8dba1df8fead1a12883f5443fbad18a`；17 RPC候选combined `9b602259c3b777e31deb63563467ae160c04bde415e841851aefae760902f34f`不是正式新发布，最终owner commit待定。Storage正式源/机器发布后才准repin及正规生成，禁止先消费mutable工作树。
+
+BFF不新增或修改表、列、索引、约束、Schema、Redis keyspace、receipt/outbox/授权cache。`database/schema.sql`保持原样。唯一持久删除事实在Storage的Asset.deleted_at、最后live引用Blob.retired_at、exact object cleanup与同事务completed command receipt；BFF不保存Asset镜像、删除标记或自制“物理已清”状态。personal与project只是同owner ordinary Asset的两种受信scope，不建立新Library实体。
+
+Project读取仍只属于BFF本仓：当前tenant+subject的owner_id及deleted_at IS NULL，取canonical ID；组织Member/admin/平台admin不是替代谓词。Storage不查BFF表，BFF不读Storage表。Artifact、skill_package、Conversation、ReleaseScope、整Project删除与本两个单Asset操作分开；Artifact有效引用冲突不级联，不动包/会话/其他共享Blob的Asset。
+
+唯一幂等主权在Storage：tenant/scope/caller/subject/operation/command域，public key稳定派生commandId且不含asset，digest含asset。同scope同key异asset409；回放前重新当前准入，合法receipt不被预GetAsset已删谓词挡掉。无BFF二次事务跨库协调、Map或上传checkpoint复用。响应只稳定asset/time/replayed，request ID是本次header，不持久化进owner receipt。
+
+删除成功只表示逻辑提交及durable清理安排，旧对象版本identity与同digest新代隔离由Storage独立事务/partial unique/provider门保证。BFF不以列表缺行证明物理删除、不请求任意object key；既发URL可能自然有效至300秒。未知ACK后同key核定可恢复，换key不是恢复；取消不是回滚。Web保存的仅当次intent/状态，撤准入/切人必须退役，持久业务事实从owner重新读。
+
+Project授权读取的**目标生命周期已裁决，实现待验**：当前无signal的pool.query没有源级连接/statement/query预算，不能据现源宣称目标10秒成立。目标现 `application/ports/project-repository.ts`、`application/project-service.ts`、`infrastructure/postgres/project-repository.ts` 新具名 `findActiveResourceProjectId(scope, idOrSlug, signal: AbortSignal, deadlineAt: number): Promise<string | null>`，必填signal/绝对deadline，唯一原owner谓词，只回canonical ID/null；旧findProject、数据模型不变。连接生命周期不塞入row CRUD：比较直接repository方法后采用现目录新普通 `infrastructure/postgres/project-resource-access.ts`，exact checkout、late acquire释放、取消/超时精确destroyClient(true)，本读取事务内设置statement_timeout/lock_timeout/client_connection_check_interval与剩余预算，清理监听及timer。无跨owner事务、无写receipt、无新service/模块/通用SQL平台；授权结果不缓存。
+
+真实pool saturation、held SQL取消、迟到取得释放、连接故障、事务结束与资源回收是上线条件，取消后零Storage IO；业务等待终止不等底层connect已取消，不能只race裸pool.query或冒称无遗留。具体无法满足时报告Root，不放宽预算或扩改全局query/statement。TECH放置表记录五新普通source及三现接缝；本轮只有D0写入，零实现授权。
+
+后继数据验证：BFF原catalog/facts不变；真实Storage同key重放/异义/并发/引用/最后引用/新代/旧cleanup不伤新代由owner证明；BFF真实授权取消/超时无泄漏及只调用本scope；Root用户确认→DELETE→权威列表/硬刷新独立验收。正常删除数据、授资格、DDL、进程切换均非本D0授权；原suffix与untracked var保护。
+
+Root最终补充裁决：现 `src/infrastructure/postgres/client.ts` 唯一Pool仅增加 `connectionTimeoutMillis: 1000`，有限约束底层connect与pending队列，堵住仅race/late-release仍可能无界等待；不改全局query_timeout/statement_timeout、max、credentials，不创建新Pool。此为D0目标并非源码已支持。保留五新普通文件和三现port/service/repository接缝；真实完整旧回归及pool饱和、SQL锁、取消、late acquire/连接故障门必须验证无泄漏及取消后零Storage IO。
+
+<!-- R261-BFF-FILE-DELETE-DATA-END -->
+
 ## R259-SKILLS-METADATA-BFF-D0：数据边界（2026-10-06；D1冻结候选待Root验收）
 
 D1候选保持`database/schema.sql`零diff；机器与投影实现不新增任何BFF持久事实，真实owner资源验证仍由Root执行。

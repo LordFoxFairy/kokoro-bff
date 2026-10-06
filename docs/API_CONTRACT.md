@@ -1,3 +1,45 @@
+## R261-BFF-FILE-DELETE-D0：public两操作与owner receipt（仅设计，8.4未发）
+
+基线为正式 BFF `/Users/nako/.codex/worktrees/kokoro-r257-bff-normal`、Root给定 HEAD `7269e97`。本轮只三文档新增前缀，原全文suffix逐字节保留；未修改源、机器、生成物、配置、Schema、正常数据或untracked var。现公开8.3.0/99 operation没有单文件删除；目标8.4.0/101尚未发布。Storage现pin仍`e8b9928418924812587b7ac07900aee4be5bc27f` / combined `c22b5c10ee698d579753dcac370be371d8dba1df8fead1a12883f5443fbad18a`；17 RPC候选combined `9b602259c3b777e31deb63563467ae160c04bde415e841851aefae760902f34f`不是正式新发布，最终owner commit待定。Storage正式源/机器发布后才准repin及正规生成，禁止先消费mutable工作树。
+
+|路径 / operationId|permission metadata / scope|
+|---|---|
+|`DELETE /v1/library/files/{asset_id}` / `deleteLibraryFile`|`storage.library.delete`；受信personal scope_id=subject_id|
+|`DELETE /v1/projects/{projectId}/resources/{asset_id}` / `deleteProjectResource`|`project.resource.delete`；本人active Project解析到canonical ID|
+
+两operation都是BFF/public/beta，幂等required；不增加IAM policy事实。零body/query，不接受tenant/actor/subject/scope/object key/mode输入，不提供alias。asset_id沿现owner合法有界ASCII ID（1..191，首位字母或数字，余字母数字/`.`/`_`/`:`/`-`），不假定UUID；Project沿现ID/slug且canonical化。拒transfer-encoding、非零content-length、条件写头（owner无CAS）及非法selector；无body的Content-Type不单独拒。Idempotency-Key检查raw唯一、原值1..191 printableASCII且无空白/逗号，不trim。无ETag/If-Match/If-None-Match保证，不发明版本字段。
+
+成功200严格 `{data:{asset_id,deleted_at,replayed}}`，三字段required、各层closed；asset_id精确等请求、deleted_at为owner合法UTC时间、replayed布尔。`x-request-id`有界且关联本次请求，JSON/no-store。request ID只header；新边界不复用旧meta.request_id的宽ok/failure，也不改原99操作envelope。replay仍返回原asset/time、仅replayed=true；不将历史request ID写进新响应。
+
+### closed错误图
+
+错误严格 `{error:{code,message,retryable}}`、无meta/details/原文；message为BFF固定安全说明，不作为判断依据。所有成功/错误均有x-request-id与no-store；限流Retry-After仅转实际合法1..86400整数秒。code只属于本表，不把Storage原码命名改写回owner合同。
+
+|HTTP|code闭集|retryable/事实|
+|---|---|---|
+|400|`invalid_file_delete_request`、`invalid_idempotency_key`|false；本地非法输入或匹配的owner INVALID_ARGUMENT|
+|401|`session_authentication_required`、`session_invalid`|false；当前本人准入|
+|403|`service_auth_failed`、`product_tenant_forbidden`、`session_forbidden`|false；当前准入，不借platform_admin越过本人scope|
+|404|`project_not_found`（仅项目）、`file_not_found`|false；不可见/缺失/他命令已删，不枚举跨scope对象|
+|409|`idempotency_conflict`、`file_delete_conflict`、`file_delete_precondition_failed`|digest mismatch false；CONFLICT沿owner retryable（在途/SSI可能true、Artifact引用false）；PRECONDITION_FAILED false|
+|429|`session_rate_limited`、`storage_rate_limited`|true；有界Retry-After可选，无自动mutation retry|
+|502|`storage_response_invalid`|false；坏ACK/错误tuple/未知协议，不能当已删|
+|503|`product_tenant_not_configured`、`iam_admission_unavailable`、`business_store_unavailable`（仅项目）、`storage_unavailable`|true仅表示可稍后核实同意图，不承诺未提交或自动重发；配置/依赖诊断不泄密|
+
+Storage ErrorDetail/Connect/status/header一致性必须固定验证：InvalidArgument/INVALID_ARGUMENT→400；NotFound/NOT_FOUND→404；AlreadyExists/COMMAND_DIGEST_MISMATCH→409幂等冲突；AlreadyExists或retryable Aborted/CONFLICT→409业务冲突；FailedPrecondition/PRECONDITION_FAILED→409前置；ResourceExhausted/RATE_LIMITED→429；Unavailable/DEPENDENCY_UNAVAILABLE、Internal/INTERNAL→503。Storage Unauthenticated/UNAUTHENTICATED、PermissionDenied/PERMISSION_DENIED是本次服务credential/策略依赖错误，映射503而非让用户重新登录401。未知或矛盾组合502。Canceled/DeadlineExceeded按现Connect无detail例外处理成取消/未知，不伪造ACK；不按message猜码。
+
+### command与确认
+
+只消费正式发布后的v2 DeleteAsset：request command/asset_id，身份全在可信metadata；response asset_id/deleted_at/replayed。command ID域分隔+tenant/subject/scope/publickey，不含asset；digest绑定asset语义。同scope同key异asset409，同key同语义合法已删重放，异key已删404。BFF每次fresh授权后直接调用，无GetAsset前置、第二receipt或本地成功cache。Storage源commit待定，候选digest不能代替正式发行。
+
+总10秒/每RPC消息1MiB为目标，包含admission、Project授权和owner；剩余预算不重置，无自动retry。当前projects.find缺signal且Pool未固定连接/查询预算；目标已由Root裁决为现project port/service/repository新增 `findActiveResourceProjectId(scope, idOrSlug, signal: AbortSignal, deadlineAt: number): Promise<string | null>`，required取消与绝对deadline无默认值，仅返回同本人active谓词下canonical ID/null。新普通 `infrastructure/postgres/project-resource-access.ts` 承接有限checkout/事务内SQL期限/exact client退役及迟到获取释放，不改旧find或全局query/statement。取消后零Storage IO；pool saturation/held SQL/迟到checkout/连接故障真实门待验，不能用race冒取消。连接丢失/timeout可能已提交：保原key显式同意图核定或只GET查看，不造“已删除”；ACK后fresh现列表从首cursor刷新，单页缺行不证明未知请求提交。逻辑删除不等provider立即清理；旧签名URL最多300秒自然到期。Web动作当时需人类永久删除确认。
+
+机器先按8.4/101目标新增两个closed操作及完整前置错误，原99wire不动；具名预算接缝设计已由Root裁决；只有Storage新commit正式发布、Root另准源范围后才进入source阶段，实际期限/取消门仍须通过。字段细节只在本仓唯一OpenAPI形成机器事实，不建立副本/alias/通用删除协议。
+
+Root最终补充裁决：现 `src/infrastructure/postgres/client.ts` 唯一Pool仅增加 `connectionTimeoutMillis: 1000`，有限约束底层connect与pending队列，堵住仅race/late-release仍可能无界等待；不改全局query_timeout/statement_timeout、max、credentials，不创建新Pool。此为D0目标并非源码已支持。保留五新普通文件和三现port/service/repository接缝；真实完整旧回归及pool饱和、SQL锁、取消、late acquire/连接故障门必须验证无泄漏及取消后零Storage IO。
+
+<!-- R261-BFF-FILE-DELETE-API-END -->
+
 ## R259-SKILLS-METADATA-BFF-D0：安装元信息契约（2026-10-06；D1冻结候选待Root验收）
 
 D1候选已写入public8.3/99与固定owner生成物；此为未发布工作树，不改变正常BFF/Web合同，Root验收前不得消费。

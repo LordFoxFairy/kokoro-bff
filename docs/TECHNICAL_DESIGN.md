@@ -1,3 +1,51 @@
+## R261-BFF-FILE-DELETE-D0：两具名单 Asset 删除（仅设计，具名预算接缝已由Root裁决）
+
+基线为正式 BFF `/Users/nako/.codex/worktrees/kokoro-r257-bff-normal`、Root给定 HEAD `7269e97`。本轮只三文档新增前缀，原全文suffix逐字节保留；未修改源、机器、生成物、配置、Schema、正常数据或untracked var。现公开8.3.0/99 operation没有单文件删除；目标8.4.0/101尚未发布。Storage现pin仍`e8b9928418924812587b7ac07900aee4be5bc27f` / combined `c22b5c10ee698d579753dcac370be371d8dba1df8fead1a12883f5443fbad18a`；17 RPC候选combined `9b602259c3b777e31deb63563467ae160c04bde415e841851aefae760902f34f`不是正式新发布，最终owner commit待定。Storage正式源/机器发布后才准repin及正规生成，禁止先消费mutable工作树。
+
+### 当前事实与目标
+
+现 `src/bootstrap/server.ts` 已装配个人 `GET /v1/library?kind=file` / `POST /v1/library/files` / `GET /v1/library/files/{asset_id}/content`、项目 `GET/POST /v1/projects/{projectId}/resources`；普通Asset唯一由Storage写，Artifact另走Conversation授权组合。目标只新增 `DELETE /v1/library/files/{asset_id}` 与 `DELETE /v1/projects/{projectId}/resources/{asset_id}`，无body/query、新实体或兼容alias。
+
+每次先原service envelope＋唯一Bearer＋IAM当前Session＋固定Producttenant。personal scope等于当前subject；project复用本仓 `tenant_id + owner_id + deleted_at IS NULL` 的本人active Project语义，解析ID/slug后只传canonical project.id。现 `ProjectService.find` / `PostgresProjectRepository.findProject` 并非成员/action ACL；Org Member/admin、平台admin、上传者、同digest都不自动扩大权限。permission metadata仅本operation治理名，不伪称IAM新增grant。
+
+### §8 放置与依赖
+
+|项|明确选择|
+|---|---|
+|Owner|BFF拥有两个public操作/本人准入/响应；Storage唯一拥有Asset逻辑删除、Blob退役、cleanup与receipt；Web拥有action-time确认和瞬时UI。|
+|采用位置|现 `src/http/routes/file-delete.ts` 处理两个具名HTTP入口；现 `src/infrastructure/clients/storage/asset-delete.ts` 新普通文件处理typed RPC/稳定command/strict映射；现 `src/application/file-delete.types.ts`、`file-delete.error.ts` 各新普通文件分别定义业务边界类型和错误。目录均已存在。|
+|淘汰位置|不把单RPC删除塞入多阶段upload/checkpoint，不增加泛owner proxy、删除模块/服务、第二权限或通用receipt层。个人/项目共享具名consumer而不伪造projectId=subjectId。|
+|现入口|`src/bootstrap/server.ts` 在当前admission后、generic body/JSON/mutationTicket前exact分派；项目授权必须在此具名路径重新执行，不能因提前return绕过原generic检查。前置admission失败也进入新closed header-only错误profile。|
+|依赖|handler→本仓project授权读取/窄Storage client→固定generated；generated不穿透业务类型，无跨ownerSQL/ORM/source import。普通99操作与上传多阶段receipt保持。|
+|授权读取放置比较|直接在现PostgresProjectRepository内管理独立连接生命周期会混入row CRUD变化；采用现 `src/infrastructure/postgres/project-resource-access.ts` 新单普通helper，独占本人active Project授权读取、有限checkout/SQL及精确连接退役。repository仅委托，既有目录内无新模块/服务。|
+|现三处接缝|`src/application/ports/project-repository.ts` → `src/application/project-service.ts` → `src/infrastructure/postgres/project-repository.ts` 新具名 `findActiveResourceProjectId(scope, idOrSlug, signal: AbortSignal, deadlineAt: number): Promise<string | null>`；signal及绝对毫秒deadline必填，无optional/default。复用原owner谓词且仅返回canonical ID/null，旧find/findProject不变。|
+|数据/删除项|零BFF表/列/索引/Redis票据/outbox/缓存；不增加Map成功缓存。无旧单删实现可兼容，不加alias。|
+|验证|机器闭集/正规生成；具名HTTP有效RED→实现；真实PG/Storage组合及Web确认/刷新/撤权分别验，工程数量不替代用户链。|
+
+### 唯一命令与恢复
+
+public key原样且唯一。command ID用版本化域分隔、tenant、subject、scope kind、canonical scope ID、public key确定，**不含asset_id**；semantic digest含同域和asset_id。于是同scope同key异asset为409，不通过换command ID绕异义；不同scope/subject隔离。request ID、时钟与随机attempt不进command身份。Storage认证/operation/scope与BFF当前授权每次先于replay；不得预GetAsset/List检查已删状态再调DeleteAsset，否则合法同键重放会误404。首次与replay都直接交owner唯一receipt，无BFF第二票据。
+
+200只表示owner逻辑删除及必要退役/cleanup/receipt已提交。客户端取消/timeout/丢ACK不等未提交：保同intent原key，可显式同键请求核定，无自动retry/rekey；或fresh GET只报告当前事实，单页缺行不是此次提交证明。ACK后现列表从首cursor刷新；分页/错误不得假空。旧预签URL可能至300秒自然到期，不承诺即时撤销或物理bytes已清。Artifact引用409而非级联，包/Conversation/ReleaseScope/整项目删除不是这两个入口。
+
+### 10秒与具名Project授权读取（目标已裁决，实现待验证）
+
+目标从本次admission开始到授权读取及RPC/响应处理共享10秒绝对预算，原始取消和剩余时间逐层传递，每await fence，早已aborted/destroyed零后续owner IO。**当前尚不具备Project读取取消能力**：`application/project-service.ts:26–27` / `application/ports/project-repository.ts` 无signal/deadline；`infrastructure/postgres/project-repository.ts:91–99`直接pool.query；`infrastructure/postgres/client.ts:15`未指定connectionTimeoutMillis/query_timeout/statement_timeout。锁定pg默认query/statement timeout为false，pg-pool无connectionTimeoutMillis的pending队列无本地timer；不能依赖未读取的外部URL/数据库设置声称已有界。
+
+Root已裁决：只新增上述具名方法与 `project-resource-access.ts`，不改全局query/statement或旧findProject，不复制权限事实。required signal+绝对deadline从handler贯穿，helper每步按剩余预算执行；借现rename的exact checkout、late acquisition释放、abort/timeout精确 `release(true)` / destroyClient语义，并在本次读取事务内设置有限 `statement_timeout`、`lock_timeout`、`client_connection_check_interval`，正常结束回滚/提交并释放，所有监听和timer清理。不是照搬4.5秒常量/写事务/receipt，也不是对裸pool.query做race；取消后即使取得连接/返回行，也先退役或释放且零Storage IO。事务只读取现本人active Project，无新事实或锁定后跨owner事务承诺。
+
+连接等待的实现及验证仍是上线条件：pending checkout超时/取消须立即终止本次业务等待，并对每个迟到取得的确切client释放；已取得或执行中client超时/取消须精确销毁而不回池留SQL。不得把取消业务等待当底层connect已终止、或把late-release当已经证明池无残留。真实PG必须覆盖pool saturation、held SQL取消、迟到获取、连接故障，确认请求有界、无后续Storage IO、资源最终回收；这些尚未运行，不以本D0声称成立。如现pg接口不足以在仅固定Pool连接期限的约束下兑现这些门，先向Root报告具体机制阻塞，不擅增第二pool或平台。
+
+### 后继精确集与门
+
+除原四新普通source，新增已裁决的第五普通文件 `src/infrastructure/postgres/project-resource-access.ts`；现bootstrap及上述Project port/service/repository三处为目标必改，旧findProject不改；现Pool仅下述连接期限目标。这是D0目标集，不构成源码准写。机器候选为现 `contract/openapi/v1/openapi.yaml`、`contract/dependencies/storage-connect.json`、`buf.storage.json`、`scripts/generate-storage-connect-client.mjs`必要pin、正规vendor/`src/generated/storage-connect`和contract README；固定版本与exact变更再列，不改依赖版本或历史artifact。测试新增现目录 `test/file-delete.test.mjs`；真实组合建议 `test/file-delete.integration.mjs`另准；现storage-connect-contract、contract/openapi-contract、contract-governance及必要check脚本准确更新。现personal-file-upload.integration只有BFF PG是真、Storage为Connect double，不冒owner真组合。INDEX/docsINDEX/CURRENT待实际实现证据再更。
+
+Root门包括普通current Session、本人/他人/跨tenant/已删项目、同键回放/异asset409/异键404、引用409、非法query/body/key、错误tuple、超时/取消/迟到、pool等待/数据库锁与连接黑洞无遗留、真实确认→一次DELETE→权威列表刷新/下载拒→hardreload。未知结果保持intent，撤准入或切人退役私有UI。永久删除必须用户action-time确认；本设计不执行删文件、seed或授资格。
+
+Root最终补充裁决：现 `src/infrastructure/postgres/client.ts` 唯一Pool仅增加 `connectionTimeoutMillis: 1000`，有限约束底层connect与pending队列，堵住仅race/late-release仍可能无界等待；不改全局query_timeout/statement_timeout、max、credentials，不创建新Pool。此为D0目标并非源码已支持。保留五新普通文件和三现port/service/repository接缝；真实完整旧回归及pool饱和、SQL锁、取消、late acquire/连接故障门必须验证无泄漏及取消后零Storage IO。
+
+<!-- R261-BFF-FILE-DELETE-TECH-END -->
+
 ## R259-SKILLS-METADATA-BFF-D0：安装元信息消费（2026-10-06；D1冻结候选待Root验收）
 
 **D1候选状态。** 已按本设计完成单pin机器、public8.3与十二字段strict投影；有效RED与focused GREEN已留证，但正常进程、真实owner和Web仍未发布，须Root独审及Node22/真实组合后方可改变当前事实。
