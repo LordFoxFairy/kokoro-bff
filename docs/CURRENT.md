@@ -1,3 +1,11 @@
+## R257 本人 MCP Connection 读取研发切片（2026-10-06）
+
+源码/机器契约6d46ec8bdd2d2ffaa06513fd0561272eae907919已精确提交，新增唯一GET /v1/mcp/connections，固定Platform HTTP3.2.0/9ab3b653360d04fb498a238659edeec01e72f62d/digest4b42dd161c972b3447cfea3a6f80a949bbdb573c46213dbf8ef4c3ecb58e72da，旧3.1vendor删除。六字段本人投影、可信actor、closed四query、strict错误/header、1MiB与贯穿token/owner/body/parse单5s、取消迟到退役；Server与Skill旧分支不重解释。
+
+Root原81428完整pnpm check真实exit0：795PASS/0FAIL/1skip，lint/types/完整contract生成一致性与build通过；作者窄111/0、独审0c31098a最终33hash一致无P0/P1/P2。全format:check仍原受保护Project两文件失败，不冒全仓格式通过。原19mixed排除暂存且当下stage前后hash保持；R257启动未逐一保存source before，不称19原始byte全部审。正常原48037停止130后复用原持久env唯一51474/53714 ready200，没有重启PG/Redis/改业务数据。
+
+当前Web仍旧Server消费者；固定public8.0.0 YAML digest8d5b452ba554f7b9ce723481a0a619abf12d9fb3174b9f15f52a395ad1372783已给Web后继。本人正常owner与浏览器读取尚未验收，ready和补充替身门不等真实产品闭环。创建/授权/启停/调用/撤销仍OPEN，空列表不能证明生命周期完成。管理员当前资格IAM0.8消费设计独立进行，normal IAM旧required形状不先上线半边。
+
 ## R255 02:44 ScheduledTask 本地 immutable artifact 交接
 
 Root已接收固定owner commit `45e67f0e783fb4bcdb086665a09b7c3c5fadbb6f` 的唯一 `contract/openapi/v1/openapi.yaml` 原字节：public发布前 `8.0.0`，git blob `1b42d49388ca26eaaef7371daf23cbf1158d5fe6`，SHA-256 `0802a31f9469a17cd8fc8b78e6d2326e0571bc93f3ac8d19811a42a1b185df95`。当前canonical与该immutable blob byte-equal；旧Web pin97a99d35/33971eaa仍冻结，不改旧commit内容。此本地交接允许后继消费者锁定新commit/version/digest，经现generator正规生成；不是remote push、registry release或正常运行激活。
