@@ -1,3 +1,38 @@
+## R257-MCP-BFF-D0：正式本人 MCP Connection 读取（2026-10-06；设计候选，未实施）
+
+**基线。** BFF main ef2d3062e7503cb443d88a972804a98e9158a321，19项原 mixed（含文档与未跟踪删除候选）由Root保护。本前缀以下旧文件全部bytes保持。正常新增页仍读全局Server而非本人Connection，Root已记录wrong-resource业务RED；不是新接口已实跑RED。BFF当前HTTP consumer仍pin Platform3.1.0/6a09913a96c686b316bfe707b823d039e625607a。Root本轮已核Platform已提交main 9ab3b653360d04fb498a238659edeec01e72f62d的 contract/openapi/platform-http.openapi.json 为3.2.0，与工作树全文SHA256 4b42dd161c972b3447cfea3a6f80a949bbdb573c46213dbf8ef4c3ecb58e72da exact。后继生成必须固定该提交完整SHA及digest，不消费移动工作树；Connect版本/aggregate不是本HTTP来源。Root已核正常Platform启用surface尚缺mcp-connection，正规启用/原句柄重载由Root独立处理；这是发布后运行前置，不改成旧Server fallback，也不由本片操作配置。
+
+### 放置与边界
+
+| 项 | 当前决定 |
+|---|---|
+| Owner | Platform拥有Connector/Connection/current authorization/Server；BFF只发布public读取，Web消费投影。Root独占后继放行、资源、Git；本轮只准三D0前缀。 |
+| 唯一增量 | GET /v1/mcp/connections，operationId=listSelfMcpConnections，六字段本人active连接；不是连接命令/Server注册/enable或Agent执行。 |
+| 位置比较 | 采用现 src/http/routes/platform-projection.ts 的明确operation分支与 src/infrastructure/clients/platform/projection-http.ts 固定generated调用；淘汰Web过滤Server、独立服务/第二HTTP栈/BFF Connection表。 |
+| 身份 | 现service+当前IAM Session admission → context.identity.namespace/userId → 独立projection workload → Platform。caller header/body/query不赋tenant/subject；不借Skill权限、不新加人类MCP-read权限。 |
+| 权限 | public capability.mcp.read沿现治理分类，不证明新增IAMgrant；实际是当前Session+认证BFF workload+Platform完整same-tenant/user-self/current资格。投影不是invocation grant。 |
+| 数据 | 无表/列/索引/SQL/Redis投影/receipt/outbox/事务，不读Platform数据库。 |
+| 删除/保留 | active HTTP3.1输入/pin换成唯一固定3.2并正规生成，旧vendor按生成来源替换；原Skill/Server操作保持。GET /v1/mcp/servers不重解释、不alias或双读fallback；Web展示切换另卡。 |
+| 排除 | 19原mixed、Project删除、MessageCreate/selected_mcp_connection_refs、Agent、IAM权限、Provider/secret、Admin、所有MCP非GET与normal配置/启动不在本片。 |
+
+### 读取/失败生命周期
+
+每次先IAM admission，失效/撤权/异租户拒绝且零Platform调用。owner tenant/subject headers只由受信RequestContext生成，普通用户Bearer不下传Platform；现projection credential/token负责独立workload。Platform在有界RepeatableRead中核同tenant active connection、active user/self connector、其current approved authorization、registered且provider一致的streamable_http server，资格后分页；BFF不重算predicate、不筛漏为空成功，同Server多个Connection不合并。
+
+新operation在现client建立单次总预算：沿 platformProjection.timeoutMs（默认5000ms）覆盖credential/token等待、owner headers/body及解析，不在拿到token后重置。owner body仍1MiB，token body沿现64KiB；复用single-flight，取消单waiter不杀其他waiter，最后waiter取消可中止flight。request aborted/response close贯穿取消；已取消/销毁/结束response不再写，迟到token/body不得启动下一调用或回写。超时终态失败，无自动重试/预取；取消不宣称瞬时停止owner在途SQL，读取也不是授权租约。
+
+现client原实现token与owner各阶段分别计时、route只派发servers；新operation总预算/取消/400映射是待实现目标，不冒旧测试已覆盖。局部约束新operation，不重写旧Skill/Server/token缓存框架。owner固定generated schema、JSON media、exact request-id/no-store全核后才投影；错误见API本节。empty仅代表本次无可见active连接，不证明安装/enable/工具执行。
+
+### 后继精确写集与门（Root另行放行）
+
+- 先现测试RED：test/platform-http-contract.test.mjs、test/platform-projection-http.test.mjs、test/platform-projection-route.test.mjs、test/contract/openapi-contract.test.mjs、test/contract-governance.test.mjs。保原断言，补pin/唯一operation/六字段拒Server、query/subject映射、分页400、空/错/取消/总deadline/body cap；原credential测试不改但回归。
+- 机器/固定生成：contract/openapi/v1/openapi.yaml、contract/tests/v1-operations.json、scripts/verify-openapi.ts、contract/README.md；contract/dependencies/platform-http.json、openapi-ts.platform-http.config.ts、scripts/generate-platform-http-client.mjs；按批准完整commit替换现contract/vendor/kokoro-platform-http来源目录，src/generated/platform-http/**只由正规generator写。无依赖/lockfile升级。
+- 生产最小两文件：src/http/routes/platform-projection.ts、src/infrastructure/clients/platform/projection-http.ts。owner.ts:126已有dispatch、bootstrap现admission/非GET拒绝保持；projection-token/credential原职责复用，非必要不改。发现须扩大文件集先交Root，不自行新建模块。
+- Node22.22.2/pnpm11.25既有命令：node scripts/generate-platform-http-client.mjs --write（后继生成阶段）；pnpm contract:check:platform-http；pnpm build && node --test test/platform-http-contract.test.mjs test/platform-projection-credential.test.mjs test/platform-projection-http.test.mjs test/platform-projection-route.test.mjs test/contract/openapi-contract.test.mjs test/contract-governance.test.mjs；再pnpm format:check / lint / typecheck / contract:check / test:architecture / test / build。本D0未执行命令/资源。
+- doubles证明wire/映射，不算真实IAM/Platform PG。Root后验正规Session A/B、本人连接/撤销/精确过滤/分页，再Web正常新增页/刷新/切人；缺合法自有连接只验empty，不seed/私SQL/preview造正控。完整创建授权/enable/Agent invoke/撤销旅程仍OPEN，不阻本人读取片，也不被读取PASS覆盖。
+
+<!-- R257-MCP-BFF-D0-TECH-END -->
+
 ## R255：ScheduledTask recurrence anchor 与 Scheduler-confirmed next 投影（2026-10-05；仅设计）
 
 **当前态与目标。** 正常用户创建 weekly 08:00 America/New_York 任务后，BFF 把省略的 `next_run_at` 填为创建瞬时点并持久化，公开列表因而显示 21:16；Scheduler 实际 command receipt 已返回 owner 计算的 `next_due_at`，但现 BFF delivery 将 2xx 降成无内容 `succeeded`。目标保持 BFF 为 ScheduledTask 产品 owner、Scheduler 为 recurrence/`next_due_at` owner：把规则日期锚点 `recurrence_anchor_at` 与可空的 Scheduler-confirmed `next_run_at` 分开，复用现 task/outbox receipt 的 lease/fence/revision settlement 原子投影。本文不表示机器契约、源码、SQL或真实 Scheduler 验收已经完成。

@@ -1,3 +1,20 @@
+## R257-MCP-BFF-D0：本人 Connection读取无本仓数据变化（2026-10-06；仅设计）
+
+BFF ef2d3062e7503cb443d88a972804a98e9158a321；本轮仅三D0当前前缀，原文全部bytes及19项mixed保护，Project删除/SQL/installer候选不在此片。
+
+Platform唯一拥有Connector/Connection/current authorization/全局Server。固定消费已提交9ab3b653360d04fb498a238659edeec01e72f62d的HTTP3.2.0，contract/openapi/platform-http.openapi.json SHA256 4b42dd161c972b3447cfea3a6f80a949bbdb573c46213dbf8ef4c3ecb58e72da；后继vendor与生成固定该完整commit。BFF只在单次GET /v1/mcp/connections验证和投影六字段，不建立本人Server表/Connection缓存，不复制owner predicate/SQL。
+
+- database/schema.sql完全不变；无新表/列/索引/FK/迁移/事务/receipt/outbox/retention/Redis key，不安装/迁移owner库。
+- tenant/subject只来自当次IAM已验RequestContext及owner受信请求，不从body/query/browser marker/日志取权，不存另一权限snapshot。既有workload token cache是运输，不缓存Connection资格；每次列表读current事实。
+- connection_id不同于connector_id/server_id，同Server多个Connection保多项；registered Server不能推导某人已连接。不存假name/authorized/enabled、URL/secret handle/token/scope或原始错误体。
+- cursor由owner绑定tenant/subject/surface/filters，以serverId+connectionId稳定keyset排序；BFF不解码/重签/二次排序。每页独立current snapshot，不宣跨页一致；跨actor/filter旧cursor拒绝，不假连续页。
+- owner有界RepeatableRead中完整eligibility后分页；预算耗尽/损坏/未知失败，不partial200。BFF取消/timeout不写业务事实，不承诺瞬停owner在途SQL；迟到结果不得公开。
+- Conversation/Message/Project/Skill/Server投影/AG-UI原数据生命周期不动。selected_mcp_connection_refs、创建/授权/启用/撤销/secret交付与Agent执行另卡；本人GET不写这些事实，不凭active暗示invoke授权。
+
+资源验收由Root以真实Session A/B及owner关联/撤销/分页读证据确认；纯fixture/生成schema不是持久关联与完整用户连接功能证明。无合法自有连接只验empty，不正常seed/私SQL/preview造正控。本D0无DDL/source/资源/验证命令执行，旧suffix与其历史阶段保持，不冒已完成。
+
+<!-- R257-MCP-BFF-D0-DATA-END -->
+
 ## R255：ScheduledTask anchor 与可空 next 投影数据边界（2026-10-05；仅设计）
 
 BFF canonical目标只改现`bff_scheduled_task`两项：新增 `recurrence_anchor_at TIMESTAMPTZ(3) NOT NULL`，把 `next_run_at TIMESTAMPTZ(3) NOT NULL` 改为 nullable。anchor是规则选择输入；next是Scheduler对当前revision的确认投影。两者不得互填，next null不得以anchor、`created_at`、`updated_at`或应用时钟补齐。无migration/compat列/alias；fresh install与正规派生同片更新。

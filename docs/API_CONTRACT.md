@@ -1,3 +1,46 @@
+## R257-MCP-BFF-D0：本人 Connection public只读契约（2026-10-06；仅设计，未发布/激活）
+
+唯一机器源仍是 contract/openapi/v1/openapi.yaml。目标在当前发布前8.0.0中仅新增 GET /v1/mcp/connections / listSelfMcpConnections；owner=kokoro-bff、visibility=public、stability=beta、idempotency=none、permission=capability.mcp.read（既有MCP治理分类，非新IAMgrant）。Root后继发布新immutable commit/digest，旧已交接blob不覆写；Web固定新artifact后消费。本轮机器/inventory/generated/source/config均未改。
+
+固定owner为Platform commit 9ab3b653360d04fb498a238659edeec01e72f62d、HTTP3.2.0、contract/openapi/platform-http.openapi.json、SHA256 4b42dd161c972b3447cfea3a6f80a949bbdb573c46213dbf8ef4c3ecb58e72da；generated调用listSelfMcpConnections，不以Connect或移动工作树代替。
+
+### 输入/身份/分页
+
+每次现IAM Session admission后的context.identity.namespace/userId建立唯一tenant/subject，BFF生成owner headers；现tenant-bound workload token使用Platform audience/platform:projection.read。caller身份header不成为authority；不收tenant/subject/owner/scope/Run/proof query/body。
+唯一query闭集是可选connection_id、provider_key、limit、cursor：connection_id为1..191且正则 ^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$；provider_key为1..191；limit缺省50、仅十进制正整数1..100；cursor为1..2048 opaque。重复/未知/空值拒绝；沿现projection先trim再校验，除此不变换大小写或解析/重签cursor。limit拒浮点/指数/符号/前导零/越界；无body、transfer-encoding或Idempotency-Key。非法400 invalid_query_parameter且零owner调用。
+精确connection_id仍列表，不新detail alias。cursor由owner绑定tenant/subject/surface/全部filters；跨主体/filter或坏cursor拒400，不默默回第一页。每页重验当前资格，不宣跨请求snapshot；更换filters/主体须从首页重新请求。
+
+### 成功投影
+
+200严格为 {data:{connections:[...],next_cursor?:string}}，顶层/data/item均closed。无JSON meta/request_id；传输只用x-request-id，全部响应Cache-Control:no-store。next_cursor有后页才出现、1..2048，末页缺失，非null/空串。
+
+| 每项required字段 | 约束 |
+|---|---|
+| connection_id / connector_id / server_id | 各自独立opaque ID，1..191、同上述ID正则，不互代 |
+| provider_key | string 1..191，owner原值 |
+| transport | 唯一streamable_http |
+| status | 唯一active |
+
+资格为同tenant active connection、active且owner=user/当前subject的connector、其current approved且属于该connector的authorization、registered/streamable_http/provider匹配的server。先完整资格再keyset/limit；不存在/他人/撤销exact filter均合法empty，不泄存在。BFF原顺序/身份/cursor投影，不按Server过滤/去重/合成Connection。
+不返回server_identity/declaration_digest/URL/headers/secret handle/token/scopes/grant/proof/audit/raw row，不加name/authorized/enabled。owner200返回Server旧shape也拒绝；active不等于工具权限/选择提交/enable/Agent成功。
+
+### 错误与取消
+
+错误严格 {error:{code,message,retryable}}，安全固定message、所有状态含BFF x-request-id/no-store。新GET单独closed错误profile，不为其放宽旧Skill/Serverprofile。
+
+| 条件 | public结果 |
+|---|---|
+| 现服务认证、缺/失效Session、资格拒绝、限流、固定tenant/依赖失败 | 保现401/403/429/503及service_auth_failed、session_authentication_required、session_invalid、session_forbidden、session_rate_limited、product_tenant_not_configured、product_tenant_forbidden、iam_admission_unavailable；沿现retryable/合法有界Retry-After；零Platform调用 |
+| 本地query/body/key非法；owner有效400 capability.invalid_request（含坏cursor） | 400 invalid_query_parameter，retryable=false |
+| projection配置/凭据/token失败、网络/总deadline；owner有效401/403/500/503 | 503 mcp_connection_dependency_unavailable，retryable=true；不把workload拒绝当资源不存在/假empty |
+| owner坏JSON/media/schema/headers/request-id/no-store、超限、未知status-code组合或其他意外状态 | 502 mcp_connection_response_invalid，retryable=false |
+| caller取消、response destroyed/writableEnded | 退役本次结果/取消等待，不向已结束response补成功或错误 |
+
+映射owner错误前也核fixed generated error envelope、exact owner request-id/no-store及status-code匹配；畸形400返回502而非400，未在此operation声明的404也不是本人资源不存在。不透传owner message/detail。单次总预算覆盖token+owner headers/body/parse（默认5000ms），owner上限1MiB，按TECH收敛；无自动重试，retryable仅支持用户显式新GET。非GET及未登记别名保持现fail-closed，不新增写operation；GET /v1/mcp/servers的资源含义、shape与错误契约不变，不alias/fallback到新接口。
+后继机器/断言/生成集见TECH，Root审D0后另行准入；本节不是已发布机器或真实用户验收。
+
+<!-- R257-MCP-BFF-D0-API-END -->
+
 ## R255：ScheduledTask anchor/next public contract（2026-10-05；仅设计）
 
 当前 public `/v1`、operationId、成功/错误 envelope 与 IAM admission 不变；唯一可编辑机器源仍是 `contract/openapi/v1/openapi.yaml`。在 8.0.0 发布前 clean-slate 更新同一版本，不增加 `/v2`、alias或双轨：
