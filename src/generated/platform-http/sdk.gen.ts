@@ -9,6 +9,9 @@ import type {
   ListMcpServersData,
   ListMcpServersErrors,
   ListMcpServersResponses,
+  ListSelfMcpConnectionsData,
+  ListSelfMcpConnectionsErrors,
+  ListSelfMcpConnectionsResponses,
   ListVisibleSkillCatalogData,
   ListVisibleSkillCatalogErrors,
   ListVisibleSkillCatalogResponses,
@@ -22,6 +25,7 @@ import type {
 import {
   zGetPublishedPersonalSkillResponse,
   zListMcpServersResponse,
+  zListSelfMcpConnectionsResponse,
   zListVisibleSkillCatalogResponse,
   zListVisibleSkillPoolResponse,
   zListVisibleSkillsResponse,
@@ -97,5 +101,18 @@ export const listMcpServers = <ThrowOnError extends boolean = false>(
     responseValidator: async (data) => await zListMcpServersResponse.parseAsync(data),
     security: [{ scheme: "bearer", type: "http" }],
     url: "/v1/mcp/servers",
+    ...options,
+  })
+
+/**
+ * List current subject active MCP connections
+ */
+export const listSelfMcpConnections = <ThrowOnError extends boolean = false>(
+  options: Options<ListSelfMcpConnectionsData, ThrowOnError>,
+): RequestResult<ListSelfMcpConnectionsResponses, ListSelfMcpConnectionsErrors, ThrowOnError> =>
+  (options.client ?? client).get<ListSelfMcpConnectionsResponses, ListSelfMcpConnectionsErrors, ThrowOnError>({
+    responseValidator: async (data) => await zListSelfMcpConnectionsResponse.parseAsync(data),
+    security: [{ scheme: "bearer", type: "http" }],
+    url: "/v1/mcp/connections",
     ...options,
   })

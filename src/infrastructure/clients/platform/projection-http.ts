@@ -2,6 +2,7 @@ import { createClient } from "../../../generated/platform-http/client/client.gen
 import {
   getPublishedPersonalSkill,
   listMcpServers,
+  listSelfMcpConnections,
   listVisibleSkillCatalog,
   listVisibleSkillPool,
   listVisibleSkills,
@@ -10,6 +11,8 @@ import {
   zErrorEnvelope,
   zGetPublishedPersonalSkillResponse,
   zListMcpServersResponse,
+  zListSelfMcpConnectionsResponse,
+  zMcpConnection,
   zListVisibleSkillCatalogResponse,
   zListVisibleSkillPoolResponse,
   zListVisibleSkillsResponse,
@@ -17,10 +20,21 @@ import {
 import { ProjectionCredentialSource } from "./projection-credential.js"
 import { ProjectionTokenSource } from "./projection-token.js"
 
-export type ProjectionOperation = "skills" | "skill" | "pool" | "catalog" | "mcp"
+export type ProjectionOperation = "skills" | "skill" | "pool" | "catalog" | "mcp" | "mcpConnections"
 export type ProjectionResult =
   | { ok: true; status: 200; data: unknown }
-  | { ok: false; status: 404 | 502 | 503; code: "skill_not_found" | "skill_response_invalid" | "skill_dependency_unavailable"; retryable: boolean }
+  | {
+      ok: false
+      status: 400 | 404 | 502 | 503
+      code:
+        | "skill_not_found"
+        | "skill_response_invalid"
+        | "skill_dependency_unavailable"
+        | "invalid_query_parameter"
+        | "mcp_connection_response_invalid"
+        | "mcp_connection_dependency_unavailable"
+      retryable: boolean
+    }
 const invalidResponse = (): ProjectionResult => ({ ok: false, status: 502, code: "skill_response_invalid", retryable: false })
 const unavailable = (): ProjectionResult => ({ ok: false, status: 503, code: "skill_dependency_unavailable", retryable: true })
 const publishedFields = ["name", "revision", "skill_id", "source_ref", "status", "summary", "tags"]
@@ -45,6 +59,37 @@ function matchesPublishedIdentity(value: unknown, skillId: string | undefined): 
     resource.tags.every((tag) => typeof tag === "string")
   )
 }
+
+const connectionResponse = zListSelfMcpConnectionsResponse.strict().extend({
+  data: zListSelfMcpConnectionsResponse.shape.data.strict().extend({
+    connections: zMcpConnection.strict().array(),
+  }),
+})
+const connectionError = zErrorEnvelope.strict().extend({ error: zErrorEnvelope.shape.error.strict() })
+
+// A caller budget also bounds providers/streams that settle after cancellation.
+function whileActive<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const aborted = (): void => reject(signal.reason)
+    signal.addEventListener("abort", aborted, { once: true })
+    void promise.then(
+      (value) => {
+        signal.removeEventListener("abort", aborted)
+        if (signal.aborted) reject(signal.reason)
+        else resolve(value)
+      },
+      (error: unknown) => {
+        signal.removeEventListener("abort", aborted)
+        reject(error)
+      },
+    )
+    if (signal.aborted) {
+      signal.removeEventListener("abort", aborted)
+      reject(signal.reason)
+    }
+  })
+}
+
 export class PlatformProjectionHttpClient {
   readonly #tokens: ProjectionTokenSource
   constructor(
@@ -64,12 +109,38 @@ export class PlatformProjectionHttpClient {
     input: { query?: Record<string, unknown>; skillId?: string } = {},
     signal?: AbortSignal,
   ): Promise<ProjectionResult> {
+    if (operation !== "mcpConnections") return this.#read(operation, tenantId, subject, requestId, input, signal)
+    const deadline = new AbortController()
+    const timer = setTimeout(() => deadline.abort(new Error("projection_deadline")), this.timeoutMs)
+    const total = signal ? AbortSignal.any([signal, deadline.signal]) : deadline.signal
+    try {
+      total.throwIfAborted()
+      return await whileActive(this.#read(operation, tenantId, subject, requestId, input, total), total)
+    } catch {
+      return { ok: false, status: 503, code: "mcp_connection_dependency_unavailable", retryable: true }
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+  async #read(
+    operation: ProjectionOperation,
+    tenantId: string,
+    subject: string,
+    requestId: string,
+    input: { query?: Record<string, unknown>; skillId?: string },
+    signal?: AbortSignal,
+  ): Promise<ProjectionResult> {
+    const self = operation === "mcpConnections"
+    const invalid = (): ProjectionResult => (self ? { ok: false, status: 502, code: "mcp_connection_response_invalid", retryable: false } : invalidResponse())
+    const dependency = (): ProjectionResult =>
+      self ? { ok: false, status: 503, code: "mcp_connection_dependency_unavailable", retryable: true } : unavailable()
     let token: string
     try {
       token = await this.#tokens.get(tenantId, signal)
     } catch {
-      return unavailable()
+      return dependency()
     }
+    if (self) signal?.throwIfAborted()
     let invalidOwnerResponse = false
     const bounded = async (request: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
       const controller = new AbortController()
@@ -79,7 +150,20 @@ export class PlatformProjectionHttpClient {
       const baseRequest = new Request(request, init)
       const fetchHeaders = new Headers(baseRequest.headers)
       fetchHeaders.set("authorization", `Bearer ${token}`)
-      const response = await fetch(new Request(baseRequest, { headers: fetchHeaders, signal: joined, redirect: "error" }))
+      if (self) joined.throwIfAborted()
+      const pending = fetch(new Request(baseRequest, { headers: fetchHeaders, signal: joined, redirect: "error" }))
+      const response = self
+        ? await whileActive(
+            pending.then((late) => {
+              if (joined.aborted) {
+                void late.body?.cancel().catch(() => undefined)
+                throw joined.reason
+              }
+              return late
+            }),
+            joined,
+          )
+        : await pending
       const declaredLength = response.headers.get("content-length")
       if (declaredLength !== null && /^[0-9]+$/u.test(declaredLength) && Number(declaredLength) > this.maxBytes) {
         invalidOwnerResponse = true
@@ -93,7 +177,7 @@ export class PlatformProjectionHttpClient {
       let size = 0
       try {
         for (;;) {
-          const next = await reader.read()
+          const next = self ? await whileActive(reader.read(), joined) : await reader.read()
           if (next.done) break
           size += next.value.byteLength
           if (size > this.maxBytes) {
@@ -113,41 +197,68 @@ export class PlatformProjectionHttpClient {
         bytes.set(chunk, offset)
         offset += chunk.byteLength
       }
+      if (self) {
+        joined.throwIfAborted()
+        try {
+          if (response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() !== "application/json") throw new Error("media")
+          const value: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes))
+          if (!(response.status === 200 ? connectionResponse : connectionError).safeParse(value).success) throw new Error("shape")
+        } catch {
+          invalidOwnerResponse = true
+          throw new Error("projection_response_invalid")
+        }
+      }
       return new Response(bytes, { status: response.status, headers: response.headers })
     }
     const client = createClient({ baseUrl: this.baseUrl, fetch: bounded, redirect: "error" })
     const headers = { "x-kokoro-tenant-id": tenantId, "x-kokoro-subject": subject, "x-kokoro-request-id": requestId }
     const result =
-      operation === "skills"
-        ? await listVisibleSkills({ client, auth: token, headers, ...(input.query === undefined ? {} : { query: input.query as never }) })
-        : operation === "pool"
-          ? await listVisibleSkillPool({ client, auth: token, headers, ...(input.query === undefined ? {} : { query: input.query as never }) })
-          : operation === "catalog"
-            ? await listVisibleSkillCatalog({ client, auth: token, headers, ...(input.query === undefined ? {} : { query: input.query as never }) })
-            : operation === "mcp"
-              ? await listMcpServers({ client, auth: token, headers, ...(input.query === undefined ? {} : { query: input.query as never }) })
-              : await getPublishedPersonalSkill({ client, auth: token, headers, path: { skill_id: input.skillId ?? "" } })
+      operation === "mcpConnections"
+        ? await listSelfMcpConnections({ client, auth: token, headers, ...(input.query === undefined ? {} : { query: input.query as never }) })
+        : operation === "skills"
+          ? await listVisibleSkills({ client, auth: token, headers, ...(input.query === undefined ? {} : { query: input.query as never }) })
+          : operation === "pool"
+            ? await listVisibleSkillPool({ client, auth: token, headers, ...(input.query === undefined ? {} : { query: input.query as never }) })
+            : operation === "catalog"
+              ? await listVisibleSkillCatalog({ client, auth: token, headers, ...(input.query === undefined ? {} : { query: input.query as never }) })
+              : operation === "mcp"
+                ? await listMcpServers({ client, auth: token, headers, ...(input.query === undefined ? {} : { query: input.query as never }) })
+                : await getPublishedPersonalSkill({ client, auth: token, headers, path: { skill_id: input.skillId ?? "" } })
     const status = result.response?.status
-    if (status === undefined) return invalidOwnerResponse ? invalidResponse() : unavailable()
-    if (result.response?.headers.get("x-kokoro-request-id") !== requestId || result.response?.headers.get("cache-control") !== "no-store")
-      return invalidResponse()
+    if (status === undefined) return invalidOwnerResponse ? invalid() : dependency()
+    if (result.response?.headers.get("x-kokoro-request-id") !== requestId || result.response?.headers.get("cache-control") !== "no-store") return invalid()
     if (status === 200 && result.data !== undefined) {
       const schema =
-        operation === "skills"
-          ? zListVisibleSkillsResponse
-          : operation === "pool"
-            ? zListVisibleSkillPoolResponse
-            : operation === "catalog"
-              ? zListVisibleSkillCatalogResponse
-              : operation === "mcp"
-                ? zListMcpServersResponse
-                : zGetPublishedPersonalSkillResponse
+        operation === "mcpConnections"
+          ? zListSelfMcpConnectionsResponse
+          : operation === "skills"
+            ? zListVisibleSkillsResponse
+            : operation === "pool"
+              ? zListVisibleSkillPoolResponse
+              : operation === "catalog"
+                ? zListVisibleSkillCatalogResponse
+                : operation === "mcp"
+                  ? zListMcpServersResponse
+                  : zGetPublishedPersonalSkillResponse
       const parsed = schema.safeParse(result.data)
-      if (!parsed.success || (operation === "skill" && !matchesPublishedIdentity(result.data, input.skillId))) return invalidResponse()
+      if (!parsed.success || (operation === "skill" && !matchesPublishedIdentity(result.data, input.skillId))) return invalid()
       return { ok: true, status: 200, data: parsed.data.data }
     }
     const parsed = zErrorEnvelope.safeParse(result.error)
-    if (!parsed.success) return invalidResponse()
+    if (!parsed.success) return invalid()
+    if (self) {
+      const { code, retryable } = parsed.data.error
+      if (status === 400 && code === "capability.invalid_request" && !retryable)
+        return { ok: false, status: 400, code: "invalid_query_parameter", retryable: false }
+      if (
+        (status === 401 && code === "capability.service_auth_failed" && !retryable) ||
+        (status === 403 && ["capability.permission_denied", "capability.tenant_mismatch"].includes(code) && !retryable) ||
+        (status === 500 && code === "capability.internal_error" && !retryable) ||
+        (status === 503 && code === "capability.dependencies_unavailable" && retryable)
+      )
+        return dependency()
+      return invalid()
+    }
     if (status === 404 && operation === "skill" && parsed.data.error.code === "capability.route_not_found")
       return { ok: false, status: 404, code: "skill_not_found", retryable: false }
     if (status === 401 || status === 403 || status === 503) return unavailable()

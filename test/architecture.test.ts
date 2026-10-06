@@ -724,7 +724,7 @@ test("BFF governance documents distinguish implemented facts from accepted targe
   assert.equal(/CREATE TABLE IF NOT EXISTS bff_outbox\b/u.test(schema), false)
 })
 
-test("BFF consumes the pinned Platform 3.1 HTTP projection without owning its data", async () => {
+test("BFF consumes the pinned Platform 3.2 HTTP projection without owning its data", async () => {
   const [generatorConfig, generatorScript, manifestSource, schema] = await Promise.all([
     readFile(path.join(root, "openapi-ts.platform-http.config.ts"), "utf8"),
     readFile(path.join(root, "scripts/generate-platform-http-client.mjs"), "utf8"),
@@ -733,7 +733,7 @@ test("BFF consumes the pinned Platform 3.1 HTTP projection without owning its da
   ])
   const manifest = JSON.parse(manifestSource) as { status: string; owner: { contract_version: string } }
   assert.equal(manifest.status, "generated")
-  assert.equal(manifest.owner.contract_version, "3.1.0")
+  assert.equal(manifest.owner.contract_version, "3.2.0")
   assert.match(generatorConfig, /src\/generated\/platform-http/u)
   assert.match(generatorScript, /two byte-identical generations/u)
   assert.doesNotMatch(schema, /CREATE TABLE[^;]*capability/iu)

@@ -358,6 +358,11 @@
     },
     {
       "method": "GET",
+      "path": "/v1/mcp/connections",
+      "operation_id": "listSelfMcpConnections"
+    },
+    {
+      "method": "GET",
       "path": "/v1/mcp/servers",
       "operation_id": "listMcpServers"
     },

@@ -11,9 +11,9 @@ const output = path.join(root, "src/generated/platform-http")
 const manifestPath = path.join(root, "contract/dependencies/platform-http.json")
 const configPath = path.join(root, "openapi-ts.platform-http.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "6a09913a96c686b316bfe707b823d039e625607a"
+const ownerCommit = "9ab3b653360d04fb498a238659edeec01e72f62d"
 const vendorPath = path.join(root, `contract/vendor/kokoro-platform-http/${ownerCommit}/platform-http.openapi.json`)
-const ownerDigest = "21a92c1f7d792cfeae40741e52672954d0c89a6dc6a0e6b51eac3b3895738e72"
+const ownerDigest = "4b42dd161c972b3447cfea3a6f80a949bbdb573c46213dbf8ef4c3ecb58e72da"
 const generatedFiles = [
   "client.gen.ts",
   "client/client.gen.ts",
@@ -203,7 +203,7 @@ async function manifestFor(directory) {
     owner: {
       repository_path: "apps/kokoro-capability",
       repository_commit: ownerCommit,
-      contract_version: "3.1.0",
+      contract_version: "3.2.0",
       contract_path: "contract/openapi/platform-http.openapi.json",
       contract_sha256: ownerDigest,
     },

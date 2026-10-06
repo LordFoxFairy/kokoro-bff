@@ -5,6 +5,7 @@ import type { RequestContext } from "../../domain/request-context.js"
 import {
   zGetPublishedPersonalSkillPath,
   zListMcpServersQuery,
+  zListSelfMcpConnectionsQuery,
   zListVisibleSkillCatalogQuery,
   zListVisibleSkillPoolQuery,
   zListVisibleSkillsQuery,
@@ -15,6 +16,7 @@ import { send } from "../response.js"
 
 const clients = new WeakMap<BffConfig, PlatformProjectionHttpClient>()
 const skillQueryKeys = new Set(["query", "tags", "scope_kind", "limit", "cursor"])
+const connectionQueryKeys = new Set(["connection_id", "provider_key", "limit", "cursor"])
 const mcpQueryKeys = new Set(["provider_key", "limit", "cursor"])
 
 function operationFor(path: string[], method: string): ProjectionOperation | null {
@@ -24,13 +26,14 @@ function operationFor(path: string[], method: string): ProjectionOperation | nul
   if (path.length === 2 && path[0] === "skills" && path[1] === "catalog") return "catalog"
   if (path.length === 2 && path[0] === "skills" && !["quota", "drafts", "github"].includes(path[1] ?? "")) return "skill"
   if (path.length === 2 && path[0] === "mcp" && path[1] === "servers") return "mcp"
+  if (path.length === 2 && path[0] === "mcp" && path[1] === "connections") return "mcpConnections"
   return null
 }
 
 function parseQuery(request: IncomingMessage, operation: ProjectionOperation): Record<string, unknown> | null {
   const incoming = queryOf(request)
   if (operation === "skill") return incoming.size === 0 ? {} : null
-  const allowed = operation === "mcp" ? mcpQueryKeys : skillQueryKeys
+  const allowed = operation === "mcpConnections" ? connectionQueryKeys : operation === "mcp" ? mcpQueryKeys : skillQueryKeys
   const query: Record<string, unknown> = {}
   for (const key of new Set(incoming.keys())) {
     if (!allowed.has(key)) return null
@@ -47,13 +50,15 @@ function parseQuery(request: IncomingMessage, operation: ProjectionOperation): R
     } else query[key] = normalized[0]
   }
   const schema =
-    operation === "skills"
-      ? zListVisibleSkillsQuery
-      : operation === "pool"
-        ? zListVisibleSkillPoolQuery
-        : operation === "catalog"
-          ? zListVisibleSkillCatalogQuery
-          : zListMcpServersQuery
+    operation === "mcpConnections"
+      ? zListSelfMcpConnectionsQuery
+      : operation === "skills"
+        ? zListVisibleSkillsQuery
+        : operation === "pool"
+          ? zListVisibleSkillPoolQuery
+          : operation === "catalog"
+            ? zListVisibleSkillCatalogQuery
+            : zListMcpServersQuery
   const checked = schema.safeParse(query)
   return checked.success ? checked.data : null
 }
@@ -71,6 +76,8 @@ export async function livePlatformProjectionRead(
 ): Promise<boolean> {
   const operation = operationFor(path, request.method || "GET")
   if (operation === null) return false
+  const dependencyCode = operation === "mcpConnections" ? "mcp_connection_dependency_unavailable" : "skill_dependency_unavailable"
+  const dependencyMessage = operation === "mcpConnections" ? "MCP connection projection is unavailable" : "Skill projection is unavailable"
   response.setHeader("x-request-id", context.requestId)
   if (
     (request.headers["content-length"] !== undefined && request.headers["content-length"] !== "0") ||
@@ -97,7 +104,7 @@ export async function livePlatformProjectionRead(
   }
   const projection = config.platformProjection
   if (projection?.baseUrl === null || projection?.credentialFile === null || config.iamBaseUrl === null || projection === undefined) {
-    strictError(response, 503, "skill_dependency_unavailable", "Skill projection is unavailable", true)
+    strictError(response, 503, dependencyCode, dependencyMessage, true)
     return true
   }
   let client = clients.get(config)
@@ -120,14 +127,21 @@ export async function livePlatformProjectionRead(
       controller.signal,
     )
   } catch {
-    if (!response.destroyed) strictError(response, 503, "skill_dependency_unavailable", "Skill projection is unavailable", true)
+    if (!controller.signal.aborted && !response.destroyed && !response.writableEnded) strictError(response, 503, dependencyCode, dependencyMessage, true)
     return true
   } finally {
     request.removeListener("aborted", abort)
     response.removeListener("close", abort)
   }
-  if (response.destroyed) return true
+  if (controller.signal.aborted || response.destroyed || response.writableEnded) return true
   if (result.ok) send(response, 200, { data: result.data })
-  else strictError(response, result.status, result.code, result.status === 404 ? "Skill was not found" : "Skill projection is unavailable", result.retryable)
+  else
+    strictError(
+      response,
+      result.status,
+      result.code,
+      result.status === 404 ? "Skill was not found" : result.status === 400 ? "Read query is invalid" : dependencyMessage,
+      result.retryable,
+    )
   return true
 }

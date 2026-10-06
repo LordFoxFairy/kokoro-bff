@@ -1635,12 +1635,13 @@ test("R240 rename contract remains one strict name PATCH beside the approved Bil
   assert.deepEqual(Object.keys(path), ["parameters", "patch"])
   const priorPaths = { ...document.paths }
   delete priorPaths[route]
+  delete priorPaths["/v1/mcp/connections"] // R257 adds only this independently governed read.
   assert.equal(
     createHash("sha256").update(JSON.stringify(priorPaths)).digest("hex"),
     "0a609a0020b6a0d6914c585621275899cc4beece19240a94dd5092fa7f4006ba",
     "all non-rename path definitions stay byte-semantically frozen after the Billing read replacement",
   )
-  assert.equal(baseline.length, 92)
+  assert.equal(baseline.filter((item) => item.operation_id !== "listSelfMcpConnections").length, 92)
   assert.deepEqual(
     baseline.filter((item) => item.operation_id === "renameProject"),
     [{ method: "PATCH", path: route, operation_id: "renameProject" }],
@@ -1823,5 +1824,37 @@ test("R240 rename semantic gate rejects input, receipt, status and header drift"
       inspectBffOpenApi(broken, baseline).some((error) => /renameProject|RenameProject/u.test(error)),
       `rename mutation ${index} must fail closed`,
     )
+  }
+})
+
+test("R257 self MCP connection contract rejects Server substitution and error-profile widening", async () => {
+  const { openapi, baseline } = await readContract()
+  assert.deepEqual(inspectBffOpenApi(openapi, baseline), [])
+  const start = openapi.indexOf("  /v1/mcp/connections:\n")
+  const end = openapi.indexOf("  /v1/mcp/servers:\n", start)
+  const route = openapi.slice(start, end)
+  assert.equal(baseline.length, 93)
+  assert.deepEqual(
+    baseline.filter((item) => item.operation_id === "listSelfMcpConnections"),
+    [{ method: "GET", path: "/v1/mcp/connections", operation_id: "listSelfMcpConnections" }],
+  )
+  assert.match(route, /operationId: listSelfMcpConnections/u)
+  assert.match(route, /name: connection_id/u)
+  assert.doesNotMatch(route, /post:|requestBody:/u)
+  for (const broken of [
+    openapi.replace(route, route.replace("McpConnectionListResponse", "McpServerListResponse")),
+    openapi.replace(route, route.replace("McpConnectionReadBadGateway", "PlatformProjectionReadBadGateway")),
+    openapi.replace(
+      "required: [connection_id, connector_id, server_id, provider_key, transport, status]",
+      "required: [server_id, provider_key, transport, status]",
+    ),
+    openapi.replace(
+      "status: { type: string, enum: [active] }\n    McpConnectionListResponse:",
+      "status: { type: string, enum: [registered] }\n    McpConnectionListResponse:",
+    ),
+    openapi.replace("next_cursor: { type: string, minLength: 1, maxLength: 2048 }", "next_cursor: { type: [string, 'null'] }"),
+  ]) {
+    assert.notEqual(broken, openapi)
+    assert.notDeepEqual(inspectBffOpenApi(broken, baseline), [])
   }
 })

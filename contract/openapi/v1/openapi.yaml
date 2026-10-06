@@ -2733,6 +2733,45 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /v1/mcp/connections:
+    get:
+      tags: [MCP]
+      operationId: listSelfMcpConnections
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: capability.mcp.read
+      summary: List current-person active MCP connections
+      description: Only current-person eligible connections; this read does not grant invocation. Duplicate, unknown, empty and malformed query values are rejected. Cursor is opaque and bound to the current tenant, subject and filters; each page rechecks current eligibility.
+      parameters:
+        - in: query
+          name: connection_id
+          required: false
+          schema: { type: string, minLength: 1, maxLength: 191, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        - $ref: '#/components/parameters/CapabilityProviderKey'
+        - $ref: '#/components/parameters/CapabilityLimit'
+        - $ref: '#/components/parameters/CapabilityCursor'
+      responses:
+        '200':
+          description: Current-person active MCP connection list
+          headers:
+            x-request-id:
+              required: true
+              schema: { type: string, minLength: 1, maxLength: 128 }
+            Cache-Control:
+              required: true
+              schema: { type: string, const: no-store }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpConnectionListResponse'
+        '403': { $ref: '#/components/responses/McpConnectionReadForbidden' }
+        '400': { $ref: '#/components/responses/McpConnectionReadBadRequest' }
+        '502': { $ref: '#/components/responses/McpConnectionReadBadGateway' }
+        '503': { $ref: '#/components/responses/McpConnectionReadUnavailable' }
+        '401': { $ref: '#/components/responses/McpConnectionReadUnauthorized' }
+        '429': { $ref: '#/components/responses/McpConnectionReadRateLimited' }
   /v1/mcp/servers:
     get:
       tags: [MCP]
@@ -6127,6 +6166,46 @@ components:
         categories:
           type: array
           items: { type: string }
+    McpConnectionProjection:
+      type: object
+      required: [connection_id, connector_id, server_id, provider_key, transport, status]
+      additionalProperties: false
+      properties:
+        connection_id: { type: string, minLength: 1, maxLength: 191, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        connector_id: { type: string, minLength: 1, maxLength: 191, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        server_id: { type: string, minLength: 1, maxLength: 191, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        provider_key: { type: string, minLength: 1, maxLength: 191 }
+        transport: { type: string, enum: [streamable_http] }
+        status: { type: string, enum: [active] }
+    McpConnectionListResponse:
+      type: object
+      required: [data]
+      additionalProperties: false
+      properties:
+        data:
+          type: object
+          required: [connections]
+          additionalProperties: false
+          properties:
+            connections:
+              type: array
+              items: { $ref: '#/components/schemas/McpConnectionProjection' }
+            next_cursor: { type: string, minLength: 1, maxLength: 2048 }
+    McpConnectionReadErrorResponse:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error:
+          type: object
+          required: [code, message, retryable]
+          additionalProperties: false
+          properties:
+            code:
+              type: string
+              enum: [invalid_query_parameter, service_auth_failed, session_authentication_required, session_invalid, session_forbidden, session_rate_limited, product_tenant_not_configured, product_tenant_forbidden, iam_admission_unavailable, mcp_connection_dependency_unavailable, mcp_connection_response_invalid]
+            message: { type: string, minLength: 1 }
+            retryable: { type: boolean }
     PlatformProjectionReadErrorResponse:
       type: object
       required: [error]
@@ -6973,6 +7052,129 @@ components:
                     type: object
                     properties:
                       code: { type: string, enum: [skill_installation_dependency_timeout] }
+    McpConnectionReadBadRequest:
+      description: Product projection read returned HTTP 400
+      headers:
+        x-request-id:
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          required: true
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/McpConnectionReadErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [invalid_query_parameter] }
+    McpConnectionReadUnauthorized:
+      description: Product projection read returned HTTP 401
+      headers:
+        x-request-id:
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          required: true
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/McpConnectionReadErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [session_authentication_required, session_invalid] }
+    McpConnectionReadForbidden:
+      description: Product projection read returned HTTP 403
+      headers:
+        x-request-id:
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          required: true
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/McpConnectionReadErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [service_auth_failed, session_forbidden, product_tenant_forbidden] }
+    McpConnectionReadRateLimited:
+      description: Product projection read returned HTTP 429
+      headers:
+        x-request-id:
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          required: true
+          schema: { type: string, const: no-store }
+        Retry-After:
+          required: false
+          schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/McpConnectionReadErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [session_rate_limited] }
+    McpConnectionReadBadGateway:
+      description: Product projection read returned HTTP 502
+      headers:
+        x-request-id:
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          required: true
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/McpConnectionReadErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [mcp_connection_response_invalid] }
+    McpConnectionReadUnavailable:
+      description: Product projection read returned HTTP 503
+      headers:
+        x-request-id:
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        Cache-Control:
+          required: true
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/McpConnectionReadErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [product_tenant_not_configured, iam_admission_unavailable, mcp_connection_dependency_unavailable] }
     PlatformProjectionReadBadRequest:
       description: Product projection read returned HTTP 400
       headers:

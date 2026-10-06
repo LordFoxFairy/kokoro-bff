@@ -1,3 +1,7 @@
+## R257 本人 MCP Connection 读取候选（未发布）
+
+唯一 public 8.0.0 canonical 新增 GET /v1/mcp/connections / listSelfMcpConnections，旧 Server 资源不变；本次候选尚待 Root 验证与新 immutable commit/digest，下面 R255 blob 是历史交接，不再声称与当前候选相等。HTTP consumer 固定 Platform 3.2.0 / 9ab3b653360d04fb498a238659edeec01e72f62d / SHA256 4b42dd161c972b3447cfea3a6f80a949bbdb573c46213dbf8ef4c3ecb58e72da，16 generated 只由既有 generator 生成。六字段本人 active 投影不是连接创建/授权/启用或调用成功；Web 后继独立固定正式发布 artifact。
+
 ## R255 02:44 ScheduledTask 本地 immutable artifact 交接
 
 Root已接收固定owner commit `45e67f0e783fb4bcdb086665a09b7c3c5fadbb6f` 的唯一 `contract/openapi/v1/openapi.yaml` 原字节：public发布前 `8.0.0`，git blob `1b42d49388ca26eaaef7371daf23cbf1158d5fe6`，SHA-256 `0802a31f9469a17cd8fc8b78e6d2326e0571bc93f3ac8d19811a42a1b185df95`。当前canonical与该immutable blob byte-equal；旧Web pin97a99d35/33971eaa仍冻结，不改旧commit内容。此本地交接允许后继消费者锁定新commit/version/digest，经现generator正规生成；不是remote push、registry release或正常运行激活。

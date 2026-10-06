@@ -181,7 +181,7 @@ async function handle(
     ((businessPath[0] === "skills" &&
       (businessPath.length === 1 ||
         (businessPath.length === 2 && businessPath[1] !== "quota" && businessPath[1] !== "drafts" && businessPath[1] !== "github"))) ||
-      (businessPath.length === 2 && businessPath[0] === "mcp" && businessPath[1] === "servers"))
+      (businessPath.length === 2 && businessPath[0] === "mcp" && (businessPath[1] === "servers" || businessPath[1] === "connections")))
   if (request.method === "GET" && businessPath.length === 3 && businessPath[0] === "projects" && businessPath[2] === "resources")
     response.setHeader("x-request-id", id)
   if (request.method === "POST" && businessPath.length === 2 && businessPath[0] === "library" && businessPath[1] === "files")

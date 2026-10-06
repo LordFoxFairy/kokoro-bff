@@ -43,6 +43,15 @@ export type PublishedPersonalSkill = {
   tags: Array<string>
 }
 
+export type McpConnection = {
+  connection_id: string
+  connector_id: string
+  server_id: string
+  provider_key: string
+  transport: "streamable_http"
+  status: "active"
+}
+
 export type RequestId = string
 
 /**
@@ -69,6 +78,8 @@ export type Cursor = string
  * Canonical Platform Skill ID, not a source_ref or package asset ID.
  */
 export type SkillId = string
+
+export type McpConnectionId = string
 
 export type ListVisibleSkillsData = {
   body?: never
@@ -382,3 +393,65 @@ export type ListMcpServersResponses = {
 }
 
 export type ListMcpServersResponse = ListMcpServersResponses[keyof ListMcpServersResponses]
+
+export type ListSelfMcpConnectionsData = {
+  body?: never
+  headers: {
+    "x-kokoro-request-id"?: string
+    /**
+     * Optional consistency assertion only; tenant authority is IAM introspection.
+     */
+    "x-kokoro-tenant-id"?: string
+    /**
+     * Product Session subject projected by the authenticated kokoro-bff workload after IAM admission; never a browser-supplied tenant identity.
+     */
+    "x-kokoro-subject": string
+  }
+  path?: never
+  query?: {
+    connection_id?: string
+    provider_key?: string
+    limit?: number
+    cursor?: string
+  }
+  url: "/v1/mcp/connections"
+}
+
+export type ListSelfMcpConnectionsErrors = {
+  /**
+   * Stable error envelope
+   */
+  400: ErrorEnvelope
+  /**
+   * Stable error envelope
+   */
+  401: ErrorEnvelope
+  /**
+   * Stable error envelope
+   */
+  403: ErrorEnvelope
+  /**
+   * Stable error envelope
+   */
+  500: ErrorEnvelope
+  /**
+   * Stable error envelope
+   */
+  503: ErrorEnvelope
+}
+
+export type ListSelfMcpConnectionsError = ListSelfMcpConnectionsErrors[keyof ListSelfMcpConnectionsErrors]
+
+export type ListSelfMcpConnectionsResponses = {
+  /**
+   * Current subject active MCP connections
+   */
+  200: {
+    data: {
+      connections: Array<McpConnection>
+      next_cursor?: string
+    }
+  }
+}
+
+export type ListSelfMcpConnectionsResponse = ListSelfMcpConnectionsResponses[keyof ListSelfMcpConnectionsResponses]

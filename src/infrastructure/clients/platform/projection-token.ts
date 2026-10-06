@@ -9,7 +9,9 @@ export class ProjectionTokenSource {
     private readonly timeoutMs: number,
   ) {}
   async get(tenantId: string, signal?: AbortSignal): Promise<string> {
+    signal?.throwIfAborted()
     const credential = await this.credentials.read(tenantId)
+    signal?.throwIfAborted()
     const cached = this.#tokens.get(credential.cacheKey)
     if (cached && cached.expiresAt - Date.now() > 5_000) return cached.value
     let flight = this.#flights.get(credential.cacheKey)

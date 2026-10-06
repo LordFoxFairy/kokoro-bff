@@ -312,6 +312,8 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
         "SkillPoolResponse",
         "SkillCatalogResponse",
         "McpServerListResponse",
+        "McpConnectionListResponse",
+        "McpConnectionReadErrorResponse",
       ].includes(block.name)
     )
       continue
@@ -337,7 +339,8 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
   for (const operation of operations) {
     const operationId = operation.fields.get("operationId") ?? operation.name
     const isPublishedPersonalSkill = operationId === "getPublishedPersonalSkill" && operation.method === "GET" && operation.path === "/v1/skills/{skill_id}"
-    const isPlatformProjectionRead = operation.method === "GET" && ["listSkills", "listSkillPool", "listSkillCatalog", "listMcpServers"].includes(operationId)
+    const isPlatformProjectionRead =
+      operation.method === "GET" && ["listSkills", "listSkillPool", "listSkillCatalog", "listMcpServers", "listSelfMcpConnections"].includes(operationId)
     const isCreateSkillDraft = operationId === "createSkillDraft"
     const isMoveSession = operationId === "moveSession" && operation.method === "POST" && operation.path === "/v1/sessions/{id}/move"
     const isRenameProject = operationId === "renameProject" && operation.method === "PATCH" && operation.path === "/v1/projects/{projectId}/name"
@@ -551,7 +554,8 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
           ERROR_RESPONSE_COMPONENTS.has(match[1]) ||
           isCreateSkillDraft ||
           (isPublishedPersonalSkill && match[1].startsWith("PublishedPersonalSkill")) ||
-          (isPlatformProjectionRead && match[1].startsWith("PlatformProjectionRead")) ||
+          (isPlatformProjectionRead &&
+            (match[1].startsWith("PlatformProjectionRead") || (operationId === "listSelfMcpConnections" && match[1].startsWith("McpConnectionRead")))) ||
           (isGetSkillPackageUpload && match[1].startsWith("SkillPackageUploadGet")) ||
           (isBeginSkillPackageUpload && match[1].startsWith("SkillPackageBegin")) ||
           (isCompleteSkillPackageUpload && match[1].startsWith("SkillPackageComplete")) ||
@@ -1841,6 +1845,7 @@ function platformProjectionReadContractErrors(
     ["listSkillPool", "/v1/skills/pool", "SkillPoolResponse"],
     ["listSkillCatalog", "/v1/skills/catalog", "SkillCatalogResponse"],
     ["listMcpServers", "/v1/mcp/servers", "McpServerListResponse"],
+    ["listSelfMcpConnections", "/v1/mcp/connections", "McpConnectionListResponse"],
   ] as const
   const failures = {
     "400": "PlatformProjectionReadBadRequest",
@@ -1875,11 +1880,32 @@ function platformProjectionReadContractErrors(
     if (!success.includes(`#/components/schemas/${responseSchema}`) || !requiredHeaders(success)) {
       errors.push(`${operationId} 200 must expose ${responseSchema} with required no-store and request ID headers`)
     }
-    for (const [status, component] of Object.entries(failures)) {
+    for (const [status, legacyComponent] of Object.entries(failures)) {
+      const component = operationId === "listSelfMcpConnections" ? legacyComponent.replace("PlatformProjectionRead", "McpConnectionRead") : legacyComponent
       if (responses.get(status)?.trim() !== `'${status}': { $ref: '#/components/responses/${component}' }`) {
         errors.push(`${operationId} ${status} must use ${component}`)
       }
     }
+  }
+  const connection = schemas.get("McpConnectionProjection")
+  const connectionFields = ["connection_id", "connector_id", "server_id", "provider_key", "transport", "status"]
+  if (
+    !connection ||
+    JSON.stringify(topLevelRequired(connection)) !== JSON.stringify(connectionFields) ||
+    JSON.stringify(schemaProperties(connection)) !== JSON.stringify(connectionFields) ||
+    !connection.text.includes("additionalProperties: false") ||
+    !connection.text.includes("transport: { type: string, enum: [streamable_http] }") ||
+    !connection.text.includes("status: { type: string, enum: [active] }")
+  ) {
+    errors.push("MCP connection projection must expose exactly six owner-native fields")
+  }
+  const connectionList = schemas.get("McpConnectionListResponse")
+  if (
+    !connectionList?.text.includes("required: [connections]") ||
+    !connectionList.text.includes("items: { $ref: '#/components/schemas/McpConnectionProjection' }") ||
+    !connectionList.text.includes("next_cursor: { type: string, minLength: 1, maxLength: 2048 }")
+  ) {
+    errors.push("MCP connection list must preserve its opaque optional bounded cursor")
   }
   const quota = operations.find((item) => item.method === "GET" && item.path === "/v1/skills/quota")
   if (!quota || collectResponseBlocks(quota).has("200") || !collectResponseBlocks(quota).has("503")) {
@@ -1900,12 +1926,22 @@ function platformProjectionReadContractErrors(
       errors.push(`${responseSchema} must expose a strict data-only envelope`)
     }
   }
-  for (const [name, codes] of Object.entries(allowedCodes)) {
+  const connectionCodes = Object.fromEntries(
+    Object.entries(allowedCodes).map(([name, codes]) => [
+      name.replace("PlatformProjectionRead", "McpConnectionRead"),
+      codes.map((code) =>
+        code
+          .replace("skill_response_invalid", "mcp_connection_response_invalid")
+          .replace("skill_dependency_unavailable", "mcp_connection_dependency_unavailable"),
+      ),
+    ]),
+  )
+  for (const [name, codes] of Object.entries({ ...allowedCodes, ...connectionCodes })) {
     const component = responseComponents.get(name)
     if (
       !component ||
       !requiredHeaders(component.text) ||
-      !component.text.includes("#/components/schemas/PlatformProjectionReadErrorResponse") ||
+      !component.text.includes(`#/components/schemas/${name.startsWith("McpConnectionRead") ? "McpConnectionRead" : "PlatformProjectionRead"}ErrorResponse`) ||
       !component.text.includes(`enum: [${codes.join(", ")}]`)
     ) {
       errors.push(`${name} must constrain error codes and cache headers`)

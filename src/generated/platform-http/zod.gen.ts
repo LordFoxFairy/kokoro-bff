@@ -41,6 +41,27 @@ export const zPublishedPersonalSkill = z.object({
   tags: z.array(z.string()),
 })
 
+export const zMcpConnection = z.object({
+  connection_id: z
+    .string()
+    .min(1)
+    .max(191)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/),
+  connector_id: z
+    .string()
+    .min(1)
+    .max(191)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/),
+  server_id: z
+    .string()
+    .min(1)
+    .max(191)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/),
+  provider_key: z.string().min(1).max(191),
+  transport: z.enum(["streamable_http"]),
+  status: z.enum(["active"]),
+})
+
 export const zRequestId = z.string().min(1).max(255)
 
 /**
@@ -71,6 +92,12 @@ export const zCursor = z.string().min(1).max(2048)
  * Canonical Platform Skill ID, not a source_ref or package asset ID.
  */
 export const zSkillId = z
+  .string()
+  .min(1)
+  .max(191)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/)
+
+export const zMcpConnectionId = z
   .string()
   .min(1)
   .max(191)
@@ -208,5 +235,37 @@ export const zListMcpServersResponse = z.object({
   data: z.object({
     servers: z.array(zMcpServer),
     next_cursor: z.string().optional(),
+  }),
+})
+
+export const zListSelfMcpConnectionsHeaders = z.object({
+  "x-kokoro-request-id": z.string().min(1).max(255).optional(),
+  "x-kokoro-tenant-id": z.string().min(1).max(255).optional(),
+  "x-kokoro-subject": z
+    .string()
+    .min(1)
+    .max(255)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._:@\/-]{0,254}$/),
+})
+
+export const zListSelfMcpConnectionsQuery = z.object({
+  connection_id: z
+    .string()
+    .min(1)
+    .max(191)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/)
+    .optional(),
+  provider_key: z.string().min(1).max(191).optional(),
+  limit: z.int().gte(1).lte(100).optional().default(50),
+  cursor: z.string().min(1).max(2048).optional(),
+})
+
+/**
+ * Current subject active MCP connections
+ */
+export const zListSelfMcpConnectionsResponse = z.object({
+  data: z.object({
+    connections: z.array(zMcpConnection),
+    next_cursor: z.string().min(1).max(2048).optional(),
   }),
 })
