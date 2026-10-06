@@ -2826,10 +2826,7 @@ integrationTest("R257 terminal Scheduler rejection is projected by authoritative
     assert.equal(created.next_run_at, null)
 
     await waitFor(async () => {
-      const result = await pool.query(
-        "SELECT status,last_error_code FROM bff_scheduled_task_outbox WHERE tenant_id=$1 AND task_id=$2",
-        [tenant, created.id],
-      )
+      const result = await pool.query("SELECT status,last_error_code FROM bff_scheduled_task_outbox WHERE tenant_id=$1 AND task_id=$2", [tenant, created.id])
       return result.rows.length === 1 && result.rows[0].status === "failed" && result.rows[0].last_error_code === "invalid_schedule"
     })
     const ownSchedulerCalls = schedulerCalls.filter((call) => call.tenant === tenant && call.body.body.task_id === created.id)
