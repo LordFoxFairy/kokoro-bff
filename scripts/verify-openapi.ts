@@ -1570,6 +1570,35 @@ function protocolErrors(parameters: Map<string, NamedBlock>, schemas: Map<string
   return errors
 }
 
+function scheduledTaskTimingContractErrors(schemas: Map<string, NamedBlock>): string[] {
+  const errors: string[] = []
+  const require = (condition: boolean, message: string): void => {
+    if (!condition) errors.push(message)
+  }
+  const task = schemas.get("ScheduledTask")
+  const create = schemas.get("CreateScheduledTaskRequest")
+  const patch = schemas.get("ScheduledTaskPatchRequest")
+  require(task !== undefined, "ScheduledTask schema is required")
+  require(create !== undefined, "CreateScheduledTaskRequest schema is required")
+  require(patch !== undefined, "ScheduledTaskPatchRequest schema is required")
+  if (task !== undefined) {
+    require(topLevelRequired(task).includes("next_run_at"), "ScheduledTask.next_run_at must remain required")
+    require(/^ {8}next_run_at: \{ type: \[string, 'null'\], format: date-time \}$/mu.test(task.text), "ScheduledTask.next_run_at must be a nullable date-time")
+  }
+  for (const [name, input] of [
+    ["CreateScheduledTaskRequest", create],
+    ["ScheduledTaskPatchRequest", patch],
+  ] as const) {
+    if (input === undefined) continue
+    const properties = schemaProperties(input)
+    require(/^ {6}additionalProperties: false$/mu.test(input.text), `${name} must reject unknown fields`)
+    require(properties.includes("recurrence_anchor_at"), `${name}.recurrence_anchor_at is required in the schema`)
+    require(!properties.includes("next_run_at"), `${name} must not accept next_run_at`)
+    require(/^ {8}recurrence_anchor_at: \{ type: string, format: date-time \}$/mu.test(input.text), `${name}.recurrence_anchor_at must be a date-time`)
+  }
+  return errors
+}
+
 function moveSessionContractErrors(
   source: string,
   parameters: Map<string, NamedBlock>,
@@ -2031,6 +2060,7 @@ export function inspectBffOpenApi(source: string, baseline: readonly BaselineOpe
     ...skillValidateContractErrors(parameters, schemas, operations, responseComponents),
     ...skillPublishContractErrors(parameters, schemas, operations, responseComponents),
     ...protocolErrors(parameters, schemas, operations),
+    ...scheduledTaskTimingContractErrors(schemas),
   ]
   return [...new Set(errors)]
 }

@@ -6044,7 +6044,7 @@ components:
           enum: [daily, weekly]
         time: { type: string }
         timezone: { type: string }
-        next_run_at: { type: string, format: date-time }
+        next_run_at: { type: [string, 'null'], format: date-time }
         expires_at: { type: string, format: date-time }
         auto_approve: { type: boolean }
         enabled: { type: boolean }
@@ -6090,12 +6090,27 @@ components:
           enum: [daily, weekly]
         time: { type: string }
         timezone: { type: string }
-        next_run_at: { type: string, format: date-time }
+        recurrence_anchor_at: { type: string, format: date-time }
         expires_at: { type: string, format: date-time }
         auto_approve: { type: boolean }
     ScheduledTaskPatchRequest:
       type: object
-      additionalProperties: true
+      additionalProperties: false
+      properties:
+        title: { type: string }
+        prompt: { type: string }
+        frequency:
+          type: string
+          enum: [daily, weekly]
+        time: { type: string }
+        timezone: { type: string }
+        recurrence_anchor_at: { type: string, format: date-time }
+        expires_at: { type: [string, 'null'], format: date-time }
+        auto_approve: { type: boolean }
+        enabled: { type: boolean }
+        status:
+          type: string
+          enum: [active, paused, failed]
     Skill:
       type: object
       required: [source_ref, name, description, content_hash, scope, revision, enabled, categories]

@@ -1,3 +1,11 @@
+## R255 01:41 ScheduledTask 时间机器合同候选（未发布，生产实现待续）
+
+当前 public OpenAPI 8.0.0 发布前切片：create/closed PATCH 仅接受可选 recurrence_anchor_at，不再接受输入 next_run_at；输出 next_run_at 必有且可 null。保原92操作、权限、envelope、weekly锚点规则和owner计算职责，无旧字段alias。仅机器合同、现semantic gate及既有contract断言改变；生产parser/SQL/receipt投影/generated消费者/pins未改变，暂不发布或宣称正式用户修好。
+
+Root按本仓Node22.22.2重跑目标format、typecheck、lint、build、contract:semantic、inventory、focused 77/0、contract:check 242/0全部exit0；worker先前Node24 pin失败原日志保留，未修改pin放宽门。独立冻结审查 f1ee0cb0 无P0/P1/P2；490 tracked中批准三文件变化，另485 exact、原mixed保护。正常每周08:00创建与刷新反例仍FAIL；下一同卡实施源码/schema及Scheduler receipt事务投影，最后真实浏览器复验。这些工程门不替代E2E。
+
+证据：Root ignored var/dev/r255-preserve/0141-bff-root-gates.json，冻结handoff 3e34fb14、diff 1438e0d6；SQL/真实Scheduler/浏览器本切片未执行，0模型/赠送/结算/服务重启。
+
 # R251 Skills V2 consumer 候选（2026-10-05，未发布）
 
 当前隔离候选把唯一 Platform Connect source 固定到 `494b118ae7c29f1fc1005122d72c6c2bbf2640b6`，验证 V7 `3384a88f…` → V6 `0d728881…` → V5 `3f97b3c9…` 继承、当前 Proto/descriptor，并由现 generator 正常生成；V7 仍为 inactive/routable=false，不表示 activation。

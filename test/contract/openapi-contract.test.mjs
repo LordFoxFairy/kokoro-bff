@@ -1213,7 +1213,7 @@ test("R71 closed ScheduledTask creation schema declares optional nonempty projec
   const properties = Object.keys(schema.properties).sort()
   assert.deepEqual(
     properties,
-    ["title", "prompt", "frequency", "time", "timezone", "next_run_at", "expires_at", "auto_approve", "project_id"].sort(),
+    ["title", "prompt", "frequency", "time", "timezone", "recurrence_anchor_at", "expires_at", "auto_approve", "project_id"].sort(),
     "closed public6 creation schema retains optional project_id while excluding create-only state controls and Conversation linkage",
   )
   const project = schema.properties.project_id
@@ -1251,7 +1251,7 @@ test("R73 create no longer advertises caller-set enabled/status or silent-ignore
   const schema = (await r73ScheduledContract()).components.schemas.CreateScheduledTaskRequest
   assert.deepEqual(
     Object.keys(schema.properties).sort(),
-    ["title", "prompt", "frequency", "time", "timezone", "next_run_at", "expires_at", "auto_approve", "project_id"].sort(),
+    ["title", "prompt", "frequency", "time", "timezone", "recurrence_anchor_at", "expires_at", "auto_approve", "project_id"].sort(),
   )
 })
 
@@ -1296,10 +1296,23 @@ test("R73 create still declares no query input and keeps the existing PATCH cont
   )
   const patch = document.paths["/v1/scheduled-tasks/{id}"].patch
   assert.equal(patch.requestBody.content["application/json"].schema.$ref, "#/components/schemas/ScheduledTaskPatchRequest")
-  assert.deepEqual(document.components.schemas.ScheduledTaskPatchRequest, {
-    type: "object",
-    additionalProperties: true,
-  })
+  const patchSchema = document.components.schemas.ScheduledTaskPatchRequest
+  assert.equal(patchSchema.type, "object")
+  assert.equal(patchSchema.additionalProperties, false)
+  assert.deepEqual(Object.keys(patchSchema.properties).sort(), [
+    "auto_approve",
+    "enabled",
+    "expires_at",
+    "frequency",
+    "prompt",
+    "recurrence_anchor_at",
+    "status",
+    "time",
+    "timezone",
+    "title",
+  ])
+  assert.equal(Object.hasOwn(patchSchema.properties, "next_run_at"), false)
+  assert.deepEqual(patchSchema.properties.recurrence_anchor_at, { type: "string", format: "date-time" })
 })
 
 function r75RequiredScheduledPayload() {
@@ -1316,7 +1329,7 @@ test("R75 creation schema requires exactly the five production-required properti
   const document = await r73ScheduledContract()
   const schema = document.components.schemas.CreateScheduledTaskRequest
   assert.deepEqual([...(schema.required ?? [])].sort(), ["title", "prompt", "frequency", "time", "timezone"].sort())
-  for (const field of ["project_id", "next_run_at", "expires_at", "auto_approve"]) {
+  for (const field of ["project_id", "recurrence_anchor_at", "expires_at", "auto_approve"]) {
     assert.equal(schema.required.includes(field), false, `${field} must remain optional`)
     assert.ok(Object.hasOwn(schema.properties, field), `${field} must remain declared`)
   }
@@ -1324,6 +1337,40 @@ test("R75 creation schema requires exactly the five production-required properti
     const requestBody = document.paths[path].post.requestBody
     assert.equal(requestBody.required, true)
     assert.equal(requestBody.content["application/json"].schema.$ref, "#/components/schemas/CreateScheduledTaskRequest")
+  }
+})
+
+test("R255 ScheduledTask publishes an anchor-only input and a required nullable Scheduler-confirmed next instant", async () => {
+  const document = await r73ScheduledContract()
+  const create = document.components.schemas.CreateScheduledTaskRequest
+  const patch = document.components.schemas.ScheduledTaskPatchRequest
+  const task = document.components.schemas.ScheduledTask
+
+  for (const input of [create, patch]) {
+    assert.equal(Object.hasOwn(input.properties, "next_run_at"), false)
+    assert.deepEqual(input.properties.recurrence_anchor_at, { type: "string", format: "date-time" })
+  }
+  assert.equal(create.additionalProperties, false)
+  assert.equal(patch.additionalProperties, false)
+  assert.ok(task.required.includes("next_run_at"))
+  assert.deepEqual(task.properties.next_run_at, { type: ["string", "null"], format: "date-time" })
+})
+
+test("R255 ScheduledTask semantic gate rejects anchor aliases, date-time drift, and a nonnullable or optional next projection", async () => {
+  const { openapi, baseline } = await readContract()
+  assert.deepEqual(inspectBffOpenApi(openapi, baseline), [])
+  const mutations = [
+    openapi.replace("next_run_at: { type: [string, 'null'], format: date-time }", "next_run_at: { type: string, format: date-time }"),
+    openapi.replaceAll("recurrence_anchor_at: { type: string, format: date-time }", "next_run_at: { type: string, format: date-time }"),
+    openapi.replace("recurrence_anchor_at: { type: string, format: date-time }", "recurrence_anchor_at: { type: string }"),
+    openapi.replace(
+      "required: [id, title, prompt, frequency, time, timezone, next_run_at, auto_approve, enabled, status]",
+      "required: [id, title, prompt, frequency, time, timezone, auto_approve, enabled, status]",
+    ),
+  ]
+  for (const [index, mutation] of mutations.entries()) {
+    assert.notEqual(mutation, openapi, `mutation ${index} must change the canonical contract`)
+    assert.notDeepEqual(inspectBffOpenApi(mutation, baseline), [], `mutation ${index} must be rejected`)
   }
 })
 
