@@ -2098,6 +2098,14 @@ export function inspectBffOpenApi(source: string, baseline: readonly BaselineOpe
     ...protocolErrors(parameters, schemas, operations),
     ...scheduledTaskTimingContractErrors(schemas),
   ]
+  const currentUserIdentity = schemas.get("CurrentUserIdentity")?.text ?? ""
+  if (
+    !/^      required: \[user_id, tenant_id, platform_admin\]$/mu.test(currentUserIdentity) ||
+    !/^      additionalProperties: false$/mu.test(currentUserIdentity) ||
+    !/^        platform_admin: \{ type: boolean \}$/mu.test(currentUserIdentity)
+  ) {
+    errors.push("CurrentUserIdentity must expose the required strict platform_admin boolean")
+  }
   return [...new Set(errors)]
 }
 

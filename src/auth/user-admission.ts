@@ -1,11 +1,11 @@
 import type { IncomingMessage } from "node:http"
 
 import type { BffConfig } from "../config/runtime.js"
-import type { RequestContext } from "../domain/request-context.js"
+import type { AdmittedUserRequestContext } from "../domain/request-context.js"
 import type { SessionAdmission } from "./session-admission.types.js"
 
 export type UserAdmissionResult =
-  | Readonly<{ ok: true; context: RequestContext; bearerToken: string }>
+  | Readonly<{ ok: true; context: AdmittedUserRequestContext; bearerToken: string }>
   | Readonly<{ ok: false; status: 401 | 403 | 429 | 503; code: string; retryAfter?: string }>
 
 function authorizationValues(request: IncomingMessage): string[] {
@@ -40,5 +40,5 @@ export async function authorizeUserRequest(
   const result = await admission.verify({ token, requestId, signal })
   if (!result.ok) return result
   if (result.identity.namespace !== fixedTenantId) return { ok: false, status: 403, code: "product_tenant_forbidden" }
-  return { ok: true, context: { requestId, identity: result.identity }, bearerToken: token }
+  return { ok: true, context: { requestId, identity: result.identity, platformAdmin: result.platformAdmin }, bearerToken: token }
 }

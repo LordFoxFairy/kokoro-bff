@@ -80,9 +80,9 @@ test("published browser-private policy is a deterministic read-only projection o
   })
 })
 
-test("vendored IAM 0.7.0 contract and generated-client manifest pin the execution owner bytes", async () => {
-  const ownerCommit = "e3c035b99cf9479ac8357c7d38147f1541dcbcac"
-  const expectedDigest = "c8d7af8a365ad5d13eaabccf7f31133e0918ef198bdc3e7c790d90933eae91b2"
+test("vendored IAM 0.8.0 contract and generated-client manifest pin the execution owner bytes", async () => {
+  const ownerCommit = "d24aa2b697de59a350e8588720620df331bc5da5"
+  const expectedDigest = "0153a16f5c2779803d73d93d5533caf1b377d21299cefe01613d7cd1b2cbb194"
   const vendor = await readFile(new URL(`../contract/vendor/kokoro-iam/${ownerCommit}/iam.internal.v1.json`, import.meta.url)).catch(() => null)
   assert.notEqual(vendor, null)
   assert.equal(createHash("sha256").update(vendor!).digest("hex"), expectedDigest)
@@ -90,15 +90,19 @@ test("vendored IAM 0.7.0 contract and generated-client manifest pin the executio
     new URL("../contract/vendor/kokoro-iam/4d981441d154c83b63987f284e3a82a559595870/iam.internal.v1.json", import.meta.url),
   ).catch(() => null)
   assert.equal(oldVendor, null, "old owner vendor path must be removed")
+  const retiredAdmissionVendor = await readFile(
+    new URL("../contract/vendor/kokoro-iam/e3c035b99cf9479ac8357c7d38147f1541dcbcac/iam.internal.v1.json", import.meta.url),
+  ).catch(() => null)
+  assert.equal(retiredAdmissionVendor, null, "retired 0.7 admission vendor path must be removed")
   const contract = JSON.parse(vendor!.toString("utf8")) as { info?: { version?: string } }
-  assert.equal(contract.info?.version, "0.7.0")
+  assert.equal(contract.info?.version, "0.8.0")
   const manifest = JSON.parse(await readFile(new URL("../contract/dependencies/iam-http.json", import.meta.url), "utf8")) as {
     owner?: { repository_commit?: string; contract_version?: string; contract_sha256?: string }
   }
   assert.deepEqual(manifest.owner, {
     repository_path: "apps/kokoro-iam",
     repository_commit: ownerCommit,
-    contract_version: "0.7.0",
+    contract_version: "0.8.0",
     contract_path: "contract/openapi/iam.internal.v1.json",
     contract_sha256: expectedDigest,
   })

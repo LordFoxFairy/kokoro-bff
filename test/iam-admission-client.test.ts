@@ -55,7 +55,11 @@ test("IAM admission sends one bodyless bearer request and returns only the trust
     request.on("end", () => {
       captured = { method: request.method, url: request.url, body: Buffer.concat(chunks), headers: request.headers }
       response.writeHead(200, responseHeaders())
-      response.end(JSON.stringify({ data: { allowed: true, tenant_id: "tenant-a", user_id: "user-a", session_id: "session-a", client_id: "web-a" } }))
+      response.end(
+        JSON.stringify({
+          data: { allowed: true, tenant_id: "tenant-a", user_id: "user-a", session_id: "session-a", client_id: "web-a", platform_admin: false },
+        }),
+      )
     })
   })
 
@@ -69,7 +73,7 @@ test("IAM admission sends one bodyless bearer request and returns only the trust
   assert.equal(captured?.headers["x-request-id"], "public-request")
   assert.equal(captured?.headers["x-kokoro-namespace"], undefined)
   assert.equal(captured?.headers["x-kokoro-principal-id"], undefined)
-  assert.deepEqual(result, { ok: true, identity: { namespace: "tenant-a", userId: "user-a" } })
+  assert.deepEqual(result, { ok: true, identity: { namespace: "tenant-a", userId: "user-a" }, platformAdmin: false })
 })
 
 test("IAM admission replaces an invalid caller request id before owner I/O", async () => {
@@ -77,7 +81,9 @@ test("IAM admission replaces an invalid caller request id before owner I/O", asy
   const baseUrl = await listen((request, response) => {
     ownerRequestId = String(request.headers["x-request-id"] ?? "")
     response.writeHead(200, responseHeaders())
-    response.end(JSON.stringify({ data: { allowed: true, tenant_id: "tenant-a", user_id: "user-a", session_id: "session-a", client_id: "web-a" } }))
+    response.end(
+      JSON.stringify({ data: { allowed: true, tenant_id: "tenant-a", user_id: "user-a", session_id: "session-a", client_id: "web-a", platform_admin: false } }),
+    )
   })
 
   const result = await client(baseUrl).verify({ token: "session-token", requestId: "invalid request id!", signal: new AbortController().signal })
@@ -89,10 +95,10 @@ test("IAM admission replaces an invalid caller request id before owner I/O", asy
 
 test("IAM admission rejects false, incomplete, and extra-field success payloads", async () => {
   const payloads = [
-    { data: { allowed: false, tenant_id: "tenant-a", user_id: "user-a", session_id: "session-a", client_id: "web-a" } },
-    { data: { allowed: true, tenant_id: "", user_id: "user-a", session_id: "session-a", client_id: "web-a" } },
-    { data: { allowed: true, tenant_id: "tenant-a", user_id: "user-a", session_id: "session-a", client_id: "web-a", extra: true } },
-    { data: { allowed: true, tenant_id: "tenant-a", user_id: "user-a", session_id: "session-a", client_id: "web-a" }, extra: true },
+    { data: { allowed: false, tenant_id: "tenant-a", user_id: "user-a", session_id: "session-a", client_id: "web-a", platform_admin: false } },
+    { data: { allowed: true, tenant_id: "", user_id: "user-a", session_id: "session-a", client_id: "web-a", platform_admin: false } },
+    { data: { allowed: true, tenant_id: "tenant-a", user_id: "user-a", session_id: "session-a", client_id: "web-a", platform_admin: false, extra: true } },
+    { data: { allowed: true, tenant_id: "tenant-a", user_id: "user-a", session_id: "session-a", client_id: "web-a", platform_admin: false }, extra: true },
   ]
   let index = 0
   const baseUrl = await listen((_request, response) => {
@@ -191,12 +197,12 @@ test("IAM admission fails closed on invalid response headers, envelopes, and sta
     {
       status: 200,
       headers: responseHeaders({ "cache-control": "public" }),
-      body: { data: { allowed: true, tenant_id: "tenant-a", user_id: "user-a", session_id: "session-a", client_id: "web-a" } },
+      body: { data: { allowed: true, tenant_id: "tenant-a", user_id: "user-a", session_id: "session-a", client_id: "web-a", platform_admin: false } },
     },
     {
       status: 200,
       headers: responseHeaders({ "x-request-id": "bad id" }),
-      body: { data: { allowed: true, tenant_id: "tenant-a", user_id: "user-a", session_id: "session-a", client_id: "web-a" } },
+      body: { data: { allowed: true, tenant_id: "tenant-a", user_id: "user-a", session_id: "session-a", client_id: "web-a", platform_admin: false } },
     },
     { status: 400, headers: responseHeaders(), body: { error: { code: "INVALID_ARGUMENT", message: "bad", retryable: false, details: [], extra: true } } },
     { status: 418, headers: responseHeaders(), body: { error: { code: "INTERNAL", message: "tea", retryable: false, details: [] } } },
@@ -235,7 +241,11 @@ test("IAM admission applies one deadline to slow headers and slow bodies", async
   const slowHeaders = await listen((_request, response) => {
     setTimeout(() => {
       response.writeHead(200, responseHeaders())
-      response.end(JSON.stringify({ data: { allowed: true, tenant_id: "tenant-a", user_id: "user-a", session_id: "session-a", client_id: "web-a" } }))
+      response.end(
+        JSON.stringify({
+          data: { allowed: true, tenant_id: "tenant-a", user_id: "user-a", session_id: "session-a", client_id: "web-a", platform_admin: false },
+        }),
+      )
     }, 100)
   })
   const slowBody = await listen((_request, response) => {
@@ -255,7 +265,11 @@ test("IAM admission applies one deadline to slow headers and slow bodies", async
 test("IAM admission enforces its response cap and caller cancellation", async () => {
   const oversized = await listen((_request, response) => {
     response.writeHead(200, responseHeaders())
-    response.end(JSON.stringify({ data: { allowed: true, tenant_id: "tenant-a", user_id: "user-a", session_id: "session-a", client_id: "x".repeat(200) } }))
+    response.end(
+      JSON.stringify({
+        data: { allowed: true, tenant_id: "tenant-a", user_id: "user-a", session_id: "session-a", client_id: "x".repeat(200), platform_admin: false },
+      }),
+    )
   })
   assert.deepEqual(
     await client(oversized, { maxResponseBytes: 64 }).verify({ token: "session-token", requestId: "public-request", signal: new AbortController().signal }),
@@ -285,7 +299,9 @@ test("IAM admission enforces its response cap and caller cancellation", async ()
 test("IAM admission rejects response headers that exceed its response cap", async () => {
   const oversizedHeader = await listen((_request, response) => {
     response.writeHead(200, responseHeaders({ "x-padding": "h".repeat(1024) }))
-    response.end(JSON.stringify({ data: { allowed: true, tenant_id: "tenant-a", user_id: "user-a", session_id: "session-a", client_id: "web-a" } }))
+    response.end(
+      JSON.stringify({ data: { allowed: true, tenant_id: "tenant-a", user_id: "user-a", session_id: "session-a", client_id: "web-a", platform_admin: false } }),
+    )
   })
   assert.deepEqual(
     await client(oversizedHeader, { maxResponseBytes: 512 }).verify({
@@ -300,7 +316,11 @@ test("IAM admission rejects response headers that exceed its response cap", asyn
 test("IAM admission rejects a combined header and body size above its response cap", async () => {
   const combinedOverCap = await listen((_request, response) => {
     response.writeHead(200, responseHeaders({ "x-padding": "h".repeat(200) }))
-    response.end(JSON.stringify({ data: { allowed: true, tenant_id: "tenant-a", user_id: "user-a", session_id: "session-a", client_id: "b".repeat(200) } }))
+    response.end(
+      JSON.stringify({
+        data: { allowed: true, tenant_id: "tenant-a", user_id: "user-a", session_id: "session-a", client_id: "b".repeat(200), platform_admin: false },
+      }),
+    )
   })
   assert.deepEqual(
     await client(combinedOverCap, { maxResponseBytes: 512 }).verify({
@@ -482,4 +502,82 @@ test("IAM Skill check rejects contradictory HTTP status and owner error code", a
       { ok: false, status: 503, code: "iam_admission_unavailable" },
     )
   }
+})
+
+for (const platformAdmin of [true, false]) {
+  test("IAM admission trusts the required owner 0.8 platform_admin=" + platformAdmin + " boolean", async () => {
+    const captured: Array<{ method: string | undefined; url: string | undefined; body: Buffer; headers: IncomingMessage["headers"] }> = []
+    const baseUrl = await listen((request, response) => {
+      const chunks: Buffer[] = []
+      request.on("data", (chunk) => chunks.push(Buffer.from(chunk)))
+      request.on("end", () => {
+        captured.push({ method: request.method, url: request.url, body: Buffer.concat(chunks), headers: request.headers })
+        response.writeHead(200, responseHeaders())
+        response.end(
+          JSON.stringify({
+            data: {
+              allowed: true,
+              tenant_id: "tenant-a",
+              user_id: "user-a",
+              session_id: "session-a",
+              client_id: "web-a",
+              platform_admin: platformAdmin,
+            },
+          }),
+        )
+      })
+    })
+
+    const result = await client(baseUrl).verify({ token: "session-token", requestId: "public-request", signal: new AbortController().signal })
+
+    assert.equal(captured.length, 1)
+    assert.equal(captured[0]?.method, "POST")
+    assert.equal(captured[0]?.url, "/internal/v1/session-authorizations/verify")
+    assert.equal(captured[0]?.body.length, 0)
+    assert.equal(captured[0]?.headers.authorization, "Bearer session-token")
+    assert.equal(captured[0]?.headers["x-request-id"], "public-request")
+    assert.equal(captured[0]?.headers["x-kokoro-namespace"], undefined)
+    assert.equal(captured[0]?.headers["x-kokoro-principal-id"], undefined)
+    assert.deepEqual(result, {
+      ok: true,
+      identity: { namespace: "tenant-a", userId: "user-a" },
+      platformAdmin,
+    })
+  })
+}
+
+test("IAM admission rejects missing, null, non-boolean and extra-field administrator projections", async () => {
+  const valid = {
+    allowed: true,
+    tenant_id: "tenant-a",
+    user_id: "user-a",
+    session_id: "session-a",
+    client_id: "web-a",
+  }
+  const payloads = [
+    { data: valid },
+    ...[null, "true", "false", 0, 1, [], {}].map((platform_admin) => ({
+      data: { ...valid, platform_admin },
+    })),
+    { data: { ...valid, platform_admin: true, role: "admin" } },
+    { data: { ...valid, platform_admin: false }, platform_admin: true },
+  ]
+  let calls = 0
+  const baseUrl = await listen((_request, response) => {
+    response.writeHead(200, responseHeaders())
+    response.end(JSON.stringify(payloads[calls++]))
+  })
+  const admission = client(baseUrl)
+  for (const payload of payloads) {
+    assert.deepEqual(
+      await admission.verify({
+        token: "session-token",
+        requestId: "public-request",
+        signal: new AbortController().signal,
+      }),
+      { ok: false, status: 503, code: "iam_admission_unavailable" },
+      JSON.stringify(payload),
+    )
+  }
+  assert.equal(calls, payloads.length)
 })

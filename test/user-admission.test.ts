@@ -61,7 +61,16 @@ test("GET /v1/me projects only the online IAM-admitted Product identity", async 
       iamCalls.push(request.headers.authorization ?? "")
       response.writeHead(200, { "content-type": "application/json", "cache-control": "no-store", "x-request-id": "iam-request" })
       response.end(
-        JSON.stringify({ data: { allowed: true, tenant_id: "tenant-server", user_id: "user-trusted", session_id: "session-secret", client_id: "web-client" } }),
+        JSON.stringify({
+          data: {
+            allowed: true,
+            tenant_id: "tenant-server",
+            user_id: "user-trusted",
+            session_id: "session-secret",
+            client_id: "web-client",
+            platform_admin: false,
+          },
+        }),
       )
     }),
   )
@@ -80,7 +89,10 @@ test("GET /v1/me projects only the online IAM-admitted Product identity", async 
   assert.equal(response.status, 200)
   assert.equal(response.headers.get("cache-control"), "no-store")
   assert.equal(response.headers.get("x-request-id"), "me-request")
-  assert.deepEqual(await response.json(), { data: { user_id: "user-trusted", tenant_id: "tenant-server" }, meta: { request_id: "me-request" } })
+  assert.deepEqual(await response.json(), {
+    data: { user_id: "user-trusted", tenant_id: "tenant-server", platform_admin: false },
+    meta: { request_id: "me-request" },
+  })
   assert.deepEqual(iamCalls, ["Bearer product-token"])
   const forgedQuery = await fetch(`${bff}/v1/me?tenant_id=tenant-forged`, {
     headers: {
@@ -133,7 +145,14 @@ test("GET /v1/me preserves fixed-tenant and IAM denial semantics without busines
       response.end(
         status === 200
           ? JSON.stringify({
-              data: { allowed: true, tenant_id: "tenant-foreign", user_id: "user-foreign", session_id: "session-foreign", client_id: "web-client" },
+              data: {
+                allowed: true,
+                tenant_id: "tenant-foreign",
+                user_id: "user-foreign",
+                session_id: "session-foreign",
+                client_id: "web-client",
+                platform_admin: false,
+              },
             })
           : JSON.stringify({ error: { code: "UNAUTHENTICATED", message: "private IAM detail", retryable: status === 429, details: [] } }),
       )
@@ -542,4 +561,133 @@ test("Share, runtime manifest, and Scheduler callback remain separate service bo
   assert.equal(((await manifest.json()) as { error: { code: string } }).error.code, "upstream_not_configured")
   assert.equal(scheduler.status, 401)
   assert.equal(admission.calls.length, 0)
+})
+
+test("GET /v1/me rereads current administrator qualification for the same token and isolates users", async () => {
+  let platformAdmin = true
+  let unavailable = false
+  const iamCalls: string[] = []
+  const iam = await listen(
+    createServer((request, response) => {
+      const bearer = request.headers.authorization ?? ""
+      iamCalls.push(bearer)
+      response.writeHead(unavailable ? 503 : 200, {
+        "content-type": "application/json",
+        "cache-control": "no-store",
+        "x-request-id": "iam-admin-request",
+      })
+      response.end(
+        JSON.stringify(
+          unavailable
+            ? {
+                error: {
+                  code: "UNAVAILABLE",
+                  message: "private owner failure",
+                  retryable: true,
+                  details: [],
+                },
+              }
+            : {
+                data: {
+                  allowed: true,
+                  platform_admin: bearer === "Bearer admin-token" && platformAdmin,
+                  tenant_id: "tenant-server",
+                  user_id: bearer === "Bearer admin-token" ? "user-admin" : "user-ordinary",
+                  session_id: "session-private",
+                  client_id: "web-client",
+                },
+              },
+        ),
+      )
+    }),
+  )
+  const bff = await listen(createBffServer({ ...config(), iamBaseUrl: iam }, { businessStore: null, readiness: async () => undefined }))
+  const read = (token: string): Promise<Response> =>
+    fetch(bff + "/v1/me", {
+      headers: {
+        "x-kokoro-service": "web-bff",
+        "x-kokoro-internal-secret": "test-secret",
+        authorization: "Bearer " + token,
+        "x-kokoro-platform-admin": "true",
+        "platform-admin": "true",
+        "x-kokoro-principal-id": "user-forged",
+        "x-request-id": "current-admin",
+      },
+    })
+  for (const [token, user, expected] of [
+    ["admin-token", "user-admin", true],
+    ["ordinary-token", "user-ordinary", false],
+  ] as const) {
+    const response = await read(token)
+    assert.equal(response.status, 200)
+    assert.equal(response.headers.get("cache-control"), "no-store")
+    assert.deepEqual(await response.json(), {
+      data: {
+        user_id: user,
+        tenant_id: "tenant-server",
+        platform_admin: expected,
+      },
+      meta: { request_id: "current-admin" },
+    })
+  }
+  platformAdmin = false
+  const revoked = await read("admin-token")
+  assert.equal(revoked.status, 200)
+  assert.deepEqual(await revoked.json(), {
+    data: {
+      user_id: "user-admin",
+      tenant_id: "tenant-server",
+      platform_admin: false,
+    },
+    meta: { request_id: "current-admin" },
+  })
+  unavailable = true
+  const failed = await read("admin-token")
+  assert.equal(failed.status, 503)
+  const failedBody = (await failed.json()) as { error: { code: string } }
+  assert.equal(failedBody.error.code, "iam_admission_unavailable")
+  assert.doesNotMatch(JSON.stringify(failedBody), /platform_admin|private owner failure/u)
+  assert.deepEqual(iamCalls, ["Bearer admin-token", "Bearer ordinary-token", "Bearer admin-token", "Bearer admin-token"])
+})
+
+test("GET /v1/me rejects malformed administrator snapshots and never substitutes false", async () => {
+  const valid = {
+    allowed: true,
+    tenant_id: "tenant-server",
+    user_id: "user-trusted",
+    session_id: "session-private",
+    client_id: "web-client",
+  }
+  const payloads = [
+    { data: valid },
+    { data: { ...valid, platform_admin: null } },
+    { data: { ...valid, platform_admin: "true" } },
+    { data: { ...valid, platform_admin: true, extra: true } },
+  ]
+  let calls = 0
+  const iam = await listen(
+    createServer((_request, response) => {
+      response.writeHead(200, {
+        "content-type": "application/json",
+        "cache-control": "no-store",
+        "x-request-id": "iam-admin-request",
+      })
+      response.end(JSON.stringify(payloads[calls++]))
+    }),
+  )
+  const bff = await listen(createBffServer({ ...config(), iamBaseUrl: iam }, { businessStore: null, readiness: async () => undefined }))
+  for (const _payload of payloads) {
+    const response = await fetch(bff + "/v1/me", {
+      headers: {
+        "x-kokoro-service": "web-bff",
+        "x-kokoro-internal-secret": "test-secret",
+        authorization: "Bearer token",
+      },
+    })
+    assert.equal(response.status, 503)
+    const body = (await response.json()) as { error: { code: string } }
+    assert.equal(body.error.code, "iam_admission_unavailable")
+    assert.doesNotMatch(JSON.stringify(body), /platform_admin|session-private/u)
+  }
+  assert.equal(calls, payloads.length)
 })

@@ -3,3 +3,8 @@ export type RequestContext = {
   requestId: string
   identity: { namespace: string; userId: string }
 }
+
+/** Current IAM admission projection; not available to service-only callers. */
+export type AdmittedUserRequestContext = RequestContext & {
+  platformAdmin: boolean
+}

@@ -1,6 +1,6 @@
 export type TestAdmissionIdentity = Readonly<{ namespace: string; userId: string }>
 export type TestAdmissionResult =
-  | Readonly<{ ok: true; identity: TestAdmissionIdentity }>
+  | Readonly<{ ok: true; identity: TestAdmissionIdentity; platformAdmin: boolean }>
   | Readonly<{ ok: false; status: 401 | 403 | 429 | 503; code: string; retryAfter?: string }>
 
 export type TestAdmissionCall = Readonly<{ token: string; requestId: string; signal: AbortSignal }>
@@ -14,7 +14,7 @@ export class SessionAdmissionDouble {
   }
 
   public allow(token: string, identity: TestAdmissionIdentity): void {
-    this.results.set(token, { ok: true, identity })
+    this.results.set(token, { ok: true, identity, platformAdmin: false })
   }
 
   public deny(token: string, result: Exclude<TestAdmissionResult, { ok: true }>): void {

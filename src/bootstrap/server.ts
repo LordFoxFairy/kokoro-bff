@@ -344,7 +344,7 @@ async function handle(
       send(response, 400, failure("current_user_body_rejected", "Current user request must not contain a body", id))
       return
     }
-    send(response, 200, ok({ user_id: context.identity.userId, tenant_id: context.identity.namespace }, id))
+    send(response, 200, ok({ user_id: context.identity.userId, tenant_id: context.identity.namespace, platform_admin: context.platformAdmin }, id))
     return
   }
 

@@ -802,7 +802,7 @@ test("current Product identity is a narrow public self-read contract", async () 
   for (const status of ["200", "400", "401", "403", "429", "503"]) assert.match(operation, new RegExp(`'${status}':`, "u"))
   assert.match(operation, /x-request-id:/u)
   assert.match(operation, /Cache-Control:/u)
-  assert.match(openapi, /CurrentUserIdentity:\n\s+type: object\n\s+required: \[user_id, tenant_id\]\n\s+additionalProperties: false/u)
+  assert.match(openapi, /CurrentUserIdentity:\n\s+type: object\n\s+required: \[user_id, tenant_id, platform_admin\]\n\s+additionalProperties: false/u)
   assert.match(openapi, /CurrentUserResponse:\n\s+type: object\n\s+required: \[data, meta\]\n\s+additionalProperties: false/u)
 })
 
@@ -1856,5 +1856,20 @@ test("R257 self MCP connection contract rejects Server substitution and error-pr
   ]) {
     assert.notEqual(broken, openapi)
     assert.notDeepEqual(inspectBffOpenApi(broken, baseline), [])
+  }
+})
+
+test("current administrator projection rejects missing, optional, nullable and non-boolean public contracts", async () => {
+  const { openapi, baseline } = await readContract()
+  assert.deepEqual(inspectBffOpenApi(openapi, baseline), [])
+  const field = "        platform_admin: { type: boolean }"
+  assert.ok(openapi.includes(field))
+  for (const changed of [
+    openapi.replace("required: [user_id, tenant_id, platform_admin]", "required: [user_id, tenant_id]"),
+    openapi.replace(field, ""),
+    openapi.replace(field, "        platform_admin: { type: string }"),
+    openapi.replace(field, "        platform_admin: { type: boolean, nullable: true }"),
+  ]) {
+    assert.ok(inspectBffOpenApi(changed, baseline).some((error) => error.includes("CurrentUserIdentity")))
   }
 })

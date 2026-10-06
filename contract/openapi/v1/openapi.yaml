@@ -4523,11 +4523,12 @@ components:
             audit: { type: array, minItems: 1, items: { type: string, enum: [read] } }
     CurrentUserIdentity:
       type: object
-      required: [user_id, tenant_id]
+      required: [user_id, tenant_id, platform_admin]
       additionalProperties: false
       properties:
         user_id: { type: string, minLength: 1 }
         tenant_id: { type: string, minLength: 1 }
+        platform_admin: { type: boolean }
     CurrentUserResponse:
       type: object
       required: [data, meta]

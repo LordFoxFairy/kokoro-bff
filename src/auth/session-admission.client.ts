@@ -70,6 +70,7 @@ export class SessionAdmissionClient implements SessionAdmission {
         return {
           ok: true,
           identity: { namespace: parsed.data.data.tenant_id, userId: parsed.data.data.user_id },
+          platformAdmin: parsed.data.data.platform_admin,
         }
       }
       if (!zApiErrorResponse.safeParse(body).success) return unavailable()

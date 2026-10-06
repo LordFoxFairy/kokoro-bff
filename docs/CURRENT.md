@@ -1,3 +1,11 @@
+## R257 当前本人管理员资格消费源码发布（正常切换待验）
+
+本提交冻结来源04a6a123：固定IAM d24aa2b internal0.8原字节0153a16f，成功必填platformAdmin仅具名AdmittedUserRequestContext；原GET /v1/me追加required platform_admin，普通false合法200，未知/缺失/错型不假false。public首发前8.0.0/93operation，YAML cec91c36c836319af4acbb4e2cf372434b70dd0f52bdf266420e1957057ac4be，旧MCP6d46ec8 immutable artifact不覆写；Web后继必须固定本新发布，不双读兼容。
+
+Root22285显式Node22.22.2 pnpm check实际exit0：contract259/0，全纯802PASS/0FAIL/1资源skip，lint/types/generators/build0；独审69ef3abb无已证P0–P2，35候选/19protected/3extra起终exact。19仅本阶段保护，不冒最初全部mixed hash；未全format（原Project两protected失败）、未跑正常IAM组合/PG/浏览器后台。Root8589合法owner0.8两HTTP正控先2FAIL，最终true/false/同token在线撤权/伪身份/依赖与取消回归是辅助门，不代表正常后台完成。
+
+正常仍原BFF51474/6d46ec8进程配旧IAM/schema；不先半边激活。IAM只有fresh installer、正常有数据演进入口仍缺，Web旧strict /me会拒新字段，必须owner正规演进+Web消费与server/admin gate后Root受控整组切换。未授任何帐号管理员资格，Settings入口/直链保护/后台业务CRUD/财务权限尚未验。
+
 ## R257 本人 MCP Connection 读取研发切片（2026-10-06）
 
 源码/机器契约6d46ec8bdd2d2ffaa06513fd0561272eae907919已精确提交，新增唯一GET /v1/mcp/connections，固定Platform HTTP3.2.0/9ab3b653360d04fb498a238659edeec01e72f62d/digest4b42dd161c972b3447cfea3a6f80a949bbdb573c46213dbf8ef4c3ecb58e72da，旧3.1vendor删除。六字段本人投影、可信actor、closed四query、strict错误/header、1MiB与贯穿token/owner/body/parse单5s、取消迟到退役；Server与Skill旧分支不重解释。

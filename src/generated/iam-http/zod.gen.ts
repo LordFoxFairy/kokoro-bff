@@ -441,6 +441,7 @@ export const zVerifySessionAuthorizationResponse = z
     data: z
       .object({
         allowed: z.literal(true),
+        platform_admin: z.boolean(),
         tenant_id: z.string().min(1),
         user_id: z.string().min(1),
         session_id: z.string().min(1),

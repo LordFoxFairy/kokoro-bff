@@ -8116,6 +8116,9 @@
                             true
                           ]
                         },
+                        "platform_admin": {
+                          "type": "boolean"
+                        },
                         "tenant_id": {
                           "type": "string",
                           "minLength": 1
@@ -8135,6 +8138,7 @@
                       },
                       "required": [
                         "allowed",
+                        "platform_admin",
                         "tenant_id",
                         "user_id",
                         "session_id",
@@ -9198,7 +9202,7 @@
   "info": {
     "title": "Kokoro IAM Internal API",
     "description": "IAM-owned liveness, Tenancy, Authorization and Audit operations.",
-    "version": "0.7.0",
+    "version": "0.8.0",
     "contact": {}
   },
   "tags": [],

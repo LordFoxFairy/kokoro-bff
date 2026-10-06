@@ -151,9 +151,9 @@ test("Library publishes explicit personal file 200 and rejects contract drift", 
   assert.ok(inspectLibraryFileContract(mixedPage).some((error) => error.includes("LibraryFilePage")))
 })
 
-test("the IAM consumer pins the complete 0.7.0 owner artifact and generates only approved admission, Skill, Team and invitation operations", async () => {
-  const commit = "e3c035b99cf9479ac8357c7d38147f1541dcbcac"
-  const digest = "c8d7af8a365ad5d13eaabccf7f31133e0918ef198bdc3e7c790d90933eae91b2"
+test("the IAM consumer pins the complete 0.8.0 owner artifact and generates only approved admission, Skill, Team and invitation operations", async () => {
+  const commit = "d24aa2b697de59a350e8588720620df331bc5da5"
+  const digest = "0153a16f5c2779803d73d93d5533caf1b377d21299cefe01613d7cd1b2cbb194"
   const [manifestSource, vendor, config, lockfile, sdk, types] = await Promise.all([
     readFile(new URL("../contract/dependencies/iam-http.json", import.meta.url), "utf8"),
     readFile(new URL(`../contract/vendor/kokoro-iam/${commit}/iam.internal.v1.json`, import.meta.url)),
@@ -166,12 +166,16 @@ test("the IAM consumer pins the complete 0.7.0 owner artifact and generates only
   const manifest = JSON.parse(manifestSource)
   const owner = JSON.parse(vendor.toString("utf8"))
   assert.equal(sha256(vendor), digest)
-  assert.equal(owner.info.version, "0.7.0")
+  assert.equal(owner.info.version, "0.8.0")
+  const admissionSchema = owner.paths["/internal/v1/session-authorizations/verify"].post.responses["200"].content["application/json"].schema.properties.data
+  assert.ok(admissionSchema.required.includes("platform_admin"))
+  assert.deepEqual(admissionSchema.properties.platform_admin, { type: "boolean" })
+  assert.match(types, /platform_admin: boolean/u)
   assert.ok(Object.keys(owner.paths).length > 1)
   assert.deepEqual(manifest.owner, {
     repository_path: "apps/kokoro-iam",
     repository_commit: commit,
-    contract_version: "0.7.0",
+    contract_version: "0.8.0",
     contract_path: "contract/openapi/iam.internal.v1.json",
     contract_sha256: digest,
   })

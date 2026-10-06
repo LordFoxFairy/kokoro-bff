@@ -1587,6 +1587,7 @@ export type VerifySessionAuthorizationResponses = {
   200: {
     data: {
       allowed: true
+      platform_admin: boolean
       tenant_id: string
       user_id: string
       session_id: string
