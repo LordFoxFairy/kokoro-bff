@@ -2760,6 +2760,135 @@ integrationTest("R257 personalization real raw HTTP rejects ambiguous JSON heade
   assert.deepEqual((await f.request("preferences/personalization")).body, { data: { personalization: null, revision: 0 } })
 })
 
+integrationTest("R257 terminal Scheduler rejection is projected by authoritative ScheduledTask HTTP reads", async () => {
+  const suffix = `${Date.now()}_${Math.random().toString(16).slice(2)}`
+  const tenant = `schedule_failure_http_${suffix}`
+  const subject = `schedule_failure_user_${suffix}`
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
+  const redis = createClient({ url: redisUrl })
+  const schedulerCalls = []
+  let scheduler
+  let bff
+  try {
+    await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+    await redis.connect()
+    scheduler = createServer((request, response) => {
+      const chunks = []
+      request.on("data", (chunk) => chunks.push(Buffer.from(chunk)))
+      request.on("end", () => {
+        const body = JSON.parse(Buffer.concat(chunks).toString("utf8"))
+        schedulerCalls.push({
+          method: request.method,
+          url: request.url,
+          authorization: request.headers.authorization,
+          service: request.headers["x-kokoro-service"],
+          tenant: request.headers["x-kokoro-tenant-id"],
+          requestId: request.headers["x-request-id"],
+          idempotencyKey: request.headers["idempotency-key"],
+          body,
+        })
+        response.statusCode = 400
+        response.setHeader("content-type", "application/json")
+        response.end(
+          JSON.stringify({
+            error: { code: "invalid_schedule", message: "Schedule target is invalid" },
+            meta: { request_id: request.headers["x-request-id"] },
+          }),
+        )
+      })
+    })
+    const schedulerBase = await listen(scheduler)
+    const targetUrl = "http://bff.test/internal/bff/scheduled-tasks/dispatch"
+    bff = createBffServer(bffConfig({ tenantId: tenant, schedulerBase, schedulerTargetUrl: targetUrl }), { sessionAdmission })
+    const base = await listen(bff)
+    const response = await fetch(`${base}/v1/scheduled-tasks`, {
+      method: "POST",
+      headers: {
+        ...auth(tenant, subject),
+        "content-type": "application/json",
+        "idempotency-key": `schedule-failure-${suffix}`,
+      },
+      body: JSON.stringify({
+        title: "Terminal failure projection",
+        prompt: "Do not execute this integration fixture.",
+        frequency: "daily",
+        time: "08:00",
+        timezone: "UTC",
+        recurrence_anchor_at: "2026-10-06T08:00:00.000Z",
+        auto_approve: false,
+      }),
+      signal: AbortSignal.timeout(5000),
+    })
+    assert.equal(response.status, 200)
+    const created = (await response.json()).data.task
+    assert.equal(created.status, "active")
+    assert.equal(created.enabled, true)
+    assert.equal(created.next_run_at, null)
+
+    await waitFor(async () => {
+      const result = await pool.query(
+        "SELECT status,last_error_code FROM bff_scheduled_task_outbox WHERE tenant_id=$1 AND task_id=$2",
+        [tenant, created.id],
+      )
+      return result.rows.length === 1 && result.rows[0].status === "failed" && result.rows[0].last_error_code === "invalid_schedule"
+    })
+    const ownSchedulerCalls = schedulerCalls.filter((call) => call.tenant === tenant && call.body.body.task_id === created.id)
+    assert.equal(ownSchedulerCalls.length, 1)
+    assert.equal(ownSchedulerCalls[0].method, "POST")
+    assert.match(ownSchedulerCalls[0].url ?? "", /^\/internal\/scheduler\/v1\/schedules\/kokoro[.]scheduled[.]/u)
+    assert.equal(ownSchedulerCalls[0].authorization, "Bearer scheduler-secret")
+    assert.equal(ownSchedulerCalls[0].service, "web-bff")
+    assert.equal(ownSchedulerCalls[0].tenant, tenant)
+    assert.equal(typeof ownSchedulerCalls[0].requestId, "string")
+    assert.equal(typeof ownSchedulerCalls[0].idempotencyKey, "string")
+    assert.equal(ownSchedulerCalls[0].body.url, targetUrl)
+    assert.equal(ownSchedulerCalls[0].body.body.task_id, created.id)
+    assert.equal(ownSchedulerCalls[0].body.body.owner_id, subject)
+
+    const detail = await fetch(`${base}/v1/scheduled-tasks/${created.id}`, {
+      headers: auth(tenant, subject),
+      signal: AbortSignal.timeout(5000),
+    })
+    assert.equal(detail.status, 200)
+    const authoritative = (await detail.json()).data.task
+    assert.equal(authoritative.id, created.id)
+    assert.equal(authoritative.status, "failed")
+    assert.equal(authoritative.enabled, true)
+    assert.equal("revision" in authoritative, false)
+    assert.equal(authoritative.next_run_at, null)
+
+    const persisted = await pool.query(
+      `SELECT task.status AS task_status,task.enabled,task.revision,task.next_run_at,
+              command.status AS command_status,command.last_error_code,command.completed_at,
+              command.lease_owner,command.lease_token,command.lease_until
+         FROM bff_scheduled_task AS task
+         JOIN bff_scheduled_task_outbox AS command
+           ON command.tenant_id=task.tenant_id AND command.task_id=task.task_id
+        WHERE task.tenant_id=$1 AND task.task_id=$2`,
+      [tenant, created.id],
+    )
+    assert.equal(persisted.rows.length, 1)
+    assert.equal(persisted.rows[0].task_status, "failed")
+    assert.equal(persisted.rows[0].enabled, true)
+    assert.equal(Number(persisted.rows[0].revision), 1)
+    assert.equal(persisted.rows[0].next_run_at, null)
+    assert.equal(persisted.rows[0].command_status, "failed")
+    assert.equal(persisted.rows[0].last_error_code, "invalid_schedule")
+    assert.ok(persisted.rows[0].completed_at)
+    assert.equal(persisted.rows[0].lease_owner, null)
+    assert.equal(persisted.rows[0].lease_token, null)
+    assert.equal(persisted.rows[0].lease_until, null)
+  } finally {
+    if (bff) await close(bff)
+    if (scheduler?.listening) await close(scheduler)
+    await pool.query("DELETE FROM bff_scheduled_task_outbox WHERE tenant_id=$1", [tenant]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_scheduled_task WHERE tenant_id=$1", [tenant]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_idempotency_receipt WHERE starts_with(scope,$1)", [`${JSON.stringify([tenant]).slice(0, -1)},`]).catch(() => undefined)
+    await redis.quit().catch(() => undefined)
+    await pool.end()
+  }
+})
+
 integrationTest("R257 personalization an unfinished request body spends the route deadline before any SQL checkout", { timeout: 10000 }, async (t) => {
   const f = await r241Fixture(t)
   const observer = r241ObservePool(f.ownerPool)

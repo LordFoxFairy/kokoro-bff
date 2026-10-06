@@ -475,17 +475,40 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskRepository,
     assertLease(lease)
     const failedTimestamp = dbDate(failedAt, "SCHEDULED_TASK_OUTBOX_FAILED_AT_INVALID")
     if (errorCode.trim() === "") throw new Error("SCHEDULED_TASK_OUTBOX_ERROR_CODE_REQUIRED")
-    const result = await this.database.pool.query(
-      `UPDATE bff_scheduled_task_outbox
-          SET status = 'failed', last_error_code = $5, last_error_at = $6::timestamptz,
-              completed_at = $6::timestamptz,
-              lease_owner = NULL, lease_token = NULL, lease_until = NULL,
-              updated_at = CURRENT_TIMESTAMP(3)
-        WHERE outbox_id = $1 AND status = 'leased' AND lease_owner = $2
-          AND lease_token = $3 AND fence = $4`,
-      [lease.outboxId, lease.leaseOwner, lease.leaseToken, lease.fence, errorCode, failedTimestamp],
-    )
-    return result.rowCount === 1
+    return this.transaction(async (client) => {
+      const command = await client.query<ScheduledTaskOutboxRow>(
+        `SELECT outbox_id, tenant_id, task_id, command_type, aggregate_revision, payload,
+                actor_id, request_id, idempotency_key, status, attempt_count, available_at,
+                lease_owner, lease_token, lease_until, fence, last_error_code
+           FROM bff_scheduled_task_outbox
+          WHERE outbox_id = $1 AND status = 'leased' AND lease_owner = $2
+            AND lease_token = $3 AND fence = $4
+          FOR UPDATE`,
+        [lease.outboxId, lease.leaseOwner, lease.leaseToken, lease.fence],
+      )
+      const row = command.rows[0]
+      if (row === undefined) return false
+      if (row.command_type === "scheduler.register" || row.command_type === "scheduler.replace") {
+        await client.query(
+          `UPDATE bff_scheduled_task
+              SET status = 'failed', next_run_at = NULL, updated_at = CURRENT_TIMESTAMP(3)
+            WHERE tenant_id = $1 AND task_id = $2 AND revision = $3
+              AND enabled AND status = 'active'`,
+          [row.tenant_id, row.task_id, safeInteger(row.aggregate_revision, "SCHEDULED_TASK_OUTBOX_REVISION")],
+        )
+      }
+      const settled = await client.query(
+        `UPDATE bff_scheduled_task_outbox
+            SET status = 'failed', last_error_code = $5, last_error_at = $6::timestamptz,
+                completed_at = $6::timestamptz,
+                lease_owner = NULL, lease_token = NULL, lease_until = NULL,
+                updated_at = CURRENT_TIMESTAMP(3)
+          WHERE outbox_id = $1 AND status = 'leased' AND lease_owner = $2
+            AND lease_token = $3 AND fence = $4`,
+        [lease.outboxId, lease.leaseOwner, lease.leaseToken, lease.fence, errorCode, failedTimestamp],
+      )
+      return settled.rowCount === 1
+    })
   }
 
   private async transaction<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {

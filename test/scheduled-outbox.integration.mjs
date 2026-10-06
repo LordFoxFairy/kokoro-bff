@@ -672,3 +672,256 @@ integrationTest("Scheduler receipt schema gates next projection before durable s
     await new Promise((resolve) => owner.close(() => resolve()))
   }
 })
+
+integrationTest("terminal Scheduler failure projects only the current active task revision", async (t) => {
+  const suffix = `${Date.now()}_${Math.random().toString(16).slice(2)}`
+  const tenants = {
+    current: `failure_current_${suffix}`,
+    replace: `failure_replace_${suffix}`,
+    retryable: `failure_retryable_${suffix}`,
+    stale: `failure_stale_${suffix}`,
+    paused: `failure_paused_${suffix}`,
+    deleted: `failure_deleted_${suffix}`,
+    lease: `failure_lease_${suffix}`,
+    rollback: `failure_rollback_${suffix}`,
+  }
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC", max: 6 })
+  const repository = new PostgresScheduledTaskRepository({ pool })
+  const schema = await readFile(new URL("../database/schema.sql", import.meta.url), "utf8")
+  const rollbackFunction = `fixture_fail_terminal_settlement_${suffix.replace(/[^a-zA-Z0-9_]/gu, "_")}`
+  const rollbackTrigger = `fixture_fail_terminal_settlement_trigger_${suffix.replace(/[^a-zA-Z0-9_]/gu, "_")}`
+  let rollbackTriggerInstalled = false
+
+  async function create(tenantId, label) {
+    const taskId = `scheduled_failure_${label}_${suffix}`
+    const scope = ownerScope(tenantId, suffix)
+    await repository.createScheduledTask(scope, taskInput(suffix), taskId, lineage(tenantId, `create-${label}-${suffix}`, suffix))
+    return { taskId, scope }
+  }
+
+  async function claim(tenantId, taskId, worker) {
+    const commands = await repository.claimScheduledTaskOutbox({
+      workerId: `${worker}-${suffix}`,
+      limit: 100,
+      leaseDurationMs: 30_000,
+      now: new Date(Date.now() + 1_000),
+    })
+    const matches = commands.filter((command) => command.tenantId === tenantId && command.taskId === taskId)
+    assert.equal(matches.length, 1)
+    return matches[0]
+  }
+
+  async function state(tenantId, taskId, outboxId) {
+    const result = await pool.query(
+      `SELECT task.status AS task_status, task.enabled, task.revision, task.next_run_at,
+              command.status AS command_status, command.last_error_code, command.completed_at,
+              command.lease_owner, command.lease_token, command.fence
+         FROM bff_scheduled_task_outbox AS command
+         LEFT JOIN bff_scheduled_task AS task
+           ON task.tenant_id = command.tenant_id AND task.task_id = command.task_id
+        WHERE command.tenant_id = $1 AND command.task_id = $2 AND command.outbox_id = $3`,
+      [tenantId, taskId, outboxId],
+    )
+    assert.equal(result.rows.length, 1)
+    return result.rows[0]
+  }
+
+  try {
+    await pool.query(schema)
+
+    await t.test("current active register failure is atomic with the terminal outbox", async () => {
+      const { taskId } = await create(tenants.current, "current")
+      const command = await claim(tenants.current, taskId, "worker-current-failure")
+      assert.equal(await repository.markScheduledTaskOutboxFailed(leasedIdentity(command), "invalid_schedule", new Date()), true)
+      const persisted = await state(tenants.current, taskId, command.outboxId)
+      assert.equal(persisted.task_status, "failed")
+      assert.equal(persisted.enabled, true)
+      assert.equal(Number(persisted.revision), 1)
+      assert.equal(persisted.next_run_at, null)
+      assert.equal(persisted.command_status, "failed")
+      assert.equal(persisted.last_error_code, "invalid_schedule")
+      assert.ok(persisted.completed_at)
+      assert.equal(persisted.lease_owner, null)
+      assert.equal(persisted.lease_token, null)
+    })
+
+    await t.test("current active replace failure projects failed without advancing revision", async () => {
+      const { taskId, scope } = await create(tenants.replace, "replace")
+      const register = await claim(tenants.replace, taskId, "worker-replace-register")
+      assert.equal(
+        await repository.markScheduledTaskOutboxSucceeded(
+          leasedIdentity(register),
+          new Date(),
+          confirmedNext(register, new Date("2026-09-08T08:00:00.000Z")),
+        ),
+        true,
+      )
+      const replaced = await repository.updateScheduledTask(
+        scope,
+        taskId,
+        { prompt: "Current active replacement." },
+        lineage(tenants.replace, `replace-current-${suffix}`, suffix),
+      )
+      assert.equal(replaced?.revision, 2)
+      const replace = await claim(tenants.replace, taskId, "worker-replace-failure")
+      assert.equal(replace.commandType, "scheduler.replace")
+      assert.equal(await repository.markScheduledTaskOutboxFailed(leasedIdentity(replace), "invalid_schedule", new Date()), true)
+      const persisted = await state(tenants.replace, taskId, replace.outboxId)
+      assert.equal(persisted.task_status, "failed")
+      assert.equal(persisted.enabled, true)
+      assert.equal(Number(persisted.revision), 2)
+      assert.equal(persisted.next_run_at, null)
+      assert.equal(persisted.command_status, "failed")
+    })
+
+    await t.test("retryable delivery keeps the current task active before terminal exhaustion", async () => {
+      const { taskId } = await create(tenants.retryable, "retryable")
+      const dispatcher = new ScheduledTaskOutboxDispatcher(
+        repository,
+        { deliver: async () => ({ outcome: "retryable", errorCode: "scheduler_target_unavailable" }) },
+        {
+          workerId: `worker-retryable-${suffix}`,
+          batchSize: 100,
+          maxAttempts: 3,
+          clock: () => new Date(Date.now() + 1_000),
+          random: () => 0,
+        },
+      )
+      assert.ok((await dispatcher.runOnce()) >= 1)
+      const result = await pool.query(
+        `SELECT task.status AS task_status,task.enabled,task.revision,task.next_run_at,
+                command.status AS command_status,command.last_error_code,command.completed_at
+           FROM bff_scheduled_task AS task
+           JOIN bff_scheduled_task_outbox AS command
+             ON command.tenant_id=task.tenant_id AND command.task_id=task.task_id
+          WHERE task.tenant_id=$1 AND task.task_id=$2`,
+        [tenants.retryable, taskId],
+      )
+      assert.equal(result.rows.length, 1)
+      assert.equal(result.rows[0].task_status, "active")
+      assert.equal(result.rows[0].enabled, true)
+      assert.equal(Number(result.rows[0].revision), 1)
+      assert.equal(result.rows[0].next_run_at, null)
+      assert.equal(result.rows[0].command_status, "retryable")
+      assert.equal(result.rows[0].last_error_code, "scheduler_target_unavailable")
+      assert.equal(result.rows[0].completed_at, null)
+    })
+
+    await t.test("an old revision failure terminates its command without overwriting the current task", async () => {
+      const { taskId, scope } = await create(tenants.stale, "stale")
+      const oldCommand = await claim(tenants.stale, taskId, "worker-stale-failure")
+      const current = await repository.updateScheduledTask(scope, taskId, { prompt: "New revision remains active." }, lineage(tenants.stale, `replace-stale-${suffix}`, suffix))
+      assert.equal(current?.revision, 2)
+      assert.equal(await repository.markScheduledTaskOutboxFailed(leasedIdentity(oldCommand), "invalid_schedule", new Date()), true)
+      const persisted = await state(tenants.stale, taskId, oldCommand.outboxId)
+      assert.equal(persisted.task_status, "active")
+      assert.equal(persisted.enabled, true)
+      assert.equal(Number(persisted.revision), 2)
+      assert.equal(persisted.command_status, "failed")
+    })
+
+    await t.test("a current paused task is not rewritten by terminal replace failure", async () => {
+      const { taskId, scope } = await create(tenants.paused, "paused")
+      const register = await claim(tenants.paused, taskId, "worker-paused-register")
+      assert.equal(
+        await repository.markScheduledTaskOutboxSucceeded(
+          leasedIdentity(register),
+          new Date(),
+          confirmedNext(register, new Date("2026-09-08T08:00:00.000Z")),
+        ),
+        true,
+      )
+      const paused = await repository.updateScheduledTask(
+        scope,
+        taskId,
+        { enabled: false, status: "paused" },
+        lineage(tenants.paused, `pause-${suffix}`, suffix),
+      )
+      assert.equal(paused?.revision, 2)
+      const replace = await claim(tenants.paused, taskId, "worker-paused-replace")
+      assert.equal(await repository.markScheduledTaskOutboxFailed(leasedIdentity(replace), "invalid_schedule", new Date()), true)
+      const persisted = await state(tenants.paused, taskId, replace.outboxId)
+      assert.equal(persisted.task_status, "paused")
+      assert.equal(persisted.enabled, false)
+      assert.equal(Number(persisted.revision), 2)
+      assert.equal(persisted.command_status, "failed")
+    })
+
+    await t.test("delete failure does not recreate a physically deleted task", async () => {
+      const { taskId, scope } = await create(tenants.deleted, "deleted")
+      const register = await claim(tenants.deleted, taskId, "worker-delete-register")
+      assert.equal(
+        await repository.markScheduledTaskOutboxSucceeded(
+          leasedIdentity(register),
+          new Date(),
+          confirmedNext(register, new Date("2026-09-08T08:00:00.000Z")),
+        ),
+        true,
+      )
+      await repository.deleteScheduledTask(scope, taskId, lineage(tenants.deleted, `delete-${suffix}`, suffix))
+      const deletion = await claim(tenants.deleted, taskId, "worker-delete-failure")
+      assert.equal(deletion.commandType, "scheduler.delete")
+      assert.equal(await repository.markScheduledTaskOutboxFailed(leasedIdentity(deletion), "invalid_schedule", new Date()), true)
+      assert.equal(await repository.findScheduledTask(scope, taskId), null)
+      const persisted = await state(tenants.deleted, taskId, deletion.outboxId)
+      assert.equal(persisted.task_status, null)
+      assert.equal(persisted.command_status, "failed")
+    })
+
+    await t.test("wrong lease identity cannot change either task or outbox", async () => {
+      const { taskId } = await create(tenants.lease, "lease")
+      const command = await claim(tenants.lease, taskId, "worker-invalid-lease")
+      assert.equal(await repository.markScheduledTaskOutboxFailed({ ...leasedIdentity(command), leaseToken: "wrong-token" }, "invalid_schedule", new Date()), false)
+      assert.equal(await repository.markScheduledTaskOutboxFailed({ ...leasedIdentity(command), fence: command.fence + 1 }, "invalid_schedule", new Date()), false)
+      const protectedState = await state(tenants.lease, taskId, command.outboxId)
+      assert.equal(protectedState.task_status, "active")
+      assert.equal(protectedState.command_status, "leased")
+      assert.equal(protectedState.lease_owner, command.leaseOwner)
+      assert.equal(protectedState.lease_token, command.leaseToken)
+      assert.equal(Number(protectedState.fence), command.fence)
+    })
+
+    await t.test("task projection and terminal settlement roll back and recover together", async () => {
+      const { taskId } = await create(tenants.rollback, "rollback")
+      const command = await claim(tenants.rollback, taskId, "worker-rollback-failure")
+      await pool.query(
+        `CREATE OR REPLACE FUNCTION ${rollbackFunction}() RETURNS trigger
+         LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'fixture terminal settlement failure'; END; $$`,
+      )
+      await pool.query(
+        `CREATE TRIGGER ${rollbackTrigger}
+           BEFORE UPDATE ON bff_scheduled_task_outbox
+           FOR EACH ROW
+           WHEN (OLD.tenant_id = '${tenants.rollback}' AND NEW.status = 'failed')
+           EXECUTE FUNCTION ${rollbackFunction}()`,
+      )
+      rollbackTriggerInstalled = true
+      await assert.rejects(
+        repository.markScheduledTaskOutboxFailed(leasedIdentity(command), "invalid_schedule", new Date()),
+        /fixture terminal settlement failure/u,
+      )
+      const rolledBack = await state(tenants.rollback, taskId, command.outboxId)
+      assert.equal(rolledBack.task_status, "active")
+      assert.equal(rolledBack.command_status, "leased")
+      assert.equal(rolledBack.lease_owner, command.leaseOwner)
+      assert.equal(rolledBack.lease_token, command.leaseToken)
+      assert.equal(Number(rolledBack.fence), command.fence)
+
+      await pool.query(`DROP TRIGGER ${rollbackTrigger} ON bff_scheduled_task_outbox`)
+      await pool.query(`DROP FUNCTION ${rollbackFunction}()`)
+      rollbackTriggerInstalled = false
+      assert.equal(await repository.markScheduledTaskOutboxFailed(leasedIdentity(command), "invalid_schedule", new Date()), true)
+      const recovered = await state(tenants.rollback, taskId, command.outboxId)
+      assert.equal(recovered.task_status, "failed")
+      assert.equal(recovered.command_status, "failed")
+    })
+  } finally {
+    if (rollbackTriggerInstalled) {
+      await pool.query(`DROP TRIGGER IF EXISTS ${rollbackTrigger} ON bff_scheduled_task_outbox`).catch(() => undefined)
+      await pool.query(`DROP FUNCTION IF EXISTS ${rollbackFunction}()`).catch(() => undefined)
+    }
+    await pool.query("DELETE FROM bff_scheduled_task_outbox WHERE tenant_id = ANY($1::text[])", [Object.values(tenants)]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_scheduled_task WHERE tenant_id = ANY($1::text[])", [Object.values(tenants)]).catch(() => undefined)
+    await pool.end()
+  }
+})

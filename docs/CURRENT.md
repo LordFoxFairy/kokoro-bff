@@ -1,3 +1,9 @@
+## R257 当前排程 terminal 失败投影切片（2026-10-06）
+
+现 PostgresScheduledTaskRepository 在有效outbox lease/fence行锁下，将当前revision且active+enabled的register/replace终止失败与outbox终结同事务提交为failed、next_run_at=null；paused/stale/delete/retryable不覆盖或复活任务。无schema/contract/新状态变化。
+Root Node22完整check813PASS/0/2skip，完整owner integrations277PASS/0/0skip（真实PG/Redis/BFF HTTP；Session准入及Scheduler HTTP响应替身仅证明本方分支）；独立源审475c1ae3无确定P0–P2。298源/测试冻结与自有库0连接回收、PG集合77→77/Redis15零exact。前两fixture前置与HTTP revision/global-call oracle错误已保留并精确修正，最终完整工程与业务库断言重跑通过。
+这不是正常Scheduler接纳/dispatch/Agent执行/费用或浏览器完整排程闭环；正常配置与源码受控重载另由Root核定。本提交不修改旧failed命令或正常QA paused事实。
+
 ## R257 当前本人管理员资格消费源码发布（正常切换待验）
 
 本提交冻结来源04a6a123：固定IAM d24aa2b internal0.8原字节0153a16f，成功必填platformAdmin仅具名AdmittedUserRequestContext；原GET /v1/me追加required platform_admin，普通false合法200，未知/缺失/错型不假false。public首发前8.0.0/93operation，YAML cec91c36c836319af4acbb4e2cf372434b70dd0f52bdf266420e1957057ac4be，旧MCP6d46ec8 immutable artifact不覆写；Web后继必须固定本新发布，不双读兼容。
