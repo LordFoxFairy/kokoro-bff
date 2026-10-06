@@ -1,3 +1,47 @@
+## R266-SKILLS-BFF-D0：本人 Skill 管理读取（目标 public 8.4.0 / 101 operations，尚未实施）
+
+### 当前事实与固定 owner
+
+本节为当前目标方案，覆盖下方 Storage 删除 D0 的旧版本占位但不改其删除语义；下方全文保持历史字节。正式 BFF 基线是 `/Users/nako/.codex/worktrees/kokoro-r257-bff-normal`、HEAD `42ac39ee1fadc0fc1c2a4eadfad16569bd42dee7`，当前 public OpenAPI `8.3.0` / 99 operations。当前 Platform HTTP consumer仍固定 `9ab3b653…` / 3.2.0，运行时只有 ACTIVE discovery、published detail与MCP读取，没有本人五状态管理读取。本片只写三设计前缀，没有实现、生成或发布能力。
+
+唯一 producer 已正式发布 Platform commit `3d4ba6c3462e3896481f902adf47e0713c4187e4`、HTTP `3.3.0`、raw SHA256 `b6e5d0e0118207ee37933e5c22e94c86d95d74307b22a44e26e8974fede82acf`、combined SHA256 `9ad2c4286f8b2e933450c7a81dda10f7580d1421bf64516dec1231d42d237d19`。它新增 internal-owner `GET /v1/self/skills` 与 `GET /v1/self/skills/{skill_id}`；Platform Connect pin `c94909f1…`及Proto/execution历史独立不变。BFF后继必须一次替换旧HTTP vendor目录与pin并正规生成16个既有output，不保3.2/3.3双轨、不手写DTO。
+
+Root裁定本次公开顺序为 additive `8.4.0` / 101 operations。尚未发行的Storage单Asset删除设计继续保留全部权限、预算、owner receipt和数据规则，但其历史`8.4/101`占位由本次实际顺序替代，后继目标改为`8.5.0` / 103 operations；这不是本片抢先发布Storage能力。
+
+### §8 放置裁决
+
+|项|结论|
+|---|---|
+|Owner|公开HTTP与当次用户准入唯一owner是kokoro-bff；Skill/series/revision/status事实owner仍kokoro-platform。唯一writer按Root任务卡，Git/index/资源由Root。|
+|当前事实|`src/http/routes/platform-projection.ts`和`src/infrastructure/clients/platform/projection-http.ts`承接旧六owner GET；`src/bootstrap/server.ts`在通用user admission后才分派旧projection，旧handler重新建取消scope，不能证明“准入起算10秒”。现vendor 3.2与generated16不含新operation。|
+|目标职责|只新增public `GET /v1/self/skills`与`GET /v1/self/skills/{skill_id}`，投影本人五状态/八安全字段；每次重新做当前Session admission并调用固定Platform owner。它们不是安装/执行资格，也不承载CreateVersion/Withdraw。|
+|目录方案|A：继续塞入`platform-projection.ts`并改通用准入生命周期——淘汰，会扩大旧六取消/错误面且handler起表无法覆盖admission。B：采用新普通`src/http/routes/managed-personal-skills.ts`，在bootstrap通用admission前对两个exact GET分派，由该route持唯一绝对预算并调用现`authorizeUserRequest`；现`projection-http.ts`只扩两个具名generated operation与严格映射。无新模块、auth框架、proxy或进程。|
+|粒度|新route只因“两条管理读共享完整准入预算、closed input与public envelope”变化；owner transport/token/响应读取仍扩现`projection-http.ts`，避免第二credential/token client。`src/bootstrap/server.ts`只作exact早分派；`owner.ts`与旧`platform-projection.ts`不承接新path。|
+|依赖|Browser→Web same-origin→BFF managed route→IAM admission→Platform HTTP3.3。route可依赖现auth、config、response/envelope和窄client；client可依赖generated16、projection credential/token。禁止读Platform DB/源码、Connect替代HTTP、通用owner proxy、BFF SQL/Redis/cache/receipt。|
+|数据/API|公开metadata：owner=`kokoro-bff`、visibility=`public`、stability=`beta`、idempotency=`none`、permission=`product.skill.read_managed_personal`。tenant/user只取当前admission context；owner只接受BFF machine credential和显式tenant/subject headers。无DDL/receipt/cache。|
+|删除项|repin时删除旧`contract/vendor/kokoro-platform-http/9ab3…`，唯一新vendor目录固定`3d4ba6c…`；不保alias/fallback/旧新generated并存。旧ACTIVE discovery路径与语义保留，不删除。|
+|验证|先public/owner pin/generated/route测试在旧源形成业务RED，再正规`node scripts/generate-platform-http-client.mjs --write`与`pnpm contract:check:platform-http`；随后focused contract/HTTP/credential/timeout测试、format/lint/typecheck/contract/architecture/full test/build。真实IAM→BFF→Platform、取消/慢admission/慢body由Root隔离运行。|
+
+### 单一绝对预算、取消与失败闭合
+
+`managed-personal-skills.ts`在exact路径识别后、调用`authorizeUserRequest`前用单调时钟固定`deadlineAt = start + 10_000ms`，安装一个AbortController及request-aborted/response-close监听。相同signal与剩余期限依次覆盖IAM admission、credential file、token flight、owner fetch、1MiB有界response stream、UTF-8/JSON/generated strict解析和BFF回复；任何阶段不得重新起10秒。入口在该专属finally清timer/listener并消费所有已启动Promise的迟到resolve/reject；过期、取消或response关闭后不得采纳late admission/token/owner结果为200。早已abort/过期应在IAM或owner I/O前终止。不是裸`Promise.race`，不留下后台读流或unhandled rejection。
+
+新GET任意`Content-Length`（包括`0`）、`Transfer-Encoding`、`Idempotency-Key`或实际body一律400；无body的普通`Content-Type: application/json`合法。ETag/If-Match不是本read的前置条件，若出现不改变无条件读取结果，也不新增条件头拒绝规则。list query只允许单值`limit/cursor/status`，limit缺省50且1..100、cursor 1..2048、status仅`draft|active|disabled|withdrawn|quarantined`；重复、空、未知键/状态拒绝。detail不接受任何query，path id用owner生成schema。原六读取的body/query/预算行为不因本片改变。
+
+client必须调用generated `listSelfManagedSkills` / `getSelfManagedSkill`（名称以后继实际generator输出为准，不手写函数），并以generated Zod为第一层、BFF绑定为第二层：closed八字段、五状态、正十进制revision、`source_ref=skill:<skill_id>`、detail path ID一致，list cursor形状严格；owner tenant/subject不从body/query自报。响应只接受JSON、request-id与no-store，body上限1MiB；owner省略合法`next_cursor`时BFF归一为public null，其它非法cursor shape拒绝。owner code机器字段只是string，closed tuple由固定runtime+BFF政策显式验证：`capability.subject_invalid`即使owner报400也映503依赖失配；machine auth、未知status/code/retryable组合、错identity/额外字段/坏UTF-8均失败关闭，不返回部分列表或猜状态。
+
+### 精确后继写集
+
+机器/生成阶段：`contract/openapi/v1/openapi.yaml`、`contract/tests/v1-operations.json`、`contract/README.md`、`scripts/verify-openapi.ts`、`scripts/check-contract.mjs`、`contract/dependencies/platform-http.json`、`openapi-ts.platform-http.config.ts`、`scripts/generate-platform-http-client.mjs`，删除旧vendor并新增固定`contract/vendor/kokoro-platform-http/3d4ba6c…/platform-http.openapi.json`，正规生成`src/generated/platform-http/**`现16文件。版本只改public8.4/101及本HTTP pin；Platform Connect依赖不动。
+
+runtime阶段：新增`src/http/routes/managed-personal-skills.ts`；修改`src/bootstrap/server.ts`作exact早分派；扩`src/infrastructure/clients/platform/projection-http.ts`的两个具名operation/strict mapping。只有实际实现发现现token source不能接受同一signal/剩余deadline时，才由Root另准`projection-token.ts`；D0不预授权泛重构。测试优先扩现`test/platform-http-contract.test.mjs`、`test/platform-projection-http.test.mjs`、`test/platform-projection-route.test.mjs`、`test/platform-projection-credential.test.mjs`、`test/contract/openapi-contract.test.mjs`、`test/contract-governance.test.mjs`、`test/architecture.test.ts`；需要新增专属文件须先入任务卡。
+
+### 未决与停止线
+
+当前能力尚未实现：BFF未repin/generate，public8.4/101未发行，正常进程未重载，Web未消费，两条公开路径及真实用户五状态/分页/刷新均未验证。CreateVersion/Withdraw及完整CRUD属于后继生命周期切片。owner机器已发布不代表BFF能调用；三D0通过也不代替真实RED、工程门或用户验收。
+
+<!-- R266-SKILLS-BFF-D0-TECH-END -->
+
 ## R261-BFF-FILE-DELETE-D0：两具名单 Asset 删除（仅设计，具名预算接缝已由Root裁决）
 
 基线为正式 BFF `/Users/nako/.codex/worktrees/kokoro-r257-bff-normal`、Root给定 HEAD `7269e97`。本轮只三文档新增前缀，原全文suffix逐字节保留；未修改源、机器、生成物、配置、Schema、正常数据或untracked var。现公开8.3.0/99 operation没有单文件删除；目标8.4.0/101尚未发布。Storage现pin仍`e8b9928418924812587b7ac07900aee4be5bc27f` / combined `c22b5c10ee698d579753dcac370be371d8dba1df8fead1a12883f5443fbad18a`；17 RPC候选combined `9b602259c3b777e31deb63563467ae160c04bde415e841851aefae760902f34f`不是正式新发布，最终owner commit待定。Storage正式源/机器发布后才准repin及正规生成，禁止先消费mutable工作树。

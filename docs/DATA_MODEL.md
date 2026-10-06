@@ -1,3 +1,25 @@
+## R266-SKILLS-BFF-D0：本人 Skill 管理读取数据边界（零BFF持久化）
+
+本切片不新增或修改BFF表、列、索引、约束、canonical SQL、Redis namespace、receipt、outbox、cache或后台worker；`database/schema.sql`逐字保持。Skill、series、revision、metadata、五状态与管理分页cursor的唯一owner是kokoro-platform `3d4ba6c…`。BFF只在单次已准入请求中把可信tenant/subject投影到固定Platform HTTP3.3，并把严格安全响应映射为public envelope；不保存Skill镜像、本人历史或列表快照，不新增业务/持久token或授权缓存；现credential版本键控machine token内存cache/shared flight保持，当前用户admission仍每次重验。
+
+### 状态、分页与一致性
+
+`draft|active|disabled|withdrawn|quarantined`是Platform当前行事实，不是BFF状态机。每个revision独立返回，BFF不按series合并、不选latest、不从旧ACTIVE discovery或installation记录补全管理历史。`source_ref`必须绑定返回`skill_id`；detail还绑定path ID。owner cursor绑定tenant、subject、status/all和稳定排序；BFF对合法非空cursor原样有界传递与回传，owner合法省略next_cursor时只在public envelope归一为null；其它shape拒绝。BFF不解码、不跨subject复用、不把它当权限凭据。分页是每页当前读，不宣称跨页snapshot。
+
+当前Session/IAM admission、Platform token和owner读都在请求生命周期内；不得写授权cache来绕过重验。10秒绝对预算/取消是传输生命周期，不形成持久lease或恢复状态。GET无业务副作用，不申请idempotency receipt；失败或未知结果允许调用方重新GET，但BFF不自动重试或把旧200缓存为当前状态。
+
+### owner边界与删除规则版本顺序
+
+本次public8.4/101只新增两条读取，不改变Storage任何数据或删除流程。下方R261单Asset删除D0的旧`8.4/101`文字是当时未发行占位；按Root实际顺序，其后继机器目标为8.5/103，原personal/project scope、引用冲突、owner receipt、logical delete与physical cleanup规则全部保留。两个能力不共享表、receipt或cursor。
+
+### 事务、失败与验证
+
+BFF无事务/锁序/补偿：Platform在其owner边界保证本人谓词、metadata一致性和keyset；BFF严格验证成功/错误shape并fail closed。坏owner数据或未知错误tuple为502，不落地“待修复”行；owner/IAM不可用或绝对deadline为503，不返回缓存/部分列表。取消后迟到owner数据被丢弃并清理stream/listener。
+
+后继数据门只验证`database/schema.sql`与现表manifest零差异、无新增SQL/Redis key/receipt调用；真实测试另证跨tenant/subject、status/cursor绑定、分页中更新、owner malformed/timeout/cancel不会产生任何BFF持久化。当前未运行schema或资源门，三D0不是实现证据。
+
+<!-- R266-SKILLS-BFF-D0-DATA-END -->
+
 ## R261-BFF-FILE-DELETE-D0：唯一Storage删除事实、零BFF数据演进（仅设计）
 
 基线为正式 BFF `/Users/nako/.codex/worktrees/kokoro-r257-bff-normal`、Root给定 HEAD `7269e97`。本轮只三文档新增前缀，原全文suffix逐字节保留；未修改源、机器、生成物、配置、Schema、正常数据或untracked var。现公开8.3.0/99 operation没有单文件删除；目标8.4.0/101尚未发布。Storage现pin仍`e8b9928418924812587b7ac07900aee4be5bc27f` / combined `c22b5c10ee698d579753dcac370be371d8dba1df8fead1a12883f5443fbad18a`；17 RPC候选combined `9b602259c3b777e31deb63563467ae160c04bde415e841851aefae760902f34f`不是正式新发布，最终owner commit待定。Storage正式源/机器发布后才准repin及正规生成，禁止先消费mutable工作树。

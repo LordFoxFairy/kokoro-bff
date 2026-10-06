@@ -1,3 +1,50 @@
+## R266-SKILLS-BFF-D0：本人 Skill 管理 public read contract（目标8.4.0，尚未发布）
+
+### 版本、路径与治理
+
+当前唯一public机器事实仍`contract/openapi/v1/openapi.yaml` 8.3.0/99；本节定义下一additive 8.4.0/101目标，不把文档当已发行能力。新增且仅新增：
+
+|method/path|operationId|metadata|
+|---|---|---|
+|`GET /v1/self/skills`|`listManagedPersonalSkills`|owner `kokoro-bff`；public；beta；idempotency none；permission `product.skill.read_managed_personal`|
+|`GET /v1/self/skills/{skill_id}`|`getManagedPersonalSkill`|同上|
+
+事实owner固定Platform `3d4ba6c3462e3896481f902adf47e0713c4187e4` HTTP3.3/raw`b6e5d0e…`/combined`9ad2c428…`；BFF通过固定vendor/generated client消费。Platform Connect pin不变。旧`/v1/skills*` ACTIVE discovery/published detail、安装和catalog mutation全部保持；新read不能作为安装/执行grant。
+
+### 请求与成功响应
+
+身份不出现在path/query/body。每次请求必须通过现service envelope与当前Bearer Session admission；可信`tenant_id/user_id`只来自IAM结果，BFF向Platform传匹配tenant/subject。普通用户、作者身份和资源owner每页/每detail重新验证；Platform admin、Organization member或内部service身份不自动获得他人的本人记录。
+
+list唯一query：`limit`可省略默认50、整数1..100；`cursor`可省略，出现时1..2048 opaque；`status`可省略，出现时仅`draft|active|disabled|withdrawn|quarantined`。每项只含required `skill_id/source_ref/series_id/revision/name/summary/tags/status`；revision为正十进制字符串，summary允许空串，返回值不trim。成功：`{data:{skills:[...],next_cursor:string|null},meta:{request_id}}`；owner合法省略`next_cursor`时BFF规范化为public `null`，显式非空合法值原样映射，null/空串/超界/其它shape拒绝。稳定排序/cursor语义由Platform管理surface拥有，BFF不得后过滤、重排或造cursor。
+
+detail path只接canonical exact `skill_id`且零query，成功`{data:item,meta:{request_id}}`。返回exact revision，不折叠为latest；不存在、跨tenant或非本人统一404，不泄漏存在性。两响应及所有错误都要求`x-request-id`与body`meta.request_id`等于当次BFF request ID、`Cache-Control: no-store`。
+
+GET closed input：任意`Content-Length`（含`0`）、`Transfer-Encoding`、`Idempotency-Key`或body均400；仅Content-Type且无body合法。未知/重复/空query拒400。读取是无条件读取：不要求ETag/If-Match，调用方即使发送条件头也不改变结果且不作为额外拒绝条件；无receipt、mutation key或自动retry。
+
+### 稳定错误闭集
+
+公开错误继续使用现BFF envelope`{error:{code,message},meta:{request_id}}`，不新增统一`retryable`字段；retry/read策略由status+稳定code契约决定。目标闭集：
+
+|status|code/来源|
+|---|---|
+|400|`invalid_skill_request`：path/query/framing/body/idempotency key非法，或owner合法`capability.invalid_request`|
+|401|现IAM admission `session_authentication_required|session_invalid`|
+|403|现service/session/Product tenant admission闭集：`service_auth_failed|session_forbidden|product_tenant_forbidden`|
+|404|detail `skill_not_found`：owner合法不可见/不存在；list无404成功语义|
+|429|现admission `session_rate_limited`；合法有界`Retry-After`按现公共规则|
+|502|`skill_response_invalid`：owner非JSON/坏UTF-8/超1MiB/额外或缺字段、identity不绑定、未知status/code组合、owner500 internal或不符合正式profile|
+|503|`product_tenant_not_configured|iam_admission_unavailable|skill_dependency_unavailable`：本地配置、credential/token、transport、owner正式503、machine workload认证/权限失败、任一阶段10秒绝对deadline|
+
+Platform OpenAPI的`ErrorEnvelope.error.code`机器shape是普通string，并未发布code enum；这里的closed tuple来自固定owner runtime行为与BFF显式验证政策，不冒充owner机器枚举。精确映射：400 `capability.invalid_request`→400；400 `capability.subject_invalid`→503 `skill_dependency_unavailable`（可信subject/header集成失配，不甩给用户400）；detail合法404；503 `capability.dependencies_unavailable`→503；其余已知machine认证/权限错误只映依赖503，不能冒充当前用户401/403；owner internal500及任何未知status/code/retryable tuple均502。取消/response关闭时停止写响应，不把迟到结果映200。BFF不透传owner message、retryable字段、tenant/subject或内部reason。
+
+### 供应链与breaking规则
+
+一次clean repin删除旧3.2 vendor目录，固定Platform完整commit+raw digest；`@hey-api/openapi-ts`沿现配置正规生成16output并由manifest逐SHA验证。public唯一OpenAPI升8.4.0、operation inventory升101；原99 operations逐项wire/metadata保持。历史Storage delete文档中的8.4/101只为未发行占位，本目标占用实际下一版本后，Storage两个delete后继为8.5/103；其API权限、预算、错误与owner receipt规则不变。
+
+当前未决：机器尚未写、generated未刷新、runtime未实现、Root真实IAM/Platform与Web未验；不能称8.4已发布或完整Skill CRUD完成。
+
+<!-- R266-SKILLS-BFF-D0-API-END -->
+
 ## R261-BFF-FILE-DELETE-D0：public两操作与owner receipt（仅设计，8.4未发）
 
 基线为正式 BFF `/Users/nako/.codex/worktrees/kokoro-r257-bff-normal`、Root给定 HEAD `7269e97`。本轮只三文档新增前缀，原全文suffix逐字节保留；未修改源、机器、生成物、配置、Schema、正常数据或untracked var。现公开8.3.0/99 operation没有单文件删除；目标8.4.0/101尚未发布。Storage现pin仍`e8b9928418924812587b7ac07900aee4be5bc27f` / combined `c22b5c10ee698d579753dcac370be371d8dba1df8fead1a12883f5443fbad18a`；17 RPC候选combined `9b602259c3b777e31deb63563467ae160c04bde415e841851aefae760902f34f`不是正式新发布，最终owner commit待定。Storage正式源/机器发布后才准repin及正规生成，禁止先消费mutable工作树。
