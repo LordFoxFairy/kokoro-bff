@@ -67,6 +67,7 @@ function expectedIdempotency(operation) {
   if (["GET", "HEAD", "OPTIONS"].includes(operation.method)) return "none"
   if (operation.fields.get("operationId") === "previewGithubSkill") return "none"
   if (TEAM_OWNER_DELEGATED_MUTATIONS.has(`${operation.method} ${operation.path} ${operation.fields.get("operationId")}`)) return "none"
+  if (operation.method === "PUT" && operation.path === "/v1/preferences/personalization" && operation.fields.get("operationId") === "replaceSelfPersonalization") return "none"
   return "required"
 }
 

@@ -3,6 +3,16 @@
   "operations": [
     {
       "method": "GET",
+      "path": "/v1/preferences/personalization",
+      "operation_id": "getSelfPersonalization"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/preferences/personalization",
+      "operation_id": "replaceSelfPersonalization"
+    },
+    {
+      "method": "GET",
       "path": "/healthz",
       "operation_id": "healthz"
     },

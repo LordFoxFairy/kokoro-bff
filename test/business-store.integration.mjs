@@ -2443,3 +2443,366 @@ integrationTest("R241 lifecycle L6 HTTP abort during real Project lock or receip
       await r241CommittedFacts(f, before, project, "取消恢复", [["abort", "取消恢复"]])
     })
 })
+
+// R257: real BFF HTTP / owner PostgreSQL; IAM admission remains the existing boundary double.
+// Root installs the current canonical schema in its isolated fixture before running this case.
+// Reuse the owned-tenant lifecycle; do not add schema DDL, global deletion, or a fake store.
+integrationTest("R257 personalization ordinary Session reads absent saves four fields and reads committed snapshot", async (t) => {
+  const f = await r241Fixture(t)
+  const currentUser = await f.request("me")
+  assert.equal(currentUser.status, 200, "existing ordinary Session admission must succeed before personalization RED")
+  assert.deepEqual(currentUser.body.data, { user_id: f.owner, tenant_id: f.tenant, platform_admin: false })
+
+  const initial = await f.request("preferences/personalization")
+  assert.equal(initial.status, 200, "an admitted ordinary user must read the absent personalization resource")
+  r241Headers(initial)
+  assert.deepEqual(initial.body, { data: { personalization: null, revision: 0 } })
+
+  const personalization = {
+    nickname: "R257 本人昵称 🌿",
+    occupation: "测试职业",
+    about: "仅用于本测试的非敏感介绍。\n第二行保留。",
+    instructions: "本测试保存四项内容，不声明 Agent 已应用。",
+  }
+  const saved = await f.request("preferences/personalization", "PUT", { expected_revision: 0, ...personalization })
+  assert.equal(saved.status, 200, "explicit conditional save must return a committed HTTP ACK without an Idempotency-Key")
+  r241Headers(saved)
+  assert.deepEqual(saved.body, { data: { personalization, revision: 1 } })
+
+  const readBack = await f.request("preferences/personalization")
+  assert.equal(readBack.status, 200, "a new HTTP read must recover the complete saved snapshot")
+  r241Headers(readBack)
+  assert.deepEqual(readBack.body, saved.body)
+})
+
+function r257PersonalizationFields(label = "A") {
+  return { nickname: label, occupation: "测试职业", about: "自有测试介绍", instructions: "保留这段非敏感测试文本" }
+}
+
+function r257PersonalizationError(result, status, code) {
+  assert.equal(result.status, status)
+  r241Headers(result)
+  assert.deepEqual(Object.keys(result.body), ["error"])
+  assert.deepEqual(Object.keys(result.body.error).sort(), ["code", "message", "retryable"])
+  assert.equal(result.body.error.code, code)
+  assert.equal(result.body.error.retryable, false)
+}
+
+integrationTest("R257 personalization absent read is read-only and current owner survives restart and clear", async (t) => {
+  const f = await r241Fixture(t)
+  const path = "preferences/personalization"
+  assert.deepEqual((await f.request(path)).body, { data: { personalization: null, revision: 0 } })
+  assert.equal((await f.pool.query("SELECT count(*)::int AS n FROM bff_personalization WHERE tenant_id=$1", [f.tenant])).rows[0].n, 0)
+  const fields = r257PersonalizationFields("本人 🌿")
+  assert.equal((await f.request(path, "PUT", { expected_revision: 0, ...fields })).status, 200)
+  const otherToken = `r257-other-${randomUUID()}`
+  f.admission.allow(otherToken, { namespace: f.tenant, userId: "r257_other" })
+  const other = await f.request(path, "GET", undefined, { authorization: `Bearer ${otherToken}` })
+  assert.deepEqual(other.body, { data: { personalization: null, revision: 0 } })
+  const otherFields = r257PersonalizationFields("另一本人")
+  const otherSave = await f.request(path, "PUT", { expected_revision: 0, ...otherFields }, { authorization: `Bearer ${otherToken}` })
+  assert.equal(otherSave.status, 200)
+  const crossToken = `r257-cross-${randomUUID()}`
+  f.admission.allow(crossToken, { namespace: `${f.tenant}_other`, userId: f.owner })
+  r257PersonalizationError(await f.request(path, "GET", undefined, { authorization: `Bearer ${crossToken}` }), 403, "product_tenant_forbidden")
+  await f.restart()
+  assert.deepEqual((await f.request(path)).body, { data: { personalization: fields, revision: 1 } })
+  const empty = { nickname: "", occupation: "", about: "", instructions: "" }
+  assert.deepEqual((await f.request(path, "PUT", { expected_revision: 1, ...empty })).body, { data: { personalization: empty, revision: 2 } })
+  assert.deepEqual((await f.request(path)).body, { data: { personalization: empty, revision: 2 } })
+  assert.deepEqual((await f.request(path, "GET", undefined, { authorization: `Bearer ${otherToken}` })).body, {
+    data: { personalization: otherFields, revision: 1 },
+  })
+  assert.equal((await f.pool.query("SELECT count(*)::int AS n FROM bff_idempotency_receipt WHERE position($1 in scope)>0", [f.tenant])).rows[0].n, 0)
+})
+
+integrationTest("R257 personalization first and subsequent concurrent CAS each have one winner without lost update", async (t) => {
+  const f = await r241Fixture(t)
+  const path = "preferences/personalization"
+  for (const expected of [0, 1]) {
+    const inputs = ["A", "B"].map((label) => ({ expected_revision: expected, ...r257PersonalizationFields(`${expected}-${label}`) }))
+    const results = await Promise.all(inputs.map((body) => f.request(path, "PUT", body)))
+    assert.deepEqual(results.map((result) => result.status).sort(), [200, 409])
+    const winner = results.findIndex((result) => result.status === 200)
+    const { expected_revision: ignored, ...fields } = inputs[winner]
+    assert.equal(ignored, expected)
+    assert.deepEqual(results[winner].body, { data: { personalization: fields, revision: expected + 1 } })
+    r257PersonalizationError(results[1 - winner], 409, "personalization_revision_conflict")
+    assert.deepEqual((await f.request(path)).body, results[winner].body)
+    r257PersonalizationError(await f.request(path, "PUT", inputs[winner]), 409, "personalization_revision_conflict")
+    assert.deepEqual((await f.request(path)).body, results[winner].body)
+  }
+  assert.equal((await f.pool.query("SELECT count(*)::int AS n FROM bff_personalization WHERE tenant_id=$1", [f.tenant])).rows[0].n, 1)
+})
+
+integrationTest("R257 personalization rejects malformed requests without inserting private facts or receipts", async (t) => {
+  const f = await r241Fixture(t)
+  const path = "preferences/personalization"
+  const valid = { expected_revision: 0, ...r257PersonalizationFields() }
+  for (const body of [
+    { ...valid, tenant_id: f.tenant },
+    { ...valid, subject_id: f.owner },
+    { ...valid, extra: true },
+    { ...valid, nickname: null },
+    { ...valid, expected_revision: "0" },
+    { ...valid, expected_revision: -1 },
+    { ...valid, instructions: "🌿".repeat(8001) },
+    { nickname: "missing" },
+    [],
+  ])
+    r257PersonalizationError(await f.request(path, "PUT", body), 400, "invalid_personalization_request")
+  for (const query of ["?unknown=x", "?owner_id=x&owner_id=y"]) r257PersonalizationError(await f.request(path + query), 400, "invalid_personalization_request")
+  const retired = await f.request(path, "PATCH", valid)
+  r257PersonalizationError(retired, 405, "method_not_allowed")
+  assert.equal(retired.headers.get("allow"), "GET, PUT")
+  r257PersonalizationError(await f.request(path, "PUT", valid, { "content-type": "text/plain" }), 400, "invalid_personalization_request")
+  r257PersonalizationError(await f.request(path, "PUT", { ...valid, instructions: "x".repeat(70000) }), 413, "request_body_too_large")
+  assert.equal((await f.pool.query("SELECT count(*)::int AS n FROM bff_personalization WHERE tenant_id=$1", [f.tenant])).rows[0].n, 0)
+  assert.equal((await f.pool.query("SELECT count(*)::int AS n FROM bff_idempotency_receipt WHERE position($1 in scope)>0", [f.tenant])).rows[0].n, 0)
+  const denied = `r257-denied-${randomUUID()}`
+  f.admission.deny(denied, { ok: false, status: 403, code: "session_forbidden" })
+  r257PersonalizationError(await f.request(path, "PUT", valid, { authorization: `Bearer ${denied}` }), 403, "session_forbidden")
+  assert.equal((await f.request(path, "PUT", valid)).status, 200, "a later valid save must still work")
+})
+
+integrationTest("R257 personalization real row lock times out without commit and later CAS recovers", async (t) => {
+  const f = await r241Fixture(t)
+  const path = "preferences/personalization"
+  const original = r257PersonalizationFields("A")
+  assert.equal((await f.request(path, "PUT", { expected_revision: 0, ...original })).status, 200)
+  const blocker = await f.pool.connect()
+  const observer = r241ObservePool(f.ownerPool)
+  try {
+    await blocker.query("BEGIN")
+    await blocker.query("SELECT 1 FROM bff_personalization WHERE tenant_id=$1 AND owner_id=$2 FOR UPDATE", [f.tenant, f.owner])
+    const started = performance.now()
+    r257PersonalizationError(await f.request(path, "PUT", { expected_revision: 1, ...r257PersonalizationFields("B") }), 503, "personalization_unavailable")
+    assert.ok(performance.now() - started < 2500, "the row lock uses its one-second bound, not the full route budget")
+    assert.ok(
+      observer.leases.some((lease) => lease.events.some((event) => event.errorCode === "55P03")),
+      "real PG lock_timeout must fire",
+    )
+    assert.equal(
+      observer.leases.some((lease) => lease.events.some((event) => event.sql === "COMMIT")),
+      false,
+    )
+  } finally {
+    await blocker.query("ROLLBACK")
+    blocker.release()
+    observer.restore()
+  }
+  assert.deepEqual((await f.request(path)).body, { data: { personalization: original, revision: 1 } })
+  assert.equal((await f.request(path, "PUT", { expected_revision: 1, ...r257PersonalizationFields("B") })).status, 200)
+})
+
+integrationTest("R257 personalization pool saturation exhausts one deadline and retires late acquisition before SQL", { timeout: 14000 }, async (t) => {
+  const f = await r241Fixture(t)
+  const held = []
+  let observer
+  let pending
+  try {
+    for (let i = 0; i < f.ownerPool.options.max; i++) held.push(await f.ownerPool.connect())
+    observer = r241ObservePool(f.ownerPool)
+    const started = performance.now()
+    pending = r241Observed(f.request("preferences/personalization", "PUT", { expected_revision: 0, ...r257PersonalizationFields() }))
+    await r241Until(() => f.ownerPool.waitingCount === 1, 1500)
+    r257PersonalizationError(r241Value(await pending), 503, "personalization_unavailable")
+    const elapsed = performance.now() - started
+    assert.ok(elapsed >= 4700 && elapsed < 5800, `single route budget elapsed ${elapsed}`)
+    held.shift().release()
+    await r241Until(() => observer.leases.length === 1 && observer.leases[0].releases.length === 1, 1500)
+    assert.deepEqual(observer.leases[0].events, [])
+    assert.deepEqual(
+      observer.leases[0].releases.map((item) => item.destroy),
+      [false],
+    )
+  } finally {
+    for (const client of held) client.release()
+    if (pending) await pending
+    observer?.restore()
+  }
+  assert.deepEqual((await f.request("preferences/personalization")).body, { data: { personalization: null, revision: 0 } })
+  assert.equal((await f.request("preferences/personalization", "PUT", { expected_revision: 0, ...r257PersonalizationFields() })).status, 200)
+})
+
+integrationTest("R257 personalization real committed SQL with observed ACK rejection reconciles without overwriting later save", async (t) => {
+  const f = await r241Fixture(t)
+  const path = "preferences/personalization"
+  let brokenPid
+  const observer = r241ObservePool(f.ownerPool, async (lease, event) => {
+    if (event.sql.startsWith("INSERT INTO bff_personalization") && event.result.rowCount === 1) lease.personalizationSaved = true
+    if (lease.personalizationSaved && brokenPid === undefined && event.sql === "COMMIT") {
+      assert.equal(event.result.command, "COMMIT")
+      brokenPid = lease.pid
+      const absorb = () => {}
+      lease.fixtureErrors.push(absorb)
+      lease.client.on("error", absorb)
+      lease.client.connection.stream.destroy()
+      // Observation hook rejects after PostgreSQL acknowledged COMMIT; this is not a TCP ACK suppression test.
+      throw new Error("R257_OBSERVED_COMMIT_ACK_REJECTED")
+    }
+  })
+  const a = r257PersonalizationFields("A")
+  try {
+    r257PersonalizationError(await f.request(path, "PUT", { expected_revision: 0, ...a }), 503, "personalization_save_unknown")
+    assert.ok(brokenPid)
+    const lease = await r241Released(f, observer, brokenPid, true)
+    assert.equal(
+      lease.events.some((event) => event.sql === "ROLLBACK"),
+      false,
+      "unknown commit is not guessed rolled back",
+    )
+  } finally {
+    observer.restore()
+  }
+  assert.deepEqual((await f.request(path)).body, { data: { personalization: a, revision: 1 } })
+  const b = r257PersonalizationFields("B")
+  assert.equal((await f.request(path, "PUT", { expected_revision: 1, ...b })).status, 200)
+  r257PersonalizationError(await f.request(path, "PUT", { expected_revision: 0, ...a }), 409, "personalization_revision_conflict")
+  await f.restart()
+  assert.deepEqual((await f.request(path)).body, { data: { personalization: b, revision: 2 } })
+})
+
+integrationTest("R257 personalization HTTP cancellation during real PG lock retires exact client without a late write", async (t) => {
+  const f = await r241Fixture(t)
+  const path = "preferences/personalization"
+  const original = r257PersonalizationFields("A")
+  assert.equal((await f.request(path, "PUT", { expected_revision: 0, ...original })).status, 200)
+  const blocker = await f.pool.connect()
+  const observer = r241ObservePool(f.ownerPool)
+  const abort = new AbortController()
+  let pending
+  try {
+    await blocker.query("BEGIN")
+    await blocker.query("SELECT 1 FROM bff_personalization WHERE tenant_id=$1 AND owner_id=$2 FOR UPDATE", [f.tenant, f.owner])
+    pending = r241Observed(f.request(path, "PUT", { expected_revision: 1, ...r257PersonalizationFields("B") }, {}, abort.signal))
+    const pid = await r241Until(async () => {
+      const result = await blocker.query("SELECT pid FROM pg_stat_activity WHERE datname=current_database() AND $1=ANY(pg_blocking_pids(pid))", [
+        blocker.processID,
+      ])
+      return result.rows[0]?.pid
+    }, 1500)
+    abort.abort()
+    assert.ok((await pending).error)
+    await r241Released(f, observer, pid, true)
+  } finally {
+    abort.abort()
+    await blocker.query("ROLLBACK")
+    blocker.release()
+    if (pending) await pending
+    observer.restore()
+  }
+  assert.deepEqual((await f.request(path)).body, { data: { personalization: original, revision: 1 } })
+  assert.equal((await f.request(path, "PUT", { expected_revision: 1, ...r257PersonalizationFields("C") })).status, 200)
+})
+
+async function r257RawPersonalization(f, { method = "PUT", suffix = "", raw = "", headers = [], incomplete = false } = {}) {
+  const { request: httpRequest } = await import("node:http")
+  const address = servers.at(-1).address()
+  assert.ok(address && typeof address !== "string", "the current owned fixture server must be listening")
+  return new Promise((resolve, reject) => {
+    const outgoing = httpRequest(
+      {
+        hostname: "127.0.0.1",
+        port: address.port,
+        path: `/v1/preferences/personalization${suffix}`,
+        method,
+        signal: AbortSignal.timeout(6500),
+        headers: [
+          "Host",
+          `127.0.0.1:${address.port}`,
+          "x-kokoro-service",
+          "web-bff",
+          "x-kokoro-internal-secret",
+          "web-secret",
+          "authorization",
+          `Bearer ${f.token}`,
+          "Content-Type",
+          "application/json",
+          "Content-Length",
+          String(incomplete ? 100 : Buffer.byteLength(raw)),
+          ...headers,
+        ],
+      },
+      (response) => {
+        const chunks = []
+        response.on("data", (chunk) => chunks.push(Buffer.from(chunk)))
+        response.once("error", reject)
+        response.once("end", () => {
+          try {
+            resolve({ status: response.statusCode, headers: new Headers(response.headers), body: JSON.parse(Buffer.concat(chunks).toString("utf8")) })
+          } catch (error) {
+            reject(error)
+          } finally {
+            outgoing.destroy()
+          }
+        })
+      },
+    )
+    outgoing.once("error", reject)
+    if (incomplete) {
+      outgoing.flushHeaders()
+      outgoing.write(raw)
+    } else outgoing.end(raw)
+  })
+}
+
+integrationTest("R257 personalization real raw HTTP rejects ambiguous JSON headers query and GET bodies", async (t) => {
+  const f = await r241Fixture(t)
+  const raw = JSON.stringify({ expected_revision: 0, ...r257PersonalizationFields() })
+  for (const options of [
+    { raw: raw.replace('"expected_revision":0', '"expected_revision":0,"expected_revision":0') },
+    { raw, headers: ["Content-Type", "application/json"] },
+    { method: "GET", raw: "{}" },
+    { method: "GET", suffix: "?" },
+  ])
+    r257PersonalizationError(await r257RawPersonalization(f, options), 400, "invalid_personalization_request")
+  assert.deepEqual((await f.request("preferences/personalization")).body, { data: { personalization: null, revision: 0 } })
+})
+
+integrationTest("R257 personalization an unfinished request body spends the route deadline before any SQL checkout", { timeout: 10000 }, async (t) => {
+  const f = await r241Fixture(t)
+  const observer = r241ObservePool(f.ownerPool)
+  try {
+    const started = performance.now()
+    r257PersonalizationError(await r257RawPersonalization(f, { raw: "{", incomplete: true }), 503, "personalization_unavailable")
+    const elapsed = performance.now() - started
+    assert.ok(elapsed >= 4700 && elapsed < 5900, `body belongs to the same bounded operation: ${elapsed}`)
+    assert.equal(observer.leases.length, 0, "no database lease before a complete valid body")
+  } finally {
+    observer.restore()
+  }
+  assert.deepEqual((await f.request("preferences/personalization")).body, { data: { personalization: null, revision: 0 } })
+})
+
+integrationTest("R257 personalization real catalog and terminal revision preserve singleton invariants", async (t) => {
+  const f = await r241Fixture(t)
+  const columns = await f.pool.query(
+    "SELECT column_name,data_type,is_nullable,datetime_precision FROM information_schema.columns WHERE table_schema='kokoro_bff' AND table_name='bff_personalization' ORDER BY ordinal_position",
+  )
+  assert.deepEqual(
+    columns.rows.map((row) => row.column_name),
+    ["tenant_id", "owner_id", "nickname", "occupation", "about", "instructions", "revision", "created_at", "updated_at"],
+  )
+  assert.ok(columns.rows.every((row) => row.is_nullable === "NO"))
+  assert.equal(columns.rows.find((row) => row.column_name === "revision").data_type, "bigint")
+  for (const row of columns.rows.filter((item) => item.column_name.endsWith("_at"))) assert.equal(row.datetime_precision, 3)
+  const constraints = (
+    await f.pool.query("SELECT contype,pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conrelid='kokoro_bff.bff_personalization'::regclass")
+  ).rows
+  assert.equal(constraints.filter((row) => row.contype === "p").length, 1)
+  assert.match(constraints.find((row) => row.contype === "p").definition, /PRIMARY KEY \(tenant_id, owner_id\)/u)
+  assert.equal(
+    constraints.some((row) => row.contype === "f"),
+    false,
+  )
+  const fields = r257PersonalizationFields()
+  assert.equal((await f.request("preferences/personalization", "PUT", { expected_revision: 0, ...fields })).status, 200)
+  await f.pool.query("UPDATE bff_personalization SET revision=9007199254740991 WHERE tenant_id=$1 AND owner_id=$2", [f.tenant, f.owner])
+  r257PersonalizationError(
+    await f.request("preferences/personalization", "PUT", { expected_revision: Number.MAX_SAFE_INTEGER, ...r257PersonalizationFields("not written") }),
+    409,
+    "personalization_revision_exhausted",
+  )
+  assert.deepEqual((await f.request("preferences/personalization")).body, { data: { personalization: fields, revision: Number.MAX_SAFE_INTEGER } })
+})

@@ -426,3 +426,23 @@ databaseTest("R237 fresh catalog has the single nullable Project tombstone and e
     }
   }
 })
+
+test("R257 personalization canonical owns one bounded caller singleton without a history or foreign key", async () => {
+  const schema = await loadCanonicalSchema()
+  const block = schema.match(/CREATE TABLE IF NOT EXISTS bff_personalization \([\s\S]*?\n\);/u)?.[0] ?? ""
+  assert.ok(block)
+  assert.match(block, /PRIMARY KEY \(tenant_id, owner_id\)/u)
+  assert.match(block, /revision BIGINT NOT NULL/u)
+  assert.match(block, /revision >= 1 AND revision <= 9007199254740991/u)
+  for (const [field, maximum] of [
+    ["nickname", 128],
+    ["occupation", 256],
+    ["about", 2000],
+    ["instructions", 8000],
+  ]) {
+    assert.ok(block.includes(`${field} TEXT NOT NULL`))
+    assert.ok(block.includes(`char_length(${field}) <= ${maximum}`))
+  }
+  assert.equal((block.match(/TIMESTAMPTZ\(3\) NOT NULL/gu) ?? []).length, 2)
+  assert.doesNotMatch(block, /FOREIGN KEY|REFERENCES|JSONB|deleted_at|receipt|DEFAULT ''/iu)
+})

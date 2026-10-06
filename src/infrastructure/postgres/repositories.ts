@@ -1,3 +1,4 @@
+import { PostgresPersonalizationRepository } from "./personalization-repository.js"
 import { PostgresBffDatabase } from "./client.js"
 import { PostgresIdempotencyRepository } from "./idempotency-repository.js"
 import { PostgresProjectRepository } from "./project-repository.js"
@@ -61,7 +62,15 @@ export class PostgresBffRepositories {
     this.schedulerDispatchReceipts = new PostgresSchedulerDispatchReceiptRepository(this.database.pool)
     this.scheduledAgentDispatch = new PostgresScheduledAgentDispatchRepository(this.database)
     this.artifactLibrary = new PostgresConversationArtifactLibrary(this.database)
-    this.services = new BffApplicationServices(this.projects, this.scheduled, chat, publicShares, agentDispatchOutbox, new Sha256StableIdGenerator())
+    this.services = new BffApplicationServices(
+      this.projects,
+      this.scheduled,
+      chat,
+      publicShares,
+      agentDispatchOutbox,
+      new Sha256StableIdGenerator(),
+      new PostgresPersonalizationRepository(this.database),
+    )
     this.agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(this.database))
     this.agUiConsumers = new PostgresAgUiConsumerRepository(this.database)
   }

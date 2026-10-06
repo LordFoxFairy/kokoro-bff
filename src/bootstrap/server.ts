@@ -1,3 +1,4 @@
+import { personalizationRoute } from "../http/routes/personalization.js"
 import { projectRenameRoute } from "../http/routes/project-rename.js"
 import { projectResourceListRoute } from "../http/routes/project-resource-list.js"
 import { libraryFileListRoute } from "../http/routes/library-file-list.js"
@@ -158,6 +159,7 @@ async function handle(
   }
 
   const businessPath = segments.slice(1)
+  const isPersonalizationPath = businessPath.length === 2 && businessPath[0] === "preferences" && businessPath[1] === "personalization"
   const isProjectRenamePath =
     composition.routeHandler === undefined &&
     request.method === "PATCH" &&
@@ -211,7 +213,8 @@ async function handle(
         isSkillInstallationPath ||
         isPlatformProjectionRead ||
         isMoveSessionPath ||
-        isProjectRenamePath
+        isProjectRenamePath ||
+        isPersonalizationPath
       ) {
         response.setHeader("cache-control", "no-store")
         send(
@@ -225,6 +228,11 @@ async function handle(
     return
   }
   const context = admission.context
+
+  if (isPersonalizationPath) {
+    await personalizationRoute(request, response, context, composition.businessStore)
+    return
+  }
 
   if (isProjectRenamePath) {
     await projectRenameRoute(request, response, context, businessPath[1] ?? "", composition.businessStore)

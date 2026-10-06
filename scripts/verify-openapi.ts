@@ -306,6 +306,9 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
         "PlatformProjectionReadErrorResponse",
         "MoveSessionResponse",
         "MoveSessionErrorResponse",
+        "GetSelfPersonalizationResponse",
+        "ReplaceSelfPersonalizationResponse",
+        "PersonalizationErrorResponse",
         "RenameProjectResponse",
         "RenameProjectErrorResponse",
         "SkillListResponse",
@@ -343,6 +346,8 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
       operation.method === "GET" && ["listSkills", "listSkillPool", "listSkillCatalog", "listMcpServers", "listSelfMcpConnections"].includes(operationId)
     const isCreateSkillDraft = operationId === "createSkillDraft"
     const isMoveSession = operationId === "moveSession" && operation.method === "POST" && operation.path === "/v1/sessions/{id}/move"
+    const isPersonalization = operation.path === "/v1/preferences/personalization" && ((operation.method === "GET" && operationId === "getSelfPersonalization") || (operation.method === "PUT" && operationId === "replaceSelfPersonalization"))
+    if (!isPersonalization && operation.text.includes("#/components/responses/Personalization")) errors.push("Personalization response components require the exact caller-owned operation")
     const isRenameProject = operationId === "renameProject" && operation.method === "PATCH" && operation.path === "/v1/projects/{projectId}/name"
     const isGetSkillPackageUpload =
       operationId === "getSkillPackageUpload" && operation.method === "GET" && operation.path === "/v1/skills/{skill_id}/package-upload"
@@ -543,6 +548,7 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
           !isPublishSkill &&
           !isMoveSession &&
           !isRenameProject &&
+          !isPersonalization &&
           !response.includes("#/components/schemas/ErrorEnvelope")
         ) {
           errors.push(`${operation.method} ${operation.path} ${status} must use ErrorEnvelope`)
@@ -562,7 +568,8 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
           (isValidateSkillDraft && match[1].startsWith("SkillValidate")) ||
           (isPublishSkill && match[1].startsWith("SkillPublish")) ||
           (isMoveSession && match[1].startsWith("MoveSession")) ||
-          (isRenameProject && match[1].startsWith("RenameProject"))
+          (isRenameProject && match[1].startsWith("RenameProject")) ||
+          (isPersonalization && match[1].startsWith("Personalization"))
         )
           continue
         errors.push(`${operation.method} ${operation.path} ${status} references non-error response ${match[1]}`)
@@ -604,7 +611,8 @@ function idempotencyErrors(parameters: Map<string, NamedBlock>, operations: Oper
 
   for (const operation of operations) {
     const operationId = operation.fields.get("operationId") ?? operation.name
-    const expected = ["GET", "HEAD", "OPTIONS"].includes(operation.method) || operationId === "previewGithubSkill" ? "none" : "required"
+    const isPersonalizationCas = operation.method === "PUT" && operation.path === "/v1/preferences/personalization" && operationId === "replaceSelfPersonalization"
+    const expected = ["GET", "HEAD", "OPTIONS"].includes(operation.method) || operationId === "previewGithubSkill" || isPersonalizationCas ? "none" : "required"
     const declared = operation.fields.get("x-kokoro-idempotency")
     const hasParameter =
       operationId === "createSkillDraft"
@@ -1611,7 +1619,7 @@ function moveSessionContractErrors(
   responseComponents: Map<string, NamedBlock>,
 ): string[] {
   const errors: string[] = []
-  if (!/^  version: 8\.0\.0$/mu.test(source)) errors.push("moveSession must remain in current public contract version 8.0.0")
+  if (!/^  version: 8\.1\.0$/mu.test(source)) errors.push("moveSession must remain in current public contract version 8.1.0")
   const matches = operations.filter((operation) => operation.fields.get("operationId") === "moveSession")
   const operation = matches.length === 1 ? matches[0] : undefined
   if (operation?.method !== "POST" || operation.path !== "/v1/sessions/{id}/move") {
@@ -1731,7 +1739,7 @@ function renameProjectContractErrors(
   const require = (condition: boolean, message: string): void => {
     if (!condition) errors.push(`renameProject ${message}`)
   }
-  require(/^  version: 8\.0\.0$/mu.test(source), "current public contract must be version 8.0.0")
+  require(/^  version: 8\.1\.0$/mu.test(source), "current public contract must be version 8.1.0")
   const matches = operations.filter((operation) => operation.fields.get("operationId") === "renameProject")
   const operation = matches.length === 1 ? matches[0] : undefined
   if (operation?.method !== "PATCH" || operation.path !== "/v1/projects/{projectId}/name")
@@ -2072,6 +2080,83 @@ function billingPersonalReadContractErrors(
   return errors
 }
 
+
+function personalizationContractErrors(
+  schemas: Map<string, NamedBlock>,
+  operations: OperationBlock[],
+  responses: Map<string, NamedBlock>,
+): string[] {
+  const errors: string[] = []
+  const require = (value: boolean, message: string): void => {
+    if (!value) errors.push(`personalization: ${message}`)
+  }
+  const request = schemas.get("ReplaceSelfPersonalizationRequest")?.text ?? ""
+  const fields = schemas.get("PersonalizationFields")?.text ?? ""
+  require(request.includes("additionalProperties: false") && request.includes("required: [expected_revision, nickname, occupation, about, instructions]"), "replacement must be closed and complete")
+  require(request.includes("expected_revision: { type: integer, minimum: 0, maximum: 9007199254740991 }"), "replacement requires safe integer CAS")
+  require(fields.includes("additionalProperties: false") && fields.includes("required: [nickname, occupation, about, instructions]"), "fields must be closed and complete")
+  for (const [key, limit] of [["nickname", 128], ["occupation", 256], ["about", 2000], ["instructions", 8000]] as const)
+    for (const block of [request, fields])
+      require(block.includes(`${key}: { type: string, maxLength: ${limit}, pattern: '^[^\\u0000]*$' }`), `${key} must preserve its scalar bound and reject NUL`)
+  const absent = schemas.get("PersonalizationAbsent")?.text ?? ""
+  const present = schemas.get("PersonalizationPresent")?.text ?? ""
+  require(absent.includes("personalization: { type: 'null' }") && absent.includes("revision: { type: integer, const: 0 }"), "absent is exactly null/zero")
+  require(present.includes("personalization: { $ref: '#/components/schemas/PersonalizationFields' }") && present.includes("revision: { type: integer, minimum: 1, maximum: 9007199254740991 }"), "present requires fields/positive safe revision")
+  for (const name of ["PersonalizationAbsent", "PersonalizationPresent"]) {
+    const text = schemas.get(name)?.text ?? ""
+    require(text.includes("additionalProperties: false") && text.includes("required: [personalization, revision]"), `${name} is a closed snapshot`)
+  }
+  for (const name of ["GetSelfPersonalizationResponse", "ReplaceSelfPersonalizationResponse"]) {
+    const text = schemas.get(name)?.text ?? ""
+    require(text.includes("additionalProperties: false") && text.includes("required: [data]") && !text.includes("meta:"), `${name} requires data only`)
+  }
+  const read = schemas.get("GetSelfPersonalizationResponse")?.text ?? ""
+  require(read.includes("oneOf:") && read.includes("#/components/schemas/PersonalizationAbsent") && read.includes("#/components/schemas/PersonalizationPresent"), "read binds absent and present snapshots")
+  require(schemas.get("ReplaceSelfPersonalizationResponse")?.text.includes("data: { $ref: '#/components/schemas/PersonalizationPresent' }") === true, "save ACK cannot be absent")
+  const error = schemas.get("PersonalizationErrorResponse")?.text ?? ""
+  require(schemas.has("PersonalizationErrorResponse") && JSON.stringify(topLevelRequired(schemas.get("PersonalizationErrorResponse")!)) === JSON.stringify(["error"]), "error envelope has no meta")
+  require(error.includes("required: [code, message, retryable]") && (error.match(/additionalProperties: false/gu) ?? []).length === 2, "error is closed at both levels")
+  const statusProfiles: Record<string, [string, string[]]> = {
+    "400": ["BadRequest", ["invalid_personalization_request"]],
+    "401": ["Unauthorized", ["service_auth_failed", "session_authentication_required", "session_invalid"]],
+    "403": ["Forbidden", ["service_auth_failed", "session_forbidden", "product_tenant_forbidden"]],
+    "405": ["MethodNotAllowed", ["method_not_allowed"]],
+    "409": ["Conflict", ["personalization_revision_conflict", "personalization_revision_exhausted"]],
+    "413": ["PayloadTooLarge", ["request_body_too_large"]],
+    "429": ["RateLimited", ["session_rate_limited"]],
+    "503": ["Unavailable", ["product_tenant_not_configured", "iam_admission_unavailable", "personalization_unavailable", "personalization_save_unknown"]],
+  }
+  const headers = (text: string): boolean => text.includes("x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }") &&
+    text.includes("Cache-Control: { required: true, schema: { type: string, const: no-store } }")
+  for (const [method, id, verb, success] of [
+    ["GET", "getSelfPersonalization", "read", "Read"],
+    ["PUT", "replaceSelfPersonalization", "write", "Save"],
+  ] as const) {
+    const op = operations.find((item) => item.path === "/v1/preferences/personalization" && item.method === method && item.fields.get("operationId") === id)
+    require(op !== undefined, `${id} exact operation is required`)
+    if (op === undefined) continue
+    require(op.fields.get("x-kokoro-idempotency") === "none" && op.fields.get("x-kokoro-permission") === `personalization.self.${verb}`, `${id} must retain caller-only CAS metadata`)
+    require(!op.text.includes("#/components/parameters/IdempotencyKey"), `${id} must not require a receipt key`)
+    require(method === "PUT" ? op.text.includes("requestBody:") && op.text.includes("#/components/schemas/ReplaceSelfPersonalizationRequest") : !op.text.includes("requestBody:"), `${id} body boundary drifted`)
+    const expected: Record<string, string> = { "200": `Personalization${success}Success` }
+    for (const [status, [name]] of Object.entries(statusProfiles))
+      if (method === "PUT" || !["409", "413"].includes(status)) expected[status] = `Personalization${name}`
+    const actual = collectResponseBlocks(op)
+    require(JSON.stringify([...actual.keys()].sort()) === JSON.stringify(Object.keys(expected).sort()), `${id} status set drifted`)
+    for (const [status, name] of Object.entries(expected))
+      require(actual.get(status)?.includes(`#/components/responses/${name}`) === true, `${id} ${status} component drifted`)
+  }
+  for (const [name, schema] of [["Read", "GetSelfPersonalizationResponse"], ["Save", "ReplaceSelfPersonalizationResponse"]]) {
+    const text = responses.get(`Personalization${name}Success`)?.text ?? ""
+    require(headers(text) && text.includes(`#/components/schemas/${schema}`), `${name} success requires strict schema and headers`)
+  }
+  for (const [name, codes] of Object.values(statusProfiles)) {
+    const text = responses.get(`Personalization${name}`)?.text ?? ""
+    require(headers(text) && text.includes("#/components/schemas/PersonalizationErrorResponse") && text.includes(`code: { type: string, enum: [${codes.join(", ")}] }`), `${name} requires stable codes and headers`)
+  }
+  return errors
+}
+
 export function inspectBffOpenApi(source: string, baseline: readonly BaselineOperation[]): string[] {
   const operations = collectOperationBlocks(source)
   const schemas = collectSectionBlocks(source, "schemas")
@@ -2088,6 +2173,7 @@ export function inspectBffOpenApi(source: string, baseline: readonly BaselineOpe
     ...moveSessionContractErrors(source, parameters, schemas, operations, responseComponents),
     ...renameProjectContractErrors(source, parameters, schemas, operations, responseComponents),
     ...idempotencyErrors(parameters, operations),
+    ...personalizationContractErrors(schemas, operations, responseComponents),
     ...publishedPersonalSkillContractErrors(parameters, schemas, operations, responseComponents),
     ...skillDraftContractErrors(parameters, schemas, operations, responseComponents),
     ...skillPackageUploadGetContractErrors(parameters, schemas, operations, responseComponents),

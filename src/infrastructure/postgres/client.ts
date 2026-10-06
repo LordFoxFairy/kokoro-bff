@@ -45,7 +45,8 @@ export class PostgresBffDatabase {
               AND to_regclass('kokoro_bff.bff_conversation') IS NOT NULL
               AND to_regclass('kokoro_bff.bff_scheduled_task') IS NOT NULL
               AND to_regclass('kokoro_bff.bff_idempotency_receipt') IS NOT NULL
-              AND to_regclass('kokoro_bff.bff_agui_event') IS NOT NULL AS installed`,
+              AND to_regclass('kokoro_bff.bff_agui_event') IS NOT NULL
+               AND to_regclass('kokoro_bff.bff_personalization') IS NOT NULL AS installed`,
     )
     if (result.rows[0]?.schema !== "kokoro_bff" || result.rows[0]?.installed !== true) {
       throw new Error("BFF owner schema is not installed or incomplete")

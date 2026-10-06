@@ -781,3 +781,23 @@ CREATE TABLE IF NOT EXISTS bff_agui_cursor_tombstone (
 );
 CREATE INDEX IF NOT EXISTS ix_bff_agui_cursor_tombstone_expiry
   ON bff_agui_cursor_tombstone (expired_at ASC, tenant_id ASC, session_id ASC);
+
+-- R257: current caller-owned personalization; no foreign-owner profile or history.
+CREATE TABLE IF NOT EXISTS bff_personalization (
+  tenant_id TEXT NOT NULL,
+  owner_id TEXT NOT NULL,
+  nickname TEXT NOT NULL,
+  occupation TEXT NOT NULL,
+  about TEXT NOT NULL,
+  instructions TEXT NOT NULL,
+  revision BIGINT NOT NULL,
+  created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT pk_bff_personalization PRIMARY KEY (tenant_id, owner_id),
+  CONSTRAINT ck_bff_personalization_scope CHECK (tenant_id <> '' AND owner_id <> ''),
+  CONSTRAINT ck_bff_personalization_nickname CHECK (char_length(nickname) <= 128),
+  CONSTRAINT ck_bff_personalization_occupation CHECK (char_length(occupation) <= 256),
+  CONSTRAINT ck_bff_personalization_about CHECK (char_length(about) <= 2000),
+  CONSTRAINT ck_bff_personalization_instructions CHECK (char_length(instructions) <= 8000),
+  CONSTRAINT ck_bff_personalization_revision CHECK (revision >= 1 AND revision <= 9007199254740991)
+);

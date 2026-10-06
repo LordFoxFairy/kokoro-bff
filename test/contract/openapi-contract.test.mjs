@@ -40,7 +40,7 @@ function inspectChatFailureContract(openapi) {
     if (!condition) errors.push(label)
   }
 
-  require(/^info:\n(?:.*\n){0,3}?  version: 8\.0\.0$/mu.test(openapi), "public info.version must be 8.0.0")
+  require(/^info:\n(?:.*\n){0,3}?  version: 8\.1\.0$/mu.test(openapi), "public info.version must be 8.1.0")
   require(/^      required: \[message_id, role, content, status, created_at\]$/mu.test(message), "failure must stay optional")
   const roles = [...(message.match(/role:\n\s+type: string\n\s+enum: \[([^\]]+)\]/u)?.[1] ?? "").matchAll(/[a-z_]+/gu)].map((match) => match[0])
   require(JSON.stringify(roles) === JSON.stringify(["user", "assistant"]), "Message roles must equal user and assistant")
@@ -1066,7 +1066,7 @@ test("public7 retains the closed full execution head, five current-locator decis
   const { openapi } = await readContract()
   const document = load(openapi)
   const schemas = document.components.schemas
-  assert.equal(document.info.version, "8.0.0")
+  assert.equal(document.info.version, "8.1.0")
   const snapshot = schemas.SessionSnapshotResponse.properties.data
   assert.equal(Object.hasOwn(snapshot.properties, "active_run"), false)
   assert.equal(Object.hasOwn(snapshot.properties, "pending_pauses"), false)
@@ -1405,7 +1405,7 @@ test("R124 public7 publishes nullable snapshot process and the anchored Run proc
   const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
   const { openapi } = await readContract()
   const document = load(openapi)
-  assert.equal(document.info.version, "8.0.0")
+  assert.equal(document.info.version, "8.1.0")
   const snapshot = document.components.schemas.SessionSnapshotResponse.properties.data
   assert.ok(snapshot.required.includes("execution_process"))
   assert.deepEqual(snapshot.properties.execution_process, {
@@ -1461,7 +1461,7 @@ test("R146 Move is one strict additive public command with a durable synchronous
     Object.keys(pathItem).filter((key) => ["get", "post", "put", "patch", "delete"].includes(key)),
     ["post"],
   )
-  assert.equal(document.info.version, "8.0.0", "the prelaunch Skills V2 cutover advances the only public major without a path alias")
+  assert.equal(document.info.version, "8.1.0", "the prelaunch Skills V2 cutover advances the only public major without a path alias")
   assert.ok(baseline.some((entry) => entry.method === "POST" && entry.path === path && entry.operation_id === "moveSession"))
 
   const operation = pathItem.post
@@ -1628,7 +1628,7 @@ test("R240 rename contract remains one strict name PATCH beside the approved Bil
   const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
   const { openapi, baseline } = await readContract()
   const document = load(openapi)
-  assert.equal(document.info.version, "8.0.0")
+  assert.equal(document.info.version, "8.1.0")
   const route = "/v1/projects/{projectId}/name"
   const path = document.paths[route]
   assert.ok(path)
@@ -1636,12 +1636,13 @@ test("R240 rename contract remains one strict name PATCH beside the approved Bil
   const priorPaths = { ...document.paths }
   delete priorPaths[route]
   delete priorPaths["/v1/mcp/connections"] // R257 adds only this independently governed read.
+  delete priorPaths["/v1/preferences/personalization"] // R257 separately governs the new caller-owned CAS resource.
   assert.equal(
     createHash("sha256").update(JSON.stringify(priorPaths)).digest("hex"),
     "0a609a0020b6a0d6914c585621275899cc4beece19240a94dd5092fa7f4006ba",
     "all non-rename path definitions stay byte-semantically frozen after the Billing read replacement",
   )
-  assert.equal(baseline.filter((item) => item.operation_id !== "listSelfMcpConnections").length, 92)
+  assert.equal(baseline.filter((item) => !["listSelfMcpConnections", "getSelfPersonalization", "replaceSelfPersonalization"].includes(item.operation_id)).length, 92)
   assert.deepEqual(
     baseline.filter((item) => item.operation_id === "renameProject"),
     [{ method: "PATCH", path: route, operation_id: "renameProject" }],
@@ -1777,7 +1778,7 @@ test("R240 rename semantic gate rejects input, receipt, status and header drift"
   const request = (before, after) => mutate("    RenameProjectRequest:", "    RenameProjectResponse:", before, after)
   const success = (before, after) => mutate("    RenameProjectResponse:", "    RenameProjectErrorResponse:", before, after)
   const mutations = [
-    openapi.replace("  version: 8.0.0", "  version: 7.1.0"),
+    openapi.replace("  version: 8.1.0", "  version: 7.1.0"),
     route("    patch:", "    post:"),
     route("operationId: renameProject", "operationId: renameProjectAlias"),
     route("x-kokoro-permission: project.update", "x-kokoro-permission: project.read"),
@@ -1833,7 +1834,7 @@ test("R257 self MCP connection contract rejects Server substitution and error-pr
   const start = openapi.indexOf("  /v1/mcp/connections:\n")
   const end = openapi.indexOf("  /v1/mcp/servers:\n", start)
   const route = openapi.slice(start, end)
-  assert.equal(baseline.length, 93)
+  assert.equal(baseline.length, 95)
   assert.deepEqual(
     baseline.filter((item) => item.operation_id === "listSelfMcpConnections"),
     [{ method: "GET", path: "/v1/mcp/connections", operation_id: "listSelfMcpConnections" }],
@@ -1872,4 +1873,24 @@ test("current administrator projection rejects missing, optional, nullable and n
   ]) {
     assert.ok(inspectBffOpenApi(changed, baseline).some((error) => error.includes("CurrentUserIdentity")))
   }
+})
+
+test("R257 personalization contract binds the two exact closed caller operations and safe CAS", async () => {
+  const { openapi, baseline } = await readContract()
+  assert.deepEqual(inspectBffOpenApi(openapi, baseline), [])
+  for (const [before, after, expected] of [
+    ["expected_revision: { type: integer, minimum: 0, maximum: 9007199254740991 }", "expected_revision: { type: integer, minimum: 0 }", /safe integer CAS/u],
+    ["required: [expected_revision, nickname, occupation, about, instructions]", "required: [nickname, occupation, about, instructions]", /closed and complete/u],
+    ["nickname: { type: string, maxLength: 128", "nickname: { type: string, maxLength: 129", /nickname/u],
+    ["revision: { type: integer, const: 0 }", "revision: { type: integer, minimum: 0 }", /null\/zero/u],
+    ["PersonalizationReadSuccess'", "PersonalizationSaveSuccess'", /component drifted/u],
+  ]) {
+    assert.ok(openapi.includes(before), before)
+    assert.match(inspectBffOpenApi(openapi.replace(before, after), baseline).join("\n"), expected)
+  }
+  const begin = openapi.indexOf("    PersonalizationReadSuccess:")
+  const end = openapi.indexOf("\n    PersonalizationSaveSuccess:", begin)
+  const block = openapi.slice(begin, end)
+  const broken = openapi.replace(block, block.replace("const: no-store", "const: public"))
+  assert.match(inspectBffOpenApi(broken, baseline).join("\n"), /strict schema and headers/u)
 })

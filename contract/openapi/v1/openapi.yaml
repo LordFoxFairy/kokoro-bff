@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 8.0.0
+  version: 8.1.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -16,6 +16,8 @@ security:
     internalSecret: []
     userBearer: []
 tags:
+  - name: Personalization
+    description: Caller-owned personal fields with explicit conditional saving.
   - name: Health
     description: Process and dependency health probes.
   - name: Identity
@@ -45,6 +47,50 @@ tags:
   - name: Billing
     description: Billing catalog, summary, and checkout projections.
 paths:
+  /v1/preferences/personalization:
+    get:
+      tags: [Personalization]
+      operationId: getSelfPersonalization
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: personalization.self.read
+      summary: Read current caller personalization
+      description: No query or identity selectors. No request body; absent is null with revision zero and never creates a row.
+      responses:
+        '200': { $ref: '#/components/responses/PersonalizationReadSuccess' }
+        '400': { $ref: '#/components/responses/PersonalizationBadRequest' }
+        '401': { $ref: '#/components/responses/PersonalizationUnauthorized' }
+        '403': { $ref: '#/components/responses/PersonalizationForbidden' }
+        '405': { $ref: '#/components/responses/PersonalizationMethodNotAllowed' }
+        '429': { $ref: '#/components/responses/PersonalizationRateLimited' }
+        '503': { $ref: '#/components/responses/PersonalizationUnavailable' }
+    put:
+      tags: [Personalization]
+      operationId: replaceSelfPersonalization
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: personalization.self.write
+      summary: Conditionally replace current caller personalization
+      description: No query or identity selectors. Required expected_revision CAS; stale writes conflict. No automatic mutation retry or Idempotency-Key receipt. A lost ACK requires a fresh GET; an old read does not prove an in-flight COMMIT failed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReplaceSelfPersonalizationRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/PersonalizationSaveSuccess' }
+        '400': { $ref: '#/components/responses/PersonalizationBadRequest' }
+        '401': { $ref: '#/components/responses/PersonalizationUnauthorized' }
+        '403': { $ref: '#/components/responses/PersonalizationForbidden' }
+        '405': { $ref: '#/components/responses/PersonalizationMethodNotAllowed' }
+        '409': { $ref: '#/components/responses/PersonalizationConflict' }
+        '413': { $ref: '#/components/responses/PersonalizationPayloadTooLarge' }
+        '429': { $ref: '#/components/responses/PersonalizationRateLimited' }
+        '503': { $ref: '#/components/responses/PersonalizationUnavailable' }
   /healthz:
     get:
       tags: [Health]
@@ -3943,6 +3989,70 @@ components:
       schema:
         type: string
   schemas:
+    PersonalizationFields:
+      type: object
+      additionalProperties: false
+      required: [nickname, occupation, about, instructions]
+      properties:
+        nickname: { type: string, maxLength: 128, pattern: '^[^\u0000]*$' }
+        occupation: { type: string, maxLength: 256, pattern: '^[^\u0000]*$' }
+        about: { type: string, maxLength: 2000, pattern: '^[^\u0000]*$' }
+        instructions: { type: string, maxLength: 8000, pattern: '^[^\u0000]*$' }
+    ReplaceSelfPersonalizationRequest:
+      description: Whole replacement; at most 65536 raw UTF-8 bytes. Duplicate keys and unpaired surrogates are rejected. No coercion, trimming, or normalization.
+      type: object
+      additionalProperties: false
+      required: [expected_revision, nickname, occupation, about, instructions]
+      properties:
+        expected_revision: { type: integer, minimum: 0, maximum: 9007199254740991 }
+        nickname: { type: string, maxLength: 128, pattern: '^[^\u0000]*$' }
+        occupation: { type: string, maxLength: 256, pattern: '^[^\u0000]*$' }
+        about: { type: string, maxLength: 2000, pattern: '^[^\u0000]*$' }
+        instructions: { type: string, maxLength: 8000, pattern: '^[^\u0000]*$' }
+    PersonalizationAbsent:
+      type: object
+      additionalProperties: false
+      required: [personalization, revision]
+      properties:
+        personalization: { type: 'null' }
+        revision: { type: integer, const: 0 }
+    PersonalizationPresent:
+      type: object
+      additionalProperties: false
+      required: [personalization, revision]
+      properties:
+        personalization: { $ref: '#/components/schemas/PersonalizationFields' }
+        revision: { type: integer, minimum: 1, maximum: 9007199254740991 }
+    GetSelfPersonalizationResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          oneOf:
+            - { $ref: '#/components/schemas/PersonalizationAbsent' }
+            - { $ref: '#/components/schemas/PersonalizationPresent' }
+    ReplaceSelfPersonalizationResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/PersonalizationPresent' }
+    PersonalizationErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, retryable]
+          properties:
+            code:
+              type: string
+              enum: [invalid_personalization_request, request_body_too_large, method_not_allowed, personalization_revision_conflict, personalization_revision_exhausted, personalization_unavailable, personalization_save_unknown, service_auth_failed, session_authentication_required, session_invalid, session_forbidden, session_rate_limited, product_tenant_not_configured, product_tenant_forbidden, iam_admission_unavailable]
+            message: { type: string }
+            retryable: { type: boolean }
     CreateSkillDraftRequest:
       type: object
       required: [display_name, summary, tags]
@@ -8829,3 +8939,141 @@ components:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    PersonalizationReadSuccess:
+      description: Current caller-owned persisted snapshot
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/GetSelfPersonalizationResponse' }
+    PersonalizationSaveSuccess:
+      description: Current caller-owned persisted snapshot
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ReplaceSelfPersonalizationResponse' }
+    PersonalizationBadRequest:
+      description: Personalization operation rejected or unavailable; an unknown save must be reconciled by reading, not automatically retried
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - { $ref: '#/components/schemas/PersonalizationErrorResponse' }
+              - type: object
+                properties:
+                  error:
+                    properties:
+                      code: { type: string, enum: [invalid_personalization_request] }
+    PersonalizationUnauthorized:
+      description: Personalization operation rejected or unavailable; an unknown save must be reconciled by reading, not automatically retried
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - { $ref: '#/components/schemas/PersonalizationErrorResponse' }
+              - type: object
+                properties:
+                  error:
+                    properties:
+                      code: { type: string, enum: [service_auth_failed, session_authentication_required, session_invalid] }
+    PersonalizationForbidden:
+      description: Personalization operation rejected or unavailable; an unknown save must be reconciled by reading, not automatically retried
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - { $ref: '#/components/schemas/PersonalizationErrorResponse' }
+              - type: object
+                properties:
+                  error:
+                    properties:
+                      code: { type: string, enum: [service_auth_failed, session_forbidden, product_tenant_forbidden] }
+    PersonalizationMethodNotAllowed:
+      description: Personalization operation rejected or unavailable; an unknown save must be reconciled by reading, not automatically retried
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+        Allow: { required: true, schema: { type: string, const: 'GET, PUT' } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - { $ref: '#/components/schemas/PersonalizationErrorResponse' }
+              - type: object
+                properties:
+                  error:
+                    properties:
+                      code: { type: string, enum: [method_not_allowed] }
+    PersonalizationConflict:
+      description: Personalization operation rejected or unavailable; an unknown save must be reconciled by reading, not automatically retried
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - { $ref: '#/components/schemas/PersonalizationErrorResponse' }
+              - type: object
+                properties:
+                  error:
+                    properties:
+                      code: { type: string, enum: [personalization_revision_conflict, personalization_revision_exhausted] }
+    PersonalizationPayloadTooLarge:
+      description: Personalization operation rejected or unavailable; an unknown save must be reconciled by reading, not automatically retried
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - { $ref: '#/components/schemas/PersonalizationErrorResponse' }
+              - type: object
+                properties:
+                  error:
+                    properties:
+                      code: { type: string, enum: [request_body_too_large] }
+    PersonalizationRateLimited:
+      description: Personalization operation rejected or unavailable; an unknown save must be reconciled by reading, not automatically retried
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+        Retry-After: { required: false, schema: { type: integer, minimum: 0 } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - { $ref: '#/components/schemas/PersonalizationErrorResponse' }
+              - type: object
+                properties:
+                  error:
+                    properties:
+                      code: { type: string, enum: [session_rate_limited] }
+    PersonalizationUnavailable:
+      description: Personalization operation rejected or unavailable; an unknown save must be reconciled by reading, not automatically retried
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - { $ref: '#/components/schemas/PersonalizationErrorResponse' }
+              - type: object
+                properties:
+                  error:
+                    properties:
+                      code: { type: string, enum: [product_tenant_not_configured, iam_admission_unavailable, personalization_unavailable, personalization_save_unknown] }

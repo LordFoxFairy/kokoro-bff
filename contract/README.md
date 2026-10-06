@@ -1,3 +1,7 @@
+## R257 personalization public8.1 候选（未发布/未正常激活）
+
+基线 ac3cd1da4f13e9e22320efbd4dbf4009aa0a2e29 的public8.0/93operation新增GET/PUT /v1/preferences/personalization，目标8.1.0/95operation。四字段本人singleton、required expected_revision CAS、no-store/header request-id、未知保存只读核实；旧93项的wire语义保持。canonical仅追加本owner表，源/隔离PG/合同待Root最终验收与immutable commit/digest，当前不交移动工作树给Web生成。正常已有数据须正规演进且IAM0.8/Web配对，禁止半边重载；Knowledge/导入/Agent应用仍OPEN。
+
 ## R257 本人 MCP Connection 读取候选（未发布）
 
 唯一 public 8.0.0 canonical 新增 GET /v1/mcp/connections / listSelfMcpConnections，旧 Server 资源不变；本次候选尚待 Root 验证与新 immutable commit/digest，下面 R255 blob 是历史交接，不再声称与当前候选相等。HTTP consumer 固定 Platform 3.2.0 / 9ab3b653360d04fb498a238659edeec01e72f62d / SHA256 4b42dd161c972b3447cfea3a6f80a949bbdb573c46213dbf8ef4c3ecb58e72da，16 generated 只由既有 generator 生成。六字段本人 active 投影不是连接创建/授权/启用或调用成功；Web 后继独立固定正式发布 artifact。

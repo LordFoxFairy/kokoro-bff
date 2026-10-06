@@ -457,3 +457,18 @@ test("R124 operation inventory has one governed public Run process page and no l
   assert.deepEqual(inspectOpenApiGovernance(openapi), [])
   assert.deepEqual(compareOperationBaseline(openapi, baseline), [])
 })
+
+test("R257 personalization CAS none exception requires the exact method path and operation identity", () => {
+  const exact = governedOperation
+    .replace("/v1/projects:", "/v1/preferences/personalization:")
+    .replace("    post:", "    put:")
+    .replace("operationId: createProject", "operationId: replaceSelfPersonalization")
+    .replace("x-kokoro-idempotency: required", "x-kokoro-idempotency: none")
+    .replace("project.create", "personalization.self.write")
+  assert.deepEqual(inspectOpenApiGovernance(exact), [])
+  for (const changed of [
+    exact.replace("    put:", "    patch:"),
+    exact.replace("/v1/preferences/personalization:", "/v1/preferences/knowledge:"),
+    exact.replace("replaceSelfPersonalization", "replaceOtherPersonalization"),
+  ]) assert.match(inspectOpenApiGovernance(changed).join("\n"), /idempotency=required/u)
+})
