@@ -1,3 +1,29 @@
+## R257-PERSONALIZATION-EVOLUTION-D0：已有数据具名演进（2026-10-06；待 Root 审准实施）
+
+**当前与目标。** 本人四字段源码已由 Root 验收并提交 399e70dfd97004c4c75cfb1e83c571a38c749437（真实 11 PG 用例通过，完整 check 809 PASS/0 FAIL/1 skip）；正常 BFF 仍 6d46ec8，尚未配对激活。以下原全文保留为历史阶段，旧“未实施/无表”不描述本次源码。正常完整 catalog 尚未核查，不声称旧表总数或正常演进通过。本轮仅设计，具名例外见 [ADR-003](./ADR/ADR-003-personalization-schema-evolution.md)。
+
+### §8 最窄放置与实施边界
+
+|项|决定|
+|---|---|
+|Owner / 位置比较|BFF 唯一 writer；采用现 scripts 下三个普通具名文件。扩展 apply-schema.mjs 虽可复用入口，却会混淆 fresh 空 owner 与有数据演进，淘汰；不建通用 migration runner/ledger/新服务。|
+|三文件职责|evolve-personalization-schema.mjs 仅 strict CLI/check/apply/脱敏结果；personalization-schema-evolution.mjs 仅本次连接、事务、期限、COMMIT 与清理；personalization-schema-catalog.mjs 仅目标语义 catalog 和 canonical 唯一 CREATE 提取。无新目录/依赖。|
+|依赖 / 删除|只复用现 apply-schema.mjs 的 loadCanonicalSchema/assertBffSchemaUrl；绝不调用 applyCanonicalSchema 或执行整份 canonical。fresh、运行时 source、schema、其他 owner/Project 原 mixed 不改；无旧入口要删，不建 alias/双轨/启动 DDL。|
+|后继精确写集|上述三 scripts；新 test/personalization-schema-evolution.integration.mjs；现 package.json 仅具名命令及窄验证入口、test/schema-governance.test.mjs 仅追加提取一致性/fresh 非空拒绝保护。此表是下一阶段范围，本轮未获源码实施许可。|
+|独立测试位置|新 integration 承载有数据旧 shape/锁/unknown 生命周期，不再扩展 business-store 大文件；复用 Root 自有临时库及既有业务入口，禁止 normal reset/跨 owner SQL。|
+
+### 操作生命周期与受控配对
+
+Root 停止/drain BFF 写入与 worker，在无并发手工 DDL 的窗口执行；只一个自有 PG 连接。显式连接上限 5s、整操作 20s、事务 LOCAL lock_timeout 2s/statement_timeout 5s/idle_in_transaction_session_timeout 5s 均为待演练目标，各阶段受剩余总预算限制。BEGIN 后固定 owner search_path/UTC，取与 fresh 相同的 pg_advisory_xact_lock(hashtext(current_database()),hashtext('kokoro_bff'))；判据、唯一 CREATE 与后置校验同事务。current 先确认关系种类、有限锁住目标再验；不锁旧业务表做长时间 ACCESS EXCLUSIVE。check 不执行 DDL/数据写，apply 仅 legacy 创建目标；前后旧 owner catalog 摘要不变（剔除本次目标衍生对象），不把混合 canonical 当旧表 oracle。
+
+COMMIT 前失败在剩余预算 rollback，保 primary，清理失败单列；超时/取消必须退役 exact connection，不以 Promise.race 当 SQL 已取消。COMMIT 发出后失联、超时或未完成安全收尾均 unknown，不声称已 rollback、不自动 apply 重试；新连接同锁 check 才裁当前 schema 状态，旧 backend 未释放锁就有限等待/停止。只有 Root 确认 serialized legacy、旧连接终止且原因解除才再显式 apply；无 down/自动恢复备份。应用启动失败保留 additive 表，按匹配版本回退应用，不删已保存资料。
+
+normal 准入：Root 先核实际 owner catalog/旧事实聚合，停写后完成 kokoro_bff 一致备份（目录私有、备份文件 0600）及自有临时库恢复验证；记录旧 Project/Conversation/Message/Share/Scheduled/receipt/AGUI 事实保全，不打印正文。只演进本 owner。IAM 正常 schema+0.8、BFF /me+public8.1+本人表、Web strict /me/后继本人保存消费受控配对；不混发新 required shape，不重置帐号/Session/OAuth/历史。不等待支付等独立业务；无可用 Web 消费者时不宣称用户保存已完成。
+
+验证顺序：node --check 三 scripts、窄格式/治理门；Root 自有 PG 旧 shape→check legacy→apply→check current，已有事实/已存偏好重放保全、双并发、漂移零写、锁/取消、真实 TCP COMMIT ACK 未知恢复；随后完整 check。现 tsc 不覆盖这些 mjs。测试方法 hook 的 after-COMMIT 错误不冒充真实 TCP。最后 Root normal 配对与用户保存/ACK/回读/刷新/切账号/冲突验收；本轮未执行任何资源或工程测试。
+
+<!-- R257-PERSONALIZATION-EVOLUTION-TECH-END -->
+
 ## R257-PERSONALIZATION-D0：本人四字段显式保存（2026-10-06；设计待 Root 放行，未实施）
 
 **当前态。** 基线为 Root 已发布 ac3cd1da4f13e9e22320efbd4dbf4009aa0a2e29；原 19 mixed 保留。本节以下全部原文为历史阶段的 exact suffix；管理员消费源码已发布的当前事实见 CURRENT，不再以旧段落“待实现”描述它。正常 BFF 仍旧实例，IAM/schema/Web 同步激活停止线不变。

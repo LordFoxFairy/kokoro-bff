@@ -1,3 +1,23 @@
+## R257-PERSONALIZATION-EVOLUTION-D0：具名运维操作边界（2026-10-06；目标待实施）
+
+源码基线 399e70dfd97004c4c75cfb1e83c571a38c749437 已发布 public 8.1.0/95 operations；本片不改其 HTTP、IAM pin 或 generated，不新增管理 HTTP/RPC。下面旧全文为完整历史后缀。已有数据演进只新增 owner 运维 CLI，ADR 为 [ADR-003](./ADR/ADR-003-personalization-schema-evolution.md)，正常激活仍未验。
+
+拟正式入口 pnpm db:evolve-personalization check / apply，只接受这一个必需位置参数；未知/重复/多余参数拒绝。显式读取既有 KOKORO_BFF_POSTGRES_URL，不自动加载 .env、不接受 URL/SQL 参数或隐式 apply；拒系统数据库及非 kokoro_bff schema、options/search_path 注入。连接信息和原始 PG 错误不回显。check 同 advisory lock 串行只观察；apply 同锁同事务，唯一允许写入见 DATA。
+
+|退出/结果|语义及恢复|
+|---|---|
+|0 / check legacy 或 current|已完成同锁 catalog 观察；legacy 不是无条件执行授权，normal 仍需备份/恢复与维护配对门。current 不是上次 COMMIT ACK/因果证明。|
+|0 / apply applied 或 already_current|前者目标创建/后置校验/COMMIT 与清理确认；后者精确 current，零 DDL，不改已存行/revision。|
+|2 / invalid_request 或 invalid_schema|参数/目标/碰撞/漂移不合格，零修复；稳定安全 code，不透传对象正文/SQL。|
+|3 / unavailable|连接/锁/预算/COMMIT 前失败；主错误保留并附安全 cleanup 状态，不声称靠超时已取消 SQL。|
+|4 / unknown|apply 已发 COMMIT 后未完成确认或安全收尾；禁止自动重试/声称回滚。新连接同锁 check，失败/超时仍停止。|
+
+结果仅 operation、request_id、state/result、安全 code、duration_ms 及必要 cleanup 状态；不输出 URL/credential、正文/参数/正文摘要。CLI 不消费 Session、不授管理员；本人 HTTP 资格仍来自 current Session，schema 权限不代替业务资格。check 失败不包装 legacy，apply 失败不输出 applied。精确 catalog/期限见 DATA/TECH，不提供 reset/down/fallback 开关。
+
+发布先具名隔离演练和 Root normal 备份恢复/只读前置，再协调 IAM/BFF/Web；正常旧实例不因文档或纯门通过而重载。本人保存未知回执继续按 public8.1 只读核实，不自动重发；schema current 也不等浏览器保存或后台管理 CRUD PASS。
+
+<!-- R257-PERSONALIZATION-EVOLUTION-API-END -->
+
 ## R257-PERSONALIZATION-D0：本人四字段 Product 契约（2026-10-06；目标未实施）
 
 正式基线 ac3cd1da4f13e9e22320efbd4dbf4009aa0a2e29 的 public 8.0.0/93 operations 无 personalization；以下旧全文为 exact suffix。唯一机器源 contract/openapi/v1/openapi.yaml 新增两个 additive operations，目标 public 8.1.0/95 operations；不修改旧 artifact 或既有 operation shape。Root 验收后交新 immutable commit/version/digest，Web 固定生成消费；本轮未改机器源。

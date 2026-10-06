@@ -1,3 +1,19 @@
+## R257-PERSONALIZATION-EVOLUTION-D0：单表语义判据（2026-10-06；待实施）
+
+399e70dfd97004c4c75cfb1e83c571a38c749437 已有 canonical bff_personalization 与本人 CAS；下面“无表/仅设计”为保留历史。此片不改 canonical，不读正常数据库；正常完整 catalog/旧数据尚待 Root 核实。唯一 SQL 真源仍 database/schema.sql；[ADR-003](./ADR/ADR-003-personalization-schema-evolution.md) 只准这次有数据 additive 例外，不生成第二份可编辑 DDL。
+
+**legacy。** 必须已有 kokoro_bff schema 和原部署必需普通核心表 bff_project、bff_conversation、bff_scheduled_task、bff_idempotency_receipt、bff_agui_event；空库/缺 schema 不创建也不视为 legacy。目标 relation/同名 type、pk_bff_personalization 索引名无碰撞。normal 原部署还须 Root 实际 catalog 审准，以上最小锚点不等完整旧结构证明；未知旧漂移停止，不以当前原 mixed canonical 追补旧列/表，不捏造旧表 count。
+
+**current。** 精确普通永久表，无分区/继承/RLS/用户 trigger/rule；恰九列、顺序/类型/typmod/NOT NULL/默认/identity/generated 均符合唯一 canonical：tenant_id、owner_id、nickname、occupation、about、instructions 为 TEXT；revision 为 BIGINT；created_at/updated_at 为 TIMESTAMPTZ(3) 且唯一默认 CURRENT_TIMESTAMP(3)，其余无默认。恰具名复合 PK(tenant_id,owner_id) 与有效 btree 唯一 PK 索引；具名 scope 非空、四 char_length≤128/256/2000/8000、revision 1..9007199254740991 CHECK，均 validated/非 deferrable；无额外约束/FK/索引。catalog 比较规范化语义而非源码空白/仅对象存在，更强的额外约束也不合格；重跑保所有已存资料/revision，不读出正文。
+
+**invalid 零修复。** 同名 view/foreign table/type、部分结构、列/类型/精度/默认/可空/索引/约束差异、RLS/trigger 等拒绝。读取 pg_catalog 的启用 DDL event-trigger 元数据，存在可能影响本次 CREATE 的 hook 则停止交 Root 另审；无跳过检查开关，不执行其他 owner SQL。唯一目标 CREATE 从 loadCanonicalSchema 提取，严格拒缺块/多块/额外 SQL，具名执行去掉 IF NOT EXISTS 以显露同名竞争；完整后置 catalog 必需。fresh 与演进目标的语义 catalog 等价由隔离测试证明，不靠手写 predicate 自证。
+
+同 owner advisory lock 下观察/创建/后置校验同事务；只新增目标及其 canonical PK/约束衍生对象，旧 owner catalog 摘要前后 exact，维护窗口旧业务事实保持。跨 owner 表、原 Project mixed、fresh 空 owner 拒绝、当前业务 SQL 都不动。check 无 DDL/数据写，current apply 无 ALTER/DROP/清表。失败、COMMIT unknown、新连接同锁核实与有限清理按 TECH/API；不越锁把暂时缺表判成最终未提交。
+
+Root 正常只读前置、owner 备份/实际恢复演练和配对是独立放行门，不能从自有临时库结果推导正常已安全。验收要求原事实不变、current 重跑保已保存偏好、并发一 applied 一 already_current、每类漂移零写、有限锁/取消、真实 TCP ACK 未知后同锁 check；测试受控 hook 仅辅助。无 down/自动 restore/全库 reset，备份只在确有损坏且 Root 明确裁决时恢复，不覆盖其他 owner。
+
+<!-- R257-PERSONALIZATION-EVOLUTION-DATA-END -->
+
 ## R257-PERSONALIZATION-D0：BFF 本人四字段单行事实（2026-10-06；仅设计）
 
 基线 ac3cd1da4f13e9e22320efbd4dbf4009aa0a2e29；当前 canonical database/schema.sql 无 personalization。目标只在本 owner kokoro_bff schema 增 bff_personalization，不改 IAM.User.name/System/Project 或其他 owner 表。原19 mixed及以下全文bytes保留，本轮无DDL/数据读写/资源执行。
