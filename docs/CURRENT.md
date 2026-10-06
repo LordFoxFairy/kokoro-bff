@@ -1,3 +1,12 @@
+## R266 本人 Skill 管理读取源码/机器已验收（2026-10-06 23:38 UTC）
+
+本片准备由Root精确提交；下方候选/D0/旧版本文字为历史，以本段和实际commit为当前事实。Public 8.4.0/101正式源码新增exact GET /v1/self/skills及/{skill_id}，固定Platform HTTP3.3 owner3d4ba6c/rawb6e5d0e0，旧vendor3.2删除，正规生成16输出且原六/原99 wire和原components保持。Connect/Proto c949独立pin、数据库/Redis/凭据文件与安装/发布命令不变。
+
+新route在通用准入前精确分派，本次Session admission→现shared machine token→owner/body/strict parse→成功序列化后复核共一个单调10秒预算，取消/过期/late结果不提交200；safe8/五状态/本人可信身份、closed请求/错误tuple/no-store/request-id/1MiB均按三D0实施。普通版本号仍string，无额外owner mirror/缓存/receipt/权限grant。旧六client后缀byte exact。
+
+Root实际新build四HTTP44PASS/0FAIL/0SKIP；full contract276/0、architecture35/0、default841PASS/0FAIL/2原资源SKIP，lint/types/build/目标format全0。机器独审bd3aaed3/runtime最终c380fc35均无剩余确定阻断；Root重新核504任务外文件/三已提交D0/旧99及components/旧六exact。三架构oracle旧version/importerFAIL32/3后只同步exact批准route/8.4/owner3.3固定pin；有效RED、类型失败和错误harness证据保留，不靠删skip或放宽预算。
+
+这是BFF已验收源与机器，不是正常进程或Web用户全CRUD。正常53714/Platform8086未重载，Web仍ee4056c/8.3，真IAM→BFF→Platform组合、新五状态管理页/版本/撤回及浏览器33用例待验。无normal DB/资金/模型/权限写或restart/reset；Root统一Git和资源。证据Root var/dev/r255-preserve/r266-bff-managed-read-{runtime-green,root-full-gates,root-final-gates}.log及freeze/review/receipt。
 ## R257 管理路由 HTTP 实施验收（2026-10-06 16:16 UTC）
 
 四个已发布public8.2操作现有具名route/client实施，System3.0固定artifact与全部旧operation不变；无BFF DDL/新owner/兼容proxy。

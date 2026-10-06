@@ -51,6 +51,7 @@ import { validateSkillDraftRoute } from "../http/routes/validate-skill-draft.js"
 import { publishSkillRoute } from "../http/routes/publish-skill.js"
 import { skillInstallationRoute } from "../http/routes/skill-installations.js"
 import { moveSessionRoute } from "../http/routes/move-session.js"
+import { managedPersonalSkillsRoute } from "../http/routes/managed-personal-skills.js"
 
 async function handle(
   request: IncomingMessage,
@@ -160,6 +161,14 @@ async function handle(
   }
 
   const businessPath = segments.slice(1)
+  const isManagedPersonalSkillRead =
+    request.method === "GET" &&
+    ((businessPath.length === 2 && businessPath[0] === "self" && businessPath[1] === "skills") ||
+      (businessPath.length === 3 && businessPath[0] === "self" && businessPath[1] === "skills"))
+  if (isManagedPersonalSkillRead) {
+    await managedPersonalSkillsRoute(request, response, config, composition.sessionAdmission, id, businessPath)
+    return
+  }
   const isPersonalizationPath = businessPath.length === 2 && businessPath[0] === "preferences" && businessPath[1] === "personalization"
   const isProjectRenamePath =
     composition.routeHandler === undefined &&

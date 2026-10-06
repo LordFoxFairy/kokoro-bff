@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 8.3.0
+  version: 8.4.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -2264,6 +2264,61 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /v1/self/skills:
+    get:
+      tags: [Skills]
+      operationId: listManagedPersonalSkills
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: product.skill.read_managed_personal
+      summary: List the current subject's own Skills across management states
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+        - name: cursor
+          in: query
+          required: false
+          schema: { type: string, minLength: 1, maxLength: 2048 }
+        - name: status
+          in: query
+          required: false
+          schema: { type: string, enum: [draft, active, disabled, withdrawn, quarantined] }
+      responses:
+        '200': { $ref: '#/components/responses/ManagedPersonalSkillListOk' }
+        '400': { $ref: '#/components/responses/ManagedPersonalSkillBadRequest' }
+        '401': { $ref: '#/components/responses/ManagedPersonalSkillUnauthorized' }
+        '403': { $ref: '#/components/responses/ManagedPersonalSkillForbidden' }
+        '429': { $ref: '#/components/responses/ManagedPersonalSkillRateLimited' }
+        '502': { $ref: '#/components/responses/ManagedPersonalSkillBadGateway' }
+        '503': { $ref: '#/components/responses/ManagedPersonalSkillUnavailable' }
+  /v1/self/skills/{skill_id}:
+    get:
+      tags: [Skills]
+      operationId: getManagedPersonalSkill
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: product.skill.read_managed_personal
+      summary: Read one exact Skill revision owned by the current subject
+      parameters:
+        - name: skill_id
+          in: path
+          required: true
+          schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+      responses:
+        '200': { $ref: '#/components/responses/ManagedPersonalSkillDetailOk' }
+        '400': { $ref: '#/components/responses/ManagedPersonalSkillBadRequest' }
+        '401': { $ref: '#/components/responses/ManagedPersonalSkillUnauthorized' }
+        '403': { $ref: '#/components/responses/ManagedPersonalSkillForbidden' }
+        '404': { $ref: '#/components/responses/ManagedPersonalSkillNotFound' }
+        '429': { $ref: '#/components/responses/ManagedPersonalSkillRateLimited' }
+        '502': { $ref: '#/components/responses/ManagedPersonalSkillBadGateway' }
+        '503': { $ref: '#/components/responses/ManagedPersonalSkillUnavailable' }
   /v1/skills:
     get:
       tags: [Skills]
@@ -4528,6 +4583,63 @@ components:
       additionalProperties: false
       properties:
         error: { $ref: '#/components/schemas/SkillPublishErrorDetail' }
+    ManagedPersonalSkillResource:
+      type: object
+      required: [skill_id, source_ref, series_id, revision, name, summary, tags, status]
+      additionalProperties: false
+      properties:
+        skill_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        source_ref: { type: string, pattern: '^skill:[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        series_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        revision: { type: string, pattern: '^[1-9][0-9]*$' }
+        name: { type: string, minLength: 1, maxLength: 255, pattern: '.*\S.*' }
+        summary: { type: string, maxLength: 65535 }
+        tags:
+          type: array
+          maxItems: 100
+          items: { type: string, maxLength: 128 }
+        status: { type: string, enum: [draft, active, disabled, withdrawn, quarantined] }
+    ManagedPersonalSkillListResponse:
+      type: object
+      required: [data, meta]
+      additionalProperties: false
+      properties:
+        data:
+          type: object
+          required: [skills, next_cursor]
+          additionalProperties: false
+          properties:
+            skills:
+              type: array
+              items: { $ref: '#/components/schemas/ManagedPersonalSkillResource' }
+            next_cursor:
+              type: [string, 'null']
+              minLength: 1
+              maxLength: 2048
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    ManagedPersonalSkillDetailResponse:
+      type: object
+      required: [data, meta]
+      additionalProperties: false
+      properties:
+        data: { $ref: '#/components/schemas/ManagedPersonalSkillResource' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    ManagedPersonalSkillErrorDetail:
+      type: object
+      required: [code, message]
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          enum: [invalid_skill_request, session_authentication_required, session_invalid, service_auth_failed, session_forbidden, product_tenant_forbidden, session_rate_limited, skill_not_found, skill_response_invalid, product_tenant_not_configured, iam_admission_unavailable, skill_dependency_unavailable]
+        message: { type: string, minLength: 1 }
+    ManagedPersonalSkillErrorResponse:
+      type: object
+      required: [error, meta]
+      additionalProperties: false
+      properties:
+        error: { $ref: '#/components/schemas/ManagedPersonalSkillErrorDetail' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
     PublishedPersonalSkillResource:
       type: object
       required: [skill_id, source_ref, revision, status, name, summary, tags]
@@ -9205,6 +9317,107 @@ components:
                     type: object
                     properties:
                       code: { type: string, enum: [product_tenant_not_configured, iam_admission_unavailable, skill_dependency_unavailable] }
+    ManagedPersonalSkillListOk:
+      description: Current subject management-visible Skill page
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ManagedPersonalSkillListResponse' }
+    ManagedPersonalSkillDetailOk:
+      description: Current subject exact management-visible Skill
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ManagedPersonalSkillDetailResponse' }
+    ManagedPersonalSkillBadRequest:
+      description: Managed personal Skill request is invalid
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ManagedPersonalSkillErrorResponse'
+              - type: object
+                properties: { error: { properties: { code: { type: string, enum: [invalid_skill_request] } } } }
+    ManagedPersonalSkillUnauthorized:
+      description: Product session authentication failed
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ManagedPersonalSkillErrorResponse'
+              - type: object
+                properties: { error: { properties: { code: { type: string, enum: [session_authentication_required, session_invalid] } } } }
+    ManagedPersonalSkillForbidden:
+      description: Trusted service or admitted Product tenant is forbidden
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ManagedPersonalSkillErrorResponse'
+              - type: object
+                properties: { error: { properties: { code: { type: string, enum: [service_auth_failed, session_forbidden, product_tenant_forbidden] } } } }
+    ManagedPersonalSkillNotFound:
+      description: Skill is absent or hidden by tenant and ownership policy
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ManagedPersonalSkillErrorResponse'
+              - type: object
+                properties: { error: { properties: { code: { type: string, enum: [skill_not_found] } } } }
+    ManagedPersonalSkillRateLimited:
+      description: IAM Product session admission is rate limited
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+        Retry-After: { required: false, schema: { type: string, pattern: '^(?:[1-9][0-9]{0,3}|[1-7][0-9]{4}|8[0-5][0-9]{3}|86[0-3][0-9]{2}|86400)(?![\s\S])' } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ManagedPersonalSkillErrorResponse'
+              - type: object
+                properties: { error: { properties: { code: { type: string, enum: [session_rate_limited] } } } }
+    ManagedPersonalSkillBadGateway:
+      description: Platform management projection response is invalid
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ManagedPersonalSkillErrorResponse'
+              - type: object
+                properties: { error: { properties: { code: { type: string, enum: [skill_response_invalid] } } } }
+    ManagedPersonalSkillUnavailable:
+      description: Managed personal Skill dependency is unavailable
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ManagedPersonalSkillErrorResponse'
+              - type: object
+                properties: { error: { properties: { code: { type: string, enum: [product_tenant_not_configured, iam_admission_unavailable, skill_dependency_unavailable] } } } }
     PublishedPersonalSkillOk:
       description: Current ACTIVE personal Skill safe projection
       headers:

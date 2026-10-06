@@ -6,9 +6,15 @@ import type {
   GetPublishedPersonalSkillData,
   GetPublishedPersonalSkillErrors,
   GetPublishedPersonalSkillResponses,
+  GetSelfManagedSkillData,
+  GetSelfManagedSkillErrors,
+  GetSelfManagedSkillResponses,
   ListMcpServersData,
   ListMcpServersErrors,
   ListMcpServersResponses,
+  ListSelfManagedSkillsData,
+  ListSelfManagedSkillsErrors,
+  ListSelfManagedSkillsResponses,
   ListSelfMcpConnectionsData,
   ListSelfMcpConnectionsErrors,
   ListSelfMcpConnectionsResponses,
@@ -24,7 +30,9 @@ import type {
 } from "./types.gen.js"
 import {
   zGetPublishedPersonalSkillResponse,
+  zGetSelfManagedSkillResponse,
   zListMcpServersResponse,
+  zListSelfManagedSkillsResponse,
   zListSelfMcpConnectionsResponse,
   zListVisibleSkillCatalogResponse,
   zListVisibleSkillPoolResponse,
@@ -114,5 +122,35 @@ export const listSelfMcpConnections = <ThrowOnError extends boolean = false>(
     responseValidator: async (data) => await zListSelfMcpConnectionsResponse.parseAsync(data),
     security: [{ scheme: "bearer", type: "http" }],
     url: "/v1/mcp/connections",
+    ...options,
+  })
+
+/**
+ * List the authenticated Product subject own Skills across management states.
+ *
+ * Returns only the current subject own exact Skill revisions. Management visibility does not grant installation or execution.
+ */
+export const listSelfManagedSkills = <ThrowOnError extends boolean = false>(
+  options: Options<ListSelfManagedSkillsData, ThrowOnError>,
+): RequestResult<ListSelfManagedSkillsResponses, ListSelfManagedSkillsErrors, ThrowOnError> =>
+  (options.client ?? client).get<ListSelfManagedSkillsResponses, ListSelfManagedSkillsErrors, ThrowOnError>({
+    responseValidator: async (data) => await zListSelfManagedSkillsResponse.parseAsync(data),
+    security: [{ scheme: "bearer", type: "http" }],
+    url: "/v1/self/skills",
+    ...options,
+  })
+
+/**
+ * Read one exact Skill revision owned by the authenticated Product subject.
+ *
+ * Returns the current subject own exact Skill in any supported management state. Missing and non-owner Skills are indistinguishable.
+ */
+export const getSelfManagedSkill = <ThrowOnError extends boolean = false>(
+  options: Options<GetSelfManagedSkillData, ThrowOnError>,
+): RequestResult<GetSelfManagedSkillResponses, GetSelfManagedSkillErrors, ThrowOnError> =>
+  (options.client ?? client).get<GetSelfManagedSkillResponses, GetSelfManagedSkillErrors, ThrowOnError>({
+    responseValidator: async (data) => await zGetSelfManagedSkillResponse.parseAsync(data),
+    security: [{ scheme: "bearer", type: "http" }],
+    url: "/v1/self/skills/{skill_id}",
     ...options,
   })

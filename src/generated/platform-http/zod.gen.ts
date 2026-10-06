@@ -62,6 +62,29 @@ export const zMcpConnection = z.object({
   status: z.enum(["active"]),
 })
 
+export const zSelfManagedSkill = z.object({
+  skill_id: z
+    .string()
+    .min(1)
+    .max(191)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/),
+  source_ref: z.string().regex(/^skill:[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/),
+  series_id: z
+    .string()
+    .min(1)
+    .max(191)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/),
+  revision: z.string().regex(/^[1-9][0-9]*$/),
+  name: z
+    .string()
+    .min(1)
+    .max(255)
+    .regex(/.*\S.*/),
+  summary: z.string().max(65535),
+  tags: z.array(z.string().max(128)).max(100),
+  status: z.enum(["draft", "active", "disabled", "withdrawn", "quarantined"]),
+})
+
 export const zRequestId = z.string().min(1).max(255)
 
 /**
@@ -102,6 +125,11 @@ export const zMcpConnectionId = z
   .min(1)
   .max(191)
   .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/)
+
+/**
+ * Optional exact management-state filter; not an execution eligibility assertion.
+ */
+export const zSelfSkillStatus = z.enum(["draft", "active", "disabled", "withdrawn", "quarantined"])
 
 export const zListVisibleSkillsHeaders = z.object({
   "x-kokoro-request-id": z.string().min(1).max(255).optional(),
@@ -268,4 +296,55 @@ export const zListSelfMcpConnectionsResponse = z.object({
     connections: z.array(zMcpConnection),
     next_cursor: z.string().min(1).max(2048).optional(),
   }),
+})
+
+export const zListSelfManagedSkillsHeaders = z.object({
+  "x-kokoro-request-id": z.string().min(1).max(255).optional(),
+  "x-kokoro-tenant-id": z.string().min(1).max(255).optional(),
+  "x-kokoro-subject": z
+    .string()
+    .min(1)
+    .max(255)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._:@\/-]{0,254}$/),
+})
+
+export const zListSelfManagedSkillsQuery = z.object({
+  limit: z.int().gte(1).lte(100).optional().default(50),
+  cursor: z.string().min(1).max(2048).optional(),
+  status: z.enum(["draft", "active", "disabled", "withdrawn", "quarantined"]).optional(),
+})
+
+/**
+ * Current subject own Skill management page without cache reuse
+ */
+export const zListSelfManagedSkillsResponse = z.object({
+  data: z.object({
+    skills: z.array(zSelfManagedSkill),
+    next_cursor: z.string().min(1).max(2048).optional(),
+  }),
+})
+
+export const zGetSelfManagedSkillHeaders = z.object({
+  "x-kokoro-request-id": z.string().min(1).max(255).optional(),
+  "x-kokoro-tenant-id": z.string().min(1).max(255).optional(),
+  "x-kokoro-subject": z
+    .string()
+    .min(1)
+    .max(255)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._:@\/-]{0,254}$/),
+})
+
+export const zGetSelfManagedSkillPath = z.object({
+  skill_id: z
+    .string()
+    .min(1)
+    .max(191)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/),
+})
+
+/**
+ * Current subject own exact Skill management summary without cache reuse
+ */
+export const zGetSelfManagedSkillResponse = z.object({
+  data: zSelfManagedSkill,
 })

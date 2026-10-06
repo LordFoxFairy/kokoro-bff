@@ -1,3 +1,9 @@
+## R266 reviewed public 8.4 management read source
+
+Public 8.4.0 / 101 operations and the two exact self-management reads are now implemented and Root verified. Platform HTTP3.3 uniquely consumes immutable 3d4ba6c / raw b6e5d0e0, with regular generated artifacts and the former vendor removed. Existing 99 operations and six reads remain unchanged. Current source evidence is in docs/CURRENT.md; normal process activation and Web/user CRUD are not yet verified. Candidate wording below is historical.
+
+Public 8.4.0 adds the two beta managed-personal Skill reads (`listManagedPersonalSkills` and `getManagedPersonalSkill`) with five management states, eight safe fields, strict request/meta/error profiles, and 101 total operations. The internal Platform HTTP dependency is uniquely pinned to owner `3d4ba6c3462e3896481f902adf47e0713c4187e4`, contract 3.3.0, raw SHA-256 `b6e5d0e0118207ee37933e5c22e94c86d95d74307b22a44e26e8974fede82acf`; the former 3.2 vendor path is removed rather than retained as a fallback. Platform Connect and all historical artifacts remain independently pinned. Runtime implementation and generated output publication remain a later gated stage.
+
 Public 8.3.0 adds required safe installation display_name, summary, and source_status fields while retaining 99 operations and the existing envelopes. Platform owner pin is `c94909f1c593f2b7ffd5f325786739da744ff31f`; V5–V7 historical artifacts remain byte-exact.
 
 ## R256 Admin model routing public 8.2 candidate

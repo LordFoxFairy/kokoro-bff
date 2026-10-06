@@ -40,7 +40,7 @@ function inspectChatFailureContract(openapi) {
     if (!condition) errors.push(label)
   }
 
-  require(/^info:\n(?:.*\n){0,3}?  version: 8\.3\.0$/mu.test(openapi), "public info.version must be 8.3.0")
+  require(/^info:\n(?:.*\n){0,3}?  version: 8\.4\.0$/mu.test(openapi), "public info.version must be 8.4.0")
   require(/^      required: \[message_id, role, content, status, created_at\]$/mu.test(message), "failure must stay optional")
   const roles = [...(message.match(/role:\n\s+type: string\n\s+enum: \[([^\]]+)\]/u)?.[1] ?? "").matchAll(/[a-z_]+/gu)].map((match) => match[0])
   require(JSON.stringify(roles) === JSON.stringify(["user", "assistant"]), "Message roles must equal user and assistant")
@@ -1067,7 +1067,7 @@ test("public7 retains the closed full execution head, five current-locator decis
   const { openapi } = await readContract()
   const document = load(openapi)
   const schemas = document.components.schemas
-  assert.equal(document.info.version, "8.3.0")
+  assert.equal(document.info.version, "8.4.0")
   const snapshot = schemas.SessionSnapshotResponse.properties.data
   assert.equal(Object.hasOwn(snapshot.properties, "active_run"), false)
   assert.equal(Object.hasOwn(snapshot.properties, "pending_pauses"), false)
@@ -1415,7 +1415,7 @@ test("R124 public7 publishes nullable snapshot process and the anchored Run proc
   const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
   const { openapi } = await readContract()
   const document = load(openapi)
-  assert.equal(document.info.version, "8.3.0")
+  assert.equal(document.info.version, "8.4.0")
   const snapshot = document.components.schemas.SessionSnapshotResponse.properties.data
   assert.ok(snapshot.required.includes("execution_process"))
   assert.deepEqual(snapshot.properties.execution_process, {
@@ -1471,7 +1471,7 @@ test("R146 Move is one strict additive public command with a durable synchronous
     Object.keys(pathItem).filter((key) => ["get", "post", "put", "patch", "delete"].includes(key)),
     ["post"],
   )
-  assert.equal(document.info.version, "8.3.0", "the prelaunch Skills V2 cutover advances the only public major without a path alias")
+  assert.equal(document.info.version, "8.4.0", "the prelaunch Skills V2 cutover advances the only public major without a path alias")
   assert.ok(baseline.some((entry) => entry.method === "POST" && entry.path === path && entry.operation_id === "moveSession"))
 
   const operation = pathItem.post
@@ -1638,7 +1638,7 @@ test("R240 rename contract remains one strict name PATCH beside the approved Bil
   const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
   const { openapi, baseline } = await readContract()
   const document = load(openapi)
-  assert.equal(document.info.version, "8.3.0")
+  assert.equal(document.info.version, "8.4.0")
   const route = "/v1/projects/{projectId}/name"
   const path = document.paths[route]
   assert.ok(path)
@@ -1646,6 +1646,8 @@ test("R240 rename contract remains one strict name PATCH beside the approved Bil
   const priorPaths = { ...document.paths }
   delete priorPaths[route]
   delete priorPaths["/v1/mcp/connections"] // R257 adds only this independently governed read.
+  delete priorPaths["/v1/self/skills"] // R266 separately governs managed personal Skill reads.
+  delete priorPaths["/v1/self/skills/{skill_id}"]
   delete priorPaths["/v1/preferences/personalization"] // R257 separately governs the new caller-owned CAS resource.
   delete priorPaths["/v1/admin/model-routing"] // R256 separately governs the current-tenant admin read.
   delete priorPaths["/v1/admin/model-labels"]
@@ -1661,6 +1663,8 @@ test("R240 rename contract remains one strict name PATCH beside the approved Bil
       (item) =>
         ![
           "listSelfMcpConnections",
+          "listManagedPersonalSkills",
+          "getManagedPersonalSkill",
           "getSelfPersonalization",
           "replaceSelfPersonalization",
           "listAdminModelRouting",
@@ -1806,7 +1810,7 @@ test("R240 rename semantic gate rejects input, receipt, status and header drift"
   const request = (before, after) => mutate("    RenameProjectRequest:", "    RenameProjectResponse:", before, after)
   const success = (before, after) => mutate("    RenameProjectResponse:", "    RenameProjectErrorResponse:", before, after)
   const mutations = [
-    openapi.replace("  version: 8.3.0", "  version: 7.1.0"),
+    openapi.replace("  version: 8.4.0", "  version: 7.1.0"),
     route("    patch:", "    post:"),
     route("operationId: renameProject", "operationId: renameProjectAlias"),
     route("x-kokoro-permission: project.update", "x-kokoro-permission: project.read"),
@@ -1862,7 +1866,7 @@ test("R257 self MCP connection contract rejects Server substitution and error-pr
   const start = openapi.indexOf("  /v1/mcp/connections:\n")
   const end = openapi.indexOf("  /v1/mcp/servers:\n", start)
   const route = openapi.slice(start, end)
-  assert.equal(baseline.length, 99)
+  assert.equal(baseline.length, 101)
   assert.deepEqual(
     baseline.filter((item) => item.operation_id === "listSelfMcpConnections"),
     [
@@ -2015,4 +2019,53 @@ test("R256 admin model routing publishes closed pages, bounded CAS and exact tra
     openapi.replace("        '502':\n          $ref: '#/components/responses/AdminModelRoutingInvalidResponse'\n", ""),
   ])
     assert.equal(reject(mutated), true)
+})
+
+test("R266 managed personal Skill contract rejects route, envelope, status-code and Retry-After drift", async () => {
+  const { openapi, baseline } = await readContract()
+  assert.deepEqual(inspectBffOpenApi(openapi, baseline), [])
+  const mutate = (startMarker, endMarker, before, after) => {
+    const start = openapi.indexOf(startMarker)
+    const end = openapi.indexOf(endMarker, start + startMarker.length)
+    assert.ok(start >= 0 && end > start, startMarker)
+    const block = openapi.slice(start, end)
+    assert.ok(block.includes(before), before)
+    return openapi.slice(0, start) + block.replace(before, after) + openapi.slice(end)
+  }
+  const listRoute = (before, after) => mutate("  /v1/self/skills:\n", "  /v1/self/skills/{skill_id}:\n", before, after)
+  const detailRoute = (before, after) => mutate("  /v1/self/skills/{skill_id}:\n", "  /v1/skills:\n", before, after)
+  const error = (before, after) => mutate("    ManagedPersonalSkillErrorResponse:\n", "    PublishedPersonalSkillResource:\n", before, after)
+  const response = (name, next, before, after) =>
+    mutate(
+      `    ManagedPersonalSkill${name}:\n`,
+      next === "PublishedPersonalSkillOk" ? "    PublishedPersonalSkillOk:\n" : `    ManagedPersonalSkill${next}:\n`,
+      before,
+      after,
+    )
+  const mutations = [
+    listRoute("operationId: listManagedPersonalSkills", "operationId: listSkills"),
+    detailRoute("    get:", "    post:"),
+    listRoute("x-kokoro-permission: product.skill.read_managed_personal", "x-kokoro-permission: capability.skill.read"),
+    listRoute("'429': { $ref: '#/components/responses/ManagedPersonalSkillRateLimited' }", "'429': { $ref: '#/components/responses/PlatformProjectionReadRateLimited' }"),
+    detailRoute("'404': { $ref: '#/components/responses/ManagedPersonalSkillNotFound' }", "'404': { $ref: '#/components/responses/NotFound' }"),
+    error("required: [error, meta]", "required: [error]"),
+    error("additionalProperties: false", "additionalProperties: true"),
+    error("        meta: { $ref: '#/components/schemas/RequestMeta' }", "        retryable: { type: boolean }"),
+    response("BadRequest", "Unauthorized", "enum: [invalid_skill_request]", "enum: [invalid_query_parameter]"),
+    response("RateLimited", "BadGateway", "enum: [session_rate_limited]", "enum: [session_rate_limited, skill_rate_limited]"),
+    response("BadGateway", "Unavailable", "enum: [skill_response_invalid]", "enum: [skill_dependency_unavailable]"),
+    response("Unavailable", "PublishedPersonalSkillOk", "product_tenant_not_configured, iam_admission_unavailable, skill_dependency_unavailable", "product_tenant_not_configured, skill_dependency_unavailable"),
+    response("ListOk", "DetailOk", "required: true", "required: false"),
+  ]
+  for (const [index, broken] of mutations.entries()) {
+    assert.notEqual(broken, openapi)
+    assert.ok(inspectBffOpenApi(broken, baseline).some((message) => /managed personal Skill|ManagedPersonalSkill/u.test(message)), `managed mutation ${index} must fail closed`)
+  }
+  const { createRequire } = await import("node:module")
+  const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
+  const document = load(openapi)
+  const pattern = document.components.responses.ManagedPersonalSkillRateLimited.headers["Retry-After"].schema.pattern
+  const retry = new RegExp(pattern, "u")
+  for (const valid of ["1", "86400"]) assert.equal(retry.test(valid), true, valid)
+  for (const invalid of ["0", "86401", "99999", "1\n"]) assert.equal(retry.test(invalid), false, JSON.stringify(invalid))
 })

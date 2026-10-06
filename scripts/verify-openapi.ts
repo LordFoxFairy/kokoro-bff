@@ -303,6 +303,7 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
         "SkillPublishErrorResponse",
         "PublishedPersonalSkillResponse",
         "PublishedPersonalSkillErrorResponse",
+        "ManagedPersonalSkillErrorResponse",
         "PlatformProjectionReadErrorResponse",
         "MoveSessionResponse",
         "MoveSessionErrorResponse",
@@ -344,6 +345,32 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
     const isPublishedPersonalSkill = operationId === "getPublishedPersonalSkill" && operation.method === "GET" && operation.path === "/v1/skills/{skill_id}"
     const isPlatformProjectionRead =
       operation.method === "GET" && ["listSkills", "listSkillPool", "listSkillCatalog", "listMcpServers", "listSelfMcpConnections"].includes(operationId)
+    const managedPersonalResponses: Record<string, Record<string, string>> = {
+      listManagedPersonalSkills: {
+        "200": "ManagedPersonalSkillListOk",
+        "400": "ManagedPersonalSkillBadRequest",
+        "401": "ManagedPersonalSkillUnauthorized",
+        "403": "ManagedPersonalSkillForbidden",
+        "429": "ManagedPersonalSkillRateLimited",
+        "502": "ManagedPersonalSkillBadGateway",
+        "503": "ManagedPersonalSkillUnavailable",
+      },
+      getManagedPersonalSkill: {
+        "200": "ManagedPersonalSkillDetailOk",
+        "400": "ManagedPersonalSkillBadRequest",
+        "401": "ManagedPersonalSkillUnauthorized",
+        "403": "ManagedPersonalSkillForbidden",
+        "404": "ManagedPersonalSkillNotFound",
+        "429": "ManagedPersonalSkillRateLimited",
+        "502": "ManagedPersonalSkillBadGateway",
+        "503": "ManagedPersonalSkillUnavailable",
+      },
+    }
+    const managedPersonalExpected = managedPersonalResponses[operationId]
+    const isManagedPersonalSkill =
+      operation.method === "GET" &&
+      ((operationId === "listManagedPersonalSkills" && operation.path === "/v1/self/skills") ||
+        (operationId === "getManagedPersonalSkill" && operation.path === "/v1/self/skills/{skill_id}"))
     const isCreateSkillDraft = operationId === "createSkillDraft"
     const isMoveSession = operationId === "moveSession" && operation.method === "POST" && operation.path === "/v1/sessions/{id}/move"
     const isPersonalization = operation.path === "/v1/preferences/personalization" && ((operation.method === "GET" && operationId === "getSelfPersonalization") || (operation.method === "PUT" && operationId === "replaceSelfPersonalization"))
@@ -446,6 +473,13 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
     )
       errors.push(`${operation.method} ${operation.path} must not reference PublishedPersonalSkill strict components`)
     if (
+      !isManagedPersonalSkill &&
+      /#\/components\/(?:schemas\/ManagedPersonalSkill[A-Za-z]*|responses\/ManagedPersonalSkill[A-Za-z]*)/u.test(
+        operation.text.split(/^components:\s*$/mu)[0] ?? "",
+      )
+    )
+      errors.push(`${operation.method} ${operation.path} must not reference ManagedPersonalSkill strict components`)
+    if (
       !isGetSkillPackageUpload &&
       /#\/components\/(?:schemas\/(?:GetSkillPackageUploadResponse|SkillPackageUploadGetErrorResponse)|responses\/SkillPackageUploadGet[A-Za-z]*)/u.test(
         operation.text.split(/^components:\s*$/mu)[0] ?? "",
@@ -542,6 +576,7 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
           !isCreateSkillDraft &&
           !isPublishedPersonalSkill &&
           !isPlatformProjectionRead &&
+          !isManagedPersonalSkill &&
           !isGetSkillPackageUpload &&
           !isBeginSkillPackageUpload &&
           !isCompleteSkillPackageUpload &&
@@ -563,6 +598,7 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
           (isPublishedPersonalSkill && match[1].startsWith("PublishedPersonalSkill")) ||
           (isPlatformProjectionRead &&
             (match[1].startsWith("PlatformProjectionRead") || (operationId === "listSelfMcpConnections" && match[1].startsWith("McpConnectionRead")))) ||
+          (isManagedPersonalSkill && managedPersonalExpected?.[status] === match[1]) ||
           (isGetSkillPackageUpload && match[1].startsWith("SkillPackageUploadGet")) ||
           (isBeginSkillPackageUpload && match[1].startsWith("SkillPackageBegin")) ||
           (isCompleteSkillPackageUpload && match[1].startsWith("SkillPackageComplete")) ||
@@ -1615,6 +1651,128 @@ function scheduledTaskTimingContractErrors(schemas: Map<string, NamedBlock>): st
   return errors
 }
 
+function managedPersonalSkillContractErrors(
+  schemas: Map<string, NamedBlock>,
+  operations: OperationBlock[],
+  responses: Map<string, NamedBlock>,
+): string[] {
+  const errors: string[] = []
+  const require = (condition: boolean, message: string): void => {
+    if (!condition) errors.push(`managed personal Skill ${message}`)
+  }
+  const operationProfiles = {
+    listManagedPersonalSkills: {
+      method: "GET",
+      path: "/v1/self/skills",
+      responses: {
+        "200": "ManagedPersonalSkillListOk",
+        "400": "ManagedPersonalSkillBadRequest",
+        "401": "ManagedPersonalSkillUnauthorized",
+        "403": "ManagedPersonalSkillForbidden",
+        "429": "ManagedPersonalSkillRateLimited",
+        "502": "ManagedPersonalSkillBadGateway",
+        "503": "ManagedPersonalSkillUnavailable",
+      },
+    },
+    getManagedPersonalSkill: {
+      method: "GET",
+      path: "/v1/self/skills/{skill_id}",
+      responses: {
+        "200": "ManagedPersonalSkillDetailOk",
+        "400": "ManagedPersonalSkillBadRequest",
+        "401": "ManagedPersonalSkillUnauthorized",
+        "403": "ManagedPersonalSkillForbidden",
+        "404": "ManagedPersonalSkillNotFound",
+        "429": "ManagedPersonalSkillRateLimited",
+        "502": "ManagedPersonalSkillBadGateway",
+        "503": "ManagedPersonalSkillUnavailable",
+      },
+    },
+  } as const
+  for (const [id, profile] of Object.entries(operationProfiles)) {
+    const matches = operations.filter((operation) => operation.fields.get("operationId") === id)
+    const operation = matches.length === 1 ? matches[0] : undefined
+    require(operation?.method === profile.method && operation.path === profile.path, `${id} must be exact ${profile.method} ${profile.path}`)
+    if (operation === undefined) continue
+    for (const [field, value] of Object.entries({
+      "x-kokoro-owner": "kokoro-bff",
+      "x-kokoro-visibility": "public",
+      "x-kokoro-stability": "beta",
+      "x-kokoro-idempotency": "none",
+      "x-kokoro-permission": "product.skill.read_managed_personal",
+    })) require(operation.fields.get(field) === value, `${id} ${field} must equal ${value}`)
+    require(!operation.text.includes("requestBody:"), `${id} must not publish a request body`)
+    const actual = collectResponseBlocks(operation)
+    require(JSON.stringify([...actual.keys()]) === JSON.stringify(Object.keys(profile.responses)), `${id} status profile drifted`)
+    for (const [status, component] of Object.entries(profile.responses))
+      require(actual.get(status)?.trim() === `'${status}': { $ref: '#/components/responses/${component}' }`, `${id} ${status} must reference only ${component}`)
+  }
+  const resource = schemas.get("ManagedPersonalSkillResource")
+  require(resource !== undefined, "resource schema is required")
+  if (resource !== undefined) {
+    require(JSON.stringify(topLevelRequired(resource)) === JSON.stringify(["skill_id", "source_ref", "series_id", "revision", "name", "summary", "tags", "status"]), "resource must require the safe eight fields")
+    require(schemaProperties(resource).join(",") === "skill_id,source_ref,series_id,revision,name,summary,tags,status", "resource must define only the safe eight fields")
+    require(/^      additionalProperties: false$/mu.test(resource.text), "resource must be closed")
+    require(resource.text.includes("enum: [draft, active, disabled, withdrawn, quarantined]"), "resource must close the five management states")
+  }
+  const list = schemas.get("ManagedPersonalSkillListResponse")
+  const detail = schemas.get("ManagedPersonalSkillDetailResponse")
+  const errorDetail = schemas.get("ManagedPersonalSkillErrorDetail")
+  const error = schemas.get("ManagedPersonalSkillErrorResponse")
+  require(
+    list !== undefined &&
+      JSON.stringify(topLevelRequired(list)) === JSON.stringify(["data", "meta"]) &&
+      schemaProperties(list).join(",") === "data,skills,next_cursor,meta" &&
+      list.text.includes("required: [skills, next_cursor]") &&
+      list.text.includes("type: [string, 'null']") &&
+      (list.text.match(/additionalProperties: false/gu) ?? []).length === 2,
+    "list must have closed top-level and nested data with required nullable cursor",
+  )
+  require(
+    detail !== undefined &&
+      JSON.stringify(topLevelRequired(detail)) === JSON.stringify(["data", "meta"]) &&
+      schemaProperties(detail).join(",") === "data,meta" &&
+      (detail.text.match(/additionalProperties: false/gu) ?? []).length === 1,
+    "detail must be closed data/meta",
+  )
+  require(
+    errorDetail !== undefined &&
+      JSON.stringify(topLevelRequired(errorDetail)) === JSON.stringify(["code", "message"]) &&
+      schemaProperties(errorDetail).join(",") === "code,message" &&
+      (errorDetail.text.match(/additionalProperties: false/gu) ?? []).length === 1 &&
+      !errorDetail.text.includes("retryable"),
+    "error detail must be closed code/message without retryable",
+  )
+  require(
+    error !== undefined &&
+      JSON.stringify(topLevelRequired(error)) === JSON.stringify(["error", "meta"]) &&
+      schemaProperties(error).join(",") === "error,meta" &&
+      (error.text.match(/additionalProperties: false/gu) ?? []).length === 1 &&
+      !error.text.includes("retryable"),
+    "error response must be closed error/meta without retryable",
+  )
+  const responseProfiles: Record<string, Readonly<{ schema: string; codes?: readonly string[] }>> = {
+    ManagedPersonalSkillListOk: { schema: "ManagedPersonalSkillListResponse" },
+    ManagedPersonalSkillDetailOk: { schema: "ManagedPersonalSkillDetailResponse" },
+    ManagedPersonalSkillBadRequest: { schema: "ManagedPersonalSkillErrorResponse", codes: ["invalid_skill_request"] },
+    ManagedPersonalSkillUnauthorized: { schema: "ManagedPersonalSkillErrorResponse", codes: ["session_authentication_required", "session_invalid"] },
+    ManagedPersonalSkillForbidden: { schema: "ManagedPersonalSkillErrorResponse", codes: ["service_auth_failed", "session_forbidden", "product_tenant_forbidden"] },
+    ManagedPersonalSkillNotFound: { schema: "ManagedPersonalSkillErrorResponse", codes: ["skill_not_found"] },
+    ManagedPersonalSkillRateLimited: { schema: "ManagedPersonalSkillErrorResponse", codes: ["session_rate_limited"] },
+    ManagedPersonalSkillBadGateway: { schema: "ManagedPersonalSkillErrorResponse", codes: ["skill_response_invalid"] },
+    ManagedPersonalSkillUnavailable: { schema: "ManagedPersonalSkillErrorResponse", codes: ["product_tenant_not_configured", "iam_admission_unavailable", "skill_dependency_unavailable"] },
+  }
+  for (const [name, profile] of Object.entries(responseProfiles)) {
+    const text = responses.get(name)?.text ?? ""
+    require(text.includes("x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }") && text.includes("Cache-Control: { required: true, schema: { type: string, const: no-store } }"), `${name} must require bounded request ID and no-store`)
+    require(text.includes(`#/components/schemas/${profile.schema}`), `${name} must use ${profile.schema}`)
+    if (profile.codes !== undefined) require(text.includes(`code: { type: string, enum: [${profile.codes.join(", ")}] }`), `${name} code profile drifted`)
+  }
+  const retryPattern = "^(?:[1-9][0-9]{0,3}|[1-7][0-9]{4}|8[0-5][0-9]{3}|86[0-3][0-9]{2}|86400)(?![\\s\\S])"
+  require((responses.get("ManagedPersonalSkillRateLimited")?.text ?? "").includes(`pattern: '${retryPattern}'`), "429 Retry-After must be the exact bounded 1..86400 whole-string pattern")
+  return errors
+}
+
 function moveSessionContractErrors(
   source: string,
   parameters: Map<string, NamedBlock>,
@@ -1623,7 +1781,7 @@ function moveSessionContractErrors(
   responseComponents: Map<string, NamedBlock>,
 ): string[] {
   const errors: string[] = []
-  if (!/^  version: 8\.3\.0$/mu.test(source)) errors.push("moveSession must remain in current public contract version 8.3.0")
+  if (!/^  version: 8\.4\.0$/mu.test(source)) errors.push("moveSession must remain in current public contract version 8.4.0")
   const matches = operations.filter((operation) => operation.fields.get("operationId") === "moveSession")
   const operation = matches.length === 1 ? matches[0] : undefined
   if (operation?.method !== "POST" || operation.path !== "/v1/sessions/{id}/move") {
@@ -1743,7 +1901,7 @@ function renameProjectContractErrors(
   const require = (condition: boolean, message: string): void => {
     if (!condition) errors.push(`renameProject ${message}`)
   }
-  require(/^  version: 8\.3\.0$/mu.test(source), "current public contract must be version 8.3.0")
+  require(/^  version: 8\.4\.0$/mu.test(source), "current public contract must be version 8.4.0")
   const matches = operations.filter((operation) => operation.fields.get("operationId") === "renameProject")
   const operation = matches.length === 1 ? matches[0] : undefined
   if (operation?.method !== "PATCH" || operation.path !== "/v1/projects/{projectId}/name")
@@ -2174,6 +2332,7 @@ export function inspectBffOpenApi(source: string, baseline: readonly BaselineOpe
     ...envelopeErrors(schemas, operations, responseComponents),
     ...billingPersonalReadContractErrors(schemas, operations, responseComponents),
     ...platformProjectionReadContractErrors(schemas, operations, responseComponents),
+    ...managedPersonalSkillContractErrors(schemas, operations, responseComponents),
     ...moveSessionContractErrors(source, parameters, schemas, operations, responseComponents),
     ...renameProjectContractErrors(source, parameters, schemas, operations, responseComponents),
     ...idempotencyErrors(parameters, operations),

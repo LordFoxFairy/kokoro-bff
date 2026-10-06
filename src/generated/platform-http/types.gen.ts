@@ -52,6 +52,17 @@ export type McpConnection = {
   status: "active"
 }
 
+export type SelfManagedSkill = {
+  skill_id: string
+  source_ref: string
+  series_id: string
+  revision: string
+  name: string
+  summary: string
+  tags: Array<string>
+  status: "draft" | "active" | "disabled" | "withdrawn" | "quarantined"
+}
+
 export type RequestId = string
 
 /**
@@ -80,6 +91,11 @@ export type Cursor = string
 export type SkillId = string
 
 export type McpConnectionId = string
+
+/**
+ * Optional exact management-state filter; not an execution eligibility assertion.
+ */
+export type SelfSkillStatus = "draft" | "active" | "disabled" | "withdrawn" | "quarantined"
 
 export type ListVisibleSkillsData = {
   body?: never
@@ -455,3 +471,130 @@ export type ListSelfMcpConnectionsResponses = {
 }
 
 export type ListSelfMcpConnectionsResponse = ListSelfMcpConnectionsResponses[keyof ListSelfMcpConnectionsResponses]
+
+export type ListSelfManagedSkillsData = {
+  body?: never
+  headers: {
+    "x-kokoro-request-id"?: string
+    /**
+     * Optional consistency assertion only; tenant authority is IAM introspection.
+     */
+    "x-kokoro-tenant-id"?: string
+    /**
+     * Product Session subject projected by the authenticated kokoro-bff workload after IAM admission; never a browser-supplied tenant identity.
+     */
+    "x-kokoro-subject": string
+  }
+  path?: never
+  query?: {
+    limit?: number
+    cursor?: string
+    /**
+     * Optional exact management-state filter; not an execution eligibility assertion.
+     */
+    status?: "draft" | "active" | "disabled" | "withdrawn" | "quarantined"
+  }
+  url: "/v1/self/skills"
+}
+
+export type ListSelfManagedSkillsErrors = {
+  /**
+   * Self Skill management error without cache reuse
+   */
+  400: ErrorEnvelope
+  /**
+   * Self Skill management error without cache reuse
+   */
+  401: ErrorEnvelope
+  /**
+   * Self Skill management error without cache reuse
+   */
+  403: ErrorEnvelope
+  /**
+   * Self Skill management error without cache reuse
+   */
+  500: ErrorEnvelope
+  /**
+   * Self Skill management error without cache reuse
+   */
+  503: ErrorEnvelope
+}
+
+export type ListSelfManagedSkillsError = ListSelfManagedSkillsErrors[keyof ListSelfManagedSkillsErrors]
+
+export type ListSelfManagedSkillsResponses = {
+  /**
+   * Current subject own Skill management page without cache reuse
+   */
+  200: {
+    data: {
+      skills: Array<SelfManagedSkill>
+      next_cursor?: string
+    }
+  }
+}
+
+export type ListSelfManagedSkillsResponse = ListSelfManagedSkillsResponses[keyof ListSelfManagedSkillsResponses]
+
+export type GetSelfManagedSkillData = {
+  body?: never
+  headers: {
+    "x-kokoro-request-id"?: string
+    /**
+     * Optional consistency assertion only; tenant authority is IAM introspection.
+     */
+    "x-kokoro-tenant-id"?: string
+    /**
+     * Product Session subject projected by the authenticated kokoro-bff workload after IAM admission; never a browser-supplied tenant identity.
+     */
+    "x-kokoro-subject": string
+  }
+  path: {
+    /**
+     * Canonical Platform Skill ID, not a source_ref or package asset ID.
+     */
+    skill_id: string
+  }
+  query?: never
+  url: "/v1/self/skills/{skill_id}"
+}
+
+export type GetSelfManagedSkillErrors = {
+  /**
+   * Self Skill management error without cache reuse
+   */
+  400: ErrorEnvelope
+  /**
+   * Self Skill management error without cache reuse
+   */
+  401: ErrorEnvelope
+  /**
+   * Self Skill management error without cache reuse
+   */
+  403: ErrorEnvelope
+  /**
+   * Self Skill management error without cache reuse
+   */
+  404: ErrorEnvelope
+  /**
+   * Self Skill management error without cache reuse
+   */
+  500: ErrorEnvelope
+  /**
+   * Self Skill management error without cache reuse
+   */
+  503: ErrorEnvelope
+}
+
+export type GetSelfManagedSkillError = GetSelfManagedSkillErrors[keyof GetSelfManagedSkillErrors]
+
+export type GetSelfManagedSkillResponses = {
+  /**
+   * Current subject own exact Skill management summary without cache reuse
+   */
+  200: {
+    data: SelfManagedSkill
+  }
+}
+
+export type GetSelfManagedSkillResponse = GetSelfManagedSkillResponses[keyof GetSelfManagedSkillResponses]

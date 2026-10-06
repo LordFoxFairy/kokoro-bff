@@ -1,26 +1,40 @@
 import { createClient } from "../../../generated/platform-http/client/client.gen.js"
 import {
+  getSelfManagedSkill,
   getPublishedPersonalSkill,
   listMcpServers,
   listSelfMcpConnections,
+  listSelfManagedSkills,
   listVisibleSkillCatalog,
   listVisibleSkillPool,
   listVisibleSkills,
 } from "../../../generated/platform-http/sdk.gen.js"
 import {
   zErrorEnvelope,
+  zGetSelfManagedSkillResponse,
   zGetPublishedPersonalSkillResponse,
   zListMcpServersResponse,
   zListSelfMcpConnectionsResponse,
+  zListSelfManagedSkillsResponse,
   zMcpConnection,
+  zSelfManagedSkill,
   zListVisibleSkillCatalogResponse,
   zListVisibleSkillPoolResponse,
   zListVisibleSkillsResponse,
 } from "../../../generated/platform-http/zod.gen.js"
 import { ProjectionCredentialSource } from "./projection-credential.js"
 import { ProjectionTokenSource } from "./projection-token.js"
+import type { ListSelfManagedSkillsData } from "../../../generated/platform-http/types.gen.js"
 
 export type ProjectionOperation = "skills" | "skill" | "pool" | "catalog" | "mcp" | "mcpConnections"
+export type ManagedPersonalSkillOperation = "managedSkills" | "managedSkill"
+export type ManagedPersonalSkillResult =
+  | { ok: true; status: 200; data: unknown }
+  | {
+      ok: false
+      status: 400 | 404 | 502 | 503
+      code: "invalid_skill_request" | "skill_not_found" | "skill_response_invalid" | "skill_dependency_unavailable"
+    }
 export type ProjectionResult =
   | { ok: true; status: 200; data: unknown }
   | {
@@ -66,6 +80,25 @@ const connectionResponse = zListSelfMcpConnectionsResponse.strict().extend({
   }),
 })
 const connectionError = zErrorEnvelope.strict().extend({ error: zErrorEnvelope.shape.error.strict() })
+const managedSkill = zSelfManagedSkill.strict()
+const managedListResponse = zListSelfManagedSkillsResponse.strict().extend({
+  data: zListSelfManagedSkillsResponse.shape.data.strict().extend({ skills: managedSkill.array() }),
+})
+const managedDetailResponse = zGetSelfManagedSkillResponse.strict().extend({ data: managedSkill })
+const managedError = zErrorEnvelope.strict().extend({ error: zErrorEnvelope.shape.error.strict() })
+
+function matchesManagedIdentity(value: unknown, skillId?: string): boolean {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false
+  const data = (value as { data?: unknown }).data
+  const items = skillId === undefined ? (data as { skills?: unknown } | undefined)?.skills : [data]
+  if (!Array.isArray(items)) return false
+  return items.every((item) => {
+    if (typeof item !== "object" || item === null || Array.isArray(item)) return false
+    const identity = item as { skill_id?: unknown; source_ref?: unknown }
+    if (typeof identity.skill_id !== "string" || typeof identity.source_ref !== "string") return false
+    return identity.source_ref === `skill:${identity.skill_id}` && (skillId === undefined || identity.skill_id === skillId)
+  })
+}
 
 // A caller budget also bounds providers/streams that settle after cancellation.
 function whileActive<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
@@ -120,6 +153,129 @@ export class PlatformProjectionHttpClient {
       return { ok: false, status: 503, code: "mcp_connection_dependency_unavailable", retryable: true }
     } finally {
       clearTimeout(timer)
+    }
+  }
+  async readManagedPersonalSkill(
+    operation: ManagedPersonalSkillOperation,
+    tenantId: string,
+    subject: string,
+    requestId: string,
+    input: { query?: ListSelfManagedSkillsData["query"]; skillId?: string },
+    signal: AbortSignal,
+    deadlineAt: number,
+  ): Promise<ManagedPersonalSkillResult> {
+    const invalid = (): ManagedPersonalSkillResult => ({ ok: false, status: 502, code: "skill_response_invalid" })
+    const dependency = (): ManagedPersonalSkillResult => ({ ok: false, status: 503, code: "skill_dependency_unavailable" })
+    let invalidOwnerResponse = false
+    const active = (): void => {
+      signal.throwIfAborted()
+      if (performance.now() >= deadlineAt) throw new Error("managed_personal_skill_deadline")
+    }
+    try {
+      active()
+      const token = await whileActive(this.#tokens.get(tenantId, signal), signal)
+      active()
+      const bounded = async (request: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+        active()
+        const baseRequest = new Request(request, init)
+        const headers = new Headers(baseRequest.headers)
+        headers.set("authorization", `Bearer ${token}`)
+        const pending = fetch(new Request(baseRequest, { headers, signal, redirect: "error" }))
+        const ownerResponse = await whileActive(
+          pending.then((late) => {
+            if (signal.aborted) {
+              void late.body?.cancel().catch(() => undefined)
+              throw signal.reason
+            }
+            return late
+          }),
+          signal,
+        )
+        active()
+        const declaredLength = ownerResponse.headers.get("content-length")
+        if (declaredLength !== null && (!/^[0-9]+$/u.test(declaredLength) || Number(declaredLength) > this.maxBytes)) {
+          invalidOwnerResponse = true
+          void ownerResponse.body?.cancel().catch(() => undefined)
+          throw new Error("projection_response_too_large")
+        }
+        if (ownerResponse.body === null) return ownerResponse
+        const reader = ownerResponse.body.getReader()
+        const chunks: Uint8Array[] = []
+        let size = 0
+        try {
+          for (;;) {
+            active()
+            const next = await whileActive(reader.read(), signal)
+            active()
+            if (next.done) break
+            size += next.value.byteLength
+            if (size > this.maxBytes) {
+              invalidOwnerResponse = true
+              throw new Error("projection_response_too_large")
+            }
+            chunks.push(next.value)
+          }
+        } finally {
+          void reader.cancel().catch(() => undefined)
+          reader.releaseLock()
+        }
+        active()
+        const bytes = new Uint8Array(size)
+        let offset = 0
+        for (const chunk of chunks) {
+          bytes.set(chunk, offset)
+          offset += chunk.byteLength
+        }
+        active()
+        try {
+          if (ownerResponse.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() !== "application/json") throw new Error("media")
+          const decoded: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes))
+          const schema = ownerResponse.status === 200 ? (operation === "managedSkills" ? managedListResponse : managedDetailResponse) : managedError
+          if (!schema.safeParse(decoded).success) throw new Error("shape")
+        } catch {
+          invalidOwnerResponse = true
+          throw new Error("projection_response_invalid")
+        }
+        active()
+        return new Response(bytes, { status: ownerResponse.status, headers: ownerResponse.headers })
+      }
+      const client = createClient({ baseUrl: this.baseUrl, fetch: bounded, redirect: "error" })
+      const headers = { "x-kokoro-tenant-id": tenantId, "x-kokoro-subject": subject, "x-kokoro-request-id": requestId }
+      const result =
+        operation === "managedSkills"
+          ? await listSelfManagedSkills({ client, auth: token, headers, ...(input.query === undefined ? {} : { query: input.query }) })
+          : await getSelfManagedSkill({ client, auth: token, headers, path: { skill_id: input.skillId ?? "" } })
+      active()
+      const ownerResultResponse = result.response
+      const status = ownerResultResponse?.status
+      if (status === undefined || ownerResultResponse === undefined) return invalidOwnerResponse ? invalid() : dependency()
+      if (ownerResultResponse.headers.get("x-kokoro-request-id") !== requestId || ownerResultResponse.headers.get("cache-control") !== "no-store")
+        return invalid()
+      if (status === 200 && result.data !== undefined) {
+        const parsed = (operation === "managedSkills" ? managedListResponse : managedDetailResponse).safeParse(result.data)
+        if (!parsed.success || !matchesManagedIdentity(result.data, input.skillId)) return invalid()
+        if (operation === "managedSkills") {
+          const data = parsed.data.data as { skills: unknown[]; next_cursor?: string }
+          return { ok: true, status: 200, data: { skills: data.skills, next_cursor: data.next_cursor ?? null } }
+        }
+        return { ok: true, status: 200, data: parsed.data.data }
+      }
+      const parsed = managedError.safeParse(result.error)
+      if (!parsed.success) return invalid()
+      const { code, retryable } = parsed.data.error
+      if (status === 400 && code === "capability.invalid_request" && !retryable) return { ok: false, status: 400, code: "invalid_skill_request" }
+      if (status === 404 && operation === "managedSkill" && code === "capability.route_not_found" && !retryable)
+        return { ok: false, status: 404, code: "skill_not_found" }
+      if (
+        (status === 400 && code === "capability.subject_invalid" && !retryable) ||
+        (status === 401 && code === "capability.service_auth_failed" && !retryable) ||
+        (status === 403 && ["capability.permission_denied", "capability.tenant_mismatch"].includes(code) && !retryable) ||
+        (status === 503 && code === "capability.dependencies_unavailable" && retryable)
+      )
+        return dependency()
+      return invalid()
+    } catch {
+      return invalidOwnerResponse ? invalid() : dependency()
     }
   }
   async #read(

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Kokoro Platform Business HTTP API",
-    "version": "3.2.0",
+    "version": "3.3.0",
     "description": "Platform read-only projections. IAM projection bearer authentication establishes caller and tenant; authenticated BFF then supplies its Product Session subject."
   },
   "servers": [
@@ -11,18 +11,10 @@
     }
   ],
   "x-kokoro-runtime": {
-    "default_surfaces": [
-      "skill-catalog"
-    ],
+    "default_surfaces": ["skill-catalog"],
     "surface_requirements": {
-      "skill-source": [
-        "storage",
-        "iam_projection_introspection"
-      ],
-      "mcp-server": [
-        "provider_catalog",
-        "iam_projection_introspection"
-      ]
+      "skill-source": ["storage", "iam_projection_introspection"],
+      "mcp-server": ["provider_catalog", "iam_projection_introspection"]
     },
     "startup_policy": "Missing configuration or a failed readiness probe prevents the process from listening."
   },
@@ -366,6 +358,111 @@
         },
         "summary": "List current subject active MCP connections"
       }
+    },
+    "/v1/self/skills": {
+      "get": {
+        "operationId": "listSelfManagedSkills",
+        "summary": "List the authenticated Product subject own Skills across management states.",
+        "description": "Returns only the current subject own exact Skill revisions. Management visibility does not grant installation or execution.",
+        "x-kokoro-owner": "kokoro-platform",
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-stability": "stable",
+        "x-kokoro-idempotency": "read-only",
+        "x-kokoro-permission": "platform:projection.read",
+        "x-kokoro-surface": "skill-source",
+        "x-kokoro-total-budget-ms": 10000,
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/TenantId"
+          },
+          {
+            "$ref": "#/components/parameters/SubjectId"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "$ref": "#/components/parameters/SelfSkillStatus"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/SelfSkillList"
+          },
+          "400": {
+            "$ref": "#/components/responses/SelfSkillError"
+          },
+          "401": {
+            "$ref": "#/components/responses/SelfSkillError"
+          },
+          "403": {
+            "$ref": "#/components/responses/SelfSkillError"
+          },
+          "500": {
+            "$ref": "#/components/responses/SelfSkillError"
+          },
+          "503": {
+            "$ref": "#/components/responses/SelfSkillError"
+          }
+        }
+      }
+    },
+    "/v1/self/skills/{skill_id}": {
+      "get": {
+        "operationId": "getSelfManagedSkill",
+        "summary": "Read one exact Skill revision owned by the authenticated Product subject.",
+        "description": "Returns the current subject own exact Skill in any supported management state. Missing and non-owner Skills are indistinguishable.",
+        "x-kokoro-owner": "kokoro-platform",
+        "x-kokoro-visibility": "internal-owner",
+        "x-kokoro-stability": "stable",
+        "x-kokoro-idempotency": "read-only",
+        "x-kokoro-permission": "platform:projection.read",
+        "x-kokoro-surface": "skill-source",
+        "x-kokoro-total-budget-ms": 10000,
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/TenantId"
+          },
+          {
+            "$ref": "#/components/parameters/SubjectId"
+          },
+          {
+            "$ref": "#/components/parameters/SkillId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/SelfSkill"
+          },
+          "400": {
+            "$ref": "#/components/responses/SelfSkillError"
+          },
+          "401": {
+            "$ref": "#/components/responses/SelfSkillError"
+          },
+          "403": {
+            "$ref": "#/components/responses/SelfSkillError"
+          },
+          "404": {
+            "$ref": "#/components/responses/SelfSkillError"
+          },
+          "500": {
+            "$ref": "#/components/responses/SelfSkillError"
+          },
+          "503": {
+            "$ref": "#/components/responses/SelfSkillError"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -489,6 +586,16 @@
           "maxLength": 191,
           "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$"
         }
+      },
+      "SelfSkillStatus": {
+        "name": "status",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "enum": ["draft", "active", "disabled", "withdrawn", "quarantined"]
+        },
+        "description": "Optional exact management-state filter; not an execution eligibility assertion."
       }
     },
     "schemas": {
@@ -569,12 +676,7 @@
           },
           "transport": {
             "type": "string",
-            "enum": [
-              "stdio",
-              "streamable_http",
-              "sse_compat",
-              "unknown"
-            ]
+            "enum": ["stdio", "streamable_http", "sse_compat", "unknown"]
           },
           "declaration_digest": {
             "type": "string",
@@ -582,28 +684,18 @@
           },
           "status": {
             "type": "string",
-            "enum": [
-              "registered",
-              "disabled",
-              "unknown"
-            ]
+            "enum": ["registered", "disabled", "unknown"]
           }
         }
       },
       "ErrorEnvelope": {
         "type": "object",
-        "required": [
-          "error"
-        ],
+        "required": ["error"],
         "additionalProperties": false,
         "properties": {
           "error": {
             "type": "object",
-            "required": [
-              "code",
-              "message",
-              "retryable"
-            ],
+            "required": ["code", "message", "retryable"],
             "additionalProperties": false,
             "properties": {
               "code": {
@@ -646,9 +738,7 @@
           },
           "status": {
             "type": "string",
-            "enum": [
-              "active"
-            ]
+            "enum": ["active"]
           },
           "name": {
             "type": "string"
@@ -701,15 +791,69 @@
           },
           "transport": {
             "type": "string",
-            "enum": [
-              "streamable_http"
-            ]
+            "enum": ["streamable_http"]
           },
           "status": {
             "type": "string",
-            "enum": [
-              "active"
-            ]
+            "enum": ["active"]
+          }
+        }
+      },
+      "SelfManagedSkill": {
+        "type": "object",
+        "required": [
+          "skill_id",
+          "source_ref",
+          "series_id",
+          "revision",
+          "name",
+          "summary",
+          "tags",
+          "status"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "skill_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 191,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$"
+          },
+          "source_ref": {
+            "type": "string",
+            "pattern": "^skill:[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$"
+          },
+          "series_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 191,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$"
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": ".*\\S.*"
+          },
+          "summary": {
+            "type": "string",
+            "maxLength": 65535
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "maxItems": 100
+          },
+          "status": {
+            "type": "string",
+            "enum": ["draft", "active", "disabled", "withdrawn", "quarantined"]
           }
         }
       }
@@ -731,16 +875,12 @@
           "application/json": {
             "schema": {
               "type": "object",
-              "required": [
-                "data"
-              ],
+              "required": ["data"],
               "additionalProperties": false,
               "properties": {
                 "data": {
                   "type": "object",
-                  "required": [
-                    "skills"
-                  ],
+                  "required": ["skills"],
                   "additionalProperties": false,
                   "properties": {
                     "skills": {
@@ -750,10 +890,7 @@
                       }
                     },
                     "next_cursor": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                      "type": ["string", "null"]
                     }
                   }
                 }
@@ -778,16 +915,12 @@
           "application/json": {
             "schema": {
               "type": "object",
-              "required": [
-                "data"
-              ],
+              "required": ["data"],
               "additionalProperties": false,
               "properties": {
                 "data": {
                   "type": "object",
-                  "required": [
-                    "servers"
-                  ],
+                  "required": ["servers"],
                   "additionalProperties": false,
                   "properties": {
                     "servers": {
@@ -841,9 +974,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "enum": [
-                "no-store"
-              ]
+              "enum": ["no-store"]
             }
           }
         },
@@ -851,9 +982,7 @@
           "application/json": {
             "schema": {
               "type": "object",
-              "required": [
-                "data"
-              ],
+              "required": ["data"],
               "additionalProperties": false,
               "properties": {
                 "data": {
@@ -879,9 +1008,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "enum": [
-                "no-store"
-              ]
+              "enum": ["no-store"]
             }
           }
         },
@@ -910,16 +1037,12 @@
             "schema": {
               "type": "object",
               "additionalProperties": false,
-              "required": [
-                "data"
-              ],
+              "required": ["data"],
               "properties": {
                 "data": {
                   "type": "object",
                   "additionalProperties": false,
-                  "required": [
-                    "connections"
-                  ],
+                  "required": ["connections"],
                   "properties": {
                     "connections": {
                       "type": "array",
@@ -935,6 +1058,116 @@
                   }
                 }
               }
+            }
+          }
+        }
+      },
+      "SelfSkillList": {
+        "description": "Current subject own Skill management page without cache reuse",
+        "headers": {
+          "x-kokoro-request-id": {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          },
+          "Cache-Control": {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["no-store"]
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "required": ["data"],
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "type": "object",
+                  "required": ["skills"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "skills": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/SelfManagedSkill"
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2048
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "SelfSkill": {
+        "description": "Current subject own exact Skill management summary without cache reuse",
+        "headers": {
+          "x-kokoro-request-id": {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          },
+          "Cache-Control": {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["no-store"]
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "required": ["data"],
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/SelfManagedSkill"
+                }
+              }
+            }
+          }
+        }
+      },
+      "SelfSkillError": {
+        "description": "Self Skill management error without cache reuse",
+        "headers": {
+          "x-kokoro-request-id": {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          },
+          "Cache-Control": {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["no-store"]
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
             }
           }
         }

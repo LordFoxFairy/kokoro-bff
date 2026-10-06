@@ -169,9 +169,18 @@ async function main() {
   if (!Array.isArray(parsedBaseline.operations)) {
     throw new TypeError("contract/tests/v1-operations.json must contain an operations array")
   }
+  const currentOperations = parseOpenApiOperations(openapi)
+  const managedPersonalReads = currentOperations.filter((operation) =>
+    operation.fields.get("operationId") === "listManagedPersonalSkills" || operation.fields.get("operationId") === "getManagedPersonalSkill",
+  )
   const errors = [
     ...inspectOpenApiGovernance(openapi),
     ...compareOperationBaseline(openapi, parsedBaseline.operations),
+    ...(parsedBaseline.operations.length === 101 && currentOperations.length === 101 ? [] : ["public 8.4.0 must freeze exactly 101 operations"]),
+    ...(/^  version: 8\.4\.0$/mu.test(openapi) ? [] : ["public contract version must equal 8.4.0"]),
+    ...(managedPersonalReads.length === 2 && managedPersonalReads.every((operation) => operation.method === "GET")
+      ? []
+      : ["managed personal Skill inventory must contain exactly the two GET operations"]),
   ]
   if (errors.length > 0) {
     console.error(errors.join("\n"))
