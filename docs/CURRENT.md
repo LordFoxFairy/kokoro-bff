@@ -1,3 +1,11 @@
+## R255 02:44 ScheduledTask 本地 immutable artifact 交接
+
+Root已接收固定owner commit `45e67f0e783fb4bcdb086665a09b7c3c5fadbb6f` 的唯一 `contract/openapi/v1/openapi.yaml` 原字节：public发布前 `8.0.0`，git blob `1b42d49388ca26eaaef7371daf23cbf1158d5fe6`，SHA-256 `0802a31f9469a17cd8fc8b78e6d2326e0571bc93f3ac8d19811a42a1b185df95`。当前canonical与该immutable blob byte-equal；旧Web pin97a99d35/33971eaa仍冻结，不改旧commit内容。此本地交接允许后继消费者锁定新commit/version/digest，经现generator正规生成；不是remote push、registry release或正常运行激活。
+
+相对旧Web artifact只有ScheduledTask输出必有nullable next_run_at、create的可选recurrence_anchor_at以及closed PATCH显式规则字段；92operation、身份/错误/权限/其余schema保持。三D0已批准public8.0发布前clean-slate更正且源码e603bd55落地，不引入/v2、双协议、旧字段alias。后继Web只显示owner确认next，null不以应用时钟补齐；规则anchor与next不互填。
+
+验收绑定源tree77c81139：Root精确index真实PG/Redis175pass/0fail/0skip、fullcontract242pass/0fail与八纯门0；本轮Node22.22.2直接semantic再次0（92operation）。这些是artifact/source验收，不替代真实IAM/Scheduler/provider/浏览器；normal BFF非watch未重载、schema调整一次待答、Web consumer未改，持续next读取仍待后继，T-P02未闭环。沿现任务/QA台账与owner边界接续，不用全文历史状态覆盖本节。
+
 ## R255 02:02 ScheduledTask 源码集成验收（正常页面尚未激活）
 
 当前源码已与发布前 OpenAPI 候选对齐：持久规则锚点 recurrence_anchor_at 与 nullable next_run_at 分离；create/replace 先置 next 为 null，Scheduler 成功回执通过生成 validator 与业务等值校验后，当前 task revision 与 outbox lease/token/fence 核验，task 投影及 outbox success 同事务提交。暂停/禁用/删除与迟到回执不复活任务；V2严格payload，删除无V1兼容或可选projection fallback。Scheduler.version独立于BFF task revision。持续执行后的 next 刷新仍待 owner 读/事件接续，不称整个排程生命周期完成。
