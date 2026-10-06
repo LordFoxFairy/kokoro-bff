@@ -1,3 +1,40 @@
+## R256-ADMIN-03.D0：当前 tenant 模型路由管理（2026-10-06；仅设计，待 Root 放行）
+
+**证据与当前态。** 本文基于只读报告 `var/dev/r255-preserve/r257-admin-management-next-slice.md`（SHA256 `a376743747b454e1a95040ef2af7932a44056b177aa48efe07325a03a9527a1f`）及 BFF `975a2d8a538dfb1f4b83b33b98bc9262a77c00f2`。当前 BFF 已消费 IAM 0.8 的 required `platformAdmin`，但 `/system` 明确 fail closed，`/models` 只有普通 catalog read；不存在管理写路由。System 是 ModelLabel、ModelRevision、RoutingPolicy 与 command receipt 唯一 owner；其 runtime-Zod 机器源为 3.0.0、OpenAPI SHA256 `94ed91655741cbba66ce80a4c41717b9179cc509cb6858534e0b78aa3e6dc059`。本轮只增加三份文档前缀，零源码、机器合同、generated、DDL、配置、资源或资格变化；下方原文保持历史后缀。
+
+### 已裁决授权、职责与状态
+
+- current IAM `platform_admin === true` 只在 BFF 固定 Product tenant 内授四个具名 public 操作；每次请求仍先完成 current Session admission，缺失/错型/依赖失败不按 false 或旧 true 继续。false 返回管理 403，普通产品能力不受影响。tenant/actor 只取受信 `context.identity.namespace/userId`，Browser 自报 tenant、actor、permission、service 一律忽略。
+- BFF 使用既有 `web-bff` service credential，只为三 read 生成 `system:read`、为一 PUT 生成 `system:write`。System 继续验证 service、固定 tenant、actor、permission、资源状态与 CAS，才是最终守门人。该映射不授 `system-admin`、global、publish、provider、delete 或组织成员权限；org admin 与 platform admin 互不推导。
+- 首片状态只有当前 tenant 的单 label routing：有界分页读 routing/labels/revisions，显式 PUT 冻结 label、原 version、System 现行合法四字段、原 Idempotency-Key 与条件头，随后从 routing list 有界分页权威回读。第一轮用户验收/UI 只编辑 `visible` 并回送其余当前值；这不是 BFF backend 对 System 其他合法字段变化新增限制，BFF 不为此先读旧 row、合并字段或缓存权限。之后刷新普通 `/models` 核可见效果。PUT ACK 不是读模型，catalog 也不证明全部 routing 字段。
+- 保存状态为 `idle -> saving -> verifying -> confirmed | conflict | unknown | failed`。保存/核实绑定 tenant、subject、admission generation、草稿 generation 与单一 10 秒总预算；取消只退役等待，不证明 System 写入撤销。CAS 冲突保草稿并回读新 version；丢 ACK/期限/断网为 unknown，只读核实且不自动换 key 重写。分页找不到、读失败、同值或更高版本均不得伪造本命令因果确认。
+- System receipt 是写幂等唯一事实。BFF 不进入内存 `MutationTicket`/receipt 分支，不造第二 receipt、admin service、兼容 alias、通用 command executor 或 `/system` 万能代理。首片不做跨两行默认切换、label/revision/provider CRUD、publish/retire、推理与计费。
+
+### §8 放置表与依赖边界
+
+|项|决定|
+|---|---|
+|Owner|System 唯一写 ModelLabel/ModelRevision/RoutingPolicy/receipt；BFF 只拥有 public 管理用例、current-session 授权与 wire 映射；Web 后继只拥有交互。无新数据库 writer。|
+|当前事实|`src/bootstrap/server.ts` 已 fresh admission；`src/http/routes/owner.ts` 对 `/system` 返回 503；`src/upstream.ts` 不保 If-Match/If-None-Match/AbortSignal；现 owner identity 不生成 permission。普通 `/models` 仅投影 visible catalog。|
+|目标职责|四个具名 public route 只代理 System 3.0 的 `listRoutingPolicy`、`listModelLabel`、`listModelRevision`、`putRoutingPolicy`，strict 解析并映射稳定 public 结果/错误；不公开任意 upstream path。|
+|位置方案|采用新增 `src/http/routes/model-routing-admin.ts`（public route/授权/映射）与 `src/infrastructure/clients/owner/system-model-routing.ts`（System wire、期限、header、strict parse）。另一方案扩 `owner.ts`/`liveOwnerRequest` 会扩大万能代理和条件头权限，淘汰；另建 admin module/service 只有单用例且制造第二管理边界，也淘汰。|
+|粒度|两个普通职责文件，不建新一级模块/目录树/CQRS；`src/bootstrap/server.ts` 只在通用 mutation 之前精确分派。共享入口由 Root 集成。|
+|依赖|route 依赖 admitted context 与具名 client；client 依赖现 HTTP primitive、固定 generated System 3.0 类型。禁止相对导入 System 源、手写重复 DTO、DB/Redis、generic proxy permission 扩张、跨 owner SQL。|
+|数据/API|Public OpenAPI 从 8.1.0/95 operations additive 升 8.2.0/99 operations；System 3.0 固定 commit/digest artifact 正规生成。无 BFF canonical schema、事务、cache、receipt 或 credential 总表变化。|
+|删除项|无既有管理实现可删。禁止保留未发布别名、旧 System pin 双读、optional generated shape、fallback 或第二 admin 服务。|
+|验证|先合法 current-admin→真实 System owner/PG 的目标 route 业务 RED；再 machine/generated drift、unit、真实 HTTP/PG、architecture、完整 check；最后 Root normal 配对和真实浏览器。|
+
+### 后继精确实施与测试写集（本 D0 不授权写入）
+
+- 生产：新增 `src/http/routes/model-routing-admin.ts`、`src/infrastructure/clients/owner/system-model-routing.ts`；现 `src/bootstrap/server.ts` 仅具名早分派，配置文件仅在实际生成 client 接线需要且须先报 Root。`src/http/routes/owner.ts`、`src/upstream.ts`、generic identity 默认不改。
+- 机器/generated：`contract/openapi/v1/openapi.yaml`、`contract/README.md`、`contract/tests/v1-operations.json`、`scripts/verify-openapi.ts`、`scripts/check-contract.mjs`；新增 `contract/dependencies/system-http.json`、固定 `contract/vendor/kokoro-system/<COMMIT>/system.openapi.json` 与 provenance、`openapi-ts.system.config.ts`、`scripts/generate-system-http-client.mjs`、正规 `src/generated/system-http/**`；`package.json` 只登记生成/check/窄格式。generated 由工具生成，不手改。
+- 测试：新增 `test/model-routing-admin.test.ts`、`test/system-model-routing-client.test.ts`、`test/system-http-contract.test.mjs`；现 `test/user-admission.test.ts`、`test/contract/openapi-contract.test.mjs`、`test/contract-governance.test.mjs`、`test/architecture.test.ts` 仅按实际必要追加。真实 owner PG/TCP 组合由 Root 隔离装配，不用 doubles、伪 token、404 或缺方法冒业务 RED。
+- shared `bootstrap/server.ts`、`package.json`、public OpenAPI/operation inventory 与生成入口由 Root 串行集成；writer 不接触 Git index。后继 RED 必须证明：合法 current platform-admin + 固定 tenant + 正式 service identity 到目标 public read/PUT，当前因 route 不存在而失败，并且 System fixture 有真实 routing row；普通 false/跨 tenant/global/伪 header 仍零写。
+
+**未决项/停止线。** 实施开工前 Root 只需把 System 3.0 artifact 的正式 immutable commit 与 BFF 8.2 发布 digest 写入 dependency pin；当前只读 System checkout HEAD 不作为发布 pin。Web 文件集须按 Root 最终 Web HEAD 再冻结。本 D0 不运行测试、服务或资源，不授账号；正常管理员身份、真实路由改写、Web 页面、推理与 Billing 继续 OPEN。
+
+<!-- R256-ADMIN-03-D0-TECH-END -->
+
 ## R257-PERSONALIZATION-EVOLUTION-D0：已有数据具名演进（2026-10-06；待 Root 审准实施）
 
 **当前与目标。** 本人四字段源码已由 Root 验收并提交 399e70dfd97004c4c75cfb1e83c571a38c749437（真实 11 PG 用例通过，完整 check 809 PASS/0 FAIL/1 skip）；正常 BFF 仍 6d46ec8，尚未配对激活。以下原全文保留为历史阶段，旧“未实施/无表”不描述本次源码。正常完整 catalog 尚未核查，不声称旧表总数或正常演进通过。本轮仅设计，具名例外见 [ADR-003](./ADR/ADR-003-personalization-schema-evolution.md)。

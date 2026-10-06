@@ -1,3 +1,27 @@
+## R256-ADMIN-03.D0：模型路由管理数据边界（2026-10-06；零 BFF DDL）
+
+System 唯一拥有 ModelLabel、ModelRevision、RoutingPolicy、版本/CAS、tenant scope 与 command receipt；BFF 只保存当前请求内的受信 admission context、冻结命令与解析结果，不复制 owner row、资格、routing 快照、receipt 或 cursor。本片不改 `database/schema.sql`，不建表/列/索引/触发器/迁移、Redis key、审计副本或 credential/permission 总表；BFF 仍禁止跨 owner SQL/JOIN。
+
+### 写入、并发与恢复不变量
+
+- 单 label PUT 的完整 body、label_id、可信 tenant/actor、条件头与 Idempotency-Key 由 BFF 原样语义映射到 System。System 在自己的事务内校验 label/revision/feature/product、锁定 routing、比较 version、写固定列、推进 version并与 durable receipt 同事务提交；BFF 不在本地事务包 owner HTTP。
+- 创建使用 `If-None-Match: *`，更新使用原 `If-Match: "version"`；两窗口同 version 最多一笔成功，另一笔409且不覆盖。System 现行单-label PUT 的四合法字段规范不变，BFF 不为第一轮 UI 验收增加字段级拒绝、旧 row 预读、merge、重复写规约或权限缓存；首轮 UI 只改变 `visible` 并提交其已读完整快照。不存在 partial PATCH、字段默认或顺序双 PUT。
+- System 现唯一 `(tenant, feature) WHERE is_default` 约束会拒两个默认；单行 PUT 不自动清另一行。本片不实现跨两行原子 default 切换，也不以先后两 PUT 模拟。label/revision publish/retire/provider/删除仍由 System 其他合同和权限拥有。
+- owner command receipt 以 tenant+key 锁并绑定 operation、actor、path、body、precondition digest；原 key同请求重放原终态，同 key异请求拒绝。BFF 内存 MutationTicket 不是权威且不得参与。COMMIT 已发后断链/timeout可已写入；客户端保持 unknown，以有界 routing list只读核实，不能新 key盲写或用普通 catalog 猜因果。
+- 三个列表只处理 owner opaque cursor与单页最多100；BFF不持久化、解码、重签或跨 tenant/operation复用。分页在更新中不承诺snapshot；达到有界页数仍未找到即保持 unknown/未定位，不宣称不存在或回滚。
+
+### 放置、删除与验证
+
+数据层方案一是在 BFF 新表缓存 routing/receipt，因制造第二事实源、失去 owner CAS 与恢复权威而淘汰；方案二（采用）是具名 System generated client + request-scope 状态，成功/失败均不落 BFF DB。另建通用 admin credential/permission 表同样淘汰：current资格属于 IAM，实际操作权限与资源事实属于 System。
+
+后继生产写集仅 `src/http/routes/model-routing-admin.ts`、`src/infrastructure/clients/owner/system-model-routing.ts` 与 Root 集成的 `src/bootstrap/server.ts`；generated/pin/机器文件及测试精确清单见 TECH 当前前缀。`database/schema.sql`、现 PostgreSQL repositories、personalization演进、Redis及 normal 数据均须保持字节/事实不变。
+
+真实验证必须以 System 自有隔离 PG fixture 证明：首轮 UI 合法单 row visible 更新只改变目标 owner row/version与一条对应 receipt，并以 backend contract case 证明 System 其余合法字段变化没有被 BFF 新增拒绝；普通 false、伪 header、跨 tenant/global、wrong feature、draft/retired revision、缺/错条件、同 key异body、CAS输家均零写；丢 ACK 后同 key权威恢复只提交一次；分页回读与普通 `/models` 分别验证完整 routing 和 visible projection。BFF schema catalog/fresh安装前后 exact 不变。Root 才能运行资源门、核库集合并配对 normal；本 D0未运行。
+
+**未决项。** 只剩正式 System 3.0 immutable commit/digest pin 与 Web 最终 HEAD 文件冻结；均不改变“零新DDL/唯一System owner”结论。跨两行默认切换需要未来 System 原子命令与独立数据设计，不能扩本片。
+
+<!-- R256-ADMIN-03-D0-DATA-END -->
+
 ## R257-PERSONALIZATION-EVOLUTION-D0：单表语义判据（2026-10-06；待实施）
 
 399e70dfd97004c4c75cfb1e83c571a38c749437 已有 canonical bff_personalization 与本人 CAS；下面“无表/仅设计”为保留历史。此片不改 canonical，不读正常数据库；正常完整 catalog/旧数据尚待 Root 核实。唯一 SQL 真源仍 database/schema.sql；[ADR-003](./ADR/ADR-003-personalization-schema-evolution.md) 只准这次有数据 additive 例外，不生成第二份可编辑 DDL。

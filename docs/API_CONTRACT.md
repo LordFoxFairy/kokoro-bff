@@ -1,3 +1,34 @@
+## R256-ADMIN-03.D0：四个 current-tenant 模型路由管理契约（2026-10-06；目标 8.2.0，未发布）
+
+当前 public 机器基线为 8.1.0/95 operations；唯一可编辑事实源仍是 `contract/openapi/v1/openapi.yaml`。目标 additive 升级为 8.2.0/99 operations，不覆写旧 immutable artifact，不建 `/v2`、兼容 alias 或任意 `/system` proxy。固定 owner 输入是 System 3.0.0 runtime-Zod OpenAPI（SHA256 `94ed91655741cbba66ce80a4c41717b9179cc509cb6858534e0b78aa3e6dc059`）；正式 immutable commit/digest 由 Root 开工前写入 pin。System 仍为最终授权、状态、CAS 与 receipt owner。
+
+|Public operation|System 3.0 固定 operation|语义|
+|---|---|---|
+|GET `/v1/admin/model-routing` / `listAdminModelRouting`|`listRoutingPolicy`|current tenant routing 有界分页|
+|GET `/v1/admin/model-labels` / `listAdminModelLabels`|`listModelLabel`|current tenant label 有界分页，仅供首片选择/显示|
+|GET `/v1/admin/model-revisions` / `listAdminModelRevisions`|`listModelRevision`|current tenant revision 有界分页，仅供首片选择/显示|
+|PUT `/v1/admin/model-routing/{label_id}` / `replaceAdminModelRouting`|`putRoutingPolicy`|单 label 显式 CAS upsert；System 现行四字段完整请求，首轮 UI 验收只编辑 visible|
+
+### 身份、请求与成功表示
+
+- 四操作均需现 service envelope、唯一用户 Bearer、current IAM admission 且 `platform_admin === true`；false 为 403 `admin_model_routing_forbidden`。tenant/actor 只来自受信 context，query/body/header 不接 tenant、actor、service、permission 或 global selector。BFF 仅映射为 web-bff + current tenant + actor + 三 read 的 `system:read`/PUT 的 `system:write`；System 再校验。缺/坏 platform_admin 或 IAM unavailable 保 503，不复用旧 true。
+- 三 GET 唯一 query 为可选 `limit`、`cursor`：limit 缺省 50、十进制 1..100；cursor opaque 1..2048。重复/空/未知 query、body、Idempotency-Key、条件写头均 400。成功严格复用现 BFF 分页 envelope：closed `{data:[...],meta:{request_id,next_cursor}}`，`next_cursor` required 且为 opaque string 或末页 `null`；data item 由各 operation 独立 closed schema 固定。保 owner 稳定排序；cursor 绑定 tenant 与 operation/filter，不是权限，跨主体/操作拒绝。每页重验 current admission，不宣称跨页 snapshot。
+- PUT path `label_id` 为 UUID；无 query；required `Idempotency-Key` 1..128。创建仅 `If-None-Match: *`，更新仅 `If-Match: "N"`（N>=1），二者同时、缺失或其他值 428 `admin_model_routing_precondition_required`/400 invalid request。closed body 与固定 System 3.0 generated request exact，BFF 接受并转交该 owner 契约全部合法四字段变化，不另读旧 row、做字段 merge/重复写规约或缓存权限；第一轮 UI/用户验收只编辑 visible并提交其已读完整快照。不接受 partial/PATCH/null/多字段。raw JSON、media type、body bytes 与字段界沿固定 owner artifact并由 BFF strict 前置校验。
+- PUT 200 只表示 owner command ACK，响应严格复用现 BFF envelope `{data:{...routing snapshot/version...},meta:{request_id}}`；随后客户端以 GET routing 从首页开始有界分页查同 label，只有 same id、目标 version、完整字段相等才 `confirmed`。普通 `/v1/models` 另行刷新只验证 visible projection。不存在 public detail GET；不得发明 `/routing/{label}` GET 或将 PUT echo/catalog 当权威回读。
+- 成功和错误均 `Cache-Control: no-store` 与 `x-request-id`，且 header 值必须与 body `meta.request_id` 一致。四操作复用现 BFF envelope，不采用 System 的 header-only 表示：成功为 closed `{data,meta:{request_id}}`（分页仅在 meta 追加 required nullable `next_cursor`），错误为 closed `{error:{code,message},meta:{request_id}}`。unknown/additional/null/unsafe integer/非法 cursor/截断、错误 status-code 组合均不得投影 success/empty。
+
+### 错误、幂等、期限与取消
+
+System 400 `INVALID_ARGUMENT`→400 `invalid_admin_model_routing_request`；403 `FORBIDDEN`→403 `admin_model_routing_forbidden`；404 `NOT_FOUND`→404 `admin_model_routing_not_found`；409 `VERSION_CONFLICT`→409 `admin_model_routing_version_conflict`，`IDEMPOTENCY_KEY_REUSED`→409 `admin_model_routing_idempotency_conflict`，`INVALID_STATE`→409 `admin_model_routing_invalid_state`；428 `PRECONDITION_REQUIRED`→428 `admin_model_routing_precondition_required`；System 503/transport/config→503 `admin_model_routing_unavailable`。owner 401/credential/permission mismatch 不伪装普通用户未登录；按 service dependency failure 503 并告警。未知 status/code、坏 media/JSON/envelope/request-id/schema、超限→502 `admin_model_routing_response_invalid`。公开错误保持现 BFF closed `{error:{code,message},meta:{request_id}}`，不新增统一 `retryable` 字段或第二错误协议，不透传 owner message、SQL、secret 或正文。
+
+每次 owner call 使用一个 10 秒总预算覆盖凭据/header、连接、响应 body 与 strict parse，各阶段不得重置；response body 有固定上限、无自动重试。request abort/response close 传播 AbortSignal并退役迟到结果；取消不证明 owner SQL/COMMIT 撤销。System durable receipt 是 PUT 幂等唯一事实：原 key+原 body/precondition 可由明确后继流程重放以取原结果，同 key 异请求固定409；BFF 不 claim 自己的 mutation ticket。网络/期限/丢 ACK 进入 `unknown`，只读核实，不自动产生新 key。GET 找不到、失败、读到旧/更高版本不能证明原命令失败或成功。
+
+### 发布、RED 与范围
+
+正式发布同时更新 OpenAPI、semantic validator、99-operation inventory、固定 System dependency/generated 与 contract tests；生成物不手写，旧 System pin 不双读。后继首个真实业务 RED必须使用合法 current-admin Session、固定 Product tenant、正式 web-bff service identity与 System 自有 PG 已存在 routing row，目标 public GET/PUT因当前 BFF route 未实现而失败；伪 token、登录前拒绝、空数据或不存在方法不算。正负还需 ordinary false、org-admin/platform-false、撤权、跨 tenant/global、伪 identity、CAS冲突、same-key异body、wrong feature/draft/retired revision、invalid owner response、取消/unknown与 System 零越权写。跨两行默认切换、CRUD/publish/provider、推理/计费不在 8.2 四操作内。
+
+<!-- R256-ADMIN-03-D0-API-END -->
+
 ## R257-PERSONALIZATION-EVOLUTION-D0：具名运维操作边界（2026-10-06；目标待实施）
 
 源码基线 399e70dfd97004c4c75cfb1e83c571a38c749437 已发布 public 8.1.0/95 operations；本片不改其 HTTP、IAM pin 或 generated，不新增管理 HTTP/RPC。下面旧全文为完整历史后缀。已有数据演进只新增 owner 运维 CLI，ADR 为 [ADR-003](./ADR/ADR-003-personalization-schema-evolution.md)，正常激活仍未验。
