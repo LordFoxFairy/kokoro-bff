@@ -1141,7 +1141,7 @@ function r71ScheduledCreatePayload() {
     frequency: "daily",
     time: "08:00",
     timezone: "UTC",
-    next_run_at: "2026-10-03T08:00:00.000Z",
+    recurrence_anchor_at: "2026-10-03T08:00:00.000Z",
     expires_at: "2026-11-03T08:00:00.000Z",
     auto_approve: false,
   }
@@ -1164,7 +1164,7 @@ function r71AssertScheduledInput(input, payload) {
   assert.equal(input.frequency, payload.frequency)
   assert.equal(input.time, payload.time)
   assert.equal(input.timezone, payload.timezone)
-  assert.equal(input.nextRunAt.toISOString(), payload.next_run_at)
+  assert.equal(input.recurrenceAnchorAt.toISOString(), payload.recurrence_anchor_at)
   assert.equal(input.expiresAt.toISOString(), payload.expires_at)
   assert.equal(input.autoApprove, payload.auto_approve)
   assert.equal(Object.hasOwn(input, "conversationId"), false)
@@ -1381,8 +1381,8 @@ test("R75 production accepts an independent task with only the five required pro
   assert.ok(input !== null)
   for (const field of ["title", "prompt", "frequency", "time", "timezone"]) assert.equal(input[field], payload[field])
   assert.equal(input.autoApprove, false)
-  assert.ok(input.nextRunAt instanceof Date)
-  assert.ok(Number.isFinite(input.nextRunAt.getTime()))
+  assert.ok(input.recurrenceAnchorAt instanceof Date)
+  assert.ok(Number.isFinite(input.recurrenceAnchorAt.getTime()))
   for (const field of ["projectId", "expiresAt", "conversationId", "sessionId"]) assert.equal(Object.hasOwn(input, field), false)
 })
 

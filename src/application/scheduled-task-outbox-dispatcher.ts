@@ -1,7 +1,4 @@
-import {
-  scheduledTaskRetryDelayMs,
-  type ScheduledTaskOutboxCommand,
-} from "../domain/scheduled-task/outbox.js"
+import { scheduledTaskRetryDelayMs, type ScheduledTaskOutboxCommand } from "../domain/scheduled-task/outbox.js"
 import type { ScheduledTaskOutboxDeliveryPort } from "./ports/scheduled-task-outbox-delivery.js"
 import type { ScheduledTaskOutboxRepository } from "./ports/scheduled-task-outbox-repository.js"
 
@@ -77,8 +74,12 @@ export class ScheduledTaskOutboxDispatcher {
     const cycle = this.executeCycle()
     this.activeCycle = cycle
     void cycle.then(
-      () => { if (this.activeCycle === cycle) this.activeCycle = null },
-      () => { if (this.activeCycle === cycle) this.activeCycle = null },
+      () => {
+        if (this.activeCycle === cycle) this.activeCycle = null
+      },
+      () => {
+        if (this.activeCycle === cycle) this.activeCycle = null
+      },
     )
     return cycle
   }
@@ -123,7 +124,7 @@ export class ScheduledTaskOutboxDispatcher {
     const settledAt = this.clock()
     const lease = leaseFor(command)
     if (result.outcome === "succeeded") {
-      await this.repository.markScheduledTaskOutboxSucceeded(lease, settledAt).catch(() => false)
+      await this.repository.markScheduledTaskOutboxSucceeded(lease, settledAt, result.projection).catch(() => false)
       return
     }
     if (result.outcome === "failed" || command.attemptCount >= this.maxAttempts) {

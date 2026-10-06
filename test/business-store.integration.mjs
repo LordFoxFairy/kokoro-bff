@@ -180,7 +180,7 @@ integrationTest("keeps Project and ScheduledTask facts private to the trusted su
       frequency: "daily",
       time: "08:00",
       timezone: "UTC",
-      next_run_at: "2026-09-01T08:00:00.000Z",
+      recurrence_anchor_at: "2026-09-01T08:00:00.000Z",
       auto_approve: false,
     })
     const createScheduled = async (owner, projectId) =>
@@ -283,8 +283,24 @@ integrationTest("persists BFF facts, registers Scheduler, and replays Agent disp
           schedule: raw ? JSON.parse(raw) : null,
         })
         response.setHeader("content-type", "application/json")
+        const schedule = raw ? JSON.parse(raw) : null
         response.end(
-          JSON.stringify({ data: { name: request.url?.split("/").at(-1), status: "registered" }, meta: { request_id: request.headers["x-request-id"] } }),
+          JSON.stringify({
+            data: {
+              name: request.url?.split("/").at(-1),
+              status: request.method === "POST" ? "registered" : "updated",
+              schedule:
+                schedule === null
+                  ? undefined
+                  : {
+                      ...schedule,
+                      id: "00000000-0000-4000-8000-000000000001",
+                      next_due_at: "2026-09-01T08:00:00.000Z",
+                      version: 9,
+                    },
+            },
+            meta: { request_id: request.headers["x-request-id"] },
+          }),
         )
       })
     })
@@ -331,7 +347,7 @@ integrationTest("persists BFF facts, registers Scheduler, and replays Agent disp
       frequency: "daily",
       time: "08:00",
       timezone: "UTC",
-      next_run_at: "2026-09-01T08:00:00.000Z",
+      recurrence_anchor_at: "2026-09-01T08:00:00.000Z",
       auto_approve: true,
     }
     const created = await fetch(`${base}/v1/scheduled-tasks`, { method: "POST", headers: createHeaders, body: JSON.stringify(createPayload) })
@@ -500,7 +516,7 @@ function r73CreatePayload(extra = {}) {
     frequency: "daily",
     time: "08:00",
     timezone: "UTC",
-    next_run_at: "2026-10-03T08:00:00.000Z",
+    recurrence_anchor_at: "2026-10-03T08:00:00.000Z",
     auto_approve: false,
     ...extra,
   }
@@ -1026,7 +1042,7 @@ function r237Schedule(projectId) {
     frequency: "daily",
     time: "08:00",
     timezone: "UTC",
-    next_run_at: "2099-01-01T08:00:00.000Z",
+    recurrence_anchor_at: "2099-01-01T08:00:00.000Z",
     auto_approve: false,
   }
 }
@@ -1257,7 +1273,7 @@ integrationTest("R237 real PG inner Project and Conversation predicates are not 
             frequency: "daily",
             time: "08:00",
             timezone: "UTC",
-            nextRunAt: new Date("2099-01-01T08:00:00.000Z"),
+            recurrenceAnchorAt: new Date("2099-01-01T08:00:00.000Z"),
             autoApprove: false,
           },
           undefined,
@@ -1377,7 +1393,7 @@ integrationTest("R237 real Project row-lock races revalidate active before Messa
               frequency: "daily",
               time: "08:00",
               timezone: "UTC",
-              nextRunAt: new Date("2099-01-01T08:00:00.000Z"),
+              recurrenceAnchorAt: new Date("2099-01-01T08:00:00.000Z"),
               autoApprove: false,
             },
             undefined,

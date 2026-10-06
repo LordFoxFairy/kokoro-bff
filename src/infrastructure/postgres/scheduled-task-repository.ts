@@ -15,7 +15,11 @@ import {
   type ScheduledTaskOutboxTask,
 } from "../../domain/scheduled-task/outbox.js"
 import { utcDate, type ScheduledTaskFact } from "../../domain/scheduled-task/task.js"
-import type { ScheduledTaskOutboxClaimInput, ScheduledTaskOutboxRepository } from "../../application/ports/scheduled-task-outbox-repository.js"
+import type {
+  ScheduledTaskNextProjection,
+  ScheduledTaskOutboxClaimInput,
+  ScheduledTaskOutboxRepository,
+} from "../../application/ports/scheduled-task-outbox-repository.js"
 import type {
   ScheduledTaskCreateInput,
   ScheduledTaskMutationLineage,
@@ -41,7 +45,8 @@ type ScheduledTaskRow = {
   frequency: "daily" | "weekly"
   task_time: string
   timezone: string
-  next_run_at: Date | string
+  recurrence_anchor_at: Date | string
+  next_run_at: Date | string | null
   expires_at: Date | string | null
   auto_approve: boolean
   enabled: boolean
@@ -72,7 +77,7 @@ type ScheduledTaskOutboxRow = {
 }
 
 const TASK_COLUMNS = `task_id, tenant_id, project_id, owner_id, title, prompt, frequency, task_time, timezone,
-              next_run_at, expires_at, auto_approve, enabled, status, revision, created_at, updated_at`
+              recurrence_anchor_at, next_run_at, expires_at, auto_approve, enabled, status, revision, created_at, updated_at`
 
 function dbDate(value: Date | string, errorCode: string): Date {
   const parsed = value instanceof Date ? value : new Date(value)
@@ -94,7 +99,8 @@ function scheduledTaskFromRow(row: ScheduledTaskRow): ScheduledTaskFact {
     frequency: row.frequency,
     time: row.task_time,
     timezone: row.timezone,
-    nextRunAt: dbDate(row.next_run_at, "SCHEDULED_TASK_NEXT_RUN_INVALID"),
+    recurrenceAnchorAt: dbDate(row.recurrence_anchor_at, "SCHEDULED_TASK_RECURRENCE_ANCHOR_INVALID"),
+    nextRunAt: row.next_run_at === null ? null : dbDate(row.next_run_at, "SCHEDULED_TASK_NEXT_RUN_INVALID"),
     ...(row.expires_at === null ? {} : { expiresAt: dbDate(row.expires_at, "SCHEDULED_TASK_EXPIRES_INVALID") }),
     autoApprove: row.auto_approve,
     enabled: row.enabled,
@@ -113,7 +119,7 @@ function outboxTaskFromRow(row: ScheduledTaskRow): ScheduledTaskOutboxTask {
     frequency: row.frequency,
     time: row.task_time,
     timezone: row.timezone,
-    nextRunAt: dbDate(row.next_run_at, "SCHEDULED_TASK_NEXT_RUN_INVALID"),
+    recurrenceAnchorAt: dbDate(row.recurrence_anchor_at, "SCHEDULED_TASK_RECURRENCE_ANCHOR_INVALID"),
     ...(row.expires_at === null ? {} : { expiresAt: dbDate(row.expires_at, "SCHEDULED_TASK_EXPIRES_INVALID") }),
     autoApprove: row.auto_approve,
     enabled: row.enabled,
@@ -246,14 +252,28 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskRepository,
       if (input.projectId !== undefined && ownedProjectId === null) {
         throw new Error("PROJECT_NOT_FOUND")
       }
+      const recurrenceAnchorAt = input.recurrenceAnchorAt ?? new Date()
       const inserted = await client.query<ScheduledTaskRow>(
         `INSERT INTO bff_scheduled_task
           (task_id, tenant_id, project_id, owner_id, title, prompt, frequency, task_time, timezone,
-           next_run_at, expires_at, auto_approve, enabled, status, revision)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::timestamptz, $11::timestamptz, $12, true, 'active', 1)
+           recurrence_anchor_at, next_run_at, expires_at, auto_approve, enabled, status, revision)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::timestamptz, NULL, $11::timestamptz, $12, true, 'active', 1)
          ON CONFLICT (task_id) DO NOTHING
          RETURNING ${TASK_COLUMNS}`,
-        [taskId, scope.tenantId, ownedProjectId, scope.subjectId, input.title, input.prompt, input.frequency, input.time, input.timezone, input.nextRunAt, input.expiresAt ?? null, input.autoApprove],
+        [
+          taskId,
+          scope.tenantId,
+          ownedProjectId,
+          scope.subjectId,
+          input.title,
+          input.prompt,
+          input.frequency,
+          input.time,
+          input.timezone,
+          recurrenceAnchorAt,
+          input.expiresAt ?? null,
+          input.autoApprove,
+        ],
       )
       const row = inserted.rows[0]
       if (row === undefined) {
@@ -286,12 +306,26 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskRepository,
       }
       const updated = await client.query<ScheduledTaskRow>(
         `UPDATE bff_scheduled_task SET title = $4, prompt = $5, frequency = $6, task_time = $7,
-          timezone = $8, next_run_at = $9::timestamptz, expires_at = $10::timestamptz,
+          timezone = $8, recurrence_anchor_at = $9::timestamptz, next_run_at = NULL, expires_at = $10::timestamptz,
           auto_approve = $11, enabled = $12, status = $13, revision = revision + 1,
           updated_at = CURRENT_TIMESTAMP(3)
          WHERE tenant_id = $1 AND owner_id = $2 AND task_id = $3
          RETURNING ${TASK_COLUMNS}`,
-        [scope.tenantId, scope.subjectId, taskId, input.title ?? current.title, input.prompt ?? current.prompt, input.frequency ?? current.frequency, input.time ?? current.task_time, input.timezone ?? current.timezone, input.nextRunAt ?? dbDate(current.next_run_at, "SCHEDULED_TASK_NEXT_RUN_INVALID"), input.expiresAt === undefined ? current.expires_at : input.expiresAt, input.autoApprove ?? current.auto_approve, input.enabled ?? current.enabled, input.status ?? current.status],
+        [
+          scope.tenantId,
+          scope.subjectId,
+          taskId,
+          input.title ?? current.title,
+          input.prompt ?? current.prompt,
+          input.frequency ?? current.frequency,
+          input.time ?? current.task_time,
+          input.timezone ?? current.timezone,
+          input.recurrenceAnchorAt ?? dbDate(current.recurrence_anchor_at, "SCHEDULED_TASK_RECURRENCE_ANCHOR_INVALID"),
+          input.expiresAt === undefined ? current.expires_at : input.expiresAt,
+          input.autoApprove ?? current.auto_approve,
+          input.enabled ?? current.enabled,
+          input.status ?? current.status,
+        ],
       )
       const row = updated.rows[0]
       if (row === undefined) return null
@@ -360,19 +394,53 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskRepository,
     return result.rows.map((row) => claimedCommandFromRow(row, this.stableIdGenerator))
   }
 
-  public async markScheduledTaskOutboxSucceeded(lease: ScheduledTaskOutboxLease, completedAt: Date): Promise<boolean> {
+  public async markScheduledTaskOutboxSucceeded(lease: ScheduledTaskOutboxLease, completedAt: Date, projection: ScheduledTaskNextProjection): Promise<boolean> {
     assertLease(lease)
     const completedTimestamp = dbDate(completedAt, "SCHEDULED_TASK_OUTBOX_COMPLETED_AT_INVALID")
-    const result = await this.database.pool.query(
-      `UPDATE bff_scheduled_task_outbox
-          SET status = 'succeeded', completed_at = $5::timestamptz,
-              lease_owner = NULL, lease_token = NULL, lease_until = NULL,
-              last_error_code = NULL, last_error_at = NULL, updated_at = CURRENT_TIMESTAMP(3)
-        WHERE outbox_id = $1 AND status = 'leased' AND lease_owner = $2
-          AND lease_token = $3 AND fence = $4`,
-      [lease.outboxId, lease.leaseOwner, lease.leaseToken, lease.fence, completedTimestamp],
-    )
-    return result.rowCount === 1
+    if (projection !== null) {
+      requiredIdentity(projection.taskId, "SCHEDULED_TASK_PROJECTION_TASK_ID")
+      validPositiveInteger(projection.taskRevision, "SCHEDULED_TASK_PROJECTION_REVISION")
+      dbDate(projection.nextRunAt, "SCHEDULED_TASK_PROJECTION_NEXT_RUN_INVALID")
+    }
+    return this.transaction(async (client) => {
+      const command = await client.query<ScheduledTaskOutboxRow>(
+        `SELECT outbox_id, tenant_id, task_id, command_type, aggregate_revision, payload,
+                actor_id, request_id, idempotency_key, status, attempt_count, available_at,
+                lease_owner, lease_token, lease_until, fence, last_error_code
+           FROM bff_scheduled_task_outbox
+          WHERE outbox_id = $1 AND status = 'leased' AND lease_owner = $2
+            AND lease_token = $3 AND fence = $4
+          FOR UPDATE`,
+        [lease.outboxId, lease.leaseOwner, lease.leaseToken, lease.fence],
+      )
+      const row = command.rows[0]
+      if (row === undefined) return false
+      const revision = safeInteger(row.aggregate_revision, "SCHEDULED_TASK_OUTBOX_REVISION")
+      if (projection === null) {
+        if (row.command_type !== "scheduler.delete") throw new Error("SCHEDULED_TASK_PROJECTION_REQUIRED")
+      } else {
+        if (row.command_type === "scheduler.delete" || projection.taskId !== row.task_id || projection.taskRevision !== revision) {
+          throw new Error("SCHEDULED_TASK_PROJECTION_MISMATCH")
+        }
+        await client.query(
+          `UPDATE bff_scheduled_task
+              SET next_run_at = CASE WHEN enabled AND status = 'active' THEN $4::timestamptz ELSE NULL END,
+                  updated_at = CURRENT_TIMESTAMP(3)
+            WHERE tenant_id = $1 AND task_id = $2 AND revision = $3`,
+          [row.tenant_id, row.task_id, revision, projection.nextRunAt],
+        )
+      }
+      const settled = await client.query(
+        `UPDATE bff_scheduled_task_outbox
+            SET status = 'succeeded', completed_at = $5::timestamptz,
+                lease_owner = NULL, lease_token = NULL, lease_until = NULL,
+                last_error_code = NULL, last_error_at = NULL, updated_at = CURRENT_TIMESTAMP(3)
+          WHERE outbox_id = $1 AND status = 'leased' AND lease_owner = $2
+            AND lease_token = $3 AND fence = $4`,
+        [lease.outboxId, lease.leaseOwner, lease.leaseToken, lease.fence, completedTimestamp],
+      )
+      return settled.rowCount === 1
+    })
   }
 
   public async markScheduledTaskOutboxRetryable(

@@ -16,7 +16,8 @@ export type ScheduledTaskFact = {
   frequency: ScheduledTaskFrequency
   time: string
   timezone: string
-  nextRunAt: Date
+  recurrenceAnchorAt: Date
+  nextRunAt: Date | null
   expiresAt?: Date
   autoApprove: boolean
   enabled: boolean

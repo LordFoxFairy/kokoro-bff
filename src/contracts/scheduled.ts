@@ -6,7 +6,7 @@ export type ScheduledTask = {
   frequency: "daily" | "weekly"
   time: string
   timezone: string
-  next_run_at: string
+  next_run_at: string | null
   expires_at?: string
   auto_approve: boolean
   enabled: boolean

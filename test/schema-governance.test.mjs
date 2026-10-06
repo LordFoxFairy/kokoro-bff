@@ -35,6 +35,8 @@ test("schema application reads the repository canonical schema", async () => {
   assert.match(schema, /CREATE TABLE IF NOT EXISTS bff_project/u)
   assert.match(schema, /CREATE TABLE IF NOT EXISTS bff_project[\s\S]*?owner_id TEXT NOT NULL/u)
   assert.match(schema, /CREATE TABLE IF NOT EXISTS bff_scheduled_task/u)
+  assert.match(schema, /recurrence_anchor_at TIMESTAMPTZ\(3\) NOT NULL/u)
+  assert.match(schema, /next_run_at TIMESTAMPTZ\(3\),/u)
   assert.match(schema, /CREATE TABLE IF NOT EXISTS bff_scheduled_task_outbox/u)
   assert.match(schema, /CREATE TABLE IF NOT EXISTS bff_idempotency_receipt/u)
   assert.match(schema, /CREATE TABLE IF NOT EXISTS bff_conversation/u)

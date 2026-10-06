@@ -1,3 +1,13 @@
+## R255 02:02 ScheduledTask 源码集成验收（正常页面尚未激活）
+
+当前源码已与发布前 OpenAPI 候选对齐：持久规则锚点 recurrence_anchor_at 与 nullable next_run_at 分离；create/replace 先置 next 为 null，Scheduler 成功回执通过生成 validator 与业务等值校验后，当前 task revision 与 outbox lease/token/fence 核验，task 投影及 outbox success 同事务提交。暂停/禁用/删除与迟到回执不复活任务；V2严格payload，删除无V1兼容或可选projection fallback。Scheduler.version独立于BFF task revision。持续执行后的 next 刷新仍待 owner 读/事件接续，不称整个排程生命周期完成。
+
+Root真实PG先8 tests/1pass/7fail（父失败含在内）；修复后的混合工作树5文件174/0，再将24批准source/test精确暂存，排除三mixed原Project改动，在 index tree 77c811391c697e370cdcab888b5c427c71ae4c32 独立快照复跑真实PG/Redis175/0/0skip（含保留HEAD的R237 catalog），库目录77→77 exact。localhost网络负控13/13已在现 validator 下通过，不是新RED；先前缺validator判断正式撤回，没有扩大control-client写集。真实PG与existing Redis、localhost owner doubles不是正常IAM/Scheduler/provider/浏览器E2E。
+
+同Node22.22.2暂存快照 format/lint/types/build/semantic/schema/scheduler generated/full contract均exit0；默认779pass/0fail/2资源skip，schema纯门10pass/2资源skip，完整contract242pass/0fail/0skip。原mixed工作树 format仍exit1（两个任务外Project文件），不格式化他人修改、不放宽门。独立暂存审查625092a8零P0/P1/P2；当前源码+测试无依赖original mixed。Root只提交24source/test及本CURRENT前缀，原全文/三mixed批准外hunks/468非source tracked保护。
+
+正常开发BFF tsx非watch，仍旧已加载源码；唯一QA暂停任务仅只读盘点，局部排程表重建请求一次待答，未删除/重启/改normal schema。Web消费者pin尚未更新，候选未发布；必须 owner artifact→Web repin→批准的局部激活→真实创建/编辑/暂停/刷新/时区/执行浏览器验收。完整70组11/8/14/36/1不变，T-P02整组FAIL保留，0主动模型/赠送/结算。证据沿Root现var/dev/r255-preserve/0202-*，本CURRENT新增只记本切片，不覆盖以下历史时点。
+
 ## R255 01:41 ScheduledTask 时间机器合同候选（未发布，生产实现待续）
 
 当前 public OpenAPI 8.0.0 发布前切片：create/closed PATCH 仅接受可选 recurrence_anchor_at，不再接受输入 next_run_at；输出 next_run_at 必有且可 null。保原92操作、权限、envelope、weekly锚点规则和owner计算职责，无旧字段alias。仅机器合同、现semantic gate及既有contract断言改变；生产parser/SQL/receipt投影/generated消费者/pins未改变，暂不发布或宣称正式用户修好。

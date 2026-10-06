@@ -1104,8 +1104,8 @@ for (const resource of ["bff_scheduled_task", "bff_scheduled_agent_scope"]) {
         let acceptOperation
         try {
           await pool.query(
-            `INSERT INTO bff_scheduled_task(task_id,tenant_id,owner_id,title,prompt,frequency,task_time,timezone,next_run_at,status)
-             VALUES($1,$2,$3,'Accept lease','go','daily','08:00','UTC','2026-09-01T08:00:00Z','active')`,
+            `INSERT INTO bff_scheduled_task(task_id,tenant_id,owner_id,title,prompt,frequency,task_time,timezone,recurrence_anchor_at,next_run_at,status)
+             VALUES($1,$2,$3,'Accept lease','go','daily','08:00','UTC','2026-09-01T08:00:00Z',NULL,'active')`,
             [task, tenant, owner],
           )
           if (resource === "bff_scheduled_agent_scope") {
@@ -1264,8 +1264,8 @@ function r67AcceptanceRejections(requestId) {
         let acceptOperation
         try {
           await pool.query(
-            `INSERT INTO bff_scheduled_task(task_id,tenant_id,owner_id,title,prompt,frequency,task_time,timezone,next_run_at,status,enabled)
-             VALUES($1,$2,$3,'Rejection lease','go','daily','08:00','UTC','2026-09-01T08:00:00Z','paused',false)`,
+            `INSERT INTO bff_scheduled_task(task_id,tenant_id,owner_id,title,prompt,frequency,task_time,timezone,recurrence_anchor_at,next_run_at,status,enabled)
+             VALUES($1,$2,$3,'Rejection lease','go','daily','08:00','UTC','2026-09-01T08:00:00Z',NULL,'paused',false)`,
             [task, tenant, owner],
           )
           store = new PostgresBffRepositories(postgresUrl, redisUrl)

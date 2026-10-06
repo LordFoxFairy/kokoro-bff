@@ -24,7 +24,7 @@ describe("BFF Scheduler control mapping", () => {
     frequency: "daily" as const,
     time: "08:15",
     timezone: "America/New_York",
-    nextRunAt: new Date("2026-09-01T12:15:00.000Z"),
+    recurrenceAnchorAt: new Date("2026-09-01T12:15:00.000Z"),
     autoApprove: true,
     enabled: true,
     status: "active" as const,
@@ -63,7 +63,7 @@ describe("BFF Scheduler control mapping", () => {
       frequency: "weekly" as const,
       time: "23:30",
       timezone: "America/Los_Angeles",
-      nextRunAt: new Date("2026-09-07T06:30:00.000Z"), // Sunday 23:30 local.
+      recurrenceAnchorAt: new Date("2026-09-07T06:30:00.000Z"), // Sunday 23:30 local.
       enabled: false,
       status: "paused" as const,
     }

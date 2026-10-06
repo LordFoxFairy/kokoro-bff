@@ -40,8 +40,8 @@ function localSchedule(task: ScheduledTaskFact): string {
   const minute = Number(match[2])
   if (hour > 23 || minute > 59) throw new Error("SCHEDULE_LOCAL_TIME_INVALID")
   if (task.frequency === "daily") return `${minute} ${hour} * * *`
-  if (Number.isNaN(task.nextRunAt.getTime())) throw new Error("SCHEDULE_NEXT_RUN_INVALID")
-  return `${minute} ${hour} * * ${weekdayInTimezone(task.nextRunAt, task.timezone)}`
+  if (Number.isNaN(task.recurrenceAnchorAt.getTime())) throw new Error("SCHEDULE_RECURRENCE_ANCHOR_INVALID")
+  return `${minute} ${hour} * * ${weekdayInTimezone(task.recurrenceAnchorAt, task.timezone)}`
 }
 
 export function buildSchedulerSchedule(task: ScheduledTaskFact, tenantId: string, ownerId: string, targetUrl: string): SchedulerScheduleInput {

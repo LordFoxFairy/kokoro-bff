@@ -5,10 +5,11 @@ import { describe, it } from "node:test"
 import { buildScheduledTaskOutboxPayload, scheduledTaskOutboxTaskFromPayload, scheduledTaskRetryDelayMs } from "../dist/domain/scheduled-task/outbox.js"
 import { scheduledTaskOutboxId } from "../dist/infrastructure/identifiers/scheduled-task-outbox-id.js"
 import { ScheduledTaskOutboxDispatcher } from "../dist/application/scheduled-task-outbox-dispatcher.js"
-import type { ScheduledTaskOutboxRepository } from "../dist/application/ports/scheduled-task-outbox-repository.js"
+import type { ScheduledTaskNextProjection, ScheduledTaskOutboxRepository } from "../dist/application/ports/scheduled-task-outbox-repository.js"
 import type { ScheduledTaskOutboxCommand } from "../dist/domain/scheduled-task/outbox.js"
 import type { ScheduledTaskOutboxDeliveryPort, ScheduledTaskOutboxDeliveryResult } from "../dist/application/ports/scheduled-task-outbox-delivery.js"
 import { SchedulerOutboxDelivery } from "../dist/infrastructure/clients/scheduler/outbox-delivery.js"
+import { buildSchedulerSchedule } from "../dist/infrastructure/clients/scheduler/schedule.js"
 
 const task = {
   taskId: "scheduled_fixture",
@@ -19,7 +20,7 @@ const task = {
   frequency: "daily" as const,
   time: "08:00",
   timezone: "UTC",
-  nextRunAt: new Date("2026-09-01T08:00:00.000Z"),
+  recurrenceAnchorAt: new Date("2026-09-01T08:00:00.000Z"),
   autoApprove: true,
   enabled: true,
   status: "active" as const,
@@ -57,6 +58,7 @@ function command(attemptCount = 1): ScheduledTaskOutboxCommand {
 class FixtureOutboxRepository implements ScheduledTaskOutboxRepository {
   public queued: ScheduledTaskOutboxCommand[] = []
   public succeeded: string[] = []
+  public projections: ScheduledTaskNextProjection[] = []
   public retryable: Array<{ id: string; nextAttemptAt: Date; errorCode: string }> = []
   public failed: Array<{ id: string; errorCode: string }> = []
 
@@ -65,8 +67,13 @@ class FixtureOutboxRepository implements ScheduledTaskOutboxRepository {
     return next === undefined ? [] : [next]
   }
 
-  public async markScheduledTaskOutboxSucceeded(lease: ScheduledTaskOutboxCommand): Promise<boolean> {
+  public async markScheduledTaskOutboxSucceeded(
+    lease: ScheduledTaskOutboxCommand,
+    _completedAt: Date,
+    projection: ScheduledTaskNextProjection,
+  ): Promise<boolean> {
     this.succeeded.push(lease.outboxId)
+    this.projections.push(projection)
     return true
   }
 
@@ -91,7 +98,12 @@ class FixtureDelivery implements ScheduledTaskOutboxDeliveryPort {
 
   public async deliver(commandToDeliver: ScheduledTaskOutboxCommand): Promise<ScheduledTaskOutboxDeliveryResult> {
     this.commands.push(commandToDeliver)
-    return this.results.shift() ?? { outcome: "succeeded" }
+    return (
+      this.results.shift() ?? {
+        outcome: "succeeded",
+        projection: { taskId: "scheduled_fixture", taskRevision: 3, nextRunAt: new Date("2026-09-05T08:00:00.000Z") },
+      }
+    )
   }
 }
 
@@ -99,7 +111,7 @@ describe("ScheduledTask durable outbox", () => {
   it("builds a versioned scheduler command with complete lineage and stable identity", () => {
     const payload = buildScheduledTaskOutboxPayload("replace", lineage, task)
     assert.deepEqual(payload, {
-      schema_version: 1,
+      schema_version: 2,
       command_type: "scheduler.replace",
       lineage: {
         tenant_id: "tenant_fixture",
@@ -116,7 +128,7 @@ describe("ScheduledTask durable outbox", () => {
         frequency: "daily",
         time: "08:00",
         timezone: "UTC",
-        next_run_at: "2026-09-01T08:00:00.000Z",
+        recurrence_anchor_at: "2026-09-01T08:00:00.000Z",
         auto_approve: true,
         enabled: true,
         status: "active",
@@ -124,8 +136,8 @@ describe("ScheduledTask durable outbox", () => {
       },
     })
     const internal = scheduledTaskOutboxTaskFromPayload(payload.task)
-    assert.ok(internal.nextRunAt instanceof Date)
-    assert.equal(internal.nextRunAt.toISOString(), "2026-09-01T08:00:00.000Z")
+    assert.ok(internal.recurrenceAnchorAt instanceof Date)
+    assert.equal(internal.recurrenceAnchorAt.toISOString(), "2026-09-01T08:00:00.000Z")
     assert.equal(
       scheduledTaskOutboxId("tenant_fixture", "scheduled_fixture", "replace", "schedule-fixture"),
       "scheduled_outbox_a9418ff083b15fea19f73ac7c64a3f52",
@@ -145,7 +157,10 @@ describe("ScheduledTask durable outbox", () => {
   it("claims, retries, and completes through the lease-aware port", async () => {
     const repository = new FixtureOutboxRepository()
     repository.queued.push(command(1), command(2))
-    const delivery = new FixtureDelivery([{ outcome: "retryable", errorCode: "scheduler_timeout" }, { outcome: "succeeded" }])
+    const delivery = new FixtureDelivery([
+      { outcome: "retryable", errorCode: "scheduler_timeout" },
+      { outcome: "succeeded", projection: { taskId: "scheduled_fixture", taskRevision: 3, nextRunAt: new Date("2026-09-05T08:00:00.000Z") } },
+    ])
     let now = new Date("2026-09-04T12:00:00.000Z")
     const dispatcher = new ScheduledTaskOutboxDispatcher(repository, delivery, {
       workerId: "worker_fixture",
@@ -162,6 +177,7 @@ describe("ScheduledTask durable outbox", () => {
     now = new Date("2026-09-04T12:00:02.000Z")
     assert.equal(await dispatcher.runOnce(), 1)
     assert.deepEqual(repository.succeeded, [command().outboxId])
+    assert.equal(repository.projections[0]?.taskRevision, 3)
     assert.equal(delivery.commands.length, 2)
   })
 
@@ -189,7 +205,26 @@ describe("ScheduledTask durable outbox", () => {
         response.statusCode = 409
         response.end(JSON.stringify({ error: { code: "schedule_already_exists", message: "exists" }, meta: { request_id: "req_fixture" } }))
       } else {
-        response.end(JSON.stringify({ data: { name: "kokoro.scheduled.scheduled_fixture", status: "updated" }, meta: { request_id: "req_fixture" } }))
+        response.end(
+          JSON.stringify({
+            data: {
+              name: "kokoro.scheduled.scheduled_fixture",
+              status: "updated",
+              schedule: {
+                ...buildSchedulerSchedule(
+                  { ...task, id: task.taskId, nextRunAt: null },
+                  "tenant_fixture",
+                  "actor_fixture",
+                  "http://bff.test/internal/bff/scheduled-tasks/dispatch",
+                ),
+                id: "00000000-0000-4000-8000-000000000001",
+                next_due_at: "2026-09-05T08:00:00.000Z",
+                version: 9,
+              },
+            },
+            meta: { request_id: "req_fixture" },
+          }),
+        )
       }
     })
     await new Promise<void>((resolve, reject) => {
@@ -206,7 +241,10 @@ describe("ScheduledTask durable outbox", () => {
         upstreamTimeoutMs: 1000,
         upstreamMaxResponseBytes: 1024 * 1024,
       } as never)
-      assert.deepEqual(await delivery.deliver({ ...command(), commandType: "scheduler.register" }), { outcome: "succeeded" })
+      assert.deepEqual(await delivery.deliver({ ...command(), commandType: "scheduler.register" }), {
+        outcome: "succeeded",
+        projection: { taskId: "scheduled_fixture", taskRevision: 3, nextRunAt: new Date("2026-09-05T08:00:00.000Z") },
+      })
       assert.deepEqual(methods, ["POST", "PUT"])
     } finally {
       await new Promise<void>((resolve) => owner.close(() => resolve()))

@@ -1,7 +1,8 @@
 import type { ScheduledTaskCreateInput, ScheduledTaskPatch } from "../ports/scheduled-task-repository.js"
 import { isIanaTimezone, parseUtcTimestamp } from "../../domain/scheduled-task/task.js"
 
-const CREATE_FIELDS = new Set(["project_id", "title", "prompt", "frequency", "time", "timezone", "next_run_at", "expires_at", "auto_approve"])
+const CREATE_FIELDS = new Set(["project_id", "title", "prompt", "frequency", "time", "timezone", "recurrence_anchor_at", "expires_at", "auto_approve"])
+const PATCH_FIELDS = new Set(["title", "prompt", "frequency", "time", "timezone", "recurrence_anchor_at", "expires_at", "auto_approve", "enabled", "status"])
 
 function exactProjectReference(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && value.trim() === value
@@ -27,17 +28,20 @@ export function scheduledCreateInput(json: Record<string, unknown>, projectId?: 
   const frequency = json.frequency
   const time = typeof json.time === "string" ? json.time.trim() : ""
   const timezone = typeof json.timezone === "string" ? json.timezone.trim() : ""
-  const nextRunAt = json.next_run_at === undefined ? new Date() : instant(json.next_run_at, "SCHEDULED_TASK_NEXT_RUN_INVALID")
-  const expiresAt = json.expires_at === undefined
-    ? undefined
-    : json.expires_at === null
-      ? null
-      : instant(json.expires_at, "SCHEDULED_TASK_EXPIRES_INVALID")
+  const recurrenceAnchorAt =
+    json.recurrence_anchor_at === undefined ? new Date() : instant(json.recurrence_anchor_at, "SCHEDULED_TASK_RECURRENCE_ANCHOR_INVALID")
+  const expiresAt = json.expires_at === undefined ? undefined : json.expires_at === null ? null : instant(json.expires_at, "SCHEDULED_TASK_EXPIRES_INVALID")
   if (
-    title === "" || prompt === "" || (frequency !== "daily" && frequency !== "weekly")
-    || !/^([01]\d|2[0-3]):[0-5]\d$/u.test(time) || timezone === "" || !isIanaTimezone(timezone)
-    || nextRunAt === null || expiresAt === null
-  ) return null
+    title === "" ||
+    prompt === "" ||
+    (frequency !== "daily" && frequency !== "weekly") ||
+    !/^([01]\d|2[0-3]):[0-5]\d$/u.test(time) ||
+    timezone === "" ||
+    !isIanaTimezone(timezone) ||
+    recurrenceAnchorAt === null ||
+    expiresAt === null
+  )
+    return null
   return {
     ...(projectReference === undefined ? {} : { projectId: projectReference }),
     title,
@@ -45,13 +49,14 @@ export function scheduledCreateInput(json: Record<string, unknown>, projectId?: 
     frequency,
     time,
     timezone,
-    nextRunAt,
+    recurrenceAnchorAt,
     ...(expiresAt === undefined ? {} : { expiresAt }),
     autoApprove: typeof json.auto_approve === "boolean" ? json.auto_approve : false,
   }
 }
 
 export function scheduledPatchInput(json: Record<string, unknown>): ScheduledTaskPatch | null {
+  if (Object.keys(json).some((key) => !PATCH_FIELDS.has(key))) return null
   const input: ScheduledTaskPatch = {}
   if (json.title !== undefined) {
     if (typeof json.title !== "string" || json.title.trim() === "") return null
@@ -73,10 +78,10 @@ export function scheduledPatchInput(json: Record<string, unknown>): ScheduledTas
     if (typeof json.timezone !== "string" || json.timezone.trim() === "" || !isIanaTimezone(json.timezone.trim())) return null
     input.timezone = json.timezone.trim()
   }
-  if (json.next_run_at !== undefined) {
-    const nextRunAt = instant(json.next_run_at, "SCHEDULED_TASK_NEXT_RUN_INVALID")
-    if (nextRunAt === null) return null
-    input.nextRunAt = nextRunAt
+  if (json.recurrence_anchor_at !== undefined) {
+    const recurrenceAnchorAt = instant(json.recurrence_anchor_at, "SCHEDULED_TASK_RECURRENCE_ANCHOR_INVALID")
+    if (recurrenceAnchorAt === null) return null
+    input.recurrenceAnchorAt = recurrenceAnchorAt
   }
   if (json.expires_at !== undefined) {
     if (json.expires_at === null) {

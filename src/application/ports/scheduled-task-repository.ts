@@ -19,7 +19,7 @@ export type ScheduledTaskCreateInput = {
   frequency: ScheduledTaskFrequency
   time: string
   timezone: string
-  nextRunAt: Date
+  recurrenceAnchorAt?: Date
   expiresAt?: Date
   autoApprove: boolean
 }
@@ -30,7 +30,7 @@ export type ScheduledTaskPatch = Partial<{
   frequency: ScheduledTaskFrequency
   time: string
   timezone: string
-  nextRunAt: Date
+  recurrenceAnchorAt: Date
   expiresAt: Date | null
   autoApprove: boolean
   enabled: boolean

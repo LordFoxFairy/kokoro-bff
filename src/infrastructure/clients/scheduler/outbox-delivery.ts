@@ -1,6 +1,6 @@
 import type { BffConfig } from "../../../config/runtime.js"
 import { isRecord } from "../../../domain/json.js"
-import type { ScheduledTaskFact } from "../../../domain/scheduled-task/task.js"
+import { parseUtcTimestamp, type ScheduledTaskFact } from "../../../domain/scheduled-task/task.js"
 import type { ScheduledTaskOutboxDeliveryPort, ScheduledTaskOutboxDeliveryResult } from "../../../application/ports/scheduled-task-outbox-delivery.js"
 import {
   scheduledTaskOutboxTaskFromPayload,
@@ -9,6 +9,7 @@ import {
 } from "../../../domain/scheduled-task/outbox.js"
 import { SchedulerControlClient, type SchedulerControlAttempt } from "./control-client.js"
 import { buildSchedulerSchedule, schedulerScheduleName } from "./schedule.js"
+import { isDeepStrictEqual } from "node:util"
 
 function schedulerErrorCode(body: unknown): string | null {
   return isRecord(body) && isRecord(body.error) && typeof body.error.code === "string" ? body.error.code : null
@@ -20,9 +21,50 @@ function operationOf(commandType: ScheduledTaskOutboxCommand["commandType"]): Sc
   return "delete"
 }
 
-function classify(attempt: SchedulerControlAttempt): ScheduledTaskOutboxDeliveryResult {
+function classify(
+  attempt: SchedulerControlAttempt,
+  expected: ReturnType<typeof buildSchedulerSchedule> | null,
+  command: ScheduledTaskOutboxCommand,
+): ScheduledTaskOutboxDeliveryResult {
   if (attempt.kind === "transport") return { outcome: "retryable", errorCode: attempt.errorCode }
-  if (attempt.status >= 200 && attempt.status < 300) return { outcome: "succeeded" }
+  if (attempt.status >= 200 && attempt.status < 300) {
+    const data = isRecord(attempt.body) && isRecord(attempt.body.data) ? attempt.body.data : null
+    if (data === null) return { outcome: "failed", errorCode: "scheduler_response_invalid" }
+    if (expected === null) {
+      return data.name === schedulerScheduleName(command.taskId) && data.status === "deleted"
+        ? { outcome: "succeeded", projection: null }
+        : { outcome: "failed", errorCode: "scheduler_response_invalid" }
+    }
+    const schedule = isRecord(data.schedule) ? data.schedule : null
+    if (
+      schedule === null ||
+      (data.status !== "registered" && data.status !== "updated") ||
+      data.name !== expected.name ||
+      schedule.name !== expected.name ||
+      schedule.schedule !== expected.schedule ||
+      schedule.timezone !== expected.timezone ||
+      schedule.url !== expected.url ||
+      schedule.method !== expected.method ||
+      !isDeepStrictEqual(schedule.body, expected.body) ||
+      !isDeepStrictEqual(schedule.retry, expected.retry) ||
+      schedule.misfire_policy !== expected.misfire_policy ||
+      schedule.catch_up_limit !== expected.catch_up_limit ||
+      schedule.overlap_policy !== expected.overlap_policy ||
+      schedule.paused !== expected.paused
+    ) {
+      return { outcome: "failed", errorCode: "scheduler_response_invalid" }
+    }
+    if (typeof schedule.next_due_at !== "string" || typeof schedule.version !== "number" || !Number.isSafeInteger(schedule.version) || schedule.version < 1) {
+      return { outcome: "failed", errorCode: "scheduler_response_invalid" }
+    }
+    let nextRunAt: Date
+    try {
+      nextRunAt = parseUtcTimestamp(schedule.next_due_at, "SCHEDULER_NEXT_DUE_INVALID")
+    } catch {
+      return { outcome: "failed", errorCode: "scheduler_response_invalid" }
+    }
+    return { outcome: "succeeded", projection: { taskId: command.taskId, taskRevision: command.taskRevision, nextRunAt } }
+  }
   const errorCode = schedulerErrorCode(attempt.body) ?? `scheduler_http_${attempt.status}`
   if (attempt.status === 408 || attempt.status === 425 || attempt.status === 429 || attempt.status >= 500) return { outcome: "retryable", errorCode }
   return { outcome: "failed", errorCode }
@@ -49,7 +91,8 @@ export class SchedulerOutboxDelivery implements ScheduledTaskOutboxDeliveryPort 
         frequency: task.frequency,
         time: task.time,
         timezone: task.timezone,
-        nextRunAt: task.nextRunAt,
+        recurrenceAnchorAt: task.recurrenceAnchorAt,
+        nextRunAt: null,
         ...(task.expiresAt === undefined ? {} : { expiresAt: task.expiresAt }),
         autoApprove: task.autoApprove,
         enabled: task.enabled,
@@ -67,15 +110,15 @@ export class SchedulerOutboxDelivery implements ScheduledTaskOutboxDeliveryPort 
             ? await client.replace(name, body as NonNullable<typeof body>, lineage)
             : await client.delete(name, lineage)
       if (operation === "delete" && first.kind === "response" && first.status === 404 && schedulerErrorCode(first.body) === "schedule_not_found") {
-        return { outcome: "succeeded" }
+        return { outcome: "succeeded", projection: null }
       }
       if (operation === "register" && first.kind === "response" && first.status === 409 && schedulerErrorCode(first.body) === "schedule_already_exists") {
-        return classify(await client.replace(name, body as NonNullable<typeof body>, lineage))
+        return classify(await client.replace(name, body as NonNullable<typeof body>, lineage), body as NonNullable<typeof body>, command)
       }
       if (operation === "replace" && first.kind === "response" && first.status === 404 && schedulerErrorCode(first.body) === "schedule_not_found") {
-        return classify(await client.create(name, body as NonNullable<typeof body>, lineage))
+        return classify(await client.create(name, body as NonNullable<typeof body>, lineage), body as NonNullable<typeof body>, command)
       }
-      return classify(first)
+      return classify(first, body ?? null, command)
     } catch {
       return { outcome: "failed", errorCode: "scheduled_task_outbox_payload_invalid" }
     }

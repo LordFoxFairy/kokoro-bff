@@ -1,7 +1,7 @@
 import { isRecord } from "../json.js"
 import { isIanaTimezone, parseUtcTimestamp, utcDate, type ScheduledTaskFrequency, type ScheduledTaskStatus } from "./task.js"
 
-export const SCHEDULED_TASK_OUTBOX_SCHEMA_VERSION = 1 as const
+export const SCHEDULED_TASK_OUTBOX_SCHEMA_VERSION = 2 as const
 
 export type ScheduledTaskOutboxOperation = "register" | "replace" | "delete"
 export type ScheduledTaskOutboxCommandType = `scheduler.${ScheduledTaskOutboxOperation}`
@@ -24,7 +24,7 @@ export type ScheduledTaskOutboxTask = {
   frequency: ScheduledTaskFrequency
   time: string
   timezone: string
-  nextRunAt: Date
+  recurrenceAnchorAt: Date
   expiresAt?: Date
   autoApprove: boolean
   enabled: boolean
@@ -42,7 +42,7 @@ export type ScheduledTaskOutboxTaskWire = {
   frequency: ScheduledTaskFrequency
   time: string
   timezone: string
-  next_run_at: string
+  recurrence_anchor_at: string
   expires_at?: string
   auto_approve: boolean
   enabled: boolean
@@ -129,7 +129,7 @@ function validateTask(task: ScheduledTaskOutboxTask): void {
   if (!/^([01]\d|2[0-3]):[0-5]\d$/u.test(task.time) || !isIanaTimezone(task.timezone)) {
     throw new Error("SCHEDULED_TASK_OUTBOX_TASK_TIME_INVALID")
   }
-  utcDate(task.nextRunAt, "SCHEDULED_TASK_OUTBOX_NEXT_RUN_INVALID")
+  utcDate(task.recurrenceAnchorAt, "SCHEDULED_TASK_OUTBOX_RECURRENCE_ANCHOR_INVALID")
   if (task.expiresAt !== undefined) utcDate(task.expiresAt, "SCHEDULED_TASK_OUTBOX_EXPIRES_INVALID")
   if (!Number.isSafeInteger(task.revision) || task.revision < 1) throw new Error("SCHEDULED_TASK_OUTBOX_REVISION_INVALID")
 }
@@ -145,7 +145,7 @@ function wireTask(task: ScheduledTaskOutboxTask): ScheduledTaskOutboxTaskWire {
     frequency: task.frequency,
     time: task.time,
     timezone: task.timezone,
-    next_run_at: utcDate(task.nextRunAt, "SCHEDULED_TASK_OUTBOX_NEXT_RUN_INVALID").toISOString(),
+    recurrence_anchor_at: utcDate(task.recurrenceAnchorAt, "SCHEDULED_TASK_OUTBOX_RECURRENCE_ANCHOR_INVALID").toISOString(),
     ...(task.expiresAt === undefined ? {} : { expires_at: utcDate(task.expiresAt, "SCHEDULED_TASK_OUTBOX_EXPIRES_INVALID").toISOString() }),
     auto_approve: task.autoApprove,
     enabled: task.enabled,
@@ -184,22 +184,23 @@ export function buildScheduledTaskOutboxPayload(
 }
 
 /** Canonical input for the infrastructure-owned stable ID generator. */
-export function scheduledTaskOutboxIdentityMaterial(
-  tenantId: string,
-  taskId: string,
-  operation: ScheduledTaskOutboxOperation,
-  idempotencyKey: string,
-): string {
+export function scheduledTaskOutboxIdentityMaterial(tenantId: string, taskId: string, operation: ScheduledTaskOutboxOperation, idempotencyKey: string): string {
   return [tenantId, taskId, commandType(operation), idempotencyKey].join("\u001f")
 }
 
 /** Parse JSONB at the infrastructure boundary before a worker can deliver it. */
 export function parseScheduledTaskOutboxPayload(value: unknown): ScheduledTaskOutboxPayload {
   if (!isRecord(value)) throw new Error("SCHEDULED_TASK_OUTBOX_PAYLOAD_INVALID")
+  if (Object.keys(value).some((key) => !["schema_version", "command_type", "lineage", "task"].includes(key))) {
+    throw new Error("SCHEDULED_TASK_OUTBOX_PAYLOAD_INVALID")
+  }
   if (value.schema_version !== SCHEDULED_TASK_OUTBOX_SCHEMA_VERSION) throw new Error("SCHEDULED_TASK_OUTBOX_SCHEMA_VERSION_UNSUPPORTED")
   const command = requiredChoice(value, "command_type", ["scheduler.register", "scheduler.replace", "scheduler.delete"] as const)
   const lineageValue = value.lineage
   if (!isRecord(lineageValue)) throw new Error("SCHEDULED_TASK_OUTBOX_LINEAGE_INVALID")
+  if (Object.keys(lineageValue).some((key) => !["tenant_id", "actor_id", "request_id", "idempotency_key"].includes(key))) {
+    throw new Error("SCHEDULED_TASK_OUTBOX_LINEAGE_INVALID")
+  }
   const lineage = {
     tenant_id: requiredString(lineageValue, "tenant_id"),
     actor_id: requiredString(lineageValue, "actor_id"),
@@ -208,6 +209,28 @@ export function parseScheduledTaskOutboxPayload(value: unknown): ScheduledTaskOu
   }
   const taskValue = value.task
   if (!isRecord(taskValue)) throw new Error("SCHEDULED_TASK_OUTBOX_TASK_INVALID")
+  if (
+    Object.keys(taskValue).some(
+      (key) =>
+        ![
+          "task_id",
+          "project_id",
+          "owner_id",
+          "title",
+          "prompt",
+          "frequency",
+          "time",
+          "timezone",
+          "recurrence_anchor_at",
+          "expires_at",
+          "auto_approve",
+          "enabled",
+          "status",
+          "revision",
+        ].includes(key),
+    )
+  )
+    throw new Error("SCHEDULED_TASK_OUTBOX_TASK_INVALID")
   const projectId = optionalString(taskValue, "project_id")
   const expiresAt = optionalString(taskValue, "expires_at")
   const task: ScheduledTaskOutboxTaskWire = {
@@ -219,7 +242,7 @@ export function parseScheduledTaskOutboxPayload(value: unknown): ScheduledTaskOu
     frequency: requiredChoice(taskValue, "frequency", ["daily", "weekly"] as const),
     time: requiredString(taskValue, "time"),
     timezone: requiredString(taskValue, "timezone"),
-    next_run_at: requiredTimestamp(taskValue, "next_run_at"),
+    recurrence_anchor_at: requiredTimestamp(taskValue, "recurrence_anchor_at"),
     ...(expiresAt === undefined ? {} : { expires_at: parseUtcTimestamp(expiresAt, "SCHEDULED_TASK_OUTBOX_EXPIRES_AT_INVALID").toISOString() }),
     auto_approve: requiredBoolean(taskValue, "auto_approve"),
     enabled: requiredBoolean(taskValue, "enabled"),
@@ -232,7 +255,7 @@ export function parseScheduledTaskOutboxPayload(value: unknown): ScheduledTaskOu
 
 /** Convert the persisted JSON representation back to an internal UTC model. */
 export function scheduledTaskOutboxTaskFromPayload(task: ScheduledTaskOutboxTaskWire): ScheduledTaskOutboxTask {
-  const nextRunAt = parseUtcTimestamp(task.next_run_at, "SCHEDULED_TASK_OUTBOX_NEXT_RUN_INVALID")
+  const recurrenceAnchorAt = parseUtcTimestamp(task.recurrence_anchor_at, "SCHEDULED_TASK_OUTBOX_RECURRENCE_ANCHOR_INVALID")
   const expiresAt = task.expires_at === undefined ? undefined : parseUtcTimestamp(task.expires_at, "SCHEDULED_TASK_OUTBOX_EXPIRES_INVALID")
   const internal: ScheduledTaskOutboxTask = {
     taskId: task.task_id,
@@ -243,7 +266,7 @@ export function scheduledTaskOutboxTaskFromPayload(task: ScheduledTaskOutboxTask
     frequency: task.frequency,
     time: task.time,
     timezone: task.timezone,
-    nextRunAt,
+    recurrenceAnchorAt,
     ...(expiresAt === undefined ? {} : { expiresAt }),
     autoApprove: task.auto_approve,
     enabled: task.enabled,
@@ -257,6 +280,6 @@ export function scheduledTaskOutboxTaskFromPayload(task: ScheduledTaskOutboxTask
 export function scheduledTaskRetryDelayMs(attemptCount: number, randomValue = 0): number {
   if (!Number.isSafeInteger(attemptCount) || attemptCount < 1) throw new Error("SCHEDULED_TASK_OUTBOX_ATTEMPT_INVALID")
   const jitter = Number.isFinite(randomValue) ? Math.min(1, Math.max(0, randomValue)) : 0
-  const exponential = Math.min(300_000, 1_000 * (2 ** Math.min(attemptCount - 1, 8)))
+  const exponential = Math.min(300_000, 1_000 * 2 ** Math.min(attemptCount - 1, 8))
   return exponential + Math.floor(exponential * 0.2 * jitter)
 }

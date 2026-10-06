@@ -11,7 +11,7 @@ export function scheduledTaskResponse(task: ScheduledTaskFact): ScheduledTask {
     frequency: task.frequency,
     time: task.time,
     timezone: task.timezone,
-    next_run_at: task.nextRunAt.toISOString(),
+    next_run_at: task.nextRunAt?.toISOString() ?? null,
     ...(task.expiresAt === undefined ? {} : { expires_at: task.expiresAt.toISOString() }),
     auto_approve: task.autoApprove,
     enabled: task.enabled,

@@ -1,10 +1,13 @@
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
+import { createServer } from "node:http"
 import { test } from "node:test"
 
 import { Pool } from "pg"
 
 import { PostgresScheduledTaskRepository } from "../dist/infrastructure/postgres/scheduled-task-repository.js"
+import { ScheduledTaskOutboxDispatcher } from "../dist/application/scheduled-task-outbox-dispatcher.js"
+import { SchedulerOutboxDelivery } from "../dist/infrastructure/clients/scheduler/outbox-delivery.js"
 
 const postgresUrl = process.env.KOKORO_TEST_POSTGRES_URL
 const integrationTest = postgresUrl ? test : test.skip
@@ -29,7 +32,7 @@ function taskInput(suffix, overrides = {}) {
     frequency: "daily",
     time: "08:00",
     timezone: "UTC",
-    nextRunAt: new Date("2026-09-04T12:00:00.000Z"),
+    recurrenceAnchorAt: new Date("2026-09-04T12:00:00.000Z"),
     autoApprove: false,
     ...overrides,
   }
@@ -65,7 +68,7 @@ integrationTest("ScheduledTask outbox is atomic, idempotent, tenant-scoped, and 
       `SELECT table_name, column_name, datetime_precision
          FROM information_schema.columns
         WHERE table_name IN ('bff_scheduled_task', 'bff_scheduled_task_outbox')
-          AND column_name IN ('next_run_at', 'expires_at', 'created_at', 'updated_at', 'available_at', 'lease_until', 'last_error_at', 'completed_at')`,
+          AND column_name IN ('recurrence_anchor_at', 'next_run_at', 'expires_at', 'created_at', 'updated_at', 'available_at', 'lease_until', 'last_error_at', 'completed_at')`,
     )
     assert.ok(precision.rows.length >= 10)
     assert.ok(precision.rows.every((row) => Number(row.datetime_precision) === 3))
@@ -129,7 +132,7 @@ integrationTest("ScheduledTask outbox is atomic, idempotent, tenant-scoped, and 
     assert.equal(registerRow.rows[0].idempotency_key, createLineage.idempotencyKey)
     assert.equal(Number(registerRow.rows[0].aggregate_revision), 1)
     assert.equal(registerRow.rows[0].payload.lineage.tenant_id, tenants.core)
-    assert.equal(registerRow.rows[0].payload.task.next_run_at, "2026-09-04T12:00:00.000Z")
+    assert.equal(registerRow.rows[0].payload.task.recurrence_anchor_at, "2026-09-04T12:00:00.000Z")
 
     assert.deepEqual(await repository.listScheduledTasks(ownerScope(`${tenants.core}_other`, suffix)), [])
     assert.equal(await repository.findScheduledTask(ownerScope(`${tenants.core}_other`, suffix), taskId), null)
@@ -172,7 +175,7 @@ integrationTest("ScheduledTask outbox is atomic, idempotent, tenant-scoped, and 
       secondUpdateLineage,
     )
     assert.equal(updatedAgain?.revision, 3)
-    assert.equal(updatedAgain?.nextRunAt instanceof Date, true)
+    assert.equal(updatedAgain?.nextRunAt, null)
     assert.equal(updatedAgain?.expiresAt?.toISOString(), "2026-09-05T00:00:00.000Z")
     assert.equal(await count(pool, "bff_scheduled_task_outbox", tenants.core), 3)
 
@@ -234,10 +237,11 @@ integrationTest("ScheduledTask outbox is atomic, idempotent, tenant-scoped, and 
       leaseToken: claimed.leaseToken,
       fence: claimed.fence,
     }
-    assert.equal(await repository.markScheduledTaskOutboxSucceeded({ ...lease, leaseToken: "stale-token" }, claimNow), false)
-    assert.equal(await repository.markScheduledTaskOutboxSucceeded({ ...lease, fence: 99 }, claimNow), false)
-    assert.equal(await repository.markScheduledTaskOutboxSucceeded(lease, new Date(claimNow.getTime() + 1)), true)
-    assert.equal(await repository.markScheduledTaskOutboxSucceeded(lease, new Date(claimNow.getTime() + 2)), false)
+    const claimProjection = confirmedNext(claimed, new Date("2026-09-05T12:00:00.000Z"))
+    assert.equal(await repository.markScheduledTaskOutboxSucceeded({ ...lease, leaseToken: "stale-token" }, claimNow, claimProjection), false)
+    assert.equal(await repository.markScheduledTaskOutboxSucceeded({ ...lease, fence: 99 }, claimNow, claimProjection), false)
+    assert.equal(await repository.markScheduledTaskOutboxSucceeded(lease, new Date(claimNow.getTime() + 1), claimProjection), true)
+    assert.equal(await repository.markScheduledTaskOutboxSucceeded(lease, new Date(claimNow.getTime() + 2), claimProjection), false)
 
     const recoveryTaskId = `scheduled_recovery_${suffix}`
     const recoveryLineage = lineage(tenants.recovery, `recovery-${suffix}`, suffix)
@@ -280,8 +284,9 @@ integrationTest("ScheduledTask outbox is atomic, idempotent, tenant-scoped, and 
       leaseToken: afterRestart.leaseToken,
       fence: afterRestart.fence,
     }
-    assert.equal(await repositoryB.markScheduledTaskOutboxSucceeded(oldLease, new Date()), false)
-    assert.equal(await repositoryB.markScheduledTaskOutboxSucceeded(newLease, new Date()), true)
+    const recoveryProjection = confirmedNext(afterRestart, new Date("2026-09-05T12:00:00.000Z"))
+    assert.equal(await repositoryB.markScheduledTaskOutboxSucceeded(oldLease, new Date(), recoveryProjection), false)
+    assert.equal(await repositoryB.markScheduledTaskOutboxSucceeded(newLease, new Date(), recoveryProjection), true)
 
     const concurrentTaskIds = Array.from({ length: 4 }, (_, index) => `scheduled_concurrent_${suffix}_${index}`)
     for (const [index, concurrentTaskId] of concurrentTaskIds.entries()) {
@@ -317,5 +322,353 @@ integrationTest("ScheduledTask outbox is atomic, idempotent, tenant-scoped, and 
     await pool.query("DELETE FROM bff_scheduled_task WHERE tenant_id = ANY($1::text[])", [Object.values(tenants)]).catch(() => undefined)
     await pool.query("DELETE FROM bff_project WHERE tenant_id = ANY($1::text[])", [Object.values(tenants)]).catch(() => undefined)
     for (const candidate of pools.reverse()) await candidate.end().catch(() => undefined)
+  }
+})
+
+function leasedIdentity(command) {
+  return {
+    outboxId: command.outboxId,
+    leaseOwner: command.leaseOwner,
+    leaseToken: command.leaseToken,
+    fence: command.fence,
+  }
+}
+
+function confirmedNext(command, nextRunAt) {
+  return {
+    taskId: command.taskId,
+    taskRevision: command.taskRevision,
+    nextRunAt,
+  }
+}
+
+integrationTest("Scheduler-confirmed next is nullable, revision-fenced, and atomic with outbox settlement", async (t) => {
+  const suffix = `${Date.now()}_${Math.random().toString(16).slice(2)}`
+  const tenants = {
+    explicit: `next_explicit_${suffix}`,
+    omitted: `next_omitted_${suffix}`,
+    current: `next_current_${suffix}`,
+    paused: `next_paused_${suffix}`,
+    stale: `next_stale_${suffix}`,
+    rollback: `next_rollback_${suffix}`,
+  }
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC", max: 6 })
+  const repository = new PostgresScheduledTaskRepository({ pool })
+  const schema = await readFile(new URL("../database/schema.sql", import.meta.url), "utf8")
+  const rollbackFunction = `fixture_fail_next_settlement_${suffix.replace(/[^a-zA-Z0-9_]/gu, "_")}`
+  const rollbackTrigger = `fixture_fail_next_settlement_trigger_${suffix.replace(/[^a-zA-Z0-9_]/gu, "_")}`
+  let rollbackTriggerInstalled = false
+
+  async function create(tenantId, label, overrides = {}) {
+    const taskId = `scheduled_${label}_${suffix}`
+    const scope = ownerScope(tenantId, suffix)
+    const created = await repository.createScheduledTask(scope, taskInput(suffix, overrides), taskId, lineage(tenantId, `create-${label}-${suffix}`, suffix))
+    return { taskId, scope, created }
+  }
+
+  async function claim(tenantId, taskId, worker) {
+    const commands = await repository.claimScheduledTaskOutbox({
+      workerId: `${worker}-${suffix}`,
+      limit: 100,
+      leaseDurationMs: 30_000,
+      now: new Date(Date.now() + 1_000),
+    })
+    assert.ok(commands.length > 0)
+    assert.ok(commands.every((command) => Object.values(tenants).includes(command.tenantId)))
+    const matches = commands.filter((command) => command.tenantId === tenantId && command.taskId === taskId)
+    assert.equal(matches.length, 1)
+    return matches[0]
+  }
+
+  try {
+    await pool.query(schema)
+
+    await t.test("create keeps an explicit anchor separate from pending next", async () => {
+      const explicitAnchor = new Date("2026-09-06T12:00:00.000Z")
+      const explicit = await create(tenants.explicit, "explicit", { recurrenceAnchorAt: explicitAnchor })
+      assert.equal(explicit.created.recurrenceAnchorAt.toISOString(), explicitAnchor.toISOString())
+      assert.equal(explicit.created.nextRunAt, null)
+      const persisted = await pool.query(
+        `SELECT recurrence_anchor_at, next_run_at
+           FROM bff_scheduled_task
+          WHERE tenant_id = $1`,
+        [tenants.explicit],
+      )
+      assert.equal(new Date(persisted.rows[0].recurrence_anchor_at).toISOString(), explicitAnchor.toISOString())
+      assert.equal(persisted.rows[0].next_run_at, null)
+      const pending = await pool.query(
+        `SELECT payload
+           FROM bff_scheduled_task_outbox
+          WHERE tenant_id = $1 AND status = 'pending'`,
+        [tenants.explicit],
+      )
+      assert.equal(pending.rows[0].payload.schema_version, 2)
+      assert.equal(pending.rows[0].payload.task.recurrence_anchor_at, explicitAnchor.toISOString())
+      assert.equal(Object.hasOwn(pending.rows[0].payload.task, "next_run_at"), false)
+    })
+
+    await t.test("create freezes an omitted anchor once while keeping pending next null", async () => {
+      const before = Date.now()
+      const omitted = await create(tenants.omitted, "omitted", { recurrenceAnchorAt: undefined })
+      const after = Date.now()
+      assert.ok(omitted.created.recurrenceAnchorAt instanceof Date)
+      assert.ok(omitted.created.recurrenceAnchorAt.getTime() >= before && omitted.created.recurrenceAnchorAt.getTime() <= after)
+      assert.equal(omitted.created.nextRunAt, null)
+      const persisted = await pool.query(
+        `SELECT recurrence_anchor_at, next_run_at
+           FROM bff_scheduled_task
+          WHERE tenant_id = $1`,
+        [tenants.omitted],
+      )
+      assert.equal(new Date(persisted.rows[0].recurrence_anchor_at).toISOString(), omitted.created.recurrenceAnchorAt.toISOString())
+      assert.equal(persisted.rows[0].next_run_at, null)
+      const pending = await pool.query(
+        `SELECT payload
+           FROM bff_scheduled_task_outbox
+          WHERE tenant_id = $1 AND status = 'pending'`,
+        [tenants.omitted],
+      )
+      assert.equal(pending.rows[0].payload.schema_version, 2)
+      assert.equal(pending.rows[0].payload.task.recurrence_anchor_at, omitted.created.recurrenceAnchorAt.toISOString())
+      assert.equal(Object.hasOwn(pending.rows[0].payload.task, "next_run_at"), false)
+    })
+
+    await t.test("the current revision projects owner next and settles the exact lease atomically", async () => {
+      const { taskId } = await create(tenants.current, "current", { recurrenceAnchorAt: new Date("2026-09-07T12:00:00.000Z") })
+      const command = await claim(tenants.current, taskId, "worker-current")
+      const nextRunAt = new Date("2026-09-08T12:00:00.000Z")
+      assert.equal(
+        await repository.markScheduledTaskOutboxSucceeded(leasedIdentity(command), new Date("2026-09-06T12:01:00.000Z"), confirmedNext(command, nextRunAt)),
+        true,
+      )
+      const state = await pool.query(
+        `SELECT task.next_run_at, task.revision, command.status, command.completed_at
+           FROM bff_scheduled_task AS task
+           JOIN bff_scheduled_task_outbox AS command
+             ON command.tenant_id = task.tenant_id AND command.task_id = task.task_id
+          WHERE task.tenant_id = $1 AND task.task_id = $2`,
+        [tenants.current, taskId],
+      )
+      assert.equal(new Date(state.rows[0].next_run_at).toISOString(), nextRunAt.toISOString())
+      assert.equal(Number(state.rows[0].revision), command.taskRevision)
+      assert.equal(state.rows[0].status, "succeeded")
+      assert.ok(state.rows[0].completed_at)
+    })
+
+    await t.test("pausing creates a new revision and clears a previously confirmed next", async () => {
+      const { taskId, scope } = await create(tenants.paused, "paused", { recurrenceAnchorAt: new Date("2026-09-07T12:00:00.000Z") })
+      await pool.query("UPDATE bff_scheduled_task SET next_run_at = $3::timestamptz WHERE tenant_id = $1 AND task_id = $2", [
+        tenants.paused,
+        taskId,
+        new Date("2026-09-08T12:00:00.000Z"),
+      ])
+      const paused = await repository.updateScheduledTask(
+        scope,
+        taskId,
+        { status: "paused", enabled: false },
+        lineage(tenants.paused, `pause-${suffix}`, suffix),
+      )
+      assert.equal(paused?.revision, 2)
+      assert.equal(paused?.status, "paused")
+      assert.equal(paused?.enabled, false)
+      assert.equal(paused?.nextRunAt, null)
+      const persisted = await pool.query("SELECT next_run_at FROM bff_scheduled_task WHERE tenant_id = $1 AND task_id = $2", [tenants.paused, taskId])
+      assert.equal(persisted.rows[0].next_run_at, null)
+    })
+
+    await t.test("late old-revision and stale-lease acknowledgements cannot overwrite the current task", async () => {
+      const { taskId, scope } = await create(tenants.stale, "stale", { recurrenceAnchorAt: new Date("2026-09-07T12:00:00.000Z") })
+      const oldCommand = await claim(tenants.stale, taskId, "worker-stale-old")
+      const current = await repository.updateScheduledTask(scope, taskId, { time: "09:00" }, lineage(tenants.stale, `replace-${suffix}`, suffix))
+      assert.equal(current?.revision, 2)
+      assert.equal(current?.nextRunAt, null)
+
+      const oldNext = new Date("2026-09-08T12:00:00.000Z")
+      for (const invalidLease of [
+        { ...leasedIdentity(oldCommand), leaseToken: "stale-token" },
+        { ...leasedIdentity(oldCommand), fence: oldCommand.fence + 1 },
+      ]) {
+        assert.equal(
+          await repository.markScheduledTaskOutboxSucceeded(
+            invalidLease,
+            new Date("2026-09-06T12:00:30.000Z"),
+            confirmedNext(oldCommand, new Date("2026-09-09T12:00:00.000Z")),
+          ),
+          false,
+        )
+        const protectedState = await pool.query(
+          `SELECT task.next_run_at, command.status
+             FROM bff_scheduled_task AS task
+             JOIN bff_scheduled_task_outbox AS command
+               ON command.tenant_id = task.tenant_id AND command.task_id = task.task_id
+            WHERE task.tenant_id = $1 AND task.task_id = $2 AND command.outbox_id = $3`,
+          [tenants.stale, taskId, oldCommand.outboxId],
+        )
+        assert.equal(protectedState.rows[0].next_run_at, null)
+        assert.equal(protectedState.rows[0].status, "leased")
+      }
+      assert.equal(
+        await repository.markScheduledTaskOutboxSucceeded(leasedIdentity(oldCommand), new Date("2026-09-06T12:01:00.000Z"), confirmedNext(oldCommand, oldNext)),
+        true,
+      )
+      const state = await pool.query("SELECT revision, next_run_at FROM bff_scheduled_task WHERE tenant_id = $1 AND task_id = $2", [tenants.stale, taskId])
+      assert.equal(Number(state.rows[0].revision), 2)
+      assert.equal(state.rows[0].next_run_at, null)
+    })
+
+    await t.test("projection and success settlement roll back together on a mid-transaction SQL failure", async () => {
+      const { taskId } = await create(tenants.rollback, "rollback-next", { recurrenceAnchorAt: new Date("2026-09-07T12:00:00.000Z") })
+      const command = await claim(tenants.rollback, taskId, "worker-rollback-next")
+      await pool.query(
+        `CREATE OR REPLACE FUNCTION ${rollbackFunction}() RETURNS trigger
+         LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'fixture next settlement failure'; END; $$`,
+      )
+      await pool.query(
+        `CREATE TRIGGER ${rollbackTrigger}
+           BEFORE UPDATE ON bff_scheduled_task_outbox
+           FOR EACH ROW
+           WHEN (OLD.tenant_id = '${tenants.rollback}' AND NEW.status = 'succeeded')
+           EXECUTE FUNCTION ${rollbackFunction}()`,
+      )
+      rollbackTriggerInstalled = true
+      const projectedNext = new Date("2026-09-08T12:00:00.000Z")
+      await assert.rejects(
+        repository.markScheduledTaskOutboxSucceeded(leasedIdentity(command), new Date("2026-09-06T12:01:00.000Z"), confirmedNext(command, projectedNext)),
+        /fixture next settlement failure/u,
+      )
+      const rolledBack = await pool.query(
+        `SELECT task.next_run_at, command.status, command.lease_owner, command.lease_token, command.fence
+           FROM bff_scheduled_task AS task
+           JOIN bff_scheduled_task_outbox AS command
+             ON command.tenant_id = task.tenant_id AND command.task_id = task.task_id
+          WHERE task.tenant_id = $1 AND task.task_id = $2`,
+        [tenants.rollback, taskId],
+      )
+      assert.equal(rolledBack.rows[0].next_run_at, null)
+      assert.equal(rolledBack.rows[0].status, "leased")
+      assert.equal(rolledBack.rows[0].lease_owner, command.leaseOwner)
+      assert.equal(rolledBack.rows[0].lease_token, command.leaseToken)
+      assert.equal(Number(rolledBack.rows[0].fence), command.fence)
+
+      await pool.query(`DROP TRIGGER ${rollbackTrigger} ON bff_scheduled_task_outbox`)
+      await pool.query(`DROP FUNCTION ${rollbackFunction}()`)
+      rollbackTriggerInstalled = false
+      assert.equal(
+        await repository.markScheduledTaskOutboxSucceeded(leasedIdentity(command), new Date("2026-09-06T12:02:00.000Z"), confirmedNext(command, projectedNext)),
+        true,
+      )
+      const recovered = await pool.query(
+        `SELECT task.next_run_at, command.status
+           FROM bff_scheduled_task AS task
+           JOIN bff_scheduled_task_outbox AS command
+             ON command.tenant_id = task.tenant_id AND command.task_id = task.task_id
+          WHERE task.tenant_id = $1 AND task.task_id = $2`,
+        [tenants.rollback, taskId],
+      )
+      assert.equal(new Date(recovered.rows[0].next_run_at).toISOString(), projectedNext.toISOString())
+      assert.equal(recovered.rows[0].status, "succeeded")
+    })
+  } finally {
+    if (rollbackTriggerInstalled) {
+      await pool.query(`DROP TRIGGER IF EXISTS ${rollbackTrigger} ON bff_scheduled_task_outbox`).catch(() => undefined)
+      await pool.query(`DROP FUNCTION IF EXISTS ${rollbackFunction}()`).catch(() => undefined)
+    }
+    await pool.query("DELETE FROM bff_scheduled_task_outbox WHERE tenant_id = ANY($1::text[])", [Object.values(tenants)]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_scheduled_task WHERE tenant_id = ANY($1::text[])", [Object.values(tenants)]).catch(() => undefined)
+    await pool.end()
+  }
+})
+
+integrationTest("Scheduler receipt schema gates next projection before durable settlement", async (t) => {
+  const suffix = `${Date.now()}_${Math.random().toString(16).slice(2)}`
+  const cases = ["valid", "missing-meta", "missing-id", "invalid-calendar"]
+  const tenants = Object.fromEntries(cases.map((name) => [name, `next_receipt_${name.replaceAll("-", "_")}_${suffix}`]))
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC", max: 4 })
+  const repository = new PostgresScheduledTaskRepository({ pool })
+  const schema = await readFile(new URL("../database/schema.sql", import.meta.url), "utf8")
+  let responseMode = "valid"
+  const ownerRequests = []
+  const owner = createServer((request, response) => {
+    const chunks = []
+    request.on("data", (chunk) => chunks.push(Buffer.from(chunk)))
+    request.on("end", () => {
+      const schedule = JSON.parse(Buffer.concat(chunks).toString("utf8"))
+      ownerRequests.push({ mode: responseMode, taskId: schedule.body?.task_id })
+      const ownerSchedule = {
+        ...schedule,
+        id: "00000000-0000-4000-8000-000000000001",
+        next_due_at: responseMode === "invalid-calendar" ? "2026-02-30T08:00:00.000Z" : "2026-09-08T08:00:00.000Z",
+        version: 41,
+      }
+      if (responseMode === "missing-id") delete ownerSchedule.id
+      const envelope = {
+        data: { name: schedule.name, status: "registered", schedule: ownerSchedule },
+        meta: { request_id: request.headers["x-request-id"] },
+      }
+      if (responseMode === "missing-meta") delete envelope.meta
+      response.setHeader("content-type", "application/json")
+      response.end(JSON.stringify(envelope))
+    })
+  })
+  await new Promise((resolve, reject) => {
+    owner.once("error", reject)
+    owner.listen(0, "127.0.0.1", resolve)
+  })
+  const address = owner.address()
+  if (address === null || typeof address === "string") throw new Error("fixture Scheduler did not bind")
+  const delivery = new SchedulerOutboxDelivery({
+    upstreams: { scheduler: `http://127.0.0.1:${address.port}` },
+    schedulerServiceToken: "fixture-scheduler-token",
+    schedulerTargetUrl: "http://bff.test/internal/bff/scheduled-tasks/dispatch",
+    upstreamTimeoutMs: 1000,
+    upstreamMaxResponseBytes: 1024 * 1024,
+  })
+
+  try {
+    await pool.query(schema)
+    for (const name of cases) {
+      await t.test(name, async () => {
+        responseMode = name
+        const tenantId = tenants[name]
+        const taskId = `scheduled_receipt_${name.replaceAll("-", "_")}_${suffix}`
+        await repository.createScheduledTask(
+          ownerScope(tenantId, suffix),
+          taskInput(suffix, { recurrenceAnchorAt: new Date("2026-09-07T08:00:00.000Z") }),
+          taskId,
+          lineage(tenantId, `receipt-${name}-${suffix}`, suffix),
+        )
+        const ownerRequestCount = ownerRequests.length
+        const dispatchNow = new Date(Date.now() + 1_000)
+        const dispatcher = new ScheduledTaskOutboxDispatcher(repository, delivery, {
+          workerId: `receipt-${name}-${suffix}`,
+          batchSize: 1,
+          maxAttempts: 1,
+          clock: () => dispatchNow,
+        })
+        assert.equal(await dispatcher.runOnce(), 1)
+        assert.equal(ownerRequests.length, ownerRequestCount + 1)
+        assert.deepEqual(ownerRequests.at(-1), { mode: name, taskId })
+        const state = await pool.query(
+          `SELECT task.next_run_at, command.status
+             FROM bff_scheduled_task AS task
+             JOIN bff_scheduled_task_outbox AS command
+               ON command.tenant_id = task.tenant_id AND command.task_id = task.task_id
+            WHERE task.tenant_id = $1 AND task.task_id = $2`,
+          [tenantId, taskId],
+        )
+        if (name === "valid") {
+          assert.equal(new Date(state.rows[0].next_run_at).toISOString(), "2026-09-08T08:00:00.000Z")
+          assert.equal(state.rows[0].status, "succeeded")
+        } else {
+          assert.equal(state.rows[0].next_run_at, null)
+          assert.notEqual(state.rows[0].status, "succeeded")
+        }
+      })
+    }
+  } finally {
+    await pool.query("DELETE FROM bff_scheduled_task_outbox WHERE tenant_id = ANY($1::text[])", [Object.values(tenants)]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_scheduled_task WHERE tenant_id = ANY($1::text[])", [Object.values(tenants)]).catch(() => undefined)
+    await pool.end()
+    await new Promise((resolve) => owner.close(() => resolve()))
   }
 })
