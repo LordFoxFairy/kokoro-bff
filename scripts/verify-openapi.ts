@@ -1623,7 +1623,7 @@ function moveSessionContractErrors(
   responseComponents: Map<string, NamedBlock>,
 ): string[] {
   const errors: string[] = []
-  if (!/^  version: 8\.2\.0$/mu.test(source)) errors.push("moveSession must remain in current public contract version 8.2.0")
+  if (!/^  version: 8\.3\.0$/mu.test(source)) errors.push("moveSession must remain in current public contract version 8.3.0")
   const matches = operations.filter((operation) => operation.fields.get("operationId") === "moveSession")
   const operation = matches.length === 1 ? matches[0] : undefined
   if (operation?.method !== "POST" || operation.path !== "/v1/sessions/{id}/move") {
@@ -1743,7 +1743,7 @@ function renameProjectContractErrors(
   const require = (condition: boolean, message: string): void => {
     if (!condition) errors.push(`renameProject ${message}`)
   }
-  require(/^  version: 8\.2\.0$/mu.test(source), "current public contract must be version 8.2.0")
+  require(/^  version: 8\.3\.0$/mu.test(source), "current public contract must be version 8.3.0")
   const matches = operations.filter((operation) => operation.fields.get("operationId") === "renameProject")
   const operation = matches.length === 1 ? matches[0] : undefined
   if (operation?.method !== "PATCH" || operation.path !== "/v1/projects/{projectId}/name")

@@ -40,7 +40,7 @@ function inspectChatFailureContract(openapi) {
     if (!condition) errors.push(label)
   }
 
-  require(/^info:\n(?:.*\n){0,3}?  version: 8\.2\.0$/mu.test(openapi), "public info.version must be 8.2.0")
+  require(/^info:\n(?:.*\n){0,3}?  version: 8\.3\.0$/mu.test(openapi), "public info.version must be 8.3.0")
   require(/^      required: \[message_id, role, content, status, created_at\]$/mu.test(message), "failure must stay optional")
   const roles = [...(message.match(/role:\n\s+type: string\n\s+enum: \[([^\]]+)\]/u)?.[1] ?? "").matchAll(/[a-z_]+/gu)].map((match) => match[0])
   require(JSON.stringify(roles) === JSON.stringify(["user", "assistant"]), "Message roles must equal user and assistant")
@@ -504,7 +504,7 @@ test("CompleteSkillPackageUpload publishes an inactive user-only strict command"
 test("CompleteSkillPackageUpload binds owner v4 digest version and all eleven frozen command vectors", async () => {
   const manifest = JSON.parse(
     await readFile(
-      new URL("../../contract/vendor/kokoro-platform/494b118ae7c29f1fc1005122d72c6c2bbf2640b6/execution-operations-v5/manifest.json", import.meta.url),
+      new URL("../../contract/vendor/kokoro-platform/c94909f1c593f2b7ffd5f325786739da744ff31f/execution-operations-v5/manifest.json", import.meta.url),
       "utf8",
     ),
   )
@@ -579,7 +579,7 @@ test("ValidateSkillDraft describes one default-closed user-only attempt-bound co
 test("ValidateSkillDraft pins owner v4 tag 7 and all eight command digest vectors", async () => {
   const manifest = JSON.parse(
     await readFile(
-      new URL("../../contract/vendor/kokoro-platform/494b118ae7c29f1fc1005122d72c6c2bbf2640b6/execution-operations-v5/manifest.json", import.meta.url),
+      new URL("../../contract/vendor/kokoro-platform/c94909f1c593f2b7ffd5f325786739da744ff31f/execution-operations-v5/manifest.json", import.meta.url),
       "utf8",
     ),
   )
@@ -663,7 +663,7 @@ test("PublishSkill exposes one default-closed user-only command with no request 
 test("PublishSkill pins the inactive owner v4 PERSONAL command and all eight digest vectors", async () => {
   const manifest = JSON.parse(
     await readFile(
-      new URL("../../contract/vendor/kokoro-platform/494b118ae7c29f1fc1005122d72c6c2bbf2640b6/execution-operations-v5/manifest.json", import.meta.url),
+      new URL("../../contract/vendor/kokoro-platform/c94909f1c593f2b7ffd5f325786739da744ff31f/execution-operations-v5/manifest.json", import.meta.url),
       "utf8",
     ),
   )
@@ -731,7 +731,7 @@ test("PublishSkill semantic gate rejects body, state, status and legacy-operatio
 test("BeginSkillPackageUpload candidate names the exact inactive owner v4 command and digest version", async () => {
   const manifest = JSON.parse(
     await readFile(
-      new URL("../../contract/vendor/kokoro-platform/494b118ae7c29f1fc1005122d72c6c2bbf2640b6/execution-operations-v5/manifest.json", import.meta.url),
+      new URL("../../contract/vendor/kokoro-platform/c94909f1c593f2b7ffd5f325786739da744ff31f/execution-operations-v5/manifest.json", import.meta.url),
       "utf8",
     ),
   )
@@ -1034,6 +1034,7 @@ test("personal Skill installations replace legacy name toggles with exact five-o
     "setPersonalSkillInstallationEnabled",
   ])
     assert.ok(openapi.includes(`operationId: ${operation}`), operation)
+  for (const field of ["display_name", "summary", "source_status"]) assert.match(openapi.slice(openapi.indexOf("    SkillInstallation:"), openapi.indexOf("    SkillInstallationMutation:")), new RegExp(`\\b${field}\\b`, "u"))
   for (const forbidden of ["package_asset_ref", "content_digest", "execution_proof", "target_owner_scope"])
     assert.equal(openapi.slice(openapi.indexOf("  /v1/skill-installations:"), openapi.indexOf("  /v1/skills/github/preview:")).includes(forbidden), false)
 })
@@ -1066,7 +1067,7 @@ test("public7 retains the closed full execution head, five current-locator decis
   const { openapi } = await readContract()
   const document = load(openapi)
   const schemas = document.components.schemas
-  assert.equal(document.info.version, "8.2.0")
+  assert.equal(document.info.version, "8.3.0")
   const snapshot = schemas.SessionSnapshotResponse.properties.data
   assert.equal(Object.hasOwn(snapshot.properties, "active_run"), false)
   assert.equal(Object.hasOwn(snapshot.properties, "pending_pauses"), false)
@@ -1414,7 +1415,7 @@ test("R124 public7 publishes nullable snapshot process and the anchored Run proc
   const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
   const { openapi } = await readContract()
   const document = load(openapi)
-  assert.equal(document.info.version, "8.2.0")
+  assert.equal(document.info.version, "8.3.0")
   const snapshot = document.components.schemas.SessionSnapshotResponse.properties.data
   assert.ok(snapshot.required.includes("execution_process"))
   assert.deepEqual(snapshot.properties.execution_process, {
@@ -1470,7 +1471,7 @@ test("R146 Move is one strict additive public command with a durable synchronous
     Object.keys(pathItem).filter((key) => ["get", "post", "put", "patch", "delete"].includes(key)),
     ["post"],
   )
-  assert.equal(document.info.version, "8.2.0", "the prelaunch Skills V2 cutover advances the only public major without a path alias")
+  assert.equal(document.info.version, "8.3.0", "the prelaunch Skills V2 cutover advances the only public major without a path alias")
   assert.ok(baseline.some((entry) => entry.method === "POST" && entry.path === path && entry.operation_id === "moveSession"))
 
   const operation = pathItem.post
@@ -1637,7 +1638,7 @@ test("R240 rename contract remains one strict name PATCH beside the approved Bil
   const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
   const { openapi, baseline } = await readContract()
   const document = load(openapi)
-  assert.equal(document.info.version, "8.2.0")
+  assert.equal(document.info.version, "8.3.0")
   const route = "/v1/projects/{projectId}/name"
   const path = document.paths[route]
   assert.ok(path)
@@ -1805,7 +1806,7 @@ test("R240 rename semantic gate rejects input, receipt, status and header drift"
   const request = (before, after) => mutate("    RenameProjectRequest:", "    RenameProjectResponse:", before, after)
   const success = (before, after) => mutate("    RenameProjectResponse:", "    RenameProjectErrorResponse:", before, after)
   const mutations = [
-    openapi.replace("  version: 8.2.0", "  version: 7.1.0"),
+    openapi.replace("  version: 8.3.0", "  version: 7.1.0"),
     route("    patch:", "    post:"),
     route("operationId: renameProject", "operationId: renameProjectAlias"),
     route("x-kokoro-permission: project.update", "x-kokoro-permission: project.read"),

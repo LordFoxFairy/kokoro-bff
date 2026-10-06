@@ -3,7 +3,7 @@
   "status": "generated-not-activated",
   "owner": {
     "repository_path": "apps/kokoro-capability",
-    "repository_commit": "494b118ae7c29f1fc1005122d72c6c2bbf2640b6",
+    "repository_commit": "c94909f1c593f2b7ffd5f325786739da744ff31f",
     "package_name": "kokoro.platform.v1",
     "sources": [
       {
@@ -12,42 +12,42 @@
       },
       {
         "path": "contract/proto/kokoro/platform/v1/platform_runtime.proto",
-        "sha256": "2e1c0d19b986b43f05efd5ab8c2e9800d7b9f6785e93e25780006ae19007b502"
+        "sha256": "e5fd71e436f8d0ad271ae4ccfbcc323dbb691aafeacca04e29297e8f0a068db0"
       }
     ]
   },
   "execution_artifact": {
-    "path": "contract/vendor/kokoro-platform/494b118ae7c29f1fc1005122d72c6c2bbf2640b6/execution-operations-v7",
+    "path": "contract/vendor/kokoro-platform/c94909f1c593f2b7ffd5f325786739da744ff31f/execution-operations-v7",
     "artifact_version": "7.0.0",
     "status": "inactive",
     "routable": false,
-    "provenance_path": "contract/vendor/kokoro-platform/494b118ae7c29f1fc1005122d72c6c2bbf2640b6/execution-operations-v7/provenance.json",
+    "provenance_path": "contract/vendor/kokoro-platform/c94909f1c593f2b7ffd5f325786739da744ff31f/execution-operations-v7/provenance.json",
     "aggregate_sha256": "3384a88f31be1fdd3e15bcbceb33e4fd7d62b04dfbfef65fcc35c24ce7afbb72"
   },
   "execution_proof_chain": [
     {
-      "path": "contract/vendor/kokoro-platform/494b118ae7c29f1fc1005122d72c6c2bbf2640b6/execution-operations-v7",
+      "path": "contract/vendor/kokoro-platform/c94909f1c593f2b7ffd5f325786739da744ff31f/execution-operations-v7",
       "artifact_version": "7.0.0",
       "aggregate_sha256": "3384a88f31be1fdd3e15bcbceb33e4fd7d62b04dfbfef65fcc35c24ce7afbb72",
       "inherits_version": "6.0.0",
       "inherits_aggregate_sha256": "0d728881ba1046dc566131d63de71f6821ec636cf45837b5d937fee9872d5f91"
     },
     {
-      "path": "contract/vendor/kokoro-platform/494b118ae7c29f1fc1005122d72c6c2bbf2640b6/execution-operations-v6",
+      "path": "contract/vendor/kokoro-platform/c94909f1c593f2b7ffd5f325786739da744ff31f/execution-operations-v6",
       "artifact_version": "6.0.0",
       "aggregate_sha256": "0d728881ba1046dc566131d63de71f6821ec636cf45837b5d937fee9872d5f91",
       "inherits_version": "5.0.1",
       "inherits_aggregate_sha256": "3f97b3c98fd8e7ce46e4a8ea73237ddb85e764849d2b15dd28d0a3a58a69e42f"
     },
     {
-      "path": "contract/vendor/kokoro-platform/494b118ae7c29f1fc1005122d72c6c2bbf2640b6/execution-operations-v5",
+      "path": "contract/vendor/kokoro-platform/c94909f1c593f2b7ffd5f325786739da744ff31f/execution-operations-v5",
       "artifact_version": "5.0.1",
       "aggregate_sha256": "3f97b3c98fd8e7ce46e4a8ea73237ddb85e764849d2b15dd28d0a3a58a69e42f"
     }
   ],
   "descriptor": {
-    "path": "contract/vendor/kokoro-platform/494b118ae7c29f1fc1005122d72c6c2bbf2640b6/descriptor/platform-v1.binpb",
-    "sha256": "ae2683134d6b780a003c9c485177fbab06632ecbfaeeb548f96fc440f2b2048c"
+    "path": "contract/vendor/kokoro-platform/c94909f1c593f2b7ffd5f325786739da744ff31f/descriptor/platform-v1.binpb",
+    "sha256": "0467c1c45e8ac27c79cb906e27bfdb679d88739e45bfa38128f0f629bec686d5"
   },
   "generator": {
     "packages": {
@@ -59,14 +59,14 @@
     "configs": [
       {
         "path": "buf.platform.json",
-        "sha256": "865015bd706a7b294a0c00617e6c6778a767c489a5dced0bee5e6af8ebe0938b"
+        "sha256": "31ef9ce7fd46cd31533f24b233d92b95d33b08e70bd234b4d6f901b2379ca492"
       },
       {
         "path": "buf.platform.gen.json",
         "sha256": "9888ea0808f6967ebdfb859125eb54430b89ad3f4dbee4418902bfdf6a4540ab"
       }
     ],
-    "script_sha256": "3ad9483ce23e7670338dd950923addb79e06e7bf5e055f636b10860de33db300",
+    "script_sha256": "9a58e837a8e30eadc71a3548d93c1cf80bcc19208b5b323297670e14d9423908",
     "formatting": {
       "package": "prettier",
       "version": "3.9.6",
@@ -83,10 +83,7 @@
     "performance": "No network calls or application startup added. Runtime performance is unmeasured; this slice validates descriptor serialization only.",
     "failure_semantics": "Generation rejects source/config/package/tree/digest drift. The fixed V7 to V6 to V5 proof chain, descriptor, current Proto source and Get read binding fail closed; runtime adapter admits current user before Platform Connect.",
     "exit_path": "Regenerate from the pinned owner Proto with a reviewed compatible generator; generated wire types remain isolated from business code.",
-    "sources": [
-      "https://connectrpc.com/docs/node/getting-started/",
-      "https://github.com/bufbuild/protobuf-es/releases/tag/v2.14.0"
-    ]
+    "sources": ["https://connectrpc.com/docs/node/getting-started/", "https://github.com/bufbuild/protobuf-es/releases/tag/v2.14.0"]
   },
   "runtime": {
     "node": "22.22.2",
@@ -102,7 +99,7 @@
     },
     {
       "path": "kokoro/platform/v1/platform_runtime_pb.ts",
-      "sha256": "c9bdfddb7a43d548dca122a772bf220a4a11b68e31520b278ccea61f6f843638"
+      "sha256": "54cfecb89849735894a39657e466ccabd12a93dbef6447b21044b1472911e9b5"
     }
   ]
 }

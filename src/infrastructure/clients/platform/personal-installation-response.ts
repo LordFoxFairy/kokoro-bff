@@ -1,10 +1,20 @@
 import type { Timestamp } from "@bufbuild/protobuf/wkt"
-import { SkillInstallationChange, type ProductSkillInstallation } from "../../../generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
+import {
+  SkillInstallationChange,
+  SkillStatus,
+  type ProductSkillInstallation,
+} from "../../../generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u,
   SOURCE = /^skill:(?!skill:)[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u,
   EVENT = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u
 const changes: Record<number, string> = { 1: "installed", 2: "upgraded", 3: "reinstalled", 4: "enabled", 5: "disabled", 6: "removed", 7: "unchanged" }
+const sourceStatuses: Partial<Record<SkillStatus, string>> = {
+  [SkillStatus.ACTIVE]: "active",
+  [SkillStatus.DISABLED]: "disabled",
+  [SkillStatus.WITHDRAWN]: "withdrawn",
+  [SkillStatus.QUARANTINED]: "quarantined",
+}
 function instant(value: Timestamp | undefined, required: boolean): string | undefined {
   if (!value) {
     if (required) throw new Error("skill_installation_response_invalid")
@@ -17,6 +27,7 @@ function instant(value: Timestamp | undefined, required: boolean): string | unde
   return date.toISOString()
 }
 export function projectInstallation(value: ProductSkillInstallation | undefined) {
+  const sourceStatus = value === undefined ? undefined : sourceStatuses[value.sourceStatus]
   if (
     !value?.installationId ||
     !ID.test(value.installationId.value) ||
@@ -25,7 +36,11 @@ export function projectInstallation(value: ProductSkillInstallation | undefined)
     !value.seriesId ||
     !ID.test(value.seriesId.value) ||
     value.revision < 1n ||
-    value.revision > 18446744073709551615n
+    value.revision > 18446744073709551615n ||
+    value.displayName.length > 255 ||
+    !/\S/u.test(value.displayName) ||
+    value.summary.length > 65535 ||
+    sourceStatus === undefined
   )
     throw new Error("skill_installation_response_invalid")
   const installedAt = instant(value.installedAt, true),
@@ -48,6 +63,9 @@ export function projectInstallation(value: ProductSkillInstallation | undefined)
     installed_at: installedAt,
     updated_at: updatedAt,
     ...(removedAt === undefined ? {} : { removed_at: removedAt }),
+    display_name: value.displayName,
+    summary: value.summary,
+    source_status: sourceStatus,
   }
 }
 export function projectInstallationAck(value: {

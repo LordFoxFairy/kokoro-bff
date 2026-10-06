@@ -5,10 +5,10 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { test } from "node:test"
 
-const ownerCommit = "494b118ae7c29f1fc1005122d72c6c2bbf2640b6"
+const ownerCommit = "c94909f1c593f2b7ffd5f325786739da744ff31f"
 const sources = {
   "kokoro/common/v1/common.proto": "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08",
-  "kokoro/platform/v1/platform_runtime.proto": "2e1c0d19b986b43f05efd5ab8c2e9800d7b9f6785e93e25780006ae19007b502",
+  "kokoro/platform/v1/platform_runtime.proto": "e5fd71e436f8d0ad271ae4ccfbcc323dbb691aafeacca04e29297e8f0a068db0",
 }
 const root = new URL("../", import.meta.url)
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex")
@@ -73,7 +73,7 @@ test("Platform consumer pins exact owner Proto bytes and inactive V7 to V6 to V5
   )
   assert.deepEqual(manifest.descriptor, {
     path: `contract/vendor/kokoro-platform/${ownerCommit}/descriptor/platform-v1.binpb`,
-    sha256: "ae2683134d6b780a003c9c485177fbab06632ecbfaeeb548f96fc440f2b2048c",
+    sha256: "0467c1c45e8ac27c79cb906e27bfdb679d88739e45bfa38128f0f629bec686d5",
   })
   assert.deepEqual(
     manifest.owner.sources,
@@ -312,4 +312,12 @@ test("independent JCS rejects values outside the plain dense JSON domain", async
   assert.throws(() => canonicalizeJcs(sparse), /array element 0 is absent or undefined/)
   assert.throws(() => canonicalizeJcs([undefined]), /array element 0 is absent or undefined/)
   assert.throws(() => canonicalizeJcs(new Date(0)), /plain JSON/)
+})
+
+test("Platform generated Product installation exposes fixed metadata tags", async () => {
+  const source = await requiredFile("src/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.ts")
+  const text = source.toString("utf8")
+  assert.match(text, /displayName/u)
+  assert.match(text, /summary/u)
+  assert.match(text, /sourceStatus/u)
 })

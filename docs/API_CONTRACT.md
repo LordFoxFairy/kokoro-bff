@@ -1,4 +1,6 @@
-## R259-SKILLS-METADATA-BFF-D0：安装元信息契约（2026-10-06；仅设计）
+## R259-SKILLS-METADATA-BFF-D0：安装元信息契约（2026-10-06；D1冻结候选待Root验收）
+
+D1候选已写入public8.3/99与固定owner生成物；此为未发布工作树，不改变正常BFF/Web合同，Root验收前不得消费。
 
 固定 owner 为 Platform `c94909f1c593f2b7ffd5f325786739da744ff31f` / digest `4fe862adba0d460fa23713c124ba747d457f23f777043926739d16e35d350e07`。现五个 Product installation RPC、请求、分页、幂等、错误和 V7/V6/V5 历史 artifact 均不变；只在 `ProductSkillInstallation` 增 required tag10 `display_name`、tag11 `summary`、tag12 `source_status`。BFF public五个既有安装操作同步返回 required `display_name`、`summary`、`source_status`，OpenAPI additive升8.3.0但仍99 operations；成功/错误 envelope及`meta.request_id`不变。
 

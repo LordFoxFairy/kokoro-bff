@@ -7,7 +7,7 @@ import { Code, ConnectError } from "@connectrpc/connect"
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 import { createLiveTestBffServer } from "./doubles/server.ts"
 import { SkillInstallationChange } from "../dist/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
-import { projectInstallationAck, projectInstallationList } from "../dist/infrastructure/clients/platform/personal-installation-response.js"
+import { projectInstallation, projectInstallationAck, projectInstallationList } from "../dist/infrastructure/clients/platform/personal-installation-response.js"
 import {
   installPersonalDigest,
   removePersonalDigest,
@@ -28,6 +28,9 @@ const installation = () => ({
   enabled: true,
   installedAt: timestamp(1),
   updatedAt: timestamp(2),
+  displayName: "Research assistant",
+  summary: "",
+  sourceStatus: 2,
 })
 const config = {
   host: "127.0.0.1",
@@ -108,6 +111,9 @@ test("safe installation ACK maps enum, uint64 and UTC without private fields", (
         enabled: true,
         installed_at: "1970-01-01T00:00:01.000Z",
         updated_at: "1970-01-01T00:00:02.000Z",
+        display_name: "Research assistant",
+        summary: "",
+        source_status: "active",
       },
       change: "installed",
       event_id: "event-1",
@@ -115,7 +121,12 @@ test("safe installation ACK maps enum, uint64 and UTC without private fields", (
     },
   )
 })
-test("response rejects unknown enum, unchanged event and invalid page presence", () => {
+test("response rejects unknown metadata status, unchanged event and invalid page presence", () => {
+  assert.throws(() => projectInstallation({ ...installation(), sourceStatus: 1 }))
+  assert.throws(() => projectInstallation({ ...installation(), displayName: "   " }))
+  assert.throws(() => projectInstallation({ ...installation(), displayName: "x".repeat(256) }))
+  assert.throws(() => projectInstallation({ ...installation(), summary: "x".repeat(65_536) }))
+  assert.equal(projectInstallation({ ...installation(), summary: "" }).summary, "")
   assert.throws(() =>
     projectInstallationAck({
       installation: installation(),
@@ -141,7 +152,7 @@ test("response rejects unknown enum, unchanged event and invalid page presence",
 })
 test("all owner product installation projection vectors keep their published digests", async () => {
   const source = new URL(
-    "../contract/vendor/kokoro-platform/494b118ae7c29f1fc1005122d72c6c2bbf2640b6/execution-operations-v5/vectors/product-installation.json",
+    "../contract/vendor/kokoro-platform/c94909f1c593f2b7ffd5f325786739da744ff31f/execution-operations-v5/vectors/product-installation.json",
     import.meta.url,
   )
   const vectors = JSON.parse(await readFile(source, "utf8")).vectors.filter((vector) => vector.stage === "projection")

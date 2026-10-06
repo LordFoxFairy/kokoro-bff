@@ -74,7 +74,7 @@ test("Validate default-off candidate does not reach Platform", async () => {
 test("Validate projector matches all eight owner v4 command vectors", async () => {
   const manifest = JSON.parse(
     await readFile(
-      new URL("../contract/vendor/kokoro-platform/494b118ae7c29f1fc1005122d72c6c2bbf2640b6/execution-operations-v5/manifest.json", import.meta.url),
+      new URL("../contract/vendor/kokoro-platform/c94909f1c593f2b7ffd5f325786739da744ff31f/execution-operations-v5/manifest.json", import.meta.url),
       "utf8",
     ),
   )

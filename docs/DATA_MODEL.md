@@ -1,4 +1,6 @@
-## R259-SKILLS-METADATA-BFF-D0：数据边界（2026-10-06；仅设计）
+## R259-SKILLS-METADATA-BFF-D0：数据边界（2026-10-06；D1冻结候选待Root验收）
+
+D1候选保持`database/schema.sql`零diff；机器与投影实现不新增任何BFF持久事实，真实owner资源验证仍由Root执行。
 
 Platform `skills/installation`继续唯一拥有安装行、精确Skill revision逻辑关联、`display_name`、`summary`、`source_status`及command receipt。BFF仅在单次五个既有RPC响应中严格校验并投影三字段；`display_name`须非空白且JS `length<=255`，`summary`允许空串且JS `length<=65535`、原样不trim；Proto省略合法空summary由固定decoder得到`""`，不构成缺关联或坏数据。不创建安装或元信息表、缓存、snapshot、receipt、outbox、Redis key、索引、FK、migration或跨owner JOIN。`database/schema.sql`必须零diff。
 

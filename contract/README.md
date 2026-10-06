@@ -1,3 +1,5 @@
+Public 8.3.0 adds required safe installation display_name, summary, and source_status fields while retaining 99 operations and the existing envelopes. Platform owner pin is `c94909f1c593f2b7ffd5f325786739da744ff31f`; V5–V7 historical artifacts remain byte-exact.
+
 ## R256 Admin model routing public 8.2 candidate
 
 Public 8.2.0 adds four closed tenant-scoped admin model-routing operations and pins immutable System 3.0.0 commit `955bd587f46a771e43a4330d202d90a7d2d67262` / SHA-256 `94ed91655741cbba66ce80a4c41717b9179cc509cb6858534e0b78aa3e6dc059`. The generated System client is restricted to `listModelLabel`, `listModelRevision`, `listRoutingPolicy`, and `putRoutingPolicy`; runtime routes remain a later slice.

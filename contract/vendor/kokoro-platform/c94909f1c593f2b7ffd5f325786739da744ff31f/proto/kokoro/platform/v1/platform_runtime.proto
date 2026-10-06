@@ -838,6 +838,9 @@ message ProductSkillInstallation {
   google.protobuf.Timestamp installed_at = 7;
   google.protobuf.Timestamp updated_at = 8;
   google.protobuf.Timestamp removed_at = 9;
+  string display_name = 10;
+  string summary = 11;
+  kokoro.platform.v1.SkillStatus source_status = 12;
 }
 
 message InstallPersonalSkillRequest {

@@ -1,4 +1,6 @@
-## R259-SKILLS-METADATA-BFF-D0：安装元信息消费（2026-10-06；仅设计）
+## R259-SKILLS-METADATA-BFF-D0：安装元信息消费（2026-10-06；D1冻结候选待Root验收）
+
+**D1候选状态。** 已按本设计完成单pin机器、public8.3与十二字段strict投影；有效RED与focused GREEN已留证，但正常进程、真实owner和Web仍未发布，须Root独审及Node22/真实组合后方可改变当前事实。
 
 **当前事实与固定 owner。** Platform 已由 Root 发布 `c94909f1c593f2b7ffd5f325786739da744ff31f`，contract digest `4fe862adba0d460fa23713c124ba747d457f23f777043926739d16e35d350e07`；`ProductSkillInstallation` 在原九字段后 additive 增加 required `display_name=10`、`summary=11`、`source_status=12`。owner V1–V7历史共93文件；其中BFF vendor V5–V7为27文件，三者 aggregate `3384a88f…`、`0d728881…`、`3f97b3c9…` 仍 byte-exact，不造 V8、不重算历史 pin。当前 BFF `bac0cbf` 仍固定 Platform `494b118a…`、旧 descriptor `ae268313…` 和九字段 projector/public 8.2，因此正常进程保持不重载，且不得先向 Web 声称元信息可用。
 

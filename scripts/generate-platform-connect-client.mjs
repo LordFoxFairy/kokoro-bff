@@ -7,7 +7,7 @@ import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-const ownerCommit = "494b118ae7c29f1fc1005122d72c6c2bbf2640b6"
+const ownerCommit = "c94909f1c593f2b7ffd5f325786739da744ff31f"
 const vendorRoot = `contract/vendor/kokoro-platform/${ownerCommit}`
 const vendor = `contract/vendor/kokoro-platform/${ownerCommit}/proto`
 const artifacts = {
@@ -21,12 +21,12 @@ const artifactAggregates = {
   v7: "3384a88f31be1fdd3e15bcbceb33e4fd7d62b04dfbfef65fcc35c24ce7afbb72",
 }
 const descriptor = `${vendorRoot}/descriptor/platform-v1.binpb`
-const descriptorDigest = "ae2683134d6b780a003c9c485177fbab06632ecbfaeeb548f96fc440f2b2048c"
+const descriptorDigest = "0467c1c45e8ac27c79cb906e27bfdb679d88739e45bfa38128f0f629bec686d5"
 const output = path.join(root, "src/generated/platform-connect")
 const manifestPath = path.join(root, "contract/dependencies/platform-connect.json")
 const sourceDigests = {
   "kokoro/common/v1/common.proto": "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08",
-  "kokoro/platform/v1/platform_runtime.proto": "2e1c0d19b986b43f05efd5ab8c2e9800d7b9f6785e93e25780006ae19007b502",
+  "kokoro/platform/v1/platform_runtime.proto": "e5fd71e436f8d0ad271ae4ccfbcc323dbb691aafeacca04e29297e8f0a068db0",
 }
 const directories = ["kokoro", "kokoro/common", "kokoro/common/v1", "kokoro/platform", "kokoro/platform/v1"]
 const generatedFiles = ["kokoro/common/v1/common_pb.ts", "kokoro/platform/v1/platform_runtime_pb.ts"]
@@ -164,8 +164,8 @@ export function assertProofChain(v5, v6, v7) {
   assert.deepEqual(
     v6.sourcePins,
     [
-      { path: "contract/proto/kokoro/platform/v1/platform_runtime.proto", sha256: sourceDigests["kokoro/platform/v1/platform_runtime.proto"] },
-      { path: "contract/descriptor/platform-v1.binpb", sha256: descriptorDigest },
+      { path: "contract/proto/kokoro/platform/v1/platform_runtime.proto", sha256: "2e1c0d19b986b43f05efd5ab8c2e9800d7b9f6785e93e25780006ae19007b502" },
+      { path: "contract/descriptor/platform-v1.binpb", sha256: "ae2683134d6b780a003c9c485177fbab06632ecbfaeeb548f96fc440f2b2048c" },
       { path: "contract/provenance.json", sha256: "1f04cc50707d075893ff0e95e5c25f5a686d1206be26f67ce86ffe3f38bb696c" },
       { path: "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts", sha256: "a8e5124e38f8bff1aa3838f9bec0e0e1f70f894b30161675b0f5f6b6308d1c7f" },
       { path: "contract/openapi/platform-http.openapi.json", sha256: "4b42dd161c972b3447cfea3a6f80a949bbdb573c46213dbf8ef4c3ecb58e72da" },
