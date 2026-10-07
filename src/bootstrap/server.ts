@@ -52,6 +52,8 @@ import { publishSkillRoute } from "../http/routes/publish-skill.js"
 import { skillInstallationRoute } from "../http/routes/skill-installations.js"
 import { moveSessionRoute } from "../http/routes/move-session.js"
 import { managedPersonalSkillsRoute } from "../http/routes/managed-personal-skills.js"
+import { createPersonalSkillVersionRoute } from "../http/routes/create-personal-skill-version.js"
+import { withdrawPersonalSkillRoute } from "../http/routes/withdraw-personal-skill.js"
 
 async function handle(
   request: IncomingMessage,
@@ -161,6 +163,18 @@ async function handle(
   }
 
   const businessPath = segments.slice(1)
+  const isCreatePersonalSkillVersion =
+    request.method === "POST" && businessPath.length === 4 && businessPath[0] === "self" && businessPath[1] === "skills" && businessPath[3] === "versions"
+  if (isCreatePersonalSkillVersion) {
+    await createPersonalSkillVersionRoute(request, response, config, composition.sessionAdmission, id, businessPath[2] ?? "", composition.skillDraftClient)
+    return
+  }
+  const isWithdrawPersonalSkill =
+    request.method === "POST" && businessPath.length === 4 && businessPath[0] === "self" && businessPath[1] === "skills" && businessPath[3] === "withdraw"
+  if (isWithdrawPersonalSkill) {
+    await withdrawPersonalSkillRoute(request, response, config, composition.sessionAdmission, id, businessPath[2] ?? "", composition.skillDraftClient)
+    return
+  }
   const isManagedPersonalSkillRead =
     request.method === "GET" &&
     ((businessPath.length === 2 && businessPath[0] === "self" && businessPath[1] === "skills") ||

@@ -157,3 +157,126 @@ test("credential snapshot rejects symlink, non-regular, duplicate tenant and inv
     await assert.rejects(new CatalogCredentialSource(file).read("tenant"), /invalid/u)
   }
 })
+
+test("CatalogTokenSource already-aborted caller performs zero credential and IAM work", async () => {
+  const original = globalThis.fetch
+  let credentialReads = 0
+  let fetches = 0
+  globalThis.fetch = async () => {
+    fetches += 1
+    throw new Error("IAM fetch must not start")
+  }
+  try {
+    const credentials = {
+      read: async () => {
+        credentialReads += 1
+        return { ...item(1), cacheKey: "cancelled-before-read" }
+      },
+    }
+    const controller = new AbortController()
+    controller.abort(new Error("caller-already-left"))
+    const pending = new CatalogTokenSource("http://iam", credentials, 1000).get("tenant", controller.signal)
+    await assert.rejects(pending, /caller-already-left/u)
+    assert.equal(credentialReads, 0)
+    assert.equal(fetches, 0)
+  } finally {
+    globalThis.fetch = original
+  }
+})
+
+test("CatalogTokenSource cancellation during held credential read starts no late IAM fetch", async () => {
+  const original = globalThis.fetch
+  let fetches = 0
+  let releaseCredential
+  let credentialStartedResolve
+  const credentialStarted = new Promise((resolve) => {
+    credentialStartedResolve = resolve
+  })
+  const heldCredential = new Promise((resolve) => {
+    releaseCredential = resolve
+  })
+  globalThis.fetch = async () => {
+    fetches += 1
+    throw new Error("late IAM fetch must not start")
+  }
+  try {
+    const credentials = {
+      read: async () => {
+        credentialStartedResolve()
+        return heldCredential
+      },
+    }
+    const controller = new AbortController()
+    const pending = new CatalogTokenSource("http://iam", credentials, 1000).get("tenant", controller.signal)
+    await credentialStarted
+    controller.abort(new Error("caller-left-during-credential"))
+    releaseCredential({ ...item(1), cacheKey: "cancelled-after-read" })
+    await assert.rejects(pending, /caller-left-during-credential/u)
+    assert.equal(fetches, 0)
+  } finally {
+    globalThis.fetch = original
+  }
+})
+
+test("CatalogTokenSource expired absolute deadline performs zero credential and IAM work without an aborted signal", async () => {
+  const original = globalThis.fetch
+  let credentialReads = 0
+  let fetches = 0
+  globalThis.fetch = async () => {
+    fetches += 1
+    throw new Error("IAM fetch must not start")
+  }
+  try {
+    const credentials = {
+      read: async () => {
+        credentialReads += 1
+        return { ...item(1), cacheKey: "expired-before-read" }
+      },
+    }
+    const signal = new AbortController().signal
+    const pending = new CatalogTokenSource("http://iam", credentials, 1000).get("tenant", signal, performance.now() - 1)
+    await assert.rejects(pending)
+    assert.equal(signal.aborted, false)
+    assert.equal(credentialReads, 0)
+    assert.equal(fetches, 0)
+  } finally {
+    globalThis.fetch = original
+  }
+})
+
+test("CatalogTokenSource held credential crossing the absolute deadline starts no IAM fetch", async () => {
+  const original = globalThis.fetch
+  let fetches = 0
+  let releaseCredential
+  let credentialStartedResolve
+  const credentialStarted = new Promise((resolve) => {
+    credentialStartedResolve = resolve
+  })
+  const heldCredential = new Promise((resolve) => {
+    releaseCredential = resolve
+  })
+  globalThis.fetch = async () => {
+    fetches += 1
+    throw new Error("late IAM fetch must not start")
+  }
+  try {
+    const credentials = {
+      read: async () => {
+        credentialStartedResolve()
+        return heldCredential
+      },
+    }
+    const signal = new AbortController().signal
+    const deadlineAt = performance.now() + 5
+    const pending = new CatalogTokenSource("http://iam", credentials, 1000).get("tenant", signal, deadlineAt)
+    await credentialStarted
+    await new Promise((resolve) => setTimeout(resolve, Math.max(1, deadlineAt - performance.now() + 1)))
+    assert.ok(performance.now() >= deadlineAt)
+    releaseCredential({ ...item(1), cacheKey: "expired-after-read" })
+    await assert.rejects(pending)
+    assert.equal(signal.aborted, false)
+    assert.equal(fetches, 0)
+  } finally {
+    globalThis.fetch = original
+  }
+})

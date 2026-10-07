@@ -1,10 +1,11 @@
 import { create } from "@bufbuild/protobuf"
-import { createClient } from "@connectrpc/connect"
+import { Code, ConnectError, createClient } from "@connectrpc/connect"
 import { createConnectTransport } from "@connectrpc/connect-node"
 import { CommandIdentitySchema } from "../../../generated/platform-connect/kokoro/common/v1/common_pb.js"
 import {
   BeginSkillPackageUploadRequestSchema,
   CompleteSkillPackageUploadRequestSchema,
+  CreateSkillVersionRequestSchema,
   CreateSkillDraftRequestSchema,
   GetSkillPackageUploadRequestSchema,
   OwnerScopeSchema,
@@ -12,9 +13,11 @@ import {
   PublishSkillRequestSchema,
   SkillCatalogService,
   SkillIdSchema,
+  SkillSourceRefSchema,
   SkillMetadataSchema,
   SkillScopeKind,
   ValidateSkillDraftRequestSchema,
+  WithdrawSkillRequestSchema,
 } from "../../../generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
 import type { CatalogTokenSource } from "./catalog-token.js"
 
@@ -180,6 +183,66 @@ export class CatalogConnectClient {
         headers: { authorization: `Bearer ${token}`, "x-tenant-ref": input.tenant },
         timeoutMs: this.timeoutMs,
       },
+    )
+  }
+
+  async createPersonalVersion(
+    input: {
+      requestId: string
+      commandId: string
+      digest: string
+      tenant: string
+      user: string
+      baseSkillId: string
+      displayName: string
+      summary: string
+      tags: string[]
+    },
+    signal: AbortSignal,
+    deadlineAt: number,
+  ) {
+    signal.throwIfAborted()
+    const token = await this.tokens.get(input.tenant, signal, deadlineAt)
+    signal.throwIfAborted()
+    const remaining = Math.floor(deadlineAt - performance.now())
+    if (remaining <= 0) throw new ConnectError("catalog deadline exceeded", Code.DeadlineExceeded)
+    return this.#client.createSkillVersion(
+      create(CreateSkillVersionRequestSchema, {
+        requestId: input.requestId,
+        command: create(CommandIdentitySchema, { commandId: input.commandId, requestDigest: input.digest }),
+        ownerScope: create(OwnerScopeSchema, { kind: "user", id: input.user }),
+        baseSkillId: create(SkillIdSchema, { value: input.baseSkillId }),
+        metadata: create(SkillMetadataSchema, {
+          displayName: input.displayName,
+          summary: input.summary,
+          tags: input.tags,
+          metadataJson: Buffer.from("{}", "utf8"),
+        }),
+        productContext: create(ProductCatalogContextSchema, { subjectId: input.user, ownerScope: create(OwnerScopeSchema, { kind: "user", id: input.user }) }),
+      }),
+      { signal, headers: { authorization: `Bearer ${token}`, "x-tenant-ref": input.tenant }, timeoutMs: remaining },
+    )
+  }
+
+  async withdrawPersonal(
+    input: { requestId: string; commandId: string; digest: string; tenant: string; user: string; skillId: string; reason: string },
+    signal: AbortSignal,
+    deadlineAt: number,
+  ) {
+    signal.throwIfAborted()
+    const token = await this.tokens.get(input.tenant, signal, deadlineAt)
+    signal.throwIfAborted()
+    const remaining = Math.floor(deadlineAt - performance.now())
+    if (remaining <= 0) throw new ConnectError("catalog deadline exceeded", Code.DeadlineExceeded)
+    return this.#client.withdrawSkill(
+      create(WithdrawSkillRequestSchema, {
+        requestId: input.requestId,
+        command: create(CommandIdentitySchema, { commandId: input.commandId, requestDigest: input.digest }),
+        sourceRef: create(SkillSourceRefSchema, { value: `skill:${input.skillId}` }),
+        reason: input.reason,
+        productContext: create(ProductCatalogContextSchema, { subjectId: input.user, ownerScope: create(OwnerScopeSchema, { kind: "user", id: input.user }) }),
+      }),
+      { signal, headers: { authorization: `Bearer ${token}`, "x-tenant-ref": input.tenant }, timeoutMs: remaining },
     )
   }
 }

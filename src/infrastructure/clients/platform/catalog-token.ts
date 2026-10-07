@@ -8,8 +8,12 @@ export class CatalogTokenSource {
     private readonly credentials: CatalogCredentialSource,
     private readonly timeoutMs: number,
   ) {}
-  async get(tenantId: string, signal?: AbortSignal): Promise<string> {
+  async get(tenantId: string, signal?: AbortSignal, deadlineAt?: number): Promise<string> {
+    signal?.throwIfAborted()
+    if (deadlineAt !== undefined && performance.now() >= deadlineAt) throw new Error("catalog_token_deadline")
     const credential = await this.credentials.read(tenantId)
+    signal?.throwIfAborted()
+    if (deadlineAt !== undefined && performance.now() >= deadlineAt) throw new Error("catalog_token_deadline")
     const cached = this.#tokens.get(credential.cacheKey)
     if (cached && cached.expiresAt - Date.now() > 5_000) return cached.value
     let flight = this.#flights.get(credential.cacheKey)

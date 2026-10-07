@@ -1,3 +1,7 @@
+## R268 lifecycle runtime candidate (not released)
+
+The public 8.5.0 / 103-operation candidate now has the two named runtime routes. Root verified the frozen source and existing engineering gates; real IAM/Platform persistence composition and user E2E qualification remain pending. Web must not consume this candidate yet. Normal BFF remains 930028b / public 8.4.0. No machine artifact, generated client, Schema or existing operation changes belong to this runtime slice. The earlier machine-only entry below is historical.
+
 ## R267 lifecycle machine candidate (not released)
 
 Public 8.5.0 / 103 operations is a machine-only candidate adding `createPersonalSkillVersion` and `withdrawPersonalSkill`. Runtime routes are not implemented and Web must not consume this candidate. Existing 101 operations and Platform Connect pins remain unchanged.

@@ -1,3 +1,11 @@
+## R268 个人技能生命周期运行候选（未发行、未正常激活）
+
+本次候选在 a55f70f3 的 public 8.5.0 / 103 机器定义上实现两个精确个人命令；正常 BFF 仍为 930028b9721587e9c21535eff1e78ce361b82df9 / 8.4.0，Web 禁止在真实 owner 资格通过前消费候选。新增两个 input、两个 owner 3.0 digest projector、两个具名 route 与一个仅服务这两命令的请求生命周期 helper；复用既有 Catalog client/token 与 bootstrap，无 Schema、第二 receipt、owner mirror、latest 或自动升级/重试。
+
+Root 对最终冻结 13 路径重跑：format/lint/typecheck/build exit 0；contract:check 295 PASS / 0 FAIL，architecture 35 PASS / 0 FAIL，默认 864 PASS / 0 FAIL / 2 既有 SKIP；目标两 suite 22 PASS / 0 FAIL / 0 SKIP。4 个既有 OpenAPI warning保留。真实本地 HTTP/生成 Connect binary 和固定正式 owner digest 向量证明此候选的传输/校验边界，不是正式 IAM/Platform PostgreSQL 组合或用户整页验收。独审 1338f91c 绑定最终 manifest e99ffc08，旧两 P1/三 P2与 early-body 缺口在本切片闭合；Root 核其余521文件及原 Catalog/bootstrap/credential 断言保护。
+
+原全部实际 RED、两次类型错误、格式失败及测试 oracle 错误证据保留于 Root var/dev/r255-preserve/r268-*。后继仍须真实 IAM→BFF→Platform receipt/replay、安装精确 revision 保持和撤权拒绝资格，再接 Web 新版本/撤回 UI及浏览器 CRUD。真实 owner integration / 正常加载 / 用户端到端：未运行，不记通过。源码候选提交不等公开发行或完整 T-K03 通过；原正常服务和共享基础设施未重启/重置。
+
 ## R266 本人 Skill 管理读取源码/机器已验收（2026-10-06 23:38 UTC）
 
 本片准备由Root精确提交；下方候选/D0/旧版本文字为历史，以本段和实际commit为当前事实。Public 8.4.0/101正式源码新增exact GET /v1/self/skills及/{skill_id}，固定Platform HTTP3.3 owner3d4ba6c/rawb6e5d0e0，旧vendor3.2删除，正规生成16输出且原六/原99 wire和原components保持。Connect/Proto c949独立pin、数据库/Redis/凭据文件与安装/发布命令不变。
