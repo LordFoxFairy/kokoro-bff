@@ -1,14 +1,26 @@
+## R284 Project scope release worker 数据边界（目标，尚未实施）
+
+当前 commit `6f20f81a8d15992b35bc07e76ac8808d7072bee8` 的 canonical schema 已包含 `bff_project_deletion` 与 `bff_project_scope_release_outbox`，本地删除事务、N+1冻结、约束、rollback、receipt replay与status完整性已通过Root隔离PostgreSQL 16/0。R284不新增表、列、索引、兼容DDL或第二receipt；正常schema组合仍未激活，真实Storage worker/ACK unknown尚未验证。
+
+repository只在短事务中领取due pending或过期leased row，成对写lease owner/expiry并增加fence；网络调用在事务外。settle按tenant+command+state leased+lease owner+fence+未过期lease做CAS，并以Project聚合行作为同Project结算序列化点，从冻结的唯一Project scope与完整Conversation scope集合重算状态。lost lease/晚ACK/取消后返回均零写；每次settle清理lease pair。原deletion receipt、response_data、response_status与Location永不随worker更新。
+
+`attempt_count`只用于观测/退避，不能在8次或任意次数后把unknown写成blocked/failed。transport unknown与可信retryable继续原command/digest pending；可信terminal写blocked。唯一资格恢复标记仍落现行state/error/available_at/lease字段：固定owner正规`UNAUTHENTICATED`至少冷却300秒、每轮最多一条、同identity/command的新fence一次RPC；不得新增repair表、换key或由用户session重建身份。PermissionDenied、InvalidArgument、digest mismatch、precondition和损坏row保持blocked；普通claim不得覆盖。
+
+ACK不含scope identity，不能把响应counts当关联键。持久字段`tenant_id`、`owner_subject_id`、`actor_id`、`scope_kind/scope_id`、`command_id`、`request_digest`，以及由`scope_kind`固定派生的两种operation，是唯一可信调用上下文；`actor_id = owner_subject_id`的既有约束保持，且不发送actor header。operation不是持久列：project固定`storage.release_project_scope:v1`、conversation固定`storage.release_conversation_scope:v1`，并已纳入保存的digest；投递不得替换digest。`released`只表示Storage接受逻辑release，物理状态不入本仓新事实且公开仍为pending。
+
+后继真实PG门须覆盖双worker过期fence、晚ACK CAS0、同Project并发settle、blocked不被普通claim吞、300秒资格恢复选择上限、shutdown取消与重启samecommand；再与固定Storage owner验证receipt/replay。完整DELETE并发与COMMIT-unknown、正常schema组合仍单独OPEN。
+
+
 ## R282 Project 删除数据当前态（本地候选）
 
 当前 canonical 候选已包含 Project deletion receipt 与 N+1 scope release outbox，BFF 本地同事务聚合删除、约束、回滚、重放与完整性读取已通过 Root 隔离 PostgreSQL 验证。正常运行实例仍未激活该候选；Storage release worker 与物理清理证据尚不存在，因此 logical 状态之外的 physical cleanup 始终视为 pending，T-C05 不得标记 PASS。下方 R276 数据方案仍为字段与事务语义权威。
 
-## R276-PROJECT-DELETE-D0：Project 墓碑、聚合 receipt 与 N+1 release outbox（机器候选；数据与运行未实现）
+## R276-PROJECT-DELETE-D0：Project 墓碑、聚合 receipt 与 N+1 release outbox（本地数据/runtime 已实现；worker 未实现）
 
 > API shape 见 [API_CONTRACT.md](./API_CONTRACT.md) 同名章节，锁序、worker 与模块放置见
 > [TECHNICAL_DESIGN.md](./TECHNICAL_DESIGN.md) 同名章节。当前正式已发布 contract 与正常 runtime 仍为
-> `8.5.0 / 103 operations`；当前工作树已有 `8.6.0 / 105 operations` 机器候选，但尚未发行或生成消费者。当前 canonical
-> schema 已有 `bff_project.deleted_at` 与 active partial index；以下新增表/约束及 runtime、owner/browser 链仍是目标，
-> 不是已执行 DDL 或已实现能力。
+> `8.5.0 / 103 operations`；当前工作树已有 `8.6.0 / 105 operations` 机器候选，但尚未发行或生成消费者。当前 `6f20f81a` canonical
+> schema、两张新增表/约束与本地 runtime 已实现并通过隔离验证；Storage worker、正常schema组合激活及owner/browser链仍是目标。
 
 ### 当前事实与不变边界
 
@@ -19,7 +31,7 @@
 - Storage 固定 owner contract 已有 Project/Conversation scope release；BFF 只持久可信 scope identity、command digest、
   ACK 投影和 lease/fence，不复制 Storage 对象清单或物理 cleanup 状态。
 
-### 目标 canonical 关系
+### 当前 `6f20f81a` 已实现的 canonical 关系
 
 #### `bff_project_deletion`
 
@@ -40,10 +52,10 @@ Project/key 异 fingerprint 只能冲突，不能覆盖 receipt；同 key 跨 Pr
 
 冻结成员集合与 owner command 一体化的具名 outbox：
 
-- identity：`command_id`、`tenant_id`、`project_id`、`scope_kind IN ('project','conversation')`、`scope_id`；
-- owner request：`request_digest` 与固定 owner operation；Project 一条、每个冻结 Conversation 一条；
+- identity：`command_id`、`tenant_id`、`project_id`、`owner_subject_id`、`actor_id`、`scope_kind IN ('project','conversation')`、`scope_id`；既有约束要求`actor_id = owner_subject_id`；
+- owner request：持久`request_digest`；owner operation不是列，而是由`scope_kind`固定派生为`storage.release_project_scope:v1`或`storage.release_conversation_scope:v1`且已纳入digest；Project 一条、每个冻结 Conversation 一条；
 - delivery：`state IN ('pending','leased','released','blocked')`、`attempt_count`、`available_at`、`lease_owner`、
-  `lease_expires_at`、`lease_fence`、`last_error_code`、`created_at`、`updated_at`、`released_at`；
+  `lease_expires_at`、`fence`、`last_error_code`、`created_at`、`updated_at`、`released_at`；
 - `UNIQUE (tenant_id, project_id, scope_kind, scope_id)` 与 `UNIQUE (command_id)`；Project command 必须恰好一条，
   Conversation 行集合本身就是冻结成员证明。
 

@@ -1,3 +1,12 @@
+## R284 Project scope release worker 文档门（2026-10-07；未实施）
+
+BFF本地Project删除切片已由Root提交为`6f20f81a8d15992b35bc07e76ac8808d7072bee8`：19路径包含本地runtime、canonical两表与`8.6.0 / 105`机器候选，Root隔离HTTP/PostgreSQL为16/0。正常BFF仍运行`39db` / public`8.5.0`，未激活本候选；Storage worker、正常schema组合、Web 17条用户链、完整DELETE并发/COMMIT-unknown及真实Storage ACK-unknown恢复均未验，T-C05保持OPEN。
+
+本轮只收敛后继设计：新增具名scope-release client、dispatcher、outbox port与PostgreSQL repository，并只接现business-store/repositories/runtime/server四装配入口。复用固定Storage `e8b9928418924812587b7ac07900aee4be5bc27f`/combined`c22b5c10ee698d579753dcac370be371d8dba1df8fead1a12883f5443fbad18a`、现两表和原N+1命令；不新增public operation、Schema、receipt、通用bus或repair API。
+
+恢复政策已锁定：普通claim不动blocked；unknown/retryable永远同command/digest恢复且不按次数冒终态；只有正规`UNAUTHENTICATED`资格错误可在至少300秒冷却、每轮最多一条、同可信identity/新fence下尝试一次可能写的RPC。其它terminal/损坏保持blocked。下一阶段须先用真实PostgreSQL与固定Storage owner做failure-first RED；本D0未运行任何门、资源或用户验收。
+
+
 ## R282 Project 删除本地候选（已实现、未发行）
 
 当前工作树已实现 Project DELETE/status、本地事务、canonical SQL、Conversation/ScheduledTask 聚合处理与 Storage release outbox；Root 隔离 HTTP/PostgreSQL 16/0 及完整工程门已通过。正常 BFF 仍运行正式 `39db` / public `8.5.0`，本工作树 `8.6.0 / 105 operations` 机器与 runtime 候选尚未正式发行或激活；Storage worker、Web 消费和 17 条真实用户链均未实现验收，T-C05 仍为 OPEN。

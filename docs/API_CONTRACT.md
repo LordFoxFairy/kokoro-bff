@@ -1,13 +1,24 @@
+## R284 Project scope release worker API边界（目标，尚未实施）
+
+本片不新增或修改 public API。当前 commit `6f20f81a8d15992b35bc07e76ac8808d7072bee8` 已具备本地 Project DELETE/status runtime、SQL与 `8.6.0 / 105` 机器候选；正常服务仍为 `39db` / public `8.5.0`，尚未激活或供Web消费。worker完成后，原 `DELETE` 仍只返回并重放保存的 `202 {data:{...,logical_release_state:"pending",physical_cleanup_state:"pending"}}`，`GET .../deletion`仍是唯一当前投影；request ID、Location、closed errors与无条件读取语义不变。
+
+BFF只调用固定Storage internal-owner `ReleaseProjectScope`与`ReleaseConversationScope`。请求body只有正式`CommandIdentity`；tenant/subject/scope kind/scope id来自持久可信metadata，service为`web-bff`，不得发送actor header。Storage ACK没有scope回显；BFF只在精确RPC、当前lease/fence与`scope_released=true`同时成立时接受，uint64 counts不转不安全Number且不作为物理清理完成证明。
+
+错误/恢复为内部状态机而非新public错误：unknown、cancel、deadline、断连、无ACK和正规retryable tuple保`pending`并以同command/digest恢复；可信terminal为`blocked`。普通claim不重开blocked。只有固定owner正规`UNAUTHENTICATED`资格错误可在至少300秒冷却、每轮最多一条、同身份/命令/新fence下作一次可能写的恢复RPC；PermissionDenied、InvalidArgument、digest mismatch、precondition与坏shape不得自动恢复。public GET仅观察`pending|blocked|released`，不暴露owner code、lease、attempt、credential或内部恢复原因；`physical_cleanup_state`继续固定`pending`。
+
+后继必须以固定Storage owner真RPC验证成功、replay、丢ACK、错误tuple与错误metadata，不以mock response宣称owner资格；public机器仍不因worker增加operation。
+
+
 ## R282 Project 删除 API 当前态（候选，未发行）
 
 当前工作树已实现候选 `DELETE /v1/projects/{projectId}` 与 `GET /v1/projects/{projectId}/deletion`，并通过 Root 隔离 HTTP/PostgreSQL 16/0；公开 shape、closed errors、header-only request ID 与无条件 status GET 均保持下方 R276 方案。正常正式 API 仍为 `8.5.0 / 103 operations`，`8.6.0 / 105` 尚未发行或供 Web 消费，不能据此宣称用户链完成。
 
-## R276-PROJECT-DELETE-D0：公开删除与状态资源（目标 `8.6.0 / 105`；机器候选，未发行）
+## R276-PROJECT-DELETE-D0：公开删除与状态资源（本地 runtime 已实现；机器候选未发行）
 
 > 技术编排见 [TECHNICAL_DESIGN.md](./TECHNICAL_DESIGN.md) 同名章节，表、事务和 outbox 见
 > [DATA_MODEL.md](./DATA_MODEL.md) 同名章节。当前正式已发布 contract 与正常 runtime 仍为 `8.5.0 / 103 operations`；
-> 当前工作树的 `8.6.0 / 105 operations` OpenAPI 机器候选已包含以下两个 operation，但尚未发行、生成消费者或实施
-> runtime、SQL、owner/browser 链。Storage 单 Asset 删除不进入本次版本。
+> 当前工作树的 `8.6.0 / 105 operations` OpenAPI 机器候选与本地 runtime/SQL 已由 `6f20f81a` 实现，但尚未发行、生成消费者、
+> 接入 Storage release worker 或完成 owner/browser 链。Storage 单 Asset 删除不进入本次版本。
 
 ### 公开 owner、授权和共同约束
 

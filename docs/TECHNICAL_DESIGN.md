@@ -1,23 +1,55 @@
+## R284 Project scope release worker 文档门（目标，尚未实施）
+
+当前 commit `6f20f81a8d15992b35bc07e76ac8808d7072bee8` 已提交 Project 删除的 BFF 本地事务、两张 canonical 表与 `8.6.0 / 105` 机器候选，并由 Root 在隔离 HTTP/PostgreSQL 中验证 16/0；正常 BFF 仍运行 `39db` / public `8.5.0`，本候选未激活。下一切片只补提交后 Storage 逻辑 scope release 的具名 worker；不改原始 DELETE `202 pending` receipt、公开状态 shape、Schema、generated Storage pin 或 Web。Storage worker、正常 schema 组合、Web 17 条用户链、完整 DELETE 并发/COMMIT-unknown 与真实 Storage ACK-unknown 恢复均未验。
+
+### §8 局部放置门
+
+| 项 | 结论 |
+| --- | --- |
+| Owner | `kokoro-bff` 唯一拥有 `bff_project_scope_release_outbox` 的 claim/lease/settle 与 Project deletion 聚合投影；`kokoro-storage` 固定 `e8b9928418924812587b7ac07900aee4be5bc27f` / combined `c22b5c10ee698d579753dcac370be371d8dba1df8fead1a12883f5443fbad18a` 唯一拥有 scope release 与物理对象生命周期。 |
+| 当前事实 | `project-delete.ts` 已原子写入稳定 N+1 command/digest/可信 tenant、subject、actor、scope；两表已有 pending/leased/released/blocked、lease/fence/available_at/attempt/error。generated client 已含 `ReleaseProjectScope`/`ReleaseConversationScope`，ACK 只有 `scope_released`、`replayed` 与 uint64 counts，不回显 scope。尚无 worker。 |
+| 目标职责 | 四个具名普通文件：`src/infrastructure/clients/storage/scope-release-client.ts` 只调用两条固定 RPC；`src/application/project-scope-release-outbox-dispatcher.ts` 管单 worker 生命周期；`src/application/ports/project-scope-release-outbox.ts` 定义该业务的 claim/settle port；`src/infrastructure/postgres/project-scope-release-outbox-repository.ts` 执行同 Project 串行的 lease/CAS/聚合结算。 |
+| 目录比较 | **采用**上述 client + dispatcher + port + repository，分别隔离 owner wire、调度、业务接口和 SQL 生命周期；**淘汰**把 release 错误塞入 upload `client.ts`、把 Project outbox并入 Agent/Scheduler worker或建通用 command bus，这些都会混淆错误/终态与 owner。 |
+| 粒度 | 只有一个新业务 worker，不建新模块、进程、表或 repair API；四文件各有一个持续变化原因。现四装配入口仅接线：`src/application/ports/bff-business-store.ts`、`src/infrastructure/postgres/repositories.ts`、`src/bootstrap/runtime.ts`、`src/bootstrap/server.ts`。 |
+| 依赖 | dispatcher→具名 port/client；client只依赖固定 generated Storage Connect 与现运行配置。禁止读 Storage DB、复用 Catalog token、事务内网络、发送 actor header、Web直连owner或修改 upload 错误政策。 |
+| 数据/API | 复用现两表与原 N+1 rows；不新增 DDL、public operation、receipt或缓存。原 DELETE receipt永远重放初始202 pending；GET从固定命令集合投影 logical状态，physical恒pending。 |
+| 删除项 | 不保留第二套 claim/settle、次数耗尽→failed、换 command/key、人工改表恢复、泛用 proxy/bus 或 scope ACK回显假字段。 |
+| 验证 | 先具名 client/dispatcher failure-first tests，再真实 BFF PostgreSQL lease/CAS/聚合测试，再固定 Storage owner 真 RPC/丢ACK/恢复资格，最后正常 Browser→Web→BFF。建议后继门：`pnpm contract:check:storage`、定向 tests、`pnpm check`、`pnpm format:check`；本 D0 未运行命令。 |
+
+### Claim、投递、结算与恢复
+
+1. 普通 claim 只领取 due `pending` 或 lease 已过期的 `leased`，用 `SKIP LOCKED` 设置 owner/expiry、新 fence 与 attempt；`blocked` 不得被普通 claim 吞回 pending。缺 Storage 配置时 worker 不启动 claim，并输出不含凭据的明确观测。
+2. 网络在事务外。每次 lease 最多一次固定 RPC；同一个有界 attempt 使用不超过 10 秒且小于 lease 剩余时间、预留 settlement 的绝对预算，signal贯穿 credential/transport/decode。shutdown先停claim，再取消并有界等待在途attempt。取消、deadline、断连、未知ACK都不代表owner回滚。
+3. metadata只取持久可信 tenant/subject/scope kind/scope id；service=`web-bff`，不发送actor header。调用使用原 command ID/digest，禁止重算、换key或从当前浏览器补身份。ACK不回显scope，归属由精确RPC、当前leased row与lease fence绑定；`scope_released=true`才是成功，counts保uint64且不表示物理完成。
+4. settle用 tenant+command+leased owner+fence+未过期lease CAS；先以Project聚合为同一序列化点，再更新command并从固定N+1集合重算。晚ACK、过期fence或lost lease均零写；原202 receipt/body/location永不改。
+5. transport unknown、无ACK、合法retryable tuple继续同命令退避，不因attempt次数（包括8次）冒充终态。可信terminal tuple进入`blocked`。PermissionDenied、InvalidArgument、digest mismatch、precondition与结构损坏保持blocked，等待owner/代码修复，不自动恢复。
+6. 唯一自动恢复例外是固定Storage owner正规 `UNAUTHENTICATED` 资格错误：至少300秒冷却、每轮最多一条、重新持有同原命令/可信identity/新lease fence后只作一次可能写的RPC；不改token/scope/actor，不借新key或用户重新登录。恢复仍须走相同ACK校验与CAS；unknown永远不能凭次数标failed。
+
+### 后继真实 failure-first 范围
+
+后继仅可写上述4个新业务文件、4个现装配入口，以及Root另行批准的具名测试；不改Schema、public contract/generated、`project-delete.ts`命令生成或原HTTP receipt。真实矩阵至少覆盖：普通claim不动blocked；无配置零claim；同command丢ACK/重启replay；双worker过期lease与晚ACK CAS0；正规CONFLICT/Unavailable保持pending；资格UNAUTHENTICATED进入受限恢复而PermissionDenied/InvalidArgument/digest/precondition不进入；坏ACK不released；shutdown/timeout无悬挂；Project+Conversation N+1全ACK后logical released/physical pending。必须调用固定Storage owner/受控wire与真实PostgreSQL，不以source mock替代owner。
+
+
 ## R282 Project 删除本地实现状态（候选，未发行）
 
 R276 方案的 BFF 本地边界已在当前工作树实现：专用 DELETE/status 路由、单事务 Project→Conversation→ScheduledTask 锁序、同 client Conversation 删除核心、Scheduler replace outbox、Project deletion receipt 与 N+1 Storage release outbox。Root 隔离 HTTP/PostgreSQL 16/0 与工程门通过；正常 runtime 仍为 `39db` / public `8.5.0`。`8.6.0 / 105` 机器和 runtime 候选未正式发行，Storage worker、Web 与 17 条用户链仍待后继。下方 R276 设计语义继续为本实现的权威方案。
 
-## R276-PROJECT-DELETE-D0：Project 删除与逻辑释放状态（目标 public 8.6.0 / 105 operations；机器候选，运行未实现）
+## R276-PROJECT-DELETE-D0：Project 删除与逻辑释放状态（本地 runtime/SQL 已实现；Storage worker 未实现）
 
 > 当前事实源与边界：API 面见 [API_CONTRACT.md](./API_CONTRACT.md) 的同名章节，持久化、事务与 outbox 面见
 > [DATA_MODEL.md](./DATA_MODEL.md) 的同名章节。当前正式已发布 contract 与正常 runtime 仍为 `8.5.0 / 103 operations`；
 > 当前工作树已有包含 `DELETE /v1/projects/{projectId}` 与 `GET /v1/projects/{projectId}/deletion` 的
-> `8.6.0 / 105 operations` 机器候选，但尚未发行、生成消费者或实施 runtime、SQL、owner/browser 链。
+> `8.6.0 / 105 operations` 机器候选及本地 runtime/SQL 已在 `6f20f81a` 实现，但尚未发行、生成消费者、接入 Storage worker 或完成 owner/browser 链。
 > Storage 单 Asset 删除的 provider 资格仍未闭合，不占用本目标的 `8.6.0 / 105` 版本。
 
 ### 当前态与目标态
 
-- 当前 BFF 已有 `bff_project.deleted_at`、active-project 查询 fence、Project/Conversation owner 校验、正式 Conversation Move、
-  ScheduledTask revision/CAS 与 `scheduler.replace` outbox；Project 尚无公开删除 route、聚合删除 receipt、成员冻结或 Storage
-  release worker。
+- 当前 BFF `6f20f81a` 已有 `bff_project.deleted_at`、active-project 查询 fence、Project/Conversation owner 校验、正式 Conversation Move、
+  ScheduledTask revision/CAS 与 `scheduler.replace` outbox，以及公开删除/status route、聚合 receipt、成员冻结与 N+1 Storage release outbox；
+  尚缺的是 Storage release worker、正常运行激活与最终 owner/browser 验收。
 - BFF 已固定 Storage 正式提交 `e8b9928418924812587b7ac07900aee4be5bc27f` 与 combined digest
   `c22b5c10ee698d579753dcac370be371d8dba1df8fead1a12883f5443fbad18a`，其中已有
-  `ReleaseConversationScope`、`ReleaseProjectScope`。这只证明 owner contract 可用，不证明 Project 删除编排已实现。
+  `ReleaseConversationScope`、`ReleaseProjectScope`。本地 Project 删除编排已实现；这仍不证明 Storage release worker 或真实 owner 投递已实现。
 - 目标是一次提交 BFF 本地权威删除：冻结成员、按单 Conversation 删除规范执行本地 tombstone/compact、撤销分享与写入
   durable cancel 意图，暂停而不级联删除 ScheduledTask，写入一条 Project scope 加 N 条 Conversation scope 的 owner
   command outbox，并返回可重放的原始 `202 pending`。Message 与 immutable AG-UI ledger 仍按现 retention 保留，Agent Run
