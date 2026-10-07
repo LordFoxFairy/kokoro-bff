@@ -324,6 +324,10 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
         "McpServerListResponse",
         "McpConnectionListResponse",
         "McpConnectionReadErrorResponse",
+        "PersonalMcpConnectorListResponse",
+        "PersonalMcpConnectorDetailResponse",
+        "PersonalMcpConnectionListResponse",
+        "PersonalMcpConnectionDetailResponse",
       ].includes(block.name)
     )
       continue
@@ -348,6 +352,14 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
 
   for (const operation of operations) {
     const operationId = operation.fields.get("operationId") ?? operation.name
+    const personalMcpPaths: Record<string, string> = {
+      listPersonalMcpConnectors: "/v1/self/mcp/connectors",
+      getPersonalMcpConnector: "/v1/self/mcp/connectors/{connector_id}",
+      listPersonalMcpConnections: "/v1/self/mcp/connectors/{connector_id}/connections",
+      getPersonalMcpConnection: "/v1/self/mcp/connections/{connection_id}",
+    }
+    // Exact method/path/ID boundary; the dedicated oracle below checks every status and schema.
+    if (operation.method === "GET" && personalMcpPaths[operationId] === operation.path) continue
     const isPublishedPersonalSkill = operationId === "getPublishedPersonalSkill" && operation.method === "GET" && operation.path === "/v1/skills/{skill_id}"
     const isPlatformProjectionRead =
       operation.method === "GET" && ["listSkills", "listSkillPool", "listSkillCatalog", "listMcpServers", "listSelfMcpConnections"].includes(operationId)
@@ -1909,7 +1921,7 @@ function moveSessionContractErrors(
   responseComponents: Map<string, NamedBlock>,
 ): string[] {
   const errors: string[] = []
-  if (!/^  version: 8\.6\.0$/mu.test(source)) errors.push("moveSession must remain in current public contract version 8.6.0")
+  if (!/^  version: 8\.7\.0$/mu.test(source)) errors.push("moveSession must remain in current public contract version 8.7.0")
   const matches = operations.filter((operation) => operation.fields.get("operationId") === "moveSession")
   const operation = matches.length === 1 ? matches[0] : undefined
   if (operation?.method !== "POST" || operation.path !== "/v1/sessions/{id}/move") {
@@ -2029,7 +2041,7 @@ function renameProjectContractErrors(
   const require = (condition: boolean, message: string): void => {
     if (!condition) errors.push(`renameProject ${message}`)
   }
-  require(/^  version: 8\.6\.0$/mu.test(source), "current public contract must be version 8.6.0")
+  require(/^  version: 8\.7\.0$/mu.test(source), "current public contract must be version 8.7.0")
   const matches = operations.filter((operation) => operation.fields.get("operationId") === "renameProject")
   const operation = matches.length === 1 ? matches[0] : undefined
   if (operation?.method !== "PATCH" || operation.path !== "/v1/projects/{projectId}/name")
@@ -2143,7 +2155,7 @@ function projectDeletionContractErrors(
   const require = (condition: boolean, message: string): void => {
     if (!condition) errors.push(`Project deletion ${message}`)
   }
-  require(/^  version: 8\.6\.0$/mu.test(source), "public contract version must be 8.6.0")
+  require(/^  version: 8\.7\.0$/mu.test(source), "public contract version must be 8.7.0")
   const deletion = operations.filter((operation) => operation.fields.get("operationId") === "deleteProject")
   const status = operations.filter((operation) => operation.fields.get("operationId") === "getProjectDeletion")
   require(deletion.length === 1 && deletion[0]?.method === "DELETE" && deletion[0]?.path === "/v1/projects/{projectId}", "must publish one DELETE /v1/projects/{projectId}")
@@ -2568,6 +2580,151 @@ function personalizationContractErrors(
   return errors
 }
 
+// R323: closed public personal reads, independent from the valid execution projection.
+function personalMcpReadContractErrors(
+  schemas: Map<string, NamedBlock>,
+  operations: OperationBlock[],
+  responses: Map<string, NamedBlock>,
+): string[] {
+  const errors: string[] = []
+  const require = (condition: boolean, message: string): void => {
+    if (!condition) errors.push(`personal MCP ${message}`)
+  }
+  // These existing named blocks are checked exactly, not exempted from governance by prefix.
+  const exact = (actual: string, expected: string, name: string, indents: readonly number[]): void => {
+    const actualIndents = actual.split(/\r?\n/u).filter((line) => line.trim()).map(indentation)
+    require(JSON.stringify(actualIndents) === JSON.stringify(indents), `${name} nesting drifted`)
+    const lines = (value: string): string => value.split(/\r?\n/u).map((line) => line.trim()).filter(Boolean).join("\n")
+    require(lines(actual) === lines(expected), `${name} closed shape drifted`)
+  }
+  const id = "{ type: string, minLength: 1, maxLength: 191, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\s\\S])' }"
+  const cursor = "{ type: string, minLength: 1, maxLength: 2048, pattern: '^[A-Za-z0-9_-]+(?![\\s\\S])' }"
+  const headers = `headers:
+x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+Cache-Control: { required: true, schema: { type: string, const: no-store } }`
+  const failures: Record<string, [string, string[]]> = {
+    "400": ["BadRequest", ["invalid_mcp_personal_request"]],
+    "401": ["Unauthorized", ["session_authentication_required", "session_invalid"]],
+    "403": ["Forbidden", ["service_auth_failed", "session_forbidden", "product_tenant_forbidden"]],
+    "404": ["NotFound", ["mcp_personal_not_found"]],
+    "429": ["RateLimited", ["session_rate_limited"]],
+    "502": ["BadGateway", ["mcp_personal_response_invalid"]],
+    "503": ["Unavailable", ["product_tenant_not_configured", "iam_admission_unavailable", "mcp_personal_dependency_unavailable"]],
+  }
+  const entries = [
+    ["/v1/self/mcp/connectors", "listPersonalMcpConnectors", "ConnectorList", "items", "PersonalMcpConnector", "", ["limit", "cursor", "status"]],
+    ["/v1/self/mcp/connectors/{connector_id}", "getPersonalMcpConnector", "ConnectorDetail", "connector", "PersonalMcpConnector", "connector_id", []],
+    ["/v1/self/mcp/connectors/{connector_id}/connections", "listPersonalMcpConnections", "ConnectionList", "items", "PersonalMcpConnection", "connector_id", ["limit", "cursor"]],
+    ["/v1/self/mcp/connections/{connection_id}", "getPersonalMcpConnection", "ConnectionDetail", "connection", "PersonalMcpConnection", "connection_id", []],
+  ] as const
+  require(operations.filter((operation) => operation.path.startsWith("/v1/self/mcp/")).length === 4, "requires exactly four personal operations")
+  for (const [pathName, operationId, kind, field, item, pathId, queries] of entries) {
+    const matches = operations.filter((operation) => operation.fields.get("operationId") === operationId || operation.path === pathName)
+    const operation = matches.length === 1 ? matches[0] : undefined
+    require(operation?.method === "GET" && operation.path === pathName && operation.fields.get("operationId") === operationId, `${operationId} method/path/identity drifted`)
+    if (operation === undefined) continue
+    for (const [key, value] of Object.entries({ owner: "kokoro-bff", visibility: "public", stability: "beta", idempotency: "none", permission: "product.mcp.read_personal" })) {
+      require(operation.fields.get(`x-kokoro-${key}`) === value, `${operationId} ${key} drifted`)
+    }
+    require(!operation.fields.has("requestBody") && !operation.fields.has("security"), `${operationId} must retain inherited user admission and no body`)
+    require(operation.text.includes("Reject unknown or duplicate query keys, body, transfer-encoding and idempotency-key."), `${operationId} closed input rules missing`)
+    const parameterText = operation.text.match(/^      parameters:\n([\s\S]*?)(?=^      [A-Za-z])/mu)?.[1] ?? ""
+    const parameterLines: string[] = []
+    if (pathId) parameterLines.push(`- name: ${pathId}\nin: path\nrequired: true\nschema: ${id}`)
+    for (const query of queries) {
+      const shape = query === "limit" ? "{ type: integer, minimum: 1, maximum: 100, default: 50 }"
+        : query === "cursor" ? cursor : "{ type: string, enum: [pending, active, error, revoked] }"
+      parameterLines.push(`- name: ${query}\nin: query\nrequired: false\nschema: ${shape}`)
+    }
+    exact(parameterText, parameterLines.join("\n"), `${operationId} parameters`, parameterLines.flatMap(() => [8, 10, 10, 10]))
+    const expectedStatuses = ["200", ...Object.keys(failures).filter((status) => pathId || status !== "404")]
+    const actualResponses = collectResponseBlocks(operation)
+    require(JSON.stringify([...actualResponses.keys()].sort()) === JSON.stringify(expectedStatuses.sort()), `${operationId} status set drifted`)
+    for (const status of expectedStatuses) {
+      const component = `PersonalMcp${status === "200" ? `${kind}Ok` : failures[status]?.[0] ?? ""}`
+      exact(actualResponses.get(status) ?? "", `'${status}': { $ref: '#/components/responses/${component}' }`, `${operationId} ${status}`, [8])
+    }
+    const responseSchema = `PersonalMcp${kind}Response`
+    exact(responses.get(`PersonalMcp${kind}Ok`)?.text ?? "", `PersonalMcp${kind}Ok:
+description: Caller-owned safe MCP read.
+${headers}
+content:
+application/json:
+schema: { $ref: '#/components/schemas/${responseSchema}' }`, `${kind} response`, [4, 6, 6, 8, 8, 6, 8, 10])
+    const value = field === "items" ? `items:
+type: array
+maxItems: 100
+items: { $ref: '#/components/schemas/${item}' }
+next_cursor:
+oneOf:
+- ${cursor}
+- { type: 'null' }` : `${field}: { $ref: '#/components/schemas/${item}' }`
+    exact(schemas.get(responseSchema)?.text ?? "", `${responseSchema}:
+type: object
+additionalProperties: false
+required: [data]
+properties:
+data:
+type: object
+additionalProperties: false
+required: [${field === "items" ? "items, next_cursor" : field}]
+properties:
+${value}`, responseSchema, field === "items" ? [4, 6, 6, 6, 6, 8, 10, 10, 10, 10, 12, 14, 14, 14, 12, 14, 16, 16] : [4, 6, 6, 6, 6, 8, 10, 10, 10, 10, 12])
+  }
+  exact(schemas.get("PersonalMcpConnector")?.text ?? "", `PersonalMcpConnector:
+type: object
+additionalProperties: false
+required: [connector_id, connector_type, provider_key, status, approved_scopes]
+properties:
+connector_id: ${id}
+connector_type: { type: string, enum: [builtin, byok, mcp] }
+provider_key: { type: string, minLength: 1, maxLength: 64, pattern: '^[a-z0-9][a-z0-9._-]{0,63}(?![\\s\\S])' }
+status: { type: string, enum: [pending, active, error, revoked] }
+approved_scopes:
+description: Each item has JavaScript UTF-16 string.length 1-128, contains no JavaScript whitespace anywhere, and is neither trimmed nor reordered.
+type: array
+uniqueItems: true
+items: { type: string, minLength: 1, maxLength: 128, pattern: '^\\S+(?![\\s\\S])' }`, "Connector", [4, 6, 6, 6, 6, 8, 8, 8, 8, 8, 10, 10, 10, 10])
+  exact(schemas.get("PersonalMcpConnection")?.text ?? "", `PersonalMcpConnection:
+type: object
+additionalProperties: false
+required: [connection_id, connector_id, server_id, allowed_selectors, policy_digest, status]
+properties:
+connection_id: ${id}
+connector_id: ${id}
+server_id: ${id}
+allowed_selectors:
+description: Each item has JavaScript UTF-16 string.length 1-256 and no leading or trailing whitespace; interior whitespace is preserved.
+type: array
+uniqueItems: true
+items: { type: string, minLength: 1, maxLength: 256, pattern: '^\\S(?:[\\s\\S]*\\S)?(?![\\s\\S])' }
+policy_digest: { type: string, minLength: 64, maxLength: 64, pattern: '^[a-f0-9]{64}(?![\\s\\S])' }
+status: { type: string, enum: [active, revoked] }`, "Connection", [4, 6, 6, 6, 6, 8, 8, 8, 8, 10, 10, 10, 10, 8, 8])
+  for (const [status, [name, codes]] of Object.entries(failures)) {
+    exact(schemas.get(`PersonalMcp${name}Error`)?.text ?? "", `PersonalMcp${name}Error:
+type: object
+additionalProperties: false
+required: [error]
+properties:
+error:
+type: object
+additionalProperties: false
+required: [code, message, retryable]
+properties:
+code: { type: string, enum: [${codes.join(", ")}] }
+message: { type: string, minLength: 1, description: Fixed sanitized message; never provider payload. }
+retryable: { type: boolean, const: ${status === "429" || status === "503" ? "true" : "false"} }`, `${name} error`, [4, 6, 6, 6, 6, 8, 10, 10, 10, 10, 12, 12, 12])
+    const retry = status === "429" ? "\nRetry-After: { required: false, schema: { type: string, pattern: '^(?:[1-9][0-9]{0,3}|[1-7][0-9]{4}|8[0-5][0-9]{3}|86[0-3][0-9]{2}|86400)(?![\\s\\S])' } }" : ""
+    exact(responses.get(`PersonalMcp${name}`)?.text ?? "", `PersonalMcp${name}:
+description: Closed safe personal MCP failure.
+${headers}${retry}
+content:
+application/json:
+schema: { $ref: '#/components/schemas/PersonalMcp${name}Error' }`, `${name} response`, [4, 6, 6, 8, 8, ...(status === "429" ? [8] : []), 6, 8, 10])
+  }
+  return errors
+}
+
 export function inspectBffOpenApi(source: string, baseline: readonly BaselineOperation[]): string[] {
   const operations = collectOperationBlocks(source)
   const schemas = collectSectionBlocks(source, "schemas")
@@ -2579,6 +2736,7 @@ export function inspectBffOpenApi(source: string, baseline: readonly BaselineOpe
     ...wireNameErrors(schemas, source),
     ...revisionErrors(schemas),
     ...envelopeErrors(schemas, operations, responseComponents),
+    ...personalMcpReadContractErrors(schemas, operations, responseComponents),
     ...billingPersonalReadContractErrors(schemas, operations, responseComponents),
     ...platformProjectionReadContractErrors(schemas, operations, responseComponents),
     ...managedPersonalSkillContractErrors(schemas, operations, responseComponents),

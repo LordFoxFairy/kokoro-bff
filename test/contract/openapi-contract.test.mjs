@@ -40,7 +40,7 @@ function inspectChatFailureContract(openapi) {
     if (!condition) errors.push(label)
   }
 
-  require(/^info:\n(?:.*\n){0,3}?  version: 8\.6\.0$/mu.test(openapi), "public info.version must be 8.6.0")
+  require(/^info:\n(?:.*\n){0,3}?  version: 8\.7\.0$/mu.test(openapi), "public info.version must be 8.7.0")
   require(/^      required: \[message_id, role, content, status, created_at\]$/mu.test(message), "failure must stay optional")
   const roles = [...(message.match(/role:\n\s+type: string\n\s+enum: \[([^\]]+)\]/u)?.[1] ?? "").matchAll(/[a-z_]+/gu)].map((match) => match[0])
   require(JSON.stringify(roles) === JSON.stringify(["user", "assistant"]), "Message roles must equal user and assistant")
@@ -1067,7 +1067,7 @@ test("public7 retains the closed full execution head, five current-locator decis
   const { openapi } = await readContract()
   const document = load(openapi)
   const schemas = document.components.schemas
-  assert.equal(document.info.version, "8.6.0")
+  assert.equal(document.info.version, "8.7.0")
   const snapshot = schemas.SessionSnapshotResponse.properties.data
   assert.equal(Object.hasOwn(snapshot.properties, "active_run"), false)
   assert.equal(Object.hasOwn(snapshot.properties, "pending_pauses"), false)
@@ -1415,7 +1415,7 @@ test("R124 public7 publishes nullable snapshot process and the anchored Run proc
   const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
   const { openapi } = await readContract()
   const document = load(openapi)
-  assert.equal(document.info.version, "8.6.0")
+  assert.equal(document.info.version, "8.7.0")
   const snapshot = document.components.schemas.SessionSnapshotResponse.properties.data
   assert.ok(snapshot.required.includes("execution_process"))
   assert.deepEqual(snapshot.properties.execution_process, {
@@ -1471,7 +1471,7 @@ test("R146 Move is one strict additive public command with a durable synchronous
     Object.keys(pathItem).filter((key) => ["get", "post", "put", "patch", "delete"].includes(key)),
     ["post"],
   )
-  assert.equal(document.info.version, "8.6.0", "the prelaunch Skills V2 cutover advances the only public major without a path alias")
+  assert.equal(document.info.version, "8.7.0", "the prelaunch Skills V2 cutover advances the only public major without a path alias")
   assert.ok(baseline.some((entry) => entry.method === "POST" && entry.path === path && entry.operation_id === "moveSession"))
 
   const operation = pathItem.post
@@ -1638,7 +1638,7 @@ test("R240 rename contract remains one strict name PATCH beside the approved Bil
   const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
   const { openapi, baseline } = await readContract()
   const document = load(openapi)
-  assert.equal(document.info.version, "8.6.0")
+  assert.equal(document.info.version, "8.7.0")
   const route = "/v1/projects/{projectId}/name"
   const path = document.paths[route]
   assert.ok(path)
@@ -1648,6 +1648,10 @@ test("R240 rename contract remains one strict name PATCH beside the approved Bil
   delete priorPaths["/v1/projects/{projectId}"].delete // R277 adds only the governed Project deletion command.
   delete priorPaths["/v1/projects/{projectId}/deletion"] // R277 separately governs the deletion status read.
   delete priorPaths[route]
+  delete priorPaths["/v1/self/mcp/connectors"]
+  delete priorPaths["/v1/self/mcp/connectors/{connector_id}"]
+  delete priorPaths["/v1/self/mcp/connectors/{connector_id}/connections"]
+  delete priorPaths["/v1/self/mcp/connections/{connection_id}"]
   delete priorPaths["/v1/mcp/connections"] // R257 adds only this independently governed read.
   delete priorPaths["/v1/self/skills"] // R266 separately governs managed personal Skill reads.
   delete priorPaths["/v1/self/skills/{skill_id}"]
@@ -1668,6 +1672,10 @@ test("R240 rename contract remains one strict name PATCH beside the approved Bil
       (item) =>
         ![
           "listSelfMcpConnections",
+          "listPersonalMcpConnectors",
+          "getPersonalMcpConnector",
+          "listPersonalMcpConnections",
+          "getPersonalMcpConnection",
           "listManagedPersonalSkills",
           "getManagedPersonalSkill",
           "createPersonalSkillVersion",
@@ -1819,7 +1827,7 @@ test("R240 rename semantic gate rejects input, receipt, status and header drift"
   const request = (before, after) => mutate("    RenameProjectRequest:", "    RenameProjectResponse:", before, after)
   const success = (before, after) => mutate("    RenameProjectResponse:", "    RenameProjectErrorResponse:", before, after)
   const mutations = [
-    openapi.replace("  version: 8.6.0", "  version: 7.1.0"),
+    openapi.replace("  version: 8.7.0", "  version: 7.1.0"),
     route("    patch:", "    post:"),
     route("operationId: renameProject", "operationId: renameProjectAlias"),
     route("x-kokoro-permission: project.update", "x-kokoro-permission: project.read"),
@@ -1875,7 +1883,7 @@ test("R257 self MCP connection contract rejects Server substitution and error-pr
   const start = openapi.indexOf("  /v1/mcp/connections:\n")
   const end = openapi.indexOf("  /v1/mcp/servers:\n", start)
   const route = openapi.slice(start, end)
-  assert.equal(baseline.length, 105)
+  assert.equal(baseline.length, 109)
   assert.deepEqual(
     baseline.filter((item) => item.operation_id === "listSelfMcpConnections"),
     [
@@ -2233,7 +2241,7 @@ function inspectR277ProjectDeletion(document) {
     return schema?.allOf?.[1]?.properties?.error?.properties?.retryable?.const
   }
 
-  require(document.info?.version === "8.6.0", "R277 public info.version must be 8.6.0")
+  require(document.info?.version === "8.7.0", "R277 public info.version must be 8.7.0")
   const projectPath = document.paths?.["/v1/projects/{projectId}"]
   const statusPath = document.paths?.["/v1/projects/{projectId}/deletion"]
   const deletion = projectPath?.delete
@@ -2439,8 +2447,8 @@ test("R277 deleteProject publishes one empty-body owner command with immutable p
   const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
   const { openapi, baseline } = await readContract()
   const document = load(openapi)
-  assert.equal(document.info.version, "8.6.0")
-  assert.equal(baseline.length, 105)
+  assert.equal(document.info.version, "8.7.0")
+  assert.equal(baseline.length, 109)
   assert.deepEqual(
     baseline.filter(({ operation_id }) => operation_id === "deleteProject"),
     [{ method: "DELETE", path: "/v1/projects/{projectId}", operation_id: "deleteProject" }],
@@ -2501,5 +2509,171 @@ test("R277 Project deletion machine profile rejects method, permission, replay, 
     const candidate = structuredClone(document)
     mutate(candidate)
     assert.notDeepEqual(inspectR277ProjectDeletion(candidate), [], `R277 mutation ${index} must fail closed`)
+  }
+})
+
+// R323: Product personal MCP contract only; production routes and credentials remain a later slice.
+for (const entry of [
+  { path: "/v1/self/mcp/connectors", operation: "listPersonalMcpConnectors", query: ["cursor", "limit", "status"], schema: "PersonalMcpConnectorListResponse", field: "items", item: "PersonalMcpConnector", notFound: false },
+  { path: "/v1/self/mcp/connectors/{connector_id}", operation: "getPersonalMcpConnector", query: [], schema: "PersonalMcpConnectorDetailResponse", field: "connector", item: "PersonalMcpConnector", notFound: true },
+  { path: "/v1/self/mcp/connectors/{connector_id}/connections", operation: "listPersonalMcpConnections", query: ["cursor", "limit"], schema: "PersonalMcpConnectionListResponse", field: "items", item: "PersonalMcpConnection", notFound: true },
+  { path: "/v1/self/mcp/connections/{connection_id}", operation: "getPersonalMcpConnection", query: [], schema: "PersonalMcpConnectionDetailResponse", field: "connection", item: "PersonalMcpConnection", notFound: true },
+]) {
+  test(`R323 missing personal MCP public GET contract: ${entry.operation}`, async () => {
+    const { createRequire } = await import("node:module")
+    const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
+    const { openapi } = await readContract()
+    const document = load(openapi)
+    const pathItem = document.paths[entry.path]
+    assert.ok(pathItem, `missing formal personal MCP resource ${entry.path}`)
+    assert.deepEqual(Object.keys(pathItem), ["get"])
+    const operation = pathItem.get
+    assert.equal(operation.operationId, entry.operation)
+    assert.equal(operation["x-kokoro-owner"], "kokoro-bff")
+    assert.equal(operation["x-kokoro-visibility"], "public")
+    assert.equal(operation["x-kokoro-stability"], "beta")
+    assert.equal(operation["x-kokoro-idempotency"], "none")
+    assert.equal(operation["x-kokoro-permission"], "product.mcp.read_personal")
+    assert.equal(operation.requestBody, undefined)
+    assert.match(operation.description, /unknown|未知/u)
+    assert.match(operation.description, /duplicate|重复/u)
+    assert.match(operation.description, /idempotency-key/iu)
+    const parameters = (operation.parameters ?? []).map((parameter) => parameter.$ref ? document.components.parameters[parameter.$ref.split("/").at(-1)] : parameter)
+    assert.deepEqual(parameters.filter((parameter) => parameter.in === "query").map((parameter) => parameter.name).sort(), entry.query)
+    assert.equal(parameters.some((parameter) => parameter.in === "header"), false)
+    const pathId = entry.path.includes("{connector_id}") ? "connector_id" : entry.path.includes("{connection_id}") ? "connection_id" : undefined
+    assert.deepEqual(parameters.filter((parameter) => parameter.in === "path").map((parameter) => parameter.name), pathId ? [pathId] : [])
+    for (const parameter of parameters) {
+      if (parameter.in === "path") {
+        assert.equal(parameter.required, true)
+        assert.equal(parameter.schema.type, "string")
+        const pattern = new RegExp(parameter.schema.pattern, "u")
+        for (const accepted of ["mcp-1", "a".repeat(191)]) assert.equal(pattern.test(accepted), true)
+        for (const rejected of ["", "a".repeat(192), "a/b", " a", "a\n"]) assert.equal(pattern.test(rejected), false)
+      } else {
+        assert.notEqual(parameter.required, true)
+        if (parameter.name === "limit") assert.deepEqual(parameter.schema, { type: "integer", minimum: 1, maximum: 100, default: 50 })
+        if (parameter.name === "status") assert.deepEqual(parameter.schema, { type: "string", enum: ["pending", "active", "error", "revoked"] })
+        if (parameter.name === "cursor") {
+          assert.equal(parameter.schema.type, "string")
+          assert.equal(parameter.schema.minLength, 1)
+          assert.equal(parameter.schema.maxLength, 2048)
+          const pattern = new RegExp(parameter.schema.pattern, "u")
+          assert.equal(pattern.test("abc_-01"), true)
+          for (const rejected of ["", "a=", "a\n", "a b"]) assert.equal(pattern.test(rejected), false)
+        }
+      }
+    }
+    const resolve = (value) => value.$ref ? document.components.schemas[value.$ref.split("/").at(-1)] : value
+    const closed = (value, fields) => {
+      assert.equal(value.type, "object")
+      assert.equal(value.additionalProperties, false)
+      assert.deepEqual([...value.required].sort(), [...fields].sort())
+      assert.deepEqual(Object.keys(value.properties).sort(), [...fields].sort())
+    }
+    const expectedErrors = {
+      "400": ["invalid_mcp_personal_request"],
+      "401": ["session_authentication_required", "session_invalid"],
+      "403": ["service_auth_failed", "session_forbidden", "product_tenant_forbidden"],
+      ...(entry.notFound ? { "404": ["mcp_personal_not_found"] } : {}),
+      "429": ["session_rate_limited"],
+      "502": ["mcp_personal_response_invalid"],
+      "503": ["product_tenant_not_configured", "iam_admission_unavailable", "mcp_personal_dependency_unavailable"],
+    }
+    assert.deepEqual(Object.keys(operation.responses).sort(), ["200", ...Object.keys(expectedErrors)].sort())
+    for (const [status, rawResponse] of Object.entries(operation.responses)) {
+      const response = rawResponse.$ref ? document.components.responses[rawResponse.$ref.split("/").at(-1)] : rawResponse
+      assert.equal(response.headers["Cache-Control"].required, true)
+      assert.equal(response.headers["Cache-Control"].schema.const, "no-store")
+      assert.equal(response.headers["x-request-id"].required, true)
+      assert.equal(response.headers["x-request-id"].schema.type, "string")
+      assert.ok(response.headers["x-request-id"].schema.minLength >= 1)
+      const schema = resolve(response.content["application/json"].schema)
+      if (status === "200") {
+        assert.equal(response.content["application/json"].schema.$ref, `#/components/schemas/${entry.schema}`)
+        closed(schema, ["data"])
+        const data = resolve(schema.properties.data)
+        closed(data, entry.field === "items" ? ["items", "next_cursor"] : [entry.field])
+        const value = data.properties[entry.field]
+        if (entry.field === "items") {
+          assert.equal(value.type, "array")
+          assert.equal(value.maxItems, 100)
+          assert.equal(value.items.$ref, `#/components/schemas/${entry.item}`)
+          const alternatives = data.properties.next_cursor.oneOf
+          assert.equal(alternatives.length, 2)
+          assert.ok(alternatives.some((option) => option.type === "null"))
+          const cursor = alternatives.find((option) => option.type === "string")
+          assert.equal(cursor.minLength, 1)
+          assert.equal(cursor.maxLength, 2048)
+        } else assert.equal(value.$ref, `#/components/schemas/${entry.item}`)
+      } else {
+        closed(schema, ["error"])
+        const error = resolve(schema.properties.error)
+        closed(error, ["code", "message", "retryable"])
+        assert.deepEqual(error.properties.code.enum, expectedErrors[status])
+        assert.equal(error.properties.message.type, "string")
+        assert.equal(error.properties.retryable.const, ["429", "503"].includes(status))
+      }
+    }
+    const item = document.components.schemas[entry.item]
+    const connector = entry.item === "PersonalMcpConnector"
+    closed(item, connector ? ["connector_id", "connector_type", "provider_key", "status", "approved_scopes"] : ["connection_id", "connector_id", "server_id", "allowed_selectors", "policy_digest", "status"])
+    assert.deepEqual(item.properties.status.enum, connector ? ["pending", "active", "error", "revoked"] : ["active", "revoked"])
+    if (connector) assert.deepEqual(item.properties.connector_type.enum, ["builtin", "byok", "mcp"])
+    const strings = item.properties[connector ? "approved_scopes" : "allowed_selectors"]
+    assert.equal(strings.type, "array")
+    assert.equal(strings.uniqueItems, true)
+    assert.equal(strings.items.type, "string")
+    assert.equal(strings.items.minLength, 1)
+    assert.equal(strings.items.maxLength, connector ? 128 : 256)
+    const stringPattern = new RegExp(strings.items.pattern, "u")
+    assert.equal(stringPattern.test("tools/read"), true)
+    for (const rejected of ["", " x", "x ", "x\n"]) assert.equal(stringPattern.test(rejected), false)
+    for (const whitespace of [" ", "\t", "\n", "\r", "\u00a0", "\u2028", "\u2029", "\ufeff"]) {
+      assert.equal(stringPattern.test(`read${whitespace}write`), !connector)
+    }
+  })
+}
+
+// R323 machine drift controls; these are not runtime or IAM integration evidence.
+test("R323 personal MCP fixed checker rejects permission, query, safe-field and error drift", async () => {
+  const { openapi, baseline } = await readContract()
+  assert.deepEqual(inspectBffOpenApi(openapi, baseline), [])
+  const mutations = [
+    ["permission", "x-kokoro-permission: product.mcp.read_personal", "x-kokoro-permission: product.mcp.admin"],
+    ["method", "/v1/self/mcp/connectors:\n    get:", "/v1/self/mcp/connectors:\n    post:"],
+    ["query", "operationId: listPersonalMcpConnectors", "operationId: listPersonalMcpConnectors\n      requestBody: {}"],
+    ["nested safe shape", "        approved_scopes:\n", "      approved_scopes:\n"],
+    ["scope whitespace", "pattern: '^\\S+(?![\\s\\S])'", "pattern: '^[\\s\\S]+$'"],
+    ["scope bound", "maxLength: 128, pattern: '^\\S+", "maxLength: 129, pattern: '^\\S+"],
+    ["safe shape", "required: [connector_id, connector_type, provider_key, status, approved_scopes]", "required: [connector_id, connector_type, provider_key, status, approved_scopes, secret]"],
+    ["foreign leak", "enum: [mcp_personal_not_found]", "enum: [mcp_personal_foreign_owner]"],
+    ["error tuple", "enum: [mcp_personal_response_invalid]", "enum: [mcp_personal_dependency_unavailable]"],
+    ["caller-live cancellation", "enum: [product_tenant_not_configured, iam_admission_unavailable, mcp_personal_dependency_unavailable]", "enum: [product_tenant_not_configured, iam_admission_unavailable, canceled]"],
+    ["cursor empty", "- { type: string, minLength: 1, maxLength: 2048", "- { type: string, minLength: 0, maxLength: 2048"],
+  ]
+  for (const [name, original, replacement] of mutations) {
+    assert.ok(openapi.includes(original), `${name} mutation must reach the real contract`)
+    const mutated = openapi.replace(original, replacement)
+    assert.notEqual(mutated, openapi)
+    assert.ok(inspectBffOpenApi(mutated, baseline).some((error) => error.startsWith("personal MCP ")), name)
+  }
+})
+
+// R323 review: only the new personal response, never the historical Retry-After contracts.
+test("R323 personal MCP Retry-After is canonical decimal 1 through 86400 without trailing LF", async () => {
+  const { createRequire } = await import("node:module")
+  const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
+  const { openapi } = await readContract()
+  const document = load(openapi)
+  const header = document.components.responses.PersonalMcpRateLimited.headers["Retry-After"]
+  assert.equal(header.required, false)
+  assert.equal(header.schema.type, "string")
+  const pattern = new RegExp(header.schema.pattern, "u")
+  for (const accepted of ["1", "9", "10", "9999", "10000", "79999", "80000", "85999", "86000", "86399", "86400"]) {
+    assert.equal(pattern.test(accepted), true, `Retry-After must accept ${accepted}`)
+  }
+  for (const rejected of ["86401", "99999", "100000", "0", "01", "+1", "1.0", "1e2", " 1", "1 ", "1\n", "86400\n", "", "١"]) {
+    assert.equal(pattern.test(rejected), false, `Retry-After must reject ${JSON.stringify(rejected)}`)
   }
 })

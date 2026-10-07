@@ -1,3 +1,75 @@
+## R323 本人 MCP 四读机器契约已发布，运行接线尚未实现（2026-10-07）
+
+当前唯一public OpenAPI **8.7.0 / 109 operations**，新增四 `/v1/self/mcp/*` GET（本人connector列表/详情、connector下connection列表、connection详情），固定metadata、安全closed shape/参数/错误与no-store。原105 operations/88path items/456components Root独立完整document剥增量后deepEqual，Platform固定vendor/generated、runtime/source/Schema/正常身份完全未动。旧R320三面中“尚未写机器契约”的阶段现由本节替代；五普通TS、正规OAuth HTTP到owner组合及正常激活仍目标，不把contract发行当已存在HTTP路由。没有新数据库/credential或兼容层。
+
+Root实际四缺口RED 77旧PASS/4新FAIL；首机器contract73381 302PASS/1FAIL为旧R240闭集包含新path，最窄排除仅四新path/四ID，原hash/92不变。独审发现新Retry-After范围P2，现尾负控2PASS/1FAIL拒86401；只新header/verifier两行修canonical1..86400/绝对末尾、不容LF。原四RED组全文exact，旧response不改。专用checker和11漂移负控保闭集；scope JSONSchema字符计数不同于UTF-16 JS string.length，描述明确后继mapper仍须真实运行补强，不能单靠maxLength冒同规则。
+
+Root显式Node22.22.2最终71468完整pnpm check自然exit0：contract304PASS/0SKIP、default879中877PASS/0FAIL/2原资源SKIP，lint/typecheck/build；13002 format:check自然exit0。只辅助机器验收，未运行全资源integration、真实本人四读HTTP/E2E或正常用户连接器CRUD，不把两skip计为通过。独审最终1fa085a4无确定阻断，七机器freeze加三已批准D0/本CURRENT/INDEX精确十二paths由Root独占提交；539其它tracked exact，原var保留。完整70/个人33不升级，支付最后，后继按既定实际IAM HTTP/Platform/BFF系统RED再授runtime五文件。
+
+## R320 本人 MCP 四读 Product 消费设计（目标，尚未实现）
+
+基线 `a3e9a7ed6615e35bcf722d5d20bddd997dcf7e86` / `codex/r257-bff-normal-current`；当前551 tracked、仅原var。已固定Platform owner `e83a2ad3a7c7d333ad0b0b8e7f3d3f64e497bc42` 与V8 aggregate `4a5ed2ca1a25673967ac2ee05a43c5f568bdd19c9ff768d8e606fdac94b9542f`；43 RPC/20 command/24 proof和历史parent39/完整V8→V7→V6→V5继续冻结。本设计新增BFF公开本人管理读，不改owner wire，不把机器消费标记当正常runtime已启用。原105 operations/public8.6.0尚无本节四GET；目标独立additive public8.7.0/109，正常服务当前版本另以Root维护证据为准。
+
+事实owner仍Platform；IAM拥有准入与机器资格；BFF拥有public安全投影；Web仅同源adapter。四读不是完整CRUD，secret宿主/privateServer/创建编辑/启停撤销重连及mutation幂等恢复仍OPEN。本次只三D0前缀，禁止先写contract/src/test/config/credentials/Schema；Root文档通过后再按下面顺序另授。
+
+### 四个 public 操作（唯一schema待机器切片发布）
+
+| GET / operationId | 固定ProductMcpPersonalService RPC | input闭集 |
+|---|---|---|
+| /v1/self/mcp/connectors / listPersonalMcpConnectors | ListPersonalMcpConnectors | query status?、limit?、cursor? |
+| /v1/self/mcp/connectors/{connector_id} / getPersonalMcpConnector | GetPersonalMcpConnector | 一个path ID；无query |
+| /v1/self/mcp/connectors/{connector_id}/connections / listPersonalMcpConnections | ListPersonalMcpConnections | path ID；query limit?、cursor? |
+| /v1/self/mcp/connections/{connection_id} / getPersonalMcpConnection | GetPersonalMcpConnection | 一个path ID；无query |
+
+全部metadata owner=kokoro-bff、visibility=public、stability=beta、idempotency=none、permission=`product.mcp.read_personal`（这是public operation描述，不新增IAMrole/scope）；普通本人无需platformAdmin。请求禁止body/transfer-encoding/idempotency-key、未知或重复query；limit仅规范十进制1–100、省略50，不trim、不接受0/负数/小数/exponent/前导零；cursor非空canonical owner opaque base64url≤2048，BFF不解码内容，原样传owner校验绑定。status仅pending/active/error/revoked，省略所有管理状态，无空串/数字/unknown。path ID完整ASCII `[A-Za-z0-9][A-Za-z0-9._:-]{0,190}`，不trim/大小写修复，禁止解码后slash或多次decode。GET detail不接受分页。owner请求只正规generated字段；request_id来自BFF可信请求context，identity永不来自query/body。
+
+### 成功closed schema与安全语义
+
+四200分别为 `{data:{items:Connector[],next_cursor:string|null}}`、`{data:{connector:Connector}}`、`{data:{items:Connection[],next_cursor:string|null}}`、`{data:{connection:Connection}}`；所有对象additionalProperties=false、列举属性必填。cursor有下一页才非空，末页null；items可空、最多100，保持owner顺序，绝不自动退第一页或合并旧projection。每个请求固定Cache-Control:no-store和x-request-id原BFF ID（已知可信ID时错误同样回传）。
+
+- Connector精确字段：connector_id(string ID)、connector_type(`builtin|byok|mcp`)、provider_key(`[a-z0-9][a-z0-9._-]{0,63}`)、status(`pending|active|error|revoked`)、approved_scopes(string[]，每项JS string.length为1–128，禁止任何JavaScript `/\s/u`匹配的空白字符，集合unique，不trim或改序)。
+- Connection精确字段：connection_id/connector_id/server_id(string ID)、allowed_selectors(string[]，每项1–256、非空、无首尾空白/唯一)、policy_digest(64 lowercase hex)、status(`active|revoked`)。
+- 正规generated解码缺省repeated空集合后public明确[]；未知enum/缺必需message/坏字段/错误method资源ID/列表越界/重复ID或bad cursor返回502，不补授权/伪unknown。owner detail ID必须等于path，connections列表每条connector_id必须等于path；不把inactive connector对应active connection当usable承诺。
+- 不输出tenant/owner/subject、external_account_ref、authorization/secret/handle、server identity/URL、rawheaders/provider响应、内部receipt或operation元数据。所有错误message固定脱敏，不靠message substring判类。
+
+### 错误与身份退役闭集
+
+统一 `{error:{code:string,message:string,retryable:boolean}}`，对象closed，三属性必填；no-store。公开status/code/retryable配对：
+
+| HTTP | code闭集 | retryable |
+|---|---|---|
+| 400 | invalid_mcp_personal_request | false |
+| 401 | session_authentication_required、session_invalid | false |
+| 403 | service_auth_failed、session_forbidden、product_tenant_forbidden | false |
+| 404 | mcp_personal_not_found（owner NotFound，不区分缺失/非本人） | false |
+| 429 | session_rate_limited | true；透传经校验Retry-After |
+| 502 | mcp_personal_response_invalid（坏wire/persisted Internal/不可能owner参数拒绝） | false |
+| 503 | product_tenant_not_configured、iam_admission_unavailable、mcp_personal_dependency_unavailable | true |
+
+owner InvalidArgument针对已允许的opaque cursor拒绝映400；owner机器Unauthenticated/PermissionDenied、token获取失败、Unavailable/DeadlineExceeded/资源耗尽归503 dependency，不伪用户session401/403。本地完整10秒deadline届满有可写response时503 dependency；只有caller实际abort/disconnect才不迟到写响应；owner RPC返回Canceled而当前caller仍live时，必须返回closed 503 `mcp_personal_dependency_unavailable`（retryable=true），不把owner取消误当caller断开，也不悬挂无响应；无499公开schema。owner未知错误tuple或未知enum归502；不重放不同主体结果。本人缺失/foreign404不回漏授权细节；获取token不缓存用户session，当前session拒绝直接终止且不继续owner调用。
+
+旧105操作及全部原Schema/status语义保留。8.7.0/109仅这四public GET追加，原8.6.0/105差分与operation baseline检查同时更新；不存在本片public mutation、secret、Webadapter或schema发布。
+
+### 发布与真实验收顺序
+
+1. 文档门通过后，先在现contract测试保原105操作/旧schema语义，新增四GET缺口RED；再唯一 `contract/openapi/v1/openapi.yaml` 发布8.7.0/109、现 `contract/tests/v1-operations.json` 精确增加四operation及现schema检查/测试更新。Platform vendor/descriptor/generated不再生成或改pin；Web之后只消费BFF正式public发行物，不复制Platform Proto。
+2. 使用正式IAM HTTP token接缝的真实系统RED，再授五普通TS及必要现config/server接线；现Node22/BFF框架不升级。Root负责实际test/build/type/lint/contract/architecture/format门与Git。无mock、unit计数或native预签token冒系统通过。
+3. 后继新普通 `test/mcp-personal.integration.mjs` 放现test根（不是新test/integration树），通过 `pnpm build && node --test --test-concurrency=1 test/mcp-personal.integration.mjs` 使用Root提供的受保护fixture路径、独立BFF/Platform数据库边界与Redis namespace、真实IAM user session及OAuth token HTTP、真实Platform TCP。fixture私密值不入日志/断言，测试缺资源明确skip且不算通过；正式验收要求0资源skip。原 `test/platform-projection-route.test.mjs` 和所有Skills/projection回归保留；public闭集扩现 `test/contract/openapi-contract.test.mjs`、`test/contract-governance.test.mjs` 及 `scripts/verify-openapi.ts`，仅必要将新系统test纳入现package命令。
+4. 必须实际覆盖四GET成功/安全集合缺省/两页无重漏、detail/list connector统一foreign/absent404、跨subject/tenant/filter/connector cursor拒绝、错scope/缺subject/未知字段、session拒绝、token HTTP失败/自然过期/官方disable后旧token拒绝、credential轮换/并发取消/慢token与RPC/decode预算及同request-id。不导入IAM私有fixture到BFF，不访问其他owner SQL。Root R317仅native issuer证据现已由R320实际HTTP资格补齐：官方隔离fixture+独立managed personal client，真实POST /iam/oauth2/token Basic+client_credentials/resource/scope返回200/Bearer/单scope/300s，实际introspection200且BFF caller/tenant一致；错surface403、扩scope400 invalid_scope、官方disable后旧token401。Root78264自然exit0/finally关闭，未用native预签personal、未改正常权限。该证据仅资格子链，不证明BFF新token类/四GET或正常激活通过；sanitized结果见Root ignored r320-iam-http-result.json。
+5. 隔离链通过与正常激活分开。正常BFF/Platform独立资格和0600配置、显式路由配置、受控reload/ready/回滚由Root另维护切片；不扩旧projection/catalog/E2 scopes，不重启当前服务。BFF正式commit/artifact固定后Web再接四读，浏览器MCP/Settings自然用户链另验，工程门不提升完整70/33。
+
+### 真正未决
+
+四读public形状/身份/目录/零Schema已在本前缀确定，不再反复总体设计。实际OAuth HTTP资格子链已由Root R320验证；BFF实现的token缓存/退役/预算与四GET实际组合仍须后继系统验证，正常启用时机和Web消费是独立执行门。secret本机或托管宿主、privateServer及全部mutation生命周期仍未裁决，本片没有代替它们选择auth-none或借Agent/global Register写入口。
+
+### R323 两项精确澄清（不扩大既定方案）
+
+approved_scopes沿固定Platform `mcp-personal.mapper.ts` 的scopes分支：每项JS string.length为1–128，禁止任何JavaScript `/\s/u`匹配的空白字符（含中间空白），集合unique；不trim、不清洗、不改序。它不同于allowed_selectors仅禁止首尾空白的既定规则。此为public safe投影闭集，不新增scope/角色或更改owner wire。
+
+owner RPC Canceled与caller生命周期分开：caller仍live且response可写时，owner Canceled映closed HTTP503、code=`mcp_personal_dependency_unavailable`、retryable=true；本地绝对deadline届满但response仍可写时同样503。只有caller实际abort/disconnect才停止写响应，不把共享deadline signal或ownerCanceled本身当caller断开；无499、新重试/fallback或物理network保证。原十秒绝对预算、五普通TS职责、旧105有效语义和零Schema均不变。
+
+<!-- R320 personal MCP consumer design end; prior document follows byte-exact. -->
+
 ## R319 固定 Platform V8 消费文档门（机器消费候选已生成，待Root验收）
 
 基线为本仓 `76098c089dbcf23cc10d49140000ab04889ed7d7`、`codex/r257-bff-normal-current`，Root 起始清单543 tracked、仅既有 untracked var；原文完整保留为历史后缀。Root 已裁决本片仅升级 **Platform Connect 固定机器消费**：owner正式提交 `e83a2ad3a7c7d333ad0b0b8e7f3d3f64e497bc42`，完整V8→V7→V6→V5链、最新43 RPC/20 command/24 proof及parent39保护。不新增BFF public operation、业务client/runtime、IAM资格/权限、数据库或浏览器功能。
