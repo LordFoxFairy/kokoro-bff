@@ -928,3 +928,81 @@ message ProductSkillInstallationPageRequest {
   optional uint32 limit = 1;
   optional string cursor = 2;
 }
+
+// Product personal MCP management reads; independent of Agent execution proofs.
+message ListPersonalMcpConnectorsRequest {
+  reserved 100;
+  reserved "execution_proof", "tenant_id", "actor_id", "subject_id", "owner_scope", "target_owner_scope", "product_context", "command";
+  string request_id = 1;
+  optional kokoro.platform.v1.McpConnectorStatus status = 2;
+  kokoro.platform.v1.PersonalMcpPageRequest page = 3;
+}
+
+message GetPersonalMcpConnectorRequest {
+  reserved 100;
+  reserved "execution_proof", "tenant_id", "actor_id", "subject_id", "owner_scope", "target_owner_scope", "product_context", "command";
+  string request_id = 1;
+  kokoro.platform.v1.McpConnectorId connector_id = 2;
+}
+
+message ListPersonalMcpConnectionsRequest {
+  reserved 100;
+  reserved "execution_proof", "tenant_id", "actor_id", "subject_id", "owner_scope", "target_owner_scope", "product_context", "command";
+  string request_id = 1;
+  kokoro.platform.v1.McpConnectorId connector_id = 2;
+  kokoro.platform.v1.PersonalMcpPageRequest page = 3;
+}
+
+message GetPersonalMcpConnectionRequest {
+  reserved 100;
+  reserved "execution_proof", "tenant_id", "actor_id", "subject_id", "owner_scope", "target_owner_scope", "product_context", "command";
+  string request_id = 1;
+  kokoro.platform.v1.McpConnectionId connection_id = 2;
+}
+
+message ListPersonalMcpConnectorsResponse {
+  repeated kokoro.platform.v1.PersonalMcpConnector connectors = 1;
+  kokoro.common.v1.PageResult page = 2;
+}
+
+message GetPersonalMcpConnectorResponse {
+  kokoro.platform.v1.PersonalMcpConnector connector = 1;
+}
+
+message ListPersonalMcpConnectionsResponse {
+  repeated kokoro.platform.v1.PersonalMcpConnection connections = 1;
+  kokoro.common.v1.PageResult page = 2;
+}
+
+message GetPersonalMcpConnectionResponse {
+  kokoro.platform.v1.PersonalMcpConnection connection = 1;
+}
+
+message PersonalMcpPageRequest {
+  optional uint32 limit = 1;
+  optional string cursor = 2;
+}
+
+message PersonalMcpConnector {
+  kokoro.platform.v1.McpConnectorId connector_id = 1;
+  kokoro.platform.v1.McpConnectorType connector_type = 2;
+  string provider_key = 3;
+  kokoro.platform.v1.McpConnectorStatus status = 4;
+  repeated string approved_scopes = 5;
+}
+
+message PersonalMcpConnection {
+  kokoro.platform.v1.McpConnectionId connection_id = 1;
+  kokoro.platform.v1.McpConnectorId connector_id = 2;
+  kokoro.platform.v1.McpServerId server_id = 3;
+  repeated string allowed_selectors = 4;
+  string policy_digest = 5;
+  string status = 6;
+}
+
+service ProductMcpPersonalService {
+  rpc ListPersonalMcpConnectors(kokoro.platform.v1.ListPersonalMcpConnectorsRequest) returns (kokoro.platform.v1.ListPersonalMcpConnectorsResponse);
+  rpc GetPersonalMcpConnector(kokoro.platform.v1.GetPersonalMcpConnectorRequest) returns (kokoro.platform.v1.GetPersonalMcpConnectorResponse);
+  rpc ListPersonalMcpConnections(kokoro.platform.v1.ListPersonalMcpConnectionsRequest) returns (kokoro.platform.v1.ListPersonalMcpConnectionsResponse);
+  rpc GetPersonalMcpConnection(kokoro.platform.v1.GetPersonalMcpConnectionRequest) returns (kokoro.platform.v1.GetPersonalMcpConnectionResponse);
+}

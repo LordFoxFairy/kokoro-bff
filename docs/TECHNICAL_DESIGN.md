@@ -1,3 +1,33 @@
+## R319 固定 Platform V8 消费文档门（机器消费候选已生成，待Root验收）
+
+基线为本仓 `76098c089dbcf23cc10d49140000ab04889ed7d7`、`codex/r257-bff-normal-current`，Root 起始清单543 tracked、仅既有 untracked var；原文完整保留为历史后缀。Root 已裁决本片仅升级 **Platform Connect 固定机器消费**：owner正式提交 `e83a2ad3a7c7d333ad0b0b8e7f3d3f64e497bc42`，完整V8→V7→V6→V5链、最新43 RPC/20 command/24 proof及parent39保护。不新增BFF public operation、业务client/runtime、IAM资格/权限、数据库或浏览器功能。
+
+提交基线固定owner `c94909f1c593f2b7ffd5f325786739da744ff31f` / V7；本候选已以唯一新commit vendor替换旧Connect vendor，不双pin、latest或fallback。V8 artifact原 `inactive` / `routable:false` 与consumer `generated-not-activated`标记保留；这些是发行/消费阶段metadata，不是runtime kill-switch或正常服务启用事实。Platform R317运行证据与BFF未来真实消费/正常维护分开；四读也不是完整MCP CRUD。
+
+### §8 具名放置与依赖
+
+| 项 | 当前裁决 |
+|---|---|
+| Owner / writer | Platform拥有Proto/artifact；BFF是唯一固定consumer，Root任务卡指定单writer，Root独占集成提交 |
+| 输入 | 仅Root从正式e83a Git对象物化的38文件及其逐SHA清单；ignored bundle只是传递媒介，不是Root可编辑contract中心，禁止复制在编owner工作树 |
+| 位置比较 | 采用既有 `contract/vendor/kokoro-platform/<exactcommit>` + 现generator；拒绝新SDK层、Root contract镜像、手写DTO及直接拷owner generated，避免第二事实源 |
+| 普通文件/粒度 | 不增运行模块或目录层；新增唯一commit目录承接proto、两descriptor与V5/V6/V7/V8完整固定发行物 |
+| 依赖 | 本地生成仅消费固定只读vendor与现精确工具；业务继续只通过本仓generated窄client，不import owner源码/ORM/SQL |
+| 删除 | 删除旧c949 Connect vendor目录，原V5–V7 bytes承接至新e83a目录；不删除语义不同的Platform HTTP projection vendor/generated/routes或旧有效Skills链 |
+| 冻结 | package/lock、buf.platform.gen.json、public OpenAPI、Schema、credentials、client/runtime、正常服务全不改 |
+
+代码准入候选仅现 `buf.platform.json`、`scripts/generate-platform-connect-client.mjs`、`test/platform-connect-contract.test.mjs`；正规生成 `contract/dependencies/platform-connect.json` 与 `src/generated/platform-connect/kokoro/common/v1/common_pb.ts`、`src/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.ts`，加唯一新vendor38输入/删除旧vendor。CURRENT/INDEX由Root最终事实更新。Root已依同任务卡另授机器实现；写入范围仍仅本表机器文件，不延伸四读运行。
+
+### 验证与后继边界
+
+先在现 `test/platform-connect-contract.test.mjs` 追加固定V8缺口期望并取得自然机器RED，再按Root另授写集更新输入/pin并正规生成。Node22、本地现Buf/Protobuf-ES/Connect精确版本不升级；`pnpm contract:generate:platform` 和 `pnpm contract:check:platform` 继续两次独立生成byte一致、精确源/树/包/配置/hash/manifest门；common输出应保持原bytes，platform输出由工具增加四方法/11messages。原V5 census39保持历史输入，最新43与parent39分开验证，不把旧断言全改43。Root负责最终contract/default/architecture/build与范围审查/Git；作者已在Node22执行正规生成/check/build及现contract单文件16 PASS/0 SKIP；Root最终工程门与独审尚待，不宣用户功能通过。
+
+当前机器范围无新的owner/Schema/字段/密钥政策未决。后续BFF四本人读public契约、独立personal客户端资格、真实用户session与OAuth token HTTP获取→Platform introspection、Web消费和正常进程维护另切片；R317 native issuer证据不能冒BFF HTTP token链通过。privateServer/secret宿主/编辑启停重连及全mutation政策仍未决，不在此裁决。正常projection、Skills、权限与服务保持不动。
+
+Root完整contract首轮298项中289 PASS/9 FAIL，六个既有测试仍硬编码旧vendor路径造成ENOENT，属于本次cutover遗漏而非历史baseline。现 `test/contract/openapi-contract.test.mjs`、`test/skill-installation-http.test.mjs`、`test/skill-package-begin-http.test.mjs`、`test/skill-package-complete-http.test.mjs`、`test/skill-publish-http.test.mjs`、`test/skill-validate-http.test.mjs` 仅旧40字符commit→新40字符commit字面替换；原V5 bytes与全部断言/版本/count不变，同唯一固定点继续校验。完整门待Root重跑。
+
+<!-- R319 fixed V8 consumer design end; prior document follows byte-exact. -->
+
 ## R291 Project scope release worker 实现候选（2026-10-07）
 
 现具名四文件及 runtime/store 接线已实现，下面 R284 为批准设计的历史时点。repository 以短事务领取/结算，dispatcher 在事务外调用固定 Storage 两 RPC；stop 同步停止领取并排空，数据库随后关闭。每批最多一条冷却300秒正规 UNAUTHENTICATED 恢复，占总 batch 内一 slot，普通队列不再导致恢复饥饿；其它 terminal 仍 blocked。内部 required `leaseObservedAtMs` 在 checkout/BEGIN 后、实际 claim SQL 前共同取单调时钟，配实际 SQL clock_timestamp 剩余形成保守 deadline 下界；无每项新租期或 claim elapsed 双扣。十秒执行/结算同预算、取消、未知 COMMIT、锁后真时刻 lease/fence CAS 保持。

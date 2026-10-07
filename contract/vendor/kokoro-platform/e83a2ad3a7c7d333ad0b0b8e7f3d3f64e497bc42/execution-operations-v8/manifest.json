@@ -1,0 +1,17 @@
+{
+  "artifact": "platform-execution-operations",
+  "artifactVersion": "8.0.0",
+  "status": "inactive",
+  "routable": false,
+  "packageName": "kokoro.platform.v1",
+  "inherits": {
+    "version": "7.0.0",
+    "aggregateSha256": "3384a88f31be1fdd3e15bcbceb33e4fd7d62b04dfbfef65fcc35c24ce7afbb72"
+  },
+  "counts": {
+    "rpc": 43,
+    "command": 20,
+    "proof": 24
+  },
+  "profile": "personal-mcp-read-v1"
+}

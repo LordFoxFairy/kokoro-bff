@@ -1,0 +1,32 @@
+{
+  "algorithm": "sha256",
+  "aggregateRecord": "path + NUL + length + NUL + sha256 + LF",
+  "files": [
+    {
+      "path": "manifest.json",
+      "bytes": 405,
+      "sha256": "cf9b40ebf83c6dd7ffc7f0b12f2de18c363b96866e7f330fe0eb4b2446f7966c"
+    },
+    {
+      "path": "personal-mcp-read-v1.json",
+      "bytes": 5493,
+      "sha256": "d45fd8f396cad4151d1f3de0feea74a3db5d796060025a206a1c6f16932cfa41"
+    },
+    {
+      "path": "schemas/manifest.schema.json",
+      "bytes": 1028,
+      "sha256": "de62c22fea26ac1859674b783d48abde78f39e5b5151c3f575f91fbf498fd460"
+    },
+    {
+      "path": "schemas/personal-mcp-read.schema.json",
+      "bytes": 6823,
+      "sha256": "4435f60a584fb3099267a326af98d16b532194f13e281d65cd274a73d9bd066e"
+    },
+    {
+      "path": "vectors/personal-mcp-read.json",
+      "bytes": 102719,
+      "sha256": "40555c30ccc84075163279d35dfc288cead6b728f8d98bf70f23628827d69cb8"
+    }
+  ],
+  "aggregateSha256": "4a5ed2ca1a25673967ac2ee05a43c5f568bdd19c9ff768d8e606fdac94b9542f"
+}

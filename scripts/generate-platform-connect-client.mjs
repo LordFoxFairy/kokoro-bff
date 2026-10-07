@@ -1,3 +1,5 @@
+import { fromBinary, toBinary } from "@bufbuild/protobuf"
+import { FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt"
 import assert from "node:assert/strict"
 import { spawn } from "node:child_process"
 import { createHash } from "node:crypto"
@@ -7,28 +9,41 @@ import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-const ownerCommit = "c94909f1c593f2b7ffd5f325786739da744ff31f"
+const ownerCommit = "e83a2ad3a7c7d333ad0b0b8e7f3d3f64e497bc42"
 const vendorRoot = `contract/vendor/kokoro-platform/${ownerCommit}`
 const vendor = `contract/vendor/kokoro-platform/${ownerCommit}/proto`
 const artifacts = {
   v5: `${vendorRoot}/execution-operations-v5`,
   v6: `${vendorRoot}/execution-operations-v6`,
   v7: `${vendorRoot}/execution-operations-v7`,
+  v8: `${vendorRoot}/execution-operations-v8`,
 }
 const artifactAggregates = {
+  v8: "4a5ed2ca1a25673967ac2ee05a43c5f568bdd19c9ff768d8e606fdac94b9542f",
   v5: "3f97b3c98fd8e7ce46e4a8ea73237ddb85e764849d2b15dd28d0a3a58a69e42f",
   v6: "0d728881ba1046dc566131d63de71f6821ec636cf45837b5d937fee9872d5f91",
   v7: "3384a88f31be1fdd3e15bcbceb33e4fd7d62b04dfbfef65fcc35c24ce7afbb72",
 }
+const artifactProvenanceDigests = {
+  v5: "787d8d1e7e4f734ea072c1e7516fd9cb36acb9eab0b87192c873ec0c10eabb43",
+  v6: "3288cdad7e3a633c07873f255c52daa6bf6744831f81b3eeeb7340c12c75a312",
+  v7: "cd8b08095c7410f7322bc51bd3ba68eeb084e1b0542ab35d8b26751694c65dec",
+  v8: "a985f907fc9f2c5d8735c8918f1af6028efa9a3ed0f43b273612c592c2288444",
+}
 const descriptor = `${vendorRoot}/descriptor/platform-v1.binpb`
-const descriptorDigest = "0467c1c45e8ac27c79cb906e27bfdb679d88739e45bfa38128f0f629bec686d5"
+const descriptorDigest = "5f0f00f605f6a445b4d80943459b69bf9f489fd7851cc80b6c2700f8f78a8d0e"
+const parentDescriptor = `${vendorRoot}/descriptor/platform-v8-parent39.binpb`
+const parentDigest = "0467c1c45e8ac27c79cb906e27bfdb679d88739e45bfa38128f0f629bec686d5"
 const output = path.join(root, "src/generated/platform-connect")
 const manifestPath = path.join(root, "contract/dependencies/platform-connect.json")
 const sourceDigests = {
+  "kokoro/storage/v2/storage.proto": "02266d53b8bfb7fdd6991b17d59ebb17399d4f189b6a3135fedcb69b6b364276",
   "kokoro/common/v1/common.proto": "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08",
-  "kokoro/platform/v1/platform_runtime.proto": "e5fd71e436f8d0ad271ae4ccfbcc323dbb691aafeacca04e29297e8f0a068db0",
+  "kokoro/platform/v1/platform_runtime.proto": "c93ae886195d7c676d1bc2a3e99dcaa8013afdd7df304558a8ea0552ec0be7e4",
 }
 const directories = ["kokoro", "kokoro/common", "kokoro/common/v1", "kokoro/platform", "kokoro/platform/v1"]
+const sourceDirectories = [...directories, "kokoro/storage", "kokoro/storage/v2"].sort()
+const generationInputs = ["kokoro/common/v1/common.proto", "kokoro/platform/v1/platform_runtime.proto"]
 const generatedFiles = ["kokoro/common/v1/common_pb.ts", "kokoro/platform/v1/platform_runtime_pb.ts"]
 const versions = {
   "@bufbuild/buf": "1.72.0",
@@ -60,7 +75,7 @@ export function assertVendorPins(entries) {
 export function assertVendorLayout(entries) {
   assert.deepEqual(
     entries.map((entry) => entry.name).sort(),
-    ["descriptor", "execution-operations-v5", "execution-operations-v6", "execution-operations-v7", "proto"],
+    ["descriptor", "execution-operations-v5", "execution-operations-v6", "execution-operations-v7", "execution-operations-v8", "proto"],
     "Platform vendor layout allowlist drifted",
   )
   assert.ok(
@@ -101,7 +116,11 @@ export function assertExecutionArtifact(provenance, files, expectedAggregate = a
 }
 
 export async function verifyExecutionArtifactDirectory(directory, expectedAggregate = artifactAggregates.v5) {
-  const provenance = JSON.parse(await readFile(path.join(directory, "provenance.json"), "utf8"))
+  const provenanceBytes = await readFile(path.join(directory, "provenance.json"))
+  const version = Object.keys(artifactAggregates).find((key) => artifactAggregates[key] === expectedAggregate)
+  assert.ok(version, "Platform artifact aggregate not registered")
+  assert.equal(sha256(provenanceBytes), artifactProvenanceDigests[version], "Platform provenance bytes drifted")
+  const provenance = JSON.parse(provenanceBytes.toString("utf8"))
   const actual = await tree(directory)
   const expectedFiles = ["provenance.json", ...provenance.files.map((entry) => entry.path)].sort()
   const expectedDirectories = [
@@ -120,7 +139,21 @@ export async function verifyExecutionArtifactDirectory(directory, expectedAggreg
   return { files, manifest }
 }
 
-export function assertProofChain(v5, v6, v7) {
+export function assertProofChain(v5, v6, v7, v8) {
+  assert.deepEqual(
+    v8,
+    {
+      artifact: "platform-execution-operations",
+      artifactVersion: "8.0.0",
+      status: "inactive",
+      routable: false,
+      packageName: "kokoro.platform.v1",
+      inherits: { version: "7.0.0", aggregateSha256: artifactAggregates.v7 },
+      counts: { rpc: 43, command: 20, proof: 24 },
+      profile: "personal-mcp-read-v1",
+    },
+    "Platform v8 proof drifted",
+  )
   assert.deepEqual(
     {
       artifact: v5.artifact,
@@ -202,50 +235,82 @@ function assertV5Product(files) {
   assert.equal(product.safeProjection.fields.length, 9)
 }
 
-export function assertGetReadBinding(files) {
-  const bindings = JSON.parse(files["request-bindings.json"].toString("utf8"))
+export function assertPublishedDescriptors(currentBytes, parentBytes, files) {
+  assert.equal(sha256(currentBytes), descriptorDigest, "Platform descriptor digest drifted")
+  assert.equal(sha256(parentBytes), parentDigest, "Platform parent descriptor digest drifted")
+  const current = fromBinary(FileDescriptorSetSchema, currentBytes)
+  const parent = fromBinary(FileDescriptorSetSchema, parentBytes)
+  const currentFile = current.file.find((file) => file.package === "kokoro.platform.v1")
+  const parentFile = parent.file.find((file) => file.package === "kokoro.platform.v1")
+  assert.ok(currentFile && parentFile, "Platform descriptor file missing")
+  assert.equal(currentFile.service.flatMap((service) => service.method).length, 43)
+  const methods = ["ListPersonalMcpConnectors", "GetPersonalMcpConnector", "ListPersonalMcpConnections", "GetPersonalMcpConnection"]
+  const service = currentFile.service.find((entry) => entry.name === "ProductMcpPersonalService")
+  assert.deepEqual(
+    service?.method.map((method) => method.name),
+    methods,
+    "Platform personal methods drifted",
+  )
+  for (const method of service.method) {
+    assert.equal(method.clientStreaming, false)
+    assert.equal(method.serverStreaming, false)
+  }
+  const additions = [
+    ...methods.flatMap((method) => [`${method}Request`, `${method}Response`]),
+    "PersonalMcpPageRequest",
+    "PersonalMcpConnector",
+    "PersonalMcpConnection",
+  ]
+  assert.equal(currentFile.messageType.filter((message) => additions.includes(message.name)).length, 11)
   const catalog = JSON.parse(files["operation-catalog.json"].toString("utf8"))
-  const read = bindings.readBinding
-  assert.equal(bindings.artifactVersion, "5.0.1", "Platform read binding artifact version drifted")
-  assert.equal(bindings.bindingVersion, "3.0.0", "Platform request binding version drifted")
-  assert.equal(bindings.bindings.length, 24, "Platform request bindings drifted")
-  assert.equal(read.version, "1.0.0", "Platform Get read binding version drifted")
-  assert.equal(read.fqMethod, "kokoro.platform.v1.SkillCatalogService/GetSkillPackageUpload", "Platform Get read method drifted")
-  assert.equal(read.operation, "skill.get_package_upload", "Platform Get read operation drifted")
-  assert.equal(read.proof, "forbidden", "Platform Get must not carry proof")
-  assert.equal(read.command, "forbidden", "Platform Get must not carry command identity")
   assert.deepEqual(
-    read.requestFields.map(({ name, tag, type }) => [name, tag, type]),
+    catalog.operations.filter((entry) => entry.fqMethod === "kokoro.platform.v1.SkillCatalogService/GetSkillPackageUpload"),
     [
-      ["request_id", 1, "string"],
-      ["skill_id", 2, "SkillId"],
-      ["product_context", 3, "ProductCatalogContext"],
+      {
+        class: "workload-only",
+        fqMethod: "kokoro.platform.v1.SkillCatalogService/GetSkillPackageUpload",
+        operation: "skill.get_package_upload",
+        proof: "forbidden",
+        permission: "platform:skill-catalog.manage",
+        idempotency: "none",
+      },
     ],
-    "Platform Get request descriptor drifted",
-  )
-  assert.deepEqual(
-    read.responseFields.map(({ name, tag, type }) => [name, tag, type]),
-    [
-      ["skill_id", 1, "SkillId"],
-      ["attempt_id", 2, "optional string"],
-      ["attempt_epoch", 3, "uint64"],
-      ["phase", 4, "SkillPackagePhase"],
-      ["upload_id", 5, "optional string"],
-    ],
-    "Platform Get response descriptor drifted",
-  )
-  const operation = catalog.operations.filter(({ fqMethod }) => fqMethod === read.fqMethod)
-  assert.equal(operation.length, 1, "Platform Get operation catalog drifted")
-  assert.deepEqual(
-    { class: operation[0].class, operation: operation[0].operation, proof: operation[0].proof, idempotency: operation[0].idempotency },
-    { class: "workload-only", operation: read.operation, proof: "forbidden", idempotency: "none" },
     "Platform Get catalog semantics drifted",
   )
-  assert.equal(read.vectors.length, 7, "Platform Get read vectors drifted")
+  for (const file of [parentFile, currentFile]) {
+    const method = file.service.find((entry) => entry.name === "SkillCatalogService")?.method.find((entry) => entry.name === "GetSkillPackageUpload")
+    assert.ok(method && !method.clientStreaming && !method.serverStreaming, "Platform Get method drifted")
+    assert.equal(method.inputType, ".kokoro.platform.v1.GetSkillPackageUploadRequest")
+    assert.equal(method.outputType, ".kokoro.platform.v1.GetSkillPackageUploadResponse")
+    const request = file.messageType.find((entry) => entry.name === "GetSkillPackageUploadRequest")
+    assert.deepEqual(
+      request?.field.map((field) => [field.name, field.number, field.type, field.typeName]),
+      [
+        ["request_id", 1, 9, ""],
+        ["skill_id", 2, 11, ".kokoro.platform.v1.SkillId"],
+        ["product_context", 3, 11, ".kokoro.platform.v1.ProductCatalogContext"],
+      ],
+      "Platform Get request descriptor drifted",
+    )
+    const response = file.messageType.find((entry) => entry.name === "GetSkillPackageUploadResponse")
+    assert.deepEqual(
+      response?.field.map((field) => [field.name, field.number, field.type, field.proto3Optional]),
+      [
+        ["skill_id", 1, 11, false],
+        ["attempt_id", 2, 9, true],
+        ["attempt_epoch", 3, 4, false],
+        ["phase", 4, 14, false],
+        ["upload_id", 5, 9, true],
+      ],
+      "Platform Get response descriptor drifted",
+    )
+  }
+  currentFile.service = currentFile.service.filter((entry) => entry.name !== "ProductMcpPersonalService")
+  currentFile.messageType = currentFile.messageType.filter((entry) => !additions.includes(entry.name))
   assert.deepEqual(
-    read.vectors.map(({ name }) => name),
-    ["valid", "unknown-request", "unknown-context", "missing-context", "invalid-skill-id", "owner-kind", "subject-mismatch"],
-    "Platform Get read vector names drifted",
+    Buffer.from(toBinary(FileDescriptorSetSchema, current)),
+    Buffer.from(toBinary(FileDescriptorSetSchema, parent)),
+    "Platform parent39 structure drifted",
   )
 }
 
@@ -253,7 +318,14 @@ async function verifyExecutionArtifacts() {
   const v5 = await verifyExecutionArtifactDirectory(path.join(root, artifacts.v5), artifactAggregates.v5)
   const v6 = await verifyExecutionArtifactDirectory(path.join(root, artifacts.v6), artifactAggregates.v6)
   const v7 = await verifyExecutionArtifactDirectory(path.join(root, artifacts.v7), artifactAggregates.v7)
-  assertProofChain(v5.manifest, v6.manifest, v7.manifest)
+  const v8 = await verifyExecutionArtifactDirectory(path.join(root, artifacts.v8), artifactAggregates.v8)
+  assertProofChain(v5.manifest, v6.manifest, v7.manifest, v8.manifest)
+  const personalVectors = JSON.parse(v8.files["vectors/personal-mcp-read.json"].toString("utf8")).vectors
+  assert.equal(personalVectors.length, 190)
+  assert.equal(new Set(personalVectors.map((entry) => entry.id)).size, 190)
+  assertPublishedDescriptors(await readFile(path.join(root, descriptor)), await readFile(path.join(root, parentDescriptor)), v5.files)
+  const descriptorTree = await tree(path.join(root, vendorRoot, "descriptor"))
+  assert.deepEqual(descriptorTree, { files: ["platform-v1.binpb", "platform-v8-parent39.binpb"], directories: [] }, "Platform descriptor tree drifted")
   assertV5Product(v5.files)
   const profile = JSON.parse(v7.files["zip-profile-v2.json"].toString("utf8"))
   assert.deepEqual(profile.manifestKeys, ["schema_version", "entry"], "Platform V2 manifest key set drifted")
@@ -284,7 +356,7 @@ async function verifyInputs() {
     assert.equal(installed.version, version, `${name} installed version`)
   }
   const sources = await tree(path.join(root, vendor))
-  assert.deepEqual(sources.directories, directories, "Platform source directory allowlist drifted")
+  assert.deepEqual(sources.directories, sourceDirectories, "Platform source directory allowlist drifted")
   assertSourceDigests(Object.fromEntries(await Promise.all(sources.files.map(async (file) => [file, await readFile(path.join(root, vendor, file))]))))
   assert.deepEqual(
     JSON.parse(await readFile(path.join(root, configFiles[0]), "utf8")),
@@ -323,7 +395,16 @@ async function run(command, args) {
 }
 
 async function generate(directory) {
-  await run(path.join(root, "node_modules/.bin/buf"), ["generate", "--config", configFiles[0], "--template", configFiles[1], "--output", directory])
+  await run(path.join(root, "node_modules/.bin/buf"), [
+    "generate",
+    "--config",
+    configFiles[0],
+    "--template",
+    configFiles[1],
+    "--output",
+    directory,
+    ...generationInputs.flatMap((file) => ["--path", `${vendor}/${file}`]),
+  ])
   assertGeneratedTree(await tree(directory))
   await run(process.execPath, [path.join(root, "node_modules/prettier/bin/prettier.cjs"), "--no-semi", "--print-width", "160", "--write", directory])
 }
@@ -342,14 +423,21 @@ async function manifestFor(directory) {
       })),
     },
     execution_artifact: {
-      path: artifacts.v7,
-      artifact_version: "7.0.0",
+      path: artifacts.v8,
+      artifact_version: "8.0.0",
       status: "inactive",
       routable: false,
-      provenance_path: `${artifacts.v7}/provenance.json`,
-      aggregate_sha256: artifactAggregates.v7,
+      provenance_path: `${artifacts.v8}/provenance.json`,
+      aggregate_sha256: artifactAggregates.v8,
     },
     execution_proof_chain: [
+      {
+        path: artifacts.v8,
+        artifact_version: "8.0.0",
+        aggregate_sha256: artifactAggregates.v8,
+        inherits_version: "7.0.0",
+        inherits_aggregate_sha256: artifactAggregates.v7,
+      },
       {
         path: artifacts.v7,
         artifact_version: "7.0.0",
@@ -374,6 +462,7 @@ async function manifestFor(directory) {
       path: descriptor,
       sha256: descriptorDigest,
     },
+    parent_descriptor: { path: parentDescriptor, sha256: parentDigest },
     generator: {
       packages: versions,
       configs: await Promise.all(
@@ -400,7 +489,7 @@ async function manifestFor(directory) {
       supply_chain: "Exact package versions and lock integrity; local generation without remote plugins; only @bufbuild/buf install build is newly allowed.",
       performance: "No network calls or application startup added. Runtime performance is unmeasured; this slice validates descriptor serialization only.",
       failure_semantics:
-        "Generation rejects source/config/package/tree/digest drift. The fixed V7 to V6 to V5 proof chain, descriptor, current Proto source and Get read binding fail closed; runtime adapter admits current user before Platform Connect.",
+        "Generation rejects source/config/package/tree/digest drift. The fixed V8 to V7 to V6 to V5 proof chain, descriptor, current Proto source and Get read binding fail closed; runtime adapter admits current user before Platform Connect.",
       exit_path: "Regenerate from the pinned owner Proto with a reviewed compatible generator; generated wire types remain isolated from business code.",
       sources: ["https://connectrpc.com/docs/node/getting-started/", "https://github.com/bufbuild/protobuf-es/releases/tag/v2.14.0"],
     },
@@ -440,7 +529,7 @@ async function main() {
       assert.deepEqual(JSON.parse(await readFile(manifestPath, "utf8")), manifest, "Platform dependency manifest drifted")
     }
     console.log(
-      `PASS Platform Connect ${mode.slice(2)} (${generatedFiles.length} files, two byte-identical generations; fixed v7.0.0 -> v6.0.0 -> v5.0.1 proof; consumer activation remains gated)`,
+      `PASS Platform Connect ${mode.slice(2)} (${generatedFiles.length} files, two byte-identical generations; fixed v8.0.0 -> v7.0.0 -> v6.0.0 -> v5.0.1 proof; consumer activation remains gated)`,
     )
   } finally {
     await rm(temporary, { recursive: true, force: true })

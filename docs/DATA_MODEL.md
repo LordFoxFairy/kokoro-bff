@@ -1,3 +1,27 @@
+## R319 固定 Platform V8 消费文档门（机器消费候选已生成，待Root验收）
+
+基线为本仓 `76098c089dbcf23cc10d49140000ab04889ed7d7`、`codex/r257-bff-normal-current`，Root 起始清单543 tracked、仅既有 untracked var；原文完整保留为历史后缀。Root 已裁决本片仅升级 **Platform Connect 固定机器消费**：owner正式提交 `e83a2ad3a7c7d333ad0b0b8e7f3d3f64e497bc42`，完整V8→V7→V6→V5链、最新43 RPC/20 command/24 proof及parent39保护。不新增BFF public operation、业务client/runtime、IAM资格/权限、数据库或浏览器功能。
+
+提交基线固定owner `c94909f1c593f2b7ffd5f325786739da744ff31f` / V7；本候选已以唯一新commit vendor替换旧Connect vendor，不双pin、latest或fallback。V8 artifact原 `inactive` / `routable:false` 与consumer `generated-not-activated`标记保留；这些是发行/消费阶段metadata，不是runtime kill-switch或正常服务启用事实。Platform R317运行证据与BFF未来真实消费/正常维护分开；四读也不是完整MCP CRUD。
+
+### 零持久化变化与历史事实保护
+
+本片只有固定机器输入/生成物，无BFF表、列、索引、迁移、receipt/outbox/cache事实或SQL变化；`database/schema.sql`完整冻结。Platform MCP Connector/Connection/authorization事实仍由Platform自有owner处理，BFF不访问其数据库、不复制ORM/model/schema，也不创建MCP镜像表或为四read增加command回执。
+
+vendor发行记录不是业务数据owner：新唯一e83a目录保存Root正式Git对象38输入，含当前/parent39两descriptor及完整V8/V7/V6/V5。provenance逐文件长度/hash和aggregate只证明发行字节；旧V5–V7历史bytes按同值承接，不回填历史状态、不把最新43倒灌历史39。删除只限被替代旧Connect vendor固定点，不删除独立HTTPprojection发行记录、业务projection或历史有效Skills协议。
+
+消费链尚未新增查询或凭据读取；不存在本片授权的tenant/subject来自body/浏览器头路径。后继四read需要BFF当前IAM session得tenant/user、独立personal机器资格及可信metadata，仍每页由owner做本人谓词/绑定cursor；这些运行事实不由此次生成证明。OAuth token获取缓存、安全secret政策和正常资格维护均不写入本仓Schema，也不在本片实现。
+
+### 验证与后继边界
+
+先在现 `test/platform-connect-contract.test.mjs` 追加固定V8缺口期望并取得自然机器RED，再按Root另授写集更新输入/pin并正规生成。Node22、本地现Buf/Protobuf-ES/Connect精确版本不升级；`pnpm contract:generate:platform` 和 `pnpm contract:check:platform` 继续两次独立生成byte一致、精确源/树/包/配置/hash/manifest门；common输出应保持原bytes，platform输出由工具增加四方法/11messages。原V5 census39保持历史输入，最新43与parent39分开验证，不把旧断言全改43。Root负责最终contract/default/architecture/build与范围审查/Git；作者已在Node22执行正规生成/check/build及现contract单文件16 PASS/0 SKIP；Root最终工程门与独审尚待，不宣用户功能通过。
+
+当前机器范围无新的owner/Schema/字段/密钥政策未决。后续BFF四本人读public契约、独立personal客户端资格、真实用户session与OAuth token HTTP获取→Platform introspection、Web消费和正常进程维护另切片；R317 native issuer证据不能冒BFF HTTP token链通过。privateServer/secret宿主/编辑启停重连及全mutation政策仍未决，不在此裁决。正常projection、Skills、权限与服务保持不动。
+
+Root完整contract首轮298项中289 PASS/9 FAIL，六个既有测试仍硬编码旧vendor路径造成ENOENT，属于本次cutover遗漏而非历史baseline。现 `test/contract/openapi-contract.test.mjs`、`test/skill-installation-http.test.mjs`、`test/skill-package-begin-http.test.mjs`、`test/skill-package-complete-http.test.mjs`、`test/skill-publish-http.test.mjs`、`test/skill-validate-http.test.mjs` 仅旧40字符commit→新40字符commit字面替换；原V5 bytes与全部断言/版本/count不变，同唯一固定点继续校验。完整门待Root重跑。
+
+<!-- R319 fixed V8 consumer design end; prior document follows byte-exact. -->
+
 ## R291 Project release 数据实现候选（2026-10-07）
 
 canonical两表和约束未变，新增实现只操作 BFF 自有 Project deletion/outbox。claim 在短事务选一冷却恢复、普通补剩余总配额；SQL实际 clock_timestamp 建 lease，原 identity/fence/attempt 保持。settle 先串行锁 Project 聚合，再使用 clock_timestamp 未过期条件 CAS；lease 丢失/晚 ACK/unknown COMMIT 不猜写结果。内部单调观察不入数据库或公开契约，不读取 Storage/IAM SQL。

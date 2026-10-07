@@ -504,7 +504,7 @@ test("CompleteSkillPackageUpload publishes an inactive user-only strict command"
 test("CompleteSkillPackageUpload binds owner v4 digest version and all eleven frozen command vectors", async () => {
   const manifest = JSON.parse(
     await readFile(
-      new URL("../../contract/vendor/kokoro-platform/c94909f1c593f2b7ffd5f325786739da744ff31f/execution-operations-v5/manifest.json", import.meta.url),
+      new URL("../../contract/vendor/kokoro-platform/e83a2ad3a7c7d333ad0b0b8e7f3d3f64e497bc42/execution-operations-v5/manifest.json", import.meta.url),
       "utf8",
     ),
   )
@@ -579,7 +579,7 @@ test("ValidateSkillDraft describes one default-closed user-only attempt-bound co
 test("ValidateSkillDraft pins owner v4 tag 7 and all eight command digest vectors", async () => {
   const manifest = JSON.parse(
     await readFile(
-      new URL("../../contract/vendor/kokoro-platform/c94909f1c593f2b7ffd5f325786739da744ff31f/execution-operations-v5/manifest.json", import.meta.url),
+      new URL("../../contract/vendor/kokoro-platform/e83a2ad3a7c7d333ad0b0b8e7f3d3f64e497bc42/execution-operations-v5/manifest.json", import.meta.url),
       "utf8",
     ),
   )
@@ -663,7 +663,7 @@ test("PublishSkill exposes one default-closed user-only command with no request 
 test("PublishSkill pins the inactive owner v4 PERSONAL command and all eight digest vectors", async () => {
   const manifest = JSON.parse(
     await readFile(
-      new URL("../../contract/vendor/kokoro-platform/c94909f1c593f2b7ffd5f325786739da744ff31f/execution-operations-v5/manifest.json", import.meta.url),
+      new URL("../../contract/vendor/kokoro-platform/e83a2ad3a7c7d333ad0b0b8e7f3d3f64e497bc42/execution-operations-v5/manifest.json", import.meta.url),
       "utf8",
     ),
   )
@@ -731,7 +731,7 @@ test("PublishSkill semantic gate rejects body, state, status and legacy-operatio
 test("BeginSkillPackageUpload candidate names the exact inactive owner v4 command and digest version", async () => {
   const manifest = JSON.parse(
     await readFile(
-      new URL("../../contract/vendor/kokoro-platform/c94909f1c593f2b7ffd5f325786739da744ff31f/execution-operations-v5/manifest.json", import.meta.url),
+      new URL("../../contract/vendor/kokoro-platform/e83a2ad3a7c7d333ad0b0b8e7f3d3f64e497bc42/execution-operations-v5/manifest.json", import.meta.url),
       "utf8",
     ),
   )

@@ -1,3 +1,12 @@
+## R319 固定 Platform V8 消费已通过 Root 工程验收（未正常激活）
+
+BFF 现消费 owner e83a2ad3a7c7d333ad0b0b8e7f3d3f64e497bc42 的38个固定发布对象；唯一vendor迁移，V8→V7→V6→V5 provenance逐byte固定、当前43 RPC/父39描述剥除四本人读精确回父版。实际生成只common/platform；Storage第三proto保留完整固定来源而不生成第三业务模块。现generator删除原未调用的request-bindings读取，正式V5来源与对应GetSkillPackageUpload描述/字段守卫可达；四provenance本身的摘要也固定。public 8.6/105、Schema、runtime消费者、服务身份和正常进程均不变，仍 generated-not-activated，不能把本片当四本人读用户流程完成。
+
+Root完整check第一正确Node22尝试contract 289PASS/9FAIL：六既有test旧vendor路径ENOENT；只9处40字符commit字面更新，所有原断言/版本/计数inverse exact，不恢复旧vendor或放松门。最终Node22.22.2完整pnpm check句柄54243自然exit0：contract298PASS、default873中871PASS/0FAIL/2原资源SKIP，lint/typecheck/build/固定生成验证通过；format:check句柄92634自然exit0。此前48723子进程Node24被固定guard拒绝单列。所有日志保Root r319-bff-root-*.log，辅助门不替用户浏览器验收。
+
+82路径freeze55c03a99精确、其余499tracked byte一致；原独审f40caa91无确定新阻断、六引用inverse与三D0历史suffix exact。Root仅再加本CURRENT与INDEX前缀，Git独占显式路径。真实OAuth client_credentials HTTP→owner introspection→BFF四本人读、正常8086接入/资格和完整CRUD仍OPEN；本轮只只读核官方IAM HTTP接缝，未启动测试fixture/扩权/重启资源。
+
+---
 ## R291 Project scope release worker 候选入口
 
 - `src/application/ports/project-scope-release-outbox.ts`：具名 claim/lease/settle 与 required 单调观察。

@@ -1,0 +1,3434 @@
+{
+  "profileVersion": 1,
+  "vectors": [
+    {
+      "id": "ListPersonalMcpConnectors.valid",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "request",
+      "outcome": "accept",
+      "value": {
+        "request_id": "r-A"
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.forbidden-execution_proof",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "execution_proof": "forbidden"
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.forbidden-tenant_id",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "tenant_id": "forbidden"
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.forbidden-actor_id",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "actor_id": "forbidden"
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.forbidden-subject_id",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "subject_id": "forbidden"
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.forbidden-owner_scope",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "owner_scope": "forbidden"
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.forbidden-target_owner_scope",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "target_owner_scope": "forbidden"
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.forbidden-product_context",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "product_context": "forbidden"
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.forbidden-command",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "command": "forbidden"
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.forbidden-unknown",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "unknown": "forbidden"
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.request-id-10",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": ""
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.request-id-11",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": null
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.request-id-12",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "space id"
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.request-id-13",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.page-valid-14",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "request",
+      "outcome": "accept",
+      "value": {
+        "request_id": "r-A",
+        "page": {}
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.page-valid-15",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "request",
+      "outcome": "accept",
+      "value": {
+        "request_id": "r-A",
+        "page": {
+          "limit": 1
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.page-valid-16",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "request",
+      "outcome": "accept",
+      "value": {
+        "request_id": "r-A",
+        "page": {
+          "limit": 100
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.page-valid-17",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "request",
+      "outcome": "accept",
+      "value": {
+        "request_id": "r-A",
+        "page": {
+          "cursor": "eyJ2ZXJzaW9uIjoxLCJzdXJmYWNlIjoicHJvZHVjdC1tY3AtcGVyc29uYWwtY29ubmVjdG9ycyIsInNjb3BlIjoiYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYSIsImFmdGVyIjp7InByb3ZpZGVyS2V5IjoiZ2l0aHViIiwiaWQiOiJjb25uZWN0b3ItQSJ9fQ"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.page-invalid-18",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "page": null
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.page-invalid-19",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "page": {
+          "limit": 0
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.page-invalid-20",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "page": {
+          "limit": 101
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.page-invalid-21",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "page": {
+          "limit": {
+            "numerator": 3,
+            "denominator": 2
+          }
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.page-invalid-22",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "page": {
+          "limit": -1
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.page-invalid-23",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "page": {
+          "limit": "2"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.page-invalid-24",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "page": {
+          "cursor": ""
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.page-invalid-25",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "page": {
+          "cursor": "a="
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.page-invalid-26",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "page": {
+          "cursor": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.page-invalid-27",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "page": {
+          "extra": 1
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.cursor-invalid-28",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "page": {
+          "cursor": "eyJ2ZXJzaW9uIjoxLCJzdXJmYWNlIjoicHJvZHVjdC1tY3AtcGVyc29uYWwtY29ubmVjdG9ycyIsInNjb3BlIjoiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYiIsImFmdGVyIjp7InByb3ZpZGVyS2V5IjoiZ2l0aHViIiwiaWQiOiJjb25uZWN0b3ItQSJ9fQ"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.cursor-invalid-29",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "page": {
+          "cursor": "eyJ2ZXJzaW9uIjoxLCJzdXJmYWNlIjoicHJvZHVjdC1tY3AtcGVyc29uYWwtY29ubmVjdG9ycyIsInNjb3BlIjoiYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYSIsImFmdGVyIjp7InByb3ZpZGVyS2V5IjoiZ2l0aHViIiwiaWQiOiJjb25uZWN0b3ItQSJ9LCJleHRyYSI6MX0"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.cursor-invalid-30",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "page": {
+          "cursor": "eyJ2ZXJzaW9uIjoyLCJzdXJmYWNlIjoicHJvZHVjdC1tY3AtcGVyc29uYWwtY29ubmVjdG9ycyIsInNjb3BlIjoiYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYSIsImFmdGVyIjp7InByb3ZpZGVyS2V5IjoiZ2l0aHViIiwiaWQiOiJjb25uZWN0b3ItQSJ9fQ"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.cursor-invalid-31",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "page": {
+          "cursor": "eyJ2ZXJzaW9uIjoxLCJzdXJmYWNlIjoicHJvZHVjdC1tY3AtcGVyc29uYWwtY29ubmVjdG9ycyIsInNjb3BlIjoiYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYSIsImFmdGVyIjp7InByb3ZpZGVyS2V5IjoiZ2l0aHViIiwiaWQiOiJjb25uZWN0b3ItQSIsImV4dHJhIjoxfX0"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.cursor-invalid-32",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "page": {
+          "cursor": "eyJ2ZXJzaW9uIjoxLCJzdXJmYWNlIjoicHJvZHVjdC1tY3AtcGVyc29uYWwtY29ubmVjdG9ycyIsInNjb3BlIjoiYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYSIsImFmdGVyIjp7fX0"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.cursor-invalid-33",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "page": {
+          "cursor": "eyJ2ZXJzaW9uIjoxLCJzdXJmYWNlIjoib3RoZXIiLCJzY29wZSI6ImFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEiLCJhZnRlciI6eyJwcm92aWRlcktleSI6ImdpdGh1YiIsImlkIjoiY29ubmVjdG9yLUEifX0"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnector.valid",
+      "method": "GetPersonalMcpConnector",
+      "direction": "request",
+      "outcome": "accept",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": "connector-A"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnector.forbidden-execution_proof",
+      "method": "GetPersonalMcpConnector",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": "connector-A"
+        },
+        "execution_proof": "forbidden"
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnector.forbidden-tenant_id",
+      "method": "GetPersonalMcpConnector",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": "connector-A"
+        },
+        "tenant_id": "forbidden"
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnector.forbidden-actor_id",
+      "method": "GetPersonalMcpConnector",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": "connector-A"
+        },
+        "actor_id": "forbidden"
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnector.forbidden-subject_id",
+      "method": "GetPersonalMcpConnector",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": "connector-A"
+        },
+        "subject_id": "forbidden"
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnector.forbidden-owner_scope",
+      "method": "GetPersonalMcpConnector",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": "connector-A"
+        },
+        "owner_scope": "forbidden"
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnector.forbidden-target_owner_scope",
+      "method": "GetPersonalMcpConnector",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": "connector-A"
+        },
+        "target_owner_scope": "forbidden"
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnector.forbidden-product_context",
+      "method": "GetPersonalMcpConnector",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": "connector-A"
+        },
+        "product_context": "forbidden"
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnector.forbidden-command",
+      "method": "GetPersonalMcpConnector",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": "connector-A"
+        },
+        "command": "forbidden"
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnector.forbidden-unknown",
+      "method": "GetPersonalMcpConnector",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": "connector-A"
+        },
+        "unknown": "forbidden"
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnector.request-id-44",
+      "method": "GetPersonalMcpConnector",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "",
+        "connector_id": {
+          "value": "connector-A"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnector.request-id-45",
+      "method": "GetPersonalMcpConnector",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": null,
+        "connector_id": {
+          "value": "connector-A"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnector.request-id-46",
+      "method": "GetPersonalMcpConnector",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "space id",
+        "connector_id": {
+          "value": "connector-A"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnector.request-id-47",
+      "method": "GetPersonalMcpConnector",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "connector_id": {
+          "value": "connector-A"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnector.bad-id-48",
+      "method": "GetPersonalMcpConnector",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": null
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnector.bad-id-49",
+      "method": "GetPersonalMcpConnector",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {}
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnector.bad-id-50",
+      "method": "GetPersonalMcpConnector",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": ""
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnector.bad-id-51",
+      "method": "GetPersonalMcpConnector",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": "a/b"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnector.bad-id-52",
+      "method": "GetPersonalMcpConnector",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": "A",
+          "extra": 1
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnector.missing-id",
+      "method": "GetPersonalMcpConnector",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A"
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnector.page-forbidden",
+      "method": "GetPersonalMcpConnector",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": "connector-A"
+        },
+        "page": {}
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.valid",
+      "method": "ListPersonalMcpConnections",
+      "direction": "request",
+      "outcome": "accept",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": "connector-A"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.forbidden-execution_proof",
+      "method": "ListPersonalMcpConnections",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": "connector-A"
+        },
+        "execution_proof": "forbidden"
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.forbidden-tenant_id",
+      "method": "ListPersonalMcpConnections",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": "connector-A"
+        },
+        "tenant_id": "forbidden"
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.forbidden-actor_id",
+      "method": "ListPersonalMcpConnections",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": "connector-A"
+        },
+        "actor_id": "forbidden"
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.forbidden-subject_id",
+      "method": "ListPersonalMcpConnections",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": "connector-A"
+        },
+        "subject_id": "forbidden"
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.forbidden-owner_scope",
+      "method": "ListPersonalMcpConnections",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": "connector-A"
+        },
+        "owner_scope": "forbidden"
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.forbidden-target_owner_scope",
+      "method": "ListPersonalMcpConnections",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": "connector-A"
+        },
+        "target_owner_scope": "forbidden"
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.forbidden-product_context",
+      "method": "ListPersonalMcpConnections",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": "connector-A"
+        },
+        "product_context": "forbidden"
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.forbidden-command",
+      "method": "ListPersonalMcpConnections",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": "connector-A"
+        },
+        "command": "forbidden"
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.forbidden-unknown",
+      "method": "ListPersonalMcpConnections",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": "connector-A"
+        },
+        "unknown": "forbidden"
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.request-id-65",
+      "method": "ListPersonalMcpConnections",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "",
+        "connector_id": {
+          "value": "connector-A"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.request-id-66",
+      "method": "ListPersonalMcpConnections",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": null,
+        "connector_id": {
+          "value": "connector-A"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.request-id-67",
+      "method": "ListPersonalMcpConnections",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "space id",
+        "connector_id": {
+          "value": "connector-A"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.request-id-68",
+      "method": "ListPersonalMcpConnections",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "connector_id": {
+          "value": "connector-A"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.bad-id-69",
+      "method": "ListPersonalMcpConnections",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": null
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.bad-id-70",
+      "method": "ListPersonalMcpConnections",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {}
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.bad-id-71",
+      "method": "ListPersonalMcpConnections",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": ""
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.bad-id-72",
+      "method": "ListPersonalMcpConnections",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": "a/b"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.bad-id-73",
+      "method": "ListPersonalMcpConnections",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": "A",
+          "extra": 1
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.missing-id",
+      "method": "ListPersonalMcpConnections",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A"
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.page-valid-75",
+      "method": "ListPersonalMcpConnections",
+      "direction": "request",
+      "outcome": "accept",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": "connector-A"
+        },
+        "page": {}
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.page-valid-76",
+      "method": "ListPersonalMcpConnections",
+      "direction": "request",
+      "outcome": "accept",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": "connector-A"
+        },
+        "page": {
+          "limit": 1
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.page-valid-77",
+      "method": "ListPersonalMcpConnections",
+      "direction": "request",
+      "outcome": "accept",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": "connector-A"
+        },
+        "page": {
+          "limit": 100
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.page-valid-78",
+      "method": "ListPersonalMcpConnections",
+      "direction": "request",
+      "outcome": "accept",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": "connector-A"
+        },
+        "page": {
+          "cursor": "eyJ2ZXJzaW9uIjoxLCJzdXJmYWNlIjoicHJvZHVjdC1tY3AtcGVyc29uYWwtY29ubmVjdGlvbnMiLCJzY29wZSI6ImFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEiLCJhZnRlciI6eyJzZXJ2ZXJJZCI6InNlcnZlci1BIiwiaWQiOiJjb25uZWN0aW9uLUEifX0"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.page-invalid-79",
+      "method": "ListPersonalMcpConnections",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": "connector-A"
+        },
+        "page": null
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.page-invalid-80",
+      "method": "ListPersonalMcpConnections",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": "connector-A"
+        },
+        "page": {
+          "limit": 0
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.page-invalid-81",
+      "method": "ListPersonalMcpConnections",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": "connector-A"
+        },
+        "page": {
+          "limit": 101
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.page-invalid-82",
+      "method": "ListPersonalMcpConnections",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": "connector-A"
+        },
+        "page": {
+          "limit": {
+            "numerator": 3,
+            "denominator": 2
+          }
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.page-invalid-83",
+      "method": "ListPersonalMcpConnections",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": "connector-A"
+        },
+        "page": {
+          "limit": -1
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.page-invalid-84",
+      "method": "ListPersonalMcpConnections",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": "connector-A"
+        },
+        "page": {
+          "limit": "2"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.page-invalid-85",
+      "method": "ListPersonalMcpConnections",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": "connector-A"
+        },
+        "page": {
+          "cursor": ""
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.page-invalid-86",
+      "method": "ListPersonalMcpConnections",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": "connector-A"
+        },
+        "page": {
+          "cursor": "a="
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.page-invalid-87",
+      "method": "ListPersonalMcpConnections",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": "connector-A"
+        },
+        "page": {
+          "cursor": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.page-invalid-88",
+      "method": "ListPersonalMcpConnections",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": "connector-A"
+        },
+        "page": {
+          "extra": 1
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.cursor-invalid-89",
+      "method": "ListPersonalMcpConnections",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": "connector-A"
+        },
+        "page": {
+          "cursor": "eyJ2ZXJzaW9uIjoxLCJzdXJmYWNlIjoicHJvZHVjdC1tY3AtcGVyc29uYWwtY29ubmVjdGlvbnMiLCJzY29wZSI6ImJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmIiLCJhZnRlciI6eyJzZXJ2ZXJJZCI6InNlcnZlci1BIiwiaWQiOiJjb25uZWN0aW9uLUEifX0"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.cursor-invalid-90",
+      "method": "ListPersonalMcpConnections",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": "connector-A"
+        },
+        "page": {
+          "cursor": "eyJ2ZXJzaW9uIjoxLCJzdXJmYWNlIjoicHJvZHVjdC1tY3AtcGVyc29uYWwtY29ubmVjdGlvbnMiLCJzY29wZSI6ImFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEiLCJhZnRlciI6eyJzZXJ2ZXJJZCI6InNlcnZlci1BIiwiaWQiOiJjb25uZWN0aW9uLUEifSwiZXh0cmEiOjF9"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.cursor-invalid-91",
+      "method": "ListPersonalMcpConnections",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": "connector-A"
+        },
+        "page": {
+          "cursor": "eyJ2ZXJzaW9uIjoyLCJzdXJmYWNlIjoicHJvZHVjdC1tY3AtcGVyc29uYWwtY29ubmVjdGlvbnMiLCJzY29wZSI6ImFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEiLCJhZnRlciI6eyJzZXJ2ZXJJZCI6InNlcnZlci1BIiwiaWQiOiJjb25uZWN0aW9uLUEifX0"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.cursor-invalid-92",
+      "method": "ListPersonalMcpConnections",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": "connector-A"
+        },
+        "page": {
+          "cursor": "eyJ2ZXJzaW9uIjoxLCJzdXJmYWNlIjoicHJvZHVjdC1tY3AtcGVyc29uYWwtY29ubmVjdGlvbnMiLCJzY29wZSI6ImFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEiLCJhZnRlciI6eyJzZXJ2ZXJJZCI6InNlcnZlci1BIiwiaWQiOiJjb25uZWN0aW9uLUEiLCJleHRyYSI6MX19"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.cursor-invalid-93",
+      "method": "ListPersonalMcpConnections",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": "connector-A"
+        },
+        "page": {
+          "cursor": "eyJ2ZXJzaW9uIjoxLCJzdXJmYWNlIjoicHJvZHVjdC1tY3AtcGVyc29uYWwtY29ubmVjdGlvbnMiLCJzY29wZSI6ImFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEiLCJhZnRlciI6e319"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.cursor-invalid-94",
+      "method": "ListPersonalMcpConnections",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connector_id": {
+          "value": "connector-A"
+        },
+        "page": {
+          "cursor": "eyJ2ZXJzaW9uIjoxLCJzdXJmYWNlIjoib3RoZXIiLCJzY29wZSI6ImFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEiLCJhZnRlciI6eyJzZXJ2ZXJJZCI6InNlcnZlci1BIiwiaWQiOiJjb25uZWN0aW9uLUEifX0"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnection.valid",
+      "method": "GetPersonalMcpConnection",
+      "direction": "request",
+      "outcome": "accept",
+      "value": {
+        "request_id": "r-A",
+        "connection_id": {
+          "value": "connection-A"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnection.forbidden-execution_proof",
+      "method": "GetPersonalMcpConnection",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connection_id": {
+          "value": "connection-A"
+        },
+        "execution_proof": "forbidden"
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnection.forbidden-tenant_id",
+      "method": "GetPersonalMcpConnection",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connection_id": {
+          "value": "connection-A"
+        },
+        "tenant_id": "forbidden"
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnection.forbidden-actor_id",
+      "method": "GetPersonalMcpConnection",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connection_id": {
+          "value": "connection-A"
+        },
+        "actor_id": "forbidden"
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnection.forbidden-subject_id",
+      "method": "GetPersonalMcpConnection",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connection_id": {
+          "value": "connection-A"
+        },
+        "subject_id": "forbidden"
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnection.forbidden-owner_scope",
+      "method": "GetPersonalMcpConnection",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connection_id": {
+          "value": "connection-A"
+        },
+        "owner_scope": "forbidden"
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnection.forbidden-target_owner_scope",
+      "method": "GetPersonalMcpConnection",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connection_id": {
+          "value": "connection-A"
+        },
+        "target_owner_scope": "forbidden"
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnection.forbidden-product_context",
+      "method": "GetPersonalMcpConnection",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connection_id": {
+          "value": "connection-A"
+        },
+        "product_context": "forbidden"
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnection.forbidden-command",
+      "method": "GetPersonalMcpConnection",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connection_id": {
+          "value": "connection-A"
+        },
+        "command": "forbidden"
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnection.forbidden-unknown",
+      "method": "GetPersonalMcpConnection",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connection_id": {
+          "value": "connection-A"
+        },
+        "unknown": "forbidden"
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnection.request-id-105",
+      "method": "GetPersonalMcpConnection",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "",
+        "connection_id": {
+          "value": "connection-A"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnection.request-id-106",
+      "method": "GetPersonalMcpConnection",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": null,
+        "connection_id": {
+          "value": "connection-A"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnection.request-id-107",
+      "method": "GetPersonalMcpConnection",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "space id",
+        "connection_id": {
+          "value": "connection-A"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnection.request-id-108",
+      "method": "GetPersonalMcpConnection",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "connection_id": {
+          "value": "connection-A"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnection.bad-id-109",
+      "method": "GetPersonalMcpConnection",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connection_id": null
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnection.bad-id-110",
+      "method": "GetPersonalMcpConnection",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connection_id": {}
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnection.bad-id-111",
+      "method": "GetPersonalMcpConnection",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connection_id": {
+          "value": ""
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnection.bad-id-112",
+      "method": "GetPersonalMcpConnection",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connection_id": {
+          "value": "a/b"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnection.bad-id-113",
+      "method": "GetPersonalMcpConnection",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connection_id": {
+          "value": "A",
+          "extra": 1
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnection.missing-id",
+      "method": "GetPersonalMcpConnection",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A"
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnection.page-forbidden",
+      "method": "GetPersonalMcpConnection",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "connection_id": {
+          "value": "connection-A"
+        },
+        "page": {}
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "status-1",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "request",
+      "outcome": "accept",
+      "value": {
+        "request_id": "r-A",
+        "status": 1
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "status-2",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "request",
+      "outcome": "accept",
+      "value": {
+        "request_id": "r-A",
+        "status": 2
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "status-3",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "request",
+      "outcome": "accept",
+      "value": {
+        "request_id": "r-A",
+        "status": 3
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "status-4",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "request",
+      "outcome": "accept",
+      "value": {
+        "request_id": "r-A",
+        "status": 4
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "bad-status-0",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "status": 0
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "bad-status-5",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "status": 5
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "bad-status-None",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "status": null
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "bad-status-active",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "request",
+      "outcome": "reject",
+      "value": {
+        "request_id": "r-A",
+        "status": "active"
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.safe",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "response",
+      "outcome": "accept",
+      "value": {
+        "connectors": [
+          {
+            "connector_id": {
+              "value": "connector-A"
+            },
+            "connector_type": 3,
+            "provider_key": "github",
+            "status": 2,
+            "approved_scopes": []
+          }
+        ],
+        "page": {}
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.empty",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "response",
+      "outcome": "accept",
+      "value": {
+        "page": {}
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.next",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "response",
+      "outcome": "accept",
+      "value": {
+        "connectors": [
+          {
+            "connector_id": {
+              "value": "connector-A"
+            },
+            "connector_type": 3,
+            "provider_key": "github",
+            "status": 2,
+            "approved_scopes": []
+          }
+        ],
+        "page": {
+          "next_cursor": "eyJ2ZXJzaW9uIjoxLCJzdXJmYWNlIjoicHJvZHVjdC1tY3AtcGVyc29uYWwtY29ubmVjdG9ycyIsInNjb3BlIjoiYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYSIsImFmdGVyIjp7InByb3ZpZGVyS2V5IjoiZ2l0aHViIiwiaWQiOiJjb25uZWN0b3ItQSJ9fQ"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.empty-next",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connectors": [],
+        "page": {
+          "next_cursor": "eyJ2ZXJzaW9uIjoxLCJzdXJmYWNlIjoicHJvZHVjdC1tY3AtcGVyc29uYWwtY29ubmVjdG9ycyIsInNjb3BlIjoiYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYSIsImFmdGVyIjp7InByb3ZpZGVyS2V5IjoiZ2l0aHViIiwiaWQiOiJjb25uZWN0b3ItQSJ9fQ"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.missing-page",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connectors": [
+          {
+            "connector_id": {
+              "value": "connector-A"
+            },
+            "connector_type": 3,
+            "provider_key": "github",
+            "status": 2,
+            "approved_scopes": []
+          }
+        ]
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.unsafe-connector_id",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connectors": [
+          {
+            "connector_id": null,
+            "connector_type": 3,
+            "provider_key": "github",
+            "status": 2,
+            "approved_scopes": []
+          }
+        ],
+        "page": {}
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.unsafe-connector_type",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connectors": [
+          {
+            "connector_id": {
+              "value": "connector-A"
+            },
+            "connector_type": null,
+            "provider_key": "github",
+            "status": 2,
+            "approved_scopes": []
+          }
+        ],
+        "page": {}
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.unsafe-provider_key",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connectors": [
+          {
+            "connector_id": {
+              "value": "connector-A"
+            },
+            "connector_type": 3,
+            "provider_key": null,
+            "status": 2,
+            "approved_scopes": []
+          }
+        ],
+        "page": {}
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.unsafe-status",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connectors": [
+          {
+            "connector_id": {
+              "value": "connector-A"
+            },
+            "connector_type": 3,
+            "provider_key": "github",
+            "status": null,
+            "approved_scopes": []
+          }
+        ],
+        "page": {}
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.unsafe-approved_scopes",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connectors": [
+          {
+            "connector_id": {
+              "value": "connector-A"
+            },
+            "connector_type": 3,
+            "provider_key": "github",
+            "status": 2,
+            "approved_scopes": null
+          }
+        ],
+        "page": {}
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.unsafe-secret",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connectors": [
+          {
+            "connector_id": {
+              "value": "connector-A"
+            },
+            "connector_type": 3,
+            "provider_key": "github",
+            "status": 2,
+            "approved_scopes": [],
+            "secret": "forbidden"
+          }
+        ],
+        "page": {}
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.unsafe-token",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connectors": [
+          {
+            "connector_id": {
+              "value": "connector-A"
+            },
+            "connector_type": 3,
+            "provider_key": "github",
+            "status": 2,
+            "approved_scopes": [],
+            "token": "forbidden"
+          }
+        ],
+        "page": {}
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.unsafe-external_account_ref",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connectors": [
+          {
+            "connector_id": {
+              "value": "connector-A"
+            },
+            "connector_type": 3,
+            "provider_key": "github",
+            "status": 2,
+            "approved_scopes": [],
+            "external_account_ref": "forbidden"
+          }
+        ],
+        "page": {}
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.unsafe-authorization_id",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connectors": [
+          {
+            "connector_id": {
+              "value": "connector-A"
+            },
+            "connector_type": 3,
+            "provider_key": "github",
+            "status": 2,
+            "approved_scopes": [],
+            "authorization_id": "forbidden"
+          }
+        ],
+        "page": {}
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.unsafe-server_url",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connectors": [
+          {
+            "connector_id": {
+              "value": "connector-A"
+            },
+            "connector_type": 3,
+            "provider_key": "github",
+            "status": 2,
+            "approved_scopes": [],
+            "server_url": "forbidden"
+          }
+        ],
+        "page": {}
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.duplicate",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connectors": [
+          {
+            "connector_id": {
+              "value": "connector-A"
+            },
+            "connector_type": 3,
+            "provider_key": "github",
+            "status": 2,
+            "approved_scopes": ["x", "x"]
+          }
+        ],
+        "page": {}
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.management-state-1",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "response",
+      "outcome": "accept",
+      "value": {
+        "connectors": [
+          {
+            "connector_id": {
+              "value": "connector-A"
+            },
+            "connector_type": 3,
+            "provider_key": "github",
+            "status": 1,
+            "approved_scopes": []
+          }
+        ],
+        "page": {}
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.management-state-3",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "response",
+      "outcome": "accept",
+      "value": {
+        "connectors": [
+          {
+            "connector_id": {
+              "value": "connector-A"
+            },
+            "connector_type": 3,
+            "provider_key": "github",
+            "status": 3,
+            "approved_scopes": []
+          }
+        ],
+        "page": {}
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnectors.management-state-4",
+      "method": "ListPersonalMcpConnectors",
+      "direction": "response",
+      "outcome": "accept",
+      "value": {
+        "connectors": [
+          {
+            "connector_id": {
+              "value": "connector-A"
+            },
+            "connector_type": 3,
+            "provider_key": "github",
+            "status": 4,
+            "approved_scopes": []
+          }
+        ],
+        "page": {}
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnector.safe",
+      "method": "GetPersonalMcpConnector",
+      "direction": "response",
+      "outcome": "accept",
+      "value": {
+        "connector": {
+          "connector_id": {
+            "value": "connector-A"
+          },
+          "connector_type": 3,
+          "provider_key": "github",
+          "status": 2,
+          "approved_scopes": []
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnector.unsafe-connector_id",
+      "method": "GetPersonalMcpConnector",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connector": {
+          "connector_id": null,
+          "connector_type": 3,
+          "provider_key": "github",
+          "status": 2,
+          "approved_scopes": []
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnector.unsafe-connector_type",
+      "method": "GetPersonalMcpConnector",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connector": {
+          "connector_id": {
+            "value": "connector-A"
+          },
+          "connector_type": null,
+          "provider_key": "github",
+          "status": 2,
+          "approved_scopes": []
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnector.unsafe-provider_key",
+      "method": "GetPersonalMcpConnector",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connector": {
+          "connector_id": {
+            "value": "connector-A"
+          },
+          "connector_type": 3,
+          "provider_key": null,
+          "status": 2,
+          "approved_scopes": []
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnector.unsafe-status",
+      "method": "GetPersonalMcpConnector",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connector": {
+          "connector_id": {
+            "value": "connector-A"
+          },
+          "connector_type": 3,
+          "provider_key": "github",
+          "status": null,
+          "approved_scopes": []
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnector.unsafe-approved_scopes",
+      "method": "GetPersonalMcpConnector",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connector": {
+          "connector_id": {
+            "value": "connector-A"
+          },
+          "connector_type": 3,
+          "provider_key": "github",
+          "status": 2,
+          "approved_scopes": null
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnector.unsafe-secret",
+      "method": "GetPersonalMcpConnector",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connector": {
+          "connector_id": {
+            "value": "connector-A"
+          },
+          "connector_type": 3,
+          "provider_key": "github",
+          "status": 2,
+          "approved_scopes": [],
+          "secret": "forbidden"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnector.unsafe-token",
+      "method": "GetPersonalMcpConnector",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connector": {
+          "connector_id": {
+            "value": "connector-A"
+          },
+          "connector_type": 3,
+          "provider_key": "github",
+          "status": 2,
+          "approved_scopes": [],
+          "token": "forbidden"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnector.unsafe-external_account_ref",
+      "method": "GetPersonalMcpConnector",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connector": {
+          "connector_id": {
+            "value": "connector-A"
+          },
+          "connector_type": 3,
+          "provider_key": "github",
+          "status": 2,
+          "approved_scopes": [],
+          "external_account_ref": "forbidden"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnector.unsafe-authorization_id",
+      "method": "GetPersonalMcpConnector",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connector": {
+          "connector_id": {
+            "value": "connector-A"
+          },
+          "connector_type": 3,
+          "provider_key": "github",
+          "status": 2,
+          "approved_scopes": [],
+          "authorization_id": "forbidden"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnector.unsafe-server_url",
+      "method": "GetPersonalMcpConnector",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connector": {
+          "connector_id": {
+            "value": "connector-A"
+          },
+          "connector_type": 3,
+          "provider_key": "github",
+          "status": 2,
+          "approved_scopes": [],
+          "server_url": "forbidden"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnector.duplicate",
+      "method": "GetPersonalMcpConnector",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connector": {
+          "connector_id": {
+            "value": "connector-A"
+          },
+          "connector_type": 3,
+          "provider_key": "github",
+          "status": 2,
+          "approved_scopes": ["x", "x"]
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnector.management-state-1",
+      "method": "GetPersonalMcpConnector",
+      "direction": "response",
+      "outcome": "accept",
+      "value": {
+        "connector": {
+          "connector_id": {
+            "value": "connector-A"
+          },
+          "connector_type": 3,
+          "provider_key": "github",
+          "status": 1,
+          "approved_scopes": []
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnector.management-state-3",
+      "method": "GetPersonalMcpConnector",
+      "direction": "response",
+      "outcome": "accept",
+      "value": {
+        "connector": {
+          "connector_id": {
+            "value": "connector-A"
+          },
+          "connector_type": 3,
+          "provider_key": "github",
+          "status": 3,
+          "approved_scopes": []
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnector.management-state-4",
+      "method": "GetPersonalMcpConnector",
+      "direction": "response",
+      "outcome": "accept",
+      "value": {
+        "connector": {
+          "connector_id": {
+            "value": "connector-A"
+          },
+          "connector_type": 3,
+          "provider_key": "github",
+          "status": 4,
+          "approved_scopes": []
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.safe",
+      "method": "ListPersonalMcpConnections",
+      "direction": "response",
+      "outcome": "accept",
+      "value": {
+        "connections": [
+          {
+            "connection_id": {
+              "value": "connection-A"
+            },
+            "connector_id": {
+              "value": "connector-A"
+            },
+            "server_id": {
+              "value": "server-A"
+            },
+            "allowed_selectors": [],
+            "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "status": "active"
+          }
+        ],
+        "page": {}
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.empty",
+      "method": "ListPersonalMcpConnections",
+      "direction": "response",
+      "outcome": "accept",
+      "value": {
+        "page": {}
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.next",
+      "method": "ListPersonalMcpConnections",
+      "direction": "response",
+      "outcome": "accept",
+      "value": {
+        "connections": [
+          {
+            "connection_id": {
+              "value": "connection-A"
+            },
+            "connector_id": {
+              "value": "connector-A"
+            },
+            "server_id": {
+              "value": "server-A"
+            },
+            "allowed_selectors": [],
+            "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "status": "active"
+          }
+        ],
+        "page": {
+          "next_cursor": "eyJ2ZXJzaW9uIjoxLCJzdXJmYWNlIjoicHJvZHVjdC1tY3AtcGVyc29uYWwtY29ubmVjdGlvbnMiLCJzY29wZSI6ImFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEiLCJhZnRlciI6eyJzZXJ2ZXJJZCI6InNlcnZlci1BIiwiaWQiOiJjb25uZWN0aW9uLUEifX0"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.empty-next",
+      "method": "ListPersonalMcpConnections",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connections": [],
+        "page": {
+          "next_cursor": "eyJ2ZXJzaW9uIjoxLCJzdXJmYWNlIjoicHJvZHVjdC1tY3AtcGVyc29uYWwtY29ubmVjdGlvbnMiLCJzY29wZSI6ImFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEiLCJhZnRlciI6eyJzZXJ2ZXJJZCI6InNlcnZlci1BIiwiaWQiOiJjb25uZWN0aW9uLUEifX0"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.missing-page",
+      "method": "ListPersonalMcpConnections",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connections": [
+          {
+            "connection_id": {
+              "value": "connection-A"
+            },
+            "connector_id": {
+              "value": "connector-A"
+            },
+            "server_id": {
+              "value": "server-A"
+            },
+            "allowed_selectors": [],
+            "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "status": "active"
+          }
+        ]
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.unsafe-connection_id",
+      "method": "ListPersonalMcpConnections",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connections": [
+          {
+            "connection_id": null,
+            "connector_id": {
+              "value": "connector-A"
+            },
+            "server_id": {
+              "value": "server-A"
+            },
+            "allowed_selectors": [],
+            "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "status": "active"
+          }
+        ],
+        "page": {}
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.unsafe-connector_id",
+      "method": "ListPersonalMcpConnections",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connections": [
+          {
+            "connection_id": {
+              "value": "connection-A"
+            },
+            "connector_id": null,
+            "server_id": {
+              "value": "server-A"
+            },
+            "allowed_selectors": [],
+            "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "status": "active"
+          }
+        ],
+        "page": {}
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.unsafe-server_id",
+      "method": "ListPersonalMcpConnections",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connections": [
+          {
+            "connection_id": {
+              "value": "connection-A"
+            },
+            "connector_id": {
+              "value": "connector-A"
+            },
+            "server_id": null,
+            "allowed_selectors": [],
+            "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "status": "active"
+          }
+        ],
+        "page": {}
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.unsafe-allowed_selectors",
+      "method": "ListPersonalMcpConnections",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connections": [
+          {
+            "connection_id": {
+              "value": "connection-A"
+            },
+            "connector_id": {
+              "value": "connector-A"
+            },
+            "server_id": {
+              "value": "server-A"
+            },
+            "allowed_selectors": null,
+            "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "status": "active"
+          }
+        ],
+        "page": {}
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.unsafe-policy_digest",
+      "method": "ListPersonalMcpConnections",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connections": [
+          {
+            "connection_id": {
+              "value": "connection-A"
+            },
+            "connector_id": {
+              "value": "connector-A"
+            },
+            "server_id": {
+              "value": "server-A"
+            },
+            "allowed_selectors": [],
+            "policy_digest": null,
+            "status": "active"
+          }
+        ],
+        "page": {}
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.unsafe-status",
+      "method": "ListPersonalMcpConnections",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connections": [
+          {
+            "connection_id": {
+              "value": "connection-A"
+            },
+            "connector_id": {
+              "value": "connector-A"
+            },
+            "server_id": {
+              "value": "server-A"
+            },
+            "allowed_selectors": [],
+            "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "status": null
+          }
+        ],
+        "page": {}
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.unsafe-secret",
+      "method": "ListPersonalMcpConnections",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connections": [
+          {
+            "connection_id": {
+              "value": "connection-A"
+            },
+            "connector_id": {
+              "value": "connector-A"
+            },
+            "server_id": {
+              "value": "server-A"
+            },
+            "allowed_selectors": [],
+            "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "status": "active",
+            "secret": "forbidden"
+          }
+        ],
+        "page": {}
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.unsafe-token",
+      "method": "ListPersonalMcpConnections",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connections": [
+          {
+            "connection_id": {
+              "value": "connection-A"
+            },
+            "connector_id": {
+              "value": "connector-A"
+            },
+            "server_id": {
+              "value": "server-A"
+            },
+            "allowed_selectors": [],
+            "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "status": "active",
+            "token": "forbidden"
+          }
+        ],
+        "page": {}
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.unsafe-external_account_ref",
+      "method": "ListPersonalMcpConnections",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connections": [
+          {
+            "connection_id": {
+              "value": "connection-A"
+            },
+            "connector_id": {
+              "value": "connector-A"
+            },
+            "server_id": {
+              "value": "server-A"
+            },
+            "allowed_selectors": [],
+            "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "status": "active",
+            "external_account_ref": "forbidden"
+          }
+        ],
+        "page": {}
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.unsafe-authorization_id",
+      "method": "ListPersonalMcpConnections",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connections": [
+          {
+            "connection_id": {
+              "value": "connection-A"
+            },
+            "connector_id": {
+              "value": "connector-A"
+            },
+            "server_id": {
+              "value": "server-A"
+            },
+            "allowed_selectors": [],
+            "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "status": "active",
+            "authorization_id": "forbidden"
+          }
+        ],
+        "page": {}
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.unsafe-server_url",
+      "method": "ListPersonalMcpConnections",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connections": [
+          {
+            "connection_id": {
+              "value": "connection-A"
+            },
+            "connector_id": {
+              "value": "connector-A"
+            },
+            "server_id": {
+              "value": "server-A"
+            },
+            "allowed_selectors": [],
+            "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "status": "active",
+            "server_url": "forbidden"
+          }
+        ],
+        "page": {}
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.duplicate",
+      "method": "ListPersonalMcpConnections",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connections": [
+          {
+            "connection_id": {
+              "value": "connection-A"
+            },
+            "connector_id": {
+              "value": "connector-A"
+            },
+            "server_id": {
+              "value": "server-A"
+            },
+            "allowed_selectors": ["x", "x"],
+            "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "status": "active"
+          }
+        ],
+        "page": {}
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "ListPersonalMcpConnections.management-state-revoked",
+      "method": "ListPersonalMcpConnections",
+      "direction": "response",
+      "outcome": "accept",
+      "value": {
+        "connections": [
+          {
+            "connection_id": {
+              "value": "connection-A"
+            },
+            "connector_id": {
+              "value": "connector-A"
+            },
+            "server_id": {
+              "value": "server-A"
+            },
+            "allowed_selectors": [],
+            "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "status": "revoked"
+          }
+        ],
+        "page": {}
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnection.safe",
+      "method": "GetPersonalMcpConnection",
+      "direction": "response",
+      "outcome": "accept",
+      "value": {
+        "connection": {
+          "connection_id": {
+            "value": "connection-A"
+          },
+          "connector_id": {
+            "value": "connector-A"
+          },
+          "server_id": {
+            "value": "server-A"
+          },
+          "allowed_selectors": [],
+          "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "status": "active"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnection.unsafe-connection_id",
+      "method": "GetPersonalMcpConnection",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connection": {
+          "connection_id": null,
+          "connector_id": {
+            "value": "connector-A"
+          },
+          "server_id": {
+            "value": "server-A"
+          },
+          "allowed_selectors": [],
+          "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "status": "active"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnection.unsafe-connector_id",
+      "method": "GetPersonalMcpConnection",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connection": {
+          "connection_id": {
+            "value": "connection-A"
+          },
+          "connector_id": null,
+          "server_id": {
+            "value": "server-A"
+          },
+          "allowed_selectors": [],
+          "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "status": "active"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnection.unsafe-server_id",
+      "method": "GetPersonalMcpConnection",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connection": {
+          "connection_id": {
+            "value": "connection-A"
+          },
+          "connector_id": {
+            "value": "connector-A"
+          },
+          "server_id": null,
+          "allowed_selectors": [],
+          "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "status": "active"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnection.unsafe-allowed_selectors",
+      "method": "GetPersonalMcpConnection",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connection": {
+          "connection_id": {
+            "value": "connection-A"
+          },
+          "connector_id": {
+            "value": "connector-A"
+          },
+          "server_id": {
+            "value": "server-A"
+          },
+          "allowed_selectors": null,
+          "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "status": "active"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnection.unsafe-policy_digest",
+      "method": "GetPersonalMcpConnection",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connection": {
+          "connection_id": {
+            "value": "connection-A"
+          },
+          "connector_id": {
+            "value": "connector-A"
+          },
+          "server_id": {
+            "value": "server-A"
+          },
+          "allowed_selectors": [],
+          "policy_digest": null,
+          "status": "active"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnection.unsafe-status",
+      "method": "GetPersonalMcpConnection",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connection": {
+          "connection_id": {
+            "value": "connection-A"
+          },
+          "connector_id": {
+            "value": "connector-A"
+          },
+          "server_id": {
+            "value": "server-A"
+          },
+          "allowed_selectors": [],
+          "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "status": null
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnection.unsafe-secret",
+      "method": "GetPersonalMcpConnection",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connection": {
+          "connection_id": {
+            "value": "connection-A"
+          },
+          "connector_id": {
+            "value": "connector-A"
+          },
+          "server_id": {
+            "value": "server-A"
+          },
+          "allowed_selectors": [],
+          "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "status": "active",
+          "secret": "forbidden"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnection.unsafe-token",
+      "method": "GetPersonalMcpConnection",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connection": {
+          "connection_id": {
+            "value": "connection-A"
+          },
+          "connector_id": {
+            "value": "connector-A"
+          },
+          "server_id": {
+            "value": "server-A"
+          },
+          "allowed_selectors": [],
+          "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "status": "active",
+          "token": "forbidden"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnection.unsafe-external_account_ref",
+      "method": "GetPersonalMcpConnection",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connection": {
+          "connection_id": {
+            "value": "connection-A"
+          },
+          "connector_id": {
+            "value": "connector-A"
+          },
+          "server_id": {
+            "value": "server-A"
+          },
+          "allowed_selectors": [],
+          "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "status": "active",
+          "external_account_ref": "forbidden"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnection.unsafe-authorization_id",
+      "method": "GetPersonalMcpConnection",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connection": {
+          "connection_id": {
+            "value": "connection-A"
+          },
+          "connector_id": {
+            "value": "connector-A"
+          },
+          "server_id": {
+            "value": "server-A"
+          },
+          "allowed_selectors": [],
+          "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "status": "active",
+          "authorization_id": "forbidden"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnection.unsafe-server_url",
+      "method": "GetPersonalMcpConnection",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connection": {
+          "connection_id": {
+            "value": "connection-A"
+          },
+          "connector_id": {
+            "value": "connector-A"
+          },
+          "server_id": {
+            "value": "server-A"
+          },
+          "allowed_selectors": [],
+          "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "status": "active",
+          "server_url": "forbidden"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnection.duplicate",
+      "method": "GetPersonalMcpConnection",
+      "direction": "response",
+      "outcome": "reject",
+      "value": {
+        "connection": {
+          "connection_id": {
+            "value": "connection-A"
+          },
+          "connector_id": {
+            "value": "connector-A"
+          },
+          "server_id": {
+            "value": "server-A"
+          },
+          "allowed_selectors": ["x", "x"],
+          "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "status": "active"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "GetPersonalMcpConnection.management-state-revoked",
+      "method": "GetPersonalMcpConnection",
+      "direction": "response",
+      "outcome": "accept",
+      "value": {
+        "connection": {
+          "connection_id": {
+            "value": "connection-A"
+          },
+          "connector_id": {
+            "value": "connector-A"
+          },
+          "server_id": {
+            "value": "server-A"
+          },
+          "allowed_selectors": [],
+          "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "status": "revoked"
+        }
+      },
+      "context": {
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    }
+  ]
+}
