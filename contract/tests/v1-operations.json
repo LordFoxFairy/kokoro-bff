@@ -192,6 +192,16 @@
       "operation_id": "updateProjectInstruction"
     },
     {
+      "method": "DELETE",
+      "path": "/v1/projects/{projectId}",
+      "operation_id": "deleteProject"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/{projectId}/deletion",
+      "operation_id": "getProjectDeletion"
+    },
+    {
       "method": "GET",
       "path": "/v1/mori/projects",
       "operation_id": "listMoriProjects"

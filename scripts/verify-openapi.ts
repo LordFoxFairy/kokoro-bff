@@ -315,6 +315,9 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
         "PersonalizationErrorResponse",
         "RenameProjectResponse",
         "RenameProjectErrorResponse",
+        "ProjectDeletionAcceptedResponse",
+        "ProjectDeletionStatusResponse",
+        "ProjectDeletionErrorResponse",
         "SkillListResponse",
         "SkillPoolResponse",
         "SkillCatalogResponse",
@@ -388,6 +391,9 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
     if (!isPersonalization && operation.text.includes("#/components/responses/Personalization")) errors.push("Personalization response components require the exact caller-owned operation")
     const isAdminModelRouting = ["listAdminModelRouting", "listAdminModelLabels", "listAdminModelRevisions", "replaceAdminModelRouting"].includes(operationId)
     const isRenameProject = operationId === "renameProject" && operation.method === "PATCH" && operation.path === "/v1/projects/{projectId}/name"
+    const isProjectDeletion =
+      (operationId === "deleteProject" && operation.method === "DELETE" && operation.path === "/v1/projects/{projectId}") ||
+      (operationId === "getProjectDeletion" && operation.method === "GET" && operation.path === "/v1/projects/{projectId}/deletion")
     const isGetSkillPackageUpload =
       operationId === "getSkillPackageUpload" && operation.method === "GET" && operation.path === "/v1/skills/{skill_id}/package-upload"
     const isBeginSkillPackageUpload =
@@ -533,6 +539,13 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
     )
       errors.push(`${operation.method} ${operation.path} must not reference RenameProject strict components`)
     if (
+      !isProjectDeletion &&
+      /#\/components\/(?:schemas\/ProjectDeletion[A-Za-z]*|responses\/ProjectDeletion[A-Za-z]*|parameters\/ProjectDeletion[A-Za-z]*)/u.test(
+        operation.text.split(/^components:\s*$/mu)[0] ?? "",
+      )
+    )
+      errors.push(`${operation.method} ${operation.path} must not reference ProjectDeletion strict components`)
+    if (
       !isMoveSession &&
       /#\/components\/(?:schemas\/MoveSession(?:Request|Response|ErrorResponse)|responses\/MoveSession[A-Za-z]*|parameters\/MoveSession[A-Za-z]*)/u.test(
         operation.text.split(/^components:\s*$/mu)[0] ?? "",
@@ -596,6 +609,7 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
           !isPublishSkill &&
           !isMoveSession &&
           !isRenameProject &&
+          !isProjectDeletion &&
           !isPersonalization &&
           !response.includes("#/components/schemas/ErrorEnvelope")
         ) {
@@ -619,6 +633,7 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
           (isPublishSkill && match[1].startsWith("SkillPublish")) ||
           (isMoveSession && match[1].startsWith("MoveSession")) ||
           (isRenameProject && match[1].startsWith("RenameProject")) ||
+          (isProjectDeletion && match[1].startsWith("ProjectDeletion")) ||
           (isPersonalization && match[1].startsWith("Personalization")) ||
           (isAdminModelRouting && match[1].startsWith("AdminModel"))
         )
@@ -672,6 +687,8 @@ function idempotencyErrors(parameters: Map<string, NamedBlock>, operations: Oper
           ? operation.text.includes("#/components/parameters/MoveSessionIdempotencyKey")
           : operationId === "renameProject" && operation.method === "PATCH" && operation.path === "/v1/projects/{projectId}/name"
             ? operation.text.includes("#/components/parameters/RenameProjectIdempotencyKey")
+            : operationId === "deleteProject" && operation.method === "DELETE" && operation.path === "/v1/projects/{projectId}"
+              ? operation.text.includes("#/components/parameters/ProjectDeletionIdempotencyKey")
             : operationId === "beginSkillPackageUpload" && operation.method === "POST" && operation.path === "/v1/skills/{skill_id}/package-upload"
               ? operation.text.includes("#/components/parameters/SkillPackageBeginIdempotencyKey")
               : operationId === "completeSkillPackageUpload" &&
@@ -1892,7 +1909,7 @@ function moveSessionContractErrors(
   responseComponents: Map<string, NamedBlock>,
 ): string[] {
   const errors: string[] = []
-  if (!/^  version: 8\.5\.0$/mu.test(source)) errors.push("moveSession must remain in current public contract version 8.5.0")
+  if (!/^  version: 8\.6\.0$/mu.test(source)) errors.push("moveSession must remain in current public contract version 8.6.0")
   const matches = operations.filter((operation) => operation.fields.get("operationId") === "moveSession")
   const operation = matches.length === 1 ? matches[0] : undefined
   if (operation?.method !== "POST" || operation.path !== "/v1/sessions/{id}/move") {
@@ -2012,7 +2029,7 @@ function renameProjectContractErrors(
   const require = (condition: boolean, message: string): void => {
     if (!condition) errors.push(`renameProject ${message}`)
   }
-  require(/^  version: 8\.5\.0$/mu.test(source), "current public contract must be version 8.5.0")
+  require(/^  version: 8\.6\.0$/mu.test(source), "current public contract must be version 8.6.0")
   const matches = operations.filter((operation) => operation.fields.get("operationId") === "renameProject")
   const operation = matches.length === 1 ? matches[0] : undefined
   if (operation?.method !== "PATCH" || operation.path !== "/v1/projects/{projectId}/name")
@@ -2112,6 +2129,127 @@ function renameProjectContractErrors(
     ?.text.includes(
       "Retry-After: { required: false, schema: { type: string, pattern: '^(?:[1-9][0-9]{0,3}|[1-7][0-9]{4}|8[0-5][0-9]{3}|86[0-3][0-9]{2}|86400)(?![\\s\\S])' } }",
     ) === true, "Retry-After must be optional and bounded to 1..86400")
+  return errors
+}
+
+function projectDeletionContractErrors(
+  source: string,
+  parameters: Map<string, NamedBlock>,
+  schemas: Map<string, NamedBlock>,
+  operations: OperationBlock[],
+  responseComponents: Map<string, NamedBlock>,
+): string[] {
+  const errors: string[] = []
+  const require = (condition: boolean, message: string): void => {
+    if (!condition) errors.push(`Project deletion ${message}`)
+  }
+  require(/^  version: 8\.6\.0$/mu.test(source), "public contract version must be 8.6.0")
+  const deletion = operations.filter((operation) => operation.fields.get("operationId") === "deleteProject")
+  const status = operations.filter((operation) => operation.fields.get("operationId") === "getProjectDeletion")
+  require(deletion.length === 1 && deletion[0]?.method === "DELETE" && deletion[0]?.path === "/v1/projects/{projectId}", "must publish one DELETE /v1/projects/{projectId}")
+  require(status.length === 1 && status[0]?.method === "GET" && status[0]?.path === "/v1/projects/{projectId}/deletion", "must publish one GET /v1/projects/{projectId}/deletion")
+  for (const [operation, permission, idempotency, name] of [
+    [deletion[0], "project.update", "required", "deleteProject"],
+    [status[0], "project.read", "none", "getProjectDeletion"],
+  ] as const) {
+    require(operation !== undefined, `${name} is missing`)
+    if (operation === undefined) continue
+    for (const [field, expected] of Object.entries({
+      "x-kokoro-owner": "kokoro-bff",
+      "x-kokoro-visibility": "public",
+      "x-kokoro-stability": "beta",
+      "x-kokoro-idempotency": idempotency,
+      "x-kokoro-permission": permission,
+    }))
+      require(operation.fields.get(field) === expected, `${name} ${field} must equal ${expected}`)
+    require(!/requestBody:/u.test(operation.text), `${name} must not publish a request body`)
+  }
+  require(deletion[0]?.text.includes("#/components/parameters/ProjectDeletionId") === true, "DELETE must override generic ProjectId")
+  require(deletion[0]?.text.includes("#/components/parameters/ProjectDeletionIdempotencyKey") === true, "DELETE must use its dedicated key")
+  require(
+    source.includes("  /v1/projects/{projectId}/deletion:\n    parameters:\n      - $ref: '#/components/parameters/ProjectDeletionId'"),
+    "status path must bind ProjectDeletionId",
+  )
+  const id = parameters.get("ProjectDeletionId")?.text ?? ""
+  const key = parameters.get("ProjectDeletionIdempotencyKey")?.text ?? ""
+  const idPattern = "pattern: '^project_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?![\\s\\S])'"
+  require(id.includes("name: projectId") && id.includes("in: path") && id.includes("required: true") && id.includes("type: string") && id.includes(idPattern), "ProjectDeletionId must be canonical and absolute")
+  require(
+    key.includes("name: Idempotency-Key") &&
+      key.includes("in: header") &&
+      key.includes("required: true") &&
+      key.includes("type: string") &&
+      key.includes("minLength: 1") &&
+      key.includes("maxLength: 128") &&
+      key.includes("pattern: '^[\\x21-\\x2B\\x2D-\\x7E]{1,128}(?![\\s\\S])'"),
+    "ProjectDeletionIdempotencyKey must be one bounded absolute printable header",
+  )
+  const expectedSchemas = {
+    ProjectDeletionAcceptedResource: ["project_id", "logical_release_state", "physical_cleanup_state"],
+    ProjectDeletionStatusResource: ["project_id", "logical_release_state", "physical_cleanup_state"],
+    ProjectDeletionAcceptedResponse: ["data"],
+    ProjectDeletionStatusResponse: ["data"],
+  } as const
+  for (const [name, fields] of Object.entries(expectedSchemas)) {
+    const schema = schemas.get(name)
+    require(schema !== undefined, `${name} is missing`)
+    require(schema !== undefined && JSON.stringify(topLevelRequired(schema)) === JSON.stringify(fields), `${name} required fields drifted`)
+    require(schema !== undefined && schemaProperties(schema).join(",") === fields.join(","), `${name} properties drifted`)
+    require(schema?.text.includes("additionalProperties: false") === true, `${name} must be closed`)
+  }
+  require(schemas.get("ProjectDeletionAcceptedResource")?.text.includes("logical_release_state: { type: string, const: pending }") === true, "DELETE ACK logical state must stay pending")
+  require(schemas.get("ProjectDeletionStatusResource")?.text.includes("logical_release_state: { type: string, enum: [pending, blocked, released] }") === true, "status logical states drifted")
+  for (const name of ["ProjectDeletionAcceptedResource", "ProjectDeletionStatusResource"])
+    require(schemas.get(name)?.text.includes("physical_cleanup_state: { type: string, const: pending }") === true, `${name} physical state must stay pending`)
+  const error = schemas.get("ProjectDeletionErrorResponse")?.text ?? ""
+  const allCodes = "invalid_project_deletion_request, idempotency_key_required, invalid_idempotency_key, session_authentication_required, session_invalid, service_auth_failed, session_forbidden, product_tenant_forbidden, project_not_found, idempotency_conflict, idempotency_in_progress, session_rate_limited, product_tenant_not_configured, iam_admission_unavailable, business_store_unavailable"
+  require(
+    JSON.stringify(topLevelRequired(schemas.get("ProjectDeletionErrorResponse") ?? { name: "", text: "" })) === '["error"]' &&
+      schemaProperties(schemas.get("ProjectDeletionErrorResponse") ?? { name: "", text: "" }).join(",") === "error,code,message,retryable" &&
+      error.includes("required: [code, message, retryable]") &&
+      error.includes(`enum: [${allCodes}]`) &&
+      error.includes("retryable: { type: boolean }") &&
+      (error.match(/additionalProperties: false/gu) ?? []).length === 2,
+    "error detail must be closed code/message/retryable",
+  )
+  const deleteProfiles = { "202": "ProjectDeletionAccepted", "400": "ProjectDeletionBadRequest", "401": "ProjectDeletionUnauthorized", "403": "ProjectDeletionForbidden", "404": "ProjectDeletionNotFound", "409": "ProjectDeletionConflict", "429": "ProjectDeletionRateLimited", "503": "ProjectDeletionUnavailable" } as const
+  const statusProfiles = { "200": "ProjectDeletionStatusSuccess", "400": "ProjectDeletionStatusBadRequest", "401": "ProjectDeletionUnauthorized", "403": "ProjectDeletionForbidden", "404": "ProjectDeletionNotFound", "429": "ProjectDeletionRateLimited", "503": "ProjectDeletionUnavailable" } as const
+  for (const [operation, expected, name] of [[deletion[0], deleteProfiles, "deleteProject"], [status[0], statusProfiles, "getProjectDeletion"]] as const) {
+    const actual = operation === undefined ? new Map<string, string>() : collectResponseBlocks(operation)
+    require(JSON.stringify([...actual.keys()]) === JSON.stringify(Object.keys(expected)), `${name} status set drifted`)
+    for (const [code, component] of Object.entries(expected)) require(actual.get(code)?.includes(`#/components/responses/${component}`) === true, `${name} ${code} response drifted`)
+  }
+  const codes = {
+    ProjectDeletionBadRequest: "invalid_project_deletion_request, idempotency_key_required, invalid_idempotency_key",
+    ProjectDeletionStatusBadRequest: "invalid_project_deletion_request",
+    ProjectDeletionUnauthorized: "session_authentication_required, session_invalid",
+    ProjectDeletionForbidden: "service_auth_failed, session_forbidden, product_tenant_forbidden",
+    ProjectDeletionNotFound: "project_not_found",
+    ProjectDeletionRateLimited: "session_rate_limited",
+    ProjectDeletionUnavailable: "product_tenant_not_configured, iam_admission_unavailable, business_store_unavailable",
+  } as const
+  const headers = (text: string): boolean =>
+    text.includes("x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }") &&
+    text.includes("Cache-Control: { required: true, schema: { type: string, const: no-store } }")
+  for (const name of new Set([...Object.values(deleteProfiles), ...Object.values(statusProfiles)])) {
+    const text = responseComponents.get(name)?.text ?? ""
+    require(headers(text), `${name} must require nonempty x-request-id and no-store`)
+    if (name !== "ProjectDeletionAccepted" && name !== "ProjectDeletionStatusSuccess")
+      require(text.includes("#/components/schemas/ProjectDeletionErrorResponse"), `${name} must use ProjectDeletionErrorResponse`)
+  }
+  require(responseComponents.get("ProjectDeletionAccepted")?.text.includes("#/components/schemas/ProjectDeletionAcceptedResponse") === true, "202 schema drifted")
+  require(responseComponents.get("ProjectDeletionAccepted")?.text.includes("pattern: '^/v1/projects/project_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/deletion(?![\\s\\S])'") === true, "202 Location drifted")
+  require(responseComponents.get("ProjectDeletionStatusSuccess")?.text.includes("#/components/schemas/ProjectDeletionStatusResponse") === true, "status success schema drifted")
+  for (const [name, expectedCodes] of Object.entries(codes)) {
+    const text = responseComponents.get(name)?.text ?? ""
+    require(text.includes(`code: { type: string, enum: [${expectedCodes}] }`), `${name} codes drifted`)
+    require(text.includes(`retryable: { type: boolean, const: ${name === "ProjectDeletionRateLimited" || name === "ProjectDeletionUnavailable"} }`), `${name} retryable drifted`)
+  }
+  const conflict = responseComponents.get("ProjectDeletionConflict")?.text ?? ""
+  require(conflict.includes("code: { type: string, const: idempotency_conflict }") && conflict.includes("retryable: { type: boolean, const: false }") && conflict.includes("code: { type: string, const: idempotency_in_progress }") && conflict.includes("retryable: { type: boolean, const: true }"), "conflict code retryability drifted")
+  require(responseComponents.get("ProjectDeletionRateLimited")?.text.includes("Retry-After: { required: false, schema: { type: string, pattern: '^(?:[1-9]|[1-9][0-9]{1,3}|[1-7][0-9]{4}|8[0-5][0-9]{3}|86[0-3][0-9]{2}|86400)(?![\\s\\S])' } }") === true, "Retry-After profile drifted")
+  for (const clause of ["original 202 pending", "current authoritative status GET", "new key", "returns 404"])
+    require(deletion[0]?.text.includes(clause) === true, `DELETE replay clause missing: ${clause}`)
   return errors
 }
 
@@ -2447,6 +2585,7 @@ export function inspectBffOpenApi(source: string, baseline: readonly BaselineOpe
     ...personalSkillLifecycleContractErrors(schemas, operations, responseComponents),
     ...moveSessionContractErrors(source, parameters, schemas, operations, responseComponents),
     ...renameProjectContractErrors(source, parameters, schemas, operations, responseComponents),
+    ...projectDeletionContractErrors(source, parameters, schemas, operations, responseComponents),
     ...idempotencyErrors(parameters, operations),
     ...personalizationContractErrors(schemas, operations, responseComponents),
     ...publishedPersonalSkillContractErrors(parameters, schemas, operations, responseComponents),

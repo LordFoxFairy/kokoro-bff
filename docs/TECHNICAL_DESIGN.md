@@ -1,8 +1,9 @@
-## R276-PROJECT-DELETE-D0：Project 删除与逻辑释放状态（目标 public 8.6.0 / 105 operations；仅设计，未实现）
+## R276-PROJECT-DELETE-D0：Project 删除与逻辑释放状态（目标 public 8.6.0 / 105 operations；机器候选，运行未实现）
 
 > 当前事实源与边界：API 面见 [API_CONTRACT.md](./API_CONTRACT.md) 的同名章节，持久化、事务与 outbox 面见
-> [DATA_MODEL.md](./DATA_MODEL.md) 的同名章节。当前正式 public contract 仍为 `8.5.0 / 103 operations`；本节描述的
-> `DELETE /v1/projects/{projectId}` 与 `GET /v1/projects/{projectId}/deletion` 尚未进入机器契约、源码或运行服务。
+> [DATA_MODEL.md](./DATA_MODEL.md) 的同名章节。当前正式已发布 contract 与正常 runtime 仍为 `8.5.0 / 103 operations`；
+> 当前工作树已有包含 `DELETE /v1/projects/{projectId}` 与 `GET /v1/projects/{projectId}/deletion` 的
+> `8.6.0 / 105 operations` 机器候选，但尚未发行、生成消费者或实施 runtime、SQL、owner/browser 链。
 > Storage 单 Asset 删除的 provider 资格仍未闭合，不占用本目标的 `8.6.0 / 105` 版本。
 
 ### 当前态与目标态
@@ -64,8 +65,8 @@
 - owner 成功或可信 replay ACK 才把该命令置 `released`；timeout、断连和未知 ACK 保持可重试 `pending`，不得换 key；明确
   terminal owner 冲突/资格失败置 `blocked` 并保存非敏感稳定 code。lease 丢失或旧 fence 的晚结果不得落库。
 - status GET 是冻结命令集合的权威当前投影：存在 blocked→`blocked`；否则全部 released→`released`；其余→`pending`。
-  DELETE 的同 key replay 永远返回 receipt 保存的原始 `202 pending` data（仅以本次 request id 重新包 envelope），不会随 worker
-  状态漂移；后台 worker 继续按同 command 重试，不新增人工 repair endpoint。
+  DELETE 的同 key replay 永远返回 receipt 保存的原始 `202 pending` data，不会随 worker 状态漂移；request ID 只在本次响应
+  `x-request-id` header 生成，不进入 JSON/receipt。后台 worker 继续按同 command 重试，不新增人工 repair endpoint。
 - `released` 只表示 Storage 接受逻辑 scope release。现契约没有“全部对象物理删除完成”的终态证据，因此公开
   `physical_cleanup_state` 在本切片恒为 `pending`；不得根据 GET/404、队列为空或经过时间推断完成。
 

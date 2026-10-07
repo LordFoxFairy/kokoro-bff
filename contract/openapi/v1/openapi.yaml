@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 8.5.0
+  version: 8.6.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -1489,6 +1489,59 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
+    delete:
+      tags: [Projects]
+      operationId: deleteProject
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: project.update
+      summary: Delete an owned Project
+      description: >-
+        Accepts no request body or query and requires one operation-scoped Idempotency-Key.
+        Every request, including replay, repeats current IAM admission and current owner checks.
+        A successful replay returns the original 202 pending data, status and Location; use the
+        current authoritative status GET for later logical release state. A new key after the
+        Project tombstone returns 404 without disclosing the prior receipt. The command atomically
+        tombstones the Project and frozen Conversations, pauses linked ScheduledTasks, and writes
+        the fixed Project plus Conversation logical-release commands. Physical cleanup remains pending.
+      parameters:
+        - $ref: '#/components/parameters/ProjectDeletionId'
+        - $ref: '#/components/parameters/ProjectDeletionIdempotencyKey'
+      responses:
+        '202': { $ref: '#/components/responses/ProjectDeletionAccepted' }
+        '400': { $ref: '#/components/responses/ProjectDeletionBadRequest' }
+        '401': { $ref: '#/components/responses/ProjectDeletionUnauthorized' }
+        '403': { $ref: '#/components/responses/ProjectDeletionForbidden' }
+        '404': { $ref: '#/components/responses/ProjectDeletionNotFound' }
+        '409': { $ref: '#/components/responses/ProjectDeletionConflict' }
+        '429': { $ref: '#/components/responses/ProjectDeletionRateLimited' }
+        '503': { $ref: '#/components/responses/ProjectDeletionUnavailable' }
+  /v1/projects/{projectId}/deletion:
+    parameters:
+      - $ref: '#/components/parameters/ProjectDeletionId'
+    get:
+      tags: [Projects]
+      operationId: getProjectDeletion
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: project.read
+      summary: Get the logical deletion status of an owned Project
+      description: >-
+        Returns only the current logical release state for an owned Project tombstone. Active,
+        absent, cross-tenant and cross-owner Projects are indistinguishable 404 responses.
+        pending, blocked and released never claim physical object cleanup; physical cleanup stays pending.
+      responses:
+        '200': { $ref: '#/components/responses/ProjectDeletionStatusSuccess' }
+        '400': { $ref: '#/components/responses/ProjectDeletionStatusBadRequest' }
+        '401': { $ref: '#/components/responses/ProjectDeletionUnauthorized' }
+        '403': { $ref: '#/components/responses/ProjectDeletionForbidden' }
+        '404': { $ref: '#/components/responses/ProjectDeletionNotFound' }
+        '429': { $ref: '#/components/responses/ProjectDeletionRateLimited' }
+        '503': { $ref: '#/components/responses/ProjectDeletionUnavailable' }
   /v1/mori/projects:
     get:
       tags: [Mori Music]
@@ -4301,6 +4354,24 @@ components:
       in: header
       required: true
       schema: { type: string, minLength: 1, maxLength: 128, pattern: '^[\x21-\x2B\x2D-\x7E]+$' }
+    ProjectDeletionId:
+      name: projectId
+      in: path
+      required: true
+      description: Canonical Project ID for Project deletion operations; slug aliases and trailing bytes are invalid.
+      schema:
+        type: string
+        pattern: '^project_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?![\s\S])'
+    ProjectDeletionIdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Must occur exactly once; 1..128 printable ASCII characters excluding whitespace and comma, without trimming or merging.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+        pattern: '^[\x21-\x2B\x2D-\x7E]{1,128}(?![\s\S])'
   schemas:
     PersonalizationFields:
       type: object
@@ -7523,6 +7594,50 @@ components:
       properties:
         error: { $ref: '#/components/schemas/PersonalSkillLifecycleErrorDetail' }
         meta: { $ref: '#/components/schemas/RequestMeta' }
+    ProjectDeletionAcceptedResource:
+      type: object
+      required: [project_id, logical_release_state, physical_cleanup_state]
+      additionalProperties: false
+      properties:
+        project_id: { type: string, pattern: '^project_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?![\s\S])' }
+        logical_release_state: { type: string, const: pending }
+        physical_cleanup_state: { type: string, const: pending }
+    ProjectDeletionStatusResource:
+      type: object
+      required: [project_id, logical_release_state, physical_cleanup_state]
+      additionalProperties: false
+      properties:
+        project_id: { type: string, pattern: '^project_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?![\s\S])' }
+        logical_release_state: { type: string, enum: [pending, blocked, released] }
+        physical_cleanup_state: { type: string, const: pending }
+    ProjectDeletionAcceptedResponse:
+      type: object
+      required: [data]
+      additionalProperties: false
+      properties:
+        data: { $ref: '#/components/schemas/ProjectDeletionAcceptedResource' }
+    ProjectDeletionStatusResponse:
+      type: object
+      required: [data]
+      additionalProperties: false
+      properties:
+        data: { $ref: '#/components/schemas/ProjectDeletionStatusResource' }
+    ProjectDeletionErrorResponse:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error:
+          type: object
+          required: [code, message, retryable]
+          additionalProperties: false
+          properties:
+            code:
+              type: string
+              enum: [invalid_project_deletion_request, idempotency_key_required, invalid_idempotency_key, session_authentication_required, session_invalid, service_auth_failed, session_forbidden, product_tenant_forbidden, project_not_found, idempotency_conflict, idempotency_in_progress, session_rate_limited, product_tenant_not_configured, iam_admission_unavailable, business_store_unavailable]
+            message: { type: string, minLength: 1 }
+            retryable: { type: boolean }
+
   responses:
     AdminModelRoutingListSuccess:
       description: Current tenant routing policies
@@ -10428,3 +10543,169 @@ components:
                     type: object
                     properties:
                       code: { type: string, enum: [product_tenant_not_configured, iam_admission_unavailable, skill_dependency_unavailable] }
+    ProjectDeletionAccepted:
+      description: Project deletion transaction committed; logical release remains pending
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+        Location:
+          required: true
+          schema:
+            type: string
+            pattern: '^/v1/projects/project_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/deletion(?![\s\S])'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ProjectDeletionAcceptedResponse' }
+    ProjectDeletionStatusSuccess:
+      description: Current logical Project release status; physical cleanup remains pending
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ProjectDeletionStatusResponse' }
+    ProjectDeletionBadRequest:
+      description: Invalid Project deletion command
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ProjectDeletionErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [invalid_project_deletion_request, idempotency_key_required, invalid_idempotency_key] }
+                      retryable: { type: boolean, const: false }
+    ProjectDeletionStatusBadRequest:
+      description: Invalid Project deletion status request
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ProjectDeletionErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [invalid_project_deletion_request] }
+                      retryable: { type: boolean, const: false }
+    ProjectDeletionUnauthorized:
+      description: Project deletion session authentication failed
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ProjectDeletionErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [session_authentication_required, session_invalid] }
+                      retryable: { type: boolean, const: false }
+    ProjectDeletionForbidden:
+      description: Project deletion admission is forbidden
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ProjectDeletionErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [service_auth_failed, session_forbidden, product_tenant_forbidden] }
+                      retryable: { type: boolean, const: false }
+    ProjectDeletionNotFound:
+      description: Project is absent or invisible for this deletion operation
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ProjectDeletionErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [project_not_found] }
+                      retryable: { type: boolean, const: false }
+    ProjectDeletionConflict:
+      description: Project deletion idempotency conflict or in-progress result
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ProjectDeletionErrorResponse'
+              - oneOf:
+                  - type: object
+                    properties:
+                      error:
+                        type: object
+                        properties:
+                          code: { type: string, const: idempotency_conflict }
+                          retryable: { type: boolean, const: false }
+                  - type: object
+                    properties:
+                      error:
+                        type: object
+                        properties:
+                          code: { type: string, const: idempotency_in_progress }
+                          retryable: { type: boolean, const: true }
+    ProjectDeletionRateLimited:
+      description: Project deletion admission is rate limited
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+        Retry-After: { required: false, schema: { type: string, pattern: '^(?:[1-9]|[1-9][0-9]{1,3}|[1-7][0-9]{4}|8[0-5][0-9]{3}|86[0-3][0-9]{2}|86400)(?![\s\S])' } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ProjectDeletionErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [session_rate_limited] }
+                      retryable: { type: boolean, const: true }
+    ProjectDeletionUnavailable:
+      description: Project deletion IAM or business store dependency is unavailable
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ProjectDeletionErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [product_tenant_not_configured, iam_admission_unavailable, business_store_unavailable] }
+                      retryable: { type: boolean, const: true }

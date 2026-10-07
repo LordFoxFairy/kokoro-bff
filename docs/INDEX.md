@@ -1,3 +1,7 @@
+## R277 当前机器候选入口
+
+Project 删除目标当前只在 canonical [`../contract/openapi/v1/openapi.yaml`](../contract/openapi/v1/openapi.yaml) 候选中增加两条具名operation，版本目标 `8.6.0 / 105`；设计边界见本目录三D0顶部。候选未发行且无runtime/schema/consumer实现，Root后继机器门与真实owner/浏览器验收前不得标记T-C05通过。
+
 # kokoro-bff 文档索引
 
 ## 阅读顺序

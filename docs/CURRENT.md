@@ -1,3 +1,12 @@
+## R277 Project 删除机器候选（未发行、未实现）
+
+当前工作树仅候选 public `8.6.0` / 105 operations：在原103项之外增加 `DELETE /v1/projects/{projectId}` / `deleteProject` 与 `GET /v1/projects/{projectId}/deletion` / `getProjectDeletion`。成功与错误保持本仓 data-only/error-only profile，request ID仅header；DELETE保存原始202 pending receipt，status GET只投影 logical pending/blocked/released，physical恒pending。共享旧Project GET/PATCH参数与原103 wire不改。此候选尚无runtime、canonical SQL、worker、Storage/Scheduler真链、Web消费或浏览器用户验收；v1 baseline只能由Root正规生成并审查。
+
+
+Root 当前候选验收（2026-10-07）：Node22正规 `pnpm contract:update-baseline` 写105唯一baseline；`pnpm format:check`、`pnpm lint`、`pnpm contract:check`、`pnpm test`、`pnpm typecheck`、`pnpm build`均exit0。contract **298PASS/0FAIL**，默认 **867PASS/0FAIL/2既有SKIP**；独立target contract+architecture **112PASS/0FAIL**。4既有OpenAPI warning保留。此前Root真实新RED3FAIL/0PASS，首次完整contract297PASS/1FAIL因现governance当前版本仍8.5；仅同步标题/当前regex至8.6，其余生命周期断言逐字exact，保首次失败日志。
+
+Root对旧103operation/path参数和旧components结构逐项deep equal、旧baseline subset exact；独审绑定冻结机器685862b5，GET400/闭合profile问题已修正，无剩余确定阻断。当前三D0已明确“已发行8.5/103 vs 工作树8.6/105机器候选”。本轮不触source/schema或正常服务、不生成Web消费；无真实PG/owner/项目删除浏览器验收，所以仍是待运行实现的候选。证据Root `var/dev/r255-preserve/r277-project-final-pure-gates.log`、`r277-project-old-wire-preservation.json`、`r277-project-machine-final-review.md`；后续由原BFF owner补运行/同事务冻结与任务恢复fence，Root真实验收后才发行。
+
 ## R269 个人 Skill 生命周期 producer 正式交接（2026-10-07）
 
 BFF `39db896b9755a8b710d27ae1a220cdbb182b72b7` 已固定 public `8.5.0` / 103 operations；canonical OpenAPI raw SHA-256 为 `01009fb40ba2fbd2bb4829543e4b038d151ae56bcd1e11666f11c6a51344f296`。本仓正式源码现具备 `createPersonalSkillVersion` 与 `withdrawPersonalSkill` 两个公开命令，可由 Web 后继固定该 commit/digest 后通过既有 generator 消费；Platform Connect pin 与其历史证明链不变，无兼容双轨、BFF SQL、第二 receipt 或 owner mirror。

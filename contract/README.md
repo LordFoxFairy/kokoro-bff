@@ -1,3 +1,7 @@
+## R277 Project deletion machine candidate (not released)
+
+Public `8.6.0` / 105 operations is a machine-only candidate adding `deleteProject` and `getProjectDeletion`. The two closed operations use existing `project.update` / `project.read` governance, operation-specific canonical Project identity, immutable `202 pending` replay, and a logical status resource whose physical cleanup remains `pending`. Existing 103 operations, runtime, canonical SQL, generated consumers and owner pins are unchanged. Root must generate the operation baseline and pass semantic/contract/architecture gates before this candidate can be published; it is not runtime, owner-integration or browser deletion evidence.
+
 ## R269 public 8.5 lifecycle release handoff
 
 Public `8.5.0` with 103 operations is fixed at BFF source commit `39db896b9755a8b710d27ae1a220cdbb182b72b7`. The canonical OpenAPI raw SHA-256 is `01009fb40ba2fbd2bb4829543e4b038d151ae56bcd1e11666f11c6a51344f296`. Web consumers may now pin this exact commit and digest and generate through the existing consumer toolchain; no second copy, fallback, or editable downstream contract is introduced.

@@ -40,7 +40,7 @@ function inspectChatFailureContract(openapi) {
     if (!condition) errors.push(label)
   }
 
-  require(/^info:\n(?:.*\n){0,3}?  version: 8\.5\.0$/mu.test(openapi), "public info.version must be 8.5.0")
+  require(/^info:\n(?:.*\n){0,3}?  version: 8\.6\.0$/mu.test(openapi), "public info.version must be 8.6.0")
   require(/^      required: \[message_id, role, content, status, created_at\]$/mu.test(message), "failure must stay optional")
   const roles = [...(message.match(/role:\n\s+type: string\n\s+enum: \[([^\]]+)\]/u)?.[1] ?? "").matchAll(/[a-z_]+/gu)].map((match) => match[0])
   require(JSON.stringify(roles) === JSON.stringify(["user", "assistant"]), "Message roles must equal user and assistant")
@@ -1067,7 +1067,7 @@ test("public7 retains the closed full execution head, five current-locator decis
   const { openapi } = await readContract()
   const document = load(openapi)
   const schemas = document.components.schemas
-  assert.equal(document.info.version, "8.5.0")
+  assert.equal(document.info.version, "8.6.0")
   const snapshot = schemas.SessionSnapshotResponse.properties.data
   assert.equal(Object.hasOwn(snapshot.properties, "active_run"), false)
   assert.equal(Object.hasOwn(snapshot.properties, "pending_pauses"), false)
@@ -1415,7 +1415,7 @@ test("R124 public7 publishes nullable snapshot process and the anchored Run proc
   const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
   const { openapi } = await readContract()
   const document = load(openapi)
-  assert.equal(document.info.version, "8.5.0")
+  assert.equal(document.info.version, "8.6.0")
   const snapshot = document.components.schemas.SessionSnapshotResponse.properties.data
   assert.ok(snapshot.required.includes("execution_process"))
   assert.deepEqual(snapshot.properties.execution_process, {
@@ -1471,7 +1471,7 @@ test("R146 Move is one strict additive public command with a durable synchronous
     Object.keys(pathItem).filter((key) => ["get", "post", "put", "patch", "delete"].includes(key)),
     ["post"],
   )
-  assert.equal(document.info.version, "8.5.0", "the prelaunch Skills V2 cutover advances the only public major without a path alias")
+  assert.equal(document.info.version, "8.6.0", "the prelaunch Skills V2 cutover advances the only public major without a path alias")
   assert.ok(baseline.some((entry) => entry.method === "POST" && entry.path === path && entry.operation_id === "moveSession"))
 
   const operation = pathItem.post
@@ -1638,12 +1638,15 @@ test("R240 rename contract remains one strict name PATCH beside the approved Bil
   const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
   const { openapi, baseline } = await readContract()
   const document = load(openapi)
-  assert.equal(document.info.version, "8.5.0")
+  assert.equal(document.info.version, "8.6.0")
   const route = "/v1/projects/{projectId}/name"
   const path = document.paths[route]
   assert.ok(path)
   assert.deepEqual(Object.keys(path), ["parameters", "patch"])
   const priorPaths = { ...document.paths }
+  priorPaths["/v1/projects/{projectId}"] = { ...priorPaths["/v1/projects/{projectId}"] }
+  delete priorPaths["/v1/projects/{projectId}"].delete // R277 adds only the governed Project deletion command.
+  delete priorPaths["/v1/projects/{projectId}/deletion"] // R277 separately governs the deletion status read.
   delete priorPaths[route]
   delete priorPaths["/v1/mcp/connections"] // R257 adds only this independently governed read.
   delete priorPaths["/v1/self/skills"] // R266 separately governs managed personal Skill reads.
@@ -1675,6 +1678,8 @@ test("R240 rename contract remains one strict name PATCH beside the approved Bil
           "listAdminModelLabels",
           "listAdminModelRevisions",
           "replaceAdminModelRouting",
+          "deleteProject",
+          "getProjectDeletion",
         ].includes(item.operation_id),
     ).length,
     92,
@@ -1814,7 +1819,7 @@ test("R240 rename semantic gate rejects input, receipt, status and header drift"
   const request = (before, after) => mutate("    RenameProjectRequest:", "    RenameProjectResponse:", before, after)
   const success = (before, after) => mutate("    RenameProjectResponse:", "    RenameProjectErrorResponse:", before, after)
   const mutations = [
-    openapi.replace("  version: 8.5.0", "  version: 7.1.0"),
+    openapi.replace("  version: 8.6.0", "  version: 7.1.0"),
     route("    patch:", "    post:"),
     route("operationId: renameProject", "operationId: renameProjectAlias"),
     route("x-kokoro-permission: project.update", "x-kokoro-permission: project.read"),
@@ -1870,7 +1875,7 @@ test("R257 self MCP connection contract rejects Server substitution and error-pr
   const start = openapi.indexOf("  /v1/mcp/connections:\n")
   const end = openapi.indexOf("  /v1/mcp/servers:\n", start)
   const route = openapi.slice(start, end)
-  assert.equal(baseline.length, 103)
+  assert.equal(baseline.length, 105)
   assert.deepEqual(
     baseline.filter((item) => item.operation_id === "listSelfMcpConnections"),
     [
@@ -2200,4 +2205,301 @@ test("R267 final lifecycle path rejects a 503 response drift before components",
       (message) => message === "personal Skill lifecycle withdrawPersonalSkill 503 response drifted",
     ),
   )
+})
+
+function inspectR277ProjectDeletion(document) {
+  const errors = []
+  const require = (condition, message) => {
+    if (!condition) errors.push(message)
+  }
+  const resolve = (value) => {
+    if (!value?.$ref) return value
+    const [, , section, name] = value.$ref.split("/")
+    return document.components?.[section]?.[name]
+  }
+  const responseSchema = (response) => resolve(response)?.content?.["application/json"]?.schema
+  const requiredHeader = (response, name) => {
+    const header = resolve(response)?.headers?.[name]
+    return header?.required === true ? header : undefined
+  }
+  const errorCodes = (response) => {
+    const schema = responseSchema(response)
+    const constrained = schema?.allOf?.[1] ?? schema
+    if (Array.isArray(constrained?.oneOf)) return constrained.oneOf.map((entry) => entry?.properties?.error?.properties?.code?.const)
+    return constrained?.properties?.error?.properties?.code?.enum
+  }
+  const errorRetryable = (response) => {
+    const schema = responseSchema(response)
+    return schema?.allOf?.[1]?.properties?.error?.properties?.retryable?.const
+  }
+
+  require(document.info?.version === "8.6.0", "R277 public info.version must be 8.6.0")
+  const projectPath = document.paths?.["/v1/projects/{projectId}"]
+  const statusPath = document.paths?.["/v1/projects/{projectId}/deletion"]
+  const deletion = projectPath?.delete
+  const status = statusPath?.get
+  require(deletion?.operationId === "deleteProject", "R277 deleteProject operation is missing")
+  require(status?.operationId === "getProjectDeletion", "R277 getProjectDeletion operation is missing")
+  require(Object.keys(statusPath ?? {}).join(",") === "parameters,get", "R277 deletion status path must expose only parameters and GET")
+  require(projectPath?.parameters?.some(({ $ref }) => $ref === "#/components/parameters/ProjectId"), "R277 existing Project path parameter drifted")
+  require(
+    deletion?.parameters?.some(({ $ref }) => $ref === "#/components/parameters/ProjectDeletionId") &&
+      statusPath?.parameters?.some(({ $ref }) => $ref === "#/components/parameters/ProjectDeletionId"),
+    "R277 both new operations must use the canonical ProjectDeletionId override",
+  )
+
+  for (const [operation, name, permission, idempotency] of [
+    [deletion, "deleteProject", "project.update", "required"],
+    [status, "getProjectDeletion", "project.read", "none"],
+  ]) {
+    require(operation?.["x-kokoro-owner"] === "kokoro-bff", `R277 ${name} owner drifted`)
+    require(operation?.["x-kokoro-visibility"] === "public", `R277 ${name} visibility drifted`)
+    require(operation?.["x-kokoro-stability"] === "beta", `R277 ${name} stability drifted`)
+    require(operation?.["x-kokoro-permission"] === permission, `R277 ${name} permission drifted`)
+    require(operation?.["x-kokoro-idempotency"] === idempotency, `R277 ${name} idempotency drifted`)
+  }
+  require(deletion?.requestBody === undefined, "R277 deleteProject must not publish a request body")
+  require(status?.requestBody === undefined, "R277 getProjectDeletion must not publish a request body")
+  require(
+    deletion?.parameters?.some(({ $ref }) => $ref === "#/components/parameters/ProjectDeletionIdempotencyKey"),
+    "R277 deleteProject must require its operation-specific Idempotency-Key",
+  )
+  const key = document.components?.parameters?.ProjectDeletionIdempotencyKey
+  require(key?.name === "Idempotency-Key" && key?.in === "header" && key?.required === true, "R277 deletion key header drifted")
+  require(key?.schema?.minLength === 1 && key?.schema?.maxLength === 128, "R277 deletion key bounds drifted")
+  require(key?.schema?.type === "string" && typeof key?.schema?.pattern === "string", "R277 deletion key type/pattern drifted")
+  require(key?.schema?.pattern === "^[\\x21-\\x2B\\x2D-\\x7E]{1,128}(?![\\s\\S])", "R277 deletion key absolute pattern drifted")
+  if (key?.schema?.pattern) {
+    const keyPattern = new RegExp(key.schema.pattern, "u")
+    for (const valid of ["a", "A".repeat(128), "project-delete:01"]) require(keyPattern.test(valid), `R277 valid key rejected: ${valid}`)
+    for (const invalid of ["", "A".repeat(129), " ", "a,b", "a\tb", "a\nb", "中文"]) require(!keyPattern.test(invalid), `R277 invalid key accepted: ${JSON.stringify(invalid)}`)
+  }
+  const id = document.components?.parameters?.ProjectDeletionId
+  require(id?.name === "projectId" && id?.in === "path" && id?.required === true, "R277 ProjectDeletionId placement drifted")
+  require(id?.schema?.type === "string" && typeof id?.schema?.pattern === "string", "R277 ProjectDeletionId type/pattern drifted")
+  require(
+    id?.schema?.pattern === "^project_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?![\\s\\S])",
+    "R277 ProjectDeletionId absolute pattern drifted",
+  )
+  if (id?.schema?.pattern) {
+    const idPattern = new RegExp(id.schema.pattern, "u")
+    const canonical = "project_12345678-1234-1234-1234-123456789abc"
+    require(idPattern.test(canonical), "R277 canonical Project ID rejected")
+    for (const invalid of ["project_slug", canonical.toUpperCase(), `${canonical}\n`, ` ${canonical}`, ""]) require(!idPattern.test(invalid), `R277 invalid Project ID accepted: ${JSON.stringify(invalid)}`)
+  }
+
+  const expectedDeleteResponses = {
+    202: "ProjectDeletionAccepted",
+    400: "ProjectDeletionBadRequest",
+    401: "ProjectDeletionUnauthorized",
+    403: "ProjectDeletionForbidden",
+    404: "ProjectDeletionNotFound",
+    409: "ProjectDeletionConflict",
+    429: "ProjectDeletionRateLimited",
+    503: "ProjectDeletionUnavailable",
+  }
+  const expectedStatusResponses = {
+    200: "ProjectDeletionStatusSuccess",
+    400: "ProjectDeletionStatusBadRequest",
+    401: "ProjectDeletionUnauthorized",
+    403: "ProjectDeletionForbidden",
+    404: "ProjectDeletionNotFound",
+    429: "ProjectDeletionRateLimited",
+    503: "ProjectDeletionUnavailable",
+  }
+  for (const [operation, expected, name] of [
+    [deletion, expectedDeleteResponses, "deleteProject"],
+    [status, expectedStatusResponses, "getProjectDeletion"],
+  ]) {
+    require(JSON.stringify(Object.keys(operation?.responses ?? {})) === JSON.stringify(Object.keys(expected)), `R277 ${name} status set drifted`)
+    for (const [code, component] of Object.entries(expected))
+      require(operation?.responses?.[code]?.$ref === `#/components/responses/${component}`, `R277 ${name} ${code} response drifted`)
+  }
+
+  for (const name of new Set([...Object.values(expectedDeleteResponses), ...Object.values(expectedStatusResponses)])) {
+    const response = document.components?.responses?.[name]
+    const requestId = requiredHeader(response, "x-request-id")
+    require(
+      requestId?.schema?.type === "string" && requestId.schema.minLength === 1 && requestId.schema.maxLength === 128,
+      `R277 ${name} must require a bounded nonempty string x-request-id`,
+    )
+    require(requiredHeader(response, "Cache-Control")?.schema?.const === "no-store", `R277 ${name} must require no-store`)
+    if (!["ProjectDeletionAccepted", "ProjectDeletionStatusSuccess"].includes(name))
+      require(
+        responseSchema(response)?.allOf?.[0]?.$ref === "#/components/schemas/ProjectDeletionErrorResponse",
+        `R277 ${name} must retain the ProjectDeletionErrorResponse base`,
+      )
+  }
+  const accepted = document.components?.responses?.ProjectDeletionAccepted
+  require(requiredHeader(accepted, "Location") !== undefined, "R277 202 must require Location")
+  require(
+    requiredHeader(accepted, "Location")?.schema?.pattern ===
+      "^/v1/projects/project_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/deletion(?![\\s\\S])",
+    "R277 202 Location must identify the canonical deletion resource",
+  )
+  if (requiredHeader(accepted, "Location")?.schema?.pattern) {
+    const locationPattern = new RegExp(requiredHeader(accepted, "Location").schema.pattern, "u")
+    const valid = "/v1/projects/project_12345678-1234-1234-1234-123456789abc/deletion"
+    require(locationPattern.test(valid), "R277 canonical Location rejected")
+    for (const invalid of [`${valid}\n`, `${valid}/`, "/v1/projects/project_slug/deletion"]) require(!locationPattern.test(invalid), `R277 invalid Location accepted: ${JSON.stringify(invalid)}`)
+  }
+
+  const acceptedEnvelope = resolve(responseSchema(accepted))
+  const statusEnvelope = resolve(responseSchema(document.components?.responses?.ProjectDeletionStatusSuccess))
+  for (const [envelope, resourceRef, name] of [
+    [acceptedEnvelope, "#/components/schemas/ProjectDeletionAcceptedResource", "accepted"],
+    [statusEnvelope, "#/components/schemas/ProjectDeletionStatusResource", "status"],
+  ]) {
+    require(envelope?.additionalProperties === false, `R277 ${name} envelope must be closed`)
+    require(JSON.stringify(envelope?.required) === JSON.stringify(["data"]), `R277 ${name} envelope fields drifted`)
+    require(JSON.stringify(Object.keys(envelope?.properties ?? {})) === JSON.stringify(["data"]), `R277 ${name} must contain data only`)
+    require(envelope?.properties?.data?.$ref === resourceRef, `R277 ${name} data ref drifted`)
+  }
+  const acceptedResource = document.components?.schemas?.ProjectDeletionAcceptedResource
+  const statusResource = document.components?.schemas?.ProjectDeletionStatusResource
+  for (const [resource, name] of [
+    [acceptedResource, "accepted"],
+    [statusResource, "status"],
+  ]) {
+    require(resource?.additionalProperties === false, `R277 ${name} resource must be closed`)
+    require(
+      JSON.stringify(resource?.required) === JSON.stringify(["project_id", "logical_release_state", "physical_cleanup_state"]),
+      `R277 ${name} resource fields drifted`,
+    )
+    require(
+      JSON.stringify(Object.keys(resource?.properties ?? {})) === JSON.stringify(["project_id", "logical_release_state", "physical_cleanup_state"]),
+      `R277 ${name} resource must not expose optional internal fields`,
+    )
+    require(resource?.properties?.physical_cleanup_state?.const === "pending", `R277 ${name} physical cleanup must stay pending`)
+  }
+  require(acceptedResource?.properties?.logical_release_state?.const === "pending", "R277 DELETE ACK must stay pending")
+  require(
+    JSON.stringify(statusResource?.properties?.logical_release_state?.enum) === JSON.stringify(["pending", "blocked", "released"]),
+    "R277 status must expose exactly three logical release states",
+  )
+
+  const error = document.components?.schemas?.ProjectDeletionErrorResponse
+  require(error?.additionalProperties === false, "R277 error envelope must be closed")
+  require(JSON.stringify(error?.required) === JSON.stringify(["error"]), "R277 error envelope fields drifted")
+  require(JSON.stringify(Object.keys(error?.properties ?? {})) === JSON.stringify(["error"]), "R277 error envelope must contain error only")
+  require(error?.properties?.error?.additionalProperties === false, "R277 error detail must be closed")
+  require(JSON.stringify(error?.properties?.error?.required) === JSON.stringify(["code", "message", "retryable"]), "R277 error detail fields drifted")
+  require(error?.properties?.error?.properties?.retryable?.type === "boolean", "R277 error retryable must be boolean")
+  const profiles = {
+    ProjectDeletionBadRequest: ["invalid_project_deletion_request", "idempotency_key_required", "invalid_idempotency_key"],
+    ProjectDeletionStatusBadRequest: ["invalid_project_deletion_request"],
+    ProjectDeletionUnauthorized: ["session_authentication_required", "session_invalid"],
+    ProjectDeletionForbidden: ["service_auth_failed", "session_forbidden", "product_tenant_forbidden"],
+    ProjectDeletionNotFound: ["project_not_found"],
+    ProjectDeletionConflict: ["idempotency_conflict", "idempotency_in_progress"],
+    ProjectDeletionRateLimited: ["session_rate_limited"],
+    ProjectDeletionUnavailable: ["product_tenant_not_configured", "iam_admission_unavailable", "business_store_unavailable"],
+  }
+  const allCodes = [...new Set(Object.values(profiles).flat())]
+  require(
+    JSON.stringify(error?.properties?.error?.properties?.code?.enum) === JSON.stringify(allCodes),
+    "R277 error code union drifted",
+  )
+  for (const [name, codes] of Object.entries(profiles))
+    require(JSON.stringify(errorCodes(document.components?.responses?.[name])) === JSON.stringify(codes), `R277 ${name} code tuple drifted`)
+  for (const name of ["ProjectDeletionBadRequest", "ProjectDeletionStatusBadRequest", "ProjectDeletionUnauthorized", "ProjectDeletionForbidden", "ProjectDeletionNotFound"])
+    require(errorRetryable(document.components?.responses?.[name]) === false, `R277 ${name} retryable must be false`)
+  for (const name of ["ProjectDeletionRateLimited", "ProjectDeletionUnavailable"])
+    require(errorRetryable(document.components?.responses?.[name]) === true, `R277 ${name} retryable must be true`)
+  const conflictConstraint = responseSchema(document.components?.responses?.ProjectDeletionConflict)?.allOf?.[1]
+  require(Array.isArray(conflictConstraint?.oneOf) && conflictConstraint.oneOf.length === 2, "R277 conflict must distinguish retryability by code")
+  const conflictProfiles = (conflictConstraint?.oneOf ?? []).map((entry) => ({
+    code: entry?.properties?.error?.properties?.code?.const,
+    retryable: entry?.properties?.error?.properties?.retryable?.const,
+  }))
+  require(
+    JSON.stringify(conflictProfiles) ===
+      JSON.stringify([
+        { code: "idempotency_conflict", retryable: false },
+        { code: "idempotency_in_progress", retryable: true },
+      ]),
+    "R277 conflict code/retryable profiles drifted",
+  )
+  const retry = resolve(document.components?.responses?.ProjectDeletionRateLimited)?.headers?.["Retry-After"]
+  require(retry?.required === false, "R277 429 must publish only the optional bounded Retry-After profile")
+  require(retry?.schema?.type === "string" && typeof retry.schema.pattern === "string", "R277 Retry-After type/pattern drifted")
+  if (retry?.schema?.pattern) {
+    const pattern = new RegExp(retry.schema.pattern, "u")
+    require(pattern.test("1") && pattern.test("86400"), "R277 Retry-After legal bounds drifted")
+    require(!pattern.test("0") && !pattern.test("86401") && !pattern.test("1\n"), "R277 Retry-After illegal bounds accepted")
+  }
+  require(/original 202 pending/u.test(deletion?.description ?? ""), "R277 DELETE must promise immutable pending replay")
+  require(/new key[\s\S]*404/u.test(deletion?.description ?? ""), "R277 DELETE must close tombstone new-key lookup")
+  require(/current[\s\S]*status GET/u.test(deletion?.description ?? ""), "R277 DELETE must direct current state to status GET")
+  return errors
+}
+
+test("R277 deleteProject publishes one empty-body owner command with immutable pending replay", async () => {
+  const { createRequire } = await import("node:module")
+  const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
+  const { openapi, baseline } = await readContract()
+  const document = load(openapi)
+  assert.equal(document.info.version, "8.6.0")
+  assert.equal(baseline.length, 105)
+  assert.deepEqual(
+    baseline.filter(({ operation_id }) => operation_id === "deleteProject"),
+    [{ method: "DELETE", path: "/v1/projects/{projectId}", operation_id: "deleteProject" }],
+  )
+  assert.deepEqual(inspectR277ProjectDeletion(document), [])
+})
+
+test("R277 getProjectDeletion publishes only the three logical states and never claims physical completion", async () => {
+  const { createRequire } = await import("node:module")
+  const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
+  const { openapi, baseline } = await readContract()
+  const document = load(openapi)
+  assert.deepEqual(
+    baseline.filter(({ operation_id }) => operation_id === "getProjectDeletion"),
+    [{ method: "GET", path: "/v1/projects/{projectId}/deletion", operation_id: "getProjectDeletion" }],
+  )
+  assert.deepEqual(inspectR277ProjectDeletion(document), [])
+})
+
+test("R277 Project deletion machine profile rejects method, permission, replay, state, envelope and header drift", async () => {
+  const { createRequire } = await import("node:module")
+  const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
+  const { openapi } = await readContract()
+  const document = load(openapi)
+  assert.deepEqual(inspectR277ProjectDeletion(document), [])
+  const mutations = [
+    (candidate) => {
+      candidate.paths["/v1/projects/{projectId}"].post = candidate.paths["/v1/projects/{projectId}"].delete
+      delete candidate.paths["/v1/projects/{projectId}"].delete
+    },
+    (candidate) => (candidate.paths["/v1/projects/{projectId}"].delete["x-kokoro-permission"] = "project.read"),
+    (candidate) => (candidate.paths["/v1/projects/{projectId}/deletion"].get["x-kokoro-permission"] = "project.update"),
+    (candidate) => (candidate.paths["/v1/projects/{projectId}/deletion"].parameters = [{ $ref: "#/components/parameters/ProjectId" }]),
+    (candidate) => (candidate.paths["/v1/projects/{projectId}"].delete.parameters = [{ $ref: "#/components/parameters/ProjectDeletionIdempotencyKey" }]),
+    (candidate) => (candidate.paths["/v1/projects/{projectId}"].delete.requestBody = { required: false }),
+    (candidate) => (candidate.components.parameters.ProjectDeletionId.schema.pattern = "^project_.+$"),
+    (candidate) => (candidate.components.parameters.ProjectDeletionIdempotencyKey.schema.pattern = "^.+$"),
+    (candidate) => (candidate.components.schemas.ProjectDeletionAcceptedResource.properties.logical_release_state = { type: "string", enum: ["pending", "released"] }),
+    (candidate) => candidate.components.schemas.ProjectDeletionStatusResource.properties.logical_release_state.enum.push("completed"),
+    (candidate) => (candidate.components.schemas.ProjectDeletionStatusResource.properties.physical_cleanup_state.const = "released"),
+    (candidate) => (candidate.components.schemas.ProjectDeletionStatusResource.properties.internal_attempt_count = { type: "integer" }),
+    (candidate) => (candidate.components.schemas.ProjectDeletionAcceptedResponse.properties.meta = { $ref: "#/components/schemas/RequestMeta" }),
+    (candidate) => (candidate.components.schemas.ProjectDeletionErrorResponse.additionalProperties = true),
+    (candidate) => delete candidate.components.schemas.ProjectDeletionErrorResponse.properties.error.properties.retryable,
+    (candidate) => candidate.components.schemas.ProjectDeletionErrorResponse.properties.error.properties.code.enum.push("internal_error"),
+    (candidate) => delete candidate.components.responses.ProjectDeletionAccepted.headers.Location,
+    (candidate) => (candidate.components.responses.ProjectDeletionAccepted.headers.Location.schema.pattern = "^/v1/projects/.+/deletion$"),
+    (candidate) => (candidate.components.responses.ProjectDeletionStatusSuccess.headers["Cache-Control"].schema.const = "public"),
+    (candidate) => (candidate.components.responses.ProjectDeletionUnauthorized.headers["x-request-id"].schema.minLength = 0),
+    (candidate) => candidate.components.responses.ProjectDeletionUnavailable.content["application/json"].schema.allOf.shift(),
+    (candidate) => (candidate.components.responses.ProjectDeletionUnavailable.content["application/json"].schema.allOf[1].properties.error.properties.code.enum = ["business_store_unavailable"]),
+    (candidate) => delete candidate.components.responses.ProjectDeletionRateLimited.headers["Retry-After"].schema.pattern,
+    (candidate) => (candidate.components.responses.ProjectDeletionRateLimited.content["application/json"].schema.allOf[1].properties.error.properties.retryable.const = false),
+    (candidate) => (candidate.components.responses.ProjectDeletionConflict.content["application/json"].schema.allOf[1].oneOf[1].properties.error.properties.retryable.const = false),
+    (candidate) => (candidate.paths["/v1/projects/{projectId}"].delete.description = "Replay returns the current result."),
+  ]
+  for (const [index, mutate] of mutations.entries()) {
+    const candidate = structuredClone(document)
+    mutate(candidate)
+    assert.notDeepEqual(inspectR277ProjectDeletion(candidate), [], `R277 mutation ${index} must fail closed`)
+  }
 })

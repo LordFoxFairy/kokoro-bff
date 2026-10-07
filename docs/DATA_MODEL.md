@@ -1,8 +1,10 @@
-## R276-PROJECT-DELETE-D0：Project 墓碑、聚合 receipt 与 N+1 release outbox（目标；未实现）
+## R276-PROJECT-DELETE-D0：Project 墓碑、聚合 receipt 与 N+1 release outbox（机器候选；数据与运行未实现）
 
 > API shape 见 [API_CONTRACT.md](./API_CONTRACT.md) 同名章节，锁序、worker 与模块放置见
-> [TECHNICAL_DESIGN.md](./TECHNICAL_DESIGN.md) 同名章节。当前 canonical schema 已有 `bff_project.deleted_at` 与 active
-> partial index；以下新增表/约束仍是目标，不是已执行 DDL。
+> [TECHNICAL_DESIGN.md](./TECHNICAL_DESIGN.md) 同名章节。当前正式已发布 contract 与正常 runtime 仍为
+> `8.5.0 / 103 operations`；当前工作树已有 `8.6.0 / 105 operations` 机器候选，但尚未发行或生成消费者。当前 canonical
+> schema 已有 `bff_project.deleted_at` 与 active partial index；以下新增表/约束及 runtime、owner/browser 链仍是目标，
+> 不是已执行 DDL 或已实现能力。
 
 ### 当前事实与不变边界
 
@@ -20,8 +22,8 @@
 一 Project 一行的聚合删除 receipt/status：
 
 - identity：`tenant_id`、`project_id`、`owner_subject_id`；`project_id` 唯一并与 tombstone identity 逻辑一致；
-- idempotency：`operation`、`idempotency_key`、`request_fingerprint`、规范且不含 request-level meta 的 `response_data`、
-  `response_status = 202` 与 Location；每次 replay 重新生成本次 `meta.request_id`；
+- idempotency：`operation`、`idempotency_key`、`request_fingerprint`、规范 `response_data`、`response_status = 202` 与
+  Location；request ID 从不落 JSON/receipt，每次 replay 只生成本次 `x-request-id` header；
 - frozen summary：`conversation_count`、`release_command_count = conversation_count + 1`；不保存可漂移 JSON 成员副本；
 - projection：`logical_release_state CHECK IN ('pending','blocked','released')`、`physical_cleanup_state CHECK = 'pending'`；
 - audit：`created_at`、`updated_at`、可空 `blocked_code`。不存 token、授权结果、Storage payload 或任意敏感 message 内容。
@@ -78,8 +80,8 @@ DELETE 单 Project→成员保持同方向。所有能新增/迁移/恢复成员
 
 ### Fresh install、迁移与验证停止线
 
-- 后继 DDL 必须同时更新本仓唯一 canonical schema、installer/fresh-install oracle 与真实 PostgreSQL migration；不存在应用启动时
-  自动建表、兼容旧列或双写路径。
+- 后继 DDL 必须同时更新本仓唯一 canonical schema 与 installer/fresh-install oracle。本仓 SQL V1 当前没有 migration 链；
+  正常已有库的受控演进须另立 ADR 和明确执行/备份/停止线，本片不新建 migration runner/链、兼容表、启动时建表或双写路径。
 - 在机器契约、canonical DDL、repository/source 和真实 PG 测试同片审查前，目标保持“未实现”。真实门必须证明：零成员、
   多成员、Move/Delete 两种胜序、Scheduled revision 晚 callback、N+1 精确冻结、同 key replay/异 body 冲突、事务回滚、
   lease 丢失晚 ACK、blocked→同 command 恢复、Storage unknown，以及跨 tenant/subject 零泄露。
