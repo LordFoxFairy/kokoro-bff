@@ -16,6 +16,7 @@ import type {
 import type { Conversation } from "../../domain/chat/conversation.js"
 import type { Share } from "../../domain/chat/share.js"
 import type { PostgresBffDatabase } from "./client.js"
+import { deleteLockedConversationFacts } from "./conversation-delete.js"
 import {
   conversationColumns,
   conversationFromRow,
@@ -472,98 +473,7 @@ export class PostgresChatRepository implements ChatRepository {
         await client.query("ROLLBACK")
         return false
       }
-      await client.query(`DELETE FROM bff_agui_run_interaction WHERE tenant_id=$1 AND session_id=$2`, [tenantId, conversationId])
-      await client.query(`DELETE FROM bff_agui_run_activity WHERE tenant_id=$1 AND session_id=$2`, [tenantId, conversationId])
-      await client.query(`DELETE FROM bff_agui_run_process WHERE tenant_id=$1 AND session_id=$2`, [tenantId, conversationId])
-      await client.query(
-        `DELETE FROM bff_conversation_artifact
-          WHERE tenant_id = $1 AND conversation_id = $2`,
-        [tenantId, conversationId],
-      )
-      await client.query(
-        `UPDATE bff_share SET revoked_at = CURRENT_TIMESTAMP(3)
-          WHERE tenant_id = $1 AND conversation_id = $3 AND revoked_at IS NULL
-            AND EXISTS (
-              SELECT 1 FROM bff_conversation AS conversation
-               WHERE conversation.tenant_id = bff_share.tenant_id
-                 AND conversation.conversation_id = bff_share.conversation_id
-                 AND conversation.owner_id = $2
-            )`,
-        [tenantId, subjectId, conversationId],
-      )
-      await client.query(
-        `UPDATE bff_agui_stream
-            SET consumer_state = 'stopped',
-                consumer_fence = consumer_fence + 1,
-                consumer_lease_owner = NULL,
-                consumer_lease_token = NULL,
-                consumer_lease_until = NULL,
-                consumer_last_error_code = 'conversation_deleted',
-                consumer_last_error_at = CURRENT_TIMESTAMP(3),
-                updated_at = CURRENT_TIMESTAMP(3)
-          WHERE tenant_id = $1 AND session_id = $3 AND consumer_subject_id = $2`,
-        [tenantId, subjectId, conversationId],
-      )
-      await client.query(
-        `INSERT INTO bff_agent_cancellation_outbox
-          (cancellation_id, tenant_id, conversation_id, conversation_dispatch_seq, run_id,
-           subject_id, actor_id, request_id, command_id, identity_assertion_ref, payload,
-           status, attempt_count, available_at, fence)
-         SELECT 'cancel_' || dispatch.outbox_id,
-                dispatch.tenant_id,
-                dispatch.conversation_id,
-                dispatch.conversation_dispatch_seq,
-                dispatch.run_id,
-                dispatch.subject_id,
-                $2,
-                $4,
-                'cancel_' || dispatch.outbox_id,
-                dispatch.identity_assertion_ref,
-                jsonb_build_object('kind', 'run.cancel', 'session_id', dispatch.conversation_id),
-                'cancel_requested', 0, CURRENT_TIMESTAMP(3), 0
-           FROM bff_agent_dispatch_outbox AS dispatch
-          WHERE dispatch.tenant_id = $1
-            AND dispatch.subject_id = $2
-            AND dispatch.conversation_id = $3
-            AND dispatch.attempt_count > 0
-         ON CONFLICT (tenant_id, run_id) DO NOTHING`,
-        [tenantId, subjectId, conversationId, requestId],
-      )
-      await client.query(
-        `UPDATE bff_agent_dispatch_outbox
-            SET status = 'retryable', admission_unknown_seen = TRUE,
-                last_error_code = 'conversation_deleted', last_error_at = CURRENT_TIMESTAMP(3),
-                lease_owner = NULL, lease_token = NULL, lease_until = NULL,
-                fence = fence + 1, updated_at = CURRENT_TIMESTAMP(3)
-          WHERE tenant_id = $1 AND subject_id = $2 AND conversation_id = $3
-            AND status IN ('leased', 'retryable') AND attempt_count > 0`,
-        [tenantId, subjectId, conversationId],
-      )
-      await client.query(
-        `UPDATE bff_agent_dispatch_outbox
-            SET status = 'failed', completed_at = CURRENT_TIMESTAMP(3),
-                last_error_code = 'conversation_deleted', last_error_at = CURRENT_TIMESTAMP(3),
-                lease_owner = NULL, lease_token = NULL, lease_until = NULL,
-                fence = fence + 1, updated_at = CURRENT_TIMESTAMP(3)
-          WHERE tenant_id = $1 AND subject_id = $2 AND conversation_id = $3
-            AND status IN ('pending', 'retryable', 'leased')
-            AND attempt_count = 0 AND admission_unknown_seen = FALSE`,
-        [tenantId, subjectId, conversationId],
-      )
-      await client.query(
-        `UPDATE bff_message
-            SET status = 'failed', agent_failure_code = NULL, agent_failure_retryable = NULL,
-                updated_at = CURRENT_TIMESTAMP(3)
-          WHERE tenant_id = $1 AND conversation_id = $3
-            AND role = 'assistant' AND status IN ('pending', 'streaming')
-            AND EXISTS (
-              SELECT 1 FROM bff_conversation AS conversation
-               WHERE conversation.tenant_id = bff_message.tenant_id
-                 AND conversation.conversation_id = bff_message.conversation_id
-                 AND conversation.owner_id = $2
-            )`,
-        [tenantId, subjectId, conversationId],
-      )
+      await deleteLockedConversationFacts(client, tenantId, subjectId, conversationId, requestId)
       await client.query("COMMIT")
       return true
     } catch (error) {

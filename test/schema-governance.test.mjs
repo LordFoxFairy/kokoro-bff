@@ -33,6 +33,26 @@ test("schema application reads the repository canonical schema", async () => {
   const schema = await loadCanonicalSchema()
 
   assert.match(schema, /CREATE TABLE IF NOT EXISTS bff_project/u)
+  assert.match(schema, /CREATE TABLE IF NOT EXISTS bff_project_deletion/u)
+  assert.match(schema, /CREATE TABLE IF NOT EXISTS bff_project_scope_release_outbox/u)
+  assert.match(schema, /UNIQUE \(tenant_id, owner_subject_id, operation, project_id, idempotency_key\)/u)
+  assert.match(schema, /UNIQUE \(tenant_id, project_id, scope_kind, scope_id\)/u)
+  const projectDeletion = schema.match(/CREATE TABLE IF NOT EXISTS bff_project_deletion \([\s\S]*?\n\);/u)?.[0] ?? ""
+  const projectRelease = schema.match(/CREATE TABLE IF NOT EXISTS bff_project_scope_release_outbox \([\s\S]*?\n\);/u)?.[0] ?? ""
+  assert.match(projectDeletion, /ck_bff_project_deletion_key CHECK \(length\(idempotency_key\) BETWEEN 1 AND 128[\s\S]*?strpos\(idempotency_key, ','\) = 0\)/u)
+  assert.match(projectDeletion, /ck_bff_project_deletion_fingerprint CHECK \(length\(request_fingerprint\) = 64[\s\S]*?\[\^0-9a-f\]/u)
+  assert.match(
+    projectDeletion,
+    /ck_bff_project_deletion_response_data CHECK \(response_data = jsonb_build_object\('project_id', project_id, 'logical_release_state', 'pending', 'physical_cleanup_state', 'pending'\)\)/u,
+  )
+  assert.match(projectDeletion, /ck_bff_project_deletion_location CHECK \(location = '\/v1\/projects\/' \|\| project_id \|\| '\/deletion'\)/u)
+  assert.match(projectRelease, /ck_bff_project_release_actor CHECK \(actor_id = owner_subject_id\)/u)
+  assert.match(projectRelease, /ck_bff_project_release_project_scope CHECK \(scope_kind <> 'project' OR scope_id = project_id\)/u)
+  assert.match(projectRelease, /ck_bff_project_release_digest CHECK \(length\(request_digest\) = 64[\s\S]*?\[\^0-9a-f\]/u)
+  assert.match(
+    projectRelease,
+    /state = 'leased' AND lease_owner IS NOT NULL AND lease_expires_at IS NOT NULL[\s\S]*?state <> 'leased' AND lease_owner IS NULL AND lease_expires_at IS NULL/u,
+  )
   assert.match(schema, /CREATE TABLE IF NOT EXISTS bff_project[\s\S]*?owner_id TEXT NOT NULL/u)
   assert.match(schema, /CREATE TABLE IF NOT EXISTS bff_scheduled_task/u)
   assert.match(schema, /recurrence_anchor_at TIMESTAMPTZ\(3\) NOT NULL/u)

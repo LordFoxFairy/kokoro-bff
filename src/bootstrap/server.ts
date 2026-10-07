@@ -1,5 +1,7 @@
 import { personalizationRoute } from "../http/routes/personalization.js"
 import { projectRenameRoute } from "../http/routes/project-rename.js"
+import { projectDeleteRoute } from "../http/routes/project-delete.js"
+import { projectDeletionStatusRoute } from "../http/routes/project-deletion-status.js"
 import { projectResourceListRoute } from "../http/routes/project-resource-list.js"
 import { libraryFileListRoute } from "../http/routes/library-file-list.js"
 import { personalFileUploadRoute } from "../http/routes/personal-file-upload.js"
@@ -190,6 +192,14 @@ async function handle(
     businessPath.length === 3 &&
     businessPath[0] === "projects" &&
     businessPath[2] === "name"
+  const isProjectDeletePath =
+    composition.routeHandler === undefined && request.method === "DELETE" && businessPath.length === 2 && businessPath[0] === "projects"
+  const isProjectDeletionStatusPath =
+    composition.routeHandler === undefined &&
+    request.method === "GET" &&
+    businessPath.length === 3 &&
+    businessPath[0] === "projects" &&
+    businessPath[2] === "deletion"
   const isMoveSessionPath =
     composition.routeHandler === undefined &&
     request.method === "POST" &&
@@ -238,6 +248,8 @@ async function handle(
         isPlatformProjectionRead ||
         isMoveSessionPath ||
         isProjectRenamePath ||
+        isProjectDeletePath ||
+        isProjectDeletionStatusPath ||
         isPersonalizationPath
       ) {
         response.setHeader("cache-control", "no-store")
@@ -260,6 +272,16 @@ async function handle(
 
   if (isProjectRenamePath) {
     await projectRenameRoute(request, response, context, businessPath[1] ?? "", composition.businessStore)
+    return
+  }
+
+  if (isProjectDeletePath) {
+    await projectDeleteRoute(request, response, context, businessPath[1] ?? "", composition.businessStore)
+    return
+  }
+
+  if (isProjectDeletionStatusPath) {
+    await projectDeletionStatusRoute(request, response, context, businessPath[1] ?? "", composition.businessStore)
     return
   }
 

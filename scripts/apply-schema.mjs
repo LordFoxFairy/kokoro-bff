@@ -53,10 +53,12 @@ export async function applyCanonicalSchema(databaseUrl, schema) {
     await client.query(schema)
     const installed = await client.query(
       `SELECT to_regclass('kokoro_bff.bff_project') IS NOT NULL AS project,
+              to_regclass('kokoro_bff.bff_project_deletion') IS NOT NULL AS project_deletion,
+              to_regclass('kokoro_bff.bff_project_scope_release_outbox') IS NOT NULL AS project_release_outbox,
               to_regclass('kokoro_bff.bff_agui_event') IS NOT NULL AS agui,
               to_regclass('kokoro_bff.ix_bff_project_owner_list') IS NOT NULL AS project_index`,
     )
-    if (!installed.rows[0]?.project || !installed.rows[0]?.agui || !installed.rows[0]?.project_index) {
+    if (!installed.rows[0]?.project || !installed.rows[0]?.project_deletion || !installed.rows[0]?.project_release_outbox || !installed.rows[0]?.agui || !installed.rows[0]?.project_index) {
       throw new Error("BFF canonical schema installation is incomplete")
     }
     await client.query("COMMIT")

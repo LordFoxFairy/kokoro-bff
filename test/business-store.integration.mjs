@@ -3226,3 +3226,726 @@ integrationTest("R278 Project then ScheduledTask lock order makes deletion and u
     }
   })
 })
+
+function r279AssertProjectDeletionResource(result, projectId, status) {
+  assert.equal(result.status, status, JSON.stringify(result.body))
+  r241Headers(result)
+  assert.deepEqual(result.body, {
+    data: {
+      project_id: projectId,
+      logical_release_state: "pending",
+      physical_cleanup_state: "pending",
+    },
+  })
+}
+
+async function r279DeleteProject(f, projectId, key) {
+  return f.request(`projects/${projectId}`, "DELETE", undefined, { "idempotency-key": key })
+}
+
+async function r279CreateConversation(f, repositories, projectId, label) {
+  const conversationId = `conv_${randomUUID()}`
+  const receipt = await repositories.services.chatTurns.submit({
+    tenantId: f.tenant,
+    conversationId,
+    projectRef: projectId,
+    subjectId: f.owner,
+    actorId: f.owner,
+    requestId: `r279-${label}-${randomUUID()}`,
+    idempotencyKey: `r279-${label}-${randomUUID()}`,
+    content: `R279 ${label} durable member`,
+  })
+  assert.ok(receipt, "the real chat-turn repository must establish the Project member")
+  return conversationId
+}
+
+async function r279DeletionSnapshot(f, projectId) {
+  const [project, conversations, tasks, schedulerOutbox, deletion, releaseOutbox] = await Promise.all([
+    f.pool.query("SELECT to_jsonb(row) AS value FROM bff_project AS row WHERE tenant_id=$1 AND project_id=$2", [f.tenant, projectId]),
+    f.pool.query("SELECT to_jsonb(row) AS value FROM bff_conversation AS row WHERE tenant_id=$1 AND project_ref=$2 ORDER BY conversation_id", [
+      f.tenant,
+      projectId,
+    ]),
+    f.pool.query("SELECT to_jsonb(row) AS value FROM bff_scheduled_task AS row WHERE tenant_id=$1 AND project_id=$2 ORDER BY task_id", [f.tenant, projectId]),
+    f.pool.query(
+      "SELECT to_jsonb(row) AS value FROM bff_scheduled_task_outbox AS row WHERE tenant_id=$1 AND task_id IN (SELECT task_id FROM bff_scheduled_task WHERE tenant_id=$1 AND project_id=$2) ORDER BY created_at,outbox_id",
+      [f.tenant, projectId],
+    ),
+    f.pool.query("SELECT to_jsonb(row) AS value FROM bff_project_deletion AS row WHERE tenant_id=$1 AND project_id=$2", [f.tenant, projectId]),
+    f.pool.query(
+      "SELECT to_jsonb(row) AS value FROM bff_project_scope_release_outbox AS row WHERE tenant_id=$1 AND project_id=$2 ORDER BY scope_kind,scope_id",
+      [f.tenant, projectId],
+    ),
+  ])
+  return {
+    project: project.rows.map(({ value }) => value),
+    conversations: conversations.rows.map(({ value }) => value),
+    tasks: tasks.rows.map(({ value }) => value),
+    schedulerOutbox: schedulerOutbox.rows.map(({ value }) => value),
+    deletion: deletion.rows.map(({ value }) => value),
+    releaseOutbox: releaseOutbox.rows.map(({ value }) => value),
+  }
+}
+
+integrationTest("R279 DELETE and status expose pending logical release for an empty Project", async (t) => {
+  const f = await r241Fixture(t)
+  const project = await f.project("R279 empty Project")
+  const key = `r279-empty-${randomUUID()}`
+  const deleted = await r279DeleteProject(f, project.id, key)
+  r279AssertProjectDeletionResource(deleted, project.id, 202)
+  assert.equal(deleted.headers.get("location"), `/v1/projects/${project.id}/deletion`)
+
+  const status = await f.request(`projects/${project.id}/deletion`)
+  r279AssertProjectDeletionResource(status, project.id, 200)
+  const persisted = await r279DeletionSnapshot(f, project.id)
+  assert.equal(persisted.deletion.length, 1)
+  assert.equal(persisted.deletion[0].conversation_count, 0)
+  assert.equal(persisted.deletion[0].release_command_count, 1)
+  assert.equal(persisted.deletion[0].response_status, 202)
+  assert.equal(persisted.releaseOutbox.length, 1)
+  assert.deepEqual(
+    persisted.releaseOutbox.map((row) => [row.scope_kind, row.scope_id, row.state]),
+    [["project", project.id, "pending"]],
+  )
+})
+
+integrationTest("R279 aggregate deletion freezes active and deleted members and pauses associated ScheduledTasks", async (t) => {
+  const f = await r241Fixture(t)
+  const project = await f.project("R279 aggregate Project")
+  const repositories = new PostgresBffRepositories(postgresUrl, redisUrl)
+  await repositories.ready()
+  let activeConversation
+  let deletedConversation
+  try {
+    activeConversation = await r279CreateConversation(f, repositories, project.id, "active-conversation")
+    deletedConversation = await r279CreateConversation(f, repositories, project.id, "deleted-conversation")
+    assert.equal(
+      await repositories.services.chat.deleteConversation(f.tenant, f.owner, deletedConversation, `r279-delete-member-${randomUUID()}`, project.id),
+      true,
+    )
+  } finally {
+    await repositories.close()
+  }
+  const task = await r278CreateScheduledTask(f, project.id, "aggregate")
+  const beforeTask = (await f.pool.query("SELECT to_jsonb(row) AS value FROM bff_scheduled_task AS row WHERE tenant_id=$1 AND task_id=$2", [f.tenant, task.id]))
+    .rows[0].value
+  const deletedMemberBefore = (
+    await f.pool.query("SELECT deleted_at FROM bff_conversation WHERE tenant_id=$1 AND conversation_id=$2", [f.tenant, deletedConversation])
+  ).rows[0].deleted_at
+  const beforeHistory = await f.pool.query(
+    "SELECT to_jsonb(row) AS value FROM bff_agui_event AS row WHERE tenant_id=$1 AND session_id=$2 ORDER BY public_sequence",
+    [f.tenant, activeConversation],
+  )
+  assert.ok(beforeHistory.rowCount > 0, "the real chat ledger must provide immutable AG-UI history")
+  const beforeMessages = await f.pool.query(
+    "SELECT conversation_id,message_id,role,content FROM bff_message WHERE tenant_id=$1 AND conversation_id=ANY($2::text[]) ORDER BY conversation_id,message_id",
+    [f.tenant, [activeConversation, deletedConversation]],
+  )
+
+  const deleted = await r279DeleteProject(f, project.id, `r279-aggregate-${randomUUID()}`)
+  r279AssertProjectDeletionResource(deleted, project.id, 202)
+  const persisted = await r279DeletionSnapshot(f, project.id)
+  assert.equal(persisted.project[0].deleted_at === null, false)
+  assert.equal(persisted.deletion[0].conversation_count, 2)
+  assert.equal(persisted.deletion[0].release_command_count, 3)
+  assert.deepEqual(
+    persisted.releaseOutbox.map((row) => [row.scope_kind, row.scope_id, row.state]),
+    [
+      ["conversation", activeConversation, "pending"],
+      ["conversation", deletedConversation, "pending"],
+      ["project", project.id, "pending"],
+    ].sort(([leftKind, leftId], [rightKind, rightId]) => leftKind.localeCompare(rightKind) || leftId.localeCompare(rightId)),
+  )
+  assert.deepEqual(
+    new Date(persisted.conversations.find((row) => row.conversation_id === deletedConversation)?.deleted_at).toISOString(),
+    new Date(deletedMemberBefore).toISOString(),
+    "already-deleted member tombstone changed",
+  )
+  assert.deepEqual(
+    persisted.conversations.map((row) => [row.conversation_id, row.status, row.project_ref]),
+    [
+      [activeConversation, "deleted", project.id],
+      [deletedConversation, "deleted", project.id],
+    ].sort(([leftId], [rightId]) => leftId.localeCompare(rightId)),
+  )
+  assert.deepEqual(
+    (
+      await f.pool.query(
+        "SELECT conversation_id,message_id,role,content FROM bff_message WHERE tenant_id=$1 AND conversation_id=ANY($2::text[]) ORDER BY conversation_id,message_id",
+        [f.tenant, [activeConversation, deletedConversation]],
+      )
+    ).rows,
+    beforeMessages.rows,
+    "Project deletion must retain existing Message rows",
+  )
+  assert.deepEqual(
+    (
+      await f.pool.query("SELECT to_jsonb(row) AS value FROM bff_agui_event AS row WHERE tenant_id=$1 AND session_id=$2 ORDER BY public_sequence", [
+        f.tenant,
+        activeConversation,
+      ])
+    ).rows,
+    beforeHistory.rows,
+    "Project deletion must retain immutable AG-UI history",
+  )
+  assert.equal(persisted.tasks.length, 1)
+  assert.equal(persisted.tasks[0].task_id, task.id)
+  assert.equal(persisted.tasks[0].project_id, project.id)
+  assert.equal(persisted.tasks[0].status, "paused")
+  assert.equal(persisted.tasks[0].enabled, false)
+  assert.equal(persisted.tasks[0].next_run_at, null)
+  assert.equal(Number(persisted.tasks[0].revision), Number(beforeTask.revision) + 1)
+  for (const field of ["title", "prompt", "frequency", "task_time", "timezone", "recurrence_anchor_at", "expires_at", "auto_approve"])
+    assert.deepEqual(persisted.tasks[0][field], beforeTask[field], `ScheduledTask ${field} changed during Project deletion`)
+  const taskCommands = persisted.schedulerOutbox.filter((row) => row.task_id === task.id)
+  assert.equal(taskCommands.length, 2)
+  assert.deepEqual(
+    taskCommands.map((row) => [row.command_type, Number(row.aggregate_revision)]),
+    [
+      ["scheduler.register", Number(beforeTask.revision)],
+      ["scheduler.replace", Number(beforeTask.revision) + 1],
+    ],
+  )
+})
+
+integrationTest("R279 deletion receipt replays original pending while new keys and revoked sessions fail closed", async (t) => {
+  const f = await r241Fixture(t)
+  const project = await f.project("R279 replay Project")
+  const key = `r279-replay-${randomUUID()}`
+  const original = await r279DeleteProject(f, project.id, key)
+  r279AssertProjectDeletionResource(original, project.id, 202)
+  const before = await r279DeletionSnapshot(f, project.id)
+
+  const replay = await r279DeleteProject(f, project.id, key)
+  r279AssertProjectDeletionResource(replay, project.id, 202)
+  assert.deepEqual(replay.body, original.body)
+  assert.equal(replay.headers.get("location"), original.headers.get("location"))
+  assert.notEqual(replay.headers.get("x-request-id"), original.headers.get("x-request-id"))
+  assert.deepEqual(await r279DeletionSnapshot(f, project.id), before, "same-key replay appended or changed deletion facts")
+
+  const newKey = await r279DeleteProject(f, project.id, `r279-new-${randomUUID()}`)
+  assert.equal(newKey.status, 404, JSON.stringify(newKey.body))
+  r241Headers(newKey)
+  assert.deepEqual(newKey.body.error, { code: "project_not_found", message: newKey.body.error.message, retryable: false })
+  assert.deepEqual(await r279DeletionSnapshot(f, project.id), before, "new-key tombstone request changed deletion facts")
+
+  f.admission.deny(f.token, { ok: false, status: 401, code: "session_invalid" })
+  const denied = await r279DeleteProject(f, project.id, key)
+  assert.equal(denied.status, 401, JSON.stringify(denied.body))
+  r241Headers(denied)
+  assert.equal(denied.body.error.code, "session_invalid")
+  assert.equal(denied.body.error.retryable, false)
+  assert.deepEqual(await r279DeletionSnapshot(f, project.id), before, "current admission denial replayed or changed deletion facts")
+})
+
+async function r279TenantAuthoritySnapshot(f) {
+  const tables = await f.pool.query(
+    `SELECT table_name FROM information_schema.columns
+      WHERE table_schema='kokoro_bff' AND column_name='tenant_id'
+      ORDER BY table_name`,
+  )
+  const snapshot = {}
+  for (const { table_name: table } of tables.rows) {
+    if (!/^bff_[a-z0-9_]+$/u.test(table)) throw new Error(`unsafe canonical table ${table}`)
+    const rows = await f.pool.query(`SELECT to_jsonb(row) AS value FROM ${table} AS row WHERE tenant_id=$1 ORDER BY to_jsonb(row)::text`, [f.tenant])
+    snapshot[table] = rows.rows.map(({ value }) => value)
+  }
+  snapshot.bff_idempotency_receipt = (
+    await f.pool.query("SELECT to_jsonb(row) AS value FROM bff_idempotency_receipt AS row WHERE position($1 in scope)>0 ORDER BY scope", [f.tenant])
+  ).rows.map(({ value }) => value)
+  return snapshot
+}
+
+async function r279InstallFault(f, label, projectId, secondConversationId) {
+  const suffix = randomUUID().replaceAll("-", "")
+  const functionName = `r279_fault_${suffix}`
+  const triggerName = `r279_trigger_${suffix}`
+  const target = label === "second-conversation" ? "bff_message" : label === "receipt" ? "bff_project_deletion" : "bff_project_scope_release_outbox"
+  const event = label === "second-conversation" ? "UPDATE" : "INSERT"
+  const predicate =
+    label === "second-conversation"
+      ? `OLD.tenant_id=${"'"}${f.tenant}${"'"} AND OLD.conversation_id=${"'"}${secondConversationId}${"'"} AND OLD.role='assistant' AND OLD.status IN ('pending','streaming')`
+      : label === "last-scope"
+        ? `NEW.tenant_id=${"'"}${f.tenant}${"'"} AND NEW.project_id=${"'"}${projectId}${"'"} AND NEW.scope_kind='project' AND NEW.scope_id=${"'"}${projectId}${"'"}`
+        : `NEW.tenant_id=${"'"}${f.tenant}${"'"} AND NEW.project_id=${"'"}${projectId}${"'"}`
+  let functionCreated = false
+  let triggerCreated = false
+  try {
+    await f.pool.query(
+      `CREATE FUNCTION ${functionName}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF ${predicate} THEN RAISE EXCEPTION 'r279 ${label}'; END IF; RETURN NEW; END $$`,
+    )
+    functionCreated = true
+    await f.pool.query(`CREATE TRIGGER ${triggerName} BEFORE ${event} ON ${target} FOR EACH ROW EXECUTE FUNCTION ${functionName}()`)
+    triggerCreated = true
+  } catch (error) {
+    if (triggerCreated) await f.pool.query(`DROP TRIGGER IF EXISTS ${triggerName} ON ${target}`).catch(() => undefined)
+    if (functionCreated) await f.pool.query(`DROP FUNCTION IF EXISTS ${functionName}()`).catch(() => undefined)
+    throw error
+  }
+  return async () => {
+    await f.pool.query(`DROP TRIGGER IF EXISTS ${triggerName} ON ${target}`)
+    await f.pool.query(`DROP FUNCTION IF EXISTS ${functionName}()`)
+  }
+}
+
+for (const fault of ["second-conversation", "last-scope", "receipt"]) {
+  integrationTest(`R279 ${fault} failure rolls back every tenant fact and same-key retry commits once`, async (t) => {
+    const f = await r241Fixture(t)
+    const project = await f.project(`R279 rollback ${fault}`)
+    const repositories = new PostgresBffRepositories(postgresUrl, redisUrl)
+    await repositories.ready()
+    let secondConversationId
+    try {
+      await r279CreateConversation(f, repositories, project.id, `${fault}-first`)
+      secondConversationId = await r279CreateConversation(f, repositories, project.id, `${fault}-second`)
+    } finally {
+      await repositories.close()
+    }
+    await r278CreateScheduledTask(f, project.id, `${fault}-task`)
+    const key = `r279-${fault}-${randomUUID()}`
+    const before = await r279TenantAuthoritySnapshot(f)
+    const uninstall = await r279InstallFault(f, fault, project.id, secondConversationId)
+    try {
+      const failed = await r279DeleteProject(f, project.id, key)
+      assert.equal(failed.status, 503, JSON.stringify(failed.body))
+      assert.equal(failed.body.error.code, "business_store_unavailable")
+      assert.deepEqual(await r279TenantAuthoritySnapshot(f), before, `${fault} left partial tenant facts`)
+    } finally {
+      await uninstall()
+    }
+    const retried = await r279DeleteProject(f, project.id, key)
+    r279AssertProjectDeletionResource(retried, project.id, 202)
+    const committed = await r279TenantAuthoritySnapshot(f)
+    const replay = await r279DeleteProject(f, project.id, key)
+    r279AssertProjectDeletionResource(replay, project.id, 202)
+    assert.deepEqual(await r279TenantAuthoritySnapshot(f), committed, `${fault} replay appended durable facts`)
+  })
+}
+
+async function r279RawHttp(f, method, path, rawHeaders = [], body = "") {
+  const { request } = await import("node:http")
+  const server = servers.at(-1)
+  const address = server?.address()
+  if (!address || typeof address === "string") throw new Error("R279 HTTP fixture is not listening")
+  const url = new URL(`http://127.0.0.1:${address.port}`)
+  return new Promise((resolve, reject) => {
+    const outgoing = request(
+      {
+        hostname: url.hostname,
+        port: url.port,
+        method,
+        path: `/v1/${path}`,
+        headers: [
+          "Host",
+          url.host,
+          "x-kokoro-service",
+          "web-bff",
+          "x-kokoro-internal-secret",
+          "web-secret",
+          "authorization",
+          `Bearer ${f.token}`,
+          ...rawHeaders,
+        ],
+        signal: AbortSignal.timeout(6000),
+      },
+      (response) => {
+        const chunks = []
+        response.on("data", (chunk) => chunks.push(Buffer.from(chunk)))
+        response.once("error", reject)
+        response.once("end", () => {
+          const raw = Buffer.concat(chunks).toString("utf8")
+          resolve({ status: response.statusCode, body: JSON.parse(raw), headers: new Headers(response.headers) })
+        })
+      },
+    )
+    outgoing.once("error", reject)
+    outgoing.end(body)
+  })
+}
+
+integrationTest("R279 raw DELETE and status ingress is closed without inventing conditional-read semantics", async (t) => {
+  const f = await r241Fixture(t)
+  const project = await f.project("R279 ingress")
+  const path = `projects/${project.id}`
+  const before = await r279TenantAuthoritySnapshot(f)
+  for (const [suffix, headers, body, code] of [
+    ["/", ["Idempotency-Key", "valid"], "", "invalid_project_deletion_request"],
+    ["?x=1", ["Idempotency-Key", "valid"], "", "invalid_project_deletion_request"],
+    ["", [], "", "idempotency_key_required"],
+    ["", ["Idempotency-Key", "a", "Idempotency-Key", "b"], "", "invalid_idempotency_key"],
+    ["", ["Idempotency-Key", "a,b"], "", "invalid_idempotency_key"],
+    ["", ["Idempotency-Key", "bad key"], "", "invalid_idempotency_key"],
+    ["", ["Idempotency-Key", "x".repeat(129)], "", "invalid_idempotency_key"],
+    ["", ["Idempotency-Key", "valid", "Content-Length", "2"], "{}", "invalid_project_deletion_request"],
+  ]) {
+    const result = await r279RawHttp(f, "DELETE", path + suffix, headers, body)
+    assert.equal(result.status, 400, JSON.stringify(result.body))
+    assert.equal(result.body.error.code, code)
+    assert.equal(result.body.error.retryable, false)
+    r241Headers(result)
+  }
+  assert.deepEqual(await r279TenantAuthoritySnapshot(f), before)
+  const key1 = "x"
+  const key128 = "K".repeat(128)
+  const first = await r279RawHttp(f, "DELETE", path, ["Idempotency-Key", key1, "Content-Type", "application/json", "Content-Length", "0"])
+  r279AssertProjectDeletionResource(first, project.id, 202)
+  const statusPath = `${path}/deletion`
+  for (const conditional of [[], ["If-Match", '"opaque"'], ["If-None-Match", '"opaque"'], ["Content-Type", "application/json"]]) {
+    const status = await r279RawHttp(f, "GET", statusPath, conditional)
+    r279AssertProjectDeletionResource(status, project.id, 200)
+  }
+  for (const headers of [
+    ["Idempotency-Key", key128],
+    ["Content-Length", "0"],
+  ]) {
+    const invalid = await r279RawHttp(f, "GET", statusPath, headers)
+    assert.equal(invalid.status, 400)
+    assert.equal(invalid.body.error.code, "invalid_project_deletion_request")
+  }
+  const another = await f.project("R279 128-byte key")
+  const maxKey = await r279RawHttp(f, "DELETE", `projects/${another.id}`, ["Idempotency-Key", key128])
+  r279AssertProjectDeletionResource(maxKey, another.id, 202)
+})
+
+integrationTest("R279 Project deletion preserves admitted-unknown recovery and fails only never-attempted dispatch", async (t) => {
+  const f = await r241Fixture(t)
+  const project = await f.project("R279 dispatch recovery")
+  const repositories = new PostgresBffRepositories(postgresUrl, redisUrl)
+  await repositories.ready()
+  let unknownConversation
+  let pendingConversation
+  try {
+    unknownConversation = await r279CreateConversation(f, repositories, project.id, "unknown-dispatch")
+    pendingConversation = await r279CreateConversation(f, repositories, project.id, "pending-dispatch")
+  } finally {
+    await repositories.close()
+  }
+  await f.pool.query(
+    `UPDATE bff_agent_dispatch_outbox SET status='retryable',attempt_count=1,admission_unknown_seen=TRUE,last_error_code='transport_unknown',last_error_at=CURRENT_TIMESTAMP(3)
+      WHERE tenant_id=$1 AND conversation_id=$2`,
+    [f.tenant, unknownConversation],
+  )
+  const key = `r279-dispatch-${randomUUID()}`
+  r279AssertProjectDeletionResource(await r279DeleteProject(f, project.id, key), project.id, 202)
+  const dispatch = await f.pool.query(
+    `SELECT conversation_id,status,attempt_count,admission_unknown_seen,last_error_code FROM bff_agent_dispatch_outbox
+      WHERE tenant_id=$1 AND conversation_id=ANY($2::text[]) ORDER BY conversation_id`,
+    [f.tenant, [unknownConversation, pendingConversation]],
+  )
+  const byConversation = new Map(dispatch.rows.map((row) => [row.conversation_id, row]))
+  assert.deepEqual(
+    [
+      byConversation.get(unknownConversation).status,
+      Number(byConversation.get(unknownConversation).attempt_count),
+      byConversation.get(unknownConversation).admission_unknown_seen,
+    ],
+    ["retryable", 1, true],
+  )
+  assert.deepEqual(
+    [
+      byConversation.get(pendingConversation).status,
+      Number(byConversation.get(pendingConversation).attempt_count),
+      byConversation.get(pendingConversation).admission_unknown_seen,
+    ],
+    ["failed", 0, false],
+  )
+  const cancellations = await f.pool.query(
+    "SELECT conversation_id,run_id,command_id FROM bff_agent_cancellation_outbox WHERE tenant_id=$1 ORDER BY conversation_id,run_id",
+    [f.tenant],
+  )
+  assert.deepEqual(
+    cancellations.rows.map((row) => row.conversation_id),
+    [unknownConversation],
+  )
+  const beforeReplay = await r279TenantAuthoritySnapshot(f)
+  r279AssertProjectDeletionResource(await r279DeleteProject(f, project.id, key), project.id, 202)
+  assert.deepEqual(await r279TenantAuthoritySnapshot(f), beforeReplay, "replay duplicated cancellation or changed unknown recovery")
+})
+
+integrationTest("R279 replay rejects a restored active Project instead of trusting a terminal deletion receipt", async (t) => {
+  const f = await r241Fixture(t)
+  const project = await f.project("R279 restored receipt")
+  const key = `r279-restored-${randomUUID()}`
+  r279AssertProjectDeletionResource(await r279DeleteProject(f, project.id, key), project.id, 202)
+  await f.pool.query("UPDATE bff_project SET deleted_at=NULL,updated_at=CURRENT_TIMESTAMP(3) WHERE tenant_id=$1 AND project_id=$2", [f.tenant, project.id])
+  const before = await r279TenantAuthoritySnapshot(f)
+  const replay = await r279DeleteProject(f, project.id, key)
+  assert.equal(replay.status, 503, JSON.stringify(replay.body))
+  r241Headers(replay)
+  assert.equal(replay.body.error.code, "business_store_unavailable")
+  assert.equal(replay.body.error.retryable, true)
+  assert.deepEqual(await r279TenantAuthoritySnapshot(f), before, "invalid active-Project replay changed facts")
+})
+
+for (const corruption of ["missing-member", "zero-scope", "wrong-project-scope"]) {
+  integrationTest(`R279 status fails closed for ${corruption} release-set corruption`, async (t) => {
+    const f = await r241Fixture(t)
+    const project = await f.project(`R279 integrity ${corruption}`)
+    const repositories = new PostgresBffRepositories(postgresUrl, redisUrl)
+    await repositories.ready()
+    let conversationId
+    try {
+      conversationId = await r279CreateConversation(f, repositories, project.id, `${corruption}-member`)
+    } finally {
+      await repositories.close()
+    }
+    r279AssertProjectDeletionResource(await r279DeleteProject(f, project.id, `r279-integrity-${randomUUID()}`), project.id, 202)
+    if (corruption !== "wrong-project-scope")
+      await f.pool.query("UPDATE bff_project_scope_release_outbox SET state='released',released_at=CURRENT_TIMESTAMP(3) WHERE tenant_id=$1 AND project_id=$2", [
+        f.tenant,
+        project.id,
+      ])
+    if (corruption === "missing-member")
+      await f.pool.query("DELETE FROM bff_project_scope_release_outbox WHERE tenant_id=$1 AND project_id=$2 AND scope_kind='conversation' AND scope_id=$3", [
+        f.tenant,
+        project.id,
+        conversationId,
+      ])
+    else if (corruption === "zero-scope")
+      await f.pool.query("DELETE FROM bff_project_scope_release_outbox WHERE tenant_id=$1 AND project_id=$2", [f.tenant, project.id])
+    else {
+      const beforeConstraint = await r279TenantAuthoritySnapshot(f)
+      await assert.rejects(
+        f.pool.query("UPDATE bff_project_scope_release_outbox SET scope_id=$3 WHERE tenant_id=$1 AND project_id=$2 AND scope_kind='project'", [
+          f.tenant,
+          project.id,
+          `project_${randomUUID()}`,
+        ]),
+        (error) => error?.code === "23514" && error?.constraint === "ck_bff_project_release_project_scope",
+      )
+      assert.deepEqual(await r279TenantAuthoritySnapshot(f), beforeConstraint, "rejected Project scope corruption changed facts")
+      r279AssertProjectDeletionResource(await f.request(`projects/${project.id}/deletion`), project.id, 200)
+      return
+    }
+    const before = await r279TenantAuthoritySnapshot(f)
+    const status = await f.request(`projects/${project.id}/deletion`)
+    assert.equal(status.status, 503, JSON.stringify(status.body))
+    r241Headers(status)
+    assert.equal(status.body.error.code, "business_store_unavailable")
+    assert.equal(status.body.error.retryable, true)
+    assert.deepEqual(await r279TenantAuthoritySnapshot(f), before, "integrity read mutated corrupted facts")
+  })
+}
+
+integrationTest("R279 cancelled status lock wait retires the leased query and a later read succeeds", async (t) => {
+  const f = await r241Fixture(t)
+  const project = await f.project("R279 status cancellation")
+  r279AssertProjectDeletionResource(await r279DeleteProject(f, project.id, `r279-cancel-${randomUUID()}`), project.id, 202)
+  const blocker = await f.pool.connect()
+  const abort = new AbortController()
+  let pending
+  try {
+    await blocker.query("BEGIN")
+    await blocker.query("LOCK TABLE bff_project_scope_release_outbox IN ACCESS EXCLUSIVE MODE")
+    const blockerPid = (await blocker.query("SELECT pg_backend_pid() AS pid")).rows[0].pid
+    pending = f.request(`projects/${project.id}/deletion`, "GET", undefined, {}, abort.signal).then(
+      (value) => ({ value }),
+      (error) => ({ error }),
+    )
+    let blockedPid
+    await waitFor(async () => {
+      const blocked = await f.pool.query(
+        `SELECT pid FROM pg_stat_activity
+          WHERE datname=current_database() AND $1=ANY(pg_blocking_pids(pid))`,
+        [blockerPid],
+      )
+      blockedPid = blocked.rows[0]?.pid
+      return blocked.rowCount === 1 && blockedPid !== undefined
+    }, 1500)
+    abort.abort()
+    const cancelled = await pending
+    assert.ok(cancelled.error, "the HTTP caller must observe cancellation while the exact status query is lock-waiting")
+    await waitFor(async () => {
+      const remaining = await f.pool.query("SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND pid=$1", [blockedPid])
+      return remaining.rowCount === 0
+    }, 1500)
+    await blocker.query("ROLLBACK")
+    r279AssertProjectDeletionResource(await f.request(`projects/${project.id}/deletion`), project.id, 200)
+  } finally {
+    abort.abort()
+    await blocker.query("ROLLBACK").catch(() => undefined)
+    blocker.release()
+    if (pending) await pending
+  }
+})
+
+integrationTest("R280 equal-count substituted Conversation scope fails closed", async (t) => {
+  const f = await r241Fixture(t)
+  const project = await f.project("R280 substituted scope")
+  const otherProject = await f.project("R280 other owned scope")
+  const repositories = new PostgresBffRepositories(postgresUrl, redisUrl)
+  await repositories.ready()
+  let conversationId
+  let otherConversationId
+  try {
+    conversationId = await r279CreateConversation(f, repositories, project.id, "substituted-scope")
+    otherConversationId = await r279CreateConversation(f, repositories, otherProject.id, "other-valid-scope")
+  } finally {
+    await repositories.close()
+  }
+  r279AssertProjectDeletionResource(await r279DeleteProject(f, project.id, `r280-substitute-${randomUUID()}`), project.id, 202)
+  await f.pool.query("UPDATE bff_project_scope_release_outbox SET state='released',released_at=CURRENT_TIMESTAMP(3) WHERE tenant_id=$1 AND project_id=$2", [
+    f.tenant,
+    project.id,
+  ])
+  await f.pool.query(
+    "UPDATE bff_project_scope_release_outbox SET scope_id=$4 WHERE tenant_id=$1 AND project_id=$2 AND scope_kind='conversation' AND scope_id=$3",
+    [f.tenant, project.id, conversationId, otherConversationId],
+  )
+  const before = await r279TenantAuthoritySnapshot(f)
+  const result = await f.request(`projects/${project.id}/deletion`)
+  assert.equal(result.status, 503, JSON.stringify(result.body))
+  r241Headers(result)
+  assert.equal(result.body.error.code, "business_store_unavailable")
+  assert.deepEqual(await r279TenantAuthoritySnapshot(f), before)
+})
+
+integrationTest("R280 cancellation after status SELECT ACK cannot leave cleanup waiting for a ROLLBACK ACK", async (t) => {
+  const f = await r241Fixture(t)
+  const project = await f.project("R280 post-ACK cancellation")
+  r279AssertProjectDeletionResource(await r279DeleteProject(f, project.id, `r280-ack-${randomUUID()}`), project.id, 202)
+  const abort = new AbortController()
+  let releaseSelect
+  const selectGate = new Promise((resolve) => {
+    releaseSelect = resolve
+  })
+  let releaseRollback
+  const rollbackGate = new Promise((resolve) => {
+    releaseRollback = resolve
+  })
+  let selectAck = false
+  let rollbackAckWithheld = false
+  const observer = r241ObservePool(f.ownerPool, async (_lease, event) => {
+    if (typeof event.sql === "string" && event.sql.includes("FROM bff_project_deletion d")) {
+      selectAck = true
+      await selectGate
+      queueMicrotask(() => abort.abort())
+    }
+    if (selectAck && event.sql === "ROLLBACK") {
+      rollbackAckWithheld = true
+      await rollbackGate
+    }
+  })
+  let pending
+  try {
+    pending = r241Observed(f.request(`projects/${project.id}/deletion`, "GET", undefined, {}, abort.signal))
+    await r241Until(() => selectAck, 1500)
+    releaseSelect()
+    await r241Until(() => rollbackAckWithheld || observer.leases.some((lease) => lease.releases.length > 0), 1500)
+    assert.equal(rollbackAckWithheld, false, "cleanup incorrectly depends on a post-cancellation ROLLBACK ACK")
+    const lease = observer.leases.find((candidate) =>
+      candidate.events.some((event) => typeof event.sql === "string" && event.sql.includes("FROM bff_project_deletion d")),
+    )
+    assert.ok(lease)
+    await r241Until(() => lease.releases.length === 1, 1500)
+    assert.deepEqual(
+      lease.releases.map((entry) => entry.destroy),
+      [true],
+    )
+  } finally {
+    abort.abort()
+    releaseSelect?.()
+    releaseRollback?.()
+    if (pending) await pending
+    observer.restore()
+  }
+  r279AssertProjectDeletionResource(await f.request(`projects/${project.id}/deletion`), project.id, 200)
+})
+
+integrationTest("R281 Project deletion tables enforce closed receipt, identity, digest and lease invariants", async (t) => {
+  const f = await r241Fixture(t)
+  const client = await f.pool.connect()
+  const projectId = `project_${randomUUID()}`
+  const owner = `r281_owner_${randomUUID()}`
+  const key = "R281-valid-key"
+  const digest = "a".repeat(64)
+  const data = { project_id: projectId, logical_release_state: "pending", physical_cleanup_state: "pending" }
+  let savepoint = 0
+  const rejected = async (sql, values, constraint) => {
+    const name = `r281_bad_${++savepoint}`
+    await client.query(`SAVEPOINT ${name}`)
+    try {
+      await assert.rejects(client.query(sql, values), (error) => error?.code === "23514" && error?.constraint === constraint)
+    } finally {
+      await client.query(`ROLLBACK TO SAVEPOINT ${name}`)
+      await client.query(`RELEASE SAVEPOINT ${name}`)
+    }
+  }
+  try {
+    await client.query("BEGIN")
+    await client.query(
+      `INSERT INTO bff_project_deletion
+       (tenant_id,project_id,owner_subject_id,operation,idempotency_key,request_fingerprint,response_data,response_status,location,conversation_count,release_command_count)
+       VALUES ($1,$2,$3,'project.delete:v1',$4,$5,$6::jsonb,202,$7,0,1)`,
+      [f.tenant, projectId, owner, key, digest, JSON.stringify(data), `/v1/projects/${projectId}/deletion`],
+    )
+    await client.query(
+      `INSERT INTO bff_project_scope_release_outbox
+       (command_id,tenant_id,project_id,owner_subject_id,actor_id,scope_kind,scope_id,request_digest,state,attempt_count,available_at,fence)
+       VALUES ($1,$2,$3,$4,$4,'project',$3,$5,'pending',0,CURRENT_TIMESTAMP(3),0)`,
+      [`r281_${randomUUID()}`, f.tenant, projectId, owner, digest],
+    )
+    await rejected(
+      "UPDATE bff_project_deletion SET idempotency_key='bad key' WHERE tenant_id=$1 AND project_id=$2",
+      [f.tenant, projectId],
+      "ck_bff_project_deletion_key",
+    )
+    await rejected(
+      "UPDATE bff_project_deletion SET request_fingerprint=$3 WHERE tenant_id=$1 AND project_id=$2",
+      [f.tenant, projectId, `${"b".repeat(63)}Z`],
+      "ck_bff_project_deletion_fingerprint",
+    )
+    await rejected(
+      "UPDATE bff_project_deletion SET response_data=$3::jsonb WHERE tenant_id=$1 AND project_id=$2",
+      [f.tenant, projectId, JSON.stringify({ project_id: projectId })],
+      "ck_bff_project_deletion_response_data",
+    )
+    await rejected(
+      "UPDATE bff_project_deletion SET response_data=$3::jsonb WHERE tenant_id=$1 AND project_id=$2",
+      [f.tenant, projectId, JSON.stringify({ ...data, project_id: `project_${randomUUID()}` })],
+      "ck_bff_project_deletion_response_data",
+    )
+    await rejected(
+      "UPDATE bff_project_deletion SET location=$3 WHERE tenant_id=$1 AND project_id=$2",
+      [f.tenant, projectId, `/v1/projects/project_${randomUUID()}/deletion`],
+      "ck_bff_project_deletion_location",
+    )
+    await rejected(
+      "UPDATE bff_project_scope_release_outbox SET actor_id='other' WHERE tenant_id=$1 AND project_id=$2",
+      [f.tenant, projectId],
+      "ck_bff_project_release_actor",
+    )
+    await rejected(
+      "UPDATE bff_project_scope_release_outbox SET scope_id=$3 WHERE tenant_id=$1 AND project_id=$2",
+      [f.tenant, projectId, `project_${randomUUID()}`],
+      "ck_bff_project_release_project_scope",
+    )
+    await rejected(
+      "UPDATE bff_project_scope_release_outbox SET request_digest=$3 WHERE tenant_id=$1 AND project_id=$2",
+      [f.tenant, projectId, "A".repeat(64)],
+      "ck_bff_project_release_digest",
+    )
+    await rejected(
+      "UPDATE bff_project_scope_release_outbox SET lease_owner='worker' WHERE tenant_id=$1 AND project_id=$2",
+      [f.tenant, projectId],
+      "ck_bff_project_release_lease",
+    )
+    await rejected(
+      "UPDATE bff_project_scope_release_outbox SET lease_expires_at=CURRENT_TIMESTAMP(3) WHERE tenant_id=$1 AND project_id=$2",
+      [f.tenant, projectId],
+      "ck_bff_project_release_lease",
+    )
+    assert.equal(
+      (await client.query("SELECT count(*)::int AS n FROM bff_project_deletion WHERE tenant_id=$1 AND project_id=$2", [f.tenant, projectId])).rows[0].n,
+      1,
+    )
+    assert.equal(
+      (await client.query("SELECT count(*)::int AS n FROM bff_project_scope_release_outbox WHERE tenant_id=$1 AND project_id=$2", [f.tenant, projectId]))
+        .rows[0].n,
+      1,
+    )
+  } finally {
+    await client.query("ROLLBACK").catch(() => undefined)
+    client.release()
+  }
+})

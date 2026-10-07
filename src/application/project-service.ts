@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto"
 
 import type { Project, ProjectInstructionRevision, Task } from "../contracts/index.js"
-import type { ProjectOwnerScope, ProjectRepository, RenameProjectResult } from "./ports/project-repository.js"
+import type { DeleteProjectResult, ProjectDeletionResource, ProjectOwnerScope, ProjectRepository, RenameProjectResult } from "./ports/project-repository.js"
 
 /** Project use cases. HTTP handlers depend on this service, not on SQL adapters. */
 export class ProjectService {
@@ -40,5 +40,15 @@ export class ProjectService {
   }
   public tasks(scope: ProjectOwnerScope, projectId: string): Promise<Task[] | null> {
     return this.repository.listTasks(scope, projectId)
+  }
+  public delete(scope: ProjectOwnerScope, projectId: string, key: string, requestId: string, signal: AbortSignal): Promise<DeleteProjectResult> {
+    const fingerprint = createHash("sha256")
+      .update(JSON.stringify(["project.delete:v1", projectId]), "utf8")
+      .digest("hex")
+    return this.repository.deleteProject(scope, projectId, key, fingerprint, requestId, signal)
+  }
+
+  public deletion(scope: ProjectOwnerScope, projectId: string, signal: AbortSignal): Promise<ProjectDeletionResource | null> {
+    return this.repository.projectDeletion(scope, projectId, signal)
   }
 }

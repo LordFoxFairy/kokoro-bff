@@ -1,3 +1,7 @@
+## R282 Project 删除本地候选（已实现、未发行）
+
+当前工作树已实现 Project DELETE/status、本地事务、canonical SQL、Conversation/ScheduledTask 聚合处理与 Storage release outbox；Root 隔离 HTTP/PostgreSQL 16/0 及完整工程门已通过。正常 BFF 仍运行正式 `39db` / public `8.5.0`，本工作树 `8.6.0 / 105 operations` 机器与 runtime 候选尚未正式发行或激活；Storage worker、Web 消费和 17 条真实用户链均未实现验收，T-C05 仍为 OPEN。
+
 ## R277 Project 删除机器候选（未发行、未实现）
 
 当前工作树仅候选 public `8.6.0` / 105 operations：在原103项之外增加 `DELETE /v1/projects/{projectId}` / `deleteProject` 与 `GET /v1/projects/{projectId}/deletion` / `getProjectDeletion`。成功与错误保持本仓 data-only/error-only profile，request ID仅header；DELETE保存原始202 pending receipt，status GET只投影 logical pending/blocked/released，physical恒pending。共享旧Project GET/PATCH参数与原103 wire不改。此候选尚无runtime、canonical SQL、worker、Storage/Scheduler真链、Web消费或浏览器用户验收；v1 baseline只能由Root正规生成并审查。

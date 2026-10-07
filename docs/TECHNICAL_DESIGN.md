@@ -1,3 +1,7 @@
+## R282 Project 删除本地实现状态（候选，未发行）
+
+R276 方案的 BFF 本地边界已在当前工作树实现：专用 DELETE/status 路由、单事务 Project→Conversation→ScheduledTask 锁序、同 client Conversation 删除核心、Scheduler replace outbox、Project deletion receipt 与 N+1 Storage release outbox。Root 隔离 HTTP/PostgreSQL 16/0 与工程门通过；正常 runtime 仍为 `39db` / public `8.5.0`。`8.6.0 / 105` 机器和 runtime 候选未正式发行，Storage worker、Web 与 17 条用户链仍待后继。下方 R276 设计语义继续为本实现的权威方案。
+
 ## R276-PROJECT-DELETE-D0：Project 删除与逻辑释放状态（目标 public 8.6.0 / 105 operations；机器候选，运行未实现）
 
 > 当前事实源与边界：API 面见 [API_CONTRACT.md](./API_CONTRACT.md) 的同名章节，持久化、事务与 outbox 面见

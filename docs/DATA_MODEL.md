@@ -1,3 +1,7 @@
+## R282 Project 删除数据当前态（本地候选）
+
+当前 canonical 候选已包含 Project deletion receipt 与 N+1 scope release outbox，BFF 本地同事务聚合删除、约束、回滚、重放与完整性读取已通过 Root 隔离 PostgreSQL 验证。正常运行实例仍未激活该候选；Storage release worker 与物理清理证据尚不存在，因此 logical 状态之外的 physical cleanup 始终视为 pending，T-C05 不得标记 PASS。下方 R276 数据方案仍为字段与事务语义权威。
+
 ## R276-PROJECT-DELETE-D0：Project 墓碑、聚合 receipt 与 N+1 release outbox（机器候选；数据与运行未实现）
 
 > API shape 见 [API_CONTRACT.md](./API_CONTRACT.md) 同名章节，锁序、worker 与模块放置见

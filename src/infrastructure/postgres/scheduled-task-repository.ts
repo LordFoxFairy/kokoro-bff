@@ -136,6 +136,62 @@ function outboxTaskFromRow(row: ScheduledTaskRow): ScheduledTaskOutboxTask {
   }
 }
 
+async function insertScheduledTaskOutbox(
+  client: PoolClient,
+  operation: ScheduledTaskOutboxOperation,
+  lineage: ScheduledTaskMutationLineage,
+  row: ScheduledTaskRow,
+  stableIdGenerator: StableIdGenerator,
+): Promise<void> {
+  const payload = buildScheduledTaskOutboxPayload(operation, lineage, outboxTaskFromRow(row))
+  const result = await client.query(
+    `INSERT INTO bff_scheduled_task_outbox
+      (outbox_id,tenant_id,task_id,command_type,aggregate_revision,payload,actor_id,request_id,idempotency_key,status,attempt_count,available_at,fence)
+     VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,'pending',0,CURRENT_TIMESTAMP(3),0)`,
+    [
+      scheduledTaskOutboxId(row.tenant_id, row.task_id, operation, lineage.idempotencyKey, stableIdGenerator),
+      row.tenant_id,
+      row.task_id,
+      commandType(operation),
+      row.revision,
+      JSON.stringify(payload),
+      lineage.actorId,
+      lineage.requestId,
+      lineage.idempotencyKey,
+    ],
+  )
+  if (result.rowCount !== 1) throw new Error("SCHEDULED_TASK_OUTBOX_INSERT_FAILED")
+}
+
+export async function pauseProjectScheduledTasks(
+  client: PoolClient,
+  scope: ScheduledTaskOwnerScope,
+  projectId: string,
+  requestId: string,
+  deletionKey: string,
+): Promise<void> {
+  const tasks = await client.query<ScheduledTaskRow>(
+    `SELECT ${TASK_COLUMNS} FROM bff_scheduled_task WHERE tenant_id=$1 AND owner_id=$2 AND project_id=$3 ORDER BY task_id FOR UPDATE`,
+    [scope.tenantId, scope.subjectId, projectId],
+  )
+  const generator = new Sha256StableIdGenerator()
+  for (const task of tasks.rows) {
+    const updated = await client.query<ScheduledTaskRow>(
+      `UPDATE bff_scheduled_task SET enabled=FALSE,status='paused',next_run_at=NULL,revision=revision+1,updated_at=CURRENT_TIMESTAMP(3) WHERE tenant_id=$1 AND owner_id=$2 AND task_id=$3 RETURNING ${TASK_COLUMNS}`,
+      [scope.tenantId, scope.subjectId, task.task_id],
+    )
+    const row = updated.rows[0]
+    if (row === undefined) throw new Error("PROJECT_DELETE_TASK_UPDATE_FAILED")
+    await insertScheduledTaskOutbox(
+      client,
+      "replace",
+      { tenantId: scope.tenantId, actorId: scope.subjectId, requestId, idempotencyKey: `project-delete:${projectId}:${deletionKey}:${task.task_id}` },
+      row,
+      generator,
+    )
+  }
+}
+
 function requireLineage(scope: ScheduledTaskOwnerScope, lineage: ScheduledTaskMutationLineage | undefined): ScheduledTaskMutationLineage {
   if (lineage === undefined) throw new Error("SCHEDULED_TASK_LINEAGE_REQUIRED")
   if (scope.tenantId.trim() === "") throw new Error("SCHEDULED_TASK_TENANT_REQUIRED")
@@ -603,26 +659,7 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskRepository,
     lineage: ScheduledTaskMutationLineage,
     row: ScheduledTaskRow,
   ): Promise<void> {
-    const payload = buildScheduledTaskOutboxPayload(operation, lineage, outboxTaskFromRow(row))
-    const result = await client.query(
-      `INSERT INTO bff_scheduled_task_outbox
-        (outbox_id, tenant_id, task_id, command_type, aggregate_revision, payload,
-         actor_id, request_id, idempotency_key, status, attempt_count, available_at, fence)
-       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, 'pending', 0, CURRENT_TIMESTAMP(3), 0)
-       `,
-      [
-        scheduledTaskOutboxId(row.tenant_id, row.task_id, operation, lineage.idempotencyKey, this.stableIdGenerator),
-        row.tenant_id,
-        row.task_id,
-        commandType(operation),
-        row.revision,
-        JSON.stringify(payload),
-        lineage.actorId,
-        lineage.requestId,
-        lineage.idempotencyKey,
-      ],
-    )
-    if (result.rowCount !== 1) throw new Error("SCHEDULED_TASK_OUTBOX_INSERT_FAILED")
+    await insertScheduledTaskOutbox(client, operation, lineage, row, this.stableIdGenerator)
   }
 }
 

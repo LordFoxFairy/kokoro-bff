@@ -1,9 +1,17 @@
 import { renameProject } from "./project-rename.js"
+import { deleteProjectAggregate, readProjectDeletion } from "./project-delete.js"
 import { randomUUID } from "node:crypto"
 
 import type { Project, ProjectInstructionRevision, Task } from "../../contracts/index.js"
 import type { PostgresBffDatabase } from "./client.js"
-import type { ProjectOwnerScope, ProjectRepository, RenameProjectCommand, RenameProjectResult } from "../../application/ports/project-repository.js"
+import type {
+  DeleteProjectResult,
+  ProjectDeletionResource,
+  ProjectOwnerScope,
+  ProjectRepository,
+  RenameProjectCommand,
+  RenameProjectResult,
+} from "../../application/ports/project-repository.js"
 
 type ProjectRow = {
   project_id: string
@@ -226,6 +234,21 @@ export class PostgresProjectRepository implements ProjectRepository {
       [scope.tenantId, project.id, scope.subjectId],
     )
     return result.rows.map(taskFromRow)
+  }
+
+  public deleteProject(
+    scope: ProjectOwnerScope,
+    projectId: string,
+    key: string,
+    fingerprint: string,
+    requestId: string,
+    signal: AbortSignal,
+  ): Promise<DeleteProjectResult> {
+    return deleteProjectAggregate(this.database, scope, projectId, key, fingerprint, requestId, signal)
+  }
+
+  public projectDeletion(scope: ProjectOwnerScope, projectId: string, signal: AbortSignal): Promise<ProjectDeletionResource | null> {
+    return readProjectDeletion(this.database, scope, projectId, signal)
   }
 }
 

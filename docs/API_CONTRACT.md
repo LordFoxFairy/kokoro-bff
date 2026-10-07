@@ -1,3 +1,7 @@
+## R282 Project 删除 API 当前态（候选，未发行）
+
+当前工作树已实现候选 `DELETE /v1/projects/{projectId}` 与 `GET /v1/projects/{projectId}/deletion`，并通过 Root 隔离 HTTP/PostgreSQL 16/0；公开 shape、closed errors、header-only request ID 与无条件 status GET 均保持下方 R276 方案。正常正式 API 仍为 `8.5.0 / 103 operations`，`8.6.0 / 105` 尚未发行或供 Web 消费，不能据此宣称用户链完成。
+
 ## R276-PROJECT-DELETE-D0：公开删除与状态资源（目标 `8.6.0 / 105`；机器候选，未发行）
 
 > 技术编排见 [TECHNICAL_DESIGN.md](./TECHNICAL_DESIGN.md) 同名章节，表、事务和 outbox 见

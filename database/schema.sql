@@ -19,6 +19,60 @@ CREATE INDEX IF NOT EXISTS ix_bff_project_owner_list
   ON bff_project (tenant_id, owner_id, created_at ASC, project_id ASC)
   WHERE deleted_at IS NULL;
 
+CREATE TABLE IF NOT EXISTS bff_project_deletion (
+  tenant_id TEXT NOT NULL,
+  project_id TEXT NOT NULL,
+  owner_subject_id TEXT NOT NULL,
+  operation TEXT NOT NULL CONSTRAINT ck_bff_project_deletion_operation CHECK (operation = 'project.delete:v1'),
+  idempotency_key TEXT NOT NULL CONSTRAINT ck_bff_project_deletion_key CHECK (length(idempotency_key) BETWEEN 1 AND 128 AND idempotency_key COLLATE "C" !~ '[^!-~]' AND strpos(idempotency_key, ',') = 0),
+  request_fingerprint TEXT NOT NULL CONSTRAINT ck_bff_project_deletion_fingerprint CHECK (length(request_fingerprint) = 64 AND request_fingerprint COLLATE "C" !~ '[^0-9a-f]'),
+  response_data JSONB NOT NULL CONSTRAINT ck_bff_project_deletion_response_data CHECK (response_data = jsonb_build_object('project_id', project_id, 'logical_release_state', 'pending', 'physical_cleanup_state', 'pending')),
+  response_status INTEGER NOT NULL CONSTRAINT ck_bff_project_deletion_response_status CHECK (response_status = 202),
+  location TEXT NOT NULL CONSTRAINT ck_bff_project_deletion_location CHECK (location = '/v1/projects/' || project_id || '/deletion'),
+  conversation_count INTEGER NOT NULL CONSTRAINT ck_bff_project_deletion_conversation_count CHECK (conversation_count >= 0),
+  release_command_count INTEGER NOT NULL,
+  logical_release_state TEXT NOT NULL DEFAULT 'pending' CONSTRAINT ck_bff_project_deletion_logical_state CHECK (logical_release_state IN ('pending','blocked','released')),
+  physical_cleanup_state TEXT NOT NULL DEFAULT 'pending' CONSTRAINT ck_bff_project_deletion_physical_state CHECK (physical_cleanup_state = 'pending'),
+  blocked_code TEXT,
+  created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (tenant_id, project_id),
+  CONSTRAINT uq_bff_project_deletion_command UNIQUE (tenant_id, owner_subject_id, operation, project_id, idempotency_key),
+  CONSTRAINT ck_bff_project_deletion_release_count CHECK (release_command_count = conversation_count + 1)
+);
+
+CREATE TABLE IF NOT EXISTS bff_project_scope_release_outbox (
+  command_id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  project_id TEXT NOT NULL,
+  owner_subject_id TEXT NOT NULL,
+  actor_id TEXT NOT NULL,
+  scope_kind TEXT NOT NULL CONSTRAINT ck_bff_project_release_scope_kind CHECK (scope_kind IN ('project','conversation')),
+  scope_id TEXT NOT NULL,
+  request_digest TEXT NOT NULL,
+  state TEXT NOT NULL DEFAULT 'pending' CONSTRAINT ck_bff_project_release_state CHECK (state IN ('pending','leased','released','blocked')),
+  attempt_count INTEGER NOT NULL DEFAULT 0 CONSTRAINT ck_bff_project_release_attempt_count CHECK (attempt_count >= 0),
+  available_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  lease_owner TEXT,
+  lease_expires_at TIMESTAMPTZ(3),
+  fence BIGINT NOT NULL DEFAULT 0 CONSTRAINT ck_bff_project_release_fence CHECK (fence >= 0),
+  last_error_code TEXT,
+  released_at TIMESTAMPTZ(3),
+  created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT uq_bff_project_release_scope UNIQUE (tenant_id, project_id, scope_kind, scope_id),
+  CONSTRAINT ck_bff_project_release_actor CHECK (actor_id = owner_subject_id),
+  CONSTRAINT ck_bff_project_release_project_scope CHECK (scope_kind <> 'project' OR scope_id = project_id),
+  CONSTRAINT ck_bff_project_release_digest CHECK (length(request_digest) = 64 AND request_digest COLLATE "C" !~ '[^0-9a-f]'),
+  CONSTRAINT ck_bff_project_release_lease CHECK (
+    (state = 'leased' AND lease_owner IS NOT NULL AND lease_expires_at IS NOT NULL)
+    OR (state <> 'leased' AND lease_owner IS NULL AND lease_expires_at IS NULL)
+  )
+);
+CREATE INDEX IF NOT EXISTS ix_bff_project_release_claim
+  ON bff_project_scope_release_outbox (available_at, created_at, command_id)
+  WHERE state = 'pending';
+
 CREATE TABLE IF NOT EXISTS bff_project_instruction_revision (
   revision_id TEXT PRIMARY KEY,
   tenant_id TEXT NOT NULL,
