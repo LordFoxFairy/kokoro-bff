@@ -2932,3 +2932,297 @@ integrationTest("R257 personalization real catalog and terminal revision preserv
   )
   assert.deepEqual((await f.request("preferences/personalization")).body, { data: { personalization: fields, revision: Number.MAX_SAFE_INTEGER } })
 })
+
+async function r278CreateScheduledTask(f, projectId, label) {
+  const created = await f.request("scheduled-tasks", "POST", r73CreatePayload(projectId === null ? {} : { project_id: projectId }), {
+    "idempotency-key": `r278-create-${label}-${randomUUID()}`,
+  })
+  assert.equal(created.status, 200, JSON.stringify(created.body))
+  return created.body.data.task
+}
+
+async function r278TaskSnapshot(f, taskId) {
+  const [task, outbox, receipts] = await Promise.all([
+    f.pool.query("SELECT to_jsonb(task) AS row FROM bff_scheduled_task AS task WHERE tenant_id=$1 AND task_id=$2", [f.tenant, taskId]),
+    f.pool.query("SELECT to_jsonb(command) AS row FROM bff_scheduled_task_outbox AS command WHERE tenant_id=$1 AND task_id=$2 ORDER BY created_at,outbox_id", [
+      f.tenant,
+      taskId,
+    ]),
+    f.pool.query("SELECT to_jsonb(receipt) AS row FROM bff_idempotency_receipt AS receipt WHERE position($1 in scope)>0 ORDER BY scope", [f.tenant]),
+  ])
+  return {
+    task: task.rows.map(({ row }) => row),
+    outbox: outbox.rows.map(({ row }) => row),
+    receipts: receipts.rows.map(({ row }) => row),
+  }
+}
+
+function r278AssertProjectNotFound(result) {
+  assert.equal(result.status, 404, JSON.stringify(result.body))
+  r241Headers(result)
+  assert.deepEqual(Object.keys(result.body).sort(), ["error", "meta"])
+  assert.deepEqual(Object.keys(result.body.error).sort(), ["code", "message"])
+  assert.equal(result.body.error.code, "project_not_found")
+  assert.deepEqual(Object.keys(result.body.meta), ["request_id"])
+  assert.equal(result.body.meta.request_id, result.headers.get("x-request-id"))
+}
+
+function r278AssertRejectedMutation(before, after, result, expectedScope) {
+  assert.deepEqual(after.task, before.task, "rejected Project-bound intent changed the ScheduledTask")
+  assert.deepEqual(after.outbox, before.outbox, "rejected Project-bound intent appended or changed Scheduler outbox state")
+  const original = new Map(before.receipts.map((receipt) => [receipt.scope, receipt]))
+  for (const [scope, receipt] of original)
+    assert.deepEqual(
+      after.receipts.find((candidate) => candidate.scope === scope),
+      receipt,
+    )
+  const added = after.receipts.filter((receipt) => !original.has(receipt.scope))
+  assert.equal(added.length, 1, "a closed HTTP rejection must complete exactly its own durable receipt")
+  assert.equal(added[0].scope, expectedScope)
+  assert.equal(added[0].status, 404)
+  assert.deepEqual(added[0].response_body, result.body)
+}
+
+async function r278CommitTombstoneAndPause(f, projectId, taskId) {
+  const client = await f.pool.connect()
+  try {
+    await client.query("BEGIN")
+    assert.equal(
+      (
+        await client.query("UPDATE bff_project SET deleted_at=CURRENT_TIMESTAMP(3),updated_at=CURRENT_TIMESTAMP(3) WHERE tenant_id=$1 AND project_id=$2", [
+          f.tenant,
+          projectId,
+        ])
+      ).rowCount,
+      1,
+    )
+    assert.equal(
+      (
+        await client.query(
+          "UPDATE bff_scheduled_task SET status='paused',enabled=false,next_run_at=NULL,revision=revision+1,updated_at=CURRENT_TIMESTAMP(3) WHERE tenant_id=$1 AND task_id=$2",
+          [f.tenant, taskId],
+        )
+      ).rowCount,
+      1,
+    )
+    await client.query("COMMIT")
+  } catch (error) {
+    await client.query("ROLLBACK")
+    throw error
+  } finally {
+    client.release()
+  }
+}
+
+integrationTest("R278 tombstoned Project rejects new ScheduledTask enable and retry intent without durable writes", async (t) => {
+  const f = await r241Fixture(t)
+  for (const operation of ["enable", "retry"]) {
+    await t.test(operation, async () => {
+      const project = await f.project(`R278 ${operation}`)
+      const task = await r278CreateScheduledTask(f, project.id, operation)
+      await r278CommitTombstoneAndPause(f, project.id, task.id)
+      const before = await r278TaskSnapshot(f, task.id)
+      const idempotencyKey = `r278-${operation}-${randomUUID()}`
+      const result =
+        operation === "enable"
+          ? await f.request(`scheduled-tasks/${task.id}`, "PATCH", { status: "active", enabled: true }, { "idempotency-key": idempotencyKey })
+          : await f.request(`scheduled-tasks/${task.id}/retry`, "POST", undefined, { "idempotency-key": idempotencyKey })
+      r278AssertProjectNotFound(result)
+      r278AssertRejectedMutation(
+        before,
+        await r278TaskSnapshot(f, task.id),
+        result,
+        JSON.stringify([
+          f.tenant,
+          f.owner,
+          operation === "enable" ? "PATCH" : "POST",
+          operation === "enable" ? `/scheduled-tasks/${task.id}` : `/scheduled-tasks/${task.id}/retry`,
+          idempotencyKey,
+        ]),
+      )
+    })
+  }
+})
+
+integrationTest("R278 independent and active-Project ScheduledTasks retain legal update behavior", async (t) => {
+  const f = await r241Fixture(t)
+  const project = await f.project("R278 active control")
+  for (const [label, projectId] of [
+    ["independent", null],
+    ["active-project", project.id],
+  ]) {
+    const task = await r278CreateScheduledTask(f, projectId, label)
+    const updated = await f.request(
+      `scheduled-tasks/${task.id}`,
+      "PATCH",
+      { prompt: `R278 ${label} update remains legal` },
+      { "idempotency-key": `r278-update-${label}-${randomUUID()}` },
+    )
+    assert.equal(updated.status, 200, JSON.stringify(updated.body))
+    r241Headers(updated)
+    assert.equal(updated.body.data.task.prompt, `R278 ${label} update remains legal`)
+  }
+})
+
+integrationTest("R278 completed HTTP receipt replays its original ACK after Project tombstone without restoring the task", async (t) => {
+  const f = await r241Fixture(t)
+  const project = await f.project("R278 completed receipt")
+  const task = await r278CreateScheduledTask(f, project.id, "completed-receipt")
+  const key = `r278-complete-${randomUUID()}`
+  const patch = { prompt: "R278 completed response remains replayable" }
+  const original = await f.request(`scheduled-tasks/${task.id}`, "PATCH", patch, { "idempotency-key": key })
+  assert.equal(original.status, 200, JSON.stringify(original.body))
+  assert.equal(original.body.data.task.status, "active")
+  assert.equal(original.body.data.task.enabled, true)
+  await r278CommitTombstoneAndPause(f, project.id, task.id)
+  const before = await r278TaskSnapshot(f, task.id)
+  const replay = await f.request(`scheduled-tasks/${task.id}`, "PATCH", patch, { "idempotency-key": key })
+  assert.deepEqual(replay.body, original.body)
+  assert.equal(replay.status, original.status)
+  r241Headers(replay)
+  assert.deepEqual(await r278TaskSnapshot(f, task.id), before, "terminal HTTP receipt replay must not execute another mutation")
+  const current = await f.request(`scheduled-tasks/${task.id}`)
+  assert.equal(current.status, 200, JSON.stringify(current.body))
+  assert.equal(current.body.data.task.status, "paused")
+  assert.equal(current.body.data.task.enabled, false)
+  assert.equal(current.body.data.task.prompt, patch.prompt)
+})
+
+integrationTest("R278 committed replace outbox recovers before Project active check when the HTTP receipt is absent", async (t) => {
+  const f = await r241Fixture(t)
+  const project = await f.project("R278 repository recovery")
+  const task = await r278CreateScheduledTask(f, project.id, "repository-recovery")
+  const repository = new PostgresScheduledTaskRepository({ pool: f.pool })
+  const scope = { tenantId: f.tenant, subjectId: f.owner }
+  const lineage = {
+    tenantId: f.tenant,
+    actorId: f.owner,
+    requestId: `r278-repository-${randomUUID()}`,
+    idempotencyKey: `r278-repository-${randomUUID()}`,
+  }
+  const first = await repository.updateScheduledTask(scope, task.id, { prompt: "R278 outbox committed before receipt" }, lineage)
+  assert.equal(first?.prompt, "R278 outbox committed before receipt")
+  await r278CommitTombstoneAndPause(f, project.id, task.id)
+  const before = await r278TaskSnapshot(f, task.id)
+  const recovered = await repository.updateScheduledTask(scope, task.id, { prompt: "R278 outbox committed before receipt" }, lineage)
+  assert.equal(recovered?.status, "paused")
+  assert.equal(recovered?.enabled, false)
+  assert.equal(recovered?.revision, before.task[0].revision)
+  assert.deepEqual(await r278TaskSnapshot(f, task.id), before, "outbox recovery must return current facts without another write")
+})
+
+integrationTest("R278 Project then ScheduledTask lock order makes deletion and update races deterministic", async (t) => {
+  await t.test("deletion lock wins before a new enable intent", async (t) => {
+    const f = await r241Fixture(t)
+    const project = await f.project("R278 deletion wins")
+    const task = await r278CreateScheduledTask(f, project.id, "delete-wins")
+    const blocker = await f.pool.connect()
+    let pending
+    try {
+      await blocker.query("BEGIN")
+      const blockerPid = (await blocker.query("SELECT pg_backend_pid() AS pid")).rows[0].pid
+      await blocker.query("UPDATE bff_project SET deleted_at=CURRENT_TIMESTAMP(3),updated_at=CURRENT_TIMESTAMP(3) WHERE tenant_id=$1 AND project_id=$2", [
+        f.tenant,
+        project.id,
+      ])
+      await blocker.query(
+        "UPDATE bff_scheduled_task SET status='paused',enabled=false,next_run_at=NULL,revision=revision+1,updated_at=CURRENT_TIMESTAMP(3) WHERE tenant_id=$1 AND task_id=$2",
+        [f.tenant, task.id],
+      )
+      pending = f
+        .request(`scheduled-tasks/${task.id}`, "PATCH", { status: "active", enabled: true }, { "idempotency-key": `r278-delete-wins-${randomUUID()}` })
+        .then(
+          (value) => ({ value }),
+          (error) => ({ error }),
+        )
+      let blockedQuery = ""
+      await waitFor(async () => {
+        const activity = await f.pool.query(
+          `SELECT query FROM pg_stat_activity
+            WHERE datname=current_database() AND $1=ANY(pg_blocking_pids(pid)) AND state='active'`,
+          [blockerPid],
+        )
+        blockedQuery = activity.rows[0]?.query ?? ""
+        return blockedQuery.length > 0
+      }, 1000)
+      assert.match(blockedQuery, /bff_project/u, "ScheduledTask mutation must first wait on the Project deletion fence")
+      await blocker.query("COMMIT")
+      const result = await pending
+      assert.equal(result.error, undefined)
+      r278AssertProjectNotFound(result.value)
+    } finally {
+      await blocker.query("ROLLBACK").catch(() => undefined)
+      blocker.release()
+      if (pending) await pending
+    }
+  })
+
+  await t.test("update holding the Project fence completes before a later tombstone", async (t) => {
+    const f = await r241Fixture(t)
+    const project = await f.project("R278 update wins")
+    const task = await r278CreateScheduledTask(f, project.id, "update-wins")
+    const taskBlocker = await f.pool.connect()
+    const deleter = await f.pool.connect()
+    let pendingUpdate
+    let pendingDelete
+    try {
+      await taskBlocker.query("BEGIN")
+      const taskBlockerPid = (await taskBlocker.query("SELECT pg_backend_pid() AS pid")).rows[0].pid
+      await taskBlocker.query("SELECT task_id FROM bff_scheduled_task WHERE tenant_id=$1 AND task_id=$2 FOR UPDATE", [f.tenant, task.id])
+      pendingUpdate = f
+        .request(
+          `scheduled-tasks/${task.id}`,
+          "PATCH",
+          { prompt: "R278 update acquired Project before task" },
+          { "idempotency-key": `r278-update-wins-${randomUUID()}` },
+        )
+        .then(
+          (value) => ({ value }),
+          (error) => ({ error }),
+        )
+      let updaterPid
+      await waitFor(async () => {
+        const activity = await f.pool.query(
+          `SELECT pid FROM pg_stat_activity
+            WHERE datname=current_database() AND $1=ANY(pg_blocking_pids(pid)) AND query LIKE '%bff_scheduled_task%'`,
+          [taskBlockerPid],
+        )
+        updaterPid = activity.rows[0]?.pid
+        return updaterPid !== undefined
+      }, 1000)
+      await deleter.query("BEGIN")
+      pendingDelete = deleter.query(
+        "UPDATE bff_project SET deleted_at=CURRENT_TIMESTAMP(3),updated_at=CURRENT_TIMESTAMP(3) WHERE tenant_id=$1 AND project_id=$2",
+        [f.tenant, project.id],
+      )
+      let deletionBlocked = false
+      const winner = await Promise.race([
+        pendingDelete.then(() => "deleted"),
+        waitFor(async () => {
+          const activity = await f.pool.query(
+            "SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid() AND $1=ANY(pg_blocking_pids(pid)) AND query LIKE '%bff_project%'",
+            [updaterPid],
+          )
+          deletionBlocked = activity.rowCount === 1
+          return deletionBlocked
+        }, 1000).then(() => "blocked"),
+      ])
+      assert.equal(winner, "blocked", "later tombstone must wait behind the update's Project fence")
+      assert.equal(deletionBlocked, true)
+      await taskBlocker.query("COMMIT")
+      const updated = await pendingUpdate
+      assert.equal(updated.error, undefined)
+      assert.equal(updated.value.status, 200, JSON.stringify(updated.value.body))
+      assert.equal(updated.value.body.data.task.prompt, "R278 update acquired Project before task")
+      await pendingDelete
+      await deleter.query("ROLLBACK")
+    } finally {
+      await taskBlocker.query("ROLLBACK").catch(() => undefined)
+      await deleter.query("ROLLBACK").catch(() => undefined)
+      taskBlocker.release()
+      deleter.release()
+      if (pendingUpdate) await pendingUpdate
+      if (pendingDelete) await pendingDelete.catch(() => undefined)
+    }
+  })
+})

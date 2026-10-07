@@ -76,6 +76,14 @@ type ScheduledTaskOutboxRow = {
   last_error_code: string | null
 }
 
+type ScheduledTaskBindingRow = {
+  project_id: string | null
+}
+
+type ScheduledTaskProjectRow = {
+  deleted_at: Date | string | null
+}
+
 const TASK_COLUMNS = `task_id, tenant_id, project_id, owner_id, title, prompt, frequency, task_time, timezone,
               recurrence_anchor_at, next_run_at, expires_at, auto_approve, enabled, status, revision, created_at, updated_at`
 
@@ -299,11 +307,17 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskRepository,
   ): Promise<ScheduledTaskFact | null> {
     const taskLineage = requireLineage(scope, lineage)
     return this.transaction(async (client) => {
+      const binding = await this.taskBinding(client, scope, taskId)
+      if (binding === undefined) return null
+      const project = binding.project_id === null ? null : await this.lockedProject(client, scope, binding.project_id)
+      if (binding.project_id !== null && project === null) throw new Error("PROJECT_NOT_FOUND")
       const current = await this.lockedTask(client, scope, taskId)
       if (current === null) return null
+      if (current.project_id !== binding.project_id) throw new Error("PROJECT_NOT_FOUND")
       if (await this.outboxExists(client, scope.tenantId, taskId, "replace", taskLineage.idempotencyKey, scope.subjectId)) {
         return scheduledTaskFromRow(current)
       }
+      if (project !== null && project.deleted_at !== null) throw new Error("PROJECT_NOT_FOUND")
       const updated = await client.query<ScheduledTaskRow>(
         `UPDATE bff_scheduled_task SET title = $4, prompt = $5, frequency = $6, task_time = $7,
           timezone = $8, recurrence_anchor_at = $9::timestamptz, next_run_at = NULL, expires_at = $10::timestamptz,
@@ -541,6 +555,27 @@ export class PostgresScheduledTaskRepository implements ScheduledTaskRepository,
       `SELECT ${TASK_COLUMNS}
          FROM bff_scheduled_task WHERE tenant_id = $1 AND owner_id = $2 AND task_id = $3 FOR UPDATE`,
       [scope.tenantId, scope.subjectId, taskId],
+    )
+    return result.rows[0] ?? null
+  }
+
+  private async taskBinding(client: PoolClient, scope: ScheduledTaskOwnerScope, taskId: string): Promise<ScheduledTaskBindingRow | undefined> {
+    const result = await client.query<ScheduledTaskBindingRow>(
+      `SELECT project_id
+         FROM bff_scheduled_task
+        WHERE tenant_id = $1 AND owner_id = $2 AND task_id = $3`,
+      [scope.tenantId, scope.subjectId, taskId],
+    )
+    return result.rows[0]
+  }
+
+  private async lockedProject(client: PoolClient, scope: ScheduledTaskOwnerScope, projectId: string): Promise<ScheduledTaskProjectRow | null> {
+    const result = await client.query<ScheduledTaskProjectRow>(
+      `SELECT deleted_at
+         FROM bff_project
+        WHERE tenant_id = $1 AND owner_id = $2 AND project_id = $3
+        FOR SHARE`,
+      [scope.tenantId, scope.subjectId, projectId],
     )
     return result.rows[0] ?? null
   }
