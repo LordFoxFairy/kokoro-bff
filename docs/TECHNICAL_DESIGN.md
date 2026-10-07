@@ -1,3 +1,55 @@
+## R267-SKILLS-LIFECYCLE-D0：本人 Skill 创建新版本与撤回（目标 public 8.5.0 / 103 operations，尚未实施）
+
+### 当前事实、owner 与范围
+
+正式基线为 BFF `930028b9721587e9c21535eff1e78ce361b82df9`，当前公开机器为 `8.4.0` / 101 operations；本人五状态 list/detail 已发布，但 CreateVersion/Withdraw 尚无 public operation、route 或 client 方法。Platform `6e5c28487651541fffdabe63624fb997536bd3d2` 是 Skill/series/revision/status 与 command receipt 唯一 owner；其 Connect contract 已有 `CreateSkillVersion` 与 `WithdrawSkill`，Platform HTTP 3.3 仍保持只读。本片只增加三设计前缀，不修改机器、源码、生成物、Schema、测试或运行服务。
+
+Root 裁定下一 additive public release 为 `8.5.0` / 103 operations：`POST /v1/self/skills/{skill_id}/versions`（`createPersonalSkillVersion`）与 `POST /v1/self/skills/{skill_id}/withdraw`（`withdrawPersonalSkill`）。未发行 Storage 单 Asset 删除保持原权限、receipt与生命周期语义，但顺序后移为目标 `8.6.0` / 105 operations；本片不抢先实现它。
+
+CreateVersion 以 path 的精确本人 active/disabled revision 为 base，沿同 series 生成新 ID/revision 的 draft；display_name 不可修改，不复制旧 package/scan/validate 证明，不原地替换 active，不自动升级安装。新 draft 继续走既有 upload→scan→validate→publish。Withdraw 只撤回 path 指定的精确 active/disabled revision，转为 withdrawn；安装继续绑定该 revision，权威 `source_status` 改变但不自动 remove、升级或选择 latest。
+
+### §8 放置裁决
+
+|项|结论|
+|---|---|
+|Owner|kokoro-bff 拥有 public HTTP、当前用户 admission、公开错误与响应；kokoro-platform 独占 lifecycle事实、版本分配、事件和 durable receipt。Browser/Web 仅在正式BFF发行后消费。|
+|当前事实|`src/http/routes/create-skill-draft.ts`、`publish-skill.ts`承接相邻命令；`src/infrastructure/clients/platform/catalog-connect.ts`承接现Catalog Connect；`src/bootstrap/server.ts`具名分派。`managed-personal-skills.ts`只读，不承载mutation。generated Connect已有两RPC，但production未调用。|
+|目标职责|两个具名public command把可信tenant/subject固定为个人owner context，将path skill ID和严格body映射到owner命令；响应严格验证owner identity/status/replay。无市场、admin、组织owner或latest selector。|
+|目录比较|A：塞入`managed-personal-skills.ts`或建通用Skill command proxy——淘汰；会混淆read/mutation预算与扩大任意RPC。B（采用）：新增相邻普通`create-personal-skill-version.ts`、`withdraw-personal-skill.ts` route，扩现`catalog-connect.ts`两具名方法；各自投影/command-id helper按现一变化原因相邻放置。bootstrap只作两个exact dispatch。|
+|粒度|两个命令的body、成功shape与precondition不同，route不合成万能handler；Connect transport/token复用单一现client，不建第二client/module/进程。若现投影器需新普通文件，分别限定CreateVersion/Withdraw且由后继卡批准。|
+|依赖|Browser→Web same-origin→BFF current Session admission→Platform Connect。Catalog client必须接受同一signal与absolute deadline/remaining budget并关闭transport自动retry；route依赖现request/envelope/admission与Catalog client；禁止读Platform DB/源码、调用Platform HTTP mutation、共享ORM、跨owner事务。|
+|数据/API|public owner=`kokoro-bff`、visibility=`public`、stability=`beta`；治理permission=`product.skill.manage_personal`（治理元数据，不新造IAM grant）。tenant/subject/owner scope只来自当前admission；body不能自报。零BFF DDL/cache/receipt/outbox。|
+|删除项|无旧public API可兼容；不增加alias、PATCH/in-place edit、latest版本、自动retry/rekey、第二receipt或managed-read内mutation。Connect现单pin若与owner正式Proto/wire逐字节等价则保持；Root已只读逐字节核当前6e5的common.proto SHA `65025b…`与platform_runtime.proto SHA `e5fd71…`均等于现c949 vendor/pin，因此不因source commit变化repin；descriptor/generator仍须机器片重跑确认，不手改generated。|
+|验证|先机器/HTTP有效RED，再正规生成与contract门；Platform真PG receipt/并发门、BFF owner真链、Web same-origin与正常浏览器分层验收。D0不算功能通过。|
+
+### 信任、单一预算与取消
+
+两route必须在exact path识别后、`authorizeUserRequest`前建立唯一单调 `deadlineAt=start+10_000ms` 与Abort scope；同一signal/剩余deadline覆盖admission、credential/token、Connect请求、response解析、序列化和回复。每个await前后及回复前检查过期/response关闭；早取消零IAM/owner IO，晚admission/token/owner结果被消费但不采纳，timer/listener/stream在finally清理。不得由Catalog client另起完整预算，亦不得用裸race留下后台命令。取消或timeout不等owner未提交，不能返回成功或自动换key重试。
+
+准入取得可信 `tenant=context.identity.namespace`、`subject=userId`；BFF构造 `owner_scope={kind:user,id:subject}` 与同值ProductCatalogContext。path `skill_id`必须是单一opaque ID；CreateVersion body严格为`{display_name,summary,tags}`：`display_name`是Web从当前本人detail显示的只读不可变名称断言，原值进入owner完整metadata与digest；BFF不额外GET、不缓存或猜值，Platform在事务内以`base.displayName === metadata.displayName`强检。这不是rename授权，任何不同值为412。summary/tags沿现CreateDraft约束。Withdraw body严格为`{reason}`，reason须1..2048 code points且至少含一个非空白字符，原样不trim进入digest。
+
+两个请求都要求恰一枚 printable 1..128 `Idempotency-Key`，拒重复/逗号合并/空值。CreateVersion要求JSON body（64KiB上限、fatal UTF-8、重复键/未知键关闭）；Withdraw同样为严格JSON reason。任意query、Transfer-Encoding/冲突framing拒绝；无ETag/If-Match语义，不借条件头实现revision选择，path本身就是精确版本身份。
+
+### owner receipt、未知结果与错误闭集
+
+public key按版本化operation域、tenant、subject、path skill ID稳定派生Platform command ID；owner command digest由正式3.0 projector绑定tenant/method、owner scope、Product context、base/source identity及完整body，排除request ID/command identity。同一path下同key同body可在owner current replay guard仍成立时恢复receipt，同一path下同key异body为409；不同path属于不同command namespace，不要求冲突。每次replay前仍做当前Session/owner授权，撤权后不因历史receipt放行。
+
+CreateVersion成功须严格验证合法`skill_id`与`series_id`、新skill ID不等于path base、正十进制string revision且>=2、`status=draft`、boolean replayed；无额外base预读，BFF不得声称将series_id与预读base事实比较，series归属由Platform事务保证。Withdraw成功须严格验证`source_ref=skill:<path skill_id>`、`status=withdrawn`、匹配`^evt:[a-f0-9]{64}$`的event_id与boolean replayed。BFF不以managed list/detail预检查替代owner命令，否则会挡住withdraw终态后的合法同key replay。
+
+closed mapping沿现Skill command profile：400 `invalid_skill_request|idempotency_key_required|invalid_idempotency_key`；401 `session_authentication_required|session_invalid`；403 `service_auth_failed|session_forbidden|product_tenant_forbidden`；404 `skill_not_found`（owner NotFound/PermissionDenied目标统一防枚举）；409 `skill_idempotency_conflict|skill_command_in_progress`；412 `skill_precondition_failed`；413 `request_body_too_large`；429 `session_rate_limited|skill_rate_limited`且Retry-After严格1..86400；502 `skill_response_invalid`；503 `product_tenant_not_configured|iam_admission_unavailable|skill_dependency_unavailable`。新命令成功沿`{data,meta:{request_id}}`，错误固定`{error:{code,message},meta:{request_id}}`，无`retryable`；header request-id与body一致且no-store。旧101 operations的既有envelope与字段完全不改。未知Connect code、错tuple、坏identity/额外字段一律502，Unavailable/Deadline/Canceled/Unauthenticated为503；不泄漏owner message。 当前owner `skill-rpc.service.ts:241` 的 `assertCatalogAdmission` 在命令/receipt前重读current resource：不存在为NotFound、owner不符为PermissionDenied；`:317` 的 `assertCatalogReplayCurrent`还校验CreateVersion返回的新draft当前status/revision。BFF可把NotFound/PermissionDenied统一404，但必须保留current owner/replay校验，不能为命中receipt而绕过。CreateVersion新draft后来已发布等发生状态漂移时，原key重放可返回412，不承诺永远重放原201；Withdraw终态同key重放仍沿owner现规则。
+
+丢ACK后Web保留原intent/key/body并由用户显式同键重放。CreateVersion仅看list出现draft不能证明该command；Withdraw权威回读为withdrawn只证明当前状态，不证明本次ACK。刷新丢失key时只重新读权威状态并让用户决定，不能自动新key。新的key对终态withdraw与非法base稳定412，不伪装replay。
+
+### 精确后继候选集与停止线
+
+机器阶段：`contract/openapi/v1/openapi.yaml`、`contract/tests/v1-operations.json`、`contract/README.md`、`scripts/verify-openapi.ts`、`scripts/check-contract.mjs`及现contract/governance/architecture tests；若Connect正式bytes不同才准依现`contract/dependencies/platform-connect.json`、vendor、generator及generated更新，否则保持现wire。public版本升8.5/103，并只改Storage尚未发行占位为8.6/105。
+
+runtime阶段候选：新增`src/http/routes/create-personal-skill-version.ts`、`withdraw-personal-skill.ts`；扩`src/infrastructure/clients/platform/catalog-connect.ts`；现`src/bootstrap/server.ts` exact dispatch；相邻两个command-id/input/projector普通文件以机器shape实际需要为准，须先入任务卡。测试扩现Skill command/http/Connect/contract tests；需要新专属test先报告。`database/schema.sql`、token cache/shared flight、managed read、Platform源码与Web不在本片写集。
+
+当前未实现、未运行门、未重载服务，也未验证正常浏览器。Root已裁定CreateVersion body显式携带只读`display_name`断言、BFF不额外GET；机器片必须把该字段、长度/不可变负控、digest与owner current replay guard锁为正式schema后才可进入runtime，这不再是架构未决。
+
+<!-- R267-SKILLS-LIFECYCLE-D0-TECH-END -->
+
 ## R266-SKILLS-BFF-D0：本人 Skill 管理读取（目标 public 8.4.0 / 101 operations，尚未实施）
 
 ### 当前事实与固定 owner

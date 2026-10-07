@@ -1,3 +1,21 @@
+## R267-SKILLS-LIFECYCLE-D0：零BFF持久化的版本/撤回消费（仅设计）
+
+Platform唯一拥有Skill行、series/revision/status、package绑定、installation、event/outbox和command receipt。BFF仅持有单次请求的可信admission context、严格解析值、command投影与短暂结果；不新增/修改PostgreSQL表、列、索引、约束、migration、Redis key、receipt、outbox、snapshot或授权cache，`database/schema.sql`保持零diff。Web后继只保存当次未知intent/key，不成为业务事实源。
+
+CreateVersion不更新base：Platform在其短事务内重读同tenant/owner的精确base，要求active/disabled和不可变display_name，按series分配下一revision，插入新ID draft并提交receipt；新draft有自己的package生命周期。并发安全由owner `(tenant,series,revision)`等约束、事务和receipt证明，BFF不先读max或生成revision。旧active/disabled及其安装保持。
+
+Withdraw在Platform事务内重读精确source、校验active/disabled、窄状态CAS为withdrawn，并原子写事件/receipt。installation继续绑定原revision；撤回不级联remove、Blob/Asset删除、package清理或latest迁移。本人管理读和安装metadata可反映source_status，但installed/enabled不等可执行，执行仍需fresh active gate。
+
+public key只用于稳定派生owner command identity；semantic digest绑定tenant、method、subject owner scope、Product context、path identity和完整body。command ID命名空间沿现publish形状绑定operation+tenant+subject+path ID+key；同path同key异body冲突，不同path为不同namespace。BFF不持久化key、digest、请求正文或owner response。同key回放仍先当前admission与owner current replay guard；同path同key异body冲突，不同path为独立namespace。COMMIT/ACK未知后不在BFF补偿或写“pending”行，原key显式重放或权威GET由调用方恢复；CreateVersion新draft状态已漂移时owner current guard可使原key412，并不保证永久返回原201；GET当前状态不是receipt因果证明。
+
+单一10秒deadline和AbortSignal是request生命周期，不是数据库lease。取消可能发生在owner已经提交后；BFF不得声称rollback。token内存cache/shared flight保持现credential版本键控机制，但不新增业务、持久token或授权结果cache；用户admission每次重验。
+
+数据完整性验证要求BFF schema/catalog前后exact、无新SQL/Redis/receipt调用；Platform真PG验证同owner/跨owner/跨tenant、并发revision、同key重放/异义、terminal新key、事件一次与事务回滚；BFF真HTTP验证严格映射、撤权零owner调用、超时/迟到不返回成功。当前未运行任何门，D0不等于实现。
+
+未发行Storage删除的版本占位改为8.6/105只是发布排序；其Asset/Blob/cleanup数据规则完全独立且不在本片迁移。无第二owner、双写、兼容表或历史回填。
+
+<!-- R267-SKILLS-LIFECYCLE-D0-DATA-END -->
+
 ## R266-SKILLS-BFF-D0：本人 Skill 管理读取数据边界（零BFF持久化）
 
 本切片不新增或修改BFF表、列、索引、约束、canonical SQL、Redis namespace、receipt、outbox、cache或后台worker；`database/schema.sql`逐字保持。Skill、series、revision、metadata、五状态与管理分页cursor的唯一owner是kokoro-platform `3d4ba6c…`。BFF只在单次已准入请求中把可信tenant/subject投影到固定Platform HTTP3.3，并把严格安全响应映射为public envelope；不保存Skill镜像、本人历史或列表快照，不新增业务/持久token或授权缓存；现credential版本键控machine token内存cache/shared flight保持，当前用户admission仍每次重验。
