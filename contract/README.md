@@ -1,3 +1,7 @@
+## R267 lifecycle machine candidate (not released)
+
+Public 8.5.0 / 103 operations is a machine-only candidate adding `createPersonalSkillVersion` and `withdrawPersonalSkill`. Runtime routes are not implemented and Web must not consume this candidate. Existing 101 operations and Platform Connect pins remain unchanged.
+
 ## R266 reviewed public 8.4 management read source
 
 Public 8.4.0 / 101 operations and the two exact self-management reads are now implemented and Root verified. Platform HTTP3.3 uniquely consumes immutable 3d4ba6c / raw b6e5d0e0, with regular generated artifacts and the former vendor removed. Existing 99 operations and six reads remain unchanged. Current source evidence is in docs/CURRENT.md; normal process activation and Web/user CRUD are not yet verified. Candidate wording below is historical.

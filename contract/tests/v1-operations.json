@@ -83,6 +83,26 @@
     },
     {
       "method": "GET",
+      "path": "/v1/admin/model-routing",
+      "operation_id": "listAdminModelRouting"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/admin/model-labels",
+      "operation_id": "listAdminModelLabels"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/admin/model-revisions",
+      "operation_id": "listAdminModelRevisions"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/admin/model-routing/{label_id}",
+      "operation_id": "replaceAdminModelRouting"
+    },
+    {
+      "method": "GET",
       "path": "/v1/models",
       "operation_id": "listModels"
     },
@@ -487,24 +507,14 @@
       "operation_id": "createBillingCheckout"
     },
     {
-      "method": "GET",
-      "path": "/v1/admin/model-routing",
-      "operation_id": "listAdminModelRouting"
+      "method": "POST",
+      "path": "/v1/self/skills/{skill_id}/versions",
+      "operation_id": "createPersonalSkillVersion"
     },
     {
-      "method": "GET",
-      "path": "/v1/admin/model-labels",
-      "operation_id": "listAdminModelLabels"
-    },
-    {
-      "method": "GET",
-      "path": "/v1/admin/model-revisions",
-      "operation_id": "listAdminModelRevisions"
-    },
-    {
-      "method": "PUT",
-      "path": "/v1/admin/model-routing/{label_id}",
-      "operation_id": "replaceAdminModelRouting"
+      "method": "POST",
+      "path": "/v1/self/skills/{skill_id}/withdraw",
+      "operation_id": "withdrawPersonalSkill"
     }
   ]
 }

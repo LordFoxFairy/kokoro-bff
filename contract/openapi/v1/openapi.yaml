@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 8.4.0
+  version: 8.5.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -3830,6 +3830,74 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /v1/self/skills/{skill_id}/versions:
+    post:
+      tags: [Skills]
+      operationId: createPersonalSkillVersion
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: product.skill.manage_personal
+      summary: Create a new draft revision in the current user-owned Skill series
+      parameters:
+        - $ref: '#/components/parameters/PersonalSkillLifecycleSkillId'
+        - $ref: '#/components/parameters/CreatePersonalSkillVersionIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreatePersonalSkillVersionRequest' }
+      responses:
+        '201':
+          description: New draft revision created or currently replayable
+          headers: &PersonalSkillLifecycleHeaders
+            x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+            Cache-Control: { required: true, schema: { type: string, const: no-store } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/CreatePersonalSkillVersionResponse' } } }
+        '400': { $ref: '#/components/responses/PersonalSkillLifecycleBadRequest' }
+        '401': { $ref: '#/components/responses/PersonalSkillLifecycleUnauthorized' }
+        '403': { $ref: '#/components/responses/PersonalSkillLifecycleForbidden' }
+        '404': { $ref: '#/components/responses/PersonalSkillLifecycleNotFound' }
+        '409': { $ref: '#/components/responses/PersonalSkillLifecycleConflict' }
+        '412': { $ref: '#/components/responses/PersonalSkillLifecyclePreconditionFailed' }
+        '413': { $ref: '#/components/responses/PersonalSkillLifecyclePayloadTooLarge' }
+        '429': { $ref: '#/components/responses/PersonalSkillLifecycleRateLimited' }
+        '502': { $ref: '#/components/responses/PersonalSkillLifecycleBadGateway' }
+        '503': { $ref: '#/components/responses/PersonalSkillLifecycleUnavailable' }
+  /v1/self/skills/{skill_id}/withdraw:
+    post:
+      tags: [Skills]
+      operationId: withdrawPersonalSkill
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: product.skill.manage_personal
+      summary: Withdraw the exact current user-owned Skill revision
+      parameters:
+        - $ref: '#/components/parameters/PersonalSkillLifecycleSkillId'
+        - $ref: '#/components/parameters/WithdrawPersonalSkillIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WithdrawPersonalSkillRequest' }
+      responses:
+        '200':
+          description: Exact revision withdrawn or durably replayed
+          headers: *PersonalSkillLifecycleHeaders
+          content: { application/json: { schema: { $ref: '#/components/schemas/WithdrawPersonalSkillResponse' } } }
+        '400': { $ref: '#/components/responses/PersonalSkillLifecycleBadRequest' }
+        '401': { $ref: '#/components/responses/PersonalSkillLifecycleUnauthorized' }
+        '403': { $ref: '#/components/responses/PersonalSkillLifecycleForbidden' }
+        '404': { $ref: '#/components/responses/PersonalSkillLifecycleNotFound' }
+        '409': { $ref: '#/components/responses/PersonalSkillLifecycleConflict' }
+        '412': { $ref: '#/components/responses/PersonalSkillLifecyclePreconditionFailed' }
+        '413': { $ref: '#/components/responses/PersonalSkillLifecyclePayloadTooLarge' }
+        '429': { $ref: '#/components/responses/PersonalSkillLifecycleRateLimited' }
+        '502': { $ref: '#/components/responses/PersonalSkillLifecycleBadGateway' }
+        '503': { $ref: '#/components/responses/PersonalSkillLifecycleUnavailable' }
 components:
   securitySchemes:
     serviceHeader:
@@ -4218,6 +4286,21 @@ components:
       required: true
       schema:
         type: string
+    PersonalSkillLifecycleSkillId:
+      name: skill_id
+      in: path
+      required: true
+      schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+    CreatePersonalSkillVersionIdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, minLength: 1, maxLength: 128, pattern: '^[\x21-\x2B\x2D-\x7E]+$' }
+    WithdrawPersonalSkillIdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, minLength: 1, maxLength: 128, pattern: '^[\x21-\x2B\x2D-\x7E]+$' }
   schemas:
     PersonalizationFields:
       type: object
@@ -7362,6 +7445,84 @@ components:
             code: { type: string, minLength: 1, maxLength: 128 }
             message: { type: string, minLength: 1, maxLength: 1024 }
             retryable: { type: boolean }
+    CreatePersonalSkillVersionRequest:
+      type: object
+      additionalProperties: false
+      required: [display_name, summary, tags]
+      properties:
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          pattern: '.*\S.*'
+          description: Runtime enforcement counts UTF-16 code units; OpenAPI maxLength alone is not the implementation rule.
+        summary:
+          type: string
+          maxLength: 65535
+          description: Runtime enforcement counts UTF-16 code units.
+        tags:
+          type: array
+          maxItems: 100
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 1
+            maxLength: 128
+            pattern: '.*\S.*'
+          description: Order is preserved and participates in the command digest; runtime lengths use UTF-16 code units.
+    CreatePersonalSkillVersionResource:
+      type: object
+      additionalProperties: false
+      required: [skill_id, series_id, revision, status, replayed]
+      properties:
+        skill_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        series_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        revision: { type: string, pattern: '^(?!(?:0|1)$)(?:[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{4}|18446744073709550[0-9]{3}|18446744073709551[0-5][0-9]{2}|1844674407370955160[0-9]|1844674407370955161[0-4]|18446744073709551615)$' }
+        status: { type: string, const: draft }
+        replayed: { type: boolean }
+    CreatePersonalSkillVersionResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/CreatePersonalSkillVersionResource' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    WithdrawPersonalSkillRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 1, maxLength: 2048, pattern: '^(?=[\s\S]*\S)[^\u0000]+$' }
+    WithdrawPersonalSkillResource:
+      type: object
+      additionalProperties: false
+      required: [source_ref, status, event_id, replayed]
+      properties:
+        source_ref: { type: string, pattern: '^skill:[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        status: { type: string, const: withdrawn }
+        event_id: { type: string, pattern: '^evt:[a-f0-9]{64}$' }
+        replayed: { type: boolean }
+    WithdrawPersonalSkillResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/WithdrawPersonalSkillResource' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    PersonalSkillLifecycleErrorDetail:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string, minLength: 1 }
+    PersonalSkillLifecycleErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error, meta]
+      properties:
+        error: { $ref: '#/components/schemas/PersonalSkillLifecycleErrorDetail' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
   responses:
     AdminModelRoutingListSuccess:
       description: Current tenant routing policies
@@ -10106,3 +10267,164 @@ components:
                   error:
                     properties:
                       code: { type: string, enum: [product_tenant_not_configured, iam_admission_unavailable, personalization_unavailable, personalization_save_unknown] }
+    PersonalSkillLifecycleBadRequest:
+      description: Closed personal Skill lifecycle error
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/PersonalSkillLifecycleErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [invalid_skill_request, idempotency_key_required, invalid_idempotency_key] }
+    PersonalSkillLifecycleUnauthorized:
+      description: Closed personal Skill lifecycle error
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/PersonalSkillLifecycleErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [session_authentication_required, session_invalid] }
+    PersonalSkillLifecycleForbidden:
+      description: Closed personal Skill lifecycle error
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/PersonalSkillLifecycleErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [service_auth_failed, session_forbidden, product_tenant_forbidden] }
+    PersonalSkillLifecycleNotFound:
+      description: Closed personal Skill lifecycle error
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/PersonalSkillLifecycleErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [skill_not_found] }
+    PersonalSkillLifecycleConflict:
+      description: Closed personal Skill lifecycle error
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/PersonalSkillLifecycleErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [skill_idempotency_conflict, skill_command_in_progress] }
+    PersonalSkillLifecyclePreconditionFailed:
+      description: Closed personal Skill lifecycle error
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/PersonalSkillLifecycleErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [skill_precondition_failed] }
+    PersonalSkillLifecyclePayloadTooLarge:
+      description: Closed personal Skill lifecycle error
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/PersonalSkillLifecycleErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [request_body_too_large] }
+    PersonalSkillLifecycleRateLimited:
+      description: Closed personal Skill lifecycle error
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+        Retry-After: { required: false, schema: { type: string, pattern: '^(?:[1-9]|[1-9][0-9]{1,3}|[1-7][0-9]{4}|8[0-5][0-9]{3}|86[0-3][0-9]{2}|86400)$(?![\s\S])' } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/PersonalSkillLifecycleErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [session_rate_limited, skill_rate_limited] }
+    PersonalSkillLifecycleBadGateway:
+      description: Closed personal Skill lifecycle error
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/PersonalSkillLifecycleErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [skill_response_invalid] }
+    PersonalSkillLifecycleUnavailable:
+      description: Closed personal Skill lifecycle error
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/PersonalSkillLifecycleErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [product_tenant_not_configured, iam_admission_unavailable, skill_dependency_unavailable] }

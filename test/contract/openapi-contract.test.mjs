@@ -40,7 +40,7 @@ function inspectChatFailureContract(openapi) {
     if (!condition) errors.push(label)
   }
 
-  require(/^info:\n(?:.*\n){0,3}?  version: 8\.4\.0$/mu.test(openapi), "public info.version must be 8.4.0")
+  require(/^info:\n(?:.*\n){0,3}?  version: 8\.5\.0$/mu.test(openapi), "public info.version must be 8.5.0")
   require(/^      required: \[message_id, role, content, status, created_at\]$/mu.test(message), "failure must stay optional")
   const roles = [...(message.match(/role:\n\s+type: string\n\s+enum: \[([^\]]+)\]/u)?.[1] ?? "").matchAll(/[a-z_]+/gu)].map((match) => match[0])
   require(JSON.stringify(roles) === JSON.stringify(["user", "assistant"]), "Message roles must equal user and assistant")
@@ -1067,7 +1067,7 @@ test("public7 retains the closed full execution head, five current-locator decis
   const { openapi } = await readContract()
   const document = load(openapi)
   const schemas = document.components.schemas
-  assert.equal(document.info.version, "8.4.0")
+  assert.equal(document.info.version, "8.5.0")
   const snapshot = schemas.SessionSnapshotResponse.properties.data
   assert.equal(Object.hasOwn(snapshot.properties, "active_run"), false)
   assert.equal(Object.hasOwn(snapshot.properties, "pending_pauses"), false)
@@ -1415,7 +1415,7 @@ test("R124 public7 publishes nullable snapshot process and the anchored Run proc
   const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
   const { openapi } = await readContract()
   const document = load(openapi)
-  assert.equal(document.info.version, "8.4.0")
+  assert.equal(document.info.version, "8.5.0")
   const snapshot = document.components.schemas.SessionSnapshotResponse.properties.data
   assert.ok(snapshot.required.includes("execution_process"))
   assert.deepEqual(snapshot.properties.execution_process, {
@@ -1471,7 +1471,7 @@ test("R146 Move is one strict additive public command with a durable synchronous
     Object.keys(pathItem).filter((key) => ["get", "post", "put", "patch", "delete"].includes(key)),
     ["post"],
   )
-  assert.equal(document.info.version, "8.4.0", "the prelaunch Skills V2 cutover advances the only public major without a path alias")
+  assert.equal(document.info.version, "8.5.0", "the prelaunch Skills V2 cutover advances the only public major without a path alias")
   assert.ok(baseline.some((entry) => entry.method === "POST" && entry.path === path && entry.operation_id === "moveSession"))
 
   const operation = pathItem.post
@@ -1638,7 +1638,7 @@ test("R240 rename contract remains one strict name PATCH beside the approved Bil
   const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
   const { openapi, baseline } = await readContract()
   const document = load(openapi)
-  assert.equal(document.info.version, "8.4.0")
+  assert.equal(document.info.version, "8.5.0")
   const route = "/v1/projects/{projectId}/name"
   const path = document.paths[route]
   assert.ok(path)
@@ -1648,6 +1648,8 @@ test("R240 rename contract remains one strict name PATCH beside the approved Bil
   delete priorPaths["/v1/mcp/connections"] // R257 adds only this independently governed read.
   delete priorPaths["/v1/self/skills"] // R266 separately governs managed personal Skill reads.
   delete priorPaths["/v1/self/skills/{skill_id}"]
+  delete priorPaths["/v1/self/skills/{skill_id}/versions"]
+  delete priorPaths["/v1/self/skills/{skill_id}/withdraw"]
   delete priorPaths["/v1/preferences/personalization"] // R257 separately governs the new caller-owned CAS resource.
   delete priorPaths["/v1/admin/model-routing"] // R256 separately governs the current-tenant admin read.
   delete priorPaths["/v1/admin/model-labels"]
@@ -1665,6 +1667,8 @@ test("R240 rename contract remains one strict name PATCH beside the approved Bil
           "listSelfMcpConnections",
           "listManagedPersonalSkills",
           "getManagedPersonalSkill",
+          "createPersonalSkillVersion",
+          "withdrawPersonalSkill",
           "getSelfPersonalization",
           "replaceSelfPersonalization",
           "listAdminModelRouting",
@@ -1810,7 +1814,7 @@ test("R240 rename semantic gate rejects input, receipt, status and header drift"
   const request = (before, after) => mutate("    RenameProjectRequest:", "    RenameProjectResponse:", before, after)
   const success = (before, after) => mutate("    RenameProjectResponse:", "    RenameProjectErrorResponse:", before, after)
   const mutations = [
-    openapi.replace("  version: 8.4.0", "  version: 7.1.0"),
+    openapi.replace("  version: 8.5.0", "  version: 7.1.0"),
     route("    patch:", "    post:"),
     route("operationId: renameProject", "operationId: renameProjectAlias"),
     route("x-kokoro-permission: project.update", "x-kokoro-permission: project.read"),
@@ -1866,7 +1870,7 @@ test("R257 self MCP connection contract rejects Server substitution and error-pr
   const start = openapi.indexOf("  /v1/mcp/connections:\n")
   const end = openapi.indexOf("  /v1/mcp/servers:\n", start)
   const route = openapi.slice(start, end)
-  assert.equal(baseline.length, 101)
+  assert.equal(baseline.length, 103)
   assert.deepEqual(
     baseline.filter((item) => item.operation_id === "listSelfMcpConnections"),
     [
@@ -2026,7 +2030,7 @@ test("R266 managed personal Skill contract rejects route, envelope, status-code 
   assert.deepEqual(inspectBffOpenApi(openapi, baseline), [])
   const mutate = (startMarker, endMarker, before, after) => {
     const start = openapi.indexOf(startMarker)
-    const end = openapi.indexOf(endMarker, start + startMarker.length)
+    const end = endMarker === "" ? openapi.length : openapi.indexOf(endMarker, start + startMarker.length)
     assert.ok(start >= 0 && end > start, startMarker)
     const block = openapi.slice(start, end)
     assert.ok(block.includes(before), before)
@@ -2068,4 +2072,132 @@ test("R266 managed personal Skill contract rejects route, envelope, status-code 
   const retry = new RegExp(pattern, "u")
   for (const valid of ["1", "86400"]) assert.equal(retry.test(valid), true, valid)
   for (const invalid of ["0", "86401", "99999", "1\n"]) assert.equal(retry.test(invalid), false, JSON.stringify(invalid))
+})
+
+test("R267 createPersonalSkillVersion publishes one governed strict personal version command", async () => {
+  const { openapi, baseline } = await readContract()
+  const operation = baseline.find(
+    ({ method, path, operation_id }) =>
+      method === "POST" && path === "/v1/self/skills/{skill_id}/versions" && operation_id === "createPersonalSkillVersion",
+  )
+  assert.ok(operation, "createPersonalSkillVersion must be registered in the operation inventory")
+  const { createRequire } = await import("node:module")
+  const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
+  const document = load(openapi)
+  const route = document.paths?.["/v1/self/skills/{skill_id}/versions"]?.post
+  assert.ok(route, "createPersonalSkillVersion route must exist")
+  assert.equal(route.operationId, "createPersonalSkillVersion")
+  assert.equal(route["x-kokoro-owner"], "kokoro-bff")
+  assert.equal(route["x-kokoro-visibility"], "public")
+  assert.equal(route["x-kokoro-stability"], "beta")
+  assert.equal(route["x-kokoro-permission"], "product.skill.manage_personal")
+  assert.ok(route.parameters.some(({ $ref }) => $ref === "#/components/parameters/CreatePersonalSkillVersionIdempotencyKey"))
+  const requestRef = route.requestBody?.content?.["application/json"]?.schema?.$ref
+  assert.equal(requestRef, "#/components/schemas/CreatePersonalSkillVersionRequest")
+  const request = document.components.schemas.CreatePersonalSkillVersionRequest
+  assert.deepEqual(request.required, ["display_name", "summary", "tags"])
+  assert.equal(request.additionalProperties, false)
+  assert.deepEqual(Object.keys(request.properties), ["display_name", "summary", "tags"])
+  const responseRef = route.responses?.["201"]?.content?.["application/json"]?.schema?.$ref
+  assert.equal(responseRef, "#/components/schemas/CreatePersonalSkillVersionResponse")
+  const resource = document.components.schemas.CreatePersonalSkillVersionResource
+  assert.deepEqual(resource.required, ["skill_id", "series_id", "revision", "status", "replayed"])
+  assert.equal(resource.additionalProperties, false)
+  assert.equal(resource.properties.status.const, "draft")
+  assert.equal(resource.properties.revision.type, "string")
+  const revision = new RegExp(resource.properties.revision.pattern, "u")
+  for (const valid of ["2", "18446744073709540000", "18446744073709550000", "18446744073709551615"]) assert.equal(revision.test(valid), true, valid)
+  for (const invalid of ["0", "1", "01", "-2", "2.0", "2\n", "18446744073709551616"]) assert.equal(revision.test(invalid), false, JSON.stringify(invalid))
+})
+
+test("R267 withdrawPersonalSkill publishes one governed strict personal withdrawal command", async () => {
+  const { openapi, baseline } = await readContract()
+  const operation = baseline.find(
+    ({ method, path, operation_id }) =>
+      method === "POST" && path === "/v1/self/skills/{skill_id}/withdraw" && operation_id === "withdrawPersonalSkill",
+  )
+  assert.ok(operation, "withdrawPersonalSkill must be registered in the operation inventory")
+  const { createRequire } = await import("node:module")
+  const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
+  const document = load(openapi)
+  const route = document.paths?.["/v1/self/skills/{skill_id}/withdraw"]?.post
+  assert.ok(route, "withdrawPersonalSkill route must exist")
+  assert.equal(route.operationId, "withdrawPersonalSkill")
+  assert.equal(route["x-kokoro-owner"], "kokoro-bff")
+  assert.equal(route["x-kokoro-visibility"], "public")
+  assert.equal(route["x-kokoro-stability"], "beta")
+  assert.equal(route["x-kokoro-permission"], "product.skill.manage_personal")
+  assert.ok(route.parameters.some(({ $ref }) => $ref === "#/components/parameters/WithdrawPersonalSkillIdempotencyKey"))
+  const requestRef = route.requestBody?.content?.["application/json"]?.schema?.$ref
+  assert.equal(requestRef, "#/components/schemas/WithdrawPersonalSkillRequest")
+  const request = document.components.schemas.WithdrawPersonalSkillRequest
+  assert.deepEqual(request.required, ["reason"])
+  assert.equal(request.additionalProperties, false)
+  assert.deepEqual(Object.keys(request.properties), ["reason"])
+  assert.equal(request.properties.reason.minLength, 1)
+  assert.equal(request.properties.reason.maxLength, 2048)
+  const reason = new RegExp(request.properties.reason.pattern, "u")
+  for (const valid of ["kept", " kept ", "\nlegitimate"]) assert.equal(reason.test(valid), true, JSON.stringify(valid))
+  for (const invalid of ["", "   ", "\n\t"]) assert.equal(reason.test(invalid), false, JSON.stringify(invalid))
+  const responseRef = route.responses?.["200"]?.content?.["application/json"]?.schema?.$ref
+  assert.equal(responseRef, "#/components/schemas/WithdrawPersonalSkillResponse")
+  const resource = document.components.schemas.WithdrawPersonalSkillResource
+  assert.deepEqual(resource.required, ["source_ref", "status", "event_id", "replayed"])
+  assert.equal(resource.additionalProperties, false)
+  assert.equal(resource.properties.status.const, "withdrawn")
+  assert.equal(resource.properties.event_id.pattern, "^evt:[a-f0-9]{64}$")
+  const errorResponses = { "400": "BadRequest", "401": "Unauthorized", "403": "Forbidden", "404": "NotFound", "409": "Conflict", "412": "PreconditionFailed", "413": "PayloadTooLarge", "429": "RateLimited", "502": "BadGateway", "503": "Unavailable" }
+  for (const [status, suffix] of Object.entries(errorResponses))
+    assert.equal(route.responses?.[status]?.$ref, `#/components/responses/PersonalSkillLifecycle${suffix}`)
+})
+
+test("R267 personal Skill lifecycle schemas reject boundary and closed-envelope drift", async () => {
+  const { openapi, baseline } = await readContract()
+  assert.deepEqual(inspectBffOpenApi(openapi, baseline), [])
+  const mutate = (startMarker, endMarker, before, after) => {
+    const start = openapi.indexOf(startMarker)
+    const end = openapi.indexOf(endMarker, start + startMarker.length)
+    assert.ok(start >= 0 && end > start, startMarker)
+    const block = openapi.slice(start, end)
+    assert.ok(block.includes(before), before)
+    return openapi.slice(0, start) + block.replace(before, after) + openapi.slice(end)
+  }
+  const mutations = [
+    mutate("    CreatePersonalSkillVersionRequest:\n", "    CreatePersonalSkillVersionResource:\n", "required: [display_name, summary, tags]", "required: [summary, tags]"),
+    mutate("    CreatePersonalSkillVersionResource:\n", "    CreatePersonalSkillVersionResponse:\n", "status: { type: string, const: draft }", "status: { type: string, const: active }"),
+    mutate("    WithdrawPersonalSkillResource:\n", "    WithdrawPersonalSkillResponse:\n", "event_id: { type: string, pattern: '^evt:[a-f0-9]{64}$' }", "event_id: { type: string }"),
+    mutate("    PersonalSkillLifecycleErrorResponse:\n", "  responses:\n", "required: [error, meta]", "required: [error, meta, retryable]"),
+    mutate("  /v1/self/skills/{skill_id}/withdraw:\n", "components:\n", "'429': { $ref: '#/components/responses/PersonalSkillLifecycleRateLimited' }", "'429': { $ref: '#/components/responses/PlatformProjectionReadRateLimited' }"),
+  ]
+  for (const broken of mutations) {
+    assert.notEqual(broken, openapi)
+    assert.ok(inspectBffOpenApi(broken, baseline).some((message) => /personal Skill lifecycle/u.test(message)))
+  }
+})
+
+test("R267 final lifecycle path stops at the real top-level components boundary", async () => {
+  const { openapi, baseline } = await readContract()
+  const withdrawStart = openapi.indexOf("  /v1/self/skills/{skill_id}/withdraw:\n")
+  const componentsStart = openapi.indexOf("components:\n", withdrawStart)
+  assert.ok(withdrawStart >= 0 && componentsStart > withdrawStart)
+  assert.equal(openapi.slice(withdrawStart, componentsStart).includes("'503': { $ref: '#/components/responses/PersonalSkillLifecycleUnavailable' }"), true)
+  assert.deepEqual(inspectBffOpenApi(openapi, baseline), [])
+})
+
+test("R267 final lifecycle path rejects a 503 response drift before components", async () => {
+  const { openapi, baseline } = await readContract()
+  const withdrawStart = openapi.indexOf("  /v1/self/skills/{skill_id}/withdraw:\n")
+  const componentsStart = openapi.indexOf("components:\n", withdrawStart)
+  assert.ok(withdrawStart >= 0 && componentsStart > withdrawStart)
+  const route = openapi.slice(withdrawStart, componentsStart)
+  const expected = "'503': { $ref: '#/components/responses/PersonalSkillLifecycleUnavailable' }"
+  assert.equal(route.includes(expected), true)
+  const brokenRoute = route.replace(expected, "'503': { $ref: '#/components/responses/PersonalSkillLifecycleBadGateway' }")
+  assert.notEqual(brokenRoute, route)
+  const broken = openapi.slice(0, withdrawStart) + brokenRoute + openapi.slice(componentsStart)
+  assert.ok(
+    inspectBffOpenApi(broken, baseline).some(
+      (message) => message === "personal Skill lifecycle withdrawPersonalSkill 503 response drifted",
+    ),
+  )
 })

@@ -176,8 +176,8 @@ async function main() {
   const errors = [
     ...inspectOpenApiGovernance(openapi),
     ...compareOperationBaseline(openapi, parsedBaseline.operations),
-    ...(parsedBaseline.operations.length === 101 && currentOperations.length === 101 ? [] : ["public 8.4.0 must freeze exactly 101 operations"]),
-    ...(/^  version: 8\.4\.0$/mu.test(openapi) ? [] : ["public contract version must equal 8.4.0"]),
+    ...(parsedBaseline.operations.length === 103 && currentOperations.length === 103 ? [] : ["public 8.5.0 must freeze exactly 103 operations"]),
+    ...(/^  version: 8\.5\.0$/mu.test(openapi) ? [] : ["public contract version must equal 8.5.0"]),
     ...(managedPersonalReads.length === 2 && managedPersonalReads.every((operation) => operation.method === "GET")
       ? []
       : ["managed personal Skill inventory must contain exactly the two GET operations"]),
