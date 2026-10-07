@@ -1,3 +1,10 @@
+## R291 Project scope release worker 实现候选（2026-10-07）
+
+现具名四文件及 runtime/store 接线已实现，下面 R284 为批准设计的历史时点。repository 以短事务领取/结算，dispatcher 在事务外调用固定 Storage 两 RPC；stop 同步停止领取并排空，数据库随后关闭。每批最多一条冷却300秒正规 UNAUTHENTICATED 恢复，占总 batch 内一 slot，普通队列不再导致恢复饥饿；其它 terminal 仍 blocked。内部 required `leaseObservedAtMs` 在 checkout/BEGIN 后、实际 claim SQL 前共同取单调时钟，配实际 SQL clock_timestamp 剩余形成保守 deadline 下界；无每项新租期或 claim elapsed 双扣。十秒执行/结算同预算、取消、未知 COMMIT、锁后真时刻 lease/fence CAS 保持。
+
+Root Node22 build/check/format 均0，当前15真PG行为通过（Storage wire/ACK为受控正式 generated Connect fixture，不是真Storage进程）；独审当前十hash a4cc4484 无新增确定阻断。固定producer/pin/Schema/public8.6/105未变。正常BFF仍39db/public8.5，候选未发行或激活；真实Storage/IAM组合、正常schema与17浏览器删除子例仍OPEN。
+
+---
 ## R284 Project scope release worker 文档门（目标，尚未实施）
 
 当前 commit `6f20f81a8d15992b35bc07e76ac8808d7072bee8` 已提交 Project 删除的 BFF 本地事务、两张 canonical 表与 `8.6.0 / 105` 机器候选，并由 Root 在隔离 HTTP/PostgreSQL 中验证 16/0；正常 BFF 仍运行 `39db` / public `8.5.0`，本候选未激活。下一切片只补提交后 Storage 逻辑 scope release 的具名 worker；不改原始 DELETE `202 pending` receipt、公开状态 shape、Schema、generated Storage pin 或 Web。Storage worker、正常 schema 组合、Web 17 条用户链、完整 DELETE 并发/COMMIT-unknown 与真实 Storage ACK-unknown 恢复均未验。

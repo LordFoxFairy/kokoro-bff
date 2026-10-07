@@ -730,7 +730,8 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
     composition.agentDispatchDispatcher !== undefined ||
     composition.agentCancellationDispatcher !== undefined ||
     composition.scheduledAgentDispatcher !== undefined ||
-    composition.scheduledAgentTerminalConsumer !== undefined
+    composition.scheduledAgentTerminalConsumer !== undefined ||
+    composition.projectScopeReleaseDispatcher !== undefined
   ) {
     server.once("listening", () => {
       composition.agUiProjector?.start()
@@ -739,6 +740,7 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
       composition.scheduledAgentDispatcher?.start()
       composition.scheduledAgentTerminalConsumer?.start()
       composition.agentCancellationDispatcher?.start()
+      composition.projectScopeReleaseDispatcher?.start()
     })
   }
   server.once("close", () => {

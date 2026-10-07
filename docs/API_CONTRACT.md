@@ -1,3 +1,10 @@
+## R291 Project release runtime 当前候选（2026-10-07）
+
+public 8.6.0/105 与固定 Storage e8b99284 / combined c22b5c10 机器事实均未由本片改变。两具名 ReleaseProjectScope/ReleaseConversationScope 只发送已持久化 command/digest 与可信 tenant/subject/scope，无 actor header；严格 ACK/错误 tuple 分支已接 runtime worker。新租期观察字段只属 BFF 内部 port，不是公开 JSON/Proto 或第二网络协议。原 DELETE 202 pending receipt 不被 worker 改写；logical released 与 physical pending 分开。
+
+Root 15真PG/受控 generated Connect 行为通过，仍不是真Storage/IAM或Browser验证；正常8.5消费者未切换，aggregate DELETE/status 17用户路径与真正丢ACK恢复仍待验。下面旧D0是历史设计时点。
+
+---
 ## R284 Project scope release worker API边界（目标，尚未实施）
 
 本片不新增或修改 public API。当前 commit `6f20f81a8d15992b35bc07e76ac8808d7072bee8` 已具备本地 Project DELETE/status runtime、SQL与 `8.6.0 / 105` 机器候选；正常服务仍为 `39db` / public `8.5.0`，尚未激活或供Web消费。worker完成后，原 `DELETE` 仍只返回并重放保存的 `202 {data:{...,logical_release_state:"pending",physical_cleanup_state:"pending"}}`，`GET .../deletion`仍是唯一当前投影；request ID、Location、closed errors与无条件读取语义不变。

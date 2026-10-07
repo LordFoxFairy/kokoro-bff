@@ -27,6 +27,8 @@ import { CatalogConnectClient } from "../infrastructure/clients/platform/catalog
 import { PersonalInstallationConnectClient } from "../infrastructure/clients/platform/personal-installation-connect.js"
 import { ProjectionCredentialSource } from "../infrastructure/clients/platform/projection-credential.js"
 import { ProjectionTokenSource } from "../infrastructure/clients/platform/projection-token.js"
+import { ProjectScopeReleaseOutboxDispatcher } from "../application/project-scope-release-outbox-dispatcher.js"
+import { StorageScopeReleaseClient } from "../infrastructure/clients/storage/scope-release-client.js"
 
 type ScheduledWorkerErrorEvent = { operation: string; result: "error"; errorCode: string; attempt: number; backoffMs: number }
 function scheduledWorkerLog(event: ScheduledWorkerErrorEvent): void {
@@ -60,6 +62,7 @@ export type BffServerComposition = {
   agentCancellationDispatcher?: AgentCancellationOutboxDispatcher
   scheduledAgentDispatcher?: ScheduledAgentDispatcher
   scheduledAgentTerminalConsumer?: ScheduledAgentTerminalConsumer
+  projectScopeReleaseDispatcher?: ProjectScopeReleaseOutboxDispatcher
   readiness: () => Promise<void>
   stopWorkers: () => Promise<void>
   close: () => Promise<void>
@@ -84,6 +87,7 @@ export type BffCompositionOptions = {
   agentCancellationDispatcher?: AgentCancellationOutboxDispatcher
   scheduledAgentDispatcher?: ScheduledAgentDispatcher
   scheduledAgentTerminalConsumer?: ScheduledAgentTerminalConsumer
+  projectScopeReleaseDispatcher?: ProjectScopeReleaseOutboxDispatcher
   readiness?: () => Promise<void>
   close?: () => Promise<void>
   routeHandler?: BffRouteHandler
@@ -237,11 +241,21 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
           },
         )
       : undefined)
+  const projectScopeReleaseDispatcher =
+    options.projectScopeReleaseDispatcher ??
+    (config.storage === undefined || businessStore?.projectScopeReleaseOutbox === undefined
+      ? undefined
+      : new ProjectScopeReleaseOutboxDispatcher(
+          businessStore.projectScopeReleaseOutbox,
+          new StorageScopeReleaseClient(config.storage.baseUrl, config.storage.secret),
+          { workerId: `bff-project-scope-release-${process.pid}-${randomUUID()}` },
+        ))
   const closeStore = options.close ?? (ownsStore && businessStore !== null ? (): Promise<void> => businessStore.close() : async (): Promise<void> => undefined)
   let stopWorkersPromise: Promise<void> | null = null
   const stopWorkers = (): Promise<void> => {
     if (stopWorkersPromise !== null) return stopWorkersPromise
     stopWorkersPromise = (async (): Promise<void> => {
+      const projectScopeReleaseStop = projectScopeReleaseDispatcher?.stop()
       // Stop claimers first; stop() drains in-flight source reads and outbox
       // deliveries before their shared persistence connections are closed.
       await agUiProjector?.stop()
@@ -250,6 +264,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
       await agentCancellationDispatcher?.stop()
       await agentDispatchDispatcher?.stop()
       await scheduledTaskDispatcher?.stop()
+      await projectScopeReleaseStop
     })()
     return stopWorkersPromise
   }
@@ -275,6 +290,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     ...(agentCancellationDispatcher === undefined ? {} : { agentCancellationDispatcher }),
     ...(scheduledAgentDispatcher === undefined ? {} : { scheduledAgentDispatcher }),
     ...(scheduledAgentTerminalConsumer === undefined ? {} : { scheduledAgentTerminalConsumer }),
+    ...(projectScopeReleaseDispatcher === undefined ? {} : { projectScopeReleaseDispatcher }),
     readiness,
     stopWorkers,
     close,

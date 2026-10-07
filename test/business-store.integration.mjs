@@ -3949,3 +3949,985 @@ integrationTest("R281 Project deletion tables enforce closed receipt, identity, 
     client.release()
   }
 })
+
+async function r285ReleaseFixture(t, release) {
+  const { ConnectError, Code } = await import("@connectrpc/connect")
+  const { connectNodeAdapter } = await import("@connectrpc/connect-node")
+  const { StorageService } = await import("../dist/generated/storage-connect/kokoro/storage/v2/storage_pb.js")
+  const ownerCalls = []
+  let replayEnabled = false
+  const dispatch = async (kind, request, context) => {
+    const call = {
+      kind,
+      commandId: request.command?.commandId,
+      requestDigest: request.command?.requestDigest,
+      service: context.requestHeader.get("x-kokoro-service"),
+      secret: context.requestHeader.get("x-kokoro-internal-secret"),
+      tenant: context.requestHeader.get("x-kokoro-tenant-id"),
+      subject: context.requestHeader.get("x-kokoro-subject-id"),
+      requestId: context.requestHeader.get("x-kokoro-request-id"),
+      scopeKind: context.requestHeader.get("x-kokoro-scope-kind"),
+      scopeId: context.requestHeader.get("x-kokoro-scope-id"),
+      actor: context.requestHeader.get("x-kokoro-actor-id"),
+    }
+    ownerCalls.push(call)
+    const outcome = await release({ call, calls: ownerCalls, replayEnabled, ConnectError, Code })
+    if (outcome instanceof Error) throw outcome
+    return {
+      scopeReleased: true,
+      replayed: outcome?.replayed ?? false,
+      abortedUploadCount: 0n,
+      releasedAssetCount: 0n,
+      queuedObjectCleanupCount: 0n,
+    }
+  }
+  const storage = createServer(
+    connectNodeAdapter({
+      routes(router) {
+        router.service(StorageService, {
+          releaseProjectScope: (request, context) => dispatch("project", request, context),
+          releaseConversationScope: (request, context) => dispatch("conversation", request, context),
+        })
+      },
+    }),
+  )
+  const storageBase = await listen(storage)
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
+  const tenant = `r285_${randomUUID().replaceAll("-", "")}`
+  const owner = "r285_owner"
+  const admission = new SessionAdmissionDouble()
+  const token = `r285-${randomUUID()}`
+  admission.allow(token, { namespace: tenant, userId: owner })
+  const headers = { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "web-secret", authorization: `Bearer ${token}` }
+  let store
+  let bff
+  let base
+  let tables = []
+  const stop = async () => {
+    const errors = []
+    try {
+      if (bff) await bff.shutdown(1500)
+    } catch (error) {
+      errors.push(error)
+    } finally {
+      bff = undefined
+    }
+    try {
+      if (store) await store.close()
+    } catch (error) {
+      errors.push(error)
+    } finally {
+      store = undefined
+    }
+    if (errors.length > 0) throw errors[0]
+  }
+  const start = async () => {
+    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    await store.ready()
+    const config = {
+      ...bffConfig({ tenantId: tenant }),
+      storage: { baseUrl: storageBase, secret: "r285-storage-secret", objectOrigin: storageBase },
+      storageObjectOrigin: storageBase,
+    }
+    bff = createBffServer(config, {
+      businessStore: store,
+      sessionAdmission: admission,
+      agentDispatchDispatcher: r237IdleWorker,
+      agentCancellationDispatcher: r237IdleWorker,
+      agUiProjector: r237IdleWorker,
+      scheduledTaskDispatcher: r237IdleWorker,
+      scheduledAgentDispatcher: r237IdleWorker,
+      scheduledAgentTerminalConsumer: r237IdleWorker,
+    })
+    base = await listen(bff)
+  }
+  t.after(async () => {
+    const errors = []
+    try {
+      await stop()
+    } catch (error) {
+      errors.push(error)
+    } finally {
+      try {
+        if (storage.listening) await close(storage)
+      } catch (error) {
+        errors.push(error)
+      } finally {
+        try {
+          for (const table of tables) {
+            if (table === "bff_idempotency_receipt") await pool.query(`DELETE FROM ${table} WHERE position($1 in scope)>0`, [tenant])
+            else await pool.query(`DELETE FROM ${table} WHERE tenant_id=$1`, [tenant])
+          }
+        } catch (error) {
+          errors.push(error)
+        } finally {
+          try {
+            await pool.end()
+          } catch (error) {
+            errors.push(error)
+          }
+        }
+      }
+    }
+    if (errors.length > 0) throw errors[0]
+  })
+  tables = (
+    await pool.query(`SELECT table_name FROM information_schema.tables WHERE table_schema='kokoro_bff' AND table_type='BASE TABLE'
+      AND (table_name='bff_idempotency_receipt' OR table_name IN
+        (SELECT table_name FROM information_schema.columns WHERE table_schema='kokoro_bff' AND column_name='tenant_id')) ORDER BY table_name`)
+  ).rows.map((row) => row.table_name)
+  assert.ok(tables.includes("bff_project_scope_release_outbox") && tables.includes("bff_project_deletion"))
+  await start()
+  const request = async (path, method = "GET", payload, extra = {}) => {
+    const response = await fetch(`${base}/v1/${path}`, {
+      method,
+      headers: { ...headers, "content-type": "application/json", ...extra },
+      ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+      signal: AbortSignal.timeout(7000),
+    })
+    return { status: response.status, body: await response.json(), headers: response.headers }
+  }
+  const project = async (name) => {
+    const result = await request("projects", "POST", { name }, { "idempotency-key": `r285-create-${randomUUID()}` })
+    assert.equal(result.status, 200, JSON.stringify(result.body))
+    return result.body.data.project
+  }
+  return {
+    get ownerPool() {
+      return store.database.pool
+    },
+    pool,
+    tenant,
+    owner,
+    request,
+    project,
+    ownerCalls,
+    restart: async () => {
+      await stop()
+      replayEnabled = true
+      await start()
+    },
+  }
+}
+
+function r285AssertStorageCall(call, fixture, kind, scopeId) {
+  assert.equal(call.kind, kind)
+  assert.equal(call.service, "web-bff")
+  assert.equal(call.secret, "r285-storage-secret")
+  assert.equal(call.tenant, fixture.tenant)
+  assert.equal(call.subject, fixture.owner)
+  assert.equal(call.actor, null, "trusted Storage metadata must not invent an actor header")
+  assert.equal(call.scopeKind, kind)
+  assert.equal(call.scopeId, scopeId)
+  assert.match(call.requestId ?? "", /^[^\x00-\x20\x7f]{1,128}$/u)
+  assert.match(call.commandId ?? "", /^release_[a-f0-9]{48}$/u)
+  assert.match(call.requestDigest ?? "", /^[a-f0-9]{64}$/u)
+}
+
+integrationTest(
+  "R285 Project deletion releases the frozen active and deleted Conversation scopes through fixed Storage Connect",
+  { timeout: 15000 },
+  async (t) => {
+    const f = await r285ReleaseFixture(t, async () => ({ replayed: false }))
+    const project = await f.project("R285 release all frozen scopes")
+    const repositories = new PostgresBffRepositories(postgresUrl, redisUrl)
+    await repositories.ready()
+    let activeConversation
+    let deletedConversation
+    try {
+      activeConversation = await r279CreateConversation(f, repositories, project.id, "release-active")
+      deletedConversation = await r279CreateConversation(f, repositories, project.id, "release-deleted")
+      assert.equal(
+        await repositories.services.chat.deleteConversation(f.tenant, f.owner, deletedConversation, `r285-single-delete-${randomUUID()}`, project.id),
+        true,
+      )
+    } finally {
+      await repositories.close()
+    }
+    const key = `r285-release-${randomUUID()}`
+    const original = await r279DeleteProject(f, project.id, key)
+    r279AssertProjectDeletionResource(original, project.id, 202)
+    const originalBody = structuredClone(original.body)
+    const originalLocation = original.headers.get("location")
+
+    await waitFor(async () => {
+      const result = await f.request(`projects/${project.id}/deletion`)
+      return result.status === 200 && result.body.data.logical_release_state === "released"
+    }, 7000)
+    const status = await f.request(`projects/${project.id}/deletion`)
+    assert.equal(status.status, 200, JSON.stringify(status.body))
+    r241Headers(status)
+    assert.deepEqual(status.body, {
+      data: { project_id: project.id, logical_release_state: "released", physical_cleanup_state: "pending" },
+    })
+    assert.equal(f.ownerCalls.length, 3)
+    const persistedCommands = await f.pool.query(
+      "SELECT scope_kind,scope_id,command_id,request_digest FROM bff_project_scope_release_outbox WHERE tenant_id=$1 AND project_id=$2",
+      [f.tenant, project.id],
+    )
+    const expectedCommands = new Map(persistedCommands.rows.map((row) => [`${row.scope_kind}:${row.scope_id}`, row]))
+    const calls = new Map(f.ownerCalls.map((call) => [`${call.scopeKind}:${call.scopeId}`, call]))
+    for (const [kind, scopeId] of [
+      ["project", project.id],
+      ["conversation", activeConversation],
+      ["conversation", deletedConversation],
+    ]) {
+      const call = calls.get(`${kind}:${scopeId}`)
+      const persisted = expectedCommands.get(`${kind}:${scopeId}`)
+      assert.ok(persisted, `missing persisted ${kind} command for ${scopeId}`)
+      r285AssertStorageCall(call, f, kind, scopeId)
+      assert.equal(call.commandId, persisted.command_id)
+      assert.equal(call.requestDigest, persisted.request_digest)
+    }
+
+    const replay = await r279DeleteProject(f, project.id, key)
+    assert.equal(replay.status, 202)
+    assert.deepEqual(replay.body, originalBody, "worker settlement must not rewrite the original pending receipt")
+    assert.equal(replay.headers.get("location"), originalLocation)
+    assert.equal(f.ownerCalls.length, 3, "HTTP receipt replay must not append or redeliver released commands")
+  },
+)
+
+integrationTest("R285 lost Storage ACK restarts with the same command and owner replay before logical release", { timeout: 20000 }, async (t) => {
+  const seen = new Map()
+  const f = await r285ReleaseFixture(t, async ({ call, replayEnabled, ConnectError, Code }) => {
+    const prior = seen.get(call.commandId)
+    if (prior) {
+      assert.equal(call.requestDigest, prior.requestDigest)
+      assert.equal(call.scopeKind, prior.scopeKind)
+      assert.equal(call.scopeId, prior.scopeId)
+    } else seen.set(call.commandId, call)
+    if (!replayEnabled) return new ConnectError("ACK lost after durable owner commit", Code.Unavailable)
+    return { replayed: true }
+  })
+  const project = await f.project("R285 recover lost Storage ACK")
+  const key = `r285-lost-ack-${randomUUID()}`
+  const original = await r279DeleteProject(f, project.id, key)
+  r279AssertProjectDeletionResource(original, project.id, 202)
+  await waitFor(async () => {
+    if (f.ownerCalls.length < 1) return false
+    const result = await f.pool.query(
+      "SELECT state,lease_owner,lease_expires_at,released_at FROM bff_project_scope_release_outbox WHERE tenant_id=$1 AND project_id=$2",
+      [f.tenant, project.id],
+    )
+    return result.rows.length === 1 && result.rows[0].state === "pending" && result.rows[0].lease_owner === null
+  }, 7000)
+  const first = f.ownerCalls[0]
+  r285AssertStorageCall(first, f, "project", project.id)
+  const beforeRestart = await f.pool.query(
+    "SELECT command_id,request_digest,state,lease_owner,lease_expires_at,released_at FROM bff_project_scope_release_outbox WHERE tenant_id=$1 AND project_id=$2",
+    [f.tenant, project.id],
+  )
+  assert.equal(beforeRestart.rows.length, 1)
+  assert.equal(first.commandId, beforeRestart.rows[0].command_id)
+  assert.equal(first.requestDigest, beforeRestart.rows[0].request_digest)
+  assert.equal(beforeRestart.rows[0].state, "pending")
+  assert.equal(beforeRestart.rows[0].lease_owner, null)
+  assert.equal(beforeRestart.rows[0].lease_expires_at, null)
+  assert.equal(beforeRestart.rows[0].released_at, null)
+
+  const preRestartCallCount = f.ownerCalls.length
+  await f.restart()
+  await waitFor(async () => {
+    const result = await f.request(`projects/${project.id}/deletion`)
+    return result.status === 200 && result.body.data.logical_release_state === "released"
+  }, 7000)
+  const callsAfterRestart = f.ownerCalls.slice(preRestartCallCount)
+  const matching = callsAfterRestart.filter((call) => call.commandId === first.commandId)
+  assert.ok(matching.length >= 1, "the new BFF instance must retry the original command after the lost ACK")
+  for (const call of matching) {
+    assert.equal(call.requestDigest, first.requestDigest)
+    assert.equal(call.scopeId, first.scopeId)
+  }
+  const status = await f.request(`projects/${project.id}/deletion`)
+  assert.equal(status.status, 200, JSON.stringify(status.body))
+  r241Headers(status)
+  assert.deepEqual(status.body, {
+    data: { project_id: project.id, logical_release_state: "released", physical_cleanup_state: "pending" },
+  })
+  const replay = await r279DeleteProject(f, project.id, key)
+  assert.deepEqual(replay.body, original.body)
+  assert.equal(replay.status, 202)
+})
+
+function r285WorkerCommand(commandId, leaseRemainingMs = 1000, leaseObservedAtMs = performance.now()) {
+  return {
+    commandId,
+    tenantId: "tenant-r285-worker",
+    projectId: "11111111-1111-4111-8111-111111111111",
+    ownerSubjectId: "subject-r285-worker",
+    actorId: "subject-r285-worker",
+    scopeKind: "project",
+    scopeId: "11111111-1111-4111-8111-111111111111",
+    requestDigest: "a".repeat(64),
+    attemptCount: 1,
+    leaseOwner: "worker-r285",
+    fence: 1,
+    leaseObservedAtMs,
+    leaseRemainingMs,
+  }
+}
+
+function r285WorkerRepository(claim) {
+  const writes = []
+  return {
+    writes,
+    claimProjectScopeReleases: claim,
+    markProjectScopeReleased: async (lease) => {
+      writes.push(["released", lease])
+      return true
+    },
+    markProjectScopeRetryable: async (lease, delayMs, errorCode) => {
+      writes.push(["retryable", lease, delayMs, errorCode])
+      return true
+    },
+    markProjectScopeBlocked: async (lease, errorCode) => {
+      writes.push(["blocked", lease, errorCode])
+      return true
+    },
+  }
+}
+
+test("R285 stopping during a pending claim never dispatches the returned batch", async () => {
+  const { ProjectScopeReleaseOutboxDispatcher } = await import("../dist/application/project-scope-release-outbox-dispatcher.js")
+  let releaseClaim
+  let claimEntered
+  const entered = new Promise((resolve) => {
+    claimEntered = resolve
+  })
+  const repository = r285WorkerRepository(async () => {
+    claimEntered()
+    return new Promise((resolve) => {
+      releaseClaim = resolve
+    })
+  })
+  const calls = []
+  const dispatcher = new ProjectScopeReleaseOutboxDispatcher(
+    repository,
+    { release: async (command) => (calls.push(command.commandId), { outcome: "released" }) },
+    { workerId: "worker-r285", pollIntervalMs: 60_000 },
+  )
+  const cycle = dispatcher.runOnce()
+  await entered
+  const stopped = dispatcher.stop()
+  releaseClaim([r285WorkerCommand("release_" + "1".repeat(48)), r285WorkerCommand("release_" + "2".repeat(48))])
+  await stopped
+  await cycle
+  assert.deepEqual(calls, [])
+  assert.deepEqual(repository.writes, [])
+})
+
+test("R285 one claimed batch shares each lease's original monotonic deadline", async () => {
+  const { ProjectScopeReleaseOutboxDispatcher } = await import("../dist/application/project-scope-release-outbox-dispatcher.js")
+  let now = 100
+  const repository = r285WorkerRepository(async () => [
+    r285WorkerCommand("release_" + "3".repeat(48), 2000, now),
+    r285WorkerCommand("release_" + "4".repeat(48), 1000, now),
+  ])
+  const calls = []
+  const dispatcher = new ProjectScopeReleaseOutboxDispatcher(
+    repository,
+    {
+      release: async (command) => {
+        calls.push(command.commandId)
+        if (calls.length === 1) now += 950
+        return { outcome: "released" }
+      },
+    },
+    { workerId: "worker-r285", settlementReserveMs: 100, monotonicNow: () => now },
+  )
+  await dispatcher.runOnce()
+  assert.deepEqual(calls, ["release_" + "3".repeat(48)])
+  assert.equal(repository.writes.length, 1)
+  assert.equal(repository.writes[0][0], "released")
+})
+
+test("R285 timeout or cancellation after owner dispatch performs no settlement write", async () => {
+  const { ProjectScopeReleaseOutboxDispatcher } = await import("../dist/application/project-scope-release-outbox-dispatcher.js")
+  let now = 500
+  const repository = r285WorkerRepository(async () => [r285WorkerCommand("release_" + "5".repeat(48), 1000, now)])
+  const dispatcher = new ProjectScopeReleaseOutboxDispatcher(
+    repository,
+    {
+      release: async () => {
+        now += 950
+        throw new Error("owner result arrived after the usable lease budget")
+      },
+    },
+    { workerId: "worker-r285", settlementReserveMs: 100, monotonicNow: () => now },
+  )
+  await dispatcher.runOnce()
+  assert.deepEqual(repository.writes, [])
+})
+
+integrationTest("R285 Project settlement retires its exact PG lease while a Project lock crosses expiry", { timeout: 10000 }, async (t) => {
+  const { PostgresProjectScopeReleaseOutboxRepository } = await import("../dist/infrastructure/postgres/project-scope-release-outbox-repository.js")
+  const f = await r241Fixture(t)
+  const project = await f.project("R285 bounded settlement lock")
+  const deletion = await r279DeleteProject(f, project.id, `r285-lock-${randomUUID()}`)
+  r279AssertProjectDeletionResource(deletion, project.id, 202)
+  const repository = new PostgresProjectScopeReleaseOutboxRepository({ pool: f.ownerPool })
+  const claimed = await repository.claimProjectScopeReleases(
+    {
+      workerId: "worker-r285-lock",
+      limit: 1,
+      leaseDurationMs: 1000,
+      includeOneCredentialRecovery: false,
+    },
+    AbortSignal.timeout(1000),
+    1000,
+  )
+  assert.equal(claimed.length, 1)
+  const command = claimed[0]
+  const observer = r241ObservePool(f.ownerPool)
+  const blocker = await f.pool.connect()
+  let transaction = false
+  let settlement
+  try {
+    await blocker.query("BEGIN")
+    transaction = true
+    await blocker.query("SELECT project_id FROM bff_project_deletion WHERE tenant_id=$1 AND project_id=$2 FOR UPDATE", [f.tenant, project.id])
+    settlement = repository.markProjectScopeReleased(
+      {
+        commandId: command.commandId,
+        tenantId: command.tenantId,
+        projectId: command.projectId,
+        leaseOwner: command.leaseOwner,
+        fence: command.fence,
+      },
+      AbortSignal.timeout(1000),
+      1000,
+    )
+    const [blockedPid] = await r241Blocked(f, blocker.processID)
+    const observedLease = observer.leases.find((lease) => lease.pid === blockedPid)
+    assert.ok(observedLease, "the blocked backend must be the exact observed settlement checkout")
+    const result = await Promise.race([
+      settlement,
+      new Promise((resolve) => {
+        const timer = setTimeout(() => resolve("r285-pg-settlement-timeout"), 1400)
+        timer.unref?.()
+      }),
+    ])
+    assert.equal(result, false, "settlement must retire its own blocked query when the exact lease expires")
+    await r241Released(f, observer, blockedPid, true)
+  } finally {
+    if (transaction) await blocker.query("ROLLBACK").catch(() => undefined)
+    blocker.release()
+    await settlement?.catch(() => undefined)
+    observer.restore()
+  }
+  const row = await f.pool.query(
+    "SELECT state,released_at,lease_owner,lease_expires_at FROM bff_project_scope_release_outbox WHERE tenant_id=$1 AND command_id=$2",
+    [f.tenant, command.commandId],
+  )
+  assert.equal(row.rows.length, 1)
+  assert.notEqual(row.rows[0].state, "released")
+  assert.equal(row.rows[0].released_at, null)
+})
+
+test("R285 absolute ten second attempt budget fences late result and throw before timer delivery", async (t) => {
+  const { ProjectScopeReleaseOutboxDispatcher } = await import("../dist/application/project-scope-release-outbox-dispatcher.js")
+  for (const outcome of ["result", "throw"]) {
+    await t.test(outcome, async () => {
+      let now = 1000
+      const repository = r285WorkerRepository(async () => [r285WorkerCommand(`release_${outcome === "result" ? "6" : "7"}`.padEnd(56, "0"), 30000, now)])
+      const dispatcher = new ProjectScopeReleaseOutboxDispatcher(
+        repository,
+        {
+          release: async () => {
+            now += 11000
+            if (outcome === "throw") throw new Error("owner completed after the absolute attempt budget")
+            return { outcome: "released" }
+          },
+        },
+        { workerId: "worker-r285", settlementReserveMs: 500, monotonicNow: () => now },
+      )
+      await dispatcher.runOnce()
+      assert.deepEqual(repository.writes, [], `${outcome} after ten seconds must not settle before a delayed timer callback runs`)
+    })
+  }
+})
+
+integrationTest("R285 releasing a Project lock after lease expiry cannot commit a late ACK", { timeout: 10000 }, async (t) => {
+  const { PostgresProjectScopeReleaseOutboxRepository } = await import("../dist/infrastructure/postgres/project-scope-release-outbox-repository.js")
+  const f = await r241Fixture(t)
+  const project = await f.project("R285 expired settlement")
+  r279AssertProjectDeletionResource(await r279DeleteProject(f, project.id, `r285-expired-${randomUUID()}`), project.id, 202)
+  const repository = new PostgresProjectScopeReleaseOutboxRepository({ pool: f.ownerPool })
+  const [command] = await repository.claimProjectScopeReleases(
+    {
+      workerId: "worker-r285-expired",
+      limit: 1,
+      leaseDurationMs: 1000,
+      includeOneCredentialRecovery: false,
+    },
+    AbortSignal.timeout(1000),
+    1000,
+  )
+  assert.ok(command)
+  const blocker = await f.pool.connect()
+  const observer = r241ObservePool(f.ownerPool)
+  let transaction = false
+  let settlement
+  try {
+    await blocker.query("BEGIN")
+    transaction = true
+    await blocker.query("SELECT project_id FROM bff_project_deletion WHERE tenant_id=$1 AND project_id=$2 FOR UPDATE", [f.tenant, project.id])
+    settlement = repository.markProjectScopeReleased(
+      {
+        commandId: command.commandId,
+        tenantId: command.tenantId,
+        projectId: command.projectId,
+        leaseOwner: command.leaseOwner,
+        fence: command.fence,
+      },
+      AbortSignal.timeout(3000),
+      3000,
+    )
+    const [blockedPid] = await r241Blocked(f, blocker.processID)
+    const settlementLease = observer.leases.find((lease) => lease.pid === blockedPid)
+    assert.ok(settlementLease, "the same observed transaction must wait on the Project aggregate lock")
+    await r241Until(() => settlementLease.events.some((event) => event.sql === "BEGIN" && event.result !== null))
+    const timing = await f.pool.query(
+      `SELECT a.xact_start,o.lease_expires_at,clock_timestamp() AS observed_at
+         FROM pg_stat_activity a,bff_project_scope_release_outbox o
+        WHERE a.pid=$1 AND o.tenant_id=$2 AND o.command_id=$3`,
+      [blockedPid, f.tenant, command.commandId],
+    )
+    assert.equal(timing.rows.length, 1)
+    assert.ok(new Date(timing.rows[0].xact_start).getTime() < new Date(timing.rows[0].lease_expires_at).getTime())
+    await r241Until(
+      async () =>
+        (
+          await f.pool.query(
+            "SELECT clock_timestamp()>lease_expires_at AS expired FROM bff_project_scope_release_outbox WHERE tenant_id=$1 AND command_id=$2",
+            [f.tenant, command.commandId],
+          )
+        ).rows[0]?.expired === true,
+      1800,
+    )
+    await blocker.query("ROLLBACK")
+    transaction = false
+    assert.equal(await settlement, false)
+  } finally {
+    if (transaction) await blocker.query("ROLLBACK").catch(() => undefined)
+    blocker.release()
+    await settlement?.catch(() => undefined)
+    observer.restore()
+  }
+  const row = await f.pool.query("SELECT state,released_at FROM bff_project_scope_release_outbox WHERE tenant_id=$1 AND command_id=$2", [
+    f.tenant,
+    command.commandId,
+  ])
+  assert.notEqual(row.rows[0]?.state, "released")
+  assert.equal(row.rows[0]?.released_at, null)
+})
+
+integrationTest("R285 pool saturation cancellation does not leave a late settlement checkout", { timeout: 10000 }, async (t) => {
+  const { PostgresProjectScopeReleaseOutboxRepository } = await import("../dist/infrastructure/postgres/project-scope-release-outbox-repository.js")
+  const f = await r241Fixture(t)
+  const project = await f.project("R285 saturated settlement")
+  r279AssertProjectDeletionResource(await r279DeleteProject(f, project.id, `r285-saturated-${randomUUID()}`), project.id, 202)
+  const repository = new PostgresProjectScopeReleaseOutboxRepository({ pool: f.ownerPool })
+  const [command] = await repository.claimProjectScopeReleases(
+    {
+      workerId: "worker-r285-saturated",
+      limit: 1,
+      leaseDurationMs: 1000,
+      includeOneCredentialRecovery: false,
+    },
+    AbortSignal.timeout(1000),
+    1000,
+  )
+  assert.ok(command)
+  const held = []
+  const observer = r241ObservePool(f.ownerPool)
+  let settlement
+  try {
+    for (let index = 0; index < f.ownerPool.options.max; index += 1) held.push(await f.ownerPool.connect())
+    const leasesBeforeSettlement = observer.leases.length
+    settlement = repository.markProjectScopeReleased(
+      {
+        commandId: command.commandId,
+        tenantId: command.tenantId,
+        projectId: command.projectId,
+        leaseOwner: command.leaseOwner,
+        fence: command.fence,
+      },
+      AbortSignal.timeout(500),
+      500,
+    )
+    await r241Until(() => f.ownerPool.waitingCount === 1)
+    const result = await Promise.race([
+      settlement,
+      new Promise((resolve) => {
+        const timer = setTimeout(() => resolve("r285-pool-acquire-timeout"), 800)
+        timer.unref?.()
+      }),
+    ])
+    assert.equal(result, false)
+    const firstHeld = held.shift()
+    assert.ok(firstHeld)
+    firstHeld.release()
+    await r241Until(() => observer.leases.length === leasesBeforeSettlement + 1)
+    const lateLease = observer.leases.at(-1)
+    assert.ok(lateLease)
+    await r241Until(() => lateLease.releases.length === 1)
+    assert.deepEqual(lateLease.events, [], "a late checkout after cancellation must execute no SQL")
+    assert.deepEqual(
+      lateLease.releases.map((release) => release.destroy),
+      [false],
+    )
+    assert.equal(f.ownerPool.waitingCount, 0)
+  } finally {
+    for (const client of held) client.release()
+    await settlement?.catch(() => undefined)
+    observer.restore()
+  }
+  await r241PoolUsable(f.ownerPool)
+})
+
+integrationTest("R287 a delayed event loop after the real COMMIT ACK reports unknown and retires the exact lease", { timeout: 10000 }, async (t) => {
+  const { PostgresProjectScopeReleaseOutboxRepository } = await import("../dist/infrastructure/postgres/project-scope-release-outbox-repository.js")
+  const f = await r241Fixture(t)
+  const project = await f.project("R287 committed ACK beyond budget")
+  r279AssertProjectDeletionResource(await r279DeleteProject(f, project.id, `r287-commit-${randomUUID()}`), project.id, 202)
+  const repository = new PostgresProjectScopeReleaseOutboxRepository({ pool: f.ownerPool })
+  const [command] = await repository.claimProjectScopeReleases(
+    {
+      workerId: "worker-r287-commit",
+      limit: 1,
+      leaseDurationMs: 3000,
+      includeOneCredentialRecovery: false,
+    },
+    AbortSignal.timeout(1000),
+    1000,
+  )
+  assert.ok(command)
+
+  let stalledCommit = false
+  const observer = r241ObservePool(f.ownerPool, async (_lease, event) => {
+    if (event.sql !== "COMMIT" || stalledCommit) return
+    stalledCommit = true
+    const stalledUntil = performance.now() + 650
+    while (performance.now() < stalledUntil) {
+      // The real PostgreSQL ACK is already recorded; only timer delivery is delayed.
+    }
+  })
+  let settlement
+  try {
+    settlement = repository.markProjectScopeReleased(
+      {
+        commandId: command.commandId,
+        tenantId: command.tenantId,
+        projectId: command.projectId,
+        leaseOwner: command.leaseOwner,
+        fence: command.fence,
+      },
+      AbortSignal.timeout(500),
+      500,
+    )
+    await assert.rejects(settlement, (error) => {
+      assert.equal(error?.message, "PROJECT_SCOPE_RELEASE_COMMIT_UNKNOWN")
+      return true
+    })
+    assert.equal(stalledCommit, true, "the seam must delay only after the real COMMIT result")
+    const lease = observer.leases.find((candidate) => candidate.events.some((event) => event.sql === "COMMIT"))
+    assert.ok(lease)
+    await r241Released(f, observer, lease.pid, true)
+    const commitIndex = lease.events.findIndex((event) => event.sql === "COMMIT")
+    assert.ok(commitIndex >= 0)
+    assert.deepEqual(lease.events.slice(commitIndex + 1), [], "an unknown committed result must not guess ROLLBACK or issue another write")
+  } finally {
+    await settlement?.catch(() => undefined)
+    observer.restore()
+  }
+
+  const committed = await f.pool.query("SELECT state,released_at,updated_at FROM bff_project_scope_release_outbox WHERE tenant_id=$1 AND command_id=$2", [
+    f.tenant,
+    command.commandId,
+  ])
+  assert.equal(committed.rows.length, 1)
+  assert.equal(committed.rows[0].state, "released", "unknown transport outcome does not mean PostgreSQL rolled the durable commit back")
+  assert.ok(committed.rows[0].released_at)
+  const beforeReplay = structuredClone(committed.rows[0])
+  assert.equal(
+    await repository.markProjectScopeReleased(
+      {
+        commandId: command.commandId,
+        tenantId: command.tenantId,
+        projectId: command.projectId,
+        leaseOwner: command.leaseOwner,
+        fence: command.fence,
+      },
+      AbortSignal.timeout(1000),
+      1000,
+    ),
+    false,
+  )
+  const afterReplay = await f.pool.query("SELECT state,released_at,updated_at FROM bff_project_scope_release_outbox WHERE tenant_id=$1 AND command_id=$2", [
+    f.tenant,
+    command.commandId,
+  ])
+  assert.deepEqual(afterReplay.rows, [beforeReplay], "the original consumed lease cannot append another released write")
+})
+
+integrationTest("R288 PostgreSQL lock_timeout is a normal unconfirmed settlement and preserves the lease for retry", { timeout: 12000 }, async (t) => {
+  const { PostgresProjectScopeReleaseOutboxRepository } = await import("../dist/infrastructure/postgres/project-scope-release-outbox-repository.js")
+  const f = await r241Fixture(t)
+  const project = await f.project("R288 settlement lock timeout")
+  r279AssertProjectDeletionResource(await r279DeleteProject(f, project.id, `r288-lock-${randomUUID()}`), project.id, 202)
+  const repository = new PostgresProjectScopeReleaseOutboxRepository({ pool: f.ownerPool })
+  const [command] = await repository.claimProjectScopeReleases(
+    {
+      workerId: "worker-r288-lock",
+      limit: 1,
+      leaseDurationMs: 8000,
+      includeOneCredentialRecovery: false,
+    },
+    AbortSignal.timeout(1000),
+    1000,
+  )
+  assert.ok(command)
+  const authoritative = async () =>
+    (
+      await f.pool.query(
+        `SELECT state,attempt_count,fence,lease_owner,lease_expires_at,released_at,last_error_code
+           FROM bff_project_scope_release_outbox WHERE tenant_id=$1 AND command_id=$2`,
+        [f.tenant, command.commandId],
+      )
+    ).rows
+  const before = await authoritative()
+  assert.equal(before.length, 1)
+  assert.equal(before[0].state, "leased")
+  assert.equal(Number(before[0].attempt_count), 1)
+  assert.equal(Number(before[0].fence), command.fence)
+
+  const blocker = await f.pool.connect()
+  const observer = r241ObservePool(f.ownerPool)
+  let blockerTransaction = false
+  let settlement
+  let outcome
+  try {
+    await blocker.query("BEGIN")
+    blockerTransaction = true
+    await blocker.query("SELECT project_id FROM bff_project_deletion WHERE tenant_id=$1 AND project_id=$2 FOR UPDATE", [f.tenant, project.id])
+    settlement = repository.markProjectScopeReleased(
+      {
+        commandId: command.commandId,
+        tenantId: command.tenantId,
+        projectId: command.projectId,
+        leaseOwner: command.leaseOwner,
+        fence: command.fence,
+      },
+      AbortSignal.timeout(3000),
+      3000,
+    )
+    outcome = await settlement.then(
+      (value) => ({ value }),
+      (error) => ({ error }),
+    )
+    const lease = observer.leases.find((candidate) => candidate.events.some((event) => event.errorCode === "55P03"))
+    assert.ok(lease, "the real PostgreSQL lock_timeout must expose server code 55P03")
+    assert.equal(lease.events.filter((event) => event.errorCode === "55P03").length, 1)
+    assert.ok(lease.events.some((event) => event.sql === "ROLLBACK" && event.result !== null))
+    assert.equal(
+      lease.events.some((event) => event.sql === "COMMIT"),
+      false,
+    )
+    await r241Released(f, observer, lease.pid, false)
+  } finally {
+    if (blockerTransaction) await blocker.query("ROLLBACK").catch(() => undefined)
+    blocker.release()
+    await settlement?.catch(() => undefined)
+    observer.restore()
+  }
+
+  assert.equal(outcome?.error, undefined, `lock_timeout escaped instead of returning false: ${outcome?.error?.message ?? "unknown"}`)
+  assert.equal(outcome?.value, false)
+  assert.deepEqual(await authoritative(), before, "a lock_timeout must not consume the lease or confirm any release")
+  await r241PoolUsable(f.ownerPool)
+  assert.equal(
+    await repository.markProjectScopeReleased(
+      {
+        commandId: command.commandId,
+        tenantId: command.tenantId,
+        projectId: command.projectId,
+        leaseOwner: command.leaseOwner,
+        fence: command.fence,
+      },
+      AbortSignal.timeout(3000),
+      3000,
+    ),
+    true,
+    "the unchanged legal lease must settle after the independent blocker is gone",
+  )
+  const released = await authoritative()
+  assert.equal(released[0].state, "released")
+  assert.equal(Number(released[0].attempt_count), 1)
+  assert.equal(Number(released[0].fence), command.fence)
+  assert.ok(released[0].released_at)
+})
+
+integrationTest("R290 credential recovery occupies one total batch slot without starving behind ordinary due work", { timeout: 12000 }, async (t) => {
+  const { PostgresProjectScopeReleaseOutboxRepository } = await import("../dist/infrastructure/postgres/project-scope-release-outbox-repository.js")
+  const f = await r241Fixture(t)
+  const repository = new PostgresProjectScopeReleaseOutboxRepository({ pool: f.ownerPool })
+  const seed = async (label, state, errorCode, ageSeconds) => {
+    const project = await f.project(`R290 ${label}`)
+    r279AssertProjectDeletionResource(await r279DeleteProject(f, project.id, `r290-${label}-${randomUUID()}`), project.id, 202)
+    const command = (
+      await f.pool.query("SELECT command_id FROM bff_project_scope_release_outbox WHERE tenant_id=$1 AND project_id=$2 AND scope_kind='project'", [
+        f.tenant,
+        project.id,
+      ])
+    ).rows[0]
+    assert.ok(command)
+    await f.pool.query(
+      `UPDATE bff_project_scope_release_outbox
+          SET state=$3,last_error_code=$4,available_at=clock_timestamp()-INTERVAL '1 second',
+              updated_at=clock_timestamp()-($5::double precision*INTERVAL '1 second'),lease_owner=NULL,lease_expires_at=NULL,released_at=NULL
+        WHERE tenant_id=$1 AND command_id=$2`,
+      [f.tenant, command.command_id, state, errorCode, ageSeconds],
+    )
+    return command.command_id
+  }
+
+  const oneOrdinary = await seed("limit-one-ordinary", "pending", null, 10)
+  const oneRecovery = await seed("limit-one-recovery", "blocked", "storage_unauthenticated", 700)
+  const oneRecoveryLater = await seed("limit-one-recovery-later", "blocked", "storage_unauthenticated", 600)
+  const one = await repository.claimProjectScopeReleases(
+    { workerId: "worker-r290-one", limit: 1, leaseDurationMs: 60_000, includeOneCredentialRecovery: true },
+    AbortSignal.timeout(2000),
+    2000,
+  )
+  assert.deepEqual(
+    one.map((command) => command.commandId),
+    [oneRecovery],
+    "one cooled credential recovery must occupy the sole batch slot even when ordinary work is due",
+  )
+  assert.equal(new Set(one.map((command) => command.commandId)).size, one.length)
+  const phaseOne = await f.pool.query(
+    "SELECT command_id,state,last_error_code FROM bff_project_scope_release_outbox WHERE tenant_id=$1 AND command_id=ANY($2::text[]) ORDER BY command_id",
+    [f.tenant, [oneOrdinary, oneRecovery, oneRecoveryLater]],
+  )
+  assert.equal(phaseOne.rows.find((row) => row.command_id === oneOrdinary)?.state, "pending")
+  assert.equal(phaseOne.rows.find((row) => row.command_id === oneRecovery)?.state, "leased")
+  assert.equal(phaseOne.rows.find((row) => row.command_id === oneRecoveryLater)?.state, "blocked")
+
+  const manyOrdinaries = [oneOrdinary]
+  for (let index = 0; index < 9; index += 1) manyOrdinaries.push(await seed(`many-ordinary-${index}`, "pending", null, 10))
+  const manyRecovery = await seed("many-recovery", "blocked", "storage_unauthenticated", 900)
+  const manyRecoveryLater = await seed("many-recovery-later", "blocked", "storage_unauthenticated", 800)
+  const permissionDenied = await seed("permission-denied", "blocked", "storage_terminal_3", 900)
+  const many = await repository.claimProjectScopeReleases(
+    { workerId: "worker-r290-many", limit: 10, leaseDurationMs: 60_000, includeOneCredentialRecovery: true },
+    AbortSignal.timeout(2000),
+    2000,
+  )
+  assert.equal(many.length, 10)
+  assert.equal(many.filter((command) => manyOrdinaries.includes(command.commandId)).length, 9)
+  assert.equal(many.filter((command) => command.commandId === manyRecovery).length, 1)
+  const ordinaryRows = await f.pool.query(
+    "SELECT command_id,state FROM bff_project_scope_release_outbox WHERE tenant_id=$1 AND command_id=ANY($2::text[]) ORDER BY command_id",
+    [f.tenant, manyOrdinaries],
+  )
+  assert.equal(ordinaryRows.rows.filter((row) => row.state === "leased").length, 9)
+  assert.equal(ordinaryRows.rows.filter((row) => row.state === "pending").length, 1)
+  const remainingOrdinary = ordinaryRows.rows.find((row) => row.state === "pending")?.command_id
+  assert.ok(remainingOrdinary)
+  const manyRows = await f.pool.query(
+    "SELECT command_id,state,last_error_code FROM bff_project_scope_release_outbox WHERE tenant_id=$1 AND command_id=ANY($2::text[]) ORDER BY command_id",
+    [f.tenant, [manyRecovery, manyRecoveryLater, permissionDenied]],
+  )
+  assert.equal(manyRows.rows.find((row) => row.command_id === manyRecovery)?.state, "leased")
+  assert.equal(manyRows.rows.find((row) => row.command_id === manyRecoveryLater)?.state, "blocked")
+  assert.equal(manyRows.rows.find((row) => row.command_id === permissionDenied)?.state, "blocked")
+  assert.equal(manyRows.rows.find((row) => row.command_id === permissionDenied)?.last_error_code, "storage_terminal_3")
+
+  const disabledOrdinary = await seed("recovery-disabled-ordinary", "pending", null, 10)
+  const disabledRecovery = await seed("recovery-disabled-blocked", "blocked", "storage_unauthenticated", 900)
+  const disabled = await repository.claimProjectScopeReleases(
+    { workerId: "worker-r290-disabled", limit: 10, leaseDurationMs: 5000, includeOneCredentialRecovery: false },
+    AbortSignal.timeout(2000),
+    2000,
+  )
+  assert.deepEqual(new Set(disabled.map((command) => command.commandId)), new Set([remainingOrdinary, disabledOrdinary]))
+  assert.equal(
+    (await f.pool.query("SELECT state FROM bff_project_scope_release_outbox WHERE tenant_id=$1 AND command_id=$2", [f.tenant, disabledRecovery])).rows[0]
+      ?.state,
+    "blocked",
+  )
+})
+
+integrationTest(
+  "R290 dispatcher anchors a real delayed claim to the database lease window without double charging checkout wait",
+  { timeout: 12000 },
+  async (t) => {
+    const { ProjectScopeReleaseOutboxDispatcher } = await import("../dist/application/project-scope-release-outbox-dispatcher.js")
+    const { PostgresProjectScopeReleaseOutboxRepository } = await import("../dist/infrastructure/postgres/project-scope-release-outbox-repository.js")
+    const f = await r241Fixture(t)
+    const project = await f.project("R290 delayed claim lease anchor")
+    r279AssertProjectDeletionResource(await r279DeleteProject(f, project.id, `r290-anchor-${randomUUID()}`), project.id, 202)
+    const repository = new PostgresProjectScopeReleaseOutboxRepository({ pool: f.ownerPool })
+    const held = []
+    const ownerCalls = []
+    let cycle
+    try {
+      for (let index = 0; index < f.ownerPool.options.max; index += 1) held.push(await f.ownerPool.connect())
+      const dispatcher = new ProjectScopeReleaseOutboxDispatcher(
+        repository,
+        {
+          release: async (command) => {
+            const timing = await f.pool.query(
+              `SELECT state,lease_expires_at,clock_timestamp() AS observed_at,
+                    FLOOR(EXTRACT(EPOCH FROM (lease_expires_at-clock_timestamp()))*1000)::integer AS remaining_ms
+               FROM bff_project_scope_release_outbox WHERE tenant_id=$1 AND command_id=$2`,
+              [f.tenant, command.commandId],
+            )
+            assert.equal(timing.rows.length, 1)
+            assert.equal(timing.rows[0].state, "leased")
+            assert.ok(timing.rows[0].lease_expires_at > timing.rows[0].observed_at)
+            assert.ok(timing.rows[0].remaining_ms > 100, `database lease had no usable execution window: ${timing.rows[0].remaining_ms}`)
+            ownerCalls.push(command.commandId)
+            return { outcome: "released" }
+          },
+        },
+        { workerId: "worker-r290-anchor", batchSize: 1, leaseDurationMs: 1000, settlementReserveMs: 100, pollIntervalMs: 60_000 },
+      )
+      cycle = dispatcher.runOnce()
+      await r241Until(() => f.ownerPool.waitingCount === 1, 1500)
+      const waitStarted = performance.now()
+      const harnessDeadline = waitStarted + 1200
+      while (performance.now() - waitStarted < 600) {
+        assert.ok(performance.now() < harnessDeadline, "test harness did not observe the real checkout delay")
+        await new Promise((resolve) => setImmediate(resolve))
+      }
+      const released = held.shift()
+      assert.ok(released)
+      released.release()
+      const result = await Promise.race([
+        cycle,
+        new Promise((_, reject) => {
+          const timer = setTimeout(() => reject(new Error("R290 delayed real claim did not finish")), 5000)
+          timer.unref?.()
+        }),
+      ])
+      assert.equal(result, 1)
+      assert.equal(ownerCalls.length, 1)
+      const authoritative = await f.pool.query(
+        "SELECT state,attempt_count,fence,released_at FROM bff_project_scope_release_outbox WHERE tenant_id=$1 AND project_id=$2",
+        [f.tenant, project.id],
+      )
+      assert.equal(authoritative.rows.length, 1)
+      assert.equal(authoritative.rows[0].state, "released")
+      assert.equal(Number(authoritative.rows[0].attempt_count), 1)
+      assert.equal(Number(authoritative.rows[0].fence), 1)
+      assert.ok(authoritative.rows[0].released_at)
+    } finally {
+      for (const client of held) client.release()
+      await cycle?.catch(() => undefined)
+    }
+    await r241PoolUsable(f.ownerPool)
+  },
+)

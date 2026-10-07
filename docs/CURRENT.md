@@ -1,3 +1,12 @@
+## R291 Root worker 候选验收（2026-10-07；未发行/未激活）
+
+当前8生产文件+2测试实现具名Project scope release worker。Root先见两个真实PG失败：冷却恢复被普通due挤住、真实600ms pool等待后owner调用0；三source窄修后Node22全部15PG通过/0失败/0跳过，满limit10总10/恢复1/普通9、include=false保剩余普通与terminal状态均实际到达。原迟到COMMIT/55P03/取消/晚lease/停止/十秒预算也重跑通过。SQL claim前required单调观察＋实际DB剩余不双扣，queue/commit仍耗预算。凭据原短timer屏障只在测试改为单调重检，产品5ms/零fetch/assert不弱化；当前完整9与重复15次通过，旧默认失败历史保留。
+
+Root22656当前 build/check/format/exact source format 各exit0；默认867PASS/0FAIL/2原资源SKIP，合同检查与类型/lint/build通过。十hash及所有tracked运行起终exact，独审a4cc4484无新增确定阻断；required字段接缝inverse完整c2c9原文exact，HEAD190113bytes保护。Root只复用自有r285隔离库，26表最终0行/0其它客户端；正常服务/数据/资金未重启重置或写入。
+
+这是源码候选资格，不是完整产品PASS。正常BFF仍39db/public8.5，当前候选public8.6/105尚未发行/正常激活。真实Storage/IAM资格、正常schema组合、Web消费及17删除用户路径仍OPEN，完整Wave0–7不缩小。下面原阶段文字按历史时点读。
+
+---
 ## R284 Project scope release worker 文档门（2026-10-07；未实施）
 
 BFF本地Project删除切片已由Root提交为`6f20f81a8d15992b35bc07e76ac8808d7072bee8`：19路径包含本地runtime、canonical两表与`8.6.0 / 105`机器候选，Root隔离HTTP/PostgreSQL为16/0。正常BFF仍运行`39db` / public`8.5.0`，未激活本候选；Storage worker、正常schema组合、Web 17条用户链、完整DELETE并发/COMMIT-unknown及真实Storage ACK-unknown恢复均未验，T-C05保持OPEN。

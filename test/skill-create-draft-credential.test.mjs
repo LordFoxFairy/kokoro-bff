@@ -259,6 +259,8 @@ test("CatalogTokenSource held credential crossing the absolute deadline starts n
     fetches += 1
     throw new Error("late IAM fetch must not start")
   }
+  let pending
+  let credentialReleased = false
   try {
     const credentials = {
       read: async () => {
@@ -268,15 +270,24 @@ test("CatalogTokenSource held credential crossing the absolute deadline starts n
     }
     const signal = new AbortController().signal
     const deadlineAt = performance.now() + 5
-    const pending = new CatalogTokenSource("http://iam", credentials, 1000).get("tenant", signal, deadlineAt)
+    pending = new CatalogTokenSource("http://iam", credentials, 1000).get("tenant", signal, deadlineAt)
     await credentialStarted
-    await new Promise((resolve) => setTimeout(resolve, Math.max(1, deadlineAt - performance.now() + 1)))
+    const harnessDeadline = performance.now() + 1000
+    for (;;) {
+      const now = performance.now()
+      assert.ok(now < harnessDeadline, "test harness did not observe the fixed product deadline")
+      if (now >= deadlineAt) break
+      await new Promise((resolve) => setImmediate(resolve))
+    }
     assert.ok(performance.now() >= deadlineAt)
     releaseCredential({ ...item(1), cacheKey: "expired-after-read" })
+    credentialReleased = true
     await assert.rejects(pending)
     assert.equal(signal.aborted, false)
     assert.equal(fetches, 0)
   } finally {
+    if (!credentialReleased) releaseCredential({ ...item(1), cacheKey: "fixture-cleanup-after-read" })
+    await pending?.catch(() => undefined)
     globalThis.fetch = original
   }
 })

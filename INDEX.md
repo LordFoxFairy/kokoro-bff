@@ -1,3 +1,12 @@
+## R291 Project scope release worker 候选入口
+
+- `src/application/ports/project-scope-release-outbox.ts`：具名 claim/lease/settle 与 required 单调观察。
+- `src/application/project-scope-release-outbox-dispatcher.ts`：共享原始lease deadline、单cycle、有限执行预算与停止/排空。
+- `src/infrastructure/postgres/project-scope-release-outbox-repository.ts`：BFF自有outbox领取、有限恢复slot与Project聚合lease/fence CAS。
+- `src/infrastructure/clients/storage/scope-release-client.ts`：固定generated Storage两RPC/正规错误tuple；无owner模型复制。
+- `test/business-store.integration.mjs`：当前真实PG资格与受控wire，真实Storage/正常浏览器资格见CURRENT未验项。
+
+---
 ## R268 个人生命周期运行候选入口（未发行）
 
 - `src/http/{create-personal-skill-version-input,withdraw-personal-skill-input}.ts`：两个命令的严格原始输入与稳定 command ID。

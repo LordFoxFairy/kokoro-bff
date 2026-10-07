@@ -1,3 +1,10 @@
+## R291 Project release 数据实现候选（2026-10-07）
+
+canonical两表和约束未变，新增实现只操作 BFF 自有 Project deletion/outbox。claim 在短事务选一冷却恢复、普通补剩余总配额；SQL实际 clock_timestamp 建 lease，原 identity/fence/attempt 保持。settle 先串行锁 Project 聚合，再使用 clock_timestamp 未过期条件 CAS；lease 丢失/晚 ACK/unknown COMMIT 不猜写结果。内部单调观察不入数据库或公开契约，不读取 Storage/IAM SQL。
+
+Root 自有 r285 资格库15真PG通过且结束26表0行/0其它客户端；未运行正常DDL或清理共享数据库。实际Storage事实、正常schema组合、全部用户删除生命周期仍OPEN，下面R284/R282为历史时点。
+
+---
 ## R284 Project scope release worker 数据边界（目标，尚未实施）
 
 当前 commit `6f20f81a8d15992b35bc07e76ac8808d7072bee8` 的 canonical schema 已包含 `bff_project_deletion` 与 `bff_project_scope_release_outbox`，本地删除事务、N+1冻结、约束、rollback、receipt replay与status完整性已通过Root隔离PostgreSQL 16/0。R284不新增表、列、索引、兼容DDL或第二receipt；正常schema组合仍未激活，真实Storage worker/ACK unknown尚未验证。
