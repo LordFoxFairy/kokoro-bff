@@ -1,3 +1,9 @@
+## R269 public 8.5 lifecycle release handoff
+
+Public `8.5.0` with 103 operations is fixed at BFF source commit `39db896b9755a8b710d27ae1a220cdbb182b72b7`. The canonical OpenAPI raw SHA-256 is `01009fb40ba2fbd2bb4829543e4b038d151ae56bcd1e11666f11c6a51344f296`. Web consumers may now pin this exact commit and digest and generate through the existing consumer toolchain; no second copy, fallback, or editable downstream contract is introduced.
+
+The two lifecycle commands were qualified through the owned IAM → BFF → Platform composition assembled at `6831e0bb330127d9172bf99e51d020b7257f794e`: CreateVersion first/replay/conflict, exact installed revision retention, no inherited package, Withdraw first/replay/terminal precondition, withdrawn installation projection, durable receipt/event checks, revoked-session zero owner requests, and resource cleanup all passed in 73.036 seconds. This evidence fixes the producer handoff; it does not mean the normal BFF process has been reloaded, Web has consumed the artifact, or browser lifecycle CRUD has passed.
+
 ## R268 lifecycle runtime candidate (not released)
 
 The public 8.5.0 / 103-operation candidate now has the two named runtime routes. Root verified the frozen source and existing engineering gates; real IAM/Platform persistence composition and user E2E qualification remain pending. Web must not consume this candidate yet. Normal BFF remains 930028b / public 8.4.0. No machine artifact, generated client, Schema or existing operation changes belong to this runtime slice. The earlier machine-only entry below is historical.

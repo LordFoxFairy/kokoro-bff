@@ -1,3 +1,11 @@
+## R269 个人 Skill 生命周期 producer 正式交接（2026-10-07）
+
+BFF `39db896b9755a8b710d27ae1a220cdbb182b72b7` 已固定 public `8.5.0` / 103 operations；canonical OpenAPI raw SHA-256 为 `01009fb40ba2fbd2bb4829543e4b038d151ae56bcd1e11666f11c6a51344f296`。本仓正式源码现具备 `createPersonalSkillVersion` 与 `withdrawPersonalSkill` 两个公开命令，可由 Web 后继固定该 commit/digest 后通过既有 generator 消费；Platform Connect pin 与其历史证明链不变，无兼容双轨、BFF SQL、第二 receipt 或 owner mirror。
+
+Root 资格装配 commit `6831e0bb330127d9172bf99e51d020b7257f794e` 的真实 IAM → BFF → Platform owner 链在 73.036 秒内 PASS，且 resources clean。证据包含新版本 revision 2 / 同 series、原 key replay、异 body 409、安装保持原 exact revision、草稿不继承 package、撤回 replay、新 key terminal 412、安装 source_status=withdrawn、completed receipt +3、retryable-failed receipt +1、唯一 withdraw event，以及撤权后两个原 key 401 且 Platform HTTP 请求零增量。资格过程使用正式 ZIP V2，保留此前错误 fixture 与 counter RED 证据，不以放宽 owner 规则过门。
+
+当前边界：正常 BFF 尚未受控重载至该源码；Web 尚未 repin/生成/消费 8.5；新版本与撤回的浏览器 CRUD 尚未验证。因此本节是 producer 与真实 owner 资格的正式交接，不是正常运行激活或完整 T-K03 用户验收。下方 R268 “候选/资格待验”文字为历史阶段记录。
+
 ## R268 个人技能生命周期运行候选（未发行、未正常激活）
 
 本次候选在 a55f70f3 的 public 8.5.0 / 103 机器定义上实现两个精确个人命令；正常 BFF 仍为 930028b9721587e9c21535eff1e78ce361b82df9 / 8.4.0，Web 禁止在真实 owner 资格通过前消费候选。新增两个 input、两个 owner 3.0 digest projector、两个具名 route 与一个仅服务这两命令的请求生命周期 helper；复用既有 Catalog client/token 与 bootstrap，无 Schema、第二 receipt、owner mirror、latest 或自动升级/重试。
