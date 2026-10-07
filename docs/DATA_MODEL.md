@@ -1,3 +1,90 @@
+## R276-PROJECT-DELETE-D0：Project 墓碑、聚合 receipt 与 N+1 release outbox（目标；未实现）
+
+> API shape 见 [API_CONTRACT.md](./API_CONTRACT.md) 同名章节，锁序、worker 与模块放置见
+> [TECHNICAL_DESIGN.md](./TECHNICAL_DESIGN.md) 同名章节。当前 canonical schema 已有 `bff_project.deleted_at` 与 active
+> partial index；以下新增表/约束仍是目标，不是已执行 DDL。
+
+### 当前事实与不变边界
+
+- `bff_project` 已持久化 `deleted_at TIMESTAMPTZ(3)`；active list/read/Move 使用 deletion fence。墓碑继续占有 slug，禁止
+  删除行后复用。无需新增第二个 Project deletion flag。
+- Conversation、Message、Share、AG-UI、ScheduledTask 均是 BFF owner 内事实，可以在同一数据库事务中按既定 repository
+  规则更新；Storage scope/blob 与 Scheduler 执行事实不得通过 SQL 读取或联表。
+- Storage 固定 owner contract 已有 Project/Conversation scope release；BFF 只持久可信 scope identity、command digest、
+  ACK 投影和 lease/fence，不复制 Storage 对象清单或物理 cleanup 状态。
+
+### 目标 canonical 关系
+
+#### `bff_project_deletion`
+
+一 Project 一行的聚合删除 receipt/status：
+
+- identity：`tenant_id`、`project_id`、`owner_subject_id`；`project_id` 唯一并与 tombstone identity 逻辑一致；
+- idempotency：`operation`、`idempotency_key`、`request_fingerprint`、规范且不含 request-level meta 的 `response_data`、
+  `response_status = 202` 与 Location；每次 replay 重新生成本次 `meta.request_id`；
+- frozen summary：`conversation_count`、`release_command_count = conversation_count + 1`；不保存可漂移 JSON 成员副本；
+- projection：`logical_release_state CHECK IN ('pending','blocked','released')`、`physical_cleanup_state CHECK = 'pending'`；
+- audit：`created_at`、`updated_at`、可空 `blocked_code`。不存 token、授权结果、Storage payload 或任意敏感 message 内容。
+
+约束：`UNIQUE (tenant_id, project_id)`；`UNIQUE (tenant_id, owner_subject_id, project_id, operation, idempotency_key)`；同
+Project/key 异 fingerprint 只能冲突，不能覆盖 receipt；同 key 跨 Project 独立。聚合行与 Project tombstone/current owner 必须
+在每次 replay/status read 中重新校验。墓碑 Project 的新 key 统一 404，而不是与既有 receipt 形成新冲突。
+
+#### `bff_project_scope_release_outbox`
+
+冻结成员集合与 owner command 一体化的具名 outbox：
+
+- identity：`command_id`、`tenant_id`、`project_id`、`scope_kind IN ('project','conversation')`、`scope_id`；
+- owner request：`request_digest` 与固定 owner operation；Project 一条、每个冻结 Conversation 一条；
+- delivery：`state IN ('pending','leased','released','blocked')`、`attempt_count`、`available_at`、`lease_owner`、
+  `lease_expires_at`、`lease_fence`、`last_error_code`、`created_at`、`updated_at`、`released_at`；
+- `UNIQUE (tenant_id, project_id, scope_kind, scope_id)` 与 `UNIQUE (command_id)`；Project command 必须恰好一条，
+  Conversation 行集合本身就是冻结成员证明。
+
+领取索引仅覆盖 `state='pending'` 且到期可用行；lease acquire/reclaim/ACK 均带 fence CAS。`blocked` 不由普通 claim
+自动重置；同 command 的明确恢复判断可把它重新置 pending，不生成新 command，也不开放人工修复表/API。
+
+### 单事务写入与固定锁序
+
+一个沿现 repository 策略的 `READ COMMITTED`、同 client 事务按以下顺序：
+
+1. 按 `(tenant_id, project_id)` 锁定包含墓碑的 Project 行，验证 current owner；锁定/读取完整 namespace 的 deletion receipt；
+2. 有匹配 receipt 时先校验 digest/current tombstone：合法 replay 返回保存的原始 202 pending data；异 digest 409。无匹配 receipt
+   才要求 Project active；墓碑新 key、不存在或非 owner均 404；receipt/墓碑不一致为 store failure；
+3. Project 锁取得后用 fresh statement snapshot 查询并按 canonical conversation id 升序锁定当前成员，再按 task id 升序锁定
+   关联 ScheduledTask；
+4. 按 `(scope_kind, scope_id)` 升序建立 Project + Conversation 的 N+1 release outbox；
+5. 对已锁且集合绑定的 Conversation 调 same-client 删除核心；该核心不复用外部单删的 active-Project predicate，外部入口仍保
+   原授权。核心不删除 Message/immutable AG-UI ledger，也不伪造 Agent terminal；
+6. 写 `bff_project.deleted_at`，逐 ScheduledTask 写 paused/disabled、`next_run_at = NULL`、revision+1 与现
+   `scheduler.replace` outbox；
+7. 写不含 request-level meta 的规范 202 pending receipt data、Location 和 frozen counts后提交。
+
+任何一步失败整体回滚。事务内禁止 IAM/Storage/Scheduler 网络调用。Move 现按 source/target Project 排序取锁后再锁 Conversation；
+DELETE 单 Project→成员保持同方向。所有能新增/迁移/恢复成员或 task 的 writer 均须先持对应 Project admission lock 并重验 active。
+不得靠 `SERIALIZABLE` 旧快照、最终扫描或静默 detach 代替这个共同锁协议。
+
+### 状态投影、unknown 与保留
+
+- 聚合 `logical_release_state` 只由固定 outbox 集合投影：任一 blocked→blocked；全部 released→released；否则 pending。
+  worker ACK 与聚合更新处于同一 BFF 事务并以 lease fence 防晚写。
+- timeout/断连/未知 ACK 保持 pending 并用相同 `command_id`/digest 重试；owner replay success 才 released。Project deletion
+  HTTP receipt 只证明 BFF 本地事务已提交，不证明 Storage 已收到命令。
+- `physical_cleanup_state` 在本 schema 版本恒为 pending。不得用 owner 404、队列为空、时间经过或 logical released 推断物理完成；
+  未来若 Storage 发布终态证据，须另起 contract/schema slice。
+- Project/Conversation 墓碑的精确 retention 与最终 purge 时限尚未批准。当前不新增 purge DDL/job；Message 与 immutable
+  ledger 依现 retention 保留，compact/share revoke/durable cancel 沿单 Conversation 删除事实。本切片不开放 Project slug
+  复用，但不把 retention 未决写成永久保存承诺。
+
+### Fresh install、迁移与验证停止线
+
+- 后继 DDL 必须同时更新本仓唯一 canonical schema、installer/fresh-install oracle 与真实 PostgreSQL migration；不存在应用启动时
+  自动建表、兼容旧列或双写路径。
+- 在机器契约、canonical DDL、repository/source 和真实 PG 测试同片审查前，目标保持“未实现”。真实门必须证明：零成员、
+  多成员、Move/Delete 两种胜序、Scheduled revision 晚 callback、N+1 精确冻结、同 key replay/异 body 冲突、事务回滚、
+  lease 丢失晚 ACK、blocked→同 command 恢复、Storage unknown，以及跨 tenant/subject 零泄露。
+- 不访问或清理正常数据库；实现期使用独立随机 tenant/隔离数据库，核 catalog 起终一致并只清自己创建的数据。
+
 ## R267-SKILLS-LIFECYCLE-D0：零BFF持久化的版本/撤回消费（仅设计）
 
 Platform唯一拥有Skill行、series/revision/status、package绑定、installation、event/outbox和command receipt。BFF仅持有单次请求的可信admission context、严格解析值、command投影与短暂结果；不新增/修改PostgreSQL表、列、索引、约束、migration、Redis key、receipt、outbox、snapshot或授权cache，`database/schema.sql`保持零diff。Web后继只保存当次未知intent/key，不成为业务事实源。

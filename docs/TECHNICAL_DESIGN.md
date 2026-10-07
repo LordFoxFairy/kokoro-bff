@@ -1,3 +1,87 @@
+## R276-PROJECT-DELETE-D0：Project 删除与逻辑释放状态（目标 public 8.6.0 / 105 operations；仅设计，未实现）
+
+> 当前事实源与边界：API 面见 [API_CONTRACT.md](./API_CONTRACT.md) 的同名章节，持久化、事务与 outbox 面见
+> [DATA_MODEL.md](./DATA_MODEL.md) 的同名章节。当前正式 public contract 仍为 `8.5.0 / 103 operations`；本节描述的
+> `DELETE /v1/projects/{projectId}` 与 `GET /v1/projects/{projectId}/deletion` 尚未进入机器契约、源码或运行服务。
+> Storage 单 Asset 删除的 provider 资格仍未闭合，不占用本目标的 `8.6.0 / 105` 版本。
+
+### 当前态与目标态
+
+- 当前 BFF 已有 `bff_project.deleted_at`、active-project 查询 fence、Project/Conversation owner 校验、正式 Conversation Move、
+  ScheduledTask revision/CAS 与 `scheduler.replace` outbox；Project 尚无公开删除 route、聚合删除 receipt、成员冻结或 Storage
+  release worker。
+- BFF 已固定 Storage 正式提交 `e8b9928418924812587b7ac07900aee4be5bc27f` 与 combined digest
+  `c22b5c10ee698d579753dcac370be371d8dba1df8fead1a12883f5443fbad18a`，其中已有
+  `ReleaseConversationScope`、`ReleaseProjectScope`。这只证明 owner contract 可用，不证明 Project 删除编排已实现。
+- 目标是一次提交 BFF 本地权威删除：冻结成员、按单 Conversation 删除规范执行本地 tombstone/compact、撤销分享与写入
+  durable cancel 意图，暂停而不级联删除 ScheduledTask，写入一条 Project scope 加 N 条 Conversation scope 的 owner
+  command outbox，并返回可重放的原始 `202 pending`。Message 与 immutable AG-UI ledger 仍按现 retention 保留，Agent Run
+  真实终态仍由 Agent owner 决定。
+  Storage 调用在提交后异步执行；`pending | blocked | released` 仅表示逻辑 scope release，物理回收一律保持 `pending`，
+  直到 Storage 未来发布可验证的终态物理证据。
+
+### §8 局部放置门
+
+| 项 | 结论 |
+| --- | --- |
+| Owner | `kokoro-bff` 的 Project 聚合唯一写入本地 Project/Conversation/Share/ScheduledTask 关系、删除 receipt 与 command outbox；`kokoro-storage` 仍唯一拥有 scope/blob/physical cleanup；`kokoro-scheduler` 仍拥有调度执行事实。 |
+| 当前事实 | 入口为 `src/bootstrap/server.ts`；应用编排为 `src/application/project-service.ts`；端口为 `src/application/ports/project-repository.ts`；同一 PostgreSQL owner 内实现为 `src/infrastructure/postgres/project-repository.ts`、`chat-repository.ts`、`scheduled-task-repository.ts` 与 `conversation-move.ts`。现 generated Storage client 已有两条 release RPC。 |
+| 目标职责 | 新增两个具名 public operation、Project 删除聚合事务、具名 deletion-status read、Project deletion receipt/outbox 及有界 worker；不新增通用删除框架、command bus、修复 API 或第二 admin 服务。 |
+| 目录比较 | **采用**扩展现 `ProjectService`/`ProjectRepository`，并把单 Conversation 删除的 same-client 原语提取为现 PostgreSQL 目录内 helper：一个事务可锁定并处理完整集合。**淘汰** route 循环调用现 HTTP/service（会形成部分提交与 N 次独立事务）；**淘汰**新建通用 saga/bus 模块（只有一个具名业务编排且会掩盖 owner/锁序）。 |
+| 粒度 | route/schema、应用 input、repository contract、same-client transaction、Storage release worker 各自只有一个变化原因；Project 与 Conversation outbox 共用本聚合的具名表和 worker，不机械复制 DTO 层。 |
+| 依赖 | Browser→Web→BFF；BFF 仅通过固定 Storage generated client 和现 Scheduler dispatch outbox 调 owner。禁止读 Storage/Scheduler DB、禁止事务内网络、禁止 Web 直连 owner。 |
+| 数据/API | 新增 Project deletion 聚合 receipt 与 N+1 scope-release outbox；不新增 Project 字段、不复用通用幂等表、不开放 slug。公开 API 目标为 `8.6.0 / 105`，详见 API 面。 |
+| 删除项 | 后继实现应删除/收敛任何“route 内逐 Conversation 调 service”“提交后直接调用 Storage”“静默把 ScheduledTask 的 project_id 置空”的候选；不保 fallback、alias 或双轨状态。 |
+| 验证 | 先机器契约 RED；再真实 PostgreSQL 证明锁序、回滚、Move/Delete 竞态、N+1 冻结与 receipt；再 Storage/Scheduler 受控 owner 证明重放、unknown、blocked 恢复；最后 Browser→Web→BFF 真链。建议门：`pnpm contract:check`、`pnpm contract:semantic`、`pnpm test`、`pnpm lint`、`pnpm typecheck`、`pnpm build`。本 D0 未运行这些命令。 |
+
+### 请求生命周期与事务边界
+
+1. route 在 body/I/O 前完成当前 session admission 与 Product tenant 校验；每次 replay 仍重新 admission。`projectId` 只取规范
+   路径值，body 为空，`Idempotency-Key` 为命令必需项。repository 必须按 tenant + canonical Project 锁定包含墓碑的行并核
+   current owner，随后在 active 前查询完整 namespace（operation + tenant + subject + canonical Project + key）的 receipt：
+   同 key/digest 重放保存的原始 `202 pending` data，异 digest 为 409；无匹配 receipt 才要求 Project active。墓碑上的新 key、
+   不存在与非 owner 一律 404；receipt/墓碑不一致闭合为 store failure，不伪造结果。
+2. `ProjectRepository.deleteProject(...)` 沿现事务策略使用一个连接上的 `READ COMMITTED` 事务。固定锁序为：Project 一行；
+   receipt；Project 锁取得后的新语句快照中，按 canonical conversation id 升序锁定全部现成员；按 task id 升序锁定全部关联
+   ScheduledTask；按 `(scope_kind, scope_id)` 升序写 release outbox。集合在 Project fence 下确定，禁止遍历中重新发现成员。
+3. 并发 Move 已按 source/target Project id 排序锁 Project，再锁 Conversation；DELETE 锁单 Project 后锁成员，方向一致。
+   Move 先提交则 DELETE 取得 Project 锁后的 fresh snapshot 纳入其结果；DELETE 先持锁则 Move 在 active 复核失败。所有可新增、
+   迁移、恢复成员或关联 task 的其他 writer 都必须补同 Project admission lock + active fence，不能冒称现已全部具备。
+4. 每个冻结 Conversation 调用“已锁定且已验证为本聚合成员”的 same-client 删除核心，不重跑外部单删的 active-Project SQL；
+   外部单 Conversation 入口继续保留原 active/owner fence。核心沿当前事实清理 interaction/activity/process 与 Artifact links、
+   撤销 share、停止 stream/consumer、结算未完成 assistant，并写 durable cancel 意图；不删除 Message/immutable AG-UI ledger，
+   不伪造 Agent Run 已 cancelled。Project tombstone 可在成员核心之后写入，或核心显式接受冻结成员资格，绝不能因零命中仍提交。
+5. 关联 ScheduledTask **不级联删除也不 detach**。事务内把 BFF 权威 task 置为 paused/disabled、`next_run_at = NULL`，
+   按当前 revision fence 递增 revision，并写既有 `scheduler.replace` outbox；晚到旧 revision callback 无权恢复执行。
+   用户后续对已删除 Project 下 task 的 resume/replace 必须 closed fail，保留关联与审计事实。
+6. 同事务写一条 Project scope 与每个冻结 Conversation 一条 release command（N+1），以及聚合 receipt 的规范 `202`
+   body。提交前没有 owner 网络调用；任一 SQL/约束失败回滚 Project、成员、Schedule、receipt 与全部 outbox。
+
+### 异步释放、重放与恢复
+
+- worker 按稳定 `command_id`、完整 request digest、lease owner/expiry/fence 和 CAS 领取每条命令；调用固定 Storage
+  `ReleaseProjectScope`/`ReleaseConversationScope` 时传入可信 tenant/subject/scope identity，不从公共 body 自报。
+- owner 成功或可信 replay ACK 才把该命令置 `released`；timeout、断连和未知 ACK 保持可重试 `pending`，不得换 key；明确
+  terminal owner 冲突/资格失败置 `blocked` 并保存非敏感稳定 code。lease 丢失或旧 fence 的晚结果不得落库。
+- status GET 是冻结命令集合的权威当前投影：存在 blocked→`blocked`；否则全部 released→`released`；其余→`pending`。
+  DELETE 的同 key replay 永远返回 receipt 保存的原始 `202 pending` data（仅以本次 request id 重新包 envelope），不会随 worker
+  状态漂移；后台 worker 继续按同 command 重试，不新增人工 repair endpoint。
+- `released` 只表示 Storage 接受逻辑 scope release。现契约没有“全部对象物理删除完成”的终态证据，因此公开
+  `physical_cleanup_state` 在本切片恒为 `pending`；不得根据 GET/404、队列为空或经过时间推断完成。
+
+### 墓碑、retention 与后继准确写集
+
+- 本切片保留 Project tombstone 与 slug 且不开放 slug 复用；列表、详情和 Move target 使用 active fence，而 slug 创建冲突检查
+  明确覆盖墓碑。是否永久保留由后继 retention 裁决决定，本 D0 不将当前未定 retention 写成永久承诺。Conversation 的
+  compact/历史保留严格沿现单 Conversation 删除事实。
+- 精确 retention/最终 Project 与 Conversation 墓碑物理 purge 时限尚无批准事实，保持未决；本切片不猜期限、不加 purge
+  worker，也不以 retention 未定阻塞逻辑删除。
+- 后继 machine/source/test 最窄集合：`contract/openapi/v1/openapi.yaml`、契约 provenance/checker/既有 contract tests；
+  `src/http/routes/project-delete.ts`、`src/http/routes/project-deletion-status.ts`、`src/application/project-service.ts`、
+  `src/application/ports/project-repository.ts`、`src/infrastructure/postgres/project-repository.ts`、现 Conversation same-client
+  helper、现 Scheduler repository/outbox 接缝、具名 Storage release worker 与 `src/bootstrap/server.ts`；canonical SQL 与真实 PG/
+  HTTP/owner tests。任何额外文件须在实现前重新过放置门。
+
 ## R267-SKILLS-LIFECYCLE-D0：本人 Skill 创建新版本与撤回（目标 public 8.5.0 / 103 operations，尚未实施）
 
 ### 当前事实、owner 与范围

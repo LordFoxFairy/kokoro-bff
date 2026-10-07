@@ -1,3 +1,73 @@
+## R276-PROJECT-DELETE-D0：公开删除与状态资源（目标 `8.6.0 / 105`；未发行）
+
+> 技术编排见 [TECHNICAL_DESIGN.md](./TECHNICAL_DESIGN.md) 同名章节，表、事务和 outbox 见
+> [DATA_MODEL.md](./DATA_MODEL.md) 同名章节。当前机器事实仍为 `8.5.0 / 103 operations`；以下两个 operation 尚不存在于
+> OpenAPI、generated client 或运行服务。Storage 单 Asset 删除不进入本次版本。
+
+### 公开 owner、授权和共同约束
+
+- public owner 为 `kokoro-bff`。两条 operation 均只允许当前 Product tenant 内 Project owner；tenant、subject、actor 与
+  service identity 来自当前可信 admission，不接受 body/header 自报。
+- DELETE 是幂等命令，要求单个合法 `Idempotency-Key`；command namespace 固定为 operation + tenant + subject + canonical
+  Project + key，digest 覆盖 method/path/空 body。同 Project 同 key 异 digest 返回冲突；同一 key 可在不同 Project 独立使用。
+- GET 是无条件权威读取，无 body、mutation/idempotency key；不提供 ETag/If-Match，也不据条件头改变语义。两条 response 均
+  `Cache-Control: no-store`，header `X-Request-ID` 与 envelope `meta.request_id` 相同。
+- 所有对象 closed，snake_case，无 public `retryable` 字段。`physical_cleanup_state` 本版本唯一合法值为 `pending`。
+
+### `DELETE /v1/projects/{projectId}` — `deleteProject`
+
+- 请求：规范、非空 opaque `projectId` path；空 body；必需 `Idempotency-Key`。重复/尾斜线/编码静态 segment、重复 key、
+  framing body、未知 query 均拒绝，且在 repository/owner I/O 前完成。
+- 成功：`202 Accepted`，`Location: /v1/projects/{canonical_project_id}/deletion`，body：
+
+```json
+{
+  "data": {
+    "project_id": "PROJECT_ID",
+    "logical_release_state": "pending",
+    "physical_cleanup_state": "pending"
+  },
+  "meta": { "request_id": "REQUEST_ID" }
+}
+```
+
+  本地 Project/Conversation/Schedule 事务已提交才可返回 202；Storage 逻辑 release 尚在 outbox。相同 key/digest 在 current
+  owner 与 receipt 检查通过时永远返回保存的原始 `pending` data/status/Location，不返回 GET 的当前状态；本次 header/body 使用
+  新 request id。未知提交结果必须以原 key 恢复，不换 key。删除后使用新 key 统一 404，不泄露墓碑或既有 receipt。
+
+### `GET /v1/projects/{projectId}/deletion` — `getProjectDeletion`
+
+- 只对当前 owner 的已删除 Project 可见；active Project 或不存在/跨 tenant/跨 subject 均 fail closed，不泄露存在性。
+- 成功 `200 OK` 与 DELETE 使用同一 closed data shape；`logical_release_state` 为：
+  - `pending`：至少一条冻结 command 未取得可信终态且无 blocked；
+  - `blocked`：至少一条 command 收到可信 terminal failure；后台只允许按同 command/receipt 恢复，不开放修复 API；
+  - `released`：冻结的 Project + 全部 Conversation command 均取得可信逻辑 release ACK。
+- `released` 不是物理对象删除完成；在 owner 发布正式物理终态证据前，`physical_cleanup_state` 仍必须为 `pending`。
+
+### Closed 状态/错误 profile
+
+| HTTP | code | operation | 语义 |
+| --- | --- | --- | --- |
+| 400 | `invalid_project_deletion_request` | DELETE/GET | path/query/header/body/framing 不符合本 operation 的 closed profile。 |
+| 400 | `idempotency_key_required` / `invalid_idempotency_key` | DELETE | key 缺失或不合法；GET 携带 mutation key 归 invalid request。 |
+| 401/403/429/503 | 现 admission stable code | DELETE/GET | 沿当前 session/service/Product tenant admission；429 只接受现合法 `Retry-After` profile。 |
+| 404 | `project_not_found` | DELETE/GET | 不存在、非 owner、跨 tenant/subject、active 状态读统一闭合。 |
+| 409 | `idempotency_conflict` | DELETE | 同 Project command namespace/key 的 digest 不同；同 key 跨 Project 独立。墓碑上的新 key 返回 404。 |
+| 409 | `idempotency_in_progress` | DELETE | 同 key 事务/结果尚不能安全重放；客户端只使用原 key恢复。 |
+| 503 | `business_store_unavailable` | DELETE/GET | BFF 本地权威 store/事务依赖失败。 |
+
+错误统一为 `{ "error": { "code": "...", "message": "..." }, "meta": { "request_id": "..." } }`；不得将
+Storage/Scheduler 内部 code、lease、attempt、对象 key 或物理 provider 状态暴露给 public API。逻辑 outbox `blocked` 是
+GET 的可观察 data 状态，不转换成一次性 HTTP 5xx。
+
+### ScheduledTask 与一致性承诺
+
+- DELETE 原子暂停 Project 关联 ScheduledTask，并以当前 revision fence 写 `scheduler.replace`；不删除、不 detach，状态 read
+  不把 Scheduler owner 状态拼成第二事实源。
+- DELETE 前完成的 Move 决定冻结成员；DELETE fence 后的 Move/创建/恢复/写内容 closed fail。列表与详情不再返回墓碑 Project，
+  但 deletion status 是 owner 专用恢复资源。
+- 本 D0 不定义 retention 时限、slug 复用、物理 cleanup completed、批量删除或 admin repair API。
+
 ## R267-SKILLS-LIFECYCLE-D0：public 8.5.0 两个个人生命周期命令（仅设计）
 
 当前公开机器仍为`8.4.0`/101；目标 additive `8.5.0`/103仅新增：
