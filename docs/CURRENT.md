@@ -1,3 +1,13 @@
+### R345 Skill 更新时间正式机器发行，运行消费者尚待接线（2026-10-08）
+
+Root 固定 Platform正式af38f44的55 publication与独立HTTP原Git字节；public8.9.0/111只给四closed schemas新增required skill_updated_at/string/date-time/Z$，剥回完整8.8 parent与原R342完整8.7 parent均保持。单owner pin，无旧vendor fallback，SQL、runtime、配置、权限与依赖未改。正式source SHA f7f69075fc79ca0bd93a3b2bd5137b8094a6d1a56546a86ede5833ffdfcc0846，parsed canonical e95f026581b389dad643d390f543f9ab057a2bfd0cbb02dfab0aeb8cc662631d。
+
+Root真实tests RED143PASS/31FAIL→GREEN174PASS/0FAIL，双固定generator drift check与build0；129冻结paths及55正式Git bytes独审匹配。独审P2过期版本诊断已窄修并重新semantic111通过，判断未变。Writer完整contract现312PASS/9FAIL（4未接线runtime502、5旧vendor测试字面ENOENT）明确待后继runtime切片，Root未以focused宣全门绿。
+
+正常BFF32003/PID44454仍旧进程，与旧Platform40745配对未变。P运行03ee664已完成真实隔离资源核验但尚未正常激活；Web只D0。正式机器可供消费，不代表用户页面已有日期；外部与我的技能、作者/例子/真实封面/usage/创建/后台仍未完整对齐Manus，其它模块及kokoro-10继续暂停。
+
+<!-- R345-B-MACHINE-ROOT-RECEIPT-END -->
+
 ### R343 本人技能包正文运行已接通；Web 详情仍待验收（2026-10-08）
 
 本片基线 e70562759e80a18a959c0e418e495721027ac54f/public8.8.0/111，不改机器契约、SQL、scope或配置。新增三个普通文件分别承接两GET编排、固定Connect与严格响应映射；现server精确分流，projection credential/token仅有界读取/绝对预算/轮换防迟到强化。唯一调用仍 Browser→Web→BFF→Platform→Storage，正文不缓存、不伪造。

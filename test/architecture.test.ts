@@ -604,7 +604,7 @@ test("Conversation collection filtering stays one BFF-owned discriminated path w
   assert.match(service, /filter: ConversationCollectionFilter/u)
   assert.match(repository, /filter\.kind === "direct"[\s\S]*project_ref IS NULL/u)
   assert.match(repository, /filter\.kind === "project" \? filter\.projectRef : null/u)
-  assert.match(openapi, /^  version: 8\.8\.0$/mu)
+  assert.match(openapi, /^  version: 8\.9\.0$/mu)
   assert.match(openapi, /scope=direct and a nonempty project_ref are mutually exclusive/u)
   assert.doesNotMatch(port, /ConversationCollectionFilter\s*=\s*string/u)
 })
@@ -748,7 +748,7 @@ test("BFF governance documents distinguish implemented facts from accepted targe
   assert.equal(/CREATE TABLE IF NOT EXISTS bff_outbox\b/u.test(schema), false)
 })
 
-test("BFF consumes the pinned Platform 3.3 HTTP projection without owning its data", async () => {
+test("BFF consumes the pinned Platform 3.4 HTTP projection without owning its data", async () => {
   const [generatorConfig, generatorScript, manifestSource, schema] = await Promise.all([
     readFile(path.join(root, "openapi-ts.platform-http.config.ts"), "utf8"),
     readFile(path.join(root, "scripts/generate-platform-http-client.mjs"), "utf8"),
@@ -760,9 +760,9 @@ test("BFF consumes the pinned Platform 3.3 HTTP projection without owning its da
     owner: { repository_commit: string; contract_version: string; contract_sha256: string }
   }
   assert.equal(manifest.status, "generated")
-  assert.equal(manifest.owner.repository_commit, "3d4ba6c3462e3896481f902adf47e0713c4187e4")
-  assert.equal(manifest.owner.contract_version, "3.3.0")
-  assert.equal(manifest.owner.contract_sha256, "b6e5d0e0118207ee37933e5c22e94c86d95d74307b22a44e26e8974fede82acf")
+  assert.equal(manifest.owner.repository_commit, "af38f4419f6aa123d5bffaeaf14bd73a0b06c191")
+  assert.equal(manifest.owner.contract_version, "3.4.0")
+  assert.equal(manifest.owner.contract_sha256, "ca90f41f124c53a690746434cb66ac774f4a134acf109decd44bb110fafa61d6")
   assert.match(generatorConfig, /src\/generated\/platform-http/u)
   assert.match(generatorScript, /two byte-identical generations/u)
   assert.doesNotMatch(schema, /CREATE TABLE[^;]*capability/iu)

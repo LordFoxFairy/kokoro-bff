@@ -5,6 +5,7 @@ import { fileURLToPath, pathToFileURL } from "node:url"
 
 import { compareOperationBaseline, inspectOpenApiGovernance } from "./check-contract.mjs"
 import { inspectSkillPackageInspectionContract } from "./verify-skill-package-inspection-contract.mjs"
+import { inspectSkillUpdatedAtContract } from "./verify-skill-updated-at-contract.mjs"
 
 const HTTP_METHODS = new Set(["get", "post", "put", "patch", "delete", "head", "options", "trace"])
 const SNAKE_CASE = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/u
@@ -798,7 +799,7 @@ function publishedPersonalSkillContractErrors(
   for (const fragment of ["name: skill_id", "in: path", "required: true", "type: string", "pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$'"])
     if (!parameter?.text.includes(fragment)) errors.push(`PublishedPersonalSkillId must define ${fragment}`)
   const resource = schemas.get("PublishedPersonalSkillResource")
-  const fields = ["skill_id", "source_ref", "revision", "status", "name", "summary", "tags"]
+  const fields = ["skill_id", "source_ref", "revision", "status", "name", "summary", "tags", "skill_updated_at"]
   const resourceFragments = [
     "skill_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }",
     "source_ref: { type: string, pattern: '^skill:[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }",
@@ -807,6 +808,7 @@ function publishedPersonalSkillContractErrors(
     "name: { type: string }",
     "summary: { type: string }",
     "items: { type: string }",
+    'skill_updated_at: { type: string, format: date-time, pattern: "Z$" }',
   ]
   if (
     resource === undefined ||
@@ -815,7 +817,7 @@ function publishedPersonalSkillContractErrors(
     !resource.text.includes("additionalProperties: false") ||
     resourceFragments.some((fragment) => !resource.text.includes(fragment))
   )
-    errors.push("PublishedPersonalSkillResource must remain the exact strict seven-field ACTIVE projection")
+    errors.push("PublishedPersonalSkillResource must remain the exact strict eight-field ACTIVE projection")
   const success = schemas.get("PublishedPersonalSkillResponse")
   if (
     success === undefined ||
@@ -1778,10 +1780,11 @@ function managedPersonalSkillContractErrors(
   const resource = schemas.get("ManagedPersonalSkillResource")
   require(resource !== undefined, "resource schema is required")
   if (resource !== undefined) {
-    require(JSON.stringify(topLevelRequired(resource)) === JSON.stringify(["skill_id", "source_ref", "series_id", "revision", "name", "summary", "tags", "status"]), "resource must require the safe eight fields")
-    require(schemaProperties(resource).join(",") === "skill_id,source_ref,series_id,revision,name,summary,tags,status", "resource must define only the safe eight fields")
+    require(JSON.stringify(topLevelRequired(resource)) === JSON.stringify(["skill_id", "source_ref", "series_id", "revision", "name", "summary", "tags", "status", "skill_updated_at"]), "resource must require the safe nine fields")
+    require(schemaProperties(resource).join(",") === "skill_id,source_ref,series_id,revision,name,summary,tags,status,skill_updated_at", "resource must define only the safe nine fields")
     require(/^      additionalProperties: false$/mu.test(resource.text), "resource must be closed")
     require(resource.text.includes("enum: [draft, active, disabled, withdrawn, quarantined]"), "resource must close the five management states")
+    require(resource.text.includes('skill_updated_at: { type: string, format: date-time, pattern: "Z$" }'), "resource Skill update instant must remain UTC Z")
   }
   const list = schemas.get("ManagedPersonalSkillListResponse")
   const detail = schemas.get("ManagedPersonalSkillDetailResponse")
@@ -1943,7 +1946,7 @@ function moveSessionContractErrors(
   responseComponents: Map<string, NamedBlock>,
 ): string[] {
   const errors: string[] = []
-  if (!/^  version: 8\.8\.0$/mu.test(source)) errors.push("moveSession must remain in current public contract version 8.8.0")
+  if (!/^  version: 8\.9\.0$/mu.test(source)) errors.push("moveSession must remain in current public contract version 8.9.0")
   const matches = operations.filter((operation) => operation.fields.get("operationId") === "moveSession")
   const operation = matches.length === 1 ? matches[0] : undefined
   if (operation?.method !== "POST" || operation.path !== "/v1/sessions/{id}/move") {
@@ -2063,7 +2066,7 @@ function renameProjectContractErrors(
   const require = (condition: boolean, message: string): void => {
     if (!condition) errors.push(`renameProject ${message}`)
   }
-  require(/^  version: 8\.8\.0$/mu.test(source), "current public contract must be version 8.8.0")
+  require(/^  version: 8\.9\.0$/mu.test(source), "current public contract must be version 8.9.0")
   const matches = operations.filter((operation) => operation.fields.get("operationId") === "renameProject")
   const operation = matches.length === 1 ? matches[0] : undefined
   if (operation?.method !== "PATCH" || operation.path !== "/v1/projects/{projectId}/name")
@@ -2177,7 +2180,7 @@ function projectDeletionContractErrors(
   const require = (condition: boolean, message: string): void => {
     if (!condition) errors.push(`Project deletion ${message}`)
   }
-  require(/^  version: 8\.8\.0$/mu.test(source), "public contract version must be 8.8.0")
+  require(/^  version: 8\.9\.0$/mu.test(source), "public contract version must be 8.9.0")
   const deletion = operations.filter((operation) => operation.fields.get("operationId") === "deleteProject")
   const status = operations.filter((operation) => operation.fields.get("operationId") === "getProjectDeletion")
   require(deletion.length === 1 && deletion[0]?.method === "DELETE" && deletion[0]?.path === "/v1/projects/{projectId}", "must publish one DELETE /v1/projects/{projectId}")
@@ -2754,6 +2757,7 @@ export function inspectBffOpenApi(source: string, baseline: readonly BaselineOpe
   const responseComponents = collectSectionBlocks(source, "responses")
   const errors = [
     ...inspectOpenApiGovernance(source),
+    ...inspectSkillUpdatedAtContract(source),
     ...compareOperationBaseline(source, baseline),
     ...inspectSkillPackageInspectionContract(source),
     ...wireNameErrors(schemas, source),

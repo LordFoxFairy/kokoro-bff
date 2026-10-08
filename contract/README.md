@@ -68,9 +68,25 @@ BFF 固定 Storage 已发布 `e8b9928418924812587b7ac07900aee4be5bc27f` 与 comb
 
 The single `/v1` source candidate is now `7.0.0`. Session snapshots require nullable `execution_process`; Run process pages use the authorized immutable watermark route, bounded safe Todo/activity projection, and no raw tool payload or compatibility alias. The canonical SQL owns the two compact provenance tables while the immutable AG-UI ledger remains the as-of page source. Root resource verification and publication remain pending.
 
-## R342 Skills package inspection public 8.8 machine contract
+## R345 Skill update instant public 8.9 machine contract
 
-The single canonical Product OpenAPI is now `8.8.0` with 111 operations. It adds only
+The single canonical Product OpenAPI is now `8.9.0` with the same 111 operations. It adds required
+`skill_updated_at` UTC `date-time` values to the closed `Skill`, `ManagedPersonalSkillResource`,
+`PublishedPersonalSkillResource`, and `SkillInstallation` projections. The dedicated
+`scripts/verify-skill-updated-at-contract.mjs` checker removes exactly those four fields and the version change, then proves that
+the complete parsed public 8.8 parent is unchanged. `SkillInstallation.installed_at` and `updated_at` keep their installation
+lifecycle meanings; they do not substitute for the owner Skill update instant.
+
+The fixed Platform consumer is generated only from owner commit `af38f4419f6aa123d5bffaeaf14bd73a0b06c191`: HTTP contract
+3.4 exposes `skill_updated_at` on catalog, managed and published Skill projections, while Connect
+`ProductSkillInstallation.skill_updated_at` remains field tag 14. The vendored publication includes the three formal parent
+snapshots so the generators can remove only that field and prove the prior owner surface. This slice publishes machine contracts
+and generated consumers only; runtime mapping/activation and author, examples, cover or usage facts remain follow-up work and are
+not synthesized from the viewer, installation timestamps, tags or fixed values.
+
+## R342 Skills package inspection public 8.8 parent contract
+
+The public 8.8 parent had 111 operations. It added only
 `GET /v1/self/skills/{skill_id}/package` (`getManagedPersonalSkillPackage`) and
 `GET /v1/skill-installations/{installation_id}/package` (`getPersonalSkillInstallationPackage`). Both are current-user reads with
 one optional `file_path`, closed data/error envelopes, canonical decimal uint64 strings, required `x-request-id` and
@@ -79,10 +95,10 @@ limit share HTTP 429 but retain different `retryable` semantics; only session ad
 `Retry-After`. Missing files remain the non-disclosing `skill_package_not_found` because the owner does not yet publish a stable
 machine distinction.
 
-`scripts/verify-skill-package-inspection-contract.mjs` owns the dedicated semantic oracle. It removes exactly the two new paths,
-three parameters, six schemas, nine responses and the version change from the parsed document, then verifies that the full prior
-8.7 surface is unchanged. This is a machine-contract publication only: no HTTP route, credential/runtime activation, database,
-owner source, generated consumer, normal service or browser detail flow is implemented by this slice.
+`scripts/verify-skill-package-inspection-contract.mjs` owns the dedicated semantic oracle. On the current document it first
+removes the R345 fields, then removes exactly the two R342 paths, three parameters, six schemas, nine responses and the version
+change, and verifies that the full prior 8.7 surface is unchanged. This historical machine-contract slice did not itself activate
+the route or browser detail flow.
 
 # Kokoro BFF contract
 

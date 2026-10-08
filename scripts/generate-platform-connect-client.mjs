@@ -15,7 +15,7 @@ import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-const ownerCommit = "1f6f764bc4bcf09d235e086ae7fe137acf16d63d"
+const ownerCommit = "af38f4419f6aa123d5bffaeaf14bd73a0b06c191"
 const vendorRoot = `contract/vendor/kokoro-platform/${ownerCommit}`
 const vendor = `contract/vendor/kokoro-platform/${ownerCommit}/proto`
 const artifacts = {
@@ -40,10 +40,10 @@ const artifactProvenanceDigests = {
   v8: "a985f907fc9f2c5d8735c8918f1af6028efa9a3ed0f43b273612c592c2288444",
 }
 const descriptor = `${vendorRoot}/descriptor/platform-v1.binpb`
-const descriptorDigest = "2e1a811bf347b5d9cd3577ac6c762ee9d31f40dea2ac326a06b83bc61de9a8d5"
+const descriptorDigest = "fcfab521242b07c17b08efad33463022625fd5163f1e62beb18ddd9589053808"
 const parentDescriptor = `${vendorRoot}/descriptor/platform-v8-parent39.binpb`
 const parentDigest = "0467c1c45e8ac27c79cb906e27bfdb679d88739e45bfa38128f0f629bec686d5"
-const publicationAggregate = "e4201bc8674c470bf49c840712f87c34e869b96e59a0e96ba83eb3e4df19446a"
+const publicationAggregate = "710d72122cc0a9fb37599ce928911435568cd309101a1608c3f3a1d568542973"
 const publicationInputs = {
   "contract/descriptor/platform-installation-tags-parent-generated.binpb": {
     bytes: 35431,
@@ -61,9 +61,21 @@ const publicationInputs = {
     bytes: 46971,
     sha256: "37207ddd3513d0f0b1e3320401a54ab0848326692f9cc07571325bc325b4ddda",
   },
-  "contract/descriptor/platform-v1.binpb": {
+  "contract/descriptor/platform-skill-updated-at-http-3.3.0.json": {
+    bytes: 33330,
+    sha256: "b6e5d0e0118207ee37933e5c22e94c86d95d74307b22a44e26e8974fede82acf",
+  },
+  "contract/descriptor/platform-skill-updated-at-parent-generated.binpb": {
+    bytes: 37232,
+    sha256: "bf466c1288cb9bbd84e05a5122aa018b9a135377426099c3e158450a0f8f9b03",
+  },
+  "contract/descriptor/platform-skill-updated-at-parent.binpb": {
     bytes: 48752,
     sha256: "2e1a811bf347b5d9cd3577ac6c762ee9d31f40dea2ac326a06b83bc61de9a8d5",
+  },
+  "contract/descriptor/platform-v1.binpb": {
+    bytes: 48822,
+    sha256: "fcfab521242b07c17b08efad33463022625fd5163f1e62beb18ddd9589053808",
   },
   "contract/descriptor/platform-v8-parent39.binpb": {
     bytes: 43624,
@@ -234,16 +246,16 @@ const publicationInputs = {
     sha256: "7c256bbc3f9ed0cc93434595bd9caa7c2f0a00035837fadc2fc3dfa1110df9ed",
   },
   "contract/openapi/platform-http.openapi.json": {
-    bytes: 33330,
-    sha256: "b6e5d0e0118207ee37933e5c22e94c86d95d74307b22a44e26e8974fede82acf",
+    bytes: 33747,
+    sha256: "ca90f41f124c53a690746434cb66ac774f4a134acf109decd44bb110fafa61d6",
   },
   "contract/proto/kokoro/common/v1/common.proto": {
     bytes: 2271,
     sha256: "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08",
   },
   "contract/proto/kokoro/platform/v1/platform_runtime.proto": {
-    bytes: 35569,
-    sha256: "7d82840be8c65f0e826e16639dc4d4565729f096bf6cbc2c4f1960a8e265f1eb",
+    bytes: 35620,
+    sha256: "292ded6a64ca52ebff34442db245c40b459f207e8e352985cf053a6f2d6b7e8f",
   },
   "contract/proto/kokoro/storage/v2/storage.proto": {
     bytes: 10666,
@@ -251,7 +263,7 @@ const publicationInputs = {
   },
   "contract/provenance.json": {
     bytes: 350,
-    sha256: "fca4ce3aead18ed92d3bc6381d2bb9629227414c75d043228f27446fc1147a48",
+    sha256: "5794e3d195e59b2edf70d3773fbe3e5d0ed0739c10a586c242fd4d7b27ed9788",
   },
 }
 
@@ -260,7 +272,7 @@ const manifestPath = path.join(root, "contract/dependencies/platform-connect.jso
 const sourceDigests = {
   "kokoro/storage/v2/storage.proto": "02266d53b8bfb7fdd6991b17d59ebb17399d4f189b6a3135fedcb69b6b364276",
   "kokoro/common/v1/common.proto": "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08",
-  "kokoro/platform/v1/platform_runtime.proto": "7d82840be8c65f0e826e16639dc4d4565729f096bf6cbc2c4f1960a8e265f1eb",
+  "kokoro/platform/v1/platform_runtime.proto": "292ded6a64ca52ebff34442db245c40b459f207e8e352985cf053a6f2d6b7e8f",
 }
 const directories = ["kokoro", "kokoro/common", "kokoro/common/v1", "kokoro/platform", "kokoro/platform/v1"]
 const sourceDirectories = [...directories, "kokoro/storage", "kokoro/storage/v2"].sort()
@@ -626,14 +638,31 @@ export function assertInspectionDescriptors(set) {
 export function stripDescriptorLineage(set) {
   const current = fromBinary(FileDescriptorSetSchema, toBinary(FileDescriptorSetSchema, set))
   const file = platformFile(current)
+  const installation = file.messageType.find((message) => message.name === "ProductSkillInstallation")
+  assert.ok(installation)
+  const skillUpdatedAt = installation.field.filter((field) => field.name === "skill_updated_at")
+  assert.equal(skillUpdatedAt.length, 1, "Platform Skill update instant unique field drifted")
+  exactDescriptor(
+    FieldDescriptorProtoSchema,
+    skillUpdatedAt[0],
+    {
+      name: "skill_updated_at",
+      number: 14,
+      type: 11,
+      label: 1,
+      jsonName: "skillUpdatedAt",
+      typeName: ".google.protobuf.Timestamp",
+    },
+    "Platform Skill update instant shape drifted",
+  )
+  installation.field = installation.field.filter((field) => field.name !== "skill_updated_at")
+  assertWholeParent(current, "platform-skill-updated-at-parent.binpb")
   const additions = inspectionReads
     .flatMap(([, method]) => [`${method}Request`, `${method}Response`])
     .concat(["SkillPackageTextFile", "SkillPackageSelectedText"])
   file.service = file.service.filter((service) => !inspectionReads.some(([name]) => service.name === name))
   file.messageType = file.messageType.filter((message) => !additions.includes(message.name))
   assertWholeParent(current, "platform-package-read-parent.binpb")
-  const installation = file.messageType.find((message) => message.name === "ProductSkillInstallation")
-  assert.ok(installation)
   const tags = installation.field.filter((field) => field.name === "tags")
   assert.equal(tags.length, 1, "Platform tags unique field drifted")
   exactDescriptor(FieldDescriptorProtoSchema, tags[0], descriptorField("tags", 13, 9, undefined, true), "Platform tags shape drifted")
@@ -682,7 +711,9 @@ export function assertGeneratedDescriptor(generated, compiledBytes) {
 }
 
 export function assertDescriptorPairs(files) {
-  for (const stem of ["platform-v9-parent43", "platform-installation-tags-parent", "platform-package-read-parent"]) {
+  const httpParent = "platform-skill-updated-at-http-3.3.0.json"
+  assert.equal(sha256(files[httpParent]), publicationInputs[`contract/descriptor/${httpParent}`].sha256, `Platform HTTP parent bytes drifted: ${httpParent}`)
+  for (const stem of ["platform-v9-parent43", "platform-installation-tags-parent", "platform-package-read-parent", "platform-skill-updated-at-parent"]) {
     const compiledName = `${stem}.binpb`
     const generatedName = `${stem}-generated.binpb`
     for (const name of [compiledName, generatedName])

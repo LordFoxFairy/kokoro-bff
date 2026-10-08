@@ -9,11 +9,11 @@ import { configureBffProtobufTextEncoding } from "../dist/infrastructure/protobu
 
 configureBffProtobufTextEncoding()
 
-const ownerCommit = "1f6f764bc4bcf09d235e086ae7fe137acf16d63d"
+const ownerCommit = "af38f4419f6aa123d5bffaeaf14bd73a0b06c191"
 const sources = {
   "kokoro/storage/v2/storage.proto": "02266d53b8bfb7fdd6991b17d59ebb17399d4f189b6a3135fedcb69b6b364276",
   "kokoro/common/v1/common.proto": "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08",
-  "kokoro/platform/v1/platform_runtime.proto": "7d82840be8c65f0e826e16639dc4d4565729f096bf6cbc2c4f1960a8e265f1eb",
+  "kokoro/platform/v1/platform_runtime.proto": "292ded6a64ca52ebff34442db245c40b459f207e8e352985cf053a6f2d6b7e8f",
 }
 const root = new URL("../", import.meta.url)
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex")
@@ -90,7 +90,7 @@ test("Platform consumer pins exact owner Proto bytes and inactive V9 to V8 to V7
   )
   assert.deepEqual(manifest.descriptor, {
     path: `contract/vendor/kokoro-platform/${ownerCommit}/descriptor/platform-v1.binpb`,
-    sha256: "2e1a811bf347b5d9cd3577ac6c762ee9d31f40dea2ac326a06b83bc61de9a8d5",
+    sha256: "fcfab521242b07c17b08efad33463022625fd5163f1e62beb18ddd9589053808",
   })
   assert.deepEqual(
     manifest.owner.sources,
@@ -351,10 +351,62 @@ test("Platform generated Product installation exposes fixed metadata tags", asyn
   assert.match(text, /sourceStatus/u)
 })
 
+test("R345 generated and compiled Product installation add only required Skill update Timestamp tag14", async () => {
+  const { fromBinary, toBinary } = await import("@bufbuild/protobuf")
+  const { FileDescriptorProtoSchema, FileDescriptorSetSchema } = await import("@bufbuild/protobuf/wkt")
+  const generated = await import("../dist/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
+  const fields = generated.ProductSkillInstallationSchema.fields
+  const installed = fields.find((field) => field.name === "installed_at")
+  const updated = fields.find((field) => field.name === "updated_at")
+  const skillUpdated = fields.find((field) => field.name === "skill_updated_at")
+  assert.equal(installed?.number, 7)
+  assert.equal(updated?.number, 8, "tag8 remains the installation record update instant")
+  assert.equal(updated?.message?.typeName, "google.protobuf.Timestamp")
+  assert.equal(skillUpdated?.number, 14)
+  assert.equal(skillUpdated?.message?.typeName, "google.protobuf.Timestamp")
+  assert.equal(skillUpdated?.oneof, undefined)
+
+  const prefix = `contract/vendor/kokoro-platform/${ownerCommit}/descriptor`
+  const currentBytes = await requiredFile(`${prefix}/platform-v1.binpb`)
+  assert.equal(sha256(currentBytes), "fcfab521242b07c17b08efad33463022625fd5163f1e62beb18ddd9589053808")
+  const current = fromBinary(FileDescriptorSetSchema, currentBytes)
+  const compiledParentBytes = await requiredFile(`${prefix}/platform-skill-updated-at-parent.binpb`)
+  assert.equal(sha256(compiledParentBytes), "2e1a811bf347b5d9cd3577ac6c762ee9d31f40dea2ac326a06b83bc61de9a8d5")
+  const compiledParent = fromBinary(FileDescriptorSetSchema, compiledParentBytes)
+  const platform = current.file.find((file) => file.package === "kokoro.platform.v1")
+  const installation = platform.messageType.find((message) => message.name === "ProductSkillInstallation")
+  const compiledUpdated = installation.field.find((field) => field.name === "updated_at")
+  const compiledSkillUpdated = installation.field.find((field) => field.name === "skill_updated_at")
+  assert.deepEqual(
+    [compiledUpdated.number, compiledUpdated.type, compiledUpdated.typeName, compiledUpdated.proto3Optional, compiledUpdated.oneofIndex],
+    [8, 11, ".google.protobuf.Timestamp", false, 0],
+  )
+  assert.deepEqual(
+    [
+      compiledSkillUpdated.number,
+      compiledSkillUpdated.type,
+      compiledSkillUpdated.typeName,
+      compiledSkillUpdated.proto3Optional,
+      compiledSkillUpdated.oneofIndex,
+    ],
+    [14, 11, ".google.protobuf.Timestamp", false, 0],
+  )
+  installation.field = installation.field.filter((field) => field.name !== "skill_updated_at")
+  assert.deepEqual(current, compiledParent, "stripping only tag14 must restore the complete compiled parent graph")
+
+  const generatedParentBytes = await requiredFile(`${prefix}/platform-skill-updated-at-parent-generated.binpb`)
+  assert.equal(sha256(generatedParentBytes), "bf466c1288cb9bbd84e05a5122aa018b9a135377426099c3e158450a0f8f9b03")
+  const generatedParent = fromBinary(FileDescriptorProtoSchema, generatedParentBytes)
+  const generatedFile = fromBinary(FileDescriptorProtoSchema, toBinary(FileDescriptorProtoSchema, generated.file_kokoro_platform_v1_platform_runtime.proto))
+  const generatedInstallation = generatedFile.messageType.find((message) => message.name === "ProductSkillInstallation")
+  generatedInstallation.field = generatedInstallation.field.filter((field) => field.name !== "skill_updated_at")
+  assert.deepEqual(generatedFile, generatedParent, "stripping only tag14 must restore the complete generated parent graph")
+})
+
 // R319: fixed machine consumption only; no BFF route, identity or runtime activation.
 test("R319 consumer fixes the complete V8 owner and preserves the historical parent39 pin", async () => {
   const manifest = JSON.parse(await requiredFile("contract/dependencies/platform-connect.json"))
-  assert.equal(manifest.owner.repository_commit, "1f6f764bc4bcf09d235e086ae7fe137acf16d63d")
+  assert.equal(manifest.owner.repository_commit, ownerCommit)
   assert.equal(manifest.status, "generated-not-activated")
   assert.deepEqual(
     manifest.execution_proof_chain.slice(1).map((entry) => entry.artifact_version),
@@ -364,7 +416,7 @@ test("R319 consumer fixes the complete V8 owner and preserves the historical par
     manifest.descriptor_parents.find((entry) => entry.path.endsWith("/platform-v9-parent43.binpb")).sha256,
     "5f0f00f605f6a445b4d80943459b69bf9f489fd7851cc80b6c2700f8f78a8d0e",
   )
-  const prefix = "contract/vendor/kokoro-platform/1f6f764bc4bcf09d235e086ae7fe137acf16d63d"
+  const prefix = `contract/vendor/kokoro-platform/${ownerCommit}`
   assert.equal(
     sha256(await requiredFile(`${prefix}/descriptor/platform-v8-parent39.binpb`)),
     "0467c1c45e8ac27c79cb906e27bfdb679d88739e45bfa38128f0f629bec686d5",
@@ -467,10 +519,7 @@ test("R319 historical V8 descriptor contains four personal unary reads and eleve
     file.messageType.find((entry) => entry.name === "ListPersonalMcpConnectorsRequest").field.find((field) => field.name === "status").proto3Optional,
     true,
   )
-  const parent = fromBinary(
-    FileDescriptorSetSchema,
-    await requiredFile("contract/vendor/kokoro-platform/1f6f764bc4bcf09d235e086ae7fe137acf16d63d/descriptor/platform-v8-parent39.binpb"),
-  )
+  const parent = fromBinary(FileDescriptorSetSchema, await requiredFile(`contract/vendor/kokoro-platform/${ownerCommit}/descriptor/platform-v8-parent39.binpb`))
   file.service = file.service.filter((entry) => entry.name !== "ProductMcpPersonalService")
   file.messageType = file.messageType.filter((entry) => !Object.hasOwn(expected, entry.name))
   assert.deepEqual(descriptor, parent, "removing only V8 additions preserves every parent39 descriptor fact")
@@ -548,11 +597,11 @@ test("R340 generated consumer exposes both personal package inspection services"
   }
 })
 
-test("R340 complete 52-input publication is closed, byte-pinned and rejects omitted, extra and altered inputs", async () => {
+test("R345 complete 55-input publication is closed, byte-pinned and rejects omitted, extra and altered inputs", async () => {
   const manifest = JSON.parse(await requiredFile("contract/dependencies/platform-connect.json"))
   assert.equal(manifest.published_inputs.path_algorithm, "owner-repository-relative-including-contract")
-  assert.equal(manifest.published_inputs.aggregate_sha256, "e4201bc8674c470bf49c840712f87c34e869b96e59a0e96ba83eb3e4df19446a")
-  assert.equal(manifest.published_inputs.files.length, 52)
+  assert.equal(manifest.published_inputs.aggregate_sha256, "710d72122cc0a9fb37599ce928911435568cd309101a1608c3f3a1d568542973")
+  assert.equal(manifest.published_inputs.files.length, 55)
   const files = Object.fromEntries(
     await Promise.all(
       manifest.published_inputs.files.map(async (pin) => {
@@ -605,7 +654,7 @@ test("R340 historical V9 retains 43/20/24, all 128 vectors and exact inactive V8
   )
 })
 
-test("R340 current 45/20/24 graph exactly strips to three pinned parents and preserves generated/compiled whole graphs", async () => {
+test("R345 current 45/20/24 graph strips through four pinned parents and preserves generated/compiled whole graphs", async () => {
   const { fromBinary, toBinary } = await import("@bufbuild/protobuf")
   const { FileDescriptorSetSchema, FileDescriptorProtoSchema } = await import("@bufbuild/protobuf/wkt")
   const {

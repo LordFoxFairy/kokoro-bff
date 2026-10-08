@@ -850,6 +850,7 @@ message ProductSkillInstallation {
   string summary = 11;
   kokoro.platform.v1.SkillStatus source_status = 12;
   repeated string tags = 13;
+  google.protobuf.Timestamp skill_updated_at = 14;
 }
 
 message InstallPersonalSkillRequest {

@@ -7,5 +7,5 @@
     "proto/kokoro/storage/v2/storage.proto",
     "openapi/platform-http.openapi.json"
   ],
-  "combinedSha256": "c681561b26dc30bce8981d87c74bd056f958b6a3193e459c10e6c964aecd455f"
+  "combinedSha256": "83812bd4b2a6ab9aae09df62cd37a770118ba8200a8385358ffc781b53ef868e"
 }

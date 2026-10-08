@@ -14,6 +14,7 @@ export type Skill = {
   enabled: boolean
   installed?: boolean
   categories: Array<string>
+  skill_updated_at: string
 }
 
 export type McpServer = {
@@ -41,6 +42,7 @@ export type PublishedPersonalSkill = {
   name: string
   summary: string
   tags: Array<string>
+  skill_updated_at: string
 }
 
 export type McpConnection = {
@@ -61,6 +63,7 @@ export type SelfManagedSkill = {
   summary: string
   tags: Array<string>
   status: "draft" | "active" | "disabled" | "withdrawn" | "quarantined"
+  skill_updated_at: string
 }
 
 export type RequestId = string

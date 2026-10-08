@@ -3,7 +3,7 @@
   "status": "generated-not-activated",
   "owner": {
     "repository_path": "apps/kokoro-capability",
-    "repository_commit": "1f6f764bc4bcf09d235e086ae7fe137acf16d63d",
+    "repository_commit": "af38f4419f6aa123d5bffaeaf14bd73a0b06c191",
     "package_name": "kokoro.platform.v1",
     "sources": [
       {
@@ -16,13 +16,13 @@
       },
       {
         "path": "contract/proto/kokoro/platform/v1/platform_runtime.proto",
-        "sha256": "7d82840be8c65f0e826e16639dc4d4565729f096bf6cbc2c4f1960a8e265f1eb"
+        "sha256": "292ded6a64ca52ebff34442db245c40b459f207e8e352985cf053a6f2d6b7e8f"
       }
     ]
   },
   "published_inputs": {
     "path_algorithm": "owner-repository-relative-including-contract",
-    "aggregate_sha256": "e4201bc8674c470bf49c840712f87c34e869b96e59a0e96ba83eb3e4df19446a",
+    "aggregate_sha256": "710d72122cc0a9fb37599ce928911435568cd309101a1608c3f3a1d568542973",
     "files": [
       {
         "path": "contract/descriptor/platform-installation-tags-parent-generated.binpb",
@@ -45,9 +45,24 @@
         "sha256": "37207ddd3513d0f0b1e3320401a54ab0848326692f9cc07571325bc325b4ddda"
       },
       {
-        "path": "contract/descriptor/platform-v1.binpb",
+        "path": "contract/descriptor/platform-skill-updated-at-http-3.3.0.json",
+        "bytes": 33330,
+        "sha256": "b6e5d0e0118207ee37933e5c22e94c86d95d74307b22a44e26e8974fede82acf"
+      },
+      {
+        "path": "contract/descriptor/platform-skill-updated-at-parent-generated.binpb",
+        "bytes": 37232,
+        "sha256": "bf466c1288cb9bbd84e05a5122aa018b9a135377426099c3e158450a0f8f9b03"
+      },
+      {
+        "path": "contract/descriptor/platform-skill-updated-at-parent.binpb",
         "bytes": 48752,
         "sha256": "2e1a811bf347b5d9cd3577ac6c762ee9d31f40dea2ac326a06b83bc61de9a8d5"
+      },
+      {
+        "path": "contract/descriptor/platform-v1.binpb",
+        "bytes": 48822,
+        "sha256": "fcfab521242b07c17b08efad33463022625fd5163f1e62beb18ddd9589053808"
       },
       {
         "path": "contract/descriptor/platform-v8-parent39.binpb",
@@ -261,8 +276,8 @@
       },
       {
         "path": "contract/openapi/platform-http.openapi.json",
-        "bytes": 33330,
-        "sha256": "b6e5d0e0118207ee37933e5c22e94c86d95d74307b22a44e26e8974fede82acf"
+        "bytes": 33747,
+        "sha256": "ca90f41f124c53a690746434cb66ac774f4a134acf109decd44bb110fafa61d6"
       },
       {
         "path": "contract/proto/kokoro/common/v1/common.proto",
@@ -271,8 +286,8 @@
       },
       {
         "path": "contract/proto/kokoro/platform/v1/platform_runtime.proto",
-        "bytes": 35569,
-        "sha256": "7d82840be8c65f0e826e16639dc4d4565729f096bf6cbc2c4f1960a8e265f1eb"
+        "bytes": 35620,
+        "sha256": "292ded6a64ca52ebff34442db245c40b459f207e8e352985cf053a6f2d6b7e8f"
       },
       {
         "path": "contract/proto/kokoro/storage/v2/storage.proto",
@@ -282,88 +297,100 @@
       {
         "path": "contract/provenance.json",
         "bytes": 350,
-        "sha256": "fca4ce3aead18ed92d3bc6381d2bb9629227414c75d043228f27446fc1147a48"
+        "sha256": "5794e3d195e59b2edf70d3773fbe3e5d0ed0739c10a586c242fd4d7b27ed9788"
       }
     ]
   },
   "execution_artifact": {
-    "path": "contract/vendor/kokoro-platform/1f6f764bc4bcf09d235e086ae7fe137acf16d63d/execution-operations-v9",
+    "path": "contract/vendor/kokoro-platform/af38f4419f6aa123d5bffaeaf14bd73a0b06c191/execution-operations-v9",
     "artifact_version": "9.0.0",
     "status": "inactive",
     "routable": false,
-    "provenance_path": "contract/vendor/kokoro-platform/1f6f764bc4bcf09d235e086ae7fe137acf16d63d/execution-operations-v9/provenance.json",
+    "provenance_path": "contract/vendor/kokoro-platform/af38f4419f6aa123d5bffaeaf14bd73a0b06c191/execution-operations-v9/provenance.json",
     "aggregate_sha256": "19c1466ab398c6dbb43130f3977fe776532e41e00e2487476d465f22fc936073"
   },
   "execution_proof_chain": [
     {
-      "path": "contract/vendor/kokoro-platform/1f6f764bc4bcf09d235e086ae7fe137acf16d63d/execution-operations-v9",
+      "path": "contract/vendor/kokoro-platform/af38f4419f6aa123d5bffaeaf14bd73a0b06c191/execution-operations-v9",
       "artifact_version": "9.0.0",
       "aggregate_sha256": "19c1466ab398c6dbb43130f3977fe776532e41e00e2487476d465f22fc936073",
       "inherits_version": "8.0.0",
       "inherits_aggregate_sha256": "4a5ed2ca1a25673967ac2ee05a43c5f568bdd19c9ff768d8e606fdac94b9542f"
     },
     {
-      "path": "contract/vendor/kokoro-platform/1f6f764bc4bcf09d235e086ae7fe137acf16d63d/execution-operations-v8",
+      "path": "contract/vendor/kokoro-platform/af38f4419f6aa123d5bffaeaf14bd73a0b06c191/execution-operations-v8",
       "artifact_version": "8.0.0",
       "aggregate_sha256": "4a5ed2ca1a25673967ac2ee05a43c5f568bdd19c9ff768d8e606fdac94b9542f",
       "inherits_version": "7.0.0",
       "inherits_aggregate_sha256": "3384a88f31be1fdd3e15bcbceb33e4fd7d62b04dfbfef65fcc35c24ce7afbb72"
     },
     {
-      "path": "contract/vendor/kokoro-platform/1f6f764bc4bcf09d235e086ae7fe137acf16d63d/execution-operations-v7",
+      "path": "contract/vendor/kokoro-platform/af38f4419f6aa123d5bffaeaf14bd73a0b06c191/execution-operations-v7",
       "artifact_version": "7.0.0",
       "aggregate_sha256": "3384a88f31be1fdd3e15bcbceb33e4fd7d62b04dfbfef65fcc35c24ce7afbb72",
       "inherits_version": "6.0.0",
       "inherits_aggregate_sha256": "0d728881ba1046dc566131d63de71f6821ec636cf45837b5d937fee9872d5f91"
     },
     {
-      "path": "contract/vendor/kokoro-platform/1f6f764bc4bcf09d235e086ae7fe137acf16d63d/execution-operations-v6",
+      "path": "contract/vendor/kokoro-platform/af38f4419f6aa123d5bffaeaf14bd73a0b06c191/execution-operations-v6",
       "artifact_version": "6.0.0",
       "aggregate_sha256": "0d728881ba1046dc566131d63de71f6821ec636cf45837b5d937fee9872d5f91",
       "inherits_version": "5.0.1",
       "inherits_aggregate_sha256": "3f97b3c98fd8e7ce46e4a8ea73237ddb85e764849d2b15dd28d0a3a58a69e42f"
     },
     {
-      "path": "contract/vendor/kokoro-platform/1f6f764bc4bcf09d235e086ae7fe137acf16d63d/execution-operations-v5",
+      "path": "contract/vendor/kokoro-platform/af38f4419f6aa123d5bffaeaf14bd73a0b06c191/execution-operations-v5",
       "artifact_version": "5.0.1",
       "aggregate_sha256": "3f97b3c98fd8e7ce46e4a8ea73237ddb85e764849d2b15dd28d0a3a58a69e42f"
     }
   ],
   "descriptor": {
-    "path": "contract/vendor/kokoro-platform/1f6f764bc4bcf09d235e086ae7fe137acf16d63d/descriptor/platform-v1.binpb",
-    "sha256": "2e1a811bf347b5d9cd3577ac6c762ee9d31f40dea2ac326a06b83bc61de9a8d5"
+    "path": "contract/vendor/kokoro-platform/af38f4419f6aa123d5bffaeaf14bd73a0b06c191/descriptor/platform-v1.binpb",
+    "sha256": "fcfab521242b07c17b08efad33463022625fd5163f1e62beb18ddd9589053808"
   },
   "parent_descriptor": {
-    "path": "contract/vendor/kokoro-platform/1f6f764bc4bcf09d235e086ae7fe137acf16d63d/descriptor/platform-v8-parent39.binpb",
+    "path": "contract/vendor/kokoro-platform/af38f4419f6aa123d5bffaeaf14bd73a0b06c191/descriptor/platform-v8-parent39.binpb",
     "sha256": "0467c1c45e8ac27c79cb906e27bfdb679d88739e45bfa38128f0f629bec686d5"
   },
   "descriptor_parents": [
     {
-      "path": "contract/vendor/kokoro-platform/1f6f764bc4bcf09d235e086ae7fe137acf16d63d/descriptor/platform-installation-tags-parent-generated.binpb",
+      "path": "contract/vendor/kokoro-platform/af38f4419f6aa123d5bffaeaf14bd73a0b06c191/descriptor/platform-installation-tags-parent-generated.binpb",
       "sha256": "9aa6cf2b817bf021f42e031b8eab2cd7d8cfb8701bb994aa3717b5ba815b8915"
     },
     {
-      "path": "contract/vendor/kokoro-platform/1f6f764bc4bcf09d235e086ae7fe137acf16d63d/descriptor/platform-installation-tags-parent.binpb",
+      "path": "contract/vendor/kokoro-platform/af38f4419f6aa123d5bffaeaf14bd73a0b06c191/descriptor/platform-installation-tags-parent.binpb",
       "sha256": "0e9d45786e09d528402e5971880bb73bf1a7aae474322eb960c6fc7acba4ec18"
     },
     {
-      "path": "contract/vendor/kokoro-platform/1f6f764bc4bcf09d235e086ae7fe137acf16d63d/descriptor/platform-package-read-parent-generated.binpb",
+      "path": "contract/vendor/kokoro-platform/af38f4419f6aa123d5bffaeaf14bd73a0b06c191/descriptor/platform-package-read-parent-generated.binpb",
       "sha256": "c4caf5f9f4c92bacd38999af983af6828eaa2181d97307042897110c475cfdfd"
     },
     {
-      "path": "contract/vendor/kokoro-platform/1f6f764bc4bcf09d235e086ae7fe137acf16d63d/descriptor/platform-package-read-parent.binpb",
+      "path": "contract/vendor/kokoro-platform/af38f4419f6aa123d5bffaeaf14bd73a0b06c191/descriptor/platform-package-read-parent.binpb",
       "sha256": "37207ddd3513d0f0b1e3320401a54ab0848326692f9cc07571325bc325b4ddda"
     },
     {
-      "path": "contract/vendor/kokoro-platform/1f6f764bc4bcf09d235e086ae7fe137acf16d63d/descriptor/platform-v8-parent39.binpb",
+      "path": "contract/vendor/kokoro-platform/af38f4419f6aa123d5bffaeaf14bd73a0b06c191/descriptor/platform-skill-updated-at-http-3.3.0.json",
+      "sha256": "b6e5d0e0118207ee37933e5c22e94c86d95d74307b22a44e26e8974fede82acf"
+    },
+    {
+      "path": "contract/vendor/kokoro-platform/af38f4419f6aa123d5bffaeaf14bd73a0b06c191/descriptor/platform-skill-updated-at-parent-generated.binpb",
+      "sha256": "bf466c1288cb9bbd84e05a5122aa018b9a135377426099c3e158450a0f8f9b03"
+    },
+    {
+      "path": "contract/vendor/kokoro-platform/af38f4419f6aa123d5bffaeaf14bd73a0b06c191/descriptor/platform-skill-updated-at-parent.binpb",
+      "sha256": "2e1a811bf347b5d9cd3577ac6c762ee9d31f40dea2ac326a06b83bc61de9a8d5"
+    },
+    {
+      "path": "contract/vendor/kokoro-platform/af38f4419f6aa123d5bffaeaf14bd73a0b06c191/descriptor/platform-v8-parent39.binpb",
       "sha256": "0467c1c45e8ac27c79cb906e27bfdb679d88739e45bfa38128f0f629bec686d5"
     },
     {
-      "path": "contract/vendor/kokoro-platform/1f6f764bc4bcf09d235e086ae7fe137acf16d63d/descriptor/platform-v9-parent43-generated.binpb",
+      "path": "contract/vendor/kokoro-platform/af38f4419f6aa123d5bffaeaf14bd73a0b06c191/descriptor/platform-v9-parent43-generated.binpb",
       "sha256": "25197edc2c40d19773147c6b433d1f56d180b8ecf9c758f404ac1bf3884eea40"
     },
     {
-      "path": "contract/vendor/kokoro-platform/1f6f764bc4bcf09d235e086ae7fe137acf16d63d/descriptor/platform-v9-parent43.binpb",
+      "path": "contract/vendor/kokoro-platform/af38f4419f6aa123d5bffaeaf14bd73a0b06c191/descriptor/platform-v9-parent43.binpb",
       "sha256": "5f0f00f605f6a445b4d80943459b69bf9f489fd7851cc80b6c2700f8f78a8d0e"
     }
   ],
@@ -378,14 +405,14 @@
     "configs": [
       {
         "path": "buf.platform.json",
-        "sha256": "504f151c7b39431e2dc446251edac7ddd3a2ce8f3119728cfd5d4d4134b70506"
+        "sha256": "bcecb76b4f4ccfdd3e7c1d936177ed1b14db3f7a45daf3254a9899b9b502cb4f"
       },
       {
         "path": "buf.platform.gen.json",
         "sha256": "9888ea0808f6967ebdfb859125eb54430b89ad3f4dbee4418902bfdf6a4540ab"
       }
     ],
-    "script_sha256": "c0294422ce34a802e5c02360174c2b3a30cd12c2147d107d36dd62e82403749c",
+    "script_sha256": "307519e82e092196820bb571d3f88535f5dee9fde4585cfc053a84a3fb5fb584",
     "formatting": {
       "package": "prettier",
       "version": "3.9.6",
@@ -421,7 +448,7 @@
     },
     {
       "path": "kokoro/platform/v1/platform_runtime_pb.ts",
-      "sha256": "bb4ffeedd7d9f16882ddaf1672f379d8f311c9c4e6e7fbe2ba2cfd01f95feed7"
+      "sha256": "2518a044f60d081dfef90b05d1ca90b1911741c59919bef2e128a5e00b546547"
     }
   ]
 }

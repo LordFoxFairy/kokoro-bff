@@ -476,11 +476,104 @@ test("R257 personalization CAS none exception requires the exact method path and
     assert.match(inspectOpenApiGovernance(changed).join("\n"), /idempotency=required/u)
 })
 
-test("R267 lifecycle operations remain frozen in the current public 8.8 inventory", async () => {
+test("R267 lifecycle operations remain frozen in the current public 8.9 inventory", async () => {
   const openapi = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
-  assert.match(openapi, /^  version: 8\.8\.0$/mu)
+  assert.match(openapi, /^  version: 8\.9\.0$/mu)
   assert.equal((openapi.match(/operationId: createPersonalSkillVersion/gu) ?? []).length, 1)
   assert.equal((openapi.match(/operationId: withdrawPersonalSkill/gu) ?? []).length, 1)
+})
+
+test("R345 public 8.9 adds one required UTC Skill update instant to exactly four closed schemas and keeps 111 operations", async () => {
+  const { createRequire } = await import("node:module")
+  const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
+  const openapi = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
+  const document = load(openapi)
+  assert.equal(document.info.version, "8.9.0")
+  const operations = Object.values(document.paths).flatMap((pathItem) =>
+    Object.keys(pathItem).filter((method) => ["get", "post", "put", "patch", "delete", "head", "options", "trace"].includes(method)),
+  )
+  assert.equal(operations.length, 111)
+  const profiles = {
+    Skill: {
+      required: ["source_ref", "name", "description", "content_hash", "scope", "revision", "enabled", "categories", "skill_updated_at"],
+      properties: ["source_ref", "name", "description", "content_hash", "scope", "revision", "enabled", "installed", "categories", "skill_updated_at"],
+    },
+    ManagedPersonalSkillResource: {
+      required: ["skill_id", "source_ref", "series_id", "revision", "name", "summary", "tags", "status", "skill_updated_at"],
+      properties: ["skill_id", "source_ref", "series_id", "revision", "name", "summary", "tags", "status", "skill_updated_at"],
+    },
+    PublishedPersonalSkillResource: {
+      required: ["skill_id", "source_ref", "revision", "status", "name", "summary", "tags", "skill_updated_at"],
+      properties: ["skill_id", "source_ref", "revision", "status", "name", "summary", "tags", "skill_updated_at"],
+    },
+    SkillInstallation: {
+      required: [
+        "installation_id",
+        "source_ref",
+        "series_id",
+        "revision",
+        "installed",
+        "enabled",
+        "installed_at",
+        "updated_at",
+        "display_name",
+        "summary",
+        "source_status",
+        "skill_updated_at",
+      ],
+      properties: [
+        "installation_id",
+        "source_ref",
+        "series_id",
+        "revision",
+        "installed",
+        "enabled",
+        "installed_at",
+        "updated_at",
+        "removed_at",
+        "display_name",
+        "summary",
+        "source_status",
+        "skill_updated_at",
+      ],
+    },
+  }
+  for (const [name, profile] of Object.entries(profiles)) {
+    const schema = document.components.schemas[name]
+    assert.equal(schema.additionalProperties, false, `${name} remains closed`)
+    assert.deepEqual([...schema.required].sort(), [...profile.required].sort(), `${name} required fields`)
+    assert.deepEqual(Object.keys(schema.properties).sort(), [...profile.properties].sort(), `${name} exact properties`)
+    assert.deepEqual(schema.properties.skill_updated_at, { type: "string", format: "date-time", pattern: "Z$" }, `${name} UTC instant`)
+  }
+})
+
+test("R345 dedicated Skill update checker rejects each local shape drift without relying only on version or historical hash", async () => {
+  const { createRequire } = await import("node:module")
+  const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
+  const { inspectSkillUpdatedAtDocument } = await import("../scripts/verify-skill-updated-at-contract.mjs")
+  const openapi = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
+  const document = load(openapi)
+  assert.deepEqual(inspectSkillUpdatedAtDocument(document), [])
+  const schemas = ["Skill", "ManagedPersonalSkillResource", "PublishedPersonalSkillResource", "SkillInstallation"]
+  for (const name of schemas) {
+    const mutations = [
+      ["required", (schema) => (schema.required = schema.required.filter((field) => field !== "skill_updated_at"))],
+      ["property", (schema) => delete schema.properties.skill_updated_at],
+      ["extra property", (schema) => (schema.properties.unreviewed = { type: "string" })],
+      ["open object", (schema) => (schema.additionalProperties = true)],
+      ["string", (schema) => (schema.properties.skill_updated_at.type = "integer")],
+      ["format", (schema) => delete schema.properties.skill_updated_at.format],
+      ["UTC Z", (schema) => (schema.properties.skill_updated_at.pattern = ".*")],
+    ]
+    for (const [label, mutate] of mutations) {
+      const candidate = structuredClone(document)
+      mutate(candidate.components.schemas[name])
+      assert.match(inspectSkillUpdatedAtDocument(candidate).join("\n"), new RegExp(`R345 Skill updatedAt ${name}.*${label}`, "u"))
+    }
+  }
+  const historical = structuredClone(document)
+  historical.paths["/healthz"].get.summary = "Changed historical summary"
+  assert.match(inspectSkillUpdatedAtDocument(historical).join("\n"), /parsed public 8\.8 surface drifted/u)
 })
 
 test("R342 Skill package inspection checker rejects route, closed-shape, uint64, nullable, error and old-surface drift", async () => {

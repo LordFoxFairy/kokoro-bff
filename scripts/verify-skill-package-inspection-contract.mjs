@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto"
 import { createRequire } from "node:module"
 
+import { stripSkillUpdatedAtAdditions } from "./verify-skill-updated-at-contract.mjs"
+
 const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
 
 const BASE_PUBLIC_8_7_CANONICAL_SHA256 = "3471669d47146ef7a8541606b72f97965db9ce7ca014d0b51684ff87c8625383"
@@ -199,7 +201,7 @@ export function inspectSkillPackageInspectionDocument(document) {
     if (!condition) errors.push(`Skill package inspection ${message}`)
   }
 
-  require(document.info?.version === "8.8.0", "public version must equal 8.8.0")
+  require(document.info?.version === "8.9.0", "public version must equal 8.9.0")
   const operations = Object.values(document.paths ?? {}).flatMap((pathItem) =>
     Object.entries(pathItem ?? {}).filter(([method]) => ["get", "post", "put", "patch", "delete", "head", "options", "trace"].includes(method)),
   )
@@ -322,7 +324,7 @@ export function inspectSkillPackageInspectionDocument(document) {
   require(/session.*Retry-After/iu.test(rateLimited?.description ?? ""), "429 must scope Retry-After to session admission")
   require(/skill_package_limit_exceeded.*omit.*Retry-After/iu.test(rateLimited?.description ?? ""), "429 limit rejection must omit Retry-After")
 
-  const baseDigest = canonicalSha256(stripSkillPackageInspectionAdditions(document))
+  const baseDigest = canonicalSha256(stripSkillPackageInspectionAdditions(stripSkillUpdatedAtAdditions(document)))
   require(baseDigest === BASE_PUBLIC_8_7_CANONICAL_SHA256, `parsed public 8.7 surface drifted after stripping R342 additions: ${baseDigest}`)
   return [...new Set(errors)]
 }
