@@ -1,0 +1,161 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kokoro.dev/contracts/platform-execution-operations/9.0.0/schemas/global-mcp-registration.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "profileVersion",
+    "service",
+    "method",
+    "classification",
+    "request",
+    "registration",
+    "reservedTags",
+    "reservedNames",
+    "response",
+    "identity",
+    "constraints",
+    "idempotency",
+    "budget",
+    "errors",
+    "runtimeVerified",
+    "policyBoundary"
+  ],
+  "properties": {
+    "profileVersion": {
+      "const": 1
+    },
+    "service": {
+      "const": "kokoro.platform.v1.McpServerService"
+    },
+    "method": {
+      "const": "RegisterMcpServer"
+    },
+    "classification": {
+      "const": "global-registration"
+    },
+    "request": {
+      "const": {
+        "request_id": {
+          "tag": 1,
+          "type": "string"
+        },
+        "registration": {
+          "tag": 8,
+          "type": "McpServerRegistration",
+          "presence": "required message"
+        }
+      }
+    },
+    "registration": {
+      "const": {
+        "provider_key": {
+          "tag": 1,
+          "type": "string"
+        },
+        "server_identity": {
+          "tag": 2,
+          "type": "string"
+        },
+        "transport": {
+          "tag": 3,
+          "type": "McpTransport"
+        },
+        "declaration_digest": {
+          "tag": 4,
+          "type": "string"
+        }
+      }
+    },
+    "reservedTags": {
+      "const": [2, 3, 4, 5, 6, 7]
+    },
+    "reservedNames": {
+      "const": [
+        "command",
+        "provider_key",
+        "server_identity",
+        "transport",
+        "declaration_digest",
+        "attestation"
+      ]
+    },
+    "response": {
+      "const": {
+        "server_id": {
+          "tag": 1,
+          "type": "McpServerId"
+        },
+        "status": {
+          "tag": 2,
+          "type": "McpServerStatus"
+        },
+        "replayed": {
+          "tag": 3,
+          "type": "bool"
+        }
+      }
+    },
+    "identity": {
+      "const": {
+        "caller": "kokoro-system",
+        "profile": "operator_machine",
+        "purpose": "platform_ingress_global",
+        "scope": "platform:mcp-server.register",
+        "tenant": false,
+        "subject": false,
+        "command": false,
+        "proof": false
+      }
+    },
+    "constraints": {
+      "const": {
+        "requestId": "visible ASCII length 1..191; no trim",
+        "providerKey": "[a-z0-9][a-z0-9._-]{0,63}; full match; no trim",
+        "serverIdentity": "raw and normalized UTF-16 length 1..255; safe absolute HTTP(S) URL; no credentials/query/fragment/control/backslash/encoded separators/dot segments",
+        "transport": {
+          "accepted": [2],
+          "failedPrecondition": [1, 3],
+          "invalidArgument": "0, unknown, noninteger, wrong type"
+        },
+        "declarationDigest": "exact 64 lowercase hex; no LF",
+        "json": "strict snake-case closed objects; no null/default required fields"
+      }
+    },
+    "idempotency": {
+      "const": {
+        "key": "normalized serverIdentity",
+        "sameDefinition": "original id/current status/replayed=true including disabled",
+        "differentDefinition": "AlreadyExists; original row unchanged",
+        "unknownCommit": "no automatic rewrite; caller explicit same-definition replay"
+      }
+    },
+    "budget": {
+      "const": {
+        "maxMs": 10000,
+        "attempts": 3,
+        "isolation": "ReadCommitted",
+        "retry": "only confirmed rollback and explicitly allowed database errors; one absolute budget; observe settlement before permit reuse"
+      }
+    },
+    "errors": {
+      "const": [
+        "InvalidArgument",
+        "FailedPrecondition",
+        "Unauthenticated",
+        "PermissionDenied",
+        "AlreadyExists",
+        "Internal",
+        "Unavailable",
+        "DeadlineExceeded",
+        "Canceled"
+      ]
+    },
+    "runtimeVerified": {
+      "const": false
+    },
+    "policyBoundary": {
+      "const": "Build-time lexical/codec fixtures only. Actual trusted IAM, provider existence/type, production HTTPS/development loopback allowance, exact origin/path policy, SQL and external health require runtime tests; no network or provider calls."
+    }
+  }
+}

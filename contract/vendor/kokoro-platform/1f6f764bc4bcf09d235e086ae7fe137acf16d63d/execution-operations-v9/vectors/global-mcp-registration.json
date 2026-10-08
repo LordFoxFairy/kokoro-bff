@@ -1,0 +1,901 @@
+{
+  "profileVersion": 1,
+  "vectors": [
+    {
+      "id": "json.valid",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "accept",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.missing-registration",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\"}"
+    },
+    {
+      "id": "json.missing-request_id",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.registration-None",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":null}"
+    },
+    {
+      "id": "json.registration-{}",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{}}"
+    },
+    {
+      "id": "json.registration-[]",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":[]}"
+    },
+    {
+      "id": "json.registration-",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":\"\"}"
+    },
+    {
+      "id": "json.registration-0",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":0}"
+    },
+    {
+      "id": "json.root-tenant_id",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},\"tenant_id\":\"forbidden\"}"
+    },
+    {
+      "id": "json.root-subject_id",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},\"subject_id\":\"forbidden\"}"
+    },
+    {
+      "id": "json.root-command",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},\"command\":\"forbidden\"}"
+    },
+    {
+      "id": "json.root-execution_proof",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},\"execution_proof\":\"forbidden\"}"
+    },
+    {
+      "id": "json.root-attestation",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},\"attestation\":\"forbidden\"}"
+    },
+    {
+      "id": "json.root-unknown",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},\"unknown\":\"forbidden\"}"
+    },
+    {
+      "id": "json.root-requestId",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},\"requestId\":\"forbidden\"}"
+    },
+    {
+      "id": "json.missing-provider_key",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.missing-server_identity",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.missing-transport",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/mcp\",\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.missing-declaration_digest",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":2}}"
+    },
+    {
+      "id": "json.definition-providerKey",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"providerKey\":\"forbidden\"}}"
+    },
+    {
+      "id": "json.definition-serverIdentity",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"serverIdentity\":\"forbidden\"}}"
+    },
+    {
+      "id": "json.definition-declarationDigest",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"declarationDigest\":\"forbidden\"}}"
+    },
+    {
+      "id": "json.definition-secret",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"secret\":\"forbidden\"}}"
+    },
+    {
+      "id": "json.definition-tenant_id",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"tenant_id\":\"forbidden\"}}"
+    },
+    {
+      "id": "json.definition-unknown",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"unknown\":\"forbidden\"}}"
+    },
+    {
+      "id": "json.provider-empty",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.provider-min",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "accept",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"a\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.provider-max",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "accept",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.provider-over",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.provider-upper",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"Upper\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.provider-LF",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"a\\n\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.provider-space",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\" a\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.provider-slash",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"a/b\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.provider-null",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":null,\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.transport-zero",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":0,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.transport-stdio",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "FailedPrecondition",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":1,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.transport-sse",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "FailedPrecondition",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":3,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.transport-unknown",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":4,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.transport-negative",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":-1,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.transport-fraction",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":1.5,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.transport-string",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":\"2\",\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.transport-null",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":null,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.digest-short",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.digest-long",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.digest-upper",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":2,\"declaration_digest\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"}}"
+    },
+    {
+      "id": "json.digest-nonhex",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":2,\"declaration_digest\":\"gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg\"}}"
+    },
+    {
+      "id": "json.digest-LF",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\\n\"}}"
+    },
+    {
+      "id": "json.digest-empty",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":2,\"declaration_digest\":\"\"}}"
+    },
+    {
+      "id": "json.digest-null",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":2,\"declaration_digest\":null}}"
+    },
+    {
+      "id": "json.request-empty",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.request-min",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "accept",
+      "payload": "{\"request_id\":\"r\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.request-max",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "accept",
+      "payload": "{\"request_id\":\"rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.request-over",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.request-LF",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r\\n\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.request-space",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r r\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.request-null",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":null,\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.url-max",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "accept",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.url-over",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.url-normalize",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "accept",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"HTTPS://MCP.EXAMPLE.TEST:443/mcp\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.url-http-lexical-only",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "accept",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"http://127.0.0.1/mcp\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.url-normalized-over",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.url-credentials",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://u:p@mcp.example.test/mcp\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.url-query",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/?q=x\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.url-fragment",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/#x\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.url-scheme",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"file:///tmp/mcp\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.url-relative",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"not-url\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.url-empty",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.url-LF",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/x\\n\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.url-control",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/x\\u0001\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.url-backslash",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/a\\\\b\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.url-dot",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/a/../b\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.url-encoded-dot",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/a/%2e%2e/b\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.url-encoded-slash",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/a%2fb\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.url-encoded-backslash",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/a%5cb\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.url-encoded-null",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/a%00b\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.url-double-encoded-slash",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/a%252fb\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.url-bad-escape",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/%zz\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.response-registered",
+      "encoding": "json",
+      "direction": "response",
+      "outcome": "accept",
+      "payload": "{\"server_id\":{\"value\":\"server-1\"},\"status\":1}"
+    },
+    {
+      "id": "json.response-disabled-replay",
+      "encoding": "json",
+      "direction": "response",
+      "outcome": "accept",
+      "payload": "{\"server_id\":{\"value\":\"server-1\"},\"status\":2,\"replayed\":true}"
+    },
+    {
+      "id": "json.response-false",
+      "encoding": "json",
+      "direction": "response",
+      "outcome": "accept",
+      "payload": "{\"server_id\":{\"value\":\"server-1\"},\"status\":1,\"replayed\":false}"
+    },
+    {
+      "id": "json.response-empty-id",
+      "encoding": "json",
+      "direction": "response",
+      "outcome": "InvalidArgument",
+      "payload": "{\"server_id\":{},\"status\":1}"
+    },
+    {
+      "id": "json.response-zero-status",
+      "encoding": "json",
+      "direction": "response",
+      "outcome": "InvalidArgument",
+      "payload": "{\"server_id\":{\"value\":\"server-1\"},\"status\":0}"
+    },
+    {
+      "id": "json.response-secret",
+      "encoding": "json",
+      "direction": "response",
+      "outcome": "InvalidArgument",
+      "payload": "{\"server_id\":{\"value\":\"server-1\"},\"status\":1,\"secret\":\"x\"}"
+    },
+    {
+      "id": "binary.valid",
+      "encoding": "binary",
+      "direction": "request",
+      "outcome": "accept",
+      "payload": "Cg1yMzI4LXJlZ2lzdGVyQmsKB2V4YW1wbGUSHGh0dHBzOi8vbWNwLmV4YW1wbGUudGVzdC9tY3AiQGFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEYAg=="
+    },
+    {
+      "id": "binary.missing-registration",
+      "encoding": "binary",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "CgRyMzI4"
+    },
+    {
+      "id": "binary.empty-registration",
+      "encoding": "binary",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "CgRyMzI4QgA="
+    },
+    {
+      "id": "binary.missing-request",
+      "encoding": "binary",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "QmsKB2V4YW1wbGUSHGh0dHBzOi8vbWNwLmV4YW1wbGUudGVzdC9tY3AiQGFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEYAg=="
+    },
+    {
+      "id": "binary.truncated",
+      "encoding": "binary",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "Cg1yMzI4LXJlZ2lzdGVyQmsKB2V4YW1wbGUSHGh0dHBzOi8vbWNwLmV4YW1wbGUudGVzdC9tY3AiQGFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEY"
+    },
+    {
+      "id": "binary.unknown-root",
+      "encoding": "binary",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "Cg1yMzI4LXJlZ2lzdGVyQmsKB2V4YW1wbGUSHGh0dHBzOi8vbWNwLmV4YW1wbGUudGVzdC9tY3AiQGFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEYApgGAQ=="
+    },
+    {
+      "id": "binary.unknown-definition",
+      "encoding": "binary",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "CgRyMzI4Qm4KB2V4YW1wbGUSHGh0dHBzOi8vbWNwLmV4YW1wbGUudGVzdC9tY3AiQGFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEYApgGAQ=="
+    },
+    {
+      "id": "binary.transport-0",
+      "encoding": "binary",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "Cg1yMzI4LXJlZ2lzdGVyQmsKB2V4YW1wbGUSHGh0dHBzOi8vbWNwLmV4YW1wbGUudGVzdC9tY3AiQGFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEYAA=="
+    },
+    {
+      "id": "binary.transport-1",
+      "encoding": "binary",
+      "direction": "request",
+      "outcome": "FailedPrecondition",
+      "payload": "Cg1yMzI4LXJlZ2lzdGVyQmsKB2V4YW1wbGUSHGh0dHBzOi8vbWNwLmV4YW1wbGUudGVzdC9tY3AiQGFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEYAQ=="
+    },
+    {
+      "id": "binary.transport-3",
+      "encoding": "binary",
+      "direction": "request",
+      "outcome": "FailedPrecondition",
+      "payload": "Cg1yMzI4LXJlZ2lzdGVyQmsKB2V4YW1wbGUSHGh0dHBzOi8vbWNwLmV4YW1wbGUudGVzdC9tY3AiQGFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEYAw=="
+    },
+    {
+      "id": "binary.transport-4",
+      "encoding": "binary",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "Cg1yMzI4LXJlZ2lzdGVyQmsKB2V4YW1wbGUSHGh0dHBzOi8vbWNwLmV4YW1wbGUudGVzdC9tY3AiQGFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEYBA=="
+    },
+    {
+      "id": "binary.missing-provider_key",
+      "encoding": "binary",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "Cg1yMzI4LXJlZ2lzdGVyQmISHGh0dHBzOi8vbWNwLmV4YW1wbGUudGVzdC9tY3AiQGFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEYAg=="
+    },
+    {
+      "id": "binary.missing-server_identity",
+      "encoding": "binary",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "Cg1yMzI4LXJlZ2lzdGVyQk0KB2V4YW1wbGUiQGFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEYAg=="
+    },
+    {
+      "id": "binary.missing-transport",
+      "encoding": "binary",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "Cg1yMzI4LXJlZ2lzdGVyQmkKB2V4YW1wbGUSHGh0dHBzOi8vbWNwLmV4YW1wbGUudGVzdC9tY3AiQGFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE="
+    },
+    {
+      "id": "binary.missing-declaration_digest",
+      "encoding": "binary",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "Cg1yMzI4LXJlZ2lzdGVyQikKB2V4YW1wbGUSHGh0dHBzOi8vbWNwLmV4YW1wbGUudGVzdC9tY3AYAg=="
+    },
+    {
+      "id": "binary.url-max",
+      "encoding": "binary",
+      "direction": "request",
+      "outcome": "accept",
+      "payload": "Cg1yMzI4LXJlZ2lzdGVyQs8CCgdleGFtcGxlEv8BaHR0cHM6Ly9tY3AuZXhhbXBsZS50ZXN0L2FhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIkBhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhGAI="
+    },
+    {
+      "id": "binary.url-over",
+      "encoding": "binary",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "Cg1yMzI4LXJlZ2lzdGVyQtACCgdleGFtcGxlEoACaHR0cHM6Ly9tY3AuZXhhbXBsZS50ZXN0L2FhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYSJAYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYRgC"
+    },
+    {
+      "id": "binary.url-normalize",
+      "encoding": "binary",
+      "direction": "request",
+      "outcome": "accept",
+      "payload": "Cg1yMzI4LXJlZ2lzdGVyQm8KB2V4YW1wbGUSIEhUVFBTOi8vTUNQLkVYQU1QTEUuVEVTVDo0NDMvbWNwIkBhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhGAI="
+    },
+    {
+      "id": "binary.url-http-lexical-only",
+      "encoding": "binary",
+      "direction": "request",
+      "outcome": "accept",
+      "payload": "Cg1yMzI4LXJlZ2lzdGVyQmMKB2V4YW1wbGUSFGh0dHA6Ly8xMjcuMC4wLjEvbWNwIkBhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhGAI="
+    },
+    {
+      "id": "binary.url-normalized-over",
+      "encoding": "binary",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "Cg1yMzI4LXJlZ2lzdGVyQrECCgdleGFtcGxlEuEBaHR0cHM6Ly9tY3AuZXhhbXBsZS50ZXN0L8Opw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpw6nDqcOpIkBhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhGAI="
+    },
+    {
+      "id": "binary.url-credentials",
+      "encoding": "binary",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "Cg1yMzI4LXJlZ2lzdGVyQm8KB2V4YW1wbGUSIGh0dHBzOi8vdTpwQG1jcC5leGFtcGxlLnRlc3QvbWNwIkBhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhGAI="
+    },
+    {
+      "id": "binary.url-query",
+      "encoding": "binary",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "Cg1yMzI4LXJlZ2lzdGVyQmwKB2V4YW1wbGUSHWh0dHBzOi8vbWNwLmV4YW1wbGUudGVzdC8/cT14IkBhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhGAI="
+    },
+    {
+      "id": "binary.url-fragment",
+      "encoding": "binary",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "Cg1yMzI4LXJlZ2lzdGVyQmoKB2V4YW1wbGUSG2h0dHBzOi8vbWNwLmV4YW1wbGUudGVzdC8jeCJAYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYRgC"
+    },
+    {
+      "id": "binary.url-scheme",
+      "encoding": "binary",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "Cg1yMzI4LXJlZ2lzdGVyQl4KB2V4YW1wbGUSD2ZpbGU6Ly8vdG1wL21jcCJAYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYRgC"
+    },
+    {
+      "id": "binary.url-relative",
+      "encoding": "binary",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "Cg1yMzI4LXJlZ2lzdGVyQlYKB2V4YW1wbGUSB25vdC11cmwiQGFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEYAg=="
+    },
+    {
+      "id": "binary.url-empty",
+      "encoding": "binary",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "Cg1yMzI4LXJlZ2lzdGVyQk8KB2V4YW1wbGUSACJAYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYRgC"
+    },
+    {
+      "id": "binary.url-LF",
+      "encoding": "binary",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "Cg1yMzI4LXJlZ2lzdGVyQmoKB2V4YW1wbGUSG2h0dHBzOi8vbWNwLmV4YW1wbGUudGVzdC94CiJAYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYRgC"
+    },
+    {
+      "id": "binary.url-control",
+      "encoding": "binary",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "Cg1yMzI4LXJlZ2lzdGVyQmoKB2V4YW1wbGUSG2h0dHBzOi8vbWNwLmV4YW1wbGUudGVzdC94ASJAYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYRgC"
+    },
+    {
+      "id": "binary.url-backslash",
+      "encoding": "binary",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "Cg1yMzI4LXJlZ2lzdGVyQmsKB2V4YW1wbGUSHGh0dHBzOi8vbWNwLmV4YW1wbGUudGVzdC9hXGIiQGFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEYAg=="
+    },
+    {
+      "id": "binary.url-dot",
+      "encoding": "binary",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "Cg1yMzI4LXJlZ2lzdGVyQm4KB2V4YW1wbGUSH2h0dHBzOi8vbWNwLmV4YW1wbGUudGVzdC9hLy4uL2IiQGFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEYAg=="
+    },
+    {
+      "id": "binary.url-encoded-dot",
+      "encoding": "binary",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "Cg1yMzI4LXJlZ2lzdGVyQnIKB2V4YW1wbGUSI2h0dHBzOi8vbWNwLmV4YW1wbGUudGVzdC9hLyUyZSUyZS9iIkBhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhGAI="
+    },
+    {
+      "id": "binary.url-encoded-slash",
+      "encoding": "binary",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "Cg1yMzI4LXJlZ2lzdGVyQm0KB2V4YW1wbGUSHmh0dHBzOi8vbWNwLmV4YW1wbGUudGVzdC9hJTJmYiJAYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYRgC"
+    },
+    {
+      "id": "binary.url-encoded-backslash",
+      "encoding": "binary",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "Cg1yMzI4LXJlZ2lzdGVyQm0KB2V4YW1wbGUSHmh0dHBzOi8vbWNwLmV4YW1wbGUudGVzdC9hJTVjYiJAYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYRgC"
+    },
+    {
+      "id": "binary.url-encoded-null",
+      "encoding": "binary",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "Cg1yMzI4LXJlZ2lzdGVyQm0KB2V4YW1wbGUSHmh0dHBzOi8vbWNwLmV4YW1wbGUudGVzdC9hJTAwYiJAYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYRgC"
+    },
+    {
+      "id": "binary.url-double-encoded-slash",
+      "encoding": "binary",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "Cg1yMzI4LXJlZ2lzdGVyQm8KB2V4YW1wbGUSIGh0dHBzOi8vbWNwLmV4YW1wbGUudGVzdC9hJTI1MmZiIkBhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhGAI="
+    },
+    {
+      "id": "binary.url-bad-escape",
+      "encoding": "binary",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "Cg1yMzI4LXJlZ2lzdGVyQmsKB2V4YW1wbGUSHGh0dHBzOi8vbWNwLmV4YW1wbGUudGVzdC8lenoiQGFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEYAg=="
+    },
+    {
+      "id": "binary.digest-LF",
+      "encoding": "binary",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "Cg1yMzI4LXJlZ2lzdGVyQmwKB2V4YW1wbGUSHGh0dHBzOi8vbWNwLmV4YW1wbGUudGVzdC9tY3AiQWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEKGAI="
+    },
+    {
+      "id": "binary.response-registered",
+      "encoding": "binary",
+      "direction": "response",
+      "outcome": "accept",
+      "payload": "CgoKCHNlcnZlci0xEAE="
+    },
+    {
+      "id": "binary.response-disabled",
+      "encoding": "binary",
+      "direction": "response",
+      "outcome": "accept",
+      "payload": "CgoKCHNlcnZlci0xEAIYAQ=="
+    },
+    {
+      "id": "binary.response-unknown",
+      "encoding": "binary",
+      "direction": "response",
+      "outcome": "InvalidArgument",
+      "payload": "CgoKCHNlcnZlci0xEAFIAQ=="
+    },
+    {
+      "id": "json.raw-duplicate-root",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"shadow\",\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.raw-duplicate-definition",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":2,\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.raw-escaped-duplicate",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transp\\u006frt\":2,\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.raw-utf8-bom",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "﻿{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+    },
+    {
+      "id": "json.raw-malformed",
+      "encoding": "json",
+      "direction": "request",
+      "outcome": "InvalidArgument",
+      "payload": "{\"request_id\":\"r328-register\",\"registration\":{\"provider_key\":\"example\",\"server_identity\":\"https://mcp.example.test/mcp\",\"transport\":2,\"declaration_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}"
+    }
+  ]
+}

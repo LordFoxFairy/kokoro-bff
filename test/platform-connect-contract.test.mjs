@@ -4,12 +4,16 @@ import { access, cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "no
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { test } from "node:test"
+import { getTextEncoding } from "@bufbuild/protobuf/wire"
+import { configureBffProtobufTextEncoding } from "../dist/infrastructure/protobuf-text-encoding.js"
 
-const ownerCommit = "e83a2ad3a7c7d333ad0b0b8e7f3d3f64e497bc42"
+configureBffProtobufTextEncoding()
+
+const ownerCommit = "1f6f764bc4bcf09d235e086ae7fe137acf16d63d"
 const sources = {
   "kokoro/storage/v2/storage.proto": "02266d53b8bfb7fdd6991b17d59ebb17399d4f189b6a3135fedcb69b6b364276",
   "kokoro/common/v1/common.proto": "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08",
-  "kokoro/platform/v1/platform_runtime.proto": "c93ae886195d7c676d1bc2a3e99dcaa8013afdd7df304558a8ea0552ec0be7e4",
+  "kokoro/platform/v1/platform_runtime.proto": "7d82840be8c65f0e826e16639dc4d4565729f096bf6cbc2c4f1960a8e265f1eb",
 }
 const root = new URL("../", import.meta.url)
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex")
@@ -37,18 +41,18 @@ async function sourceBytes() {
   )
 }
 
-test("Platform consumer pins exact owner Proto bytes and inactive V8 to V7 to V6 to V5 proof", async () => {
+test("Platform consumer pins exact owner Proto bytes and inactive V9 to V8 to V7 to V6 to V5 proof", async () => {
   const manifest = JSON.parse(await requiredFile("contract/dependencies/platform-connect.json"))
   assert.equal(manifest.owner.repository_commit, ownerCommit)
   assert.equal(manifest.owner.package_name, "kokoro.platform.v1")
   assert.equal(manifest.owner.repository_path, "apps/kokoro-capability")
   assert.deepEqual(manifest.execution_artifact, {
-    path: `contract/vendor/kokoro-platform/${ownerCommit}/execution-operations-v8`,
-    artifact_version: "8.0.0",
+    path: `contract/vendor/kokoro-platform/${ownerCommit}/execution-operations-v9`,
+    artifact_version: "9.0.0",
     status: "inactive",
     routable: false,
-    provenance_path: `contract/vendor/kokoro-platform/${ownerCommit}/execution-operations-v8/provenance.json`,
-    aggregate_sha256: "4a5ed2ca1a25673967ac2ee05a43c5f568bdd19c9ff768d8e606fdac94b9542f",
+    provenance_path: `contract/vendor/kokoro-platform/${ownerCommit}/execution-operations-v9/provenance.json`,
+    aggregate_sha256: "19c1466ab398c6dbb43130f3977fe776532e41e00e2487476d465f22fc936073",
   })
   assert.deepEqual(
     manifest.execution_proof_chain.map(({ artifact_version, aggregate_sha256, inherits_version, inherits_aggregate_sha256 }) => ({
@@ -57,6 +61,12 @@ test("Platform consumer pins exact owner Proto bytes and inactive V8 to V7 to V6
       ...(inherits_version === undefined ? {} : { inherits_version, inherits_aggregate_sha256 }),
     })),
     [
+      {
+        artifact_version: "9.0.0",
+        aggregate_sha256: "19c1466ab398c6dbb43130f3977fe776532e41e00e2487476d465f22fc936073",
+        inherits_version: "8.0.0",
+        inherits_aggregate_sha256: "4a5ed2ca1a25673967ac2ee05a43c5f568bdd19c9ff768d8e606fdac94b9542f",
+      },
       {
         artifact_version: "8.0.0",
         aggregate_sha256: "4a5ed2ca1a25673967ac2ee05a43c5f568bdd19c9ff768d8e606fdac94b9542f",
@@ -80,7 +90,7 @@ test("Platform consumer pins exact owner Proto bytes and inactive V8 to V7 to V6
   )
   assert.deepEqual(manifest.descriptor, {
     path: `contract/vendor/kokoro-platform/${ownerCommit}/descriptor/platform-v1.binpb`,
-    sha256: "5f0f00f605f6a445b4d80943459b69bf9f489fd7851cc80b6c2700f8f78a8d0e",
+    sha256: "2e1a811bf347b5d9cd3577ac6c762ee9d31f40dea2ac326a06b83bc61de9a8d5",
   })
   assert.deepEqual(
     manifest.owner.sources,
@@ -129,12 +139,21 @@ test("Platform generator rejects source, proof-chain and generated tree drift", 
   assert.doesNotThrow(() => assertVendorPins([vendorEntry]))
   assert.throws(() => assertVendorPins([vendorEntry, { name: "5b6eb2c1532b23b9747bc4bf6ac99f69ad453de0", isDirectory: () => true }]), /commit allowlist/)
   assert.throws(() => assertVendorPins([{ name: ownerCommit, isDirectory: () => false }]), /real directory/)
-  const vendorInputs = ["descriptor", "execution-operations-v5", "execution-operations-v6", "execution-operations-v7", "execution-operations-v8", "proto"].map(
-    (name) => ({
-      name,
-      isDirectory: () => true,
-    }),
-  )
+  const vendorInputs = [
+    "descriptor",
+    "execution-operations-v5",
+    "execution-operations-v6",
+    "execution-operations-v7",
+    "execution-operations-v8",
+    "execution-operations-v9",
+    "openapi",
+    "proto",
+    "provenance.json",
+  ].map((name) => ({
+    name,
+    isDirectory: () => name !== "provenance.json",
+    isFile: () => name === "provenance.json",
+  }))
   assert.doesNotThrow(() => assertVendorLayout(vendorInputs))
   assert.throws(() => assertVendorLayout([...vendorInputs, { name: "execution-operations-v3", isDirectory: () => true }]), /layout allowlist/)
   assert.throws(
@@ -335,14 +354,17 @@ test("Platform generated Product installation exposes fixed metadata tags", asyn
 // R319: fixed machine consumption only; no BFF route, identity or runtime activation.
 test("R319 consumer fixes the complete V8 owner and preserves the historical parent39 pin", async () => {
   const manifest = JSON.parse(await requiredFile("contract/dependencies/platform-connect.json"))
-  assert.equal(manifest.owner.repository_commit, "e83a2ad3a7c7d333ad0b0b8e7f3d3f64e497bc42")
+  assert.equal(manifest.owner.repository_commit, "1f6f764bc4bcf09d235e086ae7fe137acf16d63d")
   assert.equal(manifest.status, "generated-not-activated")
   assert.deepEqual(
-    manifest.execution_proof_chain.map((entry) => entry.artifact_version),
+    manifest.execution_proof_chain.slice(1).map((entry) => entry.artifact_version),
     ["8.0.0", "7.0.0", "6.0.0", "5.0.1"],
   )
-  assert.equal(manifest.descriptor.sha256, "5f0f00f605f6a445b4d80943459b69bf9f489fd7851cc80b6c2700f8f78a8d0e")
-  const prefix = "contract/vendor/kokoro-platform/e83a2ad3a7c7d333ad0b0b8e7f3d3f64e497bc42"
+  assert.equal(
+    manifest.descriptor_parents.find((entry) => entry.path.endsWith("/platform-v9-parent43.binpb")).sha256,
+    "5f0f00f605f6a445b4d80943459b69bf9f489fd7851cc80b6c2700f8f78a8d0e",
+  )
+  const prefix = "contract/vendor/kokoro-platform/1f6f764bc4bcf09d235e086ae7fe137acf16d63d"
   assert.equal(
     sha256(await requiredFile(`${prefix}/descriptor/platform-v8-parent39.binpb`)),
     "0467c1c45e8ac27c79cb906e27bfdb679d88739e45bfa38128f0f629bec686d5",
@@ -353,11 +375,14 @@ test("R319 consumer fixes the complete V8 owner and preserves the historical par
   )
 })
 
-test("R319 current descriptor contains four personal unary reads and eleven messages without commands or proof", async () => {
+test("R319 historical V8 descriptor contains four personal unary reads and eleven messages without commands or proof", async () => {
   const { fromBinary } = await import("@bufbuild/protobuf")
   const { FileDescriptorSetSchema } = await import("@bufbuild/protobuf/wkt")
   const manifest = JSON.parse(await requiredFile("contract/dependencies/platform-connect.json"))
-  const descriptor = fromBinary(FileDescriptorSetSchema, await requiredFile(manifest.descriptor.path))
+  const descriptor = fromBinary(
+    FileDescriptorSetSchema,
+    await requiredFile(manifest.descriptor_parents.find((entry) => entry.path.endsWith("/platform-v9-parent43.binpb")).path),
+  )
   const file = descriptor.file.find((entry) => entry.package === "kokoro.platform.v1")
   assert.ok(file)
   assert.equal(file.service.flatMap((service) => service.method).length, 43)
@@ -444,7 +469,7 @@ test("R319 current descriptor contains four personal unary reads and eleven mess
   )
   const parent = fromBinary(
     FileDescriptorSetSchema,
-    await requiredFile("contract/vendor/kokoro-platform/e83a2ad3a7c7d333ad0b0b8e7f3d3f64e497bc42/descriptor/platform-v8-parent39.binpb"),
+    await requiredFile("contract/vendor/kokoro-platform/1f6f764bc4bcf09d235e086ae7fe137acf16d63d/descriptor/platform-v8-parent39.binpb"),
   )
   file.service = file.service.filter((entry) => entry.name !== "ProductMcpPersonalService")
   file.messageType = file.messageType.filter((entry) => !Object.hasOwn(expected, entry.name))
@@ -453,13 +478,14 @@ test("R319 current descriptor contains four personal unary reads and eleven mess
 
 test("R319 V8 pins the complete 190-vector corpus and exact inheritance without claiming semantic execution", async () => {
   const manifest = JSON.parse(await requiredFile("contract/dependencies/platform-connect.json"))
-  assert.equal(manifest.execution_artifact.artifact_version, "8.0.0")
-  assert.equal(manifest.execution_artifact.aggregate_sha256, "4a5ed2ca1a25673967ac2ee05a43c5f568bdd19c9ff768d8e606fdac94b9542f")
-  const base = `${manifest.execution_artifact.path}/`
+  const historical = manifest.execution_proof_chain.find((entry) => entry.artifact_version === "8.0.0")
+  assert.equal(historical.artifact_version, "8.0.0")
+  assert.equal(historical.aggregate_sha256, "4a5ed2ca1a25673967ac2ee05a43c5f568bdd19c9ff768d8e606fdac94b9542f")
+  const base = `${historical.path}/`
   const provenance = JSON.parse(await requiredFile(`${base}provenance.json`))
   const files = Object.fromEntries(await Promise.all(provenance.files.map(async (entry) => [entry.path, await requiredFile(`${base}${entry.path}`)])))
   const { assertExecutionArtifact } = await generator()
-  assert.doesNotThrow(() => assertExecutionArtifact(provenance, files, manifest.execution_artifact.aggregate_sha256))
+  assert.doesNotThrow(() => assertExecutionArtifact(provenance, files, historical.aggregate_sha256))
   const artifact = JSON.parse(files["manifest.json"])
   assert.deepEqual(artifact.counts, { rpc: 43, command: 20, proof: 24 })
   assert.deepEqual(artifact.inherits, { version: "7.0.0", aggregateSha256: "3384a88f31be1fdd3e15bcbceb33e4fd7d62b04dfbfef65fcc35c24ce7afbb72" })
@@ -508,4 +534,193 @@ test("R319 production verification rejects V8 inheritance, corpus and descriptor
     () => assertExecutionArtifact(provenance, { ...files, "vectors/personal-mcp-read.json": Buffer.from(JSON.stringify(vectors)) }, provenance.aggregateSha256),
     /byte length drifted|digest drifted/,
   )
+})
+
+test("R340 generated consumer exposes both personal package inspection services", async () => {
+  const generated = await import("../dist/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
+  for (const [service, method] of [
+    ["ProductSkillPackageInspectionService", "InspectPersonalSkillPackage"],
+    ["ProductSkillInstallationPackageInspectionService", "InspectPersonalSkillInstallationPackage"],
+  ]) {
+    assert.ok(generated[service], `${service} must be formally generated`)
+    assert.equal(generated[service].methods[0].name, method)
+    assert.equal(generated[service].methods[0].methodKind, "unary")
+  }
+})
+
+test("R340 complete 52-input publication is closed, byte-pinned and rejects omitted, extra and altered inputs", async () => {
+  const manifest = JSON.parse(await requiredFile("contract/dependencies/platform-connect.json"))
+  assert.equal(manifest.published_inputs.path_algorithm, "owner-repository-relative-including-contract")
+  assert.equal(manifest.published_inputs.aggregate_sha256, "e4201bc8674c470bf49c840712f87c34e869b96e59a0e96ba83eb3e4df19446a")
+  assert.equal(manifest.published_inputs.files.length, 52)
+  const files = Object.fromEntries(
+    await Promise.all(
+      manifest.published_inputs.files.map(async (pin) => {
+        const file = pin.path.replace(/^contract\//u, "").replace(/^execution-operations\/v([5-9])\//u, "execution-operations-v$1/")
+        const bytes = await requiredFile(`contract/vendor/kokoro-platform/${ownerCommit}/${file}`)
+        assert.equal(bytes.length, pin.bytes)
+        assert.equal(sha256(bytes), pin.sha256)
+        return [pin.path, bytes]
+      }),
+    ),
+  )
+  const { assertPublicationInputs } = await generator()
+  assert.doesNotThrow(() => assertPublicationInputs(files))
+  for (const [file, bytes] of Object.entries(files)) {
+    const missing = { ...files }
+    delete missing[file]
+    assert.throws(() => assertPublicationInputs(missing), /allowlist drifted/)
+    assert.throws(() => assertPublicationInputs({ ...files, [file]: Buffer.concat([bytes, Buffer.from([0])]) }), /byte length drifted/)
+    const changed = Buffer.from(bytes)
+    changed[0] ^= 1
+    assert.throws(() => assertPublicationInputs({ ...files, [file]: changed }), /digest drifted/)
+  }
+  assert.throws(() => assertPublicationInputs({ ...files, "contract/extra.json": Buffer.from("{}") }), /allowlist drifted/)
+})
+
+test("R340 historical V9 retains 43/20/24, all 128 vectors and exact inactive V8 inheritance", async () => {
+  const prefix = `contract/vendor/kokoro-platform/${ownerCommit}/execution-operations-v9`
+  const provenance = JSON.parse(await requiredFile(`${prefix}/provenance.json`))
+  const files = Object.fromEntries(await Promise.all(provenance.files.map(async (pin) => [pin.path, await requiredFile(`${prefix}/${pin.path}`)])))
+  const { assertExecutionArtifact, assertV9Proof } = await generator()
+  assert.equal(provenance.aggregateSha256, "19c1466ab398c6dbb43130f3977fe776532e41e00e2487476d465f22fc936073")
+  assert.doesNotThrow(() => assertExecutionArtifact(provenance, files, provenance.aggregateSha256))
+  const manifest = JSON.parse(files["manifest.json"])
+  assert.doesNotThrow(() => assertV9Proof(manifest))
+  assert.throws(() => assertV9Proof({ ...manifest, counts: { rpc: 45, command: 20, proof: 24 } }), /historical v9 proof drifted/)
+  assert.throws(() => assertV9Proof({ ...manifest, inherits: { ...manifest.inherits, aggregateSha256: "0".repeat(64) } }), /historical v9 proof drifted/)
+  assert.throws(() => assertV9Proof({ ...manifest, routable: true }), /historical v9 proof drifted/)
+  const vectors = JSON.parse(files["vectors/global-mcp-registration.json"])
+  assert.equal(vectors.vectors.length, 128)
+  assert.equal(new Set(vectors.vectors.map((vector) => vector.id)).size, 128)
+  vectors.vectors.pop()
+  assert.throws(
+    () =>
+      assertExecutionArtifact(
+        provenance,
+        { ...files, "vectors/global-mcp-registration.json": Buffer.from(JSON.stringify(vectors)) },
+        provenance.aggregateSha256,
+      ),
+    /byte length drifted|digest drifted/,
+  )
+})
+
+test("R340 current 45/20/24 graph exactly strips to three pinned parents and preserves generated/compiled whole graphs", async () => {
+  const { fromBinary, toBinary } = await import("@bufbuild/protobuf")
+  const { FileDescriptorSetSchema, FileDescriptorProtoSchema } = await import("@bufbuild/protobuf/wkt")
+  const {
+    assertDescriptorLineage,
+    assertDescriptorCensus,
+    assertDescriptorPairs,
+    assertGeneratedDescriptor,
+    assertInspectionDescriptors,
+    stripDescriptorLineage,
+  } = await generator()
+  const prefix = `contract/vendor/kokoro-platform/${ownerCommit}/descriptor`
+  const currentBytes = await requiredFile(`${prefix}/platform-v1.binpb`)
+  const current = fromBinary(FileDescriptorSetSchema, currentBytes)
+  assert.doesNotThrow(() => assertDescriptorCensus(current, [45, 20, 24]))
+  const historical = assertDescriptorLineage(currentBytes)
+  assert.deepEqual(Buffer.from(toBinary(FileDescriptorSetSchema, historical)), await requiredFile(`${prefix}/platform-v9-parent43.binpb`))
+  assert.doesNotThrow(() => assertDescriptorCensus(historical, [43, 20, 24]))
+  const manifest = JSON.parse(await requiredFile("contract/dependencies/platform-connect.json"))
+  const parents = Object.fromEntries(await Promise.all(manifest.descriptor_parents.map(async (pin) => [path.basename(pin.path), await requiredFile(pin.path)])))
+  assert.doesNotThrow(() => assertDescriptorPairs(parents))
+  for (const file of Object.keys(parents).filter((file) => !file.includes("v8-parent39"))) {
+    assert.throws(() => assertDescriptorPairs({ ...parents, [file]: Buffer.concat([parents[file], Buffer.from([0])]) }), /parent bytes drifted/)
+  }
+  const { file_kokoro_platform_v1_platform_runtime } = await import("../dist/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
+  assert.doesNotThrow(() => assertGeneratedDescriptor(file_kokoro_platform_v1_platform_runtime.proto, currentBytes))
+  const changedGenerated = fromBinary(FileDescriptorProtoSchema, toBinary(FileDescriptorProtoSchema, file_kokoro_platform_v1_platform_runtime.proto))
+  changedGenerated.messageType.find((message) => message.name === "SkillPackageSelectedText").field[1].number = 30
+  assert.throws(() => assertGeneratedDescriptor(changedGenerated, currentBytes), /whole graph drifted/)
+  const clone = () => fromBinary(FileDescriptorSetSchema, currentBytes)
+  for (const mutate of [
+    (file) => {
+      file.messageType.find((message) => message.name === "InspectPersonalSkillPackageRequest").reservedName.pop()
+    },
+    (file) => {
+      file.messageType.find((message) => message.name === "InspectPersonalSkillInstallationPackageRequest").field[2].proto3Optional = false
+    },
+    (file) => {
+      file.messageType.find((message) => message.name === "InspectPersonalSkillPackageResponse").field[2].label = 1
+    },
+    (file) => {
+      file.service.find((service) => service.name === "ProductSkillPackageInspectionService").method[0].serverStreaming = true
+    },
+    (file) => {
+      file.service.find((service) => service.name === "ProductSkillInstallationPackageInspectionService").method[0].outputType =
+        ".kokoro.platform.v1.InspectPersonalSkillPackageResponse"
+    },
+  ]) {
+    const changed = clone()
+    mutate(changed.file.find((file) => file.package === "kokoro.platform.v1"))
+    assert.throws(() => assertInspectionDescriptors(changed), /inspection.*drifted/)
+  }
+  const changedParent = clone()
+  changedParent.file
+    .find((file) => file.package === "kokoro.platform.v1")
+    .messageType.find((message) => message.name === "GetSkillPackageUploadResponse").field[0].number = 30
+  assert.throws(() => stripDescriptorLineage(changedParent), /whole parent graph drifted/)
+})
+
+test("BFF initializes one strict BOM-preserving Protobuf codec before composing clients", async () => {
+  const codec = getTextEncoding()
+  configureBffProtobufTextEncoding()
+  assert.equal(getTextEncoding(), codec)
+  const text = new Uint8Array([0xef, 0xbb, 0xbf, 0x61])
+  assert.equal(codec.decodeUtf8(text, false), "\uFEFFa")
+  assert.equal(codec.decodeUtf8(text, true), "\uFEFFa")
+  assert.throws(() => codec.decodeUtf8(new Uint8Array([0xff]), true), TypeError)
+  assert.equal(codec.decodeUtf8(new Uint8Array([0xff]), false), "\uFFFD")
+  const server = await requiredFile("src/bootstrap/server.ts")
+  assert.match(
+    server.toString("utf8"),
+    /export function createBffServer\([^]*?\{\n  configureBffProtobufTextEncoding\(\)\n  const composition = createBffComposition/u,
+  )
+})
+
+test("R340 inspection wire preserves absent versus explicit empty file, distinct identities, uint64 and original UTF-8 text", async () => {
+  const { create, fromBinary, toBinary } = await import("@bufbuild/protobuf")
+  const generated = await import("../dist/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
+  for (const [requestName, responseName, id] of [
+    ["InspectPersonalSkillPackageRequest", "InspectPersonalSkillPackageResponse", "skillId"],
+    ["InspectPersonalSkillInstallationPackageRequest", "InspectPersonalSkillInstallationPackageResponse", "installationId"],
+  ]) {
+    const requestSchema = generated[`${requestName}Schema`]
+    const responseSchema = generated[`${responseName}Schema`]
+    assert.deepEqual(
+      requestSchema.fields.map((field) => field.name),
+      ["request_id", id === "skillId" ? "skill_id" : "installation_id", "file_path"],
+    )
+    const absent = create(requestSchema, { requestId: "inspection-1", [id]: { value: "owned-resource" } })
+    const empty = create(requestSchema, { requestId: "inspection-1", [id]: { value: "owned-resource" }, filePath: "" })
+    const selected = create(requestSchema, { requestId: "inspection-1", [id]: { value: "owned-resource" }, filePath: "docs/说明.md" })
+    assert.equal(fromBinary(requestSchema, toBinary(requestSchema, absent)).filePath, undefined)
+    assert.equal(fromBinary(requestSchema, toBinary(requestSchema, empty)).filePath, "")
+    assert.notDeepEqual(toBinary(requestSchema, absent), toBinary(requestSchema, empty))
+    assert.deepEqual(fromBinary(requestSchema, toBinary(requestSchema, selected)), selected)
+    const originalText = "\uFEFF# 技能 🦊\r\n\r\n<raw>&正文\n"
+    const response = create(responseSchema, {
+      sourceRef: { value: "source-1" },
+      revision: 18446744073709551615n,
+      files: [{ path: "SKILL.md", sizeBytes: 9007199254740993n }],
+      selectedFile: { path: "SKILL.md", text: originalText },
+    })
+    assert.deepEqual(fromBinary(responseSchema, toBinary(responseSchema, response)), response)
+    const directoryOnly = create(responseSchema, { files: [{ path: "SKILL.md", sizeBytes: 1n }] })
+    assert.equal(fromBinary(responseSchema, toBinary(responseSchema, directoryOnly)).selectedFile, undefined)
+    const emptyFile = create(responseSchema, { files: [{ path: "SKILL.md", sizeBytes: 0n }], selectedFile: { path: "SKILL.md", text: "" } })
+    const decodedEmptyFile = fromBinary(responseSchema, toBinary(responseSchema, emptyFile))
+    assert.deepEqual(decodedEmptyFile, emptyFile)
+    assert.equal(decodedEmptyFile.selectedFile.text, "")
+    assert.notEqual(decodedEmptyFile.selectedFile, undefined)
+  }
+  const installation = create(generated.ProductSkillInstallationSchema, { tags: ["媒体", "内容", "自动化"] })
+  assert.deepEqual(fromBinary(generated.ProductSkillInstallationSchema, toBinary(generated.ProductSkillInstallationSchema, installation)).tags, [
+    "媒体",
+    "内容",
+    "自动化",
+  ])
+  assert.equal(generated.ProductSkillInstallationSchema.fields.find((field) => field.name === "tags").number, 13)
 })

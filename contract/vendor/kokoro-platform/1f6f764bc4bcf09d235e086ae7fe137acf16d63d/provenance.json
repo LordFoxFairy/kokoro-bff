@@ -1,0 +1,11 @@
+{
+  "authority": "local contract",
+  "source": "contract",
+  "files": [
+    "proto/kokoro/common/v1/common.proto",
+    "proto/kokoro/platform/v1/platform_runtime.proto",
+    "proto/kokoro/storage/v2/storage.proto",
+    "openapi/platform-http.openapi.json"
+  ],
+  "combinedSha256": "c681561b26dc30bce8981d87c74bd056f958b6a3193e459c10e6c964aecd455f"
+}

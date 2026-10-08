@@ -1,6 +1,18 @@
+## R341 Skills 查看详情固定消费前置已验证，页面仍未验收（2026-10-08）
+
+当前源码固定Platform **1f6f764bc4bcf09d235e086ae7fe137acf16d63d** 唯一52输入，逐bytes对正式Git/aggregate e4201bc8674c470bf49c840712f87c34e869b96e59a0e96ba83eb3e4df19446a；正规common/platform生成、当前45RPC/20command/24proof，V8/V9历史各43/20/24及三双父原图保护。旧e83a vendor删除，六旧测试仅反pin字面替换恢复原断言；独立Platform HTTP vendor保持原样。public仍8.7.0/109，SQL/正常配置/身份/进程不变；两本人正文GET和Web查看详情尚未实现。
+
+Root独审确认现wire缺原BOM/合法空presence守卫，新增后真实20PASS/1FAIL：默认Protobuf2.14.0 decoder丢U+FEFF；原FAIL日志保留。现进程级wire策略同步幂等初始化，在server composition之前配置strict/non-strict ignoreBOM:true，复用encode/check，非法UTF8严格拒绝/非严格replacement保持；零异步切换、无测试mock或generated手改。两service原BOM/混合换行/合法空正文/目录absence/uint64守卫22PASS，正常服务未启用本源码。
+
+Root最终冻结Node22.22.2 pnpm check句柄15282自然exit0：contract304PASS、default885中883PASS/0FAIL/2原资源SKIP，lint/typecheck/正式生成/build0；随后pnpm format:check自然0。此前format仅新增长assert报错，最窄3行换行后完整check/format重跑；不隐藏历史失败。日志Root var/dev/r255-preserve/r341-bff-root-{contract,contract-after,check-final,format-final}.log。独审 /root/bff_skills_consumer_review_r341（gpt-5.6-sol）最终无新增源码/安全阻断；Root加CURRENT/INDEX窄收据再冻，494范围外tracked逐SHA保护，原var保留。D0原TECH最后SHA270f8bb3（下节384de170为旧误记，现纠正），API51d71be1/DATAd02ab1原suffix保留。
+
+这是正式详情接线前置，未跑当前真实IAM/Platform/Storage/PG/BFF正文系统或用户浏览器链；不把辅助门当页面闭环，不升完整70/个人33。真实Manus同800×752对照仍缺查看详情/文件树/示例list/作者日期usage与真实cover，安装动作高24px、首卡短33.5px，用户验收FAIL。下一只推进Skills正文public→真实系统→runtime→Web同弹窗详情与示例字段，其他模块/heartbeat继续暂停。README既存84operation陈旧说明债务保留，不宣全仓文档闭环。
+
+<!-- R341-FIXED-CONSUMER-ROOT-END -->
+
 ## R340 Skills 包正文三面设计已冻结，功能仍待实现（2026-10-08）
 
-Root审查三D0一致，独审对应原8996fe/51d71b/d02ab1未发现设计阻断；Root核现client/owner metadata后TECH仅明确token tenant authority、x-kokoro-subject/typed request_id/响应x-kokoro-request-id，最终384de170，API/DATA不改。三原suffix/548其它tracked保留。当前固定Connect仍e83a43且两inspection缺失，Root实际资格assert自然exit1；真实owner1f6f764 clean、52正式输入以owner仓相对path含contract/记录聚合e4201bc可独立重算。第一次无前缀聚合断言失败仅审计算法差异，重核源未变。
+Root审查三D0一致，独审对应原8996fe/51d71b/d02ab1未发现设计阻断；Root核现client/owner metadata后TECH仅明确token tenant authority、x-kokoro-subject/typed request_id/响应x-kokoro-request-id，最终270f8bb3（R341纠正旧收据384de170误记），API/DATA不改。三原suffix/548其它tracked保留。当前固定Connect仍e83a43且两inspection缺失，Root实际资格assert自然exit1；真实owner1f6f764 clean、52正式输入以owner仓相对path含contract/记录聚合e4201bc可独立重算。第一次无前缀聚合断言失败仅审计算法差异，重核源未变。
 
 下步仅完整fixedconsumer/正规生成，之后独立public8.8/111→真实系统RED→runtime→正常激活→Web真实查看详情；当前无public正文路由，不冒UI完成。无SQL/正常进程/身份/资源更改，其它模块暂停，完整目标仍active。三D0完整路径见现TECH/API/DATA顶部R340，正文资格/作者usage/Admin仍OPEN。
 

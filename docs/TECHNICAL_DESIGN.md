@@ -1,3 +1,7 @@
+### R341 原文 BOM 解码纠正（2026-10-08）
+
+真实现消费者2.14.0默认Protobuf decoder剥字符串开头U+FEFF，Root新增原BOM守卫实际20PASS/1FAIL。原文保持规则不放宽；现普通src/infrastructure/protobuf-text-encoding.ts负责同步幂等进程wire策略，采用公开configureTextEncoding/getTextEncoding复用encode/check，只让strict与非strict decoder均ignoreBOM:true。现createBffServer在composition前配置一次；不在请求期间切换/恢复、不改owner string/bytes协议或JSON transport、不手改generated。放在现infrastructure而非Skills业务/新模块；package默认format仅加该路径。零SQL/身份/public路由/正常服务变更。最终验证以CURRENT实际收据为准，页面查看详情及示例仍未实施，不凭辅助codec通过判用户闭环。
+
 ## R340 Skills 本人包正文消费设计门（2026-10-08；目标，尚未实施）
 
 基线 `c91fee642c5bac79d5beab90b15a1eaf97637047` / `codex/r257-bff-normal-current`。当前 BFF public **8.7.0 / 109 operations**，Connect 固定 `e83a2ad3a7c7d333ad0b0b8e7f3d3f64e497bc42` / 43 RPC，未生成两个 inspection 方法，公开正文 route 尚不存在。Platform 已提交 **1f6f764bc4bcf09d235e086ae7fe137acf16d63d**，最新45 RPC/20 command/24 proof；正常进程启用另以 Root 实际维护证据为准。下面目标不表示本仓机器、运行或浏览器详情已经通过。本轮只新增三个现 D0 前缀，原全文后缀逐字节保留，Root 批准后另授切片。

@@ -1,3 +1,7 @@
+## R341 当前 Skills 包详情接线前置（2026-10-08）
+
+当前唯一固定Connect来源1f6f764/52输入/current45RPC，历史V8/V9各43不改；common/platform正规生成、旧e83a固定vendor已替换。`src/infrastructure/protobuf-text-encoding.ts`同步幂等wire设置在`src/bootstrap/server.ts`composition之前，保留原正文BOM并维持strict非法UTF8拒绝。完整Root check/format通过仅说明工程前置；public仍8.7/109，两正文GET/真正查看详情/示例与正常进程尚未接入。实际结果/失败/未验见CURRENT R341；下列R323/R319按历史时点读取，不是当前固定点。
+
 ## R323 本人 MCP 四读机器契约已发布，运行接线尚未实现（2026-10-07）
 
 当前唯一public OpenAPI **8.7.0 / 109 operations**，新增四 `/v1/self/mcp/*` GET（本人connector列表/详情、connector下connection列表、connection详情），固定metadata、安全closed shape/参数/错误与no-store。原105 operations/88path items/456components Root独立完整document剥增量后deepEqual，Platform固定vendor/generated、runtime/source/Schema/正常身份完全未动。旧R320三面中“尚未写机器契约”的阶段现由本节替代；五普通TS、正规OAuth HTTP到owner组合及正常激活仍目标，不把contract发行当已存在HTTP路由。没有新数据库/credential或兼容层。

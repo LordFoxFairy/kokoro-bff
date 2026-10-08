@@ -568,6 +568,14 @@ message RegisterMcpServerRequest {
   reserved 2, 3, 4, 5, 6, 7;
   reserved "command", "provider_key", "server_identity", "transport", "declaration_digest", "attestation";
   string request_id = 1;
+  kokoro.platform.v1.McpServerRegistration registration = 8;
+}
+
+message McpServerRegistration {
+  string provider_key = 1;
+  string server_identity = 2;
+  kokoro.platform.v1.McpTransport transport = 3;
+  string declaration_digest = 4;
 }
 
 message RegisterMcpServerResponse {
@@ -841,6 +849,7 @@ message ProductSkillInstallation {
   string display_name = 10;
   string summary = 11;
   kokoro.platform.v1.SkillStatus source_status = 12;
+  repeated string tags = 13;
 }
 
 message InstallPersonalSkillRequest {
@@ -1005,4 +1014,53 @@ service ProductMcpPersonalService {
   rpc GetPersonalMcpConnector(kokoro.platform.v1.GetPersonalMcpConnectorRequest) returns (kokoro.platform.v1.GetPersonalMcpConnectorResponse);
   rpc ListPersonalMcpConnections(kokoro.platform.v1.ListPersonalMcpConnectionsRequest) returns (kokoro.platform.v1.ListPersonalMcpConnectionsResponse);
   rpc GetPersonalMcpConnection(kokoro.platform.v1.GetPersonalMcpConnectionRequest) returns (kokoro.platform.v1.GetPersonalMcpConnectionResponse);
+}
+
+// Product package inspection: independently admitted personal reads.
+message InspectPersonalSkillPackageRequest {
+  reserved 100;
+  reserved "tenant_id", "actor_id", "subject_id", "owner_scope", "target_owner_scope", "product_context", "command", "execution_proof", "attestation";
+  string request_id = 1;
+  kokoro.platform.v1.SkillId skill_id = 2;
+  optional string file_path = 3;
+}
+
+service ProductSkillPackageInspectionService {
+  rpc InspectPersonalSkillPackage(kokoro.platform.v1.InspectPersonalSkillPackageRequest) returns (kokoro.platform.v1.InspectPersonalSkillPackageResponse);
+}
+
+message InspectPersonalSkillInstallationPackageRequest {
+  reserved 100;
+  reserved "tenant_id", "actor_id", "subject_id", "owner_scope", "target_owner_scope", "product_context", "command", "execution_proof", "attestation";
+  string request_id = 1;
+  kokoro.platform.v1.SkillInstallationId installation_id = 2;
+  optional string file_path = 3;
+}
+
+service ProductSkillInstallationPackageInspectionService {
+  rpc InspectPersonalSkillInstallationPackage(kokoro.platform.v1.InspectPersonalSkillInstallationPackageRequest) returns (kokoro.platform.v1.InspectPersonalSkillInstallationPackageResponse);
+}
+
+message InspectPersonalSkillPackageResponse {
+  kokoro.platform.v1.SkillSourceRef source_ref = 1;
+  uint64 revision = 2;
+  repeated kokoro.platform.v1.SkillPackageTextFile files = 3;
+  kokoro.platform.v1.SkillPackageSelectedText selected_file = 4;
+}
+
+message InspectPersonalSkillInstallationPackageResponse {
+  kokoro.platform.v1.SkillSourceRef source_ref = 1;
+  uint64 revision = 2;
+  repeated kokoro.platform.v1.SkillPackageTextFile files = 3;
+  kokoro.platform.v1.SkillPackageSelectedText selected_file = 4;
+}
+
+message SkillPackageTextFile {
+  string path = 1;
+  uint64 size_bytes = 2;
+}
+
+message SkillPackageSelectedText {
+  string path = 1;
+  string text = 2;
 }

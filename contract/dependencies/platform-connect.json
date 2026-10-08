@@ -3,7 +3,7 @@
   "status": "generated-not-activated",
   "owner": {
     "repository_path": "apps/kokoro-capability",
-    "repository_commit": "e83a2ad3a7c7d333ad0b0b8e7f3d3f64e497bc42",
+    "repository_commit": "1f6f764bc4bcf09d235e086ae7fe137acf16d63d",
     "package_name": "kokoro.platform.v1",
     "sources": [
       {
@@ -16,72 +16,376 @@
       },
       {
         "path": "contract/proto/kokoro/platform/v1/platform_runtime.proto",
-        "sha256": "c93ae886195d7c676d1bc2a3e99dcaa8013afdd7df304558a8ea0552ec0be7e4"
+        "sha256": "7d82840be8c65f0e826e16639dc4d4565729f096bf6cbc2c4f1960a8e265f1eb"
+      }
+    ]
+  },
+  "published_inputs": {
+    "path_algorithm": "owner-repository-relative-including-contract",
+    "aggregate_sha256": "e4201bc8674c470bf49c840712f87c34e869b96e59a0e96ba83eb3e4df19446a",
+    "files": [
+      {
+        "path": "contract/descriptor/platform-installation-tags-parent-generated.binpb",
+        "bytes": 35431,
+        "sha256": "9aa6cf2b817bf021f42e031b8eab2cd7d8cfb8701bb994aa3717b5ba815b8915"
+      },
+      {
+        "path": "contract/descriptor/platform-installation-tags-parent.binpb",
+        "bytes": 46951,
+        "sha256": "0e9d45786e09d528402e5971880bb73bf1a7aae474322eb960c6fc7acba4ec18"
+      },
+      {
+        "path": "contract/descriptor/platform-package-read-parent-generated.binpb",
+        "bytes": 35451,
+        "sha256": "c4caf5f9f4c92bacd38999af983af6828eaa2181d97307042897110c475cfdfd"
+      },
+      {
+        "path": "contract/descriptor/platform-package-read-parent.binpb",
+        "bytes": 46971,
+        "sha256": "37207ddd3513d0f0b1e3320401a54ab0848326692f9cc07571325bc325b4ddda"
+      },
+      {
+        "path": "contract/descriptor/platform-v1.binpb",
+        "bytes": 48752,
+        "sha256": "2e1a811bf347b5d9cd3577ac6c762ee9d31f40dea2ac326a06b83bc61de9a8d5"
+      },
+      {
+        "path": "contract/descriptor/platform-v8-parent39.binpb",
+        "bytes": 43624,
+        "sha256": "0467c1c45e8ac27c79cb906e27bfdb679d88739e45bfa38128f0f629bec686d5"
+      },
+      {
+        "path": "contract/descriptor/platform-v9-parent43-generated.binpb",
+        "bytes": 35139,
+        "sha256": "25197edc2c40d19773147c6b433d1f56d180b8ecf9c758f404ac1bf3884eea40"
+      },
+      {
+        "path": "contract/descriptor/platform-v9-parent43.binpb",
+        "bytes": 46659,
+        "sha256": "5f0f00f605f6a445b4d80943459b69bf9f489fd7851cc80b6c2700f8f78a8d0e"
+      },
+      {
+        "path": "contract/execution-operations/v5/command-identities.json",
+        "bytes": 32532,
+        "sha256": "33d356f224de6c2c58bda6d414858013a295e442773887c7e196cdcd67f13b82"
+      },
+      {
+        "path": "contract/execution-operations/v5/manifest.json",
+        "bytes": 13371,
+        "sha256": "43768f526cf4465e1316a696484cb482da581fe7c00c29ca84de816cc956730c"
+      },
+      {
+        "path": "contract/execution-operations/v5/operation-catalog.json",
+        "bytes": 11230,
+        "sha256": "b39ff94ab27215dcd9122361ca7a9e000ddc7e723c0b598d16544d420774ddd9"
+      },
+      {
+        "path": "contract/execution-operations/v5/product-installation-v1.json",
+        "bytes": 10347,
+        "sha256": "699d2fd002581f9161c6ac737728a5480e68e121a4f46663b1395ea9e7a96fe0"
+      },
+      {
+        "path": "contract/execution-operations/v5/provenance.json",
+        "bytes": 1858,
+        "sha256": "787d8d1e7e4f734ea072c1e7516fd9cb36acb9eab0b87192c873ec0c10eabb43"
+      },
+      {
+        "path": "contract/execution-operations/v5/schemas/command-identities.schema.json",
+        "bytes": 37395,
+        "sha256": "4f9b9112afe2bd08f6189e1fc30050771b0a9eb508450a7e83080eba5a2df123"
+      },
+      {
+        "path": "contract/execution-operations/v5/schemas/manifest.schema.json",
+        "bytes": 17524,
+        "sha256": "39ee548bcfdd02745434e95420edca0699c1dbeb4f67d79e75aec2e5e812e8f4"
+      },
+      {
+        "path": "contract/execution-operations/v5/schemas/operation-catalog.schema.json",
+        "bytes": 12935,
+        "sha256": "bd9b987377cdd1cc9fc794f57c306d399bb28c0ffd0b7330122d888834958055"
+      },
+      {
+        "path": "contract/execution-operations/v5/schemas/product-installation.schema.json",
+        "bytes": 15222,
+        "sha256": "e1062ad73f2cf3ca1028e4ceff2c837d18dbd4885a3b6e8a08fa0639ebe97911"
+      },
+      {
+        "path": "contract/execution-operations/v5/schemas/vector-inventory.schema.json",
+        "bytes": 121741,
+        "sha256": "a70ef2767ed1cc90f6fb20cfa2fff5ef6bbf14ae00dac48235a8d06006be6f3e"
+      },
+      {
+        "path": "contract/execution-operations/v5/vectors/product-installation.json",
+        "bytes": 112930,
+        "sha256": "31efd14da208dffef6785b64cf42ed44c9875d40cf3013349fd6d1fd85cab62e"
+      },
+      {
+        "path": "contract/execution-operations/v6/authorize-response-v1.json",
+        "bytes": 1137,
+        "sha256": "b09776cceeda7d36ecc49e43b1ef4ccb9b426c9914825ec317805a5aa876174d"
+      },
+      {
+        "path": "contract/execution-operations/v6/connection-projection-v1.json",
+        "bytes": 1954,
+        "sha256": "3e29005afb0856936f6361f59ae197b76d59324d0a37c6c03f711756c891d29c"
+      },
+      {
+        "path": "contract/execution-operations/v6/manifest.json",
+        "bytes": 1181,
+        "sha256": "2f5adda27ca7de30771dfe2a0422797f3c8b8d3eeff7f2e870868b508792fa0a"
+      },
+      {
+        "path": "contract/execution-operations/v6/provenance.json",
+        "bytes": 1519,
+        "sha256": "3288cdad7e3a633c07873f255c52daa6bf6744831f81b3eeeb7340c12c75a312"
+      },
+      {
+        "path": "contract/execution-operations/v6/schemas/authorize-response.schema.json",
+        "bytes": 2293,
+        "sha256": "8cd877313c9e6ad60cae1f8c3d722cf3e3b47678bbbc60041a53c0df3f70a6db"
+      },
+      {
+        "path": "contract/execution-operations/v6/schemas/connection-projection.schema.json",
+        "bytes": 5637,
+        "sha256": "e33ef29a89c562ce74b3871522d004c5502709a70ad4afb1fe1647affa8418ce"
+      },
+      {
+        "path": "contract/execution-operations/v6/schemas/manifest.schema.json",
+        "bytes": 2275,
+        "sha256": "b6cecac8d80d78354b351cc5e4dde8f7dc9ef6bd89356e84aa8ed4fbb7d3c8e3"
+      },
+      {
+        "path": "contract/execution-operations/v6/vectors/authorize-response.json",
+        "bytes": 12300,
+        "sha256": "2bf8751822d4db00d053ceb41b60749ab452dd38db22b081a4e4e5e7b0ab147e"
+      },
+      {
+        "path": "contract/execution-operations/v6/vectors/connection-projection.json",
+        "bytes": 7474,
+        "sha256": "6c83cebd8006349d3e17c63d0e9f97209385f8b363822dc20869afbf39c8ae5a"
+      },
+      {
+        "path": "contract/execution-operations/v7/manifest.json",
+        "bytes": 391,
+        "sha256": "09ae832c861d0106986e15a0302574f33b4d9c89375f1284050d1d540b3f1b34"
+      },
+      {
+        "path": "contract/execution-operations/v7/provenance.json",
+        "bytes": 1135,
+        "sha256": "cd8b08095c7410f7322bc51bd3ba68eeb084e1b0542ab35d8b26751694c65dec"
+      },
+      {
+        "path": "contract/execution-operations/v7/publish-v2.json",
+        "bytes": 2472,
+        "sha256": "551b0f4ccec56b64644fcdce9eec0ff1c4020d0dc48eccdf02833cc74225de35"
+      },
+      {
+        "path": "contract/execution-operations/v7/schemas/manifest.schema.json",
+        "bytes": 1014,
+        "sha256": "c67b0173c36172d7f3870ac442567ac64c1b570535dda84b07bdbdcdc9583988"
+      },
+      {
+        "path": "contract/execution-operations/v7/schemas/zip-profile-v2.schema.json",
+        "bytes": 3090,
+        "sha256": "1204e84b628829e037a4e0f44f691d1eed07233c78bdf6b1a8ee5bbbc67613d1"
+      },
+      {
+        "path": "contract/execution-operations/v7/vectors/zip-v2.json",
+        "bytes": 4533,
+        "sha256": "66421e76274cca5b0d0ed3248d2c75151fea348341b250e523112ccfb151ad2c"
+      },
+      {
+        "path": "contract/execution-operations/v7/zip-profile-v2.json",
+        "bytes": 1630,
+        "sha256": "077b9a40d5525a77c7fe0814ed0afa4b48fc1c22dad72187c7aea10d9f6116a9"
+      },
+      {
+        "path": "contract/execution-operations/v8/manifest.json",
+        "bytes": 405,
+        "sha256": "cf9b40ebf83c6dd7ffc7f0b12f2de18c363b96866e7f330fe0eb4b2446f7966c"
+      },
+      {
+        "path": "contract/execution-operations/v8/personal-mcp-read-v1.json",
+        "bytes": 5493,
+        "sha256": "d45fd8f396cad4151d1f3de0feea74a3db5d796060025a206a1c6f16932cfa41"
+      },
+      {
+        "path": "contract/execution-operations/v8/provenance.json",
+        "bytes": 1007,
+        "sha256": "a985f907fc9f2c5d8735c8918f1af6028efa9a3ed0f43b273612c592c2288444"
+      },
+      {
+        "path": "contract/execution-operations/v8/schemas/manifest.schema.json",
+        "bytes": 1028,
+        "sha256": "de62c22fea26ac1859674b783d48abde78f39e5b5151c3f575f91fbf498fd460"
+      },
+      {
+        "path": "contract/execution-operations/v8/schemas/personal-mcp-read.schema.json",
+        "bytes": 6823,
+        "sha256": "4435f60a584fb3099267a326af98d16b532194f13e281d65cd274a73d9bd066e"
+      },
+      {
+        "path": "contract/execution-operations/v8/vectors/personal-mcp-read.json",
+        "bytes": 102719,
+        "sha256": "40555c30ccc84075163279d35dfc288cead6b728f8d98bf70f23628827d69cb8"
+      },
+      {
+        "path": "contract/execution-operations/v9/global-mcp-registration-v1.json",
+        "bytes": 2970,
+        "sha256": "7cfdb27781789887cf51f44d8fe44577950bbed6c05b2d99fd392c0c731e954e"
+      },
+      {
+        "path": "contract/execution-operations/v9/manifest.json",
+        "bytes": 411,
+        "sha256": "3b4caf81080ffc6e72c204ceb1bcf65e275f1ef47d1c0be4fe924e4983397fba"
+      },
+      {
+        "path": "contract/execution-operations/v9/provenance.json",
+        "bytes": 1024,
+        "sha256": "cbfa5f46a495966722a5e2df50d17ce7d83c2f5c6a722bc13981ac4d5541ddef"
+      },
+      {
+        "path": "contract/execution-operations/v9/schemas/global-mcp-registration.schema.json",
+        "bytes": 4287,
+        "sha256": "6276f648dd621f5d8ca3cf7d7f54889476ecf203dab970fe80b744193405853a"
+      },
+      {
+        "path": "contract/execution-operations/v9/schemas/manifest.schema.json",
+        "bytes": 1034,
+        "sha256": "0fc177c27c760ce9d574ccb623e00c2eebbeda35401a5b63cc7241a4fadf14cc"
+      },
+      {
+        "path": "contract/execution-operations/v9/vectors/global-mcp-registration.json",
+        "bytes": 47456,
+        "sha256": "7c256bbc3f9ed0cc93434595bd9caa7c2f0a00035837fadc2fc3dfa1110df9ed"
+      },
+      {
+        "path": "contract/openapi/platform-http.openapi.json",
+        "bytes": 33330,
+        "sha256": "b6e5d0e0118207ee37933e5c22e94c86d95d74307b22a44e26e8974fede82acf"
+      },
+      {
+        "path": "contract/proto/kokoro/common/v1/common.proto",
+        "bytes": 2271,
+        "sha256": "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08"
+      },
+      {
+        "path": "contract/proto/kokoro/platform/v1/platform_runtime.proto",
+        "bytes": 35569,
+        "sha256": "7d82840be8c65f0e826e16639dc4d4565729f096bf6cbc2c4f1960a8e265f1eb"
+      },
+      {
+        "path": "contract/proto/kokoro/storage/v2/storage.proto",
+        "bytes": 10666,
+        "sha256": "02266d53b8bfb7fdd6991b17d59ebb17399d4f189b6a3135fedcb69b6b364276"
+      },
+      {
+        "path": "contract/provenance.json",
+        "bytes": 350,
+        "sha256": "fca4ce3aead18ed92d3bc6381d2bb9629227414c75d043228f27446fc1147a48"
       }
     ]
   },
   "execution_artifact": {
-    "path": "contract/vendor/kokoro-platform/e83a2ad3a7c7d333ad0b0b8e7f3d3f64e497bc42/execution-operations-v8",
-    "artifact_version": "8.0.0",
+    "path": "contract/vendor/kokoro-platform/1f6f764bc4bcf09d235e086ae7fe137acf16d63d/execution-operations-v9",
+    "artifact_version": "9.0.0",
     "status": "inactive",
     "routable": false,
-    "provenance_path": "contract/vendor/kokoro-platform/e83a2ad3a7c7d333ad0b0b8e7f3d3f64e497bc42/execution-operations-v8/provenance.json",
-    "aggregate_sha256": "4a5ed2ca1a25673967ac2ee05a43c5f568bdd19c9ff768d8e606fdac94b9542f"
+    "provenance_path": "contract/vendor/kokoro-platform/1f6f764bc4bcf09d235e086ae7fe137acf16d63d/execution-operations-v9/provenance.json",
+    "aggregate_sha256": "19c1466ab398c6dbb43130f3977fe776532e41e00e2487476d465f22fc936073"
   },
   "execution_proof_chain": [
     {
-      "path": "contract/vendor/kokoro-platform/e83a2ad3a7c7d333ad0b0b8e7f3d3f64e497bc42/execution-operations-v8",
+      "path": "contract/vendor/kokoro-platform/1f6f764bc4bcf09d235e086ae7fe137acf16d63d/execution-operations-v9",
+      "artifact_version": "9.0.0",
+      "aggregate_sha256": "19c1466ab398c6dbb43130f3977fe776532e41e00e2487476d465f22fc936073",
+      "inherits_version": "8.0.0",
+      "inherits_aggregate_sha256": "4a5ed2ca1a25673967ac2ee05a43c5f568bdd19c9ff768d8e606fdac94b9542f"
+    },
+    {
+      "path": "contract/vendor/kokoro-platform/1f6f764bc4bcf09d235e086ae7fe137acf16d63d/execution-operations-v8",
       "artifact_version": "8.0.0",
       "aggregate_sha256": "4a5ed2ca1a25673967ac2ee05a43c5f568bdd19c9ff768d8e606fdac94b9542f",
       "inherits_version": "7.0.0",
       "inherits_aggregate_sha256": "3384a88f31be1fdd3e15bcbceb33e4fd7d62b04dfbfef65fcc35c24ce7afbb72"
     },
     {
-      "path": "contract/vendor/kokoro-platform/e83a2ad3a7c7d333ad0b0b8e7f3d3f64e497bc42/execution-operations-v7",
+      "path": "contract/vendor/kokoro-platform/1f6f764bc4bcf09d235e086ae7fe137acf16d63d/execution-operations-v7",
       "artifact_version": "7.0.0",
       "aggregate_sha256": "3384a88f31be1fdd3e15bcbceb33e4fd7d62b04dfbfef65fcc35c24ce7afbb72",
       "inherits_version": "6.0.0",
       "inherits_aggregate_sha256": "0d728881ba1046dc566131d63de71f6821ec636cf45837b5d937fee9872d5f91"
     },
     {
-      "path": "contract/vendor/kokoro-platform/e83a2ad3a7c7d333ad0b0b8e7f3d3f64e497bc42/execution-operations-v6",
+      "path": "contract/vendor/kokoro-platform/1f6f764bc4bcf09d235e086ae7fe137acf16d63d/execution-operations-v6",
       "artifact_version": "6.0.0",
       "aggregate_sha256": "0d728881ba1046dc566131d63de71f6821ec636cf45837b5d937fee9872d5f91",
       "inherits_version": "5.0.1",
       "inherits_aggregate_sha256": "3f97b3c98fd8e7ce46e4a8ea73237ddb85e764849d2b15dd28d0a3a58a69e42f"
     },
     {
-      "path": "contract/vendor/kokoro-platform/e83a2ad3a7c7d333ad0b0b8e7f3d3f64e497bc42/execution-operations-v5",
+      "path": "contract/vendor/kokoro-platform/1f6f764bc4bcf09d235e086ae7fe137acf16d63d/execution-operations-v5",
       "artifact_version": "5.0.1",
       "aggregate_sha256": "3f97b3c98fd8e7ce46e4a8ea73237ddb85e764849d2b15dd28d0a3a58a69e42f"
     }
   ],
   "descriptor": {
-    "path": "contract/vendor/kokoro-platform/e83a2ad3a7c7d333ad0b0b8e7f3d3f64e497bc42/descriptor/platform-v1.binpb",
-    "sha256": "5f0f00f605f6a445b4d80943459b69bf9f489fd7851cc80b6c2700f8f78a8d0e"
+    "path": "contract/vendor/kokoro-platform/1f6f764bc4bcf09d235e086ae7fe137acf16d63d/descriptor/platform-v1.binpb",
+    "sha256": "2e1a811bf347b5d9cd3577ac6c762ee9d31f40dea2ac326a06b83bc61de9a8d5"
   },
   "parent_descriptor": {
-    "path": "contract/vendor/kokoro-platform/e83a2ad3a7c7d333ad0b0b8e7f3d3f64e497bc42/descriptor/platform-v8-parent39.binpb",
+    "path": "contract/vendor/kokoro-platform/1f6f764bc4bcf09d235e086ae7fe137acf16d63d/descriptor/platform-v8-parent39.binpb",
     "sha256": "0467c1c45e8ac27c79cb906e27bfdb679d88739e45bfa38128f0f629bec686d5"
   },
+  "descriptor_parents": [
+    {
+      "path": "contract/vendor/kokoro-platform/1f6f764bc4bcf09d235e086ae7fe137acf16d63d/descriptor/platform-installation-tags-parent-generated.binpb",
+      "sha256": "9aa6cf2b817bf021f42e031b8eab2cd7d8cfb8701bb994aa3717b5ba815b8915"
+    },
+    {
+      "path": "contract/vendor/kokoro-platform/1f6f764bc4bcf09d235e086ae7fe137acf16d63d/descriptor/platform-installation-tags-parent.binpb",
+      "sha256": "0e9d45786e09d528402e5971880bb73bf1a7aae474322eb960c6fc7acba4ec18"
+    },
+    {
+      "path": "contract/vendor/kokoro-platform/1f6f764bc4bcf09d235e086ae7fe137acf16d63d/descriptor/platform-package-read-parent-generated.binpb",
+      "sha256": "c4caf5f9f4c92bacd38999af983af6828eaa2181d97307042897110c475cfdfd"
+    },
+    {
+      "path": "contract/vendor/kokoro-platform/1f6f764bc4bcf09d235e086ae7fe137acf16d63d/descriptor/platform-package-read-parent.binpb",
+      "sha256": "37207ddd3513d0f0b1e3320401a54ab0848326692f9cc07571325bc325b4ddda"
+    },
+    {
+      "path": "contract/vendor/kokoro-platform/1f6f764bc4bcf09d235e086ae7fe137acf16d63d/descriptor/platform-v8-parent39.binpb",
+      "sha256": "0467c1c45e8ac27c79cb906e27bfdb679d88739e45bfa38128f0f629bec686d5"
+    },
+    {
+      "path": "contract/vendor/kokoro-platform/1f6f764bc4bcf09d235e086ae7fe137acf16d63d/descriptor/platform-v9-parent43-generated.binpb",
+      "sha256": "25197edc2c40d19773147c6b433d1f56d180b8ecf9c758f404ac1bf3884eea40"
+    },
+    {
+      "path": "contract/vendor/kokoro-platform/1f6f764bc4bcf09d235e086ae7fe137acf16d63d/descriptor/platform-v9-parent43.binpb",
+      "sha256": "5f0f00f605f6a445b4d80943459b69bf9f489fd7851cc80b6c2700f8f78a8d0e"
+    }
+  ],
   "generator": {
     "packages": {
       "@bufbuild/buf": "1.72.0",
       "@bufbuild/protoc-gen-es": "2.14.0",
       "@bufbuild/protobuf": "2.14.0",
-      "@connectrpc/connect": "2.2.0"
+      "@connectrpc/connect": "2.2.0",
+      "tsx": "4.23.12"
     },
     "configs": [
       {
         "path": "buf.platform.json",
-        "sha256": "1c625e3af0ecaa8e9254a39116a3a4d2c86a84dbdb25c0a904153bfa915c94ed"
+        "sha256": "504f151c7b39431e2dc446251edac7ddd3a2ce8f3119728cfd5d4d4134b70506"
       },
       {
         "path": "buf.platform.gen.json",
         "sha256": "9888ea0808f6967ebdfb859125eb54430b89ad3f4dbee4418902bfdf6a4540ab"
       }
     ],
-    "script_sha256": "8418393aef87fe8faeb15c299410f40c54d068340e37f2076308d9208de26cab",
+    "script_sha256": "c0294422ce34a802e5c02360174c2b3a30cd12c2147d107d36dd62e82403749c",
     "formatting": {
       "package": "prettier",
       "version": "3.9.6",
@@ -96,7 +400,7 @@
     "licenses": "Buf, Protobuf-ES and Connect-ES: Apache-2.0",
     "supply_chain": "Exact package versions and lock integrity; local generation without remote plugins; only @bufbuild/buf install build is newly allowed.",
     "performance": "No network calls or application startup added. Runtime performance is unmeasured; this slice validates descriptor serialization only.",
-    "failure_semantics": "Generation rejects source/config/package/tree/digest drift. The fixed V8 to V7 to V6 to V5 proof chain, descriptor, current Proto source and Get read binding fail closed; runtime adapter admits current user before Platform Connect.",
+    "failure_semantics": "Generation rejects source/config/package/tree/digest drift. The fixed V9 to V8 to V7 to V6 to V5 proof chain, descriptor, current Proto source and Get read binding fail closed; runtime adapter admits current user before Platform Connect.",
     "exit_path": "Regenerate from the pinned owner Proto with a reviewed compatible generator; generated wire types remain isolated from business code.",
     "sources": [
       "https://connectrpc.com/docs/node/getting-started/",
@@ -117,7 +421,7 @@
     },
     {
       "path": "kokoro/platform/v1/platform_runtime_pb.ts",
-      "sha256": "677a7180148af768cd87d16b700f96ffebb5c8dbecccb9e4312b1bc10bff818d"
+      "sha256": "bb4ffeedd7d9f16882ddaf1672f379d8f311c9c4e6e7fbe2ba2cfd01f95feed7"
     }
   ]
 }

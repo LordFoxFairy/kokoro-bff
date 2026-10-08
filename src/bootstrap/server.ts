@@ -56,6 +56,7 @@ import { moveSessionRoute } from "../http/routes/move-session.js"
 import { managedPersonalSkillsRoute } from "../http/routes/managed-personal-skills.js"
 import { createPersonalSkillVersionRoute } from "../http/routes/create-personal-skill-version.js"
 import { withdrawPersonalSkillRoute } from "../http/routes/withdraw-personal-skill.js"
+import { configureBffProtobufTextEncoding } from "../infrastructure/protobuf-text-encoding.js"
 
 async function handle(
   request: IncomingMessage,
@@ -678,6 +679,7 @@ export type BffServer = Server & {
 }
 
 export function createBffServer(config: BffConfig = loadConfig(), options: BffServerOptions = {}): BffServer {
+  configureBffProtobufTextEncoding()
   const composition = createBffComposition(config, options)
   const server = createServer((request, response) => {
     void handle(request, response, config, composition).catch(() => {

@@ -1,15 +1,21 @@
-import { fromBinary, toBinary } from "@bufbuild/protobuf"
-import { FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt"
+import { createFileRegistry, fromBinary, fromJson, toBinary } from "@bufbuild/protobuf"
+import {
+  DescriptorProtoSchema,
+  FieldDescriptorProtoSchema,
+  FileDescriptorProtoSchema,
+  FileDescriptorSetSchema,
+  ServiceDescriptorProtoSchema,
+} from "@bufbuild/protobuf/wkt"
 import assert from "node:assert/strict"
 import { spawn } from "node:child_process"
 import { createHash } from "node:crypto"
-import { cp, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises"
+import { cp, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-const ownerCommit = "e83a2ad3a7c7d333ad0b0b8e7f3d3f64e497bc42"
+const ownerCommit = "1f6f764bc4bcf09d235e086ae7fe137acf16d63d"
 const vendorRoot = `contract/vendor/kokoro-platform/${ownerCommit}`
 const vendor = `contract/vendor/kokoro-platform/${ownerCommit}/proto`
 const artifacts = {
@@ -17,29 +23,244 @@ const artifacts = {
   v6: `${vendorRoot}/execution-operations-v6`,
   v7: `${vendorRoot}/execution-operations-v7`,
   v8: `${vendorRoot}/execution-operations-v8`,
+  v9: `${vendorRoot}/execution-operations-v9`,
 }
 const artifactAggregates = {
+  v9: "19c1466ab398c6dbb43130f3977fe776532e41e00e2487476d465f22fc936073",
   v8: "4a5ed2ca1a25673967ac2ee05a43c5f568bdd19c9ff768d8e606fdac94b9542f",
   v5: "3f97b3c98fd8e7ce46e4a8ea73237ddb85e764849d2b15dd28d0a3a58a69e42f",
   v6: "0d728881ba1046dc566131d63de71f6821ec636cf45837b5d937fee9872d5f91",
   v7: "3384a88f31be1fdd3e15bcbceb33e4fd7d62b04dfbfef65fcc35c24ce7afbb72",
 }
 const artifactProvenanceDigests = {
+  v9: "cbfa5f46a495966722a5e2df50d17ce7d83c2f5c6a722bc13981ac4d5541ddef",
   v5: "787d8d1e7e4f734ea072c1e7516fd9cb36acb9eab0b87192c873ec0c10eabb43",
   v6: "3288cdad7e3a633c07873f255c52daa6bf6744831f81b3eeeb7340c12c75a312",
   v7: "cd8b08095c7410f7322bc51bd3ba68eeb084e1b0542ab35d8b26751694c65dec",
   v8: "a985f907fc9f2c5d8735c8918f1af6028efa9a3ed0f43b273612c592c2288444",
 }
 const descriptor = `${vendorRoot}/descriptor/platform-v1.binpb`
-const descriptorDigest = "5f0f00f605f6a445b4d80943459b69bf9f489fd7851cc80b6c2700f8f78a8d0e"
+const descriptorDigest = "2e1a811bf347b5d9cd3577ac6c762ee9d31f40dea2ac326a06b83bc61de9a8d5"
 const parentDescriptor = `${vendorRoot}/descriptor/platform-v8-parent39.binpb`
 const parentDigest = "0467c1c45e8ac27c79cb906e27bfdb679d88739e45bfa38128f0f629bec686d5"
+const publicationAggregate = "e4201bc8674c470bf49c840712f87c34e869b96e59a0e96ba83eb3e4df19446a"
+const publicationInputs = {
+  "contract/descriptor/platform-installation-tags-parent-generated.binpb": {
+    bytes: 35431,
+    sha256: "9aa6cf2b817bf021f42e031b8eab2cd7d8cfb8701bb994aa3717b5ba815b8915",
+  },
+  "contract/descriptor/platform-installation-tags-parent.binpb": {
+    bytes: 46951,
+    sha256: "0e9d45786e09d528402e5971880bb73bf1a7aae474322eb960c6fc7acba4ec18",
+  },
+  "contract/descriptor/platform-package-read-parent-generated.binpb": {
+    bytes: 35451,
+    sha256: "c4caf5f9f4c92bacd38999af983af6828eaa2181d97307042897110c475cfdfd",
+  },
+  "contract/descriptor/platform-package-read-parent.binpb": {
+    bytes: 46971,
+    sha256: "37207ddd3513d0f0b1e3320401a54ab0848326692f9cc07571325bc325b4ddda",
+  },
+  "contract/descriptor/platform-v1.binpb": {
+    bytes: 48752,
+    sha256: "2e1a811bf347b5d9cd3577ac6c762ee9d31f40dea2ac326a06b83bc61de9a8d5",
+  },
+  "contract/descriptor/platform-v8-parent39.binpb": {
+    bytes: 43624,
+    sha256: "0467c1c45e8ac27c79cb906e27bfdb679d88739e45bfa38128f0f629bec686d5",
+  },
+  "contract/descriptor/platform-v9-parent43-generated.binpb": {
+    bytes: 35139,
+    sha256: "25197edc2c40d19773147c6b433d1f56d180b8ecf9c758f404ac1bf3884eea40",
+  },
+  "contract/descriptor/platform-v9-parent43.binpb": {
+    bytes: 46659,
+    sha256: "5f0f00f605f6a445b4d80943459b69bf9f489fd7851cc80b6c2700f8f78a8d0e",
+  },
+  "contract/execution-operations/v5/command-identities.json": {
+    bytes: 32532,
+    sha256: "33d356f224de6c2c58bda6d414858013a295e442773887c7e196cdcd67f13b82",
+  },
+  "contract/execution-operations/v5/manifest.json": {
+    bytes: 13371,
+    sha256: "43768f526cf4465e1316a696484cb482da581fe7c00c29ca84de816cc956730c",
+  },
+  "contract/execution-operations/v5/operation-catalog.json": {
+    bytes: 11230,
+    sha256: "b39ff94ab27215dcd9122361ca7a9e000ddc7e723c0b598d16544d420774ddd9",
+  },
+  "contract/execution-operations/v5/product-installation-v1.json": {
+    bytes: 10347,
+    sha256: "699d2fd002581f9161c6ac737728a5480e68e121a4f46663b1395ea9e7a96fe0",
+  },
+  "contract/execution-operations/v5/provenance.json": {
+    bytes: 1858,
+    sha256: "787d8d1e7e4f734ea072c1e7516fd9cb36acb9eab0b87192c873ec0c10eabb43",
+  },
+  "contract/execution-operations/v5/schemas/command-identities.schema.json": {
+    bytes: 37395,
+    sha256: "4f9b9112afe2bd08f6189e1fc30050771b0a9eb508450a7e83080eba5a2df123",
+  },
+  "contract/execution-operations/v5/schemas/manifest.schema.json": {
+    bytes: 17524,
+    sha256: "39ee548bcfdd02745434e95420edca0699c1dbeb4f67d79e75aec2e5e812e8f4",
+  },
+  "contract/execution-operations/v5/schemas/operation-catalog.schema.json": {
+    bytes: 12935,
+    sha256: "bd9b987377cdd1cc9fc794f57c306d399bb28c0ffd0b7330122d888834958055",
+  },
+  "contract/execution-operations/v5/schemas/product-installation.schema.json": {
+    bytes: 15222,
+    sha256: "e1062ad73f2cf3ca1028e4ceff2c837d18dbd4885a3b6e8a08fa0639ebe97911",
+  },
+  "contract/execution-operations/v5/schemas/vector-inventory.schema.json": {
+    bytes: 121741,
+    sha256: "a70ef2767ed1cc90f6fb20cfa2fff5ef6bbf14ae00dac48235a8d06006be6f3e",
+  },
+  "contract/execution-operations/v5/vectors/product-installation.json": {
+    bytes: 112930,
+    sha256: "31efd14da208dffef6785b64cf42ed44c9875d40cf3013349fd6d1fd85cab62e",
+  },
+  "contract/execution-operations/v6/authorize-response-v1.json": {
+    bytes: 1137,
+    sha256: "b09776cceeda7d36ecc49e43b1ef4ccb9b426c9914825ec317805a5aa876174d",
+  },
+  "contract/execution-operations/v6/connection-projection-v1.json": {
+    bytes: 1954,
+    sha256: "3e29005afb0856936f6361f59ae197b76d59324d0a37c6c03f711756c891d29c",
+  },
+  "contract/execution-operations/v6/manifest.json": {
+    bytes: 1181,
+    sha256: "2f5adda27ca7de30771dfe2a0422797f3c8b8d3eeff7f2e870868b508792fa0a",
+  },
+  "contract/execution-operations/v6/provenance.json": {
+    bytes: 1519,
+    sha256: "3288cdad7e3a633c07873f255c52daa6bf6744831f81b3eeeb7340c12c75a312",
+  },
+  "contract/execution-operations/v6/schemas/authorize-response.schema.json": {
+    bytes: 2293,
+    sha256: "8cd877313c9e6ad60cae1f8c3d722cf3e3b47678bbbc60041a53c0df3f70a6db",
+  },
+  "contract/execution-operations/v6/schemas/connection-projection.schema.json": {
+    bytes: 5637,
+    sha256: "e33ef29a89c562ce74b3871522d004c5502709a70ad4afb1fe1647affa8418ce",
+  },
+  "contract/execution-operations/v6/schemas/manifest.schema.json": {
+    bytes: 2275,
+    sha256: "b6cecac8d80d78354b351cc5e4dde8f7dc9ef6bd89356e84aa8ed4fbb7d3c8e3",
+  },
+  "contract/execution-operations/v6/vectors/authorize-response.json": {
+    bytes: 12300,
+    sha256: "2bf8751822d4db00d053ceb41b60749ab452dd38db22b081a4e4e5e7b0ab147e",
+  },
+  "contract/execution-operations/v6/vectors/connection-projection.json": {
+    bytes: 7474,
+    sha256: "6c83cebd8006349d3e17c63d0e9f97209385f8b363822dc20869afbf39c8ae5a",
+  },
+  "contract/execution-operations/v7/manifest.json": {
+    bytes: 391,
+    sha256: "09ae832c861d0106986e15a0302574f33b4d9c89375f1284050d1d540b3f1b34",
+  },
+  "contract/execution-operations/v7/provenance.json": {
+    bytes: 1135,
+    sha256: "cd8b08095c7410f7322bc51bd3ba68eeb084e1b0542ab35d8b26751694c65dec",
+  },
+  "contract/execution-operations/v7/publish-v2.json": {
+    bytes: 2472,
+    sha256: "551b0f4ccec56b64644fcdce9eec0ff1c4020d0dc48eccdf02833cc74225de35",
+  },
+  "contract/execution-operations/v7/schemas/manifest.schema.json": {
+    bytes: 1014,
+    sha256: "c67b0173c36172d7f3870ac442567ac64c1b570535dda84b07bdbdcdc9583988",
+  },
+  "contract/execution-operations/v7/schemas/zip-profile-v2.schema.json": {
+    bytes: 3090,
+    sha256: "1204e84b628829e037a4e0f44f691d1eed07233c78bdf6b1a8ee5bbbc67613d1",
+  },
+  "contract/execution-operations/v7/vectors/zip-v2.json": {
+    bytes: 4533,
+    sha256: "66421e76274cca5b0d0ed3248d2c75151fea348341b250e523112ccfb151ad2c",
+  },
+  "contract/execution-operations/v7/zip-profile-v2.json": {
+    bytes: 1630,
+    sha256: "077b9a40d5525a77c7fe0814ed0afa4b48fc1c22dad72187c7aea10d9f6116a9",
+  },
+  "contract/execution-operations/v8/manifest.json": {
+    bytes: 405,
+    sha256: "cf9b40ebf83c6dd7ffc7f0b12f2de18c363b96866e7f330fe0eb4b2446f7966c",
+  },
+  "contract/execution-operations/v8/personal-mcp-read-v1.json": {
+    bytes: 5493,
+    sha256: "d45fd8f396cad4151d1f3de0feea74a3db5d796060025a206a1c6f16932cfa41",
+  },
+  "contract/execution-operations/v8/provenance.json": {
+    bytes: 1007,
+    sha256: "a985f907fc9f2c5d8735c8918f1af6028efa9a3ed0f43b273612c592c2288444",
+  },
+  "contract/execution-operations/v8/schemas/manifest.schema.json": {
+    bytes: 1028,
+    sha256: "de62c22fea26ac1859674b783d48abde78f39e5b5151c3f575f91fbf498fd460",
+  },
+  "contract/execution-operations/v8/schemas/personal-mcp-read.schema.json": {
+    bytes: 6823,
+    sha256: "4435f60a584fb3099267a326af98d16b532194f13e281d65cd274a73d9bd066e",
+  },
+  "contract/execution-operations/v8/vectors/personal-mcp-read.json": {
+    bytes: 102719,
+    sha256: "40555c30ccc84075163279d35dfc288cead6b728f8d98bf70f23628827d69cb8",
+  },
+  "contract/execution-operations/v9/global-mcp-registration-v1.json": {
+    bytes: 2970,
+    sha256: "7cfdb27781789887cf51f44d8fe44577950bbed6c05b2d99fd392c0c731e954e",
+  },
+  "contract/execution-operations/v9/manifest.json": {
+    bytes: 411,
+    sha256: "3b4caf81080ffc6e72c204ceb1bcf65e275f1ef47d1c0be4fe924e4983397fba",
+  },
+  "contract/execution-operations/v9/provenance.json": {
+    bytes: 1024,
+    sha256: "cbfa5f46a495966722a5e2df50d17ce7d83c2f5c6a722bc13981ac4d5541ddef",
+  },
+  "contract/execution-operations/v9/schemas/global-mcp-registration.schema.json": {
+    bytes: 4287,
+    sha256: "6276f648dd621f5d8ca3cf7d7f54889476ecf203dab970fe80b744193405853a",
+  },
+  "contract/execution-operations/v9/schemas/manifest.schema.json": {
+    bytes: 1034,
+    sha256: "0fc177c27c760ce9d574ccb623e00c2eebbeda35401a5b63cc7241a4fadf14cc",
+  },
+  "contract/execution-operations/v9/vectors/global-mcp-registration.json": {
+    bytes: 47456,
+    sha256: "7c256bbc3f9ed0cc93434595bd9caa7c2f0a00035837fadc2fc3dfa1110df9ed",
+  },
+  "contract/openapi/platform-http.openapi.json": {
+    bytes: 33330,
+    sha256: "b6e5d0e0118207ee37933e5c22e94c86d95d74307b22a44e26e8974fede82acf",
+  },
+  "contract/proto/kokoro/common/v1/common.proto": {
+    bytes: 2271,
+    sha256: "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08",
+  },
+  "contract/proto/kokoro/platform/v1/platform_runtime.proto": {
+    bytes: 35569,
+    sha256: "7d82840be8c65f0e826e16639dc4d4565729f096bf6cbc2c4f1960a8e265f1eb",
+  },
+  "contract/proto/kokoro/storage/v2/storage.proto": {
+    bytes: 10666,
+    sha256: "02266d53b8bfb7fdd6991b17d59ebb17399d4f189b6a3135fedcb69b6b364276",
+  },
+  "contract/provenance.json": {
+    bytes: 350,
+    sha256: "fca4ce3aead18ed92d3bc6381d2bb9629227414c75d043228f27446fc1147a48",
+  },
+}
+
 const output = path.join(root, "src/generated/platform-connect")
 const manifestPath = path.join(root, "contract/dependencies/platform-connect.json")
 const sourceDigests = {
   "kokoro/storage/v2/storage.proto": "02266d53b8bfb7fdd6991b17d59ebb17399d4f189b6a3135fedcb69b6b364276",
   "kokoro/common/v1/common.proto": "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08",
-  "kokoro/platform/v1/platform_runtime.proto": "c93ae886195d7c676d1bc2a3e99dcaa8013afdd7df304558a8ea0552ec0be7e4",
+  "kokoro/platform/v1/platform_runtime.proto": "7d82840be8c65f0e826e16639dc4d4565729f096bf6cbc2c4f1960a8e265f1eb",
 }
 const directories = ["kokoro", "kokoro/common", "kokoro/common/v1", "kokoro/platform", "kokoro/platform/v1"]
 const sourceDirectories = [...directories, "kokoro/storage", "kokoro/storage/v2"].sort()
@@ -50,6 +271,7 @@ const versions = {
   "@bufbuild/protoc-gen-es": "2.14.0",
   "@bufbuild/protobuf": "2.14.0",
   "@connectrpc/connect": "2.2.0",
+  tsx: "4.23.12",
 }
 const configFiles = ["buf.platform.json", "buf.platform.gen.json"]
 
@@ -73,14 +295,55 @@ export function assertVendorPins(entries) {
 }
 
 export function assertVendorLayout(entries) {
-  assert.deepEqual(
-    entries.map((entry) => entry.name).sort(),
-    ["descriptor", "execution-operations-v5", "execution-operations-v6", "execution-operations-v7", "execution-operations-v8", "proto"],
-    "Platform vendor layout allowlist drifted",
-  )
+  const names = [
+    "descriptor",
+    "execution-operations-v5",
+    "execution-operations-v6",
+    "execution-operations-v7",
+    "execution-operations-v8",
+    "execution-operations-v9",
+    "openapi",
+    "proto",
+    "provenance.json",
+  ]
+  assert.deepEqual(entries.map((entry) => entry.name).sort(), names, "Platform vendor layout allowlist drifted")
   assert.ok(
-    entries.every((entry) => entry.isDirectory()),
-    "Platform vendor inputs must be real directories",
+    entries.every((entry) => (entry.name === "provenance.json" ? entry.isFile() : entry.isDirectory())),
+    "Platform vendor inputs must be real directories/files",
+  )
+}
+
+function vendorPath(ownerPath) {
+  return ownerPath.replace(/^contract\//u, "").replace(/^execution-operations\/v([5-9])\//u, "execution-operations-v$1/")
+}
+
+export function assertPublicationInputs(files) {
+  assert.deepEqual(Object.keys(files).sort(), Object.keys(publicationInputs), "Platform complete publication allowlist drifted")
+  const records = []
+  for (const [file, expected] of Object.entries(publicationInputs)) {
+    assert.equal(files[file].length, expected.bytes, `Platform publication byte length drifted: ${file}`)
+    assert.equal(sha256(files[file]), expected.sha256, `Platform publication digest drifted: ${file}`)
+    records.push(`${file}\0${expected.bytes}\0${expected.sha256}\n`)
+  }
+  assert.equal(sha256(Buffer.from(records.join(""))), publicationAggregate, "Platform complete publication aggregate drifted")
+}
+
+async function verifyPublicationInputs() {
+  const actual = await tree(path.join(root, vendorRoot))
+  const expectedFiles = Object.keys(publicationInputs).map(vendorPath).sort()
+  const expectedDirectories = [
+    ...new Set(
+      expectedFiles.flatMap((file) => {
+        const parts = file.split("/").slice(0, -1)
+        return parts.map((_, index) => parts.slice(0, index + 1).join("/"))
+      }),
+    ),
+  ].sort()
+  assert.deepEqual(actual, { files: expectedFiles, directories: expectedDirectories }, "Platform complete publication filesystem drifted")
+  assertPublicationInputs(
+    Object.fromEntries(
+      await Promise.all(Object.keys(publicationInputs).map(async (file) => [file, await readFile(path.join(root, vendorRoot, vendorPath(file)))])),
+    ),
   )
 }
 
@@ -235,10 +498,218 @@ function assertV5Product(files) {
   assert.equal(product.safeProjection.fields.length, 9)
 }
 
+// These are consumer assertions over the fixed publication, not runtime authorization.
+const inspectionReads = [
+  ["ProductSkillPackageInspectionService", "InspectPersonalSkillPackage", "skill_id", "SkillId"],
+  ["ProductSkillInstallationPackageInspectionService", "InspectPersonalSkillInstallationPackage", "installation_id", "SkillInstallationId"],
+]
+const inspectionReserved = [
+  "tenant_id",
+  "actor_id",
+  "subject_id",
+  "owner_scope",
+  "target_owner_scope",
+  "product_context",
+  "command",
+  "execution_proof",
+  "attestation",
+]
+function descriptorField(name, number, type, typeName, repeated = false, optional = false) {
+  return {
+    name,
+    number,
+    type,
+    label: repeated ? 3 : 1,
+    jsonName: name.replace(/_([a-z])/gu, (_, letter) => letter.toUpperCase()),
+    ...(typeName === undefined ? {} : { typeName: `.kokoro.platform.v1.${typeName}` }),
+    ...(optional ? { proto3Optional: true, oneofIndex: 0 } : {}),
+  }
+}
+function platformFile(set) {
+  const files = set.file.filter((file) => file.package === "kokoro.platform.v1")
+  assert.equal(files.length, 1, "Platform unique descriptor file required")
+  return files[0]
+}
+function exactDescriptor(schema, actual, expected, reason) {
+  assert.ok(actual, reason)
+  assert.deepEqual(Buffer.from(toBinary(schema, actual)), Buffer.from(toBinary(schema, fromJson(schema, expected))), reason)
+}
+function assertWholeParent(set, file) {
+  assert.equal(
+    sha256(toBinary(FileDescriptorSetSchema, set)),
+    publicationInputs[`contract/descriptor/${file}`].sha256,
+    `Platform whole parent graph drifted: ${file}`,
+  )
+}
+
+export function assertV9Proof(manifest) {
+  assert.deepEqual(
+    manifest,
+    {
+      artifact: "platform-execution-operations",
+      artifactVersion: "9.0.0",
+      status: "inactive",
+      routable: false,
+      packageName: "kokoro.platform.v1",
+      inherits: { version: "8.0.0", aggregateSha256: artifactAggregates.v8 },
+      counts: { rpc: 43, command: 20, proof: 24 },
+      profile: "global-mcp-registration-v1",
+    },
+    "Platform historical v9 proof drifted",
+  )
+}
+
+export function assertDescriptorLineage(currentBytes) {
+  assert.equal(sha256(currentBytes), descriptorDigest, "Platform descriptor digest drifted")
+  const current = fromBinary(FileDescriptorSetSchema, currentBytes)
+  assertInspectionDescriptors(current)
+  assertDescriptorCensus(current, [45, 20, 24])
+  return stripDescriptorLineage(current)
+}
+
+export function assertDescriptorCensus(set, expected) {
+  const file = createFileRegistry(set).getFile("kokoro/platform/v1/platform_runtime.proto")
+  assert.ok(file, "Platform registry missing")
+  const inputs = file.services.flatMap((service) => service.methods.map((method) => method.input))
+  assert.deepEqual(
+    [
+      inputs.length,
+      inputs.filter((input) => input.fields.some((field) => field.name === "command")).length,
+      inputs.filter((input) => input.fields.some((field) => field.name === "execution_proof")).length,
+    ],
+    expected,
+    "Platform RPC/command/proof census drifted",
+  )
+}
+
+// Independent exact shape assertions are also exported for adversarial contract tests.
+export function assertInspectionDescriptors(set) {
+  const file = platformFile(set)
+  assert.equal(file.service.flatMap((service) => service.method).length, 45, "Platform current RPC census drifted")
+  const messages = [
+    ...inspectionReads.map(([, method, id, idType]) => ({
+      name: `${method}Request`,
+      field: [descriptorField("request_id", 1, 9), descriptorField(id, 2, 11, idType), descriptorField("file_path", 3, 9, undefined, false, true)],
+      oneofDecl: [{ name: "_file_path" }],
+      reservedRange: [{ start: 100, end: 101 }],
+      reservedName: inspectionReserved,
+    })),
+    ...inspectionReads.map(([, method]) => ({
+      name: `${method}Response`,
+      field: [
+        descriptorField("source_ref", 1, 11, "SkillSourceRef"),
+        descriptorField("revision", 2, 4),
+        descriptorField("files", 3, 11, "SkillPackageTextFile", true),
+        descriptorField("selected_file", 4, 11, "SkillPackageSelectedText"),
+      ],
+    })),
+    { name: "SkillPackageTextFile", field: [descriptorField("path", 1, 9), descriptorField("size_bytes", 2, 4)] },
+    { name: "SkillPackageSelectedText", field: [descriptorField("path", 1, 9), descriptorField("text", 2, 9)] },
+  ]
+  for (const expected of messages) {
+    const matches = file.messageType.filter((message) => message.name === expected.name)
+    assert.equal(matches.length, 1, `Platform unique ${expected.name}`)
+    exactDescriptor(DescriptorProtoSchema, matches[0], expected, `Platform inspection shape drifted: ${expected.name}`)
+  }
+  for (const [name, method] of inspectionReads) {
+    const matches = file.service.filter((service) => service.name === name)
+    assert.equal(matches.length, 1, `Platform unique ${name}`)
+    exactDescriptor(
+      ServiceDescriptorProtoSchema,
+      matches[0],
+      { name, method: [{ name: method, inputType: `.kokoro.platform.v1.${method}Request`, outputType: `.kokoro.platform.v1.${method}Response` }] },
+      `Platform inspection unary service drifted: ${name}`,
+    )
+  }
+}
+
+export function stripDescriptorLineage(set) {
+  const current = fromBinary(FileDescriptorSetSchema, toBinary(FileDescriptorSetSchema, set))
+  const file = platformFile(current)
+  const additions = inspectionReads
+    .flatMap(([, method]) => [`${method}Request`, `${method}Response`])
+    .concat(["SkillPackageTextFile", "SkillPackageSelectedText"])
+  file.service = file.service.filter((service) => !inspectionReads.some(([name]) => service.name === name))
+  file.messageType = file.messageType.filter((message) => !additions.includes(message.name))
+  assertWholeParent(current, "platform-package-read-parent.binpb")
+  const installation = file.messageType.find((message) => message.name === "ProductSkillInstallation")
+  assert.ok(installation)
+  const tags = installation.field.filter((field) => field.name === "tags")
+  assert.equal(tags.length, 1, "Platform tags unique field drifted")
+  exactDescriptor(FieldDescriptorProtoSchema, tags[0], descriptorField("tags", 13, 9, undefined, true), "Platform tags shape drifted")
+  installation.field = installation.field.filter((field) => field.name !== "tags")
+  assertWholeParent(current, "platform-installation-tags-parent.binpb")
+  const request = file.messageType.find((message) => message.name === "RegisterMcpServerRequest")
+  assert.ok(request)
+  const registration = request.field.filter((field) => field.name === "registration")
+  assert.equal(registration.length, 1, "Platform registration unique field drifted")
+  exactDescriptor(
+    FieldDescriptorProtoSchema,
+    registration[0],
+    descriptorField("registration", 8, 11, "McpServerRegistration"),
+    "Platform registration shape drifted",
+  )
+  const definitions = file.messageType.filter((message) => message.name === "McpServerRegistration")
+  assert.equal(definitions.length, 1, "Platform registration unique message drifted")
+  exactDescriptor(
+    DescriptorProtoSchema,
+    definitions[0],
+    {
+      name: "McpServerRegistration",
+      field: [
+        descriptorField("provider_key", 1, 9),
+        descriptorField("server_identity", 2, 9),
+        descriptorField("transport", 3, 14, "McpTransport"),
+        descriptorField("declaration_digest", 4, 9),
+      ],
+    },
+    "Platform registration definition drifted",
+  )
+  request.field = request.field.filter((field) => field.name !== "registration")
+  file.messageType = file.messageType.filter((message) => message.name !== "McpServerRegistration")
+  assertWholeParent(current, "platform-v9-parent43.binpb")
+  assertDescriptorCensus(current, [43, 20, 24])
+  return current
+}
+
+export function assertGeneratedDescriptor(generated, compiledBytes) {
+  assert.equal(sha256(compiledBytes), descriptorDigest, "Platform generated compiled pin drifted")
+  assert.deepEqual(
+    Buffer.from(toBinary(FileDescriptorProtoSchema, generated, { writeUnknownFields: false })),
+    Buffer.from(toBinary(FileDescriptorProtoSchema, platformFile(fromBinary(FileDescriptorSetSchema, compiledBytes)), { writeUnknownFields: false })),
+    "Platform latest generated/compiled whole graph drifted",
+  )
+}
+
+export function assertDescriptorPairs(files) {
+  for (const stem of ["platform-v9-parent43", "platform-installation-tags-parent", "platform-package-read-parent"]) {
+    const compiledName = `${stem}.binpb`
+    const generatedName = `${stem}-generated.binpb`
+    for (const name of [compiledName, generatedName])
+      assert.equal(sha256(files[name]), publicationInputs[`contract/descriptor/${name}`].sha256, `Platform descriptor parent bytes drifted: ${name}`)
+    const compiled = platformFile(fromBinary(FileDescriptorSetSchema, files[compiledName]))
+    const generated = fromBinary(FileDescriptorProtoSchema, files[generatedName])
+    assert.deepEqual(
+      Buffer.from(toBinary(FileDescriptorProtoSchema, generated, { writeUnknownFields: false })),
+      Buffer.from(toBinary(FileDescriptorProtoSchema, compiled, { writeUnknownFields: false })),
+      `Platform parent generated/compiled whole graph drifted: ${stem}`,
+    )
+  }
+}
+
+async function verifyDescriptorPairs() {
+  const names = Object.keys(publicationInputs)
+    .filter((file) => file.startsWith("contract/descriptor/"))
+    .map((file) => path.basename(file))
+  assertDescriptorPairs(
+    Object.fromEntries(await Promise.all(names.map(async (name) => [name, await readFile(path.join(root, vendorRoot, "descriptor", name))]))),
+  )
+}
+
 export function assertPublishedDescriptors(currentBytes, parentBytes, files) {
   assert.equal(sha256(currentBytes), descriptorDigest, "Platform descriptor digest drifted")
   assert.equal(sha256(parentBytes), parentDigest, "Platform parent descriptor digest drifted")
-  const current = fromBinary(FileDescriptorSetSchema, currentBytes)
+  const current = assertDescriptorLineage(currentBytes)
   const parent = fromBinary(FileDescriptorSetSchema, parentBytes)
   const currentFile = current.file.find((file) => file.package === "kokoro.platform.v1")
   const parentFile = parent.file.find((file) => file.package === "kokoro.platform.v1")
@@ -315,17 +786,34 @@ export function assertPublishedDescriptors(currentBytes, parentBytes, files) {
 }
 
 async function verifyExecutionArtifacts() {
+  await verifyPublicationInputs()
   const v5 = await verifyExecutionArtifactDirectory(path.join(root, artifacts.v5), artifactAggregates.v5)
   const v6 = await verifyExecutionArtifactDirectory(path.join(root, artifacts.v6), artifactAggregates.v6)
   const v7 = await verifyExecutionArtifactDirectory(path.join(root, artifacts.v7), artifactAggregates.v7)
   const v8 = await verifyExecutionArtifactDirectory(path.join(root, artifacts.v8), artifactAggregates.v8)
+  const v9 = await verifyExecutionArtifactDirectory(path.join(root, artifacts.v9), artifactAggregates.v9)
   assertProofChain(v5.manifest, v6.manifest, v7.manifest, v8.manifest)
+  assertV9Proof(v9.manifest)
+  const registrationVectors = JSON.parse(v9.files["vectors/global-mcp-registration.json"].toString("utf8")).vectors
+  assert.equal(registrationVectors.length, 128)
+  assert.equal(new Set(registrationVectors.map((entry) => entry.id)).size, 128)
+  await verifyDescriptorPairs()
   const personalVectors = JSON.parse(v8.files["vectors/personal-mcp-read.json"].toString("utf8")).vectors
   assert.equal(personalVectors.length, 190)
   assert.equal(new Set(personalVectors.map((entry) => entry.id)).size, 190)
   assertPublishedDescriptors(await readFile(path.join(root, descriptor)), await readFile(path.join(root, parentDescriptor)), v5.files)
   const descriptorTree = await tree(path.join(root, vendorRoot, "descriptor"))
-  assert.deepEqual(descriptorTree, { files: ["platform-v1.binpb", "platform-v8-parent39.binpb"], directories: [] }, "Platform descriptor tree drifted")
+  assert.deepEqual(
+    descriptorTree,
+    {
+      files: Object.keys(publicationInputs)
+        .filter((file) => file.startsWith("contract/descriptor/"))
+        .map((file) => path.basename(file))
+        .sort(),
+      directories: [],
+    },
+    "Platform descriptor tree drifted",
+  )
   assertV5Product(v5.files)
   const profile = JSON.parse(v7.files["zip-profile-v2.json"].toString("utf8"))
   assert.deepEqual(profile.manifestKeys, ["schema_version", "entry"], "Platform V2 manifest key set drifted")
@@ -407,6 +895,18 @@ async function generate(directory) {
   ])
   assertGeneratedTree(await tree(directory))
   await run(process.execPath, [path.join(root, "node_modules/prettier/bin/prettier.cjs"), "--no-semi", "--print-width", "160", "--write", directory])
+  await run(process.execPath, [
+    "--import",
+    "tsx",
+    "--input-type=module",
+    "-e",
+    `
+    import { readFile } from "node:fs/promises";
+    import { assertGeneratedDescriptor } from ${JSON.stringify(import.meta.url)};
+    import { file_kokoro_platform_v1_platform_runtime } from ${JSON.stringify(pathToFileURL(path.join(directory, generatedFiles[1])).href)};
+    assertGeneratedDescriptor(file_kokoro_platform_v1_platform_runtime.proto, await readFile(${JSON.stringify(path.join(root, descriptor))}));
+  `,
+  ])
 }
 
 async function manifestFor(directory) {
@@ -422,15 +922,27 @@ async function manifestFor(directory) {
         sha256: digest,
       })),
     },
+    published_inputs: {
+      path_algorithm: "owner-repository-relative-including-contract",
+      aggregate_sha256: publicationAggregate,
+      files: Object.entries(publicationInputs).map(([file, pin]) => ({ path: file, ...pin })),
+    },
     execution_artifact: {
-      path: artifacts.v8,
-      artifact_version: "8.0.0",
+      path: artifacts.v9,
+      artifact_version: "9.0.0",
       status: "inactive",
       routable: false,
-      provenance_path: `${artifacts.v8}/provenance.json`,
-      aggregate_sha256: artifactAggregates.v8,
+      provenance_path: `${artifacts.v9}/provenance.json`,
+      aggregate_sha256: artifactAggregates.v9,
     },
     execution_proof_chain: [
+      {
+        path: artifacts.v9,
+        artifact_version: "9.0.0",
+        aggregate_sha256: artifactAggregates.v9,
+        inherits_version: "8.0.0",
+        inherits_aggregate_sha256: artifactAggregates.v8,
+      },
       {
         path: artifacts.v8,
         artifact_version: "8.0.0",
@@ -463,6 +975,9 @@ async function manifestFor(directory) {
       sha256: descriptorDigest,
     },
     parent_descriptor: { path: parentDescriptor, sha256: parentDigest },
+    descriptor_parents: Object.entries(publicationInputs)
+      .filter(([file]) => file.startsWith("contract/descriptor/") && file !== "contract/descriptor/platform-v1.binpb")
+      .map(([file, pin]) => ({ path: `${vendorRoot}/${vendorPath(file)}`, sha256: pin.sha256 })),
     generator: {
       packages: versions,
       configs: await Promise.all(
@@ -489,7 +1004,7 @@ async function manifestFor(directory) {
       supply_chain: "Exact package versions and lock integrity; local generation without remote plugins; only @bufbuild/buf install build is newly allowed.",
       performance: "No network calls or application startup added. Runtime performance is unmeasured; this slice validates descriptor serialization only.",
       failure_semantics:
-        "Generation rejects source/config/package/tree/digest drift. The fixed V8 to V7 to V6 to V5 proof chain, descriptor, current Proto source and Get read binding fail closed; runtime adapter admits current user before Platform Connect.",
+        "Generation rejects source/config/package/tree/digest drift. The fixed V9 to V8 to V7 to V6 to V5 proof chain, descriptor, current Proto source and Get read binding fail closed; runtime adapter admits current user before Platform Connect.",
       exit_path: "Regenerate from the pinned owner Proto with a reviewed compatible generator; generated wire types remain isolated from business code.",
       sources: ["https://connectrpc.com/docs/node/getting-started/", "https://github.com/bufbuild/protobuf-es/releases/tag/v2.14.0"],
     },
@@ -511,6 +1026,9 @@ async function main() {
   await verifyInputs()
   const temporary = await mkdtemp(path.join(tmpdir(), "kokoro-platform-connect-"))
   try {
+    // The disposable generated module harness uses the same installed toolchain and ESM semantics.
+    await writeFile(path.join(temporary, "package.json"), '{"type":"module"}\n')
+    await symlink(path.join(root, "node_modules"), path.join(temporary, "node_modules"), "dir")
     const first = path.join(temporary, "first")
     const second = path.join(temporary, "second")
     await generate(first)
@@ -529,7 +1047,7 @@ async function main() {
       assert.deepEqual(JSON.parse(await readFile(manifestPath, "utf8")), manifest, "Platform dependency manifest drifted")
     }
     console.log(
-      `PASS Platform Connect ${mode.slice(2)} (${generatedFiles.length} files, two byte-identical generations; fixed v8.0.0 -> v7.0.0 -> v6.0.0 -> v5.0.1 proof; consumer activation remains gated)`,
+      `PASS Platform Connect ${mode.slice(2)} (${generatedFiles.length} files, two byte-identical generations; fixed v9.0.0 -> v8.0.0 -> v7.0.0 -> v6.0.0 -> v5.0.1 proof; consumer activation remains gated)`,
     )
   } finally {
     await rm(temporary, { recursive: true, force: true })

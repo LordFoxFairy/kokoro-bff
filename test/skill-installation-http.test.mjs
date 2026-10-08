@@ -152,7 +152,7 @@ test("response rejects unknown metadata status, unchanged event and invalid page
 })
 test("all owner product installation projection vectors keep their published digests", async () => {
   const source = new URL(
-    "../contract/vendor/kokoro-platform/e83a2ad3a7c7d333ad0b0b8e7f3d3f64e497bc42/execution-operations-v5/vectors/product-installation.json",
+    "../contract/vendor/kokoro-platform/1f6f764bc4bcf09d235e086ae7fe137acf16d63d/execution-operations-v5/vectors/product-installation.json",
     import.meta.url,
   )
   const vectors = JSON.parse(await readFile(source, "utf8")).vectors.filter((vector) => vector.stage === "projection")

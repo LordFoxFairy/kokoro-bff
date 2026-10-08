@@ -1,3 +1,7 @@
+### R341 原文 BOM 解码纠正（2026-10-08）
+
+真实现消费者2.14.0默认Protobuf decoder剥字符串开头U+FEFF，Root新增原BOM守卫实际20PASS/1FAIL。原文保持规则不放宽；现普通src/infrastructure/protobuf-text-encoding.ts负责同步幂等进程wire策略，采用公开configureTextEncoding/getTextEncoding复用encode/check，只让strict与非strict decoder均ignoreBOM:true。现createBffServer在composition前配置一次；不在请求期间切换/恢复、不改owner string/bytes协议或JSON transport、不手改generated。放在现infrastructure而非Skills业务/新模块；package默认format仅加该路径。零SQL/身份/public路由/正常服务变更。最终验证以CURRENT实际收据为准，页面查看详情及示例仍未实施，不凭辅助codec通过判用户闭环。
+
 ## R340 Skills 包正文消费的数据与生命周期边界（2026-10-08；目标，尚未实施）
 
 本仓基线c91fee642c5bac79d5beab90b15a1eaf97637047/public8.7.0/109/Connect e83a2ad43，当前无正文public route；目标完整固定Platform1f6f764当前45/20/24、后继public8.8/111。本轮只三个现D0前缀，原全文suffix保留，未改canonical SQL/机器/source/正常配置。精确API/错误/1MiB规则见API R340，文件放置/52固定输入/三双父/阶段授权见TECH R340。
