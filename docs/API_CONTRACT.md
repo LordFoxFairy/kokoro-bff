@@ -1,3 +1,9 @@
+### R353-B2 同正式 Storage pin 的现有上传消费者收口（2026-10-08）
+
+仅正式 v3 切换所必需的个人/项目上传、读取/释放及测试保持；不恢复其它模块研发，不新增表、业务流程或进程。signed PUT 返回原样非空有效 VersionId，Complete 前持久化上传 ID/版本/command/digest。现 bff_idempotency_receipt 增加单条完整 expected fingerprint/status/JSONB→replacement CAS，miss 只读结果；现 claim/put/release 语义保持。frozen/admitted/selected 是本调用的闭集阶段，递进与字段原值 keep-first；并发 A/B 只有一个 selected，loser 不 Complete/Abort/覆盖赢家，ACK 不确定须精确 readback 或停止。
+
+本地 selected 与 owner locator 精确匹配；任何已知版本均禁止再 PUT。owner 有 locator 而本地完整 selected/command/digest 缺失不得从 server 合成。仅本地 admitted 未知版本且 owner pending 无 locator 可 PUT 后 CAS；既有 v2 `{upload_id}` 只在 owner 精确 completed 时读原结果，不回填版本、不再 Complete。AI handoff 复用该最小 receipt CAS/独立闭集 body，无新增 journal。完整 Public9 与 Skills 内外页范围不变，正常37旧资产恢复/paired activation 和浏览器验收仍另行待验。
+
 ## R353-B2：完整Skills消费正式输入锁定（D0，尚未实现；2026-10-08）
 
 Public9 closed schemas map only to the formal owner matrix below. Publisher uses bounded IAM batch; admin uses fresh human check plus dedicated machine; package/cover/download revalidate exact owner identity around Storage bytes; usage returns unavailable without trusted complete coverage. record stays an S06 target with input OPEN and no guessed request schema.
