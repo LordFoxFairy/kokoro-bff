@@ -1,3 +1,11 @@
+### R345 正常 Skills 配对已激活，整体UI未完成（2026-10-08）
+
+Root 同持久 source/env 成对停止旧 BFF/Platform 后启新 Platform03ee664 与 BFF2e5fbaf；本BFF正常句柄5007/listener92197，ready200。未重置PG/Redis/MinIO或用户数据，不变凭据/权限。Web正式e7c7370固定public8.9。真实外部R255 catalog200与预览datetime均2026-10-06T00:38:54.049Z；查看详情真实SKILL.md→Back→Close，本人安装/发布日期同原事实。切换窗口曾502/准入不可确认，正常Retry恢复原账户，失败证据保留。
+
+仅更新时间与本人已安装正文读取局部验收；作者/examples/真实cover/usage/任意未安装正文资格/创建四能力/Skills后台及全页面仍OPEN。正常源进程持续运行，后继Root持有句柄；其它模块暂停。实际浏览器收据Root var/dev/r255-preserve/r345-live-browser-read-receipt.json。
+
+<!-- R345-NORMAL-SKILLS-PAIR-ACTIVATED-END -->
+
 ### R345 Skill 更新时间运行投影已独审（2026-10-08，正常组合待成对激活）
 
 Root 接收原 Skills owner 冻结十路径，仅两客户端及八测试；固定 Platform af38f441 / HTTP3.4、public8.9/111。四 Skill 投影严格 required `skill_updated_at` UTC Z/closed shape，安装取 tag14，tag7/8生命周期不冒来源时间；无SQL、权限、receipt、环境或依赖变更。
