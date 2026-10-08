@@ -1,3 +1,49 @@
+## R340 Skills 本人包正文消费设计门（2026-10-08；目标，尚未实施）
+
+基线 `c91fee642c5bac79d5beab90b15a1eaf97637047` / `codex/r257-bff-normal-current`。当前 BFF public **8.7.0 / 109 operations**，Connect 固定 `e83a2ad3a7c7d333ad0b0b8e7f3d3f64e497bc42` / 43 RPC，未生成两个 inspection 方法，公开正文 route 尚不存在。Platform 已提交 **1f6f764bc4bcf09d235e086ae7fe137acf16d63d**，最新45 RPC/20 command/24 proof；正常进程启用另以 Root 实际维护证据为准。下面目标不表示本仓机器、运行或浏览器详情已经通过。本轮只新增三个现 D0 前缀，原全文后缀逐字节保留，Root 批准后另授切片。
+
+### §8 放置与边界
+
+| 项 | 已裁决方案 |
+|---|---|
+| Owner / writer | BFF 唯一 public 安全投影；Platform 唯一包资格、来源/安装绑定与目录正文规则；Storage 唯一 bytes；IAM 唯一身份与机器准入。Root 指定一名 BFF writer，Root 独占审查/Git/资源 |
+| 当前事实 | 551 tracked、仅原 untracked var；原 projection scope 可用，但 credential 读取上限及 token rotation/取消后 cache 必须后继实际强化，不能以旧实现推断已合格 |
+| 目标职责 | 两个本人包 GET：目录、指定文件真实 UTF-8 原文；不以简介、伪 SKILL.md 或 UI 假入口替代 |
+| 位置比较 | 采用现 http/routes 与 infrastructure/clients/platform 的三普通文件；淘汰把 RPC 塞入 projection-http 的 HTTP union，或把读生命周期塞进 installation command client；无新顶层模块/通用框架 |
+| 粒度 | route 管 public 准入/预算；connect 管两个固定 RPC/正规 token/transport；response 管 strict 安全投影与错误。现 server 仅具名路由接线，WeakMap 配置生命周期复用，不机械改 runtime/config |
+| 依赖 | Browser → Web 同源 → BFF → Platform 固定生成 client → owner 自有 Storage 接缝；禁止 BFF owner SQL、源码相对 import、直 Storage 或借 catalog/execution token |
+| 数据 / API | 零 SQL/Redis/receipt/outbox，当前 session tenant/subject 受信；目标 public8.8.0/111，两个本人 RPC 当前授权绑定，不以 catalog scope/installed 标记推导资格 |
+| 删除项 | 固定消费时仅删除被替代 e83a Connect vendor，唯一 1f6f764 pin；完整历史 V5–V9 只校验、不路由，不保 alias/fallback/双 pin；独立 Platform HTTP vendor 与有效旧 Skills 操作保留 |
+| 验证 | Node22.22.2 正规两次生成 byte equal、完整固定源/descriptor/provenance/负控、旧操作保护、contract/lint/types/build/default/format；后继实际 IAM HTTP/Platform/Storage/PG/BFF 系统链和浏览器才判功能完成 |
+
+后继三个普通源文件为 `src/http/routes/skill-package-inspection.ts`、`src/infrastructure/clients/platform/skill-package-inspection-connect.ts`、`src/infrastructure/clients/platform/skill-package-inspection-response.ts`。现 `src/bootstrap/server.ts` 先于通用路径准确分流两个 GET，每请求在同预算内仅调用一次现 authorizeUserRequest。使用现 config.platformProjection/baseUrl/credentialFile/iamBaseUrl，缺配置返回503，不新增 credential 身份或 scope；client 沿 WeakMap<BffConfig, Client>。现 `projection-credential.ts` / `projection-token.ts` 有界读取、共享 flight 轮换及取消退役强化属于另授 runtime 切片，保护原消费者，不先写。不创建 ORM、package 数据库镜像或第二安全 schema；public 参数/输出只由唯一 OpenAPI 定义。
+
+### 完整固定输入与三组双父证明
+
+固定 owner **1f6f764bc4bcf09d235e086ae7fe137acf16d63d**；Root 受保护传递的52输入为 proto3、descriptor8、execution V5–V9 共39、provenance与HTTP共2，整输入 aggregate **e4201bc8674c470bf49c840712f87c34e869b96e59a0e96ba83eb3e4df19446a**，摘要记录路径采用 owner 仓相对路径（含 `contract/` 前缀）；该传递清单不替正规固定 raw SHA/provenance manifest。来源必须正式 Git 对象，ignored bundle 只传递，不成为可编辑 contract 中心。完整升级包含 V9 registration、installation tags13 和新两服务/六消息，不摘两个符号后保旧 pin。
+
+三对 compiled/generated 父描述分别为 `platform-v9-parent43{,-generated}.binpb`、`platform-installation-tags-parent{,-generated}.binpb`、`platform-package-read-parent{,-generated}.binpb`，加最新 platform-v1 与历史 platform-v8-parent39 共8个 descriptor。最新 generated 图必须与当前 compiled 完全同图；剥新 inspection 两服务/六消息回 package-read 两父；剥 installation tags13 回 tags 两父；剥 V9 registration8 与 McpServerRegistration 回 V9 两父；旧 V8 剥四本人 MCP 读/11消息回 parent39。编译与生成父差别按 owner 精确保护，不合并成一个猜测父图、不宽泛删除旧字段/options。V5–V9 artifacts/provenance 原字节逐个保护；V8 与 V9 历史 census 始终43/20/24，当前45/20/24分开，inactive/unroutable与generated-not-activated是阶段metadata，不等实际进程启用。
+
+机器候选仅现 `buf.platform.json`、`scripts/generate-platform-connect-client.mjs`、`test/platform-connect-contract.test.mjs`，完整单 pin vendor/正式 generated 两输出与 dependency manifest；common/platform 由既有 Buf/Protobuf-ES 工具生成，不手改 generated，不升级 dependency/lock/buf template。现6个旧测试涉及 vendor SHA 时仅正规 pin 字面更新，旧断言保持。原 HTTP projection、public、runtime、正常资格与 Schema 全不改。
+
+### 单预算、认证与失效退役
+
+route 首 await 前建立 performance.now()+10000 唯一绝对 deadline，覆盖输入/current session admission、credential 文件、正规 OAuth token HTTP、两个 RPC、strict decode/安全投影、实际 public JSON 编码与 return fence；每步使用剩余，不层层重新十秒。可信 tenant/subject 仅来自当前 admission，用户 Bearer 只发送 IAM；Platform Connect 调用沿现 personal-installation-connect metadata 构造正规 projection workload Bearer、x-tenant-ref/x-kokoro-subject；tenant/caller 的 authority 仍唯一来自 IAM 当前 token 资格，x-tenant-ref 不被当独立身份依据。原 request_id 放 typed 请求字段，owner 原 x-kokoro-request-id 响应头必须匹配，BFF 对浏览器回 x-request-id；不从 body 接身份。本人来源与安装各调用自己的 inspection，Platform 每次在线准入和初末绑定/CLEAN复核；不自动安装、不借 catalog credential 或 Agent proof。
+
+复用精确 platform:projection.read / https://kokoro.dev/resources/platform-internal 资格：credential regular file、O_NOFOLLOW、0400/0600、当前 uid、实际读取有界；token HTTP redirect:error、有界正文与安全异常。缓存只短期 token、不缓存用户授权或正文；共享 flight 每 waiter 独立取消，末 waiter 取消实际 HTTP；完成后重新检查 credential identity/rotation，取消/轮换后的迟到值不得缓存或返回。owner 机器401/403退役相关 token/flight，当次失败，不 fallback/自动重试。旧 projection 的有效读取仍保护，安全强化须真实回归，不把新 D0 当现实现保证。
+
+caller 实际 abort/disconnect 才停止写回复；owner Canceled/DeadlineExceeded 或本地预算届满而 caller live 返回 closed503依赖错误，不能把合成 deadline signal 当 caller 已断。对不即时可取消 I/O 观察迟到 settlement、丢弃结果，零后继 token/RPC/回复，不宣称物理连接/已发送字节即时回收。Connect 二进制 typed 输入、单文件 optional presence、read/write上限与剩余timeout；headers 同 request-id/no-store 必检。public 真 JSON 字节≤1MiB另验，不借 owner 两 codec 限额代替。
+
+### 阶段与真实业务验收
+
+顺序固定：三 D0一致 → fixed consumer/正规生成并由 Root 提交 → 两 GET canonical public8.8/111与旧109完整保护 → 正式系统 RED → runtime/credential安全强化 → 系统 GREEN → 正常受控配对激活 → Web 固定 BFF artifact/查看详情与 E2E。每段另授写集，不把机器生成当功能，不重启正常服务或 reset 共享资源。
+
+后继普通 `test/skill-package-inspection.integration.mjs` 置现 test 根，由 Root 给 protected IAM session/正规 OAuth HTTP配置及真实 Platform/Storage/MinIO/ClamAV/隔离 PG资源；不导入 owner SQL或私有 fixture、不 native 预签 token冒 HTTP。先实际四读 RED；本人来源/安装目录→SKILL.md准确原文、两主体 foreign/absent/removed404、disabled/withdrawn可读、draft/quarantined拒、空/BOM/path、missing/binary/超限、no-store/request-id/完整error、慢请求/取消/轮换/撤权与零 mutation分别核。共享资源只 Root 操作，缺资源为未验，不冒通过。
+
+最终 Web 路径须真实卡片→预览→查看详情→文件列表/原文切换→错误显式重试→取消/返回保 query/focus、异步不跳动；本文不造提前按钮。任意可见非本人且未安装目录的正文资格、作者/usage/真实cover、series收敛、Skills管理员与前后台同步仍 OPEN；两本人读不缩小完整 Skills/Wave0–7目标。
+
+<!-- R340-SKILLS-INSPECTION-TECH-END -->
+
 ## R323 本人 MCP 四读机器契约已发布，运行接线尚未实现（2026-10-07）
 
 当前唯一public OpenAPI **8.7.0 / 109 operations**，新增四 `/v1/self/mcp/*` GET（本人connector列表/详情、connector下connection列表、connection详情），固定metadata、安全closed shape/参数/错误与no-store。原105 operations/88path items/456components Root独立完整document剥增量后deepEqual，Platform固定vendor/generated、runtime/source/Schema/正常身份完全未动。旧R320三面中“尚未写机器契约”的阶段现由本节替代；五普通TS、正规OAuth HTTP到owner组合及正常激活仍目标，不把contract发行当已存在HTTP路由。没有新数据库/credential或兼容层。

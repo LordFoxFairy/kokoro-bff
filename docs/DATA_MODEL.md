@@ -1,3 +1,33 @@
+## R340 Skills 包正文消费的数据与生命周期边界（2026-10-08；目标，尚未实施）
+
+本仓基线c91fee642c5bac79d5beab90b15a1eaf97637047/public8.7.0/109/Connect e83a2ad43，当前无正文public route；目标完整固定Platform1f6f764当前45/20/24、后继public8.8/111。本轮只三个现D0前缀，原全文suffix保留，未改canonical SQL/机器/source/正常配置。精确API/错误/1MiB规则见API R340，文件放置/52固定输入/三双父/阶段授权见TECH R340。
+
+### 唯一事实与零新增持久化
+
+Platform继续唯一拥有Skill/series/revision/status、本人安装removed/enabled、validated package绑定与目录正文资格；Storage唯一Blob/Asset/CLEAN及bytes；IAM唯一current Session与机器资格。BFF只保当次已准入identity、typed请求/响应和安全公开表示，不新增表、列、索引、migration、FK、package镜像、receipt/outbox、Redis业务key、正文/目录cache或权限decision cache；database/schema.sql完整零diff。不访问owner SQL/Redis/ORM，不保存资产或下载凭据，不让Web成为owner事实源。
+
+两GET无command/digest/idempotency key。重复调用各自当前admission与对应本人inspection，不从已安装列表或catalog personal/installed标记推导授权，不把absence当已证无资格，不自动安装或猜installation ID。本人来源直接精确skill ID；本人安装直接已知精确installation ID，来源/ref/revision由Platform绑定，不能换成series latest。active/disabled/withdrawn且validated与installed的读取资格不同于执行enabled；可查看不代表可执行，removed/draft/quarantined拒绝保持owner规定。
+
+Platform初末在各自短事务读取本人来源/安装/package一致快照，Storage/ZIP网络在事务外，末端再在线身份/绑定/CLEAN核验；BFF不复制这些事务、pool/permit或校验器，不宣不同owner间原子快照。出现变化按owner闭集失败，不用早先metadata/缓存返回；选中原文只在当次成功响应生命周期存在，取消/期限退役丢弃，不持久写入。
+
+### 认证优化不是业务数据
+
+现projection credential正规文件用途与scope不扩大。内存token/flight仅短期传输优化，key含tenant/generation/ref/client/resource/scope/secret-hash，文件读取有界/安全权限，get与flight完成重核rotation；取消/轮换迟到值不得缓存或返回，owner机器401/403退役相关token/flight。不得以token cache替current用户准入或Platform fresh决定。此安全强化后继runtime另授，不凭本设计声称旧projection已实现；不造新身份、持久token表、Redis授权镜像或后台刷新任务，不写正常凭据/secret/资金。
+
+唯一10秒单调绝对预算覆盖输入、admission、凭据、实际OAuth HTTP、RPC、有界decode/strictprojection和publicJSON实际编码/末端fence；逐层耗remaining，不重计。caller断开与owner取消/本地deadline分开，迟到I/O被观察/丢弃、零后继，不宣物理settlement10秒完全回收。包目录/原文public实际UTF-8 JSON≤1MiB，超过429/no retry/no截断；selected null与空text明确区别，原BOM/换行保留。
+
+### 发行记录与历史保护
+
+唯一Connect vendor由e83a替换1f6f764完整52正式Git输入；V5–V9历史bytes/provenance完整固定，历史V8/V9各43/20/24与最新45/20/24明确区别，三compiled/generated双父剥新增回父、完整generated等compiled；旧V8→parent39保持。固定输入manifest/hash不是业务事实，不建立Root可编辑contract中心，也不把inactive/generated-not-activated或文档准入当runtime激活。独立Platform HTTP vendor与有效旧projection/Skills/public109不变；不为clean-slate删除仍有效业务，删除只限被替代Connect固定点与重复alias。
+
+### 实际验收和资源边界
+
+按TECH既定机器→public→真实系统RED→runtime→系统GREEN→正常受控切换→WebE2E串行；缺资源明确未验，辅助门不替用户测试。后继test/skill-package-inspection.integration.mjs置现test根，Root提供受保护正式IAM Session/OAuth HTTP与真实Platform/Storage/MinIO/ClamAV/PG资格；BFF不导入owner SQL seed或IAM私有fixture，不重新造包冒已有真实引用，不native预签token代实际HTTP。每主体/source/installation、目录/正文、foreign/missing/removed、disabled/withdrawn、原文空/BOM、路径/超限、错误header/no-store、取消/撤权/轮换与零mutation均独立证据。
+
+测试只Root隔离资源/清理本次自有资源，不reset共享PostgreSQL/Redis/ObjectStore、不重启正常预览，不扩大原包清理资格。当前正常配对由Root后继受控维护；本文无新连接器/MCP/Agent/Admin/Billing写入。作者/usage/真实cover、series收敛、可见非本人未安装catalog正文资格以及Skills管理员前后台同步仍OPEN，完整Skills与Wave0–7范围不缩小。
+
+<!-- R340-SKILLS-INSPECTION-DATA-END -->
+
 ## R323 本人 MCP 四读机器契约已发布，运行接线尚未实现（2026-10-07）
 
 当前唯一public OpenAPI **8.7.0 / 109 operations**，新增四 `/v1/self/mcp/*` GET（本人connector列表/详情、connector下connection列表、connection详情），固定metadata、安全closed shape/参数/错误与no-store。原105 operations/88path items/456components Root独立完整document剥增量后deepEqual，Platform固定vendor/generated、runtime/source/Schema/正常身份完全未动。旧R320三面中“尚未写机器契约”的阶段现由本节替代；五普通TS、正规OAuth HTTP到owner组合及正常激活仍目标，不把contract发行当已存在HTTP路由。没有新数据库/credential或兼容层。

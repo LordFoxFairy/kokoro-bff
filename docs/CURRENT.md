@@ -1,3 +1,11 @@
+## R340 Skills 包正文三面设计已冻结，功能仍待实现（2026-10-08）
+
+Root审查三D0一致，独审对应原8996fe/51d71b/d02ab1未发现设计阻断；Root核现client/owner metadata后TECH仅明确token tenant authority、x-kokoro-subject/typed request_id/响应x-kokoro-request-id，最终384de170，API/DATA不改。三原suffix/548其它tracked保留。当前固定Connect仍e83a43且两inspection缺失，Root实际资格assert自然exit1；真实owner1f6f764 clean、52正式输入以owner仓相对path含contract/记录聚合e4201bc可独立重算。第一次无前缀聚合断言失败仅审计算法差异，重核源未变。
+
+下步仅完整fixedconsumer/正规生成，之后独立public8.8/111→真实系统RED→runtime→正常激活→Web真实查看详情；当前无public正文路由，不冒UI完成。无SQL/正常进程/身份/资源更改，其它模块暂停，完整目标仍active。三D0完整路径见现TECH/API/DATA顶部R340，正文资格/作者usage/Admin仍OPEN。
+
+<!-- R340-D0-ROOT-END -->
+
 ## R323 本人 MCP 四读机器契约已发布，运行接线尚未实现（2026-10-07）
 
 当前唯一public OpenAPI **8.7.0 / 109 operations**，新增四 `/v1/self/mcp/*` GET（本人connector列表/详情、connector下connection列表、connection详情），固定metadata、安全closed shape/参数/错误与no-store。原105 operations/88path items/456components Root独立完整document剥增量后deepEqual，Platform固定vendor/generated、runtime/source/Schema/正常身份完全未动。旧R320三面中“尚未写机器契约”的阶段现由本节替代；五普通TS、正规OAuth HTTP到owner组合及正常激活仍目标，不把contract发行当已存在HTTP路由。没有新数据库/credential或兼容层。

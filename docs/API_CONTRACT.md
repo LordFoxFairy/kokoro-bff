@@ -1,3 +1,57 @@
+## R340 Skills 本人包正文公开契约设计（2026-10-08；尚未发行/实现）
+
+基线 `c91fee642c5bac79d5beab90b15a1eaf97637047`，当前 canonical public8.7.0/109，固定 Connect e83a2ad/43且缺 inspection。目标固定 Platform **1f6f764bc4bcf09d235e086ae7fe137acf16d63d** 当前45/20/24，完整52输入及三双父/历史 V5–V9以 TECH R340为准；V8/V9历史各43，不改census。先完整固定生成，再独立 canonical OpenAPI **8.8.0 / 111**追加以下两 GET，原109及全部旧 schema/metadata/status语义完整保持。当前只三 D0前缀，不已发布public，不存在正文生产route，不宣正常激活。
+
+### 两个具名本人 GET
+
+| Public path / operationId目标 | 唯一 fixed owner RPC |
+|---|---|
+| GET /v1/self/skills/{skill_id}/package / getManagedPersonalSkillPackage | ProductSkillPackageInspectionService.InspectPersonalSkillPackage |
+| GET /v1/skill-installations/{installation_id}/package / getPersonalSkillInstallationPackage | ProductSkillInstallationPackageInspectionService.InspectPersonalSkillInstallationPackage |
+
+owner=kokoro-bff、visibility=public、stability与既有首发策略一致、idempotency=none、permission=self/current user；Platform机器侧仅现 platform:projection.read，不新增human角色或scope。service envelope+当前 IAM Session唯一准入，tenant/subject来自 context，不从外来legacy header/body身份自报；不自动安装或先取目录猜权限。来源 path ID或安装 path ID精确送对应 typed wrapper，无command/proof/product_context；request_id原BFF ID，file_path optional presence保留。
+
+唯一 query键 file_path，省略=目录，存在=指定目录文件原文；显式空、重复/unknown query、body(content-length/transfer-encoding)、idempotency-key均400。path ID沿当前 owner ID闭集1–191 ASCII `[A-Za-z0-9][A-Za-z0-9._:-]*`；file_path沿 owner ZIP路径：合法Unicode、NFC、UTF-8≤256B、非空、不以BOM/drive/absolute路径开头、无反斜线/NUL、无空段/./..。不trim、不二次URL-decode、不折大小写/替斜线、不把 maxLength码点当UTF-8字节验证。正常 HTTP query解码只一次后原样送owner，非法解码输入拒绝，不宽松修复。
+
+### closed成功响应与原文
+
+200 为唯一 `{data:{source_ref,revision,files,selected_file}}`；全部对象 additionalProperties=false，所有上述字段必填，无request_id/meta复制。`x-request-id`仅响应header；Cache-Control:no-store成功与错误一致。
+
+- source_ref：合法 skill:<ID>；来源请求精确等 skill:<path skill_id>，安装请求合法ref但不猜来源ID；安装归属由owner本人绑定判定。
+- revision：1..18446744073709551615的规范十进制字符串，无+号/前导0。
+- files：0..128安全普通文本目录项，每项精确 path与size_bytes；path同安全规则，唯一并保持owner确定排序；size_bytes为0..18446744073709551615规范十进制字符串。Proto合法省略repeated由正规decoder得到空集合，再公开[]，不是伪造文件。
+- selected_file：目录请求必须null且owner selected message无presence；选择请求必为 `{path,text}`，path等请求且存在files，text允许空字符串。缺wrapper/错method响应、unknown字段、duplicate/乱序路径、错source/ref/revision、坏值或presence不符都502，不补默认身份/正文。
+- text原BOM、空、Unicode与换行保留，不trim、不base64替代binary、不截断；检查原文UTF-8字节与所选目录size_bytes一致。正文不当执行指令、不执行HTML/SVG/脚本、不包含资产ID/下载URL/header/tenant/subject/receipt/provider异常。
+- BFF完整public JSON实际UTF-8编码（含data/null/escaping全部开销）**≤1,048,576 bytes**，单独与owner protobuf/JSON的1MiB区别；超限429 skill_package_limit_exceeded且retryable=false，不截断、不伪成功。不拿owner readMaxBytes冒public最终限额。
+
+### 错误闭集、身份与预算
+
+统一closed `{error:{code,message,retryable}}`，message固定脱敏，禁SQL/URL/token/正文/原异常；已知 request ID返回header，no-store。只按可信typed Connect Code及固定结构reason/header识别配对，不靠message substring猜错误。
+
+| HTTP | code | retryable / 来源 |
+|---|---|---|
+| 400 | invalid_skill_package_request | false；输入闭集/路径拒绝，owner固定InvalidArgument |
+| 404 | skill_package_not_found | false；不存在/foreign/removed统一，不泄存在性 |
+| 404 | skill_package_file_not_found（有条件候选，当前不启用） | false；仅后继确认 owner 稳定机器 details/error code 可区分文件缺失时准入；无此事实统一 skill_package_not_found |
+| 412 | skill_package_precondition_failed | false；合法绑定包暂不可预览等固定FailedPrecondition，不混超量 |
+| 429 | skill_package_limit_exceeded | false；owner ResourceExhausted或本次public实际JSON超1MiB；超量文件不可预览仍429，不擅改412/413、无自动retry |
+| 502 | skill_package_response_invalid | false；坏typed响应/身份/headers/安全投影、Internal或未知错误tuple |
+| 503 | skill_package_dependency_unavailable | true；token/机器资格401或403、Unavailable/Canceled/DeadlineExceeded与本地完整预算耗尽；不伪用户session401/403 |
+
+当前 inspection 实现的 NotFound rawMessage（如 package_file_not_found）不视为已发布稳定机器 details/code；当前公开映射必须统一 skill_package_not_found，不读取 message 判 missingfile/foreign。文件专属码在未取得正规机器事实前不得列实际可达分支；后继机器契约可只发行当前可达统一404闭集，不凭 D0 候选宣存在。ResourceExhausted 同样统一429 limit，不靠 message 区分超限/非文本；只有 typed FailedPrecondition 才映412。
+
+当前session admission闭集仍原401(session_authentication_required/session_invalid)、403(service_auth_failed/session_forbidden/product_tenant_forbidden)、429(session_rate_limited，true且经验证Retry-After)、503(product_tenant_not_configured/iam_admission_unavailable，true)，不放宽或复制第二授权源。包表示确定大小拒绝的429不是时间窗口限流，不猜retry-after秒数；owner提供header也不据其虚构重试许可。机器资格失败退役token/flight，不自动重试/fallback；caller仍live的owner取消/预算到期明确503，只有caller实际断开不写。
+
+首await前单一绝对10秒贯穿session/credential/tokenHTTP/RPC/strictdecode/publicJSONencode与末端fence，无每层重计、cache正文或已验结果replay。Platform重新在线授权及两次本人来源/安装/package/CLEAN复核；来源active/disabled/withdrawn且validated，安装installed且精确revision，draft/quarantined/removed不供正文；变化失败关闭，不替最新版。各owner事实与BFF调用不是跨服务原子事务/持久快照，授权之后已发送字节不承诺撤回。
+
+### 发行与验收
+
+三 D0 →52正式固定输入/三双父/完整生成 →public8.8/111及旧109 deep equal →真实IAM OAuth HTTP/Platform/Storage/PG/BFF四读缺口RED →runtime/安全强化 →真实组合GREEN →Root正常受控激活 →Web固定BFFpublic artifact与实际查看详情/切文件/异步返回。canonical仍只contract/openapi/v1/openapi.yaml；public测试/operation inventory由原入口扩展，零Schema/权限/credential变更。格式/contract/生成/type/build都是辅助，不等用户完整页面通过。
+
+任意可见非本人未安装catalog来源正文资格、作者/usage/series、Skills human-admin与前后台同步保持OPEN；不以这两本人GET宣完整Skills或Wave0–7完成。
+
+<!-- R340-SKILLS-INSPECTION-API-END -->
+
 ## R323 本人 MCP 四读机器契约已发布，运行接线尚未实现（2026-10-07）
 
 当前唯一public OpenAPI **8.7.0 / 109 operations**，新增四 `/v1/self/mcp/*` GET（本人connector列表/详情、connector下connection列表、connection详情），固定metadata、安全closed shape/参数/错误与no-store。原105 operations/88path items/456components Root独立完整document剥增量后deepEqual，Platform固定vendor/generated、runtime/source/Schema/正常身份完全未动。旧R320三面中“尚未写机器契约”的阶段现由本节替代；五普通TS、正规OAuth HTTP到owner组合及正常激活仍目标，不把contract发行当已存在HTTP路由。没有新数据库/credential或兼容层。
