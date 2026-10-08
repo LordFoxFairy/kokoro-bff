@@ -14,10 +14,10 @@ import {
   setPersonalEnabledDigest,
 } from "../dist/infrastructure/clients/platform/personal-installation-projector.js"
 import { PersonalInstallationConnectClient } from "../dist/infrastructure/clients/platform/personal-installation-connect.js"
-const timestamp = (seconds) => ({
+const timestamp = (seconds, nanos = 0) => ({
   $typeName: "google.protobuf.Timestamp",
   seconds: BigInt(seconds),
-  nanos: 0,
+  nanos,
 })
 const installation = () => ({
   installationId: { value: "i" },
@@ -31,6 +31,7 @@ const installation = () => ({
   displayName: "Research assistant",
   summary: "",
   sourceStatus: 2,
+  skillUpdatedAt: timestamp(3, 123456789),
 })
 const config = {
   host: "127.0.0.1",
@@ -114,6 +115,7 @@ test("safe installation ACK maps enum, uint64 and UTC without private fields", (
         display_name: "Research assistant",
         summary: "",
         source_status: "active",
+        skill_updated_at: "1970-01-01T00:00:03.123Z",
       },
       change: "installed",
       event_id: "event-1",
@@ -150,9 +152,34 @@ test("response rejects unknown metadata status, unchanged event and invalid page
     }),
   )
 })
+test("R345 installation requires a distinct valid Skill update Timestamp and never substitutes installation time", () => {
+  const projected = projectInstallation(installation())
+  assert.equal(projected.installed_at, "1970-01-01T00:00:01.000Z")
+  assert.equal(projected.updated_at, "1970-01-01T00:00:02.000Z")
+  assert.equal(projected.skill_updated_at, "1970-01-01T00:00:03.123Z")
+  assert.notEqual(projected.skill_updated_at, projected.updated_at)
+  assert.match(projected.skill_updated_at, /Z$/u)
+  assert.throws(() => projectInstallation({ ...installation(), skillUpdatedAt: undefined }), /skill_installation_response_invalid/u)
+  assert.throws(() => projectInstallation({ ...installation(), skillUpdatedAt: timestamp(3, -1) }), /skill_installation_response_invalid/u)
+  assert.throws(() => projectInstallation({ ...installation(), skillUpdatedAt: timestamp(3, 1_000_000_000) }), /skill_installation_response_invalid/u)
+})
+test("R345 installation rejects protobuf Timestamp seconds outside the canonical range", () => {
+  const minimum = timestamp(-62_135_596_800n)
+  const maximum = timestamp(253_402_300_799n, 999_999_999)
+  const belowMinimum = timestamp(-62_135_596_801n)
+  const aboveMaximum = timestamp(253_402_300_800n)
+  assert.equal(projectInstallation({ ...installation(), skillUpdatedAt: minimum }).skill_updated_at, "0001-01-01T00:00:00.000Z")
+  assert.equal(projectInstallation({ ...installation(), skillUpdatedAt: maximum }).skill_updated_at, "9999-12-31T23:59:59.999Z")
+  assert.equal(projectInstallation({ ...installation(), installedAt: minimum, updatedAt: minimum }).installed_at, "0001-01-01T00:00:00.000Z")
+  assert.equal(projectInstallation({ ...installation(), installedAt: maximum, updatedAt: maximum }).updated_at, "9999-12-31T23:59:59.999Z")
+  assert.throws(() => projectInstallation({ ...installation(), skillUpdatedAt: belowMinimum }), /skill_installation_response_invalid/u)
+  assert.throws(() => projectInstallation({ ...installation(), skillUpdatedAt: aboveMaximum }), /skill_installation_response_invalid/u)
+  assert.throws(() => projectInstallation({ ...installation(), installedAt: belowMinimum, updatedAt: belowMinimum }), /skill_installation_response_invalid/u)
+  assert.throws(() => projectInstallation({ ...installation(), installedAt: aboveMaximum, updatedAt: aboveMaximum }), /skill_installation_response_invalid/u)
+})
 test("all owner product installation projection vectors keep their published digests", async () => {
   const source = new URL(
-    "../contract/vendor/kokoro-platform/1f6f764bc4bcf09d235e086ae7fe137acf16d63d/execution-operations-v5/vectors/product-installation.json",
+    "../contract/vendor/kokoro-platform/af38f4419f6aa123d5bffaeaf14bd73a0b06c191/execution-operations-v5/vectors/product-installation.json",
     import.meta.url,
   )
   const vectors = JSON.parse(await readFile(source, "utf8")).vectors.filter((vector) => vector.stage === "projection")

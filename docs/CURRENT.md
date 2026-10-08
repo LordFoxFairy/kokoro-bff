@@ -1,3 +1,13 @@
+### R345 Skill 更新时间运行投影已独审（2026-10-08，正常组合待成对激活）
+
+Root 接收原 Skills owner 冻结十路径，仅两客户端及八测试；固定 Platform af38f441 / HTTP3.4、public8.9/111。四 Skill 投影严格 required `skill_updated_at` UTC Z/closed shape，安装取 tag14，tag7/8生命周期不冒来源时间；无SQL、权限、receipt、环境或依赖变更。
+
+Root 原 RED 134PASS/5FAIL→完整check89767 903PASS/2既有资源SKIP；独审另发现 Timestamp seconds 越界P1，Root新负控0PASS/1FAIL后最窄BigInt范围修复。最终Root73169完整check自然0：contract324PASS/default904PASS、0FAIL、2既有资源SKIP，lint/typecheck/正规生成/build均0。独审绑定984dce25/c0aebae5关闭P1，十SHA与freeze一致；旧V5bytes保持。不以工程门替用户UI验收。
+
+原正常BFF44454/Platform31887非watch旧配对仍保持，尚未激活新字段。Web正在固定消费；Root后继同持久配置成对切换并实际点目录/本人预览与详情。作者/例子/真实cover/usage/未安装目录正文资格及后台仍OPEN，其它模块暂停。
+
+<!-- R345-B-RUNTIME-ROOT-END -->
+
 ### R345 Skill 更新时间正式机器发行，运行消费者尚待接线（2026-10-08）
 
 Root 固定 Platform正式af38f44的55 publication与独立HTTP原Git字节；public8.9.0/111只给四closed schemas新增required skill_updated_at/string/date-time/Z$，剥回完整8.8 parent与原R342完整8.7 parent均保持。单owner pin，无旧vendor fallback，SQL、runtime、配置、权限与依赖未改。正式source SHA f7f69075fc79ca0bd93a3b2bd5137b8094a6d1a56546a86ede5833ffdfcc0846，parsed canonical e95f026581b389dad643d390f543f9ab057a2bfd0cbb02dfab0aeb8cc662631d。

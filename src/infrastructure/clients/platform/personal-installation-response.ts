@@ -20,7 +20,8 @@ function instant(value: Timestamp | undefined, required: boolean): string | unde
     if (required) throw new Error("skill_installation_response_invalid")
     return undefined
   }
-  if (value.nanos < 0 || value.nanos > 999999999) throw new Error("skill_installation_response_invalid")
+  if (value.seconds < -62135596800n || value.seconds > 253402300799n || value.nanos < 0 || value.nanos > 999999999)
+    throw new Error("skill_installation_response_invalid")
   const milliseconds = Number(value.seconds * 1000n + BigInt(Math.floor(value.nanos / 1_000_000)))
   const date = new Date(milliseconds)
   if (!Number.isSafeInteger(milliseconds) || Number.isNaN(date.valueOf())) throw new Error("skill_installation_response_invalid")
@@ -45,7 +46,8 @@ export function projectInstallation(value: ProductSkillInstallation | undefined)
     throw new Error("skill_installation_response_invalid")
   const installedAt = instant(value.installedAt, true),
     updatedAt = instant(value.updatedAt, true),
-    removedAt = instant(value.removedAt, false)
+    removedAt = instant(value.removedAt, false),
+    skillUpdatedAt = instant(value.skillUpdatedAt, true)
   if (
     (value.installed && removedAt !== undefined) ||
     (!value.installed && (value.enabled || removedAt === undefined)) ||
@@ -66,6 +68,7 @@ export function projectInstallation(value: ProductSkillInstallation | undefined)
     display_name: value.displayName,
     summary: value.summary,
     source_status: sourceStatus,
+    skill_updated_at: skillUpdatedAt,
   }
 }
 export function projectInstallationAck(value: {

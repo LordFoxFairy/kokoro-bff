@@ -159,7 +159,16 @@ test("projection client does not leak owner auth/error codes to Product API", as
 })
 
 test("projection by-ID response must bind requested identity and exact public fields", async () => {
-  const base = { skill_id: "skill-one", source_ref: "skill:skill-one", revision: "1", status: "active", name: "Name", summary: "Summary", tags: [] }
+  const base = {
+    skill_id: "skill-one",
+    source_ref: "skill:skill-one",
+    revision: "1",
+    status: "active",
+    name: "Name",
+    summary: "Summary",
+    tags: [],
+    skill_updated_at: "2026-10-08T12:34:56.123456789Z",
+  }
   for (const data of [
     { ...base, skill_id: "skill-other" },
     { ...base, source_ref: "skill:skill-other" },
@@ -171,6 +180,90 @@ test("projection by-ID response must bind requested identity and exact public fi
       (client) => client.read("skill", "t", "u", "r", { skillId: "skill-one" }),
     )
     assert.deepEqual(result, { ok: false, status: 502, code: "skill_response_invalid", retryable: false })
+  }
+})
+
+test("R345 all three HTTP Skill shapes require one closed UTC Z update instant and preserve nanoseconds", async () => {
+  const instant = "2026-10-08T12:34:56.123456789Z"
+  const visible = {
+    source_ref: "skill:skill-one",
+    name: "Name",
+    description: "Summary",
+    content_hash: "hash",
+    scope: "personal",
+    revision: "1",
+    enabled: true,
+    categories: [],
+    skill_updated_at: instant,
+  }
+  const published = {
+    skill_id: "skill-one",
+    source_ref: "skill:skill-one",
+    revision: "1",
+    status: "active",
+    name: "Name",
+    summary: "Summary",
+    tags: [],
+    skill_updated_at: instant,
+  }
+  const managed = {
+    skill_id: "skill-one",
+    source_ref: "skill:skill-one",
+    series_id: "series-one",
+    revision: "1",
+    name: "Name",
+    summary: "Summary",
+    tags: [],
+    status: "active",
+    skill_updated_at: instant,
+  }
+  const cases = [
+    {
+      label: "visible Skill",
+      value: visible,
+      response: (value) => ({ data: { skills: [value] } }),
+      read: (client) => client.read("skills", "t", "u", "r"),
+      expected: { ok: true, status: 200, data: { skills: [visible] } },
+      invalid: { ok: false, status: 502, code: "skill_response_invalid", retryable: false },
+    },
+    {
+      label: "published personal Skill",
+      value: published,
+      response: (value) => ({ data: value }),
+      read: (client) => client.read("skill", "t", "u", "r", { skillId: "skill-one" }),
+      expected: { ok: true, status: 200, data: published },
+      invalid: { ok: false, status: 502, code: "skill_response_invalid", retryable: false },
+    },
+    {
+      label: "managed personal Skill",
+      value: managed,
+      response: (value) => ({ data: value }),
+      read: (client) =>
+        client.readManagedPersonalSkill("managedSkill", "t", "u", "r", { skillId: "skill-one" }, new AbortController().signal, performance.now() + 5000),
+      expected: { ok: true, status: 200, data: managed },
+      invalid: { ok: false, status: 502, code: "skill_response_invalid" },
+    },
+  ]
+  for (const profile of cases) {
+    const valid = await withProjectionOwner(
+      async () => new Response(JSON.stringify(profile.response(profile.value)), { status: 200, headers: ownerHeaders }),
+      profile.read,
+    )
+    assert.deepEqual(valid, profile.expected, `${profile.label} preserves the exact owner instant`)
+    for (const [label, mutate] of [
+      ["missing", (value) => delete value.skill_updated_at],
+      ["extra", (value) => (value.unreviewed = true)],
+      ["invalid", (value) => (value.skill_updated_at = "not-an-instant")],
+      ["non-Z", (value) => (value.skill_updated_at = "2026-10-08T12:34:56+00:00")],
+    ]) {
+      const changed = structuredClone(profile.value)
+      mutate(changed)
+      const result = await withProjectionOwner(
+        async () => new Response(JSON.stringify(profile.response(changed)), { status: 200, headers: ownerHeaders }),
+        profile.read,
+      )
+      assert.deepEqual(result, profile.invalid, `${profile.label} rejects ${label} field drift`)
+    }
   }
 })
 

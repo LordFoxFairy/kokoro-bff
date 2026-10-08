@@ -770,6 +770,20 @@ test("BFF consumes the pinned Platform 3.4 HTTP projection without owning its da
   assert.equal(await exists("contract/dependencies/capability-http.json"), false)
 })
 
+test("R345 Skill update instants stay strict at the two existing Platform projection mappers without timestamp fallback", async () => {
+  const [projection, installation] = await Promise.all([
+    readFile(path.join(root, "src/infrastructure/clients/platform/projection-http.ts"), "utf8"),
+    readFile(path.join(root, "src/infrastructure/clients/platform/personal-installation-response.ts"), "utf8"),
+  ])
+  for (const schema of ["zSkill", "zPublishedPersonalSkill", "zSelfManagedSkill"])
+    assert.match(projection, new RegExp(`${schema}\\.strict\\(\\)`, "u"), `${schema} must reject unknown owner fields`)
+  assert.match(projection, /skill_updated_at/u)
+  assert.doesNotMatch(projection, /skill_updated_at\s*(?:\?\?|\|\|).*?(?:installed_at|updated_at)/u)
+  assert.match(installation, /instant\(value\.skillUpdatedAt, true\)/u)
+  assert.match(installation, /skill_updated_at:\s*skillUpdatedAt/u)
+  assert.doesNotMatch(installation, /skillUpdatedAt\s*(?:\?\?|\|\|)/u)
+})
+
 test("Scheduler control and receiver implement distinct owner boundaries and durable recovery invariants", async () => {
   const [technical, api, data, current, config] = await Promise.all([
     readFile(path.join(root, "docs/TECHNICAL_DESIGN.md"), "utf8"),

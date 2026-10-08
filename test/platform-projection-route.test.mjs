@@ -82,9 +82,19 @@ async function fixture(owner) {
 }
 
 const ownerHeaders = { "content-type": "application/json", "x-kokoro-request-id": "route-request", "cache-control": "no-store" }
+const skillUpdatedAt = "2026-10-08T12:34:56.123456789Z"
 
 test("Product by-ID GET is strict data-only and current-person bound", async () => {
-  const resource = { skill_id: "skill-one", source_ref: "skill:skill-one", revision: "2", status: "active", name: "Sandbox", summary: "summary", tags: ["one"] }
+  const resource = {
+    skill_id: "skill-one",
+    source_ref: "skill:skill-one",
+    revision: "2",
+    status: "active",
+    name: "Sandbox",
+    summary: "summary",
+    tags: ["one"],
+    skill_updated_at: skillUpdatedAt,
+  }
   const app = await fixture(async () => new Response(JSON.stringify({ data: resource }), { status: 200, headers: ownerHeaders }))
   try {
     const result = await app.get("/v1/skills/skill-one")
@@ -112,6 +122,7 @@ test("Product list and MCP GET keep owner-native identity and stable cursor", as
     revision: "2",
     enabled: true,
     categories: [],
+    skill_updated_at: skillUpdatedAt,
   }
   const mcp = {
     server_id: "server",
@@ -442,6 +453,7 @@ const managedSkills = ["draft", "active", "disabled", "withdrawn", "quarantined"
   summary: status === "draft" ? "" : `${status} summary`,
   tags: status === "active" ? ["featured"] : [],
   status,
+  skill_updated_at: skillUpdatedAt,
 }))
 
 function managedConfig(credentialFile) {
@@ -552,7 +564,7 @@ function assertManagedEnvelope(response, body) {
   assert.deepEqual(body.meta, { request_id: requestId })
 }
 
-test("R266 managed personal list projects all five statuses, safe eight fields, empty summary and omitted cursor", async () => {
+test("R345 managed personal list projects all five statuses, safe nine fields, exact Skill instant and omitted cursor", async () => {
   const app = await managedFixture()
   try {
     const response = await fetch(`${app.origin}/v1/self/skills?limit=5`, {
@@ -561,8 +573,19 @@ test("R266 managed personal list projects all five statuses, safe eight fields, 
     const body = await response.json()
     assertManagedEnvelope(response, body)
     assert.deepEqual(body.data, { skills: managedSkills, next_cursor: null })
-    assert.deepEqual(Object.keys(body.data.skills[0]), ["skill_id", "source_ref", "series_id", "revision", "name", "summary", "tags", "status"])
+    assert.deepEqual(Object.keys(body.data.skills[0]), [
+      "skill_id",
+      "source_ref",
+      "series_id",
+      "revision",
+      "name",
+      "summary",
+      "tags",
+      "status",
+      "skill_updated_at",
+    ])
     assert.equal(body.data.skills[0].summary, "")
+    assert.equal(body.data.skills[0].skill_updated_at, skillUpdatedAt)
     assert.equal(app.admissionCalls.length, 1)
     assert.equal(app.calls.length, 1)
     assert.equal(app.calls[0].headers.get("x-kokoro-tenant-id"), "tenant")

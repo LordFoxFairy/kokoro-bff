@@ -17,7 +17,9 @@ import {
   zListSelfMcpConnectionsResponse,
   zListSelfManagedSkillsResponse,
   zMcpConnection,
+  zPublishedPersonalSkill,
   zSelfManagedSkill,
+  zSkill,
   zListVisibleSkillCatalogResponse,
   zListVisibleSkillPoolResponse,
   zListVisibleSkillsResponse,
@@ -51,7 +53,7 @@ export type ProjectionResult =
     }
 const invalidResponse = (): ProjectionResult => ({ ok: false, status: 502, code: "skill_response_invalid", retryable: false })
 const unavailable = (): ProjectionResult => ({ ok: false, status: 503, code: "skill_dependency_unavailable", retryable: true })
-const publishedFields = ["name", "revision", "skill_id", "source_ref", "status", "summary", "tags"]
+const publishedFields = ["name", "revision", "skill_id", "skill_updated_at", "source_ref", "status", "summary", "tags"]
 
 function matchesPublishedIdentity(value: unknown, skillId: string | undefined): boolean {
   if (typeof skillId !== "string" || typeof value !== "object" || value === null || Array.isArray(value)) return false
@@ -80,7 +82,19 @@ const connectionResponse = zListSelfMcpConnectionsResponse.strict().extend({
   }),
 })
 const connectionError = zErrorEnvelope.strict().extend({ error: zErrorEnvelope.shape.error.strict() })
-const managedSkill = zSelfManagedSkill.strict()
+const visibleSkill = zSkill.strict().refine(({ skill_updated_at }) => skill_updated_at.endsWith("Z"))
+const publishedSkill = zPublishedPersonalSkill.strict().refine(({ skill_updated_at }) => skill_updated_at.endsWith("Z"))
+const managedSkill = zSelfManagedSkill.strict().refine(({ skill_updated_at }) => skill_updated_at.endsWith("Z"))
+const visibleSkillsResponse = zListVisibleSkillsResponse.strict().extend({
+  data: zListVisibleSkillsResponse.shape.data.strict().extend({ skills: visibleSkill.array() }),
+})
+const visibleSkillPoolResponse = zListVisibleSkillPoolResponse.strict().extend({
+  data: zListVisibleSkillPoolResponse.shape.data.strict().extend({ skills: visibleSkill.array() }),
+})
+const visibleSkillCatalogResponse = zListVisibleSkillCatalogResponse.strict().extend({
+  data: zListVisibleSkillCatalogResponse.shape.data.strict().extend({ skills: visibleSkill.array() }),
+})
+const publishedSkillResponse = zGetPublishedPersonalSkillResponse.strict().extend({ data: publishedSkill })
 const managedListResponse = zListSelfManagedSkillsResponse.strict().extend({
   data: zListSelfManagedSkillsResponse.shape.data.strict().extend({ skills: managedSkill.array() }),
 })
@@ -353,12 +367,26 @@ export class PlatformProjectionHttpClient {
         bytes.set(chunk, offset)
         offset += chunk.byteLength
       }
-      if (self) {
-        joined.throwIfAborted()
+      if (self || (response.status === 200 && operation !== "mcp")) {
+        if (self) joined.throwIfAborted()
         try {
           if (response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() !== "application/json") throw new Error("media")
           const value: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes))
-          if (!(response.status === 200 ? connectionResponse : connectionError).safeParse(value).success) throw new Error("shape")
+          const schema =
+            response.status !== 200
+              ? connectionError
+              : operation === "mcpConnections"
+                ? connectionResponse
+                : operation === "skills"
+                  ? visibleSkillsResponse
+                  : operation === "pool"
+                    ? visibleSkillPoolResponse
+                    : operation === "catalog"
+                      ? visibleSkillCatalogResponse
+                      : operation === "skill"
+                        ? publishedSkillResponse
+                        : undefined
+          if (schema === undefined || !schema.safeParse(value).success) throw new Error("shape")
         } catch {
           invalidOwnerResponse = true
           throw new Error("projection_response_invalid")
@@ -388,14 +416,14 @@ export class PlatformProjectionHttpClient {
         operation === "mcpConnections"
           ? zListSelfMcpConnectionsResponse
           : operation === "skills"
-            ? zListVisibleSkillsResponse
+            ? visibleSkillsResponse
             : operation === "pool"
-              ? zListVisibleSkillPoolResponse
+              ? visibleSkillPoolResponse
               : operation === "catalog"
-                ? zListVisibleSkillCatalogResponse
+                ? visibleSkillCatalogResponse
                 : operation === "mcp"
                   ? zListMcpServersResponse
-                  : zGetPublishedPersonalSkillResponse
+                  : publishedSkillResponse
       const parsed = schema.safeParse(result.data)
       if (!parsed.success || (operation === "skill" && !matchesPublishedIdentity(result.data, input.skillId))) return invalid()
       return { ok: true, status: 200, data: parsed.data.data }
