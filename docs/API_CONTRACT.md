@@ -1,3 +1,11 @@
+## R353-B2：完整Skills消费正式输入锁定（D0，尚未实现；2026-10-08）
+
+Public9 closed schemas map only to the formal owner matrix below. Publisher uses bounded IAM batch; admin uses fresh human check plus dedicated machine; package/cover/download revalidate exact owner identity around Storage bytes; usage returns unavailable without trusted complete coverage. record stays an S06 target with input OPEN and no guessed request schema.
+
+Root已核71个Platform生成输入由同一正式701aedb5 Git对象取得；保V5–V9/父descriptor/分类/示例/逆向负控，旧v2仅owner历史inverse snapshot，不生成或保留运行时v2。完整Platform/IAM/Storage一套固定消费者，沿既有Skills模块和生成器，无新通用workflow。删无正式owner的getSkillQuota/listSkillRevisions及对应假入口，不临时扩owner能力。B1已正式9d1cc19b，复用事实；本片零SQL/schema/evolution/AGUI投影改写。
+
+源实现可与必要Agent delivery-v3独立并行，Agent公开Artifact读接口未变；普通无watch进程仍旧source，正常成对切换必须等Root真实owner/Agent/MinIO/scanner及37旧资产保持，不设置feature flag、双decoder或缺实现503分支。最终内外技能页/Settings/后台/详情及Manus同尺寸S01–S10浏览器验收另外通过，不以源码或接口证据冒整页完成。
+
 ## R353-BFF-D0：Skills Public 9 目标契约（尚未发布）
 
 当前正式 public 仍是 8.10；Public 9 只在 Platform 正式 D1 63 RPC/32 command/24 proof、IAM 0.10、Storage v3 与 BFF runtime 成对冻结后发布。唯一 OpenAPI 继续 closed snake_case schema；旧操作原义保留，新增/required 字段一次发行，不 alias、fallback、双 pin 或 body 自报身份。

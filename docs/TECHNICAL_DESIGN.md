@@ -1,3 +1,11 @@
+## R353-B2：完整Skills消费正式输入锁定（D0，尚未实现；2026-10-08）
+
+Pin Platform 701aedb5 HTTP5/63RPC/32commands/24proof Product1.0 combined 5d4bc1…, IAM 7c62e75/0.10, Storage d13f33a/v3. Public9 is wired once with no feature flag, compatibility decoder or partial activation; B1 facts are consumed without schema/journal rewrite; Agent D0 4f6802d remains a pairing stop line until its formal source/runtime qualification.
+
+Root已核71个Platform生成输入由同一正式701aedb5 Git对象取得；保V5–V9/父descriptor/分类/示例/逆向负控，旧v2仅owner历史inverse snapshot，不生成或保留运行时v2。完整Platform/IAM/Storage一套固定消费者，沿既有Skills模块和生成器，无新通用workflow。删无正式owner的getSkillQuota/listSkillRevisions及对应假入口，不临时扩owner能力。B1已正式9d1cc19b，复用事实；本片零SQL/schema/evolution/AGUI投影改写。
+
+源实现可与必要Agent delivery-v3独立并行，Agent公开Artifact读接口未变；普通无watch进程仍旧source，正常成对切换必须等Root真实owner/Agent/MinIO/scanner及37旧资产保持，不设置feature flag、双decoder或缺实现503分支。最终内外技能页/Settings/后台/详情及Manus同尺寸S01–S10浏览器验收另外通过，不以源码或接口证据冒整页完成。
+
 ## R353-BFF-D0：Skills 完整 Product 消费设计（目标，尚未实现）
 
 本片基线为 BFF `88fe38733d1147bb61b3edbf2c66374725ddacb6`。Platform R353-D1 设计已正式提交 `8e869ded1f58354297217af1db13e5b9ade3a447`，源码与机器 publication 尚未冻结；后继只能固定正式 Git owner source commit、完整 provenance/digest 与 generated 输出，不从动态工作树复制。目标一次消费 Platform Product 63 RPC/32 command/24 proof、IAM 0.10 与 Storage v3，再发布唯一 Public 9；本节不表示机器、运行、正常凭据或页面已经可用。

@@ -1,3 +1,11 @@
+## R353-B2：完整Skills消费正式输入锁定（D0，尚未实现；2026-10-08）
+
+No new BFF Skill owner copy. Reuse B1 Share/usage and bff_conversation_artifact+bff_idempotency_receipt. Native BFF SQL changes are none for Product9 unless a concrete adapter signature proves otherwise. Runtime activation is a normal source replacement after Root pairing, not a feature-flag state.
+
+Root已核71个Platform生成输入由同一正式701aedb5 Git对象取得；保V5–V9/父descriptor/分类/示例/逆向负控，旧v2仅owner历史inverse snapshot，不生成或保留运行时v2。完整Platform/IAM/Storage一套固定消费者，沿既有Skills模块和生成器，无新通用workflow。删无正式owner的getSkillQuota/listSkillRevisions及对应假入口，不临时扩owner能力。B1已正式9d1cc19b，复用事实；本片零SQL/schema/evolution/AGUI投影改写。
+
+源实现可与必要Agent delivery-v3独立并行，Agent公开Artifact读接口未变；普通无watch进程仍旧source，正常成对切换必须等Root真实owner/Agent/MinIO/scanner及37旧资产保持，不设置feature flag、双decoder或缺实现503分支。最终内外技能页/Settings/后台/详情及Manus同尺寸S01–S10浏览器验收另外通过，不以源码或接口证据冒整页完成。
+
 ## R353-BFF-D0：Skills Share、Usage 与 owner 数据边界（目标，尚未实现）
 
 Platform 继续唯一保存 Skill revision/series/source/creator/audience/draft/admin/package/cover 与 update；IAM 保存身份、publisher display 和权限；Storage 保存 Blob/Asset/scan；Agent 保存 Run 与 source event。BFF 不镜像这些 owner 表，只新增自己的 typed Share 与 durable usage projection。AI/GitHub bytes 进入现 draft/package owner 流程，不形成第三份 Skill metadata。
