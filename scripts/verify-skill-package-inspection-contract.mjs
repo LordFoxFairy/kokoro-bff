@@ -1,3 +1,4 @@
+import { stripSkillExamplePromptsAdditions } from "./verify-skill-example-prompts-contract.mjs"
 import { createHash } from "node:crypto"
 import { createRequire } from "node:module"
 
@@ -195,6 +196,7 @@ export function stripSkillPackageInspectionAdditions(document) {
 }
 
 export function inspectSkillPackageInspectionDocument(document) {
+  if (document?.info?.version === "8.10.0") document = stripSkillExamplePromptsAdditions(document)
   if (!isRecord(document)) return ["Skill package inspection OpenAPI document must be an object"]
   const errors = []
   const require = (condition, message) => {

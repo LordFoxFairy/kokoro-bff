@@ -83,6 +83,7 @@ export async function createSkillDraftRoute(
           summary: input.summary,
           tags: input.tags,
           metadata_json: "e30",
+          ...(input.examplePrompts === undefined ? {} : { example_prompts: input.examplePrompts }),
         },
       },
     }),

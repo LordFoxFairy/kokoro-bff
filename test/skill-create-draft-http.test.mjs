@@ -73,7 +73,7 @@ test("candidate emits exact 201 and forwards trusted owner identity", async () =
       const response = await fetch(`${base}/v1/skills/drafts`, {
         method: "POST",
         headers,
-        body: JSON.stringify({ display_name: "Tea", summary: "", tags: ["tea"] }),
+        body: JSON.stringify({ display_name: "Tea", summary: "", tags: ["tea"], example_prompts: ["  Brew tea  ", "same", "same"] }),
       })
       assert.equal(response.status, 201)
       assert.deepEqual(await response.json(), { data: { skill_id: "skill_1", series_id: "series_1", revision: 1, status: "draft", replayed: false } })
@@ -81,6 +81,7 @@ test("candidate emits exact 201 and forwards trusted owner identity", async () =
   )
   assert.equal(calls[0].tenant, "tenant")
   assert.equal(calls[0].user, "user")
+  assert.deepEqual(calls[0].examplePrompts, ["  Brew tea  ", "same", "same"])
 })
 
 import { Code, ConnectError } from "@connectrpc/connect"
@@ -252,4 +253,46 @@ test("same-key replay always re-admits IAM and revoked replay performs zero addi
   } finally {
     await new Promise((resolve) => server.close(resolve))
   }
+})
+
+test("two real binary Catalog requests preserve absent, empty and original ordered examples", async () => {
+  const { createServer } = await import("node:http")
+  const { connectNodeAdapter } = await import("@connectrpc/connect-node")
+  const { CatalogConnectClient } = await import("../dist/infrastructure/clients/platform/catalog-connect.js")
+  const { SkillCatalogService } = await import("../dist/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
+  const seen = []
+  const owner = createServer(connectNodeAdapter({routes(router) {
+    const capture = request => { seen.push(request); return {skillId:{value:"new"},seriesId:{value:"series"},revision:1n,status:SkillStatus.DRAFT,replayed:false} }
+    router.service(SkillCatalogService, {createSkillDraft:capture,createSkillVersion:capture})
+  }}))
+  owner.listen(0,"127.0.0.1"); await once(owner,"listening")
+  try {
+    const client = new CatalogConnectClient(`http://127.0.0.1:${owner.address().port}`, {get:async()=>"token"}, 1000)
+    for (const method of ["create", "createPersonalVersion"]) {
+      for (const examplePrompts of [undefined, [], ["  line\n", "same", "same"], ["😀".repeat(1000)]]) {
+        const input = {requestId:"r",commandId:"c",digest:"d".repeat(64),tenant:"tenant",user:"user",baseSkillId:"base",displayName:"Tea",summary:"",tags:[],...(examplePrompts === undefined ? {} : {examplePrompts})}
+        await client[method](input,new AbortController().signal,performance.now()+1000)
+        const metadata = seen.at(-1).metadata
+        assert.deepEqual(metadata.examplePrompts?.prompts, examplePrompts)
+        assert.equal(Buffer.from(metadata.metadataJson).toString("utf8"), "{}")
+      }
+    }
+    assert.equal(seen.length,8)
+  } finally { owner.closeAllConnections(); await new Promise(resolve=>owner.close(resolve)) }
+})
+
+test("draft HTTP rejects invalid examples without dispatch and binds presence/order to digest", async () => {
+  const calls=[]
+  await withServer({create:async input=>{calls.push(input);return {skillId:{value:"s"},seriesId:{value:"series"},revision:1n,status:SkillStatus.DRAFT,replayed:false}}}, async base=> {
+    for(const prompts of [null,{},["tail\ud800"],["\u0000"], [...Array.from({length:8},()=>"é".repeat(1000)),"é".repeat(192)+"a"]]) {
+      const response=await fetch(`${base}/v1/skills/drafts`,{method:"POST",headers,body:JSON.stringify({display_name:"Tea",summary:"",tags:[],example_prompts:prompts})})
+      assert.equal(response.status,400);assert.equal(calls.length,0)
+    }
+    for(const prompts of [undefined,[],["a","b"],["b","a"]]) {
+      const response=await fetch(`${base}/v1/skills/drafts`,{method:"POST",headers,body:JSON.stringify({display_name:"Tea",summary:"",tags:[],...(prompts===undefined?{}:{example_prompts:prompts})})})
+      assert.equal(response.status,201)
+    }
+  })
+  assert.equal(new Set(calls.map(c=>c.digest)).size,4)
+  assert.equal(Object.hasOwn(calls[0],"examplePrompts"),false)
 })

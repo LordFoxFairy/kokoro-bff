@@ -1,3 +1,13 @@
+## R350-B2：Skill 示例消费数据边界
+
+`example_prompts` 是 Platform Skills revision 的非 nullable、有序 string-array 事实；BFF 不拥有、不持久化、不补全。CreateDraft/CreateVersion 只把 public optional presence 传入 owner：absence 继续 canonical 省键，present `[]` 表示显式空数组；CreateVersion absence 不从 base revision 继承。四类读响应只投影 owner 返回的精确 revision 数组，并保留原文、顺序和重复。
+
+本片对 `database/schema.sql`、PostgreSQL/Redis、repository、receipt、outbox、cache、幂等键、tenant 与权限事实均零变化。安装响应的 examples 必须来自当前精确来源 revision 的 tag15 message；成功、replay、list 与 detail 均使用该值，缺失或非法失败关闭，不从 metadata JSON、summary、安装时间或前端状态恢复。
+
+作者、usage、封面、正式 taxonomy 与固定三例仍无事实来源，不在本片新增。Platform 持久化实现与固定 `94bd0ea…` 机器匹配后才允许配对激活；此前这里只是消费者实现，不是正常数据或 UI 验收。
+
+<!-- R350-B2-SKILL-EXAMPLE-PROMPTS-END -->
+
 ## R345-B-D0：Skill 更新时间消费数据边界（已定设计，尚未实现）
 
 本片不新增 BFF 持久化事实。唯一 owner 仍是 Platform Skills 的精确 `Skill.updatedAt`；Platform D0 commit `dcc2102e41a677b52367f2cc1a18b6283bbda2e6` 已裁决来源关系，但正式 3.4.0 machine/runtime commit 与 digest 尚待 owner 冻结。BFF 基线 `411e6906f651087dbbd8ff8afd96d53e38b352c0` 仍运行 public 8.8.0/111；目标 public 8.9.0 仍保持111 operations且仅增四处required展示字段，本节不把目标写成当前已上线事实。

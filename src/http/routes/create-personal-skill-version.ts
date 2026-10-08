@@ -119,6 +119,7 @@ export async function createPersonalSkillVersionRoute(
           summary: input.summary,
           tags: input.tags,
           metadata_json: "e30",
+          ...(input.examplePrompts === undefined ? {} : { example_prompts: input.examplePrompts }),
         },
         product_context: {
           subject_id: scope.context.identity.userId,

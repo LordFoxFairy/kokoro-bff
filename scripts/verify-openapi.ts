@@ -1,3 +1,4 @@
+import { inspectSkillExamplePromptsContract, stripSkillExamplePromptsSource } from "./verify-skill-example-prompts-contract.mjs"
 import { createHash } from "node:crypto"
 import { readFile } from "node:fs/promises"
 import path from "node:path"
@@ -2751,11 +2752,14 @@ schema: { $ref: '#/components/schemas/PersonalMcp${name}Error' }`, `${name} resp
 }
 
 export function inspectBffOpenApi(source: string, baseline: readonly BaselineOperation[]): string[] {
+  const examplesErrors = inspectSkillExamplePromptsContract(source)
+  source = stripSkillExamplePromptsSource(source)
   const operations = collectOperationBlocks(source)
   const schemas = collectSectionBlocks(source, "schemas")
   const parameters = collectSectionBlocks(source, "parameters")
   const responseComponents = collectSectionBlocks(source, "responses")
   const errors = [
+    ...examplesErrors,
     ...inspectOpenApiGovernance(source),
     ...inspectSkillUpdatedAtContract(source),
     ...compareOperationBaseline(source, baseline),

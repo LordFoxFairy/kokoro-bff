@@ -604,7 +604,7 @@ test("Conversation collection filtering stays one BFF-owned discriminated path w
   assert.match(service, /filter: ConversationCollectionFilter/u)
   assert.match(repository, /filter\.kind === "direct"[\s\S]*project_ref IS NULL/u)
   assert.match(repository, /filter\.kind === "project" \? filter\.projectRef : null/u)
-  assert.match(openapi, /^  version: 8\.9\.0$/mu)
+  assert.match(openapi, /^  version: 8\.10\.0$/mu)
   assert.match(openapi, /scope=direct and a nonempty project_ref are mutually exclusive/u)
   assert.doesNotMatch(port, /ConversationCollectionFilter\s*=\s*string/u)
 })
@@ -748,7 +748,7 @@ test("BFF governance documents distinguish implemented facts from accepted targe
   assert.equal(/CREATE TABLE IF NOT EXISTS bff_outbox\b/u.test(schema), false)
 })
 
-test("BFF consumes the pinned Platform 3.4 HTTP projection without owning its data", async () => {
+test("BFF consumes the pinned Platform 3.5 HTTP projection without owning its data", async () => {
   const [generatorConfig, generatorScript, manifestSource, schema] = await Promise.all([
     readFile(path.join(root, "openapi-ts.platform-http.config.ts"), "utf8"),
     readFile(path.join(root, "scripts/generate-platform-http-client.mjs"), "utf8"),
@@ -760,9 +760,9 @@ test("BFF consumes the pinned Platform 3.4 HTTP projection without owning its da
     owner: { repository_commit: string; contract_version: string; contract_sha256: string }
   }
   assert.equal(manifest.status, "generated")
-  assert.equal(manifest.owner.repository_commit, "af38f4419f6aa123d5bffaeaf14bd73a0b06c191")
-  assert.equal(manifest.owner.contract_version, "3.4.0")
-  assert.equal(manifest.owner.contract_sha256, "ca90f41f124c53a690746434cb66ac774f4a134acf109decd44bb110fafa61d6")
+  assert.equal(manifest.owner.repository_commit, "94bd0ea94aabc60c666fdb2cfa8784baf194e24b")
+  assert.equal(manifest.owner.contract_version, "3.5.0")
+  assert.equal(manifest.owner.contract_sha256, "370e3d7152796042f00095eda86eec4bc9883766c051f7f7dc864dce2b359b04")
   assert.match(generatorConfig, /src\/generated\/platform-http/u)
   assert.match(generatorScript, /two byte-identical generations/u)
   assert.doesNotMatch(schema, /CREATE TABLE[^;]*capability/iu)
@@ -776,7 +776,7 @@ test("R345 Skill update instants stay strict at the two existing Platform projec
     readFile(path.join(root, "src/infrastructure/clients/platform/personal-installation-response.ts"), "utf8"),
   ])
   for (const schema of ["zSkill", "zPublishedPersonalSkill", "zSelfManagedSkill"])
-    assert.match(projection, new RegExp(`${schema}\\.strict\\(\\)`, "u"), `${schema} must reject unknown owner fields`)
+    assert.ok(projection.replace(/\s+/gu, "").includes(`${schema}.extend({example_prompts:z.custom<string[]>(validExamples)}).strict()`), `${schema} must reject unknown owner fields`)
   assert.match(projection, /skill_updated_at/u)
   assert.doesNotMatch(projection, /skill_updated_at\s*(?:\?\?|\|\|).*?(?:installed_at|updated_at)/u)
   assert.match(installation, /instant\(value\.skillUpdatedAt, true\)/u)

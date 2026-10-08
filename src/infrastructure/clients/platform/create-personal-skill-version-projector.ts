@@ -1,3 +1,4 @@
+import { parseSkillExamplePrompts } from "./skill-example-prompts.js"
 import { sha256Jcs } from "./jcs.js"
 import { strictParseRawJson } from "../../raw-json.js"
 
@@ -26,7 +27,7 @@ export function projectCreatePersonalSkillVersion(raw: Uint8Array | string, vali
   const contextOwner = object(context.owner_scope)
   exact(owner, ["kind", "id"])
   exact(base, ["value"])
-  exact(metadata, ["display_name", "summary", "tags", "metadata_json"])
+  exact(metadata, ["display_name", "summary", "tags", "metadata_json", ...(Object.hasOwn(metadata, "example_prompts") ? ["example_prompts"] : [])])
   exact(context, ["subject_id", "owner_scope"])
   exact(contextOwner, ["kind", "id"])
   const tenant = text(root.tenant_ref, /\S/u)
@@ -48,6 +49,7 @@ export function projectCreatePersonalSkillVersion(raw: Uint8Array | string, vali
         summary: text(metadata.summary, /^[\s\S]*$/u, 65_535),
         tags,
         metadata_json: text(metadata.metadata_json, /^e30$/u),
+        ...(metadata.example_prompts === undefined ? {} : { example_prompts: parseSkillExamplePrompts(metadata.example_prompts) }),
       },
       product_context: { subject_id: subject, owner_scope: { kind: contextOwner.kind, id: productOwnerId } },
     },

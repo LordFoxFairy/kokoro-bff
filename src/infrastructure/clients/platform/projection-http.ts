@@ -1,3 +1,5 @@
+import { z } from "zod"
+import { parseSkillExamplePrompts } from "./skill-example-prompts.js"
 import { createClient } from "../../../generated/platform-http/client/client.gen.js"
 import {
   getSelfManagedSkill,
@@ -53,7 +55,7 @@ export type ProjectionResult =
     }
 const invalidResponse = (): ProjectionResult => ({ ok: false, status: 502, code: "skill_response_invalid", retryable: false })
 const unavailable = (): ProjectionResult => ({ ok: false, status: 503, code: "skill_dependency_unavailable", retryable: true })
-const publishedFields = ["name", "revision", "skill_id", "skill_updated_at", "source_ref", "status", "summary", "tags"]
+const publishedFields = ["example_prompts", "name", "revision", "skill_id", "skill_updated_at", "source_ref", "status", "summary", "tags"]
 
 function matchesPublishedIdentity(value: unknown, skillId: string | undefined): boolean {
   if (typeof skillId !== "string" || typeof value !== "object" || value === null || Array.isArray(value)) return false
@@ -82,9 +84,26 @@ const connectionResponse = zListSelfMcpConnectionsResponse.strict().extend({
   }),
 })
 const connectionError = zErrorEnvelope.strict().extend({ error: zErrorEnvelope.shape.error.strict() })
-const visibleSkill = zSkill.strict().refine(({ skill_updated_at }) => skill_updated_at.endsWith("Z"))
-const publishedSkill = zPublishedPersonalSkill.strict().refine(({ skill_updated_at }) => skill_updated_at.endsWith("Z"))
-const managedSkill = zSelfManagedSkill.strict().refine(({ skill_updated_at }) => skill_updated_at.endsWith("Z"))
+function validExamples(value: unknown): boolean {
+  try {
+    parseSkillExamplePrompts(value)
+    return true
+  } catch {
+    return false
+  }
+}
+const visibleSkill = zSkill
+  .extend({ example_prompts: z.custom<string[]>(validExamples) })
+  .strict()
+  .refine(({ skill_updated_at }) => skill_updated_at.endsWith("Z"))
+const publishedSkill = zPublishedPersonalSkill
+  .extend({ example_prompts: z.custom<string[]>(validExamples) })
+  .strict()
+  .refine(({ skill_updated_at }) => skill_updated_at.endsWith("Z"))
+const managedSkill = zSelfManagedSkill
+  .extend({ example_prompts: z.custom<string[]>(validExamples) })
+  .strict()
+  .refine(({ skill_updated_at }) => skill_updated_at.endsWith("Z"))
 const visibleSkillsResponse = zListVisibleSkillsResponse.strict().extend({
   data: zListVisibleSkillsResponse.shape.data.strict().extend({ skills: visibleSkill.array() }),
 })
@@ -257,8 +276,20 @@ export class PlatformProjectionHttpClient {
       const headers = { "x-kokoro-tenant-id": tenantId, "x-kokoro-subject": subject, "x-kokoro-request-id": requestId }
       const result =
         operation === "managedSkills"
-          ? await listSelfManagedSkills({ client, auth: token, headers, ...(input.query === undefined ? {} : { query: input.query }) })
-          : await getSelfManagedSkill({ client, auth: token, headers, path: { skill_id: input.skillId ?? "" } })
+          ? await listSelfManagedSkills({
+              responseValidator: async (value) => managedListResponse.parseAsync(value),
+              client,
+              auth: token,
+              headers,
+              ...(input.query === undefined ? {} : { query: input.query }),
+            })
+          : await getSelfManagedSkill({
+              responseValidator: async (value) => managedDetailResponse.parseAsync(value),
+              client,
+              auth: token,
+              headers,
+              path: { skill_id: input.skillId ?? "" },
+            })
       active()
       const ownerResultResponse = result.response
       const status = ownerResultResponse?.status
@@ -400,14 +431,38 @@ export class PlatformProjectionHttpClient {
       operation === "mcpConnections"
         ? await listSelfMcpConnections({ client, auth: token, headers, ...(input.query === undefined ? {} : { query: input.query as never }) })
         : operation === "skills"
-          ? await listVisibleSkills({ client, auth: token, headers, ...(input.query === undefined ? {} : { query: input.query as never }) })
+          ? await listVisibleSkills({
+              responseValidator: async (value) => visibleSkillsResponse.parseAsync(value),
+              client,
+              auth: token,
+              headers,
+              ...(input.query === undefined ? {} : { query: input.query as never }),
+            })
           : operation === "pool"
-            ? await listVisibleSkillPool({ client, auth: token, headers, ...(input.query === undefined ? {} : { query: input.query as never }) })
+            ? await listVisibleSkillPool({
+                responseValidator: async (value) => visibleSkillPoolResponse.parseAsync(value),
+                client,
+                auth: token,
+                headers,
+                ...(input.query === undefined ? {} : { query: input.query as never }),
+              })
             : operation === "catalog"
-              ? await listVisibleSkillCatalog({ client, auth: token, headers, ...(input.query === undefined ? {} : { query: input.query as never }) })
+              ? await listVisibleSkillCatalog({
+                  responseValidator: async (value) => visibleSkillCatalogResponse.parseAsync(value),
+                  client,
+                  auth: token,
+                  headers,
+                  ...(input.query === undefined ? {} : { query: input.query as never }),
+                })
               : operation === "mcp"
                 ? await listMcpServers({ client, auth: token, headers, ...(input.query === undefined ? {} : { query: input.query as never }) })
-                : await getPublishedPersonalSkill({ client, auth: token, headers, path: { skill_id: input.skillId ?? "" } })
+                : await getPublishedPersonalSkill({
+                    responseValidator: async (value) => publishedSkillResponse.parseAsync(value),
+                    client,
+                    auth: token,
+                    headers,
+                    path: { skill_id: input.skillId ?? "" },
+                  })
     const status = result.response?.status
     if (status === undefined) return invalidOwnerResponse ? invalid() : dependency()
     if (result.response?.headers.get("x-kokoro-request-id") !== requestId || result.response?.headers.get("cache-control") !== "no-store") return invalid()

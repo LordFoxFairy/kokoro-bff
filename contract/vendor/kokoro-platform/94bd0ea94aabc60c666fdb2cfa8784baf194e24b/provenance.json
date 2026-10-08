@@ -5,7 +5,9 @@
     "proto/kokoro/common/v1/common.proto",
     "proto/kokoro/platform/v1/platform_runtime.proto",
     "proto/kokoro/storage/v2/storage.proto",
+    "execution-operations/skill-example-prompts-v1.json",
+    "execution-operations/skill-example-prompts-v1.vectors.json",
     "openapi/platform-http.openapi.json"
   ],
-  "combinedSha256": "83812bd4b2a6ab9aae09df62cd37a770118ba8200a8385358ffc781b53ef868e"
+  "combinedSha256": "88a833b976b5933792616205ceb6befc53870bdaf7d4fcf7d110aa533bc514be"
 }

@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url"
 import { defineConfig } from "@hey-api/openapi-ts"
 
 const repositoryRoot = dirname(fileURLToPath(import.meta.url))
-const ownerCommit = "af38f4419f6aa123d5bffaeaf14bd73a0b06c191"
+const ownerCommit = "94bd0ea94aabc60c666fdb2cfa8784baf194e24b"
 export default defineConfig({
   input: resolve(repositoryRoot, `contract/vendor/kokoro-platform-http/${ownerCommit}/platform-http.openapi.json`),
   output: {

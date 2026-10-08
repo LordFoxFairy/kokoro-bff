@@ -15,6 +15,7 @@ import {
   SkillIdSchema,
   SkillSourceRefSchema,
   SkillMetadataSchema,
+  SkillExamplePromptsSchema,
   SkillScopeKind,
   ValidateSkillDraftRequestSchema,
   WithdrawSkillRequestSchema,
@@ -34,7 +35,17 @@ export class CatalogConnectClient {
     )
   }
   async create(
-    input: { requestId: string; commandId: string; digest: string; tenant: string; user: string; displayName: string; summary: string; tags: string[] },
+    input: {
+      requestId: string
+      commandId: string
+      digest: string
+      tenant: string
+      user: string
+      displayName: string
+      summary: string
+      tags: string[]
+      examplePrompts?: string[]
+    },
     signal?: AbortSignal,
   ) {
     const token = await this.tokens.get(input.tenant, signal)
@@ -48,6 +59,7 @@ export class CatalogConnectClient {
           summary: input.summary,
           tags: input.tags,
           metadataJson: Buffer.from("{}", "utf8"),
+          ...(input.examplePrompts === undefined ? {} : { examplePrompts: create(SkillExamplePromptsSchema, { prompts: input.examplePrompts }) }),
         }),
         productContext: create(ProductCatalogContextSchema, { subjectId: input.user, ownerScope: create(OwnerScopeSchema, { kind: "user", id: input.user }) }),
       }),
@@ -197,6 +209,7 @@ export class CatalogConnectClient {
       displayName: string
       summary: string
       tags: string[]
+      examplePrompts?: string[]
     },
     signal: AbortSignal,
     deadlineAt: number,
@@ -217,6 +230,7 @@ export class CatalogConnectClient {
           summary: input.summary,
           tags: input.tags,
           metadataJson: Buffer.from("{}", "utf8"),
+          ...(input.examplePrompts === undefined ? {} : { examplePrompts: create(SkillExamplePromptsSchema, { prompts: input.examplePrompts }) }),
         }),
         productContext: create(ProductCatalogContextSchema, { subjectId: input.user, ownerScope: create(OwnerScopeSchema, { kind: "user", id: input.user }) }),
       }),

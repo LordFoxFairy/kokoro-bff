@@ -13,6 +13,7 @@ export const zSkill = z.object({
   installed: z.boolean().optional(),
   categories: z.array(z.string()),
   skill_updated_at: z.iso.datetime(),
+  example_prompts: z.array(z.string().min(1).max(1000).regex(/\S/)).max(10),
 })
 
 export const zMcpServer = z.object({
@@ -41,6 +42,7 @@ export const zPublishedPersonalSkill = z.object({
   summary: z.string(),
   tags: z.array(z.string()),
   skill_updated_at: z.iso.datetime(),
+  example_prompts: z.array(z.string().min(1).max(1000).regex(/\S/)).max(10),
 })
 
 export const zMcpConnection = z.object({
@@ -86,6 +88,7 @@ export const zSelfManagedSkill = z.object({
   tags: z.array(z.string().max(128)).max(100),
   status: z.enum(["draft", "active", "disabled", "withdrawn", "quarantined"]),
   skill_updated_at: z.iso.datetime(),
+  example_prompts: z.array(z.string().min(1).max(1000).regex(/\S/)).max(10),
 })
 
 export const zRequestId = z.string().min(1).max(255)

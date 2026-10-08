@@ -1,3 +1,13 @@
+### R350-B2 示例固定消费者已完成源码验收，页面待接线（2026-10-08）
+
+固定 Platform `94bd0ea94aabc60c666fdb2cfa8784baf194e24b` 的完整60 publication及 HTTP3.5，Public8.10/111；两Create保持 absence 与 present[] 的不同命令身份，四读严格 required example_prompts，安装 typed message 必须present。原文/顺序/重复/Unicode scalar与UTF-8总量规则一致，Publish仍零body；无SQL/权限/新operation。
+
+Root冻结121现存scope SHA及三D0原正文匹配，独审无确定新阻断；Node22.22.2实际 lint/typecheck/双固定生成/semantic/具名checker/build/diffcheck均0，默认909PASS/0FAIL/2原资源SKIP，额外示例10PASS/0FAIL。收据位于Root `var/dev/r255-preserve/r350-root-bff-final.log`。首次Root用了不存在Node路径及zsh只读变量导致工具调用失败，随后正确Node22执行成功，非源码测试失败。
+
+正常BFF5007与Platform42873仍旧配对，未激活、未改持久库；Web尚未消费新字段。工程源码验收不代表真实HTTP/浏览器或Manus页面完成，作者/usage/真实cover/分享下载/分类事实/四创建与后台仍OPEN；其它模块暂停。
+
+<!-- R350-B2-ROOT-CONSUMER-RECEIPT-END -->
+
 ### R345 正常 Skills 配对已激活，整体UI未完成（2026-10-08）
 
 Root 同持久 source/env 成对停止旧 BFF/Platform 后启新 Platform03ee664 与 BFF2e5fbaf；本BFF正常句柄5007/listener92197，ready200。未重置PG/Redis/MinIO或用户数据，不变凭据/权限。Web正式e7c7370固定public8.9。真实外部R255 catalog200与预览datetime均2026-10-06T00:38:54.049Z；查看详情真实SKILL.md→Back→Close，本人安装/发布日期同原事实。切换窗口曾502/准入不可确认，正常Retry恢复原账户，失败证据保留。

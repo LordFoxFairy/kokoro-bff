@@ -32,6 +32,7 @@ const installation = () => ({
   summary: "",
   sourceStatus: 2,
   skillUpdatedAt: timestamp(3, 123456789),
+  examplePrompts: { prompts: [] },
 })
 const config = {
   host: "127.0.0.1",
@@ -115,6 +116,7 @@ test("safe installation ACK maps enum, uint64 and UTC without private fields", (
         display_name: "Research assistant",
         summary: "",
         source_status: "active",
+        example_prompts: [],
         skill_updated_at: "1970-01-01T00:00:03.123Z",
       },
       change: "installed",
@@ -179,7 +181,7 @@ test("R345 installation rejects protobuf Timestamp seconds outside the canonical
 })
 test("all owner product installation projection vectors keep their published digests", async () => {
   const source = new URL(
-    "../contract/vendor/kokoro-platform/af38f4419f6aa123d5bffaeaf14bd73a0b06c191/execution-operations-v5/vectors/product-installation.json",
+    "../contract/vendor/kokoro-platform/94bd0ea94aabc60c666fdb2cfa8784baf194e24b/execution-operations-v5/vectors/product-installation.json",
     import.meta.url,
   )
   const vectors = JSON.parse(await readFile(source, "utf8")).vectors.filter((vector) => vector.stage === "projection")
@@ -350,4 +352,11 @@ test("HTTP maps token-stage budget exhaustion to 504 without relabeling caller c
     await new Promise((resolve) => setTimeout(resolve, 10))
     assert.notEqual(tokenAbortReason?.name, "TimeoutError")
   })
+})
+
+test("installation examples require present typed message and valid original strings", () => {
+ for (const examplePrompts of [undefined, null, {prompts:null}, {prompts:["\ud800"]}, {prompts:["\u0000"]}, {prompts:[" "]}, {prompts:[1]}])
+  assert.throws(() => projectInstallation({...installation(), examplePrompts}), /skill_installation_response_invalid/u)
+ for (const prompts of [[], ["  a\n", "same", "same"], ["😀".repeat(1000)]])
+  assert.deepEqual(projectInstallation({...installation(), examplePrompts:{prompts}}).example_prompts, prompts)
 })

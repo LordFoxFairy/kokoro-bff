@@ -101,6 +101,11 @@ message SkillMetadata {
   string summary = 2;
   repeated string tags = 3;
   bytes metadata_json = 4;
+  kokoro.platform.v1.SkillExamplePrompts example_prompts = 5;
+}
+
+message SkillExamplePrompts {
+  repeated string prompts = 1;
 }
 
 message SkillSummary {
@@ -851,6 +856,7 @@ message ProductSkillInstallation {
   kokoro.platform.v1.SkillStatus source_status = 12;
   repeated string tags = 13;
   google.protobuf.Timestamp skill_updated_at = 14;
+  kokoro.platform.v1.SkillExamplePrompts example_prompts = 15;
 }
 
 message InstallPersonalSkillRequest {

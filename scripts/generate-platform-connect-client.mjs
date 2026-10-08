@@ -15,7 +15,7 @@ import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-const ownerCommit = "af38f4419f6aa123d5bffaeaf14bd73a0b06c191"
+const ownerCommit = "94bd0ea94aabc60c666fdb2cfa8784baf194e24b"
 const vendorRoot = `contract/vendor/kokoro-platform/${ownerCommit}`
 const vendor = `contract/vendor/kokoro-platform/${ownerCommit}/proto`
 const artifacts = {
@@ -40,10 +40,10 @@ const artifactProvenanceDigests = {
   v8: "a985f907fc9f2c5d8735c8918f1af6028efa9a3ed0f43b273612c592c2288444",
 }
 const descriptor = `${vendorRoot}/descriptor/platform-v1.binpb`
-const descriptorDigest = "fcfab521242b07c17b08efad33463022625fd5163f1e62beb18ddd9589053808"
+const descriptorDigest = "d9b82ed81c643be7bab6cb19319fed86e566663a4cdae1c68afcc91386dab52b"
 const parentDescriptor = `${vendorRoot}/descriptor/platform-v8-parent39.binpb`
 const parentDigest = "0467c1c45e8ac27c79cb906e27bfdb679d88739e45bfa38128f0f629bec686d5"
-const publicationAggregate = "710d72122cc0a9fb37599ce928911435568cd309101a1608c3f3a1d568542973"
+const publicationAggregate = "bc7ebb7312195e0f718940a33c73ed1db7d77aac4333ad6975831ed5d3740e55"
 const publicationInputs = {
   "contract/descriptor/platform-installation-tags-parent-generated.binpb": {
     bytes: 35431,
@@ -61,6 +61,18 @@ const publicationInputs = {
     bytes: 46971,
     sha256: "37207ddd3513d0f0b1e3320401a54ab0848326692f9cc07571325bc325b4ddda",
   },
+  "contract/descriptor/platform-skill-example-prompts-http-3.4.0.json": {
+    bytes: 33747,
+    sha256: "ca90f41f124c53a690746434cb66ac774f4a134acf109decd44bb110fafa61d6",
+  },
+  "contract/descriptor/platform-skill-example-prompts-parent-generated.binpb": {
+    bytes: 37302,
+    sha256: "e416d960b344797b89418a2534f90c3b6923e9359ad48a6943a11005b9cd9567",
+  },
+  "contract/descriptor/platform-skill-example-prompts-parent.binpb": {
+    bytes: 48822,
+    sha256: "fcfab521242b07c17b08efad33463022625fd5163f1e62beb18ddd9589053808",
+  },
   "contract/descriptor/platform-skill-updated-at-http-3.3.0.json": {
     bytes: 33330,
     sha256: "b6e5d0e0118207ee37933e5c22e94c86d95d74307b22a44e26e8974fede82acf",
@@ -74,8 +86,8 @@ const publicationInputs = {
     sha256: "2e1a811bf347b5d9cd3577ac6c762ee9d31f40dea2ac326a06b83bc61de9a8d5",
   },
   "contract/descriptor/platform-v1.binpb": {
-    bytes: 48822,
-    sha256: "fcfab521242b07c17b08efad33463022625fd5163f1e62beb18ddd9589053808",
+    bytes: 49035,
+    sha256: "d9b82ed81c643be7bab6cb19319fed86e566663a4cdae1c68afcc91386dab52b",
   },
   "contract/descriptor/platform-v8-parent39.binpb": {
     bytes: 43624,
@@ -88,6 +100,14 @@ const publicationInputs = {
   "contract/descriptor/platform-v9-parent43.binpb": {
     bytes: 46659,
     sha256: "5f0f00f605f6a445b4d80943459b69bf9f489fd7851cc80b6c2700f8f78a8d0e",
+  },
+  "contract/execution-operations/skill-example-prompts-v1.json": {
+    bytes: 3758,
+    sha256: "8106cedbeed0ed2a1afb25983f6e8ebece3528b277f83bcdb5c227c655edd496",
+  },
+  "contract/execution-operations/skill-example-prompts-v1.vectors.json": {
+    bytes: 574590,
+    sha256: "fbded2af8f5b02df848ee6b326b018845e2cdbfefaa7d3ff5d6efc0b43c1a673",
   },
   "contract/execution-operations/v5/command-identities.json": {
     bytes: 32532,
@@ -246,24 +266,24 @@ const publicationInputs = {
     sha256: "7c256bbc3f9ed0cc93434595bd9caa7c2f0a00035837fadc2fc3dfa1110df9ed",
   },
   "contract/openapi/platform-http.openapi.json": {
-    bytes: 33747,
-    sha256: "ca90f41f124c53a690746434cb66ac774f4a134acf109decd44bb110fafa61d6",
+    bytes: 35169,
+    sha256: "370e3d7152796042f00095eda86eec4bc9883766c051f7f7dc864dce2b359b04",
   },
   "contract/proto/kokoro/common/v1/common.proto": {
     bytes: 2271,
     sha256: "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08",
   },
   "contract/proto/kokoro/platform/v1/platform_runtime.proto": {
-    bytes: 35620,
-    sha256: "292ded6a64ca52ebff34442db245c40b459f207e8e352985cf053a6f2d6b7e8f",
+    bytes: 35809,
+    sha256: "5fd99ca07adc6c40c917071b652d4c048905fcb23674dc7f695dad89a2a2b684",
   },
   "contract/proto/kokoro/storage/v2/storage.proto": {
     bytes: 10666,
     sha256: "02266d53b8bfb7fdd6991b17d59ebb17399d4f189b6a3135fedcb69b6b364276",
   },
   "contract/provenance.json": {
-    bytes: 350,
-    sha256: "5794e3d195e59b2edf70d3773fbe3e5d0ed0739c10a586c242fd4d7b27ed9788",
+    bytes: 474,
+    sha256: "b07e1ef96573dd0273952fdba628fa3c111978c4c8e707dda91ca26ed18a550c",
   },
 }
 
@@ -272,7 +292,7 @@ const manifestPath = path.join(root, "contract/dependencies/platform-connect.jso
 const sourceDigests = {
   "kokoro/storage/v2/storage.proto": "02266d53b8bfb7fdd6991b17d59ebb17399d4f189b6a3135fedcb69b6b364276",
   "kokoro/common/v1/common.proto": "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08",
-  "kokoro/platform/v1/platform_runtime.proto": "292ded6a64ca52ebff34442db245c40b459f207e8e352985cf053a6f2d6b7e8f",
+  "kokoro/platform/v1/platform_runtime.proto": "5fd99ca07adc6c40c917071b652d4c048905fcb23674dc7f695dad89a2a2b684",
 }
 const directories = ["kokoro", "kokoro/common", "kokoro/common/v1", "kokoro/platform", "kokoro/platform/v1"]
 const sourceDirectories = [...directories, "kokoro/storage", "kokoro/storage/v2"].sort()
@@ -309,6 +329,7 @@ export function assertVendorPins(entries) {
 export function assertVendorLayout(entries) {
   const names = [
     "descriptor",
+    "execution-operations",
     "execution-operations-v5",
     "execution-operations-v6",
     "execution-operations-v7",
@@ -640,6 +661,36 @@ export function stripDescriptorLineage(set) {
   const file = platformFile(current)
   const installation = file.messageType.find((message) => message.name === "ProductSkillInstallation")
   assert.ok(installation)
+  const metadata = file.messageType.find((message) => message.name === "SkillMetadata")
+  assert.ok(metadata)
+  const metadataExamples = metadata.field.filter((field) => field.name === "example_prompts")
+  assert.equal(metadataExamples.length, 1, "Platform metadata example prompts unique field drifted")
+  exactDescriptor(
+    FieldDescriptorProtoSchema,
+    metadataExamples[0],
+    descriptorField("example_prompts", 5, 11, "SkillExamplePrompts"),
+    "Platform metadata example prompts shape drifted",
+  )
+  const installationExamples = installation.field.filter((field) => field.name === "example_prompts")
+  assert.equal(installationExamples.length, 1, "Platform installation example prompts unique field drifted")
+  exactDescriptor(
+    FieldDescriptorProtoSchema,
+    installationExamples[0],
+    descriptorField("example_prompts", 15, 11, "SkillExamplePrompts"),
+    "Platform installation example prompts shape drifted",
+  )
+  const exampleMessages = file.messageType.filter((message) => message.name === "SkillExamplePrompts")
+  assert.equal(exampleMessages.length, 1, "Platform example prompts unique message drifted")
+  exactDescriptor(
+    DescriptorProtoSchema,
+    exampleMessages[0],
+    { name: "SkillExamplePrompts", field: [descriptorField("prompts", 1, 9, undefined, true)] },
+    "Platform example prompts message drifted",
+  )
+  metadata.field = metadata.field.filter((field) => field.name !== "example_prompts")
+  installation.field = installation.field.filter((field) => field.name !== "example_prompts")
+  file.messageType = file.messageType.filter((message) => message.name !== "SkillExamplePrompts")
+  assertWholeParent(current, "platform-skill-example-prompts-parent.binpb")
   const skillUpdatedAt = installation.field.filter((field) => field.name === "skill_updated_at")
   assert.equal(skillUpdatedAt.length, 1, "Platform Skill update instant unique field drifted")
   exactDescriptor(
@@ -711,9 +762,15 @@ export function assertGeneratedDescriptor(generated, compiledBytes) {
 }
 
 export function assertDescriptorPairs(files) {
-  const httpParent = "platform-skill-updated-at-http-3.3.0.json"
-  assert.equal(sha256(files[httpParent]), publicationInputs[`contract/descriptor/${httpParent}`].sha256, `Platform HTTP parent bytes drifted: ${httpParent}`)
-  for (const stem of ["platform-v9-parent43", "platform-installation-tags-parent", "platform-package-read-parent", "platform-skill-updated-at-parent"]) {
+  for (const httpParent of ["platform-skill-updated-at-http-3.3.0.json", "platform-skill-example-prompts-http-3.4.0.json"])
+    assert.equal(sha256(files[httpParent]), publicationInputs[`contract/descriptor/${httpParent}`].sha256, `Platform HTTP parent bytes drifted: ${httpParent}`)
+  for (const stem of [
+    "platform-v9-parent43",
+    "platform-installation-tags-parent",
+    "platform-package-read-parent",
+    "platform-skill-updated-at-parent",
+    "platform-skill-example-prompts-parent",
+  ]) {
     const compiledName = `${stem}.binpb`
     const generatedName = `${stem}-generated.binpb`
     for (const name of [compiledName, generatedName])
@@ -825,6 +882,30 @@ async function verifyExecutionArtifacts() {
   const v9 = await verifyExecutionArtifactDirectory(path.join(root, artifacts.v9), artifactAggregates.v9)
   assertProofChain(v5.manifest, v6.manifest, v7.manifest, v8.manifest)
   assertV9Proof(v9.manifest)
+  const exampleProfile = JSON.parse(await readFile(path.join(root, vendorRoot, "execution-operations/skill-example-prompts-v1.json"), "utf8"))
+  assert.equal(exampleProfile.artifact, "platform-skill-example-prompts")
+  assert.equal(exampleProfile.artifactVersion, "1.0.1")
+  assert.equal(exampleProfile.commandDigestVersion, "3.0.0")
+  assert.equal(exampleProfile.runtimeActivated, false)
+  assert.deepEqual(exampleProfile.counts, { rpc: 45, command: 20, proof: 24 })
+  assert.deepEqual(exampleProfile.methods, [
+    "kokoro.platform.v1.SkillCatalogService/CreateSkillDraft",
+    "kokoro.platform.v1.SkillCatalogService/CreateSkillVersion",
+  ])
+  assert.equal(exampleProfile.parent.compiledSha256, "fcfab521242b07c17b08efad33463022625fd5163f1e62beb18ddd9589053808")
+  assert.equal(exampleProfile.parent.generatedSha256, "e416d960b344797b89418a2534f90c3b6923e9359ad48a6943a11005b9cd9567")
+  assert.equal(exampleProfile.parent.httpSha256, "ca90f41f124c53a690746434cb66ac774f4a134acf109decd44bb110fafa61d6")
+  assert.equal(exampleProfile.http.version, "3.5.0")
+  assert.equal(exampleProfile.wire.metadata.tag, 5)
+  assert.equal(exampleProfile.wire.installation.tag, 15)
+  assert.equal(exampleProfile.canonical.absent, "omit-key")
+  assert.equal(exampleProfile.canonical.present, "unwrap-prompts-array")
+  const exampleVectors = JSON.parse(
+    await readFile(path.join(root, vendorRoot, "execution-operations/skill-example-prompts-v1.vectors.json"), "utf8"),
+  )
+  assert.equal(exampleVectors.artifactVersion, "1.0.1")
+  assert.equal(exampleVectors.vectors.length, 64)
+  assert.equal(new Set(exampleVectors.vectors.map((entry) => entry.id)).size, 64)
   const registrationVectors = JSON.parse(v9.files["vectors/global-mcp-registration.json"].toString("utf8")).vectors
   assert.equal(registrationVectors.length, 128)
   assert.equal(new Set(registrationVectors.map((entry) => entry.id)).size, 128)

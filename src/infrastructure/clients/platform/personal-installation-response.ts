@@ -1,3 +1,4 @@
+import { parseSkillExamplePrompts } from "./skill-example-prompts.js"
 import type { Timestamp } from "@bufbuild/protobuf/wkt"
 import {
   SkillInstallationChange,
@@ -44,6 +45,13 @@ export function projectInstallation(value: ProductSkillInstallation | undefined)
     sourceStatus === undefined
   )
     throw new Error("skill_installation_response_invalid")
+  let examplePrompts: string[]
+  try {
+    if (value.examplePrompts === undefined || (value.examplePrompts.$unknown?.length ?? 0) !== 0) throw new Error("missing or unknown examples")
+    examplePrompts = parseSkillExamplePrompts(value.examplePrompts.prompts)
+  } catch {
+    throw new Error("skill_installation_response_invalid")
+  }
   const installedAt = instant(value.installedAt, true),
     updatedAt = instant(value.updatedAt, true),
     removedAt = instant(value.removedAt, false),
@@ -67,6 +75,7 @@ export function projectInstallation(value: ProductSkillInstallation | undefined)
     ...(removedAt === undefined ? {} : { removed_at: removedAt }),
     display_name: value.displayName,
     summary: value.summary,
+    example_prompts: examplePrompts,
     source_status: sourceStatus,
     skill_updated_at: skillUpdatedAt,
   }

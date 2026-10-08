@@ -1,3 +1,15 @@
+## R350-B2：Skill 示例 Public 8.10 契约
+
+唯一 public contract 为 `8.10.0 / 111 operations`。`CreateSkillDraftRequest` 与 `CreatePersonalSkillVersionRequest` 各新增 optional `example_prompts`；absence 与 present `[]` 不合并。`Skill`、`ManagedPersonalSkillResource`、`PublishedPersonalSkillResource`、`SkillInstallation` 的 closed schema 均新增 required `example_prompts`。
+
+数组最多 10 项；每项 1–1000 Unicode scalar、`trim()` 后非空、拒绝 U+0000 与孤立 surrogate；数组总 UTF-8 不超过 16384 bytes。原文、顺序、重复保留，不 trim/dedupe/normalize。input null、alias、重复 JSON key、非法 UTF-8 与任意越界值在调用 owner 前拒绝；owner read 的缺失/null/坏数组映射既有 `skill_response_invalid`。Publish operation 继续要求零 body，且没有 `example_prompts` 输入。
+
+具名 semantic checker 只剥本次两个 Create 各自的 request property、四个 required read property及 version，结果必须等于 Public 8.9 parsed canonical SHA `e95f026581b389dad643d390f543f9ab057a2bfd0cbb02dfab0aeb8cc662631d`。随后旧 updated-at/package parent checker继续验证原父链，不能更新旧基线掩盖漂移。`contract/tests/v1-operations.json` 保持原 111 字节。
+
+Owner 机器固定为 commit `94bd0ea94aabc60c666fdb2cfa8784baf194e24b`、HTTP `3.5.0`、Proto SHA `5fd99ca07adc6c40c917071b652d4c048905fcb23674dc7f695dad89a2a2b684`、descriptor SHA `d9b82ed81c643be7bab6cb19319fed86e566663a4cdae1c68afcc91386dab52b`、HTTP SHA `370e3d7152796042f00095eda86eec4bc9883766c051f7f7dc864dce2b359b04`。BFF 固定完整 60-file publication，不修改历史 V5–V9。
+
+<!-- R350-B2-SKILL-EXAMPLE-PROMPTS-END -->
+
 ## R345-B-D0：Skill 更新时间固定契约（已定设计，尚未发行）
 
 BFF 当前仍是 `411e6906f651087dbbd8ff8afd96d53e38b352c0` / public `8.8.0 / 111 operations`；Platform `dcc2102e41a677b52367f2cc1a18b6283bbda2e6` 只有设计，正式 3.4.0 commit/digest 尚待 owner 冻结。后继 BFF 只能固定消费 Root 已审查提交的正式 artifact，不能用当前工作树生成物或预填 digest。

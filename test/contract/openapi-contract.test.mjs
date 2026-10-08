@@ -40,7 +40,7 @@ function inspectChatFailureContract(openapi) {
     if (!condition) errors.push(label)
   }
 
-  require(/^info:\n(?:.*\n){0,3}?  version: 8\.9\.0$/mu.test(openapi), "public info.version must be 8.9.0")
+  require(/^info:\n(?:.*\n){0,3}?  version: 8\.10\.0$/mu.test(openapi), "public info.version must be 8.10.0")
   require(/^      required: \[message_id, role, content, status, created_at\]$/mu.test(message), "failure must stay optional")
   const roles = [...(message.match(/role:\n\s+type: string\n\s+enum: \[([^\]]+)\]/u)?.[1] ?? "").matchAll(/[a-z_]+/gu)].map((match) => match[0])
   require(JSON.stringify(roles) === JSON.stringify(["user", "assistant"]), "Message roles must equal user and assistant")
@@ -504,7 +504,7 @@ test("CompleteSkillPackageUpload publishes an inactive user-only strict command"
 test("CompleteSkillPackageUpload binds owner v4 digest version and all eleven frozen command vectors", async () => {
   const manifest = JSON.parse(
     await readFile(
-      new URL("../../contract/vendor/kokoro-platform/af38f4419f6aa123d5bffaeaf14bd73a0b06c191/execution-operations-v5/manifest.json", import.meta.url),
+      new URL("../../contract/vendor/kokoro-platform/94bd0ea94aabc60c666fdb2cfa8784baf194e24b/execution-operations-v5/manifest.json", import.meta.url),
       "utf8",
     ),
   )
@@ -579,7 +579,7 @@ test("ValidateSkillDraft describes one default-closed user-only attempt-bound co
 test("ValidateSkillDraft pins owner v4 tag 7 and all eight command digest vectors", async () => {
   const manifest = JSON.parse(
     await readFile(
-      new URL("../../contract/vendor/kokoro-platform/af38f4419f6aa123d5bffaeaf14bd73a0b06c191/execution-operations-v5/manifest.json", import.meta.url),
+      new URL("../../contract/vendor/kokoro-platform/94bd0ea94aabc60c666fdb2cfa8784baf194e24b/execution-operations-v5/manifest.json", import.meta.url),
       "utf8",
     ),
   )
@@ -663,7 +663,7 @@ test("PublishSkill exposes one default-closed user-only command with no request 
 test("PublishSkill pins the inactive owner v4 PERSONAL command and all eight digest vectors", async () => {
   const manifest = JSON.parse(
     await readFile(
-      new URL("../../contract/vendor/kokoro-platform/af38f4419f6aa123d5bffaeaf14bd73a0b06c191/execution-operations-v5/manifest.json", import.meta.url),
+      new URL("../../contract/vendor/kokoro-platform/94bd0ea94aabc60c666fdb2cfa8784baf194e24b/execution-operations-v5/manifest.json", import.meta.url),
       "utf8",
     ),
   )
@@ -731,7 +731,7 @@ test("PublishSkill semantic gate rejects body, state, status and legacy-operatio
 test("BeginSkillPackageUpload candidate names the exact inactive owner v4 command and digest version", async () => {
   const manifest = JSON.parse(
     await readFile(
-      new URL("../../contract/vendor/kokoro-platform/af38f4419f6aa123d5bffaeaf14bd73a0b06c191/execution-operations-v5/manifest.json", import.meta.url),
+      new URL("../../contract/vendor/kokoro-platform/94bd0ea94aabc60c666fdb2cfa8784baf194e24b/execution-operations-v5/manifest.json", import.meta.url),
       "utf8",
     ),
   )
@@ -958,7 +958,7 @@ test("GetPublishedPersonalSkill is an inactive strict personal ACTIVE read candi
   for (const status of ["200", "400", "401", "403", "404", "429", "502", "503"]) assert.match(operation, new RegExp(`'${status}':`, "u"))
   assert.doesNotMatch(operation, /requestBody:|Idempotency-Key|CapabilitySkill|source_selector|secret_ref/u)
   const resource = openapi.slice(openapi.indexOf("    PublishedPersonalSkillResource:"), openapi.indexOf("    PublishedPersonalSkillResponse:"))
-  assert.match(resource, /required: \[skill_id, source_ref, revision, status, name, summary, tags, skill_updated_at\]/u)
+  assert.match(resource, /required: \[skill_id, source_ref, revision, status, name, summary, tags, skill_updated_at, example_prompts\]/u)
   assert.match(resource, /additionalProperties: false/u)
   assert.match(resource, /status: \{ type: string, const: active \}/u)
   assert.deepEqual(inspectBffOpenApi(openapi, baseline), [])
@@ -974,7 +974,7 @@ test("GetPublishedPersonalSkill semantic gate rejects envelope, field, input, st
   const ok = openapi.slice(openapi.indexOf("    PublishedPersonalSkillOk:"), openapi.indexOf("    PublishedPersonalSkillBadRequest:"))
   const legacy = openapi.slice(openapi.indexOf("  /v1/me:"), openapi.indexOf("  /v1/team/members:"))
   const mutations = [
-    openapi.replace("required: [skill_id, source_ref, revision, status, name, summary, tags, skill_updated_at]", "required: [skill_id, name]"),
+    openapi.replace("required: [skill_id, source_ref, revision, status, name, summary, tags, skill_updated_at, example_prompts]", "required: [skill_id, name]"),
     openapi.replace(operation, operation.replace("#/components/parameters/PublishedPersonalSkillId", "#/components/parameters/CapabilityCursor")),
     openapi.replace(operation, operation.replace("#/components/parameters/PublishedPersonalSkillId", "#/components/parameters/IdempotencyKey")),
     openapi.replace(
@@ -1067,7 +1067,7 @@ test("public7 retains the closed full execution head, five current-locator decis
   const { openapi } = await readContract()
   const document = load(openapi)
   const schemas = document.components.schemas
-  assert.equal(document.info.version, "8.9.0")
+  assert.equal(document.info.version, "8.10.0")
   const snapshot = schemas.SessionSnapshotResponse.properties.data
   assert.equal(Object.hasOwn(snapshot.properties, "active_run"), false)
   assert.equal(Object.hasOwn(snapshot.properties, "pending_pauses"), false)
@@ -1415,7 +1415,7 @@ test("R124 public7 publishes nullable snapshot process and the anchored Run proc
   const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
   const { openapi } = await readContract()
   const document = load(openapi)
-  assert.equal(document.info.version, "8.9.0")
+  assert.equal(document.info.version, "8.10.0")
   const snapshot = document.components.schemas.SessionSnapshotResponse.properties.data
   assert.ok(snapshot.required.includes("execution_process"))
   assert.deepEqual(snapshot.properties.execution_process, {
@@ -1471,7 +1471,7 @@ test("R146 Move is one strict additive public command with a durable synchronous
     Object.keys(pathItem).filter((key) => ["get", "post", "put", "patch", "delete"].includes(key)),
     ["post"],
   )
-  assert.equal(document.info.version, "8.9.0", "the additive Skills package reads advance the only public contract without a path alias")
+  assert.equal(document.info.version, "8.10.0", "the additive Skills package reads advance the only public contract without a path alias")
   assert.ok(baseline.some((entry) => entry.method === "POST" && entry.path === path && entry.operation_id === "moveSession"))
 
   const operation = pathItem.post
@@ -1638,7 +1638,7 @@ test("R240 rename contract remains one strict name PATCH beside the approved Bil
   const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
   const { openapi, baseline } = await readContract()
   const document = load(openapi)
-  assert.equal(document.info.version, "8.9.0")
+  assert.equal(document.info.version, "8.10.0")
   const route = "/v1/projects/{projectId}/name"
   const path = document.paths[route]
   assert.ok(path)
@@ -1831,7 +1831,7 @@ test("R240 rename semantic gate rejects input, receipt, status and header drift"
   const request = (before, after) => mutate("    RenameProjectRequest:", "    RenameProjectResponse:", before, after)
   const success = (before, after) => mutate("    RenameProjectResponse:", "    RenameProjectErrorResponse:", before, after)
   const mutations = [
-    openapi.replace("  version: 8.9.0", "  version: 7.1.0"),
+    openapi.replace("  version: 8.10.0", "  version: 7.1.0"),
     route("    patch:", "    post:"),
     route("operationId: renameProject", "operationId: renameProjectAlias"),
     route("x-kokoro-permission: project.update", "x-kokoro-permission: project.read"),
@@ -2114,7 +2114,7 @@ test("R267 createPersonalSkillVersion publishes one governed strict personal ver
   const request = document.components.schemas.CreatePersonalSkillVersionRequest
   assert.deepEqual(request.required, ["display_name", "summary", "tags"])
   assert.equal(request.additionalProperties, false)
-  assert.deepEqual(Object.keys(request.properties), ["display_name", "summary", "tags"])
+  assert.deepEqual(Object.keys(request.properties), ["example_prompts", "display_name", "summary", "tags"])
   const responseRef = route.responses?.["201"]?.content?.["application/json"]?.schema?.$ref
   assert.equal(responseRef, "#/components/schemas/CreatePersonalSkillVersionResponse")
   const resource = document.components.schemas.CreatePersonalSkillVersionResource
@@ -2245,7 +2245,7 @@ function inspectR277ProjectDeletion(document) {
     return schema?.allOf?.[1]?.properties?.error?.properties?.retryable?.const
   }
 
-  require(document.info?.version === "8.9.0", "R277 public info.version must be 8.9.0")
+  require(document.info?.version === "8.10.0", "R277 public info.version must be 8.10.0")
   const projectPath = document.paths?.["/v1/projects/{projectId}"]
   const statusPath = document.paths?.["/v1/projects/{projectId}/deletion"]
   const deletion = projectPath?.delete
@@ -2451,7 +2451,7 @@ test("R277 deleteProject publishes one empty-body owner command with immutable p
   const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
   const { openapi, baseline } = await readContract()
   const document = load(openapi)
-  assert.equal(document.info.version, "8.9.0")
+  assert.equal(document.info.version, "8.10.0")
   assert.equal(baseline.length, 111)
   assert.deepEqual(
     baseline.filter(({ operation_id }) => operation_id === "deleteProject"),

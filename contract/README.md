@@ -1,3 +1,7 @@
+## R350 Skill example prompts consumer candidate
+
+Public 8.10.0 retains exactly 111 operations. Both Skill Create bodies accept optional `example_prompts`; four Skill read shapes require the ordered array. The sole Platform pins are commit `94bd0ea94aabc60c666fdb2cfa8784baf194e24b`, HTTP 3.5.0, and the complete 60-input publication including example profile 1.0.1. `scripts/verify-skill-example-prompts-contract.mjs` restores the entire fixed public 8.9 parent. Original strings/order/duplicates and absent-versus-present command binding are preserved. No normal process activation or browser qualification is claimed.
+
 ## R277 Project deletion machine candidate (not released)
 
 Public `8.6.0` / 105 operations is a machine-only candidate adding `deleteProject` and `getProjectDeletion`. The two closed operations use existing `project.update` / `project.read` governance, operation-specific canonical Project identity, immutable `202 pending` replay, and a logical status resource whose physical cleanup remains `pending`. Existing 103 operations, runtime, canonical SQL, generated consumers and owner pins are unchanged. Root must generate the operation baseline and pass semantic/contract/architecture gates before this candidate can be published; it is not runtime, owner-integration or browser deletion evidence.

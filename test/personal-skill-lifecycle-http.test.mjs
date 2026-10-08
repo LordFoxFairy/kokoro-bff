@@ -101,6 +101,7 @@ test("personal Skill lifecycle legal CreateVersion reaches the admitted owner an
         display_name: "Published name",
         summary: "Next version",
         tags: ["managed"],
+        example_prompts: ["  First\nline  ", "same", "same"],
       })
       assert.equal(response.status, 201)
       const requestId = response.headers.get("x-request-id")
@@ -125,6 +126,7 @@ test("personal Skill lifecycle legal CreateVersion reaches the admitted owner an
   assert.equal(calls[0].displayName, "Published name")
   assert.equal(calls[0].summary, "Next version")
   assert.deepEqual(calls[0].tags, ["managed"])
+  assert.deepEqual(calls[0].examplePrompts, ["  First\nline  ", "same", "same"])
   assert.match(calls[0].commandId, /^bff\.skill\.create_version\.v1\.[a-f0-9]{64}$/u)
   assert.match(calls[0].digest, /^[a-f0-9]{64}$/u)
 })
@@ -816,4 +818,20 @@ test("personal Skill lifecycle command digest projections retain the formal owne
     const projected = vector.project(Buffer.from(vector.rawBase64, "base64"), true)
     assert.equal(projected.sha256, vector.hash)
   }
+})
+
+test("version HTTP rejects bad examples without owner dispatch and binds empty/order distinctly", async () => {
+ const calls=[]
+ await withServer({createPersonalVersion:async input=>{calls.push(input);return versionResult()}},async origin=>{
+  for(const prompts of [null,{},["tail\ud800"],["\u0000"],[...Array.from({length:8},()=>"é".repeat(1000)),"é".repeat(192)+"a"]]) {
+   const response=await post(origin,"/v1/self/skills/skill-base/versions",{display_name:"Tea",summary:"",tags:[],example_prompts:prompts})
+   assert.equal(response.status,400);assert.equal(calls.length,0)
+  }
+  for(const prompts of [undefined,[],["a","b"],["b","a"]]) {
+   const response=await post(origin,"/v1/self/skills/skill-base/versions",{display_name:"Tea",summary:"",tags:[],...(prompts===undefined?{}:{example_prompts:prompts})})
+   assert.equal(response.status,201)
+  }
+ })
+ assert.equal(new Set(calls.map(c=>c.digest)).size,4)
+ assert.equal(Object.hasOwn(calls[0],"examplePrompts"),false)
 })

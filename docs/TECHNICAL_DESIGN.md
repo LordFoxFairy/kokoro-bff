@@ -1,3 +1,17 @@
+## R350-B2：Skill 示例固定消费与 Public 8.10
+
+Platform Skills 继续唯一拥有 revision 的 `example_prompts`。BFF 固定消费 owner commit `94bd0ea94aabc60c666fdb2cfa8784baf194e24b`、HTTP `3.5.0` 与完整 60-file publication，只负责严格校验、两条 Create 命令转发和四类 Product 读投影；不读取 owner 数据库、不新增本地状态，也不扩权限或 Admin API。
+
+实现沿现 `contract/vendor`、Platform Connect/HTTP generator、两个 Create input/route/projector、`catalog-connect.ts`、`projection-http.ts` 与 `personal-installation-response.ts`。唯一新运行文件 `src/infrastructure/clients/platform/skill-example-prompts.ts` 是 owner-specific 纯校验器，供 HTTP 输入与 owner 读写适配器复用；不建立通用 validation framework。唯一新 contract checker `scripts/verify-skill-example-prompts-contract.mjs` 负责 Public 8.10 增量及完整 8.9 parent 逆变换。
+
+两 Create 的 `example_prompts` 可省略；省略时 canonical metadata 继续省键并保持旧 digest，present `[]` 或非空数组时保键。原文、顺序和重复项不变。四类读表示 `Skill`、managed、published 与 installation 都必须返回该数组；缺失、null、超限或非法文本失败关闭，不从 summary、metadata JSON、安装记录或旧 receipt 推断。Proto installation message 必须 present，即使数组为空。Publish 仍严格零请求体。
+
+Public 升为 `8.10.0 / 111 operations`，不新增 path、permission、status 或 error。机器生成物只由现 generator 正规产生；旧 `af38…` 两 vendor 目录删除，不保双 pin。历史 V5–V9、45 RPC/20 command/24 proof 与旧 parent 字节保持。Platform runtime 持久化完成并与固定机器匹配前不激活新 BFF；工程门通过不代表 Web 示例或 Manus 页面完成。
+
+三种 Skill HTTP shape 只在 existing mapper 内用同一纯校验器替换 generated Zod 的 example_prompts UTF-16 maxLength 推导；六个具名 Skills SDK 调用显式使用完整 strict response validator，其余字段及 MCP 验证保持。这样接受 1000 个 astral Unicode scalar，同时拒绝合计 UTF-8 超界、NUL、孤立代理及缺失字段，不手改 generated 输出。
+
+<!-- R350-B2-SKILL-EXAMPLE-PROMPTS-END -->
+
 ## R345-B-D0：Skill 更新时间固定消费与 Public 8.9（已定设计，尚未实现）
 
 基线为 BFF `411e6906f651087dbbd8ff8afd96d53e38b352c0`、canonical public `8.8.0 / 111 operations`；Platform 只完成 D0 `dcc2102e41a677b52367f2cc1a18b6283bbda2e6`，正式 3.4.0 机器、运行和发布 commit/digest 尚未冻结。本片只固定后继设计，不把 Platform 当前工作树或未提交 digest 当依赖，也不声明正常进程、Web 或浏览器已经出现更新时间。

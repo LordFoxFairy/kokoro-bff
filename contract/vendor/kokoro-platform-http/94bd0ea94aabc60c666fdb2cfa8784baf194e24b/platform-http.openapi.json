@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Kokoro Platform Business HTTP API",
-    "version": "3.4.0",
+    "version": "3.5.0",
     "description": "Platform read-only projections. IAM projection bearer authentication establishes caller and tenant; authenticated BFF then supplies its Product Session subject."
   },
   "servers": [
@@ -610,7 +610,8 @@
           "revision",
           "enabled",
           "categories",
-          "skill_updated_at"
+          "skill_updated_at",
+          "example_prompts"
         ],
         "additionalProperties": false,
         "properties": {
@@ -655,6 +656,21 @@
           "skill_updated_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "example_prompts": {
+            "type": "array",
+            "maxItems": 10,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000,
+              "pattern": "\\S",
+              "x-kokoro-unpaired-surrogates": "reject",
+              "not": {
+                "pattern": "\\u0000"
+              }
+            },
+            "x-kokoro-total-utf8-bytes": 16384
           }
         }
       },
@@ -726,7 +742,8 @@
           "name",
           "summary",
           "tags",
-          "skill_updated_at"
+          "skill_updated_at",
+          "example_prompts"
         ],
         "additionalProperties": false,
         "properties": {
@@ -761,6 +778,21 @@
           "skill_updated_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "example_prompts": {
+            "type": "array",
+            "maxItems": 10,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000,
+              "pattern": "\\S",
+              "x-kokoro-unpaired-surrogates": "reject",
+              "not": {
+                "pattern": "\\u0000"
+              }
+            },
+            "x-kokoro-total-utf8-bytes": 16384
           }
         }
       },
@@ -820,7 +852,8 @@
           "summary",
           "tags",
           "status",
-          "skill_updated_at"
+          "skill_updated_at",
+          "example_prompts"
         ],
         "additionalProperties": false,
         "properties": {
@@ -869,6 +902,21 @@
           "skill_updated_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "example_prompts": {
+            "type": "array",
+            "maxItems": 10,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000,
+              "pattern": "\\S",
+              "x-kokoro-unpaired-surrogates": "reject",
+              "not": {
+                "pattern": "\\u0000"
+              }
+            },
+            "x-kokoro-total-utf8-bytes": 16384
           }
         }
       }

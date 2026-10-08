@@ -476,9 +476,9 @@ test("R257 personalization CAS none exception requires the exact method path and
     assert.match(inspectOpenApiGovernance(changed).join("\n"), /idempotency=required/u)
 })
 
-test("R267 lifecycle operations remain frozen in the current public 8.9 inventory", async () => {
+test("R267 lifecycle operations remain frozen in the current public 8.10 inventory", async () => {
   const openapi = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
-  assert.match(openapi, /^  version: 8\.9\.0$/mu)
+  assert.match(openapi, /^  version: 8\.10\.0$/mu)
   assert.equal((openapi.match(/operationId: createPersonalSkillVersion/gu) ?? []).length, 1)
   assert.equal((openapi.match(/operationId: withdrawPersonalSkill/gu) ?? []).length, 1)
 })
@@ -487,7 +487,8 @@ test("R345 public 8.9 adds one required UTC Skill update instant to exactly four
   const { createRequire } = await import("node:module")
   const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
   const openapi = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
-  const document = load(openapi)
+  const { stripSkillExamplePromptsAdditions } = await import("../scripts/verify-skill-example-prompts-contract.mjs")
+  const document = stripSkillExamplePromptsAdditions(load(openapi))
   assert.equal(document.info.version, "8.9.0")
   const operations = Object.values(document.paths).flatMap((pathItem) =>
     Object.keys(pathItem).filter((method) => ["get", "post", "put", "patch", "delete", "head", "options", "trace"].includes(method)),
@@ -673,4 +674,23 @@ test("R342 Skill package inspection checker binds response paths to the exact re
       assert.doesNotMatch(errors.join("\n"), /parsed public 8\.7 surface drifted/u)
     })
   }
+})
+
+test("R350 public examples have strict six profiles and restore complete immutable 8.9 parent", async () => {
+  const { createRequire } = await import("node:module")
+  const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
+  const { inspectSkillExamplePromptsDocument } = await import("../scripts/verify-skill-example-prompts-contract.mjs")
+  const doc = load(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"))
+  assert.deepEqual(inspectSkillExamplePromptsDocument(doc), [])
+  for (const change of [
+    d => delete d.components.schemas.Skill.properties.example_prompts,
+    d => d.components.schemas.Skill.required.splice(d.components.schemas.Skill.required.indexOf("example_prompts"),1),
+    d => d.components.schemas.CreateSkillDraftRequest.required.push("example_prompts"),
+    d => d.components.schemas.Skill.properties.example_prompts.items.maxLength = 1001,
+    d => d.components.schemas.Skill.properties.example_prompts.uniqueItems = true,
+    d => d.components.schemas.Skill.properties.example_prompts.type = ["array","null"],
+    d => d.components.schemas.Skill.properties.name.type = "integer",
+    d => delete d.paths["/v1/skills/drafts"],
+    d => d.info.version = "8.9.0",
+  ]) { const changed = structuredClone(doc); change(changed); assert.ok(inspectSkillExamplePromptsDocument(changed).length > 0) }
 })

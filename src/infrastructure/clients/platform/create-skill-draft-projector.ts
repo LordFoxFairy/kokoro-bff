@@ -1,3 +1,4 @@
+import { parseSkillExamplePrompts } from "./skill-example-prompts.js"
 import { sha256Jcs } from "./jcs.js"
 import { strictParseRawJson } from "../../raw-json.js"
 
@@ -28,7 +29,7 @@ function owner(value: unknown, idDomain?: RegExp): { kind: string; id: string } 
 }
 function metadata(value: unknown): RecordValue {
   const v = record(value)
-  const allowed = ["display_name", "summary", "tags", "metadata_json"]
+  const allowed = ["display_name", "summary", "tags", "metadata_json", "example_prompts"]
   const extra = Object.keys(v).find((k) => !allowed.includes(k))
   if (extra) fail(`wire unknown field ${extra}`)
   const candidateTags = v.tags === undefined ? [] : v.tags
@@ -48,6 +49,7 @@ function metadata(value: unknown): RecordValue {
     summary: string(v.summary ?? "", undefined, 65535),
     tags: tags.map((x) => string(x, undefined, 128)),
     metadata_json: encoded,
+    ...(v.example_prompts === undefined ? {} : { example_prompts: parseSkillExamplePrompts(v.example_prompts) }),
   }
 }
 

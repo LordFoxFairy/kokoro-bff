@@ -1,18 +1,21 @@
 import { createHash } from "node:crypto"
+import { strictParseRawJson } from "../infrastructure/raw-json.js"
+import { parseSkillExamplePrompts } from "../infrastructure/clients/platform/skill-example-prompts.js"
 
-export type SkillDraftInput = Readonly<{ displayName: string; summary: string; tags: string[] }>
+export type SkillDraftInput = Readonly<{ displayName: string; summary: string; tags: string[]; examplePrompts?: string[] }>
 
 export function parseSkillDraftInput(raw: Buffer): SkillDraftInput {
   if (raw.length > 65_536) throw new Error("request_body_too_large")
   let value: unknown
   try {
-    value = JSON.parse(raw.toString("utf8"))
+    value = strictParseRawJson(new TextDecoder("utf-8", { fatal: true }).decode(raw))
   } catch {
     throw new Error("invalid_skill_request")
   }
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("invalid_skill_request")
   const object = value as Record<string, unknown>
-  if (Object.keys(object).sort().join(",") !== "display_name,summary,tags") throw new Error("invalid_skill_request")
+  const keys = Object.keys(object).sort().join(",")
+  if (keys !== "display_name,summary,tags" && keys !== "display_name,example_prompts,summary,tags") throw new Error("invalid_skill_request")
   if (typeof object.display_name !== "string" || object.display_name.length < 1 || object.display_name.length > 255 || !/\S/u.test(object.display_name))
     throw new Error("invalid_skill_request")
   if (typeof object.summary !== "string" || object.summary.length > 65_535) throw new Error("invalid_skill_request")
@@ -23,7 +26,18 @@ export function parseSkillDraftInput(raw: Buffer): SkillDraftInput {
     object.tags.some((tag) => typeof tag !== "string" || tag.length < 1 || tag.length > 128 || !/\S/u.test(tag))
   )
     throw new Error("invalid_skill_request")
-  return { displayName: object.display_name, summary: object.summary, tags: object.tags as string[] }
+  let examplePrompts: string[] | undefined
+  try {
+    examplePrompts = object.example_prompts === undefined ? undefined : parseSkillExamplePrompts(object.example_prompts)
+  } catch {
+    throw new Error("invalid_skill_request")
+  }
+  return {
+    displayName: object.display_name,
+    summary: object.summary,
+    tags: object.tags as string[],
+    ...(examplePrompts === undefined ? {} : { examplePrompts }),
+  }
 }
 
 export function skillDraftCommandId(tenant: string, user: string, key: string): string {
