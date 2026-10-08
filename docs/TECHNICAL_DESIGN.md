@@ -1,3 +1,34 @@
+## R353-BFF-D0：Skills 完整 Product 消费设计（目标，尚未实现）
+
+本片基线为 BFF `88fe38733d1147bb61b3edbf2c66374725ddacb6`。Platform R353-D1 设计已正式提交 `8e869ded1f58354297217af1db13e5b9ade3a447`，源码与机器 publication 尚未冻结；后继只能固定正式 Git owner source commit、完整 provenance/digest 与 generated 输出，不从动态工作树复制。目标一次消费 Platform Product 63 RPC/32 command/24 proof、IAM 0.10 与 Storage v3，再发布唯一 Public 9；本节不表示机器、运行、正常凭据或页面已经可用。
+
+### Owner、模块与调用边界
+
+Platform 唯一拥有 Skill revision、creator/source/audience/draft/admin、package/cover 引用及 `available_update`；IAM 唯一拥有 current subject、publisher display profile 与 admin admission；Storage 唯一拥有 package/cover bytes、scan 和生命周期；Agent 唯一拥有 Run/ready activity/terminal；BFF 拥有 Product contract、Share、durable AG-UI projection 与 usage 聚合。Web 只经同源 adapter，不直连 owner、不自报 creator/source/admin/usage。
+
+继续扩现 Skills route/client/projector、现 Share 和 AG-UI source 摄取，不建 workflow、metadata 或 handoff 一级模块。Share 采用现表 typed resource，淘汰独立 `skill_share` 对 URL/expiry/revoke receipt 的复制。Usage 是 BFF 自有投影而非 Platform 安装数或 Agent 新协议。AI 复用 immutable conversation-artifact association 与 Storage spool；浏览器只传 selector。GitHub 仅新增受限公开仓库 adapter，拒任意 URL、私有 token 和 body 自报来源。
+
+### 准入、事务与失败恢复
+
+Conversation share 的匿名 reader 永远只读 `conversation`，旧行为保持。Skill share 创建需要当前登录用户在同 tenant 对 exact `source_ref` 可见，键为 `(tenant,current creator subject,exact source_ref)` 且最多一个 active；到期旧行先撤再建。创建者只撤自己的。resolve 必须登录、同 tenant，并每次 fresh 调 Platform precise revision/read；链接不扩大 audience。Platform 后续 owner/admin withdraw 或 quarantine 使所有 resolve 失败，不为此新增 IAM 管理动作。
+
+Usage 从 trusted Agent source event 投影显式接收 ready `source_refs` 与严格 `run.completed(status=completed)`，在 `agui-projection-repository.commitProjection` 插入 source fact 的同一事务写 durable observation/terminal；唯一身份 `(tenant,run_id,source_ref)`，重复、乱序和 terminal-first 均闭合一次。失败/取消 terminal 不计数。事实及 coverage 不随 public frame GC。每 tenant 另存最小可信覆盖证明/水位；启动时刻、session high-watermark 或当前无行均不是历史完整证明，缺 owner 授权回补或可信 checkpoint 时公开 `unavailable`，禁止返回 0。bounded `source_ref` 集合由单查询聚合，不逐项查询。
+
+Package/cover 仍经 BFF 代理 owner I/O；响应前重验 current identity、exact revision、Asset purpose/scan/bytes。两 Create 保 optional presence，草稿持久恢复/废弃、防重复和 admin mutation 只转正式 Platform command；`available_update` 仅提示，绝不隐式换源或升级。Publisher profile 按本页 refs 去重后一次 IAM 有界批量解析，missing 不用 owner id/安装者猜名。
+
+AI handoff 只接受 BFF 可重读的 exact immutable association、Storage bytes 与对应成功 completed Run；缺一失败关闭，不接浏览器自由 JSON。GitHub adapter 固定允许的 public host、owner/repository/ref/path、大小、timeout、hash 与响应类型，再进入同一 draft/package 输入；没有生产 route 前保持 OPEN。record 入口与 payload 仍未核定，禁止用录屏、插件或空 payload 缩小目标。
+
+### 发行顺序、文件集与停止线
+
+1. 三设计通过后，先固定 Platform 正式 D1、IAM 0.10 与 Storage v3 的 contract/dependency/vendor/generated；正规 generator 与完整 parent inverse 后再发布 Public 9，旧有效操作不双 pin、不 optional fallback、不手改 generated。
+2. Share 后继：`database/schema.sql`、`src/domain/chat/share.ts`、`src/application/{ports/public-share-repository,public-share-service}.ts`、`src/infrastructure/postgres/{chat-repository,chat-repository-mappers,public-share-repository}.ts`、具名 authenticated Skill route/contract/tests；旧 `/v1/shared/:id` conversation 分支保持。
+3. Usage 后继：Agent projection、`src/application/agui/ports/agui-projection-repository.ts`、`src/infrastructure/postgres/agui-projection-repository.ts`、canonical SQL、Product projector/contract与 unit/integration；不从 `bff_agui_event` frame 反推。
+4. 完整 Skills 消费后继沿现 Platform/IAM/Storage clients、Create/admin/catalog/personal/package routes、public OpenAPI/checkers/tests；AI 沿 artifact reader/spool，GitHub 仅一个 owner-specific adapter。单模块普通文件，不建通用 workflow。
+
+停止线：正式 owner source/publication/pins、IAM/Storage 准入与真实 package/cover、AI association+completed、GitHub route 任一缺失都不得激活对应 public shape。历史 coverage proof 缺失时 usage 必须激活正式 `unavailable` 分支，但不阻断目录或其余已具备依赖的 Public 9 shape。机器/工程门不等于正常 HTTP、浏览器、后台或 S01–S10 完成。
+
+<!-- R353-BFF-D0-SKILLS-PRODUCT-END -->
+
 ## R350-B2：Skill 示例固定消费与 Public 8.10
 
 Platform Skills 继续唯一拥有 revision 的 `example_prompts`。BFF 固定消费 owner commit `94bd0ea94aabc60c666fdb2cfa8784baf194e24b`、HTTP `3.5.0` 与完整 60-file publication，只负责严格校验、两条 Create 命令转发和四类 Product 读投影；不读取 owner 数据库、不新增本地状态，也不扩权限或 Admin API。

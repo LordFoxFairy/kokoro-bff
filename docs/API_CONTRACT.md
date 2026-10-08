@@ -1,3 +1,25 @@
+## R353-BFF-D0：Skills Public 9 目标契约（尚未发布）
+
+当前正式 public 仍是 8.10；Public 9 只在 Platform 正式 D1 63 RPC/32 command/24 proof、IAM 0.10、Storage v3 与 BFF runtime 成对冻结后发布。唯一 OpenAPI 继续 closed snake_case schema；旧操作原义保留，新增/required 字段一次发行，不 alias、fallback、双 pin 或 body 自报身份。
+
+### Product 表示与操作
+
+Catalog、preview/detail、managed、published、installation 使用 Platform exact revision 的 creator/source/category/examples/updated_at/package/optional cover/audience/draft/admin 与 `available_update`；publisher display 由 BFF 对本页 refs 去重后调用 IAM 批量解析，missing 显式，不用 raw id、安装者或 tags 猜。Package/cover bytes 经 BFF 代理且末端复核；cover absence 合法，package 必须存在。`available_update` 仅作提示；Platform D1 不设 Upgrade RPC，用户明确更新时先移除旧安装，再对 exact 新 revision 重新安装，绝不隐式换源或升级。
+
+四类 Create 入口最终归一为 Platform draft/version command：手工与既有 package、AI exact artifact selector、GitHub restricted public repository；optional presence、原序、重复与 explicit empty 按 owner canonical 保持。AI 缺 immutable association、Storage bytes 或同 run completed 失败；GitHub 非允许 host/ref/path、私有认证、redirect、超限或 hash/type 不符失败。record 的正式输入仍 OPEN，不增加猜测字段。
+
+Skill share 是 BFF typed Share：create 需登录、同 tenant、current readable exact `source_ref`；同 `(tenant,creator_subject,source_ref)` 返回唯一 active link，过期后替换。creator 可 revoke 自己的 link。resolve 也必须登录同 tenant并 fresh Platform read，withdraw/quarantine/audience/identity 变化返回 not found/forbidden 的既定安全映射；link 不授权匿名或跨 tenant。旧 conversation `/v1/shared/{share_id}` 仍仅返回 conversation，不接受 Skill target。
+
+Usage 返回 exact source_ref 的 `{ status: available, successful_run_count }` 或 `{ status: unavailable }` closed union。计数定义为同 tenant、ready 引用该 exact source_ref 且严格 terminal `run.completed(status=completed)` 的 distinct `run_id`；重复 ready/terminal、乱序和多次投递只计一次，failed/cancelled 不计。缺可信 tenant 历史覆盖证明必须 `unavailable`，不得把空行、GC、启动时间或单 session 水位映为 0。
+
+### 身份、失败与发布门
+
+tenant/subject/session 来自当前 IAM admission；admin 操作必须走 IAM 0.10 current admin check 与专用受信 Platform machine surface，普通 catalog credential、浏览器布尔和 publisher profile scope 不授 admin。Share/usage 是 BFF 自有事实；Platform/IAM/Storage/Agent owner 错误按既有 closed Product error 映射，依赖异常不返回空列表、默认封面、默认作者或零计数。
+
+后继机器范围为 `contract/openapi/v1/openapi.yaml`、operation inventory、Platform/IAM/Storage dependency manifests/vendor、正规 generators/generated、现 Skills contract checkers与具名 parent inverse/HTTP/SDK tests。正式 owner source、完整 provenance/digest与 BFF Public 9 parent 未冻结前不写版本/operation 数的伪最终值；现目标 63/32/24 不等于已消费。发布后仍须真实登录、普通/管理员/跨 tenant、撤权、重放、GC、package/cover、AI/GitHub 与返回/焦点浏览器验收。
+
+<!-- R353-BFF-D0-SKILLS-PUBLIC-9-END -->
+
 ## R350-B2：Skill 示例 Public 8.10 契约
 
 唯一 public contract 为 `8.10.0 / 111 operations`。`CreateSkillDraftRequest` 与 `CreatePersonalSkillVersionRequest` 各新增 optional `example_prompts`；absence 与 present `[]` 不合并。`Skill`、`ManagedPersonalSkillResource`、`PublishedPersonalSkillResource`、`SkillInstallation` 的 closed schema 均新增 required `example_prompts`。

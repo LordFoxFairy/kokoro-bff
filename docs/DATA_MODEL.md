@@ -1,3 +1,25 @@
+## R353-BFF-D0：Skills Share、Usage 与 owner 数据边界（目标，尚未实现）
+
+Platform 继续唯一保存 Skill revision/series/source/creator/audience/draft/admin/package/cover 与 update；IAM 保存身份、publisher display 和权限；Storage 保存 Blob/Asset/scan；Agent 保存 Run 与 source event。BFF 不镜像这些 owner 表，只新增自己的 typed Share 与 durable usage projection。AI/GitHub bytes 进入现 draft/package owner 流程，不形成第三份 Skill metadata。
+
+### Native BFF SQL 扩展
+
+`bff_share` 增 closed `resource_kind = conversation | skill_revision`，`conversation_id` 改 nullable，新增 nullable bounded `skill_source_ref` 与 Skill link `creator_subject_id`；CHECK 要求两种 target exactly-one。旧行原地保持为 conversation，不重写 URL/expiry/revoke。保旧 conversation active partial unique/index；新增 partial unique `(tenant_id,creator_subject_id,skill_source_ref) WHERE revoked_at IS NULL` 与 active resolve 索引。expiry 不进入动态索引谓词；创建事务先锁同键，把已到期未撤行标记 revoked，再插入，重放返回同一未到期 active。create/resolve 请求前必须 fresh Platform read；revoke 只要求当前 IAM 登录同 tenant，并在同事务满足 `creator_subject_id` 谓词，因此 source 已 withdraw/quarantine 后创建者仍可撤自己的 link。
+
+Usage 最小三事实：`bff_skill_usage_run_terminal` 以 `(tenant_id,run_id)` 为主键，保存 session、closed terminal status、source owner/event id/sequence/digest/occurred_at；`bff_skill_usage_observation` 以 `(tenant_id,run_id,source_ref)` 为主键，保存 trusted ready source identity 与 nullable `counted_at`；`bff_skill_usage_coverage` 以 tenant 为键，保存 closed `unavailable|complete`、可信 checkpoint/proof identity 和时间。terminal-first 先写 terminal，后到 ready 查同 run；ready-first 后到 completed 批量闭合该 run。只有 completed 写 `counted_at`，failed/cancelled 永不计数。
+
+三元主键、source event 唯一身份与 digest 漂移检查保证重复/乱序不双计；同一 AG-UI source ingestion 数据库事务同时插 source fact 与 usage 变化，失败整体回滚。`(tenant_id,source_ref)` 的 counted partial index支持单次 bounded source 集合聚合。usage/terminal/coverage retention 独立于 `bff_agui_event` frame GC；删除 conversation/frame 不删除计数证明。无可信全历史 backfill/checkpoint 的既有 tenant 保持 unavailable；不得由 `started_at`、session high-watermark 或 count(*)=0 升级 complete。
+
+Share URL 不是 Platform 权限事实，creator id 只是撤销/审计键；每次 resolve 仍由当前 subject 对 exact revision fresh check。withdraw/quarantine 不跨 owner 写 BFF 行，读取失败即失效。Package/cover、publisher profile、draft/admin和 `available_update` 均只作当次严格投影，不落 BFF 缓存或复制表；owner 缺失/坏值失败关闭。
+
+### Expand、rollback 与验证
+
+后继 expand 只在 BFF canonical `database/schema.sql` 增列/约束/索引和 usage 三表：短事务、固定 schema/search_path、shadow 拒绝、advisory lock、existing table/constraint/index exact 校验、statement/lock timeout、提交前 cancel fence、COMMIT unknown 不猜成功。先 nullable/backfill旧 share kind/加 CHECK，再收敛目标约束；rollback 只有确认无 Skill rows/usage rows且旧 conversation facts完整时才可删增量，禁止丢新事实以强退。
+
+集成验证必须覆盖旧 conversation bytes/匿名读取不变、两 target/零 target 拒绝、active/expired/revoke并发、跨 tenant/creator、Platform 撤回后 read fail；ready/terminal 两种顺序、重复与 digest 冲突、failed/cancelled、事务回滚、frame GC、coverage unavailable/complete 与单查询聚合。不得访问 owner SQL、重置共享 PG/Redis或以 mock 计数冒历史覆盖。
+
+<!-- R353-BFF-D0-SKILLS-DATA-END -->
+
 ## R350-B2：Skill 示例消费数据边界
 
 `example_prompts` 是 Platform Skills revision 的非 nullable、有序 string-array 事实；BFF 不拥有、不持久化、不补全。CreateDraft/CreateVersion 只把 public optional presence 传入 owner：absence 继续 canonical 省键，present `[]` 表示显式空数组；CreateVersion absence 不从 base revision 继承。四类读响应只投影 owner 返回的精确 revision 数组，并保留原文、顺序和重复。
