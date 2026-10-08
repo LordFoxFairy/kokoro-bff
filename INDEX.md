@@ -1,3 +1,7 @@
+## R342 Skills 包正文公开契约入口
+
+当前 `contract/openapi/v1/openapi.yaml` 为8.8.0/111，两本人package GET；`scripts/verify-skill-package-inspection-contract.mjs`具名审查新增closed表示/请求响应绑定/安全path，并保护旧109完整parsed面。主verify/check调用此入口，现contract-governance含漂移负控；不从runtime import scripts。当前没有对应生产HTTP路由或Web详情，下一仍沿三D0既定实现与真实用户验收。实际失败和结果见CURRENT R342。
+
 ## R341 当前 Skills 包详情接线前置（2026-10-08）
 
 当前唯一固定Connect来源1f6f764/52输入/current45RPC，历史V8/V9各43不改；common/platform正规生成、旧e83a固定vendor已替换。`src/infrastructure/protobuf-text-encoding.ts`同步幂等wire设置在`src/bootstrap/server.ts`composition之前，保留原正文BOM并维持strict非法UTF8拒绝。完整Root check/format通过仅说明工程前置；public仍8.7/109，两正文GET/真正查看详情/示例与正常进程尚未接入。实际结果/失败/未验见CURRENT R341；下列R323/R319按历史时点读取，不是当前固定点。

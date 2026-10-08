@@ -173,14 +173,21 @@ async function main() {
   const managedPersonalReads = currentOperations.filter((operation) =>
     operation.fields.get("operationId") === "listManagedPersonalSkills" || operation.fields.get("operationId") === "getManagedPersonalSkill",
   )
+  const skillPackageInspectionReads = currentOperations.filter((operation) =>
+    operation.fields.get("operationId") === "getManagedPersonalSkillPackage"
+      || operation.fields.get("operationId") === "getPersonalSkillInstallationPackage",
+  )
   const errors = [
     ...inspectOpenApiGovernance(openapi),
     ...compareOperationBaseline(openapi, parsedBaseline.operations),
-    ...(parsedBaseline.operations.length === 109 && currentOperations.length === 109 ? [] : ["public 8.7.0 must freeze exactly 109 operations"]),
-    ...(/^  version: 8\.7\.0$/mu.test(openapi) ? [] : ["public contract version must equal 8.7.0"]),
+    ...(parsedBaseline.operations.length === 111 && currentOperations.length === 111 ? [] : ["public 8.8.0 must freeze exactly 111 operations"]),
+    ...(/^  version: 8\.8\.0$/mu.test(openapi) ? [] : ["public contract version must equal 8.8.0"]),
     ...(managedPersonalReads.length === 2 && managedPersonalReads.every((operation) => operation.method === "GET")
       ? []
       : ["managed personal Skill inventory must contain exactly the two GET operations"]),
+    ...(skillPackageInspectionReads.length === 2 && skillPackageInspectionReads.every((operation) => operation.method === "GET")
+      ? []
+      : ["Skill package inspection inventory must contain exactly the two GET operations"]),
   ]
   if (errors.length > 0) {
     console.error(errors.join("\n"))

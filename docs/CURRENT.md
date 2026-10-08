@@ -1,3 +1,15 @@
+## R342 两个本人包读取公开机器契约已验证，用户详情仍未实现（2026-10-08）
+
+当前 canonical public OpenAPI **8.8.0 / 111 operations**：两个本人 package GET，严格目录/选中原文、uint64字符串、空正文/null、原BOM/换行、no-store/request-ID与闭合错误；managed source_ref精确匹配skill路径，selected_file.path精确匹配请求。原109完整parsed文档剥新增后Root deepStrictEqual通过，architecture只当前版本行逆变换后全bytes相同。固定Platform52/45、runtime/source/SQL/正常配置保持，运行中BFF仍d218a1a，未新接HTTP route。
+
+Root原两缺失RED83PASS/2FAIL；首次完整check虽886PASS，但独审发现请求响应绑定/path schema漏守。先新增9强负控，Root真实RED16PASS/10FAIL（含父套件）；只两新operation描述、两output path描述与具名checker补强，原负控保持。最终冻结Root Node22.22.2 pnpm check句柄23333自然exit0：合同/默认全部无失败，default898中896PASS/2原资源SKIP，lint/typecheck/生成/build通过；format句柄9511自然exit0。日志Root var/dev/r255-preserve/r342-root-{binding-red,full-check-final,format-final}.log。两原资源skip不算真实owner通过。
+
+独审bff_skills_consumer_review_r341（gpt-5.6-sol）复核最终10 SHA，原P1/P2关闭，无新增确定阻断；Root全old109解析比较和完整范围外保护独立执行。Root首次inverse审计把含反斜线的regex当普通版本literal两次失败，改为只检查实际第607行escaped版本后全bytes通过；产品未因审计失败修改。提交由Root独占明确路径，原var与557范围外tracked保护。
+
+这只是公开接口机器切片，**不是 Skills 页面验收**：真实IAM/Platform/Storage/BFF新读取链、normal paired activation、Web同弹窗查看详情/文件/正文仍未跑。作者/examples/usage/cover、任意目录卡片读取资格、后台同owner联动仍OPEN；完整70/个人33不升，其他模块和heartbeat继续暂停。README既存84操作旧说明仍为独立文档债务。本轮恢复五个正式源码开发服务只证健康，不把200或辅助门冒浏览器闭环。
+
+<!-- R342-PUBLIC-MACHINE-ROOT-END -->
+
 ## R341 Skills 查看详情固定消费前置已验证，页面仍未验收（2026-10-08）
 
 当前源码固定Platform **1f6f764bc4bcf09d235e086ae7fe137acf16d63d** 唯一52输入，逐bytes对正式Git/aggregate e4201bc8674c470bf49c840712f87c34e869b96e59a0e96ba83eb3e4df19446a；正规common/platform生成、当前45RPC/20command/24proof，V8/V9历史各43/20/24及三双父原图保护。旧e83a vendor删除，六旧测试仅反pin字面替换恢复原断言；独立Platform HTTP vendor保持原样。public仍8.7.0/109，SQL/正常配置/身份/进程不变；两本人正文GET和Web查看详情尚未实现。

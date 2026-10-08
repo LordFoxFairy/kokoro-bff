@@ -476,9 +476,108 @@ test("R257 personalization CAS none exception requires the exact method path and
     assert.match(inspectOpenApiGovernance(changed).join("\n"), /idempotency=required/u)
 })
 
-test("R267 lifecycle operations are frozen only in current public 8.7 inventory", async () => {
+test("R267 lifecycle operations remain frozen in the current public 8.8 inventory", async () => {
   const openapi = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
-  assert.match(openapi, /^  version: 8\.7\.0$/mu)
+  assert.match(openapi, /^  version: 8\.8\.0$/mu)
   assert.equal((openapi.match(/operationId: createPersonalSkillVersion/gu) ?? []).length, 1)
   assert.equal((openapi.match(/operationId: withdrawPersonalSkill/gu) ?? []).length, 1)
+})
+
+test("R342 Skill package inspection checker rejects route, closed-shape, uint64, nullable, error and old-surface drift", async () => {
+  const { createRequire } = await import("node:module")
+  const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
+  const { inspectSkillPackageInspectionDocument } = await import("../scripts/verify-skill-package-inspection-contract.mjs")
+  const openapi = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
+  const document = load(openapi)
+  assert.deepEqual(inspectSkillPackageInspectionDocument(document), [])
+
+  const mutations = [
+    ["method", (candidate) => {
+      candidate.paths["/v1/self/skills/{skill_id}/package"].post = candidate.paths["/v1/self/skills/{skill_id}/package"].get
+      delete candidate.paths["/v1/self/skills/{skill_id}/package"].get
+    }],
+    ["permission", (candidate) => (candidate.paths["/v1/self/skills/{skill_id}/package"].get["x-kokoro-permission"] = "product.skill.admin")],
+    ["required field", (candidate) => candidate.components.schemas.SkillPackageInspectionData.required.splice(1, 1)],
+    ["open shape", (candidate) => (candidate.components.schemas.SkillPackageInspectionData.additionalProperties = true)],
+    ["extra field", (candidate) => (candidate.components.schemas.SkillPackageInspectionData.properties.secret = { type: "string" })],
+    ["uint64", (candidate) => (candidate.components.schemas.SkillPackageInspectionData.properties.revision.pattern = "^[1-9][0-9]*$")],
+    ["directory null", (candidate) => candidate.components.schemas.SkillPackageInspectionData.properties.selected_file.oneOf.shift()],
+    ["unstable file code", (candidate) => (candidate.components.responses.SkillPackageInspectionNotFound.content["application/json"].schema.allOf[1].properties.error.properties.code.enum = ["skill_package_file_not_found"])],
+    ["limit retryability", (candidate) => (candidate.components.responses.SkillPackageInspectionRateLimited.content["application/json"].schema.allOf[1].oneOf[1].properties.error.properties.retryable.const = true)],
+    ["dependency retryability", (candidate) => (candidate.components.responses.SkillPackageInspectionUnavailable.content["application/json"].schema.allOf[1].properties.error.properties.retryable.const = false)],
+    ["budget", (candidate) => (candidate.paths["/v1/self/skills/{skill_id}/package"].get.description = "Inspect a package.")],
+    ["old surface", (candidate) => (candidate.paths["/healthz"].get.summary = "Changed historical summary")],
+  ]
+  for (const [name, mutate] of mutations) {
+    const candidate = structuredClone(document)
+    mutate(candidate)
+    assert.notDeepEqual(inspectSkillPackageInspectionDocument(candidate), [], `${name} drift must fail closed`)
+  }
+})
+
+test("R342 Skill package inspection checker binds response paths to the exact requested Skill and file", async (t) => {
+  const { createRequire } = await import("node:module")
+  const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
+  const { inspectSkillPackageInspectionDocument } = await import("../scripts/verify-skill-package-inspection-contract.mjs")
+  const openapi = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
+  const document = load(openapi)
+
+  const cases = [
+    {
+      name: "managed source_ref must bind the decoded path skill_id",
+      mutate(candidate) {
+        const operation = candidate.paths["/v1/self/skills/{skill_id}/package"].get
+        operation.description = operation.description.replace("source_ref equals skill:<skill_id> for the decoded path skill_id.", "")
+      },
+      expected: /getManagedPersonalSkillPackage.*source_ref.*path skill_id/u,
+    },
+    ...[
+      ["managed", "/v1/self/skills/{skill_id}/package", "getManagedPersonalSkillPackage"],
+      ["installation", "/v1/skill-installations/{installation_id}/package", "getPersonalSkillInstallationPackage"],
+    ].map(([label, path, operationId]) => ({
+      name: `${label} selected_file.path must bind the exact requested file_path`,
+      mutate(candidate) {
+        const operation = candidate.paths[path].get
+        operation.description = operation.description.replace("For a file read, selected_file.path equals the requested file_path exactly.", "")
+      },
+      expected: new RegExp(`${operationId}.*selected_file\\.path.*requested file_path`, "u"),
+    })),
+    ...[
+      ["directory", "SkillPackageInspectionFile", "file entry"],
+      ["selected", "SkillPackageInspectionSelectedFile", "selected file"],
+    ].flatMap(([label, schemaName, errorLabel]) => [
+      {
+        name: `${label} path rejects a non-string schema`,
+        mutate(candidate) {
+          candidate.components.schemas[schemaName].properties.path.type = "integer"
+        },
+        expected: new RegExp(`${errorLabel} path.*string`, "u"),
+      },
+      {
+        name: `${label} path remains nonempty`,
+        mutate(candidate) {
+          delete candidate.components.schemas[schemaName].properties.path.minLength
+        },
+        expected: new RegExp(`${errorLabel} path.*nonempty`, "u"),
+      },
+      {
+        name: `${label} path retains the complete safe-path semantics`,
+        mutate(candidate) {
+          const pathSchema = candidate.components.schemas[schemaName].properties.path
+          pathSchema.description = pathSchema.description.replace("same safe-path rules as file_path", "")
+        },
+        expected: new RegExp(`${errorLabel} path.*safe-path`, "u"),
+      },
+    ]),
+  ]
+
+  for (const { name, mutate, expected } of cases) {
+    await t.test(name, () => {
+      const candidate = structuredClone(document)
+      mutate(candidate)
+      const errors = inspectSkillPackageInspectionDocument(candidate)
+      assert.match(errors.join("\n"), expected)
+      assert.doesNotMatch(errors.join("\n"), /parsed public 8\.7 surface drifted/u)
+    })
+  }
 })

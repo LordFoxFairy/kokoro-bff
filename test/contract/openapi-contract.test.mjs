@@ -40,7 +40,7 @@ function inspectChatFailureContract(openapi) {
     if (!condition) errors.push(label)
   }
 
-  require(/^info:\n(?:.*\n){0,3}?  version: 8\.7\.0$/mu.test(openapi), "public info.version must be 8.7.0")
+  require(/^info:\n(?:.*\n){0,3}?  version: 8\.8\.0$/mu.test(openapi), "public info.version must be 8.8.0")
   require(/^      required: \[message_id, role, content, status, created_at\]$/mu.test(message), "failure must stay optional")
   const roles = [...(message.match(/role:\n\s+type: string\n\s+enum: \[([^\]]+)\]/u)?.[1] ?? "").matchAll(/[a-z_]+/gu)].map((match) => match[0])
   require(JSON.stringify(roles) === JSON.stringify(["user", "assistant"]), "Message roles must equal user and assistant")
@@ -1067,7 +1067,7 @@ test("public7 retains the closed full execution head, five current-locator decis
   const { openapi } = await readContract()
   const document = load(openapi)
   const schemas = document.components.schemas
-  assert.equal(document.info.version, "8.7.0")
+  assert.equal(document.info.version, "8.8.0")
   const snapshot = schemas.SessionSnapshotResponse.properties.data
   assert.equal(Object.hasOwn(snapshot.properties, "active_run"), false)
   assert.equal(Object.hasOwn(snapshot.properties, "pending_pauses"), false)
@@ -1415,7 +1415,7 @@ test("R124 public7 publishes nullable snapshot process and the anchored Run proc
   const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
   const { openapi } = await readContract()
   const document = load(openapi)
-  assert.equal(document.info.version, "8.7.0")
+  assert.equal(document.info.version, "8.8.0")
   const snapshot = document.components.schemas.SessionSnapshotResponse.properties.data
   assert.ok(snapshot.required.includes("execution_process"))
   assert.deepEqual(snapshot.properties.execution_process, {
@@ -1471,7 +1471,7 @@ test("R146 Move is one strict additive public command with a durable synchronous
     Object.keys(pathItem).filter((key) => ["get", "post", "put", "patch", "delete"].includes(key)),
     ["post"],
   )
-  assert.equal(document.info.version, "8.7.0", "the prelaunch Skills V2 cutover advances the only public major without a path alias")
+  assert.equal(document.info.version, "8.8.0", "the additive Skills package reads advance the only public contract without a path alias")
   assert.ok(baseline.some((entry) => entry.method === "POST" && entry.path === path && entry.operation_id === "moveSession"))
 
   const operation = pathItem.post
@@ -1638,7 +1638,7 @@ test("R240 rename contract remains one strict name PATCH beside the approved Bil
   const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
   const { openapi, baseline } = await readContract()
   const document = load(openapi)
-  assert.equal(document.info.version, "8.7.0")
+  assert.equal(document.info.version, "8.8.0")
   const route = "/v1/projects/{projectId}/name"
   const path = document.paths[route]
   assert.ok(path)
@@ -1655,6 +1655,8 @@ test("R240 rename contract remains one strict name PATCH beside the approved Bil
   delete priorPaths["/v1/mcp/connections"] // R257 adds only this independently governed read.
   delete priorPaths["/v1/self/skills"] // R266 separately governs managed personal Skill reads.
   delete priorPaths["/v1/self/skills/{skill_id}"]
+  delete priorPaths["/v1/self/skills/{skill_id}/package"] // R342 separately governs managed package inspection.
+  delete priorPaths["/v1/skill-installations/{installation_id}/package"] // R342 separately governs installed package inspection.
   delete priorPaths["/v1/self/skills/{skill_id}/versions"]
   delete priorPaths["/v1/self/skills/{skill_id}/withdraw"]
   delete priorPaths["/v1/preferences/personalization"] // R257 separately governs the new caller-owned CAS resource.
@@ -1678,6 +1680,8 @@ test("R240 rename contract remains one strict name PATCH beside the approved Bil
           "getPersonalMcpConnection",
           "listManagedPersonalSkills",
           "getManagedPersonalSkill",
+          "getManagedPersonalSkillPackage",
+          "getPersonalSkillInstallationPackage",
           "createPersonalSkillVersion",
           "withdrawPersonalSkill",
           "getSelfPersonalization",
@@ -1827,7 +1831,7 @@ test("R240 rename semantic gate rejects input, receipt, status and header drift"
   const request = (before, after) => mutate("    RenameProjectRequest:", "    RenameProjectResponse:", before, after)
   const success = (before, after) => mutate("    RenameProjectResponse:", "    RenameProjectErrorResponse:", before, after)
   const mutations = [
-    openapi.replace("  version: 8.7.0", "  version: 7.1.0"),
+    openapi.replace("  version: 8.8.0", "  version: 7.1.0"),
     route("    patch:", "    post:"),
     route("operationId: renameProject", "operationId: renameProjectAlias"),
     route("x-kokoro-permission: project.update", "x-kokoro-permission: project.read"),
@@ -1883,7 +1887,7 @@ test("R257 self MCP connection contract rejects Server substitution and error-pr
   const start = openapi.indexOf("  /v1/mcp/connections:\n")
   const end = openapi.indexOf("  /v1/mcp/servers:\n", start)
   const route = openapi.slice(start, end)
-  assert.equal(baseline.length, 109)
+  assert.equal(baseline.length, 111)
   assert.deepEqual(
     baseline.filter((item) => item.operation_id === "listSelfMcpConnections"),
     [
@@ -2241,7 +2245,7 @@ function inspectR277ProjectDeletion(document) {
     return schema?.allOf?.[1]?.properties?.error?.properties?.retryable?.const
   }
 
-  require(document.info?.version === "8.7.0", "R277 public info.version must be 8.7.0")
+  require(document.info?.version === "8.8.0", "R277 public info.version must be 8.8.0")
   const projectPath = document.paths?.["/v1/projects/{projectId}"]
   const statusPath = document.paths?.["/v1/projects/{projectId}/deletion"]
   const deletion = projectPath?.delete
@@ -2447,8 +2451,8 @@ test("R277 deleteProject publishes one empty-body owner command with immutable p
   const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
   const { openapi, baseline } = await readContract()
   const document = load(openapi)
-  assert.equal(document.info.version, "8.7.0")
-  assert.equal(baseline.length, 109)
+  assert.equal(document.info.version, "8.8.0")
+  assert.equal(baseline.length, 111)
   assert.deepEqual(
     baseline.filter(({ operation_id }) => operation_id === "deleteProject"),
     [{ method: "DELETE", path: "/v1/projects/{projectId}", operation_id: "deleteProject" }],
@@ -2677,3 +2681,197 @@ test("R323 personal MCP Retry-After is canonical decimal 1 through 86400 without
     assert.equal(pattern.test(rejected), false, `Retry-After must reject ${JSON.stringify(rejected)}`)
   }
 })
+
+// R342: Product Skill package inspection contract only; production routes remain a later slice.
+for (const entry of [
+  {
+    path: "/v1/self/skills/{skill_id}/package",
+    operation: "getManagedPersonalSkillPackage",
+    pathParameter: "skill_id",
+    permission: "product.skill.read_managed_personal",
+  },
+  {
+    path: "/v1/skill-installations/{installation_id}/package",
+    operation: "getPersonalSkillInstallationPackage",
+    pathParameter: "installation_id",
+    permission: "product.skill.installation.read",
+  },
+]) {
+  test(`R342 Skill package inspection public GET contract: ${entry.operation}`, async () => {
+    const { createRequire } = await import("node:module")
+    const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
+    const { openapi } = await readContract()
+    const document = load(openapi)
+    const resolve = (value) => {
+      if (!value?.$ref) return value
+      const [, , section, name] = value.$ref.split("/")
+      return document.components?.[section]?.[name]
+    }
+    const closed = (value, fields, label) => {
+      assert.equal(value?.type, "object", `${label} must be an object`)
+      assert.equal(value?.additionalProperties, false, `${label} must reject undeclared fields`)
+      assert.deepEqual([...(value?.required ?? [])].sort(), [...fields].sort(), `${label} must require every public field`)
+      assert.deepEqual(Object.keys(value?.properties ?? {}).sort(), [...fields].sort(), `${label} must publish only approved fields`)
+    }
+    const assertUint64 = (schema, { allowZero, label }) => {
+      assert.equal(schema?.type, "string", `${label} must use a decimal string`)
+      assert.equal(typeof schema?.pattern, "string", `${label} must publish an absolute decimal pattern`)
+      const pattern = new RegExp(schema.pattern, "u")
+      for (const accepted of allowZero ? ["0", "1", "18446744073709551615"] : ["1", "18446744073709551615"])
+        assert.equal(pattern.test(accepted), true, `${label} must accept ${accepted}`)
+      for (const rejected of ["", "00", "01", "+1", "-1", "1.0", "1e3", "18446744073709551616", "1\n"])
+        assert.equal(pattern.test(rejected), false, `${label} must reject ${JSON.stringify(rejected)}`)
+      if (!allowZero) assert.equal(pattern.test("0"), false, `${label} must reject zero`)
+    }
+    const requiredHeader = (response, name) => {
+      const header = resolve(response)?.headers?.[name]
+      assert.equal(header?.required, true, `${entry.operation} ${name} must be required`)
+      return header
+    }
+
+    const pathItem = document.paths?.[entry.path]
+    assert.ok(pathItem, `missing formal Skill package inspection resource ${entry.path}`)
+    assert.deepEqual(Object.keys(pathItem), ["get"])
+    const operation = pathItem.get
+    assert.equal(operation.operationId, entry.operation)
+    assert.equal(operation["x-kokoro-owner"], "kokoro-bff")
+    assert.equal(operation["x-kokoro-visibility"], "public")
+    assert.equal(operation["x-kokoro-stability"], "beta")
+    assert.equal(operation["x-kokoro-idempotency"], "none")
+    assert.equal(operation["x-kokoro-permission"], entry.permission)
+    assert.equal(operation.requestBody, undefined)
+    assert.match(operation.description, /unknown|未知/u)
+    assert.match(operation.description, /duplicate|重复/u)
+    assert.match(operation.description, /body/iu)
+    assert.match(operation.description, /transfer-encoding/iu)
+    assert.match(operation.description, /idempotency-key/iu)
+    assert.match(operation.description, /single absolute ten-second|single absolute 10-second/iu)
+    assert.match(operation.description, /1,048,576|1048576/u)
+    assert.match(operation.description, /UTF-8/u)
+    assert.match(operation.description, /not trim|without trimming/iu)
+    assert.match(operation.description, /not truncat|without truncat/iu)
+
+    const parameters = (operation.parameters ?? []).map(resolve)
+    assert.deepEqual(parameters.map(({ name, in: location }) => [name, location]).sort(), [
+      ["file_path", "query"],
+      [entry.pathParameter, "path"],
+    ].sort())
+    const identifier = parameters.find(({ name, in: location }) => name === entry.pathParameter && location === "path")
+    assert.equal(identifier.required, true)
+    assert.equal(identifier.schema.type, "string")
+    const identifierPattern = new RegExp(identifier.schema.pattern, "u")
+    for (const accepted of ["a", "skill-1", "a".repeat(191)]) assert.equal(identifierPattern.test(accepted), true)
+    for (const rejected of ["", "a".repeat(192), "a/b", " a", "a ", "a\n"]) assert.equal(identifierPattern.test(rejected), false)
+    const filePath = parameters.find(({ name, in: location }) => name === "file_path" && location === "query")
+    assert.notEqual(filePath.required, true)
+    assert.equal(filePath.schema.type, "string")
+    assert.match(filePath.description, /NFC/u)
+    assert.match(filePath.description, /UTF-8/u)
+    assert.match(filePath.description, /256/u)
+    assert.match(filePath.description, /decoded once|single decode/iu)
+
+    const expectedProfiles = {
+      "400": [{ code: "invalid_skill_package_request", retryable: false }],
+      "401": [
+        { code: "session_authentication_required", retryable: false },
+        { code: "session_invalid", retryable: false },
+      ],
+      "403": [
+        { code: "service_auth_failed", retryable: false },
+        { code: "session_forbidden", retryable: false },
+        { code: "product_tenant_forbidden", retryable: false },
+      ],
+      "404": [{ code: "skill_package_not_found", retryable: false }],
+      "412": [{ code: "skill_package_precondition_failed", retryable: false }],
+      "429": [
+        { code: "session_rate_limited", retryable: true },
+        { code: "skill_package_limit_exceeded", retryable: false },
+      ],
+      "502": [{ code: "skill_package_response_invalid", retryable: false }],
+      "503": [
+        { code: "product_tenant_not_configured", retryable: true },
+        { code: "iam_admission_unavailable", retryable: true },
+        { code: "skill_package_dependency_unavailable", retryable: true },
+      ],
+    }
+    assert.deepEqual(Object.keys(operation.responses).sort(), ["200", ...Object.keys(expectedProfiles)].sort())
+    for (const rawResponse of Object.values(operation.responses)) {
+      const response = resolve(rawResponse)
+      const requestId = requiredHeader(response, "x-request-id")
+      assert.equal(requestId.schema.type, "string")
+      assert.equal(requestId.schema.minLength, 1)
+      assert.equal(requestId.schema.maxLength, 128)
+      assert.equal(requiredHeader(response, "Cache-Control").schema.const, "no-store")
+      assert.deepEqual(Object.keys(response.content), ["application/json"])
+    }
+
+    const successResponse = resolve(operation.responses["200"])
+    const successEnvelope = resolve(successResponse.content["application/json"].schema)
+    closed(successEnvelope, ["data"], `${entry.operation} success envelope`)
+    const data = resolve(successEnvelope.properties.data)
+    closed(data, ["source_ref", "revision", "files", "selected_file"], `${entry.operation} data`)
+    assert.equal(data.properties.source_ref.type, "string")
+    const sourceRefPattern = new RegExp(data.properties.source_ref.pattern, "u")
+    assert.equal(sourceRefPattern.test("skill:example-1"), true)
+    for (const rejected of ["", "skill:", "skill:/bad", "example-1", "skill:example\n"])
+      assert.equal(sourceRefPattern.test(rejected), false, `source_ref must reject ${JSON.stringify(rejected)}`)
+    assertUint64(data.properties.revision, { allowZero: false, label: `${entry.operation} revision` })
+    assert.equal(data.properties.files.type, "array")
+    assert.equal(data.properties.files.maxItems, 128)
+    const file = resolve(data.properties.files.items)
+    closed(file, ["path", "size_bytes"], `${entry.operation} file entry`)
+    assert.equal(file.properties.path.type, "string")
+    assertUint64(file.properties.size_bytes, { allowZero: true, label: `${entry.operation} file size` })
+    const selectedAlternatives = data.properties.selected_file.oneOf
+    assert.equal(selectedAlternatives?.length, 2)
+    assert.equal(selectedAlternatives.some((candidate) => candidate.type === "null"), true)
+    const selected = resolve(selectedAlternatives.find((candidate) => candidate.type !== "null"))
+    closed(selected, ["path", "text"], `${entry.operation} selected file`)
+    assert.equal(selected.properties.path.type, "string")
+    assert.deepEqual(selected.properties.text, { type: "string" })
+    assert.match(data.description, /selected_file.*null|directory.*null/iu)
+    assert.match(data.description, /empty text|empty string/iu)
+    assert.match(data.description, /BOM/iu)
+    assert.match(data.description, /deterministic|sorted/iu)
+    assert.match(data.description, /unique/iu)
+    assert.match(data.description, /size_bytes/iu)
+
+    let baseErrorRef
+    for (const [status, expected] of Object.entries(expectedProfiles)) {
+      const response = resolve(operation.responses[status])
+      const schema = response.content["application/json"].schema
+      assert.equal(schema.allOf?.length, 2, `${entry.operation} ${status} must combine one closed error base with one exact profile`)
+      assert.equal(typeof schema.allOf[0].$ref, "string")
+      baseErrorRef ??= schema.allOf[0].$ref
+      assert.equal(schema.allOf[0].$ref, baseErrorRef, `${entry.operation} ${status} must retain the shared package error envelope`)
+      const constrained = schema.allOf[1]
+      const actual = (constrained.oneOf ?? [constrained]).flatMap((profile) => {
+        const error = profile.properties?.error?.properties
+        const codes = error?.code?.enum ?? (typeof error?.code?.const === "string" ? [error.code.const] : [])
+        return codes.map((code) => ({ code, retryable: error?.retryable?.const }))
+      })
+      assert.deepEqual(actual, expected, `${entry.operation} ${status} error tuple drifted`)
+      if (status !== "429") assert.equal(resolve(response).headers?.["Retry-After"], undefined)
+    }
+    const errorEnvelope = resolve({ $ref: baseErrorRef })
+    closed(errorEnvelope, ["error"], `${entry.operation} error envelope`)
+    const error = resolve(errorEnvelope.properties.error)
+    closed(error, ["code", "message", "retryable"], `${entry.operation} error detail`)
+    assert.equal(error.properties.code.type, "string")
+    assert.equal(error.properties.message.type, "string")
+    assert.equal(error.properties.message.minLength, 1)
+    assert.equal(error.properties.retryable.type, "boolean")
+    assert.equal(JSON.stringify(expectedProfiles).includes("skill_package_file_not_found"), false)
+
+    const rateLimit = resolve(operation.responses["429"])
+    const retryAfter = rateLimit.headers["Retry-After"]
+    assert.equal(retryAfter.required, false)
+    assert.equal(retryAfter.schema.type, "string")
+    const retryAfterPattern = new RegExp(retryAfter.schema.pattern, "u")
+    for (const accepted of ["1", "86400"]) assert.equal(retryAfterPattern.test(accepted), true)
+    for (const rejected of ["", "0", "01", "86401", "+1", "1.0", "1\n"])
+      assert.equal(retryAfterPattern.test(rejected), false, `Retry-After must reject ${JSON.stringify(rejected)}`)
+    assert.match(rateLimit.description, /session.*Retry-After/iu)
+    assert.match(rateLimit.description, /skill_package_limit_exceeded.*omit|limit.*without.*Retry-After/iu)
+  })
+}

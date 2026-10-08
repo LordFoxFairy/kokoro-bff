@@ -4,6 +4,7 @@ import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
 import { compareOperationBaseline, inspectOpenApiGovernance } from "./check-contract.mjs"
+import { inspectSkillPackageInspectionContract } from "./verify-skill-package-inspection-contract.mjs"
 
 const HTTP_METHODS = new Set(["get", "post", "put", "patch", "delete", "head", "options", "trace"])
 const SNAKE_CASE = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/u
@@ -328,6 +329,8 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
         "PersonalMcpConnectorDetailResponse",
         "PersonalMcpConnectionListResponse",
         "PersonalMcpConnectionDetailResponse",
+        "SkillPackageInspectionResponse",
+        "SkillPackageInspectionErrorResponse",
       ].includes(block.name)
     )
       continue
@@ -360,6 +363,12 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
     }
     // Exact method/path/ID boundary; the dedicated oracle below checks every status and schema.
     if (operation.method === "GET" && personalMcpPaths[operationId] === operation.path) continue
+    const skillPackageInspectionPaths: Record<string, string> = {
+      getManagedPersonalSkillPackage: "/v1/self/skills/{skill_id}/package",
+      getPersonalSkillInstallationPackage: "/v1/skill-installations/{installation_id}/package",
+    }
+    // Exact method/path/ID boundary; the dedicated R342 checker owns these data-only envelopes and status tuples.
+    if (operation.method === "GET" && skillPackageInspectionPaths[operationId] === operation.path) continue
     const isPublishedPersonalSkill = operationId === "getPublishedPersonalSkill" && operation.method === "GET" && operation.path === "/v1/skills/{skill_id}"
     const isPlatformProjectionRead =
       operation.method === "GET" && ["listSkills", "listSkillPool", "listSkillCatalog", "listMcpServers", "listSelfMcpConnections"].includes(operationId)
@@ -414,6 +423,10 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
       operationId === "completeSkillPackageUpload" && operation.method === "POST" && operation.path === "/v1/skills/{skill_id}/package-upload/complete"
     const isValidateSkillDraft = operationId === "validateSkillDraft" && operation.method === "POST" && operation.path === "/v1/skills/{skill_id}/validate"
     const isPublishSkill = operationId === "publishSkill" && operation.method === "POST" && operation.path === "/v1/skills/{skill_id}/publish"
+    const isSkillPackageInspection =
+      operation.method === "GET" &&
+      ((operationId === "getManagedPersonalSkillPackage" && operation.path === "/v1/self/skills/{skill_id}/package") ||
+        (operationId === "getPersonalSkillInstallationPackage" && operation.path === "/v1/skill-installations/{installation_id}/package"))
     const installationResponses: Record<string, Record<string, string>> = {
       installPersonalSkill: {
         "200": "SkillInstallationMutationSuccess",
@@ -501,6 +514,13 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
       )
     )
       errors.push(`${operation.method} ${operation.path} must not reference PublishedPersonalSkill strict components`)
+    if (
+      !isSkillPackageInspection &&
+      /#\/components\/(?:schemas\/SkillPackageInspection[A-Za-z]*|responses\/SkillPackageInspection[A-Za-z]*|parameters\/SkillPackageInspection[A-Za-z]*)/u.test(
+        operation.text.split(/^components:\s*$/mu)[0] ?? "",
+      )
+    )
+      errors.push(`${operation.method} ${operation.path} must not reference SkillPackageInspection strict components`)
     if (
       !isManagedPersonalSkill &&
       /#\/components\/(?:schemas\/ManagedPersonalSkill[A-Za-z]*|responses\/ManagedPersonalSkill[A-Za-z]*)/u.test(
@@ -623,6 +643,7 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
           !isRenameProject &&
           !isProjectDeletion &&
           !isPersonalization &&
+          !isSkillPackageInspection &&
           !response.includes("#/components/schemas/ErrorEnvelope")
         ) {
           errors.push(`${operation.method} ${operation.path} ${status} must use ErrorEnvelope`)
@@ -647,6 +668,7 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
           (isRenameProject && match[1].startsWith("RenameProject")) ||
           (isProjectDeletion && match[1].startsWith("ProjectDeletion")) ||
           (isPersonalization && match[1].startsWith("Personalization")) ||
+          (isSkillPackageInspection && match[1].startsWith("SkillPackageInspection")) ||
           (isAdminModelRouting && match[1].startsWith("AdminModel"))
         )
           continue
@@ -1921,7 +1943,7 @@ function moveSessionContractErrors(
   responseComponents: Map<string, NamedBlock>,
 ): string[] {
   const errors: string[] = []
-  if (!/^  version: 8\.7\.0$/mu.test(source)) errors.push("moveSession must remain in current public contract version 8.7.0")
+  if (!/^  version: 8\.8\.0$/mu.test(source)) errors.push("moveSession must remain in current public contract version 8.8.0")
   const matches = operations.filter((operation) => operation.fields.get("operationId") === "moveSession")
   const operation = matches.length === 1 ? matches[0] : undefined
   if (operation?.method !== "POST" || operation.path !== "/v1/sessions/{id}/move") {
@@ -2041,7 +2063,7 @@ function renameProjectContractErrors(
   const require = (condition: boolean, message: string): void => {
     if (!condition) errors.push(`renameProject ${message}`)
   }
-  require(/^  version: 8\.7\.0$/mu.test(source), "current public contract must be version 8.7.0")
+  require(/^  version: 8\.8\.0$/mu.test(source), "current public contract must be version 8.8.0")
   const matches = operations.filter((operation) => operation.fields.get("operationId") === "renameProject")
   const operation = matches.length === 1 ? matches[0] : undefined
   if (operation?.method !== "PATCH" || operation.path !== "/v1/projects/{projectId}/name")
@@ -2155,7 +2177,7 @@ function projectDeletionContractErrors(
   const require = (condition: boolean, message: string): void => {
     if (!condition) errors.push(`Project deletion ${message}`)
   }
-  require(/^  version: 8\.7\.0$/mu.test(source), "public contract version must be 8.7.0")
+  require(/^  version: 8\.8\.0$/mu.test(source), "public contract version must be 8.8.0")
   const deletion = operations.filter((operation) => operation.fields.get("operationId") === "deleteProject")
   const status = operations.filter((operation) => operation.fields.get("operationId") === "getProjectDeletion")
   require(deletion.length === 1 && deletion[0]?.method === "DELETE" && deletion[0]?.path === "/v1/projects/{projectId}", "must publish one DELETE /v1/projects/{projectId}")
@@ -2733,6 +2755,7 @@ export function inspectBffOpenApi(source: string, baseline: readonly BaselineOpe
   const errors = [
     ...inspectOpenApiGovernance(source),
     ...compareOperationBaseline(source, baseline),
+    ...inspectSkillPackageInspectionContract(source),
     ...wireNameErrors(schemas, source),
     ...revisionErrors(schemas),
     ...envelopeErrors(schemas, operations, responseComponents),

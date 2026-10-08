@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 8.7.0
+  version: 8.8.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -2372,6 +2372,35 @@ paths:
         '429': { $ref: '#/components/responses/ManagedPersonalSkillRateLimited' }
         '502': { $ref: '#/components/responses/ManagedPersonalSkillBadGateway' }
         '503': { $ref: '#/components/responses/ManagedPersonalSkillUnavailable' }
+  /v1/self/skills/{skill_id}/package:
+    get:
+      tags: [Skills]
+      operationId: getManagedPersonalSkillPackage
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: product.skill.read_managed_personal
+      summary: Inspect the current subject's exact managed Skill package
+      description: >-
+        Reject unknown or duplicate query keys, body, transfer-encoding and idempotency-key. The decoded identifier and optional
+        file_path are passed without trimming or a second decode. A single absolute ten-second budget covers admission, credentials,
+        OAuth HTTP, owner RPC, strict projection and final UTF-8 JSON encoding. The complete public JSON is at most 1,048,576 bytes;
+        responses are not truncated. The source_ref equals skill:<skill_id> for the decoded path skill_id. For a file read,
+        selected_file.path equals the requested file_path exactly.
+      parameters:
+        - $ref: '#/components/parameters/SkillPackageInspectionSkillId'
+        - $ref: '#/components/parameters/SkillPackageInspectionFilePath'
+      responses:
+        '200': { $ref: '#/components/responses/SkillPackageInspectionOk' }
+        '400': { $ref: '#/components/responses/SkillPackageInspectionBadRequest' }
+        '401': { $ref: '#/components/responses/SkillPackageInspectionUnauthorized' }
+        '403': { $ref: '#/components/responses/SkillPackageInspectionForbidden' }
+        '404': { $ref: '#/components/responses/SkillPackageInspectionNotFound' }
+        '412': { $ref: '#/components/responses/SkillPackageInspectionPreconditionFailed' }
+        '429': { $ref: '#/components/responses/SkillPackageInspectionRateLimited' }
+        '502': { $ref: '#/components/responses/SkillPackageInspectionBadGateway' }
+        '503': { $ref: '#/components/responses/SkillPackageInspectionUnavailable' }
   /v1/skills:
     get:
       tags: [Skills]
@@ -2920,6 +2949,34 @@ paths:
         '502': { $ref: '#/components/responses/SkillInstallationBadGateway' }
         '503': { $ref: '#/components/responses/SkillInstallationUnavailable' }
         '504': { $ref: '#/components/responses/SkillInstallationTimeout' }
+  /v1/skill-installations/{installation_id}/package:
+    get:
+      tags: [Skills]
+      operationId: getPersonalSkillInstallationPackage
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: product.skill.installation.read
+      summary: Inspect the current subject's exact installed Skill package
+      description: >-
+        Reject unknown or duplicate query keys, body, transfer-encoding and idempotency-key. The decoded identifier and optional
+        file_path are passed without trimming or a second decode. A single absolute ten-second budget covers admission, credentials,
+        OAuth HTTP, owner RPC, strict projection and final UTF-8 JSON encoding. The complete public JSON is at most 1,048,576 bytes;
+        responses are not truncated. For a file read, selected_file.path equals the requested file_path exactly.
+      parameters:
+        - $ref: '#/components/parameters/SkillPackageInspectionInstallationId'
+        - $ref: '#/components/parameters/SkillPackageInspectionFilePath'
+      responses:
+        '200': { $ref: '#/components/responses/SkillPackageInspectionOk' }
+        '400': { $ref: '#/components/responses/SkillPackageInspectionBadRequest' }
+        '401': { $ref: '#/components/responses/SkillPackageInspectionUnauthorized' }
+        '403': { $ref: '#/components/responses/SkillPackageInspectionForbidden' }
+        '404': { $ref: '#/components/responses/SkillPackageInspectionNotFound' }
+        '412': { $ref: '#/components/responses/SkillPackageInspectionPreconditionFailed' }
+        '429': { $ref: '#/components/responses/SkillPackageInspectionRateLimited' }
+        '502': { $ref: '#/components/responses/SkillPackageInspectionBadGateway' }
+        '503': { $ref: '#/components/responses/SkillPackageInspectionUnavailable' }
   /v1/skill-installations/{installation_id}/enabled:
     parameters:
       - name: installation_id
@@ -4503,7 +4560,98 @@ components:
         minLength: 1
         maxLength: 128
         pattern: '^[\x21-\x2B\x2D-\x7E]{1,128}(?![\s\S])'
+    SkillPackageInspectionSkillId:
+      name: skill_id
+      in: path
+      required: true
+      description: Exact managed personal Skill identifier; it is neither trimmed nor decoded twice.
+      schema: { type: string, minLength: 1, maxLength: 191, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])' }
+    SkillPackageInspectionInstallationId:
+      name: installation_id
+      in: path
+      required: true
+      description: Exact personal Skill installation identifier; it is neither trimmed nor decoded twice.
+      schema: { type: string, minLength: 1, maxLength: 191, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])' }
+    SkillPackageInspectionFilePath:
+      name: file_path
+      in: query
+      required: false
+      description: >-
+        Optional safe ZIP member path, decoded once and preserved exactly. Runtime admission requires nonempty NFC Unicode whose UTF-8
+        encoding is at most 256 bytes, rejects absolute or drive paths, empty/dot segments, backslash, NUL and a leading BOM, and does
+        not trim or normalize a non-NFC value.
+      schema: { type: string, minLength: 1 }
   schemas:
+    SkillPackageInspectionFile:
+      type: object
+      additionalProperties: false
+      required: [path, size_bytes]
+      properties:
+        path:
+          type: string
+          minLength: 1
+          description: >-
+            Safe ZIP member path under the same safe-path rules as file_path: nonempty NFC Unicode whose UTF-8 encoding is at most
+            256 bytes, with no leading BOM, NUL, drive or absolute path, backslash, empty, dot or dotdot segment.
+        size_bytes:
+          type: string
+          pattern: '^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{4}|18446744073709550[0-9]{3}|18446744073709551[0-5][0-9]{2}|1844674407370955160[0-9]|1844674407370955161[0-4]|18446744073709551615)(?![\s\S])'
+    SkillPackageInspectionSelectedFile:
+      type: object
+      additionalProperties: false
+      required: [path, text]
+      properties:
+        path:
+          type: string
+          minLength: 1
+          description: >-
+            Exact selected path from the files directory under the same safe-path rules as file_path: nonempty NFC Unicode whose
+            UTF-8 encoding is at most 256 bytes, with no leading BOM, NUL, drive or absolute path, backslash, empty, dot or dotdot
+            segment.
+        text: { type: string }
+    SkillPackageInspectionData:
+      type: object
+      additionalProperties: false
+      required: [source_ref, revision, files, selected_file]
+      description: >-
+        Directory reads require selected_file null. File reads require a selected path that is unique in the deterministically sorted
+        files list, with size_bytes equal to the original UTF-8 bytes; empty text is an empty string, and an original BOM and line
+        endings are preserved.
+      properties:
+        source_ref: { type: string, minLength: 7, maxLength: 197, pattern: '^skill:[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])' }
+        revision:
+          type: string
+          pattern: '^(?:[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{4}|18446744073709550[0-9]{3}|18446744073709551[0-5][0-9]{2}|1844674407370955160[0-9]|1844674407370955161[0-4]|18446744073709551615)(?![\s\S])'
+        files:
+          type: array
+          maxItems: 128
+          items: { $ref: '#/components/schemas/SkillPackageInspectionFile' }
+        selected_file:
+          oneOf:
+            - { type: 'null' }
+            - $ref: '#/components/schemas/SkillPackageInspectionSelectedFile'
+    SkillPackageInspectionResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/SkillPackageInspectionData' }
+    SkillPackageInspectionErrorDetail:
+      type: object
+      additionalProperties: false
+      required: [code, message, retryable]
+      properties:
+        code:
+          type: string
+          enum: [invalid_skill_package_request, session_authentication_required, session_invalid, service_auth_failed, session_forbidden, product_tenant_forbidden, skill_package_not_found, skill_package_precondition_failed, session_rate_limited, skill_package_limit_exceeded, skill_package_response_invalid, product_tenant_not_configured, iam_admission_unavailable, skill_package_dependency_unavailable]
+        message: { type: string, minLength: 1, description: 'Fixed sanitized message; never owner payload, path, body, token or exception.' }
+        retryable: { type: boolean }
+    SkillPackageInspectionErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error: { $ref: '#/components/schemas/SkillPackageInspectionErrorDetail' }
     PersonalMcpConnectorListResponse:
       type: object
       additionalProperties: false
@@ -7948,6 +8096,144 @@ components:
             retryable: { type: boolean }
 
   responses:
+    SkillPackageInspectionOk:
+      description: Exact caller-authorized package directory or selected UTF-8 text.
+      headers: &SkillPackageInspectionHeaders
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/SkillPackageInspectionResponse' }
+    SkillPackageInspectionBadRequest:
+      description: Package inspection input is invalid.
+      headers: *SkillPackageInspectionHeaders
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/SkillPackageInspectionErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [invalid_skill_package_request] }
+                      retryable: { type: boolean, const: false }
+    SkillPackageInspectionUnauthorized:
+      description: Current Product session authentication failed.
+      headers: *SkillPackageInspectionHeaders
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/SkillPackageInspectionErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [session_authentication_required, session_invalid] }
+                      retryable: { type: boolean, const: false }
+    SkillPackageInspectionForbidden:
+      description: Trusted service or admitted Product tenant is forbidden.
+      headers: *SkillPackageInspectionHeaders
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/SkillPackageInspectionErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [service_auth_failed, session_forbidden, product_tenant_forbidden] }
+                      retryable: { type: boolean, const: false }
+    SkillPackageInspectionNotFound:
+      description: Package is absent, removed or hidden by ownership policy; file absence uses the same non-disclosing result.
+      headers: *SkillPackageInspectionHeaders
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/SkillPackageInspectionErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [skill_package_not_found] }
+                      retryable: { type: boolean, const: false }
+    SkillPackageInspectionPreconditionFailed:
+      description: Exact authorized package is not currently previewable.
+      headers: *SkillPackageInspectionHeaders
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/SkillPackageInspectionErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [skill_package_precondition_failed] }
+                      retryable: { type: boolean, const: false }
+    SkillPackageInspectionRateLimited:
+      description: Session admission may return retryable session_rate_limited with optional Retry-After; skill_package_limit_exceeded is not retryable and omits Retry-After.
+      headers:
+        <<: *SkillPackageInspectionHeaders
+        Retry-After: { required: false, schema: { type: string, pattern: '^(?:[1-9][0-9]{0,3}|[1-7][0-9]{4}|8[0-5][0-9]{3}|86[0-3][0-9]{2}|86400)(?![\s\S])' } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/SkillPackageInspectionErrorResponse'
+              - oneOf:
+                  - type: object
+                    properties:
+                      error:
+                        type: object
+                        properties:
+                          code: { type: string, const: session_rate_limited }
+                          retryable: { type: boolean, const: true }
+                  - type: object
+                    properties:
+                      error:
+                        type: object
+                        properties:
+                          code: { type: string, const: skill_package_limit_exceeded }
+                          retryable: { type: boolean, const: false }
+    SkillPackageInspectionBadGateway:
+      description: Owner response or package projection is invalid.
+      headers: *SkillPackageInspectionHeaders
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/SkillPackageInspectionErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [skill_package_response_invalid] }
+                      retryable: { type: boolean, const: false }
+    SkillPackageInspectionUnavailable:
+      description: IAM or Platform package inspection dependency is unavailable.
+      headers: *SkillPackageInspectionHeaders
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/SkillPackageInspectionErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [product_tenant_not_configured, iam_admission_unavailable, skill_package_dependency_unavailable] }
+                      retryable: { type: boolean, const: true }
     PersonalMcpConnectorListOk:
       description: Caller-owned safe MCP read.
       headers:

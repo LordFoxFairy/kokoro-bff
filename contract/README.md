@@ -68,6 +68,22 @@ BFF 固定 Storage 已发布 `e8b9928418924812587b7ac07900aee4be5bc27f` 与 comb
 
 The single `/v1` source candidate is now `7.0.0`. Session snapshots require nullable `execution_process`; Run process pages use the authorized immutable watermark route, bounded safe Todo/activity projection, and no raw tool payload or compatibility alias. The canonical SQL owns the two compact provenance tables while the immutable AG-UI ledger remains the as-of page source. Root resource verification and publication remain pending.
 
+## R342 Skills package inspection public 8.8 machine contract
+
+The single canonical Product OpenAPI is now `8.8.0` with 111 operations. It adds only
+`GET /v1/self/skills/{skill_id}/package` (`getManagedPersonalSkillPackage`) and
+`GET /v1/skill-installations/{installation_id}/package` (`getPersonalSkillInstallationPackage`). Both are current-user reads with
+one optional `file_path`, closed data/error envelopes, canonical decimal uint64 strings, required `x-request-id` and
+`Cache-Control: no-store`, and the fixed admission/package error profiles. The package-size rejection and session admission rate
+limit share HTTP 429 but retain different `retryable` semantics; only session admission may include the optional bounded
+`Retry-After`. Missing files remain the non-disclosing `skill_package_not_found` because the owner does not yet publish a stable
+machine distinction.
+
+`scripts/verify-skill-package-inspection-contract.mjs` owns the dedicated semantic oracle. It removes exactly the two new paths,
+three parameters, six schemas, nine responses and the version change from the parsed document, then verifies that the full prior
+8.7 surface is unchanged. This is a machine-contract publication only: no HTTP route, credential/runtime activation, database,
+owner source, generated consumer, normal service or browser detail flow is implemented by this slice.
+
 # Kokoro BFF contract
 
 ## Owner

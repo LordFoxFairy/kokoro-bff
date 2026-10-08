@@ -1,3 +1,11 @@
+## R342 包正文公开契约当前态（2026-10-08）
+
+唯一 public OpenAPI 现为 **8.8.0 / 111 operations**，两本人包 GET 的机器表示已按 R340 设计实现：managed source_ref 精确绑定路径 skill_id，两条文件读取 selected_file.path 精确绑定请求 file_path，目录/空正文/原BOM、安全路径与 uint64 精度闭集不变。旧109完整parsed表示剥增量后保持；Platform固定52输入/current45 RPC不变。
+
+本阶段没有新增 HTTP runtime 路由或 Web 详情接线，运行中的 BFF 仍来自 d218a1a。身份、持久配置、SQL、业务事实、资源及两本人读取资格均未改。下列 R340“目标8.8/111”仅机器发布这一阶段由本节更新；三普通runtime文件/凭据安全强化、真实owner系统链、受控激活和用户同弹窗验收仍待实施。工程结果见 CURRENT R342，不把契约发行当页面完成。
+
+<!-- R342-PUBLIC-MACHINE-CURRENT-END -->
+
 ### R341 原文 BOM 解码纠正（2026-10-08）
 
 真实现消费者2.14.0默认Protobuf decoder剥字符串开头U+FEFF，Root新增原BOM守卫实际20PASS/1FAIL。原文保持规则不放宽；现普通src/infrastructure/protobuf-text-encoding.ts负责同步幂等进程wire策略，采用公开configureTextEncoding/getTextEncoding复用encode/check，只让strict与非strict decoder均ignoreBOM:true。现createBffServer在composition前配置一次；不在请求期间切换/恢复、不改owner string/bytes协议或JSON transport、不手改generated。放在现infrastructure而非Skills业务/新模块；package默认format仅加该路径。零SQL/身份/public路由/正常服务变更。最终验证以CURRENT实际收据为准，页面查看详情及示例仍未实施，不凭辅助codec通过判用户闭环。
