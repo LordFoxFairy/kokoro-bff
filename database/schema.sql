@@ -520,22 +520,94 @@ CREATE INDEX IF NOT EXISTS ix_bff_agent_cancellation_conversation
 CREATE TABLE IF NOT EXISTS bff_share (
   share_id TEXT PRIMARY KEY,
   tenant_id TEXT NOT NULL,
-  conversation_id TEXT NOT NULL,
+  resource_kind TEXT NOT NULL DEFAULT 'conversation',
+  conversation_id TEXT,
+  creator_subject_id TEXT,
+  skill_source_ref TEXT,
   url TEXT NOT NULL,
   created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   expires_at TIMESTAMPTZ(3),
   revoked_at TIMESTAMPTZ(3),
-  CONSTRAINT ck_bff_share_identity CHECK (length(btrim(tenant_id)) > 0 AND length(btrim(conversation_id)) > 0),
+  CONSTRAINT ck_bff_share_identity CHECK (length(btrim(tenant_id)) > 0),
+  CONSTRAINT ck_bff_share_bounded_identity CHECK (
+    char_length(tenant_id) <= 255
+    AND (creator_subject_id IS NULL OR char_length(creator_subject_id) <= 255)
+    AND (skill_source_ref IS NULL OR char_length(skill_source_ref) <= 197)
+  ),
+  CONSTRAINT ck_bff_share_resource CHECK (
+    (resource_kind = 'conversation' AND conversation_id IS NOT NULL AND length(btrim(conversation_id)) > 0 AND creator_subject_id IS NULL AND skill_source_ref IS NULL)
+    OR
+    (resource_kind = 'skill_revision' AND conversation_id IS NULL AND creator_subject_id IS NOT NULL AND length(btrim(creator_subject_id)) > 0 AND skill_source_ref IS NOT NULL AND length(btrim(skill_source_ref)) > 0)
+  ),
   CONSTRAINT ck_bff_share_url CHECK (length(btrim(url)) > 0),
   CONSTRAINT ck_bff_share_expiry CHECK (expires_at IS NULL OR expires_at > created_at),
   CONSTRAINT ck_bff_share_revoke_after_create CHECK (revoked_at IS NULL OR revoked_at >= created_at)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_bff_share_active_conversation
   ON bff_share (tenant_id, conversation_id)
-  WHERE revoked_at IS NULL;
+  WHERE revoked_at IS NULL AND resource_kind = 'conversation';
+CREATE UNIQUE INDEX IF NOT EXISTS uq_bff_share_active_skill_revision
+  ON bff_share (tenant_id, creator_subject_id, skill_source_ref)
+  WHERE revoked_at IS NULL AND resource_kind = 'skill_revision';
 CREATE INDEX IF NOT EXISTS ix_bff_share_active_lookup
   ON bff_share (share_id, tenant_id, conversation_id)
-  WHERE revoked_at IS NULL;
+  WHERE revoked_at IS NULL AND resource_kind = 'conversation';
+CREATE INDEX IF NOT EXISTS ix_bff_share_active_skill_lookup
+  ON bff_share (share_id, tenant_id, skill_source_ref)
+  WHERE revoked_at IS NULL AND resource_kind = 'skill_revision';
+
+CREATE TABLE IF NOT EXISTS bff_skill_usage_run_terminal (
+  tenant_id TEXT NOT NULL,
+  run_id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  status TEXT NOT NULL,
+  source_owner TEXT NOT NULL,
+  source_event_id TEXT NOT NULL,
+  source_sequence BIGINT NOT NULL,
+  source_digest TEXT NOT NULL,
+  source_occurred_at TIMESTAMPTZ(3) NOT NULL,
+  observed_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (tenant_id, run_id),
+  CONSTRAINT ck_bff_skill_usage_terminal_status CHECK (status IN ('completed', 'cancelled', 'failed')),
+  CONSTRAINT ck_bff_skill_usage_terminal_identity CHECK (
+    length(btrim(tenant_id)) > 0 AND length(btrim(run_id)) > 0 AND length(btrim(session_id)) > 0
+    AND source_owner = 'kokoro-agent' AND length(btrim(source_event_id)) > 0
+    AND source_sequence > 0 AND source_digest ~ '^[0-9a-f]{64}$'
+  )
+);
+CREATE TABLE IF NOT EXISTS bff_skill_usage_observation (
+  tenant_id TEXT NOT NULL,
+  run_id TEXT NOT NULL,
+  source_ref TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  ready_source_owner TEXT NOT NULL,
+  ready_source_event_id TEXT NOT NULL,
+  ready_source_sequence BIGINT NOT NULL,
+  ready_source_digest TEXT NOT NULL,
+  ready_source_occurred_at TIMESTAMPTZ(3) NOT NULL,
+  counted_at TIMESTAMPTZ(3),
+  PRIMARY KEY (tenant_id, run_id, source_ref),
+  CONSTRAINT ck_bff_skill_usage_observation_identity CHECK (
+    length(btrim(tenant_id)) > 0 AND length(btrim(run_id)) > 0 AND length(btrim(session_id)) > 0
+    AND source_ref ~ '^skill:[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$'
+    AND ready_source_owner = 'kokoro-agent' AND length(btrim(ready_source_event_id)) > 0
+    AND ready_source_sequence > 0 AND ready_source_digest ~ '^[0-9a-f]{64}$'
+  )
+);
+CREATE INDEX IF NOT EXISTS ix_bff_skill_usage_observation_counted
+  ON bff_skill_usage_observation (tenant_id, source_ref, run_id)
+  WHERE counted_at IS NOT NULL;
+CREATE TABLE IF NOT EXISTS bff_skill_usage_coverage (
+  tenant_id TEXT PRIMARY KEY,
+  status TEXT NOT NULL DEFAULT 'unavailable',
+  checkpoint_id TEXT,
+  checkpoint_at TIMESTAMPTZ(3),
+  CONSTRAINT ck_bff_skill_usage_coverage_status CHECK (status IN ('unavailable', 'complete')),
+  CONSTRAINT ck_bff_skill_usage_coverage_checkpoint CHECK (
+    (status = 'unavailable' AND checkpoint_id IS NULL AND checkpoint_at IS NULL)
+    OR (status = 'complete' AND checkpoint_id IS NOT NULL AND length(btrim(checkpoint_id)) > 0 AND checkpoint_at IS NOT NULL)
+  )
+);
 
 -- Durable public AG-UI projection. Agent execution events are copied into this
 -- BFF-owned ledger before any public SSE frame is emitted. The stream row is

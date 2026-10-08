@@ -18,6 +18,10 @@ tenant/subject/session 来自当前 IAM admission；admin 操作必须走 IAM 0.
 
 后继机器范围为 `contract/openapi/v1/openapi.yaml`、operation inventory、Platform/IAM/Storage dependency manifests/vendor、正规 generators/generated、现 Skills contract checkers与具名 parent inverse/HTTP/SDK tests。正式 owner source、完整 provenance/digest与 BFF Public 9 parent 未冻结前不写版本/operation 数的伪最终值；现目标 63/32/24 不等于已消费。发布后仍须真实登录、普通/管理员/跨 tenant、撤权、重放、GC、package/cover、AI/GitHub 与返回/焦点浏览器验收。
 
+### R353-B1 implementation boundary
+
+B1 publishes no Public 9 operation. The existing anonymous `/v1/shared/{share_id}` reader is explicitly conversation-only; Skill rows have a separate authenticated repository port and cannot be returned by that route. Usage result modeling is closed `available|unavailable`, but no public usage route is activated in this slice.
+
 <!-- R353-BFF-D0-SKILLS-PUBLIC-9-END -->
 
 ## R350-B2：Skill 示例 Public 8.10 契约

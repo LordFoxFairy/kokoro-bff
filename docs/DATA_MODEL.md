@@ -18,6 +18,10 @@ Share URL 不是 Platform 权限事实，creator id 只是撤销/审计键；每
 
 集成验证必须覆盖旧 conversation bytes/匿名读取不变、两 target/零 target 拒绝、active/expired/revoke并发、跨 tenant/creator、Platform 撤回后 read fail；ready/terminal 两种顺序、重复与 digest 冲突、failed/cancelled、事务回滚、frame GC、coverage unavailable/complete 与单查询聚合。不得访问 owner SQL、重置共享 PG/Redis或以 mock 计数冒历史覆盖。
 
+### R353-B1 implementation boundary
+
+The canonical target now contains the typed Share discriminator and the three usage fact tables described above. Runtime ingestion may only preserve `unavailable`; `complete` remains a schema-supported, tested state for a future trusted checkpoint producer and has no normal promotion path in B1. The named expand command is the only legacy transition; normal startup does not mutate schema.
+
 <!-- R353-BFF-D0-SKILLS-DATA-END -->
 
 ## R350-B2：Skill 示例消费数据边界

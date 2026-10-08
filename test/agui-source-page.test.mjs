@@ -592,7 +592,7 @@ describe("AG-UI source continuity defense", () => {
         projectionState: { textMessageIds: [] },
       }),
       assertPersistedSources: async () => undefined,
-      commitProjection: async () => "committed",
+      commitProjection: async () => ({ kind: "committed", insertedFrames: 0 }),
       replay: async () => ({ kind: "page", frames: [], atHead: true, terminalRunId: null }),
       status: async () => ({ sourceHighWatermark: 0, currentCursor: null }),
     }
@@ -609,7 +609,7 @@ describe("AG-UI source continuity defense", () => {
         projectionState: { textMessageIds: [] },
       }),
       assertPersistedSources: async () => undefined,
-      commitProjection: async () => "committed",
+      commitProjection: async () => ({ kind: "committed", insertedFrames: 0 }),
       replay: async () => ({ kind: "page", frames: [], atHead: true, terminalRunId: null }),
       status: async () => ({ sourceHighWatermark: 0, currentCursor: null }),
     }
@@ -625,7 +625,7 @@ describe("AG-UI source continuity defense", () => {
       assertPersistedSources: async () => undefined,
       commitProjection: async (command) => {
         committed = command
-        return "committed"
+        return { kind: "committed", insertedFrames: command.sources.reduce((count, source) => count + source.frames.length, 0) }
       },
     }
     const service = new AgUiProjectionService(repository)

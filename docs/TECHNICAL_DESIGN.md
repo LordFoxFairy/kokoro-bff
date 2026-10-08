@@ -27,6 +27,10 @@ AI handoff 只接受 BFF 可重读的 exact immutable association、Storage byte
 
 停止线：正式 owner source/publication/pins、IAM/Storage 准入与真实 package/cover、AI association+completed、GitHub route 任一缺失都不得激活对应 public shape。历史 coverage proof 缺失时 usage 必须激活正式 `unavailable` 分支，但不阻断目录或其余已具备依赖的 Public 9 shape。机器/工程门不等于正常 HTTP、浏览器、后台或 S01–S10 完成。
 
+### R353-B1 implementation boundary
+
+B1 implements only the BFF-owned typed Share repository and durable usage facts inside the existing AG-UI source transaction. It deliberately adds no Product HTTP route, owner pin, coverage promotion, background job, or Agent protocol. Existing tenants remain `unavailable`; Skill link HTTP activation still waits for formal Platform exact-revision admission.
+
 <!-- R353-BFF-D0-SKILLS-PRODUCT-END -->
 
 ## R350-B2：Skill 示例固定消费与 Public 8.10

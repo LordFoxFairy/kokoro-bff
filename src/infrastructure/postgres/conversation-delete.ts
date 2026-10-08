@@ -13,7 +13,7 @@ export async function deleteLockedConversationFacts(
   await client.query(`DELETE FROM bff_agui_run_process WHERE tenant_id=$1 AND session_id=$2`, [tenantId, conversationId])
   await client.query(`DELETE FROM bff_conversation_artifact WHERE tenant_id = $1 AND conversation_id = $2`, [tenantId, conversationId])
   await client.query(
-    `UPDATE bff_share SET revoked_at=CURRENT_TIMESTAMP(3) WHERE tenant_id=$1 AND conversation_id=$3 AND revoked_at IS NULL AND EXISTS (SELECT 1 FROM bff_conversation c WHERE c.tenant_id=bff_share.tenant_id AND c.conversation_id=bff_share.conversation_id AND c.owner_id=$2)`,
+    `UPDATE bff_share SET revoked_at=CURRENT_TIMESTAMP(3) WHERE tenant_id=$1 AND conversation_id=$3 AND resource_kind='conversation' AND revoked_at IS NULL AND EXISTS (SELECT 1 FROM bff_conversation c WHERE c.tenant_id=bff_share.tenant_id AND c.conversation_id=bff_share.conversation_id AND c.owner_id=$2)`,
     [tenantId, subjectId, conversationId],
   )
   await client.query(

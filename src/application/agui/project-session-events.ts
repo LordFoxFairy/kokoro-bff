@@ -23,6 +23,7 @@ import type {
   AgUiConsumerLease,
   AgUiArtifactDelivery,
 } from "./ports/agui-projection-repository.js"
+import { projectSkillUsageFacts } from "./skill-usage.js"
 
 const MAX_COMMIT_ATTEMPTS = 5
 const OPAQUE_CURSOR_PATTERN = /^agui_[0-9a-f]{32}$/u
@@ -146,6 +147,7 @@ function projectSources(
     }
     const frames = source.event === null ? [] : validateAgUiFrames(projectChatEvent(source.event, state))
     const event = source.event
+    const skillUsageFact = event === null || event.run_id === null || event.run_id === "" ? undefined : projectSkillUsageFacts(event, event.run_id)
     if (event?.kind === "delivery.created") {
       return { ...sourceIdentity(source), frames, artifactDelivery: artifactDelivery(event) }
     }
@@ -181,6 +183,7 @@ function projectSources(
         ...sourceIdentity(source),
         frames,
         assistantUpdate: { runId, kind: event.payload.status === "cancelled" ? ("cancel" as const) : ("complete" as const) },
+        ...(skillUsageFact === undefined ? {} : { skillUsageFact }),
       }
     }
     if (event.kind === "run.failed") {
@@ -197,9 +200,10 @@ function projectSources(
           kind: "fail" as const,
           failure: candidate as import("../../domain/chat/message.js").AgentFailureProfile,
         },
+        ...(skillUsageFact === undefined ? {} : { skillUsageFact }),
       }
     }
-    return { ...sourceIdentity(source), frames }
+    return { ...sourceIdentity(source), frames, ...(skillUsageFact === undefined ? {} : { skillUsageFact }) }
   })
 }
 
@@ -314,10 +318,10 @@ export class AgUiProjectionService {
         terminalRunId: runState.terminalRunId,
         ...(consumerLease === undefined ? {} : { consumerLease }),
       })
-      if (result === "committed") {
+      if (typeof result === "object" && result.kind === "committed") {
         return {
           insertedSources: projections.length,
-          insertedFrames: projections.reduce((count, source) => count + source.frames.length, 0),
+          insertedFrames: result.insertedFrames,
           sourceHighWatermark,
         }
       }

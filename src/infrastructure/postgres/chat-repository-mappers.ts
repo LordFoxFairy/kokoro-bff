@@ -33,7 +33,10 @@ export type MessageRow = {
 export type ShareRow = {
   share_id: string
   tenant_id: string
-  conversation_id: string
+  resource_kind: "conversation" | "skill_revision"
+  conversation_id: string | null
+  creator_subject_id: string | null
+  skill_source_ref: string | null
   url: string
   created_at: Date | string
   expires_at: Date | string | null
@@ -128,21 +131,27 @@ export function messageFromRow(row: MessageRow): Message {
 }
 
 export function shareFromRow(row: ShareRow): Share {
-  return {
+  const common = {
     shareId: row.share_id,
     tenantId: row.tenant_id,
-    conversationId: row.conversation_id,
     url: row.url,
     createdAt: instant(row.created_at),
     expiresAt: row.expires_at === null ? null : instant(row.expires_at),
     revokedAt: row.revoked_at === null ? null : instant(row.revoked_at),
   }
+  if (row.resource_kind === "conversation" && row.conversation_id !== null && row.creator_subject_id === null && row.skill_source_ref === null) {
+    return { ...common, resourceKind: "conversation", conversationId: row.conversation_id }
+  }
+  if (row.resource_kind === "skill_revision" && row.conversation_id === null && row.creator_subject_id !== null && row.skill_source_ref !== null) {
+    return { ...common, resourceKind: "skill_revision", creatorSubjectId: row.creator_subject_id, sourceRef: row.skill_source_ref }
+  }
+  throw new Error("CHAT_SHARE_RESOURCE_INVALID")
 }
 
 export const conversationColumns = "conversation_id, tenant_id, owner_id, project_ref, title, status, created_at, updated_at, deleted_at"
 export const messageColumns =
   "message_id, tenant_id, conversation_id, run_id, role, content, status, agent_failure_code, agent_failure_retryable, message_seq, created_at, updated_at"
-export const shareColumns = "share_id, tenant_id, conversation_id, url, created_at, expires_at, revoked_at"
+export const shareColumns = "share_id, tenant_id, resource_kind, conversation_id, creator_subject_id, skill_source_ref, url, created_at, expires_at, revoked_at"
 
 export function moveReceiptFromRow(
   row: { fingerprint: string; status: number; response_body: unknown },

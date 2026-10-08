@@ -21,6 +21,9 @@ const redisUrl = process.env.KOKORO_TEST_REDIS_URL
 const integrationTest = postgresUrl && redisUrl ? test : test.skip
 
 const TABLES = [
+  "bff_skill_usage_observation",
+  "bff_skill_usage_run_terminal",
+  "bff_skill_usage_coverage",
   "bff_agui_run_activity",
   "bff_agui_run_process",
   "bff_agui_run_interaction",
@@ -2766,7 +2769,7 @@ integrationTest("registering a newer run fences a stale projector commit", async
       terminalRunId: oldRun,
       consumerLease: lease,
     })
-    assert.notEqual(committed, "committed")
+    assert.equal(committed, "version_conflict")
 
     const current = await projection.readStream("tenant_a", "session_run_fence")
     assert.ok(current.version > stale.version)
@@ -4920,7 +4923,7 @@ integrationTest("R124 one authorized RR snapshot binds Message head process HITL
     activity: "skill",
     activity_id: "act_" + "b".repeat(64),
     preflight_id: "spf_" + "b".repeat(64),
-    source_refs: ["skill:catalog/read"],
+    source_refs: ["skill:catalog:read"],
     phase: "ready",
   }
   const delivery = (suffix) => ({
@@ -5265,4 +5268,225 @@ integrationTest("R124 corrupt or missing process provenance is unavailable inste
     c.runId,
   ])
   assert.deepEqual(await c.snapshot(), good)
+})
+
+integrationTest("R353 terminal-first late Skill ready is bookkeeping-only across real projection commits", { timeout: 30_000 }, async () => {
+  const { randomUUID } = await import("node:crypto")
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
+  let store = null
+  const suffix = randomUUID().replaceAll("-", "")
+  const tenantId = `tenant_r353_${suffix}`,
+    sessionId = `session_r353_${suffix}`,
+    ownerId = `owner_r353_${suffix}`
+  try {
+    await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
+    await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    await store.ready()
+    const runId = await submitAndAdmit(store, pool, { tenantId, sessionId, ownerId, suffix })
+    const terminal = agentSource({ id: `r353_terminal_${suffix}`, sequence: 1, kind: "run.completed", payload: { status: "completed" }, sessionId, runId })
+    assert.equal((await store.agUi.ingest(tenantId, sessionId, [terminal])).insertedSources, 1)
+    const frameCount = (await pool.query("SELECT count(*)::int AS count FROM bff_agui_event WHERE tenant_id=$1 AND session_id=$2", [tenantId, sessionId]))
+      .rows[0].count
+    const ready = agentSource({
+      id: `r353_ready_${suffix}`,
+      sequence: 2,
+      kind: "activity.updated",
+      payload: { activity: "skill", activity_id: `activity_${suffix}`, preflight_id: `preflight_${suffix}`, source_refs: ["skill:revision"], phase: "ready" },
+      sessionId,
+      runId,
+    })
+    const lateReady = await store.agUi.ingest(tenantId, sessionId, [ready])
+    assert.equal(lateReady.insertedSources, 1)
+    assert.equal(lateReady.insertedFrames, 0)
+    assert.equal(
+      (await pool.query("SELECT count(*)::int AS count FROM bff_agui_event WHERE tenant_id=$1 AND session_id=$2", [tenantId, sessionId])).rows[0].count,
+      frameCount,
+    )
+    assert.equal(
+      (
+        await pool.query(
+          "SELECT count(*)::int AS count FROM bff_skill_usage_observation WHERE tenant_id=$1 AND run_id=$2 AND source_ref='skill:revision' AND counted_at IS NOT NULL",
+          [tenantId, runId],
+        )
+      ).rows[0].count,
+      1,
+    )
+    const duplicateReady = agentSource({
+      id: `r353_ready_duplicate_${suffix}`,
+      sequence: 3,
+      kind: "activity.updated",
+      payload: {
+        activity: "skill",
+        activity_id: `activity_${suffix}`,
+        preflight_id: `preflight_${suffix}`,
+        source_refs: ["skill:revision"],
+        phase: "ready",
+      },
+      sessionId,
+      runId,
+    })
+    const duplicateReadyResult = await store.agUi.ingest(tenantId, sessionId, [duplicateReady])
+    assert.equal(duplicateReadyResult.insertedSources, 1)
+    assert.equal(duplicateReadyResult.insertedFrames, 0)
+    const duplicateTerminal = agentSource({
+      id: `r353_terminal_duplicate_${suffix}`,
+      sequence: 4,
+      kind: "run.completed",
+      payload: { status: "completed" },
+      sessionId,
+      runId,
+    })
+    const duplicateTerminalResult = await store.agUi.ingest(tenantId, sessionId, [duplicateTerminal])
+    assert.equal(duplicateTerminalResult.insertedSources, 1)
+    assert.equal(duplicateTerminalResult.insertedFrames, 0)
+    const queued = await store.services.chatTurns.submit({
+      tenantId,
+      conversationId: sessionId,
+      subjectId: ownerId,
+      actorId: ownerId,
+      requestId: `request_next_${suffix}`,
+      idempotencyKey: `turn_next_${suffix}`,
+      content: `Next ${suffix}`,
+    })
+    const headSnapshot = async () => {
+      const result = await pool.query(
+        `SELECT stream.expected_run_id,stream.latest_run_id,stream.terminal_run_id,
+                (SELECT jsonb_agg(jsonb_build_object('run_id',dispatch.run_id,'status',dispatch.status) ORDER BY dispatch.run_id)
+                   FROM bff_agent_dispatch_outbox AS dispatch WHERE dispatch.tenant_id=stream.tenant_id AND dispatch.conversation_id=stream.session_id) AS dispatches,
+                (SELECT jsonb_agg(jsonb_build_object('run_id',message.run_id,'status',message.status,'content',message.content) ORDER BY message.message_id)
+                   FROM bff_message AS message WHERE message.tenant_id=stream.tenant_id AND message.conversation_id=stream.session_id) AS messages
+           FROM bff_agui_stream AS stream WHERE stream.tenant_id=$1 AND stream.session_id=$2`,
+        [tenantId, sessionId],
+      )
+      return result.rows[0]
+    }
+    const queuedBefore = await headSnapshot()
+    const queuedLate = await store.agUi.ingest(tenantId, sessionId, [
+      agentSource({
+        id: `r353_ready_queued_${suffix}`,
+        sequence: 5,
+        kind: "activity.updated",
+        payload: { activity: "skill", activity_id: `activity_${suffix}`, preflight_id: `preflight_${suffix}`, source_refs: ["skill:revision"], phase: "ready" },
+        sessionId,
+        runId,
+      }),
+    ])
+    assert.equal(queuedLate.insertedFrames, 0)
+    assert.deepEqual(await headSnapshot(), queuedBefore)
+    const [claim] = await store.agentDispatchOutbox.claimAgentDispatchOutbox({ workerId: `worker_next_${suffix}`, limit: 1, leaseDurationMs: 5000, maxAttempts: 8 })
+    assert.equal(claim.runId, queued.run_id)
+    assert.equal(await store.agentDispatchOutbox.markAgentDispatchAdmitted(claim), true)
+    const admittedBefore = await headSnapshot()
+    const admittedLate = await store.agUi.ingest(tenantId, sessionId, [
+      agentSource({ id: `r353_terminal_admitted_${suffix}`, sequence: 6, kind: "run.completed", payload: { status: "completed" }, sessionId, runId }),
+    ])
+    assert.equal(admittedLate.insertedFrames, 0)
+    assert.deepEqual(await headSnapshot(), admittedBefore)
+    await assert.rejects(
+      () =>
+        store.agUi.ingest(tenantId, sessionId, [
+          agentSource({ id: `r353_message_${suffix}`, sequence: 7, kind: "message.delta", payload: { delta: "late" }, sessionId, runId }),
+        ]),
+      /AGUI_POST_TERMINAL_SOURCE/u,
+    )
+  } finally {
+    await store?.close()
+    await pool.query("DELETE FROM bff_skill_usage_observation WHERE tenant_id=$1", [tenantId]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_skill_usage_run_terminal WHERE tenant_id=$1", [tenantId]).catch(() => undefined)
+    await pool.query("DELETE FROM bff_skill_usage_coverage WHERE tenant_id=$1", [tenantId]).catch(() => undefined)
+    await pool.end()
+  }
+})
+
+integrationTest("R353 same-batch terminal fences late Skill bookkeeping and rejects late messages atomically", { timeout: 30_000 }, async () => {
+  const { randomUUID } = await import("node:crypto")
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
+  const stores = []
+  const setup = async (label) => {
+    const suffix = `${label}_${randomUUID().replaceAll("-", "")}`
+    const tenantId = `tenant_${suffix}`,
+      sessionId = `session_${suffix}`,
+      ownerId = `owner_${suffix}`
+    const store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    stores.push(store)
+    await store.ready()
+    const runId = await submitAndAdmit(store, pool, { tenantId, sessionId, ownerId, suffix })
+    await store.agUi.ingest(tenantId, sessionId, [
+      agentSource({ id: `start_${suffix}`, sequence: 1, kind: "run.created", payload: { run_id: runId }, sessionId, runId }),
+    ])
+    return { store, suffix, tenantId, sessionId, ownerId, runId }
+  }
+  try {
+    await pool.query("CREATE SCHEMA IF NOT EXISTS kokoro_bff")
+    await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
+    for (const duplicateTerminal of [false, true]) {
+      const c = await setup(duplicateTerminal ? "terminal" : "ready")
+      const framesBefore = (await pool.query("SELECT count(*)::int AS count FROM bff_agui_event WHERE tenant_id=$1 AND session_id=$2", [c.tenantId, c.sessionId]))
+        .rows[0].count
+      const terminal = agentSource({ id: `terminal_${c.suffix}`, sequence: 2, kind: "run.completed", payload: { status: "completed" }, sessionId: c.sessionId, runId: c.runId })
+      const late = duplicateTerminal
+        ? agentSource({ id: `terminal_duplicate_${c.suffix}`, sequence: 3, kind: "run.completed", payload: { status: "completed" }, sessionId: c.sessionId, runId: c.runId })
+        : agentSource({
+            id: `ready_${c.suffix}`,
+            sequence: 3,
+            kind: "activity.updated",
+            payload: { activity: "skill", activity_id: `activity_${c.suffix}`, preflight_id: `preflight_${c.suffix}`, source_refs: ["skill:revision"], phase: "ready" },
+            sessionId: c.sessionId,
+            runId: c.runId,
+          })
+      const result = await c.store.agUi.ingest(c.tenantId, c.sessionId, [terminal, late])
+      const frames = await pool.query(
+        `SELECT source_event_id,count(*)::int AS count FROM bff_agui_event
+          WHERE tenant_id=$1 AND session_id=$2 GROUP BY source_event_id ORDER BY source_event_id`,
+        [c.tenantId, c.sessionId],
+      )
+      assert.equal(result.insertedFrames, frames.rows.reduce((sum, row) => sum + row.count, 0) - framesBefore)
+      assert.equal(frames.rows.find((row) => row.source_event_id === late.sourceEventId), undefined)
+      assert.equal((await pool.query("SELECT count(*)::int AS count FROM bff_agui_source_event WHERE tenant_id=$1 AND session_id=$2", [c.tenantId, c.sessionId])).rows[0].count, 3)
+      assert.equal(
+        (await pool.query("SELECT source_event_id FROM bff_skill_usage_run_terminal WHERE tenant_id=$1 AND run_id=$2", [c.tenantId, c.runId])).rows[0]
+          .source_event_id,
+        terminal.sourceEventId,
+      )
+    }
+
+    const rejected = await setup("message")
+    const before = (
+      await pool.query(
+        `SELECT stream.source_high_watermark,stream.expected_run_id,stream.latest_run_id,stream.terminal_run_id,
+                dispatch.status AS dispatch_status,message.status AS message_status,message.content
+           FROM bff_agui_stream AS stream
+           JOIN bff_agent_dispatch_outbox AS dispatch ON dispatch.tenant_id=stream.tenant_id AND dispatch.conversation_id=stream.session_id
+           JOIN bff_message AS message ON message.message_id=dispatch.assistant_message_id
+          WHERE stream.tenant_id=$1 AND stream.session_id=$2 AND dispatch.run_id=$3`,
+        [rejected.tenantId, rejected.sessionId, rejected.runId],
+      )
+    ).rows[0]
+    await assert.rejects(
+      () =>
+        rejected.store.agUi.ingest(rejected.tenantId, rejected.sessionId, [
+          agentSource({ id: `terminal_${rejected.suffix}`, sequence: 2, kind: "run.completed", payload: { status: "completed" }, sessionId: rejected.sessionId, runId: rejected.runId }),
+          agentSource({ id: `message_${rejected.suffix}`, sequence: 3, kind: "message.delta", payload: { delta: "late" }, sessionId: rejected.sessionId, runId: rejected.runId }),
+        ]),
+      /AGUI_POST_TERMINAL_SOURCE/u,
+    )
+    const after = (
+      await pool.query(
+        `SELECT stream.source_high_watermark,stream.expected_run_id,stream.latest_run_id,stream.terminal_run_id,
+                dispatch.status AS dispatch_status,message.status AS message_status,message.content
+           FROM bff_agui_stream AS stream
+           JOIN bff_agent_dispatch_outbox AS dispatch ON dispatch.tenant_id=stream.tenant_id AND dispatch.conversation_id=stream.session_id
+           JOIN bff_message AS message ON message.message_id=dispatch.assistant_message_id
+          WHERE stream.tenant_id=$1 AND stream.session_id=$2 AND dispatch.run_id=$3`,
+        [rejected.tenantId, rejected.sessionId, rejected.runId],
+      )
+    ).rows[0]
+    assert.deepEqual(after, before)
+    assert.equal((await pool.query("SELECT count(*)::int AS count FROM bff_agui_source_event WHERE tenant_id=$1 AND session_id=$2", [rejected.tenantId, rejected.sessionId])).rows[0].count, 1)
+    assert.equal((await pool.query("SELECT count(*)::int AS count FROM bff_skill_usage_run_terminal WHERE tenant_id=$1 AND run_id=$2", [rejected.tenantId, rejected.runId])).rows[0].count, 0)
+  } finally {
+    await Promise.all(stores.map((store) => store.close()))
+    await pool.end()
+  }
 })

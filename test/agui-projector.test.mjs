@@ -4,6 +4,7 @@ import { describe, it } from "node:test"
 import { EventSchemas, EventType } from "@ag-ui/core"
 
 import { AgUiConsumerLeaseLostError, AgUiSourceContinuityError, AgUiSourceReadError } from "../dist/application/agui/errors.js"
+import { AgUiProjectionService } from "../dist/application/agui/project-session-events.js"
 import { AgUiProjectorRunner } from "../dist/application/agui/projector.js"
 import { createAgUiProjectionState, projectChatEvent } from "../dist/application/agui/project-chat-event.js"
 import { mapAgentEvent } from "../dist/infrastructure/clients/agent/projection.js"
@@ -433,7 +434,7 @@ it("a new START identity after a full interaction is rejected before committing 
     assertPersistedSources: async () => {},
     commitProjection: async () => {
       commits++
-      return "committed"
+      return { kind: "committed", insertedFrames: 0 }
     },
   })
   const timestamp = new Date(3000).toISOString()
@@ -539,3 +540,60 @@ for (const [label, eventType, payload, kind, name] of r123TodoAndSkillProjection
     assert.deepEqual(Object.keys(frame?.value ?? {}).sort(), Object.keys(payload).sort())
   })
 }
+
+it("R353 carries strict Skill ready and terminal facts into the same source commit", async () => {
+  const commits = []
+  const repository = {
+    async readStream() {
+      return { version: 0, sourceHighWatermark: 0, projectionState: { textMessageIds: [] }, expectedRunId: "run_1" }
+    },
+    async assertPersistedSources() {},
+    async commitProjection(command) {
+      commits.push(command)
+      return { kind: "committed", insertedFrames: command.sources.reduce((count, source) => count + source.frames.length, 0) }
+    },
+  }
+  const service = new AgUiProjectionService(repository)
+  const events = [
+    {
+      sourceRunId: "run_1",
+      sourceEventId: "ready",
+      sourceSequence: 1,
+      sourceOccurredAt: "2026-09-01T00:00:00.000Z",
+      sourcePayload: { kind: "ready" },
+      event: {
+        event_id: "ready",
+        seq: 1,
+        session_id: "session_1",
+        run_id: "run_1",
+        timestamp: "2026-09-01T00:00:00.000Z",
+        kind: "activity.updated",
+        payload: { activity: "skill", activity_id: "skill_activity", preflight_id: "preflight", source_refs: ["skill:revision_1"], phase: "ready" },
+      },
+    },
+    {
+      sourceRunId: "run_1",
+      sourceEventId: "done",
+      sourceSequence: 2,
+      sourceOccurredAt: "2026-09-01T00:00:01.000Z",
+      sourcePayload: { kind: "done" },
+      event: {
+        event_id: "done",
+        seq: 2,
+        session_id: "session_1",
+        run_id: "run_1",
+        timestamp: "2026-09-01T00:00:01.000Z",
+        kind: "run.completed",
+        payload: { status: "completed" },
+      },
+    },
+  ]
+  await service.ingest("tenant_1", "session_1", events)
+  assert.deepEqual(
+    commits[0].sources.map(({ skillUsageFact }) => skillUsageFact),
+    [
+      { kind: "ready", runId: "run_1", sourceRefs: ["skill:revision_1"] },
+      { kind: "terminal", runId: "run_1", status: "completed" },
+    ],
+  )
+})

@@ -426,11 +426,39 @@ databaseTest("R237 fresh catalog has the single nullable Project tombstone and e
         WHERE index_row.indrelid='kokoro_bff.bff_project'::regclass ORDER BY index_class.relname`,
     )
     assert.deepEqual(indexes.rows, [
-      { name: "bff_project_pkey", method: "btree", unique: true, valid: true, key_count: 1, total_count: 1, keys: ["project_id"], options: "0", predicate: null },
-      { name: "ix_bff_project_owner_list", method: "btree", unique: false, valid: true, key_count: 4, total_count: 4,
-        keys: ["tenant_id", "owner_id", "created_at", "project_id"], options: "0 0 0 0", predicate: "(deleted_at IS NULL)" },
-      { name: "uq_bff_project_owner_slug", method: "btree", unique: true, valid: true, key_count: 3, total_count: 3,
-        keys: ["tenant_id", "owner_id", "slug"], options: "0 0 0", predicate: null },
+      {
+        name: "bff_project_pkey",
+        method: "btree",
+        unique: true,
+        valid: true,
+        key_count: 1,
+        total_count: 1,
+        keys: ["project_id"],
+        options: "0",
+        predicate: null,
+      },
+      {
+        name: "ix_bff_project_owner_list",
+        method: "btree",
+        unique: false,
+        valid: true,
+        key_count: 4,
+        total_count: 4,
+        keys: ["tenant_id", "owner_id", "created_at", "project_id"],
+        options: "0 0 0 0",
+        predicate: "(deleted_at IS NULL)",
+      },
+      {
+        name: "uq_bff_project_owner_slug",
+        method: "btree",
+        unique: true,
+        valid: true,
+        key_count: 3,
+        total_count: 3,
+        keys: ["tenant_id", "owner_id", "slug"],
+        options: "0 0 0",
+        predicate: null,
+      },
     ])
     await client.query("INSERT INTO kokoro_bff.bff_project (project_id,tenant_id,owner_id,name,slug) VALUES ('r237','r237','owner','Active','active')")
     assert.deepEqual((await client.query("SELECT deleted_at FROM kokoro_bff.bff_project WHERE project_id='r237'")).rows, [{ deleted_at: null }])
@@ -473,7 +501,10 @@ test("R257 personalization evolution extracts exactly its canonical target and r
   const canonical = await loadCanonicalSchema()
   const statement = canonical.match(/^CREATE TABLE IF NOT EXISTS bff_personalization \(\n[\s\S]*?^\);/gmu)
   assert.equal(statement?.length, 1)
-  assert.equal(extractPersonalizationCreate(canonical), statement[0].replace("CREATE TABLE IF NOT EXISTS bff_personalization", "CREATE TABLE kokoro_bff.bff_personalization"))
+  assert.equal(
+    extractPersonalizationCreate(canonical),
+    statement[0].replace("CREATE TABLE IF NOT EXISTS bff_personalization", "CREATE TABLE kokoro_bff.bff_personalization"),
+  )
   for (const invalid of [
     canonical.replace(statement[0], ""),
     `${canonical}\n${statement[0]}`,
@@ -481,6 +512,18 @@ test("R257 personalization evolution extracts exactly its canonical target and r
     canonical.replace("char_length(nickname) <= 128", "char_length(nickname) <= 129"),
     canonical.replace("tenant_id <> '' AND owner_id <> ''", "tenant_id <> ' ' AND owner_id <> ''"),
     canonical.replace("nickname TEXT NOT NULL", "nickname TEXT NOT NULL; SELECT 1"),
-  ]) assert.throws(() => extractPersonalizationCreate(invalid), /invalid_schema/u)
+  ])
+    assert.throws(() => extractPersonalizationCreate(invalid), /invalid_schema/u)
   assert.throws(() => assertEmptyOwnerSchema(["bff_project"]), /requires an empty kokoro_bff schema/u)
+})
+
+test("R353 canonical schema isolates typed shares and durable usage from frame GC", async () => {
+  const canonical = await loadCanonicalSchema()
+  for (const table of ["bff_skill_usage_run_terminal", "bff_skill_usage_observation", "bff_skill_usage_coverage"])
+    assert.match(canonical, new RegExp(`CREATE TABLE IF NOT EXISTS ${table} \\(`, "u"))
+  assert.match(canonical, /resource_kind TEXT NOT NULL DEFAULT 'conversation'/u)
+  assert.match(canonical, /resource_kind = 'conversation'[\s\S]*resource_kind = 'skill_revision'/u)
+  assert.match(canonical, /uq_bff_share_active_skill_revision/u)
+  assert.match(canonical, /ck_bff_skill_usage_coverage_checkpoint/u)
+  assert.doesNotMatch(canonical.match(/CREATE TABLE IF NOT EXISTS bff_skill_usage_coverage \([\s\S]*?\n\);/u)?.[0] ?? "", /started_at|session_high_watermark/iu)
 })

@@ -509,7 +509,7 @@ export class PostgresChatRepository implements ChatRepository {
       }
       const existing = await client.query<ShareRow>(
         `SELECT ${shareColumns} FROM bff_share
-          WHERE tenant_id = $1 AND conversation_id = $3 AND revoked_at IS NULL
+          WHERE tenant_id = $1 AND conversation_id = $3 AND resource_kind = 'conversation' AND revoked_at IS NULL
             AND EXISTS (
               SELECT 1 FROM bff_conversation AS conversation
                WHERE conversation.tenant_id = bff_share.tenant_id
@@ -529,7 +529,7 @@ export class PostgresChatRepository implements ChatRepository {
       // unique index is checked for the replacement share.
       await client.query(
         `UPDATE bff_share SET revoked_at = CURRENT_TIMESTAMP(3)
-          WHERE tenant_id = $1 AND conversation_id = $3 AND revoked_at IS NULL
+          WHERE tenant_id = $1 AND conversation_id = $3 AND resource_kind = 'conversation' AND revoked_at IS NULL
             AND EXISTS (
               SELECT 1 FROM bff_conversation AS conversation
                WHERE conversation.tenant_id = bff_share.tenant_id
@@ -541,8 +541,8 @@ export class PostgresChatRepository implements ChatRepository {
       )
       const shareId = `shr_${randomUUID().replaceAll("-", "")}`
       const inserted = await client.query<ShareRow>(
-        `INSERT INTO bff_share (share_id, tenant_id, conversation_id, url)
-         VALUES ($1, $2, $3, $4) RETURNING ${shareColumns}`,
+        `INSERT INTO bff_share (share_id, tenant_id, resource_kind, conversation_id, url)
+         VALUES ($1, $2, 'conversation', $3, $4) RETURNING ${shareColumns}`,
         [shareId, tenantId, conversationId, `/v1/shared/${shareId}`],
       )
       await client.query("COMMIT")
@@ -560,7 +560,7 @@ export class PostgresChatRepository implements ChatRepository {
   public async revokeShare(tenantId: string, subjectId: string, conversationId: string, projectRef?: string): Promise<Share | null> {
     const result = await this.database.pool.query<ShareRow>(
       `UPDATE bff_share SET revoked_at = CURRENT_TIMESTAMP(3)
-        WHERE tenant_id = $1 AND conversation_id = $3 AND revoked_at IS NULL
+        WHERE tenant_id = $1 AND conversation_id = $3 AND resource_kind = 'conversation' AND revoked_at IS NULL
           AND EXISTS (
             SELECT 1 FROM bff_conversation AS conversation
              WHERE conversation.tenant_id = bff_share.tenant_id

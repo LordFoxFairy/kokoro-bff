@@ -13,11 +13,13 @@ import type {
   AgUiProjectionStateSnapshot,
   AgUiProjectionStatus,
   AgUiSourceIdentity,
+  AgUiSourceProjection,
   AgUiStreamState,
   AgUiReplayPage,
   CommitAgUiProjection,
   StoredAgUiFrame,
 } from "../../application/agui/ports/agui-projection-repository.js"
+import { applySkillUsageFact } from "./skill-usage-projection.js"
 import type { PostgresBffDatabase } from "./client.js"
 import { insertArtifactDelivery, lockArtifactConversation } from "./conversation-artifact-projection.js"
 import { PostgresAgentDispatchOutboxRepository } from "./agent-dispatch-outbox-repository.js"
@@ -90,6 +92,16 @@ type AssistantBindingRow = {
   message_run_id: string | null
   message_role: string | null
   message_status: string | null
+}
+
+function isTerminalSkillBookkeeping(source: AgUiSourceProjection): boolean {
+  const fact = source.skillUsageFact
+  if (fact === undefined || source.sourceRunId !== fact.runId || source.artifactDelivery !== undefined || source.interactionState !== undefined) return false
+  if (fact.kind === "ready") return source.assistantUpdate === undefined
+  if (source.assistantUpdate?.runId !== fact.runId) return false
+  if (fact.status === "completed") return source.assistantUpdate.kind === "complete"
+  if (fact.status === "cancelled") return source.assistantUpdate.kind === "cancel"
+  return source.assistantUpdate.kind === "fail"
 }
 
 async function assertAssistantBindingOrLegitimateSkip(
@@ -268,9 +280,10 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
     }
   }
 
-  public async commitProjection(command: CommitAgUiProjection): Promise<"committed" | "version_conflict" | "lease_conflict"> {
+  public async commitProjection(command: CommitAgUiProjection): Promise<{ kind: "committed"; insertedFrames: number } | "version_conflict" | "lease_conflict"> {
     const client = await this.database.pool.connect()
     let notificationCursor: string | null = null
+    let insertedFrames = 0
     try {
       await client.query("BEGIN")
       await PostgresAgentDispatchOutboxRepository.lockConversationsInTransaction(client, [{ tenantId: command.tenantId, conversationId: command.sessionId }])
@@ -306,7 +319,8 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
         await client.query("ROLLBACK")
         return "version_conflict"
       }
-      const sourceRunIds = new Set<string>()
+      const postTerminalBookkeeping = new Set<AgUiSourceProjection>()
+      const batchTerminalRunIds = new Set<string>()
       for (const source of command.sources) {
         const derivedRunIds = new Set<string>()
         if (source.assistantUpdate !== undefined) derivedRunIds.add(source.assistantUpdate.runId)
@@ -316,18 +330,18 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
           if (runId !== null && runId !== undefined && runId !== "") derivedRunIds.add(runId)
         }
         if ([...derivedRunIds].some((runId) => runId !== source.sourceRunId)) throw new Error("AGUI_SOURCE_RUN_MISMATCH")
-        if (source.sourceRunId !== null) sourceRunIds.add(source.sourceRunId)
-      }
-      for (const runId of sourceRunIds) {
+        if (source.sourceRunId === null) continue
         const historical = await client.query<{ status: string }>(
           `SELECT status FROM bff_agent_dispatch_outbox
             WHERE tenant_id = $1 AND conversation_id = $2 AND run_id = $3
             FOR UPDATE`,
-          [command.tenantId, command.sessionId, runId],
+          [command.tenantId, command.sessionId, source.sourceRunId],
         )
-        if (historical.rows[0]?.status === "terminal" || historical.rows[0]?.status === "failed") {
-          throw new Error("AGUI_POST_TERMINAL_SOURCE")
+        if (batchTerminalRunIds.has(source.sourceRunId) || historical.rows[0]?.status === "terminal" || historical.rows[0]?.status === "failed") {
+          if (!isTerminalSkillBookkeeping(source)) throw new Error("AGUI_POST_TERMINAL_SOURCE")
+          postTerminalBookkeeping.add(source)
         }
+        if (source.skillUsageFact?.kind === "terminal") batchTerminalRunIds.add(source.sourceRunId)
       }
       let nextPublicSequence = safeInteger(stream.next_public_sequence, "next public sequence")
       let latestRunStartSequence = stream.latest_run_start_sequence === null ? null : safeInteger(stream.latest_run_start_sequence, "latest run start sequence")
@@ -395,6 +409,20 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
           ],
         )
         if (inserted.rows[0] === undefined) throw new AgUiSourceIdentityConflictError()
+
+        if (source.skillUsageFact !== undefined) {
+          await applySkillUsageFact(client, {
+            tenantId: command.tenantId,
+            sessionId: command.sessionId,
+            sourceOwner: source.sourceOwner,
+            sourceEventId: source.sourceEventId,
+            sourceSequence: source.sourceSequence,
+            sourceDigest: source.sourceDigest,
+            sourceOccurredAt: source.sourceOccurredAt,
+            fact: source.skillUsageFact,
+          })
+        }
+        if (postTerminalBookkeeping.has(source)) continue
 
         if (source.artifactDelivery !== undefined) {
           if (artifactOwner === null) throw new Error("AGUI_ARTIFACT_BINDING_MISSING")
@@ -508,6 +536,7 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
             await writeRunInteraction(client, command.tenantId, command.sessionId, stream.consumer_subject_id, source, nextPublicSequence, frameCursor)
           }
           nextPublicSequence += 1
+          insertedFrames += 1
           notificationCursor = frameCursor
         }
       }
@@ -584,7 +613,7 @@ export class PostgresAgUiProjectionRepository implements AgUiProjectionRepositor
     }
 
     await this.database.notifyAgUiProjection(command.tenantId, command.sessionId, notificationCursor).catch(() => undefined)
-    return "committed"
+    return { kind: "committed", insertedFrames }
   }
 
   public async replay(

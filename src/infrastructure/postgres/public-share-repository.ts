@@ -1,15 +1,9 @@
 import type { MessagePage } from "../../application/ports/chat-repository.js"
 import type { PublicShareRepository } from "../../application/ports/public-share-repository.js"
 import type { Conversation } from "../../domain/chat/conversation.js"
-import type { Share } from "../../domain/chat/share.js"
+import type { ConversationShare } from "../../domain/chat/share.js"
 import type { PostgresBffDatabase } from "./client.js"
-import {
-  conversationFromRow,
-  messageFromRow,
-  shareFromRow,
-  type MessageRow,
-  type SharedRow,
-} from "./chat-repository-mappers.js"
+import { conversationFromRow, messageFromRow, shareFromRow, type MessageRow, type SharedRow } from "./chat-repository-mappers.js"
 
 /** Public share capability reads; no trusted subject is accepted at this boundary. */
 export class PostgresPublicShareRepository implements PublicShareRepository {
@@ -19,7 +13,7 @@ export class PostgresPublicShareRepository implements PublicShareRepository {
     shareId: string,
     tenantId?: string,
     projectRef?: string,
-  ): Promise<{ share: Share; conversation: Conversation } | null> {
+  ): Promise<{ share: ConversationShare; conversation: Conversation } | null> {
     const result = await this.database.pool.query<SharedRow>(
       `SELECT s.share_id, s.tenant_id AS share_tenant_id, s.conversation_id AS share_conversation_id, s.url,
               s.created_at AS share_created_at, s.expires_at, s.revoked_at,
@@ -30,6 +24,7 @@ export class PostgresPublicShareRepository implements PublicShareRepository {
            ON c.tenant_id = s.tenant_id
           AND c.conversation_id = s.conversation_id
         WHERE s.share_id = $1
+          AND s.resource_kind = 'conversation'
           AND s.tenant_id = COALESCE($2::text, s.tenant_id)
           AND ($3::text IS NULL OR c.project_ref = $3)
           AND s.revoked_at IS NULL
@@ -39,16 +34,22 @@ export class PostgresPublicShareRepository implements PublicShareRepository {
       [shareId, tenantId ?? null, projectRef ?? null],
     )
     const row = result.rows[0]
-    return row === undefined ? null : {
-      share: shareFromRow({
-        share_id: row.share_id,
-        tenant_id: row.share_tenant_id,
-        conversation_id: row.share_conversation_id,
-        url: row.url,
-        created_at: row.share_created_at,
-        expires_at: row.expires_at,
-        revoked_at: row.revoked_at,
-      }),
+    if (row === undefined) return null
+    const share = shareFromRow({
+      share_id: row.share_id,
+      tenant_id: row.share_tenant_id,
+      resource_kind: "conversation",
+      creator_subject_id: null,
+      skill_source_ref: null,
+      conversation_id: row.share_conversation_id,
+      url: row.url,
+      created_at: row.share_created_at,
+      expires_at: row.expires_at,
+      revoked_at: row.revoked_at,
+    })
+    if (share.resourceKind !== "conversation") throw new Error("PUBLIC_SHARE_RESOURCE_INVALID")
+    return {
+      share,
       conversation: conversationFromRow({
         conversation_id: row.conversation_id,
         tenant_id: row.tenant_id,
@@ -63,12 +64,7 @@ export class PostgresPublicShareRepository implements PublicShareRepository {
     }
   }
 
-  public async listSharedMessages(
-    shareId: string,
-    tenantId: string,
-    conversationId: string,
-    limit: number,
-  ): Promise<MessagePage | null> {
+  public async listSharedMessages(shareId: string, tenantId: string, conversationId: string, limit: number): Promise<MessagePage | null> {
     const result = await this.database.pool.query<MessageRow>(
       `SELECT message.message_id, message.tenant_id, message.conversation_id, message.run_id,
               message.role, message.content, message.status, message.agent_failure_code, message.agent_failure_retryable, message.message_seq,
@@ -83,6 +79,7 @@ export class PostgresPublicShareRepository implements PublicShareRepository {
                 ON conversation.tenant_id = share.tenant_id
                AND conversation.conversation_id = share.conversation_id
              WHERE share.share_id = $3
+               AND share.resource_kind = 'conversation'
                AND share.tenant_id = message.tenant_id
                AND share.conversation_id = message.conversation_id
                AND share.revoked_at IS NULL

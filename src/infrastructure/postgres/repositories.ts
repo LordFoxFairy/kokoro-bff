@@ -28,6 +28,8 @@ import type { ScheduledAgentDispatchRepository } from "../../application/ports/s
 import { PostgresConversationArtifactLibrary } from "./conversation-artifact-library.js"
 import { PostgresProjectScopeReleaseOutboxRepository } from "./project-scope-release-outbox-repository.js"
 import type { ProjectScopeReleaseOutboxRepository } from "../../application/ports/project-scope-release-outbox.js"
+import { PostgresSkillShareRepository } from "./skill-share-repository.js"
+import type { SkillShareRepository } from "../../application/ports/skill-share-repository.js"
 
 export { PENDING_RECEIPT_STATUS }
 export type { PersistentReceipt, ReceiptClaim } from "../../application/ports/idempotency-repository.js"
@@ -48,6 +50,7 @@ export class PostgresBffRepositories {
   public readonly scheduledAgentDispatch: ScheduledAgentDispatchRepository
   public readonly artifactLibrary: ArtifactLibraryRepository
   public readonly projectScopeReleaseOutbox: ProjectScopeReleaseOutboxRepository
+  public readonly skillShares: SkillShareRepository
 
   public constructor(postgresUrl: string, redisUrl: string) {
     this.database = new PostgresBffDatabase(postgresUrl, redisUrl)
@@ -66,6 +69,7 @@ export class PostgresBffRepositories {
     this.scheduledAgentDispatch = new PostgresScheduledAgentDispatchRepository(this.database)
     this.artifactLibrary = new PostgresConversationArtifactLibrary(this.database)
     this.projectScopeReleaseOutbox = new PostgresProjectScopeReleaseOutboxRepository(this.database)
+    this.skillShares = new PostgresSkillShareRepository(this.database)
     this.services = new BffApplicationServices(
       this.projects,
       this.scheduled,

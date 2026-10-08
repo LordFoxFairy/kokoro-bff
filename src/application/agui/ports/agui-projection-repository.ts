@@ -1,6 +1,7 @@
 import type { InteractionState } from "../../../contracts/chat.js"
 import type { AgUiEvent } from "../project-chat-event.js"
 import type { AgentFailureProfile } from "../../../domain/chat/message.js"
+import type { SkillUsageFact } from "../skill-usage.js"
 
 export type AgUiProjectionStateSnapshot = {
   textMessageIds: string[]
@@ -47,9 +48,10 @@ export type AgUiSourceProjection = {
   assistantUpdate?: AgUiAssistantUpdate
   interactionState?: InteractionState
   artifactDelivery?: AgUiArtifactDelivery
+  skillUsageFact?: SkillUsageFact
 }
 
-export type AgUiSourceIdentity = Omit<AgUiSourceProjection, "frames" | "assistantUpdate" | "artifactDelivery" | "interactionState">
+export type AgUiSourceIdentity = Omit<AgUiSourceProjection, "frames" | "assistantUpdate" | "artifactDelivery" | "interactionState" | "skillUsageFact">
 
 export type CommitAgUiProjection = {
   tenantId: string
@@ -145,7 +147,7 @@ export interface AgUiProjectionConsumerRepository {
 export interface AgUiProjectionRepository {
   readStream(tenantId: string, sessionId: string): Promise<AgUiStreamState>
   assertPersistedSources(tenantId: string, sessionId: string, sources: readonly AgUiSourceIdentity[]): Promise<void>
-  commitProjection(command: CommitAgUiProjection): Promise<"committed" | "version_conflict" | "lease_conflict">
+  commitProjection(command: CommitAgUiProjection): Promise<{ kind: "committed"; insertedFrames: number } | "version_conflict" | "lease_conflict">
   replay(
     tenantId: string,
     sessionId: string,
