@@ -38,6 +38,11 @@ test("projection credential source rejects broad permissions and reads exact ten
   await chmod(file, 0o600)
   assert.equal((await stat(file)).mode & 0o777, 0o600)
   assert.equal((await source.read("tenant")).generation, 1)
+  await writeFile(file, "x".repeat(65_537))
+  await assert.rejects(source.read("tenant"), /invalid/u)
+  const aborted = new AbortController()
+  aborted.abort(new Error("caller_cancelled"))
+  await assert.rejects(source.read("tenant", aborted.signal), /caller_cancelled/u)
 })
 
 test("projection credential cache key changes on secret-only rotation", async () => {
@@ -50,6 +55,34 @@ test("projection credential cache key changes on secret-only rotation", async ()
   const after = await source.read("tenant")
   assert.notEqual(before.cacheKey, after.cacheKey)
   assert.equal(after.cacheKey.includes("rotated-secret"), false)
+})
+
+test("token exchange discards an in-flight token after credential rotation", async () => {
+  const original = globalThis.fetch
+  let generation = 1
+  let release
+  globalThis.fetch = async () => {
+    await new Promise((resolve) => {
+      release = resolve
+    })
+    return new Response(JSON.stringify({ access_token: "stale", token_type: "Bearer", expires_in: 60, scope }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    })
+  }
+  try {
+    const credentials = {
+      read: async (tenant) => ({ ...item(generation), cacheKey: JSON.stringify([tenant, generation, "v1", "one", resource, scope]) }),
+    }
+    const source = new ProjectionTokenSource("http://iam.example", credentials, 100)
+    const pending = source.get("tenant")
+    await new Promise((resolve) => setImmediate(resolve))
+    generation = 2
+    release()
+    await assert.rejects(pending, /rotated/u)
+  } finally {
+    globalThis.fetch = original
+  }
 })
 
 test("token exchange uses frozen IAM contract, coalesces, and invalidates on generation rotation", async () => {

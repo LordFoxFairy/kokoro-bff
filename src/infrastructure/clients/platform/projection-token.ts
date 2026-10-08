@@ -8,16 +8,20 @@ export class ProjectionTokenSource {
     private readonly credentials: ProjectionCredentialSource,
     private readonly timeoutMs: number,
   ) {}
-  async get(tenantId: string, signal?: AbortSignal): Promise<string> {
+  retire(token: string): void {
+    for (const [key, cached] of this.#tokens) if (cached.value === token) this.#tokens.delete(key)
+  }
+  async get(tenantId: string, signal?: AbortSignal, deadlineAt?: number): Promise<string> {
     signal?.throwIfAborted()
-    const credential = await this.credentials.read(tenantId)
+    if (deadlineAt !== undefined && performance.now() >= deadlineAt) throw new Error("projection_token_deadline")
+    const credential = await this.credentials.read(tenantId, signal, deadlineAt)
     signal?.throwIfAborted()
     const cached = this.#tokens.get(credential.cacheKey)
     if (cached && cached.expiresAt - Date.now() > 5_000) return cached.value
     let flight = this.#flights.get(credential.cacheKey)
     if (!flight) {
       const controller = new AbortController()
-      const promise = this.#load(credential, controller.signal).finally(() => this.#flights.delete(credential.cacheKey))
+      const promise = this.#load(credential, controller.signal, deadlineAt).finally(() => this.#flights.delete(credential.cacheKey))
       flight = { promise, controller, waiters: 0 }
       this.#flights.set(credential.cacheKey, flight)
     }
@@ -57,8 +61,11 @@ export class ProjectionTokenSource {
       )
     })
   }
-  async #load(credential: ProjectionCredential, external?: AbortSignal): Promise<string> {
-    const signal = external ? AbortSignal.any([external, AbortSignal.timeout(this.timeoutMs)]) : AbortSignal.timeout(this.timeoutMs)
+  async #load(credential: ProjectionCredential, external?: AbortSignal, deadlineAt?: number): Promise<string> {
+    const remaining = deadlineAt === undefined ? this.timeoutMs : Math.min(this.timeoutMs, Math.floor(deadlineAt - performance.now()))
+    if (remaining <= 0) throw new Error("projection_token_deadline")
+    const timeout = AbortSignal.timeout(remaining)
+    const signal = external ? AbortSignal.any([external, timeout]) : timeout
     const response = await fetch(new URL("/iam/oauth2/token", this.iam), {
       method: "POST",
       redirect: "error",
@@ -104,6 +111,10 @@ export class ProjectionTokenSource {
       value.expires_in < 1
     )
       throw new Error("projection_token_invalid")
+    signal.throwIfAborted()
+    const currentCredential = await this.credentials.read(credential.tenantId, signal, deadlineAt)
+    signal.throwIfAborted()
+    if (currentCredential.cacheKey !== credential.cacheKey) throw new Error("projection_credential_rotated")
     this.#tokens.clear()
     this.#tokens.set(credential.cacheKey, { value: value.access_token, expiresAt: Date.now() + value.expires_in * 1000 })
     return value.access_token

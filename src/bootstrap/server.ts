@@ -56,6 +56,7 @@ import { moveSessionRoute } from "../http/routes/move-session.js"
 import { managedPersonalSkillsRoute } from "../http/routes/managed-personal-skills.js"
 import { createPersonalSkillVersionRoute } from "../http/routes/create-personal-skill-version.js"
 import { withdrawPersonalSkillRoute } from "../http/routes/withdraw-personal-skill.js"
+import { skillPackageInspectionRoute } from "../http/routes/skill-package-inspection.js"
 import { configureBffProtobufTextEncoding } from "../infrastructure/protobuf-text-encoding.js"
 
 async function handle(
@@ -70,7 +71,17 @@ async function handle(
   }
   const id = requestId(request)
   response.setHeader("x-request-id", id)
-  const segments = pathOf(request)
+  const rawPathname = new URL(request.url || "/", "http://bff.local").pathname
+  const isRawSkillPackageInspection =
+    request.method === "GET" && (/^\/v1\/self\/skills\/[^/]+\/package$/u.test(rawPathname) || /^\/v1\/skill-installations\/[^/]+\/package$/u.test(rawPathname))
+  let segments: string[]
+  try {
+    segments = pathOf(request)
+  } catch (error) {
+    if (!isRawSkillPackageInspection) throw error
+    send(response, 400, { error: { code: "invalid_skill_package_request", message: "Skill package request is invalid", retryable: false } })
+    return
+  }
   if (segments.length === 1 && segments[0] === "healthz" && request.method === "GET") {
     send(response, 200, { status: "ok", service: "kokoro-bff", mode: config.mode })
     return
@@ -166,6 +177,14 @@ async function handle(
   }
 
   const businessPath = segments.slice(1)
+  const isSkillPackageInspection =
+    isRawSkillPackageInspection &&
+    ((businessPath.length === 4 && businessPath[0] === "self" && businessPath[1] === "skills" && businessPath[3] === "package") ||
+      (businessPath.length === 3 && businessPath[0] === "skill-installations" && businessPath[2] === "package"))
+  if (isSkillPackageInspection) {
+    await skillPackageInspectionRoute(request, response, config, composition.sessionAdmission, id, businessPath)
+    return
+  }
   const isCreatePersonalSkillVersion =
     request.method === "POST" && businessPath.length === 4 && businessPath[0] === "self" && businessPath[1] === "skills" && businessPath[3] === "versions"
   if (isCreatePersonalSkillVersion) {

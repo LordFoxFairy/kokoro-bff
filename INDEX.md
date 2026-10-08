@@ -1,3 +1,9 @@
+### R343 Skills 本人原文读取当前入口
+
+两public GET运行由 `src/http/routes/skill-package-inspection.ts`、`src/infrastructure/clients/platform/skill-package-inspection-{connect,response}.ts`承接，server在generic前exact分流。目录与原文仅真实owner读取，绝对10s/1MiB与可信本人身份每次重验。真实四GET/九边界Root通过，UI仍未完成；详见docs/CURRENT.md当前R343收据。
+
+<!-- R343-PACKAGE-RUNTIME-MAP-END -->
+
 ## R342 Skills 包正文公开契约入口
 
 当前 `contract/openapi/v1/openapi.yaml` 为8.8.0/111，两本人package GET；`scripts/verify-skill-package-inspection-contract.mjs`具名审查新增closed表示/请求响应绑定/安全path，并保护旧109完整parsed面。主verify/check调用此入口，现contract-governance含漂移负控；不从runtime import scripts。当前没有对应生产HTTP路由或Web详情，下一仍沿三D0既定实现与真实用户验收。实际失败和结果见CURRENT R342。
