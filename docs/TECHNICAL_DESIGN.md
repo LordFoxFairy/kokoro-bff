@@ -1,3 +1,37 @@
+## R345-B-D0：Skill 更新时间固定消费与 Public 8.9（已定设计，尚未实现）
+
+基线为 BFF `411e6906f651087dbbd8ff8afd96d53e38b352c0`、canonical public `8.8.0 / 111 operations`；Platform 只完成 D0 `dcc2102e41a677b52367f2cc1a18b6283bbda2e6`，正式 3.4.0 机器、运行和发布 commit/digest 尚未冻结。本片只固定后继设计，不把 Platform 当前工作树或未提交 digest 当依赖，也不声明正常进程、Web 或浏览器已经出现更新时间。
+
+### Owner、放置与停止线
+
+| 项 | 已裁决方案 |
+|---|---|
+| Owner | `apps/kokoro-capability` / Platform `modules/skills` 继续唯一拥有 `Skill.updatedAt`；BFF 只固定版本消费并发布 Product 安全表示。 |
+| 当前事实 | Platform D0 已决定 HTTP 三个 closed schema 增 `skill_updated_at`，安装 Proto 增 `ProductSkillInstallation.skill_updated_at = 14`；BFF 当前仍固定旧 owner bytes，公开 8.8.0/111 不含该字段。 |
+| 目标职责 | catalog/pool/list、本人 managed、本人 published 与安装 Product 表示都输出所绑定精确 Skill revision 的更新时间；不改变查询资格、状态机、分页、错误、幂等或写命令。 |
+| 目录方案 | 沿现 `contract/vendor`、两个 Platform generator/generated client、`projection-http.ts` 与 `personal-installation-response.ts`；公开约束放一个普通具名 `scripts/verify-skill-updated-at-contract.mjs`。不建 presentation/metadata 模块，也不把规则塞进 Web。 |
+| 粒度 | 扩展既有固定消费者和 mapper；生成物只由现 generator 正规生成。新 checker 单独负责四个公开 schema 与完整 8.8 parsed 还原，避免继续扩大通用 checker。 |
+| 依赖 | 只消费 Root 已审查提交的 Platform 3.4.0 正式 commit、digest、provenance、OpenAPI 与 Proto/FDS；禁止从 Platform 工作树复制候选、读取 owner 数据库或用 Web/安装事实补值。 |
+| 数据/API | Public 升 `8.9.0`，operation 仍精确 111；只给四个既有 closed schema 增加 required `skill_updated_at`。Proto tag 8 `updated_at` 仍是安装更新时间，tag 14 才是 Skill 更新时间。 |
+| 删除项 | 无旧业务路径；禁止 optional fallback、unknown-field strip、双读、alias、以 `installed_at/updated_at` 冒充、默认时间或空占位。 |
+| 验证 | 固定 artifact/digest、正规双生成、完整图剥 tag14 还原、HTTP 父契约差分、public 8.8 parsed 还原、mapper强负控、contract/architecture/format/lint/typecheck/build；最终由 Root 成对激活并做真实浏览器验收。 |
+
+### 后继具名文件集
+
+1. 固定 HTTP 消费：`contract/vendor/kokoro-platform-http/<正式 owner commit>/platform-http.openapi.json`、`contract/dependencies/platform-http.json`、`scripts/generate-platform-http-client.mjs`，以及该 generator 既有 16 文件 allowlist：`src/generated/platform-http/client.gen.ts`、`client/{client.gen,index,types.gen,utils.gen}.ts`、`core/{auth.gen,bodySerializer.gen,params.gen,pathSerializer.gen,queryKeySerializer.gen,serverSentEvents.gen,types.gen,utils.gen}.ts`、`sdk.gen.ts`、`types.gen.ts`、`zod.gen.ts`。`openapi-ts.platform-http.config.ts`、依赖版本和 lockfile 不变。
+2. 固定 Connect 消费：`contract/vendor/kokoro-platform/<正式 owner commit>/` 中正式 provenance 列出的完整 publication、`contract/dependencies/platform-connect.json`、`scripts/generate-platform-connect-client.mjs`、`src/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.ts`。`common_pb.ts` 应保持内容不变；旧 V5–V9 与旧 parent 字节不改，不建 V10。
+3. 运行映射：`src/infrastructure/clients/platform/projection-http.ts` 对 skills/pool/catalog、published、managed 使用 generated required 字段并保持 success envelope/resource strict；`src/infrastructure/clients/platform/personal-installation-response.ts` 把 tag14 映为 `skill_updated_at`，不把它纳入 tag7/tag8 安装生命周期排序。
+4. Public 机器与校验：`contract/openapi/v1/openapi.yaml`、`scripts/verify-skill-updated-at-contract.mjs`、`scripts/verify-openapi.ts`、`scripts/verify-skill-package-inspection-contract.mjs`、`scripts/check-contract.mjs`、`contract/README.md`；`contract/tests/v1-operations.json` 必须 byte-exact 不改。
+5. 测试：`test/platform-http-contract.test.mjs`、`test/platform-connect-contract.test.mjs`、`test/platform-projection-http.test.mjs`、`test/platform-projection-route.test.mjs`、`test/skill-installation-http.test.mjs`、`test/contract/openapi-contract.test.mjs`、`test/contract-governance.test.mjs`、`test/architecture.test.ts`。缺失、额外字段、非法非 UTC `Z`、tag14 缺失/坏 Timestamp 与把 tag8 当来源时间都必须失败关闭。
+
+### 成对发布与真实验收
+
+新旧 closed consumer 没有混跑兼容交集。先提交但不激活 Platform 3.4.0 正式机器/运行，再提交但不激活固定该 commit/digest 的 BFF 8.9.0。Root 暂停并 drain BFF Skills 入口后，先启动并确认新 Platform ready，再启动并确认新 BFF ready，最后恢复入口；回滚也必须暂停/drain 后成对恢复旧 Platform 与旧 BFF，双方 ready 才开放。禁止 HMR、滚动混版、先发 unknown 字段或 optional compatibility。
+
+Web 后继固定 BFF 8.9 后，以真实 catalog/preview/detail/我的技能和 focus 路径验收；不得用空白 spacer 凑布局。作者/publisher、example prompts、真实封面、usage 和未安装 catalog 正文资格仍未完成，不能拿 owner/安装者、固定例子、安装数或占位图片伪造。现 `tags` 是来源自由标签，不是 Manus 固定分类；真实 `R255` 等验收资源不得由前端改名或自动删除来美化。
+
+<!-- R345-B-SKILL-UPDATED-AT-D0-END -->
+
 ### R343 本人技能包正文运行已接通；Web 详情仍待验收（2026-10-08）
 
 本片基线 e70562759e80a18a959c0e418e495721027ac54f/public8.8.0/111，不改机器契约、SQL、scope或配置。新增三个普通文件分别承接两GET编排、固定Connect与严格响应映射；现server精确分流，projection credential/token仅有界读取/绝对预算/轮换防迟到强化。唯一调用仍 Browser→Web→BFF→Platform→Storage，正文不缓存、不伪造。

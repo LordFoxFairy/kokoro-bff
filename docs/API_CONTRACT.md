@@ -1,3 +1,40 @@
+## R345-B-D0：Skill 更新时间固定契约（已定设计，尚未发行）
+
+BFF 当前仍是 `411e6906f651087dbbd8ff8afd96d53e38b352c0` / public `8.8.0 / 111 operations`；Platform `dcc2102e41a677b52367f2cc1a18b6283bbda2e6` 只有设计，正式 3.4.0 commit/digest 尚待 owner 冻结。后继 BFF 只能固定消费 Root 已审查提交的正式 artifact，不能用当前工作树生成物或预填 digest。
+
+### 固定 owner 输入
+
+- Platform HTTP 3.4.0 只在现 `Skill`、`SelfManagedSkill`、`PublishedPersonalSkill` 三个 closed schema 中增加 required `skill_updated_at`，值为精确 Skill revision 的 RFC 3339 UTC `...Z`；原 paths、operations、permission、分页、错误与缓存头不变。
+- Platform Proto 只在 `ProductSkillInstallation` 增 `google.protobuf.Timestamp skill_updated_at = 14`；现 45 RPC、旧字段、服务、V5–V9发行物与 tag 8 `updated_at` 全保。BFF 固定正式 proto/FDS/provenance并验证剥除仅 field14 后完整图等于父图。
+- HTTP 与 Connect generated consumer 都必须 required/strict；缺字段、额外字段、非法时间或未知 owner shape 映为既有安全 `skill_response_invalid`，不能静默删除、默认或回退。
+
+### Public 8.9 唯一增量
+
+canonical `contract/openapi/v1/openapi.yaml` 升为 **8.9.0 / 111 operations**，不增删 path、operationId、status、permission、header、error code、retryability 或 request shape。四个现有 schema 保持 `additionalProperties: false` 并增加同一属性：
+
+```yaml
+skill_updated_at: { type: string, format: date-time, pattern: "Z$" }
+```
+
+| Schema | 8.9 required/properties 变化 |
+|---|---|
+| `Skill` | 核心 required 增 `skill_updated_at`；`installed` 仍是原可选属性，其他字段不变。 |
+| `ManagedPersonalSkillResource` | 原安全八字段增为安全九字段，`skill_updated_at` required。 |
+| `PublishedPersonalSkillResource` | 原 ACTIVE 七字段增为八字段，`skill_updated_at` required。 |
+| `SkillInstallation` | required 增 `skill_updated_at`；`installed_at`、`updated_at`、optional `removed_at` 及全部原语义不变。 |
+
+`skill_updated_at` 只表示所绑定精确 Skill revision 的 `Skill.updatedAt`。特别是安装响应：tag7/`installed_at` 是安装时刻，tag8/`updated_at` 是安装记录变化时刻，tag14/`skill_updated_at` 是来源 Skill 时刻；三值允许不同，不建立相互先后约束，也不以 tag8 补 tag14。
+
+### 完整面保护与负控
+
+新 `scripts/verify-skill-updated-at-contract.mjs` 具名检查版本、四个 closed schema、required/property/type/format/`Z$`，再从 parsed 8.9 clone 中只删除四处 `skill_updated_at` 并把版本还原 8.8.0；结果必须与正式 8.8 全文 parsed canonical SHA `6981d9c4571b5c2c5198025e9c1fbda6bfa62805063e7483fa33c379021de9c8` 相等。`contract/tests/v1-operations.json` 仍为原 111 且 byte-exact。
+
+R342 package checker 必须先剥 R345 四字段回到 8.8，再按原逻辑剥 package 增量回到 8.7，原 8.7 hash 不更新；不能用新 baseline hash 掩盖旧契约漂移。现 `verify-openapi.ts` 主入口只接该具名 checker并收紧已有四schema断言；`check-contract.mjs` 只晋级当前版本字面，111不变。强负控逐一覆盖 required 删除、property 删除/增加、open object、非 string、缺 format、缺/放宽 `Z$`，并证明失败来自具名规则而非仅版本/hash。
+
+运行切换严格成对：Platform 新版 ready 前不启 BFF 新 fixed consumer，BFF 新版 ready 前不恢复 Skills 入口；回滚同样配对。Web 固定 8.9 并完成真实页面验收才构成用户证据。作者/publisher、example prompts、封面、usage及未安装目录正文资格不在本契约，不发布空值、假值或推断字段。
+
+<!-- R345-B-SKILL-UPDATED-AT-D0-END -->
+
 ### R343 本人技能包正文运行已接通；Web 详情仍待验收（2026-10-08）
 
 本片基线 e70562759e80a18a959c0e418e495721027ac54f/public8.8.0/111，不改机器契约、SQL、scope或配置。新增三个普通文件分别承接两GET编排、固定Connect与严格响应映射；现server精确分流，projection credential/token仅有界读取/绝对预算/轮换防迟到强化。唯一调用仍 Browser→Web→BFF→Platform→Storage，正文不缓存、不伪造。

@@ -1,3 +1,24 @@
+## R345-B-D0：Skill 更新时间消费数据边界（已定设计，尚未实现）
+
+本片不新增 BFF 持久化事实。唯一 owner 仍是 Platform Skills 的精确 `Skill.updatedAt`；Platform D0 commit `dcc2102e41a677b52367f2cc1a18b6283bbda2e6` 已裁决来源关系，但正式 3.4.0 machine/runtime commit 与 digest 尚待 owner 冻结。BFF 基线 `411e6906f651087dbbd8ff8afd96d53e38b352c0` 仍运行 public 8.8.0/111；目标 public 8.9.0 仍保持111 operations且仅增四处required展示字段，本节不把目标写成当前已上线事实。
+
+### 唯一事实与关系语义
+
+- catalog/pool/list、本人 managed 与本人 published 直接消费 Platform 所投影当前精确 Skill 行的 `skill_updated_at`，不由 BFF 重新查询或计算。
+- 安装投影的 `skill_updated_at` 必须来自已经 tenant、skill id、series id、revision 关系校验的精确来源 Skill；不得取系列最新版、安装者时间、receipt时间或 BFF 当前时间。
+- Proto tag7 `installed_at`、tag8 `updated_at` 和新 tag14 `skill_updated_at` 是三个独立 instant：tag8继续只表示安装记录启停/移除等变化，不改字段号、排序约束或重放身份。BFF mapper只做严格 Timestamp→UTC `Z` 编码，不比较Skill时间与安装时间。
+- Platform receipt replay/写 ACK 以当前精确来源安全 metadata 覆盖 Skill 时间的 owner 语义由 Platform 保持；BFF 不把该展示时间加入 idempotency digest、receipt、事件或本地状态。
+
+### 零持久化变化
+
+`database/schema.sql`、PostgreSQL表/列/index/transaction、Redis namespace、cache、receipt、outbox、幂等键、权限decision与租户模型全部零变化。BFF 不保存 `skill_updated_at`，不读 Platform 数据库，不创建 presentation/metadata 表，不缓存正文或 owner projection；字段仅存在于当次固定 owner response、严格内存映射与 public response。缺失/非法/额外 owner 数据失败关闭，不能从 `installed_at`、`updated_at`、文件时间、前端状态或默认值恢复。
+
+后继文件仅为正式 vendored owner artifact及其 dependency manifest/generator/generated输出、`projection-http.ts`、`personal-installation-response.ts`、public OpenAPI/具名 checker和现有contract/mapper测试；无需 SQL migration、Prisma、repository、service state、配置或数据回填。真实PG数据无需更新，因为事实列已由 Platform 持有；Root只在配对版本ready后恢复入口，并由Web读取真实响应验收。
+
+作者/publisher、example prompts、真实封面、usage与固定“全部/个人/官方/第三方”分类仍没有本片批准的BFF事实。`tags` 是来源自由标签并保留真实内容/顺序，不能改造成固定分类；`R255` 等现验收资源是实际数据，不自动改名、删除或以占位数据替换。
+
+<!-- R345-B-SKILL-UPDATED-AT-D0-END -->
+
 ### R343 本人技能包正文运行已接通；Web 详情仍待验收（2026-10-08）
 
 本片基线 e70562759e80a18a959c0e418e495721027ac54f/public8.8.0/111，不改机器契约、SQL、scope或配置。新增三个普通文件分别承接两GET编排、固定Connect与严格响应映射；现server精确分流，projection credential/token仅有界读取/绝对预算/轮换防迟到强化。唯一调用仍 Browser→Web→BFF→Platform→Storage，正文不缓存、不伪造。
