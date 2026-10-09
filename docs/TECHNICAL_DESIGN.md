@@ -1,3 +1,30 @@
+## T-K03.2 Skills 全接口规范与消费者切换设计（2026-10-09；设计门，未实现）
+
+基线 adcdac3 / Public11；本前缀是当前目标，覆盖下方历史“自定 Skills REST/包装”的选择，不把目标称已发行。Root 346c6841 已决定先完成 Skills 全部 API、Manus 一致 UI 与真实普通/Admin交互，其它新功能暂停。
+调用方向固定 Browser → Web 同源 → BFF → Platform/IAM/Storage；BFF 唯一拥有 public Product contract，Platform 保存 Skills/版本/安装/生命周期，IAM 保存身份与权限，Storage 保存包/封面/扫描。仅固定消费 owner 正式 commit/version/digest，不读取 owner SQL。
+
+### 唯一协议与事实组合
+公开文档接口只改版本段 /v2→/v1，保原 suffix/method/参数位置/字段/类型/每接口成功和错误；GET /v1/skill.list 不再使用 /skills 别名或旧 data/meta 包装。user.me 等其它接口仅后继排队。
+网站 Hub、我的技能、详情/下载是独立表示：沿 Root 五次实际 POST200 与用户九项 JSON补齐，不把 skill.list 当目录；网站是BFF browser-private：原 /skill.v1.SkillOptionalService/{ListHubSkills,ListSkills,GetSkill} 与 /skill.v1.SkillService/DownloadSkill；不重复加/v1、不造skill.hub.list。Web用同源/api前缀＋原service方法path，仍经BFF，不直连owner；这是不同可见性/资源表示，不是同接口双轨。
+采用唯一新 Skills 表示，整片切换时删除被替代的 REST别名、旧 schema/parser/包装/字段映射；不建立 compat facade、fallback 或两套运行成功路径。未观察的创建/导入/安装/文件/分享/Admin职责继续承接现事务边界，不能因为缺参考而删除或伪命名。
+creator_info.name 来自当前 IAM creator 身份，不用 publisher display 偷换 creator；网站 publisher 与 creator分开，缺权威事实不补默认作者。usageCount 由现 BFF distinct successful Run/coverage事实聚合，口径未对齐先明确缺口，不把 unavailable变0或重命名冒一致。
+公开时间为Unix秒int64，网站时间为原字符串，archiveSize/usageCount为原十进制字符串。Root B：原seriesId→稳定skillId，现Skill.id→versionUid，owner显式current发布引用；安装仍绑定精确旧versionUid，不能换当前/最大revision。普通skillId下载只解析owner显式current，本人已安装视图按原installation绑定；缺新owner事实/正式artifact输入时明确失败，不假pin完成、不用latest/HEAD补资格。
+POST原GetSkill/DownloadSkill返回JSON skill/downloadInfo；downloadInfo.downloadUrl实际指向BFF browser-private GET /skill-downloads/{handle}，Web同源/api前缀。此GET只是实际字节资源，非Manus公开文档method；对应旧/v1/skills/{id}/download在切换时删除。
+opaque短期handle用小TTL/容量有界内存绑定当前tenant/subject、精确versionUid、原下载资格、owner实际filename/expiry与不可变包句柄；TTL不越ownerexpiry，无新持久库/密钥/通用框架。每次重新当前human IAM/tenant准入、exact版本/扫描/下载资格，IO后再核；不把handle持有当授权，不返内部URL/凭据、不接受浏览器自报upstream。
+过期/重启丢句柄410并重新正规metadata，撤权403或安全404，非clean/依赖失败沿稳定脱敏错误；句柄缺失同410、跨主体不暴露存在性，绝不映射最新版本。有限流式字节/时限、真实SHA/size、安全Content-Disposition、no-store、取消/临时文件清理保原；signed URL只请求期内存且不日志。
+Web 同源新消费者一次切换目录→预览→详情文件树/正文→返回/关闭、Settings、草稿编辑/恢复/封面/创建导入/发布、分享下载、Admin；保旧列表/正文/焦点/滚动直到合法新投影原子提交，401/403清私有，身份/代际/abort拒迟到。
+写命令沿 owner真实 CAS/固定 key/body/digest/receipt；普通新版本仍 metadata-only，Admin版本及撤回/发布等保实际 CAS；unknown 只同意图重放，GET观察不当ACK、无自动升级/安装/回滚。网站未观察幂等/CAS字段不冒称参考定义。
+
+### 后继整片源码范围（此卡只写三设计，源码另授）
+入口/机器：src/bootstrap/server.ts、contract/openapi/v1/openapi.yaml；scripts/verify-openapi.ts、verify-skill-product-contract.mjs、verify-skill-package-inspection-contract.mjs、verify-skill-example-prompts-contract.mjs、verify-skill-updated-at-contract.mjs承接新当前闭集，新active合同按正式规范/语义验证，不继续叠历史20层hash逆向；保有效权限/tenant/CAS/取消/unknown阴性与非Skills字节。
+正式消费：contract/dependencies/platform-{connect,http}.json、现唯一 vendor/platform发布对象、openapi-ts.platform-http.config.ts、scripts/generate-platform-{connect,http}-client.mjs 及其现 generated目标仅正规生成；IAM/Storage非必要pin、Team与非Skills机器块保原字节。
+查询/聚合：src/http/routes/{platform-projection,managed-personal-skills,skill-usage,skill-share,skill-download,skill-package-inspection}.ts；src/infrastructure/clients/platform/{catalog-connect,projection-http,skill-product-connect,skill-product-schema,skill-product-response,personal-installation-response,skill-package-inspection-connect,skill-package-inspection-response}.ts；现 iam-publisher-profile.ts 与 Storage skill-product-transfer.ts按各自职责承接；新增普通src/application/skill-download-handles.ts仅负责有界短期句柄身份/expiry/eviction，选择此处而非放wire parser或新模块，依赖请求期owner下载事实、不访问DB/新密钥；不加通用façade。
+命令：src/http/routes/现 skill-drafts、create-skill-draft、begin/get/complete-skill-package-upload、validate-skill-draft、publish-skill、personal-skill-lifecycle、create/withdraw-personal-skill、skill-installations、skill-github-import、skill-ai-import、skill-cover、skill-admin；对应现 src/http/*skill*input.ts 与 Platform *skill*projector/client；不扩普通/Admin权限或丢已有事务能力。
+测试：test/contract/openapi-contract.test.mjs、platform-{http,connect}-contract.test.mjs、platform-projection-{http,route}.test.mjs与现 skill-*.test.ts/.mjs、personal-skill-lifecycle-http.test.mjs；现 skill-product/package/share/usage integration夹具保原业务负控，新参考字面形状、旧别名拒绝、数值/时间、撤权/过期/取消/unknown列具名RED。
+验收按当前冻结跑 pnpm contract:check / lint / typecheck / test:architecture / test / build；真实隔离PG/Redis/Storage/provider与正常源激活/普通和Admin浏览器仅Root执行。新字段无权威来源、未知写参考与实际UI仍OPEN，工程数量不销账。
+
+<!-- T-K03.2-BFF-TECHNICAL-DESIGN-END; complete original body follows -->
+
 ## R357-H1 当前人类 MCP 准入（2026-10-09）
 
 本切片归 BFF auth 与既有 MCP projection；IAM 唯一拥有身份/成员权限。只消费正式 IAM 55befe5092f96d617088549df3166e1d381e6b1c / 0.11.0 / SHA47011671cf2c3631c5ff914db4b40a8a9f9cdecc9b2b6fcd13a359a45b0882d3。

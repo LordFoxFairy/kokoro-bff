@@ -1,3 +1,21 @@
+## T-K03.2 Skills 全表示的数据边界（2026-10-09；设计目标，无新增存储）
+
+基线 adcdac3；现 database/schema.sql不变。本片无新表/列/索引/Schema/迁移/Role，不建立Skills镜像或跨owner SQL；新面向页面字段由唯一owner正式事实提供，三设计与整片机器发行同步。
+Platform保原Skill、series/revision、包ref、安装、状态/CAS/receipt；IAM保creator/publisher身份和当前权限，Storage保Asset/Blob/版本/scan，Agent保真实Run/source事件。BFF仅原Project关联、typed Share、durable usage与自身receipt，不重复持有owner canonical字段。
+Root B明确原seriesId→稳定skillId，现Skill.id→versionUid；owner显式current发布引用而非MAX(revision)/latest。安装精确旧version引用保持；普通skillId读/download选显式current，本人安装视图按原installation绑定。缺新owner字段/selector/授权支持或未发行正式artifact就失败，不假pin/HEAD补齐；原ID/版本/安装/37Asset保，不自动重装/升级或伪造sourceVersion。
+公开created_at/updated_at按真实owner instant转Unix秒int64，网站UTC字符串分别保存Skill/currentVersion/source/加入等既有含义；不得把Skill更新时间充当创建/版本/源commit时间。JSON数值int64与字符串大数分别按契约校验，不能统一Number()降精度。
+creator_info使用creator IAM ref/name，publisher资料沿真实publisher ref；作者缺失/权限失败按正式接口规则处理，不填publisher冒creator、默认官方账号或假verified。defaultEnable/defaultAdd/sortOrder/visibility/type等无事实者列owner缺口，不用当前enabled/audience推导冒同字段。
+Hub archiveSize/checksum/fileCount必须对应同一实际currentVersion包；tags.values/tagOptions来源由owner当前规范给出，不拿旧category_keys任意分类或预置标签当响应；current与license/sync/source观察不在BFF发明持久真源。
+现usage projection保持distinct successful Run/重复与乱序/冲突处理及coverage；只有经批准等价的统计口径才能发usageCount。无证明仍是明确缺口，不返回虚构零，不新建统计表或从当前页面条数计算。
+Share仍使用现bff_share事实和撤销/到期，链接不替当前tenant主体/exactrevision授权。文件树/正文与安装package直接消费正式owner，不缓存为BFF Skill镜像；读列表包括停用项且零启用写。
+downloadInfo是请求期metadata；downloadUrl指向browser-private GET /skill-downloads/{handle}（Web/api），非Manus公开接口。小TTL/容量有界内存句柄固定tenant/subject、exact versionUid/owner包句柄、原下载资格、真实filename与expiry，TTL不超ownerexpiry；无新持久库/表/密钥/框架，重启丢句柄410后重取metadata，不恢复为最新。
+每次字节请求当前H准入及ownerexact资格/scan、IO后重验；到期410、撤权403或安全404，句柄缺失同410，scan/依赖稳定失败；不保存/返回signed内部URL、cookie/token，不按handle拥有者免鉴权，不从unknown/HEAD/current read追认版本。
+创建/上传/cover/import/publish/version/withdraw/Admin沿现幂等receipt、固定规范化输入与digest/CAS；只替wire表示，原command事务/unknown重放和final locator事实保留。一般新version不修改base，Withdraw/Admin真实写仍核实际CAS。
+BFF对自己的AI artifact/event关联与usage/share事实继续本仓查询，跨owner仅固定contract读取；request projection/IAM姓名不扩为新持久化owner。非Skills/Team/AGUI/现Schema与其它资源不在切片内。
+验证：三完整父suffix SHA必须等卡，canonical Schema byte保持；后继pure contract/类型/负控与Root真实PG/Redis/Storage配对分别记录。数据修复/正常资源升级与完整普通/Admin浏览器由Root另核，不因文档门通过冒已实施。
+
+<!-- T-K03.2-BFF-DATA-MODEL-END; complete original body follows -->
+
 ## R357-H1 当前人类 MCP 准入（2026-10-09）
 
 本切片归 BFF auth 与既有 MCP projection；IAM 唯一拥有身份/成员权限。只消费正式 IAM 55befe5092f96d617088549df3166e1d381e6b1c / 0.11.0 / SHA47011671cf2c3631c5ff914db4b40a8a9f9cdecc9b2b6fcd13a359a45b0882d3。

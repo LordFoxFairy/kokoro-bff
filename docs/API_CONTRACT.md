@@ -1,3 +1,53 @@
+## T-K03.2 Skills 正式 Product协议收敛（2026-10-09；目标待owner发行）
+
+当前基线 adcdac3 / Public11.0.0 /132 operations；原 Skills 42paths/47ops 的职责清单如下，表中旧路径均带 /v1。对应参考替换时同片删旧别名，未观察操作不假装已有Manus同名文档；其它85 operations与Team保持，不扩到user.me。
+官方唯一依据：[skill.list](https://open.manus.ai/docs/v2/skill.list)（2026-10-09核对）；GET /v2/skill.list → GET /v1/skill.list，可选 query project_id:string；成功 {ok:boolean,request_id:string,data:Skill[]}，错误 {ok:boolean,request_id:string,error:{code:string,message:string}}，不加旧meta/retryable外壳。
+Skill的id/name/description:string，owner_type=personal|official|team|project|app，creator_info:{user_id:string,name:string}，created_at/updated_at:integer<int64> Unix秒；保原可选/缺省声明。Root B稳定skillId=原seriesId，versionUid=现Skill.id，current为owner显式发布引用；安装保精确旧version。包含停用安装且读取不启用；正式owner字段/artifact未发行时为必需后继输入，不声称已固定消费。
+文档 APIKey/标准OAuth/trusted client可见性不同：标准OAuth仅其App技能、project_id为InvalidArgument400；APIKey/trusted可含可见项目。Kokoro按正式IAM实际凭据类别/主体/授权实现，不以service scope或浏览器参数冒任一类别；原文 security空数组不作匿名授权。
+网站来源：Root r357-manus-skills-protocol-observed.json五次POST200、truncated=true；用户九项JSON SHA262d4df11290ac3dbde396f88d7ed435b70c54eb04be2f6251a56f02cd4338a6。BFF browser-private原/skill.v1.SkillOptionalService/{ListSkills,ListHubSkills,GetSkill}与/skill.v1.SkillService/DownloadSkill，Web/api＋原path；不重复/v1、不造公开同名方法。
+下列S=string、B=boolean、I=integer；presence仅记录本次出现/缺失，所有未证明required/optional/default/enum/错误格OPEN，遗漏不等于可选、null或false；完整规范已明确的公开skill.list可先实施，不等待穷尽网站枚举。
+Hub集合H：skillId/originalName/displayName/userDescription/publishStatus/sortOrder/createdAt/publisherType/usageCount/type:S；icon:{type:S,value:S}；exampleQuestions:S[]；tags:{values:S[]}；currentVersion:{versionUid:S,checksum:S,archiveSize:S,fileCount:I,status:S,current:B,createdAt:S}。
+Hub扩展X：verified:B；coverImage/cmsUpdatedAt/syncStatus:S；source:{type,url,owner,repository,ref,path,stars,forks,latestCommitSha,latestCommitAt,licenseSpdxId,licenseUrl,licenseStatus,licenseCategory,pathCommitAt:全S}；currentVersion附sourceRevision/sourceRevisionAt/licenseSpdxId/licenseUrl:全S；tagOptions:{values:[{tag:S,displayName:S}]}。
+Detail集合D：id/name/description/version/updatedAt/ownerType/type/displayName/sortOrder/createdAt/visibility/userDescription/coverImage/addTime:S；added/defaultEnable/defaultAdd:B；exampleQuestions/sessionTypes:S[]；tags:{values:S[]}；skillIcon:{type:S,value:S}。DownloadInfo集合F：downloadUrl/filename/expiresAt:S。
+ListSkills的userAddedSkills与officialSkills元素均观察D、enabled:B、icon:S、skillConfig:{teamSkillForceAdd:B}；只有officialSkills观察deviceCapable:B。此是各数组字段union而非逐record必有承诺；Detail的D不因此自动获得enabled/deviceCapable/skillConfig。
+
+| 实际POST与请求presence | 实际200响应字段类型与presence | 未观察规则/错误/写协议 |
+| --- | --- | --- |
+| OptionalService/ListSkills；{}，零请求成员 | userAddedSkills:object[]、officialSkills:object[]均出现；元素按上述ListSkills集合 | required/optional/default/enum OPEN；错误OPEN；关联写协议OPEN |
+| OptionalService/ListHubSkills；pageSize:I=9、shuffle:B=true、includeOfficialSkills:B=true均出现 | skills:object[9]、tagOptions出现；元素H与X字段union出现；nextPageToken未出现 | 所有presence规则OPEN；不推下一页不存在；错误OPEN；写协议OPEN |
+| OptionalService/ListHubSkills；pageSize:I=1出现，shuffle/includeOfficialSkills未出现 | skills:object[1]、tagOptions、nextPageToken:S出现；H、coverImage/cmsUpdatedAt/source/syncStatus/版本source与license出现，verified未出现 | 不推缺省开关值或verified=false；presence规则OPEN；错误OPEN；写协议OPEN |
+| OptionalService/GetSkill；skillId:S出现 | skill:object含D、downloadInfo:object含F均出现 | presence/enum/default OPEN；错误OPEN；关联写协议OPEN |
+| SkillService/DownloadSkill；skillId:S出现 | skill:object含D、downloadInfo:object含F均出现；POST返回JSON，非ZIP body | presence/enum/default OPEN；错误OPEN；关联写协议OPEN |
+
+用户九项逐record观察verified为5/9，source/syncStatus/cmsUpdatedAt及版本source/license字段为4/9；coverImage在九项出现但未证明全局必有。所有verified/source/sync与license presence及状态转移只是observation，未见规则OPEN；不按publisherType/sourceKind推true/false或补null。
+
+### 原全Skills职责承接/替换表
+
+H=现authorizeUserRequest：web-bff service envelope＋唯一human Bearer→fresh IAM session，tenant=context.identity.namespace且等config.tenantId，subject=context.identity.userId；不信body/旧identity header。A=H＋现CheckTenantSkillAuthorization action与当前IAM admin资格；不是service scope或陈旧platformAdmin标志授human。O-R=现platform:projection.read，O-W=platform:skill-catalog.manage，O-A=platform:skills-admin.manage各自固定tenant正式workload credential；均不替human。actions逐项来自src/auth/user-admission.ts现skillActionForRequest与正式IAM schema；网站POST read按原读取语义映射H，不能猜read/manage动作字符串。
+
+| 旧 /v1 路径与方法（完整42paths/47ops） | 正式职责与参考处理 | 当前可信human/admin与owner边界 |
+| --- | --- | --- |
+| GET /skills、/skills/pool、/skills/catalog | 分开已安装选择、有效池、Hub目录；公开选择以skill.list替换；Hub按ListHubSkills，非同资源合并 | H→O-R；现GET无独立Skills IAM action，owner可见性读，不能以POST carrier改为写action |
+| GET /skills/{skill_id}、/self/skills、/self/skills/{skill_id} | active确认、owned管理、本人详情；ListSkills/GetSkill已观察，owned草稿职责保留；始终当前human IAM/tenant准入，拒绝匿名，状态/权限失败安全404/403 | H→O-R；owned本人边界/active状态由owner核；无anonymous |
+| POST /skills/drafts；GET/POST /skills/{skill_id}/package-upload；POST其/complete | 真实Create/Begin/观察/Complete与版本ACK；参考写协议待观察，保现固定CAS/key与来源版本 | H→O-W；POST create_draft/begin_upload/complete_upload；GET观察仍H、现owner O-W句柄读 |
+| POST /skills/{skill_id}/validate、/publish；PATCH其/draft；POST其/discard、/audience | 校验/发布/编辑/丢弃/可见性事务；未观察，保owner生命周期与审计，不删职责或猜公开名称 | H→O-W；validate_draft/publish/update_draft/discard_draft/set_publication_audience |
+| POST /self/skills/{skill_id}/versions、/withdraw | 普通独立新draft与实际CAS撤回；未观察，保与Admin版本语义区别 | H→O-W；create_version/withdraw；本人owner scope固定user/当前subject |
+| GET/POST /skill-installations；GET/DELETE /skill-installations/{installation_id}；PUT其/enabled | 精确版本安装/读回/移除/启停；ListSkills表示补充不替写准入，操作协议待观察 | H；GET→O-R；POST install/DELETE remove_installation/PUT set_installation_enabled→O-W |
+| POST /skills/github/preview、/github/import、/ai-import | 固定commit/path预览导入、真实conversation/artifact ZIP导入draft；写协议待观察，不用Chat回调冒成功 | H；preview→O-W调用前后当前资格、无独立IAM action；两import create_draft→O-W |
+| GET /skills/{skill_id}/package、/self/skills/{skill_id}/package、/skill-installations/{installation_id}/package | 可选file_path原目录与正文/exactrevision；网站文件API未观察，保路径/UTF8/大小和安装旧版 | H→O-R；catalog可见性、managed本人、installation原绑定由owner核；无独立GET action |
+| GET /skills/{skill_id}/download | POST原DownloadSkill取得JSON F，downloadUrl指向唯一GET /skill-downloads/{handle}字节资源（Web/api）；旧直接二进制入口删除，不宣新GET为Manus公开method | H→O-R＋I/O后同身份readmit；当前下载资格/exact包由owner核；新handle每次同准入 |
+| GET/POST /skills/{skill_id}/cover-upload；POST其/complete；GET /skills/{skill_id}/cover | 实际cover版本ACK/扫描/CAS与图片读取；参考写协议未观察，保本人与Admin权限隔离 | H→O-W；POST begin_upload/complete_upload，GET观察/cover bytes当前资格；不替Admin授权 |
+| GET /admin/skills、/admin/skills/{skill_id}；POST其/versions、/publish、/withdraw、/quarantine、/restore、/audience、/discard | Admin列表详情七事务；未观察，保当前human admin/专用owner凭据/CAS，不扩大普通发布权 | A→O-A；GET admin_read；POST admin_create_version/official_publish/admin_withdraw/quarantine/restore/admin_set_publication_audience/admin_discard_draft |
+| POST /skill-shares；GET/DELETE /skill-shares/{share_id}；POST /skills/usage | BFF自有链接/撤销与可信usage聚合；参考未观察，链接不授匿名/跨tenant资格，缺coverage不变0 | H；share写BFF自有tenant/creator且inspect→O-R，usage本tenant可见性；现无独立Skills IAM action |
+| PATCH /projects/{projectId}/skills/{skill} | 项目Skills选择关联；与公开list项目读取分开，保项目权限/幂等，不猜task调用字段 | H＋现authorizeLiveBffMutation项目资格；fresh inspect→O-R；关联写本仓，现无Skills专用IAM action |
+
+新增字节资源GET /skill-downloads/{handle}仅browser-private、H当前准入；opaque小TTL/容量有界内存绑定tenant/subject、exact version、原资格、真实filename/expiry。过期或重启旧句柄410，撤权403或安全404；scan/依赖稳定脱敏错误；句柄缺失同410；no-store、request-id、取消预算沿现边界，不暴露内部URL/凭据、不猜最新。skillId普通GET/Download解析owner显式current，本人安装下载保持原installation→旧version绑定；owner无必需selector/资格时失败，不latest/HEAD。
+BFF一次修改唯一public OpenAPI/现route与projector；正式 owner发行后固定生成，不编辑generated文件；Web随后固定新artifact，同时删对应旧snake/扁平schema与旧data/meta消费，Admin与其它仍有效CAS保原职责。新机器major/digest由Root冻结发行，不在本设计伪报操作总数不变。
+各已定义参考接口采用自己的success/error；网站仅200已观测，错误/headers/枚举/默认值待证据与本地正式裁决。现错误脱敏、status语义、412真实CAS/409幂等冲突/unknown、request-id、限流Retry-After、取消/绝对预算/no-store门仍保持，不能为接新shape放宽准入或吞依赖失败。
+合同验收保非Skills/Team块与有效权限/tenant/CAS/取消/unknown原阴性；新active合同依正式规范校验，不继续机械叠历史20层hash逆向；逐一覆盖全表职责、公开停用列出且零写、坏project资格、creator与publisher不同、Hub分页/tagOptions、下载过期/撤权/精确版本以及旧别名拒绝。缺参考不是“接口已完成”，不替Root正常资源/页面证据。
+
+<!-- T-K03.2-BFF-API-CONTRACT-END; complete original body follows -->
+
 ## R357-H1 当前人类 MCP 准入（2026-10-09）
 
 本切片归 BFF auth 与既有 MCP projection；IAM 唯一拥有身份/成员权限。只消费正式 IAM 55befe5092f96d617088549df3166e1d381e6b1c / 0.11.0 / SHA47011671cf2c3631c5ff914db4b40a8a9f9cdecc9b2b6fcd13a359a45b0882d3。
