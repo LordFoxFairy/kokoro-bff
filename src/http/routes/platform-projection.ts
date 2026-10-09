@@ -1,33 +1,36 @@
+import { ConnectError, Code } from "@connectrpc/connect"
+import { authorizeUserRequest } from "../../auth/user-admission.js"
+import type { BffServerComposition } from "../../bootstrap/runtime.js"
+import type { SkillSpecificationOperation } from "../../infrastructure/clients/platform/skill-specification.types.js"
+import { strictParseRawJson } from "../../infrastructure/raw-json.js"
+import {
+  publicSkillListSchema,
+  publicSkillQuerySchema,
+  websiteEmptyRequestSchema,
+  websiteHubRequestSchema,
+  websiteHubResponseSchema,
+  websiteListResponseSchema,
+  websiteSkillRequestSchema,
+  websiteSkillSchema,
+} from "../skill-specification-schema.js"
+import { startSkillRequestBudget, readSkillBody } from "./skill-drafts.js"
 import { mcpRequestRemaining } from "../mcp-request-budget.js"
 import { skillRequestRemaining } from "./skill-drafts.js"
-import { IamPublisherProfileClient } from "../../infrastructure/clients/iam-publisher-profile.js"
 import type { IncomingMessage, ServerResponse } from "node:http"
 
 import type { BffConfig } from "../../config/runtime.js"
 import type { RequestContext } from "../../domain/request-context.js"
-import {
-  zGetPublishedPersonalSkillPath,
-  zListMcpServersQuery,
-  zListSelfMcpConnectionsQuery,
-  zListVisibleSkillCatalogQuery,
-  zListVisibleSkillPoolQuery,
-  zListVisibleSkillsQuery,
-} from "../../generated/platform-http/zod.gen.js"
+import { zListMcpServersQuery, zListSelfMcpConnectionsQuery } from "../../generated/platform-http/zod.gen.js"
 import { PlatformProjectionHttpClient, type ProjectionOperation } from "../../infrastructure/clients/platform/projection-http.js"
 import { queryOf } from "../request.js"
 import { send } from "../response.js"
 
 const clients = new WeakMap<BffConfig, PlatformProjectionHttpClient>()
-const skillQueryKeys = new Set(["query", "tags", "scope_kind", "limit", "cursor", "category_key", "source_kind"])
 const connectionQueryKeys = new Set(["connection_id", "provider_key", "limit", "cursor"])
 const mcpQueryKeys = new Set(["provider_key", "limit", "cursor"])
 
 function operationFor(path: string[], method: string): ProjectionOperation | null {
   if (method !== "GET") return null
-  if (path.length === 1 && path[0] === "skills") return "skills"
-  if (path.length === 2 && path[0] === "skills" && path[1] === "pool") return "pool"
-  if (path.length === 2 && path[0] === "skills" && path[1] === "catalog") return "catalog"
-  if (path.length === 2 && path[0] === "skills" && !["quota", "drafts", "github"].includes(path[1] ?? "")) return "skill"
   if (path.length === 2 && path[0] === "mcp" && path[1] === "servers") return "mcp"
   if (path.length === 2 && path[0] === "mcp" && path[1] === "connections") return "mcpConnections"
   return null
@@ -35,8 +38,7 @@ function operationFor(path: string[], method: string): ProjectionOperation | nul
 
 function parseQuery(request: IncomingMessage, operation: ProjectionOperation): Record<string, unknown> | null {
   const incoming = queryOf(request)
-  if (operation === "skill") return incoming.size === 0 ? {} : null
-  const allowed = operation === "mcpConnections" ? connectionQueryKeys : operation === "mcp" ? mcpQueryKeys : skillQueryKeys
+  const allowed = operation === "mcpConnections" ? connectionQueryKeys : mcpQueryKeys
   const query: Record<string, unknown> = {}
   for (const key of new Set(incoming.keys())) {
     if (!allowed.has(key)) return null
@@ -52,16 +54,7 @@ function parseQuery(request: IncomingMessage, operation: ProjectionOperation): R
       query.limit = Number(normalized[0])
     } else query[key] = normalized[0]
   }
-  const schema =
-    operation === "mcpConnections"
-      ? zListSelfMcpConnectionsQuery
-      : operation === "skills"
-        ? zListVisibleSkillsQuery
-        : operation === "pool"
-          ? zListVisibleSkillPoolQuery
-          : operation === "catalog"
-            ? zListVisibleSkillCatalogQuery
-            : zListMcpServersQuery
+  const schema = operation === "mcpConnections" ? zListSelfMcpConnectionsQuery : zListMcpServersQuery
   const checked = schema.safeParse(query)
   return checked.success ? checked.data : null
 }
@@ -100,11 +93,6 @@ export async function livePlatformProjectionRead(
     strictError(response, 400, operation === "skill" ? "invalid_skill_request" : "invalid_query_parameter", "Read query is invalid")
     return true
   }
-  const skillId = operation === "skill" ? path[1] : undefined
-  if (operation === "skill" && !zGetPublishedPersonalSkillPath.safeParse({ skill_id: skillId }).success) {
-    strictError(response, 400, "invalid_skill_request", "Skill ID is invalid")
-    return true
-  }
   const projection = config.platformProjection
   if (projection?.baseUrl === null || projection?.credentialFile === null || config.iamBaseUrl === null || projection === undefined) {
     strictError(response, 503, dependencyCode, dependencyMessage, true)
@@ -125,14 +113,7 @@ export async function livePlatformProjectionRead(
   )
   try {
     if ((operation === "mcp" || operation === "mcpConnections") && mcpRequestRemaining(request) <= 0) throw new Error("mcp_read_deadline")
-    const result = await client.read(
-      operation,
-      context.identity.namespace,
-      context.identity.userId,
-      context.requestId,
-      { query, ...(skillId === undefined ? {} : { skillId }) },
-      controller.signal,
-    )
+    const result = await client.read(operation, context.identity.namespace, context.identity.userId, context.requestId, { query }, controller.signal)
     if (
       controller.signal.aborted ||
       response.destroyed ||
@@ -144,17 +125,7 @@ export async function livePlatformProjectionRead(
       return true
     }
     if (result.ok) {
-      const token = /^Bearer ([^\s,]+)$/iu.exec(request.headers.authorization ?? "")?.[1]
-      const data =
-        operation === "mcp" || operation === "mcpConnections"
-          ? result.data
-          : await new IamPublisherProfileClient(config.iamBaseUrl ?? "", 5000).enrich(
-              context.identity.namespace,
-              token ?? "",
-              context.requestId,
-              result.data,
-              controller.signal,
-            )
+      const data = result.data
       if (!controller.signal.aborted && !response.destroyed && !response.writableEnded) send(response, 200, { data })
     } else
       strictError(
@@ -166,6 +137,141 @@ export async function livePlatformProjectionRead(
       )
   } catch {
     if (!request.aborted && !response.destroyed && !response.writableEnded) strictError(response, 503, dependencyCode, dependencyMessage, true)
+  } finally {
+    clearTimeout(timer)
+    request.removeListener("aborted", abort)
+    response.removeListener("close", abort)
+  }
+  return true
+}
+
+/** The specification representations are independent of the retired flattened catalog representation. */
+export async function skillSpecificationReadRoute(
+  request: IncomingMessage,
+  response: ServerResponse,
+  config: BffConfig,
+  composition: BffServerComposition,
+  requestId: string,
+  pathname: string,
+): Promise<boolean> {
+  const paths = new Map<string, SkillSpecificationOperation>([
+    ["/v1/skill.list", "skill.list"],
+    ["/skill.v1.SkillOptionalService/ListSkills", "ListSkills"],
+    ["/skill.v1.SkillOptionalService/ListHubSkills", "ListHubSkills"],
+    ["/skill.v1.SkillOptionalService/GetSkill", "GetSkill"],
+    ["/skill.v1.SkillService/DownloadSkill", "DownloadSkill"],
+  ])
+  const operation = paths.get(pathname)
+  if (operation === undefined) return false
+  const publicList = operation === "skill.list"
+  const error = (status: number, code: string, message: string): void => {
+    send(response, status, publicList ? { ok: false, request_id: requestId, error: { code, message } } : { error: { code, message } })
+  }
+  if (request.method !== (publicList ? "GET" : "POST")) {
+    response.setHeader("allow", publicList ? "GET" : "POST")
+    error(405, "MethodNotAllowed", "Request method is invalid")
+    return true
+  }
+  const deadlineAt = startSkillRequestBudget(request)
+  const controller = new AbortController()
+  const abort = (): void => controller.abort()
+  request.once("aborted", abort)
+  response.once("close", abort)
+  const timer = setTimeout(abort, Math.max(0, skillRequestRemaining(request)))
+  const within = <T>(work: Promise<T>): Promise<T> => {
+    if (controller.signal.aborted) return Promise.reject(new Error("skill_read_deadline"))
+    return new Promise<T>((resolve, reject) => {
+      const cancelled = (): void => reject(new Error("skill_read_deadline"))
+      controller.signal.addEventListener("abort", cancelled, { once: true })
+      work.then(resolve, reject).finally(() => controller.signal.removeEventListener("abort", cancelled))
+    })
+  }
+  try {
+    let input: Record<string, unknown>
+    const query = queryOf(request)
+    if (request.headers["idempotency-key"] !== undefined) throw new Error("skill_spec_input_invalid")
+    if (publicList) {
+      if (request.headers["transfer-encoding"] !== undefined || (request.headers["content-length"] !== undefined && request.headers["content-length"] !== "0"))
+        throw new Error("skill_spec_input_invalid")
+      const values: Record<string, string> = {}
+      for (const key of new Set(query.keys())) {
+        if (query.getAll(key).length !== 1) throw new Error("skill_spec_input_invalid")
+        values[key] = query.get(key) ?? ""
+      }
+      const parsed = publicSkillQuerySchema.safeParse(values)
+      if (!parsed.success) throw new Error("skill_spec_input_invalid")
+      input = parsed.data
+    } else {
+      if (query.size > 0 || !/^application\/json(?:\s*;\s*charset=utf-8)?$/iu.test(request.headers["content-type"] ?? ""))
+        throw new Error("skill_spec_input_invalid")
+      let raw: unknown
+      try {
+        raw = strictParseRawJson(await within(readSkillBody(request)))
+      } catch (cause) {
+        if (controller.signal.aborted || (cause instanceof Error && cause.message === "request_body_too_large")) throw cause
+        throw new Error("skill_spec_input_invalid")
+      }
+      const schema =
+        operation === "ListSkills" ? websiteEmptyRequestSchema : operation === "ListHubSkills" ? websiteHubRequestSchema : websiteSkillRequestSchema
+      const parsed = schema.safeParse(raw)
+      if (!parsed.success) throw new Error("skill_spec_input_invalid")
+      input = parsed.data
+    }
+    const admission = await within(authorizeUserRequest(request, config, composition.sessionAdmission, requestId, controller.signal))
+    if (!admission.ok) {
+      if (admission.retryAfter !== undefined) response.setHeader("retry-after", admission.retryAfter)
+      error(admission.status, admission.code, "Current user admission is required")
+      return true
+    }
+    const source = composition.skillSpecificationSource
+    if (source === null) throw new Error("skill_dependency_unavailable")
+    const context = Object.freeze({ ...admission.context, identity: Object.freeze({ ...admission.context.identity }), humanBearer: admission.bearerToken })
+    let payload: unknown
+    if (operation === "GetSkill" || operation === "DownloadSkill") {
+      const prepared = await within(source.prepareDownload(operation, input.skillId as string, context, controller.signal, deadlineAt))
+      if (typeof prepared !== "object" || prepared === null || typeof prepared.binding !== "object" || prepared.binding === null)
+        throw new Error("skill_response_invalid")
+      const skill = websiteSkillSchema.safeParse(prepared.skill)
+      const binding = prepared.binding
+      if (
+        !skill.success ||
+        skill.data.id !== input.skillId ||
+        binding.skillId !== input.skillId ||
+        binding.tenantId !== admission.context.identity.namespace ||
+        binding.subjectId !== admission.context.identity.userId
+      )
+        throw new Error("skill_response_invalid")
+      if (controller.signal.aborted || skillRequestRemaining(request) <= 0) throw new Error("skill_read_deadline")
+      const handle = composition.skillDownloadHandles.issue(binding)
+      payload = {
+        skill: skill.data,
+        downloadInfo: { downloadUrl: `/api/skill-downloads/${handle.handle}`, filename: binding.filename, expiresAt: new Date(handle.expiresAt).toISOString() },
+      }
+    } else {
+      const result = await within(source.read(operation, input, context, controller.signal, deadlineAt))
+      const schema = publicList ? publicSkillListSchema : operation === "ListSkills" ? websiteListResponseSchema : websiteHubResponseSchema
+      const parsed = schema.safeParse(result)
+      if (!parsed.success) throw new Error("skill_response_invalid")
+      payload = publicList ? { ok: true, request_id: requestId, data: parsed.data } : parsed.data
+    }
+    if (!controller.signal.aborted && skillRequestRemaining(request) > 0 && !response.destroyed && !response.writableEnded) send(response, 200, payload)
+    else throw new Error("skill_read_deadline")
+  } catch (cause) {
+    if (!request.aborted && !response.destroyed && !response.writableEnded) {
+      const code = cause instanceof Error ? cause.message : ""
+      if (cause instanceof ConnectError && [Code.PermissionDenied, Code.Unauthenticated, Code.NotFound, Code.InvalidArgument].includes(cause.code)) {
+        const status = cause.code === Code.PermissionDenied ? 403 : cause.code === Code.Unauthenticated ? 401 : cause.code === Code.NotFound ? 404 : 400
+        error(
+          status,
+          status === 403 ? "PermissionDenied" : status === 401 ? "Unauthenticated" : status === 404 ? "NotFound" : "InvalidArgument",
+          status === 400 ? "Read input is invalid" : "Skill is not available",
+        )
+      } else if (code === "request_body_too_large") error(413, "PayloadTooLarge", "Read body exceeds the request limit")
+      else if (code === "skill_spec_input_invalid") error(400, "InvalidArgument", "Read input is invalid")
+      else if (code === "skill_response_invalid") error(502, "InvalidResponse", "Skills dependency response is invalid")
+      else if (code === "skill_download_expired") error(410, "Gone", "Download qualification has expired")
+      else error(503, "Unavailable", "Skills dependency is unavailable")
+    }
   } finally {
     clearTimeout(timer)
     request.removeListener("aborted", abort)

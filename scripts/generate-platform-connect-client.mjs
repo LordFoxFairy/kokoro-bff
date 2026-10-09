@@ -16,7 +16,7 @@ import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-const ownerCommit = "fa185ed2b25c3e81946cfdcd12d7665d02b8bad3"
+const ownerCommit = "6d2a3bd005d483f036efaa1b6990b5c620024bc3"
 const vendorRoot = `contract/vendor/kokoro-platform/${ownerCommit}`
 const vendor = `contract/vendor/kokoro-platform/${ownerCommit}/proto`
 const artifacts = {
@@ -41,10 +41,10 @@ const artifactProvenanceDigests = {
   v8: "a985f907fc9f2c5d8735c8918f1af6028efa9a3ed0f43b273612c592c2288444",
 }
 const descriptor = `${vendorRoot}/descriptor/platform-v1.binpb`
-const descriptorDigest = "453f275b6e95052437072c3f52bbe74675271400526680003569b6bd09196fb1"
+const descriptorDigest = "848c8d69a97a97e3c5174ba7fe4cb1ce9dce2c7f020c43284b2d64b792e3cb07"
 const parentDescriptor = `${vendorRoot}/descriptor/platform-v8-parent39.binpb`
 const parentDigest = "0467c1c45e8ac27c79cb906e27bfdb679d88739e45bfa38128f0f629bec686d5"
-const publicationAggregate = "ce7708d7e2a15d7e3a77b7b9ea45905ab3fbe90093e343d0be9b3140ca03e2d6"
+const publicationAggregate = "8ff25b672001137b2490ea36d85b8d4fa1f7e47d32c0df66817c17f4046b0711"
 const publicationInputs = {
   "contract/descriptor/platform-installation-tags-parent-generated.binpb": {
     bytes: 35431,
@@ -155,8 +155,8 @@ const publicationInputs = {
     sha256: "2e1a811bf347b5d9cd3577ac6c762ee9d31f40dea2ac326a06b83bc61de9a8d5",
   },
   "contract/descriptor/platform-v1.binpb": {
-    bytes: 67631,
-    sha256: "453f275b6e95052437072c3f52bbe74675271400526680003569b6bd09196fb1",
+    bytes: 72750,
+    sha256: "848c8d69a97a97e3c5174ba7fe4cb1ce9dce2c7f020c43284b2d64b792e3cb07",
   },
   "contract/descriptor/platform-v8-parent39.binpb": {
     bytes: 43624,
@@ -169,6 +169,14 @@ const publicationInputs = {
   "contract/descriptor/platform-v9-parent43.binpb": {
     bytes: 46659,
     sha256: "5f0f00f605f6a445b4d80943459b69bf9f489fd7851cc80b6c2700f8f78a8d0e",
+  },
+  "contract/execution-operations/mcp-personal-product-request-vectors-v1.json": {
+    bytes: 3453,
+    sha256: "5fb9868da51570a1cbdba8b58c79bf6afe1db4963f698e0080e3df1ae3e8f0fe",
+  },
+  "contract/execution-operations/mcp-personal-product-v1.json": {
+    bytes: 27458,
+    sha256: "269dc9fddb5e02e931108b690aec67aaeab88ecebdfa4f37da90e63e8a272648",
   },
   "contract/execution-operations/skill-category-keys-v1.json": {
     bytes: 4651,
@@ -193,6 +201,10 @@ const publicationInputs = {
   "contract/execution-operations/skill-product-v1.json": {
     bytes: 273395,
     sha256: "2629cd6838acac55215c2d4bea042d4d3a98e05ddcfe07cb3eb621b149bfb653",
+  },
+  "contract/execution-operations/skill-series-current-v1.json": {
+    bytes: 526,
+    sha256: "4ac204cc1a302a8f8d0131d91b63899c01abf92bd083ec6ed869317d141c1d81",
   },
   "contract/execution-operations/v5/command-identities.json": {
     bytes: 32532,
@@ -351,24 +363,24 @@ const publicationInputs = {
     sha256: "7c256bbc3f9ed0cc93434595bd9caa7c2f0a00035837fadc2fc3dfa1110df9ed",
   },
   "contract/openapi/platform-http.openapi.json": {
-    bytes: 47379,
-    sha256: "6d4abae68cd5cc6e2d8676ac34a48f7ea3564196ec6215ea1531b3cfedd3c3d7",
+    bytes: 51640,
+    sha256: "95f1c2817707ba96d512c00c1f94174c287622b862d08712c05007b9da4ab76c",
   },
   "contract/proto/kokoro/common/v1/common.proto": {
     bytes: 2271,
     sha256: "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08",
   },
   "contract/proto/kokoro/platform/v1/platform_runtime.proto": {
-    bytes: 50210,
-    sha256: "12f357a7f81363c4242954fd0415fc786436685618ad542a50182304153bc22c",
+    bytes: 54739,
+    sha256: "2aec3f3ff3eb160f7a1903b7fbd76e22d25b9d4d7b49763fe05d4d936e1e3ec8",
   },
   "contract/proto/kokoro/storage/v3/storage.proto": {
     bytes: 12626,
     sha256: "1021e603065978871c51519ddba5b23c9b97f16b781a08bd98e019b3342bf5f9",
   },
   "contract/provenance.json": {
-    bytes: 710,
-    sha256: "ad6fff80652fb003c2b76e4a10d5b56266b183aa1be10809f2aa948068f9c335",
+    bytes: 897,
+    sha256: "374eb487cc265c5cba994b9a78e903a8f7ef9f969e83d920b9e6f61d2d422266",
   },
 }
 
@@ -376,7 +388,7 @@ const output = path.join(root, "src/generated/platform-connect")
 const manifestPath = path.join(root, "contract/dependencies/platform-connect.json")
 const sourceDigests = {
   "kokoro/common/v1/common.proto": "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08",
-  "kokoro/platform/v1/platform_runtime.proto": "12f357a7f81363c4242954fd0415fc786436685618ad542a50182304153bc22c",
+  "kokoro/platform/v1/platform_runtime.proto": "2aec3f3ff3eb160f7a1903b7fbd76e22d25b9d4d7b49763fe05d4d936e1e3ec8",
   "kokoro/storage/v3/storage.proto": "1021e603065978871c51519ddba5b23c9b97f16b781a08bd98e019b3342bf5f9",
 }
 const directories = ["kokoro", "kokoro/common", "kokoro/common/v1", "kokoro/platform", "kokoro/platform/v1", "kokoro/storage", "kokoro/storage/v3"]
@@ -703,7 +715,7 @@ export function assertDescriptorCensus(set, expected) {
 // Independent exact shape assertions are also exported for adversarial contract tests.
 export function assertInspectionDescriptors(set) {
   const file = platformFile(set)
-  assert.equal(file.service.flatMap((service) => service.method).length, 63, "Platform current RPC census drifted")
+  assert.equal(file.service.flatMap((service) => service.method).length, 63, "Platform historical inspection RPC census drifted")
   const messages = [
     ...inspectionReads.map(([, method, id, idType]) => ({
       name: `${method}Request`,
@@ -942,9 +954,9 @@ async function verifyDescriptorPairs() {
 }
 
 export function assertPublishedDescriptors(currentBytes, parentBytes, files) {
-  assert.equal(sha256(currentBytes), descriptorDigest, "Platform descriptor digest drifted")
+  assert.equal(sha256(currentBytes), "5f0f00f605f6a445b4d80943459b69bf9f489fd7851cc80b6c2700f8f78a8d0e", "Platform descriptor digest drifted")
   assert.equal(sha256(parentBytes), parentDigest, "Platform parent descriptor digest drifted")
-  const current = assertDescriptorLineage(currentBytes)
+  const current = fromBinary(FileDescriptorSetSchema, currentBytes)
   const parent = fromBinary(FileDescriptorSetSchema, parentBytes)
   const currentFile = current.file.find((file) => file.package === "kokoro.platform.v1")
   const parentFile = parent.file.find((file) => file.package === "kokoro.platform.v1")
@@ -1084,7 +1096,22 @@ async function verifyExecutionArtifacts() {
 }
 
 async function verifyInputs() {
-  await verifyExecutionArtifacts()
+  await verifyPublicationInputs()
+  const provenance = JSON.parse(await readFile(path.join(root, vendorRoot, "provenance.json"), "utf8"))
+  assert.equal(provenance.combinedSha256, "58f8f442e524b1b5ff4a5c375d33fc1c8c0d2c64dd8776cf3f37ee624b64f94b", "Platform active digest drifted")
+  assert.equal(
+    sha256(Buffer.concat(await Promise.all(provenance.files.map((file) => readFile(path.join(root, vendorRoot, file)))))),
+    provenance.combinedSha256,
+    "Platform active sources drifted",
+  )
+  const set = fromBinary(FileDescriptorSetSchema, await readFile(path.join(root, descriptor)))
+  const registry = createFileRegistry(set)
+  const method = registry.getService("kokoro.platform.v1.ProductSkillReadService").methods.find((method) => method.name === "GetCurrentSkill")
+  assert.deepEqual(
+    method.input.fields.map((field) => field.name),
+    ["request_id", "series_id", "purpose"],
+    "Platform current read binding drifted",
+  )
   assertVendorPins(await readdir(path.join(root, "contract/vendor/kokoro-platform"), { withFileTypes: true }))
   assertVendorLayout(await readdir(path.join(root, "contract/vendor/kokoro-platform", ownerCommit), { withFileTypes: true }))
   assert.equal(process.versions.node, "22.22.2", "Platform consumer generation requires pinned Node 22.22.2")
@@ -1304,7 +1331,7 @@ async function main() {
       assert.deepEqual(JSON.parse(await readFile(manifestPath, "utf8")), manifest, "Platform dependency manifest drifted")
     }
     console.log(
-      `PASS Platform Connect ${mode.slice(2)} (${generatedFiles.length} files, two byte-identical generations; fixed v9.0.0 -> v8.0.0 -> v7.0.0 -> v6.0.0 -> v5.0.1 proof; consumer activation remains gated)`,
+      `PASS Platform Connect ${mode.slice(2)} (${generatedFiles.length} files, two byte-identical generations; formal active publication + exact generated descriptor; runtime acceptance remains separate)`,
     )
   } finally {
     await rm(temporary, { recursive: true, force: true })

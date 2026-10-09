@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Kokoro Platform Business HTTP API",
-    "version": "5.2.0",
+    "version": "5.3.0",
     "description": "Platform read-only projections. IAM projection bearer authentication establishes caller and tenant; authenticated BFF then supplies its Product Session subject."
   },
   "servers": [
@@ -702,6 +702,7 @@
       "Skill": {
         "type": "object",
         "required": [
+          "series_id",
           "source_ref",
           "name",
           "description",
@@ -712,10 +713,16 @@
           "skill_updated_at",
           "example_prompts",
           "category_keys",
-          "product"
+          "product",
+          "created_at",
+          "updated_at",
+          "owner_scope"
         ],
         "additionalProperties": false,
         "properties": {
+          "series_id": {
+            "type": "string"
+          },
           "source_ref": {
             "type": "string"
           },
@@ -787,6 +794,27 @@
           },
           "product": {
             "$ref": "#/components/schemas/SkillProductFacts"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "owner_scope": {
+            "type": "object",
+            "required": ["kind", "id"],
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              }
+            }
           }
         }
       },
@@ -1384,6 +1412,147 @@
           "presentation_kind": {
             "type": "string",
             "enum": ["first_party", "github_repository"]
+          }
+        }
+      },
+      "PersonalMcpConnector": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "connector_id",
+          "connector_type",
+          "provider_key",
+          "status",
+          "approved_scopes",
+          "enabled",
+          "state_version"
+        ],
+        "properties": {
+          "connector_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 191
+          },
+          "connector_type": {
+            "type": "integer",
+            "enum": [1, 2, 3]
+          },
+          "provider_key": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+          },
+          "status": {
+            "type": "integer",
+            "enum": [1, 2, 3, 4]
+          },
+          "approved_scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "display_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "state_version": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PersonalMcpProvider": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "provider_key",
+          "display_name",
+          "directory_type",
+          "category_keys",
+          "example_prompts",
+          "enabled",
+          "state_version"
+        ],
+        "properties": {
+          "provider_key": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+          },
+          "display_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "directory_type": {
+            "type": "string",
+            "enum": ["app", "data_source"]
+          },
+          "category_keys": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "enum": [
+                "efficiency",
+                "creation",
+                "business",
+                "development",
+                "finance",
+                "travel",
+                "health"
+              ]
+            }
+          },
+          "example_prompts": {
+            "type": "array",
+            "maxItems": 10,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            }
+          },
+          "author": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "website": {
+            "type": "string",
+            "format": "uri"
+          },
+          "privacy_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "state_version": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
           }
         }
       }

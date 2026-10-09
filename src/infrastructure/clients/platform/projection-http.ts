@@ -1,3 +1,4 @@
+import { strictParseRawJson } from "../../raw-json.js"
 import { skillCategoryKeysSchema } from "./skill-product-schema.js"
 import { projectSkillProductJson } from "./skill-product-response.js"
 import { z } from "zod"
@@ -424,11 +425,13 @@ export class PlatformProjectionHttpClient {
         bytes.set(chunk, offset)
         offset += chunk.byteLength
       }
-      if (self || (response.status === 200 && operation !== "mcp")) {
+      if (self || operation === "catalog" || (response.status === 200 && operation !== "mcp")) {
         if (self) joined.throwIfAborted()
         try {
           if (response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() !== "application/json") throw new Error("media")
-          const value: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes))
+          const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes)
+          if (operation === "catalog") strictParseRawJson(text)
+          const value: unknown = JSON.parse(text)
           const schema =
             response.status !== 200
               ? connectionError
@@ -524,6 +527,8 @@ export class PlatformProjectionHttpClient {
         return dependency()
       return invalid()
     }
+    if (status === 400 && operation === "catalog" && parsed.data.error.code === "capability.invalid_request" && parsed.data.error.retryable === false)
+      return { ok: false, status: 400, code: "invalid_query_parameter", retryable: false }
     if (status === 404 && operation === "skill" && parsed.data.error.code === "capability.route_not_found")
       return { ok: false, status: 404, code: "skill_not_found", retryable: false }
     if (status === 401 || status === 403 || status === 503) return unavailable()

@@ -3,8 +3,8 @@ import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import test from "node:test"
-import { ProjectionTokenSource } from "../dist/infrastructure/clients/platform/projection-token.js"
-import { PlatformProjectionHttpClient } from "../dist/infrastructure/clients/platform/projection-http.js"
+import { ProjectionTokenSource } from "../src/infrastructure/clients/platform/projection-token.ts"
+import { PlatformProjectionHttpClient } from "../src/infrastructure/clients/platform/projection-http.ts"
 test("projection client sends tenant/subject bearer and rejects missing no-store", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "projection-")),
     file = path.join(dir, "c.json")
@@ -187,6 +187,10 @@ test("projection by-ID response must bind requested identity and exact public fi
 test("R345 all three HTTP Skill shapes require one closed UTC Z update instant and preserve nanoseconds", async () => {
   const instant = "2026-10-08T12:34:56.123456789Z"
   const visible = {
+    series_id: "series-one",
+    created_at: instant,
+    updated_at: instant,
+    owner_scope: { kind: "user", id: "creator-one" },
     source_ref: "skill:skill-one",
     name: "Name",
     description: "Summary",
@@ -660,4 +664,22 @@ test("R257 self connection response provider and cursor bounds count Unicode cod
     )
     assert.deepEqual(result, expected ? { ok: true, status: 200, data } : connectionInvalid)
   }
+})
+test("R357 current catalog preserves owner invalid-cursor400 without leaking owner messages", async () => {
+  const result = await withProjectionOwner(
+    async () =>
+      new Response(JSON.stringify({ error: { code: "capability.invalid_request", message: "private cursor facts", retryable: false } }), {
+        status: 400,
+        headers: ownerHeaders,
+      }),
+    (client) => client.read("catalog", "t", "u", "r", { query: { cursor: "invalid" } }),
+  )
+  assert.deepEqual(result, { ok: false, status: 400, code: "invalid_query_parameter", retryable: false })
+})
+test("R357 current catalog rejects duplicate raw response keys rather than picking a convenient empty list", async () => {
+  const result = await withProjectionOwner(
+    async () => new Response('{"data":{"skills":["invalid"],"skills":[]}}', { status: 200, headers: ownerHeaders }),
+    (client) => client.read("catalog", "t", "u", "r"),
+  )
+  assert.deepEqual(result, { ok: false, status: 502, code: "skill_response_invalid", retryable: false })
 })

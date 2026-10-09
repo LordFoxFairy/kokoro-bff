@@ -262,6 +262,8 @@ message ValidateSkillDraftResponse {
   bool replayed = 5;
   kokoro.platform.v1.SkillSeriesId series_id = 6;
   uint64 state_version = 7;
+  optional string original_name = 8;
+  optional uint32 file_count = 9;
 }
 
 message PublishSkillRequest {
@@ -1044,6 +1046,12 @@ message PersonalMcpConnector {
   string provider_key = 3;
   kokoro.platform.v1.McpConnectorStatus status = 4;
   repeated string approved_scopes = 5;
+  optional string display_name = 6;
+  optional string description = 7;
+  bool enabled = 8;
+  uint64 state_version = 9;
+  optional string created_at = 10;
+  optional string updated_at = 11;
 }
 
 message PersonalMcpConnection {
@@ -1060,6 +1068,12 @@ service ProductMcpPersonalService {
   rpc GetPersonalMcpConnector(kokoro.platform.v1.GetPersonalMcpConnectorRequest) returns (kokoro.platform.v1.GetPersonalMcpConnectorResponse);
   rpc ListPersonalMcpConnections(kokoro.platform.v1.ListPersonalMcpConnectionsRequest) returns (kokoro.platform.v1.ListPersonalMcpConnectionsResponse);
   rpc GetPersonalMcpConnection(kokoro.platform.v1.GetPersonalMcpConnectionRequest) returns (kokoro.platform.v1.GetPersonalMcpConnectionResponse);
+  rpc CreatePersonalMcpConnector(kokoro.platform.v1.CreatePersonalMcpConnectorRequest) returns (kokoro.platform.v1.CreatePersonalMcpConnectorResponse);
+  rpc UpdatePersonalMcpConnector(kokoro.platform.v1.UpdatePersonalMcpConnectorRequest) returns (kokoro.platform.v1.UpdatePersonalMcpConnectorResponse);
+  rpc SetPersonalMcpConnectorEnabled(kokoro.platform.v1.SetPersonalMcpConnectorEnabledRequest) returns (kokoro.platform.v1.SetPersonalMcpConnectorEnabledResponse);
+  rpc RemovePersonalMcpConnector(kokoro.platform.v1.RemovePersonalMcpConnectorRequest) returns (kokoro.platform.v1.RemovePersonalMcpConnectorResponse);
+  rpc ListPersonalMcpProviders(kokoro.platform.v1.ListPersonalMcpProvidersRequest) returns (kokoro.platform.v1.ListPersonalMcpProvidersResponse);
+  rpc GetPersonalMcpProvider(kokoro.platform.v1.GetPersonalMcpProviderRequest) returns (kokoro.platform.v1.GetPersonalMcpProviderResponse);
 }
 
 // Product package inspection: independently admitted personal reads.
@@ -1163,6 +1177,11 @@ message SkillProductRecord {
   kokoro.platform.v1.SkillProductFacts product = 7;
   kokoro.platform.v1.SkillPackagePhase package_phase = 8;
   kokoro.platform.v1.SkillSourceRef source_ref = 9;
+  optional string original_name = 10;
+  optional uint32 file_count = 11;
+  optional uint64 archive_size = 12;
+  google.protobuf.Timestamp created_at = 13;
+  kokoro.platform.v1.OwnerScope owner_scope = 14;
 }
 
 message SkillLocalProvenance {
@@ -1483,6 +1502,27 @@ message GetSkillCoverReferenceResponse {
   kokoro.platform.v1.PackageTransferReference transfer_reference = 3;
 }
 
+message GetCurrentSkillRequest {
+  reserved 100;
+  reserved "tenant_id", "subject_id", "owner_scope", "execution_proof";
+  string request_id = 1;
+  kokoro.platform.v1.SkillSeriesId series_id = 2;
+  string purpose = 3;
+}
+
+message SkillCurrentPublication {
+  kokoro.platform.v1.SkillSeriesId series_id = 1;
+  kokoro.platform.v1.SkillProductRecord current_version = 2;
+  bool current = 3;
+  string audience = 4;
+  uint64 state_version = 5;
+  google.protobuf.Timestamp published_at = 6;
+}
+
+message GetCurrentSkillResponse {
+  kokoro.platform.v1.SkillCurrentPublication publication = 1;
+}
+
 service SkillAdminService {
   rpc ListAdminSkills(kokoro.platform.v1.ListAdminSkillsRequest) returns (kokoro.platform.v1.ListAdminSkillsResponse);
   rpc GetAdminSkill(kokoro.platform.v1.GetAdminSkillRequest) returns (kokoro.platform.v1.GetAdminSkillResponse);
@@ -1496,8 +1536,87 @@ service SkillAdminService {
 }
 
 service ProductSkillReadService {
+  rpc GetCurrentSkill(kokoro.platform.v1.GetCurrentSkillRequest) returns (kokoro.platform.v1.GetCurrentSkillResponse);
   rpc InspectSkillPackage(kokoro.platform.v1.InspectSkillPackageRequest) returns (kokoro.platform.v1.InspectSkillPackageResponse);
   rpc GetSkillPackageDownload(kokoro.platform.v1.GetSkillPackageDownloadRequest) returns (kokoro.platform.v1.GetSkillPackageDownloadResponse);
   rpc GetSkillCoverReference(kokoro.platform.v1.GetSkillCoverReferenceRequest) returns (kokoro.platform.v1.GetSkillCoverReferenceResponse);
 }
 
+
+
+// Human control plane: BFF workload + current human qualification, not execution proof.
+message CreatePersonalMcpConnectorRequest {
+  string request_id = 1;
+  kokoro.common.v1.CommandIdentity command = 2;
+  string provider_key = 3;
+  kokoro.platform.v1.McpConnectorType connector_type = 4;
+  string display_name = 5;
+  string description = 6;
+}
+message UpdatePersonalMcpConnectorRequest {
+  string request_id = 1;
+  kokoro.common.v1.CommandIdentity command = 2;
+  kokoro.platform.v1.McpConnectorId connector_id = 3;
+  optional uint64 expected_state_version = 4;
+  string display_name = 5;
+  string description = 6;
+}
+message SetPersonalMcpConnectorEnabledRequest {
+  string request_id = 1;
+  kokoro.common.v1.CommandIdentity command = 2;
+  kokoro.platform.v1.McpConnectorId connector_id = 3;
+  optional uint64 expected_state_version = 4;
+  optional bool enabled = 5;
+}
+message RemovePersonalMcpConnectorRequest {
+  string request_id = 1;
+  kokoro.common.v1.CommandIdentity command = 2;
+  kokoro.platform.v1.McpConnectorId connector_id = 3;
+  optional uint64 expected_state_version = 4;
+}
+message CreatePersonalMcpConnectorResponse {
+  kokoro.platform.v1.PersonalMcpConnector connector = 1;
+}
+message ListPersonalMcpProvidersRequest {
+  string request_id = 1;
+  optional string query = 2;
+  optional string directory_type = 3;
+  optional string category_key = 4;
+  kokoro.platform.v1.PersonalMcpPageRequest page = 5;
+}
+message GetPersonalMcpProviderRequest {
+  string request_id = 1;
+  string provider_key = 2;
+}
+message PersonalMcpProvider {
+  string provider_key = 1;
+  string display_name = 2;
+  optional string description = 3;
+  string directory_type = 4;
+  repeated string category_keys = 5;
+  repeated string example_prompts = 6;
+  optional string author = 7;
+  optional string website = 8;
+  optional string privacy_url = 9;
+  bool enabled = 10;
+  uint64 state_version = 11;
+}
+message ListPersonalMcpProvidersResponse {
+  repeated kokoro.platform.v1.PersonalMcpProvider providers = 1;
+  kokoro.common.v1.PageResult page = 2;
+}
+message GetPersonalMcpProviderResponse {
+  kokoro.platform.v1.PersonalMcpProvider provider = 1;
+}
+
+message UpdatePersonalMcpConnectorResponse {
+  kokoro.platform.v1.PersonalMcpConnector connector = 1;
+}
+
+message SetPersonalMcpConnectorEnabledResponse {
+  kokoro.platform.v1.PersonalMcpConnector connector = 1;
+}
+
+message RemovePersonalMcpConnectorResponse {
+  kokoro.platform.v1.PersonalMcpConnector connector = 1;
+}

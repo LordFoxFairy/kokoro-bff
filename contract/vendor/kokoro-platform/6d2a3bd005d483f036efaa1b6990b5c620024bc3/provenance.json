@@ -11,7 +11,10 @@
     "execution-operations/skill-category-keys-v1.vectors.json",
     "execution-operations/skill-product-v1.json",
     "execution-operations/skill-product-request-vectors-v1.json",
+    "execution-operations/mcp-personal-product-v1.json",
+    "execution-operations/mcp-personal-product-request-vectors-v1.json",
+    "execution-operations/skill-series-current-v1.json",
     "openapi/platform-http.openapi.json"
   ],
-  "combinedSha256": "6bd7a55ab56973cc8438802ea851d877cdf36a5fb1604893682473bcb4ac3de2"
+  "combinedSha256": "58f8f442e524b1b5ff4a5c375d33fc1c8c0d2c64dd8776cf3f37ee624b64f94b"
 }

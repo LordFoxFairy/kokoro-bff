@@ -191,7 +191,7 @@ test("R345 installation rejects protobuf Timestamp seconds outside the canonical
 })
 test("all owner product installation projection vectors keep their published digests", async () => {
   const source = new URL(
-    "../contract/vendor/kokoro-platform/fa185ed2b25c3e81946cfdcd12d7665d02b8bad3/execution-operations-v5/vectors/product-installation.json",
+    "../contract/vendor/kokoro-platform/6d2a3bd005d483f036efaa1b6990b5c620024bc3/execution-operations-v5/vectors/product-installation.json",
     import.meta.url,
   )
   const vectors = JSON.parse(await readFile(source, "utf8")).vectors.filter((vector) => vector.stage === "projection")

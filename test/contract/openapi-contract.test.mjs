@@ -9,7 +9,7 @@ import { parseOpenApiOperations } from "../../scripts/check-contract.mjs"
 
 import { inspectSkillProductContract, stripSkillProductSource, skillProductParentBaseline } from "../../scripts/verify-skill-product-contract.mjs"
 
-const openapiUrl = new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url)
+const openapiUrl = new URL("../../contract/tests/public11-historical.openapi.yaml", import.meta.url)
 const baselineUrl = new URL("../../contract/tests/v1-operations.json", import.meta.url)
 const agentControlSnapshotUrl = new URL("../../contract/external/kokoro-agent/control-receipt.v1.json", import.meta.url)
 const platformV4Url = new URL("../../contract/vendor/kokoro-platform/263a28f1e55745bd1829a61f68228d775751adbc/execution-operations-v4/", import.meta.url)
@@ -29,7 +29,7 @@ const SAFE_FAILURE_CODES = [
 async function readContract() {
   const [openapi, baselineDocument] = await Promise.all([readFile(openapiUrl, "utf8"), readFile(baselineUrl, "utf8")])
   const baseline = JSON.parse(baselineDocument).operations
-  assert.deepEqual(inspectSkillProductContract(openapi, baseline), [], "Current Public11 must pass before historical parent mutation proof")
+  assert.deepEqual(inspectSkillProductContract(openapi), [], "Historical Public11 fixture must pass before historical parent mutation proof")
   return { openapi: stripSkillProductSource(openapi), baseline: skillProductParentBaseline(openapi) }
 }
 
@@ -510,7 +510,7 @@ test("CompleteSkillPackageUpload publishes an inactive user-only strict command"
 test("CompleteSkillPackageUpload binds owner v4 digest version and all eleven frozen command vectors", async () => {
   const manifest = JSON.parse(
     await readFile(
-      new URL("../../contract/vendor/kokoro-platform/fa185ed2b25c3e81946cfdcd12d7665d02b8bad3/execution-operations-v5/manifest.json", import.meta.url),
+      new URL("../../contract/vendor/kokoro-platform/6d2a3bd005d483f036efaa1b6990b5c620024bc3/execution-operations-v5/manifest.json", import.meta.url),
       "utf8",
     ),
   )
@@ -585,7 +585,7 @@ test("ValidateSkillDraft describes one default-closed user-only attempt-bound co
 test("ValidateSkillDraft pins owner v4 tag 7 and all eight command digest vectors", async () => {
   const manifest = JSON.parse(
     await readFile(
-      new URL("../../contract/vendor/kokoro-platform/fa185ed2b25c3e81946cfdcd12d7665d02b8bad3/execution-operations-v5/manifest.json", import.meta.url),
+      new URL("../../contract/vendor/kokoro-platform/6d2a3bd005d483f036efaa1b6990b5c620024bc3/execution-operations-v5/manifest.json", import.meta.url),
       "utf8",
     ),
   )
@@ -669,7 +669,7 @@ test("PublishSkill exposes one default-closed user-only command with no request 
 test("PublishSkill pins the inactive owner v4 PERSONAL command and all eight digest vectors", async () => {
   const manifest = JSON.parse(
     await readFile(
-      new URL("../../contract/vendor/kokoro-platform/fa185ed2b25c3e81946cfdcd12d7665d02b8bad3/execution-operations-v5/manifest.json", import.meta.url),
+      new URL("../../contract/vendor/kokoro-platform/6d2a3bd005d483f036efaa1b6990b5c620024bc3/execution-operations-v5/manifest.json", import.meta.url),
       "utf8",
     ),
   )
@@ -737,7 +737,7 @@ test("PublishSkill semantic gate rejects body, state, status and legacy-operatio
 test("BeginSkillPackageUpload candidate names the exact inactive owner v4 command and digest version", async () => {
   const manifest = JSON.parse(
     await readFile(
-      new URL("../../contract/vendor/kokoro-platform/fa185ed2b25c3e81946cfdcd12d7665d02b8bad3/execution-operations-v5/manifest.json", import.meta.url),
+      new URL("../../contract/vendor/kokoro-platform/6d2a3bd005d483f036efaa1b6990b5c620024bc3/execution-operations-v5/manifest.json", import.meta.url),
       "utf8",
     ),
   )
@@ -1029,7 +1029,7 @@ test("GetPublishedPersonalSkill semantic gate rejects envelope, field, input, st
 })
 
 test("personal Skill installations replace legacy name toggles with exact five-operation resource", async () => {
-  const openapi = await readFile(new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
+  const openapi = await readFile(openapiUrl, "utf8")
   assert.equal(openapi.includes("/v1/skills/{name}/enable:"), false)
   assert.equal(openapi.includes("/v1/skills/{name}/disable:"), false)
   for (const operation of [
@@ -2984,7 +2984,11 @@ for (const entry of [
 
 test("Public10 binds the actual Skills Product operations, closed schemas and preserved Public8.10 parent", async () => {
   const openapi = await readFile(openapiUrl, "utf8"),
-    baseline = JSON.parse(await readFile(baselineUrl, "utf8")).operations
+    baseline = parseOpenApiOperations(openapi).map((operation) => ({
+      method: operation.method,
+      path: operation.path,
+      operation_id: operation.fields.get("operationId"),
+    }))
   const module = await import("../../scripts/verify-skill-product-contract.mjs").catch(() => ({}))
   assert.equal(typeof module.inspectSkillProductContract, "function")
   assert.deepEqual(module.inspectSkillProductContract(openapi, baseline), [])

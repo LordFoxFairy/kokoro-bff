@@ -84,54 +84,27 @@ async function fixture(owner, { deadlineMs, entryDelayMs = 0 } = {}) {
   }
 }
 
-const ownerHeaders = { "content-type": "application/json", "x-kokoro-request-id": "route-request", "cache-control": "no-store" }
 const skillUpdatedAt = "2026-10-08T12:34:56.123456789Z"
 
-test("Product by-ID GET is strict data-only and current-person bound", async () => {
-  const resource = {
-    skill_id: "skill-one",
-    source_ref: "skill:skill-one",
-    revision: "2",
-    status: "active",
-    name: "Sandbox",
-    summary: "summary",
-    tags: ["one"],
-    example_prompts: [],
-    skill_updated_at: skillUpdatedAt,
-    category_keys: [],
-    product: { publication_audience: "owner", state_version: "1" },
-  }
-  const app = await fixture(async () => new Response(JSON.stringify({ data: resource }), { status: 200, headers: ownerHeaders }))
+const ownerHeaders = { "content-type": "application/json", "x-kokoro-request-id": "route-request", "cache-control": "no-store" }
+
+test("retired Product by-ID read is absent without owner I/O", async () => {
+  const app = await fixture(async () => {
+    throw new Error("retired alias reached owner")
+  })
   try {
-    const result = await app.get("/v1/skills/skill-one")
-    assert.equal(result.status, 200)
-    assert.deepEqual(result.body, { data: resource })
-    assert.equal(result.headers["cache-control"], "no-store")
-    assert.equal(result.headers["x-request-id"], "route-request")
-    const before = app.ownerCalls
-    const invalid = await app.get("/v1/skills/skill-one?cursor=unexpected")
-    assert.equal(invalid.status, 400)
-    assert.deepEqual(Object.keys(invalid.body), ["error"])
-    assert.equal(app.ownerCalls, before)
+    for (const url of ["/v1/skills/skill-one", "/v1/skills/skill-one?cursor=unexpected"]) {
+      const result = await app.get(url)
+      assert.equal(result.status, 404)
+      assert.equal(result.body, null)
+    }
+    assert.equal(app.ownerCalls, 0)
   } finally {
     await app.close()
   }
 })
 
-test("Product list and MCP GET keep owner-native identity and stable cursor", async () => {
-  const skill = {
-    source_ref: "skill:skill-one",
-    name: "Sandbox",
-    description: "summary",
-    content_hash: "hash",
-    scope: "personal",
-    revision: "2",
-    enabled: true,
-    example_prompts: [],
-    skill_updated_at: skillUpdatedAt,
-    category_keys: [],
-    product: { publication_audience: "owner", state_version: "1" },
-  }
+test("retired Product list is absent while MCP GET keeps owner-native identity and stable cursor", async () => {
   const mcp = {
     server_id: "server",
     provider_key: "provider",
@@ -140,21 +113,12 @@ test("Product list and MCP GET keep owner-native identity and stable cursor", as
     declaration_digest: "a".repeat(64),
     status: "registered",
   }
-  const app = await fixture(
-    async (input) =>
-      new Response(
-        JSON.stringify(
-          (input instanceof Request ? input.url : String(input)).includes("/mcp/servers")
-            ? { data: { servers: [mcp], next_cursor: "next" } }
-            : { data: { skills: [skill], next_cursor: "next" } },
-        ),
-        { status: 200, headers: ownerHeaders },
-      ),
-  )
+  const app = await fixture(async () => new Response(JSON.stringify({ data: { servers: [mcp], next_cursor: "next" } }), { status: 200, headers: ownerHeaders }))
   try {
     const skills = await app.get("/v1/skills?scope_kind=personal&limit=1&cursor=opaque")
-    assert.equal(skills.status, 200, JSON.stringify(skills))
-    assert.deepEqual(skills.body, { data: { skills: [skill], next_cursor: "next" } })
+    assert.equal(skills.status, 404)
+    assert.equal(skills.body, null)
+    assert.equal(app.ownerCalls, 0)
     const servers = await app.get("/v1/mcp/servers?limit=1")
     assert.equal(servers.status, 200)
     assert.deepEqual(servers.body, { data: { servers: [mcp], next_cursor: "next" } })
@@ -163,13 +127,13 @@ test("Product list and MCP GET keep owner-native identity and stable cursor", as
   }
 })
 
-test("Product projection fails closed before owner socket without credential", async () => {
+test("MCP projection fails closed before owner socket without credential", async () => {
   const app = await fixture(async () => {
     throw new Error("owner should not be called")
   })
   app.config.platformProjection.credentialFile = null
   try {
-    const result = await app.get("/v1/skills/skill-one")
+    const result = await app.get("/v1/mcp/servers")
     assert.equal(result.status, 503)
     assert.equal(result.body.error.code, "skill_dependency_unavailable")
     assert.equal(app.ownerCalls, 0)
@@ -208,7 +172,7 @@ test("bootstrap admission rejects Platform reads with strict error-only envelope
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))
   const origin = `http://127.0.0.1:${server.address().port}`
   try {
-    for (const resource of ["/v1/skills/skill-one", "/v1/skills", "/v1/skills/pool", "/v1/skills/catalog", "/v1/mcp/servers", "/v1/mcp/connections"]) {
+    for (const resource of ["/v1/mcp/servers", "/v1/mcp/connections"]) {
       const missing = await fetch(`${origin}${resource}`, { headers: { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "test-secret" } })
       assert.equal(missing.status, 401, resource)
       assert.deepEqual(Object.keys(await missing.json()), ["error"], resource)

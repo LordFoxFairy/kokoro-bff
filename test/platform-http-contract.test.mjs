@@ -3,8 +3,8 @@ import { createHash } from "node:crypto"
 import { readFile } from "node:fs/promises"
 import { test } from "node:test"
 const root = new URL("../", import.meta.url)
-const ownerCommit = "fa185ed2b25c3e81946cfdcd12d7665d02b8bad3"
-const ownerDigest = "6d4abae68cd5cc6e2d8676ac34a48f7ea3564196ec6215ea1531b3cfedd3c3d7"
+const ownerCommit = "6d2a3bd005d483f036efaa1b6990b5c620024bc3"
+const ownerDigest = "95f1c2817707ba96d512c00c1f94174c287622b862d08712c05007b9da4ab76c"
 const ownerUrl = new URL(`contract/vendor/kokoro-platform/${ownerCommit}/openapi/platform-http.openapi.json`, root)
 
 test("routed Platform HTTP 3.5.0 projection client pins reviewed owner bytes", async () => {
@@ -12,7 +12,7 @@ test("routed Platform HTTP 3.5.0 projection client pins reviewed owner bytes", a
   const source = await readFile(ownerUrl)
   const api = JSON.parse(source)
   assert.equal(manifest.status, "generated")
-  assert.equal(manifest.owner.contract_version, "5.2.0")
+  assert.equal(manifest.owner.contract_version, "5.3.0")
   assert.equal(manifest.owner.repository_path, "apps/kokoro-capability")
   assert.equal(manifest.owner.repository_commit, ownerCommit)
   assert.equal(manifest.owner.contract_sha256, ownerDigest)
@@ -29,7 +29,7 @@ test("R266 Platform HTTP 3.5 management projection pin exposes only the two revi
   const manifest = JSON.parse(await readFile(new URL("contract/dependencies/platform-http.json", root), "utf8"))
   const source = await readFile(new URL(`contract/vendor/kokoro-platform/${manifest.owner.repository_commit}/openapi/platform-http.openapi.json`, root))
   const api = JSON.parse(source)
-  assert.equal(manifest.owner.contract_version, "5.2.0")
+  assert.equal(manifest.owner.contract_version, "5.3.0")
   assert.equal(manifest.owner.repository_commit, ownerCommit)
   assert.equal(manifest.owner.contract_sha256, ownerDigest)
   assert.equal(createHash("sha256").update(source).digest("hex"), manifest.owner.contract_sha256)

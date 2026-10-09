@@ -1,4 +1,9 @@
-import { inspectSkillProductContract, stripSkillProductSource, skillProductParentBaseline } from "./verify-skill-product-contract.mjs"
+import {
+  inspectSkillProductContract,
+  inspectSkillsSpecificationContract,
+  stripSkillProductSource,
+  skillProductParentBaseline,
+} from "./verify-skill-product-contract.mjs"
 import { inspectSkillExamplePromptsContract, stripSkillExamplePromptsSource } from "./verify-skill-example-prompts-contract.mjs"
 import { createHash } from "node:crypto"
 import { readFile } from "node:fs/promises"
@@ -2962,6 +2967,8 @@ schema: { $ref: '#/components/schemas/PersonalMcp${name}Error' }`,
 }
 
 export function inspectBffOpenApi(source: string, baseline: readonly BaselineOperation[]): string[] {
+  if (/^  version: 12\.0\.0$/mu.test(source))
+    return [...inspectSkillsSpecificationContract(source), ...inspectOpenApiGovernance(source), ...compareOperationBaseline(source, baseline)]
   return [...inspectSkillProductContract(source, baseline), ...inspectBffHistoricalOpenApi(stripSkillProductSource(source), skillProductParentBaseline(source))]
 }
 

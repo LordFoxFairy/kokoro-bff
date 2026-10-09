@@ -762,9 +762,9 @@ test("BFF consumes the pinned Platform 5.1 HTTP projection without owning its da
     owner: { repository_commit: string; contract_version: string; contract_sha256: string }
   }
   assert.equal(manifest.status, "generated")
-  assert.equal(manifest.owner.repository_commit, "fa185ed2b25c3e81946cfdcd12d7665d02b8bad3")
-  assert.equal(manifest.owner.contract_version, "5.2.0")
-  assert.equal(manifest.owner.contract_sha256, "6d4abae68cd5cc6e2d8676ac34a48f7ea3564196ec6215ea1531b3cfedd3c3d7")
+  assert.equal(manifest.owner.repository_commit, "6d2a3bd005d483f036efaa1b6990b5c620024bc3")
+  assert.equal(manifest.owner.contract_version, "5.3.0")
+  assert.equal(manifest.owner.contract_sha256, "95f1c2817707ba96d512c00c1f94174c287622b862d08712c05007b9da4ab76c")
   assert.match(generatorConfig, /src\/generated\/platform-http/u)
   assert.match(generatorScript, /two byte-identical generations/u)
   assert.doesNotMatch(schema, /CREATE TABLE[^;]*capability/iu)

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 11.0.0
+  version: 12.0.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -2440,241 +2440,6 @@ paths:
         '429': { $ref: '#/components/responses/SkillPackageInspectionRateLimited' }
         '502': { $ref: '#/components/responses/SkillPackageInspectionBadGateway' }
         '503': { $ref: '#/components/responses/SkillPackageInspectionUnavailable' }
-  /v1/skills:
-    get:
-      tags:
-        - Skills
-      operationId: listSkills
-      x-kokoro-owner: kokoro-bff
-      x-kokoro-visibility: public
-      x-kokoro-stability: beta
-      x-kokoro-idempotency: none
-      x-kokoro-permission: capability.skill.read
-      summary: List skills
-      parameters:
-        - $ref: "#/components/parameters/CapabilitySkillQuery"
-        - $ref: "#/components/parameters/CapabilitySkillTags"
-        - $ref: "#/components/parameters/CapabilitySkillScope"
-        - $ref: "#/components/parameters/CapabilityLimit"
-        - $ref: "#/components/parameters/CapabilityCursor"
-        - name: category_key
-          in: query
-          required: false
-          schema:
-            type: string
-            enum:
-              - programming
-              - data
-              - automation
-              - business
-              - design
-              - media
-              - content
-              - apps
-        - name: source_kind
-          in: query
-          required: false
-          schema:
-            type: string
-            enum:
-              - personal
-              - official
-              - third_party
-      responses:
-        "200":
-          description: Skill projections
-          headers:
-            x-request-id:
-              required: true
-              schema:
-                type: string
-                minLength: 1
-                maxLength: 128
-            Cache-Control:
-              required: true
-              schema:
-                type: string
-                const: no-store
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SkillListResponse"
-        "400":
-          $ref: "#/components/responses/PlatformProjectionReadBadRequest"
-        "401":
-          $ref: "#/components/responses/PlatformProjectionReadUnauthorized"
-        "403":
-          $ref: "#/components/responses/PlatformProjectionReadForbidden"
-        "429":
-          $ref: "#/components/responses/PlatformProjectionReadRateLimited"
-        "502":
-          $ref: "#/components/responses/PlatformProjectionReadBadGateway"
-        "503":
-          $ref: "#/components/responses/PlatformProjectionReadUnavailable"
-  /v1/skills/{skill_id}:
-    get:
-      tags: [Skills]
-      operationId: getPublishedPersonalSkill
-      x-kokoro-owner: kokoro-bff
-      x-kokoro-visibility: public
-      x-kokoro-stability: beta
-      x-kokoro-idempotency: none
-      x-kokoro-permission: product.skill.read_published_personal
-      summary: Read the current ACTIVE personal Skill by canonical ID
-      description: Current IAM Product user and tenant are projected to Platform; missing, non-owner, cross-tenant, non-PERSONAL, and non-ACTIVE Skills share the same 404 and installation is not required.
-      parameters:
-        - $ref: '#/components/parameters/PublishedPersonalSkillId'
-      responses:
-        '200': { $ref: '#/components/responses/PublishedPersonalSkillOk' }
-        '400': { $ref: '#/components/responses/PublishedPersonalSkillBadRequest' }
-        '401': { $ref: '#/components/responses/PublishedPersonalSkillUnauthorized' }
-        '403': { $ref: '#/components/responses/PublishedPersonalSkillForbidden' }
-        '404': { $ref: '#/components/responses/PublishedPersonalSkillNotFound' }
-        '429': { $ref: '#/components/responses/PublishedPersonalSkillRateLimited' }
-        '502': { $ref: '#/components/responses/PublishedPersonalSkillBadGateway' }
-        '503': { $ref: '#/components/responses/PublishedPersonalSkillUnavailable' }
-  /v1/skills/pool:
-    get:
-      tags:
-        - Skills
-      operationId: listSkillPool
-      x-kokoro-owner: kokoro-bff
-      x-kokoro-visibility: public
-      x-kokoro-stability: beta
-      x-kokoro-idempotency: none
-      x-kokoro-permission: capability.skill.read
-      summary: List the skill pool
-      parameters:
-        - $ref: "#/components/parameters/CapabilitySkillQuery"
-        - $ref: "#/components/parameters/CapabilitySkillTags"
-        - $ref: "#/components/parameters/CapabilitySkillScope"
-        - $ref: "#/components/parameters/CapabilityLimit"
-        - $ref: "#/components/parameters/CapabilityCursor"
-        - name: category_key
-          in: query
-          required: false
-          schema:
-            type: string
-            enum:
-              - programming
-              - data
-              - automation
-              - business
-              - design
-              - media
-              - content
-              - apps
-        - name: source_kind
-          in: query
-          required: false
-          schema:
-            type: string
-            enum:
-              - personal
-              - official
-              - third_party
-      responses:
-        "200":
-          description: Skill pool
-          headers:
-            x-request-id:
-              required: true
-              schema:
-                type: string
-                minLength: 1
-                maxLength: 128
-            Cache-Control:
-              required: true
-              schema:
-                type: string
-                const: no-store
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SkillPoolResponse"
-        "400":
-          $ref: "#/components/responses/PlatformProjectionReadBadRequest"
-        "401":
-          $ref: "#/components/responses/PlatformProjectionReadUnauthorized"
-        "403":
-          $ref: "#/components/responses/PlatformProjectionReadForbidden"
-        "429":
-          $ref: "#/components/responses/PlatformProjectionReadRateLimited"
-        "502":
-          $ref: "#/components/responses/PlatformProjectionReadBadGateway"
-        "503":
-          $ref: "#/components/responses/PlatformProjectionReadUnavailable"
-  /v1/skills/catalog:
-    get:
-      tags:
-        - Skills
-      operationId: listSkillCatalog
-      x-kokoro-owner: kokoro-bff
-      x-kokoro-visibility: public
-      x-kokoro-stability: beta
-      x-kokoro-idempotency: none
-      x-kokoro-permission: capability.skill.read
-      summary: List the skill catalog
-      parameters:
-        - $ref: "#/components/parameters/CapabilitySkillQuery"
-        - $ref: "#/components/parameters/CapabilitySkillTags"
-        - $ref: "#/components/parameters/CapabilitySkillScope"
-        - $ref: "#/components/parameters/CapabilityLimit"
-        - $ref: "#/components/parameters/CapabilityCursor"
-        - name: category_key
-          in: query
-          required: false
-          schema:
-            type: string
-            enum:
-              - programming
-              - data
-              - automation
-              - business
-              - design
-              - media
-              - content
-              - apps
-        - name: source_kind
-          in: query
-          required: false
-          schema:
-            type: string
-            enum:
-              - personal
-              - official
-              - third_party
-      responses:
-        "200":
-          description: Skill catalog
-          headers:
-            x-request-id:
-              required: true
-              schema:
-                type: string
-                minLength: 1
-                maxLength: 128
-            Cache-Control:
-              required: true
-              schema:
-                type: string
-                const: no-store
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SkillCatalogResponse"
-        "400":
-          $ref: "#/components/responses/PlatformProjectionReadBadRequest"
-        "401":
-          $ref: "#/components/responses/PlatformProjectionReadUnauthorized"
-        "403":
-          $ref: "#/components/responses/PlatformProjectionReadForbidden"
-        "429":
-          $ref: "#/components/responses/PlatformProjectionReadRateLimited"
-        "502":
-          $ref: "#/components/responses/PlatformProjectionReadBadGateway"
-        "503":
-          $ref: "#/components/responses/PlatformProjectionReadUnavailable"
   /v1/skills/drafts:
     post:
       tags: [Skills]
@@ -6259,205 +6024,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SkillProductErrorResponse"
-  /v1/skills/{skill_id}/download:
-    get:
-      tags:
-        - Skills
-      operationId: downloadSkillPackage
-      x-kokoro-owner: kokoro-bff
-      x-kokoro-visibility: public
-      x-kokoro-stability: beta
-      x-kokoro-idempotency: none
-      x-kokoro-permission: skill.read
-      summary: downloadSkillPackage
-      description: >-
-        Closed Product9 boundary. Identity comes from fresh IAM admission; no caller-supplied tenant, actor or admin status. One bounded admission and I/O budget,
-        no fallback.
-      parameters:
-        - name: skill_id
-          in: path
-          required: true
-          schema:
-            type: string
-            pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$
-      responses:
-        "200":
-          description: Current admitted Product result
-          headers:
-            x-request-id:
-              schema:
-                type: string
-                minLength: 1
-                maxLength: 128
-            Cache-Control:
-              schema:
-                type: string
-                const: no-store
-          content:
-            application/zip:
-              schema:
-                type: string
-                format: binary
-        "400":
-          description: Closed sanitized Product failure
-          headers:
-            x-request-id:
-              schema:
-                type: string
-                minLength: 1
-                maxLength: 128
-            Cache-Control:
-              schema:
-                type: string
-                const: no-store
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SkillProductErrorResponse"
-        "401":
-          description: Closed sanitized Product failure
-          headers:
-            x-request-id:
-              schema:
-                type: string
-                minLength: 1
-                maxLength: 128
-            Cache-Control:
-              schema:
-                type: string
-                const: no-store
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SkillProductErrorResponse"
-        "403":
-          description: Closed sanitized Product failure
-          headers:
-            x-request-id:
-              schema:
-                type: string
-                minLength: 1
-                maxLength: 128
-            Cache-Control:
-              schema:
-                type: string
-                const: no-store
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SkillProductErrorResponse"
-        "404":
-          description: Closed sanitized Product failure
-          headers:
-            x-request-id:
-              schema:
-                type: string
-                minLength: 1
-                maxLength: 128
-            Cache-Control:
-              schema:
-                type: string
-                const: no-store
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SkillProductErrorResponse"
-        "409":
-          description: Closed sanitized Product failure
-          headers:
-            x-request-id:
-              schema:
-                type: string
-                minLength: 1
-                maxLength: 128
-            Cache-Control:
-              schema:
-                type: string
-                const: no-store
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SkillProductErrorResponse"
-        "412":
-          description: Closed sanitized Product failure
-          headers:
-            x-request-id:
-              schema:
-                type: string
-                minLength: 1
-                maxLength: 128
-            Cache-Control:
-              schema:
-                type: string
-                const: no-store
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SkillProductErrorResponse"
-        "413":
-          description: Closed sanitized Product failure
-          headers:
-            x-request-id:
-              schema:
-                type: string
-                minLength: 1
-                maxLength: 128
-            Cache-Control:
-              schema:
-                type: string
-                const: no-store
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SkillProductErrorResponse"
-        "429":
-          description: Closed sanitized Product failure
-          headers:
-            x-request-id:
-              schema:
-                type: string
-                minLength: 1
-                maxLength: 128
-            Cache-Control:
-              schema:
-                type: string
-                const: no-store
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SkillProductErrorResponse"
-        "502":
-          description: Closed sanitized Product failure
-          headers:
-            x-request-id:
-              schema:
-                type: string
-                minLength: 1
-                maxLength: 128
-            Cache-Control:
-              schema:
-                type: string
-                const: no-store
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SkillProductErrorResponse"
-        "503":
-          description: Closed sanitized Product failure
-          headers:
-            x-request-id:
-              schema:
-                type: string
-                minLength: 1
-                maxLength: 128
-            Cache-Control:
-              schema:
-                type: string
-                const: no-store
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SkillProductErrorResponse"
   /v1/admin/skills:
     get:
       tags:
@@ -9383,6 +8949,1150 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SkillProductErrorResponse"
+  /v1/skill.list:
+    get:
+      tags:
+        - Skills
+      operationId: listSkills
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: capability.skill.read
+      summary: listSkills
+      description: Fresh current human and fixed Product tenant admission. Source facts are qualified by the owner; no anonymous access, latest fallback or write side effect.
+      responses:
+        "200":
+          description: Specification representation; no legacy data/meta wrapper.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationPublicSkillList"
+        "400":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationPublicError"
+        "401":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationPublicError"
+        "403":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationPublicError"
+        "404":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationPublicError"
+        "405":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationPublicError"
+        "410":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationPublicError"
+        "429":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationPublicError"
+        "502":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationPublicError"
+        "503":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationPublicError"
+      parameters:
+        - name: project_id
+          in: query
+          required: false
+          schema:
+            type: string
+  /skill.v1.SkillOptionalService/ListSkills:
+    post:
+      tags:
+        - Skills
+      operationId: websiteListSkills
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: browser-private
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: capability.skill.read
+      summary: websiteListSkills
+      description: Fresh current human and fixed Product tenant admission. Source facts are qualified by the owner; no anonymous access, latest fallback or write side effect.
+      responses:
+        "200":
+          description: Specification representation; no legacy data/meta wrapper.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationListResponse"
+        "400":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+        "401":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+        "403":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+        "404":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+        "405":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+        "410":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+        "413":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+        "429":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+        "502":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+        "503":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpecificationEmptyRequest"
+  /skill.v1.SkillOptionalService/ListHubSkills:
+    post:
+      tags:
+        - Skills
+      operationId: websiteListHubSkills
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: browser-private
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: capability.skill.read
+      summary: websiteListHubSkills
+      description: Fresh current human and fixed Product tenant admission. Source facts are qualified by the owner; no anonymous access, latest fallback or write side effect.
+      responses:
+        "200":
+          description: Specification representation; no legacy data/meta wrapper.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationHubResponse"
+        "400":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+        "401":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+        "403":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+        "404":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+        "405":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+        "410":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+        "413":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+        "429":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+        "502":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+        "503":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpecificationHubRequest"
+  /skill.v1.SkillOptionalService/GetSkill:
+    post:
+      tags:
+        - Skills
+      operationId: websiteGetSkill
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: browser-private
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: capability.skill.read
+      summary: websiteGetSkill
+      description: Fresh current human and fixed Product tenant admission. Source facts are qualified by the owner; no anonymous access, latest fallback or write side effect.
+      responses:
+        "200":
+          description: Specification representation; no legacy data/meta wrapper.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationDownloadInfo"
+        "400":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+        "401":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+        "403":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+        "404":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+        "405":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+        "410":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+        "413":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+        "429":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+        "502":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+        "503":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpecificationSkillRequest"
+  /skill.v1.SkillService/DownloadSkill:
+    post:
+      tags:
+        - Skills
+      operationId: websiteDownloadSkill
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: browser-private
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: capability.skill.read
+      summary: websiteDownloadSkill
+      description: Fresh current human and fixed Product tenant admission. Source facts are qualified by the owner; no anonymous access, latest fallback or write side effect.
+      responses:
+        "200":
+          description: Specification representation; no legacy data/meta wrapper.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationDownloadInfo"
+        "400":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+        "401":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+        "403":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+        "404":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+        "405":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+        "410":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+        "413":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+        "429":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+        "502":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+        "503":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpecificationSkillRequest"
+  /skill-downloads/{handle}:
+    get:
+      tags:
+        - Skills
+      operationId: downloadSkillBytes
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: browser-private
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: capability.skill.read
+      summary: downloadSkillBytes
+      description: Fresh current human and fixed Product tenant admission. Source facts are qualified by the owner; no anonymous access, latest fallback or write side effect.
+      responses:
+        "200":
+          description: Exact qualified version bytes after complete hash/size verification and current admission recheck.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+            Content-Disposition:
+              required: true
+              schema:
+                type: string
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+        "400":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+        "401":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+        "403":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+        "404":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+        "405":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+        "410":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+        "429":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+        "502":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+        "503":
+          description: Fixed sanitized local failure. Website error protocol has not been observed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecificationBrowserError"
+      parameters:
+        - name: handle
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: ^[A-Za-z0-9_-]{43}$
 components:
   securitySchemes:
     serviceHeader:
@@ -9517,33 +10227,6 @@ components:
       schema:
         $ref: '#/components/schemas/Cursor'
       example: cur_01JNEXT
-    CapabilitySkillQuery:
-      name: query
-      in: query
-      required: false
-      schema:
-        type: string
-        minLength: 1
-        maxLength: 1024
-    CapabilitySkillTags:
-      name: tags
-      in: query
-      required: false
-      schema:
-        type: array
-        items:
-          type: string
-          minLength: 1
-          maxLength: 128
-      style: form
-      explode: true
-    CapabilitySkillScope:
-      name: scope_kind
-      in: query
-      required: false
-      schema:
-        type: string
-        enum: [personal, project, organization, session, '1', '2', '3', '4']
     CapabilityProviderKey:
       name: provider_key
       in: query
@@ -9735,14 +10418,6 @@ components:
         minLength: 1
         maxLength: 128
         pattern: '^[\x21-\x2B\x2D-\x7E]+$'
-    PublishedPersonalSkillId:
-      name: skill_id
-      in: path
-      required: true
-      description: Canonical Platform Skill identifier; never a source_ref, package asset, or installation identifier.
-      schema:
-        type: string
-        pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$'
     MoveSessionIdempotencyKey:
       name: Idempotency-Key
       in: header
@@ -9814,6 +10489,515 @@ components:
         not trim or normalize a non-NFC value.
       schema: { type: string, minLength: 1 }
   schemas:
+    SpecificationPublicSkill:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        owner_type:
+          type: string
+          enum:
+            - personal
+            - official
+            - team
+            - project
+            - app
+        creator_info:
+          type: object
+          properties:
+            user_id:
+              type: string
+            name:
+              type: string
+          additionalProperties: false
+        created_at:
+          type: integer
+          format: int64
+          description: Unix timestamp in seconds.
+        updated_at:
+          type: integer
+          format: int64
+          description: Unix timestamp in seconds.
+      additionalProperties: false
+    SpecificationPublicSkillList:
+      type: object
+      additionalProperties: false
+      required:
+        - ok
+        - request_id
+        - data
+      properties:
+        ok:
+          type: boolean
+        request_id:
+          type: string
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/SpecificationPublicSkill"
+    SpecificationPublicError:
+      type: object
+      additionalProperties: false
+      required:
+        - ok
+        - request_id
+        - error
+      properties:
+        ok:
+          type: boolean
+        request_id:
+          type: string
+        error:
+          type: object
+          additionalProperties: false
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+    SpecificationBrowserError:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            retryable:
+              type: boolean
+    SpecificationHubRequest:
+      type: object
+      properties:
+        pageSize:
+          type: integer
+          exclusiveMinimum: 0
+          maximum: 9007199254740991
+        shuffle:
+          type: boolean
+        includeOfficialSkills:
+          type: boolean
+        tag:
+          type: string
+        query:
+          type: string
+        pageToken:
+          type: string
+        excludeTop:
+          type: boolean
+      additionalProperties: false
+    SpecificationEmptyRequest:
+      type: object
+      properties: {}
+      additionalProperties: false
+    SpecificationSkillRequest:
+      type: object
+      properties:
+        skillId:
+          type: string
+          minLength: 1
+          maxLength: 191
+      required:
+        - skillId
+      additionalProperties: false
+    SpecificationHubResponse:
+      type: object
+      properties:
+        skills:
+          type: array
+          items:
+            type: object
+            properties:
+              skillId:
+                type: string
+              originalName:
+                type: string
+              displayName:
+                type: string
+              userDescription:
+                type: string
+              icon:
+                type: object
+                properties:
+                  type:
+                    type: string
+                  value:
+                    type: string
+                additionalProperties: false
+              publishStatus:
+                type: string
+              currentVersion:
+                type: object
+                properties:
+                  versionUid:
+                    type: string
+                  checksum:
+                    type: string
+                  archiveSize:
+                    type: string
+                  fileCount:
+                    type: integer
+                    minimum: -9007199254740991
+                    maximum: 9007199254740991
+                  status:
+                    type: string
+                  current:
+                    type: boolean
+                  createdAt:
+                    type: string
+                  sourceRevision:
+                    type: string
+                  sourceRevisionAt:
+                    type: string
+                  licenseSpdxId:
+                    type: string
+                  licenseUrl:
+                    type: string
+                additionalProperties: false
+              sortOrder:
+                type: string
+              createdAt:
+                type: string
+              publisherType:
+                type: string
+              verified:
+                type: boolean
+              usageCount:
+                type: string
+              exampleQuestions:
+                type: array
+                items:
+                  type: string
+              tags:
+                type: object
+                properties:
+                  values:
+                    type: array
+                    items:
+                      type: string
+                additionalProperties: false
+              type:
+                type: string
+              coverImage:
+                type: string
+              source:
+                type: object
+                properties:
+                  type:
+                    type: string
+                  url:
+                    type: string
+                  owner:
+                    type: string
+                  repository:
+                    type: string
+                  ref:
+                    type: string
+                  path:
+                    type: string
+                  stars:
+                    type: string
+                  forks:
+                    type: string
+                  latestCommitSha:
+                    type: string
+                  latestCommitAt:
+                    type: string
+                  licenseSpdxId:
+                    type: string
+                  licenseUrl:
+                    type: string
+                  licenseStatus:
+                    type: string
+                  licenseCategory:
+                    type: string
+                  pathCommitAt:
+                    type: string
+                additionalProperties: false
+              syncStatus:
+                type: string
+              cmsUpdatedAt:
+                type: string
+            additionalProperties: false
+        tagOptions:
+          type: object
+          properties:
+            values:
+              type: array
+              items:
+                type: object
+                properties:
+                  tag:
+                    type: string
+                  displayName:
+                    type: string
+                additionalProperties: false
+          additionalProperties: false
+        nextPageToken:
+          type: string
+      required:
+        - skills
+        - tagOptions
+      additionalProperties: false
+    SpecificationListResponse:
+      type: object
+      properties:
+        userAddedSkills:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              name:
+                type: string
+              description:
+                type: string
+              version:
+                type: string
+              updatedAt:
+                type: string
+              ownerType:
+                type: string
+              type:
+                type: string
+              displayName:
+                type: string
+              sortOrder:
+                type: string
+              createdAt:
+                type: string
+              visibility:
+                type: string
+              userDescription:
+                type: string
+              coverImage:
+                type: string
+              addTime:
+                type: string
+              added:
+                type: boolean
+              defaultEnable:
+                type: boolean
+              defaultAdd:
+                type: boolean
+              exampleQuestions:
+                type: array
+                items:
+                  type: string
+              sessionTypes:
+                type: array
+                items:
+                  type: string
+              tags:
+                type: object
+                properties:
+                  values:
+                    type: array
+                    items:
+                      type: string
+                additionalProperties: false
+              skillIcon:
+                type: object
+                properties:
+                  type:
+                    type: string
+                  value:
+                    type: string
+                additionalProperties: false
+              enabled:
+                type: boolean
+              icon:
+                type: string
+              skillConfig:
+                type: object
+                properties:
+                  teamSkillForceAdd:
+                    type: boolean
+                additionalProperties: false
+            additionalProperties: false
+        officialSkills:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              name:
+                type: string
+              description:
+                type: string
+              version:
+                type: string
+              updatedAt:
+                type: string
+              ownerType:
+                type: string
+              type:
+                type: string
+              displayName:
+                type: string
+              sortOrder:
+                type: string
+              createdAt:
+                type: string
+              visibility:
+                type: string
+              userDescription:
+                type: string
+              coverImage:
+                type: string
+              addTime:
+                type: string
+              added:
+                type: boolean
+              defaultEnable:
+                type: boolean
+              defaultAdd:
+                type: boolean
+              exampleQuestions:
+                type: array
+                items:
+                  type: string
+              sessionTypes:
+                type: array
+                items:
+                  type: string
+              tags:
+                type: object
+                properties:
+                  values:
+                    type: array
+                    items:
+                      type: string
+                additionalProperties: false
+              skillIcon:
+                type: object
+                properties:
+                  type:
+                    type: string
+                  value:
+                    type: string
+                additionalProperties: false
+              enabled:
+                type: boolean
+              icon:
+                type: string
+              skillConfig:
+                type: object
+                properties:
+                  teamSkillForceAdd:
+                    type: boolean
+                additionalProperties: false
+              deviceCapable:
+                type: boolean
+            additionalProperties: false
+      required:
+        - userAddedSkills
+        - officialSkills
+      additionalProperties: false
+    SpecificationSkill:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        version:
+          type: string
+        updatedAt:
+          type: string
+        ownerType:
+          type: string
+        type:
+          type: string
+        displayName:
+          type: string
+        sortOrder:
+          type: string
+        createdAt:
+          type: string
+        visibility:
+          type: string
+        userDescription:
+          type: string
+        coverImage:
+          type: string
+        addTime:
+          type: string
+        added:
+          type: boolean
+        defaultEnable:
+          type: boolean
+        defaultAdd:
+          type: boolean
+        exampleQuestions:
+          type: array
+          items:
+            type: string
+        sessionTypes:
+          type: array
+          items:
+            type: string
+        tags:
+          type: object
+          properties:
+            values:
+              type: array
+              items:
+                type: string
+          additionalProperties: false
+        skillIcon:
+          type: object
+          properties:
+            type:
+              type: string
+            value:
+              type: string
+          additionalProperties: false
+      additionalProperties: false
+    SpecificationDownloadInfo:
+      type: object
+      additionalProperties: false
+      required:
+        - skill
+        - downloadInfo
+      properties:
+        skill:
+          $ref: "#/components/schemas/SpecificationSkill"
+        downloadInfo:
+          type: object
+          additionalProperties: false
+          required:
+            - downloadUrl
+            - filename
+            - expiresAt
+          properties:
+            downloadUrl:
+              type: string
+              description: Same-origin /api/skill-downloads/{handle} opaque byte resource.
+            filename:
+              type: string
+            expiresAt:
+              type: string
+              description: Actual bounded handle expiry instant.
     GithubSkillImportRequest:
       type: object
       additionalProperties: false
@@ -11825,85 +13009,6 @@ components:
       properties:
         error: { $ref: '#/components/schemas/ManagedPersonalSkillErrorDetail' }
         meta: { $ref: '#/components/schemas/RequestMeta' }
-    PublishedPersonalSkillResource:
-      type: object
-      required:
-        - skill_id
-        - source_ref
-        - revision
-        - status
-        - name
-        - summary
-        - tags
-        - skill_updated_at
-        - example_prompts
-        - category_keys
-        - product
-      additionalProperties: false
-      properties:
-        example_prompts:
-          type: array
-          maxItems: 10
-          items:
-            type: string
-            minLength: 1
-            maxLength: 1000
-            pattern: \S
-          description: >-
-            Ordered original strings; duplicates preserved. Each item has 1-1000 Unicode scalar values; reject unpaired surrogates, U+0000 and ECMAScript trim
-            whitespace-only strings. Combined UTF-8 size is at most 16384 bytes. Empty arrays are valid; null is invalid.
-        skill_id:
-          type: string
-          pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$
-        source_ref:
-          type: string
-          pattern: ^skill:[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$
-        revision:
-          type: string
-          pattern: ^[1-9][0-9]*$
-        status:
-          type: string
-          const: active
-        name:
-          type: string
-        summary:
-          type: string
-        tags:
-          type: array
-          items:
-            type: string
-        skill_updated_at:
-          type: string
-          format: date-time
-          pattern: Z$
-        category_keys:
-          $ref: "#/components/schemas/SkillProductCategoryKeys"
-        product:
-          $ref: "#/components/schemas/Public9SkillProductFacts"
-        publisher_profile:
-          $ref: "#/components/schemas/SkillPublisherProfile"
-    PublishedPersonalSkillResponse:
-      type: object
-      required: [data]
-      additionalProperties: false
-      properties:
-        data: { $ref: '#/components/schemas/PublishedPersonalSkillResource' }
-    PublishedPersonalSkillErrorDetail:
-      type: object
-      required: [code, message, retryable]
-      additionalProperties: false
-      properties:
-        code:
-          type: string
-          enum: [invalid_skill_request, service_auth_failed, session_authentication_required, session_invalid, session_forbidden, session_rate_limited, product_tenant_not_configured, product_tenant_forbidden, skill_not_found, skill_rate_limited, iam_admission_unavailable, skill_dependency_unavailable, skill_response_invalid]
-        message: { type: string, minLength: 1 }
-        retryable: { type: boolean }
-    PublishedPersonalSkillErrorResponse:
-      type: object
-      required: [error]
-      additionalProperties: false
-      properties:
-        error: { $ref: '#/components/schemas/PublishedPersonalSkillErrorDetail' }
     PersonalFileUploadResponse:
       type: object
       additionalProperties: false
@@ -13776,66 +14881,6 @@ components:
         status:
           type: string
           enum: [active, paused, failed]
-    Skill:
-      type: object
-      required:
-        - source_ref
-        - name
-        - description
-        - content_hash
-        - scope
-        - revision
-        - enabled
-        - skill_updated_at
-        - example_prompts
-        - category_keys
-        - product
-      additionalProperties: false
-      properties:
-        example_prompts:
-          type: array
-          maxItems: 10
-          items:
-            type: string
-            minLength: 1
-            maxLength: 1000
-            pattern: \S
-          description: >-
-            Ordered original strings; duplicates preserved. Each item has 1-1000 Unicode scalar values; reject unpaired surrogates, U+0000 and ECMAScript trim
-            whitespace-only strings. Combined UTF-8 size is at most 16384 bytes. Empty arrays are valid; null is invalid.
-        source_ref:
-          type: string
-        name:
-          type: string
-        description:
-          type: string
-        content_hash:
-          type: string
-        scope:
-          type: string
-          enum:
-            - personal
-            - project
-            - organization
-            - session
-            - unknown
-        revision:
-          type: string
-          pattern: ^[1-9][0-9]*$
-        enabled:
-          type: boolean
-        installed:
-          type: boolean
-        skill_updated_at:
-          type: string
-          format: date-time
-          pattern: Z$
-        category_keys:
-          $ref: "#/components/schemas/SkillProductCategoryKeys"
-        product:
-          $ref: "#/components/schemas/Public9SkillProductFacts"
-        publisher_profile:
-          $ref: "#/components/schemas/SkillPublisherProfile"
     McpConnectionProjection:
       type: object
       required: [connection_id, connector_id, server_id, provider_key, transport, status]
@@ -13891,51 +14936,6 @@ components:
               enum: [invalid_query_parameter, service_auth_failed, session_authentication_required, session_invalid, session_forbidden, session_rate_limited, product_tenant_not_configured, product_tenant_forbidden, iam_admission_unavailable, skill_dependency_unavailable, skill_response_invalid]
             message: { type: string, minLength: 1 }
             retryable: { type: boolean }
-    SkillListResponse:
-      type: object
-      required: [data]
-      additionalProperties: false
-      properties:
-        data:
-          type: object
-          required: [skills]
-          additionalProperties: false
-          properties:
-            skills:
-              type: array
-              items: { $ref: '#/components/schemas/Skill' }
-            next_cursor:
-              type: [string, 'null']
-    SkillPoolResponse:
-      type: object
-      required: [data]
-      additionalProperties: false
-      properties:
-        data:
-          type: object
-          required: [skills]
-          additionalProperties: false
-          properties:
-            skills:
-              type: array
-              items: { $ref: '#/components/schemas/Skill' }
-            next_cursor:
-              type: [string, 'null']
-    SkillCatalogResponse:
-      type: object
-      required: [data]
-      additionalProperties: false
-      properties:
-        data:
-          type: object
-          required: [skills]
-          additionalProperties: false
-          properties:
-            skills:
-              type: array
-              items: { $ref: '#/components/schemas/Skill' }
-            next_cursor:
-              type: [string, 'null']
     GithubSkillRequest:
       type: object
       additionalProperties: false
@@ -17258,154 +18258,6 @@ components:
               - $ref: '#/components/schemas/ManagedPersonalSkillErrorResponse'
               - type: object
                 properties: { error: { properties: { code: { type: string, enum: [product_tenant_not_configured, iam_admission_unavailable, skill_dependency_unavailable] } } } }
-    PublishedPersonalSkillOk:
-      description: Current ACTIVE personal Skill safe projection
-      headers:
-        x-request-id:
-          required: true
-          schema: { type: string, minLength: 1, maxLength: 128 }
-        Cache-Control:
-          required: true
-          schema: { type: string, const: no-store }
-      content:
-        application/json:
-          schema: { $ref: '#/components/schemas/PublishedPersonalSkillResponse' }
-    PublishedPersonalSkillBadRequest:
-      description: Malformed canonical Skill identifier
-      headers:
-        x-request-id:
-          required: true
-          schema: { type: string, minLength: 1, maxLength: 128 }
-        Cache-Control:
-          required: true
-          schema: { type: string, const: no-store }
-      content:
-        application/json:
-          schema:
-            allOf:
-              - $ref: '#/components/schemas/PublishedPersonalSkillErrorResponse'
-              - type: object
-                properties:
-                  error:
-                    properties:
-                      code: { type: string, enum: [invalid_skill_request] }
-    PublishedPersonalSkillUnauthorized:
-      description: Product session authentication failed
-      headers:
-        x-request-id:
-          required: true
-          schema: { type: string, minLength: 1, maxLength: 128 }
-        Cache-Control:
-          required: true
-          schema: { type: string, const: no-store }
-      content:
-        application/json:
-          schema:
-            allOf:
-              - $ref: '#/components/schemas/PublishedPersonalSkillErrorResponse'
-              - type: object
-                properties:
-                  error:
-                    properties:
-                      code: { type: string, enum: [session_authentication_required, session_invalid] }
-    PublishedPersonalSkillForbidden:
-      description: Trusted service or admitted Product tenant is forbidden
-      headers:
-        x-request-id:
-          required: true
-          schema: { type: string, minLength: 1, maxLength: 128 }
-        Cache-Control:
-          required: true
-          schema: { type: string, const: no-store }
-      content:
-        application/json:
-          schema:
-            allOf:
-              - $ref: '#/components/schemas/PublishedPersonalSkillErrorResponse'
-              - type: object
-                properties:
-                  error:
-                    properties:
-                      code: { type: string, enum: [service_auth_failed, session_forbidden, product_tenant_forbidden] }
-    PublishedPersonalSkillNotFound:
-      description: Skill is absent or hidden by ownership, tenant, scope, or ACTIVE-state policy
-      headers:
-        x-request-id:
-          required: true
-          schema: { type: string, minLength: 1, maxLength: 128 }
-        Cache-Control:
-          required: true
-          schema: { type: string, const: no-store }
-      content:
-        application/json:
-          schema:
-            allOf:
-              - $ref: '#/components/schemas/PublishedPersonalSkillErrorResponse'
-              - type: object
-                properties:
-                  error:
-                    properties:
-                      code: { type: string, enum: [skill_not_found] }
-    PublishedPersonalSkillRateLimited:
-      description: IAM Product session admission is rate limited
-      headers:
-        x-request-id:
-          required: true
-          schema: { type: string, minLength: 1, maxLength: 128 }
-        Cache-Control:
-          required: true
-          schema: { type: string, const: no-store }
-        Retry-After:
-          required: false
-          schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
-      content:
-        application/json:
-          schema:
-            allOf:
-              - $ref: '#/components/schemas/PublishedPersonalSkillErrorResponse'
-              - type: object
-                properties:
-                  error:
-                    properties:
-                      code: { type: string, enum: [session_rate_limited] }
-    PublishedPersonalSkillBadGateway:
-      description: Platform returned an invalid projection
-      headers:
-        x-request-id:
-          required: true
-          schema: { type: string, minLength: 1, maxLength: 128 }
-        Cache-Control:
-          required: true
-          schema: { type: string, const: no-store }
-      content:
-        application/json:
-          schema:
-            allOf:
-              - $ref: '#/components/schemas/PublishedPersonalSkillErrorResponse'
-              - type: object
-                properties:
-                  error:
-                    properties:
-                      code: { type: string, enum: [skill_response_invalid] }
-    PublishedPersonalSkillUnavailable:
-      description: Required Product admission or Platform projection is unavailable
-      headers:
-        x-request-id:
-          required: true
-          schema: { type: string, minLength: 1, maxLength: 128 }
-        Cache-Control:
-          required: true
-          schema: { type: string, const: no-store }
-      content:
-        application/json:
-          schema:
-            allOf:
-              - $ref: '#/components/schemas/PublishedPersonalSkillErrorResponse'
-              - type: object
-                properties:
-                  error:
-                    properties:
-                      code: { type: string, enum: [product_tenant_not_configured, iam_admission_unavailable, skill_dependency_unavailable] }
     SkillDraftBadRequest:
       description: Invalid strict body or Idempotency-Key
       headers:

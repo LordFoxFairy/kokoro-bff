@@ -5,6 +5,12 @@ import { fileURLToPath, pathToFileURL } from "node:url"
 const HTTP_METHODS = new Set(["get", "post", "put", "patch", "delete", "head", "options", "trace"])
 const REQUIRED_EXTENSIONS = ["x-kokoro-owner", "x-kokoro-visibility", "x-kokoro-stability", "x-kokoro-idempotency", "x-kokoro-permission"]
 const STABILITY_VALUES = new Set(["stable", "beta", "experimental"])
+const SPECIFICATION_BROWSER_READS = new Map([
+  ["/skill.v1.SkillOptionalService/ListSkills", "websiteListSkills"],
+  ["/skill.v1.SkillOptionalService/ListHubSkills", "websiteListHubSkills"],
+  ["/skill.v1.SkillOptionalService/GetSkill", "websiteGetSkill"],
+  ["/skill.v1.SkillService/DownloadSkill", "websiteDownloadSkill"],
+])
 const TEAM_OWNER_DELEGATED_MUTATIONS = new Set([
   "POST /v1/team/invitations createTeamInvitation",
   "POST /v1/team/invitations/{invitation_id}/resend resendTeamInvitation",
@@ -56,6 +62,7 @@ export function parseOpenApiOperations(source) {
 
 function expectedIdempotency(operation) {
   if (["GET", "HEAD", "OPTIONS"].includes(operation.method)) return "none"
+  if (operation.method === "POST" && SPECIFICATION_BROWSER_READS.get(operation.path) === operation.fields.get("operationId")) return "none"
   if (operation.fields.get("operationId") === "previewGithubSkill") return "none"
   if (
     new Set(["POST /v1/skill-shares createSkillShare", "DELETE /v1/skill-shares/{share_id} revokeSkillShare", "POST /v1/skills/usage getSkillUsage"]).has(
@@ -101,8 +108,11 @@ export function inspectOpenApiGovernance(source) {
       errors.push(`${label} must declare x-kokoro-owner=kokoro-bff`)
     }
     const visibility = operation.fields.get("x-kokoro-visibility")
-    if (visibility !== undefined && visibility !== "public") {
-      errors.push(`${label} must declare x-kokoro-visibility=public`)
+    const browserRead =
+      (operation.method === "POST" && SPECIFICATION_BROWSER_READS.get(operation.path) === operationId) ||
+      (operation.method === "GET" && operation.path === "/skill-downloads/{handle}" && operationId === "downloadSkillBytes")
+    if (visibility !== undefined && visibility !== (browserRead ? "browser-private" : "public")) {
+      errors.push(`${label} must declare x-kokoro-visibility=${browserRead ? "browser-private" : "public"}`)
     }
     const stability = operation.fields.get("x-kokoro-stability")
     if (stability !== undefined && !STABILITY_VALUES.has(stability)) {

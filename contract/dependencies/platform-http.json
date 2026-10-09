@@ -3,16 +3,16 @@
   "status": "generated",
   "owner": {
     "repository_path": "apps/kokoro-capability",
-    "repository_commit": "fa185ed2b25c3e81946cfdcd12d7665d02b8bad3",
-    "contract_version": "5.2.0",
+    "repository_commit": "6d2a3bd005d483f036efaa1b6990b5c620024bc3",
+    "contract_version": "5.3.0",
     "contract_path": "contract/openapi/platform-http.openapi.json",
-    "contract_sha256": "6d4abae68cd5cc6e2d8676ac34a48f7ea3564196ec6215ea1531b3cfedd3c3d7"
+    "contract_sha256": "95f1c2817707ba96d512c00c1f94174c287622b862d08712c05007b9da4ab76c"
   },
   "generator": {
     "package": "@hey-api/openapi-ts",
     "version": "0.99.0",
     "config_path": "openapi-ts.platform-http.config.ts",
-    "config_sha256": "1161234884426391db3944d072e149050994606c10f51bf0fb160e30328b7973"
+    "config_sha256": "4e3abc5b3056edc3f2b72fa83dfb21a52c70d1f1435f98b37548b66119509b40"
   },
   "runtime": {
     "node": "22.22.2",
@@ -79,11 +79,11 @@
     },
     {
       "path": "types.gen.ts",
-      "sha256": "4f711da6f312f3031786d7e7ac1423c38bec680f10bcedd3b0d41a96e8e15422"
+      "sha256": "7571bb9c68098985e22f95c621447a2a8d7fc8267fe26bf54a5cd4e44294ccda"
     },
     {
       "path": "zod.gen.ts",
-      "sha256": "9364eae1f1bb9c14a541e33f855eb6dc87547d3169272d7bedbf7b6e5d26841c"
+      "sha256": "7f26457630a07b7aacd53814590a428450557a28317291e6a720b3f5fcbf4f24"
     }
   ]
 }

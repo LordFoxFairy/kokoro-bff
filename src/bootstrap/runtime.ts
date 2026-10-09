@@ -1,3 +1,8 @@
+import { SkillSpecificationService } from "../application/skill-specification.js"
+import { PlatformProjectionHttpClient } from "../infrastructure/clients/platform/projection-http.js"
+import { IamPublisherProfileClient } from "../infrastructure/clients/iam-publisher-profile.js"
+import { SkillDownloadHandles } from "../application/skill-download-handles.js"
+import type { SkillSpecificationSource } from "../infrastructure/clients/platform/skill-specification.types.js"
 import { McpAuthorizationClient } from "../auth/mcp-authorization.client.js"
 import { SkillAuthorizationClient } from "../auth/skill-authorization.client.js"
 import { SkillProductConnectClient } from "../infrastructure/clients/platform/skill-product-connect.js"
@@ -56,6 +61,8 @@ export type BffRouteInput = {
 export type BffRouteHandler = (input: BffRouteInput) => Promise<boolean | void>
 
 export type BffServerComposition = {
+  skillSpecificationSource: SkillSpecificationSource | null
+  skillDownloadHandles: SkillDownloadHandles
   mcpAuthorization: Pick<McpAuthorizationClient, "check">
   skillAuthorization: Pick<SkillAuthorizationClient, "check">
   skillProductClient: SkillProductConnectClient | null
@@ -84,6 +91,7 @@ export type BffServerComposition = {
 }
 
 export type BffCompositionOptions = {
+  skillSpecificationSource?: SkillSpecificationSource | null
   mcpAuthorization?: Pick<McpAuthorizationClient, "check">
   skillAuthorization?: Pick<SkillAuthorizationClient, "check">
   skillProductClient?: SkillProductConnectClient | null
@@ -310,16 +318,41 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     })()
     return stopWorkersPromise
   }
+  const skillDownloadHandles = new SkillDownloadHandles()
   let closePromise: Promise<void> | null = null
   const close = (): Promise<void> => {
     if (closePromise !== null) return closePromise
     closePromise = (async (): Promise<void> => {
       await stopWorkers()
+      skillDownloadHandles.clear()
       await closeStore()
     })()
     return closePromise
   }
   return {
+    skillSpecificationSource:
+      options.skillSpecificationSource !== undefined
+        ? options.skillSpecificationSource
+        : skillProductClient &&
+            personalInstallationClient &&
+            config.platformProjection?.baseUrl &&
+            config.platformProjection.credentialFile &&
+            config.iamBaseUrl
+          ? new SkillSpecificationService({
+              product: skillProductClient,
+              installations: personalInstallationClient,
+              projection: new PlatformProjectionHttpClient(
+                config.platformProjection.baseUrl,
+                config.iamBaseUrl,
+                config.platformProjection.credentialFile,
+                config.platformProjection.timeoutMs,
+              ),
+              profiles: new IamPublisherProfileClient(config.iamBaseUrl, config.upstreamTimeoutMs),
+              ...(businessStore?.services.skillUsage === undefined ? {} : { usage: businessStore.services.skillUsage }),
+              objectOrigin: config.storageObjectOrigin ?? config.storage?.objectOrigin ?? null,
+            })
+          : null,
+    skillDownloadHandles,
     skillDraftClient,
     mcpAuthorization,
     skillAuthorization,

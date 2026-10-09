@@ -274,7 +274,7 @@ test("P4 Public9 two optional query blocks remain exact and invert whole Public8
     { createHash } = await import("node:crypto"),
     { load } = await import("js-yaml")
   const { inspectSkillProductContract, stripSkillProductSource } = await import("../scripts/verify-skill-product-contract.mjs")
-  const source = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"),
+  const source = await readFile(new URL("../contract/tests/public11-historical.openapi.yaml", import.meta.url), "utf8"),
     document = load(source)
   assert.deepEqual(inspectSkillProductContract(source), [])
   assert.equal(createHash("sha256").update(stripSkillProductSource(source)).digest("hex"), "640f47f9c70341aa49934eec319a4dcc5bab76bba83e4407d6a9e0c3ab0ac389")

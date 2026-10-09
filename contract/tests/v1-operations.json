@@ -317,26 +317,6 @@
       "operation_id": "getManagedPersonalSkillPackage"
     },
     {
-      "method": "GET",
-      "path": "/v1/skills",
-      "operation_id": "listSkills"
-    },
-    {
-      "method": "GET",
-      "path": "/v1/skills/{skill_id}",
-      "operation_id": "getPublishedPersonalSkill"
-    },
-    {
-      "method": "GET",
-      "path": "/v1/skills/pool",
-      "operation_id": "listSkillPool"
-    },
-    {
-      "method": "GET",
-      "path": "/v1/skills/catalog",
-      "operation_id": "listSkillCatalog"
-    },
-    {
       "method": "POST",
       "path": "/v1/skills/drafts",
       "operation_id": "createSkillDraft"
@@ -588,11 +568,6 @@
     },
     {
       "method": "GET",
-      "path": "/v1/skills/{skill_id}/download",
-      "operation_id": "downloadSkillPackage"
-    },
-    {
-      "method": "GET",
       "path": "/v1/admin/skills",
       "operation_id": "listAdminSkills"
     },
@@ -660,6 +635,36 @@
       "method": "POST",
       "path": "/v1/skills/ai-import",
       "operation_id": "createAiSkillDraft"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/skill.list",
+      "operation_id": "listSkills"
+    },
+    {
+      "method": "POST",
+      "path": "/skill.v1.SkillOptionalService/ListSkills",
+      "operation_id": "websiteListSkills"
+    },
+    {
+      "method": "POST",
+      "path": "/skill.v1.SkillOptionalService/ListHubSkills",
+      "operation_id": "websiteListHubSkills"
+    },
+    {
+      "method": "POST",
+      "path": "/skill.v1.SkillOptionalService/GetSkill",
+      "operation_id": "websiteGetSkill"
+    },
+    {
+      "method": "POST",
+      "path": "/skill.v1.SkillService/DownloadSkill",
+      "operation_id": "websiteDownloadSkill"
+    },
+    {
+      "method": "GET",
+      "path": "/skill-downloads/{handle}",
+      "operation_id": "downloadSkillBytes"
     }
   ]
 }

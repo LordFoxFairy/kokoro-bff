@@ -5,6 +5,7 @@ export type ClientOptions = {
 }
 
 export type Skill = {
+  series_id: string
   source_ref: string
   name: string
   description: string
@@ -17,6 +18,12 @@ export type Skill = {
   example_prompts: Array<string>
   category_keys: Array<"programming" | "data" | "automation" | "business" | "design" | "media" | "content" | "apps">
   product: SkillProductFacts
+  created_at: string
+  updated_at: string
+  owner_scope: {
+    kind: string
+    id: string
+  }
 }
 
 export type McpServer = {
@@ -148,6 +155,34 @@ export type SkillProductFacts = {
   publication_audience: "owner" | "tenant" | "catalog"
   state_version: string
   presentation_kind?: "first_party" | "github_repository"
+}
+
+export type PersonalMcpConnector = {
+  connector_id: string
+  connector_type: 1 | 2 | 3
+  provider_key: string
+  status: 1 | 2 | 3 | 4
+  approved_scopes: Array<string>
+  display_name?: string
+  description?: string
+  enabled: boolean
+  state_version: number
+  created_at?: string
+  updated_at?: string
+}
+
+export type PersonalMcpProvider = {
+  provider_key: string
+  display_name: string
+  description?: string
+  directory_type: "app" | "data_source"
+  category_keys: Array<"efficiency" | "creation" | "business" | "development" | "finance" | "travel" | "health">
+  example_prompts: Array<string>
+  author?: string
+  website?: string
+  privacy_url?: string
+  enabled: boolean
+  state_version: number
 }
 
 export type RequestId = string

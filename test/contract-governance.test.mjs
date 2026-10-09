@@ -152,9 +152,9 @@ test("Library publishes explicit personal file 200 and rejects contract drift", 
   assert.ok(inspectLibraryFileContract(mixedPage).some((error) => error.includes("LibraryFilePage")))
 })
 
-test("the IAM consumer pins the complete 0.10.0 owner artifact and generates only approved admission, Skill, Team and invitation operations", async () => {
-  const commit = "7c62e759760448e127b21200f87adeefdc6016f7"
-  const digest = "31010c6b4080d50d4b9cfc1cabdcc8f2266ee177ebc542fd7f361d2f52748edd"
+test("the IAM consumer pins the complete 0.11.0 owner artifact and generates only approved admission, human qualification, Skill, Team and invitation operations", async () => {
+  const commit = "55befe5092f96d617088549df3166e1d381e6b1c"
+  const digest = "47011671cf2c3631c5ff914db4b40a8a9f9cdecc9b2b6fcd13a359a45b0882d3"
   const [manifestSource, vendor, config, lockfile, sdk, types] = await Promise.all([
     readFile(new URL("../contract/dependencies/iam-http.json", import.meta.url), "utf8"),
     readFile(new URL(`../contract/vendor/kokoro-iam/${commit}/iam.internal.v1.json`, import.meta.url)),
@@ -167,7 +167,7 @@ test("the IAM consumer pins the complete 0.10.0 owner artifact and generates onl
   const manifest = JSON.parse(manifestSource)
   const owner = JSON.parse(vendor.toString("utf8"))
   assert.equal(sha256(vendor), digest)
-  assert.equal(owner.info.version, "0.10.0")
+  assert.equal(owner.info.version, "0.11.0")
   const admissionSchema = owner.paths["/internal/v1/session-authorizations/verify"].post.responses["200"].content["application/json"].schema.properties.data
   assert.ok(admissionSchema.required.includes("platform_admin"))
   assert.deepEqual(admissionSchema.properties.platform_admin, { type: "boolean" })
@@ -176,7 +176,7 @@ test("the IAM consumer pins the complete 0.10.0 owner artifact and generates onl
   assert.deepEqual(manifest.owner, {
     repository_path: "apps/kokoro-iam",
     repository_commit: commit,
-    contract_version: "0.10.0",
+    contract_version: "0.11.0",
     contract_path: "contract/openapi/iam.internal.v1.json",
     contract_sha256: digest,
   })
@@ -213,6 +213,7 @@ test("the IAM consumer pins the complete 0.10.0 owner artifact and generates onl
   assert.deepEqual([...sdk.matchAll(/^export const ([A-Za-z0-9_]+)\s*=/gmu)].map((match) => match[1]).sort(), [
     "acceptTenantInvitation",
     "cancelTenantInvitation",
+    "checkAuthorization",
     "checkTenantSkillAuthorization",
     "createTenantInvitation",
     "getTenantInvitationContext",
@@ -228,6 +229,7 @@ test("the IAM consumer pins the complete 0.10.0 owner artifact and generates onl
     "verifySessionAuthorization",
   ])
   assert.doesNotMatch(`${sdk}\n${types}`, /getMetrics|healthz|readyz/u)
+  assert.match(config, /POST \/internal\/v1\/authorization\/check/u)
   assert.match(config, /POST \/internal\/v1\/session-authorizations\/verify/u)
   assert.doesNotMatch(config, /POST \/internal\/v1\/execution-authorizations\/verify/u)
   assert.doesNotMatch(config, /POST \/internal\/v1\/platform-workload-tokens\/introspect/u)
@@ -246,7 +248,7 @@ test("the IAM generator normalizer and generated-tree allowlist fail closed on d
 })
 
 test("the public Platform projection reads expose strict native pages and error envelopes", async () => {
-  const current = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
+  const current = await readFile(new URL("../contract/tests/public11-historical.openapi.yaml", import.meta.url), "utf8")
   assert.deepEqual(inspectSkillProductContract(current), [])
   const openapi = stripSkillProductSource(current)
   for (const [start, end] of [
@@ -481,7 +483,7 @@ test("R257 personalization CAS none exception requires the exact method path and
 })
 
 test("R267 lifecycle operations remain frozen in the current public 8.10 inventory", async () => {
-  const openapi = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
+  const openapi = await readFile(new URL("../contract/tests/public11-historical.openapi.yaml", import.meta.url), "utf8")
   assert.match(openapi, /^  version: 11\.0\.0$/mu)
   assert.equal((openapi.match(/operationId: createPersonalSkillVersion/gu) ?? []).length, 1)
   assert.equal((openapi.match(/operationId: withdrawPersonalSkill/gu) ?? []).length, 1)
@@ -490,7 +492,7 @@ test("R267 lifecycle operations remain frozen in the current public 8.10 invento
 test("R345 public 8.9 adds one required UTC Skill update instant to exactly four closed schemas and keeps 111 operations", async () => {
   const { createRequire } = await import("node:module")
   const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
-  const openapi = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
+  const openapi = await readFile(new URL("../contract/tests/public11-historical.openapi.yaml", import.meta.url), "utf8")
   const { stripSkillExamplePromptsAdditions } = await import("../scripts/verify-skill-example-prompts-contract.mjs")
   const document = stripSkillExamplePromptsAdditions(load(stripSkillProductSource(openapi)))
   assert.equal(document.info.version, "8.9.0")
@@ -556,7 +558,7 @@ test("R345 dedicated Skill update checker rejects each local shape drift without
   const { createRequire } = await import("node:module")
   const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
   const { inspectSkillUpdatedAtDocument } = await import("../scripts/verify-skill-updated-at-contract.mjs")
-  const openapi = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
+  const openapi = await readFile(new URL("../contract/tests/public11-historical.openapi.yaml", import.meta.url), "utf8")
   assert.deepEqual(inspectSkillProductContract(openapi), [])
   const document = load(stripSkillProductSource(openapi))
   assert.deepEqual(inspectSkillUpdatedAtDocument(document), [])
@@ -586,7 +588,7 @@ test("R342 Skill package inspection checker rejects route, closed-shape, uint64,
   const { createRequire } = await import("node:module")
   const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
   const { inspectSkillPackageInspectionDocument } = await import("../scripts/verify-skill-package-inspection-contract.mjs")
-  const openapi = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
+  const openapi = await readFile(new URL("../contract/tests/public11-historical.openapi.yaml", import.meta.url), "utf8")
   assert.deepEqual(inspectSkillProductContract(openapi), [])
   const document = load(stripSkillProductSource(openapi))
   assert.deepEqual(inspectSkillPackageInspectionDocument(document), [])
@@ -640,7 +642,7 @@ test("R342 Skill package inspection checker binds response paths to the exact re
   const { createRequire } = await import("node:module")
   const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
   const { inspectSkillPackageInspectionDocument } = await import("../scripts/verify-skill-package-inspection-contract.mjs")
-  const openapi = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
+  const openapi = await readFile(new URL("../contract/tests/public11-historical.openapi.yaml", import.meta.url), "utf8")
   assert.deepEqual(inspectSkillProductContract(openapi), [])
   const document = load(stripSkillProductSource(openapi))
 
@@ -708,7 +710,7 @@ test("R350 public examples have strict six profiles and restore complete immutab
   const { createRequire } = await import("node:module")
   const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
   const { inspectSkillExamplePromptsDocument } = await import("../scripts/verify-skill-example-prompts-contract.mjs")
-  const source = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
+  const source = await readFile(new URL("../contract/tests/public11-historical.openapi.yaml", import.meta.url), "utf8")
   assert.deepEqual(inspectSkillProductContract(source), [])
   const doc = load(stripSkillProductSource(source))
   assert.deepEqual(inspectSkillExamplePromptsDocument(doc), [])

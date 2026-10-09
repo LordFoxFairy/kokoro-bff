@@ -1,3 +1,5 @@
+import { skillSpecificationReadRoute } from "../http/routes/platform-projection.js"
+import { skillDownloadHandleRoute } from "../http/routes/skill-download.js"
 import { startMcpRequestBudget, mcpRequestRemaining } from "../http/mcp-request-budget.js"
 import { skillGithubImportRoute, skillGithubPreviewRoute } from "../http/routes/skill-github-import.js"
 import { assertSkillWireKnown } from "../infrastructure/clients/platform/skill-product-response.js"
@@ -6,7 +8,7 @@ import { skillAiImportRoute } from "../http/routes/skill-ai-import.js"
 import { skillShareRoute } from "../http/routes/skill-share.js"
 import { skillUsageRoute } from "../http/routes/skill-usage.js"
 import { skillCoverRoute } from "../http/routes/skill-cover.js"
-import { skillDownloadRoute } from "../http/routes/skill-download.js"
+import { publishedSkillPackageInspectionRoute } from "../http/routes/skill-download.js"
 import { runSkillRoute, startSkillRequestBudget, skillRequestRemaining, skillDraftsRoute } from "../http/routes/skill-drafts.js"
 import { skillAdminRoute } from "../http/routes/skill-admin.js"
 import { personalizationRoute } from "../http/routes/personalization.js"
@@ -198,6 +200,19 @@ async function handle(
     await schedulerDispatch(request, response, config, composition.businessStore, composition.idempotency)
     return
   }
+  if (await skillSpecificationReadRoute(request, response, config, composition, id, rawPathname)) return
+  if (await skillDownloadHandleRoute(request, response, config, composition, id, segments)) return
+  const removedSkillRead =
+    request.method === "GET" &&
+    segments[0] === "v1" &&
+    segments[1] === "skills" &&
+    (segments.length === 2 ||
+      (segments.length === 3 && !["quota", "drafts", "github"].includes(segments[2] ?? "")) ||
+      (segments.length === 4 && segments[3] === "download"))
+  if (removedSkillRead) {
+    send(response, 404, failure("route_not_found", "Route was not found", id))
+    return
+  }
   if (segments[0] !== "v1") {
     send(response, 404, failure("route_not_found", "Use the versioned /v1 business API", id))
     return
@@ -296,11 +311,7 @@ async function handle(
   const isSkillPublishPath = segments.length === 4 && segments[1] === "skills" && segments[3] === "publish"
   const isSkillInstallationPath = businessPath[0] === "skill-installations"
   const isPlatformProjectionRead =
-    request.method === "GET" &&
-    ((businessPath[0] === "skills" &&
-      (businessPath.length === 1 ||
-        (businessPath.length === 2 && businessPath[1] !== "quota" && businessPath[1] !== "drafts" && businessPath[1] !== "github"))) ||
-      (businessPath.length === 2 && businessPath[0] === "mcp" && (businessPath[1] === "servers" || businessPath[1] === "connections")))
+    request.method === "GET" && businessPath.length === 2 && businessPath[0] === "mcp" && ["servers", "connections"].includes(businessPath[1]!)
   if (request.method === "GET" && businessPath.length === 3 && businessPath[0] === "projects" && businessPath[2] === "resources")
     response.setHeader("x-request-id", id)
   if (request.method === "POST" && businessPath.length === 2 && businessPath[0] === "library" && businessPath[1] === "files")
@@ -442,17 +453,8 @@ async function handle(
     await skillUsageRoute(request, response, context, composition.businessStore?.services.skillUsage)
     return
   }
-  if (businessPath.length === 3 && businessPath[0] === "skills" && ["package", "download"].includes(businessPath[2]!) && request.method === "GET") {
-    await skillDownloadRoute(
-      request,
-      response,
-      context,
-      businessPath[1]!,
-      businessPath[2] === "package" ? "inspect" : "download",
-      composition.skillProductClient,
-      config.storage?.objectOrigin ?? null,
-      readmitSkill,
-    )
+  if (businessPath.length === 3 && businessPath[0] === "skills" && businessPath[2] === "package" && request.method === "GET") {
+    await publishedSkillPackageInspectionRoute(request, response, context, businessPath[1]!, composition.skillProductClient)
     return
   }
   if (

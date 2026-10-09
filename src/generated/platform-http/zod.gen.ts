@@ -137,6 +137,7 @@ export const zSkillProductFacts = z.object({
 })
 
 export const zSkill = z.object({
+  series_id: z.string(),
   source_ref: z.string(),
   name: z.string(),
   description: z.string(),
@@ -149,6 +150,12 @@ export const zSkill = z.object({
   example_prompts: z.array(z.string().min(1).max(1000).regex(/\S/)).max(10),
   category_keys: z.array(z.enum(["programming", "data", "automation", "business", "design", "media", "content", "apps"])).max(8),
   product: zSkillProductFacts,
+  created_at: z.iso.datetime(),
+  updated_at: z.iso.datetime(),
+  owner_scope: z.object({
+    kind: z.string(),
+    id: z.string(),
+  }),
 })
 
 export const zPublishedPersonalSkill = z.object({
@@ -190,6 +197,34 @@ export const zSelfManagedSkill = z.object({
   example_prompts: z.array(z.string().min(1).max(1000).regex(/\S/)).max(10),
   category_keys: z.array(z.enum(["programming", "data", "automation", "business", "design", "media", "content", "apps"])).max(8),
   product: zSkillProductFacts,
+})
+
+export const zPersonalMcpConnector = z.object({
+  connector_id: z.string().min(1).max(191),
+  connector_type: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+  provider_key: z.string().regex(/^[a-z0-9][a-z0-9._-]{0,63}$/),
+  status: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
+  approved_scopes: z.array(z.string()),
+  display_name: z.string().min(1).max(100).optional(),
+  description: z.string().max(1000).optional(),
+  enabled: z.boolean(),
+  state_version: z.int().gte(1).lte(2147483647),
+  created_at: z.iso.datetime().optional(),
+  updated_at: z.iso.datetime().optional(),
+})
+
+export const zPersonalMcpProvider = z.object({
+  provider_key: z.string().regex(/^[a-z0-9][a-z0-9._-]{0,63}$/),
+  display_name: z.string().min(1).max(100),
+  description: z.string().max(1000).optional(),
+  directory_type: z.enum(["app", "data_source"]),
+  category_keys: z.array(z.enum(["efficiency", "creation", "business", "development", "finance", "travel", "health"])),
+  example_prompts: z.array(z.string().min(1).max(1000)).max(10),
+  author: z.string().min(1).max(100).optional(),
+  website: z.url().optional(),
+  privacy_url: z.url().optional(),
+  enabled: z.boolean(),
+  state_version: z.int().gte(1).lte(2147483647),
 })
 
 export const zRequestId = z.string().min(1).max(255)

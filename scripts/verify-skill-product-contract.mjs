@@ -109,6 +109,7 @@ function restorePublic10(source) {
   return parent
 }
 export function inspectSkillProductContract(source, baseline = OPERATIONS) {
+  if (/^  version: 12\.0\.0$/mu.test(source)) return inspectSkillsSpecificationContract(source)
   if (!/^  version: 11\.0\.0$/mu.test(source)) return ["Public11 version must equal 11.0.0"]
   const errors = []
   for (const [name, expected] of [
@@ -121,4 +122,94 @@ export function inspectSkillProductContract(source, baseline = OPERATIONS) {
   const parent = restorePublic10(source)
   if (hash(parent) !== PUBLIC10_SHA) errors.push("Public11 exact Public10.0.0 parent inverse drifted")
   return [...errors, ...inspectPublic10Contract(parent, baseline)]
+}
+
+/** Current specification gate; historical Public11 proofs are not the active publication protocol. */
+export function inspectSkillsSpecificationContract(source) {
+  const errors = []
+  let document
+  try {
+    document = load(source, { json: false })
+  } catch {
+    return ["Public12 must be valid unique-key YAML"]
+  }
+  const require = (condition, message) => {
+    if (!condition) errors.push(message)
+  }
+  require(document?.info?.version === "12.0.0", "Public12 version must equal 12.0.0")
+  const paths = document?.paths ?? {},
+    schemas = document?.components?.schemas ?? {}
+  const expected = [
+    ["/v1/skill.list", "get", "listSkills", "public", "SpecificationPublicSkillList"],
+    ["/skill.v1.SkillOptionalService/ListSkills", "post", "websiteListSkills", "browser-private", "SpecificationListResponse"],
+    ["/skill.v1.SkillOptionalService/ListHubSkills", "post", "websiteListHubSkills", "browser-private", "SpecificationHubResponse"],
+    ["/skill.v1.SkillOptionalService/GetSkill", "post", "websiteGetSkill", "browser-private", "SpecificationDownloadInfo"],
+    ["/skill.v1.SkillService/DownloadSkill", "post", "websiteDownloadSkill", "browser-private", "SpecificationDownloadInfo"],
+    ["/skill-downloads/{handle}", "get", "downloadSkillBytes", "browser-private", null],
+  ]
+  for (const [path, method, id, visibility, success] of expected) {
+    const operation = paths[path]?.[method]
+    require(operation?.operationId === id &&
+      operation?.["x-kokoro-visibility"] === visibility &&
+      operation?.["x-kokoro-idempotency"] === "none", `${path} must retain its exact read identity/visibility/no-receipt semantics`)
+    require(operation?.security === undefined, `${path} must not override current authenticated admission`)
+    for (const [status, response] of Object.entries(operation?.responses ?? {})) {
+      require(response.headers?.["Cache-Control"]?.schema?.const === "no-store" &&
+        response.headers?.["X-Request-Id"]?.required === true, `${path} ${status} must retain no-store/request ID`)
+    }
+    if (success)
+      require(operation?.responses?.["200"]?.content?.["application/json"]?.schema?.$ref ===
+        `#/components/schemas/${success}`, `${path} must expose the specification representation`)
+  }
+  for (const path of ["/v1/skills", "/v1/skills/pool", "/v1/skills/catalog", "/v1/skills/{skill_id}", "/v1/skills/{skill_id}/download"])
+    require(paths[path]?.get === undefined, `Retired read alias must be absent: ${path}`)
+  const publicList = paths["/v1/skill.list"]?.get
+  require(JSON.stringify(publicList?.parameters) ===
+    JSON.stringify([
+      { name: "project_id", in: "query", required: false, schema: { type: "string" } },
+    ]), "skill.list must retain optional project_id string only")
+  require(JSON.stringify(Object.keys(schemas.SpecificationPublicSkillList?.properties ?? {})) ===
+    JSON.stringify(["ok", "request_id", "data"]), "Public skill.list must not use data/meta")
+  const skill = schemas.SpecificationPublicSkill?.properties ?? {}
+  for (const key of ["id", "name", "description"]) require(skill[key]?.type === "string", `Public Skill ${key} must be string`)
+  require(JSON.stringify(skill.owner_type?.enum) ===
+    JSON.stringify(["personal", "official", "team", "project", "app"]), "Public owner_type must retain original enum")
+  for (const key of ["created_at", "updated_at"])
+    require(skill[key]?.type === "integer" && skill[key]?.format === "int64", `Public ${key} must be int64 Unix seconds`)
+  require(skill.creator_info?.properties?.user_id?.type === "string" &&
+    skill.creator_info?.properties?.name?.type === "string", "Public creator_info must retain real IAM user_id/name")
+  const request = schemas.SpecificationHubRequest
+  require(request?.additionalProperties === false &&
+    JSON.stringify(Object.keys(request?.properties ?? {})) ===
+      JSON.stringify([
+        "pageSize",
+        "shuffle",
+        "includeOfficialSkills",
+        "tag",
+        "query",
+        "pageToken",
+        "excludeTop",
+      ]), "Hub request must retain the seven observed fields only")
+  require(request?.properties?.pageSize?.type === "integer" &&
+    request?.properties?.shuffle?.type === "boolean" &&
+    request?.properties?.includeOfficialSkills?.type === "boolean" &&
+    request?.properties?.tag?.type === "string" &&
+    request?.properties?.query?.type === "string" && request?.properties?.pageToken?.type === "string" && request?.properties?.excludeTop?.type === "boolean", "Hub request field types drifted")
+  const info = schemas.SpecificationDownloadInfo?.properties?.downloadInfo
+  require(info?.additionalProperties === false &&
+    JSON.stringify(info?.required) === JSON.stringify(["downloadUrl", "filename", "expiresAt"]) &&
+    Object.values(info?.properties ?? {}).every((p) => p.type === "string"), "Download metadata must retain exact observed strings")
+  const publicError = schemas.SpecificationPublicError
+  require(JSON.stringify(Object.keys(publicError?.properties ?? {})) === JSON.stringify(["ok", "request_id", "error"]) &&
+    JSON.stringify(Object.keys(publicError?.properties?.error?.properties ?? {})) ===
+      JSON.stringify(["code", "message"]), "Public error must retain ok/request_id/error code/message")
+  for (const [path, method] of [
+    ["/v1/skills/drafts", "post"],
+    ["/v1/admin/skills/{skill_id}/publish", "post"],
+    ["/v1/skill-installations", "post"],
+    ["/v1/self/skills/{skill_id}/versions", "post"],
+    ["/v1/self/skills/{skill_id}/withdraw", "post"],
+  ])
+    require(paths[path]?.[method] !== undefined, `Effective lifecycle responsibility must remain: ${method} ${path}`)
+  return errors
 }

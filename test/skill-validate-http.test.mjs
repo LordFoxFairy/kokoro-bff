@@ -79,7 +79,7 @@ test("Validate default-off candidate does not reach Platform", async () => {
 test("Validate projector matches all eight owner v4 command vectors", async () => {
   const manifest = JSON.parse(
     await readFile(
-      new URL("../contract/vendor/kokoro-platform/fa185ed2b25c3e81946cfdcd12d7665d02b8bad3/execution-operations-v5/manifest.json", import.meta.url),
+      new URL("../contract/vendor/kokoro-platform/6d2a3bd005d483f036efaa1b6990b5c620024bc3/execution-operations-v5/manifest.json", import.meta.url),
       "utf8",
     ),
   )
@@ -146,6 +146,8 @@ test("Validate generated Connect schema carries v4 typed attempt selector", asyn
       ["replayed", 5],
       ["series_id", 6],
       ["state_version", 7],
+      ["original_name", 8],
+      ["file_count", 9],
     ],
   )
   const request = create(ValidateSkillDraftRequestSchema, {

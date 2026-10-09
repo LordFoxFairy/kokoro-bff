@@ -113,7 +113,7 @@ test("both BFF projectors reproduce all accepted fixed owner example canonical v
   const vectors = JSON.parse(
     await readFile(
       new URL(
-        "../contract/vendor/kokoro-platform/fa185ed2b25c3e81946cfdcd12d7665d02b8bad3/execution-operations/skill-example-prompts-v1.vectors.json",
+        "../contract/vendor/kokoro-platform/6d2a3bd005d483f036efaa1b6990b5c620024bc3/execution-operations/skill-example-prompts-v1.vectors.json",
         import.meta.url,
       ),
       "utf8",
