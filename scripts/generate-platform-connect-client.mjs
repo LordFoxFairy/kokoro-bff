@@ -16,7 +16,7 @@ import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-const ownerCommit = "981df60e74b65eccfc2d58044db9965928e4d37e"
+const ownerCommit = "84262b664275229c62370d49f51ad5e276116148"
 const vendorRoot = `contract/vendor/kokoro-platform/${ownerCommit}`
 const vendor = `contract/vendor/kokoro-platform/${ownerCommit}/proto`
 const artifacts = {
@@ -28,7 +28,7 @@ const artifacts = {
   v10: `${vendorRoot}/execution-operations-v10`,
 }
 const artifactAggregates = {
-  v10: "277a2bf24b4fdc34196dac3c5fbba89ef88df75a3b96054af63547f9ae53ff0b",
+  v10: "dddb0d194af44dbf0b83a0a0443d774f3dee63f8cb03c364ad529c4c230fb85b",
   v9: "19c1466ab398c6dbb43130f3977fe776532e41e00e2487476d465f22fc936073",
   v8: "4a5ed2ca1a25673967ac2ee05a43c5f568bdd19c9ff768d8e606fdac94b9542f",
   v5: "3f97b3c98fd8e7ce46e4a8ea73237ddb85e764849d2b15dd28d0a3a58a69e42f",
@@ -46,7 +46,7 @@ const descriptor = `${vendorRoot}/descriptor/platform-v1.binpb`
 const descriptorDigest = "fc5d3893a05284a5f52d8de40b82f6e2bbd859608994d84dac20dff43a4a6fd2"
 const parentDescriptor = `${vendorRoot}/descriptor/platform-v8-parent39.binpb`
 const parentDigest = "0467c1c45e8ac27c79cb906e27bfdb679d88739e45bfa38128f0f629bec686d5"
-const publicationAggregate = "64a22c1bd1d1deba9b10d1225c651f8b4a18e4217a6b309cdaff089e6dc6bd6e"
+const publicationAggregate = "9c5fe8036b0246b26b0411e9caa31595059d82fedfcd28efaabfdf6bb7e011c1"
 const publicationInputs = {
   "contract/descriptor/platform-installation-tags-parent-generated.binpb": {
     bytes: 35431,
@@ -209,16 +209,16 @@ const publicationInputs = {
     sha256: "7ea63b4fcf3523dcc305207a7ac3956fd4c723f299f757bb566c6b5dab3b9227",
   },
   "contract/execution-operations/v10/local-skill-import-v1.json": {
-    bytes: 2646,
-    sha256: "d14f38288ba7708caa55b0a8dba99dce3d2dcb768526cee3ed263ac4642d2198",
+    bytes: 2645,
+    sha256: "2b0696f2b78deb041cb4291c69a992f7e6d6a9425ed94925bc15e041347def63",
   },
   "contract/execution-operations/v10/manifest.json": {
-    bytes: 407,
-    sha256: "dfdddd29763f43dc3dabea99c6d5b4ece457e4b5f39ff585f7c59667615300c3",
+    bytes: 404,
+    sha256: "2f53d4bcb56353b6026fe690aa4a81d91d92bc7acdc9faddd3329134b757d902",
   },
   "contract/execution-operations/v10/provenance.json": {
     bytes: 506,
-    sha256: "a565b343106284706d11f7cf8a18529df90bd2b9b6789f70ddaa9d017b7c3b21",
+    sha256: "acb97a699f225dc11ece78b5317be15b24d89874e8aa5ab22fde627c3502ff05",
   },
   "contract/execution-operations/v5/command-identities.json": {
     bytes: 32532,
@@ -394,7 +394,7 @@ const publicationInputs = {
   },
   "contract/provenance.json": {
     bytes: 1050,
-    sha256: "6a28dcb90aaf2f402e1e0991996afa99887673291f40af0a854387372d3d2170",
+    sha256: "f0b45f95673d064880ad34b0faa38ad893ac3bc647bd3a2bc9ad57403955923f",
   },
 }
 
@@ -1113,7 +1113,7 @@ async function verifyExecutionArtifacts() {
 async function verifyInputs() {
   await verifyPublicationInputs()
   const provenance = JSON.parse(await readFile(path.join(root, vendorRoot, "provenance.json"), "utf8"))
-  assert.equal(provenance.combinedSha256, "6fcc148fddb4aaab73076dfb5b6109e2b4d9f0209e93ef58b0c510e3ed28b693", "Platform active digest drifted")
+  assert.equal(provenance.combinedSha256, "8a850363580521fadf75bc20b1be70bfe62c20004568c00b72a77f614caa672f", "Platform active digest drifted")
   assert.equal(
     sha256(Buffer.concat(await Promise.all(provenance.files.map((file) => readFile(path.join(root, vendorRoot, vendorPath(file))))))),
     provenance.combinedSha256,
@@ -1211,7 +1211,7 @@ async function generate(directory) {
 async function manifestFor(directory) {
   return {
     schema_version: 1,
-    status: "generated-not-activated",
+    status: "generated",
     owner: {
       repository_path: "apps/kokoro-capability",
       repository_commit: ownerCommit,
@@ -1229,8 +1229,8 @@ async function manifestFor(directory) {
     execution_artifact: {
       path: artifacts.v10,
       artifact_version: "10.0.0",
-      status: "inactive",
-      routable: false,
+      status: "active",
+      routable: true,
       provenance_path: `${artifacts.v10}/provenance.json`,
       aggregate_sha256: artifactAggregates.v10,
     },

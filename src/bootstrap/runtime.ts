@@ -41,6 +41,7 @@ import { ProjectionTokenSource } from "../infrastructure/clients/platform/projec
 import { ProjectScopeReleaseOutboxDispatcher } from "../application/project-scope-release-outbox-dispatcher.js"
 import { StorageScopeReleaseClient } from "../infrastructure/clients/storage/scope-release-client.js"
 import type { LocalSkillImportClient } from "../http/routes/local-skill-import.js"
+import { LocalSkillImportConnectClient } from "../infrastructure/clients/platform/local-skill-import-connect.js"
 
 type ScheduledWorkerErrorEvent = { operation: string; result: "error"; errorCode: string; attempt: number; backoffMs: number }
 function scheduledWorkerLog(event: ScheduledWorkerErrorEvent): void {
@@ -205,6 +206,27 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
             config.skillDraft.timeoutMs,
           )
         : null
+  const localSkillImportClient =
+    options.localSkillImportClient !== undefined
+      ? options.localSkillImportClient
+      : config.skillDraft?.platformBaseUrl &&
+          config.skillDraft.credentialFile &&
+          config.platformProjection?.credentialFile &&
+          config.iamBaseUrl
+        ? new LocalSkillImportConnectClient(
+            config.skillDraft.platformBaseUrl,
+            new CatalogTokenSource(
+              config.iamBaseUrl,
+              new CatalogCredentialSource(config.skillDraft.credentialFile),
+              config.skillDraft.timeoutMs,
+            ),
+            new ProjectionTokenSource(
+              config.iamBaseUrl,
+              new ProjectionCredentialSource(config.platformProjection.credentialFile),
+              config.platformProjection.timeoutMs,
+            ),
+          )
+        : undefined
   const explicitlySuppliedStore = Object.prototype.hasOwnProperty.call(options, "businessStore")
   const businessStore = explicitlySuppliedStore
     ? (options.businessStore ?? null)
@@ -333,7 +355,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     return closePromise
   }
   return {
-    ...(options.localSkillImportClient === undefined ? {} : { localSkillImportClient: options.localSkillImportClient }),
+    ...(localSkillImportClient === undefined ? {} : { localSkillImportClient }),
     skillSpecificationSource:
       options.skillSpecificationSource !== undefined
         ? options.skillSpecificationSource

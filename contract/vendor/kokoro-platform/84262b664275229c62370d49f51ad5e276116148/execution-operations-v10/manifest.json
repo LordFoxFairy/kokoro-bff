@@ -1,8 +1,8 @@
 {
   "artifact": "platform-execution-operations",
   "artifactVersion": "10.0.0",
-  "status": "inactive",
-  "routable": false,
+  "status": "active",
+  "routable": true,
   "packageName": "kokoro.platform.v1",
   "inherits": {
     "version": "9.0.0",

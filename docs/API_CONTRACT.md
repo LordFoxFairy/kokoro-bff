@@ -1,3 +1,13 @@
+## R357-BFF-ACTIVATION：正式 active owner 的消费边界（D0，wire 不变）
+
+唯一 owner 输入更新为 Platform commit `84262b664275229c62370d49f51ad5e276116148`、active/routable v10 aggregate `dddb0d194af44dbf0b83a0a0443d774f3dee63f8cb03c364ad529c4c230fb85b`、Root publication digest `8a850363580521fadf75bc20b1be70bfe62c20004568c00b72a77f614caa672f`。四个 internal-owner 方法、下列四个 `/browser/v1` private route及其 request/success/error wire均不改；变化仅是生产 composition 在完整配置时可注册既有 exact dispatch。
+
+写请求和同 key receipt replay一律先 fresh current session，再对同一 tenant/subject执行 `create_draft AND install`；两者均通过才允许 catalog workload token与 owner command。Get 每次 fresh read并使用 projection workload token。任何 browser bearer、body tenant/subject或旧身份 header均不是 owner credential。配置不完整时四路径继续404且owner零调用；不得改成503、fallback或公开 `/v1` operation。
+
+固定 consumer machine范围是 `contract/dependencies/platform-{connect,http}.json`、单一 `contract/vendor/kokoro-platform/84262b.../` 完整必要 publication、`scripts/generate-platform-{connect,http}-client.mjs`、三份 Connect `src/generated/platform-connect/**_pb.ts` 及HTTP工具必要机械产物；旧 `981df60e...` vendor整目录删除，来源只取正式Git对象。private policy仍由既有 policy源与 `scripts/generate-local-skill-import-policy.mjs` 唯一生成。public OpenAPI字节、operation census、Developer Portal与public SDK保持不变。
+
+<!-- R357-BFF-LOCAL-IMPORT-ACTIVATION-API-D0-END -->
+
 ## T-K03.4 本地 Skill import browser-private 合同（仅设计，未发布）
 
 本能力没有已证明的 Manus public upload write suffix，因此不新增 public `/v1` operation。唯一拟议外部边界是 Kokoro BFF `browser-private` v1：

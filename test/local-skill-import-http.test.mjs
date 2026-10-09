@@ -3,6 +3,10 @@ import { once } from "node:events"
 import test from "node:test"
 import { create } from "@bufbuild/protobuf"
 import { request as httpRequest } from "node:http"
+import { createServer } from "node:http"
+import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 import {
@@ -26,6 +30,7 @@ import {
 } from "../dist/infrastructure/clients/platform/local-skill-import-response.js"
 import { createLiveTestBffServer } from "./doubles/server.ts"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
+import { createBffComposition } from "../dist/bootstrap/runtime.js"
 
 const config = {
   host: "127.0.0.1",
@@ -111,8 +116,8 @@ const headers = {
   "idempotency-key": "local-import-begin-1",
 }
 
-async function withServer(options, run) {
-  const server = createLiveTestBffServer(config, options)
+async function withServer(options, run, serverConfig = config) {
+  const server = createLiveTestBffServer(serverConfig, options)
   server.listen(0, "127.0.0.1")
   await once(server, "listening")
   try {
@@ -269,7 +274,93 @@ test("all four browser-private routes preserve exact method, body and fresh read
   assert.deepEqual(actions, ["create_draft", "install", "create_draft", "install"])
 })
 
-test("inactive production composition keeps the private namespace unregistered as 404", async () => {
+test("production composition registers all four local-import owner methods only with the complete Platform credential set", async () => {
+  const complete = {
+    ...config,
+    iamBaseUrl: "https://iam.example",
+    skillDraft: {
+      enabled: true,
+      platformBaseUrl: "https://platform.example",
+      credentialFile: "/credentials/catalog.json",
+      timeoutMs: 100,
+    },
+    platformProjection: {
+      baseUrl: "https://platform.example",
+      credentialFile: "/credentials/projection.json",
+      timeoutMs: 100,
+    },
+  }
+  const options = {
+    businessStore: null,
+    readiness: async () => undefined,
+    sessionAdmission: new SessionAdmissionDouble(),
+    skillAuthorization: { check: async () => ({ ok: true }) },
+  }
+  const active = createBffComposition(complete, options)
+  assert.ok(active.localSkillImportClient)
+  assert.deepEqual(
+    ["begin", "complete", "finalize", "get"].map((method) => typeof active.localSkillImportClient[method]),
+    ["function", "function", "function", "function"],
+  )
+  await active.close()
+
+  for (const [name, candidate] of [
+    ["platform base URL", { ...complete, skillDraft: { ...complete.skillDraft, platformBaseUrl: null } }],
+    ["catalog credential", { ...complete, skillDraft: { ...complete.skillDraft, credentialFile: null } }],
+    ["projection credential", { ...complete, platformProjection: { ...complete.platformProjection, credentialFile: null } }],
+    ["IAM URL", { ...complete, iamBaseUrl: null }],
+  ]) {
+    const inactive = createBffComposition(candidate, options)
+    assert.equal(inactive.localSkillImportClient, undefined, name)
+    await inactive.close()
+    await withServer(
+      { sessionAdmission: new SessionAdmissionDouble({ "current-session": { namespace: "tenant", userId: "user" } }), skillAuthorization: { check: async () => ({ ok: true }) } },
+      async (base) => {
+        const response = await fetch(`${base}/browser/v1/skills/local-imports`, { method: "POST", headers, body: JSON.stringify({ filename: "tea.skill", size_bytes: 123, content_sha256: "a".repeat(64) }) })
+        assert.equal(response.status, 404, name)
+      },
+      candidate,
+    )
+  }
+})
+
+test("complete production composition dispatches all four private routes through machine-authenticated owner RPC", async () => {
+  const { connectNodeAdapter } = await import("@connectrpc/connect-node")
+  const { SkillCatalogService } = await import("../dist/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
+  const calls = []
+  const owner = createServer(connectNodeAdapter({ routes(router) {
+    router.service(SkillCatalogService, {
+      beginLocalSkillImport(request, context) { calls.push(["begin", request, Object.fromEntries(context.requestHeader)]); return beginResponse() },
+      completeLocalSkillImport(request, context) { calls.push(["complete", request, Object.fromEntries(context.requestHeader)]); return { intentId: request.intentId, skillId: { value: "skill-1" }, phase: SkillImportPhase.UPLOADED, uploadProof: { uploadId: request.uploadId, assetId: "asset-1", sourceVersionId: request.sourceVersionId, contentSha256: request.contentSha256, sizeBytes: request.sizeBytes }, scanState: SkillPackageScanState.CLEAN, expiresAt: timestamp(Math.floor(Date.now() / 1000) + 86400), replayed: false } },
+      finalizeLocalSkillImport(request, context) { calls.push(["finalize", request, Object.fromEntries(context.requestHeader)]); return { intentId: request.intentId, phase: SkillImportPhase.COMPLETED, skill: skill(), installation: installation(), replayed: false } },
+      getLocalSkillImport(request, context) { calls.push(["get", request, Object.fromEntries(context.requestHeader)]); return { intentId: request.intentId, skillId: { value: "series-1" }, phase: SkillImportPhase.COMPLETED, expiresAt: timestamp(Math.floor(Date.now() / 1000) + 86400), uploadProof: { uploadId: "upload-1", assetId: "asset-1", sourceVersionId: "v1", contentSha256: "a".repeat(64), sizeBytes: 123n }, skill: skill(), installation: installation() } },
+    })
+  } }))
+  owner.listen(0, "127.0.0.1"); await once(owner, "listening")
+  const iam = createServer(async (req, res) => { let body=""; for await (const chunk of req) body += chunk; const scope = new URLSearchParams(body).get("scope"); res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify({ access_token: scope === "platform:projection.read" ? "projection-machine" : "catalog-machine", token_type: "Bearer", scope, expires_in: 60 })) })
+  iam.listen(0, "127.0.0.1"); await once(iam, "listening")
+  const dir = await mkdtemp(join(tmpdir(), "kokoro-local-import-"))
+  const credential = (scope) => [{ tenantId: "tenant", generation: 1, credentialRefVersion: "v1", clientId: scope, clientSecret: "secret", resource: "https://kokoro.dev/resources/platform-internal", scope }]
+  const catalog = join(dir, "catalog.json"), projection = join(dir, "projection.json")
+  await writeFile(catalog, JSON.stringify(credential("platform:skill-catalog.manage"))); await chmod(catalog, 0o600)
+  await writeFile(projection, JSON.stringify(credential("platform:projection.read"))); await chmod(projection, 0o600)
+  const live = { ...config, iamBaseUrl: `http://127.0.0.1:${iam.address().port}`, skillDraft: { enabled: true, platformBaseUrl: `http://127.0.0.1:${owner.address().port}`, credentialFile: catalog, timeoutMs: 1000 }, platformProjection: { baseUrl: `http://127.0.0.1:${owner.address().port}`, credentialFile: projection, timeoutMs: 1000 } }
+  try {
+    await withServer({ sessionAdmission: new SessionAdmissionDouble({ "current-session": { namespace: "tenant", userId: "user" } }), skillAuthorization: { check: async () => ({ ok: true }) } }, async (base) => {
+      const requests = [
+        ["POST", `${base}/browser/v1/skills/local-imports`, { filename: "tea.skill", size_bytes: 123, content_sha256: "a".repeat(64) }],
+        ["POST", `${base}/browser/v1/skills/local-imports/intent-1/complete`, { upload_id: "upload-1", source_version_id: "v1", size_bytes: 123, content_sha256: "a".repeat(64) }],
+        ["POST", `${base}/browser/v1/skills/local-imports/intent-1/finalize`, null],
+        ["GET", `${base}/browser/v1/skills/local-imports/intent-1`, null],
+      ]
+      for (const [method,url,body] of requests) { const requestHeaders = method === "GET" ? { authorization: headers.authorization, "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "secret" } : headers; const response = await fetch(url, { method, headers: requestHeaders, body: body === null ? undefined : JSON.stringify(body) }); assert.ok(response.ok, `${method} ${url}: ${response.status}`) }
+    }, live)
+  } finally { await rm(dir,{recursive:true,force:true}); await Promise.all([new Promise(r=>owner.close(r)),new Promise(r=>iam.close(r))]) }
+  assert.deepEqual(calls.map(([name]) => name), ["begin","complete","finalize","get"])
+  for (const [name, request, headers] of calls) { assert.equal(headers["x-tenant-ref"], "tenant"); assert.equal(headers["x-kokoro-subject"], "user"); assert.equal(headers.authorization, name === "get" ? "Bearer projection-machine" : "Bearer catalog-machine"); assert.equal(request.productContext.subjectId, "user") }
+})
+
+test("incomplete production composition keeps the private namespace unregistered as 404", async () => {
   await withServer(
     {
       sessionAdmission: new SessionAdmissionDouble({ "current-session": { namespace: "tenant", userId: "user" } }),

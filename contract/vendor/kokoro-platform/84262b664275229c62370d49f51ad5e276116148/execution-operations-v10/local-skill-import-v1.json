@@ -93,5 +93,5 @@
   "storagePutReferenceMaxSeconds": 900,
   "protoSha256": "41fdcc2a782a779c38df861f99d89b1d20966486d29ed64647d1ecf149926bd6",
   "descriptorSha256": "fc5d3893a05284a5f52d8de40b82f6e2bbd859608994d84dac20dff43a4a6fd2",
-  "runtimeVerified": false
+  "runtimeVerified": true
 }

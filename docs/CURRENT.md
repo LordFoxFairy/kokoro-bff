@@ -1,3 +1,13 @@
+## R357-BFF-ACTIVATION：正式 active local import 源码候选（2026-10-09；完整验收 OPEN）
+
+Platform 已正式发布 `84262b664275229c62370d49f51ad5e276116148`，v10 active/routable aggregate 为 `dddb0d194af44dbf0b83a0a0443d774f3dee63f8cb03c364ad529c4c230fb85b`，Root publication digest 为 `8a850363580521fadf75bc20b1be70bfe62c20004568c00b72a77f614caa672f`。Root 已完成 owner 正常源码重载与 health/ready，但这不是 BFF/Web/browser 完成证据。
+
+本源码候选已将 Connect/HTTP dependency、generator 与单一完整 vendor 同步到正式 Git 对象 `84262b...`，删除旧 `981df60e...`；完整 HTTP OpenAPI、历史 fixed evidence 和 public contract 保持。`runtime.ts` 仅在 Platform base URL、catalog/projection credentials、IAM URL 全部存在时生产装配 local import client；缺任一仍 404/owner 零调用。写与 receipt replay 每次 fresh current session 下 `create_draft AND install`，Get fresh read；catalog/projection machine credential 分离，不透传 human bearer，不新增 public API、BFF Storage/SQL/receipt、fallback 或 alias。正常 BFF 尚未重载，不能将源码候选描述为已正常注册。
+
+Root 实际验收：production composition 聚焦 58 PASS；contract 704 PASS，typecheck/lint/build 均为 0。默认测试为 1287 PASS / 8 FAIL / 3 SKIP；隔离正式基线 `3e19fbed...` 为 1010 PASS / 18 FAIL / 3 SKIP，其中候选的原 7 个 leaf failure 均在基线复现。新增 Billing personal-read summary 在默认并发门出现 `503 != 200`，但 Root 受控具名候选与基线均自然 0，支持固定 75ms 下的资源敏感判断；该失败日志保留，不能据此声称默认全绿。独审同时确认 `src/application/skill-specification.ts` 直接依赖 infrastructure/generated 是真实生产边界债，须由后继窄切片处理；旧 OpenAPI 9 oracle 与当前 Public12、四个 mock quota/MCP/docs 准入断言也须分别按当前机器事实校正，不能放宽 oracle。本片 DATA_MODEL 无变化，正常服务重载、真实 IAM/Platform/Storage/browser 组合及完整 BFF 验收仍 OPEN。
+
+<!-- R357-BFF-LOCAL-IMPORT-ACTIVATION-CURRENT-D0-END -->
+
 ## T-K03.4 本地 Skill import BFF 文档门（2026-10-09；未实施）
 
 三设计已收敛为 Kokoro 自有 `/browser/v1/skills/local-imports...` 四个 browser-private route，经Web `/api/browser/v1/...` 同源adapter消费，再调用Platform已批准的四 internal-owner RPC。它不是Manus public upload接口；public OpenAPI原字节、operation census、Developer Portal和public SDK保持不变。专属 exact dispatch/private policy及其确定性生成物仍属后继实现，当前仓没有该路由。

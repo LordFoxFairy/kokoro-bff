@@ -1,3 +1,22 @@
+## R357-BFF-ACTIVATION：active local import 的生产装配设计（D0，未实施）
+
+Platform 已正式发布 `84262b664275229c62370d49f51ad5e276116148`，v10 为 `status=active`、`routable=true`，aggregate `dddb0d194af44dbf0b83a0a0443d774f3dee63f8cb03c364ad529c4c230fb85b`，Root publication digest `8a850363580521fadf75bc20b1be70bfe62c20004568c00b72a77f614caa672f`。本切片只把这一正式 owner 发行转为 BFF 的可实施生产装配方案；当前源码仍固定旧 `981df60e...` 且 production 不构造 `LocalSkillImportConnectClient`，所以正常 namespace 仍是 404。
+
+生产装配只扩 `src/bootstrap/runtime.ts`：显式测试 seam 继续优先；非测试路径仅在 `skillDraft.platformBaseUrl`、catalog credential、projection credential 与 `iamBaseUrl` 四项完整时，使用同一 Platform base URL、现 `CatalogTokenSource`（三个写）和 `ProjectionTokenSource`（Get）构造一个 `LocalSkillImportConnectClient`。缺任一项保持 client `undefined`、exact namespace 不注册且 owner 调用为零；不新增 null-client 503、兼容代理、配置键、Storage client、SQL/Redis 或 receipt。现 `src/bootstrap/server.ts` 的 exact private dispatch、route/input/projector/client职责不移动。
+
+每次 Begin、Complete、Finalize 及其 receipt replay 都先在同一 human session 内 fresh 校验 `create_draft AND install`，再取 catalog workload token并调用 owner；任一 action 失败即零 Platform I/O。Get 每次 fresh session/read并只取 projection token。human bearer、tenant或subject不透传给 Platform；owner只收到 BFF workload credential及由受信 session绑定的 product context。现单一绝对预算、首次取消 winner、late fence、strict projection、same-key digest/unknown恢复保持。
+
+后继实现精确范围：
+
+- 唯一 pin 替换：删除 `contract/vendor/kokoro-platform/981df60e74b65eccfc2d58044db9965928e4d37e/`，从正式 `84262b664275229c62370d49f51ad5e276116148` Git 对象新增 `contract/vendor/kokoro-platform/84262b664275229c62370d49f51ad5e276116148/` 的完整必要 publication（根 provenance、三份 Proto、HTTP OpenAPI、descriptor/父证据、execution-operations 与 v5–v10）；同时更新 `contract/dependencies/platform-connect.json` 与 `contract/dependencies/platform-http.json`，不从 owner 脏工作树复制。
+- 正规生成链：同步 `scripts/generate-platform-connect-client.mjs` 与 `scripts/generate-platform-http-client.mjs` 的固定 commit、root digest、v10 aggregate/status/routable及各自严格 allowlist，禁止放宽来源检查；Connect 生成三份 `src/generated/platform-connect/**_pb.ts`，HTTP generated 仅由现工具机械生成且无字节变化时不列变更。私有 policy 继续由 `src/http/routes/local-skill-import.policy.ts` 经 `scripts/generate-local-skill-import-policy.mjs` 生成 `contract/local-skill-import-policy.json`，不手改生成物。
+- 生产源码只需 `src/bootstrap/runtime.ts`；既有 `src/infrastructure/clients/platform/local-skill-import-connect.ts`、`src/http/routes/local-skill-import.ts`、input/response/policy仅在正式新生成类型造成必要编译差异时窄修，不复制第二协议。
+- RED/回归入口：`test/local-skill-import-http.test.mjs` 把“production composition 404”改为完整四配置下真实 owner HTTP 四 route 可达，并保缺任一配置404/owner零调用；`test/platform-connect-contract.test.mjs` 固定 active pin/aggregate/generated；现 `test/user-admission.test.ts` 与 local-import suite继续证明双 action、replay、Get read、预算/取消/late fence。
+
+public OpenAPI、Developer Portal、public SDK/count、GitHub/AI普通流程、Admin Publish及 DATA_MODEL/canonical schema 均不变。正常服务重载、真实多 owner HTTP 与 Web/browser 验收由 Root 后继执行，文档门不冒充激活完成。
+
+<!-- R357-BFF-LOCAL-IMPORT-ACTIVATION-D0-END -->
+
 ## T-K03.4 本地 Skill import：BFF browser-private 消费设计（仅文档，未实施）
 
 普通用户本地 `.zip`/`.skill` 导入只走 `Browser -> Web same-origin adapter -> BFF -> Platform`。BFF 私有入口固定为 `POST /browser/v1/skills/local-imports`、`POST /browser/v1/skills/local-imports/{intent_id}/complete`、`POST /browser/v1/skills/local-imports/{intent_id}/finalize` 与 `GET /browser/v1/skills/local-imports/{intent_id}`；Web 后继只暴露对应 `/api/browser/v1/...`。该 namespace 是 Kokoro 自有 `browser-private`，不冒充已观察的 Manus `/skill.v1.*`，也不进入 public `/v1` OpenAPI、Developer Portal、public generated SDK 或 operation census。BFF 在现 server 的非 `/v1` 默认拒绝之前 exact dispatch；未知 path/method/query/body/header 失败关闭，不落通用代理。
