@@ -3227,3 +3227,14 @@ GET 专用响应 gate 验证 page 数量/唯一 Asset ID、purpose/scan/origin e
 放置：`src/http/routes/validate-skill-draft.ts` 负责 HTTP owner projection；`src/infrastructure/clients/platform/skill-product-schema.ts` 负责 AI handoff stable result；`contract/openapi/v1/openapi.yaml` 与 `scripts/verify-openapi.ts` 维护唯一 public schema及语义门。对应现有 Validate HTTP、AI handoff 与 OpenAPI contract 测试先以正规 skill-md-v1 owner response RED，再做最小实现。无数据迁移、删除或正常资源操作。
 
 <!-- T-K03.4-BFF-CANONICAL-IDENTITY-END; complete original body follows -->
+## R357-BFF-BOUNDARY-AND-ORACLE D0：Skill 表示应用规则与 owner façade 分离（2026-10-09；修订设计）
+
+正式基线 `a71d846e7486c0dab2ca60e7915544730d22a3f8` 的 `SkillSpecificationService` 同时包含两类职责。跨 installation/catalog/current 的 exact 一致性、official 过滤、usage/profile 聚合、可信 tenant/subject 下的下载 handle 再确认，是 BFF-owned 应用规则，必须保留在 `src/application/skill-specification.ts`；Connect/generated/Zod 解码、owner 错误归一和具体 client 调用才属于 Platform transport façade。上一版把整体服务搬入 infrastructure 会让业务规则跟随 transport 变化，现撤回。
+
+放置比较：A（采用）保留 application service，并新增一个既有 Platform client 目录内的窄 façade，把当前 `SkillProductConnectClient`、`PersonalInstallationConnectClient`、`PlatformProjectionHttpClient` 与 generated HTTP decode 封装成应用真正需要的 current/download/installation-page/catalog-page 能力；application 只依同文件或现规范类型中的窄 structural ports，以及既有 BFF application services，不 import infrastructure/generated/http。B（淘汰）整体放 infrastructure 虽可快速消除 application import，但会混入 official 筛选、聚合、授权再确认等独立业务规则；注入四个 Zod `parse` 也只是隐藏 transport 依赖，不采用。每个 owner method 不机械拆一个 port/DTO；仅 transport wire 与稳定应用事实语义不同处由单 façade 映射。
+
+后继精准范围：恢复并重构 `src/application/skill-specification.ts`；删除错误候选 `src/infrastructure/clients/platform/skill-specification.ts`，新增 `src/infrastructure/clients/platform/skill-specification-facade.ts`；同步 `src/bootstrap/runtime.ts`、`test/contract/skill-specification-http.test.mjs`、`test/architecture.test.ts` 与 `test/bff.test.ts`。现 `src/infrastructure/clients/platform/skill-specification.types.ts` 实质是 BFF application seam，单源移动为 `src/application/skill-specification.types.ts` 并删除旧路径；仅同步 runtime、`http/routes/platform-projection.ts`、service/facade import，不设 alias、不复制。该文件集中保留 route source/context，并增加一个 `SkillSpecificationOwner` structural port及确有语义差异的 installation/catalog/current/download result types，不按方法另建 ports/DTO。
+
+强门保留 application 禁止 infrastructure/generated/http、infrastructure 禁止 http/interface implementation，以及 Platform generated importer exact allow-list。负控必须证明 façade 拒绝 malformed/unknown owner wire，application 独立 fixture证明跨来源 exact、official过滤、usage/profile、tenant/subject下载确认不变。OpenAPI仍 exact `12.0.0`。MCP mock 标题改为“fresh admission 后未暴露 mutation fail-closed”，仅断言两种请求503与owner零调用；不得以旧“register/toggle/list/delete flow”标题暗示CRUD完成，GET沿现专门测试。Billing 75ms仍只做同命令候选/基线诊断，不调预算。
+
+<!-- R357-BFF-BOUNDARY-AND-ORACLE-D0-END -->

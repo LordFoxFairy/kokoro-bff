@@ -1,7 +1,7 @@
 import { ConnectError, Code } from "@connectrpc/connect"
 import { authorizeUserRequest } from "../../auth/user-admission.js"
 import type { BffServerComposition } from "../../bootstrap/runtime.js"
-import type { SkillSpecificationOperation } from "../../infrastructure/clients/platform/skill-specification.types.js"
+import type { SkillSpecificationOperation } from "../../application/skill-specification.types.js"
 import { strictParseRawJson } from "../../infrastructure/raw-json.js"
 import {
   publicSkillListSchema,

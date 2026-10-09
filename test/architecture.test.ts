@@ -237,6 +237,7 @@ test("Platform projection generated types stay behind one facade and old Capabil
     "src/http/routes/platform-projection.ts",
     "src/infrastructure/clients/platform/projection-http.ts",
     "src/infrastructure/clients/platform/skill-product-response.ts",
+    "src/infrastructure/clients/platform/skill-specification-facade.ts",
   ])
   for (const { relativePath, source } of sources) {
     assert.doesNotMatch(source, /generated\/capability-http|infrastructure\/clients\/capability/u, relativePath)
@@ -606,7 +607,7 @@ test("Conversation collection filtering stays one BFF-owned discriminated path w
   assert.match(service, /filter: ConversationCollectionFilter/u)
   assert.match(repository, /filter\.kind === "direct"[\s\S]*project_ref IS NULL/u)
   assert.match(repository, /filter\.kind === "project" \? filter\.projectRef : null/u)
-  assert.match(openapi, /^  version: 9\.0\.0$/mu)
+  assert.match(openapi, /^  version: 12\.0\.0$/mu)
   assert.match(openapi, /scope=direct and a nonempty project_ref are mutually exclusive/u)
   assert.doesNotMatch(port, /ConversationCollectionFilter\s*=\s*string/u)
 })

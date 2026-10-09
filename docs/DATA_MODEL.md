@@ -1982,3 +1982,8 @@ W2 资源列表当前实现不新增 BFF 表、索引、物化快照、缓存或
 本片只纠正 BFF 对 Platform owner 返回的 canonical identity 值域：当前 `skill-md-v1:sha256:<64 lowercase hex>` 与正式 legacy `zip-v2:sha256:<64 lowercase hex>`。BFF 不计算、不转换、不 trim、不持久化该 identity，也不新增表、列、索引、migration、receipt、缓存或镜像；现 package、Skill、安装、Share/usage 与非 Skills 数据均不变。
 
 <!-- T-K03.4-BFF-CANONICAL-IDENTITY-END; complete original body follows -->
+## R357-BFF-BOUNDARY-AND-ORACLE D0：无数据变化（2026-10-09；修订边界）
+
+`SkillSpecificationService` 的跨owner一致性、过滤、聚合及下载确认继续是 BFF application规则；application types 单源移动不产生持久 DTO；Platform façade只做transport解码，不新增持久事实。无表、列、索引、schema、migration、SQL、Redis key、receipt、缓存、owner或retention变化；不得为职责拆分建立Skill镜像、持久DTO或第二套wire模型。
+
+<!-- R357-BFF-BOUNDARY-AND-ORACLE-DATA-D0-END -->

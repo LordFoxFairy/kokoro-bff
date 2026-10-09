@@ -2527,3 +2527,10 @@ session_invalid/skill_forbidden/skill_rate_limited，坏响应、超时、未知
 不接受 trim、大小写变体、长度错误、额外前后缀、`zip-v1` 或未知 profile；非法 owner 200 仍映射既有 502 `skill_response_invalid`。IAM、tenant/subject、Idempotency-Key、command digest、attempt/CAS、预算/取消、unknown recovery及所有错误结构不变。AI import handoff 使用同一闭集，不建立另一种响应或 fallback；vendor/artifact 已含该事实，本片不 repin、不改 generated client。
 
 <!-- T-K03.4-BFF-CANONICAL-IDENTITY-END; complete original body follows -->
+## R357-BFF-BOUNDARY-AND-ORACLE D0：应用规则与 wire façade 边界（2026-10-09；wire 不变）
+
+本切片不改变 public/browser-private/internal request、response、status、permission 或 operation。canonical public OpenAPI 保持 exact `12.0.0`，不以 regex 放宽。现 infrastructure 下的 `skill-specification.types.ts` 单源移动到 application，route source/context wire seam本身不变。Platform façade 只把固定 generated/Connect/HTTP owner wire 解码为 application 所需的单一 structural owner port窄事实；Skill specification application service继续拥有跨来源一致性、过滤、聚合和下载确认，route 的 `SkillSpecificationSource` 合同不变。
+
+四个 mock oracle 只校正当前事实：quota/list 使用当前 closed envelope；Public12 docs coverage使用 canonical machine path/census并不恢复 `/v1/skills/pool`；deprecated compatibility 在 fresh admission 后验证未实现 operation fail-closed。MCP mutation 用例必须改名为 fresh-admission fail-closed，并断言无 owner I/O；它不证明 register/toggle/list/delete CRUD，GET能力仍由独立现有测试证明。不得以 IAM unavailable、旧路由、skip 或宽 schema 取绿。Billing 75ms默认并发波动保留对照证据，不改 timeout/error contract。
+
+<!-- R357-BFF-BOUNDARY-AND-ORACLE-API-D0-END -->

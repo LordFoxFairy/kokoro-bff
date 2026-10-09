@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url"
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 import type { BffConfig } from "../src/config/runtime.ts"
 import { createLiveTestBffServer, createTestBffServer } from "./doubles/server.ts"
+import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 
 const servers: Server[] = []
 
@@ -198,16 +199,24 @@ describe("kokoro-bff v1 mock contract", () => {
     const { MoriMockBffStore } = await import("./doubles/mori-store.ts")
     const { mockBusiness } = await import("./doubles/mock-route.ts")
     const { SessionAdmissionDouble } = await import("./doubles/session-admission.ts")
-    const store = new MockBffStore(), mori = new MoriMockBffStore(true)
-    const base = await listen(createBffServer(config(), {
-      sessionAdmission: new SessionAdmissionDouble({"test-session": {namespace:"ns_test", userId:"user_test"}}),
-      businessStore:null,
-      skillProductClient: {inspect:async (input: {sourceRef:string;tenant:string;subject:string})=> {
-        assert.equal(input.tenant,"ns_test");assert.equal(input.subject,"user_test");assert.equal(input.sourceRef,"skill:skill-builder")
-        return {sourceRef:{value:input.sourceRef},revision:1n,files:[]}
-      }} as never,
-      routeHandler:async ({request,response,businessPath,context,json,mutation,idempotency})=>mockBusiness(request,response,businessPath,context,store,mori,idempotency,mutation,json),
-    }))
+    const store = new MockBffStore(),
+      mori = new MoriMockBffStore(true)
+    const base = await listen(
+      createBffServer(config(), {
+        sessionAdmission: new SessionAdmissionDouble({ "test-session": { namespace: "ns_test", userId: "user_test" } }),
+        businessStore: null,
+        skillProductClient: {
+          inspect: async (input: { sourceRef: string; tenant: string; subject: string }) => {
+            assert.equal(input.tenant, "ns_test")
+            assert.equal(input.subject, "user_test")
+            assert.equal(input.sourceRef, "skill:skill-builder")
+            return { sourceRef: { value: input.sourceRef }, revision: 1n, files: [] }
+          },
+        } as never,
+        routeHandler: async ({ request, response, businessPath, context, json, mutation, idempotency }) =>
+          mockBusiness(request, response, businessPath, context, store, mori, idempotency, mutation, json),
+      }),
+    )
     const projectId = "project_kokoro"
     const skillPath = `${base}/v1/projects/${projectId}/skills/skill-builder`
     const missingSkillKey = await fetch(skillPath, {
@@ -336,72 +345,185 @@ describe("kokoro-bff v1 mock contract", () => {
   })
 
   it("previews a GitHub skill without requiring Idempotency-Key", async () => {
-    const base = await listen(testServer(config())), originalFetch = globalThis.fetch
-    const commit = "a".repeat(40), calls: string[] = [], zip = Buffer.from("504b0304140000000000daa6485d153af49252000000520000000d000000726f6f742f534b494c4c2e6d642d2d2d0a6e616d653a205265616c20736b696c6c0a6465736372697074696f6e3a2041637475616c207061636b616765206d657461646174610a2d2d2d0a232041637475616c20536b696c6c20626f64790a504b01021403140000000000daa6485d153af49252000000520000000d0000000000000000000000800100000000726f6f742f534b494c4c2e6d64504b050600000000010001003b0000007d0000000000", "hex")
+    const base = await listen(testServer(config())),
+      originalFetch = globalThis.fetch
+    const commit = "a".repeat(40),
+      calls: string[] = [],
+      zip = Buffer.from(
+        "504b0304140000000000daa6485d153af49252000000520000000d000000726f6f742f534b494c4c2e6d642d2d2d0a6e616d653a205265616c20736b696c6c0a6465736372697074696f6e3a2041637475616c207061636b616765206d657461646174610a2d2d2d0a232041637475616c20536b696c6c20626f64790a504b01021403140000000000daa6485d153af49252000000520000000d0000000000000000000000800100000000726f6f742f534b494c4c2e6d64504b050600000000010001003b0000007d0000000000",
+        "hex",
+      )
     globalThis.fetch = async (url, init) => {
       const target = String(url)
-      if (target.startsWith("http://127.0.0.1:")) return originalFetch(url,init)
+      if (target.startsWith("http://127.0.0.1:")) return originalFetch(url, init)
       calls.push(target)
-      if (target.endsWith("/commits/main")) return Response.json({sha:commit})
-      if (target.startsWith("https://codeload.github.com/")) return new Response(zip,{headers:{"content-type":"application/zip"}})
-      assert.equal(target,"https://api.github.com/repos/acme/skill-pack")
-      return Response.json({id:1,private:false,full_name:"acme/skill-pack",html_url:"https://github.com/acme/skill-pack",owner:{login:"acme",html_url:"https://github.com/acme"},stargazers_count:0,forks_count:0,default_branch:"main"})
+      if (target.endsWith("/commits/main")) return Response.json({ sha: commit })
+      if (target.startsWith("https://codeload.github.com/")) return new Response(zip, { headers: { "content-type": "application/zip" } })
+      assert.equal(target, "https://api.github.com/repos/acme/skill-pack")
+      return Response.json({
+        id: 1,
+        private: false,
+        full_name: "acme/skill-pack",
+        html_url: "https://github.com/acme/skill-pack",
+        owner: { login: "acme", html_url: "https://github.com/acme" },
+        stargazers_count: 0,
+        forks_count: 0,
+        default_branch: "main",
+      })
     }
     try {
-      const response = await fetch(`${base}/v1/skills/github/preview`,{method:"POST",headers:{...authHeaders(),"content-type":"application/json"},body:JSON.stringify({repository_url:"https://github.com/acme/skill-pack"})})
-      assert.equal(response.status,200)
-      const body = await response.json() as {data:{selector:unknown;metadata:unknown;selection_required:boolean}}
-      assert.equal(body.data.selection_required,false)
-      assert.deepEqual(body.data.selector,{owner:"acme",repository:"skill-pack",commit,path:""})
-      assert.deepEqual(body.data.metadata,{display_name:"Real skill",summary:"Actual package metadata",tags:[]})
-      assert.equal(response.headers.get("cache-control"),"no-store")
+      const response = await fetch(`${base}/v1/skills/github/preview`, {
+        method: "POST",
+        headers: { ...authHeaders(), "content-type": "application/json" },
+        body: JSON.stringify({ repository_url: "https://github.com/acme/skill-pack" }),
+      })
+      assert.equal(response.status, 200)
+      const body = (await response.json()) as { data: { selector: unknown; metadata: unknown; selection_required: boolean } }
+      assert.equal(body.data.selection_required, false)
+      assert.deepEqual(body.data.selector, { owner: "acme", repository: "skill-pack", commit, path: "" })
+      assert.deepEqual(body.data.metadata, { display_name: "Real skill", summary: "Actual package metadata", tags: [] })
+      assert.equal(response.headers.get("cache-control"), "no-store")
       assert.ok(response.headers.get("x-request-id"))
-      assert.deepEqual(calls,["https://api.github.com/repos/acme/skill-pack","https://api.github.com/repos/acme/skill-pack/commits/main",`https://codeload.github.com/acme/skill-pack/zip/${commit}`])
-    } finally {globalThis.fetch = originalFetch}
+      assert.deepEqual(calls, [
+        "https://api.github.com/repos/acme/skill-pack",
+        "https://api.github.com/repos/acme/skill-pack/commits/main",
+        `https://codeload.github.com/acme/skill-pack/zip/${commit}`,
+      ])
+    } finally {
+      globalThis.fetch = originalFetch
+    }
   })
 
   it("requires Idempotency-Key for GitHub skill import and replays the result", async () => {
-    const {skillGithubImportRoute} = await import("../dist/http/routes/skill-github-import.js")
-    const commit="a".repeat(40), selector={owner:"acme",repository:"skill-pack",commit,path:""}, zip=Buffer.from("504b0304140000000000daa6485d153af49252000000520000000d000000726f6f742f534b494c4c2e6d642d2d2d0a6e616d653a205265616c20736b696c6c0a6465736372697074696f6e3a2041637475616c207061636b616765206d657461646174610a2d2d2d0a232041637475616c20536b696c6c20626f64790a504b01021403140000000000daa6485d153af49252000000520000000d0000000000000000000000800100000000726f6f742f534b494c4c2e6d64504b050600000000010001003b0000007d0000000000","hex")
-    const originalFetch=globalThis.fetch
-    let row: any=null, puts=0, digest="", providerCalls=0
-    const commands: string[]=[], creates: unknown[]=[]
-    const receipts={getReceipt:async()=>row,claimReceipt:async (_scope:string,fingerprint:string)=>{row={fingerprint,status:102,body:{}};return {claimed:true,receipt:null}},compareAndSetReceipt:async(_scope:string,_fingerprint:string,expected:unknown,replacement:unknown)=>{assert.deepEqual(row,expected);row=replacement;return {updated:true,receipt:row}}}
-    const client={getPackageUpload:async()=>({skillId:{value:"imported"},attemptId:"attempt",uploadId:"upload",attemptEpoch:1n}),command:async(operation:string,_identity:unknown,members:any)=>{
-      commands.push(operation)
-      if(operation==="createSkillDraft"){creates.push(members);assert.equal(members.metadata.display_name,"Real skill");assert.equal(members.creation_provenance.github.asset_ref,undefined);return {skillId:{value:"imported"},status:1,revision:1n,stateVersion:7n}}
-      if(operation==="beginSkillPackageUpload"){assert.equal(members.expected_state_version,"7");digest=members.content_sha256;return {skillId:{value:"imported"},attemptId:"attempt",uploadId:"upload",attemptEpoch:1n,stateVersion:8n,transferReference:{url:"http://object.test/put",method:"PUT",requiredHeaders:{"content-type":"application/zip"},expiresAt:{seconds:BigInt(Math.floor(Date.now()/1000)+60),nanos:0}}}}
-      if(operation==="completeSkillPackageUpload"){assert.equal(row.body.stage,"selected");assert.equal(members.source_version_id,"OPAQUE+/=");return {skillId:{value:"imported"},scanState:2,contentSha256:digest,stateVersion:9n}}
-      assert.equal(operation,"validateSkillDraft");return {skillId:{value:"imported"},valid:true,contentDigest:digest,manifestIdentity:`zip-v2:sha256:${digest}`,stateVersion:10n}
-    }}
-    globalThis.fetch=async(url,init)=>{
-      const target=String(url)
-      if(target.startsWith("http://127.0.0.1:"))return originalFetch(url,init)
-      if(target==="http://object.test/put"){puts++;return new Response(null,{status:200,headers:{"x-amz-version-id":"OPAQUE+/="}})}
-      providerCalls++
-      if(target.endsWith(`/commits/${commit}`))return Response.json({sha:commit})
-      if(target.startsWith("https://codeload.github.com/"))return new Response(zip,{headers:{"content-type":"application/zip"}})
-      assert.equal(target,"https://api.github.com/repos/acme/skill-pack")
-      return Response.json({id:1,private:false,full_name:"acme/skill-pack",html_url:"https://github.com/acme/skill-pack",owner:{login:"acme",html_url:"https://github.com/acme"},stargazers_count:providerCalls,forks_count:0})
+    const { skillGithubImportRoute } = await import("../dist/http/routes/skill-github-import.js")
+    const commit = "a".repeat(40),
+      selector = { owner: "acme", repository: "skill-pack", commit, path: "" },
+      zip = Buffer.from(
+        "504b0304140000000000daa6485d153af49252000000520000000d000000726f6f742f534b494c4c2e6d642d2d2d0a6e616d653a205265616c20736b696c6c0a6465736372697074696f6e3a2041637475616c207061636b616765206d657461646174610a2d2d2d0a232041637475616c20536b696c6c20626f64790a504b01021403140000000000daa6485d153af49252000000520000000d0000000000000000000000800100000000726f6f742f534b494c4c2e6d64504b050600000000010001003b0000007d0000000000",
+        "hex",
+      )
+    const originalFetch = globalThis.fetch
+    let row: any = null,
+      puts = 0,
+      digest = "",
+      providerCalls = 0
+    const commands: string[] = [],
+      creates: unknown[] = []
+    const receipts = {
+      getReceipt: async () => row,
+      claimReceipt: async (_scope: string, fingerprint: string) => {
+        row = { fingerprint, status: 102, body: {} }
+        return { claimed: true, receipt: null }
+      },
+      compareAndSetReceipt: async (_scope: string, _fingerprint: string, expected: unknown, replacement: unknown) => {
+        assert.deepEqual(row, expected)
+        row = replacement
+        return { updated: true, receipt: row }
+      },
     }
-    const base=await listen(createServer((request,response)=>{void skillGithubImportRoute(request,response,{requestId:"import-id",identity:{namespace:"ns_test",userId:"user_test"}},config({storage:{objectOrigin:"http://object.test"} as never}),receipts as never,client as never,async()=>{})}))
+    const client = {
+      getPackageUpload: async () => ({ skillId: { value: "imported" }, attemptId: "attempt", uploadId: "upload", attemptEpoch: 1n }),
+      command: async (operation: string, _identity: unknown, members: any) => {
+        commands.push(operation)
+        if (operation === "createSkillDraft") {
+          creates.push(members)
+          assert.equal(members.metadata.display_name, "Real skill")
+          assert.equal(members.creation_provenance.github.asset_ref, undefined)
+          return { skillId: { value: "imported" }, status: 1, revision: 1n, stateVersion: 7n }
+        }
+        if (operation === "beginSkillPackageUpload") {
+          assert.equal(members.expected_state_version, "7")
+          digest = members.content_sha256
+          return {
+            skillId: { value: "imported" },
+            attemptId: "attempt",
+            uploadId: "upload",
+            attemptEpoch: 1n,
+            stateVersion: 8n,
+            transferReference: {
+              url: "http://object.test/put",
+              method: "PUT",
+              requiredHeaders: { "content-type": "application/zip" },
+              expiresAt: { seconds: BigInt(Math.floor(Date.now() / 1000) + 60), nanos: 0 },
+            },
+          }
+        }
+        if (operation === "completeSkillPackageUpload") {
+          assert.equal(row.body.stage, "selected")
+          assert.equal(members.source_version_id, "OPAQUE+/=")
+          return { skillId: { value: "imported" }, scanState: 2, contentSha256: digest, stateVersion: 9n }
+        }
+        assert.equal(operation, "validateSkillDraft")
+        return { skillId: { value: "imported" }, valid: true, contentDigest: digest, manifestIdentity: `zip-v2:sha256:${digest}`, stateVersion: 10n }
+      },
+    }
+    globalThis.fetch = async (url, init) => {
+      const target = String(url)
+      if (target.startsWith("http://127.0.0.1:")) return originalFetch(url, init)
+      if (target === "http://object.test/put") {
+        puts++
+        return new Response(null, { status: 200, headers: { "x-amz-version-id": "OPAQUE+/=" } })
+      }
+      providerCalls++
+      if (target.endsWith(`/commits/${commit}`)) return Response.json({ sha: commit })
+      if (target.startsWith("https://codeload.github.com/")) return new Response(zip, { headers: { "content-type": "application/zip" } })
+      assert.equal(target, "https://api.github.com/repos/acme/skill-pack")
+      return Response.json({
+        id: 1,
+        private: false,
+        full_name: "acme/skill-pack",
+        html_url: "https://github.com/acme/skill-pack",
+        owner: { login: "acme", html_url: "https://github.com/acme" },
+        stargazers_count: providerCalls,
+        forks_count: 0,
+      })
+    }
+    const base = await listen(
+      createServer((request, response) => {
+        void skillGithubImportRoute(
+          request,
+          response,
+          { requestId: "import-id", identity: { namespace: "ns_test", userId: "user_test" } },
+          config({ storage: { objectOrigin: "http://object.test" } as never }),
+          receipts as never,
+          client as never,
+          async () => {},
+        )
+      }),
+    )
     try {
-      const missingKey=await fetch(`${base}/v1/skills/github/import`,{method:"POST",headers:{...authHeaders(),"content-type":"application/json"},body:JSON.stringify(selector)})
-      assert.equal(missingKey.status,400);assert.equal(providerCalls,0)
-      const forged=await fetch(`${base}/v1/skills/github/import`,{method:"POST",headers:{...authHeaders(),"content-type":"application/json","idempotency-key":"k"},body:JSON.stringify({...selector,metadata:{display_name:"Fake"}})})
-      assert.equal(forged.status,400);assert.equal(providerCalls,0)
-      const init={method:"POST",headers:{...authHeaders(),"content-type":"application/json","idempotency-key":"k"},body:JSON.stringify(selector)}
-      const first=await fetch(`${base}/v1/skills/github/import`,init), firstBody=await first.json()
-      assert.equal(first.status,201)
-      const second=await fetch(`${base}/v1/skills/github/import`,init)
-      assert.equal(second.status,201);assert.deepEqual(await second.json(),firstBody)
-      assert.equal(puts,1);assert.equal(commands.filter(x=>x==="completeSkillPackageUpload").length,1)
-      assert.equal(commands.filter(x=>x==="validateSkillDraft").length,1);assert.deepEqual(creates[0],creates[1])
-    }finally{globalThis.fetch=originalFetch}
+      const missingKey = await fetch(`${base}/v1/skills/github/import`, {
+        method: "POST",
+        headers: { ...authHeaders(), "content-type": "application/json" },
+        body: JSON.stringify(selector),
+      })
+      assert.equal(missingKey.status, 400)
+      assert.equal(providerCalls, 0)
+      const forged = await fetch(`${base}/v1/skills/github/import`, {
+        method: "POST",
+        headers: { ...authHeaders(), "content-type": "application/json", "idempotency-key": "k" },
+        body: JSON.stringify({ ...selector, metadata: { display_name: "Fake" } }),
+      })
+      assert.equal(forged.status, 400)
+      assert.equal(providerCalls, 0)
+      const init = { method: "POST", headers: { ...authHeaders(), "content-type": "application/json", "idempotency-key": "k" }, body: JSON.stringify(selector) }
+      const first = await fetch(`${base}/v1/skills/github/import`, init),
+        firstBody = await first.json()
+      assert.equal(first.status, 201)
+      const second = await fetch(`${base}/v1/skills/github/import`, init)
+      assert.equal(second.status, 201)
+      assert.deepEqual(await second.json(), firstBody)
+      assert.equal(puts, 1)
+      assert.equal(commands.filter((x) => x === "completeSkillPackageUpload").length, 1)
+      assert.equal(commands.filter((x) => x === "validateSkillDraft").length, 1)
+      assert.deepEqual(creates[0], creates[1])
+    } finally {
+      globalThis.fetch = originalFetch
+    }
   })
 
   it("rejects non-GitHub URLs for GitHub skill preview and import", async () => {
-    const base = await listen(liveServer(config(), {skillAuthorization:{check:async()=>({ok:true})}}))
+    const base = await listen(liveServer(config(), { skillAuthorization: { check: async () => ({ ok: true }) } }))
     for (const path of ["preview", "import"]) {
       const response = await fetch(`${base}/v1/skills/github/${path}`, {
         method: "POST",
@@ -466,12 +588,6 @@ describe("kokoro-bff v1 mock contract", () => {
     })
     assert.equal(disabled.status, 404)
 
-    const afterDisable = await fetch(`${base}/v1/skills`, { headers: authHeaders() })
-    const disabledSkill = ((await afterDisable.json()) as { data: { skills: Array<{ name: string; enabled?: boolean }> } }).data.skills.find(
-      (skill) => skill.name === "contract-review",
-    )
-    assert.equal(disabledSkill?.enabled, true)
-
     const enabled = await fetch(`${base}/v1/skills/contract-review/enable?scope=official`, {
       method: "POST",
       headers: { ...authHeaders(), "idempotency-key": "skills-toggle-contract-review-enable" },
@@ -479,8 +595,19 @@ describe("kokoro-bff v1 mock contract", () => {
     assert.equal(enabled.status, 404)
   })
 
-  it("completes the MCP server register, toggle, list, and delete mock flow", async () => {
-    const base = await listen(testServer(config()))
+  it("fails closed for fresh-admission MCP mutations before owner I/O", async () => {
+    let ownerCalls = 0
+    const base = await listen(
+      liveServer(config(), {
+        businessStore: null,
+        readiness: async () => undefined,
+        sessionAdmission: new SessionAdmissionDouble({ "test-session": { namespace: "ns_test", userId: "user_test" } }),
+        mcpAuthorization: { check: async () => ({ ok: true }) },
+        routeHandler: async () => {
+          ownerCalls++
+        },
+      }),
+    )
     const name = "phase-one-mcp"
     const registration = {
       name,
@@ -494,66 +621,17 @@ describe("kokoro-bff v1 mock contract", () => {
       headers: { ...authHeaders(), "content-type": "application/json" },
       body: JSON.stringify(registration),
     })
-    assert.equal(missingKey.status, 400)
-    assert.equal(((await missingKey.json()) as { error: { code: string } }).error.code, "idempotency_key_required")
+    assert.equal(missingKey.status, 503)
+    assert.equal(((await missingKey.json()) as { error: { code: string } }).error.code, "platform_operation_not_available")
 
     const registered = await fetch(`${base}/v1/mcp/servers`, {
       method: "POST",
       headers: { ...authHeaders(), "content-type": "application/json", "idempotency-key": "mcp-register-phase-one" },
       body: JSON.stringify(registration),
     })
-    const registeredBody = (await registered.json()) as {
-      data: { server: Record<string, unknown> }
-      meta: { request_id: string }
-    }
-    assert.equal(registered.status, 200)
-    assert.deepEqual(registeredBody.data.server, {
-      scope: "ns_test",
-      name,
-      revision: 1,
-      transport: "streamable_http",
-      url: "https://mcp.example.test/stream",
-      allowed_tools: ["search", "fetch"],
-      secret_ref: "handle:srt_fixture",
-      enabled: true,
-    })
-    assert.ok(registeredBody.meta.request_id.length > 0)
-
-    const listed = await fetch(`${base}/v1/mcp/servers`, { headers: authHeaders() })
-    const listedBody = (await listed.json()) as {
-      data: { servers: Array<{ name: string; enabled: boolean }> }
-      meta: { request_id: string }
-    }
-    assert.equal(listed.status, 200)
-    assert.equal(listedBody.data.servers.find((server) => server.name === name)?.enabled, true)
-    assert.ok(listedBody.meta.request_id.length > 0)
-
-    const disabled = await fetch(`${base}/v1/mcp/servers/${name}/disable`, {
-      method: "POST",
-      headers: { ...authHeaders(), "idempotency-key": "mcp-toggle-phase-one-disable" },
-    })
-    assert.equal(disabled.status, 200)
-    assert.deepEqual(((await disabled.json()) as { data: { ok: boolean } }).data, { ok: true })
-
-    const enabled = await fetch(`${base}/v1/mcp/servers/${name}/enable`, {
-      method: "POST",
-      headers: { ...authHeaders(), "idempotency-key": "mcp-toggle-phase-one-enable" },
-    })
-    assert.equal(enabled.status, 200)
-    assert.deepEqual(((await enabled.json()) as { data: { ok: boolean } }).data, { ok: true })
-
-    const deleted = await fetch(`${base}/v1/mcp/servers/${name}`, {
-      method: "DELETE",
-      headers: { ...authHeaders(), "idempotency-key": "mcp-delete-phase-one" },
-    })
-    assert.equal(deleted.status, 200)
-    assert.deepEqual(((await deleted.json()) as { data: { ok: boolean } }).data, { ok: true })
-
-    const afterDelete = await fetch(`${base}/v1/mcp/servers`, { headers: authHeaders() })
-    assert.equal(
-      ((await afterDelete.json()) as { data: { servers: Array<{ name: string }> } }).data.servers.some((server) => server.name === name),
-      false,
-    )
+    assert.equal(registered.status, 503)
+    assert.equal(((await registered.json()) as { error: { code: string } }).error.code, "platform_operation_not_available")
+    assert.equal(ownerCalls, 0)
   })
 
   it("requires explicit Library kind after admission and does not mistake an HTTP upstream for the Storage Connect adapter", async () => {
@@ -1053,9 +1131,7 @@ describe("kokoro-bff v1 mock contract", () => {
       "/v1/projects/{projectId}/resources",
       "/v1/projects/{projectId}/skills/{skill}",
       "/v1/projects/{projectId}/scheduled-tasks",
-      "/v1/skills",
-      "/v1/skills/pool",
-      "/v1/skills/catalog",
+      "/v1/skill.list",
       "/v1/skill-installations",
       "/v1/skill-installations/{installation_id}",
       "/v1/skill-installations/{installation_id}/enabled",
@@ -1331,7 +1407,12 @@ describe("kokoro-bff v1 mock contract", () => {
           mode: "live",
           upstreams: { ...config().upstreams, capability: capabilityBase },
         }),
-        { idempotency: receipts },
+        {
+          idempotency: receipts,
+          sessionAdmission: new SessionAdmissionDouble({ "test-session": { namespace: "ns_test", userId: "user_test" } }),
+          mcpAuthorization: { check: async () => ({ ok: true }) },
+          skillAuthorization: { check: async () => ({ ok: true }) },
+        },
       ),
     )
 

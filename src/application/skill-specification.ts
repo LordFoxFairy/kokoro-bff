@@ -2,25 +2,26 @@ import { Code, ConnectError } from "@connectrpc/connect"
 import type { ProjectOwnerScope } from "./ports/project-repository.js"
 import type { BffApplicationServices } from "./services.js"
 import type { SkillDownloadBinding } from "./skill-download-handles.js"
-import type { SkillProductConnectClient } from "../infrastructure/clients/platform/skill-product-connect.js"
-import type { PersonalInstallationConnectClient } from "../infrastructure/clients/platform/personal-installation-connect.js"
-import type { PlatformProjectionHttpClient } from "../infrastructure/clients/platform/projection-http.js"
-import type { IamPublisherProfileClient } from "../infrastructure/clients/iam-publisher-profile.js"
-import type { SkillSpecificationContext, SkillSpecificationSource } from "../infrastructure/clients/platform/skill-specification.types.js"
-import { projectInstallationList, projectInstallationSourceFacts } from "../infrastructure/clients/platform/personal-installation-response.js"
-import { assertSkillWireKnown, projectSkillProductRecord, skillTimestamp } from "../infrastructure/clients/platform/skill-product-response.js"
-import { zListVisibleSkillCatalogResponse, zSkill } from "../generated/platform-http/zod.gen.js"
-import { z } from "zod"
-import { publicSkillListSchema, websiteSkillSchema, websiteHubResponseSchema, websiteListResponseSchema } from "../http/skill-specification-schema.js"
+import type { SkillSpecificationContext, SkillSpecificationOwner, SkillSpecificationSource } from "./skill-specification.types.js"
+
+function identity<T>(value: T): T {
+  return value
+}
 
 /** Product representation aggregation; identity/lifecycle remain fixed owner contracts. */
 export class SkillSpecificationService implements SkillSpecificationSource {
   public constructor(
     private readonly dependencies: {
-      product: Pick<SkillProductConnectClient, "current" | "download">
-      installations: Pick<PersonalInstallationConnectClient, "list">
-      projection: Pick<PlatformProjectionHttpClient, "read">
-      profiles: Pick<IamPublisherProfileClient, "resolve">
+      owner: SkillSpecificationOwner
+      profiles: Readonly<{
+        resolve(
+          tenant: string,
+          bearer: string,
+          requestId: string,
+          refs: ReadonlyArray<Readonly<{ kind: "user"; id: string }>>,
+          signal: AbortSignal,
+        ): Promise<Map<string, Readonly<{ status: string; display_name?: string }>>>
+      }>
       usage?: BffApplicationServices["skillUsage"]
       projects?: Pick<BffApplicationServices["projects"], "find">
       objectOrigin: string | null
@@ -48,13 +49,13 @@ export class SkillSpecificationService implements SkillSpecificationSource {
     }
   }
   private async installations(context: SkillSpecificationContext, signal: AbortSignal, deadlineAt: number, projectRef?: string) {
-    const items: Array<ReturnType<typeof projectInstallationList>["data"][number] & ReturnType<typeof projectInstallationSourceFacts>> = [],
+    const items: import("./skill-specification.types.js").SkillInstallationFact[] = [],
       seen = new Set<string>(),
       cursors = new Set<string>()
     let cursor: string | undefined
     do {
       this.active(signal, deadlineAt)
-      const raw = await this.dependencies.installations.list(
+      const result = await this.dependencies.owner.listInstallations(
         {
           ...this.common(context),
           installed: true,
@@ -64,15 +65,14 @@ export class SkillSpecificationService implements SkillSpecificationSource {
         },
         signal,
       )
-      const result = projectInstallationList(raw)
       this.active(signal, deadlineAt)
-      for (const [index, item] of result.data.entries()) {
+      for (const item of result.items) {
         if (!item.installed || seen.has(item.installation_id)) throw new Error("skill_response_invalid")
         seen.add(item.installation_id)
-        items.push({ ...item, ...projectInstallationSourceFacts(raw.installations[index]!) })
+        items.push(item)
       }
       if (items.length > 1000) throw new ConnectError("Skill list capacity exceeded", Code.ResourceExhausted)
-      cursor = result.meta?.next_cursor
+      cursor = result.nextCursor
       if (cursor !== undefined) {
         if (cursors.has(cursor)) throw new Error("skill_response_invalid")
         cursors.add(cursor)
@@ -82,50 +82,18 @@ export class SkillSpecificationService implements SkillSpecificationSource {
   }
   private async catalog(input: Readonly<Record<string, unknown>>, context: SkillSpecificationContext, signal: AbortSignal, deadlineAt: number) {
     this.active(signal, deadlineAt)
-    const result = await this.dependencies.projection.read(
-      "catalog",
-      context.identity.namespace,
-      context.identity.userId,
-      context.requestId,
-      { query: { ...input } },
-      signal,
-    )
+    const result = await this.dependencies.owner.listCatalog(input, context, signal)
     this.active(signal, deadlineAt)
-    if (!result.ok) {
-      if (result.status === 400) throw new ConnectError("Skill query invalid", Code.InvalidArgument)
-      if (result.status === 404) throw new ConnectError("Skill not found", Code.NotFound)
-      if (result.status === 502) throw new Error("skill_response_invalid")
-      throw new ConnectError("Skill dependency unavailable", Code.Unavailable)
-    }
-    return zListVisibleSkillCatalogResponse
-      .strict()
-      .extend({ data: zListVisibleSkillCatalogResponse.shape.data.strict().extend({ skills: z.array(zSkill.strict()) }) })
-      .parse({ data: result.data }).data
+    return result
   }
   private async current(seriesId: string, context: SkillSpecificationContext, signal: AbortSignal, deadlineAt: number) {
     this.active(signal, deadlineAt)
-    const result = await this.dependencies.product.current({ ...this.common(context), seriesId }, signal, deadlineAt)
-    assertSkillWireKnown(result)
-    const publication = result.publication
-    if (
-      !publication ||
-      publication.seriesId?.value !== seriesId ||
-      !publication.current ||
-      publication.stateVersion < 1n ||
-      publication.stateVersion > 9_223_372_036_854_775_807n ||
-      !["owner", "tenant", "catalog"].includes(publication.audience)
-    )
-      throw new Error("skill_response_invalid")
-    const skill = projectSkillProductRecord(publication.currentVersion)
-    if (skill.series_id !== seriesId || skill.status !== "active" || skill.package_phase !== "validated") throw new Error("skill_response_invalid")
-    // New fields are taken directly from the issued owner record, never install/publish timestamps.
-    const record = publication.currentVersion!
-    if (!record.ownerScope || !record.ownerScope.id || !record.ownerScope.kind) throw new Error("skill_response_invalid")
+    const result = await this.dependencies.owner.current(seriesId, context, signal, deadlineAt)
     this.active(signal, deadlineAt)
-    return { skill, record, createdAt: skillTimestamp(record.createdAt), publishedAt: skillTimestamp(publication.publishedAt) }
+    return result
   }
   private async creatorProfiles(
-    products: Array<ReturnType<typeof projectSkillProductRecord>["product"]>,
+    products: import("./skill-specification.types.js").SkillProductFact[],
     context: SkillSpecificationContext,
     signal: AbortSignal,
     deadlineAt: number,
@@ -137,7 +105,7 @@ export class SkillSpecificationService implements SkillSpecificationSource {
         ),
       ).values(),
     ]
-    const result: Awaited<ReturnType<IamPublisherProfileClient["resolve"]>> = new Map()
+    const result = new Map<string, Readonly<{ status: string; display_name?: string }>>()
     for (let offset = 0; offset < refs.length; offset += 100) {
       this.active(signal, deadlineAt)
       const profiles = await this.dependencies.profiles.resolve(
@@ -158,10 +126,10 @@ export class SkillSpecificationService implements SkillSpecificationSource {
     const ownerType =
       skill.product.source_kind === "official"
         ? "official"
-        : ({ user: "personal", organization: "team", project: "project", app: "app" } as Record<string, string>)[record.ownerScope!.kind]
+        : ({ user: "personal", organization: "team", project: "project", app: "app" } as Record<string, string>)[record.ownerKind]
     return {
       ...current,
-      representation: websiteSkillSchema.parse({
+      representation: identity({
         id: seriesId,
         name: record.originalName ?? skill.name,
         displayName: skill.name,
@@ -222,7 +190,7 @@ export class SkillSpecificationService implements SkillSpecificationSource {
         signal,
         deadlineAt,
       )
-      const data = publicSkillListSchema.parse(
+      const data = identity(
         installed.map((item) => {
           const creator = item.product.creator_ref,
             profile = creator?.kind === "user" ? profiles.get(JSON.stringify(["user", creator.id])) : undefined
@@ -249,7 +217,7 @@ export class SkillSpecificationService implements SkillSpecificationSource {
     }
     if (operation === "ListSkills") {
       const installed = await this.installations(context, signal, deadlineAt)
-      const official: Array<z.infer<typeof websiteSkillSchema>> = [],
+      const official: Array<Record<string, unknown>> = [],
         cursors = new Set<string>()
       let cursor: string | undefined
       do {
@@ -261,13 +229,13 @@ export class SkillSpecificationService implements SkillSpecificationSource {
           official.push({ ...value.representation, added: installed.some((entry) => entry.series_id === item.series_id) })
         }
         if (official.length > 1000) throw new ConnectError("Skill list capacity exceeded", Code.ResourceExhausted)
-        cursor = page.next_cursor ?? undefined
+        cursor = page.nextCursor ?? undefined
         if (cursor !== undefined) {
           if (cursors.has(cursor)) throw new Error("skill_response_invalid")
           cursors.add(cursor)
         }
       } while (cursor !== undefined)
-      return websiteListResponseSchema.parse({
+      return identity({
         userAddedSkills: installed.map((item) => ({
           id: item.series_id,
           name: item.display_name,
@@ -347,7 +315,7 @@ export class SkillSpecificationService implements SkillSpecificationSource {
       })
     }
     this.active(signal, deadlineAt)
-    return websiteHubResponseSchema.parse({
+    return identity({
       skills,
       tagOptions: {
         values: [
@@ -361,7 +329,7 @@ export class SkillSpecificationService implements SkillSpecificationSource {
           ["apps", "应用"],
         ].map(([key, displayName]) => ({ tag: this.tag(key!), displayName })),
       },
-      ...(page.next_cursor == null ? {} : { nextPageToken: page.next_cursor }),
+      ...(page.nextCursor == null ? {} : { nextPageToken: page.nextCursor }),
     })
   }
   public async prepareDownload(
@@ -372,21 +340,20 @@ export class SkillSpecificationService implements SkillSpecificationSource {
     deadlineAt: number,
   ) {
     const value = await this.detail(skillId, context, signal, deadlineAt)
-    const owner = await this.dependencies.product.download({ ...this.common(context), sourceRef: value.skill.source_ref }, signal, deadlineAt)
-    assertSkillWireKnown(owner)
+    const owner = await this.dependencies.owner.download(value.skill.source_ref, context, signal, deadlineAt)
     if (
-      owner.sourceRef?.value !== value.skill.source_ref ||
-      owner.revision.toString() !== value.skill.revision ||
+      owner.sourceRef !== value.skill.source_ref ||
+      owner.revision !== value.skill.revision ||
       owner.sizeBytes < 1n ||
       owner.sizeBytes > 33_554_432n ||
       !/^[a-f0-9]{64}$/u.test(owner.contentSha256) ||
-      !owner.transferReference ||
+      !owner.transfer ||
       !this.dependencies.objectOrigin
     )
       throw new Error("skill_response_invalid")
-    const transfer = owner.transferReference,
+    const transfer = owner.transfer,
       url = new URL(transfer.url),
-      expiresAt = Date.parse(skillTimestamp(transfer.expiresAt))
+      expiresAt = Date.parse(transfer.expiresAt)
     if (
       url.origin !== this.dependencies.objectOrigin ||
       url.username ||

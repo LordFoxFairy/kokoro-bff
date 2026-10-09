@@ -847,6 +847,12 @@ async function specificationServiceFixture() {
     usage: async (tenant, refs) => new Map(refs.map((ref) => [ref, { status: "available", successfulRunCount: "7" }])),
     objectOrigin: "http://objects.test",
   }
+  const { PlatformSkillSpecificationFacade } = await import("../../src/infrastructure/clients/platform/skill-specification-facade.ts")
+  deps.owner = new PlatformSkillSpecificationFacade({
+    product: deps.product,
+    installations: deps.installations,
+    projection: deps.projection,
+  })
   const context = Object.freeze({
     requestId: "aggregate-request",
     identity: Object.freeze({ namespace: "tenant", userId: "human" }),

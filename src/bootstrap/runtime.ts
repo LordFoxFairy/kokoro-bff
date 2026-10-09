@@ -1,8 +1,9 @@
 import { SkillSpecificationService } from "../application/skill-specification.js"
+import { PlatformSkillSpecificationFacade } from "../infrastructure/clients/platform/skill-specification-facade.js"
 import { PlatformProjectionHttpClient } from "../infrastructure/clients/platform/projection-http.js"
 import { IamPublisherProfileClient } from "../infrastructure/clients/iam-publisher-profile.js"
 import { SkillDownloadHandles } from "../application/skill-download-handles.js"
-import type { SkillSpecificationSource } from "../infrastructure/clients/platform/skill-specification.types.js"
+import type { SkillSpecificationSource } from "../application/skill-specification.types.js"
 import { McpAuthorizationClient } from "../auth/mcp-authorization.client.js"
 import { SkillAuthorizationClient } from "../auth/skill-authorization.client.js"
 import { SkillProductConnectClient } from "../infrastructure/clients/platform/skill-product-connect.js"
@@ -209,17 +210,10 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
   const localSkillImportClient =
     options.localSkillImportClient !== undefined
       ? options.localSkillImportClient
-      : config.skillDraft?.platformBaseUrl &&
-          config.skillDraft.credentialFile &&
-          config.platformProjection?.credentialFile &&
-          config.iamBaseUrl
+      : config.skillDraft?.platformBaseUrl && config.skillDraft.credentialFile && config.platformProjection?.credentialFile && config.iamBaseUrl
         ? new LocalSkillImportConnectClient(
             config.skillDraft.platformBaseUrl,
-            new CatalogTokenSource(
-              config.iamBaseUrl,
-              new CatalogCredentialSource(config.skillDraft.credentialFile),
-              config.skillDraft.timeoutMs,
-            ),
+            new CatalogTokenSource(config.iamBaseUrl, new CatalogCredentialSource(config.skillDraft.credentialFile), config.skillDraft.timeoutMs),
             new ProjectionTokenSource(
               config.iamBaseUrl,
               new ProjectionCredentialSource(config.platformProjection.credentialFile),
@@ -365,14 +359,16 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
             config.platformProjection.credentialFile &&
             config.iamBaseUrl
           ? new SkillSpecificationService({
-              product: skillProductClient,
-              installations: personalInstallationClient,
-              projection: new PlatformProjectionHttpClient(
-                config.platformProjection.baseUrl,
-                config.iamBaseUrl,
-                config.platformProjection.credentialFile,
-                config.platformProjection.timeoutMs,
-              ),
+              owner: new PlatformSkillSpecificationFacade({
+                product: skillProductClient,
+                installations: personalInstallationClient,
+                projection: new PlatformProjectionHttpClient(
+                  config.platformProjection.baseUrl,
+                  config.iamBaseUrl,
+                  config.platformProjection.credentialFile,
+                  config.platformProjection.timeoutMs,
+                ),
+              }),
               ...(businessStore?.services.projects === undefined ? {} : { projects: businessStore.services.projects }),
               profiles: new IamPublisherProfileClient(config.iamBaseUrl, config.upstreamTimeoutMs),
               ...(businessStore?.services.skillUsage === undefined ? {} : { usage: businessStore.services.skillUsage }),
