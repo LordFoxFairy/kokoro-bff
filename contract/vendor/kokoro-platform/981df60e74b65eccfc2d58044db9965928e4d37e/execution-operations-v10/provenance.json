@@ -1,0 +1,17 @@
+{
+  "algorithm": "sha256",
+  "aggregateRecord": "path + NUL + length + NUL + sha256 + LF",
+  "files": [
+    {
+      "path": "local-skill-import-v1.json",
+      "bytes": 2646,
+      "sha256": "d14f38288ba7708caa55b0a8dba99dce3d2dcb768526cee3ed263ac4642d2198"
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 407,
+      "sha256": "dfdddd29763f43dc3dabea99c6d5b4ece457e4b5f39ff585f7c59667615300c3"
+    }
+  ],
+  "aggregateSha256": "277a2bf24b4fdc34196dac3c5fbba89ef88df75a3b96054af63547f9ae53ff0b"
+}

@@ -4,7 +4,7 @@ BFF 不拥有 `SkillImportIntent`、Upload、scan、Skill、publication、instal
 
 24小时 intent、phase、预分配 skill ID、immutable upload proof和terminal结果均只从 Platform Get/command receipt取得；900秒 PUT URL及headers不落盘。same-key replay前重新做 current session及`create_draft AND install`，receipt不成为权限缓存。只有未到期 `upload_pending` intent 且 Storage upload 仍 pending 可由原 Begin 重签同一 upload；`uploaded`、`completed`、`rejected` 或 expired 后的旧 Begin 只接 owner phase/precondition 错误并由 Get 恢复，不产生新 upload/reference。Finalize completed 的原 key 由 owner receipt 至少 30 天精确重放，BFF不复制该事实。Web已有 PUT响应 `x-amz-version-id` 是 Complete 的 `source_version_id` 来源；BFF不读取Storage、不猜值。
 
-public OpenAPI、数据库schema、现有BFF receipt/outbox、GitHub/AI Draft事实及Admin Publish事实全不变。后继本地文件UI停止建立假Draft，但不清理或迁移既有Draft、Asset、installation，也不删除合法失败历史。正式 owner 五份机器事实可供隔离消费者 pin/generation，不改变本数据边界；owner inactive 阶段不注册生产 dispatch、不产生 intent 或任何 BFF 持久事实。当前未实施，无schema/数据命令。
+public OpenAPI、数据库schema、现有BFF receipt/outbox、GitHub/AI Draft事实及Admin Publish事实全不变。后继本地文件UI停止建立假Draft，但不清理或迁移既有Draft、Asset、installation，也不删除合法失败历史。当前候选的正式 owner A6 pin/generation与隔离 typed seam 不改变本数据边界；owner inactive 阶段生产不注入 client、不产生 intent 或任何 BFF 持久事实。无schema/数据命令。
 
 <!-- T-K03.4-BROWSER-PRIVATE-LOCAL-IMPORT-DATA-END -->
 
@@ -67,7 +67,6 @@ Public唯一9.0.0/132operations，具名Product checker先核完整当前closed 
 Cover/目录/IAMpublisher当次投影不缓存持久事实。Projectassociation写前freshPlatform inspect，但准入→本地写间存在跨owner竞态，不宣分布事务；existinguse-time资格继续验证。正常旧30包/blob/Skill引用的source-version资格缺口由Rootread-only审计与最小资格裁决，本writer不DDL/repair/rebind/activate。
 
 安装source_kind是既定field5消费，BFF透传及closedvalidation已实现，owner当前正式P4已修typed/raw/RPC filter与query游标绑定；BFF安装/owned查询按同Unicode标量/trim/closedpresence规则透传，筛选在owner分页前执行；不在BFF复制owner查询事实/新table。GitHub解析依赖仅js-yaml4.3.2与types4.0.9必要锁定hunk，旧开发Redocly传递4.2图保持。真实隔离PG测试test/skill-product.integration.mjs仅Root在显式isolatedURL+flag运行，未执行不宣integration通过。
-
 
 P4仅既有installed与owned列表可选query消费，Public9.0/132不另发版本，不新增方法/Schema/依赖。原52e副本76删净，仅fa185ed正式81机器；新增query6从独立parent完整逆向剥离后保所有历史父SHA，生成物只正规生成。P1/P2已含source I/O后required当前session同tenant/subject重验及owner坏响应502；原浏览器input400保持。仍非正常激活/配对/页面或S01–S10完成。
 
@@ -263,6 +262,7 @@ canonical两表和约束未变，新增实现只操作 BFF 自有 Project deleti
 Root 自有 r285 资格库15真PG通过且结束26表0行/0其它客户端；未运行正常DDL或清理共享数据库。实际Storage事实、正常schema组合、全部用户删除生命周期仍OPEN，下面R284/R282为历史时点。
 
 ---
+
 ## R284 Project scope release worker 数据边界（目标，尚未实施）
 
 当前 commit `6f20f81a8d15992b35bc07e76ac8808d7072bee8` 的 canonical schema 已包含 `bff_project_deletion` 与 `bff_project_scope_release_outbox`，本地删除事务、N+1冻结、约束、rollback、receipt replay与status完整性已通过Root隔离PostgreSQL 16/0。R284不新增表、列、索引、兼容DDL或第二receipt；正常schema组合仍未激活，真实Storage worker/ACK unknown尚未验证。
@@ -274,7 +274,6 @@ repository只在短事务中领取due pending或过期leased row，成对写leas
 ACK不含scope identity，不能把响应counts当关联键。持久字段`tenant_id`、`owner_subject_id`、`actor_id`、`scope_kind/scope_id`、`command_id`、`request_digest`，以及由`scope_kind`固定派生的两种operation，是唯一可信调用上下文；`actor_id = owner_subject_id`的既有约束保持，且不发送actor header。operation不是持久列：project固定`storage.release_project_scope:v1`、conversation固定`storage.release_conversation_scope:v1`，并已纳入保存的digest；投递不得替换digest。`released`只表示Storage接受逻辑release，物理状态不入本仓新事实且公开仍为pending。
 
 后继真实PG门须覆盖双worker过期fence、晚ACK CAS0、同Project并发settle、blocked不被普通claim吞、300秒资格恢复选择上限、shutdown取消与重启samecommand；再与固定Storage owner验证receipt/replay。完整DELETE并发与COMMIT-unknown、正常schema组合仍单独OPEN。
-
 
 ## R282 Project 删除数据当前态（本地候选）
 
@@ -451,6 +450,7 @@ Root92682 Node22 check+format exit0：contract264/0、主829PASS/0FAIL/2既有sk
 正常BFF仍旧进程，本次未重启/授正常管理员；Web管理页面仍占位，合法普通Session403/管理员撤权后重放、普通models visible投影、浏览器保存确认、推理和资金未验。仅owner子链及本切片工程通过，旧404/400/502/取消抖动证据保留；下方阶段描述为历史exact suffix，不作当前否认实现的依据。
 
 - 机器契约/generated 阶段不改变本结论：public 8.2/99 与固定 System 3.0 client 不引入 BFF DDL、缓存或 owner 数据副本；生产接线仍属后继切片。
+
 ## R256-ADMIN-03.D0：模型路由管理数据边界（2026-10-06；零 BFF DDL）
 
 System 唯一拥有 ModelLabel、ModelRevision、RoutingPolicy、版本/CAS、tenant scope 与 command receipt；BFF 只保存当前请求内的受信 admission context、冻结命令与解析结果，不复制 owner row、资格、routing 快照、receipt 或 cursor。本片不改 `database/schema.sql`，不建表/列/索引/触发器/迁移、Redis key、审计副本或 credential/permission 总表；BFF 仍禁止跨 owner SQL/JOIN。
@@ -497,13 +497,13 @@ Root 正常只读前置、owner 备份/实际恢复演练和配对是独立放�
 
 ### 唯一表与本人查询
 
-|列/约束|目标与理由|
-|---|---|
-|tenant_id / owner_id|TEXT NOT NULL且非空，已验namespace/userId；具名复合PRIMARY KEY(tenant_id,owner_id)。没有独立外部ID/生命周期的本人singleton采用自然owner key，无额外UUID。|
-|nickname / occupation / about / instructions|各TEXT NOT NULL，无隐式默认。空串是明确清除；具名CHECK char_length上限128/256/2000/8000，与HTTP code point一致。严格wire拒坏UTF-8/孤立surrogate/NUL，PG TEXT自身不接受NUL。|
-|revision|BIGINT NOT NULL，具名CHECK 1..9007199254740991；wire为精确safe integer。0是未建行条件，不落库；首次1，每次成功CAS+1，上限拒写不回绕。PG int8字符串须验证合法安全范围才转number。|
-|created_at / updated_at|TIMESTAMPTZ(3) NOT NULL，创建时同事务时间，替换只更新updated_at，UTC。时间不当并发令牌，内部列不公开。|
-|索引/完整性|复合PK覆盖唯一的本人精确读/条件写；无冗余index/FK/JSONB/软删除/status/关系表。无跨IAM FK/JOIN；当前Session在SQL前准入。|
+| 列/约束                                      | 目标与理由                                                                                                                                                                       |
+| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| tenant_id / owner_id                         | TEXT NOT NULL且非空，已验namespace/userId；具名复合PRIMARY KEY(tenant_id,owner_id)。没有独立外部ID/生命周期的本人singleton采用自然owner key，无额外UUID。                        |
+| nickname / occupation / about / instructions | 各TEXT NOT NULL，无隐式默认。空串是明确清除；具名CHECK char_length上限128/256/2000/8000，与HTTP code point一致。严格wire拒坏UTF-8/孤立surrogate/NUL，PG TEXT自身不接受NUL。      |
+| revision                                     | BIGINT NOT NULL，具名CHECK 1..9007199254740991；wire为精确safe integer。0是未建行条件，不落库；首次1，每次成功CAS+1，上限拒写不回绕。PG int8字符串须验证合法安全范围才转number。 |
+| created_at / updated_at                      | TIMESTAMPTZ(3) NOT NULL，创建时同事务时间，替换只更新updated_at，UTC。时间不当并发令牌，内部列不公开。                                                                           |
+| 索引/完整性                                  | 复合PK覆盖唯一的本人精确读/条件写；无冗余index/FK/JSONB/软删除/status/关系表。无跨IAM FK/JOIN；当前Session在SQL前准入。                                                          |
 
 全部SELECT/INSERT/UPDATE带受信tenant+owner，无跨人列表、搜索或Admin :any。缺行GET null/0且零写；损坏/越界Row报错，不以默认修补。只存当前四字段/版本，不保原文历史、请求正文receipt、语义hash或Redis副本。
 
@@ -846,16 +846,16 @@ Owner 为 BFF ScheduledTask，Project 与 ScheduledTask 均是本仓事实。唯
 
 BFF Chat 是完整 interaction public read model 唯一 writer，Agent 仍是事实 owner。FIFO head 不另建表，继续用 bff_agent_dispatch_outbox 的现最早 nonterminal row。比较现 bff_agui_stream 扩多列与一张 run-scoped 投影：stream-only 会在下一 run覆盖上一轮 provenance，且把 text/tool projector cache、session source HWM 与 Run revision混为一类；采用新 bff_agui_run_interaction，PK (tenant_id,session_id,run_id)，只维护每个 Run 最新完整 revision。它无独立 public CRUD、lease、进程或生命周期模块，不是第二 intent/journal。所有 ID 沿本仓 opaque TEXT，不改既有 Conversation/dispatch 类型。
 
-| 字段组（后继canonical目标） | 类型/NULL/职责与约束 |
-|---|---|
-| tenant_id、session_id、run_id、subject_id | TEXT NOT NULL；前三列 PK；subject 来自已锁 active Conversation/stream/dispatch 一致身份，不从 source payload自报 |
-| projection_schema_version | INTEGER NOT NULL，值1，命名 CHECK；表示 BFF projection envelope，非 Agent HTTP/public版本 |
-| interaction_revision、pause_revision、pause_ref、phase | BIGINT NOT NULL 正 interaction revision/非负 pause revision；pause_revision<=interaction_revision，pause_ref TEXT仅在revision0为NULL，其余非空；phase TEXT NOT NULL CHECK active/waiting/resuming/terminal |
-| groups | JSONB NOT NULL array，保存固定owner版本的原序 full collection，display/input_schema为受限外部schema；phase waiting/resuming要求非空、pause_revision>0，active/terminal明确空 |
-| action_command_id、action_pause_revision、action_kind | TEXT/BIGINT/TEXT 同空同非空；kind为owner accepted/native_consumed/validation_failed/unknown/cancelled，action revision正且<=pause_revision；resuming须accepted/unknown且action revision=当前pause；waiting validation_failed须引用更早pause |
-| interaction_digest | TEXT NOT NULL lowercase64hex命名 CHECK；对完整六字段规范化JSON计算SHA-256，对象键递归排序、数组保序、optional字段存在性保留；同revision内容冲突不因不同source ID放行 |
-| source_owner、source_event_id、source_sequence、source_digest、source_occurred_at | NOT NULL；owner固定kokoro-agent，source ID非空/sequence BIGINT正/digest lowercase64hex/UTC TIMESTAMPTZ(3)，与现source ledger同事务绑定，不复制 private source payload |
-| public_sequence、public_cursor、created_at、updated_at | BIGINT正/TEXT opaque cursor/UTC TIMESTAMPTZ(3)；每个接受的更高full revision绑定一个CUSTOM frame，created_at不覆盖，updated_at仅真实replace更新，no-op不改 |
+| 字段组（后继canonical目标）                                                       | 类型/NULL/职责与约束                                                                                                                                                                                                                        |
+| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| tenant_id、session_id、run_id、subject_id                                         | TEXT NOT NULL；前三列 PK；subject 来自已锁 active Conversation/stream/dispatch 一致身份，不从 source payload自报                                                                                                                            |
+| projection_schema_version                                                         | INTEGER NOT NULL，值1，命名 CHECK；表示 BFF projection envelope，非 Agent HTTP/public版本                                                                                                                                                   |
+| interaction_revision、pause_revision、pause_ref、phase                            | BIGINT NOT NULL 正 interaction revision/非负 pause revision；pause_revision<=interaction_revision，pause_ref TEXT仅在revision0为NULL，其余非空；phase TEXT NOT NULL CHECK active/waiting/resuming/terminal                                  |
+| groups                                                                            | JSONB NOT NULL array，保存固定owner版本的原序 full collection，display/input_schema为受限外部schema；phase waiting/resuming要求非空、pause_revision>0，active/terminal明确空                                                                |
+| action_command_id、action_pause_revision、action_kind                             | TEXT/BIGINT/TEXT 同空同非空；kind为owner accepted/native_consumed/validation_failed/unknown/cancelled，action revision正且<=pause_revision；resuming须accepted/unknown且action revision=当前pause；waiting validation_failed须引用更早pause |
+| interaction_digest                                                                | TEXT NOT NULL lowercase64hex命名 CHECK；对完整六字段规范化JSON计算SHA-256，对象键递归排序、数组保序、optional字段存在性保留；同revision内容冲突不因不同source ID放行                                                                        |
+| source_owner、source_event_id、source_sequence、source_digest、source_occurred_at | NOT NULL；owner固定kokoro-agent，source ID非空/sequence BIGINT正/digest lowercase64hex/UTC TIMESTAMPTZ(3)，与现source ledger同事务绑定，不复制 private source payload                                                                       |
+| public_sequence、public_cursor、created_at、updated_at                            | BIGINT正/TEXT opaque cursor/UTC TIMESTAMPTZ(3)；每个接受的更高full revision绑定一个CUSTOM frame，created_at不覆盖，updated_at仅真实replace更新，no-op不改                                                                                   |
 
 R56 P2 的 digest 身份界定：interaction_digest 仅绑定 owner 完整六字段 full state：对象键递归排序、groups/items 等数组保序，optional 字段的实际存在性与 null 值保持；不套用 control 的 optional-null 归一规则。同 revision 的 full-state digest 相等才允许 no-op，mutation fingerprint/control digest 均不能证明 state/source 相等。
 
@@ -987,7 +987,6 @@ mapper parser、过滤或 fallback。
 `pnpm db:apply-schema`，并执行定点测试、`pnpm contract:check`、architecture、lint、typecheck、build、full test。当前文档门
 未运行数据库或服务，不构成 schema 已应用或用户数据已兼容的证据。
 
-
 ## BFF-RETRY-DESIGN：原 user 上的新 attempt（2026-09-30；零 BFF DDL，未实施）
 
 ### 当前数据事实与目标行语义
@@ -999,14 +998,14 @@ mapper parser、过滤或 fallback。
 
 首次成功的 retry 在现表上形成下列事实：
 
-| 事实 | 原行 | 新行 / 改写 |
-| --- | --- | --- |
-| user Message | 保留原 `message_id`、原 `run_id`、content/status/sequence | 无新 user，不改写原 run |
-| failed assistant | 保留原 assistant/run/content/verified safe failure | 不改写，仍可审计 |
-| retry assistant | 无 | 新 `message_id`、新 `run_id`、`role='assistant'`、`status='pending'`、空 content，failure 两列 NULL，`message_seq=MAX+1` |
-| source dispatch outbox | 必须绑定原 user/assistant/run，`status='succeeded'`，严格 payload | 保留不变 |
-| retry dispatch outbox | 无 | 新 outbox/run/assistant/request/identity；`user_message_id` 复用原 user；`status='pending'`；`conversation_dispatch_seq` 等于新 assistant 的 `message_seq` |
-| AG-UI stream | `expected_run_id=terminal_run_id=old_run_id`；`latest_run_id` 可为 NULL/其他旧 marker | 同事务 register 新 expected run，version/fence 增长，terminal/start marker 按现 registration 清空，旧 lease 清理 |
+| 事实                   | 原行                                                                                  | 新行 / 改写                                                                                                                                                |
+| ---------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| user Message           | 保留原 `message_id`、原 `run_id`、content/status/sequence                             | 无新 user，不改写原 run                                                                                                                                    |
+| failed assistant       | 保留原 assistant/run/content/verified safe failure                                    | 不改写，仍可审计                                                                                                                                           |
+| retry assistant        | 无                                                                                    | 新 `message_id`、新 `run_id`、`role='assistant'`、`status='pending'`、空 content，failure 两列 NULL，`message_seq=MAX+1`                                   |
+| source dispatch outbox | 必须绑定原 user/assistant/run，`status='succeeded'`，严格 payload                     | 保留不变                                                                                                                                                   |
+| retry dispatch outbox  | 无                                                                                    | 新 outbox/run/assistant/request/identity；`user_message_id` 复用原 user；`status='pending'`；`conversation_dispatch_seq` 等于新 assistant 的 `message_seq` |
+| AG-UI stream           | `expected_run_id=terminal_run_id=old_run_id`；`latest_run_id` 可为 NULL/其他旧 marker | 同事务 register 新 expected run，version/fence 增长，terminal/start marker 按现 registration 清空，旧 lease 清理                                           |
 
 新 outbox 冻结原 payload 的 content、requested model、agent、thinking、ordered Skill source refs、MCP
 servers、project 和原 user ID，只生成新 request/run/assistant/outbox/identity。Agent owner 发布后，launch 还必须带
@@ -1019,10 +1018,10 @@ typed `retry_of_run_id=source.run_id`。BFF 严格解析原 persisted payload，
 零 DDL 不等于持久 JSON 不升版。Agent 4.0 的 `retry_of_run_id` 是 required nullable，所以 BFF 两个
 Agent launch producer 必须在同一 consumer cutover 升级：
 
-| persisted fact | 当前 | 目标 v3 不变式 |
-| --- | --- | --- |
-| `bff_agent_dispatch_outbox.payload` | `schema_version=2`；launch 无 parent | `schema_version=3`；顶层仍 exact `{schema_version,launch}`；`launch.retry_of_run_id` required，normal 为 JSON null，retry 为非空 target run；canonical digest/parser/row lineage 都包含该值；v2 fail closed |
-| `bff_idempotency_receipt.response_body` 的 Scheduler dispatch receipt | envelope `schema_version=2`；Snapshot Agent body 无 parent | envelope `schema_version=3`；envelope/snapshot/launch/body/trace/receipt 全部 exact closed；Scheduler 是 normal producer，所以 `retry_of_run_id` 必须存在且恰为 null；v2 fail closed |
+| persisted fact                                                        | 当前                                                       | 目标 v3 不变式                                                                                                                                                                                              |
+| --------------------------------------------------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bff_agent_dispatch_outbox.payload`                                   | `schema_version=2`；launch 无 parent                       | `schema_version=3`；顶层仍 exact `{schema_version,launch}`；`launch.retry_of_run_id` required，normal 为 JSON null，retry 为非空 target run；canonical digest/parser/row lineage 都包含该值；v2 fail closed |
+| `bff_idempotency_receipt.response_body` 的 Scheduler dispatch receipt | envelope `schema_version=2`；Snapshot Agent body 无 parent | envelope `schema_version=3`；envelope/snapshot/launch/body/trace/receipt 全部 exact closed；Scheduler 是 normal producer，所以 `retry_of_run_id` 必须存在且恰为 null；v2 fail closed                        |
 
 Chat v3 首次持久前必须用新 Agent generated validator 验证 required nullable 字段。normal submit 的
 canonical request material 显式含 null；retry material 显式含 parent run 并与 operation/target digest 一致。
@@ -1216,12 +1215,12 @@ owner contract、BFF consumer/public contract、CHECK 与 Web consumer，不能�
 
 `bff_message.status='failed'` 当前有四类可达来源，目标数据语义如下：
 
-| writer | status | failure 列 |
-| --- | --- | --- |
-| strict verified Agent `run.failed` | `failed` | 同一 source projection transaction 写二元组 |
-| Agent `run.completed(status=cancelled)` | `failed` | 两列保持/显式设为 NULL |
-| BFF dispatch permanent failure | `failed` | 两列保持/显式设为 NULL |
-| Conversation delete 对 mutable assistant 的终止 | `failed` | 两列保持/显式设为 NULL |
+| writer                                          | status   | failure 列                                  |
+| ----------------------------------------------- | -------- | ------------------------------------------- |
+| strict verified Agent `run.failed`              | `failed` | 同一 source projection transaction 写二元组 |
+| Agent `run.completed(status=cancelled)`         | `failed` | 两列保持/显式设为 NULL                      |
+| BFF dispatch permanent failure                  | `failed` | 两列保持/显式设为 NULL                      |
+| Conversation delete 对 mutable assistant 的终止 | `failed` | 两列保持/显式设为 NULL                      |
 
 `agent-cancellation-outbox.status='failed'` 只是取消命令自身失败，不更新 Message。禁止把 dispatch/cancel/delete 的本地
 error code 转写为 `agent_failure_code`，禁止以 `internal_error` 补齐 unknown owner code。只有固定 Agent 3.0
@@ -1283,7 +1282,6 @@ BFF 不创建 `bff_skill_installation`、安装 projection/cache、command recei
 
 本设计没有 BFF 数据事务、跨 owner FK/JOIN、双写、retention/GC 或 migration。当前实现的 schema 证据是 `git diff -- database/schema.sql` 必须为空，加 `pnpm schema:check`/`pnpm db:apply-schema` 回归现有 canonical schema；真实组合必须证明首次/replay/冲突/撤权/跨用户、disable/remove 在 unhealthy source 下仍可降权、分页 presence/cursor 与 BFF 重启后由 Platform receipt 恢复，而不是检查 BFF 新行。旧 503 installation stub/按 name route 删除不会迁移旧数据，因为它从未拥有 installation 数据。
 
-
 ## W3 Chat typed Skill 选择（已实现，零 SQL Schema 改动）
 
 `bff_agent_dispatch_outbox.payload JSONB` 已是不可变 Agent launch 快照；本片将有序 `selected_skill_source_refs` 与 Chat 用户/助手消息、expected-run registration 在同一事务写入，并将相同有序数组纳入 `request_digest`。同键同摘要只重放原 receipt，异 ref/顺序 409；claim、lease takeover、HTTP 重试与进程重启只读取该 JSONB 原文语义，不从用户当前本地偏好或 Platform 列表重算。Chat payload `schema_version` 1→2，旧版解析确定失败，不双解旧 `trace.pinned_skills`。Scheduler 的现有 `bff_idempotency_receipt.response_body` envelope `schema_version` 1→2，`snapshot.launch.body` 首次持久化显式 `[]`、恢复原值重发；旧版 snapshot 拒绝而非补值。仅重建任务自有旧 fixture，不自动清理共享数据。没有新 Skill 事实、BFF 安装表、额外 SQL 列/索引/Redis key、跨 owner JOIN 或 BFF→Platform 预授权缓存；Agent/Platform 保留 Run/安装/执行权限真源。发布不自动安装/启用；用户须显式创建 installation。本数据门只保证基础 Chat 与 Scheduler 不因 Agent required 字段断链。
@@ -1292,13 +1290,11 @@ BFF 不创建 `bff_skill_installation`、安装 projection/cache、command recei
 
 五个 GET 使用当前 IAM Product tenant/user 与独立 Platform projection credential 获取 owner 当前事实；BFF 没有新增 Skill/MCP 表、索引、事务、Redis key、receipt 或投影缓存，也不跨 owner SQL。`source_ref`、`revision`、status 与 cursor 来自 Platform；BFF 只校验并透出公开安全字段。旧 Capability HTTP transport 删除不触及本仓 canonical `database/schema.sql`。下方“未激活机器候选”为历史记录。
 
-
 ## 历史快照：Published personal Skill read（已由上文替代）
 
 新 `GET /v1/skills/{skill_id}` 未激活机器候选不新增表、列、索引、事务、receipt、outbox、Redis key 或 cache。Skill tenant、user owner、PERSONAL scope、ACTIVE state、`source_ref` 与 `revision` 都是 Platform owner 事实；BFF 只在当次 IAM admission 后读取并安全投影七字段。非本人/跨 tenant/非 PERSONAL/非 ACTIVE 与缺失均由 owner read 隐蔽为 404。
 
 后继原子 read cutover 也不得复制 Platform Skill/MCP 数据。旧四 GET 改用 Platform HTTP 3.1.0；个人 ACTIVE list 使用 `scope_kind=personal`。MCP 必须采用 owner-native 六字段、同步 Web 并移除当前实际 503 的旧控件，禁止持久化或继续合成旧 revision/url/allowed_tools/secret_ref。
-
 
 ## W3 Publish 运行候选：无 BFF 持久化 owner（2026-09-29）
 
@@ -1980,6 +1976,7 @@ checkpoint 是独立 scope 的 terminal status=200（外层是 canonical route s
 W2 scan 错误不回滚 Storage 完成事实：感染 422 以既有外层 receipt 固化，待扫描/unknown 503 释放外层 pending 但保留 terminal upload checkpoint，因此同 key 重查同一 Asset，不新建资产。
 
 W2 资源列表当前实现不新增 BFF 表、索引、物化快照、缓存或 migration。Project 所有权仍来自本仓 canonical `bff_project` 的 tenant+owner 查询；Asset、purpose、scan、created_at 与排序 cursor 只来自 Storage owner。GET 不使用上传 receipt 重建列表，也不把 POST 的 upload_id 当作资产列。Storage 的 scope 索引与分页查询由其 canonical schema 验证；BFF `pnpm schema:check` 必须证明本仓数据模型零变化。跨仓读取无事务或双写，Storage 不可用时显式依赖失败而非返回空列表。
+
 ## T-K03.4 Validate identity 无数据变更（2026-10-09）
 
 本片只纠正 BFF 对 Platform owner 返回的 canonical identity 值域：当前 `skill-md-v1:sha256:<64 lowercase hex>` 与正式 legacy `zip-v2:sha256:<64 lowercase hex>`。BFF 不计算、不转换、不 trim、不持久化该 identity，也不新增表、列、索引、migration、receipt、缓存或镜像；现 package、Skill、安装、Share/usage 与非 Skills 数据均不变。

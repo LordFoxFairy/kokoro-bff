@@ -8,19 +8,19 @@ Begin 返回的 PUT reference 只接受批准 ObjectStore origin、固定 PUT、
 
 放置表：
 
-| 项 | 结论 |
-| --- | --- |
-| Owner | Platform/Skills 唯一写 intent、Skill、publication、installation 与 receipt；BFF 仅 browser-private 编排和投影；Web 仅同源交互。 |
-| 当前事实 | BFF 现有 public Draft/package/Validate/Publish 服务 GitHub/AI；admin Publish 独立正式；现 Platform pin 尚无可路由 local-import runtime。 |
-| 目标职责 | 精确消费 Platform 已批准的 Begin/Complete/Finalize/Get 四 internal-owner RPC，不公开上传 API。 |
+| 项       | 结论                                                                                                                                                                                    |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner    | Platform/Skills 唯一写 intent、Skill、publication、installation 与 receipt；BFF 仅 browser-private 编排和投影；Web 仅同源交互。                                                         |
+| 当前事实 | BFF 现有 public Draft/package/Validate/Publish 服务 GitHub/AI；admin Publish 独立正式；现 Platform pin 尚无可路由 local-import runtime。                                                |
+| 目标职责 | 精确消费 Platform 已批准的 Begin/Complete/Finalize/Get 四 internal-owner RPC，不公开上传 API。                                                                                          |
 | 目录方案 | 采用现 `src/http/routes` 单 lifecycle route + private policy、现 Platform client目录的 Connect/projector；淘汰 public `/v1/skill-imports` 与伪造 `/skill.v1.*`，不建新模块/四层脚手架。 |
-| 粒度 | 后继一个 input/digest 文件、一个 route、一个 projector；扩现 admission、Connect、bootstrap。policy 是唯一可编辑私有机器事实并确定性生成根 contract JSON。 |
-| 依赖 | 只依赖正式固定的 Platform contract/generated 与现 IAM action client；禁止 Storage client、owner DB、generic proxy、body自报身份。 |
-| 数据/API | BFF 无 SQL/Redis/receipt；public OpenAPI字节/census/SDK必须原样。private policy固定四method、闭集schema/status与breaking版本。 |
-| 删除项 | 后继只删除 Web 本地文件入口对普通 Draft→package→validate→publish 的串联；不删 GitHub/AI 生命周期或 `/v1/admin/skills/{id}/publish`。 |
-| 验证 | private policy生成/check、public字节/census负控、四route HTTP、dual IAM replay/预算/取消、900秒/24小时/unknown恢复、generated pin、GitHub/AI与admin Publish回归。 |
+| 粒度     | 后继一个 input/digest 文件、一个 route、一个 projector；扩现 admission、Connect、bootstrap。policy 是唯一可编辑私有机器事实并确定性生成根 contract JSON。                               |
+| 依赖     | 只依赖正式固定的 Platform contract/generated 与现 IAM action client；禁止 Storage client、owner DB、generic proxy、body自报身份。                                                       |
+| 数据/API | BFF 无 SQL/Redis/receipt；public OpenAPI字节/census/SDK必须原样。private policy固定四method、闭集schema/status与breaking版本。                                                          |
+| 删除项   | 后继只删除 Web 本地文件入口对普通 Draft→package→validate→publish 的串联；不删 GitHub/AI 生命周期或 `/v1/admin/skills/{id}/publish`。                                                    |
+| 验证     | private policy生成/check、public字节/census负控、四route HTTP、dual IAM replay/预算/取消、900秒/24小时/unknown恢复、generated pin、GitHub/AI与admin Publish回归。                       |
 
-当前只通过文档门。Platform 将本能力的五份机器事实正式发行后，BFF 可固定该 owner commit、正规生成 client，并隔离实现 input、projector、private policy 与 route 测试；这不等于生产可路由。Platform artifact 仍为 inactive、真实 Storage 集成或激活证据未齐时，生产 bootstrap 不注册 exact dispatch，也不构造生产 local-import client。激活由后继独立切片完成，不用消费者实现倒逼 owner 提前 routable。
+当前候选已按正式 Platform `981df60e74b65eccfc2d58044db9965928e4d37e` 固定 A6 机器事实、正规生成 client，并通过 typed seam 隔离实现 input、projector、private policy 与四 route；这不等于生产可路由。Platform v10 artifact 仍为 inactive，生产 bootstrap 不构造 local-import client，exact dispatch 因无注入保持未注册404。激活仍由 owner active/routable与真实Storage门后的独立切片完成。
 
 <!-- T-K03.4-BROWSER-PRIVATE-LOCAL-IMPORT-DESIGN-END -->
 
@@ -46,6 +46,7 @@ exact installed createdAt/source owner直接新Proto19/20，creator只真实crea
 调用方向固定 Browser → Web 同源 → BFF → Platform/IAM/Storage；BFF 唯一拥有 public Product contract，Platform 保存 Skills/版本/安装/生命周期，IAM 保存身份与权限，Storage 保存包/封面/扫描。仅固定消费 owner 正式 commit/version/digest，不读取 owner SQL。
 
 ### 唯一协议与事实组合
+
 公开文档接口只改版本段 /v2→/v1，保原 suffix/method/参数位置/字段/类型/每接口成功和错误；GET /v1/skill.list 不再使用 /skills 别名或旧 data/meta 包装。user.me 等其它接口仅后继排队。
 网站 Hub、我的技能、详情/下载是独立表示：沿 Root 五次实际 POST200 与用户九项 JSON补齐，不把 skill.list 当目录；网站是BFF browser-private：原 /skill.v1.SkillOptionalService/{ListHubSkills,ListSkills,GetSkill} 与 /skill.v1.SkillService/DownloadSkill；不重复加/v1、不造skill.hub.list。Web用同源/api前缀＋原service方法path，仍经BFF，不直连owner；这是不同可见性/资源表示，不是同接口双轨。
 采用唯一新 Skills 表示，整片切换时删除被替代的 REST别名、旧 schema/parser/包装/字段映射；不建立 compat facade、fallback 或两套运行成功路径。未观察的创建/导入/安装/文件/分享/Admin职责继续承接现事务边界，不能因为缺参考而删除或伪命名。
@@ -58,6 +59,7 @@ Web 同源新消费者一次切换目录→预览→详情文件树/正文→返
 写命令沿 owner真实 CAS/固定 key/body/digest/receipt；普通新版本仍 metadata-only，Admin版本及撤回/发布等保实际 CAS；unknown 只同意图重放，GET观察不当ACK、无自动升级/安装/回滚。网站未观察幂等/CAS字段不冒称参考定义。
 
 ### 后继整片源码范围（此卡只写三设计，源码另授）
+
 入口/机器：src/bootstrap/server.ts、contract/openapi/v1/openapi.yaml；scripts/verify-openapi.ts、verify-skill-product-contract.mjs、verify-skill-package-inspection-contract.mjs、verify-skill-example-prompts-contract.mjs、verify-skill-updated-at-contract.mjs承接新当前闭集，新active合同按正式规范/语义验证，不继续叠历史20层hash逆向；保有效权限/tenant/CAS/取消/unknown阴性与非Skills字节。
 正式消费：contract/dependencies/platform-{connect,http}.json、现唯一 vendor/platform发布对象、openapi-ts.platform-http.config.ts、scripts/generate-platform-{connect,http}-client.mjs 及其现 generated目标仅正规生成；IAM/Storage非必要pin、Team与非Skills机器块保原字节。
 查询/聚合：src/http/routes/{platform-projection,managed-personal-skills,skill-usage,skill-share,skill-download,skill-package-inspection}.ts；src/infrastructure/clients/platform/{catalog-connect,projection-http,skill-product-connect,skill-product-schema,skill-product-response,personal-installation-response,skill-package-inspection-connect,skill-package-inspection-response}.ts；现 iam-publisher-profile.ts 与 Storage skill-product-transfer.ts按各自职责承接；新增普通src/application/skill-download-handles.ts仅负责有界短期句柄身份/expiry/eviction，选择此处而非放wire parser或新模块，依赖请求期owner下载事实、不访问DB/新密钥；不加通用façade。
@@ -101,15 +103,15 @@ Public唯一9.0.0/132operations，具名Product checker先核完整当前closed 
 
 ### 放置与依赖（沿既有整体设计，不建新计划）
 
-|项|当前决定|
-|---|---|
-|Owner|BFF既有Skills public编排；Platform唯一Skill生命周期/来源/包/封面owner，IAM身份与publisher，Storage对象，Agent执行。|
-|当前事实/目标|现server/runtime/auth/clients/routes承接完整Product消费，保B1 Share/usage和durable AG-UI；手工draft、AI真实artifact、GitHub真实包归一既有owner命令。|
-|目录/粒度|选择现http/routes与infrastructure/clients具名普通文件；淘汰通用workflow/metadata模块、跨ownerRepository和镜像表。github-skill-metadata.ts仅真实frontmatter解析，github-skill-import.ts仅网络/ZIP。|
-|依赖|Browser→Web→BFF→正式owner；无ownerSQL/ORM引用，无浏览器直连GitHub或Storage身份冒充。|
-|数据/API|既有BFF receiptCAS/Share/usage/artifact association；Public9一次消费、普通/专用admin machine凭据隔离，无flag/fallback/alias。|
-|删除|无正式owner的quota/revisions与替代旧wire/v2运行生成、老71Platform+1HTTP候选副本。|
-|验证|Node22.22.2 lint/typecheck/build/format、固定生成check、默认与contract测试、父逆向负控；真实配对与隔离PG/Redis/ObjectStore/provider/browser由Root执行。|
+| 项            | 当前决定                                                                                                                                                                                           |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner         | BFF既有Skills public编排；Platform唯一Skill生命周期/来源/包/封面owner，IAM身份与publisher，Storage对象，Agent执行。                                                                                |
+| 当前事实/目标 | 现server/runtime/auth/clients/routes承接完整Product消费，保B1 Share/usage和durable AG-UI；手工draft、AI真实artifact、GitHub真实包归一既有owner命令。                                               |
+| 目录/粒度     | 选择现http/routes与infrastructure/clients具名普通文件；淘汰通用workflow/metadata模块、跨ownerRepository和镜像表。github-skill-metadata.ts仅真实frontmatter解析，github-skill-import.ts仅网络/ZIP。 |
+| 依赖          | Browser→Web→BFF→正式owner；无ownerSQL/ORM引用，无浏览器直连GitHub或Storage身份冒充。                                                                                                               |
+| 数据/API      | 既有BFF receiptCAS/Share/usage/artifact association；Public9一次消费、普通/专用admin machine凭据隔离，无flag/fallback/alias。                                                                      |
+| 删除          | 无正式owner的quota/revisions与替代旧wire/v2运行生成、老71Platform+1HTTP候选副本。                                                                                                                  |
+| 验证          | Node22.22.2 lint/typecheck/build/format、固定生成check、默认与contract测试、父逆向负控；真实配对与隔离PG/Redis/ObjectStore/provider/browser由Root执行。                                            |
 
 请求首await前建立唯一monotonic绝对预算，IAM admission、凭据/token、owner RPC、body、I/O与enrichment共用剩余时间；取消/超限closed response，无迟到响应覆盖。目录/安装/managed/published严格requiredcategory/product/examples/updated_at，IAM每页批量去重profile解析、missing显式、不凭raw id猜名。admin专用platform:skills-admin.manage且当前IAM skill.admin，普通catalog/projection凭据不授管理员。
 
@@ -120,7 +122,6 @@ AI必须重读BFF自身completed来源event与immutableconversation-artifact关�
 Cover沿正式fresh Platform transfer/exactlocator；有界MIME/尺寸、同sourceRef/cover资产与IO后身份重验。PNG结构/CRC/inflate/filter检查，JPEG仅结构/尺寸，不宣完整JPEG像素decode或ownerdigest全spool证明；下载包仍完整SHA/size。Project现association仍BFF唯一事实，写前fresh inspect currentIAM/exactrevision；准入与本地写非跨owner事务，保既有use-time资格复核。
 
 source_kind使用已正式Protofield5，BFF闭集personal/official/third_party、缺省省略，cursor原样。Root发现ownerhandler/rawvalidator漏映射且无query，真实跨页来源/搜索待最小owner正式修正；15loopback仅BFF传参证据。record入口/payload未核定，不加伪空payload或录屏替代。
-
 
 P4仅既有installed与owned列表可选query消费，Public9.0/132不另发版本，不新增方法/Schema/依赖。原52e副本76删净，仅fa185ed正式81机器；新增query6从独立parent完整逆向剥离后保所有历史父SHA，生成物只正规生成。P1/P2已含source I/O后required当前session同tenant/subject重验及owner坏响应502；原浏览器input400保持。仍非正常激活/配对/页面或S01–S10完成。
 
@@ -181,17 +182,17 @@ Public 升为 `8.10.0 / 111 operations`，不新增 path、permission、status �
 
 ### Owner、放置与停止线
 
-| 项 | 已裁决方案 |
-|---|---|
-| Owner | `apps/kokoro-capability` / Platform `modules/skills` 继续唯一拥有 `Skill.updatedAt`；BFF 只固定版本消费并发布 Product 安全表示。 |
-| 当前事实 | Platform D0 已决定 HTTP 三个 closed schema 增 `skill_updated_at`，安装 Proto 增 `ProductSkillInstallation.skill_updated_at = 14`；BFF 当前仍固定旧 owner bytes，公开 8.8.0/111 不含该字段。 |
-| 目标职责 | catalog/pool/list、本人 managed、本人 published 与安装 Product 表示都输出所绑定精确 Skill revision 的更新时间；不改变查询资格、状态机、分页、错误、幂等或写命令。 |
+| 项       | 已裁决方案                                                                                                                                                                                                                                                  |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner    | `apps/kokoro-capability` / Platform `modules/skills` 继续唯一拥有 `Skill.updatedAt`；BFF 只固定版本消费并发布 Product 安全表示。                                                                                                                            |
+| 当前事实 | Platform D0 已决定 HTTP 三个 closed schema 增 `skill_updated_at`，安装 Proto 增 `ProductSkillInstallation.skill_updated_at = 14`；BFF 当前仍固定旧 owner bytes，公开 8.8.0/111 不含该字段。                                                                 |
+| 目标职责 | catalog/pool/list、本人 managed、本人 published 与安装 Product 表示都输出所绑定精确 Skill revision 的更新时间；不改变查询资格、状态机、分页、错误、幂等或写命令。                                                                                           |
 | 目录方案 | 沿现 `contract/vendor`、两个 Platform generator/generated client、`projection-http.ts` 与 `personal-installation-response.ts`；公开约束放一个普通具名 `scripts/verify-skill-updated-at-contract.mjs`。不建 presentation/metadata 模块，也不把规则塞进 Web。 |
-| 粒度 | 扩展既有固定消费者和 mapper；生成物只由现 generator 正规生成。新 checker 单独负责四个公开 schema 与完整 8.8 parsed 还原，避免继续扩大通用 checker。 |
-| 依赖 | 只消费 Root 已审查提交的 Platform 3.4.0 正式 commit、digest、provenance、OpenAPI 与 Proto/FDS；禁止从 Platform 工作树复制候选、读取 owner 数据库或用 Web/安装事实补值。 |
-| 数据/API | Public 升 `8.9.0`，operation 仍精确 111；只给四个既有 closed schema 增加 required `skill_updated_at`。Proto tag 8 `updated_at` 仍是安装更新时间，tag 14 才是 Skill 更新时间。 |
-| 删除项 | 无旧业务路径；禁止 optional fallback、unknown-field strip、双读、alias、以 `installed_at/updated_at` 冒充、默认时间或空占位。 |
-| 验证 | 固定 artifact/digest、正规双生成、完整图剥 tag14 还原、HTTP 父契约差分、public 8.8 parsed 还原、mapper强负控、contract/architecture/format/lint/typecheck/build；最终由 Root 成对激活并做真实浏览器验收。 |
+| 粒度     | 扩展既有固定消费者和 mapper；生成物只由现 generator 正规生成。新 checker 单独负责四个公开 schema 与完整 8.8 parsed 还原，避免继续扩大通用 checker。                                                                                                         |
+| 依赖     | 只消费 Root 已审查提交的 Platform 3.4.0 正式 commit、digest、provenance、OpenAPI 与 Proto/FDS；禁止从 Platform 工作树复制候选、读取 owner 数据库或用 Web/安装事实补值。                                                                                     |
+| 数据/API | Public 升 `8.9.0`，operation 仍精确 111；只给四个既有 closed schema 增加 required `skill_updated_at`。Proto tag 8 `updated_at` 仍是安装更新时间，tag 14 才是 Skill 更新时间。                                                                               |
+| 删除项   | 无旧业务路径；禁止 optional fallback、unknown-field strip、双读、alias、以 `installed_at/updated_at` 冒充、默认时间或空占位。                                                                                                                               |
+| 验证     | 固定 artifact/digest、正规双生成、完整图剥 tag14 还原、HTTP 父契约差分、public 8.8 parsed 还原、mapper强负控、contract/architecture/format/lint/typecheck/build；最终由 Root 成对激活并做真实浏览器验收。                                                   |
 
 ### 后继具名文件集
 
@@ -241,17 +242,17 @@ Root Node22.22.2完整check自然0：contract317PASS；default897PASS/0FAIL/2原
 
 ### §8 放置与边界
 
-| 项 | 已裁决方案 |
-|---|---|
-| Owner / writer | BFF 唯一 public 安全投影；Platform 唯一包资格、来源/安装绑定与目录正文规则；Storage 唯一 bytes；IAM 唯一身份与机器准入。Root 指定一名 BFF writer，Root 独占审查/Git/资源 |
-| 当前事实 | 551 tracked、仅原 untracked var；原 projection scope 可用，但 credential 读取上限及 token rotation/取消后 cache 必须后继实际强化，不能以旧实现推断已合格 |
-| 目标职责 | 两个本人包 GET：目录、指定文件真实 UTF-8 原文；不以简介、伪 SKILL.md 或 UI 假入口替代 |
-| 位置比较 | 采用现 http/routes 与 infrastructure/clients/platform 的三普通文件；淘汰把 RPC 塞入 projection-http 的 HTTP union，或把读生命周期塞进 installation command client；无新顶层模块/通用框架 |
-| 粒度 | route 管 public 准入/预算；connect 管两个固定 RPC/正规 token/transport；response 管 strict 安全投影与错误。现 server 仅具名路由接线，WeakMap 配置生命周期复用，不机械改 runtime/config |
-| 依赖 | Browser → Web 同源 → BFF → Platform 固定生成 client → owner 自有 Storage 接缝；禁止 BFF owner SQL、源码相对 import、直 Storage 或借 catalog/execution token |
-| 数据 / API | 零 SQL/Redis/receipt/outbox，当前 session tenant/subject 受信；目标 public8.8.0/111，两个本人 RPC 当前授权绑定，不以 catalog scope/installed 标记推导资格 |
-| 删除项 | 固定消费时仅删除被替代 e83a Connect vendor，唯一 1f6f764 pin；完整历史 V5–V9 只校验、不路由，不保 alias/fallback/双 pin；独立 Platform HTTP vendor 与有效旧 Skills 操作保留 |
-| 验证 | Node22.22.2 正规两次生成 byte equal、完整固定源/descriptor/provenance/负控、旧操作保护、contract/lint/types/build/default/format；后继实际 IAM HTTP/Platform/Storage/PG/BFF 系统链和浏览器才判功能完成 |
+| 项             | 已裁决方案                                                                                                                                                                                             |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Owner / writer | BFF 唯一 public 安全投影；Platform 唯一包资格、来源/安装绑定与目录正文规则；Storage 唯一 bytes；IAM 唯一身份与机器准入。Root 指定一名 BFF writer，Root 独占审查/Git/资源                               |
+| 当前事实       | 551 tracked、仅原 untracked var；原 projection scope 可用，但 credential 读取上限及 token rotation/取消后 cache 必须后继实际强化，不能以旧实现推断已合格                                               |
+| 目标职责       | 两个本人包 GET：目录、指定文件真实 UTF-8 原文；不以简介、伪 SKILL.md 或 UI 假入口替代                                                                                                                  |
+| 位置比较       | 采用现 http/routes 与 infrastructure/clients/platform 的三普通文件；淘汰把 RPC 塞入 projection-http 的 HTTP union，或把读生命周期塞进 installation command client；无新顶层模块/通用框架               |
+| 粒度           | route 管 public 准入/预算；connect 管两个固定 RPC/正规 token/transport；response 管 strict 安全投影与错误。现 server 仅具名路由接线，WeakMap 配置生命周期复用，不机械改 runtime/config                 |
+| 依赖           | Browser → Web 同源 → BFF → Platform 固定生成 client → owner 自有 Storage 接缝；禁止 BFF owner SQL、源码相对 import、直 Storage 或借 catalog/execution token                                            |
+| 数据 / API     | 零 SQL/Redis/receipt/outbox，当前 session tenant/subject 受信；目标 public8.8.0/111，两个本人 RPC 当前授权绑定，不以 catalog scope/installed 标记推导资格                                              |
+| 删除项         | 固定消费时仅删除被替代 e83a Connect vendor，唯一 1f6f764 pin；完整历史 V5–V9 只校验、不路由，不保 alias/fallback/双 pin；独立 Platform HTTP vendor 与有效旧 Skills 操作保留                            |
+| 验证           | Node22.22.2 正规两次生成 byte equal、完整固定源/descriptor/provenance/负控、旧操作保护、contract/lint/types/build/default/format；后继实际 IAM HTTP/Platform/Storage/PG/BFF 系统链和浏览器才判功能完成 |
 
 后继三个普通源文件为 `src/http/routes/skill-package-inspection.ts`、`src/infrastructure/clients/platform/skill-package-inspection-connect.ts`、`src/infrastructure/clients/platform/skill-package-inspection-response.ts`。现 `src/bootstrap/server.ts` 先于通用路径准确分流两个 GET，每请求在同预算内仅调用一次现 authorizeUserRequest。使用现 config.platformProjection/baseUrl/credentialFile/iamBaseUrl，缺配置返回503，不新增 credential 身份或 scope；client 沿 WeakMap<BffConfig, Client>。现 `projection-credential.ts` / `projection-token.ts` 有界读取、共享 flight 轮换及取消退役强化属于另授 runtime 切片，保护原消费者，不先写。不创建 ORM、package 数据库镜像或第二安全 schema；public 参数/输出只由唯一 OpenAPI 定义。
 
@@ -299,13 +300,13 @@ Root显式Node22.22.2最终71468完整pnpm check自然exit0：contract304PASS/0S
 
 新普通TS **合计5个：现platform目录4个 + 现http/routes目录1个**，不是platform五个再加route。不存在名为mcp-personal的现route，`src/http/routes/mcp-personal.ts`是新增普通文件，目录本身已有。
 
-| 新文件 | 唯一职责 / 依赖与淘汰方案 |
-|---|---|
+| 新文件                                                         | 唯一职责 / 依赖与淘汰方案                                                                                    |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | src/infrastructure/clients/platform/mcp-personal-credential.ts | 独立credential严格文件读取/形状/rotation身份；不扩大projection/catalog固定scope parser，不加credential通用层 |
-| src/infrastructure/clients/platform/mcp-personal-token.ts | 当前tenant专属资格实际OAuth HTTP获取、过期cache/共享flight与waiter取消；不借旧token源、不新SDK框架 |
-| src/infrastructure/clients/platform/mcp-personal-connect.ts | 四固定generated方法/metadata/剩余timeout与wire有界读取；不复制owner DTO/ORM，不新增Connect wrapper模块 |
-| src/infrastructure/clients/platform/mcp-personal-response.ts | 严格safe public projection/enum与nullable页尾、typed错误映射；与credential/transport变化原因分离 |
-| src/http/routes/mcp-personal.ts | 四具名GET、输入闭集、当前user admission、绝对budget及公共envelope；不塞旧projection操作union/fallback |
+| src/infrastructure/clients/platform/mcp-personal-token.ts      | 当前tenant专属资格实际OAuth HTTP获取、过期cache/共享flight与waiter取消；不借旧token源、不新SDK框架           |
+| src/infrastructure/clients/platform/mcp-personal-connect.ts    | 四固定generated方法/metadata/剩余timeout与wire有界读取；不复制owner DTO/ORM，不新增Connect wrapper模块       |
+| src/infrastructure/clients/platform/mcp-personal-response.ts   | 严格safe public projection/enum与nullable页尾、typed错误映射；与credential/transport变化原因分离             |
+| src/http/routes/mcp-personal.ts                                | 四具名GET、输入闭集、当前user admission、绝对budget及公共envelope；不塞旧projection操作union/fallback        |
 
 现 `src/config/runtime.ts` 增加可选组合 `mcpPersonal`：共用现KOKORO_PLATFORM_BASE_URL值但独立 `KOKORO_BFF_PLATFORM_MCP_PERSONAL_CREDENTIALS_FILE`；缺新配置默认不启用四读、匹配请求返回503 mcp_personal_dependency_unavailable，半配置启动拒绝。timeout固定上限10000ms与请求取消信号，不新增任意配置中心。现 `src/bootstrap/server.ts` 只精确识别四GET交具名route；route沿当前managed-personal-skills模式在本次budget内调用一次现authorizeUserRequest，不先做第二次全局admission。client沿现WeakMap<BffConfig,Client>生命周期，不增后台worker；因此 **src/bootstrap/runtime.ts不列必需写集**，若后继确有生命周期缺口先报Root，不机械添加。三D0/CURRENT/INDEX事实更新按Root任务分工。
 
@@ -347,15 +348,15 @@ owner RPC Canceled与caller生命周期分开：caller仍live且response可写�
 
 ### §8 具名放置与依赖
 
-| 项 | 当前裁决 |
-|---|---|
-| Owner / writer | Platform拥有Proto/artifact；BFF是唯一固定consumer，Root任务卡指定单writer，Root独占集成提交 |
-| 输入 | 仅Root从正式e83a Git对象物化的38文件及其逐SHA清单；ignored bundle只是传递媒介，不是Root可编辑contract中心，禁止复制在编owner工作树 |
-| 位置比较 | 采用既有 `contract/vendor/kokoro-platform/<exactcommit>` + 现generator；拒绝新SDK层、Root contract镜像、手写DTO及直接拷owner generated，避免第二事实源 |
-| 普通文件/粒度 | 不增运行模块或目录层；新增唯一commit目录承接proto、两descriptor与V5/V6/V7/V8完整固定发行物 |
-| 依赖 | 本地生成仅消费固定只读vendor与现精确工具；业务继续只通过本仓generated窄client，不import owner源码/ORM/SQL |
-| 删除 | 删除旧c949 Connect vendor目录，原V5–V7 bytes承接至新e83a目录；不删除语义不同的Platform HTTP projection vendor/generated/routes或旧有效Skills链 |
-| 冻结 | package/lock、buf.platform.gen.json、public OpenAPI、Schema、credentials、client/runtime、正常服务全不改 |
+| 项             | 当前裁决                                                                                                                                               |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Owner / writer | Platform拥有Proto/artifact；BFF是唯一固定consumer，Root任务卡指定单writer，Root独占集成提交                                                            |
+| 输入           | 仅Root从正式e83a Git对象物化的38文件及其逐SHA清单；ignored bundle只是传递媒介，不是Root可编辑contract中心，禁止复制在编owner工作树                     |
+| 位置比较       | 采用既有 `contract/vendor/kokoro-platform/<exactcommit>` + 现generator；拒绝新SDK层、Root contract镜像、手写DTO及直接拷owner generated，避免第二事实源 |
+| 普通文件/粒度  | 不增运行模块或目录层；新增唯一commit目录承接proto、两descriptor与V5/V6/V7/V8完整固定发行物                                                             |
+| 依赖           | 本地生成仅消费固定只读vendor与现精确工具；业务继续只通过本仓generated窄client，不import owner源码/ORM/SQL                                              |
+| 删除           | 删除旧c949 Connect vendor目录，原V5–V7 bytes承接至新e83a目录；不删除语义不同的Platform HTTP projection vendor/generated/routes或旧有效Skills链         |
+| 冻结           | package/lock、buf.platform.gen.json、public OpenAPI、Schema、credentials、client/runtime、正常服务全不改                                               |
 
 代码准入候选仅现 `buf.platform.json`、`scripts/generate-platform-connect-client.mjs`、`test/platform-connect-contract.test.mjs`；正规生成 `contract/dependencies/platform-connect.json` 与 `src/generated/platform-connect/kokoro/common/v1/common_pb.ts`、`src/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.ts`，加唯一新vendor38输入/删除旧vendor。CURRENT/INDEX由Root最终事实更新。Root已依同任务卡另授机器实现；写入范围仍仅本表机器文件，不延伸四读运行。
 
@@ -376,23 +377,24 @@ Root完整contract首轮298项中289 PASS/9 FAIL，六个既有测试仍硬编�
 Root Node22 build/check/format 均0，当前15真PG行为通过（Storage wire/ACK为受控正式 generated Connect fixture，不是真Storage进程）；独审当前十hash a4cc4484 无新增确定阻断。固定producer/pin/Schema/public8.6/105未变。正常BFF仍39db/public8.5，候选未发行或激活；真实Storage/IAM组合、正常schema与17浏览器删除子例仍OPEN。
 
 ---
+
 ## R284 Project scope release worker 文档门（目标，尚未实施）
 
 当前 commit `6f20f81a8d15992b35bc07e76ac8808d7072bee8` 已提交 Project 删除的 BFF 本地事务、两张 canonical 表与 `8.6.0 / 105` 机器候选，并由 Root 在隔离 HTTP/PostgreSQL 中验证 16/0；正常 BFF 仍运行 `39db` / public `8.5.0`，本候选未激活。下一切片只补提交后 Storage 逻辑 scope release 的具名 worker；不改原始 DELETE `202 pending` receipt、公开状态 shape、Schema、generated Storage pin 或 Web。Storage worker、正常 schema 组合、Web 17 条用户链、完整 DELETE 并发/COMMIT-unknown 与真实 Storage ACK-unknown 恢复均未验。
 
 ### §8 局部放置门
 
-| 项 | 结论 |
-| --- | --- |
-| Owner | `kokoro-bff` 唯一拥有 `bff_project_scope_release_outbox` 的 claim/lease/settle 与 Project deletion 聚合投影；`kokoro-storage` 固定 `e8b9928418924812587b7ac07900aee4be5bc27f` / combined `c22b5c10ee698d579753dcac370be371d8dba1df8fead1a12883f5443fbad18a` 唯一拥有 scope release 与物理对象生命周期。 |
-| 当前事实 | `project-delete.ts` 已原子写入稳定 N+1 command/digest/可信 tenant、subject、actor、scope；两表已有 pending/leased/released/blocked、lease/fence/available_at/attempt/error。generated client 已含 `ReleaseProjectScope`/`ReleaseConversationScope`，ACK 只有 `scope_released`、`replayed` 与 uint64 counts，不回显 scope。尚无 worker。 |
+| 项       | 结论                                                                                                                                                                                                                                                                                                                                                                                              |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner    | `kokoro-bff` 唯一拥有 `bff_project_scope_release_outbox` 的 claim/lease/settle 与 Project deletion 聚合投影；`kokoro-storage` 固定 `e8b9928418924812587b7ac07900aee4be5bc27f` / combined `c22b5c10ee698d579753dcac370be371d8dba1df8fead1a12883f5443fbad18a` 唯一拥有 scope release 与物理对象生命周期。                                                                                           |
+| 当前事实 | `project-delete.ts` 已原子写入稳定 N+1 command/digest/可信 tenant、subject、actor、scope；两表已有 pending/leased/released/blocked、lease/fence/available_at/attempt/error。generated client 已含 `ReleaseProjectScope`/`ReleaseConversationScope`，ACK 只有 `scope_released`、`replayed` 与 uint64 counts，不回显 scope。尚无 worker。                                                           |
 | 目标职责 | 四个具名普通文件：`src/infrastructure/clients/storage/scope-release-client.ts` 只调用两条固定 RPC；`src/application/project-scope-release-outbox-dispatcher.ts` 管单 worker 生命周期；`src/application/ports/project-scope-release-outbox.ts` 定义该业务的 claim/settle port；`src/infrastructure/postgres/project-scope-release-outbox-repository.ts` 执行同 Project 串行的 lease/CAS/聚合结算。 |
-| 目录比较 | **采用**上述 client + dispatcher + port + repository，分别隔离 owner wire、调度、业务接口和 SQL 生命周期；**淘汰**把 release 错误塞入 upload `client.ts`、把 Project outbox并入 Agent/Scheduler worker或建通用 command bus，这些都会混淆错误/终态与 owner。 |
-| 粒度 | 只有一个新业务 worker，不建新模块、进程、表或 repair API；四文件各有一个持续变化原因。现四装配入口仅接线：`src/application/ports/bff-business-store.ts`、`src/infrastructure/postgres/repositories.ts`、`src/bootstrap/runtime.ts`、`src/bootstrap/server.ts`。 |
-| 依赖 | dispatcher→具名 port/client；client只依赖固定 generated Storage Connect 与现运行配置。禁止读 Storage DB、复用 Catalog token、事务内网络、发送 actor header、Web直连owner或修改 upload 错误政策。 |
-| 数据/API | 复用现两表与原 N+1 rows；不新增 DDL、public operation、receipt或缓存。原 DELETE receipt永远重放初始202 pending；GET从固定命令集合投影 logical状态，physical恒pending。 |
-| 删除项 | 不保留第二套 claim/settle、次数耗尽→failed、换 command/key、人工改表恢复、泛用 proxy/bus 或 scope ACK回显假字段。 |
-| 验证 | 先具名 client/dispatcher failure-first tests，再真实 BFF PostgreSQL lease/CAS/聚合测试，再固定 Storage owner 真 RPC/丢ACK/恢复资格，最后正常 Browser→Web→BFF。建议后继门：`pnpm contract:check:storage`、定向 tests、`pnpm check`、`pnpm format:check`；本 D0 未运行命令。 |
+| 目录比较 | **采用**上述 client + dispatcher + port + repository，分别隔离 owner wire、调度、业务接口和 SQL 生命周期；**淘汰**把 release 错误塞入 upload `client.ts`、把 Project outbox并入 Agent/Scheduler worker或建通用 command bus，这些都会混淆错误/终态与 owner。                                                                                                                                       |
+| 粒度     | 只有一个新业务 worker，不建新模块、进程、表或 repair API；四文件各有一个持续变化原因。现四装配入口仅接线：`src/application/ports/bff-business-store.ts`、`src/infrastructure/postgres/repositories.ts`、`src/bootstrap/runtime.ts`、`src/bootstrap/server.ts`。                                                                                                                                   |
+| 依赖     | dispatcher→具名 port/client；client只依赖固定 generated Storage Connect 与现运行配置。禁止读 Storage DB、复用 Catalog token、事务内网络、发送 actor header、Web直连owner或修改 upload 错误政策。                                                                                                                                                                                                  |
+| 数据/API | 复用现两表与原 N+1 rows；不新增 DDL、public operation、receipt或缓存。原 DELETE receipt永远重放初始202 pending；GET从固定命令集合投影 logical状态，physical恒pending。                                                                                                                                                                                                                            |
+| 删除项   | 不保留第二套 claim/settle、次数耗尽→failed、换 command/key、人工改表恢复、泛用 proxy/bus 或 scope ACK回显假字段。                                                                                                                                                                                                                                                                                 |
+| 验证     | 先具名 client/dispatcher failure-first tests，再真实 BFF PostgreSQL lease/CAS/聚合测试，再固定 Storage owner 真 RPC/丢ACK/恢复资格，最后正常 Browser→Web→BFF。建议后继门：`pnpm contract:check:storage`、定向 tests、`pnpm check`、`pnpm format:check`；本 D0 未运行命令。                                                                                                                        |
 
 ### Claim、投递、结算与恢复
 
@@ -406,7 +408,6 @@ Root Node22 build/check/format 均0，当前15真PG行为通过（Storage wire/A
 ### 后继真实 failure-first 范围
 
 后继仅可写上述4个新业务文件、4个现装配入口，以及Root另行批准的具名测试；不改Schema、public contract/generated、`project-delete.ts`命令生成或原HTTP receipt。真实矩阵至少覆盖：普通claim不动blocked；无配置零claim；同command丢ACK/重启replay；双worker过期lease与晚ACK CAS0；正规CONFLICT/Unavailable保持pending；资格UNAUTHENTICATED进入受限恢复而PermissionDenied/InvalidArgument/digest/precondition不进入；坏ACK不released；shutdown/timeout无悬挂；Project+Conversation N+1全ACK后logical released/physical pending。必须调用固定Storage owner/受控wire与真实PostgreSQL，不以source mock替代owner。
-
 
 ## R282 Project 删除本地实现状态（候选，未发行）
 
@@ -437,17 +438,17 @@ R276 方案的 BFF 本地边界已在当前工作树实现：专用 DELETE/statu
 
 ### §8 局部放置门
 
-| 项 | 结论 |
-| --- | --- |
-| Owner | `kokoro-bff` 的 Project 聚合唯一写入本地 Project/Conversation/Share/ScheduledTask 关系、删除 receipt 与 command outbox；`kokoro-storage` 仍唯一拥有 scope/blob/physical cleanup；`kokoro-scheduler` 仍拥有调度执行事实。 |
+| 项       | 结论                                                                                                                                                                                                                                                                                                                                                            |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner    | `kokoro-bff` 的 Project 聚合唯一写入本地 Project/Conversation/Share/ScheduledTask 关系、删除 receipt 与 command outbox；`kokoro-storage` 仍唯一拥有 scope/blob/physical cleanup；`kokoro-scheduler` 仍拥有调度执行事实。                                                                                                                                        |
 | 当前事实 | 入口为 `src/bootstrap/server.ts`；应用编排为 `src/application/project-service.ts`；端口为 `src/application/ports/project-repository.ts`；同一 PostgreSQL owner 内实现为 `src/infrastructure/postgres/project-repository.ts`、`chat-repository.ts`、`scheduled-task-repository.ts` 与 `conversation-move.ts`。现 generated Storage client 已有两条 release RPC。 |
-| 目标职责 | 新增两个具名 public operation、Project 删除聚合事务、具名 deletion-status read、Project deletion receipt/outbox 及有界 worker；不新增通用删除框架、command bus、修复 API 或第二 admin 服务。 |
-| 目录比较 | **采用**扩展现 `ProjectService`/`ProjectRepository`，并把单 Conversation 删除的 same-client 原语提取为现 PostgreSQL 目录内 helper：一个事务可锁定并处理完整集合。**淘汰** route 循环调用现 HTTP/service（会形成部分提交与 N 次独立事务）；**淘汰**新建通用 saga/bus 模块（只有一个具名业务编排且会掩盖 owner/锁序）。 |
-| 粒度 | route/schema、应用 input、repository contract、same-client transaction、Storage release worker 各自只有一个变化原因；Project 与 Conversation outbox 共用本聚合的具名表和 worker，不机械复制 DTO 层。 |
-| 依赖 | Browser→Web→BFF；BFF 仅通过固定 Storage generated client 和现 Scheduler dispatch outbox 调 owner。禁止读 Storage/Scheduler DB、禁止事务内网络、禁止 Web 直连 owner。 |
-| 数据/API | 新增 Project deletion 聚合 receipt 与 N+1 scope-release outbox；不新增 Project 字段、不复用通用幂等表、不开放 slug。公开 API 目标为 `8.6.0 / 105`，详见 API 面。 |
-| 删除项 | 后继实现应删除/收敛任何“route 内逐 Conversation 调 service”“提交后直接调用 Storage”“静默把 ScheduledTask 的 project_id 置空”的候选；不保 fallback、alias 或双轨状态。 |
-| 验证 | 先机器契约 RED；再真实 PostgreSQL 证明锁序、回滚、Move/Delete 竞态、N+1 冻结与 receipt；再 Storage/Scheduler 受控 owner 证明重放、unknown、blocked 恢复；最后 Browser→Web→BFF 真链。建议门：`pnpm contract:check`、`pnpm contract:semantic`、`pnpm test`、`pnpm lint`、`pnpm typecheck`、`pnpm build`。本 D0 未运行这些命令。 |
+| 目标职责 | 新增两个具名 public operation、Project 删除聚合事务、具名 deletion-status read、Project deletion receipt/outbox 及有界 worker；不新增通用删除框架、command bus、修复 API 或第二 admin 服务。                                                                                                                                                                    |
+| 目录比较 | **采用**扩展现 `ProjectService`/`ProjectRepository`，并把单 Conversation 删除的 same-client 原语提取为现 PostgreSQL 目录内 helper：一个事务可锁定并处理完整集合。**淘汰** route 循环调用现 HTTP/service（会形成部分提交与 N 次独立事务）；**淘汰**新建通用 saga/bus 模块（只有一个具名业务编排且会掩盖 owner/锁序）。                                           |
+| 粒度     | route/schema、应用 input、repository contract、same-client transaction、Storage release worker 各自只有一个变化原因；Project 与 Conversation outbox 共用本聚合的具名表和 worker，不机械复制 DTO 层。                                                                                                                                                            |
+| 依赖     | Browser→Web→BFF；BFF 仅通过固定 Storage generated client 和现 Scheduler dispatch outbox 调 owner。禁止读 Storage/Scheduler DB、禁止事务内网络、禁止 Web 直连 owner。                                                                                                                                                                                            |
+| 数据/API | 新增 Project deletion 聚合 receipt 与 N+1 scope-release outbox；不新增 Project 字段、不复用通用幂等表、不开放 slug。公开 API 目标为 `8.6.0 / 105`，详见 API 面。                                                                                                                                                                                                |
+| 删除项   | 后继实现应删除/收敛任何“route 内逐 Conversation 调 service”“提交后直接调用 Storage”“静默把 ScheduledTask 的 project_id 置空”的候选；不保 fallback、alias 或双轨状态。                                                                                                                                                                                           |
+| 验证     | 先机器契约 RED；再真实 PostgreSQL 证明锁序、回滚、Move/Delete 竞态、N+1 冻结与 receipt；再 Storage/Scheduler 受控 owner 证明重放、unknown、blocked 恢复；最后 Browser→Web→BFF 真链。建议门：`pnpm contract:check`、`pnpm contract:semantic`、`pnpm test`、`pnpm lint`、`pnpm typecheck`、`pnpm build`。本 D0 未运行这些命令。                                   |
 
 ### 请求生命周期与事务边界
 
@@ -509,17 +510,17 @@ CreateVersion 以 path 的精确本人 active/disabled revision 为 base，沿�
 
 ### §8 放置裁决
 
-|项|结论|
-|---|---|
-|Owner|kokoro-bff 拥有 public HTTP、当前用户 admission、公开错误与响应；kokoro-platform 独占 lifecycle事实、版本分配、事件和 durable receipt。Browser/Web 仅在正式BFF发行后消费。|
-|当前事实|`src/http/routes/create-skill-draft.ts`、`publish-skill.ts`承接相邻命令；`src/infrastructure/clients/platform/catalog-connect.ts`承接现Catalog Connect；`src/bootstrap/server.ts`具名分派。`managed-personal-skills.ts`只读，不承载mutation。generated Connect已有两RPC，但production未调用。|
-|目标职责|两个具名public command把可信tenant/subject固定为个人owner context，将path skill ID和严格body映射到owner命令；响应严格验证owner identity/status/replay。无市场、admin、组织owner或latest selector。|
-|目录比较|A：塞入`managed-personal-skills.ts`或建通用Skill command proxy——淘汰；会混淆read/mutation预算与扩大任意RPC。B（采用）：新增相邻普通`create-personal-skill-version.ts`、`withdraw-personal-skill.ts` route，扩现`catalog-connect.ts`两具名方法；各自投影/command-id helper按现一变化原因相邻放置。bootstrap只作两个exact dispatch。|
-|粒度|两个命令的body、成功shape与precondition不同，route不合成万能handler；Connect transport/token复用单一现client，不建第二client/module/进程。若现投影器需新普通文件，分别限定CreateVersion/Withdraw且由后继卡批准。|
-|依赖|Browser→Web same-origin→BFF current Session admission→Platform Connect。Catalog client必须接受同一signal与absolute deadline/remaining budget并关闭transport自动retry；route依赖现request/envelope/admission与Catalog client；禁止读Platform DB/源码、调用Platform HTTP mutation、共享ORM、跨owner事务。|
-|数据/API|public owner=`kokoro-bff`、visibility=`public`、stability=`beta`；治理permission=`product.skill.manage_personal`（治理元数据，不新造IAM grant）。tenant/subject/owner scope只来自当前admission；body不能自报。零BFF DDL/cache/receipt/outbox。|
-|删除项|无旧public API可兼容；不增加alias、PATCH/in-place edit、latest版本、自动retry/rekey、第二receipt或managed-read内mutation。Connect现单pin若与owner正式Proto/wire逐字节等价则保持；Root已只读逐字节核当前6e5的common.proto SHA `65025b…`与platform_runtime.proto SHA `e5fd71…`均等于现c949 vendor/pin，因此不因source commit变化repin；descriptor/generator仍须机器片重跑确认，不手改generated。|
-|验证|先机器/HTTP有效RED，再正规生成与contract门；Platform真PG receipt/并发门、BFF owner真链、Web same-origin与正常浏览器分层验收。D0不算功能通过。|
+| 项       | 结论                                                                                                                                                                                                                                                                                                                                                                                           |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner    | kokoro-bff 拥有 public HTTP、当前用户 admission、公开错误与响应；kokoro-platform 独占 lifecycle事实、版本分配、事件和 durable receipt。Browser/Web 仅在正式BFF发行后消费。                                                                                                                                                                                                                     |
+| 当前事实 | `src/http/routes/create-skill-draft.ts`、`publish-skill.ts`承接相邻命令；`src/infrastructure/clients/platform/catalog-connect.ts`承接现Catalog Connect；`src/bootstrap/server.ts`具名分派。`managed-personal-skills.ts`只读，不承载mutation。generated Connect已有两RPC，但production未调用。                                                                                                  |
+| 目标职责 | 两个具名public command把可信tenant/subject固定为个人owner context，将path skill ID和严格body映射到owner命令；响应严格验证owner identity/status/replay。无市场、admin、组织owner或latest selector。                                                                                                                                                                                             |
+| 目录比较 | A：塞入`managed-personal-skills.ts`或建通用Skill command proxy——淘汰；会混淆read/mutation预算与扩大任意RPC。B（采用）：新增相邻普通`create-personal-skill-version.ts`、`withdraw-personal-skill.ts` route，扩现`catalog-connect.ts`两具名方法；各自投影/command-id helper按现一变化原因相邻放置。bootstrap只作两个exact dispatch。                                                             |
+| 粒度     | 两个命令的body、成功shape与precondition不同，route不合成万能handler；Connect transport/token复用单一现client，不建第二client/module/进程。若现投影器需新普通文件，分别限定CreateVersion/Withdraw且由后继卡批准。                                                                                                                                                                               |
+| 依赖     | Browser→Web same-origin→BFF current Session admission→Platform Connect。Catalog client必须接受同一signal与absolute deadline/remaining budget并关闭transport自动retry；route依赖现request/envelope/admission与Catalog client；禁止读Platform DB/源码、调用Platform HTTP mutation、共享ORM、跨owner事务。                                                                                        |
+| 数据/API | public owner=`kokoro-bff`、visibility=`public`、stability=`beta`；治理permission=`product.skill.manage_personal`（治理元数据，不新造IAM grant）。tenant/subject/owner scope只来自当前admission；body不能自报。零BFF DDL/cache/receipt/outbox。                                                                                                                                                 |
+| 删除项   | 无旧public API可兼容；不增加alias、PATCH/in-place edit、latest版本、自动retry/rekey、第二receipt或managed-read内mutation。Connect现单pin若与owner正式Proto/wire逐字节等价则保持；Root已只读逐字节核当前6e5的common.proto SHA `65025b…`与platform_runtime.proto SHA `e5fd71…`均等于现c949 vendor/pin，因此不因source commit变化repin；descriptor/generator仍须机器片重跑确认，不手改generated。 |
+| 验证     | 先机器/HTTP有效RED，再正规生成与contract门；Platform真PG receipt/并发门、BFF owner真链、Web same-origin与正常浏览器分层验收。D0不算功能通过。                                                                                                                                                                                                                                                  |
 
 ### 信任、单一预算与取消
 
@@ -561,17 +562,17 @@ Root裁定本次公开顺序为 additive `8.4.0` / 101 operations。尚未发行
 
 ### §8 放置裁决
 
-|项|结论|
-|---|---|
-|Owner|公开HTTP与当次用户准入唯一owner是kokoro-bff；Skill/series/revision/status事实owner仍kokoro-platform。唯一writer按Root任务卡，Git/index/资源由Root。|
-|当前事实|`src/http/routes/platform-projection.ts`和`src/infrastructure/clients/platform/projection-http.ts`承接旧六owner GET；`src/bootstrap/server.ts`在通用user admission后才分派旧projection，旧handler重新建取消scope，不能证明“准入起算10秒”。现vendor 3.2与generated16不含新operation。|
-|目标职责|只新增public `GET /v1/self/skills`与`GET /v1/self/skills/{skill_id}`，投影本人五状态/八安全字段；每次重新做当前Session admission并调用固定Platform owner。它们不是安装/执行资格，也不承载CreateVersion/Withdraw。|
-|目录方案|A：继续塞入`platform-projection.ts`并改通用准入生命周期——淘汰，会扩大旧六取消/错误面且handler起表无法覆盖admission。B：采用新普通`src/http/routes/managed-personal-skills.ts`，在bootstrap通用admission前对两个exact GET分派，由该route持唯一绝对预算并调用现`authorizeUserRequest`；现`projection-http.ts`只扩两个具名generated operation与严格映射。无新模块、auth框架、proxy或进程。|
-|粒度|新route只因“两条管理读共享完整准入预算、closed input与public envelope”变化；owner transport/token/响应读取仍扩现`projection-http.ts`，避免第二credential/token client。`src/bootstrap/server.ts`只作exact早分派；`owner.ts`与旧`platform-projection.ts`不承接新path。|
-|依赖|Browser→Web same-origin→BFF managed route→IAM admission→Platform HTTP3.3。route可依赖现auth、config、response/envelope和窄client；client可依赖generated16、projection credential/token。禁止读Platform DB/源码、Connect替代HTTP、通用owner proxy、BFF SQL/Redis/cache/receipt。|
-|数据/API|公开metadata：owner=`kokoro-bff`、visibility=`public`、stability=`beta`、idempotency=`none`、permission=`product.skill.read_managed_personal`。tenant/user只取当前admission context；owner只接受BFF machine credential和显式tenant/subject headers。无DDL/receipt/cache。|
-|删除项|repin时删除旧`contract/vendor/kokoro-platform-http/9ab3…`，唯一新vendor目录固定`3d4ba6c…`；不保alias/fallback/旧新generated并存。旧ACTIVE discovery路径与语义保留，不删除。|
-|验证|先public/owner pin/generated/route测试在旧源形成业务RED，再正规`node scripts/generate-platform-http-client.mjs --write`与`pnpm contract:check:platform-http`；随后focused contract/HTTP/credential/timeout测试、format/lint/typecheck/contract/architecture/full test/build。真实IAM→BFF→Platform、取消/慢admission/慢body由Root隔离运行。|
+| 项       | 结论                                                                                                                                                                                                                                                                                                                                                                                    |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner    | 公开HTTP与当次用户准入唯一owner是kokoro-bff；Skill/series/revision/status事实owner仍kokoro-platform。唯一writer按Root任务卡，Git/index/资源由Root。                                                                                                                                                                                                                                     |
+| 当前事实 | `src/http/routes/platform-projection.ts`和`src/infrastructure/clients/platform/projection-http.ts`承接旧六owner GET；`src/bootstrap/server.ts`在通用user admission后才分派旧projection，旧handler重新建取消scope，不能证明“准入起算10秒”。现vendor 3.2与generated16不含新operation。                                                                                                    |
+| 目标职责 | 只新增public `GET /v1/self/skills`与`GET /v1/self/skills/{skill_id}`，投影本人五状态/八安全字段；每次重新做当前Session admission并调用固定Platform owner。它们不是安装/执行资格，也不承载CreateVersion/Withdraw。                                                                                                                                                                       |
+| 目录方案 | A：继续塞入`platform-projection.ts`并改通用准入生命周期——淘汰，会扩大旧六取消/错误面且handler起表无法覆盖admission。B：采用新普通`src/http/routes/managed-personal-skills.ts`，在bootstrap通用admission前对两个exact GET分派，由该route持唯一绝对预算并调用现`authorizeUserRequest`；现`projection-http.ts`只扩两个具名generated operation与严格映射。无新模块、auth框架、proxy或进程。 |
+| 粒度     | 新route只因“两条管理读共享完整准入预算、closed input与public envelope”变化；owner transport/token/响应读取仍扩现`projection-http.ts`，避免第二credential/token client。`src/bootstrap/server.ts`只作exact早分派；`owner.ts`与旧`platform-projection.ts`不承接新path。                                                                                                                   |
+| 依赖     | Browser→Web same-origin→BFF managed route→IAM admission→Platform HTTP3.3。route可依赖现auth、config、response/envelope和窄client；client可依赖generated16、projection credential/token。禁止读Platform DB/源码、Connect替代HTTP、通用owner proxy、BFF SQL/Redis/cache/receipt。                                                                                                         |
+| 数据/API | 公开metadata：owner=`kokoro-bff`、visibility=`public`、stability=`beta`、idempotency=`none`、permission=`product.skill.read_managed_personal`。tenant/user只取当前admission context；owner只接受BFF machine credential和显式tenant/subject headers。无DDL/receipt/cache。                                                                                                               |
+| 删除项   | repin时删除旧`contract/vendor/kokoro-platform-http/9ab3…`，唯一新vendor目录固定`3d4ba6c…`；不保alias/fallback/旧新generated并存。旧ACTIVE discovery路径与语义保留，不删除。                                                                                                                                                                                                             |
+| 验证     | 先public/owner pin/generated/route测试在旧源形成业务RED，再正规`node scripts/generate-platform-http-client.mjs --write`与`pnpm contract:check:platform-http`；随后focused contract/HTTP/credential/timeout测试、format/lint/typecheck/contract/architecture/full test/build。真实IAM→BFF→Platform、取消/慢admission/慢body由Root隔离运行。                                              |
 
 ### 单一绝对预算、取消与失败闭合
 
@@ -605,17 +606,17 @@ runtime阶段：新增`src/http/routes/managed-personal-skills.ts`；修改`src/
 
 ### §8 放置与依赖
 
-|项|明确选择|
-|---|---|
-|Owner|BFF拥有两个public操作/本人准入/响应；Storage唯一拥有Asset逻辑删除、Blob退役、cleanup与receipt；Web拥有action-time确认和瞬时UI。|
-|采用位置|现 `src/http/routes/file-delete.ts` 处理两个具名HTTP入口；现 `src/infrastructure/clients/storage/asset-delete.ts` 新普通文件处理typed RPC/稳定command/strict映射；现 `src/application/file-delete.types.ts`、`file-delete.error.ts` 各新普通文件分别定义业务边界类型和错误。目录均已存在。|
-|淘汰位置|不把单RPC删除塞入多阶段upload/checkpoint，不增加泛owner proxy、删除模块/服务、第二权限或通用receipt层。个人/项目共享具名consumer而不伪造projectId=subjectId。|
-|现入口|`src/bootstrap/server.ts` 在当前admission后、generic body/JSON/mutationTicket前exact分派；项目授权必须在此具名路径重新执行，不能因提前return绕过原generic检查。前置admission失败也进入新closed header-only错误profile。|
-|依赖|handler→本仓project授权读取/窄Storage client→固定generated；generated不穿透业务类型，无跨ownerSQL/ORM/source import。普通99操作与上传多阶段receipt保持。|
-|授权读取放置比较|直接在现PostgresProjectRepository内管理独立连接生命周期会混入row CRUD变化；采用现 `src/infrastructure/postgres/project-resource-access.ts` 新单普通helper，独占本人active Project授权读取、有限checkout/SQL及精确连接退役。repository仅委托，既有目录内无新模块/服务。|
-|现三处接缝|`src/application/ports/project-repository.ts` → `src/application/project-service.ts` → `src/infrastructure/postgres/project-repository.ts` 新具名 `findActiveResourceProjectId(scope, idOrSlug, signal: AbortSignal, deadlineAt: number): Promise<string | null>`；signal及绝对毫秒deadline必填，无optional/default。复用原owner谓词且仅返回canonical ID/null，旧find/findProject不变。|
-|数据/删除项|零BFF表/列/索引/Redis票据/outbox/缓存；不增加Map成功缓存。无旧单删实现可兼容，不加alias。|
-|验证|机器闭集/正规生成；具名HTTP有效RED→实现；真实PG/Storage组合及Web确认/刷新/撤权分别验，工程数量不替代用户链。|
+| 项               | 明确选择                                                                                                                                                                                                                                                                                   |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Owner            | BFF拥有两个public操作/本人准入/响应；Storage唯一拥有Asset逻辑删除、Blob退役、cleanup与receipt；Web拥有action-time确认和瞬时UI。                                                                                                                                                            |
+| 采用位置         | 现 `src/http/routes/file-delete.ts` 处理两个具名HTTP入口；现 `src/infrastructure/clients/storage/asset-delete.ts` 新普通文件处理typed RPC/稳定command/strict映射；现 `src/application/file-delete.types.ts`、`file-delete.error.ts` 各新普通文件分别定义业务边界类型和错误。目录均已存在。 |
+| 淘汰位置         | 不把单RPC删除塞入多阶段upload/checkpoint，不增加泛owner proxy、删除模块/服务、第二权限或通用receipt层。个人/项目共享具名consumer而不伪造projectId=subjectId。                                                                                                                              |
+| 现入口           | `src/bootstrap/server.ts` 在当前admission后、generic body/JSON/mutationTicket前exact分派；项目授权必须在此具名路径重新执行，不能因提前return绕过原generic检查。前置admission失败也进入新closed header-only错误profile。                                                                    |
+| 依赖             | handler→本仓project授权读取/窄Storage client→固定generated；generated不穿透业务类型，无跨ownerSQL/ORM/source import。普通99操作与上传多阶段receipt保持。                                                                                                                                   |
+| 授权读取放置比较 | 直接在现PostgresProjectRepository内管理独立连接生命周期会混入row CRUD变化；采用现 `src/infrastructure/postgres/project-resource-access.ts` 新单普通helper，独占本人active Project授权读取、有限checkout/SQL及精确连接退役。repository仅委托，既有目录内无新模块/服务。                     |
+| 现三处接缝       | `src/application/ports/project-repository.ts` → `src/application/project-service.ts` → `src/infrastructure/postgres/project-repository.ts` 新具名 `findActiveResourceProjectId(scope, idOrSlug, signal: AbortSignal, deadlineAt: number): Promise<string                                   | null>`；signal及绝对毫秒deadline必填，无optional/default。复用原owner谓词且仅返回canonical ID/null，旧find/findProject不变。 |
+| 数据/删除项      | 零BFF表/列/索引/Redis票据/outbox/缓存；不增加Map成功缓存。无旧单删实现可兼容，不加alias。                                                                                                                                                                                                  |
+| 验证             | 机器闭集/正规生成；具名HTTP有效RED→实现；真实PG/Storage组合及Web确认/刷新/撤权分别验，工程数量不替代用户链。                                                                                                                                                                               |
 
 ### 唯一命令与恢复
 
@@ -649,16 +650,16 @@ Root最终补充裁决：现 `src/infrastructure/postgres/client.ts` 唯一Pool�
 
 ### §8 放置与发布边界
 
-|项|决定|
-|---|---|
-|Owner / writer|Platform `skills/installation` 是安装、固定 revision 关联及 name/summary/status 的唯一 owner；BFF 只做受信 current-session 后的严格消费和 public 投影；Web 后继只展示。无 BFF 数据 writer。|
-|当前入口|现 `scripts/generate-platform-connect-client.mjs` 固定单一 vendor commit并正规生成 `src/generated/platform-connect/**`；`personal-installation-connect.ts` 调五个具名 Product RPC；`personal-installation-response.ts` 当前只校验/投影九字段；public OpenAPI 8.2 的 `SkillInstallation` 也只有九字段。|
-|目标职责|一次 clean repin 到 owner `c94909f…`，由正规 generator 得到 required 三字段；response projector 对 name/summary/status 做闭集、长度与 unknown 校验，五个 read/mutation ACK 均投影同一十二字段；public schema additive 升 8.3，operation 数仍 99。|
-|位置比较|采用现 `personal-installation-response.ts` 扩展既有唯一安装响应映射，并同步现生成/contract门。另建通用 Platform mapper 会复制现职责；在 route/Web 补字段会绕过 owner strict 边界，均淘汰。|
-|依赖|只依赖固定 Platform Proto/generated enum与现 owner client；禁止相对 import Platform 源、手写 Proto DTO、读取 Platform DB、缓存元信息、BFF N+1 catalog 查询或从 source_ref 猜名称。|
-|数据/API|无 BFF DDL、Redis、receipt、事务或 cursor变化。public 三字段均 required，但这不等于 Proto implicit scalar 有独立 wire presence：`display_name`须非空白且 JS `length<=255`；`summary`允许空串且 JS `length<=65535`，原样保留、不 trim，owner省略空 scalar 时固定 decoder 得到`""`亦合法；`source_status`只允许active/disabled/withdrawn/quarantined。display越界/空白、summary越界、UNSPECIFIED/draft/未知enum才是owner-response-invalid→既有502。removed installation仍可携带权威元信息，status不授权执行。|
-|删除项|repin 同一切片删除旧 `contract/vendor/kokoro-platform/494b118a…`；不得双 vendor、双 descriptor、optional字段、fallback、V8或历史 artifact 重写。|
-|验证|先新 pin/十二字段 machine与projector测试形成有效 RED，再正规 generate/check；随后 unit/HTTP/contract/architecture/full check。Root 最后用真实 IAM→BFF→Platform read与 mutation replay，Web 再固定 BFF 8.3。|
+| 项             | 决定                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner / writer | Platform `skills/installation` 是安装、固定 revision 关联及 name/summary/status 的唯一 owner；BFF 只做受信 current-session 后的严格消费和 public 投影；Web 后继只展示。无 BFF 数据 writer。                                                                                                                                                                                                                                                                                                                 |
+| 当前入口       | 现 `scripts/generate-platform-connect-client.mjs` 固定单一 vendor commit并正规生成 `src/generated/platform-connect/**`；`personal-installation-connect.ts` 调五个具名 Product RPC；`personal-installation-response.ts` 当前只校验/投影九字段；public OpenAPI 8.2 的 `SkillInstallation` 也只有九字段。                                                                                                                                                                                                      |
+| 目标职责       | 一次 clean repin 到 owner `c94909f…`，由正规 generator 得到 required 三字段；response projector 对 name/summary/status 做闭集、长度与 unknown 校验，五个 read/mutation ACK 均投影同一十二字段；public schema additive 升 8.3，operation 数仍 99。                                                                                                                                                                                                                                                           |
+| 位置比较       | 采用现 `personal-installation-response.ts` 扩展既有唯一安装响应映射，并同步现生成/contract门。另建通用 Platform mapper 会复制现职责；在 route/Web 补字段会绕过 owner strict 边界，均淘汰。                                                                                                                                                                                                                                                                                                                  |
+| 依赖           | 只依赖固定 Platform Proto/generated enum与现 owner client；禁止相对 import Platform 源、手写 Proto DTO、读取 Platform DB、缓存元信息、BFF N+1 catalog 查询或从 source_ref 猜名称。                                                                                                                                                                                                                                                                                                                          |
+| 数据/API       | 无 BFF DDL、Redis、receipt、事务或 cursor变化。public 三字段均 required，但这不等于 Proto implicit scalar 有独立 wire presence：`display_name`须非空白且 JS `length<=255`；`summary`允许空串且 JS `length<=65535`，原样保留、不 trim，owner省略空 scalar 时固定 decoder 得到`""`亦合法；`source_status`只允许active/disabled/withdrawn/quarantined。display越界/空白、summary越界、UNSPECIFIED/draft/未知enum才是owner-response-invalid→既有502。removed installation仍可携带权威元信息，status不授权执行。 |
+| 删除项         | repin 同一切片删除旧 `contract/vendor/kokoro-platform/494b118a…`；不得双 vendor、双 descriptor、optional字段、fallback、V8或历史 artifact 重写。                                                                                                                                                                                                                                                                                                                                                            |
+| 验证           | 先新 pin/十二字段 machine与projector测试形成有效 RED，再正规 generate/check；随后 unit/HTTP/contract/architecture/full check。Root 最后用真实 IAM→BFF→Platform read与 mutation replay，Web 再固定 BFF 8.3。                                                                                                                                                                                                                                                                                                 |
 
 ### 精确后继范围（本 D0 不授权实现）
 
@@ -682,6 +683,7 @@ Root92682 Node22 check+format exit0：contract264/0、主829PASS/0FAIL/2既有sk
 正常BFF仍旧进程，本次未重启/授正常管理员；Web管理页面仍占位，合法普通Session403/管理员撤权后重放、普通models visible投影、浏览器保存确认、推理和资金未验。仅owner子链及本切片工程通过，旧404/400/502/取消抖动证据保留；下方阶段描述为历史exact suffix，不作当前否认实现的依据。
 
 - 机器阶段已固定 System 3.0.0 immutable artifact `955bd587f46a771e43a4330d202d90a7d2d67262` / SHA-256 `94ed91655741cbba66ce80a4c41717b9179cc509cb6858534e0b78aa3e6dc059`，仅生成四具名 owner operations；public 8.2/99 为本阶段机器候选，生产 route/client/bootstrap 未进入本切片。
+
 ## R256-ADMIN-03.D0：当前 tenant 模型路由管理（2026-10-06；仅设计，待 Root 放行）
 
 **证据与当前态。** 本文基于只读报告 `var/dev/r255-preserve/r257-admin-management-next-slice.md`（SHA256 `a376743747b454e1a95040ef2af7932a44056b177aa48efe07325a03a9527a1f`）及 BFF `975a2d8a538dfb1f4b83b33b98bc9262a77c00f2`。当前 BFF 已消费 IAM 0.8 的 required `platformAdmin`，但 `/system` 明确 fail closed，`/models` 只有普通 catalog read；不存在管理写路由。System 是 ModelLabel、ModelRevision、RoutingPolicy 与 command receipt 唯一 owner；其 runtime-Zod 机器源为 3.0.0、OpenAPI SHA256 `94ed91655741cbba66ce80a4c41717b9179cc509cb6858534e0b78aa3e6dc059`。本轮只增加三份文档前缀，零源码、机器合同、generated、DDL、配置、资源或资格变化；下方原文保持历史后缀。
@@ -696,17 +698,17 @@ Root92682 Node22 check+format exit0：contract264/0、主829PASS/0FAIL/2既有sk
 
 ### §8 放置表与依赖边界
 
-|项|决定|
-|---|---|
-|Owner|System 唯一写 ModelLabel/ModelRevision/RoutingPolicy/receipt；BFF 只拥有 public 管理用例、current-session 授权与 wire 映射；Web 后继只拥有交互。无新数据库 writer。|
-|当前事实|`src/bootstrap/server.ts` 已 fresh admission；`src/http/routes/owner.ts` 对 `/system` 返回 503；`src/upstream.ts` 不保 If-Match/If-None-Match/AbortSignal；现 owner identity 不生成 permission。普通 `/models` 仅投影 visible catalog。|
-|目标职责|四个具名 public route 只代理 System 3.0 的 `listRoutingPolicy`、`listModelLabel`、`listModelRevision`、`putRoutingPolicy`，strict 解析并映射稳定 public 结果/错误；不公开任意 upstream path。|
-|位置方案|采用新增 `src/http/routes/model-routing-admin.ts`（public route/授权/映射）与 `src/infrastructure/clients/owner/system-model-routing.ts`（System wire、期限、header、strict parse）。另一方案扩 `owner.ts`/`liveOwnerRequest` 会扩大万能代理和条件头权限，淘汰；另建 admin module/service 只有单用例且制造第二管理边界，也淘汰。|
-|粒度|两个普通职责文件，不建新一级模块/目录树/CQRS；`src/bootstrap/server.ts` 只在通用 mutation 之前精确分派。共享入口由 Root 集成。|
-|依赖|route 依赖 admitted context 与具名 client；client 依赖现 HTTP primitive、固定 generated System 3.0 类型。禁止相对导入 System 源、手写重复 DTO、DB/Redis、generic proxy permission 扩张、跨 owner SQL。|
-|数据/API|Public OpenAPI 从 8.1.0/95 operations additive 升 8.2.0/99 operations；System 3.0 固定 commit/digest artifact 正规生成。无 BFF canonical schema、事务、cache、receipt 或 credential 总表变化。|
-|删除项|无既有管理实现可删。禁止保留未发布别名、旧 System pin 双读、optional generated shape、fallback 或第二 admin 服务。|
-|验证|先合法 current-admin→真实 System owner/PG 的目标 route 业务 RED；再 machine/generated drift、unit、真实 HTTP/PG、architecture、完整 check；最后 Root normal 配对和真实浏览器。|
+| 项       | 决定                                                                                                                                                                                                                                                                                                                             |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner    | System 唯一写 ModelLabel/ModelRevision/RoutingPolicy/receipt；BFF 只拥有 public 管理用例、current-session 授权与 wire 映射；Web 后继只拥有交互。无新数据库 writer。                                                                                                                                                              |
+| 当前事实 | `src/bootstrap/server.ts` 已 fresh admission；`src/http/routes/owner.ts` 对 `/system` 返回 503；`src/upstream.ts` 不保 If-Match/If-None-Match/AbortSignal；现 owner identity 不生成 permission。普通 `/models` 仅投影 visible catalog。                                                                                          |
+| 目标职责 | 四个具名 public route 只代理 System 3.0 的 `listRoutingPolicy`、`listModelLabel`、`listModelRevision`、`putRoutingPolicy`，strict 解析并映射稳定 public 结果/错误；不公开任意 upstream path。                                                                                                                                    |
+| 位置方案 | 采用新增 `src/http/routes/model-routing-admin.ts`（public route/授权/映射）与 `src/infrastructure/clients/owner/system-model-routing.ts`（System wire、期限、header、strict parse）。另一方案扩 `owner.ts`/`liveOwnerRequest` 会扩大万能代理和条件头权限，淘汰；另建 admin module/service 只有单用例且制造第二管理边界，也淘汰。 |
+| 粒度     | 两个普通职责文件，不建新一级模块/目录树/CQRS；`src/bootstrap/server.ts` 只在通用 mutation 之前精确分派。共享入口由 Root 集成。                                                                                                                                                                                                   |
+| 依赖     | route 依赖 admitted context 与具名 client；client 依赖现 HTTP primitive、固定 generated System 3.0 类型。禁止相对导入 System 源、手写重复 DTO、DB/Redis、generic proxy permission 扩张、跨 owner SQL。                                                                                                                           |
+| 数据/API | Public OpenAPI 从 8.1.0/95 operations additive 升 8.2.0/99 operations；System 3.0 固定 commit/digest artifact 正规生成。无 BFF canonical schema、事务、cache、receipt 或 credential 总表变化。                                                                                                                                   |
+| 删除项   | 无既有管理实现可删。禁止保留未发布别名、旧 System pin 双读、optional generated shape、fallback 或第二 admin 服务。                                                                                                                                                                                                               |
+| 验证     | 先合法 current-admin→真实 System owner/PG 的目标 route 业务 RED；再 machine/generated drift、unit、真实 HTTP/PG、architecture、完整 check；最后 Root normal 配对和真实浏览器。                                                                                                                                                   |
 
 ### 后继精确实施与测试写集（本 D0 不授权写入）
 
@@ -725,13 +727,13 @@ Root92682 Node22 check+format exit0：contract264/0、主829PASS/0FAIL/2既有sk
 
 ### §8 最窄放置与实施边界
 
-|项|决定|
-|---|---|
-|Owner / 位置比较|BFF 唯一 writer；采用现 scripts 下三个普通具名文件。扩展 apply-schema.mjs 虽可复用入口，却会混淆 fresh 空 owner 与有数据演进，淘汰；不建通用 migration runner/ledger/新服务。|
-|三文件职责|evolve-personalization-schema.mjs 仅 strict CLI/check/apply/脱敏结果；personalization-schema-evolution.mjs 仅本次连接、事务、期限、COMMIT 与清理；personalization-schema-catalog.mjs 仅目标语义 catalog 和 canonical 唯一 CREATE 提取。无新目录/依赖。|
-|依赖 / 删除|只复用现 apply-schema.mjs 的 loadCanonicalSchema/assertBffSchemaUrl；绝不调用 applyCanonicalSchema 或执行整份 canonical。fresh、运行时 source、schema、其他 owner/Project 原 mixed 不改；无旧入口要删，不建 alias/双轨/启动 DDL。|
-|后继精确写集|上述三 scripts；新 test/personalization-schema-evolution.integration.mjs；现 package.json 仅具名命令及窄验证入口、test/schema-governance.test.mjs 仅追加提取一致性/fresh 非空拒绝保护。此表是下一阶段范围，本轮未获源码实施许可。|
-|独立测试位置|新 integration 承载有数据旧 shape/锁/unknown 生命周期，不再扩展 business-store 大文件；复用 Root 自有临时库及既有业务入口，禁止 normal reset/跨 owner SQL。|
+| 项               | 决定                                                                                                                                                                                                                                                   |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Owner / 位置比较 | BFF 唯一 writer；采用现 scripts 下三个普通具名文件。扩展 apply-schema.mjs 虽可复用入口，却会混淆 fresh 空 owner 与有数据演进，淘汰；不建通用 migration runner/ledger/新服务。                                                                          |
+| 三文件职责       | evolve-personalization-schema.mjs 仅 strict CLI/check/apply/脱敏结果；personalization-schema-evolution.mjs 仅本次连接、事务、期限、COMMIT 与清理；personalization-schema-catalog.mjs 仅目标语义 catalog 和 canonical 唯一 CREATE 提取。无新目录/依赖。 |
+| 依赖 / 删除      | 只复用现 apply-schema.mjs 的 loadCanonicalSchema/assertBffSchemaUrl；绝不调用 applyCanonicalSchema 或执行整份 canonical。fresh、运行时 source、schema、其他 owner/Project 原 mixed 不改；无旧入口要删，不建 alias/双轨/启动 DDL。                      |
+| 后继精确写集     | 上述三 scripts；新 test/personalization-schema-evolution.integration.mjs；现 package.json 仅具名命令及窄验证入口、test/schema-governance.test.mjs 仅追加提取一致性/fresh 非空拒绝保护。此表是下一阶段范围，本轮未获源码实施许可。                      |
+| 独立测试位置     | 新 integration 承载有数据旧 shape/锁/unknown 生命周期，不再扩展 business-store 大文件；复用 Root 自有临时库及既有业务入口，禁止 normal reset/跨 owner SQL。                                                                                            |
 
 ### 操作生命周期与受控配对
 
@@ -753,17 +755,17 @@ normal 准入：Root 先核实际 owner catalog/旧事实聚合，停写后完�
 
 ### §8 放置表
 
-|项|当前设计决定|
-|---|---|
-|Owner / writer|BFF Product 唯一拥有本人四字段；Web 拥有草稿与显式保存交互。Root 审批/集成/正常资源，本轮唯一 writer 仅三 D0 前缀。IAM 只提供 current Session identity，不用 User.name；System 不代存任意偏好。|
-|现入口|service+Bearer → IAM admission → bootstrap → businessStore.services；PostgresBffRepositories 复用唯一 PostgresBffDatabase.pool/search_path=kokoro_bff。现 generic mutation 管线有 receipt；本资源精确分派后提前返回，不进入它。|
-|目标|同一受信 tenant+subject 的 singleton GET 与 required expected_revision 的 PUT 全量替换；四字段真实 PG，不建任意 key/value 配置或动态字段注册。|
-|位置比较|采用现 application/ports 的窄 PersonalizationRepository 与 infrastructure/postgres 实现，挂入现 services 聚合，并使用小 input/route。另一可行方案为新 PersonalizationService 包装 port；本片没有额外编排，淘汰纯转发 wrapper。也不塞 ProjectService/IAM 或新 prefs 服务。|
-|粒度|新增四个普通文件，无新目录/框架。port 只定义 scope、四字段 snapshot、CAS 结果和两方法；PG 文件只负责本表 SQL/连接生命周期；input 只解析 wire；route 负责 HTTP 映射。无机械 DTO/Command/Row 五套复制。|
-|依赖|HTTP 只使用已验 context.identity.namespace/userId；platformAdmin 不参与本人资格。port 不泄漏 pg/framework，PG 复用 pool，严格 raw JSON 复用现 parser。禁止跨 owner SQL、Web 直读 DB、自报 actor、Admin :any、Redis 权威缓存或跨服务事务。|
-|数据/API|唯一 database/schema.sql 增本人表，public 唯一 OpenAPI 增 GET/PUT；CAS、冲突、未知 ACK 见 API/DATA。无 receipt、outbox、审计正文副本。|
-|删除/保留|后继 Web 删除 normal blur PATCH、吞错和假本地持久化；不发布旧 PATCH alias/双读 fallback。独立 preview、Knowledge/导入边界保留，正式能力仍 OPEN，不以隐藏或假成功关闭。|
-|验证|先合法保存 HTTP/PG 业务 RED，再机器、真实 PG/并发/取消/unknown 与工程门；最后 Root 正常合法 Session 保存/刷新/切人。doubles/源码门不代正常 E2E。|
+| 项             | 当前设计决定                                                                                                                                                                                                                                                              |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner / writer | BFF Product 唯一拥有本人四字段；Web 拥有草稿与显式保存交互。Root 审批/集成/正常资源，本轮唯一 writer 仅三 D0 前缀。IAM 只提供 current Session identity，不用 User.name；System 不代存任意偏好。                                                                           |
+| 现入口         | service+Bearer → IAM admission → bootstrap → businessStore.services；PostgresBffRepositories 复用唯一 PostgresBffDatabase.pool/search_path=kokoro_bff。现 generic mutation 管线有 receipt；本资源精确分派后提前返回，不进入它。                                           |
+| 目标           | 同一受信 tenant+subject 的 singleton GET 与 required expected_revision 的 PUT 全量替换；四字段真实 PG，不建任意 key/value 配置或动态字段注册。                                                                                                                            |
+| 位置比较       | 采用现 application/ports 的窄 PersonalizationRepository 与 infrastructure/postgres 实现，挂入现 services 聚合，并使用小 input/route。另一可行方案为新 PersonalizationService 包装 port；本片没有额外编排，淘汰纯转发 wrapper。也不塞 ProjectService/IAM 或新 prefs 服务。 |
+| 粒度           | 新增四个普通文件，无新目录/框架。port 只定义 scope、四字段 snapshot、CAS 结果和两方法；PG 文件只负责本表 SQL/连接生命周期；input 只解析 wire；route 负责 HTTP 映射。无机械 DTO/Command/Row 五套复制。                                                                     |
+| 依赖           | HTTP 只使用已验 context.identity.namespace/userId；platformAdmin 不参与本人资格。port 不泄漏 pg/framework，PG 复用 pool，严格 raw JSON 复用现 parser。禁止跨 owner SQL、Web 直读 DB、自报 actor、Admin :any、Redis 权威缓存或跨服务事务。                                 |
+| 数据/API       | 唯一 database/schema.sql 增本人表，public 唯一 OpenAPI 增 GET/PUT；CAS、冲突、未知 ACK 见 API/DATA。无 receipt、outbox、审计正文副本。                                                                                                                                    |
+| 删除/保留      | 后继 Web 删除 normal blur PATCH、吞错和假本地持久化；不发布旧 PATCH alias/双读 fallback。独立 preview、Knowledge/导入边界保留，正式能力仍 OPEN，不以隐藏或假成功关闭。                                                                                                    |
+| 验证           | 先合法保存 HTTP/PG 业务 RED，再机器、真实 PG/并发/取消/unknown 与工程门；最后 Root 正常合法 Session 保存/刷新/切人。doubles/源码门不代正常 E2E。                                                                                                                          |
 
 ### 装配、状态与失败恢复
 
@@ -794,14 +796,14 @@ IAM owner已发布 d24aa2b697de59a350e8588720620df331bc5da5，internal0.8.0，co
 
 ### 唯一 owner 与最窄位置
 
-|项|当前决定|
-|---|---|
-|资格|IAM User.platformAdmin唯一事实；受控独立manager Session/CAS/Audit授撤；BFF不写资格、不解释组织role/email/OAuthoperator/financial名单。|
-|准入|现POST /internal/v1/session-authorizations/verify返回required platform_admin；IAM已限定fixed Product Web client+fixed tenant+当前User资格及全部原Session/Member/client/resource/binding。BFF保固定tenant检查，不复制owner client资格判定或新增scope。|
-|放置比较|采用现auth/session-admission client/types → user-admission → bootstrap /me；拒另建admin service/endpoint/角色引擎、解析JWT管理员claim或信自报header。|
-|受信类型|现session-admission.types.ts成功分支新增required platformAdmin:boolean；现domain/request-context.ts增具名AdmittedUserRequestContext = RequestContext & {platformAdmin:boolean}，user-admission成功context必填。基础RequestContext及service-only身份不机械扩权限字段，无optional或生产默认false。|
-|公开展示|扩现GET /v1/me的required platform_admin；false仍普通登录200。Web后片同源/admin、Settings与管理API各自消费当前投影；本BFF片不创造管理CRUD或假后台列表。|
-|数据/删除|不增加DB/Redis键/资格缓存/receipt/权限表。旧IAM0.7 active pin与generated输入替换为唯一0.8，不双读旧shape、不alias/fallback；现MCP/Team/Skill/财务边界保持。|
+| 项        | 当前决定                                                                                                                                                                                                                                                                                         |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 资格      | IAM User.platformAdmin唯一事实；受控独立manager Session/CAS/Audit授撤；BFF不写资格、不解释组织role/email/OAuthoperator/financial名单。                                                                                                                                                           |
+| 准入      | 现POST /internal/v1/session-authorizations/verify返回required platform_admin；IAM已限定fixed Product Web client+fixed tenant+当前User资格及全部原Session/Member/client/resource/binding。BFF保固定tenant检查，不复制owner client资格判定或新增scope。                                            |
+| 放置比较  | 采用现auth/session-admission client/types → user-admission → bootstrap /me；拒另建admin service/endpoint/角色引擎、解析JWT管理员claim或信自报header。                                                                                                                                            |
+| 受信类型  | 现session-admission.types.ts成功分支新增required platformAdmin:boolean；现domain/request-context.ts增具名AdmittedUserRequestContext = RequestContext & {platformAdmin:boolean}，user-admission成功context必填。基础RequestContext及service-only身份不机械扩权限字段，无optional或生产默认false。 |
+| 公开展示  | 扩现GET /v1/me的required platform_admin；false仍普通登录200。Web后片同源/admin、Settings与管理API各自消费当前投影；本BFF片不创造管理CRUD或假后台列表。                                                                                                                                           |
+| 数据/删除 | 不增加DB/Redis键/资格缓存/receipt/权限表。旧IAM0.7 active pin与generated输入替换为唯一0.8，不双读旧shape、不alias/fallback；现MCP/Team/Skill/财务边界保持。                                                                                                                                      |
 
 ### fresh资格、取消与正常切换停止线
 
@@ -828,16 +830,16 @@ Web后继Settings显示只是提示：/admin每次server准入和每条管理API
 
 ### 放置与边界
 
-| 项 | 当前决定 |
-|---|---|
-| Owner | Platform拥有Connector/Connection/current authorization/Server；BFF只发布public读取，Web消费投影。Root独占后继放行、资源、Git；本轮只准三D0前缀。 |
-| 唯一增量 | GET /v1/mcp/connections，operationId=listSelfMcpConnections，六字段本人active连接；不是连接命令/Server注册/enable或Agent执行。 |
-| 位置比较 | 采用现 src/http/routes/platform-projection.ts 的明确operation分支与 src/infrastructure/clients/platform/projection-http.ts 固定generated调用；淘汰Web过滤Server、独立服务/第二HTTP栈/BFF Connection表。 |
-| 身份 | 现service+当前IAM Session admission → context.identity.namespace/userId → 独立projection workload → Platform。caller header/body/query不赋tenant/subject；不借Skill权限、不新加人类MCP-read权限。 |
-| 权限 | public capability.mcp.read沿现治理分类，不证明新增IAMgrant；实际是当前Session+认证BFF workload+Platform完整same-tenant/user-self/current资格。投影不是invocation grant。 |
-| 数据 | 无表/列/索引/SQL/Redis投影/receipt/outbox/事务，不读Platform数据库。 |
-| 删除/保留 | active HTTP3.1输入/pin换成唯一固定3.2并正规生成，旧vendor按生成来源替换；原Skill/Server操作保持。GET /v1/mcp/servers不重解释、不alias或双读fallback；Web展示切换另卡。 |
-| 排除 | 19原mixed、Project删除、MessageCreate/selected_mcp_connection_refs、Agent、IAM权限、Provider/secret、Admin、所有MCP非GET与normal配置/启动不在本片。 |
+| 项        | 当前决定                                                                                                                                                                                                |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner     | Platform拥有Connector/Connection/current authorization/Server；BFF只发布public读取，Web消费投影。Root独占后继放行、资源、Git；本轮只准三D0前缀。                                                        |
+| 唯一增量  | GET /v1/mcp/connections，operationId=listSelfMcpConnections，六字段本人active连接；不是连接命令/Server注册/enable或Agent执行。                                                                          |
+| 位置比较  | 采用现 src/http/routes/platform-projection.ts 的明确operation分支与 src/infrastructure/clients/platform/projection-http.ts 固定generated调用；淘汰Web过滤Server、独立服务/第二HTTP栈/BFF Connection表。 |
+| 身份      | 现service+当前IAM Session admission → context.identity.namespace/userId → 独立projection workload → Platform。caller header/body/query不赋tenant/subject；不借Skill权限、不新加人类MCP-read权限。       |
+| 权限      | public capability.mcp.read沿现治理分类，不证明新增IAMgrant；实际是当前Session+认证BFF workload+Platform完整same-tenant/user-self/current资格。投影不是invocation grant。                                |
+| 数据      | 无表/列/索引/SQL/Redis投影/receipt/outbox/事务，不读Platform数据库。                                                                                                                                    |
+| 删除/保留 | active HTTP3.1输入/pin换成唯一固定3.2并正规生成，旧vendor按生成来源替换；原Skill/Server操作保持。GET /v1/mcp/servers不重解释、不alias或双读fallback；Web展示切换另卡。                                  |
+| 排除      | 19原mixed、Project删除、MessageCreate/selected_mcp_connection_refs、Agent、IAM权限、Provider/secret、Admin、所有MCP非GET与normal配置/启动不在本片。                                                     |
 
 ### 读取/失败生命周期
 
@@ -863,18 +865,18 @@ Web后继Settings显示只是提示：/admin每次server准入和每条管理API
 
 ### §8 放置与后继范围
 
-| 项 | 当前裁决 |
-|---|---|
-| Owner | BFF 写任务、锚点、公开投影与 outbox；Scheduler 计算 recurrence/`next_due_at`。Web 只显示公开值，不计算日期。 |
-| 当前事实 | `application/scheduled/input.ts` 以 `new Date()` 伪成 next；task/SQL 强制 next 非空；`scheduler/schedule.ts` 又借该值选择 weekly weekday；Scheduler client 已接收 receipt，但 delivery/dispatcher/settlement 丢弃其 Schedule。 |
-| 目标职责 | create/patch 只把 `recurrence_anchor_at` 用作现 weekly weekday 选择；`next_run_at` 仅保存当前 task revision 经 Scheduler receipt 确认的 instant。pending、disabled/paused/failed 或修改后待确认时为 null，不把创建/更新时间冒成执行时刻。 |
-| 位置比较 | **采用**现 ScheduledTask outbox delivery→dispatcher→Postgres fenced settlement：网络仍在事务外，receipt projection 与 outbox 成功同事务提交。**淘汰**同步网络塞入创建事务、Web/BFF 新建 cron/date 算法或靠 callback 加周期；它们会破坏本地原子提交、重复 DST 语义或产生双写。 |
-| 粒度 | 扩现 scheduled 普通类型、port、client、dispatcher、repository；不建 sync 平台、新模块或通用 receipt framework。Scheduler 持续状态 read 是后续 owner 契约，不塞进首片。 |
-| 依赖 | 允许固定 generated Scheduler response、现 DB clock/lease/fence/revision 与 public OpenAPI；禁止 Scheduler SQL、Web 日期计算、跨 owner transaction、IP/target 绕过。正常 localhost 可沿 Scheduler 既有 exact allowlist/SSRF guard由Root配置验收，本片不改该机制。 |
-| 数据/API | public 8.0.0 发布前 clean-slate 把 create/patch 输入 `next_run_at` 替换为 `recurrence_anchor_at`，不留 alias；输出 `next_run_at` 仍为必有成员但允许 null。SQL 新增非空 anchor、next 改可空；不新增状态列/表/索引。 |
-| 并发 | register/replace 成功必须校 receipt 的Schedule name/rule/timezone/paused/next及callback body中的tenant/task/owner与本命令请求exact；Scheduler `version`只验证为正规正整数并绑定同一receipt，它是Scheduler owner版本，绝不与BFF task `revision`直接比较。同一 lease owner/token/fence 下，仅当outbox `aggregate_revision`等于锁内task当前revision才写next并settle。旧revision或迟到/旧lease ACK可按现规则失败或收束自身命令，但不得覆盖新任务、删除后复活或写入旧next。 |
-| 删除项 | 删除“now即next”、输入`next_run_at` alias及“任意2xx即丢body成功”；不删原幂等、Project/tenant admission、outbox或Scheduler SSRF保护。 |
-| 验证 | contract/schema fresh install；create/replace receipt正负、pending/null、paused/null、旧revision/lease ACK、unknown ACK、worker restart与原子rollback；最后Root真实 weekly 08:00创建→确认→刷新、编辑失效/再确认、暂停。 |
+| 项       | 当前裁决                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner    | BFF 写任务、锚点、公开投影与 outbox；Scheduler 计算 recurrence/`next_due_at`。Web 只显示公开值，不计算日期。                                                                                                                                                                                                                                                                                                                                                           |
+| 当前事实 | `application/scheduled/input.ts` 以 `new Date()` 伪成 next；task/SQL 强制 next 非空；`scheduler/schedule.ts` 又借该值选择 weekly weekday；Scheduler client 已接收 receipt，但 delivery/dispatcher/settlement 丢弃其 Schedule。                                                                                                                                                                                                                                         |
+| 目标职责 | create/patch 只把 `recurrence_anchor_at` 用作现 weekly weekday 选择；`next_run_at` 仅保存当前 task revision 经 Scheduler receipt 确认的 instant。pending、disabled/paused/failed 或修改后待确认时为 null，不把创建/更新时间冒成执行时刻。                                                                                                                                                                                                                              |
+| 位置比较 | **采用**现 ScheduledTask outbox delivery→dispatcher→Postgres fenced settlement：网络仍在事务外，receipt projection 与 outbox 成功同事务提交。**淘汰**同步网络塞入创建事务、Web/BFF 新建 cron/date 算法或靠 callback 加周期；它们会破坏本地原子提交、重复 DST 语义或产生双写。                                                                                                                                                                                          |
+| 粒度     | 扩现 scheduled 普通类型、port、client、dispatcher、repository；不建 sync 平台、新模块或通用 receipt framework。Scheduler 持续状态 read 是后续 owner 契约，不塞进首片。                                                                                                                                                                                                                                                                                                 |
+| 依赖     | 允许固定 generated Scheduler response、现 DB clock/lease/fence/revision 与 public OpenAPI；禁止 Scheduler SQL、Web 日期计算、跨 owner transaction、IP/target 绕过。正常 localhost 可沿 Scheduler 既有 exact allowlist/SSRF guard由Root配置验收，本片不改该机制。                                                                                                                                                                                                       |
+| 数据/API | public 8.0.0 发布前 clean-slate 把 create/patch 输入 `next_run_at` 替换为 `recurrence_anchor_at`，不留 alias；输出 `next_run_at` 仍为必有成员但允许 null。SQL 新增非空 anchor、next 改可空；不新增状态列/表/索引。                                                                                                                                                                                                                                                     |
+| 并发     | register/replace 成功必须校 receipt 的Schedule name/rule/timezone/paused/next及callback body中的tenant/task/owner与本命令请求exact；Scheduler `version`只验证为正规正整数并绑定同一receipt，它是Scheduler owner版本，绝不与BFF task `revision`直接比较。同一 lease owner/token/fence 下，仅当outbox `aggregate_revision`等于锁内task当前revision才写next并settle。旧revision或迟到/旧lease ACK可按现规则失败或收束自身命令，但不得覆盖新任务、删除后复活或写入旧next。 |
+| 删除项   | 删除“now即next”、输入`next_run_at` alias及“任意2xx即丢body成功”；不删原幂等、Project/tenant admission、outbox或Scheduler SSRF保护。                                                                                                                                                                                                                                                                                                                                    |
+| 验证     | contract/schema fresh install；create/replace receipt正负、pending/null、paused/null、旧revision/lease ACK、unknown ACK、worker restart与原子rollback；最后Root真实 weekly 08:00创建→确认→刷新、编辑失效/再确认、暂停。                                                                                                                                                                                                                                                |
 
 后继准确源码/机器写集限于现 `contract/openapi/v1/openapi.yaml`、`scripts/verify-openapi.ts`、`contract/tests/v1-operations.json`及对应contract tests；`database/schema.sql`、现schema apply/governance测试；`src/application/scheduled/{input,mappers}.ts`、`src/domain/scheduled-task/{task,outbox}.ts`、`src/application/ports/scheduled-task-{repository,outbox-delivery,outbox-repository}.ts`、`src/application/scheduled-task-outbox-dispatcher.ts`、`src/infrastructure/clients/scheduler/{schedule,control-client,outbox-delivery}.ts`、`src/infrastructure/postgres/scheduled-task-repository.ts`及现scheduled/contract/真实PG测试。生成物只由现正规脚本重建，不手改；Web pin另卡。
 
@@ -894,15 +896,15 @@ public保持现资源路径 `/v1/billing/summary`，但在尚未正式发布的p
 
 ### 放置与依赖裁决
 
-| 项 | 裁决 |
-|---|---|
-| Owner/调用方向 | Billing唯一拥有余额与流水；Browser→Web same-origin→BFF→Billing。BFF只投影已验证owner结果，不读Billing数据库、不创建wallet、不计算费率/赠送/充值。 |
-| contract pin/generated | 沿现Agent HTTP consumer模式：vendor固定owner YAML、dependency manifest、独立固定生成脚本/config及只读 `src/generated/billing-http/`；只过滤上述2个operation并使用现有 `@hey-api/openapi-ts 0.99.0`/Zod4/fetch client。淘汰手抄owner DTO与运行时跨仓import。 |
-| 普通源码位置 | 采用现 `src/infrastructure/clients/owner/billing-personal-read.ts` 单文件：只负责该两读的u1身份编码、五因素请求、generated response校验和有限错误分类；两个GET共享同一合同/身份/credential生命周期，当前无需新目录。向 `routes/owner.ts` 继续混入认证codec或另建`billing/`目录都会制造第二变化中心，均淘汰。若实现使该文件超过TS08职责预算，再由Root另卡拆codec，不预建空层。 |
-| HTTP route | 现 `src/http/routes/owner.ts` 只做public path/query准入、调用client及BFF envelope；不复用现 `liveOwnerRequest/proxyUpstream`，因为其单一bearer与plain identity不满足Billing专用五因素/u1。 |
-| config | `src/config/runtime.ts` 增具名 `KOKORO_BILLING_BFF_SERVICE_TOKEN` 字段；与现internal secret必须分别存在且不得相等。配置Billing upstream时缺任一因素fail closed，不退到用户JWT、plain header或v1。 |
-| 数据/API | BFF数据库、receipt、幂等、Redis和事务零变化；公开wire见API R255。读响应始终`no-store`。 |
-| 删除项 | 删除旧 `BillingSummary` float type与test double假100余额；public YAML原float schema原位替换，不留deprecated兼容。现plans/checkout与其v1链不随本片扩展或宣称可用。 |
+| 项                     | 裁决                                                                                                                                                                                                                                                                                                                                                                          |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner/调用方向         | Billing唯一拥有余额与流水；Browser→Web same-origin→BFF→Billing。BFF只投影已验证owner结果，不读Billing数据库、不创建wallet、不计算费率/赠送/充值。                                                                                                                                                                                                                             |
+| contract pin/generated | 沿现Agent HTTP consumer模式：vendor固定owner YAML、dependency manifest、独立固定生成脚本/config及只读 `src/generated/billing-http/`；只过滤上述2个operation并使用现有 `@hey-api/openapi-ts 0.99.0`/Zod4/fetch client。淘汰手抄owner DTO与运行时跨仓import。                                                                                                                   |
+| 普通源码位置           | 采用现 `src/infrastructure/clients/owner/billing-personal-read.ts` 单文件：只负责该两读的u1身份编码、五因素请求、generated response校验和有限错误分类；两个GET共享同一合同/身份/credential生命周期，当前无需新目录。向 `routes/owner.ts` 继续混入认证codec或另建`billing/`目录都会制造第二变化中心，均淘汰。若实现使该文件超过TS08职责预算，再由Root另卡拆codec，不预建空层。 |
+| HTTP route             | 现 `src/http/routes/owner.ts` 只做public path/query准入、调用client及BFF envelope；不复用现 `liveOwnerRequest/proxyUpstream`，因为其单一bearer与plain identity不满足Billing专用五因素/u1。                                                                                                                                                                                    |
+| config                 | `src/config/runtime.ts` 增具名 `KOKORO_BILLING_BFF_SERVICE_TOKEN` 字段；与现internal secret必须分别存在且不得相等。配置Billing upstream时缺任一因素fail closed，不退到用户JWT、plain header或v1。                                                                                                                                                                             |
+| 数据/API               | BFF数据库、receipt、幂等、Redis和事务零变化；公开wire见API R255。读响应始终`no-store`。                                                                                                                                                                                                                                                                                       |
+| 删除项                 | 删除旧 `BillingSummary` float type与test double假100余额；public YAML原float schema原位替换，不留deprecated兼容。现plans/checkout与其v1链不随本片扩展或宣称可用。                                                                                                                                                                                                             |
 
 可信身份只来自每次现IAM session admission后的 `RequestContext.identity.namespace/userId`；分别按Billing `personal-identity-u1`执行严格UTF-8、无paddingbase64url编码，绝不接受浏览器body/query/header自报tenant/subject。owner调用恰带 `x-kokoro-service:web-bff`、internal secret、独立service bearer、编码tenant与subject；partial/malformed credential不降级。public query只接受ledger的`limit` 1..100与单一opaque `cursor`（最多2048字符），原值一次转发；summary不接query/body。
 
@@ -961,17 +963,17 @@ BFF Project 唯一 owner；采用既有目录内 `src/http/project-rename-input.
 
 Root选择R235路径A：在正式 `7289b3a4ae8f2df5c249350d59b9405c33fb4083` 上独立交付Project墓碑列与现有资格查询的active条件，为R234改名及完整删除后继提供前置；不缩减完整CRUD目标。HEAD尚无Project.deleted_at；现20mixed包含未交付候选及会回退R217的旧实现，不作为可整体接入的基线。
 
-| 放置/范围 | 唯一目标 |
-|---|---|
-| Owner/依赖 | BFF拥有Project资格；现IAM准入→可信tenant/subject→本仓repository，保持现事务与父Project→Conversation锁序，不新增HTTP身份协议。 |
-| `database/schema.sql` | 唯一canonical：仅Project nullable墓碑列及原owner-list索引partial predicate；数据语义见DATA_MODEL R236。 |
-| `src/infrastructure/postgres/project-repository.ts` | 6处：list、find、instruction UPDATE、revision父EXISTS、skill父锁、tasks父EXISTS。 |
-| `src/infrastructure/postgres/chat-repository.ts` | 10处：list/find/snapshot/process、messages两查、rename/delete、create/revoke share的Project EXISTS；保HEAD内联Conversation生命周期。 |
-| `src/infrastructure/postgres/conversation-artifact-library.ts` | 2处：列表与空页授权Project EXISTS。 |
-| `src/infrastructure/postgres/conversation-move.ts` | 3处：winner当前Project、源解析、排序Project锁；保Move原lease/receipt。 |
-| `src/infrastructure/postgres/scheduled-task-repository.ts` | 1处：ownedProjectId父FOR SHARE，不改Task生命周期。 |
-| `src/infrastructure/postgres/chat-turn-commit.ts` | 3处：resolveActiveProject、首次Project锁、既有Conversation排序Project锁；保持正式R217有界事务。 |
-| 粒度/比较 | 共7生产/schema位置、25处资格predicate；采用现文件窄增量，淘汰整体接入mixed、删除lifecycle先片及第二schema/fallback，不建文件/目录/框架。 |
+| 放置/范围                                                      | 唯一目标                                                                                                                                 |
+| -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner/依赖                                                     | BFF拥有Project资格；现IAM准入→可信tenant/subject→本仓repository，保持现事务与父Project→Conversation锁序，不新增HTTP身份协议。            |
+| `database/schema.sql`                                          | 唯一canonical：仅Project nullable墓碑列及原owner-list索引partial predicate；数据语义见DATA_MODEL R236。                                  |
+| `src/infrastructure/postgres/project-repository.ts`            | 6处：list、find、instruction UPDATE、revision父EXISTS、skill父锁、tasks父EXISTS。                                                        |
+| `src/infrastructure/postgres/chat-repository.ts`               | 10处：list/find/snapshot/process、messages两查、rename/delete、create/revoke share的Project EXISTS；保HEAD内联Conversation生命周期。     |
+| `src/infrastructure/postgres/conversation-artifact-library.ts` | 2处：列表与空页授权Project EXISTS。                                                                                                      |
+| `src/infrastructure/postgres/conversation-move.ts`             | 3处：winner当前Project、源解析、排序Project锁；保Move原lease/receipt。                                                                   |
+| `src/infrastructure/postgres/scheduled-task-repository.ts`     | 1处：ownedProjectId父FOR SHARE，不改Task生命周期。                                                                                       |
+| `src/infrastructure/postgres/chat-turn-commit.ts`              | 3处：resolveActiveProject、首次Project锁、既有Conversation排序Project锁；保持正式R217有界事务。                                          |
+| 粒度/比较                                                      | 共7生产/schema位置、25处资格predicate；采用现文件窄增量，淘汰整体接入mixed、删除lifecycle先片及第二schema/fallback，不建文件/目录/框架。 |
 
 后继tests-first只用现 `test/schema-governance.test.mjs` 与 `test/business-store.integration.mjs` 的HEAD增量；前者真fresh catalog，后者真实HTTP/PG正负矩阵，详见API/DATA R236。Root冻结clean artifact后另授代码，原20mixed字节保留。保全部HEAD测试，尤其R207/R209/R211/R215共7个Message期限/断链/unknown case及request-id断言；保outbox对chat-turn-commit委派、Message合法解析后早返回，禁止恢复mixed无界内联事务/owner预读。
 
@@ -1009,14 +1011,14 @@ Storage 是 scope/object lifecycle contract owner；BFF 只在既有 `contract/v
 
 **当前态与触发证据。** BFF `main 0333cd7c515846e977b1b05d8349e8c04d2a49dd` 已发布 public `7.1.0` Move（源码提交 `284b5e04c4c09759787ef239b1a19fcdcd5ed8fa`），当前源码无未提交变更。`src/infrastructure/postgres/chat-repository.ts` 从先前 `a68cbe55` 的 671 行增至 979 行，超过 Root 标准门的 800 行上限；Root 全仓标准门实际 153 项失败中，本 Move 新引入的这一项是独立 P1，不能拿已通过的 BFF 741 纯测试/1 个既有资源 skip、173 真 PG/Redis integration 或 9 项 Move 真 HTTP/PG 行为门冒充架构合规。现同一文件同时含 Move 的有界连接租约、整事务/赢家重放及其他 Chat Repository 查询写入；既有 `chat-repository-mappers.ts` 已负责纯 Row 映射，但尚未承接 Move receipt Row 的严格解码。Web 固定契约与浏览器消费、Project DELETE、Storage release 消费和原用户界面验收不属于本拆分。
 
-| §8 项 | R152 已裁决的目标与边界 |
-|---|---|
-| Owner/唯一 writer | BFF Conversation Move 的 PostgreSQL 实现；原 `PostgresChatRepository` 保留现有 ChatRepository port 的具名 `moveConversation(command)` 入口，不产生第二个业务 writer。 |
-| 方案 A（采用） | 在现 `src/infrastructure/postgres/` 新建 `conversation-move.ts`，独占当前 Move 整事务、本人可见性重查、排序 Project→Conversation 锁、final receipt 写入、赢家读取及有界重试；新建 `conversation-move-lease.ts`，独占 Move 私有 deadline、PoolClient 获取/迟到归还、SQL/rollback/取消预算与未知 COMMIT 时销毁租约；现 `chat-repository-mappers.ts` 增纯同步 receipt Row 校验/转换。原 Chat Repository 方法只具名委派，不复制 SQL 或重放分支。 |
-| 方案 B（淘汰） | 仅外移 lease 而把事务/赢家读取留在 979 行 Chat Repository，或按行数拆成 `chat-part-N`：前者未解除业务变化耦合，后者没有稳定 owner/测试边界。也不新增目录、port、service、BaseRepository 或运行进程。 |
-| 粒度/依赖 | 两个新文件各有单一变化原因并复用现 `postgres/` 目录。`conversation-move.ts` 仅依现 port 的 `MoveConversationCommand/Result`、`PostgresBffDatabase`、本仓 pg lease 与既有 mapper；lease 只依现 DB/pg 和取消时钟，不含 Chat 授权/receipt 语义；mapper 无 I/O。Application/HTTP 不见 `pg` 或 `PoolClient`，不引入循环依赖。 |
-| 数据/API/删除项 | 不改 `database/schema.sql`、OpenAPI `7.1.0`、operation inventory、generated/pin、现 port 形状或任何表/索引。原文件中的 Move lease、事务、receipt 解码移走且删原实现，不留 alias、双路径或 fallback；SQL 字面值、受信 tenant/owner 与 current IAM 准入、scope/fingerprint、排序锁、4500ms 内部预算及对外 5 秒门、同键重放/冲突、unknown COMMIT `release(true)` 均须逐项保持。 |
-| 验证与阶段门 | 本 D0 不改源码或重跑资源。Root 已取得原文件 979 行越 800 的真实架构 RED；后继做等价迁移，Root 在同一最终源码上重跑该 800 行标准门、Node22 `pnpm check && pnpm format:check`、OpenAPI/Schema drift、本仓完整八文件 173 项真实 PG/Redis integration 与 9 项 Move 真 HTTP/PG（锁预算、same-key、故障回滚、未知 COMMIT 销毁/恢复）。所有受影响旧 Chat 查询及测试保持；独立审与 Root 集成通过后才提交。 |
+| §8 项             | R152 已裁决的目标与边界                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner/唯一 writer | BFF Conversation Move 的 PostgreSQL 实现；原 `PostgresChatRepository` 保留现有 ChatRepository port 的具名 `moveConversation(command)` 入口，不产生第二个业务 writer。                                                                                                                                                                                                                                                                        |
+| 方案 A（采用）    | 在现 `src/infrastructure/postgres/` 新建 `conversation-move.ts`，独占当前 Move 整事务、本人可见性重查、排序 Project→Conversation 锁、final receipt 写入、赢家读取及有界重试；新建 `conversation-move-lease.ts`，独占 Move 私有 deadline、PoolClient 获取/迟到归还、SQL/rollback/取消预算与未知 COMMIT 时销毁租约；现 `chat-repository-mappers.ts` 增纯同步 receipt Row 校验/转换。原 Chat Repository 方法只具名委派，不复制 SQL 或重放分支。 |
+| 方案 B（淘汰）    | 仅外移 lease 而把事务/赢家读取留在 979 行 Chat Repository，或按行数拆成 `chat-part-N`：前者未解除业务变化耦合，后者没有稳定 owner/测试边界。也不新增目录、port、service、BaseRepository 或运行进程。                                                                                                                                                                                                                                         |
+| 粒度/依赖         | 两个新文件各有单一变化原因并复用现 `postgres/` 目录。`conversation-move.ts` 仅依现 port 的 `MoveConversationCommand/Result`、`PostgresBffDatabase`、本仓 pg lease 与既有 mapper；lease 只依现 DB/pg 和取消时钟，不含 Chat 授权/receipt 语义；mapper 无 I/O。Application/HTTP 不见 `pg` 或 `PoolClient`，不引入循环依赖。                                                                                                                     |
+| 数据/API/删除项   | 不改 `database/schema.sql`、OpenAPI `7.1.0`、operation inventory、generated/pin、现 port 形状或任何表/索引。原文件中的 Move lease、事务、receipt 解码移走且删原实现，不留 alias、双路径或 fallback；SQL 字面值、受信 tenant/owner 与 current IAM 准入、scope/fingerprint、排序锁、4500ms 内部预算及对外 5 秒门、同键重放/冲突、unknown COMMIT `release(true)` 均须逐项保持。                                                                 |
+| 验证与阶段门      | 本 D0 不改源码或重跑资源。Root 已取得原文件 979 行越 800 的真实架构 RED；后继做等价迁移，Root 在同一最终源码上重跑该 800 行标准门、Node22 `pnpm check && pnpm format:check`、OpenAPI/Schema drift、本仓完整八文件 173 项真实 PG/Redis integration 与 9 项 Move 真 HTTP/PG（锁预算、same-key、故障回滚、未知 COMMIT 销毁/恢复）。所有受影响旧 Chat 查询及测试保持；独立审与 Root 集成通过后才提交。                                           |
 
 **不变性与未决。** R146 下节是已发布业务契约/原实现设计，不是要求永久把 Move SQL 留在 `chat-repository.ts`。R152 只变更内部文件边界；任何因提取而出现的 SQL/错误/预算语义差异应先作为行为缺陷修正，不借架构切片扩展 Project DELETE 或收敛其他标准门失败项。新文件具体导出名、测试增补的最小范围由后继源码门依真实 import/architecture 结果固定，当前不预先创造新公开 API。
 
@@ -1024,15 +1026,15 @@ Storage 是 scope/object lifecycle contract owner；BFF 只在既有 `contract/v
 
 **当前态/边界。** 已提交并推送的 `main 284b5e04c4c09759787ef239b1a19fcdcd5ed8fa` 是 public `7.1.0`、包含 Move 的 BFF producer；`main a68cbe55cde709f9b21f3d5803bfbd3ca5d14e2b` 是此前 public `7.0.0`、无 Move 的基线。唯一 OpenAPI 已加 `7.1.0` Move operation，并在独立 `src/http/routes/move-session.ts`、Chat service/repository 实现本人 Conversation 归属与同事务最终 receipt。既有其他操作的通用 `mutationTicket()` 仍在业务事务外，Move 专属路径不使用它。`database/schema.sql` 未改，`bff_conversation.project_ref` 可空且现有读写事实可为本人 Project ID 或 slug。Root Node22 `pnpm check && pnpm format:check` exit 0（741 pass、1 个既有资源 skip；contract 4 条已知 warning），聚焦真 HTTP/PG Move 9/9、完整八文件真 PG/Redis integration 173/173，详见 `docs/CURRENT.md` 的 R150 最终日志；Web pin 与浏览器消费尚待验，故 BFF producer 发布不等于用户界面可用。它不消费 Storage；Project DELETE 的 Storage 依赖、ScheduledTask 产品选择与 T-C05 继续开放。
 
-| §8 项 | Move 独立切片的放置裁决 |
-|---|---|
-| Owner/职责 | BFF Conversation 唯一写会话归属；Project 是同仓被校验的源/目标事实，Agent Run、Storage Asset、Scheduler Schedule 均非 Move writer。 |
-| 设计时入口/当前扩展 | 原 Chat route/authorization、Chat service/port/repository 与 `src/bootstrap/server.ts` 保持各自职责；当前实现另有 `src/http/move-session-input.ts` 和专用 `src/http/routes/move-session.ts`。外层 query `project_ref` 授权和通用事务外 receipt 均不充当 Move 权威。 |
-| 方案 A（采用） | 在现 Chat route/service/port 增具名 Move，在现 Chat repository 用一个 checked-out `PoolClient` 锁 Project→Conversation、更新归属并写现 receipt；HTTP 只解析和传递受信上下文。Conversation 是唯一被移动 aggregate。 |
-| 方案 B（淘汰） | 放入 Project repository 或 HTTP 先查源/目标再调用 Chat 更新：两 repository/route 难共享同一 client，出现 TOCTOU、反向锁和 receipt 分裂；不为 Move 新建一级模块、通用 bus、Storage outbox或机械 `chat/` 目录。 |
-| 粒度/依赖/删除项 | 扩现文件即可；Move 输入解析独立于路由，既有 strict JSON 原字节解析器移至中立 `src/infrastructure/raw-json.ts` 并机械更新消费者，不让 Chat 依赖 Platform client。禁止跨 owner SQL、复制 owner Proto、旧 API alias 或双轨 generic receipt；只对本操作绕开 `mutationTicket()` 的事务外 claim/after-response put，其余操作保持原路。 |
-| 数据/API | 单个 `POST /v1/sessions/{id}/move`，`id` 限 canonical Conversation ID；闭集 body 的 `target_project_id` 为 canonical Project ID 或 `null`；同事务更新 `project_ref`、最终 200 receipt，无新表/列/索引推荐。详见本仓 API_CONTRACT/DATA_MODEL 的 R146 段。 |
-| 验证 | OpenAPI/operation inventory/语义负例、Node22 纯门与 format 已通过；聚焦真 HTTP/PG Move 9/9、完整八文件 PG/Redis integration 173/173，contract 仍有 4 条已知 warning。BFF producer 已提交推送；Web consumer 仍是独立门。 |
+| §8 项               | Move 独立切片的放置裁决                                                                                                                                                                                                                                                                                                          |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner/职责          | BFF Conversation 唯一写会话归属；Project 是同仓被校验的源/目标事实，Agent Run、Storage Asset、Scheduler Schedule 均非 Move writer。                                                                                                                                                                                              |
+| 设计时入口/当前扩展 | 原 Chat route/authorization、Chat service/port/repository 与 `src/bootstrap/server.ts` 保持各自职责；当前实现另有 `src/http/move-session-input.ts` 和专用 `src/http/routes/move-session.ts`。外层 query `project_ref` 授权和通用事务外 receipt 均不充当 Move 权威。                                                              |
+| 方案 A（采用）      | 在现 Chat route/service/port 增具名 Move，在现 Chat repository 用一个 checked-out `PoolClient` 锁 Project→Conversation、更新归属并写现 receipt；HTTP 只解析和传递受信上下文。Conversation 是唯一被移动 aggregate。                                                                                                               |
+| 方案 B（淘汰）      | 放入 Project repository 或 HTTP 先查源/目标再调用 Chat 更新：两 repository/route 难共享同一 client，出现 TOCTOU、反向锁和 receipt 分裂；不为 Move 新建一级模块、通用 bus、Storage outbox或机械 `chat/` 目录。                                                                                                                    |
+| 粒度/依赖/删除项    | 扩现文件即可；Move 输入解析独立于路由，既有 strict JSON 原字节解析器移至中立 `src/infrastructure/raw-json.ts` 并机械更新消费者，不让 Chat 依赖 Platform client。禁止跨 owner SQL、复制 owner Proto、旧 API alias 或双轨 generic receipt；只对本操作绕开 `mutationTicket()` 的事务外 claim/after-response put，其余操作保持原路。 |
+| 数据/API            | 单个 `POST /v1/sessions/{id}/move`，`id` 限 canonical Conversation ID；闭集 body 的 `target_project_id` 为 canonical Project ID 或 `null`；同事务更新 `project_ref`、最终 200 receipt，无新表/列/索引推荐。详见本仓 API_CONTRACT/DATA_MODEL 的 R146 段。                                                                         |
+| 验证                | OpenAPI/operation inventory/语义负例、Node22 纯门与 format 已通过；聚焦真 HTTP/PG Move 9/9、完整八文件 PG/Redis integration 173/173，contract 仍有 4 条已知 warning。BFF producer 已提交推送；Web consumer 仍是独立门。                                                                                                          |
 
 **命令与运行中语义。** 当前 IAM 对首次及每次同键重放都先重新准入；tenant、actor、owner仅取受信上下文。Move 可在 Run streaming 时执行，但只改变后续 message/Run admission 看到的 Project 归属；既有 Run 继续原 admission context。Conversation ID、Message、Share、AG-UI stream/cursor、Run 与 Artifact association 原样保留；不得复用 `deleteConversation()`，不发 cancel、不停 consumer、不重启 stream、不复制 Storage 或 Agent 事实。新 key 且已在目标归属是合法 no-op，写该 key 的稳定 receipt，但不改 Conversation `updated_at` 或历史事实。
 
@@ -1052,14 +1054,14 @@ Storage 是 scope/object lifecycle contract owner；BFF 只在既有 `contract/v
 
 **原两项P1的Storage owner后继依赖，D0文本不算关闭。** Project-scope logical release**不会**释放成员Conversation的`conversation` scope Agent Artifact/Asset/Blob，清BFF `bff_conversation_artifact`关联也只关闭产品可见性。已审Storage目标新增具名`ReleaseConversationScope`：只受信`web-bff + conversation`、body仅`CommandIdentity`，同事务复用既有永久scope fence、全部Upload/staging cleanup、Asset/Blob lifecycle与receipt；合法Artifact保最小审计身份并清title，所有读/写/replay受released fence。Project release的目标增强同样在scope锁内先验证完整Artifact graph，再原子释放合法图；损坏/孤儿/跨scope/部分状态整事务`FAILED_PRECONDITION`回滚。当前行为尚非该目标：只有Storage发布真实contract/实现与graph正反例、fence/重放证明且BFF固定commit/digest，才进入BFF机器/源码门。损坏graph是显式**blocked integrity anomaly**，不自动当成功或GC等待；后续若owner事实经合法修复，再用原命令重投，本文不发明remediation RPC/表、事务外预检或逐项ListAssets绕过。D0不宣称全部项目可删除闭环，T-C05继续未验。
 
-| §8 项 | 本切片目标裁决 |
-|---|---|
-| Owner / 职责 | BFF Project 唯一写本地删除命令、Project/Conversation关系与公开 ACK；Storage 唯一写 project-scope Upload/Asset/Blob logical release；Agent/Scheduler 分别写 Run 与 Schedule。BFF 不读其他 owner SQL。 |
-| 放置方案 A（采用） | 现 `src/http/routes/live-bff.ts` 做薄入口，`src/application/project-service.ts`/Project port 承载用例，`src/infrastructure/postgres/project-repository.ts` 用一个 BFF `PoolClient` 持整个事务；现 Chat 删除 SQL 抽具名同-client helper供单会话和Project批量复用。独立的 Storage release 投递有具名 port、现 postgres 目录 outbox repository 与窄 Storage generated-client adapter，复用既有 BFF worker 生命周期。 |
-| 放置方案 B（淘汰） | 在 HTTP handler 内循环单会话 delete 或同步调用 Storage；这会在部分会话成功、网络超时和本地事务提交间失去原子性与恢复身份。也不新建 Project 一级模块、通用 cleanup bus、跨owner SQL或旧API fallback。 |
-| 粒度 / 依赖 | Project 事务、同-client Chat lifecycle helper、Storage outbox/worker 各有独立变化原因；HTTP 不持 PG 锁做网络调用，Storage 命令只能消费其发布后固定commit/digest的 Proto/generated。 |
-| 数据 / API / 删除项 | 单个 Project 墓碑、同事务 public receipt与锁定成员N条Conversation-scope加1条Project-scope稳定Storage命令；只在Storage正式发布后固定身份。会话沿现 tombstone，删除 Project instruction revisions/Project skill/task。独立 Library、ScheduledTask、Message/不可变审计 ledger 不级联删；不复制 Storage 可编辑 Proto/SQL。准确 schema、身份与 ACK 见本仓 DATA_MODEL/API_CONTRACT 新节。 |
-| 验证 | 先同一 OpenAPI/operation inventory/语义负例与真 HTTP+PG RED，再实现并跑 Node22 本仓门；Storage正式发布后才pin/两轮生成check/真实Connect+PG unknown ACK；Root独立资源验收，Web最后消费。 |
+| §8 项               | 本切片目标裁决                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner / 职责        | BFF Project 唯一写本地删除命令、Project/Conversation关系与公开 ACK；Storage 唯一写 project-scope Upload/Asset/Blob logical release；Agent/Scheduler 分别写 Run 与 Schedule。BFF 不读其他 owner SQL。                                                                                                                                                                                                              |
+| 放置方案 A（采用）  | 现 `src/http/routes/live-bff.ts` 做薄入口，`src/application/project-service.ts`/Project port 承载用例，`src/infrastructure/postgres/project-repository.ts` 用一个 BFF `PoolClient` 持整个事务；现 Chat 删除 SQL 抽具名同-client helper供单会话和Project批量复用。独立的 Storage release 投递有具名 port、现 postgres 目录 outbox repository 与窄 Storage generated-client adapter，复用既有 BFF worker 生命周期。 |
+| 放置方案 B（淘汰）  | 在 HTTP handler 内循环单会话 delete 或同步调用 Storage；这会在部分会话成功、网络超时和本地事务提交间失去原子性与恢复身份。也不新建 Project 一级模块、通用 cleanup bus、跨owner SQL或旧API fallback。                                                                                                                                                                                                              |
+| 粒度 / 依赖         | Project 事务、同-client Chat lifecycle helper、Storage outbox/worker 各有独立变化原因；HTTP 不持 PG 锁做网络调用，Storage 命令只能消费其发布后固定commit/digest的 Proto/generated。                                                                                                                                                                                                                               |
+| 数据 / API / 删除项 | 单个 Project 墓碑、同事务 public receipt与锁定成员N条Conversation-scope加1条Project-scope稳定Storage命令；只在Storage正式发布后固定身份。会话沿现 tombstone，删除 Project instruction revisions/Project skill/task。独立 Library、ScheduledTask、Message/不可变审计 ledger 不级联删；不复制 Storage 可编辑 Proto/SQL。准确 schema、身份与 ACK 见本仓 DATA_MODEL/API_CONTRACT 新节。                               |
+| 验证                | 先同一 OpenAPI/operation inventory/语义负例与真 HTTP+PG RED，再实现并跑 Node22 本仓门；Storage正式发布后才pin/两轮生成check/真实Connect+PG unknown ACK；Root独立资源验收，Web最后消费。                                                                                                                                                                                                                           |
 
 **本地线性化点。** 当前 IAM/fixed tenant/user 必须在每次请求（包括同键重放）先准入；DELETE path 只接受 canonical `project_id`，现 GET/PATCH 的 slug 读写保持，不能把 slug 变成删除 alias。请求零 body、无 query、单个有效 `Idempotency-Key`；route 的前置 find 不能代替事务内授权。事务先按可信 tenant+owner+canonical ID 锁 Project `FOR UPDATE`，再按稳定 ID 顺序锁该 Project 的 Conversation 和关联 ScheduledTask，与现 Chat 首次发 Run、ScheduledTask create 的 Project `FOR SHARE`互斥。Move 是**独立前置命令**：须保原 Conversation ID/Message，源/目标授权与 Project/Conversation 锁同事务；Move 先提交则会话不属于删除集合，DELETE 先提交则 Move 失败关闭。当前仅有未发布 Move 候选，Project DELETE 仍未实现；本 DELETE 文档门不冒充删除竞态已验。
 
@@ -1075,12 +1077,12 @@ Storage 是 scope/object lifecycle contract owner；BFF 只在既有 `contract/v
 
 **后续实施精确写集（本 D0 不授权写入）。** 先取得正式Storage producer commit/Proto/digest与真实行为门，再由唯一writer按RED→实现→本仓验收推进；ScheduledTask用户答复只阻挡其关联规则和最终公开DELETE，不阻挡可独立验证的机器/Chat/Storage后继切片。不能先生成未发布的消费者。
 
-| 切片 | 预期唯一写集与先行 RED |
-|---|---|
-| BFF 机器门 | `contract/openapi/v1/openapi.yaml`、operation inventory/`scripts/verify-openapi.ts` 及其直接 contract 负例；确认版本、202/状态查询、错误、no-store/request ID，不放宽既有操作。 |
-| BFF 本地事务 | `database/schema.sql`、`src/application/project-service.ts`、`src/application/ports/project-repository.ts`、`src/infrastructure/postgres/project-repository.ts`、现 Chat repository 同-client helper、`src/http/routes/live-bff.ts`；先建真 PG 回滚、并发 Move/create/run、越权与同key重放 RED。 |
-| BFF Storage 后继 | Project删除聚合receipt与N+1精确scope durable命令、窄Storage adapter/固定provenance generated artifact、现worker入口；先取得Storage owner的Conversation release与Project完整graph安全释放真实证明，再做lease/fence、重复/未知ACK、损坏graph blocked与重启恢复RED；producer未发布前不写生成物。 |
-| 独立依赖片 | Conversation Move 的候选 API/事务与测试待独立发布、ScheduledTask detach/fence 与对应 Scheduler replace 测试、Web 消费；各自另有机器/实现验收门，不在本 D0 伪装完成。 |
+| 切片             | 预期唯一写集与先行 RED                                                                                                                                                                                                                                                                           |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| BFF 机器门       | `contract/openapi/v1/openapi.yaml`、operation inventory/`scripts/verify-openapi.ts` 及其直接 contract 负例；确认版本、202/状态查询、错误、no-store/request ID，不放宽既有操作。                                                                                                                  |
+| BFF 本地事务     | `database/schema.sql`、`src/application/project-service.ts`、`src/application/ports/project-repository.ts`、`src/infrastructure/postgres/project-repository.ts`、现 Chat repository 同-client helper、`src/http/routes/live-bff.ts`；先建真 PG 回滚、并发 Move/create/run、越权与同key重放 RED。 |
+| BFF Storage 后继 | Project删除聚合receipt与N+1精确scope durable命令、窄Storage adapter/固定provenance generated artifact、现worker入口；先取得Storage owner的Conversation release与Project完整graph安全释放真实证明，再做lease/fence、重复/未知ACK、损坏graph blocked与重启恢复RED；producer未发布前不写生成物。    |
+| 独立依赖片       | Conversation Move 的候选 API/事务与测试待独立发布、ScheduledTask detach/fence 与对应 Scheduler replace 测试、Web 消费；各自另有机器/实现验收门，不在本 D0 伪装完成。                                                                                                                             |
 
 ## R133 当前切片 Root 验收事实（2026-10-03）
 
@@ -1124,20 +1126,20 @@ Root 已裁决独立评审的三个 P1：public 唯一目标是 breaking `7.0.0`
 
 ### §8 放置表、目录比较与阶段边界
 
-| 项 | 当前裁决 |
-|---|---|
-| Owner | Agent 唯一写 Run、Todo、Skill/tool/subagent、HITL 与 Delivery；BFF Chat 唯一写 durable AG-UI ledger、compact `RunProcessProjection` 与授权 public read model；Web 只读 BFF。 |
-| 当前事实 | HTTP4 mapper 仍读取 raw tool/subagent 且没有 Todo/Skill；public6 snapshot 的 Message/head/HITL/Delivery/watermark 已同一 RR，但没有安全过程。`agui-consumer-registration.ts` 在 `expected_run_id` 变化时把 `latest_run_start_sequence` 清 NULL，实际会在后继只 queued 时丢失上一 durable START。 |
-| 目标职责 | 固定 Agent5 owner artifact；严格 decode closed Todo/activity；同 source/frame/HWM 事务写 compact；snapshot 在其 `event_watermark` 上返回 selected Run 的 Todo 与 activity 第一页；后续 `/runs/{runId}/process` 从不可变 safe CUSTOM ledger 读取同 anchor 页。 |
-| 表方案 | 淘汰“扩 interaction Row”与“一个无界 JSON aggregate Row”。采用 `bff_agui_run_process`（每 Run START+Todo）和 `bff_agui_run_activity`（每 Run/activity 当前安全值）；interaction 表继续只管 HITL。 |
-| 锚定页来源 | 淘汰“只读 mutable latest activity Row”：并发更新会污染下一页。采用现不可变 `bff_agui_event` 中 `kokoro.activity.updated` frames，在 `public_sequence <= anchor` 取每 activity 截止 anchor 的最后值，按其首次 public sequence + activity_id 排序；compact activity Row只做当前态/完整性/GC引用。 |
-| decoder 放置 | 比较继续膨胀 `clients/agent/projection.ts` 与新 `clients/agent/process-state.ts`；采用后者，只承担 Agent5 Todo/activity 的 generated-schema 后语义门（Unicode scalar、原始 payload UTF-8、conditional presence）和 wire→安全内部值，mapper编排留原文件。单文件单变化原因，不新模块/目录。 |
-| reducer 放置 | 比较把规则塞进 `project-chat-event.ts` 与新 `application/agui/process-state.ts`；采用后者做无副作用 replace/replay/conflict reducer，projector只映射安全 CUSTOM。这里“replace”不含 phase/status 单向校验。 |
-| SQL helper 放置 | 比较继续加长 `agui-projection-repository.ts`/`chat-repository.ts` 与现 postgres 目录两个窄 helper；后继采用 `agui-process-projection.ts`（父事务内写/核验）和 `agui-process-page.ts`（RR anchor 查询）。helper只收 caller `PoolClient`，不建 pool、不 commit/rollback、不反向 import repository。 |
+| 项                 | 当前裁决                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner              | Agent 唯一写 Run、Todo、Skill/tool/subagent、HITL 与 Delivery；BFF Chat 唯一写 durable AG-UI ledger、compact `RunProcessProjection` 与授权 public read model；Web 只读 BFF。                                                                                                                                                                                                                                                                                                       |
+| 当前事实           | HTTP4 mapper 仍读取 raw tool/subagent 且没有 Todo/Skill；public6 snapshot 的 Message/head/HITL/Delivery/watermark 已同一 RR，但没有安全过程。`agui-consumer-registration.ts` 在 `expected_run_id` 变化时把 `latest_run_start_sequence` 清 NULL，实际会在后继只 queued 时丢失上一 durable START。                                                                                                                                                                                   |
+| 目标职责           | 固定 Agent5 owner artifact；严格 decode closed Todo/activity；同 source/frame/HWM 事务写 compact；snapshot 在其 `event_watermark` 上返回 selected Run 的 Todo 与 activity 第一页；后续 `/runs/{runId}/process` 从不可变 safe CUSTOM ledger 读取同 anchor 页。                                                                                                                                                                                                                      |
+| 表方案             | 淘汰“扩 interaction Row”与“一个无界 JSON aggregate Row”。采用 `bff_agui_run_process`（每 Run START+Todo）和 `bff_agui_run_activity`（每 Run/activity 当前安全值）；interaction 表继续只管 HITL。                                                                                                                                                                                                                                                                                   |
+| 锚定页来源         | 淘汰“只读 mutable latest activity Row”：并发更新会污染下一页。采用现不可变 `bff_agui_event` 中 `kokoro.activity.updated` frames，在 `public_sequence <= anchor` 取每 activity 截止 anchor 的最后值，按其首次 public sequence + activity_id 排序；compact activity Row只做当前态/完整性/GC引用。                                                                                                                                                                                    |
+| decoder 放置       | 比较继续膨胀 `clients/agent/projection.ts` 与新 `clients/agent/process-state.ts`；采用后者，只承担 Agent5 Todo/activity 的 generated-schema 后语义门（Unicode scalar、原始 payload UTF-8、conditional presence）和 wire→安全内部值，mapper编排留原文件。单文件单变化原因，不新模块/目录。                                                                                                                                                                                          |
+| reducer 放置       | 比较把规则塞进 `project-chat-event.ts` 与新 `application/agui/process-state.ts`；采用后者做无副作用 replace/replay/conflict reducer，projector只映射安全 CUSTOM。这里“replace”不含 phase/status 单向校验。                                                                                                                                                                                                                                                                         |
+| SQL helper 放置    | 比较继续加长 `agui-projection-repository.ts`/`chat-repository.ts` 与现 postgres 目录两个窄 helper；后继采用 `agui-process-projection.ts`（父事务内写/核验）和 `agui-process-page.ts`（RR anchor 查询）。helper只收 caller `PoolClient`，不建 pool、不 commit/rollback、不反向 import repository。                                                                                                                                                                                  |
 | 页输入/route/codec | route 留在现 `src/http/routes/chat.ts`，不新 router；新 `src/http/chat-process-page-input.ts` 只解析 exact query `watermark`、`cursor`、`limit`。比较复用会暴露 sequence 的 `conv/msg` base64 codec、另建持久 cursor 表、使用现 ledger opaque IDs：采用第三项；`watermark` 与 `cursor` 只接受 `agui_...` opaque wire ID，repository在当前 scope/run内解析 anchor与 after activity，不把 source/public sequence编码到wire。typed mapping留 `chat-service.ts`/port，不建新业务模块。 |
-| 依赖 | owner bytes→generated client→窄 decoder→纯 reducer→现 projection port/repository；public页只读 BFF ledger/compact。禁止 Agent source import、跨 owner SQL/FK、Redis或浏览器缓存事实、raw/generated类型穿透public。 |
-| 机器目标 | 公共唯一编辑点 `contract/openapi/v1/openapi.yaml`，版本一次切 `7.0.0`；SQL唯一编辑点 `database/schema.sql`。不保 public6 alias、HTTP4/5双pin或fallback。 |
-| 删除项 | GREEN 同片删除 e977 HTTP4 vendor/pin、旧 raw activity mapper和 raw Tool frames；不迁移历史 raw ledger为safe，不输出 args/result/name/description/error原文/path/stack/hidden reasoning。 |
+| 依赖               | owner bytes→generated client→窄 decoder→纯 reducer→现 projection port/repository；public页只读 BFF ledger/compact。禁止 Agent source import、跨 owner SQL/FK、Redis或浏览器缓存事实、raw/generated类型穿透public。                                                                                                                                                                                                                                                                 |
+| 机器目标           | 公共唯一编辑点 `contract/openapi/v1/openapi.yaml`，版本一次切 `7.0.0`；SQL唯一编辑点 `database/schema.sql`。不保 public6 alias、HTTP4/5双pin或fallback。                                                                                                                                                                                                                                                                                                                           |
+| 删除项             | GREEN 同片删除 e977 HTTP4 vendor/pin、旧 raw activity mapper和 raw Tool frames；不迁移历史 raw ledger为safe，不输出 args/result/name/description/error原文/path/stack/hidden reasoning。                                                                                                                                                                                                                                                                                           |
 
 ### 唯一状态、事务、幂等与故障规则
 
@@ -1206,16 +1208,16 @@ Root 已批准 public5.0.0 作为首次公共上线前 clean-slate breaking arti
 
 Root 明确决定创建端无 query：任何 query 参数（含重复、空值或 project_id）均 400，这是本次产品策略，不是由 OpenAPI 未列 query 自动推导。unknown body、auto_approve 非 boolean、create enabled/status 均 400；创建固定 active/enabled=true，后续暂停/启用仍走既有 PATCH。语法拒绝和项目权限检查均先于 generic receipt claim/replay；不可见/不存在/跨租户项目统一 404，不修改全站幂等。
 
-| 项 | 本片结论 |
-|---|---|
-| Owner / writer | BFF ScheduledTask；WIN02 唯一文件 writer，Root 唯一 Git/资源/集成 owner；独立审查员只读 |
-| 当前事实 | src/application/scheduled/input.ts 宽松解析；src/http/routes/live-bff.ts 预检 trim、create 原值；src/bootstrap/server.ts 先项目预检后 receipt；工作树起点干净 |
-| 目标职责 | 在原 create 入口关闭输入并复用一个已验证引用；不新增 API、模块、进程或跨 owner 访问 |
-| 目录比较 | 采用现 parser/route/server 和现测试文件；淘汰新通用 validation 层或新 Scheduled 模块目录，避免把一次 create 修复扩为全站重构 |
-| 粒度 / 依赖 | parser 只负责输入，HTTP 负责错误/准入次序，service/repository 保持事实事务；无依赖升级、框架/driver 类型上泄 |
-| 数据/API | 唯一 contract/openapi/v1/openapi.yaml 与 database/schema.sql；当前均冻结。后继 contract 删除 create enabled/status、约束 project_id 边缘空白、补现有 404；不改 PATCH |
-| 删除项 | 本阶段无；GREEN 删除 create silent-ignore 与重复引用解析，不增加 alias/fallback/双轨 |
-| 验证 | 本窗口 build + 两纯定点、语法检查、原前缀/非目标 hash；Root owned fixture 跑 business-store integration，再执行 contract/architecture/unit/schema/build 与完整回归 |
+| 项             | 本片结论                                                                                                                                                             |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner / writer | BFF ScheduledTask；WIN02 唯一文件 writer，Root 唯一 Git/资源/集成 owner；独立审查员只读                                                                              |
+| 当前事实       | src/application/scheduled/input.ts 宽松解析；src/http/routes/live-bff.ts 预检 trim、create 原值；src/bootstrap/server.ts 先项目预检后 receipt；工作树起点干净        |
+| 目标职责       | 在原 create 入口关闭输入并复用一个已验证引用；不新增 API、模块、进程或跨 owner 访问                                                                                  |
+| 目录比较       | 采用现 parser/route/server 和现测试文件；淘汰新通用 validation 层或新 Scheduled 模块目录，避免把一次 create 修复扩为全站重构                                         |
+| 粒度 / 依赖    | parser 只负责输入，HTTP 负责错误/准入次序，service/repository 保持事实事务；无依赖升级、框架/driver 类型上泄                                                         |
+| 数据/API       | 唯一 contract/openapi/v1/openapi.yaml 与 database/schema.sql；当前均冻结。后继 contract 删除 create enabled/status、约束 project_id 边缘空白、补现有 404；不改 PATCH |
+| 删除项         | 本阶段无；GREEN 删除 create silent-ignore 与重复引用解析，不增加 alias/fallback/双轨                                                                                 |
+| 验证           | 本窗口 build + 两纯定点、语法检查、原前缀/非目标 hash；Root owned fixture 跑 business-store integration，再执行 contract/architecture/unit/schema/build 与完整回归   |
 
 ### 事务、重放与失败恢复
 
@@ -1237,17 +1239,17 @@ Root 明确决定创建端无 query：任何 query 参数（含重复、空值�
 
 Root R62 已批准在现 postgres 目录抽取 interaction 持久化职责；当前 projection repository 739 行、普通 helper 165 行。R59 decoder、纯 revision/control policy、projection/RR/control 及重复 START 原子拒绝已形成工作树候选；真实资源及发布仍待 Root。基线 main / 759bfe0a8c521946cae31a74b6426f43b063bae1；以下 R48 原 body 逐字节保留，阶段状态以本前缀及 CURRENT 为准。
 
-| 项 | R62 已批准并实施的最小放置结论 |
-|---|---|
-| Owner | BFF Chat / durable AG-UI projection，WIN02 唯一 writer；Root 独占集成、资源与 Git |
-| 当前事实 | 现 projection/chat repository 共同读取完整 interaction；新增逻辑使原 projection repository 达 830 行，既有事务和锁边界不得搬迁 |
-| 目标职责 | src/infrastructure/postgres/agui-interaction-projection.ts 只承载 interaction Row 解码、source/ledger 完整性读取及事务内写入 |
-| 目录方案 | 采用现 postgres 目录普通 helper；淘汰拆旧 replay 的方案，避免扩大 cursor、分页和旧 replay 边界，不建目录/模块/进程 |
-| 粒度 | interaction 持久化是本片独立变化原因；原 repository 留 739 行，未以压行或放宽门禁达标 |
-| 依赖 | projection/chat repo → helper → 本仓 interaction 类型/纯 digest/严格 decoder；helper 不回 import repo，不管理 Pool 或提交事务 |
-| 数据/API | 无第二 schema/contract；父锁、stream/outbox 锁、lease、CAS、source/frame 和 commit 仍由原 repository 管理；读 helper 仅在已授权 RR 或原锁内使用 |
-| 删除项 | 原 projection repository 内对应 decode/read/write 函数已抽出，不保留重复实现/alias；旧 replay 保持原职责 |
-| 验证 | Node22 format/lint/typecheck、contract:check、test:architecture、schema:check、test、build；Root 冻结后完整真实 PG/Redis/HTTP；本窗口未执行资源门 |
+| 项       | R62 已批准并实施的最小放置结论                                                                                                                    |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner    | BFF Chat / durable AG-UI projection，WIN02 唯一 writer；Root 独占集成、资源与 Git                                                                 |
+| 当前事实 | 现 projection/chat repository 共同读取完整 interaction；新增逻辑使原 projection repository 达 830 行，既有事务和锁边界不得搬迁                    |
+| 目标职责 | src/infrastructure/postgres/agui-interaction-projection.ts 只承载 interaction Row 解码、source/ledger 完整性读取及事务内写入                      |
+| 目录方案 | 采用现 postgres 目录普通 helper；淘汰拆旧 replay 的方案，避免扩大 cursor、分页和旧 replay 边界，不建目录/模块/进程                                |
+| 粒度     | interaction 持久化是本片独立变化原因；原 repository 留 739 行，未以压行或放宽门禁达标                                                             |
+| 依赖     | projection/chat repo → helper → 本仓 interaction 类型/纯 digest/严格 decoder；helper 不回 import repo，不管理 Pool 或提交事务                     |
+| 数据/API | 无第二 schema/contract；父锁、stream/outbox 锁、lease、CAS、source/frame 和 commit 仍由原 repository 管理；读 helper 仅在已授权 RR 或原锁内使用   |
+| 删除项   | 原 projection repository 内对应 decode/read/write 函数已抽出，不保留重复实现/alias；旧 replay 保持原职责                                          |
+| 验证     | Node22 format/lint/typecheck、contract:check、test:architecture、schema:check、test、build；Root 冻结后完整真实 PG/Redis/HTTP；本窗口未执行资源门 |
 
 ---
 
@@ -1261,17 +1263,17 @@ Agent main e977923ea9992cbddaf0cdbc6c8f8d23b3af120e 已由 Root 发布。唯一 
 
 BFF 当前 contract/dependencies/agent-http.json 仍固定 Agent3 f3be3b97/e9f0a543；生成器及 config 同样固定旧 commit，并只生成 launch/session-events，不生成 control。public canonical OpenAPI 仍为3.0.0。内部 head 候选已写 queued/交接/RR/head-aware replay，但 ChatApplicationService 仍发 active_run 与顶层固定 pending_pauses=[]，旧 mapper 仍把 interaction 当单项 awaiting，不能宣称完整 pause。
 
-| 项 | 当前设计结论 |
-|---|---|
-| Owner | Agent 唯一拥有 Run/native pause/decision consumption；BFF Chat 唯一写 durable public projection、FIFO head、完整 interaction read model；Web 只消费发布的 BFF artifact |
-| 当前事实 | 现 application/agui、clients/agent、postgres、Chat service/ports 与 owner canonical/vendor/generated 路径；五内部源、R46/R43 与原 dirty 测试冻结；未提交变更不覆盖 |
-| 目标职责 | snapshot 四态/full pause 与 watermark 同 RR；同一 durable ledger 支撑 AG-UI/replay/restart；resume 携带整个当前 pause 的 decisions 与 required locator，不以 ACK 改状态 |
-| 目录方案 | 扩展现 Chat/AG-UI/client/repository 边界，并在现目录放普通 decoder/reducer/collection validator 文件；淘汰新 modules/chat/hitl 顶层搬迁与 stream projection_state 塞任意状态，前者无必要重构、后者混淆 projector cache 与 durable run fact |
-| 粒度 | 新普通文件仅承担外部 interaction decode、纯 revision transition、纯 resume collection policy 三个独立变化原因；Service 编排、Repository SQL、wire schema 各保现角色，不建新目录/进程/Repository abstraction |
-| 依赖 | owner HTTP/generated→窄 decoder→内部 typed projection→本仓 Repository；Web→BFF；禁止业务 import sibling Agent 源码/数据库、框架/Pool 类型上泄、runtime import scripts、直接把 generated wire 当本仓 Row |
-| 数据/API | 选本仓 run-scoped 最新完整 interaction 投影一表，唯一 canonical database/schema.sql；public4 原 /v1 corrective；tenant/subject/project 来自可信授权；既有 durable receipt/lease/fence、source ledger 与 opaque cursor 保持 |
-| 删除项 | 切换片删除旧 Agent3 vendor/pin/event-protocol split pin、旧 interaction/tool.awaiting_approval adapter、active_run/ChatActiveRun/顶层固定 pending_pauses 及其消费者；不保留 alias、双枚举、旧3 fallback；保留通用 AG-UI Message/Tool 事件和历史 source guards |
-| 验证 | RED→机器/pin+DDL+source 同片→Root 真 PG/HTTP/SSE/重启与旧完整投影矩阵→完整 lint/typecheck/contract/schema/architecture/test/build→独立审/Git 发布→Web repin/fresh 激活 |
+| 项       | 当前设计结论                                                                                                                                                                                                                                                  |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner    | Agent 唯一拥有 Run/native pause/decision consumption；BFF Chat 唯一写 durable public projection、FIFO head、完整 interaction read model；Web 只消费发布的 BFF artifact                                                                                        |
+| 当前事实 | 现 application/agui、clients/agent、postgres、Chat service/ports 与 owner canonical/vendor/generated 路径；五内部源、R46/R43 与原 dirty 测试冻结；未提交变更不覆盖                                                                                            |
+| 目标职责 | snapshot 四态/full pause 与 watermark 同 RR；同一 durable ledger 支撑 AG-UI/replay/restart；resume 携带整个当前 pause 的 decisions 与 required locator，不以 ACK 改状态                                                                                       |
+| 目录方案 | 扩展现 Chat/AG-UI/client/repository 边界，并在现目录放普通 decoder/reducer/collection validator 文件；淘汰新 modules/chat/hitl 顶层搬迁与 stream projection_state 塞任意状态，前者无必要重构、后者混淆 projector cache 与 durable run fact                    |
+| 粒度     | 新普通文件仅承担外部 interaction decode、纯 revision transition、纯 resume collection policy 三个独立变化原因；Service 编排、Repository SQL、wire schema 各保现角色，不建新目录/进程/Repository abstraction                                                   |
+| 依赖     | owner HTTP/generated→窄 decoder→内部 typed projection→本仓 Repository；Web→BFF；禁止业务 import sibling Agent 源码/数据库、框架/Pool 类型上泄、runtime import scripts、直接把 generated wire 当本仓 Row                                                       |
+| 数据/API | 选本仓 run-scoped 最新完整 interaction 投影一表，唯一 canonical database/schema.sql；public4 原 /v1 corrective；tenant/subject/project 来自可信授权；既有 durable receipt/lease/fence、source ledger 与 opaque cursor 保持                                    |
+| 删除项   | 切换片删除旧 Agent3 vendor/pin/event-protocol split pin、旧 interaction/tool.awaiting_approval adapter、active_run/ChatActiveRun/顶层固定 pending_pauses 及其消费者；不保留 alias、双枚举、旧3 fallback；保留通用 AG-UI Message/Tool 事件和历史 source guards |
+| 验证     | RED→机器/pin+DDL+source 同片→Root 真 PG/HTTP/SSE/重启与旧完整投影矩阵→完整 lint/typecheck/contract/schema/architecture/test/build→独立审/Git 发布→Web repin/fresh 激活                                                                                        |
 
 ### 四态、完整 revision 与事务
 
@@ -1301,16 +1303,16 @@ interaction_digest 仅绑定 owner 完整六字段 full state：对象键递归�
 
 ### 精确后继文件集（本轮全部未授权写）
 
-| 切片 | 精确路径与变化原因 |
-|---|---|
-| 最小先 RED | 现 test/agent-control-adapter.test.ts（required revision/ref、五 decision shape、整集合与 ACK 无状态效果）、test/agui-source-page.test.mjs（HTTP4 interaction.state 严格 decode/拒旧 interaction）、test/agui.test.ts（一完整 CUSTOM）、test/chat-service.test.ts（四态公开 snapshot）；现 test/agui-projection.integration.mjs、test/agui-http.integration.mjs（真实完整 revision/RR/rollback/restart/control） |
-| 公共机器 | contract/openapi/v1/openapi.yaml：public4、ExecutionHead/PendingPause/ResumeDecision/RunResumeRequest/interaction CUSTOM 值与示例；contract/tests/v1-operations.json 仅批准 breaking baseline，operation/path/permission 不变；contract/README.md、README.md、INDEX.md、docs/INDEX.md 同步唯一入口 |
-| Agent 固定消费 | 新 contract/vendor/kokoro-agent/e977923ea9992cbddaf0cdbc6c8f8d23b3af120e/{openapi.json,provenance.json} 只拷发布 bytes；删除两旧 commit vendor；现 openapi-ts.agent.config.ts、scripts/generate-agent-http-client.mjs、contract/dependencies/agent-http.json 同时固定 HTTP4/provenance，生成 control+launch+session-events，删除仅 delivery.created 的旧 split event pin；src/generated/agent-http/** 只由现生成器重建，不手改 |
-| 窄 source decoder | 现 clients/agent/{projection,types,http-wire,control,control-receipt,index}.ts；新 src/infrastructure/clients/agent/interaction-state.ts 只做 generated schema+owner 跨字段校验；projector-source.ts 保 continuity/错误/预算接线，仅真正必要的 typed source 变化，不改 Scheduled 业务状态机 |
-| 纯投影与 ports | 新 src/application/agui/interaction-state.ts 只做全量 revision 校验/替换；现 application/agui/{project-chat-event,project-session-events}.ts 与 ports/agui-projection-repository.ts 携带内部 typed interaction mutation；现 application/ports/chat-repository.ts 扩展 full head/窄 resume read，并删除 ChatActiveRun |
-| 持久化 | database/schema.sql 一新 run interaction 投影表；现 postgres/{agui-projection-repository,chat-repository,agui-consumer-repository}.ts 分别原子写/RR读与delete/保护GC；不重写已冻 outbox、cancellation、artifact helper 或 Scheduled 表 |
-| 公开映射/control | 现 src/contracts/chat.ts、src/application/chat-service.ts、src/http/routes/agent.ts、src/bootstrap/server.ts；新 src/application/chat-run-control.ts 是纯 policy；server 仅传现 Chat service 给 route，reuse receipt/auth/HTTP transport，不新增进程或隐式 network |
-| schema/contract/回归 | 现 test/schema-governance.test.mjs、test/architecture.test.ts、test/agent-http-wire.test.mjs、test/agui-projector.test.mjs、test/agui-replay.test.mjs、test/contract/openapi-contract.test.mjs、test/contract-governance.test.mjs；三 integration fixture 的 TABLES/零写 fingerprint/own cleanup 仅补新表。Scheduled 仅检查 shared HTTP4 generated consumer，若发现必需变更先报告，不扩大 owner 业务写集 |
+| 切片                 | 精确路径与变化原因                                                                                                                                                                                                                                                                                                                                                                                                             |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 最小先 RED           | 现 test/agent-control-adapter.test.ts（required revision/ref、五 decision shape、整集合与 ACK 无状态效果）、test/agui-source-page.test.mjs（HTTP4 interaction.state 严格 decode/拒旧 interaction）、test/agui.test.ts（一完整 CUSTOM）、test/chat-service.test.ts（四态公开 snapshot）；现 test/agui-projection.integration.mjs、test/agui-http.integration.mjs（真实完整 revision/RR/rollback/restart/control）               |
+| 公共机器             | contract/openapi/v1/openapi.yaml：public4、ExecutionHead/PendingPause/ResumeDecision/RunResumeRequest/interaction CUSTOM 值与示例；contract/tests/v1-operations.json 仅批准 breaking baseline，operation/path/permission 不变；contract/README.md、README.md、INDEX.md、docs/INDEX.md 同步唯一入口                                                                                                                             |
+| Agent 固定消费       | 新 contract/vendor/kokoro-agent/e977923ea9992cbddaf0cdbc6c8f8d23b3af120e/{openapi.json,provenance.json} 只拷发布 bytes；删除两旧 commit vendor；现 openapi-ts.agent.config.ts、scripts/generate-agent-http-client.mjs、contract/dependencies/agent-http.json 同时固定 HTTP4/provenance，生成 control+launch+session-events，删除仅 delivery.created 的旧 split event pin；src/generated/agent-http/** 只由现生成器重建，不手改 |
+| 窄 source decoder    | 现 clients/agent/{projection,types,http-wire,control,control-receipt,index}.ts；新 src/infrastructure/clients/agent/interaction-state.ts 只做 generated schema+owner 跨字段校验；projector-source.ts 保 continuity/错误/预算接线，仅真正必要的 typed source 变化，不改 Scheduled 业务状态机                                                                                                                                    |
+| 纯投影与 ports       | 新 src/application/agui/interaction-state.ts 只做全量 revision 校验/替换；现 application/agui/{project-chat-event,project-session-events}.ts 与 ports/agui-projection-repository.ts 携带内部 typed interaction mutation；现 application/ports/chat-repository.ts 扩展 full head/窄 resume read，并删除 ChatActiveRun                                                                                                           |
+| 持久化               | database/schema.sql 一新 run interaction 投影表；现 postgres/{agui-projection-repository,chat-repository,agui-consumer-repository}.ts 分别原子写/RR读与delete/保护GC；不重写已冻 outbox、cancellation、artifact helper 或 Scheduled 表                                                                                                                                                                                         |
+| 公开映射/control     | 现 src/contracts/chat.ts、src/application/chat-service.ts、src/http/routes/agent.ts、src/bootstrap/server.ts；新 src/application/chat-run-control.ts 是纯 policy；server 仅传现 Chat service 给 route，reuse receipt/auth/HTTP transport，不新增进程或隐式 network                                                                                                                                                             |
+| schema/contract/回归 | 现 test/schema-governance.test.mjs、test/architecture.test.ts、test/agent-http-wire.test.mjs、test/agui-projector.test.mjs、test/agui-replay.test.mjs、test/contract/openapi-contract.test.mjs、test/contract-governance.test.mjs；三 integration fixture 的 TABLES/零写 fingerprint/own cleanup 仅补新表。Scheduled 仅检查 shared HTTP4 generated consumer，若发现必需变更先报告，不扩大 owner 业务写集                       |
 
 ### R48 GC公平性最小真实RED（仅后继精准授权，当前不改测试）
 
@@ -1320,15 +1322,15 @@ interaction_digest 仅绑定 owner 完整六字段 full state：对象键递归�
 
 Root 日志 /tmp/kokoro-bff-projection-r48-root-regression.log 实际21passed/9failed/0skip、1661.549ms；四 authority 例全通过。这九项是当前失败证据，非“全部 fixture”；WIN03 已交只读归因：7项 queued/head-aware 批准语义迁移、1项eligible-later缺真实父、1项publichead缺能力；仍待 Root独立审与精确写卡，未修改原断言。另发现上述GC公平性独立缺口，不把所有GC失败归fixture。下列是拟批准的语义迁移，不是本轮已修改：
 
-| 原失败位置（test/agui-projection.integration.mjs） | 后继批准动作与仍须保持的断言 |
-|---|---|
-| 898 draft/tool/final replay；1311 page boundary | 把真实 queued CUSTOM 纳入精确完整 frame 列表和分页/cursor，显式核 name/value/run/sequence；原全文、Tool、RUN_STARTED/FINISHED 与丢帧/重复断言保持，不通过过滤 CUSTOM 恢复旧计数 |
-| 1652 retention 长度/旧 offset；1789 interleaved 列表 | 从实际 enqueue/handoff 列表逐帧核 queued 与 START/terminal；按合法新的 sequence 校准 GC floor/tombstone/cursor；interleaved START 引用不完整仍禁止GC，不能放宽成非零任意值 |
-| 1830 eligible-later 0 vs 1 | 现 fixture 无父 Conversation，按新 authority 本应不进入GC；后继仅给合法 control 建真实同 tenant parent/subject，保 inert starvation 及2帧回收，另保 R46 orphan 零写负例。该例 fixture 归因与独立 effective-boundary 算法缺口分别处理，不把所有GC失败归 fixture |
-| 1939 newer-run marker | B queued 存在时有效 replay terminal 必须 null，DB 历史 A terminal 仍保留；明确新 head/cursor，原 old-source guard/正式B START/terminal断言保持，禁止清历史 marker 或提前 launch B |
-| 2091 stale-projector replay | 纳入 queued frame，保原 stale lease/version commit 拒绝、source/frame/cursor零非法写；若 fence 行为也失败则先修生产，不删 fenced 断言 |
-| 2285 invalid mixed batch frame_count | queued 已在故障前存在，应与故障前完整 fingerprint 相同而非硬编码0；source HWM不动、整批 source/assistant/interaction/ledger零新增全部保持 |
-| 2493 R43 public head | 等真正 public4/full pause 源码映射后原 R43 assertion 原样转绿；RR barrier 与新旧 head/cursor/Message一致不降级；另外两文件 R43 queued回滚/重启后公开 head 后段同样保留 |
+| 原失败位置（test/agui-projection.integration.mjs）   | 后继批准动作与仍须保持的断言                                                                                                                                                                                                                                   |
+| ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 898 draft/tool/final replay；1311 page boundary      | 把真实 queued CUSTOM 纳入精确完整 frame 列表和分页/cursor，显式核 name/value/run/sequence；原全文、Tool、RUN_STARTED/FINISHED 与丢帧/重复断言保持，不通过过滤 CUSTOM 恢复旧计数                                                                                |
+| 1652 retention 长度/旧 offset；1789 interleaved 列表 | 从实际 enqueue/handoff 列表逐帧核 queued 与 START/terminal；按合法新的 sequence 校准 GC floor/tombstone/cursor；interleaved START 引用不完整仍禁止GC，不能放宽成非零任意值                                                                                     |
+| 1830 eligible-later 0 vs 1                           | 现 fixture 无父 Conversation，按新 authority 本应不进入GC；后继仅给合法 control 建真实同 tenant parent/subject，保 inert starvation 及2帧回收，另保 R46 orphan 零写负例。该例 fixture 归因与独立 effective-boundary 算法缺口分别处理，不把所有GC失败归 fixture |
+| 1939 newer-run marker                                | B queued 存在时有效 replay terminal 必须 null，DB 历史 A terminal 仍保留；明确新 head/cursor，原 old-source guard/正式B START/terminal断言保持，禁止清历史 marker 或提前 launch B                                                                              |
+| 2091 stale-projector replay                          | 纳入 queued frame，保原 stale lease/version commit 拒绝、source/frame/cursor零非法写；若 fence 行为也失败则先修生产，不删 fenced 断言                                                                                                                          |
+| 2285 invalid mixed batch frame_count                 | queued 已在故障前存在，应与故障前完整 fingerprint 相同而非硬编码0；source HWM不动、整批 source/assistant/interaction/ledger零新增全部保持                                                                                                                      |
+| 2493 R43 public head                                 | 等真正 public4/full pause 源码映射后原 R43 assertion 原样转绿；RR barrier 与新旧 head/cursor/Message一致不降级；另外两文件 R43 queued回滚/重启后公开 head 后段同样保留                                                                                         |
 
 以上迁移须绑定发布 cut 的行为定义，先在原冻结基线记录 RED，再独立审准精确 assert/fixture/cleanup 行；不得更新快照吞掉未知失败、改 selector/skip/xfail、删除旧安全/一致性保障。
 
@@ -1480,13 +1482,13 @@ public `pending_pauses`必须与head/state（含resuming submitted marker）/wat
 expected fence，commit 后才跨 Agent；2xx 只是 `admitted`；受信 terminal source 即使早于 HTTP ACK，也把精确 head 与
 assistant/AG-UI/stream 原子结算为 `terminal` 并释放 expected，后继才可安装自己的 fence。
 
-| 项 | 结论 |
-| --- | --- |
-| Owner | BFF Chat 唯一拥有 Conversation Message、dispatch queue 与 durable AG-UI projection；Agent 继续拥有 Run terminal source fact。 |
-| 采用 | 扩展现 Chat dispatch domain/port/dispatcher、Agent delivery client、PostgreSQL outbox/consumer registration/AG-UI projection 与 canonical schema；这些已拥有 immutable launch lineage、lease fence及terminal投影。 |
-| 淘汰 | 不建第二 outbox、通用 queue service、Redis gate、进程内 mutex或Web过滤；它们无法与Message/AG-UI原子结算。 |
+| 项        | 结论                                                                                                                                                                                                                                                                |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner     | BFF Chat 唯一拥有 Conversation Message、dispatch queue 与 durable AG-UI projection；Agent 继续拥有 Run terminal source fact。                                                                                                                                       |
+| 采用      | 扩展现 Chat dispatch domain/port/dispatcher、Agent delivery client、PostgreSQL outbox/consumer registration/AG-UI projection 与 canonical schema；这些已拥有 immutable launch lineage、lease fence及terminal投影。                                                  |
+| 淘汰      | 不建第二 outbox、通用 queue service、Redis gate、进程内 mutex或Web过滤；它们无法与Message/AG-UI原子结算。                                                                                                                                                           |
 | Scheduled | 现 `routes/scheduler.ts` 以独立 `bff_idempotency_receipt` 直接 launch `scheduled:<task_id>`，不进入Conversation/Message/Chat AG-UI gate；它仍缺同 scheduled session 的 terminal FIFO，必须作为独立P0任务由Scheduled receiver/Agent source边界闭环，本片不伪称覆盖。 |
-| API | public OpenAPI、HTTP 202 receipt、Agent owner wire、generated/vendor与lockfile不变；不偷发queued/retry/required parent或Agent 4 contract。 |
+| API       | public OpenAPI、HTTP 202 receipt、Agent owner wire、generated/vendor与lockfile不变；不偷发queued/retry/required parent或Agent 4 contract。                                                                                                                          |
 
 ### 状态、结果分类与恢复
 
@@ -1562,17 +1564,17 @@ installer 自动修复。
 
 ### 放置表
 
-| 项 | ROLE2 结论 |
-| --- | --- |
-| Owner | `kokoro-bff` Chat 模块拥有 Conversation/Message public projection 与 `bff_message`，是唯一 writer；Root 负责发布编排、真实 PostgreSQL 与最终 Git。 |
+| 项       | ROLE2 结论                                                                                                                                                                                                                         |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner    | `kokoro-bff` Chat 模块拥有 Conversation/Message public projection 与 `bff_message`，是唯一 writer；Root 负责发布编排、真实 PostgreSQL 与最终 Git。                                                                                 |
 | 当前事实 | 唯一 INSERT 路径只写 `user`/`assistant`；canonical SQL、`src/domain/chat/message.ts`、`src/contracts/chat.ts` 和 OpenAPI 多声明 `system`；row mapper 未独立拒绝数据库非法角色；本轮开始时四份 docs 另有未验 retry 候选，必须隔离。 |
-| 目标职责 | 既有 Message 事实在 fresh schema、domain、public TypeScript 与 canonical OpenAPI 中共享精确两角色集合；公开 API 仍是现 `/v1` Chat operation，不增加 operation。 |
-| 目录方案 | 采用现有 schema/domain/public contract/OpenAPI 与两项现有测试；相比新建 role 目录、通用 parser 或第二 contract，此问题只是既有声明漂移，后者会制造重复事实源和空职责。 |
-| 粒度 | 后续只修改现有声明与现有测试，不新建文件、目录、模块或进程；每个文件仍承担原变化原因。 |
-| 依赖 | 允许 Chat route/application → domain/public type → PostgreSQL adapter 的既有方向；禁止 Web/Agent 源码 import、第二 role 常量、generated/vendor 手改与跨 owner 数据访问。 |
-| 数据/API | fresh `kokoro_bff` schema 的命名 CHECK 只接受两角色；tenant/事务/幂等/Redis/查询与 writer 不变。public 目标 `3.0.0` 同 `/v1` 是一次 pre-release corrective breaking 例外，不称兼容；正式发布后的 breaking 仍要求 `/v2`。 |
-| 删除项 | 后续删除 SQL/domain/public/OpenAPI 中无 producer 的 `system` 声明；不保留 alias、fallback、过滤、`system -> assistant` 映射或 ALTER/migration 兼容链。 |
-| 验证 | 先定点 OpenAPI/schema RED，再改声明 GREEN；Root 随后用同一现 PostgreSQL 实例/role、随机临时数据库和 fresh `kokoro_bff` schema 跑 apply/check，最后执行 contract、architecture、lint、typecheck、build、full test。 |
+| 目标职责 | 既有 Message 事实在 fresh schema、domain、public TypeScript 与 canonical OpenAPI 中共享精确两角色集合；公开 API 仍是现 `/v1` Chat operation，不增加 operation。                                                                    |
+| 目录方案 | 采用现有 schema/domain/public contract/OpenAPI 与两项现有测试；相比新建 role 目录、通用 parser 或第二 contract，此问题只是既有声明漂移，后者会制造重复事实源和空职责。                                                             |
+| 粒度     | 后续只修改现有声明与现有测试，不新建文件、目录、模块或进程；每个文件仍承担原变化原因。                                                                                                                                             |
+| 依赖     | 允许 Chat route/application → domain/public type → PostgreSQL adapter 的既有方向；禁止 Web/Agent 源码 import、第二 role 常量、generated/vendor 手改与跨 owner 数据访问。                                                           |
+| 数据/API | fresh `kokoro_bff` schema 的命名 CHECK 只接受两角色；tenant/事务/幂等/Redis/查询与 writer 不变。public 目标 `3.0.0` 同 `/v1` 是一次 pre-release corrective breaking 例外，不称兼容；正式发布后的 breaking 仍要求 `/v2`。           |
+| 删除项   | 后续删除 SQL/domain/public/OpenAPI 中无 producer 的 `system` 声明；不保留 alias、fallback、过滤、`system -> assistant` 映射或 ALTER/migration 兼容链。                                                                             |
+| 验证     | 先定点 OpenAPI/schema RED，再改声明 GREEN；Root 随后用同一现 PostgreSQL 实例/role、随机临时数据库和 fresh `kokoro_bff` schema 跑 apply/check，最后执行 contract、architecture、lint、typecheck、build、full test。                 |
 
 ### 状态、失败恢复与阶段门
 
@@ -1582,7 +1584,6 @@ Root 自有临时资源，不触碰当前用户 schema。已有数据库若含�
 schema/domain/public/OpenAPI GREEN。待执行命令：`pnpm contract:check`、`pnpm test:architecture`、定点两测试、
 `pnpm lint`、`pnpm typecheck`、`pnpm build`、`pnpm test`，以及由 Root 提供随机临时库 URL 的
 `pnpm db:apply-schema`/真实 PostgreSQL CHECK；当前均未作为本阶段通过证据。
-
 
 ## BFF-RETRY-DESIGN：失败 assistant 的正式原消息重试（2026-09-30；仅设计，未实施）
 
@@ -1612,17 +1613,17 @@ user origin、native pre-turn checkpoint、新 run fence 和单一 HumanMessage 
 
 ### §8 放置表
 
-| 项 | 结论 |
-| --- | --- |
-| Owner | `kokoro-bff` Chat 能力是 public retry command、Message/outbox/AG-UI 事务的唯一 writer；`kokoro-agent` 唯一拥有 Run/checkpoint/native history 的 retry-attempt 语义。 |
+| 项       | 结论                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner    | `kokoro-bff` Chat 能力是 public retry command、Message/outbox/AG-UI 事务的唯一 writer；`kokoro-agent` 唯一拥有 Run/checkpoint/native history 的 retry-attempt 语义。                                                                                                                                                                                                                                                                                                                                                          |
 | 当前事实 | 入口在 `src/bootstrap/server.ts` 与 `src/http/routes/chat.ts`；授权预检在 `chat-authorization.ts`；命令在 `chat-turn-service.ts`；原子写在 `agent-dispatch-outbox-repository.ts`；canonical 表是 `bff_conversation`/`bff_message`/`bff_agent_dispatch_outbox`/`bff_agui_stream`。BFF 还有第二个 Agent `/v1/runs` producer：`src/http/routes/scheduler.ts` 通过 `src/infrastructure/clients/agent/launch.ts` 生成 normal Scheduler launch，并由 `scheduler-dispatch-receipt-repository.ts` 持久化/恢复快照。现无 retry route。 |
-| 目标职责 | 对当前 IAM admission 下的本人 private Conversation，把最新、已验 Agent failure 且 `retryable=true` 的 assistant 变为一个新 attempt；公开 API 只是指定 retry target 的 command，不接受内容或配置。 |
-| 目录方案 | **采用**：扩展现有 Chat route/service/outbox repository/domain payload，因为它们已共同拥有 submit 的锁、序列、幂等和 worker 边界。**淘汰**：新建 `retry/` 目录或 retry 表，会复制 Chat 状态机与 receipt。**淘汰**：改写旧 run/outbox 或新建伪 user，会破坏历史、identity 与审计。 |
-| 粒度 | 扩展现有文件，不新建目录。retry 是 `ChatTurnApplicationService` 的第二个 command，事务是现 repository 的第二个 atomic method；不抽象 BaseRepository/command bus/通用 retry helper。 |
-| 依赖 | HTTP 只依赖 Chat application port；application 只依赖 domain/port/stable-id；PostgreSQL 实现事务；worker 事务外调用 fixed Agent generated contract。BFF 中 Chat outbox delivery 和 Scheduler receiver 是同一 Agent owner contract 的两个 sender，必须同片切换，不把 Scheduler 留给“后续其他仓”。禁止 BFF 读 Agent DB/checkpoint，禁止 Web 直连 Agent，禁止用 generic HTTP receipt 拼接业务事实。 |
-| 数据/API | public `3.1.0`、HTTP `/v1` 不变；新 POST 只接受 `{}` 与唯一 `Idempotency-Key`，202 复用现 receipt。零 BFF DDL；复用 Message/outbox/stream 并在一个事务中新建 assistant/run/outbox 和 consumer fence。tenant/actor 只来自受信 admission。 |
-| 删除项 | Agent 发布后，新 HTTP owner pin 在同一切片替换当前 `f3be…` HTTP vendor/generated 来源，删除旧 HTTP vendor 目录；独立 `delivery.created` 的 `486adb…` event-protocol pin 保持。不保留无 `retry_of_run_id` 的 wire，不接受旧 Chat payload v2 或 Scheduler receipt v2，不增 alias/fallback。 |
-| 验证 | 先机器契约与纯测试 RED，再在固定 owner artifact 上 GREEN；Node 22 运行 contract/architecture/unit/build，Root 独占随机 PostgreSQL fixture 串行运行真事务/HTTP/worker/Agent owner 矩阵。本文档阶段不运行这些命令。 |
+| 目标职责 | 对当前 IAM admission 下的本人 private Conversation，把最新、已验 Agent failure 且 `retryable=true` 的 assistant 变为一个新 attempt；公开 API 只是指定 retry target 的 command，不接受内容或配置。                                                                                                                                                                                                                                                                                                                             |
+| 目录方案 | **采用**：扩展现有 Chat route/service/outbox repository/domain payload，因为它们已共同拥有 submit 的锁、序列、幂等和 worker 边界。**淘汰**：新建 `retry/` 目录或 retry 表，会复制 Chat 状态机与 receipt。**淘汰**：改写旧 run/outbox 或新建伪 user，会破坏历史、identity 与审计。                                                                                                                                                                                                                                             |
+| 粒度     | 扩展现有文件，不新建目录。retry 是 `ChatTurnApplicationService` 的第二个 command，事务是现 repository 的第二个 atomic method；不抽象 BaseRepository/command bus/通用 retry helper。                                                                                                                                                                                                                                                                                                                                           |
+| 依赖     | HTTP 只依赖 Chat application port；application 只依赖 domain/port/stable-id；PostgreSQL 实现事务；worker 事务外调用 fixed Agent generated contract。BFF 中 Chat outbox delivery 和 Scheduler receiver 是同一 Agent owner contract 的两个 sender，必须同片切换，不把 Scheduler 留给“后续其他仓”。禁止 BFF 读 Agent DB/checkpoint，禁止 Web 直连 Agent，禁止用 generic HTTP receipt 拼接业务事实。                                                                                                                              |
+| 数据/API | public `3.1.0`、HTTP `/v1` 不变；新 POST 只接受 `{}` 与唯一 `Idempotency-Key`，202 复用现 receipt。零 BFF DDL；复用 Message/outbox/stream 并在一个事务中新建 assistant/run/outbox 和 consumer fence。tenant/actor 只来自受信 admission。                                                                                                                                                                                                                                                                                      |
+| 删除项   | Agent 发布后，新 HTTP owner pin 在同一切片替换当前 `f3be…` HTTP vendor/generated 来源，删除旧 HTTP vendor 目录；独立 `delivery.created` 的 `486adb…` event-protocol pin 保持。不保留无 `retry_of_run_id` 的 wire，不接受旧 Chat payload v2 或 Scheduler receipt v2，不增 alias/fallback。                                                                                                                                                                                                                                     |
+| 验证     | 先机器契约与纯测试 RED，再在固定 owner artifact 上 GREEN；Node 22 运行 contract/architecture/unit/build，Root 独占随机 PostgreSQL fixture 串行运行真事务/HTTP/worker/Agent owner 矩阵。本文档阶段不运行这些命令。                                                                                                                                                                                                                                                                                                             |
 
 ### 命令与状态机
 
@@ -1779,12 +1780,12 @@ HTTP status、投递错误或本地异常猜一个 Agent failure。
 
 必须保留四种当前可达的 Message `failed` writer，只有第一种携带 Agent failure：
 
-| writer | 当前触发 | 目标 `agent_failure_code` / `agent_failure_retryable` |
-| --- | --- | --- |
-| verified Agent terminal | 固定 3.0 owner 的 `run.failed` | 同一 projection 事务写严格验证的二元组 |
-| Agent cancellation terminal | `run.completed(status=cancelled)` | 两列都为 `NULL`；取消不是 Agent failure profile |
+| writer                         | 当前触发                                                 | 目标 `agent_failure_code` / `agent_failure_retryable`    |
+| ------------------------------ | -------------------------------------------------------- | -------------------------------------------------------- |
+| verified Agent terminal        | 固定 3.0 owner 的 `run.failed`                           | 同一 projection 事务写严格验证的二元组                   |
+| Agent cancellation terminal    | `run.completed(status=cancelled)`                        | 两列都为 `NULL`；取消不是 Agent failure profile          |
 | BFF dispatch permanent failure | `agent-dispatch-outbox-repository.ts` 写本地 `RUN_ERROR` | 两列都为 `NULL`；BFF launch error code 不冒充 Agent code |
-| Conversation delete | `chat-repository.ts` 终止 pending/streaming assistant | 两列都为 `NULL`；删除是产品生命周期动作 |
+| Conversation delete            | `chat-repository.ts` 终止 pending/streaming assistant    | 两列都为 `NULL`；删除是产品生命周期动作                  |
 
 `agent-cancellation-outbox` 自身的 `failed` 是取消命令投递状态，不写 Message；不得把它映射成 Message failure。
 所有 user/system、非 `failed` Message、assistant 无 `run_id`、以及上述三个非 Agent failure writer 的两列必须同时为
@@ -1881,10 +1882,10 @@ artifact 的 `source_sha256` 同为该 OpenAPI SHA，不以人工审查文字代
 Root/独立审查放行后的**第二门只授权既有 tests 写稳定 RED**；canonical OpenAPI、Schema、vendor、manifest、
 generator、generated 与 runtime 全部保持 15e bytes。精确允许集只有：`test/agent-http-wire.test.mjs`、
 `test/agui-source-page.test.mjs`、
-  `test/agui.test.ts`、`test/agui-projector.test.mjs`、`test/chat-service.test.ts`、
-  `test/contract/openapi-contract.test.mjs`、`test/contract-governance.test.mjs`、
-  `test/schema-governance.test.mjs`、`test/chat-facts.integration.mjs`、
-  `test/agui-projection.integration.mjs`、`test/agui-http.integration.mjs`、`test/architecture.test.ts`。
+`test/agui.test.ts`、`test/agui-projector.test.mjs`、`test/chat-service.test.ts`、
+`test/contract/openapi-contract.test.mjs`、`test/contract-governance.test.mjs`、
+`test/schema-governance.test.mjs`、`test/chat-facts.integration.mjs`、
+`test/agui-projection.integration.mjs`、`test/agui-http.integration.mjs`、`test/architecture.test.ts`。
 
 RED 必须来自对当前行为/contract/Schema bytes 的真实断言失败：mapAgentEvent strict failure 负例、当前 RUN_ERROR 缺
 safe metadata、public version/field/presence guard 目标、canonical 两列/CHECK 目标等；测试不得 import 尚不存在的
@@ -1961,7 +1962,6 @@ PostgreSQL/Redis/localhost HTTP integration 文件及 rollback/RR/GC/ACL/Share �
 
 **实现与验收状态。** 当前代码片已固定 v5.0.1 owner bytes/provenance/aggregate、删除 v4 installation 消费路径，并同步 canonical OpenAPI、具名运行 adapter、generated client 与测试；database schema 和 lockfile 不变。后续只剩 Root 审查/提交、Web 消费与真实 IAM→BFF→Platform 组合。门禁覆盖 SDK 双生成/来源漂移、三 digest 向量、九字段泄漏负例、uint64/UTC/presence、本人/跨用户/撤权、首次/replay/冲突/unknown ACK、删除/禁用降权、分页/cursor、timeout/AbortSignal 与旧 503/alias 不可达。正式激活还需 `pnpm format:check && pnpm lint && pnpm typecheck && pnpm contract:check && pnpm test:architecture && pnpm test && pnpm build`、真实 owner integration 与 Root smoke；当前本仓静态与隔离 HTTP 门已执行，产品激活仍以真实组合为准。
 
-
 ## W3 Chat→Agent typed Skill 选择（已实现消费者，组合待验）
 
 **Owner/当前态。** BFF 唯一拥有 public `createMessage` 的用户选择与 `bff_agent_dispatch_outbox` 的不可变 Chat 投递；Agent 唯一拥有 Run 入站/执行，Platform 唯一拥有 Skill 安装与当前授权。public 现已删除名称 `pinned_skills`，仅接受 exact `selected_skill_source_refs`；普通 Chat durable outbox 和 Scheduler launch 正文均显式传递选择，无选择为 `[]`。Agent HTTP consumer 固定 2.0.0 owner `dd34a4800b4ce0cc61eb80dd715e528b9d4517da`，唯一 `contract/openapi/v1/openapi.json` SHA-256 `20398c59f42031c1b6ae2e2c3708e63ec8b5645baf741bf831bc67e14625ef99`；vendor/生成物均由本仓工具校验。Web 旧 name 消费仍待其 owner 更新。
@@ -1974,7 +1974,6 @@ PostgreSQL/Redis/localhost HTTP integration 文件及 rollback/RR/GC/ACL/Share �
 
 放置沿既有 `src/http/routes/owner.ts` 精确分派到 `platform-projection.ts`，后者校验五个 GET 路径/查询/无 body 与幂等键；`src/infrastructure/clients/platform/projection-http.ts` 为唯一 owner wire adapter，固定 generated HTTP contract、1 MiB 响应上限、请求 deadline/取消和响应 envelope 验证。IAM 当前 Product session 是 tenant/user authority；独立 `platform:projection.read` workload token 不转发浏览器 Bearer，读路径不复用默认关闭的 v4 catalog write candidate。旧 Capability HTTP 2.0.0 facade/vendor/generated/manifest 已删除，无双读 fallback。BFF 不拥有 Skill/MCP SQL、receipt、Redis cache，Platform 仍为唯一事实 writer。替代位置“BFF 自建 Skill 表”和“复用 v4 catalog Connect 作 read projection”均因 owner 重复/契约边界不同而淘汰。以下 preflight 为历史切片，不再表示当前运行态。
 
-
 ## 历史快照：Published personal Skill by ID preflight（已由上文替代）
 
 **当前态。** 活跃 Skills/Pool/Catalog 与 MCP 读取仍经旧 Capability facade；`listSkills` 输出 legacy `{data,meta}` 并丢失 owner `source_ref/revision`。新 `GET /v1/skills/{skill_id}` 目前只有 BFF canonical public OpenAPI 与语义门，没有运行 route、Platform HTTP client、projection credential 或 Web caller。
@@ -1982,7 +1981,6 @@ PostgreSQL/Redis/localhost HTTP integration 文件及 rollback/RR/GC/ACL/Share �
 **目标态。** Browser 仍只走 Web same-origin adapter；BFF 每次先做 IAM Product session admission，以可信 tenant/user 调 Platform HTTP 3.1.0 `getPublishedPersonalSkill`。Platform 是 Skill 唯一事实 owner，只允许该 user 的 PERSONAL/ACTIVE 当前行且不要求安装；其他 tenant/owner/scope/state 与缺失同一 404。BFF 只投影七个安全字段，不存 Skill SQL、receipt、cache，不转发 user Bearer，不返回 package、manifest、Asset、签名 URL 或执行字段。
 
 放置采用扩展现有 public Skills surface 与 canonical OpenAPI，否决新增 BFF Skill 数据模块或复用写侧 inactive v4 Connect：前者复制 owner 事实，后者不是 read projection contract。下一运行切片必须原子迁移旧四 GET 到 Platform HTTP 3.1.0、专用 workload Bearer，并删除 Capability secret/source selector/generated 双轨；个人 ACTIVE list 使用 `scope_kind=personal`，pool/catalog 不恢复 ACK。MCP 采用 owner-native 六字段并同步 Web、移除当前实际 503 的旧控件；不保留旧伪造字段兼容层。
-
 
 ## W3 Publish 运行候选：当前态与目标态（2026-09-29；默认关闭）
 
@@ -2409,12 +2407,7 @@ issuer operation；`/sign-up/email` 仍来自静态 allowlist/snapshot，不混�
     "queryParameter": "id",
     "valueFormat": "canonical-lowercase-uuid",
     "errorQueryParameter": "error",
-    "allowedErrorCodes": [
-      "TOKEN_EXPIRED",
-      "INVALID_TOKEN",
-      "USER_NOT_FOUND",
-      "INVALID_USER"
-    ]
+    "allowedErrorCodes": ["TOKEN_EXPIRED", "INVALID_TOKEN", "USER_NOT_FOUND", "INVALID_USER"]
   }
 }
 ```
@@ -3205,6 +3198,7 @@ GET 专用响应 gate 验证 page 数量/唯一 Asset ID、purpose/scan/origin e
 ### BFF activeRun running首片 Root最终证据（2026-09-30）
 
 同一个ACL先行RR snapshot实现已通过Root Node22完整纯门（contract191、architecture27、test506pass1skip、format/lint/typecheck/build）及canonical fresh install、定向8/8与全7文件真实PG/Redis/localhost HTTP integration47/47、0失败/0跳过。日志 `/tmp/kokoro-bff-active-run-root-pg-fixture-final-gates.log`、`/tmp/kokoro-bff-active-run-real-pg-final-green.log`；自有/新增临时库0、Redis新增0/baseline保留。首次PG7/1因fixture缺正常assistant/dispatch binding失败，改由ChatTurn.submit建立绑定后复验，不改生产guard。公开OpenAPI/schema/generated字节未变；浏览器终态全文与queued/waiting/pending/files仍后继，不能据47项owner integration宣布全产品完成。
+
 ## T-K03.4 Validate canonical identity 值域纠正（2026-10-09；窄实现）
 
 本片属于既有 ValidateSkillDraft 与 AI package handoff 的 owner-response 校验，不新增 API、模块、Schema、权限、事务或兼容路径。正式 Platform `2f0c393` 及本仓 vendor `9ed6801` 的 `execution-operations/skill-series-current-v1.json` 声明 canonical identity 只有 `skill-md-v1:sha256:<64 lowercase hex>` 与 legacy `zip-v2:sha256:<64 lowercase hex>`；BFF 当前两处 runtime 与 OpenAPI 两处只接受 zip-v2，错误拒绝正规 owner 200。

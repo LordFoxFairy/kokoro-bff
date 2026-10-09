@@ -4,7 +4,7 @@
 
 三个写与same-key replay要求fresh `create_draft AND install`，Get为fresh read；统一绝对预算、取消/迟到关闭、900秒PUT、24小时intent、原key/unknown恢复，不新增BFF Storage调用、SQL/Redis/receipt。Begin成功或重签仅限未到期 `upload_pending` 且 Storage pending；进入 `uploaded`/`completed`/`rejected` 或 expired 后旧 Begin 接 owner phase/precondition 错误并改用 Get，绝不重签或再次 createUpload；Finalize completed 原 key 按 owner 至少30天receipt精确重放。现Web严格从成功PUT的`x-amz-version-id`取得source version可供未来Complete使用，但旧链证据不代表新import已通过。GitHub/AI普通Draft流程与Admin Publish保留；仅未来Web本地文件callsite退出旧Draft→Publish串联。
 
-当前固定 Platform consumer 尚未包含 local-import owner 合同。Platform 五份机器事实正式发行后，可在独立消费者切片中 repin、正规生成 client，并以注入 seam 完成 private policy/input/projector/route 的隔离测试；该切片不注册生产 dispatch。只有 owner artifact active/routable、真实 Storage 集成门完成后，后继激活切片才接入 production composition 与 exact namespace。当前源码、contract、generated、服务与数据均未改，后继实现须另行授权和冻结。
+当前候选已固定 Platform `981df60e74b65eccfc2d58044db9965928e4d37e` 的正式 A6 机器事实并正规生成 client，以 typed 注入 seam 实现 private policy/input/projector/四 route 隔离 HTTP 测试；public OpenAPI/SDK/count不变。owner v10 artifact 仍 inactive，因此 production composition 不构造 client，namespace 保持原404而非新增503。只有 owner active/routable、真实 Storage 集成门完成后，后继激活切片才接入 production composition。当前候选待 Root 冻结复验，不代表正常服务或浏览器完成。
 
 <!-- T-K03.4-BROWSER-PRIVATE-LOCAL-IMPORT-CURRENT-END -->
 
@@ -50,6 +50,7 @@ Root裁决首次正常对外激活前 beta corrective major，同 `/v1`、132 op
 对应现HTTP测试采用实际HTTP requestHeader来源，不用body request_id伪echo；缺失/错误response ID及missing/wrong cache继续拒绝。工程/三个聚焦测试与冻结证据随Root ignored交接，真实IAM/Platform/Storage/Agent组合与浏览器仍由Root最终执行，不把loopback当owner资源集成。下方完整旧正文保持原字节。
 
 ---
+
 ## R356 Public9.0.1 消费者一致性修正（同 132 operations）
 
 GET package-upload 的现有真实 source_version_id 现列入闭合 schema，可选、1–1024 printable ASCII且拒绝字面 null；不从对象 current read 推断版本。owner 无效版本稳定返回502 skill_response_invalid；安装列表 owner query/source-bound cursor 的 InvalidArgument 返回400 invalid_skill_installation_request，不泄露内部原因。原 Public9/Public8.10 父逆和其它 closed blocks 保持。此为源码契约修正，正常服务未重新激活，不能称 Skills 页面验收。
@@ -163,6 +164,7 @@ Root完整check第一正确Node22尝试contract 289PASS/9FAIL：六既有test旧
 82路径freeze55c03a99精确、其余499tracked byte一致；原独审f40caa91无确定新阻断、六引用inverse与三D0历史suffix exact。Root仅再加本CURRENT与INDEX前缀，Git独占显式路径。真实OAuth client_credentials HTTP→owner introspection→BFF四本人读、正常8086接入/资格和完整CRUD仍OPEN；本轮只只读核官方IAM HTTP接缝，未启动测试fixture/扩权/重启资源。
 
 ---
+
 ## R291 Root worker 候选验收（2026-10-07；未发行/未激活）
 
 当前8生产文件+2测试实现具名Project scope release worker。Root先见两个真实PG失败：冷却恢复被普通due挤住、真实600ms pool等待后owner调用0；三source窄修后Node22全部15PG通过/0失败/0跳过，满limit10总10/恢复1/普通9、include=false保剩余普通与terminal状态均实际到达。原迟到COMMIT/55P03/取消/晚lease/停止/十秒预算也重跑通过。SQL claim前required单调观察＋实际DB剩余不双扣，queue/commit仍耗预算。凭据原短timer屏障只在测试改为单调重检，产品5ms/零fetch/assert不弱化；当前完整9与重复15次通过，旧默认失败历史保留。
@@ -172,6 +174,7 @@ Root22656当前 build/check/format/exact source format 各exit0；默认867PASS/
 这是源码候选资格，不是完整产品PASS。正常BFF仍39db/public8.5，当前候选public8.6/105尚未发行/正常激活。真实Storage/IAM资格、正常schema组合、Web消费及17删除用户路径仍OPEN，完整Wave0–7不缩小。下面原阶段文字按历史时点读。
 
 ---
+
 ## R284 Project scope release worker 文档门（2026-10-07；未实施）
 
 BFF本地Project删除切片已由Root提交为`6f20f81a8d15992b35bc07e76ac8808d7072bee8`：19路径包含本地runtime、canonical两表与`8.6.0 / 105`机器候选，Root隔离HTTP/PostgreSQL为16/0。正常BFF仍运行`39db` / public`8.5.0`，未激活本候选；Storage worker、正常schema组合、Web 17条用户链、完整DELETE并发/COMMIT-unknown及真实Storage ACK-unknown恢复均未验，T-C05保持OPEN。
@@ -180,7 +183,6 @@ BFF本地Project删除切片已由Root提交为`6f20f81a8d15992b35bc07e76ac8808d
 
 恢复政策已锁定：普通claim不动blocked；unknown/retryable永远同command/digest恢复且不按次数冒终态；只有正规`UNAUTHENTICATED`资格错误可在至少300秒冷却、每轮最多一条、同可信identity/新fence下尝试一次可能写的RPC。其它terminal/损坏保持blocked。下一阶段须先用真实PostgreSQL与固定Storage owner做failure-first RED；本D0未运行任何门、资源或用户验收。
 
-
 ## R282 Project 删除本地候选（已实现、未发行）
 
 当前工作树已实现 Project DELETE/status、本地事务、canonical SQL、Conversation/ScheduledTask 聚合处理与 Storage release outbox；Root 隔离 HTTP/PostgreSQL 16/0 及完整工程门已通过。正常 BFF 仍运行正式 `39db` / public `8.5.0`，本工作树 `8.6.0 / 105 operations` 机器与 runtime 候选尚未正式发行或激活；Storage worker、Web 消费和 17 条真实用户链均未实现验收，T-C05 仍为 OPEN。
@@ -188,7 +190,6 @@ BFF本地Project删除切片已由Root提交为`6f20f81a8d15992b35bc07e76ac8808d
 ## R277 Project 删除机器候选（未发行、未实现）
 
 当前工作树仅候选 public `8.6.0` / 105 operations：在原103项之外增加 `DELETE /v1/projects/{projectId}` / `deleteProject` 与 `GET /v1/projects/{projectId}/deletion` / `getProjectDeletion`。成功与错误保持本仓 data-only/error-only profile，request ID仅header；DELETE保存原始202 pending receipt，status GET只投影 logical pending/blocked/released，physical恒pending。共享旧Project GET/PATCH参数与原103 wire不改。此候选尚无runtime、canonical SQL、worker、Storage/Scheduler真链、Web消费或浏览器用户验收；v1 baseline只能由Root正规生成并审查。
-
 
 Root 当前候选验收（2026-10-07）：Node22正规 `pnpm contract:update-baseline` 写105唯一baseline；`pnpm format:check`、`pnpm lint`、`pnpm contract:check`、`pnpm test`、`pnpm typecheck`、`pnpm build`均exit0。contract **298PASS/0FAIL**，默认 **867PASS/0FAIL/2既有SKIP**；独立target contract+architecture **112PASS/0FAIL**。4既有OpenAPI warning保留。此前Root真实新RED3FAIL/0PASS，首次完整contract297PASS/1FAIL因现governance当前版本仍8.5；仅同步标题/当前regex至8.6，其余生命周期断言逐字exact，保首次失败日志。
 
@@ -219,6 +220,7 @@ Root 对最终冻结 13 路径重跑：format/lint/typecheck/build exit 0；cont
 Root实际新build四HTTP44PASS/0FAIL/0SKIP；full contract276/0、architecture35/0、default841PASS/0FAIL/2原资源SKIP，lint/types/build/目标format全0。机器独审bd3aaed3/runtime最终c380fc35均无剩余确定阻断；Root重新核504任务外文件/三已提交D0/旧99及components/旧六exact。三架构oracle旧version/importerFAIL32/3后只同步exact批准route/8.4/owner3.3固定pin；有效RED、类型失败和错误harness证据保留，不靠删skip或放宽预算。
 
 这是BFF已验收源与机器，不是正常进程或Web用户全CRUD。正常53714/Platform8086未重载，Web仍ee4056c/8.3，真IAM→BFF→Platform组合、新五状态管理页/版本/撤回及浏览器33用例待验。无normal DB/资金/模型/权限写或restart/reset；Root统一Git和资源。证据Root var/dev/r255-preserve/r266-bff-managed-read-{runtime-green,root-full-gates,root-final-gates}.log及freeze/review/receipt。
+
 ## R257 管理路由 HTTP 实施验收（2026-10-06 16:16 UTC）
 
 四个已发布public8.2操作现有具名route/client实施，System3.0固定artifact与全部旧operation不变；无BFF DDL/新owner/兼容proxy。
@@ -454,8 +456,8 @@ R75 当前阶段：Root修复前final真实full integration 149pass/0fail/0skip�
 
 基线 main / d695fcbc0cd3f0376c34f64f6217d9d8e74c1b3c；Root 已复验 R73 纯 RED 83=51pass/32fail/0skip，以及 owned canonical fixture 上真实 HTTP+PG+Redis 53=14pass/39fail/0skip（含父/嵌套 failure，不是 39 个独立缺陷）。资源已由 Root 回收。本节覆盖下方 R73 的「版本待裁定/生产未修改」阶段描述；全部下方原正文保留，不作为当前完成证据。
 
-| 任务 | 责任/写集 | 当前阶段 |
-|---|---|---|
+| 任务                         | 责任/写集                                                                                                        | 当前阶段                                                  |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
 | R74-BFF-CREATE-PUBLIC5-GREEN | WIN02 单 writer；Root Git/资源/发布；仅三生产文件、canonical OpenAPI/contract README、四当前D0前缀、三已授权测试 | 源码与纯GREEN候选已冻结待Root全owner资源复验；未提交/发布 |
 
 Root实际证据：/tmp/kokoro-bff-r74-root-pure-red-explicit.tap；/tmp/kokoro-bff-r74-full-root-integration.log；/tmp/kokoro-bff-r74-full-owned-resource.json。owned bff_full_r74_fc8e901688aa40f0 已回收、Redis15余0、tracked保持；此为Root报告，本窗口未重复跑资源。独立7文件/429保护审0P0/P1/P2。
@@ -464,16 +466,16 @@ public5 /v1 pre-release breaking已裁定，正式公共发布后版本政策不
 
 本窗口实际证据（Node24.20.0，pnpm11.25.0；未更改仓Node22 engine声明）：
 
-| 实际命令 | 结果 | 日志（/tmp/kokoro-bff-r74-green/） |
-|---|---|---|
-| node --test --test-reporter=tap test/scheduled-input.test.ts test/contract/openapi-contract.test.mjs | 85pass/0fail/0skip；原83回归先已83/83 | pure-green.tap / pure-initial.tap |
-| pnpm format:check / lint / typecheck | 各exit0 | format-check.log / lint.log / typecheck.log |
-| pnpm contract:check（Node24） | exit1：既有Platform生成器要求精确Node22.22.2；非业务RED，未放宽pin | contract-check.log |
-| pnpm test:architecture | 27pass/0fail/0skip | test-architecture.log |
-| pnpm test | 672pass/0fail/1既定资源skip，共673 | test.log |
-| pnpm schema:check | 8pass/0fail/1既定资源skip | schema-check.log |
-| pnpm build | exit0 | build.log |
-| pnpm contract:check（固定Node22.22.2补跑） | 222pass/0fail/0skip，完整生成drift/lint/semantic门exit0 | contract-check-node22.log |
+| 实际命令                                                                                             | 结果                                                               | 日志（/tmp/kokoro-bff-r74-green/）          |
+| ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------- |
+| node --test --test-reporter=tap test/scheduled-input.test.ts test/contract/openapi-contract.test.mjs | 85pass/0fail/0skip；原83回归先已83/83                              | pure-green.tap / pure-initial.tap           |
+| pnpm format:check / lint / typecheck                                                                 | 各exit0                                                            | format-check.log / lint.log / typecheck.log |
+| pnpm contract:check（Node24）                                                                        | exit1：既有Platform生成器要求精确Node22.22.2；非业务RED，未放宽pin | contract-check.log                          |
+| pnpm test:architecture                                                                               | 27pass/0fail/0skip                                                 | test-architecture.log                       |
+| pnpm test                                                                                            | 672pass/0fail/1既定资源skip，共673                                 | test.log                                    |
+| pnpm schema:check                                                                                    | 8pass/0fail/1既定资源skip                                          | schema-check.log                            |
+| pnpm build                                                                                           | exit0                                                              | build.log                                   |
+| pnpm contract:check（固定Node22.22.2补跑）                                                           | 222pass/0fail/0skip，完整生成drift/lint/semantic门exit0            | contract-check-node22.log                   |
 
 Node24 engine warning与contract失败均保留；Node22补跑不算Node24八门全绿。无需修改 scripts/verify-openapi.ts 或 contract-governance。机器解析后除当前version、create schema/description/404外与原完全相同，immutable baseArtifact4/vendor/生成输入保持；contract测试仅五处授权文本机械迁移。原R73两个测试全文保prefix、四文档全部保suffix；最终精确hash/424非目标tracked保护见freeze.json，gates.json列每条结果。
 
@@ -483,8 +485,8 @@ Node24 engine warning与contract失败均保留；Node22补跑不算Node24八门
 
 基线 `main / d695fcbc0cd3f0376c34f64f6217d9d8e74c1b3c`，R71 已由 Root 发布。本节为 R73 ScheduledTask create 的唯一当前目标；下方全部旧正文逐字节保留，其 R71「待发布」和宽松输入描述仅是历史阶段，不覆盖本节。当前阶段仅 D0 + tests RED，生产实现、canonical contract、SQL、package/pin/generated 尚未修改。
 
-| 任务 | Owner / 执行 / 审查 | 基线与写集 | 验收 / 状态 |
-|---|---|---|---|
+| 任务                           | Owner / 执行 / 审查                                  | 基线与写集                                                                                                                                                                                                                                                                                                    | 验收 / 状态                                                                                                                                |
+| ------------------------------ | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | R73-BFF-PROJECT-RUNTIME-D0-RED | BFF / WIN02 唯一 writer / 原 native 只读审查员、Root | 本仓绝对目录 /Users/nako/WebstormProjects/github/thefoxfairy/Kokoro/apps/kokoro-bff；main/d695fcbc；起点无未提交变更。仅本仓 TECHNICAL_DESIGN、API_CONTRACT、DATA_MODEL、CURRENT 四 doc 前缀及 test/scheduled-input.test.ts、test/business-store.integration.mjs、test/contract/openapi-contract.test.mjs EOF | 纯定点行为 RED、合法 control、旧正文/测试前缀及所有非目标 tracked 字节保持；集成只冻结由 Root 真跑。当前待独立审查 / Root 资源复验，未提交 |
 
 Root 已裁定：独立 ScheduledTask 的 optional project_id 为精确非空无边缘空白 string，保可见 ID/slug；未知 body/query（含重复）、非法引用类型/null/数组/空白、非 bool auto_approve 与 create enabled/status 拒绝 400。创建默认 active/enabled=true，PATCH 保留。拒绝与项目预检在 receipt 前；其他 owner/缺失/跨 tenant 项目同 404，原不匹配 tenant admission 403 不变。合法重启 replay200、另一可见项目 same-key409、撤权 replay404，以及拒绝零写/事务回滚均进入新增测试。

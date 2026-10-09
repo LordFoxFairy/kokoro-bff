@@ -3,7 +3,7 @@
   "status": "generated",
   "owner": {
     "repository_path": "apps/kokoro-capability",
-    "repository_commit": "9ed6801673ca279f446712de6eee3476717bfb24",
+    "repository_commit": "981df60e74b65eccfc2d58044db9965928e4d37e",
     "contract_version": "5.3.0",
     "contract_path": "contract/openapi/platform-http.openapi.json",
     "contract_sha256": "c5f9a343170c87d59e0c40134c503cc6d40b59416216ac993a138cfbac3bb581"
@@ -12,7 +12,7 @@
     "package": "@hey-api/openapi-ts",
     "version": "0.99.0",
     "config_path": "openapi-ts.platform-http.config.ts",
-    "config_sha256": "a201b90e5d033e45a3a6077bbde9c279b2354f5d05f0611f7c49b810dbc5556d"
+    "config_sha256": "dd8735a995edd44845e880dc3d7ad7eb054df1d69f8257cc69a204f2f7bb7735"
   },
   "runtime": {
     "node": "22.22.2",

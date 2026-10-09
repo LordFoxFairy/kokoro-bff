@@ -40,6 +40,7 @@ import { ProjectionCredentialSource } from "../infrastructure/clients/platform/p
 import { ProjectionTokenSource } from "../infrastructure/clients/platform/projection-token.js"
 import { ProjectScopeReleaseOutboxDispatcher } from "../application/project-scope-release-outbox-dispatcher.js"
 import { StorageScopeReleaseClient } from "../infrastructure/clients/storage/scope-release-client.js"
+import type { LocalSkillImportClient } from "../http/routes/local-skill-import.js"
 
 type ScheduledWorkerErrorEvent = { operation: string; result: "error"; errorCode: string; attempt: number; backoffMs: number }
 function scheduledWorkerLog(event: ScheduledWorkerErrorEvent): void {
@@ -61,6 +62,7 @@ export type BffRouteInput = {
 export type BffRouteHandler = (input: BffRouteInput) => Promise<boolean | void>
 
 export type BffServerComposition = {
+  localSkillImportClient?: LocalSkillImportClient
   skillSpecificationSource: SkillSpecificationSource | null
   skillDownloadHandles: SkillDownloadHandles
   mcpAuthorization: Pick<McpAuthorizationClient, "check">
@@ -91,6 +93,7 @@ export type BffServerComposition = {
 }
 
 export type BffCompositionOptions = {
+  localSkillImportClient?: LocalSkillImportClient
   skillSpecificationSource?: SkillSpecificationSource | null
   mcpAuthorization?: Pick<McpAuthorizationClient, "check">
   skillAuthorization?: Pick<SkillAuthorizationClient, "check">
@@ -330,6 +333,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     return closePromise
   }
   return {
+    ...(options.localSkillImportClient === undefined ? {} : { localSkillImportClient: options.localSkillImportClient }),
     skillSpecificationSource:
       options.skillSpecificationSource !== undefined
         ? options.skillSpecificationSource

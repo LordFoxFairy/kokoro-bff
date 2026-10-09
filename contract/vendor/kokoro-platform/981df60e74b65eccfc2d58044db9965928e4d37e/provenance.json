@@ -14,7 +14,10 @@
     "execution-operations/mcp-personal-product-v1.json",
     "execution-operations/mcp-personal-product-request-vectors-v1.json",
     "execution-operations/skill-series-current-v1.json",
+    "execution-operations/v10/manifest.json",
+    "execution-operations/v10/local-skill-import-v1.json",
+    "execution-operations/v10/provenance.json",
     "openapi/platform-http.openapi.json"
   ],
-  "combinedSha256": "244d70909067b63e0b6dff721fbc976758e9b08e420d6f19faa638ab628afe2f"
+  "combinedSha256": "6fcc148fddb4aaab73076dfb5b6109e2b4d9f0209e93ef58b0c510e3ed28b693"
 }

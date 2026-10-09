@@ -1,0 +1,97 @@
+{
+  "profileVersion": 1,
+  "service": "kokoro.platform.v1.SkillCatalogService",
+  "visibility": "internal-owner",
+  "owner": "Platform/Skills",
+  "methods": [
+    {
+      "method": "BeginLocalSkillImport",
+      "operation": "skill.begin_local_import",
+      "permission": "platform:skill-catalog.manage",
+      "command": true,
+      "requestBinding": [
+        "tenant_id",
+        "subject_id",
+        "command",
+        "product_context",
+        "filename",
+        "size_bytes",
+        "content_sha256"
+      ]
+    },
+    {
+      "method": "CompleteLocalSkillImport",
+      "operation": "skill.complete_local_import",
+      "permission": "platform:skill-catalog.manage",
+      "command": true,
+      "requestBinding": [
+        "tenant_id",
+        "subject_id",
+        "command",
+        "product_context",
+        "intent_id",
+        "upload_id",
+        "source_version_id",
+        "size_bytes",
+        "content_sha256"
+      ]
+    },
+    {
+      "method": "FinalizeLocalSkillImport",
+      "operation": "skill.finalize_local_import",
+      "permission": "platform:skill-catalog.manage",
+      "command": true,
+      "requestBinding": [
+        "tenant_id",
+        "subject_id",
+        "command",
+        "product_context",
+        "intent_id"
+      ]
+    },
+    {
+      "method": "GetLocalSkillImport",
+      "operation": "skill.get_local_import",
+      "permission": "platform:projection.read",
+      "command": false,
+      "requestBinding": [
+        "tenant_id",
+        "subject_id",
+        "product_context",
+        "intent_id"
+      ]
+    }
+  ],
+  "identity": {
+    "caller": "kokoro-bff",
+    "platformAdmission": {
+      "owner": "Platform",
+      "everyRequest": true,
+      "workload": "fresh_introspection",
+      "tenant": "trusted_workload_tenant",
+      "subjectOwner": "context_subject_equals_user_owner"
+    },
+    "humanAdmissionOwner": "kokoro-bff",
+    "humanAdmissionBoundary": "consumer_precondition",
+    "writeHumanActions": [
+      "create_draft",
+      "install"
+    ],
+    "writeHumanCombination": "AND",
+    "writeHumanTiming": "before every execution and receipt replay",
+    "readHumanAdmission": "fresh session/read before GetLocalSkillImport",
+    "humanBearerForwarding": false,
+    "bodyAdmissionProof": false
+  },
+  "budgetsMs": {
+    "begin": 10000,
+    "complete": 10000,
+    "finalize": 20000,
+    "get": 2000
+  },
+  "intentTtlSeconds": 86400,
+  "storagePutReferenceMaxSeconds": 900,
+  "protoSha256": "41fdcc2a782a779c38df861f99d89b1d20966486d29ed64647d1ecf149926bd6",
+  "descriptorSha256": "fc5d3893a05284a5f52d8de40b82f6e2bbd859608994d84dac20dff43a4a6fd2",
+  "runtimeVerified": false
+}

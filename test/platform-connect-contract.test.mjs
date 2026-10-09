@@ -9,10 +9,10 @@ import { configureBffProtobufTextEncoding } from "../dist/infrastructure/protobu
 
 configureBffProtobufTextEncoding()
 
-const ownerCommit = "9ed6801673ca279f446712de6eee3476717bfb24"
+const ownerCommit = "981df60e74b65eccfc2d58044db9965928e4d37e"
 const sources = {
   "kokoro/common/v1/common.proto": "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08",
-  "kokoro/platform/v1/platform_runtime.proto": "8f7f6292c2b59e1171632362882d7ea490d20bbe1e2fa21556a7a7a4cc7e6a97",
+  "kokoro/platform/v1/platform_runtime.proto": "41fdcc2a782a779c38df861f99d89b1d20966486d29ed64647d1ecf149926bd6",
   "kokoro/storage/v3/storage.proto": "1021e603065978871c51519ddba5b23c9b97f16b781a08bd98e019b3342bf5f9",
 }
 const root = new URL("../", import.meta.url)
@@ -41,18 +41,18 @@ async function sourceBytes() {
   )
 }
 
-test("Platform consumer pins exact owner Proto bytes and inactive V9 to V8 to V7 to V6 to V5 proof", async () => {
+test("Platform consumer pins exact owner Proto bytes and inactive V10 through historical V5 proof", async () => {
   const manifest = JSON.parse(await requiredFile("contract/dependencies/platform-connect.json"))
   assert.equal(manifest.owner.repository_commit, ownerCommit)
   assert.equal(manifest.owner.package_name, "kokoro.platform.v1")
   assert.equal(manifest.owner.repository_path, "apps/kokoro-capability")
   assert.deepEqual(manifest.execution_artifact, {
-    path: `contract/vendor/kokoro-platform/${ownerCommit}/execution-operations-v9`,
-    artifact_version: "9.0.0",
+    path: `contract/vendor/kokoro-platform/${ownerCommit}/execution-operations-v10`,
+    artifact_version: "10.0.0",
     status: "inactive",
     routable: false,
-    provenance_path: `contract/vendor/kokoro-platform/${ownerCommit}/execution-operations-v9/provenance.json`,
-    aggregate_sha256: "19c1466ab398c6dbb43130f3977fe776532e41e00e2487476d465f22fc936073",
+    provenance_path: `contract/vendor/kokoro-platform/${ownerCommit}/execution-operations-v10/provenance.json`,
+    aggregate_sha256: "277a2bf24b4fdc34196dac3c5fbba89ef88df75a3b96054af63547f9ae53ff0b",
   })
   assert.deepEqual(
     manifest.execution_proof_chain.map(({ artifact_version, aggregate_sha256, inherits_version, inherits_aggregate_sha256 }) => ({
@@ -61,6 +61,12 @@ test("Platform consumer pins exact owner Proto bytes and inactive V9 to V8 to V7
       ...(inherits_version === undefined ? {} : { inherits_version, inherits_aggregate_sha256 }),
     })),
     [
+      {
+        artifact_version: "10.0.0",
+        aggregate_sha256: "277a2bf24b4fdc34196dac3c5fbba89ef88df75a3b96054af63547f9ae53ff0b",
+        inherits_version: "9.0.0",
+        inherits_aggregate_sha256: "19c1466ab398c6dbb43130f3977fe776532e41e00e2487476d465f22fc936073",
+      },
       {
         artifact_version: "9.0.0",
         aggregate_sha256: "19c1466ab398c6dbb43130f3977fe776532e41e00e2487476d465f22fc936073",
@@ -90,7 +96,7 @@ test("Platform consumer pins exact owner Proto bytes and inactive V9 to V8 to V7
   )
   assert.deepEqual(manifest.descriptor, {
     path: `contract/vendor/kokoro-platform/${ownerCommit}/descriptor/platform-v1.binpb`,
-    sha256: "a167ddd3e815a5469da8ef1cbb54be6e22dbada48def0fdd0621e945c2a985db",
+    sha256: "fc5d3893a05284a5f52d8de40b82f6e2bbd859608994d84dac20dff43a4a6fd2",
   })
   assert.deepEqual(
     manifest.owner.sources,
@@ -142,6 +148,7 @@ test("Platform generator rejects source, proof-chain and generated tree drift", 
   const vendorInputs = [
     "descriptor",
     "execution-operations",
+    "execution-operations-v10",
     "execution-operations-v5",
     "execution-operations-v6",
     "execution-operations-v7",
@@ -370,7 +377,7 @@ test("R345 generated and compiled Product installation add only required Skill u
 
   const prefix = `contract/vendor/kokoro-platform/${ownerCommit}/descriptor`
   const currentBytes = await requiredFile(`${prefix}/platform-v1.binpb`)
-  assert.equal(sha256(currentBytes), "a167ddd3e815a5469da8ef1cbb54be6e22dbada48def0fdd0621e945c2a985db")
+  assert.equal(sha256(currentBytes), "fc5d3893a05284a5f52d8de40b82f6e2bbd859608994d84dac20dff43a4a6fd2")
   const current = fromBinary(FileDescriptorSetSchema, await requiredFile(`${prefix}/platform-skill-example-prompts-parent.binpb`))
   const compiledParentBytes = await requiredFile(`${prefix}/platform-skill-updated-at-parent.binpb`)
   assert.equal(sha256(compiledParentBytes), "2e1a811bf347b5d9cd3577ac6c762ee9d31f40dea2ac326a06b83bc61de9a8d5")
@@ -411,7 +418,7 @@ test("R319 consumer fixes the complete V8 owner and preserves the historical par
   assert.equal(manifest.owner.repository_commit, ownerCommit)
   assert.equal(manifest.status, "generated-not-activated")
   assert.deepEqual(
-    manifest.execution_proof_chain.slice(1).map((entry) => entry.artifact_version),
+    manifest.execution_proof_chain.slice(2).map((entry) => entry.artifact_version),
     ["8.0.0", "7.0.0", "6.0.0", "5.0.1"],
   )
   assert.equal(
@@ -599,15 +606,15 @@ test("R340 generated consumer exposes both personal package inspection services"
   }
 })
 
-test("formal complete 84-input publication is closed, byte-pinned and rejects omitted, extra and altered inputs", async () => {
+test("formal complete 87-input publication is closed, byte-pinned and rejects omitted, extra and altered inputs", async () => {
   const manifest = JSON.parse(await requiredFile("contract/dependencies/platform-connect.json"))
   assert.equal(manifest.published_inputs.path_algorithm, "owner-repository-relative-including-contract")
-  assert.equal(manifest.published_inputs.aggregate_sha256, "ab8719ce9c4dd6c42157be64154713b4d6831f68b367a2103f98fb95b3e0c166")
-  assert.equal(manifest.published_inputs.files.length, 84)
+  assert.equal(manifest.published_inputs.aggregate_sha256, "64a22c1bd1d1deba9b10d1225c651f8b4a18e4217a6b309cdaff089e6dc6bd6e")
+  assert.equal(manifest.published_inputs.files.length, 87)
   const files = Object.fromEntries(
     await Promise.all(
       manifest.published_inputs.files.map(async (pin) => {
-        const file = pin.path.replace(/^contract\//u, "").replace(/^execution-operations\/v([5-9])\//u, "execution-operations-v$1/")
+        const file = pin.path.replace(/^contract\//u, "").replace(/^execution-operations\/v(10|[5-9])\//u, "execution-operations-v$1/")
         const bytes = await requiredFile(`contract/vendor/kokoro-platform/${ownerCommit}/${file}`)
         assert.equal(bytes.length, pin.bytes)
         assert.equal(sha256(bytes), pin.sha256)

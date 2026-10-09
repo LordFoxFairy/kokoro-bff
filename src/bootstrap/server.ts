@@ -33,6 +33,7 @@ import {
   skillActionForRequest,
   withSkillActionAdmission,
 } from "../auth/user-admission.js"
+import { localSkillImportRoute } from "../http/routes/local-skill-import.js"
 import { failure, ok } from "../contracts/index.js"
 import { mutationTicket, type MutationTicket } from "../application/idempotency.js"
 import {
@@ -202,6 +203,19 @@ async function handle(
   }
   if (await skillSpecificationReadRoute(request, response, config, composition, id, rawPathname)) return
   if (await skillDownloadHandleRoute(request, response, config, composition, id, segments)) return
+  if (
+    await localSkillImportRoute(
+      request,
+      response,
+      config,
+      composition.sessionAdmission,
+      composition.skillAuthorization,
+      composition.localSkillImportClient,
+      id,
+      segments,
+    )
+  )
+    return
   const removedSkillRead =
     request.method === "GET" &&
     segments[0] === "v1" &&

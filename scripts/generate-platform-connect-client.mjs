@@ -16,7 +16,7 @@ import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-const ownerCommit = "9ed6801673ca279f446712de6eee3476717bfb24"
+const ownerCommit = "981df60e74b65eccfc2d58044db9965928e4d37e"
 const vendorRoot = `contract/vendor/kokoro-platform/${ownerCommit}`
 const vendor = `contract/vendor/kokoro-platform/${ownerCommit}/proto`
 const artifacts = {
@@ -25,8 +25,10 @@ const artifacts = {
   v7: `${vendorRoot}/execution-operations-v7`,
   v8: `${vendorRoot}/execution-operations-v8`,
   v9: `${vendorRoot}/execution-operations-v9`,
+  v10: `${vendorRoot}/execution-operations-v10`,
 }
 const artifactAggregates = {
+  v10: "277a2bf24b4fdc34196dac3c5fbba89ef88df75a3b96054af63547f9ae53ff0b",
   v9: "19c1466ab398c6dbb43130f3977fe776532e41e00e2487476d465f22fc936073",
   v8: "4a5ed2ca1a25673967ac2ee05a43c5f568bdd19c9ff768d8e606fdac94b9542f",
   v5: "3f97b3c98fd8e7ce46e4a8ea73237ddb85e764849d2b15dd28d0a3a58a69e42f",
@@ -41,10 +43,10 @@ const artifactProvenanceDigests = {
   v8: "a985f907fc9f2c5d8735c8918f1af6028efa9a3ed0f43b273612c592c2288444",
 }
 const descriptor = `${vendorRoot}/descriptor/platform-v1.binpb`
-const descriptorDigest = "a167ddd3e815a5469da8ef1cbb54be6e22dbada48def0fdd0621e945c2a985db"
+const descriptorDigest = "fc5d3893a05284a5f52d8de40b82f6e2bbd859608994d84dac20dff43a4a6fd2"
 const parentDescriptor = `${vendorRoot}/descriptor/platform-v8-parent39.binpb`
 const parentDigest = "0467c1c45e8ac27c79cb906e27bfdb679d88739e45bfa38128f0f629bec686d5"
-const publicationAggregate = "ab8719ce9c4dd6c42157be64154713b4d6831f68b367a2103f98fb95b3e0c166"
+const publicationAggregate = "64a22c1bd1d1deba9b10d1225c651f8b4a18e4217a6b309cdaff089e6dc6bd6e"
 const publicationInputs = {
   "contract/descriptor/platform-installation-tags-parent-generated.binpb": {
     bytes: 35431,
@@ -155,8 +157,8 @@ const publicationInputs = {
     sha256: "2e1a811bf347b5d9cd3577ac6c762ee9d31f40dea2ac326a06b83bc61de9a8d5",
   },
   "contract/descriptor/platform-v1.binpb": {
-    bytes: 72898,
-    sha256: "a167ddd3e815a5469da8ef1cbb54be6e22dbada48def0fdd0621e945c2a985db",
+    bytes: 77018,
+    sha256: "fc5d3893a05284a5f52d8de40b82f6e2bbd859608994d84dac20dff43a4a6fd2",
   },
   "contract/descriptor/platform-v8-parent39.binpb": {
     bytes: 43624,
@@ -205,6 +207,18 @@ const publicationInputs = {
   "contract/execution-operations/skill-series-current-v1.json": {
     bytes: 526,
     sha256: "7ea63b4fcf3523dcc305207a7ac3956fd4c723f299f757bb566c6b5dab3b9227",
+  },
+  "contract/execution-operations/v10/local-skill-import-v1.json": {
+    bytes: 2646,
+    sha256: "d14f38288ba7708caa55b0a8dba99dce3d2dcb768526cee3ed263ac4642d2198",
+  },
+  "contract/execution-operations/v10/manifest.json": {
+    bytes: 407,
+    sha256: "dfdddd29763f43dc3dabea99c6d5b4ece457e4b5f39ff585f7c59667615300c3",
+  },
+  "contract/execution-operations/v10/provenance.json": {
+    bytes: 506,
+    sha256: "a565b343106284706d11f7cf8a18529df90bd2b9b6789f70ddaa9d017b7c3b21",
   },
   "contract/execution-operations/v5/command-identities.json": {
     bytes: 32532,
@@ -371,16 +385,16 @@ const publicationInputs = {
     sha256: "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08",
   },
   "contract/proto/kokoro/platform/v1/platform_runtime.proto": {
-    bytes: 54847,
-    sha256: "8f7f6292c2b59e1171632362882d7ea490d20bbe1e2fa21556a7a7a4cc7e6a97",
+    bytes: 58465,
+    sha256: "41fdcc2a782a779c38df861f99d89b1d20966486d29ed64647d1ecf149926bd6",
   },
   "contract/proto/kokoro/storage/v3/storage.proto": {
     bytes: 12626,
     sha256: "1021e603065978871c51519ddba5b23c9b97f16b781a08bd98e019b3342bf5f9",
   },
   "contract/provenance.json": {
-    bytes: 897,
-    sha256: "6f55cd3ee100cc282004ba438da4c05d2ef6253af4bf0f75987ecee104248873",
+    bytes: 1050,
+    sha256: "6a28dcb90aaf2f402e1e0991996afa99887673291f40af0a854387372d3d2170",
   },
 }
 
@@ -388,7 +402,7 @@ const output = path.join(root, "src/generated/platform-connect")
 const manifestPath = path.join(root, "contract/dependencies/platform-connect.json")
 const sourceDigests = {
   "kokoro/common/v1/common.proto": "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08",
-  "kokoro/platform/v1/platform_runtime.proto": "8f7f6292c2b59e1171632362882d7ea490d20bbe1e2fa21556a7a7a4cc7e6a97",
+  "kokoro/platform/v1/platform_runtime.proto": "41fdcc2a782a779c38df861f99d89b1d20966486d29ed64647d1ecf149926bd6",
   "kokoro/storage/v3/storage.proto": "1021e603065978871c51519ddba5b23c9b97f16b781a08bd98e019b3342bf5f9",
 }
 const directories = ["kokoro", "kokoro/common", "kokoro/common/v1", "kokoro/platform", "kokoro/platform/v1", "kokoro/storage", "kokoro/storage/v3"]
@@ -427,6 +441,7 @@ export function assertVendorLayout(entries) {
   const names = [
     "descriptor",
     "execution-operations",
+    "execution-operations-v10",
     "execution-operations-v5",
     "execution-operations-v6",
     "execution-operations-v7",
@@ -444,7 +459,7 @@ export function assertVendorLayout(entries) {
 }
 
 function vendorPath(ownerPath) {
-  return ownerPath.replace(/^contract\//u, "").replace(/^execution-operations\/v([5-9])\//u, "execution-operations-v$1/")
+  return ownerPath.replace(/^contract\//u, "").replace(/^execution-operations\/v(10|[5-9])\//u, "execution-operations-v$1/")
 }
 
 export function assertPublicationInputs(files) {
@@ -1098,9 +1113,9 @@ async function verifyExecutionArtifacts() {
 async function verifyInputs() {
   await verifyPublicationInputs()
   const provenance = JSON.parse(await readFile(path.join(root, vendorRoot, "provenance.json"), "utf8"))
-  assert.equal(provenance.combinedSha256, "244d70909067b63e0b6dff721fbc976758e9b08e420d6f19faa638ab628afe2f", "Platform active digest drifted")
+  assert.equal(provenance.combinedSha256, "6fcc148fddb4aaab73076dfb5b6109e2b4d9f0209e93ef58b0c510e3ed28b693", "Platform active digest drifted")
   assert.equal(
-    sha256(Buffer.concat(await Promise.all(provenance.files.map((file) => readFile(path.join(root, vendorRoot, file)))))),
+    sha256(Buffer.concat(await Promise.all(provenance.files.map((file) => readFile(path.join(root, vendorRoot, vendorPath(file))))))),
     provenance.combinedSha256,
     "Platform active sources drifted",
   )
@@ -1212,14 +1227,21 @@ async function manifestFor(directory) {
       files: Object.entries(publicationInputs).map(([file, pin]) => ({ path: file, ...pin })),
     },
     execution_artifact: {
-      path: artifacts.v9,
-      artifact_version: "9.0.0",
+      path: artifacts.v10,
+      artifact_version: "10.0.0",
       status: "inactive",
       routable: false,
-      provenance_path: `${artifacts.v9}/provenance.json`,
-      aggregate_sha256: artifactAggregates.v9,
+      provenance_path: `${artifacts.v10}/provenance.json`,
+      aggregate_sha256: artifactAggregates.v10,
     },
     execution_proof_chain: [
+      {
+        path: artifacts.v10,
+        artifact_version: "10.0.0",
+        aggregate_sha256: artifactAggregates.v10,
+        inherits_version: "9.0.0",
+        inherits_aggregate_sha256: artifactAggregates.v9,
+      },
       {
         path: artifacts.v9,
         artifact_version: "9.0.0",

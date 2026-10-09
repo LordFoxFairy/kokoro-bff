@@ -65,6 +65,9 @@ message SkillSeriesId {
 message SkillId {
   string value = 1;
 }
+message SkillImportIntentId {
+  string value = 1;
+}
 message SkillInstallationId {
   string value = 1;
 }
@@ -160,6 +163,98 @@ message CreateSkillDraftResponse {
   bool replayed = 4;
   kokoro.platform.v1.SkillSeriesId series_id = 5;
   uint64 state_version = 6;
+}
+
+enum SkillImportPhase {
+  SKILL_IMPORT_PHASE_UNSPECIFIED = 0;
+  SKILL_IMPORT_PHASE_INTENT = 1;
+  SKILL_IMPORT_PHASE_UPLOAD_PENDING = 2;
+  SKILL_IMPORT_PHASE_UPLOADED = 3;
+  SKILL_IMPORT_PHASE_COMPLETED = 4;
+  SKILL_IMPORT_PHASE_REJECTED = 5;
+  SKILL_IMPORT_PHASE_EXPIRED = 6;
+}
+
+message SkillImportUploadProof {
+  string upload_id = 1;
+  string asset_id = 2;
+  string source_version_id = 3;
+  string content_sha256 = 4;
+  uint64 size_bytes = 5;
+  reserved 6;
+  reserved "scan_state";
+}
+
+message BeginLocalSkillImportRequest {
+  string request_id = 1;
+  kokoro.common.v1.CommandIdentity command = 2;
+  kokoro.platform.v1.ProductCatalogContext product_context = 3;
+  string filename = 4;
+  uint64 size_bytes = 5;
+  string content_sha256 = 6;
+}
+
+message BeginLocalSkillImportResponse {
+  kokoro.platform.v1.SkillImportIntentId intent_id = 1;
+  kokoro.platform.v1.SkillId skill_id = 2;
+  kokoro.platform.v1.SkillImportPhase phase = 3;
+  string upload_id = 4;
+  kokoro.platform.v1.PackageTransferReference transfer_reference = 5;
+  google.protobuf.Timestamp expires_at = 6;
+  bool replayed = 7;
+}
+
+message CompleteLocalSkillImportRequest {
+  string request_id = 1;
+  kokoro.common.v1.CommandIdentity command = 2;
+  kokoro.platform.v1.ProductCatalogContext product_context = 3;
+  kokoro.platform.v1.SkillImportIntentId intent_id = 4;
+  string upload_id = 5;
+  string source_version_id = 6;
+  uint64 size_bytes = 7;
+  string content_sha256 = 8;
+}
+
+message CompleteLocalSkillImportResponse {
+  kokoro.platform.v1.SkillImportIntentId intent_id = 1;
+  kokoro.platform.v1.SkillId skill_id = 2;
+  kokoro.platform.v1.SkillImportPhase phase = 3;
+  kokoro.platform.v1.SkillImportUploadProof upload_proof = 4;
+  google.protobuf.Timestamp expires_at = 5;
+  bool replayed = 6;
+  kokoro.platform.v1.SkillPackageScanState scan_state = 7;
+}
+
+message FinalizeLocalSkillImportRequest {
+  string request_id = 1;
+  kokoro.common.v1.CommandIdentity command = 2;
+  kokoro.platform.v1.ProductCatalogContext product_context = 3;
+  kokoro.platform.v1.SkillImportIntentId intent_id = 4;
+}
+
+message FinalizeLocalSkillImportResponse {
+  kokoro.platform.v1.SkillImportIntentId intent_id = 1;
+  kokoro.platform.v1.SkillImportPhase phase = 2;
+  kokoro.platform.v1.SkillProductRecord skill = 3;
+  kokoro.platform.v1.ProductSkillInstallation installation = 4;
+  bool replayed = 5;
+}
+
+message GetLocalSkillImportRequest {
+  string request_id = 1;
+  kokoro.platform.v1.ProductCatalogContext product_context = 2;
+  kokoro.platform.v1.SkillImportIntentId intent_id = 3;
+}
+
+message GetLocalSkillImportResponse {
+  kokoro.platform.v1.SkillImportIntentId intent_id = 1;
+  kokoro.platform.v1.SkillId skill_id = 2;
+  kokoro.platform.v1.SkillImportPhase phase = 3;
+  google.protobuf.Timestamp expires_at = 4;
+  optional kokoro.platform.v1.SkillImportUploadProof upload_proof = 5;
+  optional string rejection_code = 6;
+  optional kokoro.platform.v1.SkillProductRecord skill = 7;
+  optional kokoro.platform.v1.ProductSkillInstallation installation = 8;
 }
 
 enum SkillPackagePhase {
@@ -777,6 +872,10 @@ message AuthorizeMcpToolResponse {
 }
 
 service SkillCatalogService {
+  rpc BeginLocalSkillImport(kokoro.platform.v1.BeginLocalSkillImportRequest) returns (kokoro.platform.v1.BeginLocalSkillImportResponse);
+  rpc CompleteLocalSkillImport(kokoro.platform.v1.CompleteLocalSkillImportRequest) returns (kokoro.platform.v1.CompleteLocalSkillImportResponse);
+  rpc FinalizeLocalSkillImport(kokoro.platform.v1.FinalizeLocalSkillImportRequest) returns (kokoro.platform.v1.FinalizeLocalSkillImportResponse);
+  rpc GetLocalSkillImport(kokoro.platform.v1.GetLocalSkillImportRequest) returns (kokoro.platform.v1.GetLocalSkillImportResponse);
   rpc UpdateSkillDraft(kokoro.platform.v1.UpdateSkillDraftRequest) returns (kokoro.platform.v1.UpdateSkillDraftResponse);
   rpc DiscardSkillDraft(kokoro.platform.v1.DiscardSkillDraftRequest) returns (kokoro.platform.v1.DiscardSkillDraftResponse);
   rpc SetSkillPublicationAudience(kokoro.platform.v1.SetSkillPublicationAudienceRequest) returns (kokoro.platform.v1.SetSkillPublicationAudienceResponse);

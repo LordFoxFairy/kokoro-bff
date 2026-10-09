@@ -59,6 +59,20 @@ export async function authorizeSkillAction(
     action,
   })
 }
+/** Local import writes require both current human actions from one admitted session, in order, on one signal. */
+export async function authorizeLocalSkillImportWrite(
+  source: Pick<import("./skill-authorization.client.js").SkillAuthorizationClient, "check">,
+  admission: Extract<UserAdmissionResult, { ok: true }>,
+  signal: AbortSignal,
+) {
+  for (const action of ["create_draft", "install"] as const) {
+    signal.throwIfAborted()
+    const checked = await authorizeSkillAction(source, admission, action, signal)
+    signal.throwIfAborted()
+    if (!checked.ok) return checked
+  }
+  return { ok: true } as const
+}
 export function skillActionForRequest(method: string, path: string[]): import("./skill-authorization.types.js").SkillAuthorizationInput["action"] | null {
   if (path[0] === "admin" && path[1] === "skills") {
     if (method === "GET") return "admin_read"

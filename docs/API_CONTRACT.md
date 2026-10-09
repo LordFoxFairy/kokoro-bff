@@ -2,18 +2,18 @@
 
 本能力没有已证明的 Manus public upload write suffix，因此不新增 public `/v1` operation。唯一拟议外部边界是 Kokoro BFF `browser-private` v1：
 
-| Method/path | strict request | strict success projection |
-| --- | --- | --- |
-| `POST /browser/v1/skills/local-imports` | 单 `Idempotency-Key`；JSON `{filename,size_bytes,content_sha256}` | 201 `{data:{intent_id,skill_id,phase:"upload_pending",upload_id,transfer_reference,expires_at,replayed}}` |
-| `POST /browser/v1/skills/local-imports/{intent_id}/complete` | 单 key；JSON `{upload_id,source_version_id,size_bytes,content_sha256}` | 200 `{data:{intent_id,skill_id,phase:"uploaded",upload_proof,scan_state,expires_at,replayed}}` |
-| `POST /browser/v1/skills/local-imports/{intent_id}/finalize` | 单 key；零请求体 | 200 `{data:{intent_id,phase:"completed",skill,installation,replayed}}` |
-| `GET /browser/v1/skills/local-imports/{intent_id}` | 无 query/body/key | 200 `{data:{intent_id,skill_id,phase,expires_at,upload_proof?,rejection_code?,skill?,installation?}}`，presence 按 phase 闭集 |
+| Method/path                                                  | strict request                                                         | strict success projection                                                                                                     |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `POST /browser/v1/skills/local-imports`                      | 单 `Idempotency-Key`；JSON `{filename,size_bytes,content_sha256}`      | 201 `{data:{intent_id,skill_id,phase:"upload_pending",upload_id,transfer_reference,expires_at,replayed}}`                     |
+| `POST /browser/v1/skills/local-imports/{intent_id}/complete` | 单 key；JSON `{upload_id,source_version_id,size_bytes,content_sha256}` | 200 `{data:{intent_id,skill_id,phase:"uploaded",upload_proof,scan_state,expires_at,replayed}}`                                |
+| `POST /browser/v1/skills/local-imports/{intent_id}/finalize` | 单 key；零请求体                                                       | 200 `{data:{intent_id,phase:"completed",skill,installation,replayed}}`                                                        |
+| `GET /browser/v1/skills/local-imports/{intent_id}`           | 无 query/body/key                                                      | 200 `{data:{intent_id,skill_id,phase,expires_at,upload_proof?,rejection_code?,skill?,installation?}}`，presence 按 phase 闭集 |
 
 `transfer_reference` 仅含 approved-origin URL、`PUT`、完整 required headers与RFC3339 expiry；`upload_proof`仅含持久的 upload/asset/source-version/hash/size，Get 不返回或查询 scan。Complete 的 `scan_state` 是当次权威读取的独立字段。ID、uint64、lowercase SHA-256、Timestamp、enum/message presence、content type、request ID、no-store和错误 status/reason 全部严格投影；unknown/UNSPECIFIED/额外字段拒绝，不回显 owner message、token、URL凭据或内部事实。
 
 三个 POST（包括 completed/same-key replay）必须 fresh `create_draft AND install` 后才调用 Platform；GET 使用 fresh session/read。Begin 的 201（含同 key 重签）只适用于未到期的 `upload_pending` intent 且 Storage upload 仍为 pending；`uploaded`、`completed`、`rejected` 或 expired phase 的旧 Begin 重放投影 owner 明确 phase/precondition 错误，不返回 transfer reference，调用方以 GET 恢复。Finalize 已 completed 的原 key 在 owner 至少 30 天 receipt 保留窗内仍精确重放同一成功结果。tenant/subject 只来自受信 session，不能从 body/header自报。预算、取消、900秒 PUT上限、24小时 intent、原key恢复与 unknown ACK 规则以技术设计为准。BFF 不接 Storage、不持久 receipt/intent。
 
-该 private contract 后继由 `local-skill-import.policy.ts` 唯一编辑并确定性生成根 policy JSON；不写入 public OpenAPI/Developer Portal/public SDK/count。Platform 五份 owner 机器事实正式发行后可先生成 client、创建 private policy 并做注入式隔离合同/HTTP测试；owner artifact inactive 时不得在生产 server 注册该 namespace 或把 null client 暴露为可观察 503。只有 owner active/routable 与真实 Storage 集成门同时成立，后继激活切片才注册 exact dispatch。GitHub/AI 的普通 Draft/Validate/Publish 与后台 Admin Publish 保持原合同。
+该 private contract 当前候选由 `local-skill-import.policy.ts` 唯一编辑并确定性生成根 policy JSON；不写入 public OpenAPI/Developer Portal/public SDK/count。正式 Platform A6 已供生成 client 与注入式隔离合同/HTTP测试；owner artifact inactive 时生产 composition 不注入 client，该 namespace 仍为404而非 null-client 503。只有 owner active/routable 与真实 Storage 集成门同时成立，后继激活切片才注册 exact dispatch。GitHub/AI 的普通 Draft/Validate/Publish 与后台 Admin Publish 保持原合同。
 
 <!-- T-K03.4-BROWSER-PRIVATE-LOCAL-IMPORT-API-END -->
 
@@ -45,13 +45,13 @@ Hub扩展X：verified:B；coverImage/cmsUpdatedAt/syncStatus:S；source:{type,ur
 Detail集合D：id/name/description/version/updatedAt/ownerType/type/displayName/sortOrder/createdAt/visibility/userDescription/coverImage/addTime:S；added/defaultEnable/defaultAdd:B；exampleQuestions/sessionTypes:S[]；tags:{values:S[]}；skillIcon:{type:S,value:S}。DownloadInfo集合F：downloadUrl/filename/expiresAt:S。
 ListSkills的userAddedSkills与officialSkills元素均观察D、enabled:B、icon:S、skillConfig:{teamSkillForceAdd:B}；只有officialSkills观察deviceCapable:B。此是各数组字段union而非逐record必有承诺；Detail的D不因此自动获得enabled/deviceCapable/skillConfig。
 
-| 实际POST与请求presence | 实际200响应字段类型与presence | 未观察规则/错误/写协议 |
-| --- | --- | --- |
-| OptionalService/ListSkills；{}，零请求成员 | userAddedSkills:object[]、officialSkills:object[]均出现；元素按上述ListSkills集合 | required/optional/default/enum OPEN；错误OPEN；关联写协议OPEN |
-| OptionalService/ListHubSkills；pageSize:I=9、shuffle:B=true、includeOfficialSkills:B=true均出现 | skills:object[9]、tagOptions出现；元素H与X字段union出现；nextPageToken未出现 | 所有presence规则OPEN；不推下一页不存在；错误OPEN；写协议OPEN |
-| OptionalService/ListHubSkills；pageSize:I=1出现，shuffle/includeOfficialSkills未出现 | skills:object[1]、tagOptions、nextPageToken:S出现；H、coverImage/cmsUpdatedAt/source/syncStatus/版本source与license出现，verified未出现 | 不推缺省开关值或verified=false；presence规则OPEN；错误OPEN；写协议OPEN |
-| OptionalService/GetSkill；skillId:S出现 | skill:object含D、downloadInfo:object含F均出现 | presence/enum/default OPEN；错误OPEN；关联写协议OPEN |
-| SkillService/DownloadSkill；skillId:S出现 | skill:object含D、downloadInfo:object含F均出现；POST返回JSON，非ZIP body | presence/enum/default OPEN；错误OPEN；关联写协议OPEN |
+| 实际POST与请求presence                                                                          | 实际200响应字段类型与presence                                                                                                           | 未观察规则/错误/写协议                                                 |
+| ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| OptionalService/ListSkills；{}，零请求成员                                                      | userAddedSkills:object[]、officialSkills:object[]均出现；元素按上述ListSkills集合                                                       | required/optional/default/enum OPEN；错误OPEN；关联写协议OPEN          |
+| OptionalService/ListHubSkills；pageSize:I=9、shuffle:B=true、includeOfficialSkills:B=true均出现 | skills:object[9]、tagOptions出现；元素H与X字段union出现；nextPageToken未出现                                                            | 所有presence规则OPEN；不推下一页不存在；错误OPEN；写协议OPEN           |
+| OptionalService/ListHubSkills；pageSize:I=1出现，shuffle/includeOfficialSkills未出现            | skills:object[1]、tagOptions、nextPageToken:S出现；H、coverImage/cmsUpdatedAt/source/syncStatus/版本source与license出现，verified未出现 | 不推缺省开关值或verified=false；presence规则OPEN；错误OPEN；写协议OPEN |
+| OptionalService/GetSkill；skillId:S出现                                                         | skill:object含D、downloadInfo:object含F均出现                                                                                           | presence/enum/default OPEN；错误OPEN；关联写协议OPEN                   |
+| SkillService/DownloadSkill；skillId:S出现                                                       | skill:object含D、downloadInfo:object含F均出现；POST返回JSON，非ZIP body                                                                 | presence/enum/default OPEN；错误OPEN；关联写协议OPEN                   |
 
 用户九项逐record观察verified为5/9，source/syncStatus/cmsUpdatedAt及版本source/license字段为4/9；coverImage在九项出现但未证明全局必有。所有verified/source/sync与license presence及状态转移只是observation，未见规则OPEN；不按publisherType/sourceKind推true/false或补null。
 
@@ -59,21 +59,21 @@ ListSkills的userAddedSkills与officialSkills元素均观察D、enabled:B、icon
 
 H=现authorizeUserRequest：web-bff service envelope＋唯一human Bearer→fresh IAM session，tenant=context.identity.namespace且等config.tenantId，subject=context.identity.userId；不信body/旧identity header。A=H＋现CheckTenantSkillAuthorization action与当前IAM admin资格；不是service scope或陈旧platformAdmin标志授human。O-R=现platform:projection.read，O-W=platform:skill-catalog.manage，O-A=platform:skills-admin.manage各自固定tenant正式workload credential；均不替human。actions逐项来自src/auth/user-admission.ts现skillActionForRequest与正式IAM schema；网站POST read按原读取语义映射H，不能猜read/manage动作字符串。
 
-| 旧 /v1 路径与方法（完整42paths/47ops） | 正式职责与参考处理 | 当前可信human/admin与owner边界 |
-| --- | --- | --- |
-| GET /skills、/skills/pool、/skills/catalog | 分开已安装选择、有效池、Hub目录；公开选择以skill.list替换；Hub按ListHubSkills，非同资源合并 | H→O-R；现GET无独立Skills IAM action，owner可见性读，不能以POST carrier改为写action |
-| GET /skills/{skill_id}、/self/skills、/self/skills/{skill_id} | active确认、owned管理、本人详情；ListSkills/GetSkill已观察，owned草稿职责保留；始终当前human IAM/tenant准入，拒绝匿名，状态/权限失败安全404/403 | H→O-R；owned本人边界/active状态由owner核；无anonymous |
-| POST /skills/drafts；GET/POST /skills/{skill_id}/package-upload；POST其/complete | 真实Create/Begin/观察/Complete与版本ACK；参考写协议待观察，保现固定CAS/key与来源版本 | H→O-W；POST create_draft/begin_upload/complete_upload；GET观察仍H、现owner O-W句柄读 |
-| POST /skills/{skill_id}/validate、/publish；PATCH其/draft；POST其/discard、/audience | 校验/发布/编辑/丢弃/可见性事务；未观察，保owner生命周期与审计，不删职责或猜公开名称 | H→O-W；validate_draft/publish/update_draft/discard_draft/set_publication_audience |
-| POST /self/skills/{skill_id}/versions、/withdraw | 普通独立新draft与实际CAS撤回；未观察，保与Admin版本语义区别 | H→O-W；create_version/withdraw；本人owner scope固定user/当前subject |
-| GET/POST /skill-installations；GET/DELETE /skill-installations/{installation_id}；PUT其/enabled | 精确版本安装/读回/移除/启停；ListSkills表示补充不替写准入，操作协议待观察 | H；GET→O-R；POST install/DELETE remove_installation/PUT set_installation_enabled→O-W |
-| POST /skills/github/preview、/github/import、/ai-import | 固定commit/path预览导入、真实conversation/artifact ZIP导入draft；写协议待观察，不用Chat回调冒成功 | H；preview→O-W调用前后当前资格、无独立IAM action；两import create_draft→O-W |
-| GET /skills/{skill_id}/package、/self/skills/{skill_id}/package、/skill-installations/{installation_id}/package | 可选file_path原目录与正文/exactrevision；网站文件API未观察，保路径/UTF8/大小和安装旧版 | H→O-R；catalog可见性、managed本人、installation原绑定由owner核；无独立GET action |
-| GET /skills/{skill_id}/download | POST原DownloadSkill取得JSON F，downloadUrl指向唯一GET /skill-downloads/{handle}字节资源（Web/api）；旧直接二进制入口删除，不宣新GET为Manus公开method | H→O-R＋I/O后同身份readmit；当前下载资格/exact包由owner核；新handle每次同准入 |
-| GET/POST /skills/{skill_id}/cover-upload；POST其/complete；GET /skills/{skill_id}/cover | 实际cover版本ACK/扫描/CAS与图片读取；参考写协议未观察，保本人与Admin权限隔离 | H→O-W；POST begin_upload/complete_upload，GET观察/cover bytes当前资格；不替Admin授权 |
-| GET /admin/skills、/admin/skills/{skill_id}；POST其/versions、/publish、/withdraw、/quarantine、/restore、/audience、/discard | Admin列表详情七事务；未观察，保当前human admin/专用owner凭据/CAS，不扩大普通发布权 | A→O-A；GET admin_read；POST admin_create_version/official_publish/admin_withdraw/quarantine/restore/admin_set_publication_audience/admin_discard_draft |
-| POST /skill-shares；GET/DELETE /skill-shares/{share_id}；POST /skills/usage | BFF自有链接/撤销与可信usage聚合；参考未观察，链接不授匿名/跨tenant资格，缺coverage不变0 | H；share写BFF自有tenant/creator且inspect→O-R，usage本tenant可见性；现无独立Skills IAM action |
-| PATCH /projects/{projectId}/skills/{skill} | 项目Skills选择关联；与公开list项目读取分开，保项目权限/幂等，不猜task调用字段 | H＋现authorizeLiveBffMutation项目资格；fresh inspect→O-R；关联写本仓，现无Skills专用IAM action |
+| 旧 /v1 路径与方法（完整42paths/47ops）                                                                                        | 正式职责与参考处理                                                                                                                                   | 当前可信human/admin与owner边界                                                                                                                         |
+| ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| GET /skills、/skills/pool、/skills/catalog                                                                                    | 分开已安装选择、有效池、Hub目录；公开选择以skill.list替换；Hub按ListHubSkills，非同资源合并                                                          | H→O-R；现GET无独立Skills IAM action，owner可见性读，不能以POST carrier改为写action                                                                     |
+| GET /skills/{skill_id}、/self/skills、/self/skills/{skill_id}                                                                 | active确认、owned管理、本人详情；ListSkills/GetSkill已观察，owned草稿职责保留；始终当前human IAM/tenant准入，拒绝匿名，状态/权限失败安全404/403      | H→O-R；owned本人边界/active状态由owner核；无anonymous                                                                                                  |
+| POST /skills/drafts；GET/POST /skills/{skill_id}/package-upload；POST其/complete                                              | 真实Create/Begin/观察/Complete与版本ACK；参考写协议待观察，保现固定CAS/key与来源版本                                                                 | H→O-W；POST create_draft/begin_upload/complete_upload；GET观察仍H、现owner O-W句柄读                                                                   |
+| POST /skills/{skill_id}/validate、/publish；PATCH其/draft；POST其/discard、/audience                                          | 校验/发布/编辑/丢弃/可见性事务；未观察，保owner生命周期与审计，不删职责或猜公开名称                                                                  | H→O-W；validate_draft/publish/update_draft/discard_draft/set_publication_audience                                                                      |
+| POST /self/skills/{skill_id}/versions、/withdraw                                                                              | 普通独立新draft与实际CAS撤回；未观察，保与Admin版本语义区别                                                                                          | H→O-W；create_version/withdraw；本人owner scope固定user/当前subject                                                                                    |
+| GET/POST /skill-installations；GET/DELETE /skill-installations/{installation_id}；PUT其/enabled                               | 精确版本安装/读回/移除/启停；ListSkills表示补充不替写准入，操作协议待观察                                                                            | H；GET→O-R；POST install/DELETE remove_installation/PUT set_installation_enabled→O-W                                                                   |
+| POST /skills/github/preview、/github/import、/ai-import                                                                       | 固定commit/path预览导入、真实conversation/artifact ZIP导入draft；写协议待观察，不用Chat回调冒成功                                                    | H；preview→O-W调用前后当前资格、无独立IAM action；两import create_draft→O-W                                                                            |
+| GET /skills/{skill_id}/package、/self/skills/{skill_id}/package、/skill-installations/{installation_id}/package               | 可选file_path原目录与正文/exactrevision；网站文件API未观察，保路径/UTF8/大小和安装旧版                                                               | H→O-R；catalog可见性、managed本人、installation原绑定由owner核；无独立GET action                                                                       |
+| GET /skills/{skill_id}/download                                                                                               | POST原DownloadSkill取得JSON F，downloadUrl指向唯一GET /skill-downloads/{handle}字节资源（Web/api）；旧直接二进制入口删除，不宣新GET为Manus公开method | H→O-R＋I/O后同身份readmit；当前下载资格/exact包由owner核；新handle每次同准入                                                                           |
+| GET/POST /skills/{skill_id}/cover-upload；POST其/complete；GET /skills/{skill_id}/cover                                       | 实际cover版本ACK/扫描/CAS与图片读取；参考写协议未观察，保本人与Admin权限隔离                                                                         | H→O-W；POST begin_upload/complete_upload，GET观察/cover bytes当前资格；不替Admin授权                                                                   |
+| GET /admin/skills、/admin/skills/{skill_id}；POST其/versions、/publish、/withdraw、/quarantine、/restore、/audience、/discard | Admin列表详情七事务；未观察，保当前human admin/专用owner凭据/CAS，不扩大普通发布权                                                                   | A→O-A；GET admin_read；POST admin_create_version/official_publish/admin_withdraw/quarantine/restore/admin_set_publication_audience/admin_discard_draft |
+| POST /skill-shares；GET/DELETE /skill-shares/{share_id}；POST /skills/usage                                                   | BFF自有链接/撤销与可信usage聚合；参考未观察，链接不授匿名/跨tenant资格，缺coverage不变0                                                              | H；share写BFF自有tenant/creator且inspect→O-R，usage本tenant可见性；现无独立Skills IAM action                                                           |
+| PATCH /projects/{projectId}/skills/{skill}                                                                                    | 项目Skills选择关联；与公开list项目读取分开，保项目权限/幂等，不猜task调用字段                                                                        | H＋现authorizeLiveBffMutation项目资格；fresh inspect→O-R；关联写本仓，现无Skills专用IAM action                                                         |
 
 新增字节资源GET /skill-downloads/{handle}仅browser-private、H当前准入；opaque小TTL/容量有界内存绑定tenant/subject、exact version、原资格、真实filename/expiry。过期或重启旧句柄410，撤权403或安全404；scan/依赖稳定脱敏错误；句柄缺失同410；no-store、request-id、取消预算沿现边界，不暴露内部URL/凭据、不猜最新。skillId普通GET/Download解析owner显式current，本人安装下载保持原installation→旧version绑定；owner无必需selector/资格时失败，不latest/HEAD。
 BFF一次修改唯一public OpenAPI/现route与projector；正式 owner发行后固定生成，不编辑generated文件；Web随后固定新artifact，同时删对应旧snake/扁平schema与旧data/meta消费，Admin与其它仍有效CAS保原职责。新机器major/digest由Root冻结发行，不在本设计伪报操作总数不变。
@@ -127,7 +127,6 @@ Catalog/managed/published/installation投影真实category_keys/product/source_k
 GitHubpreview请求{repository_url,path?}只支持canonicalhttps://github.com/owner/repository。固定API真实defaultbranch→fullSHA，受限ZIP+SKILL.md以正式js-yaml4.3.2 FAILSAFE解析真实name/description及可选metadata。根目录优先，否则唯一合法目录；多候选返回{selection_required:true,repository_url,commit,paths}，不默认取首项。就绪返回{selection_required:false,selector:{owner,repository,commit,path},metadata,repository,content_sha256,size_bytes}。import请求仅selector，重新从同SHA/path包解析metadata，不接受browser metadata，也不支持URL-only直接import。GitHubprovenance无asset_ref时真实omit、AIrequired保持，draft前不造Asset。所有网络覆盖同请求deadline/cancel、固定host、redirect:error/credentials:omit、有界UTF8/YAML/ZIP/hash。
 
 安装list已接既有source_kind闭集、未知/重复400、缺省all由省字段表达；分页cursor由owner绑定query资格。当前正式P4已修owner typed/raw/RPC source_kind绑定与分页前query筛选；BFF将installed/owned query按trim后1–1024 Unicode scalars严格校验，保字面%/_/反斜杠，不做当前页过滤；query/source/actor等cursor身份由owner绑定。BFF loopback只证明转发，Root真实PG证据与后续配对/浏览器分别验收。category_keys替代categories旧alias，无兼容字段或双decoder。PNG/JPEGcover资格与下载全spool按TECH当前限制；记录式创建及完整正常浏览器S01–S10待验。
-
 
 P4仅既有installed与owned列表可选query消费，Public9.0/132不另发版本，不新增方法/Schema/依赖。原52e副本76删净，仅fa185ed正式81机器；新增query6从独立parent完整逆向剥离后保所有历史父SHA，生成物只正规生成。P1/P2已含source I/O后required当前session同tenant/subject重验及owner坏响应502；原浏览器input400保持。仍非正常激活/配对/页面或S01–S10完成。
 
@@ -189,12 +188,12 @@ canonical `contract/openapi/v1/openapi.yaml` 升为 **8.9.0 / 111 operations**�
 skill_updated_at: { type: string, format: date-time, pattern: "Z$" }
 ```
 
-| Schema | 8.9 required/properties 变化 |
-|---|---|
-| `Skill` | 核心 required 增 `skill_updated_at`；`installed` 仍是原可选属性，其他字段不变。 |
-| `ManagedPersonalSkillResource` | 原安全八字段增为安全九字段，`skill_updated_at` required。 |
-| `PublishedPersonalSkillResource` | 原 ACTIVE 七字段增为八字段，`skill_updated_at` required。 |
-| `SkillInstallation` | required 增 `skill_updated_at`；`installed_at`、`updated_at`、optional `removed_at` 及全部原语义不变。 |
+| Schema                           | 8.9 required/properties 变化                                                                           |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `Skill`                          | 核心 required 增 `skill_updated_at`；`installed` 仍是原可选属性，其他字段不变。                        |
+| `ManagedPersonalSkillResource`   | 原安全八字段增为安全九字段，`skill_updated_at` required。                                              |
+| `PublishedPersonalSkillResource` | 原 ACTIVE 七字段增为八字段，`skill_updated_at` required。                                              |
+| `SkillInstallation`              | required 增 `skill_updated_at`；`installed_at`、`updated_at`、optional `removed_at` 及全部原语义不变。 |
 
 `skill_updated_at` 只表示所绑定精确 Skill revision 的 `Skill.updatedAt`。特别是安装响应：tag7/`installed_at` 是安装时刻，tag8/`updated_at` 是安装记录变化时刻，tag14/`skill_updated_at` 是来源 Skill 时刻；三值允许不同，不建立相互先后约束，也不以 tag8 补 tag14。
 
@@ -240,9 +239,9 @@ Root Node22.22.2完整check自然0：contract317PASS；default897PASS/0FAIL/2原
 
 ### 两个具名本人 GET
 
-| Public path / operationId目标 | 唯一 fixed owner RPC |
-|---|---|
-| GET /v1/self/skills/{skill_id}/package / getManagedPersonalSkillPackage | ProductSkillPackageInspectionService.InspectPersonalSkillPackage |
+| Public path / operationId目标                                                               | 唯一 fixed owner RPC                                                                     |
+| ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| GET /v1/self/skills/{skill_id}/package / getManagedPersonalSkillPackage                     | ProductSkillPackageInspectionService.InspectPersonalSkillPackage                         |
 | GET /v1/skill-installations/{installation_id}/package / getPersonalSkillInstallationPackage | ProductSkillInstallationPackageInspectionService.InspectPersonalSkillInstallationPackage |
 
 owner=kokoro-bff、visibility=public、stability与既有首发策略一致、idempotency=none、permission=self/current user；Platform机器侧仅现 platform:projection.read，不新增human角色或scope。service envelope+当前 IAM Session唯一准入，tenant/subject来自 context，不从外来legacy header/body身份自报；不自动安装或先取目录猜权限。来源 path ID或安装 path ID精确送对应 typed wrapper，无command/proof/product_context；request_id原BFF ID，file_path optional presence保留。
@@ -264,15 +263,15 @@ owner=kokoro-bff、visibility=public、stability与既有首发策略一致、id
 
 统一closed `{error:{code,message,retryable}}`，message固定脱敏，禁SQL/URL/token/正文/原异常；已知 request ID返回header，no-store。只按可信typed Connect Code及固定结构reason/header识别配对，不靠message substring猜错误。
 
-| HTTP | code | retryable / 来源 |
-|---|---|---|
-| 400 | invalid_skill_package_request | false；输入闭集/路径拒绝，owner固定InvalidArgument |
-| 404 | skill_package_not_found | false；不存在/foreign/removed统一，不泄存在性 |
-| 404 | skill_package_file_not_found（有条件候选，当前不启用） | false；仅后继确认 owner 稳定机器 details/error code 可区分文件缺失时准入；无此事实统一 skill_package_not_found |
-| 412 | skill_package_precondition_failed | false；合法绑定包暂不可预览等固定FailedPrecondition，不混超量 |
-| 429 | skill_package_limit_exceeded | false；owner ResourceExhausted或本次public实际JSON超1MiB；超量文件不可预览仍429，不擅改412/413、无自动retry |
-| 502 | skill_package_response_invalid | false；坏typed响应/身份/headers/安全投影、Internal或未知错误tuple |
-| 503 | skill_package_dependency_unavailable | true；token/机器资格401或403、Unavailable/Canceled/DeadlineExceeded与本地完整预算耗尽；不伪用户session401/403 |
+| HTTP | code                                                   | retryable / 来源                                                                                               |
+| ---- | ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| 400  | invalid_skill_package_request                          | false；输入闭集/路径拒绝，owner固定InvalidArgument                                                             |
+| 404  | skill_package_not_found                                | false；不存在/foreign/removed统一，不泄存在性                                                                  |
+| 404  | skill_package_file_not_found（有条件候选，当前不启用） | false；仅后继确认 owner 稳定机器 details/error code 可区分文件缺失时准入；无此事实统一 skill_package_not_found |
+| 412  | skill_package_precondition_failed                      | false；合法绑定包暂不可预览等固定FailedPrecondition，不混超量                                                  |
+| 429  | skill_package_limit_exceeded                           | false；owner ResourceExhausted或本次public实际JSON超1MiB；超量文件不可预览仍429，不擅改412/413、无自动retry    |
+| 502  | skill_package_response_invalid                         | false；坏typed响应/身份/headers/安全投影、Internal或未知错误tuple                                              |
+| 503  | skill_package_dependency_unavailable                   | true；token/机器资格401或403、Unavailable/Canceled/DeadlineExceeded与本地完整预算耗尽；不伪用户session401/403  |
 
 当前 inspection 实现的 NotFound rawMessage（如 package_file_not_found）不视为已发布稳定机器 details/code；当前公开映射必须统一 skill_package_not_found，不读取 message 判 missingfile/foreign。文件专属码在未取得正规机器事实前不得列实际可达分支；后继机器契约可只发行当前可达统一404闭集，不凭 D0 候选宣存在。ResourceExhausted 同样统一429 limit，不靠 message 区分超限/非文本；只有 typed FailedPrecondition 才映412。
 
@@ -304,12 +303,12 @@ Root显式Node22.22.2最终71468完整pnpm check自然exit0：contract304PASS/0S
 
 ### 四个 public 操作（唯一schema待机器切片发布）
 
-| GET / operationId | 固定ProductMcpPersonalService RPC | input闭集 |
-|---|---|---|
-| /v1/self/mcp/connectors / listPersonalMcpConnectors | ListPersonalMcpConnectors | query status?、limit?、cursor? |
-| /v1/self/mcp/connectors/{connector_id} / getPersonalMcpConnector | GetPersonalMcpConnector | 一个path ID；无query |
-| /v1/self/mcp/connectors/{connector_id}/connections / listPersonalMcpConnections | ListPersonalMcpConnections | path ID；query limit?、cursor? |
-| /v1/self/mcp/connections/{connection_id} / getPersonalMcpConnection | GetPersonalMcpConnection | 一个path ID；无query |
+| GET / operationId                                                               | 固定ProductMcpPersonalService RPC | input闭集                      |
+| ------------------------------------------------------------------------------- | --------------------------------- | ------------------------------ |
+| /v1/self/mcp/connectors / listPersonalMcpConnectors                             | ListPersonalMcpConnectors         | query status?、limit?、cursor? |
+| /v1/self/mcp/connectors/{connector_id} / getPersonalMcpConnector                | GetPersonalMcpConnector           | 一个path ID；无query           |
+| /v1/self/mcp/connectors/{connector_id}/connections / listPersonalMcpConnections | ListPersonalMcpConnections        | path ID；query limit?、cursor? |
+| /v1/self/mcp/connections/{connection_id} / getPersonalMcpConnection             | GetPersonalMcpConnection          | 一个path ID；无query           |
 
 全部metadata owner=kokoro-bff、visibility=public、stability=beta、idempotency=none、permission=`product.mcp.read_personal`（这是public operation描述，不新增IAMrole/scope）；普通本人无需platformAdmin。请求禁止body/transfer-encoding/idempotency-key、未知或重复query；limit仅规范十进制1–100、省略50，不trim、不接受0/负数/小数/exponent/前导零；cursor非空canonical owner opaque base64url≤2048，BFF不解码内容，原样传owner校验绑定。status仅pending/active/error/revoked，省略所有管理状态，无空串/数字/unknown。path ID完整ASCII `[A-Za-z0-9][A-Za-z0-9._:-]{0,190}`，不trim/大小写修复，禁止解码后slash或多次decode。GET detail不接受分页。owner请求只正规generated字段；request_id来自BFF可信请求context，identity永不来自query/body。
 
@@ -326,15 +325,15 @@ Root显式Node22.22.2最终71468完整pnpm check自然exit0：contract304PASS/0S
 
 统一 `{error:{code:string,message:string,retryable:boolean}}`，对象closed，三属性必填；no-store。公开status/code/retryable配对：
 
-| HTTP | code闭集 | retryable |
-|---|---|---|
-| 400 | invalid_mcp_personal_request | false |
-| 401 | session_authentication_required、session_invalid | false |
-| 403 | service_auth_failed、session_forbidden、product_tenant_forbidden | false |
-| 404 | mcp_personal_not_found（owner NotFound，不区分缺失/非本人） | false |
-| 429 | session_rate_limited | true；透传经校验Retry-After |
-| 502 | mcp_personal_response_invalid（坏wire/persisted Internal/不可能owner参数拒绝） | false |
-| 503 | product_tenant_not_configured、iam_admission_unavailable、mcp_personal_dependency_unavailable | true |
+| HTTP | code闭集                                                                                      | retryable                   |
+| ---- | --------------------------------------------------------------------------------------------- | --------------------------- |
+| 400  | invalid_mcp_personal_request                                                                  | false                       |
+| 401  | session_authentication_required、session_invalid                                              | false                       |
+| 403  | service_auth_failed、session_forbidden、product_tenant_forbidden                              | false                       |
+| 404  | mcp_personal_not_found（owner NotFound，不区分缺失/非本人）                                   | false                       |
+| 429  | session_rate_limited                                                                          | true；透传经校验Retry-After |
+| 502  | mcp_personal_response_invalid（坏wire/persisted Internal/不可能owner参数拒绝）                | false                       |
+| 503  | product_tenant_not_configured、iam_admission_unavailable、mcp_personal_dependency_unavailable | true                        |
 
 owner InvalidArgument针对已允许的opaque cursor拒绝映400；owner机器Unauthenticated/PermissionDenied、token获取失败、Unavailable/DeadlineExceeded/资源耗尽归503 dependency，不伪用户session401/403。本地完整10秒deadline届满有可写response时503 dependency；只有caller实际abort/disconnect才不迟到写响应；owner RPC返回Canceled而当前caller仍live时，必须返回closed 503 `mcp_personal_dependency_unavailable`（retryable=true），不把owner取消误当caller断开，也不悬挂无响应；无499公开schema。owner未知错误tuple或未知enum归502；不重放不同主体结果。本人缺失/foreign404不回漏授权细节；获取token不缓存用户session，当前session拒绝直接终止且不继续owner调用。
 
@@ -391,6 +390,7 @@ public 8.6.0/105 与固定 Storage e8b99284 / combined c22b5c10 机器事实均�
 Root 15真PG/受控 generated Connect 行为通过，仍不是真Storage/IAM或Browser验证；正常8.5消费者未切换，aggregate DELETE/status 17用户路径与真正丢ACK恢复仍待验。下面旧D0是历史设计时点。
 
 ---
+
 ## R284 Project scope release worker API边界（目标，尚未实施）
 
 本片不新增或修改 public API。当前 commit `6f20f81a8d15992b35bc07e76ac8808d7072bee8` 已具备本地 Project DELETE/status runtime、SQL与 `8.6.0 / 105` 机器候选；正常服务仍为 `39db` / public `8.5.0`，尚未激活或供Web消费。worker完成后，原 `DELETE` 仍只返回并重放保存的 `202 {data:{...,logical_release_state:"pending",physical_cleanup_state:"pending"}}`，`GET .../deletion`仍是唯一当前投影；request ID、Location、closed errors与无条件读取语义不变。
@@ -400,7 +400,6 @@ BFF只调用固定Storage internal-owner `ReleaseProjectScope`与`ReleaseConvers
 错误/恢复为内部状态机而非新public错误：unknown、cancel、deadline、断连、无ACK和正规retryable tuple保`pending`并以同command/digest恢复；可信terminal为`blocked`。普通claim不重开blocked。只有固定owner正规`UNAUTHENTICATED`资格错误可在至少300秒冷却、每轮最多一条、同身份/命令/新fence下作一次可能写的恢复RPC；PermissionDenied、InvalidArgument、digest mismatch、precondition与坏shape不得自动恢复。public GET仅观察`pending|blocked|released`，不暴露owner code、lease、attempt、credential或内部恢复原因；`physical_cleanup_state`继续固定`pending`。
 
 后继必须以固定Storage owner真RPC验证成功、replay、丢ACK、错误tuple与错误metadata，不以mock response宣称owner资格；public机器仍不因worker增加operation。
-
 
 ## R282 Project 删除 API 当前态（候选，未发行）
 
@@ -442,9 +441,9 @@ BFF只调用固定Storage internal-owner `ReleaseProjectScope`与`ReleaseConvers
 }
 ```
 
-  本地 Project/Conversation/Schedule 事务已提交才可返回 202；Storage 逻辑 release 尚在 outbox。相同 key/digest 在 current
-  owner 与 receipt 检查通过时永远返回保存的原始 `pending` data/status/Location，不返回 GET 的当前状态；每次只生成新的
-  `x-request-id` header。未知提交结果必须以原 key 恢复，不换 key。删除后使用新 key 统一 404，不泄露墓碑或既有 receipt。
+本地 Project/Conversation/Schedule 事务已提交才可返回 202；Storage 逻辑 release 尚在 outbox。相同 key/digest 在 current
+owner 与 receipt 检查通过时永远返回保存的原始 `pending` data/status/Location，不返回 GET 的当前状态；每次只生成新的
+`x-request-id` header。未知提交结果必须以原 key 恢复，不换 key。删除后使用新 key 统一 404，不泄露墓碑或既有 receipt。
 
 ### `GET /v1/projects/{projectId}/deletion` — `getProjectDeletion`
 
@@ -458,15 +457,15 @@ BFF只调用固定Storage internal-owner `ReleaseProjectScope`与`ReleaseConvers
 
 ### Closed 状态/错误 profile
 
-| HTTP | code | operation | 语义 |
-| --- | --- | --- | --- |
-| 400 | `invalid_project_deletion_request` | DELETE/GET | path/query/header/body/framing 不符合本 operation 的 closed profile。 |
-| 400 | `idempotency_key_required` / `invalid_idempotency_key` | DELETE | key 缺失或不合法；GET 携带 mutation key 归 invalid request。 |
-| 401/403/429/503 | 现 admission stable code | DELETE/GET | 沿当前 session/service/Product tenant admission；429 只接受现合法 `Retry-After` profile。 |
-| 404 | `project_not_found` | DELETE/GET | 不存在、非 owner、跨 tenant/subject、active 状态读统一闭合。 |
-| 409 | `idempotency_conflict` | DELETE | 同 Project command namespace/key 的 digest 不同；同 key 跨 Project 独立。墓碑上的新 key 返回 404。 |
-| 409 | `idempotency_in_progress` | DELETE | 同 key 事务/结果尚不能安全重放；客户端只使用原 key恢复。 |
-| 503 | `business_store_unavailable` | DELETE/GET | BFF 本地权威 store/事务依赖失败。 |
+| HTTP            | code                                                   | operation  | 语义                                                                                               |
+| --------------- | ------------------------------------------------------ | ---------- | -------------------------------------------------------------------------------------------------- |
+| 400             | `invalid_project_deletion_request`                     | DELETE/GET | path/query/header/body/framing 不符合本 operation 的 closed profile。                              |
+| 400             | `idempotency_key_required` / `invalid_idempotency_key` | DELETE     | key 缺失或不合法；GET 携带 mutation key 归 invalid request。                                       |
+| 401/403/429/503 | 现 admission stable code                               | DELETE/GET | 沿当前 session/service/Product tenant admission；429 只接受现合法 `Retry-After` profile。          |
+| 404             | `project_not_found`                                    | DELETE/GET | 不存在、非 owner、跨 tenant/subject、active 状态读统一闭合。                                       |
+| 409             | `idempotency_conflict`                                 | DELETE     | 同 Project command namespace/key 的 digest 不同；同 key 跨 Project 独立。墓碑上的新 key 返回 404。 |
+| 409             | `idempotency_in_progress`                              | DELETE     | 同 key 事务/结果尚不能安全重放；客户端只使用原 key恢复。                                           |
+| 503             | `business_store_unavailable`                           | DELETE/GET | BFF 本地权威 store/事务依赖失败。                                                                  |
 
 错误统一为 `{ "error": { "code": "...", "message": "...", "retryable": false } }`，request ID 仅在 header。
 `retryable=true` 只允许 429、503 与 409 `idempotency_in_progress`；409 `idempotency_conflict` 及其余 profile 均 false。
@@ -500,18 +499,18 @@ Withdraw body严格`{reason}`，reason为1..2048 code points且至少含一个�
 
 所有成功/错误必须`Cache-Control:no-store`，header `x-request-id`与body`meta.request_id`一致。错误closed tuples：
 
-|HTTP|允许code|
-|---:|---|
-|400|`invalid_skill_request`、`idempotency_key_required`、`invalid_idempotency_key`|
-|401|`session_authentication_required`、`session_invalid`|
-|403|`service_auth_failed`、`session_forbidden`、`product_tenant_forbidden`|
-|404|`skill_not_found`|
-|409|`skill_idempotency_conflict`、`skill_command_in_progress`|
-|412|`skill_precondition_failed`|
-|413|`request_body_too_large`|
-|429|`session_rate_limited`、`skill_rate_limited`；Retry-After仅1..86400|
-|502|`skill_response_invalid`|
-|503|`product_tenant_not_configured`、`iam_admission_unavailable`、`skill_dependency_unavailable`|
+| HTTP | 允许code                                                                                     |
+| ---: | -------------------------------------------------------------------------------------------- |
+|  400 | `invalid_skill_request`、`idempotency_key_required`、`invalid_idempotency_key`               |
+|  401 | `session_authentication_required`、`session_invalid`                                         |
+|  403 | `service_auth_failed`、`session_forbidden`、`product_tenant_forbidden`                       |
+|  404 | `skill_not_found`                                                                            |
+|  409 | `skill_idempotency_conflict`、`skill_command_in_progress`                                    |
+|  412 | `skill_precondition_failed`                                                                  |
+|  413 | `request_body_too_large`                                                                     |
+|  429 | `session_rate_limited`、`skill_rate_limited`；Retry-After仅1..86400                          |
+|  502 | `skill_response_invalid`                                                                     |
+|  503 | `product_tenant_not_configured`、`iam_admission_unavailable`、`skill_dependency_unavailable` |
 
 新两命令envelope固定`{data,meta:{request_id}}`或`{error:{code,message},meta:{request_id}}`，错误无`retryable`；旧101 operations不变。owner NotFound与PermissionDenied目标都投404防枚举；AlreadyExists→409 conflict，Aborted→409 in-progress，FailedPrecondition→412，ResourceExhausted→429，Unavailable/DeadlineExceeded/Canceled/Unauthenticated→503，未知/坏response→502。当前owner以`assertCatalogAdmission`在命令/receipt前重读current resource，不存在为NotFound、owner不符为PermissionDenied，故两者统一404；`assertCatalogReplayCurrent`还核CreateVersion返回的新draft当前status/revision。BFF不得为了先返回receipt而绕过这些校验。
 
@@ -535,10 +534,10 @@ timeout/cancel/断连为未知结果而非回滚。消费者只可显式用原ke
 
 当前唯一public机器事实仍`contract/openapi/v1/openapi.yaml` 8.3.0/99；本节定义下一additive 8.4.0/101目标，不把文档当已发行能力。新增且仅新增：
 
-|method/path|operationId|metadata|
-|---|---|---|
-|`GET /v1/self/skills`|`listManagedPersonalSkills`|owner `kokoro-bff`；public；beta；idempotency none；permission `product.skill.read_managed_personal`|
-|`GET /v1/self/skills/{skill_id}`|`getManagedPersonalSkill`|同上|
+| method/path                      | operationId                 | metadata                                                                                             |
+| -------------------------------- | --------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `GET /v1/self/skills`            | `listManagedPersonalSkills` | owner `kokoro-bff`；public；beta；idempotency none；permission `product.skill.read_managed_personal` |
+| `GET /v1/self/skills/{skill_id}` | `getManagedPersonalSkill`   | 同上                                                                                                 |
 
 事实owner固定Platform `3d4ba6c3462e3896481f902adf47e0713c4187e4` HTTP3.3/raw`b6e5d0e…`/combined`9ad2c428…`；BFF通过固定vendor/generated client消费。Platform Connect pin不变。旧`/v1/skills*` ACTIVE discovery/published detail、安装和catalog mutation全部保持；新read不能作为安装/执行grant。
 
@@ -556,15 +555,15 @@ GET closed input：任意`Content-Length`（含`0`）、`Transfer-Encoding`、`I
 
 公开错误继续使用现BFF envelope`{error:{code,message},meta:{request_id}}`，不新增统一`retryable`字段；retry/read策略由status+稳定code契约决定。目标闭集：
 
-|status|code/来源|
-|---|---|
-|400|`invalid_skill_request`：path/query/framing/body/idempotency key非法，或owner合法`capability.invalid_request`|
-|401|现IAM admission `session_authentication_required|session_invalid`|
-|403|现service/session/Product tenant admission闭集：`service_auth_failed|session_forbidden|product_tenant_forbidden`|
-|404|detail `skill_not_found`：owner合法不可见/不存在；list无404成功语义|
-|429|现admission `session_rate_limited`；合法有界`Retry-After`按现公共规则|
-|502|`skill_response_invalid`：owner非JSON/坏UTF-8/超1MiB/额外或缺字段、identity不绑定、未知status/code组合、owner500 internal或不符合正式profile|
-|503|`product_tenant_not_configured|iam_admission_unavailable|skill_dependency_unavailable`：本地配置、credential/token、transport、owner正式503、machine workload认证/权限失败、任一阶段10秒绝对deadline|
+| status | code/来源                                                                                                                                    |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| 400    | `invalid_skill_request`：path/query/framing/body/idempotency key非法，或owner合法`capability.invalid_request`                                |
+| 401    | 现IAM admission `session_authentication_required                                                                                             | session_invalid`          |
+| 403    | 现service/session/Product tenant admission闭集：`service_auth_failed                                                                         | session_forbidden         | product_tenant_forbidden`                                                                                                                   |
+| 404    | detail `skill_not_found`：owner合法不可见/不存在；list无404成功语义                                                                          |
+| 429    | 现admission `session_rate_limited`；合法有界`Retry-After`按现公共规则                                                                        |
+| 502    | `skill_response_invalid`：owner非JSON/坏UTF-8/超1MiB/额外或缺字段、identity不绑定、未知status/code组合、owner500 internal或不符合正式profile |
+| 503    | `product_tenant_not_configured                                                                                                               | iam_admission_unavailable | skill_dependency_unavailable`：本地配置、credential/token、transport、owner正式503、machine workload认证/权限失败、任一阶段10秒绝对deadline |
 
 Platform OpenAPI的`ErrorEnvelope.error.code`机器shape是普通string，并未发布code enum；这里的closed tuple来自固定owner runtime行为与BFF显式验证政策，不冒充owner机器枚举。精确映射：400 `capability.invalid_request`→400；400 `capability.subject_invalid`→503 `skill_dependency_unavailable`（可信subject/header集成失配，不甩给用户400）；detail合法404；503 `capability.dependencies_unavailable`→503；其余已知machine认证/权限错误只映依赖503，不能冒充当前用户401/403；owner internal500及任何未知status/code/retryable tuple均502。取消/response关闭时停止写响应，不把迟到结果映200。BFF不透传owner message、retryable字段、tenant/subject或内部reason。
 
@@ -580,10 +579,10 @@ Platform OpenAPI的`ErrorEnvelope.error.code`机器shape是普通string，并未
 
 基线为正式 BFF `/Users/nako/.codex/worktrees/kokoro-r257-bff-normal`、Root给定 HEAD `7269e97`。本轮只三文档新增前缀，原全文suffix逐字节保留；未修改源、机器、生成物、配置、Schema、正常数据或untracked var。现公开8.3.0/99 operation没有单文件删除；目标8.4.0/101尚未发布。Storage现pin仍`e8b9928418924812587b7ac07900aee4be5bc27f` / combined `c22b5c10ee698d579753dcac370be371d8dba1df8fead1a12883f5443fbad18a`；17 RPC候选combined `9b602259c3b777e31deb63563467ae160c04bde415e841851aefae760902f34f`不是正式新发布，最终owner commit待定。Storage正式源/机器发布后才准repin及正规生成，禁止先消费mutable工作树。
 
-|路径 / operationId|permission metadata / scope|
-|---|---|
-|`DELETE /v1/library/files/{asset_id}` / `deleteLibraryFile`|`storage.library.delete`；受信personal scope_id=subject_id|
-|`DELETE /v1/projects/{projectId}/resources/{asset_id}` / `deleteProjectResource`|`project.resource.delete`；本人active Project解析到canonical ID|
+| 路径 / operationId                                                               | permission metadata / scope                                     |
+| -------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `DELETE /v1/library/files/{asset_id}` / `deleteLibraryFile`                      | `storage.library.delete`；受信personal scope_id=subject_id      |
+| `DELETE /v1/projects/{projectId}/resources/{asset_id}` / `deleteProjectResource` | `project.resource.delete`；本人active Project解析到canonical ID |
 
 两operation都是BFF/public/beta，幂等required；不增加IAM policy事实。零body/query，不接受tenant/actor/subject/scope/object key/mode输入，不提供alias。asset_id沿现owner合法有界ASCII ID（1..191，首位字母或数字，余字母数字/`.`/`_`/`:`/`-`），不假定UUID；Project沿现ID/slug且canonical化。拒transfer-encoding、非零content-length、条件写头（owner无CAS）及非法selector；无body的Content-Type不单独拒。Idempotency-Key检查raw唯一、原值1..191 printableASCII且无空白/逗号，不trim。无ETag/If-Match/If-None-Match保证，不发明版本字段。
 
@@ -593,16 +592,16 @@ Platform OpenAPI的`ErrorEnvelope.error.code`机器shape是普通string，并未
 
 错误严格 `{error:{code,message,retryable}}`、无meta/details/原文；message为BFF固定安全说明，不作为判断依据。所有成功/错误均有x-request-id与no-store；限流Retry-After仅转实际合法1..86400整数秒。code只属于本表，不把Storage原码命名改写回owner合同。
 
-|HTTP|code闭集|retryable/事实|
-|---|---|---|
-|400|`invalid_file_delete_request`、`invalid_idempotency_key`|false；本地非法输入或匹配的owner INVALID_ARGUMENT|
-|401|`session_authentication_required`、`session_invalid`|false；当前本人准入|
-|403|`service_auth_failed`、`product_tenant_forbidden`、`session_forbidden`|false；当前准入，不借platform_admin越过本人scope|
-|404|`project_not_found`（仅项目）、`file_not_found`|false；不可见/缺失/他命令已删，不枚举跨scope对象|
-|409|`idempotency_conflict`、`file_delete_conflict`、`file_delete_precondition_failed`|digest mismatch false；CONFLICT沿owner retryable（在途/SSI可能true、Artifact引用false）；PRECONDITION_FAILED false|
-|429|`session_rate_limited`、`storage_rate_limited`|true；有界Retry-After可选，无自动mutation retry|
-|502|`storage_response_invalid`|false；坏ACK/错误tuple/未知协议，不能当已删|
-|503|`product_tenant_not_configured`、`iam_admission_unavailable`、`business_store_unavailable`（仅项目）、`storage_unavailable`|true仅表示可稍后核实同意图，不承诺未提交或自动重发；配置/依赖诊断不泄密|
+| HTTP | code闭集                                                                                                                    | retryable/事实                                                                                                     |
+| ---- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| 400  | `invalid_file_delete_request`、`invalid_idempotency_key`                                                                    | false；本地非法输入或匹配的owner INVALID_ARGUMENT                                                                  |
+| 401  | `session_authentication_required`、`session_invalid`                                                                        | false；当前本人准入                                                                                                |
+| 403  | `service_auth_failed`、`product_tenant_forbidden`、`session_forbidden`                                                      | false；当前准入，不借platform_admin越过本人scope                                                                   |
+| 404  | `project_not_found`（仅项目）、`file_not_found`                                                                             | false；不可见/缺失/他命令已删，不枚举跨scope对象                                                                   |
+| 409  | `idempotency_conflict`、`file_delete_conflict`、`file_delete_precondition_failed`                                           | digest mismatch false；CONFLICT沿owner retryable（在途/SSI可能true、Artifact引用false）；PRECONDITION_FAILED false |
+| 429  | `session_rate_limited`、`storage_rate_limited`                                                                              | true；有界Retry-After可选，无自动mutation retry                                                                    |
+| 502  | `storage_response_invalid`                                                                                                  | false；坏ACK/错误tuple/未知协议，不能当已删                                                                        |
+| 503  | `product_tenant_not_configured`、`iam_admission_unavailable`、`business_store_unavailable`（仅项目）、`storage_unavailable` | true仅表示可稍后核实同意图，不承诺未提交或自动重发；配置/依赖诊断不泄密                                            |
 
 Storage ErrorDetail/Connect/status/header一致性必须固定验证：InvalidArgument/INVALID_ARGUMENT→400；NotFound/NOT_FOUND→404；AlreadyExists/COMMAND_DIGEST_MISMATCH→409幂等冲突；AlreadyExists或retryable Aborted/CONFLICT→409业务冲突；FailedPrecondition/PRECONDITION_FAILED→409前置；ResourceExhausted/RATE_LIMITED→429；Unavailable/DEPENDENCY_UNAVAILABLE、Internal/INTERNAL→503。Storage Unauthenticated/UNAUTHENTICATED、PermissionDenied/PERMISSION_DENIED是本次服务credential/策略依赖错误，映射503而非让用户重新登录401。未知或矛盾组合502。Canceled/DeadlineExceeded按现Connect无detail例外处理成取消/未知，不伪造ACK；不按message猜码。
 
@@ -643,16 +642,17 @@ Root92682 Node22 check+format exit0：contract264/0、主829PASS/0FAIL/2既有sk
 正常BFF仍旧进程，本次未重启/授正常管理员；Web管理页面仍占位，合法普通Session403/管理员撤权后重放、普通models visible投影、浏览器保存确认、推理和资金未验。仅owner子链及本切片工程通过，旧404/400/502/取消抖动证据保留；下方阶段描述为历史exact suffix，不作当前否认实现的依据。
 
 - 当前机器候选为 public `8.2.0` / 99 operations；System consumer 固定 3.0.0 commit `955bd587f46a771e43a4330d202d90a7d2d67262` 与原字节 SHA-256 `94ed91655741cbba66ce80a4c41717b9179cc509cb6858534e0b78aa3e6dc059`，生成过滤只含三读一写四具名 operations。
+
 ## R256-ADMIN-03.D0：四个 current-tenant 模型路由管理契约（2026-10-06；目标 8.2.0，未发布）
 
 当前 public 机器基线为 8.1.0/95 operations；唯一可编辑事实源仍是 `contract/openapi/v1/openapi.yaml`。目标 additive 升级为 8.2.0/99 operations，不覆写旧 immutable artifact，不建 `/v2`、兼容 alias 或任意 `/system` proxy。固定 owner 输入是 System 3.0.0 runtime-Zod OpenAPI（SHA256 `94ed91655741cbba66ce80a4c41717b9179cc509cb6858534e0b78aa3e6dc059`）；正式 immutable commit/digest 由 Root 开工前写入 pin。System 仍为最终授权、状态、CAS 与 receipt owner。
 
-|Public operation|System 3.0 固定 operation|语义|
-|---|---|---|
-|GET `/v1/admin/model-routing` / `listAdminModelRouting`|`listRoutingPolicy`|current tenant routing 有界分页|
-|GET `/v1/admin/model-labels` / `listAdminModelLabels`|`listModelLabel`|current tenant label 有界分页，仅供首片选择/显示|
-|GET `/v1/admin/model-revisions` / `listAdminModelRevisions`|`listModelRevision`|current tenant revision 有界分页，仅供首片选择/显示|
-|PUT `/v1/admin/model-routing/{label_id}` / `replaceAdminModelRouting`|`putRoutingPolicy`|单 label 显式 CAS upsert；System 现行四字段完整请求，首轮 UI 验收只编辑 visible|
+| Public operation                                                      | System 3.0 固定 operation | 语义                                                                            |
+| --------------------------------------------------------------------- | ------------------------- | ------------------------------------------------------------------------------- |
+| GET `/v1/admin/model-routing` / `listAdminModelRouting`               | `listRoutingPolicy`       | current tenant routing 有界分页                                                 |
+| GET `/v1/admin/model-labels` / `listAdminModelLabels`                 | `listModelLabel`          | current tenant label 有界分页，仅供首片选择/显示                                |
+| GET `/v1/admin/model-revisions` / `listAdminModelRevisions`           | `listModelRevision`       | current tenant revision 有界分页，仅供首片选择/显示                             |
+| PUT `/v1/admin/model-routing/{label_id}` / `replaceAdminModelRouting` | `putRoutingPolicy`        | 单 label 显式 CAS upsert；System 现行四字段完整请求，首轮 UI 验收只编辑 visible |
 
 ### 身份、请求与成功表示
 
@@ -680,13 +680,13 @@ System 400 `INVALID_ARGUMENT`→400 `invalid_admin_model_routing_request`；403 
 
 拟正式入口 pnpm db:evolve-personalization check / apply，只接受这一个必需位置参数；未知/重复/多余参数拒绝。显式读取既有 KOKORO_BFF_POSTGRES_URL，不自动加载 .env、不接受 URL/SQL 参数或隐式 apply；拒系统数据库及非 kokoro_bff schema、options/search_path 注入。连接信息和原始 PG 错误不回显。check 同 advisory lock 串行只观察；apply 同锁同事务，唯一允许写入见 DATA。
 
-|退出/结果|语义及恢复|
-|---|---|
-|0 / check legacy 或 current|已完成同锁 catalog 观察；legacy 不是无条件执行授权，normal 仍需备份/恢复与维护配对门。current 不是上次 COMMIT ACK/因果证明。|
-|0 / apply applied 或 already_current|前者目标创建/后置校验/COMMIT 与清理确认；后者精确 current，零 DDL，不改已存行/revision。|
-|2 / invalid_request 或 invalid_schema|参数/目标/碰撞/漂移不合格，零修复；稳定安全 code，不透传对象正文/SQL。|
-|3 / unavailable|连接/锁/预算/COMMIT 前失败；主错误保留并附安全 cleanup 状态，不声称靠超时已取消 SQL。|
-|4 / unknown|apply 已发 COMMIT 后未完成确认或安全收尾；禁止自动重试/声称回滚。新连接同锁 check，失败/超时仍停止。|
+| 退出/结果                             | 语义及恢复                                                                                                                   |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| 0 / check legacy 或 current           | 已完成同锁 catalog 观察；legacy 不是无条件执行授权，normal 仍需备份/恢复与维护配对门。current 不是上次 COMMIT ACK/因果证明。 |
+| 0 / apply applied 或 already_current  | 前者目标创建/后置校验/COMMIT 与清理确认；后者精确 current，零 DDL，不改已存行/revision。                                     |
+| 2 / invalid_request 或 invalid_schema | 参数/目标/碰撞/漂移不合格，零修复；稳定安全 code，不透传对象正文/SQL。                                                       |
+| 3 / unavailable                       | 连接/锁/预算/COMMIT 前失败；主错误保留并附安全 cleanup 状态，不声称靠超时已取消 SQL。                                        |
+| 4 / unknown                           | apply 已发 COMMIT 后未完成确认或安全收尾；禁止自动重试/声称回滚。新连接同锁 check，失败/超时仍停止。                         |
 
 结果仅 operation、request_id、state/result、安全 code、duration_ms 及必要 cleanup 状态；不输出 URL/credential、正文/参数/正文摘要。CLI 不消费 Session、不授管理员；本人 HTTP 资格仍来自 current Session，schema 权限不代替业务资格。check 失败不包装 legacy，apply 失败不输出 applied。精确 catalog/期限见 DATA/TECH，不提供 reset/down/fallback 开关。
 
@@ -698,17 +698,17 @@ System 400 `INVALID_ARGUMENT`→400 `invalid_admin_model_routing_request`；403 
 
 正式基线 ac3cd1da4f13e9e22320efbd4dbf4009aa0a2e29 的 public 8.0.0/93 operations 无 personalization；以下旧全文为 exact suffix。唯一机器源 contract/openapi/v1/openapi.yaml 新增两个 additive operations，目标 public 8.1.0/95 operations；不修改旧 artifact 或既有 operation shape。Root 验收后交新 immutable commit/version/digest，Web 固定生成消费；本轮未改机器源。
 
-|项|目标合同|
-|---|---|
-|资源|GET /v1/preferences/personalization / getSelfPersonalization；PUT 同路径 / replaceSelfPersonalization。owner=kokoro-bff，visibility=public，stability=beta。|
-|资格|现 service envelope+唯一用户 Bearer+current IAM admission；tenant/subject 只来自受信 context。普通本人可用，无他人 selector/管理员旁路。permission metadata 为 personalization.self.read / personalization.self.write，仅 public 用例分类，不新造 IAM scope/grant。|
-|幂等|两者 x-kokoro-idempotency=none；PUT 以 required expected_revision 保证同条件至多一次效果，不要求 Idempotency-Key、不造 receipt。重复旧版本409，不承诺相同 ACK 重放。现治理默认 mutation required-key，后继只能对精确 method/path/operationId 增 CAS 例外及反向负控，不放宽其他 mutation。|
-|请求边界|唯一精确路径，无 query（未知/重复/空 selector 均400）；GET无body。PUT一个 application/json Content-Type，raw body≤65,536 bytes，严格 UTF-8/raw JSON，重复键/坏转义/孤立 surrogate/NUL 拒绝。旧 PATCH不alias；其他method405，Allow: GET, PUT。|
-|PUT body|closed {expected_revision,nickname,occupation,about,instructions}；revision为required integer 0..9007199254740991，不接受unsafe/fraction/string/coercion；四项required string，空串表示清除，不接受null/漏项/多字段/数组。|
-|字段界|nickname128、occupation256、about2000、instructions8000 Unicode code points（非UTF-16 code units）；保空白/换行/内容，不隐式trim/normalize/截断。字段和whole-body界同时成立，转义膨胀仍受raw bytes限制；正文不执行插值/Agent应用。|
-|GET200|closed {data:{personalization:null,revision:0}} 只代表owner本次确认不存在；存在为 {data:{personalization:{nickname,occupation,about,instructions},revision:N}}，N为1..9007199254740991。null+正revision/对象+0非法。GET不建行、不假空。|
-|PUT200|仅COMMIT确认后返回同结构非null snapshot；首次revision1，替换expected+1。字段取成功SQL返回值，不把请求echo当持久ACK；与旧revision相同内容仍须CAS，成功推进一次。|
-|传输|所有成功/错误no-store、x-request-id；request ID只header，不增meta/body字段。无ETag/分页/event/公开profile。Web后继保header，当前泛代理丢request-id不算已闭环。|
+| 项       | 目标合同                                                                                                                                                                                                                                                                                  |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 资源     | GET /v1/preferences/personalization / getSelfPersonalization；PUT 同路径 / replaceSelfPersonalization。owner=kokoro-bff，visibility=public，stability=beta。                                                                                                                              |
+| 资格     | 现 service envelope+唯一用户 Bearer+current IAM admission；tenant/subject 只来自受信 context。普通本人可用，无他人 selector/管理员旁路。permission metadata 为 personalization.self.read / personalization.self.write，仅 public 用例分类，不新造 IAM scope/grant。                       |
+| 幂等     | 两者 x-kokoro-idempotency=none；PUT 以 required expected_revision 保证同条件至多一次效果，不要求 Idempotency-Key、不造 receipt。重复旧版本409，不承诺相同 ACK 重放。现治理默认 mutation required-key，后继只能对精确 method/path/operationId 增 CAS 例外及反向负控，不放宽其他 mutation。 |
+| 请求边界 | 唯一精确路径，无 query（未知/重复/空 selector 均400）；GET无body。PUT一个 application/json Content-Type，raw body≤65,536 bytes，严格 UTF-8/raw JSON，重复键/坏转义/孤立 surrogate/NUL 拒绝。旧 PATCH不alias；其他method405，Allow: GET, PUT。                                             |
+| PUT body | closed {expected_revision,nickname,occupation,about,instructions}；revision为required integer 0..9007199254740991，不接受unsafe/fraction/string/coercion；四项required string，空串表示清除，不接受null/漏项/多字段/数组。                                                                |
+| 字段界   | nickname128、occupation256、about2000、instructions8000 Unicode code points（非UTF-16 code units）；保空白/换行/内容，不隐式trim/normalize/截断。字段和whole-body界同时成立，转义膨胀仍受raw bytes限制；正文不执行插值/Agent应用。                                                        |
+| GET200   | closed {data:{personalization:null,revision:0}} 只代表owner本次确认不存在；存在为 {data:{personalization:{nickname,occupation,about,instructions},revision:N}}，N为1..9007199254740991。null+正revision/对象+0非法。GET不建行、不假空。                                                   |
+| PUT200   | 仅COMMIT确认后返回同结构非null snapshot；首次revision1，替换expected+1。字段取成功SQL返回值，不把请求echo当持久ACK；与旧revision相同内容仍须CAS，成功推进一次。                                                                                                                           |
+| 传输     | 所有成功/错误no-store、x-request-id；request ID只header，不增meta/body字段。无ETag/分页/event/公开profile。Web后继保header，当前泛代理丢request-id不算已闭环。                                                                                                                            |
 
 ### 失败与 ACK 未知
 
@@ -736,14 +736,14 @@ IAM POST /internal/v1/session-authorizations/verify / verifySessionAuthorization
 
 ### 唯一public变化
 
-|项|目标|
-|---|---|
-|路径/operation|原GET /v1/me / getCurrentUser，owner=kokoro-bff，public/beta，idempotency=none，permission=identity.self.read；93operation保持。|
-|请求|原service envelope+唯一本人Bearer，body/query拒绝保持；不接他人user/tenant/admin selector，不新增Idempotency-Key或管理员token。|
-|200|原{data:{user_id,tenant_id},meta:{request_id}}中的data追加required platform_admin:boolean；CurrentUserIdentity保持closed，其余原字段/既有meta语义不改。|
-|普通用户|当前false仍200，不拦普通页面；Web后继隐藏Settings后台入口，访问/admin及受保护管理API按各自边界拒403。|
-|传输|沿现no-store/x-request-id/有界响应与取消；不公开IAM session_id/client_id、资格版本、管理者名单、reason、Audit或secret。|
-|错误|沿现400/401/403/429/503与envelope；资格校验未知/依赖失败保503而非伪false或回用旧true；不在/me假造新的admin403。|
+| 项             | 目标                                                                                                                                                    |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 路径/operation | 原GET /v1/me / getCurrentUser，owner=kokoro-bff，public/beta，idempotency=none，permission=identity.self.read；93operation保持。                        |
+| 请求           | 原service envelope+唯一本人Bearer，body/query拒绝保持；不接他人user/tenant/admin selector，不新增Idempotency-Key或管理员token。                         |
+| 200            | 原{data:{user_id,tenant_id},meta:{request_id}}中的data追加required platform_admin:boolean；CurrentUserIdentity保持closed，其余原字段/既有meta语义不改。 |
+| 普通用户       | 当前false仍200，不拦普通页面；Web后继隐藏Settings后台入口，访问/admin及受保护管理API按各自边界拒403。                                                   |
+| 传输           | 沿现no-store/x-request-id/有界响应与取消；不公开IAM session_id/client_id、资格版本、管理者名单、reason、Audit或secret。                                 |
+| 错误           | 沿现400/401/403/429/503与envelope；资格校验未知/依赖失败保503而非伪false或回用旧true；不在/me假造新的admin403。                                         |
 
 新字段属于strict表示演进，public仍处正式发布前8.0.0，由Root发布新的immutable commit/digest后Web固定消费；已交MCP artifact保持原字节。没有optional字段、missing→false、旧shape双读、旧权限alias或另一个可编辑contract中心。现operation inventory不增删；后继新增真实管理命令时才逐个声明它们的owner/权限/失败/审计，不用本布尔覆盖所有owner操作。
 
@@ -773,12 +773,12 @@ BFF每个请求在线IAM核验，不将肯定结果作为后续请求票据。We
 
 200严格为 {data:{connections:[...],next_cursor?:string}}，顶层/data/item均closed。无JSON meta/request_id；传输只用x-request-id，全部响应Cache-Control:no-store。next_cursor有后页才出现、1..2048，末页缺失，非null/空串。
 
-| 每项required字段 | 约束 |
-|---|---|
+| 每项required字段                         | 约束                                            |
+| ---------------------------------------- | ----------------------------------------------- |
 | connection_id / connector_id / server_id | 各自独立opaque ID，1..191、同上述ID正则，不互代 |
-| provider_key | string 1..191，owner原值 |
-| transport | 唯一streamable_http |
-| status | 唯一active |
+| provider_key                             | string 1..191，owner原值                        |
+| transport                                | 唯一streamable_http                             |
+| status                                   | 唯一active                                      |
 
 资格为同tenant active connection、active且owner=user/当前subject的connector、其current approved且属于该connector的authorization、registered/streamable_http/provider匹配的server。先完整资格再keyset/limit；不存在/他人/撤销exact filter均合法empty，不泄存在。BFF原顺序/身份/cursor投影，不按Server过滤/去重/合成Connection。
 不返回server_identity/declaration_digest/URL/headers/secret handle/token/scopes/grant/proof/audit/raw row，不加name/authorized/enabled。owner200返回Server旧shape也拒绝；active不等于工具权限/选择提交/enable/Agent成功。
@@ -787,13 +787,13 @@ BFF每个请求在线IAM核验，不将肯定结果作为后续请求票据。We
 
 错误严格 {error:{code,message,retryable}}，安全固定message、所有状态含BFF x-request-id/no-store。新GET单独closed错误profile，不为其放宽旧Skill/Serverprofile。
 
-| 条件 | public结果 |
-|---|---|
-| 现服务认证、缺/失效Session、资格拒绝、限流、固定tenant/依赖失败 | 保现401/403/429/503及service_auth_failed、session_authentication_required、session_invalid、session_forbidden、session_rate_limited、product_tenant_not_configured、product_tenant_forbidden、iam_admission_unavailable；沿现retryable/合法有界Retry-After；零Platform调用 |
-| 本地query/body/key非法；owner有效400 capability.invalid_request（含坏cursor） | 400 invalid_query_parameter，retryable=false |
-| projection配置/凭据/token失败、网络/总deadline；owner有效401/403/500/503 | 503 mcp_connection_dependency_unavailable，retryable=true；不把workload拒绝当资源不存在/假empty |
-| owner坏JSON/media/schema/headers/request-id/no-store、超限、未知status-code组合或其他意外状态 | 502 mcp_connection_response_invalid，retryable=false |
-| caller取消、response destroyed/writableEnded | 退役本次结果/取消等待，不向已结束response补成功或错误 |
+| 条件                                                                                          | public结果                                                                                                                                                                                                                                                                 |
+| --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 现服务认证、缺/失效Session、资格拒绝、限流、固定tenant/依赖失败                               | 保现401/403/429/503及service_auth_failed、session_authentication_required、session_invalid、session_forbidden、session_rate_limited、product_tenant_not_configured、product_tenant_forbidden、iam_admission_unavailable；沿现retryable/合法有界Retry-After；零Platform调用 |
+| 本地query/body/key非法；owner有效400 capability.invalid_request（含坏cursor）                 | 400 invalid_query_parameter，retryable=false                                                                                                                                                                                                                               |
+| projection配置/凭据/token失败、网络/总deadline；owner有效401/403/500/503                      | 503 mcp_connection_dependency_unavailable，retryable=true；不把workload拒绝当资源不存在/假empty                                                                                                                                                                            |
+| owner坏JSON/media/schema/headers/request-id/no-store、超限、未知status-code组合或其他意外状态 | 502 mcp_connection_response_invalid，retryable=false                                                                                                                                                                                                                       |
+| caller取消、response destroyed/writableEnded                                                  | 退役本次结果/取消等待，不向已结束response补成功或错误                                                                                                                                                                                                                      |
 
 映射owner错误前也核fixed generated error envelope、exact owner request-id/no-store及status-code匹配；畸形400返回502而非400，未在此operation声明的404也不是本人资源不存在。不透传owner message/detail。单次总预算覆盖token+owner headers/body/parse（默认5000ms），owner上限1MiB，按TECH收敛；无自动重试，retryable仅支持用户显式新GET。非GET及未登记别名保持现fail-closed，不新增写operation；GET /v1/mcp/servers的资源含义、shape与错误契约不变，不alias/fallback到新接口。
 后继机器/断言/生成集见TECH，Root审D0后另行准入；本节不是已发布机器或真实用户验收。
@@ -833,12 +833,12 @@ summary无body/query；ledger无body，拒重复/未知query、非法limit、空
 
 BFF内部只调用owner `GET /v2/billing/me/credit-account` 与 `GET /v2/billing/me/credit-ledger`，用固定五因素：`web-bff`、internal secret、独立Billing BFF service bearer、tenant u1、subject u1。用户Bearer不下传，partial machine profile不降级。owner 200先按固定generated schema验证再重包，owner request-id只作观测且不替换BFF public request-id。
 
-| 条件 | public结果 |
-|---|---|
-| IAM session缺失/拒绝/限流/不可用 | 保现401/403/429/503与Retry-After语义，且不调用Billing |
-| public ledger query非法 | 400稳定invalid request，零owner调用 |
-| Billing本人账户不存在 | 404 `billing_account_not_found`；不返回零余额或空流水 |
-| Billing 200不符合固定schema | 502 `upstream_response_invalid`，不透传部分数据 |
+| 条件                                                      | public结果                                                                   |
+| --------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| IAM session缺失/拒绝/限流/不可用                          | 保现401/403/429/503与Retry-After语义，且不调用Billing                        |
+| public ledger query非法                                   | 400稳定invalid request，零owner调用                                          |
+| Billing本人账户不存在                                     | 404 `billing_account_not_found`；不返回零余额或空流水                        |
+| Billing 200不符合固定schema                               | 502 `upstream_response_invalid`，不透传部分数据                              |
 | Billing credential缺失、401/403、timeout、不可达、500/503 | 503 `billing_unavailable`、retryable true；不把服务认证失败误报为用户401/403 |
 
 错误仍遵API05的本仓唯一实际error envelope（具体字段以现public机器合同为准），不得透传owner内部message/header/credential。GET read-only、无Idempotency-Key、无BFF receipt；no-store适用于成功与错误。
@@ -1120,11 +1120,11 @@ Root 已裁决 public4.0.0 为首次上线前原 /v1 corrective breaking artifac
 
 GET /v1/sessions/{id} 的现 response 内，execution_head 为可缺失的 closed object，required run_id、state、pending_pauses，额外字段拒绝；无 FIFO nonterminal head 时缺失，不用 null/空 run 猜测。state 精确 queued|active|waiting|resuming；active 对应 UI streaming，不新增 streaming wire alias。
 
-| state | pending_pauses | 事实依据 |
-|---|---|---|
-| queued | 空数组 | matching RUN_STARTED 尚未投影，pending/leased/retryable/admitted 差异私有，不是从 parser 失败推断空 |
-| active | 空数组 | matching started 且从未出现有效 interaction 的连续源初始态；有 revision 后必须是 owner phase active/terminal 的明确空集合；terminal interaction 不是 Run terminal |
-| waiting | 恰一条完整 PendingPause | 该 Run 当前 owner phase waiting，含全部 groups/items；新 pause/re-pause/validation_failed 均整体替换 |
+| state    | pending_pauses          | 事实依据                                                                                                                                                            |
+| -------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| queued   | 空数组                  | matching RUN_STARTED 尚未投影，pending/leased/retryable/admitted 差异私有，不是从 parser 失败推断空                                                                 |
+| active   | 空数组                  | matching started 且从未出现有效 interaction 的连续源初始态；有 revision 后必须是 owner phase active/terminal 的明确空集合；terminal interaction 不是 Run terminal   |
+| waiting  | 恰一条完整 PendingPause | 该 Run 当前 owner phase waiting，含全部 groups/items；新 pause/re-pause/validation_failed 均整体替换                                                                |
 | resuming | 恰一条完整 PendingPause | 同 pause 的完整 groups 保留，owner durable source phase resuming，action_result accepted/unknown 且 action.pause_revision 精确当前 revision；阻止新 key 重复 decide |
 
 PendingPause 不是逐 item 的独立 lifecycle；它投影当前一个 owner pause 的六字段 interaction_revision、pause_revision、pause_ref、phase、groups、action_result，phase 此处限 waiting|resuming、pause_revision 为正整数、pause_ref 非空。groups/items 保留 owner 原顺序与全部 group_id/item_id/request_id、kind、allowed_decisions、display、可选 validation；group/item 全局唯一。action_result 保留 command_id/pause_revision/kind，waiting 可含上一轮 native_consumed/validation_failed/cancelled 等 owner 允许结果，不能因非空结果把新的 waiting 误判 submitted。具体 schema 由 BFF canonical OpenAPI 的 PendingPause/ResumeDecision 定义公开投影，并对固定 owner 机器图做 contract assertions；手写 type 不当第二可编辑 schema。
@@ -1247,7 +1247,6 @@ schema。旧数据库不会由 installer 自动修复。待验：OpenAPI 定点 
 `pnpm test:architecture`、`pnpm lint`、`pnpm typecheck`、`pnpm build`、`pnpm test`；发布 commit/digest、Web repin 与 fresh
 组合均待后继，不以本次文档编辑冒充机器契约已发布。
 
-
 ## BFF-RETRY-DESIGN：失败 assistant 重试 public 契约（2026-09-30；目标 `3.1.0`，未实施）
 
 ### 当前机器事实与 owner 发布门
@@ -1327,17 +1326,17 @@ active Conversation 的最新 assistant，严格 `status=failed`，有 verified 
 dispatch、active run 或未决 HITL。普通 resend、successful regenerate、BFF 本地 dispatch recovery 都是
 其他 operation，不得进入本路由。
 
-| HTTP | stable code | 含义 |
-| --- | --- | --- |
-| 400 | `invalid_retry_request` | body 不是精确 `{}`，或 path/query 不符合契约。 |
-| 400 | `idempotency_key_required` / `invalid_idempotency_key` | key 缺失，或 raw header 不是唯一合法值。 |
-| 401/403 | 现 IAM session/service codes | online admission 失败；不读取 retry 事实。 |
-| 404 | `session_not_found` / `message_not_found` | Conversation/target 不存在或对当前 tenant/owner/project 不可见；跨权不区分。 |
-| 409 | `idempotency_conflict` | 同 key 已绑定不同 operation/target/digest。 |
-| 409 | `retry_not_allowed` | 新 key 的 target/profile/source/tail/run/HITL 状态不满足完整重试前置。 |
-| 413 | `request_body_too_large` | 超过现 BFF mutation body 上限；不进入 Chat 事务。 |
-| 429 | 现 IAM rate-limit code | online admission 限流，保留受控 `Retry-After`。 |
-| 503 | `agent_not_configured` / `business_store_unavailable` | 依赖未配置或 BFF 业务存储不可用；无部分重试事实。 |
+| HTTP    | stable code                                            | 含义                                                                         |
+| ------- | ------------------------------------------------------ | ---------------------------------------------------------------------------- |
+| 400     | `invalid_retry_request`                                | body 不是精确 `{}`，或 path/query 不符合契约。                               |
+| 400     | `idempotency_key_required` / `invalid_idempotency_key` | key 缺失，或 raw header 不是唯一合法值。                                     |
+| 401/403 | 现 IAM session/service codes                           | online admission 失败；不读取 retry 事实。                                   |
+| 404     | `session_not_found` / `message_not_found`              | Conversation/target 不存在或对当前 tenant/owner/project 不可见；跨权不区分。 |
+| 409     | `idempotency_conflict`                                 | 同 key 已绑定不同 operation/target/digest。                                  |
+| 409     | `retry_not_allowed`                                    | 新 key 的 target/profile/source/tail/run/HITL 状态不满足完整重试前置。       |
+| 413     | `request_body_too_large`                               | 超过现 BFF mutation body 上限；不进入 Chat 事务。                            |
+| 429     | 现 IAM rate-limit code                                 | online admission 限流，保留受控 `Retry-After`。                              |
+| 503     | `agent_not_configured` / `business_store_unavailable`  | 依赖未配置或 BFF 业务存储不可用；无部分重试事实。                            |
 
 Agent worker 网络失败发生在 202 之后，按现 durable outbox 的有界重试/终止语义处理，
 不把 provider diagnostics 暴露为 public error。新 Agent run 若再失败，仍由 BFF-AGENT-FAILURE3 的严格
@@ -1525,13 +1524,13 @@ Root完整门与真实七integration已通过，证据见CURRENT；Web严格cons
 
 当前 canonical OpenAPI 与在途 runtime 已唯一固定 Platform `6519ae9a7dba63586474d2860f6725d3165b701e` v5.0.1 aggregate `3f97b3c98fd8e7ce46e4a8ea73237ddb85e764849d2b15dd28d0a3a58a69e42f`，并接线以下 public `/v1` 本人安装资源及五个 owner 方法；旧按 name enable/disable contract、stub、alias 与 v4 fallback 已删除。该消费者代码尚待 Root 提交及真实 IAM→BFF→Platform 组合验收，产品未激活；本文链接本仓唯一 `contract/openapi/v1/openapi.yaml`，不是第二份机器 schema。
 
-| Method/path | 输入与语义 | 成功 |
-| --- | --- | --- |
-| `POST /v1/skill-installations` | strict body 只含原样 canonical `source_ref`；单个 Idempotency-Key；显式安装，不由 Publish 触发 | 200 owner receipt ACK |
-| `GET /v1/skill-installations` | optional `enabled`/`installed` 保留 presence；optional `limit`/`cursor` 不 trim | 200 当前本人页 |
-| `GET /v1/skill-installations/{installation_id}` | canonical exact ID；无 body/query/idempotency key | 200 当前本人表示 |
-| `DELETE /v1/skill-installations/{installation_id}` | canonical exact ID；单个 Idempotency-Key；不接 body | 200 receipt；installation 为 `installed=false`、`enabled=false`、`removed_at` present |
-| `PUT /v1/skill-installations/{installation_id}/enabled` | strict body 只含 required boolean `enabled`；单个 Idempotency-Key | 200 owner receipt ACK |
+| Method/path                                             | 输入与语义                                                                                     | 成功                                                                                  |
+| ------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `POST /v1/skill-installations`                          | strict body 只含原样 canonical `source_ref`；单个 Idempotency-Key；显式安装，不由 Publish 触发 | 200 owner receipt ACK                                                                 |
+| `GET /v1/skill-installations`                           | optional `enabled`/`installed` 保留 presence；optional `limit`/`cursor` 不 trim                | 200 当前本人页                                                                        |
+| `GET /v1/skill-installations/{installation_id}`         | canonical exact ID；无 body/query/idempotency key                                              | 200 当前本人表示                                                                      |
+| `DELETE /v1/skill-installations/{installation_id}`      | canonical exact ID；单个 Idempotency-Key；不接 body                                            | 200 receipt；installation 为 `installed=false`、`enabled=false`、`removed_at` present |
+| `PUT /v1/skill-installations/{installation_id}/enabled` | strict body 只含 required boolean `enabled`；单个 Idempotency-Key                              | 200 owner receipt ACK                                                                 |
 
 身份只来自 current IAM session 的可信 tenant/user；BFF workload metadata 使用精确 `x-kokoro-subject`，public body/header 不接受 tenant、subject、owner scope、target、execution proof、package/hash 或 command identity。资源缺失或对当前可信 tenant/subject 不可见统一 404，不泄漏存在性；缺失/失效 session 是 401，service/session/tenant 或 workload 已认证但无权是 403；organization/project/session/global/shared 不在此版本。POST 只能安装本人 PERSONAL/ACTIVE source，且发布不自动安装。读权限不等于执行权限；安装/true-enable 的 source/package/fresh health 与 current generation 由 Platform owner 每次判定。
 
@@ -1545,7 +1544,6 @@ List 成功沿现有 BFF list 规范：`{data:[<九字段 installation>],meta?:{
 
 三写操作的 command digest 分别使用 Platform v5 artifact 中独立的 `skill.product.install`、`skill.product.set_installation_enabled`、`skill.product.remove_installation` 定义，digest version 均为 `product-personal-installation/1.0.0`；source/installation/boolean presence 与可信 subject/target 按 owner machine binding 投影，不把 request ID、token、command ID 纳入 digest。GET/List 不制造命令或 receipt。Breaking/activation：本仓 canonical OpenAPI、operation inventory、语义门、生成 client 与 runtime 已在同一在途切片更新；旧 503 paths 删除而非 alias/fallback，Web 再固定新 BFF commit/digest。
 
-
 ## W3 Chat typed Skill 选择契约（已实现，组合待验）
 
 唯一 public `MessageCreateRequest` 已移除 name `pinned_skills` 与对应 trace 字段；Agent required `LaunchRequest.selected_skill_source_refs` 已在 HTTP 2.0.0 commit `dd34a4800b4ce0cc61eb80dd715e528b9d4517da` 发布，`contract/openapi/v1/openapi.json` SHA-256 `20398c59f42031c1b6ae2e2c3708e63ec8b5645baf741bf831bc67e14625ef99`。本片机器契约一次替换旧字段为 `selected_skill_source_refs?: string[]`，每项原样匹配 owner `^skill:(?!skill:)[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])`、7–197 ASCII 字符（不 trim、不接受 display name/裸 ID）、最多 16 项、禁止重复、保留顺序、整个数组以无额外空白的 JSON 编码为 UTF-8 后最多 4096 bytes；缺失 public 值等同空数组，非法形状 400 `invalid_message`，同 `Idempotency-Key` 改变选择或顺序 409 `idempotency_conflict`。BFF 对 Agent 的 Chat 与 Scheduler `POST /v1/runs` 必须始终显式发送该字段，包括 `[]`，不得通过 `trace`、name 或别名补选。当前 IAM tenant/user admission 不变；目标 Agent 在 Run 执行时经 Platform 校验 installed/enabled/current；当前固定 Agent 非空选择会 fail closed，reader 尚未接入，而 BFF public 已发布本人 ACTIVE 读回**不证明可执行**。正式 Agent 2.0.0 来源 pin 与生成 drift 已接入；真实双边测试仍由 Root 在隔离组合验收。本人发布后不自动可用；用户须显式安装/启用。该裁决不构成基础无 Skill Chat wire 的前置条件。
@@ -1554,13 +1552,11 @@ List 成功沿现有 BFF list 规范：`{data:[<九字段 installation>],meta?:{
 
 唯一机器契约 `contract/openapi/v1/openapi.yaml` 的 `GET /v1/skills`、`/v1/skills/{skill_id}`、`/v1/skills/pool`、`/v1/skills/catalog`、`/v1/mcp/servers` 已按 Platform HTTP 3.1.0 运行切换。成功严格 `{data}` 且 `x-request-id`、`Cache-Control: no-store`；list 保留 owner `source_ref`、十进制 `revision`、`next_cursor`，MCP 保留六个 owner-native 字段。by-ID 只接 canonical `skill_id`，当前 IAM user/tenant 可见的 PERSONAL/ACTIVE 未安装 Skill 也可读，其余统一 404。错误只含 `{error:{code,message,retryable}}`；先当前 IAM admission，再用独立 projection workload token 调 Platform。旧四 GET 的 `{data,meta}` 和 Capability 2.0.0 客户端已删除。Web 同源消费与 Root 真组合验收仍待后续；下方“未激活候选”是历史门记录。
 
-
 ## 历史快照：`GET /v1/skills/{skill_id}` 未激活候选（已由上文替代）
 
 canonical OpenAPI 现声明唯一 `getPublishedPersonalSkill` public read candidate。输入只有 canonical `skill_id` path；无 query、body 或幂等键。IAM-admitted Product tenant/user 是唯一身份来源；本人 PERSONAL/ACTIVE 且未安装也可读，非本人、跨 tenant、非 PERSONAL、非 ACTIVE 与缺失统一 404。成功严格为 `{data:{skill_id,source_ref,revision,status,name,summary,tags}}`，`status=active`、`source_ref=skill:<skill_id>` 形状、revision 为正十进制字符串；错误严格 `{error}`。状态集合精确为 200/400/401/403/404/429/502/503，所有出口要求 `x-request-id` 与 `Cache-Control: no-store`，429 可带有界 `Retry-After`。本片不激活 route。
 
 现有 `listSkills` 机器合同仍为 legacy `{data,meta}` 且丢 `source_ref/revision`，本片不改变它。下一运行 cutover 与旧 Skills/Pool/Catalog/MCP 四 GET 的 Platform HTTP 3.1.0 迁移必须同提交完成，并删除旧 credential/source selector/generated。MCP 只发布 owner-native `server_id/provider_key/server_identity/transport/declaration_digest/status` 并同步 Web、移除当前实际 503 的旧控件；旧伪造 revision/url/allowed_tools/secret_ref 映射没有兼容期。
-
 
 ## W3 Publish public 默认关闭运行候选（2026-09-29）
 
@@ -2513,6 +2509,7 @@ session_invalid/skill_forbidden/skill_rate_limited，坏响应、超时、未知
 ### W2 项目资源读取契约（当前）
 
 固定 Storage owner `ef0fd7779bf434120ac1f8a58592222f534a7c45` 的 v2 `ListAssets`，已发布 `GET /v1/projects/{projectId}/resources?limit=…&cursor=…`。它是 public Product API，由 BFF 在每次请求先校验固定租户/当前 User Bearer 与该私人 Project 的 tenant+subject predicate；不存在和无权同为 404。limit 默认50、范围1..100，cursor 长度1..4096且只含可见ASCII、opaque 且绑定受信 project/subject/filter，不接受浏览器自报 tenant/scope。成功为 `{data:{items:[{asset_id,filename,mime_type,size_bytes,content_sha256,scan_state,created_at}],next_cursor},meta:{request_id}}`；只含 `ASSET`/`CLEAN`，不含 POST 独有的 `upload_id`、下载 URL、内部状态或 package。非法分页/cursor 400，owner 失败按既有 public 错误语义返回 502/503，不用 preview/mock 200 替代。机器事实源仍是 `contract/openapi/v1/openapi.yaml`，新增 operationId `listProjectResources` 与 `ProjectResourceListResponse`；POST形态和checkpoint不变。
+
 ## T-K03.4 Validate canonical identity 同 wire 闭集（2026-10-09）
 
 `POST /v1/skills/{skill_id}/validate` 的 method、path、请求、状态和 response shape 不变。成功 `manifest_identity` 接受且只接受 `^(?:skill-md-v1|zip-v2):sha256:[a-f0-9]{64}$`：`skill-md-v1` 是当前根 `SKILL.md` canonical identity，`zip-v2` 仅为已正式声明的 legacy identity。两者都来自 Platform owner 结果，调用者不能提交。
