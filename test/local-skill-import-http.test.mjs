@@ -538,15 +538,17 @@ test("Finalize success projects the complete skill and installation and binds it
   assert.equal(projected.intent_id, "intent-1")
   assert.equal(projected.phase, "completed")
   assert.equal(projected.skill.skill_id, "skill-1")
+  assert.equal(projected.skill.package_phase, "valid")
   assert.equal(projected.installation.installation_id, "installation-1")
   assert.equal(projected.replayed, true)
   assert.throws(() => projectLocalImportFinalize(response, "intent-other"), /local_skill_import_response_invalid/)
 })
 
-test("Get presence accepts completed after installation removal and rejects dirty non-completed projections", () => {
+test("Get presence projects the completed Skill package phase exactly and rejects dirty non-completed projections", () => {
   const uploadProof = { uploadId: "upload-1", assetId: "asset-1", sourceVersionId: "v1", contentSha256: "a".repeat(64), sizeBytes: 123n }
   const common = { intentId: { value: "intent-1" }, skillId: { value: "series-1" }, expiresAt: timestamp(2) }
-  assert.doesNotThrow(() => projectLocalImportGet({ ...common, phase: SkillImportPhase.COMPLETED, uploadProof, skill: skill() }, "intent-1"))
+  const completed = projectLocalImportGet({ ...common, phase: SkillImportPhase.COMPLETED, uploadProof, skill: skill() }, "intent-1")
+  assert.equal(completed.skill.package_phase, "valid")
   for (const value of [
     { ...common, phase: SkillImportPhase.UPLOADED, uploadProof, skill: skill() },
     { ...common, phase: SkillImportPhase.REJECTED, uploadProof, skill: skill(), rejectionCode: "scan_rejected" },

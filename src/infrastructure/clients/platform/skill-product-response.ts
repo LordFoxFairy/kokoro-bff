@@ -26,6 +26,13 @@ const states: Record<number, string> = {
   [SkillStatus.QUARANTINED]: "quarantined",
   [SkillStatus.DISCARDED]: "discarded",
 }
+const packagePhases: Partial<Record<SkillPackagePhase, "none" | "upload_pending" | "uploaded" | "valid" | "aborted">> = {
+  [SkillPackagePhase.NONE]: "none",
+  [SkillPackagePhase.UPLOAD_PENDING]: "upload_pending",
+  [SkillPackagePhase.UPLOADED]: "uploaded",
+  [SkillPackagePhase.VALIDATED]: "valid",
+  [SkillPackagePhase.ABORTED]: "aborted",
+}
 export function assertSkillWireKnown(value: unknown): void {
   if (typeof value !== "object" || value === null || value instanceof Uint8Array) return
   if ((value as Message).$unknown?.length) throw new Error("skill_response_invalid")
@@ -124,6 +131,7 @@ export function projectSkillProductFacts(value: SkillProductFacts | undefined) {
   return result
 }
 export function projectSkillProductRecord(value: SkillProductRecord | undefined, expectedSkillId?: string) {
+  const packagePhase = value === undefined ? undefined : packagePhases[value.packagePhase]
   if (
     !value ||
     !value.skillId ||
@@ -139,8 +147,7 @@ export function projectSkillProductRecord(value: SkillProductRecord | undefined,
     value.metadata.displayName.trim().length === 0 ||
     value.metadata.displayName.length > 255 ||
     value.metadata.summary.length > 65_535 ||
-    value.packagePhase < SkillPackagePhase.NONE ||
-    value.packagePhase > SkillPackagePhase.ABORTED
+    packagePhase === undefined
   )
     throw new Error("skill_response_invalid")
   assertSkillWireKnown(value)
@@ -166,7 +173,7 @@ export function projectSkillProductRecord(value: SkillProductRecord | undefined,
     category_keys: categories.data,
     skill_updated_at: skillTimestamp(value.skillUpdatedAt),
     product: projectSkillProductFacts(value.product),
-    package_phase: SkillPackagePhase[value.packagePhase]!.toLowerCase(),
+    package_phase: packagePhase,
   }
 }
 export function projectSkillProductAck(

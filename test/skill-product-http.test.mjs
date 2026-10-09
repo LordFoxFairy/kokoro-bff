@@ -34,6 +34,78 @@ test("Product mapper preserves unknown legacy facts as absent and bounds CAS", a
   assert.throws(() => module.projectSkillProductFacts(facts))
 })
 
+test("Product record mapper rejects package phases outside the public Skill record vocabulary", async () => {
+  const { projectSkillProductRecord } = await import("../src/infrastructure/clients/platform/skill-product-response.ts")
+  for (const packagePhase of [wire.SkillPackagePhase.UNSPECIFIED, wire.SkillPackagePhase.INTENT, 999]) {
+    const record = create(wire.SkillProductRecordSchema, {
+      skillId: { value: "skill-1" },
+      sourceRef: { value: "skill:skill-1" },
+      seriesId: { value: "series-1" },
+      revision: 1n,
+      status: wire.SkillStatus.ACTIVE,
+      metadata: { displayName: "Skill", summary: "", examplePrompts: { prompts: [] }, categoryKeys: { keys: [] } },
+      skillUpdatedAt: { seconds: 1n, nanos: 0 },
+      product: { publicationAudience: "owner", stateVersion: 1n },
+      packagePhase,
+    })
+    assert.throws(() => projectSkillProductRecord(record), /skill_response_invalid/u)
+  }
+})
+
+test("Skill specification facade accepts the canonical public valid package phase", async () => {
+  const { PlatformSkillSpecificationFacade } = await import("../src/infrastructure/clients/platform/skill-specification-facade.ts")
+  const skill = create(wire.SkillProductRecordSchema, {
+    skillId: { value: "skill-1" },
+    sourceRef: { value: "skill:skill-1" },
+    seriesId: { value: "series-1" },
+    revision: 1n,
+    status: wire.SkillStatus.ACTIVE,
+    metadata: { displayName: "Skill", summary: "", examplePrompts: { prompts: [] }, categoryKeys: { keys: [] } },
+    createdAt: { seconds: 1n, nanos: 0 },
+    skillUpdatedAt: { seconds: 2n, nanos: 0 },
+    ownerScope: { kind: "user", id: "user-1" },
+    product: { publicationAudience: "owner", stateVersion: 1n },
+    packagePhase: wire.SkillPackagePhase.VALIDATED,
+  })
+  const facade = new PlatformSkillSpecificationFacade({
+    product: {
+      current: async () => ({
+        publication: {
+          seriesId: { value: "series-1" },
+          current: true,
+          stateVersion: 1n,
+          audience: "owner",
+          currentVersion: skill,
+          publishedAt: { seconds: 3n, nanos: 0 },
+        },
+      }),
+      download: async () => {
+        throw new Error("not used")
+      },
+    },
+    installations: {
+      list: async () => {
+        throw new Error("not used")
+      },
+    },
+    projection: {
+      read: async () => {
+        throw new Error("not used")
+      },
+    },
+  })
+  const current = await facade.current(
+    "series-1",
+    {
+      requestId: "request-1",
+      identity: { namespace: "tenant-1", userId: "user-1" },
+    },
+    new AbortController().signal,
+    Date.now() + 1_000,
+  )
+  assert.equal(current.skill.package_phase, "valid")
+})
+
 import { once } from "node:events"
 import { createLiveTestBffServer } from "./doubles/server.ts"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"

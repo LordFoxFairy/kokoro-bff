@@ -68,7 +68,7 @@ export class PlatformSkillSpecificationFacade implements SkillSpecificationOwner
     )
       throw new Error("skill_response_invalid")
     const skill = projectSkillProductRecord(publication.currentVersion)
-    if (skill.series_id !== seriesId || skill.status !== "active" || skill.package_phase !== "validated") throw new Error("skill_response_invalid")
+    if (skill.series_id !== seriesId || skill.status !== "active" || skill.package_phase !== "valid") throw new Error("skill_response_invalid")
     const record = publication.currentVersion!
     if (!record.ownerScope || !record.ownerScope.id || !record.ownerScope.kind) throw new Error("skill_response_invalid")
     return {

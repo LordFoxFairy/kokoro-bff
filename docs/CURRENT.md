@@ -1518,3 +1518,9 @@ W2 审查修正：项目资源成功态收窄为 CLEAN。INFECTED 为稳定不�
 基线 `49b555c227edd24f7ba2497bf6732a2597bb982e` 的 server 已有有序 shutdown，但 main 未接 SIGINT/SIGTERM。本候选只接线既有 `shutdown(30s)`，关闭中重复 signal 不提前终止；成功自然退出 0，同步/异步失败固定安全错误 exit 1，referenced 31s deadline 对永不 settle 提供有界失败终态。deadline 强退不冒充资源 drain。现有真实 HTTP/worker/store 顺序用例保持，新真实 Node 子进程覆盖两种 signal、重复 signal、拒绝及永不 settle。
 
 Node 22 候选实测：lifecycle 6/6；format、lint、typecheck、build 均 exit 0；contract 704/704；默认 1303 tests、1300 pass、0 fail、3 既定 skip。本片不改 contract、SQL、权限、owner、配置或关闭预算，未操作正常 session 9724、服务或数据；Root 提交、正常重载及运行 PID 验收仍待执行。
+## R357 Local Skill import package phase projection
+
+Platform `SkillPackagePhase.VALIDATED` 现在由既有 Skill Product response mapper 显式投影为 public
+`package_phase: "valid"`，与 canonical OpenAPI 的既有闭集一致。mapper 不再机械小写 owner enum；没有 public
+Skill record 对应值的 `UNSPECIFIED`、`INTENT` 及未知值 fail closed。Finalize 与 completed Get 共用该 mapper，
+不改变 Platform wire、public contract、权限、幂等、SQL 或预算；正常服务重载和既有 intent 恢复由 Root 执行。
