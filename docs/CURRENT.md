@@ -4,7 +4,7 @@
 
 三个写与same-key replay要求fresh `create_draft AND install`，Get为fresh read；统一绝对预算、取消/迟到关闭、900秒PUT、24小时intent、原key/unknown恢复，不新增BFF Storage调用、SQL/Redis/receipt。Begin成功或重签仅限未到期 `upload_pending` 且 Storage pending；进入 `uploaded`/`completed`/`rejected` 或 expired 后旧 Begin 接 owner phase/precondition 错误并改用 Get，绝不重签或再次 createUpload；Finalize completed 原 key 按 owner 至少30天receipt精确重放。现Web严格从成功PUT的`x-amz-version-id`取得source version可供未来Complete使用，但旧链证据不代表新import已通过。GitHub/AI普通Draft流程与Admin Publish保留；仅未来Web本地文件callsite退出旧Draft→Publish串联。
 
-当前固定Platform consumer尚未包含正式可路由v10 runtime。owner正式发行前不repin vendor/generated、不创建policy/注册route；源码、contract、generated、服务与数据均未改，后继实现须另行授权和冻结。
+当前固定 Platform consumer 尚未包含 local-import owner 合同。Platform 五份机器事实正式发行后，可在独立消费者切片中 repin、正规生成 client，并以注入 seam 完成 private policy/input/projector/route 的隔离测试；该切片不注册生产 dispatch。只有 owner artifact active/routable、真实 Storage 集成门完成后，后继激活切片才接入 production composition 与 exact namespace。当前源码、contract、generated、服务与数据均未改，后继实现须另行授权和冻结。
 
 <!-- T-K03.4-BROWSER-PRIVATE-LOCAL-IMPORT-CURRENT-END -->
 

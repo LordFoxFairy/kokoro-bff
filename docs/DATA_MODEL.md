@@ -4,7 +4,7 @@ BFF 不拥有 `SkillImportIntent`、Upload、scan、Skill、publication、instal
 
 24小时 intent、phase、预分配 skill ID、immutable upload proof和terminal结果均只从 Platform Get/command receipt取得；900秒 PUT URL及headers不落盘。same-key replay前重新做 current session及`create_draft AND install`，receipt不成为权限缓存。只有未到期 `upload_pending` intent 且 Storage upload 仍 pending 可由原 Begin 重签同一 upload；`uploaded`、`completed`、`rejected` 或 expired 后的旧 Begin 只接 owner phase/precondition 错误并由 Get 恢复，不产生新 upload/reference。Finalize completed 的原 key 由 owner receipt 至少 30 天精确重放，BFF不复制该事实。Web已有 PUT响应 `x-amz-version-id` 是 Complete 的 `source_version_id` 来源；BFF不读取Storage、不猜值。
 
-public OpenAPI、数据库schema、现有BFF receipt/outbox、GitHub/AI Draft事实及Admin Publish事实全不变。后继本地文件UI停止建立假Draft，但不清理或迁移既有Draft、Asset、installation，也不删除合法失败历史。当前未实施，无schema/数据命令。
+public OpenAPI、数据库schema、现有BFF receipt/outbox、GitHub/AI Draft事实及Admin Publish事实全不变。后继本地文件UI停止建立假Draft，但不清理或迁移既有Draft、Asset、installation，也不删除合法失败历史。正式 owner 五份机器事实可供隔离消费者 pin/generation，不改变本数据边界；owner inactive 阶段不注册生产 dispatch、不产生 intent 或任何 BFF 持久事实。当前未实施，无schema/数据命令。
 
 <!-- T-K03.4-BROWSER-PRIVATE-LOCAL-IMPORT-DATA-END -->
 

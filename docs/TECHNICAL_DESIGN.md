@@ -20,7 +20,7 @@ Begin 返回的 PUT reference 只接受批准 ObjectStore origin、固定 PUT、
 | 删除项 | 后继只删除 Web 本地文件入口对普通 Draft→package→validate→publish 的串联；不删 GitHub/AI 生命周期或 `/v1/admin/skills/{id}/publish`。 |
 | 验证 | private policy生成/check、public字节/census负控、四route HTTP、dual IAM replay/预算/取消、900秒/24小时/unknown恢复、generated pin、GitHub/AI与admin Publish回归。 |
 
-当前只通过文档门。Platform v10 runtime 正式可路由发行前不得 repin vendor/generated、注册路由或创建 private policy 文件；后继实现另行授权。
+当前只通过文档门。Platform 将本能力的五份机器事实正式发行后，BFF 可固定该 owner commit、正规生成 client，并隔离实现 input、projector、private policy 与 route 测试；这不等于生产可路由。Platform artifact 仍为 inactive、真实 Storage 集成或激活证据未齐时，生产 bootstrap 不注册 exact dispatch，也不构造生产 local-import client。激活由后继独立切片完成，不用消费者实现倒逼 owner 提前 routable。
 
 <!-- T-K03.4-BROWSER-PRIVATE-LOCAL-IMPORT-DESIGN-END -->
 

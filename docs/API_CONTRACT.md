@@ -13,7 +13,7 @@
 
 三个 POST（包括 completed/same-key replay）必须 fresh `create_draft AND install` 后才调用 Platform；GET 使用 fresh session/read。Begin 的 201（含同 key 重签）只适用于未到期的 `upload_pending` intent 且 Storage upload 仍为 pending；`uploaded`、`completed`、`rejected` 或 expired phase 的旧 Begin 重放投影 owner 明确 phase/precondition 错误，不返回 transfer reference，调用方以 GET 恢复。Finalize 已 completed 的原 key 在 owner 至少 30 天 receipt 保留窗内仍精确重放同一成功结果。tenant/subject 只来自受信 session，不能从 body/header自报。预算、取消、900秒 PUT上限、24小时 intent、原key恢复与 unknown ACK 规则以技术设计为准。BFF 不接 Storage、不持久 receipt/intent。
 
-该 private contract 后继由 `local-skill-import.policy.ts` 唯一编辑并确定性生成根 policy JSON；不写入 public OpenAPI/Developer Portal/public SDK/count。当前机器policy尚不存在，Platform runtime正式发行前不得创建或路由。GitHub/AI 的普通 Draft/Validate/Publish 与后台 Admin Publish 保持原合同。
+该 private contract 后继由 `local-skill-import.policy.ts` 唯一编辑并确定性生成根 policy JSON；不写入 public OpenAPI/Developer Portal/public SDK/count。Platform 五份 owner 机器事实正式发行后可先生成 client、创建 private policy 并做注入式隔离合同/HTTP测试；owner artifact inactive 时不得在生产 server 注册该 namespace 或把 null client 暴露为可观察 503。只有 owner active/routable 与真实 Storage 集成门同时成立，后继激活切片才注册 exact dispatch。GitHub/AI 的普通 Draft/Validate/Publish 与后台 Admin Publish 保持原合同。
 
 <!-- T-K03.4-BROWSER-PRIVATE-LOCAL-IMPORT-API-END -->
 
