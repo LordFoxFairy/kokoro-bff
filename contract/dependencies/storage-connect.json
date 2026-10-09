@@ -3,17 +3,17 @@
   "status": "generated",
   "owner": {
     "repository_path": "apps/kokoro-storage",
-    "repository_commit": "e8b9928418924812587b7ac07900aee4be5bc27f",
-    "published_combined_sha256": "c22b5c10ee698d579753dcac370be371d8dba1df8fead1a12883f5443fbad18a",
-    "package_name": "kokoro.storage.v2",
+    "repository_commit": "d13f33acfc7a482d61ebffc58e7b2667b58ae197",
+    "published_combined_sha256": "47e2659f577cf5c0a5e44a9ee9165d0fee17471bb3d7abb80095a956f655c1f9",
+    "package_name": "kokoro.storage.v3",
     "sources": [
       {
         "path": "contract/proto/kokoro/common/v1/common.proto",
         "sha256": "4604725ec7d5896c9d74b53c6f06d19b20ee758d5ab9e1cb90177ede95bba9fd"
       },
       {
-        "path": "contract/proto/kokoro/storage/v2/storage.proto",
-        "sha256": "7960312aa9879d17af17dbd68f25df1a61edb67f1f7d9613ea3e97b404c75bef"
+        "path": "contract/proto/kokoro/storage/v3/storage.proto",
+        "sha256": "1021e603065978871c51519ddba5b23c9b97f16b781a08bd98e019b3342bf5f9"
       }
     ]
   },
@@ -29,14 +29,14 @@
     "configs": [
       {
         "path": "buf.storage.json",
-        "sha256": "a09651cb1f18f4b31e9d09363e7ae5cd727714eed060e33bd32add711e796b38"
+        "sha256": "405c14f37384cac2a5bb3f3936ac22020e1f21cef7ae55b2c924a832a1291ca4"
       },
       {
         "path": "buf.storage.gen.json",
         "sha256": "9888ea0808f6967ebdfb859125eb54430b89ad3f4dbee4418902bfdf6a4540ab"
       }
     ],
-    "script_sha256": "01d1dfde51e7c4c0445e7f36fe3d80064c7759ddfeeb6ae0b985c36b23159917",
+    "script_sha256": "1b3fbf7e60eb53443b66d8edbf8134c00841cebeced9bc51af0ad67d93ff55b0",
     "formatting": {
       "package": "prettier",
       "version": "3.9.6",
@@ -45,7 +45,7 @@
     }
   },
   "dependency_decision": {
-    "verified_on": "2026-09-28",
+    "verified_on": "2026-10-08",
     "approach": "Reuse the published owner's exact Buf/Protobuf-ES/Connect versions; no floating upgrade. Protobuf-ES v2 emits service descriptors consumed by Connect createClient.",
     "alternatives": "Handwritten DTO/RPC serializers duplicate the owner contract; copying owner runtime/generated files lacks an independent reproducible consumer generation chain.",
     "licenses": "Buf, Protobuf-ES and Connect-ES: Apache-2.0",
@@ -63,7 +63,7 @@
     "pnpm": "11.25.0",
     "typescript": "5.9.3"
   },
-  "lockfile_sha256": "ab7d35aca5c299b6ff108cc1cdab5581db71d5a84a3c4147de9c3033a406eb0e",
+  "lockfile_sha256": "6c331386e53900ed7b93d32b83dc03bd37bc19be6c8cef7d7974d6bd5a5373a3",
   "build_policy_sha256": "b9cab84f3d70bbbd4712d0131e208eb8e267c154ed5879092d34bf0ccc3d2e9e",
   "generated": [
     {
@@ -71,8 +71,8 @@
       "sha256": "909684f35c7d3044e98adb3fb02c64600c7a4b1a75e8836384f0100b0451d47f"
     },
     {
-      "path": "kokoro/storage/v2/storage_pb.ts",
-      "sha256": "e2832491c506b4f02bb578f58a0730fe697864f69506c12e49ce131c0a150056"
+      "path": "kokoro/storage/v3/storage_pb.ts",
+      "sha256": "77cd33b3002a7af50143366015c79b55ffe59fa68108ce5535c6d5eac5d99e70"
     }
   ]
 }

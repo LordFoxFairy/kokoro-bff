@@ -1,3 +1,5 @@
+import { skillCategoryKeysSchema } from "./skill-product-schema.js"
+import { projectSkillProductJson } from "./skill-product-response.js"
 import { z } from "zod"
 import { parseSkillExamplePrompts } from "./skill-example-prompts.js"
 import { createClient } from "../../../generated/platform-http/client/client.gen.js"
@@ -55,7 +57,19 @@ export type ProjectionResult =
     }
 const invalidResponse = (): ProjectionResult => ({ ok: false, status: 502, code: "skill_response_invalid", retryable: false })
 const unavailable = (): ProjectionResult => ({ ok: false, status: 503, code: "skill_dependency_unavailable", retryable: true })
-const publishedFields = ["example_prompts", "name", "revision", "skill_id", "skill_updated_at", "source_ref", "status", "summary", "tags"]
+const publishedFields = [
+  "category_keys",
+  "example_prompts",
+  "name",
+  "product",
+  "revision",
+  "skill_id",
+  "skill_updated_at",
+  "source_ref",
+  "status",
+  "summary",
+  "tags",
+]
 
 function matchesPublishedIdentity(value: unknown, skillId: string | undefined): boolean {
   if (typeof skillId !== "string" || typeof value !== "object" || value === null || Array.isArray(value)) return false
@@ -93,15 +107,27 @@ function validExamples(value: unknown): boolean {
   }
 }
 const visibleSkill = zSkill
-  .extend({ example_prompts: z.custom<string[]>(validExamples) })
+  .extend({
+    example_prompts: z.custom<string[]>(validExamples),
+    category_keys: skillCategoryKeysSchema,
+    product: z.unknown().transform(projectSkillProductJson),
+  })
   .strict()
   .refine(({ skill_updated_at }) => skill_updated_at.endsWith("Z"))
 const publishedSkill = zPublishedPersonalSkill
-  .extend({ example_prompts: z.custom<string[]>(validExamples) })
+  .extend({
+    example_prompts: z.custom<string[]>(validExamples),
+    category_keys: skillCategoryKeysSchema,
+    product: z.unknown().transform(projectSkillProductJson),
+  })
   .strict()
   .refine(({ skill_updated_at }) => skill_updated_at.endsWith("Z"))
 const managedSkill = zSelfManagedSkill
-  .extend({ example_prompts: z.custom<string[]>(validExamples) })
+  .extend({
+    example_prompts: z.custom<string[]>(validExamples),
+    category_keys: skillCategoryKeysSchema,
+    product: z.unknown().transform(projectSkillProductJson),
+  })
   .strict()
   .refine(({ skill_updated_at }) => skill_updated_at.endsWith("Z"))
 const visibleSkillsResponse = zListVisibleSkillsResponse.strict().extend({

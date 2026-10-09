@@ -2,7 +2,7 @@ import { createClient, ConnectError, Code, type Client, type Transport } from "@
 import { createConnectTransport } from "@connectrpc/connect-node"
 import type { ProjectResourcePageInput } from "../../../application/project-resource-list.types.js"
 import { ProjectResourceError } from "../../../application/project-resource.error.js"
-import { StorageService } from "../../../generated/storage-connect/kokoro/storage/v2/storage_pb.js"
+import { StorageService } from "../../../generated/storage-connect/kokoro/storage/v3/storage_pb.js"
 import { parseCleanAssetPage } from "./client.js"
 
 export type PersonalFileContext = Readonly<{ tenantId: string; subjectId: string; requestId: string }>

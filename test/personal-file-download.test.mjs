@@ -68,7 +68,7 @@ test("personal download is a versioned binary Product operation with stable erro
 test("personal Storage download checks ASSET/CLEAN before signing, verifies exact metadata and bytes, and carries admitted scope", async () => {
   const { PersonalFileDownloadClient } = await import("../dist/infrastructure/clients/storage/personal-file-download.js")
   const { createRouterTransport, ConnectError, Code } = await import("@connectrpc/connect")
-  const { StorageService, UploadPurpose, ScanState } = await import("../dist/generated/storage-connect/kokoro/storage/v2/storage_pb.js")
+  const { StorageService, UploadPurpose, ScanState } = await import("../dist/generated/storage-connect/kokoro/storage/v3/storage_pb.js")
   const calls = []
   let asset = {
     assetId: "asset-1",
@@ -225,7 +225,7 @@ test("live Product HTTP re-admits every download and never returns another subje
   const { createServer } = await import("node:http")
   const { connectNodeAdapter } = await import("@connectrpc/connect-node")
   const { ConnectError, Code } = await import("@connectrpc/connect")
-  const { StorageService, UploadPurpose, ScanState } = await import("../dist/generated/storage-connect/kokoro/storage/v2/storage_pb.js")
+  const { StorageService, UploadPurpose, ScanState } = await import("../dist/generated/storage-connect/kokoro/storage/v3/storage_pb.js")
   const { createBffServer } = await import("../dist/bootstrap/server.js")
   const { loadConfig } = await import("../dist/config/runtime.js")
   const servers = []

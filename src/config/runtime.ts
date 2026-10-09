@@ -89,8 +89,8 @@ export type BffConfig = {
   agUi: AgUiConfig
   upstreams: Record<string, string | null>
   platformProjection: Readonly<{ baseUrl: string | null; credentialFile: string | null; timeoutMs: number }>
+  skillAdminCredentialFile?: string | null
   skillDraft: Readonly<{
-    enabled: boolean
     platformBaseUrl: string | null
     credentialFile: string | null
     timeoutMs: number
@@ -362,15 +362,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
   if (storageSecret !== null && !/^[\x21-\x7e]+$/u.test(storageSecret)) throw new Error("Storage secret must be a visible ASCII header value")
   const relay = iamRelayConfig(env)
   const skillDraft = {
-    enabled: booleanFlag(env.KOKORO_SKILL_DRAFT_CANDIDATE_ENABLED, false),
     platformBaseUrl: optionalOrigin(env.KOKORO_PLATFORM_BASE_URL, "KOKORO_PLATFORM_BASE_URL"),
     credentialFile: env.KOKORO_BFF_PLATFORM_CATALOG_CREDENTIALS_FILE?.trim() || null,
     timeoutMs: positiveInteger(env.KOKORO_PLATFORM_CATALOG_TIMEOUT_MS, "KOKORO_PLATFORM_CATALOG_TIMEOUT_MS", upstreamTimeoutMs),
   }
-  if (skillDraft.enabled && !["127.0.0.1", "::1", "localhost"].includes(env.KOKORO_BFF_HOST?.trim() || "127.0.0.1"))
-    throw new Error("Skill draft candidate requires a loopback BFF host")
-  if (skillDraft.enabled && (skillDraft.platformBaseUrl === null || skillDraft.credentialFile === null || optionalOrigin(env.KOKORO_IAM_BASE_URL) === null))
-    throw new Error("Skill draft candidate requires Platform, IAM and credential configuration")
+
   return {
     host: env.KOKORO_BFF_HOST?.trim() || "127.0.0.1",
     port,
@@ -405,5 +401,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
       timeoutMs: upstreamTimeoutMs,
     },
     skillDraft,
+    skillAdminCredentialFile: env.KOKORO_BFF_SKILLS_ADMIN_CREDENTIAL_FILE?.trim() || null,
   }
 }

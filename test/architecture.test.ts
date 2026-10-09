@@ -81,10 +81,11 @@ function assertSingleSchemaInstaller(scripts: Record<string, string>, sourceFile
     .map(({ relativePath }) => relativePath)
     .sort()
   const nonCanonicalInstallerImports = sourceFiles
-    .filter(({ relativePath, source }) =>
-      relativePath !== canonicalInstaller.relativePath &&
-      importsCanonicalSchemaInstaller(relativePath, source) &&
-      !isNamedPersonalizationSchemaReader(relativePath, source),
+    .filter(
+      ({ relativePath, source }) =>
+        relativePath !== canonicalInstaller.relativePath &&
+        importsCanonicalSchemaInstaller(relativePath, source) &&
+        !isNamedPersonalizationSchemaReader(relativePath, source),
     )
     .map(({ relativePath }) => relativePath)
     .sort()
@@ -235,6 +236,7 @@ test("Platform projection generated types stay behind one facade and old Capabil
     "src/http/routes/managed-personal-skills.ts",
     "src/http/routes/platform-projection.ts",
     "src/infrastructure/clients/platform/projection-http.ts",
+    "src/infrastructure/clients/platform/skill-product-response.ts",
   ])
   for (const { relativePath, source } of sources) {
     assert.doesNotMatch(source, /generated\/capability-http|infrastructure\/clients\/capability/u, relativePath)
@@ -604,7 +606,7 @@ test("Conversation collection filtering stays one BFF-owned discriminated path w
   assert.match(service, /filter: ConversationCollectionFilter/u)
   assert.match(repository, /filter\.kind === "direct"[\s\S]*project_ref IS NULL/u)
   assert.match(repository, /filter\.kind === "project" \? filter\.projectRef : null/u)
-  assert.match(openapi, /^  version: 8\.10\.0$/mu)
+  assert.match(openapi, /^  version: 9\.0\.0$/mu)
   assert.match(openapi, /scope=direct and a nonempty project_ref are mutually exclusive/u)
   assert.doesNotMatch(port, /ConversationCollectionFilter\s*=\s*string/u)
 })
@@ -748,7 +750,7 @@ test("BFF governance documents distinguish implemented facts from accepted targe
   assert.equal(/CREATE TABLE IF NOT EXISTS bff_outbox\b/u.test(schema), false)
 })
 
-test("BFF consumes the pinned Platform 3.5 HTTP projection without owning its data", async () => {
+test("BFF consumes the pinned Platform 5.1 HTTP projection without owning its data", async () => {
   const [generatorConfig, generatorScript, manifestSource, schema] = await Promise.all([
     readFile(path.join(root, "openapi-ts.platform-http.config.ts"), "utf8"),
     readFile(path.join(root, "scripts/generate-platform-http-client.mjs"), "utf8"),
@@ -760,9 +762,9 @@ test("BFF consumes the pinned Platform 3.5 HTTP projection without owning its da
     owner: { repository_commit: string; contract_version: string; contract_sha256: string }
   }
   assert.equal(manifest.status, "generated")
-  assert.equal(manifest.owner.repository_commit, "94bd0ea94aabc60c666fdb2cfa8784baf194e24b")
-  assert.equal(manifest.owner.contract_version, "3.5.0")
-  assert.equal(manifest.owner.contract_sha256, "370e3d7152796042f00095eda86eec4bc9883766c051f7f7dc864dce2b359b04")
+  assert.equal(manifest.owner.repository_commit, "fa185ed2b25c3e81946cfdcd12d7665d02b8bad3")
+  assert.equal(manifest.owner.contract_version, "5.2.0")
+  assert.equal(manifest.owner.contract_sha256, "6d4abae68cd5cc6e2d8676ac34a48f7ea3564196ec6215ea1531b3cfedd3c3d7")
   assert.match(generatorConfig, /src\/generated\/platform-http/u)
   assert.match(generatorScript, /two byte-identical generations/u)
   assert.doesNotMatch(schema, /CREATE TABLE[^;]*capability/iu)
@@ -776,7 +778,14 @@ test("R345 Skill update instants stay strict at the two existing Platform projec
     readFile(path.join(root, "src/infrastructure/clients/platform/personal-installation-response.ts"), "utf8"),
   ])
   for (const schema of ["zSkill", "zPublishedPersonalSkill", "zSelfManagedSkill"])
-    assert.ok(projection.replace(/\s+/gu, "").includes(`${schema}.extend({example_prompts:z.custom<string[]>(validExamples)}).strict()`), `${schema} must reject unknown owner fields`)
+    assert.ok(
+      projection
+        .replace(/\s+/gu, "")
+        .includes(
+          `${schema}.extend({example_prompts:z.custom<string[]>(validExamples),category_keys:skillCategoryKeysSchema,product:z.unknown().transform(projectSkillProductJson),}).strict()`,
+        ),
+      `${schema} must reject unknown owner fields`,
+    )
   assert.match(projection, /skill_updated_at/u)
   assert.doesNotMatch(projection, /skill_updated_at\s*(?:\?\?|\|\|).*?(?:installed_at|updated_at)/u)
   assert.match(installation, /instant\(value\.skillUpdatedAt, true\)/u)
@@ -837,7 +846,7 @@ test("Scheduler control and receiver implement distinct owner boundaries and dur
   }
 })
 
-test("BFF Library file slice uses personal Storage v2 without claiming Artifact completion", async () => {
+test("BFF Library file slice uses personal Storage v3 without claiming Artifact completion", async () => {
   const [technical, api, data, current] = await Promise.all([
     readFile(path.join(root, "docs/TECHNICAL_DESIGN.md"), "utf8"),
     readFile(path.join(root, "docs/API_CONTRACT.md"), "utf8"),
@@ -937,7 +946,6 @@ test("R257 personalization stays caller-owned and bypasses generic receipt dispa
   assert.doesNotMatch(repository, /bff_idempotency_receipt|kokoro_iam|kokoro_system|\.redis\./u)
   assert.ok(server.indexOf("await personalizationRoute(") < server.indexOf("const mutationRequired ="))
 })
-
 
 test("R257 named evolution may import exactly the two approved canonical read helpers", () => {
   const namedReader: SourceFile = {

@@ -1,3 +1,11 @@
+## R353-B2 当前源码候选（2026-10-08；待Root冻源审查/真实配对）
+
+唯一 BFF writer 为 bff_skills_product_source_r353；工作树 HEAD d2695c47bca64a8e83168aa259e2366f7cee3ea8。当前唯一 Platform固定52eeb0b891326a7538926e5fc5ffc89fe87f3c54、Product1.1/HTTP5.1/63RPC/32commands/24proofs、完整76正式publication；aggregate e92205f4c495497cd3e0aadd96027cc925e246c7dc253ddb3544105aa9966191、descriptor 4a8715b5057fbe3a9f443faee0315482de20593ce01430c7c357561a61576bfd、HTTP a8cef2bc45b2c0514f3d1abf06199087ad0efadf9db75224b17c69b1c50b12ce。HTTP直接读同Platform vendor/openapi；原701候选72副本移除，无双pin。IAM7c62e759760448e127b21200f87adeefdc6016f7/0.10、Storage d13f33a/v3继续原正规固定生成；不升级其它owner。
+
+Public唯一9.0.0/132operations，具名Product checker先核完整当前closed blocks，再剥本片还原完整Public8.10字节SHA640f47f9c70341aa49934eec319a4dcc5bab76bba83e4407d6a9e0c3ab0ac389并运行全部旧父证明。机器/纯门只证明本源码；正常Storage旧源版本资格、真实IAM/Platform/Storage/Agent配对、provider、普通/管理员浏览器与S01–S10由Root继续验证，仍OPEN。未运行数据库/资源/服务/正常激活，不以fixture为integration或UI完成。
+
+当前纯门和实际失败日志绑定最终freeze；阶段性默认1187PASS/15FAIL/3SKIP及1201PASS/6FAIL/3SKIP已保留。批准窄fixture与共同lock正规生成后，整份pnpm check自然0：contract620PASS/default1207PASS、0FAIL、3既有资源SKIP；独立format自然0。随后增加URL身份39/100边界负控与同Public9闭集限制，最终同源门以freeze实际命令结果为准。尚未正常服务切换/浏览器验证/真实provider，源码门不代表整页完成。
+
 ### R350-B2 示例固定消费者已完成源码验收，页面待接线（2026-10-08）
 
 固定 Platform `94bd0ea94aabc60c666fdb2cfa8784baf194e24b` 的完整60 publication及 HTTP3.5，Public8.10/111；两Create保持 absence 与 present[] 的不同命令身份，四读严格 required example_prompts，安装 typed message 必须present。原文/顺序/重复/Unicode scalar与UTF-8总量规则一致，Publish仍零body；无SQL/权限/新operation。

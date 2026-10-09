@@ -3,7 +3,9 @@ import { createHash } from "node:crypto"
 import { readFile } from "node:fs/promises"
 import { test } from "node:test"
 
-import { inspectAgentControlSnapshot, inspectBffOpenApi } from "../../scripts/verify-openapi.ts"
+import { inspectAgentControlSnapshot, inspectBffHistoricalOpenApi as inspectBffOpenApi } from "../../scripts/verify-openapi.ts"
+
+import { inspectSkillProductContract, stripSkillProductSource, skillProductParentBaseline } from "../../scripts/verify-skill-product-contract.mjs"
 
 const openapiUrl = new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url)
 const baselineUrl = new URL("../../contract/tests/v1-operations.json", import.meta.url)
@@ -24,7 +26,9 @@ const SAFE_FAILURE_CODES = [
 
 async function readContract() {
   const [openapi, baselineDocument] = await Promise.all([readFile(openapiUrl, "utf8"), readFile(baselineUrl, "utf8")])
-  return { openapi, baseline: JSON.parse(baselineDocument).operations }
+  const baseline = JSON.parse(baselineDocument).operations
+  assert.deepEqual(inspectSkillProductContract(openapi, baseline), [], "Current Public9 must pass before historical parent mutation proof")
+  return { openapi: stripSkillProductSource(openapi), baseline: skillProductParentBaseline(openapi) }
 }
 
 function inspectChatFailureContract(openapi) {
@@ -504,7 +508,7 @@ test("CompleteSkillPackageUpload publishes an inactive user-only strict command"
 test("CompleteSkillPackageUpload binds owner v4 digest version and all eleven frozen command vectors", async () => {
   const manifest = JSON.parse(
     await readFile(
-      new URL("../../contract/vendor/kokoro-platform/94bd0ea94aabc60c666fdb2cfa8784baf194e24b/execution-operations-v5/manifest.json", import.meta.url),
+      new URL("../../contract/vendor/kokoro-platform/fa185ed2b25c3e81946cfdcd12d7665d02b8bad3/execution-operations-v5/manifest.json", import.meta.url),
       "utf8",
     ),
   )
@@ -579,7 +583,7 @@ test("ValidateSkillDraft describes one default-closed user-only attempt-bound co
 test("ValidateSkillDraft pins owner v4 tag 7 and all eight command digest vectors", async () => {
   const manifest = JSON.parse(
     await readFile(
-      new URL("../../contract/vendor/kokoro-platform/94bd0ea94aabc60c666fdb2cfa8784baf194e24b/execution-operations-v5/manifest.json", import.meta.url),
+      new URL("../../contract/vendor/kokoro-platform/fa185ed2b25c3e81946cfdcd12d7665d02b8bad3/execution-operations-v5/manifest.json", import.meta.url),
       "utf8",
     ),
   )
@@ -663,7 +667,7 @@ test("PublishSkill exposes one default-closed user-only command with no request 
 test("PublishSkill pins the inactive owner v4 PERSONAL command and all eight digest vectors", async () => {
   const manifest = JSON.parse(
     await readFile(
-      new URL("../../contract/vendor/kokoro-platform/94bd0ea94aabc60c666fdb2cfa8784baf194e24b/execution-operations-v5/manifest.json", import.meta.url),
+      new URL("../../contract/vendor/kokoro-platform/fa185ed2b25c3e81946cfdcd12d7665d02b8bad3/execution-operations-v5/manifest.json", import.meta.url),
       "utf8",
     ),
   )
@@ -731,7 +735,7 @@ test("PublishSkill semantic gate rejects body, state, status and legacy-operatio
 test("BeginSkillPackageUpload candidate names the exact inactive owner v4 command and digest version", async () => {
   const manifest = JSON.parse(
     await readFile(
-      new URL("../../contract/vendor/kokoro-platform/94bd0ea94aabc60c666fdb2cfa8784baf194e24b/execution-operations-v5/manifest.json", import.meta.url),
+      new URL("../../contract/vendor/kokoro-platform/fa185ed2b25c3e81946cfdcd12d7665d02b8bad3/execution-operations-v5/manifest.json", import.meta.url),
       "utf8",
     ),
   )
@@ -1034,7 +1038,8 @@ test("personal Skill installations replace legacy name toggles with exact five-o
     "setPersonalSkillInstallationEnabled",
   ])
     assert.ok(openapi.includes(`operationId: ${operation}`), operation)
-  for (const field of ["display_name", "summary", "source_status"]) assert.match(openapi.slice(openapi.indexOf("    SkillInstallation:"), openapi.indexOf("    SkillInstallationMutation:")), new RegExp(`\\b${field}\\b`, "u"))
+  for (const field of ["display_name", "summary", "source_status"])
+    assert.match(openapi.slice(openapi.indexOf("    SkillInstallation:"), openapi.indexOf("    SkillInstallationMutation:")), new RegExp(`\\b${field}\\b`, "u"))
   for (const forbidden of ["package_asset_ref", "content_digest", "execution_proof", "target_owner_scope"])
     assert.equal(openapi.slice(openapi.indexOf("  /v1/skill-installations:"), openapi.indexOf("  /v1/skills/github/preview:")).includes(forbidden), false)
 })
@@ -2067,7 +2072,10 @@ test("R266 managed personal Skill contract rejects route, envelope, status-code 
     listRoute("operationId: listManagedPersonalSkills", "operationId: listSkills"),
     detailRoute("    get:", "    post:"),
     listRoute("x-kokoro-permission: product.skill.read_managed_personal", "x-kokoro-permission: capability.skill.read"),
-    listRoute("'429': { $ref: '#/components/responses/ManagedPersonalSkillRateLimited' }", "'429': { $ref: '#/components/responses/PlatformProjectionReadRateLimited' }"),
+    listRoute(
+      "'429': { $ref: '#/components/responses/ManagedPersonalSkillRateLimited' }",
+      "'429': { $ref: '#/components/responses/PlatformProjectionReadRateLimited' }",
+    ),
     detailRoute("'404': { $ref: '#/components/responses/ManagedPersonalSkillNotFound' }", "'404': { $ref: '#/components/responses/NotFound' }"),
     error("required: [error, meta]", "required: [error]"),
     error("additionalProperties: false", "additionalProperties: true"),
@@ -2075,12 +2083,20 @@ test("R266 managed personal Skill contract rejects route, envelope, status-code 
     response("BadRequest", "Unauthorized", "enum: [invalid_skill_request]", "enum: [invalid_query_parameter]"),
     response("RateLimited", "BadGateway", "enum: [session_rate_limited]", "enum: [session_rate_limited, skill_rate_limited]"),
     response("BadGateway", "Unavailable", "enum: [skill_response_invalid]", "enum: [skill_dependency_unavailable]"),
-    response("Unavailable", "PublishedPersonalSkillOk", "product_tenant_not_configured, iam_admission_unavailable, skill_dependency_unavailable", "product_tenant_not_configured, skill_dependency_unavailable"),
+    response(
+      "Unavailable",
+      "PublishedPersonalSkillOk",
+      "product_tenant_not_configured, iam_admission_unavailable, skill_dependency_unavailable",
+      "product_tenant_not_configured, skill_dependency_unavailable",
+    ),
     response("ListOk", "DetailOk", "required: true", "required: false"),
   ]
   for (const [index, broken] of mutations.entries()) {
     assert.notEqual(broken, openapi)
-    assert.ok(inspectBffOpenApi(broken, baseline).some((message) => /managed personal Skill|ManagedPersonalSkill/u.test(message)), `managed mutation ${index} must fail closed`)
+    assert.ok(
+      inspectBffOpenApi(broken, baseline).some((message) => /managed personal Skill|ManagedPersonalSkill/u.test(message)),
+      `managed mutation ${index} must fail closed`,
+    )
   }
   const { createRequire } = await import("node:module")
   const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
@@ -2094,8 +2110,7 @@ test("R266 managed personal Skill contract rejects route, envelope, status-code 
 test("R267 createPersonalSkillVersion publishes one governed strict personal version command", async () => {
   const { openapi, baseline } = await readContract()
   const operation = baseline.find(
-    ({ method, path, operation_id }) =>
-      method === "POST" && path === "/v1/self/skills/{skill_id}/versions" && operation_id === "createPersonalSkillVersion",
+    ({ method, path, operation_id }) => method === "POST" && path === "/v1/self/skills/{skill_id}/versions" && operation_id === "createPersonalSkillVersion",
   )
   assert.ok(operation, "createPersonalSkillVersion must be registered in the operation inventory")
   const { createRequire } = await import("node:module")
@@ -2130,8 +2145,7 @@ test("R267 createPersonalSkillVersion publishes one governed strict personal ver
 test("R267 withdrawPersonalSkill publishes one governed strict personal withdrawal command", async () => {
   const { openapi, baseline } = await readContract()
   const operation = baseline.find(
-    ({ method, path, operation_id }) =>
-      method === "POST" && path === "/v1/self/skills/{skill_id}/withdraw" && operation_id === "withdrawPersonalSkill",
+    ({ method, path, operation_id }) => method === "POST" && path === "/v1/self/skills/{skill_id}/withdraw" && operation_id === "withdrawPersonalSkill",
   )
   assert.ok(operation, "withdrawPersonalSkill must be registered in the operation inventory")
   const { createRequire } = await import("node:module")
@@ -2163,7 +2177,18 @@ test("R267 withdrawPersonalSkill publishes one governed strict personal withdraw
   assert.equal(resource.additionalProperties, false)
   assert.equal(resource.properties.status.const, "withdrawn")
   assert.equal(resource.properties.event_id.pattern, "^evt:[a-f0-9]{64}$")
-  const errorResponses = { "400": "BadRequest", "401": "Unauthorized", "403": "Forbidden", "404": "NotFound", "409": "Conflict", "412": "PreconditionFailed", "413": "PayloadTooLarge", "429": "RateLimited", "502": "BadGateway", "503": "Unavailable" }
+  const errorResponses = {
+    400: "BadRequest",
+    401: "Unauthorized",
+    403: "Forbidden",
+    404: "NotFound",
+    409: "Conflict",
+    412: "PreconditionFailed",
+    413: "PayloadTooLarge",
+    429: "RateLimited",
+    502: "BadGateway",
+    503: "Unavailable",
+  }
   for (const [status, suffix] of Object.entries(errorResponses))
     assert.equal(route.responses?.[status]?.$ref, `#/components/responses/PersonalSkillLifecycle${suffix}`)
 })
@@ -2180,11 +2205,31 @@ test("R267 personal Skill lifecycle schemas reject boundary and closed-envelope 
     return openapi.slice(0, start) + block.replace(before, after) + openapi.slice(end)
   }
   const mutations = [
-    mutate("    CreatePersonalSkillVersionRequest:\n", "    CreatePersonalSkillVersionResource:\n", "required: [display_name, summary, tags]", "required: [summary, tags]"),
-    mutate("    CreatePersonalSkillVersionResource:\n", "    CreatePersonalSkillVersionResponse:\n", "status: { type: string, const: draft }", "status: { type: string, const: active }"),
-    mutate("    WithdrawPersonalSkillResource:\n", "    WithdrawPersonalSkillResponse:\n", "event_id: { type: string, pattern: '^evt:[a-f0-9]{64}$' }", "event_id: { type: string }"),
+    mutate(
+      "    CreatePersonalSkillVersionRequest:\n",
+      "    CreatePersonalSkillVersionResource:\n",
+      "required: [display_name, summary, tags]",
+      "required: [summary, tags]",
+    ),
+    mutate(
+      "    CreatePersonalSkillVersionResource:\n",
+      "    CreatePersonalSkillVersionResponse:\n",
+      "status: { type: string, const: draft }",
+      "status: { type: string, const: active }",
+    ),
+    mutate(
+      "    WithdrawPersonalSkillResource:\n",
+      "    WithdrawPersonalSkillResponse:\n",
+      "event_id: { type: string, pattern: '^evt:[a-f0-9]{64}$' }",
+      "event_id: { type: string }",
+    ),
     mutate("    PersonalSkillLifecycleErrorResponse:\n", "  responses:\n", "required: [error, meta]", "required: [error, meta, retryable]"),
-    mutate("  /v1/self/skills/{skill_id}/withdraw:\n", "components:\n", "'429': { $ref: '#/components/responses/PersonalSkillLifecycleRateLimited' }", "'429': { $ref: '#/components/responses/PlatformProjectionReadRateLimited' }"),
+    mutate(
+      "  /v1/self/skills/{skill_id}/withdraw:\n",
+      "components:\n",
+      "'429': { $ref: '#/components/responses/PersonalSkillLifecycleRateLimited' }",
+      "'429': { $ref: '#/components/responses/PlatformProjectionReadRateLimited' }",
+    ),
   ]
   for (const broken of mutations) {
     assert.notEqual(broken, openapi)
@@ -2212,11 +2257,7 @@ test("R267 final lifecycle path rejects a 503 response drift before components",
   const brokenRoute = route.replace(expected, "'503': { $ref: '#/components/responses/PersonalSkillLifecycleBadGateway' }")
   assert.notEqual(brokenRoute, route)
   const broken = openapi.slice(0, withdrawStart) + brokenRoute + openapi.slice(componentsStart)
-  assert.ok(
-    inspectBffOpenApi(broken, baseline).some(
-      (message) => message === "personal Skill lifecycle withdrawPersonalSkill 503 response drifted",
-    ),
-  )
+  assert.ok(inspectBffOpenApi(broken, baseline).some((message) => message === "personal Skill lifecycle withdrawPersonalSkill 503 response drifted"))
 })
 
 function inspectR277ProjectDeletion(document) {
@@ -2254,11 +2295,10 @@ function inspectR277ProjectDeletion(document) {
   require(status?.operationId === "getProjectDeletion", "R277 getProjectDeletion operation is missing")
   require(Object.keys(statusPath ?? {}).join(",") === "parameters,get", "R277 deletion status path must expose only parameters and GET")
   require(projectPath?.parameters?.some(({ $ref }) => $ref === "#/components/parameters/ProjectId"), "R277 existing Project path parameter drifted")
-  require(
-    deletion?.parameters?.some(({ $ref }) => $ref === "#/components/parameters/ProjectDeletionId") &&
-      statusPath?.parameters?.some(({ $ref }) => $ref === "#/components/parameters/ProjectDeletionId"),
-    "R277 both new operations must use the canonical ProjectDeletionId override",
-  )
+  require(deletion?.parameters?.some(({ $ref }) => $ref === "#/components/parameters/ProjectDeletionId") &&
+    statusPath?.parameters?.some(
+      ({ $ref }) => $ref === "#/components/parameters/ProjectDeletionId",
+    ), "R277 both new operations must use the canonical ProjectDeletionId override")
 
   for (const [operation, name, permission, idempotency] of [
     [deletion, "deleteProject", "project.update", "required"],
@@ -2272,10 +2312,9 @@ function inspectR277ProjectDeletion(document) {
   }
   require(deletion?.requestBody === undefined, "R277 deleteProject must not publish a request body")
   require(status?.requestBody === undefined, "R277 getProjectDeletion must not publish a request body")
-  require(
-    deletion?.parameters?.some(({ $ref }) => $ref === "#/components/parameters/ProjectDeletionIdempotencyKey"),
-    "R277 deleteProject must require its operation-specific Idempotency-Key",
-  )
+  require(deletion?.parameters?.some(
+    ({ $ref }) => $ref === "#/components/parameters/ProjectDeletionIdempotencyKey",
+  ), "R277 deleteProject must require its operation-specific Idempotency-Key")
   const key = document.components?.parameters?.ProjectDeletionIdempotencyKey
   require(key?.name === "Idempotency-Key" && key?.in === "header" && key?.required === true, "R277 deletion key header drifted")
   require(key?.schema?.minLength === 1 && key?.schema?.maxLength === 128, "R277 deletion key bounds drifted")
@@ -2284,20 +2323,20 @@ function inspectR277ProjectDeletion(document) {
   if (key?.schema?.pattern) {
     const keyPattern = new RegExp(key.schema.pattern, "u")
     for (const valid of ["a", "A".repeat(128), "project-delete:01"]) require(keyPattern.test(valid), `R277 valid key rejected: ${valid}`)
-    for (const invalid of ["", "A".repeat(129), " ", "a,b", "a\tb", "a\nb", "中文"]) require(!keyPattern.test(invalid), `R277 invalid key accepted: ${JSON.stringify(invalid)}`)
+    for (const invalid of ["", "A".repeat(129), " ", "a,b", "a\tb", "a\nb", "中文"])
+      require(!keyPattern.test(invalid), `R277 invalid key accepted: ${JSON.stringify(invalid)}`)
   }
   const id = document.components?.parameters?.ProjectDeletionId
   require(id?.name === "projectId" && id?.in === "path" && id?.required === true, "R277 ProjectDeletionId placement drifted")
   require(id?.schema?.type === "string" && typeof id?.schema?.pattern === "string", "R277 ProjectDeletionId type/pattern drifted")
-  require(
-    id?.schema?.pattern === "^project_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?![\\s\\S])",
-    "R277 ProjectDeletionId absolute pattern drifted",
-  )
+  require(id?.schema?.pattern ===
+    "^project_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?![\\s\\S])", "R277 ProjectDeletionId absolute pattern drifted")
   if (id?.schema?.pattern) {
     const idPattern = new RegExp(id.schema.pattern, "u")
     const canonical = "project_12345678-1234-1234-1234-123456789abc"
     require(idPattern.test(canonical), "R277 canonical Project ID rejected")
-    for (const invalid of ["project_slug", canonical.toUpperCase(), `${canonical}\n`, ` ${canonical}`, ""]) require(!idPattern.test(invalid), `R277 invalid Project ID accepted: ${JSON.stringify(invalid)}`)
+    for (const invalid of ["project_slug", canonical.toUpperCase(), `${canonical}\n`, ` ${canonical}`, ""])
+      require(!idPattern.test(invalid), `R277 invalid Project ID accepted: ${JSON.stringify(invalid)}`)
   }
 
   const expectedDeleteResponses = {
@@ -2331,29 +2370,24 @@ function inspectR277ProjectDeletion(document) {
   for (const name of new Set([...Object.values(expectedDeleteResponses), ...Object.values(expectedStatusResponses)])) {
     const response = document.components?.responses?.[name]
     const requestId = requiredHeader(response, "x-request-id")
-    require(
-      requestId?.schema?.type === "string" && requestId.schema.minLength === 1 && requestId.schema.maxLength === 128,
-      `R277 ${name} must require a bounded nonempty string x-request-id`,
-    )
+    require(requestId?.schema?.type === "string" &&
+      requestId.schema.minLength === 1 &&
+      requestId.schema.maxLength === 128, `R277 ${name} must require a bounded nonempty string x-request-id`)
     require(requiredHeader(response, "Cache-Control")?.schema?.const === "no-store", `R277 ${name} must require no-store`)
     if (!["ProjectDeletionAccepted", "ProjectDeletionStatusSuccess"].includes(name))
-      require(
-        responseSchema(response)?.allOf?.[0]?.$ref === "#/components/schemas/ProjectDeletionErrorResponse",
-        `R277 ${name} must retain the ProjectDeletionErrorResponse base`,
-      )
+      require(responseSchema(response)?.allOf?.[0]?.$ref ===
+        "#/components/schemas/ProjectDeletionErrorResponse", `R277 ${name} must retain the ProjectDeletionErrorResponse base`)
   }
   const accepted = document.components?.responses?.ProjectDeletionAccepted
   require(requiredHeader(accepted, "Location") !== undefined, "R277 202 must require Location")
-  require(
-    requiredHeader(accepted, "Location")?.schema?.pattern ===
-      "^/v1/projects/project_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/deletion(?![\\s\\S])",
-    "R277 202 Location must identify the canonical deletion resource",
-  )
+  require(requiredHeader(accepted, "Location")?.schema?.pattern ===
+    "^/v1/projects/project_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/deletion(?![\\s\\S])", "R277 202 Location must identify the canonical deletion resource")
   if (requiredHeader(accepted, "Location")?.schema?.pattern) {
     const locationPattern = new RegExp(requiredHeader(accepted, "Location").schema.pattern, "u")
     const valid = "/v1/projects/project_12345678-1234-1234-1234-123456789abc/deletion"
     require(locationPattern.test(valid), "R277 canonical Location rejected")
-    for (const invalid of [`${valid}\n`, `${valid}/`, "/v1/projects/project_slug/deletion"]) require(!locationPattern.test(invalid), `R277 invalid Location accepted: ${JSON.stringify(invalid)}`)
+    for (const invalid of [`${valid}\n`, `${valid}/`, "/v1/projects/project_slug/deletion"])
+      require(!locationPattern.test(invalid), `R277 invalid Location accepted: ${JSON.stringify(invalid)}`)
   }
 
   const acceptedEnvelope = resolve(responseSchema(accepted))
@@ -2374,21 +2408,15 @@ function inspectR277ProjectDeletion(document) {
     [statusResource, "status"],
   ]) {
     require(resource?.additionalProperties === false, `R277 ${name} resource must be closed`)
-    require(
-      JSON.stringify(resource?.required) === JSON.stringify(["project_id", "logical_release_state", "physical_cleanup_state"]),
-      `R277 ${name} resource fields drifted`,
-    )
-    require(
-      JSON.stringify(Object.keys(resource?.properties ?? {})) === JSON.stringify(["project_id", "logical_release_state", "physical_cleanup_state"]),
-      `R277 ${name} resource must not expose optional internal fields`,
-    )
+    require(JSON.stringify(resource?.required) ===
+      JSON.stringify(["project_id", "logical_release_state", "physical_cleanup_state"]), `R277 ${name} resource fields drifted`)
+    require(JSON.stringify(Object.keys(resource?.properties ?? {})) ===
+      JSON.stringify(["project_id", "logical_release_state", "physical_cleanup_state"]), `R277 ${name} resource must not expose optional internal fields`)
     require(resource?.properties?.physical_cleanup_state?.const === "pending", `R277 ${name} physical cleanup must stay pending`)
   }
   require(acceptedResource?.properties?.logical_release_state?.const === "pending", "R277 DELETE ACK must stay pending")
-  require(
-    JSON.stringify(statusResource?.properties?.logical_release_state?.enum) === JSON.stringify(["pending", "blocked", "released"]),
-    "R277 status must expose exactly three logical release states",
-  )
+  require(JSON.stringify(statusResource?.properties?.logical_release_state?.enum) ===
+    JSON.stringify(["pending", "blocked", "released"]), "R277 status must expose exactly three logical release states")
 
   const error = document.components?.schemas?.ProjectDeletionErrorResponse
   require(error?.additionalProperties === false, "R277 error envelope must be closed")
@@ -2408,13 +2436,16 @@ function inspectR277ProjectDeletion(document) {
     ProjectDeletionUnavailable: ["product_tenant_not_configured", "iam_admission_unavailable", "business_store_unavailable"],
   }
   const allCodes = [...new Set(Object.values(profiles).flat())]
-  require(
-    JSON.stringify(error?.properties?.error?.properties?.code?.enum) === JSON.stringify(allCodes),
-    "R277 error code union drifted",
-  )
+  require(JSON.stringify(error?.properties?.error?.properties?.code?.enum) === JSON.stringify(allCodes), "R277 error code union drifted")
   for (const [name, codes] of Object.entries(profiles))
     require(JSON.stringify(errorCodes(document.components?.responses?.[name])) === JSON.stringify(codes), `R277 ${name} code tuple drifted`)
-  for (const name of ["ProjectDeletionBadRequest", "ProjectDeletionStatusBadRequest", "ProjectDeletionUnauthorized", "ProjectDeletionForbidden", "ProjectDeletionNotFound"])
+  for (const name of [
+    "ProjectDeletionBadRequest",
+    "ProjectDeletionStatusBadRequest",
+    "ProjectDeletionUnauthorized",
+    "ProjectDeletionForbidden",
+    "ProjectDeletionNotFound",
+  ])
     require(errorRetryable(document.components?.responses?.[name]) === false, `R277 ${name} retryable must be false`)
   for (const name of ["ProjectDeletionRateLimited", "ProjectDeletionUnavailable"])
     require(errorRetryable(document.components?.responses?.[name]) === true, `R277 ${name} retryable must be true`)
@@ -2424,14 +2455,11 @@ function inspectR277ProjectDeletion(document) {
     code: entry?.properties?.error?.properties?.code?.const,
     retryable: entry?.properties?.error?.properties?.retryable?.const,
   }))
-  require(
-    JSON.stringify(conflictProfiles) ===
-      JSON.stringify([
-        { code: "idempotency_conflict", retryable: false },
-        { code: "idempotency_in_progress", retryable: true },
-      ]),
-    "R277 conflict code/retryable profiles drifted",
-  )
+  require(JSON.stringify(conflictProfiles) ===
+    JSON.stringify([
+      { code: "idempotency_conflict", retryable: false },
+      { code: "idempotency_in_progress", retryable: true },
+    ]), "R277 conflict code/retryable profiles drifted")
   const retry = resolve(document.components?.responses?.ProjectDeletionRateLimited)?.headers?.["Retry-After"]
   require(retry?.required === false, "R277 429 must publish only the optional bounded Retry-After profile")
   require(retry?.schema?.type === "string" && typeof retry.schema.pattern === "string", "R277 Retry-After type/pattern drifted")
@@ -2490,7 +2518,8 @@ test("R277 Project deletion machine profile rejects method, permission, replay, 
     (candidate) => (candidate.paths["/v1/projects/{projectId}"].delete.requestBody = { required: false }),
     (candidate) => (candidate.components.parameters.ProjectDeletionId.schema.pattern = "^project_.+$"),
     (candidate) => (candidate.components.parameters.ProjectDeletionIdempotencyKey.schema.pattern = "^.+$"),
-    (candidate) => (candidate.components.schemas.ProjectDeletionAcceptedResource.properties.logical_release_state = { type: "string", enum: ["pending", "released"] }),
+    (candidate) =>
+      (candidate.components.schemas.ProjectDeletionAcceptedResource.properties.logical_release_state = { type: "string", enum: ["pending", "released"] }),
     (candidate) => candidate.components.schemas.ProjectDeletionStatusResource.properties.logical_release_state.enum.push("completed"),
     (candidate) => (candidate.components.schemas.ProjectDeletionStatusResource.properties.physical_cleanup_state.const = "released"),
     (candidate) => (candidate.components.schemas.ProjectDeletionStatusResource.properties.internal_attempt_count = { type: "integer" }),
@@ -2503,10 +2532,17 @@ test("R277 Project deletion machine profile rejects method, permission, replay, 
     (candidate) => (candidate.components.responses.ProjectDeletionStatusSuccess.headers["Cache-Control"].schema.const = "public"),
     (candidate) => (candidate.components.responses.ProjectDeletionUnauthorized.headers["x-request-id"].schema.minLength = 0),
     (candidate) => candidate.components.responses.ProjectDeletionUnavailable.content["application/json"].schema.allOf.shift(),
-    (candidate) => (candidate.components.responses.ProjectDeletionUnavailable.content["application/json"].schema.allOf[1].properties.error.properties.code.enum = ["business_store_unavailable"]),
+    (candidate) =>
+      (candidate.components.responses.ProjectDeletionUnavailable.content["application/json"].schema.allOf[1].properties.error.properties.code.enum = [
+        "business_store_unavailable",
+      ]),
     (candidate) => delete candidate.components.responses.ProjectDeletionRateLimited.headers["Retry-After"].schema.pattern,
-    (candidate) => (candidate.components.responses.ProjectDeletionRateLimited.content["application/json"].schema.allOf[1].properties.error.properties.retryable.const = false),
-    (candidate) => (candidate.components.responses.ProjectDeletionConflict.content["application/json"].schema.allOf[1].oneOf[1].properties.error.properties.retryable.const = false),
+    (candidate) =>
+      (candidate.components.responses.ProjectDeletionRateLimited.content["application/json"].schema.allOf[1].properties.error.properties.retryable.const =
+        false),
+    (candidate) =>
+      (candidate.components.responses.ProjectDeletionConflict.content["application/json"].schema.allOf[1].oneOf[1].properties.error.properties.retryable.const =
+        false),
     (candidate) => (candidate.paths["/v1/projects/{projectId}"].delete.description = "Replay returns the current result."),
   ]
   for (const [index, mutate] of mutations.entries()) {
@@ -2518,10 +2554,42 @@ test("R277 Project deletion machine profile rejects method, permission, replay, 
 
 // R323: Product personal MCP contract only; production routes and credentials remain a later slice.
 for (const entry of [
-  { path: "/v1/self/mcp/connectors", operation: "listPersonalMcpConnectors", query: ["cursor", "limit", "status"], schema: "PersonalMcpConnectorListResponse", field: "items", item: "PersonalMcpConnector", notFound: false },
-  { path: "/v1/self/mcp/connectors/{connector_id}", operation: "getPersonalMcpConnector", query: [], schema: "PersonalMcpConnectorDetailResponse", field: "connector", item: "PersonalMcpConnector", notFound: true },
-  { path: "/v1/self/mcp/connectors/{connector_id}/connections", operation: "listPersonalMcpConnections", query: ["cursor", "limit"], schema: "PersonalMcpConnectionListResponse", field: "items", item: "PersonalMcpConnection", notFound: true },
-  { path: "/v1/self/mcp/connections/{connection_id}", operation: "getPersonalMcpConnection", query: [], schema: "PersonalMcpConnectionDetailResponse", field: "connection", item: "PersonalMcpConnection", notFound: true },
+  {
+    path: "/v1/self/mcp/connectors",
+    operation: "listPersonalMcpConnectors",
+    query: ["cursor", "limit", "status"],
+    schema: "PersonalMcpConnectorListResponse",
+    field: "items",
+    item: "PersonalMcpConnector",
+    notFound: false,
+  },
+  {
+    path: "/v1/self/mcp/connectors/{connector_id}",
+    operation: "getPersonalMcpConnector",
+    query: [],
+    schema: "PersonalMcpConnectorDetailResponse",
+    field: "connector",
+    item: "PersonalMcpConnector",
+    notFound: true,
+  },
+  {
+    path: "/v1/self/mcp/connectors/{connector_id}/connections",
+    operation: "listPersonalMcpConnections",
+    query: ["cursor", "limit"],
+    schema: "PersonalMcpConnectionListResponse",
+    field: "items",
+    item: "PersonalMcpConnection",
+    notFound: true,
+  },
+  {
+    path: "/v1/self/mcp/connections/{connection_id}",
+    operation: "getPersonalMcpConnection",
+    query: [],
+    schema: "PersonalMcpConnectionDetailResponse",
+    field: "connection",
+    item: "PersonalMcpConnection",
+    notFound: true,
+  },
 ]) {
   test(`R323 missing personal MCP public GET contract: ${entry.operation}`, async () => {
     const { createRequire } = await import("node:module")
@@ -2542,11 +2610,25 @@ for (const entry of [
     assert.match(operation.description, /unknown|未知/u)
     assert.match(operation.description, /duplicate|重复/u)
     assert.match(operation.description, /idempotency-key/iu)
-    const parameters = (operation.parameters ?? []).map((parameter) => parameter.$ref ? document.components.parameters[parameter.$ref.split("/").at(-1)] : parameter)
-    assert.deepEqual(parameters.filter((parameter) => parameter.in === "query").map((parameter) => parameter.name).sort(), entry.query)
-    assert.equal(parameters.some((parameter) => parameter.in === "header"), false)
+    const parameters = (operation.parameters ?? []).map((parameter) =>
+      parameter.$ref ? document.components.parameters[parameter.$ref.split("/").at(-1)] : parameter,
+    )
+    assert.deepEqual(
+      parameters
+        .filter((parameter) => parameter.in === "query")
+        .map((parameter) => parameter.name)
+        .sort(),
+      entry.query,
+    )
+    assert.equal(
+      parameters.some((parameter) => parameter.in === "header"),
+      false,
+    )
     const pathId = entry.path.includes("{connector_id}") ? "connector_id" : entry.path.includes("{connection_id}") ? "connection_id" : undefined
-    assert.deepEqual(parameters.filter((parameter) => parameter.in === "path").map((parameter) => parameter.name), pathId ? [pathId] : [])
+    assert.deepEqual(
+      parameters.filter((parameter) => parameter.in === "path").map((parameter) => parameter.name),
+      pathId ? [pathId] : [],
+    )
     for (const parameter of parameters) {
       if (parameter.in === "path") {
         assert.equal(parameter.required, true)
@@ -2568,7 +2650,7 @@ for (const entry of [
         }
       }
     }
-    const resolve = (value) => value.$ref ? document.components.schemas[value.$ref.split("/").at(-1)] : value
+    const resolve = (value) => (value.$ref ? document.components.schemas[value.$ref.split("/").at(-1)] : value)
     const closed = (value, fields) => {
       assert.equal(value.type, "object")
       assert.equal(value.additionalProperties, false)
@@ -2576,13 +2658,13 @@ for (const entry of [
       assert.deepEqual(Object.keys(value.properties).sort(), [...fields].sort())
     }
     const expectedErrors = {
-      "400": ["invalid_mcp_personal_request"],
-      "401": ["session_authentication_required", "session_invalid"],
-      "403": ["service_auth_failed", "session_forbidden", "product_tenant_forbidden"],
-      ...(entry.notFound ? { "404": ["mcp_personal_not_found"] } : {}),
-      "429": ["session_rate_limited"],
-      "502": ["mcp_personal_response_invalid"],
-      "503": ["product_tenant_not_configured", "iam_admission_unavailable", "mcp_personal_dependency_unavailable"],
+      400: ["invalid_mcp_personal_request"],
+      401: ["session_authentication_required", "session_invalid"],
+      403: ["service_auth_failed", "session_forbidden", "product_tenant_forbidden"],
+      ...(entry.notFound ? { 404: ["mcp_personal_not_found"] } : {}),
+      429: ["session_rate_limited"],
+      502: ["mcp_personal_response_invalid"],
+      503: ["product_tenant_not_configured", "iam_admission_unavailable", "mcp_personal_dependency_unavailable"],
     }
     assert.deepEqual(Object.keys(operation.responses).sort(), ["200", ...Object.keys(expectedErrors)].sort())
     for (const [status, rawResponse] of Object.entries(operation.responses)) {
@@ -2621,7 +2703,12 @@ for (const entry of [
     }
     const item = document.components.schemas[entry.item]
     const connector = entry.item === "PersonalMcpConnector"
-    closed(item, connector ? ["connector_id", "connector_type", "provider_key", "status", "approved_scopes"] : ["connection_id", "connector_id", "server_id", "allowed_selectors", "policy_digest", "status"])
+    closed(
+      item,
+      connector
+        ? ["connector_id", "connector_type", "provider_key", "status", "approved_scopes"]
+        : ["connection_id", "connector_id", "server_id", "allowed_selectors", "policy_digest", "status"],
+    )
     assert.deepEqual(item.properties.status.enum, connector ? ["pending", "active", "error", "revoked"] : ["active", "revoked"])
     if (connector) assert.deepEqual(item.properties.connector_type.enum, ["builtin", "byok", "mcp"])
     const strings = item.properties[connector ? "approved_scopes" : "allowed_selectors"]
@@ -2650,17 +2737,28 @@ test("R323 personal MCP fixed checker rejects permission, query, safe-field and 
     ["nested safe shape", "        approved_scopes:\n", "      approved_scopes:\n"],
     ["scope whitespace", "pattern: '^\\S+(?![\\s\\S])'", "pattern: '^[\\s\\S]+$'"],
     ["scope bound", "maxLength: 128, pattern: '^\\S+", "maxLength: 129, pattern: '^\\S+"],
-    ["safe shape", "required: [connector_id, connector_type, provider_key, status, approved_scopes]", "required: [connector_id, connector_type, provider_key, status, approved_scopes, secret]"],
+    [
+      "safe shape",
+      "required: [connector_id, connector_type, provider_key, status, approved_scopes]",
+      "required: [connector_id, connector_type, provider_key, status, approved_scopes, secret]",
+    ],
     ["foreign leak", "enum: [mcp_personal_not_found]", "enum: [mcp_personal_foreign_owner]"],
     ["error tuple", "enum: [mcp_personal_response_invalid]", "enum: [mcp_personal_dependency_unavailable]"],
-    ["caller-live cancellation", "enum: [product_tenant_not_configured, iam_admission_unavailable, mcp_personal_dependency_unavailable]", "enum: [product_tenant_not_configured, iam_admission_unavailable, canceled]"],
+    [
+      "caller-live cancellation",
+      "enum: [product_tenant_not_configured, iam_admission_unavailable, mcp_personal_dependency_unavailable]",
+      "enum: [product_tenant_not_configured, iam_admission_unavailable, canceled]",
+    ],
     ["cursor empty", "- { type: string, minLength: 1, maxLength: 2048", "- { type: string, minLength: 0, maxLength: 2048"],
   ]
   for (const [name, original, replacement] of mutations) {
     assert.ok(openapi.includes(original), `${name} mutation must reach the real contract`)
     const mutated = openapi.replace(original, replacement)
     assert.notEqual(mutated, openapi)
-    assert.ok(inspectBffOpenApi(mutated, baseline).some((error) => error.startsWith("personal MCP ")), name)
+    assert.ok(
+      inspectBffOpenApi(mutated, baseline).some((error) => error.startsWith("personal MCP ")),
+      name,
+    )
   }
 })
 
@@ -2752,10 +2850,13 @@ for (const entry of [
     assert.match(operation.description, /not truncat|without truncat/iu)
 
     const parameters = (operation.parameters ?? []).map(resolve)
-    assert.deepEqual(parameters.map(({ name, in: location }) => [name, location]).sort(), [
-      ["file_path", "query"],
-      [entry.pathParameter, "path"],
-    ].sort())
+    assert.deepEqual(
+      parameters.map(({ name, in: location }) => [name, location]).sort(),
+      [
+        ["file_path", "query"],
+        [entry.pathParameter, "path"],
+      ].sort(),
+    )
     const identifier = parameters.find(({ name, in: location }) => name === entry.pathParameter && location === "path")
     assert.equal(identifier.required, true)
     assert.equal(identifier.schema.type, "string")
@@ -2771,24 +2872,24 @@ for (const entry of [
     assert.match(filePath.description, /decoded once|single decode/iu)
 
     const expectedProfiles = {
-      "400": [{ code: "invalid_skill_package_request", retryable: false }],
-      "401": [
+      400: [{ code: "invalid_skill_package_request", retryable: false }],
+      401: [
         { code: "session_authentication_required", retryable: false },
         { code: "session_invalid", retryable: false },
       ],
-      "403": [
+      403: [
         { code: "service_auth_failed", retryable: false },
         { code: "session_forbidden", retryable: false },
         { code: "product_tenant_forbidden", retryable: false },
       ],
-      "404": [{ code: "skill_package_not_found", retryable: false }],
-      "412": [{ code: "skill_package_precondition_failed", retryable: false }],
-      "429": [
+      404: [{ code: "skill_package_not_found", retryable: false }],
+      412: [{ code: "skill_package_precondition_failed", retryable: false }],
+      429: [
         { code: "session_rate_limited", retryable: true },
         { code: "skill_package_limit_exceeded", retryable: false },
       ],
-      "502": [{ code: "skill_package_response_invalid", retryable: false }],
-      "503": [
+      502: [{ code: "skill_package_response_invalid", retryable: false }],
+      503: [
         { code: "product_tenant_not_configured", retryable: true },
         { code: "iam_admission_unavailable", retryable: true },
         { code: "skill_package_dependency_unavailable", retryable: true },
@@ -2824,7 +2925,10 @@ for (const entry of [
     assertUint64(file.properties.size_bytes, { allowZero: true, label: `${entry.operation} file size` })
     const selectedAlternatives = data.properties.selected_file.oneOf
     assert.equal(selectedAlternatives?.length, 2)
-    assert.equal(selectedAlternatives.some((candidate) => candidate.type === "null"), true)
+    assert.equal(
+      selectedAlternatives.some((candidate) => candidate.type === "null"),
+      true,
+    )
     const selected = resolve(selectedAlternatives.find((candidate) => candidate.type !== "null"))
     closed(selected, ["path", "text"], `${entry.operation} selected file`)
     assert.equal(selected.properties.path.type, "string")
@@ -2875,3 +2979,27 @@ for (const entry of [
     assert.match(rateLimit.description, /skill_package_limit_exceeded.*omit|limit.*without.*Retry-After/iu)
   })
 }
+
+test("Public9 binds the actual Skills Product operations, closed schemas and preserved Public8.10 parent", async () => {
+  const openapi = await readFile(openapiUrl, "utf8"),
+    baseline = JSON.parse(await readFile(baselineUrl, "utf8")).operations
+  const module = await import("../../scripts/verify-skill-product-contract.mjs").catch(() => ({}))
+  assert.equal(typeof module.inspectSkillProductContract, "function")
+  assert.deepEqual(module.inspectSkillProductContract(openapi, baseline), [])
+})
+
+test("Public9 rejects new operation removal, current closed schema widening and unrelated parent mutation", async () => {
+  const raw = await readFile(openapiUrl, "utf8")
+  for (const changed of [
+    raw.replace("operationId: updateSkillDraft", "operationId: unexpectedDraft"),
+    raw.replace(
+      "    SkillUsageResponse:\n      type: object\n      additionalProperties: false",
+      "    SkillUsageResponse:\n      type: object\n      additionalProperties: true",
+    ),
+    raw.replace("  version: 9.0.0", "  version: 8.10.0"),
+    raw.replace("title: Kokoro Business API", "title: Altered Business API"),
+  ]) {
+    assert.notEqual(changed, raw)
+    assert.notDeepEqual(inspectSkillProductContract(changed), [])
+  }
+})

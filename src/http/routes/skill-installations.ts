@@ -1,3 +1,5 @@
+import { skillRequestRemaining } from "./skill-drafts.js"
+import { IamPublisherProfileClient } from "../../infrastructure/clients/iam-publisher-profile.js"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import { Code, ConnectError } from "@connectrpc/connect"
 import type { RequestContext } from "../../domain/request-context.js"
@@ -12,7 +14,7 @@ import {
   parseInstallInput,
   parseInstallationList,
 } from "../skill-installation-input.js"
-import { readBody } from "../request.js"
+import { readSkillBody as readBody } from "./skill-drafts.js"
 import { send } from "../response.js"
 const failure = (code: string, message: string, retryable = false) => ({
   error: { code, message, retryable },
@@ -86,6 +88,7 @@ export async function skillInstallationRoute(
   path: string[],
   client: PersonalInstallationConnectClient | null,
   signal?: AbortSignal,
+  iamBaseUrl?: string | null,
 ): Promise<boolean> {
   if (path[0] !== "skill-installations") return false
   response.setHeader("x-request-id", context.requestId)
@@ -94,6 +97,22 @@ export async function skillInstallationRoute(
     send(response, 503, failure("skill_installation_dependency_unavailable", "Skill installation owner is unavailable", true))
     return true
   }
+  const cancellation = new AbortController(),
+    timer = setTimeout(() => cancellation.abort(), skillRequestRemaining(request))
+  const cancel = () => {
+    if (!response.writableEnded) cancellation.abort()
+  }
+  request.once("aborted", cancel)
+  response.once("close", cancel)
+  signal = signal ? AbortSignal.any([signal, cancellation.signal]) : cancellation.signal
+  const enrich = <T>(value: T) =>
+    new IamPublisherProfileClient(iamBaseUrl ?? "", 5000).enrich(
+      context.identity.namespace,
+      /^Bearer ([^\s,]+)$/iu.exec(request.headers.authorization ?? "")?.[1] ?? "",
+      context.requestId,
+      value,
+      signal!,
+    )
   try {
     const common = {
       requestId: context.requestId,
@@ -114,14 +133,14 @@ export async function skillInstallationRoute(
         },
         signal,
       )
-      send(response, 200, { data: projectInstallationAck(result) })
+      send(response, 200, { data: await enrich(projectInstallationAck(result)) })
       return true
     }
     if (path.length === 1 && request.method === "GET") {
       if (request.headers["idempotency-key"] !== undefined || (await readBody(request, 1)).length) throw new Error("invalid_skill_installation_request")
       const input = parseInstallationList(request.url ?? "")
       const result = await client.list({ ...common, ...input }, signal)
-      send(response, 200, projectInstallationList(result))
+      send(response, 200, await enrich(projectInstallationList(result)))
       return true
     }
     const id = exactInstallationId(path[1] ?? "")
@@ -129,7 +148,7 @@ export async function skillInstallationRoute(
       if (new URL(request.url ?? "", "http://bff.local").search || request.headers["idempotency-key"] !== undefined || (await readBody(request, 1)).length)
         throw new Error("invalid_skill_installation_request")
       const result = await client.get({ ...common, installationId: id }, signal)
-      send(response, 200, { data: projectInstallation(result.installation) })
+      send(response, 200, { data: await enrich(projectInstallation(result.installation)) })
       return true
     }
     if (path.length === 2 && request.method === "DELETE") {
@@ -146,7 +165,7 @@ export async function skillInstallationRoute(
         },
         signal,
       )
-      send(response, 200, { data: projectInstallationAck(result) })
+      send(response, 200, { data: await enrich(projectInstallationAck(result)) })
       return true
     }
     if (path.length === 3 && path[2] === "enabled" && request.method === "PUT") {
@@ -164,13 +183,13 @@ export async function skillInstallationRoute(
         },
         signal,
       )
-      send(response, 200, { data: projectInstallationAck(result) })
+      send(response, 200, { data: await enrich(projectInstallationAck(result)) })
       return true
     }
     send(response, 404, failure("bff_route_not_found", "Business route was not found"))
     return true
   } catch (error) {
-    if (response.destroyed) return true
+    if (response.destroyed || response.writableEnded || request.aborted) return true
     if (
       error instanceof Error &&
       ["invalid_skill_installation_request", "skill_installation_idempotency_key_required", "request_body_too_large", "request body too large"].includes(
@@ -184,5 +203,9 @@ export async function skillInstallationRoute(
     const value = mapped(error)
     send(response, value.status, value.body, value.retryAfter ?? undefined)
     return true
+  } finally {
+    clearTimeout(timer)
+    request.off("aborted", cancel)
+    response.off("close", cancel)
   }
 }

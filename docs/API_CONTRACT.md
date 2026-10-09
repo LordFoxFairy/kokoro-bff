@@ -1,16 +1,23 @@
-### R353-B2 同正式 Storage pin 的现有上传消费者收口（2026-10-08）
+## R353-B2 当前源码候选（2026-10-08；待Root冻源审查/真实配对）
 
-仅正式 v3 切换所必需的个人/项目上传、读取/释放及测试保持；不恢复其它模块研发，不新增表、业务流程或进程。signed PUT 返回原样非空有效 VersionId，Complete 前持久化上传 ID/版本/command/digest。现 bff_idempotency_receipt 增加单条完整 expected fingerprint/status/JSONB→replacement CAS，miss 只读结果；现 claim/put/release 语义保持。frozen/admitted/selected 是本调用的闭集阶段，递进与字段原值 keep-first；并发 A/B 只有一个 selected，loser 不 Complete/Abort/覆盖赢家，ACK 不确定须精确 readback 或停止。
+唯一 BFF writer 为 bff_skills_product_source_r353；工作树 HEAD d2695c47bca64a8e83168aa259e2366f7cee3ea8。当前唯一 Platform固定fa185ed2b25c3e81946cfdcd12d7665d02b8bad3、Product1.2/HTTP5.2/63RPC/32commands/24proofs、完整81正式publication；aggregate ce7708d7e2a15d7e3a77b7b9ea45905ab3fbe90093e343d0be9b3140ca03e2d6、descriptor 453f275b6e95052437072c3f52bbe74675271400526680003569b6bd09196fb1、HTTP 6d4abae68cd5cc6e2d8676ac34a48f7ea3564196ec6215ea1531b3cfedd3c3d7。HTTP直接读同Platform vendor/openapi；原701候选72副本移除，无双pin。IAM7c62e759760448e127b21200f87adeefdc6016f7/0.10、Storage d13f33a/v3继续原正规固定生成；不升级其它owner。
 
-本地 selected 与 owner locator 精确匹配；任何已知版本均禁止再 PUT。owner 有 locator 而本地完整 selected/command/digest 缺失不得从 server 合成。仅本地 admitted 未知版本且 owner pending 无 locator 可 PUT 后 CAS；既有 v2 `{upload_id}` 只在 owner 精确 completed 时读原结果，不回填版本、不再 Complete。AI handoff 复用该最小 receipt CAS/独立闭集 body，无新增 journal。完整 Public9 与 Skills 内外页范围不变，正常37旧资产恢复/paired activation 和浏览器验收仍另行待验。
+Public唯一9.0.0/132operations，具名Product checker先核完整当前closed blocks，再剥本片还原完整Public8.10字节SHA640f47f9c70341aa49934eec319a4dcc5bab76bba83e4407d6a9e0c3ab0ac389并运行全部旧父证明。机器/纯门只证明本源码；正常Storage旧源版本资格、真实IAM/Platform/Storage/Agent配对、provider、普通/管理员浏览器与S01–S10由Root继续验证，仍OPEN。未运行数据库/资源/服务/正常激活，不以fixture为integration或UI完成。
 
-## R353-B2：完整Skills消费正式输入锁定（D0，尚未实现；2026-10-08）
+### 当前公开机器与行为
 
-Public9 closed schemas map only to the formal owner matrix below. Publisher uses bounded IAM batch; admin uses fresh human check plus dedicated machine; package/cover/download revalidate exact owner identity around Storage bytes; usage returns unavailable without trusted complete coverage. record stays an S06 target with input OPEN and no guessed request schema.
+Catalog/managed/published/installation投影真实category_keys/product/source_kind/creator/publisher/examples/UTCskill_updated_at与available_update，available_update只作exactlaterrevision提示，不发明UpgradeRPC。draft/version/audience/discard、package-directory可选file_path与download、cover三命令/bytes、admin列表详情与七命令、AI/GitHub、typed Skill Share/Usage沿当前唯一Public9。createLocalSkillDraft只是Create→Begin→PUT→Complete→Validate的产品编排，不加aliasoperation。删除getSkillQuota/listSkillRevisions以及对应旧schema/参数。
 
-Root已核71个Platform生成输入由同一正式701aedb5 Git对象取得；保V5–V9/父descriptor/分类/示例/逆向负控，旧v2仅owner历史inverse snapshot，不生成或保留运行时v2。完整Platform/IAM/Storage一套固定消费者，沿既有Skills模块和生成器，无新通用workflow。删无正式owner的getSkillQuota/listSkillRevisions及对应假入口，不临时扩owner能力。B1已正式9d1cc19b，复用事实；本片零SQL/schema/evolution/AGUI投影改写。
+所有身份来自当前受信IAM，browser不自报tenant/subject/publisher权限；普通catalog/project/installation与admin专用credential隔离。新Skills返回data-only/no-store/x-request-id、closedsanitizederror；超限413、未知/重复字段400、异常不回空列表/默认作者/假cover/零usage。Sharecreate/resolve需currentexactrevisionread、creator可以撤自己link；conversation匿名share保持原事实不返回Skill。Usage闭集available真实successful_run_count或unavailable，缺可信全历史proof就unavailable。
 
-源实现可与必要Agent delivery-v3独立并行，Agent公开Artifact读接口未变；普通无watch进程仍旧source，正常成对切换必须等Root真实owner/Agent/MinIO/scanner及37旧资产保持，不设置feature flag、双decoder或缺实现503分支。最终内外技能页/Settings/后台/详情及Manus同尺寸S01–S10浏览器验收另外通过，不以源码或接口证据冒整页完成。
+GitHubpreview请求{repository_url,path?}只支持canonicalhttps://github.com/owner/repository。固定API真实defaultbranch→fullSHA，受限ZIP+SKILL.md以正式js-yaml4.3.2 FAILSAFE解析真实name/description及可选metadata。根目录优先，否则唯一合法目录；多候选返回{selection_required:true,repository_url,commit,paths}，不默认取首项。就绪返回{selection_required:false,selector:{owner,repository,commit,path},metadata,repository,content_sha256,size_bytes}。import请求仅selector，重新从同SHA/path包解析metadata，不接受browser metadata，也不支持URL-only直接import。GitHubprovenance无asset_ref时真实omit、AIrequired保持，draft前不造Asset。所有网络覆盖同请求deadline/cancel、固定host、redirect:error/credentials:omit、有界UTF8/YAML/ZIP/hash。
+
+安装list已接既有source_kind闭集、未知/重复400、缺省all由省字段表达；分页cursor由owner绑定query资格。当前正式P4已修owner typed/raw/RPC source_kind绑定与分页前query筛选；BFF将installed/owned query按trim后1–1024 Unicode scalars严格校验，保字面%/_/反斜杠，不做当前页过滤；query/source/actor等cursor身份由owner绑定。BFF loopback只证明转发，Root真实PG证据与后续配对/浏览器分别验收。category_keys替代categories旧alias，无兼容字段或双decoder。PNG/JPEGcover资格与下载全spool按TECH当前限制；记录式创建及完整正常浏览器S01–S10待验。
+
+
+P4仅既有installed与owned列表可选query消费，Public9.0/132不另发版本，不新增方法/Schema/依赖。原52e副本76删净，仅fa185ed正式81机器；新增query6从独立parent完整逆向剥离后保所有历史父SHA，生成物只正规生成。P1/P2已含source I/O后required当前session同tenant/subject重验及owner坏响应502；原浏览器input400保持。仍非正常激活/配对/页面或S01–S10完成。
+
+<!-- R353-B2-CURRENT-PREFIX-END; immutable historical baseline follows -->
 
 ## R353-BFF-D0：Skills Public 9 目标契约（尚未发布）
 

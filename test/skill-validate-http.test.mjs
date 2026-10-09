@@ -37,6 +37,7 @@ const headers = {
 const input = { attempt_id: "attempt-1" }
 const manifestIdentityV2 = `zip-v2:sha256:${"b".repeat(64)}`
 const result = () => ({
+  stateVersion: 1n,
   skillId: { value: "skill-1" },
   seriesId: { value: "series-1" },
   valid: true,
@@ -45,7 +46,11 @@ const result = () => ({
   replayed: false,
 })
 async function withServer(client, run, admission = { verify: async () => ({ ok: true, identity: { namespace: "tenant", userId: "user" } }) }) {
-  const server = createLiveTestBffServer(config, { sessionAdmission: admission, skillDraftClient: client })
+  const server = createLiveTestBffServer(config, {
+    skillAuthorization: { check: async () => ({ ok: true }) },
+    sessionAdmission: admission,
+    skillDraftClient: client,
+  })
   server.listen(0, "127.0.0.1")
   await once(server, "listening")
   try {
@@ -74,7 +79,7 @@ test("Validate default-off candidate does not reach Platform", async () => {
 test("Validate projector matches all eight owner v4 command vectors", async () => {
   const manifest = JSON.parse(
     await readFile(
-      new URL("../contract/vendor/kokoro-platform/94bd0ea94aabc60c666fdb2cfa8784baf194e24b/execution-operations-v5/manifest.json", import.meta.url),
+      new URL("../contract/vendor/kokoro-platform/fa185ed2b25c3e81946cfdcd12d7665d02b8bad3/execution-operations-v5/manifest.json", import.meta.url),
       "utf8",
     ),
   )
@@ -96,6 +101,7 @@ test("Validate returns strict V2 validated owner projection", async () => {
       assert.ok(response.headers.get("x-request-id"))
       assert.deepEqual(await response.json(), {
         data: {
+          state_version: "1",
           skill_id: "skill-1",
           series_id: "series-1",
           valid: true,
@@ -127,6 +133,7 @@ test("Validate generated Connect schema carries v4 typed attempt selector", asyn
       ["skill_id", 3],
       ["product_context", 6],
       ["attempt_id", 7],
+      ["expected_state_version", 8],
     ],
   )
   assert.deepEqual(
@@ -138,6 +145,7 @@ test("Validate generated Connect schema carries v4 typed attempt selector", asyn
       ["manifest_identity", 4],
       ["replayed", 5],
       ["series_id", 6],
+      ["state_version", 7],
     ],
   )
   const request = create(ValidateSkillDraftRequestSchema, {

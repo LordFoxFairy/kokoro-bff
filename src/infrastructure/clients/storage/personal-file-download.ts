@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto"
 import { createClient, ConnectError, Code, type Client, type Transport } from "@connectrpc/connect"
 import { createConnectTransport } from "@connectrpc/connect-node"
-import { StorageService, UploadPurpose, ScanState } from "../../../generated/storage-connect/kokoro/storage/v2/storage_pb.js"
+import { StorageService, UploadPurpose, ScanState } from "../../../generated/storage-connect/kokoro/storage/v3/storage_pb.js"
 import { PersonalFileDownloadError, readPersonalFileBytes } from "./personal-file-download-transfer.js"
 
 export type PersonalFileDownloadContext = Readonly<{ tenantId: string; subjectId: string; requestId: string }>

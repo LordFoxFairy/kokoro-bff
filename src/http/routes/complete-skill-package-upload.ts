@@ -1,3 +1,5 @@
+import { startSkillRequestBudget } from "./skill-drafts.js"
+import { assertSkillWireKnown, projectSkillStateVersion } from "../../infrastructure/clients/platform/skill-product-response.js"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import { Code, ConnectError } from "@connectrpc/connect"
 import { SkillPackagePhase, SkillPackageScanState } from "../../generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
@@ -5,7 +7,7 @@ import type { RequestContext } from "../../domain/request-context.js"
 import type { CatalogConnectClient } from "../../infrastructure/clients/platform/catalog-connect.js"
 import { projectCompleteSkillPackage } from "../../infrastructure/clients/platform/complete-skill-package-projector.js"
 import { completeSkillPackageCommandId, parseCompleteSkillPackageInput, type CompleteSkillPackageInput } from "../complete-skill-package-input.js"
-import { readBody } from "../request.js"
+import { readSkillBody as readBody } from "./skill-drafts.js"
 import { send } from "../response.js"
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u
@@ -35,6 +37,8 @@ function mapFailure(error: unknown): { status: number; body: ReturnType<typeof f
 }
 
 function project(result: Awaited<ReturnType<CatalogConnectClient["completePackageUpload"]>>, skillId: string, input: CompleteSkillPackageInput) {
+  assertSkillWireKnown(result)
+  projectSkillStateVersion(result.stateVersion)
   if (typeof result !== "object" || result === null) throw new Error("skill_response_invalid")
   const scan = new Map([
     [SkillPackageScanState.CLEAN, "clean"],
@@ -62,6 +66,7 @@ function project(result: Awaited<ReturnType<CatalogConnectClient["completePackag
   )
     throw new Error("skill_response_invalid")
   return {
+    state_version: projectSkillStateVersion(result.stateVersion),
     skill_id: skillId,
     attempt_id: result.attemptId,
     attempt_epoch: result.attemptEpoch.toString(),
@@ -119,12 +124,14 @@ export async function completeSkillPackageUploadRoute(
     fq_method: "kokoro.platform.v1.SkillCatalogService/CompleteSkillPackageUpload",
     tenant_ref: context.identity.namespace,
     request: {
+      ...(input.expectedStateVersion === undefined ? {} : { expected_state_version: input.expectedStateVersion }),
       skill_id: { value: skillId },
       product_context: { subject_id: context.identity.userId, owner_scope: { kind: "user", id: context.identity.userId } },
       attempt_id: input.attemptId,
       upload_id: input.uploadId,
+      source_version_id: input.sourceVersionId,
       content_sha256: input.contentSha256,
-      size_bytes: input.sizeBytes,
+      size_bytes: String(input.sizeBytes),
     },
   })
   let digest: string
@@ -146,6 +153,7 @@ export async function completeSkillPackageUploadRoute(
         ...input,
       },
       signal,
+      startSkillRequestBudget(request),
     )
     send(response, 200, { data: project(owner, skillId, input) })
   } catch (error) {

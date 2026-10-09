@@ -42,6 +42,9 @@ import type {
   ResendTenantInvitationData,
   ResendTenantInvitationErrors,
   ResendTenantInvitationResponses,
+  ResolveTenantPublisherProfilesData,
+  ResolveTenantPublisherProfilesErrors,
+  ResolveTenantPublisherProfilesResponses,
   VerifySessionAuthorizationData,
   VerifySessionAuthorizationErrors,
   VerifySessionAuthorizationResponses,
@@ -60,6 +63,7 @@ import {
   zRemoveTenantMemberResponse,
   zReplaceTenantMemberRolesResponse,
   zResendTenantInvitationResponse,
+  zResolveTenantPublisherProfilesResponse,
   zVerifySessionAuthorizationResponse,
 } from "./zod.gen.js"
 
@@ -204,6 +208,20 @@ export const cancelTenantInvitation = <ThrowOnError extends boolean = false>(
     security: [{ scheme: "bearer", type: "http" }],
     url: "/internal/v1/tenants/{tenant_id}/invitations/{invitation_id}",
     ...options,
+  })
+
+export const resolveTenantPublisherProfiles = <ThrowOnError extends boolean = false>(
+  options: Options<ResolveTenantPublisherProfilesData, ThrowOnError>,
+): RequestResult<ResolveTenantPublisherProfilesResponses, ResolveTenantPublisherProfilesErrors, ThrowOnError> =>
+  (options.client ?? client).post<ResolveTenantPublisherProfilesResponses, ResolveTenantPublisherProfilesErrors, ThrowOnError>({
+    responseValidator: async (data) => await zResolveTenantPublisherProfilesResponse.parseAsync(data),
+    security: [{ scheme: "bearer", type: "http" }],
+    url: "/internal/v1/tenants/{tenant_id}/publisher-profiles/resolve",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
   })
 
 export const verifySessionAuthorization = <ThrowOnError extends boolean = false>(

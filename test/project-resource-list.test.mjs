@@ -24,7 +24,7 @@ const storageConfig = { baseUrl: "http://storage.test", secret: "storage-secret"
 async function fixture(overrides = {}) {
   const { StorageUploadClient } = await import("../dist/infrastructure/clients/storage/client.js")
   const { createRouterTransport } = await import("@connectrpc/connect")
-  const { StorageService } = await import("../dist/generated/storage-connect/kokoro/storage/v2/storage_pb.js")
+  const { StorageService } = await import("../dist/generated/storage-connect/kokoro/storage/v3/storage_pb.js")
   const item = {
     assetId: "asset-1",
     filename: "fox.txt",
@@ -240,7 +240,7 @@ test("HTTP GET uses generated owner pagination and never calls Storage for anoth
   const { ConnectError, Code } = await import("@connectrpc/connect")
   const { createBffServer } = await import("../dist/bootstrap/server.js")
   const { loadConfig } = await import("../dist/config/runtime.js")
-  const { StorageService } = await import("../dist/generated/storage-connect/kokoro/storage/v2/storage_pb.js")
+  const { StorageService } = await import("../dist/generated/storage-connect/kokoro/storage/v3/storage_pb.js")
   const servers = []
   let calls = 0
   let unavailable = false
@@ -357,7 +357,7 @@ test("HTTP GET uses generated owner pagination and never calls Storage for anoth
 
 test("GET metadata uses the same owner values as the POST completed asset projection", async () => {
   const { createRouterTransport } = await import("@connectrpc/connect")
-  const { StorageService } = await import("../dist/generated/storage-connect/kokoro/storage/v2/storage_pb.js")
+  const { StorageService } = await import("../dist/generated/storage-connect/kokoro/storage/v3/storage_pb.js")
   const { StorageUploadClient } = await import("../dist/infrastructure/clients/storage/client.js")
   const item = {
     assetId: "asset-1",

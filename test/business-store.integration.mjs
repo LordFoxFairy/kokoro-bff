@@ -3953,7 +3953,7 @@ integrationTest("R281 Project deletion tables enforce closed receipt, identity, 
 async function r285ReleaseFixture(t, release) {
   const { ConnectError, Code } = await import("@connectrpc/connect")
   const { connectNodeAdapter } = await import("@connectrpc/connect-node")
-  const { StorageService } = await import("../dist/generated/storage-connect/kokoro/storage/v2/storage_pb.js")
+  const { StorageService } = await import("../dist/generated/storage-connect/kokoro/storage/v3/storage_pb.js")
   const ownerCalls = []
   let replayEnabled = false
   const dispatch = async (kind, request, context) => {

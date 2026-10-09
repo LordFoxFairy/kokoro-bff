@@ -1,3 +1,6 @@
+import { startSkillRequestBudget } from "./skill-drafts.js"
+import { skillSourceVersionSchema } from "../../infrastructure/clients/platform/skill-product-schema.js"
+import { assertSkillWireKnown, projectSkillStateVersion } from "../../infrastructure/clients/platform/skill-product-response.js"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import { Code, ConnectError } from "@connectrpc/connect"
 import { SkillPackagePhase } from "../../generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
@@ -32,6 +35,8 @@ function catalogFailure(error: unknown): { status: number; body: ReturnType<type
 }
 
 function project(result: Awaited<ReturnType<CatalogConnectClient["getPackageUpload"]>>, skillId: string) {
+  assertSkillWireKnown(result)
+  projectSkillStateVersion(result.stateVersion)
   const epoch = result.attemptEpoch
   const attempt = result.attemptId
   const upload = result.uploadId
@@ -58,7 +63,9 @@ function project(result: Awaited<ReturnType<CatalogConnectClient["getPackageUplo
   )
     throw new Error("skill_response_invalid")
   return {
+    state_version: projectSkillStateVersion(result.stateVersion),
     skill_id: skillId,
+    ...(result.sourceVersionId === undefined ? {} : { source_version_id: skillSourceVersionSchema.parse(result.sourceVersionId) }),
     attempt_epoch: epoch.toString(),
     phase,
     ...(attempt === undefined ? {} : { attempt_id: attempt }),
@@ -80,7 +87,7 @@ export async function getSkillPackageUploadRoute(
     request.method !== "GET" ||
     request.url !== `/v1/skills/${skillId}/package-upload` ||
     !SKILL_ID.test(skillId) ||
-    (request.headers["content-length"] !== undefined && request.headers["content-length"] !== "0") ||
+    request.headers["content-length"] !== undefined ||
     request.headers["transfer-encoding"] !== undefined ||
     request.rawHeaders.some((name, index) => index % 2 === 0 && name.toLowerCase() === "idempotency-key")
   ) {
@@ -95,6 +102,7 @@ export async function getSkillPackageUploadRoute(
     const result = await client.getPackageUpload(
       { requestId: context.requestId, skillId, tenant: context.identity.namespace, user: context.identity.userId },
       signal,
+      startSkillRequestBudget(request),
     )
     send(response, 200, { data: project(result, skillId) })
   } catch (error) {

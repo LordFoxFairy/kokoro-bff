@@ -5,6 +5,7 @@ import {
   type IdempotencyRepository,
   type PersistentReceipt,
   type ReceiptClaim,
+  type ReceiptCasResult,
 } from "../../application/ports/idempotency-repository.js"
 
 export class PostgresIdempotencyRepository implements IdempotencyRepository {
@@ -50,6 +51,34 @@ export class PostgresIdempotencyRepository implements IdempotencyRepository {
       [scope, receipt.fingerprint, receipt.status, JSON.stringify(receipt.body), PENDING_RECEIPT_STATUS],
     )
     if (result.rowCount !== 1) throw new Error("idempotency_receipt_cas_missed")
+  }
+
+  public async compareAndSetReceipt(
+    scope: string,
+    fingerprint: string,
+    expected: PersistentReceipt,
+    replacement: PersistentReceipt,
+  ): Promise<ReceiptCasResult> {
+    if (expected.fingerprint !== fingerprint || replacement.fingerprint !== fingerprint) throw new Error("idempotency_receipt_fingerprint_invalid")
+    const result = await this.pool.query<{ updated: boolean; fingerprint: string; status: number; body: unknown }>(
+      `WITH updated AS (
+         UPDATE bff_idempotency_receipt
+            SET status = $5, response_body = $6::jsonb, created_at = CURRENT_TIMESTAMP(3)
+          WHERE scope = $1 AND fingerprint = $2 AND status = $3 AND response_body = $4::jsonb
+         RETURNING fingerprint, status, response_body AS body
+       )
+       SELECT true AS updated, fingerprint, status, body FROM updated
+       UNION ALL
+       SELECT false AS updated, fingerprint, status, response_body AS body
+         FROM bff_idempotency_receipt
+        WHERE scope = $1 AND NOT EXISTS (SELECT 1 FROM updated)
+       LIMIT 1`,
+      [scope, fingerprint, expected.status, JSON.stringify(expected.body), replacement.status, JSON.stringify(replacement.body)],
+    )
+    const row = result.rows[0]
+    if (row === undefined) return { updated: false, receipt: null }
+    const receipt = { fingerprint: row.fingerprint, status: row.status, body: row.body }
+    return row.updated ? { updated: true, receipt } : { updated: false, receipt }
   }
 
   public async releaseReceipt(scope: string, fingerprint: string): Promise<void> {

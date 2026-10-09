@@ -1,3 +1,4 @@
+import { readSkillUsage } from "./skill-usage-projection.js"
 import { PostgresPersonalizationRepository } from "./personalization-repository.js"
 import { PostgresBffDatabase } from "./client.js"
 import { PostgresIdempotencyRepository } from "./idempotency-repository.js"
@@ -7,8 +8,13 @@ import { PostgresChatRepository } from "./chat-repository.js"
 import { PostgresPublicShareRepository } from "./public-share-repository.js"
 import { PostgresAgentDispatchOutboxRepository } from "./agent-dispatch-outbox-repository.js"
 import { PostgresAgentCancellationOutboxRepository } from "./agent-cancellation-outbox-repository.js"
-import { PENDING_RECEIPT_STATUS, type PersistentReceipt, type ReceiptClaim } from "../../application/ports/idempotency-repository.js"
-import type { IdempotencyRepository } from "../../application/ports/idempotency-repository.js"
+import {
+  PENDING_RECEIPT_STATUS,
+  type IdempotencyRepository,
+  type PersistentReceipt,
+  type ReceiptCasResult,
+  type ReceiptClaim,
+} from "../../application/ports/idempotency-repository.js"
 import type { ProjectRepository } from "../../application/ports/project-repository.js"
 import type { ScheduledTaskRepository } from "../../application/ports/scheduled-task-repository.js"
 import type { ScheduledTaskOutboxRepository } from "../../application/ports/scheduled-task-outbox-repository.js"
@@ -67,7 +73,8 @@ export class PostgresBffRepositories {
     this.agentCancellationOutbox = agentCancellationOutbox
     this.schedulerDispatchReceipts = new PostgresSchedulerDispatchReceiptRepository(this.database.pool)
     this.scheduledAgentDispatch = new PostgresScheduledAgentDispatchRepository(this.database)
-    this.artifactLibrary = new PostgresConversationArtifactLibrary(this.database)
+    const artifactLibrary = new PostgresConversationArtifactLibrary(this.database)
+    this.artifactLibrary = artifactLibrary
     this.projectScopeReleaseOutbox = new PostgresProjectScopeReleaseOutboxRepository(this.database)
     this.skillShares = new PostgresSkillShareRepository(this.database)
     this.services = new BffApplicationServices(
@@ -78,6 +85,16 @@ export class PostgresBffRepositories {
       agentDispatchOutbox,
       new Sha256StableIdGenerator(),
       new PostgresPersonalizationRepository(this.database),
+      this.skillShares,
+      async (tenant, refs) => {
+        const client = await this.database.pool.connect()
+        try {
+          return await readSkillUsage(client, tenant, refs)
+        } finally {
+          client.release()
+        }
+      },
+      (tenant, subject, conversation, artifact) => artifactLibrary.findSkillHandoff(tenant, subject, conversation, artifact),
     )
     this.agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(this.database))
     this.agUiConsumers = new PostgresAgUiConsumerRepository(this.database)
@@ -98,6 +115,9 @@ export class PostgresBffRepositories {
   }
   public putReceipt(scope: string, receipt: PersistentReceipt): Promise<void> {
     return this.idempotency.putReceipt(scope, receipt)
+  }
+  public compareAndSetReceipt(scope: string, fingerprint: string, expected: PersistentReceipt, replacement: PersistentReceipt): Promise<ReceiptCasResult> {
+    return this.idempotency.compareAndSetReceipt(scope, fingerprint, expected, replacement)
   }
   public releaseReceipt(scope: string, fingerprint: string): Promise<void> {
     return this.idempotency.releaseReceipt(scope, fingerprint)

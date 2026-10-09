@@ -1,4 +1,4 @@
-import { createFileRegistry, fromBinary, fromJson, toBinary } from "@bufbuild/protobuf"
+import { createFileRegistry, fromBinary, fromJson, toBinary, toJson } from "@bufbuild/protobuf"
 import {
   DescriptorProtoSchema,
   FieldDescriptorProtoSchema,
@@ -9,13 +9,14 @@ import {
 import assert from "node:assert/strict"
 import { spawn } from "node:child_process"
 import { createHash } from "node:crypto"
+import { readFileSync } from "node:fs"
 import { cp, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-const ownerCommit = "94bd0ea94aabc60c666fdb2cfa8784baf194e24b"
+const ownerCommit = "fa185ed2b25c3e81946cfdcd12d7665d02b8bad3"
 const vendorRoot = `contract/vendor/kokoro-platform/${ownerCommit}`
 const vendor = `contract/vendor/kokoro-platform/${ownerCommit}/proto`
 const artifacts = {
@@ -40,10 +41,10 @@ const artifactProvenanceDigests = {
   v8: "a985f907fc9f2c5d8735c8918f1af6028efa9a3ed0f43b273612c592c2288444",
 }
 const descriptor = `${vendorRoot}/descriptor/platform-v1.binpb`
-const descriptorDigest = "d9b82ed81c643be7bab6cb19319fed86e566663a4cdae1c68afcc91386dab52b"
+const descriptorDigest = "453f275b6e95052437072c3f52bbe74675271400526680003569b6bd09196fb1"
 const parentDescriptor = `${vendorRoot}/descriptor/platform-v8-parent39.binpb`
 const parentDigest = "0467c1c45e8ac27c79cb906e27bfdb679d88739e45bfa38128f0f629bec686d5"
-const publicationAggregate = "bc7ebb7312195e0f718940a33c73ed1db7d77aac4333ad6975831ed5d3740e55"
+const publicationAggregate = "ce7708d7e2a15d7e3a77b7b9ea45905ab3fbe90093e343d0be9b3140ca03e2d6"
 const publicationInputs = {
   "contract/descriptor/platform-installation-tags-parent-generated.binpb": {
     bytes: 35431,
@@ -61,6 +62,18 @@ const publicationInputs = {
     bytes: 46971,
     sha256: "37207ddd3513d0f0b1e3320401a54ab0848326692f9cc07571325bc325b4ddda",
   },
+  "contract/descriptor/platform-skill-category-keys-http-3.5.0.json": {
+    bytes: 35169,
+    sha256: "370e3d7152796042f00095eda86eec4bc9883766c051f7f7dc864dce2b359b04",
+  },
+  "contract/descriptor/platform-skill-category-keys-parent-generated.binpb": {
+    bytes: 37515,
+    sha256: "7bfaf427b3d254dec151807d6bc32ab15947838437be75afe26c4e60a3f85dcd",
+  },
+  "contract/descriptor/platform-skill-category-keys-parent.binpb": {
+    bytes: 49035,
+    sha256: "d9b82ed81c643be7bab6cb19319fed86e566663a4cdae1c68afcc91386dab52b",
+  },
   "contract/descriptor/platform-skill-example-prompts-http-3.4.0.json": {
     bytes: 33747,
     sha256: "ca90f41f124c53a690746434cb66ac774f4a134acf109decd44bb110fafa61d6",
@@ -72,6 +85,62 @@ const publicationInputs = {
   "contract/descriptor/platform-skill-example-prompts-parent.binpb": {
     bytes: 48822,
     sha256: "fcfab521242b07c17b08efad33463022625fd5163f1e62beb18ddd9589053808",
+  },
+  "contract/descriptor/platform-skill-github-asset-parent-generated.binpb": {
+    bytes: 54454,
+    sha256: "44d7a214e998a28fa6126d97e69458562225ccb45c338f80223126cf9e4becc9",
+  },
+  "contract/descriptor/platform-skill-github-asset-parent-http-5.0.0.json": {
+    bytes: 49236,
+    sha256: "67c4222266dfc888dc996f86782d4af5b27139d2e500268ab1b5b9f8af069111",
+  },
+  "contract/descriptor/platform-skill-github-asset-parent-profile-1.0.0.json": {
+    bytes: 274219,
+    sha256: "dce4ac2df444b3ec7795da77375d494f166611856cb424d614a901b7583907d9",
+  },
+  "contract/descriptor/platform-skill-github-asset-parent-vectors-1.0.0.json": {
+    bytes: 734276,
+    sha256: "9c11430dfd9c6610ebb4075803ad04b4ec5ad283fcd0d71e62ad66212afff201",
+  },
+  "contract/descriptor/platform-skill-github-asset-parent.binpb": {
+    bytes: 67575,
+    sha256: "f9bc56230b594ef168f77d0bca8b282795a00807464a788879d3a58e0ea9dda0",
+  },
+  "contract/descriptor/platform-skill-personal-query-parent-generated.binpb": {
+    bytes: 54473,
+    sha256: "033e577bc9d119089813ee4a4d14a2e8f4a6b3f5d712f7f7c38ac557833f3f5c",
+  },
+  "contract/descriptor/platform-skill-personal-query-parent-http-5.1.0.json": {
+    bytes: 49213,
+    sha256: "a8cef2bc45b2c0514f3d1abf06199087ad0efadf9db75224b17c69b1c50b12ce",
+  },
+  "contract/descriptor/platform-skill-personal-query-parent-profile-1.1.0.json": {
+    bytes: 274465,
+    sha256: "7a145160743773f5863cd68185a29aab25d29d09eb7f65094c8557dcaa2e5169",
+  },
+  "contract/descriptor/platform-skill-personal-query-parent-vectors-1.1.0.json": {
+    bytes: 766009,
+    sha256: "0932149e311a7496e9bed9565235d20b48f797b6e73c447a67fccc7cfd783ebc",
+  },
+  "contract/descriptor/platform-skill-personal-query-parent.binpb": {
+    bytes: 67594,
+    sha256: "4a8715b5057fbe3a9f443faee0315482de20593ce01430c7c357561a61576bfd",
+  },
+  "contract/descriptor/platform-skill-product-http-4.0.0.json": {
+    bytes: 37781,
+    sha256: "08c4ee5a66d9d44723a895f0d31094ae0b519500c9bed78cfec75ac1851cf238",
+  },
+  "contract/descriptor/platform-skill-product-parent-generated.binpb": {
+    bytes: 37784,
+    sha256: "eae7f129393e534842fe2f23909f40de83fe540c17a3b91837600d3ce1c2a045",
+  },
+  "contract/descriptor/platform-skill-product-parent.binpb": {
+    bytes: 49304,
+    sha256: "947abde6d3d083ceb14eb16e9bef023b25a183acb88e2f98ac44c372b16cfaa7",
+  },
+  "contract/descriptor/platform-skill-product-storage-v2.proto.snapshot": {
+    bytes: 10666,
+    sha256: "02266d53b8bfb7fdd6991b17d59ebb17399d4f189b6a3135fedcb69b6b364276",
   },
   "contract/descriptor/platform-skill-updated-at-http-3.3.0.json": {
     bytes: 33330,
@@ -86,8 +155,8 @@ const publicationInputs = {
     sha256: "2e1a811bf347b5d9cd3577ac6c762ee9d31f40dea2ac326a06b83bc61de9a8d5",
   },
   "contract/descriptor/platform-v1.binpb": {
-    bytes: 49035,
-    sha256: "d9b82ed81c643be7bab6cb19319fed86e566663a4cdae1c68afcc91386dab52b",
+    bytes: 67631,
+    sha256: "453f275b6e95052437072c3f52bbe74675271400526680003569b6bd09196fb1",
   },
   "contract/descriptor/platform-v8-parent39.binpb": {
     bytes: 43624,
@@ -101,6 +170,14 @@ const publicationInputs = {
     bytes: 46659,
     sha256: "5f0f00f605f6a445b4d80943459b69bf9f489fd7851cc80b6c2700f8f78a8d0e",
   },
+  "contract/execution-operations/skill-category-keys-v1.json": {
+    bytes: 4651,
+    sha256: "77893dbe7bbc40bd167ba130fc39431d347dee2fa9421b3aba2673819b604d7e",
+  },
+  "contract/execution-operations/skill-category-keys-v1.vectors.json": {
+    bytes: 582408,
+    sha256: "1ec6f1c5dce7f68fb01e6db16b7b72e053d46d10e717fc726503ff5504a1d60f",
+  },
   "contract/execution-operations/skill-example-prompts-v1.json": {
     bytes: 3758,
     sha256: "8106cedbeed0ed2a1afb25983f6e8ebece3528b277f83bcdb5c227c655edd496",
@@ -108,6 +185,14 @@ const publicationInputs = {
   "contract/execution-operations/skill-example-prompts-v1.vectors.json": {
     bytes: 574590,
     sha256: "fbded2af8f5b02df848ee6b326b018845e2cdbfefaa7d3ff5d6efc0b43c1a673",
+  },
+  "contract/execution-operations/skill-product-request-vectors-v1.json": {
+    bytes: 766009,
+    sha256: "794601f6632efb8cc72d2df1ddbc5af84c6803cbc951624aeada01f299a02036",
+  },
+  "contract/execution-operations/skill-product-v1.json": {
+    bytes: 273395,
+    sha256: "2629cd6838acac55215c2d4bea042d4d3a98e05ddcfe07cb3eb621b149bfb653",
   },
   "contract/execution-operations/v5/command-identities.json": {
     bytes: 32532,
@@ -266,38 +351,38 @@ const publicationInputs = {
     sha256: "7c256bbc3f9ed0cc93434595bd9caa7c2f0a00035837fadc2fc3dfa1110df9ed",
   },
   "contract/openapi/platform-http.openapi.json": {
-    bytes: 35169,
-    sha256: "370e3d7152796042f00095eda86eec4bc9883766c051f7f7dc864dce2b359b04",
+    bytes: 47379,
+    sha256: "6d4abae68cd5cc6e2d8676ac34a48f7ea3564196ec6215ea1531b3cfedd3c3d7",
   },
   "contract/proto/kokoro/common/v1/common.proto": {
     bytes: 2271,
     sha256: "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08",
   },
   "contract/proto/kokoro/platform/v1/platform_runtime.proto": {
-    bytes: 35809,
-    sha256: "5fd99ca07adc6c40c917071b652d4c048905fcb23674dc7f695dad89a2a2b684",
+    bytes: 50210,
+    sha256: "12f357a7f81363c4242954fd0415fc786436685618ad542a50182304153bc22c",
   },
-  "contract/proto/kokoro/storage/v2/storage.proto": {
-    bytes: 10666,
-    sha256: "02266d53b8bfb7fdd6991b17d59ebb17399d4f189b6a3135fedcb69b6b364276",
+  "contract/proto/kokoro/storage/v3/storage.proto": {
+    bytes: 12626,
+    sha256: "1021e603065978871c51519ddba5b23c9b97f16b781a08bd98e019b3342bf5f9",
   },
   "contract/provenance.json": {
-    bytes: 474,
-    sha256: "b07e1ef96573dd0273952fdba628fa3c111978c4c8e707dda91ca26ed18a550c",
+    bytes: 710,
+    sha256: "ad6fff80652fb003c2b76e4a10d5b56266b183aa1be10809f2aa948068f9c335",
   },
 }
 
 const output = path.join(root, "src/generated/platform-connect")
 const manifestPath = path.join(root, "contract/dependencies/platform-connect.json")
 const sourceDigests = {
-  "kokoro/storage/v2/storage.proto": "02266d53b8bfb7fdd6991b17d59ebb17399d4f189b6a3135fedcb69b6b364276",
   "kokoro/common/v1/common.proto": "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08",
-  "kokoro/platform/v1/platform_runtime.proto": "5fd99ca07adc6c40c917071b652d4c048905fcb23674dc7f695dad89a2a2b684",
+  "kokoro/platform/v1/platform_runtime.proto": "12f357a7f81363c4242954fd0415fc786436685618ad542a50182304153bc22c",
+  "kokoro/storage/v3/storage.proto": "1021e603065978871c51519ddba5b23c9b97f16b781a08bd98e019b3342bf5f9",
 }
-const directories = ["kokoro", "kokoro/common", "kokoro/common/v1", "kokoro/platform", "kokoro/platform/v1"]
-const sourceDirectories = [...directories, "kokoro/storage", "kokoro/storage/v2"].sort()
-const generationInputs = ["kokoro/common/v1/common.proto", "kokoro/platform/v1/platform_runtime.proto"]
-const generatedFiles = ["kokoro/common/v1/common_pb.ts", "kokoro/platform/v1/platform_runtime_pb.ts"]
+const directories = ["kokoro", "kokoro/common", "kokoro/common/v1", "kokoro/platform", "kokoro/platform/v1", "kokoro/storage", "kokoro/storage/v3"]
+const sourceDirectories = [...directories].sort()
+const generationInputs = ["kokoro/common/v1/common.proto", "kokoro/platform/v1/platform_runtime.proto", "kokoro/storage/v3/storage.proto"]
+const generatedFiles = ["kokoro/common/v1/common_pb.ts", "kokoro/platform/v1/platform_runtime_pb.ts", "kokoro/storage/v3/storage_pb.ts"]
 const versions = {
   "@bufbuild/buf": "1.72.0",
   "@bufbuild/protoc-gen-es": "2.14.0",
@@ -596,7 +681,7 @@ export function assertDescriptorLineage(currentBytes) {
   assert.equal(sha256(currentBytes), descriptorDigest, "Platform descriptor digest drifted")
   const current = fromBinary(FileDescriptorSetSchema, currentBytes)
   assertInspectionDescriptors(current)
-  assertDescriptorCensus(current, [45, 20, 24])
+  assertDescriptorCensus(current, [63, 32, 24])
   return stripDescriptorLineage(current)
 }
 
@@ -618,7 +703,7 @@ export function assertDescriptorCensus(set, expected) {
 // Independent exact shape assertions are also exported for adversarial contract tests.
 export function assertInspectionDescriptors(set) {
   const file = platformFile(set)
-  assert.equal(file.service.flatMap((service) => service.method).length, 45, "Platform current RPC census drifted")
+  assert.equal(file.service.flatMap((service) => service.method).length, 63, "Platform current RPC census drifted")
   const messages = [
     ...inspectionReads.map(([, method, id, idType]) => ({
       name: `${method}Request`,
@@ -657,7 +742,63 @@ export function assertInspectionDescriptors(set) {
 }
 
 export function stripDescriptorLineage(set) {
-  const current = fromBinary(FileDescriptorSetSchema, toBinary(FileDescriptorSetSchema, set))
+  let current = fromBinary(FileDescriptorSetSchema, toBinary(FileDescriptorSetSchema, set))
+  const installationQuery = platformFile(current).messageType.find((message) => message.name === "ListPersonalSkillInstallationsRequest")
+  assert.ok(installationQuery, "Platform personal installation list request required")
+  exactDescriptor(
+    FieldDescriptorProtoSchema,
+    installationQuery.field.find((field) => field.number === 6),
+    { ...descriptorField("query", 6, 9, undefined, false, true), oneofIndex: 3 },
+    "Platform personal optional query tag6 drifted",
+  )
+  assert.deepEqual(
+    installationQuery.oneofDecl.map((entry) => entry.name),
+    ["_enabled", "_installed", "_source_kind", "_query"],
+    "Platform personal query oneof drifted",
+  )
+  installationQuery.field = installationQuery.field.filter((field) => field.number !== 6)
+  installationQuery.oneofDecl.pop()
+  assertWholeParent(current, "platform-skill-personal-query-parent.binpb")
+  const provenance = platformFile(current).messageType.find((message) => message.name === "SkillGithubProvenance")
+  assert.ok(provenance, "Platform GitHub provenance required")
+  const asset = provenance.field.find((field) => field.number === 8)
+  exactDescriptor(
+    FieldDescriptorProtoSchema,
+    asset,
+    { ...descriptorField("asset_ref", 8, 9), proto3Optional: true, oneofIndex: 0 },
+    "Platform GitHub optional asset tag8 drifted",
+  )
+  assert.deepEqual(
+    provenance.oneofDecl.map((entry) => entry.name),
+    ["_asset_ref"],
+    "Platform GitHub asset presence oneof drifted",
+  )
+  delete asset.proto3Optional
+  delete asset.oneofIndex
+  provenance.oneofDecl = []
+  assertWholeParent(current, "platform-skill-github-asset-parent.binpb")
+  const productParent = fromBinary(FileDescriptorSetSchema, readFileSync(path.join(root, vendorRoot, "descriptor/platform-skill-product-parent.binpb")))
+  const productGenerated = fromBinary(
+    FileDescriptorProtoSchema,
+    readFileSync(path.join(root, vendorRoot, "descriptor/platform-skill-product-parent-generated.binpb")),
+  )
+  assert.deepEqual(
+    toBinary(FileDescriptorProtoSchema, platformFile(productParent), { writeUnknownFields: false }),
+    toBinary(FileDescriptorProtoSchema, productGenerated, { writeUnknownFields: false }),
+    "Platform product independent parent drifted",
+  )
+  current = productParent
+  const categoryParent = fromBinary(FileDescriptorSetSchema, readFileSync(path.join(root, vendorRoot, "descriptor/platform-skill-category-keys-parent.binpb")))
+  const categoryGenerated = fromBinary(
+    FileDescriptorProtoSchema,
+    readFileSync(path.join(root, vendorRoot, "descriptor/platform-skill-category-keys-parent-generated.binpb")),
+  )
+  assert.deepEqual(
+    toBinary(FileDescriptorProtoSchema, platformFile(categoryParent), { writeUnknownFields: false }),
+    toBinary(FileDescriptorProtoSchema, categoryGenerated, { writeUnknownFields: false }),
+    "Platform category independent parent drifted",
+  )
+  current = categoryParent
   const file = platformFile(current)
   const installation = file.messageType.find((message) => message.name === "ProductSkillInstallation")
   assert.ok(installation)
@@ -762,7 +903,11 @@ export function assertGeneratedDescriptor(generated, compiledBytes) {
 }
 
 export function assertDescriptorPairs(files) {
-  for (const httpParent of ["platform-skill-updated-at-http-3.3.0.json", "platform-skill-example-prompts-http-3.4.0.json"])
+  for (const httpParent of [
+    "platform-skill-updated-at-http-3.3.0.json",
+    "platform-skill-example-prompts-http-3.4.0.json",
+    "platform-skill-personal-query-parent-http-5.1.0.json",
+  ])
     assert.equal(sha256(files[httpParent]), publicationInputs[`contract/descriptor/${httpParent}`].sha256, `Platform HTTP parent bytes drifted: ${httpParent}`)
   for (const stem of [
     "platform-v9-parent43",
@@ -770,6 +915,8 @@ export function assertDescriptorPairs(files) {
     "platform-package-read-parent",
     "platform-skill-updated-at-parent",
     "platform-skill-example-prompts-parent",
+    "platform-skill-github-asset-parent",
+    "platform-skill-personal-query-parent",
   ]) {
     const compiledName = `${stem}.binpb`
     const generatedName = `${stem}-generated.binpb`
@@ -900,9 +1047,7 @@ async function verifyExecutionArtifacts() {
   assert.equal(exampleProfile.wire.installation.tag, 15)
   assert.equal(exampleProfile.canonical.absent, "omit-key")
   assert.equal(exampleProfile.canonical.present, "unwrap-prompts-array")
-  const exampleVectors = JSON.parse(
-    await readFile(path.join(root, vendorRoot, "execution-operations/skill-example-prompts-v1.vectors.json"), "utf8"),
-  )
+  const exampleVectors = JSON.parse(await readFile(path.join(root, vendorRoot, "execution-operations/skill-example-prompts-v1.vectors.json"), "utf8"))
   assert.equal(exampleVectors.artifactVersion, "1.0.1")
   assert.equal(exampleVectors.vectors.length, 64)
   assert.equal(new Set(exampleVectors.vectors.map((entry) => entry.id)).size, 64)

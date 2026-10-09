@@ -72,6 +72,14 @@ function fixture() {
     async putReceipt(key, value) {
       receipts.set(key, value)
     },
+    async compareAndSetReceipt(key, fingerprint, expected, replacement) {
+      const current = receipts.get(key) ?? null
+      if (current?.fingerprint === fingerprint && JSON.stringify(current) === JSON.stringify(expected)) {
+        receipts.set(key, replacement)
+        return { updated: true, receipt: replacement }
+      }
+      return { updated: false, receipt: current }
+    },
     async releaseReceipt(key) {
       if (receipts.get(key)?.status === 102) receipts.delete(key)
     },
@@ -87,7 +95,14 @@ function fixture() {
     },
     async getUploadStatus() {
       calls.push("status")
-      return { state: completed ? "completed" : "pending", assetId: completed ? "asset-1" : null, sha256: input.sha256, sizeBytes: "5", mimeType: "text/plain" }
+      return {
+        state: completed ? "completed" : "pending",
+        assetId: completed ? "asset-1" : null,
+        sourceVersionId: completed ? "version-A" : null,
+        sha256: input.sha256,
+        sizeBytes: "5",
+        mimeType: "text/plain",
+      }
     },
     async put() {
       calls.push("put")
@@ -96,6 +111,7 @@ function fixture() {
         true,
         "durable checkpoint before PUT",
       )
+      return "version-A"
     },
     async completeUpload() {
       calls.push("complete")
@@ -163,9 +179,9 @@ test("Storage transfer rejects arbitrary origins, redirect, credentials and unex
     calls++
     assert.equal(init.redirect, "error")
     assert.deepEqual(init.headers, { "content-type": "text/plain" })
-    return new Response(null, { status: 200 })
+    return new Response(null, { status: 200, headers: { "x-amz-version-id": "version-A" } })
   }
-  await putStorageBytes(valid, Buffer.from("hello"), "text/plain", "http://objects.test", AbortSignal.timeout(5000), fetcher)
+  assert.equal(await putStorageBytes(valid, Buffer.from("hello"), "text/plain", "http://objects.test", AbortSignal.timeout(5000), fetcher), "version-A")
   for (const change of [
     { url: "http://metadata.test/file" },
     { url: "http://u:p@objects.test/file" },
@@ -180,10 +196,10 @@ test("Storage transfer rejects arbitrary origins, redirect, credentials and unex
   assert.equal(calls, 1)
 })
 
-test("Storage v2 facade uses generated Connect calls and only trusted project metadata", async () => {
+test("Storage v3 facade uses generated Connect calls and only trusted project metadata", async () => {
   const { StorageUploadClient } = await moduleAt("infrastructure/clients/storage/client")
   const { createRouterTransport } = await import("@connectrpc/connect")
-  const { StorageService, UploadPurpose } = await import("../dist/generated/storage-connect/kokoro/storage/v2/storage_pb.js")
+  const { StorageService, UploadPurpose } = await import("../dist/generated/storage-connect/kokoro/storage/v3/storage_pb.js")
   const f = fixture()
   const transport = createRouterTransport((router) =>
     router.service(StorageService, {
@@ -338,7 +354,7 @@ test("HTTP composition performs Connect upload and exact presigned PUT then repl
   const { connectNodeAdapter } = await import("@connectrpc/connect-node")
   const { createBffServer } = await import("../dist/bootstrap/server.js")
   const { loadConfig } = await import("../dist/config/runtime.js")
-  const { StorageService, UploadState, ScanState, UploadPurpose } = await import("../dist/generated/storage-connect/kokoro/storage/v2/storage_pb.js")
+  const { StorageService, UploadState, ScanState, UploadPurpose } = await import("../dist/generated/storage-connect/kokoro/storage/v3/storage_pb.js")
   const f = fixture(),
     servers = []
   const listen = async (server) => {
@@ -360,6 +376,7 @@ test("HTTP composition performs Connect upload and exact presigned PUT then repl
         for await (const chunk of req) chunks.push(chunk)
         assert.deepEqual(Buffer.concat(chunks), f.input.bytes)
         puts++
+        res.setHeader("x-amz-version-id", "version-A")
         res.end()
       }),
     )
@@ -391,7 +408,7 @@ test("HTTP composition performs Connect upload and exact presigned PUT then repl
                   expectedSha256: f.input.sha256,
                   expectedSizeBytes: 5n,
                   mimeType: "text/plain",
-                  ...(completes ? { assetId: "asset-1" } : {}),
+                  ...(completes ? { assetId: "asset-1", sourceVersionId: "version-A" } : {}),
                 }
               },
               completeUpload() {
@@ -500,7 +517,7 @@ test("HTTP composition performs Connect upload and exact presigned PUT then repl
 test("both Complete and GetAsset require CLEAN; infection and pending scans have stable typed errors", async () => {
   const { StorageUploadClient } = await moduleAt("infrastructure/clients/storage/client")
   const { createRouterTransport } = await import("@connectrpc/connect")
-  const { StorageService, ScanState, UploadPurpose } = await import("../dist/generated/storage-connect/kokoro/storage/v2/storage_pb.js")
+  const { StorageService, ScanState, UploadPurpose } = await import("../dist/generated/storage-connect/kokoro/storage/v3/storage_pb.js")
   for (const [scanState, code, status, retryable] of [
     [ScanState.INFECTED, "resource_file_infected", 422, false],
     [ScanState.UNKNOWN, "resource_scan_pending", 503, true],
@@ -528,7 +545,7 @@ test("both Complete and GetAsset require CLEAN; infection and pending scans have
     )
     const client = new StorageUploadClient({ baseUrl: "http://storage.test", secret: "secret", objectOrigin: "http://objects.test" }, f.context, transport)
     const match = (error) => error.code === code && error.status === status && error.retryable === retryable
-    await assert.rejects(client.completeUpload("complete", "a".repeat(64), "upload-1", f.input, AbortSignal.timeout(5000)), match)
+    await assert.rejects(client.completeUpload("complete", "a".repeat(64), "upload-1", "version-A", f.input, AbortSignal.timeout(5000)), match)
     await assert.rejects(client.getAsset("upload-1", "asset-1", f.input, AbortSignal.timeout(5000)), match)
   }
 })
@@ -538,7 +555,7 @@ test("quarantined completion returns no resource; same-key retries retain one as
   const { projectResourceRoute } = await moduleAt("http/routes/project-resource")
   const { createRouterTransport } = await import("@connectrpc/connect")
   const { EventEmitter } = await import("node:events")
-  const { StorageService, ScanState, UploadState, UploadPurpose } = await import("../dist/generated/storage-connect/kokoro/storage/v2/storage_pb.js")
+  const { StorageService, ScanState, UploadState, UploadPurpose } = await import("../dist/generated/storage-connect/kokoro/storage/v3/storage_pb.js")
   for (const initialScan of [ScanState.INFECTED, ScanState.UNKNOWN, ScanState.PENDING]) {
     const f = fixture()
     let scan = initialScan,

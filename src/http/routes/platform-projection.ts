@@ -1,3 +1,5 @@
+import { skillRequestRemaining } from "./skill-drafts.js"
+import { IamPublisherProfileClient } from "../../infrastructure/clients/iam-publisher-profile.js"
 import type { IncomingMessage, ServerResponse } from "node:http"
 
 import type { BffConfig } from "../../config/runtime.js"
@@ -15,7 +17,7 @@ import { queryOf } from "../request.js"
 import { send } from "../response.js"
 
 const clients = new WeakMap<BffConfig, PlatformProjectionHttpClient>()
-const skillQueryKeys = new Set(["query", "tags", "scope_kind", "limit", "cursor"])
+const skillQueryKeys = new Set(["query", "tags", "scope_kind", "limit", "cursor", "category_key", "source_kind"])
 const connectionQueryKeys = new Set(["connection_id", "provider_key", "limit", "cursor"])
 const mcpQueryKeys = new Set(["provider_key", "limit", "cursor"])
 
@@ -116,9 +118,12 @@ export async function livePlatformProjectionRead(
   const abort = (): void => controller.abort()
   request.once("aborted", abort)
   response.once("close", abort)
-  let result
+  const timer = setTimeout(
+    () => controller.abort(new Error("skill_read_deadline")),
+    operation === "mcp" || operation === "mcpConnections" ? 10_000 : skillRequestRemaining(request),
+  )
   try {
-    result = await client.read(
+    const result = await client.read(
       operation,
       context.identity.namespace,
       context.identity.userId,
@@ -126,22 +131,34 @@ export async function livePlatformProjectionRead(
       { query, ...(skillId === undefined ? {} : { skillId }) },
       controller.signal,
     )
+    if (controller.signal.aborted || response.destroyed || response.writableEnded) return true
+    if (result.ok) {
+      const token = /^Bearer ([^\s,]+)$/iu.exec(request.headers.authorization ?? "")?.[1]
+      const data =
+        operation === "mcp" || operation === "mcpConnections"
+          ? result.data
+          : await new IamPublisherProfileClient(config.iamBaseUrl ?? "", 5000).enrich(
+              context.identity.namespace,
+              token ?? "",
+              context.requestId,
+              result.data,
+              controller.signal,
+            )
+      if (!controller.signal.aborted && !response.destroyed && !response.writableEnded) send(response, 200, { data })
+    } else
+      strictError(
+        response,
+        result.status,
+        result.code,
+        result.status === 404 ? "Skill was not found" : result.status === 400 ? "Read query is invalid" : dependencyMessage,
+        result.retryable,
+      )
   } catch {
-    if (!controller.signal.aborted && !response.destroyed && !response.writableEnded) strictError(response, 503, dependencyCode, dependencyMessage, true)
-    return true
+    if (!request.aborted && !response.destroyed && !response.writableEnded) strictError(response, 503, dependencyCode, dependencyMessage, true)
   } finally {
+    clearTimeout(timer)
     request.removeListener("aborted", abort)
     response.removeListener("close", abort)
   }
-  if (controller.signal.aborted || response.destroyed || response.writableEnded) return true
-  if (result.ok) send(response, 200, { data: result.data })
-  else
-    strictError(
-      response,
-      result.status,
-      result.code,
-      result.status === 404 ? "Skill was not found" : result.status === 400 ? "Read query is invalid" : dependencyMessage,
-      result.retryable,
-    )
   return true
 }

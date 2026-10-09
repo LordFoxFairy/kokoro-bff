@@ -1,0 +1,17 @@
+{
+  "authority": "local contract",
+  "source": "contract",
+  "files": [
+    "proto/kokoro/common/v1/common.proto",
+    "proto/kokoro/platform/v1/platform_runtime.proto",
+    "proto/kokoro/storage/v3/storage.proto",
+    "execution-operations/skill-example-prompts-v1.json",
+    "execution-operations/skill-example-prompts-v1.vectors.json",
+    "execution-operations/skill-category-keys-v1.json",
+    "execution-operations/skill-category-keys-v1.vectors.json",
+    "execution-operations/skill-product-v1.json",
+    "execution-operations/skill-product-request-vectors-v1.json",
+    "openapi/platform-http.openapi.json"
+  ],
+  "combinedSha256": "6bd7a55ab56973cc8438802ea851d877cdf36a5fb1604893682473bcb4ac3de2"
+}

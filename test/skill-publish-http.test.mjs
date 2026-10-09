@@ -35,6 +35,7 @@ const headers = {
   "idempotency-key": "publish-1",
 }
 const result = () => ({
+  stateVersion: 1n,
   sourceRef: { value: "skill:skill-1" },
   revision: 1n,
   status: 2,
@@ -42,7 +43,11 @@ const result = () => ({
   replayed: false,
 })
 async function withServer(client, run, admission = { verify: async () => ({ ok: true, identity: { namespace: "tenant", userId: "user" } }) }) {
-  const server = createLiveTestBffServer(config, { sessionAdmission: admission, skillDraftClient: client })
+  const server = createLiveTestBffServer(config, {
+    skillAuthorization: { check: async () => ({ ok: true }) },
+    sessionAdmission: admission,
+    skillDraftClient: client,
+  })
   server.listen(0, "127.0.0.1")
   await once(server, "listening")
   try {
@@ -79,7 +84,7 @@ test("Publish accepts exactly zero bytes and projects active owner result", asyn
       assert.equal(response.headers.get("cache-control"), "no-store")
       assert.ok(response.headers.get("x-request-id"))
       assert.deepEqual(await response.json(), {
-        data: { source_ref: "skill:skill-1", revision: "1", status: "active", event_id: result().eventId, replayed: false },
+        data: { state_version: "1", source_ref: "skill:skill-1", revision: "1", status: "active", event_id: result().eventId, replayed: false },
       })
     },
   )
@@ -93,7 +98,7 @@ test("Publish accepts exactly zero bytes and projects active owner result", asyn
 test("Publish projector matches all eight owner v4 command vectors", async () => {
   const manifest = JSON.parse(
     await readFile(
-      new URL("../contract/vendor/kokoro-platform/94bd0ea94aabc60c666fdb2cfa8784baf194e24b/execution-operations-v5/manifest.json", import.meta.url),
+      new URL("../contract/vendor/kokoro-platform/fa185ed2b25c3e81946cfdcd12d7665d02b8bad3/execution-operations-v5/manifest.json", import.meta.url),
       "utf8",
     ),
   )
@@ -114,6 +119,8 @@ test("Publish generated Connect descriptor has fixed visibility and active resul
       ["skill_id", 3],
       ["visibility", 4],
       ["product_context", 5],
+      ["audience", 6],
+      ["expected_state_version", 7],
     ],
   )
   assert.deepEqual(
@@ -124,6 +131,7 @@ test("Publish generated Connect descriptor has fixed visibility and active resul
       ["status", 3],
       ["event_id", 4],
       ["replayed", 5],
+      ["state_version", 6],
     ],
   )
   const message = create(PublishSkillRequestSchema, {
@@ -141,6 +149,16 @@ test("real generated Publish Connect client sends fixed PERSONAL and catalog cre
   const { connectNodeAdapter } = await import("@connectrpc/connect-node")
   const { CatalogConnectClient } = await import("../dist/infrastructure/clients/platform/catalog-connect.js")
   const { SkillCatalogService, SkillScopeKind } = await import("../dist/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
+  const { projectSkillProductCommand } = await import("../dist/infrastructure/clients/platform/create-skill-draft-projector.js")
+  const digest = projectSkillProductCommand(
+    JSON.stringify({
+      command_digest_version: "3.0.0",
+      fq_method: "kokoro.platform.v1.SkillCatalogService/PublishSkill",
+      tenant_ref: "tenant",
+      request: { ...{ skill_id: { value: "skill-1" }, visibility: 1 }, product_context: { subject_id: "user", owner_scope: { kind: "user", id: "user" } } },
+    }),
+    true,
+  ).sha256
   let calls = 0
   const owner = createServer(
     connectNodeAdapter({
@@ -148,11 +166,13 @@ test("real generated Publish Connect client sends fixed PERSONAL and catalog cre
         router.service(SkillCatalogService, {
           publishSkill(request, context) {
             calls++
+            context.responseHeader.set("x-kokoro-request-id", request.requestId)
+            context.responseHeader.set("cache-control", "no-store")
             assert.equal(context.requestHeader.get("authorization"), "Bearer catalog-machine")
             assert.equal(context.requestHeader.get("x-tenant-ref"), "tenant")
             assert.equal(request.requestId, "request-1")
             assert.equal(request.command?.commandId, "command-1")
-            assert.equal(request.command?.requestDigest, "a".repeat(64))
+            assert.equal(request.command?.requestDigest, digest)
             assert.equal(request.skillId?.value, "skill-1")
             assert.equal(request.visibility, SkillScopeKind.PERSONAL)
             assert.equal(request.productContext?.subjectId, "user")
@@ -171,7 +191,7 @@ test("real generated Publish Connect client sends fixed PERSONAL and catalog cre
     const response = await client.publish({
       requestId: "request-1",
       commandId: "command-1",
-      digest: "a".repeat(64),
+      digest: digest,
       tenant: "tenant",
       user: "user",
       skillId: "skill-1",
@@ -368,7 +388,9 @@ test("Publish owner receipt preserves same event for same-key replay and rejects
       const firstEvent = (await first.json()).data.event_id
       const replay = await post(base)
       assert.equal(replay.status, 200)
-      assert.deepEqual(await replay.json(), { data: { source_ref: "skill:skill-1", revision: "1", status: "active", event_id: firstEvent, replayed: true } })
+      assert.deepEqual(await replay.json(), {
+        data: { state_version: "1", source_ref: "skill:skill-1", revision: "1", status: "active", event_id: firstEvent, replayed: true },
+      })
       const different = await post(base, undefined, { "idempotency-key": "publish-2" })
       assert.equal(different.status, 412)
       assert.equal((await different.json()).error.code, "skill_precondition_failed")

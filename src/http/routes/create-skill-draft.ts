@@ -1,8 +1,10 @@
+import { startSkillRequestBudget } from "./skill-drafts.js"
+import { assertSkillWireKnown, projectSkillStateVersion } from "../../infrastructure/clients/platform/skill-product-response.js"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import { Code, ConnectError } from "@connectrpc/connect"
 import { SkillStatus } from "../../generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
 import type { RequestContext } from "../../domain/request-context.js"
-import { readBody } from "../request.js"
+import { readSkillBody as readBody } from "./skill-drafts.js"
 import { send } from "../response.js"
 import { parseSkillDraftInput, skillDraftCommandId } from "../create-skill-draft-input.js"
 import { projectCreateSkillDraft } from "../../infrastructure/clients/platform/create-skill-draft-projector.js"
@@ -83,7 +85,8 @@ export async function createSkillDraftRoute(
           summary: input.summary,
           tags: input.tags,
           metadata_json: "e30",
-          ...(input.examplePrompts === undefined ? {} : { example_prompts: input.examplePrompts }),
+          ...(input.examplePrompts === undefined ? {} : { example_prompts: { prompts: input.examplePrompts } }),
+          ...(input.categoryKeys === undefined ? {} : { category_keys: { keys: input.categoryKeys } }),
         },
       },
     }),
@@ -100,7 +103,10 @@ export async function createSkillDraftRoute(
         ...input,
       },
       signal,
+      startSkillRequestBudget(request),
     )
+    assertSkillWireKnown(result)
+    projectSkillStateVersion(result.stateVersion)
     const ownerId = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u
     if (
       !result.skillId?.value ||
@@ -112,7 +118,14 @@ export async function createSkillDraftRoute(
     )
       throw new Error("skill_response_invalid")
     send(response, 201, {
-      data: { skill_id: result.skillId.value, series_id: result.seriesId.value, revision: Number(result.revision), status: "draft", replayed: result.replayed },
+      data: {
+        state_version: projectSkillStateVersion(result.stateVersion),
+        skill_id: result.skillId.value,
+        series_id: result.seriesId.value,
+        revision: Number(result.revision),
+        status: "draft",
+        replayed: result.replayed,
+      },
     })
   } catch (error) {
     const mapped = catalogFailure(error)

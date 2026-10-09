@@ -1,3 +1,7 @@
+### R353-B2 Skills当前源码候选入口
+
+现 http/routes skill-drafts/admin/cover/download/ai-import/github-import/share/usage及server/runtime组成Public9/132；clients/platform skill-product-{connect,response,schema}与skill-admin专用credential/token，IAMpublisherbatch、Storagetransfer复用正式owner。GitHub metadata单普通文件使用正式js-yaml4.3.2，从固定SHA真实SKILL.md解析；没有browser自报metadata或URL代理。源卡及补卡固定，正常配对/真实provider/browser/queryowner修正见CURRENT，S01–S10仍OPEN。以下为既往切片入口，不替代此当前状态。
+
 ### R343 Skills 本人原文读取当前入口
 
 两public GET运行由 `src/http/routes/skill-package-inspection.ts`、`src/infrastructure/clients/platform/skill-package-inspection-{connect,response}.ts`承接，server在generic前exact分流。目录与原文仅真实owner读取，绝对10s/1MiB与可信本人身份每次重验。真实四GET/九边界Root通过，UI仍未完成；详见docs/CURRENT.md当前R343收据。

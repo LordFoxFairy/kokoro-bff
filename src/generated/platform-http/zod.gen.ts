@@ -2,20 +2,6 @@
 
 import * as z from "zod"
 
-export const zSkill = z.object({
-  source_ref: z.string(),
-  name: z.string(),
-  description: z.string(),
-  content_hash: z.string(),
-  scope: z.enum(["personal", "project", "organization", "session", "unknown"]),
-  revision: z.string().regex(/^[1-9][0-9]*$/),
-  enabled: z.boolean(),
-  installed: z.boolean().optional(),
-  categories: z.array(z.string()),
-  skill_updated_at: z.iso.datetime(),
-  example_prompts: z.array(z.string().min(1).max(1000).regex(/\S/)).max(10),
-})
-
 export const zMcpServer = z.object({
   server_id: z.string(),
   provider_key: z.string(),
@@ -31,18 +17,6 @@ export const zErrorEnvelope = z.object({
     message: z.string(),
     retryable: z.boolean(),
   }),
-})
-
-export const zPublishedPersonalSkill = z.object({
-  skill_id: z.string().min(1),
-  source_ref: z.string().regex(/^skill:[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/),
-  revision: z.string().regex(/^[1-9][0-9]*$/),
-  status: z.enum(["active"]),
-  name: z.string(),
-  summary: z.string(),
-  tags: z.array(z.string()),
-  skill_updated_at: z.iso.datetime(),
-  example_prompts: z.array(z.string().min(1).max(1000).regex(/\S/)).max(10),
 })
 
 export const zMcpConnection = z.object({
@@ -66,6 +40,131 @@ export const zMcpConnection = z.object({
   status: z.enum(["active"]),
 })
 
+export const zSkillIamRef = z.object({
+  kind: z.enum(["user", "organization"]),
+  id: z.string().min(1).max(255),
+})
+
+export const zSkillRepositoryStats = z.object({
+  stars: z
+    .string()
+    .max(19)
+    .regex(/^(0|[1-9][0-9]*)$/),
+  forks: z
+    .string()
+    .max(19)
+    .regex(/^(0|[1-9][0-9]*)$/),
+  observed_at: z.iso.datetime(),
+  metadata_source_url: z.url().max(2048),
+})
+
+export const zSkillAiProvenance = z.object({
+  kind: z.enum(["ai"]),
+  conversation_id: z.string().min(1).max(255),
+  run_ref: z.string().min(1).max(255),
+  artifact_ref: z.string().min(1).max(255),
+  source_event_id: z.string().min(1).max(255),
+  source_event_seq: z
+    .string()
+    .max(19)
+    .regex(/^[1-9][0-9]*$/),
+  source_event_digest: z.string().regex(/^[a-f0-9]{64}$/),
+  asset_ref: z.string().min(1).max(255),
+  content_sha256: z.string().regex(/^[a-f0-9]{64}$/),
+  size_bytes: z
+    .string()
+    .max(19)
+    .regex(/^[1-9][0-9]*$/),
+  mime_type: z.enum(["application/zip"]),
+})
+
+export const zSkillGithubProvenance = z.object({
+  kind: z.enum(["github"]),
+  repository_id: z.string().min(1).max(255),
+  repository_url: z.url().max(2048),
+  owner_login: z.string().min(1).max(255),
+  owner_url: z.url().max(2048),
+  commit: z.string().regex(/^[a-f0-9]{40}([a-f0-9]{24})?$/),
+  path: z.string().max(2048),
+  repo_stats: zSkillRepositoryStats.optional(),
+  asset_ref: z.string().min(1).max(255).optional(),
+  content_sha256: z.string().regex(/^[a-f0-9]{64}$/),
+  size_bytes: z
+    .string()
+    .max(19)
+    .regex(/^[1-9][0-9]*$/),
+  mime_type: z.enum(["application/zip"]),
+})
+
+export const zSkillCreationProvenance = z.union([
+  z.object({
+    kind: z.enum(["local"]),
+  }),
+  zSkillAiProvenance,
+  zSkillGithubProvenance,
+])
+
+export const zSkillPublisher = z.union([
+  z.object({
+    kind: z.enum(["iam"]),
+    iam: zSkillIamRef,
+  }),
+  z.object({
+    kind: z.enum(["github_repository"]),
+    github_repository: zSkillGithubProvenance,
+  }),
+])
+
+export const zSkillCover = z.object({
+  asset_ref: z.string().min(1).max(255),
+  mime_type: z.enum(["image/png", "image/jpeg"]),
+  width: z.int().gte(1).lte(4096),
+  height: z.int().gte(1).lte(4096),
+})
+
+export const zSkillProductFacts = z.object({
+  creator_ref: zSkillIamRef.optional(),
+  publisher: zSkillPublisher.optional(),
+  source_kind: z.enum(["personal", "official", "third_party"]).optional(),
+  creation_provenance: zSkillCreationProvenance.optional(),
+  cover: zSkillCover.optional(),
+  publication_audience: z.enum(["owner", "tenant", "catalog"]),
+  state_version: z
+    .string()
+    .max(19)
+    .regex(/^[1-9][0-9]*$/),
+  presentation_kind: z.enum(["first_party", "github_repository"]).optional(),
+})
+
+export const zSkill = z.object({
+  source_ref: z.string(),
+  name: z.string(),
+  description: z.string(),
+  content_hash: z.string(),
+  scope: z.enum(["personal", "project", "organization", "session", "unknown"]),
+  revision: z.string().regex(/^[1-9][0-9]*$/),
+  enabled: z.boolean(),
+  installed: z.boolean().optional(),
+  skill_updated_at: z.iso.datetime(),
+  example_prompts: z.array(z.string().min(1).max(1000).regex(/\S/)).max(10),
+  category_keys: z.array(z.enum(["programming", "data", "automation", "business", "design", "media", "content", "apps"])).max(8),
+  product: zSkillProductFacts,
+})
+
+export const zPublishedPersonalSkill = z.object({
+  skill_id: z.string().min(1),
+  source_ref: z.string().regex(/^skill:[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/),
+  revision: z.string().regex(/^[1-9][0-9]*$/),
+  status: z.enum(["active"]),
+  name: z.string(),
+  summary: z.string(),
+  tags: z.array(z.string()),
+  skill_updated_at: z.iso.datetime(),
+  example_prompts: z.array(z.string().min(1).max(1000).regex(/\S/)).max(10),
+  category_keys: z.array(z.enum(["programming", "data", "automation", "business", "design", "media", "content", "apps"])).max(8),
+  product: zSkillProductFacts,
+})
+
 export const zSelfManagedSkill = z.object({
   skill_id: z
     .string()
@@ -86,9 +185,11 @@ export const zSelfManagedSkill = z.object({
     .regex(/.*\S.*/),
   summary: z.string().max(65535),
   tags: z.array(z.string().max(128)).max(100),
-  status: z.enum(["draft", "active", "disabled", "withdrawn", "quarantined"]),
+  status: z.enum(["draft", "active", "disabled", "withdrawn", "quarantined", "discarded"]),
   skill_updated_at: z.iso.datetime(),
   example_prompts: z.array(z.string().min(1).max(1000).regex(/\S/)).max(10),
+  category_keys: z.array(z.enum(["programming", "data", "automation", "business", "design", "media", "content", "apps"])).max(8),
+  product: zSkillProductFacts,
 })
 
 export const zRequestId = z.string().min(1).max(255)
@@ -135,7 +236,7 @@ export const zMcpConnectionId = z
 /**
  * Optional exact management-state filter; not an execution eligibility assertion.
  */
-export const zSelfSkillStatus = z.enum(["draft", "active", "disabled", "withdrawn", "quarantined"])
+export const zSelfSkillStatus = z.enum(["draft", "active", "disabled", "withdrawn", "quarantined", "discarded"])
 
 export const zListVisibleSkillsHeaders = z.object({
   "x-kokoro-request-id": z.string().min(1).max(255).optional(),
@@ -153,6 +254,8 @@ export const zListVisibleSkillsQuery = z.object({
   scope_kind: z.enum(["personal", "project", "organization", "session", "1", "2", "3", "4"]).optional(),
   limit: z.int().gte(1).lte(100).optional().default(50),
   cursor: z.string().min(1).max(2048).optional(),
+  category_key: z.enum(["programming", "data", "automation", "business", "design", "media", "content", "apps"]).optional(),
+  source_kind: z.enum(["personal", "official", "third_party"]).optional(),
 })
 
 /**
@@ -206,6 +309,8 @@ export const zListVisibleSkillPoolQuery = z.object({
   scope_kind: z.enum(["personal", "project", "organization", "session", "1", "2", "3", "4"]).optional(),
   limit: z.int().gte(1).lte(100).optional().default(50),
   cursor: z.string().min(1).max(2048).optional(),
+  category_key: z.enum(["programming", "data", "automation", "business", "design", "media", "content", "apps"]).optional(),
+  source_kind: z.enum(["personal", "official", "third_party"]).optional(),
 })
 
 /**
@@ -234,6 +339,8 @@ export const zListVisibleSkillCatalogQuery = z.object({
   scope_kind: z.enum(["personal", "project", "organization", "session", "1", "2", "3", "4"]).optional(),
   limit: z.int().gte(1).lte(100).optional().default(50),
   cursor: z.string().min(1).max(2048).optional(),
+  category_key: z.enum(["programming", "data", "automation", "business", "design", "media", "content", "apps"]).optional(),
+  source_kind: z.enum(["personal", "official", "third_party"]).optional(),
 })
 
 /**
@@ -317,7 +424,9 @@ export const zListSelfManagedSkillsHeaders = z.object({
 export const zListSelfManagedSkillsQuery = z.object({
   limit: z.int().gte(1).lte(100).optional().default(50),
   cursor: z.string().min(1).max(2048).optional(),
-  status: z.enum(["draft", "active", "disabled", "withdrawn", "quarantined"]).optional(),
+  status: z.enum(["draft", "active", "disabled", "withdrawn", "quarantined", "discarded"]).optional(),
+  source_kind: z.enum(["personal", "official", "third_party"]).optional(),
+  query: z.string().min(1).max(1024).optional(),
 })
 
 /**

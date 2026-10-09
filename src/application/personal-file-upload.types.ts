@@ -17,12 +17,20 @@ export interface PersonalFileStorage {
   getUploadStatus(
     uploadId: string,
     signal: AbortSignal,
-  ): Promise<{ state: "pending" | "completed" | "aborted"; assetId: string | null; sha256: string; sizeBytes: string; mimeType: string }>
-  put(reference: PersonalFileTransfer, input: PersonalFileInput, signal: AbortSignal): Promise<void>
+  ): Promise<{
+    state: "pending" | "completed" | "aborted"
+    assetId: string | null
+    sourceVersionId: string | null
+    sha256: string
+    sizeBytes: string
+    mimeType: string
+  }>
+  put(reference: PersonalFileTransfer, input: PersonalFileInput, signal: AbortSignal): Promise<string>
   completeUpload(
     commandId: string,
     digest: string,
     uploadId: string,
+    sourceVersionId: string,
     input: PersonalFileInput,
     signal: AbortSignal,
   ): Promise<{ assetId: string; scanState: "clean" }>

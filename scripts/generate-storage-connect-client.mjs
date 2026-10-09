@@ -7,16 +7,16 @@ import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-const ownerCommit = "e8b9928418924812587b7ac07900aee4be5bc27f"
+const ownerCommit = "d13f33acfc7a482d61ebffc58e7b2667b58ae197"
 const vendor = `contract/vendor/kokoro-storage/${ownerCommit}/proto`
 const output = path.join(root, "src/generated/storage-connect")
 const manifestPath = path.join(root, "contract/dependencies/storage-connect.json")
 const sourceDigests = {
   "kokoro/common/v1/common.proto": "4604725ec7d5896c9d74b53c6f06d19b20ee758d5ab9e1cb90177ede95bba9fd",
-  "kokoro/storage/v2/storage.proto": "7960312aa9879d17af17dbd68f25df1a61edb67f1f7d9613ea3e97b404c75bef",
+  "kokoro/storage/v3/storage.proto": "1021e603065978871c51519ddba5b23c9b97f16b781a08bd98e019b3342bf5f9",
 }
-const directories = ["kokoro", "kokoro/common", "kokoro/common/v1", "kokoro/storage", "kokoro/storage/v2"]
-const generatedFiles = ["kokoro/common/v1/common_pb.ts", "kokoro/storage/v2/storage_pb.ts"]
+const directories = ["kokoro", "kokoro/common", "kokoro/common/v1", "kokoro/storage", "kokoro/storage/v3"]
+const generatedFiles = ["kokoro/common/v1/common_pb.ts", "kokoro/storage/v3/storage_pb.ts"]
 const versions = {
   "@bufbuild/buf": "1.72.0",
   "@bufbuild/protoc-gen-es": "2.14.0",
@@ -110,8 +110,8 @@ async function manifestFor(directory) {
     owner: {
       repository_path: "apps/kokoro-storage",
       repository_commit: ownerCommit,
-      published_combined_sha256: "c22b5c10ee698d579753dcac370be371d8dba1df8fead1a12883f5443fbad18a",
-      package_name: "kokoro.storage.v2",
+      published_combined_sha256: "47e2659f577cf5c0a5e44a9ee9165d0fee17471bb3d7abb80095a956f655c1f9",
+      package_name: "kokoro.storage.v3",
       sources: Object.entries(sourceDigests).map(([file, digest]) => ({ path: `contract/proto/${file}`, sha256: digest })),
     },
     execution_artifact: null,
@@ -122,7 +122,7 @@ async function manifestFor(directory) {
       formatting: { package: "prettier", version: "3.9.6", semi: false, print_width: 160 },
     },
     dependency_decision: {
-      verified_on: "2026-09-28",
+      verified_on: "2026-10-08",
       approach:
         "Reuse the published owner's exact Buf/Protobuf-ES/Connect versions; no floating upgrade. Protobuf-ES v2 emits service descriptors consumed by Connect createClient.",
       alternatives:

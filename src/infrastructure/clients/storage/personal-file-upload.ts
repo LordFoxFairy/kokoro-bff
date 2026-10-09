@@ -1,6 +1,6 @@
 import { createClient, ConnectError, Code, type Client, type Transport } from "@connectrpc/connect"
 import { createConnectTransport } from "@connectrpc/connect-node"
-import { StorageService, UploadPurpose, UploadState, ScanState } from "../../../generated/storage-connect/kokoro/storage/v2/storage_pb.js"
+import { StorageService, UploadPurpose, UploadState, ScanState } from "../../../generated/storage-connect/kokoro/storage/v3/storage_pb.js"
 import { ProjectResourceError } from "../../../application/project-resource.error.js"
 import { PersonalFileError } from "../../../application/personal-file-upload.error.js"
 import type {
@@ -102,13 +102,20 @@ export class PersonalFileUploadClient implements PersonalFileStorage {
               ? "aborted"
               : null
       if (result.uploadId !== uploadId || state === null) throw new PersonalFileError("storage_response_invalid", 502)
-      return { state, assetId: result.assetId ?? null, sha256: result.expectedSha256, sizeBytes: String(result.expectedSizeBytes), mimeType: result.mimeType }
+      return {
+        state,
+        assetId: result.assetId ?? null,
+        sourceVersionId: result.sourceVersionId ?? null,
+        sha256: result.expectedSha256,
+        sizeBytes: String(result.expectedSizeBytes),
+        mimeType: result.mimeType,
+      }
     })
   }
 
-  async put(reference: PersonalFileTransfer, input: PersonalFileInput, signal: AbortSignal): Promise<void> {
+  async put(reference: PersonalFileTransfer, input: PersonalFileInput, signal: AbortSignal): Promise<string> {
     try {
-      await putStorageBytes(reference, input.bytes, input.mimeType, this.config.objectOrigin, signal)
+      return await putStorageBytes(reference, input.bytes, input.mimeType, this.config.objectOrigin, signal)
     } catch (error) {
       if (error instanceof ProjectResourceError)
         throw new PersonalFileError(
@@ -120,10 +127,10 @@ export class PersonalFileUploadClient implements PersonalFileStorage {
     }
   }
 
-  async completeUpload(commandId: string, digest: string, uploadId: string, input: PersonalFileInput, signal: AbortSignal) {
+  async completeUpload(commandId: string, digest: string, uploadId: string, sourceVersionId: string, input: PersonalFileInput, signal: AbortSignal) {
     return this.rpc(async () => {
       const result = await this.client.completeUpload(
-        { command: { commandId, requestDigest: digest }, uploadId, contentSha256: input.sha256, sizeBytes: BigInt(input.bytes.length) },
+        { command: { commandId, requestDigest: digest }, uploadId, sourceVersionId, contentSha256: input.sha256, sizeBytes: BigInt(input.bytes.length) },
         { headers: this.headers, signal },
       )
       if (result.uploadId !== uploadId || !result.assetId) throw new PersonalFileError("storage_response_invalid", 502)

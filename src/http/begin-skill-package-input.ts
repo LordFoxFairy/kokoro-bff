@@ -1,3 +1,4 @@
+import { skillDecimalSchema } from "../infrastructure/clients/platform/skill-product-schema.js"
 import { createHash } from "node:crypto"
 import { strictParseRawJson } from "../infrastructure/raw-json.js"
 
@@ -6,6 +7,7 @@ export type BeginSkillPackageInput = Readonly<{
   mimeType: "application/zip"
   sizeBytes: number
   contentSha256: string
+  expectedStateVersion?: string
   replacesAttemptId?: string
 }>
 
@@ -23,6 +25,8 @@ export function parseBeginSkillPackageInput(raw: Buffer): BeginSkillPackageInput
   }
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw new Error("invalid_skill_request")
   const value = parsed as Record<string, unknown>
+  const expectedStateVersion = value.expected_state_version === undefined ? undefined : skillDecimalSchema.parse(value.expected_state_version)
+  delete value.expected_state_version
   const keys = Object.keys(value).sort().join(",")
   if (keys !== "content_sha256,filename,mime_type,size_bytes" && keys !== "content_sha256,filename,mime_type,replaces_attempt_id,size_bytes")
     throw new Error("invalid_skill_request")
@@ -40,6 +44,7 @@ export function parseBeginSkillPackageInput(raw: Buffer): BeginSkillPackageInput
     throw new Error("invalid_skill_request")
   return {
     filename: value.filename,
+    ...(expectedStateVersion === undefined ? {} : { expectedStateVersion }),
     mimeType: "application/zip",
     sizeBytes: value.size_bytes as number,
     contentSha256: value.content_sha256,

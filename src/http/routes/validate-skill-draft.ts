@@ -1,10 +1,12 @@
+import { startSkillRequestBudget } from "./skill-drafts.js"
+import { assertSkillWireKnown, projectSkillStateVersion } from "../../infrastructure/clients/platform/skill-product-response.js"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import { Code, ConnectError } from "@connectrpc/connect"
 import type { RequestContext } from "../../domain/request-context.js"
 import type { CatalogConnectClient } from "../../infrastructure/clients/platform/catalog-connect.js"
 import { projectValidateSkillDraft } from "../../infrastructure/clients/platform/validate-skill-draft-projector.js"
 import { parseValidateSkillDraftInput, validateSkillDraftCommandId } from "../validate-skill-draft-input.js"
-import { readBody } from "../request.js"
+import { readSkillBody as readBody } from "./skill-drafts.js"
 import { send } from "../response.js"
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u
@@ -40,6 +42,8 @@ function mapFailure(error: unknown): { status: number; body: ReturnType<typeof f
 }
 
 function project(result: Awaited<ReturnType<CatalogConnectClient["validateDraft"]>>, skillId: string) {
+  assertSkillWireKnown(result)
+  projectSkillStateVersion(result.stateVersion)
   if (
     typeof result !== "object" ||
     result === null ||
@@ -55,6 +59,7 @@ function project(result: Awaited<ReturnType<CatalogConnectClient["validateDraft"
   )
     throw new Error("skill_response_invalid")
   return {
+    state_version: projectSkillStateVersion(result.stateVersion),
     skill_id: skillId,
     series_id: result.seriesId.value,
     valid: true,
@@ -97,9 +102,11 @@ export async function validateSkillDraftRoute(
     send(response, 400, failure("invalid_skill_request", "Content-Type must be application/json"))
     return
   }
+  let input: ReturnType<typeof parseValidateSkillDraftInput>
   let attemptId: string
   try {
-    attemptId = parseValidateSkillDraftInput(await readBody(request, 65_536)).attemptId
+    input = parseValidateSkillDraftInput(await readBody(request, 65_536))
+    attemptId = input.attemptId
   } catch (error) {
     const oversized = error instanceof Error && ["request_body_too_large", "request body too large"].includes(error.message)
     send(response, oversized ? 413 : 400, failure(oversized ? "request_body_too_large" : "invalid_skill_request", "Skill Validate request is invalid"))
@@ -110,6 +117,7 @@ export async function validateSkillDraftRoute(
     fq_method: "kokoro.platform.v1.SkillCatalogService/ValidateSkillDraft",
     tenant_ref: context.identity.namespace,
     request: {
+      ...(input.expectedStateVersion === undefined ? {} : { expected_state_version: input.expectedStateVersion }),
       skill_id: { value: skillId },
       product_context: { subject_id: context.identity.userId, owner_scope: { kind: "user", id: context.identity.userId } },
       attempt_id: attemptId,
@@ -132,8 +140,10 @@ export async function validateSkillDraftRoute(
         user: context.identity.userId,
         skillId,
         attemptId,
+        ...(input.expectedStateVersion === undefined ? {} : { expectedStateVersion: input.expectedStateVersion }),
       },
       signal,
+      startSkillRequestBudget(request),
     )
     send(response, 200, { data: project(owner, skillId) })
   } catch (error) {

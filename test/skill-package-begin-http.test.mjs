@@ -37,6 +37,7 @@ const headers = {
 }
 const input = { filename: "sample.zip", mime_type: "application/zip", size_bytes: 143, content_sha256: "a".repeat(64) }
 const result = () => ({
+  stateVersion: 1n,
   skillId: { value: "skill-1" },
   attemptId: "attempt-1",
   attemptEpoch: 1n,
@@ -50,7 +51,10 @@ const result = () => ({
   },
 })
 async function withServer(client, run, admission = { verify: async () => ({ ok: true, identity: { namespace: "tenant", userId: "user" } }) }, override = {}) {
-  const server = createLiveTestBffServer({ ...config, ...override }, { sessionAdmission: admission, skillDraftClient: client })
+  const server = createLiveTestBffServer(
+    { ...config, ...override },
+    { skillAuthorization: { check: async () => ({ ok: true }) }, sessionAdmission: admission, skillDraftClient: client },
+  )
   server.listen(0, "127.0.0.1")
   await once(server, "listening")
   try {
@@ -65,7 +69,7 @@ const post = (base, body = input, other = {}) =>
 test("Begin digest projector matches every pinned owner v4 projection vector", async () => {
   const manifest = JSON.parse(
     await readFile(
-      new URL("../contract/vendor/kokoro-platform/94bd0ea94aabc60c666fdb2cfa8784baf194e24b/execution-operations-v5/manifest.json", import.meta.url),
+      new URL("../contract/vendor/kokoro-platform/fa185ed2b25c3e81946cfdcd12d7665d02b8bad3/execution-operations-v5/manifest.json", import.meta.url),
       "utf8",
     ),
   )
@@ -85,7 +89,7 @@ test("Begin POST routes beside Get and returns strict current signed PUT referen
       assert.equal(response.status, 201)
       const body = await response.json()
       assert.deepEqual(Object.keys(body), ["data"])
-      assert.deepEqual(Object.keys(body.data), ["skill_id", "attempt_id", "attempt_epoch", "upload_id", "transfer_reference", "replayed"])
+      assert.deepEqual(Object.keys(body.data), ["state_version", "skill_id", "attempt_id", "attempt_epoch", "upload_id", "transfer_reference", "replayed"])
       assert.equal(body.data.attempt_epoch, "1")
       assert.equal(body.data.transfer_reference.url, result().transferReference.url)
       assert.equal(body.data.transfer_reference.method, "PUT")
@@ -442,7 +446,7 @@ test("Begin requires configured approved object origin without affecting Get", a
       beginPackageUpload: async () => {
         throw new Error("must not call")
       },
-      getPackageUpload: async () => ({ skillId: { value: "skill-1" }, attemptEpoch: 0n, phase: 1 }),
+      getPackageUpload: async () => ({ stateVersion: 1n, skillId: { value: "skill-1" }, attemptEpoch: 0n, phase: 1 }),
     },
     async (base) => {
       assert.equal((await post(base)).status, 503)
@@ -467,6 +471,26 @@ test("real generated Begin Connect client forwards only catalog credential and e
   const { connectNodeAdapter } = await import("@connectrpc/connect-node")
   const { CatalogConnectClient } = await import("../dist/infrastructure/clients/platform/catalog-connect.js")
   const { SkillCatalogService } = await import("../dist/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
+  const { projectSkillProductCommand } = await import("../dist/infrastructure/clients/platform/create-skill-draft-projector.js")
+  const digest = projectSkillProductCommand(
+    JSON.stringify({
+      command_digest_version: "3.0.0",
+      fq_method: "kokoro.platform.v1.SkillCatalogService/BeginSkillPackageUpload",
+      tenant_ref: "tenant",
+      request: {
+        ...{
+          skill_id: { value: "skill-1" },
+          filename: "sample.zip",
+          mime_type: "application/zip",
+          size_bytes: "143",
+          content_sha256: "b".repeat(64),
+          replaces_attempt_id: "attempt-1",
+        },
+        product_context: { subject_id: "user", owner_scope: { kind: "user", id: "user" } },
+      },
+    }),
+    true,
+  ).sha256
   let calls = 0
   const owner = createServer(
     connectNodeAdapter({
@@ -474,10 +498,12 @@ test("real generated Begin Connect client forwards only catalog credential and e
         router.service(SkillCatalogService, {
           beginSkillPackageUpload(request, context) {
             calls++
+            context.responseHeader.set("x-kokoro-request-id", request.requestId)
+            context.responseHeader.set("cache-control", "no-store")
             assert.equal(context.requestHeader.get("authorization"), "Bearer catalog-machine")
             assert.equal(context.requestHeader.get("x-tenant-ref"), "tenant")
             assert.equal(request.command?.commandId, "command-1")
-            assert.equal(request.command?.requestDigest, "a".repeat(64))
+            assert.equal(request.command?.requestDigest, digest)
             assert.equal(request.skillId?.value, "skill-1")
             assert.equal(request.productContext?.subjectId, "user")
             assert.equal(request.productContext?.ownerScope?.kind, "user")
@@ -498,7 +524,7 @@ test("real generated Begin Connect client forwards only catalog credential and e
     const response = await client.beginPackageUpload({
       requestId: "request-1",
       commandId: "command-1",
-      digest: "a".repeat(64),
+      digest: digest,
       tenant: "tenant",
       user: "user",
       skillId: "skill-1",

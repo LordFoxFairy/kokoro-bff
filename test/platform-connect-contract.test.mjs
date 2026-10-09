@@ -9,11 +9,11 @@ import { configureBffProtobufTextEncoding } from "../dist/infrastructure/protobu
 
 configureBffProtobufTextEncoding()
 
-const ownerCommit = "94bd0ea94aabc60c666fdb2cfa8784baf194e24b"
+const ownerCommit = "fa185ed2b25c3e81946cfdcd12d7665d02b8bad3"
 const sources = {
-  "kokoro/storage/v2/storage.proto": "02266d53b8bfb7fdd6991b17d59ebb17399d4f189b6a3135fedcb69b6b364276",
   "kokoro/common/v1/common.proto": "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08",
-  "kokoro/platform/v1/platform_runtime.proto": "5fd99ca07adc6c40c917071b652d4c048905fcb23674dc7f695dad89a2a2b684",
+  "kokoro/platform/v1/platform_runtime.proto": "12f357a7f81363c4242954fd0415fc786436685618ad542a50182304153bc22c",
+  "kokoro/storage/v3/storage.proto": "1021e603065978871c51519ddba5b23c9b97f16b781a08bd98e019b3342bf5f9",
 }
 const root = new URL("../", import.meta.url)
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex")
@@ -90,7 +90,7 @@ test("Platform consumer pins exact owner Proto bytes and inactive V9 to V8 to V7
   )
   assert.deepEqual(manifest.descriptor, {
     path: `contract/vendor/kokoro-platform/${ownerCommit}/descriptor/platform-v1.binpb`,
-    sha256: "d9b82ed81c643be7bab6cb19319fed86e566663a4cdae1c68afcc91386dab52b",
+    sha256: "453f275b6e95052437072c3f52bbe74675271400526680003569b6bd09196fb1",
   })
   assert.deepEqual(
     manifest.owner.sources,
@@ -129,8 +129,8 @@ test("Platform generator rejects source, proof-chain and generated tree drift", 
       }),
     /source allowlist/,
   )
-  const files = ["kokoro/common/v1/common_pb.ts", "kokoro/platform/v1/platform_runtime_pb.ts"]
-  const directories = ["kokoro", "kokoro/common", "kokoro/common/v1", "kokoro/platform", "kokoro/platform/v1"]
+  const files = ["kokoro/common/v1/common_pb.ts", "kokoro/platform/v1/platform_runtime_pb.ts", "kokoro/storage/v3/storage_pb.ts"]
+  const directories = ["kokoro", "kokoro/common", "kokoro/common/v1", "kokoro/platform", "kokoro/platform/v1", "kokoro/storage", "kokoro/storage/v3"]
   assert.doesNotThrow(() => assertGeneratedTree({ files, directories }))
   assert.throws(() => assertGeneratedTree({ files: files.slice(1), directories }), /file allowlist/)
   assert.throws(() => assertGeneratedTree({ files: [...files, "manual.ts"], directories }), /file allowlist/)
@@ -238,6 +238,7 @@ test("generated Platform descriptor preserves CreateDraft wire tags, bytes, Prod
       ["owner_scope", 3],
       ["metadata", 4],
       ["product_context", 5],
+      ["creation_provenance", 6],
     ],
   )
   const request = create(CreateSkillDraftRequestSchema, {
@@ -369,7 +370,7 @@ test("R345 generated and compiled Product installation add only required Skill u
 
   const prefix = `contract/vendor/kokoro-platform/${ownerCommit}/descriptor`
   const currentBytes = await requiredFile(`${prefix}/platform-v1.binpb`)
-  assert.equal(sha256(currentBytes), "d9b82ed81c643be7bab6cb19319fed86e566663a4cdae1c68afcc91386dab52b")
+  assert.equal(sha256(currentBytes), "453f275b6e95052437072c3f52bbe74675271400526680003569b6bd09196fb1")
   const current = fromBinary(FileDescriptorSetSchema, await requiredFile(`${prefix}/platform-skill-example-prompts-parent.binpb`))
   const compiledParentBytes = await requiredFile(`${prefix}/platform-skill-updated-at-parent.binpb`)
   assert.equal(sha256(compiledParentBytes), "2e1a811bf347b5d9cd3577ac6c762ee9d31f40dea2ac326a06b83bc61de9a8d5")
@@ -424,7 +425,7 @@ test("R319 consumer fixes the complete V8 owner and preserves the historical par
   )
   assert.deepEqual(
     manifest.generated.map((entry) => entry.path),
-    ["kokoro/common/v1/common_pb.ts", "kokoro/platform/v1/platform_runtime_pb.ts"],
+    ["kokoro/common/v1/common_pb.ts", "kokoro/platform/v1/platform_runtime_pb.ts", "kokoro/storage/v3/storage_pb.ts"],
   )
 })
 
@@ -598,11 +599,11 @@ test("R340 generated consumer exposes both personal package inspection services"
   }
 })
 
-test("R345 complete 60-input publication is closed, byte-pinned and rejects omitted, extra and altered inputs", async () => {
+test("formal complete 81-input publication is closed, byte-pinned and rejects omitted, extra and altered inputs", async () => {
   const manifest = JSON.parse(await requiredFile("contract/dependencies/platform-connect.json"))
   assert.equal(manifest.published_inputs.path_algorithm, "owner-repository-relative-including-contract")
-  assert.equal(manifest.published_inputs.aggregate_sha256, "bc7ebb7312195e0f718940a33c73ed1db7d77aac4333ad6975831ed5d3740e55")
-  assert.equal(manifest.published_inputs.files.length, 60)
+  assert.equal(manifest.published_inputs.aggregate_sha256, "ce7708d7e2a15d7e3a77b7b9ea45905ab3fbe90093e343d0be9b3140ca03e2d6")
+  assert.equal(manifest.published_inputs.files.length, 81)
   const files = Object.fromEntries(
     await Promise.all(
       manifest.published_inputs.files.map(async (pin) => {
@@ -655,7 +656,7 @@ test("R340 historical V9 retains 43/20/24, all 128 vectors and exact inactive V8
   )
 })
 
-test("R345 current 45/20/24 graph strips through four pinned parents and preserves generated/compiled whole graphs", async () => {
+test("formal current 63/32/24 graph strips through pinned parents and preserves generated/compiled whole graphs", async () => {
   const { fromBinary, toBinary } = await import("@bufbuild/protobuf")
   const { FileDescriptorSetSchema, FileDescriptorProtoSchema } = await import("@bufbuild/protobuf/wkt")
   const {
@@ -669,14 +670,18 @@ test("R345 current 45/20/24 graph strips through four pinned parents and preserv
   const prefix = `contract/vendor/kokoro-platform/${ownerCommit}/descriptor`
   const currentBytes = await requiredFile(`${prefix}/platform-v1.binpb`)
   const current = fromBinary(FileDescriptorSetSchema, currentBytes)
-  assert.doesNotThrow(() => assertDescriptorCensus(current, [45, 20, 24]))
+  assert.doesNotThrow(() => assertDescriptorCensus(current, [63, 32, 24]))
   const historical = assertDescriptorLineage(currentBytes)
   assert.deepEqual(Buffer.from(toBinary(FileDescriptorSetSchema, historical)), await requiredFile(`${prefix}/platform-v9-parent43.binpb`))
   assert.doesNotThrow(() => assertDescriptorCensus(historical, [43, 20, 24]))
   const manifest = JSON.parse(await requiredFile("contract/dependencies/platform-connect.json"))
   const parents = Object.fromEntries(await Promise.all(manifest.descriptor_parents.map(async (pin) => [path.basename(pin.path), await requiredFile(pin.path)])))
   assert.doesNotThrow(() => assertDescriptorPairs(parents))
-  for (const file of Object.keys(parents).filter((file) => !file.includes("v8-parent39"))) {
+  for (const file of Object.keys(parents).filter((file) =>
+    /^(platform-v9-parent43|platform-installation-tags-parent|platform-package-read-parent|platform-skill-updated-at-parent|platform-skill-example-prompts-parent|platform-skill-github-asset-parent|platform-skill-personal-query-parent)(-generated)?\.binpb$/u.test(
+      file,
+    ),
+  )) {
     assert.throws(() => assertDescriptorPairs({ ...parents, [file]: Buffer.concat([parents[file], Buffer.from([0])]) }), /parent bytes drifted/)
   }
   const { file_kokoro_platform_v1_platform_runtime } = await import("../dist/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
@@ -707,11 +712,7 @@ test("R345 current 45/20/24 graph strips through four pinned parents and preserv
     mutate(changed.file.find((file) => file.package === "kokoro.platform.v1"))
     assert.throws(() => assertInspectionDescriptors(changed), /inspection.*drifted/)
   }
-  const changedParent = clone()
-  changedParent.file
-    .find((file) => file.package === "kokoro.platform.v1")
-    .messageType.find((message) => message.name === "GetSkillPackageUploadResponse").field[0].number = 30
-  assert.throws(() => stripDescriptorLineage(changedParent), /whole parent graph drifted/)
+  assert.deepEqual(Buffer.from(toBinary(FileDescriptorSetSchema, stripDescriptorLineage(current))), await requiredFile(`${prefix}/platform-v9-parent43.binpb`))
 })
 
 test("BFF initializes one strict BOM-preserving Protobuf codec before composing clients", async () => {
@@ -773,4 +774,30 @@ test("R340 inspection wire preserves absent versus explicit empty file, distinct
     "自动化",
   ])
   assert.equal(generated.ProductSkillInstallationSchema.fields.find((field) => field.name === "tags").number, 13)
+})
+
+test("P4 query6 strips only the approved field and source_kind5 remains parent bound", async () => {
+  const { fromBinary, toBinary } = await import("@bufbuild/protobuf"),
+    { FileDescriptorSetSchema } = await import("@bufbuild/protobuf/wkt")
+  const { stripDescriptorLineage } = await generator(),
+    bytes = await requiredFile(`contract/vendor/kokoro-platform/${ownerCommit}/descriptor/platform-v1.binpb`)
+  for (const mutate of [
+    (field) => (field.number = 7),
+    (field) => (field.type = 4),
+    (field) => (field.proto3Optional = false),
+    (field) => (field.oneofIndex = 0),
+    (field) => (field.name = "query_alias"),
+  ]) {
+    const set = fromBinary(FileDescriptorSetSchema, bytes),
+      file = set.file.find((file) => file.package === "kokoro.platform.v1"),
+      request = file.messageType.find((message) => message.name === "ListPersonalSkillInstallationsRequest")
+    mutate(request.field.find((field) => field.number === 6))
+    assert.throws(() => stripDescriptorLineage(set), /personal optional query tag6 drifted/)
+  }
+  const changed = fromBinary(FileDescriptorSetSchema, bytes)
+  changed.file
+    .find((file) => file.package === "kokoro.platform.v1")
+    .messageType.find((message) => message.name === "ListPersonalSkillInstallationsRequest")
+    .field.find((field) => field.number === 5).name = "source_alias"
+  assert.throws(() => stripDescriptorLineage(changed), /whole parent graph drifted/)
 })

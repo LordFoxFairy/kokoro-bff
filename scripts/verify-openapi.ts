@@ -1,3 +1,4 @@
+import { inspectSkillProductContract, stripSkillProductSource, skillProductParentBaseline } from "./verify-skill-product-contract.mjs"
 import { inspectSkillExamplePromptsContract, stripSkillExamplePromptsSource } from "./verify-skill-example-prompts-contract.mjs"
 import { createHash } from "node:crypto"
 import { readFile } from "node:fs/promises"
@@ -397,21 +398,47 @@ function envelopeErrors(schemas: Map<string, NamedBlock>, operations: OperationB
     }
     const managedPersonalExpected = managedPersonalResponses[operationId]
     const lifecycleResponses: Record<string, Record<string, string>> = {
-      createPersonalSkillVersion: { "400": "PersonalSkillLifecycleBadRequest", "401": "PersonalSkillLifecycleUnauthorized", "403": "PersonalSkillLifecycleForbidden", "404": "PersonalSkillLifecycleNotFound", "409": "PersonalSkillLifecycleConflict", "412": "PersonalSkillLifecyclePreconditionFailed", "413": "PersonalSkillLifecyclePayloadTooLarge", "429": "PersonalSkillLifecycleRateLimited", "502": "PersonalSkillLifecycleBadGateway", "503": "PersonalSkillLifecycleUnavailable" },
-      withdrawPersonalSkill: { "400": "PersonalSkillLifecycleBadRequest", "401": "PersonalSkillLifecycleUnauthorized", "403": "PersonalSkillLifecycleForbidden", "404": "PersonalSkillLifecycleNotFound", "409": "PersonalSkillLifecycleConflict", "412": "PersonalSkillLifecyclePreconditionFailed", "413": "PersonalSkillLifecyclePayloadTooLarge", "429": "PersonalSkillLifecycleRateLimited", "502": "PersonalSkillLifecycleBadGateway", "503": "PersonalSkillLifecycleUnavailable" },
+      createPersonalSkillVersion: {
+        "400": "PersonalSkillLifecycleBadRequest",
+        "401": "PersonalSkillLifecycleUnauthorized",
+        "403": "PersonalSkillLifecycleForbidden",
+        "404": "PersonalSkillLifecycleNotFound",
+        "409": "PersonalSkillLifecycleConflict",
+        "412": "PersonalSkillLifecyclePreconditionFailed",
+        "413": "PersonalSkillLifecyclePayloadTooLarge",
+        "429": "PersonalSkillLifecycleRateLimited",
+        "502": "PersonalSkillLifecycleBadGateway",
+        "503": "PersonalSkillLifecycleUnavailable",
+      },
+      withdrawPersonalSkill: {
+        "400": "PersonalSkillLifecycleBadRequest",
+        "401": "PersonalSkillLifecycleUnauthorized",
+        "403": "PersonalSkillLifecycleForbidden",
+        "404": "PersonalSkillLifecycleNotFound",
+        "409": "PersonalSkillLifecycleConflict",
+        "412": "PersonalSkillLifecyclePreconditionFailed",
+        "413": "PersonalSkillLifecyclePayloadTooLarge",
+        "429": "PersonalSkillLifecycleRateLimited",
+        "502": "PersonalSkillLifecycleBadGateway",
+        "503": "PersonalSkillLifecycleUnavailable",
+      },
     }
     const lifecycleExpected = lifecycleResponses[operationId]
-    const isPersonalSkillLifecycle = operation.method === "POST" &&
+    const isPersonalSkillLifecycle =
+      operation.method === "POST" &&
       ((operationId === "createPersonalSkillVersion" && operation.path === "/v1/self/skills/{skill_id}/versions") ||
-       (operationId === "withdrawPersonalSkill" && operation.path === "/v1/self/skills/{skill_id}/withdraw"))
+        (operationId === "withdrawPersonalSkill" && operation.path === "/v1/self/skills/{skill_id}/withdraw"))
     const isManagedPersonalSkill =
       operation.method === "GET" &&
       ((operationId === "listManagedPersonalSkills" && operation.path === "/v1/self/skills") ||
         (operationId === "getManagedPersonalSkill" && operation.path === "/v1/self/skills/{skill_id}"))
     const isCreateSkillDraft = operationId === "createSkillDraft"
     const isMoveSession = operationId === "moveSession" && operation.method === "POST" && operation.path === "/v1/sessions/{id}/move"
-    const isPersonalization = operation.path === "/v1/preferences/personalization" && ((operation.method === "GET" && operationId === "getSelfPersonalization") || (operation.method === "PUT" && operationId === "replaceSelfPersonalization"))
-    if (!isPersonalization && operation.text.includes("#/components/responses/Personalization")) errors.push("Personalization response components require the exact caller-owned operation")
+    const isPersonalization =
+      operation.path === "/v1/preferences/personalization" &&
+      ((operation.method === "GET" && operationId === "getSelfPersonalization") || (operation.method === "PUT" && operationId === "replaceSelfPersonalization"))
+    if (!isPersonalization && operation.text.includes("#/components/responses/Personalization"))
+      errors.push("Personalization response components require the exact caller-owned operation")
     const isAdminModelRouting = ["listAdminModelRouting", "listAdminModelLabels", "listAdminModelRevisions", "replaceAdminModelRouting"].includes(operationId)
     const isRenameProject = operationId === "renameProject" && operation.method === "PATCH" && operation.path === "/v1/projects/{projectId}/name"
     const isProjectDeletion =
@@ -713,7 +740,8 @@ function idempotencyErrors(parameters: Map<string, NamedBlock>, operations: Oper
 
   for (const operation of operations) {
     const operationId = operation.fields.get("operationId") ?? operation.name
-    const isPersonalizationCas = operation.method === "PUT" && operation.path === "/v1/preferences/personalization" && operationId === "replaceSelfPersonalization"
+    const isPersonalizationCas =
+      operation.method === "PUT" && operation.path === "/v1/preferences/personalization" && operationId === "replaceSelfPersonalization"
     const expected = ["GET", "HEAD", "OPTIONS"].includes(operation.method) || operationId === "previewGithubSkill" || isPersonalizationCas ? "none" : "required"
     const declared = operation.fields.get("x-kokoro-idempotency")
     const hasParameter =
@@ -725,23 +753,23 @@ function idempotencyErrors(parameters: Map<string, NamedBlock>, operations: Oper
             ? operation.text.includes("#/components/parameters/RenameProjectIdempotencyKey")
             : operationId === "deleteProject" && operation.method === "DELETE" && operation.path === "/v1/projects/{projectId}"
               ? operation.text.includes("#/components/parameters/ProjectDeletionIdempotencyKey")
-            : operationId === "beginSkillPackageUpload" && operation.method === "POST" && operation.path === "/v1/skills/{skill_id}/package-upload"
-              ? operation.text.includes("#/components/parameters/SkillPackageBeginIdempotencyKey")
-              : operationId === "completeSkillPackageUpload" &&
-                  operation.method === "POST" &&
-                  operation.path === "/v1/skills/{skill_id}/package-upload/complete"
-                ? operation.text.includes("#/components/parameters/SkillPackageCompleteIdempotencyKey")
-                : operationId === "validateSkillDraft" && operation.method === "POST" && operation.path === "/v1/skills/{skill_id}/validate"
-                  ? operation.text.includes("#/components/parameters/SkillValidateIdempotencyKey")
-                  : operationId === "publishSkill" && operation.method === "POST" && operation.path === "/v1/skills/{skill_id}/publish"
-                    ? operation.text.includes("#/components/parameters/SkillPublishIdempotencyKey")
-                    : operationId === "createPersonalSkillVersion" && operation.method === "POST" && operation.path === "/v1/self/skills/{skill_id}/versions"
-                      ? operation.text.includes("#/components/parameters/CreatePersonalSkillVersionIdempotencyKey")
-                      : operationId === "withdrawPersonalSkill" && operation.method === "POST" && operation.path === "/v1/self/skills/{skill_id}/withdraw"
-                        ? operation.text.includes("#/components/parameters/WithdrawPersonalSkillIdempotencyKey")
-                        : operationId === "replaceAdminModelRouting"
-                      ? operation.text.includes("#/components/parameters/AdminModelRoutingIdempotencyKey")
-                      : operation.text.includes("#/components/parameters/IdempotencyKey")
+              : operationId === "beginSkillPackageUpload" && operation.method === "POST" && operation.path === "/v1/skills/{skill_id}/package-upload"
+                ? operation.text.includes("#/components/parameters/SkillPackageBeginIdempotencyKey")
+                : operationId === "completeSkillPackageUpload" &&
+                    operation.method === "POST" &&
+                    operation.path === "/v1/skills/{skill_id}/package-upload/complete"
+                  ? operation.text.includes("#/components/parameters/SkillPackageCompleteIdempotencyKey")
+                  : operationId === "validateSkillDraft" && operation.method === "POST" && operation.path === "/v1/skills/{skill_id}/validate"
+                    ? operation.text.includes("#/components/parameters/SkillValidateIdempotencyKey")
+                    : operationId === "publishSkill" && operation.method === "POST" && operation.path === "/v1/skills/{skill_id}/publish"
+                      ? operation.text.includes("#/components/parameters/SkillPublishIdempotencyKey")
+                      : operationId === "createPersonalSkillVersion" && operation.method === "POST" && operation.path === "/v1/self/skills/{skill_id}/versions"
+                        ? operation.text.includes("#/components/parameters/CreatePersonalSkillVersionIdempotencyKey")
+                        : operationId === "withdrawPersonalSkill" && operation.method === "POST" && operation.path === "/v1/self/skills/{skill_id}/withdraw"
+                          ? operation.text.includes("#/components/parameters/WithdrawPersonalSkillIdempotencyKey")
+                          : operationId === "replaceAdminModelRouting"
+                            ? operation.text.includes("#/components/parameters/AdminModelRoutingIdempotencyKey")
+                            : operation.text.includes("#/components/parameters/IdempotencyKey")
     if (declared !== expected) continue
     if (expected === "required" && !hasParameter) {
       errors.push(`${operation.method} ${operation.path} (${operationId}) must reference Idempotency-Key`)
@@ -1722,11 +1750,7 @@ function scheduledTaskTimingContractErrors(schemas: Map<string, NamedBlock>): st
   return errors
 }
 
-function managedPersonalSkillContractErrors(
-  schemas: Map<string, NamedBlock>,
-  operations: OperationBlock[],
-  responses: Map<string, NamedBlock>,
-): string[] {
+function managedPersonalSkillContractErrors(schemas: Map<string, NamedBlock>, operations: OperationBlock[], responses: Map<string, NamedBlock>): string[] {
   const errors: string[] = []
   const require = (condition: boolean, message: string): void => {
     if (!condition) errors.push(`managed personal Skill ${message}`)
@@ -1771,7 +1795,8 @@ function managedPersonalSkillContractErrors(
       "x-kokoro-stability": "beta",
       "x-kokoro-idempotency": "none",
       "x-kokoro-permission": "product.skill.read_managed_personal",
-    })) require(operation.fields.get(field) === value, `${id} ${field} must equal ${value}`)
+    }))
+      require(operation.fields.get(field) === value, `${id} ${field} must equal ${value}`)
     require(!operation.text.includes("requestBody:"), `${id} must not publish a request body`)
     const actual = collectResponseBlocks(operation)
     require(JSON.stringify([...actual.keys()]) === JSON.stringify(Object.keys(profile.responses)), `${id} status profile drifted`)
@@ -1781,8 +1806,20 @@ function managedPersonalSkillContractErrors(
   const resource = schemas.get("ManagedPersonalSkillResource")
   require(resource !== undefined, "resource schema is required")
   if (resource !== undefined) {
-    require(JSON.stringify(topLevelRequired(resource)) === JSON.stringify(["skill_id", "source_ref", "series_id", "revision", "name", "summary", "tags", "status", "skill_updated_at"]), "resource must require the safe nine fields")
-    require(schemaProperties(resource).join(",") === "skill_id,source_ref,series_id,revision,name,summary,tags,status,skill_updated_at", "resource must define only the safe nine fields")
+    require(JSON.stringify(topLevelRequired(resource)) ===
+      JSON.stringify([
+        "skill_id",
+        "source_ref",
+        "series_id",
+        "revision",
+        "name",
+        "summary",
+        "tags",
+        "status",
+        "skill_updated_at",
+      ]), "resource must require the safe nine fields")
+    require(schemaProperties(resource).join(",") ===
+      "skill_id,source_ref,series_id,revision,name,summary,tags,status,skill_updated_at", "resource must define only the safe nine fields")
     require(/^      additionalProperties: false$/mu.test(resource.text), "resource must be closed")
     require(resource.text.includes("enum: [draft, active, disabled, withdrawn, quarantined]"), "resource must close the five management states")
     require(resource.text.includes('skill_updated_at: { type: string, format: date-time, pattern: "Z$" }'), "resource Skill update instant must remain UTC Z")
@@ -1791,85 +1828,108 @@ function managedPersonalSkillContractErrors(
   const detail = schemas.get("ManagedPersonalSkillDetailResponse")
   const errorDetail = schemas.get("ManagedPersonalSkillErrorDetail")
   const error = schemas.get("ManagedPersonalSkillErrorResponse")
-  require(
-    list !== undefined &&
-      JSON.stringify(topLevelRequired(list)) === JSON.stringify(["data", "meta"]) &&
-      schemaProperties(list).join(",") === "data,skills,next_cursor,meta" &&
-      list.text.includes("required: [skills, next_cursor]") &&
-      list.text.includes("type: [string, 'null']") &&
-      (list.text.match(/additionalProperties: false/gu) ?? []).length === 2,
-    "list must have closed top-level and nested data with required nullable cursor",
-  )
-  require(
-    detail !== undefined &&
-      JSON.stringify(topLevelRequired(detail)) === JSON.stringify(["data", "meta"]) &&
-      schemaProperties(detail).join(",") === "data,meta" &&
-      (detail.text.match(/additionalProperties: false/gu) ?? []).length === 1,
-    "detail must be closed data/meta",
-  )
-  require(
-    errorDetail !== undefined &&
-      JSON.stringify(topLevelRequired(errorDetail)) === JSON.stringify(["code", "message"]) &&
-      schemaProperties(errorDetail).join(",") === "code,message" &&
-      (errorDetail.text.match(/additionalProperties: false/gu) ?? []).length === 1 &&
-      !errorDetail.text.includes("retryable"),
-    "error detail must be closed code/message without retryable",
-  )
-  require(
-    error !== undefined &&
-      JSON.stringify(topLevelRequired(error)) === JSON.stringify(["error", "meta"]) &&
-      schemaProperties(error).join(",") === "error,meta" &&
-      (error.text.match(/additionalProperties: false/gu) ?? []).length === 1 &&
-      !error.text.includes("retryable"),
-    "error response must be closed error/meta without retryable",
-  )
+  require(list !== undefined &&
+    JSON.stringify(topLevelRequired(list)) === JSON.stringify(["data", "meta"]) &&
+    schemaProperties(list).join(",") === "data,skills,next_cursor,meta" &&
+    list.text.includes("required: [skills, next_cursor]") &&
+    list.text.includes("type: [string, 'null']") &&
+    (list.text.match(/additionalProperties: false/gu) ?? []).length === 2, "list must have closed top-level and nested data with required nullable cursor")
+  require(detail !== undefined &&
+    JSON.stringify(topLevelRequired(detail)) === JSON.stringify(["data", "meta"]) &&
+    schemaProperties(detail).join(",") === "data,meta" &&
+    (detail.text.match(/additionalProperties: false/gu) ?? []).length === 1, "detail must be closed data/meta")
+  require(errorDetail !== undefined &&
+    JSON.stringify(topLevelRequired(errorDetail)) === JSON.stringify(["code", "message"]) &&
+    schemaProperties(errorDetail).join(",") === "code,message" &&
+    (errorDetail.text.match(/additionalProperties: false/gu) ?? []).length === 1 &&
+    !errorDetail.text.includes("retryable"), "error detail must be closed code/message without retryable")
+  require(error !== undefined &&
+    JSON.stringify(topLevelRequired(error)) === JSON.stringify(["error", "meta"]) &&
+    schemaProperties(error).join(",") === "error,meta" &&
+    (error.text.match(/additionalProperties: false/gu) ?? []).length === 1 &&
+    !error.text.includes("retryable"), "error response must be closed error/meta without retryable")
   const responseProfiles: Record<string, Readonly<{ schema: string; codes?: readonly string[] }>> = {
     ManagedPersonalSkillListOk: { schema: "ManagedPersonalSkillListResponse" },
     ManagedPersonalSkillDetailOk: { schema: "ManagedPersonalSkillDetailResponse" },
     ManagedPersonalSkillBadRequest: { schema: "ManagedPersonalSkillErrorResponse", codes: ["invalid_skill_request"] },
     ManagedPersonalSkillUnauthorized: { schema: "ManagedPersonalSkillErrorResponse", codes: ["session_authentication_required", "session_invalid"] },
-    ManagedPersonalSkillForbidden: { schema: "ManagedPersonalSkillErrorResponse", codes: ["service_auth_failed", "session_forbidden", "product_tenant_forbidden"] },
+    ManagedPersonalSkillForbidden: {
+      schema: "ManagedPersonalSkillErrorResponse",
+      codes: ["service_auth_failed", "session_forbidden", "product_tenant_forbidden"],
+    },
     ManagedPersonalSkillNotFound: { schema: "ManagedPersonalSkillErrorResponse", codes: ["skill_not_found"] },
     ManagedPersonalSkillRateLimited: { schema: "ManagedPersonalSkillErrorResponse", codes: ["session_rate_limited"] },
     ManagedPersonalSkillBadGateway: { schema: "ManagedPersonalSkillErrorResponse", codes: ["skill_response_invalid"] },
-    ManagedPersonalSkillUnavailable: { schema: "ManagedPersonalSkillErrorResponse", codes: ["product_tenant_not_configured", "iam_admission_unavailable", "skill_dependency_unavailable"] },
+    ManagedPersonalSkillUnavailable: {
+      schema: "ManagedPersonalSkillErrorResponse",
+      codes: ["product_tenant_not_configured", "iam_admission_unavailable", "skill_dependency_unavailable"],
+    },
   }
   for (const [name, profile] of Object.entries(responseProfiles)) {
     const text = responses.get(name)?.text ?? ""
-    require(text.includes("x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }") && text.includes("Cache-Control: { required: true, schema: { type: string, const: no-store } }"), `${name} must require bounded request ID and no-store`)
+    require(text.includes("x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }") &&
+      text.includes("Cache-Control: { required: true, schema: { type: string, const: no-store } }"), `${name} must require bounded request ID and no-store`)
     require(text.includes(`#/components/schemas/${profile.schema}`), `${name} must use ${profile.schema}`)
     if (profile.codes !== undefined) require(text.includes(`code: { type: string, enum: [${profile.codes.join(", ")}] }`), `${name} code profile drifted`)
   }
   const retryPattern = "^(?:[1-9][0-9]{0,3}|[1-7][0-9]{4}|8[0-5][0-9]{3}|86[0-3][0-9]{2}|86400)(?![\\s\\S])"
-  require((responses.get("ManagedPersonalSkillRateLimited")?.text ?? "").includes(`pattern: '${retryPattern}'`), "429 Retry-After must be the exact bounded 1..86400 whole-string pattern")
+  require((responses.get("ManagedPersonalSkillRateLimited")?.text ?? "").includes(
+    `pattern: '${retryPattern}'`,
+  ), "429 Retry-After must be the exact bounded 1..86400 whole-string pattern")
   return errors
 }
 
-function personalSkillLifecycleContractErrors(
-  schemas: Map<string, NamedBlock>,
-  operations: OperationBlock[],
-  responses: Map<string, NamedBlock>,
-): string[] {
+function personalSkillLifecycleContractErrors(schemas: Map<string, NamedBlock>, operations: OperationBlock[], responses: Map<string, NamedBlock>): string[] {
   const errors: string[] = []
-  const require = (condition: boolean, message: string): void => { if (!condition) errors.push(`personal Skill lifecycle ${message}`) }
+  const require = (condition: boolean, message: string): void => {
+    if (!condition) errors.push(`personal Skill lifecycle ${message}`)
+  }
   const profiles = {
-    createPersonalSkillVersion: { path: "/v1/self/skills/{skill_id}/versions", success: "201", response: "CreatePersonalSkillVersionResponse", key: "CreatePersonalSkillVersionIdempotencyKey" },
-    withdrawPersonalSkill: { path: "/v1/self/skills/{skill_id}/withdraw", success: "200", response: "WithdrawPersonalSkillResponse", key: "WithdrawPersonalSkillIdempotencyKey" },
+    createPersonalSkillVersion: {
+      path: "/v1/self/skills/{skill_id}/versions",
+      success: "201",
+      response: "CreatePersonalSkillVersionResponse",
+      key: "CreatePersonalSkillVersionIdempotencyKey",
+    },
+    withdrawPersonalSkill: {
+      path: "/v1/self/skills/{skill_id}/withdraw",
+      success: "200",
+      response: "WithdrawPersonalSkillResponse",
+      key: "WithdrawPersonalSkillIdempotencyKey",
+    },
   } as const
   for (const [id, profile] of Object.entries(profiles)) {
     const matches = operations.filter((operation) => operation.fields.get("operationId") === id)
     const operation = matches.length === 1 ? matches[0] : undefined
     require(operation?.method === "POST" && operation.path === profile.path, `${id} exact route drifted`)
     if (!operation) continue
-    for (const [field, value] of Object.entries({ "x-kokoro-owner": "kokoro-bff", "x-kokoro-visibility": "public", "x-kokoro-stability": "beta", "x-kokoro-idempotency": "required", "x-kokoro-permission": "product.skill.manage_personal" }))
+    for (const [field, value] of Object.entries({
+      "x-kokoro-owner": "kokoro-bff",
+      "x-kokoro-visibility": "public",
+      "x-kokoro-stability": "beta",
+      "x-kokoro-idempotency": "required",
+      "x-kokoro-permission": "product.skill.manage_personal",
+    }))
       require(operation.fields.get(field) === value, `${id} ${field} drifted`)
     require(operation.text.includes(`#/components/parameters/${profile.key}`), `${id} key profile drifted`)
     require(operation.text.includes(`#/components/schemas/${profile.response}`), `${id} success response drifted`)
-    const expectedErrors = { "400": "BadRequest", "401": "Unauthorized", "403": "Forbidden", "404": "NotFound", "409": "Conflict", "412": "PreconditionFailed", "413": "PayloadTooLarge", "429": "RateLimited", "502": "BadGateway", "503": "Unavailable" }
+    const expectedErrors = {
+      "400": "BadRequest",
+      "401": "Unauthorized",
+      "403": "Forbidden",
+      "404": "NotFound",
+      "409": "Conflict",
+      "412": "PreconditionFailed",
+      "413": "PayloadTooLarge",
+      "429": "RateLimited",
+      "502": "BadGateway",
+      "503": "Unavailable",
+    }
     const actual = collectResponseBlocks(operation)
     require(JSON.stringify([...actual.keys()]) === JSON.stringify([profile.success, ...Object.keys(expectedErrors)]), `${id} status profile drifted`)
     for (const [status, suffix] of Object.entries(expectedErrors))
-      require(actual.get(status)?.trim() === `'${status}': { $ref: '#/components/responses/PersonalSkillLifecycle${suffix}' }`, `${id} ${status} response drifted`)
+      require(actual.get(status)?.trim() ===
+        `'${status}': { $ref: '#/components/responses/PersonalSkillLifecycle${suffix}' }`, `${id} ${status} response drifted`)
   }
   for (const [name, required, properties] of [
     ["CreatePersonalSkillVersionRequest", "display_name,summary,tags", "display_name,summary,tags"],
@@ -1880,28 +1940,49 @@ function personalSkillLifecycleContractErrors(
     ["PersonalSkillLifecycleErrorResponse", "error,meta", "error,meta"],
   ] as const) {
     const block = schemas.get(name)
-    require(block !== undefined && topLevelRequired(block).join(",") === required && schemaProperties(block).join(",") === properties && block.text.includes("additionalProperties: false"), `${name} must be closed`)
+    require(block !== undefined &&
+      topLevelRequired(block).join(",") === required &&
+      schemaProperties(block).join(",") === properties &&
+      block.text.includes("additionalProperties: false"), `${name} must be closed`)
     if (name.includes("Error")) require(!(block?.text.includes("retryable") ?? true), `${name} must not expose retryable`)
   }
   const versionRequest = schemas.get("CreatePersonalSkillVersionRequest")?.text ?? ""
-  require(versionRequest.includes("maxLength: 255") && versionRequest.includes("pattern: '.*\\S.*'") && versionRequest.includes("maxLength: 65535") && versionRequest.includes("maxItems: 100") && versionRequest.includes("maxLength: 128"), "CreateVersion metadata must match CreateSkillDraftRequest constraints")
+  require(versionRequest.includes("maxLength: 255") &&
+    versionRequest.includes("pattern: '.*\\S.*'") &&
+    versionRequest.includes("maxLength: 65535") &&
+    versionRequest.includes("maxItems: 100") &&
+    versionRequest.includes("maxLength: 128"), "CreateVersion metadata must match CreateSkillDraftRequest constraints")
   const versionResponseBlock = schemas.get("CreatePersonalSkillVersionResponse")
   const withdrawResponseBlock = schemas.get("WithdrawPersonalSkillResponse")
   const versionResponse = versionResponseBlock?.text ?? ""
   const withdrawResponse = withdrawResponseBlock?.text ?? ""
-  require(versionResponseBlock !== undefined && topLevelRequired(versionResponseBlock).join(",") === "data,meta" && schemaProperties(versionResponseBlock).join(",") === "data,meta", "CreateVersion wrapper must be strict data/meta")
-  require(withdrawResponseBlock !== undefined && topLevelRequired(withdrawResponseBlock).join(",") === "data,meta" && schemaProperties(withdrawResponseBlock).join(",") === "data,meta", "Withdraw wrapper must be strict data/meta")
-  require(versionResponse.includes("additionalProperties: false") && versionResponse.includes("data: { $ref: '#/components/schemas/CreatePersonalSkillVersionResource' }") && versionResponse.includes("meta: { $ref: '#/components/schemas/RequestMeta' }"), "CreateVersion wrapper refs drifted")
-  require(withdrawResponse.includes("additionalProperties: false") && withdrawResponse.includes("data: { $ref: '#/components/schemas/WithdrawPersonalSkillResource' }") && withdrawResponse.includes("meta: { $ref: '#/components/schemas/RequestMeta' }"), "Withdraw wrapper refs drifted")
-  require((schemas.get("CreatePersonalSkillVersionResource")?.text ?? "").includes("status: { type: string, const: draft }"), "CreateVersion status must be draft")
-  require((schemas.get("WithdrawPersonalSkillResource")?.text ?? "").includes("status: { type: string, const: withdrawn }"), "Withdraw status must be withdrawn")
+  require(versionResponseBlock !== undefined &&
+    topLevelRequired(versionResponseBlock).join(",") === "data,meta" &&
+    schemaProperties(versionResponseBlock).join(",") === "data,meta", "CreateVersion wrapper must be strict data/meta")
+  require(withdrawResponseBlock !== undefined &&
+    topLevelRequired(withdrawResponseBlock).join(",") === "data,meta" &&
+    schemaProperties(withdrawResponseBlock).join(",") === "data,meta", "Withdraw wrapper must be strict data/meta")
+  require(versionResponse.includes("additionalProperties: false") &&
+    versionResponse.includes("data: { $ref: '#/components/schemas/CreatePersonalSkillVersionResource' }") &&
+    versionResponse.includes("meta: { $ref: '#/components/schemas/RequestMeta' }"), "CreateVersion wrapper refs drifted")
+  require(withdrawResponse.includes("additionalProperties: false") &&
+    withdrawResponse.includes("data: { $ref: '#/components/schemas/WithdrawPersonalSkillResource' }") &&
+    withdrawResponse.includes("meta: { $ref: '#/components/schemas/RequestMeta' }"), "Withdraw wrapper refs drifted")
+  require((schemas.get("CreatePersonalSkillVersionResource")?.text ?? "").includes(
+    "status: { type: string, const: draft }",
+  ), "CreateVersion status must be draft")
+  require((schemas.get("WithdrawPersonalSkillResource")?.text ?? "").includes(
+    "status: { type: string, const: withdrawn }",
+  ), "Withdraw status must be withdrawn")
   const revisionText = schemas.get("CreatePersonalSkillVersionResource")?.text ?? ""
   const revisionPattern = /revision: \{ type: string, pattern: '([^']+)' \}/u.exec(revisionText)?.[1]
   require(revisionPattern !== undefined, "revision pattern is required")
   if (revisionPattern !== undefined) {
     const pattern = new RegExp(revisionPattern, "u")
-    for (const value of ["2", "18446744073709540000", "18446744073709550000", "18446744073709551615"]) require(pattern.test(value), `revision must accept ${value}`)
-    for (const value of ["0", "1", "01", "-2", "2.0", "2\n", "18446744073709551616"]) require(!pattern.test(value), `revision must reject ${JSON.stringify(value)}`)
+    for (const value of ["2", "18446744073709540000", "18446744073709550000", "18446744073709551615"])
+      require(pattern.test(value), `revision must accept ${value}`)
+    for (const value of ["0", "1", "01", "-2", "2.0", "2\n", "18446744073709551616"])
+      require(!pattern.test(value), `revision must reject ${JSON.stringify(value)}`)
   }
   const eventText = schemas.get("WithdrawPersonalSkillResource")?.text ?? ""
   const eventPattern = /event_id: \{ type: string, pattern: '([^']+)' \}/u.exec(eventText)?.[1]
@@ -1909,7 +1990,8 @@ function personalSkillLifecycleContractErrors(
   if (eventPattern !== undefined) {
     const pattern = new RegExp(eventPattern, "u")
     require(pattern.test(`evt:${"a".repeat(64)}`), "event must accept exact evt sha256")
-    for (const value of [`evt:${"a".repeat(63)}`, `evt:${"a".repeat(65)}`, `evt:${"A".repeat(64)}`, `evt:${"a".repeat(64)}\n`]) require(!pattern.test(value), `event must reject ${JSON.stringify(value)}`)
+    for (const value of [`evt:${"a".repeat(63)}`, `evt:${"a".repeat(65)}`, `evt:${"A".repeat(64)}`, `evt:${"a".repeat(64)}\n`])
+      require(!pattern.test(value), `event must reject ${JSON.stringify(value)}`)
   }
   const reasonText = schemas.get("WithdrawPersonalSkillRequest")?.text ?? ""
   const reasonPattern = /reason: \{ type: string, minLength: 1, maxLength: 2048, pattern: '([^']+)' \}/u.exec(reasonText)?.[1]
@@ -1923,14 +2005,19 @@ function personalSkillLifecycleContractErrors(
     PersonalSkillLifecycleBadRequest: ["invalid_skill_request", "idempotency_key_required", "invalid_idempotency_key"],
     PersonalSkillLifecycleUnauthorized: ["session_authentication_required", "session_invalid"],
     PersonalSkillLifecycleForbidden: ["service_auth_failed", "session_forbidden", "product_tenant_forbidden"],
-    PersonalSkillLifecycleNotFound: ["skill_not_found"], PersonalSkillLifecycleConflict: ["skill_idempotency_conflict", "skill_command_in_progress"],
-    PersonalSkillLifecyclePreconditionFailed: ["skill_precondition_failed"], PersonalSkillLifecyclePayloadTooLarge: ["request_body_too_large"],
-    PersonalSkillLifecycleRateLimited: ["session_rate_limited", "skill_rate_limited"], PersonalSkillLifecycleBadGateway: ["skill_response_invalid"],
+    PersonalSkillLifecycleNotFound: ["skill_not_found"],
+    PersonalSkillLifecycleConflict: ["skill_idempotency_conflict", "skill_command_in_progress"],
+    PersonalSkillLifecyclePreconditionFailed: ["skill_precondition_failed"],
+    PersonalSkillLifecyclePayloadTooLarge: ["request_body_too_large"],
+    PersonalSkillLifecycleRateLimited: ["session_rate_limited", "skill_rate_limited"],
+    PersonalSkillLifecycleBadGateway: ["skill_response_invalid"],
     PersonalSkillLifecycleUnavailable: ["product_tenant_not_configured", "iam_admission_unavailable", "skill_dependency_unavailable"],
   }
   for (const [name, codes] of Object.entries(responseCodes)) {
     const text = responses.get(name)?.text ?? ""
-    require(text.includes("x-request-id: { required: true") && text.includes("Cache-Control: { required: true") && text.includes("const: no-store"), `${name} headers drifted`)
+    require(text.includes("x-request-id: { required: true") &&
+      text.includes("Cache-Control: { required: true") &&
+      text.includes("const: no-store"), `${name} headers drifted`)
     require(text.includes("#/components/schemas/PersonalSkillLifecycleErrorResponse"), `${name} envelope drifted`)
     require(text.includes(`code: { type: string, enum: [${codes.join(", ")}] }`), `${name} code tuple drifted`)
   }
@@ -2184,8 +2271,12 @@ function projectDeletionContractErrors(
   require(/^  version: 8\.9\.0$/mu.test(source), "public contract version must be 8.9.0")
   const deletion = operations.filter((operation) => operation.fields.get("operationId") === "deleteProject")
   const status = operations.filter((operation) => operation.fields.get("operationId") === "getProjectDeletion")
-  require(deletion.length === 1 && deletion[0]?.method === "DELETE" && deletion[0]?.path === "/v1/projects/{projectId}", "must publish one DELETE /v1/projects/{projectId}")
-  require(status.length === 1 && status[0]?.method === "GET" && status[0]?.path === "/v1/projects/{projectId}/deletion", "must publish one GET /v1/projects/{projectId}/deletion")
+  require(deletion.length === 1 &&
+    deletion[0]?.method === "DELETE" &&
+    deletion[0]?.path === "/v1/projects/{projectId}", "must publish one DELETE /v1/projects/{projectId}")
+  require(status.length === 1 &&
+    status[0]?.method === "GET" &&
+    status[0]?.path === "/v1/projects/{projectId}/deletion", "must publish one GET /v1/projects/{projectId}/deletion")
   for (const [operation, permission, idempotency, name] of [
     [deletion[0], "project.update", "required", "deleteProject"],
     [status[0], "project.read", "none", "getProjectDeletion"],
@@ -2204,24 +2295,24 @@ function projectDeletionContractErrors(
   }
   require(deletion[0]?.text.includes("#/components/parameters/ProjectDeletionId") === true, "DELETE must override generic ProjectId")
   require(deletion[0]?.text.includes("#/components/parameters/ProjectDeletionIdempotencyKey") === true, "DELETE must use its dedicated key")
-  require(
-    source.includes("  /v1/projects/{projectId}/deletion:\n    parameters:\n      - $ref: '#/components/parameters/ProjectDeletionId'"),
-    "status path must bind ProjectDeletionId",
-  )
+  require(source.includes(
+    "  /v1/projects/{projectId}/deletion:\n    parameters:\n      - $ref: '#/components/parameters/ProjectDeletionId'",
+  ), "status path must bind ProjectDeletionId")
   const id = parameters.get("ProjectDeletionId")?.text ?? ""
   const key = parameters.get("ProjectDeletionIdempotencyKey")?.text ?? ""
   const idPattern = "pattern: '^project_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?![\\s\\S])'"
-  require(id.includes("name: projectId") && id.includes("in: path") && id.includes("required: true") && id.includes("type: string") && id.includes(idPattern), "ProjectDeletionId must be canonical and absolute")
-  require(
-    key.includes("name: Idempotency-Key") &&
-      key.includes("in: header") &&
-      key.includes("required: true") &&
-      key.includes("type: string") &&
-      key.includes("minLength: 1") &&
-      key.includes("maxLength: 128") &&
-      key.includes("pattern: '^[\\x21-\\x2B\\x2D-\\x7E]{1,128}(?![\\s\\S])'"),
-    "ProjectDeletionIdempotencyKey must be one bounded absolute printable header",
-  )
+  require(id.includes("name: projectId") &&
+    id.includes("in: path") &&
+    id.includes("required: true") &&
+    id.includes("type: string") &&
+    id.includes(idPattern), "ProjectDeletionId must be canonical and absolute")
+  require(key.includes("name: Idempotency-Key") &&
+    key.includes("in: header") &&
+    key.includes("required: true") &&
+    key.includes("type: string") &&
+    key.includes("minLength: 1") &&
+    key.includes("maxLength: 128") &&
+    key.includes("pattern: '^[\\x21-\\x2B\\x2D-\\x7E]{1,128}(?![\\s\\S])'"), "ProjectDeletionIdempotencyKey must be one bounded absolute printable header")
   const expectedSchemas = {
     ProjectDeletionAcceptedResource: ["project_id", "logical_release_state", "physical_cleanup_state"],
     ProjectDeletionStatusResource: ["project_id", "logical_release_state", "physical_cleanup_state"],
@@ -2235,27 +2326,48 @@ function projectDeletionContractErrors(
     require(schema !== undefined && schemaProperties(schema).join(",") === fields.join(","), `${name} properties drifted`)
     require(schema?.text.includes("additionalProperties: false") === true, `${name} must be closed`)
   }
-  require(schemas.get("ProjectDeletionAcceptedResource")?.text.includes("logical_release_state: { type: string, const: pending }") === true, "DELETE ACK logical state must stay pending")
-  require(schemas.get("ProjectDeletionStatusResource")?.text.includes("logical_release_state: { type: string, enum: [pending, blocked, released] }") === true, "status logical states drifted")
+  require(schemas.get("ProjectDeletionAcceptedResource")?.text.includes("logical_release_state: { type: string, const: pending }") ===
+    true, "DELETE ACK logical state must stay pending")
+  require(schemas.get("ProjectDeletionStatusResource")?.text.includes("logical_release_state: { type: string, enum: [pending, blocked, released] }") ===
+    true, "status logical states drifted")
   for (const name of ["ProjectDeletionAcceptedResource", "ProjectDeletionStatusResource"])
     require(schemas.get(name)?.text.includes("physical_cleanup_state: { type: string, const: pending }") === true, `${name} physical state must stay pending`)
   const error = schemas.get("ProjectDeletionErrorResponse")?.text ?? ""
-  const allCodes = "invalid_project_deletion_request, idempotency_key_required, invalid_idempotency_key, session_authentication_required, session_invalid, service_auth_failed, session_forbidden, product_tenant_forbidden, project_not_found, idempotency_conflict, idempotency_in_progress, session_rate_limited, product_tenant_not_configured, iam_admission_unavailable, business_store_unavailable"
-  require(
-    JSON.stringify(topLevelRequired(schemas.get("ProjectDeletionErrorResponse") ?? { name: "", text: "" })) === '["error"]' &&
-      schemaProperties(schemas.get("ProjectDeletionErrorResponse") ?? { name: "", text: "" }).join(",") === "error,code,message,retryable" &&
-      error.includes("required: [code, message, retryable]") &&
-      error.includes(`enum: [${allCodes}]`) &&
-      error.includes("retryable: { type: boolean }") &&
-      (error.match(/additionalProperties: false/gu) ?? []).length === 2,
-    "error detail must be closed code/message/retryable",
-  )
-  const deleteProfiles = { "202": "ProjectDeletionAccepted", "400": "ProjectDeletionBadRequest", "401": "ProjectDeletionUnauthorized", "403": "ProjectDeletionForbidden", "404": "ProjectDeletionNotFound", "409": "ProjectDeletionConflict", "429": "ProjectDeletionRateLimited", "503": "ProjectDeletionUnavailable" } as const
-  const statusProfiles = { "200": "ProjectDeletionStatusSuccess", "400": "ProjectDeletionStatusBadRequest", "401": "ProjectDeletionUnauthorized", "403": "ProjectDeletionForbidden", "404": "ProjectDeletionNotFound", "429": "ProjectDeletionRateLimited", "503": "ProjectDeletionUnavailable" } as const
-  for (const [operation, expected, name] of [[deletion[0], deleteProfiles, "deleteProject"], [status[0], statusProfiles, "getProjectDeletion"]] as const) {
+  const allCodes =
+    "invalid_project_deletion_request, idempotency_key_required, invalid_idempotency_key, session_authentication_required, session_invalid, service_auth_failed, session_forbidden, product_tenant_forbidden, project_not_found, idempotency_conflict, idempotency_in_progress, session_rate_limited, product_tenant_not_configured, iam_admission_unavailable, business_store_unavailable"
+  require(JSON.stringify(topLevelRequired(schemas.get("ProjectDeletionErrorResponse") ?? { name: "", text: "" })) === '["error"]' &&
+    schemaProperties(schemas.get("ProjectDeletionErrorResponse") ?? { name: "", text: "" }).join(",") === "error,code,message,retryable" &&
+    error.includes("required: [code, message, retryable]") &&
+    error.includes(`enum: [${allCodes}]`) &&
+    error.includes("retryable: { type: boolean }") &&
+    (error.match(/additionalProperties: false/gu) ?? []).length === 2, "error detail must be closed code/message/retryable")
+  const deleteProfiles = {
+    "202": "ProjectDeletionAccepted",
+    "400": "ProjectDeletionBadRequest",
+    "401": "ProjectDeletionUnauthorized",
+    "403": "ProjectDeletionForbidden",
+    "404": "ProjectDeletionNotFound",
+    "409": "ProjectDeletionConflict",
+    "429": "ProjectDeletionRateLimited",
+    "503": "ProjectDeletionUnavailable",
+  } as const
+  const statusProfiles = {
+    "200": "ProjectDeletionStatusSuccess",
+    "400": "ProjectDeletionStatusBadRequest",
+    "401": "ProjectDeletionUnauthorized",
+    "403": "ProjectDeletionForbidden",
+    "404": "ProjectDeletionNotFound",
+    "429": "ProjectDeletionRateLimited",
+    "503": "ProjectDeletionUnavailable",
+  } as const
+  for (const [operation, expected, name] of [
+    [deletion[0], deleteProfiles, "deleteProject"],
+    [status[0], statusProfiles, "getProjectDeletion"],
+  ] as const) {
     const actual = operation === undefined ? new Map<string, string>() : collectResponseBlocks(operation)
     require(JSON.stringify([...actual.keys()]) === JSON.stringify(Object.keys(expected)), `${name} status set drifted`)
-    for (const [code, component] of Object.entries(expected)) require(actual.get(code)?.includes(`#/components/responses/${component}`) === true, `${name} ${code} response drifted`)
+    for (const [code, component] of Object.entries(expected))
+      require(actual.get(code)?.includes(`#/components/responses/${component}`) === true, `${name} ${code} response drifted`)
   }
   const codes = {
     ProjectDeletionBadRequest: "invalid_project_deletion_request, idempotency_key_required, invalid_idempotency_key",
@@ -2275,17 +2387,31 @@ function projectDeletionContractErrors(
     if (name !== "ProjectDeletionAccepted" && name !== "ProjectDeletionStatusSuccess")
       require(text.includes("#/components/schemas/ProjectDeletionErrorResponse"), `${name} must use ProjectDeletionErrorResponse`)
   }
-  require(responseComponents.get("ProjectDeletionAccepted")?.text.includes("#/components/schemas/ProjectDeletionAcceptedResponse") === true, "202 schema drifted")
-  require(responseComponents.get("ProjectDeletionAccepted")?.text.includes("pattern: '^/v1/projects/project_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/deletion(?![\\s\\S])'") === true, "202 Location drifted")
-  require(responseComponents.get("ProjectDeletionStatusSuccess")?.text.includes("#/components/schemas/ProjectDeletionStatusResponse") === true, "status success schema drifted")
+  require(responseComponents.get("ProjectDeletionAccepted")?.text.includes("#/components/schemas/ProjectDeletionAcceptedResponse") ===
+    true, "202 schema drifted")
+  require(responseComponents
+    .get("ProjectDeletionAccepted")
+    ?.text.includes("pattern: '^/v1/projects/project_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/deletion(?![\\s\\S])'") ===
+    true, "202 Location drifted")
+  require(responseComponents.get("ProjectDeletionStatusSuccess")?.text.includes("#/components/schemas/ProjectDeletionStatusResponse") ===
+    true, "status success schema drifted")
   for (const [name, expectedCodes] of Object.entries(codes)) {
     const text = responseComponents.get(name)?.text ?? ""
     require(text.includes(`code: { type: string, enum: [${expectedCodes}] }`), `${name} codes drifted`)
-    require(text.includes(`retryable: { type: boolean, const: ${name === "ProjectDeletionRateLimited" || name === "ProjectDeletionUnavailable"} }`), `${name} retryable drifted`)
+    require(text.includes(
+      `retryable: { type: boolean, const: ${name === "ProjectDeletionRateLimited" || name === "ProjectDeletionUnavailable"} }`,
+    ), `${name} retryable drifted`)
   }
   const conflict = responseComponents.get("ProjectDeletionConflict")?.text ?? ""
-  require(conflict.includes("code: { type: string, const: idempotency_conflict }") && conflict.includes("retryable: { type: boolean, const: false }") && conflict.includes("code: { type: string, const: idempotency_in_progress }") && conflict.includes("retryable: { type: boolean, const: true }"), "conflict code retryability drifted")
-  require(responseComponents.get("ProjectDeletionRateLimited")?.text.includes("Retry-After: { required: false, schema: { type: string, pattern: '^(?:[1-9]|[1-9][0-9]{1,3}|[1-7][0-9]{4}|8[0-5][0-9]{3}|86[0-3][0-9]{2}|86400)(?![\\s\\S])' } }") === true, "Retry-After profile drifted")
+  require(conflict.includes("code: { type: string, const: idempotency_conflict }") &&
+    conflict.includes("retryable: { type: boolean, const: false }") &&
+    conflict.includes("code: { type: string, const: idempotency_in_progress }") &&
+    conflict.includes("retryable: { type: boolean, const: true }"), "conflict code retryability drifted")
+  require(responseComponents
+    .get("ProjectDeletionRateLimited")
+    ?.text.includes(
+      "Retry-After: { required: false, schema: { type: string, pattern: '^(?:[1-9]|[1-9][0-9]{1,3}|[1-7][0-9]{4}|8[0-5][0-9]{3}|86[0-3][0-9]{2}|86400)(?![\\s\\S])' } }",
+    ) === true, "Retry-After profile drifted")
   for (const clause of ["original 202 pending", "current authoritative status GET", "new key", "returns 404"])
     require(deletion[0]?.text.includes(clause) === true, `DELETE replay clause missing: ${clause}`)
   return errors
@@ -2529,28 +2655,31 @@ function billingPersonalReadContractErrors(
   return errors
 }
 
-
-function personalizationContractErrors(
-  schemas: Map<string, NamedBlock>,
-  operations: OperationBlock[],
-  responses: Map<string, NamedBlock>,
-): string[] {
+function personalizationContractErrors(schemas: Map<string, NamedBlock>, operations: OperationBlock[], responses: Map<string, NamedBlock>): string[] {
   const errors: string[] = []
   const require = (value: boolean, message: string): void => {
     if (!value) errors.push(`personalization: ${message}`)
   }
   const request = schemas.get("ReplaceSelfPersonalizationRequest")?.text ?? ""
   const fields = schemas.get("PersonalizationFields")?.text ?? ""
-  require(request.includes("additionalProperties: false") && request.includes("required: [expected_revision, nickname, occupation, about, instructions]"), "replacement must be closed and complete")
+  require(request.includes("additionalProperties: false") &&
+    request.includes("required: [expected_revision, nickname, occupation, about, instructions]"), "replacement must be closed and complete")
   require(request.includes("expected_revision: { type: integer, minimum: 0, maximum: 9007199254740991 }"), "replacement requires safe integer CAS")
-  require(fields.includes("additionalProperties: false") && fields.includes("required: [nickname, occupation, about, instructions]"), "fields must be closed and complete")
-  for (const [key, limit] of [["nickname", 128], ["occupation", 256], ["about", 2000], ["instructions", 8000]] as const)
+  require(fields.includes("additionalProperties: false") &&
+    fields.includes("required: [nickname, occupation, about, instructions]"), "fields must be closed and complete")
+  for (const [key, limit] of [
+    ["nickname", 128],
+    ["occupation", 256],
+    ["about", 2000],
+    ["instructions", 8000],
+  ] as const)
     for (const block of [request, fields])
       require(block.includes(`${key}: { type: string, maxLength: ${limit}, pattern: '^[^\\u0000]*$' }`), `${key} must preserve its scalar bound and reject NUL`)
   const absent = schemas.get("PersonalizationAbsent")?.text ?? ""
   const present = schemas.get("PersonalizationPresent")?.text ?? ""
   require(absent.includes("personalization: { type: 'null' }") && absent.includes("revision: { type: integer, const: 0 }"), "absent is exactly null/zero")
-  require(present.includes("personalization: { $ref: '#/components/schemas/PersonalizationFields' }") && present.includes("revision: { type: integer, minimum: 1, maximum: 9007199254740991 }"), "present requires fields/positive safe revision")
+  require(present.includes("personalization: { $ref: '#/components/schemas/PersonalizationFields' }") &&
+    present.includes("revision: { type: integer, minimum: 1, maximum: 9007199254740991 }"), "present requires fields/positive safe revision")
   for (const name of ["PersonalizationAbsent", "PersonalizationPresent"]) {
     const text = schemas.get(name)?.text ?? ""
     require(text.includes("additionalProperties: false") && text.includes("required: [personalization, revision]"), `${name} is a closed snapshot`)
@@ -2560,11 +2689,16 @@ function personalizationContractErrors(
     require(text.includes("additionalProperties: false") && text.includes("required: [data]") && !text.includes("meta:"), `${name} requires data only`)
   }
   const read = schemas.get("GetSelfPersonalizationResponse")?.text ?? ""
-  require(read.includes("oneOf:") && read.includes("#/components/schemas/PersonalizationAbsent") && read.includes("#/components/schemas/PersonalizationPresent"), "read binds absent and present snapshots")
-  require(schemas.get("ReplaceSelfPersonalizationResponse")?.text.includes("data: { $ref: '#/components/schemas/PersonalizationPresent' }") === true, "save ACK cannot be absent")
+  require(read.includes("oneOf:") &&
+    read.includes("#/components/schemas/PersonalizationAbsent") &&
+    read.includes("#/components/schemas/PersonalizationPresent"), "read binds absent and present snapshots")
+  require(schemas.get("ReplaceSelfPersonalizationResponse")?.text.includes("data: { $ref: '#/components/schemas/PersonalizationPresent' }") ===
+    true, "save ACK cannot be absent")
   const error = schemas.get("PersonalizationErrorResponse")?.text ?? ""
-  require(schemas.has("PersonalizationErrorResponse") && JSON.stringify(topLevelRequired(schemas.get("PersonalizationErrorResponse")!)) === JSON.stringify(["error"]), "error envelope has no meta")
-  require(error.includes("required: [code, message, retryable]") && (error.match(/additionalProperties: false/gu) ?? []).length === 2, "error is closed at both levels")
+  require(schemas.has("PersonalizationErrorResponse") &&
+    JSON.stringify(topLevelRequired(schemas.get("PersonalizationErrorResponse")!)) === JSON.stringify(["error"]), "error envelope has no meta")
+  require(error.includes("required: [code, message, retryable]") &&
+    (error.match(/additionalProperties: false/gu) ?? []).length === 2, "error is closed at both levels")
   const statusProfiles: Record<string, [string, string[]]> = {
     "400": ["BadRequest", ["invalid_personalization_request"]],
     "401": ["Unauthorized", ["service_auth_failed", "session_authentication_required", "session_invalid"]],
@@ -2575,7 +2709,8 @@ function personalizationContractErrors(
     "429": ["RateLimited", ["session_rate_limited"]],
     "503": ["Unavailable", ["product_tenant_not_configured", "iam_admission_unavailable", "personalization_unavailable", "personalization_save_unknown"]],
   }
-  const headers = (text: string): boolean => text.includes("x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }") &&
+  const headers = (text: string): boolean =>
+    text.includes("x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }") &&
     text.includes("Cache-Control: { required: true, schema: { type: string, const: no-store } }")
   for (const [method, id, verb, success] of [
     ["GET", "getSelfPersonalization", "read", "Read"],
@@ -2584,9 +2719,12 @@ function personalizationContractErrors(
     const op = operations.find((item) => item.path === "/v1/preferences/personalization" && item.method === method && item.fields.get("operationId") === id)
     require(op !== undefined, `${id} exact operation is required`)
     if (op === undefined) continue
-    require(op.fields.get("x-kokoro-idempotency") === "none" && op.fields.get("x-kokoro-permission") === `personalization.self.${verb}`, `${id} must retain caller-only CAS metadata`)
+    require(op.fields.get("x-kokoro-idempotency") === "none" &&
+      op.fields.get("x-kokoro-permission") === `personalization.self.${verb}`, `${id} must retain caller-only CAS metadata`)
     require(!op.text.includes("#/components/parameters/IdempotencyKey"), `${id} must not require a receipt key`)
-    require(method === "PUT" ? op.text.includes("requestBody:") && op.text.includes("#/components/schemas/ReplaceSelfPersonalizationRequest") : !op.text.includes("requestBody:"), `${id} body boundary drifted`)
+    require(method === "PUT"
+      ? op.text.includes("requestBody:") && op.text.includes("#/components/schemas/ReplaceSelfPersonalizationRequest")
+      : !op.text.includes("requestBody:"), `${id} body boundary drifted`)
     const expected: Record<string, string> = { "200": `Personalization${success}Success` }
     for (const [status, [name]] of Object.entries(statusProfiles))
       if (method === "PUT" || !["409", "413"].includes(status)) expected[status] = `Personalization${name}`
@@ -2595,32 +2733,41 @@ function personalizationContractErrors(
     for (const [status, name] of Object.entries(expected))
       require(actual.get(status)?.includes(`#/components/responses/${name}`) === true, `${id} ${status} component drifted`)
   }
-  for (const [name, schema] of [["Read", "GetSelfPersonalizationResponse"], ["Save", "ReplaceSelfPersonalizationResponse"]]) {
+  for (const [name, schema] of [
+    ["Read", "GetSelfPersonalizationResponse"],
+    ["Save", "ReplaceSelfPersonalizationResponse"],
+  ]) {
     const text = responses.get(`Personalization${name}Success`)?.text ?? ""
     require(headers(text) && text.includes(`#/components/schemas/${schema}`), `${name} success requires strict schema and headers`)
   }
   for (const [name, codes] of Object.values(statusProfiles)) {
     const text = responses.get(`Personalization${name}`)?.text ?? ""
-    require(headers(text) && text.includes("#/components/schemas/PersonalizationErrorResponse") && text.includes(`code: { type: string, enum: [${codes.join(", ")}] }`), `${name} requires stable codes and headers`)
+    require(headers(text) &&
+      text.includes("#/components/schemas/PersonalizationErrorResponse") &&
+      text.includes(`code: { type: string, enum: [${codes.join(", ")}] }`), `${name} requires stable codes and headers`)
   }
   return errors
 }
 
 // R323: closed public personal reads, independent from the valid execution projection.
-function personalMcpReadContractErrors(
-  schemas: Map<string, NamedBlock>,
-  operations: OperationBlock[],
-  responses: Map<string, NamedBlock>,
-): string[] {
+function personalMcpReadContractErrors(schemas: Map<string, NamedBlock>, operations: OperationBlock[], responses: Map<string, NamedBlock>): string[] {
   const errors: string[] = []
   const require = (condition: boolean, message: string): void => {
     if (!condition) errors.push(`personal MCP ${message}`)
   }
   // These existing named blocks are checked exactly, not exempted from governance by prefix.
   const exact = (actual: string, expected: string, name: string, indents: readonly number[]): void => {
-    const actualIndents = actual.split(/\r?\n/u).filter((line) => line.trim()).map(indentation)
+    const actualIndents = actual
+      .split(/\r?\n/u)
+      .filter((line) => line.trim())
+      .map(indentation)
     require(JSON.stringify(actualIndents) === JSON.stringify(indents), `${name} nesting drifted`)
-    const lines = (value: string): string => value.split(/\r?\n/u).map((line) => line.trim()).filter(Boolean).join("\n")
+    const lines = (value: string): string =>
+      value
+        .split(/\r?\n/u)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .join("\n")
     require(lines(actual) === lines(expected), `${name} closed shape drifted`)
   }
   const id = "{ type: string, minLength: 1, maxLength: 191, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\s\\S])' }"
@@ -2640,52 +2787,89 @@ Cache-Control: { required: true, schema: { type: string, const: no-store } }`
   const entries = [
     ["/v1/self/mcp/connectors", "listPersonalMcpConnectors", "ConnectorList", "items", "PersonalMcpConnector", "", ["limit", "cursor", "status"]],
     ["/v1/self/mcp/connectors/{connector_id}", "getPersonalMcpConnector", "ConnectorDetail", "connector", "PersonalMcpConnector", "connector_id", []],
-    ["/v1/self/mcp/connectors/{connector_id}/connections", "listPersonalMcpConnections", "ConnectionList", "items", "PersonalMcpConnection", "connector_id", ["limit", "cursor"]],
+    [
+      "/v1/self/mcp/connectors/{connector_id}/connections",
+      "listPersonalMcpConnections",
+      "ConnectionList",
+      "items",
+      "PersonalMcpConnection",
+      "connector_id",
+      ["limit", "cursor"],
+    ],
     ["/v1/self/mcp/connections/{connection_id}", "getPersonalMcpConnection", "ConnectionDetail", "connection", "PersonalMcpConnection", "connection_id", []],
   ] as const
   require(operations.filter((operation) => operation.path.startsWith("/v1/self/mcp/")).length === 4, "requires exactly four personal operations")
   for (const [pathName, operationId, kind, field, item, pathId, queries] of entries) {
     const matches = operations.filter((operation) => operation.fields.get("operationId") === operationId || operation.path === pathName)
     const operation = matches.length === 1 ? matches[0] : undefined
-    require(operation?.method === "GET" && operation.path === pathName && operation.fields.get("operationId") === operationId, `${operationId} method/path/identity drifted`)
+    require(operation?.method === "GET" &&
+      operation.path === pathName &&
+      operation.fields.get("operationId") === operationId, `${operationId} method/path/identity drifted`)
     if (operation === undefined) continue
-    for (const [key, value] of Object.entries({ owner: "kokoro-bff", visibility: "public", stability: "beta", idempotency: "none", permission: "product.mcp.read_personal" })) {
+    for (const [key, value] of Object.entries({
+      owner: "kokoro-bff",
+      visibility: "public",
+      stability: "beta",
+      idempotency: "none",
+      permission: "product.mcp.read_personal",
+    })) {
       require(operation.fields.get(`x-kokoro-${key}`) === value, `${operationId} ${key} drifted`)
     }
     require(!operation.fields.has("requestBody") && !operation.fields.has("security"), `${operationId} must retain inherited user admission and no body`)
-    require(operation.text.includes("Reject unknown or duplicate query keys, body, transfer-encoding and idempotency-key."), `${operationId} closed input rules missing`)
+    require(operation.text.includes(
+      "Reject unknown or duplicate query keys, body, transfer-encoding and idempotency-key.",
+    ), `${operationId} closed input rules missing`)
     const parameterText = operation.text.match(/^      parameters:\n([\s\S]*?)(?=^      [A-Za-z])/mu)?.[1] ?? ""
     const parameterLines: string[] = []
     if (pathId) parameterLines.push(`- name: ${pathId}\nin: path\nrequired: true\nschema: ${id}`)
     for (const query of queries) {
-      const shape = query === "limit" ? "{ type: integer, minimum: 1, maximum: 100, default: 50 }"
-        : query === "cursor" ? cursor : "{ type: string, enum: [pending, active, error, revoked] }"
+      const shape =
+        query === "limit"
+          ? "{ type: integer, minimum: 1, maximum: 100, default: 50 }"
+          : query === "cursor"
+            ? cursor
+            : "{ type: string, enum: [pending, active, error, revoked] }"
       parameterLines.push(`- name: ${query}\nin: query\nrequired: false\nschema: ${shape}`)
     }
-    exact(parameterText, parameterLines.join("\n"), `${operationId} parameters`, parameterLines.flatMap(() => [8, 10, 10, 10]))
+    exact(
+      parameterText,
+      parameterLines.join("\n"),
+      `${operationId} parameters`,
+      parameterLines.flatMap(() => [8, 10, 10, 10]),
+    )
     const expectedStatuses = ["200", ...Object.keys(failures).filter((status) => pathId || status !== "404")]
     const actualResponses = collectResponseBlocks(operation)
     require(JSON.stringify([...actualResponses.keys()].sort()) === JSON.stringify(expectedStatuses.sort()), `${operationId} status set drifted`)
     for (const status of expectedStatuses) {
-      const component = `PersonalMcp${status === "200" ? `${kind}Ok` : failures[status]?.[0] ?? ""}`
+      const component = `PersonalMcp${status === "200" ? `${kind}Ok` : (failures[status]?.[0] ?? "")}`
       exact(actualResponses.get(status) ?? "", `'${status}': { $ref: '#/components/responses/${component}' }`, `${operationId} ${status}`, [8])
     }
     const responseSchema = `PersonalMcp${kind}Response`
-    exact(responses.get(`PersonalMcp${kind}Ok`)?.text ?? "", `PersonalMcp${kind}Ok:
+    exact(
+      responses.get(`PersonalMcp${kind}Ok`)?.text ?? "",
+      `PersonalMcp${kind}Ok:
 description: Caller-owned safe MCP read.
 ${headers}
 content:
 application/json:
-schema: { $ref: '#/components/schemas/${responseSchema}' }`, `${kind} response`, [4, 6, 6, 8, 8, 6, 8, 10])
-    const value = field === "items" ? `items:
+schema: { $ref: '#/components/schemas/${responseSchema}' }`,
+      `${kind} response`,
+      [4, 6, 6, 8, 8, 6, 8, 10],
+    )
+    const value =
+      field === "items"
+        ? `items:
 type: array
 maxItems: 100
 items: { $ref: '#/components/schemas/${item}' }
 next_cursor:
 oneOf:
 - ${cursor}
-- { type: 'null' }` : `${field}: { $ref: '#/components/schemas/${item}' }`
-    exact(schemas.get(responseSchema)?.text ?? "", `${responseSchema}:
+- { type: 'null' }`
+        : `${field}: { $ref: '#/components/schemas/${item}' }`
+    exact(
+      schemas.get(responseSchema)?.text ?? "",
+      `${responseSchema}:
 type: object
 additionalProperties: false
 required: [data]
@@ -2695,9 +2879,14 @@ type: object
 additionalProperties: false
 required: [${field === "items" ? "items, next_cursor" : field}]
 properties:
-${value}`, responseSchema, field === "items" ? [4, 6, 6, 6, 6, 8, 10, 10, 10, 10, 12, 14, 14, 14, 12, 14, 16, 16] : [4, 6, 6, 6, 6, 8, 10, 10, 10, 10, 12])
+${value}`,
+      responseSchema,
+      field === "items" ? [4, 6, 6, 6, 6, 8, 10, 10, 10, 10, 12, 14, 14, 14, 12, 14, 16, 16] : [4, 6, 6, 6, 6, 8, 10, 10, 10, 10, 12],
+    )
   }
-  exact(schemas.get("PersonalMcpConnector")?.text ?? "", `PersonalMcpConnector:
+  exact(
+    schemas.get("PersonalMcpConnector")?.text ?? "",
+    `PersonalMcpConnector:
 type: object
 additionalProperties: false
 required: [connector_id, connector_type, provider_key, status, approved_scopes]
@@ -2710,8 +2899,13 @@ approved_scopes:
 description: Each item has JavaScript UTF-16 string.length 1-128, contains no JavaScript whitespace anywhere, and is neither trimmed nor reordered.
 type: array
 uniqueItems: true
-items: { type: string, minLength: 1, maxLength: 128, pattern: '^\\S+(?![\\s\\S])' }`, "Connector", [4, 6, 6, 6, 6, 8, 8, 8, 8, 8, 10, 10, 10, 10])
-  exact(schemas.get("PersonalMcpConnection")?.text ?? "", `PersonalMcpConnection:
+items: { type: string, minLength: 1, maxLength: 128, pattern: '^\\S+(?![\\s\\S])' }`,
+    "Connector",
+    [4, 6, 6, 6, 6, 8, 8, 8, 8, 8, 10, 10, 10, 10],
+  )
+  exact(
+    schemas.get("PersonalMcpConnection")?.text ?? "",
+    `PersonalMcpConnection:
 type: object
 additionalProperties: false
 required: [connection_id, connector_id, server_id, allowed_selectors, policy_digest, status]
@@ -2725,9 +2919,14 @@ type: array
 uniqueItems: true
 items: { type: string, minLength: 1, maxLength: 256, pattern: '^\\S(?:[\\s\\S]*\\S)?(?![\\s\\S])' }
 policy_digest: { type: string, minLength: 64, maxLength: 64, pattern: '^[a-f0-9]{64}(?![\\s\\S])' }
-status: { type: string, enum: [active, revoked] }`, "Connection", [4, 6, 6, 6, 6, 8, 8, 8, 8, 10, 10, 10, 10, 8, 8])
+status: { type: string, enum: [active, revoked] }`,
+    "Connection",
+    [4, 6, 6, 6, 6, 8, 8, 8, 8, 10, 10, 10, 10, 8, 8],
+  )
   for (const [status, [name, codes]] of Object.entries(failures)) {
-    exact(schemas.get(`PersonalMcp${name}Error`)?.text ?? "", `PersonalMcp${name}Error:
+    exact(
+      schemas.get(`PersonalMcp${name}Error`)?.text ?? "",
+      `PersonalMcp${name}Error:
 type: object
 additionalProperties: false
 required: [error]
@@ -2739,19 +2938,35 @@ required: [code, message, retryable]
 properties:
 code: { type: string, enum: [${codes.join(", ")}] }
 message: { type: string, minLength: 1, description: Fixed sanitized message; never provider payload. }
-retryable: { type: boolean, const: ${status === "429" || status === "503" ? "true" : "false"} }`, `${name} error`, [4, 6, 6, 6, 6, 8, 10, 10, 10, 10, 12, 12, 12])
-    const retry = status === "429" ? "\nRetry-After: { required: false, schema: { type: string, pattern: '^(?:[1-9][0-9]{0,3}|[1-7][0-9]{4}|8[0-5][0-9]{3}|86[0-3][0-9]{2}|86400)(?![\\s\\S])' } }" : ""
-    exact(responses.get(`PersonalMcp${name}`)?.text ?? "", `PersonalMcp${name}:
+retryable: { type: boolean, const: ${status === "429" || status === "503" ? "true" : "false"} }`,
+      `${name} error`,
+      [4, 6, 6, 6, 6, 8, 10, 10, 10, 10, 12, 12, 12],
+    )
+    const retry =
+      status === "429"
+        ? "\nRetry-After: { required: false, schema: { type: string, pattern: '^(?:[1-9][0-9]{0,3}|[1-7][0-9]{4}|8[0-5][0-9]{3}|86[0-3][0-9]{2}|86400)(?![\\s\\S])' } }"
+        : ""
+    exact(
+      responses.get(`PersonalMcp${name}`)?.text ?? "",
+      `PersonalMcp${name}:
 description: Closed safe personal MCP failure.
 ${headers}${retry}
 content:
 application/json:
-schema: { $ref: '#/components/schemas/PersonalMcp${name}Error' }`, `${name} response`, [4, 6, 6, 8, 8, ...(status === "429" ? [8] : []), 6, 8, 10])
+schema: { $ref: '#/components/schemas/PersonalMcp${name}Error' }`,
+      `${name} response`,
+      [4, 6, 6, 8, 8, ...(status === "429" ? [8] : []), 6, 8, 10],
+    )
   }
   return errors
 }
 
 export function inspectBffOpenApi(source: string, baseline: readonly BaselineOperation[]): string[] {
+  return [...inspectSkillProductContract(source, baseline), ...inspectBffHistoricalOpenApi(stripSkillProductSource(source), skillProductParentBaseline(source))]
+}
+
+/** Strict historical Public8.10 proof; never used as the current release gate alone. */
+export function inspectBffHistoricalOpenApi(source: string, baseline: readonly BaselineOperation[]): string[] {
   const examplesErrors = inspectSkillExamplePromptsContract(source)
   source = stripSkillExamplePromptsSource(source)
   const operations = collectOperationBlocks(source)

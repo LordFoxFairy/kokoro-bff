@@ -6,7 +6,7 @@ import type {
   ProjectScopeReleaseCommand,
   ProjectScopeReleaseResult,
 } from "../../../application/ports/project-scope-release-outbox.js"
-import { StorageService } from "../../../generated/storage-connect/kokoro/storage/v2/storage_pb.js"
+import { StorageService } from "../../../generated/storage-connect/kokoro/storage/v3/storage_pb.js"
 import { ErrorCode, ErrorDetailSchema } from "../../../generated/storage-connect/kokoro/common/v1/common_pb.js"
 
 const retryableCodes = new Set([Code.Aborted, Code.ResourceExhausted, Code.Unavailable])

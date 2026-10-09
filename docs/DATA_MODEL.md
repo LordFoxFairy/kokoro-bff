@@ -1,16 +1,23 @@
-### R353-B2 同正式 Storage pin 的现有上传消费者收口（2026-10-08）
+## R353-B2 当前源码候选（2026-10-08；待Root冻源审查/真实配对）
 
-仅正式 v3 切换所必需的个人/项目上传、读取/释放及测试保持；不恢复其它模块研发，不新增表、业务流程或进程。signed PUT 返回原样非空有效 VersionId，Complete 前持久化上传 ID/版本/command/digest。现 bff_idempotency_receipt 增加单条完整 expected fingerprint/status/JSONB→replacement CAS，miss 只读结果；现 claim/put/release 语义保持。frozen/admitted/selected 是本调用的闭集阶段，递进与字段原值 keep-first；并发 A/B 只有一个 selected，loser 不 Complete/Abort/覆盖赢家，ACK 不确定须精确 readback 或停止。
+唯一 BFF writer 为 bff_skills_product_source_r353；工作树 HEAD d2695c47bca64a8e83168aa259e2366f7cee3ea8。当前唯一 Platform固定fa185ed2b25c3e81946cfdcd12d7665d02b8bad3、Product1.2/HTTP5.2/63RPC/32commands/24proofs、完整81正式publication；aggregate ce7708d7e2a15d7e3a77b7b9ea45905ab3fbe90093e343d0be9b3140ca03e2d6、descriptor 453f275b6e95052437072c3f52bbe74675271400526680003569b6bd09196fb1、HTTP 6d4abae68cd5cc6e2d8676ac34a48f7ea3564196ec6215ea1531b3cfedd3c3d7。HTTP直接读同Platform vendor/openapi；原701候选72副本移除，无双pin。IAM7c62e759760448e127b21200f87adeefdc6016f7/0.10、Storage d13f33a/v3继续原正规固定生成；不升级其它owner。
 
-本地 selected 与 owner locator 精确匹配；任何已知版本均禁止再 PUT。owner 有 locator 而本地完整 selected/command/digest 缺失不得从 server 合成。仅本地 admitted 未知版本且 owner pending 无 locator 可 PUT 后 CAS；既有 v2 `{upload_id}` 只在 owner 精确 completed 时读原结果，不回填版本、不再 Complete。AI handoff 复用该最小 receipt CAS/独立闭集 body，无新增 journal。完整 Public9 与 Skills 内外页范围不变，正常37旧资产恢复/paired activation 和浏览器验收仍另行待验。
+Public唯一9.0.0/132operations，具名Product checker先核完整当前closed blocks，再剥本片还原完整Public8.10字节SHA640f47f9c70341aa49934eec319a4dcc5bab76bba83e4407d6a9e0c3ab0ac389并运行全部旧父证明。机器/纯门只证明本源码；正常Storage旧源版本资格、真实IAM/Platform/Storage/Agent配对、provider、普通/管理员浏览器与S01–S10由Root继续验证，仍OPEN。未运行数据库/资源/服务/正常激活，不以fixture为integration或UI完成。
 
-## R353-B2：完整Skills消费正式输入锁定（D0，尚未实现；2026-10-08）
+### 自有事实与事务
 
-No new BFF Skill owner copy. Reuse B1 Share/usage and bff_conversation_artifact+bff_idempotency_receipt. Native BFF SQL changes are none for Product9 unless a concrete adapter signature proves otherwise. Runtime activation is a normal source replacement after Root pairing, not a feature-flag state.
+本片不创建Skill镜像、owner数据库连接、table、journal或evolution；B1已正式typed bff_share/usage projection沿原repository/AGUIsource事务，Platform/IAM/Storage/Agent事实只RPC/HTTP读取。旧conversationShare读取不返Skill；SkillShare每次fresh exactrevision授权，链接本身不授匿名/跨tenant资格。usage completed distinctrun、乱序/重复/digest冲突/覆盖proof遵循既有B1，缺proof unavailable。
 
-Root已核71个Platform生成输入由同一正式701aedb5 Git对象取得；保V5–V9/父descriptor/分类/示例/逆向负控，旧v2仅owner历史inverse snapshot，不生成或保留运行时v2。完整Platform/IAM/Storage一套固定消费者，沿既有Skills模块和生成器，无新通用workflow。删无正式owner的getSkillQuota/listSkillRevisions及对应假入口，不临时扩owner能力。B1已正式9d1cc19b，复用事实；本片零SQL/schema/evolution/AGUI投影改写。
+现bff_idempotency_receipt复用完整fingerprint/status/bodyJSONB expected→replacement单行CAS；keep-first冻结输入、admitted实际attempt/upload/epoch/CAS、selected原样opaqueVersion/Completecommand/digest，201实际结果。ACK未知精确读回，不从owner拼造checkpoint、不重复PUT、不引入泛workflow层。已有个人/项目上传v3只在正式ownercompleted时读旧receipt，不fallback生成v2。AI重读自身bff_conversation_artifact及completed来源event关联，不跨ownerSQL；Storage包全SHA/size与IO后关联资格。GitHubmetadata从真实固定SHA/path包导出，repo_stats观察keep-first、与immutable业务fingerprint分离；preview没有持久新表/阶段。
 
-源实现可与必要Agent delivery-v3独立并行，Agent公开Artifact读接口未变；普通无watch进程仍旧source，正常成对切换必须等Root真实owner/Agent/MinIO/scanner及37旧资产保持，不设置feature flag、双decoder或缺实现503分支。最终内外技能页/Settings/后台/详情及Manus同尺寸S01–S10浏览器验收另外通过，不以源码或接口证据冒整页完成。
+Cover/目录/IAMpublisher当次投影不缓存持久事实。Projectassociation写前freshPlatform inspect，但准入→本地写间存在跨owner竞态，不宣分布事务；existinguse-time资格继续验证。正常旧30包/blob/Skill引用的source-version资格缺口由Rootread-only审计与最小资格裁决，本writer不DDL/repair/rebind/activate。
+
+安装source_kind是既定field5消费，BFF透传及closedvalidation已实现，owner当前正式P4已修typed/raw/RPC filter与query游标绑定；BFF安装/owned查询按同Unicode标量/trim/closedpresence规则透传，筛选在owner分页前执行；不在BFF复制owner查询事实/新table。GitHub解析依赖仅js-yaml4.3.2与types4.0.9必要锁定hunk，旧开发Redocly传递4.2图保持。真实隔离PG测试test/skill-product.integration.mjs仅Root在显式isolatedURL+flag运行，未执行不宣integration通过。
+
+
+P4仅既有installed与owned列表可选query消费，Public9.0/132不另发版本，不新增方法/Schema/依赖。原52e副本76删净，仅fa185ed正式81机器；新增query6从独立parent完整逆向剥离后保所有历史父SHA，生成物只正规生成。P1/P2已含source I/O后required当前session同tenant/subject重验及owner坏响应502；原浏览器input400保持。仍非正常激活/配对/页面或S01–S10完成。
+
+<!-- R353-B2-CURRENT-PREFIX-END; immutable historical baseline follows -->
 
 ## R353-BFF-D0：Skills Share、Usage 与 owner 数据边界（目标，尚未实现）
 

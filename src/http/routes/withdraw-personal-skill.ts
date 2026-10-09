@@ -1,3 +1,4 @@
+import { assertSkillWireKnown, projectSkillStateVersion } from "../../infrastructure/clients/platform/skill-product-response.js"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import { Code, ConnectError } from "@connectrpc/connect"
 import { SkillStatus } from "../../generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
@@ -111,6 +112,7 @@ export async function withdrawPersonalSkillRoute(
       fq_method: "kokoro.platform.v1.SkillCatalogService/WithdrawSkill",
       tenant_ref: scope.context.identity.namespace,
       request: {
+        ...(input.expectedStateVersion === undefined ? {} : { expected_state_version: input.expectedStateVersion }),
         source_ref: { value: `skill:${skillId}` },
         reason: input.reason,
         product_context: {
@@ -130,11 +132,14 @@ export async function withdrawPersonalSkillRoute(
           user: scope.context.identity.userId,
           skillId,
           reason: input.reason,
+          ...(input.expectedStateVersion === undefined ? {} : { expectedStateVersion: input.expectedStateVersion }),
         },
         scope.signal,
         scope.deadlineAt,
       )
       scope.active()
+      assertSkillWireKnown(result)
+      projectSkillStateVersion(result.stateVersion)
       if (
         hasUnknownFields(result) ||
         hasUnknownFields(result.sourceRef) ||
@@ -146,6 +151,7 @@ export async function withdrawPersonalSkillRoute(
         throw new Error("skill_response_invalid")
       replyPersonalSkillLifecycle(response, scope, requestId, 200, {
         data: {
+          state_version: projectSkillStateVersion(result.stateVersion),
           source_ref: result.sourceRef.value,
           status: "withdrawn",
           event_id: result.eventId,

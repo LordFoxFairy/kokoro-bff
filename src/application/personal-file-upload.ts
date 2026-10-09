@@ -41,7 +41,7 @@ export async function uploadPersonalFile(
     try {
       const created = await storage.createUpload(command("create"), fingerprint, input, signal)
       uploadId = created.uploadId
-      await checkpoint(() => receipts.putReceipt(scope, { fingerprint, status: 200, body: { upload_id: uploadId } }))
+      await checkpoint(() => receipts.putReceipt(scope, { fingerprint, status: 200, body: { stage: "admitted", upload_id: uploadId } }))
       const persisted = await checkpoint(() => receipts.getReceipt(scope))
       if (persisted?.status !== 200 || persisted.fingerprint !== fingerprint || (persisted.body as { upload_id?: unknown }).upload_id !== uploadId)
         throw new PersonalFileError("file_checkpoint_unavailable", 503, true)
@@ -59,9 +59,52 @@ export async function uploadPersonalFile(
     return { kind: "file", ...(await storage.getAsset(uploadId, status.assetId, input, signal)) }
   }
   if (status.state === "aborted") throw new PersonalFileError("file_upload_aborted", 409)
-  const created = await storage.createUpload(command("create"), fingerprint, input, signal)
-  if (created.uploadId !== uploadId) throw new PersonalFileError("storage_response_invalid", 502)
-  await storage.put(created.reference, input, signal)
-  const completed = await storage.completeUpload(command("complete"), fingerprint, uploadId, input, signal)
+  const checkpointReceipt = await checkpoint(() => receipts.getReceipt(scope))
+  const body = checkpointReceipt?.body as {
+    stage?: unknown
+    upload_id?: unknown
+    source_version_id?: unknown
+    complete_command_id?: unknown
+    complete_request_digest?: unknown
+  }
+  let sourceVersionId: string
+  let completeCommandId: string
+  let completeDigest: string
+  if (
+    body.stage === "selected" &&
+    body.upload_id === uploadId &&
+    typeof body.source_version_id === "string" &&
+    typeof body.complete_command_id === "string" &&
+    typeof body.complete_request_digest === "string"
+  ) {
+    sourceVersionId = body.source_version_id
+    completeCommandId = body.complete_command_id
+    completeDigest = body.complete_request_digest
+    if (status.sourceVersionId !== null && status.sourceVersionId !== sourceVersionId) throw new PersonalFileError("storage_response_invalid", 502)
+  } else {
+    if (body.stage !== "admitted" || body.upload_id !== uploadId || status.sourceVersionId !== null)
+      throw new PersonalFileError("file_checkpoint_unavailable", 503, true)
+    const created = await storage.createUpload(command("create"), fingerprint, input, signal)
+    if (created.uploadId !== uploadId) throw new PersonalFileError("storage_response_invalid", 502)
+    sourceVersionId = await storage.put(created.reference, input, signal)
+    completeCommandId = command("complete")
+    completeDigest = createHash("sha256")
+      .update(JSON.stringify([fingerprint, uploadId, sourceVersionId]))
+      .digest("hex")
+    const selected = {
+      fingerprint,
+      status: 200,
+      body: {
+        stage: "selected",
+        upload_id: uploadId,
+        source_version_id: sourceVersionId,
+        complete_command_id: completeCommandId,
+        complete_request_digest: completeDigest,
+      },
+    }
+    const cas = await checkpoint(() => receipts.compareAndSetReceipt(scope, fingerprint, checkpointReceipt!, selected))
+    if (!cas.updated && JSON.stringify(cas.receipt) !== JSON.stringify(selected)) throw new PersonalFileError("file_checkpoint_unavailable", 503, true)
+  }
+  const completed = await storage.completeUpload(completeCommandId, completeDigest, uploadId, sourceVersionId, input, signal)
   return { kind: "file", ...(await storage.getAsset(uploadId, completed.assetId, input, signal)) }
 }

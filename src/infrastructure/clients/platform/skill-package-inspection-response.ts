@@ -1,5 +1,6 @@
 import type {
   InspectPersonalSkillInstallationPackageResponse,
+  InspectSkillPackageResponse,
   InspectPersonalSkillPackageResponse,
 } from "../../../generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
 
@@ -39,7 +40,7 @@ function validUnicode(value: string): boolean {
 }
 
 export function projectSkillPackageInspectionResponse(
-  value: InspectPersonalSkillPackageResponse | InspectPersonalSkillInstallationPackageResponse,
+  value: InspectPersonalSkillPackageResponse | InspectPersonalSkillInstallationPackageResponse | InspectSkillPackageResponse,
   expected: Readonly<{ sourceRef?: string; selectedFilePath?: string }>,
 ): SkillPackageInspectionData {
   const sourceRef = value.sourceRef?.value ?? ""

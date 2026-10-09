@@ -3,13 +3,7 @@ import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
 const HTTP_METHODS = new Set(["get", "post", "put", "patch", "delete", "head", "options", "trace"])
-const REQUIRED_EXTENSIONS = [
-  "x-kokoro-owner",
-  "x-kokoro-visibility",
-  "x-kokoro-stability",
-  "x-kokoro-idempotency",
-  "x-kokoro-permission",
-]
+const REQUIRED_EXTENSIONS = ["x-kokoro-owner", "x-kokoro-visibility", "x-kokoro-stability", "x-kokoro-idempotency", "x-kokoro-permission"]
 const STABILITY_VALUES = new Set(["stable", "beta", "experimental"])
 const TEAM_OWNER_DELEGATED_MUTATIONS = new Set([
   "POST /v1/team/invitations createTeamInvitation",
@@ -22,10 +16,7 @@ const TEAM_OWNER_DELEGATED_MUTATIONS = new Set([
 
 function scalar(value) {
   const trimmed = value.trim()
-  if (
-    (trimmed.startsWith('"') && trimmed.endsWith('"'))
-    || (trimmed.startsWith("'") && trimmed.endsWith("'"))
-  ) {
+  if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
     return trimmed.slice(1, -1)
   }
   return trimmed
@@ -66,8 +57,19 @@ export function parseOpenApiOperations(source) {
 function expectedIdempotency(operation) {
   if (["GET", "HEAD", "OPTIONS"].includes(operation.method)) return "none"
   if (operation.fields.get("operationId") === "previewGithubSkill") return "none"
+  if (
+    new Set(["POST /v1/skill-shares createSkillShare", "DELETE /v1/skill-shares/{share_id} revokeSkillShare", "POST /v1/skills/usage getSkillUsage"]).has(
+      `${operation.method} ${operation.path} ${operation.fields.get("operationId")}`,
+    )
+  )
+    return "none"
   if (TEAM_OWNER_DELEGATED_MUTATIONS.has(`${operation.method} ${operation.path} ${operation.fields.get("operationId")}`)) return "none"
-  if (operation.method === "PUT" && operation.path === "/v1/preferences/personalization" && operation.fields.get("operationId") === "replaceSelfPersonalization") return "none"
+  if (
+    operation.method === "PUT" &&
+    operation.path === "/v1/preferences/personalization" &&
+    operation.fields.get("operationId") === "replaceSelfPersonalization"
+  )
+    return "none"
   return "required"
 }
 
@@ -122,10 +124,7 @@ export function inspectOpenApiGovernance(source) {
 
 export function compareOperationBaseline(source, baseline) {
   const current = new Map(
-    parseOpenApiOperations(source).map((operation) => [
-      `${operation.method} ${operation.path}`,
-      operation.fields.get("operationId") ?? "",
-    ]),
+    parseOpenApiOperations(source).map((operation) => [`${operation.method} ${operation.path}`, operation.fields.get("operationId") ?? ""]),
   )
   const errors = []
   for (const operation of baseline) {
@@ -157,10 +156,7 @@ async function main() {
   const openapi = await readFile(openApiPath, "utf8")
   if (process.argv.includes("--write-baseline")) {
     const operations = operationBaseline(openapi)
-    await writeFile(
-      baselinePath,
-      `${JSON.stringify({ version: "v1", operations }, null, 2)}\n`,
-    )
+    await writeFile(baselinePath, `${JSON.stringify({ version: "v1", operations }, null, 2)}\n`)
     console.log(`WROTE contract compatibility baseline (${operations.length} operations)`)
     return
   }
@@ -170,12 +166,12 @@ async function main() {
     throw new TypeError("contract/tests/v1-operations.json must contain an operations array")
   }
   const currentOperations = parseOpenApiOperations(openapi)
-  const managedPersonalReads = currentOperations.filter((operation) =>
-    operation.fields.get("operationId") === "listManagedPersonalSkills" || operation.fields.get("operationId") === "getManagedPersonalSkill",
+  const managedPersonalReads = currentOperations.filter(
+    (operation) => operation.fields.get("operationId") === "listManagedPersonalSkills" || operation.fields.get("operationId") === "getManagedPersonalSkill",
   )
-  const skillPackageInspectionReads = currentOperations.filter((operation) =>
-    operation.fields.get("operationId") === "getManagedPersonalSkillPackage"
-      || operation.fields.get("operationId") === "getPersonalSkillInstallationPackage",
+  const skillPackageInspectionReads = currentOperations.filter(
+    (operation) =>
+      operation.fields.get("operationId") === "getManagedPersonalSkillPackage" || operation.fields.get("operationId") === "getPersonalSkillInstallationPackage",
   )
   const errors = [
     ...inspectOpenApiGovernance(openapi),

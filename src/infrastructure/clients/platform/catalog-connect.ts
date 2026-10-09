@@ -1,27 +1,23 @@
-import { create } from "@bufbuild/protobuf"
+import { fromJson, type JsonValue, type MessageShape } from "@bufbuild/protobuf"
 import { Code, ConnectError, createClient } from "@connectrpc/connect"
 import { createConnectTransport } from "@connectrpc/connect-node"
-import { CommandIdentitySchema } from "../../../generated/platform-connect/kokoro/common/v1/common_pb.js"
-import {
-  BeginSkillPackageUploadRequestSchema,
-  CompleteSkillPackageUploadRequestSchema,
-  CreateSkillVersionRequestSchema,
-  CreateSkillDraftRequestSchema,
-  GetSkillPackageUploadRequestSchema,
-  OwnerScopeSchema,
-  ProductCatalogContextSchema,
-  PublishSkillRequestSchema,
-  SkillCatalogService,
-  SkillIdSchema,
-  SkillSourceRefSchema,
-  SkillMetadataSchema,
-  SkillExamplePromptsSchema,
-  SkillScopeKind,
-  ValidateSkillDraftRequestSchema,
-  WithdrawSkillRequestSchema,
-} from "../../../generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
+import { SkillCatalogService } from "../../../generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
+import { projectSkillProductCommand } from "./create-skill-draft-projector.js"
 import type { CatalogTokenSource } from "./catalog-token.js"
 
+type Context = { requestId: string; commandId: string; digest: string; tenant: string; user: string; expectedStateVersion?: string }
+type Metadata = { displayName: string; summary: string; tags: string[]; examplePrompts?: string[]; categoryKeys?: string[] }
+function metadata(input: Metadata): Record<string, JsonValue> {
+  return {
+    display_name: input.displayName,
+    summary: input.summary,
+    tags: input.tags,
+    metadata_json: "e30",
+    ...(input.examplePrompts === undefined ? {} : { example_prompts: { prompts: input.examplePrompts } }),
+    ...(input.categoryKeys === undefined ? {} : { category_keys: { keys: input.categoryKeys } }),
+  }
+}
+/** Ordinary catalog credential only. Every call uses one bounded budget and the current owner canonicalizer. */
 export class CatalogConnectClient {
   readonly #client
   constructor(
@@ -34,229 +30,132 @@ export class CatalogConnectClient {
       createConnectTransport({ baseUrl, httpVersion: "1.1", useBinaryFormat: true, readMaxBytes: 1024 * 1024, writeMaxBytes: 1024 * 1024 }),
     )
   }
-  async create(
-    input: {
-      requestId: string
-      commandId: string
-      digest: string
-      tenant: string
-      user: string
-      displayName: string
-      summary: string
-      tags: string[]
-      examplePrompts?: string[]
-    },
-    signal?: AbortSignal,
-  ) {
-    const token = await this.tokens.get(input.tenant, signal)
-    return this.#client.createSkillDraft(
-      create(CreateSkillDraftRequestSchema, {
-        requestId: input.requestId,
-        command: create(CommandIdentitySchema, { commandId: input.commandId, requestDigest: input.digest }),
-        ownerScope: create(OwnerScopeSchema, { kind: "user", id: input.user }),
-        metadata: create(SkillMetadataSchema, {
-          displayName: input.displayName,
-          summary: input.summary,
-          tags: input.tags,
-          metadataJson: Buffer.from("{}", "utf8"),
-          ...(input.examplePrompts === undefined ? {} : { examplePrompts: create(SkillExamplePromptsSchema, { prompts: input.examplePrompts }) }),
-        }),
-        productContext: create(ProductCatalogContextSchema, { subjectId: input.user, ownerScope: create(OwnerScopeSchema, { kind: "user", id: input.user }) }),
-      }),
-      {
-        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(this.timeoutMs)]) : AbortSignal.timeout(this.timeoutMs),
-        headers: { authorization: `Bearer ${token}`, "x-tenant-ref": input.tenant },
-        timeoutMs: this.timeoutMs,
+  async #call<K extends keyof typeof SkillCatalogService.method>(
+    operation: K,
+    input: Omit<Context, "commandId" | "digest"> & Partial<Pick<Context, "commandId" | "digest">>,
+    members: Record<string, JsonValue>,
+    outer?: AbortSignal,
+    deadlineAt = performance.now() + this.timeoutMs,
+  ): Promise<MessageShape<(typeof SkillCatalogService.method)[K]["output"]>> {
+    const remainingBudget = Math.min(this.timeoutMs, Math.floor(deadlineAt - performance.now()))
+    if (remainingBudget <= 0) throw new ConnectError("catalog deadline exceeded", Code.DeadlineExceeded)
+    const signal = outer ? AbortSignal.any([outer, AbortSignal.timeout(remainingBudget)]) : AbortSignal.timeout(remainingBudget)
+    signal.throwIfAborted()
+    const token = await this.tokens.get(input.tenant, signal, deadlineAt)
+    signal.throwIfAborted()
+    const remaining = Math.min(this.timeoutMs, Math.floor(deadlineAt - performance.now()))
+    if (remaining <= 0) throw new ConnectError("catalog deadline exceeded", Code.DeadlineExceeded)
+    const descriptor = SkillCatalogService.method[operation]
+    const request = {
+      ...members,
+      ...(input.expectedStateVersion === undefined ? {} : { expected_state_version: input.expectedStateVersion }),
+      product_context: { subject_id: input.user, owner_scope: { kind: "user", id: input.user } },
+    }
+    const digest =
+      input.commandId === undefined
+        ? undefined
+        : projectSkillProductCommand(
+            JSON.stringify({
+              command_digest_version: "3.0.0",
+              fq_method: `${SkillCatalogService.typeName}/${descriptor.name}`,
+              tenant_ref: input.tenant,
+              request,
+            }),
+            true,
+          ).sha256
+    if (digest !== undefined && digest !== input.digest) throw new Error("skill_request_digest_mismatch")
+    const wire = fromJson(descriptor.input, {
+      ...request,
+      request_id: input.requestId,
+      ...(input.commandId === undefined ? {} : { command: { command_id: input.commandId, request_digest: digest! } }),
+    })
+    let requestId: string | null = null,
+      cache: string | null = null
+    const options = {
+      signal,
+      timeoutMs: remaining,
+      headers: { authorization: `Bearer ${token}`, "x-tenant-ref": input.tenant, "x-kokoro-subject": input.user },
+      onHeader: (headers: Headers) => {
+        requestId = headers.get("x-kokoro-request-id")
+        cache = headers.get("cache-control")
       },
-    )
+    }
+    const rpc = this.#client[operation] as unknown as (
+      request: typeof wire,
+      callOptions: typeof options,
+    ) => Promise<MessageShape<(typeof SkillCatalogService.method)[K]["output"]>>
+    try {
+      const result = await rpc(wire, options)
+      if (requestId !== input.requestId || cache !== "no-store") throw new Error("skill_response_invalid")
+      signal.throwIfAborted()
+      return result
+    } catch (error) {
+      if (error instanceof ConnectError && [Code.Unauthenticated, Code.PermissionDenied].includes(error.code)) this.tokens.retire(token)
+      throw error
+    }
   }
-
-  async getPackageUpload(input: { requestId: string; skillId: string; tenant: string; user: string }, signal?: AbortSignal) {
-    const token = await this.tokens.get(input.tenant, signal)
-    return this.#client.getSkillPackageUpload(
-      create(GetSkillPackageUploadRequestSchema, {
-        requestId: input.requestId,
-        skillId: create(SkillIdSchema, { value: input.skillId }),
-        productContext: create(ProductCatalogContextSchema, { subjectId: input.user, ownerScope: create(OwnerScopeSchema, { kind: "user", id: input.user }) }),
-      }),
-      {
-        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(this.timeoutMs)]) : AbortSignal.timeout(this.timeoutMs),
-        headers: { authorization: `Bearer ${token}`, "x-tenant-ref": input.tenant },
-        timeoutMs: this.timeoutMs,
-      },
-    )
+  create(input: Context & Metadata, signal?: AbortSignal, deadlineAt?: number) {
+    return this.#call("createSkillDraft", input, { owner_scope: { kind: "user", id: input.user }, metadata: metadata(input) }, signal, deadlineAt)
   }
-
-  async beginPackageUpload(
-    input: {
-      requestId: string
-      commandId: string
-      digest: string
-      tenant: string
-      user: string
-      skillId: string
-      filename: string
-      mimeType: "application/zip"
-      sizeBytes: number
-      contentSha256: string
-      replacesAttemptId?: string
-    },
+  getPackageUpload(input: { requestId: string; skillId: string; tenant: string; user: string }, signal?: AbortSignal, deadlineAt?: number) {
+    return this.#call("getSkillPackageUpload", input, { skill_id: { value: input.skillId } }, signal, deadlineAt)
+  }
+  beginPackageUpload(
+    input: Context & { skillId: string; filename: string; mimeType: "application/zip"; sizeBytes: number; contentSha256: string; replacesAttemptId?: string },
     signal?: AbortSignal,
+    deadlineAt?: number,
   ) {
-    const token = await this.tokens.get(input.tenant, signal)
-    return this.#client.beginSkillPackageUpload(
-      create(BeginSkillPackageUploadRequestSchema, {
-        requestId: input.requestId,
-        command: create(CommandIdentitySchema, { commandId: input.commandId, requestDigest: input.digest }),
-        skillId: create(SkillIdSchema, { value: input.skillId }),
-        productContext: create(ProductCatalogContextSchema, { subjectId: input.user, ownerScope: create(OwnerScopeSchema, { kind: "user", id: input.user }) }),
+    return this.#call(
+      "beginSkillPackageUpload",
+      input,
+      {
+        skill_id: { value: input.skillId },
         filename: input.filename,
-        mimeType: input.mimeType,
-        sizeBytes: BigInt(input.sizeBytes),
-        contentSha256: input.contentSha256,
-        ...(input.replacesAttemptId === undefined ? {} : { replacesAttemptId: input.replacesAttemptId }),
-      }),
-      {
-        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(this.timeoutMs)]) : AbortSignal.timeout(this.timeoutMs),
-        headers: { authorization: `Bearer ${token}`, "x-tenant-ref": input.tenant },
-        timeoutMs: this.timeoutMs,
+        mime_type: input.mimeType,
+        size_bytes: String(input.sizeBytes),
+        content_sha256: input.contentSha256,
+        ...(input.replacesAttemptId === undefined ? {} : { replaces_attempt_id: input.replacesAttemptId }),
       },
+      signal,
+      deadlineAt,
     )
   }
-
-  async completePackageUpload(
-    input: {
-      requestId: string
-      commandId: string
-      digest: string
-      tenant: string
-      user: string
-      skillId: string
-      attemptId: string
-      uploadId: string
-      contentSha256: string
-      sizeBytes: number
-    },
+  completePackageUpload(
+    input: Context & { skillId: string; attemptId: string; uploadId: string; sourceVersionId: string; contentSha256: string; sizeBytes: number },
     signal?: AbortSignal,
+    deadlineAt?: number,
   ) {
-    const token = await this.tokens.get(input.tenant, signal)
-    return this.#client.completeSkillPackageUpload(
-      create(CompleteSkillPackageUploadRequestSchema, {
-        requestId: input.requestId,
-        command: create(CommandIdentitySchema, { commandId: input.commandId, requestDigest: input.digest }),
-        skillId: create(SkillIdSchema, { value: input.skillId }),
-        productContext: create(ProductCatalogContextSchema, { subjectId: input.user, ownerScope: create(OwnerScopeSchema, { kind: "user", id: input.user }) }),
-        attemptId: input.attemptId,
-        uploadId: input.uploadId,
-        contentSha256: input.contentSha256,
-        sizeBytes: BigInt(input.sizeBytes),
-      }),
+    return this.#call(
+      "completeSkillPackageUpload",
+      input,
       {
-        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(this.timeoutMs)]) : AbortSignal.timeout(this.timeoutMs),
-        headers: { authorization: `Bearer ${token}`, "x-tenant-ref": input.tenant },
-        timeoutMs: this.timeoutMs,
+        skill_id: { value: input.skillId },
+        attempt_id: input.attemptId,
+        upload_id: input.uploadId,
+        source_version_id: input.sourceVersionId,
+        content_sha256: input.contentSha256,
+        size_bytes: String(input.sizeBytes),
       },
+      signal,
+      deadlineAt,
     )
   }
-
-  async validateDraft(
-    input: { requestId: string; commandId: string; digest: string; tenant: string; user: string; skillId: string; attemptId: string },
-    signal?: AbortSignal,
-  ) {
-    const token = await this.tokens.get(input.tenant, signal)
-    return this.#client.validateSkillDraft(
-      create(ValidateSkillDraftRequestSchema, {
-        requestId: input.requestId,
-        command: create(CommandIdentitySchema, { commandId: input.commandId, requestDigest: input.digest }),
-        skillId: create(SkillIdSchema, { value: input.skillId }),
-        productContext: create(ProductCatalogContextSchema, { subjectId: input.user, ownerScope: create(OwnerScopeSchema, { kind: "user", id: input.user }) }),
-        attemptId: input.attemptId,
-      }),
-      {
-        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(this.timeoutMs)]) : AbortSignal.timeout(this.timeoutMs),
-        headers: { authorization: `Bearer ${token}`, "x-tenant-ref": input.tenant },
-        timeoutMs: this.timeoutMs,
-      },
+  validateDraft(input: Context & { skillId: string; attemptId: string }, signal?: AbortSignal, deadlineAt?: number) {
+    return this.#call("validateSkillDraft", input, { skill_id: { value: input.skillId }, attempt_id: input.attemptId }, signal, deadlineAt)
+  }
+  publish(input: Context & { skillId: string }, signal?: AbortSignal, deadlineAt?: number) {
+    return this.#call("publishSkill", input, { skill_id: { value: input.skillId }, visibility: 1 }, signal, deadlineAt)
+  }
+  createPersonalVersion(input: Context & Metadata & { baseSkillId: string }, signal: AbortSignal, deadlineAt: number) {
+    return this.#call(
+      "createSkillVersion",
+      input,
+      { owner_scope: { kind: "user", id: input.user }, base_skill_id: { value: input.baseSkillId }, metadata: metadata(input) },
+      signal,
+      deadlineAt,
     )
   }
-
-  async publish(input: { requestId: string; commandId: string; digest: string; tenant: string; user: string; skillId: string }, signal?: AbortSignal) {
-    const token = await this.tokens.get(input.tenant, signal)
-    return this.#client.publishSkill(
-      create(PublishSkillRequestSchema, {
-        requestId: input.requestId,
-        command: create(CommandIdentitySchema, { commandId: input.commandId, requestDigest: input.digest }),
-        skillId: create(SkillIdSchema, { value: input.skillId }),
-        visibility: SkillScopeKind.PERSONAL,
-        productContext: create(ProductCatalogContextSchema, { subjectId: input.user, ownerScope: create(OwnerScopeSchema, { kind: "user", id: input.user }) }),
-      }),
-      {
-        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(this.timeoutMs)]) : AbortSignal.timeout(this.timeoutMs),
-        headers: { authorization: `Bearer ${token}`, "x-tenant-ref": input.tenant },
-        timeoutMs: this.timeoutMs,
-      },
-    )
-  }
-
-  async createPersonalVersion(
-    input: {
-      requestId: string
-      commandId: string
-      digest: string
-      tenant: string
-      user: string
-      baseSkillId: string
-      displayName: string
-      summary: string
-      tags: string[]
-      examplePrompts?: string[]
-    },
-    signal: AbortSignal,
-    deadlineAt: number,
-  ) {
-    signal.throwIfAborted()
-    const token = await this.tokens.get(input.tenant, signal, deadlineAt)
-    signal.throwIfAborted()
-    const remaining = Math.floor(deadlineAt - performance.now())
-    if (remaining <= 0) throw new ConnectError("catalog deadline exceeded", Code.DeadlineExceeded)
-    return this.#client.createSkillVersion(
-      create(CreateSkillVersionRequestSchema, {
-        requestId: input.requestId,
-        command: create(CommandIdentitySchema, { commandId: input.commandId, requestDigest: input.digest }),
-        ownerScope: create(OwnerScopeSchema, { kind: "user", id: input.user }),
-        baseSkillId: create(SkillIdSchema, { value: input.baseSkillId }),
-        metadata: create(SkillMetadataSchema, {
-          displayName: input.displayName,
-          summary: input.summary,
-          tags: input.tags,
-          metadataJson: Buffer.from("{}", "utf8"),
-          ...(input.examplePrompts === undefined ? {} : { examplePrompts: create(SkillExamplePromptsSchema, { prompts: input.examplePrompts }) }),
-        }),
-        productContext: create(ProductCatalogContextSchema, { subjectId: input.user, ownerScope: create(OwnerScopeSchema, { kind: "user", id: input.user }) }),
-      }),
-      { signal, headers: { authorization: `Bearer ${token}`, "x-tenant-ref": input.tenant }, timeoutMs: remaining },
-    )
-  }
-
-  async withdrawPersonal(
-    input: { requestId: string; commandId: string; digest: string; tenant: string; user: string; skillId: string; reason: string },
-    signal: AbortSignal,
-    deadlineAt: number,
-  ) {
-    signal.throwIfAborted()
-    const token = await this.tokens.get(input.tenant, signal, deadlineAt)
-    signal.throwIfAborted()
-    const remaining = Math.floor(deadlineAt - performance.now())
-    if (remaining <= 0) throw new ConnectError("catalog deadline exceeded", Code.DeadlineExceeded)
-    return this.#client.withdrawSkill(
-      create(WithdrawSkillRequestSchema, {
-        requestId: input.requestId,
-        command: create(CommandIdentitySchema, { commandId: input.commandId, requestDigest: input.digest }),
-        sourceRef: create(SkillSourceRefSchema, { value: `skill:${input.skillId}` }),
-        reason: input.reason,
-        productContext: create(ProductCatalogContextSchema, { subjectId: input.user, ownerScope: create(OwnerScopeSchema, { kind: "user", id: input.user }) }),
-      }),
-      { signal, headers: { authorization: `Bearer ${token}`, "x-tenant-ref": input.tenant }, timeoutMs: remaining },
-    )
+  withdrawPersonal(input: Context & { skillId: string; reason: string }, signal: AbortSignal, deadlineAt: number) {
+    return this.#call("withdrawSkill", input, { source_ref: { value: `skill:${input.skillId}` }, reason: input.reason }, signal, deadlineAt)
   }
 }

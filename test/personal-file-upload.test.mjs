@@ -66,6 +66,14 @@ function fixture() {
     async putReceipt(scope, value) {
       rows.set(scope, value)
     },
+    async compareAndSetReceipt(scope, fingerprint, expected, replacement) {
+      const current = rows.get(scope) ?? null
+      if (current?.fingerprint === fingerprint && JSON.stringify(current) === JSON.stringify(expected)) {
+        rows.set(scope, replacement)
+        return { updated: true, receipt: replacement }
+      }
+      return { updated: false, receipt: current }
+    },
     async releaseReceipt(scope) {
       if (rows.get(scope)?.status === 102) rows.delete(scope)
     },
@@ -80,7 +88,14 @@ function fixture() {
     },
     async getUploadStatus() {
       calls.push(["status"])
-      return { state: completed ? "completed" : "pending", assetId: completed ? "asset-1" : null, sha256: sha, sizeBytes: "5", mimeType: "text/plain" }
+      return {
+        state: completed ? "completed" : "pending",
+        assetId: completed ? "asset-1" : null,
+        sourceVersionId: completed ? "version-A" : null,
+        sha256: sha,
+        sizeBytes: "5",
+        mimeType: "text/plain",
+      }
     },
     async put() {
       calls.push(["put"])
@@ -88,6 +103,7 @@ function fixture() {
         [...rows.keys()].some((scope) => scope.includes("personal-file-upload:v1") && rows.get(scope).body.upload_id === "upload-1"),
         "checkpoint before PUT",
       )
+      return "version-A"
     },
     async completeUpload() {
       calls.push(["complete"])
@@ -180,6 +196,26 @@ test("conditional receipt persistence rejects CAS zero rows instead of acknowled
   await assert.rejects(repository.putReceipt("scope", { fingerprint: sha, status: 200, body: {} }))
 })
 
+test("receipt phase CAS keeps the first complete selected intent", async () => {
+  const { PostgresIdempotencyRepository } = await import("../dist/infrastructure/postgres/idempotency-repository.js")
+  const winner = { fingerprint: sha, status: 200, body: { stage: "selected", upload_id: "upload-1", source_version_id: "A" } }
+  const repository = new PostgresIdempotencyRepository({
+    async query(sql) {
+      assert.match(sql, /response_body\s*=\s*\$4::jsonb/u)
+      return { rowCount: 0, rows: [winner] }
+    },
+  })
+  assert.deepEqual(
+    await repository.compareAndSetReceipt(
+      "scope",
+      sha,
+      { fingerprint: sha, status: 200, body: { stage: "admitted", upload_id: "upload-1" } },
+      { fingerprint: sha, status: 200, body: { stage: "selected", upload_id: "upload-1", source_version_id: "B" } },
+    ),
+    { updated: false, receipt: winner },
+  )
+})
+
 test("checkpoint persistence failure is a recoverable store error and cannot reach object PUT", async () => {
   const { uploadPersonalFile } = await import("../dist/application/personal-file-upload.js")
   const f = fixture()
@@ -228,7 +264,7 @@ test("temporary checkpoint write failure replays stable Create without aborting 
 test("personal Storage Connect adapter sends trusted personal scope, ASSET purpose and rejects non-CLEAN owner data", async () => {
   const { PersonalFileUploadClient } = await import("../dist/infrastructure/clients/storage/personal-file-upload.js")
   const { createRouterTransport } = await import("@connectrpc/connect")
-  const { StorageService, UploadPurpose, UploadState, ScanState } = await import("../dist/generated/storage-connect/kokoro/storage/v2/storage_pb.js")
+  const { StorageService, UploadPurpose, UploadState, ScanState } = await import("../dist/generated/storage-connect/kokoro/storage/v3/storage_pb.js")
   let scanState = ScanState.CLEAN
   let purpose = UploadPurpose.ASSET
   const headers = []
@@ -249,7 +285,15 @@ test("personal Storage Connect adapter sends trusted personal scope, ASSET purpo
         }
       },
       getUploadStatus() {
-        return { uploadId: "upload-1", state: UploadState.COMPLETED, expectedSha256: sha, expectedSizeBytes: 5n, mimeType: "text/plain", assetId: "asset-1" }
+        return {
+          uploadId: "upload-1",
+          state: UploadState.COMPLETED,
+          expectedSha256: sha,
+          expectedSizeBytes: 5n,
+          mimeType: "text/plain",
+          assetId: "asset-1",
+          sourceVersionId: "version-A",
+        }
       },
       completeUpload() {
         return { uploadId: "upload-1", assetId: "asset-1", scanState }
@@ -277,13 +321,13 @@ test("personal Storage Connect adapter sends trusted personal scope, ASSET purpo
     assert.equal(headers[0].get(name), value)
   assert.equal(headers[0].get("authorization"), null)
   assert.equal((await client.getUploadStatus("upload-1", AbortSignal.timeout(5000))).assetId, "asset-1")
-  assert.equal((await client.completeUpload("complete", sha, "upload-1", input, AbortSignal.timeout(5000))).scanState, "clean")
+  assert.equal((await client.completeUpload("complete", sha, "upload-1", "version-A", input, AbortSignal.timeout(5000))).scanState, "clean")
   assert.equal((await client.getAsset("upload-1", "asset-1", input, AbortSignal.timeout(5000))).asset_id, "asset-1")
   purpose = UploadPurpose.ARTIFACT
   await assert.rejects(client.getAsset("upload-1", "asset-1", input, AbortSignal.timeout(5000)), (error) => error.status === 502)
   purpose = UploadPurpose.ASSET
   scanState = ScanState.INFECTED
-  await assert.rejects(client.completeUpload("complete", sha, "upload-1", input, AbortSignal.timeout(5000)), (error) => error.status === 422)
+  await assert.rejects(client.completeUpload("complete", sha, "upload-1", "version-A", input, AbortSignal.timeout(5000)), (error) => error.status === 422)
   scanState = ScanState.PENDING
   await assert.rejects(client.getAsset("upload-1", "asset-1", input, AbortSignal.timeout(5000)), (error) => error.status === 503)
 })
@@ -363,7 +407,7 @@ test("live Product POST recovers lost Complete through personal Connect, persist
   const { ConnectError, Code } = await import("@connectrpc/connect")
   const { createBffServer } = await import("../dist/bootstrap/server.js")
   const { loadConfig } = await import("../dist/config/runtime.js")
-  const { StorageService, UploadPurpose, UploadState, ScanState } = await import("../dist/generated/storage-connect/kokoro/storage/v2/storage_pb.js")
+  const { StorageService, UploadPurpose, UploadState, ScanState } = await import("../dist/generated/storage-connect/kokoro/storage/v3/storage_pb.js")
   const servers = []
   const rows = new Map()
   let puts = 0
@@ -384,6 +428,14 @@ test("live Product POST recovers lost Complete through personal Connect, persist
     async putReceipt(scope, receipt) {
       rows.set(scope, receipt)
     },
+    async compareAndSetReceipt(scope, fingerprint, expected, replacement) {
+      const current = rows.get(scope) ?? null
+      if (current?.fingerprint === fingerprint && JSON.stringify(current) === JSON.stringify(expected)) {
+        rows.set(scope, replacement)
+        return { updated: true, receipt: replacement }
+      }
+      return { updated: false, receipt: current }
+    },
     async releaseReceipt(scope) {
       if (rows.get(scope)?.status === 102) rows.delete(scope)
     },
@@ -403,6 +455,7 @@ test("live Product POST recovers lost Complete through personal Connect, persist
         for await (const chunk of request) chunks.push(chunk)
         assert.deepEqual(Buffer.concat(chunks), input.bytes)
         puts++
+        response.setHeader("x-amz-version-id", "version-A")
         response.end()
       }),
     )
@@ -434,7 +487,7 @@ test("live Product POST recovers lost Complete through personal Connect, persist
                   expectedSha256: sha,
                   expectedSizeBytes: 5n,
                   mimeType: "text/plain",
-                  ...(completed ? { assetId: "asset-1" } : {}),
+                  ...(completed ? { assetId: "asset-1", sourceVersionId: "version-A" } : {}),
                 }
               },
               completeUpload() {

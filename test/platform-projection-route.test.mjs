@@ -95,6 +95,8 @@ test("Product by-ID GET is strict data-only and current-person bound", async () 
     tags: ["one"],
     example_prompts: [],
     skill_updated_at: skillUpdatedAt,
+    category_keys: [],
+    product: { publication_audience: "owner", state_version: "1" },
   }
   const app = await fixture(async () => new Response(JSON.stringify({ data: resource }), { status: 200, headers: ownerHeaders }))
   try {
@@ -122,9 +124,10 @@ test("Product list and MCP GET keep owner-native identity and stable cursor", as
     scope: "personal",
     revision: "2",
     enabled: true,
-    categories: [],
     example_prompts: [],
     skill_updated_at: skillUpdatedAt,
+    category_keys: [],
+    product: { publication_audience: "owner", state_version: "1" },
   }
   const mcp = {
     server_id: "server",
@@ -457,6 +460,8 @@ const managedSkills = ["draft", "active", "disabled", "withdrawn", "quarantined"
   status,
   example_prompts: [],
   skill_updated_at: skillUpdatedAt,
+  category_keys: [],
+  product: { publication_audience: "owner", state_version: "1" },
 }))
 
 function managedConfig(credentialFile) {
@@ -587,6 +592,8 @@ test("R345 managed personal list projects all five statuses, safe nine fields, e
       "status",
       "skill_updated_at",
       "example_prompts",
+      "category_keys",
+      "product",
     ])
     assert.equal(body.data.skills[0].summary, "")
     assert.equal(body.data.skills[0].skill_updated_at, skillUpdatedAt)

@@ -32,15 +32,24 @@ export function parseEnabledInput(raw: Buffer): { enabled: boolean } {
   if (Object.keys(value).join(",") !== "enabled" || typeof value.enabled !== "boolean") throw new Error("invalid_skill_installation_request")
   return { enabled: value.enabled }
 }
+/** The formal installed/owned query is a literal substring, not a LIKE expression. */
+export function parsePersonalSkillQuery(value: unknown): string {
+  if (typeof value !== "string" || /[\uD800-\uDFFF]/u.test(value)) throw new Error("invalid_skill_installation_request")
+  const query = value.trim()
+  if ([...query].length < 1 || [...query].length > 1024) throw new Error("invalid_skill_installation_request")
+  return query
+}
 export function parseInstallationList(url: string): {
   enabled?: boolean
   installed?: boolean
   limit?: number
   cursor?: string
+  query?: string
+  sourceKind?: "personal" | "official" | "third_party"
 } {
   const query = new URL(url, "http://bff.local").searchParams
   if (
-    [...query.keys()].some((key) => !["enabled", "installed", "limit", "cursor"].includes(key)) ||
+    [...query.keys()].some((key) => !["enabled", "installed", "limit", "cursor", "source_kind", "query"].includes(key)) ||
     [...new Set(query.keys())].some((key) => query.getAll(key).length !== 1)
   )
     throw new Error("invalid_skill_installation_request")
@@ -49,12 +58,20 @@ export function parseInstallationList(url: string): {
     installed?: boolean
     limit?: number
     cursor?: string
+    query?: string
+    sourceKind?: "personal" | "official" | "third_party"
   } = {}
   for (const key of ["enabled", "installed"] as const) {
     if (!query.has(key)) continue
     const value = query.get(key)
     if (value !== "true" && value !== "false") throw new Error("invalid_skill_installation_request")
     result[key] = value === "true"
+  }
+  if (query.has("query")) result.query = parsePersonalSkillQuery(query.get("query"))
+  if (query.has("source_kind")) {
+    const value = query.get("source_kind")
+    if (value !== "personal" && value !== "official" && value !== "third_party") throw new Error("invalid_skill_installation_request")
+    result.sourceKind = value
   }
   if (query.has("limit")) {
     const value = query.get("limit") ?? ""
@@ -63,7 +80,7 @@ export function parseInstallationList(url: string): {
   }
   if (query.has("cursor")) {
     const value = query.get("cursor") ?? ""
-    if (!value || Buffer.byteLength(value, "utf8") > 4096) throw new Error("invalid_skill_installation_request")
+    if (!value || Buffer.byteLength(value, "utf8") > 4096 || !/^[A-Za-z0-9_-]+$/u.test(value)) throw new Error("invalid_skill_installation_request")
     result.cursor = value
   }
   return result

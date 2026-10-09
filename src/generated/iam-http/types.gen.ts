@@ -1243,6 +1243,9 @@ export type ListTenantRolesResponses = {
           | "install"
           | "set_installation_enabled"
           | "remove_installation"
+          | "update_draft"
+          | "discard_draft"
+          | "set_publication_audience"
         >
       }
     }>
@@ -1529,6 +1532,82 @@ export type CancelTenantInvitationResponses = {
 
 export type CancelTenantInvitationResponse = CancelTenantInvitationResponses[keyof CancelTenantInvitationResponses]
 
+export type ResolveTenantPublisherProfilesData = {
+  body: {
+    refs: Array<{
+      kind: "user" | "organization"
+      id: string
+    }>
+  }
+  headers?: {
+    /**
+     * Caller correlation identifier. Missing or invalid values are replaced by the service.
+     */
+    "x-request-id"?: string
+  }
+  path: {
+    tenant_id: string
+  }
+  query?: never
+  url: "/internal/v1/tenants/{tenant_id}/publisher-profiles/resolve"
+}
+
+export type ResolveTenantPublisherProfilesErrors = {
+  /**
+   * Stable internal API error envelope.
+   */
+  400: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  401: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  403: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  413: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  429: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  500: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  503: ApiErrorResponse
+}
+
+export type ResolveTenantPublisherProfilesError = ResolveTenantPublisherProfilesErrors[keyof ResolveTenantPublisherProfilesErrors]
+
+export type ResolveTenantPublisherProfilesResponses = {
+  200: {
+    data: {
+      items: Array<
+        | {
+            kind: "user" | "organization"
+            id: string
+            status: "found"
+            display_name: string
+            image_url: string | null
+          }
+        | {
+            kind: "user"
+            id: string
+            status: "missing"
+          }
+      >
+    }
+  }
+}
+
+export type ResolveTenantPublisherProfilesResponse = ResolveTenantPublisherProfilesResponses[keyof ResolveTenantPublisherProfilesResponses]
+
 export type VerifySessionAuthorizationData = {
   body?: never
   headers?: {
@@ -1613,6 +1692,17 @@ export type CheckTenantSkillAuthorizationData = {
       | "install"
       | "set_installation_enabled"
       | "remove_installation"
+      | "update_draft"
+      | "discard_draft"
+      | "set_publication_audience"
+      | "admin_read"
+      | "admin_create_version"
+      | "official_publish"
+      | "admin_withdraw"
+      | "quarantine"
+      | "restore"
+      | "admin_set_publication_audience"
+      | "admin_discard_draft"
   }
   headers?: {
     /**
@@ -1679,6 +1769,17 @@ export type CheckTenantSkillAuthorizationResponses = {
         | "install"
         | "set_installation_enabled"
         | "remove_installation"
+        | "update_draft"
+        | "discard_draft"
+        | "set_publication_audience"
+        | "admin_read"
+        | "admin_create_version"
+        | "official_publish"
+        | "admin_withdraw"
+        | "quarantine"
+        | "restore"
+        | "admin_set_publication_audience"
+        | "admin_discard_draft"
     }
   }
 }

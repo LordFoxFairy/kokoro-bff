@@ -337,11 +337,6 @@
       "operation_id": "listSkillCatalog"
     },
     {
-      "method": "GET",
-      "path": "/v1/skills/quota",
-      "operation_id": "getSkillQuota"
-    },
-    {
       "method": "POST",
       "path": "/v1/skills/drafts",
       "operation_id": "createSkillDraft"
@@ -370,11 +365,6 @@
       "method": "POST",
       "path": "/v1/skills/{skill_id}/publish",
       "operation_id": "publishSkill"
-    },
-    {
-      "method": "GET",
-      "path": "/v1/skills/{name}/revisions",
-      "operation_id": "listSkillRevisions"
     },
     {
       "method": "POST",
@@ -555,6 +545,121 @@
       "method": "GET",
       "path": "/v1/self/mcp/connections/{connection_id}",
       "operation_id": "getPersonalMcpConnection"
+    },
+    {
+      "method": "PATCH",
+      "path": "/v1/skills/{skill_id}/draft",
+      "operation_id": "updateSkillDraft"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/skills/{skill_id}/discard",
+      "operation_id": "discardSkillDraft"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/skills/{skill_id}/audience",
+      "operation_id": "setSkillPublicationAudience"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/skills/{skill_id}/cover-upload",
+      "operation_id": "getSkillCoverUpload"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/skills/{skill_id}/cover-upload",
+      "operation_id": "beginSkillCoverUpload"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/skills/{skill_id}/cover-upload/complete",
+      "operation_id": "completeSkillCoverUpload"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/skills/{skill_id}/cover",
+      "operation_id": "getSkillCover"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/skills/{skill_id}/package",
+      "operation_id": "getSkillPackageDirectory"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/skills/{skill_id}/download",
+      "operation_id": "downloadSkillPackage"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/admin/skills",
+      "operation_id": "listAdminSkills"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/admin/skills/{skill_id}",
+      "operation_id": "getAdminSkill"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/admin/skills/{skill_id}/versions",
+      "operation_id": "createAdminSkillVersion"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/admin/skills/{skill_id}/publish",
+      "operation_id": "publishOfficialSkill"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/admin/skills/{skill_id}/withdraw",
+      "operation_id": "withdrawAdminSkill"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/admin/skills/{skill_id}/quarantine",
+      "operation_id": "quarantineSkill"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/admin/skills/{skill_id}/restore",
+      "operation_id": "restoreSkill"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/admin/skills/{skill_id}/audience",
+      "operation_id": "setAdminSkillPublicationAudience"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/admin/skills/{skill_id}/discard",
+      "operation_id": "discardAdminSkillDraft"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/skill-shares",
+      "operation_id": "createSkillShare"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/skill-shares/{share_id}",
+      "operation_id": "resolveSkillShare"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/skill-shares/{share_id}",
+      "operation_id": "revokeSkillShare"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/skills/usage",
+      "operation_id": "getSkillUsage"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/skills/ai-import",
+      "operation_id": "createAiSkillDraft"
     }
   ]
 }

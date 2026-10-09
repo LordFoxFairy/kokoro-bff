@@ -1,3 +1,8 @@
+import { SkillAuthorizationClient } from "../auth/skill-authorization.client.js"
+import { SkillProductConnectClient } from "../infrastructure/clients/platform/skill-product-connect.js"
+import { SkillAdminConnectClient } from "../infrastructure/clients/platform/skill-admin-connect.js"
+import { SkillAdminCredentialSource } from "../infrastructure/clients/platform/skill-admin-credential.js"
+import { SkillAdminTokenSource } from "../infrastructure/clients/platform/skill-admin-token.js"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import { randomUUID } from "node:crypto"
 
@@ -50,6 +55,9 @@ export type BffRouteInput = {
 export type BffRouteHandler = (input: BffRouteInput) => Promise<boolean | void>
 
 export type BffServerComposition = {
+  skillAuthorization: Pick<SkillAuthorizationClient, "check">
+  skillProductClient: SkillProductConnectClient | null
+  skillAdminClient: SkillAdminConnectClient | null
   skillDraftClient: CatalogConnectClient | null
   personalInstallationClient: PersonalInstallationConnectClient | null
   businessStore: BffBusinessStore | null
@@ -74,6 +82,9 @@ export type BffServerComposition = {
 }
 
 export type BffCompositionOptions = {
+  skillAuthorization?: Pick<SkillAuthorizationClient, "check">
+  skillProductClient?: SkillProductConnectClient | null
+  skillAdminClient?: SkillAdminConnectClient | null
   skillDraftClient?: CatalogConnectClient | null
   personalInstallationClient?: PersonalInstallationConnectClient | null
   /** Supplying null is an explicit test composition; omitted means real persistence. */
@@ -122,10 +133,37 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
       timeoutMs: config.upstreamTimeoutMs,
       maxResponseBytes: config.upstreamMaxResponseBytes,
     })
+  const skillAuthorization =
+    options.skillAuthorization ?? new SkillAuthorizationClient({ baseUrl: config.iamBaseUrl, timeoutMs: 5000, maxResponseBytes: 65_536 })
+  const skillProductClient =
+    options.skillProductClient !== undefined
+      ? options.skillProductClient
+      : config.skillDraft?.platformBaseUrl && config.skillDraft.credentialFile && config.platformProjection?.credentialFile && config.iamBaseUrl
+        ? new SkillProductConnectClient(
+            config.skillDraft.platformBaseUrl,
+            new CatalogTokenSource(config.iamBaseUrl, new CatalogCredentialSource(config.skillDraft.credentialFile), config.skillDraft.timeoutMs),
+            new ProjectionTokenSource(
+              config.iamBaseUrl,
+              new ProjectionCredentialSource(config.platformProjection.credentialFile),
+              config.platformProjection.timeoutMs,
+            ),
+            config.skillDraft.timeoutMs,
+          )
+        : null
+  const skillAdminClient =
+    options.skillAdminClient !== undefined
+      ? options.skillAdminClient
+      : config.skillDraft?.platformBaseUrl && config.skillAdminCredentialFile && config.iamBaseUrl
+        ? new SkillAdminConnectClient(
+            config.skillDraft.platformBaseUrl,
+            new SkillAdminTokenSource(config.iamBaseUrl, new SkillAdminCredentialSource(config.skillAdminCredentialFile), config.skillDraft.timeoutMs),
+            config.skillDraft.timeoutMs,
+          )
+        : null
   const skillDraftClient =
     options.skillDraftClient !== undefined
       ? options.skillDraftClient
-      : config.skillDraft?.enabled && config.skillDraft.platformBaseUrl !== null && config.skillDraft.credentialFile !== null && config.iamBaseUrl !== null
+      : config.skillDraft && config.skillDraft.platformBaseUrl !== null && config.skillDraft.credentialFile !== null && config.iamBaseUrl !== null
         ? new CatalogConnectClient(
             config.skillDraft.platformBaseUrl,
             new CatalogTokenSource(config.iamBaseUrl, new CatalogCredentialSource(config.skillDraft.credentialFile), config.skillDraft.timeoutMs),
@@ -135,7 +173,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
   const personalInstallationClient =
     options.personalInstallationClient !== undefined
       ? options.personalInstallationClient
-      : config.skillDraft?.enabled &&
+      : config.skillDraft &&
           config.skillDraft.platformBaseUrl !== null &&
           config.skillDraft.credentialFile !== null &&
           config.platformProjection?.credentialFile !== null &&
@@ -279,6 +317,9 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
   }
   return {
     skillDraftClient,
+    skillAuthorization,
+    skillProductClient,
+    skillAdminClient,
     personalInstallationClient,
     businessStore,
     sessionAdmission,

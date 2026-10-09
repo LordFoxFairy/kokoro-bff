@@ -8,7 +8,7 @@ export async function putStorageBytes(
   allowedOrigin: string,
   signal: AbortSignal,
   fetcher: typeof fetch = fetch,
-): Promise<void> {
+): Promise<string> {
   let url: URL
   try {
     url = new URL(reference.url)
@@ -41,4 +41,15 @@ export async function putStorageBytes(
   })
   await response.body?.cancel()
   if (!response.ok) throw new ProjectResourceError("storage_upload_unavailable", 503, true)
+  const sourceVersionId = response.headers.get("x-amz-version-id")
+  if (
+    sourceVersionId === null ||
+    sourceVersionId.length === 0 ||
+    sourceVersionId.length > 512 ||
+    sourceVersionId === "null" ||
+    sourceVersionId.trim().length === 0 ||
+    /[\u0000-\u001f\u007f]/u.test(sourceVersionId)
+  )
+    throw new ProjectResourceError("storage_response_invalid", 502)
+  return sourceVersionId
 }

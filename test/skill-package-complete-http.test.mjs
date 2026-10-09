@@ -34,8 +34,9 @@ const headers = {
   "content-type": "application/json",
   "idempotency-key": "complete-1",
 }
-const input = { attempt_id: "attempt-1", upload_id: "upload-1", content_sha256: "a".repeat(64), size_bytes: 143 }
+const input = { source_version_id: "OPAQUE+/=", attempt_id: "attempt-1", upload_id: "upload-1", content_sha256: "a".repeat(64), size_bytes: 143 }
 const result = () => ({
+  stateVersion: 1n,
   skillId: { value: "skill-1" },
   attemptId: "attempt-1",
   attemptEpoch: 1n,
@@ -47,7 +48,11 @@ const result = () => ({
   scanState: 2,
 })
 async function withServer(client, run, admission = { verify: async () => ({ ok: true, identity: { namespace: "tenant", userId: "user" } }) }) {
-  const server = createLiveTestBffServer(config, { sessionAdmission: admission, skillDraftClient: client })
+  const server = createLiveTestBffServer(config, {
+    skillAuthorization: { check: async () => ({ ok: true }) },
+    sessionAdmission: admission,
+    skillDraftClient: client,
+  })
   server.listen(0, "127.0.0.1")
   await once(server, "listening")
   try {
@@ -72,7 +77,7 @@ test("Complete new path is a default-closed strict candidate, never old Capabili
 test("Complete projector matches all eleven owner v4 command projection vectors", async () => {
   const manifest = JSON.parse(
     await readFile(
-      new URL("../contract/vendor/kokoro-platform/94bd0ea94aabc60c666fdb2cfa8784baf194e24b/execution-operations-v5/manifest.json", import.meta.url),
+      new URL("../contract/vendor/kokoro-platform/fa185ed2b25c3e81946cfdcd12d7665d02b8bad3/execution-operations-v5/manifest.json", import.meta.url),
       "utf8",
     ),
   )
@@ -94,6 +99,8 @@ test("Complete generated Connect request carries exact typed command and Product
       ["upload_id", 6],
       ["content_sha256", 7],
       ["size_bytes", 8],
+      ["source_version_id", 9],
+      ["expected_state_version", 10],
     ],
   )
   assert.deepEqual(
@@ -108,6 +115,7 @@ test("Complete generated Connect request carries exact typed command and Product
       ["replayed", 7],
       ["content_sha256", 8],
       ["scan_state", 9],
+      ["state_version", 10],
     ],
   )
   const request = create(CompleteSkillPackageUploadRequestSchema, {
@@ -145,6 +153,7 @@ test("Complete returns strict uploaded data for clean, pending and unknown scans
         const body = await response.json()
         assert.deepEqual(Object.keys(body), ["data"])
         assert.deepEqual(body.data, {
+          state_version: "1",
           skill_id: "skill-1",
           attempt_id: "attempt-1",
           attempt_epoch: "1",

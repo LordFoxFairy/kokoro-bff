@@ -3,16 +3,16 @@ import { createHash } from "node:crypto"
 import { readFile } from "node:fs/promises"
 import { test } from "node:test"
 const root = new URL("../", import.meta.url)
-const ownerCommit = "94bd0ea94aabc60c666fdb2cfa8784baf194e24b"
-const ownerDigest = "370e3d7152796042f00095eda86eec4bc9883766c051f7f7dc864dce2b359b04"
-const ownerUrl = new URL(`contract/vendor/kokoro-platform-http/${ownerCommit}/platform-http.openapi.json`, root)
+const ownerCommit = "fa185ed2b25c3e81946cfdcd12d7665d02b8bad3"
+const ownerDigest = "6d4abae68cd5cc6e2d8676ac34a48f7ea3564196ec6215ea1531b3cfedd3c3d7"
+const ownerUrl = new URL(`contract/vendor/kokoro-platform/${ownerCommit}/openapi/platform-http.openapi.json`, root)
 
 test("routed Platform HTTP 3.5.0 projection client pins reviewed owner bytes", async () => {
   const manifest = JSON.parse(await readFile(new URL("contract/dependencies/platform-http.json", root), "utf8"))
   const source = await readFile(ownerUrl)
   const api = JSON.parse(source)
   assert.equal(manifest.status, "generated")
-  assert.equal(manifest.owner.contract_version, "3.5.0")
+  assert.equal(manifest.owner.contract_version, "5.2.0")
   assert.equal(manifest.owner.repository_path, "apps/kokoro-capability")
   assert.equal(manifest.owner.repository_commit, ownerCommit)
   assert.equal(manifest.owner.contract_sha256, ownerDigest)
@@ -27,9 +27,9 @@ test("routed Platform HTTP 3.5.0 projection client pins reviewed owner bytes", a
 
 test("R266 Platform HTTP 3.5 management projection pin exposes only the two reviewed self reads", async () => {
   const manifest = JSON.parse(await readFile(new URL("contract/dependencies/platform-http.json", root), "utf8"))
-  const source = await readFile(new URL(`contract/vendor/kokoro-platform-http/${manifest.owner.repository_commit}/platform-http.openapi.json`, root))
+  const source = await readFile(new URL(`contract/vendor/kokoro-platform/${manifest.owner.repository_commit}/openapi/platform-http.openapi.json`, root))
   const api = JSON.parse(source)
-  assert.equal(manifest.owner.contract_version, "3.5.0")
+  assert.equal(manifest.owner.contract_version, "5.2.0")
   assert.equal(manifest.owner.repository_commit, ownerCommit)
   assert.equal(manifest.owner.contract_sha256, ownerDigest)
   assert.equal(createHash("sha256").update(source).digest("hex"), manifest.owner.contract_sha256)
@@ -48,7 +48,9 @@ test("R345 Platform HTTP 3.4 adds only required Skill update instants to the com
   ])
   assert.equal(createHash("sha256").update(currentBytes).digest("hex"), ownerDigest)
   assert.equal(createHash("sha256").update(parentBytes).digest("hex"), "b6e5d0e0118207ee37933e5c22e94c86d95d74307b22a44e26e8974fede82acf")
-  const current = JSON.parse(await readFile(new URL(`contract/vendor/kokoro-platform/${ownerCommit}/descriptor/platform-skill-example-prompts-http-3.4.0.json`, root)))
+  const current = JSON.parse(
+    await readFile(new URL(`contract/vendor/kokoro-platform/${ownerCommit}/descriptor/platform-skill-example-prompts-http-3.4.0.json`, root)),
+  )
   const stripped = structuredClone(current)
   const exactFields = {
     Skill: ["source_ref", "name", "description", "content_hash", "scope", "revision", "enabled", "categories", "skill_updated_at"],
@@ -70,18 +72,20 @@ test("R345 Platform HTTP 3.4 adds only required Skill update instants to the com
 })
 
 test("R350 HTTP3.5 adds exactly required examples to complete HTTP3.4", async () => {
- const current = JSON.parse(await readFile(ownerUrl))
- assert.equal(current.info.version, "3.5.0")
- for (const name of ["Skill", "SelfManagedSkill", "PublishedPersonalSkill"]) {
-  const schema = current.components.schemas[name]
-  assert.ok(schema.required.includes("example_prompts"))
-  assert.equal(schema.properties.example_prompts.maxItems, 10)
-  assert.equal(schema.properties.example_prompts.items.maxLength, 1000)
-  delete schema.properties.example_prompts
-  schema.required = schema.required.filter(field => field !== "example_prompts")
- }
- current.info.version = "3.4.0"
- const bytes = await readFile(new URL(`contract/vendor/kokoro-platform/${ownerCommit}/descriptor/platform-skill-example-prompts-http-3.4.0.json`, root))
- assert.equal(createHash("sha256").update(bytes).digest("hex"), "ca90f41f124c53a690746434cb66ac774f4a134acf109decd44bb110fafa61d6")
- assert.deepEqual(current, JSON.parse(bytes))
+  const current = JSON.parse(
+    await readFile(new URL(`contract/vendor/kokoro-platform/${ownerCommit}/descriptor/platform-skill-category-keys-http-3.5.0.json`, root)),
+  )
+  assert.equal(current.info.version, "3.5.0")
+  for (const name of ["Skill", "SelfManagedSkill", "PublishedPersonalSkill"]) {
+    const schema = current.components.schemas[name]
+    assert.ok(schema.required.includes("example_prompts"))
+    assert.equal(schema.properties.example_prompts.maxItems, 10)
+    assert.equal(schema.properties.example_prompts.items.maxLength, 1000)
+    delete schema.properties.example_prompts
+    schema.required = schema.required.filter((field) => field !== "example_prompts")
+  }
+  current.info.version = "3.4.0"
+  const bytes = await readFile(new URL(`contract/vendor/kokoro-platform/${ownerCommit}/descriptor/platform-skill-example-prompts-http-3.4.0.json`, root))
+  assert.equal(createHash("sha256").update(bytes).digest("hex"), "ca90f41f124c53a690746434cb66ac774f4a134acf109decd44bb110fafa61d6")
+  assert.deepEqual(current, JSON.parse(bytes))
 })

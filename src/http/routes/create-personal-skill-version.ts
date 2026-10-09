@@ -1,3 +1,4 @@
+import { assertSkillWireKnown, projectSkillStateVersion } from "../../infrastructure/clients/platform/skill-product-response.js"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import { Code, ConnectError } from "@connectrpc/connect"
 import { SkillStatus } from "../../generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
@@ -112,6 +113,7 @@ export async function createPersonalSkillVersionRoute(
       fq_method: "kokoro.platform.v1.SkillCatalogService/CreateSkillVersion",
       tenant_ref: scope.context.identity.namespace,
       request: {
+        ...(input.expectedStateVersion === undefined ? {} : { expected_state_version: input.expectedStateVersion }),
         owner_scope: { kind: "user", id: scope.context.identity.userId },
         base_skill_id: { value: skillId },
         metadata: {
@@ -119,7 +121,8 @@ export async function createPersonalSkillVersionRoute(
           summary: input.summary,
           tags: input.tags,
           metadata_json: "e30",
-          ...(input.examplePrompts === undefined ? {} : { example_prompts: input.examplePrompts }),
+          ...(input.examplePrompts === undefined ? {} : { example_prompts: { prompts: input.examplePrompts } }),
+          ...(input.categoryKeys === undefined ? {} : { category_keys: { keys: input.categoryKeys } }),
         },
         product_context: {
           subject_id: scope.context.identity.userId,
@@ -143,6 +146,8 @@ export async function createPersonalSkillVersionRoute(
         scope.deadlineAt,
       )
       scope.active()
+      assertSkillWireKnown(result)
+      projectSkillStateVersion(result.stateVersion)
       if (
         hasUnknownFields(result) ||
         hasUnknownFields(result.skillId) ||
@@ -160,6 +165,7 @@ export async function createPersonalSkillVersionRoute(
         throw new Error("skill_response_invalid")
       replyPersonalSkillLifecycle(response, scope, requestId, 201, {
         data: {
+          state_version: projectSkillStateVersion(result.stateVersion),
           skill_id: result.skillId.value,
           series_id: result.seriesId.value,
           revision: result.revision.toString(),

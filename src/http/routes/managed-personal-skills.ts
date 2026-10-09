@@ -1,3 +1,6 @@
+import { parsePersonalSkillQuery } from "../skill-installation-input.js"
+import { startSkillRequestBudget } from "./skill-drafts.js"
+import { IamPublisherProfileClient } from "../../infrastructure/clients/iam-publisher-profile.js"
 import type { IncomingMessage, ServerResponse } from "node:http"
 
 import { authorizeUserRequest } from "../../auth/user-admission.js"
@@ -10,7 +13,7 @@ import { queryOf } from "../request.js"
 import { send } from "../response.js"
 
 const clients = new WeakMap<BffConfig, PlatformProjectionHttpClient>()
-const listQueryKeys = new Set(["limit", "cursor", "status"])
+const listQueryKeys = new Set(["limit", "cursor", "status", "source_kind", "query"])
 
 function whileActive<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -52,11 +55,18 @@ function operationFor(path: string[]): ManagedPersonalSkillOperation | null {
 function listQuery(request: IncomingMessage): ListSelfManagedSkillsData["query"] | null {
   const incoming = queryOf(request)
   const query: Record<string, unknown> = {}
+  let textQuery: string | undefined
   for (const key of new Set(incoming.keys())) {
     if (!listQueryKeys.has(key)) return null
     const values = incoming.getAll(key)
     if (values.length !== 1 || values[0] === undefined || values[0].length === 0) return null
-    if (key === "limit") {
+    if (key === "query") {
+      try {
+        textQuery = parsePersonalSkillQuery(values[0])
+      } catch {
+        return null
+      }
+    } else if (key === "limit") {
       if (!/^[1-9][0-9]*$/u.test(values[0])) return null
       query.limit = Number(values[0])
     } else query[key] = values[0]
@@ -64,9 +74,12 @@ function listQuery(request: IncomingMessage): ListSelfManagedSkillsData["query"]
   const parsed = zListSelfManagedSkillsQuery.strict().safeParse(query)
   if (!parsed.success) return null
   return {
+    // Zod max(length) counts UTF16; query is separately validated as formal Unicode scalars.
+    ...(textQuery === undefined ? {} : { query: textQuery }),
     ...(parsed.data.limit === undefined ? {} : { limit: parsed.data.limit }),
     ...(parsed.data.cursor === undefined ? {} : { cursor: parsed.data.cursor }),
     ...(parsed.data.status === undefined ? {} : { status: parsed.data.status }),
+    ...(parsed.data.source_kind === undefined ? {} : { source_kind: parsed.data.source_kind }),
   }
 }
 
@@ -82,7 +95,7 @@ export async function managedPersonalSkillsRoute(
   if (operation === null) return
   if (request.aborted || response.destroyed || response.writableEnded) return
   response.setHeader("x-request-id", requestId)
-  const deadlineAt = performance.now() + 10_000
+  const deadlineAt = startSkillRequestBudget(request)
   const deadline = new AbortController()
   let timedOut = false
   const timer = setTimeout(
@@ -172,7 +185,14 @@ export async function managedPersonalSkillsRoute(
       return
     }
     if (result.ok) {
-      const payload = Buffer.from(JSON.stringify({ data: result.data, meta: { request_id: requestId } }))
+      const enriched = await new IamPublisherProfileClient(config.iamBaseUrl ?? "", 5000).enrich(
+        admission.context.identity.namespace,
+        admission.bearerToken,
+        requestId,
+        result.data,
+        deadline.signal,
+      )
+      const payload = Buffer.from(JSON.stringify({ data: enriched, meta: { request_id: requestId } }))
       if (expired() || deadline.signal.aborted || request.aborted || response.destroyed || response.writableEnded) {
         if (timedOut && !response.destroyed && !response.writableEnded)
           fail(response, requestId, 503, "skill_dependency_unavailable", "Managed Skill dependency is unavailable")

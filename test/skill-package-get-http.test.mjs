@@ -32,6 +32,7 @@ const headers = { authorization: "Bearer session", "x-kokoro-service": "web-bff"
 
 async function withServer(client, run, admission = new SessionAdmissionDouble({ session: { namespace: "tenant", userId: "user" } })) {
   const server = createLiveTestBffServer(config, {
+    skillAuthorization: { check: async () => ({ ok: true }) },
     sessionAdmission: admission,
     skillDraftClient: client,
   })
@@ -50,13 +51,13 @@ test("candidate Get projects current package state from trusted user and tenant"
     {
       getPackageUpload: async (input) => {
         calls.push(input)
-        return { skillId: { value: "skill-1" }, attemptEpoch: 0n, phase: 1 }
+        return { stateVersion: 1n, skillId: { value: "skill-1" }, attemptEpoch: 0n, phase: 1 }
       },
     },
     async (base) => {
       const response = await fetch(`${base}/v1/skills/skill-1/package-upload`, { headers })
       assert.equal(response.status, 200)
-      assert.deepEqual(await response.json(), { data: { skill_id: "skill-1", attempt_epoch: "0", phase: "none" } })
+      assert.deepEqual(await response.json(), { data: { state_version: "1", skill_id: "skill-1", attempt_epoch: "0", phase: "none" } })
       assert.equal(response.headers.get("x-request-id")?.length > 0, true)
       assert.equal(response.headers.get("cache-control"), "no-store")
     },
@@ -71,7 +72,7 @@ test("candidate Get keeps the echoed request ID within the public 128-character 
     {
       getPackageUpload: async ({ requestId }) => {
         seen.push(requestId)
-        return { skillId: { value: "skill-1" }, attemptEpoch: 0n, phase: 1 }
+        return { stateVersion: 1n, skillId: { value: "skill-1" }, attemptEpoch: 0n, phase: 1 }
       },
     },
     async (base) => {
@@ -95,7 +96,7 @@ test("candidate Get does not echo duplicate or control-bearing request IDs", asy
     {
       getPackageUpload: async ({ requestId }) => {
         seen.push(requestId)
-        return { skillId: { value: "skill-1" }, attemptEpoch: 0n, phase: 1 }
+        return { stateVersion: 1n, skillId: { value: "skill-1" }, attemptEpoch: 0n, phase: 1 }
       },
     },
     async (base) => {
@@ -199,10 +200,10 @@ test("candidate Get projects all owner phases with uint64 epoch as a decimal str
     ],
   ]
   for (const [state, expected] of cases)
-    await withServer({ getPackageUpload: async () => ({ skillId: { value: "skill-1" }, ...state }) }, async (base) => {
+    await withServer({ getPackageUpload: async () => ({ stateVersion: 1n, skillId: { value: "skill-1" }, ...state }) }, async (base) => {
       const response = await fetch(`${base}/v1/skills/skill-1/package-upload`, { headers })
       assert.equal(response.status, 200)
-      assert.deepEqual(await response.json(), { data: { skill_id: "skill-1", ...expected } })
+      assert.deepEqual(await response.json(), { data: { state_version: "1", skill_id: "skill-1", ...expected } })
     })
 })
 
@@ -220,12 +221,12 @@ test("candidate Get fails closed on invalid owner package state and never projec
     { attemptEpoch: 18_446_744_073_709_551_616n, phase: 2, attemptId: "attempt-1" },
   ]
   for (const state of cases)
-    await withServer({ getPackageUpload: async () => ({ skillId: { value: "skill-1" }, ...state }) }, async (base) => {
+    await withServer({ getPackageUpload: async () => ({ stateVersion: 1n, skillId: { value: "skill-1" }, ...state }) }, async (base) => {
       const response = await fetch(`${base}/v1/skills/skill-1/package-upload`, { headers })
       assert.equal(response.status, 502)
       assert.equal((await response.json()).error.code, "skill_response_invalid")
     })
-  await withServer({ getPackageUpload: async () => ({ skillId: { value: "foreign-skill" }, attemptEpoch: 0n, phase: 1 }) }, async (base) => {
+  await withServer({ getPackageUpload: async () => ({ stateVersion: 1n, skillId: { value: "foreign-skill" }, attemptEpoch: 0n, phase: 1 }) }, async (base) => {
     const response = await fetch(`${base}/v1/skills/skill-1/package-upload`, { headers })
     assert.equal(response.status, 502)
   })
@@ -273,7 +274,7 @@ test("candidate Get re-admits each read and revoked session creates no new Platf
   const client = {
     getPackageUpload: async () => {
       platformCalls++
-      return { skillId: { value: "skill-1" }, attemptEpoch: 0n, phase: 1 }
+      return { stateVersion: 1n, skillId: { value: "skill-1" }, attemptEpoch: 0n, phase: 1 }
     },
   }
   await withServer(
@@ -322,6 +323,8 @@ test("generated Get Connect client sends only catalog workload token and trusted
         router.service(SkillCatalogService, {
           getSkillPackageUpload(request, context) {
             calls++
+            context.responseHeader.set("x-kokoro-request-id", request.requestId)
+            context.responseHeader.set("cache-control", "no-store")
             assert.equal(context.requestHeader.get("authorization"), "Bearer catalog-machine")
             assert.equal(context.requestHeader.get("x-tenant-ref"), "tenant")
             assert.equal(request.requestId, "request-1")
@@ -329,7 +332,7 @@ test("generated Get Connect client sends only catalog workload token and trusted
             assert.equal(request.productContext?.subjectId, "user")
             assert.equal(request.productContext?.ownerScope?.kind, "user")
             assert.equal(request.productContext?.ownerScope?.id, "user")
-            return { skillId: { value: "skill-1" }, phase: SkillPackagePhase.NONE, attemptEpoch: 0n }
+            return { stateVersion: 1n, skillId: { value: "skill-1" }, phase: SkillPackagePhase.NONE, attemptEpoch: 0n }
           },
         })
       },

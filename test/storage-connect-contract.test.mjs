@@ -3,10 +3,10 @@ import { createHash } from "node:crypto"
 import { access, readFile } from "node:fs/promises"
 import { test } from "node:test"
 
-const ownerCommit = "e8b9928418924812587b7ac07900aee4be5bc27f"
+const ownerCommit = "d13f33acfc7a482d61ebffc58e7b2667b58ae197"
 const sources = {
   "kokoro/common/v1/common.proto": "4604725ec7d5896c9d74b53c6f06d19b20ee758d5ab9e1cb90177ede95bba9fd",
-  "kokoro/storage/v2/storage.proto": "7960312aa9879d17af17dbd68f25df1a61edb67f1f7d9613ea3e97b404c75bef",
+  "kokoro/storage/v3/storage.proto": "1021e603065978871c51519ddba5b23c9b97f16b781a08bd98e019b3342bf5f9",
 }
 const root = new URL("../", import.meta.url)
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex")
@@ -37,8 +37,8 @@ async function sourceBytes() {
 test("Storage consumer pins exact owner Proto bytes and generated provenance, not an execution artifact", async () => {
   const manifest = JSON.parse(await requiredFile("contract/dependencies/storage-connect.json"))
   assert.equal(manifest.owner.repository_commit, ownerCommit)
-  assert.equal(manifest.owner.published_combined_sha256, "c22b5c10ee698d579753dcac370be371d8dba1df8fead1a12883f5443fbad18a")
-  assert.equal(manifest.owner.package_name, "kokoro.storage.v2")
+  assert.equal(manifest.owner.published_combined_sha256, "47e2659f577cf5c0a5e44a9ee9165d0fee17471bb3d7abb80095a956f655c1f9")
+  assert.equal(manifest.owner.package_name, "kokoro.storage.v3")
   assert.equal(manifest.owner.repository_path, "apps/kokoro-storage")
   assert.equal(manifest.execution_artifact, null)
   assert.deepEqual(
@@ -61,8 +61,8 @@ test("Storage generator rejects source tamper, missing source, extra source and 
     assert.throws(() => assertSourceDigests(missing), /source allowlist/)
   }
   assert.throws(() => assertSourceDigests({ ...bytes, "kokoro/storage/v1/storage.proto": Buffer.from("") }), /source allowlist/)
-  const files = ["kokoro/common/v1/common_pb.ts", "kokoro/storage/v2/storage_pb.ts"]
-  const directories = ["kokoro", "kokoro/common", "kokoro/common/v1", "kokoro/storage", "kokoro/storage/v2"]
+  const files = ["kokoro/common/v1/common_pb.ts", "kokoro/storage/v3/storage_pb.ts"]
+  const directories = ["kokoro", "kokoro/common", "kokoro/common/v1", "kokoro/storage", "kokoro/storage/v3"]
   assert.doesNotThrow(() => assertGeneratedTree({ files, directories }))
   assert.throws(() => assertGeneratedTree({ files: files.slice(1), directories }), /file allowlist/)
   assert.throws(() => assertGeneratedTree({ files: [...files, "manual.ts"], directories }), /file allowlist/)
@@ -78,7 +78,7 @@ test("all pinned consumer manifests track the same lockfile without replacing ex
 })
 
 test("Storage generated ListAssets wire contract carries only bounded query and metadata", async () => {
-  const { StorageService, ListAssetsRequestSchema, ListAssetItemSchema } = await import("../dist/generated/storage-connect/kokoro/storage/v2/storage_pb.js")
+  const { StorageService, ListAssetsRequestSchema, ListAssetItemSchema } = await import("../dist/generated/storage-connect/kokoro/storage/v3/storage_pb.js")
   assert.equal(StorageService.method.listAssets.name, "ListAssets")
   assert.deepEqual(
     ListAssetsRequestSchema.fields.map((f) => [f.name, f.number]),
@@ -94,7 +94,7 @@ test("Storage generated ListAssets wire contract carries only bounded query and 
 })
 
 test("Storage release consumer exposes only command bodies and authenticated project or conversation scope metadata", async () => {
-  const generated = await import("../dist/generated/storage-connect/kokoro/storage/v2/storage_pb.js")
+  const generated = await import("../dist/generated/storage-connect/kokoro/storage/v3/storage_pb.js")
   assert.equal(generated.StorageService.method.releaseProjectScope?.name, "ReleaseProjectScope")
   assert.equal(generated.StorageService.method.releaseConversationScope?.name, "ReleaseConversationScope")
   for (const schemaName of ["ReleaseProjectScopeRequestSchema", "ReleaseConversationScopeRequestSchema"]) {
@@ -121,9 +121,9 @@ test("Storage release consumer exposes only command bodies and authenticated pro
     )
   }
 
-  const proto = String(await sourceBytes().then((files) => files["kokoro/storage/v2/storage.proto"]))
+  const proto = String(await sourceBytes().then((files) => files["kokoro/storage/v3/storage.proto"]))
   assert.match(proto, /x-kokoro-tenant-id, x-kokoro-subject-id, and x-kokoro-request-id transport metadata/u)
-  assert.match(proto, /x-kokoro-scope-kind \(personal\|project\|conversation\|skill_package\)/u)
+  assert.match(proto, /x-kokoro-scope-kind \(personal\|project\|conversation\|skill_package\|skill_cover\)/u)
   assert.match(proto, /Scope is asserted by an authenticated, permitted business owner; body identity is forbidden\./u)
 })
 
@@ -135,7 +135,7 @@ test("Storage F2 generated Artifact reads preserve owner identity and byte-refer
     FinalArtifactItemSchema,
     GetFinalArtifactDownloadReferenceRequestSchema,
     GetFinalArtifactDownloadReferenceResponseSchema,
-  } = await import("../dist/generated/storage-connect/kokoro/storage/v2/storage_pb.js")
+  } = await import("../dist/generated/storage-connect/kokoro/storage/v3/storage_pb.js")
   assert.equal(StorageService.method.listFinalArtifacts.name, "ListFinalArtifacts")
   assert.equal(StorageService.method.getFinalArtifact.name, "GetFinalArtifact")
   assert.equal(StorageService.method.getFinalArtifactDownloadReference.name, "GetFinalArtifactDownloadReference")

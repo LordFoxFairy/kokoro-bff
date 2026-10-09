@@ -9,7 +9,7 @@ import { Pool } from "pg"
 
 import { createBffServer } from "../dist/bootstrap/server.js"
 import { loadConfig } from "../dist/config/runtime.js"
-import { StorageService, ScanState, UploadPurpose, UploadState } from "../dist/generated/storage-connect/kokoro/storage/v2/storage_pb.js"
+import { StorageService, ScanState, UploadPurpose, UploadState } from "../dist/generated/storage-connect/kokoro/storage/v3/storage_pb.js"
 import { PostgresIdempotencyRepository } from "../dist/infrastructure/postgres/idempotency-repository.js"
 
 const postgresAdminUrl = process.env.KOKORO_TEST_POSTGRES_URL

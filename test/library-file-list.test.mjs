@@ -38,7 +38,7 @@ test("Library requires explicit file or artifact kind and bounded single-valued 
 test("personal Connect list sends only admitted identity and validates CLEAN ASSET page", async () => {
   const { PersonalFileListClient } = await import("../dist/infrastructure/clients/storage/personal-file-list.js")
   const { createRouterTransport } = await import("@connectrpc/connect")
-  const { StorageService } = await import("../dist/generated/storage-connect/kokoro/storage/v2/storage_pb.js")
+  const { StorageService } = await import("../dist/generated/storage-connect/kokoro/storage/v3/storage_pb.js")
   const calls = []
   const item = {
     assetId: "asset-1",
@@ -173,7 +173,7 @@ test("live Product HTTP re-admits each page and calls personal Storage Connect w
   const { ConnectError, Code } = await import("@connectrpc/connect")
   const { createBffServer } = await import("../dist/bootstrap/server.js")
   const { loadConfig } = await import("../dist/config/runtime.js")
-  const { StorageService } = await import("../dist/generated/storage-connect/kokoro/storage/v2/storage_pb.js")
+  const { StorageService } = await import("../dist/generated/storage-connect/kokoro/storage/v3/storage_pb.js")
   const servers = []
   const calls = []
   let admissions = 0
@@ -279,7 +279,7 @@ test("live Product HTTP re-admits each page and calls personal Storage Connect w
 test("Artifact owner consumer checks trusted conversation scope and immutable receipt against FINAL CLEAN item", async () => {
   const { FinalArtifactClient } = await import("../dist/infrastructure/clients/storage/final-artifact.js")
   const { createRouterTransport, ConnectError, Code } = await import("@connectrpc/connect")
-  const { StorageService, ArtifactKind } = await import("../dist/generated/storage-connect/kokoro/storage/v2/storage_pb.js")
+  const { StorageService, ArtifactKind } = await import("../dist/generated/storage-connect/kokoro/storage/v3/storage_pb.js")
   const association = {
     conversationId: "conversation-1",
     artifactId: "artifact-1",
@@ -480,7 +480,7 @@ test("private Artifact Product HTTP list, item and download keep original bytes 
   const { connectNodeAdapter } = await import("@connectrpc/connect-node")
   const { createBffServer } = await import("../dist/bootstrap/server.js")
   const { loadConfig } = await import("../dist/config/runtime.js")
-  const { StorageService, ArtifactKind } = await import("../dist/generated/storage-connect/kokoro/storage/v2/storage_pb.js")
+  const { StorageService, ArtifactKind } = await import("../dist/generated/storage-connect/kokoro/storage/v3/storage_pb.js")
   const bytes = Buffer.from("hello")
   const digest = (await import("node:crypto")).createHash("sha256").update(bytes).digest("hex")
   const servers = []

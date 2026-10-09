@@ -154,6 +154,8 @@ export class PersonalInstallationConnectClient {
       installed?: boolean
       limit?: number
       cursor?: string
+      query?: string
+      sourceKind?: "personal" | "official" | "third_party"
     },
     signal?: AbortSignal,
   ) {
@@ -163,6 +165,8 @@ export class PersonalInstallationConnectClient {
           requestId: input.requestId,
           ...(input.enabled === undefined ? {} : { enabled: input.enabled }),
           ...(input.installed === undefined ? {} : { installed: input.installed }),
+          ...(input.sourceKind === undefined ? {} : { sourceKind: input.sourceKind }),
+          ...(input.query === undefined ? {} : { query: input.query }),
           page: create(ProductSkillInstallationPageRequestSchema, {
             ...(input.limit === undefined ? {} : { limit: input.limit }),
             ...(input.cursor === undefined ? {} : { cursor: input.cursor }),

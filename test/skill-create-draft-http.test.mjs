@@ -1,3 +1,4 @@
+import { projectSkillProductCommand } from "../dist/infrastructure/clients/platform/create-skill-draft-projector.js"
 import assert from "node:assert/strict"
 import { once } from "node:events"
 import test from "node:test"
@@ -6,6 +7,28 @@ import { createLiveTestBffServer } from "./doubles/server.ts"
 import { SessionAdmissionDouble } from "./doubles/session-admission.ts"
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 
+function catalogDigest(method, input) {
+  return projectSkillProductCommand(
+    JSON.stringify({
+      command_digest_version: "3.0.0",
+      fq_method: `kokoro.platform.v1.SkillCatalogService/${method}`,
+      tenant_ref: input.tenant,
+      request: {
+        owner_scope: { kind: "user", id: input.user },
+        product_context: { subject_id: input.user, owner_scope: { kind: "user", id: input.user } },
+        ...(method === "CreateSkillVersion" ? { base_skill_id: { value: input.baseSkillId } } : {}),
+        metadata: {
+          display_name: input.displayName,
+          summary: input.summary,
+          tags: input.tags,
+          metadata_json: "e30",
+          ...(input.examplePrompts === undefined ? {} : { example_prompts: { prompts: input.examplePrompts } }),
+        },
+      },
+    }),
+    true,
+  ).sha256
+}
 const config = {
   host: "127.0.0.1",
   port: 4300,
@@ -35,6 +58,7 @@ const headers = {
 }
 async function withServer(client, run) {
   const server = createLiveTestBffServer(config, {
+    skillAuthorization: { check: async () => ({ ok: true }) },
     sessionAdmission: new SessionAdmissionDouble({ session: { namespace: "tenant", userId: "user" } }),
     skillDraftClient: client,
   })
@@ -66,7 +90,7 @@ test("candidate emits exact 201 and forwards trusted owner identity", async () =
     {
       create: async (input) => {
         calls.push(input)
-        return { skillId: { value: "skill_1" }, seriesId: { value: "series_1" }, revision: 1n, status: SkillStatus.DRAFT, replayed: false }
+        return { stateVersion: 1n, skillId: { value: "skill_1" }, seriesId: { value: "series_1" }, revision: 1n, status: SkillStatus.DRAFT, replayed: false }
       },
     },
     async (base) => {
@@ -76,7 +100,9 @@ test("candidate emits exact 201 and forwards trusted owner identity", async () =
         body: JSON.stringify({ display_name: "Tea", summary: "", tags: ["tea"], example_prompts: ["  Brew tea  ", "same", "same"] }),
       })
       assert.equal(response.status, 201)
-      assert.deepEqual(await response.json(), { data: { skill_id: "skill_1", series_id: "series_1", revision: 1, status: "draft", replayed: false } })
+      assert.deepEqual(await response.json(), {
+        data: { state_version: "1", skill_id: "skill_1", series_id: "series_1", revision: 1, status: "draft", replayed: false },
+      })
     },
   )
   assert.equal(calls[0].tenant, "tenant")
@@ -121,7 +147,16 @@ test("candidate maps every declared Connect failure without leaking machine auth
 
 test("candidate rejects invalid response identifiers as 502", async () =>
   withServer(
-    { create: async () => ({ skillId: { value: "bad id" }, seriesId: { value: "series" }, revision: 1n, status: SkillStatus.DRAFT, replayed: false }) },
+    {
+      create: async () => ({
+        stateVersion: 1n,
+        skillId: { value: "bad id" },
+        seriesId: { value: "series" },
+        revision: 1n,
+        status: SkillStatus.DRAFT,
+        replayed: false,
+      }),
+    },
     async (base) => {
       const response = await fetch(`${base}/v1/skills/drafts`, {
         method: "POST",
@@ -159,7 +194,14 @@ test("generated CatalogConnectClient rejects a unary response larger than one Mi
       routes(router) {
         router.service(SkillCatalogService, {
           createSkillDraft() {
-            return { skillId: { value: "s".repeat(1024 * 1024 + 1) }, seriesId: { value: "series" }, revision: 1n, status: SkillStatus.DRAFT, replayed: false }
+            return {
+              stateVersion: 1n,
+              skillId: { value: "s".repeat(1024 * 1024 + 1) },
+              seriesId: { value: "series" },
+              revision: 1n,
+              status: SkillStatus.DRAFT,
+              replayed: false,
+            }
           },
         })
       },
@@ -170,7 +212,16 @@ test("generated CatalogConnectClient rejects a unary response larger than one Mi
   try {
     const client = new CatalogConnectClient(`http://127.0.0.1:${owner.address().port}`, { get: async () => "machine" }, 1000)
     await assert.rejects(
-      client.create({ requestId: "r", commandId: "c", digest: "d".repeat(64), tenant: "tenant", user: "user", displayName: "Tea", summary: "", tags: [] }),
+      client.create({
+        requestId: "r",
+        commandId: "c",
+        digest: catalogDigest("CreateSkillDraft", { tenant: "tenant", user: "user", displayName: "Tea", summary: "", tags: [] }),
+        tenant: "tenant",
+        user: "user",
+        displayName: "Tea",
+        summary: "",
+        tags: [],
+      }),
       (error) => error instanceof ConnectError && error.code === Code.ResourceExhausted && /readMaxBytes|larger than.*1048576/iu.test(error.message),
     )
   } finally {
@@ -236,10 +287,21 @@ test("same-key replay always re-admits IAM and revoked replay performs zero addi
   const client = {
     create: async () => {
       platformCalls += 1
-      return { skillId: { value: "skill" }, seriesId: { value: "series" }, revision: 1n, status: SkillStatus.DRAFT, replayed: platformCalls > 1 }
+      return {
+        stateVersion: 1n,
+        skillId: { value: "skill" },
+        seriesId: { value: "series" },
+        revision: 1n,
+        status: SkillStatus.DRAFT,
+        replayed: platformCalls > 1,
+      }
     },
   }
-  const server = createLiveTestBffServer(config, { sessionAdmission: admission, skillDraftClient: client })
+  const server = createLiveTestBffServer(config, {
+    skillAuthorization: { check: async () => ({ ok: true }) },
+    sessionAdmission: admission,
+    skillDraftClient: client,
+  })
   server.listen(0, "127.0.0.1")
   await once(server, "listening")
   try {
@@ -261,38 +323,80 @@ test("two real binary Catalog requests preserve absent, empty and original order
   const { CatalogConnectClient } = await import("../dist/infrastructure/clients/platform/catalog-connect.js")
   const { SkillCatalogService } = await import("../dist/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
   const seen = []
-  const owner = createServer(connectNodeAdapter({routes(router) {
-    const capture = request => { seen.push(request); return {skillId:{value:"new"},seriesId:{value:"series"},revision:1n,status:SkillStatus.DRAFT,replayed:false} }
-    router.service(SkillCatalogService, {createSkillDraft:capture,createSkillVersion:capture})
-  }}))
-  owner.listen(0,"127.0.0.1"); await once(owner,"listening")
+  const owner = createServer(
+    connectNodeAdapter({
+      routes(router) {
+        const capture = (request, context) => {
+          context.responseHeader.set("x-kokoro-request-id", request.requestId)
+          context.responseHeader.set("cache-control", "no-store")
+          seen.push(request)
+          return { stateVersion: 1n, skillId: { value: "new" }, seriesId: { value: "series" }, revision: 1n, status: SkillStatus.DRAFT, replayed: false }
+        }
+        router.service(SkillCatalogService, { createSkillDraft: capture, createSkillVersion: capture })
+      },
+    }),
+  )
+  owner.listen(0, "127.0.0.1")
+  await once(owner, "listening")
   try {
-    const client = new CatalogConnectClient(`http://127.0.0.1:${owner.address().port}`, {get:async()=>"token"}, 1000)
+    const client = new CatalogConnectClient(`http://127.0.0.1:${owner.address().port}`, { get: async () => "token" }, 1000)
     for (const method of ["create", "createPersonalVersion"]) {
       for (const examplePrompts of [undefined, [], ["  line\n", "same", "same"], ["😀".repeat(1000)]]) {
-        const input = {requestId:"r",commandId:"c",digest:"d".repeat(64),tenant:"tenant",user:"user",baseSkillId:"base",displayName:"Tea",summary:"",tags:[],...(examplePrompts === undefined ? {} : {examplePrompts})}
-        await client[method](input,new AbortController().signal,performance.now()+1000)
+        const input = {
+          requestId: "r",
+          commandId: "c",
+          digest: "d".repeat(64),
+          tenant: "tenant",
+          user: "user",
+          baseSkillId: "base",
+          displayName: "Tea",
+          summary: "",
+          tags: [],
+          ...(examplePrompts === undefined ? {} : { examplePrompts }),
+        }
+        input.digest = catalogDigest(method === "create" ? "CreateSkillDraft" : "CreateSkillVersion", input)
+        await client[method](input, new AbortController().signal, performance.now() + 1000)
         const metadata = seen.at(-1).metadata
         assert.deepEqual(metadata.examplePrompts?.prompts, examplePrompts)
         assert.equal(Buffer.from(metadata.metadataJson).toString("utf8"), "{}")
       }
     }
-    assert.equal(seen.length,8)
-  } finally { owner.closeAllConnections(); await new Promise(resolve=>owner.close(resolve)) }
+    assert.equal(seen.length, 8)
+  } finally {
+    owner.closeAllConnections()
+    await new Promise((resolve) => owner.close(resolve))
+  }
 })
 
 test("draft HTTP rejects invalid examples without dispatch and binds presence/order to digest", async () => {
-  const calls=[]
-  await withServer({create:async input=>{calls.push(input);return {skillId:{value:"s"},seriesId:{value:"series"},revision:1n,status:SkillStatus.DRAFT,replayed:false}}}, async base=> {
-    for(const prompts of [null,{},["tail\ud800"],["\u0000"], [...Array.from({length:8},()=>"é".repeat(1000)),"é".repeat(192)+"a"]]) {
-      const response=await fetch(`${base}/v1/skills/drafts`,{method:"POST",headers,body:JSON.stringify({display_name:"Tea",summary:"",tags:[],example_prompts:prompts})})
-      assert.equal(response.status,400);assert.equal(calls.length,0)
-    }
-    for(const prompts of [undefined,[],["a","b"],["b","a"]]) {
-      const response=await fetch(`${base}/v1/skills/drafts`,{method:"POST",headers,body:JSON.stringify({display_name:"Tea",summary:"",tags:[],...(prompts===undefined?{}:{example_prompts:prompts})})})
-      assert.equal(response.status,201)
-    }
-  })
-  assert.equal(new Set(calls.map(c=>c.digest)).size,4)
-  assert.equal(Object.hasOwn(calls[0],"examplePrompts"),false)
+  const calls = []
+  await withServer(
+    {
+      create: async (input) => {
+        calls.push(input)
+        return { stateVersion: 1n, skillId: { value: "s" }, seriesId: { value: "series" }, revision: 1n, status: SkillStatus.DRAFT, replayed: false }
+      },
+    },
+    async (base) => {
+      for (const prompts of [null, {}, ["tail\ud800"], ["\u0000"], [...Array.from({ length: 8 }, () => "é".repeat(1000)), "é".repeat(192) + "a"]]) {
+        const response = await fetch(`${base}/v1/skills/drafts`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ display_name: "Tea", summary: "", tags: [], example_prompts: prompts }),
+        })
+        assert.equal(response.status, 400)
+        assert.equal(calls.length, 0)
+      }
+      for (const prompts of [undefined, [], ["a", "b"], ["b", "a"]]) {
+        const response = await fetch(`${base}/v1/skills/drafts`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ display_name: "Tea", summary: "", tags: [], ...(prompts === undefined ? {} : { example_prompts: prompts }) }),
+        })
+        assert.equal(response.status, 201)
+      }
+    },
+  )
+  assert.equal(new Set(calls.map((c) => c.digest)).size, 4)
+  assert.equal(Object.hasOwn(calls[0], "examplePrompts"), false)
 })

@@ -1,3 +1,13 @@
+import { skillGithubImportRoute, skillGithubPreviewRoute } from "../http/routes/skill-github-import.js"
+import { assertSkillWireKnown } from "../infrastructure/clients/platform/skill-product-response.js"
+import { projectSkillPackageInspectionResponse } from "../infrastructure/clients/platform/skill-package-inspection-response.js"
+import { skillAiImportRoute } from "../http/routes/skill-ai-import.js"
+import { skillShareRoute } from "../http/routes/skill-share.js"
+import { skillUsageRoute } from "../http/routes/skill-usage.js"
+import { skillCoverRoute } from "../http/routes/skill-cover.js"
+import { skillDownloadRoute } from "../http/routes/skill-download.js"
+import { runSkillRoute, startSkillRequestBudget, skillRequestRemaining, skillDraftsRoute } from "../http/routes/skill-drafts.js"
+import { skillAdminRoute } from "../http/routes/skill-admin.js"
 import { personalizationRoute } from "../http/routes/personalization.js"
 import { projectRenameRoute } from "../http/routes/project-rename.js"
 import { projectDeleteRoute } from "../http/routes/project-delete.js"
@@ -12,7 +22,7 @@ import { projectResourceRoute } from "../http/routes/project-resource.js"
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http"
 
 import { loadConfig, type BffConfig } from "../config/runtime.js"
-import { authorizeUserRequest } from "../auth/user-admission.js"
+import { authorizeUserRequest, authorizeSkillAction, skillActionForRequest, withSkillActionAdmission } from "../auth/user-admission.js"
 import { failure, ok } from "../contracts/index.js"
 import { mutationTicket, type MutationTicket } from "../application/idempotency.js"
 import {
@@ -79,11 +89,21 @@ async function handle(
     segments = pathOf(request)
   } catch (error) {
     if (!isRawSkillPackageInspection) throw error
-    send(response, 400, { error: { code: "invalid_skill_package_request", message: "Skill package request is invalid", retryable: false } })
+    send(response, 400, {
+      error: {
+        code: "invalid_skill_package_request",
+        message: "Skill package request is invalid",
+        retryable: false,
+      },
+    })
     return
   }
   if (segments.length === 1 && segments[0] === "healthz" && request.method === "GET") {
-    send(response, 200, { status: "ok", service: "kokoro-bff", mode: config.mode })
+    send(response, 200, {
+      status: "ok",
+      service: "kokoro-bff",
+      mode: config.mode,
+    })
     return
   }
   if (segments.length === 1 && segments[0] === "readyz" && request.method === "GET") {
@@ -93,7 +113,11 @@ async function handle(
         .then(() => true)
         .catch(() => false)) &&
       (!config.agentEnabled || configuredUpstream(config, "agents") !== null)
-    send(response, ready ? 200 : 503, { status: "ok", service: "kokoro-bff", mode: config.mode })
+    send(response, ready ? 200 : 503, {
+      status: "ok",
+      service: "kokoro-bff",
+      mode: config.mode,
+    })
     return
   }
 
@@ -177,24 +201,19 @@ async function handle(
   }
 
   const businessPath = segments.slice(1)
+  const isProjectSkillAssociation = businessPath.length === 4 && businessPath[0] === "projects" && businessPath[2] === "skills" && request.method === "PATCH"
+  const hasSkillsBudget =
+    isProjectSkillAssociation ||
+    ["skills", "skill-installations", "skill-shares"].includes(businessPath[0] ?? "") ||
+    (businessPath[0] === "admin" && businessPath[1] === "skills") ||
+    (businessPath[0] === "self" && businessPath[1] === "skills")
+  if (hasSkillsBudget) startSkillRequestBudget(request)
   const isSkillPackageInspection =
     isRawSkillPackageInspection &&
     ((businessPath.length === 4 && businessPath[0] === "self" && businessPath[1] === "skills" && businessPath[3] === "package") ||
       (businessPath.length === 3 && businessPath[0] === "skill-installations" && businessPath[2] === "package"))
   if (isSkillPackageInspection) {
     await skillPackageInspectionRoute(request, response, config, composition.sessionAdmission, id, businessPath)
-    return
-  }
-  const isCreatePersonalSkillVersion =
-    request.method === "POST" && businessPath.length === 4 && businessPath[0] === "self" && businessPath[1] === "skills" && businessPath[3] === "versions"
-  if (isCreatePersonalSkillVersion) {
-    await createPersonalSkillVersionRoute(request, response, config, composition.sessionAdmission, id, businessPath[2] ?? "", composition.skillDraftClient)
-    return
-  }
-  const isWithdrawPersonalSkill =
-    request.method === "POST" && businessPath.length === 4 && businessPath[0] === "self" && businessPath[1] === "skills" && businessPath[3] === "withdraw"
-  if (isWithdrawPersonalSkill) {
-    await withdrawPersonalSkillRoute(request, response, config, composition.sessionAdmission, id, businessPath[2] ?? "", composition.skillDraftClient)
     return
   }
   const isManagedPersonalSkillRead =
@@ -205,6 +224,35 @@ async function handle(
     await managedPersonalSkillsRoute(request, response, config, composition.sessionAdmission, id, businessPath)
     return
   }
+  const isCreatePersonalSkillVersion =
+    request.method === "POST" && businessPath.length === 4 && businessPath[0] === "self" && businessPath[1] === "skills" && businessPath[3] === "versions"
+  if (isCreatePersonalSkillVersion) {
+    await createPersonalSkillVersionRoute(
+      request,
+      response,
+      config,
+      withSkillActionAdmission(composition.sessionAdmission, composition.skillAuthorization, "create_version", config.tenantId),
+      id,
+      businessPath[2] ?? "",
+      composition.skillDraftClient,
+    )
+    return
+  }
+  const isWithdrawPersonalSkill =
+    request.method === "POST" && businessPath.length === 4 && businessPath[0] === "self" && businessPath[1] === "skills" && businessPath[3] === "withdraw"
+  if (isWithdrawPersonalSkill) {
+    await withdrawPersonalSkillRoute(
+      request,
+      response,
+      config,
+      withSkillActionAdmission(composition.sessionAdmission, composition.skillAuthorization, "withdraw", config.tenantId),
+      id,
+      businessPath[2] ?? "",
+      composition.skillDraftClient,
+    )
+    return
+  }
+
   const isPersonalizationPath = businessPath.length === 2 && businessPath[0] === "preferences" && businessPath[1] === "personalization"
   const isProjectRenamePath =
     composition.routeHandler === undefined &&
@@ -243,6 +291,10 @@ async function handle(
   if (request.method === "POST" && businessPath.length === 2 && businessPath[0] === "library" && businessPath[1] === "files")
     response.setHeader("x-request-id", id)
   const admissionAbort = new AbortController()
+  const admissionTimer = setTimeout(
+    () => admissionAbort.abort(new Error("skill_admission_deadline")),
+    hasSkillsBudget ? skillRequestRemaining(request) : 10_000,
+  )
   const onRequestAborted = (): void => {
     admissionAbort.abort()
   }
@@ -251,7 +303,29 @@ async function handle(
   }
   request.once("aborted", onRequestAborted)
   response.once("close", onResponseClosed)
-  const admission = await authorizeUserRequest(request, config, composition.sessionAdmission, id, admissionAbort.signal).finally(() => {
+  const admissionWork = Promise.resolve()
+    .then(() => authorizeUserRequest(request, config, composition.sessionAdmission, id, admissionAbort.signal))
+    .then(async (result) => {
+      const action = skillActionForRequest(request.method ?? "GET", businessPath)
+      if (!result.ok || action === null) return result
+      const checked = await authorizeSkillAction(composition.skillAuthorization, result, action, admissionAbort.signal)
+      return checked.ok ? result : { ...checked, retryAfter: undefined }
+    })
+  const admission = await new Promise<Awaited<typeof admissionWork>>((resolve) => {
+    const abort = () => resolve({ ok: false, status: 503, code: "iam_admission_unavailable" })
+    admissionAbort.signal.addEventListener("abort", abort, { once: true })
+    void admissionWork
+      .then(resolve, () =>
+        resolve({
+          ok: false,
+          status: 503,
+          code: "iam_admission_unavailable",
+        }),
+      )
+      .finally(() => admissionAbort.signal.removeEventListener("abort", abort))
+    if (admissionAbort.signal.aborted) abort()
+  }).finally(() => {
+    clearTimeout(admissionTimer)
     request.removeListener("aborted", onRequestAborted)
     response.removeListener("close", onResponseClosed)
   })
@@ -259,6 +333,7 @@ async function handle(
     if (!response.destroyed) {
       response.setHeader("x-request-id", id)
       if (
+        hasSkillsBudget ||
         request.url === "/v1/skills/drafts" ||
         isSkillPackagePath ||
         isSkillPackageCompletePath ||
@@ -276,7 +351,13 @@ async function handle(
         send(
           response,
           admission.status,
-          { error: { code: admission.code, message: "BFF user admission failed", retryable: admission.status === 429 || admission.status === 503 } },
+          {
+            error: {
+              code: admission.code,
+              message: "BFF user admission failed",
+              retryable: admission.status === 429 || admission.status === 503,
+            },
+          },
           admission.retryAfter,
         )
       } else send(response, admission.status, failure(admission.code, "BFF user admission failed", id), admission.retryAfter)
@@ -284,6 +365,123 @@ async function handle(
     return
   }
   const context = admission.context
+  const readmitSkill = async (signal: AbortSignal): Promise<void> => {
+    const current = await authorizeUserRequest(request, config, composition.sessionAdmission, id, signal)
+    if (!current.ok && current.status >= 500) throw new Error("skill_dependency_unavailable")
+    if (!current.ok || current.context.identity.namespace !== context.identity.namespace || current.context.identity.userId !== context.identity.userId)
+      throw new Error("skill_not_found")
+    signal.throwIfAborted()
+  }
+  if (businessPath.join("/") === "skills/github/import" && request.method === "POST") {
+    await skillGithubImportRoute(request, response, context, config, composition.businessStore, composition.skillProductClient, readmitSkill)
+    return
+  }
+  if (businessPath.join("/") === "skills/github/preview" && request.method === "POST") {
+    await skillGithubPreviewRoute(request, response, context, readmitSkill)
+    return
+  }
+  if (businessPath.join("/") === "skills/ai-import" && request.method === "POST") {
+    await skillAiImportRoute(request, response, context, config, composition.businessStore, composition.skillProductClient, readmitSkill)
+    return
+  }
+  if (
+    businessPath[0] === "skill-shares" &&
+    ((businessPath.length === 1 && request.method === "POST") || (businessPath.length === 2 && ["GET", "DELETE"].includes(request.method ?? "")))
+  ) {
+    await skillShareRoute(
+      request,
+      response,
+      context,
+      businessPath,
+      composition.businessStore?.services.skillShares,
+      composition.skillProductClient,
+      `https://${config.domain}`,
+    )
+    return
+  }
+  if (businessPath.length === 2 && businessPath[0] === "skills" && businessPath[1] === "usage" && request.method === "POST") {
+    await skillUsageRoute(request, response, context, composition.businessStore?.services.skillUsage)
+    return
+  }
+  if (businessPath.length === 3 && businessPath[0] === "skills" && ["package", "download"].includes(businessPath[2]!) && request.method === "GET") {
+    await skillDownloadRoute(
+      request,
+      response,
+      context,
+      businessPath[1]!,
+      businessPath[2] === "package" ? "inspect" : "download",
+      composition.skillProductClient,
+      config.storage?.objectOrigin ?? null,
+      readmitSkill,
+    )
+    return
+  }
+  if (
+    businessPath[0] === "skills" &&
+    ((businessPath.length === 3 && businessPath[2] === "cover" && request.method === "GET") ||
+      (businessPath.length === 3 && businessPath[2] === "cover-upload" && ["GET", "POST"].includes(request.method ?? "")) ||
+      (businessPath.length === 4 && businessPath[2] === "cover-upload" && businessPath[3] === "complete" && request.method === "POST"))
+  ) {
+    await skillCoverRoute(
+      request,
+      response,
+      context,
+      businessPath[1]!,
+      businessPath[2] === "cover" ? "cover" : request.method === "GET" ? "get" : businessPath.length === 4 ? "complete" : "begin",
+      composition.skillProductClient,
+      config.storage?.objectOrigin ?? null,
+      readmitSkill,
+    )
+    return
+  }
+
+  if (
+    businessPath[0] === "admin" &&
+    businessPath[1] === "skills" &&
+    ((request.method === "GET" && [2, 3].includes(businessPath.length)) || (request.method === "POST" && businessPath.length === 4))
+  ) {
+    await skillAdminRoute(request, response, context, businessPath, composition.skillAdminClient, config.iamBaseUrl)
+    return
+  }
+  if (
+    businessPath[0] === "skills" &&
+    businessPath.length === 3 &&
+    ((businessPath[2] === "draft" && request.method === "PATCH") || (["discard", "audience"].includes(businessPath[2]!) && request.method === "POST"))
+  ) {
+    await skillDraftsRoute(
+      request,
+      response,
+      context,
+      businessPath[1]!,
+      businessPath[2] === "draft" ? "update" : (businessPath[2] as "discard" | "audience"),
+      composition.skillProductClient,
+    )
+    return
+  }
+
+  if (isProjectSkillAssociation) {
+    await runSkillRoute(request, response, context, async (signal, deadlineAt) => {
+      const client = composition.skillProductClient
+      if (!client) throw new Error("skill_dependency_unavailable")
+      const sourceRef = `skill:${businessPath[3]}`
+      const current = await client.inspect(
+        {
+          requestId: id,
+          tenant: context.identity.namespace,
+          subject: context.identity.userId,
+          sourceRef,
+        },
+        signal,
+        deadlineAt,
+      )
+      assertSkillWireKnown(current)
+      projectSkillPackageInspectionResponse(current, { sourceRef })
+      signal.throwIfAborted()
+    })
+    if (response.destroyed || response.writableEnded) return
+    // Admission and the local BFF association are not a cross-owner transaction.
+    // Runtime resolution remains responsible for current use-time eligibility.
+  }
 
   if (isPersonalizationPath) {
     await personalizationRoute(request, response, context, composition.businessStore)
@@ -315,7 +513,15 @@ async function handle(
     const abortRoute = (): void => routeAbort.abort()
     request.once("aborted", abortRoute)
     response.once("close", abortRoute)
-    await skillInstallationRoute(request, response, context, businessPath, composition.personalInstallationClient, routeAbort.signal).finally(() => {
+    await skillInstallationRoute(
+      request,
+      response,
+      context,
+      businessPath,
+      composition.personalInstallationClient,
+      routeAbort.signal,
+      config.iamBaseUrl,
+    ).finally(() => {
       request.removeListener("aborted", abortRoute)
       response.removeListener("close", abortRoute)
     })
@@ -418,7 +624,18 @@ async function handle(
       send(response, 400, failure("current_user_body_rejected", "Current user request must not contain a body", id))
       return
     }
-    send(response, 200, ok({ user_id: context.identity.userId, tenant_id: context.identity.namespace, platform_admin: context.platformAdmin }, id))
+    send(
+      response,
+      200,
+      ok(
+        {
+          user_id: context.identity.userId,
+          tenant_id: context.identity.namespace,
+          platform_admin: context.platformAdmin,
+        },
+        id,
+      ),
+    )
     return
   }
 
@@ -616,7 +833,16 @@ async function handle(
     mutation = result.ticket
   }
   if (composition.routeHandler !== undefined) {
-    const input: BffRouteInput = { request, response, businessPath, context, body, json, mutation, idempotency: composition.idempotency }
+    const input: BffRouteInput = {
+      request,
+      response,
+      businessPath,
+      context,
+      body,
+      json,
+      mutation,
+      idempotency: composition.idempotency,
+    }
     const handled = await composition.routeHandler(input)
     if (handled === false || (handled !== true && !response.writableEnded)) {
       await reply(response, 404, failure("bff_route_not_found", "Business route was not found", id), context, composition.idempotency, mutation)

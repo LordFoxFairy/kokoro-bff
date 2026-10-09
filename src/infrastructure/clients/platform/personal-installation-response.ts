@@ -1,3 +1,6 @@
+import { ZodError } from "zod"
+import { assertSkillWireKnown, projectSkillProductFacts } from "./skill-product-response.js"
+import { skillCategoryKeysSchema, skillSourceRefSchema, skillMetadataInputSchema } from "./skill-product-schema.js"
 import { parseSkillExamplePrompts } from "./skill-example-prompts.js"
 import type { Timestamp } from "@bufbuild/protobuf/wkt"
 import {
@@ -9,7 +12,15 @@ import {
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u,
   SOURCE = /^skill:(?!skill:)[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u,
   EVENT = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u
-const changes: Record<number, string> = { 1: "installed", 2: "upgraded", 3: "reinstalled", 4: "enabled", 5: "disabled", 6: "removed", 7: "unchanged" }
+const changes: Record<number, string> = {
+  1: "installed",
+  2: "upgraded",
+  3: "reinstalled",
+  4: "enabled",
+  5: "disabled",
+  6: "removed",
+  7: "unchanged",
+}
 const sourceStatuses: Partial<Record<SkillStatus, string>> = {
   [SkillStatus.ACTIVE]: "active",
   [SkillStatus.DISABLED]: "disabled",
@@ -29,55 +40,84 @@ function instant(value: Timestamp | undefined, required: boolean): string | unde
   return date.toISOString()
 }
 export function projectInstallation(value: ProductSkillInstallation | undefined) {
-  const sourceStatus = value === undefined ? undefined : sourceStatuses[value.sourceStatus]
-  if (
-    !value?.installationId ||
-    !ID.test(value.installationId.value) ||
-    !value.sourceRef ||
-    !SOURCE.test(value.sourceRef.value) ||
-    !value.seriesId ||
-    !ID.test(value.seriesId.value) ||
-    value.revision < 1n ||
-    value.revision > 18446744073709551615n ||
-    value.displayName.length > 255 ||
-    !/\S/u.test(value.displayName) ||
-    value.summary.length > 65535 ||
-    sourceStatus === undefined
-  )
-    throw new Error("skill_installation_response_invalid")
-  let examplePrompts: string[]
   try {
-    if (value.examplePrompts === undefined || (value.examplePrompts.$unknown?.length ?? 0) !== 0) throw new Error("missing or unknown examples")
-    examplePrompts = parseSkillExamplePrompts(value.examplePrompts.prompts)
-  } catch {
-    throw new Error("skill_installation_response_invalid")
-  }
-  const installedAt = instant(value.installedAt, true),
-    updatedAt = instant(value.updatedAt, true),
-    removedAt = instant(value.removedAt, false),
-    skillUpdatedAt = instant(value.skillUpdatedAt, true)
-  if (
-    (value.installed && removedAt !== undefined) ||
-    (!value.installed && (value.enabled || removedAt === undefined)) ||
-    new Date(updatedAt!).valueOf() < new Date(installedAt!).valueOf() ||
-    (removedAt && new Date(removedAt).valueOf() < new Date(installedAt!).valueOf())
-  )
-    throw new Error("skill_installation_response_invalid")
-  return {
-    installation_id: value.installationId.value,
-    source_ref: value.sourceRef.value,
-    series_id: value.seriesId.value,
-    revision: value.revision.toString(),
-    installed: value.installed,
-    enabled: value.enabled,
-    installed_at: installedAt,
-    updated_at: updatedAt,
-    ...(removedAt === undefined ? {} : { removed_at: removedAt }),
-    display_name: value.displayName,
-    summary: value.summary,
-    example_prompts: examplePrompts,
-    source_status: sourceStatus,
-    skill_updated_at: skillUpdatedAt,
+    const sourceStatus = value === undefined ? undefined : sourceStatuses[value.sourceStatus]
+    if (
+      !value?.installationId ||
+      !ID.test(value.installationId.value) ||
+      !value.sourceRef ||
+      !SOURCE.test(value.sourceRef.value) ||
+      !value.seriesId ||
+      !ID.test(value.seriesId.value) ||
+      value.revision < 1n ||
+      value.revision > 18446744073709551615n ||
+      value.displayName.length > 255 ||
+      !/\S/u.test(value.displayName) ||
+      value.summary.length > 65535 ||
+      sourceStatus === undefined
+    )
+      throw new Error("skill_installation_response_invalid")
+    assertSkillWireKnown(value)
+    if (value.categoryKeys === undefined || value.product === undefined) throw new Error("skill_installation_response_invalid")
+    skillMetadataInputSchema.parse({
+      display_name: value.displayName,
+      summary: value.summary,
+      tags: value.tags,
+    })
+    const product = projectSkillProductFacts(value.product)
+    const categoryKeys = skillCategoryKeysSchema.parse(value.categoryKeys.keys)
+    let availableUpdate: { source_ref: string; revision: string } | undefined
+    if (value.availableUpdate !== undefined) {
+      const update = value.availableUpdate
+      if (update.revision <= value.revision || update.revision > 18_446_744_073_709_551_615n || update.sourceRef?.value === value.sourceRef.value)
+        throw new Error("skill_installation_response_invalid")
+      availableUpdate = {
+        source_ref: skillSourceRefSchema.parse(update.sourceRef?.value),
+        revision: update.revision.toString(),
+      }
+    }
+    let examplePrompts: string[]
+    try {
+      if (value.examplePrompts === undefined || (value.examplePrompts.$unknown?.length ?? 0) !== 0) throw new Error("missing or unknown examples")
+      examplePrompts = parseSkillExamplePrompts(value.examplePrompts.prompts)
+    } catch {
+      throw new Error("skill_installation_response_invalid")
+    }
+    const installedAt = instant(value.installedAt, true),
+      updatedAt = instant(value.updatedAt, true),
+      removedAt = instant(value.removedAt, false),
+      skillUpdatedAt = instant(value.skillUpdatedAt, true)
+    if (
+      (value.installed && removedAt !== undefined) ||
+      (!value.installed && (value.enabled || removedAt === undefined)) ||
+      new Date(updatedAt!).valueOf() < new Date(installedAt!).valueOf() ||
+      (removedAt && new Date(removedAt).valueOf() < new Date(installedAt!).valueOf())
+    )
+      throw new Error("skill_installation_response_invalid")
+    return {
+      installation_id: value.installationId.value,
+      source_ref: value.sourceRef.value,
+      series_id: value.seriesId.value,
+      revision: value.revision.toString(),
+      installed: value.installed,
+      enabled: value.enabled,
+      installed_at: installedAt,
+      updated_at: updatedAt,
+      ...(removedAt === undefined ? {} : { removed_at: removedAt }),
+      display_name: value.displayName,
+      summary: value.summary,
+      tags: value.tags,
+      example_prompts: examplePrompts,
+      category_keys: categoryKeys,
+      product,
+      ...(availableUpdate === undefined ? {} : { available_update: availableUpdate }),
+      source_status: sourceStatus,
+      skill_updated_at: skillUpdatedAt,
+    }
+  } catch (error) {
+    if (error instanceof ZodError || (error instanceof Error && error.message === "skill_response_invalid"))
+      throw new Error("skill_installation_response_invalid", { cause: error })
+    throw error
   }
 }
 export function projectInstallationAck(value: {
@@ -106,5 +146,8 @@ export function projectInstallationList(value: { installations: ProductSkillInst
   }
   const cursor = value.page?.nextCursor
   if (cursor !== undefined && (!cursor || Buffer.byteLength(cursor, "utf8") > 4096)) throw new Error("skill_installation_response_invalid")
-  return { data, ...(cursor === undefined ? {} : { meta: { next_cursor: cursor } }) }
+  return {
+    data,
+    ...(cursor === undefined ? {} : { meta: { next_cursor: cursor } }),
+  }
 }

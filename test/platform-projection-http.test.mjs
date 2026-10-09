@@ -194,9 +194,10 @@ test("R345 all three HTTP Skill shapes require one closed UTC Z update instant a
     scope: "personal",
     revision: "1",
     enabled: true,
-    categories: [],
     example_prompts: [],
     skill_updated_at: instant,
+    category_keys: [],
+    product: { publication_audience: "owner", state_version: "1" },
   }
   const published = {
     skill_id: "skill-one",
@@ -208,6 +209,8 @@ test("R345 all three HTTP Skill shapes require one closed UTC Z update instant a
     tags: [],
     example_prompts: [],
     skill_updated_at: instant,
+    category_keys: [],
+    product: { publication_audience: "owner", state_version: "1" },
   }
   const managed = {
     skill_id: "skill-one",
@@ -220,6 +223,8 @@ test("R345 all three HTTP Skill shapes require one closed UTC Z update instant a
     status: "active",
     example_prompts: [],
     skill_updated_at: instant,
+    category_keys: [],
+    product: { publication_audience: "owner", state_version: "1" },
   }
   const cases = [
     {
@@ -248,22 +253,50 @@ test("R345 all three HTTP Skill shapes require one closed UTC Z update instant a
       invalid: { ok: false, status: 502, code: "skill_response_invalid" },
     },
   ]
-  for (const operation of ["pool", "catalog"]) cases.push({ ...cases[0], label: operation, read: client => client.read(operation, "t", "u", "r") })
-  cases.push({ ...cases[2], label: "managed list", response: value => ({data:{skills:[value]}}), read: client => client.readManagedPersonalSkill("managedSkills", "t", "u", "r", {}, new AbortController().signal, performance.now()+5000), expected: {ok:true,status:200,data:{skills:[managed],next_cursor:null}} })
+  for (const operation of ["pool", "catalog"]) cases.push({ ...cases[0], label: operation, read: (client) => client.read(operation, "t", "u", "r") })
+  cases.push({
+    ...cases[2],
+    label: "managed list",
+    response: (value) => ({ data: { skills: [value] } }),
+    read: (client) => client.readManagedPersonalSkill("managedSkills", "t", "u", "r", {}, new AbortController().signal, performance.now() + 5000),
+    expected: { ok: true, status: 200, data: { skills: [managed], next_cursor: null } },
+  })
   for (const profile of cases) {
     const valid = await withProjectionOwner(
       async () => new Response(JSON.stringify(profile.response(profile.value)), { status: 200, headers: ownerHeaders }),
       profile.read,
     )
     assert.deepEqual(valid, profile.expected, `${profile.label} preserves the exact owner instant`)
-    for (const prompts of [[], ["  original\n", "same", "same"], ["😀".repeat(1000)], [...Array.from({ length: 8 }, () => "é".repeat(1000)), "é".repeat(192)]]) {
+    for (const prompts of [
+      [],
+      ["  original\n", "same", "same"],
+      ["😀".repeat(1000)],
+      [...Array.from({ length: 8 }, () => "é".repeat(1000)), "é".repeat(192)],
+    ]) {
       const value = { ...profile.value, example_prompts: prompts }
-      const result = await withProjectionOwner(async () => new Response(JSON.stringify(profile.response(value)), { status: 200, headers: ownerHeaders }), profile.read)
-      assert.deepEqual(result, { ...profile.expected, data: Array.isArray(profile.expected.data.skills) ? {...profile.expected.data, skills:[value]} : value }, `${profile.label} original scalar-bound examples`)
+      const result = await withProjectionOwner(
+        async () => new Response(JSON.stringify(profile.response(value)), { status: 200, headers: ownerHeaders }),
+        profile.read,
+      )
+      assert.deepEqual(
+        result,
+        { ...profile.expected, data: Array.isArray(profile.expected.data.skills) ? { ...profile.expected.data, skills: [value] } : value },
+        `${profile.label} original scalar-bound examples`,
+      )
     }
     for (const [label, mutate] of [
-      ["missing examples", value => delete value.example_prompts],
-      ...[null, {}, [1], [""], [" \n"], ["\u0000"], ["tail\ud800"], ["😀".repeat(1001)], [...Array.from({ length: 8 }, () => "é".repeat(1000)), "é".repeat(192) + "a"]].map(prompts => ["bad examples", value => value.example_prompts = prompts]),
+      ["missing examples", (value) => delete value.example_prompts],
+      ...[
+        null,
+        {},
+        [1],
+        [""],
+        [" \n"],
+        ["\u0000"],
+        ["tail\ud800"],
+        ["😀".repeat(1001)],
+        [...Array.from({ length: 8 }, () => "é".repeat(1000)), "é".repeat(192) + "a"],
+      ].map((prompts) => ["bad examples", (value) => (value.example_prompts = prompts)]),
       ["missing", (value) => delete value.skill_updated_at],
       ["extra", (value) => (value.unreviewed = true)],
       ["invalid", (value) => (value.skill_updated_at = "not-an-instant")],

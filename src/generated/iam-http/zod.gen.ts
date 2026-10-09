@@ -299,6 +299,9 @@ export const zListTenantRolesResponse = z.object({
               "install",
               "set_installation_enabled",
               "remove_installation",
+              "update_draft",
+              "discard_draft",
+              "set_publication_audience",
             ]),
           )
           .min(1)
@@ -429,6 +432,53 @@ export const zCancelTenantInvitationResponse = z.object({
   }),
 })
 
+export const zResolveTenantPublisherProfilesBody = z.object({
+  refs: z
+    .array(
+      z.object({
+        kind: z.enum(["user", "organization"]),
+        id: z.string().min(1).max(255),
+      }),
+    )
+    .min(1)
+    .max(100),
+})
+
+export const zResolveTenantPublisherProfilesHeaders = z.object({
+  "x-request-id": z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{1,128}$/)
+    .optional(),
+})
+
+export const zResolveTenantPublisherProfilesPath = z.object({
+  tenant_id: z.string().min(1).max(255),
+})
+
+export const zResolveTenantPublisherProfilesResponse = z.object({
+  data: z.object({
+    items: z
+      .array(
+        z.union([
+          z.object({
+            kind: z.enum(["user", "organization"]),
+            id: z.string().min(1).max(255),
+            status: z.enum(["found"]),
+            display_name: z.string(),
+            image_url: z.string().nullable(),
+          }),
+          z.object({
+            kind: z.enum(["user"]),
+            id: z.string().min(1).max(255),
+            status: z.enum(["missing"]),
+          }),
+        ]),
+      )
+      .min(1)
+      .max(100),
+  }),
+})
+
 export const zVerifySessionAuthorizationHeaders = z.object({
   "x-request-id": z
     .string()
@@ -465,6 +515,17 @@ export const zCheckTenantSkillAuthorizationBody = z.object({
     "install",
     "set_installation_enabled",
     "remove_installation",
+    "update_draft",
+    "discard_draft",
+    "set_publication_audience",
+    "admin_read",
+    "admin_create_version",
+    "official_publish",
+    "admin_withdraw",
+    "quarantine",
+    "restore",
+    "admin_set_publication_audience",
+    "admin_discard_draft",
   ]),
 })
 
@@ -497,6 +558,17 @@ export const zCheckTenantSkillAuthorizationResponse = z.object({
       "install",
       "set_installation_enabled",
       "remove_installation",
+      "update_draft",
+      "discard_draft",
+      "set_publication_audience",
+      "admin_read",
+      "admin_create_version",
+      "official_publish",
+      "admin_withdraw",
+      "quarantine",
+      "restore",
+      "admin_set_publication_audience",
+      "admin_discard_draft",
     ]),
   }),
 })

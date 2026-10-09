@@ -1,3 +1,4 @@
+import { inspectSkillProductContract, stripSkillProductSource } from "../scripts/verify-skill-product-contract.mjs"
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
 import { readFile, readdir, stat } from "node:fs/promises"
@@ -151,9 +152,9 @@ test("Library publishes explicit personal file 200 and rejects contract drift", 
   assert.ok(inspectLibraryFileContract(mixedPage).some((error) => error.includes("LibraryFilePage")))
 })
 
-test("the IAM consumer pins the complete 0.8.0 owner artifact and generates only approved admission, Skill, Team and invitation operations", async () => {
-  const commit = "d24aa2b697de59a350e8588720620df331bc5da5"
-  const digest = "0153a16f5c2779803d73d93d5533caf1b377d21299cefe01613d7cd1b2cbb194"
+test("the IAM consumer pins the complete 0.10.0 owner artifact and generates only approved admission, Skill, Team and invitation operations", async () => {
+  const commit = "7c62e759760448e127b21200f87adeefdc6016f7"
+  const digest = "31010c6b4080d50d4b9cfc1cabdcc8f2266ee177ebc542fd7f361d2f52748edd"
   const [manifestSource, vendor, config, lockfile, sdk, types] = await Promise.all([
     readFile(new URL("../contract/dependencies/iam-http.json", import.meta.url), "utf8"),
     readFile(new URL(`../contract/vendor/kokoro-iam/${commit}/iam.internal.v1.json`, import.meta.url)),
@@ -166,7 +167,7 @@ test("the IAM consumer pins the complete 0.8.0 owner artifact and generates only
   const manifest = JSON.parse(manifestSource)
   const owner = JSON.parse(vendor.toString("utf8"))
   assert.equal(sha256(vendor), digest)
-  assert.equal(owner.info.version, "0.8.0")
+  assert.equal(owner.info.version, "0.10.0")
   const admissionSchema = owner.paths["/internal/v1/session-authorizations/verify"].post.responses["200"].content["application/json"].schema.properties.data
   assert.ok(admissionSchema.required.includes("platform_admin"))
   assert.deepEqual(admissionSchema.properties.platform_admin, { type: "boolean" })
@@ -175,7 +176,7 @@ test("the IAM consumer pins the complete 0.8.0 owner artifact and generates only
   assert.deepEqual(manifest.owner, {
     repository_path: "apps/kokoro-iam",
     repository_commit: commit,
-    contract_version: "0.8.0",
+    contract_version: "0.10.0",
     contract_path: "contract/openapi/iam.internal.v1.json",
     contract_sha256: digest,
   })
@@ -223,6 +224,7 @@ test("the IAM consumer pins the complete 0.8.0 owner artifact and generates only
     "removeTenantMember",
     "replaceTenantMemberRoles",
     "resendTenantInvitation",
+    "resolveTenantPublisherProfiles",
     "verifySessionAuthorization",
   ])
   assert.doesNotMatch(`${sdk}\n${types}`, /getMetrics|healthz|readyz/u)
@@ -244,7 +246,9 @@ test("the IAM generator normalizer and generated-tree allowlist fail closed on d
 })
 
 test("the public Platform projection reads expose strict native pages and error envelopes", async () => {
-  const openapi = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
+  const current = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
+  assert.deepEqual(inspectSkillProductContract(current), [])
+  const openapi = stripSkillProductSource(current)
   for (const [start, end] of [
     ["  /v1/skills:\n", "  /v1/skills/{skill_id}:\n"],
     ["  /v1/skills/pool:\n", "  /v1/skills/catalog:\n"],
@@ -478,7 +482,7 @@ test("R257 personalization CAS none exception requires the exact method path and
 
 test("R267 lifecycle operations remain frozen in the current public 8.10 inventory", async () => {
   const openapi = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
-  assert.match(openapi, /^  version: 8\.10\.0$/mu)
+  assert.match(openapi, /^  version: 9\.0\.0$/mu)
   assert.equal((openapi.match(/operationId: createPersonalSkillVersion/gu) ?? []).length, 1)
   assert.equal((openapi.match(/operationId: withdrawPersonalSkill/gu) ?? []).length, 1)
 })
@@ -488,7 +492,7 @@ test("R345 public 8.9 adds one required UTC Skill update instant to exactly four
   const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
   const openapi = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
   const { stripSkillExamplePromptsAdditions } = await import("../scripts/verify-skill-example-prompts-contract.mjs")
-  const document = stripSkillExamplePromptsAdditions(load(openapi))
+  const document = stripSkillExamplePromptsAdditions(load(stripSkillProductSource(openapi)))
   assert.equal(document.info.version, "8.9.0")
   const operations = Object.values(document.paths).flatMap((pathItem) =>
     Object.keys(pathItem).filter((method) => ["get", "post", "put", "patch", "delete", "head", "options", "trace"].includes(method)),
@@ -553,7 +557,8 @@ test("R345 dedicated Skill update checker rejects each local shape drift without
   const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
   const { inspectSkillUpdatedAtDocument } = await import("../scripts/verify-skill-updated-at-contract.mjs")
   const openapi = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
-  const document = load(openapi)
+  assert.deepEqual(inspectSkillProductContract(openapi), [])
+  const document = load(stripSkillProductSource(openapi))
   assert.deepEqual(inspectSkillUpdatedAtDocument(document), [])
   const schemas = ["Skill", "ManagedPersonalSkillResource", "PublishedPersonalSkillResource", "SkillInstallation"]
   for (const name of schemas) {
@@ -582,23 +587,45 @@ test("R342 Skill package inspection checker rejects route, closed-shape, uint64,
   const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
   const { inspectSkillPackageInspectionDocument } = await import("../scripts/verify-skill-package-inspection-contract.mjs")
   const openapi = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
-  const document = load(openapi)
+  assert.deepEqual(inspectSkillProductContract(openapi), [])
+  const document = load(stripSkillProductSource(openapi))
   assert.deepEqual(inspectSkillPackageInspectionDocument(document), [])
 
   const mutations = [
-    ["method", (candidate) => {
-      candidate.paths["/v1/self/skills/{skill_id}/package"].post = candidate.paths["/v1/self/skills/{skill_id}/package"].get
-      delete candidate.paths["/v1/self/skills/{skill_id}/package"].get
-    }],
+    [
+      "method",
+      (candidate) => {
+        candidate.paths["/v1/self/skills/{skill_id}/package"].post = candidate.paths["/v1/self/skills/{skill_id}/package"].get
+        delete candidate.paths["/v1/self/skills/{skill_id}/package"].get
+      },
+    ],
     ["permission", (candidate) => (candidate.paths["/v1/self/skills/{skill_id}/package"].get["x-kokoro-permission"] = "product.skill.admin")],
     ["required field", (candidate) => candidate.components.schemas.SkillPackageInspectionData.required.splice(1, 1)],
     ["open shape", (candidate) => (candidate.components.schemas.SkillPackageInspectionData.additionalProperties = true)],
     ["extra field", (candidate) => (candidate.components.schemas.SkillPackageInspectionData.properties.secret = { type: "string" })],
     ["uint64", (candidate) => (candidate.components.schemas.SkillPackageInspectionData.properties.revision.pattern = "^[1-9][0-9]*$")],
     ["directory null", (candidate) => candidate.components.schemas.SkillPackageInspectionData.properties.selected_file.oneOf.shift()],
-    ["unstable file code", (candidate) => (candidate.components.responses.SkillPackageInspectionNotFound.content["application/json"].schema.allOf[1].properties.error.properties.code.enum = ["skill_package_file_not_found"])],
-    ["limit retryability", (candidate) => (candidate.components.responses.SkillPackageInspectionRateLimited.content["application/json"].schema.allOf[1].oneOf[1].properties.error.properties.retryable.const = true)],
-    ["dependency retryability", (candidate) => (candidate.components.responses.SkillPackageInspectionUnavailable.content["application/json"].schema.allOf[1].properties.error.properties.retryable.const = false)],
+    [
+      "unstable file code",
+      (candidate) =>
+        (candidate.components.responses.SkillPackageInspectionNotFound.content["application/json"].schema.allOf[1].properties.error.properties.code.enum = [
+          "skill_package_file_not_found",
+        ]),
+    ],
+    [
+      "limit retryability",
+      (candidate) =>
+        (candidate.components.responses.SkillPackageInspectionRateLimited.content[
+          "application/json"
+        ].schema.allOf[1].oneOf[1].properties.error.properties.retryable.const = true),
+    ],
+    [
+      "dependency retryability",
+      (candidate) =>
+        (candidate.components.responses.SkillPackageInspectionUnavailable.content[
+          "application/json"
+        ].schema.allOf[1].properties.error.properties.retryable.const = false),
+    ],
     ["budget", (candidate) => (candidate.paths["/v1/self/skills/{skill_id}/package"].get.description = "Inspect a package.")],
     ["old surface", (candidate) => (candidate.paths["/healthz"].get.summary = "Changed historical summary")],
   ]
@@ -614,7 +641,8 @@ test("R342 Skill package inspection checker binds response paths to the exact re
   const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
   const { inspectSkillPackageInspectionDocument } = await import("../scripts/verify-skill-package-inspection-contract.mjs")
   const openapi = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
-  const document = load(openapi)
+  assert.deepEqual(inspectSkillProductContract(openapi), [])
+  const document = load(stripSkillProductSource(openapi))
 
   const cases = [
     {
@@ -680,17 +708,23 @@ test("R350 public examples have strict six profiles and restore complete immutab
   const { createRequire } = await import("node:module")
   const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
   const { inspectSkillExamplePromptsDocument } = await import("../scripts/verify-skill-example-prompts-contract.mjs")
-  const doc = load(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"))
+  const source = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
+  assert.deepEqual(inspectSkillProductContract(source), [])
+  const doc = load(stripSkillProductSource(source))
   assert.deepEqual(inspectSkillExamplePromptsDocument(doc), [])
   for (const change of [
-    d => delete d.components.schemas.Skill.properties.example_prompts,
-    d => d.components.schemas.Skill.required.splice(d.components.schemas.Skill.required.indexOf("example_prompts"),1),
-    d => d.components.schemas.CreateSkillDraftRequest.required.push("example_prompts"),
-    d => d.components.schemas.Skill.properties.example_prompts.items.maxLength = 1001,
-    d => d.components.schemas.Skill.properties.example_prompts.uniqueItems = true,
-    d => d.components.schemas.Skill.properties.example_prompts.type = ["array","null"],
-    d => d.components.schemas.Skill.properties.name.type = "integer",
-    d => delete d.paths["/v1/skills/drafts"],
-    d => d.info.version = "8.9.0",
-  ]) { const changed = structuredClone(doc); change(changed); assert.ok(inspectSkillExamplePromptsDocument(changed).length > 0) }
+    (d) => delete d.components.schemas.Skill.properties.example_prompts,
+    (d) => d.components.schemas.Skill.required.splice(d.components.schemas.Skill.required.indexOf("example_prompts"), 1),
+    (d) => d.components.schemas.CreateSkillDraftRequest.required.push("example_prompts"),
+    (d) => (d.components.schemas.Skill.properties.example_prompts.items.maxLength = 1001),
+    (d) => (d.components.schemas.Skill.properties.example_prompts.uniqueItems = true),
+    (d) => (d.components.schemas.Skill.properties.example_prompts.type = ["array", "null"]),
+    (d) => (d.components.schemas.Skill.properties.name.type = "integer"),
+    (d) => delete d.paths["/v1/skills/drafts"],
+    (d) => (d.info.version = "8.9.0"),
+  ]) {
+    const changed = structuredClone(doc)
+    change(changed)
+    assert.ok(inspectSkillExamplePromptsDocument(changed).length > 0)
+  }
 })

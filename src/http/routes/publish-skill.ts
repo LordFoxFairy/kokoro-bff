@@ -1,3 +1,5 @@
+import { startSkillRequestBudget } from "./skill-drafts.js"
+import { assertSkillWireKnown, projectSkillStateVersion } from "../../infrastructure/clients/platform/skill-product-response.js"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import { Code, ConnectError } from "@connectrpc/connect"
 import { SkillStatus } from "../../generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
@@ -5,7 +7,7 @@ import type { RequestContext } from "../../domain/request-context.js"
 import type { CatalogConnectClient } from "../../infrastructure/clients/platform/catalog-connect.js"
 import { projectPublishSkill } from "../../infrastructure/clients/platform/publish-skill-projector.js"
 import { publishSkillCommandId } from "../publish-skill-input.js"
-import { readBody } from "../request.js"
+import { readSkillBody as readBody } from "./skill-drafts.js"
 import { send } from "../response.js"
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u
@@ -40,6 +42,8 @@ function mapFailure(error: unknown): { status: number; body: ReturnType<typeof f
 }
 
 function project(result: Awaited<ReturnType<CatalogConnectClient["publish"]>>, skillId: string) {
+  assertSkillWireKnown(result)
+  projectSkillStateVersion(result.stateVersion)
   if (
     typeof result !== "object" ||
     result === null ||
@@ -54,7 +58,14 @@ function project(result: Awaited<ReturnType<CatalogConnectClient["publish"]>>, s
     typeof result.replayed !== "boolean"
   )
     throw new Error("skill_response_invalid")
-  return { source_ref: result.sourceRef.value, revision: result.revision.toString(), status: "active", event_id: result.eventId, replayed: result.replayed }
+  return {
+    state_version: projectSkillStateVersion(result.stateVersion),
+    source_ref: result.sourceRef.value,
+    revision: result.revision.toString(),
+    status: "active",
+    event_id: result.eventId,
+    replayed: result.replayed,
+  }
 }
 
 export async function publishSkillRoute(
@@ -121,6 +132,7 @@ export async function publishSkillRoute(
         skillId,
       },
       signal,
+      startSkillRequestBudget(request),
     )
     send(response, 200, { data: project(owner, skillId) })
   } catch (error) {

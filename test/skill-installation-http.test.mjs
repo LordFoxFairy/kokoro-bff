@@ -1,3 +1,5 @@
+import { create } from "@bufbuild/protobuf"
+import { SkillProductFactsSchema } from "../dist/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
 import assert from "node:assert/strict"
 import { once } from "node:events"
 import { readFile } from "node:fs/promises"
@@ -30,9 +32,12 @@ const installation = () => ({
   updatedAt: timestamp(2),
   displayName: "Research assistant",
   summary: "",
+  tags: [],
   sourceStatus: 2,
   skillUpdatedAt: timestamp(3, 123456789),
   examplePrompts: { prompts: [] },
+  categoryKeys: { keys: [] },
+  product: create(SkillProductFactsSchema, { publicationAudience: "owner", stateVersion: 1n }),
 })
 const config = {
   host: "127.0.0.1",
@@ -66,6 +71,7 @@ const headers = {
 }
 async function withServer(client, run) {
   const server = createLiveTestBffServer(config, {
+    skillAuthorization: { check: async () => ({ ok: true }) },
     sessionAdmission: {
       verify: async () => ({
         ok: true,
@@ -79,6 +85,7 @@ async function withServer(client, run) {
   try {
     await run(`http://127.0.0.1:${server.address().port}`)
   } finally {
+    server.closeAllConnections()
     await new Promise((resolve) => server.close(resolve))
   }
 }
@@ -115,6 +122,9 @@ test("safe installation ACK maps enum, uint64 and UTC without private fields", (
         updated_at: "1970-01-01T00:00:02.000Z",
         display_name: "Research assistant",
         summary: "",
+        tags: [],
+        category_keys: [],
+        product: { publication_audience: "owner", state_version: "1" },
         source_status: "active",
         example_prompts: [],
         skill_updated_at: "1970-01-01T00:00:03.123Z",
@@ -181,7 +191,7 @@ test("R345 installation rejects protobuf Timestamp seconds outside the canonical
 })
 test("all owner product installation projection vectors keep their published digests", async () => {
   const source = new URL(
-    "../contract/vendor/kokoro-platform/94bd0ea94aabc60c666fdb2cfa8784baf194e24b/execution-operations-v5/vectors/product-installation.json",
+    "../contract/vendor/kokoro-platform/fa185ed2b25c3e81946cfdcd12d7665d02b8bad3/execution-operations-v5/vectors/product-installation.json",
     import.meta.url,
   )
   const vectors = JSON.parse(await readFile(source, "utf8")).vectors.filter((vector) => vector.stage === "projection")
@@ -355,8 +365,130 @@ test("HTTP maps token-stage budget exhaustion to 504 without relabeling caller c
 })
 
 test("installation examples require present typed message and valid original strings", () => {
- for (const examplePrompts of [undefined, null, {prompts:null}, {prompts:["\ud800"]}, {prompts:["\u0000"]}, {prompts:[" "]}, {prompts:[1]}])
-  assert.throws(() => projectInstallation({...installation(), examplePrompts}), /skill_installation_response_invalid/u)
- for (const prompts of [[], ["  a\n", "same", "same"], ["😀".repeat(1000)]])
-  assert.deepEqual(projectInstallation({...installation(), examplePrompts:{prompts}}).example_prompts, prompts)
+  for (const examplePrompts of [undefined, null, { prompts: null }, { prompts: ["\ud800"] }, { prompts: ["\u0000"] }, { prompts: [" "] }, { prompts: [1] }])
+    assert.throws(() => projectInstallation({ ...installation(), examplePrompts }), /skill_installation_response_invalid/u)
+  for (const prompts of [[], ["  a\n", "same", "same"], ["😀".repeat(1000)]])
+    assert.deepEqual(projectInstallation({ ...installation(), examplePrompts: { prompts } }).example_prompts, prompts)
+})
+
+test("installation source filter reaches the owner protobuf request with cursor presence", async () => {
+  const { createServer } = await import("node:http")
+  const { fromBinary, toBinary } = await import("@bufbuild/protobuf")
+  const { ListPersonalSkillInstallationsRequestSchema, ListPersonalSkillInstallationsResponseSchema } =
+    await import("../dist/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
+  const seen = []
+  const server = createServer(async (request, response) => {
+    const chunks = []
+    for await (const chunk of request) chunks.push(chunk)
+    seen.push(fromBinary(ListPersonalSkillInstallationsRequestSchema, Buffer.concat(chunks)))
+    response.writeHead(200, { "content-type": "application/proto" })
+    response.end(toBinary(ListPersonalSkillInstallationsResponseSchema, create(ListPersonalSkillInstallationsResponseSchema)))
+  })
+  server.listen(0, "127.0.0.1")
+  await once(server, "listening")
+  try {
+    const token = { get: async () => "workload" }
+    const client = new PersonalInstallationConnectClient(`http://127.0.0.1:${server.address().port}`, token, token, 1000)
+    for (const sourceKind of [undefined, "personal", "official", "third_party"]) {
+      await client.list({ requestId: "request-source", tenant: "tenant", subject: "user", sourceKind, cursor: "owner-bound-cursor", limit: 1 })
+    }
+    assert.deepEqual(
+      seen.map((input) => input.sourceKind),
+      [undefined, "personal", "official", "third_party"],
+    )
+    for (const input of seen) {
+      assert.equal(input.page.cursor, "owner-bound-cursor")
+      assert.equal(input.page.limit, 1)
+    }
+  } finally {
+    server.closeAllConnections()
+    await new Promise((resolve) => server.close(resolve))
+  }
+  await withServer(
+    {
+      list: async (input) => {
+        assert.equal(input.sourceKind, "third_party")
+        assert.equal(input.cursor, "owner-bound-cursor")
+        return { installations: [] }
+      },
+    },
+    async (base) => {
+      const response = await fetch(`${base}/v1/skill-installations?source_kind=third_party&cursor=owner-bound-cursor`, { headers })
+      assert.equal(response.status, 200)
+    },
+  )
+})
+
+test("P4 installation HTTP forwards literal query and source filter before owner cursor pagination", async () => {
+  const seen = [],
+    query = "%_\\😀 exact"
+  await withServer(
+    {
+      list: async (input) => {
+        seen.push(input)
+        if (input.cursor && input.query !== query) throw new ConnectError("cursor filter mismatch", Code.InvalidArgument)
+        return { installations: [], page: { nextCursor: input.cursor ? undefined : "owner_cursor" } }
+      },
+    },
+    async (base) => {
+      const page1 = await fetch(
+        `${base}/v1/skill-installations?${new URLSearchParams({ query: "  " + query + "  ", source_kind: "third_party", limit: "1" })}`,
+        { headers },
+      )
+      assert.equal(page1.status, 200)
+      assert.equal((await page1.json()).meta.next_cursor, "owner_cursor")
+      const page2 = await fetch(
+        `${base}/v1/skill-installations?${new URLSearchParams({ query, source_kind: "third_party", cursor: "owner_cursor", limit: "1" })}`,
+        { headers },
+      )
+      assert.equal(page2.status, 200)
+      assert.equal(seen[0].query, query)
+      assert.equal(seen[1].query, query)
+      assert.equal(seen[1].cursor, "owner_cursor")
+      assert.equal(seen[0].sourceKind, "third_party")
+      const changed = await fetch(`${base}/v1/skill-installations?query=other&source_kind=third_party&cursor=owner_cursor`, { headers })
+      assert.equal(changed.status, 502)
+      for (const url of ["?query=", "?query=%20%20", "?query=x&query=y", "?query=" + "x".repeat(1025), "?source_kind=all&query=x"])
+        assert.equal((await fetch(`${base}/v1/skill-installations${url}`, { headers })).status, 400)
+      assert.equal(seen.length, 3, "invalid filters do not reach owner")
+    },
+  )
+})
+
+test("P4 installation Connect preserves optional query6 and exact source_kind5 protobuf presence", async () => {
+  const { createServer } = await import("node:http"),
+    { fromBinary, toBinary } = await import("@bufbuild/protobuf")
+  const { ListPersonalSkillInstallationsRequestSchema, ListPersonalSkillInstallationsResponseSchema } =
+    await import("../dist/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
+  const seen = [],
+    server = createServer(async (req, res) => {
+      const chunks = []
+      for await (const chunk of req) chunks.push(chunk)
+      seen.push(fromBinary(ListPersonalSkillInstallationsRequestSchema, Buffer.concat(chunks)))
+      res.writeHead(200, { "content-type": "application/proto" })
+      res.end(toBinary(ListPersonalSkillInstallationsResponseSchema, create(ListPersonalSkillInstallationsResponseSchema)))
+    })
+  server.listen(0, "127.0.0.1")
+  await once(server, "listening")
+  try {
+    const token = { get: async () => "token" },
+      client = new PersonalInstallationConnectClient(`http://127.0.0.1:${server.address().port}`, token, token, 1000)
+    for (const query of [undefined, "%_\\😀 exact"])
+      await client.list({ requestId: "query-request", tenant: "tenant", subject: "user", query, sourceKind: "personal", cursor: "opaque_owner", limit: 1 })
+    assert.deepEqual(
+      seen.map((input) => input.query),
+      [undefined, "%_\\😀 exact"],
+    )
+    assert.deepEqual(
+      seen.map((input) => input.sourceKind),
+      ["personal", "personal"],
+    )
+    assert.deepEqual(
+      seen.map((input) => input.page.cursor),
+      ["opaque_owner", "opaque_owner"],
+    )
+  } finally {
+    server.closeAllConnections()
+    await new Promise((resolve) => server.close(resolve))
+  }
 })

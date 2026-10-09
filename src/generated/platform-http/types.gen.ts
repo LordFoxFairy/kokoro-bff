@@ -13,9 +13,10 @@ export type Skill = {
   revision: string
   enabled: boolean
   installed?: boolean
-  categories: Array<string>
   skill_updated_at: string
   example_prompts: Array<string>
+  category_keys: Array<"programming" | "data" | "automation" | "business" | "design" | "media" | "content" | "apps">
+  product: SkillProductFacts
 }
 
 export type McpServer = {
@@ -45,6 +46,8 @@ export type PublishedPersonalSkill = {
   tags: Array<string>
   skill_updated_at: string
   example_prompts: Array<string>
+  category_keys: Array<"programming" | "data" | "automation" | "business" | "design" | "media" | "content" | "apps">
+  product: SkillProductFacts
 }
 
 export type McpConnection = {
@@ -64,9 +67,87 @@ export type SelfManagedSkill = {
   name: string
   summary: string
   tags: Array<string>
-  status: "draft" | "active" | "disabled" | "withdrawn" | "quarantined"
+  status: "draft" | "active" | "disabled" | "withdrawn" | "quarantined" | "discarded"
   skill_updated_at: string
   example_prompts: Array<string>
+  category_keys: Array<"programming" | "data" | "automation" | "business" | "design" | "media" | "content" | "apps">
+  product: SkillProductFacts
+}
+
+export type SkillIamRef = {
+  kind: "user" | "organization"
+  id: string
+}
+
+export type SkillRepositoryStats = {
+  stars: string
+  forks: string
+  observed_at: string
+  metadata_source_url: string
+}
+
+export type SkillAiProvenance = {
+  kind: "ai"
+  conversation_id: string
+  run_ref: string
+  artifact_ref: string
+  source_event_id: string
+  source_event_seq: string
+  source_event_digest: string
+  asset_ref: string
+  content_sha256: string
+  size_bytes: string
+  mime_type: "application/zip"
+}
+
+export type SkillGithubProvenance = {
+  kind: "github"
+  repository_id: string
+  repository_url: string
+  owner_login: string
+  owner_url: string
+  commit: string
+  path: string
+  repo_stats?: SkillRepositoryStats
+  asset_ref?: string
+  content_sha256: string
+  size_bytes: string
+  mime_type: "application/zip"
+}
+
+export type SkillCreationProvenance =
+  | {
+      kind: "local"
+    }
+  | SkillAiProvenance
+  | SkillGithubProvenance
+
+export type SkillPublisher =
+  | {
+      kind: "iam"
+      iam: SkillIamRef
+    }
+  | {
+      kind: "github_repository"
+      github_repository: SkillGithubProvenance
+    }
+
+export type SkillCover = {
+  asset_ref: string
+  mime_type: "image/png" | "image/jpeg"
+  width: number
+  height: number
+}
+
+export type SkillProductFacts = {
+  creator_ref?: SkillIamRef
+  publisher?: SkillPublisher
+  source_kind?: "personal" | "official" | "third_party"
+  creation_provenance?: SkillCreationProvenance
+  cover?: SkillCover
+  publication_audience: "owner" | "tenant" | "catalog"
+  state_version: string
+  presentation_kind?: "first_party" | "github_repository"
 }
 
 export type RequestId = string
@@ -101,7 +182,7 @@ export type McpConnectionId = string
 /**
  * Optional exact management-state filter; not an execution eligibility assertion.
  */
-export type SelfSkillStatus = "draft" | "active" | "disabled" | "withdrawn" | "quarantined"
+export type SelfSkillStatus = "draft" | "active" | "disabled" | "withdrawn" | "quarantined" | "discarded"
 
 export type ListVisibleSkillsData = {
   body?: never
@@ -123,6 +204,8 @@ export type ListVisibleSkillsData = {
     scope_kind?: "personal" | "project" | "organization" | "session" | "1" | "2" | "3" | "4"
     limit?: number
     cursor?: string
+    category_key?: "programming" | "data" | "automation" | "business" | "design" | "media" | "content" | "apps"
+    source_kind?: "personal" | "official" | "third_party"
   }
   url: "/v1/skills"
 }
@@ -249,6 +332,8 @@ export type ListVisibleSkillPoolData = {
     scope_kind?: "personal" | "project" | "organization" | "session" | "1" | "2" | "3" | "4"
     limit?: number
     cursor?: string
+    category_key?: "programming" | "data" | "automation" | "business" | "design" | "media" | "content" | "apps"
+    source_kind?: "personal" | "official" | "third_party"
   }
   url: "/v1/skills/pool"
 }
@@ -312,6 +397,8 @@ export type ListVisibleSkillCatalogData = {
     scope_kind?: "personal" | "project" | "organization" | "session" | "1" | "2" | "3" | "4"
     limit?: number
     cursor?: string
+    category_key?: "programming" | "data" | "automation" | "business" | "design" | "media" | "content" | "apps"
+    source_kind?: "personal" | "official" | "third_party"
   }
   url: "/v1/skills/catalog"
 }
@@ -498,7 +585,9 @@ export type ListSelfManagedSkillsData = {
     /**
      * Optional exact management-state filter; not an execution eligibility assertion.
      */
-    status?: "draft" | "active" | "disabled" | "withdrawn" | "quarantined"
+    status?: "draft" | "active" | "disabled" | "withdrawn" | "quarantined" | "discarded"
+    source_kind?: "personal" | "official" | "third_party"
+    query?: string
   }
   url: "/v1/self/skills"
 }

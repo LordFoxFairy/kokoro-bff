@@ -51,6 +51,7 @@ const admission = {
   },
 }
 const versionResult = (override = {}) => ({
+  stateVersion: 1n,
   skillId: { value: "skill-new" },
   seriesId: { value: "series-1" },
   revision: 2n,
@@ -59,6 +60,7 @@ const versionResult = (override = {}) => ({
   ...override,
 })
 const withdrawResult = (override = {}) => ({
+  stateVersion: 1n,
   sourceRef: { value: "skill:skill-base" },
   status: 3,
   eventId: `evt:${"a".repeat(64)}`,
@@ -68,6 +70,7 @@ const withdrawResult = (override = {}) => ({
 
 async function withServer(client, run, sessionAdmission = admission) {
   const server = createLiveTestBffServer(config, {
+    skillAuthorization: { check: async () => ({ ok: true }) },
     sessionAdmission,
     skillDraftClient: client,
   })
@@ -109,6 +112,7 @@ test("personal Skill lifecycle legal CreateVersion reaches the admitted owner an
       assert.equal(response.headers.get("cache-control"), "no-store")
       assert.deepEqual(await response.json(), {
         data: {
+          state_version: "1",
           skill_id: "skill-new",
           series_id: "series-1",
           revision: "2",
@@ -148,6 +152,7 @@ test("personal Skill lifecycle legal Withdraw reaches the admitted owner and bin
       assert.equal(response.headers.get("cache-control"), "no-store")
       assert.deepEqual(await response.json(), {
         data: {
+          state_version: "1",
           source_ref: "skill:skill-base",
           status: "withdrawn",
           event_id: `evt:${"a".repeat(64)}`,
@@ -254,7 +259,7 @@ test("personal Skill lifecycle closes raw input, framing, key, UTF-8 and reason 
 
 test("personal Skill lifecycle rejects invalid owner projections and maps only the closed owner error tuples", async () => {
   const invalidVersions = [
-    versionResult({ skillId: { value: "skill-base" } }),
+    versionResult({ stateVersion: 1n, skillId: { value: "skill-base" } }),
     versionResult({ revision: 1n }),
     versionResult({ revision: 18_446_744_073_709_551_616n }),
     versionResult({ status: 2 }),
@@ -351,6 +356,7 @@ test("personal Skill lifecycle closes synchronous and asynchronous admission fai
   ]) {
     let ownerCalls = 0
     const server = createLiveTestBffServer(config, {
+      skillAuthorization: { check: async () => ({ ok: true }) },
       sessionAdmission,
       skillDraftClient: {
         withdrawPersonal: async () => {
@@ -447,6 +453,7 @@ test("personal Skill lifecycle held admission is bounded by the single service d
   })
   let ownerCalls = 0
   const server = createLiveTestBffServer(config, {
+    skillAuthorization: { check: async () => ({ ok: true }) },
     sessionAdmission: {
       verify(input) {
         admissionInputResolve(input)
@@ -552,6 +559,7 @@ test("personal Skill lifecycle rejects structural URL aliases while preserving a
 test("personal Skill lifecycle oversized declared body replies 413 then retires the incomplete upload socket", async () => {
   let ownerCalls = 0
   const server = createLiveTestBffServer(config, {
+    skillAuthorization: { check: async () => ({ ok: true }) },
     sessionAdmission: admission,
     skillDraftClient: {
       withdrawPersonal: async () => {
@@ -645,6 +653,7 @@ test("personal Skill lifecycle retires incomplete upload sockets after every ear
   for (const scenario of cases) {
     let ownerCalls = 0
     const server = createLiveTestBffServer(config, {
+      skillAuthorization: { check: async () => ({ ok: true }) },
       sessionAdmission: scenario.admission,
       skillDraftClient: {
         withdrawPersonal: async () => {
@@ -717,6 +726,8 @@ test("personal Skill lifecycle generated Connect transport preserves commands an
       routes(router) {
         router.service(SkillCatalogService, {
           createSkillVersion(request, context) {
+            context.responseHeader.set("x-kokoro-request-id", request.requestId)
+            context.responseHeader.set("cache-control", "no-store")
             ownerCalls.push({ method: "create", request })
             assert.equal(context.requestHeader.get("authorization"), "Bearer catalog-machine")
             assert.equal(context.requestHeader.get("x-tenant-ref"), "tenant-personal")
@@ -726,6 +737,7 @@ test("personal Skill lifecycle generated Connect transport preserves commands an
             assert.equal(request.productContext?.ownerScope?.id, "user-personal")
             assert.deepEqual(JSON.parse(Buffer.from(request.metadata?.metadataJson ?? []).toString("utf8")), {})
             const result = create(CreateSkillVersionResponseSchema, {
+              stateVersion: 1n,
               skillId: create(SkillIdSchema, { value: "skill-new" }),
               seriesId: create(SkillSeriesIdSchema, { value: "series-1" }),
               revision: 2n,
@@ -738,12 +750,15 @@ test("personal Skill lifecycle generated Connect transport preserves commands an
             return result
           },
           withdrawSkill(request, context) {
+            context.responseHeader.set("x-kokoro-request-id", request.requestId)
+            context.responseHeader.set("cache-control", "no-store")
             ownerCalls.push({ method: "withdraw", request })
             assert.equal(context.requestHeader.get("authorization"), "Bearer catalog-machine")
             assert.equal(context.requestHeader.get("x-tenant-ref"), "tenant-personal")
             assert.equal(request.productContext?.subjectId, "user-personal")
             assert.equal(request.productContext?.ownerScope?.id, "user-personal")
             const result = create(WithdrawSkillResponseSchema, {
+              stateVersion: 1n,
               sourceRef: create(SkillSourceRefSchema, {
                 value: "skill:skill-base",
               }),
@@ -821,17 +836,71 @@ test("personal Skill lifecycle command digest projections retain the formal owne
 })
 
 test("version HTTP rejects bad examples without owner dispatch and binds empty/order distinctly", async () => {
- const calls=[]
- await withServer({createPersonalVersion:async input=>{calls.push(input);return versionResult()}},async origin=>{
-  for(const prompts of [null,{},["tail\ud800"],["\u0000"],[...Array.from({length:8},()=>"é".repeat(1000)),"é".repeat(192)+"a"]]) {
-   const response=await post(origin,"/v1/self/skills/skill-base/versions",{display_name:"Tea",summary:"",tags:[],example_prompts:prompts})
-   assert.equal(response.status,400);assert.equal(calls.length,0)
+  const calls = []
+  await withServer(
+    {
+      createPersonalVersion: async (input) => {
+        calls.push(input)
+        return versionResult()
+      },
+    },
+    async (origin) => {
+      for (const prompts of [null, {}, ["tail\ud800"], ["\u0000"], [...Array.from({ length: 8 }, () => "é".repeat(1000)), "é".repeat(192) + "a"]]) {
+        const response = await post(origin, "/v1/self/skills/skill-base/versions", { display_name: "Tea", summary: "", tags: [], example_prompts: prompts })
+        assert.equal(response.status, 400)
+        assert.equal(calls.length, 0)
+      }
+      for (const prompts of [undefined, [], ["a", "b"], ["b", "a"]]) {
+        const response = await post(origin, "/v1/self/skills/skill-base/versions", {
+          display_name: "Tea",
+          summary: "",
+          tags: [],
+          ...(prompts === undefined ? {} : { example_prompts: prompts }),
+        })
+        assert.equal(response.status, 201)
+      }
+    },
+  )
+  assert.equal(new Set(calls.map((c) => c.digest)).size, 4)
+  assert.equal(Object.hasOwn(calls[0], "examplePrompts"), false)
+})
+
+test("P4 owned Skills production HTTP forwards literal Unicode query and owner cursor", async (t) => {
+  const { PlatformProjectionHttpClient } = await import("../dist/infrastructure/clients/platform/projection-http.js")
+  const calls = []
+  t.mock.method(PlatformProjectionHttpClient.prototype, "readManagedPersonalSkill", async (_operation, _tenant, _subject, _request, input) => {
+    calls.push(input.query)
+    return { ok: true, status: 200, data: { skills: [], next_cursor: "owner_cursor" } }
+  })
+  const server = createLiveTestBffServer(
+    {
+      ...config,
+      iamBaseUrl: "http://iam.test",
+      platformProjection: { baseUrl: "http://platform.test", credentialFile: "/unused-token-fixture", timeoutMs: 1000 },
+    },
+    { sessionAdmission: admission, skillAuthorization: { check: async () => ({ ok: true }) } },
+  )
+  server.listen(0, "127.0.0.1")
+  await once(server, "listening")
+  try {
+    const headers = { ...baseHeaders }
+    delete headers["content-type"]
+    delete headers["idempotency-key"]
+    for (const query of ["%_\\😀 exact", "😀".repeat(1024)]) {
+      const response = await fetch(
+        `http://127.0.0.1:${server.address().port}/v1/self/skills?${new URLSearchParams({ query: "  " + query + "  ", source_kind: "personal", cursor: "owner_cursor", limit: "1" })}`,
+        { headers },
+      )
+      assert.equal(response.status, 200)
+      assert.equal(calls.at(-1).query, query)
+      assert.equal(calls.at(-1).cursor, "owner_cursor")
+      assert.equal(calls.at(-1).source_kind, "personal")
+    }
+    for (const suffix of ["query=", "query=%20", "query=x&query=y", "query=" + "x".repeat(1025), "source_kind=all&query=x"])
+      assert.equal((await fetch(`http://127.0.0.1:${server.address().port}/v1/self/skills?${suffix}`, { headers })).status, 400)
+    assert.equal(calls.length, 2)
+  } finally {
+    server.closeAllConnections()
+    await new Promise((resolve) => server.close(resolve))
   }
-  for(const prompts of [undefined,[],["a","b"],["b","a"]]) {
-   const response=await post(origin,"/v1/self/skills/skill-base/versions",{display_name:"Tea",summary:"",tags:[],...(prompts===undefined?{}:{example_prompts:prompts})})
-   assert.equal(response.status,201)
-  }
- })
- assert.equal(new Set(calls.map(c=>c.digest)).size,4)
- assert.equal(Object.hasOwn(calls[0],"examplePrompts"),false)
 })

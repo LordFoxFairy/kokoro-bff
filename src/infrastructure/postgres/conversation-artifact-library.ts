@@ -1,3 +1,4 @@
+import type { SkillAiAssociation } from "../../application/skill-ai-handoff.js"
 import type { ArtifactAssociation, ArtifactLibraryRepository, ArtifactPosition } from "../../application/ports/bff-business-store.js"
 import type { PostgresBffDatabase } from "./client.js"
 
@@ -83,5 +84,38 @@ export class PostgresConversationArtifactLibrary implements ArtifactLibraryRepos
       [tenantId, subjectId, conversationId, artifactId],
     )
     return result.rows[0] === undefined ? null : association(result.rows[0])
+  }
+  public async findSkillHandoff(tenantId: string, subjectId: string, conversationId: string, artifactId: string): Promise<SkillAiAssociation | null> {
+    const result = await this.database.pool.query<
+      AssociationRow & { source_event_id: string; source_sequence: string; source_digest: string; source_size_bytes: string; source_mime: string }
+    >(
+      `SELECT a.conversation_id, a.artifact_id, a.run_id, a.source_asset_id, a.source_artifact_kind,
+              a.source_content_sha256, a.delivered_at, a.source_event_id, a.source_sequence::text,
+              a.source_digest, a.source_size_bytes::text, a.source_mime
+         FROM bff_conversation_artifact AS a
+         JOIN bff_conversation AS c ON c.tenant_id = a.tenant_id AND c.conversation_id = a.conversation_id
+         JOIN bff_skill_usage_run_terminal AS t ON t.tenant_id = a.tenant_id AND t.run_id = a.run_id
+              AND t.session_id = a.conversation_id AND t.source_owner = 'kokoro-agent' AND t.status = 'completed'
+        WHERE a.tenant_id = $1 AND c.owner_id = $2 AND c.status = 'active'
+          AND a.conversation_id = $3 AND a.artifact_id = $4 AND a.source_owner = 'kokoro-agent'
+          AND a.source_artifact_kind = 'archive' AND a.source_mime = 'application/zip'
+          AND a.source_size_bytes BETWEEN 1 AND 33554432
+          AND (c.project_ref IS NULL OR EXISTS (
+            SELECT 1 FROM bff_project AS p WHERE p.tenant_id = c.tenant_id AND p.owner_id = c.owner_id
+              AND p.deleted_at IS NULL AND (p.project_id = c.project_ref OR p.slug = c.project_ref)
+          )) LIMIT 1`,
+      [tenantId, subjectId, conversationId, artifactId],
+    )
+    const row = result.rows[0]
+    if (!row) return null
+    return {
+      ...association(row),
+      sourceArtifactKind: "archive",
+      sourceEventId: row.source_event_id,
+      sourceEventSeq: row.source_sequence,
+      sourceEventDigest: row.source_digest,
+      sizeBytes: row.source_size_bytes,
+      mimeType: "application/zip",
+    }
   }
 }

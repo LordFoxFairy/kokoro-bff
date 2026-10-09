@@ -3,7 +3,7 @@ import { TimestampSchema } from "@bufbuild/protobuf/wkt"
 import type { ProjectResourcePage, ProjectResourcePageInput } from "../../../application/project-resource-list.types.js"
 import { createClient, ConnectError, Code, type Client, type Transport } from "@connectrpc/connect"
 import { createConnectTransport } from "@connectrpc/connect-node"
-import { StorageService, UploadPurpose, UploadState, ScanState, AssetOrigin } from "../../../generated/storage-connect/kokoro/storage/v2/storage_pb.js"
+import { StorageService, UploadPurpose, UploadState, ScanState, AssetOrigin } from "../../../generated/storage-connect/kokoro/storage/v3/storage_pb.js"
 import { ProjectResourceError } from "../../../application/project-resource.error.js"
 import type {
   ProjectResourceContext,
@@ -96,16 +96,23 @@ export class StorageUploadClient implements ProjectResourceStorage {
               ? "aborted"
               : null
       if (result.uploadId !== uploadId || state === null) throw new ProjectResourceError("storage_response_invalid", 502)
-      return { state, assetId: result.assetId ?? null, sha256: result.expectedSha256, sizeBytes: String(result.expectedSizeBytes), mimeType: result.mimeType }
+      return {
+        state,
+        assetId: result.assetId ?? null,
+        sourceVersionId: result.sourceVersionId ?? null,
+        sha256: result.expectedSha256,
+        sizeBytes: String(result.expectedSizeBytes),
+        mimeType: result.mimeType,
+      }
     })
   }
-  async put(reference: StorageTransfer, input: ProjectResourceInput, signal: AbortSignal): Promise<void> {
-    await putStorageBytes(reference, input.bytes, input.mimeType, this.config.objectOrigin, signal)
+  async put(reference: StorageTransfer, input: ProjectResourceInput, signal: AbortSignal): Promise<string> {
+    return putStorageBytes(reference, input.bytes, input.mimeType, this.config.objectOrigin, signal)
   }
-  async completeUpload(commandId: string, requestDigest: string, uploadId: string, input: ProjectResourceInput, signal: AbortSignal) {
+  async completeUpload(commandId: string, requestDigest: string, uploadId: string, sourceVersionId: string, input: ProjectResourceInput, signal: AbortSignal) {
     return this.rpc(async () => {
       const result = await this.client.completeUpload(
-        { command: { commandId, requestDigest }, uploadId, contentSha256: input.sha256, sizeBytes: BigInt(input.bytes.length) },
+        { command: { commandId, requestDigest }, uploadId, sourceVersionId, contentSha256: input.sha256, sizeBytes: BigInt(input.bytes.length) },
         { headers: this.headers, signal },
       )
       if (result.uploadId !== uploadId || !result.assetId) throw new ProjectResourceError("storage_response_invalid", 502)
