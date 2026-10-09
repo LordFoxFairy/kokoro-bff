@@ -1,3 +1,11 @@
+## R357-SKILLS-CANONICAL-IDENTITY 窄修（2026-10-09；待 Root 正式集成）
+
+BFF 当前 Skills validate HTTP projection 与 AI handoff 现按 Platform 正式 owner 合同接受且仅接受 `skill-md-v1:sha256:<64 lowercase hex>` 和 legacy `zip-v2:sha256:<64 lowercase hex>`；不 trim、不设 alias，未知 profile、大小写或空白漂移继续拒绝为 `skill_response_invalid`。请求准入、总预算、CAS、幂等、错误映射及未知 ACK 恢复原逻辑不变。
+
+Public12 OpenAPI 的 `SkillImportResponse`/`SkillValidateResource` 与 runtime 同值域；当前规格门固定两处 exact pattern，历史 Public11→Public8.10 fixture 与完整父逆不变。依据为本仓正规 vendor Platform `execution-operations/skill-series-current-v1.json` 的 `skill-md-v1` 当前身份与 `zip-v2` legacy 身份；未改 vendor/generated/pin、数据库、权限或 Web。源码验证与冻结证据由本片交 Root 独审，不代表正常服务、真实 owner 组合或浏览器完成。
+
+<!-- R357-SKILLS-CANONICAL-IDENTITY-END -->
+
 ## R357-H1 人类 MCP 准入源码切片（2026-10-09）
 
 当前 IAM 消费唯一固定55befe5092f96d617088549df3166e1d381e6b1c / 0.11.0（artifact SHA47011671cf2c3631c5ff914db4b40a8a9f9cdecc9b2b6fcd13a359a45b0882d3），正规生成新增 checkAuthorization，原15 consumer operations及完整共用schemas保全。现MCP read/manage每次在可信session后检查mcp_personal/current_membership；tenant/subject/request-id/no-store/closed响应不匹配拒503，false403、失效401、rate429，复用现session_forbidden/session_rate_limited public错误码。

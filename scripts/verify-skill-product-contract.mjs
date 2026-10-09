@@ -170,6 +170,13 @@ export function inspectSkillsSpecificationContract(source) {
     ]), "skill.list must retain optional project_id string only")
   require(JSON.stringify(Object.keys(schemas.SpecificationPublicSkillList?.properties ?? {})) ===
     JSON.stringify(["ok", "request_id", "data"]), "Public skill.list must not use data/meta")
+  const canonicalManifestPattern = "^(?:skill-md-v1|zip-v2):sha256:[a-f0-9]{64}$"
+  for (const [schemaName, manifestIdentity] of [
+    ["SkillImportResponse", schemas.SkillImportResponse?.properties?.data?.properties?.manifest_identity],
+    ["SkillValidateResource", schemas.SkillValidateResource?.properties?.manifest_identity],
+  ])
+    require(manifestIdentity?.pattern ===
+      canonicalManifestPattern, `${schemaName}.manifest_identity must accept only exact lowercase canonical skill-md-v1 or legacy zip-v2 identities`)
   const skill = schemas.SpecificationPublicSkill?.properties ?? {}
   for (const key of ["id", "name", "description"]) require(skill[key]?.type === "string", `Public Skill ${key} must be string`)
   require(JSON.stringify(skill.owner_type?.enum) ===
@@ -194,7 +201,9 @@ export function inspectSkillsSpecificationContract(source) {
     request?.properties?.shuffle?.type === "boolean" &&
     request?.properties?.includeOfficialSkills?.type === "boolean" &&
     request?.properties?.tag?.type === "string" &&
-    request?.properties?.query?.type === "string" && request?.properties?.pageToken?.type === "string" && request?.properties?.excludeTop?.type === "boolean", "Hub request field types drifted")
+    request?.properties?.query?.type === "string" &&
+    request?.properties?.pageToken?.type === "string" &&
+    request?.properties?.excludeTop?.type === "boolean", "Hub request field types drifted")
   const info = schemas.SpecificationDownloadInfo?.properties?.downloadInfo
   require(info?.additionalProperties === false &&
     JSON.stringify(info?.required) === JSON.stringify(["downloadUrl", "filename", "expiresAt"]) &&

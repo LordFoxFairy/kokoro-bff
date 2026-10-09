@@ -1970,3 +1970,8 @@ checkpoint 是独立 scope 的 terminal status=200（外层是 canonical route s
 W2 scan 错误不回滚 Storage 完成事实：感染 422 以既有外层 receipt 固化，待扫描/unknown 503 释放外层 pending 但保留 terminal upload checkpoint，因此同 key 重查同一 Asset，不新建资产。
 
 W2 资源列表当前实现不新增 BFF 表、索引、物化快照、缓存或 migration。Project 所有权仍来自本仓 canonical `bff_project` 的 tenant+owner 查询；Asset、purpose、scan、created_at 与排序 cursor 只来自 Storage owner。GET 不使用上传 receipt 重建列表，也不把 POST 的 upload_id 当作资产列。Storage 的 scope 索引与分页查询由其 canonical schema 验证；BFF `pnpm schema:check` 必须证明本仓数据模型零变化。跨仓读取无事务或双写，Storage 不可用时显式依赖失败而非返回空列表。
+## T-K03.4 Validate identity 无数据变更（2026-10-09）
+
+本片只纠正 BFF 对 Platform owner 返回的 canonical identity 值域：当前 `skill-md-v1:sha256:<64 lowercase hex>` 与正式 legacy `zip-v2:sha256:<64 lowercase hex>`。BFF 不计算、不转换、不 trim、不持久化该 identity，也不新增表、列、索引、migration、receipt、缓存或镜像；现 package、Skill、安装、Share/usage 与非 Skills 数据均不变。
+
+<!-- T-K03.4-BFF-CANONICAL-IDENTITY-END; complete original body follows -->

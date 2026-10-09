@@ -2494,3 +2494,10 @@ session_invalid/skill_forbidden/skill_rate_limited，坏响应、超时、未知
 ### W2 项目资源读取契约（当前）
 
 固定 Storage owner `ef0fd7779bf434120ac1f8a58592222f534a7c45` 的 v2 `ListAssets`，已发布 `GET /v1/projects/{projectId}/resources?limit=…&cursor=…`。它是 public Product API，由 BFF 在每次请求先校验固定租户/当前 User Bearer 与该私人 Project 的 tenant+subject predicate；不存在和无权同为 404。limit 默认50、范围1..100，cursor 长度1..4096且只含可见ASCII、opaque 且绑定受信 project/subject/filter，不接受浏览器自报 tenant/scope。成功为 `{data:{items:[{asset_id,filename,mime_type,size_bytes,content_sha256,scan_state,created_at}],next_cursor},meta:{request_id}}`；只含 `ASSET`/`CLEAN`，不含 POST 独有的 `upload_id`、下载 URL、内部状态或 package。非法分页/cursor 400，owner 失败按既有 public 错误语义返回 502/503，不用 preview/mock 200 替代。机器事实源仍是 `contract/openapi/v1/openapi.yaml`，新增 operationId `listProjectResources` 与 `ProjectResourceListResponse`；POST形态和checkpoint不变。
+## T-K03.4 Validate canonical identity 同 wire 闭集（2026-10-09）
+
+`POST /v1/skills/{skill_id}/validate` 的 method、path、请求、状态和 response shape 不变。成功 `manifest_identity` 接受且只接受 `^(?:skill-md-v1|zip-v2):sha256:[a-f0-9]{64}$`：`skill-md-v1` 是当前根 `SKILL.md` canonical identity，`zip-v2` 仅为已正式声明的 legacy identity。两者都来自 Platform owner 结果，调用者不能提交。
+
+不接受 trim、大小写变体、长度错误、额外前后缀、`zip-v1` 或未知 profile；非法 owner 200 仍映射既有 502 `skill_response_invalid`。IAM、tenant/subject、Idempotency-Key、command digest、attempt/CAS、预算/取消、unknown recovery及所有错误结构不变。AI import handoff 使用同一闭集，不建立另一种响应或 fallback；vendor/artifact 已含该事实，本片不 repin、不改 generated client。
+
+<!-- T-K03.4-BFF-CANONICAL-IDENTITY-END; complete original body follows -->

@@ -1,6 +1,23 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 
+test("AI handoff accepts the current skill-md-v1 canonical owner result", async () => {
+  const { skillHandoffResultSchema } = await import("../src/infrastructure/clients/platform/skill-product-schema.ts")
+  const manifestIdentity = `skill-md-v1:sha256:${"c".repeat(64)}`
+  assert.deepEqual(
+    skillHandoffResultSchema.parse({
+      skill_id: "skill-1",
+      source_ref: "skill:skill-1",
+      status: "draft",
+      state_version: "4",
+      valid: true,
+      content_digest: "a".repeat(64),
+      manifest_identity: manifestIdentity,
+    }).manifest_identity,
+    manifestIdentity,
+  )
+})
+
 test("Handoff freezes selected version before Complete and replays without another PUT", async () => {
   const module = await import("../src/application/skill-ai-handoff.ts").catch(() => ({}))
   assert.equal(typeof module.handoffSkillPackage, "function", "durable skill handoff missing")

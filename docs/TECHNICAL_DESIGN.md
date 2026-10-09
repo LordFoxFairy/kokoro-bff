@@ -3179,3 +3179,12 @@ GET 专用响应 gate 验证 page 数量/唯一 Asset ID、purpose/scan/origin e
 ### BFF activeRun running首片 Root最终证据（2026-09-30）
 
 同一个ACL先行RR snapshot实现已通过Root Node22完整纯门（contract191、architecture27、test506pass1skip、format/lint/typecheck/build）及canonical fresh install、定向8/8与全7文件真实PG/Redis/localhost HTTP integration47/47、0失败/0跳过。日志 `/tmp/kokoro-bff-active-run-root-pg-fixture-final-gates.log`、`/tmp/kokoro-bff-active-run-real-pg-final-green.log`；自有/新增临时库0、Redis新增0/baseline保留。首次PG7/1因fixture缺正常assistant/dispatch binding失败，改由ChatTurn.submit建立绑定后复验，不改生产guard。公开OpenAPI/schema/generated字节未变；浏览器终态全文与queued/waiting/pending/files仍后继，不能据47项owner integration宣布全产品完成。
+## T-K03.4 Validate canonical identity 值域纠正（2026-10-09；窄实现）
+
+本片属于既有 ValidateSkillDraft 与 AI package handoff 的 owner-response 校验，不新增 API、模块、Schema、权限、事务或兼容路径。正式 Platform `2f0c393` 及本仓 vendor `9ed6801` 的 `execution-operations/skill-series-current-v1.json` 声明 canonical identity 只有 `skill-md-v1:sha256:<64 lowercase hex>` 与 legacy `zip-v2:sha256:<64 lowercase hex>`；BFF 当前两处 runtime 与 OpenAPI 两处只接受 zip-v2，错误拒绝正规 owner 200。
+
+目标是在原 wire 字段上接受上述两个完整、大小写敏感的 exact identity；不 trim、不 alias、不接受未知 profile、错误长度、uppercase、前后缀或旧 zip-v1。请求、IAM admission、绝对预算、取消、CAS、幂等 command/digest、unknown ACK、状态/错误映射及 vendor pin/generated client 全部保持。OpenAPI 只同步该既有响应字段的闭合 union pattern；无需 repin 或生成 Platform client。
+
+放置：`src/http/routes/validate-skill-draft.ts` 负责 HTTP owner projection；`src/infrastructure/clients/platform/skill-product-schema.ts` 负责 AI handoff stable result；`contract/openapi/v1/openapi.yaml` 与 `scripts/verify-openapi.ts` 维护唯一 public schema及语义门。对应现有 Validate HTTP、AI handoff 与 OpenAPI contract 测试先以正规 skill-md-v1 owner response RED，再做最小实现。无数据迁移、删除或正常资源操作。
+
+<!-- T-K03.4-BFF-CANONICAL-IDENTITY-END; complete original body follows -->

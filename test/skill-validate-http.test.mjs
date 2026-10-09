@@ -36,6 +36,7 @@ const headers = {
 }
 const input = { attempt_id: "attempt-1" }
 const manifestIdentityV2 = `zip-v2:sha256:${"b".repeat(64)}`
+const manifestIdentitySkillMd = `skill-md-v1:sha256:${"c".repeat(64)}`
 const result = () => ({
   stateVersion: 1n,
   skillId: { value: "skill-1" },
@@ -118,6 +119,22 @@ test("Validate returns strict V2 validated owner projection", async () => {
   assert.equal(calls[0].skillId, "skill-1")
   assert.equal(calls[0].attemptId, "attempt-1")
   assert.match(calls[0].digest, /^[a-f0-9]{64}$/u)
+})
+
+test("Validate projects the current skill-md-v1 canonical owner identity", async () => {
+  await withServer(
+    {
+      validateDraft: async () => ({
+        ...result(),
+        manifestIdentity: manifestIdentitySkillMd,
+      }),
+    },
+    async (base) => {
+      const response = await post(base)
+      assert.equal(response.status, 200)
+      assert.equal((await response.json()).data.manifest_identity, manifestIdentitySkillMd)
+    },
+  )
 })
 
 test("Validate generated Connect schema carries v4 typed attempt selector", async () => {
@@ -427,6 +444,10 @@ test("Validate rejects malformed owner result instead of partial public success"
     { manifestIdentity: `ZIP-V2:SHA256:${"b".repeat(64)}` },
     { manifestIdentity: `prefix-${manifestIdentityV2}` },
     { manifestIdentity: `${manifestIdentityV2}-suffix` },
+    { manifestIdentity: `skill-md-v1:sha256:${"C".repeat(64)}` },
+    { manifestIdentity: ` skill-md-v1:sha256:${"c".repeat(64)}` },
+    { manifestIdentity: `skill-md-v1:sha256:${"c".repeat(64)} ` },
+    { manifestIdentity: `skill-md-v2:sha256:${"c".repeat(64)}` },
     { replayed: "true" },
     { manifestIdentity: `zip-v1:sha256:${"b".repeat(64)}` },
   ])

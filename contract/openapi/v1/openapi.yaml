@@ -11351,7 +11351,7 @@ components:
               pattern: ^[a-f0-9]{64}$
             manifest_identity:
               type: string
-              pattern: ^zip-v2:sha256:[a-f0-9]{64}$
+              pattern: ^(?:skill-md-v1|zip-v2):sha256:[a-f0-9]{64}$
     SkillAdminListResponse:
       type: object
       additionalProperties: false
@@ -12811,7 +12811,7 @@ components:
           pattern: ^[a-f0-9]{64}$
         manifest_identity:
           type: string
-          pattern: ^zip-v2:sha256:[a-f0-9]{64}$
+          pattern: ^(?:skill-md-v1|zip-v2):sha256:[a-f0-9]{64}$
         replayed:
           type: boolean
         state_version:

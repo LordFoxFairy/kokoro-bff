@@ -13,6 +13,7 @@ const openapiUrl = new URL("../../contract/tests/public11-historical.openapi.yam
 const baselineUrl = new URL("../../contract/tests/v1-operations.json", import.meta.url)
 const agentControlSnapshotUrl = new URL("../../contract/external/kokoro-agent/control-receipt.v1.json", import.meta.url)
 const platformV4Url = new URL("../../contract/vendor/kokoro-platform/263a28f1e55745bd1829a61f68228d775751adbc/execution-operations-v4/", import.meta.url)
+const currentOpenapiUrl = new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url)
 const SAFE_FAILURE_CODES = [
   "token_budget_exceeded",
   "recursion_limit_exceeded",
@@ -32,6 +33,12 @@ async function readContract() {
   assert.deepEqual(inspectSkillProductContract(openapi), [], "Historical Public11 fixture must pass before historical parent mutation proof")
   return { openapi: stripSkillProductSource(openapi), baseline: skillProductParentBaseline(openapi) }
 }
+
+test("current Skills responses admit only the owner-declared current and legacy canonical identities", async () => {
+  const openapi = await readFile(currentOpenapiUrl, "utf8")
+  assert.equal([...openapi.matchAll(/pattern: \^\(\?:skill-md-v1\|zip-v2\):sha256:\[a-f0-9\]\{64\}\$/gu)].length, 2)
+  assert.equal([...openapi.matchAll(/pattern: \^zip-v2:sha256:\[a-f0-9\]\{64\}\$/gu)].length, 0)
+})
 
 function inspectChatFailureContract(openapi) {
   const errors = []

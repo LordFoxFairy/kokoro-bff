@@ -152,7 +152,7 @@ export const skillHandoffResultSchema = z
     state_version: skillDecimalSchema,
     valid: z.literal(true),
     content_digest: digest,
-    manifest_identity: z.string().regex(/^zip-v2:sha256:[a-f0-9]{64}$/u),
+    manifest_identity: z.string().regex(/^(?:skill-md-v1|zip-v2):sha256:[a-f0-9]{64}$/u),
   })
   .strict()
   .refine((value) => value.source_ref === `skill:${value.skill_id}`)

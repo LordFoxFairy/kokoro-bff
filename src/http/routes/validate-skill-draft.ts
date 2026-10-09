@@ -11,7 +11,7 @@ import { send } from "../response.js"
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u
 const SHA256 = /^[a-f0-9]{64}$/u
-const MANIFEST = /^zip-v2:sha256:[a-f0-9]{64}$/u
+const MANIFEST = /^(?:skill-md-v1|zip-v2):sha256:[a-f0-9]{64}$/u
 const KEY = /^[\x21-\x2B\x2D-\x7E]{1,128}$/u
 const failure = (code: string, message: string, retryable = false) => ({ error: { code, message, retryable } })
 
