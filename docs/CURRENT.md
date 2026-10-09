@@ -1,3 +1,13 @@
+## T-K03.4 本地 Skill import BFF 文档门（2026-10-09；未实施）
+
+三设计已收敛为 Kokoro 自有 `/browser/v1/skills/local-imports...` 四个 browser-private route，经Web `/api/browser/v1/...` 同源adapter消费，再调用Platform已批准的四 internal-owner RPC。它不是Manus public upload接口；public OpenAPI原字节、operation census、Developer Portal和public SDK保持不变。专属 exact dispatch/private policy及其确定性生成物仍属后继实现，当前仓没有该路由。
+
+三个写与same-key replay要求fresh `create_draft AND install`，Get为fresh read；统一绝对预算、取消/迟到关闭、900秒PUT、24小时intent、原key/unknown恢复，不新增BFF Storage调用、SQL/Redis/receipt。Begin成功或重签仅限未到期 `upload_pending` 且 Storage pending；进入 `uploaded`/`completed`/`rejected` 或 expired 后旧 Begin 接 owner phase/precondition 错误并改用 Get，绝不重签或再次 createUpload；Finalize completed 原 key 按 owner 至少30天receipt精确重放。现Web严格从成功PUT的`x-amz-version-id`取得source version可供未来Complete使用，但旧链证据不代表新import已通过。GitHub/AI普通Draft流程与Admin Publish保留；仅未来Web本地文件callsite退出旧Draft→Publish串联。
+
+当前固定Platform consumer尚未包含正式可路由v10 runtime。owner正式发行前不repin vendor/generated、不创建policy/注册route；源码、contract、generated、服务与数据均未改，后继实现须另行授权和冻结。
+
+<!-- T-K03.4-BROWSER-PRIVATE-LOCAL-IMPORT-CURRENT-END -->
+
 ## R357-SKILLS-CANONICAL-IDENTITY 窄修（2026-10-09；待 Root 正式集成）
 
 BFF 当前 Skills validate HTTP projection 与 AI handoff 现按 Platform 正式 owner 合同接受且仅接受 `skill-md-v1:sha256:<64 lowercase hex>` 和 legacy `zip-v2:sha256:<64 lowercase hex>`；不 trim、不设 alias，未知 profile、大小写或空白漂移继续拒绝为 `skill_response_invalid`。请求准入、总预算、CAS、幂等、错误映射及未知 ACK 恢复原逻辑不变。

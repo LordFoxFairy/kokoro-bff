@@ -1,3 +1,13 @@
+## T-K03.4 本地 Skill import BFF 数据边界（仅设计，无持久化）
+
+BFF 不拥有 `SkillImportIntent`、Upload、scan、Skill、publication、installation 或 command receipt；这些事实分别由 Platform/Storage 拥有。BFF 不新增 SQL表、Redis key、URL缓存、恢复队列、idempotency receipt、Storage proof镜像或授权快照。四个 browser-private 请求只在单次内存预算内携带 strict wire 值并投影 owner结果。
+
+24小时 intent、phase、预分配 skill ID、immutable upload proof和terminal结果均只从 Platform Get/command receipt取得；900秒 PUT URL及headers不落盘。same-key replay前重新做 current session及`create_draft AND install`，receipt不成为权限缓存。只有未到期 `upload_pending` intent 且 Storage upload 仍 pending 可由原 Begin 重签同一 upload；`uploaded`、`completed`、`rejected` 或 expired 后的旧 Begin 只接 owner phase/precondition 错误并由 Get 恢复，不产生新 upload/reference。Finalize completed 的原 key 由 owner receipt 至少 30 天精确重放，BFF不复制该事实。Web已有 PUT响应 `x-amz-version-id` 是 Complete 的 `source_version_id` 来源；BFF不读取Storage、不猜值。
+
+public OpenAPI、数据库schema、现有BFF receipt/outbox、GitHub/AI Draft事实及Admin Publish事实全不变。后继本地文件UI停止建立假Draft，但不清理或迁移既有Draft、Asset、installation，也不删除合法失败历史。当前未实施，无schema/数据命令。
+
+<!-- T-K03.4-BROWSER-PRIVATE-LOCAL-IMPORT-DATA-END -->
+
 ## T-K03.3 短期句柄回收（候选，无新存储）
 
 原128容量/60秒上限不扩大；进程内到期回收、完整exact绑定复用、最老淘汰，不新库/队列/持久权限或数据镜像。被淘汰句柄永不复绑定；有效新句柄仍前后当前IAM/owner资格与实际SHA/size校验。

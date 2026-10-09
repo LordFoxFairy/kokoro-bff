@@ -1,3 +1,29 @@
+## T-K03.4 本地 Skill import：BFF browser-private 消费设计（仅文档，未实施）
+
+普通用户本地 `.zip`/`.skill` 导入只走 `Browser -> Web same-origin adapter -> BFF -> Platform`。BFF 私有入口固定为 `POST /browser/v1/skills/local-imports`、`POST /browser/v1/skills/local-imports/{intent_id}/complete`、`POST /browser/v1/skills/local-imports/{intent_id}/finalize` 与 `GET /browser/v1/skills/local-imports/{intent_id}`；Web 后继只暴露对应 `/api/browser/v1/...`。该 namespace 是 Kokoro 自有 `browser-private`，不冒充已观察的 Manus `/skill.v1.*`，也不进入 public `/v1` OpenAPI、Developer Portal、public generated SDK 或 operation census。BFF 在现 server 的非 `/v1` 默认拒绝之前 exact dispatch；未知 path/method/query/body/header 失败关闭，不落通用代理。
+
+三个 mutation 与 same-key replay 均在一个绝对总预算内先验证现 `web-bff` service envelope、唯一 current bearer、固定 tenant/subject，再 fresh 执行 IAM `create_draft AND install`；任一 deny、rate limit、依赖失败、取消或超时均在 Platform I/O 前停止。Get 只用 fresh session/read 资格，不借 mutation permission。Begin/Complete 各 10 秒、Finalize 外部阶段 20 秒、Get 2 秒；IAM、token、Platform 与恢复共享同一 deadline，不逐层重置。迟到结果不得成功。BFF 不保存 command receipt、intent、URL、Storage proof或授权缓存。
+
+Begin 返回的 PUT reference 只接受批准 ObjectStore origin、固定 PUT、完整受控 headers、未来期限且不超过 900 秒与 intent `expires_at`。只有 intent 未到期、仍处 `upload_pending` 且 Storage upload 仍为 pending 时，原 Begin key/body 才可在重新双资格后取得同 intent/upload 的重签；不能新 key/new upload 延长 intent。intent 已进入 `uploaded`、`completed`、`rejected` 或已到期时，旧 Begin 重放必须接收 owner 的明确 phase/precondition 错误，不得重签 PUT 或再次执行 createUpload，客户端改用 Get 恢复。Complete/Finalize outcome unknown 先以各自原 key 重放或 Get 确认；Finalize 已 completed 的原 key 在 owner 至少 30 天 receipt 保留窗内精确重放，未完成 intent 到期后不可恢复。Web 已有 `putPackage` 对 CORS PUT 成功响应严格读取 `x-amz-version-id` 后才提交 `source_version_id` 的正式边界；该事实可复用，不新增 BFF→Storage 旁路，也不把旧上传成功冒充新 import 已验收。
+
+放置表：
+
+| 项 | 结论 |
+| --- | --- |
+| Owner | Platform/Skills 唯一写 intent、Skill、publication、installation 与 receipt；BFF 仅 browser-private 编排和投影；Web 仅同源交互。 |
+| 当前事实 | BFF 现有 public Draft/package/Validate/Publish 服务 GitHub/AI；admin Publish 独立正式；现 Platform pin 尚无可路由 local-import runtime。 |
+| 目标职责 | 精确消费 Platform 已批准的 Begin/Complete/Finalize/Get 四 internal-owner RPC，不公开上传 API。 |
+| 目录方案 | 采用现 `src/http/routes` 单 lifecycle route + private policy、现 Platform client目录的 Connect/projector；淘汰 public `/v1/skill-imports` 与伪造 `/skill.v1.*`，不建新模块/四层脚手架。 |
+| 粒度 | 后继一个 input/digest 文件、一个 route、一个 projector；扩现 admission、Connect、bootstrap。policy 是唯一可编辑私有机器事实并确定性生成根 contract JSON。 |
+| 依赖 | 只依赖正式固定的 Platform contract/generated 与现 IAM action client；禁止 Storage client、owner DB、generic proxy、body自报身份。 |
+| 数据/API | BFF 无 SQL/Redis/receipt；public OpenAPI字节/census/SDK必须原样。private policy固定四method、闭集schema/status与breaking版本。 |
+| 删除项 | 后继只删除 Web 本地文件入口对普通 Draft→package→validate→publish 的串联；不删 GitHub/AI 生命周期或 `/v1/admin/skills/{id}/publish`。 |
+| 验证 | private policy生成/check、public字节/census负控、四route HTTP、dual IAM replay/预算/取消、900秒/24小时/unknown恢复、generated pin、GitHub/AI与admin Publish回归。 |
+
+当前只通过文档门。Platform v10 runtime 正式可路由发行前不得 repin vendor/generated、注册路由或创建 private policy 文件；后继实现另行授权。
+
+<!-- T-K03.4-BROWSER-PRIVATE-LOCAL-IMPORT-DESIGN-END -->
+
 ## T-K03.3 下载句柄容量纠正（候选，待Root验证）
 
 下载句柄先清到期再校验；同tenant/subject及完整exact包/transfer事实复用原句柄，不延TTL/不更新淘汰年龄。容量128满时只淘汰最老已发行句柄，旧句柄Gone410可正规重申，不让正常详情/下载metadata全局503；校验失败不淘汰有效项。

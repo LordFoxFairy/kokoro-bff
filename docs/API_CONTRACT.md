@@ -1,3 +1,22 @@
+## T-K03.4 本地 Skill import browser-private 合同（仅设计，未发布）
+
+本能力没有已证明的 Manus public upload write suffix，因此不新增 public `/v1` operation。唯一拟议外部边界是 Kokoro BFF `browser-private` v1：
+
+| Method/path | strict request | strict success projection |
+| --- | --- | --- |
+| `POST /browser/v1/skills/local-imports` | 单 `Idempotency-Key`；JSON `{filename,size_bytes,content_sha256}` | 201 `{data:{intent_id,skill_id,phase:"upload_pending",upload_id,transfer_reference,expires_at,replayed}}` |
+| `POST /browser/v1/skills/local-imports/{intent_id}/complete` | 单 key；JSON `{upload_id,source_version_id,size_bytes,content_sha256}` | 200 `{data:{intent_id,skill_id,phase:"uploaded",upload_proof,scan_state,expires_at,replayed}}` |
+| `POST /browser/v1/skills/local-imports/{intent_id}/finalize` | 单 key；零请求体 | 200 `{data:{intent_id,phase:"completed",skill,installation,replayed}}` |
+| `GET /browser/v1/skills/local-imports/{intent_id}` | 无 query/body/key | 200 `{data:{intent_id,skill_id,phase,expires_at,upload_proof?,rejection_code?,skill?,installation?}}`，presence 按 phase 闭集 |
+
+`transfer_reference` 仅含 approved-origin URL、`PUT`、完整 required headers与RFC3339 expiry；`upload_proof`仅含持久的 upload/asset/source-version/hash/size，Get 不返回或查询 scan。Complete 的 `scan_state` 是当次权威读取的独立字段。ID、uint64、lowercase SHA-256、Timestamp、enum/message presence、content type、request ID、no-store和错误 status/reason 全部严格投影；unknown/UNSPECIFIED/额外字段拒绝，不回显 owner message、token、URL凭据或内部事实。
+
+三个 POST（包括 completed/same-key replay）必须 fresh `create_draft AND install` 后才调用 Platform；GET 使用 fresh session/read。Begin 的 201（含同 key 重签）只适用于未到期的 `upload_pending` intent 且 Storage upload 仍为 pending；`uploaded`、`completed`、`rejected` 或 expired phase 的旧 Begin 重放投影 owner 明确 phase/precondition 错误，不返回 transfer reference，调用方以 GET 恢复。Finalize 已 completed 的原 key 在 owner 至少 30 天 receipt 保留窗内仍精确重放同一成功结果。tenant/subject 只来自受信 session，不能从 body/header自报。预算、取消、900秒 PUT上限、24小时 intent、原key恢复与 unknown ACK 规则以技术设计为准。BFF 不接 Storage、不持久 receipt/intent。
+
+该 private contract 后继由 `local-skill-import.policy.ts` 唯一编辑并确定性生成根 policy JSON；不写入 public OpenAPI/Developer Portal/public SDK/count。当前机器policy尚不存在，Platform runtime正式发行前不得创建或路由。GitHub/AI 的普通 Draft/Validate/Publish 与后台 Admin Publish 保持原合同。
+
+<!-- T-K03.4-BROWSER-PRIVATE-LOCAL-IMPORT-API-END -->
+
 ## T-K03.3 下载句柄有界生命周期（候选）
 
 Public12与全部字段不变。过期/淘汰/重启丢失的字节句柄410，重新GetSkill/DownloadSkill获新metadata；不漂移旧主体/exact版本。实际字节头固定attachment; filename="skill.zip"与RFC5987 UTF-8 filename*编码原名，引号/分号/Unicode不直接插值。
