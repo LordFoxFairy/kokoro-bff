@@ -39,13 +39,14 @@ export class PersonalInstallationConnectClient {
       }),
     )
   }
-  #options(token: string, input: Common, signal: AbortSignal, timeoutMs: number) {
+  #options(token: string, input: Common, signal: AbortSignal, timeoutMs: number, projectRef?: string) {
     return {
       signal,
       headers: {
         authorization: `Bearer ${token}`,
         "x-tenant-ref": input.tenant,
         "x-kokoro-subject": input.subject,
+        ...(projectRef === undefined ? {} : { "x-kokoro-project-ref": projectRef }),
       },
       timeoutMs,
     }
@@ -150,6 +151,7 @@ export class PersonalInstallationConnectClient {
   }
   async list(
     input: Common & {
+      projectRef?: string
       enabled?: boolean
       installed?: boolean
       limit?: number
@@ -172,7 +174,7 @@ export class PersonalInstallationConnectClient {
             ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
           }),
         }),
-        this.#options(token, input, operationSignal, timeoutMs),
+        this.#options(token, input, operationSignal, timeoutMs, input.projectRef),
       ),
     )
   }

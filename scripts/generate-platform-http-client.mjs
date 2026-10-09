@@ -11,9 +11,9 @@ const output = path.join(root, "src/generated/platform-http")
 const manifestPath = path.join(root, "contract/dependencies/platform-http.json")
 const configPath = path.join(root, "openapi-ts.platform-http.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "6d2a3bd005d483f036efaa1b6990b5c620024bc3"
+const ownerCommit = "9ed6801673ca279f446712de6eee3476717bfb24"
 const vendorPath = path.join(root, `contract/vendor/kokoro-platform/${ownerCommit}/openapi/platform-http.openapi.json`)
-const ownerDigest = "95f1c2817707ba96d512c00c1f94174c287622b862d08712c05007b9da4ab76c"
+const ownerDigest = "c5f9a343170c87d59e0c40134c503cc6d40b59416216ac993a138cfbac3bb581"
 const generatedFiles = [
   "client.gen.ts",
   "client/client.gen.ts",

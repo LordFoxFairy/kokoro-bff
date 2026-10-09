@@ -1,3 +1,19 @@
+## T-K03.3 下载句柄容量纠正（候选，待Root验证）
+
+下载句柄先清到期再校验；同tenant/subject及完整exact包/transfer事实复用原句柄，不延TTL/不更新淘汰年龄。容量128满时只淘汰最老已发行句柄，旧句柄Gone410可正规重申，不让正常详情/下载metadata全局503；校验失败不淘汰有效项。
+
+<!-- T-K03.3-DOWNLOAD-CORRECTION-END; complete previous body follows -->
+
+## T-K03.3 后继正式读取消费（源码候选，待Root验证）
+
+固定Platform9ed6801673ca279f446712de6eee3476717bfb24/active244d7090，唯一generated/vendor；首片临时project/filter/shuffle503已由正规owner读取承接，不保alias/fallback。
+public project_id先现ProjectService.find当前tenant/subject，唯canonical Project.id进入installation RPC受信x-kokoro-project-ref；原body/header不透传，完成creator聚合后同主体再find核授权/删除。project读取含disabled，不写安装、不切current。
+Hub includeOfficialSkills原布尔映射owner include_official_skills；shuffle仅首请求，opaquepageToken为原cursor，后页省shuffle且保原filter。所有过滤/排序/seek在owner SQL take前，不页内筛选或重排。
+exact installed createdAt/source owner直接新Proto19/20，creator只真实creator_ref→fresh IAM；不拿publisher/installedAt/current代填。旧installation管理envelope维持自身合同，新表示事实由现mapper独立小函数取得。
+取消/单预算/late结果关闭、当前IAM、exact版本下载/文件树、Admin/写幂等与其它85操作保留；纯门不代表正常配对/页面验收。
+
+<!-- T-K03.3-SUCCESSOR-END; complete previous body follows -->
+
 ## T-K03.2 Skills 全接口规范与消费者切换设计（2026-10-09；设计门，未实现）
 
 基线 adcdac3 / Public11；本前缀是当前目标，覆盖下方历史“自定 Skills REST/包装”的选择，不把目标称已发行。Root 346c6841 已决定先完成 Skills 全部 API、Manus 一致 UI 与真实普通/Admin交互，其它新功能暂停。

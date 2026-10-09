@@ -77,7 +77,7 @@ test("Complete new path is a default-closed strict candidate, never old Capabili
 test("Complete projector matches all eleven owner v4 command projection vectors", async () => {
   const manifest = JSON.parse(
     await readFile(
-      new URL("../contract/vendor/kokoro-platform/6d2a3bd005d483f036efaa1b6990b5c620024bc3/execution-operations-v5/manifest.json", import.meta.url),
+      new URL("../contract/vendor/kokoro-platform/9ed6801673ca279f446712de6eee3476717bfb24/execution-operations-v5/manifest.json", import.meta.url),
       "utf8",
     ),
   )

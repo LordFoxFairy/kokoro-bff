@@ -347,6 +347,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
                 config.platformProjection.credentialFile,
                 config.platformProjection.timeoutMs,
               ),
+              ...(businessStore?.services.projects === undefined ? {} : { projects: businessStore.services.projects }),
               profiles: new IamPublisherProfileClient(config.iamBaseUrl, config.upstreamTimeoutMs),
               ...(businessStore?.services.skillUsage === undefined ? {} : { usage: businessStore.services.skillUsage }),
               objectOrigin: config.storageObjectOrigin ?? config.storage?.objectOrigin ?? null,

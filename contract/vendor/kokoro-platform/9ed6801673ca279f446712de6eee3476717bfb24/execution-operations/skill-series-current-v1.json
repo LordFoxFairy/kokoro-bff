@@ -1,8 +1,8 @@
 {
   "profile": "skill-series-current-v1",
   "version": "1.0.0",
-  "proto_sha256": "2aec3f3ff3eb160f7a1903b7fbd76e22d25b9d4d7b49763fe05d4d936e1e3ec8",
-  "descriptor_sha256": "848c8d69a97a97e3c5174ba7fe4cb1ce9dce2c7f020c43284b2d64b792e3cb07",
+  "proto_sha256": "8f7f6292c2b59e1171632362882d7ea490d20bbe1e2fa21556a7a7a4cc7e6a97",
+  "descriptor_sha256": "a167ddd3e815a5469da8ef1cbb54be6e22dbada48def0fdd0621e945c2a985db",
   "semantics": {
     "stable_id": "series_id",
     "exact_version_id": "skill_id",
@@ -10,5 +10,5 @@
     "package_identity": "skill-md-v1",
     "legacy_package_identity": "zip-v2"
   },
-  "http_sha256": "95f1c2817707ba96d512c00c1f94174c287622b862d08712c05007b9da4ab76c"
+  "http_sha256": "c5f9a343170c87d59e0c40134c503cc6d40b59416216ac993a138cfbac3bb581"
 }

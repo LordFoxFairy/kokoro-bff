@@ -1,3 +1,18 @@
+## T-K03.3 下载句柄有界生命周期（候选）
+
+Public12与全部字段不变。过期/淘汰/重启丢失的字节句柄410，重新GetSkill/DownloadSkill获新metadata；不漂移旧主体/exact版本。实际字节头固定attachment; filename="skill.zip"与RFC5987 UTF-8 filename*编码原名，引号/分号/Unicode不直接插值。
+
+<!-- T-K03.3-DOWNLOAD-CORRECTION-END; complete previous body follows -->
+
+## T-K03.3 后继唯一正式owner输入（源码候选，待Root验证）
+
+唯一Platform9ed6801673ca279f446712de6eee3476717bfb24，active244d70909067b63e0b6dff721fbc976758e9b08e420d6f19faa638ab628afe2f；HTTP5.3/Proto保持本轮正式发行版本，generated正规生成。
+Public12同/v1/skill.list及既定四网站POST/字节handle，optional project_id以当前Project owner权读取project exact安装；完成前同tenant/subject再核权限。APIKey/OAuth额外资格仍OPEN，不scope冒human。
+ListHubSkills includeOfficialSkills→include_official_skills，首页shuffle→shuffle；pageToken原opaquecursor，后页显式shuffle（含false）400，保过滤绑定。
+ProductSkillInstallation.skill_created_at19/source_owner_scope20直接source facts，公开Unix秒/网站UTC字符串按原类型转换；creator_ref语义不变，无事实不伪造。既有installation管理wire不加字段或改未知ACK职责。
+
+<!-- T-K03.3-SUCCESSOR-END; complete previous body follows -->
+
 ## T-K03.2 Skills 正式 Product协议收敛（2026-10-09；目标待owner发行）
 
 当前基线 adcdac3 / Public11.0.0 /132 operations；原 Skills 42paths/47ops 的职责清单如下，表中旧路径均带 /v1。对应参考替换时同片删旧别名，未观察操作不假装已有Manus同名文档；其它85 operations与Team保持，不扩到user.me。

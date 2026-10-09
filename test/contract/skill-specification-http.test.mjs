@@ -295,14 +295,17 @@ test("R357 opaque handle remains tenant/subject/version bound, expires and is ca
   assert.equal(store.resolve(handle.handle, "tenant", "human").binding.transfer.url, "http://store.invalid/key")
   assert.throws(() => store.resolve(handle.handle, "other", "human"), /forbidden/)
   assert.throws(() => store.resolve(handle.handle, "tenant", "other"), /forbidden/)
-  assert.throws(() => store.issue(binding), /capacity/)
+  const replacement = store.issue(binding)
+  assert.notEqual(replacement.handle, handle.handle)
+  assert.throws(() => store.resolve(handle.handle, "tenant", "human"), /expired/)
+  assert.equal(store.resolve(replacement.handle, "tenant", "human").binding.versionUid, "newest")
   now = 1100
   assert.throws(() => store.resolve(handle.handle, "tenant", "human"), /expired/)
   assert.ok(store.issue(binding))
   store.clear()
   assert.throws(() => store.resolve(handle.handle, "tenant", "human"), /expired/)
 })
-async function bytesFixture(confirm, admission) {
+async function bytesFixture(confirm, admission, filename = "原始技能.zip") {
   const bytes = Buffer.from("actual verified ZIP bytes")
   let objects = 0
   const object = createServer((request, response) => {
@@ -317,7 +320,7 @@ async function bytesFixture(confirm, admission) {
     subjectId: "human",
     skillId: "stable-series",
     versionUid: "version-one",
-    filename: "原始技能.zip",
+    filename,
     sizeBytes: bytes.length,
     contentSha256: createHash("sha256").update(bytes).digest("hex"),
     expiresAt: Date.now() + 300000,
@@ -750,6 +753,7 @@ async function specificationServiceFixture() {
     categoryKeys: { keys: ["programming"] },
     product,
   })
+  Object.assign(installation, { skillCreatedAt: { seconds: 1749999990n, nanos: 0 }, sourceOwnerScope: { kind: "project", id: "source-project" } })
   const calls = []
   let changed = false
   const deps = {
@@ -851,6 +855,8 @@ async function specificationServiceFixture() {
   return {
     service: new SkillSpecificationService(deps),
     calls,
+    deps,
+    installation,
     context,
     signal: new AbortController().signal,
     deadline: performance.now() + 10000,
@@ -867,7 +873,8 @@ test("R357 formal aggregation lists stopped exact installations, resolves actual
   assert.equal(data[0].name, "Old exact")
   assert.equal(data[0].updated_at, 1749999999)
   assert.deepEqual(data[0].creator_info, { user_id: "actual-creator", name: "Real Creator" })
-  assert.equal(Object.hasOwn(data[0], "created_at"), false, "installation time is not Skill creation time")
+  assert.equal(data[0].created_at, 1749999990, "exact source creation time, not installation/current time")
+  assert.equal(data[0].owner_type, "project")
   assert.equal(
     app.calls.some((call) => call.kind === "current"),
     false,
@@ -892,7 +899,7 @@ test("R357 formal Hub aggregation binds true stable/current/exact publication an
   assert.equal(Object.hasOwn(data.skills[0], "verified"), false)
   assert.equal(Object.hasOwn(data.skills[0], "syncStatus"), false)
   assert.deepEqual(app.calls.find((call) => call.kind === "projection").input, {
-    query: { limit: 9, query: "excel", category_key: "programming", cursor: "owner-token" },
+    query: { limit: 9, query: "excel", category_key: "programming", cursor: "owner-token", include_official_skills: true },
   })
   assert.equal(app.calls.find((call) => call.kind === "current").input.seriesId, "stable-series")
 })
@@ -932,5 +939,310 @@ test("R357 production composition uses the formal Skills aggregation rather than
     assert.ok(composition.skillSpecificationSource instanceof SkillSpecificationService)
   } finally {
     await composition.close()
+  }
+})
+
+test("R357 successor project list admits canonical current Project before owner and rechecks exact subject permission before disclosure", async () => {
+  const app = await specificationServiceFixture()
+  const projects = []
+  app.deps.projects = {
+    async find(scope, id) {
+      projects.push({ scope, id })
+      return { id: "canonical-project" }
+    },
+  }
+  const data = await app.service.read("skill.list", { project_id: "project-slug" }, app.context, app.signal, app.deadline)
+  assert.equal(data[0].created_at, 1749999990)
+  assert.equal(data[0].owner_type, "project")
+  assert.equal(data[0].name, "Old exact")
+  assert.deepEqual(projects, [
+    { scope: { tenantId: "tenant", subjectId: "human" }, id: "project-slug" },
+    { scope: { tenantId: "tenant", subjectId: "human" }, id: "canonical-project" },
+  ])
+  assert.equal(app.calls.find((c) => c.kind === "installed").input.projectRef, "canonical-project")
+  assert.equal(
+    app.calls.some((c) => c.kind === "current"),
+    false,
+  )
+})
+test("R357 successor project missing/deleted/revoked or changed canonical identity is closed without replacing exact installations", async () => {
+  for (const result of [null, { id: "different-project" }]) {
+    const app = await specificationServiceFixture()
+    let count = 0
+    app.deps.projects = {
+      async find() {
+        count++
+        return count === 1 ? { id: "canonical-project" } : result
+      },
+    }
+    await assert.rejects(
+      app.service.read("skill.list", { project_id: "project-slug" }, app.context, app.signal, app.deadline),
+      (e) => e instanceof ConnectError && e.code === Code.NotFound,
+    )
+    assert.equal(
+      app.calls.some((c) => c.kind === "current"),
+      false,
+    )
+  }
+  const app = await specificationServiceFixture()
+  app.deps.projects = {
+    async find() {
+      return null
+    },
+  }
+  await assert.rejects(
+    app.service.read("skill.list", { project_id: "not-owned" }, app.context, app.signal, app.deadline),
+    (e) => e instanceof ConnectError && e.code === Code.NotFound,
+  )
+  assert.equal(app.calls.length, 0)
+})
+test("R357 successor Hub sends official exclusion and initial shuffle to owner, then cursor-bound continuation without shuffle", async () => {
+  const app = await specificationServiceFixture()
+  const first = await app.service.read(
+    "ListHubSkills",
+    { pageSize: 1, includeOfficialSkills: false, shuffle: true, query: "literal%_" },
+    app.context,
+    app.signal,
+    app.deadline,
+  )
+  assert.equal(first.skills.length, 1)
+  assert.deepEqual(app.calls.find((c) => c.kind === "projection").input.query, { limit: 1, include_official_skills: false, shuffle: true, query: "literal%_" })
+  app.calls.length = 0
+  await app.service.read(
+    "ListHubSkills",
+    { pageSize: 1, includeOfficialSkills: false, pageToken: first.nextPageToken, excludeTop: true, query: "literal%_" },
+    app.context,
+    app.signal,
+    app.deadline,
+  )
+  assert.deepEqual(app.calls.find((c) => c.kind === "projection").input.query, {
+    limit: 1,
+    include_official_skills: false,
+    cursor: "original-owner-cursor",
+    query: "literal%_",
+  })
+  app.calls.length = 0
+  await assert.rejects(
+    app.service.read("ListHubSkills", { pageToken: "cursor", shuffle: false }, app.context, app.signal, app.deadline),
+    (e) => e instanceof ConnectError && e.code === Code.InvalidArgument,
+  )
+  assert.equal(app.calls.length, 0)
+})
+
+test("R357 successor native binary installation client sends canonical project only as trusted metadata, never request body or write headers", async () => {
+  const { PersonalInstallationConnectClient } = await import("../../src/infrastructure/clients/platform/personal-installation-connect.ts")
+  const p = await import("../../src/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.ts")
+  const { create, fromBinary, toBinary } = await import("@bufbuild/protobuf")
+  const requests = []
+  const owner = createServer(async (req, res) => {
+    const chunks = []
+    for await (const b of req) chunks.push(b)
+    requests.push({ headers: req.headers, body: fromBinary(p.ListPersonalSkillInstallationsRequestSchema, Buffer.concat(chunks)) })
+    res.writeHead(200, { "content-type": "application/proto", "cache-control": "no-store" })
+    res.end(toBinary(p.ListPersonalSkillInstallationsResponseSchema, create(p.ListPersonalSkillInstallationsResponseSchema)))
+  })
+  await new Promise((r) => owner.listen(0, "127.0.0.1", r))
+  try {
+    const client = new PersonalInstallationConnectClient(
+      `http://127.0.0.1:${owner.address().port}`,
+      { get: async () => "write-token" },
+      { get: async () => "projection-token" },
+      1000,
+    )
+    const input = { requestId: "native-project", tenant: "tenant", subject: "human", installed: true, limit: 1 }
+    await client.list({ ...input, projectRef: "canonical-project" })
+    await client.list(input)
+    assert.equal(requests[0].headers["x-kokoro-project-ref"], "canonical-project")
+    assert.equal(requests[0].headers["x-kokoro-subject"], "human")
+    assert.equal(requests[0].headers.authorization, "Bearer projection-token")
+    assert.equal(requests[1].headers["x-kokoro-project-ref"], undefined)
+    assert.equal(requests[0].body.installed, true)
+    assert.equal(requests[0].body.enabled, undefined)
+    assert.equal(Object.hasOwn(requests[0].body, "projectId"), false)
+    assert.equal(Object.hasOwn(requests[0].body, "projectRef"), false)
+    assert.deepEqual(
+      p.ProductSkillInstallationSchema.fields.filter((f) => f.number >= 19).map((f) => [f.name, f.number]),
+      [
+        ["skill_created_at", 19],
+        ["source_owner_scope", 20],
+      ],
+    )
+  } finally {
+    owner.closeAllConnections()
+    await new Promise((r) => owner.close(r))
+  }
+})
+test("R357 successor exact-source missing/malformed facts close specification reads instead of guessing installation time or current owner", async () => {
+  for (const patch of [
+    { skillCreatedAt: undefined },
+    { sourceOwnerScope: undefined },
+    { sourceOwnerScope: { kind: "project", id: "" } },
+    { skillCreatedAt: { seconds: 1750000020n, nanos: 0 } },
+  ]) {
+    const app = await specificationServiceFixture()
+    Object.assign(app.installation, patch)
+    await assert.rejects(app.service.read("skill.list", {}, app.context, app.signal, app.deadline), /skill_installation_response_invalid/)
+    assert.equal(
+      app.calls.some((c) => c.kind === "current"),
+      false,
+    )
+  }
+})
+test("R357 successor cancelled project authorization never issues an installation request after late find", async () => {
+  const app = await specificationServiceFixture()
+  const controller = new AbortController()
+  let complete, entered
+  const pending = new Promise((r) => (entered = r))
+  app.deps.projects = {
+    async find() {
+      entered()
+      return await new Promise((r) => (complete = r))
+    },
+  }
+  const result = app.service.read("skill.list", { project_id: "slug" }, app.context, controller.signal, app.deadline)
+  await pending
+  controller.abort()
+  complete({ id: "canonical-project" })
+  await assert.rejects(result, { name: "AbortError" })
+  assert.equal(app.calls.length, 0)
+})
+
+test("R357 successor project owner dependency failure stays stable503 without private error disclosure", async () => {
+  const app = await specificationServiceFixture()
+  app.deps.projects = {
+    async find() {
+      throw new Error("private database payload")
+    },
+  }
+  await assert.rejects(
+    app.service.read("skill.list", { project_id: "slug" }, app.context, app.signal, app.deadline),
+    (error) => error instanceof ConnectError && error.code === Code.Unavailable && !error.message.includes("private"),
+  )
+  assert.equal(app.calls.length, 0)
+})
+
+function downloadBinding(subjectId = "human") {
+  return {
+    tenantId: "tenant",
+    subjectId,
+    skillId: "stable-series",
+    versionUid: "version-one",
+    filename: "original.zip",
+    sizeBytes: 3,
+    contentSha256: "a".repeat(64),
+    expiresAt: 5000,
+    transfer: { url: "http://store.invalid/key", method: "GET", requiredHeaders: {}, expiresAt: 5000 },
+  }
+}
+test("R357 handle identical qualification reuse never extends TTL or crosses tenant/subject", () => {
+  let now = 1000
+  const store = new SkillDownloadHandles(100, 3, () => now)
+  const binding = downloadBinding()
+  const first = store.issue(binding)
+  now = 1050
+  assert.equal(store.issue(structuredClone(binding)), first)
+  assert.equal(first.expiresAt, 1100)
+  const other = store.issue(downloadBinding("other"))
+  assert.notEqual(other.handle, first.handle)
+  assert.throws(() => store.resolve(first.handle, "tenant", "other"), /forbidden/)
+  assert.equal(store.issue({ ...binding, tenantId: "other-tenant" }).binding.tenantId, "other-tenant")
+  now = 1100
+  assert.throws(() => store.resolve(first.handle, "tenant", "human"), /expired/)
+  const reapplied = store.issue(binding)
+  assert.notEqual(reapplied.handle, first.handle)
+  assert.equal(reapplied.expiresAt, 1200)
+})
+test("R357 bounded handles evict oldest only after validation, reclaim expiry, and reapply exact facts", () => {
+  let now = 1000
+  const store = new SkillDownloadHandles(100, 2, () => now)
+  const first = store.issue(downloadBinding("first"))
+  now = 1050
+  const second = store.issue(downloadBinding("second"))
+  assert.throws(() => store.issue({ ...downloadBinding("bad"), filename: "../bad.zip" }), /response_invalid/)
+  assert.equal(store.resolve(first.handle, "tenant", "first"), first)
+  const third = store.issue(downloadBinding("third"))
+  assert.throws(() => store.resolve(first.handle, "tenant", "first"), /expired/)
+  assert.equal(store.resolve(second.handle, "tenant", "second"), second)
+  assert.throws(() => store.resolve(third.handle, "tenant", "first"), /forbidden/)
+  now = 1150
+  const reapplied = store.issue(downloadBinding("first"))
+  assert.notEqual(reapplied.handle, first.handle)
+  assert.equal(reapplied.binding.versionUid, "version-one")
+  assert.throws(() => store.resolve(second.handle, "tenant", "second"), /expired/)
+  assert.throws(() => store.resolve(third.handle, "tenant", "third"), /expired/)
+})
+test("R357 over128 cross-subject previews retain normal GetSkill and DownloadSkill, evicted metadata can be reapplied", async () => {
+  let subject = "human-0"
+  const expiresAt = Date.now() + 300000
+  const app = await fixture(
+    {
+      async prepareDownload() {
+        return { skill: detail, binding: { ...downloadBinding(subject), expiresAt, transfer: { ...downloadBinding().transfer, expiresAt } } }
+      },
+    },
+    async () => ({ ok: true, identity: { namespace: "tenant", userId: subject }, platformAdmin: false }),
+  )
+  try {
+    const first = await app.request(website + "GetSkill", { skillId: "stable-series" })
+    assert.equal(first.status, 200)
+    const oldPath = first.body.downloadInfo.downloadUrl.slice(4)
+    for (let i = 1; i <= 129; i++) {
+      subject = `human-${i}`
+      const result = await app.request(website + "GetSkill", { skillId: "stable-series" })
+      assert.equal(result.status, 200, `preview ${i}`)
+    }
+    subject = "human-0"
+    const gone = await app.request(oldPath)
+    assert.equal(gone.status, 410)
+    assert.equal(gone.body.error.code, "Gone")
+    const reapplied = await app.request("/skill.v1.SkillService/DownloadSkill", { skillId: "stable-series" })
+    assert.equal(reapplied.status, 200)
+    assert.notEqual(reapplied.body.downloadInfo.downloadUrl.slice(4), oldPath)
+    assert.equal(reapplied.body.skill.version, "version-one")
+    assert.equal((await app.request(oldPath)).status, 410)
+  } finally {
+    await app.close()
+  }
+})
+for (const [name, filename, encoded] of [
+  ["quote", 'my"skill.zip', "my%22skill.zip"],
+  ["semicolon", "my;skill.zip", "my%3Bskill.zip"],
+  ["unicode", "技能.zip", "%E6%8A%80%E8%83%BD.zip"],
+])
+  test(`R357 actual byte header ${name} uses fixed skill.zip fallback and exact RFC5987 filename`, async () => {
+    const app = await bytesFixture(async () => {}, undefined, filename)
+    try {
+      const result = await app.request(app.path)
+      assert.equal(result.status, 200)
+      assert.equal(result.headers.get("content-disposition"), `attachment; filename="skill.zip"; filename*=UTF-8''${encoded}`)
+      assert.deepEqual(result.body, app.bytes)
+    } finally {
+      await app.close()
+    }
+  })
+
+test("R357 reuse requires every exact qualification fact, never mutates or rebinds old handles", () => {
+  const variations = [
+    (b) => ({ ...b, tenantId: "other" }),
+    (b) => ({ ...b, subjectId: "other" }),
+    (b) => ({ ...b, skillId: "other-series" }),
+    (b) => ({ ...b, versionUid: "other-version" }),
+    (b) => ({ ...b, filename: "other.zip" }),
+    (b) => ({ ...b, sizeBytes: 4 }),
+    (b) => ({ ...b, contentSha256: "b".repeat(64) }),
+    (b) => ({ ...b, expiresAt: 4000 }),
+    (b) => ({ ...b, transfer: { ...b.transfer, url: "http://store.invalid/other" } }),
+    (b) => ({ ...b, transfer: { ...b.transfer, expiresAt: 4000 } }),
+  ]
+  for (const variation of variations) {
+    const store = new SkillDownloadHandles(100, 1, () => 1000)
+    const original = downloadBinding()
+    const first = store.issue(original)
+    const changed = variation(original)
+    const next = store.issue(changed)
+    assert.notEqual(next.handle, first.handle)
+    assert.deepEqual(first.binding, original)
+    assert.deepEqual(next.binding, changed)
+    assert.throws(() => store.resolve(first.handle, "tenant", "human"), /expired/)
   }
 })

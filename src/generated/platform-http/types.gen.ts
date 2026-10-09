@@ -241,6 +241,8 @@ export type ListVisibleSkillsData = {
     cursor?: string
     category_key?: "programming" | "data" | "automation" | "business" | "design" | "media" | "content" | "apps"
     source_kind?: "personal" | "official" | "third_party"
+    include_official_skills?: boolean
+    shuffle?: boolean
   }
   url: "/v1/skills"
 }
@@ -369,6 +371,8 @@ export type ListVisibleSkillPoolData = {
     cursor?: string
     category_key?: "programming" | "data" | "automation" | "business" | "design" | "media" | "content" | "apps"
     source_kind?: "personal" | "official" | "third_party"
+    include_official_skills?: boolean
+    shuffle?: boolean
   }
   url: "/v1/skills/pool"
 }
@@ -434,6 +438,8 @@ export type ListVisibleSkillCatalogData = {
     cursor?: string
     category_key?: "programming" | "data" | "automation" | "business" | "design" | "media" | "content" | "apps"
     source_kind?: "personal" | "official" | "third_party"
+    include_official_skills?: boolean
+    shuffle?: boolean
   }
   url: "/v1/skills/catalog"
 }

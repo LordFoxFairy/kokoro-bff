@@ -896,6 +896,8 @@ message ProductSkillInstallation {
   kokoro.platform.v1.SkillCategoryKeys category_keys = 16;
   kokoro.platform.v1.SkillProductFacts product = 17;
   kokoro.platform.v1.SkillAvailableUpdate available_update = 18;
+  google.protobuf.Timestamp skill_created_at = 19;
+  kokoro.platform.v1.OwnerScope source_owner_scope = 20;
 }
 
 message InstallPersonalSkillRequest {

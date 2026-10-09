@@ -1,3 +1,17 @@
+## T-K03.3 短期句柄回收（候选，无新存储）
+
+原128容量/60秒上限不扩大；进程内到期回收、完整exact绑定复用、最老淘汰，不新库/队列/持久权限或数据镜像。被淘汰句柄永不复绑定；有效新句柄仍前后当前IAM/owner资格与实际SHA/size校验。
+
+<!-- T-K03.3-DOWNLOAD-CORRECTION-END; complete previous body follows -->
+
+## T-K03.3 后继读取无新增存储（源码候选，待Root验证）
+
+本片不改SQL/表/schema/Project旧skill_name关联；只用ProjectService.find原当前owner授权与Platform project target exact安装。
+原安装skillId/revision/enabled/Asset/digest不变；创建时间/owner来自绑定exact Skill，经正规Proto读取，不保存镜像。shuffle seed/cursor由owner管理，不在BFF持久化排名/游标/权限快照。
+原短期下载handle绑定tenant/subject/stable/exact版本及事实，仍前后当前资格与全SHA/size；正常资源与浏览器验证仅Root。
+
+<!-- T-K03.3-SUCCESSOR-END; complete previous body follows -->
+
 ## T-K03.2 Skills 全表示的数据边界（2026-10-09；设计目标，无新增存储）
 
 基线 adcdac3；现 database/schema.sql不变。本片无新表/列/索引/Schema/迁移/Role，不建立Skills镜像或跨owner SQL；新面向页面字段由唯一owner正式事实提供，三设计与整片机器发行同步。

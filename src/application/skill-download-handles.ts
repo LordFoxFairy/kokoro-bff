@@ -28,7 +28,6 @@ export class SkillDownloadHandles {
   public issue(binding: SkillDownloadBinding): SkillDownloadHandle {
     const now = this.now()
     for (const [key, entry] of this.handles) if (entry.expiresAt <= now) this.handles.delete(key)
-    if (this.handles.size >= this.capacity) throw new Error("skill_download_capacity")
     if (typeof binding !== "object" || binding === null || typeof binding.transfer !== "object" || binding.transfer === null)
       throw new Error("skill_response_invalid")
     if (
@@ -71,6 +70,29 @@ export class SkillDownloadHandles {
       throw new Error("skill_response_invalid")
     const expiresAt = Math.min(now + this.ttlMs, binding.expiresAt, binding.transfer.expiresAt)
     if (expiresAt <= now) throw new Error("skill_download_expired")
+    for (const entry of this.handles.values()) {
+      const existing = entry.binding
+      if (
+        existing.tenantId === binding.tenantId &&
+        existing.subjectId === binding.subjectId &&
+        existing.skillId === binding.skillId &&
+        existing.versionUid === binding.versionUid &&
+        existing.filename === binding.filename &&
+        existing.sizeBytes === binding.sizeBytes &&
+        existing.contentSha256 === binding.contentSha256 &&
+        existing.expiresAt === binding.expiresAt &&
+        existing.transfer.url === binding.transfer.url &&
+        existing.transfer.method === binding.transfer.method &&
+        existing.transfer.expiresAt === binding.transfer.expiresAt
+      )
+        return entry
+    }
+    // Valid new qualifications may evict the oldest issued handle, never rebind it.
+    // Reuse above keeps its original expiry and does not refresh its eviction age.
+    if (this.handles.size >= this.capacity) {
+      const oldest = this.handles.keys().next().value
+      if (oldest !== undefined) this.handles.delete(oldest)
+    }
     const immutable = Object.freeze({
       ...binding,
       transfer: Object.freeze({ ...binding.transfer, requiredHeaders: Object.freeze({ ...binding.transfer.requiredHeaders }) }),

@@ -9,10 +9,10 @@ import { configureBffProtobufTextEncoding } from "../dist/infrastructure/protobu
 
 configureBffProtobufTextEncoding()
 
-const ownerCommit = "6d2a3bd005d483f036efaa1b6990b5c620024bc3"
+const ownerCommit = "9ed6801673ca279f446712de6eee3476717bfb24"
 const sources = {
   "kokoro/common/v1/common.proto": "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08",
-  "kokoro/platform/v1/platform_runtime.proto": "2aec3f3ff3eb160f7a1903b7fbd76e22d25b9d4d7b49763fe05d4d936e1e3ec8",
+  "kokoro/platform/v1/platform_runtime.proto": "8f7f6292c2b59e1171632362882d7ea490d20bbe1e2fa21556a7a7a4cc7e6a97",
   "kokoro/storage/v3/storage.proto": "1021e603065978871c51519ddba5b23c9b97f16b781a08bd98e019b3342bf5f9",
 }
 const root = new URL("../", import.meta.url)
@@ -90,7 +90,7 @@ test("Platform consumer pins exact owner Proto bytes and inactive V9 to V8 to V7
   )
   assert.deepEqual(manifest.descriptor, {
     path: `contract/vendor/kokoro-platform/${ownerCommit}/descriptor/platform-v1.binpb`,
-    sha256: "848c8d69a97a97e3c5174ba7fe4cb1ce9dce2c7f020c43284b2d64b792e3cb07",
+    sha256: "a167ddd3e815a5469da8ef1cbb54be6e22dbada48def0fdd0621e945c2a985db",
   })
   assert.deepEqual(
     manifest.owner.sources,
@@ -370,7 +370,7 @@ test("R345 generated and compiled Product installation add only required Skill u
 
   const prefix = `contract/vendor/kokoro-platform/${ownerCommit}/descriptor`
   const currentBytes = await requiredFile(`${prefix}/platform-v1.binpb`)
-  assert.equal(sha256(currentBytes), "848c8d69a97a97e3c5174ba7fe4cb1ce9dce2c7f020c43284b2d64b792e3cb07")
+  assert.equal(sha256(currentBytes), "a167ddd3e815a5469da8ef1cbb54be6e22dbada48def0fdd0621e945c2a985db")
   const current = fromBinary(FileDescriptorSetSchema, await requiredFile(`${prefix}/platform-skill-example-prompts-parent.binpb`))
   const compiledParentBytes = await requiredFile(`${prefix}/platform-skill-updated-at-parent.binpb`)
   assert.equal(sha256(compiledParentBytes), "2e1a811bf347b5d9cd3577ac6c762ee9d31f40dea2ac326a06b83bc61de9a8d5")
@@ -602,7 +602,7 @@ test("R340 generated consumer exposes both personal package inspection services"
 test("formal complete 84-input publication is closed, byte-pinned and rejects omitted, extra and altered inputs", async () => {
   const manifest = JSON.parse(await requiredFile("contract/dependencies/platform-connect.json"))
   assert.equal(manifest.published_inputs.path_algorithm, "owner-repository-relative-including-contract")
-  assert.equal(manifest.published_inputs.aggregate_sha256, "8ff25b672001137b2490ea36d85b8d4fa1f7e47d32c0df66817c17f4046b0711")
+  assert.equal(manifest.published_inputs.aggregate_sha256, "ab8719ce9c4dd6c42157be64154713b4d6831f68b367a2103f98fb95b3e0c166")
   assert.equal(manifest.published_inputs.files.length, 84)
   const files = Object.fromEntries(
     await Promise.all(

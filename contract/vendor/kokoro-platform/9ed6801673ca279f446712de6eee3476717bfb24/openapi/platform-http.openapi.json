@@ -79,6 +79,22 @@
               "type": "string",
               "enum": ["personal", "official", "third_party"]
             }
+          },
+          {
+            "name": "include_official_skills",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "shuffle",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -213,6 +229,22 @@
               "type": "string",
               "enum": ["personal", "official", "third_party"]
             }
+          },
+          {
+            "name": "include_official_skills",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "shuffle",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -296,6 +328,22 @@
             "schema": {
               "type": "string",
               "enum": ["personal", "official", "third_party"]
+            }
+          },
+          {
+            "name": "include_official_skills",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "shuffle",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
             }
           }
         ],

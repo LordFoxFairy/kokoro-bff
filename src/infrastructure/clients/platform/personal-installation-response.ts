@@ -151,3 +151,14 @@ export function projectInstallationList(value: { installations: ProductSkillInst
     ...(cursor === undefined ? {} : { meta: { next_cursor: cursor } }),
   }
 }
+
+/** Exact source facts for the specification representation, not the legacy installation envelope. */
+export function projectInstallationSourceFacts(value: ProductSkillInstallation) {
+  const owner = value.sourceOwnerScope
+  if (!owner || !ID.test(owner.id) || !/^[a-z][a-z0-9_]{0,31}$/u.test(owner.kind)) throw new Error("skill_installation_response_invalid")
+  assertSkillWireKnown(owner)
+  const created = instant(value.skillCreatedAt, true)!
+  const updated = instant(value.skillUpdatedAt, true)!
+  if (Date.parse(created) > Date.parse(updated)) throw new Error("skill_installation_response_invalid")
+  return { skill_created_at: created, source_owner_scope: { kind: owner.kind, id: owner.id } }
+}

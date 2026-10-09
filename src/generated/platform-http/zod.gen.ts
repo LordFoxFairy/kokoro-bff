@@ -291,6 +291,8 @@ export const zListVisibleSkillsQuery = z.object({
   cursor: z.string().min(1).max(2048).optional(),
   category_key: z.enum(["programming", "data", "automation", "business", "design", "media", "content", "apps"]).optional(),
   source_kind: z.enum(["personal", "official", "third_party"]).optional(),
+  include_official_skills: z.boolean().optional(),
+  shuffle: z.boolean().optional(),
 })
 
 /**
@@ -346,6 +348,8 @@ export const zListVisibleSkillPoolQuery = z.object({
   cursor: z.string().min(1).max(2048).optional(),
   category_key: z.enum(["programming", "data", "automation", "business", "design", "media", "content", "apps"]).optional(),
   source_kind: z.enum(["personal", "official", "third_party"]).optional(),
+  include_official_skills: z.boolean().optional(),
+  shuffle: z.boolean().optional(),
 })
 
 /**
@@ -376,6 +380,8 @@ export const zListVisibleSkillCatalogQuery = z.object({
   cursor: z.string().min(1).max(2048).optional(),
   category_key: z.enum(["programming", "data", "automation", "business", "design", "media", "content", "apps"]).optional(),
   source_kind: z.enum(["personal", "official", "third_party"]).optional(),
+  include_official_skills: z.boolean().optional(),
+  shuffle: z.boolean().optional(),
 })
 
 /**
