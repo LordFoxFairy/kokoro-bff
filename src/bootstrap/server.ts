@@ -1,5 +1,5 @@
 import { skillSpecificationReadRoute } from "../http/routes/platform-projection.js"
-import { skillDownloadHandleRoute } from "../http/routes/skill-download.js"
+import { exactSkillDownloadRoute, skillDownloadHandleRoute } from "../http/routes/skill-download.js"
 import { startMcpRequestBudget, mcpRequestRemaining } from "../http/mcp-request-budget.js"
 import { skillGithubImportRoute, skillGithubPreviewRoute } from "../http/routes/skill-github-import.js"
 import { assertSkillWireKnown } from "../infrastructure/clients/platform/skill-product-response.js"
@@ -203,6 +203,7 @@ async function handle(
   }
   if (await skillSpecificationReadRoute(request, response, config, composition, id, rawPathname)) return
   if (await skillDownloadHandleRoute(request, response, config, composition, id, segments)) return
+  if (await exactSkillDownloadRoute(request, response, config, composition, id, segments)) return
   if (
     await localSkillImportRoute(
       request,

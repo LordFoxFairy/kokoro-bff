@@ -4,8 +4,13 @@ import { randomBytes } from "node:crypto"
 export type SkillDownloadBinding = Readonly<{
   tenantId: string
   subjectId: string
-  skillId: string
-  versionUid: string
+  qualifier:
+    | Readonly<{ kind: "catalog_current"; seriesId: string }>
+    | Readonly<{ kind: "installation"; installationId: string }>
+    | Readonly<{ kind: "managed"; versionId: string }>
+    | Readonly<{ kind: "share"; shareId: string }>
+  sourceRef: string
+  revision: string
   filename: string
   sizeBytes: number
   contentSha256: string
@@ -31,7 +36,7 @@ export class SkillDownloadHandles {
     if (typeof binding !== "object" || binding === null || typeof binding.transfer !== "object" || binding.transfer === null)
       throw new Error("skill_response_invalid")
     if (
-      [binding.tenantId, binding.subjectId, binding.skillId, binding.versionUid, binding.filename, binding.contentSha256].some(
+      [binding.tenantId, binding.subjectId, binding.sourceRef, binding.revision, binding.filename, binding.contentSha256].some(
         (value) => typeof value !== "string",
       )
     )
@@ -56,8 +61,10 @@ export class SkillDownloadHandles {
     if (
       !binding.tenantId ||
       !binding.subjectId ||
-      !binding.skillId ||
-      !binding.versionUid ||
+      !/^skill:[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u.test(binding.sourceRef) ||
+      !/^[1-9][0-9]{0,19}$/u.test(binding.revision) ||
+      BigInt(binding.revision) > 18_446_744_073_709_551_615n ||
+      !validQualifier(binding.qualifier) ||
       !/^(?!\.{1,2}$)[^/\\\u0000-\u001f\u007f]{1,255}$/u.test(binding.filename) ||
       Buffer.byteLength(binding.filename) > 255 ||
       !Number.isSafeInteger(binding.sizeBytes) ||
@@ -75,8 +82,9 @@ export class SkillDownloadHandles {
       if (
         existing.tenantId === binding.tenantId &&
         existing.subjectId === binding.subjectId &&
-        existing.skillId === binding.skillId &&
-        existing.versionUid === binding.versionUid &&
+        JSON.stringify(existing.qualifier) === JSON.stringify(binding.qualifier) &&
+        existing.sourceRef === binding.sourceRef &&
+        existing.revision === binding.revision &&
         existing.filename === binding.filename &&
         existing.sizeBytes === binding.sizeBytes &&
         existing.contentSha256 === binding.contentSha256 &&
@@ -95,6 +103,7 @@ export class SkillDownloadHandles {
     }
     const immutable = Object.freeze({
       ...binding,
+      qualifier: Object.freeze({ ...binding.qualifier }),
       transfer: Object.freeze({ ...binding.transfer, requiredHeaders: Object.freeze({ ...binding.transfer.requiredHeaders }) }),
     })
     const entry = Object.freeze({ handle: randomBytes(32).toString("base64url"), binding: immutable, expiresAt })
@@ -113,4 +122,14 @@ export class SkillDownloadHandles {
   public clear(): void {
     this.handles.clear()
   }
+}
+
+const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u
+function validQualifier(value: SkillDownloadBinding["qualifier"]): boolean {
+  if (typeof value !== "object" || value === null) return false
+  if (value.kind === "catalog_current") return ID.test(value.seriesId) && Object.keys(value).length === 2
+  if (value.kind === "installation") return ID.test(value.installationId) && Object.keys(value).length === 2
+  if (value.kind === "managed") return ID.test(value.versionId) && Object.keys(value).length === 2
+  if (value.kind === "share") return ID.test(value.shareId) && Object.keys(value).length === 2
+  return false
 }

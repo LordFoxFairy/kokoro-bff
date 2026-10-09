@@ -70,6 +70,7 @@ export async function runSkillRoute(
   response: ServerResponse,
   context: RequestContext,
   handler: (signal: AbortSignal, deadlineAt: number) => Promise<void>,
+  errorPolicy: "default" | "exact-download" = "default",
 ): Promise<void> {
   response.setHeader("x-request-id", context.requestId)
   response.setHeader("cache-control", "no-store")
@@ -103,7 +104,35 @@ export async function runSkillRoute(
     let status = 503,
       code = "skill_dependency_unavailable",
       retryable = true
-    if (error instanceof Error && error.message === "request_body_too_large") {
+    if (errorPolicy === "exact-download") {
+      if (error instanceof Error && (error.message === "skill_deadline" || (error instanceof ConnectError && error.code === Code.DeadlineExceeded))) {
+        status = 504
+        code = "skill_deadline_exceeded"
+      } else if (error instanceof ZodError || error instanceof SyntaxError || (error instanceof ConnectError && error.code === Code.InvalidArgument)) {
+        status = 400
+        code = "invalid_skill_request"
+        retryable = false
+      } else if (error instanceof Error && /response_invalid/u.test(error.message)) {
+        status = 502
+        code = "skill_response_invalid"
+        retryable = false
+      } else if (error instanceof ConnectError && error.code === Code.Unauthenticated) {
+        status = 401
+        code = "session_authentication_required"
+        retryable = false
+      } else if (error instanceof ConnectError && error.code === Code.PermissionDenied) {
+        status = 403
+        code = "skill_download_forbidden"
+        retryable = false
+      } else if (error instanceof ConnectError && error.code === Code.NotFound) {
+        status = 404
+        code = "skill_not_found"
+        retryable = false
+      } else if (error instanceof ConnectError && error.code === Code.ResourceExhausted) {
+        status = 429
+        code = "skill_rate_limited"
+      }
+    } else if (error instanceof Error && error.message === "request_body_too_large") {
       status = 413
       code = "request_body_too_large"
       retryable = false

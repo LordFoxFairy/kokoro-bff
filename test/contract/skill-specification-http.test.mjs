@@ -221,8 +221,9 @@ for (const name of ["GetSkill", "DownloadSkill"])
     const binding = {
       tenantId: "tenant",
       subjectId: "human",
-      skillId: "stable-series",
-      versionUid: "version-one",
+      qualifier: { kind: "catalog_current", seriesId: "stable-series" },
+      sourceRef: "skill:version-one",
+      revision: "1",
       filename: "original.zip",
       sizeBytes: 3,
       contentSha256: "a".repeat(64),
@@ -280,8 +281,9 @@ test("R357 opaque handle remains tenant/subject/version bound, expires and is ca
   const binding = {
     tenantId: "tenant",
     subjectId: "human",
-    skillId: "stable",
-    versionUid: "old-installed",
+    qualifier: { kind: "catalog_current", seriesId: "stable" },
+    sourceRef: "skill:old-installed",
+    revision: "1",
     filename: "archive.zip",
     sizeBytes: 3,
     contentSha256: "a".repeat(64),
@@ -289,16 +291,16 @@ test("R357 opaque handle remains tenant/subject/version bound, expires and is ca
     transfer: { url: "http://store.invalid/key", method: "GET", requiredHeaders: {}, expiresAt: 5000 },
   }
   const handle = store.issue(binding)
-  binding.versionUid = "newest"
+  binding.sourceRef = "skill:newest"
   binding.transfer.url = "http://other.invalid/key"
-  assert.equal(store.resolve(handle.handle, "tenant", "human").binding.versionUid, "old-installed")
+  assert.equal(store.resolve(handle.handle, "tenant", "human").binding.sourceRef, "skill:old-installed")
   assert.equal(store.resolve(handle.handle, "tenant", "human").binding.transfer.url, "http://store.invalid/key")
   assert.throws(() => store.resolve(handle.handle, "other", "human"), /forbidden/)
   assert.throws(() => store.resolve(handle.handle, "tenant", "other"), /forbidden/)
   const replacement = store.issue(binding)
   assert.notEqual(replacement.handle, handle.handle)
   assert.throws(() => store.resolve(handle.handle, "tenant", "human"), /expired/)
-  assert.equal(store.resolve(replacement.handle, "tenant", "human").binding.versionUid, "newest")
+  assert.equal(store.resolve(replacement.handle, "tenant", "human").binding.sourceRef, "skill:newest")
   now = 1100
   assert.throws(() => store.resolve(handle.handle, "tenant", "human"), /expired/)
   assert.ok(store.issue(binding))
@@ -318,8 +320,9 @@ async function bytesFixture(confirm, admission, filename = "原始技能.zip") {
   const binding = {
     tenantId: "tenant",
     subjectId: "human",
-    skillId: "stable-series",
-    versionUid: "version-one",
+    qualifier: { kind: "catalog_current", seriesId: "stable-series" },
+    sourceRef: "skill:version-one",
+    revision: "1",
     filename,
     sizeBytes: bytes.length,
     contentSha256: createHash("sha256").update(bytes).digest("hex"),
@@ -356,13 +359,13 @@ async function bytesFixture(confirm, admission, filename = "原始技能.zip") {
 test("R357 handle serves real hash/size verified bytes, requalifies exact version twice and reads current human again", async () => {
   const calls = []
   const app = await bytesFixture(async (binding) => {
-    calls.push(binding.versionUid)
+    calls.push(binding.sourceRef)
   })
   try {
     const result = await app.request(app.path)
     assert.equal(result.status, 200)
     assert.deepEqual(result.body, app.bytes)
-    assert.deepEqual(calls, ["version-one", "version-one"])
+    assert.deepEqual(calls, ["skill:version-one", "skill:version-one"])
     assert.equal(app.objects(), 1)
     assert.match(result.headers.get("content-disposition"), /filename\*=UTF-8''%E5/)
     assert.equal(result.headers.get("cache-control"), "no-store")
@@ -629,8 +632,9 @@ test("R357 malformed qualified handle facts fail502 before any successful metada
   const valid = {
     tenantId: "tenant",
     subjectId: "human",
-    skillId: "stable-series",
-    versionUid: "version-one",
+    qualifier: { kind: "catalog_current", seriesId: "stable-series" },
+    sourceRef: "skill:version-one",
+    revision: "1",
     filename: "real.zip",
     sizeBytes: 3,
     contentSha256: "a".repeat(64),
@@ -638,7 +642,7 @@ test("R357 malformed qualified handle facts fail502 before any successful metada
     transfer: { url: "http://store.invalid/blob", method: "GET", requiredHeaders: {}, expiresAt: Date.now() + 300000 },
   }
   for (const change of [
-    (b) => (b.versionUid = 4),
+    (b) => (b.revision = 4),
     (b) => delete b.transfer,
     (b) => (b.transfer.method = "PUT"),
     (b) => (b.transfer.requiredHeaders = { authorization: "hidden" }),
@@ -913,7 +917,7 @@ test("R357 formal download aggregation binds original exact version and rejects 
   const app = await specificationServiceFixture()
   const value = await app.service.prepareDownload("DownloadSkill", "stable-series", app.context, app.signal, app.deadline)
   assert.equal(value.skill.id, "stable-series")
-  assert.equal(value.binding.versionUid, "current-version")
+  assert.equal(value.binding.sourceRef, "skill:current-version")
   assert.equal(value.binding.filename, "actual.zip")
   assert.equal(app.calls.find((call) => call.kind === "download").input.sourceRef, "skill:current-version")
   await app.service.confirmDownload(value.binding, app.context, app.signal, app.deadline)
@@ -1131,8 +1135,9 @@ function downloadBinding(subjectId = "human") {
   return {
     tenantId: "tenant",
     subjectId,
-    skillId: "stable-series",
-    versionUid: "version-one",
+    qualifier: { kind: "catalog_current", seriesId: "stable-series" },
+    sourceRef: "skill:version-one",
+    revision: "1",
     filename: "original.zip",
     sizeBytes: 3,
     contentSha256: "a".repeat(64),
@@ -1173,7 +1178,7 @@ test("R357 bounded handles evict oldest only after validation, reclaim expiry, a
   now = 1150
   const reapplied = store.issue(downloadBinding("first"))
   assert.notEqual(reapplied.handle, first.handle)
-  assert.equal(reapplied.binding.versionUid, "version-one")
+  assert.equal(reapplied.binding.sourceRef, "skill:version-one")
   assert.throws(() => store.resolve(second.handle, "tenant", "second"), /expired/)
   assert.throws(() => store.resolve(third.handle, "tenant", "third"), /expired/)
 })
@@ -1231,8 +1236,8 @@ test("R357 reuse requires every exact qualification fact, never mutates or rebin
   const variations = [
     (b) => ({ ...b, tenantId: "other" }),
     (b) => ({ ...b, subjectId: "other" }),
-    (b) => ({ ...b, skillId: "other-series" }),
-    (b) => ({ ...b, versionUid: "other-version" }),
+    (b) => ({ ...b, qualifier: { kind: "catalog_current", seriesId: "other-series" } }),
+    (b) => ({ ...b, sourceRef: "skill:other-version" }),
     (b) => ({ ...b, filename: "other.zip" }),
     (b) => ({ ...b, sizeBytes: 4 }),
     (b) => ({ ...b, contentSha256: "b".repeat(64) }),

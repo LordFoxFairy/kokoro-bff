@@ -1,4 +1,4 @@
-## T-K03.4 精确 Skill 下载准备动作（D0，未实施）
+## T-K03.4 精确 Skill 下载准备动作（源码候选，待Root验收）
 
 ### 放置与 owner 裁决
 
@@ -30,7 +30,7 @@ installation path只接受fresh `GetPersonalSkillInstallation`返回当前主体
 
 错误闭集候选：非法selector/shape 400，缺登录401，当前主体或tenant不匹配403，record不存在、已移除、share撤销/到期或exact事实已不可见404，错误method405，rate limit429，owner malformed/哈希或transfer漂移502，依赖不可确认503，绝对deadline504；只有已签发handle过期、淘汰或进程重启丢失为410。准备POST不是mutation且不接收幂等键；重试必须重新完整准入与exact读取，不能复用旧资格。
 
-当前只完成D0。private policy、运行时schema、public/生成合同、源码与测试均未改变；不得把Platform现exact-source RPC存在冒充三条Product路径已发布。
+当前BFF源码候选已实现private policy、应用编排、route/runtime及直接测试；public/generated与Platform owner合同仍未改变。Root全门、正式提交、正常服务重载和Web消费尚未完成，不得把候选或Platform现exact-source RPC存在冒充三条Product路径已发布。
 
 后继必要文件集严格为：现`src/http/routes/skill-download.ts`、新`src/application/exact-skill-download.ts`、现`src/application/skill-download-handles.ts`及其binding类型、现`src/bootstrap/{runtime,server}.ts`；唯一private机器源/产物`src/http/routes/skill-download.policy.ts`与`contract/skill-download-policy.json`及一个确定性生成/check脚本；现各owner client/projector仅在暴露已有Get/Inspect结构端口所必需时窄改；测试沿现`test/skill-download-http.test.mjs`并新增/扩具名应用测试、architecture/private-policy contract门。不得修改public OpenAPI、generated Platform、reference specification schema或Platform contract。
 

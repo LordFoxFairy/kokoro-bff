@@ -2,10 +2,50 @@ import { Code, ConnectError } from "@connectrpc/connect"
 import type { ProjectOwnerScope } from "./ports/project-repository.js"
 import type { BffApplicationServices } from "./services.js"
 import type { SkillDownloadBinding } from "./skill-download-handles.js"
-import type { SkillSpecificationContext, SkillSpecificationOwner, SkillSpecificationSource } from "./skill-specification.types.js"
+import type { SkillDownloadFact, SkillSpecificationContext, SkillSpecificationOwner, SkillSpecificationSource } from "./skill-specification.types.js"
 
 function identity<T>(value: T): T {
   return value
+}
+
+export function verifiedSkillDownloadPackage(
+  owner: SkillDownloadFact,
+  expected: Readonly<{ sourceRef: string; revision: string }>,
+  objectOrigin: string | null,
+) {
+  if (
+    owner.sourceRef !== expected.sourceRef ||
+    owner.revision !== expected.revision ||
+    owner.sizeBytes < 1n ||
+    owner.sizeBytes > 33_554_432n ||
+    !/^[a-f0-9]{64}$/u.test(owner.contentSha256) ||
+    !owner.transfer ||
+    !objectOrigin
+  )
+    throw new Error("skill_response_invalid")
+  const transfer = owner.transfer,
+    url = new URL(transfer.url),
+    expiresAt = Date.parse(transfer.expiresAt)
+  if (
+    url.origin !== objectOrigin ||
+    url.username ||
+    url.password ||
+    url.hash ||
+    transfer.method !== "GET" ||
+    Object.keys(transfer.requiredHeaders).length !== 0 ||
+    expiresAt <= Date.now() ||
+    expiresAt > Date.now() + 301_000
+  )
+    throw new Error("skill_response_invalid")
+  return Object.freeze({
+    sourceRef: owner.sourceRef,
+    revision: owner.revision,
+    filename: owner.filename,
+    sizeBytes: Number(owner.sizeBytes),
+    contentSha256: owner.contentSha256,
+    expiresAt,
+    transfer: Object.freeze({ url: transfer.url, method: transfer.method, requiredHeaders: Object.freeze({}), expiresAt }),
+  })
 }
 
 /** Product representation aggregation; identity/lifecycle remain fixed owner contracts. */
@@ -341,52 +381,30 @@ export class SkillSpecificationService implements SkillSpecificationSource {
   ) {
     const value = await this.detail(skillId, context, signal, deadlineAt)
     const owner = await this.dependencies.owner.download(value.skill.source_ref, context, signal, deadlineAt)
-    if (
-      owner.sourceRef !== value.skill.source_ref ||
-      owner.revision !== value.skill.revision ||
-      owner.sizeBytes < 1n ||
-      owner.sizeBytes > 33_554_432n ||
-      !/^[a-f0-9]{64}$/u.test(owner.contentSha256) ||
-      !owner.transfer ||
-      !this.dependencies.objectOrigin
+    const packageFact = verifiedSkillDownloadPackage(
+      owner,
+      { sourceRef: value.skill.source_ref, revision: value.skill.revision },
+      this.dependencies.objectOrigin,
     )
-      throw new Error("skill_response_invalid")
-    const transfer = owner.transfer,
-      url = new URL(transfer.url),
-      expiresAt = Date.parse(transfer.expiresAt)
-    if (
-      url.origin !== this.dependencies.objectOrigin ||
-      url.username ||
-      url.password ||
-      url.hash ||
-      transfer.method !== "GET" ||
-      Object.keys(transfer.requiredHeaders).length !== 0 ||
-      expiresAt <= Date.now() ||
-      expiresAt > Date.now() + 301000
-    )
-      throw new Error("skill_response_invalid")
     this.active(signal, deadlineAt)
     return {
       skill: value.representation,
       binding: {
         tenantId: context.identity.namespace,
         subjectId: context.identity.userId,
-        skillId,
-        versionUid: value.skill.skill_id,
-        filename: owner.filename,
-        sizeBytes: Number(owner.sizeBytes),
-        contentSha256: owner.contentSha256,
-        expiresAt,
-        transfer: { url: transfer.url, method: transfer.method, requiredHeaders: {}, expiresAt },
+        qualifier: { kind: "catalog_current" as const, seriesId: skillId },
+        ...packageFact,
       },
     }
   }
   public async confirmDownload(binding: SkillDownloadBinding, context: SkillSpecificationContext, signal: AbortSignal, deadlineAt: number): Promise<void> {
     if (binding.tenantId !== context.identity.namespace || binding.subjectId !== context.identity.userId)
       throw new ConnectError("Skill download not permitted", Code.PermissionDenied)
-    const value = await this.prepareDownload("DownloadSkill", binding.skillId, context, signal, deadlineAt)
+    if (binding.qualifier.kind !== "catalog_current") throw new ConnectError("Skill download not permitted", Code.PermissionDenied)
+    const value = await this.prepareDownload("DownloadSkill", binding.qualifier.seriesId, context, signal, deadlineAt)
     if (
-      value.binding.versionUid !== binding.versionUid ||
+      value.binding.sourceRef !== binding.sourceRef ||
+      value.binding.revision !== binding.revision ||
       value.binding.filename !== binding.filename ||
       value.binding.sizeBytes !== binding.sizeBytes ||
       value.binding.contentSha256 !== binding.contentSha256

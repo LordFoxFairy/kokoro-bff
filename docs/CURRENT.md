@@ -1524,3 +1524,8 @@ Platform `SkillPackagePhase.VALIDATED` 现在由既有 Skill Product response ma
 `package_phase: "valid"`，与 canonical OpenAPI 的既有闭集一致。mapper 不再机械小写 owner enum；没有 public
 Skill record 对应值的 `UNSPECIFIED`、`INTENT` 及未知值 fail closed。Finalize 与 completed Get 共用该 mapper，
 不改变 Platform wire、public contract、权限、幂等、SQL 或预算；正常服务重载和既有 intent 恢复由 Root 执行。
+## T-K03.4 exact Skill download BFF源码候选（待Root验收）
+
+基线`e380066`。BFF现候选保持参考DownloadSkill的series-current语义，并新增三条browser-private exact准备动作；closed qualifier区分catalog current、installation、managed version与share，统一现60秒/128容量opaque handle及字节spool前后资格确认。private policy由`skill-download.policy.ts`唯一生成；public/generated/Platform contract及SQL不变。Node22候选工作树实际门为focused 87 PASS、contract 715 PASS、默认1311 PASS/0 FAIL/3 SKIP，format/typecheck/lint/build均exit 0；基线隔离真HTTP对installation准备动作返回404，证明新行为原先不存在。以上仍待Root独审、正式提交、服务重载与Web消费，不能宣称正常浏览器下载完成。
+
+<!-- R357-BFF-EXACT-SKILL-DOWNLOAD-CURRENT-END -->

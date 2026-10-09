@@ -1,4 +1,4 @@
-## T-K03.4 精确 Skill 下载 browser-private 合同（D0，未发布）
+## T-K03.4 精确 Skill 下载 browser-private 合同（BFF源码候选，未发布）
 
 参考 `POST /skill.v1.SkillService/DownloadSkill` 的 `{skillId}` 永远表示series显式current，request/response/path保持原样。旧安装pin、managed exact version及share exact revision不向该参考请求增加selector，也不恢复已删除的`GET /v1/skills/{id}/download`。候选Kokoro私有合同只有：
 
@@ -14,7 +14,7 @@
 
 share动作不成为匿名下载，也不把shareId当本人DownloadSkill授权；撤销、到期、换tenant或换登录主体后旧handle失败关闭。installation与catalog同series时，私有installation动作下载旧pin，参考DownloadSkill下载新current，两者不得互相fallback。managed历史版本只走version path；缺exact owner事实就404/依赖错误，不猜current。
 
-本节未修改public OpenAPI、参考网站contract、Platform Proto/HTTP、generated client或private policy。后继唯一可编辑机器源为`src/http/routes/skill-download.policy.ts`，确定性生成`contract/skill-download-policy.json`；它只收录上述三个exact method/path、closed request/success/error及breaking version，不与local-import policy合并。Root批准机器合同后才创建并实施，当前不宣称路径存在。
+本节未修改public OpenAPI、参考网站contract、Platform Proto/HTTP或generated client。BFF源码候选已由唯一可编辑机器源`src/http/routes/skill-download.policy.ts`确定性生成`contract/skill-download-policy.json`；它只收录上述三个exact method/path，不与local-import policy合并。Root验收、正式提交、服务重载与Web消费前仍不宣称正常路径已发布。
 
 <!-- R357-BFF-EXACT-SKILL-DOWNLOAD-API-D0-END -->
 

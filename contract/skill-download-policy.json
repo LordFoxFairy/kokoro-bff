@@ -1,0 +1,1228 @@
+{
+  "visibility": "browser-private",
+  "version": 1,
+  "budgetMs": 10000,
+  "operations": [
+    {
+      "method": "POST",
+      "path": "/browser/v1/skill-installations/{installation_id}/download",
+      "qualifier": "installation",
+      "parameter": "installation_id",
+      "parameterSchema": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$"
+      },
+      "request": {
+        "query": "forbidden",
+        "idempotencyKey": "forbidden",
+        "payload": "exactly-zero-bytes",
+        "contentLength": [
+          "absent",
+          "0"
+        ],
+        "transferEncoding": "forbidden"
+      },
+      "responses": {
+        "200": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "data"
+          ],
+          "properties": {
+            "data": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "source_ref",
+                "revision",
+                "download_info"
+              ],
+              "properties": {
+                "source_ref": {
+                  "type": "string",
+                  "pattern": "^skill:[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$"
+                },
+                "revision": {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]{0,19}$"
+                },
+                "download_info": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "download_url",
+                    "filename",
+                    "expires_at"
+                  ],
+                  "properties": {
+                    "download_url": {
+                      "type": "string",
+                      "pattern": "^/skill-downloads/[A-Za-z0-9_-]{43}$"
+                    },
+                    "filename": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 255
+                    },
+                    "expires_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "errors": [
+          {
+            "status": 400,
+            "schema": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "error"
+              ],
+              "properties": {
+                "error": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "retryable"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "invalid_skill_request"
+                      ]
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "status": 401,
+            "schema": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "error"
+              ],
+              "properties": {
+                "error": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "retryable"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "session_authentication_required",
+                        "session_invalid"
+                      ]
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "status": 403,
+            "schema": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "error"
+              ],
+              "properties": {
+                "error": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "retryable"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "service_auth_failed",
+                        "product_tenant_forbidden",
+                        "session_forbidden",
+                        "skill_download_forbidden"
+                      ]
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "status": 404,
+            "schema": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "error"
+              ],
+              "properties": {
+                "error": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "retryable"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "skill_not_found"
+                      ]
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "status": 405,
+            "schema": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "error"
+              ],
+              "properties": {
+                "error": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "retryable"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "MethodNotAllowed"
+                      ]
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "status": 429,
+            "schema": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "error"
+              ],
+              "properties": {
+                "error": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "retryable"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "session_rate_limited",
+                        "skill_rate_limited"
+                      ]
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "status": 502,
+            "schema": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "error"
+              ],
+              "properties": {
+                "error": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "retryable"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "skill_response_invalid"
+                      ]
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "status": 503,
+            "schema": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "error"
+              ],
+              "properties": {
+                "error": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "retryable"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "product_tenant_not_configured",
+                        "iam_admission_unavailable",
+                        "skill_dependency_unavailable"
+                      ]
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "status": 504,
+            "schema": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "error"
+              ],
+              "properties": {
+                "error": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "retryable"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "skill_deadline_exceeded"
+                      ]
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/browser/v1/skills/{version_id}/download",
+      "qualifier": "managed",
+      "parameter": "version_id",
+      "parameterSchema": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$"
+      },
+      "request": {
+        "query": "forbidden",
+        "idempotencyKey": "forbidden",
+        "payload": "exactly-zero-bytes",
+        "contentLength": [
+          "absent",
+          "0"
+        ],
+        "transferEncoding": "forbidden"
+      },
+      "responses": {
+        "200": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "data"
+          ],
+          "properties": {
+            "data": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "source_ref",
+                "revision",
+                "download_info"
+              ],
+              "properties": {
+                "source_ref": {
+                  "type": "string",
+                  "pattern": "^skill:[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$"
+                },
+                "revision": {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]{0,19}$"
+                },
+                "download_info": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "download_url",
+                    "filename",
+                    "expires_at"
+                  ],
+                  "properties": {
+                    "download_url": {
+                      "type": "string",
+                      "pattern": "^/skill-downloads/[A-Za-z0-9_-]{43}$"
+                    },
+                    "filename": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 255
+                    },
+                    "expires_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "errors": [
+          {
+            "status": 400,
+            "schema": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "error"
+              ],
+              "properties": {
+                "error": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "retryable"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "invalid_skill_request"
+                      ]
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "status": 401,
+            "schema": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "error"
+              ],
+              "properties": {
+                "error": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "retryable"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "session_authentication_required",
+                        "session_invalid"
+                      ]
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "status": 403,
+            "schema": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "error"
+              ],
+              "properties": {
+                "error": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "retryable"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "service_auth_failed",
+                        "product_tenant_forbidden",
+                        "session_forbidden",
+                        "skill_download_forbidden"
+                      ]
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "status": 404,
+            "schema": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "error"
+              ],
+              "properties": {
+                "error": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "retryable"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "skill_not_found"
+                      ]
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "status": 405,
+            "schema": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "error"
+              ],
+              "properties": {
+                "error": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "retryable"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "MethodNotAllowed"
+                      ]
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "status": 429,
+            "schema": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "error"
+              ],
+              "properties": {
+                "error": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "retryable"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "session_rate_limited",
+                        "skill_rate_limited"
+                      ]
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "status": 502,
+            "schema": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "error"
+              ],
+              "properties": {
+                "error": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "retryable"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "skill_response_invalid"
+                      ]
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "status": 503,
+            "schema": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "error"
+              ],
+              "properties": {
+                "error": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "retryable"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "product_tenant_not_configured",
+                        "iam_admission_unavailable",
+                        "skill_dependency_unavailable"
+                      ]
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "status": 504,
+            "schema": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "error"
+              ],
+              "properties": {
+                "error": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "retryable"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "skill_deadline_exceeded"
+                      ]
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/browser/v1/skill-shares/{share_id}/download",
+      "qualifier": "share",
+      "parameter": "share_id",
+      "parameterSchema": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$"
+      },
+      "request": {
+        "query": "forbidden",
+        "idempotencyKey": "forbidden",
+        "payload": "exactly-zero-bytes",
+        "contentLength": [
+          "absent",
+          "0"
+        ],
+        "transferEncoding": "forbidden"
+      },
+      "responses": {
+        "200": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "data"
+          ],
+          "properties": {
+            "data": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "source_ref",
+                "revision",
+                "download_info"
+              ],
+              "properties": {
+                "source_ref": {
+                  "type": "string",
+                  "pattern": "^skill:[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$"
+                },
+                "revision": {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]{0,19}$"
+                },
+                "download_info": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "download_url",
+                    "filename",
+                    "expires_at"
+                  ],
+                  "properties": {
+                    "download_url": {
+                      "type": "string",
+                      "pattern": "^/skill-downloads/[A-Za-z0-9_-]{43}$"
+                    },
+                    "filename": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 255
+                    },
+                    "expires_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "errors": [
+          {
+            "status": 400,
+            "schema": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "error"
+              ],
+              "properties": {
+                "error": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "retryable"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "invalid_skill_request"
+                      ]
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "status": 401,
+            "schema": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "error"
+              ],
+              "properties": {
+                "error": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "retryable"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "session_authentication_required",
+                        "session_invalid"
+                      ]
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "status": 403,
+            "schema": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "error"
+              ],
+              "properties": {
+                "error": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "retryable"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "service_auth_failed",
+                        "product_tenant_forbidden",
+                        "session_forbidden",
+                        "skill_download_forbidden"
+                      ]
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "status": 404,
+            "schema": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "error"
+              ],
+              "properties": {
+                "error": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "retryable"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "skill_not_found"
+                      ]
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "status": 405,
+            "schema": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "error"
+              ],
+              "properties": {
+                "error": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "retryable"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "MethodNotAllowed"
+                      ]
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "status": 429,
+            "schema": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "error"
+              ],
+              "properties": {
+                "error": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "retryable"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "session_rate_limited",
+                        "skill_rate_limited"
+                      ]
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "status": 502,
+            "schema": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "error"
+              ],
+              "properties": {
+                "error": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "retryable"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "skill_response_invalid"
+                      ]
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "status": 503,
+            "schema": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "error"
+              ],
+              "properties": {
+                "error": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "retryable"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "product_tenant_not_configured",
+                        "iam_admission_unavailable",
+                        "skill_dependency_unavailable"
+                      ]
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "status": 504,
+            "schema": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "error"
+              ],
+              "properties": {
+                "error": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "retryable"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "skill_deadline_exceeded"
+                      ]
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

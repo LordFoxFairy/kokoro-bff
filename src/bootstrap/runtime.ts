@@ -43,6 +43,10 @@ import { ProjectScopeReleaseOutboxDispatcher } from "../application/project-scop
 import { StorageScopeReleaseClient } from "../infrastructure/clients/storage/scope-release-client.js"
 import type { LocalSkillImportClient } from "../http/routes/local-skill-import.js"
 import { LocalSkillImportConnectClient } from "../infrastructure/clients/platform/local-skill-import-connect.js"
+import { ExactSkillDownloadService, exactInstallationRecord, exactManagedRecord, type ExactSkillDownloadSource } from "../application/exact-skill-download.js"
+import { projectInstallation } from "../infrastructure/clients/platform/personal-installation-response.js"
+import { projectSkillPackageInspectionResponse } from "../infrastructure/clients/platform/skill-package-inspection-response.js"
+import { assertSkillWireKnown, skillTimestamp } from "../infrastructure/clients/platform/skill-product-response.js"
 
 type ScheduledWorkerErrorEvent = { operation: string; result: "error"; errorCode: string; attempt: number; backoffMs: number }
 function scheduledWorkerLog(event: ScheduledWorkerErrorEvent): void {
@@ -67,6 +71,7 @@ export type BffServerComposition = {
   localSkillImportClient?: LocalSkillImportClient
   skillSpecificationSource: SkillSpecificationSource | null
   skillDownloadHandles: SkillDownloadHandles
+  exactSkillDownloadSource: ExactSkillDownloadSource | null
   mcpAuthorization: Pick<McpAuthorizationClient, "check">
   skillAuthorization: Pick<SkillAuthorizationClient, "check">
   skillProductClient: SkillProductConnectClient | null
@@ -97,6 +102,7 @@ export type BffServerComposition = {
 export type BffCompositionOptions = {
   localSkillImportClient?: LocalSkillImportClient
   skillSpecificationSource?: SkillSpecificationSource | null
+  exactSkillDownloadSource?: ExactSkillDownloadSource | null
   mcpAuthorization?: Pick<McpAuthorizationClient, "check">
   skillAuthorization?: Pick<SkillAuthorizationClient, "check">
   skillProductClient?: SkillProductConnectClient | null
@@ -338,6 +344,15 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     return stopWorkersPromise
   }
   const skillDownloadHandles = new SkillDownloadHandles()
+  const projectionClient =
+    config.platformProjection?.baseUrl && config.platformProjection.credentialFile && config.iamBaseUrl
+      ? new PlatformProjectionHttpClient(
+          config.platformProjection.baseUrl,
+          config.iamBaseUrl,
+          config.platformProjection.credentialFile,
+          config.platformProjection.timeoutMs,
+        )
+      : null
   let closePromise: Promise<void> | null = null
   const close = (): Promise<void> => {
     if (closePromise !== null) return closePromise
@@ -362,12 +377,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
               owner: new PlatformSkillSpecificationFacade({
                 product: skillProductClient,
                 installations: personalInstallationClient,
-                projection: new PlatformProjectionHttpClient(
-                  config.platformProjection.baseUrl,
-                  config.iamBaseUrl,
-                  config.platformProjection.credentialFile,
-                  config.platformProjection.timeoutMs,
-                ),
+                projection: projectionClient!,
               }),
               ...(businessStore?.services.projects === undefined ? {} : { projects: businessStore.services.projects }),
               profiles: new IamPublisherProfileClient(config.iamBaseUrl, config.upstreamTimeoutMs),
@@ -376,6 +386,77 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
             })
           : null,
     skillDownloadHandles,
+    exactSkillDownloadSource:
+      options.exactSkillDownloadSource !== undefined
+        ? options.exactSkillDownloadSource
+        : skillProductClient && personalInstallationClient && projectionClient && businessStore?.services.skillShares
+          ? new ExactSkillDownloadService({
+              handles: skillDownloadHandles,
+              objectOrigin: config.storageObjectOrigin ?? config.storage?.objectOrigin ?? null,
+              download: async (sourceRef, context, signal, deadlineAt) => {
+                const value = await skillProductClient.download(
+                  { requestId: context.requestId, tenant: context.identity.namespace, subject: context.identity.userId, sourceRef },
+                  signal,
+                  deadlineAt,
+                )
+                assertSkillWireKnown(value)
+                return {
+                  sourceRef: value.sourceRef?.value ?? "",
+                  revision: value.revision.toString(),
+                  filename: value.filename,
+                  sizeBytes: value.sizeBytes,
+                  contentSha256: value.contentSha256,
+                  transfer: {
+                    url: value.transferReference?.url ?? "",
+                    method: value.transferReference?.method ?? "",
+                    requiredHeaders: value.transferReference?.requiredHeaders ?? {},
+                    expiresAt: skillTimestamp(value.transferReference?.expiresAt),
+                  },
+                }
+              },
+              installation: async (id, context, signal) => {
+                const value = projectInstallation(
+                  (
+                    await personalInstallationClient.get(
+                      { requestId: context.requestId, tenant: context.identity.namespace, subject: context.identity.userId, installationId: id },
+                      signal,
+                    )
+                  ).installation,
+                )
+                return exactInstallationRecord(id, value)
+              },
+              managed: async (id, context, signal, deadlineAt) => {
+                const result = await projectionClient.readManagedPersonalSkill(
+                  "managedSkill",
+                  context.identity.namespace,
+                  context.identity.userId,
+                  context.requestId,
+                  { skillId: id },
+                  signal,
+                  deadlineAt,
+                )
+                if (!result.ok) {
+                  if (result.status === 404) return null
+                  if (result.status === 502) throw new Error("skill_response_invalid")
+                  throw new Error("skill_dependency_unavailable")
+                }
+                return exactManagedRecord(id, result.data)
+              },
+              share: async (id, context, signal, deadlineAt) => {
+                const share = await businessStore.services.skillShares!.findActive(context.identity.namespace, id)
+                if (!share) return null
+                signal.throwIfAborted()
+                const raw = await skillProductClient.inspect(
+                  { requestId: context.requestId, tenant: context.identity.namespace, subject: context.identity.userId, sourceRef: share.sourceRef },
+                  signal,
+                  deadlineAt,
+                )
+                assertSkillWireKnown(raw)
+                const value = projectSkillPackageInspectionResponse(raw, { sourceRef: share.sourceRef })
+                return { sourceRef: value.source_ref, revision: value.revision }
+              },
+            })
+          : null,
     skillDraftClient,
     mcpAuthorization,
     skillAuthorization,

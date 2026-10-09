@@ -236,7 +236,8 @@ export async function skillSpecificationReadRoute(
       if (
         !skill.success ||
         skill.data.id !== input.skillId ||
-        binding.skillId !== input.skillId ||
+        binding.qualifier.kind !== "catalog_current" ||
+        binding.qualifier.seriesId !== input.skillId ||
         binding.tenantId !== admission.context.identity.namespace ||
         binding.subjectId !== admission.context.identity.userId
       )
