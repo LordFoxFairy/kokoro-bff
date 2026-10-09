@@ -447,7 +447,8 @@ test("P4 installation HTTP forwards literal query and source filter before owner
       assert.equal(seen[1].cursor, "owner_cursor")
       assert.equal(seen[0].sourceKind, "third_party")
       const changed = await fetch(`${base}/v1/skill-installations?query=other&source_kind=third_party&cursor=owner_cursor`, { headers })
-      assert.equal(changed.status, 502)
+      assert.equal(changed.status, 400)
+      assert.equal((await changed.json()).error.code, "invalid_skill_installation_request")
       for (const url of ["?query=", "?query=%20%20", "?query=x&query=y", "?query=" + "x".repeat(1025), "?source_kind=all&query=x"])
         assert.equal((await fetch(`${base}/v1/skill-installations${url}`, { headers })).status, 400)
       assert.equal(seen.length, 3, "invalid filters do not reach owner")
@@ -491,4 +492,25 @@ test("P4 installation Connect preserves optional query6 and exact source_kind5 p
     server.closeAllConnections()
     await new Promise((resolve) => server.close(resolve))
   }
+})
+
+test("R356 owner query-bound cursor rejection stays a browser invalid request", async () => {
+  let calls = 0
+  await withServer(
+    {
+      list: async () => {
+        calls++
+        throw new ConnectError("private cursor query scope differs", Code.InvalidArgument)
+      },
+    },
+    async (base) => {
+      const response = await fetch(`${base}/v1/skill-installations?query=changed&cursor=opaque`, { headers })
+      assert.equal(response.status, 400)
+      const body = await response.json()
+      assert.equal(body.error.code, "invalid_skill_installation_request")
+      assert.equal(body.error.retryable, false)
+      assert.equal(JSON.stringify(body).includes("private cursor"), false)
+    },
+  )
+  assert.equal(calls, 1)
 })

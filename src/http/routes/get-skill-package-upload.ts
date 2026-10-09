@@ -37,6 +37,8 @@ function catalogFailure(error: unknown): { status: number; body: ReturnType<type
 function project(result: Awaited<ReturnType<CatalogConnectClient["getPackageUpload"]>>, skillId: string) {
   assertSkillWireKnown(result)
   projectSkillStateVersion(result.stateVersion)
+  const version = result.sourceVersionId === undefined ? undefined : skillSourceVersionSchema.safeParse(result.sourceVersionId)
+  if (version && !version.success) throw new Error("skill_response_invalid")
   const epoch = result.attemptEpoch
   const attempt = result.attemptId
   const upload = result.uploadId
@@ -65,7 +67,7 @@ function project(result: Awaited<ReturnType<CatalogConnectClient["getPackageUplo
   return {
     state_version: projectSkillStateVersion(result.stateVersion),
     skill_id: skillId,
-    ...(result.sourceVersionId === undefined ? {} : { source_version_id: skillSourceVersionSchema.parse(result.sourceVersionId) }),
+    ...(version === undefined ? {} : { source_version_id: version.data }),
     attempt_epoch: epoch.toString(),
     phase,
     ...(attempt === undefined ? {} : { attempt_id: attempt }),

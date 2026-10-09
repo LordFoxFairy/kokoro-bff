@@ -2996,7 +2996,7 @@ test("Public9 rejects new operation removal, current closed schema widening and 
       "    SkillUsageResponse:\n      type: object\n      additionalProperties: false",
       "    SkillUsageResponse:\n      type: object\n      additionalProperties: true",
     ),
-    raw.replace("  version: 9.0.0", "  version: 8.10.0"),
+    raw.replace("  version: 9.0.1", "  version: 8.10.0"),
     raw.replace("title: Kokoro Business API", "title: Altered Business API"),
   ]) {
     assert.notEqual(changed, raw)

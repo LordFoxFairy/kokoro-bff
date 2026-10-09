@@ -2,6 +2,8 @@ import assert from "node:assert/strict"
 import { once } from "node:events"
 import { request as httpRequest } from "node:http"
 import test from "node:test"
+import { readFile } from "node:fs/promises"
+import { createRequire } from "node:module"
 import { Code, ConnectError } from "@connectrpc/connect"
 
 import { createLiveTestBffServer } from "./doubles/server.ts"
@@ -356,5 +358,64 @@ test("generated Get Connect client sends only catalog workload token and trusted
     assert.equal(calls, 1)
   } finally {
     await new Promise((resolve) => owner.close(resolve))
+  }
+})
+
+// Actual HTTP wire must remain representable by the owner's closed published contract.
+test("R356 Get selected PUT ACK is declared in the closed public upload state", async () => {
+  const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
+  const schema = load(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")).components.schemas.SkillPackageUploadState
+  await withServer(
+    {
+      getPackageUpload: async () => ({
+        stateVersion: 2n,
+        skillId: { value: "skill-1" },
+        attemptEpoch: 1n,
+        phase: 4,
+        attemptId: "attempt-1",
+        uploadId: "upload-1",
+        sourceVersionId: "ack-version-1",
+      }),
+    },
+    async (base) => {
+      const response = await fetch(`${base}/v1/skills/skill-1/package-upload`, { headers })
+      assert.equal(response.status, 200)
+      const { data } = await response.json()
+      assert.equal(data.source_version_id, "ack-version-1")
+      assert.equal(schema.additionalProperties, false)
+      for (const key of Object.keys(data)) assert.ok(Object.hasOwn(schema.properties, key), `undeclared actual wire field ${key}`)
+      const version = schema.properties.source_version_id
+      assert.equal(version.minLength, 1)
+      assert.equal(version.maxLength, 1024)
+      assert.equal(schema.required.includes("source_version_id"), false)
+      const pattern = new RegExp(version.pattern, "u")
+      for (const valid of ["ack-version-1", "x".repeat(1024)]) assert.equal(pattern.test(valid), true)
+      for (const invalid of ["", "null", " ", "x\n", "版本"]) assert.equal(pattern.test(invalid), false)
+    },
+  )
+})
+
+test("R356 Get rejects malformed owner ACK as stable invalid response", async () => {
+  for (const sourceVersionId of ["", "null", " ", "x\n", "版本", "x".repeat(1025)]) {
+    await withServer(
+      {
+        getPackageUpload: async () => ({
+          stateVersion: 2n,
+          skillId: { value: "skill-1" },
+          attemptEpoch: 1n,
+          phase: 4,
+          attemptId: "attempt-1",
+          uploadId: "upload-1",
+          sourceVersionId,
+        }),
+      },
+      async (base) => {
+        const response = await fetch(`${base}/v1/skills/skill-1/package-upload`, { headers })
+        assert.equal(response.status, 502)
+        const body = await response.json()
+        assert.equal(body.error.code, "skill_response_invalid")
+        assert.equal(body.error.retryable, false)
+      },
+    )
   }
 })

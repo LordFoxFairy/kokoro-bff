@@ -1,3 +1,7 @@
+## R356 Public9.0.1 消费者一致性修正（同 132 operations）
+
+GET package-upload 的现有真实 source_version_id 现列入闭合 schema，可选、1–1024 printable ASCII且拒绝字面 null；不从对象 current read 推断版本。owner 无效版本稳定返回502 skill_response_invalid；安装列表 owner query/source-bound cursor 的 InvalidArgument 返回400 invalid_skill_installation_request，不泄露内部原因。原 Public9/Public8.10 父逆和其它 closed blocks 保持。此为源码契约修正，正常服务未重新激活，不能称 Skills 页面验收。
+
 ## R353-B2 当前源码候选（2026-10-08；待Root冻源审查/真实配对）
 
 唯一 BFF writer 为 bff_skills_product_source_r353；工作树 HEAD d2695c47bca64a8e83168aa259e2366f7cee3ea8。当前唯一 Platform固定52eeb0b891326a7538926e5fc5ffc89fe87f3c54、Product1.1/HTTP5.1/63RPC/32commands/24proofs、完整76正式publication；aggregate e92205f4c495497cd3e0aadd96027cc925e246c7dc253ddb3544105aa9966191、descriptor 4a8715b5057fbe3a9f443faee0315482de20593ce01430c7c357561a61576bfd、HTTP a8cef2bc45b2c0514f3d1abf06199087ad0efadf9db75224b17c69b1c50b12ce。HTTP直接读同Platform vendor/openapi；原701候选72副本移除，无双pin。IAM7c62e759760448e127b21200f87adeefdc6016f7/0.10、Storage d13f33a/v3继续原正规固定生成；不升级其它owner。

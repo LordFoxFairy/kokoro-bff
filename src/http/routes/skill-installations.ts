@@ -35,6 +35,7 @@ function mapped(error: unknown) {
           status: 503,
           body: failure("skill_installation_dependency_unavailable", "Skill installation owner is unavailable", true),
         }
+  if (error.code === Code.InvalidArgument) return { status: 400, body: failure("invalid_skill_installation_request", "Skill installation request is invalid") }
   if (error.code === Code.NotFound)
     return {
       status: 404,
