@@ -1,3 +1,13 @@
+## R356 Publish Public10.0.0 预激活输入修正（2026-10-09；待Root正式集成）
+
+Root裁决首次正常对外激活前 beta corrective major，同 `/v1`、132 operations；仅 Publish 从旧零body错误候选改 required闭集 JSON audience/expected_state_version。原当前用户/tenant准入、PERSONAL visibility、固定key/body/digest/CAS、response/cache/requestID、取消及owner错误保持；无空bodyfallback、无新持久事实或owner生成/Schema/依赖。后续正式公开breaking策略保持，消费者等待本片Root正式commit后正规固定生成。
+
+真实组合原错误由Root留证；本writer registered HTTP＋真实binary具名RED0PASS/2FAIL（400≠200、缺输入digest mismatch）后接线。Node22.22.2针对HTTP/OpenAPI/治理三文件131PASS/0FAIL/0SKIP、type/lint/build自然0，semantic132通过；当前10 Publish exact→9.0.1完整SHA4ad3a0553d3b45a78fdd53c857ad66c25b1baa3d53c3af619333d70fefcad5db→原8.10/历史逆负控保留。首中间测试新增helper未import、raw断连fixture未带JSON Content-Type两问题保留日志，已补fixture，未通过的中间进程只自有终止，不作为成功。局部format首3warn后仅3授权源/test折行；最终绑定ignored冻源证据。
+
+12授权paths由唯一writer交Root审查/提交；所有其它基线file及旧文档/README后缀逐SHA保持。未Git、未启动共享/正常服务、未资源或正常数据写入；普通Web原零bodycaller需正式消费者后继，完整真实owner组合、正常浏览器、Record/管理员他人cover及S01–S10仍OPEN，不以本pure通过宣产品闭环。
+
+<!-- R356-PUBLISH-PUBLIC10-CURRENT-END -->
+
 ## R356 Skills Connect HTTP request-id 修正（2026-10-08；候选待Root正式组合）
 
 基线正式427d126/Public9.0.1/132。Root实际first draft POST此前502：owner HTTP200合法ACK，BFF漏传HTTP x-kokoro-request-id，正式Platform telemetry回随机ID且binary cache-control缺失；该真实RED及清理收据由Root保留。本片仅catalog/product/admin三个既有Skills wrapper传当前受信context精确request-id，不改digest/auth/tenant/预算/Schema/契约；response ID与no-store完整性继续严格。owner RPC no-store由Root另一唯一Platform writer修，不用放宽检查掩盖。

@@ -1,3 +1,9 @@
+## R356 当前 Public10 预激活修正（2026-10-09）
+
+唯一机器契约现为 Public10.0.0 / 132 operations，同 `/v1`；本前缀更新下文历史 Public9 摘要。Publish required closed JSON audience/expected_state_version，同 key/CAS/digest 重放，无空body fallback。首次正常公开激活前 beta clean-slate裁决不改变以后 breaking-major策略；契约/工程候选不代表正常配对或浏览器完成，消费者等Root正式commit后固定生成。现数据库/owner生成/依赖原字节保持。
+
+<!-- R356-PUBLISH-PUBLIC10-ENTRY-END -->
+
 # kokoro-bff
 
 `kokoro-bff` 是 Kokoro 唯一 public HTTP owner，发布 Web-facing Product API，并承担 Conversation、Message、

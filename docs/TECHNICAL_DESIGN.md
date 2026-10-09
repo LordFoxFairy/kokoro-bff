@@ -1,3 +1,11 @@
+## R356 Publish Public10 预激活 corrective cut（2026-10-09）
+
+首次正常对外激活前，Root裁决将未正常激活的 beta Public9 Publish 修正为唯一 Public10.0.0，同 `/v1`、132 operations，无 `/v2` 或零body fallback。Publish 严格 required application/json `{audience, expected_state_version}`，复用既有 SkillAudienceRequest；ordinary current IAM/tenant、fixed PERSONAL、固定 command/key/digest/CAS、取消预算和 strict response/header 保持。正式对外发行后的 breaking-major 策略不变，本裁决不授权以后静默破坏客户端。
+
+Platform仍唯一拥有 Skill状态/receipt/发布；BFF只转当前正式wire，不读取owner数据库、不新建表/Schema/依赖。DATA_MODEL现有零持久变化边界与本技术/API门一致，原数据设计字节保持。机器 current10先核完整 Publish，再逆为exact Public9.0.1 SHA4ad3a0553d3b45a78fdd53c857ad66c25b1baa3d53c3af619333d70fefcad5db，继续原Public8.10及历史父证明。消费者必须等Root正式commit后正规固定生成；正常服务、真实组合、浏览器和S01–S10仍待Root，不以pure结果宣完成。
+
+<!-- R356-PUBLISH-PUBLIC10-DESIGN-END -->
+
 ## R353-B2 当前源码候选（2026-10-08；待Root冻源审查/真实配对）
 
 唯一 BFF writer 为 bff_skills_product_source_r353；工作树 HEAD d2695c47bca64a8e83168aa259e2366f7cee3ea8。当前唯一 Platform固定fa185ed2b25c3e81946cfdcd12d7665d02b8bad3、Product1.2/HTTP5.2/63RPC/32commands/24proofs、完整81正式publication；aggregate ce7708d7e2a15d7e3a77b7b9ea45905ab3fbe90093e343d0be9b3140ca03e2d6、descriptor 453f275b6e95052437072c3f52bbe74675271400526680003569b6bd09196fb1、HTTP 6d4abae68cd5cc6e2d8676ac34a48f7ea3564196ec6215ea1531b3cfedd3c3d7。HTTP直接读同Platform vendor/openapi；原701候选72副本移除，无双pin。IAM7c62e759760448e127b21200f87adeefdc6016f7/0.10、Storage d13f33a/v3继续原正规固定生成；不升级其它owner。

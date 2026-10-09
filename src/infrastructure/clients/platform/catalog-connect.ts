@@ -143,8 +143,12 @@ export class CatalogConnectClient {
   validateDraft(input: Context & { skillId: string; attemptId: string }, signal?: AbortSignal, deadlineAt?: number) {
     return this.#call("validateSkillDraft", input, { skill_id: { value: input.skillId }, attempt_id: input.attemptId }, signal, deadlineAt)
   }
-  publish(input: Context & { skillId: string }, signal?: AbortSignal, deadlineAt?: number) {
-    return this.#call("publishSkill", input, { skill_id: { value: input.skillId }, visibility: 1 }, signal, deadlineAt)
+  publish(
+    input: Context & { skillId: string; audience: "owner" | "tenant" | "catalog"; expectedStateVersion: string },
+    signal?: AbortSignal,
+    deadlineAt?: number,
+  ) {
+    return this.#call("publishSkill", input, { skill_id: { value: input.skillId }, visibility: 1, audience: input.audience }, signal, deadlineAt)
   }
   createPersonalVersion(input: Context & Metadata & { baseSkillId: string }, signal: AbortSignal, deadlineAt: number) {
     return this.#call(

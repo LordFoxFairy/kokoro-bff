@@ -30,6 +30,7 @@ const config = {
 }
 const headers = {
   authorization: "Bearer session",
+  "content-type": "application/json",
   "x-kokoro-service": "web-bff",
   "x-kokoro-internal-secret": "secret",
   "idempotency-key": "publish-1",
@@ -56,8 +57,9 @@ async function withServer(client, run, admission = { verify: async () => ({ ok: 
     await new Promise((resolve) => server.close(resolve))
   }
 }
-const post = (base, body, other = {}, path = "/v1/skills/skill-1/publish") =>
-  fetch(base + path, { method: "POST", headers: { ...headers, ...other }, ...(body === undefined ? {} : { body }) })
+const publishBody = JSON.stringify({ audience: "owner", expected_state_version: "5" })
+const post = (base, body = publishBody, other = {}, path = "/v1/skills/skill-1/publish") =>
+  fetch(base + path, { method: "POST", headers: { ...headers, "content-type": "application/json", ...other }, ...(body === undefined ? {} : { body }) })
 
 test("Publish default-off candidate stays out of Platform and has strict envelope", async () => {
   await withServer(null, async (base) => {
@@ -69,7 +71,7 @@ test("Publish default-off candidate stays out of Platform and has strict envelop
   })
 })
 
-test("Publish accepts exactly zero bytes and projects active owner result", async () => {
+test("Publish accepts strict audience/CAS JSON through registered server and projects active owner result", async () => {
   const calls = []
   await withServer(
     {
@@ -92,6 +94,8 @@ test("Publish accepts exactly zero bytes and projects active owner result", asyn
   assert.equal(calls[0].tenant, "tenant")
   assert.equal(calls[0].user, "user")
   assert.equal(calls[0].skillId, "skill-1")
+  assert.equal(calls[0].audience, "owner")
+  assert.equal(calls[0].expectedStateVersion, "5")
   assert.match(calls[0].digest, /^[a-f0-9]{64}$/u)
 })
 
@@ -139,6 +143,8 @@ test("Publish generated Connect descriptor has fixed visibility and active resul
     command: { commandId: "command-1", requestDigest: "a".repeat(64) },
     skillId: { value: "skill-1" },
     visibility: SkillScopeKind.PERSONAL,
+    audience: "owner",
+    expectedStateVersion: 5n,
     productContext: { subjectId: "user", ownerScope: { kind: "user", id: "user" } },
   })
   assert.deepEqual(fromBinary(PublishSkillRequestSchema, toBinary(PublishSkillRequestSchema, message)), message)
@@ -155,7 +161,10 @@ test("real generated Publish Connect client sends fixed PERSONAL and catalog cre
       command_digest_version: "3.0.0",
       fq_method: "kokoro.platform.v1.SkillCatalogService/PublishSkill",
       tenant_ref: "tenant",
-      request: { ...{ skill_id: { value: "skill-1" }, visibility: 1 }, product_context: { subject_id: "user", owner_scope: { kind: "user", id: "user" } } },
+      request: {
+        ...{ skill_id: { value: "skill-1" }, visibility: 1, audience: "owner", expected_state_version: "5" },
+        product_context: { subject_id: "user", owner_scope: { kind: "user", id: "user" } },
+      },
     }),
     true,
   ).sha256
@@ -175,6 +184,9 @@ test("real generated Publish Connect client sends fixed PERSONAL and catalog cre
             assert.equal(request.command?.requestDigest, digest)
             assert.equal(request.skillId?.value, "skill-1")
             assert.equal(request.visibility, SkillScopeKind.PERSONAL)
+            assert.equal(context.requestHeader.get("x-kokoro-request-id"), "request-1")
+            assert.equal(request.audience, "owner")
+            assert.equal(request.expectedStateVersion, 5n)
             assert.equal(request.productContext?.subjectId, "user")
             assert.equal(request.productContext?.ownerScope?.kind, "user")
             assert.equal(request.productContext?.ownerScope?.id, "user")
@@ -195,6 +207,8 @@ test("real generated Publish Connect client sends fixed PERSONAL and catalog cre
       tenant: "tenant",
       user: "user",
       skillId: "skill-1",
+      audience: "owner",
+      expectedStateVersion: "5",
     })
     assert.equal(response.sourceRef?.value, "skill:skill-1")
     assert.equal(calls, 1)
@@ -203,7 +217,7 @@ test("real generated Publish Connect client sends fixed PERSONAL and catalog cre
   }
 })
 
-test("Publish refuses every nonzero body, oversized body, invalid path and key before owner", async () => {
+test("Publish refuses legacy empty/malformed/unknown audience/CAS bodies, oversize, invalid path and key before owner", async () => {
   let calls = 0
   await withServer(
     {
@@ -213,11 +227,28 @@ test("Publish refuses every nonzero body, oversized body, invalid path and key b
       },
     },
     async (base) => {
-      for (const body of ["{}", "null", " ", "\n", "visibility=1", JSON.stringify({ tenant: "other" })]) {
+      for (const body of [
+        "",
+        "{}",
+        "null",
+        " ",
+        "\n",
+        "visibility=1",
+        JSON.stringify({ tenant: "other" }),
+        JSON.stringify({ audience: "owner" }),
+        JSON.stringify({ expected_state_version: "5" }),
+        JSON.stringify({ audience: "bogus", expected_state_version: "5" }),
+        ...[0, "0", "01", "-1", "9223372036854775808"].map((expected_state_version) => JSON.stringify({ audience: "owner", expected_state_version })),
+        '{"audience":"owner","audience":"catalog","expected_state_version":"5"}',
+        '{"audience":"owner","expected_state_version":"5","expected_state_version":"6"}',
+        JSON.stringify({ audience: "owner", expected_state_version: "5", tenant: "other" }),
+      ]) {
         const response = await post(base, body)
         assert.equal(response.status, 400, body)
         assert.equal((await response.json()).error.code, "invalid_skill_request")
       }
+      const wrongMime = await post(base, publishBody, { "content-type": "text/plain" })
+      assert.equal(wrongMime.status, 400)
       const oversized = await post(base, "x".repeat(70_000))
       assert.equal(oversized.status, 413)
       assert.equal((await oversized.json()).error.code, "request_body_too_large")
@@ -255,7 +286,7 @@ test("Publish rejects duplicate Idempotency-Key and bounds request ID", async ()
           },
         )
         req.once("error", reject)
-        req.end()
+        req.end(publishBody)
       })
       assert.equal(duplicate.status, 400)
       assert.equal(duplicate.body.error.code, "invalid_idempotency_key")
@@ -391,6 +422,14 @@ test("Publish owner receipt preserves same event for same-key replay and rejects
       assert.deepEqual(await replay.json(), {
         data: { state_version: "1", source_ref: "skill:skill-1", revision: "1", status: "active", event_id: firstEvent, replayed: true },
       })
+      for (const changed of [
+        { audience: "tenant", expected_state_version: "5" },
+        { audience: "owner", expected_state_version: "6" },
+      ]) {
+        const conflict = await post(base, JSON.stringify(changed))
+        assert.equal(conflict.status, 409)
+        assert.equal((await conflict.json()).error.code, "skill_idempotency_conflict")
+      }
       const different = await post(base, undefined, { "idempotency-key": "publish-2" })
       assert.equal(different.status, 412)
       assert.equal((await different.json()).error.code, "skill_precondition_failed")
@@ -498,7 +537,7 @@ test("Publish client disconnect aborts in-flight owner stage", async () => {
       const url = new URL("/v1/skills/skill-1/publish", base)
       const req = httpRequest({ hostname: url.hostname, port: url.port, path: url.pathname, method: "POST", headers })
       req.on("error", () => {})
-      req.end()
+      req.end(publishBody)
       await reached
       req.destroy()
       await aborted

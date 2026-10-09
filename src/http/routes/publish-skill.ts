@@ -1,3 +1,6 @@
+import { parseSkillProductInput } from "../skill-product-input.js"
+import type { z } from "zod"
+import type { skillProductInputs } from "../skill-product-input.js"
 import { startSkillRequestBudget } from "./skill-drafts.js"
 import { assertSkillWireKnown, projectSkillStateVersion } from "../../infrastructure/clients/platform/skill-product-response.js"
 import type { IncomingMessage, ServerResponse } from "node:http"
@@ -94,11 +97,10 @@ export async function publishSkillRoute(
     send(response, 400, failure(key === undefined ? "idempotency_key_required" : "invalid_idempotency_key", "A single valid Idempotency-Key is required"))
     return
   }
+  let input: z.infer<typeof skillProductInputs.audience>
   try {
-    if ((await readBody(request, 65_536)).length !== 0) {
-      send(response, 400, failure("invalid_skill_request", "Skill Publish request body must be empty"))
-      return
-    }
+    if (request.headers["content-type"]?.split(";", 1)[0] !== "application/json") throw new Error("invalid_skill_request")
+    input = parseSkillProductInput("audience", await readBody(request, 65_536))
   } catch (error) {
     const oversized = error instanceof Error && ["request_body_too_large", "request body too large"].includes(error.message)
     send(response, oversized ? 413 : 400, failure(oversized ? "request_body_too_large" : "invalid_skill_request", "Skill Publish request is invalid"))
@@ -112,6 +114,8 @@ export async function publishSkillRoute(
       skill_id: { value: skillId },
       product_context: { subject_id: context.identity.userId, owner_scope: { kind: "user", id: context.identity.userId } },
       visibility: 1,
+      audience: input.audience,
+      expected_state_version: input.expected_state_version,
     },
   })
   let digest: string
@@ -130,6 +134,8 @@ export async function publishSkillRoute(
         tenant: context.identity.namespace,
         user: context.identity.userId,
         skillId,
+        audience: input.audience,
+        expectedStateVersion: input.expected_state_version,
       },
       signal,
       startSkillRequestBudget(request),

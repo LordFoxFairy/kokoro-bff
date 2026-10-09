@@ -5,6 +5,8 @@ import { test } from "node:test"
 
 import { inspectAgentControlSnapshot, inspectBffHistoricalOpenApi as inspectBffOpenApi } from "../../scripts/verify-openapi.ts"
 
+import { parseOpenApiOperations } from "../../scripts/check-contract.mjs"
+
 import { inspectSkillProductContract, stripSkillProductSource, skillProductParentBaseline } from "../../scripts/verify-skill-product-contract.mjs"
 
 const openapiUrl = new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url)
@@ -27,7 +29,7 @@ const SAFE_FAILURE_CODES = [
 async function readContract() {
   const [openapi, baselineDocument] = await Promise.all([readFile(openapiUrl, "utf8"), readFile(baselineUrl, "utf8")])
   const baseline = JSON.parse(baselineDocument).operations
-  assert.deepEqual(inspectSkillProductContract(openapi, baseline), [], "Current Public9 must pass before historical parent mutation proof")
+  assert.deepEqual(inspectSkillProductContract(openapi, baseline), [], "Current Public10 must pass before historical parent mutation proof")
   return { openapi: stripSkillProductSource(openapi), baseline: skillProductParentBaseline(openapi) }
 }
 
@@ -2980,7 +2982,7 @@ for (const entry of [
   })
 }
 
-test("Public9 binds the actual Skills Product operations, closed schemas and preserved Public8.10 parent", async () => {
+test("Public10 binds the actual Skills Product operations, closed schemas and preserved Public8.10 parent", async () => {
   const openapi = await readFile(openapiUrl, "utf8"),
     baseline = JSON.parse(await readFile(baselineUrl, "utf8")).operations
   const module = await import("../../scripts/verify-skill-product-contract.mjs").catch(() => ({}))
@@ -2988,7 +2990,7 @@ test("Public9 binds the actual Skills Product operations, closed schemas and pre
   assert.deepEqual(module.inspectSkillProductContract(openapi, baseline), [])
 })
 
-test("Public9 rejects new operation removal, current closed schema widening and unrelated parent mutation", async () => {
+test("Public10 rejects new operation removal, current closed schema widening and unrelated parent mutation", async () => {
   const raw = await readFile(openapiUrl, "utf8")
   for (const changed of [
     raw.replace("operationId: updateSkillDraft", "operationId: unexpectedDraft"),
@@ -2996,10 +2998,32 @@ test("Public9 rejects new operation removal, current closed schema widening and 
       "    SkillUsageResponse:\n      type: object\n      additionalProperties: false",
       "    SkillUsageResponse:\n      type: object\n      additionalProperties: true",
     ),
-    raw.replace("  version: 9.0.1", "  version: 8.10.0"),
+    raw.replace("  version: 10.0.0", "  version: 8.10.0"),
     raw.replace("title: Kokoro Business API", "title: Altered Business API"),
   ]) {
     assert.notEqual(changed, raw)
     assert.notDeepEqual(inspectSkillProductContract(changed), [])
   }
+})
+
+test("Public10 Publish requires exact audience/CAS JSON and preserves the full Public9 historical parent", async () => {
+  const raw = await readFile(openapiUrl, "utf8")
+  const start = raw.indexOf("  /v1/skills/{skill_id}/publish:\n")
+  const end = raw.indexOf("  /v1/skill-installations:\n", start)
+  const publication = raw.slice(start, end)
+  assert.match(publication, /requestBody:\n        required: true/u)
+  assert.match(publication, /\$ref: '#\/components\/schemas\/SkillAudienceRequest'/u)
+  assert.doesNotMatch(publication, /x-kokoro-empty-body/u)
+  for (const changed of [
+    raw.replace(publication, publication.replace("        required: true", "        required: false")),
+    raw.replace(publication, publication.replace("SkillAudienceRequest", "SkillReasonRequest")),
+    raw.replace(publication, publication.replace("      requestBody:", "      x-kokoro-empty-body: required\n      requestBody:")),
+    raw.replace(publication, publication.replace("product.skill.publish", "product.skill.read")),
+    raw.replace("        - expected_state_version\n        - audience", "        - audience"),
+    raw.replace("title: Kokoro Business API", "title: Changed Business API"),
+  ]) {
+    assert.notEqual(changed, raw)
+    assert.notDeepEqual(inspectSkillProductContract(changed), [])
+  }
+  assert.equal(parseOpenApiOperations(raw).length, 132)
 })

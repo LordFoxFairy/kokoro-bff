@@ -18,6 +18,7 @@ function namedBlock(source, kind, name) {
   return source.slice(matches[index].index, end < 0 ? source.length : end)
 }
 export function stripSkillProductSource(source) {
+  if (/^  version: 10\.0\.0$/mu.test(source)) source = restorePublic9(source)
   if (!/^  version: 9\.0\.1$/mu.test(source)) return source
   let parent = source.replace("  version: 9.0.1", "  version: 8.10.0")
   for (const delta of [...DELTAS].reverse()) {
@@ -39,7 +40,7 @@ export function skillProductParentBaseline(source) {
     operation_id: operation.fields.get("operationId"),
   }))
 }
-export function inspectSkillProductContract(source, baseline = OPERATIONS) {
+function inspectPublic9Contract(source, baseline = OPERATIONS) {
   const errors = []
   if (!/^  version: 9\.0\.1$/mu.test(source)) return ["Public9 version must equal 9.0.1"]
   for (const delta of DELTAS) {
@@ -64,4 +65,25 @@ export function inspectSkillProductContract(source, baseline = OPERATIONS) {
     errors.push("Public9 invalid YAML")
   }
   return errors
+}
+
+// This preactivation corrective major changes only Publish and info.version.
+const PUBLIC9_SHA = "4ad3a0553d3b45a78fdd53c857ad66c25b1baa3d53c3af619333d70fefcad5db"
+const PUBLIC10_PUBLISH_SHA = "dfa0fb222ca39f46ea32cb0b10da2df249df1e5e1c9574a1b1323ba89ddbf270"
+// prettier-ignore
+const PUBLIC9_PUBLISH = "  /v1/skills/{skill_id}/publish:\n    post:\n      tags: [Skills]\n      operationId: publishSkill\n      x-kokoro-owner: kokoro-bff\n      x-kokoro-visibility: public\n      x-kokoro-stability: beta\n      x-kokoro-idempotency: required\n      x-kokoro-empty-body: required\n      x-kokoro-fixed-visibility: personal\n      x-kokoro-permission: product.skill.publish\n      summary: Publish the current validated ZIP package of a user-owned draft Skill\n      description: Default-closed BFF runtime candidate pinned to inactive Platform v4 owner commit 263a28f1e55745bd1829a61f68228d775751adbc and artifact aggregate SHA-256 902f8f2c2fbeb95a441820c1cf16b0a9c793eadac7106f9fcd5e41e3878b7f79; the named Publish route exists but the candidate is not publicly activated. This command accepts exactly zero request-body bytes, including no JSON object, whitespace, null, visibility, asset, manifest, tenant or owner. The BFF fixes owner visibility to PERSONAL(1) and calls Platform only after current IAM user admission, including same-key replay. Platform alone checks current user owner/draft/validated package and fresh Storage CLEAN/object health, then atomically activates the Skill, keeps one durable receipt and appends one skill.published outbox event. Same-key healthy replay returns the same event_id, while a distinct command on active Skill fails. Unknown ACK recovery re-admits the user and retries the same owner command; no BFF receipt or outbox is added. Validated is not yet active, and this candidate is not publicly activated.\n      parameters:\n        - $ref: '#/components/parameters/SkillPackageUploadSkillId'\n        - $ref: '#/components/parameters/SkillPublishIdempotencyKey'\n      responses:\n        '200':\n          description: Skill is active or the same healthy publication is durably replayed\n          headers:\n            x-request-id:\n              description: Correlation identifier for this request\n              schema: { type: string, minLength: 1, maxLength: 128 }\n            Cache-Control:\n              description: Never cache a Skill publication result\n              schema: { type: string, const: no-store }\n          content:\n            application/json:\n              schema: { $ref: '#/components/schemas/PublishSkillResponse' }\n        '400': { $ref: '#/components/responses/SkillPublishBadRequest' }\n        '401': { $ref: '#/components/responses/SkillPublishUnauthorized' }\n        '403': { $ref: '#/components/responses/SkillPublishForbidden' }\n        '404': { $ref: '#/components/responses/SkillPublishNotFound' }\n        '409': { $ref: '#/components/responses/SkillPublishConflict' }\n        '412': { $ref: '#/components/responses/SkillPublishPreconditionFailed' }\n        '413': { $ref: '#/components/responses/SkillPublishPayloadTooLarge' }\n        '429': { $ref: '#/components/responses/SkillPublishRateLimited' }\n        '502': { $ref: '#/components/responses/SkillPublishBadGateway' }\n        '503': { $ref: '#/components/responses/SkillPublishUnavailable' }\n"
+function restorePublic9(source) {
+  const block = namedBlock(source, "path", "/v1/skills/{skill_id}/publish")
+  let parent = source.replace("  version: 10.0.0", "  version: 9.0.1")
+  if (block !== null) parent = parent.replace(block, () => PUBLIC9_PUBLISH)
+  return parent
+}
+export function inspectSkillProductContract(source, baseline = OPERATIONS) {
+  if (!/^  version: 10\.0\.0$/mu.test(source)) return ["Public10 version must equal 10.0.0"]
+  const errors = []
+  const publication = namedBlock(source, "path", "/v1/skills/{skill_id}/publish")
+  if (publication === null || hash(publication) !== PUBLIC10_PUBLISH_SHA) errors.push("Public10 Publish exact closed body/CAS contract drifted")
+  const parent = restorePublic9(source)
+  if (hash(parent) !== PUBLIC9_SHA) errors.push("Public10 exact Public9.0.1 parent inverse drifted")
+  return [...errors, ...inspectPublic9Contract(parent, baseline)]
 }

@@ -1,3 +1,9 @@
+## R356 当前 Public10 预激活修正（2026-10-09）
+
+唯一机器契约现为 Public10.0.0 / 132 operations，同 `/v1`；本前缀更新下文历史 Public9 摘要。Publish required closed JSON audience/expected_state_version，同 key/CAS/digest 重放，无空body fallback。首次正常公开激活前 beta clean-slate裁决不改变以后 breaking-major策略；契约/工程候选不代表正常配对或浏览器完成，消费者等Root正式commit后固定生成。现数据库/owner生成/依赖原字节保持。
+
+<!-- R356-PUBLISH-PUBLIC10-ENTRY-END -->
+
 ## R350 Skill example prompts consumer candidate
 
 Public 8.10.0 retains exactly 111 operations. Both Skill Create bodies accept optional `example_prompts`; four Skill read shapes require the ordered array. The sole Platform pins are commit `94bd0ea94aabc60c666fdb2cfa8784baf194e24b`, HTTP 3.5.0, and the complete 60-input publication including example profile 1.0.1. `scripts/verify-skill-example-prompts-contract.mjs` restores the entire fixed public 8.9 parent. Original strings/order/duplicates and absent-versus-present command binding are preserved. No normal process activation or browser qualification is claimed.

@@ -1,3 +1,11 @@
+## R356 Publish Public10 预激活 corrective cut（2026-10-09）
+
+首次正常对外激活前，Root裁决将未正常激活的 beta Public9 Publish 修正为唯一 Public10.0.0，同 `/v1`、132 operations，无 `/v2` 或零body fallback。Publish 严格 required application/json `{audience, expected_state_version}`，复用既有 SkillAudienceRequest；ordinary current IAM/tenant、fixed PERSONAL、固定 command/key/digest/CAS、取消预算和 strict response/header 保持。正式对外发行后的 breaking-major 策略不变，本裁决不授权以后静默破坏客户端。
+
+Platform仍唯一拥有 Skill状态/receipt/发布；BFF只转当前正式wire，不读取owner数据库、不新建表/Schema/依赖。DATA_MODEL现有零持久变化边界与本技术/API门一致，原数据设计字节保持。机器 current10先核完整 Publish，再逆为exact Public9.0.1 SHA4ad3a0553d3b45a78fdd53c857ad66c25b1baa3d53c3af619333d70fefcad5db，继续原Public8.10及历史父证明。消费者必须等Root正式commit后正规固定生成；正常服务、真实组合、浏览器和S01–S10仍待Root，不以pure结果宣完成。
+
+<!-- R356-PUBLISH-PUBLIC10-DESIGN-END -->
+
 ## R356 Public9.0.1 消费者一致性修正（同 132 operations）
 
 GET package-upload 的现有真实 source_version_id 现列入闭合 schema，可选、1–1024 printable ASCII且拒绝字面 null；不从对象 current read 推断版本。owner 无效版本稳定返回502 skill_response_invalid；安装列表 owner query/source-bound cursor 的 InvalidArgument 返回400 invalid_skill_installation_request，不泄露内部原因。原 Public9/Public8.10 父逆和其它 closed blocks 保持。此为源码契约修正，正常服务未重新激活，不能称 Skills 页面验收。

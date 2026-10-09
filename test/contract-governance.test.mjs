@@ -482,7 +482,7 @@ test("R257 personalization CAS none exception requires the exact method path and
 
 test("R267 lifecycle operations remain frozen in the current public 8.10 inventory", async () => {
   const openapi = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
-  assert.match(openapi, /^  version: 9\.0\.0$/mu)
+  assert.match(openapi, /^  version: 10\.0\.0$/mu)
   assert.equal((openapi.match(/operationId: createPersonalSkillVersion/gu) ?? []).length, 1)
   assert.equal((openapi.match(/operationId: withdrawPersonalSkill/gu) ?? []).length, 1)
 })
