@@ -1,3 +1,23 @@
+## T-K03.4 精确 Skill 下载 browser-private 合同（D0，未发布）
+
+参考 `POST /skill.v1.SkillService/DownloadSkill` 的 `{skillId}` 永远表示series显式current，request/response/path保持原样。旧安装pin、managed exact version及share exact revision不向该参考请求增加selector，也不恢复已删除的`GET /v1/skills/{id}/download`。候选Kokoro私有合同只有：
+
+| Method/path | selector唯一含义 | strict success 200 |
+| --- | --- | --- |
+| `POST /browser/v1/skill-installations/{installation_id}/download` | 当前tenant/subject仍installed的exact installation source/revision | `{data:{source_ref,revision,download_info:{download_url,filename,expires_at}}}` |
+| `POST /browser/v1/skills/{version_id}/download` | 当前tenant/subject可见的managed exact Skill version | 同上 |
+| `POST /browser/v1/skill-shares/{share_id}/download` | 当前tenant内active、未撤销、未过期share绑定的exact source | 同上 |
+
+路径ID使用各现机器schema；三个POST均无query、无payload、无`Idempotency-Key`，且不接受body/header中的tenant、subject、source_ref、revision或series。无body、`Content-Length:0`及非null但实际零字节stream等价合法；`Transfer-Encoding`、冲突framing、正length或读取到任一字节均为400且owner零调用。零payload读取与取消共用请求绝对预算，abort/deadline先到立即终止，不等待永挂stream cancel，任何迟到EOF/字节不得恢复请求。`source_ref`必须与可信record完全相同，`revision`为正uint64十进制字符串；`download_url`只允许`/skill-downloads/{43字符opaque handle}`，filename非空且后续字节响应仍使用既有安全Content-Disposition，expiry为未来UTC且不晚于owner transfer/handle TTL。响应带`Cache-Control:no-store`与合法`x-request-id`，不返回内部transfer URL、required headers、digest、token、cookie、owner message或share creator资料。
+
+状态闭集候选：400 invalid request/selector，401 current session缺失，403 subject或tenant不具资格，404 installation removed/not found、managed version不可见、share revoked/expired/not found或exact source已不可见，405 method，429 current admission rate limit，502 owner record/download/transfer/digest不可信，503 owner/IAM/Platform依赖不可确认，504统一绝对预算耗尽。POST无mutation receipt；任何重试都fresh admission和record读取。随后唯一字节入口仍为现`GET /skill-downloads/{handle}`：410只表达handle到期/淘汰/重启丢失；handle closed qualifier只能是`catalog_current+series_id`、`installation+installation_id`、`managed+version_id`、`share+share_id`之一，并另绑exact source_ref/revision，禁止把不同ID混入skillId。GET按qualifier再次执行对应fresh record资格，再exact-source下载，在现60秒/128容量生命周期内完成spool前后confirm、末次admission及完整长度/SHA-256确认。
+
+share动作不成为匿名下载，也不把shareId当本人DownloadSkill授权；撤销、到期、换tenant或换登录主体后旧handle失败关闭。installation与catalog同series时，私有installation动作下载旧pin，参考DownloadSkill下载新current，两者不得互相fallback。managed历史版本只走version path；缺exact owner事实就404/依赖错误，不猜current。
+
+本节未修改public OpenAPI、参考网站contract、Platform Proto/HTTP、generated client或private policy。后继唯一可编辑机器源为`src/http/routes/skill-download.policy.ts`，确定性生成`contract/skill-download-policy.json`；它只收录上述三个exact method/path、closed request/success/error及breaking version，不与local-import policy合并。Root批准机器合同后才创建并实施，当前不宣称路径存在。
+
+<!-- R357-BFF-EXACT-SKILL-DOWNLOAD-API-D0-END -->
+
 ## R357-BFF-ACTIVATION：正式 active owner 的消费边界（D0，wire 不变）
 
 唯一 owner 输入更新为 Platform commit `84262b664275229c62370d49f51ad5e276116148`、active/routable v10 aggregate `dddb0d194af44dbf0b83a0a0443d774f3dee63f8cb03c364ad529c4c230fb85b`、Root publication digest `8a850363580521fadf75bc20b1be70bfe62c20004568c00b72a77f614caa672f`。四个 internal-owner 方法、下列四个 `/browser/v1` private route及其 request/success/error wire均不改；变化仅是生产 composition 在完整配置时可注册既有 exact dispatch。

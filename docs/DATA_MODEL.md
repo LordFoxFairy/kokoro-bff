@@ -1,3 +1,17 @@
+## T-K03.4 精确 Skill 下载数据边界（D0，无持久化变化）
+
+BFF不复制Platform的Skill revision、installation、package、scan或transfer事实。installation exact selector来自当次Platform Get；managed version exact selector来自当次managed owner读取；share selector来自现有`bff_share`的`tenant_id/creator_subject_id/source_ref/revoked_at/expires_at`，但本片不加列、索引、表或新share类型。Platform现exact-source download RPC是唯一package/transfer owner读取；BFF不查owner SQL、不用series current或MAX(revision)重建旧版本。
+
+三个候选prepare POST不产生receipt、outbox、审计镜像、URL缓存或授权缓存。唯一短暂状态继续是现进程内`SkillDownloadHandles`，后继binding使用closed qualifier：`catalog_current+series_id`、`installation+installation_id`、`managed+version_id`或`share+share_id`，并共同绑定tenant/subject、exact source_ref/revision、filename/size/hash/expiry/transfer；各ID不得混入通用skillId。这不是新canonical事实；过期、容量淘汰或重启即丢失，不能从handle反建record。重复prepare重新读取owner并可在完整exact binding相同的现规则下复用句柄，但不延长TTL或跳过资格。
+
+零payload POST的空stream读取只存在于请求内存与同一绝对预算，不落“已读body”状态、receipt或恢复事实。`Content-Length:0`不代表可跳过实际EOF确认；非null零字节stream也不被误判有payload。abort/deadline first-winner后不等待底层cancel完成，迟到字节/EOF/owner结果不得创建handle。
+
+同series的installation旧pin与publication新current是两个不同事实：前者保持installation source/revision，后者继续由参考DownloadSkill读取publication current。不得自动升级installation、把current写回handle、或在旧version不可见时fallback。share撤销/到期、installation移除、managed version不可见及身份变化都使prepare和既有handle再确认失败；已取到的内部transfer引用不覆盖该终态。
+
+canonical SQL、Redis namespace、public contract/generated、Platform artifact与正常数据均不变。本D0没有执行schema、数据、服务或句柄写入。
+
+<!-- R357-BFF-EXACT-SKILL-DOWNLOAD-DATA-D0-END -->
+
 ## T-K03.4 本地 Skill import BFF 数据边界（仅设计，无持久化）
 
 BFF 不拥有 `SkillImportIntent`、Upload、scan、Skill、publication、installation 或 command receipt；这些事实分别由 Platform/Storage 拥有。BFF 不新增 SQL表、Redis key、URL缓存、恢复队列、idempotency receipt、Storage proof镜像或授权快照。四个 browser-private 请求只在单次内存预算内携带 strict wire 值并投影 owner结果。

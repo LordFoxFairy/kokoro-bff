@@ -1,3 +1,41 @@
+## T-K03.4 精确 Skill 下载准备动作（D0，未实施）
+
+### 放置与 owner 裁决
+
+| 项 | 结论 |
+| --- | --- |
+| Owner | Platform/Skills 唯一拥有 Skill revision、installation 与包/scan/transfer 事实；BFF 拥有 browser-private 人类准入、现 `bff_share` 及短期下载句柄；Web 只消费同源动作。 |
+| 当前事实 | 参考 `POST /skill.v1.SkillService/DownloadSkill {skillId}` 固定解释为 series current；`SkillSpecificationService.prepareDownload` 先读 owner current 再取该 exact `source_ref`。旧 `GET /v1/skills/{id}/download` 已删除。现 installation Get、managed Skill Get、share repository 都能先确定 exact `source_ref`；Platform `GetSkillPackageDownload` 已按 `source_ref + tenant + subject` 返回 exact revision、digest、size、filename 与短期 transfer，不需猜 latest 或读 owner SQL。该RPC只签字节引用，不单独证明Product record资格。 |
+| 目标职责 | 保持参考 DownloadSkill 的 current 语义与 wire 不变；为 installation pin、managed exact version、share exact revision 各设一个具名 browser-private prepare POST，统一签发现有 `/skill-downloads/{handle}`，不直接回包或内部 URL。 |
+| 目录方案 | 后继由现 `src/http/routes/skill-download.ts` 只承接准入、零payload解析、应用调用与响应投影；新增普通 `src/application/exact-skill-download.ts` 编排四种qualifier的fresh record资格、exact-source package校验与handle confirm。相比扩 `skill-specification.ts`，新文件只有“非current selector的exact下载准备/再确认”一个变化原因，不让参考series-current服务同时随私有installation/managed/share规则变化，也不新建目录或模块。各owner wire schema/type仍留现installation、managed、share/client文件。 |
+| 粒度 | 三个private path共用一个应用服务和一套package/transfer校验，各自只提供具名record resolver；不复制三套校验。现application specification继续负责catalog current，并与新服务共同复用现DownloadHandles/owner adapters。HTTP route不得承载fresh qualifier业务或transfer validation。 |
+| 依赖 | 允许 BFF route 调现 fresh user admission、installation Get、managed exact inspection、share repository、Platform exact-source download及handle store；禁止浏览器自报 tenant/subject/source_ref、owner DB、Storage直连、reference DownloadSkill fallback或隐式 installation 优先。 |
+| 数据/API | BFF 无新表、Redis、receipt或权限缓存；三个动作是 browser-private、无幂等键、零payload/query。public OpenAPI、参考网站方法与 Platform owner contract不变；后继唯一可编辑机器源固定为 `src/http/routes/skill-download.policy.ts`，确定性生成 `contract/skill-download-policy.json`，Root批准后才创建/实现。 |
+| 删除项 | 后继一次删除Web对旧 `/api/hub/skills/{version}/download` 的生产消费；不保留 alias、双读、current fallback或“找不到旧版就下载新版”。 |
+| 验证 | 先以 HTTP RED 固定合法无body、`Content-Length:0`、非null但实际零字节stream均可达应用；非零/冲突framing/TE拒绝且owner零调用；再覆盖旧pin/new current双意图、managed旧版、share撤销/到期/换主体、坏hash/size/revision、取消first-winner、永挂cancel与迟到结果。三动作只签opaque handle，handle GET重新IAM及exact record资格，最后回归参考DownloadSkill current。 |
+
+### 单一路径、资格与终态
+
+候选路径固定为：
+
+- `POST /browser/v1/skill-installations/{installation_id}/download`
+- `POST /browser/v1/skills/{version_id}/download`
+- `POST /browser/v1/skill-shares/{share_id}/download`
+
+三者都拒绝query、`Idempotency-Key`、`Transfer-Encoding`、冲突framing、正`Content-Length`及任何实际payload；但合法无body、`Content-Length: 0`和运行时提供的非null零字节stream都必须接受。route沿现已验证empty-body门在同一绝对预算内有界读取到EOF，abort/deadline first-winner后立即终止，不等待不合作的cancel或永挂stream；晚到read/owner结果不得继续。成功只投影 exact `source_ref`、十进制 `revision` 和 `{download_url,filename,expires_at}`，其中 URL 只能是 `/skill-downloads/{opaque_handle}`。准备动作共享现 Skills 10 秒绝对预算；IAM、record读取、exact-source owner download与签发不得分别重置预算。handle GET沿现 `skill-download.ts` 的60秒、容量128、spool前confirm、spool后confirm、末次admission、hash/size及finally清理生命周期；准备和GET都重新核当前human admission、tenant/subject及具体record仍指向同一source/revision。取消或deadline先到即为终态，迟到owner结果不能签handle或发200。
+
+installation path只接受fresh `GetPersonalSkillInstallation`返回当前主体拥有且仍installed的 installation，并固定其 `source_ref/revision`；同series已有新current也不得替换。managed path的`version_id`是现managed owner record ID，经fresh exact GET/Inspect取得source/ref/revision；不得把version当series再读current。share path先用当前tenant/shareId fresh `findActive`，再inspect该exact source，保持现同tenant登录授权，不扩大匿名或跨tenant；handle GET再次执行同一record资格链。三者随后调用同一个Platform exact-source download RPC，并严格核返回sourceRef、revision、filename、size、digest、transfer origin/method/headers/expiry；RPC成功不能替代上述资格链。
+
+所有下载handle使用一个closed qualifier union：`catalog_current + series_id`、`installation + installation_id`、`managed + version_id`、`share + share_id`，并共同绑定exact `source_ref/revision`。各selector ID不得继续混装进旧`skillId`字段。参考DownloadSkill签发`catalog_current`；三个私有动作分别签发对应qualifier。handle confirm按qualifier回到唯一fresh资格链，再核exact source/revision及包事实，绝不跨qualifier解释或降级到catalog current。
+
+错误闭集候选：非法selector/shape 400，缺登录401，当前主体或tenant不匹配403，record不存在、已移除、share撤销/到期或exact事实已不可见404，错误method405，rate limit429，owner malformed/哈希或transfer漂移502，依赖不可确认503，绝对deadline504；只有已签发handle过期、淘汰或进程重启丢失为410。准备POST不是mutation且不接收幂等键；重试必须重新完整准入与exact读取，不能复用旧资格。
+
+当前只完成D0。private policy、运行时schema、public/生成合同、源码与测试均未改变；不得把Platform现exact-source RPC存在冒充三条Product路径已发布。
+
+后继必要文件集严格为：现`src/http/routes/skill-download.ts`、新`src/application/exact-skill-download.ts`、现`src/application/skill-download-handles.ts`及其binding类型、现`src/bootstrap/{runtime,server}.ts`；唯一private机器源/产物`src/http/routes/skill-download.policy.ts`与`contract/skill-download-policy.json`及一个确定性生成/check脚本；现各owner client/projector仅在暴露已有Get/Inspect结构端口所必需时窄改；测试沿现`test/skill-download-http.test.mjs`并新增/扩具名应用测试、architecture/private-policy contract门。不得修改public OpenAPI、generated Platform、reference specification schema或Platform contract。
+
+<!-- R357-BFF-EXACT-SKILL-DOWNLOAD-D0-END -->
+
 ## R357-BFF-ACTIVATION：active local import 的生产装配设计（D0，未实施）
 
 Platform 已正式发布 `84262b664275229c62370d49f51ad5e276116148`，v10 为 `status=active`、`routable=true`，aggregate `dddb0d194af44dbf0b83a0a0443d774f3dee63f8cb03c364ad529c4c230fb85b`，Root publication digest `8a850363580521fadf75bc20b1be70bfe62c20004568c00b72a77f614caa672f`。本切片只把这一正式 owner 发行转为 BFF 的可实施生产装配方案；当前源码仍固定旧 `981df60e...` 且 production 不构造 `LocalSkillImportConnectClient`，所以正常 namespace 仍是 404。
