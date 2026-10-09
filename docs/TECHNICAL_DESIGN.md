@@ -3238,3 +3238,11 @@ GET 专用响应 gate 验证 page 数量/唯一 Asset ID、purpose/scan/origin e
 强门保留 application 禁止 infrastructure/generated/http、infrastructure 禁止 http/interface implementation，以及 Platform generated importer exact allow-list。负控必须证明 façade 拒绝 malformed/unknown owner wire，application 独立 fixture证明跨来源 exact、official过滤、usage/profile、tenant/subject下载确认不变。OpenAPI仍 exact `12.0.0`。MCP mock 标题改为“fresh admission 后未暴露 mutation fail-closed”，仅断言两种请求503与owner零调用；不得以旧“register/toggle/list/delete flow”标题暗示CRUD完成，GET沿现专门测试。Billing 75ms仍只做同命令候选/基线诊断，不调预算。
 
 <!-- R357-BFF-BOUNDARY-AND-ORACLE-D0-END -->
+
+## T-K03.4 BFF main 有界信号关闭（2026-10-09）
+
+BFF 进程入口拥有 OS signal 到既有 server lifecycle 的唯一接线；`createBffServer().shutdown()` 继续拥有停止 worker claim、停止 HTTP admission、等待在途 HTTP/worker，最后关闭 store 与其他 owned resources 的顺序。本片只在 `src/main.ts` 注册 SIGINT/SIGTERM，不改变 public/internal contract、owner、权限、配置、SQL、Redis 或预算。
+
+首次 signal 建立唯一 termination Promise；关闭期间后续同种或异种 signal 由仍注册的 handler 忽略，不能因恢复默认 handler 而提前杀死 drain。入口调用既有 `shutdown(30_000)`；正常完成后清除 deadline、移除 handler 并自然退出 0。同步 throw或异步 rejection 均只输出固定安全错误并退出 1，不回显错误、配置或凭据。31 秒 deadline 保持 referenced，直到 shutdown settle 才清除；若 worker 或 resource close 永不 settle，入口输出固定 deadline 错误并退出 1。该强制进程终态不是资源 drain 成功，也不改变 server 内部顺序。
+
+只扩现 `test/lifecycle.test.ts`：保留真实 HTTP + worker + store 顺序测试；另以真实 Node 子进程分别发送 SIGINT/SIGTERM、关闭中第二种 signal、同步/异步失败及不 settle 场景，证明 shutdown 单次调用、成功 settle 前不退出、成功 exit 0、错误不泄露和 deadline exit 1。测试可注入较短 hard deadline；生产调用不传该参数，固定保持 30/31 秒。

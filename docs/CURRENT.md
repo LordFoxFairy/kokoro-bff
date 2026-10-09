@@ -1512,3 +1512,9 @@ W2 审查修正：项目资源成功态收窄为 CLEAN。INFECTED 为稳定不�
 新增 public GET `/v1/projects/{projectId}/resources`：每页先按可信tenant/subject查当前私人Project owner，canonical id入Storage project scope；未授权/不存在404且零Storage调用。默认limit50（1..100），opaque cursor上限4096；只返回ASSET/CLEAN metadata、next_cursor及既有RequestMeta，不含upload_id/URL。坏查询400、坏owner页502、依赖失败503，不降级空列表。空项目200空items。公开OpenAPI、baseline、生成drift与负例同步；POST/checkpoint保持原行为。
 
 聚焦测试覆盖HTTP→Connect分页、跨project/subject、cursor拒绝、owner故障/坏页、当前授权与GET/POST元数据一致；owner transport在测试中是double，不算真实Storage/PG集成。Node22 format/lint/typecheck/build全部通过；contract 40/40，test 328通过/1跳过，schema 5通过/1跳过，Storage生成/check均两轮字节一致。当前未提供隔离 KOKORO_TEST_POSTGRES_URL/REDIS_URL/POSTGRES_ADMIN_URL，故未运行真实PG integration；真实Storage/PostgreSQL/ObjectStore/Web刷新组合由Root后续串行验证，Web consumer仍属后续片。
+
+### T-K03.4 BFF main signal lifecycle（2026-10-09；候选待 Root 提交/重载）
+
+基线 `49b555c227edd24f7ba2497bf6732a2597bb982e` 的 server 已有有序 shutdown，但 main 未接 SIGINT/SIGTERM。本候选只接线既有 `shutdown(30s)`，关闭中重复 signal 不提前终止；成功自然退出 0，同步/异步失败固定安全错误 exit 1，referenced 31s deadline 对永不 settle 提供有界失败终态。deadline 强退不冒充资源 drain。现有真实 HTTP/worker/store 顺序用例保持，新真实 Node 子进程覆盖两种 signal、重复 signal、拒绝及永不 settle。
+
+Node 22 候选实测：lifecycle 6/6；format、lint、typecheck、build 均 exit 0；contract 704/704；默认 1303 tests、1300 pass、0 fail、3 既定 skip。本片不改 contract、SQL、权限、owner、配置或关闭预算，未操作正常 session 9724、服务或数据；Root 提交、正常重载及运行 PID 验收仍待执行。
