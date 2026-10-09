@@ -110,3 +110,27 @@ export function withSkillActionAdmission(
     },
   }
 }
+
+/** Only current human MCP membership is accepted; workload scope is not user authority. */
+export async function authorizeMcpAction(
+  source: Pick<import("./mcp-authorization.client.js").McpAuthorizationClient, "check">,
+  admission: Extract<UserAdmissionResult, { ok: true }>,
+  action: import("./mcp-authorization.types.js").McpAuthorizationInput["action"],
+  signal: AbortSignal,
+) {
+  signal.throwIfAborted()
+  const result = await source.check({
+    token: admission.bearerToken,
+    requestId: admission.context.requestId,
+    signal,
+    tenantId: admission.context.identity.namespace,
+    subjectId: admission.context.identity.userId,
+    action,
+  })
+  signal.throwIfAborted()
+  return result
+}
+export function mcpActionForRequest(method: string, path: string[]): import("./mcp-authorization.types.js").McpAuthorizationInput["action"] | null {
+  if (path[0] !== "mcp" && !(path[0] === "self" && path[1] === "mcp")) return null
+  return method === "GET" ? "read" : "manage"
+}

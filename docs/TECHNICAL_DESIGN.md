@@ -1,3 +1,13 @@
+## R357-H1 当前人类 MCP 准入（2026-10-09）
+
+本切片归 BFF auth 与既有 MCP projection；IAM 唯一拥有身份/成员权限。只消费正式 IAM 55befe5092f96d617088549df3166e1d381e6b1c / 0.11.0 / SHA47011671cf2c3631c5ff914db4b40a8a9f9cdecc9b2b6fcd13a359a45b0882d3。
+既有 bounded session transport 承接 /internal/v1/authorization/check；两个普通 auth 文件分别定义类型与 HTTP 编排，不新建模块/框架、不复制 Skills 预算。mcp_personal read/manage 必须是当前人类 current_membership，匹配已验证 tenant/subject；workload client_scope 不授浏览器管理权。
+普通 session → MCP action checker → 已有两 projection 共用入口起始的 monotonic 10s 预算与取消；false=403，invalid=401，rate=429，依赖/身份/协议错配=503。no-store、closed envelope、request-id 严格校验，取消/到期后的迟到响应不得成功。
+现四个 self MCP GET 尚无正式 owner adapter，授权后仍503；未实现非GET仍503且无 owner 副作用。不得消费 Platform 候选 wire，真实目录/详情/CRUD/授权/执行/admin、正常scope与登录激活仍OPEN。
+旧15个 IAM generated operations / Team / Skills 协议保留；唯一 vendor 正规替换及生成，不并存旧pin。生产无mock，显式测试 composition seam 只用于隔离行为验证。
+
+<!-- R357-MCP-H1-END; original suffix retained -->
+
 ## R356 普通 Skills 生命周期 Public11 预激活纠正（2026-10-09）
 
 唯一当前契约为 Public11.0.0，同 `/v1`、132 operations。普通 CreateVersion 只接 strict metadata，不接收或转发 expected_state_version；Platform 在事务内核当前主体/owner与 active/disabled base，分配新 revision 并创建独立 draft/stateVersion=1，不改 base。普通 Withdraw 实际修改原 Skill，严格要求当前 expected_state_version；原 key/body、digest、receipt、current IAM、取消与绝对预算保持。Admin version、Publish 及其他真实 CAS 不变。

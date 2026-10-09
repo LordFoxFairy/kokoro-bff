@@ -1,3 +1,4 @@
+import { McpAuthorizationClient } from "../auth/mcp-authorization.client.js"
 import { SkillAuthorizationClient } from "../auth/skill-authorization.client.js"
 import { SkillProductConnectClient } from "../infrastructure/clients/platform/skill-product-connect.js"
 import { SkillAdminConnectClient } from "../infrastructure/clients/platform/skill-admin-connect.js"
@@ -55,6 +56,7 @@ export type BffRouteInput = {
 export type BffRouteHandler = (input: BffRouteInput) => Promise<boolean | void>
 
 export type BffServerComposition = {
+  mcpAuthorization: Pick<McpAuthorizationClient, "check">
   skillAuthorization: Pick<SkillAuthorizationClient, "check">
   skillProductClient: SkillProductConnectClient | null
   skillAdminClient: SkillAdminConnectClient | null
@@ -82,6 +84,7 @@ export type BffServerComposition = {
 }
 
 export type BffCompositionOptions = {
+  mcpAuthorization?: Pick<McpAuthorizationClient, "check">
   skillAuthorization?: Pick<SkillAuthorizationClient, "check">
   skillProductClient?: SkillProductConnectClient | null
   skillAdminClient?: SkillAdminConnectClient | null
@@ -133,6 +136,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
       timeoutMs: config.upstreamTimeoutMs,
       maxResponseBytes: config.upstreamMaxResponseBytes,
     })
+  const mcpAuthorization = options.mcpAuthorization ?? new McpAuthorizationClient({ baseUrl: config.iamBaseUrl, timeoutMs: 5000, maxResponseBytes: 65_536 })
   const skillAuthorization =
     options.skillAuthorization ?? new SkillAuthorizationClient({ baseUrl: config.iamBaseUrl, timeoutMs: 5000, maxResponseBytes: 65_536 })
   const skillProductClient =
@@ -317,6 +321,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
   }
   return {
     skillDraftClient,
+    mcpAuthorization,
     skillAuthorization,
     skillProductClient,
     skillAdminClient,

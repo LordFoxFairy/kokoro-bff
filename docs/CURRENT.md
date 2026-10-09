@@ -1,3 +1,12 @@
+## R357-H1 人类 MCP 准入源码切片（2026-10-09）
+
+当前 IAM 消费唯一固定55befe5092f96d617088549df3166e1d381e6b1c / 0.11.0（artifact SHA47011671cf2c3631c5ff914db4b40a8a9f9cdecc9b2b6fcd13a359a45b0882d3），正规生成新增 checkAuthorization，原15 consumer operations及完整共用schemas保全。现MCP read/manage每次在可信session后检查mcp_personal/current_membership；tenant/subject/request-id/no-store/closed响应不匹配拒503，false403、失效401、rate429，复用现session_forbidden/session_rate_limited public错误码。
+预算从同入口monotonic10s经过session/permission与已有两projection，不在owner阶段重置；取消/到期/迟到不成功。四self MCP GET与非GET尚无正式业务adapter，保持503、无owner副作用；没有读取Platform候选或新增public/SQL契约。
+研发证据：实际HTTP失败基线（缺人类检查、self读错误404）、deadline迟到响应失败基线均保留；新checker真实本地HTTP与完整session→action、取消/总预算、旧Team/Skills/鉴权回归由当前源码命令验证，最终数字见Root冻结收据。辅助门不代表正常激活、真实CRUD/授权执行/admin或浏览器完成。
+Root独占正常scope/登录/服务、资源、独审、重跑与Git提交；本片未正常激活，连接器完整用户路径仍OPEN。
+
+<!-- R357-MCP-H1-EVIDENCE-END; original suffix retained -->
+
 ## R356 普通 Skills 生命周期 Public11 预激活纠正（2026-10-09）
 
 唯一当前契约为 Public11.0.0，同 `/v1`、132 operations。普通 CreateVersion 只接 strict metadata，不接收或转发 expected_state_version；Platform 在事务内核当前主体/owner与 active/disabled base，分配新 revision 并创建独立 draft/stateVersion=1，不改 base。普通 Withdraw 实际修改原 Skill，严格要求当前 expected_state_version；原 key/body、digest、receipt、current IAM、取消与绝对预算保持。Admin version、Publish 及其他真实 CAS 不变。

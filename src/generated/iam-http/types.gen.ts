@@ -1608,6 +1608,93 @@ export type ResolveTenantPublisherProfilesResponses = {
 
 export type ResolveTenantPublisherProfilesResponse = ResolveTenantPublisherProfilesResponses[keyof ResolveTenantPublisherProfilesResponses]
 
+export type CheckAuthorizationData = {
+  body:
+    | {
+        resource: "tenant"
+        action: "read"
+      }
+    | {
+        resource: "audit"
+        action: "read"
+      }
+    | {
+        resource: "mcp_personal"
+        action: "read" | "manage"
+      }
+    | {
+        resource: "mcp_admin"
+        action: "read" | "revoke"
+      }
+    | {
+        resource: "mcp_catalog"
+        action: "manage"
+      }
+  headers?: {
+    /**
+     * Caller correlation identifier. Missing or invalid values are replaced by the service.
+     */
+    "x-request-id"?: string
+  }
+  path?: never
+  query?: never
+  url: "/internal/v1/authorization/check"
+}
+
+export type CheckAuthorizationErrors = {
+  /**
+   * Stable internal API error envelope.
+   */
+  400: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  401: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  403: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  404: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  409: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  413: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  429: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  500: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  503: ApiErrorResponse
+}
+
+export type CheckAuthorizationError = CheckAuthorizationErrors[keyof CheckAuthorizationErrors]
+
+export type CheckAuthorizationResponses = {
+  200: {
+    data: {
+      allowed: boolean
+      tenant_id: string
+      subject_id: string
+      decision_source: "current_membership" | "client_scope"
+    }
+  }
+}
+
+export type CheckAuthorizationResponse = CheckAuthorizationResponses[keyof CheckAuthorizationResponses]
+
 export type VerifySessionAuthorizationData = {
   body?: never
   headers?: {

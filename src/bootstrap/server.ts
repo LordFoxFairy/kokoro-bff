@@ -1,3 +1,4 @@
+import { startMcpRequestBudget, mcpRequestRemaining } from "../http/mcp-request-budget.js"
 import { skillGithubImportRoute, skillGithubPreviewRoute } from "../http/routes/skill-github-import.js"
 import { assertSkillWireKnown } from "../infrastructure/clients/platform/skill-product-response.js"
 import { projectSkillPackageInspectionResponse } from "../infrastructure/clients/platform/skill-package-inspection-response.js"
@@ -22,7 +23,14 @@ import { projectResourceRoute } from "../http/routes/project-resource.js"
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http"
 
 import { loadConfig, type BffConfig } from "../config/runtime.js"
-import { authorizeUserRequest, authorizeSkillAction, skillActionForRequest, withSkillActionAdmission } from "../auth/user-admission.js"
+import {
+  authorizeUserRequest,
+  authorizeMcpAction,
+  mcpActionForRequest,
+  authorizeSkillAction,
+  skillActionForRequest,
+  withSkillActionAdmission,
+} from "../auth/user-admission.js"
 import { failure, ok } from "../contracts/index.js"
 import { mutationTicket, type MutationTicket } from "../application/idempotency.js"
 import {
@@ -208,6 +216,13 @@ async function handle(
     (businessPath[0] === "admin" && businessPath[1] === "skills") ||
     (businessPath[0] === "self" && businessPath[1] === "skills")
   if (hasSkillsBudget) startSkillRequestBudget(request)
+  const mcpAction = mcpActionForRequest(request.method ?? "GET", businessPath)
+  const hasMcpBudget = mcpAction !== null
+  if (hasMcpBudget) {
+    startMcpRequestBudget(request)
+    response.setHeader("cache-control", "no-store")
+    response.setHeader("x-request-id", id)
+  }
   const isSkillPackageInspection =
     isRawSkillPackageInspection &&
     ((businessPath.length === 4 && businessPath[0] === "self" && businessPath[1] === "skills" && businessPath[3] === "package") ||
@@ -293,7 +308,7 @@ async function handle(
   const admissionAbort = new AbortController()
   const admissionTimer = setTimeout(
     () => admissionAbort.abort(new Error("skill_admission_deadline")),
-    hasSkillsBudget ? skillRequestRemaining(request) : 10_000,
+    hasMcpBudget ? mcpRequestRemaining(request) : hasSkillsBudget ? skillRequestRemaining(request) : 10_000,
   )
   const onRequestAborted = (): void => {
     admissionAbort.abort()
@@ -306,6 +321,13 @@ async function handle(
   const admissionWork = Promise.resolve()
     .then(() => authorizeUserRequest(request, config, composition.sessionAdmission, id, admissionAbort.signal))
     .then(async (result) => {
+      if (result.ok && mcpAction !== null) {
+        admissionAbort.signal.throwIfAborted()
+        if (mcpRequestRemaining(request) <= 0) throw new Error("mcp_admission_deadline")
+        const checked = await authorizeMcpAction(composition.mcpAuthorization, result, mcpAction, admissionAbort.signal)
+        if (mcpRequestRemaining(request) <= 0) throw new Error("mcp_admission_deadline")
+        if (!checked.ok) return { ...checked, retryAfter: undefined }
+      }
       const action = skillActionForRequest(request.method ?? "GET", businessPath)
       if (!result.ok || action === null) return result
       const checked = await authorizeSkillAction(composition.skillAuthorization, result, action, admissionAbort.signal)
@@ -333,6 +355,7 @@ async function handle(
     if (!response.destroyed) {
       response.setHeader("x-request-id", id)
       if (
+        hasMcpBudget ||
         hasSkillsBudget ||
         request.url === "/v1/skills/drafts" ||
         isSkillPackagePath ||
@@ -362,6 +385,22 @@ async function handle(
         )
       } else send(response, admission.status, failure(admission.code, "BFF user admission failed", id), admission.retryAfter)
     }
+    return
+  }
+  if (hasMcpBudget && (admissionAbort.signal.aborted || mcpRequestRemaining(request) <= 0)) {
+    if (!response.destroyed && !response.writableEnded)
+      send(response, 503, {
+        error: {
+          code: "iam_admission_unavailable",
+          message: "BFF user admission failed",
+          retryable: true,
+        },
+      })
+    return
+  }
+  if (hasMcpBudget && (request.method !== "GET" || businessPath[0] === "self")) {
+    if (!response.destroyed && !response.writableEnded)
+      send(response, 503, failure("platform_operation_not_available", "This Platform operation is not exposed by the BFF owner adapter", id))
     return
   }
   const context = admission.context

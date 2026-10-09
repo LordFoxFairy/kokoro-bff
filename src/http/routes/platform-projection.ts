@@ -1,3 +1,4 @@
+import { mcpRequestRemaining } from "../mcp-request-budget.js"
 import { skillRequestRemaining } from "./skill-drafts.js"
 import { IamPublisherProfileClient } from "../../infrastructure/clients/iam-publisher-profile.js"
 import type { IncomingMessage, ServerResponse } from "node:http"
@@ -120,9 +121,10 @@ export async function livePlatformProjectionRead(
   response.once("close", abort)
   const timer = setTimeout(
     () => controller.abort(new Error("skill_read_deadline")),
-    operation === "mcp" || operation === "mcpConnections" ? 10_000 : skillRequestRemaining(request),
+    operation === "mcp" || operation === "mcpConnections" ? mcpRequestRemaining(request) : skillRequestRemaining(request),
   )
   try {
+    if ((operation === "mcp" || operation === "mcpConnections") && mcpRequestRemaining(request) <= 0) throw new Error("mcp_read_deadline")
     const result = await client.read(
       operation,
       context.identity.namespace,
@@ -131,7 +133,16 @@ export async function livePlatformProjectionRead(
       { query, ...(skillId === undefined ? {} : { skillId }) },
       controller.signal,
     )
-    if (controller.signal.aborted || response.destroyed || response.writableEnded) return true
+    if (
+      controller.signal.aborted ||
+      response.destroyed ||
+      response.writableEnded ||
+      ((operation === "mcp" || operation === "mcpConnections") && mcpRequestRemaining(request) <= 0)
+    ) {
+      if ((operation === "mcp" || operation === "mcpConnections") && !request.aborted && !response.destroyed && !response.writableEnded)
+        strictError(response, 503, dependencyCode, dependencyMessage, true)
+      return true
+    }
     if (result.ok) {
       const token = /^Bearer ([^\s,]+)$/iu.exec(request.headers.authorization ?? "")?.[1]
       const data =

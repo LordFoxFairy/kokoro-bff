@@ -479,6 +479,45 @@ export const zResolveTenantPublisherProfilesResponse = z.object({
   }),
 })
 
+export const zCheckAuthorizationBody = z.union([
+  z.object({
+    resource: z.enum(["tenant"]),
+    action: z.enum(["read"]),
+  }),
+  z.object({
+    resource: z.enum(["audit"]),
+    action: z.enum(["read"]),
+  }),
+  z.object({
+    resource: z.enum(["mcp_personal"]),
+    action: z.enum(["read", "manage"]),
+  }),
+  z.object({
+    resource: z.enum(["mcp_admin"]),
+    action: z.enum(["read", "revoke"]),
+  }),
+  z.object({
+    resource: z.enum(["mcp_catalog"]),
+    action: z.enum(["manage"]),
+  }),
+])
+
+export const zCheckAuthorizationHeaders = z.object({
+  "x-request-id": z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{1,128}$/)
+    .optional(),
+})
+
+export const zCheckAuthorizationResponse = z.object({
+  data: z.object({
+    allowed: z.boolean(),
+    tenant_id: z.string().min(1),
+    subject_id: z.string().min(1),
+    decision_source: z.enum(["current_membership", "client_scope"]),
+  }),
+})
+
 export const zVerifySessionAuthorizationHeaders = z.object({
   "x-request-id": z
     .string()

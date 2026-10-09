@@ -1,3 +1,15 @@
+## R357-H1 当前人类 MCP 准入（2026-10-09）
+
+本切片归 BFF auth 与既有 MCP projection；IAM 唯一拥有身份/成员权限。只消费正式 IAM 55befe5092f96d617088549df3166e1d381e6b1c / 0.11.0 / SHA47011671cf2c3631c5ff914db4b40a8a9f9cdecc9b2b6fcd13a359a45b0882d3。
+既有 bounded session transport 承接 /internal/v1/authorization/check；两个普通 auth 文件分别定义类型与 HTTP 编排，不新建模块/框架、不复制 Skills 预算。mcp_personal read/manage 必须是当前人类 current_membership，匹配已验证 tenant/subject；workload client_scope 不授浏览器管理权。
+普通 session → MCP action checker → 已有两 projection 共用入口起始的 monotonic 10s 预算与取消；false=403，invalid=401，rate=429，依赖/身份/协议错配=503。no-store、closed envelope、request-id 严格校验，取消/到期后的迟到响应不得成功。
+现四个 self MCP GET 尚无正式 owner adapter，授权后仍503；未实现非GET仍503且无 owner 副作用。不得消费 Platform 候选 wire，真实目录/详情/CRUD/授权/执行/admin、正常scope与登录激活仍OPEN。
+旧15个 IAM generated operations / Team / Skills 协议保留；唯一 vendor 正规替换及生成，不并存旧pin。生产无mock，显式测试 composition seam 只用于隔离行为验证。
+
+<!-- R357-MCP-H1-END; original suffix retained -->
+
+DATA_MODEL：本片无SQL/表/Schema/持久化事实，MCP request deadline只用请求生命周期WeakMap；IAM决定不缓存。
+
 ## R353-B2 当前源码候选（2026-10-08；待Root冻源审查/真实配对）
 
 唯一 BFF writer 为 bff_skills_product_source_r353；工作树 HEAD d2695c47bca64a8e83168aa259e2366f7cee3ea8。当前唯一 Platform固定fa185ed2b25c3e81946cfdcd12d7665d02b8bad3、Product1.2/HTTP5.2/63RPC/32commands/24proofs、完整81正式publication；aggregate ce7708d7e2a15d7e3a77b7b9ea45905ab3fbe90093e343d0be9b3140ca03e2d6、descriptor 453f275b6e95052437072c3f52bbe74675271400526680003569b6bd09196fb1、HTTP 6d4abae68cd5cc6e2d8676ac34a48f7ea3564196ec6215ea1531b3cfedd3c3d7。HTTP直接读同Platform vendor/openapi；原701候选72副本移除，无双pin。IAM7c62e759760448e127b21200f87adeefdc6016f7/0.10、Storage d13f33a/v3继续原正规固定生成；不升级其它owner。

@@ -691,3 +691,60 @@ test("GET /v1/me rejects malformed administrator snapshots and never substitutes
   }
   assert.equal(calls, payloads.length)
 })
+
+test("R357 MCP action admission forwards only trusted human tenant/subject and keeps other surfaces separate", async () => {
+  const { authorizeMcpAction, mcpActionForRequest } = await import("../dist/auth/user-admission.js")
+  const controller = new AbortController()
+  const admitted = {
+    ok: true as const,
+    context: { requestId: "mcp-current", identity: { namespace: "tenant-server", userId: "human-one" }, platformAdmin: false },
+    bearerToken: "human-bearer",
+  }
+  let captured: unknown
+  const result = await authorizeMcpAction(
+    {
+      check: async (input) => {
+        captured = input
+        return { ok: true }
+      },
+    },
+    admitted,
+    "manage",
+    controller.signal,
+  )
+  assert.deepEqual(result, { ok: true })
+  assert.deepEqual(captured, {
+    token: "human-bearer",
+    requestId: "mcp-current",
+    signal: controller.signal,
+    tenantId: "tenant-server",
+    subjectId: "human-one",
+    action: "manage",
+  })
+  assert.equal(mcpActionForRequest("GET", ["self", "mcp", "connectors"]), "read")
+  assert.equal(mcpActionForRequest("GET", ["mcp", "connections"]), "read")
+  assert.equal(mcpActionForRequest("POST", ["self", "mcp", "connectors"]), "manage")
+  for (const path of [["skills"], ["team"], ["admin", "skills"], ["runtime"]]) assert.equal(mcpActionForRequest("POST", path), null)
+})
+test("R357 MCP action cancellation after a late human permission never returns admission success", async () => {
+  const { authorizeMcpAction } = await import("../dist/auth/user-admission.js")
+  const controller = new AbortController()
+  const admitted = {
+    ok: true as const,
+    context: { requestId: "mcp-current", identity: { namespace: "tenant-server", userId: "human-one" }, platformAdmin: false },
+    bearerToken: "human-bearer",
+  }
+  await assert.rejects(
+    authorizeMcpAction(
+      {
+        check: async () => {
+          controller.abort()
+          return { ok: true }
+        },
+      },
+      admitted,
+      "read",
+      controller.signal,
+    ),
+  )
+})

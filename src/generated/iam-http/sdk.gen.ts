@@ -9,6 +9,9 @@ import type {
   CancelTenantInvitationData,
   CancelTenantInvitationErrors,
   CancelTenantInvitationResponses,
+  CheckAuthorizationData,
+  CheckAuthorizationErrors,
+  CheckAuthorizationResponses,
   CheckTenantSkillAuthorizationData,
   CheckTenantSkillAuthorizationErrors,
   CheckTenantSkillAuthorizationResponses,
@@ -52,6 +55,7 @@ import type {
 import {
   zAcceptTenantInvitationResponse,
   zCancelTenantInvitationResponse,
+  zCheckAuthorizationResponse,
   zCheckTenantSkillAuthorizationResponse,
   zCreateTenantInvitationResponse,
   zGetTenantInvitationContextResponse,
@@ -217,6 +221,20 @@ export const resolveTenantPublisherProfiles = <ThrowOnError extends boolean = fa
     responseValidator: async (data) => await zResolveTenantPublisherProfilesResponse.parseAsync(data),
     security: [{ scheme: "bearer", type: "http" }],
     url: "/internal/v1/tenants/{tenant_id}/publisher-profiles/resolve",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  })
+
+export const checkAuthorization = <ThrowOnError extends boolean = false>(
+  options: Options<CheckAuthorizationData, ThrowOnError>,
+): RequestResult<CheckAuthorizationResponses, CheckAuthorizationErrors, ThrowOnError> =>
+  (options.client ?? client).post<CheckAuthorizationResponses, CheckAuthorizationErrors, ThrowOnError>({
+    responseValidator: async (data) => await zCheckAuthorizationResponse.parseAsync(data),
+    security: [{ scheme: "bearer", type: "http" }],
+    url: "/internal/v1/authorization/check",
     ...options,
     headers: {
       "Content-Type": "application/json",

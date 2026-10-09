@@ -1,3 +1,4 @@
+import { startMcpRequestBudget } from "../dist/http/mcp-request-budget.js"
 import assert from "node:assert/strict"
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { createServer, request as httpRequest } from "node:http"
@@ -10,7 +11,7 @@ import { livePlatformProjectionRead } from "../dist/http/routes/platform-project
 import { createBffServer } from "../dist/bootstrap/server.js"
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 
-async function fixture(owner) {
+async function fixture(owner, { deadlineMs, entryDelayMs = 0 } = {}) {
   const dir = await mkdtemp(path.join(os.tmpdir(), "bff-projection-route-"))
   const credentialFile = path.join(dir, "projection.json")
   await writeFile(
@@ -42,7 +43,9 @@ async function fixture(owner) {
   }
   const config = { platformProjection: { baseUrl: "http://platform.test", credentialFile, timeoutMs: 1000 }, iamBaseUrl: "http://iam.test" }
   const context = { requestId: "route-request", identity: { namespace: "tenant", userId: "person" } }
-  const server = createServer((request, response) => {
+  const server = createServer(async (request, response) => {
+    if (deadlineMs !== undefined) startMcpRequestBudget(request, deadlineMs)
+    if (entryDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, entryDelayMs))
     const segments = new URL(request.url, "http://bff.test").pathname.split("/").filter(Boolean).slice(1)
     void livePlatformProjectionRead(request, response, config, context, segments).then((handled) => {
       if (!handled) response.writeHead(404).end()
@@ -871,6 +874,26 @@ test("R266 managed caller abort reaches held admission and a late legal admissio
     removeAbortListener()
     controller.abort()
     releaseAdmission?.({ ok: false, status: 503, code: "iam_admission_unavailable" })
+    await app.close()
+  }
+})
+
+test("R357 MCP owner projection uses only entrance remaining budget and never commits a late success", async () => {
+  const app = await fixture(
+    async () => {
+      await new Promise((resolve) => setTimeout(resolve, 60))
+      return new Response(JSON.stringify({ data: { connections: [] } }), {
+        headers: ownerHeaders,
+      })
+    },
+    { deadlineMs: 40, entryDelayMs: 20 },
+  )
+  try {
+    const response = await app.get("/v1/mcp/connections", {}, AbortSignal.timeout(500))
+    assert.equal(response.status, 503)
+    assert.equal(response.body.error.code, "mcp_connection_dependency_unavailable")
+    assert.ok(app.ownerCalls <= 1)
+  } finally {
     await app.close()
   }
 })
