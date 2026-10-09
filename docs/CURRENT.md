@@ -1,3 +1,11 @@
+## R356 普通 Skills 生命周期 Public11 预激活纠正（2026-10-09）
+
+唯一当前契约为 Public11.0.0，同 `/v1`、132 operations。普通 CreateVersion 只接 strict metadata，不接收或转发 expected_state_version；Platform 在事务内核当前主体/owner与 active/disabled base，分配新 revision 并创建独立 draft/stateVersion=1，不改 base。普通 Withdraw 实际修改原 Skill，严格要求当前 expected_state_version；原 key/body、digest、receipt、current IAM、取消与绝对预算保持。Admin version、Publish 及其他真实 CAS 不变。
+
+Root 将未正常激活的 beta 以唯一 corrective major 修正；首次公开激活后的 breaking 策略保持。当前机器只改这两个普通输入与 version，先精确逆回完整 Public10.0.0 SHA2f98f529bda413912b5c15e6de45db7cdadf0e0bc51fd5de44818db9727efbb8，再运行全部原 Public9.0.1/8.10 历史门。无 owner 契约、表、Schema、依赖或新框架；DATA_MODEL/canonical schema 原字节保持。消费者等待 Root 正式提交再固定生成；源码验证不代表真实组合、正常激活或 Skills 页面完成。
+
+<!-- R356-LIFECYCLE-PUBLIC11-END -->
+
 ## R356 Publish Public10.0.0 预激活输入修正（2026-10-09；待Root正式集成）
 
 Root裁决首次正常对外激活前 beta corrective major，同 `/v1`、132 operations；仅 Publish 从旧零body错误候选改 required闭集 JSON audience/expected_state_version。原当前用户/tenant准入、PERSONAL visibility、固定key/body/digest/CAS、response/cache/requestID、取消及owner错误保持；无空bodyfallback、无新持久事实或owner生成/Schema/依赖。后续正式公开breaking策略保持，消费者等待本片Root正式commit后正规固定生成。

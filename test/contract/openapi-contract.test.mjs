@@ -29,7 +29,7 @@ const SAFE_FAILURE_CODES = [
 async function readContract() {
   const [openapi, baselineDocument] = await Promise.all([readFile(openapiUrl, "utf8"), readFile(baselineUrl, "utf8")])
   const baseline = JSON.parse(baselineDocument).operations
-  assert.deepEqual(inspectSkillProductContract(openapi, baseline), [], "Current Public10 must pass before historical parent mutation proof")
+  assert.deepEqual(inspectSkillProductContract(openapi, baseline), [], "Current Public11 must pass before historical parent mutation proof")
   return { openapi: stripSkillProductSource(openapi), baseline: skillProductParentBaseline(openapi) }
 }
 
@@ -2998,7 +2998,7 @@ test("Public10 rejects new operation removal, current closed schema widening and
       "    SkillUsageResponse:\n      type: object\n      additionalProperties: false",
       "    SkillUsageResponse:\n      type: object\n      additionalProperties: true",
     ),
-    raw.replace("  version: 10.0.0", "  version: 8.10.0"),
+    raw.replace("  version: 11.0.0", "  version: 8.10.0"),
     raw.replace("title: Kokoro Business API", "title: Altered Business API"),
   ]) {
     assert.notEqual(changed, raw)
@@ -3026,4 +3026,38 @@ test("Public10 Publish requires exact audience/CAS JSON and preserves the full P
     assert.notDeepEqual(inspectSkillProductContract(changed), [])
   }
   assert.equal(parseOpenApiOperations(raw).length, 132)
+})
+
+test("Public11 ordinary lifecycle uses metadata-only CreateVersion and required Withdraw CAS with exact Public10 parent", async () => {
+  const raw = await readFile(openapiUrl, "utf8")
+  const { createRequire } = await import("node:module")
+  const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
+  const document = load(raw)
+  assert.equal(document.info.version, "11.0.0")
+  const schemas = document.components.schemas
+  assert.equal(schemas.CreatePersonalSkillVersionRequest.additionalProperties, false)
+  assert.deepEqual(Object.keys(schemas.CreatePersonalSkillVersionRequest.properties), ["example_prompts", "display_name", "summary", "tags", "category_keys"])
+  assert.deepEqual(schemas.WithdrawPersonalSkillRequest.required, ["reason", "expected_state_version"])
+  assert.equal(schemas.WithdrawPersonalSkillRequest.additionalProperties, false)
+  assert.equal(schemas.WithdrawPersonalSkillRequest.properties.expected_state_version.type, "string")
+  assert.deepEqual(inspectSkillProductContract(raw), [])
+  const createStart = raw.indexOf("    CreatePersonalSkillVersionRequest:\n")
+  const createEnd = raw.indexOf("    CreatePersonalSkillVersionResource:\n", createStart)
+  const withdrawStart = raw.indexOf("    WithdrawPersonalSkillRequest:\n")
+  const withdrawEnd = raw.indexOf("    WithdrawPersonalSkillResource:\n", withdrawStart)
+  const create = raw.slice(createStart, createEnd),
+    withdraw = raw.slice(withdrawStart, withdrawEnd)
+  for (const changed of [
+    raw.replace(create, create.replace("      properties:", "      properties:\n        expected_state_version: { type: string }")),
+    raw.replace(create, create.replace("additionalProperties: false", "additionalProperties: true")),
+    raw.replace(withdraw, withdraw.replace("        - expected_state_version\n", "")),
+    raw.replace(withdraw, withdraw.replace("type: string", "type: [string, 'null']")),
+    raw.replace("  version: 11.0.0", "  version: 10.0.0"),
+    raw.replace("title: Kokoro Business API", "title: Changed Business API"),
+  ]) {
+    assert.notEqual(changed, raw)
+    assert.notDeepEqual(inspectSkillProductContract(changed), [])
+  }
+  assert.equal(parseOpenApiOperations(raw).length, 132)
+  assert.equal(createHash("sha256").update(stripSkillProductSource(raw)).digest("hex"), "640f47f9c70341aa49934eec319a4dcc5bab76bba83e4407d6a9e0c3ab0ac389")
 })

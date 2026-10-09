@@ -112,7 +112,7 @@ export async function withdrawPersonalSkillRoute(
       fq_method: "kokoro.platform.v1.SkillCatalogService/WithdrawSkill",
       tenant_ref: scope.context.identity.namespace,
       request: {
-        ...(input.expectedStateVersion === undefined ? {} : { expected_state_version: input.expectedStateVersion }),
+        expected_state_version: input.expectedStateVersion,
         source_ref: { value: `skill:${skillId}` },
         reason: input.reason,
         product_context: {
@@ -132,7 +132,7 @@ export async function withdrawPersonalSkillRoute(
           user: scope.context.identity.userId,
           skillId,
           reason: input.reason,
-          ...(input.expectedStateVersion === undefined ? {} : { expectedStateVersion: input.expectedStateVersion }),
+          expectedStateVersion: input.expectedStateVersion,
         },
         scope.signal,
         scope.deadlineAt,

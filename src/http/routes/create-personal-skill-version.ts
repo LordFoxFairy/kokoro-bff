@@ -113,7 +113,6 @@ export async function createPersonalSkillVersionRoute(
       fq_method: "kokoro.platform.v1.SkillCatalogService/CreateSkillVersion",
       tenant_ref: scope.context.identity.namespace,
       request: {
-        ...(input.expectedStateVersion === undefined ? {} : { expected_state_version: input.expectedStateVersion }),
         owner_scope: { kind: "user", id: scope.context.identity.userId },
         base_skill_id: { value: skillId },
         metadata: {

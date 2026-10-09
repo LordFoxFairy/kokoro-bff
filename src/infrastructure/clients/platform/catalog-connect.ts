@@ -150,7 +150,12 @@ export class CatalogConnectClient {
   ) {
     return this.#call("publishSkill", input, { skill_id: { value: input.skillId }, visibility: 1, audience: input.audience }, signal, deadlineAt)
   }
-  createPersonalVersion(input: Context & Metadata & { baseSkillId: string }, signal: AbortSignal, deadlineAt: number) {
+  createPersonalVersion(
+    input: Omit<Context, "expectedStateVersion"> & Metadata & { baseSkillId: string; expectedStateVersion?: never },
+    signal: AbortSignal,
+    deadlineAt: number,
+  ) {
+    if (Object.hasOwn(input, "expectedStateVersion")) throw new Error("invalid_skill_request")
     return this.#call(
       "createSkillVersion",
       input,
@@ -159,7 +164,7 @@ export class CatalogConnectClient {
       deadlineAt,
     )
   }
-  withdrawPersonal(input: Context & { skillId: string; reason: string }, signal: AbortSignal, deadlineAt: number) {
+  withdrawPersonal(input: Context & { skillId: string; reason: string; expectedStateVersion: string }, signal: AbortSignal, deadlineAt: number) {
     return this.#call("withdrawSkill", input, { source_ref: { value: `skill:${input.skillId}` }, reason: input.reason }, signal, deadlineAt)
   }
 }

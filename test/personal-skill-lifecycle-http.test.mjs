@@ -145,7 +145,7 @@ test("personal Skill lifecycle legal Withdraw reaches the admitted owner and bin
       },
     },
     async (origin) => {
-      const response = await post(origin, "/v1/self/skills/skill-base/withdraw", { reason: "Superseded by a safer revision" })
+      const response = await post(origin, "/v1/self/skills/skill-base/withdraw", { expected_state_version: "8", reason: "Superseded by a safer revision" })
       assert.equal(response.status, 200)
       const requestId = response.headers.get("x-request-id")
       assert.ok(requestId)
@@ -167,6 +167,7 @@ test("personal Skill lifecycle legal Withdraw reaches the admitted owner and bin
   assert.equal(calls[0].user, "user-personal")
   assert.equal(calls[0].skillId, "skill-base")
   assert.equal(calls[0].reason, "Superseded by a safer revision")
+  assert.equal(calls[0].expectedStateVersion, "8")
   assert.match(calls[0].commandId, /^bff\.skill\.withdraw\.v1\.[a-f0-9]{64}$/u)
   assert.match(calls[0].digest, /^[a-f0-9]{64}$/u)
 })
@@ -197,22 +198,23 @@ test("personal Skill lifecycle closes raw input, framing, key, UTF-8 and reason 
         tags: [],
         tenant: "other",
       }),
-      post(origin, "/v1/self/skills/skill-base/withdraw", { reason: "\n\t" }),
+      post(origin, "/v1/self/skills/skill-base/withdraw", { expected_state_version: "8", reason: "\n\t" }),
       post(origin, "/v1/self/skills/skill-base/withdraw", {
+        expected_state_version: "8",
         reason: "😀".repeat(2049),
       }),
-      post(origin, "/v1/self/skills/skill-base/withdraw", { reason: "valid" }, { "idempotency-key": "" }),
-      post(origin, "/v1/self/skills/skill-base/withdraw", { reason: "valid" }, { "content-type": "text/plain" }),
+      post(origin, "/v1/self/skills/skill-base/withdraw", { expected_state_version: "8", reason: "valid" }, { "idempotency-key": "" }),
+      post(origin, "/v1/self/skills/skill-base/withdraw", { expected_state_version: "8", reason: "valid" }, { "content-type": "text/plain" }),
     ]
     for (const pending of invalid) {
       const response = await pending
       assert.equal(response.status, 400)
       assert.equal(Object.hasOwn(await response.json(), "meta"), true)
     }
-    const validCodePoints = await post(origin, "/v1/self/skills/skill-base/withdraw", { reason: "😀".repeat(2048) })
+    const validCodePoints = await post(origin, "/v1/self/skills/skill-base/withdraw", { expected_state_version: "8", reason: "😀".repeat(2048) })
     assert.equal(validCodePoints.status, 200)
     await new Promise((resolve, reject) => {
-      const rawBody = '{"reason":"valid"}'
+      const rawBody = '{"expected_state_version":"8","reason":"valid"}'
       const request = httpRequest(
         origin + "/v1/self/skills/skill-base/withdraw",
         {
@@ -278,7 +280,7 @@ test("personal Skill lifecycle rejects invalid owner projections and maps only t
   ]
   for (const owner of invalidWithdrawals) {
     await withServer({ withdrawPersonal: async () => owner }, async (origin) => {
-      const response = await post(origin, "/v1/self/skills/skill-base/withdraw", { reason: "valid" })
+      const response = await post(origin, "/v1/self/skills/skill-base/withdraw", { expected_state_version: "8", reason: "valid" })
       assert.equal(response.status, 502)
       assert.equal((await response.json()).error.code, "skill_response_invalid")
     })
@@ -302,7 +304,7 @@ test("personal Skill lifecycle rejects invalid owner projections and maps only t
         },
       },
       async (origin) => {
-        const response = await post(origin, "/v1/self/skills/skill-base/withdraw", { reason: "valid" })
+        const response = await post(origin, "/v1/self/skills/skill-base/withdraw", { expected_state_version: "8", reason: "valid" })
         assert.equal(response.status, status)
         const body = await response.json()
         assert.equal(body.error.code, expected)
@@ -324,7 +326,7 @@ test("personal Skill Withdraw rejects a NUL reason with the strict public error 
       },
     },
     async (origin) => {
-      const response = await post(origin, "/v1/self/skills/skill-base/withdraw", { reason: "not\u0000allowed" })
+      const response = await post(origin, "/v1/self/skills/skill-base/withdraw", { expected_state_version: "8", reason: "not\u0000allowed" })
       assert.equal(response.status, 400)
       assert.equal(response.headers.get("cache-control"), "no-store")
       const requestId = response.headers.get("x-request-id")
@@ -373,7 +375,7 @@ test("personal Skill lifecycle closes synchronous and asynchronous admission fai
         response = await fetch(`http://127.0.0.1:${server.address().port}/v1/self/skills/skill-base/withdraw`, {
           method: "POST",
           headers: baseHeaders,
-          body: JSON.stringify({ reason: "valid" }),
+          body: JSON.stringify({ expected_state_version: "8", reason: "valid" }),
           signal: AbortSignal.timeout(1500),
         })
       } catch (error) {
@@ -416,7 +418,7 @@ test("personal Skill lifecycle accepts only bounded admission Retry-After values
         },
       },
       async (origin) => {
-        const response = await post(origin, "/v1/self/skills/skill-base/withdraw", { reason: "valid" })
+        const response = await post(origin, "/v1/self/skills/skill-base/withdraw", { expected_state_version: "8", reason: "valid" })
         assert.equal(response.status, status, String(retryAfter))
         assert.equal(response.headers.get("cache-control"), "no-store")
         assert.equal(response.headers.get("retry-after"), status === 429 ? retryAfter : null)
@@ -474,7 +476,7 @@ test("personal Skill lifecycle held admission is bounded by the single service d
     const pendingResponse = fetch(`http://127.0.0.1:${server.address().port}/v1/self/skills/skill-base/withdraw`, {
       method: "POST",
       headers: baseHeaders,
-      body: JSON.stringify({ reason: "valid" }),
+      body: JSON.stringify({ expected_state_version: "8", reason: "valid" }),
       signal: AbortSignal.timeout(13_000),
     })
     const observedAdmission = await admissionInput
@@ -540,7 +542,10 @@ test("personal Skill lifecycle rejects structural URL aliases while preserving a
       "/v1/%73elf/skills/skill-base/withdraw",
       "/v1/self/skills/skill-base/%77ithdraw",
     ]) {
-      const body = path.endsWith("withdraw") || path.endsWith("%77ithdraw") ? { reason: "valid" } : { display_name: "Name", summary: "", tags: [] }
+      const body =
+        path.endsWith("withdraw") || path.endsWith("%77ithdraw")
+          ? { expected_state_version: "8", reason: "valid" }
+          : { display_name: "Name", summary: "", tags: [] }
       const response = await post(origin, path, body)
       assert.equal(response.status, 400, path)
       const requestId = response.headers.get("x-request-id")
@@ -550,7 +555,7 @@ test("personal Skill lifecycle rejects structural URL aliases while preserving a
       assert.equal(payload.meta.request_id, requestId)
     }
     assert.equal(ownerCalls, 0)
-    const encodedIdentifier = await post(origin, "/v1/self/skills/skill%2Dbase/withdraw", { reason: "valid" })
+    const encodedIdentifier = await post(origin, "/v1/self/skills/skill%2Dbase/withdraw", { expected_state_version: "8", reason: "valid" })
     assert.equal(encodedIdentifier.status, 200)
   })
   assert.equal(ownerCalls, 1)
@@ -729,6 +734,8 @@ test("personal Skill lifecycle generated Connect transport preserves commands an
             context.responseHeader.set("x-kokoro-request-id", request.requestId)
             context.responseHeader.set("cache-control", "no-store")
             ownerCalls.push({ method: "create", request })
+            assert.equal(context.requestHeader.get("x-kokoro-request-id"), request.requestId)
+            assert.equal(Object.hasOwn(request, "expectedStateVersion"), false)
             assert.equal(context.requestHeader.get("authorization"), "Bearer catalog-machine")
             assert.equal(context.requestHeader.get("x-tenant-ref"), "tenant-personal")
             assert.equal(request.ownerScope?.kind, "user")
@@ -753,6 +760,8 @@ test("personal Skill lifecycle generated Connect transport preserves commands an
             context.responseHeader.set("x-kokoro-request-id", request.requestId)
             context.responseHeader.set("cache-control", "no-store")
             ownerCalls.push({ method: "withdraw", request })
+            assert.equal(context.requestHeader.get("x-kokoro-request-id"), request.requestId)
+            assert.equal(request.expectedStateVersion, 8n)
             assert.equal(context.requestHeader.get("authorization"), "Bearer catalog-machine")
             assert.equal(context.requestHeader.get("x-tenant-ref"), "tenant-personal")
             assert.equal(request.productContext?.subjectId, "user-personal")
@@ -785,7 +794,7 @@ test("personal Skill lifecycle generated Connect transport preserves commands an
         tags: ["managed"],
       })
       assert.equal(createResponse.status, 201)
-      const withdrawResponse = await post(origin, "/v1/self/skills/skill-base/withdraw", { reason: "Superseded" })
+      const withdrawResponse = await post(origin, "/v1/self/skills/skill-base/withdraw", { expected_state_version: "8", reason: "Superseded" })
       assert.equal(withdrawResponse.status, 200)
 
       for (const displayName of ["root unknown", "skill unknown", "series unknown"]) {
@@ -794,7 +803,7 @@ test("personal Skill lifecycle generated Connect transport preserves commands an
         assert.equal((await response.json()).error.code, "skill_response_invalid", displayName)
       }
       for (const reason of ["root unknown", "source unknown"]) {
-        const response = await post(origin, "/v1/self/skills/skill-base/withdraw", { reason })
+        const response = await post(origin, "/v1/self/skills/skill-base/withdraw", { expected_state_version: "8", reason })
         assert.equal(response.status, 502, reason)
         assert.equal((await response.json()).error.code, "skill_response_invalid", reason)
       }
@@ -903,4 +912,44 @@ test("P4 owned Skills production HTTP forwards literal Unicode query and owner c
     server.closeAllConnections()
     await new Promise((resolve) => server.close(resolve))
   }
+})
+
+test("Public11 registered CreateVersion rejects unsupported CAS before owner I/O", async () => {
+  let calls = 0
+  await withServer(
+    {
+      createPersonalVersion: async () => {
+        calls++
+        return versionResult()
+      },
+    },
+    async (origin) => {
+      for (const cas of ["8", null]) {
+        const response = await post(origin, "/v1/self/skills/skill-base/versions", { display_name: "Name", summary: "", tags: [], expected_state_version: cas })
+        assert.equal(response.status, 400)
+        assert.equal((await response.json()).error.code, "invalid_skill_request")
+      }
+    },
+  )
+  assert.equal(calls, 0)
+})
+
+test("Public11 registered Withdraw requires actual CAS before owner I/O", async () => {
+  let calls = 0
+  await withServer(
+    {
+      withdrawPersonal: async () => {
+        calls++
+        return withdrawResult()
+      },
+    },
+    async (origin) => {
+      for (const body of [{ reason: "Valid" }, { reason: "Valid", expected_state_version: null }]) {
+        const response = await post(origin, "/v1/self/skills/skill-base/withdraw", body)
+        assert.equal(response.status, 400)
+        assert.equal((await response.json()).error.code, "invalid_skill_request")
+      }
+    },
+  )
+  assert.equal(calls, 0)
 })

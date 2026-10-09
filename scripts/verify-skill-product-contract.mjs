@@ -18,6 +18,7 @@ function namedBlock(source, kind, name) {
   return source.slice(matches[index].index, end < 0 ? source.length : end)
 }
 export function stripSkillProductSource(source) {
+  if (/^  version: 11\.0\.0$/mu.test(source)) source = restorePublic10(source)
   if (/^  version: 10\.0\.0$/mu.test(source)) source = restorePublic9(source)
   if (!/^  version: 9\.0\.1$/mu.test(source)) return source
   let parent = source.replace("  version: 9.0.1", "  version: 8.10.0")
@@ -78,7 +79,7 @@ function restorePublic9(source) {
   if (block !== null) parent = parent.replace(block, () => PUBLIC9_PUBLISH)
   return parent
 }
-export function inspectSkillProductContract(source, baseline = OPERATIONS) {
+function inspectPublic10Contract(source, baseline = OPERATIONS) {
   if (!/^  version: 10\.0\.0$/mu.test(source)) return ["Public10 version must equal 10.0.0"]
   const errors = []
   const publication = namedBlock(source, "path", "/v1/skills/{skill_id}/publish")
@@ -86,4 +87,38 @@ export function inspectSkillProductContract(source, baseline = OPERATIONS) {
   const parent = restorePublic9(source)
   if (hash(parent) !== PUBLIC9_SHA) errors.push("Public10 exact Public9.0.1 parent inverse drifted")
   return [...errors, ...inspectPublic9Contract(parent, baseline)]
+}
+
+// Ordinary lifecycle corrective major. Preserve the exact full Public10 parent before its original inverse.
+const PUBLIC10_SHA = "2f98f529bda413912b5c15e6de45db7cdadf0e0bc51fd5de44818db9727efbb8"
+// prettier-ignore
+const PUBLIC10_CREATE_VERSION = "    CreatePersonalSkillVersionRequest:\n      type: object\n      additionalProperties: false\n      required:\n        - display_name\n        - summary\n        - tags\n      properties:\n        example_prompts:\n          type: array\n          maxItems: 10\n          items:\n            type: string\n            minLength: 1\n            maxLength: 1000\n            pattern: \\S\n          description: >-\n            Ordered original strings; duplicates preserved. Each item has 1-1000 Unicode scalar values; reject unpaired surrogates, U+0000 and ECMAScript trim\n            whitespace-only strings. Combined UTF-8 size is at most 16384 bytes. Empty arrays are valid; null is invalid.\n        display_name:\n          type: string\n          minLength: 1\n          maxLength: 255\n          pattern: .*\\S.*\n          description: Runtime enforcement counts UTF-16 code units; OpenAPI maxLength alone is not the implementation rule.\n        summary:\n          type: string\n          maxLength: 65535\n          description: Runtime enforcement counts UTF-16 code units.\n        tags:\n          type: array\n          maxItems: 100\n          uniqueItems: true\n          items:\n            type: string\n            minLength: 1\n            maxLength: 128\n            pattern: .*\\S.*\n          description: Order is preserved and participates in the command digest; runtime lengths use UTF-16 code units.\n        category_keys:\n          $ref: \"#/components/schemas/SkillProductCategoryKeys\"\n        expected_state_version:\n          type: string\n          pattern: ^[1-9][0-9]*$\n          maxLength: 19\n          description: Canonical positive decimal; runtime bounds to signed 64-bit maximum 9223372036854775807.\n"
+const PUBLIC11_CREATE_VERSION_SHA = "b8ac34a24d2e93fbef839ba5008861ef25bf057842570df6b3fe03c89d364a73"
+// prettier-ignore
+const PUBLIC10_WITHDRAW = "    WithdrawPersonalSkillRequest:\n      type: object\n      additionalProperties: false\n      required:\n        - reason\n      properties:\n        reason:\n          type: string\n          minLength: 1\n          maxLength: 2048\n          pattern: ^(?=[\\s\\S]*\\S)[^\\u0000]+$\n        expected_state_version:\n          type: string\n          pattern: ^[1-9][0-9]*$\n          maxLength: 19\n          description: Canonical positive decimal; runtime bounds to signed 64-bit maximum 9223372036854775807.\n"
+const PUBLIC11_WITHDRAW_SHA = "ead48003e929edae770d1c418f7cdd336552a1d46b93c7ab595805c1727f6ebc"
+function restorePublic10(source) {
+  let parent = source.replace("  version: 11.0.0", "  version: 10.0.0")
+  for (const [name, original] of [
+    ["CreatePersonalSkillVersionRequest", PUBLIC10_CREATE_VERSION],
+    ["WithdrawPersonalSkillRequest", PUBLIC10_WITHDRAW],
+  ]) {
+    const current = namedBlock(parent, "schema", name)
+    if (current !== null) parent = parent.replace(current, () => original)
+  }
+  return parent
+}
+export function inspectSkillProductContract(source, baseline = OPERATIONS) {
+  if (!/^  version: 11\.0\.0$/mu.test(source)) return ["Public11 version must equal 11.0.0"]
+  const errors = []
+  for (const [name, expected] of [
+    ["CreatePersonalSkillVersionRequest", PUBLIC11_CREATE_VERSION_SHA],
+    ["WithdrawPersonalSkillRequest", PUBLIC11_WITHDRAW_SHA],
+  ]) {
+    const current = namedBlock(source, "schema", name)
+    if (current === null || hash(current) !== expected) errors.push(`Public11 ordinary lifecycle exact closed schema drifted: ${name}`)
+  }
+  const parent = restorePublic10(source)
+  if (hash(parent) !== PUBLIC10_SHA) errors.push("Public11 exact Public10.0.0 parent inverse drifted")
+  return [...errors, ...inspectPublic10Contract(parent, baseline)]
 }

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 10.0.0
+  version: 11.0.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -14829,11 +14829,6 @@ components:
           description: Order is preserved and participates in the command digest; runtime lengths use UTF-16 code units.
         category_keys:
           $ref: "#/components/schemas/SkillProductCategoryKeys"
-        expected_state_version:
-          type: string
-          pattern: ^[1-9][0-9]*$
-          maxLength: 19
-          description: Canonical positive decimal; runtime bounds to signed 64-bit maximum 9223372036854775807.
     CreatePersonalSkillVersionResource:
       type: object
       additionalProperties: false
@@ -14877,6 +14872,7 @@ components:
       additionalProperties: false
       required:
         - reason
+        - expected_state_version
       properties:
         reason:
           type: string
