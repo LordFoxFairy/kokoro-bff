@@ -1,3 +1,10 @@
+## R356 Skills Connect HTTP request-id 修正（2026-10-08；候选待Root正式组合）
+
+基线正式427d126/Public9.0.1/132。Root实际first draft POST此前502：owner HTTP200合法ACK，BFF漏传HTTP x-kokoro-request-id，正式Platform telemetry回随机ID且binary cache-control缺失；该真实RED及清理收据由Root保留。本片仅catalog/product/admin三个既有Skills wrapper传当前受信context精确request-id，不改digest/auth/tenant/预算/Schema/契约；response ID与no-store完整性继续严格。owner RPC no-store由Root另一唯一Platform writer修，不用放宽检查掩盖。
+
+对应现HTTP测试采用实际HTTP requestHeader来源，不用body request_id伪echo；缺失/错误response ID及missing/wrong cache继续拒绝。工程/三个聚焦测试与冻结证据随Root ignored交接，真实IAM/Platform/Storage/Agent组合与浏览器仍由Root最终执行，不把loopback当owner资源集成。下方完整旧正文保持原字节。
+
+---
 ## R356 Public9.0.1 消费者一致性修正（同 132 operations）
 
 GET package-upload 的现有真实 source_version_id 现列入闭合 schema，可选、1–1024 printable ASCII且拒绝字面 null；不从对象 current read 推断版本。owner 无效版本稳定返回502 skill_response_invalid；安装列表 owner query/source-bound cursor 的 InvalidArgument 返回400 invalid_skill_installation_request，不泄露内部原因。原 Public9/Public8.10 父逆和其它 closed blocks 保持。此为源码契约修正，正常服务未重新激活，不能称 Skills 页面验收。

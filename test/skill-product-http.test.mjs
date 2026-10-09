@@ -293,3 +293,51 @@ test("P4 Public9 two optional query blocks remain exact and invert whole Public8
     )
   }
 })
+
+test("Product binary wrapper forwards transport request-id and keeps exact response integrity", async () => {
+  const { createServer } = await import("node:http")
+  const { once } = await import("node:events")
+  const { randomUUID } = await import("node:crypto")
+  const { connectNodeAdapter } = await import("@connectrpc/connect-node")
+  const { SkillProductConnectClient } = await import("../src/infrastructure/clients/platform/skill-product-connect.ts")
+  const wire = await import("../src/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.ts")
+  const context = { requestId: "header-request", tenant: "tenant", subject: "user" }
+  let mode = "valid"
+  const seen = []
+  const owner = createServer(
+    connectNodeAdapter({
+      routes(router) {
+        router.service(wire.SkillCatalogService, {
+          getSkillPackageUpload: (_request, rpcContext) => {
+            const transportId = rpcContext.requestHeader.get("x-kokoro-request-id")
+            seen.push(transportId)
+            if (mode !== "missing-id") rpcContext.responseHeader.set("x-kokoro-request-id", mode === "wrong-id" ? "wrong-id" : (transportId ?? randomUUID()))
+            if (mode !== "missing-cache") rpcContext.responseHeader.set("cache-control", mode === "wrong-cache" ? "public" : "no-store")
+            return { stateVersion: 1n, skillId: { value: "skill" }, phase: wire.SkillPackagePhase.NONE, attemptEpoch: 0n }
+          },
+        })
+      },
+    }),
+  )
+  owner.listen(0, "127.0.0.1")
+  await once(owner, "listening")
+  try {
+    const client = new SkillProductConnectClient(
+      `http://127.0.0.1:${owner.address().port}`,
+      { get: async () => "catalog-token", retire() {} },
+      { get: async () => "projection-token" },
+      1000,
+    )
+    const signal = new AbortController().signal
+    const invoke = () => client.getPackageUpload({ ...context, skillId: "skill" }, signal, performance.now() + 1000)
+    await invoke()
+    assert.equal(seen.at(-1), context.requestId)
+    for (mode of ["missing-id", "wrong-id", "missing-cache", "wrong-cache"]) {
+      await assert.rejects(invoke(), /skill_response_invalid/u)
+      assert.equal(seen.at(-1), context.requestId)
+    }
+  } finally {
+    owner.closeAllConnections()
+    await new Promise((resolve) => owner.close(resolve))
+  }
+})

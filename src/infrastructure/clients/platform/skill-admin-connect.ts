@@ -42,7 +42,12 @@ export class SkillAdminConnectClient {
       const value = await call({
         signal,
         timeoutMs: remaining,
-        headers: { authorization: `Bearer ${token}`, "x-kokoro-tenant": context.tenant, "x-kokoro-subject": context.subject },
+        headers: {
+          authorization: `Bearer ${token}`,
+          "x-kokoro-request-id": context.requestId,
+          "x-kokoro-tenant": context.tenant,
+          "x-kokoro-subject": context.subject,
+        },
         onHeader: (headers) => {
           requestId = headers.get("x-kokoro-request-id")
           cache = headers.get("cache-control")

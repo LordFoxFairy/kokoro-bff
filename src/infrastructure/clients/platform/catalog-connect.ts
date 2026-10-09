@@ -74,7 +74,7 @@ export class CatalogConnectClient {
     const options = {
       signal,
       timeoutMs: remaining,
-      headers: { authorization: `Bearer ${token}`, "x-tenant-ref": input.tenant, "x-kokoro-subject": input.user },
+      headers: { authorization: `Bearer ${token}`, "x-kokoro-request-id": input.requestId, "x-tenant-ref": input.tenant, "x-kokoro-subject": input.user },
       onHeader: (headers: Headers) => {
         requestId = headers.get("x-kokoro-request-id")
         cache = headers.get("cache-control")

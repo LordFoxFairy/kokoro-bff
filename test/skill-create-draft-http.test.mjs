@@ -319,16 +319,21 @@ test("same-key replay always re-admits IAM and revoked replay performs zero addi
 
 test("two real binary Catalog requests preserve absent, empty and original ordered examples", async () => {
   const { createServer } = await import("node:http")
+  const { randomUUID } = await import("node:crypto")
   const { connectNodeAdapter } = await import("@connectrpc/connect-node")
   const { CatalogConnectClient } = await import("../dist/infrastructure/clients/platform/catalog-connect.js")
   const { SkillCatalogService } = await import("../dist/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
   const seen = []
+  const transportIds = []
+  let mode = "valid"
   const owner = createServer(
     connectNodeAdapter({
       routes(router) {
         const capture = (request, context) => {
-          context.responseHeader.set("x-kokoro-request-id", request.requestId)
-          context.responseHeader.set("cache-control", "no-store")
+          const transportId = context.requestHeader.get("x-kokoro-request-id")
+          if (mode !== "missing-id") context.responseHeader.set("x-kokoro-request-id", mode === "wrong-id" ? "wrong-id" : (transportId ?? randomUUID()))
+          transportIds.push(transportId)
+          if (mode !== "missing-cache") context.responseHeader.set("cache-control", mode === "wrong-cache" ? "public" : "no-store")
           seen.push(request)
           return { stateVersion: 1n, skillId: { value: "new" }, seriesId: { value: "series" }, revision: 1n, status: SkillStatus.DRAFT, replayed: false }
         }
@@ -356,12 +361,19 @@ test("two real binary Catalog requests preserve absent, empty and original order
         }
         input.digest = catalogDigest(method === "create" ? "CreateSkillDraft" : "CreateSkillVersion", input)
         await client[method](input, new AbortController().signal, performance.now() + 1000)
+        assert.equal(transportIds.at(-1), input.requestId)
         const metadata = seen.at(-1).metadata
         assert.deepEqual(metadata.examplePrompts?.prompts, examplePrompts)
         assert.equal(Buffer.from(metadata.metadataJson).toString("utf8"), "{}")
       }
     }
     assert.equal(seen.length, 8)
+    for (mode of ["missing-id", "wrong-id", "missing-cache", "wrong-cache"]) {
+      const input = { requestId: "strict-header", commandId: "c", tenant: "tenant", user: "user", displayName: "Tea", summary: "", tags: [] }
+      input.digest = catalogDigest("CreateSkillDraft", input)
+      await assert.rejects(client.create(input, new AbortController().signal, performance.now() + 1000), /skill_response_invalid/u)
+      assert.equal(transportIds.at(-1), input.requestId)
+    }
   } finally {
     owner.closeAllConnections()
     await new Promise((resolve) => owner.close(resolve))

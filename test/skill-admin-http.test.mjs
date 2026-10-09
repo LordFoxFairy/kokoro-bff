@@ -148,3 +148,46 @@ test("Admin real HTTP distinguishes bad protobuf owner facts and ACK from browse
       }
     })
 })
+
+test("Admin binary wrapper forwards transport request-id and keeps exact response integrity", async () => {
+  const { createServer } = await import("node:http")
+  const { once } = await import("node:events")
+  const { randomUUID } = await import("node:crypto")
+  const { connectNodeAdapter } = await import("@connectrpc/connect-node")
+  const { SkillAdminConnectClient } = await import("../src/infrastructure/clients/platform/skill-admin-connect.ts")
+  const wire = await import("../src/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.ts")
+  const context = { requestId: "header-request", tenant: "tenant", subject: "user" }
+  let mode = "valid"
+  const seen = []
+  const owner = createServer(
+    connectNodeAdapter({
+      routes(router) {
+        router.service(wire.SkillAdminService, {
+          listAdminSkills: (_request, rpcContext) => {
+            const transportId = rpcContext.requestHeader.get("x-kokoro-request-id")
+            seen.push(transportId)
+            if (mode !== "missing-id") rpcContext.responseHeader.set("x-kokoro-request-id", mode === "wrong-id" ? "wrong-id" : (transportId ?? randomUUID()))
+            if (mode !== "missing-cache") rpcContext.responseHeader.set("cache-control", mode === "wrong-cache" ? "public" : "no-store")
+            return { skills: [], nextCursor: "" }
+          },
+        })
+      },
+    }),
+  )
+  owner.listen(0, "127.0.0.1")
+  await once(owner, "listening")
+  try {
+    const client = new SkillAdminConnectClient(`http://127.0.0.1:${owner.address().port}`, { get: async () => "admin-token", retire() {} }, 1000)
+    const signal = new AbortController().signal
+    const invoke = () => client.list(context, {}, signal, performance.now() + 1000)
+    await invoke()
+    assert.equal(seen.at(-1), context.requestId)
+    for (mode of ["missing-id", "wrong-id", "missing-cache", "wrong-cache"]) {
+      await assert.rejects(invoke(), /skill_response_invalid/u)
+      assert.equal(seen.at(-1), context.requestId)
+    }
+  } finally {
+    owner.closeAllConnections()
+    await new Promise((resolve) => owner.close(resolve))
+  }
+})
