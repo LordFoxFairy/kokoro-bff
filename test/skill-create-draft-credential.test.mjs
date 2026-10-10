@@ -31,6 +31,7 @@ test("credential source rejects broad permissions and reads exact tenant snapsho
   const dir = await fixtureDir("bff-catalog-")
   const file = path.join(dir, "credential.json")
   await writeFile(file, JSON.stringify([item(1)]), { mode: 0o644 })
+  await chmod(file, 0o644)
   const source = new CatalogCredentialSource(file)
   await assert.rejects(source.read("tenant"), /insecure/u)
   await chmod(file, 0o600)

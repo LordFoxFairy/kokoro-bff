@@ -1,3 +1,6 @@
+import { McpPersonalConnectClient } from "../infrastructure/clients/platform/mcp-personal-connect.js"
+import { McpPersonalCredentialSource } from "../infrastructure/clients/platform/mcp-personal-credential.js"
+import { McpPersonalTokenSource } from "../infrastructure/clients/platform/mcp-personal-token.js"
 import { SkillSpecificationService } from "../application/skill-specification.js"
 import { PlatformSkillSpecificationFacade } from "../infrastructure/clients/platform/skill-specification-facade.js"
 import { PlatformProjectionHttpClient } from "../infrastructure/clients/platform/projection-http.js"
@@ -68,6 +71,7 @@ export type BffRouteInput = {
 export type BffRouteHandler = (input: BffRouteInput) => Promise<boolean | void>
 
 export type BffServerComposition = {
+  mcpPersonalClient: Pick<McpPersonalConnectClient, "read"> & Partial<Pick<McpPersonalConnectClient, "close">> | null
   localSkillImportClient?: LocalSkillImportClient
   skillSpecificationSource: SkillSpecificationSource | null
   skillDownloadHandles: SkillDownloadHandles
@@ -100,6 +104,7 @@ export type BffServerComposition = {
 }
 
 export type BffCompositionOptions = {
+  mcpPersonalClient?: Pick<McpPersonalConnectClient, "read"> & Partial<Pick<McpPersonalConnectClient, "close">> | null
   localSkillImportClient?: LocalSkillImportClient
   skillSpecificationSource?: SkillSpecificationSource | null
   exactSkillDownloadSource?: ExactSkillDownloadSource | null
@@ -353,10 +358,14 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
           config.platformProjection.timeoutMs,
         )
       : null
+  const mcpPersonalClient = options.mcpPersonalClient !== undefined ? options.mcpPersonalClient
+    : config.mcpPersonal && config.iamBaseUrl ? new McpPersonalConnectClient(config.mcpPersonal.baseUrl,
+      new McpPersonalTokenSource(config.iamBaseUrl, new McpPersonalCredentialSource(config.mcpPersonal.credentialFile), 10_000)) : null
   let closePromise: Promise<void> | null = null
   const close = (): Promise<void> => {
     if (closePromise !== null) return closePromise
     closePromise = (async (): Promise<void> => {
+      mcpPersonalClient?.close?.()
       await stopWorkers()
       skillDownloadHandles.clear()
       await closeStore()
@@ -364,6 +373,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     return closePromise
   }
   return {
+    mcpPersonalClient,
     ...(localSkillImportClient === undefined ? {} : { localSkillImportClient }),
     skillSpecificationSource:
       options.skillSpecificationSource !== undefined

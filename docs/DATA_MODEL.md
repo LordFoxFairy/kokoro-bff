@@ -6,6 +6,7 @@
 列表/详情依正式 PersonalMcp schema/nullable 页尾投影与 ID/tenant/subject 绑定，不拿 active 六字段连接列表充当管理全状态，不把静态推荐当已连接。token 仅短期 tenant/credential identity 内存缓存，轮换/取消退役；每次请求当前准入与返回前复核，用户资格不由缓存替代。缺配置、正常 `mcp-personal` surface 未启用或资格失败闭合，不合成数据、安装、授权或 connection 成功。
 
 这只是整体 CRUD 链首个读取切片；无新 public/owner wire、generated 或 SQL 变化。后继正常 workload/surface 激活由 Root 负责，完整本人命令/授权与后台管理仍待 owner 与消费者逐片准入，不恢复旧 Web/Admin 路径。
+实现放置同步：`src/bootstrap/runtime.ts` 已纳入本片允许集，composition 创建/close 退役个人 client 与 token（含在途取消）；不采用原 R320 的 WeakMap/static client 生命周期，其他原文保留为历史。
 <!-- END:T-K03.13-BFF-MCP-PERSONAL-READ-D0 -->
 
 <!-- BEGIN:T-K03.14-BFF-SHARE-REVISION-D0 -->

@@ -1,3 +1,4 @@
+import { mcpPersonalOperation, mcpPersonalReadRoute } from "../http/routes/mcp-personal.js"
 import { skillSpecificationReadRoute } from "../http/routes/platform-projection.js"
 import { exactSkillDownloadRoute, skillDownloadHandleRoute } from "../http/routes/skill-download.js"
 import { startMcpRequestBudget, mcpRequestRemaining } from "../http/mcp-request-budget.js"
@@ -248,6 +249,7 @@ async function handle(
     (businessPath[0] === "self" && businessPath[1] === "skills")
   if (hasSkillsBudget) startSkillRequestBudget(request)
   const mcpAction = mcpActionForRequest(request.method ?? "GET", businessPath)
+  const isMcpPersonalRead = mcpPersonalOperation(businessPath, request.method ?? "GET") !== null
   const hasMcpBudget = mcpAction !== null
   if (hasMcpBudget) {
     startMcpRequestBudget(request)
@@ -391,6 +393,7 @@ async function handle(
         isSkillPublishPath ||
         isSkillInstallationPath ||
         isPlatformProjectionRead ||
+        isMcpPersonalRead ||
         isMoveSessionPath ||
         isProjectRenamePath ||
         isProjectDeletePath ||
@@ -425,12 +428,16 @@ async function handle(
       })
     return
   }
-  if (hasMcpBudget && (request.method !== "GET" || businessPath[0] === "self")) {
+  if (hasMcpBudget && !isMcpPersonalRead && (request.method !== "GET" || businessPath[0] === "self")) {
     if (!response.destroyed && !response.writableEnded)
       send(response, 503, failure("platform_operation_not_available", "This Platform operation is not exposed by the BFF owner adapter", id))
     return
   }
   const context = admission.context
+  if (isMcpPersonalRead) {
+    await mcpPersonalReadRoute(request, response, config, composition, context, businessPath)
+    return
+  }
   const readmitSkill = async (signal: AbortSignal): Promise<void> => {
     const current = await authorizeUserRequest(request, config, composition.sessionAdmission, id, signal)
     if (!current.ok && current.status >= 500) throw new Error("skill_dependency_unavailable")

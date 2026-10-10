@@ -56,9 +56,10 @@ test("Package proxy verifies all bytes then re-admits exact revision and session
     },
   }
   const config = { tenantId: "tenant", sharedSecret: "test", storageObjectOrigin: origin }
-  const proxy = createServer(
-    (request, response) => void skillDownloadHandleRoute(request, response, config, composition, "request", ["skill-downloads", entry.handle]),
-  )
+  const journeys = []
+  const proxy = createServer((request, response) => {
+    journeys.push(skillDownloadHandleRoute(request, response, config, composition, "request", ["skill-downloads", entry.handle]))
+  })
   proxy.listen(0, "127.0.0.1")
   await once(proxy, "listening")
   try {
@@ -67,17 +68,22 @@ test("Package proxy verifies all bytes then re-admits exact revision and session
     let response = await fetch(url, { headers })
     assert.equal(response.status, 200)
     assert.deepEqual(Buffer.from(await response.arrayBuffer()), bytes)
+    await journeys[0]
     assert.equal(readmitted, 2)
     changed = true
     bytesSent = false
     response = await fetch(url, { headers })
     assert.equal(response.status, 404)
+    await response.arrayBuffer()
+    await journeys[1]
     assert.equal(readmitted, 3)
     changed = false
     revoked = true
     bytesSent = false
     response = await fetch(url, { headers })
     assert.equal(response.status, 401)
+    await response.arrayBuffer()
+    await journeys[2]
     assert.equal(readmitted, 5)
     assert.equal(calls, 6)
   } finally {

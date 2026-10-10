@@ -8,6 +8,7 @@
 入口现 monotonic MCP 10s 总预算包含 session/action、credential、OAuth、RPC、decode/project 和返回前同 tenant/subject 当前资格复核；disconnect/期限取消贯穿，迟到结果丢弃，finally 清监听/计时。请求 ID 固定，响应 1 MiB 有界；机器 token 按 tenant 与 credential identity 缓存、轮换退役和 waiter 取消，不缓存用户资格。独立 `mcpPersonal` 组合采用现 Platform URL 与专用 credential 文件；缺配置仅该族依现错误返回，半配置启动拒绝，不扩大旧 projection/catalog scope。IAM 正式 purpose/scope/resource/caller 沿 R320 核验，不借浏览器 Bearer 或旧 token。
 
 正常 Platform PID44292 的 `KOKORO_PLATFORM_SURFACES` 当前没有 `mcp-personal`。正式 workload IAM 资格、surface enabled/handshake 与正常源码激活由 Root 单独执行；不降低这些门，受控测试绿色不冒正常 owner 组合通过。无 SQL/Redis 变化。最小验证候选：新增 `test/mcp-personal-read.test.ts`、`test/mcp-personal-http.test.mjs`，现 `test/bff.test.ts`、`test/mcp-authorization-http.test.mjs`、`test/platform-projection-route.test.mjs` 保旧边界；资源 integration 后继单独准入，不新建测试目录。真实 RED 为正常本人 read 503 与旧创建 404；覆盖四读成功/绑定、写 guard 保留、闭集负控、撤权、轮换、总预算/取消及原 active 投影回归后执行现工程门。
+实现放置同步：`src/bootstrap/runtime.ts` 已纳入本片允许集，composition 创建/close 退役个人 client 与 token（含在途取消）；不采用原 R320 的 WeakMap/static client 生命周期，其他原文保留为历史。
 <!-- END:T-K03.13-BFF-MCP-PERSONAL-READ-D0 -->
 
 <!-- BEGIN:T-K03.14-BFF-SHARE-REVISION-D0 -->

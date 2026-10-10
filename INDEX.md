@@ -1,3 +1,7 @@
+### T-K03.13 本人 MCP 四读运行接线候选
+
+`src/http/routes/mcp-personal.ts` 精确承接已发行四GET；`src/infrastructure/clients/platform/mcp-personal-{credential,token,connect,response}.ts` 分担独立资格/token/固定generated RPC/安全投影。`bootstrap/runtime.ts` composition创建并close退役client/token，server保留写/provider guard与原active六字段投影。测试入口为 `test/mcp-personal-{read.test.ts,http.test.mjs}`；正常surface/IAM激活及完整CRUD仍由Root后继验收。
+
 ### R353-B2 Skills当前源码候选入口
 
 现 http/routes skill-drafts/admin/cover/download/ai-import/github-import/share/usage及server/runtime组成Public9/132；clients/platform skill-product-{connect,response,schema}与skill-admin专用credential/token，IAMpublisherbatch、Storagetransfer复用正式owner。GitHub metadata单普通文件使用正式js-yaml4.3.2，从固定SHA真实SKILL.md解析；没有browser自报metadata或URL代理。源卡及补卡固定，正常配对/真实provider/browser/queryowner修正见CURRENT，S01–S10仍OPEN。以下为既往切片入口，不替代此当前状态。

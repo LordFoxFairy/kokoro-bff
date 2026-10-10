@@ -1,0 +1,96 @@
+import { createClient, Code, ConnectError } from "@connectrpc/connect"
+import { createConnectTransport } from "@connectrpc/connect-node"
+import {
+  ProductMcpPersonalService as generatedProductMcpPersonalService,
+  McpConnectorStatus,
+} from "../../../generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
+import { projectMcpPersonalResponse, type McpPersonalOperation, type McpPersonalInput } from "./mcp-personal-response.js"
+import { McpPersonalTokenSource } from "./mcp-personal-token.js"
+
+export class McpPersonalConnectClient {
+  readonly #client
+  readonly #active = new Set<AbortController>()
+  #closed = false
+  constructor(
+    baseUrl: string,
+    private readonly tokens: McpPersonalTokenSource,
+  ) {
+    this.#client = createClient(
+      generatedProductMcpPersonalService,
+      createConnectTransport({ baseUrl, httpVersion: "1.1", useBinaryFormat: true, readMaxBytes: 1_048_576, writeMaxBytes: 1_048_576 }),
+    )
+  }
+  close(): void {
+    this.#closed = true
+    for (const controller of this.#active) controller.abort()
+    this.#active.clear()
+    this.tokens.close()
+  }
+  async read(operation: McpPersonalOperation, input: McpPersonalInput, outer: AbortSignal, deadlineAt: number): Promise<unknown> {
+    if (this.#closed) throw new Error("mcp_personal_closed")
+    const controller = new AbortController()
+    this.#active.add(controller)
+    const remaining = () => Math.max(0, Math.floor(deadlineAt - performance.now()))
+    const timer = setTimeout(() => controller.abort(), remaining())
+    const signal = AbortSignal.any([outer, controller.signal])
+    let token: string | undefined
+    try {
+      signal.throwIfAborted()
+      token = await this.tokens.get(input.tenant, signal, deadlineAt)
+      signal.throwIfAborted()
+      let responseRequestId: string | null = null
+      let responseCache: string | null = null
+      const options = {
+        onHeader: (headers: Headers) => {
+          responseRequestId = headers.get("x-kokoro-request-id")
+          responseCache = headers.get("cache-control")
+        },
+        signal,
+        timeoutMs: remaining(),
+        headers: { authorization: `Bearer ${token}`, "x-tenant-ref": input.tenant, "x-kokoro-subject": input.subject, "x-kokoro-request-id": input.requestId },
+      }
+      const page = { limit: input.limit ?? 50, ...(input.cursor === undefined ? {} : { cursor: input.cursor }) }
+      const requestId = input.requestId
+      let value: unknown
+      switch (operation) {
+        case "connectors":
+          value = await this.#client.listPersonalMcpConnectors(
+            {
+              requestId,
+              page,
+              ...(input.status === undefined
+                ? {}
+                : {
+                    status: {
+                      pending: McpConnectorStatus.PENDING,
+                      active: McpConnectorStatus.ACTIVE,
+                      error: McpConnectorStatus.ERROR,
+                      revoked: McpConnectorStatus.REVOKED,
+                    }[input.status],
+                  }),
+            },
+            options,
+          )
+          break
+        case "connector":
+          value = await this.#client.getPersonalMcpConnector({ requestId, connectorId: { value: input.id! } }, options)
+          break
+        case "connections":
+          value = await this.#client.listPersonalMcpConnections({ requestId, connectorId: { value: input.id! }, page }, options)
+          break
+        case "connection":
+          value = await this.#client.getPersonalMcpConnection({ requestId, connectionId: { value: input.id! } }, options)
+          break
+      }
+      signal.throwIfAborted()
+      if (responseRequestId !== input.requestId || responseCache !== "no-store") throw new Error("mcp_personal_response_invalid")
+      return projectMcpPersonalResponse(operation, value, input)
+    } catch (error) {
+      if (token !== undefined && error instanceof ConnectError && [Code.Unauthenticated, Code.PermissionDenied].includes(error.code)) this.tokens.retire(token)
+      throw error
+    } finally {
+      clearTimeout(timer)
+      this.#active.delete(controller)
+    }
+  }
+}

@@ -142,14 +142,14 @@ test("R357 HTTP current human false decision denies all six MCP reads before own
     await f.close()
   }
 })
-test("R357 HTTP authorized but unimplemented self reads and MCP mutation remain explicit 503", async () => {
+test("R357 HTTP authorized personal reads without composition and unimplemented MCP mutations remain explicit 503", async () => {
   const f = await fixture(true)
   try {
     for (const path of paths.slice(2)) {
       const response = await fetch(f.origin + path, { headers })
       assert.equal(response.status, 503, path)
       assert.equal(response.headers.get("cache-control"), "no-store")
-      assert.equal((await response.json()).error.code, "platform_operation_not_available")
+      assert.equal((await response.json()).error.code, "mcp_personal_dependency_unavailable")
     }
     const response = await fetch(f.origin + "/v1/self/mcp/connectors", {
       method: "POST",

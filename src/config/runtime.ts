@@ -90,6 +90,7 @@ export type BffConfig = {
   redisUrl: string | null
   agUi: AgUiConfig
   upstreams: Record<string, string | null>
+  mcpPersonal?: Readonly<{ baseUrl: string; credentialFile: string }> | null
   platformProjection: Readonly<{ baseUrl: string | null; credentialFile: string | null; timeoutMs: number }>
   skillAdminCredentialFile?: string | null
   skillDraft: Readonly<{
@@ -405,6 +406,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
     redisUrl: requiredConnectionUrl(env.KOKORO_BFF_REDIS_URL, "KOKORO_BFF_REDIS_URL", ["redis:", "rediss:"]),
     agUi,
     upstreams,
+    mcpPersonal: (() => {
+      const credentialFile = env.KOKORO_BFF_PLATFORM_MCP_PERSONAL_CREDENTIALS_FILE?.trim() || null
+      if (credentialFile === null) return null
+      if (!skillDraft.platformBaseUrl || !optionalUrl(env.KOKORO_IAM_BASE_URL)) throw new Error("mcp_personal_configuration_incomplete")
+      return { baseUrl: skillDraft.platformBaseUrl, credentialFile }
+    })(),
     platformProjection: {
       baseUrl: skillDraft.platformBaseUrl,
       credentialFile: env.KOKORO_PLATFORM_PROJECTION_CREDENTIAL_FILE?.trim() || null,

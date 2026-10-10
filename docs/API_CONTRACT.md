@@ -6,6 +6,7 @@
 现 guard 对四读实际 503；目标固定 vendor `91bc3655ebd3648cb8f8ccddfacb5628bdeb1c5c` 的 `ProductMcpPersonalService` 对应四 RPC→严格 `PersonalMcp*` public 白名单，安全属性/enum、分页 nullable cursor 和 ID/主体绑定按机器及下文 R320，不透传 private 字段。GET 无 body/transfer-encoding/idempotency-key，参数不 trim，重复/未知 query 拒绝；可信 tenant/subject/request ID 来自准入，返回前重准入。全部 no-store、request ID，绝对 10s/1 MiB/取消边界沿 TECH。
 
 沿现 PersonalMcp status/code/retryable 闭集：400 invalid_mcp_personal_request；401 session_authentication_required/session_invalid；403 service_auth_failed/session_forbidden/product_tenant_forbidden；404 mcp_personal_not_found；429 session_rate_limited；502 mcp_personal_response_invalid；503 product_tenant_not_configured/iam_admission_unavailable/mcp_personal_dependency_unavailable。Retry-After 仅按既有合法规则处理；owner 机器资格或 deadline 失败不伪用户 401，不新增 504/499，未知 wire/enum 拒绝。正常 workload IAM 与 Platform surface 当前未激活，Root 独立核资格/handshake 后才记录真实四读通过；受控 HTTP 测试不代替正常组合。
+实现放置同步：`src/bootstrap/runtime.ts` 已纳入本片允许集，composition 创建/close 退役个人 client 与 token（含在途取消）；不采用原 R320 的 WeakMap/static client 生命周期，其他原文保留为历史。
 <!-- END:T-K03.13-BFF-MCP-PERSONAL-READ-D0 -->
 
 <!-- BEGIN:T-K03.14-BFF-SHARE-REVISION-D0 -->
