@@ -98,7 +98,7 @@ test("Handoff exact ACK readback compares JSONB values, not object insertion ord
   let row = {
     fingerprint: "b".repeat(64),
     status: 200,
-    body: { stage: "frozen", frozen: { first: "one", second: "two" } },
+    body: { proofVersion: 2, stage: "frozen", frozen: { first: "one", second: "two" } },
   }
   const receipts = {
     getReceipt: async () => reorder(row),
@@ -373,4 +373,185 @@ test("AI real HTTP final artifact body block rechecks session before receipt or 
         await Promise.all([new Promise((resolve) => server.close(resolve)), new Promise((resolve) => source.close(resolve))])
       }
     })
+})
+
+function checkpointHarness(fault) {
+  let row = null,
+    fail = true
+  const calls = { create: 0, begin: [], put: 0, complete: 0, validate: [] }
+  const input = { scope: "scope", fingerprint: "b".repeat(64), frozen: { source: "immutable" }, commandId: "intent" }
+  const receipts = {
+    getReceipt: async () => row,
+    claimReceipt: async () => {
+      row = { fingerprint: input.fingerprint, status: 102, body: {} }
+      return { claimed: true, receipt: null }
+    },
+    compareAndSetReceipt: async (_scope, _fingerprint, _expected, replacement) => {
+      if (
+        fail &&
+        ((fault === "created" && replacement.body.stage === "created") ||
+          (fault === "admission" && replacement.body.stage === "admitted") ||
+          (fault === "terminal" && replacement.status === 201))
+      ) {
+        fail = false
+        throw Error("checkpoint unavailable")
+      }
+      row = replacement
+      return { updated: true, receipt: row }
+    },
+  }
+  const steps = {
+    create: async () => {
+      calls.create++
+      return { skillId: "s", stateVersion: calls.begin.length ? "2" : "1" }
+    },
+    begin: async (id, skillId, stateVersion) => {
+      calls.begin.push({ id, skillId, stateVersion })
+      assert.equal(row.body.stage, "created")
+      assert.equal(stateVersion, "1")
+      return { skillId, attemptId: "a", uploadId: "u", attemptEpoch: "1", stateVersion: "2" }
+    },
+    status: async () => ({ skillId: "s", attemptId: "a", uploadId: "u", attemptEpoch: "1", sourceVersionId: calls.complete ? "VERSION" : null }),
+    put: async (admission) => {
+      calls.put++
+      assert.equal(admission.initialStateVersion, "1")
+      if (fail && fault === "put") {
+        fail = false
+        throw Error("PUT ACK lost")
+      }
+      return "VERSION"
+    },
+    completion: (_admission, sourceVersionId) => ({ commandId: "intent.complete", requestDigest: "a".repeat(64), sourceVersionId }),
+    complete: async () => {
+      calls.complete++
+      return { stateVersion: "3" }
+    },
+    validate: async (id, _admission, stateVersion) => {
+      calls.validate.push({ id, stateVersion })
+      assert.equal(row.body.stage, "completed")
+      if (fail && fault === "validate") {
+        fail = false
+        throw Error("Validate submitted, ACK lost")
+      }
+      return { skill_id: "s", valid: true }
+    },
+  }
+  return { input, receipts, steps, calls, row: () => row }
+}
+for (const fault of ["none", "created", "admission", "put", "validate", "terminal"])
+  test(`handoff durable creation/complete proofs recover ${fault} without changing CAS or commands`, async () => {
+    const { handoffSkillPackage } = await import("../src/application/skill-ai-handoff.ts")
+    const h = checkpointHarness(fault)
+    if (fault !== "none") await assert.rejects(handoffSkillPackage(h.input, h.receipts, h.steps, AbortSignal.timeout(1000)))
+    const result = await handoffSkillPackage(h.input, h.receipts, h.steps, AbortSignal.timeout(1000))
+    assert.deepEqual(result, { skill_id: "s", valid: true })
+    assert.equal(h.calls.create, fault === "created" ? 2 : 1)
+    assert.ok(h.calls.begin.every((value) => value.id === "intent.begin" && value.stateVersion === "1"))
+    assert.equal(h.calls.complete, 1)
+    assert.ok(h.calls.validate.every((value) => value.id === "intent.validate" && value.stateVersion === "3"))
+    if (["validate", "terminal"].includes(fault)) assert.equal(h.calls.validate.length, 2)
+  })
+for (const body of [
+  { stage: "created", frozen: { source: "immutable" }, creation: { skillId: "s", initialStateVersion: "1", extra: true } },
+  { stage: "admitted", frozen: { source: "immutable" }, admission: { skillId: "s", attemptId: "a", uploadId: "u", attemptEpoch: "1", stateVersion: "2" } },
+  { stage: "completed", frozen: { source: "immutable" }, admission: {}, selected: {}, completed: { stateVersion: "0" } },
+])
+  test(`handoff rejects incomplete/unknown private proof in ${body.stage} before owner effects`, async () => {
+    const { handoffSkillPackage } = await import("../src/application/skill-ai-handoff.ts")
+    const h = checkpointHarness("none")
+    h.receipts.getReceipt = async () => ({ fingerprint: h.input.fingerprint, status: 200, body })
+    await assert.rejects(handoffSkillPackage(h.input, h.receipts, h.steps, AbortSignal.timeout(1000)), /skill_checkpoint_unavailable/)
+    assert.equal(h.calls.create, 0)
+    assert.equal(h.calls.begin.length, 0)
+    assert.equal(h.calls.put, 0)
+    assert.equal(h.calls.complete, 0)
+    assert.equal(h.calls.validate.length, 0)
+  })
+
+test("handoff rejects a receipt for a different fingerprint before all owner effects", async () => {
+  const { handoffSkillPackage } = await import("../src/application/skill-ai-handoff.ts")
+  const h = checkpointHarness("none")
+  h.receipts.getReceipt = async () => ({ fingerprint: "another", status: 201, body: { skill_id: "another" } })
+  await assert.rejects(handoffSkillPackage(h.input, h.receipts, h.steps, AbortSignal.timeout(1000)), /skill_idempotency_conflict/)
+  assert.equal(h.calls.create, 0)
+  assert.equal(h.calls.begin.length, 0)
+  assert.equal(h.calls.validate.length, 0)
+})
+test("handoff binds persisted admission to the actual owner attempt before PUT", async () => {
+  const { handoffSkillPackage } = await import("../src/application/skill-ai-handoff.ts")
+  const h = checkpointHarness("put")
+  await assert.rejects(handoffSkillPackage(h.input, h.receipts, h.steps, AbortSignal.timeout(1000)), /PUT ACK lost/)
+  h.steps.status = async () => ({ skillId: "s", attemptId: "another", uploadId: "u", attemptEpoch: "1", sourceVersionId: null })
+  await assert.rejects(handoffSkillPackage(h.input, h.receipts, h.steps, AbortSignal.timeout(1000)), /skill_response_invalid/)
+  assert.equal(h.calls.create, 1)
+  assert.equal(h.calls.put, 1)
+  assert.equal(h.calls.complete, 0)
+  assert.equal(h.calls.validate.length, 0)
+})
+
+for (const step of ["create", "complete", "validate"])
+  test(`handoff caller cancellation after ${step} ACK preserves only acknowledged checkpoints`, async () => {
+    const { handoffSkillPackage } = await import("../src/application/skill-ai-handoff.ts")
+    const h = checkpointHarness("none"),
+      controller = new AbortController(),
+      original = h.steps[step]
+    h.steps[step] = async (...args) => {
+      const result = await original(...args)
+      controller.abort(new Error("caller cancellation"))
+      return result
+    }
+    await assert.rejects(handoffSkillPackage(h.input, h.receipts, h.steps, controller.signal), /caller cancellation/)
+    assert.equal(h.row().body.stage, step === "create" ? "frozen" : step === "complete" ? "selected" : "completed")
+    h.steps[step] = original
+    assert.deepEqual(await handoffSkillPackage(h.input, h.receipts, h.steps, AbortSignal.timeout(1000)), { skill_id: "s", valid: true })
+    assert.equal(h.calls.create, step === "create" ? 2 : 1)
+    assert.equal(h.calls.complete, step === "complete" ? 2 : 1)
+    assert.equal(h.calls.validate.length, step === "validate" ? 2 : 1)
+    assert.ok(h.calls.begin.every((value) => value.id === "intent.begin" && value.stateVersion === "1"))
+    assert.ok(h.calls.validate.every((value) => value.id === "intent.validate" && value.stateVersion === "3"))
+  })
+test("handoff observes caller cancellation after owner status before PUT", async () => {
+  const { handoffSkillPackage } = await import("../src/application/skill-ai-handoff.ts")
+  const h = checkpointHarness("none"),
+    controller = new AbortController(),
+    status = h.steps.status
+  h.steps.status = async () => {
+    const result = await status()
+    controller.abort(new Error("caller cancellation"))
+    return result
+  }
+  await assert.rejects(handoffSkillPackage(h.input, h.receipts, h.steps, controller.signal), /caller cancellation/)
+  assert.equal(h.row().body.stage, "admitted")
+  assert.equal(h.calls.put, 0)
+  assert.equal(h.calls.complete, 0)
+})
+
+for (const stage of ["frozen", "admitted"])
+  test(`legacy ${stage} receipt without private proof version performs zero owner calls`, async () => {
+    const { handoffSkillPackage } = await import("../src/application/skill-ai-handoff.ts")
+    const h = checkpointHarness("none")
+    h.receipts.getReceipt = async () => ({
+      fingerprint: h.input.fingerprint,
+      status: 200,
+      body: {
+        stage,
+        frozen: h.input.frozen,
+        ...(stage === "admitted" ? { admission: { skillId: "s", attemptId: "a", uploadId: "u", attemptEpoch: "1", stateVersion: "2" } } : {}),
+      },
+    })
+    await assert.rejects(handoffSkillPackage(h.input, h.receipts, h.steps, AbortSignal.timeout(1000)), /skill_checkpoint_unavailable/)
+    assert.equal(h.calls.create, 0)
+    assert.equal(h.calls.begin.length, 0)
+    assert.equal(h.calls.put, 0)
+    assert.equal(h.calls.complete, 0)
+    assert.equal(h.calls.validate.length, 0)
+  })
+test("legacy terminal 201 remains the exact original ACK without new owner calls", async () => {
+  const { handoffSkillPackage } = await import("../src/application/skill-ai-handoff.ts")
+  const h = checkpointHarness("none"),
+    body = { skill_id: "s", valid: true }
+  h.receipts.getReceipt = async () => ({ fingerprint: h.input.fingerprint, status: 201, body })
+  assert.deepEqual(await handoffSkillPackage(h.input, h.receipts, h.steps, AbortSignal.timeout(1000)), body)
+  assert.equal(h.calls.create, 0)
+  assert.equal(h.calls.validate.length, 0)
 })

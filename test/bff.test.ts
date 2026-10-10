@@ -516,7 +516,7 @@ describe("kokoro-bff v1 mock contract", () => {
       assert.equal(puts, 1)
       assert.equal(commands.filter((x) => x === "completeSkillPackageUpload").length, 1)
       assert.equal(commands.filter((x) => x === "validateSkillDraft").length, 1)
-      assert.deepEqual(creates[0], creates[1])
+      assert.equal(creates.length, 1)
     } finally {
       globalThis.fetch = originalFetch
     }

@@ -167,28 +167,14 @@ export async function importSkillBytes(
             sourceVersionId: result.sourceVersionId ?? null,
           }
         },
-        put: async (admission, selectedFrozen) => {
-          const initial = await client.command(
-            "createSkillDraft",
-            { ...common, commandId: `${commandId}.create` },
-            {
-              owner_scope: { kind: "user", id: common.subject },
-              metadata: selectedFrozen.metadata as JsonValue,
-              creation_provenance: skillCreationProvenanceSchema.parse(selectedFrozen.provenance) as JsonValue,
-            },
-            signal,
-            deadlineAt,
-          )
-          assertSkillWireKnown(initial)
-          if (!("stateVersion" in initial) || initial.skillId?.value !== admission.skillId) throw new Error("skill_response_invalid")
-          const initialStateVersion = skillDecimalSchema.parse(initial.stateVersion.toString())
+        put: async (admission) => {
           // Replayed Begin must identify precisely the already persisted attempt; it never admits a replacement.
           const result = await client.command(
             "beginSkillPackageUpload",
             { ...common, commandId: `${commandId}.begin` },
             {
               skill_id: { value: admission.skillId },
-              expected_state_version: initialStateVersion,
+              expected_state_version: admission.initialStateVersion,
               filename: "skill.zip",
               mime_type: "application/zip",
               size_bytes: String(bytes.length),
@@ -197,6 +183,7 @@ export async function importSkillBytes(
             signal,
             deadlineAt,
           )
+          assertSkillWireKnown(result)
           if (
             !("transferReference" in result) ||
             !("attemptId" in result) ||
@@ -206,6 +193,7 @@ export async function importSkillBytes(
             result.attemptId !== admission.attemptId ||
             result.uploadId !== admission.uploadId ||
             result.attemptEpoch.toString() !== admission.attemptEpoch ||
+            result.stateVersion.toString() !== admission.stateVersion ||
             !result.transferReference
           )
             throw new Error("skill_response_invalid")

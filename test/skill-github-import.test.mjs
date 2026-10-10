@@ -498,3 +498,136 @@ test("GitHub preview counts SKILL.md filename bytes and imports the selected imm
   zip = archive([[`root/${path}a/SKILL.md`, body]])
   await assert.rejects(() => client.preview({ repository_url: "https://github.com/owner/repo" }, AbortSignal.timeout(1000)), /github_package_invalid/u)
 })
+
+for (const provenanceKind of ["github", "ai"])
+  for (const lostPut of [false, true, "create", "complete"])
+    test(`shared ${provenanceKind} import uses one Create and original Begin proof (recovery=${lostPut})`, async (t) => {
+      const { importSkillBytes } = await import("../src/http/routes/skill-ai-import.ts")
+      const wire = await import("../src/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.ts")
+      const { create } = await import("@bufbuild/protobuf")
+      const { createHash } = await import("node:crypto")
+      const bytes = Buffer.from("owner verified zip fixture"),
+        digest = createHash("sha256").update(bytes).digest("hex")
+      const facts = { asset_ref: "asset", content_sha256: digest, size_bytes: String(bytes.length), mime_type: "application/zip" }
+      const provenance =
+        provenanceKind === "github"
+          ? {
+              github: {
+                ...facts,
+                repository_id: "1",
+                repository_url: "https://github.com/acme/skills",
+                owner_login: "acme",
+                owner_url: "https://github.com/acme",
+                commit: "a".repeat(40),
+                path: "one",
+              },
+            }
+          : {
+              ai: {
+                ...facts,
+                conversation_id: "conversation",
+                run_ref: "run",
+                artifact_ref: "artifact",
+                source_event_id: "event",
+                source_event_seq: "1",
+                source_event_digest: "a".repeat(64),
+              },
+            }
+      let row = null,
+        currentVersion = 1n,
+        creates = 0,
+        puts = 0,
+        completes = 0
+      const begins = []
+      let caller = new AbortController()
+      const store = {
+        getReceipt: async () => row,
+        claimReceipt: async (_scope, fingerprint) => {
+          row = { fingerprint, status: 102, body: {} }
+          return { claimed: true, receipt: null }
+        },
+        compareAndSetReceipt: async (_scope, _fingerprint, _expected, replacement) => {
+          row = replacement
+          return { updated: true, receipt: row }
+        },
+      }
+      const client = {
+        command: async (operation, context, body) => {
+          if (operation === "createSkillDraft") {
+            creates++
+            if (lostPut === "create" && creates === 1) caller.abort(new Error("caller cancellation"))
+            return create(wire.CreateSkillDraftResponseSchema, { skillId: { value: "skill" }, status: 1, revision: 1n, stateVersion: currentVersion })
+          }
+          if (operation === "beginSkillPackageUpload") {
+            begins.push({ commandId: context.commandId, body })
+            assert.equal(body.expected_state_version, "1")
+            currentVersion = 2n
+            return create(wire.BeginSkillPackageUploadResponseSchema, {
+              skillId: { value: "skill" },
+              attemptId: "attempt",
+              attemptEpoch: 1n,
+              uploadId: "upload",
+              stateVersion: 2n,
+              transferReference: {
+                url: "http://object.test/upload",
+                method: "PUT",
+                requiredHeaders: { "content-type": "application/zip" },
+                expiresAt: { seconds: BigInt(Math.floor(Date.now() / 1000) + 60), nanos: 0 },
+              },
+            })
+          }
+          if (operation === "completeSkillPackageUpload") {
+            completes++
+            if (lostPut === "complete" && completes === 1) caller.abort(new Error("caller cancellation"))
+            assert.equal(body.expected_state_version, "2")
+            return create(wire.CompleteSkillPackageUploadResponseSchema, { skillId: { value: "skill" }, contentSha256: digest, scanState: 2, stateVersion: 3n })
+          }
+          assert.equal(operation, "validateSkillDraft")
+          assert.equal(body.expected_state_version, "3")
+          return create(wire.ValidateSkillDraftResponseSchema, {
+            skillId: { value: "skill" },
+            valid: true,
+            contentDigest: digest,
+            manifestIdentity: `skill-md-v1:sha256:${digest}`,
+            stateVersion: 4n,
+          })
+        },
+        getPackageUpload: async () =>
+          create(wire.GetSkillPackageUploadResponseSchema, {
+            skillId: { value: "skill" },
+            attemptId: "attempt",
+            attemptEpoch: 1n,
+            uploadId: "upload",
+            stateVersion: currentVersion,
+            ...(completes ? { sourceVersionId: "VERSION" } : {}),
+          }),
+      }
+      t.mock.method(globalThis, "fetch", async () => {
+        puts++
+        if (lostPut === true && puts === 1) throw Error("PUT ACK lost")
+        return new Response(null, { headers: { "x-amz-version-id": "VERSION" } })
+      })
+      const run = () =>
+        importSkillBytes(
+          { identity: { namespace: "tenant", userId: "subject" }, requestId: "request" },
+          "intent",
+          bytes,
+          { display_name: "Actual", summary: "Owner", tags: [], example_prompts: [], category_keys: [] },
+          provenance,
+          client,
+          store,
+          "http://object.test",
+          AbortSignal.any([caller.signal, AbortSignal.timeout(1000)]),
+          Date.now() + 1000,
+        )
+      if (lostPut) {
+        await assert.rejects(run(), lostPut === true ? /PUT ACK lost/ : /caller cancellation/)
+        caller = new AbortController()
+      }
+      assert.equal((await run()).valid, true)
+      assert.equal(creates, lostPut === "create" ? 2 : 1)
+      assert.equal(completes, lostPut === "complete" ? 2 : 1)
+      assert.ok(begins.length >= 2)
+      assert.ok(begins.every((value) => value.commandId === "intent.begin"))
+      assert.ok(begins.every((value) => JSON.stringify(value.body) === JSON.stringify(begins[0].body)))
+    })

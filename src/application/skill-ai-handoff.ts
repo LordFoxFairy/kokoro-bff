@@ -17,7 +17,9 @@ export type SkillAiAssociation = {
   mimeType: "application/zip"
 }
 
-type Admission = { skillId: string; attemptId: string; uploadId: string; attemptEpoch: string; stateVersion: string }
+type BeginAdmission = { skillId: string; attemptId: string; uploadId: string; attemptEpoch: string; stateVersion: string }
+type Admission = BeginAdmission & { initialStateVersion: string }
+type Creation = { skillId: string; initialStateVersion: string }
 type Selection = { sourceVersionId: string; commandId: string; requestDigest: string }
 /** Persist a complete, keep-first selected locator before any owner Complete. CAS losers perform no owner mutation. */
 export async function handoffSkillPackage<T>(
@@ -25,8 +27,8 @@ export async function handoffSkillPackage<T>(
   receipts: Pick<IdempotencyRepository, "getReceipt" | "claimReceipt" | "compareAndSetReceipt">,
   steps: {
     create(commandId: string, frozen: Record<string, unknown>): Promise<{ skillId: string; stateVersion: string }>
-    begin(commandId: string, skillId: string, stateVersion: string): Promise<Admission>
-    status(skillId: string): Promise<Omit<Admission, "stateVersion"> & { sourceVersionId: string | null }>
+    begin(commandId: string, skillId: string, stateVersion: string): Promise<BeginAdmission>
+    status(skillId: string): Promise<Omit<BeginAdmission, "stateVersion"> & { sourceVersionId: string | null }>
     put(admission: Admission, frozen: Record<string, unknown>): Promise<string>
     completion(admission: Admission, sourceVersionId: string): Selection
     complete(admission: Admission, selection: Selection): Promise<{ stateVersion: string }>
@@ -66,32 +68,95 @@ export async function handoffSkillPackage<T>(
       throw new Error("skill_checkpoint_unavailable")
   }
   if (receipt?.status === 102 && receipt.fingerprint === input.fingerprint && JSON.stringify(receipt.body) === "{}") {
-    receipt = await advance(receipt, { stage: "frozen", frozen: input.frozen })
+    receipt = await advance(receipt, { proofVersion: 2, stage: "frozen", frozen: input.frozen })
   }
   if (receipt.status !== 200 || typeof receipt.body !== "object" || receipt.body === null || Array.isArray(receipt.body))
     throw new Error("skill_checkpoint_unavailable")
-  let body = receipt.body as { stage: string; frozen: unknown; admission?: Admission; selected?: Selection }
+  let body = receipt.body as {
+    stage: string
+    proofVersion?: number
+    frozen: unknown
+    creation?: Creation
+    admission?: Admission
+    selected?: Selection
+    completed?: { stateVersion: string }
+  }
   if (input.adoptFrozen) input.frozen = input.adoptFrozen(body.frozen)
   if (
-    !["frozen", "admitted", "selected"].includes(body.stage) ||
+    body.proofVersion !== 2 ||
+    !["frozen", "created", "admitted", "selected", "completed"].includes(body.stage) ||
     !isDeepStrictEqual(body.frozen, input.frozen) ||
     Object.keys(body).sort().join(",") !==
-      ({ frozen: "frozen,stage", admitted: "admission,frozen,stage", selected: "admission,frozen,selected,stage" } as Record<string, string>)[body.stage]
+      (
+        {
+          frozen: "frozen,proofVersion,stage",
+          created: "creation,frozen,proofVersion,stage",
+          admitted: "admission,frozen,proofVersion,stage",
+          selected: "admission,frozen,proofVersion,selected,stage",
+          completed: "admission,completed,frozen,proofVersion,selected,stage",
+        } as Record<string, string>
+      )[body.stage]
   )
     throw new Error("skill_checkpoint_unavailable")
+  const positiveVersion = (value: unknown): value is string =>
+    typeof value === "string" && /^[1-9][0-9]{0,18}$/u.test(value) && BigInt(value) <= 9_223_372_036_854_775_807n
+  const identity = (value: unknown): value is string => typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u.test(value)
   if (body.stage === "frozen") {
     signal.throwIfAborted()
     const created = await steps.create(`${input.commandId}.create`, input.frozen)
-    const admission = await steps.begin(`${input.commandId}.begin`, created.skillId, created.stateVersion)
-    if (admission.skillId !== created.skillId) throw new Error("skill_response_invalid")
-    receipt = await advance(receipt, { stage: "admitted", frozen: input.frozen, admission })
+    if (!identity(created.skillId) || !positiveVersion(created.stateVersion)) throw new Error("skill_response_invalid")
+    receipt = await advance(receipt, {
+      proofVersion: 2,
+      stage: "created",
+      frozen: input.frozen,
+      creation: { skillId: created.skillId, initialStateVersion: created.stateVersion },
+    })
+    body = receipt.body as typeof body
+  }
+  if (body.stage === "created") {
+    const creation = body.creation
+    if (
+      !creation ||
+      Object.keys(creation).sort().join(",") !== "initialStateVersion,skillId" ||
+      !identity(creation.skillId) ||
+      !positiveVersion(creation.initialStateVersion)
+    )
+      throw new Error("skill_checkpoint_unavailable")
+    signal.throwIfAborted()
+    const begun = await steps.begin(`${input.commandId}.begin`, creation.skillId, creation.initialStateVersion)
+    if (
+      Object.keys(begun).sort().join(",") !== "attemptEpoch,attemptId,skillId,stateVersion,uploadId" ||
+      begun.skillId !== creation.skillId ||
+      !identity(begun.attemptId) ||
+      !identity(begun.uploadId) ||
+      !positiveVersion(begun.attemptEpoch) ||
+      !positiveVersion(begun.stateVersion) ||
+      BigInt(begun.stateVersion) <= BigInt(creation.initialStateVersion)
+    )
+      throw new Error("skill_response_invalid")
+    const admission = { ...begun, initialStateVersion: creation.initialStateVersion }
+    receipt = await advance(receipt, { proofVersion: 2, stage: "admitted", frozen: input.frozen, admission })
     body = receipt.body as typeof body
   }
   const admission = body.admission
   if (
     !admission ||
-    Object.keys(admission).sort().join(",") !== "attemptEpoch,attemptId,skillId,stateVersion,uploadId" ||
-    !Object.values(admission).every((value) => typeof value === "string" && value.length > 0)
+    Object.keys(admission).sort().join(",") !== "attemptEpoch,attemptId,initialStateVersion,skillId,stateVersion,uploadId" ||
+    !identity(admission.skillId) ||
+    !identity(admission.attemptId) ||
+    !identity(admission.uploadId) ||
+    !positiveVersion(admission.attemptEpoch) ||
+    !positiveVersion(admission.stateVersion) ||
+    !positiveVersion(admission.initialStateVersion) ||
+    BigInt(admission.stateVersion) <= BigInt(admission.initialStateVersion)
+  )
+    throw new Error("skill_checkpoint_unavailable")
+  if (
+    body.stage === "completed" &&
+    (!body.completed ||
+      Object.keys(body.completed).join(",") !== "stateVersion" ||
+      !positiveVersion(body.completed.stateVersion) ||
+      BigInt(body.completed.stateVersion) <= BigInt(admission.stateVersion))
   )
     throw new Error("skill_checkpoint_unavailable")
   signal.throwIfAborted()
@@ -105,10 +170,11 @@ export async function handoffSkillPackage<T>(
     throw new Error("skill_response_invalid")
   if (body.stage === "admitted") {
     if (owner.sourceVersionId !== null) throw new Error("skill_checkpoint_unavailable")
+    signal.throwIfAborted()
     const version = await steps.put(admission, input.frozen)
     const selected = steps.completion(admission, version)
     if (selected.sourceVersionId !== version) throw new Error("skill_response_invalid")
-    receipt = await advance(receipt, { stage: "selected", frozen: input.frozen, admission, selected })
+    receipt = await advance(receipt, { proofVersion: 2, stage: "selected", frozen: input.frozen, admission, selected })
     body = receipt.body as typeof body
   }
   const selected = body.selected
@@ -124,8 +190,19 @@ export async function handoffSkillPackage<T>(
   )
     throw new Error("skill_checkpoint_unavailable")
   signal.throwIfAborted()
-  const completed = await steps.complete(admission, selected)
-  const result = await steps.validate(`${input.commandId}.validate`, admission, completed.stateVersion)
+  if (body.stage === "selected") {
+    const completed = await steps.complete(admission, selected)
+    if (
+      Object.keys(completed).join(",") !== "stateVersion" ||
+      !positiveVersion(completed.stateVersion) ||
+      BigInt(completed.stateVersion) <= BigInt(admission.stateVersion)
+    )
+      throw new Error("skill_response_invalid")
+    receipt = await advance(receipt, { proofVersion: 2, stage: "completed", frozen: input.frozen, admission, selected, completed })
+    body = receipt.body as typeof body
+  }
+  signal.throwIfAborted()
+  const result = await steps.validate(`${input.commandId}.validate`, admission, body.completed!.stateVersion)
   signal.throwIfAborted()
   const replacement = { fingerprint: input.fingerprint, status: 201, body: result }
   try {

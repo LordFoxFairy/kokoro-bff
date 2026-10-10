@@ -1,3 +1,11 @@
+## T-K03.14-BFF-GITHUB-ADMISSION（目标，2026-10-10）
+
+当前共享 AI/GitHub handoff 在 admitted 后重放 Create 获取初始 CAS，实际 owner 返回当前版本导致 Begin412。目标仅修现 BFF 私有 receipt：frozen→created（真实 Create ACK 的 skillId/initialStateVersion 已持久）→admitted（同创建身份、初始CAS及真实 Begin attempt/upload/epoch/stateVersion）→selected（真实 PUT版本与原 Complete 意图）→completed（真实 Complete ACK stateVersion）→terminal。created 持久成功/精确读回后才 Begin；Begin 和获取 transfer 均使用原 key/body/初始CAS，PUT 不再 Create。Create ACK 丢失且尚未 Begin时只同键重放；created/admitted checkpoint ACK 丢失通过精确 readback 或保留原阶段恢复，不推算版本或替换意图。
+
+completed 持久成功/精确读回后才 Validate；Validate提交后ACK丢失或terminal CAS失败，从completed同原Validate key/body/冻结Complete CAS恢复，不重复Complete、不读最新CAS替代。
+
+非terminal checkpoint严格携带私有proofVersion:2，旧200无版本（包括旧frozen）零owner写入并失败闭合，避免重放当前CAS伪造初始proof；terminal201保持原样。阶段成员、frozen/fingerprint及 owner 身份严格绑定；旧缺创建proof的 admitted/selected receipt保持原数据并失败闭合，terminal201原结果可重放，不宣称旧 intent已恢复。取消/claim/CAS败者及未知ACK语义保持，AI与GitHub共享调用均测试。无新增 public字段/API/contract、SQL/schema、依赖或 owner权限变更；现两源码、两测试实施后工程门与真实链仍待 Root 验收。
+
 ## T-K03.14-BFF-GITHUB-PATH-CONTRACT D0（2026-10-10；仅文档，待机器切片）
 
 当前13.1机器path2048与现parser256漂移，目标13.2仅纠正五处GitHub输入/Preview输出声明；无新增持久事实、SQL/schema/ORM/Redis/receipt变更，不访问Platform或其他owner数据库。BFF现handoff仍冻结真实commit/path和包digest，后继Publish/Install与owner事务不变。
