@@ -2962,7 +2962,7 @@ schema: { $ref: '#/components/schemas/PersonalMcp${name}Error' }`,
 }
 
 export function inspectBffOpenApi(source: string, baseline: readonly BaselineOperation[]): string[] {
-  if (!/^  version: 13\.1\.0$/mu.test(source)) return ["Current public contract version must equal 13.1.0"]
+  if (!/^  version: 13\.2\.0$/mu.test(source)) return ["Current public contract version must equal 13.2.0"]
   return [...inspectSkillProductContract(source), ...inspectOpenApiGovernance(source), ...compareOperationBaseline(source, baseline)]
 }
 

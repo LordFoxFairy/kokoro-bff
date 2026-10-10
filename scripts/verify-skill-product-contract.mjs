@@ -109,6 +109,7 @@ function restorePublic10(source) {
   return parent
 }
 export function inspectSkillProductContract(source, baseline = OPERATIONS) {
+  if (/^  version: 13\.2\.0$/mu.test(source)) return inspectPublic132GithubPathContract(source)
   if (/^  version: 13\.1\.0$/mu.test(source)) return inspectPublic131SkillAuthorizationContract(source)
   if (/^  version: 13\.0\.0$/mu.test(source)) return inspectPublic13CasContract(source)
   if (/^  version: 12\.0\.0$/mu.test(source)) return inspectSkillsSpecificationContract(source)
@@ -310,4 +311,48 @@ export function inspectPublic131SkillAuthorizationContract(source) {
   const parent = restorePublic13SkillAuthorizationContract(source)
   if (hash(parent) !== "f100463d3d9b686745e13fd2c07d6fdf8d305fcc8b66169cecddded0f2f82801") errors.push("Public13.1 exact Public13.0 parent inverse drifted")
   return [...errors, ...inspectPublic13CasContract(parent)]
+}
+
+const GITHUB_PATH_CONSTRAINTS = [
+  ["preview input", ["GithubSkillRequest", "properties", "path"]],
+  ["import selector", ["GithubSkillImportRequest", "properties", "path"]],
+  ["preview selector", ["GithubSkillResponse", "properties", "data", "oneOf", 0, "properties", "selector", "properties", "path"]],
+  ["preview repository", ["GithubSkillResponse", "properties", "data", "oneOf", 0, "properties", "repository", "properties", "path"]],
+  ["preview candidates", ["GithubSkillResponse", "properties", "data", "oneOf", 1, "properties", "paths", "items"]],
+]
+
+/** Explicit historical inverse; never a production input compatibility path. */
+export function restorePublic131GithubPathContract(source) {
+  let parent = source.replace("  version: 13.2.0", "  version: 13.1.0")
+  for (const name of ["GithubSkillRequest", "GithubSkillImportRequest", "GithubSkillResponse"]) {
+    const block = namedBlock(parent, "schema", name)
+    if (block === null) continue
+    let restored
+    if (name === "GithubSkillResponse") {
+      restored = block
+        .replace(/(                    path:\n                      type: string\n                      maxLength: )256/gu, "$12048")
+        .replace(/(                paths:\n                  type: array\n                  maxItems: 128\n                  items:\n                    type: string\n                    maxLength: )256/u, "$12048")
+    } else restored = block.replace(/(        path:\n          type: string\n          maxLength: )256/u, "$12048")
+    parent = parent.replace(block, restored)
+  }
+  return parent
+}
+
+/** Five advertised bounds converge to the unchanged parser; all other bytes are frozen. */
+export function inspectPublic132GithubPathContract(source) {
+  let document
+  try {
+    document = load(source, { json: false })
+  } catch {
+    return ["Public13.2 must be valid unique-key YAML"]
+  }
+  const errors = []
+  if (document?.info?.version !== "13.2.0") errors.push("Public13.2 version must equal 13.2.0")
+  for (const [label, path] of GITHUB_PATH_CONSTRAINTS) {
+    const constraint = path.reduce((value, key) => value?.[key], document?.components?.schemas)
+    if (constraint?.maxLength !== 256) errors.push(`GitHub path ${label} must equal 256 characters`)
+  }
+  const parent = restorePublic131GithubPathContract(source)
+  if (hash(parent) !== "418db9504b179d29113385f334628d304130491d4bbc86169e20c712cf2cd045") errors.push("Public13.2 exact Public13.1 parent inverse drifted")
+  return [...errors, ...inspectPublic131SkillAuthorizationContract(parent)]
 }

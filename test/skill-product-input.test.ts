@@ -72,3 +72,18 @@ test("Public13 current package admission requires CAS without rewriting immutabl
     assert.equal(current.projection.command.expected_state_version, "9007199254740993")
   }
 })
+
+test("GitHub path inputs preserve the existing 256-character selector boundary before owner calls", async () => {
+  const { parseSkillProductInput } = await import("../src/http/skill-product-input.js")
+  const commit = "a".repeat(40)
+  for (const path of ["", "a".repeat(256), "界".repeat(256)]) {
+    const preview = { repository_url: "https://github.com/owner/repo", path }
+    const selector = { owner: "owner", repository: "repo", commit, path }
+    assert.deepEqual(parseSkillProductInput("github", Buffer.from(JSON.stringify(preview))), preview)
+    assert.deepEqual(parseSkillProductInput("githubImport", Buffer.from(JSON.stringify(selector))), selector)
+  }
+  for (const path of ["a".repeat(257), "界".repeat(257), "/absolute", "a//b", "a/../b", "a/./b", "a\\b"]) {
+    assert.throws(() => parseSkillProductInput("github", Buffer.from(JSON.stringify({ repository_url: "https://github.com/owner/repo", path }))))
+    assert.throws(() => parseSkillProductInput("githubImport", Buffer.from(JSON.stringify({ owner: "owner", repository: "repo", commit, path }))))
+  }
+})

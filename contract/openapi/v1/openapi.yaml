@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 13.1.0
+  version: 13.2.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -11110,7 +11110,7 @@ components:
           pattern: ^[a-f0-9]{40}(?:[a-f0-9]{24})?$
         path:
           type: string
-          maxLength: 2048
+          maxLength: 256
           description: Empty root or NFC relative POSIX directory; no dot, empty, traversal or backslash segments.
     SkillProductErrorResponse:
       type: object
@@ -15066,7 +15066,7 @@ components:
           pattern: ^https://github\.com/[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?/[A-Za-z0-9_.-]{1,100}$
         path:
           type: string
-          maxLength: 2048
+          maxLength: 256
           description: Empty root or NFC relative POSIX directory; no dot, empty, traversal or backslash segments.
     GithubSkillResponse:
       type: object
@@ -15113,7 +15113,7 @@ components:
                       pattern: ^[a-f0-9]{40}(?:[a-f0-9]{24})?$
                     path:
                       type: string
-                      maxLength: 2048
+                      maxLength: 256
                       description: Empty root or NFC relative POSIX directory; no dot, empty, traversal or backslash segments.
                 metadata:
                   $ref: "#/components/schemas/SkillProductMetadata"
@@ -15150,7 +15150,7 @@ components:
                       pattern: ^[a-f0-9]{40}([a-f0-9]{24})?$
                     path:
                       type: string
-                      maxLength: 2048
+                      maxLength: 256
                     repo_stats:
                       $ref: "#/components/schemas/Public9SkillRepositoryStats"
                 content_sha256:
@@ -15184,7 +15184,7 @@ components:
                   maxItems: 128
                   items:
                     type: string
-                    maxLength: 2048
+                    maxLength: 256
                     description: Empty root or NFC relative POSIX directory; no dot, empty, traversal or backslash segments.
     McpServer:
       type: object

@@ -3078,7 +3078,8 @@ test("Public13 requires CAS only for the three package commands and exactly rest
   const { inspectPublic13CasContract, restorePublic12CasContract } = await import("../../scripts/verify-skill-product-contract.mjs")
   const current = await readFile(currentOpenapiUrl, "utf8")
   const { restorePublic13SkillAuthorizationContract } = await import("../../scripts/verify-skill-product-contract.mjs")
-  const source = restorePublic13SkillAuthorizationContract(current)
+  const { restorePublic131GithubPathContract } = await import("../../scripts/verify-skill-product-contract.mjs")
+  const source = restorePublic13SkillAuthorizationContract(restorePublic131GithubPathContract(current))
   assert.deepEqual(inspectPublic13CasContract(source), [])
   const document = load(source)
   assert.equal(document.info.version, "13.0.0")
@@ -3104,7 +3105,7 @@ test("Public13 requires CAS only for the three package commands and exactly rest
   const { inspectBffOpenApi: inspectCurrentBffOpenApi } = await import("../../scripts/verify-openapi.ts")
   const baseline = JSON.parse(await readFile(baselineUrl, "utf8")).operations
   assert.deepEqual(inspectCurrentBffOpenApi(current, baseline), [])
-  assert.ok(inspectCurrentBffOpenApi(restorePublic12CasContract(source), baseline).some((error) => error.includes("13.1.0")))
+  assert.ok(inspectCurrentBffOpenApi(restorePublic12CasContract(source), baseline).some((error) => error.includes("13.2.0")))
 
   assert.ok(inspectPublic13CasContract(source.replace("maximum: 33554432", "maximum: 33554431")).some((error) => error.includes("parent inverse")))
 })
@@ -3156,7 +3157,8 @@ test("Public13.1 guards every actual Skill action route, status family and the e
   const { skillActionForRequest } = await import("../../src/auth/user-admission.ts")
   const { inspectPublic131SkillAuthorizationContract, restorePublic13SkillAuthorizationContract } =
     await import("../../scripts/verify-skill-product-contract.mjs")
-  const source = await readFile(currentOpenapiUrl, "utf8"),
+  const { restorePublic131GithubPathContract } = await import("../../scripts/verify-skill-product-contract.mjs")
+  const source = restorePublic131GithubPathContract(await readFile(currentOpenapiUrl, "utf8")),
     document = load(source)
   assert.deepEqual(inspectPublic131SkillAuthorizationContract(source), [])
   assert.deepEqual(inspectSkillProductContract(restorePublic13SkillAuthorizationContract(source)), [])
@@ -3215,4 +3217,50 @@ test("Public13.1 guards every actual Skill action route, status family and the e
   assert.ok(inspectPublic131SkillAuthorizationContract(widenedRead).some((error) => error.includes("read forbidden boundary")))
   const wrongStatus = source.replace("#/components/responses/SkillValidateBadRequest", "#/components/responses/SkillValidateForbidden")
   assert.ok(inspectPublic131SkillAuthorizationContract(wrongStatus).some((error) => error.includes("parent inverse")))
+})
+
+for (const [label, path] of [
+  ["preview input", ["GithubSkillRequest", "properties", "path"]],
+  ["import selector", ["GithubSkillImportRequest", "properties", "path"]],
+  ["preview selector", ["GithubSkillResponse", "properties", "data", "oneOf", 0, "properties", "selector", "properties", "path"]],
+  ["preview repository", ["GithubSkillResponse", "properties", "data", "oneOf", 0, "properties", "repository", "properties", "path"]],
+  ["preview candidates", ["GithubSkillResponse", "properties", "data", "oneOf", 1, "properties", "paths", "items"]],
+]) {
+  test(`GitHub path current ${label} matches the existing 256-character parser`, async () => {
+    const { load } = await import("js-yaml")
+    const document = load(await readFile(currentOpenapiUrl, "utf8"))
+    const constraint = path.reduce((value, key) => value[key], document.components.schemas)
+    assert.equal(constraint.maxLength, 256)
+  })
+}
+
+test("GitHub path Public13.2 restores the exact immutable Public13.1 parent and guards all five constraints", async () => {
+  const { inspectPublic132GithubPathContract, restorePublic131GithubPathContract } = await import("../../scripts/verify-skill-product-contract.mjs")
+  const current = await readFile(currentOpenapiUrl, "utf8")
+  assert.deepEqual(inspectPublic132GithubPathContract(current), [])
+  assert.equal(createHash("sha256").update(restorePublic131GithubPathContract(current)).digest("hex"), "418db9504b179d29113385f334628d304130491d4bbc86169e20c712cf2cd045")
+  assert.deepEqual(inspectSkillProductContract(restorePublic131GithubPathContract(current)), [])
+  const matches = [...current.matchAll(/maxLength: 256/gu)].filter((match) => {
+    const changed = current.slice(0, match.index) + current.slice(match.index).replace("maxLength: 256", "maxLength: 257")
+    return inspectPublic132GithubPathContract(changed).some((error) => error.startsWith("GitHub path"))
+  })
+  assert.equal(matches.length, 5)
+  for (const match of matches) {
+    for (const replacement of ["255", "257", "2048"]) {
+      const changed = current.slice(0, match.index) + current.slice(match.index).replace("maxLength: 256", `maxLength: ${replacement}`)
+      assert.ok(inspectPublic132GithubPathContract(changed).some((error) => error.startsWith("GitHub path")))
+      if (replacement !== "2048") assert.ok(inspectPublic132GithubPathContract(changed).some((error) => error.includes("parent inverse")))
+    }
+  }
+  assert.ok(inspectPublic132GithubPathContract(current.replace("maximum: 33554432", "maximum: 33554431")).some((error) => error.includes("parent inverse")))
+  assert.ok(inspectPublic132GithubPathContract(current.replace("  version: 13.2.0", "  version: 13.1.0")).some((error) => error.includes("version")))
+  assert.notDeepEqual(inspectPublic132GithubPathContract(`${current}openapi: 3.1.0\n`), [])
+})
+
+test("GitHub path inverse must not restore a tampered repository URL bound", async () => {
+  const { inspectPublic132GithubPathContract } = await import("../../scripts/verify-skill-product-contract.mjs")
+  const current = await readFile(currentOpenapiUrl, "utf8")
+  const changed = current.replace(/(GithubSkillRequest:\n[\s\S]*?repository_url:\n\s+type: string\n\s+maxLength: )2048/u, "$1256")
+  assert.notEqual(changed, current)
+  assert.ok(inspectPublic132GithubPathContract(changed).some((error) => error.includes("parent inverse")))
 })
