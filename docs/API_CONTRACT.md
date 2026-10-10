@@ -1,3 +1,21 @@
+## R357-BFF-ADMIN-INGRESS-D0：Admin Identity read contract（已发布于当前源码候选）
+
+`admin-web-bff` 的 service envelope 使用独立 secret，并且只在 fresh human admission 后访问具名 Admin surface。public v1 artifact 新增且只新增以下 owner-preserving read operations：
+
+| BFF path | method | IAM owner operation | permission |
+| --- | --- | --- | --- |
+| `/v1/admin/identity/members` | `GET` | `listTenantMembers` | `admin.identity.read` |
+| `/v1/admin/identity/invitations` | `GET` | `listTenantInvitations` | `admin.identity.read` |
+| `/v1/admin/identity/roles` | `GET` | `listTenantRoles` | `admin.identity.read` |
+
+每项请求只允许 `limit`（默认 25，1–100）与 opaque `cursor`（至多 2048 字符）。tenant 不出现在 path、query 或 body；BFF 从已准入 context 固定 tenant、actor、bearer 与 request id，再经现严格 IAM Team client 投影。成功为闭合 owner page data 与 `no-store`/request id；普通用户或非 Admin service credential 为 `403`，非法 query 为 `400`，未命中具名路径为 `404`，限流与 owner dependency 维持固定 envelope。不存在 `/v1/admin/*` catch-all、ordinary `/v1/team/*` alias、直接 browser-to-IAM 调用或私有 Admin DTO。
+
+本片不发布 audit、global user directory、user lifecycle、session revocation、管理员授权写入、任意查询或任意 owner relay。后续 API 只能在 IAM owner contract、固定 vendor revision、BFF machine schema 与 consumer pin 同时更新后单独发行。
+
+机器验证以 canonical `contract/openapi/v1/openapi.yaml`、operation baseline（136）和 route contract test 为准；它验证三个 exact operationId、权限、query bounds、成功/失败响应以及拒绝未登记 operation。测试 fixture secret 只存在测试进程，不写日志、文档或响应。
+
+<!-- R357-BFF-ADMIN-INGRESS-API-D0-END -->
+
 ## T-K03.4 精确 Skill 下载 browser-private 合同（BFF源码候选，未发布）
 
 参考 `POST /skill.v1.SkillService/DownloadSkill` 的 `{skillId}` 永远表示series显式current，request/response/path保持原样。旧安装pin、managed exact version及share exact revision不向该参考请求增加selector，也不恢复已删除的`GET /v1/skills/{id}/download`。候选Kokoro私有合同只有：
@@ -2554,3 +2572,26 @@ session_invalid/skill_forbidden/skill_rate_limited，坏响应、超时、未知
 四个 mock oracle 只校正当前事实：quota/list 使用当前 closed envelope；Public12 docs coverage使用 canonical machine path/census并不恢复 `/v1/skills/pool`；deprecated compatibility 在 fresh admission 后验证未实现 operation fail-closed。MCP mutation 用例必须改名为 fresh-admission fail-closed，并断言无 owner I/O；它不证明 register/toggle/list/delete CRUD，GET能力仍由独立现有测试证明。不得以 IAM unavailable、旧路由、skip 或宽 schema 取绿。Billing 75ms默认并发波动保留对照证据，不改 timeout/error contract。
 
 <!-- R357-BFF-BOUNDARY-AND-ORACLE-API-D0-END -->
+## T-K03.4 `GET /v1/me` fresh profile extension (2026-10-09)
+
+The existing public beta `getCurrentUser` operation and `identity.self.read` permission remain the sole current-identity endpoint. Its closed `data` object adds one required `profile` discriminated union; no top-level or profile unknown fields are accepted:
+
+```text
+profile =
+  { status: "found", display_name: string, image_url: string | null }
+| { status: "missing" }
+```
+
+`user_id`, `tenant_id` and `platform_admin` remain required and unchanged. The `found` values are the fresh IAM result for the single exact current `user_id` in the admitted tenant. An empty or null name is not synthesized; BFF preserves the owner string as contracted, and `image_url: null` means IAM has no image. `missing` is a legitimate 200 state and omits both `display_name` and `image_url`; clients display an explicit no-profile state rather than brand, email, id or initials presented as an owner name. Unknown status, fields or result identity are invalid owner responses, not forward-compatible fallback.
+
+The operation still accepts no query, body, transfer encoding or idempotency key, and returns `Cache-Control: no-store` plus `x-request-id`. Existing admission failures retain their 401/403/429/503 meanings. After successful admission, any publisher-profile permission, dependency, timeout, cancellation, header/media/size/decode or strict-shape failure returns the existing 503 service-unavailable envelope and no identity payload. Such a 503 does not assert that the Product session is invalid; Web refresh preserves its last authenticated session and may retry or ask the user to sign in explicitly. Profile `missing` never maps to an error, while owner failure never maps to `missing` or a partial 200.
+
+The machine source of truth will be the existing `contract/openapi/v1/openapi.yaml`: extend `CurrentUserIdentity.required`, add a closed `CurrentUserProfile` oneOf/discriminator shape, and retain the exact operation count/path/method/operationId. Contract checks must reject optional profile, nullable profile, extra fields, weakened union branches and undocumented success/error responses. Publication produces a new immutable BFF public contract version, commit and SHA-256 digest; Web updates only after that owner artifact is released, regenerates its client/schema, and verifies session GET plus refresh against the pinned digest. No compatibility alias or unknown-field fallback is published.
+
+## R357 Admin IAM bridge contract boundary（已实施的首个 read slice）
+
+该 slice 的唯一对外事实是上方三个 exact v1 operations。BFF 使用当前已固定并生成的 IAM Team client；每个 owner result 都经严格 wire decode 后转出，不接收调用方指定 tenant、owner method 或额外查询字段。BFF 不持久化、缓存或重排 IAM 的 membership、invitation、role 事实。
+
+Audit、全局用户目录、用户生命周期、session revoke、角色 grant 与任何 mutation 不属于本 contract。新增它们前必须先发布相应 IAM owner operation，固定 vendor artifact、再生成 BFF client 和版本化 public schema；不得通过 internal URL、手写 wire type 或 generic relay 绕过 owner。
+
+<!-- R357-ADMIN-IAM-BRIDGE-API-D0-END -->

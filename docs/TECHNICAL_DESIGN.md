@@ -1,3 +1,17 @@
+## R357-BFF-ADMIN-INGRESS-D0：独立 Admin Web 的闭合入口（已实施）
+
+独立 Admin Web 不复用 User Web 的 cookie、OAuth client 或 service secret，但仍只经过现 BFF 的 IAM 协议中继和人类请求准入；不新增 Admin BFF、通用代理或第二套 token verifier。`admin-web-bff` 必须使用独立配置的 Admin secret；未配置、空值、与 User secret 相同、错配或交叉组合均为 `403 service_auth_failed`，不设 fallback。
+
+放置裁决：现认证目录中的 closed browser-service credential policy 是唯一 service envelope 判定点。它只返回 `web-bff` 或 `admin-web-bff` 两个闭合身份；原 `web-bff` 行为不变。`admin-web-bff` 只获固定 IAM protocol relay、`/v1/me`、已发布具名 Admin Skills/Model Routing 操作，以及本片的三条 Admin Identity 只读操作；它不得获得普通 User Web 的 music、owner、runtime-manifest、Storage、Team 或未知路由资格。每条业务请求仍须通过 fresh bearer、固定 tenant/subject 与 `platform_admin` admission；service envelope 从不替代用户身份或权限。
+
+Admin Identity 的唯一实现模块为 `src/http/routes/admin-identity.ts`，由 composition root 将精确 `admin/identity` 路径分派至该模块。它只投影 IAM 已发布且 BFF 已生成客户端支持的三项 owner read：`GET /v1/admin/identity/members`、`/invitations` 与 `/roles`。IAM 仍是 membership、invitation、role 的唯一 owner；BFF 不读 IAM SQL、不镜像事实、不开泛化 owner relay。请求 tenant、actor、bearer 与 request id 均取自已准入 context，忽略调用者伪造 tenant header；只接受闭合 `limit`（1–100）与 opaque `cursor`，非法 query 在零 IAM I/O 前失败。
+
+不包含 audit、全局用户目录、用户生命周期、session revocation、角色/管理员写入、批量操作或任意路径代理。它们必须先由 IAM 发布 owner contract，之后再单独扩充 BFF public contract 与 Admin Web。
+
+真实 HTTP 负控覆盖：admin service credential 对未知路径仍拒绝；普通用户 `403`；非法 query `400` 且零 IAM I/O；伪造 tenant header 不改变 outbound tenant；三条允许 read 仅使用已准入 tenant。取消、deadline 和迟到响应沿现有 BFF 边界处理。
+
+<!-- R357-BFF-ADMIN-INGRESS-D0-END -->
+
 ## T-K03.4 精确 Skill 下载准备动作（源码候选，待Root验收）
 
 ### 放置与 owner 裁决
@@ -3284,3 +3298,39 @@ BFF 进程入口拥有 OS signal 到既有 server lifecycle 的唯一接线；`c
 首次 signal 建立唯一 termination Promise；关闭期间后续同种或异种 signal 由仍注册的 handler 忽略，不能因恢复默认 handler 而提前杀死 drain。入口调用既有 `shutdown(30_000)`；正常完成后清除 deadline、移除 handler 并自然退出 0。同步 throw或异步 rejection 均只输出固定安全错误并退出 1，不回显错误、配置或凭据。31 秒 deadline 保持 referenced，直到 shutdown settle 才清除；若 worker 或 resource close 永不 settle，入口输出固定 deadline 错误并退出 1。该强制进程终态不是资源 drain 成功，也不改变 server 内部顺序。
 
 只扩现 `test/lifecycle.test.ts`：保留真实 HTTP + worker + store 顺序测试；另以真实 Node 子进程分别发送 SIGINT/SIGTERM、关闭中第二种 signal、同步/异步失败及不 settle 场景，证明 shutdown 单次调用、成功 settle 前不退出、成功 exit 0、错误不泄露和 deadline exit 1。测试可注入较短 hard deadline；生产调用不传该参数，固定保持 30/31 秒。
+## T-K03.4 fresh current-user profile projection design (2026-10-09)
+
+**Owner and current fact.** IAM remains the sole owner of User display name and image. BFF `GET /v1/me` currently completes the ordinary Product user admission and returns only the trusted `user_id`, fixed `tenant_id`, and current `platform_admin`. The already pinned IAM internal contract exposes `resolveTenantPublisherProfiles`; `IamPublisherProfileClient.resolve` performs one bounded, strict, no-store user-delegated read and distinguishes an exact `{kind:"user", id:currentUserId}` result as `found` or `missing`. Browser must not call IAM, decode the token, infer a name from brand/email/id, or retain a second profile in its session cookie.
+
+**Placement decision.** Two locations were compared. Extending the inline `/v1/me` branch in `src/bootstrap/server.ts` would keep the file count low, but would add owner I/O, cancellation and wire projection to the already large composition root. A generic identity service or new module would add an abstraction without a second use case. The selected target is one ordinary `src/http/routes/current-user.ts` handler: it owns only the public current-user HTTP admission-aftercare and strict response projection, receives the already admitted context/Bearer plus a narrow `resolve` capability, and never owns IAM facts. `src/bootstrap/runtime.ts` constructs the existing `IamPublisherProfileClient` once and exposes that narrow capability through the existing server composition; `src/bootstrap/server.ts` delegates the exact `/v1/me` branch. No new directory, cache, identity model, general profile facade, fallback, or alias is introduced.
+
+The handler sends exactly one ref, `{kind:"user", id:context.identity.userId}`, under `context.identity.namespace`, and accepts only the resolver's exact one-result map. `found` projects the owner `display_name` byte-for-byte and `image_url` as string or null. `missing` is a successful, explicit profile state and carries neither display name nor image. Unknown keys, extra results, wrong kind/id/status, malformed fields, extra wire fields, or a result omitted by IAM fail closed; none is converted to `missing`.
+
+Admission remains first and authoritative. Once admission succeeds, profile resolution shares the request cancellation signal and the existing configured upstream timeout, has no retry, and must settle before a 200 response. Client disconnect/timeout cancels the owner read and a late result cannot write a response. Resolver transport, timeout, permission, media/header, size, decode or shape failure maps to the existing 503 identity dependency failure; it does not return a partial 200 and does not turn an already admitted user into a 401/403 logout. Admission's existing 401/403/429/fixed-tenant semantics remain unchanged. The current Product user token already requests the IAM-owner-provisioned `iam:publisher-profile.read` scope on the same internal resource, so this needs no IAM endpoint, role or permission expansion; a stale token lacking that scope is a resolver dependency failure and Web must preserve the local session while offering retry or an explicit fresh sign-in.
+
+Implementation scope after machine-contract approval is: `contract/openapi/v1/openapi.yaml`, its existing governance/baseline tests and release metadata; `src/http/routes/current-user.ts`, `src/bootstrap/{runtime,server}.ts`; the existing `test/user-admission.test.ts` and architecture tests; then regenerated public consumer artifacts in the owning release workflow. `src/infrastructure/clients/iam-publisher-profile.ts` requires no semantic change unless a test proves its existing narrow `resolve` port cannot be injected. IAM generated files, IAM contract, SQL, session admission, cookies and unrelated routes are protected.
+
+RED must prove: the old response lacks the required profile; exact found name/null-or-image projection; exact missing 200 without invented fields; wrong/missing/duplicate ref, unknown status/field and wrong-typed image/name fail 503; resolver 401/403/429/500/503, timeout, cancellation and late settlement never produce 200 or logout; admission denial performs zero resolver calls; query/body/wrong method and forged identity perform zero resolver calls; two users and tenants never cross; every response remains no-store with the request id. Contract publication keeps the existing operationId/path and bumps the immutable public artifact version/digest, with generated drift and the Web pin checked before Web changes.
+
+## R357 Admin IAM bridge: owner-preserving first slice (not implemented)
+
+**Current fact.** The independent Admin Browser has real admissions and can reach the already-published Skills and Model Routing operations, but `/api/v1/admin/users` and `/api/v1/admin/security-events` currently end at its closed adapter with `404 admin_operation_not_found`. The active IAM internal OpenAPI currently owns tenant members, invitations, roles, tenant status and tenant-scoped audit events. It does **not** publish a global user directory, user lifecycle, or user-session revocation HTTP operation; platform-admin mutation is a protected local management command. Therefore those absent capabilities have no Admin Browser route, card, placeholder, or alias.
+
+**Owner and call direction.** The stable direction is `Admin Browser -> Admin Web -> BFF -> IAM`. IAM remains the only writer of organization membership, roles, invitations, tenant status and audit facts; BFF never reads IAM SQL or mirrors IAM records. Every BFF request first proves the current User session and `platform_admin` projection, then invokes a fixed IAM internal operation with the already-admitted access token. Browser or Admin Web never receives an IAM workload credential, and BFF must not relay an arbitrary owner path.
+
+**First published resource map.** The next BFF public artifact may expose only these current IAM capabilities, subject to a refreshed fixed IAM vendor artifact and focused owner/BFF tests:
+
+| BFF resource | IAM owner operation | Semantics |
+| --- | --- | --- |
+| `GET /v1/admin/identity/members` | `listTenantMembers` | current configured tenant, opaque cursor, bounded page |
+| `GET /v1/admin/identity/invitations` | `listTenantInvitations` | current configured tenant, opaque cursor, bounded page |
+| `GET /v1/admin/identity/roles` | `listTenantRoles` | current configured tenant, opaque cursor, bounded page |
+| `GET /v1/admin/security/audit-events` | `listAuditEvents` | IAM-defined tenant-scoped audit filters and cursor only |
+
+The public read surface preserves the IAM owner’s closed filters, ordering, opaque cursors, `no-store`, request ID, cancellation and error semantics. BFF does not add a global-user lookup, totals, aggregate status, browser-selected tenant, arbitrary audit expression, role grant or mutation. A live IAM denial, actor/session revocation, malformed owner response, timeout, cancellation or late result fails closed with no partial projection.
+
+**Contract sequence.** First pin a committed IAM OpenAPI version whose required four operations and schemas are verified against the active IAM owner; BFF then regenerates the existing IAM client from that fixed vendor artifact. BFF publishes the four named v1 operations above and exact public schemas, and only then does Admin Web regenerate its fixed consumer and add the corresponding same-origin mappings/pages. The currently pinned BFF IAM vendor artifact is 0.8.0 while active IAM is 0.11.0; that mismatch must be reconciled through the normal vendor/generation checks, never by hand-editing generated wire types.
+
+**Placement.** The selected implementation extends the existing typed IAM Team/Audit client seam and adds one dedicated `admin-identity` route module; it does not place administrator behavior in the ordinary `/v1/team/*` route or create a generic owner relay. It changes no BFF database, Redis fact, cache, receipt or schema. New global-user or lifecycle views require a separate IAM owner contract first.
+
+<!-- R357-ADMIN-IAM-BRIDGE-D0-END -->

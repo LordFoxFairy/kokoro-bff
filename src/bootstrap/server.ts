@@ -65,6 +65,7 @@ import { runtimeManifest } from "../http/routes/runtime-manifest.js"
 import { iamProtocolRelay } from "../http/routes/iam-protocol-relay.js"
 import { liveTeamRead, liveTeamWrite } from "../http/routes/team.js"
 import { liveModelRoutingAdmin } from "../http/routes/model-routing-admin.js"
+import { liveAdminIdentityRead } from "../http/routes/admin-identity.js"
 import { createBffComposition, type BffCompositionOptions, type BffRouteInput } from "./runtime.js"
 import { createSkillDraftRoute } from "../http/routes/create-skill-draft.js"
 import { getSkillPackageUploadRoute } from "../http/routes/get-skill-package-upload.js"
@@ -488,6 +489,11 @@ async function handle(
       config.storage?.objectOrigin ?? null,
       readmitSkill,
     )
+    return
+  }
+
+  if (businessPath[0] === "admin" && businessPath[1] === "identity") {
+    await liveAdminIdentityRead(request, response, config, context, admission.bearerToken, businessPath)
     return
   }
 

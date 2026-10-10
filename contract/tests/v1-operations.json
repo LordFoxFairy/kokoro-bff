@@ -83,6 +83,21 @@
     },
     {
       "method": "GET",
+      "path": "/v1/admin/identity/members",
+      "operation_id": "listAdminIdentityMembers"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/admin/identity/invitations",
+      "operation_id": "listAdminIdentityInvitations"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/admin/identity/roles",
+      "operation_id": "listAdminIdentityRoles"
+    },
+    {
+      "method": "GET",
       "path": "/v1/admin/model-routing",
       "operation_id": "listAdminModelRouting"
     },

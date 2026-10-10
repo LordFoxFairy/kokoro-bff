@@ -46,6 +46,8 @@ tags:
     description: BFF Library surface pending the Storage v2 integration.
   - name: Billing
     description: Billing catalog, summary, and checkout projections.
+  - name: Administration
+    description: Platform-administrator projections backed by their owning services.
 paths:
   /v1/preferences/personalization:
     get:
@@ -623,6 +625,75 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /v1/admin/identity/members:
+    get:
+      tags: [Administration]
+      operationId: listAdminIdentityMembers
+      summary: List current-tenant members for platform administration
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: admin.identity.read
+      parameters:
+        - $ref: '#/components/parameters/AdminIdentityLimit'
+        - $ref: '#/components/parameters/AdminIdentityCursor'
+      responses:
+        '200':
+          $ref: '#/components/responses/AdminIdentityMembersSuccess'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '502': { $ref: '#/components/responses/BadGateway' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /v1/admin/identity/invitations:
+    get:
+      tags: [Administration]
+      operationId: listAdminIdentityInvitations
+      summary: List current-tenant invitations for platform administration
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: admin.identity.read
+      parameters:
+        - $ref: '#/components/parameters/AdminIdentityLimit'
+        - $ref: '#/components/parameters/AdminIdentityCursor'
+      responses:
+        '200':
+          $ref: '#/components/responses/AdminIdentityInvitationsSuccess'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '502': { $ref: '#/components/responses/BadGateway' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /v1/admin/identity/roles:
+    get:
+      tags: [Administration]
+      operationId: listAdminIdentityRoles
+      summary: List current-tenant roles for platform administration
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: admin.identity.read
+      parameters:
+        - $ref: '#/components/parameters/AdminIdentityLimit'
+        - $ref: '#/components/parameters/AdminIdentityCursor'
+      responses:
+        '200':
+          $ref: '#/components/responses/AdminIdentityRolesSuccess'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '502': { $ref: '#/components/responses/BadGateway' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/admin/model-routing:
     get:
@@ -10108,6 +10179,23 @@ components:
       scheme: bearer
       bearerFormat: opaque-session-token
   parameters:
+    AdminIdentityLimit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 25
+    AdminIdentityCursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 2048
     AdminModelRoutingLimit:
       name: limit
       in: query
@@ -13293,6 +13381,33 @@ components:
           type: array
           items: { $ref: '#/components/schemas/TeamRole' }
         meta: { $ref: '#/components/schemas/TeamPageMeta' }
+    AdminIdentityMembersResponse:
+      type: object
+      required: [data, meta]
+      additionalProperties: false
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/TeamMember' }
+        meta: { $ref: '#/components/schemas/AdminPageMeta' }
+    AdminIdentityInvitationsResponse:
+      type: object
+      required: [data, meta]
+      additionalProperties: false
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/TeamInvitation' }
+        meta: { $ref: '#/components/schemas/AdminPageMeta' }
+    AdminIdentityRolesResponse:
+      type: object
+      required: [data, meta]
+      additionalProperties: false
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/TeamRole' }
+        meta: { $ref: '#/components/schemas/AdminPageMeta' }
     TeamCreateInvitationRequest:
       type: object
       required: [email, roles]
@@ -18620,6 +18735,39 @@ components:
                     type: object
                     properties:
                       code: { type: string, enum: [business_store_unavailable, iam_admission_unavailable] }
+    AdminIdentityMembersSuccess:
+      description: Current-tenant member page for a platform administrator
+      headers:
+        x-request-id: { required: true, schema: { $ref: '#/components/schemas/RequestId' } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/AdminIdentityMembersResponse' }
+    AdminIdentityInvitationsSuccess:
+      description: Current-tenant invitation page for a platform administrator
+      headers:
+        x-request-id: { required: true, schema: { $ref: '#/components/schemas/RequestId' } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/AdminIdentityInvitationsResponse' }
+    AdminIdentityRolesSuccess:
+      description: Current-tenant role page for a platform administrator
+      headers:
+        x-request-id: { required: true, schema: { $ref: '#/components/schemas/RequestId' } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/AdminIdentityRolesResponse' }
+    TooManyRequests:
+      description: Current session admission or owning service is rate limited
+      headers:
+        x-request-id: { required: true, schema: { $ref: '#/components/schemas/RequestId' } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+        Retry-After: { required: false, schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
     BadRequest:
       description: Invalid request
       content:

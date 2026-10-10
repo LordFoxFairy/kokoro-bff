@@ -1,3 +1,11 @@
+## R357-BFF-ADMIN-INGRESS-D0：Admin Identity read 无持久化变化（已实施）
+
+本片不新增或修改 SQL、表、索引、Redis key、session、receipt、授权缓存或审计镜像。Admin Web 的 session/state/PKCE/refresh 仍由独立 Admin Web 拥有；IAM 继续唯一拥有 OAuth client、user session、tenant、platform-admin、membership、invitation 与 role。BFF 只在请求期校验闭合 service credential，执行 fresh human admission，并投影当前已准入 tenant 的三项 IAM read；不得把成功 admission 或 owner response 持久化为用户或管理员资格。
+
+Admin service secret 是进程配置，不进入数据库、contract、日志、响应或浏览器。它必须与 User Web shared secret 明确不同且无默认回退；未配置时 Admin入口安全关闭，同时 User Web 原路径与数据生命周期保持。canonical schema及其 hash 不变。
+
+<!-- R357-BFF-ADMIN-INGRESS-DATA-D0-END -->
+
 ## T-K03.4 精确 Skill 下载数据边界（源码候选，无持久化变化）
 
 BFF不复制Platform的Skill revision、installation、package、scan或transfer事实。installation exact selector来自当次Platform Get；managed version exact selector来自当次managed owner读取；share selector来自现有`bff_share`的`tenant_id/creator_subject_id/source_ref/revoked_at/expires_at`，但本片不加列、索引、表或新share类型。Platform现exact-source download RPC是唯一package/transfer owner读取；BFF不查owner SQL、不用series current或MAX(revision)重建旧版本。
@@ -2001,3 +2009,14 @@ W2 资源列表当前实现不新增 BFF 表、索引、物化快照、缓存或
 `SkillSpecificationService` 的跨owner一致性、过滤、聚合及下载确认继续是 BFF application规则；application types 单源移动不产生持久 DTO；Platform façade只做transport解码，不新增持久事实。无表、列、索引、schema、migration、SQL、Redis key、receipt、缓存、owner或retention变化；不得为职责拆分建立Skill镜像、持久DTO或第二套wire模型。
 
 <!-- R357-BFF-BOUNDARY-AND-ORACLE-DATA-D0-END -->
+## T-K03.4 current-user profile has no BFF persistence (2026-10-09)
+
+This extension creates no BFF-owned identity fact. IAM remains the only writer for User display name and image. Each admitted `GET /v1/me` resolves exactly one current-user ref from IAM and projects either the fresh `found` values or the explicit owner `missing` state in request memory only. BFF does not store the profile in PostgreSQL, Redis, a process cache, Conversation/Project rows, an outbox/receipt, or a Web session/cookie, and it does not derive a replacement from user id, email, tenant, site brand or prior responses.
+
+Therefore `database/schema.sql`, all existing tables/columns/indexes, transactions, retention and fresh-install checks remain byte-for-byte unchanged. There is no migration, backfill, cache invalidation, consistency window or new data deletion path. Tenant and subject are still taken only from online IAM admission; the resolver request is fixed to that same tenant and exact subject, and strict identity equality prevents a returned profile from being attached across users or tenants. `missing` is an owner observation for that request, not a persisted tombstone. Dependency failure yields no profile snapshot and no write.
+
+## R357 Admin IAM bridge data boundary（已实施的首个 read slice）
+
+IAM remains the authoritative owner of tenant membership, invitations and roles. The three Admin Identity reads create no BFF table, SQL query, schema change, Redis entry, cache, local audit mirror, outbox or receipt. The only per-request data is the already admitted actor context, fixed request metadata and bounded owner response. Denied, aborted, timed-out, malformed or authorization-failed reads write nothing locally.
+
+<!-- R357-ADMIN-IAM-BRIDGE-DATA-D0-END -->
