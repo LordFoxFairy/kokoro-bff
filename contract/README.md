@@ -1,3 +1,9 @@
+<!-- BEGIN:T-K03.13-BFF-MCP-PERSONAL-CRUD-D0 -->
+## T-K03.13 本人 MCP 管理公开边界 D0（目标，未实施）
+
+本片由 Root 明确裁决：public14.0.0/143仍沿/v1，唯一已核 Web 与 BFF 在本地 development clean-slate 配对切换。13.3四读已真实激活，Connector新增required enabled/state_version及真实optional metadata属于breaking，不是minor/patch，不借“未激活beta”例外。无外部生产客户；Web固定新artifact/strict schema全验后Root才切正常runtime，无旧schemafallback/双轨，过渡不冒兼容。此仅限本slice，下面未来对外稳定breaking /v2与历史规则原文保留，不泛化例外。六新增operations与精确13.3 inverse见本任务三设计/机器门；current75 owner/vendor/generated与其他历史资格不变。
+<!-- END:T-K03.13-BFF-MCP-PERSONAL-CRUD-D0 -->
+
 ## T-K03.14-BFF-GITHUB-PATH-CONTRACT D0（2026-10-10；仅文档，待机器切片）
 
 当前canonical public13.1.0完整SHA-256 `418db9504b179d29113385f334628d304130491d4bbc86169e20c712cf2cd045`；Root批准目标13.2.0仅把GitHub Preview/Import输入和Preview selector/repository/paths候选五处path声明收敛为256字符，承接现parser，不改实际准入。archive UTF8 relative文件路径≤256 bytes（含文件名）另限，不放宽。历史provenance path2048、URL2048及manifestpattern保持。

@@ -1,3 +1,15 @@
+<!-- BEGIN:T-K03.13-BFF-MCP-PERSONAL-CRUD-D0 -->
+## T-K03.13 本人 MCP 管理公开边界 D0（目标，未实施）
+
+目标唯一 canonical public **14.0.0 /143 operations，沿 /v1**。这是已真实启用四读的 Connector strict 五字段发生 breaking 的显式本地 development clean-slate 配对切换例外：无外部生产客户，唯一已核 Web 消费方先固定新 artifact/strict schema 全验，Root 再切正常 runtime；中间不宣称兼容/闭环，无旧 schema fallback/alias。未来对外稳定 breaking 仍遵原 /v2 策略，例外不泛化。
+
+六新增：POST /v1/self/mcp/connectors（createPersonalMcpConnector，201）；PATCH /v1/self/mcp/connectors/{connector_id}（updatePersonalMcpConnector，200）；PUT 同资源 /enabled（setPersonalMcpConnectorEnabled，200）；DELETE 同资源（removePersonalMcpConnector，200）；GET /v1/self/mcp/providers 与 /{provider_key}（list/getPersonalMcpProviders，200）。原四读 connector 保原五真实字段，加 required enabled/state_version，optional display_name/description/created_at/updated_at 按 owner presence 输出，缺省不造空值/时间。connection六字段与旧active投影不变。Provider仅正式十一字段/optional性，真实目录/filter/分页，不是静态推荐或连接事实。
+
+命令 strict JSON：Create provider_key/connector_type/display_name/description；Update display_name/description/expected_state_version；Enabled enabled/expected_state_version；Remove expected_state_version。名称1–100、描述0–1000 Unicode scalars且拒 lone surrogate；CAS为原真实 **1..Number.MAX_SAFE_INTEGER decimal字符串**，不推算/截断。原 Idempotency-Key 可打印ASCII≤191，直接为 owner commandId；JCS SHA256 精确绑定 {method,tenant_id,subject_id,input}，method为正式ProductMcpPersonalService方法全名、type为正式enum整数、CAS为decimal字符串，不混request_id/key或自报身份。owner既有receipt裁决重放/冲突/并发。所有命令只真实 {data:{connector}}，无伪replayed/event/connection字段。
+
+每 operation 逐status闭集：现400/401/403/404/429/502/503读族保持，命令加409 typed idempotency冲突/进行中、412 CAS/state precondition、413 body超限；provider总list不开放404。命令成功后重新准入失败为未知，不冒owner回滚。10s总budget含≤65536请求body，response累计1MiB、requestID/no-store/取消闭合。schema-first机器 RED→GREEN；新六operation及connector delta精准逆恢复原13.3 canonical SHA256 `0a9683b38cfd30534931dd0cd7821e3ccded94d6d15613a711cebc1f1e83a209` 后委托原历史checker；其余137非本片 bytes/约束与旧baseline/hash负控不重算。
+<!-- END:T-K03.13-BFF-MCP-PERSONAL-CRUD-D0 -->
+
 <!-- BEGIN:T-K03.13-BFF-MCP-PERSONAL-READ-D0 -->
 ## T-K03.13 已发行本人 MCP 四读：实现目标（2026-10-10）
 

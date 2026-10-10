@@ -1,3 +1,13 @@
+<!-- BEGIN:T-K03.13-BFF-MCP-PERSONAL-CRUD-D0 -->
+## T-K03.13 本人 MCP 管理公开边界 D0（目标，未实施）
+
+当前 BFF `ee423b7` / public13.3.0 /137 operations 的四本人 reads 已正常启用；Connector 五字段缺管理 metadata/enable/CAS。固定 vendor `91bc3655ebd3648cb8f8ccddfacb5628bdeb1c5c` current75 的 ProductMcpPersonalService 已正式有十方法。目标扩四本人命令和两个真实 Provider reads，不新 owner API/SQL/模块或 execution 代理。比较扩现 personal client/route/composition 与另建管理模块，采用前者：同 workload/人资格及 close 生命周期，不重复 credential/token。
+
+新普通 src/http/mcp-personal-command-input.ts 负责命令 wire 校验；src/infrastructure/clients/platform/mcp-personal-command-binding.ts 负责 owner command 指纹，不混入 response 投影。现 personal-connect/response、http/routes/mcp-personal、bootstrap/server/runtime 扩能力，原 token/credential/config 不改。精确允许集共24路径见本片 freeze；package.json 只追加新3tests到既有 default/contract 清单。无 vendor/generated/依赖/lock 变化。单总10s涵盖有限 body读取、session/action、credential/OAuth/RPC、投影及返回前同tenant/subject再准入；disconnect/轮换/取消/迟到结果退役，未知 ACK 保原意图，不冒回滚。
+
+先六未发行路径/旧五字段缺CAS真实 RED，再命令/Provider/绑定/重放/错误/取消及历史契约负控；Node22 contract/default/type/lint/build、freeze/独审后由 Root 提交。Web 必须固定新 artifact/schema 验收后，Root 才受控切正常 BFF runtime；worker不激活。授权→Connection 与 Provider Admin 尚无正式 human 命令仍 OPEN，不以 CreateConnector 当已连接。
+<!-- END:T-K03.13-BFF-MCP-PERSONAL-CRUD-D0 -->
+
 <!-- BEGIN:T-K03.13-BFF-MCP-PERSONAL-READ-D0 -->
 ## T-K03.13 本人 MCP 四读运行接线（目标，2026-10-10）
 

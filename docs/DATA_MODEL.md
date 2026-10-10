@@ -1,3 +1,13 @@
+<!-- BEGIN:T-K03.13-BFF-MCP-PERSONAL-CRUD-D0 -->
+## T-K03.13 本人 MCP 管理公开边界 D0（目标，未实施）
+
+Platform独占本人 connector/provider/connection/currentCAS，以及现有 durable command receipt/准入事务；IAM独占身份和资格。BFF无SQL/表/列/索引/receipt/Redis/store新增，不读owner数据库；fixed75/vendor/generated原字节保持。
+
+原真实 state_version 以1..MAX_SAFE_INTEGER decimal字符串跨公开边界；optional metadata严格owner presence，缺省omit，不造空值/日期。status、enabled、approved_scopes与connection授权事实独立；创建connector可能pending，不合成已连接。Provider目录只正式事实，不复制静态推荐。
+
+命令JCS指纹精确owner方法/当前tenant_id/subject_id/input，type正规enum数值、CAS原字符串，原body/key/CAS冻结。ownerreceipt负责replay、changedbody冲突和并发；BFF不再造receipt。取消/unknown/返回前准入失败不冒回滚，显式重试保原意图，GET当前事实不是原命令ACK。token只短期workload内存缓存，轮换/close仍原生命周期，不缓存人资格。14.0本地配对breaking例外及Web先验后Root runtime切换见API/contractREADME；其他137历史逆恢复、原active、SQL与全部任务外字节保护。
+<!-- END:T-K03.13-BFF-MCP-PERSONAL-CRUD-D0 -->
+
 <!-- BEGIN:T-K03.13-BFF-MCP-PERSONAL-READ-D0 -->
 ## T-K03.13 本人 MCP 四读数据边界（目标，2026-10-10）
 
