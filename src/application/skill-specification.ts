@@ -375,6 +375,36 @@ export class SkillSpecificationService implements SkillSpecificationSource {
       ...(page.nextCursor == null ? {} : { nextPageToken: page.nextCursor }),
     })
   }
+  public async revisionSummary(sourceRef: string, context: SkillSpecificationContext, signal: AbortSignal, deadlineAt: number) {
+    this.active(signal, deadlineAt)
+    const value = await this.dependencies.owner.revision(sourceRef, context, signal, deadlineAt)
+    this.active(signal, deadlineAt)
+    const { skill, record, createdAt } = value
+    if (skill.source_ref !== sourceRef || sourceRef !== `skill:${skill.skill_id}` || skill.status !== "active" || skill.package_phase !== "valid")
+      throw new Error("skill_response_invalid")
+    const profiles = await this.creatorProfiles([skill.product], context, signal, deadlineAt)
+    const creator = skill.product.creator_ref
+    const profile = creator?.kind === "user" ? profiles.get(JSON.stringify(["user", creator.id])) : undefined
+    if (creator?.kind === "user" && (!profile || !["found", "missing"].includes(profile.status))) throw new Error("skill_response_invalid")
+    this.active(signal, deadlineAt)
+    return {
+      skill_id: skill.skill_id,
+      series_id: skill.series_id,
+      revision: skill.revision,
+      display_name: skill.name,
+      description: skill.summary,
+      tags: skill.tags,
+      example_prompts: skill.example_prompts,
+      category_keys: skill.category_keys,
+      created_at: createdAt,
+      updated_at: skill.skill_updated_at,
+      owner_type: this.ownerType(skill.product.source_kind, record.ownerKind),
+      source_kind: skill.product.source_kind,
+      ...(record.originalName === undefined ? {} : { original_name: record.originalName }),
+      ...(creator?.kind === "user" && profile?.status === "found" ? { author: { user_id: creator.id, display_name: profile.display_name } } : {}),
+      ...(skill.product.cover === undefined ? {} : { cover_image: `/api/v1/skills/${encodeURIComponent(skill.skill_id)}/cover` }),
+    }
+  }
   public async prepareDownload(
     _operation: "GetSkill" | "DownloadSkill",
     skillId: string,

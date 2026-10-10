@@ -2961,9 +2961,31 @@ schema: { $ref: '#/components/schemas/PersonalMcp${name}Error' }`,
   return errors
 }
 
+export function restorePublic132SharedRevisionContract(source: string): string {
+  if (!/^  version: 13\.3\.0$/mu.test(source)) throw new Error("Shared revision version drift")
+  const paths = [...source.matchAll(/^  \/v1\/skill-shares\/\{share_id\}\/skill:\n[\s\S]*?(?=^  \/|^components:)/gmu)]
+  const schemas = [...source.matchAll(/^    SharedSkillRevisionResponse:\n[\s\S]*?(?=^    SkillShareResponse:)/gmu)]
+  if (paths.length !== 1 || schemas.length !== 1) throw new Error("Shared revision exact delta missing")
+  const digest = (v: string) => createHash("sha256").update(v).digest("hex")
+  if (
+    digest(paths[0]![0]) !== "a2516c9cdcd6d73447703b7c8ed3ecb0e413fd518da9f7f463873fe284e6913b" ||
+    digest(schemas[0]![0]) !== "ce764e5f030d0b3992316443a6d4471a5c06d27898cd7391d480d34115a3d8ec"
+  )
+    throw new Error("Shared revision path/schema drift")
+  const parent = source.replace(paths[0]![0], "").replace(schemas[0]![0], "").replace("  version: 13.3.0", "  version: 13.2.0")
+  if (digest(parent) !== "3e4dd272fa8180b8f2a2bacc88d37f99ed5c77eaba05ef03e858ab766f891206")
+    throw new Error("Shared revision complete Public13.2 parent inverse drift")
+  return parent
+}
+
 export function inspectBffOpenApi(source: string, baseline: readonly BaselineOperation[]): string[] {
-  if (!/^  version: 13\.2\.0$/mu.test(source)) return ["Current public contract version must equal 13.2.0"]
-  return [...inspectSkillProductContract(source), ...inspectOpenApiGovernance(source), ...compareOperationBaseline(source, baseline)]
+  let parent: string
+  try {
+    parent = restorePublic132SharedRevisionContract(source)
+  } catch (error) {
+    return [error instanceof Error ? error.message : "Shared revision contract invalid"]
+  }
+  return [...inspectSkillProductContract(parent), ...inspectOpenApiGovernance(source), ...compareOperationBaseline(source, baseline)]
 }
 
 /** Strict historical Public8.10 proof; never used as the current release gate alone. */

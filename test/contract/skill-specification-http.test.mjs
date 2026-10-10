@@ -34,6 +34,7 @@ async function fixture(
   source,
   admission = async () => ({ ok: true, identity: { namespace: "tenant", userId: "human" }, platformAdmin: false }),
   configOverride = {},
+  options = {},
 ) {
   const config = {
     host: "127.0.0.1",
@@ -55,7 +56,7 @@ async function fixture(
     upstreams: { system: null, capability: null, scheduler: null, agents: null, billing: null, music: null },
     ...configOverride,
   }
-  const server = createBffServer(config, { businessStore: null, sessionAdmission: { verify: admission }, skillSpecificationSource: source })
+  const server = createBffServer(config, { businessStore: null, sessionAdmission: { verify: admission }, skillSpecificationSource: source, ...options })
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))
   return {
     async request(path, input, extra = {}) {
@@ -431,7 +432,7 @@ test("R357 active public contract declares original skill.list and distinct obse
   const { readFile } = await import("node:fs/promises")
   const { load } = await import("js-yaml")
   const document = load(await readFile(new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"))
-  assert.equal(document.info.version, "12.0.0")
+  assert.equal(document.info.version, "13.3.0")
   assert.equal(document.paths["/v1/skill.list"].get.operationId, "listSkills")
   for (const path of [website + "ListSkills", website + "ListHubSkills", website + "GetSkill", "/skill.v1.SkillService/DownloadSkill"]) {
     assert.equal(document.paths[path].post["x-kokoro-visibility"], "browser-private")
@@ -458,9 +459,14 @@ test("R357 active public contract declares original skill.list and distinct obse
 test("R357 active contract rejects observed-field/type/error/alias/auth/cache drift without historical hash restoration", async () => {
   const { readFile } = await import("node:fs/promises")
   const { load, dump } = await import("js-yaml")
-  const { inspectSkillsSpecificationContract } = await import("../../scripts/verify-skill-product-contract.mjs")
+  const { inspectSkillsSpecificationContract, restorePublic131GithubPathContract, restorePublic13SkillAuthorizationContract, restorePublic12CasContract } =
+    await import("../../scripts/verify-skill-product-contract.mjs")
+  const { restorePublic132SharedRevisionContract } = await import("../../scripts/verify-openapi.ts")
   const raw = await readFile(new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
-  assert.deepEqual(inspectSkillsSpecificationContract(raw), [])
+  const parent = restorePublic12CasContract(
+    restorePublic13SkillAuthorizationContract(restorePublic131GithubPathContract(restorePublic132SharedRevisionContract(raw))),
+  )
+  assert.deepEqual(inspectSkillsSpecificationContract(parent), [])
   for (const change of [
     (d) => (d.paths["/v1/skill.list"].get.security = []),
     (d) => d.paths["/v1/skill.list"].get.parameters.push({ name: "tenant", in: "query" }),
@@ -473,7 +479,7 @@ test("R357 active contract rejects observed-field/type/error/alias/auth/cache dr
     (d) => delete d.paths["/skill.v1.SkillOptionalService/GetSkill"].post.responses["200"].headers["Cache-Control"],
     (d) => (d.paths["/v1/skills"] = { get: d.paths["/v1/skill.list"].get }),
   ]) {
-    const candidate = load(raw)
+    const candidate = load(parent)
     change(candidate)
     assert.notDeepEqual(inspectSkillsSpecificationContract(dump(candidate, { lineWidth: -1, noRefs: true })), [])
   }
@@ -1271,5 +1277,292 @@ test("R357 reuse requires every exact qualification fact, never mutates or rebin
     assert.deepEqual(first.binding, original)
     assert.deepEqual(next.binding, changed)
     assert.throws(() => store.resolve(first.handle, "tenant", "human"), /expired/)
+  }
+})
+
+const sharedSummary = {
+  skill_id: "version-old",
+  series_id: "stable-series",
+  revision: "2",
+  display_name: "Old name",
+  description: "Old description",
+  tags: [],
+  example_prompts: ["Old example"],
+  category_keys: ["apps"],
+  created_at: "2026-01-01T00:00:00.000Z",
+  updated_at: "2026-01-02T00:00:00.000Z",
+  owner_type: "personal",
+  source_kind: "personal",
+}
+test("shared revision summary serves exact old revision through the admitted public route", async () => {
+  let reads = 0,
+    summaries = 0
+  const share = {
+    shareId: "shared-old",
+    tenantId: "tenant",
+    creatorSubjectId: "creator",
+    resourceKind: "skill_revision",
+    sourceRef: "skill:version-old",
+    url: "http://web.test/skills/shared/shared-old",
+    createdAt: new Date("2026-01-01"),
+    expiresAt: null,
+    revokedAt: null,
+  }
+  const app = await fixture(
+    {
+      revisionSummary: async (sourceRef, context) => {
+        summaries++
+        assert.equal(sourceRef, share.sourceRef)
+        assert.equal(context.identity.userId, "human")
+        return sharedSummary
+      },
+    },
+    undefined,
+    {},
+    {
+      businessStore: {
+        services: {
+          skillShares: {
+            findActive: async () => {
+              reads++
+              return share
+            },
+          },
+        },
+        close: async () => {},
+      },
+    },
+  )
+  try {
+    const result = await app.request("/v1/skill-shares/shared-old/skill")
+    assert.equal(result.status, 200)
+    assert.deepEqual(result.body, { data: { share_id: share.shareId, source_ref: share.sourceRef, skill: sharedSummary } })
+    assert.equal(reads, 2)
+    assert.equal(summaries, 1)
+    assert.equal(result.headers.get("cache-control"), "no-store")
+  } finally {
+    await app.close()
+  }
+})
+
+test("shared summary never calls series current or prepares a download", async () => {
+  const { SkillSpecificationService } = await import("../../src/application/skill-specification.ts")
+  let current = 0
+  const service = new SkillSpecificationService({
+    owner: {
+      revision: async () => ({
+        skill: {
+          skill_id: "version-old",
+          source_ref: "skill:version-old",
+          series_id: "stable-series",
+          revision: "2",
+          status: "active",
+          package_phase: "valid",
+          name: "Old name",
+          summary: "Old description",
+          tags: [],
+          example_prompts: ["Old example"],
+          category_keys: ["apps"],
+          skill_updated_at: sharedSummary.updated_at,
+          product: { source_kind: "personal" },
+        },
+        record: { ownerKind: "user" },
+        createdAt: sharedSummary.created_at,
+      }),
+      current: async () => {
+        current++
+        throw new Error("new revision must not substitute old")
+      },
+    },
+    profiles: { resolve: async () => new Map() },
+    objectOrigin: null,
+  })
+  const result = await service.revisionSummary(
+    "skill:version-old",
+    { identity: { namespace: "tenant", userId: "human" }, requestId: "shared", humanBearer: "human" },
+    new AbortController().signal,
+    performance.now() + 1000,
+  )
+  assert.deepEqual(result, sharedSummary)
+  assert.equal(current, 0)
+})
+
+for (const scenario of ["revoked", "expired", "changed-source", "other-tenant", "bad-source", "extra-field", "bad-cover", "iam-failure", "query", "key"])
+  test(`shared summary fail-closes ${scenario} without replacing revision`, async () => {
+    let reads = 0,
+      summaries = 0
+    const share = {
+      shareId: "shared-old",
+      tenantId: "tenant",
+      creatorSubjectId: "creator",
+      resourceKind: "skill_revision",
+      sourceRef: "skill:version-old",
+      url: "http://web.test/skills/shared/shared-old",
+      createdAt: new Date("2026-01-01"),
+      expiresAt: null,
+      revokedAt: null,
+    }
+    const source = {
+      revisionSummary: async () => {
+        summaries++
+        if (scenario === "iam-failure") throw new Error("publisher_profile_unavailable")
+        return {
+          ...sharedSummary,
+          ...(scenario === "bad-source" ? { skill_id: "new-version" } : {}),
+          ...(scenario === "extra-field" ? { package_asset_ref: "private" } : {}),
+          ...(scenario === "bad-cover" ? { cover_image: "/api/v1/skills/stable-series/cover" } : {}),
+        }
+      },
+    }
+    const app = await fixture(
+      source,
+      undefined,
+      {},
+      {
+        businessStore: {
+          services: {
+            skillShares: {
+              findActive: async () => {
+                reads++
+                return {
+                  ...share,
+                  ...(scenario === "other-tenant" ? { tenantId: "other" } : {}),
+                  ...(reads === 2 && scenario === "revoked" ? { revokedAt: new Date() } : {}),
+                  ...(reads === 2 && scenario === "expired" ? { expiresAt: new Date(0) } : {}),
+                  ...(reads === 2 && scenario === "changed-source" ? { sourceRef: "skill:new-version" } : {}),
+                }
+              },
+            },
+          },
+          close: async () => {},
+        },
+      },
+    )
+    try {
+      const result = await app.request(
+        `/v1/skill-shares/shared-old/skill${scenario === "query" ? "?extra=1" : ""}`,
+        undefined,
+        scenario === "key" ? { headers: { "idempotency-key": "forbidden" } } : {},
+      )
+      assert.equal(
+        result.status,
+        scenario === "key"
+          ? 403
+          : scenario === "query"
+            ? 400
+            : scenario === "iam-failure"
+              ? 503
+              : ["bad-source", "extra-field", "bad-cover"].includes(scenario)
+                ? 502
+                : 404,
+      )
+      if (["query", "key", "other-tenant"].includes(scenario)) assert.equal(summaries, 0)
+    } finally {
+      await app.close()
+    }
+  })
+
+test("shared summary exact metadata checks active/phase and obtains only formal found IAM author", async () => {
+  const { SkillSpecificationService } = await import("../../src/application/skill-specification.ts")
+  const context = { identity: { namespace: "tenant", userId: "human" }, requestId: "shared", humanBearer: "human" }
+  for (const status of ["found", "missing", "throw"]) {
+    const service = new SkillSpecificationService({
+      owner: {
+        revision: async () => ({
+          skill: {
+            skill_id: "version-old",
+            source_ref: "skill:version-old",
+            series_id: "stable-series",
+            revision: "2",
+            status: "active",
+            package_phase: "valid",
+            name: "Old name",
+            summary: "Old description",
+            tags: [],
+            example_prompts: [],
+            category_keys: [],
+            skill_updated_at: sharedSummary.updated_at,
+            product: { source_kind: "third_party", creator_ref: { kind: "user", id: "creator" } },
+          },
+          record: { ownerKind: "user" },
+          createdAt: sharedSummary.created_at,
+        }),
+      },
+      profiles: {
+        resolve: async (tenant, bearer, requestId, refs) => {
+          assert.equal(tenant, "tenant")
+          assert.equal(bearer, "human")
+          assert.deepEqual(refs, [{ kind: "user", id: "creator" }])
+          if (status === "throw") throw new Error("publisher_profile_unavailable")
+          return new Map([[JSON.stringify(["user", "creator"]), { status, ...(status === "found" ? { display_name: "Real creator" } : {}) }]])
+        },
+      },
+      objectOrigin: null,
+    })
+    const read = () => service.revisionSummary("skill:version-old", context, new AbortController().signal, performance.now() + 1000)
+    if (status === "throw") await assert.rejects(read, /publisher_profile_unavailable/)
+    else {
+      const result = await read()
+      assert.equal(result.source_kind, "third_party")
+      if (status === "found") assert.deepEqual(result.author, { user_id: "creator", display_name: "Real creator" })
+      else assert.equal(Object.hasOwn(result, "author"), false)
+    }
+  }
+})
+
+test("shared summary disconnect cancels exact metadata and prevents a late second share read", async () => {
+  let finish,
+    entered,
+    ownerSignal,
+    reads = 0
+  const called = new Promise((resolve) => (entered = resolve))
+  const share = {
+    shareId: "shared-old",
+    tenantId: "tenant",
+    creatorSubjectId: "creator",
+    resourceKind: "skill_revision",
+    sourceRef: "skill:version-old",
+    url: "http://web.test/skills/shared/shared-old",
+    createdAt: new Date("2026-01-01"),
+    expiresAt: null,
+    revokedAt: null,
+  }
+  const app = await fixture(
+    {
+      revisionSummary: async (_ref, _ctx, signal) => {
+        ownerSignal = signal
+        entered()
+        return await new Promise((resolve) => (finish = resolve))
+      },
+    },
+    undefined,
+    {},
+    {
+      businessStore: {
+        services: {
+          skillShares: {
+            findActive: async () => {
+              reads++
+              return share
+            },
+          },
+        },
+        close: async () => {},
+      },
+    },
+  )
+  const controller = new AbortController()
+  try {
+    const pending = app.request("/v1/skill-shares/shared-old/skill", undefined, { signal: controller.signal })
+    await called
+    controller.abort()
+    await assert.rejects(pending, { name: "AbortError" })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    assert.equal(ownerSignal.aborted, true)
+    finish(sharedSummary)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    assert.equal(reads, 1)
+  } finally {
+    await app.close()
   }
 })

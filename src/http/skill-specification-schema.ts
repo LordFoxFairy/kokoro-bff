@@ -116,3 +116,34 @@ export const websiteHubRequestSchema = z
 export const websiteEmptyRequestSchema = z.object({}).strict()
 export const websiteSkillRequestSchema = z.object({ skillId: string.min(1).max(191) }).strict()
 export const publicSkillQuerySchema = z.object({ project_id: string.min(1).max(191).optional() }).strict()
+
+const sharedId = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u)
+export const sharedSkillSummarySchema = z
+  .object({
+    skill_id: sharedId,
+    series_id: sharedId,
+    revision: z
+      .string()
+      .regex(/^[1-9][0-9]{0,19}$/u)
+      .refine((v) => BigInt(v) <= 18_446_744_073_709_551_615n),
+    display_name: z.string().min(1).max(255),
+    description: z.string().max(65_535),
+    tags: z.array(z.string()),
+    example_prompts: z.array(z.string()),
+    category_keys: z.array(z.enum(["programming", "data", "automation", "business", "design", "media", "content", "apps"])),
+    created_at: z.string().datetime(),
+    updated_at: z.string().datetime(),
+    owner_type: z.enum(["personal", "official", "team", "project", "app"]),
+    source_kind: z.enum(["personal", "official", "third_party"]),
+    original_name: z.string().min(1).optional(),
+    author: z
+      .object({ user_id: sharedId, display_name: z.string().min(1) })
+      .strict()
+      .optional(),
+    cover_image: z.string().optional(),
+  })
+  .strict()
+  .superRefine((v, ctx) => {
+    if (v.cover_image !== undefined && v.cover_image !== `/api/v1/skills/${encodeURIComponent(v.skill_id)}/cover`)
+      ctx.addIssue({ code: "custom", message: "cover revision binding invalid" })
+  })

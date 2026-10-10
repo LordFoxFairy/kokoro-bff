@@ -5,6 +5,7 @@ import {
   FileDescriptorProtoSchema,
   FileDescriptorSetSchema,
   ServiceDescriptorProtoSchema,
+  MethodDescriptorProtoSchema,
 } from "@bufbuild/protobuf/wkt"
 import assert from "node:assert/strict"
 import { spawn } from "node:child_process"
@@ -16,7 +17,7 @@ import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-const ownerCommit = "32666c1c18360e707048a1104efe6b50e375002f"
+const ownerCommit = "91bc3655ebd3648cb8f8ccddfacb5628bdeb1c5c"
 const vendorRoot = `contract/vendor/kokoro-platform/${ownerCommit}`
 const vendor = `contract/vendor/kokoro-platform/${ownerCommit}/proto`
 const artifacts = {
@@ -43,10 +44,10 @@ const artifactProvenanceDigests = {
   v8: "a985f907fc9f2c5d8735c8918f1af6028efa9a3ed0f43b273612c592c2288444",
 }
 const descriptor = `${vendorRoot}/descriptor/platform-v1.binpb`
-const descriptorDigest = "fc5d3893a05284a5f52d8de40b82f6e2bbd859608994d84dac20dff43a4a6fd2"
+const descriptorDigest = "11f00c2459fb6bd916c04d523960ce0e728b5e63d1e005b128ae44ffb0194bfb"
 const parentDescriptor = `${vendorRoot}/descriptor/platform-v8-parent39.binpb`
 const parentDigest = "0467c1c45e8ac27c79cb906e27bfdb679d88739e45bfa38128f0f629bec686d5"
-const publicationAggregate = "9c5fe8036b0246b26b0411e9caa31595059d82fedfcd28efaabfdf6bb7e011c1"
+const publicationAggregate = "6eab11810345adad565f487b8a1b890967c25befdda19abbfc428c553b55ad6c"
 const publicationInputs = {
   "contract/descriptor/platform-installation-tags-parent-generated.binpb": {
     bytes: 35431,
@@ -144,6 +145,18 @@ const publicationInputs = {
     bytes: 10666,
     sha256: "02266d53b8bfb7fdd6991b17d59ebb17399d4f189b6a3135fedcb69b6b364276",
   },
+  "contract/descriptor/platform-skill-revision-read-parent-generated.binpb": {
+    bytes: 63897,
+    sha256: "c995aa2c56293a6921d85a9e99f812e1affbd04728b98210da5aa24d51e4e779",
+  },
+  "contract/descriptor/platform-skill-revision-read-parent.binpb": {
+    bytes: 77018,
+    sha256: "fc5d3893a05284a5f52d8de40b82f6e2bbd859608994d84dac20dff43a4a6fd2",
+  },
+  "contract/descriptor/platform-skill-revision-read-parent.proto.snapshot": {
+    bytes: 58465,
+    sha256: "41fdcc2a782a779c38df861f99d89b1d20966486d29ed64647d1ecf149926bd6",
+  },
   "contract/descriptor/platform-skill-updated-at-http-3.3.0.json": {
     bytes: 33330,
     sha256: "b6e5d0e0118207ee37933e5c22e94c86d95d74307b22a44e26e8974fede82acf",
@@ -157,8 +170,8 @@ const publicationInputs = {
     sha256: "2e1a811bf347b5d9cd3577ac6c762ee9d31f40dea2ac326a06b83bc61de9a8d5",
   },
   "contract/descriptor/platform-v1.binpb": {
-    bytes: 77018,
-    sha256: "fc5d3893a05284a5f52d8de40b82f6e2bbd859608994d84dac20dff43a4a6fd2",
+    bytes: 77430,
+    sha256: "11f00c2459fb6bd916c04d523960ce0e728b5e63d1e005b128ae44ffb0194bfb",
   },
   "contract/descriptor/platform-v8-parent39.binpb": {
     bytes: 43624,
@@ -199,6 +212,10 @@ const publicationInputs = {
   "contract/execution-operations/skill-product-request-vectors-v1.json": {
     bytes: 766009,
     sha256: "794601f6632efb8cc72d2df1ddbc5af84c6803cbc951624aeada01f299a02036",
+  },
+  "contract/execution-operations/skill-product-revision-read-v1.json": {
+    bytes: 1571,
+    sha256: "cd6174273341bc6e57b6f063eb8d0392b232b7aaa7330c6d0c60fd9b4923c99f",
   },
   "contract/execution-operations/skill-product-v1.json": {
     bytes: 273395,
@@ -385,16 +402,16 @@ const publicationInputs = {
     sha256: "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08",
   },
   "contract/proto/kokoro/platform/v1/platform_runtime.proto": {
-    bytes: 58465,
-    sha256: "41fdcc2a782a779c38df861f99d89b1d20966486d29ed64647d1ecf149926bd6",
+    bytes: 58900,
+    sha256: "22a69ebbad7797c1f617535463a057bc56f6d989760069d635eef1e0a470be85",
   },
   "contract/proto/kokoro/storage/v3/storage.proto": {
     bytes: 12626,
     sha256: "1021e603065978871c51519ddba5b23c9b97f16b781a08bd98e019b3342bf5f9",
   },
   "contract/provenance.json": {
-    bytes: 1050,
-    sha256: "f0b45f95673d064880ad34b0faa38ad893ac3bc647bd3a2bc9ad57403955923f",
+    bytes: 1114,
+    sha256: "4a87271543c4989065b827a266bb8ca832ff6bfa6f3aac206096c8f9a7e4a417",
   },
 }
 
@@ -402,7 +419,7 @@ const output = path.join(root, "src/generated/platform-connect")
 const manifestPath = path.join(root, "contract/dependencies/platform-connect.json")
 const sourceDigests = {
   "kokoro/common/v1/common.proto": "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08",
-  "kokoro/platform/v1/platform_runtime.proto": "41fdcc2a782a779c38df861f99d89b1d20966486d29ed64647d1ecf149926bd6",
+  "kokoro/platform/v1/platform_runtime.proto": "22a69ebbad7797c1f617535463a057bc56f6d989760069d635eef1e0a470be85",
   "kokoro/storage/v3/storage.proto": "1021e603065978871c51519ddba5b23c9b97f16b781a08bd98e019b3342bf5f9",
 }
 const directories = ["kokoro", "kokoro/common", "kokoro/common/v1", "kokoro/platform", "kokoro/platform/v1", "kokoro/storage", "kokoro/storage/v3"]
@@ -702,6 +719,86 @@ export function assertV9Proof(manifest) {
     },
     "Platform historical v9 proof drifted",
   )
+}
+
+const revisionParentDigest = "fc5d3893a05284a5f52d8de40b82f6e2bbd859608994d84dac20dff43a4a6fd2"
+export function restoreRevisionReadDescriptor(input) {
+  const set = structuredClone(input),
+    file = platformFile(set)
+  const request = {
+    name: "GetSkillRevisionRequest",
+    reservedRange: [{ start: 100, end: 101 }],
+    reservedName: ["tenant_id", "subject_id", "owner_scope", "execution_proof"],
+    field: [descriptorField("request_id", 1, 9), descriptorField("source_ref", 2, 11, "SkillSourceRef"), descriptorField("purpose", 3, 9)],
+  }
+  const response = { name: "GetSkillRevisionResponse", field: [descriptorField("skill", 1, 11, "SkillProductRecord")] }
+  for (const expected of [request, response]) {
+    const matches = file.messageType.filter((v) => v.name === expected.name)
+    assert.equal(matches.length, 1, "revision unique exact message")
+    exactDescriptor(DescriptorProtoSchema, matches[0], expected, "revision exact fields/options/presence/reserved")
+  }
+  const service = file.service.find((v) => v.name === "ProductSkillReadService")
+  assert.ok(service, "revision read service missing")
+  const methods = service.method.filter((v) => v.name === "GetSkillRevision")
+  assert.equal(methods.length, 1, "revision unique method")
+  exactDescriptor(
+    MethodDescriptorProtoSchema,
+    methods[0],
+    { name: "GetSkillRevision", inputType: ".kokoro.platform.v1.GetSkillRevisionRequest", outputType: ".kokoro.platform.v1.GetSkillRevisionResponse" },
+    "revision exact method/options",
+  )
+  service.method = service.method.filter((v) => v.name !== "GetSkillRevision")
+  file.messageType = file.messageType.filter((v) => ![request.name, response.name].includes(v.name))
+  assert.equal(sha256(toBinary(FileDescriptorSetSchema, set)), revisionParentDigest, "revision complete parent74 inverse drifted")
+  assertDescriptorCensus(input, [75, 39, 24])
+  assertDescriptorCensus(set, [74, 39, 24])
+  return set
+}
+export function restoreRevisionReadSource(source) {
+  const messages = `message GetSkillRevisionRequest {
+  reserved 100;
+  reserved "tenant_id", "subject_id", "owner_scope", "execution_proof";
+  string request_id = 1;
+  kokoro.platform.v1.SkillSourceRef source_ref = 2;
+  string purpose = 3;
+}
+
+message GetSkillRevisionResponse {
+  kokoro.platform.v1.SkillProductRecord skill = 1;
+}
+
+`
+  const method = "  rpc GetSkillRevision(kokoro.platform.v1.GetSkillRevisionRequest) returns (kokoro.platform.v1.GetSkillRevisionResponse);\n"
+  assert.equal(source.split(messages).length, 2, "revision exact source messages")
+  assert.equal(source.split(method).length, 2, "revision exact source method")
+  const parent = source.replace(messages, "").replace(method, "")
+  assert.equal(sha256(Buffer.from(parent)), "41fdcc2a782a779c38df861f99d89b1d20966486d29ed64647d1ecf149926bd6", "revision whole source inverse drifted")
+  return parent
+}
+async function verifyRevisionRead() {
+  const current = await readFile(path.join(root, descriptor))
+  restoreRevisionReadDescriptor(fromBinary(FileDescriptorSetSchema, current))
+  const source = await readFile(path.join(root, vendor, "kokoro/platform/v1/platform_runtime.proto"), "utf8")
+  restoreRevisionReadSource(source)
+  const parent = await readFile(path.join(root, vendorRoot, "descriptor/platform-skill-revision-read-parent.binpb"))
+  assert.equal(sha256(parent), revisionParentDigest)
+  const parentSource = await readFile(path.join(root, vendorRoot, "descriptor/platform-skill-revision-read-parent.proto.snapshot"), "utf8")
+  assert.equal(restoreRevisionReadSource(source), parentSource)
+  const file = platformFile(fromBinary(FileDescriptorSetSchema, parent))
+  const generated = await readFile(path.join(root, vendorRoot, "descriptor/platform-skill-revision-read-parent-generated.binpb"))
+  assert.deepEqual(
+    Buffer.from(toBinary(FileDescriptorProtoSchema, file, { writeUnknownFields: false })),
+    generated,
+    "revision frozen generated parent equality",
+  )
+  const feature = JSON.parse(await readFile(path.join(root, vendorRoot, "execution-operations/skill-product-revision-read-v1.json"), "utf8"))
+  assert.equal(feature.profile, "skill-product-revision-read-v1")
+  assert.equal(feature.version, "1.0.0")
+  assert.deepEqual(feature.counts, { rpc: 75, command: 39, proof: 24 })
+  assert.equal(feature.method, "kokoro.platform.v1.ProductSkillReadService/GetSkillRevision")
+  assert.deepEqual(feature.request.purposeValues, ["product"])
+  assert.equal(feature.parent.descriptorSha256, revisionParentDigest)
+  assert.equal(feature.current.descriptorSha256, descriptorDigest)
 }
 
 export function assertDescriptorLineage(currentBytes) {
@@ -1049,6 +1146,7 @@ export function assertPublishedDescriptors(currentBytes, parentBytes, files) {
 
 async function verifyExecutionArtifacts() {
   await verifyPublicationInputs()
+  await verifyRevisionRead()
   const v5 = await verifyExecutionArtifactDirectory(path.join(root, artifacts.v5), artifactAggregates.v5)
   const v6 = await verifyExecutionArtifactDirectory(path.join(root, artifacts.v6), artifactAggregates.v6)
   const v7 = await verifyExecutionArtifactDirectory(path.join(root, artifacts.v7), artifactAggregates.v7)
@@ -1113,7 +1211,7 @@ async function verifyExecutionArtifacts() {
 async function verifyInputs() {
   await verifyPublicationInputs()
   const provenance = JSON.parse(await readFile(path.join(root, vendorRoot, "provenance.json"), "utf8"))
-  assert.equal(provenance.combinedSha256, "8a850363580521fadf75bc20b1be70bfe62c20004568c00b72a77f614caa672f", "Platform active digest drifted")
+  assert.equal(provenance.combinedSha256, "e35074f35aeeea0d24b13510aaf5fc61e696a8fa4c3245d329bb70cb518d906a", "Platform active digest drifted")
   assert.equal(
     sha256(Buffer.concat(await Promise.all(provenance.files.map((file) => readFile(path.join(root, vendorRoot, vendorPath(file))))))),
     provenance.combinedSha256,
@@ -1225,6 +1323,14 @@ async function manifestFor(directory) {
       path_algorithm: "owner-repository-relative-including-contract",
       aggregate_sha256: publicationAggregate,
       files: Object.entries(publicationInputs).map(([file, pin]) => ({ path: file, ...pin })),
+    },
+    revision_read_qualification: {
+      profile: "skill-product-revision-read-v1",
+      version: "1.0.0",
+      path: `${vendorRoot}/execution-operations/skill-product-revision-read-v1.json`,
+      current_counts: { rpc: 75, command: 39, proof: 24 },
+      parent_counts: { rpc: 74, command: 39, proof: 24 },
+      parent_descriptor_sha256: revisionParentDigest,
     },
     execution_artifact: {
       path: artifacts.v10,

@@ -633,6 +633,11 @@
     },
     {
       "method": "GET",
+      "path": "/v1/skill-shares/{share_id}/skill",
+      "operation_id": "getSharedSkillRevision"
+    },
+    {
+      "method": "GET",
       "path": "/v1/skill-shares/{share_id}",
       "operation_id": "resolveSkillShare"
     },

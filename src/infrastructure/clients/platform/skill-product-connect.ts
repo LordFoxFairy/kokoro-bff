@@ -106,6 +106,14 @@ export class SkillProductConnectClient {
     })
     return this.#invoke(this.writes, context, signal, deadlineAt, (options) => this.#catalog.getSkillCoverUpload(request, options))
   }
+  async revision(context: SkillProductContext & { sourceRef: string }, signal: AbortSignal, deadlineAt: number) {
+    const request = fromJson(ProductSkillReadService.method.getSkillRevision.input, {
+      request_id: context.requestId,
+      source_ref: { value: context.sourceRef },
+      purpose: "product",
+    })
+    return this.#invoke(this.reads, context, signal, deadlineAt, (options) => this.#reads.getSkillRevision(request, options))
+  }
   async current(context: SkillProductContext & { seriesId: string }, signal: AbortSignal, deadlineAt: number) {
     const request = fromJson(ProductSkillReadService.method.getCurrentSkill.input, {
       request_id: context.requestId,

@@ -6,7 +6,7 @@ import * as projector from "../src/infrastructure/clients/platform/create-skill-
 const vectors = JSON.parse(
   readFileSync(
     new URL(
-      "../contract/vendor/kokoro-platform/32666c1c18360e707048a1104efe6b50e375002f/execution-operations/skill-product-request-vectors-v1.json",
+      "../contract/vendor/kokoro-platform/91bc3655ebd3648cb8f8ccddfacb5628bdeb1c5c/execution-operations/skill-product-request-vectors-v1.json",
       import.meta.url,
     ),
     "utf8",

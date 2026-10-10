@@ -17,7 +17,8 @@
     "execution-operations/v10/manifest.json",
     "execution-operations/v10/local-skill-import-v1.json",
     "execution-operations/v10/provenance.json",
+    "execution-operations/skill-product-revision-read-v1.json",
     "openapi/platform-http.openapi.json"
   ],
-  "combinedSha256": "8a850363580521fadf75bc20b1be70bfe62c20004568c00b72a77f614caa672f"
+  "combinedSha256": "e35074f35aeeea0d24b13510aaf5fc61e696a8fa4c3245d329bb70cb518d906a"
 }

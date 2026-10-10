@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 13.2.0
+  version: 13.3.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -8222,6 +8222,204 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SkillProductErrorResponse"
+  /v1/skill-shares/{share_id}/skill:
+    get:
+      tags:
+        - Skills
+      operationId: getSharedSkillRevision
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: stable
+      x-kokoro-idempotency: none
+      x-kokoro-permission: skill.read
+      summary: getSharedSkillRevision
+      description: >-
+        Closed Product9 boundary. Identity comes from fresh IAM admission; no caller-supplied tenant, actor or admin status. One bounded admission and I/O budget,
+        no fallback.
+      parameters:
+        - name: share_id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: ^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$
+      responses:
+        "200":
+          description: Current admitted Product result
+          headers:
+            x-request-id:
+              schema:
+                type: string
+                minLength: 1
+                maxLength: 128
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SharedSkillRevisionResponse"
+        "400":
+          description: Closed sanitized Product failure
+          headers:
+            x-request-id:
+              schema:
+                type: string
+                minLength: 1
+                maxLength: 128
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SkillProductErrorResponse"
+        "401":
+          description: Closed sanitized Product failure
+          headers:
+            x-request-id:
+              schema:
+                type: string
+                minLength: 1
+                maxLength: 128
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SkillProductErrorResponse"
+        "403":
+          description: Closed sanitized Product failure
+          headers:
+            x-request-id:
+              schema:
+                type: string
+                minLength: 1
+                maxLength: 128
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SkillProductErrorResponse"
+        "404":
+          description: Closed sanitized Product failure
+          headers:
+            x-request-id:
+              schema:
+                type: string
+                minLength: 1
+                maxLength: 128
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SkillProductErrorResponse"
+        "409":
+          description: Closed sanitized Product failure
+          headers:
+            x-request-id:
+              schema:
+                type: string
+                minLength: 1
+                maxLength: 128
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SkillProductErrorResponse"
+        "412":
+          description: Closed sanitized Product failure
+          headers:
+            x-request-id:
+              schema:
+                type: string
+                minLength: 1
+                maxLength: 128
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SkillProductErrorResponse"
+        "413":
+          description: Closed sanitized Product failure
+          headers:
+            x-request-id:
+              schema:
+                type: string
+                minLength: 1
+                maxLength: 128
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SkillProductErrorResponse"
+        "429":
+          description: Closed sanitized Product failure
+          headers:
+            x-request-id:
+              schema:
+                type: string
+                minLength: 1
+                maxLength: 128
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SkillProductErrorResponse"
+        "502":
+          description: Closed sanitized Product failure
+          headers:
+            x-request-id:
+              schema:
+                type: string
+                minLength: 1
+                maxLength: 128
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SkillProductErrorResponse"
+        "503":
+          description: Closed sanitized Product failure
+          headers:
+            x-request-id:
+              schema:
+                type: string
+                minLength: 1
+                maxLength: 128
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SkillProductErrorResponse"
   /v1/skill-shares/{share_id}:
     get:
       tags:
@@ -11360,6 +11558,45 @@ components:
                         type: string
                         pattern: ^(0|[1-9][0-9]*)$
                         maxLength: 19
+    SharedSkillRevisionResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [share_id, source_ref, skill]
+          properties:
+            share_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+            source_ref: { type: string, pattern: '^skill:[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+            skill: { $ref: '#/components/schemas/SharedSkillRevisionSummary' }
+    SharedSkillRevisionSummary:
+      type: object
+      additionalProperties: false
+      required: [skill_id, series_id, revision, display_name, description, tags, example_prompts, category_keys, created_at, updated_at, owner_type, source_kind]
+      properties:
+        skill_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        series_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+        revision: { type: string, pattern: '^[1-9][0-9]{0,19}$' }
+        display_name: { type: string, minLength: 1, maxLength: 255 }
+        description: { type: string, maxLength: 65535 }
+        tags: { type: array, items: { type: string } }
+        example_prompts: { type: array, items: { type: string } }
+        category_keys: { type: array, items: { type: string, enum: [programming, data, automation, business, design, media, content, apps] } }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        owner_type: { type: string, enum: [personal, official, team, project, app] }
+        source_kind: { type: string, enum: [personal, official, third_party] }
+        original_name: { type: string, minLength: 1 }
+        author:
+          type: object
+          additionalProperties: false
+          required: [user_id, display_name]
+          properties:
+            user_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+            display_name: { type: string, minLength: 1 }
+        cover_image: { type: string, pattern: '^/api/v1/skills/[^/]+/cover$' }
     SkillShareResponse:
       type: object
       additionalProperties: false

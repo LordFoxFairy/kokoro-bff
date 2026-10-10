@@ -12,7 +12,7 @@ import { z } from "zod"
 export class PlatformSkillSpecificationFacade implements SkillSpecificationOwner {
   public constructor(
     private readonly dependencies: {
-      product: Pick<SkillProductConnectClient, "current" | "download">
+      product: Pick<SkillProductConnectClient, "current" | "download" | "revision">
       installations: Pick<PersonalInstallationConnectClient, "list">
       projection: Pick<PlatformProjectionHttpClient, "read">
     },
@@ -53,6 +53,28 @@ export class PlatformSkillSpecificationFacade implements SkillSpecificationOwner
       .extend({ data: zListVisibleSkillCatalogResponse.shape.data.strict().extend({ skills: z.array(zSkill.strict()) }) })
       .parse({ data: result.data }).data
     return { skills: page.skills, ...(page.next_cursor == null ? {} : { nextCursor: page.next_cursor }) }
+  }
+  public async revision(sourceRef: string, context: SkillSpecificationContext, signal: AbortSignal, deadlineAt: number) {
+    const result = await this.dependencies.product.revision({ ...this.common(context), sourceRef }, signal, deadlineAt)
+    assertSkillWireKnown(result)
+    const id = sourceRef.slice(6)
+    if (sourceRef !== `skill:${id}` || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u.test(id)) throw new Error("skill_response_invalid")
+    const skill = projectSkillProductRecord(result.skill, id)
+    const record = result.skill!
+    if (
+      skill.source_ref !== sourceRef ||
+      skill.status !== "active" ||
+      skill.package_phase !== "valid" ||
+      !record.ownerScope ||
+      !record.ownerScope.id ||
+      !["user", "organization", "project", "app"].includes(record.ownerScope.kind)
+    )
+      throw new Error("skill_response_invalid")
+    return {
+      skill,
+      record: { ownerKind: record.ownerScope.kind, ...(record.originalName === undefined ? {} : { originalName: record.originalName }) },
+      createdAt: skillTimestamp(record.createdAt),
+    }
   }
   public async current(seriesId: string, context: SkillSpecificationContext, signal: AbortSignal, deadlineAt: number): Promise<CurrentSkillFact> {
     const result = await this.dependencies.product.current({ ...this.common(context), seriesId }, signal, deadlineAt)

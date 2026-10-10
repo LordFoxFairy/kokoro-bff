@@ -452,16 +452,19 @@ async function handle(
   }
   if (
     businessPath[0] === "skill-shares" &&
-    ((businessPath.length === 1 && request.method === "POST") || (businessPath.length === 2 && ["GET", "DELETE"].includes(request.method ?? "")))
+    ((businessPath.length === 1 && request.method === "POST") ||
+      (businessPath.length === 2 && ["GET", "DELETE"].includes(request.method ?? "")) ||
+      (businessPath.length === 3 && businessPath[2] === "skill" && request.method === "GET"))
   ) {
     await skillShareRoute(
       request,
       response,
-      context,
+      { ...context, humanBearer: admission.bearerToken },
       businessPath,
       composition.businessStore?.services.skillShares,
       composition.skillProductClient,
       config.iamRelay?.webOrigin,
+      composition.skillSpecificationSource,
     )
     return
   }

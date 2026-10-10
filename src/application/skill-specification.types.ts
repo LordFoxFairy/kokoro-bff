@@ -28,7 +28,7 @@ export type SkillCatalogFact = Readonly<{
   content_hash: string
   product: SkillProductFact
 }>
-export type CurrentSkillFact = Readonly<{
+export type RevisionSkillFact = Readonly<{
   skill: Readonly<{
     skill_id: string
     source_ref: string
@@ -37,6 +37,7 @@ export type CurrentSkillFact = Readonly<{
     status: string
     name: string
     summary: string
+    tags: string[]
     example_prompts: string[]
     category_keys: string[]
     skill_updated_at: string
@@ -45,8 +46,8 @@ export type CurrentSkillFact = Readonly<{
   }>
   record: Readonly<{ ownerKind: string; originalName?: string; fileCount?: number; archiveSize?: bigint }>
   createdAt: string
-  publishedAt: string
 }>
+export type CurrentSkillFact = RevisionSkillFact & Readonly<{ publishedAt: string }>
 export type SkillDownloadFact = Readonly<{
   sourceRef: string
   revision: string
@@ -63,10 +64,12 @@ export type SkillSpecificationOwner = Readonly<{
     context: SkillSpecificationContext,
     signal: AbortSignal,
   ): Promise<Readonly<{ skills: SkillCatalogFact[]; nextCursor?: string }>>
+  revision(sourceRef: string, context: SkillSpecificationContext, signal: AbortSignal, deadlineAt: number): Promise<RevisionSkillFact>
   current(seriesId: string, context: SkillSpecificationContext, signal: AbortSignal, deadlineAt: number): Promise<CurrentSkillFact>
   download(sourceRef: string, context: SkillSpecificationContext, signal: AbortSignal, deadlineAt: number): Promise<SkillDownloadFact>
 }>
 export type SkillSpecificationSource = Readonly<{
+  revisionSummary(sourceRef: string, context: SkillSpecificationContext, signal: AbortSignal, deadlineAt: number): Promise<unknown>
   read(
     operation: "skill.list" | "ListSkills" | "ListHubSkills",
     input: Readonly<Record<string, unknown>>,
