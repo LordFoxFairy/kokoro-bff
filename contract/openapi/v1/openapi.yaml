@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 13.0.0
+  version: 13.1.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -2789,7 +2789,7 @@ paths:
         "401":
           $ref: "#/components/responses/SkillInstallationUnauthorized"
         "403":
-          $ref: "#/components/responses/SkillInstallationForbidden"
+          $ref: "#/components/responses/SkillInstallationMutationForbidden"
         "404":
           $ref: "#/components/responses/SkillInstallationNotFound"
         "409":
@@ -2916,7 +2916,7 @@ paths:
         '400': { $ref: '#/components/responses/SkillInstallationBadRequest' }
         '413': { $ref: '#/components/responses/SkillInstallationPayloadTooLarge' }
         '401': { $ref: '#/components/responses/SkillInstallationUnauthorized' }
-        '403': { $ref: '#/components/responses/SkillInstallationForbidden' }
+        '403': { $ref: '#/components/responses/SkillInstallationMutationForbidden' }
         '404': { $ref: '#/components/responses/SkillInstallationNotFound' }
         '409': { $ref: '#/components/responses/SkillInstallationConflict' }
         '412':
@@ -2984,7 +2984,7 @@ paths:
         '400': { $ref: '#/components/responses/SkillInstallationBadRequest' }
         '413': { $ref: '#/components/responses/SkillInstallationPayloadTooLarge' }
         '401': { $ref: '#/components/responses/SkillInstallationUnauthorized' }
-        '403': { $ref: '#/components/responses/SkillInstallationForbidden' }
+        '403': { $ref: '#/components/responses/SkillInstallationMutationForbidden' }
         '404': { $ref: '#/components/responses/SkillInstallationNotFound' }
         '409': { $ref: '#/components/responses/SkillInstallationConflict' }
         '412':
@@ -12539,7 +12539,7 @@ components:
       properties:
         code:
           type: string
-          enum: [invalid_skill_request, idempotency_key_required, invalid_idempotency_key, request_body_too_large, service_auth_failed, session_authentication_required, session_invalid, session_forbidden, session_rate_limited, product_tenant_not_configured, product_tenant_forbidden, skill_idempotency_conflict, skill_command_in_progress, skill_precondition_failed, skill_rate_limited, iam_admission_unavailable, skill_dependency_unavailable, skill_response_invalid]
+          enum: [invalid_skill_request, idempotency_key_required, invalid_idempotency_key, request_body_too_large, service_auth_failed, session_authentication_required, session_invalid, session_forbidden, session_rate_limited, product_tenant_not_configured, product_tenant_forbidden, skill_idempotency_conflict, skill_command_in_progress, skill_precondition_failed, skill_rate_limited, iam_admission_unavailable, skill_dependency_unavailable, skill_response_invalid, skill_forbidden]
         message: { type: string, minLength: 1 }
         retryable: { type: boolean }
     SkillDraftErrorResponse:
@@ -12752,7 +12752,7 @@ components:
       properties:
         code:
           type: string
-          enum: [invalid_skill_request, idempotency_key_required, invalid_idempotency_key, request_body_too_large, session_authentication_required, session_invalid, service_auth_failed, session_forbidden, product_tenant_forbidden, product_tenant_not_configured, session_rate_limited, skill_rate_limited, skill_not_found, skill_idempotency_conflict, skill_command_in_progress, skill_precondition_failed, skill_response_invalid, iam_admission_unavailable, skill_dependency_unavailable]
+          enum: [invalid_skill_request, idempotency_key_required, invalid_idempotency_key, request_body_too_large, session_authentication_required, session_invalid, service_auth_failed, session_forbidden, product_tenant_forbidden, product_tenant_not_configured, session_rate_limited, skill_rate_limited, skill_not_found, skill_idempotency_conflict, skill_command_in_progress, skill_precondition_failed, skill_response_invalid, iam_admission_unavailable, skill_dependency_unavailable, skill_forbidden]
         message: { type: string, minLength: 1 }
         retryable: { type: boolean }
     SkillPackageBeginErrorResponse:
@@ -12852,7 +12852,7 @@ components:
       properties:
         code:
           type: string
-          enum: [invalid_skill_request, idempotency_key_required, invalid_idempotency_key, request_body_too_large, session_authentication_required, session_invalid, service_auth_failed, session_forbidden, product_tenant_forbidden, product_tenant_not_configured, session_rate_limited, skill_rate_limited, skill_not_found, skill_idempotency_conflict, skill_command_in_progress, skill_precondition_failed, skill_response_invalid, iam_admission_unavailable, skill_dependency_unavailable]
+          enum: [invalid_skill_request, idempotency_key_required, invalid_idempotency_key, request_body_too_large, session_authentication_required, session_invalid, service_auth_failed, session_forbidden, product_tenant_forbidden, product_tenant_not_configured, session_rate_limited, skill_rate_limited, skill_not_found, skill_idempotency_conflict, skill_command_in_progress, skill_precondition_failed, skill_response_invalid, iam_admission_unavailable, skill_dependency_unavailable, skill_forbidden]
         message: { type: string, minLength: 1 }
         retryable: { type: boolean }
     SkillPackageCompleteErrorResponse:
@@ -12923,7 +12923,7 @@ components:
       properties:
         code:
           type: string
-          enum: [invalid_skill_request, idempotency_key_required, invalid_idempotency_key, request_body_too_large, session_authentication_required, session_invalid, service_auth_failed, session_forbidden, product_tenant_forbidden, product_tenant_not_configured, session_rate_limited, skill_rate_limited, skill_not_found, skill_idempotency_conflict, skill_command_in_progress, skill_precondition_failed, skill_response_invalid, iam_admission_unavailable, skill_dependency_unavailable]
+          enum: [invalid_skill_request, idempotency_key_required, invalid_idempotency_key, request_body_too_large, session_authentication_required, session_invalid, service_auth_failed, session_forbidden, product_tenant_forbidden, product_tenant_not_configured, session_rate_limited, skill_rate_limited, skill_not_found, skill_idempotency_conflict, skill_command_in_progress, skill_precondition_failed, skill_response_invalid, iam_admission_unavailable, skill_dependency_unavailable, skill_forbidden]
         message: { type: string, minLength: 1 }
         retryable: { type: boolean }
     SkillValidateErrorResponse:
@@ -12978,7 +12978,7 @@ components:
       properties:
         code:
           type: string
-          enum: [invalid_skill_request, idempotency_key_required, invalid_idempotency_key, request_body_too_large, session_authentication_required, session_invalid, service_auth_failed, session_forbidden, product_tenant_forbidden, product_tenant_not_configured, session_rate_limited, skill_rate_limited, skill_not_found, skill_idempotency_conflict, skill_command_in_progress, skill_precondition_failed, skill_response_invalid, iam_admission_unavailable, skill_dependency_unavailable]
+          enum: [invalid_skill_request, idempotency_key_required, invalid_idempotency_key, request_body_too_large, session_authentication_required, session_invalid, service_auth_failed, session_forbidden, product_tenant_forbidden, product_tenant_not_configured, session_rate_limited, skill_rate_limited, skill_not_found, skill_idempotency_conflict, skill_command_in_progress, skill_precondition_failed, skill_response_invalid, iam_admission_unavailable, skill_dependency_unavailable, skill_forbidden]
         message: { type: string, minLength: 1 }
         retryable: { type: boolean }
     SkillPublishErrorResponse:
@@ -16902,6 +16902,27 @@ components:
                     type: object
                     properties:
                       code: { type: string, enum: [service_auth_failed, session_forbidden, product_tenant_forbidden, skill_installation_forbidden] }
+    SkillInstallationMutationForbidden:
+      description: Operation forbidden
+      headers:
+        x-request-id:
+          {
+            required: true,
+            schema: { type: string, minLength: 1, maxLength: 128 },
+          }
+        Cache-Control:
+          { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/SkillInstallationErrorEnvelope'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, enum: [service_auth_failed, session_forbidden, product_tenant_forbidden, skill_installation_forbidden, skill_forbidden] }
     SkillInstallationNotFound:
       description: Installation not found
       headers:
@@ -17518,7 +17539,7 @@ components:
                   error:
                     type: object
                     properties:
-                      code: { type: string, enum: [service_auth_failed, session_forbidden, product_tenant_forbidden] }
+                      code: { type: string, enum: [service_auth_failed, session_forbidden, product_tenant_forbidden, skill_forbidden] }
     SkillPackageBeginNotFound:
       description: Skill is absent or invisible to this tenant or owner
       headers:
@@ -17722,7 +17743,7 @@ components:
                   error:
                     type: object
                     properties:
-                      code: { type: string, enum: [service_auth_failed, session_forbidden, product_tenant_forbidden] }
+                      code: { type: string, enum: [service_auth_failed, session_forbidden, product_tenant_forbidden, skill_forbidden] }
     SkillPackageCompleteNotFound:
       description: Skill is absent or invisible to this tenant or owner
       headers:
@@ -17926,7 +17947,7 @@ components:
                   error:
                     type: object
                     properties:
-                      code: { type: string, enum: [service_auth_failed, session_forbidden, product_tenant_forbidden] }
+                      code: { type: string, enum: [service_auth_failed, session_forbidden, product_tenant_forbidden, skill_forbidden] }
     SkillValidateNotFound:
       description: Skill is absent or invisible to this tenant or owner
       headers:
@@ -18130,7 +18151,7 @@ components:
                   error:
                     type: object
                     properties:
-                      code: { type: string, enum: [service_auth_failed, session_forbidden, product_tenant_forbidden] }
+                      code: { type: string, enum: [service_auth_failed, session_forbidden, product_tenant_forbidden, skill_forbidden] }
     SkillPublishNotFound:
       description: Skill is absent or invisible to this tenant or owner
       headers:
@@ -18996,7 +19017,7 @@ components:
                   error:
                     type: object
                     properties:
-                      code: { type: string, enum: [service_auth_failed, session_forbidden, product_tenant_forbidden] }
+                      code: { type: string, enum: [service_auth_failed, session_forbidden, product_tenant_forbidden, skill_forbidden] }
     PersonalSkillLifecycleNotFound:
       description: Closed personal Skill lifecycle error
       headers:

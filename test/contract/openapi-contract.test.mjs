@@ -3076,7 +3076,9 @@ test("Public11 ordinary lifecycle uses metadata-only CreateVersion and required 
 test("Public13 requires CAS only for the three package commands and exactly restores Public12", async () => {
   const { load, dump } = await import("js-yaml")
   const { inspectPublic13CasContract, restorePublic12CasContract } = await import("../../scripts/verify-skill-product-contract.mjs")
-  const source = await readFile(currentOpenapiUrl, "utf8")
+  const current = await readFile(currentOpenapiUrl, "utf8")
+  const { restorePublic13SkillAuthorizationContract } = await import("../../scripts/verify-skill-product-contract.mjs")
+  const source = restorePublic13SkillAuthorizationContract(current)
   assert.deepEqual(inspectPublic13CasContract(source), [])
   const document = load(source)
   assert.equal(document.info.version, "13.0.0")
@@ -3101,8 +3103,116 @@ test("Public13 requires CAS only for the three package commands and exactly rest
   assert.deepEqual(inspectSkillProductContract(restorePublic12CasContract(source)), [])
   const { inspectBffOpenApi: inspectCurrentBffOpenApi } = await import("../../scripts/verify-openapi.ts")
   const baseline = JSON.parse(await readFile(baselineUrl, "utf8")).operations
-  assert.deepEqual(inspectCurrentBffOpenApi(source, baseline), [])
-  assert.ok(inspectCurrentBffOpenApi(restorePublic12CasContract(source), baseline).some((error) => error.includes("13.0.0")))
+  assert.deepEqual(inspectCurrentBffOpenApi(current, baseline), [])
+  assert.ok(inspectCurrentBffOpenApi(restorePublic12CasContract(source), baseline).some((error) => error.includes("13.1.0")))
 
   assert.ok(inspectPublic13CasContract(source.replace("maximum: 33554432", "maximum: 33554431")).some((error) => error.includes("parent inverse")))
+})
+
+test("Public13.1 exposes skill_forbidden only on the actual Skill action 403 families", async () => {
+  const { load } = await import("js-yaml")
+  const document = load(await readFile(currentOpenapiUrl, "utf8"))
+  const schemas = document.components.schemas,
+    responses = document.components.responses
+  const baseNames = [
+    "SkillDraftErrorDetail",
+    "SkillPackageBeginErrorDetail",
+    "SkillPackageCompleteErrorDetail",
+    "SkillValidateErrorDetail",
+    "SkillPublishErrorDetail",
+  ]
+  for (const name of baseNames) assert.ok(schemas[name].properties.code.enum.includes("skill_forbidden"), name)
+  const narrowNames = [
+    "SkillPackageBeginForbidden",
+    "SkillPackageCompleteForbidden",
+    "SkillValidateForbidden",
+    "SkillPublishForbidden",
+    "PersonalSkillLifecycleForbidden",
+    "SkillInstallationMutationForbidden",
+  ]
+  for (const name of narrowNames) {
+    const narrow = responses[name].content["application/json"].schema.allOf[1].properties.error.properties.code.enum
+    assert.ok(narrow.includes("skill_forbidden"), name)
+    assert.equal(narrow.includes("invalid_skill_request"), false, name)
+    assert.equal(narrow.includes("iam_admission_unavailable"), false, name)
+  }
+  for (const name of ["SkillPackageUploadGetErrorDetail", "ManagedPersonalSkillErrorDetail", "SkillPackageInspectionErrorDetail"])
+    assert.equal(schemas[name].properties.code.enum.includes("skill_forbidden"), false, name)
+  for (const name of ["SkillPackageUploadGetForbidden", "ManagedPersonalSkillForbidden", "SkillPackageInspectionForbidden", "SkillInstallationForbidden"])
+    assert.equal(JSON.stringify(responses[name]).includes("skill_forbidden"), false, name)
+  for (const [path, item] of Object.entries(document.paths))
+    for (const [method, operation] of Object.entries(item)) {
+      if (!path.startsWith("/v1/skill-installations") || !["get", "post", "put", "delete"].includes(method)) continue
+      if (!operation.responses["403"].$ref.includes("SkillInstallation")) continue
+      assert.equal(
+        operation.responses["403"].$ref,
+        `#/components/responses/${method === "get" ? "SkillInstallationForbidden" : "SkillInstallationMutationForbidden"}`,
+      )
+    }
+})
+
+test("Public13.1 guards every actual Skill action route, status family and the exact Public13 parent", async () => {
+  const { load } = await import("js-yaml")
+  const { skillActionForRequest } = await import("../../src/auth/user-admission.ts")
+  const { inspectPublic131SkillAuthorizationContract, restorePublic13SkillAuthorizationContract } =
+    await import("../../scripts/verify-skill-product-contract.mjs")
+  const source = await readFile(currentOpenapiUrl, "utf8"),
+    document = load(source)
+  assert.deepEqual(inspectPublic131SkillAuthorizationContract(source), [])
+  assert.deepEqual(inspectSkillProductContract(restorePublic13SkillAuthorizationContract(source)), [])
+  const resolve = (value) =>
+    value?.$ref
+      ? value.$ref
+          .split("/")
+          .slice(1)
+          .reduce((current, key) => current[key], document)
+      : value
+  const allowsCode = (value, code) => {
+    const schema = resolve(value)
+    if (!schema) return false
+    if (schema.allOf) return schema.allOf.every((part) => allowsCode(part, code))
+    if (schema.properties?.error) return allowsCode(schema.properties.error, code)
+    if (schema.properties?.code) return allowsCode(schema.properties.code, code)
+    return schema.enum === undefined || schema.enum.includes(code)
+  }
+  let actionRoutes = 0
+  for (const [path, item] of Object.entries(document.paths))
+    for (const [method, operation] of Object.entries(item)) {
+      if (!["get", "post", "put", "patch", "delete"].includes(method)) continue
+      const parts = path.split("/").filter(Boolean)
+      if (parts[0] === "v1") parts.shift()
+      if (skillActionForRequest(method.toUpperCase(), parts) === null) continue
+      actionRoutes++
+      const forbidden = resolve(operation.responses["403"])
+      assert.ok(forbidden, `${method} ${path} must publish its actual 403`)
+      assert.ok(allowsCode(forbidden.content["application/json"].schema, "skill_forbidden"), `${method} ${path}`)
+    }
+  assert.equal(actionRoutes, 26)
+  for (const name of [
+    "SkillDraftErrorDetail",
+    "SkillPackageBeginErrorDetail",
+    "SkillPackageCompleteErrorDetail",
+    "SkillValidateErrorDetail",
+    "SkillPublishErrorDetail",
+  ]) {
+    const block = new RegExp(`^    ${name}:\\n[\\s\\S]*?(?=^    [A-Za-z0-9]+:)`, "mu").exec(source)[0]
+    const changed = source.replace(block, block.replace(", skill_forbidden]", "]"))
+    assert.ok(inspectPublic131SkillAuthorizationContract(changed).some((error) => error.includes(name)))
+  }
+  for (const name of [
+    "SkillPackageBeginForbidden",
+    "SkillPackageCompleteForbidden",
+    "SkillValidateForbidden",
+    "SkillPublishForbidden",
+    "PersonalSkillLifecycleForbidden",
+    "SkillInstallationMutationForbidden",
+  ]) {
+    const block = new RegExp(`^    ${name}:\\n[\\s\\S]*?(?=^    [A-Za-z0-9]+:)`, "mu").exec(source)[0]
+    const changed = source.replace(block, block.replace(", skill_forbidden]", ", invalid_skill_request, skill_forbidden]"))
+    assert.ok(inspectPublic131SkillAuthorizationContract(changed).some((error) => error.includes("parent inverse")))
+  }
+  const widenedRead = source.replace("#/components/responses/SkillInstallationForbidden", "#/components/responses/SkillInstallationMutationForbidden")
+  assert.ok(inspectPublic131SkillAuthorizationContract(widenedRead).some((error) => error.includes("read forbidden boundary")))
+  const wrongStatus = source.replace("#/components/responses/SkillValidateBadRequest", "#/components/responses/SkillValidateForbidden")
+  assert.ok(inspectPublic131SkillAuthorizationContract(wrongStatus).some((error) => error.includes("parent inverse")))
 })

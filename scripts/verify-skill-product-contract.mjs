@@ -109,6 +109,7 @@ function restorePublic10(source) {
   return parent
 }
 export function inspectSkillProductContract(source, baseline = OPERATIONS) {
+  if (/^  version: 13\.1\.0$/mu.test(source)) return inspectPublic131SkillAuthorizationContract(source)
   if (/^  version: 13\.0\.0$/mu.test(source)) return inspectPublic13CasContract(source)
   if (/^  version: 12\.0\.0$/mu.test(source)) return inspectSkillsSpecificationContract(source)
   if (!/^  version: 11\.0\.0$/mu.test(source)) return ["Public11 version must equal 11.0.0"]
@@ -249,4 +250,64 @@ export function inspectPublic13CasContract(source) {
   const parent = restorePublic12CasContract(source)
   if (hash(parent) !== "7a827ba0497315cb80028c17cc714f187eeddeb2a880f477b27c9b23e0ff3caa") errors.push("Public13 exact Public12 parent inverse drifted")
   return [...errors, ...inspectSkillsSpecificationContract(parent)]
+}
+
+const SKILL_ACTION_ERROR_BLOCKS = [
+  "SkillDraftErrorDetail",
+  "SkillPackageBeginErrorDetail",
+  "SkillPackageCompleteErrorDetail",
+  "SkillValidateErrorDetail",
+  "SkillPublishErrorDetail",
+  "SkillPackageBeginForbidden",
+  "SkillPackageCompleteForbidden",
+  "SkillValidateForbidden",
+  "SkillPublishForbidden",
+  "PersonalSkillLifecycleForbidden",
+]
+/** Compatibility addition for the existing human Skill permission failure, never a new permission. */
+export function restorePublic13SkillAuthorizationContract(source) {
+  let parent = source.replace("  version: 13.1.0", "  version: 13.0.0")
+  for (const name of SKILL_ACTION_ERROR_BLOCKS) {
+    const block = namedBlock(parent, "schema", name)
+    if (block !== null) parent = parent.replace(block, block.replace(", skill_forbidden]", "]"))
+  }
+  const mutation = namedBlock(parent, "response", "SkillInstallationMutationForbidden")
+  if (mutation !== null) parent = parent.replace(mutation, "")
+  return parent.replaceAll("#/components/responses/SkillInstallationMutationForbidden", "#/components/responses/SkillInstallationForbidden")
+}
+export function inspectPublic131SkillAuthorizationContract(source) {
+  const errors = []
+  let document
+  try {
+    document = load(source, { json: false })
+  } catch {
+    return ["Public13.1 must be valid unique-key YAML"]
+  }
+  if (document?.info?.version !== "13.1.0") errors.push("Public13.1 version must equal 13.1.0")
+  const schemas = document?.components?.schemas ?? {},
+    responses = document?.components?.responses ?? {}
+  for (const name of SKILL_ACTION_ERROR_BLOCKS) {
+    const schema = name.endsWith("ErrorDetail") ? schemas[name] : responses[name]?.content?.["application/json"]?.schema?.allOf?.[1]?.properties?.error
+    if (!schema?.properties?.code?.enum?.includes("skill_forbidden")) errors.push(`${name} must expose the actual Skill action denial`)
+  }
+  const mutation = responses.SkillInstallationMutationForbidden?.content?.["application/json"]?.schema?.allOf?.[1]?.properties?.error?.properties?.code?.enum
+  if (!mutation?.includes("skill_forbidden")) errors.push("SkillInstallationMutationForbidden must expose Skill action denial")
+  const originalForbidden = namedBlock(source, "response", "SkillInstallationForbidden")
+  const mutationForbidden = namedBlock(source, "response", "SkillInstallationMutationForbidden")
+  const expectedMutation = originalForbidden?.replace("SkillInstallationForbidden:", "SkillInstallationMutationForbidden:").replace("]", ", skill_forbidden]")
+  if (mutationForbidden !== expectedMutation) errors.push("Public13.1 installation mutation exact parent inverse drifted")
+  for (const [path, item] of Object.entries(document?.paths ?? {})) {
+    if (!path.startsWith("/v1/skill-installations")) continue
+    for (const [method, operation] of Object.entries(item)) {
+      const ref = operation?.responses?.["403"]?.$ref
+      if (
+        ref?.includes("SkillInstallation") &&
+        ref !== `#/components/responses/${method === "get" ? "SkillInstallationForbidden" : "SkillInstallationMutationForbidden"}`
+      )
+        errors.push(`${method} ${path} must retain the exact mutation/read forbidden boundary`)
+    }
+  }
+  const parent = restorePublic13SkillAuthorizationContract(source)
+  if (hash(parent) !== "f100463d3d9b686745e13fd2c07d6fdf8d305fcc8b66169cecddded0f2f82801") errors.push("Public13.1 exact Public13.0 parent inverse drifted")
+  return [...errors, ...inspectPublic13CasContract(parent)]
 }

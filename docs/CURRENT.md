@@ -1,3 +1,15 @@
+## T-K03.14-BFF-SKILL-AUTH-ERROR Public13.1 源码候选收据（2026-10-10；待 Root 独审提交）
+
+基线 `37efd64a81a66b83df2f8d0a678c6e0e8971cb31`；唯一 current public source 为 `contract/openapi/v1/openapi.yaml` **13.1.0**，仍 `/v1` / 136 operations。本片仅补已存在 IAM Skill action denial 的 `403 skill_forbidden` 契约，不改变 runtime、权限、CAS、owner wire 或数据。五个 Draft/Begin/Complete/Validate/Publish base error enum 与四个命令及个人 Version/Withdraw 共用的 narrow 403 精确补码；安装三 mutation 使用同文件新 `SkillInstallationMutationForbidden`，原安装 GET、package-upload GET、managed read、inspection 与 MCP 不扩展。原 Product/Admin/Github/AI error family 已含此码，保持原字节。
+
+具名契约测试按现 `skillActionForRequest` 逐项枚举全部 26 个真实 action operation（含原 Admin 两 GET），确认实际 403 family 接纳该码；普通无 action 的 GET 保持原闭集。负控覆盖五 base 缺码、六 narrow 错误码混入、安装 GET 错挂 mutation ref、Validate 400 错挂 Forbidden ref。当前入口严格只接 13.1.0；精确逆向恢复整个 Public13.0 source SHA `f100463d3d9b686745e13fd2c07d6fdf8d305fcc8b66169cecddded0f2f82801` 并继续既有 Public13 CAS / Public12 及更早历史证明，历史向量不是生产 fallback；新安装 component 同样核对完整父组件精确派生，不放宽状态/code 闭集。
+
+真实 RED：具名新增契约断言 0 PASS / 1 FAIL，失败为旧 `SkillDraftErrorDetail` 缺码（`/tmp/bff-public131-red.log`）。后续补强测试的初次 operation census 25 与真实 26 不符、负控块抽取过短均修正并保留原记录；正式 focused 使用 Node22/tsx 为 3 PASS / 0 FAIL（`/tmp/bff-public131-focused-final.log`）。
+
+最终 Node22.22.2 串行 `pnpm contract:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build` 自然 exit0（`/tmp/bff-public131-final.log`）：contract 729 PASS / 0 FAIL / 0 SKIP，默认 test 1328 PASS / 0 FAIL / 3 既有 SKIP，lint/typecheck/build exit0；契约 lint 保留 3 既有 warnings。operation baseline、vendor/generated、SQL/schema、依赖、框架、Web、正常服务/数据及 Git index 均未修改。Root 独审/主树复跑/正式发行、Web 固定消费 13.1 与真实失权浏览器验收仍待后继 owner，不以此源码契约修复替代完整用户闭环。
+
+<!-- T-K03.14-BFF-SKILL-AUTH-ERROR-CURRENT-END; historical body retained -->
+
 ## T-K03.14-BFF-CAS Public13 源码候选收据（2026-10-10；待 Root 独审提交）
 
 基线 `8889701b3640029b7b5751c45111d80f66d0bbd3` 的三设计门后，本候选唯一 public source 是 `contract/openapi/v1/openapi.yaml` **13.0.0**，仍 `/v1` / 136 operations；只收紧 Begin/Complete/Validate 的 mandatory `expected_state_version`。现三 parser/client/route 与 current admission projector要求 canonical positive signed64 decimal string；缺失/非法/重复键在 BFF 400 且 owner 零调用。已有所有 ACK/self read 的真实 state_version、Complete 真实 source_version_id、Publish explicit audience/CAS、metadata/cover/Withdraw/Admin CAS 与普通 CreateVersion无CAS例外保持。当前主semantic入口只接13，Public12仅用于精确父逆向证明，父SHA `7a827ba0497315cb80028c17cc714f187eeddeb2a880f477b27c9b23e0ff3caa`；不改历史owner artifact或generated、不设旧协议fallback。正规 baseline生成仍136且字节未变。
