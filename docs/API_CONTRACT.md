@@ -1,3 +1,31 @@
+## T-K03.14-BFF-CAS D0：12.0.0 当前 → 13.0.0 目标（2026-10-10；机器未改）
+
+BFF 唯一 public source 仍是 `contract/openapi/v1/openapi.yaml`；当前 **12.0.0**，Root 裁决后继正式 **13.0.0**，URL 与 operation 均保持 `/v1`，不造 `/v13`。目标收紧三个当前 optional 字段为 required，其他请求/响应字段、owner pin 与权限不变。本阶段仅文档设计，契约/生成/源码/测试未实现。
+
+| 当前操作/schema | 当前事实 | Public13 目标 / 下一步版本来源 |
+| --- | --- | --- |
+| CreateDraft / SkillDraftResource | 不接 CAS，ACK required data.state_version | 保持，以真实 ACK 为初始 observation |
+| CreatePersonalVersion | 明确不接 CAS，独立 draft ACK required data.state_version | 保持，不从 base/state/revision 推算 |
+| GET package-upload / SkillPackageUploadState | required data.state_version 与 phase/attempt/upload 身份 | 保持，仅观察/恢复，不代替原 command receipt |
+| POST package-upload / BeginSkillPackageUploadRequest | expected_state_version optional | required；输入版本取 Create ACK 或同资源 owner read；成功 SkillPackageBeginResource.state_version required |
+| POST package-upload/complete / CompleteSkillPackageUploadRequest | source_version_id required，CAS optional | CAS required，取 Begin ACK；对象版本取真实 PUT x-amz-version-id；CompleteResource.state_version required |
+| POST validate / ValidateSkillDraftRequest | attempt_id required，CAS optional | CAS required，取 Complete ACK；SkillValidateResource.state_version required |
+| POST publish | strict audience + expected_state_version already required | 保持，取 Validate ACK；成功 SkillPublishResource.state_version required；禁止零body |
+| Metadata update / discard / audience | required CAS | 保持，从 current record product.state_version 或前次 mutation ACK 获取 |
+| Cover Begin / Complete | required CAS | 保持，Complete 用 BeginCover ACK 版本与真实 PUT object version |
+| Personal Withdraw | required CAS | 保持；普通 CreateVersion 不机械加 CAS |
+| Admin version/publish/withdraw/quarantine/restore/audience/discard | 七具名操作 required CAS，完整 record ACK | 保持，从 data.skill.product.state_version 或当前 detail/list observation 获取 |
+
+state_version 与 expected_state_version 是 canonical positive decimal string，现运行时最大 `9223372036854775807`；数字/null/0/leading zero/溢出/重复键与未知字段拒绝。response 必须保 strict envelope、identity、attempt/source-ref/series/revision、phase 与真实 version，消费者不得 strip version 来适配旧 schema。当前 self GET `/v1/self/skills/{skill_id}` 与 list item 的 `product.state_version` 是 owner 记录；package inspection 的 revision 不是 CAS，installation state 不替代 Skill version。
+
+完整 consumer 必须同时接：Create/Version ACK state_version、package Get state_version/attempt identity、Begin request CAS/ACK state_version、PUT source_version_id、Complete request CAS/object version/ACK state_version+scan_state、Validate request CAS/ACK state_version+identity、Publish explicit audience/CAS/ACK state_version+event。导入/metadata/封面/Admin 有自身 required CAS，不能以只修 Begin 宣称发布链通过。
+
+首次发送与same-key replay使用原body、原CAS、原semantic digest，当前 IAM admission 每次 fresh；未知 ACK 不换 key、不按更高 Get 版本改旧请求。新 key 异操作在当前 owner 同事务 CAS 中比较；owner FailedPrecondition 保既有 412 skill_precondition_failed，命令冲突/in-progress 保既有409。目标缺 CAS 在 BFF 400 invalid_skill_request 且 owner 零调用，消除目前 owner InvalidArgument 被投影502的缺字段路径；不通过放宽错误或 owner 校验伪造成功。
+
+后继由 BFF owner 发布13机器事实与正规 baseline/历史逆向证明，保历史 Public12/11 及 owner不可编辑 artifact，不手改 generated。消费者固定该正式 artifact再正规生成/检查；Web `3c59071` 与 release `c9b02b6` 分叉，禁止整包移植或把 release能力冒充正常实现。原Admin既有基座按具名 contract后继接线，不新增泛化代理/后台壳。本阶段 contract检查/测试未运行，不记通过。
+
+<!-- T-K03.14-BFF-CAS-API-D0-END; historical body retained -->
+
 ## T-K03.14-BFF-PIN 当前 Platform 固定发行（2026-10-10；待 Root 验收）
 
 当前 Connect/HTTP 消费输入唯一固定 Platform `32666c1c18360e707048a1104efe6b50e375002f`；物理 owner 为 `apps/kokoro-capability`。从该正式 Git 对象逐项核对，87 项必要 publication 与原 `84262b...` 字节完全一致，Proto/descriptor、HTTP 5.3.0、execution V5–V10、historical qualification 及所有 artifact 摘要不变；active/routable V10 aggregate 仍为 `dddb0d194af44dbf0b83a0a0443d774f3dee63f8cb03c364ad529c4c230fb85b`。当前说明覆盖下文历史 pin，不改历史验收事实。

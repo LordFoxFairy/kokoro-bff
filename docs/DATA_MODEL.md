@@ -1,3 +1,17 @@
+## T-K03.14-BFF-CAS D0：Public13 无新增持久事实（2026-10-10；仅设计）
+
+当前 public 12.0.0 → 目标13.0.0（URL仍/v1）仅收紧 Begin/Complete/Validate mandatory expected_state_version。Platform 仍独占 Skill product.state_version、package attempt、receipt、锁内 CAS、publication及事件；Storage 仍独占 Upload/Asset/ObjectVersion/scan。BFF不新增表、列、索引、canonical schema、migration、SQL、Redis key/namespace、持久化 receipt/outbox、CAS cache或owner镜像；不读取任何 owner DB，也不以跨库预读冒充 owner 同事务。
+
+Create/Version ACK、package GET、Begin/Complete/Validate/Publish ACK的真实state_version仅作为当次请求及浏览器冻结意图的版本证据。PUT真实x-amz-version-id仅作为Complete source_version_id；Skill revision/attempt_epoch/upload_id/content hash都不是CAS或对象版本。metadata/封面/Withdraw/Admin现有required CAS与record product.state_version保持。普通CreateVersion创建独立draft、不修改base，因此不建立对base的CAS请求。
+
+first send与same-key恢复绑定原key/body/CAS/digest/身份与资源；不由BFF durable cache代替Platform receipt，GET较新版本不改写旧command。未知ACK/取消/期限/迟到允许owner已提交，保原意图恢复；新的用户操作显式重新观察且owner在锁内比较版本。浏览器必要恢复状态服从既有session/subject-generation/非敏感intent边界，不保存bearer、machine凭据、原始bytes或签名URL为长期事实；本BFF设计不授Web存储实现。
+
+正常Web3c59071与release c9b02b6分叉，不迁移数据、不回填猜测版本、不整体复制release或其替代Admin。原Admin是唯一后台基座，后继接正式contract与IAM publisher资格；非空读取/真实CRUD仍需当前网络验收。当前保留Root真实draft、原幂等键及正常服务，不删除失败事实、不清库或新建基础设施。
+
+本阶段仅现三设计，不执行schema/数据/服务/Git/测试命令。后继schema byte-diff与schema:check证明零数据变化；missing/stale/correct/replay/unknownACK及真实owner事务回归证明并发与恢复，纯contract或文档不替代该证据。
+
+<!-- T-K03.14-BFF-CAS-DATA-D0-END; historical body retained -->
+
 ## T-K03.14-BFF-PIN 当前 Platform 固定发行（2026-10-10；待 Root 验收）
 
 当前 Connect/HTTP 消费输入唯一固定 Platform `32666c1c18360e707048a1104efe6b50e375002f`；物理 owner 为 `apps/kokoro-capability`。从该正式 Git 对象逐项核对，87 项必要 publication 与原 `84262b...` 字节完全一致，Proto/descriptor、HTTP 5.3.0、execution V5–V10、historical qualification 及所有 artifact 摘要不变；active/routable V10 aggregate 仍为 `dddb0d194af44dbf0b83a0a0443d774f3dee63f8cb03c364ad529c4c230fb85b`。当前说明覆盖下文历史 pin，不改历史验收事实。

@@ -1,3 +1,40 @@
+## T-K03.14-BFF-CAS D0：Public13 完整 package 发布链（2026-10-10；仅设计）
+
+### 当前事实与唯一目标
+
+实际基线是 BFF `b097f64d132ba947bfcaf1e6324dcaeee9005451`，当前唯一可编辑 public source 为 `contract/openapi/v1/openapi.yaml`，版本 **12.0.0**。当前 Begin/Complete/Validate 的 `expected_state_version` 在 public schema、parser 和 Catalog client 中 optional，但固定 Platform `32666c1c18360e707048a1104efe6b50e375002f` 的生产 package RPC 要求该值；真实 Begin owner 400 经 BFF 映射为 502，不能归因于服务未启动。
+
+Root 已裁决目标唯一 public artifact 为 **13.0.0**，URL 仍 `/v1`，不新建 `/v13`。三个请求改为 mandatory CAS 是 breaking 收紧；只有正式 owner 发布后，消费者才能固定生成。此文档门不修改 contract、源码、测试、generated 或正常服务，不把目标写成当前已实施。NestJS 原生迁移服从 Root 统一后继；本片不顺带迁移框架或建立 adapter/fallback。
+
+| 放置项 | 已裁决方案 |
+| --- | --- |
+| Owner / writer | BFF 独占 public contract 与请求准入；Platform 独占 Skill/attempt 状态、锁内 CAS、receipt 和事件；Storage 独占对象版本/扫描。当前 writer 仅三设计，Root 审查与 Git |
+| 当前事实 | 三 optional parser、现 catalog client/三 route、现 OpenAPI/契约门；既有所有 ACK/Get 已投影真实 state_version。无未提交基线变更 |
+| 目录比较 | 扩展现 request parser/client/具名 route 与唯一 OpenAPI；淘汰新 CAS service、自动预读 adapter、第二份 DTO 或新目录，因为没有新增业务事实 |
+| 粒度 / 依赖 | 三普通现 parser 各守自身输入；client 仅 transport/digest；route 只边界投影。沿 Browser → Web → BFF → Platform/Storage，禁止 owner SQL/source import |
+| 数据/API | 13.0.0 仅收紧 Begin/Complete/Validate mandatory expected_state_version；零 SQL/schema/cache/receipt/generated 手改；原授权、取消、预算、状态与错误边界保持 |
+| 删除项 | 当前三 optional admission/type/wire 分支与接受缺 CAS 的生产断言；删除零 CAS 成功路径。不可编辑历史 owner 向量，不从历史语义产生生产 fallback |
+| 验证 | 后继先准确 RED，contract lint/semantic/current+history/inverse、三 HTTP missing/stale/correct/replay、完整发布链及既有 Admin/metadata/cover/Withdraw 正负控，Node22 lint/typecheck/test/build/schema check；Root 真实 IAM/Platform/Storage/Web/Admin 组合 |
+
+### 完整六步与 observation 生命周期
+
+1. **CreateDraft / CreatePersonalVersion**：Create ACK 的 `data.state_version` 为初始 observation；普通 CreatePersonalVersion 不携 CAS、不改 base，其新 draft ACK 版本不得从 base 推算。既有 draft 通过 current managed/detail 或 package GET 得到同 skill 的真实版本。
+2. **Begin**：携带冻结的 `expected_state_version`、filename/MIME/size/hash 与 optional replaces_attempt_id；成功保存同 skill/attempt/upload 的 ACK `state_version` 与 transfer_reference。新 replacement 必须来自同资源真实观察，不填常数。
+3. **PUT**：按现 origin/header/redirect/取消约束上传，保存真实响应 `x-amz-version-id` 为 `source_version_id`；不得用 upload_id、hash、时间或空值代替。PUT 不返回 Skill state_version、不自行推进 CAS。
+4. **Complete**：原 attempt/upload/hash/size + 真实 source_version_id，CAS 用 Begin ACK 的 `state_version`。保存 Complete ACK 的真实 state_version 和 scan_state；uploaded/clean 不是 validated。
+5. **Validate**：原 attempt_id + Complete ACK 的 CAS；保存 Validate ACK 的真实 state_version、content_digest、manifest_identity。pending/unknown 不自动发布，Get 仅观察同 attempt，unknown ACK 保持原 Validate 意图。
+6. **Publish**：strict JSON 显式 audience（owner/tenant/catalog）+ Validate ACK 的 CAS；不保空body路径，普通 PERSONAL visibility 仍由 BFF 固定。保存 Publish ACK 的真实 state_version/event_id/replayed 与资源身份；owner 才决定发布、receipt 和事件。
+
+Create、package Get、Begin、Complete、Validate、Publish 的六类 ACK/read 均已在当前 BFF 公开真实 `data.state_version`；PUT 另公开对象版本来源而非 Skill 版本。metadata/cover/个人 Withdraw/Admin 七命令早已 required CAS，保持；其 ACK 中真实 `data.skill.product.state_version`（或具名生命周期 data.state_version）为下一独立意图依据。
+
+### 失败恢复和后继消费者
+
+每个 command 首次发送前冻结 key/body/CAS/command digest 与资源、tenant/subject/admission generation。same-key replay 永远发送原 body/CAS；GET 版本前进不是刷新 CAS 后用旧 key 重写的许可。owner 比较和提交仍在同事务执行；BFF/Web 不读 owner DB、不额外预读替 caller 猜 CAS、不对 ACK 版本做 +1 请求推算。unknown ACK、取消和迟到不证明 owner 未提交；恢复保原意图，当前 IAM 重新准入后交 owner receipt，异 body/CAS 同 key 冲突。stale/new operation 的 UI 保草稿并显式重新观察，不静默自动覆盖。
+
+真实用户 Web `apps/kokoro-app` 当前 `3c59071d8188f025b3d7b7683bb2d8560ceaa0fa` 与 release `c9b02b6f5b3e84a49af9facc4cd9b8e24e86530e` 分叉，merge-base `ed95ae6`，不是简单祖先升级。正常 Web 的 strict ACK schema 缺 state_version、Begin/Validate 缺 CAS、Complete 缺 CAS/对象版本、Publish 仍零body。后继只按已发布13契约接线批准用户能力与相关测试，保五项 mixed 变更，不整包移植 release，不恢复替代 Admin。原 `apps/kokoro-admin` 是唯一后台基座；既有 read 和旧 upload-preview/confirm 不等于正式七命令 CAS CRUD，后继须沿具名 owner/BFF artifact 接既有组件及双身份/非空列表验收。
+
+<!-- T-K03.14-BFF-CAS-TECH-D0-END; historical body retained -->
+
 ## T-K03.14-BFF-PIN 当前 Platform 固定发行（2026-10-10；待 Root 验收）
 
 当前 Connect/HTTP 消费输入唯一固定 Platform `32666c1c18360e707048a1104efe6b50e375002f`；物理 owner 为 `apps/kokoro-capability`。从该正式 Git 对象逐项核对，87 项必要 publication 与原 `84262b...` 字节完全一致，Proto/descriptor、HTTP 5.3.0、execution V5–V10、historical qualification 及所有 artifact 摘要不变；active/routable V10 aggregate 仍为 `dddb0d194af44dbf0b83a0a0443d774f3dee63f8cb03c364ad529c4c230fb85b`。当前说明覆盖下文历史 pin，不改历史验收事实。
