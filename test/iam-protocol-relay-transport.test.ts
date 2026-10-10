@@ -23,10 +23,11 @@ async function listen(server: Server): Promise<string> {
   return `http://127.0.0.1:${address.port}`
 }
 
-function bff(iamBaseUrl: string, limits: { timeoutMs?: number; responseBytes?: number; tenantId?: string } = {}): Server {
+function bff(iamBaseUrl: string, limits: { timeoutMs?: number; responseBytes?: number; tenantId?: string; adminSecret?: string } = {}): Server {
   return createLiveTestBffServer(
     loadConfig({
       KOKORO_BFF_SHARED_SECRET: "test-secret",
+      ...(limits.adminSecret === undefined ? {} : { KOKORO_BFF_ADMIN_WEB_SHARED_SECRET: limits.adminSecret }),
       KOKORO_BFF_POSTGRES_URL: "postgresql://localhost/unused_bff_relay_fixture?schema=kokoro_bff",
       KOKORO_BFF_REDIS_URL: "redis://localhost:6379/8",
       KOKORO_IAM_BASE_URL: iamBaseUrl,
@@ -713,6 +714,76 @@ test("token Basic is only relayed on the exact endpoint and cookies are never fo
   assert.equal(response.status, 200)
   assert.equal(authorization, "Basic Y2xpZW50OnNlY3JldA==")
   assert.equal(cookie, undefined)
+})
+
+test("Admin Web credential reaches only the fixed OIDC backchannel and never browser relay routes", async () => {
+  let calls = 0
+  const iam = await listen(
+    createServer((_request, response) => {
+      calls += 1
+      response.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" })
+      response.end('{"access_token":"owner-token"}')
+    }),
+  )
+  const missingBase = await listen(bff(iam))
+  const admin = {
+    "x-kokoro-service": "admin-web-bff",
+    "x-kokoro-internal-secret": "admin-test-secret",
+  }
+  const missing = await fetch(`${missingBase}/iam/oauth2/token`, {
+    method: "POST",
+    headers: { ...admin, authorization: "Basic Y2xpZW50OnNlY3JldA==", "content-type": "application/x-www-form-urlencoded" },
+    body: "grant_type=authorization_code&code=opaque",
+  })
+  assert.equal(missing.status, 403)
+  assert.equal(calls, 0)
+
+  const base = await listen(bff(iam, { adminSecret: "admin-test-secret" }))
+  for (const rawHeaders of [
+    ["x-kokoro-service", "admin-web-bff", "x-kokoro-service", "admin-web-bff", "x-kokoro-internal-secret", "admin-test-secret"],
+    ["x-kokoro-service", "admin-web-bff", "x-kokoro-internal-secret", "admin-test-secret", "x-kokoro-internal-secret", "admin-test-secret"],
+  ]) {
+    const status = await new Promise<number>((resolve, reject) => {
+      const outgoing = httpRequest(`${base}/iam/oauth2/token`, { method: "POST", headers: rawHeaders }, (response) => {
+        response.resume()
+        resolve(response.statusCode ?? 0)
+      })
+      outgoing.once("error", reject)
+      outgoing.end()
+    })
+    assert.ok(status === 400 || status === 403)
+  }
+  assert.equal(calls, 0)
+  const token = await fetch(`${base}/iam/oauth2/token`, {
+    method: "POST",
+    headers: { ...admin, authorization: "Basic Y2xpZW50OnNlY3JldA==", "content-type": "application/x-www-form-urlencoded" },
+    body: "grant_type=authorization_code&code=opaque",
+  })
+  assert.equal(token.status, 200)
+  assert.equal(calls, 1)
+
+  for (const [path, headers] of [
+    ["/iam/.well-known/openid-configuration", admin],
+    ["/iam/oauth2/authorize?client_id=admin", admin],
+    ["/iam/oauth2/token", { ...admin, "x-kokoro-internal-secret": "wrong" }],
+    ["/iam/oauth2/token", { ...admin, "x-kokoro-internal-secret": "test-secret" }],
+    ["/iam/oauth2/token", { ...admin, "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "admin-test-secret" }],
+  ] as const) {
+    const response = await fetch(`${base}${path}`, {
+      method: path === "/iam/oauth2/token" ? "POST" : "GET",
+      headers,
+    })
+    assert.equal(response.status, 403, path)
+  }
+  assert.equal(calls, 1)
+
+  const legacy = await fetch(`${base}/iam/oauth2/token`, {
+    method: "POST",
+    headers: { ...webServiceHeaders, authorization: "Basic Y2xpZW50OnNlY3JldA==", "content-type": "application/x-www-form-urlencoded" },
+    body: "grant_type=authorization_code&code=opaque",
+  })
+  assert.equal(legacy.status, 200)
+  assert.equal(calls, 2)
 })
 
 test("native 429 and logout security headers survive, while hostile redirect and cookies fail closed", async () => {

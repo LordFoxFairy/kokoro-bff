@@ -77,6 +77,7 @@ export type BffConfig = {
   storage?: Readonly<{ baseUrl: string; secret: string; objectOrigin: string }>
   storageObjectOrigin?: string | null
   sharedSecret: string | null
+  adminWebSharedSecret?: string | null
   upstreamSecret: string | null
   billingServiceToken?: string | null
   upstreamTimeoutMs: number
@@ -235,6 +236,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
   const domain = requiredDomain(env.KOKORO_DOMAIN || "dev.kokoro.localhost")
   const sharedSecret = env.KOKORO_BFF_SHARED_SECRET?.trim() || null
   if (sharedSecret === null) throw new Error("KOKORO_BFF_SHARED_SECRET is required for the live BFF runtime")
+  const adminWebSharedSecret = env.KOKORO_BFF_ADMIN_WEB_SHARED_SECRET?.trim() || null
+  if (adminWebSharedSecret !== null && adminWebSharedSecret === sharedSecret) {
+    throw new Error("Admin Web BFF secret must be different from the User Web BFF secret")
+  }
   const upstreamSecret = env.KOKORO_INTERNAL_SECRET_BFF?.trim() || null
   const billingServiceToken = env.KOKORO_BILLING_BFF_SERVICE_TOKEN?.trim() || null
   if (upstreams.billing !== null) {
@@ -380,6 +385,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
       : {}),
     storageObjectOrigin: storageOrigin,
     sharedSecret,
+    adminWebSharedSecret,
     upstreamSecret,
     billingServiceToken,
     upstreamTimeoutMs,

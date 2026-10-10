@@ -3,6 +3,7 @@ import type { IncomingMessage } from "node:http"
 import type { BffConfig } from "../config/runtime.js"
 import type { AdmittedUserRequestContext } from "../domain/request-context.js"
 import type { SessionAdmission } from "./session-admission.types.js"
+import { admitBrowserService } from "./browser-service-credential.policy.js"
 
 export type UserAdmissionResult =
   | Readonly<{ ok: true; context: AdmittedUserRequestContext; bearerToken: string }>
@@ -30,7 +31,7 @@ export async function authorizeUserRequest(
   requestId: string,
   signal: AbortSignal,
 ): Promise<UserAdmissionResult> {
-  if (request.headers["x-kokoro-service"] !== "web-bff" || config.sharedSecret === null || request.headers["x-kokoro-internal-secret"] !== config.sharedSecret)
+  if (admitBrowserService(request, config, { kind: "business" }) === null)
     return { ok: false, status: 403, code: "service_auth_failed" }
 
   const token = bearerToken(request)

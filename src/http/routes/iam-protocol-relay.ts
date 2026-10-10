@@ -4,6 +4,7 @@ import { isDeepStrictEqual } from "node:util"
 import { z } from "zod"
 
 import type { BffConfig } from "../../config/runtime.js"
+import { admitBrowserService } from "../../auth/browser-service-credential.policy.js"
 import { failure } from "../../contracts/index.js"
 import type { ApiErrorResponse } from "../../generated/iam-http/types.gen.js"
 import {
@@ -347,17 +348,17 @@ export async function iamProtocolRelay(request: IncomingMessage, response: Serve
     replyFailure(response, id, 503, "iam_relay_unavailable")
     return
   }
-  if (rawHeader(request, "x-kokoro-service") !== "web-bff" || rawHeader(request, "x-kokoro-internal-secret") !== config.sharedSecret) {
+  const staticRoute = iamRelayRoute(request.url ?? "", request.method ?? "")
+  const invitationRoute = iamInvitationRelayRoute(request.url ?? "", request.method ?? "")
+  const routePath = staticRoute?.path ?? invitationRoute?.path ?? ""
+  if (admitBrowserService(request, config, { kind: "iam", ownerPath: routePath }) === null) {
     replyFailure(response, id, 403, "service_auth_failed")
     return
   }
-  const staticRoute = iamRelayRoute(request.url ?? "", request.method ?? "")
-  const invitationRoute = iamInvitationRelayRoute(request.url ?? "", request.method ?? "")
   if (staticRoute === null && invitationRoute === null) {
     replyFailure(response, id, 404, "iam_relay_route_not_found")
     return
   }
-  const routePath = staticRoute?.path ?? invitationRoute!.path
   const routeQuery = staticRoute?.query ?? ""
   const invitationAction = invitationRoute?.action ?? null
   const signUp = staticRoute?.path === IAM_RELAY_POLICY.invitationSignUp.route

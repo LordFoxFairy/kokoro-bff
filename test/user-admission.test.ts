@@ -266,6 +266,81 @@ test("service and bearer rejection happen before IAM and route work", async () =
   assert.equal(routeCalls, 0)
 })
 
+test("Admin Web credential reaches only current identity and exact named admin routes", async () => {
+  const admission = new SessionAdmissionDouble({ token: { namespace: "tenant-server", userId: "admin-user" } })
+  let routeCalls = 0
+  const server = createLiveTestBffServer(
+    { ...config(), adminWebSharedSecret: "admin-test-secret" } as BffConfig,
+    {
+      sessionAdmission: admission,
+      skillAuthorization: { check: async () => ({ ok: true as const }) },
+      routeHandler: async ({ response }): Promise<void> => {
+        routeCalls += 1
+        response.writeHead(204).end()
+      },
+    },
+  )
+  const base = await listen(server)
+  const admin = {
+    "x-kokoro-service": "admin-web-bff",
+    "x-kokoro-internal-secret": "admin-test-secret",
+    authorization: "Bearer token",
+  }
+
+  const unconfiguredAdmission = new SessionAdmissionDouble({ token: { namespace: "tenant-server", userId: "admin-user" } })
+  const unconfiguredBase = await listen(createLiveTestBffServer(config(), { sessionAdmission: unconfiguredAdmission }))
+  const unconfigured = await fetch(`${unconfiguredBase}/v1/me`, { headers: admin })
+  assert.equal(unconfigured.status, 403)
+  assert.equal(unconfiguredAdmission.calls.length, 0)
+
+  for (const rawHeaders of [
+    ["x-kokoro-service", "admin-web-bff", "x-kokoro-service", "admin-web-bff", "x-kokoro-internal-secret", "admin-test-secret", "authorization", "Bearer token"],
+    ["x-kokoro-service", "admin-web-bff", "x-kokoro-internal-secret", "admin-test-secret", "x-kokoro-internal-secret", "admin-test-secret", "authorization", "Bearer token"],
+  ]) {
+    const status = await new Promise<number>((resolve, reject) => {
+      const outgoing = httpRequest(`${base}/v1/me`, { headers: rawHeaders }, (response) => {
+        response.resume()
+        resolve(response.statusCode ?? 0)
+      })
+      outgoing.once("error", reject)
+      outgoing.end()
+    })
+    assert.ok(status === 400 || status === 403)
+  }
+  assert.equal(admission.calls.length, 0)
+
+  assert.equal((await fetch(`${base}/v1/me`, { headers: admin })).status, 200)
+  const skills = await fetch(`${base}/v1/admin/skills`, { headers: admin })
+  assert.equal(skills.status, 503)
+  assert.equal(((await skills.json()) as { error: { code: string } }).error.code, "skill_dependency_unavailable")
+  assert.equal((await fetch(`${base}/v1/admin/model-routing`, { headers: admin })).status, 204)
+  assert.equal(routeCalls, 1)
+  assert.equal(admission.calls.length, 3)
+
+  for (const [path, headers] of [
+    ["/v1/projects", admin],
+    ["/v1/team/members", admin],
+    ["/v1/system/runtime-manifest?product_id=kokoro&locale=en-US&surface_id=admin-web", admin],
+    ["/v1/admin/not-a-real-operation", admin],
+    ["/v1/admin/skills", { ...admin, "x-kokoro-internal-secret": "wrong" }],
+    ["/v1/admin/skills", { ...admin, "x-kokoro-internal-secret": "test-secret" }],
+    ["/v1/admin/skills", { ...admin, "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "admin-test-secret" }],
+  ] as const) {
+    const response = await fetch(`${base}${path}`, { headers })
+    assert.equal(response.status, 403, path)
+    assert.equal(((await response.json()) as { error: { code: string } }).error.code, "service_auth_failed")
+  }
+  assert.equal(routeCalls, 1)
+  assert.equal(admission.calls.length, 3)
+
+  const legacy = await fetch(`${base}/v1/projects`, {
+    headers: { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "test-secret", authorization: "Bearer token" },
+  })
+  assert.equal(legacy.status, 204)
+  assert.equal(routeCalls, 2)
+  assert.equal(admission.calls.length, 4)
+})
+
 test("missing fixed Product tenant fails before IAM and business work without changing service-only or issuer paths", async () => {
   const admission = new SessionAdmissionDouble({ token: { namespace: "tenant-a", userId: "user-a" } })
   let routeCalls = 0

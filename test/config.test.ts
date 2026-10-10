@@ -12,6 +12,23 @@ const runtimeEnv = {
 }
 
 describe("BFF owner PostgreSQL schema", () => {
+  it("loads an optional independent Admin Web browser-service secret and rejects reuse", () => {
+    const absent = loadConfig(runtimeEnv)
+    assert.equal(Reflect.get(absent, "adminWebSharedSecret"), null)
+
+    const configured = loadConfig({
+      ...runtimeEnv,
+      KOKORO_BFF_ADMIN_WEB_SHARED_SECRET: "admin-test-secret",
+    })
+    assert.equal(Reflect.get(configured, "adminWebSharedSecret"), "admin-test-secret")
+    assert.equal(configured.sharedSecret, "test-secret")
+
+    assert.throws(
+      () => loadConfig({ ...runtimeEnv, KOKORO_BFF_ADMIN_WEB_SHARED_SECRET: "test-secret" }),
+      /Admin Web.+secret|secret.+different/iu,
+    )
+  })
+
   it("requires an explicit fixed owner schema and rejects search_path overrides", () => {
     assert.doesNotThrow(() => assertBffPostgresUrl(runtimeEnv.KOKORO_BFF_POSTGRES_URL))
     for (const url of [
