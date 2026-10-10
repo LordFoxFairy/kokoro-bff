@@ -1,3 +1,7 @@
+## T-K03.14-BFF-ADMIN-PACKAGE D0（2026-10-10，待实现）
+
+Owner为BFF现browser-service准入；基线main2f36787 clean，唯一writer原bff_platform_pin_owner，Root提交。原Admin新版本由Platform创建本人owned draft，复用现GET/POST /v1/skills/{id}/package-upload、POST /complete和POST /validate。仅扩现browser-service-credential.policy.ts精确四method/path及现user-admission测试；与新Admin RPC/泛化skills wildcard相比选择已有owner接口，业务授权、owner-only、tenant、CAS、事务完全不变。Admin fresh管理员与普通Skill action均保留；不把service身份等同用户权限。先真实RED拒绝，再允许四路径，保未知method/path、重复secret、错误token、其它owner负控；Root实际新版本包链后验，不重启共享设施。
+
 ## T-K03.14-BFF-CAS D0：Public13 完整 package 发布链（2026-10-10；仅设计）
 
 ### 当前事实与唯一目标

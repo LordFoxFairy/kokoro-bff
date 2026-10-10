@@ -1,3 +1,7 @@
+## T-K03.14-BFF-ADMIN-PACKAGE D0（2026-10-10，待实现）
+
+四包operation及请求/ACK/error来自现Public13.1唯一本仓机器contract，不新增URL、schema、Proto、生成物、alias或版本。变化只有admin-web-bff服务凭据可到达这四既有操作，仍经当前IAM准入和动作权限。严格method、skill ID、子路径闭集，不能开放整个/v1/skills；GET与mutation语义保持。Admin adapter须单独闭集接线，尚未完成。
+
 ## T-K03.14-BFF-CAS D0：12.0.0 当前 → 13.0.0 目标（2026-10-10；机器未改）
 
 BFF 唯一 public source 仍是 `contract/openapi/v1/openapi.yaml`；当前 **12.0.0**，Root 裁决后继正式 **13.0.0**，URL 与 operation 均保持 `/v1`，不造 `/v13`。目标收紧三个当前 optional 字段为 required，其他请求/响应字段、owner pin 与权限不变。本阶段仅文档设计，契约/生成/源码/测试未实现。

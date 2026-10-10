@@ -1,3 +1,7 @@
+## T-K03.14-BFF-ADMIN-PACKAGE D0（2026-10-10，待实现）
+
+本片无任何SQL/schema/Redis namespace变化，不新增或复制Platform/Storage事实。包阶段、CAS和对象版本继续由现owner事务维护；BFF准入只决定服务路由可达性，不读跨owner数据库、不清旧数据。新Admin version ownerScope仍当前subject，另一管理员不因平台管理身份获得上传权限。
+
 ## T-K03.14-BFF-CAS D0：Public13 无新增持久事实（2026-10-10；仅设计）
 
 当前 public 12.0.0 → 目标13.0.0（URL仍/v1）仅收紧 Begin/Complete/Validate mandatory expected_state_version。Platform 仍独占 Skill product.state_version、package attempt、receipt、锁内 CAS、publication及事件；Storage 仍独占 Upload/Asset/ObjectVersion/scan。BFF不新增表、列、索引、canonical schema、migration、SQL、Redis key/namespace、持久化 receipt/outbox、CAS cache或owner镜像；不读取任何 owner DB，也不以跨库预读冒充 owner 同事务。
