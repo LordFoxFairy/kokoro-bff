@@ -16,7 +16,7 @@ export async function skillShareRoute(
   path: string[],
   repository: SkillShareRepository | undefined,
   client: SkillProductConnectClient | null,
-  publicOrigin: string,
+  publicOrigin: string | undefined,
 ) {
   await runSkillRoute(request, response, context, async (signal, deadlineAt) => {
     if (!repository) throw new ConnectError("Share store missing", Code.Unavailable)
@@ -33,6 +33,7 @@ export async function skillShareRoute(
     }
     let share
     if (request.method === "POST" && path.length === 1) {
+      if (publicOrigin === undefined) throw new ConnectError("Share public origin missing", Code.Unavailable)
       if (
         new URL(request.url!, "http://bff.local").search ||
         request.headers["idempotency-key"] !== undefined ||

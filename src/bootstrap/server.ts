@@ -461,7 +461,7 @@ async function handle(
       businessPath,
       composition.businessStore?.services.skillShares,
       composition.skillProductClient,
-      `https://${config.domain}`,
+      config.iamRelay?.webOrigin,
     )
     return
   }

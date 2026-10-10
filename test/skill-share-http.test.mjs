@@ -55,7 +55,7 @@ test("Skill Share HTTP preserves creator revoke, same-tenant login and fresh wit
         new URL(request.url, "http://bff.local").pathname.split("/").slice(2),
         repository,
         client,
-        "https://web.test",
+        "http://127.0.0.1:3310",
       ),
   )
   server.listen(0, "127.0.0.1")
@@ -64,6 +64,7 @@ test("Skill Share HTTP preserves creator revoke, same-tenant login and fresh wit
     const base = `http://127.0.0.1:${server.address().port}/v1/skill-shares`
     let response = await fetch(base, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ source_ref: "skill:one" }) })
     assert.equal(response.status, 201)
+    assert.equal((await response.json()).data.url, "http://127.0.0.1:3310/skills/shared/share")
     assert.equal(reads, 2)
     response = await fetch(`${base}/share`, { headers: { "x-fixture-tenant": "foreign" } })
     assert.equal(response.status, 404)
@@ -79,6 +80,37 @@ test("Skill Share HTTP preserves creator revoke, same-tenant login and fresh wit
     response = await fetch(`${base}/share`, { method: "DELETE" })
     assert.equal(response.status, 200)
     assert.equal((await fetch(`${base}/share`)).status, 404)
+  } finally {
+    server.closeAllConnections()
+    await new Promise((resolve) => server.close(resolve))
+  }
+})
+
+
+test("Skill Share composition uses the validated browser origin, not an invented HTTPS domain", async () => {
+  const { readFile } = await import("node:fs/promises")
+  const source = await readFile(new URL("../src/bootstrap/server.ts", import.meta.url), "utf8")
+  assert.match(source, /composition\.skillProductClient,\s*config\.iamRelay\?\.webOrigin,/u)
+})
+
+test("Skill Share POST without a trusted public origin fails before owner inspection or share creation", async () => {
+  let effects = 0
+  const server = createServer((request, response) => void skillShareRoute(
+    request, response,
+    { requestId: "origin-negative", identity: { namespace: "tenant", userId: "creator" } },
+    ["skill-shares"],
+    { create: async () => { effects++; throw new Error("unexpected write") } },
+    { inspect: async () => { effects++; throw new Error("unexpected inspection") } },
+    undefined,
+  ))
+  server.listen(0, "127.0.0.1")
+  await once(server, "listening")
+  try {
+    const response = await fetch(`http://127.0.0.1:${server.address().port}/v1/skill-shares`, {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ source_ref: "skill:one" }),
+    })
+    assert.equal(response.status, 503)
+    assert.equal(effects, 0)
   } finally {
     server.closeAllConnections()
     await new Promise((resolve) => server.close(resolve))
