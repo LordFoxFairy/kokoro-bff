@@ -155,7 +155,7 @@ export async function beginSkillPackageUploadRoute(
     fq_method: "kokoro.platform.v1.SkillCatalogService/BeginSkillPackageUpload",
     tenant_ref: context.identity.namespace,
     request: {
-      ...(input.expectedStateVersion === undefined ? {} : { expected_state_version: input.expectedStateVersion }),
+      expected_state_version: input.expectedStateVersion,
       skill_id: { value: skillId },
       product_context: { subject_id: context.identity.userId, owner_scope: { kind: "user", id: context.identity.userId } },
       filename: input.filename,

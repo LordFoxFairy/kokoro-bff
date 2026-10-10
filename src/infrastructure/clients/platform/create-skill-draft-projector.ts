@@ -205,6 +205,12 @@ export function projectSkillProductCommand(
     const kind = Object.keys(parsed)[0]!
     command.creation_provenance = { kind, ...(parsed as Record<string, RecordValue>)[kind] }
   }
+  if (
+    validateAdmission &&
+    ["BeginSkillPackageUpload", "CompleteSkillPackageUpload", "ValidateSkillDraft"].includes(method) &&
+    request.expected_state_version === undefined
+  )
+    fail("CAS required")
   if (request.expected_state_version !== undefined) command.expected_state_version = skillDecimalSchema.parse(request.expected_state_version)
   else if (
     !creator &&

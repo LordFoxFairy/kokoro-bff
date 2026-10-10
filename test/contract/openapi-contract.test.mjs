@@ -3072,3 +3072,37 @@ test("Public11 ordinary lifecycle uses metadata-only CreateVersion and required 
   assert.equal(parseOpenApiOperations(raw).length, 132)
   assert.equal(createHash("sha256").update(stripSkillProductSource(raw)).digest("hex"), "640f47f9c70341aa49934eec319a4dcc5bab76bba83e4407d6a9e0c3ab0ac389")
 })
+
+test("Public13 requires CAS only for the three package commands and exactly restores Public12", async () => {
+  const { load, dump } = await import("js-yaml")
+  const { inspectPublic13CasContract, restorePublic12CasContract } = await import("../../scripts/verify-skill-product-contract.mjs")
+  const source = await readFile(currentOpenapiUrl, "utf8")
+  assert.deepEqual(inspectPublic13CasContract(source), [])
+  const document = load(source)
+  assert.equal(document.info.version, "13.0.0")
+  for (const name of ["BeginSkillPackageUploadRequest", "CompleteSkillPackageUploadRequest", "ValidateSkillDraftRequest"]) {
+    assert.ok(document.components.schemas[name].required.includes("expected_state_version"))
+    const changed = structuredClone(document)
+    changed.components.schemas[name].required = changed.components.schemas[name].required.filter((key) => key !== "expected_state_version")
+    assert.ok(inspectPublic13CasContract(dump(changed)).some((error) => error.includes(name)))
+  }
+  assert.ok(!Object.hasOwn(document.components.schemas.CreatePersonalSkillVersionRequest.properties, "expected_state_version"))
+  for (const name of [
+    "SkillAudienceRequest",
+    "WithdrawPersonalSkillRequest",
+    "SkillUpdateDraftRequest",
+    "SkillBeginCoverRequest",
+    "SkillCompleteCoverRequest",
+    "SkillOfficialPublishRequest",
+    "SkillAdminVersionRequest",
+    "SkillDiscardRequest",
+  ])
+    assert.ok(document.components.schemas[name].required.includes("expected_state_version"))
+  assert.deepEqual(inspectSkillProductContract(restorePublic12CasContract(source)), [])
+  const { inspectBffOpenApi: inspectCurrentBffOpenApi } = await import("../../scripts/verify-openapi.ts")
+  const baseline = JSON.parse(await readFile(baselineUrl, "utf8")).operations
+  assert.deepEqual(inspectCurrentBffOpenApi(source, baseline), [])
+  assert.ok(inspectCurrentBffOpenApi(restorePublic12CasContract(source), baseline).some((error) => error.includes("13.0.0")))
+
+  assert.ok(inspectPublic13CasContract(source.replace("maximum: 33554432", "maximum: 33554431")).some((error) => error.includes("parent inverse")))
+})

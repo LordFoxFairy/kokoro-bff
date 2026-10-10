@@ -1,3 +1,15 @@
+## T-K03.14-BFF-CAS Public13 源码候选收据（2026-10-10；待 Root 独审提交）
+
+基线 `8889701b3640029b7b5751c45111d80f66d0bbd3` 的三设计门后，本候选唯一 public source 是 `contract/openapi/v1/openapi.yaml` **13.0.0**，仍 `/v1` / 136 operations；只收紧 Begin/Complete/Validate 的 mandatory `expected_state_version`。现三 parser/client/route 与 current admission projector要求 canonical positive signed64 decimal string；缺失/非法/重复键在 BFF 400 且 owner 零调用。已有所有 ACK/self read 的真实 state_version、Complete 真实 source_version_id、Publish explicit audience/CAS、metadata/cover/Withdraw/Admin CAS 与普通 CreateVersion无CAS例外保持。当前主semantic入口只接13，Public12仅用于精确父逆向证明，父SHA `7a827ba0497315cb80028c17cc714f187eeddeb2a880f477b27c9b23e0ff3caa`；不改历史owner artifact或generated、不设旧协议fallback。正规 baseline生成仍136且字节未变。
+
+实际RED：三缺CAS HTTP断言0 PASS / 3 FAIL（旧Begin201/Complete200/Validate200）；日志 `/tmp/bff-public13-red.log`。首聚焦46 PASS / 2 FAIL来自两个旧Validate正向fixture漏CAS，已补真实字段；后续54 PASS / 0 FAIL。首默认全门1324 PASS / 1 FAIL / 3 SKIP唯一为architecture current version硬12；Root批准该单行13更新，原结构/授权断言保留；日志 `/tmp/bff-public13-full.log`，不掩失败。
+
+最终 Node22.22.2 串行 `pnpm contract:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build` 自然 exit0，日志 `/tmp/bff-public13-final.log`：contract 727 PASS / 0 FAIL / 0 SKIP，默认test 1326 PASS / 0 FAIL / 3既有SKIP，lint/typecheck/build exit0。契约lint保留3既有warnings。三操作新增实际 BFF HTTP→正规 generated Connect loopback，验证caller观察CAS进入wire/owner digest、stale412、correct ACK、ACK丢失后原key/body/CAS重放与同key改CAS409；缺失/非法/duplicate均owner零调用，大于JS-safe整数仍string精确保留。此loopback只证明消费者wire/恢复，不冒充真实PG/Storage/Platform事务。
+
+SQL/schema、Platform/IAM/Storage vendor/generated、依赖、框架、Web/原Admin、正常服务/数据/Git index均未修改。正常Web3c59071与releasec9b02b6分叉事实保持；后继Root正式发行后再按Public13固定接线完整发布链和原Admin，不整包抄release或恢复替代后台。Root独审、主树复跑、正式提交/重载及真实用户上传发布和有记录Admin CRUD仍OPEN。
+
+<!-- T-K03.14-BFF-CAS-CURRENT-RECEIPT-END; historical body retained -->
+
 ## T-K03.14-BFF-PIN 当前 Platform 固定发行（2026-10-10；待 Root 验收）
 
 当前 Connect/HTTP 消费输入唯一固定 Platform `32666c1c18360e707048a1104efe6b50e375002f`；物理 owner 为 `apps/kokoro-capability`。从该正式 Git 对象逐项核对，87 项必要 publication 与原 `84262b...` 字节完全一致，Proto/descriptor、HTTP 5.3.0、execution V5–V10、historical qualification 及所有 artifact 摘要不变；active/routable V10 aggregate 仍为 `dddb0d194af44dbf0b83a0a0443d774f3dee63f8cb03c364ad529c4c230fb85b`。当前说明覆盖下文历史 pin，不改历史验收事实。

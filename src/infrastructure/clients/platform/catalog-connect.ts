@@ -101,7 +101,15 @@ export class CatalogConnectClient {
     return this.#call("getSkillPackageUpload", input, { skill_id: { value: input.skillId } }, signal, deadlineAt)
   }
   beginPackageUpload(
-    input: Context & { skillId: string; filename: string; mimeType: "application/zip"; sizeBytes: number; contentSha256: string; replacesAttemptId?: string },
+    input: Context & {
+      expectedStateVersion: string
+      skillId: string
+      filename: string
+      mimeType: "application/zip"
+      sizeBytes: number
+      contentSha256: string
+      replacesAttemptId?: string
+    },
     signal?: AbortSignal,
     deadlineAt?: number,
   ) {
@@ -121,7 +129,15 @@ export class CatalogConnectClient {
     )
   }
   completePackageUpload(
-    input: Context & { skillId: string; attemptId: string; uploadId: string; sourceVersionId: string; contentSha256: string; sizeBytes: number },
+    input: Context & {
+      expectedStateVersion: string
+      skillId: string
+      attemptId: string
+      uploadId: string
+      sourceVersionId: string
+      contentSha256: string
+      sizeBytes: number
+    },
     signal?: AbortSignal,
     deadlineAt?: number,
   ) {
@@ -140,7 +156,7 @@ export class CatalogConnectClient {
       deadlineAt,
     )
   }
-  validateDraft(input: Context & { skillId: string; attemptId: string }, signal?: AbortSignal, deadlineAt?: number) {
+  validateDraft(input: Context & { expectedStateVersion: string; skillId: string; attemptId: string }, signal?: AbortSignal, deadlineAt?: number) {
     return this.#call("validateSkillDraft", input, { skill_id: { value: input.skillId }, attempt_id: input.attemptId }, signal, deadlineAt)
   }
   publish(

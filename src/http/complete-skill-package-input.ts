@@ -8,7 +8,7 @@ export type CompleteSkillPackageInput = Readonly<{
   contentSha256: string
   sizeBytes: number
   sourceVersionId: string
-  expectedStateVersion?: string
+  expectedStateVersion: string
 }>
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u
 const SHA256 = /^[a-f0-9]{64}$/u
@@ -24,7 +24,7 @@ export function parseCompleteSkillPackageInput(raw: Buffer): CompleteSkillPackag
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw new Error("invalid_skill_request")
   const value = parsed as Record<string, unknown>
   const sourceVersionId = skillSourceVersionSchema.parse(value.source_version_id)
-  const expectedStateVersion = value.expected_state_version === undefined ? undefined : skillDecimalSchema.parse(value.expected_state_version)
+  const expectedStateVersion = skillDecimalSchema.parse(value.expected_state_version)
   delete value.expected_state_version
   delete value.source_version_id
   if (Object.keys(value).sort().join(",") !== "attempt_id,content_sha256,size_bytes,upload_id") throw new Error("invalid_skill_request")
@@ -39,7 +39,7 @@ export function parseCompleteSkillPackageInput(raw: Buffer): CompleteSkillPackag
     contentSha256: value.content_sha256,
     sizeBytes: value.size_bytes as number,
     sourceVersionId,
-    ...(expectedStateVersion === undefined ? {} : { expectedStateVersion }),
+    expectedStateVersion,
   }
 }
 

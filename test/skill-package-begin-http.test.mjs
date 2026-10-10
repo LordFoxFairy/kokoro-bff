@@ -35,7 +35,7 @@ const headers = {
   "content-type": "application/json",
   "idempotency-key": "begin-1",
 }
-const input = { filename: "sample.zip", mime_type: "application/zip", size_bytes: 143, content_sha256: "a".repeat(64) }
+const input = { expected_state_version: "7", filename: "sample.zip", mime_type: "application/zip", size_bytes: 143, content_sha256: "a".repeat(64) }
 const result = () => ({
   stateVersion: 1n,
   skillId: { value: "skill-1" },
@@ -485,6 +485,7 @@ test("real generated Begin Connect client forwards only catalog credential and e
           size_bytes: "143",
           content_sha256: "b".repeat(64),
           replaces_attempt_id: "attempt-1",
+          expected_state_version: "7",
         },
         product_context: { subject_id: "user", owner_scope: { kind: "user", id: "user" } },
       },
@@ -509,6 +510,7 @@ test("real generated Begin Connect client forwards only catalog credential and e
             assert.equal(request.productContext?.ownerScope?.kind, "user")
             assert.equal(request.productContext?.ownerScope?.id, "user")
             assert.equal(request.filename, "sample.zip")
+            assert.equal(request.expectedStateVersion, 7n)
             assert.equal(request.sizeBytes, 143n)
             assert.equal(request.replacesAttemptId, "attempt-1")
             return result()
@@ -533,9 +535,138 @@ test("real generated Begin Connect client forwards only catalog credential and e
       sizeBytes: 143,
       contentSha256: "b".repeat(64),
       replacesAttemptId: "attempt-1",
+      expectedStateVersion: "7",
     })
     assert.equal(response.attemptId, "attempt-1")
     assert.equal(calls, 1)
+  } finally {
+    await new Promise((resolve) => owner.close(resolve))
+  }
+})
+
+test("Public13 package-begin missing CAS rejects before owner", async () => {
+  let calls = 0
+  await withServer(
+    {
+      beginPackageUpload: async () => {
+        calls++
+        return result()
+      },
+    },
+    async (base) => {
+      const { expected_state_version: _, ...missing } = input
+      assert.equal((await post(base, missing)).status, 400)
+      assert.equal(calls, 0)
+    },
+  )
+})
+
+test("Public13 package-begin rejects invalid CAS before owner and preserves the signed64 string boundary", async () => {
+  let calls = 0
+  await withServer(
+    {
+      beginPackageUpload: async (command) => {
+        calls++
+        assert.equal(command.expectedStateVersion, "9223372036854775807")
+        return result()
+      },
+    },
+    async (base) => {
+      for (const version of [null, 7, "0", "01", "-1", "1.0", " 7", "9223372036854775808", "18446744073709551615"])
+        assert.equal((await post(base, { ...input, expected_state_version: version })).status, 400)
+      const duplicate = await fetch(`${base}/v1/skills/skill-1/package-upload`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(input).replace('"expected_state_version":"7"', '"expected_state_version":"7","expected_state_version":"8"'),
+      })
+      assert.equal(duplicate.status, 400)
+      assert.equal(calls, 0)
+      assert.equal((await post(base, { ...input, expected_state_version: "9223372036854775807" })).status, 201)
+      assert.equal(calls, 1)
+    },
+  )
+})
+test("Public13 package-begin actual generated wire binds CAS and same-key recovery without guessing a new version", async () => {
+  const { createServer } = await import("node:http")
+  const { connectNodeAdapter } = await import("@connectrpc/connect-node")
+  const { toJson } = await import("@bufbuild/protobuf")
+  const { CatalogConnectClient } = await import("../dist/infrastructure/clients/platform/catalog-connect.js")
+  const { SkillCatalogService } = await import("../dist/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
+  const { projectSkillProductCommand } = await import("../dist/infrastructure/clients/platform/create-skill-draft-projector.js")
+  let calls = 0,
+    committed = 0,
+    unknown = true
+  const receipts = new Map()
+  const seen = []
+  const owner = createServer(
+    connectNodeAdapter({
+      routes(router) {
+        router.service(SkillCatalogService, {
+          beginSkillPackageUpload(request, context) {
+            calls++
+            context.responseHeader.set("x-kokoro-request-id", request.requestId)
+            context.responseHeader.set("cache-control", "no-store")
+            assert.equal(context.requestHeader.get("authorization"), "Bearer public13-catalog-fixture")
+            assert.equal(context.requestHeader.get("x-tenant-ref"), "tenant")
+            assert.equal(request.productContext?.subjectId, "user")
+            const wire = toJson(SkillCatalogService.method.beginSkillPackageUpload.input, request, { useProtoFieldName: true })
+            delete wire.request_id
+            delete wire.command
+            const digest = projectSkillProductCommand(
+              JSON.stringify({
+                command_digest_version: "3.0.0",
+                fq_method: "kokoro.platform.v1.SkillCatalogService/BeginSkillPackageUpload",
+                tenant_ref: "tenant",
+                request: wire,
+              }),
+              true,
+            ).sha256
+            assert.equal(request.command.requestDigest, digest)
+            seen.push({ commandId: request.command.commandId, digest, version: request.expectedStateVersion })
+            const previous = receipts.get(request.command.commandId)
+            if (previous) {
+              if (previous.digest !== digest) throw new ConnectError("fixture digest conflict", Code.AlreadyExists)
+              return { ...previous.ack, replayed: true }
+            }
+            if (request.expectedStateVersion !== 7n) throw new ConnectError("fixture stale CAS", Code.FailedPrecondition)
+            const ack = { ...result(), stateVersion: 8n }
+            receipts.set(request.command.commandId, { digest, ack })
+            committed++
+            if (unknown) {
+              unknown = false
+              throw new ConnectError("fixture ACK loss", Code.Unavailable)
+            }
+            return ack
+          },
+        })
+      },
+    }),
+  )
+  owner.listen(0, "127.0.0.1")
+  await once(owner, "listening")
+  try {
+    const client = new CatalogConnectClient(`http://127.0.0.1:${owner.address().port}`, { get: async () => "public13-catalog-fixture", retire() {} }, 1000)
+    await withServer(client, async (base) => {
+      assert.equal((await post(base, { ...input, expected_state_version: "6" }, { "idempotency-key": "public13-stale" })).status, 412)
+      assert.equal(committed, 0)
+      assert.equal((await post(base, input, { "idempotency-key": "public13-unknown" })).status, 503)
+      assert.equal(committed, 1)
+      const replay = await post(base, input, { "idempotency-key": "public13-unknown" })
+      assert.equal(replay.status, 201)
+      const body = await replay.json()
+      assert.equal(body.data.state_version, "8")
+      assert.equal(body.data.replayed, true)
+      assert.deepEqual(seen[1], seen[2])
+      assert.equal(committed, 1)
+      assert.equal((await post(base, { ...input, expected_state_version: "8" }, { "idempotency-key": "public13-unknown" })).status, 409)
+      assert.equal(committed, 1)
+      assert.equal((await post(base, { ...input, expected_state_version: "6" }, { "idempotency-key": "public13-stale-after" })).status, 412)
+      const correct = await post(base, input, { "idempotency-key": "public13-correct" })
+      assert.equal(correct.status, 201)
+      assert.equal((await correct.json()).data.state_version, "8")
+      assert.equal(committed, 2)
+      assert.equal(calls, 6)
+    })
   } finally {
     await new Promise((resolve) => owner.close(resolve))
   }

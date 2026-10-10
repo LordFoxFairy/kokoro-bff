@@ -109,6 +109,7 @@ function restorePublic10(source) {
   return parent
 }
 export function inspectSkillProductContract(source, baseline = OPERATIONS) {
+  if (/^  version: 13\.0\.0$/mu.test(source)) return inspectPublic13CasContract(source)
   if (/^  version: 12\.0\.0$/mu.test(source)) return inspectSkillsSpecificationContract(source)
   if (!/^  version: 11\.0\.0$/mu.test(source)) return ["Public11 version must equal 11.0.0"]
   const errors = []
@@ -221,4 +222,31 @@ export function inspectSkillsSpecificationContract(source) {
   ])
     require(paths[path]?.[method] !== undefined, `Effective lifecycle responsibility must remain: ${method} ${path}`)
   return errors
+}
+
+/** Public13 changes only the three mandatory CAS requirements from the exact Public12 parent. */
+export function restorePublic12CasContract(source) {
+  let parent = source.replace("  version: 13.0.0", "  version: 12.0.0")
+  for (const name of ["BeginSkillPackageUploadRequest", "CompleteSkillPackageUploadRequest", "ValidateSkillDraftRequest"]) {
+    const block = namedBlock(parent, "schema", name)
+    if (block !== null) parent = parent.replace(block, block.replace("      required:\n        - expected_state_version\n", "      required:\n"))
+  }
+  return parent
+}
+export function inspectPublic13CasContract(source) {
+  const errors = []
+  let document
+  try {
+    document = load(source, { json: false })
+  } catch {
+    return ["Public13 must be valid unique-key YAML"]
+  }
+  if (document?.info?.version !== "13.0.0") errors.push("Public13 version must equal 13.0.0")
+  for (const name of ["BeginSkillPackageUploadRequest", "CompleteSkillPackageUploadRequest", "ValidateSkillDraftRequest"]) {
+    const schema = document?.components?.schemas?.[name]
+    if (!schema?.required?.includes("expected_state_version")) errors.push(`${name} requires expected_state_version`)
+  }
+  const parent = restorePublic12CasContract(source)
+  if (hash(parent) !== "7a827ba0497315cb80028c17cc714f187eeddeb2a880f477b27c9b23e0ff3caa") errors.push("Public13 exact Public12 parent inverse drifted")
+  return [...errors, ...inspectSkillsSpecificationContract(parent)]
 }

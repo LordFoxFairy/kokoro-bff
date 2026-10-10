@@ -53,3 +53,22 @@ test("Public9 create category and complete immutable version/CAS are preserved",
   assert.equal(result.sourceVersionId, "OPAQUE+/=")
   assert.equal(result.expectedStateVersion, "9007199254740993")
 })
+
+test("Public13 current package admission requires CAS without rewriting immutable historical projection vectors", () => {
+  for (const [method, fields] of [
+    ["BeginSkillPackageUpload", { filename: "sample.zip", mime_type: "application/zip", size_bytes: "143", content_sha256: "a".repeat(64) }],
+    [
+      "CompleteSkillPackageUpload",
+      { attempt_id: "attempt-1", upload_id: "upload-1", source_version_id: "OBJECT+/=", size_bytes: "143", content_sha256: "a".repeat(64) },
+    ],
+    ["ValidateSkillDraft", { attempt_id: "attempt-1" }],
+  ] as const) {
+    const request = { skill_id: { value: "skill-1" }, product_context: { subject_id: "user", owner_scope: { kind: "user", id: "user" } }, ...fields }
+    const wire = { command_digest_version: "3.0.0", fq_method: `kokoro.platform.v1.SkillCatalogService/${method}`, tenant_ref: "tenant", request }
+    assert.throws(() => projector.projectSkillProductCommand(JSON.stringify(wire), true), /CAS required/u)
+    const historical = projector.projectSkillProductCommand(JSON.stringify(wire), false)
+    const current = projector.projectSkillProductCommand(JSON.stringify({ ...wire, request: { ...request, expected_state_version: "9007199254740993" } }), true)
+    assert.notEqual(historical.sha256, current.sha256)
+    assert.equal(current.projection.command.expected_state_version, "9007199254740993")
+  }
+})
