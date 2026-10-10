@@ -316,10 +316,13 @@ export class SkillSpecificationService implements SkillSpecificationSource {
       signal,
       deadlineAt,
     )
-    const usage = await this.dependencies.usage?.(
-      context.identity.namespace,
-      page.skills.map((item) => item.source_ref),
-    )
+    const usage =
+      page.skills.length === 0
+        ? undefined
+        : await this.dependencies.usage?.(
+            context.identity.namespace,
+            page.skills.map((item) => item.source_ref),
+          )
     this.active(signal, deadlineAt)
     const skills = []
     for (const item of page.skills) {

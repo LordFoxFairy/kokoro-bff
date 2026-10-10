@@ -913,6 +913,22 @@ test("R357 formal Hub aggregation binds true stable/current/exact publication an
   })
   assert.equal(app.calls.find((call) => call.kind === "current").input.seriesId, "stable-series")
 })
+test("R357 formal Hub returns an empty category page without querying usage", async () => {
+  const app = await specificationServiceFixture()
+  app.deps.projection.read = async () => ({ ok: true, status: 200, data: { skills: [], next_cursor: null } })
+  app.deps.usage = async () => assert.fail("an empty catalog page must not query usage")
+
+  const data = await app.service.read(
+    "ListHubSkills",
+    { pageSize: 30, tag: "SKILL_HUB_TAG_DATA", includeOfficialSkills: true },
+    app.context,
+    app.signal,
+    app.deadline,
+  )
+
+  assert.deepEqual(data.skills, [])
+  assert.equal(data.nextPageToken, undefined)
+})
 test("R357 formal download aggregation binds original exact version and rejects current-version rotation instead of rebasing handle", async () => {
   const app = await specificationServiceFixture()
   const value = await app.service.prepareDownload("DownloadSkill", "stable-series", app.context, app.signal, app.deadline)
