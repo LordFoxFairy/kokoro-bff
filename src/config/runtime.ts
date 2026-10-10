@@ -72,6 +72,7 @@ export type BffConfig = {
     webOrigin: string
     callbackUri: string
     postLogoutUri: string
+    adminCallbackUri: string | null
     secureCookies: boolean
   }>
   storage?: Readonly<{ baseUrl: string; secret: string; objectOrigin: string }>
@@ -157,11 +158,14 @@ function iamRelayConfig(env: NodeJS.ProcessEnv): BffConfig["iamRelay"] {
     logout.hash !== ""
   )
     throw new Error("IAM relay URLs must bind the exact Web issuer, callback and post-logout paths")
+  const adminOrigin = optionalOrigin(env.KOKORO_ADMIN_WEB_ORIGIN, "KOKORO_ADMIN_WEB_ORIGIN")
+  const adminCallbackUri = adminOrigin === null ? null : `${adminOrigin}/api/auth/callback/kokoro-iam`
   return {
     publicIssuerUrl: issuer.toString(),
     webOrigin,
     callbackUri: callback.toString(),
     postLogoutUri: logout.toString(),
+    adminCallbackUri,
     secureCookies: env.NODE_ENV === "production",
   }
 }

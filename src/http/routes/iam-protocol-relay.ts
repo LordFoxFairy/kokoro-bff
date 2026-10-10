@@ -146,10 +146,15 @@ function allowedLocation(value: string, config: NonNullable<BffConfig["iamRelay"
   if (Buffer.byteLength(rawQuery) > IAM_RELAY_POLICY.maxQueryBytes || /%(?![0-9a-fA-F]{2})/u.test(rawQuery)) return false
   try {
     const url = new URL(value, config.webOrigin)
-    if (url.origin !== config.webOrigin || url.username !== "" || url.password !== "" || url.hash !== "" || url.pathname.includes("%")) return false
+    if (url.username !== "" || url.password !== "" || url.hash !== "" || url.pathname.includes("%")) return false
+    if (config.adminCallbackUri !== null) {
+      const adminCallback = new URL(config.adminCallbackUri)
+      if (url.origin === adminCallback.origin && url.pathname === adminCallback.pathname) return true
+    }
+    if (url.origin !== config.webOrigin) return false
     if (sourceRoute === IAM_RELAY_POLICY.invitationLocation.sourceRoute && invitationInteractionLocation(value, config.webOrigin)) return true
     if ((IAM_RELAY_POLICY.webInteractionPaths as readonly string[]).includes(url.pathname)) return true
-    if (url.pathname === new URL(config.callbackUri).pathname || url.pathname === new URL(config.postLogoutUri).pathname) return true
+    if (url.href === config.callbackUri || url.href === config.postLogoutUri) return true
     if (!url.pathname.startsWith("/iam/")) return false
     return iamRelayRoute(`${url.pathname}${url.search}`, "GET") !== null
   } catch {
