@@ -13,6 +13,8 @@ function oneRawHeader(request: IncomingMessage, name: string): string | null {
 }
 
 function adminBusinessRoute(method: string, target: string): boolean {
+  if (/^\/v1\/skills\/[A-Za-z0-9][A-Za-z0-9._:-]{0,190}\/package-upload$/u.test(target)) return method === "GET" || method === "POST"
+  if (method === "POST" && /^\/v1\/skills\/[A-Za-z0-9][A-Za-z0-9._:-]{0,190}\/(package-upload\/complete|validate)$/u.test(target)) return true
   let path: string
   try {
     path = new URL(target, "http://bff.local").pathname

@@ -1,6 +1,9 @@
 import assert from "node:assert/strict"
-import { createServer, request as httpRequest, type Server } from "node:http"
+import { createServer, request as httpRequest, type Server, type IncomingMessage } from "node:http"
 import { afterEach, test } from "node:test"
+
+import { admitBrowserService } from "../src/auth/browser-service-credential.policy.ts"
+import type { SkillAuthorizationInput } from "../src/auth/skill-authorization.types.ts"
 
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 import { createBffServer } from "../dist/bootstrap/server.js"
@@ -822,4 +825,116 @@ test("R357 MCP action cancellation after a late human permission never returns a
       controller.signal,
     ),
   )
+})
+
+test("Admin package service envelope admits exactly the four existing canonical operations", () => {
+  const settings = { sharedSecret: "test-secret", adminWebSharedSecret: "admin-test-secret" }
+  const rawHeaders = ["x-kokoro-service", "admin-web-bff", "x-kokoro-internal-secret", "admin-test-secret"]
+  const admit = (method: string, url: string, headers = rawHeaders) =>
+    admitBrowserService({ method, url, rawHeaders: headers } as IncomingMessage, settings, { kind: "business" })
+  for (const id of ["a", "Skill_1.test:revision-2", "a".repeat(191)]) {
+    assert.equal(admit("GET", `/v1/skills/${id}/package-upload`), "admin-web-bff")
+    assert.equal(admit("POST", `/v1/skills/${id}/package-upload`), "admin-web-bff")
+    assert.equal(admit("POST", `/v1/skills/${id}/package-upload/complete`), "admin-web-bff")
+    assert.equal(admit("POST", `/v1/skills/${id}/validate`), "admin-web-bff")
+  }
+  for (const [method, path] of [
+    ["PUT", "/v1/skills/a/package-upload"],
+    ["PATCH", "/v1/skills/a/package-upload"],
+    ["DELETE", "/v1/skills/a/package-upload"],
+    ["HEAD", "/v1/skills/a/package-upload"],
+    ["OPTIONS", "/v1/skills/a/package-upload"],
+    ["get", "/v1/skills/a/package-upload"],
+    ["GET", "/v1/skills/a/package-upload/complete"],
+    ["GET", "/v1/skills/a/validate"],
+    ["POST", "/v1/skills/a/publish"],
+    ["POST", "/v1/skills/drafts"],
+    ["POST", "/v1/skills/a/package-upload/unknown"],
+    ["POST", "/v1/skills/a/validate/extra"],
+    ["POST", "/v1/skills/a/package-upload/complete/extra"],
+    ["GET", "/v1/skills/a/package-upload/"],
+    ["POST", "/v1/skills/a/package-upload?extra=1"],
+    ["POST", "/v1/skills/a/package-upload#fragment"],
+    ["POST", "/v1/skills/a%2Fb/package-upload"],
+    ["POST", "/v1/skills/a%2fb/validate"],
+    ["POST", "/v1/skills/a%252Fb/package-upload"],
+    ["POST", "/v1/skills/%61/package-upload"],
+    ["POST", "/v1/skills//package-upload"],
+    ["POST", "/v1/skills/_a/package-upload"],
+    ["POST", `/v1/skills/${"a".repeat(192)}/package-upload`],
+    ["POST", "/v1/skills/a/b/../package-upload"],
+    ["POST", "/v1/skills/a/./package-upload"],
+    ["POST", "http://bff.local/v1/skills/a/package-upload"],
+    ["POST", "/browser/v1/skills/local-imports"],
+    ["POST", "/v1/skill-installations"],
+  ])
+    assert.equal(admit(method!, path!), null, `${method} ${path}`)
+  for (const headers of [
+    [...rawHeaders, "x-kokoro-service", "admin-web-bff"],
+    [...rawHeaders, "x-kokoro-internal-secret", "admin-test-secret"],
+    ["x-kokoro-service", "admin-web-bff", "x-kokoro-internal-secret", "wrong"],
+    ["x-kokoro-service", "admin-web-bff", "x-kokoro-internal-secret", "test-secret"],
+    ["x-kokoro-service", "web-bff", "x-kokoro-internal-secret", "admin-test-secret"],
+  ])
+    assert.equal(admit("POST", "/v1/skills/a/package-upload", headers), null)
+})
+
+test("Admin package HTTP admission preserves fresh human identity, tenant and ordinary Skill action denial", async () => {
+  const admission = new SessionAdmissionDouble({
+    token: { namespace: "tenant-server", userId: "admin-user" },
+    foreign: { namespace: "tenant-other", userId: "foreign-user" },
+  })
+  const checks: SkillAuthorizationInput[] = []
+  let allowed = false
+  const base = await listen(
+    createLiveTestBffServer({ ...config(), adminWebSharedSecret: "admin-test-secret" } as BffConfig, {
+      sessionAdmission: admission,
+      skillAuthorization: {
+        check: async (input) => {
+          checks.push(input)
+          return allowed ? { ok: true as const } : { ok: false as const, status: 403 as const, code: "skill_forbidden" }
+        },
+      },
+    }),
+  )
+  const headers = {
+    "x-kokoro-service": "admin-web-bff",
+    "x-kokoro-internal-secret": "admin-test-secret",
+    authorization: "Bearer token",
+    "x-kokoro-tenant-id": "tenant-forged",
+    "x-kokoro-principal-id": "user-forged",
+  }
+  const mutations = [
+    ["/v1/skills/a/package-upload", "begin_upload"],
+    ["/v1/skills/a/package-upload/complete", "complete_upload"],
+    ["/v1/skills/a/validate", "validate_draft"],
+  ] as const
+  for (const [path, action] of mutations) {
+    const response = await fetch(`${base}${path}`, { method: "POST", headers })
+    assert.equal(response.status, 403)
+    assert.equal(((await response.json()) as { error: { code: string } }).error.code, "skill_forbidden")
+    assert.equal(checks.at(-1)?.action, action)
+    assert.equal(checks.at(-1)?.tenantId, "tenant-server")
+    assert.equal(checks.at(-1)?.subjectId, "admin-user")
+    assert.equal(checks.at(-1)?.token, "token")
+  }
+  assert.equal(admission.calls.length, 3)
+  assert.equal(checks.length, 3)
+  for (const [token, status, code] of [
+    ["foreign", 403, "product_tenant_forbidden"],
+    ["invalid", 401, "session_invalid"],
+  ] as const) {
+    const response = await fetch(`${base}/v1/skills/a/package-upload/complete`, { method: "POST", headers: { ...headers, authorization: `Bearer ${token}` } })
+    assert.equal(response.status, status)
+    assert.equal(((await response.json()) as { error: { code: string } }).error.code, code)
+  }
+  assert.equal(checks.length, 3)
+  allowed = true
+  for (const [method, path] of [["GET", "/v1/skills/a/package-upload"], ...mutations.map(([path]) => ["POST", path])] as const) {
+    const response = await fetch(`${base}${path}`, { method, headers })
+    assert.equal(response.status, 503)
+    assert.equal(((await response.json()) as { error: { code: string } }).error.code, "skill_dependency_unavailable")
+  }
+  assert.equal(admission.calls.length, 9)
+  assert.equal(checks.length, 6)
 })
