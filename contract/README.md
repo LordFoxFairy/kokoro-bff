@@ -1,3 +1,9 @@
+## T-K03.14-BFF-GITHUB-PATH-CONTRACT D0（2026-10-10；仅文档，待机器切片）
+
+当前canonical public13.1.0完整SHA-256 `418db9504b179d29113385f334628d304130491d4bbc86169e20c712cf2cd045`；Root批准目标13.2.0仅把GitHub Preview/Import输入和Preview selector/repository/paths候选五处path声明收敛为256字符，承接现parser，不改实际准入。archive UTF8 relative文件路径≤256 bytes（含文件名）另限，不放宽。历史provenance path2048、URL2048及manifestpattern保持。
+
+后继新current门经显式五处+版本inverse恢复原13.1完整SHA，再执行不改的历史门；不修改旧snapshot/checker摘要、operation inventory、外部owner生成物或provenance。本仓无新增public generated发布目录。消费者待Root正式提交后固定新commit/version/digest正规生成。当前仅四文档D0，机器未实施、验证与浏览器闭环待验；以下正文保留原历史事实。
+
 ## R356 普通 Skills 生命周期 Public11 预激活纠正（2026-10-09）
 
 唯一当前契约为 Public11.0.0，同 `/v1`、132 operations。普通 CreateVersion 只接 strict metadata，不接收或转发 expected_state_version；Platform 在事务内核当前主体/owner与 active/disabled base，分配新 revision 并创建独立 draft/stateVersion=1，不改 base。普通 Withdraw 实际修改原 Skill，严格要求当前 expected_state_version；原 key/body、digest、receipt、current IAM、取消与绝对预算保持。Admin version、Publish 及其他真实 CAS 不变。

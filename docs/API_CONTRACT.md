@@ -1,3 +1,13 @@
+## T-K03.14-BFF-GITHUB-PATH-CONTRACT D0（2026-10-10；仅文档，待机器切片）
+
+当前唯一可编辑事实源为 `contract/openapi/v1/openapi.yaml`（13.1.0），完整SHA-256 `418db9504b179d29113385f334628d304130491d4bbc86169e20c712cf2cd045`。Root批准13.2.0作为现parser事实的机器声明纠偏，保 `/v1`、operationId及原错误/权限/幂等；不改变实际运行时准入，不推广为任意breaking变更豁免。
+
+仅五处path `maxLength:2048→256`：`GithubSkillRequest.path`、`GithubSkillImportRequest.path`、`GithubSkillResponse` 单选 `selector.path` 与 `repository.path`、多选 `paths.items`。现parser256字符限制不改；archive UTF8 relative文件路径≤256 bytes（含文件名）是另一安全约束，不能用数据库2048或字符数替代。空根与原POSIX路径规则保持。
+
+新current校验仅接受13.2，显式inverse只恢复版本及上述五处2048，要求原13.1完整SHA相等后继续原历史门。历史Public13.1及更早父摘要/snapshot保持；`Public9SkillGithubProvenance.path`历史读取2048、repository/owner URL2048及manifest历史pattern原样保留，后者不与path债务混改。operation inventory及外部owner vendor/generated/provenance不变；本仓不新增自有public生成物。正式提交后消费者才独立固定commit/version/digest并正规生成，不编辑旧artifact。
+
+后继机器片待验证：契约RED→GREEN、`pnpm contract:lint`、`pnpm contract:semantic`、`pnpm contract:check`，以及精确input/真实ZIP边界测试；当前D0仅文档，不把上述命令列为已通过。
+
 ## T-K03.14-BFF-ADMIN-PACKAGE D0（2026-10-10，待实现）
 
 四包operation及请求/ACK/error来自现Public13.1唯一本仓机器contract，不新增URL、schema、Proto、生成物、alias或版本。变化只有admin-web-bff服务凭据可到达这四既有操作，仍经当前IAM准入和动作权限。严格method、skill ID、子路径闭集，不能开放整个/v1/skills；GET与mutation语义保持。Admin adapter须单独闭集接线，尚未完成。

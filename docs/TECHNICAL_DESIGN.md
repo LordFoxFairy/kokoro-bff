@@ -1,3 +1,13 @@
+## T-K03.14-BFF-GITHUB-PATH-CONTRACT D0（2026-10-10；仅文档，待机器切片）
+
+当前基线 `939bf0e` 的唯一 public OpenAPI 为 **13.1.0**。GitHub Preview 输入、Import selector 输入及 Preview 三处 path 输出声明2048字符，但现 `githubSkillSelectorSchema.shape.path` 已限制256；Root批准目标 **13.2.0** 在原 `/v1` 纠正这五处机器声明，不改变实际准入或运行时。普通 GitHub Import 仍返回已验证 draft，Publish/Install 是后继独立命令，不把此修正写成导入发布闭环。
+
+扩展现唯一 OpenAPI、current checker和契约测试；与新 schema文件/代理相比选择现位置，因为没有新增业务能力或协议。BFF为 public contract owner，本片唯一writer仅四现文档，Root独占Git；文档门通过后才实施具名contract/checker/tests，不改route/parser/provider。新current门精确检查13.2及五处256，再通过显式inverse恢复原13.1完整字节，继续原13.1/13/12历史门；历史checker、摘要与snapshot不重写，不加生产兼容fallback。
+
+字符约束与archive安全预算分离：现archive extracted relative文件路径为UTF8≤256 bytes，包含文件名（如 `SKILL.md`）；不放宽该上限，也不承诺任意256字符目录都可预览。现preview枚举的非根候选还受 `目录/SKILL.md` 总字节数约束。目录选择仍绑定真实immutable commit/path，空字符串表示根；权限、期限、取消、幂等、请求/响应错误族保持。
+
+验证顺序：先五处机器256断言真实RED，再最小contract/checker修正；input 256/257字符、Unicode、真实ZIP relative文件路径256/257 bytes及多路径/immutable selector正负控，current+父逆+历史契约门、type/lint/test/build。未运行的门与真实浏览器导入仍待验，本D0不声明实现完成。
+
 ## T-K03.14-BFF-ADMIN-PACKAGE D0（2026-10-10，待实现）
 
 Owner为BFF现browser-service准入；基线main2f36787 clean，唯一writer原bff_platform_pin_owner，Root提交。原Admin新版本由Platform创建本人owned draft，复用现GET/POST /v1/skills/{id}/package-upload、POST /complete和POST /validate。仅扩现browser-service-credential.policy.ts精确四method/path及现user-admission测试；与新Admin RPC/泛化skills wildcard相比选择已有owner接口，业务授权、owner-only、tenant、CAS、事务完全不变。Admin fresh管理员与普通Skill action均保留；不把service身份等同用户权限。先真实RED拒绝，再允许四路径，保未知method/path、重复secret、错误token、其它owner负控；Root实际新版本包链后验，不重启共享设施。

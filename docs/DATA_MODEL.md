@@ -1,3 +1,9 @@
+## T-K03.14-BFF-GITHUB-PATH-CONTRACT D0（2026-10-10；仅文档，待机器切片）
+
+当前13.1机器path2048与现parser256漂移，目标13.2仅纠正五处GitHub输入/Preview输出声明；无新增持久事实、SQL/schema/ORM/Redis/receipt变更，不访问Platform或其他owner数据库。BFF现handoff仍冻结真实commit/path和包digest，后继Publish/Install与owner事务不变。
+
+既有历史GitHub provenance读取path2048保留；数据库存储上限不是当前GitHub导入API支持证据。archive UTF8 relative文件路径≤256 bytes含文件名仍原样执行，机器字符约束不替代该安全预算。manifest历史pattern保持独立未决项，不迁移/回填或清理数据。四文档仅新增当前前缀，下文历史原字节保留；后继contract/checker/tests必须显式inverse恢复固定13.1父字节并核canonical schema、外部owner artifact保护hash，无生产旧协议fallback。当前未执行数据或工程门。
+
 ## T-K03.14-BFF-ADMIN-PACKAGE D0（2026-10-10，待实现）
 
 本片无任何SQL/schema/Redis namespace变化，不新增或复制Platform/Storage事实。包阶段、CAS和对象版本继续由现owner事务维护；BFF准入只决定服务路由可达性，不读跨owner数据库、不清旧数据。新Admin version ownerScope仍当前subject，另一管理员不因平台管理身份获得上传权限。
