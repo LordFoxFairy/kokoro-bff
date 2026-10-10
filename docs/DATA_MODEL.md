@@ -1,3 +1,13 @@
+<!-- BEGIN:T-K03.13-BFF-MCP-PERSONAL-READ-D0 -->
+## T-K03.13 本人 MCP 四读数据边界（目标，2026-10-10）
+
+当前 public13.3.0/137 已有四本人 GET，但 BFF guard 实际 503；目标沿 TECH/API 与 R320，只消费固定 Platform vendor `91bc3655ebd3648cb8f8ccddfacb5628bdeb1c5c` current75 的 ProductMcpPersonalService。Platform 仍是 connector/connection/provider 与资格事实 owner；IAM 拥有 session/action/workload 资格；BFF 只做严格本人安全投影，不访问 owner SQL，不加表、migration、receipt、Redis 或持久缓存。
+
+列表/详情依正式 PersonalMcp schema/nullable 页尾投影与 ID/tenant/subject 绑定，不拿 active 六字段连接列表充当管理全状态，不把静态推荐当已连接。token 仅短期 tenant/credential identity 内存缓存，轮换/取消退役；每次请求当前准入与返回前复核，用户资格不由缓存替代。缺配置、正常 `mcp-personal` surface 未启用或资格失败闭合，不合成数据、安装、授权或 connection 成功。
+
+这只是整体 CRUD 链首个读取切片；无新 public/owner wire、generated 或 SQL 变化。后继正常 workload/surface 激活由 Root 负责，完整本人命令/授权与后台管理仍待 owner 与消费者逐片准入，不恢复旧 Web/Admin 路径。
+<!-- END:T-K03.13-BFF-MCP-PERSONAL-READ-D0 -->
+
 <!-- BEGIN:T-K03.14-BFF-SHARE-REVISION-D0 -->
 ## T-K03.14-BFF-SHARE-REVISION D0（目标，2026-10-10）
 

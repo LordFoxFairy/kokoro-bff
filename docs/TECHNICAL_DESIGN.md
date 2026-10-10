@@ -1,3 +1,15 @@
+<!-- BEGIN:T-K03.13-BFF-MCP-PERSONAL-READ-D0 -->
+## T-K03.13 本人 MCP 四读运行接线（目标，2026-10-10）
+
+当前 BFF `e1769b56aefa2e00e6460195c049cea81a9eea3b` 的唯一 canonical 是 public **13.3.0 / 137 operations**；四个本人 GET 已发行，但 `bootstrap/server.ts` 的 self/MCP guard 返回 `503 platform_operation_not_available`。原 active 六字段 `/v1/mcp/connections` 投影保持原样。沿下文 R320 放置裁决接通四读，不把机器发行或读取片称为 CRUD、授权/建 connection、Admin 管理完成。
+
+采用既有 platform client 与 http/routes 目录，不新建模块：新增 `src/infrastructure/clients/platform/mcp-personal-{credential,token,connect,response}.ts` 与 `src/http/routes/mcp-personal.ts`；修改 `src/config/runtime.ts`、`src/bootstrap/server.ts`。扩展 `platform-projection.ts` 虽可减少文件，但会混合 active HTTP 投影资格和 personal Connect 生命周期，淘汰。Connect 只消费固定 vendor `91bc3655ebd3648cb8f8ccddfacb5628bdeb1c5c`（current 75）的 generated `ProductMcpPersonalService`，不手改 generated、不 repin、不复制 DTO。资格、token、wire/project、HTTP 四个变化原因分离，复用 IAM MCP read 准入；仅精确四 GET 绕过旧 guard，写请求仍闭合，不整体移除 guard。
+
+入口现 monotonic MCP 10s 总预算包含 session/action、credential、OAuth、RPC、decode/project 和返回前同 tenant/subject 当前资格复核；disconnect/期限取消贯穿，迟到结果丢弃，finally 清监听/计时。请求 ID 固定，响应 1 MiB 有界；机器 token 按 tenant 与 credential identity 缓存、轮换退役和 waiter 取消，不缓存用户资格。独立 `mcpPersonal` 组合采用现 Platform URL 与专用 credential 文件；缺配置仅该族依现错误返回，半配置启动拒绝，不扩大旧 projection/catalog scope。IAM 正式 purpose/scope/resource/caller 沿 R320 核验，不借浏览器 Bearer 或旧 token。
+
+正常 Platform PID44292 的 `KOKORO_PLATFORM_SURFACES` 当前没有 `mcp-personal`。正式 workload IAM 资格、surface enabled/handshake 与正常源码激活由 Root 单独执行；不降低这些门，受控测试绿色不冒正常 owner 组合通过。无 SQL/Redis 变化。最小验证候选：新增 `test/mcp-personal-read.test.ts`、`test/mcp-personal-http.test.mjs`，现 `test/bff.test.ts`、`test/mcp-authorization-http.test.mjs`、`test/platform-projection-route.test.mjs` 保旧边界；资源 integration 后继单独准入，不新建测试目录。真实 RED 为正常本人 read 503 与旧创建 404；覆盖四读成功/绑定、写 guard 保留、闭集负控、撤权、轮换、总预算/取消及原 active 投影回归后执行现工程门。
+<!-- END:T-K03.13-BFF-MCP-PERSONAL-READ-D0 -->
+
 <!-- BEGIN:T-K03.14-BFF-SHARE-REVISION-D0 -->
 ## T-K03.14-BFF-SHARE-REVISION D0（目标，2026-10-10）
 
