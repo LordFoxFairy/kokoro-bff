@@ -1,3 +1,18 @@
+<!-- BEGIN:T-K03.14-BFF-SHARE-REVISION-D0 -->
+## T-K03.14-BFF-SHARE-REVISION D0（目标，2026-10-10）
+
+当前 BFF main `c9e8fab`，public13.2/136 operations；本片是目标设计，尚未改业务/机器/生成。Platform 正式 `91bc3655ebd3648cb8f8ccddfacb5628bdeb1c5c` 已发布 exact `ProductSkillReadService/GetSkillRevision`（skill-product-revision-read-v1/1.0.0，75/39/24）。现 SkillSpecification detail 仍由 series current 取得，不能供共享旧 revision 摘要；现 Resolve 六字段不含 metadata。
+
+目标 public13.3.0/137 operations 新增受准 `GET /v1/skill-shares/{share_id}/skill`；原 Resolve 六字段、Create 禁 Idempotency-Key/无自动重试、DELETE creator 资格与 GetSkill current 语义不变。分享不授予资源权限，浏览器仍 Web同源→BFF→Platform/IAM，无 owner SQL/管理员替代入口。
+
+无SQL/schema/表/列/索引/Redis/cache/receipt改变；BFF已有SkillRevisionShare记录仍唯一share事实（share_id/tenant/creator/sourceRef/resourceKind/URL/created/expiry/revoked）。新增只读组合不冻结metadata或权限、不写Share快照；源revision与IAM作者实时通过owner正式contract读取，不跨ownerSQL/JOIN/ORM、不复制姓名库。再次findActive解决本次远程投影期间撤销/过期，仍按读取时事实，不宣称跨owner原子事务。
+
+Platform exact skill_id、series_id、decimal revision由同一真实record提供，不按MAX/current/安装pin猜元数据。source_kind真实闭集、creator引用/IAM found决定可见作者；cover只真实exactUID绑定。Web安装状态不来自此projection，不凭读ACK合成安装成功。正文仍Storage包UTF8 reader，HTML脚本/外部引用不执行。
+
+contract vendor/provenance为build-time固定发行证据，不是业务持久化owner。new75与历史74父分别验证，历史V10 payload/aggregate原bytes保持，旧vendor同职责由正式91bc3655单pin替换。canonical database/schema.sql、全部owner数据与原share repository写行为保持；本D0只三设计前缀、原正文suffix字节不变，未执行SQL/生成/服务或工程验收。
+
+<!-- END:T-K03.14-BFF-SHARE-REVISION-D0; original body follows -->
+
 ## T-K03.14-BFF-GITHUB-ADMISSION（目标，2026-10-10）
 
 当前共享 AI/GitHub handoff 在 admitted 后重放 Create 获取初始 CAS，实际 owner 返回当前版本导致 Begin412。目标仅修现 BFF 私有 receipt：frozen→created（真实 Create ACK 的 skillId/initialStateVersion 已持久）→admitted（同创建身份、初始CAS及真实 Begin attempt/upload/epoch/stateVersion）→selected（真实 PUT版本与原 Complete 意图）→completed（真实 Complete ACK stateVersion）→terminal。created 持久成功/精确读回后才 Begin；Begin 和获取 transfer 均使用原 key/body/初始CAS，PUT 不再 Create。Create ACK 丢失且尚未 Begin时只同键重放；created/admitted checkpoint ACK 丢失通过精确 readback 或保留原阶段恢复，不推算版本或替换意图。

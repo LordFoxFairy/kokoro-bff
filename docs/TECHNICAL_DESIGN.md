@@ -1,3 +1,129 @@
+<!-- BEGIN:T-K03.14-BFF-SHARE-REVISION-D0 -->
+## T-K03.14-BFF-SHARE-REVISION D0（目标，2026-10-10）
+
+当前 BFF main `c9e8fab`，public13.2/136 operations；本片是目标设计，尚未改业务/机器/生成。Platform 正式 `91bc3655ebd3648cb8f8ccddfacb5628bdeb1c5c` 已发布 exact `ProductSkillReadService/GetSkillRevision`（skill-product-revision-read-v1/1.0.0，75/39/24）。现 SkillSpecification detail 仍由 series current 取得，不能供共享旧 revision 摘要；现 Resolve 六字段不含 metadata。
+
+目标 public13.3.0/137 operations 新增受准 `GET /v1/skill-shares/{share_id}/skill`；原 Resolve 六字段、Create 禁 Idempotency-Key/无自动重试、DELETE creator 资格与 GetSkill current 语义不变。分享不授予资源权限，浏览器仍 Web同源→BFF→Platform/IAM，无 owner SQL/管理员替代入口。
+
+| 放置项 | 本片决定 |
+| --- | --- |
+| Owner / writer | BFF拥有share与公开展示投影；Platform拥有revision，IAM拥有作者姓名，Storage拥有bytes；本Agent仅D0三设计，Root提交/服务/最终验收 |
+| 当前入口 | 现skill-share route/SkillSpecificationService/facade/Product Connect client/IAM profiles；无普通exact元数据替代，inspection只目录/文本 |
+| 目标职责 | 原Share边界读有效share、exact source_ref→newowner read→窄摘要白名单→返回前重新核有效share；不读取current，不输出current=true |
+| 位置比较 / 粒度 | 扩现Share route与SkillSpecification独立revisionSummary方法；淘汰新share模块/泛metadata服务及借个人/Admin/current；wire schema在现http schema，owner decode在现facade，不造新DTO目录 |
+| 依赖 / 生命周期 | 可信tenant/subject/humanBearer来自原admission；read token走现Product Connect projection；no-store/request-id/单10s总界/累计1MiB与abort沿现bounded网络机制，迟到不成功 |
+| 数据/API | 新read无body/query/幂等key；无数据库、receipt、缓存、SQL/依赖变化；新owner固定pin正规生成，不手改generated |
+| 删除 | 单一vendor pin原子换代，删旧32666c1输入目录，不保双current/fallback；旧入口有效职责保持 |
+| 验证 | 新path404 RED、旧revision独立事实/撤销竞态/身份/畸形wire/预算取消 GREEN；contract:check/test:contract、默认test、typecheck/lint/build及Root真实browser；本D0未运行工程门 |
+
+业务现文件候选闭集（实现需Root另授）：src/http/routes/skill-share.ts；src/bootstrap/server.ts；src/application/skill-specification.ts；src/application/skill-specification.types.ts；src/infrastructure/clients/platform/skill-specification-facade.ts；src/infrastructure/clients/platform/skill-product-connect.ts；src/http/skill-specification-schema.ts；test/skill-share-http.test.mjs；test/contract/skill-specification-http.test.mjs。现runtime已组合facade/profiles，server把现skillSpecificationSource传原route，无新增module。projectSkillProductRecord(expectedUID)、skillTimestamp、正式IAM resolve可复用；独立projection明确筛字段，不整体透传product/private locators。
+
+机器/发行候选：contract/openapi/v1/openapi.yaml；scripts/verify-openapi.ts；scripts/check-contract.mjs；test/contract/openapi-contract.test.mjs；scripts/generate-platform-connect-client.mjs；contract/dependencies/platform-connect.json；test/platform-connect-contract.test.mjs；正规生成src/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.ts。生成common_pb.ts/storage_pb.ts原bytes须保持；buf配置/HTTP5.3/历史V5–V10资格不升级。已有机器checker期待逐operation更新保旧136全闭集，不仅改count。
+
+新vendor唯一根 `contract/vendor/kokoro-platform/91bc3655ebd3648cb8f8ccddfacb5628bdeb1c5c/`，以下91个相对路径是完整准入清单；逐文件取正式owner对应contract原bytes，execution-operations-vN仅沿现vendor布局映射owner execution-operations/vN。旧根32666c1同87路径删除，不能拷owner源码/generated。新父74 proto SHA41fdcc2a782a779c38df861f99d89b1d20966486d29ed64647d1ecf149926bd6、compiled SHAfc5d3893a05284a5f52d8de40b82f6e2bbd859608994d84dac20dff43a4a6fd2、generated父binary SHAc995aa2c56293a6921d85a9e99f812e1affbd04728b98210da5aa24d51e4e779；current75 source SHA22a69ebbad7797c1f617535463a057bc56f6d989760069d635eef1e0a470be85、compiled SHA11f00c2459fb6bd916c04d523960ce0e728b5e63d1e005b128ae44ffb0194bfb。
+
+```text
+descriptor/platform-installation-tags-parent-generated.binpb
+descriptor/platform-installation-tags-parent.binpb
+descriptor/platform-package-read-parent-generated.binpb
+descriptor/platform-package-read-parent.binpb
+descriptor/platform-skill-category-keys-http-3.5.0.json
+descriptor/platform-skill-category-keys-parent-generated.binpb
+descriptor/platform-skill-category-keys-parent.binpb
+descriptor/platform-skill-example-prompts-http-3.4.0.json
+descriptor/platform-skill-example-prompts-parent-generated.binpb
+descriptor/platform-skill-example-prompts-parent.binpb
+descriptor/platform-skill-github-asset-parent-generated.binpb
+descriptor/platform-skill-github-asset-parent-http-5.0.0.json
+descriptor/platform-skill-github-asset-parent-profile-1.0.0.json
+descriptor/platform-skill-github-asset-parent-vectors-1.0.0.json
+descriptor/platform-skill-github-asset-parent.binpb
+descriptor/platform-skill-personal-query-parent-generated.binpb
+descriptor/platform-skill-personal-query-parent-http-5.1.0.json
+descriptor/platform-skill-personal-query-parent-profile-1.1.0.json
+descriptor/platform-skill-personal-query-parent-vectors-1.1.0.json
+descriptor/platform-skill-personal-query-parent.binpb
+descriptor/platform-skill-product-http-4.0.0.json
+descriptor/platform-skill-product-parent-generated.binpb
+descriptor/platform-skill-product-parent.binpb
+descriptor/platform-skill-product-storage-v2.proto.snapshot
+descriptor/platform-skill-revision-read-parent-generated.binpb
+descriptor/platform-skill-revision-read-parent.binpb
+descriptor/platform-skill-revision-read-parent.proto.snapshot
+descriptor/platform-skill-updated-at-http-3.3.0.json
+descriptor/platform-skill-updated-at-parent-generated.binpb
+descriptor/platform-skill-updated-at-parent.binpb
+descriptor/platform-v1.binpb
+descriptor/platform-v8-parent39.binpb
+descriptor/platform-v9-parent43-generated.binpb
+descriptor/platform-v9-parent43.binpb
+execution-operations-v10/local-skill-import-v1.json
+execution-operations-v10/manifest.json
+execution-operations-v10/provenance.json
+execution-operations-v5/command-identities.json
+execution-operations-v5/manifest.json
+execution-operations-v5/operation-catalog.json
+execution-operations-v5/product-installation-v1.json
+execution-operations-v5/provenance.json
+execution-operations-v5/schemas/command-identities.schema.json
+execution-operations-v5/schemas/manifest.schema.json
+execution-operations-v5/schemas/operation-catalog.schema.json
+execution-operations-v5/schemas/product-installation.schema.json
+execution-operations-v5/schemas/vector-inventory.schema.json
+execution-operations-v5/vectors/product-installation.json
+execution-operations-v6/authorize-response-v1.json
+execution-operations-v6/connection-projection-v1.json
+execution-operations-v6/manifest.json
+execution-operations-v6/provenance.json
+execution-operations-v6/schemas/authorize-response.schema.json
+execution-operations-v6/schemas/connection-projection.schema.json
+execution-operations-v6/schemas/manifest.schema.json
+execution-operations-v6/vectors/authorize-response.json
+execution-operations-v6/vectors/connection-projection.json
+execution-operations-v7/manifest.json
+execution-operations-v7/provenance.json
+execution-operations-v7/publish-v2.json
+execution-operations-v7/schemas/manifest.schema.json
+execution-operations-v7/schemas/zip-profile-v2.schema.json
+execution-operations-v7/vectors/zip-v2.json
+execution-operations-v7/zip-profile-v2.json
+execution-operations-v8/manifest.json
+execution-operations-v8/personal-mcp-read-v1.json
+execution-operations-v8/provenance.json
+execution-operations-v8/schemas/manifest.schema.json
+execution-operations-v8/schemas/personal-mcp-read.schema.json
+execution-operations-v8/vectors/personal-mcp-read.json
+execution-operations-v9/global-mcp-registration-v1.json
+execution-operations-v9/manifest.json
+execution-operations-v9/provenance.json
+execution-operations-v9/schemas/global-mcp-registration.schema.json
+execution-operations-v9/schemas/manifest.schema.json
+execution-operations-v9/vectors/global-mcp-registration.json
+execution-operations/mcp-personal-product-request-vectors-v1.json
+execution-operations/mcp-personal-product-v1.json
+execution-operations/skill-category-keys-v1.json
+execution-operations/skill-category-keys-v1.vectors.json
+execution-operations/skill-example-prompts-v1.json
+execution-operations/skill-example-prompts-v1.vectors.json
+execution-operations/skill-product-request-vectors-v1.json
+execution-operations/skill-product-revision-read-v1.json
+execution-operations/skill-product-v1.json
+execution-operations/skill-series-current-v1.json
+openapi/platform-http.openapi.json
+proto/kokoro/common/v1/common.proto
+proto/kokoro/platform/v1/platform_runtime.proto
+proto/kokoro/storage/v3/storage.proto
+provenance.json
+```
+
+正规generate流程：固定正式owner输入并核每文件SHA/aggregate→验证newfeature1.0.0 current75具名method/两messages字段/tag/presence/options/reserved→只移除此delta完整还原固定74 source/compiled→历史V10完整资格仍用固定74 parent，V5–V9原aggregate不变→官方Buf/ES两次byte-identical生成→整个generated Platform descriptor与currentcompiled相等→contract/dependencies manifest记录正式commit与每输入/输出SHA。不让旧V10 aggregate为新75背书，不加宽hash例外；source、descriptor、generated、旧方法篡改/重算provenance负控保持。仅执行pnpm contract:generate:platform正规入口；新增vendor闭集及上述脚本改动须Root授权后才能落地。
+
+单一vendor根替换的现路径消费者补全（仅后继授权候选，当前不改实际配置）：buf.platform.json只重指新vendor根，buf.platform.gen.json保持；scripts/generate-platform-http-client.mjs、openapi-ts.platform-http.config.ts重指正式91bc3655/currentpin，并正规生成contract/dependencies/platform-http.json。HTTP仍5.3.0、SHA c5f9a343170c87d59e0c40134c503cc6d40b59416216ac993a138cfbac3bb581；16个HTTP generated输出逐字节保持，不升级wire或改生成逻辑。
+
+同一必需consumer测试闭集追加test/platform-http-contract.test.mjs、test/architecture.test.ts、test/skill-publish-http.test.mjs、test/skill-validate-http.test.mjs、test/skill-installation-http.test.mjs、test/skill-package-begin-http.test.mjs、test/skill-package-complete-http.test.mjs、test/skill-product-input.test.ts、test/skill-example-prompts.test.ts；已有test/contract/openapi-contract.test.mjs亦更新原vendor历史输入locator。仅current owner pin/path与正式HTTP manifest关联hash，历史V5–V10 payload/版本/proof aggregates、固定43/63/65父图原bytes/hash不变。manifest另具名记录skill-product-revision-read-v1/1.0.0的current75→固定parent74完整资格，不命名v11、不将新method归旧V10。原Share default deadline沿现503依赖族，不扩504 exact-download特殊策略。
+
+<!-- END:T-K03.14-BFF-SHARE-REVISION-D0; original body follows -->
+
 ## T-K03.14-BFF-GITHUB-ADMISSION（目标，2026-10-10）
 
 当前共享 AI/GitHub handoff 在 admitted 后重放 Create 获取初始 CAS，实际 owner 返回当前版本导致 Begin412。目标仅修现 BFF 私有 receipt：frozen→created（真实 Create ACK 的 skillId/initialStateVersion 已持久）→admitted（同创建身份、初始CAS及真实 Begin attempt/upload/epoch/stateVersion）→selected（真实 PUT版本与原 Complete 意图）→completed（真实 Complete ACK stateVersion）→terminal。created 持久成功/精确读回后才 Begin；Begin 和获取 transfer 均使用原 key/body/初始CAS，PUT 不再 Create。Create ACK 丢失且尚未 Begin时只同键重放；created/admitted checkpoint ACK 丢失通过精确 readback 或保留原阶段恢复，不推算版本或替换意图。

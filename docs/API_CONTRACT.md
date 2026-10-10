@@ -1,3 +1,22 @@
+<!-- BEGIN:T-K03.14-BFF-SHARE-REVISION-D0 -->
+## T-K03.14-BFF-SHARE-REVISION D0（目标，2026-10-10）
+
+当前 BFF main `c9e8fab`，public13.2/136 operations；本片是目标设计，尚未改业务/机器/生成。Platform 正式 `91bc3655ebd3648cb8f8ccddfacb5628bdeb1c5c` 已发布 exact `ProductSkillReadService/GetSkillRevision`（skill-product-revision-read-v1/1.0.0，75/39/24）。现 SkillSpecification detail 仍由 series current 取得，不能供共享旧 revision 摘要；现 Resolve 六字段不含 metadata。
+
+目标 public13.3.0/137 operations 新增受准 `GET /v1/skill-shares/{share_id}/skill`；原 Resolve 六字段、Create 禁 Idempotency-Key/无自动重试、DELETE creator 资格与 GetSkill current 语义不变。分享不授予资源权限，浏览器仍 Web同源→BFF→Platform/IAM，无 owner SQL/管理员替代入口。
+
+新operation `getSharedSkillRevision`，owner BFF/public/stable、permission skill.read、idempotency none；沿现Product envelope/error family逐status闭集（200成功，400/401/403/404/429/502/503；owner不合规响应502 skill_response_invalid，依赖503；不发明个人命令族）。request为closed GET share_id（现ID规则）；零body/query/key，no-store/request-id。
+
+候选严格data白名单为share_id/source_ref/skill。skill必有skill_id、series_id、revision（owner decimal string）、display_name、description、tags、example_prompts、category_keys、created_at、updated_at、owner_type及真实source_kind（personal/official/third_party）；original_name/author/cover_image只有事实才出现。skill_id是精确UID，Web内部version映射此UID，不用decimal revision或series；无current=true/installed/enabled/usageCount/publisherType，安装事实继续正式installation读取。author定义为真实creator_ref:user的IAM found投影{user_id,display_name}，缺引用或正规not-found则omit；IAM失败不能吞成缺作者，身份/请求ID/预算校验继续生效。真实publisher引用若要另展须Root具名批准字段，不作为creator别名/fallback。
+
+读取顺序：findActive(可信tenant,shareId)并核shareId/tenant/resourceKind=skill_revision/活动与expiry→固定source_ref解析UID→Platform GetSkillRevision(product purpose)→assertSkillWireKnown、projectSkillProductRecord(expectedUID)且source/series/revision/active/validated与owner scope/source_kind合法→正式IAM作者→窄schema校验→再次findActive并核同shareId/tenant/resourceKind/sourceRef/created/expiry/url且仍未撤销→active signal/总deadline后send。失效/不可见404；不冻结分享权限、不借creator身份读取。
+
+封面只在该record有已验证真实cover时输出 `/api/v1/skills/{encoded exactUID}/cover`，沿既有受准read；不造空封面/series拼接/外部图。tags/examples只owner原值，无默认三例。原GET Resolve data严格六字段share_id/source_ref/url/created_at/expires_at/revoked_at不扩；原POST未知结果不自动Create，正式origin修正已独立归Root，不consumer改URL。metadata与包目录/选UTF8文件仍分别调用现正式bound接口，不从SKILL.md推作者/标题。
+
+新机器OpenAPI public13.3.0/137与本文同步；当前未发行，Web不得提前当可用API。旧136路径/operation/errors保持，新增schema不是camelCase GetSkill alias。完整vendor/generated资格与路径闭集见同任务TECHNICAL_DESIGN；执行前先Root设计门，机器/生成后完整contract及负控，再正式Web消费与浏览器验收。
+
+<!-- END:T-K03.14-BFF-SHARE-REVISION-D0; original body follows -->
+
 ## T-K03.14-BFF-GITHUB-ADMISSION（目标，2026-10-10）
 
 当前共享 AI/GitHub handoff 在 admitted 后重放 Create 获取初始 CAS，实际 owner 返回当前版本导致 Begin412。目标仅修现 BFF 私有 receipt：frozen→created（真实 Create ACK 的 skillId/initialStateVersion 已持久）→admitted（同创建身份、初始CAS及真实 Begin attempt/upload/epoch/stateVersion）→selected（真实 PUT版本与原 Complete 意图）→completed（真实 Complete ACK stateVersion）→terminal。created 持久成功/精确读回后才 Begin；Begin 和获取 transfer 均使用原 key/body/初始CAS，PUT 不再 Create。Create ACK 丢失且尚未 Begin时只同键重放；created/admitted checkpoint ACK 丢失通过精确 readback 或保留原阶段恢复，不推算版本或替换意图。
