@@ -1,3 +1,11 @@
+## T-K03.14-BFF-PIN 当前 Platform 固定发行（2026-10-10；待 Root 验收）
+
+当前 Connect/HTTP 消费输入唯一固定 Platform `32666c1c18360e707048a1104efe6b50e375002f`；物理 owner 为 `apps/kokoro-capability`。从该正式 Git 对象逐项核对，87 项必要 publication 与原 `84262b...` 字节完全一致，Proto/descriptor、HTTP 5.3.0、execution V5–V10、historical qualification 及所有 artifact 摘要不变；active/routable V10 aggregate 仍为 `dddb0d194af44dbf0b83a0a0443d774f3dee63f8cb03c364ad529c4c230fb85b`。当前说明覆盖下文历史 pin，不改历史验收事实。
+
+沿既有 local import production composition 与单一 vendor/generated 边界更新发行出处，不建立新 adapter、框架或 fallback。保既有授权、预算、取消、replay 与命名 dispatch；生成输入只取 owner 正式 Git 对象，旧 current vendor 删除。
+
+<!-- T-K03.14-BFF-PIN-CURRENT-END; historical body retained -->
+
 ## R357-BFF-ADMIN-INGRESS-D0：独立 Admin Web 的闭合入口（已实施）
 
 独立 Admin Web 不复用 User Web 的 cookie、OAuth client 或 service secret，但仍只经过现 BFF 的 IAM 协议中继和人类请求准入；不新增 Admin BFF、通用代理或第二套 token verifier。`admin-web-bff` 必须使用独立配置的 Admin secret；未配置、空值、与 User secret 相同、错配或交叉组合均为 `403 service_auth_failed`，不设 fallback。

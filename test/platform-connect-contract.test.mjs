@@ -9,7 +9,7 @@ import { configureBffProtobufTextEncoding } from "../dist/infrastructure/protobu
 
 configureBffProtobufTextEncoding()
 
-const ownerCommit = "84262b664275229c62370d49f51ad5e276116148"
+const ownerCommit = "32666c1c18360e707048a1104efe6b50e375002f"
 const sources = {
   "kokoro/common/v1/common.proto": "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08",
   "kokoro/platform/v1/platform_runtime.proto": "41fdcc2a782a779c38df861f99d89b1d20966486d29ed64647d1ecf149926bd6",

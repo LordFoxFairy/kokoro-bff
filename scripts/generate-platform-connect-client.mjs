@@ -16,7 +16,7 @@ import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-const ownerCommit = "84262b664275229c62370d49f51ad5e276116148"
+const ownerCommit = "32666c1c18360e707048a1104efe6b50e375002f"
 const vendorRoot = `contract/vendor/kokoro-platform/${ownerCommit}`
 const vendor = `contract/vendor/kokoro-platform/${ownerCommit}/proto`
 const artifacts = {

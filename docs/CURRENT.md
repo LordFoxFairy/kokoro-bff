@@ -1,3 +1,11 @@
+## T-K03.14-BFF-PIN 当前 Platform 固定发行（2026-10-10；待 Root 验收）
+
+当前 Connect/HTTP 消费输入唯一固定 Platform `32666c1c18360e707048a1104efe6b50e375002f`；物理 owner 为 `apps/kokoro-capability`。从该正式 Git 对象逐项核对，87 项必要 publication 与原 `84262b...` 字节完全一致，Proto/descriptor、HTTP 5.3.0、execution V5–V10、historical qualification 及所有 artifact 摘要不变；active/routable V10 aggregate 仍为 `dddb0d194af44dbf0b83a0a0443d774f3dee63f8cb03c364ad529c4c230fb85b`。当前说明覆盖下文历史 pin，不改历史验收事实。
+
+此候选仅完成消费者出处更新；新 pin 测试已真实 RED（actual 84262b、expected e2f6dbf），本轮 Node 22.22.2 正规 Connect/HTTP write 与 platform、platform-http、local-import check 全部 exit 0；lint/typecheck/build 全部 exit 0；具名 Platform Connect/HTTP 与 local import HTTP 测试 58 PASS / 0 FAIL / 0 SKIP。generated 客户端保持原字节，两个 dependency manifest 由正规工具更新。Root 的 16 项真实 Storage/Connect smoke 是 owner 证据，不替代 BFF 全门、正常服务重载或 Web/Admin 浏览器验收；完整用户闭环仍 OPEN。
+
+<!-- T-K03.14-BFF-PIN-CURRENT-END; historical body retained -->
+
 ## R357-BFF-ACTIVATION：正式 active local import 源码候选（2026-10-09；完整验收 OPEN）
 
 Platform 已正式发布 `84262b664275229c62370d49f51ad5e276116148`，v10 active/routable aggregate 为 `dddb0d194af44dbf0b83a0a0443d774f3dee63f8cb03c364ad529c4c230fb85b`，Root publication digest 为 `8a850363580521fadf75bc20b1be70bfe62c20004568c00b72a77f614caa672f`。Root 已完成 owner 正常源码重载与 health/ready，但这不是 BFF/Web/browser 完成证据。

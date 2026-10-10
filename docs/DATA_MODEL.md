@@ -1,3 +1,11 @@
+## T-K03.14-BFF-PIN 当前 Platform 固定发行（2026-10-10；待 Root 验收）
+
+当前 Connect/HTTP 消费输入唯一固定 Platform `32666c1c18360e707048a1104efe6b50e375002f`；物理 owner 为 `apps/kokoro-capability`。从该正式 Git 对象逐项核对，87 项必要 publication 与原 `84262b...` 字节完全一致，Proto/descriptor、HTTP 5.3.0、execution V5–V10、historical qualification 及所有 artifact 摘要不变；active/routable V10 aggregate 仍为 `dddb0d194af44dbf0b83a0a0443d774f3dee63f8cb03c364ad529c4c230fb85b`。当前说明覆盖下文历史 pin，不改历史验收事实。
+
+本切片无 SQL/schema、事务、receipt、缓存、Redis namespace 或数据变化；Platform/Storage 保持唯一事实 writer。固定发行与机器生成不产生 BFF 持久化事实。
+
+<!-- T-K03.14-BFF-PIN-CURRENT-END; historical body retained -->
+
 ## R357-BFF-ADMIN-INGRESS-D0：Admin Identity read 无持久化变化（已实施）
 
 本片不新增或修改 SQL、表、索引、Redis key、session、receipt、授权缓存或审计镜像。Admin Web 的 session/state/PKCE/refresh 仍由独立 Admin Web 拥有；IAM 继续唯一拥有 OAuth client、user session、tenant、platform-admin、membership、invitation 与 role。BFF 只在请求期校验闭合 service credential，执行 fresh human admission，并投影当前已准入 tenant 的三项 IAM read；不得把成功 admission 或 owner response 持久化为用户或管理员资格。

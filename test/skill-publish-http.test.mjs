@@ -102,7 +102,7 @@ test("Publish accepts strict audience/CAS JSON through registered server and pro
 test("Publish projector matches all eight owner v4 command vectors", async () => {
   const manifest = JSON.parse(
     await readFile(
-      new URL("../contract/vendor/kokoro-platform/84262b664275229c62370d49f51ad5e276116148/execution-operations-v5/manifest.json", import.meta.url),
+      new URL("../contract/vendor/kokoro-platform/32666c1c18360e707048a1104efe6b50e375002f/execution-operations-v5/manifest.json", import.meta.url),
       "utf8",
     ),
   )

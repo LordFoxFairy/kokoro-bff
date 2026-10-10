@@ -3,7 +3,7 @@ import { createHash } from "node:crypto"
 import { readFile } from "node:fs/promises"
 import { test } from "node:test"
 const root = new URL("../", import.meta.url)
-const ownerCommit = "84262b664275229c62370d49f51ad5e276116148"
+const ownerCommit = "32666c1c18360e707048a1104efe6b50e375002f"
 const ownerDigest = "c5f9a343170c87d59e0c40134c503cc6d40b59416216ac993a138cfbac3bb581"
 const ownerUrl = new URL(`contract/vendor/kokoro-platform/${ownerCommit}/openapi/platform-http.openapi.json`, root)
 
