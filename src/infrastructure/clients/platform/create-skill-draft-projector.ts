@@ -134,7 +134,11 @@ export function projectSkillProductCommand(
   if (Object.keys(request).some((key) => !allowed.includes(key))) fail("wire request member")
   const method = rpc.name
   const creator = method === "CreateSkillDraft" || method === "CreateSkillVersion"
-  if ((creator || ["UpdateSkillDraft", "CreateAdminSkillVersion"].includes(method)) && request.metadata === undefined) fail("metadata required")
+  // An official draft has no existing skill state yet.  Its platform command
+  // deliberately contains only the product context and initial metadata.
+  const adminInitialCreator = method === "CreateAdminSkillDraft"
+  const initialCreator = creator || adminInitialCreator
+  if ((initialCreator || ["UpdateSkillDraft", "CreateAdminSkillVersion"].includes(method)) && request.metadata === undefined) fail("metadata required")
   const normalized = projectLegacyCreateSkillDraft(
     JSON.stringify({
       command_digest_version: "3.0.0",
@@ -158,6 +162,8 @@ export function projectSkillProductCommand(
   if (creator) {
     command = { ...normalized }
     if (method === "CreateSkillVersion") command.base_skill_id = wrapper(request.base_skill_id)
+  } else if (adminInitialCreator) {
+    command = { product_context: normalized.product_context, metadata: normalized.metadata }
   } else {
     command = { skill_id: wrapper(request.skill_id), product_context: normalized.product_context }
     if (["UpdateSkillDraft", "CreateAdminSkillVersion"].includes(method)) command.metadata = normalized.metadata
@@ -213,7 +219,7 @@ export function projectSkillProductCommand(
     fail("CAS required")
   if (request.expected_state_version !== undefined) command.expected_state_version = skillDecimalSchema.parse(request.expected_state_version)
   else if (
-    !creator &&
+    !initialCreator &&
     !["ValidateSkillDraft", "PublishSkill", "WithdrawSkill", "SetSkillStatus", "BeginSkillPackageUpload", "CompleteSkillPackageUpload"].includes(method)
   )
     fail("CAS required")

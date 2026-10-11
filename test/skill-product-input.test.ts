@@ -73,6 +73,24 @@ test("Public13 current package admission requires CAS without rewriting immutabl
   }
 })
 
+test("official initial draft is an initial command, not a stale-resource mutation", () => {
+  const request = {
+    product_context: { subject_id: "admin", owner_scope: { kind: "user", id: "admin" } },
+    metadata: { display_name: "Official draft", summary: "", tags: [], metadata_json: "" },
+  }
+  const wire = {
+    command_digest_version: "3.0.0",
+    fq_method: "kokoro.platform.v1.SkillAdminService/CreateAdminSkillDraft",
+    tenant_ref: "tenant",
+    request,
+  }
+  const result = projector.projectSkillProductCommand(JSON.stringify(wire), true)
+  assert.deepEqual(result.projection.command, {
+    product_context: request.product_context,
+    metadata: request.metadata,
+  })
+})
+
 test("GitHub path inputs preserve the existing 256-character selector boundary before owner calls", async () => {
   const { parseSkillProductInput } = await import("../src/http/skill-product-input.js")
   const commit = "a".repeat(40)
