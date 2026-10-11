@@ -17,7 +17,7 @@ import {
   GetPersonalMcpConnectorResponseSchema,
   PersonalMcpProviderSchema,
   GetPersonalMcpProviderResponseSchema,
-} from "../src/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
+} from "../src/generated/platform-mcp-presentation-connect/kokoro/platform/v1/platform_runtime_pb.js"
 const bytes = (value: unknown) => Buffer.from(JSON.stringify(value))
 const identity = { tenant: "tenant", subject: "subject", requestId: "request", commandId: "original-key" }
 const fields = { provider_key: "test", connector_type: "mcp", display_name: "😀".repeat(100), description: "" }
@@ -116,6 +116,8 @@ test("A2 provider projection contains only official directory facts, with safe o
     examplePrompts: ["Real example"],
     enabled: true,
     stateVersion: 3n,
+    coverImageUrl: "https://cdn.example.test/connectors/test.webp",
+    updatedAt: "2026-10-11T12:34:56.000Z",
   })
   const input = { ...identity, id: "test" }
   const raw = () => create(GetPersonalMcpProviderResponseSchema, { provider })
@@ -128,6 +130,8 @@ test("A2 provider projection contains only official directory facts, with safe o
       example_prompts: ["Real example"],
       enabled: true,
       state_version: "3",
+      cover_image_url: "https://cdn.example.test/connectors/test.webp",
+      updated_at: "2026-10-11T12:34:56.000Z",
     },
   })
   provider.website = "http://insecure.test"
@@ -173,7 +177,7 @@ test("A2 Create projects actual generated disabled initial ACK and rejects fabri
 test("A2 real Connect command sends exact generated digest/key/CAS and uses shared close boundary", async () => {
   const { createServer } = await import("node:http")
   const { connectNodeAdapter } = await import("@connectrpc/connect-node")
-  const { ProductMcpPersonalService } = await import("../src/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
+  const { ProductMcpPersonalService } = await import("../src/generated/platform-mcp-presentation-connect/kokoro/platform/v1/platform_runtime_pb.js")
   const { McpPersonalConnectClient } = await import("../src/infrastructure/clients/platform/mcp-personal-connect.js")
   const { McpPersonalTokenSource } = await import("../src/infrastructure/clients/platform/mcp-personal-token.js")
   const seen: unknown[] = []

@@ -1,0 +1,48 @@
+{
+  "profile": "mcp-provider-presentation-v1",
+  "version": "1.0.0",
+  "visibility": "internal-owner",
+  "owner": "Platform/MCP",
+  "aggregate": "kokoro_platform.mcp_provider",
+  "fields": [
+    {
+      "message": "PersonalMcpProvider",
+      "name": "cover_image_url",
+      "number": 12
+    },
+    {
+      "message": "PersonalMcpProvider",
+      "name": "updated_at",
+      "number": 13
+    },
+    {
+      "message": "McpProviderAdminRecord",
+      "name": "cover_image_url",
+      "number": 19
+    },
+    {
+      "message": "McpProviderAdminInput",
+      "name": "cover_image_url",
+      "number": 15
+    }
+  ],
+  "semantics": {
+    "coverImageUrl": "optional public HTTPS artwork selected by an administrator; not a Storage credential, secret, or browser-side provider-key mapping",
+    "updatedAt": "canonical committed provider metadata timestamp; absence remains unknown and must not be fabricated"
+  },
+  "parent": {
+    "protoSha256": "2cc4627c133d0818dcffa220ad1b9feaeb08be6f1aa8553d8648b8bd1edc640a",
+    "descriptorSha256": "67e48b3d96bc5a92d65821469132482a7c56010f1d9e3e8252c7dd4e0c9eea7b",
+    "generatedSourceSha256": "eb6ec1a30151eb1a1c0046f644a600546bb841567c26b659891e484e2373bbe1"
+  },
+  "current": {
+    "protoSha256": "9a7d1db2f272a8ff5e39c5c122d4b46c230116e1c061e466e92f9186b3a1e367",
+    "descriptorSha256": "e6905c6ee8220bc1c756dd8ac96dd02c76544c4fee72bfcb2dd309574ea96316",
+    "generatedSourceSha256": "46a7729fee66e261a648479d2c15e3174e826af5f7473f2aa6fbeaf9628d47af",
+    "counts": {
+      "rpc": 82,
+      "command": 44,
+      "proof": 24
+    }
+  }
+}

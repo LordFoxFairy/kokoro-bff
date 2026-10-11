@@ -2972,7 +2972,27 @@ export function restorePublic141ConnectorListContract(source: string): string {
   return source.replace(path, "").replace(responses, "").replace("  version: 14.1.0", "  version: 14.0.0")
 }
 
+export function restorePublic144McpProviderPresentationContract(source: string): string {
+  if (!/^  version: 14\.4\.0$/mu.test(source)) throw new Error("MCP provider presentation minor version drift")
+  const digest = (value: string): string => createHash("sha256").update(value).digest("hex")
+  const admin = source.match(/^    McpProviderAdminInput:\n[\s\S]*?(?=^    McpProviderAdminRecord:)/mu)?.[0]
+  const personal = source.match(/^    PersonalMcpProvider:\n[\s\S]*?(?=^    PersonalMcpProviderListResponse:)/mu)?.[0]
+  const adminField = "        cover_image_url: { type: string, format: uri, pattern: '^https://' }\n"
+  const personalFields =
+    "        cover_image_url: { type: string, maxLength: 2048, format: uri, pattern: '^https://[^/@:]+(?::[0-9]+)?(?:[/?#][^\\s]*)?(?![\\s\\S])' }\n        updated_at: { type: string, format: date-time }\n"
+  if (admin === undefined || personal === undefined || admin.split(adminField).length !== 2 || personal.split(personalFields).length !== 2)
+    throw new Error("MCP provider presentation exact delta missing")
+  const parent = source
+    .replace(admin, () => admin.replace(adminField, ""))
+    .replace(personal, () => personal.replace(personalFields, ""))
+    .replace("  version: 14.4.0", "  version: 14.3.0")
+  if (digest(parent) !== "229b4cd808875ffed7adea93ebb9f7868f39b0d079675b52befacb6ebcfed64e")
+    throw new Error("MCP provider presentation complete Public14.3 parent inverse drift")
+  return parent
+}
+
 export function restorePublic143McpProviderAdminContract(source: string): string {
+  if (/^  version: 14\.4\.0$/mu.test(source)) source = restorePublic144McpProviderPresentationContract(source)
   if (!/^  version: 14\.3\.0$/mu.test(source)) throw new Error("MCP provider administration minor version drift")
   const digest = (value: string): string => createHash("sha256").update(value).digest("hex")
   const path = source.match(/^  \/v1\/admin\/mcp\/providers:\n[\s\S]*?(?=^  \/v1\/admin\/skills:)/mu)?.[0]
@@ -2989,7 +3009,7 @@ export function restorePublic143McpProviderAdminContract(source: string): string
 }
 
 export function restorePublic142AdminSkillDraftContract(source: string): string {
-  if (/^  version: 14\.3\.0$/mu.test(source)) source = restorePublic143McpProviderAdminContract(source)
+  if (/^  version: 14\.(?:3|4)\.0$/mu.test(source)) source = restorePublic143McpProviderAdminContract(source)
   if (!/^  version: 14\.2\.0$/mu.test(source)) throw new Error("Admin Skill draft version drift")
   const digest = (value: string): string => createHash("sha256").update(value).digest("hex")
   const path = source.match(/^  \/v1\/admin\/skills:\n[\s\S]*?^(    post:\n[\s\S]*?)(?=^  \/v1\/admin\/skills\/\{skill_id\}:)/mu)?.[1]

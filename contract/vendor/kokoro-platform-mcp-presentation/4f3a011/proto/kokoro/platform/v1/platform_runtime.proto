@@ -1729,6 +1729,8 @@ message PersonalMcpProvider {
   optional string privacy_url = 9;
   bool enabled = 10;
   uint64 state_version = 11;
+  optional string cover_image_url = 12;
+  optional string updated_at = 13;
 }
 message ListPersonalMcpProvidersResponse {
   repeated kokoro.platform.v1.PersonalMcpProvider providers = 1;
@@ -1789,6 +1791,7 @@ message McpProviderAdminRecord {
   uint64 state_version = 16;
   google.protobuf.Timestamp created_at = 17;
   google.protobuf.Timestamp updated_at = 18;
+  optional string cover_image_url = 19;
 }
 
 message McpProviderAdminInput {
@@ -1806,6 +1809,7 @@ message McpProviderAdminInput {
   bool authorization_required = 12;
   repeated kokoro.platform.v1.McpProviderOrigin allowed_mcp_origins = 13;
   optional kokoro.platform.v1.McpProviderToolAuthorizationPolicy tool_authorization_policy = 14;
+  optional string cover_image_url = 15;
 }
 
 message ListMcpProviderAdminRecordsRequest {

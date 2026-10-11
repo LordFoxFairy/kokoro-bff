@@ -163,12 +163,14 @@ test("provider admin accepts HTTPS directory metadata for a valid update", async
           author: "GitHub",
           website: "https://github.com",
           privacy_url: "https://docs.github.com/site-policy/privacy-policies/github-privacy-statement",
+          cover_image_url: "https://cdn.example.test/connectors/github.webp",
         },
       }),
     })
     assert.equal(response.status, 200)
     assert.equal(received.provider.website, "https://github.com")
     assert.equal(received.provider.privacy_url, "https://docs.github.com/site-policy/privacy-policies/github-privacy-statement")
+    assert.equal(received.provider.cover_image_url, "https://cdn.example.test/connectors/github.webp")
   } finally {
     await app.close()
   }

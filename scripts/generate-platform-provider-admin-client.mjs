@@ -7,33 +7,27 @@ import { tmpdir } from "node:os"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-const ownerCommit = "b95365f968432b59e22fa764e074f1899f82c5d3"
+const ownerCommit = "4f3a011"
 const vendorRoot = `contract/vendor/kokoro-platform-provider-admin/${ownerCommit}`
 const vendorProto = `${vendorRoot}/proto`
 const output = "src/generated/platform-provider-admin-connect"
 const manifestPath = "contract/dependencies/platform-provider-admin-connect.json"
 const config = "buf.platform-provider-admin.json"
 const template = "buf.platform-provider-admin.gen.json"
-const protoInputs = [
-  "kokoro/common/v1/common.proto",
-  "kokoro/platform/v1/platform_runtime.proto",
-  "kokoro/storage/v3/storage.proto",
-]
-const generatedFiles = [
-  "kokoro/common/v1/common_pb.ts",
-  "kokoro/platform/v1/platform_runtime_pb.ts",
-  "kokoro/storage/v3/storage_pb.ts",
-]
+const protoInputs = ["kokoro/common/v1/common.proto", "kokoro/platform/v1/platform_runtime.proto", "kokoro/storage/v3/storage.proto"]
+const generatedFiles = ["kokoro/common/v1/common_pb.ts", "kokoro/platform/v1/platform_runtime_pb.ts", "kokoro/storage/v3/storage_pb.ts"]
 const pinnedFiles = {
   "proto/kokoro/common/v1/common.proto": "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08",
-  "proto/kokoro/platform/v1/platform_runtime.proto": "2cc4627c133d0818dcffa220ad1b9feaeb08be6f1aa8553d8648b8bd1edc640a",
+  "proto/kokoro/platform/v1/platform_runtime.proto": "9a7d1db2f272a8ff5e39c5c122d4b46c230116e1c061e466e92f9186b3a1e367",
   "proto/kokoro/storage/v3/storage.proto": "1021e603065978871c51519ddba5b23c9b97f16b781a08bd98e019b3342bf5f9",
-  "descriptor/platform-v1.binpb": "67e48b3d96bc5a92d65821469132482a7c56010f1d9e3e8252c7dd4e0c9eea7b",
+  "descriptor/platform-v1.binpb": "e6905c6ee8220bc1c756dd8ac96dd02c76544c4fee72bfcb2dd309574ea96316",
   "execution-operations/mcp-provider-admin-v1.json": "093f633e73f1c207b80cc587b9e32129ba64ac8ec95077f61cdb0d1a0478b999",
-  "provenance.json": "91aa811a2ab3d986767989198e9781f798d7a91bd69445a985b45884341b6f2c",
+  "provenance.json": "232c75b5ca1cb7097aa845902f3445c919db9bbbbbf745b0c57b42eba7f1a333",
 }
 
-function sha256(value) { return createHash("sha256").update(value).digest("hex") }
+function sha256(value) {
+  return createHash("sha256").update(value).digest("hex")
+}
 
 async function tree(directory, prefix = "") {
   const result = { files: [], directories: [] }
@@ -58,24 +52,46 @@ async function verifyInputs() {
     assert.equal(sha256(await readFile(path.join(root, vendorRoot, file))), digest, `provider admin pin drifted: ${file}`)
   const profile = JSON.parse(await readFile(path.join(root, vendorRoot, "execution-operations/mcp-provider-admin-v1.json"), "utf8"))
   assert.equal(profile.service, "kokoro.platform.v1.McpProviderAdminService", "provider admin service drifted")
-  assert.deepEqual(profile.methods.map((entry) => entry.method), [
-    "ListMcpProviderAdminRecords", "GetMcpProviderAdminRecord", "CreateMcpProviderAdminRecord", "UpdateMcpProviderAdminRecord", "SetMcpProviderAdminRecordEnabled", "RemoveMcpProviderAdminRecord",
-  ], "provider admin method order drifted")
+  assert.deepEqual(
+    profile.methods.map((entry) => entry.method),
+    [
+      "ListMcpProviderAdminRecords",
+      "GetMcpProviderAdminRecord",
+      "CreateMcpProviderAdminRecord",
+      "UpdateMcpProviderAdminRecord",
+      "SetMcpProviderAdminRecordEnabled",
+      "RemoveMcpProviderAdminRecord",
+    ],
+    "provider admin method order drifted",
+  )
   assert.equal(profile.identity.humanAdmission, "fresh platform-admin decision before every read and command replay", "provider admin human admission drifted")
   assert.equal(profile.identity.humanBearerForwarding, false, "provider admin bearer boundary drifted")
-  assert.deepEqual(JSON.parse(await readFile(path.join(root, config), "utf8")), { version: "v2", modules: [{ path: vendorProto }] }, "provider admin Buf input drifted")
+  assert.deepEqual(
+    JSON.parse(await readFile(path.join(root, config), "utf8")),
+    { version: "v2", modules: [{ path: vendorProto }] },
+    "provider admin Buf input drifted",
+  )
 }
 
 async function run(command, args) {
   await new Promise((resolve, reject) => {
     const child = spawn(command, args, { cwd: root, stdio: "inherit" })
     child.once("error", reject)
-    child.once("exit", (code) => code === 0 ? resolve() : reject(new Error(`${path.basename(command)} exited ${code}`)))
+    child.once("exit", (code) => (code === 0 ? resolve() : reject(new Error(`${path.basename(command)} exited ${code}`))))
   })
 }
 
 async function generate(directory) {
-  await run(path.join(root, "node_modules/.bin/buf"), ["generate", "--config", config, "--template", template, "--output", directory, ...protoInputs.flatMap((file) => ["--path", `${vendorProto}/${file}`])])
+  await run(path.join(root, "node_modules/.bin/buf"), [
+    "generate",
+    "--config",
+    config,
+    "--template",
+    template,
+    "--output",
+    directory,
+    ...protoInputs.flatMap((file) => ["--path", `${vendorProto}/${file}`]),
+  ])
   assert.deepEqual((await tree(directory)).files, generatedFiles, "provider admin generated file allowlist drifted")
   await run(process.execPath, [path.join(root, "node_modules/prettier/bin/prettier.cjs"), "--no-semi", "--print-width", "160", "--write", directory])
   const generated = await readFile(path.join(directory, "kokoro/platform/v1/platform_runtime_pb.ts"), "utf8")
@@ -106,7 +122,8 @@ async function main() {
     const second = path.join(temporary, "second")
     await generate(first)
     await generate(second)
-    for (const file of generatedFiles) assert.deepEqual(await readFile(path.join(first, file)), await readFile(path.join(second, file)), `non-deterministic generation: ${file}`)
+    for (const file of generatedFiles)
+      assert.deepEqual(await readFile(path.join(first, file)), await readFile(path.join(second, file)), `non-deterministic generation: ${file}`)
     const manifest = await manifestFor(first)
     if (mode === "--write") {
       await rm(path.join(root, output), { recursive: true, force: true })
@@ -114,10 +131,13 @@ async function main() {
       await writeFile(path.join(root, manifestPath), `${JSON.stringify(manifest, null, 2)}\n`)
     } else {
       assert.deepEqual((await tree(path.join(root, output))).files, generatedFiles, "provider admin generated tree drifted")
-      for (const file of generatedFiles) assert.deepEqual(await readFile(path.join(root, output, file)), await readFile(path.join(first, file)), `provider admin generated drifted: ${file}`)
+      for (const file of generatedFiles)
+        assert.deepEqual(await readFile(path.join(root, output, file)), await readFile(path.join(first, file)), `provider admin generated drifted: ${file}`)
       assert.deepEqual(JSON.parse(await readFile(path.join(root, manifestPath), "utf8")), manifest, "provider admin dependency manifest drifted")
     }
     console.log(`PASS provider-admin Connect ${mode.slice(2)}`)
-  } finally { await rm(temporary, { recursive: true, force: true }) }
+  } finally {
+    await rm(temporary, { recursive: true, force: true })
+  }
 }
 if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) await main()

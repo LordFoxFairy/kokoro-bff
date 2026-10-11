@@ -56,6 +56,7 @@ function provider(value: Record<string, unknown>): Record<string, unknown> {
     ...(value.author === undefined ? {} : { author: value.author }),
     ...(value.website === undefined ? {} : { website: value.website }),
     ...(value.privacyUrl === undefined ? {} : { privacy_url: value.privacyUrl }),
+    ...(value.coverImageUrl === undefined ? {} : { cover_image_url: value.coverImageUrl }),
     ...(value.toolAuthorizationPolicy === undefined
       ? {}
       : {
@@ -81,6 +82,7 @@ function wireProvider(value: ProviderInput) {
     ...(value.author === undefined ? {} : { author: value.author as string }),
     ...(value.website === undefined ? {} : { website: value.website as string }),
     ...(value.privacy_url === undefined ? {} : { privacyUrl: value.privacy_url as string }),
+    ...(value.cover_image_url === undefined ? {} : { coverImageUrl: value.cover_image_url as string }),
     connectorTypes: (value.connector_types as (keyof typeof connectorType)[]).map((item) => connectorType[item]),
     defaultScopes: value.default_scopes as string[],
     authorizationRequired: value.authorization_required as boolean,

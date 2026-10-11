@@ -21,15 +21,18 @@ const scopes = z
   .array(z.string().regex(/^[^\s]{1,128}$/u))
   .max(100)
   .refine((value) => new Set(value).size === value.length)
-const secureUrl = z.string().max(2048).refine((value) => {
-  if (value.trim() !== value) return false
-  try {
-    const parsed = new URL(value)
-    return parsed.protocol === "https:" && !parsed.username && !parsed.password
-  } catch {
-    return false
-  }
-})
+const secureUrl = z
+  .string()
+  .max(2048)
+  .refine((value) => {
+    if (value.trim() !== value) return false
+    try {
+      const parsed = new URL(value)
+      return parsed.protocol === "https:" && !parsed.username && !parsed.password
+    } catch {
+      return false
+    }
+  })
 const origin = z
   .object({ scheme: z.enum(["http", "https"]), host: text(1, 253), port: z.int().min(1).max(65535), path_prefix: z.string().max(2048).startsWith("/") })
   .strict()
@@ -56,6 +59,7 @@ const provider = z
     // not fail at the BFF edge and unsafe credentials never reach Platform.
     website: secureUrl.optional(),
     privacy_url: secureUrl.optional(),
+    cover_image_url: secureUrl.optional(),
     connector_types: z
       .array(z.enum(["builtin", "byok", "mcp"]))
       .min(1)

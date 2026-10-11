@@ -5,7 +5,7 @@ import { createRequire } from "node:module"
 const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
 test("MCP provider administration is an additive public minor over Admin Skills", async () => {
   const spec = load(await readFile(new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"))
-  assert.equal(spec.info.version, "14.3.0")
+  assert.equal(spec.info.version, "14.4.0")
   assert.equal(
     Object.values(spec.paths).reduce(
       (n, path) => n + Object.keys(path).filter((k) => ["get", "post", "patch", "put", "delete", "head", "options"].includes(k)).length,
@@ -20,6 +20,7 @@ test("MCP provider administration is an additive public minor over Admin Skills"
 })
 test("MCP provider administration, Admin Skill draft, Connector list and prior MCP deltas keep exact historical inverses", async () => {
   const {
+    restorePublic144McpProviderPresentationContract,
     restorePublic143McpProviderAdminContract,
     restorePublic142AdminSkillDraftContract,
     restorePublic141ConnectorListContract,
@@ -33,7 +34,9 @@ test("MCP provider administration, Admin Skill draft, Connector list and prior M
     createHash("sha256")
       .update(
         restorePublic133McpPersonalContract(
-          restorePublic141ConnectorListContract(restorePublic142AdminSkillDraftContract(restorePublic143McpProviderAdminContract(source))),
+          restorePublic141ConnectorListContract(
+            restorePublic142AdminSkillDraftContract(restorePublic143McpProviderAdminContract(restorePublic144McpProviderPresentationContract(source))),
+          ),
         ),
       )
       .digest("hex"),
@@ -55,10 +58,16 @@ test("MCP provider administration, Admin Skill draft, Connector list and prior M
     source.replace("required: [connector_id, connector_type, provider_key, status, approved_scopes, enabled, state_version]", "required: [connector_id]"),
     source.replace("mcp_personal_command_in_progress", "generic_error"),
     source.replace("operationId: listPersonalMcpConnections", "operationId: old_tamper"),
-    source.replace("  version: 14.3.0", "  version: 14.2.0"),
+    source.replace("  version: 14.4.0", "  version: 14.2.0"),
     source + "unexpected: true\n",
   ])
     assert.notDeepEqual(inspectBffOpenApi(changed, baseline), [])
+
+  const provider = spec.components.schemas.PersonalMcpProvider
+  assert.equal(provider.properties.cover_image_url.format, "uri")
+  assert.equal(provider.properties.updated_at.format, "date-time")
+  assert.ok(!provider.required.includes("cover_image_url"))
+  assert.ok(!provider.required.includes("updated_at"))
   const cas = spec.components.schemas.RemovePersonalMcpConnectorRequest.properties.expected_state_version
   for (const value of ["1", "9007199254740991"]) assert.match(value, new RegExp(cas.pattern, "u"))
   for (const value of ["0", "01", "9007199254740992", "10000000000000000", "1\n"]) assert.doesNotMatch(value, new RegExp(cas.pattern, "u"))

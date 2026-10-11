@@ -90,6 +90,8 @@ const provider = z
     author: text(1, 100).optional(),
     website: safeUrl.optional(),
     privacy_url: safeUrl.optional(),
+    cover_image_url: safeUrl.optional(),
+    updated_at: date.optional(),
     enabled: z.boolean(),
     state_version: version,
   })
@@ -206,6 +208,8 @@ function projectProvider(raw: unknown) {
     ...(value.author === undefined ? {} : { author: value.author }),
     ...(value.website === undefined ? {} : { website: value.website }),
     ...(value.privacyUrl === undefined ? {} : { privacy_url: value.privacyUrl }),
+    ...(value.coverImageUrl === undefined ? {} : { cover_image_url: value.coverImageUrl }),
+    ...(value.updatedAt === undefined ? {} : { updated_at: value.updatedAt }),
   }
 }
 export function validateMcpPersonalCommand(operation: McpPersonalCommandOperation, raw: unknown, input: McpPersonalCommandInput): unknown {
