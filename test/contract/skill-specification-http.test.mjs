@@ -431,7 +431,8 @@ test("R357 metadata invalid response remains502; never synthesizes absent actor/
 test("R357 active public contract declares original skill.list and distinct observed website/bytes resources, deletes aliases and preserves effective commands", async () => {
   const { readFile } = await import("node:fs/promises")
   const { load } = await import("js-yaml")
-  const document = load(await readFile(new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"))
+  const { restorePublic133McpPersonalContract } = await import("../../scripts/verify-openapi.ts")
+  const document = load(restorePublic133McpPersonalContract(await readFile(new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")))
   assert.equal(document.info.version, "13.3.0")
   assert.equal(document.paths["/v1/skill.list"].get.operationId, "listSkills")
   for (const path of [website + "ListSkills", website + "ListHubSkills", website + "GetSkill", "/skill.v1.SkillService/DownloadSkill"]) {
@@ -461,10 +462,10 @@ test("R357 active contract rejects observed-field/type/error/alias/auth/cache dr
   const { load, dump } = await import("js-yaml")
   const { inspectSkillsSpecificationContract, restorePublic131GithubPathContract, restorePublic13SkillAuthorizationContract, restorePublic12CasContract } =
     await import("../../scripts/verify-skill-product-contract.mjs")
-  const { restorePublic132SharedRevisionContract } = await import("../../scripts/verify-openapi.ts")
+  const { restorePublic132SharedRevisionContract, restorePublic133McpPersonalContract } = await import("../../scripts/verify-openapi.ts")
   const raw = await readFile(new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
   const parent = restorePublic12CasContract(
-    restorePublic13SkillAuthorizationContract(restorePublic131GithubPathContract(restorePublic132SharedRevisionContract(raw))),
+    restorePublic13SkillAuthorizationContract(restorePublic131GithubPathContract(restorePublic132SharedRevisionContract(restorePublic133McpPersonalContract(raw)))),
   )
   assert.deepEqual(inspectSkillsSpecificationContract(parent), [])
   for (const change of [

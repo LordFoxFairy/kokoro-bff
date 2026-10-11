@@ -249,7 +249,7 @@ async function handle(
     (businessPath[0] === "self" && businessPath[1] === "skills")
   if (hasSkillsBudget) startSkillRequestBudget(request)
   const mcpAction = mcpActionForRequest(request.method ?? "GET", businessPath)
-  const isMcpPersonalRead = mcpPersonalOperation(businessPath, request.method ?? "GET") !== null
+  const isMcpPersonalOperation = mcpPersonalOperation(businessPath, request.method ?? "GET") !== null
   const hasMcpBudget = mcpAction !== null
   if (hasMcpBudget) {
     startMcpRequestBudget(request)
@@ -393,7 +393,7 @@ async function handle(
         isSkillPublishPath ||
         isSkillInstallationPath ||
         isPlatformProjectionRead ||
-        isMcpPersonalRead ||
+        isMcpPersonalOperation ||
         isMoveSessionPath ||
         isProjectRenamePath ||
         isProjectDeletePath ||
@@ -428,13 +428,13 @@ async function handle(
       })
     return
   }
-  if (hasMcpBudget && !isMcpPersonalRead && (request.method !== "GET" || businessPath[0] === "self")) {
+  if (hasMcpBudget && !isMcpPersonalOperation && (request.method !== "GET" || businessPath[0] === "self")) {
     if (!response.destroyed && !response.writableEnded)
       send(response, 503, failure("platform_operation_not_available", "This Platform operation is not exposed by the BFF owner adapter", id))
     return
   }
   const context = admission.context
-  if (isMcpPersonalRead) {
+  if (isMcpPersonalOperation) {
     await mcpPersonalReadRoute(request, response, config, composition, context, businessPath)
     return
   }

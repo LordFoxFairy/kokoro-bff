@@ -1,3 +1,6 @@
+<!-- T-K03.13-BFF-MCP-PERSONAL-CRUD -->
+本人 MCP：`src/http/mcp-personal-command-input.ts` 解析四命令，`src/infrastructure/clients/platform/mcp-personal-command-binding.ts` 冻结正式 owner JCS/key/CAS；现 `mcp-personal` route/client 承接六读取与四命令，Provider 目录不代表连接授权。
+
 ### T-K03.13 本人 MCP 四读运行接线候选
 
 `src/http/routes/mcp-personal.ts` 精确承接已发行四GET；`src/infrastructure/clients/platform/mcp-personal-{credential,token,connect,response}.ts` 分担独立资格/token/固定generated RPC/安全投影。`bootstrap/runtime.ts` composition创建并close退役client/token，server保留写/provider guard与原active六字段投影。测试入口为 `test/mcp-personal-{read.test.ts,http.test.mjs}`；正常surface/IAM激活及完整CRUD仍由Root后继验收。

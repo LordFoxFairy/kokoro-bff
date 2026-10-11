@@ -1,10 +1,11 @@
-import { createClient, Code, ConnectError } from "@connectrpc/connect"
+import { createClient, Code, ConnectError, type CallOptions } from "@connectrpc/connect"
 import { createConnectTransport } from "@connectrpc/connect-node"
 import {
   ProductMcpPersonalService as generatedProductMcpPersonalService,
   McpConnectorStatus,
 } from "../../../generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
-import { projectMcpPersonalResponse, type McpPersonalOperation, type McpPersonalInput } from "./mcp-personal-response.js"
+import { projectMcpPersonalResponse, projectMcpPersonalCommand, type McpPersonalOperation, type McpPersonalInput } from "./mcp-personal-response.js"
+import { bindMcpPersonalCommand, type McpPersonalCommandInput, type McpPersonalCommandOperation } from "./mcp-personal-command-binding.js"
 import { McpPersonalTokenSource } from "./mcp-personal-token.js"
 
 export class McpPersonalConnectClient {
@@ -27,28 +28,7 @@ export class McpPersonalConnectClient {
     this.tokens.close()
   }
   async read(operation: McpPersonalOperation, input: McpPersonalInput, outer: AbortSignal, deadlineAt: number): Promise<unknown> {
-    if (this.#closed) throw new Error("mcp_personal_closed")
-    const controller = new AbortController()
-    this.#active.add(controller)
-    const remaining = () => Math.max(0, Math.floor(deadlineAt - performance.now()))
-    const timer = setTimeout(() => controller.abort(), remaining())
-    const signal = AbortSignal.any([outer, controller.signal])
-    let token: string | undefined
-    try {
-      signal.throwIfAborted()
-      token = await this.tokens.get(input.tenant, signal, deadlineAt)
-      signal.throwIfAborted()
-      let responseRequestId: string | null = null
-      let responseCache: string | null = null
-      const options = {
-        onHeader: (headers: Headers) => {
-          responseRequestId = headers.get("x-kokoro-request-id")
-          responseCache = headers.get("cache-control")
-        },
-        signal,
-        timeoutMs: remaining(),
-        headers: { authorization: `Bearer ${token}`, "x-tenant-ref": input.tenant, "x-kokoro-subject": input.subject, "x-kokoro-request-id": input.requestId },
-      }
+    return this.#call(input, outer, deadlineAt, async (options) => {
       const page = { limit: input.limit ?? 50, ...(input.cursor === undefined ? {} : { cursor: input.cursor }) }
       const requestId = input.requestId
       let value: unknown
@@ -81,10 +61,78 @@ export class McpPersonalConnectClient {
         case "connection":
           value = await this.#client.getPersonalMcpConnection({ requestId, connectionId: { value: input.id! } }, options)
           break
+        case "providers":
+          value = await this.#client.listPersonalMcpProviders(
+            {
+              requestId,
+              page,
+              ...(input.query === undefined ? {} : { query: input.query }),
+              ...(input.directoryType === undefined ? {} : { directoryType: input.directoryType }),
+              ...(input.categoryKey === undefined ? {} : { categoryKey: input.categoryKey }),
+            },
+            options,
+          )
+          break
+        case "provider":
+          value = await this.#client.getPersonalMcpProvider({ requestId, providerKey: input.id! }, options)
+          break
       }
+      return projectMcpPersonalResponse(operation, value, input)
+    })
+  }
+  async command(operation: McpPersonalCommandOperation, input: McpPersonalCommandInput, outer: AbortSignal, deadlineAt: number): Promise<unknown> {
+    return this.#call(input, outer, deadlineAt, async (options) => {
+      const command = bindMcpPersonalCommand(operation, input)
+      const requestId = input.requestId
+      let value: unknown
+      if (operation === "create")
+        value = await this.#client.createPersonalMcpConnector(
+          {
+            requestId,
+            command,
+            providerKey: input.providerKey!,
+            connectorType: { builtin: 1, byok: 2, mcp: 3 }[input.connectorType!],
+            displayName: input.displayName!,
+            description: input.description!,
+          },
+          options,
+        )
+      else {
+        const common = { requestId, command, connectorId: { value: input.id! }, expectedStateVersion: BigInt(input.expectedStateVersion!) }
+        if (operation === "update")
+          value = await this.#client.updatePersonalMcpConnector({ ...common, displayName: input.displayName!, description: input.description! }, options)
+        else if (operation === "enabled") value = await this.#client.setPersonalMcpConnectorEnabled({ ...common, enabled: input.enabled! }, options)
+        else value = await this.#client.removePersonalMcpConnector(common, options)
+      }
+      return projectMcpPersonalCommand(operation, value, input)
+    })
+  }
+  async #call<T>(input: McpPersonalInput, outer: AbortSignal, deadlineAt: number, action: (options: CallOptions) => Promise<T>): Promise<T> {
+    if (this.#closed) throw new Error("mcp_personal_closed")
+    const controller = new AbortController()
+    this.#active.add(controller)
+    const remaining = () => Math.max(0, Math.floor(deadlineAt - performance.now()))
+    const timer = setTimeout(() => controller.abort(), remaining())
+    const signal = AbortSignal.any([outer, controller.signal])
+    let token: string | undefined
+    try {
+      signal.throwIfAborted()
+      token = await this.tokens.get(input.tenant, signal, deadlineAt)
+      signal.throwIfAborted()
+      let responseRequestId: string | null = null
+      let responseCache: string | null = null
+      const value = await action({
+        onHeader: (headers) => {
+          responseRequestId = headers.get("x-kokoro-request-id")
+          responseCache = headers.get("cache-control")
+        },
+        signal,
+        timeoutMs: remaining(),
+        headers: { authorization: `Bearer ${token}`, "x-tenant-ref": input.tenant, "x-kokoro-subject": input.subject, "x-kokoro-request-id": input.requestId },
+      })
       signal.throwIfAborted()
       if (responseRequestId !== input.requestId || responseCache !== "no-store") throw new Error("mcp_personal_response_invalid")
-      return projectMcpPersonalResponse(operation, value, input)
+      return value
     } catch (error) {
       if (token !== undefined && error instanceof ConnectError && [Code.Unauthenticated, Code.PermissionDenied].includes(error.code)) this.tokens.retire(token)
       throw error

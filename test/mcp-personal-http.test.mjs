@@ -125,7 +125,15 @@ async function fixture(decision, { realSession = false, check, routeHandler, mcp
     },
   }
 }
-const connector = { connector_id: "connector-one", connector_type: "mcp", provider_key: "test", status: "active", approved_scopes: [] }
+const connector = {
+  connector_id: "connector-one",
+  connector_type: "mcp",
+  provider_key: "test",
+  status: "active",
+  approved_scopes: [],
+  enabled: true,
+  state_version: "1",
+}
 const connection = {
   connection_id: "connection-one",
   connector_id: "connector-one",
@@ -212,7 +220,7 @@ for (const key of ["content-length", "idempotency-key"])
       await f.close()
     }
   })
-test("personal writes and unissued providers remain blocked without owner IO", async () => {
+test("unissued personal methods and provider writes remain blocked without owner IO", async () => {
   let reads = 0
   const f = await fixture(true, {
     mcpPersonalClient: {
@@ -224,8 +232,8 @@ test("personal writes and unissued providers remain blocked without owner IO", a
   })
   try {
     for (const [path, method] of [
-      ["/v1/self/mcp/connectors", "POST"],
-      ["/v1/self/mcp/providers", "GET"],
+      ["/v1/self/mcp/connectors", "PUT"],
+      ["/v1/self/mcp/providers", "POST"],
     ]) {
       const result = await fetch(f.origin + path, { method, headers })
       assert.equal(result.status, 503)

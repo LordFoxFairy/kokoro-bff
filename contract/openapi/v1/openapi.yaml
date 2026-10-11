@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 13.3.0
+  version: 14.0.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -4335,6 +4335,35 @@ paths:
         '429': { $ref: '#/components/responses/PersonalMcpRateLimited' }
         '502': { $ref: '#/components/responses/PersonalMcpBadGateway' }
         '503': { $ref: '#/components/responses/PersonalMcpUnavailable' }
+    post:
+      operationId: createPersonalMcpConnector
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: product.mcp.manage_personal
+      tags: [MCP]
+      summary: Caller-owned MCP createPersonalMcpConnector.
+      description: JSON body at most 65536 UTF-8 bytes; duplicate keys, unpaired surrogates and unknown fields rejected. Original body/key/CAS replay only; no automatic retry. Total 10-second budget includes body and re-admission. No connection creation or authorization implied.
+      parameters:
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 1, maxLength: 191, pattern: '^[\x21-\x7e]{1,191}(?![\s\S])' } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreatePersonalMcpConnectorRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/PersonalMcpConnectorDetailOk' }
+        '400': { $ref: '#/components/responses/PersonalMcpBadRequest' }
+        '401': { $ref: '#/components/responses/PersonalMcpUnauthorized' }
+        '403': { $ref: '#/components/responses/PersonalMcpForbidden' }
+        '404': { $ref: '#/components/responses/PersonalMcpNotFound' }
+        '409': { $ref: '#/components/responses/PersonalMcpConflict' }
+        '412': { $ref: '#/components/responses/PersonalMcpPreconditionFailed' }
+        '413': { $ref: '#/components/responses/PersonalMcpTooLarge' }
+        '429': { $ref: '#/components/responses/PersonalMcpRateLimited' }
+        '502': { $ref: '#/components/responses/PersonalMcpBadGateway' }
+        '503': { $ref: '#/components/responses/PersonalMcpUnavailable' }
   /v1/self/mcp/connectors/{connector_id}:
     get:
       operationId: getPersonalMcpConnector
@@ -4361,6 +4390,66 @@ paths:
         '401': { $ref: '#/components/responses/PersonalMcpUnauthorized' }
         '403': { $ref: '#/components/responses/PersonalMcpForbidden' }
         '404': { $ref: '#/components/responses/PersonalMcpNotFound' }
+        '429': { $ref: '#/components/responses/PersonalMcpRateLimited' }
+        '502': { $ref: '#/components/responses/PersonalMcpBadGateway' }
+        '503': { $ref: '#/components/responses/PersonalMcpUnavailable' }
+    patch:
+      operationId: updatePersonalMcpConnector
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: product.mcp.manage_personal
+      tags: [MCP]
+      summary: Caller-owned MCP updatePersonalMcpConnector.
+      description: JSON body at most 65536 UTF-8 bytes; duplicate keys, unpaired surrogates and unknown fields rejected. Original body/key/CAS replay only; no automatic retry. Total 10-second budget includes body and re-admission. No connection creation or authorization implied.
+      parameters:
+        - { name: connector_id, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 191, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])' } }
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 1, maxLength: 191, pattern: '^[\x21-\x7e]{1,191}(?![\s\S])' } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdatePersonalMcpConnectorRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/PersonalMcpConnectorDetailOk' }
+        '400': { $ref: '#/components/responses/PersonalMcpBadRequest' }
+        '401': { $ref: '#/components/responses/PersonalMcpUnauthorized' }
+        '403': { $ref: '#/components/responses/PersonalMcpForbidden' }
+        '404': { $ref: '#/components/responses/PersonalMcpNotFound' }
+        '409': { $ref: '#/components/responses/PersonalMcpConflict' }
+        '412': { $ref: '#/components/responses/PersonalMcpPreconditionFailed' }
+        '413': { $ref: '#/components/responses/PersonalMcpTooLarge' }
+        '429': { $ref: '#/components/responses/PersonalMcpRateLimited' }
+        '502': { $ref: '#/components/responses/PersonalMcpBadGateway' }
+        '503': { $ref: '#/components/responses/PersonalMcpUnavailable' }
+    delete:
+      operationId: removePersonalMcpConnector
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: product.mcp.manage_personal
+      tags: [MCP]
+      summary: Caller-owned MCP removePersonalMcpConnector.
+      description: JSON body at most 65536 UTF-8 bytes; duplicate keys, unpaired surrogates and unknown fields rejected. Original body/key/CAS replay only; no automatic retry. Total 10-second budget includes body and re-admission. No connection creation or authorization implied.
+      parameters:
+        - { name: connector_id, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 191, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])' } }
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 1, maxLength: 191, pattern: '^[\x21-\x7e]{1,191}(?![\s\S])' } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RemovePersonalMcpConnectorRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/PersonalMcpConnectorDetailOk' }
+        '400': { $ref: '#/components/responses/PersonalMcpBadRequest' }
+        '401': { $ref: '#/components/responses/PersonalMcpUnauthorized' }
+        '403': { $ref: '#/components/responses/PersonalMcpForbidden' }
+        '404': { $ref: '#/components/responses/PersonalMcpNotFound' }
+        '409': { $ref: '#/components/responses/PersonalMcpConflict' }
+        '412': { $ref: '#/components/responses/PersonalMcpPreconditionFailed' }
+        '413': { $ref: '#/components/responses/PersonalMcpTooLarge' }
         '429': { $ref: '#/components/responses/PersonalMcpRateLimited' }
         '502': { $ref: '#/components/responses/PersonalMcpBadGateway' }
         '503': { $ref: '#/components/responses/PersonalMcpUnavailable' }
@@ -4394,6 +4483,84 @@ paths:
           schema: { type: string, minLength: 1, maxLength: 2048, pattern: '^[A-Za-z0-9_-]+(?![\s\S])' }
       responses:
         '200': { $ref: '#/components/responses/PersonalMcpConnectionListOk' }
+        '400': { $ref: '#/components/responses/PersonalMcpBadRequest' }
+        '401': { $ref: '#/components/responses/PersonalMcpUnauthorized' }
+        '403': { $ref: '#/components/responses/PersonalMcpForbidden' }
+        '404': { $ref: '#/components/responses/PersonalMcpNotFound' }
+        '429': { $ref: '#/components/responses/PersonalMcpRateLimited' }
+        '502': { $ref: '#/components/responses/PersonalMcpBadGateway' }
+        '503': { $ref: '#/components/responses/PersonalMcpUnavailable' }
+  /v1/self/mcp/connectors/{connector_id}/enabled:
+    put:
+      operationId: setPersonalMcpConnectorEnabled
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: product.mcp.manage_personal
+      tags: [MCP]
+      summary: Caller-owned MCP setPersonalMcpConnectorEnabled.
+      description: JSON body at most 65536 UTF-8 bytes; duplicate keys, unpaired surrogates and unknown fields rejected. Original body/key/CAS replay only; no automatic retry. Total 10-second budget includes body and re-admission. No connection creation or authorization implied.
+      parameters:
+        - { name: connector_id, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 191, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])' } }
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 1, maxLength: 191, pattern: '^[\x21-\x7e]{1,191}(?![\s\S])' } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SetPersonalMcpConnectorEnabledRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/PersonalMcpConnectorDetailOk' }
+        '400': { $ref: '#/components/responses/PersonalMcpBadRequest' }
+        '401': { $ref: '#/components/responses/PersonalMcpUnauthorized' }
+        '403': { $ref: '#/components/responses/PersonalMcpForbidden' }
+        '404': { $ref: '#/components/responses/PersonalMcpNotFound' }
+        '409': { $ref: '#/components/responses/PersonalMcpConflict' }
+        '412': { $ref: '#/components/responses/PersonalMcpPreconditionFailed' }
+        '413': { $ref: '#/components/responses/PersonalMcpTooLarge' }
+        '429': { $ref: '#/components/responses/PersonalMcpRateLimited' }
+        '502': { $ref: '#/components/responses/PersonalMcpBadGateway' }
+        '503': { $ref: '#/components/responses/PersonalMcpUnavailable' }
+  /v1/self/mcp/providers:
+    get:
+      operationId: listPersonalMcpProviders
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: product.mcp.read_personal
+      tags: [MCP]
+      summary: Caller-owned MCP listPersonalMcpProviders.
+      description: Strict caller-owned provider metadata read; no body, Content-Length, Transfer-Encoding or Idempotency-Key. No execution authority implied.
+      parameters:
+        - { name: query, in: query, required: false, schema: { type: string, minLength: 1, maxLength: 1000, pattern: '^\S(?:[\s\S]*\S)?(?![\s\S])' } }
+        - { name: directory_type, in: query, required: false, schema: { type: string, enum: [app, data_source] } }
+        - { name: category_key, in: query, required: false, schema: { type: string, enum: [efficiency, creation, business, development, finance, travel, health] } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100 } }
+        - { name: cursor, in: query, required: false, schema: { type: string, minLength: 1, maxLength: 2048, pattern: '^[A-Za-z0-9_-]+(?![\s\S])' } }
+      responses:
+        '200': { $ref: '#/components/responses/PersonalMcpProviderListOk' }
+        '400': { $ref: '#/components/responses/PersonalMcpBadRequest' }
+        '401': { $ref: '#/components/responses/PersonalMcpUnauthorized' }
+        '403': { $ref: '#/components/responses/PersonalMcpForbidden' }
+        '429': { $ref: '#/components/responses/PersonalMcpRateLimited' }
+        '502': { $ref: '#/components/responses/PersonalMcpBadGateway' }
+        '503': { $ref: '#/components/responses/PersonalMcpUnavailable' }
+  /v1/self/mcp/providers/{provider_key}:
+    get:
+      operationId: getPersonalMcpProvider
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: product.mcp.read_personal
+      tags: [MCP]
+      summary: Caller-owned MCP getPersonalMcpProvider.
+      description: Strict caller-owned provider metadata read; no body, Content-Length, Transfer-Encoding or Idempotency-Key. No execution authority implied.
+      parameters:
+        - { name: provider_key, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 64, pattern: '^[a-z0-9][a-z0-9._-]{0,63}(?![\s\S])' } }
+      responses:
+        '200': { $ref: '#/components/responses/PersonalMcpProviderDetailOk' }
         '400': { $ref: '#/components/responses/PersonalMcpBadRequest' }
         '401': { $ref: '#/components/responses/PersonalMcpUnauthorized' }
         '403': { $ref: '#/components/responses/PersonalMcpForbidden' }
@@ -12510,7 +12677,7 @@ components:
     PersonalMcpConnector:
       type: object
       additionalProperties: false
-      required: [connector_id, connector_type, provider_key, status, approved_scopes]
+      required: [connector_id, connector_type, provider_key, status, approved_scopes, enabled, state_version]
       properties:
         connector_id: { type: string, minLength: 1, maxLength: 191, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])' }
         connector_type: { type: string, enum: [builtin, byok, mcp] }
@@ -12521,6 +12688,12 @@ components:
           type: array
           uniqueItems: true
           items: { type: string, minLength: 1, maxLength: 128, pattern: '^\S+(?![\s\S])' }
+        enabled: { type: boolean }
+        state_version: { type: string, minLength: 1, maxLength: 16, pattern: '^(?:[1-9][0-9]{0,14}|[1-8][0-9]{15}|900[0-6][0-9]{12}|90070[0-9]{11}|90071[0-8][0-9]{10}|900719[0-8][0-9]{9}|9007199[0-1][0-9]{8}|90071992[0-4][0-9]{7}|900719925[0-3][0-9]{6}|9007199254[0-6][0-9]{5}|90071992547[0-3][0-9]{4}|9007199254740[0-8][0-9]{2}|90071992547409[0-8][0-9]{1}|9007199254740990|9007199254740991)(?![\s\S])' }
+        display_name: { type: string, minLength: 1, maxLength: 100, pattern: '^(?=[\s\S]*\S)(?![\s\S]*[\uD800-\uDBFF](?![\uDC00-\uDFFF]))(?![\s\S]*(?<![\uD800-\uDBFF])[\uDC00-\uDFFF])[\s\S]+(?![\s\S])' }
+        description: { type: string, maxLength: 1000, pattern: '^(?![\s\S]*[\uD800-\uDBFF](?![\uDC00-\uDFFF]))(?![\s\S]*(?<![\uD800-\uDBFF])[\uDC00-\uDFFF])[\s\S]*(?![\s\S])' }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
     PersonalMcpConnection:
       type: object
       additionalProperties: false
@@ -12627,6 +12800,133 @@ components:
             code: { type: string, enum: [product_tenant_not_configured, iam_admission_unavailable, mcp_personal_dependency_unavailable] }
             message: { type: string, minLength: 1, description: Fixed sanitized message; never provider payload. }
             retryable: { type: boolean, const: true }
+    CreatePersonalMcpConnectorRequest:
+      type: object
+      additionalProperties: false
+      required: [provider_key, connector_type, display_name, description]
+      properties:
+        provider_key: { type: string, minLength: 1, maxLength: 64, pattern: '^[a-z0-9][a-z0-9._-]{0,63}(?![\s\S])' }
+        connector_type: { type: string, enum: [builtin, byok, mcp] }
+        display_name: { type: string, minLength: 1, maxLength: 100, pattern: '^(?=[\s\S]*\S)(?![\s\S]*[\uD800-\uDBFF](?![\uDC00-\uDFFF]))(?![\s\S]*(?<![\uD800-\uDBFF])[\uDC00-\uDFFF])[\s\S]+(?![\s\S])' }
+        description: { type: string, maxLength: 1000, pattern: '^(?![\s\S]*[\uD800-\uDBFF](?![\uDC00-\uDFFF]))(?![\s\S]*(?<![\uD800-\uDBFF])[\uDC00-\uDFFF])[\s\S]*(?![\s\S])' }
+    UpdatePersonalMcpConnectorRequest:
+      type: object
+      additionalProperties: false
+      required: [display_name, description, expected_state_version]
+      properties:
+        display_name: { type: string, minLength: 1, maxLength: 100, pattern: '^(?=[\s\S]*\S)(?![\s\S]*[\uD800-\uDBFF](?![\uDC00-\uDFFF]))(?![\s\S]*(?<![\uD800-\uDBFF])[\uDC00-\uDFFF])[\s\S]+(?![\s\S])' }
+        description: { type: string, maxLength: 1000, pattern: '^(?![\s\S]*[\uD800-\uDBFF](?![\uDC00-\uDFFF]))(?![\s\S]*(?<![\uD800-\uDBFF])[\uDC00-\uDFFF])[\s\S]*(?![\s\S])' }
+        expected_state_version: { type: string, minLength: 1, maxLength: 16, pattern: '^(?:[1-9][0-9]{0,14}|[1-8][0-9]{15}|900[0-6][0-9]{12}|90070[0-9]{11}|90071[0-8][0-9]{10}|900719[0-8][0-9]{9}|9007199[0-1][0-9]{8}|90071992[0-4][0-9]{7}|900719925[0-3][0-9]{6}|9007199254[0-6][0-9]{5}|90071992547[0-3][0-9]{4}|9007199254740[0-8][0-9]{2}|90071992547409[0-8][0-9]{1}|9007199254740990|9007199254740991)(?![\s\S])' }
+    SetPersonalMcpConnectorEnabledRequest:
+      type: object
+      additionalProperties: false
+      required: [enabled, expected_state_version]
+      properties:
+        enabled: { type: boolean }
+        expected_state_version: { type: string, minLength: 1, maxLength: 16, pattern: '^(?:[1-9][0-9]{0,14}|[1-8][0-9]{15}|900[0-6][0-9]{12}|90070[0-9]{11}|90071[0-8][0-9]{10}|900719[0-8][0-9]{9}|9007199[0-1][0-9]{8}|90071992[0-4][0-9]{7}|900719925[0-3][0-9]{6}|9007199254[0-6][0-9]{5}|90071992547[0-3][0-9]{4}|9007199254740[0-8][0-9]{2}|90071992547409[0-8][0-9]{1}|9007199254740990|9007199254740991)(?![\s\S])' }
+    RemovePersonalMcpConnectorRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_state_version]
+      properties:
+        expected_state_version: { type: string, minLength: 1, maxLength: 16, pattern: '^(?:[1-9][0-9]{0,14}|[1-8][0-9]{15}|900[0-6][0-9]{12}|90070[0-9]{11}|90071[0-8][0-9]{10}|900719[0-8][0-9]{9}|9007199[0-1][0-9]{8}|90071992[0-4][0-9]{7}|900719925[0-3][0-9]{6}|9007199254[0-6][0-9]{5}|90071992547[0-3][0-9]{4}|9007199254740[0-8][0-9]{2}|90071992547409[0-8][0-9]{1}|9007199254740990|9007199254740991)(?![\s\S])' }
+    PersonalMcpProvider:
+      type: object
+      additionalProperties: false
+      required: [provider_key, display_name, directory_type, category_keys, example_prompts, enabled, state_version]
+      properties:
+        provider_key: { type: string, minLength: 1, maxLength: 64, pattern: '^[a-z0-9][a-z0-9._-]{0,63}(?![\s\S])' }
+        display_name: { type: string, minLength: 1, maxLength: 100, pattern: '^(?=[\s\S]*\S)(?![\s\S]*[\uD800-\uDBFF](?![\uDC00-\uDFFF]))(?![\s\S]*(?<![\uD800-\uDBFF])[\uDC00-\uDFFF])[\s\S]+(?![\s\S])' }
+        description: { type: string, maxLength: 1000, pattern: '^(?![\s\S]*[\uD800-\uDBFF](?![\uDC00-\uDFFF]))(?![\s\S]*(?<![\uD800-\uDBFF])[\uDC00-\uDFFF])[\s\S]*(?![\s\S])' }
+        directory_type: { type: string, enum: [app, data_source] }
+        category_keys: { type: array, uniqueItems: true, items: { type: string, enum: [efficiency, creation, business, development, finance, travel, health] } }
+        example_prompts: { type: array, maxItems: 10, items: { type: string, minLength: 1, maxLength: 1000 } }
+        author: { type: string, minLength: 1, maxLength: 100, pattern: '^(?=[\s\S]*\S)(?![\s\S]*[\uD800-\uDBFF](?![\uDC00-\uDFFF]))(?![\s\S]*(?<![\uD800-\uDBFF])[\uDC00-\uDFFF])[\s\S]+(?![\s\S])' }
+        website: { type: string, maxLength: 2048, format: uri, pattern: '^https://[^/@:]+(?::[0-9]+)?(?:[/?#][^\s]*)?(?![\s\S])' }
+        privacy_url: { type: string, maxLength: 2048, format: uri, pattern: '^https://[^/@:]+(?::[0-9]+)?(?:[/?#][^\s]*)?(?![\s\S])' }
+        enabled: { type: boolean }
+        state_version: { type: string, minLength: 1, maxLength: 16, pattern: '^(?:[1-9][0-9]{0,14}|[1-8][0-9]{15}|900[0-6][0-9]{12}|90070[0-9]{11}|90071[0-8][0-9]{10}|900719[0-8][0-9]{9}|9007199[0-1][0-9]{8}|90071992[0-4][0-9]{7}|900719925[0-3][0-9]{6}|9007199254[0-6][0-9]{5}|90071992547[0-3][0-9]{4}|9007199254740[0-8][0-9]{2}|90071992547409[0-8][0-9]{1}|9007199254740990|9007199254740991)(?![\s\S])' }
+    PersonalMcpProviderListResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [items, next_cursor]
+          properties:
+            items:
+              type: array
+              maxItems: 100
+              items: { $ref: '#/components/schemas/PersonalMcpProvider' }
+            next_cursor:
+              oneOf:
+                - { type: string, minLength: 1, maxLength: 2048, pattern: '^[A-Za-z0-9_-]+(?![\s\S])' }
+                - { type: 'null' }
+    PersonalMcpProviderDetailResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [provider]
+          properties:
+            provider: { $ref: '#/components/schemas/PersonalMcpProvider' }
+    PersonalMcpPreconditionFailedError:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, retryable]
+          properties:
+            code: { type: string, enum: [mcp_personal_precondition_failed] }
+            message: { type: string, minLength: 1, description: Fixed sanitized message; never provider payload. }
+            retryable: { type: boolean, const: false }
+    PersonalMcpTooLargeError:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, retryable]
+          properties:
+            code: { type: string, enum: [mcp_personal_request_too_large] }
+            message: { type: string, minLength: 1, description: Fixed sanitized message; never provider payload. }
+            retryable: { type: boolean, const: false }
+    PersonalMcpConflictError:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [error]
+          properties:
+            error:
+              type: object
+              additionalProperties: false
+              required: [code, message, retryable]
+              properties:
+                code: { type: string, enum: [mcp_personal_idempotency_conflict] }
+                message: { type: string, minLength: 1, description: Fixed sanitized message; never provider payload. }
+                retryable: { type: boolean, const: false }
+        - type: object
+          additionalProperties: false
+          required: [error]
+          properties:
+            error:
+              type: object
+              additionalProperties: false
+              required: [code, message, retryable]
+              properties:
+                code: { type: string, enum: [mcp_personal_command_in_progress] }
+                message: { type: string, minLength: 1, description: Fixed sanitized message; never provider payload. }
+                retryable: { type: boolean, const: true }
     PersonalizationFields:
       type: object
       additionalProperties: false
@@ -16501,6 +16801,46 @@ components:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/PersonalMcpConnectionDetailResponse' }
+    PersonalMcpProviderDetailOk:
+      description: Caller-owned safe MCP read.
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/PersonalMcpProviderDetailResponse' }
+    PersonalMcpProviderListOk:
+      description: Caller-owned safe MCP read.
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/PersonalMcpProviderListResponse' }
+    PersonalMcpConflict:
+      description: Closed safe personal MCP failure.
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/PersonalMcpConflictError' }
+    PersonalMcpPreconditionFailed:
+      description: Closed safe personal MCP failure.
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/PersonalMcpPreconditionFailedError' }
+    PersonalMcpTooLarge:
+      description: Closed safe personal MCP failure.
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/PersonalMcpTooLargeError' }
     PersonalMcpBadRequest:
       description: Closed safe personal MCP failure.
       headers:

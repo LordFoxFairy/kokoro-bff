@@ -1,0 +1,319 @@
+import { startMcpRequestBudget } from "../dist/http/mcp-request-budget.js"
+import assert from "node:assert/strict"
+import { createServer, request as nodeRequest } from "node:http"
+import test from "node:test"
+import { createBffServer } from "../dist/bootstrap/server.js"
+import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
+
+const headers = {
+  "x-kokoro-service": "web-bff",
+  "x-kokoro-internal-secret": "test-secret",
+  authorization: "Bearer human-session",
+  "x-request-id": "mcp-http-1",
+}
+const paths = [
+  "/v1/mcp/servers",
+  "/v1/mcp/connections",
+  "/v1/self/mcp/connectors",
+  "/v1/self/mcp/connectors/connector-one",
+  "/v1/self/mcp/connectors/connector-one/connections",
+  "/v1/self/mcp/connections/connection-one",
+]
+async function fixture(decision, { realSession = false, check, routeHandler, mcpPersonalClient, verify, deadlineMs, sessionDelayMs = 0 } = {}) {
+  const seen = []
+  const iam = createServer(async (request, response) => {
+    const chunks = []
+    for await (const chunk of request) chunks.push(chunk)
+    seen.push({
+      path: request.url,
+      authorization: request.headers.authorization,
+      body: chunks.length === 0 ? null : JSON.parse(Buffer.concat(chunks).toString()),
+    })
+    response.writeHead(200, {
+      "content-type": "application/json",
+      "cache-control": "no-store",
+      "x-request-id": request.headers["x-request-id"],
+    })
+    response.end(
+      JSON.stringify({
+        data:
+          request.url === "/internal/v1/session-authorizations/verify"
+            ? {
+                allowed: true,
+                tenant_id: "tenant-server",
+                user_id: "human-one",
+                platform_admin: false,
+                session_id: "session-one",
+                client_id: "web-one",
+              }
+            : {
+                allowed: decision,
+                tenant_id: "tenant-server",
+                subject_id: "human-one",
+                decision_source: "current_membership",
+              },
+      }),
+    )
+  })
+  await new Promise((resolve) => iam.listen(0, "127.0.0.1", resolve))
+  const config = {
+    host: "127.0.0.1",
+    port: 0,
+    mode: "live",
+    domain: "dev.kokoro.localhost",
+    tenantId: "tenant-server",
+    iamBaseUrl: `http://127.0.0.1:${iam.address().port}`,
+    sharedSecret: "test-secret",
+    upstreamSecret: "upstream-secret",
+    upstreamTimeoutMs: 5000,
+    upstreamMaxResponseBytes: 1024 * 1024,
+    schedulerServiceToken: null,
+    schedulerTargetUrl: null,
+    agentEnabled: false,
+    postgresUrl: null,
+    redisUrl: null,
+    agUi: DEFAULT_AGUI_CONFIG,
+    upstreams: {
+      system: null,
+      capability: null,
+      scheduler: null,
+      agents: null,
+      billing: null,
+      music: null,
+    },
+  }
+  const app = createBffServer(config, {
+    businessStore: null,
+    readiness: async () => undefined,
+    ...(realSession
+      ? {}
+      : {
+          sessionAdmission: {
+            verify:
+              verify ??
+              (async () => {
+                if (sessionDelayMs) await new Promise((resolve) => setTimeout(resolve, sessionDelayMs))
+                return {
+                  ok: true,
+                  identity: { namespace: "tenant-server", userId: "human-one" },
+                  platformAdmin: false,
+                }
+              }),
+          },
+        }),
+    ...(check ? { mcpAuthorization: { check } } : {}),
+    ...(routeHandler ? { routeHandler } : {}),
+    ...(mcpPersonalClient ? { mcpPersonalClient } : {}),
+  })
+  if (deadlineMs !== undefined) {
+    const handler = app.listeners("request")[0]
+    app.removeAllListeners("request")
+    app.on("request", (request, response) => {
+      startMcpRequestBudget(request, deadlineMs)
+      handler(request, response)
+    })
+  }
+  await new Promise((resolve) => app.listen(0, "127.0.0.1", resolve))
+  return {
+    seen,
+    origin: `http://127.0.0.1:${app.address().port}`,
+    close: async () => {
+      for (const server of [app, iam]) {
+        server.closeAllConnections()
+        await new Promise((resolve) => server.close(resolve))
+      }
+    },
+  }
+}
+
+const connector = {
+  connector_id: "connector-one",
+  connector_type: "mcp",
+  provider_key: "test",
+  status: "pending",
+  approved_scopes: [],
+  enabled: true,
+  state_version: "1",
+  display_name: "Example",
+  description: "",
+}
+const provider = {
+  provider_key: "test",
+  display_name: "Provider",
+  directory_type: "app",
+  category_keys: [],
+  example_prompts: [],
+  enabled: true,
+  state_version: "1",
+}
+for (const [method, path, body, status] of [
+  ["POST", "/v1/self/mcp/connectors", { provider_key: "test", connector_type: "mcp", display_name: "Example", description: "" }, 201],
+  ["PATCH", "/v1/self/mcp/connectors/connector-one", { display_name: "Example", description: "", expected_state_version: "1" }, 200],
+  ["PUT", "/v1/self/mcp/connectors/connector-one/enabled", { enabled: true, expected_state_version: "1" }, 200],
+  ["DELETE", "/v1/self/mcp/connectors/connector-one", { expected_state_version: "1" }, 200],
+  ["GET", "/v1/self/mcp/providers", undefined, 200],
+  ["GET", "/v1/self/mcp/providers/test", undefined, 200],
+])
+  test(`A2 six formal capabilities pass guard: ${method} ${path}`, async () => {
+    const seen = []
+    const client = {
+      async read(operation, input) {
+        seen.push({ operation, input })
+        return operation === "providers" ? { items: [provider], next_cursor: null } : { provider }
+      },
+      async command(operation, input) {
+        seen.push({ operation, input })
+        return {
+          connector:
+            operation === "create"
+              ? { ...connector, enabled: false }
+              : operation === "remove"
+                ? { ...connector, enabled: false, status: "revoked" }
+                : connector,
+        }
+      },
+    }
+    const f = await fixture(true, { mcpPersonalClient: client })
+    try {
+      const response = await fetch(`${f.origin}${path}`, {
+        method,
+        headers: { ...headers, ...(body === undefined ? {} : { "content-type": "application/json", "idempotency-key": "original-intent" }) },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      })
+      assert.equal(response.status, status)
+      const raw = await response.json()
+      assert.ok(raw.data)
+      assert.equal(seen.length, 1)
+    } finally {
+      await f.close()
+    }
+  })
+for (const [label, request, expected] of [
+  ["missing key", { headers: { "content-type": "application/json" }, body: "{}" }, 400],
+  ["space key", { headers: { "content-type": "application/json", "idempotency-key": "bad key" }, body: "{}" }, 400],
+  ["unknown body", { body: JSON.stringify({ display_name: "Example", description: "", expected_state_version: "1", extra: true }) }, 400],
+  ["unsafe CAS", { body: JSON.stringify({ display_name: "Example", description: "", expected_state_version: "9007199254740992" }) }, 400],
+  ["body cap", { body: "x".repeat(65537) }, 413],
+  ["query", { suffix: "?extra=1", body: "{}" }, 400],
+])
+  test(`A2 command rejects ${label} before owner mutation`, async () => {
+    let calls = 0
+    const f = await fixture(true, {
+      mcpPersonalClient: {
+        read: async () => ({}),
+        command: async () => {
+          calls++
+          return { connector }
+        },
+      },
+    })
+    try {
+      const response = await fetch(f.origin + "/v1/self/mcp/connectors/connector-one" + (request.suffix ?? ""), {
+        method: "PATCH",
+        headers: { ...headers, ...(request.headers ?? { "content-type": "application/json", "idempotency-key": "original-key" }) },
+        body: request.body,
+      })
+      assert.equal(response.status, expected)
+      assert.equal((await response.json()).error.retryable, false)
+      assert.equal(calls, 0)
+    } finally {
+      await f.close()
+    }
+  })
+for (const [code, status, fault, retryable] of [
+  [6, 409, "mcp_personal_idempotency_conflict", false],
+  [10, 409, "mcp_personal_command_in_progress", true],
+  [9, 412, "mcp_personal_precondition_failed", false],
+  [14, 503, "mcp_personal_dependency_unavailable", true],
+])
+  test(`A2 command maps formal owner code ${code} without retrying unknown intent`, async () => {
+    const { ConnectError } = await import("@connectrpc/connect")
+    const seen = []
+    const f = await fixture(true, {
+      mcpPersonalClient: {
+        read: async () => ({}),
+        command: async (operation, input) => {
+          seen.push({ operation, input })
+          throw new ConnectError("private owner diagnostic", code)
+        },
+      },
+    })
+    const body = JSON.stringify({ display_name: "Example", description: "", expected_state_version: "1" })
+    try {
+      for (let replay = 0; replay < 2; replay++) {
+        const response = await fetch(f.origin + "/v1/self/mcp/connectors/connector-one", {
+          method: "PATCH",
+          headers: { ...headers, "content-type": "application/json", "idempotency-key": "original-intent" },
+          body,
+        })
+        assert.equal(response.status, status)
+        const raw = await response.json()
+        assert.deepEqual(raw.error, { code: fault, message: "Personal MCP read failed", retryable })
+        assert.equal(seen.length, replay + 1)
+      }
+      assert.equal(seen[0].input.commandId, "original-intent")
+      assert.equal(seen[1].input.expectedStateVersion, "1")
+      assert.deepEqual(seen[1], seen[0])
+    } finally {
+      await f.close()
+    }
+  })
+test("A2 command re-admits after ACK and hides committed result on revoked session", async () => {
+  let sessions = 0,
+    calls = 0
+  const f = await fixture(true, {
+    verify: async () =>
+      ++sessions === 1
+        ? { ok: true, identity: { namespace: "tenant-server", userId: "human-one" }, platformAdmin: false }
+        : { ok: false, status: 401, code: "session_invalid" },
+    mcpPersonalClient: {
+      read: async () => ({}),
+      command: async () => {
+        calls++
+        return { connector: { ...connector, enabled: false } }
+      },
+    },
+  })
+  try {
+    const response = await fetch(f.origin + "/v1/self/mcp/connectors", {
+      method: "POST",
+      headers: { ...headers, "content-type": "application/json", "idempotency-key": "original-intent" },
+      body: JSON.stringify({ provider_key: "test", connector_type: "mcp", display_name: "Example", description: "" }),
+    })
+    assert.equal(response.status, 401)
+    assert.equal((await response.json()).error.code, "session_invalid")
+    assert.equal(calls, 1)
+  } finally {
+    await f.close()
+  }
+})
+test("A2 command total deadline aborts RPC and never publishes late ACK", async () => {
+  let signal, release
+  const gate = new Promise((resolve) => {
+    release = resolve
+  })
+  const f = await fixture(true, {
+    deadlineMs: 30,
+    mcpPersonalClient: {
+      read: async () => ({}),
+      command: async (_operation, _input, outer) => {
+        signal = outer
+        await gate
+        return { connector: { ...connector, enabled: false } }
+      },
+    },
+  })
+  try {
+    const response = await fetch(f.origin + "/v1/self/mcp/connectors", {
+      method: "POST",
+      headers: { ...headers, "content-type": "application/json", "idempotency-key": "original-intent" },
+      body: JSON.stringify({ provider_key: "test", connector_type: "mcp", display_name: "Example", description: "" }),
+    })
+    assert.equal(response.status, 503)
+    assert.equal((await response.json()).error.code, "mcp_personal_dependency_unavailable")
+    assert.equal(signal.aborted, true)
+  } finally {
+    release()
+    await f.close()
+  }
+})

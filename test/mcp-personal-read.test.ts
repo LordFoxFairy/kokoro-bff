@@ -14,7 +14,16 @@ import { projectMcpPersonalResponse, validateMcpPersonalPublic, mcpPersonalFault
 import { McpPersonalCredentialSource } from "../src/infrastructure/clients/platform/mcp-personal-credential.js"
 import { McpPersonalTokenSource } from "../src/infrastructure/clients/platform/mcp-personal-token.js"
 const input = { tenant: "tenant", subject: "user", requestId: "test" }
-const connector = { connector_id: "connector", connector_type: "mcp", provider_key: "github", status: "active", approved_scopes: [] }
+const connector = {
+  connector_id: "connector",
+  connector_type: "mcp",
+  provider_key: "github",
+  status: "active",
+  approved_scopes: [],
+  enabled: true,
+  state_version: "3",
+  display_name: "private display",
+}
 const wireConnector = () =>
   create(PersonalMcpConnectorSchema, {
     connectorId: { value: "connector" },
@@ -27,7 +36,7 @@ const wireConnector = () =>
     stateVersion: 3n,
   })
 
-test("projects current generated owner fields to original five-field public connector without private metadata", () => {
+test("projects current generated owner fields with true optional metadata and CAS", () => {
   const raw = create(ListPersonalMcpConnectorsResponseSchema, { connectors: [wireConnector()], page: {} })
   assert.deepEqual(projectMcpPersonalResponse("connectors", raw, input), { items: [connector], next_cursor: null })
 })

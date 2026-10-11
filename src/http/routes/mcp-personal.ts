@@ -6,14 +6,26 @@ import { authorizeUserRequest, authorizeMcpAction } from "../../auth/user-admiss
 import {
   mcpPersonalFault,
   validateMcpPersonalPublic,
+  validateMcpPersonalCommand,
   type McpPersonalOperation,
   type McpPersonalInput,
 } from "../../infrastructure/clients/platform/mcp-personal-response.js"
+import { parseMcpPersonalCommand } from "../mcp-personal-command-input.js"
+import type { McpPersonalCommandOperation, McpPersonalCommandInput } from "../../infrastructure/clients/platform/mcp-personal-command-binding.js"
 import { mcpRequestRemaining } from "../mcp-request-budget.js"
 import { send } from "../response.js"
 
-export function mcpPersonalOperation(path: string[], method: string): McpPersonalOperation | null {
-  if (method !== "GET" || path[0] !== "self" || path[1] !== "mcp") return null
+export function mcpPersonalOperation(path: string[], method: string): McpPersonalOperation | McpPersonalCommandOperation | null {
+  if (path[0] !== "self" || path[1] !== "mcp") return null
+  if (path[2] === "connectors") {
+    if (path.length === 3 && method === "POST") return "create"
+    if (path.length === 4 && method === "PATCH") return "update"
+    if (path.length === 4 && method === "DELETE") return "remove"
+    if (path.length === 5 && path[4] === "enabled" && method === "PUT") return "enabled"
+  }
+  if (method !== "GET") return null
+  if (path.length === 3 && path[2] === "providers") return "providers"
+  if (path.length === 4 && path[2] === "providers") return "provider"
   if (path.length === 3 && path[2] === "connectors") return "connectors"
   if (path.length === 4 && path[2] === "connectors") return "connector"
   if (path.length === 5 && path[2] === "connectors" && path[4] === "connections") return "connections"
@@ -29,16 +41,26 @@ export async function mcpPersonalReadRoute(
   path: string[],
 ): Promise<void> {
   const operation = mcpPersonalOperation(path, request.method ?? "GET")!
+  const mutation = ["create", "update", "enabled", "remove"].includes(operation)
   const fail = (status: number, code: string, retryable = false, retryAfter?: string): void => {
     if (!response.destroyed && !response.writableEnded) send(response, status, { error: { code, message: "Personal MCP read failed", retryable } }, retryAfter)
   }
   const input: McpPersonalInput = { requestId: context.requestId, tenant: context.identity.namespace, subject: context.identity.userId }
   const url = new URL(request.url ?? "", "http://bff.invalid")
   const query = url.searchParams
-  const allowed = operation === "connectors" ? ["status", "limit", "cursor"] : operation === "connections" ? ["limit", "cursor"] : []
+  const allowed =
+    operation === "connectors"
+      ? ["status", "limit", "cursor"]
+      : operation === "connections"
+        ? ["limit", "cursor"]
+        : operation === "providers"
+          ? ["query", "directory_type", "category_key", "limit", "cursor"]
+          : []
   const invalid = (): void => fail(400, "invalid_mcp_personal_request")
   if (
-    ["content-length", "transfer-encoding", "idempotency-key"].some((key) => request.headers[key] !== undefined) ||
+    (mutation
+      ? request.headers["transfer-encoding"] !== undefined || query.size > 0
+      : ["content-length", "transfer-encoding", "idempotency-key"].some((key) => request.headers[key] !== undefined)) ||
     url.pathname !== `/v1/${path.map(encodeURIComponent).join("/")}` ||
     url.hash ||
     [...query.keys()].some((key) => !allowed.includes(key) || query.getAll(key).length !== 1)
@@ -46,8 +68,8 @@ export async function mcpPersonalReadRoute(
     invalid()
     return
   }
-  if (operation !== "connectors") {
-    if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u.test(path[3] ?? "")) {
+  if (!["connectors", "providers", "create"].includes(operation)) {
+    if (!(operation === "provider" ? /^[a-z0-9][a-z0-9._-]{0,63}(?![\s\S])/u : /^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])/u).test(path[3] ?? "")) {
       invalid()
       return
     }
@@ -76,8 +98,32 @@ export async function mcpPersonalReadRoute(
     }
     input.status = value
   }
+  if (query.has("query")) {
+    const value = query.get("query")!
+    if (!value || value.trim() !== value || [...value].length > 1000 || /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(value)) {
+      invalid()
+      return
+    }
+    input.query = value
+  }
+  if (query.has("directory_type")) {
+    const value = query.get("directory_type")!
+    if (value !== "app" && value !== "data_source") {
+      invalid()
+      return
+    }
+    input.directoryType = value
+  }
+  if (query.has("category_key")) {
+    const value = query.get("category_key")!
+    if (!["efficiency", "creation", "business", "development", "finance", "travel", "health"].includes(value)) {
+      invalid()
+      return
+    }
+    input.categoryKey = value as NonNullable<McpPersonalInput["categoryKey"]>
+  }
   const client = composition.mcpPersonalClient
-  if (client === null) {
+  if (client === null || (mutation && !client.command)) {
     fail(503, "mcp_personal_dependency_unavailable", true)
     return
   }
@@ -99,9 +145,48 @@ export async function mcpPersonalReadRoute(
     })
   try {
     controller.signal.throwIfAborted()
-    const result = await within(client.read(operation, input, controller.signal, deadlineAt))
+    let commandInput: McpPersonalCommandInput | undefined
+    if (mutation) {
+      const key = request.headers["idempotency-key"]
+      const keyCount = request.rawHeaders.filter((_, index) => index % 2 === 0 && request.rawHeaders[index]!.toLowerCase() === "idempotency-key").length
+      if (
+        typeof key !== "string" ||
+        keyCount !== 1 ||
+        !/^[\x21-\x7e]{1,191}(?![\s\S])/u.test(key) ||
+        !/^application\/json(?:;\s*charset=utf-8)?$/iu.test(String(request.headers["content-type"] ?? ""))
+      )
+        throw new Error("invalid_mcp_personal_request")
+      const length = request.headers["content-length"]
+      if (length !== undefined && (typeof length !== "string" || !/^(0|[1-9][0-9]*)(?![\s\S])/u.test(length))) throw new Error("invalid_mcp_personal_request")
+      if (length !== undefined && Number(length) > 65_536) throw new Error("mcp_personal_body_too_large")
+      const iterator = request[Symbol.asyncIterator]()
+      const chunks: Buffer[] = []
+      let size = 0
+      try {
+        for (;;) {
+          const next = await within(iterator.next())
+          controller.signal.throwIfAborted()
+          if (next.done) break
+          const chunk = Buffer.isBuffer(next.value) ? next.value : Buffer.from(next.value)
+          size += chunk.length
+          if (size > 65_536) throw new Error("mcp_personal_body_too_large")
+          chunks.push(chunk)
+        }
+      } finally {
+        if (controller.signal.aborted) request.destroy()
+      }
+      if (length !== undefined && Number(length) !== size) throw new Error("invalid_mcp_personal_request")
+      commandInput = { ...input, ...parseMcpPersonalCommand(operation as McpPersonalCommandOperation, Buffer.concat(chunks)), commandId: key }
+    }
+    const result = await within(
+      mutation
+        ? client.command!(operation as McpPersonalCommandOperation, commandInput!, controller.signal, deadlineAt)
+        : client.read(operation as McpPersonalOperation, input, controller.signal, deadlineAt),
+    )
     controller.signal.throwIfAborted()
-    const data = validateMcpPersonalPublic(operation, result, input)
+    const data = mutation
+      ? validateMcpPersonalCommand(operation as McpPersonalCommandOperation, result, commandInput!)
+      : validateMcpPersonalPublic(operation as McpPersonalOperation, result, input)
     const admitted = await within(authorizeUserRequest(request, config, composition.sessionAdmission, context.requestId, controller.signal))
     if (!admitted.ok) {
       fail(admitted.status, admitted.code, admitted.status === 429 || admitted.status === 503, admitted.retryAfter)
@@ -111,19 +196,19 @@ export async function mcpPersonalReadRoute(
       fail(404, "mcp_personal_not_found")
       return
     }
-    const action = await within(authorizeMcpAction(composition.mcpAuthorization, admitted, "read", controller.signal))
+    const action = await within(authorizeMcpAction(composition.mcpAuthorization, admitted, mutation ? "manage" : "read", controller.signal))
     if (!action.ok) {
       fail(action.status, action.code, action.status === 429 || action.status === 503)
       return
     }
     controller.signal.throwIfAborted()
     if (mcpRequestRemaining(request) <= 0) throw new Error("mcp_personal_deadline")
-    if (!response.destroyed && !response.writableEnded) send(response, 200, { data })
+    if (!response.destroyed && !response.writableEnded) send(response, operation === "create" ? 201 : 200, { data })
   } catch (error) {
     if (!request.aborted && !response.destroyed && !response.writableEnded) {
       const fault = controller.signal.aborted
         ? { status: 503, code: "mcp_personal_dependency_unavailable", retryable: true }
-        : mcpPersonalFault(error, input.cursor !== undefined)
+        : mcpPersonalFault(error, input.cursor !== undefined, mutation)
       fail(fault.status, fault.code, fault.retryable)
     }
   } finally {

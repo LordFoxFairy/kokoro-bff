@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises"
 import { test } from "node:test"
 
 import {
+  restorePublic133McpPersonalContract,
   restorePublic132SharedRevisionContract,
   inspectAgentControlSnapshot,
   inspectBffHistoricalOpenApi as inspectBffOpenApi,
@@ -3083,7 +3084,9 @@ test("Public13 requires CAS only for the three package commands and exactly rest
   const current = await readFile(currentOpenapiUrl, "utf8")
   const { restorePublic13SkillAuthorizationContract } = await import("../../scripts/verify-skill-product-contract.mjs")
   const { restorePublic131GithubPathContract } = await import("../../scripts/verify-skill-product-contract.mjs")
-  const source = restorePublic13SkillAuthorizationContract(restorePublic131GithubPathContract(restorePublic132SharedRevisionContract(current)))
+  const source = restorePublic13SkillAuthorizationContract(
+    restorePublic131GithubPathContract(restorePublic132SharedRevisionContract(restorePublic133McpPersonalContract(current))),
+  )
   assert.deepEqual(inspectPublic13CasContract(source), [])
   const document = load(source)
   assert.equal(document.info.version, "13.0.0")
@@ -3162,7 +3165,9 @@ test("Public13.1 guards every actual Skill action route, status family and the e
   const { inspectPublic131SkillAuthorizationContract, restorePublic13SkillAuthorizationContract } =
     await import("../../scripts/verify-skill-product-contract.mjs")
   const { restorePublic131GithubPathContract } = await import("../../scripts/verify-skill-product-contract.mjs")
-  const source = restorePublic131GithubPathContract(restorePublic132SharedRevisionContract(await readFile(currentOpenapiUrl, "utf8"))),
+  const source = restorePublic131GithubPathContract(
+      restorePublic132SharedRevisionContract(restorePublic133McpPersonalContract(await readFile(currentOpenapiUrl, "utf8"))),
+    ),
     document = load(source)
   assert.deepEqual(inspectPublic131SkillAuthorizationContract(source), [])
   assert.deepEqual(inspectSkillProductContract(restorePublic13SkillAuthorizationContract(source)), [])
@@ -3240,7 +3245,7 @@ for (const [label, path] of [
 
 test("GitHub path Public13.2 restores the exact immutable Public13.1 parent and guards all five constraints", async () => {
   const { inspectPublic132GithubPathContract, restorePublic131GithubPathContract } = await import("../../scripts/verify-skill-product-contract.mjs")
-  const current = restorePublic132SharedRevisionContract(await readFile(currentOpenapiUrl, "utf8"))
+  const current = restorePublic132SharedRevisionContract(restorePublic133McpPersonalContract(await readFile(currentOpenapiUrl, "utf8")))
   assert.deepEqual(inspectPublic132GithubPathContract(current), [])
   assert.equal(createHash("sha256").update(restorePublic131GithubPathContract(current)).digest("hex"), "418db9504b179d29113385f334628d304130491d4bbc86169e20c712cf2cd045")
   assert.deepEqual(inspectSkillProductContract(restorePublic131GithubPathContract(current)), [])
@@ -3263,7 +3268,7 @@ test("GitHub path Public13.2 restores the exact immutable Public13.1 parent and 
 
 test("GitHub path inverse must not restore a tampered repository URL bound", async () => {
   const { inspectPublic132GithubPathContract } = await import("../../scripts/verify-skill-product-contract.mjs")
-  const current = restorePublic132SharedRevisionContract(await readFile(currentOpenapiUrl, "utf8"))
+  const current = restorePublic132SharedRevisionContract(restorePublic133McpPersonalContract(await readFile(currentOpenapiUrl, "utf8")))
   const changed = current.replace(/(GithubSkillRequest:\n[\s\S]*?repository_url:\n\s+type: string\n\s+maxLength: )2048/u, "$1256")
   assert.notEqual(changed, current)
   assert.ok(inspectPublic132GithubPathContract(changed).some((error) => error.includes("parent inverse")))
@@ -3274,8 +3279,8 @@ test("Public13.3 shared exact summary preserves complete137 and exact13.2 parent
   const source = await readFile(currentOpenapiUrl, "utf8"),
     baseline = JSON.parse(await readFile(baselineUrl, "utf8")).operations
   assert.deepEqual(inspectBffOpenApi(source, baseline), [])
-  assert.equal(parseOpenApiOperations(source).length, 137)
-  assert.equal(parseOpenApiOperations(restorePublic132SharedRevisionContract(source)).length, 136)
+  assert.equal(parseOpenApiOperations(restorePublic133McpPersonalContract(source)).length, 137)
+  assert.equal(parseOpenApiOperations(restorePublic132SharedRevisionContract(restorePublic133McpPersonalContract(source))).length, 136)
   for (const changed of [
     source.replace("operationId: getSharedSkillRevision", "operationId: resolveSkillShare"),
     source.replace("source_kind: { type: string, enum: [personal, official, third_party] }", "source_kind: { type: string }"),

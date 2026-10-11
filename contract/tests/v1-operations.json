@@ -685,6 +685,36 @@
       "method": "GET",
       "path": "/skill-downloads/{handle}",
       "operation_id": "downloadSkillBytes"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/self/mcp/connectors",
+      "operation_id": "createPersonalMcpConnector"
+    },
+    {
+      "method": "PATCH",
+      "path": "/v1/self/mcp/connectors/{connector_id}",
+      "operation_id": "updatePersonalMcpConnector"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/self/mcp/connectors/{connector_id}",
+      "operation_id": "removePersonalMcpConnector"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/self/mcp/connectors/{connector_id}/enabled",
+      "operation_id": "setPersonalMcpConnectorEnabled"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/self/mcp/providers",
+      "operation_id": "listPersonalMcpProviders"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/self/mcp/providers/{provider_key}",
+      "operation_id": "getPersonalMcpProvider"
     }
   ]
 }

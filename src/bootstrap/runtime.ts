@@ -71,7 +71,7 @@ export type BffRouteInput = {
 export type BffRouteHandler = (input: BffRouteInput) => Promise<boolean | void>
 
 export type BffServerComposition = {
-  mcpPersonalClient: Pick<McpPersonalConnectClient, "read"> & Partial<Pick<McpPersonalConnectClient, "close">> | null
+  mcpPersonalClient: (Pick<McpPersonalConnectClient, "read"> & Partial<Pick<McpPersonalConnectClient, "close" | "command">>) | null
   localSkillImportClient?: LocalSkillImportClient
   skillSpecificationSource: SkillSpecificationSource | null
   skillDownloadHandles: SkillDownloadHandles
@@ -104,7 +104,7 @@ export type BffServerComposition = {
 }
 
 export type BffCompositionOptions = {
-  mcpPersonalClient?: Pick<McpPersonalConnectClient, "read"> & Partial<Pick<McpPersonalConnectClient, "close">> | null
+  mcpPersonalClient?: (Pick<McpPersonalConnectClient, "read"> & Partial<Pick<McpPersonalConnectClient, "close" | "command">>) | null
   localSkillImportClient?: LocalSkillImportClient
   skillSpecificationSource?: SkillSpecificationSource | null
   exactSkillDownloadSource?: ExactSkillDownloadSource | null
