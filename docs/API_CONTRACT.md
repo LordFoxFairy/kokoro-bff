@@ -1,4 +1,18 @@
 <!-- BEGIN:T-K03.13-BFF-MCP-PERSONAL-CRUD-D0 -->
+## T-K03.16 Connector V1 API 对齐 Manus（已实施）
+
+唯一新 public operation 为 `GET /v1/connector.list` / `listConnectors`，`owner=kokoro-bff`、`visibility=public`、`stability=beta`、`idempotency=none`、权限为当前已验证的主体 Connector 读取资格。该接口无 `project_id`、分页、筛选、body、`Idempotency-Key`、调用方 tenant/subject；未知或重复 query、body、transfer-encoding 均是 `400`。HTTP 成功固定 `200`、`cache-control: no-store`、`x-request-id`，JSON 与 Manus 字段完全为：
+
+```json
+{ "ok": true, "request_id": "…", "data": [{ "id": "…", "name": "…", "type": "mcp", "description": "…", "category": "…" }] }
+```
+
+失败固定 `{ "ok": false, "request_id": "…", "error": { "code": "…", "message": "…" } }`，不添加 BFF 泛用 `retryable/details`，也不泄露 owner payload、状态、CAS、scope、credential 或 Provider key。`data` 可为空；每项五字段都必需。`id` 是 Connector 的稳定 owner ID，`type` 仅 `builtin|byok|mcp`，仅 `active` Connector 代表已安装，停用仍在结果中；其余字段只取 owner 实际 display/metadata。Provider 必须具备恰好一个公开 category 才能映射到 Manus 的单值 `category`。缺任一必需投影、Connector 与 Provider 关联不一致、Provider category 不是单值、超出有界扫描或 owner protocol 无效都关闭为 `502 connector_response_invalid`。当前会话/权限拒绝为 `401/403`，owner 依赖或 deadline 为 `503 Unavailable`。完整接口使用当前用户身份，不改变连接、安装、启停或授权事实。
+
+`/v1/self/mcp/*` 不是 `connector.list` 的 alias。它将作为下一 Web browser-private 管理迁移的一部分整体删除 public exposure；在该迁移完成前，任何新 public consumer 只能使用 `/v1/connector.list`。这避免以 compatibility fallback 把两种 API 表示长期并存。
+
+<!-- T-K03.16-CONNECTOR-V1-API-D0-END -->
+
 ## T-K03.13 本人 MCP 管理公开边界 D0（目标，未实施）
 
 目标唯一 canonical public **14.0.0 /143 operations，沿 /v1**。这是已真实启用四读的 Connector strict 五字段发生 breaking 的显式本地 development clean-slate 配对切换例外：无外部生产客户，唯一已核 Web 消费方先固定新 artifact/strict schema 全验，Root 再切正常 runtime；中间不宣称兼容/闭环，无旧 schema fallback/alias。未来对外稳定 breaking 仍遵原 /v2 策略，例外不泛化。

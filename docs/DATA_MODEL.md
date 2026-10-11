@@ -1,4 +1,10 @@
 <!-- BEGIN:T-K03.13-BFF-MCP-PERSONAL-CRUD-D0 -->
+## T-K03.16 Connector V1 数据边界（已实施）
+
+本片无 BFF SQL、迁移、Redis key、receipt 或缓存。Platform 继续唯一保存 Connector、Provider、授权、Connection 与状态版本；IAM 继续唯一保存登录/主体/权限。BFF 在一个请求 deadline 内读取当前主体的 Connector 与 Provider owner 投影，按 Connector 的 `provider_key` 关联，只输出已证明完整的 Manus V1 五字段。BFF 不保存关联结果、不在缺 Provider 时保留旧快照、不用 display name 或 category 推导安全/授权状态；服务重启不产生或恢复任何 Connector 数据。
+
+<!-- T-K03.16-CONNECTOR-V1-DATA-D0-END -->
+
 ## T-K03.13 本人 MCP 管理公开边界 D0（目标，未实施）
 
 Platform独占本人 connector/provider/connection/currentCAS，以及现有 durable command receipt/准入事务；IAM独占身份和资格。BFF无SQL/表/列/索引/receipt/Redis/store新增，不读owner数据库；fixed75/vendor/generated原字节保持。

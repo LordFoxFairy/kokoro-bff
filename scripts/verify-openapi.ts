@@ -2961,6 +2961,17 @@ schema: { $ref: '#/components/schemas/PersonalMcp${name}Error' }`,
   return errors
 }
 
+export function restorePublic141ConnectorListContract(source: string): string {
+  if (!/^  version: 14\.1\.0$/mu.test(source)) throw new Error("Connector list minor version drift")
+  const digest = (value: string): string => createHash("sha256").update(value).digest("hex")
+  const path = source.match(/^  \/v1\/connector\.list:\n[\s\S]*?(?=^  \/v1\/mcp\/connections:)/mu)?.[0]
+  const responses = source.match(/^    ConnectorListInvalidArgument:\n[\s\S]*?(?=^    SkillPackageInspectionOk:)/mu)?.[0]
+  if (path === undefined || responses === undefined) throw new Error("Connector list exact delta missing")
+  if (digest(path) !== "571d9543ebf6f1ceb6c4438dbd6258e645fe28dc2819f361618174be69bdbb61") throw new Error("Connector list path drift")
+  if (digest(responses) !== "a30b3fb1941c869749fd1cb436d56521ae98932ea911ac42142dcc9e5066ce9e") throw new Error("Connector list responses drift")
+  return source.replace(path, "").replace(responses, "").replace("  version: 14.1.0", "  version: 14.0.0")
+}
+
 export function restorePublic133McpPersonalContract(source: string): string {
   if (!/^  version: 14\.0\.0$/mu.test(source)) throw new Error("Personal MCP corrective-major version drift")
   const digest = (value: string): string => createHash("sha256").update(value).digest("hex")
@@ -3016,7 +3027,7 @@ export function restorePublic132SharedRevisionContract(source: string): string {
 export function inspectBffOpenApi(source: string, baseline: readonly BaselineOperation[]): string[] {
   let parent: string
   try {
-    parent = restorePublic132SharedRevisionContract(restorePublic133McpPersonalContract(source))
+    parent = restorePublic132SharedRevisionContract(restorePublic133McpPersonalContract(restorePublic141ConnectorListContract(source)))
   } catch (error) {
     return [error instanceof Error ? error.message : "Shared revision contract invalid"]
   }

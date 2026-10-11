@@ -1,4 +1,5 @@
 import { mcpPersonalOperation, mcpPersonalReadRoute } from "../http/routes/mcp-personal.js"
+import { connectorListFailure, connectorListRoute, isConnectorListRequest } from "../http/routes/connector-list.js"
 import { skillSpecificationReadRoute } from "../http/routes/platform-projection.js"
 import { exactSkillDownloadRoute, skillDownloadHandleRoute } from "../http/routes/skill-download.js"
 import { startMcpRequestBudget, mcpRequestRemaining } from "../http/mcp-request-budget.js"
@@ -241,6 +242,7 @@ async function handle(
   }
 
   const businessPath = segments.slice(1)
+  const isConnectorList = isConnectorListRequest(businessPath, request.method ?? "GET")
   const isProjectSkillAssociation = businessPath.length === 4 && businessPath[0] === "projects" && businessPath[2] === "skills" && request.method === "PATCH"
   const hasSkillsBudget =
     isProjectSkillAssociation ||
@@ -382,6 +384,16 @@ async function handle(
   })
   if (!admission.ok) {
     if (!response.destroyed) {
+      if (isConnectorList) {
+        connectorListFailure(
+          response,
+          admission.status,
+          id,
+          admission.status === 401 ? "Unauthenticated" : admission.status === 403 ? "PermissionDenied" : "Unavailable",
+          "Connector list access is unavailable",
+        )
+        return
+      }
       response.setHeader("x-request-id", id)
       if (
         hasMcpBudget ||
@@ -426,6 +438,10 @@ async function handle(
           retryable: true,
         },
       })
+    return
+  }
+  if (isConnectorList) {
+    await connectorListRoute(request, response, config, composition, admission.context)
     return
   }
   if (hasMcpBudget && !isMcpPersonalOperation && (request.method !== "GET" || businessPath[0] === "self")) {

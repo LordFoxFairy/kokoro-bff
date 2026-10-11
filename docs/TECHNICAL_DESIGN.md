@@ -1,4 +1,22 @@
 <!-- BEGIN:T-K03.13-BFF-MCP-PERSONAL-CRUD-D0 -->
+## T-K03.16 Connector API V1 对齐 Manus（已实施）
+
+**Owner / writer：** `kokoro-bff`；唯一写入边界仍在 Platform。BFF 不新增表、缓存、Provider 凭据或 OAuth 状态，只把受信当前主体下的已安装 Connector 读模型投影为公开 API。当前事实是 `/v1/self/mcp/*` 同时混有浏览器管理细节和 Platform 的原始状态字段；它不符合用户要求的 Manus 风格 `connector.list` 产品 API，不能再作为对外接口。
+
+**目标边界：** 发布唯一公开 `GET /v1/connector.list`，无 query/body，成功严格为 `{ok:true,request_id,data:[{id,name,type,description,category}]}`；失败严格为 `{ok:false,request_id,error:{code,message}}`。字段和语义以 Manus `connector.list` 为参照：只列当前主体已安装 Connector；`id` 是后续任务选择的 Connector ID；`type` 只允许 `builtin|byok|mcp`。仅 `active` Connector 是已安装，停用仍列出，pending/error/revoked 不列出。`name`、`description`、`category` 必须来自 Connector/Provider owner 事实；Provider 必须恰有一个公开 category 才能进入该单值 wire 表示，缺失/多值/关联不一致是受控 owner 投影失败，不能以 Provider key、技术状态、空占位或 UI 文案伪造。
+
+**放置裁决：**
+
+| 项           | 采用                                                                                                               | 淘汰                                                                           |
+| ------------ | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
+| HTTP 入口    | 在既有 `src/http/routes/` 增加单职责 `connector-list.ts`，由现 `bootstrap/server.ts` 的已验证 human admission 分派 | 新建通用 catalog、BFF SQL 镜像或把投影塞入 `mcp-personal.ts`                   |
+| owner client | 扩现 `mcpPersonalClient` 的受信读组合：完整 Connector 页与完整 Provider 页在同一 deadline 内关联                   | 直读 Platform SQL、复用浏览器页面的 `/api/hub/*`、前端拼字段                   |
+| wire         | 只在 `contract/openapi/v1/openapi.yaml` 声明 public V1 的 Manus 风格封装/五字段，新的 route 专属验证测试覆盖       | 把 `self/mcp` 当 alias、把内部 `state_version/status/scopes` 泄露给 public API |
+
+**验证与剩余边界：** BFF 使用现 Platform RPC client 与 IAM admitted tenant/subject；不导入 Platform ORM、IAM 私有 DTO 或 secret。V1 route 不接受调用方 tenant/subject。RED 后覆盖未知 query、Provider 单值失败、IAM 拒绝、owner 缺失、request-id/no-store 与 exact Manus shape；`contract:test`、typecheck、lint、build 已通过。Web 的管理 CRUD browser-private 收敛、OAuth/Connection 和 Admin Provider 仍是后续独立切片，不能由本读接口冒充闭环。
+
+<!-- T-K03.16-CONNECTOR-V1-D0-END -->
+
 ## T-K03.13 本人 MCP 管理公开边界 D0（目标，未实施）
 
 当前 BFF `ee423b7` / public13.3.0 /137 operations 的四本人 reads 已正常启用；Connector 五字段缺管理 metadata/enable/CAS。固定 vendor `91bc3655ebd3648cb8f8ccddfacb5628bdeb1c5c` current75 的 ProductMcpPersonalService 已正式有十方法。目标扩四本人命令和两个真实 Provider reads，不新 owner API/SQL/模块或 execution 代理。比较扩现 personal client/route/composition 与另建管理模块，采用前者：同 workload/人资格及 close 生命周期，不重复 credential/token。

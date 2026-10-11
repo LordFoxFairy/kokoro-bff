@@ -31,8 +31,7 @@ export async function authorizeUserRequest(
   requestId: string,
   signal: AbortSignal,
 ): Promise<UserAdmissionResult> {
-  if (admitBrowserService(request, config, { kind: "business" }) === null)
-    return { ok: false, status: 403, code: "service_auth_failed" }
+  if (admitBrowserService(request, config, { kind: "business" }) === null) return { ok: false, status: 403, code: "service_auth_failed" }
 
   const token = bearerToken(request)
   if (token === null) return { ok: false, status: 401, code: "session_authentication_required" }
@@ -146,6 +145,7 @@ export async function authorizeMcpAction(
   return result
 }
 export function mcpActionForRequest(method: string, path: string[]): import("./mcp-authorization.types.js").McpAuthorizationInput["action"] | null {
+  if (method === "GET" && path.length === 1 && path[0] === "connector.list") return "read"
   if (path[0] !== "mcp" && !(path[0] === "self" && path[1] === "mcp")) return null
   return method === "GET" ? "read" : "manage"
 }

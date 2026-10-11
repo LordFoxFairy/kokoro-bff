@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 14.0.0
+  version: 14.1.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -3383,6 +3383,54 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SkillProductErrorResponse"
+  /v1/connector.list:
+    get:
+      tags: [MCP]
+      operationId: listConnectors
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: product.mcp.read_personal
+      summary: List the current caller's installed connectors
+      description: Manus-compatible public projection. Identity is derived from the caller session; this endpoint accepts no query parameters or request body. Only active installed connectors are returned, with one owner-provided category each.
+      responses:
+        '200':
+          description: Current caller connector list
+          headers:
+            x-request-id:
+              required: true
+              schema: { type: string, minLength: 1, maxLength: 128 }
+            cache-control:
+              required: true
+              schema: { type: string, const: no-store }
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [ok, request_id, data]
+                properties:
+                  ok: { type: boolean, const: true }
+                  request_id: { type: string, minLength: 1, maxLength: 128 }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required: [id, name, type, description, category]
+                      properties:
+                        id: { type: string, minLength: 1, maxLength: 191 }
+                        name: { type: string, minLength: 1, maxLength: 100 }
+                        type: { type: string, enum: [builtin, byok, mcp] }
+                        description: { type: string, minLength: 1, maxLength: 1000 }
+                        category: { type: string, minLength: 1, maxLength: 128 }
+        '400': { $ref: '#/components/responses/ConnectorListInvalidArgument' }
+        '401': { $ref: '#/components/responses/ConnectorListUnauthenticated' }
+        '403': { $ref: '#/components/responses/ConnectorListPermissionDenied' }
+        '429': { $ref: '#/components/responses/ConnectorListUnavailable' }
+        '502': { $ref: '#/components/responses/ConnectorListInvalidOwnerResponse' }
+        '503': { $ref: '#/components/responses/ConnectorListUnavailable' }
   /v1/mcp/connections:
     get:
       tags: [MCP]
@@ -16631,6 +16679,96 @@ components:
             retryable: { type: boolean }
 
   responses:
+    ConnectorListInvalidArgument:
+      description: The connector.list request has query parameters, a body, or a disallowed request header.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [ok, request_id, error]
+            properties:
+              ok: { type: boolean, const: false }
+              request_id: { type: string, minLength: 1, maxLength: 128 }
+              error:
+                type: object
+                additionalProperties: false
+                required: [code, message]
+                properties:
+                  code: { type: string, const: InvalidArgument }
+                  message: { type: string, const: Connector list request is invalid }
+    ConnectorListUnauthenticated:
+      description: A current caller session is required.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [ok, request_id, error]
+            properties:
+              ok: { type: boolean, const: false }
+              request_id: { type: string, minLength: 1, maxLength: 128 }
+              error:
+                type: object
+                additionalProperties: false
+                required: [code, message]
+                properties:
+                  code: { type: string, const: Unauthenticated }
+                  message: { type: string, const: Connector list access is unavailable }
+    ConnectorListPermissionDenied:
+      description: The current caller cannot read personal connectors.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [ok, request_id, error]
+            properties:
+              ok: { type: boolean, const: false }
+              request_id: { type: string, minLength: 1, maxLength: 128 }
+              error:
+                type: object
+                additionalProperties: false
+                required: [code, message]
+                properties:
+                  code: { type: string, const: PermissionDenied }
+                  message: { type: string, const: Connector list access is unavailable }
+    ConnectorListInvalidOwnerResponse:
+      description: Platform returned connector/provider data that cannot be safely projected to the public contract.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [ok, request_id, error]
+            properties:
+              ok: { type: boolean, const: false }
+              request_id: { type: string, minLength: 1, maxLength: 128 }
+              error:
+                type: object
+                additionalProperties: false
+                required: [code, message]
+                properties:
+                  code: { type: string, const: connector_response_invalid }
+                  message: { type: string, const: Connector list dependency returned an invalid response }
+    ConnectorListUnavailable:
+      description: IAM or Platform connector data is temporarily unavailable.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [ok, request_id, error]
+            properties:
+              ok: { type: boolean, const: false }
+              request_id: { type: string, minLength: 1, maxLength: 128 }
+              error:
+                type: object
+                additionalProperties: false
+                required: [code, message]
+                properties:
+                  code: { type: string, const: Unavailable }
+                  message: { type: string, const: Connector list dependency is unavailable }
     SkillPackageInspectionOk:
       description: Exact caller-authorized package directory or selected UTF-8 text.
       headers: &SkillPackageInspectionHeaders
