@@ -5,8 +5,8 @@ import { createBffServer } from "../dist/bootstrap/server.js"
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 
 const headers = {
-  "x-kokoro-service": "web-bff",
-  "x-kokoro-internal-secret": "test-secret",
+  "x-kokoro-service": "admin-web-bff",
+  "x-kokoro-internal-secret": "admin-test-secret",
   authorization: "Bearer admin-session",
   "x-request-id": "provider-admin-test",
 }
@@ -33,6 +33,7 @@ async function fixture({ allowed = true, client = null } = {}) {
       tenantId: "tenant-one",
       iamBaseUrl: null,
       sharedSecret: "test-secret",
+      adminWebSharedSecret: "admin-test-secret",
       upstreamSecret: "upstream-secret",
       upstreamTimeoutMs: 5_000,
       upstreamMaxResponseBytes: 1_048_576,
