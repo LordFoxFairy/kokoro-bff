@@ -74,7 +74,7 @@ export class SessionAdmissionTransport {
 
   public requestMcpAuthorization(input: McpAuthorizationInput): Promise<SessionAdmissionTransportResponse> {
     const target = new URL("/internal/v1/authorization/check", `${this.baseUrl.replace(/\/+$/u, "")}/`)
-    return this.send(input, target, JSON.stringify({ resource: "mcp_personal", action: input.action }))
+    return this.send(input, target, JSON.stringify({ resource: input.resource, action: input.action }))
   }
 
   private send(input: SessionAdmissionTransportInput, target: URL, body: string | null): Promise<SessionAdmissionTransportResponse> {

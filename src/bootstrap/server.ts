@@ -1,4 +1,5 @@
 import { mcpPersonalOperation, mcpPersonalReadRoute } from "../http/routes/mcp-personal.js"
+import { mcpProviderAdminOperation, mcpProviderAdminRoute } from "../http/routes/mcp-provider-admin.js"
 import { connectorListFailure, connectorListRoute, isConnectorListRequest } from "../http/routes/connector-list.js"
 import { skillSpecificationReadRoute } from "../http/routes/platform-projection.js"
 import { exactSkillDownloadRoute, skillDownloadHandleRoute } from "../http/routes/skill-download.js"
@@ -252,7 +253,8 @@ async function handle(
   if (hasSkillsBudget) startSkillRequestBudget(request)
   const mcpAction = mcpActionForRequest(request.method ?? "GET", businessPath)
   const isMcpPersonalOperation = mcpPersonalOperation(businessPath, request.method ?? "GET") !== null
-  const hasMcpBudget = mcpAction !== null
+  const isMcpProviderAdminOperation = mcpProviderAdminOperation(businessPath, request.method ?? "GET") !== null
+  const hasMcpBudget = mcpAction !== null || isMcpProviderAdminOperation
   if (hasMcpBudget) {
     startMcpRequestBudget(request)
     response.setHeader("cache-control", "no-store")
@@ -442,6 +444,10 @@ async function handle(
   }
   if (isConnectorList) {
     await connectorListRoute(request, response, config, composition, admission.context)
+    return
+  }
+  if (isMcpProviderAdminOperation) {
+    await mcpProviderAdminRoute(request, response, config, composition, id, businessPath)
     return
   }
   if (hasMcpBudget && !isMcpPersonalOperation && (request.method !== "GET" || businessPath[0] === "self")) {

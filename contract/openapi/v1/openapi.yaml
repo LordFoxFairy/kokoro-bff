@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 14.2.0
+  version: 14.3.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -6310,6 +6310,140 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SkillProductErrorResponse"
+  /v1/admin/mcp/providers:
+    get:
+      tags: [Connectors]
+      operationId: listAdminMcpProviders
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: mcp_catalog.manage
+      summary: List MCP connector providers for platform administration
+      parameters:
+        - { name: query, in: query, schema: { type: string, minLength: 1, maxLength: 1000 } }
+        - { name: enabled, in: query, schema: { type: boolean } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+        - { name: cursor, in: query, schema: { type: string, minLength: 1, maxLength: 2048 } }
+      responses:
+        '200': { $ref: '#/components/responses/McpProviderAdminListOk' }
+        '400': { $ref: '#/components/responses/McpProviderAdminError' }
+        '401': { $ref: '#/components/responses/McpProviderAdminError' }
+        '403': { $ref: '#/components/responses/McpProviderAdminError' }
+        '429': { $ref: '#/components/responses/McpProviderAdminError' }
+        '503': { $ref: '#/components/responses/McpProviderAdminError' }
+    post:
+      tags: [Connectors]
+      operationId: createAdminMcpProvider
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: mcp_catalog.manage
+      summary: Create an MCP connector provider
+      parameters: [{ $ref: '#/components/parameters/McpProviderAdminIdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/CreateMcpProviderAdminRequest' } }
+      responses:
+        '201': { $ref: '#/components/responses/McpProviderAdminDetailCreated' }
+        '400': { $ref: '#/components/responses/McpProviderAdminError' }
+        '401': { $ref: '#/components/responses/McpProviderAdminError' }
+        '403': { $ref: '#/components/responses/McpProviderAdminError' }
+        '409': { $ref: '#/components/responses/McpProviderAdminError' }
+        '412': { $ref: '#/components/responses/McpProviderAdminError' }
+        '503': { $ref: '#/components/responses/McpProviderAdminError' }
+  /v1/admin/mcp/providers/{provider_key}:
+    parameters: [{ $ref: '#/components/parameters/McpProviderAdminKey' }]
+    get:
+      tags: [Connectors]
+      operationId: getAdminMcpProvider
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: mcp_catalog.manage
+      summary: Get one MCP connector provider for platform administration
+      responses:
+        '200': { $ref: '#/components/responses/McpProviderAdminDetailOk' }
+        '400': { $ref: '#/components/responses/McpProviderAdminError' }
+        '401': { $ref: '#/components/responses/McpProviderAdminError' }
+        '403': { $ref: '#/components/responses/McpProviderAdminError' }
+        '404': { $ref: '#/components/responses/McpProviderAdminError' }
+        '503': { $ref: '#/components/responses/McpProviderAdminError' }
+    patch:
+      tags: [Connectors]
+      operationId: updateAdminMcpProvider
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: mcp_catalog.manage
+      summary: Update an MCP connector provider with a state version precondition
+      parameters: [{ $ref: '#/components/parameters/McpProviderAdminIdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/UpdateMcpProviderAdminRequest' } }
+      responses:
+        '200': { $ref: '#/components/responses/McpProviderAdminDetailOk' }
+        '400': { $ref: '#/components/responses/McpProviderAdminError' }
+        '401': { $ref: '#/components/responses/McpProviderAdminError' }
+        '403': { $ref: '#/components/responses/McpProviderAdminError' }
+        '404': { $ref: '#/components/responses/McpProviderAdminError' }
+        '409': { $ref: '#/components/responses/McpProviderAdminError' }
+        '412': { $ref: '#/components/responses/McpProviderAdminError' }
+        '503': { $ref: '#/components/responses/McpProviderAdminError' }
+    delete:
+      tags: [Connectors]
+      operationId: removeAdminMcpProvider
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: mcp_catalog.manage
+      summary: Remove an MCP connector provider with a state version precondition
+      parameters: [{ $ref: '#/components/parameters/McpProviderAdminIdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/RemoveMcpProviderAdminRequest' } }
+      responses:
+        '200': { $ref: '#/components/responses/McpProviderAdminRemovalOk' }
+        '400': { $ref: '#/components/responses/McpProviderAdminError' }
+        '401': { $ref: '#/components/responses/McpProviderAdminError' }
+        '403': { $ref: '#/components/responses/McpProviderAdminError' }
+        '404': { $ref: '#/components/responses/McpProviderAdminError' }
+        '409': { $ref: '#/components/responses/McpProviderAdminError' }
+        '412': { $ref: '#/components/responses/McpProviderAdminError' }
+        '503': { $ref: '#/components/responses/McpProviderAdminError' }
+  /v1/admin/mcp/providers/{provider_key}/enabled:
+    put:
+      tags: [Connectors]
+      operationId: setAdminMcpProviderEnabled
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: mcp_catalog.manage
+      summary: Enable or disable an MCP connector provider with a state version precondition
+      parameters:
+        - $ref: '#/components/parameters/McpProviderAdminKey'
+        - $ref: '#/components/parameters/McpProviderAdminIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/SetMcpProviderAdminEnabledRequest' } }
+      responses:
+        '200': { $ref: '#/components/responses/McpProviderAdminDetailOk' }
+        '400': { $ref: '#/components/responses/McpProviderAdminError' }
+        '401': { $ref: '#/components/responses/McpProviderAdminError' }
+        '403': { $ref: '#/components/responses/McpProviderAdminError' }
+        '404': { $ref: '#/components/responses/McpProviderAdminError' }
+        '409': { $ref: '#/components/responses/McpProviderAdminError' }
+        '412': { $ref: '#/components/responses/McpProviderAdminError' }
+        '503': { $ref: '#/components/responses/McpProviderAdminError' }
   /v1/admin/skills:
     get:
       tags:
@@ -10797,6 +10931,16 @@ components:
       scheme: bearer
       bearerFormat: opaque-session-token
   parameters:
+    McpProviderAdminKey:
+      name: provider_key
+      in: path
+      required: true
+      schema: { type: string, pattern: '^[a-z0-9][a-z0-9._-]{0,63}$' }
+    McpProviderAdminIdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, minLength: 1, maxLength: 191 }
     AdminIdentityLimit:
       name: limit
       in: query
@@ -11287,6 +11431,136 @@ components:
               type: string
             retryable:
               type: boolean
+    McpProviderAdminOrigin:
+      type: object
+      additionalProperties: false
+      required: [scheme, host, port, path_prefix]
+      properties:
+        scheme: { type: string, enum: [http, https] }
+        host: { type: string, minLength: 1, maxLength: 253 }
+        port: { type: integer, minimum: 1, maximum: 65535 }
+        path_prefix: { type: string, minLength: 1, maxLength: 2048, pattern: '^/' }
+    McpProviderAdminInput:
+      type: object
+      additionalProperties: false
+      required: [provider_key, display_name, directory_type, category_keys, example_prompts, connector_types, default_scopes, authorization_required, allowed_mcp_origins]
+      properties:
+        provider_key: { type: string, pattern: '^[a-z0-9][a-z0-9._-]{0,63}$' }
+        display_name: { type: string, minLength: 1, maxLength: 100 }
+        description: { type: string, minLength: 1, maxLength: 1000 }
+        directory_type: { type: string, enum: [app, data_source] }
+        category_keys: { type: array, maxItems: 16, items: { type: string, enum: [efficiency, creation, business, development, finance, travel, health] }, uniqueItems: true }
+        example_prompts: { type: array, maxItems: 10, items: { type: string, minLength: 1, maxLength: 1000 } }
+        author: { type: string, minLength: 1, maxLength: 100 }
+        website: { type: string, format: uri, pattern: '^https://' }
+        privacy_url: { type: string, format: uri, pattern: '^https://' }
+        connector_types: { type: array, minItems: 1, maxItems: 3, items: { type: string, enum: [builtin, byok, mcp] }, uniqueItems: true }
+        default_scopes: { type: array, maxItems: 100, items: { type: string, minLength: 1, maxLength: 128 }, uniqueItems: true }
+        authorization_required: { type: boolean }
+        allowed_mcp_origins: { type: array, maxItems: 100, items: { $ref: '#/components/schemas/McpProviderAdminOrigin' } }
+        tool_authorization_policy:
+          type: object
+          additionalProperties: false
+          required: [version, rules]
+          properties:
+            version: { type: integer, minimum: 1, maximum: 100 }
+            rules:
+              type: array
+              maxItems: 100
+              items:
+                type: object
+                additionalProperties: false
+                required: [server_identity, selector, required_scopes]
+                properties:
+                  server_identity: { type: string, minLength: 1, maxLength: 256 }
+                  selector: { type: string, minLength: 1, maxLength: 256 }
+                  required_scopes: { type: array, maxItems: 100, items: { type: string, minLength: 1, maxLength: 128 }, uniqueItems: true }
+    McpProviderAdminRecord:
+      allOf:
+        - $ref: '#/components/schemas/McpProviderAdminInput'
+        - type: object
+          required: [enabled, state_version]
+          properties:
+            enabled: { type: boolean }
+            state_version: { type: string, pattern: '^[1-9][0-9]{0,15}$' }
+            created_at: { type: string, format: date-time }
+            updated_at: { type: string, format: date-time }
+    CreateMcpProviderAdminRequest:
+      type: object
+      additionalProperties: false
+      required: [provider]
+      properties:
+        provider: { $ref: '#/components/schemas/McpProviderAdminInput' }
+        enabled: { type: boolean }
+    UpdateMcpProviderAdminRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_state_version, provider]
+      properties:
+        expected_state_version: { type: string, pattern: '^[1-9][0-9]{0,15}$' }
+        provider: { $ref: '#/components/schemas/McpProviderAdminInput' }
+    SetMcpProviderAdminEnabledRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_state_version, enabled]
+      properties:
+        expected_state_version: { type: string, pattern: '^[1-9][0-9]{0,15}$' }
+        enabled: { type: boolean }
+    RemoveMcpProviderAdminRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_state_version]
+      properties:
+        expected_state_version: { type: string, pattern: '^[1-9][0-9]{0,15}$' }
+    McpProviderAdminDetailResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [provider]
+          properties:
+            provider: { $ref: '#/components/schemas/McpProviderAdminRecord' }
+            replayed: { type: boolean }
+    McpProviderAdminListResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [items, next_cursor]
+          properties:
+            items: { type: array, maxItems: 100, items: { $ref: '#/components/schemas/McpProviderAdminRecord' } }
+            next_cursor: { type: [string, 'null'], maxLength: 2048 }
+    McpProviderAdminRemovalResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [provider_key, replayed]
+          properties:
+            provider_key: { type: string, pattern: '^[a-z0-9][a-z0-9._-]{0,63}$' }
+            replayed: { type: boolean }
+    McpProviderAdminErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, retryable]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            retryable: { type: boolean }
     SpecificationHubRequest:
       type: object
       properties:
@@ -16892,6 +17166,26 @@ components:
             retryable: { type: boolean }
 
   responses:
+    McpProviderAdminListOk:
+      description: Current platform administrator provider directory
+      headers: { x-request-id: { required: true, schema: { type: string } }, Cache-Control: { required: true, schema: { type: string, const: no-store } } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/McpProviderAdminListResponse' } } }
+    McpProviderAdminDetailOk:
+      description: Current platform administrator provider record
+      headers: { x-request-id: { required: true, schema: { type: string } }, Cache-Control: { required: true, schema: { type: string, const: no-store } } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/McpProviderAdminDetailResponse' } } }
+    McpProviderAdminDetailCreated:
+      description: Created platform administrator provider record
+      headers: { x-request-id: { required: true, schema: { type: string } }, Cache-Control: { required: true, schema: { type: string, const: no-store } } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/McpProviderAdminDetailResponse' } } }
+    McpProviderAdminRemovalOk:
+      description: Removed platform administrator provider record
+      headers: { x-request-id: { required: true, schema: { type: string } }, Cache-Control: { required: true, schema: { type: string, const: no-store } } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/McpProviderAdminRemovalResponse' } } }
+    McpProviderAdminError:
+      description: Closed admitted-provider administration failure
+      headers: { x-request-id: { required: true, schema: { type: string } }, Cache-Control: { required: true, schema: { type: string, const: no-store } } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/McpProviderAdminErrorResponse' } } }
     ConnectorListInvalidArgument:
       description: The connector.list request has query parameters, a body, or a disallowed request header.
       content:

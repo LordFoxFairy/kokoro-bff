@@ -1,3 +1,7 @@
+## T-K03.19 D3 Provider 管理数据边界（2026-10-11；实施中）
+
+BFF 不为 Provider 管理创建或读取任何数据库表、Redis key、receipt、审核副本或静态目录。`kokoro_platform.mcp_provider`、state version、soft delete、command receipt 与 provider catalog cache 仍完全由 Platform owner 管理。BFF 的 browser session 与当前 platform-admin 资格来自 IAM；client credential 只保存在受限本地文件并只产生短期内存 token。进程重启不恢复、构造或改变任何 Provider 事实。
+
 <!-- BEGIN:T-K03.13-BFF-MCP-PERSONAL-CRUD-D0 -->
 ## T-K03.16 Connector V1 数据边界（已实施）
 

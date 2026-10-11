@@ -1,6 +1,9 @@
 import { McpPersonalConnectClient } from "../infrastructure/clients/platform/mcp-personal-connect.js"
 import { McpPersonalCredentialSource } from "../infrastructure/clients/platform/mcp-personal-credential.js"
 import { McpPersonalTokenSource } from "../infrastructure/clients/platform/mcp-personal-token.js"
+import { McpProviderAdminConnectClient } from "../infrastructure/clients/platform/mcp-provider-admin-connect.js"
+import { McpProviderAdminCredentialSource } from "../infrastructure/clients/platform/mcp-provider-admin-credential.js"
+import { McpProviderAdminTokenSource } from "../infrastructure/clients/platform/mcp-provider-admin-token.js"
 import { SkillSpecificationService } from "../application/skill-specification.js"
 import { PlatformSkillSpecificationFacade } from "../infrastructure/clients/platform/skill-specification-facade.js"
 import { PlatformProjectionHttpClient } from "../infrastructure/clients/platform/projection-http.js"
@@ -72,6 +75,7 @@ export type BffRouteHandler = (input: BffRouteInput) => Promise<boolean | void>
 
 export type BffServerComposition = {
   mcpPersonalClient: (Pick<McpPersonalConnectClient, "read"> & Partial<Pick<McpPersonalConnectClient, "close" | "command">>) | null
+  mcpProviderAdminClient: (Pick<McpProviderAdminConnectClient, "execute"> & Partial<Pick<McpProviderAdminConnectClient, "close">>) | null
   localSkillImportClient?: LocalSkillImportClient
   skillSpecificationSource: SkillSpecificationSource | null
   skillDownloadHandles: SkillDownloadHandles
@@ -105,6 +109,7 @@ export type BffServerComposition = {
 
 export type BffCompositionOptions = {
   mcpPersonalClient?: (Pick<McpPersonalConnectClient, "read"> & Partial<Pick<McpPersonalConnectClient, "close" | "command">>) | null
+  mcpProviderAdminClient?: (Pick<McpProviderAdminConnectClient, "execute"> & Partial<Pick<McpProviderAdminConnectClient, "close">>) | null
   localSkillImportClient?: LocalSkillImportClient
   skillSpecificationSource?: SkillSpecificationSource | null
   exactSkillDownloadSource?: ExactSkillDownloadSource | null
@@ -358,14 +363,34 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
           config.platformProjection.timeoutMs,
         )
       : null
-  const mcpPersonalClient = options.mcpPersonalClient !== undefined ? options.mcpPersonalClient
-    : config.mcpPersonal && config.iamBaseUrl ? new McpPersonalConnectClient(config.mcpPersonal.baseUrl,
-      new McpPersonalTokenSource(config.iamBaseUrl, new McpPersonalCredentialSource(config.mcpPersonal.credentialFile), 10_000)) : null
+  const mcpPersonalClient =
+    options.mcpPersonalClient !== undefined
+      ? options.mcpPersonalClient
+      : config.mcpPersonal && config.iamBaseUrl
+        ? new McpPersonalConnectClient(
+            config.mcpPersonal.baseUrl,
+            new McpPersonalTokenSource(config.iamBaseUrl, new McpPersonalCredentialSource(config.mcpPersonal.credentialFile), 10_000),
+          )
+        : null
+  const mcpProviderAdminClient =
+    options.mcpProviderAdminClient !== undefined
+      ? options.mcpProviderAdminClient
+      : config.mcpProviderAdmin && config.iamBaseUrl
+        ? new McpProviderAdminConnectClient(
+            config.mcpProviderAdmin.baseUrl,
+            new McpProviderAdminTokenSource(
+              config.iamBaseUrl,
+              new McpProviderAdminCredentialSource(config.mcpProviderAdmin.credentialFile),
+              config.mcpProviderAdmin.timeoutMs,
+            ),
+          )
+        : null
   let closePromise: Promise<void> | null = null
   const close = (): Promise<void> => {
     if (closePromise !== null) return closePromise
     closePromise = (async (): Promise<void> => {
       mcpPersonalClient?.close?.()
+      mcpProviderAdminClient?.close?.()
       await stopWorkers()
       skillDownloadHandles.clear()
       await closeStore()
@@ -374,6 +399,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
   }
   return {
     mcpPersonalClient,
+    mcpProviderAdminClient,
     ...(localSkillImportClient === undefined ? {} : { localSkillImportClient }),
     skillSpecificationSource:
       options.skillSpecificationSource !== undefined

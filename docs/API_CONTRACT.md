@@ -1,3 +1,9 @@
+## T-K03.19 D3 Provider 管理 API（2026-10-11；实施中）
+
+BFF 将在既有 `/v1` 下新增 `GET|POST /v1/admin/mcp/providers` 与 `GET|PATCH|DELETE /v1/admin/mcp/providers/{provider_key}`、`PUT /v1/admin/mcp/providers/{provider_key}/enabled`。它们是 `owner=kokoro-bff`、`visibility=browser-private`、beta 的受控管理 adapter，不是 Platform RPC 的重命名，也不暴露 Connect、workload token、tenant/subject header 或 owner receipt。所有成功为 `{data: …}`、所有失败为稳定 `{error:{code,message,retryable}}`、全响应含 `x-request-id` 和 `cache-control:no-store`。
+
+读取与命令（含同 key replay）均在 BFF fresh session 后检查 IAM `mcp_catalog/manage`；普通用户和过期/失权管理员在任何 Platform 调用前终止。命令要求单个 `Idempotency-Key` 与 body `expected_state_version`，其余身份只从可信 session 获得；Platform 返回的 provider/CAS/replay 状态经窄映射为 snake_case。Platform `McpProviderAdminService` 是唯一 internal-owner contract，固定 `b95365f` 的发布输入；无 HTTP alias、无自由代理、无浏览器 bearer 转发。
+
 <!-- BEGIN:T-K03.13-BFF-MCP-PERSONAL-CRUD-D0 -->
 ## T-K03.16 Connector V1 API 对齐 Manus（已实施）
 

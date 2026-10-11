@@ -2972,7 +2972,24 @@ export function restorePublic141ConnectorListContract(source: string): string {
   return source.replace(path, "").replace(responses, "").replace("  version: 14.1.0", "  version: 14.0.0")
 }
 
+export function restorePublic143McpProviderAdminContract(source: string): string {
+  if (!/^  version: 14\.3\.0$/mu.test(source)) throw new Error("MCP provider administration minor version drift")
+  const digest = (value: string): string => createHash("sha256").update(value).digest("hex")
+  const path = source.match(/^  \/v1\/admin\/mcp\/providers:\n[\s\S]*?(?=^  \/v1\/admin\/skills:)/mu)?.[0]
+  const parameters = source.match(/^    McpProviderAdminKey:\n[\s\S]*?(?=^    AdminIdentityLimit:)/mu)?.[0]
+  const schemas = source.match(/^    McpProviderAdminOrigin:\n[\s\S]*?(?=^    SpecificationHubRequest:)/mu)?.[0]
+  const responses = source.match(/^    McpProviderAdminListOk:\n[\s\S]*?(?=^    ConnectorListInvalidArgument:)/mu)?.[0]
+  if (path === undefined || parameters === undefined || schemas === undefined || responses === undefined)
+    throw new Error("MCP provider administration exact delta missing")
+  if (digest(path) !== "64669f1ae6349de1f4279281dc036b9c3c77e956d20837d1937de60705938941") throw new Error("MCP provider administration path drift")
+  if (digest(parameters) !== "d79bdb24c98dacb8caab7aa1bc6479632a5e048c97ad1e15578dd7a2c0644c30") throw new Error("MCP provider administration parameters drift")
+  if (digest(schemas) !== "c59f8f199adb7110729f4b87882e4904de12bedfe2948f376efde9df370ea87c") throw new Error("MCP provider administration schemas drift")
+  if (digest(responses) !== "e4e6f1c851cb9d21c5d4936648756545645e5eae9246b7294110b8bccd2de3b6") throw new Error("MCP provider administration responses drift")
+  return source.replace(path, "").replace(parameters, "").replace(schemas, "").replace(responses, "").replace("  version: 14.3.0", "  version: 14.2.0")
+}
+
 export function restorePublic142AdminSkillDraftContract(source: string): string {
+  if (/^  version: 14\.3\.0$/mu.test(source)) source = restorePublic143McpProviderAdminContract(source)
   if (!/^  version: 14\.2\.0$/mu.test(source)) throw new Error("Admin Skill draft version drift")
   const digest = (value: string): string => createHash("sha256").update(value).digest("hex")
   const path = source.match(/^  \/v1\/admin\/skills:\n[\s\S]*?^(    post:\n[\s\S]*?)(?=^  \/v1\/admin\/skills\/\{skill_id\}:)/mu)?.[1]
@@ -3038,7 +3055,11 @@ export function restorePublic132SharedRevisionContract(source: string): string {
 export function inspectBffOpenApi(source: string, baseline: readonly BaselineOperation[]): string[] {
   let parent: string
   try {
-    parent = restorePublic132SharedRevisionContract(restorePublic133McpPersonalContract(restorePublic141ConnectorListContract(restorePublic142AdminSkillDraftContract(source))))
+    parent = restorePublic132SharedRevisionContract(
+      restorePublic133McpPersonalContract(
+        restorePublic141ConnectorListContract(restorePublic142AdminSkillDraftContract(restorePublic143McpProviderAdminContract(source))),
+      ),
+    )
   } catch (error) {
     return [error instanceof Error ? error.message : "Shared revision contract invalid"]
   }

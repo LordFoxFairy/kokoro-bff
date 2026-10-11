@@ -3,29 +3,39 @@ import test from "node:test"
 import { readFile } from "node:fs/promises"
 import { createRequire } from "node:module"
 const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
-test("Admin Skill draft is an additive public minor over Connector list", async () => {
+test("MCP provider administration is an additive public minor over Admin Skills", async () => {
   const spec = load(await readFile(new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"))
-  assert.equal(spec.info.version, "14.2.0")
+  assert.equal(spec.info.version, "14.3.0")
   assert.equal(
     Object.values(spec.paths).reduce(
       (n, path) => n + Object.keys(path).filter((k) => ["get", "post", "patch", "put", "delete", "head", "options"].includes(k)).length,
       0,
     ),
-    145,
+    151,
   )
   const schema = spec.components.schemas.PersonalMcpConnector
   assert.ok(schema.required.includes("enabled"))
   assert.ok(schema.required.includes("state_version"))
   for (const field of ["display_name", "description", "created_at", "updated_at"]) assert.ok(!schema.required.includes(field))
 })
-test("Admin Skill draft, Connector list and prior MCP deltas keep exact historical inverses", async () => {
-  const { restorePublic142AdminSkillDraftContract, restorePublic141ConnectorListContract, restorePublic133McpPersonalContract, inspectBffOpenApi } = await import("../../scripts/verify-openapi.ts")
+test("MCP provider administration, Admin Skill draft, Connector list and prior MCP deltas keep exact historical inverses", async () => {
+  const {
+    restorePublic143McpProviderAdminContract,
+    restorePublic142AdminSkillDraftContract,
+    restorePublic141ConnectorListContract,
+    restorePublic133McpPersonalContract,
+    inspectBffOpenApi,
+  } = await import("../../scripts/verify-openapi.ts")
   const { createHash } = await import("node:crypto")
   const source = await readFile(new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
   const baseline = JSON.parse(await readFile(new URL("../../contract/tests/v1-operations.json", import.meta.url), "utf8")).operations
   assert.equal(
     createHash("sha256")
-      .update(restorePublic133McpPersonalContract(restorePublic141ConnectorListContract(restorePublic142AdminSkillDraftContract(source))))
+      .update(
+        restorePublic133McpPersonalContract(
+          restorePublic141ConnectorListContract(restorePublic142AdminSkillDraftContract(restorePublic143McpProviderAdminContract(source))),
+        ),
+      )
       .digest("hex"),
     "0a9683b38cfd30534931dd0cd7821e3ccded94d6d15613a711cebc1f1e83a209",
   )
@@ -45,7 +55,7 @@ test("Admin Skill draft, Connector list and prior MCP deltas keep exact historic
     source.replace("required: [connector_id, connector_type, provider_key, status, approved_scopes, enabled, state_version]", "required: [connector_id]"),
     source.replace("mcp_personal_command_in_progress", "generic_error"),
     source.replace("operationId: listPersonalMcpConnections", "operationId: old_tamper"),
-    source.replace("  version: 14.2.0", "  version: 14.1.0"),
+    source.replace("  version: 14.3.0", "  version: 14.2.0"),
     source + "unexpected: true\n",
   ])
     assert.notDeepEqual(inspectBffOpenApi(changed, baseline), [])

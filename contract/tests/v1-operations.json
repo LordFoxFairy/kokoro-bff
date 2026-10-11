@@ -403,6 +403,11 @@
     },
     {
       "method": "GET",
+      "path": "/v1/connector.list",
+      "operation_id": "listConnectors"
+    },
+    {
+      "method": "GET",
       "path": "/v1/mcp/connections",
       "operation_id": "listSelfMcpConnections"
     },
@@ -527,14 +532,44 @@
       "operation_id": "listPersonalMcpConnectors"
     },
     {
+      "method": "POST",
+      "path": "/v1/self/mcp/connectors",
+      "operation_id": "createPersonalMcpConnector"
+    },
+    {
       "method": "GET",
       "path": "/v1/self/mcp/connectors/{connector_id}",
       "operation_id": "getPersonalMcpConnector"
     },
     {
+      "method": "PATCH",
+      "path": "/v1/self/mcp/connectors/{connector_id}",
+      "operation_id": "updatePersonalMcpConnector"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/self/mcp/connectors/{connector_id}",
+      "operation_id": "removePersonalMcpConnector"
+    },
+    {
       "method": "GET",
       "path": "/v1/self/mcp/connectors/{connector_id}/connections",
       "operation_id": "listPersonalMcpConnections"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/self/mcp/connectors/{connector_id}/enabled",
+      "operation_id": "setPersonalMcpConnectorEnabled"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/self/mcp/providers",
+      "operation_id": "listPersonalMcpProviders"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/self/mcp/providers/{provider_key}",
+      "operation_id": "getPersonalMcpProvider"
     },
     {
       "method": "GET",
@@ -583,8 +618,43 @@
     },
     {
       "method": "GET",
+      "path": "/v1/admin/mcp/providers",
+      "operation_id": "listAdminMcpProviders"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/admin/mcp/providers",
+      "operation_id": "createAdminMcpProvider"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/admin/mcp/providers/{provider_key}",
+      "operation_id": "getAdminMcpProvider"
+    },
+    {
+      "method": "PATCH",
+      "path": "/v1/admin/mcp/providers/{provider_key}",
+      "operation_id": "updateAdminMcpProvider"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/admin/mcp/providers/{provider_key}",
+      "operation_id": "removeAdminMcpProvider"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/admin/mcp/providers/{provider_key}/enabled",
+      "operation_id": "setAdminMcpProviderEnabled"
+    },
+    {
+      "method": "GET",
       "path": "/v1/admin/skills",
       "operation_id": "listAdminSkills"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/admin/skills",
+      "operation_id": "createAdminSkillDraft"
     },
     {
       "method": "GET",
@@ -685,36 +755,6 @@
       "method": "GET",
       "path": "/skill-downloads/{handle}",
       "operation_id": "downloadSkillBytes"
-    },
-    {
-      "method": "POST",
-      "path": "/v1/self/mcp/connectors",
-      "operation_id": "createPersonalMcpConnector"
-    },
-    {
-      "method": "PATCH",
-      "path": "/v1/self/mcp/connectors/{connector_id}",
-      "operation_id": "updatePersonalMcpConnector"
-    },
-    {
-      "method": "DELETE",
-      "path": "/v1/self/mcp/connectors/{connector_id}",
-      "operation_id": "removePersonalMcpConnector"
-    },
-    {
-      "method": "PUT",
-      "path": "/v1/self/mcp/connectors/{connector_id}/enabled",
-      "operation_id": "setPersonalMcpConnectorEnabled"
-    },
-    {
-      "method": "GET",
-      "path": "/v1/self/mcp/providers",
-      "operation_id": "listPersonalMcpProviders"
-    },
-    {
-      "method": "GET",
-      "path": "/v1/self/mcp/providers/{provider_key}",
-      "operation_id": "getPersonalMcpProvider"
     }
   ]
 }

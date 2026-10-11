@@ -1,3 +1,15 @@
+## T-K03.19 D3 Provider 管理 BFF 设计门（2026-10-11；实施中）
+
+| 项 | 决定 |
+| --- | --- |
+| Owner | `kokoro-bff` 仅拥有 `/v1/admin/mcp/providers` 的 public adapter；Provider、状态版本、删除、receipt 与目录缓存仍由 `kokoro-platform/modules/mcp/provider` 唯一写入。 |
+| 当前事实 | Platform main `b95365f` 已运行 `McpProviderAdminService`；BFF 当前 Platform vendor `3fba…` 不含该 Proto，现有本人 MCP adapter 也不具备人类 platform-admin 判断或此 workload。 |
+| 目录方案 | 采用既有 `src/http/routes/` 承载 public input/admission/response，`src/infrastructure/clients/platform/` 承载生成的 Connect client 与独立 `mcp_admin` credential/token source；淘汰在 `connector-list`、Web 或 Admin 中直连 owner 的方案。 |
+| 准入与调用 | 每次 read、command 与 receipt replay 先重新验证 browser session，再以 IAM `mcp_catalog/manage` 获取当前 platform-admin 许可；仅成功后交换 BFF `mcp_admin` client credential、携带可信 tenant/subject/request-id 调用 Platform。浏览器 bearer 不转发给 Platform。 |
+| 数据/API | 新增 additive `/v1/admin/mcp/providers` 列表/创建与按 provider_key 的 get/update/enable/delete；公开 JSON 固定 snake_case、`data`/`error` envelope、十进制 `state_version` 与 `Idempotency-Key` command identity。BFF 不增表、Redis、receipt、缓存或 owner SQL。 |
+| 固定契约 | 新增单用途 vendor pin `b95365f` 的三份 Proto + provider-admin profile，并由受控生成脚本产出独立 Connect client；既有旧 Platform consumer 继续固定自身发行，二者不互作或互为 fallback。 |
+| 验证 | 先 contract/HTTP RED：普通用户零 owner 调用、管理员每次 fresh action、非法/CAS/重复 key、owner replay/错误映射；再跑 lint/typecheck/contract/build、真实 Platform+IAM 浏览器管理路径。 |
+
 <!-- BEGIN:T-K03.13-BFF-MCP-PERSONAL-CRUD-D0 -->
 ## T-K03.16 Connector API V1 对齐 Manus（已实施）
 

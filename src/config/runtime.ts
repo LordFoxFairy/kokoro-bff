@@ -91,6 +91,7 @@ export type BffConfig = {
   agUi: AgUiConfig
   upstreams: Record<string, string | null>
   mcpPersonal?: Readonly<{ baseUrl: string; credentialFile: string }> | null
+  mcpProviderAdmin?: Readonly<{ baseUrl: string; credentialFile: string; timeoutMs: number }> | null
   platformProjection: Readonly<{ baseUrl: string | null; credentialFile: string | null; timeoutMs: number }>
   skillAdminCredentialFile?: string | null
   skillDraft: Readonly<{
@@ -411,6 +412,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
       if (credentialFile === null) return null
       if (!skillDraft.platformBaseUrl || !optionalUrl(env.KOKORO_IAM_BASE_URL)) throw new Error("mcp_personal_configuration_incomplete")
       return { baseUrl: skillDraft.platformBaseUrl, credentialFile }
+    })(),
+    mcpProviderAdmin: (() => {
+      const credentialFile = env.KOKORO_BFF_PLATFORM_MCP_ADMIN_CREDENTIALS_FILE?.trim() || null
+      if (credentialFile === null) return null
+      if (!skillDraft.platformBaseUrl || !optionalUrl(env.KOKORO_IAM_BASE_URL)) throw new Error("mcp_provider_admin_configuration_incomplete")
+      return { baseUrl: skillDraft.platformBaseUrl, credentialFile, timeoutMs: upstreamTimeoutMs }
     })(),
     platformProjection: {
       baseUrl: skillDraft.platformBaseUrl,

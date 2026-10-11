@@ -27,7 +27,7 @@ export class McpAuthorizationClient {
     if (this.transport === null || !input.token.trim() || !input.tenantId.trim() || !input.subjectId.trim()) return unavailable
     if (
       !zCheckAuthorizationBody.safeParse({
-        resource: "mcp_personal",
+        resource: input.resource,
         action: input.action,
       }).success
     )

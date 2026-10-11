@@ -140,7 +140,28 @@ export async function authorizeMcpAction(
     signal,
     tenantId: admission.context.identity.namespace,
     subjectId: admission.context.identity.userId,
+    resource: "mcp_personal",
     action,
+  })
+  signal.throwIfAborted()
+  return result
+}
+
+/** Human admission is fresh for every Platform MCP provider administration operation. */
+export async function authorizeMcpCatalogAction(
+  source: Pick<import("./mcp-authorization.client.js").McpAuthorizationClient, "check">,
+  admission: Extract<UserAdmissionResult, { ok: true }>,
+  signal: AbortSignal,
+) {
+  signal.throwIfAborted()
+  const result = await source.check({
+    token: admission.bearerToken,
+    requestId: admission.context.requestId,
+    signal,
+    tenantId: admission.context.identity.namespace,
+    subjectId: admission.context.identity.userId,
+    resource: "mcp_catalog",
+    action: "manage",
   })
   signal.throwIfAborted()
   return result
