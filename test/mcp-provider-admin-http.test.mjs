@@ -133,6 +133,47 @@ test("provider admin validates a create command before owner invocation", async 
   }
 })
 
+test("provider admin accepts HTTPS directory metadata for a valid update", async () => {
+  let received
+  const app = await fixture({
+    client: {
+      execute: async (_operation, input) => {
+        received = input
+        return { provider: { ...provider, ...input.provider, state_version: "2" }, replayed: false }
+      },
+    },
+  })
+  try {
+    const response = await fetch(`${app.origin}/v1/admin/mcp/providers/github`, {
+      method: "PATCH",
+      headers: { ...headers, "content-type": "application/json", "idempotency-key": "update-github-directory" },
+      body: JSON.stringify({
+        expected_state_version: "1",
+        provider: {
+          provider_key: provider.provider_key,
+          display_name: provider.display_name,
+          directory_type: provider.directory_type,
+          category_keys: provider.category_keys,
+          example_prompts: provider.example_prompts,
+          connector_types: provider.connector_types,
+          default_scopes: provider.default_scopes,
+          authorization_required: provider.authorization_required,
+          allowed_mcp_origins: provider.allowed_mcp_origins,
+          description: "Access, search, and organize GitHub repositories from Kokoro.",
+          author: "GitHub",
+          website: "https://github.com",
+          privacy_url: "https://docs.github.com/site-policy/privacy-policies/github-privacy-statement",
+        },
+      }),
+    })
+    assert.equal(response.status, 200)
+    assert.equal(received.provider.website, "https://github.com")
+    assert.equal(received.provider.privacy_url, "https://docs.github.com/site-policy/privacy-policies/github-privacy-statement")
+  } finally {
+    await app.close()
+  }
+})
+
 test("provider admin requires a configured owner client", async () => {
   const app = await fixture()
   try {

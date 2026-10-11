@@ -21,6 +21,15 @@ const scopes = z
   .array(z.string().regex(/^[^\s]{1,128}$/u))
   .max(100)
   .refine((value) => new Set(value).size === value.length)
+const secureUrl = z.string().max(2048).refine((value) => {
+  if (value.trim() !== value) return false
+  try {
+    const parsed = new URL(value)
+    return parsed.protocol === "https:" && !parsed.username && !parsed.password
+  } catch {
+    return false
+  }
+})
 const origin = z
   .object({ scheme: z.enum(["http", "https"]), host: text(1, 253), port: z.int().min(1).max(65535), path_prefix: z.string().max(2048).startsWith("/") })
   .strict()
@@ -42,14 +51,11 @@ const provider = z
       .refine((value) => new Set(value).size === value.length),
     example_prompts: z.array(text(1, 1000)).max(10),
     author: text(1, 100).optional(),
-    website: z
-      .url({ protocol: /^https:$/u })
-      .max(2048)
-      .optional(),
-    privacy_url: z
-      .url({ protocol: /^https:$/u })
-      .max(2048)
-      .optional(),
+    // Zod matches the URL protocol without the trailing colon. Keep this
+    // parser aligned with Platform's metadata owner so valid HTTPS links do
+    // not fail at the BFF edge and unsafe credentials never reach Platform.
+    website: secureUrl.optional(),
+    privacy_url: secureUrl.optional(),
     connector_types: z
       .array(z.enum(["builtin", "byok", "mcp"]))
       .min(1)
