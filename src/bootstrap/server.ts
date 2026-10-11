@@ -526,7 +526,7 @@ async function handle(
   if (
     businessPath[0] === "admin" &&
     businessPath[1] === "skills" &&
-    ((request.method === "GET" && [2, 3].includes(businessPath.length)) || (request.method === "POST" && businessPath.length === 4))
+    ((request.method === "GET" && [2, 3].includes(businessPath.length)) || (request.method === "POST" && [2, 4].includes(businessPath.length)))
   ) {
     await skillAdminRoute(request, response, context, businessPath, composition.skillAdminClient, config.iamBaseUrl)
     return

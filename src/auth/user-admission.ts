@@ -76,6 +76,7 @@ export async function authorizeLocalSkillImportWrite(
 export function skillActionForRequest(method: string, path: string[]): import("./skill-authorization.types.js").SkillAuthorizationInput["action"] | null {
   if (path[0] === "admin" && path[1] === "skills") {
     if (method === "GET") return "admin_read"
+    if (method === "POST" && path.length === 2) return "admin_create_draft"
     const actions: Record<string, import("./skill-authorization.types.js").SkillAuthorizationInput["action"]> = {
       versions: "admin_create_version",
       publish: "official_publish",

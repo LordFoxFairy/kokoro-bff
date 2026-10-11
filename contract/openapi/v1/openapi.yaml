@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 14.1.0
+  version: 14.2.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -6558,6 +6558,211 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SkillProductErrorResponse"
+    post:
+      tags:
+        - Skills
+      operationId: createAdminSkillDraft
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: skill.admin
+      summary: createAdminSkillDraft
+      description: >-
+        Creates the initial official Skill draft through the Platform owner; identity comes from fresh IAM admission. Identity comes from fresh IAM admission; no caller-supplied tenant, actor or admin status. One bounded admission and I/O budget,
+        no fallback.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 128
+            pattern: ^[\x21-\x2B\x2D-\x7E]{1,128}$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SkillAdminDraftRequest"
+      responses:
+        "201":
+          description: Current admitted Product result
+          headers:
+            x-request-id:
+              schema:
+                type: string
+                minLength: 1
+                maxLength: 128
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SkillProductAckResponse"
+        "400":
+          description: Closed sanitized Product failure
+          headers:
+            x-request-id:
+              schema:
+                type: string
+                minLength: 1
+                maxLength: 128
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SkillProductErrorResponse"
+        "401":
+          description: Closed sanitized Product failure
+          headers:
+            x-request-id:
+              schema:
+                type: string
+                minLength: 1
+                maxLength: 128
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SkillProductErrorResponse"
+        "403":
+          description: Closed sanitized Product failure
+          headers:
+            x-request-id:
+              schema:
+                type: string
+                minLength: 1
+                maxLength: 128
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SkillProductErrorResponse"
+        "404":
+          description: Closed sanitized Product failure
+          headers:
+            x-request-id:
+              schema:
+                type: string
+                minLength: 1
+                maxLength: 128
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SkillProductErrorResponse"
+        "409":
+          description: Closed sanitized Product failure
+          headers:
+            x-request-id:
+              schema:
+                type: string
+                minLength: 1
+                maxLength: 128
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SkillProductErrorResponse"
+        "412":
+          description: Closed sanitized Product failure
+          headers:
+            x-request-id:
+              schema:
+                type: string
+                minLength: 1
+                maxLength: 128
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SkillProductErrorResponse"
+        "413":
+          description: Closed sanitized Product failure
+          headers:
+            x-request-id:
+              schema:
+                type: string
+                minLength: 1
+                maxLength: 128
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SkillProductErrorResponse"
+        "429":
+          description: Closed sanitized Product failure
+          headers:
+            x-request-id:
+              schema:
+                type: string
+                minLength: 1
+                maxLength: 128
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SkillProductErrorResponse"
+        "502":
+          description: Closed sanitized Product failure
+          headers:
+            x-request-id:
+              schema:
+                type: string
+                minLength: 1
+                maxLength: 128
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SkillProductErrorResponse"
+        "503":
+          description: Closed sanitized Product failure
+          headers:
+            x-request-id:
+              schema:
+                type: string
+                minLength: 1
+                maxLength: 128
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SkillProductErrorResponse"
   /v1/admin/skills/{skill_id}:
     get:
       tags:
@@ -12167,6 +12372,14 @@ components:
             - catalog
         publisher:
           $ref: "#/components/schemas/Public9SkillIamRef"
+    SkillAdminDraftRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - metadata
+      properties:
+        metadata:
+          $ref: "#/components/schemas/SkillProductMetadata"
     SkillAdminVersionRequest:
       type: object
       additionalProperties: false

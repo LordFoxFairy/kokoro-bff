@@ -9,10 +9,10 @@ import { configureBffProtobufTextEncoding } from "../dist/infrastructure/protobu
 
 configureBffProtobufTextEncoding()
 
-const ownerCommit = "91bc3655ebd3648cb8f8ccddfacb5628bdeb1c5c"
+const ownerCommit = "3fba81e37fbd23e40918fd838b8ecc9da9c9fb42"
 const sources = {
   "kokoro/common/v1/common.proto": "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08",
-  "kokoro/platform/v1/platform_runtime.proto": "22a69ebbad7797c1f617535463a057bc56f6d989760069d635eef1e0a470be85",
+  "kokoro/platform/v1/platform_runtime.proto": "5e02489c99ff47e10854a8f408db8eec6fc326465878b87bb7c235657d0caa94",
   "kokoro/storage/v3/storage.proto": "1021e603065978871c51519ddba5b23c9b97f16b781a08bd98e019b3342bf5f9",
 }
 const root = new URL("../", import.meta.url)
@@ -96,7 +96,7 @@ test("Platform consumer pins exact owner Proto bytes and active V10 through hist
   )
   assert.deepEqual(manifest.descriptor, {
     path: `contract/vendor/kokoro-platform/${ownerCommit}/descriptor/platform-v1.binpb`,
-    sha256: "11f00c2459fb6bd916c04d523960ce0e728b5e63d1e005b128ae44ffb0194bfb",
+    sha256: "28aa0e6555dab43bafcceb092cc2ed14d36c5a073dd92b44c2dfac4c4e80d9df",
   })
   assert.deepEqual(
     manifest.owner.sources,
@@ -360,7 +360,7 @@ test("Platform generated Product installation exposes fixed metadata tags", asyn
   assert.match(text, /sourceStatus/u)
 })
 
-test("R345 generated and compiled Product installation add only required Skill update Timestamp tag14", async () => {
+test("R345 official-draft parent preserves Product installation Skill update Timestamp tag14", async () => {
   const { fromBinary, toBinary } = await import("@bufbuild/protobuf")
   const { FileDescriptorProtoSchema, FileDescriptorSetSchema } = await import("@bufbuild/protobuf/wkt")
   const generated = await import("../dist/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
@@ -376,7 +376,7 @@ test("R345 generated and compiled Product installation add only required Skill u
   assert.equal(skillUpdated?.oneof, undefined)
 
   const prefix = `contract/vendor/kokoro-platform/${ownerCommit}/descriptor`
-  const currentBytes = await requiredFile(`${prefix}/platform-v1.binpb`)
+  const currentBytes = await requiredFile(`${prefix}/platform-admin-skill-draft-parent.binpb`)
   assert.equal(sha256(currentBytes), "11f00c2459fb6bd916c04d523960ce0e728b5e63d1e005b128ae44ffb0194bfb")
   const current = fromBinary(FileDescriptorSetSchema, await requiredFile(`${prefix}/platform-skill-example-prompts-parent.binpb`))
   const compiledParentBytes = await requiredFile(`${prefix}/platform-skill-updated-at-parent.binpb`)
@@ -606,11 +606,11 @@ test("R340 generated consumer exposes both personal package inspection services"
   }
 })
 
-test("formal complete 91-input publication is closed, byte-pinned and rejects omitted, extra and altered inputs", async () => {
+test("formal complete 95-input publication is closed, byte-pinned and rejects omitted, extra and altered inputs", async () => {
   const manifest = JSON.parse(await requiredFile("contract/dependencies/platform-connect.json"))
   assert.equal(manifest.published_inputs.path_algorithm, "owner-repository-relative-including-contract")
-  assert.equal(manifest.published_inputs.aggregate_sha256, "6eab11810345adad565f487b8a1b890967c25befdda19abbfc428c553b55ad6c")
-  assert.equal(manifest.published_inputs.files.length, 91)
+  assert.equal(manifest.published_inputs.aggregate_sha256, "5904965c145509f4e967d74fa9ce7159f7127edc8bd815c660a65a3cd6060993")
+  assert.equal(manifest.published_inputs.files.length, 95)
   const files = Object.fromEntries(
     await Promise.all(
       manifest.published_inputs.files.map(async (pin) => {
@@ -824,15 +824,16 @@ test("P4 query6 strips only the approved field and source_kind5 remains parent b
   assert.throws(() => stripDescriptorLineage(changed), /whole parent graph drifted/)
 })
 
-test("new75 exact revision qualification independently restores frozen74 source/compiled graph", async () => {
-  const { restoreRevisionReadDescriptor, restoreRevisionReadSource } = await generator()
+test("official draft first restores exact revision75, then revision qualification restores frozen74 source/compiled graph", async () => {
+  const { restoreAdminSkillDraftDescriptor, restoreAdminSkillDraftSource, restoreRevisionReadDescriptor, restoreRevisionReadSource } = await generator()
   const { fromBinary } = await import("@bufbuild/protobuf"),
     { FileDescriptorSetSchema } = await import("@bufbuild/protobuf/wkt")
   const bytes = await requiredFile(`contract/vendor/kokoro-platform/${ownerCommit}/descriptor/platform-v1.binpb`)
   const proto = (await requiredFile(`contract/vendor/kokoro-platform/${ownerCommit}/proto/kokoro/platform/v1/platform_runtime.proto`)).toString("utf8")
-  const current = fromBinary(FileDescriptorSetSchema, bytes)
+  const current = restoreAdminSkillDraftDescriptor(fromBinary(FileDescriptorSetSchema, bytes))
+  const draftParentSource = restoreAdminSkillDraftSource(proto)
   assert.equal(
-    restoreRevisionReadSource(proto),
+    restoreRevisionReadSource(draftParentSource),
     (await requiredFile(`contract/vendor/kokoro-platform/${ownerCommit}/descriptor/platform-skill-revision-read-parent.proto.snapshot`)).toString("utf8"),
   )
   restoreRevisionReadDescriptor(current)
@@ -845,5 +846,5 @@ test("new75 exact revision qualification independently restores frozen74 source/
     if (kind === "old-field") file.messageType.find((v) => v.name === "SkillProductRecord").field[0].number = 99
     assert.throws(() => restoreRevisionReadDescriptor(changed))
   }
-  assert.throws(() => restoreRevisionReadSource(proto.replace("bool current = 3;", "bool current = 99;")))
+  assert.throws(() => restoreRevisionReadSource(draftParentSource.replace("bool current = 3;", "bool current = 99;")))
 })

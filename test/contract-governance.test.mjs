@@ -153,8 +153,8 @@ test("Library publishes explicit personal file 200 and rejects contract drift", 
 })
 
 test("the IAM consumer pins the complete 0.11.0 owner artifact and generates only approved admission, human qualification, Skill, Team and invitation operations", async () => {
-  const commit = "55befe5092f96d617088549df3166e1d381e6b1c"
-  const digest = "47011671cf2c3631c5ff914db4b40a8a9f9cdecc9b2b6fcd13a359a45b0882d3"
+  const commit = "719225439a3609b540f8d6265939feaef45a2268"
+  const digest = "cb81139cfac5890e43caca2a296e39e777f2488c743cfb931ab0a20e6761b21e"
   const [manifestSource, vendor, config, lockfile, sdk, types] = await Promise.all([
     readFile(new URL("../contract/dependencies/iam-http.json", import.meta.url), "utf8"),
     readFile(new URL(`../contract/vendor/kokoro-iam/${commit}/iam.internal.v1.json`, import.meta.url)),

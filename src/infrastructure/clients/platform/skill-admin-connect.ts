@@ -7,6 +7,7 @@ import type { SkillProductContext } from "./skill-product-connect.js"
 import { projectSkillProductCommand } from "./create-skill-draft-projector.js"
 
 export type SkillAdminCommand =
+  | "createAdminSkillDraft"
   | "createAdminSkillVersion"
   | "publishOfficialSkill"
   | "withdrawAdminSkill"

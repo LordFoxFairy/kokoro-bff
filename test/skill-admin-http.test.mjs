@@ -191,3 +191,68 @@ test("Admin binary wrapper forwards transport request-id and keeps exact respons
     await new Promise((resolve) => owner.close(resolve))
   }
 })
+
+test("Admin creates one official draft without caller-chosen identity or CAS", async () => {
+  const record = create(wire.SkillProductRecordSchema, {
+    skillId: { value: "official-1" },
+    sourceRef: { value: "skill:official-1" },
+    seriesId: { value: "official-series-1" },
+    revision: 1n,
+    status: 1,
+    packagePhase: wire.SkillPackagePhase.NONE,
+    skillUpdatedAt: { seconds: 1n, nanos: 0 },
+    metadata: { displayName: "Official skill", summary: "", categoryKeys: { keys: ["automation"] } },
+    product: { publicationAudience: "owner", stateVersion: 1n },
+  })
+  const received = fromBinary(wire.SkillProductRecordSchema, toBinary(wire.SkillProductRecordSchema, record))
+  const calls = []
+  const authorizations = []
+  const server = createBffServer(correctionConfig, {
+    businessStore: null,
+    sessionAdmission: { verify: async () => ({ ok: true, identity: { namespace: "tenant", userId: "admin" }, platformAdmin: true }) },
+    skillAuthorization: { check: async (input) => {
+      authorizations.push(input.action)
+      return { ok: true }
+    } },
+    skillAdminClient: {
+      get: async () => ({ skill: received }),
+      command: async (operation, context, members) => {
+        calls.push({ operation, context, members })
+        return { skill: received, eventId: "event-1", replayed: false }
+      },
+    },
+  })
+  server.listen(0, "127.0.0.1")
+  await once(server, "listening")
+  try {
+    const request = (body, headers = {}) =>
+      fetch(`http://127.0.0.1:${server.address().port}/v1/admin/skills`, {
+        method: "POST",
+        headers: { ...correctionHeaders, ...headers },
+        body: JSON.stringify(body),
+      })
+    const body = { metadata: { display_name: "Official skill", summary: "", tags: ["Kokoro"], category_keys: ["automation"] } }
+    const response = await request(body)
+    assert.equal(response.status, 201)
+    assert.equal(calls.length, 1)
+    assert.deepEqual(authorizations, ["admin_create_draft"])
+    assert.equal(calls[0].operation, "createAdminSkillDraft")
+    assert.equal(calls[0].context.commandId.startsWith("bff.skill."), true)
+    assert.deepEqual(calls[0].members, {
+      metadata: { display_name: "Official skill", summary: "", tags: ["Kokoro"], metadata_json: "e30", category_keys: { keys: ["automation"] } },
+    })
+    assert.deepEqual((await response.json()).data.skill.skill_id, "official-1")
+    for (const invalid of [
+      { ...body, skill_id: "caller-selected" },
+      { ...body, expected_state_version: "1" },
+      { metadata: { ...body.metadata, tags: ["Kokoro", "Kokoro"] } },
+    ]) {
+      const rejected = await request(invalid, { "idempotency-key": `invalid-${calls.length}` })
+      assert.equal(rejected.status, 400)
+      assert.equal(calls.length, 1)
+    }
+  } finally {
+    server.closeAllConnections()
+    await new Promise((resolve) => server.close(resolve))
+  }
+})

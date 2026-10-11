@@ -81,8 +81,8 @@ test("published browser-private policy is a deterministic read-only projection o
 })
 
 test("vendored IAM 0.11.0 contract and generated-client manifest pin the execution owner bytes", async () => {
-  const ownerCommit = "55befe5092f96d617088549df3166e1d381e6b1c"
-  const expectedDigest = "47011671cf2c3631c5ff914db4b40a8a9f9cdecc9b2b6fcd13a359a45b0882d3"
+  const ownerCommit = "719225439a3609b540f8d6265939feaef45a2268"
+  const expectedDigest = "cb81139cfac5890e43caca2a296e39e777f2488c743cfb931ab0a20e6761b21e"
   const vendor = await readFile(new URL(`../contract/vendor/kokoro-iam/${ownerCommit}/iam.internal.v1.json`, import.meta.url)).catch(() => null)
   assert.notEqual(vendor, null)
   assert.equal(createHash("sha256").update(vendor!).digest("hex"), expectedDigest)
@@ -248,7 +248,7 @@ test("relay URL configuration rejects partial settings and callback authority al
 
 test("R357 IAM 0.11 preserves all original fifteen consumer operations and their complete shared schemas", async () => {
   const vendor = JSON.parse(
-    await readFile(new URL("../contract/vendor/kokoro-iam/55befe5092f96d617088549df3166e1d381e6b1c/iam.internal.v1.json", import.meta.url), "utf8"),
+    await readFile(new URL("../contract/vendor/kokoro-iam/719225439a3609b540f8d6265939feaef45a2268/iam.internal.v1.json", import.meta.url), "utf8"),
   )
   const originalOperations = [
     "POST /internal/v1/session-authorizations/verify",
@@ -287,7 +287,7 @@ test("R357 IAM 0.11 preserves all original fifteen consumer operations and their
     createHash("sha256")
       .update(JSON.stringify(canonical({ operations, components: vendor.components })))
       .digest("hex"),
-    "e98a7bf1992cfc46ce192ff86388706978944a2afb9e99c28cd0560d11b0ffa6",
+    "fd871cf2f3206cf117565f9e4bc8e2041e6e1a1c4ba1e06f0bab5e1e8644a6cf",
   )
   assert.equal(typeof (iamSdk as Record<string, unknown>).checkAuthorization, "function")
   assert.equal(typeof (iamZod as Record<string, unknown>).zCheckAuthorizationResponse, "object")

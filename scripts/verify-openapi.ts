@@ -2972,6 +2972,17 @@ export function restorePublic141ConnectorListContract(source: string): string {
   return source.replace(path, "").replace(responses, "").replace("  version: 14.1.0", "  version: 14.0.0")
 }
 
+export function restorePublic142AdminSkillDraftContract(source: string): string {
+  if (!/^  version: 14\.2\.0$/mu.test(source)) throw new Error("Admin Skill draft version drift")
+  const digest = (value: string): string => createHash("sha256").update(value).digest("hex")
+  const path = source.match(/^  \/v1\/admin\/skills:\n[\s\S]*?^(    post:\n[\s\S]*?)(?=^  \/v1\/admin\/skills\/\{skill_id\}:)/mu)?.[1]
+  const schema = source.match(/^    SkillAdminDraftRequest:\n[\s\S]*?(?=^    SkillAdminVersionRequest:)/mu)?.[0]
+  if (path === undefined || schema === undefined) throw new Error("Admin Skill draft exact delta missing")
+  if (digest(path) !== "16de0f3f124596cad2286d4ef9dc63fe2d0d7f1cbc09556a93502ca5f42ef2ef") throw new Error("Admin Skill draft path drift")
+  if (digest(schema) !== "39c739a6f2dea74024b2b5257b0b8405e57a1f02dc0a6c8581e862e1c3cccb7c") throw new Error("Admin Skill draft schema drift")
+  return source.replace(path, "").replace(schema, "").replace("  version: 14.2.0", "  version: 14.1.0")
+}
+
 export function restorePublic133McpPersonalContract(source: string): string {
   if (!/^  version: 14\.0\.0$/mu.test(source)) throw new Error("Personal MCP corrective-major version drift")
   const digest = (value: string): string => createHash("sha256").update(value).digest("hex")
@@ -3027,7 +3038,7 @@ export function restorePublic132SharedRevisionContract(source: string): string {
 export function inspectBffOpenApi(source: string, baseline: readonly BaselineOperation[]): string[] {
   let parent: string
   try {
-    parent = restorePublic132SharedRevisionContract(restorePublic133McpPersonalContract(restorePublic141ConnectorListContract(source)))
+    parent = restorePublic132SharedRevisionContract(restorePublic133McpPersonalContract(restorePublic141ConnectorListContract(restorePublic142AdminSkillDraftContract(source))))
   } catch (error) {
     return [error instanceof Error ? error.message : "Shared revision contract invalid"]
   }

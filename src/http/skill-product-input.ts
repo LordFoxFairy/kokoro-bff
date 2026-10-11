@@ -35,6 +35,7 @@ export const skillProductInputs = {
   update: z.object({ ...cas, metadata: skillMetadataInputSchema, clear_cover: z.boolean().optional() }).strict(),
   discard: z.object({ ...cas, reason }).strict(),
   audience: z.object({ ...cas, audience: skillAudienceSchema }).strict(),
+  adminDraft: z.object({ metadata: skillMetadataInputSchema }).strict(),
   adminVersion: z.object({ ...cas, metadata: skillMetadataInputSchema }).strict(),
   officialPublish: z.object({ ...cas, audience: skillAudienceSchema, publisher: skillIamRefSchema }).strict(),
   beginCover: z

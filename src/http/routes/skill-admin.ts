@@ -82,13 +82,26 @@ export async function skillAdminRoute(
       }
       return
     }
-    if (request.method !== "POST" || path.length !== 4 || !Object.hasOwn(operations, path[3]!))
+    if (request.method !== "POST" || new URL(request.url!, "http://bff.local").search || request.headers["content-type"]?.split(";", 1)[0] !== "application/json")
       throw new ConnectError("Skills admin route invalid", Code.InvalidArgument)
+    if (path.length === 2) {
+      const commandId = skillCommandId(request, context, "createAdminSkillDraft")
+      const input = parseSkillProductInput("adminDraft", await readBody(request, 65_536))
+      const result = await client.command(
+        "createAdminSkillDraft",
+        { ...common, commandId },
+        { metadata: skillMetadataWire(input.metadata) },
+        signal,
+        deadlineAt,
+      )
+      signal.throwIfAborted()
+      send(response, 201, { data: await enrich(projectSkillProductAck(result)) })
+      return
+    }
+    if (path.length !== 4 || !Object.hasOwn(operations, path[3]!)) throw new ConnectError("Skills admin route invalid", Code.InvalidArgument)
     const operation = operations[path[3] as keyof typeof operations]
     const skillId = skillIdSchema.parse(path[2]),
       commandId = skillCommandId(request, context, operation[0])
-    if (new URL(request.url!, "http://bff.local").search || request.headers["content-type"]?.split(";", 1)[0] !== "application/json")
-      throw new ConnectError("Invalid request", Code.InvalidArgument)
     const input = parseSkillProductInput(operation[1], await readBody(request, 65_536))
     const members = { ...input, skill_id: { value: skillId }, ...("metadata" in input ? { metadata: skillMetadataWire(input.metadata) } : {}) } as Record<
       string,
