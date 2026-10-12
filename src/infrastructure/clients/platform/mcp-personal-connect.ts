@@ -3,7 +3,7 @@ import { createConnectTransport } from "@connectrpc/connect-node"
 import {
   ProductMcpPersonalService as generatedProductMcpPersonalService,
   McpConnectorStatus,
-} from "../../../generated/platform-mcp-product-connect/kokoro/platform/v1/platform_runtime_pb.js"
+} from "../../../generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
 import { projectMcpPersonalResponse, projectMcpPersonalCommand, type McpPersonalOperation, type McpPersonalInput } from "./mcp-personal-response.js"
 import { bindMcpPersonalCommand, type McpPersonalCommandInput, type McpPersonalCommandOperation } from "./mcp-personal-command-binding.js"
 import { bindMcpPersonalConnection, type McpPersonalAuthorizationInput, type McpPersonalAuthorizationOperation } from "./mcp-personal-authorization-binding.js"

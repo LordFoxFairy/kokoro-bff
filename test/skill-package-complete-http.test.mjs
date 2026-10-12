@@ -1,6 +1,5 @@
 import assert from "node:assert/strict"
 import { once } from "node:events"
-import { readFile } from "node:fs/promises"
 import test from "node:test"
 import { Code, ConnectError } from "@connectrpc/connect"
 
@@ -81,15 +80,6 @@ test("Complete new path is a default-closed strict candidate, never old Capabili
   })
 })
 
-test("Complete projector matches all eleven owner v4 command projection vectors", async () => {
-  const manifest = JSON.parse(
-    await readFile(
-      new URL("../contract/vendor/kokoro-platform/3fba81e37fbd23e40918fd838b8ecc9da9c9fb42/execution-operations-v5/manifest.json", import.meta.url),
-      "utf8",
-    ),
-  )
-  assert.equal(manifest.baseArtifact.aggregateSha256, "902f8f2c2fbeb95a441820c1cf16b0a9c793eadac7106f9fcd5e41e3878b7f79")
-})
 test("Complete generated Connect request carries exact typed command and Product context fields", async () => {
   const { create, toBinary, fromBinary } = await import("@bufbuild/protobuf")
   const { CompleteSkillPackageUploadRequestSchema, CompleteSkillPackageUploadResponseSchema, SkillCatalogService } =

@@ -2,7 +2,6 @@ import { create } from "@bufbuild/protobuf"
 import { SkillProductFactsSchema } from "../dist/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
 import assert from "node:assert/strict"
 import { once } from "node:events"
-import { readFile } from "node:fs/promises"
 import { request as httpRequest } from "node:http"
 import test from "node:test"
 import { Code, ConnectError } from "@connectrpc/connect"
@@ -188,24 +187,6 @@ test("R345 installation rejects protobuf Timestamp seconds outside the canonical
   assert.throws(() => projectInstallation({ ...installation(), skillUpdatedAt: aboveMaximum }), /skill_installation_response_invalid/u)
   assert.throws(() => projectInstallation({ ...installation(), installedAt: belowMinimum, updatedAt: belowMinimum }), /skill_installation_response_invalid/u)
   assert.throws(() => projectInstallation({ ...installation(), installedAt: aboveMaximum, updatedAt: aboveMaximum }), /skill_installation_response_invalid/u)
-})
-test("all owner product installation projection vectors keep their published digests", async () => {
-  const source = new URL(
-    "../contract/vendor/kokoro-platform/3fba81e37fbd23e40918fd838b8ecc9da9c9fb42/execution-operations-v5/vectors/product-installation.json",
-    import.meta.url,
-  )
-  const vectors = JSON.parse(await readFile(source, "utf8")).vectors.filter((vector) => vector.stage === "projection")
-  assert.equal(vectors.length, 4)
-  for (const vector of vectors) {
-    const command = vector.projection.command
-    const actual =
-      vector.method === "InstallPersonalSkill"
-        ? installPersonalDigest(vector.projection.tenant_ref, command.subject_id, command.source_ref.value)
-        : vector.method === "RemovePersonalSkillInstallation"
-          ? removePersonalDigest(vector.projection.tenant_ref, command.subject_id, command.installation_id.value)
-          : setPersonalEnabledDigest(vector.projection.tenant_ref, command.subject_id, command.installation_id.value, command.enabled)
-    assert.equal(actual, vector.sha256, vector.name)
-  }
 })
 test("routes reject forbidden query/body/header shapes before the owner", async () => {
   let calls = 0

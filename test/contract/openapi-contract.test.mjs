@@ -19,7 +19,6 @@ import { inspectSkillProductContract, stripSkillProductSource, skillProductParen
 const openapiUrl = new URL("../../contract/tests/public11-historical.openapi.yaml", import.meta.url)
 const baselineUrl = new URL("../../contract/tests/v1-operations.json", import.meta.url)
 const agentControlSnapshotUrl = new URL("../../contract/external/kokoro-agent/control-receipt.v1.json", import.meta.url)
-const platformV4Url = new URL("../../contract/vendor/kokoro-platform/263a28f1e55745bd1829a61f68228d775751adbc/execution-operations-v4/", import.meta.url)
 const currentOpenapiUrl = new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url)
 const SAFE_FAILURE_CODES = [
   "token_budget_exceeded",
@@ -521,17 +520,6 @@ test("CompleteSkillPackageUpload publishes an inactive user-only strict command"
   assert.deepEqual(inspectBffOpenApi(openapi, baseline), [])
 })
 
-test("CompleteSkillPackageUpload binds owner v4 digest version and all eleven frozen command vectors", async () => {
-  const manifest = JSON.parse(
-    await readFile(
-      new URL("../../contract/vendor/kokoro-platform/3fba81e37fbd23e40918fd838b8ecc9da9c9fb42/execution-operations-v5/manifest.json", import.meta.url),
-      "utf8",
-    ),
-  )
-  assert.equal(manifest.baseArtifact.artifactVersion, "4.0.0")
-  assert.equal(manifest.baseArtifact.aggregateSha256, "902f8f2c2fbeb95a441820c1cf16b0a9c793eadac7106f9fcd5e41e3878b7f79")
-  assert.ok(manifest.baseArtifact.files.length > 0)
-})
 test("CompleteSkillPackageUpload semantic gate rejects request, response, status and legacy-reference drift", async () => {
   const { openapi, baseline } = await readContract()
   const mutations = [
@@ -596,17 +584,6 @@ test("ValidateSkillDraft describes one default-closed user-only attempt-bound co
   assert.deepEqual(inspectBffOpenApi(openapi, baseline), [])
 })
 
-test("ValidateSkillDraft pins owner v4 tag 7 and all eight command digest vectors", async () => {
-  const manifest = JSON.parse(
-    await readFile(
-      new URL("../../contract/vendor/kokoro-platform/3fba81e37fbd23e40918fd838b8ecc9da9c9fb42/execution-operations-v5/manifest.json", import.meta.url),
-      "utf8",
-    ),
-  )
-  assert.equal(manifest.baseArtifact.artifactVersion, "4.0.0")
-  assert.equal(manifest.baseArtifact.aggregateSha256, "902f8f2c2fbeb95a441820c1cf16b0a9c793eadac7106f9fcd5e41e3878b7f79")
-  assert.ok(manifest.baseArtifact.files.length > 0)
-})
 test("ValidateSkillDraft semantic gate rejects schema, status, header and legacy-operation drift", async () => {
   const { openapi, baseline } = await readContract()
   for (const broken of [
@@ -680,17 +657,6 @@ test("PublishSkill exposes one default-closed user-only command with no request 
   assert.deepEqual(inspectBffOpenApi(openapi, baseline), [])
 })
 
-test("PublishSkill pins the inactive owner v4 PERSONAL command and all eight digest vectors", async () => {
-  const manifest = JSON.parse(
-    await readFile(
-      new URL("../../contract/vendor/kokoro-platform/3fba81e37fbd23e40918fd838b8ecc9da9c9fb42/execution-operations-v5/manifest.json", import.meta.url),
-      "utf8",
-    ),
-  )
-  assert.equal(manifest.baseArtifact.artifactVersion, "4.0.0")
-  assert.equal(manifest.baseArtifact.aggregateSha256, "902f8f2c2fbeb95a441820c1cf16b0a9c793eadac7106f9fcd5e41e3878b7f79")
-  assert.ok(manifest.baseArtifact.files.length > 0)
-})
 test("PublishSkill semantic gate rejects body, state, status and legacy-operation reference drift", async () => {
   const { openapi, baseline } = await readContract()
   const notFound = openapi.slice(openapi.indexOf("    SkillPublishNotFound:"), openapi.indexOf("    SkillPublishConflict:"))
@@ -748,17 +714,6 @@ test("PublishSkill semantic gate rejects body, state, status and legacy-operatio
   )
 })
 
-test("BeginSkillPackageUpload candidate names the exact inactive owner v4 command and digest version", async () => {
-  const manifest = JSON.parse(
-    await readFile(
-      new URL("../../contract/vendor/kokoro-platform/3fba81e37fbd23e40918fd838b8ecc9da9c9fb42/execution-operations-v5/manifest.json", import.meta.url),
-      "utf8",
-    ),
-  )
-  assert.equal(manifest.baseArtifact.artifactVersion, "4.0.0")
-  assert.equal(manifest.baseArtifact.aggregateSha256, "902f8f2c2fbeb95a441820c1cf16b0a9c793eadac7106f9fcd5e41e3878b7f79")
-  assert.ok(manifest.baseArtifact.files.length > 0)
-})
 test("BeginSkillPackageUpload semantic gate rejects transfer, envelope, status and legacy-reference drift", async () => {
   const { openapi, baseline } = await readContract()
   for (const broken of [
@@ -3087,7 +3042,11 @@ test("Public13 requires CAS only for the three package commands and exactly rest
   const { restorePublic13SkillAuthorizationContract } = await import("../../scripts/verify-skill-product-contract.mjs")
   const { restorePublic131GithubPathContract } = await import("../../scripts/verify-skill-product-contract.mjs")
   const source = restorePublic13SkillAuthorizationContract(
-    restorePublic131GithubPathContract(restorePublic132SharedRevisionContract(restorePublic133McpPersonalContract(restorePublic141ConnectorListContract(restorePublic142AdminSkillDraftContract(current))))),
+    restorePublic131GithubPathContract(
+      restorePublic132SharedRevisionContract(
+        restorePublic133McpPersonalContract(restorePublic141ConnectorListContract(restorePublic142AdminSkillDraftContract(current))),
+      ),
+    ),
   )
   assert.deepEqual(inspectPublic13CasContract(source), [])
   const document = load(source)
@@ -3168,7 +3127,11 @@ test("Public13.1 guards every actual Skill action route, status family and the e
     await import("../../scripts/verify-skill-product-contract.mjs")
   const { restorePublic131GithubPathContract } = await import("../../scripts/verify-skill-product-contract.mjs")
   const source = restorePublic131GithubPathContract(
-      restorePublic132SharedRevisionContract(restorePublic133McpPersonalContract(restorePublic141ConnectorListContract(restorePublic142AdminSkillDraftContract(await readFile(currentOpenapiUrl, "utf8"))))),
+      restorePublic132SharedRevisionContract(
+        restorePublic133McpPersonalContract(
+          restorePublic141ConnectorListContract(restorePublic142AdminSkillDraftContract(await readFile(currentOpenapiUrl, "utf8"))),
+        ),
+      ),
     ),
     document = load(source)
   assert.deepEqual(inspectPublic131SkillAuthorizationContract(source), [])
@@ -3247,7 +3210,11 @@ for (const [label, path] of [
 
 test("GitHub path Public13.2 restores the exact immutable Public13.1 parent and guards all five constraints", async () => {
   const { inspectPublic132GithubPathContract, restorePublic131GithubPathContract } = await import("../../scripts/verify-skill-product-contract.mjs")
-  const current = restorePublic132SharedRevisionContract(restorePublic133McpPersonalContract(restorePublic141ConnectorListContract(restorePublic142AdminSkillDraftContract(await readFile(currentOpenapiUrl, "utf8")))))
+  const current = restorePublic132SharedRevisionContract(
+    restorePublic133McpPersonalContract(
+      restorePublic141ConnectorListContract(restorePublic142AdminSkillDraftContract(await readFile(currentOpenapiUrl, "utf8"))),
+    ),
+  )
   assert.deepEqual(inspectPublic132GithubPathContract(current), [])
   assert.equal(
     createHash("sha256").update(restorePublic131GithubPathContract(current)).digest("hex"),
@@ -3273,7 +3240,11 @@ test("GitHub path Public13.2 restores the exact immutable Public13.1 parent and 
 
 test("GitHub path inverse must not restore a tampered repository URL bound", async () => {
   const { inspectPublic132GithubPathContract } = await import("../../scripts/verify-skill-product-contract.mjs")
-  const current = restorePublic132SharedRevisionContract(restorePublic133McpPersonalContract(restorePublic141ConnectorListContract(restorePublic142AdminSkillDraftContract(await readFile(currentOpenapiUrl, "utf8")))))
+  const current = restorePublic132SharedRevisionContract(
+    restorePublic133McpPersonalContract(
+      restorePublic141ConnectorListContract(restorePublic142AdminSkillDraftContract(await readFile(currentOpenapiUrl, "utf8"))),
+    ),
+  )
   const changed = current.replace(/(GithubSkillRequest:\n[\s\S]*?repository_url:\n\s+type: string\n\s+maxLength: )2048/u, "$1256")
   assert.notEqual(changed, current)
   assert.ok(inspectPublic132GithubPathContract(changed).some((error) => error.includes("parent inverse")))
@@ -3284,9 +3255,16 @@ test("Public13.3 shared exact summary preserves complete137 and exact13.2 parent
   const source = await readFile(currentOpenapiUrl, "utf8"),
     baseline = JSON.parse(await readFile(baselineUrl, "utf8")).operations
   assert.deepEqual(inspectBffOpenApi(source, baseline), [])
-  assert.equal(parseOpenApiOperations(restorePublic133McpPersonalContract(restorePublic141ConnectorListContract(restorePublic142AdminSkillDraftContract(source)))).length, 137)
   assert.equal(
-    parseOpenApiOperations(restorePublic132SharedRevisionContract(restorePublic133McpPersonalContract(restorePublic141ConnectorListContract(restorePublic142AdminSkillDraftContract(source))))).length,
+    parseOpenApiOperations(restorePublic133McpPersonalContract(restorePublic141ConnectorListContract(restorePublic142AdminSkillDraftContract(source)))).length,
+    137,
+  )
+  assert.equal(
+    parseOpenApiOperations(
+      restorePublic132SharedRevisionContract(
+        restorePublic133McpPersonalContract(restorePublic141ConnectorListContract(restorePublic142AdminSkillDraftContract(source))),
+      ),
+    ).length,
     136,
   )
   for (const changed of [

@@ -1,8 +1,0 @@
-{
-  "version": "v2",
-  "modules": [
-    {
-      "path": "contract/vendor/kokoro-platform-provider-admin/4f3a011/proto"
-    }
-  ]
-}

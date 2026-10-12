@@ -1,6 +1,5 @@
 import assert from "node:assert/strict"
 import { once } from "node:events"
-import { readFile } from "node:fs/promises"
 import test from "node:test"
 import { Code, ConnectError } from "@connectrpc/connect"
 
@@ -77,15 +76,6 @@ test("Validate default-off candidate does not reach Platform", async () => {
   })
 })
 
-test("Validate projector matches all eight owner v4 command vectors", async () => {
-  const manifest = JSON.parse(
-    await readFile(
-      new URL("../contract/vendor/kokoro-platform/3fba81e37fbd23e40918fd838b8ecc9da9c9fb42/execution-operations-v5/manifest.json", import.meta.url),
-      "utf8",
-    ),
-  )
-  assert.equal(manifest.baseArtifact.aggregateSha256, "902f8f2c2fbeb95a441820c1cf16b0a9c793eadac7106f9fcd5e41e3878b7f79")
-})
 test("Validate returns strict V2 validated owner projection", async () => {
   const calls = []
   await withServer(

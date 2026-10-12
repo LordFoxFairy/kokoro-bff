@@ -11,7 +11,7 @@ import {
   PersonalMcpConnectorSchema,
   PersonalMcpConnectionSchema,
   CreatePersonalMcpConnectionResponseSchema,
-} from "../src/generated/platform-mcp-product-connect/kokoro/platform/v1/platform_runtime_pb.js"
+} from "../src/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
 
 const bytes = (value: unknown) => Buffer.from(JSON.stringify(value))
 const identity = { tenant: "tenant", subject: "subject", requestId: "request" }
@@ -139,7 +139,7 @@ function inputForConnection() {
 test("A3 real Connect lifecycle forwards opaque callback values and exact connection command binding", async () => {
   const { createServer } = await import("node:http")
   const { connectNodeAdapter } = await import("@connectrpc/connect-node")
-  const { ProductMcpPersonalService } = await import("../src/generated/platform-mcp-product-connect/kokoro/platform/v1/platform_runtime_pb.js")
+  const { ProductMcpPersonalService } = await import("../src/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
   const { McpPersonalConnectClient } = await import("../src/infrastructure/clients/platform/mcp-personal-connect.js")
   const { McpPersonalTokenSource } = await import("../src/infrastructure/clients/platform/mcp-personal-token.js")
   const seen: unknown[] = []

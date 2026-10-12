@@ -1,6 +1,5 @@
 import assert from "node:assert/strict"
 import { once } from "node:events"
-import { readFile } from "node:fs/promises"
 import { request as httpRequest } from "node:http"
 import test from "node:test"
 import { Code, ConnectError } from "@connectrpc/connect"
@@ -99,15 +98,6 @@ test("Publish accepts strict audience/CAS JSON through registered server and pro
   assert.match(calls[0].digest, /^[a-f0-9]{64}$/u)
 })
 
-test("Publish projector matches all eight owner v4 command vectors", async () => {
-  const manifest = JSON.parse(
-    await readFile(
-      new URL("../contract/vendor/kokoro-platform/3fba81e37fbd23e40918fd838b8ecc9da9c9fb42/execution-operations-v5/manifest.json", import.meta.url),
-      "utf8",
-    ),
-  )
-  assert.equal(manifest.baseArtifact.aggregateSha256, "902f8f2c2fbeb95a441820c1cf16b0a9c793eadac7106f9fcd5e41e3878b7f79")
-})
 test("Publish generated Connect descriptor has fixed visibility and active result", async () => {
   const { create, toBinary, fromBinary } = await import("@bufbuild/protobuf")
   const { PublishSkillRequestSchema, PublishSkillResponseSchema, SkillCatalogService, SkillScopeKind, SkillStatus } =

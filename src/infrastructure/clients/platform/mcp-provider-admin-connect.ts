@@ -1,6 +1,6 @@
 import { createClient, Code, ConnectError, type CallOptions } from "@connectrpc/connect"
 import { createConnectTransport } from "@connectrpc/connect-node"
-import { McpConnectorType, McpProviderAdminService } from "../../../generated/platform-provider-admin-connect/kokoro/platform/v1/platform_runtime_pb.js"
+import { McpConnectorType, McpProviderAdminService } from "../../../generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
 import { bindMcpProviderAdminCommand, type McpProviderAdminCommandInput } from "./mcp-provider-admin-command-binding.js"
 import { McpProviderAdminTokenSource } from "./mcp-provider-admin-token.js"
 

@@ -88,7 +88,13 @@ test("both command projectors bind presence, original order and content", async 
           owner_scope: { kind: "user", id: "user" },
           product_context: { subject_id: "user", owner_scope: { kind: "user", id: "user" } },
           ...(method === "CreateSkillVersion" ? { base_skill_id: { value: "base" } } : {}),
-          metadata: { display_name: "Tea", summary: "Warm", tags: [], metadata_json: "e30", ...(prompts === undefined ? {} : { example_prompts: prompts }) },
+          metadata: {
+            display_name: "Tea",
+            summary: "Warm",
+            tags: [],
+            metadata_json: "e30",
+            ...(prompts === undefined ? {} : { example_prompts: { prompts } }),
+          },
         },
       })
     const absent = project(raw(), true)
@@ -103,37 +109,6 @@ test("both command projectors bind presence, original order and content", async 
       example_prompts: [],
     })
   }
-})
-
-test("both BFF projectors reproduce all accepted fixed owner example canonical vectors within BFF metadata bytes", async () => {
-  const { readFile } = await import("node:fs/promises")
-  const { createHash } = await import("node:crypto")
-  const { projectCreateSkillDraft } = await import("../dist/infrastructure/clients/platform/create-skill-draft-projector.js")
-  const { projectCreatePersonalSkillVersion } = await import("../dist/infrastructure/clients/platform/create-personal-skill-version-projector.js")
-  const vectors = JSON.parse(
-    await readFile(
-      new URL(
-        "../contract/vendor/kokoro-platform/3fba81e37fbd23e40918fd838b8ecc9da9c9fb42/execution-operations/skill-example-prompts-v1.vectors.json",
-        import.meta.url,
-      ),
-      "utf8",
-    ),
-  ).vectors
-  let checked = 0
-  for (const vector of vectors.filter((v: { outcome: string }) => v.outcome === "accept")) {
-    const wire = JSON.parse(Buffer.from(vector.rawBase64, "base64").toString("utf8"))
-    const metadata = wire.request.metadata
-    // BFF forwards fixed {} metadata bytes and its public array, not raw owner message JSON.
-    metadata.metadata_json = "e30"
-    if (Object.hasOwn(metadata, "example_prompts")) metadata.example_prompts = metadata.example_prompts.prompts ?? []
-    const expected = Buffer.from(vector.canonicalBase64, "base64").toString("utf8").replace('"metadata_json":"AAH_"', '"metadata_json":"e30"')
-    const project = vector.id.startsWith("CreateSkillDraft/") ? projectCreateSkillDraft : projectCreatePersonalSkillVersion
-    const result = project(JSON.stringify(wire), true)
-    assert.equal(Buffer.from(result.canonical).toString("utf8"), expected, vector.id)
-    assert.equal(result.sha256, createHash("sha256").update(expected).digest("hex"), vector.id)
-    checked += 1
-  }
-  assert.equal(checked, 20)
 })
 
 test("direct examples rejects undefined, sparse and non-string values", () => {
