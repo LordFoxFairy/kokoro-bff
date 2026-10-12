@@ -742,7 +742,13 @@ function idempotencyErrors(parameters: Map<string, NamedBlock>, operations: Oper
     const operationId = operation.fields.get("operationId") ?? operation.name
     const isPersonalizationCas =
       operation.method === "PUT" && operation.path === "/v1/preferences/personalization" && operationId === "replaceSelfPersonalization"
-    const expected = ["GET", "HEAD", "OPTIONS"].includes(operation.method) || operationId === "previewGithubSkill" || isPersonalizationCas ? "none" : "required"
+    // OAuth redirects/callbacks are state-bound owner operations, not replayable BFF commands.
+    const isMcpPersonalOAuth = [
+      "beginPersonalMcpConnectorAuthorization",
+      "reconnectPersonalMcpConnectorAuthorization",
+      "completePersonalMcpConnectorAuthorization",
+    ].includes(operationId)
+    const expected = ["GET", "HEAD", "OPTIONS"].includes(operation.method) || operationId === "previewGithubSkill" || isPersonalizationCas || isMcpPersonalOAuth ? "none" : "required"
     const declared = operation.fields.get("x-kokoro-idempotency")
     const hasParameter =
       operationId === "createSkillDraft"
@@ -2972,7 +2978,30 @@ export function restorePublic141ConnectorListContract(source: string): string {
   return source.replace(path, "").replace(responses, "").replace("  version: 14.1.0", "  version: 14.0.0")
 }
 
+export function restorePublic145McpPersonalOAuthContract(source: string): string {
+  if (!/^  version: 14\.5\.0$/mu.test(source)) throw new Error("MCP personal OAuth minor version drift")
+  const digest = (value: string): string => createHash("sha256").update(value).digest("hex")
+  const paths = [
+    /^  \/v1\/self\/mcp\/connectors\/\{connector_id\}\/authorization:\n[\s\S]*?(?=^  \/v1\/self\/mcp\/connectors\/\{connector_id\}\/connections:)/mu,
+    /^  \/v1\/self\/mcp\/authorization\/callback:\n[\s\S]*?(?=^  \/v1\/self\/mcp\/connections:)/mu,
+  ].map((pattern) => source.match(pattern)?.[0])
+  const schemas = source.match(/^    PersonalMcpConnectorAuthorizationRequest:\n[\s\S]*?(?=^    PersonalMcpConnectorListResponse:)/mu)?.[0]
+  const responses = source.match(/^    PersonalMcpConnectorAuthorizationOk:\n[\s\S]*?(?=^    PersonalMcpConnectorListOk:)/mu)?.[0]
+  if (paths.some((path) => path === undefined) || schemas === undefined || responses === undefined)
+    throw new Error("MCP personal OAuth exact delta missing")
+  const parent = source
+    .replace(paths[0]!, "")
+    .replace(paths[1]!, "")
+    .replace(schemas, "")
+    .replace(responses, "")
+    .replace("  version: 14.5.0", "  version: 14.4.0")
+  if (digest(parent) !== "81256204cad561d022755075b27e955289261ebc6db49c09ff151a1fbafa68b7")
+    throw new Error("MCP personal OAuth complete Public14.4 parent inverse drift")
+  return parent
+}
+
 export function restorePublic144McpProviderPresentationContract(source: string): string {
+  if (/^  version: 14\.5\.0$/mu.test(source)) source = restorePublic145McpPersonalOAuthContract(source)
   if (!/^  version: 14\.4\.0$/mu.test(source)) throw new Error("MCP provider presentation minor version drift")
   const digest = (value: string): string => createHash("sha256").update(value).digest("hex")
   const admin = source.match(/^    McpProviderAdminInput:\n[\s\S]*?(?=^    McpProviderAdminRecord:)/mu)?.[0]
@@ -3077,7 +3106,11 @@ export function inspectBffOpenApi(source: string, baseline: readonly BaselineOpe
   try {
     parent = restorePublic132SharedRevisionContract(
       restorePublic133McpPersonalContract(
-        restorePublic141ConnectorListContract(restorePublic142AdminSkillDraftContract(restorePublic143McpProviderAdminContract(source))),
+        restorePublic141ConnectorListContract(
+          restorePublic142AdminSkillDraftContract(
+            restorePublic143McpProviderAdminContract(restorePublic145McpPersonalOAuthContract(source)),
+          ),
+        ),
       ),
     )
   } catch (error) {

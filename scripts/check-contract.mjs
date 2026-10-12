@@ -65,6 +65,14 @@ function expectedIdempotency(operation) {
   if (operation.method === "POST" && SPECIFICATION_BROWSER_READS.get(operation.path) === operation.fields.get("operationId")) return "none"
   if (operation.fields.get("operationId") === "previewGithubSkill") return "none"
   if (
+    new Set([
+      "beginPersonalMcpConnectorAuthorization",
+      "reconnectPersonalMcpConnectorAuthorization",
+      "completePersonalMcpConnectorAuthorization",
+    ]).has(operation.fields.get("operationId"))
+  )
+    return "none"
+  if (
     new Set(["POST /v1/skill-shares createSkillShare", "DELETE /v1/skill-shares/{share_id} revokeSkillShare", "POST /v1/skills/usage getSkillUsage"]).has(
       `${operation.method} ${operation.path} ${operation.fields.get("operationId")}`,
     )

@@ -2,10 +2,10 @@
 
 | 项 | 结论 |
 | --- | --- |
-| Owner / writer | `kokoro-bff` 的既有 MCP browser-private adapter；Platform 是 Connector、OAuth attempt/credential、Connection 与状态版本的唯一 writer。 |
+| Owner / writer | `kokoro-bff` 的既有 MCP Product API adapter；Platform 是 Connector、OAuth attempt/credential、Connection 与状态版本的唯一 writer。 |
 | 当前事实 | `mcp-personal` 已承接目录与 CRUD，但其 `platform-mcp-presentation` generated consumer 只固定旧的 Presentation profile，不能消费 `7b56794` 新发行的 Begin/Complete/Reconnect/Create Connection RPC。 |
 | 目录方案 | 采用现有 `src/http/routes/mcp-personal.ts`、`src/infrastructure/clients/platform/mcp-personal-*.ts`；将过窄的 generated consumer 名称 `platform-mcp-presentation` 收敛为 `platform-mcp-product`，因为它消费完整 `ProductMcpPersonalService`。不新建 OAuth service、数据库层或泛化 gateway。 |
-| 传输与信任 | Browser → Web 同源 callback/adapter → BFF → Platform。BFF 每次先作 current session + `mcp_personal` 准入，再以受限 workload credential 调 Platform；OAuth state/code/token 不落 BFF 持久化，也不返回 Browser。 |
+| 传输与信任 | Browser → Web 同源 adapter → BFF public Product API → Platform。BFF 每次先作 current session + `mcp_personal` 准入，再以受限 workload credential 调 Platform；OAuth state/code/token 不落 BFF 持久化，也不返回 Browser。 |
 | 失败 / lifecycle | Begin/Reconnect 只返回 Platform 的 authorization URL、authorization ID、expiry 和 connector 投影；callback 只转发 state 加 code 或 error，Platform 的单次 claim/credential 加密决定终态；Connection 创建沿 owner command identity/CAS。取消、超时、失权、未知 owner wire 一律闭合，不设 alias/fallback。 |
 | 删除项 | 移除旧 `platform-mcp-presentation` generated/vendor/config/script/manifest 路径；不保留第二套 generated client。 |
 | 验证 | schema-first HTTP RED→GREEN、固定 Platform `7b56794` vendor/generation check、BFF lint/typecheck/contract/target test/build；之后才由 Web 接 callback 与真实 provider E2E。 |

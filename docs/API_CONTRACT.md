@@ -1,6 +1,6 @@
-## T-K03.19 本人 MCP OAuth/Connection browser-private API D0（BFF 已实施，待 Web/Agent 端到端验收）
+## T-K03.19 本人 MCP OAuth/Connection Product API D0（BFF 已实施，待 Web/Agent 端到端验收）
 
-固定在既有 `/v1/self/mcp`，均为 `owner=kokoro-bff`、`visibility=browser-private`、`stability=beta`、`cache-control:no-store` 与可信 session 的当前 `mcp_personal` action。没有 Developer API alias、浏览器 bearer 转发或自报 tenant/subject。
+固定在 canonical public `14.5.0 / 155 operations` 的既有 `/v1/self/mcp`，均为 `owner=kokoro-bff`、`visibility=public`、`stability=beta`、`cache-control:no-store` 与可信 session 的当前 `mcp_personal` action。Browser 仍只经 Web 同源 adapter 调用 BFF；没有到 Platform 的直连、浏览器 bearer 转发或自报 tenant/subject。
 
 | 操作 | HTTP | 请求 | 成功 |
 | --- | --- | --- | --- |
