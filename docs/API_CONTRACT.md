@@ -1,3 +1,18 @@
+## T-K03.19 本人 MCP OAuth/Connection browser-private API D0（BFF 已实施，待 Web/Agent 端到端验收）
+
+固定在既有 `/v1/self/mcp`，均为 `owner=kokoro-bff`、`visibility=browser-private`、`stability=beta`、`cache-control:no-store` 与可信 session 的当前 `mcp_personal` action。没有 Developer API alias、浏览器 bearer 转发或自报 tenant/subject。
+
+| 操作 | HTTP | 请求 | 成功 |
+| --- | --- | --- | --- |
+| Begin authorization | `POST /v1/self/mcp/connectors/{connector_id}/authorization` | `{server_id,expected_state_version}` | `{authorization_id,authorization_url,expires_at,connector}` |
+| Reconnect authorization | `POST /v1/self/mcp/connectors/{connector_id}/authorization/reconnect` | `{server_id,expected_state_version}` | 同 Begin |
+| Complete callback | `POST /v1/self/mcp/authorization/callback` | `{state,code}` 或 `{state,error}`，二选一 | `{connector}` |
+| Create connection | `POST /v1/self/mcp/connections` | `Idempotency-Key` + `{connector_id,server_id,allowed_selectors,expected_state_version}` | `{connection}` |
+
+所有 body strict JSON、最大 64 KiB；ID、state、code、error、selectors 与 CAS 在 BFF 入站闭集校验。Complete 不记录/回显 code 或 token；Platform 依据 opaque state 的受信绑定校验当前主体。Connection 的 Idempotency-Key 直接成为 Platform command identity，BFF 不另建 receipt。错误沿当前 personal MCP 的 400/401/403/404/409/412/413/429/502/503 闭集，不添加 OAuth 供应商专用 HTTP 协议。
+
+<!-- T-K03.19-BFF-MCP-OAUTH-API-D0-END -->
+
 ## T-K03.19 D3 Provider 管理 API（2026-10-11；实施中）
 
 BFF 将在既有 `/v1` 下新增 `GET|POST /v1/admin/mcp/providers` 与 `GET|PATCH|DELETE /v1/admin/mcp/providers/{provider_key}`、`PUT /v1/admin/mcp/providers/{provider_key}/enabled`。它们是 `owner=kokoro-bff`、`visibility=browser-private`、beta 的受控管理 adapter，不是 Platform RPC 的重命名，也不暴露 Connect、workload token、tenant/subject header 或 owner receipt。所有成功为 `{data: …}`、所有失败为稳定 `{error:{code,message,retryable}}`、全响应含 `x-request-id` 和 `cache-control:no-store`。

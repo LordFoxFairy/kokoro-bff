@@ -3,9 +3,11 @@ import { createConnectTransport } from "@connectrpc/connect-node"
 import {
   ProductMcpPersonalService as generatedProductMcpPersonalService,
   McpConnectorStatus,
-} from "../../../generated/platform-mcp-presentation-connect/kokoro/platform/v1/platform_runtime_pb.js"
+} from "../../../generated/platform-mcp-product-connect/kokoro/platform/v1/platform_runtime_pb.js"
 import { projectMcpPersonalResponse, projectMcpPersonalCommand, type McpPersonalOperation, type McpPersonalInput } from "./mcp-personal-response.js"
 import { bindMcpPersonalCommand, type McpPersonalCommandInput, type McpPersonalCommandOperation } from "./mcp-personal-command-binding.js"
+import { bindMcpPersonalConnection, type McpPersonalAuthorizationInput, type McpPersonalAuthorizationOperation } from "./mcp-personal-authorization-binding.js"
+import { projectMcpPersonalAuthorization } from "./mcp-personal-authorization-response.js"
 import { McpPersonalTokenSource } from "./mcp-personal-token.js"
 
 export class McpPersonalConnectClient {
@@ -105,6 +107,47 @@ export class McpPersonalConnectClient {
         else value = await this.#client.removePersonalMcpConnector(common, options)
       }
       return projectMcpPersonalCommand(operation, value, input)
+    })
+  }
+  async authorization(
+    operation: McpPersonalAuthorizationOperation,
+    input: McpPersonalAuthorizationInput,
+    outer: AbortSignal,
+    deadlineAt: number,
+  ): Promise<unknown> {
+    return this.#call(input, outer, deadlineAt, async (options) => {
+      const requestId = input.requestId
+      let value: unknown
+      if (operation === "begin" || operation === "reconnect") {
+        const request = {
+          requestId,
+          connectorId: { value: input.id! },
+          serverId: { value: input.serverId! },
+          expectedStateVersion: BigInt(input.expectedStateVersion!),
+        }
+        value =
+          operation === "begin"
+            ? await this.#client.beginPersonalMcpConnectorAuthorization(request, options)
+            : await this.#client.reconnectPersonalMcpConnectorAuthorization(request, options)
+      } else if (operation === "complete") {
+        value = await this.#client.completePersonalMcpConnectorAuthorization(
+          { requestId, state: input.state!, ...(input.code === undefined ? { error: input.error! } : { code: input.code }) },
+          options,
+        )
+      } else {
+        value = await this.#client.createPersonalMcpConnection(
+          {
+            requestId,
+            command: bindMcpPersonalConnection(input),
+            connectorId: { value: input.id! },
+            serverId: { value: input.serverId! },
+            allowedSelectors: input.allowedSelectors!,
+            expectedStateVersion: BigInt(input.expectedStateVersion!),
+          },
+          options,
+        )
+      }
+      return projectMcpPersonalAuthorization(operation, value, input)
     })
   }
   async #call<T>(input: McpPersonalInput, outer: AbortSignal, deadlineAt: number, action: (options: CallOptions) => Promise<T>): Promise<T> {

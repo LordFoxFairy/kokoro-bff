@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "status": "generated",
+  "owner": {
+    "repository_path": "apps/kokoro-capability",
+    "repository_commit": "7b56794e69670f4d38fde8f3c337d87bc547f546",
+    "package_name": "kokoro.platform.v1"
+  },
+  "profiles": [
+    {
+      "path": "contract/vendor/kokoro-platform-mcp-product/7b56794e69670f4d38fde8f3c337d87bc547f546/execution-operations/mcp-provider-presentation-v1.json",
+      "version": "1.0.0"
+    },
+    {
+      "path": "contract/vendor/kokoro-platform-mcp-product/7b56794e69670f4d38fde8f3c337d87bc547f546/execution-operations/mcp-personal-oauth-v1.json",
+      "version": "1.0.0"
+    }
+  ],
+  "inputs": [
+    {
+      "path": "contract/vendor/kokoro-platform-mcp-product/7b56794e69670f4d38fde8f3c337d87bc547f546/proto/kokoro/common/v1/common.proto",
+      "sha256": "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08"
+    },
+    {
+      "path": "contract/vendor/kokoro-platform-mcp-product/7b56794e69670f4d38fde8f3c337d87bc547f546/proto/kokoro/platform/v1/platform_runtime.proto",
+      "sha256": "ce29404fed97cab8a80a7273c59f8c187164027e9b878c4752d1710b5ee0d585"
+    },
+    {
+      "path": "contract/vendor/kokoro-platform-mcp-product/7b56794e69670f4d38fde8f3c337d87bc547f546/proto/kokoro/storage/v3/storage.proto",
+      "sha256": "1021e603065978871c51519ddba5b23c9b97f16b781a08bd98e019b3342bf5f9"
+    },
+    {
+      "path": "contract/vendor/kokoro-platform-mcp-product/7b56794e69670f4d38fde8f3c337d87bc547f546/descriptor/platform-v1.binpb",
+      "sha256": "a5b34903ebed104f3e5780c0122b936e08cf28017547eda8eb92612c9709f88d"
+    },
+    {
+      "path": "contract/vendor/kokoro-platform-mcp-product/7b56794e69670f4d38fde8f3c337d87bc547f546/execution-operations/mcp-provider-presentation-v1.json",
+      "sha256": "ff527e4650fbb2f3e9c2cf869d5cfded29cc539284003687ff56cca0c41cac04"
+    },
+    {
+      "path": "contract/vendor/kokoro-platform-mcp-product/7b56794e69670f4d38fde8f3c337d87bc547f546/execution-operations/mcp-personal-oauth-v1.json",
+      "sha256": "ff0ab99d338c1f77dad35e44ad6ea307201125cfae178ba74d6e84eb5c54aed0"
+    },
+    {
+      "path": "contract/vendor/kokoro-platform-mcp-product/7b56794e69670f4d38fde8f3c337d87bc547f546/provenance.json",
+      "sha256": "448819e156e9e38520084547b36e649eec59e0630e2eedf79e1beb3e0be1f741"
+    }
+  ],
+  "generator": {
+    "buf": "1.72.0",
+    "protobuf_es": "2.14.0",
+    "config": "buf.platform-mcp-product.json",
+    "template": "buf.platform-mcp-product.gen.json"
+  },
+  "generated": [
+    {
+      "path": "kokoro/common/v1/common_pb.ts",
+      "sha256": "6614c36d9f1b2ddac1ec9e7169d7a1540342014697815a2c859bc895e41be56d"
+    },
+    {
+      "path": "kokoro/platform/v1/platform_runtime_pb.ts",
+      "sha256": "ba9086a0809291d7df4612a1534bd0e6399486e706e6cc64e31a1873f6750fca"
+    },
+    {
+      "path": "kokoro/storage/v3/storage_pb.ts",
+      "sha256": "77cd33b3002a7af50143366015c79b55ffe59fa68108ce5535c6d5eac5d99e70"
+    }
+  ]
+}

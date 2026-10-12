@@ -7,22 +7,23 @@ import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-const ownerCommit = "4f3a011"
-const vendorRoot = `contract/vendor/kokoro-platform-mcp-presentation/${ownerCommit}`
+const ownerCommit = "7b56794e69670f4d38fde8f3c337d87bc547f546"
+const vendorRoot = `contract/vendor/kokoro-platform-mcp-product/${ownerCommit}`
 const vendorProto = `${vendorRoot}/proto`
-const output = "src/generated/platform-mcp-presentation-connect"
-const manifestPath = "contract/dependencies/platform-mcp-presentation-connect.json"
-const config = "buf.platform-mcp-presentation.json"
-const template = "buf.platform-mcp-presentation.gen.json"
+const output = "src/generated/platform-mcp-product-connect"
+const manifestPath = "contract/dependencies/platform-mcp-product-connect.json"
+const config = "buf.platform-mcp-product.json"
+const template = "buf.platform-mcp-product.gen.json"
 const protoInputs = ["kokoro/common/v1/common.proto", "kokoro/platform/v1/platform_runtime.proto", "kokoro/storage/v3/storage.proto"]
 const generatedFiles = ["kokoro/common/v1/common_pb.ts", "kokoro/platform/v1/platform_runtime_pb.ts", "kokoro/storage/v3/storage_pb.ts"]
 const pins = {
   "proto/kokoro/common/v1/common.proto": "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08",
-  "proto/kokoro/platform/v1/platform_runtime.proto": "9a7d1db2f272a8ff5e39c5c122d4b46c230116e1c061e466e92f9186b3a1e367",
+  "proto/kokoro/platform/v1/platform_runtime.proto": "ce29404fed97cab8a80a7273c59f8c187164027e9b878c4752d1710b5ee0d585",
   "proto/kokoro/storage/v3/storage.proto": "1021e603065978871c51519ddba5b23c9b97f16b781a08bd98e019b3342bf5f9",
-  "descriptor/platform-v1.binpb": "e6905c6ee8220bc1c756dd8ac96dd02c76544c4fee72bfcb2dd309574ea96316",
+  "descriptor/platform-v1.binpb": "a5b34903ebed104f3e5780c0122b936e08cf28017547eda8eb92612c9709f88d",
   "execution-operations/mcp-provider-presentation-v1.json": "ff527e4650fbb2f3e9c2cf869d5cfded29cc539284003687ff56cca0c41cac04",
-  "provenance.json": "232c75b5ca1cb7097aa845902f3445c919db9bbbbbf745b0c57b42eba7f1a333",
+  "execution-operations/mcp-personal-oauth-v1.json": "ff0ab99d338c1f77dad35e44ad6ea307201125cfae178ba74d6e84eb5c54aed0",
+  "provenance.json": "448819e156e9e38520084547b36e649eec59e0630e2eedf79e1beb3e0be1f741",
 }
 
 const sha256 = (value) => createHash("sha256").update(value).digest("hex")
@@ -42,11 +43,11 @@ async function tree(directory, prefix = "") {
   return { files: result.files.sort(), directories: result.directories.sort() }
 }
 
-export async function assertPresentationInputs() {
+export async function assertMcpProductInputs() {
   const actual = (await tree(path.join(root, vendorRoot))).files
-  assert.deepEqual(actual, Object.keys(pins).sort(), "MCP presentation vendor allowlist drifted")
+  assert.deepEqual(actual, Object.keys(pins).sort(), "MCP product vendor allowlist drifted")
   for (const [file, digest] of Object.entries(pins))
-    assert.equal(sha256(await readFile(path.join(root, vendorRoot, file))), digest, `MCP presentation pin drifted: ${file}`)
+    assert.equal(sha256(await readFile(path.join(root, vendorRoot, file))), digest, `MCP product pin drifted: ${file}`)
   const profile = JSON.parse(await readFile(path.join(root, vendorRoot, "execution-operations/mcp-provider-presentation-v1.json"), "utf8"))
   assert.deepEqual(profile.fields, [
     { message: "PersonalMcpProvider", name: "cover_image_url", number: 12 },
@@ -64,6 +65,19 @@ export async function assertPresentationInputs() {
   assert.match(source, /optional string updated_at = 13;/u)
   assert.match(source, /optional string cover_image_url = 19;/u)
   assert.match(source, /optional string cover_image_url = 15;/u)
+  const oauth = JSON.parse(await readFile(path.join(root, vendorRoot, "execution-operations/mcp-personal-oauth-v1.json"), "utf8"))
+  assert.equal(oauth.profile, "mcp-personal-oauth-v1")
+  assert.deepEqual(
+    oauth.methods.map((entry) => entry.method),
+    [
+      "BeginPersonalMcpConnectorAuthorization",
+      "CompletePersonalMcpConnectorAuthorization",
+      "ReconnectPersonalMcpConnectorAuthorization",
+      "CreatePersonalMcpConnection",
+    ],
+  )
+  assert.equal(oauth.callback.state, "opaque single-use correlation state; Platform stores only a hash")
+  assert.equal(oauth.callback.code, "provider callback input only; never stored in request receipts or logs")
 }
 
 function run(command, args) {
@@ -85,7 +99,7 @@ async function generate(directory) {
     directory,
     ...protoInputs.flatMap((file) => ["--path", `${vendorProto}/${file}`]),
   ])
-  assert.deepEqual((await tree(directory)).files, generatedFiles, "MCP presentation generated file allowlist drifted")
+  assert.deepEqual((await tree(directory)).files, generatedFiles, "MCP product generated file allowlist drifted")
   await run(process.execPath, [path.join(root, "node_modules/prettier/bin/prettier.cjs"), "--no-semi", "--print-width", "160", "--write", directory])
 }
 
@@ -94,7 +108,10 @@ async function manifestFor(directory) {
     schema_version: 1,
     status: "generated",
     owner: { repository_path: "apps/kokoro-capability", repository_commit: ownerCommit, package_name: "kokoro.platform.v1" },
-    profile: { path: `${vendorRoot}/execution-operations/mcp-provider-presentation-v1.json`, version: "1.0.0" },
+    profiles: [
+      { path: `${vendorRoot}/execution-operations/mcp-provider-presentation-v1.json`, version: "1.0.0" },
+      { path: `${vendorRoot}/execution-operations/mcp-personal-oauth-v1.json`, version: "1.0.0" },
+    ],
     inputs: await Promise.all(Object.entries(pins).map(async ([file, sha256]) => ({ path: `${vendorRoot}/${file}`, sha256 }))),
     generator: { buf: "1.72.0", protobuf_es: "2.14.0", config, template },
     generated: await Promise.all(generatedFiles.map(async (file) => ({ path: file, sha256: sha256(await readFile(path.join(directory, file))) }))),
@@ -104,8 +121,8 @@ async function manifestFor(directory) {
 async function main() {
   const mode = process.argv[2]
   assert.ok(mode === "--write" || mode === "--check", "expected --write or --check")
-  await assertPresentationInputs()
-  const temporary = await mkdtemp(path.join(tmpdir(), "kokoro-mcp-presentation-connect-"))
+  await assertMcpProductInputs()
+  const temporary = await mkdtemp(path.join(tmpdir(), "kokoro-mcp-product-connect-"))
   try {
     await writeFile(path.join(temporary, "package.json"), '{"type":"module"}\n')
     await symlink(path.join(root, "node_modules"), path.join(temporary, "node_modules"), "dir")
@@ -121,12 +138,12 @@ async function main() {
       await cp(first, path.join(root, output), { recursive: true })
       await writeFile(path.join(root, manifestPath), `${JSON.stringify(manifest, null, 2)}\n`)
     } else {
-      assert.deepEqual((await tree(path.join(root, output))).files, generatedFiles, "MCP presentation generated tree drifted")
+      assert.deepEqual((await tree(path.join(root, output))).files, generatedFiles, "MCP product generated tree drifted")
       for (const file of generatedFiles)
-        assert.deepEqual(await readFile(path.join(root, output, file)), await readFile(path.join(first, file)), `MCP presentation generated drifted: ${file}`)
-      assert.deepEqual(JSON.parse(await readFile(path.join(root, manifestPath), "utf8")), manifest, "MCP presentation dependency manifest drifted")
+        assert.deepEqual(await readFile(path.join(root, output, file)), await readFile(path.join(first, file)), `MCP product generated drifted: ${file}`)
+      assert.deepEqual(JSON.parse(await readFile(path.join(root, manifestPath), "utf8")), manifest, "MCP product dependency manifest drifted")
     }
-    console.log(`PASS MCP presentation Connect ${mode.slice(2)}`)
+    console.log(`PASS MCP product Connect ${mode.slice(2)}`)
   } finally {
     await rm(temporary, { recursive: true, force: true })
   }

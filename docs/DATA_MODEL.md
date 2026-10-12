@@ -1,3 +1,9 @@
+## T-K03.19 本人 MCP OAuth/Connection adapter 数据边界（BFF 已实施，待 Web/Agent 端到端验收）
+
+本切片不修改 `database/schema.sql`，不创建 BFF SQL、Redis、receipt、缓存、callback state 或 credential 表。Platform 唯一拥有 authorization state hash、PKCE verifier、token 密文、credential rotation、connector/connection/CAS 与 command receipt；IAM 唯一拥有登录和当前权限。BFF 只在单请求 deadline 内传递受信 identity、校验闭集并投影 owner ACK；进程重启不会恢复 OAuth/Connection 业务事实。
+
+<!-- T-K03.19-BFF-MCP-OAUTH-DATA-D0-END -->
+
 ## T-K03.19 D3 Provider 管理数据边界（2026-10-11；实施中）
 
 BFF 不为 Provider 管理创建或读取任何数据库表、Redis key、receipt、审核副本或静态目录。`kokoro_platform.mcp_provider`、state version、soft delete、command receipt 与 provider catalog cache 仍完全由 Platform owner 管理。BFF 的 browser session 与当前 platform-admin 资格来自 IAM；client credential 只保存在受限本地文件并只产生短期内存 token。进程重启不恢复、构造或改变任何 Provider 事实。

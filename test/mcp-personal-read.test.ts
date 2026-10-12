@@ -9,7 +9,7 @@ import {
   ListPersonalMcpConnectorsResponseSchema,
   PersonalMcpConnectorSchema,
   GetPersonalMcpConnectionResponseSchema,
-} from "../src/generated/platform-mcp-presentation-connect/kokoro/platform/v1/platform_runtime_pb.js"
+} from "../src/generated/platform-mcp-product-connect/kokoro/platform/v1/platform_runtime_pb.js"
 import { projectMcpPersonalResponse, validateMcpPersonalPublic, mcpPersonalFault } from "../src/infrastructure/clients/platform/mcp-personal-response.js"
 import { McpPersonalCredentialSource } from "../src/infrastructure/clients/platform/mcp-personal-credential.js"
 import { McpPersonalTokenSource } from "../src/infrastructure/clients/platform/mcp-personal-token.js"
@@ -182,7 +182,7 @@ test("shared token flight keeps remaining waiter and cancels body on final waite
 test("bounded real Connect transport binds body/header identity and rejects owner header drift", async () => {
   const { createServer } = await import("node:http")
   const { connectNodeAdapter } = await import("@connectrpc/connect-node")
-  const { ProductMcpPersonalService } = await import("../src/generated/platform-mcp-presentation-connect/kokoro/platform/v1/platform_runtime_pb.js")
+  const { ProductMcpPersonalService } = await import("../src/generated/platform-mcp-product-connect/kokoro/platform/v1/platform_runtime_pb.js")
   const { McpPersonalConnectClient } = await import("../src/infrastructure/clients/platform/mcp-personal-connect.js")
   let mode = "valid"
   const seen: Array<{ id: string; tenant: string | null; subject: string | null; requestId: string | null }> = []

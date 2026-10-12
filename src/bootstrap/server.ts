@@ -1,4 +1,4 @@
-import { mcpPersonalOperation, mcpPersonalReadRoute } from "../http/routes/mcp-personal.js"
+import { mcpPersonalOperation, mcpPersonalRoute } from "../http/routes/mcp-personal.js"
 import { mcpProviderAdminOperation, mcpProviderAdminRoute } from "../http/routes/mcp-provider-admin.js"
 import { connectorListFailure, connectorListRoute, isConnectorListRequest } from "../http/routes/connector-list.js"
 import { skillSpecificationReadRoute } from "../http/routes/platform-projection.js"
@@ -254,7 +254,7 @@ async function handle(
   const mcpAction = mcpActionForRequest(request.method ?? "GET", businessPath)
   const isMcpPersonalOperation = mcpPersonalOperation(businessPath, request.method ?? "GET") !== null
   const isMcpProviderAdminOperation = mcpProviderAdminOperation(businessPath, request.method ?? "GET") !== null
-  const hasMcpBudget = mcpAction !== null || isMcpProviderAdminOperation
+  const hasMcpBudget = mcpAction !== null || isMcpPersonalOperation || isMcpProviderAdminOperation
   if (hasMcpBudget) {
     startMcpRequestBudget(request)
     response.setHeader("cache-control", "no-store")
@@ -457,7 +457,7 @@ async function handle(
   }
   const context = admission.context
   if (isMcpPersonalOperation) {
-    await mcpPersonalReadRoute(request, response, config, composition, context, businessPath)
+    await mcpPersonalRoute(request, response, config, composition, context, businessPath)
     return
   }
   const readmitSkill = async (signal: AbortSignal): Promise<void> => {

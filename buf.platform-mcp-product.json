@@ -1,0 +1,8 @@
+{
+  "version": "v2",
+  "modules": [
+    {
+      "path": "contract/vendor/kokoro-platform-mcp-product/7b56794e69670f4d38fde8f3c337d87bc547f546/proto"
+    }
+  ]
+}

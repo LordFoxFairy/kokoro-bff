@@ -1164,6 +1164,69 @@ message PersonalMcpConnection {
   string status = 6;
 }
 
+// Personal OAuth authorization is always initiated and completed by the BFF
+// with trusted tenant and subject context. The provider callback payload is
+// deliberately opaque: Platform persists only its hashed state binding.
+message BeginPersonalMcpConnectorAuthorizationRequest {
+  reserved 100;
+  reserved "tenant_id", "actor_id", "subject_id", "owner_scope", "target_owner_scope", "product_context", "command", "execution_proof", "attestation";
+  string request_id = 1;
+  kokoro.platform.v1.McpConnectorId connector_id = 2;
+  kokoro.platform.v1.McpServerId server_id = 3;
+  optional uint64 expected_state_version = 4;
+}
+
+message BeginPersonalMcpConnectorAuthorizationResponse {
+  kokoro.platform.v1.McpAuthorizationId authorization_id = 1;
+  string authorization_url = 2;
+  google.protobuf.Timestamp expires_at = 3;
+  kokoro.platform.v1.PersonalMcpConnector connector = 4;
+}
+
+message CompletePersonalMcpConnectorAuthorizationRequest {
+  reserved 100;
+  reserved "tenant_id", "actor_id", "subject_id", "owner_scope", "target_owner_scope", "product_context", "command", "execution_proof", "attestation";
+  string request_id = 1;
+  string state = 2;
+  optional string code = 3;
+  optional string error = 4;
+}
+
+message CompletePersonalMcpConnectorAuthorizationResponse {
+  kokoro.platform.v1.PersonalMcpConnector connector = 1;
+}
+
+message ReconnectPersonalMcpConnectorAuthorizationRequest {
+  reserved 100;
+  reserved "tenant_id", "actor_id", "subject_id", "owner_scope", "target_owner_scope", "product_context", "command", "execution_proof", "attestation";
+  string request_id = 1;
+  kokoro.platform.v1.McpConnectorId connector_id = 2;
+  kokoro.platform.v1.McpServerId server_id = 3;
+  optional uint64 expected_state_version = 4;
+}
+
+message ReconnectPersonalMcpConnectorAuthorizationResponse {
+  kokoro.platform.v1.McpAuthorizationId authorization_id = 1;
+  string authorization_url = 2;
+  google.protobuf.Timestamp expires_at = 3;
+  kokoro.platform.v1.PersonalMcpConnector connector = 4;
+}
+
+message CreatePersonalMcpConnectionRequest {
+  reserved 100;
+  reserved "tenant_id", "actor_id", "subject_id", "owner_scope", "target_owner_scope", "product_context", "execution_proof", "attestation";
+  string request_id = 1;
+  kokoro.common.v1.CommandIdentity command = 2;
+  kokoro.platform.v1.McpConnectorId connector_id = 3;
+  kokoro.platform.v1.McpServerId server_id = 4;
+  repeated string allowed_selectors = 5;
+  optional uint64 expected_state_version = 6;
+}
+
+message CreatePersonalMcpConnectionResponse {
+  kokoro.platform.v1.PersonalMcpConnection connection = 1;
+}
+
 service ProductMcpPersonalService {
   rpc ListPersonalMcpConnectors(kokoro.platform.v1.ListPersonalMcpConnectorsRequest) returns (kokoro.platform.v1.ListPersonalMcpConnectorsResponse);
   rpc GetPersonalMcpConnector(kokoro.platform.v1.GetPersonalMcpConnectorRequest) returns (kokoro.platform.v1.GetPersonalMcpConnectorResponse);
@@ -1175,6 +1238,10 @@ service ProductMcpPersonalService {
   rpc RemovePersonalMcpConnector(kokoro.platform.v1.RemovePersonalMcpConnectorRequest) returns (kokoro.platform.v1.RemovePersonalMcpConnectorResponse);
   rpc ListPersonalMcpProviders(kokoro.platform.v1.ListPersonalMcpProvidersRequest) returns (kokoro.platform.v1.ListPersonalMcpProvidersResponse);
   rpc GetPersonalMcpProvider(kokoro.platform.v1.GetPersonalMcpProviderRequest) returns (kokoro.platform.v1.GetPersonalMcpProviderResponse);
+  rpc BeginPersonalMcpConnectorAuthorization(kokoro.platform.v1.BeginPersonalMcpConnectorAuthorizationRequest) returns (kokoro.platform.v1.BeginPersonalMcpConnectorAuthorizationResponse);
+  rpc CompletePersonalMcpConnectorAuthorization(kokoro.platform.v1.CompletePersonalMcpConnectorAuthorizationRequest) returns (kokoro.platform.v1.CompletePersonalMcpConnectorAuthorizationResponse);
+  rpc ReconnectPersonalMcpConnectorAuthorization(kokoro.platform.v1.ReconnectPersonalMcpConnectorAuthorizationRequest) returns (kokoro.platform.v1.ReconnectPersonalMcpConnectorAuthorizationResponse);
+  rpc CreatePersonalMcpConnection(kokoro.platform.v1.CreatePersonalMcpConnectionRequest) returns (kokoro.platform.v1.CreatePersonalMcpConnectionResponse);
 }
 
 // Product package inspection: independently admitted personal reads.

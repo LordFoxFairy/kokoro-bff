@@ -151,13 +151,13 @@ export function validateMcpPersonalPublic(operation: McpPersonalOperation, value
   }
   return parsed
 }
-function known(value: unknown): void {
+export function assertMcpPersonalWireKnown(value: unknown): void {
   if (typeof value !== "object" || value === null || value instanceof Uint8Array) return
   if ((value as Message).$unknown?.length) throw new Error("mcp_personal_response_invalid")
   for (const [key, child] of Object.entries(value))
     if (!key.startsWith("$")) {
-      if (Array.isArray(child)) child.forEach(known)
-      else known(child)
+      if (Array.isArray(child)) child.forEach(assertMcpPersonalWireKnown)
+      else assertMcpPersonalWireKnown(child)
     }
 }
 function object(value: unknown): Record<string, unknown> {
@@ -193,6 +193,14 @@ function projectConnection(raw: unknown) {
     policy_digest: value.policyDigest,
     status: value.status,
   }
+}
+export function projectMcpPersonalConnector(raw: unknown) {
+  assertMcpPersonalWireKnown(raw)
+  return connector.parse(projectConnector(raw))
+}
+export function projectMcpPersonalConnection(raw: unknown) {
+  assertMcpPersonalWireKnown(raw)
+  return connection.parse(projectConnection(raw))
 }
 function projectProvider(raw: unknown) {
   const value = object(raw)
@@ -233,11 +241,11 @@ export function validateMcpPersonalCommand(operation: McpPersonalCommandOperatio
   return result
 }
 export function projectMcpPersonalCommand(operation: McpPersonalCommandOperation, raw: unknown, input: McpPersonalCommandInput): unknown {
-  known(raw)
+  assertMcpPersonalWireKnown(raw)
   return validateMcpPersonalCommand(operation, { connector: projectConnector(object(raw).connector) }, input)
 }
 export function projectMcpPersonalResponse(operation: McpPersonalOperation, raw: unknown, input: McpPersonalInput): unknown {
-  known(raw)
+  assertMcpPersonalWireKnown(raw)
   const value = object(raw)
   if (operation === "provider") return validateMcpPersonalPublic(operation, { provider: projectProvider(value.provider) }, input)
   if (operation === "connector") return validateMcpPersonalPublic(operation, { connector: projectConnector(value.connector) }, input)

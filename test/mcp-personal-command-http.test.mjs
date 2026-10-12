@@ -248,7 +248,7 @@ for (const [code, status, fault, retryable] of [
         })
         assert.equal(response.status, status)
         const raw = await response.json()
-        assert.deepEqual(raw.error, { code: fault, message: "Personal MCP read failed", retryable })
+        assert.deepEqual(raw.error, { code: fault, message: "Personal MCP request failed", retryable })
         assert.equal(seen.length, replay + 1)
       }
       assert.equal(seen[0].input.commandId, "original-intent")
@@ -314,6 +314,99 @@ test("A2 command total deadline aborts RPC and never publishes late ACK", async 
     assert.equal(signal.aborted, true)
   } finally {
     release()
+    await f.close()
+  }
+})
+
+test("A3 OAuth callback and connection lifecycle use a single BFF-admitted personal-MCP surface", async () => {
+  const calls = []
+  const f = await fixture(true, {
+    mcpPersonalClient: {
+      read: async () => ({}),
+      authorization: async (operation, input) => {
+        calls.push({ operation, input })
+        if (operation === "complete") return { connector: { ...connector, status: "active", state_version: "3" } }
+        if (operation === "createConnection")
+          return {
+            connection: {
+              connection_id: "connection-one",
+              connector_id: "connector-one",
+              server_id: "server-one",
+              allowed_selectors: ["tool.read"],
+              policy_digest: "a".repeat(64),
+              status: "active",
+            },
+          }
+        return {
+          authorization: {
+            authorization_id: "authorization-one",
+            authorization_url: "https://oauth.example.test/authorize?state=opaque",
+            expires_at: "2027-01-15T08:00:00.000Z",
+          },
+          connector,
+        }
+      },
+    },
+  })
+  const invoke = async (path, body, idempotencyKey) => {
+    const response = await fetch(f.origin + path, {
+      method: "POST",
+      headers: { ...headers, "content-type": "application/json", ...(idempotencyKey === undefined ? {} : { "idempotency-key": idempotencyKey }) },
+      body: JSON.stringify(body),
+    })
+    return [response, await response.json()]
+  }
+  try {
+    const [begin, begun] = await invoke("/v1/self/mcp/connectors/connector-one/authorization", { server_id: "server-one", expected_state_version: "1" })
+    assert.equal(begin.status, 200)
+    assert.equal(begun.data.authorization.authorization_url, "https://oauth.example.test/authorize?state=opaque")
+    const [complete, completed] = await invoke("/v1/self/mcp/authorization/callback", { state: "opaque-state", code: "opaque-code" })
+    assert.equal(complete.status, 200)
+    assert.equal(completed.data.connector.status, "active")
+    const [connection, connected] = await invoke(
+      "/v1/self/mcp/connections",
+      { connector_id: "connector-one", server_id: "server-one", allowed_selectors: ["tool.read"], expected_state_version: "3" },
+      "connection-command",
+    )
+    assert.equal(connection.status, 201)
+    assert.equal(connected.data.connection.connection_id, "connection-one")
+    assert.deepEqual(
+      calls.map((call) => call.operation),
+      ["begin", "complete", "createConnection"],
+    )
+    assert.equal(calls[1].input.code, "opaque-code")
+    assert.equal(calls[2].input.commandId, "connection-command")
+  } finally {
+    await f.close()
+  }
+})
+
+test("A3 OAuth lifecycle rejects callback ambiguity and command keys before Platform", async () => {
+  let calls = 0
+  const f = await fixture(true, {
+    mcpPersonalClient: {
+      read: async () => ({}),
+      authorization: async () => {
+        calls++
+        return {}
+      },
+    },
+  })
+  try {
+    for (const [path, body, headersExtra] of [
+      ["/v1/self/mcp/authorization/callback", { state: "opaque", code: "one", error: "two" }, {}],
+      ["/v1/self/mcp/connectors/connector-one/authorization", { server_id: "server-one", expected_state_version: "1" }, { "idempotency-key": "not-allowed" }],
+      ["/v1/self/mcp/connections", { connector_id: "connector-one", server_id: "server-one", allowed_selectors: [], expected_state_version: "1" }, {}],
+    ]) {
+      const response = await fetch(f.origin + path, {
+        method: "POST",
+        headers: { ...headers, "content-type": "application/json", ...headersExtra },
+        body: JSON.stringify(body),
+      })
+      assert.equal(response.status, 400)
+    }
+    assert.equal(calls, 0)
+  } finally {
     await f.close()
   }
 })

@@ -1,0 +1,62 @@
+{
+  "profile": "mcp-personal-oauth-v1",
+  "version": "1.0.0",
+  "visibility": "internal-owner",
+  "owner": "Platform/MCP",
+  "service": "kokoro.platform.v1.ProductMcpPersonalService",
+  "methods": [
+    {
+      "method": "BeginPersonalMcpConnectorAuthorization",
+      "operation": "mcp.personal.BeginPersonalMcpConnectorAuthorization",
+      "command": false
+    },
+    {
+      "method": "CompletePersonalMcpConnectorAuthorization",
+      "operation": "mcp.personal.CompletePersonalMcpConnectorAuthorization",
+      "command": false
+    },
+    {
+      "method": "ReconnectPersonalMcpConnectorAuthorization",
+      "operation": "mcp.personal.ReconnectPersonalMcpConnectorAuthorization",
+      "command": false
+    },
+    {
+      "method": "CreatePersonalMcpConnection",
+      "operation": "mcp.personal.CreatePersonalMcpConnection",
+      "command": true
+    }
+  ],
+  "identity": {
+    "caller": "kokoro-bff",
+    "platformAdmission": "fresh BFF workload; tenant and subject are trusted request context",
+    "humanAdmissionOwner": "kokoro-bff",
+    "humanAdmission": "fresh user session for every operation and every replay; no human bearer forwarding",
+    "bodyAdmissionProof": false
+  },
+  "callback": {
+    "state": "opaque single-use correlation state; Platform stores only a hash",
+    "pkceVerifier": "encrypted owner-local credential; never returned to BFF or browser",
+    "code": "provider callback input only; never stored in request receipts or logs"
+  },
+  "persistence": {
+    "authorization": "kokoro_platform.mcp_personal_authorization",
+    "connection": "kokoro_platform.mcp_connection",
+    "writer": "Platform modules/mcp/personal + connection",
+    "concurrency": "connector state_version CAS; authorization callback single claim"
+  },
+  "parent": {
+    "protoSha256": "9a7d1db2f272a8ff5e39c5c122d4b46c230116e1c061e466e92f9186b3a1e367",
+    "descriptorSha256": "e6905c6ee8220bc1c756dd8ac96dd02c76544c4fee72bfcb2dd309574ea96316",
+    "generatedSourceSha256": "46a7729fee66e261a648479d2c15e3174e826af5f7473f2aa6fbeaf9628d47af"
+  },
+  "current": {
+    "protoSha256": "ce29404fed97cab8a80a7273c59f8c187164027e9b878c4752d1710b5ee0d585",
+    "descriptorSha256": "a5b34903ebed104f3e5780c0122b936e08cf28017547eda8eb92612c9709f88d",
+    "generatedSourceSha256": "11b62f371c9009202e29d32bc8590d9720c775d2862f199d96fbe9d9e841975d",
+    "counts": {
+      "rpc": 86,
+      "command": 45,
+      "proof": 24
+    }
+  }
+}

@@ -17,7 +17,7 @@ import {
   GetPersonalMcpConnectorResponseSchema,
   PersonalMcpProviderSchema,
   GetPersonalMcpProviderResponseSchema,
-} from "../src/generated/platform-mcp-presentation-connect/kokoro/platform/v1/platform_runtime_pb.js"
+} from "../src/generated/platform-mcp-product-connect/kokoro/platform/v1/platform_runtime_pb.js"
 const bytes = (value: unknown) => Buffer.from(JSON.stringify(value))
 const identity = { tenant: "tenant", subject: "subject", requestId: "request", commandId: "original-key" }
 const fields = { provider_key: "test", connector_type: "mcp", display_name: "😀".repeat(100), description: "" }
@@ -177,7 +177,7 @@ test("A2 Create projects actual generated disabled initial ACK and rejects fabri
 test("A2 real Connect command sends exact generated digest/key/CAS and uses shared close boundary", async () => {
   const { createServer } = await import("node:http")
   const { connectNodeAdapter } = await import("@connectrpc/connect-node")
-  const { ProductMcpPersonalService } = await import("../src/generated/platform-mcp-presentation-connect/kokoro/platform/v1/platform_runtime_pb.js")
+  const { ProductMcpPersonalService } = await import("../src/generated/platform-mcp-product-connect/kokoro/platform/v1/platform_runtime_pb.js")
   const { McpPersonalConnectClient } = await import("../src/infrastructure/clients/platform/mcp-personal-connect.js")
   const { McpPersonalTokenSource } = await import("../src/infrastructure/clients/platform/mcp-personal-token.js")
   const seen: unknown[] = []
