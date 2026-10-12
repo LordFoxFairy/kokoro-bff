@@ -28,6 +28,7 @@ function providerWire(input: Record<string, unknown>): Record<string, unknown> {
     author: input.author ?? null,
     website: input.website ?? null,
     privacy_url: input.privacy_url ?? null,
+    cover_image_url: input.cover_image_url ?? null,
     connector_types: (input.connector_types as string[]).map((value) => ({ builtin: 1, byok: 2, mcp: 3 })[value] ?? 0),
     default_scopes: input.default_scopes,
     authorization_required: input.authorization_required,
