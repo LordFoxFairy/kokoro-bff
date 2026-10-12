@@ -14,10 +14,10 @@ const headers = {
 const paths = [
   "/v1/mcp/servers",
   "/v1/mcp/connections",
-  "/v1/self/mcp/connectors",
-  "/v1/self/mcp/connectors/connector-one",
-  "/v1/self/mcp/connectors/connector-one/connections",
-  "/v1/self/mcp/connections/connection-one",
+  "/browser/v1/mcp/connectors",
+  "/browser/v1/mcp/connectors/connector-one",
+  "/browser/v1/mcp/connectors/connector-one/connections",
+  "/browser/v1/mcp/connections/connection-one",
 ]
 async function fixture(decision, { realSession = false, check, routeHandler, deadlineMs, sessionDelayMs = 0 } = {}) {
   const seen = []
@@ -151,7 +151,7 @@ test("R357 HTTP authorized personal reads without composition and unimplemented 
       assert.equal(response.headers.get("cache-control"), "no-store")
       assert.equal((await response.json()).error.code, "mcp_personal_dependency_unavailable")
     }
-    const response = await fetch(f.origin + "/v1/self/mcp/connectors", {
+    const response = await fetch(f.origin + "/browser/v1/mcp/connectors", {
       method: "POST",
       headers: {
         ...headers,
@@ -161,7 +161,7 @@ test("R357 HTTP authorized personal reads without composition and unimplemented 
       body: "{}",
     })
     assert.equal(response.status, 503)
-    assert.equal((await response.json()).error.code, "platform_operation_not_available")
+    assert.equal((await response.json()).error.code, "mcp_personal_dependency_unavailable")
     assert.deepEqual(f.seen.at(-1).body, {
       resource: "mcp_personal",
       action: "manage",

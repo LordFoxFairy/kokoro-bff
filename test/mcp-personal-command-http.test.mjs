@@ -14,10 +14,10 @@ const headers = {
 const paths = [
   "/v1/mcp/servers",
   "/v1/mcp/connections",
-  "/v1/self/mcp/connectors",
-  "/v1/self/mcp/connectors/connector-one",
-  "/v1/self/mcp/connectors/connector-one/connections",
-  "/v1/self/mcp/connections/connection-one",
+  "/browser/v1/mcp/connectors",
+  "/browser/v1/mcp/connectors/connector-one",
+  "/browser/v1/mcp/connectors/connector-one/connections",
+  "/browser/v1/mcp/connections/connection-one",
 ]
 async function fixture(decision, { realSession = false, check, routeHandler, mcpPersonalClient, verify, deadlineMs, sessionDelayMs = 0 } = {}) {
   const seen = []
@@ -147,12 +147,12 @@ const provider = {
   state_version: "1",
 }
 for (const [method, path, body, status] of [
-  ["POST", "/v1/self/mcp/connectors", { provider_key: "test", connector_type: "mcp", display_name: "Example", description: "" }, 201],
-  ["PATCH", "/v1/self/mcp/connectors/connector-one", { display_name: "Example", description: "", expected_state_version: "1" }, 200],
-  ["PUT", "/v1/self/mcp/connectors/connector-one/enabled", { enabled: true, expected_state_version: "1" }, 200],
-  ["DELETE", "/v1/self/mcp/connectors/connector-one", { expected_state_version: "1" }, 200],
-  ["GET", "/v1/self/mcp/providers", undefined, 200],
-  ["GET", "/v1/self/mcp/providers/test", undefined, 200],
+  ["POST", "/browser/v1/mcp/connectors", { provider_key: "test", connector_type: "mcp", display_name: "Example", description: "" }, 201],
+  ["PATCH", "/browser/v1/mcp/connectors/connector-one", { display_name: "Example", description: "", expected_state_version: "1" }, 200],
+  ["PUT", "/browser/v1/mcp/connectors/connector-one/enabled", { enabled: true, expected_state_version: "1" }, 200],
+  ["DELETE", "/browser/v1/mcp/connectors/connector-one", { expected_state_version: "1" }, 200],
+  ["GET", "/browser/v1/mcp/providers", undefined, 200],
+  ["GET", "/browser/v1/mcp/providers/test", undefined, 200],
 ])
   test(`A2 six formal capabilities pass guard: ${method} ${path}`, async () => {
     const seen = []
@@ -208,7 +208,7 @@ for (const [label, request, expected] of [
       },
     })
     try {
-      const response = await fetch(f.origin + "/v1/self/mcp/connectors/connector-one" + (request.suffix ?? ""), {
+      const response = await fetch(f.origin + "/browser/v1/mcp/connectors/connector-one" + (request.suffix ?? ""), {
         method: "PATCH",
         headers: { ...headers, ...(request.headers ?? { "content-type": "application/json", "idempotency-key": "original-key" }) },
         body: request.body,
@@ -241,7 +241,7 @@ for (const [code, status, fault, retryable] of [
     const body = JSON.stringify({ display_name: "Example", description: "", expected_state_version: "1" })
     try {
       for (let replay = 0; replay < 2; replay++) {
-        const response = await fetch(f.origin + "/v1/self/mcp/connectors/connector-one", {
+        const response = await fetch(f.origin + "/browser/v1/mcp/connectors/connector-one", {
           method: "PATCH",
           headers: { ...headers, "content-type": "application/json", "idempotency-key": "original-intent" },
           body,
@@ -275,7 +275,7 @@ test("A2 command re-admits after ACK and hides committed result on revoked sessi
     },
   })
   try {
-    const response = await fetch(f.origin + "/v1/self/mcp/connectors", {
+    const response = await fetch(f.origin + "/browser/v1/mcp/connectors", {
       method: "POST",
       headers: { ...headers, "content-type": "application/json", "idempotency-key": "original-intent" },
       body: JSON.stringify({ provider_key: "test", connector_type: "mcp", display_name: "Example", description: "" }),
@@ -304,7 +304,7 @@ test("A2 command total deadline aborts RPC and never publishes late ACK", async 
     },
   })
   try {
-    const response = await fetch(f.origin + "/v1/self/mcp/connectors", {
+    const response = await fetch(f.origin + "/browser/v1/mcp/connectors", {
       method: "POST",
       headers: { ...headers, "content-type": "application/json", "idempotency-key": "original-intent" },
       body: JSON.stringify({ provider_key: "test", connector_type: "mcp", display_name: "Example", description: "" }),
@@ -357,14 +357,14 @@ test("A3 OAuth callback and connection lifecycle use a single BFF-admitted perso
     return [response, await response.json()]
   }
   try {
-    const [begin, begun] = await invoke("/v1/self/mcp/connectors/connector-one/authorization", { server_id: "server-one", expected_state_version: "1" })
+    const [begin, begun] = await invoke("/browser/v1/mcp/connectors/connector-one/authorization", { server_id: "server-one", expected_state_version: "1" })
     assert.equal(begin.status, 200)
     assert.equal(begun.data.authorization.authorization_url, "https://oauth.example.test/authorize?state=opaque")
-    const [complete, completed] = await invoke("/v1/self/mcp/authorization/callback", { state: "opaque-state", code: "opaque-code" })
+    const [complete, completed] = await invoke("/browser/v1/mcp/authorization/callback", { state: "opaque-state", code: "opaque-code" })
     assert.equal(complete.status, 200)
     assert.equal(completed.data.connector.status, "active")
     const [connection, connected] = await invoke(
-      "/v1/self/mcp/connections",
+      "/browser/v1/mcp/connections",
       { connector_id: "connector-one", server_id: "server-one", allowed_selectors: ["tool.read"], expected_state_version: "3" },
       "connection-command",
     )
@@ -394,9 +394,13 @@ test("A3 OAuth lifecycle rejects callback ambiguity and command keys before Plat
   })
   try {
     for (const [path, body, headersExtra] of [
-      ["/v1/self/mcp/authorization/callback", { state: "opaque", code: "one", error: "two" }, {}],
-      ["/v1/self/mcp/connectors/connector-one/authorization", { server_id: "server-one", expected_state_version: "1" }, { "idempotency-key": "not-allowed" }],
-      ["/v1/self/mcp/connections", { connector_id: "connector-one", server_id: "server-one", allowed_selectors: [], expected_state_version: "1" }, {}],
+      ["/browser/v1/mcp/authorization/callback", { state: "opaque", code: "one", error: "two" }, {}],
+      [
+        "/browser/v1/mcp/connectors/connector-one/authorization",
+        { server_id: "server-one", expected_state_version: "1" },
+        { "idempotency-key": "not-allowed" },
+      ],
+      ["/browser/v1/mcp/connections", { connector_id: "connector-one", server_id: "server-one", allowed_selectors: [], expected_state_version: "1" }, {}],
     ]) {
       const response = await fetch(f.origin + path, {
         method: "POST",

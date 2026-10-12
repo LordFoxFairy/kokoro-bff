@@ -272,17 +272,14 @@ test("service and bearer rejection happen before IAM and route work", async () =
 test("Admin Web credential reaches only current identity and exact named admin routes", async () => {
   const admission = new SessionAdmissionDouble({ token: { namespace: "tenant-server", userId: "admin-user" } })
   let routeCalls = 0
-  const server = createLiveTestBffServer(
-    { ...config(), adminWebSharedSecret: "admin-test-secret" } as BffConfig,
-    {
-      sessionAdmission: admission,
-      skillAuthorization: { check: async () => ({ ok: true as const }) },
-      routeHandler: async ({ response }): Promise<void> => {
-        routeCalls += 1
-        response.writeHead(204).end()
-      },
+  const server = createLiveTestBffServer({ ...config(), adminWebSharedSecret: "admin-test-secret" } as BffConfig, {
+    sessionAdmission: admission,
+    skillAuthorization: { check: async () => ({ ok: true as const }) },
+    routeHandler: async ({ response }): Promise<void> => {
+      routeCalls += 1
+      response.writeHead(204).end()
     },
-  )
+  })
   const base = await listen(server)
   const admin = {
     "x-kokoro-service": "admin-web-bff",
@@ -297,8 +294,26 @@ test("Admin Web credential reaches only current identity and exact named admin r
   assert.equal(unconfiguredAdmission.calls.length, 0)
 
   for (const rawHeaders of [
-    ["x-kokoro-service", "admin-web-bff", "x-kokoro-service", "admin-web-bff", "x-kokoro-internal-secret", "admin-test-secret", "authorization", "Bearer token"],
-    ["x-kokoro-service", "admin-web-bff", "x-kokoro-internal-secret", "admin-test-secret", "x-kokoro-internal-secret", "admin-test-secret", "authorization", "Bearer token"],
+    [
+      "x-kokoro-service",
+      "admin-web-bff",
+      "x-kokoro-service",
+      "admin-web-bff",
+      "x-kokoro-internal-secret",
+      "admin-test-secret",
+      "authorization",
+      "Bearer token",
+    ],
+    [
+      "x-kokoro-service",
+      "admin-web-bff",
+      "x-kokoro-internal-secret",
+      "admin-test-secret",
+      "x-kokoro-internal-secret",
+      "admin-test-secret",
+      "authorization",
+      "Bearer token",
+    ],
   ]) {
     const status = await new Promise<number>((resolve, reject) => {
       const outgoing = httpRequest(`${base}/v1/me`, { headers: rawHeaders }, (response) => {
@@ -797,11 +812,12 @@ test("R357 MCP action admission forwards only trusted human tenant/subject and k
     signal: controller.signal,
     tenantId: "tenant-server",
     subjectId: "human-one",
+    resource: "mcp_personal",
     action: "manage",
   })
-  assert.equal(mcpActionForRequest("GET", ["self", "mcp", "connectors"]), "read")
+  assert.equal(mcpActionForRequest("GET", ["mcp", "connectors"]), "read")
   assert.equal(mcpActionForRequest("GET", ["mcp", "connections"]), "read")
-  assert.equal(mcpActionForRequest("POST", ["self", "mcp", "connectors"]), "manage")
+  assert.equal(mcpActionForRequest("POST", ["mcp", "connectors"]), "manage")
   for (const path of [["skills"], ["team"], ["admin", "skills"], ["runtime"]]) assert.equal(mcpActionForRequest("POST", path), null)
 })
 test("R357 MCP action cancellation after a late human permission never returns admission success", async () => {

@@ -14,10 +14,10 @@ const headers = {
 const paths = [
   "/v1/mcp/servers",
   "/v1/mcp/connections",
-  "/v1/self/mcp/connectors",
-  "/v1/self/mcp/connectors/connector-one",
-  "/v1/self/mcp/connectors/connector-one/connections",
-  "/v1/self/mcp/connections/connection-one",
+  "/browser/v1/mcp/connectors",
+  "/browser/v1/mcp/connectors/connector-one",
+  "/browser/v1/mcp/connectors/connector-one/connections",
+  "/browser/v1/mcp/connections/connection-one",
 ]
 async function fixture(decision, { realSession = false, check, routeHandler, mcpPersonalClient, verify, deadlineMs, sessionDelayMs = 0 } = {}) {
   const seen = []
@@ -182,7 +182,7 @@ for (const suffix of ["?limit=01", "?limit=101", "?limit=1&limit=2", "?cursor=",
       },
     })
     try {
-      const response = await fetch(`${f.origin}/v1/self/mcp/connectors${suffix}`, { headers })
+      const response = await fetch(`${f.origin}/browser/v1/mcp/connectors${suffix}`, { headers })
       assert.equal(response.status, 400)
       assert.equal((await response.json()).error.code, "invalid_mcp_personal_request")
       assert.equal(reads, 0)
@@ -204,7 +204,7 @@ for (const key of ["content-length", "idempotency-key"])
     try {
       const status = await new Promise((resolve, reject) => {
         const request = nodeRequest(
-          `${f.origin}/v1/self/mcp/connectors`,
+          `${f.origin}/browser/v1/mcp/connectors`,
           { headers: { ...headers, [key]: key === "content-length" ? "0" : "key" } },
           (response) => {
             response.resume()
@@ -232,12 +232,12 @@ test("unissued personal methods and provider writes remain blocked without owner
   })
   try {
     for (const [path, method] of [
-      ["/v1/self/mcp/connectors", "PUT"],
-      ["/v1/self/mcp/providers", "POST"],
+      ["/browser/v1/mcp/connectors", "PUT"],
+      ["/browser/v1/mcp/providers", "POST"],
     ]) {
       const result = await fetch(f.origin + path, { method, headers })
-      assert.equal(result.status, 503)
-      assert.equal((await result.json()).error.code, "platform_operation_not_available")
+      assert.equal(result.status, 404)
+      assert.equal((await result.json()).error.code, "route_not_found")
     }
     assert.equal(reads, 0)
   } finally {
@@ -247,7 +247,7 @@ test("unissued personal methods and provider writes remain blocked without owner
 test("returns unavailable for missing personal composition while keeping active projection separate", async () => {
   const f = await fixture(true)
   try {
-    const response = await fetch(`${f.origin}/v1/self/mcp/connectors`, { headers })
+    const response = await fetch(`${f.origin}/browser/v1/mcp/connectors`, { headers })
     assert.equal(response.status, 503)
     assert.equal((await response.json()).error.code, "mcp_personal_dependency_unavailable")
   } finally {
@@ -261,7 +261,7 @@ test("rechecks current action after owner read and never returns withdrawn data"
     mcpPersonalClient: { read: async () => ({ items: [connector], next_cursor: null }) },
   })
   try {
-    const response = await fetch(`${f.origin}/v1/self/mcp/connectors`, { headers })
+    const response = await fetch(`${f.origin}/browser/v1/mcp/connectors`, { headers })
     assert.equal(response.status, 403)
     assert.equal((await response.json()).error.code, "session_forbidden")
     assert.equal(checks, 2)
@@ -276,7 +276,7 @@ test("same request cannot return data after subject replacement", async () => {
     mcpPersonalClient: { read: async () => ({ items: [connector], next_cursor: null }) },
   })
   try {
-    const response = await fetch(`${f.origin}/v1/self/mcp/connectors`, { headers })
+    const response = await fetch(`${f.origin}/browser/v1/mcp/connectors`, { headers })
     assert.equal(response.status, 404)
     assert.equal((await response.json()).error.code, "mcp_personal_not_found")
   } finally {
@@ -298,7 +298,7 @@ test("one request deadline cancels stalled owner and discards its late result", 
     },
   })
   try {
-    const response = await fetch(`${f.origin}/v1/self/mcp/connectors`, { headers })
+    const response = await fetch(`${f.origin}/browser/v1/mcp/connectors`, { headers })
     assert.equal(response.status, 503)
     assert.equal((await response.json()).error.code, "mcp_personal_dependency_unavailable")
     assert.equal(ownerSignal.aborted, true)
@@ -325,7 +325,7 @@ test("caller disconnect cancels the personal owner read without late response", 
   })
   try {
     const caller = new AbortController()
-    const pending = fetch(`${f.origin}/v1/self/mcp/connectors`, { headers, signal: caller.signal })
+    const pending = fetch(`${f.origin}/browser/v1/mcp/connectors`, { headers, signal: caller.signal })
     const rejection = assert.rejects(pending)
     await started
     caller.abort()

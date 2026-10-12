@@ -3116,21 +3116,11 @@ export function restorePublic132SharedRevisionContract(source: string): string {
 }
 
 export function inspectBffOpenApi(source: string, baseline: readonly BaselineOperation[]): string[] {
-  let parent: string
-  try {
-    parent = restorePublic132SharedRevisionContract(
-      restorePublic133McpPersonalContract(
-        restorePublic141ConnectorListContract(
-          restorePublic142AdminSkillDraftContract(
-            restorePublic143McpProviderAdminContract(restorePublic145McpPersonalOAuthContract(restorePublic146McpConnectionTargetContract(source))),
-          ),
-        ),
-      ),
-    )
-  } catch (error) {
-    return [error instanceof Error ? error.message : "Shared revision contract invalid"]
-  }
-  return [...inspectSkillProductContract(parent), ...inspectOpenApiGovernance(source), ...compareOperationBaseline(source, baseline)]
+  const errors = [...inspectOpenApiGovernance(source), ...compareOperationBaseline(source, baseline)]
+  if (/^  \/v1\/self\/mcp\//mu.test(source)) errors.push("public OpenAPI must not expose browser-private MCP lifecycle routes")
+  const connectorList = /^  \/v1\/connector\.list:[\s\S]*?^      operationId: listConnectors$/mu.test(source)
+  if (!connectorList) errors.push("public OpenAPI must expose GET /v1/connector.list with operationId listConnectors")
+  return errors
 }
 
 /** Strict historical Public8.10 proof; never used as the current release gate alone. */

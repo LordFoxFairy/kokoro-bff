@@ -24,24 +24,24 @@ export function mcpPersonalOperation(
   path: string[],
   method: string,
 ): McpPersonalOperation | McpPersonalCommandOperation | McpPersonalAuthorizationOperation | null {
-  if (path[0] !== "self" || path[1] !== "mcp") return null
-  if (path[2] === "connectors") {
-    if (path.length === 3 && method === "POST") return "create"
-    if (path.length === 4 && method === "PATCH") return "update"
-    if (path.length === 4 && method === "DELETE") return "remove"
-    if (path.length === 5 && path[4] === "enabled" && method === "PUT") return "enabled"
-    if (path.length === 5 && path[4] === "authorization" && method === "POST") return "begin"
-    if (path.length === 6 && path[4] === "authorization" && path[5] === "reconnect" && method === "POST") return "reconnect"
+  if (path[0] !== "mcp") return null
+  if (path[1] === "connectors") {
+    if (path.length === 2 && method === "POST") return "create"
+    if (path.length === 3 && method === "PATCH") return "update"
+    if (path.length === 3 && method === "DELETE") return "remove"
+    if (path.length === 4 && path[3] === "enabled" && method === "PUT") return "enabled"
+    if (path.length === 4 && path[3] === "authorization" && method === "POST") return "begin"
+    if (path.length === 5 && path[3] === "authorization" && path[4] === "reconnect" && method === "POST") return "reconnect"
   }
-  if (path.length === 4 && path[2] === "authorization" && path[3] === "callback" && method === "POST") return "complete"
-  if (path.length === 3 && path[2] === "connections" && method === "POST") return "createConnection"
+  if (path.length === 3 && path[1] === "authorization" && path[2] === "callback" && method === "POST") return "complete"
+  if (path.length === 2 && path[1] === "connections" && method === "POST") return "createConnection"
   if (method !== "GET") return null
-  if (path.length === 3 && path[2] === "providers") return "providers"
-  if (path.length === 4 && path[2] === "providers") return "provider"
-  if (path.length === 3 && path[2] === "connectors") return "connectors"
-  if (path.length === 4 && path[2] === "connectors") return "connector"
-  if (path.length === 5 && path[2] === "connectors" && path[4] === "connections") return "connections"
-  if (path.length === 4 && path[2] === "connections") return "connection"
+  if (path.length === 2 && path[1] === "providers") return "providers"
+  if (path.length === 3 && path[1] === "providers") return "provider"
+  if (path.length === 2 && path[1] === "connectors") return "connectors"
+  if (path.length === 3 && path[1] === "connectors") return "connector"
+  if (path.length === 4 && path[1] === "connectors" && path[3] === "connections") return "connections"
+  if (path.length === 3 && path[1] === "connections") return "connection"
   return null
 }
 export async function mcpPersonalRoute(
@@ -75,7 +75,7 @@ export async function mcpPersonalRoute(
     (mutation
       ? request.headers["transfer-encoding"] !== undefined || query.size > 0
       : ["content-length", "transfer-encoding", "idempotency-key"].some((key) => request.headers[key] !== undefined)) ||
-    url.pathname !== `/v1/${path.map(encodeURIComponent).join("/")}` ||
+    url.pathname !== `/browser/v1/${path.map(encodeURIComponent).join("/")}` ||
     url.hash ||
     [...query.keys()].some((key) => !allowed.includes(key) || query.getAll(key).length !== 1)
   ) {
@@ -83,17 +83,17 @@ export async function mcpPersonalRoute(
     return
   }
   if (authorization && (operation === "begin" || operation === "reconnect")) {
-    if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])/u.test(path[3] ?? "")) {
+    if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])/u.test(path[2] ?? "")) {
       invalid()
       return
     }
-    input.id = path[3]!
+    input.id = path[2]!
   } else if (!authorization && !["connectors", "providers", "create"].includes(operation)) {
-    if (!(operation === "provider" ? /^[a-z0-9][a-z0-9._-]{0,63}(?![\s\S])/u : /^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])/u).test(path[3] ?? "")) {
+    if (!(operation === "provider" ? /^[a-z0-9][a-z0-9._-]{0,63}(?![\s\S])/u : /^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])/u).test(path[2] ?? "")) {
       invalid()
       return
     }
-    input.id = path[3]!
+    input.id = path[2]!
   }
   if (query.has("limit")) {
     if (!/^(?:[1-9]|[1-9][0-9]|100)$/u.test(query.get("limit")!)) {

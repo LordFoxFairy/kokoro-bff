@@ -232,18 +232,23 @@ async function handle(
     send(response, 404, failure("route_not_found", "Route was not found", id))
     return
   }
-  if (segments[0] !== "v1") {
+  const browserPrivateMcp = segments[0] === "browser" && segments[1] === "v1"
+  if (!browserPrivateMcp && segments[0] !== "v1") {
     send(response, 404, failure("route_not_found", "Use the versioned /v1 business API", id))
     return
   }
 
-  if (segments.length === 3 && segments[1] === "system" && segments[2] === "runtime-manifest" && request.method === "GET") {
+  if (!browserPrivateMcp && segments.length === 3 && segments[1] === "system" && segments[2] === "runtime-manifest" && request.method === "GET") {
     await runtimeManifest(request, response, config, id)
     return
   }
 
-  const businessPath = segments.slice(1)
-  const isConnectorList = isConnectorListRequest(businessPath, request.method ?? "GET")
+  const businessPath = browserPrivateMcp ? segments.slice(2) : segments.slice(1)
+  if (!browserPrivateMcp && businessPath[0] === "self" && businessPath[1] === "mcp") {
+    send(response, 404, failure("route_not_found", "Route was not found", id))
+    return
+  }
+  const isConnectorList = !browserPrivateMcp && isConnectorListRequest(businessPath, request.method ?? "GET")
   const isProjectSkillAssociation = businessPath.length === 4 && businessPath[0] === "projects" && businessPath[2] === "skills" && request.method === "PATCH"
   const hasSkillsBudget =
     isProjectSkillAssociation ||
@@ -252,8 +257,12 @@ async function handle(
     (businessPath[0] === "self" && businessPath[1] === "skills")
   if (hasSkillsBudget) startSkillRequestBudget(request)
   const mcpAction = mcpActionForRequest(request.method ?? "GET", businessPath)
-  const isMcpPersonalOperation = mcpPersonalOperation(businessPath, request.method ?? "GET") !== null
-  const isMcpProviderAdminOperation = mcpProviderAdminOperation(businessPath, request.method ?? "GET") !== null
+  const isMcpPersonalOperation = browserPrivateMcp && mcpPersonalOperation(businessPath, request.method ?? "GET") !== null
+  const isMcpProviderAdminOperation = !browserPrivateMcp && mcpProviderAdminOperation(businessPath, request.method ?? "GET") !== null
+  if (browserPrivateMcp && !isMcpPersonalOperation) {
+    send(response, 404, failure("route_not_found", "Route was not found", id))
+    return
+  }
   const hasMcpBudget = mcpAction !== null || isMcpPersonalOperation || isMcpProviderAdminOperation
   if (hasMcpBudget) {
     startMcpRequestBudget(request)
