@@ -92,6 +92,7 @@ const provider = z
     privacy_url: safeUrl.optional(),
     cover_image_url: safeUrl.optional(),
     updated_at: date.optional(),
+    connection_server_id: id.optional(),
     enabled: z.boolean(),
     state_version: version,
   })
@@ -218,6 +219,7 @@ function projectProvider(raw: unknown) {
     ...(value.privacyUrl === undefined ? {} : { privacy_url: value.privacyUrl }),
     ...(value.coverImageUrl === undefined ? {} : { cover_image_url: value.coverImageUrl }),
     ...(value.updatedAt === undefined ? {} : { updated_at: value.updatedAt }),
+    ...(value.connectionServerId === undefined ? {} : { connection_server_id: identity(value.connectionServerId) }),
   }
 }
 export function validateMcpPersonalCommand(operation: McpPersonalCommandOperation, raw: unknown, input: McpPersonalCommandInput): unknown {

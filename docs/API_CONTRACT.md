@@ -1,3 +1,7 @@
+## T-K03.20 本人 MCP 可连接目标投影（BFF 已实施，待 Web 消费）
+
+canonical public 从 `14.5.0` 递增至 `14.6.0`，不新增 endpoint 或命令。`PersonalMcpProvider` 可选新增 `connection_server_id`：它是 Platform 仅在 Provider 恰有一个 `registered + streamable_http` managed Server 时发出的不透明 ID。它不表示 endpoint、origin、tool selector、credential、OAuth URL 或连接已建成；缺失表示 Browser 不可发起既有授权/建连接命令，不能猜测或替换 ID。所有现有请求、错误 envelope、CAS、`no-store` 与 current-subject admission 保持不变。
+
 ## T-K03.19 本人 MCP OAuth/Connection Product API D0（BFF 已实施，待 Web/Agent 端到端验收）
 
 固定在 canonical public `14.5.0 / 155 operations` 的既有 `/v1/self/mcp`，均为 `owner=kokoro-bff`、`visibility=public`、`stability=beta`、`cache-control:no-store` 与可信 session 的当前 `mcp_personal` action。Browser 仍只经 Web 同源 adapter 调用 BFF；没有到 Platform 的直连、浏览器 bearer 转发或自报 tenant/subject。

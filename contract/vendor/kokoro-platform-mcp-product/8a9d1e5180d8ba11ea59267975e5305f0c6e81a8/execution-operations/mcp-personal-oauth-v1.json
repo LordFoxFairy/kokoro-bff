@@ -41,7 +41,7 @@
   "persistence": {
     "authorization": "kokoro_platform.mcp_personal_authorization",
     "connection": "kokoro_platform.mcp_connection",
-    "writer": "Platform modules/mcp/personal + connection",
+    "writer": "Platform modules/mcp/self + connection",
     "concurrency": "connector state_version CAS; authorization callback single claim"
   },
   "parent": {
@@ -50,9 +50,9 @@
     "generatedSourceSha256": "46a7729fee66e261a648479d2c15e3174e826af5f7473f2aa6fbeaf9628d47af"
   },
   "current": {
-    "protoSha256": "ce29404fed97cab8a80a7273c59f8c187164027e9b878c4752d1710b5ee0d585",
-    "descriptorSha256": "a5b34903ebed104f3e5780c0122b936e08cf28017547eda8eb92612c9709f88d",
-    "generatedSourceSha256": "11b62f371c9009202e29d32bc8590d9720c775d2862f199d96fbe9d9e841975d",
+    "protoSha256": "5f372f114057acf07493108f6a03106409472bf306f54875bcd6bb38b7f7bd19",
+    "descriptorSha256": "22da07a0103f5bbcc3d5a28a25189ffdb26ab30b244c5547318ecfaac808f615",
+    "generatedSourceSha256": "36cdba9b97f97336337643159889d7787b7a7a20920f1c491bdcfb86cb107a17",
     "counts": {
       "rpc": 86,
       "command": 45,

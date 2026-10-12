@@ -748,7 +748,10 @@ function idempotencyErrors(parameters: Map<string, NamedBlock>, operations: Oper
       "reconnectPersonalMcpConnectorAuthorization",
       "completePersonalMcpConnectorAuthorization",
     ].includes(operationId)
-    const expected = ["GET", "HEAD", "OPTIONS"].includes(operation.method) || operationId === "previewGithubSkill" || isPersonalizationCas || isMcpPersonalOAuth ? "none" : "required"
+    const expected =
+      ["GET", "HEAD", "OPTIONS"].includes(operation.method) || operationId === "previewGithubSkill" || isPersonalizationCas || isMcpPersonalOAuth
+        ? "none"
+        : "required"
     const declared = operation.fields.get("x-kokoro-idempotency")
     const hasParameter =
       operationId === "createSkillDraft"
@@ -2978,6 +2981,18 @@ export function restorePublic141ConnectorListContract(source: string): string {
   return source.replace(path, "").replace(responses, "").replace("  version: 14.1.0", "  version: 14.0.0")
 }
 
+export function restorePublic146McpConnectionTargetContract(source: string): string {
+  if (!/^  version: 14\.6\.0$/mu.test(source)) throw new Error("MCP connection target minor version drift")
+  const digest = (value: string): string => createHash("sha256").update(value).digest("hex")
+  const provider = source.match(/^    PersonalMcpProvider:\n[\s\S]*?(?=^    PersonalMcpProviderListResponse:)/mu)?.[0]
+  const field = "        connection_server_id: { type: string, minLength: 1, maxLength: 191, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\\s\\S])' }\n"
+  if (provider === undefined || provider.split(field).length !== 2) throw new Error("MCP connection target exact delta missing")
+  const parent = source.replace(provider, () => provider.replace(field, "")).replace("  version: 14.6.0", "  version: 14.5.0")
+  if (digest(parent) !== "7fbbc8cc899c84654616c2fbc5d923524d331b240e32df97620c6eece7b0d186")
+    throw new Error("MCP connection target complete Public14.5 parent inverse drift")
+  return parent
+}
+
 export function restorePublic145McpPersonalOAuthContract(source: string): string {
   if (!/^  version: 14\.5\.0$/mu.test(source)) throw new Error("MCP personal OAuth minor version drift")
   const digest = (value: string): string => createHash("sha256").update(value).digest("hex")
@@ -2987,8 +3002,7 @@ export function restorePublic145McpPersonalOAuthContract(source: string): string
   ].map((pattern) => source.match(pattern)?.[0])
   const schemas = source.match(/^    PersonalMcpConnectorAuthorizationRequest:\n[\s\S]*?(?=^    PersonalMcpConnectorListResponse:)/mu)?.[0]
   const responses = source.match(/^    PersonalMcpConnectorAuthorizationOk:\n[\s\S]*?(?=^    PersonalMcpConnectorListOk:)/mu)?.[0]
-  if (paths.some((path) => path === undefined) || schemas === undefined || responses === undefined)
-    throw new Error("MCP personal OAuth exact delta missing")
+  if (paths.some((path) => path === undefined) || schemas === undefined || responses === undefined) throw new Error("MCP personal OAuth exact delta missing")
   const parent = source
     .replace(paths[0]!, "")
     .replace(paths[1]!, "")
@@ -3108,7 +3122,7 @@ export function inspectBffOpenApi(source: string, baseline: readonly BaselineOpe
       restorePublic133McpPersonalContract(
         restorePublic141ConnectorListContract(
           restorePublic142AdminSkillDraftContract(
-            restorePublic143McpProviderAdminContract(restorePublic145McpPersonalOAuthContract(source)),
+            restorePublic143McpProviderAdminContract(restorePublic145McpPersonalOAuthContract(restorePublic146McpConnectionTargetContract(source))),
           ),
         ),
       ),

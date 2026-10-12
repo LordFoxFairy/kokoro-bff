@@ -1,3 +1,7 @@
+## T-K03.20 本人 MCP 可连接目标投影数据边界（BFF 已实施，待 Web 消费）
+
+本切片不新增 BFF 表、SQL、Redis、receipt、缓存或 callback state。`connection_server_id` 是 Platform 在一次 Provider 读取中从自身 `mcp_server` 的唯一匹配结果推导的短暂投影；BFF 既不持久化、也不回填、缓存或跨 owner 查询该 ID。进程重启不影响 owner 的 Server/Connection 事实。
+
 ## T-K03.19 本人 MCP OAuth/Connection adapter 数据边界（BFF 已实施，待 Web/Agent 端到端验收）
 
 本切片不修改 `database/schema.sql`，不创建 BFF SQL、Redis、receipt、缓存、callback state 或 credential 表。Platform 唯一拥有 authorization state hash、PKCE verifier、token 密文、credential rotation、connector/connection/CAS 与 command receipt；IAM 唯一拥有登录和当前权限。BFF 只在单请求 deadline 内传递受信 identity、校验闭集并投影 owner ACK；进程重启不会恢复 OAuth/Connection 业务事实。

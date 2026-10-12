@@ -1798,6 +1798,8 @@ message PersonalMcpProvider {
   uint64 state_version = 11;
   optional string cover_image_url = 12;
   optional string updated_at = 13;
+  // Omitted unless this provider has exactly one managed streamable HTTP server.
+  optional kokoro.platform.v1.McpServerId connection_server_id = 14;
 }
 message ListPersonalMcpProvidersResponse {
   repeated kokoro.platform.v1.PersonalMcpProvider providers = 1;

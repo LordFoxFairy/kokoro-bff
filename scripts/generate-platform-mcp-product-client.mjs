@@ -7,7 +7,7 @@ import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-const ownerCommit = "7b56794e69670f4d38fde8f3c337d87bc547f546"
+const ownerCommit = "8a9d1e5180d8ba11ea59267975e5305f0c6e81a8"
 const vendorRoot = `contract/vendor/kokoro-platform-mcp-product/${ownerCommit}`
 const vendorProto = `${vendorRoot}/proto`
 const output = "src/generated/platform-mcp-product-connect"
@@ -18,12 +18,12 @@ const protoInputs = ["kokoro/common/v1/common.proto", "kokoro/platform/v1/platfo
 const generatedFiles = ["kokoro/common/v1/common_pb.ts", "kokoro/platform/v1/platform_runtime_pb.ts", "kokoro/storage/v3/storage_pb.ts"]
 const pins = {
   "proto/kokoro/common/v1/common.proto": "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08",
-  "proto/kokoro/platform/v1/platform_runtime.proto": "ce29404fed97cab8a80a7273c59f8c187164027e9b878c4752d1710b5ee0d585",
+  "proto/kokoro/platform/v1/platform_runtime.proto": "5f372f114057acf07493108f6a03106409472bf306f54875bcd6bb38b7f7bd19",
   "proto/kokoro/storage/v3/storage.proto": "1021e603065978871c51519ddba5b23c9b97f16b781a08bd98e019b3342bf5f9",
-  "descriptor/platform-v1.binpb": "a5b34903ebed104f3e5780c0122b936e08cf28017547eda8eb92612c9709f88d",
+  "descriptor/platform-v1.binpb": "22da07a0103f5bbcc3d5a28a25189ffdb26ab30b244c5547318ecfaac808f615",
   "execution-operations/mcp-provider-presentation-v1.json": "ff527e4650fbb2f3e9c2cf869d5cfded29cc539284003687ff56cca0c41cac04",
-  "execution-operations/mcp-personal-oauth-v1.json": "ff0ab99d338c1f77dad35e44ad6ea307201125cfae178ba74d6e84eb5c54aed0",
-  "provenance.json": "448819e156e9e38520084547b36e649eec59e0630e2eedf79e1beb3e0be1f741",
+  "execution-operations/mcp-personal-oauth-v1.json": "409e950a4aa083160e5ee50bb8ca4f45d0e55990cb45d6a8862b2a2b597e4168",
+  "provenance.json": "dac5c5a45e0339e6fc0578d3eec5aa1c74217b0360c7514ed080beb12710a23e",
 }
 
 const sha256 = (value) => createHash("sha256").update(value).digest("hex")
@@ -65,6 +65,7 @@ export async function assertMcpProductInputs() {
   assert.match(source, /optional string updated_at = 13;/u)
   assert.match(source, /optional string cover_image_url = 19;/u)
   assert.match(source, /optional string cover_image_url = 15;/u)
+  assert.match(source, /optional kokoro\.platform\.v1\.McpServerId connection_server_id = 14;/u)
   const oauth = JSON.parse(await readFile(path.join(root, vendorRoot, "execution-operations/mcp-personal-oauth-v1.json"), "utf8"))
   assert.equal(oauth.profile, "mcp-personal-oauth-v1")
   assert.deepEqual(

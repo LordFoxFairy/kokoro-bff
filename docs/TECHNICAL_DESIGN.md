@@ -1,3 +1,15 @@
+## T-K03.20 本人 MCP 可连接目标投影（BFF 已实施，待 Web 消费）
+
+| 项 | 结论 |
+| --- | --- |
+| Owner / writer | `kokoro-platform/modules/mcp` 继续拥有 Server 目录、Connection、OAuth 与 CAS；BFF 只扩既有本人 Provider read projection。 |
+| 当前事实 | 授权与创建 Connection 已要求 `server_id`，但 Browser Provider 投影没有可信可用的 ID，导致 UI 只能停在“等待连接”。 |
+| 目标职责 | 只在 Provider 恰有一个 `registered + streamable_http` managed Server 时，向 Browser 投影可选不透明 `connection_server_id`；零个或多个一律 omit，由后台修正目录，绝不推断。 |
+| 目录方案 | 扩现 `mcp-personal-response.ts`、现 OpenAPI `PersonalMcpProvider` 与固定 Product Connect vendor；淘汰 BFF SQL 查询、暴露 endpoint/selector/credential、或按供应商写分支。 |
+| 依赖与生命周期 | Browser → Web same-origin adapter → BFF → Platform；`connection_server_id` 仅供既有 Begin/Reconnect/Create Connection 请求复用，仍由 owner 执行 CAS 与授权状态机。 |
+| 删除项 | 删除旧 Platform vendor pin，不保留旧 generated client、双 pin 或旧字段 fallback。 |
+| 验证 | 固定 owner artifact 再生成、Response 映射单测（唯一/缺失/未知 wire）、OpenAPI historical inverse、HTTP route 与 lint/typecheck/contract/build。 |
+
 ## T-K03.19 BFF 本人 MCP OAuth/Connection adapter D0（BFF 已实施，待 Web/Agent 端到端验收）
 
 | 项 | 结论 |

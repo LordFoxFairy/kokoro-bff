@@ -118,6 +118,7 @@ test("A2 provider projection contains only official directory facts, with safe o
     stateVersion: 3n,
     coverImageUrl: "https://cdn.example.test/connectors/test.webp",
     updatedAt: "2026-10-11T12:34:56.000Z",
+    connectionServerId: { value: "server-test" },
   })
   const input = { ...identity, id: "test" }
   const raw = () => create(GetPersonalMcpProviderResponseSchema, { provider })
@@ -132,11 +133,15 @@ test("A2 provider projection contains only official directory facts, with safe o
       state_version: "3",
       cover_image_url: "https://cdn.example.test/connectors/test.webp",
       updated_at: "2026-10-11T12:34:56.000Z",
+      connection_server_id: "server-test",
     },
   })
   provider.website = "http://insecure.test"
   assert.throws(() => projectMcpPersonalResponse("provider", raw(), input))
   provider.website = "https://public.test"
+  provider.connectionServerId = { value: "invalid space" }
+  assert.throws(() => projectMcpPersonalResponse("provider", raw(), input))
+  provider.connectionServerId = { value: "server-test" }
   assert.throws(() => projectMcpPersonalResponse("provider", raw(), { ...input, id: "other" }))
 })
 test("A2 typed command errors preserve conflict/precondition/unknown semantics", () => {
