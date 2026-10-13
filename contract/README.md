@@ -1,3 +1,7 @@
+## SET-15 Billing Catalog 单 pin 配对（2026-10-13）
+
+等待Root接收已审Billing exp4不可变commit/version/digest后，原字节替换contract/vendor/kokoro-billing单pin，正常generator增加唯一getCatalog并保原本人两读；删除旧vendor而非双pin或手改generated。新required offer_key是owner strict breaking，只限本次自有隔离开发配对，不激活main/日常/生产或声称未知consumer已更新。public15.0.0 canonical无字段/operation变更，plans错误只用现503 ErrorEnvelope。checkout保入站校验后503不可用零owner I/O，不引用旧v1目录/checkout。机器当前owner与generator一致后才实现runtime；完成需Root精确组合及真实浏览器，而不是generator通过。
+
 ## SET-13 Team 完整权限开发配对裁决（2026-10-13）
 
 public15.0.0候选纠正TeamRole.permissions漏platform/skill；strict14.7消费者会拒绝新字段，因此明确breaking而非minor。Root仅批准本次自有开发隔离组合在既有/v1串行配对：owner契约/测试→不可变BFF SHA/digest→Web单pin正规生成与strict校验→Root真实浏览器。当前不切main、日常站点或生产；Admin消费者不可访问，后继激活前仍须核验。此独立开发裁决不沿用历史beta豁免，未来稳定breaking/v2政策保留，不提供双响应或fallback。新最外层精确两域/版本inverse必须恢复完整14.7字节，再跑全部原历史门。

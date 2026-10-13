@@ -1,3 +1,7 @@
+## SET-15 Catalog 零持久化投影（2026-10-13）
+
+Billing唯一拥有canonical billing_offer与billing_offer_revision；BFF不得查询owner表或复用旧entitlement_*事实。BFF仅在一个已准入请求内严格消费固定exp4 owner HTTP，完整分页临时聚合并投影现public七字段，完成或取消后丢弃；无BFF SQL/Schema、Redis/cache、receipt、outbox或商品seed。offer_key来自正式owner字段，ID来自offer_revision_id；不按积分或ID猜套餐key/当前订阅。目录读取不创建资金账户、不写订单/授权/支付；checkout未开放保持零owner I/O。固定artifact属于build-time依赖而非业务快照。
+
 ## SET-13 Team 权限目录零持久化（2026-10-13）
 
 IAM仍唯一保存Role/Permission/Membership及审计，当前在线准入和真实tenant/subject来自IAM。BFF只在请求生命周期内严格验证固定IAM wire，并向public TeamRole完整投影既有权限；Web只作视图提示，IAM写授权继续权威。无新增BFF SQL/Schema/表/列/索引、Redis、缓存、receipt、outbox、事务、权限快照或owner数据读取。database/schema.sql与全部vendor/generated IAM源码保持原字节。本次开发配对public15.0.0裁决见TECH/API；不能由目录字段推导新增权限、执行、团队创建或生产激活。

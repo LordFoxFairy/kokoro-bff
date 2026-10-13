@@ -1,3 +1,18 @@
+## SET-15 正式 Billing Catalog 消费 D0（2026-10-13，待 owner 提交）
+
+| 项 | 裁决 |
+| --- | --- |
+| Owner / writer | Billing唯一拥有商品与版本事实；BFF只投影现public套餐列表。Root设计/Git/运行，后继runtime_audit唯一实施writer。 |
+| 当前事实 | BFF22a476ea现plans走旧v1 generic proxy，混用secret/Bearer，mapper期待旧offers；本人两读已有固定exp3 generated client。Billing候选exp4新增required offer_key，尚未提交，不能提前消费变化树。 |
+| 目标 / 放置比较 | 新普通文件src/infrastructure/clients/owner/billing-catalog.ts拥有具名GET、身份、完整分页与映射；淘汰generic proxy旧目录路径及把personal-read扩为万能client。现owner.ts仅plans接线及checkout不可用响应，无新module/pool/依赖。 |
+| 生命周期 / 依赖 | Browser→Web同源→BFF当前IAM admission→正规固定Billing generated getCatalog。可信u1 tenant、web-bff、独立serviceToken与internalSecret，不转浏览器身份header。一个请求总deadline与取消覆盖全部页和正文；总响应header+body字节上限复用现upstreamMaxResponseBytes，最多20页/2000项，任一超限明确失败，无部分成功。 |
+| 数据 / 删除 | 无SQL、Redis、cache、receipt或商品seed。新owner commit/version/digest原字节vendor正规生成并删除旧pin；public契约字段及operation保持。移除只被旧plans/checkout使用且已替代的mapper，不保留v1目录fallback。 |
+| 验证 | 真实行为RED→GREEN；source/dist真实HTTP身份/路径、两页完整、空终页、尾页失败、循环/重复ID/超预算、慢正文/取消、strict未知字段/大整数、checkout零owner读写；正规双生成check、contract/lint/type/test/build。 |
+
+固定owner exp4只有Root接收不可变提交后才能实施消费者。新Catalog client严格owner envelope/item/page，offer_revision_id→id、offer_key→key、currency_code→currency，十进制字符串原样，不合成key或默认价格。非终页空items、重复/历史cursor、重复revision或offer_key以及超过页/项/字节/总时间预算均失败；请求结果只在合法终页后一次返回。
+
+Root明确checkout目前owner未实现正式操作：保持现public入站身份/权限/幂等及request验证，但承认未支持，在业务分支返回现契约允许503 billing_unavailable，零owner读写；删除旧v1目录/checkout路径而非顺手接通支付。后继正式支付独立设计与provider sandbox验收后再开放，目录200不表示可买。此片不修改public canonical、Skills/连接器、SQL、lock或其他owner。
+
 ## SET-13 Team 角色完整权限投影 D0（2026-10-13，实施前）
 
 | 项 | 当前裁决 |

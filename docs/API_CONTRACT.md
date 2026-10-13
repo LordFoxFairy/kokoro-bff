@@ -1,3 +1,9 @@
+## SET-15 Catalog 固定消费者与未开放 checkout（2026-10-13，实施前）
+
+保持现public15.0.0 listBillingPlans、BillingPlan七字段及所有operation不变；正式依赖等待Billing已审exp4不可变commit/digest（required offer_key为owner strict breaking），以原字节vendor与正常generator替换exp3单pin。新增唯一generated getCatalog，并保原两本人读。严格消费GET /v2/commerce/catalog的data.items/page与闭集item；完整有界分页后一次投影，合法终页items=[]才是空目录，失败不转空/不截尾。金额/积分保持decimal string。
+
+plans失败统一现public允许503 billing_unavailable，不新增未声明502、不转owner错误正文/身份或任意status。认证来源为当前IAM admission，可信tenant编码与独立Billing service/internal/Bearer因素；任何缺失/错配/取消/畸形owner响应关闭失败。checkout继续现入站校验后明确503 billing_unavailable且无owner I/O，移除旧v1双读/写路径；不修改公开成功shape或借目录修复开放支付。重定向、未知字段、非终页空items、循环cursor/重复revision或key、预算耗尽都不得返回部分成功。
+
 ## SET-13 TeamRole 权限闭集纠正（2026-10-13，机器待实施）
 
 唯一可编辑事实源仍为contract/openapi/v1/openapi.yaml。目标public15.0.0在TeamRole.permissions增加可选platform（仅execute）与skill（IAM当前15动作），每数组仍非空，未知域/动作拒绝；既有六域、Role字段、所有operation路径/metadata、错误与分页保持。动作来自当前固定IAM机器契约，不建第二权限事实源，字段查看不授予执行或Skills能力。
