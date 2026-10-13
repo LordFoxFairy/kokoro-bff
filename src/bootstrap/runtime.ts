@@ -74,7 +74,7 @@ export type BffRouteInput = {
 export type BffRouteHandler = (input: BffRouteInput) => Promise<boolean | void>
 
 export type BffServerComposition = {
-  mcpPersonalClient: (Pick<McpPersonalConnectClient, "read"> & Partial<Pick<McpPersonalConnectClient, "close" | "command" | "authorization">>) | null
+  mcpPersonalClient: (Pick<McpPersonalConnectClient, "read"> & Partial<Pick<McpPersonalConnectClient, "close" | "command" | "authorization" | "server">>) | null
   mcpProviderAdminClient: (Pick<McpProviderAdminConnectClient, "execute"> & Partial<Pick<McpProviderAdminConnectClient, "close">>) | null
   localSkillImportClient?: LocalSkillImportClient
   skillSpecificationSource: SkillSpecificationSource | null
@@ -108,7 +108,8 @@ export type BffServerComposition = {
 }
 
 export type BffCompositionOptions = {
-  mcpPersonalClient?: (Pick<McpPersonalConnectClient, "read"> & Partial<Pick<McpPersonalConnectClient, "close" | "command" | "authorization">>) | null
+  mcpPersonalClient?:
+    (Pick<McpPersonalConnectClient, "read"> & Partial<Pick<McpPersonalConnectClient, "close" | "command" | "authorization" | "server">>) | null
   mcpProviderAdminClient?: (Pick<McpProviderAdminConnectClient, "execute"> & Partial<Pick<McpProviderAdminConnectClient, "close">>) | null
   localSkillImportClient?: LocalSkillImportClient
   skillSpecificationSource?: SkillSpecificationSource | null

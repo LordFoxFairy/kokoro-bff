@@ -8,10 +8,10 @@ import { configureBffProtobufTextEncoding } from "../dist/infrastructure/protobu
 configureBffProtobufTextEncoding()
 
 const root = new URL("../", import.meta.url)
-const ownerCommit = "5a070a0f2bccbadc8756e9d1ddba2c89d3a21108"
+const ownerCommit = "b402b499535a213e1a337924e5dd0090927fbe6f"
 const sources = {
   "kokoro/common/v1/common.proto": "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08",
-  "kokoro/platform/v1/platform_runtime.proto": "5f372f114057acf07493108f6a03106409472bf306f54875bcd6bb38b7f7bd19",
+  "kokoro/platform/v1/platform_runtime.proto": "c7cfca48fcb315cc9657f1bfb8c25528ea07feb32bcd3b07dae2c1e53f88d922",
   "kokoro/storage/v3/storage.proto": "1021e603065978871c51519ddba5b23c9b97f16b781a08bd98e019b3342bf5f9",
 }
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex")
@@ -92,7 +92,7 @@ test("one generated client exposes Skills, personal MCP and provider administrat
   const generated = await import("../dist/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
   for (const [service, methods] of [
     ["SkillCatalogService", ["createSkillDraft", "publishSkill"]],
-    ["ProductMcpPersonalService", ["listPersonalMcpConnectors", "listPersonalMcpConnections"]],
+    ["ProductMcpPersonalService", ["listPersonalMcpConnectors", "listPersonalMcpConnections", "registerPersonalMcpServer", "getPersonalMcpServer"]],
     ["McpProviderAdminService", ["listMcpProviderAdminRecords", "createMcpProviderAdminRecord"]],
   ]) {
     assert.equal(generated[service].typeName, `kokoro.platform.v1.${service}`)

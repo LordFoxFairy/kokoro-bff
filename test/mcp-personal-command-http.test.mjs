@@ -137,6 +137,13 @@ const connector = {
   display_name: "Example",
   description: "",
 }
+const privateServer = {
+  server_id: "server-one",
+  display_name: "Private tools",
+  server_url: "https://tools.example/mcp",
+  status: "pending",
+  state_version: "1",
+}
 const provider = {
   provider_key: "test",
   display_name: "Provider",
@@ -376,6 +383,100 @@ test("A3 OAuth callback and connection lifecycle use a single BFF-admitted perso
     )
     assert.equal(calls[1].input.code, "opaque-code")
     assert.equal(calls[2].input.commandId, "connection-command")
+  } finally {
+    await f.close()
+  }
+})
+
+test("private URL MCP follows registration, OAuth, declaration completion, connection, then enable without a generic retry error", async () => {
+  const calls = []
+  const f = await fixture(true, {
+    mcpPersonalClient: {
+      read: async () => ({}),
+      server: async (operation, input) => {
+        calls.push({ operation, input })
+        return operation === "server"
+          ? { server: privateServer }
+          : { server: privateServer, connector: { ...connector, connector_id: "connector-one", server_id: "server-one", enabled: false } }
+      },
+      authorization: async (operation, input) => {
+        calls.push({ operation, input })
+        if (operation === "complete")
+          return { connector: { ...connector, connector_id: "connector-one", server_id: "server-one", status: "active", state_version: "2", enabled: false } }
+        if (operation === "createConnection")
+          return {
+            connection: {
+              connection_id: "connection-one",
+              connector_id: "connector-one",
+              server_id: "server-one",
+              allowed_selectors: ["tool.read"],
+              policy_digest: "a".repeat(64),
+              status: "active",
+            },
+          }
+        return {
+          authorization: {
+            authorization_id: "authorization-one",
+            authorization_url: "https://oauth.example.test/authorize?state=opaque",
+            expires_at: "2027-01-15T08:00:00.000Z",
+          },
+          connector: { ...connector, connector_id: "connector-one", server_id: "server-one", enabled: false },
+        }
+      },
+      command: async (operation, input) => {
+        calls.push({ operation, input })
+        return { connector: { ...connector, connector_id: "connector-one", server_id: "server-one", enabled: true, status: "active", state_version: "3" } }
+      },
+    },
+  })
+  const post = async (path, body, idempotencyKey) => {
+    const response = await fetch(f.origin + path, {
+      method: "POST",
+      headers: { ...headers, "content-type": "application/json", ...(idempotencyKey === undefined ? {} : { "idempotency-key": idempotencyKey }) },
+      body: JSON.stringify(body),
+    })
+    return [response, await response.json()]
+  }
+  try {
+    const [registered, registration] = await post(
+      "/browser/v1/mcp/servers",
+      { display_name: "Private tools", server_url: "https://tools.example/mcp" },
+      "private-url-intent",
+    )
+    assert.equal(registered.status, 201)
+    assert.equal(registration.data.server.server_id, "server-one")
+    assert.equal(registration.data.connector.server_id, "server-one")
+    const read = await fetch(f.origin + "/browser/v1/mcp/servers/server-one", { headers })
+    assert.equal(read.status, 200)
+    assert.equal((await read.json()).data.server.status, "pending")
+    const [begin] = await post("/browser/v1/mcp/connectors/connector-one/authorization", { server_id: "server-one", expected_state_version: "1" })
+    assert.equal(begin.status, 200)
+    const [completed] = await post("/browser/v1/mcp/authorization/callback", { state: "opaque-state", code: "opaque-code" })
+    assert.equal(completed.status, 200)
+    const [connected] = await post(
+      "/browser/v1/mcp/connections",
+      { connector_id: "connector-one", server_id: "server-one", allowed_selectors: ["tool.read"], expected_state_version: "2" },
+      "connection-intent",
+    )
+    assert.equal(connected.status, 201)
+    const enabled = await fetch(f.origin + "/browser/v1/mcp/connectors/connector-one/enabled", {
+      method: "PUT",
+      headers: { ...headers, "content-type": "application/json", "idempotency-key": "enable-intent" },
+      body: JSON.stringify({ enabled: true, expected_state_version: "2" }),
+    })
+    assert.equal(enabled.status, 200)
+    assert.deepEqual(
+      calls.map((call) => call.operation),
+      ["registerServer", "server", "begin", "complete", "createConnection", "enabled"],
+    )
+    assert.deepEqual(calls[0].input, {
+      tenant: "tenant-server",
+      subject: "human-one",
+      requestId: "mcp-http-1",
+      displayName: "Private tools",
+      serverUrl: "https://tools.example/mcp",
+      commandId: "private-url-intent",
+    })
   } finally {
     await f.close()
   }

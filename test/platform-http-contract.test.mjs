@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises"
 import { test } from "node:test"
 
 const root = new URL("../", import.meta.url)
-const ownerCommit = "5a070a0f2bccbadc8756e9d1ddba2c89d3a21108"
+const ownerCommit = "b402b499535a213e1a337924e5dd0090927fbe6f"
 const ownerDigest = "c5f9a343170c87d59e0c40134c503cc6d40b59416216ac993a138cfbac3bb581"
 const ownerUrl = new URL(`contract/vendor/kokoro-platform/${ownerCommit}/openapi/platform-http.openapi.json`, root)
 

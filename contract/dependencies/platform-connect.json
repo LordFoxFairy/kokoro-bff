@@ -3,7 +3,7 @@
   "status": "generated",
   "owner": {
     "repository_path": "apps/kokoro-capability",
-    "repository_commit": "5a070a0f2bccbadc8756e9d1ddba2c89d3a21108",
+    "repository_commit": "b402b499535a213e1a337924e5dd0090927fbe6f",
     "package_name": "kokoro.platform.v1",
     "sources": [
       {
@@ -12,7 +12,7 @@
       },
       {
         "path": "contract/proto/kokoro/platform/v1/platform_runtime.proto",
-        "sha256": "5f372f114057acf07493108f6a03106409472bf306f54875bcd6bb38b7f7bd19"
+        "sha256": "c7cfca48fcb315cc9657f1bfb8c25528ea07feb32bcd3b07dae2c1e53f88d922"
       },
       {
         "path": "contract/proto/kokoro/storage/v3/storage.proto",
@@ -37,7 +37,7 @@
         "sha256": "9888ea0808f6967ebdfb859125eb54430b89ad3f4dbee4418902bfdf6a4540ab"
       }
     ],
-    "script_sha256": "dcd4917cf6a6ead3cd8c953a8b48dcd7255724591af463fecb9a2d02006a6b56"
+    "script_sha256": "4e9c797f180449f59e55946542530248bdd1f8754b8793ff279ffaaa6b1e2cf3"
   },
   "generated": [
     {
@@ -46,7 +46,7 @@
     },
     {
       "path": "kokoro/platform/v1/platform_runtime_pb.ts",
-      "sha256": "7470e8b93fc87ce22acff2c747a4ee5a7cfdf69ccec43c08a5f215837ccb9c8b"
+      "sha256": "adea7c372ba544b0aad2ae914aba32d15ca27e85a0cb7a9403fa165aec88788f"
     },
     {
       "path": "kokoro/storage/v3/storage_pb.ts",

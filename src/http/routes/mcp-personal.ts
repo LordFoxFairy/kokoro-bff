@@ -17,13 +17,15 @@ import type {
   McpPersonalAuthorizationInput,
   McpPersonalAuthorizationOperation,
 } from "../../infrastructure/clients/platform/mcp-personal-authorization-binding.js"
+import type { McpPersonalServerInput, McpPersonalServerOperation } from "../../infrastructure/clients/platform/mcp-personal-server-binding.js"
+import { parseMcpPersonalServer } from "../mcp-personal-server-input.js"
 import { mcpRequestRemaining } from "../mcp-request-budget.js"
 import { send } from "../response.js"
 
 export function mcpPersonalOperation(
   path: string[],
   method: string,
-): McpPersonalOperation | McpPersonalCommandOperation | McpPersonalAuthorizationOperation | null {
+): McpPersonalOperation | McpPersonalCommandOperation | McpPersonalAuthorizationOperation | McpPersonalServerOperation | null {
   if (path[0] !== "mcp") return null
   if (path[1] === "connectors") {
     if (path.length === 2 && method === "POST") return "create"
@@ -35,6 +37,7 @@ export function mcpPersonalOperation(
   }
   if (path.length === 3 && path[1] === "authorization" && path[2] === "callback" && method === "POST") return "complete"
   if (path.length === 2 && path[1] === "connections" && method === "POST") return "createConnection"
+  if (path.length === 2 && path[1] === "servers" && method === "POST") return "registerServer"
   if (method !== "GET") return null
   if (path.length === 2 && path[1] === "providers") return "providers"
   if (path.length === 3 && path[1] === "providers") return "provider"
@@ -42,6 +45,7 @@ export function mcpPersonalOperation(
   if (path.length === 3 && path[1] === "connectors") return "connector"
   if (path.length === 4 && path[1] === "connectors" && path[3] === "connections") return "connections"
   if (path.length === 3 && path[1] === "connections") return "connection"
+  if (path.length === 3 && path[1] === "servers") return "server"
   return null
 }
 export async function mcpPersonalRoute(
@@ -54,7 +58,8 @@ export async function mcpPersonalRoute(
 ): Promise<void> {
   const operation = mcpPersonalOperation(path, request.method ?? "GET")!
   const authorization = ["begin", "reconnect", "complete", "createConnection"].includes(operation)
-  const mutation = ["create", "update", "enabled", "remove", "begin", "reconnect", "complete", "createConnection"].includes(operation)
+  const serverOperation = operation === "registerServer" || operation === "server"
+  const mutation = ["create", "update", "enabled", "remove", "begin", "reconnect", "complete", "createConnection", "registerServer"].includes(operation)
   const fail = (status: number, code: string, retryable = false, retryAfter?: string): void => {
     if (!response.destroyed && !response.writableEnded)
       send(response, status, { error: { code, message: "Personal MCP request failed", retryable } }, retryAfter)
@@ -88,7 +93,7 @@ export async function mcpPersonalRoute(
       return
     }
     input.id = path[2]!
-  } else if (!authorization && !["connectors", "providers", "create"].includes(operation)) {
+  } else if (!authorization && !["connectors", "providers", "create", "registerServer"].includes(operation)) {
     if (!(operation === "provider" ? /^[a-z0-9][a-z0-9._-]{0,63}(?![\s\S])/u : /^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])/u).test(path[2] ?? "")) {
       invalid()
       return
@@ -143,7 +148,12 @@ export async function mcpPersonalRoute(
     input.categoryKey = value as NonNullable<McpPersonalInput["categoryKey"]>
   }
   const client = composition.mcpPersonalClient
-  if (client === null || (authorization && !client.authorization) || (!authorization && mutation && !client.command)) {
+  if (
+    client === null ||
+    (authorization && !client.authorization) ||
+    (serverOperation && !client.server) ||
+    (!authorization && !serverOperation && mutation && !client.command)
+  ) {
     fail(503, "mcp_personal_dependency_unavailable", true)
     return
   }
@@ -167,6 +177,7 @@ export async function mcpPersonalRoute(
     controller.signal.throwIfAborted()
     let commandInput: McpPersonalCommandInput | undefined
     let authorizationInput: McpPersonalAuthorizationInput | undefined
+    let serverInput: McpPersonalServerInput | undefined
     if (mutation) {
       const key = request.headers["idempotency-key"]
       const keyCount = request.rawHeaders.filter((_, index) => index % 2 === 0 && request.rawHeaders[index]!.toLowerCase() === "idempotency-key").length
@@ -197,7 +208,9 @@ export async function mcpPersonalRoute(
         if (controller.signal.aborted) request.destroy()
       }
       if (length !== undefined && Number(length) !== size) throw new Error("invalid_mcp_personal_request")
-      if (authorization) {
+      if (serverOperation) {
+        serverInput = { ...input, ...parseMcpPersonalServer("registerServer", Buffer.concat(chunks)), commandId: key as string }
+      } else if (authorization) {
         const fields = parseMcpPersonalAuthorization(operation as McpPersonalAuthorizationOperation, Buffer.concat(chunks))
         authorizationInput = {
           ...input,
@@ -210,16 +223,20 @@ export async function mcpPersonalRoute(
     const result = await within(
       authorization
         ? client.authorization!(operation as McpPersonalAuthorizationOperation, authorizationInput!, controller.signal, deadlineAt)
-        : mutation
-          ? client.command!(operation as McpPersonalCommandOperation, commandInput!, controller.signal, deadlineAt)
-          : client.read(operation as McpPersonalOperation, input, controller.signal, deadlineAt),
+        : serverOperation
+          ? client.server!(operation as McpPersonalServerOperation, serverInput ?? input, controller.signal, deadlineAt)
+          : mutation
+            ? client.command!(operation as McpPersonalCommandOperation, commandInput!, controller.signal, deadlineAt)
+            : client.read(operation as McpPersonalOperation, input, controller.signal, deadlineAt),
     )
     controller.signal.throwIfAborted()
     const data = authorization
       ? result
-      : mutation
-        ? validateMcpPersonalCommand(operation as McpPersonalCommandOperation, result, commandInput!)
-        : validateMcpPersonalPublic(operation as McpPersonalOperation, result, input)
+      : serverOperation
+        ? result
+        : mutation
+          ? validateMcpPersonalCommand(operation as McpPersonalCommandOperation, result, commandInput!)
+          : validateMcpPersonalPublic(operation as McpPersonalOperation, result, input)
     const admitted = await within(authorizeUserRequest(request, config, composition.sessionAdmission, context.requestId, controller.signal))
     if (!admitted.ok) {
       fail(admitted.status, admitted.code, admitted.status === 429 || admitted.status === 503, admitted.retryAfter)
@@ -236,7 +253,8 @@ export async function mcpPersonalRoute(
     }
     controller.signal.throwIfAborted()
     if (mcpRequestRemaining(request) <= 0) throw new Error("mcp_personal_deadline")
-    if (!response.destroyed && !response.writableEnded) send(response, operation === "create" || operation === "createConnection" ? 201 : 200, { data })
+    if (!response.destroyed && !response.writableEnded)
+      send(response, operation === "create" || operation === "createConnection" || operation === "registerServer" ? 201 : 200, { data })
   } catch (error) {
     if (!request.aborted && !response.destroyed && !response.writableEnded) {
       const fault = controller.signal.aborted
