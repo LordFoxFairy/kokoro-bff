@@ -11,6 +11,7 @@ const SPECIFICATION_BROWSER_READS = new Map([
   ["/skill.v1.SkillOptionalService/GetSkill", "websiteGetSkill"],
   ["/skill.v1.SkillService/DownloadSkill", "websiteDownloadSkill"],
 ])
+const SPECIFICATION_BROWSER_MUTATIONS = new Map([["/skill.v1.SkillOptionalService/SetSkillInstallationEnabled", "websiteSetSkillInstallationEnabled"]])
 const TEAM_OWNER_DELEGATED_MUTATIONS = new Set([
   "POST /v1/team/invitations createTeamInvitation",
   "POST /v1/team/invitations/{invitation_id}/resend resendTeamInvitation",
@@ -116,11 +117,12 @@ export function inspectOpenApiGovernance(source) {
       errors.push(`${label} must declare x-kokoro-owner=kokoro-bff`)
     }
     const visibility = operation.fields.get("x-kokoro-visibility")
-    const browserRead =
-      (operation.method === "POST" && SPECIFICATION_BROWSER_READS.get(operation.path) === operationId) ||
+    const browserPrivate =
+      (operation.method === "POST" &&
+        (SPECIFICATION_BROWSER_READS.get(operation.path) === operationId || SPECIFICATION_BROWSER_MUTATIONS.get(operation.path) === operationId)) ||
       (operation.method === "GET" && operation.path === "/skill-downloads/{handle}" && operationId === "downloadSkillBytes")
-    if (visibility !== undefined && visibility !== (browserRead ? "browser-private" : "public")) {
-      errors.push(`${label} must declare x-kokoro-visibility=${browserRead ? "browser-private" : "public"}`)
+    if (visibility !== undefined && visibility !== (browserPrivate ? "browser-private" : "public")) {
+      errors.push(`${label} must declare x-kokoro-visibility=${browserPrivate ? "browser-private" : "public"}`)
     }
     const stability = operation.fields.get("x-kokoro-stability")
     if (stability !== undefined && !STABILITY_VALUES.has(stability)) {
