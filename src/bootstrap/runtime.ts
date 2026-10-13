@@ -370,7 +370,12 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
       : config.mcpPersonal && config.iamBaseUrl
         ? new McpPersonalConnectClient(
             config.mcpPersonal.baseUrl,
-            new McpPersonalTokenSource(config.iamBaseUrl, new McpPersonalCredentialSource(config.mcpPersonal.credentialFile), 10_000),
+            new McpPersonalTokenSource(
+              config.iamBaseUrl,
+              new McpPersonalCredentialSource(config.mcpPersonal.credentialFile),
+              10_000,
+              config.iamRelay?.webOrigin,
+            ),
           )
         : null
   const mcpProviderAdminClient =

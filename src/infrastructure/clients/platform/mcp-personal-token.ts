@@ -7,6 +7,7 @@ export class McpPersonalTokenSource {
     private readonly iam: string,
     private readonly credentials: McpPersonalCredentialSource,
     private readonly timeoutMs: number,
+    private readonly webOrigin?: string,
   ) {}
   #closed = false
   #tenantKeys = new Map<string, string>()
@@ -91,6 +92,7 @@ export class McpPersonalTokenSource {
       headers: {
         authorization: `Basic ${Buffer.from(`${encodeURIComponent(credential.clientId)}:${encodeURIComponent(credential.clientSecret)}`).toString("base64")}`,
         "content-type": "application/x-www-form-urlencoded",
+        ...(this.webOrigin === undefined ? {} : { origin: this.webOrigin }),
       },
       body: new URLSearchParams({ grant_type: "client_credentials", resource: credential.resource, scope: credential.scope }),
     })
