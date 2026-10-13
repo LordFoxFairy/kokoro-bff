@@ -1,3 +1,9 @@
+## SET-13 TeamRole 权限闭集纠正（2026-10-13，机器待实施）
+
+唯一可编辑事实源仍为contract/openapi/v1/openapi.yaml。目标public15.0.0在TeamRole.permissions增加可选platform（仅execute）与skill（IAM当前15动作），每数组仍非空，未知域/动作拒绝；既有六域、Role字段、所有operation路径/metadata、错误与分页保持。动作来自当前固定IAM机器契约，不建第二权限事实源，字段查看不授予执行或Skills能力。
+
+这是strict consumer的breaking，不作为minor；本次Root仅批准自有开发隔离BFF/Web在/v1配对切换，先完成owner和历史逆门，再发布不可变SHA/digest并由Web正常生成，最后Root实际登录；禁止原14.7消费者与新响应混跑、alias或fallback。尚未批准main/日常/生产激活，无法核验的Admin consumer须在后继激活前补齐；未来稳定breaking仍按contract README/v2政策。本片最外层验证新两域精确闭集后仅撤销这两字段与version，必须恢复完整public14.7摘要，再运行原14.6及全部历史门，不改旧fixture/摘要。
+
 ## T-K03.20 本人 MCP 可连接目标投影（BFF 已实施，待 Web 消费）
 
 canonical public 从 `14.5.0` 递增至 `14.6.0`，不新增 endpoint 或命令。`PersonalMcpProvider` 可选新增 `connection_server_id`：它是 Platform 仅在 Provider 恰有一个 `registered + streamable_http` managed Server 时发出的不透明 ID。它不表示 endpoint、origin、tool selector、credential、OAuth URL 或连接已建成；缺失表示 Browser 不可发起既有授权/建连接命令，不能猜测或替换 ID。所有现有请求、错误 envelope、CAS、`no-store` 与 current-subject admission 保持不变。

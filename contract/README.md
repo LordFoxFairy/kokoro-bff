@@ -1,3 +1,7 @@
+## SET-13 Team 完整权限开发配对裁决（2026-10-13）
+
+public15.0.0候选纠正TeamRole.permissions漏platform/skill；strict14.7消费者会拒绝新字段，因此明确breaking而非minor。Root仅批准本次自有开发隔离组合在既有/v1串行配对：owner契约/测试→不可变BFF SHA/digest→Web单pin正规生成与strict校验→Root真实浏览器。当前不切main、日常站点或生产；Admin消费者不可访问，后继激活前仍须核验。此独立开发裁决不沿用历史beta豁免，未来稳定breaking/v2政策保留，不提供双响应或fallback。新最外层精确两域/版本inverse必须恢复完整14.7字节，再跑全部原历史门。
+
 <!-- BEGIN:T-K03.13-BFF-MCP-PERSONAL-CRUD-D0 -->
 ## T-K03.13 本人 MCP 管理公开边界 D0（目标，未实施）
 

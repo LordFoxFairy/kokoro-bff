@@ -1,3 +1,7 @@
+## SET-13 Team 权限目录零持久化（2026-10-13）
+
+IAM仍唯一保存Role/Permission/Membership及审计，当前在线准入和真实tenant/subject来自IAM。BFF只在请求生命周期内严格验证固定IAM wire，并向public TeamRole完整投影既有权限；Web只作视图提示，IAM写授权继续权威。无新增BFF SQL/Schema/表/列/索引、Redis、缓存、receipt、outbox、事务、权限快照或owner数据读取。database/schema.sql与全部vendor/generated IAM源码保持原字节。本次开发配对public15.0.0裁决见TECH/API；不能由目录字段推导新增权限、执行、团队创建或生产激活。
+
 ## T-K03.20 本人 MCP 可连接目标投影数据边界（BFF 已实施，待 Web 消费）
 
 本切片不新增 BFF 表、SQL、Redis、receipt、缓存或 callback state。`connection_server_id` 是 Platform 在一次 Provider 读取中从自身 `mcp_server` 的唯一匹配结果推导的短暂投影；BFF 既不持久化、也不回填、缓存或跨 owner 查询该 ID。进程重启不影响 owner 的 Server/Connection 事实。

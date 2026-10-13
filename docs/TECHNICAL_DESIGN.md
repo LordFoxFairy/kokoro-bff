@@ -1,3 +1,17 @@
+## SET-13 Team 角色完整权限投影 D0（2026-10-13，实施前）
+
+| 项 | 当前裁决 |
+| --- | --- |
+| Owner / writer | IAM拥有Role与权限；BFF拥有公开Team投影。Root完成设计与Git，后继runtime_audit单一实施writer。 |
+| 当前事实 | BFF基线95fbd894、public14.7.0；现IAM固定SDK已验证platform/skill，iam-team原样投影，而public TeamRole闭集遗漏两域，Web77ebea4严格拒绝，团队页失败。 |
+| 目标职责 | 精确表示既有IAM合法角色目录，使Web能加载并作完整权限超集提示；不新增权限或授权行为。 |
+| 目录比较 | 扩现TeamRole机器schema、verify-openapi及现Team测试；淘汰新Team模块/权限registry、Skills client修改及六域裁剪（会误判权限超集）。 |
+| 粒度 / 依赖 | 现文件局部扩展，不建目录/进程。Browser→Web同源→BFF→固定IAM；当前tenant/user Bearer、5秒/1MiB、取消/no-store与在线准入保持。 |
+| 数据 / 删除 | 无SQL/Redis/事务/receipt/缓存；正规替换Web旧固定artifact，无双schema、fallback、未知域透传。 |
+| 验证 | 真实内置角色HTTP fixture、闭集负控、完整14.7逆摘要与全部历史门；lint/typecheck/contract/test/build；固定Web再生成及真实登录读取。 |
+
+Root本次实施裁决：这是strict response集合改变，发布public15.0.0 breaking候选，不能称可选minor。此次仅在Root自有开发隔离组合维持既有/v1，并要求BFF不可变候选→Web唯一pin/generated/strict schema→Root精确组合验收串行完成；尚未授权切main、共享日常站点、生产或未知消费者。Admin源码当前不可访问，不能声称Admin已适配；后继日常/公开激活前必须逐一核其固定consumer。此局部开发配对裁决不借历史beta例外，也不改变以后稳定公开breaking的/v2政策；新旧响应不并行服务。原14.7机器字节和全部非Team语义由最外层精确inverse保护。
+
 ## T-K03.20 本人 MCP 可连接目标投影（BFF 已实施，待 Web 消费）
 
 | 项 | 结论 |
