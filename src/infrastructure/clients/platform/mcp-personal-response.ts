@@ -55,6 +55,7 @@ const connector = z
     description: text(0, 1000).optional(),
     created_at: date.optional(),
     updated_at: date.optional(),
+    server_id: id.optional(),
   })
   .strict()
 const connection = z
@@ -182,6 +183,7 @@ function projectConnector(raw: unknown) {
     ...(value.description === undefined ? {} : { description: value.description }),
     ...(value.createdAt === undefined ? {} : { created_at: value.createdAt }),
     ...(value.updatedAt === undefined ? {} : { updated_at: value.updatedAt }),
+    ...(value.serverId === undefined ? {} : { server_id: identity(value.serverId) }),
   }
 }
 function projectConnection(raw: unknown) {

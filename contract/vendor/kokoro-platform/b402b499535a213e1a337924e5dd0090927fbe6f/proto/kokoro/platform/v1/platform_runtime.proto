@@ -1153,6 +1153,7 @@ message PersonalMcpConnector {
   uint64 state_version = 9;
   optional string created_at = 10;
   optional string updated_at = 11;
+  optional kokoro.platform.v1.McpServerId server_id = 12;
 }
 
 message PersonalMcpConnection {
@@ -1228,6 +1229,8 @@ message CreatePersonalMcpConnectionResponse {
 }
 
 service ProductMcpPersonalService {
+  rpc RegisterPersonalMcpServer(kokoro.platform.v1.RegisterPersonalMcpServerRequest) returns (kokoro.platform.v1.RegisterPersonalMcpServerResponse);
+  rpc GetPersonalMcpServer(kokoro.platform.v1.GetPersonalMcpServerRequest) returns (kokoro.platform.v1.GetPersonalMcpServerResponse);
   rpc ListPersonalMcpConnectors(kokoro.platform.v1.ListPersonalMcpConnectorsRequest) returns (kokoro.platform.v1.ListPersonalMcpConnectorsResponse);
   rpc GetPersonalMcpConnector(kokoro.platform.v1.GetPersonalMcpConnectorRequest) returns (kokoro.platform.v1.GetPersonalMcpConnectorResponse);
   rpc ListPersonalMcpConnections(kokoro.platform.v1.ListPersonalMcpConnectionsRequest) returns (kokoro.platform.v1.ListPersonalMcpConnectionsResponse);
@@ -1959,4 +1962,34 @@ service McpProviderAdminService {
   rpc UpdateMcpProviderAdminRecord(kokoro.platform.v1.UpdateMcpProviderAdminRecordRequest) returns (kokoro.platform.v1.UpdateMcpProviderAdminRecordResponse);
   rpc SetMcpProviderAdminRecordEnabled(kokoro.platform.v1.SetMcpProviderAdminRecordEnabledRequest) returns (kokoro.platform.v1.SetMcpProviderAdminRecordEnabledResponse);
   rpc RemoveMcpProviderAdminRecord(kokoro.platform.v1.RemoveMcpProviderAdminRecordRequest) returns (kokoro.platform.v1.RemoveMcpProviderAdminRecordResponse);
+}
+
+// URL registration is owner-scoped; declaration and visibility are not client input.
+message RegisterPersonalMcpServerRequest {
+  reserved 100;
+  reserved "tenant_id", "actor_id", "subject_id", "owner_scope", "target_owner_scope", "product_context", "execution_proof", "attestation";
+  string request_id = 1;
+  kokoro.common.v1.CommandIdentity command = 2;
+  string display_name = 3;
+  string server_url = 4;
+}
+message GetPersonalMcpServerRequest {
+  reserved 100;
+  reserved "tenant_id", "actor_id", "subject_id", "owner_scope", "target_owner_scope", "product_context", "execution_proof", "attestation", "command";
+  string request_id = 1;
+  kokoro.platform.v1.McpServerId server_id = 2;
+}
+message PersonalMcpServer {
+  kokoro.platform.v1.McpServerId server_id = 1;
+  string display_name = 2;
+  string server_url = 3;
+  string status = 4;
+  uint64 state_version = 5;
+}
+message RegisterPersonalMcpServerResponse {
+  kokoro.platform.v1.PersonalMcpServer server = 1;
+  kokoro.platform.v1.PersonalMcpConnector connector = 2;
+}
+message GetPersonalMcpServerResponse {
+  kokoro.platform.v1.PersonalMcpServer server = 1;
 }

@@ -8,6 +8,8 @@ import { projectMcpPersonalResponse, projectMcpPersonalCommand, type McpPersonal
 import { bindMcpPersonalCommand, type McpPersonalCommandInput, type McpPersonalCommandOperation } from "./mcp-personal-command-binding.js"
 import { bindMcpPersonalConnection, type McpPersonalAuthorizationInput, type McpPersonalAuthorizationOperation } from "./mcp-personal-authorization-binding.js"
 import { projectMcpPersonalAuthorization } from "./mcp-personal-authorization-response.js"
+import { bindMcpPersonalServerRegistration, type McpPersonalServerInput, type McpPersonalServerOperation } from "./mcp-personal-server-binding.js"
+import { projectMcpPersonalServer } from "./mcp-personal-server-response.js"
 import { McpPersonalTokenSource } from "./mcp-personal-token.js"
 
 export class McpPersonalConnectClient {
@@ -148,6 +150,23 @@ export class McpPersonalConnectClient {
         )
       }
       return projectMcpPersonalAuthorization(operation, value, input)
+    })
+  }
+  async server(operation: McpPersonalServerOperation, input: McpPersonalServerInput, outer: AbortSignal, deadlineAt: number): Promise<unknown> {
+    return this.#call(input, outer, deadlineAt, async (options) => {
+      const value =
+        operation === "registerServer"
+          ? await this.#client.registerPersonalMcpServer(
+              {
+                requestId: input.requestId,
+                command: bindMcpPersonalServerRegistration(input),
+                displayName: input.displayName!,
+                serverUrl: input.serverUrl!,
+              },
+              options,
+            )
+          : await this.#client.getPersonalMcpServer({ requestId: input.requestId, serverId: { value: input.id! } }, options)
+      return projectMcpPersonalServer(operation, value, input)
     })
   }
   async #call<T>(input: McpPersonalInput, outer: AbortSignal, deadlineAt: number, action: (options: CallOptions) => Promise<T>): Promise<T> {
