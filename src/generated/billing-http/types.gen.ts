@@ -76,7 +76,7 @@ export type GetMyCreditAccountData = {
   }
   path?: never
   query?: never
-  url: "/v2/billing/me/credit-account"
+  url: "/v1/billing/me/credit-account"
 }
 
 export type GetMyCreditAccountErrors = {
@@ -129,7 +129,7 @@ export type GetMyCreditLedgerData = {
     limit?: number
     cursor?: string
   }
-  url: "/v2/billing/me/credit-ledger"
+  url: "/v1/billing/me/credit-ledger"
 }
 
 export type GetMyCreditLedgerErrors = {

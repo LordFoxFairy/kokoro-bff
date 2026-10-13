@@ -16,33 +16,29 @@ async function fixture(owner, { deadlineMs, entryDelayMs = 0 } = {}) {
   const credentialFile = path.join(dir, "projection.json")
   await writeFile(
     credentialFile,
-    JSON.stringify([
-      {
-        tenantId: "tenant",
-        generation: 1,
-        credentialRefVersion: "v1",
-        clientId: "projection",
-        clientSecret: "secret",
-        resource: "https://kokoro.dev/resources/platform-internal",
-        scope: "platform:projection.read",
-      },
-    ]),
+    JSON.stringify({
+      version: 1,
+      entries: [
+        {
+          credential_id: "bff-projection",
+          secret: "bff-projection-secret-000000000000",
+          caller: "kokoro-bff",
+          surfaces: ["projection"],
+          tenant_id: "123e4567-e89b-42d3-a456-426614174000",
+        },
+      ],
+    }),
   )
   await chmod(credentialFile, 0o600)
   const originalFetch = globalThis.fetch
   let ownerCalls = 0
   globalThis.fetch = async (input, init) => {
     const target = String(input)
-    if (target.includes("/iam/oauth2/token"))
-      return new Response(JSON.stringify({ access_token: "projection-token", token_type: "Bearer", scope: "platform:projection.read", expires_in: 60 }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      })
     ownerCalls += 1
     return owner(input, init)
   }
   const config = { platformProjection: { baseUrl: "http://platform.test", credentialFile, timeoutMs: 1000 }, iamBaseUrl: "http://iam.test" }
-  const context = { requestId: "route-request", identity: { namespace: "tenant", userId: "person" } }
+  const context = { requestId: "route-request", identity: { namespace: "123e4567-e89b-42d3-a456-426614174000", userId: "person" } }
   const server = createServer(async (request, response) => {
     if (deadlineMs !== undefined) startMcpRequestBudget(request, deadlineMs)
     if (entryDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, entryDelayMs))
@@ -148,7 +144,7 @@ test("bootstrap admission rejects Platform reads with strict error-only envelope
     port: 4300,
     mode: "live",
     domain: "dev.kokoro.localhost",
-    tenantId: "tenant",
+    tenantId: "123e4567-e89b-42d3-a456-426614174000",
     iamBaseUrl: null,
     sharedSecret: "test-secret",
     upstreamSecret: null,
@@ -221,8 +217,8 @@ test("R257 Product self connections preserve trusted actor, six fields, distinct
     assert.equal(first.headers["cache-control"], "no-store")
     assert.equal(first.headers["x-request-id"], "route-request")
     assert.equal(requests[0].headers.get("x-kokoro-subject"), "person")
-    assert.equal(requests[0].headers.get("x-kokoro-tenant-id"), "tenant")
-    assert.equal(requests[0].headers.get("authorization"), "Bearer projection-token")
+    assert.equal(requests[0].headers.get("x-kokoro-tenant-id"), "123e4567-e89b-42d3-a456-426614174000")
+    assert.equal(requests[0].headers.get("authorization"), "Bearer bff-projection-secret-000000000000")
     assert.equal(requests[0].headers.get("x-kokoro-request-id"), "route-request")
     assert.equal(new URL(requests[0].url).pathname, "/v1/mcp/connections")
     assert.equal(new URL(requests[0].url).searchParams.get("cursor"), "first-page")
@@ -437,7 +433,7 @@ function managedConfig(credentialFile) {
     port: 0,
     mode: "live",
     domain: "dev.kokoro.localhost",
-    tenantId: "tenant",
+    tenantId: "123e4567-e89b-42d3-a456-426614174000",
     iamBaseUrl: "http://iam.test",
     sharedSecret: "test-secret",
     upstreamSecret: null,
@@ -469,17 +465,18 @@ async function managedFixture({ owner, admission } = {}) {
   const credentialFile = path.join(dir, "projection.json")
   await writeFile(
     credentialFile,
-    JSON.stringify([
-      {
-        tenantId: "tenant",
-        generation: 1,
-        credentialRefVersion: "v1",
-        clientId: "projection",
-        clientSecret: "secret",
-        resource: "https://kokoro.dev/resources/platform-internal",
-        scope: "platform:projection.read",
-      },
-    ]),
+    JSON.stringify({
+      version: 1,
+      entries: [
+        {
+          credential_id: "bff-projection",
+          secret: "bff-projection-secret-000000000000",
+          caller: "kokoro-bff",
+          surfaces: ["projection"],
+          tenant_id: "123e4567-e89b-42d3-a456-426614174000",
+        },
+      ],
+    }),
   )
   await chmod(credentialFile, 0o600)
   const calls = []
@@ -489,11 +486,6 @@ async function managedFixture({ owner, admission } = {}) {
     const request = input instanceof Request ? input : new Request(input, init)
     const target = new URL(request.url)
     if (origin !== undefined && target.origin === origin) return originalFetch(input, init)
-    if (request.url === "http://iam.test/iam/oauth2/token")
-      return new Response(JSON.stringify({ access_token: "projection-token", token_type: "Bearer", scope: "platform:projection.read", expires_in: 60 }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      })
     if (target.origin !== "http://platform.test") throw new Error(`unexpected fetch target ${request.url}`)
     calls.push(request)
     if (owner) return owner(request)
@@ -512,7 +504,7 @@ async function managedFixture({ owner, admission } = {}) {
     verify: async (input) => {
       admissionCalls.push(input)
       if (admission) return admission(input)
-      return { ok: true, identity: { namespace: "tenant", userId: "person" }, platformAdmin: false }
+      return { ok: true, identity: { namespace: "123e4567-e89b-42d3-a456-426614174000", userId: "person" }, platformAdmin: false }
     },
   }
   const server = createBffServer(managedConfig(credentialFile), { businessStore: null, readiness: async () => undefined, sessionAdmission })
@@ -566,7 +558,7 @@ test("R345 managed personal list projects all five statuses, safe nine fields, e
     assert.equal(body.data.skills[0].skill_updated_at, skillUpdatedAt)
     assert.equal(app.admissionCalls.length, 1)
     assert.equal(app.calls.length, 1)
-    assert.equal(app.calls[0].headers.get("x-kokoro-tenant-id"), "tenant")
+    assert.equal(app.calls[0].headers.get("x-kokoro-tenant-id"), "123e4567-e89b-42d3-a456-426614174000")
     assert.equal(app.calls[0].headers.get("x-kokoro-subject"), "person")
     assert.equal(new URL(app.calls[0].url).pathname, "/v1/self/skills")
   } finally {
@@ -595,7 +587,7 @@ test("R266 managed personal detail is current-subject bound and preserves the ex
     assertManagedEnvelope(response, body)
     assert.deepEqual(body.data, item)
     assert.equal(app.calls.length, 1)
-    assert.equal(app.calls[0].headers.get("x-kokoro-tenant-id"), "tenant")
+    assert.equal(app.calls[0].headers.get("x-kokoro-tenant-id"), "123e4567-e89b-42d3-a456-426614174000")
     assert.equal(app.calls[0].headers.get("x-kokoro-subject"), "person")
   } finally {
     await app.close()
@@ -692,7 +684,7 @@ test("R266 managed admission shares the absolute ten second deadline and late co
     assert.equal(response.status, 503)
     assert.equal((await response.json()).error.code, "iam_admission_unavailable")
     assert.ok(elapsed >= 9_000 && elapsed <= 10_750, `deadline elapsed ${elapsed}ms`)
-    releaseAdmission({ ok: true, identity: { namespace: "tenant", userId: "person" }, platformAdmin: false })
+    releaseAdmission({ ok: true, identity: { namespace: "123e4567-e89b-42d3-a456-426614174000", userId: "person" }, platformAdmin: false })
     await new Promise((resolve) => setImmediate(resolve))
     assert.equal(app.calls.length, 0)
   } finally {
@@ -831,7 +823,7 @@ test("R266 managed caller abort reaches held admission and a late legal admissio
     await rejected
     await abortObserved
     assert.equal(admissionSignal.aborted, true)
-    releaseAdmission({ ok: true, identity: { namespace: "tenant", userId: "person" }, platformAdmin: false })
+    releaseAdmission({ ok: true, identity: { namespace: "123e4567-e89b-42d3-a456-426614174000", userId: "person" }, platformAdmin: false })
     await new Promise((resolve) => setImmediate(resolve))
     assert.equal(app.calls.length, 0)
   } finally {

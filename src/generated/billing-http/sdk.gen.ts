@@ -55,7 +55,7 @@ export const getMyCreditAccount = <ThrowOnError extends boolean = false>(
       },
       { name: "x-kokoro-subject", type: "apiKey" },
     ],
-    url: "/v2/billing/me/credit-account",
+    url: "/v1/billing/me/credit-account",
     ...options,
   })
 
@@ -84,6 +84,6 @@ export const getMyCreditLedger = <ThrowOnError extends boolean = false>(
       },
       { name: "x-kokoro-subject", type: "apiKey" },
     ],
-    url: "/v2/billing/me/credit-ledger",
+    url: "/v1/billing/me/credit-ledger",
     ...options,
   })

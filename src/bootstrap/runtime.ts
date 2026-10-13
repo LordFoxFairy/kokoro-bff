@@ -44,7 +44,6 @@ import { CatalogTokenSource } from "../infrastructure/clients/platform/catalog-t
 import { CatalogConnectClient } from "../infrastructure/clients/platform/catalog-connect.js"
 import { PersonalInstallationConnectClient } from "../infrastructure/clients/platform/personal-installation-connect.js"
 import { ProjectionCredentialSource } from "../infrastructure/clients/platform/projection-credential.js"
-import { ProjectionTokenSource } from "../infrastructure/clients/platform/projection-token.js"
 import { ProjectScopeReleaseOutboxDispatcher } from "../application/project-scope-release-outbox-dispatcher.js"
 import { StorageScopeReleaseClient } from "../infrastructure/clients/storage/scope-release-client.js"
 import type { LocalSkillImportClient } from "../http/routes/local-skill-import.js"
@@ -176,11 +175,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
         ? new SkillProductConnectClient(
             config.skillDraft.platformBaseUrl,
             new CatalogTokenSource(config.iamBaseUrl, new CatalogCredentialSource(config.skillDraft.credentialFile), config.skillDraft.timeoutMs),
-            new ProjectionTokenSource(
-              config.iamBaseUrl,
-              new ProjectionCredentialSource(config.platformProjection.credentialFile),
-              config.platformProjection.timeoutMs,
-            ),
+            new ProjectionCredentialSource(config.platformProjection.credentialFile),
             config.skillDraft.timeoutMs,
           )
         : null
@@ -216,11 +211,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
         ? new PersonalInstallationConnectClient(
             config.skillDraft.platformBaseUrl,
             new CatalogTokenSource(config.iamBaseUrl, new CatalogCredentialSource(config.skillDraft.credentialFile), config.skillDraft.timeoutMs),
-            new ProjectionTokenSource(
-              config.iamBaseUrl,
-              new ProjectionCredentialSource(config.platformProjection.credentialFile),
-              config.platformProjection.timeoutMs,
-            ),
+            new ProjectionCredentialSource(config.platformProjection.credentialFile),
             config.skillDraft.timeoutMs,
           )
         : null
@@ -231,11 +222,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
         ? new LocalSkillImportConnectClient(
             config.skillDraft.platformBaseUrl,
             new CatalogTokenSource(config.iamBaseUrl, new CatalogCredentialSource(config.skillDraft.credentialFile), config.skillDraft.timeoutMs),
-            new ProjectionTokenSource(
-              config.iamBaseUrl,
-              new ProjectionCredentialSource(config.platformProjection.credentialFile),
-              config.platformProjection.timeoutMs,
-            ),
+            new ProjectionCredentialSource(config.platformProjection.credentialFile),
           )
         : undefined
   const explicitlySuppliedStore = Object.prototype.hasOwnProperty.call(options, "businessStore")
@@ -356,13 +343,8 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
   }
   const skillDownloadHandles = new SkillDownloadHandles()
   const projectionClient =
-    config.platformProjection?.baseUrl && config.platformProjection.credentialFile && config.iamBaseUrl
-      ? new PlatformProjectionHttpClient(
-          config.platformProjection.baseUrl,
-          config.iamBaseUrl,
-          config.platformProjection.credentialFile,
-          config.platformProjection.timeoutMs,
-        )
+    config.platformProjection?.baseUrl && config.platformProjection.credentialFile
+      ? new PlatformProjectionHttpClient(config.platformProjection.baseUrl, config.platformProjection.credentialFile, config.platformProjection.timeoutMs)
       : null
   const mcpPersonalClient =
     options.mcpPersonalClient !== undefined

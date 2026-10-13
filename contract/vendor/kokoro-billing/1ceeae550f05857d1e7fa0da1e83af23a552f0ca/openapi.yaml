@@ -72,7 +72,7 @@ paths:
             text/plain; version=0.0.4:
               schema:
                 type: string
-  /v2/commerce/catalog:
+  /v1/commerce/catalog:
     get:
       operationId: getCatalog
       x-kokoro-owner: kokoro-billing
@@ -173,7 +173,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /v2/billing/me/credit-account:
+  /v1/billing/me/credit-account:
     get:
       operationId: getMyCreditAccount
       x-kokoro-owner: kokoro-billing
@@ -269,7 +269,7 @@ paths:
             cache-control:
               $ref: "#/components/headers/CacheControlNoStore"
           x-kokoro-errors:
-            - code: billing.not_found
+            - code: billing.credit_account_not_found
               retryable: false
           content:
             application/json:
@@ -303,7 +303,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /v2/billing/me/credit-ledger:
+  /v1/billing/me/credit-ledger:
     get:
       operationId: getMyCreditLedger
       x-kokoro-owner: kokoro-billing
@@ -401,7 +401,7 @@ paths:
             cache-control:
               $ref: "#/components/headers/CacheControlNoStore"
           x-kokoro-errors:
-            - code: billing.not_found
+            - code: billing.credit_account_not_found
               retryable: false
           content:
             application/json:
@@ -435,7 +435,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /v2/billing/me/subscriptions:
+  /v1/billing/me/subscriptions:
     get:
       operationId: getMySubscriptions
       x-kokoro-owner: kokoro-billing
@@ -532,7 +532,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /v2/internal/billing/admissions:
+  /v1/internal/billing/admissions:
     post:
       operationId: createAdmission
       x-kokoro-owner: kokoro-billing
@@ -667,7 +667,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
       description: Creates and commits the admission resource and any authorized hold. A durable command-receipt replay returns the original creation representation; business status remains queryable.
-  /v2/internal/billing/admissions/{admission_id}:
+  /v1/internal/billing/admissions/{admission_id}:
     get:
       operationId: getAdmission
       x-kokoro-owner: kokoro-billing
@@ -768,7 +768,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /v2/internal/billing/admissions/{admission_id}/capture:
+  /v1/internal/billing/admissions/{admission_id}/capture:
     post:
       operationId: captureAdmission
       x-kokoro-owner: kokoro-billing
@@ -900,7 +900,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /v2/internal/billing/admissions/{admission_id}/release:
+  /v1/internal/billing/admissions/{admission_id}/release:
     post:
       operationId: releaseAdmission
       x-kokoro-owner: kokoro-billing
@@ -1032,7 +1032,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /v2/internal/billing/execution-events:
+  /v1/internal/billing/execution-events:
     post:
       operationId: acceptExecutionEvent
       x-kokoro-owner: kokoro-billing
@@ -1162,7 +1162,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
       description: Commits the execution inbox event and receipt only. Processing, execution outcome, and credit capture remain independently queryable; clients must not automatically retry an unknown result.
-  /v2/internal/billing/execution-events/{execution_event_id}:
+  /v1/internal/billing/execution-events/{execution_event_id}:
     get:
       operationId: getExecutionEvent
       x-kokoro-owner: kokoro-billing
@@ -1263,7 +1263,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /v2/billing/checkouts:
+  /v1/billing/checkouts:
     post:
       operationId: createCheckout
       x-kokoro-owner: kokoro-billing
@@ -1397,7 +1397,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
       description: Creates the durable checkout snapshot. Provider session creation runs separately; 201 does not guarantee a ready checkout URL. Same-key replay returns the original creation representation and later status is read with GET.
-  /v2/billing/checkouts/{checkout_id}:
+  /v1/billing/checkouts/{checkout_id}:
     get:
       operationId: getCheckout
       x-kokoro-owner: kokoro-billing
@@ -1502,7 +1502,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /v2/internal/payment/settlements:
+  /v1/internal/payment/settlements:
     post:
       operationId: createSettlement
       x-kokoro-owner: kokoro-billing
@@ -1632,7 +1632,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
       description: Records a verified payment fact. Credit fulfillment is a separate nullable result and is not guaranteed by 201.
-  /v2/internal/payment/settlements/{settlement_id}:
+  /v1/internal/payment/settlements/{settlement_id}:
     get:
       operationId: getSettlement
       x-kokoro-owner: kokoro-billing
@@ -1733,7 +1733,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /v2/internal/payment/refunds:
+  /v1/internal/payment/refunds:
     post:
       operationId: createInternalRefund
       x-kokoro-owner: kokoro-billing
@@ -1863,7 +1863,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
       description: Records an existing provider refund fact; it does not initiate a provider refund or guarantee that the credit effect is applied.
-  /v2/internal/payment/refunds/{refund_id}:
+  /v1/internal/payment/refunds/{refund_id}:
     get:
       operationId: getRefund
       x-kokoro-owner: kokoro-billing
@@ -1969,7 +1969,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /v2/admin/billing/refunds:
+  /v1/admin/billing/refunds:
     post:
       operationId: createAdminRefund
       x-kokoro-owner: kokoro-billing
@@ -2101,7 +2101,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
       description: Records an existing provider refund with trusted operator attribution; it does not initiate a provider refund.
-  /v2/internal/credit-holds/expire:
+  /v1/internal/credit-holds/expire:
     post:
       operationId: expireCreditHolds
       x-kokoro-owner: kokoro-billing
@@ -2228,7 +2228,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /v2/webhooks/payment/stripe:
+  /v1/webhooks/payment/stripe:
     post:
       operationId: acceptStripeWebhook
       x-kokoro-owner: kokoro-billing
@@ -2298,7 +2298,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /v2/webhooks/payment/alipay:
+  /v1/webhooks/payment/alipay:
     post:
       operationId: acceptAlipayWebhook
       x-kokoro-owner: kokoro-billing
@@ -2372,7 +2372,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /v2/webhooks/payment/wechat:
+  /v1/webhooks/payment/wechat:
     post:
       operationId: acceptWechatWebhook
       x-kokoro-owner: kokoro-billing
@@ -2694,18 +2694,12 @@ components:
               additionalProperties: false
               required:
                 - postgres
-                - redis
               properties:
                 postgres:
                   type: string
                   enum:
                     - ok
                     - unavailable
-                redis:
-                  type: string
-                  enum:
-                    - ok
-                    - degraded
     Page:
       type: object
       additionalProperties: false

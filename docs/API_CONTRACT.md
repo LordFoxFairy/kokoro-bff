@@ -1,3 +1,12 @@
+## App API 修复当前切片（2026-10-13）
+
+- HTTP 业务路径统一 `/v1`，artifact SemVer 不等于路由版本。Billing 唯一消费源为 owner commit `1ceeae550f05857d1e7fa0da1e83af23a552f0ca` 的 `contract/openapi/v1/openapi.yaml`（SHA-256 `35b4a2d1d178f6a548fe67460c8e8cbba9eb247296f9051f6ec23060235baff8`）；现生成器只消费本人 Credit 两读，不回退旧 v2。
+- Platform projection 固定 owner commit `6b4c9db6719d2f5fd37a752921e603f4b0221de6`、HTTP artifact `6.0.0`（SHA-256 `50afde42d7a1564ecb058c78dff68e4ea81bbb3552bd96dbf6203b036ec381ae`）。该 surface 使用 owner profile 的本地 Bearer、caller/surface/tenant 绑定和每次重读，不作机器 OAuth/token 缓存；其他 surface 和外部当前用户 IAM 准入不随此片改动。
+- Billing 只有符合 owner envelope 的 `billing.credit_account_not_found`、非 retryable 404 才投影账户空态；未知路由或其他 404 是依赖协议错误，不冒充账户不存在。传输使用 owner 定义的 `x-request-id`。
+- 不变更公开 BFF wire、数据库或目录边界；仅替换对应 vendor pin 和正规生成物。源码门禁、正常运行切换与浏览器验收分别记录在 `docs/CURRENT.md`，未实施的付款/推理/其他认证切片不计入完成。
+
+以下阶段记录保留原时点，不覆盖本段当前调用方案。
+
 ## T-K03.20 本人 MCP 可连接目标投影（BFF 已实施，待 Web 消费）
 
 canonical public 从 `14.5.0` 递增至 `14.6.0`，不新增 endpoint 或命令。`PersonalMcpProvider` 可选新增 `connection_server_id`：它是 Platform 仅在 Provider 恰有一个 `registered + streamable_http` managed Server 时发出的不透明 ID。它不表示 endpoint、origin、tool selector、credential、OAuth URL 或连接已建成；缺失表示 Browser 不可发起既有授权/建连接命令，不能猜测或替换 ID。所有现有请求、错误 envelope、CAS、`no-store` 与 current-subject admission 保持不变。

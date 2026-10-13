@@ -1,5 +1,5 @@
 import { create } from "@bufbuild/protobuf"
-import { Code, ConnectError, createClient } from "@connectrpc/connect"
+import { createClient } from "@connectrpc/connect"
 import { createConnectTransport } from "@connectrpc/connect-node"
 
 import {
@@ -11,7 +11,6 @@ import {
   SkillInstallationIdSchema,
 } from "../../../generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
 import { ProjectionCredentialSource } from "./projection-credential.js"
-import { ProjectionTokenSource } from "./projection-token.js"
 
 type Common = Readonly<{ requestId: string; tenant: string; subject: string; filePath?: string }>
 export type SkillPackageInspectionInput =
@@ -32,11 +31,10 @@ export class SkillPackageInspectionDependencyError extends Error {
 export class SkillPackageInspectionConnectClient {
   readonly #managed
   readonly #installation
-  readonly #tokens: ProjectionTokenSource
+  readonly #tokens: ProjectionCredentialSource
 
   constructor(
     baseUrl: string,
-    iamBaseUrl: string,
     credentialFile: string,
     private readonly timeoutMs: number,
   ) {
@@ -49,7 +47,7 @@ export class SkillPackageInspectionConnectClient {
     })
     this.#managed = createClient(ProductSkillPackageInspectionService, transport)
     this.#installation = createClient(ProductSkillInstallationPackageInspectionService, transport)
-    this.#tokens = new ProjectionTokenSource(iamBaseUrl, new ProjectionCredentialSource(credentialFile), timeoutMs)
+    this.#tokens = new ProjectionCredentialSource(credentialFile)
   }
 
   async inspect(input: SkillPackageInspectionInput, signal: AbortSignal, deadlineAt: number) {
@@ -78,30 +76,24 @@ export class SkillPackageInspectionConnectClient {
         responseCacheControl = headers.get("cache-control")
       },
     }
-    let response
-    try {
-      response =
-        input.operation === "managed"
-          ? await this.#managed.inspectPersonalSkillPackage(
-              create(InspectPersonalSkillPackageRequestSchema, {
-                requestId: input.requestId,
-                skillId: create(SkillIdSchema, { value: input.skillId }),
-                ...(input.filePath === undefined ? {} : { filePath: input.filePath }),
-              }),
-              options,
-            )
-          : await this.#installation.inspectPersonalSkillInstallationPackage(
-              create(InspectPersonalSkillInstallationPackageRequestSchema, {
-                requestId: input.requestId,
-                installationId: create(SkillInstallationIdSchema, { value: input.installationId }),
-                ...(input.filePath === undefined ? {} : { filePath: input.filePath }),
-              }),
-              options,
-            )
-    } catch (error) {
-      if (error instanceof ConnectError && (error.code === Code.Unauthenticated || error.code === Code.PermissionDenied)) this.#tokens.retire(token)
-      throw error
-    }
+    const response =
+      input.operation === "managed"
+        ? await this.#managed.inspectPersonalSkillPackage(
+            create(InspectPersonalSkillPackageRequestSchema, {
+              requestId: input.requestId,
+              skillId: create(SkillIdSchema, { value: input.skillId }),
+              ...(input.filePath === undefined ? {} : { filePath: input.filePath }),
+            }),
+            options,
+          )
+        : await this.#installation.inspectPersonalSkillInstallationPackage(
+            create(InspectPersonalSkillInstallationPackageRequestSchema, {
+              requestId: input.requestId,
+              installationId: create(SkillInstallationIdSchema, { value: input.installationId }),
+              ...(input.filePath === undefined ? {} : { filePath: input.filePath }),
+            }),
+            options,
+          )
     if (responseRequestId !== input.requestId || responseCacheControl !== "no-store") throw new SkillPackageInspectionHeaderError()
     return response
   }

@@ -11,9 +11,9 @@ const output = path.join(root, "src/generated/platform-http")
 const manifestPath = path.join(root, "contract/dependencies/platform-http.json")
 const configPath = path.join(root, "openapi-ts.platform-http.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "b402b499535a213e1a337924e5dd0090927fbe6f"
+const ownerCommit = "6b4c9db6719d2f5fd37a752921e603f4b0221de6"
 const vendorPath = path.join(root, `contract/vendor/kokoro-platform/${ownerCommit}/openapi/platform-http.openapi.json`)
-const ownerDigest = "c5f9a343170c87d59e0c40134c503cc6d40b59416216ac993a138cfbac3bb581"
+const ownerDigest = "50afde42d7a1564ecb058c78dff68e4ea81bbb3552bd96dbf6203b036ec381ae"
 const generatedFiles = [
   "client.gen.ts",
   "client/client.gen.ts",
@@ -203,7 +203,7 @@ async function manifestFor(directory) {
     owner: {
       repository_path: "apps/kokoro-capability",
       repository_commit: ownerCommit,
-      contract_version: "5.3.0",
+      contract_version: "6.0.0",
       contract_path: "contract/openapi/platform-http.openapi.json",
       contract_sha256: ownerDigest,
     },
@@ -227,6 +227,8 @@ async function manifestFor(directory) {
 async function main() {
   const mode = process.argv[2]
   assert.ok(mode === "--write" || mode === "--check", "expected --write or --check")
+  const configured = await (await import(pathToFileURL(configPath).href)).default
+  assert.equal(configured.input, vendorPath, "generation input must match owner provenance")
   const temporaryRoot = await mkdtemp(path.join(tmpdir(), "kokoro-platform-http-"))
   const temporaryOutput = path.join(temporaryRoot, "generated")
   const repeatedOutput = path.join(temporaryRoot, "generated-again")

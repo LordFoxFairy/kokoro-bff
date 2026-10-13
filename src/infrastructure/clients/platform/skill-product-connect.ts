@@ -4,7 +4,7 @@ import { fromJson, type JsonValue } from "@bufbuild/protobuf"
 import { SkillCatalogService, ProductSkillReadService } from "../../../generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
 import { projectSkillProductCommand } from "./create-skill-draft-projector.js"
 import type { CatalogTokenSource } from "./catalog-token.js"
-import type { ProjectionTokenSource } from "./projection-token.js"
+import type { ProjectionCredentialSource } from "./projection-credential.js"
 
 export type SkillProductContext = { requestId: string; tenant: string; subject: string }
 export type SkillProductCommand =
@@ -23,7 +23,7 @@ export class SkillProductConnectClient {
   constructor(
     baseUrl: string,
     private readonly writes: CatalogTokenSource,
-    private readonly reads: ProjectionTokenSource,
+    private readonly reads: ProjectionCredentialSource,
     private readonly timeoutMs: number,
   ) {
     const transport = createConnectTransport({ baseUrl, httpVersion: "1.1", useBinaryFormat: true, readMaxBytes: 1024 * 1024, writeMaxBytes: 1024 * 1024 })
