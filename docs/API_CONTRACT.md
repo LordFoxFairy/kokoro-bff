@@ -1,3 +1,20 @@
+## SET-18 本人 Session public 边界（D0 独审通过，2026-10-14；尚未发行）
+
+canonical事实源仍为contract/openapi/v1/openapi.yaml public15.0.0，全文SHA256 5f6b1178cb878718090ba65d6b0d563185078624af0d3d46a01e568af87264a4。候选只追加两operation/安全closed component，public15.1.0同/v1/143 operations；不改原141项字段、权限、错误、metadata或历史摘要。先新最外层门精确剥两路径/components/版本还原完整15.0原字节，再执行原历史门。
+
+| 操作 / operationId | 目标请求与响应 |
+| --- | --- |
+| GET /v1/account/sessions / listAccountSessions | 本人iam:account-session.read；limit1..100默认25、cursor省略或非空≤2048、拒重复/未知query和body；200 {data:{current_session:{session_id,created_at,expires_at},sessions:[同形]},meta:{request_id,next_cursor}} |
+| DELETE /v1/account/sessions/{session_id} / revokeAccountSession | 本人iam:account-session.revoke；非空sid≤255与owner正式约束一致、无query/body/Idempotency-Key；200 {data:{session_id,revoked:true},meta:{request_id}}只从owner已提交ACK投影 |
+
+metadata均owner=kokoro-bff/visibility=public/stability=stable，permission分别上表scope，idempotency=none；DELETE为具名owner状态收敛，不使用BFF通用receipt或请求key。仅正常Product user_delegated本人，tenant来自admission，跨tenant会话列表仍由owner判本人；机器/operator不得替代。参数/字段以正式0.12 schema发行核验后冻结，设计不是可调用contract。
+
+request-id/no-store使用BFF现安全输出。owner错误只按固定generated错误schema和status/code一致关系映射：400 account_session_input_invalid；401 session_invalid；403 account_session_forbidden；404 account_session_not_found；409 CONFLICT→account_session_conflict，TENANT_DISABLED→403 session_forbidden（与session-admission.client.ts对owner409的普通准入映射一致；不作为撤销冲突）；413 account_session_request_too_large；429 account_session_rate_limited仅合法Retry-After1..86400；500/503/缺配置/timeout/网络→503 account_sessions_unavailable；畸形/错绑定/未知状态或错误tuple→502 account_session_response_invalid。常规外层service/admission错误保持，不把上游敏感message透传。
+
+未知DELETE结果不是失败回滚或成功：无自动retry，Web必须重新list核目标是否仍active；取消也不等于rollback。current撤销409、foreign/不存在同404、保留expired本人重复200、清理后404由IAM唯一裁决。本仓不变更scope/resource或注册图、不用旧refresh增加scope；正式scope演进与新authorize由Root资源阶段完成。
+
+唯一owner consumer生成使用正式0.12.0 source commit/version/SHA256；保持原16具名operation并追加2项，不读取未提交源码/手改generated/保旧pin双轨。Web随后仅消费正式public15.1.0固定artifact；Skills/连接器操作与其contract原字节保持。
+
 ## SET-15 Catalog 固定消费者与未开放 checkout（2026-10-13，候选已实施）
 
 保持现public15.0.0 listBillingPlans、BillingPlan七字段及所有operation不变；已固定Billing ba98badab9445ae676a8f48faa55912d42ce5d2e的exp4与SHA2568a3d12cf7517e7ee6cb2958b740bb69ab4831d38a383e61aca383b5fd1e8b27a（required offer_key为owner strict breaking），以原字节vendor与正常generator替换exp3单pin。新增唯一generated getCatalog，并保原两本人读。严格消费GET /v2/commerce/catalog的data.items/page与闭集item；完整有界分页后一次投影，合法终页items=[]才是空目录，失败不转空/不截尾。金额/积分保持decimal string；真实运行组合与浏览器验收仍待Root。

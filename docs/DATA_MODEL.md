@@ -1,3 +1,13 @@
+## SET-18 登录 Session 的非持久公开投影（D0 独审通过，2026-10-14）
+
+BFF无本片持久事实。database/schema.sql保持原字节SHA256 cb1b6810010bbdb9ac8f1c30e42ef0e59ef90670f3742b769d85521d750be421；不加表/索引/Redis/receipt/cache、不查询IAM SQL或跨owner JOIN。现有BFF Conversation/聊天Session不承接登录Session，已有Account身份也不成为设备事实副本。
+
+IAM canonical Session、OAuth token、Audit及无外键/Prisma完整性是唯一owner。BFF仅在一次请求内携带受信Bearer/context和严格安全投影，依其正式cursor保持原顺序/分页，不decode/重签或伪造快照。current单独输出，others本人active且排除current；列表跨IAM账户tenant，不把activeOrganizationId当登录来源，描述未知不补城市、UA或last-active。
+
+撤销成功由IAM同tx结束Session、处理关联凭据并写成功Audit且commit后ACK；BFF不保存永久成功receipt、无恢复/撤销撤销操作。失去ACK/取消先重读，仍可能已提交；本人expired保留重复200、ownercleanup后404，不把404转伪200。删除替代新在线Product准入拒绝；不承诺撤回已准入工作或所有JWT/refresh永不返回。
+
+新scope仅owner正式零入参provisioning演进，需正规新authorize；本仓不改client/resource/member/roles、正常服务或数据。artifact更新只动正式immutable vendor与正常生成，旧单pin删除，无并存数据库或凭据存储；重启不恢复登录/撤销事实。三面未准入源码、未运行integration/正常组合，Skills/连接器排除。
+
 ## SET-15 Catalog 零持久化投影（2026-10-13）
 
 Billing唯一拥有canonical billing_offer与billing_offer_revision；BFF不得查询owner表或复用旧entitlement_*事实。BFF仅在一个已准入请求内严格消费固定exp4 owner HTTP，完整分页临时聚合并投影现public七字段，完成或取消后丢弃；无BFF SQL/Schema、Redis/cache、receipt、outbox或商品seed。offer_key来自正式owner字段，ID来自offer_revision_id；不按积分或ID猜套餐key/当前订阅。目录读取不创建资金账户、不写订单/授权/支付；checkout未开放保持零owner I/O。固定artifact属于build-time依赖而非业务快照。

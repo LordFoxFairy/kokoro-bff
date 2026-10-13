@@ -1,3 +1,21 @@
+## SET-18 本人登录 Session 公开投影（D0 独审通过，2026-10-14；owner 未发行，源码未准入）
+
+本段为后继候选，当前运行仍无设备管理 API。IAM SET18 源码未冻结；只有 Root 接收其正式 internal0.12.0 commit/digest 后，才能固定唯一 artifact 并放行本仓源码。Skills 与连接器排除，旧文档版本按历史读取。
+
+| 项 | 决定 |
+| --- | --- |
+| Owner / writer | IAM 唯一拥有 Session、关联凭据、撤销与 Audit；BFF 唯一发布 public projection。Root 三设计/Git/资源与验收，后继 billing_scheduler_audit 唯一源码 writer；本设计不授修改权。 |
+| 当前事实 | 基线571173253ecd247b82c42b5fb8313bce7f3e29e5 clean；public15.0.0/141 operations、全文SHA256 5f6b1178cb878718090ba65d6b0d563185078624af0d3d46a01e568af87264a4；IAM消费0.11.0/7192254，现bootstrap/server在正规admission后分派team，无account/sessions路由。 |
+| 位置比较 / 粒度 | A把Session塞入Team/client或聊天sessions：淘汰，账户会话跨tenant且非Conversation。B采用现目录普通account-sessions route/input、iam-account-sessions client及其窄types：采用，无新顶层/一级module、数据库或进程。文件分别拥有HTTP、原始请求校验、owner I/O、内部结果类型，不复制wire DTO。 |
+| 当前 / 目标框架 | 当前仍是单一既有Node HTTP运行时，Nest原生整体迁移由Root统一后继，不把依赖/新功能冒迁移完成。本片只挂现唯一composition/dispatch，不建第二框架/服务/HTTP入口；原技术方案的统一后继边界保持。 |
+| 依赖 / 资格 | Browser→Web同源→BFF既有在线IAM Product admission→同一Bearer的IAM具名account-sessions operation；不自报user/sid/tenant/client、不换machine/admin、不访问owner数据库/Redis，也不relayvendor cookie。scope不替当前membership/部署资格。 |
+| 生命周期 | 准入沿现独立预算；新route起单5s总预算覆盖原始body、owner headers/body，min(config timeout,5s)，headers+body总min(config上限,1MiB)；取消主动退役挂起fetch/reader和迟到结果，移除timer/listener，不写已close响应。零自动重试、零乐观成功。 |
+| 响应 / 保证 | 固定generated strict schema并核owner JSON/no-store/同request-id；只输出安全session_id、真实UTC created/expires，不输出token/UA/IP/城市/last-active。current独立、other排除current且ID去重/数量限limit；不凭BFF时钟推断用户在线。承诺撤销提交后新在线Product请求拒绝，在途已准入请求不追溯回滚。 |
+| 数据 / 删除 | 无BFF持久事实/receipt/cache；DELETE由IAM事务与过期tombstone承接。unknown写结果提示重新读取、不得自动重试或宣成功；ownercleanup后404。删除旧IAM单pin，正规generator换正式新pin，保留其余消费operation，不手改generated。 |
+| 门禁 / 顺序 | owner发行→本仓contract RED/机器/独立逆回15.0全文→生成/client/route负控→Root独审+具名pure/check+真实IAM两登录系统验收→本仓发布→Web固定生成→正式浏览器。旧门已失败项保留，contract成功不等于浏览器完成。 |
+
+API/DATA两面同本方案；TENANT_DISABLED固定403 session_forbidden，CONFLICT才映射409 account_session_conflict，与现普通admission一致。owner正式artifact和新scope闭环是源码准入前置，不做旧0.11 fallback。
+
 ## SET-15 正式 Billing Catalog 消费（2026-10-13，候选已实施，真实组合待验）
 
 | 项 | 裁决 |

@@ -1,3 +1,11 @@
+## SET-18 登录设备公开投影准备（2026-10-14；D0 独审通过）
+
+Root已盘点三设计并写入后继候选：IAM为唯一登录Session/凭据/撤销/Audit owner，BFF拟追加public15.1两具名account/sessions接口与安全投影，无SQL/Redis/receipt。当前IAM0.12源码仍实施中；本仓当前HEAD5711732/public15.0/141未改，无新路由可用。只有owner正式发行和三设计独审通过才放行单writer。Skills/连接器排除，旧框架统一迁移仍后继，不把现Node HTTP冒Nest已完成。
+
+本轮本地账户页刷新后真实Owner/owner@example.test/user ID已显示；此前短暂loading不作为持续认证故障。正式runtime仍PID11740/3311，未重启或变更授权/正常数据。候选API细节见三设计当前前缀；源码、机器、真实资源和浏览器均未验收。
+
+独立审查唯一P2已修：owner409/TENANT_DISABLED固定403 session_forbidden，只有CONFLICT固定409 account_session_conflict；复审无剩余确定P1/P2。三面方案已准入，owner正式0.12 artifact仍未发行，因此源码/机器修改继续未授权。
+
 ## SET-15 正式 Billing Catalog 消费候选（2026-10-13，未真实配对激活）
 
 固定Billing ba98badab9445ae676a8f48faa55912d42ce5d2e的committed原字节exp4，SHA2568a3d12cf7517e7ee6cb2958b740bb69ab4831d38a383e61aca383b5fd1e8b27a；删除旧exp3 vendor单pin，现正常生成器扩唯一getCatalog并使CatalogItem/Envelope/data/Page严格，正规双生成check一致。public15.0.0所有字节/operation/字段不变，无SQL/Redis/锁或Skills/MCP业务变更。
