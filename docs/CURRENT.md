@@ -1,3 +1,13 @@
+## SET-13 Team 完整权限投影候选（2026-10-13，未激活）
+
+沿已提交D0，仅canonical TeamRole.permissions新增现IAM合法platform.execute及skill十五动作闭集，public15.0.0 breaking；仅Root自有隔离/v1配对候选，非minor/beta例外，main/日常/生产/Admin消费者均未切换。IAM wire现严格原样输出不改，无SQL/owner/generated/锁/业务权限写入。
+
+旧契约字段声明真实RED1FAIL；完整字段后SET13两契约测试GREEN，owner/admin/member正式权限fixture经自有临时HTTP owner→BFF原样返回，unknown域/platform动作/skill动作与空数组五项均502。最外层先检查完整TeamRole精确字节与15.0.0，再仅撤本片恢复14.7完整SHA598407a3dfc17d62eb4fe703837b836ba85f05b7102a018dac160351ad807c19；缺platform、未知域/动作、空数组schema、错误版本、非Team漂移负控均拒绝。旧历史门/fixture/非Team字节保持；没有用新摘要抹旧门。
+
+首次完整check误用brew22.23.2，被Storage精确Node22.22.2门拒绝；随后固定已装22.22.2重跑，lint/typecheck及全部生成check/contractlint/semantic通过（保既有Redocly warnings），contract:test634PASS/2FAIL，完整check非零。两R357既有失败及全test额外architecture collection失败均旧restorePublic142直接收当前artifact而报Admin Skill draft version drift；只读HEAD14.7原字节调用同helper也失败。独立全test1222PASS/3FAIL/3既有SKIP、build0；Team读写17PASS。完整format:check七既有文件失败，四变更TS/test具名格式0，diffcheck0；不格式化范围外旧文件。实际Web固定消费/strict schema与浏览器、Admin消费者、后继正常发布仍待Root，不能称全check或业务闭环通过。
+
+Root独立build、Team读写与contract-governance共48PASS/0FAIL/0SKIP、semantic141个冻结operations通过；另外直接从基线Git blob核对新inverse恢复全文逐字相等，并独立重现原14.7被旧restore142入口拒绝。冻结六路径独审无确定新增P1/P2。此收据仍不改变上述全check/format未通过及consumer待验边界。
+
 ## T-K03.14-BFF-SKILL-AUTH-ERROR Public13.1 源码候选收据（2026-10-10；待 Root 独审提交）
 
 基线 `37efd64a81a66b83df2f8d0a678c6e0e8971cb31`；唯一 current public source 为 `contract/openapi/v1/openapi.yaml` **13.1.0**，仍 `/v1` / 136 operations。本片仅补已存在 IAM Skill action denial 的 `403 skill_forbidden` 契约，不改变 runtime、权限、CAS、owner wire 或数据。五个 Draft/Begin/Complete/Validate/Publish base error enum 与四个命令及个人 Version/Withdraw 共用的 narrow 403 精确补码；安装三 mutation 使用同文件新 `SkillInstallationMutationForbidden`，原安装 GET、package-upload GET、managed read、inspection 与 MCP 不扩展。原 Product/Admin/Github/AI error family 已含此码，保持原字节。

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 14.7.0
+  version: 15.0.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -13877,6 +13877,8 @@ components:
             ac: { type: array, minItems: 1, items: { type: string, enum: [create, read, update] } }
             tenant: { type: array, minItems: 1, items: { type: string, enum: [read] } }
             audit: { type: array, minItems: 1, items: { type: string, enum: [read] } }
+            platform: { type: array, minItems: 1, items: { type: string, enum: [execute] } }
+            skill: { type: array, minItems: 1, items: { type: string, enum: [create_draft, create_version, begin_upload, complete_upload, abort_upload, validate_draft, publish, withdraw, set_status, install, set_installation_enabled, remove_installation, update_draft, discard_draft, set_publication_audience] } }
     CurrentUserIdentity:
       type: object
       required: [user_id, tenant_id, platform_admin]

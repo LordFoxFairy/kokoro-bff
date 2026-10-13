@@ -731,3 +731,28 @@ test("R350 public examples have strict six profiles and restore complete immutab
     assert.ok(inspectSkillExamplePromptsDocument(changed).length > 0)
   }
 })
+
+test("SET13 actual builtin permission fields are declared by the public contract", async () => {
+  const { load } = await import("js-yaml")
+  const source = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
+  const permissions = load(source).components.schemas.TeamRole.properties.permissions
+  assert.deepEqual(permissions.properties.platform.items.enum, ["execute"])
+  assert.equal(permissions.properties.skill.items.enum.length, 15)
+  assert.equal(permissions.additionalProperties, false)
+})
+
+test("SET13 rejects closed permission and non-Team historical drift", async () => {
+  const { restorePublic15TeamPermissionsContract } = await import("../scripts/verify-openapi.ts")
+  const source = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
+  const parent = restorePublic15TeamPermissionsContract(source)
+  assert.match(parent, /^  version: 14\.7\.0$/mu)
+  const mutations = [
+    source.replace("            platform: { type: array, minItems: 1, items: { type: string, enum: [execute] } }\n", ""),
+    source.replace(/(    TeamRole:[\s\S]*?)            skill: \{/u, "$1            unknown_domain: {"),
+    source.replace("enum: [execute]", "enum: [unknown_action]"),
+    source.replace("platform: { type: array, minItems: 1", "platform: { type: array, minItems: 0"),
+    source.replace("title: Kokoro Business API", "title: Changed non-Team API"),
+    source.replace("version: 15.0.0", "version: 14.8.0"),
+  ]
+  for (const mutation of mutations) assert.throws(() => restorePublic15TeamPermissionsContract(mutation), /SET13/u)
+})

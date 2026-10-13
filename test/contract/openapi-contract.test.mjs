@@ -2680,3 +2680,12 @@ for (const [label, path] of [
     assert.equal(constraint.maxLength, 256)
   })
 }
+
+test("SET13 exact inverse preserves the entire committed public14.7 artifact", async () => {
+  const { restorePublic15TeamPermissionsContract } = await import("../../scripts/verify-openapi.ts")
+  const source = await readFile(currentOpenapiUrl, "utf8")
+  assert.equal(
+    createHash("sha256").update(restorePublic15TeamPermissionsContract(source)).digest("hex"),
+    "598407a3dfc17d62eb4fe703837b836ba85f05b7102a018dac160351ad807c19",
+  )
+})
