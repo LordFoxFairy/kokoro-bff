@@ -2,10 +2,12 @@ import assert from "node:assert/strict"
 import test from "node:test"
 import { createServer } from "node:http"
 import { createHash } from "node:crypto"
+import { create } from "@bufbuild/protobuf"
 import { Code, ConnectError } from "@connectrpc/connect"
 import { SkillDownloadHandles } from "../../src/application/skill-download-handles.ts"
 import { createBffServer } from "../../src/bootstrap/server.ts"
 import { DEFAULT_AGUI_CONFIG } from "../../src/config/runtime.ts"
+import { SkillInstallationChange, SkillProductFactsSchema } from "../../src/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.ts"
 
 const website = "/skill.v1.SkillOptionalService/"
 const headers = { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "test-secret", authorization: "Bearer human", "x-request-id": "spec-request" }
@@ -423,6 +425,75 @@ test("R357 metadata invalid response remains502; never synthesizes absent actor/
   })
   try {
     assert.equal((await app.request(website + "ListHubSkills", {})).status, 502)
+  } finally {
+    await app.close()
+  }
+})
+
+test("T-K03.19 SetSkillInstallationEnabled uses only owner-issued installation identity and preserves owner idempotency semantics", async () => {
+  const calls = []
+  const installation = {
+    installationId: { value: "installation-stable" },
+    sourceRef: { value: "skill:version-one" },
+    seriesId: { value: "stable-series" },
+    revision: 1n,
+    installed: true,
+    enabled: false,
+    installedAt: { seconds: 1n, nanos: 0 },
+    updatedAt: { seconds: 2n, nanos: 0 },
+    displayName: "清单整理助手",
+    summary: "",
+    tags: [],
+    sourceStatus: 2,
+    skillUpdatedAt: { seconds: 2n, nanos: 0 },
+    examplePrompts: { prompts: [] },
+    categoryKeys: { keys: [] },
+    product: create(SkillProductFactsSchema, { publicationAudience: "owner", stateVersion: 1n }),
+  }
+  const client = {
+    async setEnabled(input) {
+      calls.push(input)
+      if (calls.length === 3) throw new ConnectError("same key drift", Code.AlreadyExists)
+      return {
+        installation: { ...installation, enabled: input.enabled },
+        change: input.enabled ? SkillInstallationChange.ENABLED : SkillInstallationChange.DISABLED,
+        eventId: "event-1",
+        replayed: calls.length === 2,
+      }
+    },
+  }
+  const app = await fixture(
+    {
+      async read() {
+        return { userAddedSkills: [], officialSkills: [] }
+      },
+    },
+    undefined,
+    {},
+    { personalInstallationClient: client },
+  )
+  try {
+    const command = website + "SetSkillInstallationEnabled"
+    const commandHeaders = { ...headers, "content-type": "application/json", "idempotency-key": "same-key" }
+    const first = await app.request(command, { installationId: "installation-stable", enabled: false }, { headers: commandHeaders })
+    const replay = await app.request(command, { installationId: "installation-stable", enabled: false }, { headers: commandHeaders })
+    const drift = await app.request(command, { installationId: "installation-stable", enabled: true }, { headers: commandHeaders })
+    assert.equal(first.status, 200)
+    assert.equal(replay.status, 200)
+    assert.equal(replay.body.data.replayed, true)
+    assert.equal(drift.status, 409)
+    assert.equal(calls[0].installationId, "installation-stable")
+    assert.equal(calls[0].commandId, calls[1].commandId)
+    assert.notEqual(calls[1].digest, calls[2].digest)
+    assert.equal(calls.some((call) => JSON.stringify(call).includes("清单整理助手")), false)
+    const displayName = await app.request(
+      command,
+      { installationId: "清单整理助手", enabled: false },
+      { headers: { ...headers, "content-type": "application/json", "idempotency-key": "display-name" } },
+    )
+    assert.equal(displayName.status, 400)
+    assert.equal(calls.length, 3)
+    assert.equal((await app.request("/v1/self/skills/%E6%B8%85%E5%8D%95%E6%95%B4%E7%90%86%E5%8A%A9%E6%89%8B/disable?scope=official", {})).status, 404)
   } finally {
     await app.close()
   }

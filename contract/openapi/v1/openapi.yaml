@@ -9848,6 +9848,48 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/SpecificationEmptyRequest"
+  /skill.v1.SkillOptionalService/SetSkillInstallationEnabled:
+    post:
+      tags:
+        - Skills
+      operationId: websiteSetSkillInstallationEnabled
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: browser-private
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: product.skill.installation.enable
+      summary: websiteSetSkillInstallationEnabled
+      description: >-
+        Mutates the admitted subject's exact personal installation through the Platform owner. installationId is an owner-issued stable installation identity; Skill display names, series IDs and source references are not accepted as write identities. A single exact Idempotency-Key replays the same command and rejects a changed body.
+      parameters:
+        - $ref: '#/components/parameters/SpecificationSkillInstallationIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SpecificationSetSkillInstallationEnabledRequest'
+      responses:
+        '200': { $ref: '#/components/responses/SkillInstallationMutationSuccess' }
+        '400': { $ref: '#/components/responses/SkillInstallationBadRequest' }
+        '401': { $ref: '#/components/responses/SkillInstallationUnauthorized' }
+        '403': { $ref: '#/components/responses/SkillInstallationMutationForbidden' }
+        '404': { $ref: '#/components/responses/SkillInstallationNotFound' }
+        '405':
+          description: Method is not allowed
+          headers:
+            x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+            Cache-Control: { required: true, schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SpecificationBrowserError' }
+        '409': { $ref: '#/components/responses/SkillInstallationConflict' }
+        '412': { $ref: '#/components/responses/SkillInstallationPreconditionFailed' }
+        '413': { $ref: '#/components/responses/SkillInstallationPayloadTooLarge' }
+        '429': { $ref: '#/components/responses/SkillInstallationRateLimited' }
+        '502': { $ref: '#/components/responses/SkillInstallationBadGateway' }
+        '503': { $ref: '#/components/responses/SkillInstallationUnavailable' }
+        '504': { $ref: '#/components/responses/SkillInstallationTimeout' }
   /skill.v1.SkillOptionalService/ListHubSkills:
     post:
       tags:
@@ -10986,6 +11028,16 @@ components:
       required: true
       schema:
         type: string
+    SpecificationSkillInstallationIdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Exactly one printable 1-128 character value; values are neither trimmed nor comma-joined.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+        pattern: '^[\x21-\x2B\x2D-\x7E]+$'
     PersonalSkillLifecycleSkillId:
       name: skill_id
       in: path
@@ -11437,6 +11489,17 @@ components:
         - skills
         - tagOptions
       additionalProperties: false
+    SpecificationSetSkillInstallationEnabledRequest:
+      type: object
+      additionalProperties: false
+      required: [installationId, enabled]
+      properties:
+        installationId:
+          type: string
+          pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$'
+          description: Owner-issued personal installation identity; not a display name, Skill series ID or source reference.
+        enabled:
+          type: boolean
     SpecificationListResponse:
       type: object
       properties:
@@ -11447,6 +11510,10 @@ components:
             properties:
               id:
                 type: string
+              installationId:
+                type: string
+                pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$'
+                description: Owner-issued installation identity for this admitted user's installed card.
               name:
                 type: string
               description:
@@ -11521,6 +11588,10 @@ components:
             properties:
               id:
                 type: string
+              installationId:
+                type: string
+                pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$'
+                description: Present only when this catalog card is installed for the admitted user; never infer it from the Skill series ID.
               name:
                 type: string
               description:

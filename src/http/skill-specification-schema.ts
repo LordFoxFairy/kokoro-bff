@@ -30,7 +30,13 @@ const detailFields = {
   skillIcon: icon,
 }
 export const websiteSkillSchema = optional(detailFields)
-const installed = optional({ ...detailFields, enabled: z.boolean(), icon: string, skillConfig: optional({ teamSkillForceAdd: z.boolean() }) })
+const installed = optional({
+  ...detailFields,
+  installationId: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u),
+  enabled: z.boolean(),
+  icon: string,
+  skillConfig: optional({ teamSkillForceAdd: z.boolean() }),
+})
 const official = installed.extend({ deviceCapable: z.boolean().optional() }).strict()
 const source = optional({
   type: string,
@@ -115,6 +121,8 @@ export const websiteHubRequestSchema = z
   .strict()
 export const websiteEmptyRequestSchema = z.object({}).strict()
 export const websiteSkillRequestSchema = z.object({ skillId: string.min(1).max(191) }).strict()
+const stableInstallationId = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u)
+export const setSkillInstallationEnabledRequestSchema = z.object({ installationId: stableInstallationId, enabled: z.boolean() }).strict()
 export const publicSkillQuerySchema = z.object({ project_id: string.min(1).max(191).optional() }).strict()
 
 const sharedId = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u)

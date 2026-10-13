@@ -2,6 +2,7 @@ import { mcpPersonalOperation, mcpPersonalRoute } from "../http/routes/mcp-perso
 import { mcpProviderAdminOperation, mcpProviderAdminRoute } from "../http/routes/mcp-provider-admin.js"
 import { connectorListFailure, connectorListRoute, isConnectorListRequest } from "../http/routes/connector-list.js"
 import { skillSpecificationReadRoute } from "../http/routes/platform-projection.js"
+import { skillSpecificationEnabledRoute } from "../http/routes/skill-specification-enabled.js"
 import { exactSkillDownloadRoute, skillDownloadHandleRoute } from "../http/routes/skill-download.js"
 import { startMcpRequestBudget, mcpRequestRemaining } from "../http/mcp-request-budget.js"
 import { skillGithubImportRoute, skillGithubPreviewRoute } from "../http/routes/skill-github-import.js"
@@ -206,6 +207,7 @@ async function handle(
     return
   }
   if (await skillSpecificationReadRoute(request, response, config, composition, id, rawPathname)) return
+  if (await skillSpecificationEnabledRoute(request, response, config, composition, id, rawPathname)) return
   if (await skillDownloadHandleRoute(request, response, config, composition, id, segments)) return
   if (await exactSkillDownloadRoute(request, response, config, composition, id, segments)) return
   if (

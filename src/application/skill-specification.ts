@@ -266,7 +266,14 @@ export class SkillSpecificationService implements SkillSpecificationSource {
           if (item.product.source_kind !== "official") throw new Error("skill_response_invalid")
           const value = await this.detail(item.series_id, context, signal, deadlineAt)
           if (value.skill.source_ref !== item.source_ref) throw new ConnectError("Skill publication changed", Code.Unavailable)
-          official.push({ ...value.representation, added: installed.some((entry) => entry.series_id === item.series_id) })
+          const installations = installed.filter((entry) => entry.series_id === item.series_id)
+          if (installations.length > 1) throw new Error("skill_response_invalid")
+          const installation = installations[0]
+          official.push({
+            ...value.representation,
+            added: installation !== undefined,
+            ...(installation === undefined ? {} : { installationId: installation.installation_id, enabled: installation.enabled }),
+          })
         }
         if (official.length > 1000) throw new ConnectError("Skill list capacity exceeded", Code.ResourceExhausted)
         cursor = page.nextCursor ?? undefined
@@ -278,6 +285,7 @@ export class SkillSpecificationService implements SkillSpecificationSource {
       return identity({
         userAddedSkills: installed.map((item) => ({
           id: item.series_id,
+          installationId: item.installation_id,
           name: item.display_name,
           displayName: item.display_name,
           description: item.summary,
