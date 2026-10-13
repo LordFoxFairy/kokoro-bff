@@ -113,45 +113,7 @@ export function messageCursor(value: string | undefined): number | null {
   return Number.isSafeInteger(cursor) && cursor >= 0 ? cursor : null
 }
 
-export type BillingPlanProjection = {
-  id: string
-  key: string
-  name: string
-  currency: string
-  amount_minor: string
-  credit_micros: string
-  billing_interval: "once" | "month" | "year"
-}
 
-export function billingPlansData(body: unknown): { plans: BillingPlanProjection[] } | null {
-  const data = dataOf(body)
-  const offers = data?.offers
-  if (!Array.isArray(offers)) return null
-  const plans: BillingPlanProjection[] = []
-  for (const offer of offers) {
-    if (!isRecord(offer)) return null
-    const id = stringField(offer, "id")
-    const key = stringField(offer, "key")
-    const name = stringField(offer, "name")
-    const currency = stringField(offer, "currency")
-    const amountMinor = stringField(offer, "amount_minor")
-    const creditMicros = stringField(offer, "credit_micros")
-    const billingInterval = stringField(offer, "billing_interval")
-    if (
-      id === null || key === null || name === null || currency === null
-      || amountMinor === null || creditMicros === null
-      || (billingInterval !== "once" && billingInterval !== "month" && billingInterval !== "year")
-    ) return null
-    plans.push({ id, key, name, currency, amount_minor: amountMinor, credit_micros: creditMicros, billing_interval: billingInterval })
-  }
-  return { plans }
-}
-
-export function checkoutUrlData(body: unknown): { checkout_url: string } | null {
-  const data = dataOf(body)
-  const checkoutUrl = data === null ? null : stringField(data, "checkout_url")
-  return checkoutUrl === null ? null : { checkout_url: checkoutUrl }
-}
 
 export function systemManifestData(body: unknown): Record<string, unknown> | null {
   const data = dataOf(body)

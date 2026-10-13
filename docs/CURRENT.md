@@ -1,3 +1,13 @@
+## SET-15 正式 Billing Catalog 消费候选（2026-10-13，未真实配对激活）
+
+固定Billing ba98badab9445ae676a8f48faa55912d42ce5d2e的committed原字节exp4，SHA2568a3d12cf7517e7ee6cb2958b740bb69ab4831d38a383e61aca383b5fd1e8b27a；删除旧exp3 vendor单pin，现正常生成器扩唯一getCatalog并使CatalogItem/Envelope/data/Page严格，正规双生成check一致。public15.0.0所有字节/operation/字段不变，无SQL/Redis/锁或Skills/MCP业务变更。
+
+现plans具名Catalog consumer经独立Billing服务Bearer、内部BFF身份及可信u1 tenant读取/v2/commerce/catalog；同一总期限、总headers+body预算、20页/2000项，只有完整合法终页返回。offer_revision_id/offer_key/currency_code映射现id/key/currency，金额与积分字符串原样；未知域、缺key、非法金额、非终页空页、重复cursor/ID/key、尾页失败、redirect、累计预算或deadline失败统一现public503 billing_unavailable，不返回部分清单或假空。abort主动取消锁定reader并退役挂起/迟到请求；旧unused mapper删除。
+
+checkout保持现准入、request/幂等校验后明确503 billing_unavailable且零owner读写，删除旧v1 Catalog/checkout调用；目录200不表示支付可用。旧checkout201真实RED后变503 GREEN。新source/dist临时HTTP/严格fixture与生成契约及原personal读具名73PASS，包含完整两页、合法空终页、BigInt以上字符串、所有闭集/分页/预算与挂起fetch/慢body取消负控；现BFF完整route plans/checkout具名1PASS。
+
+固定Node22.22.2 lint/typecheck/build exit0，生成check两次16文件字节一致，变更具名格式及diffcheck0。完整pnpm check非零：contract634PASS/2既有R357历史恢复版本失败；独立全test1222PASS/3既有FAIL/3SKIP（另一个architecture旧恢复同失败）。这些旧门已在SET13用HEAD14.7字节确认，未改历史摘要/fixture或Skills入口。完整format保留既有7文件失败；projections只精确删除两unused mapper不格式化旧内容。现package明确test清单不自动收新catalog文件，所以其73项具名测试独立执行，不能计入全test数量。正常Billing/Web/Root精确pin配对、真实浏览器目录与checkout不可用、Admin消费者后继由Root验收，未操作共享服务/DB/支付或提交Git。
+
 ## SET-13 Team 完整权限投影候选（2026-10-13，未激活）
 
 沿已提交D0，仅canonical TeamRole.permissions新增现IAM合法platform.execute及skill十五动作闭集，public15.0.0 breaking；仅Root自有隔离/v1配对候选，非minor/beta例外，main/日常/生产/Admin消费者均未切换。IAM wire现严格原样输出不改，无SQL/owner/generated/锁/业务权限写入。

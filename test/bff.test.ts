@@ -932,7 +932,7 @@ describe("kokoro-bff v1 mock contract", () => {
     }
   })
 
-  it("projects Billing catalog and checkout through the v1 owner contract", async () => {
+  it("projects v2 Billing catalog while checkout remains unavailable", async () => {
     const received: Array<{ url: string | undefined; body: string; service: string | undefined }> = []
     const upstream = createServer((request, response) => {
       const chunks: Buffer[] = []
@@ -940,23 +940,23 @@ describe("kokoro-bff v1 mock contract", () => {
       request.on("end", () => {
         received.push({ url: request.url, body: Buffer.concat(chunks).toString("utf8"), service: request.headers["x-kokoro-service"]?.toString() })
         response.setHeader("content-type", "application/json")
-        if (request.url === "/v1/commerce/catalog") {
+        if (request.url?.startsWith("/v2/commerce/catalog?")) {
           response.end(
             JSON.stringify({
               data: {
-                offers: [
+                items: [
                   {
-                    id: "offer-revision-1",
-                    key: "pro",
+                    offer_revision_id: "11111111-1111-4111-8111-111111111111",
+                    offer_key: "pro",
                     name: "Pro",
-                    currency: "USD",
+                    currency_code: "USD",
                     amount_minor: "1999",
                     credit_micros: "1000000",
                     billing_interval: "month",
                   },
                 ],
+                page: { next_cursor: null },
               },
-              meta: { request_id: "billing-catalog" },
             }),
           )
           return
@@ -972,6 +972,7 @@ describe("kokoro-bff v1 mock contract", () => {
       liveServer(
         config({
           mode: "live",
+          billingServiceToken: "billing-service-token",
           upstreams: { ...config().upstreams, billing: upstreamBase },
         }),
       ),
@@ -982,7 +983,15 @@ describe("kokoro-bff v1 mock contract", () => {
     assert.deepEqual(await plans.json(), {
       data: {
         plans: [
-          { id: "offer-revision-1", key: "pro", name: "Pro", currency: "USD", amount_minor: "1999", credit_micros: "1000000", billing_interval: "month" },
+          {
+            id: "11111111-1111-4111-8111-111111111111",
+            key: "pro",
+            name: "Pro",
+            currency: "USD",
+            amount_minor: "1999",
+            credit_micros: "1000000",
+            billing_interval: "month",
+          },
         ],
       },
       meta: { request_id: "billing-catalog" },
@@ -993,21 +1002,15 @@ describe("kokoro-bff v1 mock contract", () => {
       headers: { ...authHeaders(), "content-type": "application/json", "idempotency-key": "billing-checkout-key", "x-kokoro-request-id": "billing-checkout" },
       body: JSON.stringify({ plan_id: "offer-revision-1" }),
     })
-    assert.equal(checkout.status, 201)
+    assert.equal(checkout.status, 503)
     assert.deepEqual(await checkout.json(), {
-      data: { checkout_url: "https://pay.test/checkout-1" },
+      error: { code: "billing_unavailable", message: "Billing checkout is unavailable" },
       meta: { request_id: "billing-checkout" },
     })
-    assert.equal(received[0]?.url, "/v1/commerce/catalog")
+    assert.equal(received[0]?.url, "/v2/commerce/catalog?limit=100")
     assert.equal(received[0]?.service, "web-bff")
-    assert.deepEqual(JSON.parse(received[2]?.body ?? "{}"), {
-      offer_revision_id: "offer-revision-1",
-      amount_minor: "1999",
-      currency: "USD",
-      quote_snapshot: { key: "pro", credit_micros: "1000000", name: "Pro", plan_id: "offer-revision-1" },
-    })
+    assert.equal(received.length, 1)
   })
-
   it("projects the admitted subject's fixed Credit account and ledger without a fake balance", async () => {
     const received: Array<{ url: string | undefined; authorization: string | undefined; tenant: string | undefined; subject: string | undefined }> = []
     const upstream = createServer((request, response) => {

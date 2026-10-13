@@ -3,6 +3,9 @@
 import { client } from "./client.gen.js"
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from "./client/index.js"
 import type {
+  GetCatalogData,
+  GetCatalogErrors,
+  GetCatalogResponses,
   GetMyCreditAccountData,
   GetMyCreditAccountErrors,
   GetMyCreditAccountResponses,
@@ -10,7 +13,7 @@ import type {
   GetMyCreditLedgerErrors,
   GetMyCreditLedgerResponses,
 } from "./types.gen.js"
-import { zGetMyCreditAccountResponse, zGetMyCreditLedgerResponse } from "./zod.gen.js"
+import { zGetCatalogResponse, zGetMyCreditAccountResponse, zGetMyCreditLedgerResponse } from "./zod.gen.js"
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<
   TData,
@@ -29,6 +32,37 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
    */
   meta?: keyof ClientMeta extends never ? Record<string, unknown> : ClientMeta
 }
+
+/**
+ * Authenticated IAM user or complete web-bff machine credentials; tenant uses the canonical u1 identity header. Machine subject is optional but must be a unique valid u1 subject if present. Partial machine identity never falls back to user authentication.
+ */
+export const getCatalog = <ThrowOnError extends boolean = false>(
+  options: Options<GetCatalogData, ThrowOnError>,
+): RequestResult<GetCatalogResponses, GetCatalogErrors, ThrowOnError> =>
+  (options.client ?? client).get<GetCatalogResponses, GetCatalogErrors, ThrowOnError>({
+    responseValidator: async (data) => await zGetCatalogResponse.parseAsync(data),
+    security: [
+      { name: "x-kokoro-tenant-id", type: "apiKey" },
+      {
+        key: "userBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+      {
+        key: "serviceCaller",
+        name: "x-kokoro-service",
+        type: "apiKey",
+      },
+      { name: "x-kokoro-internal-secret", type: "apiKey" },
+      {
+        key: "serviceBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
+    url: "/v2/commerce/catalog",
+    ...options,
+  })
 
 export const getMyCreditAccount = <ThrowOnError extends boolean = false>(
   options: Options<GetMyCreditAccountData, ThrowOnError>,

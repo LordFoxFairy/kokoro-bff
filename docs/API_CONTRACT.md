@@ -1,6 +1,6 @@
-## SET-15 Catalog 固定消费者与未开放 checkout（2026-10-13，实施前）
+## SET-15 Catalog 固定消费者与未开放 checkout（2026-10-13，候选已实施）
 
-保持现public15.0.0 listBillingPlans、BillingPlan七字段及所有operation不变；正式依赖等待Billing已审exp4不可变commit/digest（required offer_key为owner strict breaking），以原字节vendor与正常generator替换exp3单pin。新增唯一generated getCatalog，并保原两本人读。严格消费GET /v2/commerce/catalog的data.items/page与闭集item；完整有界分页后一次投影，合法终页items=[]才是空目录，失败不转空/不截尾。金额/积分保持decimal string。
+保持现public15.0.0 listBillingPlans、BillingPlan七字段及所有operation不变；已固定Billing ba98badab9445ae676a8f48faa55912d42ce5d2e的exp4与SHA2568a3d12cf7517e7ee6cb2958b740bb69ab4831d38a383e61aca383b5fd1e8b27a（required offer_key为owner strict breaking），以原字节vendor与正常generator替换exp3单pin。新增唯一generated getCatalog，并保原两本人读。严格消费GET /v2/commerce/catalog的data.items/page与闭集item；完整有界分页后一次投影，合法终页items=[]才是空目录，失败不转空/不截尾。金额/积分保持decimal string；真实运行组合与浏览器验收仍待Root。
 
 plans失败统一现public允许503 billing_unavailable，不新增未声明502、不转owner错误正文/身份或任意status。认证来源为当前IAM admission，可信tenant编码与独立Billing service/internal/Bearer因素；任何缺失/错配/取消/畸形owner响应关闭失败。checkout继续现入站校验后明确503 billing_unavailable且无owner I/O，移除旧v1双读/写路径；不修改公开成功shape或借目录修复开放支付。重定向、未知字段、非终页空items、循环cursor/重复revision或key、预算耗尽都不得返回部分成功。
 

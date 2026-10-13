@@ -1,6 +1,6 @@
 ## SET-15 Billing Catalog 单 pin 配对（2026-10-13）
 
-等待Root接收已审Billing exp4不可变commit/version/digest后，原字节替换contract/vendor/kokoro-billing单pin，正常generator增加唯一getCatalog并保原本人两读；删除旧vendor而非双pin或手改generated。新required offer_key是owner strict breaking，只限本次自有隔离开发配对，不激活main/日常/生产或声称未知consumer已更新。public15.0.0 canonical无字段/operation变更，plans错误只用现503 ErrorEnvelope。checkout保入站校验后503不可用零owner I/O，不引用旧v1目录/checkout。机器当前owner与generator一致后才实现runtime；完成需Root精确组合及真实浏览器，而不是generator通过。
+已固定Billing ba98badab9445ae676a8f48faa55912d42ce5d2e的3.0.0-experimental.4，artifact SHA256为8a3d12cf7517e7ee6cb2958b740bb69ab4831d38a383e61aca383b5fd1e8b27a，原字节替换contract/vendor/kokoro-billing单pin，正常generator增加唯一getCatalog并保原本人两读；旧vendor已删除。新required offer_key是owner strict breaking，只限本次自有隔离开发配对，不激活main/日常/生产或声称未知consumer已更新。public15.0.0 canonical无字段/operation变更，plans错误只用现503 ErrorEnvelope。checkout保入站校验后503不可用零owner I/O，不引用旧v1目录/checkout。机器当前owner与generator已一致，源码候选已实施；完成仍需Root精确组合及真实浏览器。
 
 ## SET-13 Team 完整权限开发配对裁决（2026-10-13）
 

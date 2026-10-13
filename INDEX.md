@@ -113,7 +113,7 @@ Conversation/Message/Share canonical facts，以及 durable AG-UI stream/source-
 - Team 只读投影：`src/http/routes/team.ts` 与 `src/infrastructure/clients/iam-team.ts`；事实和分页 cursor 仍由 IAM 拥有
 - 资源说明：[`docs/api/README.md`](./docs/api/README.md)
 - AG-UI：[`docs/api/v1/agui-chat.md`](./docs/api/v1/agui-chat.md)
-- System / Model / Billing / Capability：当前由 `src/http/routes/owner.ts` 投影
+- System / Model / Billing / Capability：当前由 `src/http/routes/owner.ts` 投影；Billing 套餐目录经 `src/infrastructure/clients/owner/billing-catalog.ts` 消费固定 owner generated client，完整分页后投影，checkout 未开放。
 - Library：IAM admission 后由 `src/http/routes/library-file-list.ts`、`src/http/library-file-list-input.ts` 与
   `src/infrastructure/clients/storage/personal-file-list.ts` 消费 Storage personal Connect 列表；`kind=file` 必填，
   只投影 CLEAN ASSET。个人上传由 `src/http/routes/personal-file-upload.ts`、

@@ -3,7 +3,7 @@ import type { IncomingMessage, ServerResponse } from "node:http"
 import type { BffConfig } from "../../config/runtime.js"
 import { failure, ok } from "../../contracts/index.js"
 import { proxyUpstream } from "../../upstream.js"
-import { billingPlansData, checkoutUrlData, modelCatalogData } from "../../application/projections.js"
+import { modelCatalogData } from "../../application/projections.js"
 import { ownerIdentityHeaders } from "../../infrastructure/clients/owner/identity.js"
 import { reply } from "../response.js"
 import { normalizeSystemUpstreamResponse, normalizeUpstreamResponse } from "../../infrastructure/clients/upstream-response.js"
@@ -12,6 +12,7 @@ import type { RequestContext } from "../../domain/request-context.js"
 import type { IdempotencyEntry, MutationTicket } from "../../application/idempotency.js"
 import type { LiveOwnerResult } from "./types.js"
 import { livePlatformProjectionRead } from "./platform-projection.js"
+import { readBillingCatalog } from "../../infrastructure/clients/owner/billing-catalog.js"
 import { readBillingCreditAccount, readBillingCreditLedger } from "../../infrastructure/clients/owner/billing-personal-read.js"
 
 function billingLedgerQuery(request: IncomingMessage): Readonly<{ limit: number; cursor?: string }> | null {
@@ -181,24 +182,29 @@ export async function liveOwnerBusiness(
   }
 
   if (businessPath[0] === "billing" && businessPath[1] === "plans" && businessPath.length === 2 && method === "GET") {
-    const result = await liveOwnerRequest(request, config, context, "billing", "/v1/commerce/catalog", method)
-    if (result.status >= 400) {
-      await reply(response, result.status, result.body, context, idempotency, mutation)
-      return true
+    const abort = new AbortController()
+    const onAbort = (): void => abort.abort()
+    const onClose = (): void => {
+      if (!response.writableEnded) abort.abort()
     }
-    const projected = billingPlansData(result.body)
-    if (projected === null) {
-      await reply(
-        response,
-        502,
-        failure("upstream_response_invalid", "Billing catalog did not match the v1 owner contract", context.requestId),
-        context,
-        idempotency,
-        mutation,
-      )
-      return true
+    request.once("aborted", onAbort)
+    response.once("close", onClose)
+    if (request.aborted || response.destroyed) abort.abort()
+    try {
+      const result = await readBillingCatalog(config, context, abort.signal)
+      if (!response.destroyed)
+        await reply(
+          response,
+          result.ok ? 200 : 503,
+          result.ok ? ok({ plans: result.plans }, context.requestId) : failure("billing_unavailable", "Billing catalog is unavailable", context.requestId),
+          context,
+          idempotency,
+          mutation,
+        )
+    } finally {
+      request.removeListener("aborted", onAbort)
+      response.removeListener("close", onClose)
     }
-    await reply(response, result.status, ok(projected, context.requestId), context, idempotency, mutation)
     return true
   }
 
@@ -208,48 +214,7 @@ export async function liveOwnerBusiness(
       await reply(response, 400, failure("invalid_checkout", "plan_id is required", context.requestId), context, idempotency, mutation)
       return true
     }
-    const catalogResult = await liveOwnerRequest(request, config, context, "billing", "/v1/commerce/catalog", "GET")
-    if (catalogResult.status >= 400) {
-      await reply(response, catalogResult.status, catalogResult.body, context, idempotency, mutation)
-      return true
-    }
-    const catalog = billingPlansData(catalogResult.body)
-    const plan = catalog?.plans.find((candidate) => candidate.id === planId)
-    if (plan === undefined) {
-      await reply(response, 404, failure("plan_not_found", "Billing plan was not found", context.requestId), context, idempotency, mutation)
-      return true
-    }
-    const checkoutBody = Buffer.from(
-      JSON.stringify({
-        offer_revision_id: plan.id,
-        amount_minor: plan.amount_minor,
-        currency: plan.currency,
-        quote_snapshot: {
-          key: plan.key,
-          credit_micros: plan.credit_micros,
-          name: plan.name,
-          plan_id: plan.id,
-        },
-      }),
-    )
-    const checkoutResult = await liveOwnerRequest(request, config, context, "billing", "/v1/billing/checkout", method, checkoutBody)
-    if (checkoutResult.status >= 400) {
-      await reply(response, checkoutResult.status, checkoutResult.body, context, idempotency, mutation)
-      return true
-    }
-    const projected = checkoutUrlData(checkoutResult.body)
-    if (projected === null) {
-      await reply(
-        response,
-        502,
-        failure("upstream_response_invalid", "Billing checkout did not return a checkout URL", context.requestId),
-        context,
-        idempotency,
-        mutation,
-      )
-      return true
-    }
-    await reply(response, checkoutResult.status, ok(projected, context.requestId), context, idempotency, mutation)
+    await reply(response, 503, failure("billing_unavailable", "Billing checkout is unavailable", context.requestId), context, idempotency, mutation)
     return true
   }
 

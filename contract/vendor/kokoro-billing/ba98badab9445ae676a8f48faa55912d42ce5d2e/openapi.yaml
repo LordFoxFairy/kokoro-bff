@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Billing Internal Owner API
-  version: 3.0.0-experimental.3
+  version: 3.0.0-experimental.4
   description: Experimental clean-slate target contract; not deployed.
 servers:
   - url: https://billing.internal
@@ -87,8 +87,25 @@ paths:
           serviceCaller: []
           internalSecret: []
           serviceBearer: []
+      description: Authenticated IAM user or complete web-bff machine credentials; tenant uses the canonical u1 identity header. Machine subject is optional but must be a unique valid u1 subject if present. Partial machine identity never falls back to user authentication.
+      x-kokoro-identity-transport: catalog-identity-u1
+      x-kokoro-auth-selection:
+        machine_markers:
+          - x-kokoro-service
+          - x-kokoro-internal-secret
+          - x-kokoro-subject
+        service_bearer_selects_machine: true
+        machine_partial_response: 403
+        machine_to_user_fallback: false
       parameters:
-        - $ref: "#/components/parameters/TenantId"
+        - $ref: "#/components/parameters/PersonalTenantId"
+        - $ref: "#/components/parameters/PersonalSubjectId"
+        - name: x-kokoro-service
+          in: header
+          required: false
+          schema:
+            type: string
+            const: web-bff
         - $ref: "#/components/parameters/Limit"
         - $ref: "#/components/parameters/Cursor"
       responses:
@@ -2720,6 +2737,7 @@ components:
       type: object
       additionalProperties: false
       required:
+        - offer_key
         - offer_revision_id
         - name
         - amount_minor
@@ -2727,6 +2745,10 @@ components:
         - credit_micros
         - billing_interval
       properties:
+        offer_key:
+          type: string
+          minLength: 1
+          maxLength: 255
         offer_revision_id:
           $ref: "#/components/schemas/Uuid"
         name:
