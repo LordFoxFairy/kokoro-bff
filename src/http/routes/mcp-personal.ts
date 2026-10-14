@@ -260,7 +260,9 @@ export async function mcpPersonalRoute(
           : validateMcpPersonalPublic(operation as McpPersonalOperation, result, input)
     const [sessionOutcome, actionOutcome] = await within(
       Promise.allSettled([
-        authorizeUserRequest(request, config, composition.sessionAdmission, context.requestId, controller.signal),
+        mutation
+          ? authorizeUserRequest(request, config, composition.sessionAdmission, context.requestId, controller.signal)
+          : Promise.resolve(initialAdmission),
         authorizeMcpAction(composition.mcpAuthorization, initialAdmission, mutation ? "manage" : "read", controller.signal),
       ]),
     )

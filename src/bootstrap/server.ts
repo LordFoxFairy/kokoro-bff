@@ -260,6 +260,7 @@ async function handle(
   if (hasSkillsBudget) startSkillRequestBudget(request)
   const mcpAction = mcpActionForRequest(request.method ?? "GET", businessPath)
   const isMcpPersonalOperation = browserPrivateMcp && mcpPersonalOperation(businessPath, request.method ?? "GET") !== null
+  const defersMcpPersonalReadAction = isMcpPersonalOperation && request.method === "GET"
   const isMcpProviderAdminOperation = !browserPrivateMcp && mcpProviderAdminOperation(businessPath, request.method ?? "GET") !== null
   if (browserPrivateMcp && !isMcpPersonalOperation) {
     send(response, 404, failure("route_not_found", "Route was not found", id))
@@ -365,7 +366,7 @@ async function handle(
   const admissionWork = Promise.resolve()
     .then(() => authorizeUserRequest(request, config, composition.sessionAdmission, id, admissionAbort.signal))
     .then(async (result) => {
-      if (result.ok && mcpAction !== null) {
+      if (result.ok && mcpAction !== null && !defersMcpPersonalReadAction) {
         admissionAbort.signal.throwIfAborted()
         if (mcpRequestRemaining(request) <= 0) throw new Error("mcp_admission_deadline")
         const checked = await authorizeMcpAction(composition.mcpAuthorization, result, mcpAction, admissionAbort.signal)

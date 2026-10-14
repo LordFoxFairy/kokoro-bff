@@ -142,6 +142,24 @@ const connection = {
   policy_digest: "a".repeat(64),
   status: "active",
 }
+for (const [path, response] of [
+  ["/browser/v1/mcp/providers", { items: [], next_cursor: null }],
+  ["/browser/v1/mcp/connectors", { items: [connector], next_cursor: null }],
+])
+  test(`personal read performs one session verification and one current action check: ${path}`, async () => {
+    const f = await fixture(true, {
+      realSession: true,
+      mcpPersonalClient: { read: async () => response },
+    })
+    try {
+      const result = await fetch(f.origin + path, { headers })
+      assert.equal(result.status, 200)
+      assert.equal(f.seen.filter(({ path: ownerPath }) => ownerPath === "/internal/v1/session-authorizations/verify").length, 1)
+      assert.equal(f.seen.filter(({ path: ownerPath }) => ownerPath === "/internal/v1/authorization/check").length, 1)
+    } finally {
+      await f.close()
+    }
+  })
 for (const path of paths.slice(2))
   test(`personal read admitted through guard: ${path}`, async () => {
     const reads = []
@@ -256,29 +274,57 @@ test("returns unavailable for missing personal composition while keeping active 
 })
 test("rechecks current action after owner read and never returns withdrawn data", async () => {
   let checks = 0
+  let ownerDone = false
   const f = await fixture(true, {
-    check: async () => (++checks === 1 ? { ok: true } : { ok: false, status: 403, code: "session_forbidden" }),
-    mcpPersonalClient: { read: async () => ({ items: [connector], next_cursor: null }) },
+    check: async () => {
+      checks++
+      assert.equal(ownerDone, true)
+      return { ok: false, status: 403, code: "session_forbidden" }
+    },
+    mcpPersonalClient: {
+      read: async () => {
+        ownerDone = true
+        return { items: [connector], next_cursor: null }
+      },
+    },
   })
   try {
     const response = await fetch(`${f.origin}/browser/v1/mcp/connectors`, { headers })
     assert.equal(response.status, 403)
     assert.equal((await response.json()).error.code, "session_forbidden")
-    assert.equal(checks, 2)
+    assert.equal(checks, 1)
   } finally {
     await f.close()
   }
 })
-test("same request cannot return data after subject replacement", async () => {
-  let checks = 0
+test("post-owner action check remains bound to the initially admitted tenant and subject", async () => {
+  let verifies = 0
+  let captured
+  let ownerDone = false
   const f = await fixture(true, {
-    verify: async () => ({ ok: true, identity: { namespace: "tenant-server", userId: ++checks === 1 ? "human-one" : "human-two" }, platformAdmin: false }),
-    mcpPersonalClient: { read: async () => ({ items: [connector], next_cursor: null }) },
+    verify: async () => {
+      verifies++
+      return { ok: true, identity: { namespace: "tenant-server", userId: "human-one" }, platformAdmin: false }
+    },
+    check: async (value) => {
+      assert.equal(ownerDone, true)
+      captured = value
+      return { ok: true }
+    },
+    mcpPersonalClient: {
+      read: async () => {
+        ownerDone = true
+        return { items: [connector], next_cursor: null }
+      },
+    },
   })
   try {
     const response = await fetch(`${f.origin}/browser/v1/mcp/connectors`, { headers })
-    assert.equal(response.status, 404)
-    assert.equal((await response.json()).error.code, "mcp_personal_not_found")
+    assert.equal(response.status, 200)
+    assert.equal(verifies, 1)
+    assert.equal(captured.tenantId, "tenant-server")
+    assert.equal(captured.subjectId, "human-one")
+    assert.equal(captured.action, "read")
   } finally {
     await f.close()
   }
@@ -337,32 +383,23 @@ test("caller disconnect cancels the personal owner read without late response", 
   }
 })
 
-test("post-owner fresh checks start together and wait for both before releasing data", async () => {
+test("post-owner current action check blocks release without repeating session verification", async () => {
   let verifies = 0
   let checks = 0
   let ownerDone = false
-  let releaseVerify
   let releaseCheck
-  let enteredVerify
   let enteredCheck
-  const verifyStarted = new Promise((resolve) => {
-    enteredVerify = resolve
-  })
   const checkStarted = new Promise((resolve) => {
     enteredCheck = resolve
   })
   const identity = { ok: true, identity: { namespace: "tenant-server", userId: "human-one" }, platformAdmin: false }
   const f = await fixture(true, {
     verify: async () => {
-      if (++verifies === 1) return identity
-      assert.equal(ownerDone, true)
-      enteredVerify()
-      return new Promise((resolve) => {
-        releaseVerify = resolve
-      })
+      verifies++
+      return identity
     },
     check: async () => {
-      if (++checks === 1) return { ok: true }
+      checks++
       assert.equal(ownerDone, true)
       enteredCheck()
       return new Promise((resolve) => {
@@ -384,24 +421,21 @@ test("post-owner fresh checks start together and wait for both before releasing 
   let timeout
   try {
     await Promise.race([
-      Promise.all([verifyStarted, checkStarted]),
+      checkStarted,
       new Promise((_, reject) => {
-        timeout = setTimeout(() => reject(new Error("post checks did not start concurrently")), 500)
+        timeout = setTimeout(() => reject(new Error("post-owner check did not start")), 500)
       }),
     ])
     clearTimeout(timeout)
-    releaseCheck({ ok: true })
     await new Promise((resolve) => setTimeout(resolve, 20))
     assert.equal(completed, false)
-    releaseVerify(identity)
+    releaseCheck({ ok: true })
     const response = await pending
     assert.equal(response.status, 200)
-    assert.equal(verifies, 2)
-    assert.equal(checks, 2)
+    assert.equal(verifies, 1)
+    assert.equal(checks, 1)
   } finally {
     clearTimeout(timeout)
-    releaseVerify?.(identity)
-    await verifyStarted
     await checkStarted
     releaseCheck?.({ ok: true })
     await pending
@@ -409,66 +443,66 @@ test("post-owner fresh checks start together and wait for both before releasing 
   }
 })
 
-test("post-owner session failure takes priority over concurrent action denial", async () => {
+test("post-owner current action check preserves revoked session denial", async () => {
   let verifies = 0
   let checks = 0
+  let ownerDone = false
   const f = await fixture(true, {
-    verify: async () =>
-      ++verifies === 1
-        ? { ok: true, identity: { namespace: "tenant-server", userId: "human-one" }, platformAdmin: false }
-        : { ok: false, status: 401, code: "session_invalid" },
-    check: async () => (++checks === 1 ? { ok: true } : { ok: false, status: 403, code: "session_forbidden" }),
-    mcpPersonalClient: { read: async () => ({ items: [connector], next_cursor: null }) },
+    verify: async () => {
+      verifies++
+      return { ok: true, identity: { namespace: "tenant-server", userId: "human-one" }, platformAdmin: false }
+    },
+    check: async () => {
+      checks++
+      assert.equal(ownerDone, true)
+      return { ok: false, status: 401, code: "session_invalid" }
+    },
+    mcpPersonalClient: {
+      read: async () => {
+        ownerDone = true
+        return { items: [connector], next_cursor: null }
+      },
+    },
   })
   try {
     const response = await fetch(`${f.origin}/browser/v1/mcp/connectors`, { headers })
     assert.equal(response.status, 401)
     assert.equal((await response.json()).error.code, "session_invalid")
-    assert.equal(verifies, 2)
-    assert.equal(checks, 2)
+    assert.equal(verifies, 1)
+    assert.equal(checks, 1)
   } finally {
     await f.close()
   }
 })
 
-test("post-owner action rejection waits for later session denial and preserves 401", async () => {
+test("post-owner action transport failure does not leak the owner response", async () => {
   let verifies = 0
   let checks = 0
-  let releaseSession
-  let actionRejected
-  const rejected = new Promise((resolve) => {
-    actionRejected = resolve
-  })
+  let ownerDone = false
   const f = await fixture(true, {
-    verify: async () =>
-      ++verifies === 1
-        ? { ok: true, identity: { namespace: "tenant-server", userId: "human-one" }, platformAdmin: false }
-        : new Promise((resolve) => {
-            releaseSession = resolve
-          }),
+    verify: async () => {
+      verifies++
+      return { ok: true, identity: { namespace: "tenant-server", userId: "human-one" }, platformAdmin: false }
+    },
     check: async () => {
-      if (++checks === 1) return { ok: true }
-      actionRejected()
+      checks++
+      assert.equal(ownerDone, true)
       throw new Error("action_transport_failure")
     },
-    mcpPersonalClient: { read: async () => ({ items: [connector], next_cursor: null }) },
-  })
-  let completed = false
-  const pending = fetch(`${f.origin}/browser/v1/mcp/connectors`, { headers }).then((response) => {
-    completed = true
-    return response
+    mcpPersonalClient: {
+      read: async () => {
+        ownerDone = true
+        return { items: [connector], next_cursor: null }
+      },
+    },
   })
   try {
-    await rejected
-    await new Promise((resolve) => setTimeout(resolve, 30))
-    assert.equal(completed, false)
-    releaseSession({ ok: false, status: 401, code: "session_invalid" })
-    const response = await pending
-    assert.equal(response.status, 401)
-    assert.equal((await response.json()).error.code, "session_invalid")
+    const response = await fetch(`${f.origin}/browser/v1/mcp/connectors`, { headers })
+    assert.equal(response.status, 503)
+    assert.equal((await response.json()).error.code, "mcp_personal_dependency_unavailable")
+    assert.equal(verifies, 1)
+    assert.equal(checks, 1)
   } finally {
-    releaseSession?.({ ok: false, status: 401, code: "session_invalid" })
-    await pending
     await f.close()
   }
 })
