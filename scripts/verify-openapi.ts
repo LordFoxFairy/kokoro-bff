@@ -1,3 +1,4 @@
+import { restorePublic152SharedTasksContract, sharedTasksParentBaseline } from "./shared-tasks-public-contract.mjs"
 import { restorePublic151AccountProfileContract, accountProfileParentBaseline } from "./account-profile-public-contract.mjs"
 import { restorePublic15AccountSessionContract, accountSessionParentBaseline } from "./account-session-public-contract.mjs"
 import { inspectSkillProductContract } from "./verify-skill-product-contract.mjs"
@@ -3133,6 +3134,10 @@ export function restorePublic15TeamPermissionsContract(source: string): string {
 
 export function inspectBffOpenApi(source: string, baseline: readonly BaselineOperation[]): string[] {
   try {
+    if (/^  version: 15\.3\.0$/mu.test(source)) {
+      source = restorePublic152SharedTasksContract(source)
+      baseline = sharedTasksParentBaseline(baseline)
+    }
     if (/^  version: 15\.2\.0$/mu.test(source)) {
       source = restorePublic151AccountProfileContract(source)
       baseline = accountProfileParentBaseline(baseline)

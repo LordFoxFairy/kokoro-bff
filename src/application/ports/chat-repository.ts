@@ -61,7 +61,20 @@ export type MoveConversationCommand = Readonly<{
   signal: AbortSignal
 }>
 
+export type SharedTasksPosition = Readonly<{ sharedAt: string; sessionId: string }>
+export type SharedTaskItem = Readonly<{ session_id: string; title: string; shared_at: string; expires_at: string | null }>
+export type SharedTasksRead = Readonly<{ items: SharedTaskItem[]; nextPosition: SharedTasksPosition | null }>
+export type SharedTasksPage = Readonly<{ items: SharedTaskItem[]; next_cursor: string | null }>
+
 export type ChatRepository = {
+  listOwnedSharedTasks(
+    tenantId: string,
+    subjectId: string,
+    limit: number,
+    position: SharedTasksPosition | null,
+    signal: AbortSignal,
+    deadlineAt: number,
+  ): Promise<SharedTasksRead>
   listConversations(tenantId: string, subjectId: string, filter: ConversationCollectionFilter, limit: number, cursor: string | null): Promise<ConversationPage>
   findConversation(tenantId: string, subjectId: string, conversationId: string, projectRef: string | undefined): Promise<Conversation | null>
   readSnapshot(tenantId: string, subjectId: string, conversationId: string, projectRef: string | undefined): Promise<ChatSnapshot | null>

@@ -1,3 +1,4 @@
+import { sharedTasksRoute } from "../http/routes/shared-tasks.js"
 import { accountProfileRoute } from "../http/routes/account-profile.js"
 import { mcpPersonalOperation, mcpPersonalRoute } from "../http/routes/mcp-personal.js"
 import { mcpProviderAdminOperation, mcpProviderAdminRoute } from "../http/routes/mcp-provider-admin.js"
@@ -101,6 +102,10 @@ async function handle(
   response.setHeader("x-request-id", id)
   if (request.method === "PATCH" && (request.url === "/v1/account/profile" || request.url?.startsWith("/v1/account/profile?"))) {
     await accountProfileRoute(request, response, config, composition.sessionAdmission, id)
+    return
+  }
+  if (request.method === "GET" && (request.url === "/v1/account/shared-tasks" || request.url?.startsWith("/v1/account/shared-tasks?"))) {
+    await sharedTasksRoute(request, response, config, composition.sessionAdmission, composition.businessStore?.services.chat, id)
     return
   }
   const rawPathname = new URL(request.url || "/", "http://bff.local").pathname
@@ -1052,6 +1057,9 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
         if (request.method === "PATCH" && (request.url === "/v1/account/profile" || request.url?.startsWith("/v1/account/profile?"))) {
           response.setHeader("x-request-id", requestId(request))
           send(response, 500, { error: { code: "internal_error", message: "The BFF encountered an internal error", retryable: false } })
+        } else if (request.method === "GET" && (request.url === "/v1/account/shared-tasks" || request.url?.startsWith("/v1/account/shared-tasks?"))) {
+          response.setHeader("x-request-id", requestId(request))
+          send(response, 503, { error: { code: "shared_tasks_unavailable", message: "shared_tasks_unavailable", retryable: true } })
         } else send(response, 500, failure("internal_error", "The BFF encountered an internal error", requestId(request)))
       } else response.destroy()
     })

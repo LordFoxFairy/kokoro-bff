@@ -3,6 +3,11 @@
   "operations": [
     {
       "method": "GET",
+      "path": "/v1/account/shared-tasks",
+      "operation_id": "listOwnedSharedTasks"
+    },
+    {
+      "method": "GET",
       "path": "/v1/preferences/personalization",
       "operation_id": "getSelfPersonalization"
     },

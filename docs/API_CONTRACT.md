@@ -1,3 +1,23 @@
+## SET-21 已验证的 public15.3（2026-10-15）
+
+canonical新增GET /v1/account/shared-tasks / listOwnedSharedTasks，public15.3.0/146全文SHA256 694251d4f4c1bcc9a79ae4fd2d4c050c87a0a8af39bea0a9f0bed3a4dcae5ad5。独审/Root纯门与真实HTTP/数据库验证通过；完整15.2/145逆恢复、原操作字段和旧oracle保持。响应只有安全四字段，UTC毫秒符合canonical TIMESTAMPTZ(3)，同刻ID明确C/UTF8字节序。下文既定闭集/预算/权限/错误语义已实现；正常Web页面待正式发行后消费，不能把纯门/PG样本当浏览器验收。
+
+## SET-21 本人任务分享列表（2026-10-15；Root真实RED后具名源码准入）
+
+title保正规旧Chat字符串，不增加trim/全长200猜测或截断；shared_at降序的同毫秒session_id按UTF8字节升序（SQL COLLATE "C"），keyset比较同一规则，不依服务器locale或JS UTF16顺序。此新增排序说明须进机器合同和负控，原145面保持。
+
+Root真实缺operation/版本/响应断言RED已复现。现按CURRENT表授canonical机器和具名实现；发行仍需冻结独审、Root复验及真实owner事实验证，拟15.3不得提前称为正式可消费。
+
+目标新增一个GET /v1/account/shared-tasks / listOwnedSharedTasks，owner=kokoro-bff、visibility=public、stability=beta、idempotency=none、permission=chat.read。身份唯一原browser-service+Product Bearer在线准入和配置tenant；只列当前本人拥有可见的有效Conversation分享。发行前保持当前15.2/145，拟additive15.3/146先过完整逆恢复。
+
+query只limit（缺省20、canonical十进制1..100）、cursor（缺省首屏，存在非空≤2048）；拒重复/未知参数、坏percent/UTF8、非GET/body framing、Content-Encoding/Idempotency-Key。sht1_ canonical base64url(JSON)，closed kind=shared_tasks、tenantId、subjectId、limit、sharedAt/sessionId anchor；fatal UTF8、BOM、重复decoded key、错误日期/身份/limit拒绝。cursor可编辑而非不可伪造身份，SQL每次重新过滤本人。UTC毫秒、shared_at DESC/session_id ASC keyset，不承诺跨页快照。
+
+200 closed {data:{items:[{session_id,title,shared_at,expires_at}],next_cursor:string|null}}；最多limit条，同页session唯一且顺序合法，next存在必须有实际末条和后续候选，空页next=null。session_id/title沿现Chat合法原字符串，shared_at为Share.created_at，expires_at为真实nullable UTC时间；不公开share_id/url/capability，不推导完成状态。x-request-id只header、no-store/JSON，总响应≤1MiB，无新meta.request_id。原分享创建/撤销data.share_id+meta合同不改。
+
+新endpoint closed错误{error:{code,message,retryable}}，无meta/details/SQL信息。status/code：400 shared_tasks_input_invalid；401 session_authentication_required/session_invalid；403 service_auth_failed/session_forbidden/product_tenant_forbidden；429 session_rate_limited；503 product_tenant_not_configured/iam_admission_unavailable/shared_tasks_unavailable。429/503 retryable=true，其余false；429 Retry-After可缺省，存在沿现admission/send为canonical1..86400，其他状态无该头。未公开错误归503 shared_tasks_unavailable，不透任意code/message，不修改通用send/admission；本精确GET的外层catch同closed503。
+
+route入口单10s上限含准入/输入/DB/输出，停止/逾时无新查询或输出，零自动retry。invalid/anonymous零repository I/O；cursor跨身份/tenant/limit不得进SQL，missing live store503而非假空。唯一machine为canonical OpenAPI及正规inventory；Root三设计已独审无确定P1/P2；当前Web接收后另授机器/源实现。下方历史面字节保持。
+
 ## SET-19 本人姓名 public PATCH（2026-10-15；已实现并通过真实owner验证）
 
 当前canonical public15.2.0/145全文SHA256 3214e32d273fbc514db1c1f2307f7855b623f1f613fb1da710cc51d23c41f453；正式IAM消费、独审、Root真实保存/CAS/权限/撤销验收见CURRENT顶部。Web消费与实际页面闭环仍未验收。

@@ -1,3 +1,28 @@
+## SET-21 本人分享列表源码及真实 owner 验证已接收（2026-10-15）
+
+冻结24 writer（16既有/8新）及631原保护路径由Root独立逐SHA/范围核对，四Root设计文另计；终态独审无剩余确定P1/P2。新GET /v1/account/shared-tasks只安全四字段、本人有效Share/Conversation与非NULL Project父校验、单请求预算；public15.3.0/146全文SHA256 694251d4f4c1bcc9a79ae4fd2d4c050c87a0a8af39bea0a9f0bed3a4dcae5ad5，完整15.2/145逆恢复保持。Root专项83PASS、生产build成功。作者lint/type/build与semantic/inventory通过；正常contract764PASS/2既有FAIL，default1354PASS/3既有FAIL/3SKIP，architecture36PASS/1原缺模块失败，format保七旧警告，不冒全门通过。
+
+Root实际HTTP→PostgreSQL1项通过：正规message创建三Conversation→share→安全分页→foreign空→revoke→重读/public404，合法旧标题/Unicode IDs保持，读取前后Share/Conversation/Project事实不变，到期与空project_ref排除。idle worker未执行模型，不冒正常聊天或浏览器正向。合成5000分享/10owner/本人500条读取100条25样本（排除两warmup）p50 1.87ms/p95 3.12ms；实际EXPLAIN执行1.38ms。真实自有锁等待150.94ms到期后同pool再读成功；指标只该本地合成查询含lease/readonly事务，不含HTTP/UI/生产负载。fixture仅新自有库，收尾核10个数据库名称及Redis测试库原零key集合精确恢复，正常服务未停。
+
+原输入真实1PASS/4FAIL与标题/C排序3FAIL输出保留。canonical Share.created_at/expires_at是TIMESTAMPTZ(3)，故与公开UTC毫秒一致；不存在未经证明的微秒迁移需求，不改schema或旧Share API。Root将沿同功能分支/现draft PR正式发行供Web SET21/22消费；Data/Help页面与正常CUA旅程仍后继，完整设置Goal active，Skills/连接器排除。下方任务卡为阶段历史。
+
+## SET-21-BFF 分享列表任务卡（2026-10-15；Root真实RED复现，具名源码准入）
+
+Root固定Node22实际复现两具名测试5项：1PASS/4断言FAIL，合法GET404而非200、非法query404而非400、15.3版本及新增闭集operation缺失。没有编译或缺模块冒RED。651原tracked中647保护hash及两测试冻结hash独立保持。现准入下表既定源码、机器与纯测试集给billing_scheduler_audit唯一writer；Root四docs/INDEX/Git/正常运行/真实资源保留，禁止worker资源操作。原tests-only段保留作为阶段证据，后继范围以本段及下表为准。
+
+基线a88e710d2201342200017f44c2bc34325937b5d0 / 651 tracked clean；Root保存原hash。三设计新增文首方案：沿现Chat/Share owner、单有界本人查询、安全四字段列表、无签名且身份绑定cursor；不新DDL/配置/secret/owner。Web SET20源码已由Root独立复跑174专项、实际HTTP5项/重定向2项及build后接收并提交26695df；其正常集成/browser继续由Root持有。本片现仅准入下列具名tests-only，仍未授机器/source。现正式public15.2/145 SHA2563214e32d273fbc514db1c1f2307f7855b623f1f613fb1da710cc51d23c41f453，拟15.3/146必须完整逆恢复旧面。
+
+| 范围 | 后继允许集（当前仅下方tests-only，其余待真RED） |
+| --- | --- |
+| Owner / 分工 | BFF；billing_scheduler_audit后继唯一源码writer，storage_platform_audit只读独审，Root四docs/INDEX/Git/真实资源/发行 |
+| 新普通源 | src/http/shared-tasks-input.ts；src/http/routes/shared-tasks.ts；src/infrastructure/postgres/shared-tasks.ts；无新目录/module |
+| 现源 | src/application/ports/chat-repository.ts只本read类型/签名；src/application/chat-service.ts只本query；src/infrastructure/postgres/chat-repository.ts只委托；src/bootstrap/server.ts只exact raw GET前分派/同shape兜底 |
+| 机器 / 正规门 | contract/openapi/v1/openapi.yaml新增唯一GET/closed新components/version15.3；contract/tests/v1-operations.json正规146；新scripts/shared-tasks-public-contract.mjs最外inverse，现verify-openapi.ts/check-contract.mjs仅最外接线，旧oracle不改；package.json仅具名test/contract/format登记，deps/lock不变 |
+| 测试 | 新test/shared-tasks-input.test.ts、shared-tasks-http.test.mjs、shared-tasks-contract.test.mjs、shared-tasks-repository.test.ts；现test/chat-facts.integration.mjs只新增具名真实事实场景（Root执行资源）；现test/chat-service.test.ts必要本read转发；现architecture/contract-governance/openapi-contract tests仅新注册/version/count及先还原15.2再委托原断言，旧语义保护；现test/account-profile-contract.test.mjs和account-sessions-contract.test.mjs仅先最外剥SET21回完整15.2/145，再执行原SET19/18断言及负控，旧hash/oracle不刷新 |
+| 门 / 保护 | 先现真实HTTP/机器缺口RED；D0独审与当前Web接收后另授。固定既有Node22/pnpm11纯门/freeze/651保护；Root独审/复验及真实PG/Redis/EXPLAIN再正式发行供Web，normal/browser不被纯绿替代。禁止worker Git/docs/INDEX/资源/服务/其他repo/Skills连接器/SQL DDL |
+
+当前四docs D0已独审无确定P1/P2，tests-only仅新增test/shared-tasks-http.test.mjs与test/shared-tasks-contract.test.mjs；HTTP测试调用原实际createBffServer（可构造仅本人read替身但不能伪造route），合法GET期望200及安全四字段、匿名和非法query/body零read；机器测试解析当前canonical新增operation/闭集应不存在，不能依赖不存在的module产生collection错误。先Root实际RED复现后才授source与其余测试，原651保护除四docs及两测试保持。明确只有project_ref IS NULL可无父、空串仍须匹配现父规则；normal组合保持，完整设置Goal active。性能、正常已有真实本人任务与浏览器正向未验，不伪造已齐备或要求用户为内部设计确认。
+
 ## SET-19-BFF 本人姓名保存验收（2026-10-15）
 
 本仓已完成本人 PATCH /v1/account/profile，canonical public15.2.0/145operations，全文SHA256 3214e32d273fbc514db1c1f2307f7855b623f1f613fb1da710cc51d23c41f453。唯一IAM消费固定c64faa7992301f31495e163d04049c48a23d0225/internal0.13.0；正常19operations生成，原18保留。独立V2窄审无剩余确定P1/P2；Root核27变更记录、621保护路径及原642tracked基线，三路径P2修补之外首冻字节保持。

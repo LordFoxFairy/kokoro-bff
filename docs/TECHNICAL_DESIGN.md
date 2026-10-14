@@ -1,3 +1,30 @@
+## SET-21 实现与验证状态（2026-10-15）
+
+已实现既定普通文件/原Chat委托及安全本人分享GET，终态冻结独审与Root83专项/build通过；Root正规HTTP和自有PG事实链、精确lease超时后的pool恢复及EXPLAIN通过，详见CURRENT。canonical Share时间为TIMESTAMPTZ(3)，新wire/cursor保持UTC毫秒；SQL同时间ID C字节排序与wire一致。没有schema/依赖/Secret/旧Chat实现改变。下面源码准入与D0叙述保留设计历史，正式消费者仍须固定当前commit及public15.3全文摘要，正常浏览器待验。
+
+## SET-21 本人任务分享列表（2026-10-15；Root真实RED后具名源码准入）
+
+Root预读补充保留规则：ChatSession.title正式只string，canonical SQL btrim只普通空格；新列表不得用JS trim或完整字符串200上限拒合法旧值。保原title，不截断或归一化，响应总界另约束。当前PG en_US.utf8的默认文本排序不等于JS UTF16顺序；本新query keyset和ORDER BY的session ID统一显式COLLATE "C"（UTF8字节升序），wire页校验同字节比较。普通旧Chat API/schema保持，不新DDL。
+
+当前实现阶段由本仓唯一writer billing_scheduler_audit按CURRENT具名表实施；Root已复现1PASS/4断言FAIL。Web SET20源码已接收，Root继续正常运行集成；本仓实现不访问测试资源。下方原D0阶段叙述保留，不作为当前尚未授源码的判断。
+
+正式前置a88e710d2201342200017f44c2bc34325937b5d0/public15.2.0/145已有本人Conversation分享创建/撤销与真实Share，缺本人有效分享列表。IAM c64/其他owner固定，不新数据库、模块、进程、配置、依赖或持久化副本。当前Web团队仍为唯一实现面；此刻只设计/独审，不授第二owner源码。
+
+| 放置项 | 决定 |
+| --- | --- |
+| Owner / 分工 | BFF独占Conversation/Share/Project事实与public API；billing_scheduler_audit后继唯一源码writer，storage_platform_audit只读独审，Root设计/docs/INDEX/Git/真实资源与发行。Web等待正式不可变发行后消费。 |
+| 当前事实 | 现ChatRepository/service/PostgresChatRepository承担分享。Share kind=conversation、created/expires/revoked，capability/url不能进入本列表。Conversation active/deleted，任何非NULL project_ref（含空串）须存在同tenant/本人未删除Project的ID或slug。无文件分享/归档/授权应用能力，不纳本片。 |
+| 位置比较 | A扩大/v1/sessions及通用cursor或AG-UI ledger：淘汰，混淆排序/生命周期或新增持久化。B沿现目录新增普通http/shared-tasks-input.ts（query/cursor）、http/routes/shared-tasks.ts（预算/准入/投影）；现Chat service/port接具名read，采用。普通infrastructure/postgres/shared-tasks.ts只承担这一个有界查询/leased client/row映射，现PostgresChatRepository委托；不把HTTP codec/授权/配置放repository，无新目录。 |
+| 输入 / cursor | GET /v1/account/shared-tasks，limit缺省20、1..100，cursor缺省首屏，存在非空≤2048。重复/未知参数、坏percent/UTF8、body framing、Content-Encoding或Idempotency-Key拒绝。sht1_ canonical base64url闭集JSON含kind、tenantId、subjectId、limit、sharedAt/sessionId；精确UTC毫秒。参照现Artifact模式，没有HMAC/key配置，不引签名secret。cursor可编辑、不是凭据；SQL每次重绑可信本人。fatal UTF8/BOM/重复decoded key/未知字段/身份或limit不符拒绝。 |
+| 请求生命周期 | server具名原始GET path在generic admission/mutation前分派；route入口单绝对min(config.upstreamTimeoutMs,10000)预算含metadata、原authorizeUserRequest、cursor、pool/SQL、编码与最后active核。parent abort/response close退休；迟到准入零DB、迟到结果零输出。沿原Product browser-service+Bearer+fixed tenant，不另建认证，不自动重试。 |
+| 数据I/O | Query port带可信tenant/subject、limit/position与signal/deadline，复用原pool。沿本仓bounded leased-client模式：迟到connect release；pending SQL取消/超时仅销毁精确leased client，不pool.end/停共享资源。只读事务内设置剩余statement/lock预算，query/COMMIT/cleanup同deadline，未结束事务销毁连接，不向其他query插入取消/rollback。 |
+| 查询 / 表示 | 一个同owner SELECT：Share kind conversation、未revoked、expires null或>statement_timestamp()；连接同tenant本人active Conversation，Project父资源EXISTS。只选sessionId/title/Share createdAt/expiresAt，不SELECT capability/url或查Message/Agent/IAM。created_at DESC、conversation_id ASC，严格keyset且limit+1。200只data.items/next_cursor；item四安全字段，不猜任务完成/分享者。 |
+| 有界 / 一致性 | 总JSON响应≤1MiB；非法row、超界或有下一页但cursor编码超界时503，不截断标题/伪造next=null。原Chat合法ID/title保真。每页只是其SQL语句时刻的有效事实，没有跨请求快照；新增/撤销/过期可改变后续页，消费者须重读。 |
+| 发行 / 保护 | 无旧路径删除或fallback；additive15.3.0/146。新scripts/shared-tasks-public-contract.mjs先核新增面，精确剥唯一path/components、还原version，完整恢复15.2原字节SHA与145顺序/数组摘要，再委托SET19→SET18旧门。所有旧operation、Skills连接器、owner vendor/generated、依赖锁及canonical schema字节保护，不刷新旧oracle。 |
+| 验证 | 先现入口缺operation的真实HTTP/机器断言RED，再input/cursor/HTTP/contract纯门、原Chat/分享/架构及normal gates。Root独审与自有PG/Redis：正式HTTP message→share→list→revoke→list/public404、同毫秒分页/撤销/到期/foreign/父失效、EXPLAIN ANALYZE BUFFERS。idle worker/受控身份仅证明真实BFF持久事实，不冒正常模型/browser。 |
+
+当前无shared_at排序覆盖索引，Root实际EXPLAIN后再判断是否要另授canonical索引；D0无DDL。正常Chat-off尚无正规新任务事实，正常空列表可验，正向分享需已有本人真实任务或合法执行链，不seed业务行填正常应用。该具体运行边界不阻当前团队修补，不称设置全部完成。
+
 ## SET-19 本人姓名 public adapter（2026-10-15；源码及真实owner验证通过）
 
 当前实现按下表窄边界落地；public15.2.0/145全文SHA256 3214e32d273fbc514db1c1f2307f7855b623f1f613fb1da710cc51d23c41f453。V2独审与Root真实HTTP/数据库验证已通过，具体门禁债及后继Web/browser边界见CURRENT顶部；以下D0记录保留设计来由，不再代表“尚无源码”。

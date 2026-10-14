@@ -1,10 +1,13 @@
+import { restorePublic152SharedTasksContract, sharedTasksParentBaseline } from "../scripts/shared-tasks-public-contract.mjs"
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { createHash } from "node:crypto"
 import test from "node:test"
 import { restorePublic151AccountProfileContract, accountProfileParentBaseline } from "../scripts/account-profile-public-contract.mjs"
-const source = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
-const baseline = JSON.parse(await readFile(new URL("../contract/tests/v1-operations.json", import.meta.url), "utf8")).operations
+const currentSource = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
+const currentBaseline = JSON.parse(await readFile(new URL("../contract/tests/v1-operations.json", import.meta.url), "utf8")).operations
+const source = restorePublic152SharedTasksContract(currentSource)
+const baseline = sharedTasksParentBaseline(currentBaseline)
 const digest = (value) => createHash("sha256").update(value).digest("hex")
 test("profile additive release restores exact complete15.1 bytes and144 operations", () => {
   assert.equal(digest(restorePublic151AccountProfileContract(source)), "5972f7be07a0117d8ee036fa4e742da7942b3c864d009c2847e70e69112a747d")

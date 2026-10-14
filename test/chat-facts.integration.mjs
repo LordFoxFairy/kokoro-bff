@@ -5332,3 +5332,78 @@ integrationTest("R190 omitted Message scope serializes with Move and client-crea
     }
   }
 })
+
+integrationTest("SET21 real HTTP creates own turns and shares, pages safe facts and revokes without model execution", { timeout: 30_000 }, async () => {
+  const suffix = randomUUID().replaceAll("-", "")
+  const tenant = `set21_${suffix}`
+  const subject = `set21_owner_${suffix}`
+  const pool = new Pool({ connectionString: postgresUrl, options: "-c search_path=kokoro_bff -c timezone=UTC" })
+  let store = null
+  let server = null
+  try {
+    store = new PostgresBffRepositories(postgresUrl, redisUrl)
+    await store.ready()
+    const cfg = config(tenant)
+    cfg.agentEnabled = true
+    cfg.upstreams.agents = "http://127.0.0.1:9"
+    server = createBffServer(cfg, { businessStore: store, sessionAdmission, agentDispatchDispatcher: idleWorker, agentCancellationDispatcher: idleWorker, agUiProjector: idleWorker, scheduledTaskDispatcher: idleWorker, scheduledAgentDispatcher: idleWorker, scheduledAgentTerminalConsumer: idleWorker })
+    const base = await listen(server)
+    const ids = []
+    const capabilities = []
+    for (let i = 0; i < 3; i += 1) {
+      const id = `conv_${randomUUID()}`; ids.push(id)
+      const create = await fetch(`${base}/v1/sessions/${id}/messages`, { method: "POST", headers: { ...auth(tenant, subject), "content-type": "application/json", "idempotency-key": `set21_message_${suffix}_${i}` }, body: JSON.stringify({ content: `SET21 owned task ${i}` }) })
+      assert.equal(create.status, 202)
+      const share = await fetch(`${base}/v1/sessions/${id}/share`, { method: "POST", headers: { ...auth(tenant, subject), "content-type": "application/json", "idempotency-key": `set21_share_${suffix}_${i}` }, body: "{}" })
+      assert.equal(share.status, 200); capabilities.push((await share.json()).data.share_id)
+    }
+    // Owner-only tie fixture: every task/share was first created through the canonical HTTP boundary.
+    await pool.query("UPDATE bff_share SET created_at='2026-10-01T00:00:00.000Z' WHERE tenant_id=$1", [tenant])
+    let cursor = null; const found = []
+    do {
+      const response = await fetch(`${base}/v1/account/shared-tasks?limit=1${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`, { headers: auth(tenant, subject) })
+      assert.equal(response.status, 200)
+      const page = await response.json()
+      for (const item of page.data.items) { assert.deepEqual(Object.keys(item).sort(), ["expires_at", "session_id", "shared_at", "title"]); found.push(item.session_id) }
+      for (const capability of capabilities) assert.ok(!JSON.stringify(page).includes(capability))
+      cursor = page.data.next_cursor
+    } while (cursor)
+    assert.deepEqual(found, [...ids].sort())
+    const foreign = await fetch(`${base}/v1/account/shared-tasks`, { headers: auth(tenant, `foreign_${suffix}`) })
+    assert.deepEqual((await foreign.json()).data, { items: [], next_cursor: null })
+    const revoke = await fetch(`${base}/v1/sessions/${ids[0]}/share`, { method: "DELETE", headers: { ...auth(tenant, subject), "idempotency-key": `set21_revoke_${suffix}` } })
+    assert.equal(revoke.status, 200); assert.equal((await revoke.json()).data.share_id, capabilities[0])
+    const read = await fetch(`${base}/v1/account/shared-tasks`, { headers: auth(tenant, subject) })
+    assert.equal(read.status, 200); assert.equal((await read.json()).data.items.length, 2)
+    const publicRead = await fetch(`${base}/v1/shared/${capabilities[0]}`, { headers: { "x-kokoro-service": "web-bff", "x-kokoro-internal-secret": "web-secret" } })
+    assert.equal(publicRead.status, 404)
+    // Legacy owner-row boundary fixtures, not normal task creation: titles and opaque IDs remain unmodified by the read.
+    for (const [index, legacyId, title] of [[1, "conv_\uE000", "\t"], [2, "conv_𐀀", ` ${"x".repeat(200)} `]]) {
+      await pool.query("UPDATE bff_share SET conversation_id=$3 WHERE tenant_id=$1 AND conversation_id=$2", [tenant, ids[index], legacyId])
+      await pool.query("UPDATE bff_conversation SET conversation_id=$3,title=$4 WHERE tenant_id=$1 AND conversation_id=$2", [tenant, ids[index], legacyId, title])
+      ids[index] = legacyId
+    }
+    const facts = async () => {
+      const values = []
+      for (const table of ["bff_share", "bff_conversation", "bff_project"]) values.push((await pool.query(`SELECT row_to_json(t) AS fact FROM ${table} t WHERE tenant_id=$1 ORDER BY row_to_json(t)::text COLLATE "C"`, [tenant])).rows)
+      return values
+    }
+    const beforeRead = await facts()
+    const legacyPage = await fetch(`${base}/v1/account/shared-tasks`, { headers: auth(tenant, subject) })
+    assert.equal(legacyPage.status, 200)
+    const legacyItems = (await legacyPage.json()).data.items
+    assert.deepEqual(legacyItems.map(item => item.session_id), [ids[1], ids[2]])
+    assert.deepEqual(legacyItems.map(item => item.title), ["\t", ` ${"x".repeat(200)} `])
+    assert.deepEqual(await facts(), beforeRead, "all three owner facts must remain byte-for-byte unchanged by listing")
+    await pool.query("UPDATE bff_share SET expires_at='2026-10-02T00:00:00.000Z' WHERE tenant_id=$1 AND conversation_id=$2", [tenant, ids[1]])
+    await pool.query("UPDATE bff_conversation SET project_ref='' WHERE tenant_id=$1 AND conversation_id=$2", [tenant, ids[2]])
+    const unavailableParents = await fetch(`${base}/v1/account/shared-tasks`, { headers: auth(tenant, subject) })
+    assert.deepEqual((await unavailableParents.json()).data, { items: [], next_cursor: null })
+  } finally {
+    if (server) await close(server)
+    if (store) await store.close()
+    await pool.query("DELETE FROM bff_idempotency_receipt WHERE position($1 in scope)>0", [tenant])
+    for (const table of ["bff_agent_cancellation_outbox", "bff_share", "bff_agui_event", "bff_agui_stream", "bff_agent_dispatch_outbox", "bff_message", "bff_conversation"]) await pool.query(`DELETE FROM ${table} WHERE tenant_id=$1`, [tenant])
+    await pool.end()
+  }
+})

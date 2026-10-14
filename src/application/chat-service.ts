@@ -1,5 +1,5 @@
 import type { ChatMessage, ChatSessionDetail, ChatSessionSummary } from "../contracts/index.js"
-import type { ChatRepository, ConversationCollectionFilter } from "./ports/chat-repository.js"
+import type { ChatRepository, ConversationCollectionFilter, SharedTasksPosition, SharedTasksRead } from "./ports/chat-repository.js"
 import { createHash } from "node:crypto"
 import { mutationScope } from "./idempotency.js"
 import type { RequestContext } from "../domain/request-context.js"
@@ -10,6 +10,17 @@ export class ChatApplicationService {
 
   public constructor(repository: ChatRepository) {
     this.repository = repository
+  }
+
+  public listOwnedSharedTasks(
+    tenantId: string,
+    subjectId: string,
+    limit: number,
+    position: SharedTasksPosition | null,
+    signal: AbortSignal,
+    deadlineAt: number,
+  ): Promise<SharedTasksRead> {
+    return this.repository.listOwnedSharedTasks(tenantId, subjectId, limit, position, signal, deadlineAt)
   }
 
   public async listConversations(

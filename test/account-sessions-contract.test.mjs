@@ -1,3 +1,4 @@
+import { restorePublic152SharedTasksContract, sharedTasksParentBaseline } from "../scripts/shared-tasks-public-contract.mjs"
 import { restorePublic151AccountProfileContract, accountProfileParentBaseline } from "../scripts/account-profile-public-contract.mjs"
 import { createHash } from "node:crypto"
 import { restorePublic15AccountSessionContract, accountSessionParentBaseline } from "../scripts/account-session-public-contract.mjs"
@@ -7,18 +8,26 @@ import test from "node:test"
 import yaml from "js-yaml"
 
 test("public account-session operations are present as authenticated owner projections", async () => {
-  const spec = yaml.load(restorePublic151AccountProfileContract(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")))
+  const spec = yaml.load(
+    restorePublic151AccountProfileContract(
+      restorePublic152SharedTasksContract(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")),
+    ),
+  )
   assert.equal(spec.paths["/v1/account/sessions"]?.get?.operationId, "listAccountSessions")
   assert.equal(spec.paths["/v1/account/sessions/{session_id}"]?.delete?.operationId, "revokeAccountSession")
 })
 
 test("SET18 exact inverse preserves all committed public15.0 bytes and the original141 operations", async () => {
-  const source = restorePublic151AccountProfileContract(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"))
+  const source = restorePublic151AccountProfileContract(
+    restorePublic152SharedTasksContract(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")),
+  )
   assert.equal(
     createHash("sha256").update(restorePublic15AccountSessionContract(source)).digest("hex"),
     "5f6b1178cb878718090ba65d6b0d563185078624af0d3d46a01e568af87264a4",
   )
-  const baseline = accountProfileParentBaseline(JSON.parse(await readFile(new URL("../contract/tests/v1-operations.json", import.meta.url), "utf8")).operations)
+  const baseline = accountProfileParentBaseline(
+    sharedTasksParentBaseline(JSON.parse(await readFile(new URL("../contract/tests/v1-operations.json", import.meta.url), "utf8")).operations),
+  )
   assert.equal(baseline.length, 144)
   assert.equal(accountSessionParentBaseline(baseline).length, 141)
   assert.equal(
@@ -50,7 +59,11 @@ test("SET18 exact inverse preserves all committed public15.0 bytes and the origi
   assert.throws(() => accountSessionParentBaseline(baseline.filter((item) => item.operation_id !== "revokeAccountSession")), /SET18/u)
 })
 test("public schemas expose no token/UA/IP/online inference and preserve established service admission errors", async () => {
-  const spec = yaml.load(restorePublic151AccountProfileContract(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")))
+  const spec = yaml.load(
+    restorePublic151AccountProfileContract(
+      restorePublic152SharedTasksContract(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")),
+    ),
+  )
   assert.equal(spec.info.version, "15.1.0")
   assert.deepEqual(Object.keys(spec.components.schemas.AccountSession.properties), ["session_id", "created_at", "expires_at"])
   assert.equal(spec.components.schemas.AccountSession.additionalProperties, false)

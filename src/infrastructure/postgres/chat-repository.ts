@@ -1,3 +1,5 @@
+import { listOwnedSharedTasks } from "./shared-tasks.js"
+import type { SharedTasksPosition, SharedTasksRead } from "../../application/ports/chat-repository.js"
 import { readRunInteraction } from "./agui-interaction-projection.js"
 import { randomUUID } from "node:crypto"
 
@@ -105,6 +107,17 @@ export class PostgresChatRepository implements ChatRepository {
 
   public async moveConversation(command: MoveConversationCommand): Promise<MoveConversationResult> {
     return moveConversation(this.database, command)
+  }
+
+  public listOwnedSharedTasks(
+    tenantId: string,
+    subjectId: string,
+    limit: number,
+    position: SharedTasksPosition | null,
+    signal: AbortSignal,
+    deadlineAt: number,
+  ): Promise<SharedTasksRead> {
+    return listOwnedSharedTasks(this.database.pool, tenantId, subjectId, limit, position, signal, deadlineAt)
   }
 
   public async listConversations(

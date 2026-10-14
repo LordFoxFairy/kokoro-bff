@@ -1,3 +1,23 @@
+## SET-21 真实 owner 数据验证（2026-10-15）
+
+canonical schema保持原字节；Share.created_at/expires_at/revoked_at为TIMESTAMPTZ(3)，毫秒wire不改变事实。Root正规HTTP创建/分享/读取/撤销、公有访问失效、foreign/expiry/orphan/合法旧title及C字节ID验证通过，读取前后同owner三表事实保持。自有测试库5000合成Share的实际EXPLAIN及锁等待到期后同pool恢复通过，查询样本见CURRENT；当前没有证据要求新增索引，未授DDL。只有Root新建fixture库被清理，共享实例/正常库保持，正常Chat-off未seed数据冒UI正向。
+
+## SET-21 本人有效任务分享读取（2026-10-15；Root真实RED后具名源码准入）
+
+新列表ID排序和keyset显式COLLATE "C"字节序，避免当前en_US.utf8与wire比较不一致；title合法性以原事实边界为准，btrim只普通空格，不用JS trim或全长200重复猜限制。原值保真、总输出有界，canonical schema不改。
+
+具名读取实现已授，canonical schema/依赖/资源仍禁止worker修改。Root后继实际PG事实和EXPLAIN验证前不宣称数据或性能门通过。
+
+现SQL-first database/schema.sql是唯一canonical，保持原字节；没有新表、column、cache、receipt、DDL或其他owner SQL。事实唯一bff_share/bff_conversation/bff_project，使用原kokoro_bff pool。分享列表不是另一份业务真源，也不拥有文件分享/归档/授权应用。
+
+同一SELECT以可信tenant/subject过滤Conversation owner/status=active，Share同tenant/conversation、resource_kind=conversation、revoked_at NULL且expires_at NULL或>statement_timestamp()。任何非NULL project_ref（含空串）必须EXISTS同tenant/owner/未删除Project，按现ID或slug规则；失效父不返回，读取不顺带修复orphan。只SELECT conversation_id/title/share.created_at/expires_at，不拉capability share_id/url，也无N+1/跨owner JOIN。
+
+ORDER BY share.created_at DESC,conversation_id ASC，严格小于时间或同毫秒更大ID，limit+1判next。safe item shared_at映射真实created_at；无任务完成事实推导。没有跨页快照；新增/撤销/到期/父状态变化影响未来请求，cursor不授权、非签名且每页重核本人过滤。超界或非法表示503，不截断或冒空。
+
+现active share唯一索引和Conversation owner/Project索引可保证事实关系及基本访问，没有shared_at排序覆盖；先Root实跑代表性EXPLAIN ANALYZE BUFFERS，再决定是否另授canonical索引，不为未测性能先加DDL。读只在一个有界只读事务/精确leased client内设置剩余statement/lock预算，取消/超时销毁精确连接、晚connect release，绝不停pool/共享PG/Redis。
+
+Root后验disposable fixture经正式HTTP message创建真实Conversation→share→list→revoke→list/public404；idle worker不执行模型且不冒已完成任务。专项expiry/orphan SQL须明确owner测试数据；不得seed正常应用的任务/分享来冒浏览器正向。正常Chat-off未证已有本人任务，空态可先验，正向保持具体后继。三设计已独审无确定P1/P2；源码/资源/SQL仍待后继准入。
+
 ## SET-19 姓名的零持久化 public projection（2026-10-15；真实owner验证通过）
 
 实际HTTP保存及CAS/撤销已由Root在测试自有IAM PostgreSQL/Redis验证并完整清理；BFF canonical schema及其他数据owner字节保持，仍没有本片持久化事实。证据与消费者未决项见CURRENT顶部。
