@@ -720,6 +720,11 @@
       "method": "DELETE",
       "path": "/v1/account/sessions/{session_id}",
       "operation_id": "revokeAccountSession"
+    },
+    {
+      "method": "PATCH",
+      "path": "/v1/account/profile",
+      "operation_id": "updateAccountProfile"
     }
   ]
 }

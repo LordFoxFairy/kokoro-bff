@@ -37,6 +37,25 @@ export const zApiErrorResponse = z
   })
   .strict()
 
+export const zUpdateAccountProfileBody = z.object({
+  name: z.string().min(1).max(100),
+  expected_name: z.string().max(16384),
+})
+
+export const zUpdateAccountProfileHeaders = z.object({
+  "x-request-id": z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{1,128}$/)
+    .optional(),
+})
+
+export const zUpdateAccountProfileResponse = z.object({
+  data: z.object({
+    subject: z.string().min(1),
+    name: z.string(),
+  }),
+})
+
 export const zListAccountSessionsHeaders = z.object({
   "x-request-id": z
     .string()

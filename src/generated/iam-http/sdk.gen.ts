@@ -54,6 +54,9 @@ import type {
   RevokeAccountSessionData,
   RevokeAccountSessionErrors,
   RevokeAccountSessionResponses,
+  UpdateAccountProfileData,
+  UpdateAccountProfileErrors,
+  UpdateAccountProfileResponses,
   VerifySessionAuthorizationData,
   VerifySessionAuthorizationErrors,
   VerifySessionAuthorizationResponses,
@@ -76,6 +79,7 @@ import {
   zResendTenantInvitationResponse,
   zResolveTenantPublisherProfilesResponse,
   zRevokeAccountSessionResponse,
+  zUpdateAccountProfileResponse,
   zVerifySessionAuthorizationResponse,
 } from "./zod.gen.js"
 
@@ -96,6 +100,20 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
    */
   meta?: keyof ClientMeta extends never ? Record<string, unknown> : ClientMeta
 }
+
+export const updateAccountProfile = <ThrowOnError extends boolean = false>(
+  options: Options<UpdateAccountProfileData, ThrowOnError>,
+): RequestResult<UpdateAccountProfileResponses, UpdateAccountProfileErrors, ThrowOnError> =>
+  (options.client ?? client).patch<UpdateAccountProfileResponses, UpdateAccountProfileErrors, ThrowOnError>({
+    responseValidator: async (data) => await zUpdateAccountProfileResponse.parseAsync(data),
+    security: [{ scheme: "bearer", type: "http" }],
+    url: "/internal/v1/account/profile",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  })
 
 export const listAccountSessions = <ThrowOnError extends boolean = false>(
   options?: Options<ListAccountSessionsData, ThrowOnError>,

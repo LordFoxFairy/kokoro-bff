@@ -1,3 +1,4 @@
+import { accountProfileRoute } from "../http/routes/account-profile.js"
 import { mcpPersonalOperation, mcpPersonalRoute } from "../http/routes/mcp-personal.js"
 import { mcpProviderAdminOperation, mcpProviderAdminRoute } from "../http/routes/mcp-provider-admin.js"
 import { connectorListFailure, connectorListRoute, isConnectorListRequest } from "../http/routes/connector-list.js"
@@ -98,6 +99,10 @@ async function handle(
   }
   const id = requestId(request)
   response.setHeader("x-request-id", id)
+  if (request.method === "PATCH" && (request.url === "/v1/account/profile" || request.url?.startsWith("/v1/account/profile?"))) {
+    await accountProfileRoute(request, response, config, composition.sessionAdmission, id)
+    return
+  }
   const rawPathname = new URL(request.url || "/", "http://bff.local").pathname
   const isRawSkillPackageInspection =
     request.method === "GET" && (/^\/v1\/self\/skills\/[^/]+\/package$/u.test(rawPathname) || /^\/v1\/skill-installations\/[^/]+\/package$/u.test(rawPathname))
@@ -1043,8 +1048,12 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
   const composition = createBffComposition(config, options)
   const server = createServer((request, response) => {
     void handle(request, response, config, composition).catch(() => {
-      if (!response.headersSent) send(response, 500, failure("internal_error", "The BFF encountered an internal error", requestId(request)))
-      else response.destroy()
+      if (!response.headersSent) {
+        if (request.method === "PATCH" && (request.url === "/v1/account/profile" || request.url?.startsWith("/v1/account/profile?"))) {
+          response.setHeader("x-request-id", requestId(request))
+          send(response, 500, { error: { code: "internal_error", message: "The BFF encountered an internal error", retryable: false } })
+        } else send(response, 500, failure("internal_error", "The BFF encountered an internal error", requestId(request)))
+      } else response.destroy()
     })
   })
   let shutdownPromise: Promise<void> | null = null

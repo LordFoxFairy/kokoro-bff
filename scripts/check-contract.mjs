@@ -1,3 +1,4 @@
+import { restorePublic151AccountProfileContract, accountProfileParentBaseline } from "./account-profile-public-contract.mjs"
 import { restorePublic15AccountSessionContract, accountSessionParentBaseline } from "./account-session-public-contract.mjs"
 import { readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
@@ -91,6 +92,9 @@ function expectedIdempotency(operation) {
 }
 
 export function inspectOpenApiGovernance(source) {
+  if (/^  version: 15\.2\.0$/mu.test(source)) {
+    try { source = restorePublic151AccountProfileContract(source) } catch(error) { return [error.message] }
+  }
   if (/^  version: 15\.1\.0$/mu.test(source)) {
     try { source = restorePublic15AccountSessionContract(source) } catch(error) { return [error.message] }
   }
@@ -147,6 +151,9 @@ export function inspectOpenApiGovernance(source) {
 }
 
 export function compareOperationBaseline(source, baseline) {
+  if (/^  version: 15\.2\.0$/mu.test(source)) {
+    try { source = restorePublic151AccountProfileContract(source); baseline = accountProfileParentBaseline(baseline) } catch(error) { return [error.message] }
+  }
   if (/^  version: 15\.1\.0$/mu.test(source)) {
     try { source = restorePublic15AccountSessionContract(source); baseline = accountSessionParentBaseline(baseline) } catch(error) { return [error.message] }
   }
@@ -201,7 +208,7 @@ async function main() {
       operation.fields.get("operationId") === "getManagedPersonalSkillPackage" || operation.fields.get("operationId") === "getPersonalSkillInstallationPackage",
   )
   const errors = [
-    ...(/^  version: 15\.1\.0$/mu.test(openapi) && parsedBaseline.operations.length === 144 ? [] : ["SET18 current public release must be15.1/144"]),
+    ...(/^  version: 15\.2\.0$/mu.test(openapi) && parsedBaseline.operations.length === 145 ? [] : ["SET19 current public release must be15.2/145"]),
     ...inspectOpenApiGovernance(openapi),
     ...compareOperationBaseline(openapi, parsedBaseline.operations),
     ...(parsedBaseline.operations.length === currentOperations.length

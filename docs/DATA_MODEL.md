@@ -1,3 +1,13 @@
+## SET-19 姓名的零持久化 public projection（2026-10-15；真实owner验证通过）
+
+实际HTTP保存及CAS/撤销已由Root在测试自有IAM PostgreSQL/Redis验证并完整清理；BFF canonical schema及其他数据owner字节保持，仍没有本片持久化事实。证据与消费者未决项见CURRENT顶部。
+
+IAMc64faa7992301f31495e163d04049c48a23d0225唯一持有User.name、Session/资格、原值CAS与同事务Audit。本仓只在具名HTTP请求生命周期内转发已准入的本人Bearer/name/expected_name，消费正式internal0.13.0 ACK并严格投影subject/name；无BFF持久化姓名、身份缓存、User schema、SQL/跨库JOIN、Redis/receipt/outbox或scope/resource登记写。database/schema.sql字节保持，不需要db:apply-schema。
+
+name条件写与no-op/updatedAt由IAM裁决。BFF不以本地cache/输入内容制造成功，不使用通用mutation Idempotency-Key/businessStore，也不假定取消意味着未提交；失去ACK必须由Web重新userinfo读取，重新提交仍显式带真实original。成功只保证owner提交点，不保证后续另一个session没有修改或撤销；owner返回不存在/禁用tenant按资格拒绝，不作target姓名404。
+
+唯一跨仓build-time事实为固定commit/version/digest immutable IAM artifact，旧单pin删除；生成类型仅用于wire校验/结果投影，不能import IAM源/ORM/私有SQL。新public15.2只添profile endpoint及closed组件，旧15.1完整逆恢复。所有正常数据和Skills/连接器事实不变；资源测试仅Root自己的正规fixture，未完成正常Web保存/刷新验收。
+
 ## SET-18 登录 Session 的非持久公开投影（D0 独审通过，2026-10-14）
 
 IAM正式错误缓存修补已发行284bfd8fea91d57dae18fa2b7c772d75c7b6dcd9，internal0.12.0 artifact仍为SHA256 f6f3588d0fe52e5b3eed57e117e25b991caabc9e2825d1a0edcf9149f6a3e26b。本仓V2业务已冻审并真实BFF→IAM通过，public15.1.0候选SHA2565972f7be07a0117d8ee036fa4e742da7942b3c864d009c2847e70e69112a747d、canonical/inventory144；正式单pin更新及两新增消费元数据/格式回归修补已完成并接收，源码任务仍沿Root卡。本仓待Root正式发行，尚未正常激活；Skills/连接器业务排除，Root保留docs/Git/资源与最终验收。

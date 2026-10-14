@@ -1,3 +1,9 @@
+## 本人姓名与登录设备
+
+姓名 PATCH：`src/http/account-profile-input.ts` 负责原始输入；`src/http/routes/account-profile.ts` 负责正常准入与单总预算；`src/infrastructure/clients/iam-account-profile.ts` 负责固定IAM generated请求与绑定ACK，`.types.ts`承载结果类型。唯一public事实源是 `contract/openapi/v1/openapi.yaml` 15.2.0；`scripts/account-profile-public-contract.mjs` 精确恢复完整15.1后委托旧治理。BFF不持久化姓名。
+
+登录设备仍由 `src/http/routes/account-sessions.ts` 与 `src/infrastructure/clients/iam-account-sessions.ts` 消费IAM本人会话；当前验证与尚未闭环的Web/browser项见 `docs/CURRENT.md`。
+
 <!-- T-K03.13-BFF-MCP-PERSONAL-CRUD -->
 本人 MCP：`src/http/mcp-personal-command-input.ts` 解析四命令，`src/infrastructure/clients/platform/mcp-personal-command-binding.ts` 冻结正式 owner JCS/key/CAS；现 `mcp-personal` route/client 承接六读取与四命令，Provider 目录不代表连接授权。
 

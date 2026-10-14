@@ -1,3 +1,30 @@
+## SET-19-BFF 本人姓名保存验收（2026-10-15）
+
+本仓已完成本人 PATCH /v1/account/profile，canonical public15.2.0/145operations，全文SHA256 3214e32d273fbc514db1c1f2307f7855b623f1f613fb1da710cc51d23c41f453。唯一IAM消费固定c64faa7992301f31495e163d04049c48a23d0225/internal0.13.0；正常19operations生成，原18保留。独立V2窄审无剩余确定P1/P2；Root核27变更记录、621保护路径及原642tracked基线，三路径P2修补之外首冻字节保持。
+
+Root冻结后具名108PASS/0FAIL；正常lint/typecheck/build与16文件生成检查通过。默认1304PASS/3原FAIL/3SKIP；完整check保留713contractPASS/2原R357FAIL，format仍七个既有警告，未改历史摘要或放宽门禁。首冻合法expected_name escaped lone surrogate的两项真实RED已修为GREEN，旧值原字节转发、新姓名限制保持；全局parser未修改。
+
+Root真实BFF HTTP→正式IAM→PostgreSQL完成十四请求：普通成员保存200且数据库和正式userinfo一致、旧值409、no-op不改updatedAt、非法query/重复JSON/key拒400、超限413、缺scope及machine/operator拒403、不同sid同原值并发200/409、撤销其他会话200后其写入401。测试自有PostgreSQL库及Redis键集合精确恢复；未重复启动基础设施、未操作正常服务。首次保存单样本97.76ms，不作为性能基准。该证据证明后端链路；Web正式消费、fresh16scope登录及页面保存→刷新→重登仍由Root后继验收，整个设置Goal继续active。
+
+## SET-19-BFF 本人姓名 public adapter 任务卡（2026-10-14，D0 独审通过；源码准入）
+
+IAM正式owner已commit/push c64faa7992301f31495e163d04049c48a23d0225，internal/SDK0.13.0 SHA c22c55ef2b963a89ca3e03016138c2da74f5f005edf1b6ee8c5572daaf466262；V2独审/Root完整verify118files1488PASS、真实profile8/8与trusted3/40过滤通过，首冻CAS失败及实际SQL修复证据留存，资源收尾精确恢复。普通运行仍原IAM284bfd8；只有正式消费者齐备才切换，页面改名尚只读。
+
+本片D0三设计明确采用server raw canonical PATCH提前分派，profile独立route内调用原authorizeUserRequest/composition.sessionAdmission并从route入口起单10s预算；相比深改generic admission及所有return/meta分支更窄。outer catch只exact profile plain envelope。Root已核642tracked5399640基线；storage_platform_audit只读独审无确定P1/P2，billing_scheduler_audit只读地图核正式owner Git blob及生成/治理接缝。Root准入下表窄源码集，待freeze独审及实际owner验收，不将D0通过记为功能完成。
+
+首冻57ba96ff经独审发现确定P2：原global strict raw parser拒expected_name合法旧escaped单码元，正式IAM该字段仅max16384，与Web原值保真不符。Root只准入本片input及其input/HTTP两测试三路径修补flat原文codec，保fatal UTF8/duplicate/closed及newname wellformed负控；全局parser、其他源/contract/generated首冻SHA保持，原失败日志保留。新freeze/独审及Root真实owner验收前不发行。
+
+| 项 | 决定 |
+| --- | --- |
+| P1 / 完成 | BFF本人name/expected_name真消费，closed ACK/权限/CAS/unknown，formal public15.2可供Web接线；不以BFF通过冒设置完成 |
+| 唯一 writer / reviewer | billing_scheduler_audit后继实现；storage_platform_audit只读D0/源码独审；Root三设计/任务/INDEX/Git/资源/发行 |
+| 基线 | settings-bff feat/settings-team-contract 53996400e4100ed5940b104f0dce139d44fec383 clean；public15.1/144 SHA5972f7be07a0117d8ee036fa4e742da7942b3c864d009c2847e70e69112a747d |
+| 新普通源 | http/account-profile-input.ts、http/routes/account-profile.ts；infrastructure/clients/iam-account-profile.ts与.types.ts（无新目录/module） |
+| 现源 | bootstrap/server.ts仅import/exact earlydispatch/最后plain错误兜底；原通用admission/mutation/businessStore/旧operation不改 |
+| 机器 / 正规生成 | canonical openapi/v1/openapi.yaml添加profile/closed components/version15.2；operation inventory追加1；新scripts/account-profile-public-contract.mjs独立inverse，现verify-openapi.ts/check-contract.mjs只最外层接线；IAM现config/generator/dependency manifest、唯一旧vendor284bfd8删新c64原字节、正常generated19项（旧18保持）；package脚本仅把新具名测试/format/governance追加 |
+| 测试 | 新account-profile-input/client .test.ts及profile-http/contract .test.mjs；现test/iam-protocol-relay-policy.test.ts与test/contract-governance.test.mjs仅当前IAM pin/provenance及新能力负控；现test/architecture.test.ts与test/contract/openapi-contract.test.mjs仅当前public版本/数量及新能力登记，先profile inverse再原历史门。额外准入现test/account-sessions-contract.test.mjs仅先恢复完整15.1/144再原SET18 inverse，原5f6/2e32摘要、141/144及全部旧negative保持。旧会话/Skills/连接器语义oracle不放宽，其他必要路径先报Root |
+| 验证 / 保护 | 先具名真实RED，后纯GREEN、normal contract/generation/lint/type/build/check；freeze路径/hash与其余原642tracked保护，Root复核/独审/必要纯复跑+实际BFF→IAM自有资源再发行。现旧check2/test3/format7失败不隐去，新增必须修；无依赖锁/DDL/资源/Git权限 |
+
 ## SET-18 登录设备公开投影准备（2026-10-14；D0 独审通过）
 
 IAM正式错误缓存修补已发行284bfd8fea91d57dae18fa2b7c772d75c7b6dcd9，internal0.12.0 artifact仍为SHA256 f6f3588d0fe52e5b3eed57e117e25b991caabc9e2825d1a0edcf9149f6a3e26b。本仓V2业务已冻审并真实BFF→IAM通过，public15.1.0候选SHA2565972f7be07a0117d8ee036fa4e742da7942b3c864d009c2847e70e69112a747d、canonical/inventory144；正式单pin更新及两新增消费元数据/格式回归修补已完成并接收，源码任务仍沿Root卡。本仓待Root正式发行，尚未正常激活；Skills/连接器业务排除，Root保留docs/Git/资源与最终验收。

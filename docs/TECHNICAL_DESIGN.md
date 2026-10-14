@@ -1,3 +1,24 @@
+## SET-19 本人姓名 public adapter（2026-10-15；源码及真实owner验证通过）
+
+当前实现按下表窄边界落地；public15.2.0/145全文SHA256 3214e32d273fbc514db1c1f2307f7855b623f1f613fb1da710cc51d23c41f453。V2独审与Root真实HTTP/数据库验证已通过，具体门禁债及后继Web/browser边界见CURRENT顶部；以下D0记录保留设计来由，不再代表“尚无源码”。
+
+IAM姓名owner已正式提交并推送c64faa7992301f31495e163d04049c48a23d0225，internal0.13.0正规artifact全文SHA256 c22c55ef2b963a89ca3e03016138c2da74f5f005edf1b6ee8c5572daaf466262。本仓基线53996400e4100ed5940b104f0dce139d44fec383，public15.1.0/144 operations SHA2565972f7be07a0117d8ee036fa4e742da7942b3c864d009c2847e70e69112a747d；Root已保存642tracked基线。storage_platform_audit绑定该基线与三设计只读独审，无确定P1/P2；Root准入下表窄源码集，尚非实现或运行验收。Skills/连接器业务排除。
+
+| 放置项 | 当前裁决 |
+| --- | --- |
+| Owner / writer | IAM唯一User.name/资格/Audit owner；BFF唯一public投影。Root三设计/CURRENT/INDEX/Git/资源，billing_scheduler_audit后继唯一源码writer，storage_platform_audit只读独审。 |
+| 当前 / 目标 | 当前account-sessions普通route在通用admission后分派且另起5s，不能承接姓名的一体预算。新增现目录account-profile普通route/input及iam-account-profile client/types，唯一PATCH本人姓名。 |
+| 比较 / 粒度 | A深改通用admission计时/各return及meta分支：淘汰，会扩大旧接口变化；B在server具名PATCH原始canonical路径提前分派到独立profile route：采用，route调用原authorizeUserRequest与composition.sessionAdmission，独占本请求从进入route开始的预算，不建立第二认证实现。外层catch仅本精确PATCH安全plain错误兜底。无新顶层/模块/进程/框架或配置。 |
+| 依赖 | Browser→Web同源→BFF现browser-service+Product admission→同一admitted Bearer→正常generated IAM updateAccountProfile。本人subject绑定context.identity.userId；不接受body/header自报tenant/subject，不使用machine/issuerCookie。 |
+| 生命周期 | route入口立即performance绝对deadline=min(config.upstreamTimeoutMs,10000)及单AbortController，覆盖metadata/admission/body/owner headers+body/最后active检查。所有等待race同budget，即使fetch/admission/reader不合作也退役迟到工作；后继每步assertActive，预算耗尽绝无新owner写。parent aborted/response close主动abort，不写关闭response，finally移除timer/listener/reader。 |
+| 输入 / 传输 | 原raw path/method具名匹配，query含空问号、Idempotency-Key、重复Content-Type/Content-Encoding或非JSON拒绝；Content-Encoding仅缺省/identity，合法单一chunked传输可读，实际body≤65536bytes。冲突Content-Length/Transfer-Encoding等Node parser直接拒绝的请求不冒本route JSON响应。入站本片flat codec以fatal UTF8/有效JSON/精确两string字段/decoded键唯一证明拒坏UTF8与重复keys，并保expected_name合法旧单码元；新name仍wellformed/控制/trim规则，均不规范化。全局strictParseRawJson及旧API原字节不改，owner新ACK仍复用该strict parser；普通requestBodyJson/单独JSON.parse不能证明本片原文边界。 |
+| owner消费 | 唯一immutable IAM单pin正常generator，原18operations保留并加1。headers+正文总min(config上限,1MiB)、strict raw JSON、content-type/no-store/同requestID/零redirect-setCookie、generated strip前全形状闭集与subject/name binding；错误精确status/code tuple，不透传敏感owner message。 |
+| 数据 / 失败 | BFF无DB/Redis/receipt/cache/姓名副本；generic PATCH Idempotency-Key/businessStore管道不得进入。零自动write retry；timeout/取消/ACK丢失可能已提交，消费者须userinfo重读，不以取消认定rollback。IAM承诺提交点资格/姓名原值条件，已准入结果不反向保证后续没有新改名/撤销。 |
+| 删除 / 发行 | 删除旧IAM284bfd8唯一vendor pin，不保fallback/alias/双schema；public additive15.2.0/145operations。新外层inverse精准剥profile path及仅新增components、版本还原完整15.1全文SHA与旧清单，再委托原历史门。其他API/Skills/连接器语义原字节。 |
+| 验证 | 新profile input/client/HTTP/contract具名RED→GREEN，正常IAM生成check/历史inverse/type/lint/build/check与旧account/Team保留；Root独审/哈希/必要复验及真实BFF→IAM普通保存/CAS/错误/撤权后再发行。Web正常pin/freshscope16/UI保存刷新是后继。 |
+
+metadata/input先核，正常admission随后、有界body读取在准入成功后；所有步骤同一个deadline。HTTP route自身catch精确plain错误，server外层catch仅exact raw PATCH /v1/account/profile提供同shape最后兜底，不修改旧global failure()、旧admission或其他服务选择。准入结果迟到只被退役，不可启动body/owner。最后active检查不伪装为第二次在线IAM准入；owner已同tx复核Session/资格，Web后继仍需同opaque Product session/generation/access寿命的最后身份栅栏。
+
 ## SET-18 本人登录 Session 公开投影（D0 独审通过，2026-10-14；owner 已发行，源码准入）
 
 IAM正式错误缓存修补已发行284bfd8fea91d57dae18fa2b7c772d75c7b6dcd9，internal0.12.0 artifact仍为SHA256 f6f3588d0fe52e5b3eed57e117e25b991caabc9e2825d1a0edcf9149f6a3e26b。本仓V2业务已冻审并真实BFF→IAM通过，public15.1.0候选SHA2565972f7be07a0117d8ee036fa4e742da7942b3c864d009c2847e70e69112a747d、canonical/inventory144；正式单pin更新及两新增消费元数据/格式回归修补已完成并接收，源码任务仍沿Root卡。本仓待Root正式发行，尚未正常激活；Skills/连接器业务排除，Root保留docs/Git/资源与最终验收。

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 15.1.0
+  version: 15.2.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -11026,6 +11026,183 @@ paths:
             type: string
             minLength: 1
             maxLength: 255
+  /v1/account/profile:
+    patch:
+      tags:
+        - Account Profile
+      operationId: updateAccountProfile
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: stable
+      x-kokoro-idempotency: none
+      x-kokoro-permission: iam:account-profile.write
+      summary: Update current Product user display name
+      security:
+        - serviceHeader: []
+          internalSecret: []
+          userBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountProfileInput'
+      responses:
+        '200':
+          description: Owner-confirmed current subject and exact saved name
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountProfileResponse'
+        '400':
+          description: Sanitized account profile failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountProfileError400'
+        '401':
+          description: Sanitized account profile failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountProfileError401'
+        '403':
+          description: Sanitized account profile failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountProfileError403'
+        '409':
+          description: Sanitized account profile failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountProfileError409'
+        '413':
+          description: Sanitized account profile failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountProfileError413'
+        '429':
+          description: Sanitized account profile failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+            Retry-After:
+              schema:
+                type: string
+                pattern: ^[1-9][0-9]{0,4}$
+                description: Validated delta seconds from1 through86400.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountProfileError429'
+        '500':
+          description: Sanitized account profile failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountProfileError500'
+        '502':
+          description: Sanitized account profile failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountProfileError502'
+        '503':
+          description: Sanitized account profile failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountProfileError503'
 components:
   securitySchemes:
     serviceHeader:
@@ -11459,6 +11636,263 @@ components:
         not trim or normalize a non-NFC value.
       schema: { type: string, minLength: 1 }
   schemas:
+    AccountProfileInput:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - expected_name
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: 1..100 UTF-16 code units; well-formed Unicode, no C0/C1 controls or ECMAScript trim boundary whitespace; never normalized.
+        expected_name:
+          type: string
+          maxLength: 16384
+          description: Exact original userinfo name, including empty or surrounding whitespace; never normalized.
+    AccountProfileResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required:
+            - subject
+            - name
+          properties:
+            subject:
+              type: string
+              minLength: 1
+            name:
+              type: string
+    AccountProfileError400:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required:
+            - code
+            - message
+            - retryable
+          properties:
+            code:
+              type: string
+              enum:
+                - account_profile_input_invalid
+            message:
+              type: string
+              minLength: 1
+            retryable:
+              type: boolean
+              const: false
+    AccountProfileError401:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required:
+            - code
+            - message
+            - retryable
+          properties:
+            code:
+              type: string
+              enum:
+                - session_authentication_required
+                - session_invalid
+            message:
+              type: string
+              minLength: 1
+            retryable:
+              type: boolean
+              const: false
+    AccountProfileError403:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required:
+            - code
+            - message
+            - retryable
+          properties:
+            code:
+              type: string
+              enum:
+                - service_auth_failed
+                - session_forbidden
+                - product_tenant_forbidden
+                - account_profile_forbidden
+            message:
+              type: string
+              minLength: 1
+            retryable:
+              type: boolean
+              const: false
+    AccountProfileError409:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required:
+            - code
+            - message
+            - retryable
+          properties:
+            code:
+              type: string
+              enum:
+                - account_profile_conflict
+            message:
+              type: string
+              minLength: 1
+            retryable:
+              type: boolean
+              const: false
+    AccountProfileError413:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required:
+            - code
+            - message
+            - retryable
+          properties:
+            code:
+              type: string
+              enum:
+                - account_profile_request_too_large
+            message:
+              type: string
+              minLength: 1
+            retryable:
+              type: boolean
+              const: false
+    AccountProfileError429:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required:
+            - code
+            - message
+            - retryable
+          properties:
+            code:
+              type: string
+              enum:
+                - session_rate_limited
+                - account_profile_rate_limited
+            message:
+              type: string
+              minLength: 1
+            retryable:
+              type: boolean
+              const: true
+    AccountProfileError500:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required:
+            - code
+            - message
+            - retryable
+          properties:
+            code:
+              type: string
+              enum:
+                - internal_error
+            message:
+              type: string
+              minLength: 1
+            retryable:
+              type: boolean
+              const: false
+    AccountProfileError502:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required:
+            - code
+            - message
+            - retryable
+          properties:
+            code:
+              type: string
+              enum:
+                - account_profile_response_invalid
+            message:
+              type: string
+              minLength: 1
+            retryable:
+              type: boolean
+              const: false
+    AccountProfileError503:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required:
+            - code
+            - message
+            - retryable
+          properties:
+            code:
+              type: string
+              enum:
+                - product_tenant_not_configured
+                - iam_admission_unavailable
+                - account_profile_unavailable
+            message:
+              type: string
+              minLength: 1
+            retryable:
+              type: boolean
+              const: true
     AccountSession:
       type: object
       properties:

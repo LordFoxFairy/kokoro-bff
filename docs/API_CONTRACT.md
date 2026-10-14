@@ -1,3 +1,33 @@
+## SET-19 本人姓名 public PATCH（2026-10-15；已实现并通过真实owner验证）
+
+当前canonical public15.2.0/145全文SHA256 3214e32d273fbc514db1c1f2307f7855b623f1f613fb1da710cc51d23c41f453；正式IAM消费、独审、Root真实保存/CAS/权限/撤销验收见CURRENT顶部。Web消费与实际页面闭环仍未验收。
+
+正式消费IAMc64faa7992301f31495e163d04049c48a23d0225/internal0.13.0，artifact SHA256 c22c55ef2b963a89ca3e03016138c2da74f5f005edf1b6ee8c5572daaf466262。唯一新增PATCH /v1/account/profile / updateAccountProfile：owner kokoro-bff、visibility public、stability stable、idempotency none、permission iam:account-profile.write。public additive15.2.0/145operations，现15.1全文SHA5972f7be07a0117d8ee036fa4e742da7942b3c864d009c2847e70e69112a747d为不可修改的inverse起点。
+
+严格无query/application-json实际body≤64KiB，恰{name,expected_name}两required string；未知/重复key/坏UTF8/非JSON/Idempotency-Key/重复Content-Type拒绝。name1..100 UTF16 code units、合法Unicode、无C0/C1、无ECMAScript trim边界空白，不修剪归一化；expected_name为userinfo原名含空字符串及原空白，最长16384 UTF16，不规范化。只转发本人admitted Bearer，subject来自正常Product admission，tenant/client/target不从body取。
+
+Content-Encoding仅缺省或唯一identity；允许合法单一chunked并按真实字节有界读取。Node HTTP parser在进入route前拒绝的冲突framing不保证应用层plain JSON，不能以该边界冒本片已响应。
+
+expected_name正式仅UTF16长度限制，含escaped lone surrogate也须逐字保留；入站采用本片flat JSON codec而非会拒该原值的全局strict parser。fatal UTF8/JSON语法/duplicate decoded键/closed两string规则保持，新name仍必须wellformed；原全局parser与其他API不放宽。owner新ACK仅含新wellformed name与真实subject，仍沿原strict原文检查。
+
+200严格{data:{subject,name}}，subject与admitted subject相同且name与新提交原文相同；所有本片响应no-store、x-request-id仅header，JSON无meta/request_id/credentials/email/role。错误严格{error:{code,message,retryable}}、不含details/meta/raw owner正文。normal admission原401/403/429/503代码保留但采用本片plain envelope。
+
+| IAM status / code | BFF status / code |
+| --- | --- |
+| 400 INVALID_ARGUMENT | 400 account_profile_input_invalid |
+| 401 UNAUTHENTICATED | 401 session_invalid |
+| 403 PERMISSION_DENIED | 403 account_profile_forbidden |
+| 404 TENANT_NOT_FOUND、409 TENANT_DISABLED | 403 session_forbidden（资格失效，不是姓名冲突） |
+| 409 CONFLICT | 409 account_profile_conflict，不泄露新姓名；需userinfo重读 |
+| 413 PAYLOAD_TOO_LARGE | 413 account_profile_request_too_large |
+| 429 RATE_LIMITED | 429 account_profile_rate_limited，仅合法Retry-After1..86400 |
+| 500 INTERNAL、503 DEPENDENCY_UNAVAILABLE、缺配置/预算/网络 | 503 account_profile_unavailable |
+| owner未知tuple/不合法header/raw schema/错subject/name | 502 account_profile_response_invalid |
+
+本地body校验400/413；本片unexpected内部错误最后兜底500 internal_error。retryable只429/503为true，写仍不自动retry。normal admission诸码按既有authenticate/service/tenant语义原样，JSON剥仅本片metadata。绝对总时间min(config.upstreamTimeoutMs,10s)，headers+正文总min(config上限,1MiB)；迟到promise/abort/已close响应不得冒成功。request期限不是数据库rollback保证，unknown后正规userinfo读当前name，再由用户明确决定新PATCH。
+
+正常IAM生成保18已有operation，仅新增1；不改生成器全局strip策略，以具名raw pre-strip+strictParseRawJson封闭新响应。public新独立outer inverse恢复完整15.1 artifact及144清单后运行旧治理，不重算旧摘要/删旧negative oracle。源码/机器实现已冻审且Root真实owner验证通过；Web浏览器闭环仍未完成。
+
 ## SET-18 本人 Session public 边界（D0 独审通过，2026-10-14；尚未发行）
 
 IAM正式错误缓存修补已发行284bfd8fea91d57dae18fa2b7c772d75c7b6dcd9，internal0.12.0 artifact仍为SHA256 f6f3588d0fe52e5b3eed57e117e25b991caabc9e2825d1a0edcf9149f6a3e26b。本仓V2业务已冻审并真实BFF→IAM通过，public15.1.0候选SHA2565972f7be07a0117d8ee036fa4e742da7942b3c864d009c2847e70e69112a747d、canonical/inventory144；正式单pin更新及两新增消费元数据/格式回归修补已完成并接收，源码任务仍沿Root卡。本仓待Root正式发行，尚未正常激活；Skills/连接器业务排除，Root保留docs/Git/资源与最终验收。

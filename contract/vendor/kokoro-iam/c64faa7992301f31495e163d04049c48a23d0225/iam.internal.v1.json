@@ -169,6 +169,356 @@
         ]
       }
     },
+    "/internal/v1/account/profile": {
+      "patch": {
+        "operationId": "updateAccountProfile",
+        "parameters": [
+          {
+            "name": "x-request-id",
+            "in": "header",
+            "required": false,
+            "description": "Caller correlation identifier. Missing or invalid values are replaced by the service.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "description": "New display name: 1..100 UTF-16 code units; well-formed Unicode, no C0/C1 controls or ECMAScript trim boundary whitespace; never normalized."
+                  },
+                  "expected_name": {
+                    "type": "string",
+                    "maxLength": 16384,
+                    "description": "Exact original userinfo name, including empty or surrounding whitespace; at most16384 UTF-16 code units; never normalized."
+                  }
+                },
+                "required": [
+                  "name",
+                  "expected_name"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              },
+              "x-request-id": {
+                "description": "Final service request identifier used for this response.",
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                }
+              }
+            },
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "subject": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "subject",
+                        "name"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Stable internal API error envelope.",
+            "headers": {
+              "Cache-Control": {
+                "description": "The admission decision must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              },
+              "x-request-id": {
+                "description": "Final service request identifier used for this response.",
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Stable internal API error envelope.",
+            "headers": {
+              "Cache-Control": {
+                "description": "The admission decision must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              },
+              "x-request-id": {
+                "description": "Final service request identifier used for this response.",
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Stable internal API error envelope.",
+            "headers": {
+              "Cache-Control": {
+                "description": "The admission decision must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              },
+              "x-request-id": {
+                "description": "Final service request identifier used for this response.",
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Stable internal API error envelope.",
+            "headers": {
+              "Cache-Control": {
+                "description": "The admission decision must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              },
+              "x-request-id": {
+                "description": "Final service request identifier used for this response.",
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Stable internal API error envelope.",
+            "headers": {
+              "Cache-Control": {
+                "description": "The admission decision must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              },
+              "x-request-id": {
+                "description": "Final service request identifier used for this response.",
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Stable internal API error envelope.",
+            "headers": {
+              "Cache-Control": {
+                "description": "The admission decision must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              },
+              "x-request-id": {
+                "description": "Final service request identifier used for this response.",
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Stable internal API error envelope.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the fixed-window quota resets.",
+                "schema": {
+                  "type": "string",
+                  "example": "60"
+                }
+              },
+              "Cache-Control": {
+                "description": "The admission decision must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              },
+              "x-request-id": {
+                "description": "Final service request identifier used for this response.",
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Stable internal API error envelope.",
+            "headers": {
+              "Cache-Control": {
+                "description": "The admission decision must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              },
+              "x-request-id": {
+                "description": "Final service request identifier used for this response.",
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Stable internal API error envelope.",
+            "headers": {
+              "Cache-Control": {
+                "description": "The admission decision must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              },
+              "x-request-id": {
+                "description": "Final service request identifier used for this response.",
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "internalBearer": []
+          }
+        ],
+        "summary": "",
+        "tags": [
+          "Account Profile"
+        ],
+        "x-kokoro-idempotency": "none",
+        "x-kokoro-owner": "kokoro-iam",
+        "x-kokoro-permission": "iam:account-profile.write",
+        "x-kokoro-stability": "stable",
+        "x-kokoro-visibility": "internal-owner"
+      }
+    },
     "/internal/v1/account/sessions": {
       "get": {
         "operationId": "listAccountSessions",
@@ -10481,7 +10831,7 @@
   "info": {
     "title": "Kokoro IAM Internal API",
     "description": "IAM-owned liveness, Tenancy, Authorization and Audit operations.",
-    "version": "0.12.0",
+    "version": "0.13.0",
     "contact": {}
   },
   "tags": [],

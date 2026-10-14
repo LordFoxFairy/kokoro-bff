@@ -1,3 +1,4 @@
+import { restorePublic151AccountProfileContract } from "../../scripts/account-profile-public-contract.mjs"
 import { restorePublic15AccountSessionContract } from "../../scripts/account-session-public-contract.mjs"
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
@@ -2687,7 +2688,7 @@ test("SET13 exact inverse preserves the entire committed public14.7 artifact", a
   const source = await readFile(currentOpenapiUrl, "utf8")
   assert.equal(
     createHash("sha256")
-      .update(restorePublic15TeamPermissionsContract(restorePublic15AccountSessionContract(source)))
+      .update(restorePublic15TeamPermissionsContract(restorePublic15AccountSessionContract(restorePublic151AccountProfileContract(source))))
       .digest("hex"),
     "598407a3dfc17d62eb4fe703837b836ba85f05b7102a018dac160351ad807c19",
   )

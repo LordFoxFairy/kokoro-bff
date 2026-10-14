@@ -80,9 +80,9 @@ test("published browser-private policy is a deterministic read-only projection o
   })
 })
 
-test("vendored IAM 0.12.0 contract and generated-client manifest pin the execution owner bytes", async () => {
-  const ownerCommit = "284bfd8fea91d57dae18fa2b7c772d75c7b6dcd9"
-  const expectedDigest = "f6f3588d0fe52e5b3eed57e117e25b991caabc9e2825d1a0edcf9149f6a3e26b"
+test("vendored IAM 0.13.0 contract and generated-client manifest pin the execution owner bytes", async () => {
+  const ownerCommit = "c64faa7992301f31495e163d04049c48a23d0225"
+  const expectedDigest = "c22c55ef2b963a89ca3e03016138c2da74f5f005edf1b6ee8c5572daaf466262"
   const vendor = await readFile(new URL(`../contract/vendor/kokoro-iam/${ownerCommit}/iam.internal.v1.json`, import.meta.url)).catch(() => null)
   assert.notEqual(vendor, null)
   assert.equal(createHash("sha256").update(vendor!).digest("hex"), expectedDigest)
@@ -99,14 +99,14 @@ test("vendored IAM 0.12.0 contract and generated-client manifest pin the executi
   ).catch(() => null)
   assert.equal(retiredAdmissionVendor, null, "retired 0.7 admission vendor path must be removed")
   const contract = JSON.parse(vendor!.toString("utf8")) as { info?: { version?: string } }
-  assert.equal(contract.info?.version, "0.12.0")
+  assert.equal(contract.info?.version, "0.13.0")
   const manifest = JSON.parse(await readFile(new URL("../contract/dependencies/iam-http.json", import.meta.url), "utf8")) as {
     owner?: { repository_commit?: string; contract_version?: string; contract_sha256?: string }
   }
   assert.deepEqual(manifest.owner, {
     repository_path: "apps/kokoro-iam",
     repository_commit: ownerCommit,
-    contract_version: "0.12.0",
+    contract_version: "0.13.0",
     contract_path: "contract/openapi/iam.internal.v1.json",
     contract_sha256: expectedDigest,
   })
@@ -252,7 +252,7 @@ test("relay URL configuration rejects partial settings and callback authority al
 
 test("R357 IAM 0.12 preserves all original fifteen consumer operations and their complete shared schemas", async () => {
   const vendor = JSON.parse(
-    await readFile(new URL("../contract/vendor/kokoro-iam/284bfd8fea91d57dae18fa2b7c772d75c7b6dcd9/iam.internal.v1.json", import.meta.url), "utf8"),
+    await readFile(new URL("../contract/vendor/kokoro-iam/c64faa7992301f31495e163d04049c48a23d0225/iam.internal.v1.json", import.meta.url), "utf8"),
   )
   const originalOperations = [
     "POST /internal/v1/session-authorizations/verify",
