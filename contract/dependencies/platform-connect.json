@@ -3,7 +3,7 @@
   "status": "generated",
   "owner": {
     "repository_path": "apps/kokoro-capability",
-    "repository_commit": "b402b499535a213e1a337924e5dd0090927fbe6f",
+    "repository_commit": "7f10eaad1b737e04358f1725040ccb3bde7bfac8",
     "package_name": "kokoro.platform.v1",
     "sources": [
       {
@@ -12,13 +12,28 @@
       },
       {
         "path": "contract/proto/kokoro/platform/v1/platform_runtime.proto",
-        "sha256": "c7cfca48fcb315cc9657f1bfb8c25528ea07feb32bcd3b07dae2c1e53f88d922"
+        "sha256": "0399dc93a8c97a23213953e1fccc149225f38e165d34dad695baf8e82e4412ee"
       },
       {
         "path": "contract/proto/kokoro/storage/v3/storage.proto",
         "sha256": "1021e603065978871c51519ddba5b23c9b97f16b781a08bd98e019b3342bf5f9"
       }
-    ]
+    ],
+    "artifacts": [
+      {
+        "path": "contract/execution-operations/mcp-private-server-v1.json",
+        "sha256": "038758d2007f6f623b2a14d752e89d38082812e7db1bf6e40c4f21aee8ab7f1a"
+      },
+      {
+        "path": "contract/descriptor/platform-v1.binpb",
+        "sha256": "fe5354739d45125dad2adf3b7509b8cc77560e5cbef6bfda95d567cd47b59cc9"
+      }
+    ],
+    "provenance": {
+      "path": "contract/provenance.json",
+      "sha256": "402e0948642c4a6c01310097b9949bb75cb7da3da56ec9ffe5a79117c47bdaeb",
+      "combined_sha256": "5fce7c3bb36c855acc5e3e349eb22ae87cbf63aaf9fcc0892d09c200827a730f"
+    }
   },
   "generator": {
     "packages": {
@@ -37,7 +52,7 @@
         "sha256": "9888ea0808f6967ebdfb859125eb54430b89ad3f4dbee4418902bfdf6a4540ab"
       }
     ],
-    "script_sha256": "4e9c797f180449f59e55946542530248bdd1f8754b8793ff279ffaaa6b1e2cf3"
+    "script_sha256": "1aa379213b4511e868130852cdd6b985f9fcedaf12e56626b59c1b2db7eec900"
   },
   "generated": [
     {
@@ -46,7 +61,7 @@
     },
     {
       "path": "kokoro/platform/v1/platform_runtime_pb.ts",
-      "sha256": "adea7c372ba544b0aad2ae914aba32d15ca27e85a0cb7a9403fa165aec88788f"
+      "sha256": "2f13939a612958d17a15bdc4aaab8661263c960524084b1fbb0ef53718d20cfe"
     },
     {
       "path": "kokoro/storage/v3/storage_pb.ts",

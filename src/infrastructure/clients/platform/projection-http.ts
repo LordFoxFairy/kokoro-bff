@@ -29,7 +29,7 @@ import {
   zListVisibleSkillPoolResponse,
   zListVisibleSkillsResponse,
 } from "../../../generated/platform-http/zod.gen.js"
-import { ProjectionCredentialSource } from "./projection-credential.js"
+import { PlatformServiceCredentialSource } from "./platform-service-credential.js"
 import type { ListSelfManagedSkillsData } from "../../../generated/platform-http/types.gen.js"
 
 export type ProjectionOperation = "skills" | "skill" | "pool" | "catalog" | "mcp" | "mcpConnections"
@@ -183,14 +183,14 @@ function whileActive<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
 }
 
 export class PlatformProjectionHttpClient {
-  readonly #tokens: ProjectionCredentialSource
+  readonly #tokens: PlatformServiceCredentialSource
   constructor(
     private readonly baseUrl: string,
     credentialFile: string,
     private readonly timeoutMs = 5000,
     private readonly maxBytes = 1024 * 1024,
   ) {
-    this.#tokens = new ProjectionCredentialSource(credentialFile)
+    this.#tokens = new PlatformServiceCredentialSource(credentialFile, "projection")
   }
   async read(
     operation: ProjectionOperation,

@@ -184,7 +184,6 @@ test("A2 real Connect command sends exact generated digest/key/CAS and uses shar
   const { connectNodeAdapter } = await import("@connectrpc/connect-node")
   const { ProductMcpPersonalService } = await import("../src/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
   const { McpPersonalConnectClient } = await import("../src/infrastructure/clients/platform/mcp-personal-connect.js")
-  const { McpPersonalTokenSource } = await import("../src/infrastructure/clients/platform/mcp-personal-token.js")
   const seen: unknown[] = []
   const server = createServer(
     connectNodeAdapter({
@@ -192,7 +191,7 @@ test("A2 real Connect command sends exact generated digest/key/CAS and uses shar
         router.service(ProductMcpPersonalService, {
           updatePersonalMcpConnector: (request, context) => {
             seen.push(request)
-            assert.equal(context.requestHeader.get("x-tenant-ref"), identity.tenant)
+            assert.equal(context.requestHeader.get("x-kokoro-tenant"), identity.tenant)
             assert.equal(context.requestHeader.get("x-kokoro-subject"), identity.subject)
             context.responseHeader.set("cache-control", "no-store")
             context.responseHeader.set("x-kokoro-request-id", request.requestId)
@@ -216,7 +215,7 @@ test("A2 real Connect command sends exact generated digest/key/CAS and uses shar
   const address = server.address()
   assert.ok(address && typeof address === "object")
   const tokens = { get: async () => "workload", retire: () => undefined, close: () => undefined }
-  const client = new McpPersonalConnectClient(`http://127.0.0.1:${address.port}`, tokens as unknown as InstanceType<typeof McpPersonalTokenSource>)
+  const client = new McpPersonalConnectClient(`http://127.0.0.1:${address.port}`, tokens)
   const input = { ...identity, id: "connector", expectedStateVersion: "1", displayName: "Updated", description: "" }
   try {
     for (let replay = 0; replay < 2; replay++) await client.command("update", input, new AbortController().signal, performance.now() + 1000)

@@ -7,7 +7,7 @@ import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-const ownerCommit = "b402b499535a213e1a337924e5dd0090927fbe6f"
+const ownerCommit = "7f10eaad1b737e04358f1725040ccb3bde7bfac8"
 const vendorRoot = `contract/vendor/kokoro-platform/${ownerCommit}`
 const vendorProto = `${vendorRoot}/proto`
 const output = "src/generated/platform-connect"
@@ -15,9 +15,15 @@ const manifestPath = "contract/dependencies/platform-connect.json"
 
 const sourceDigests = {
   "kokoro/common/v1/common.proto": "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08",
-  "kokoro/platform/v1/platform_runtime.proto": "c7cfca48fcb315cc9657f1bfb8c25528ea07feb32bcd3b07dae2c1e53f88d922",
+  "kokoro/platform/v1/platform_runtime.proto": "0399dc93a8c97a23213953e1fccc149225f38e165d34dad695baf8e82e4412ee",
   "kokoro/storage/v3/storage.proto": "1021e603065978871c51519ddba5b23c9b97f16b781a08bd98e019b3342bf5f9",
 }
+const artifactDigests = {
+  "descriptor/platform-v1.binpb": "fe5354739d45125dad2adf3b7509b8cc77560e5cbef6bfda95d567cd47b59cc9",
+  "execution-operations/mcp-private-server-v1.json": "038758d2007f6f623b2a14d752e89d38082812e7db1bf6e40c4f21aee8ab7f1a",
+  "provenance.json": "402e0948642c4a6c01310097b9949bb75cb7da3da56ec9ffe5a79117c47bdaeb",
+}
+const provenanceCombinedSha256 = "5fce7c3bb36c855acc5e3e349eb22ae87cbf63aaf9fcc0892d09c200827a730f"
 const generatedFiles = ["kokoro/common/v1/common_pb.ts", "kokoro/platform/v1/platform_runtime_pb.ts", "kokoro/storage/v3/storage_pb.ts"]
 const generatedDirectories = ["kokoro", "kokoro/common", "kokoro/common/v1", "kokoro/platform", "kokoro/platform/v1", "kokoro/storage", "kokoro/storage/v3"]
 const configFiles = ["buf.platform.json", "buf.platform.gen.json"]
@@ -38,12 +44,21 @@ function assertSourceDigests(sources) {
   }
 }
 
+function assertArtifactDigests(artifacts) {
+  assert.deepEqual(Object.keys(artifacts).sort(), Object.keys(artifactDigests).sort(), "Platform artifact allowlist drifted")
+  for (const [file, digest] of Object.entries(artifactDigests)) {
+    assert.equal(sha256(artifacts[file]), digest, `Platform artifact digest drifted: ${file}`)
+  }
+  assert.equal(JSON.parse(artifacts["provenance.json"].toString("utf8")).combinedSha256, provenanceCombinedSha256, "Platform provenance drifted")
+}
+
 function assertVendorLayout(tree) {
   assert.deepEqual(
     tree,
     {
       directories: [
-        "openapi",
+        "descriptor",
+        "execution-operations",
         "proto",
         "proto/kokoro",
         "proto/kokoro/common",
@@ -53,7 +68,7 @@ function assertVendorLayout(tree) {
         "proto/kokoro/storage",
         "proto/kokoro/storage/v3",
       ],
-      files: ["openapi/platform-http.openapi.json", ...Object.keys(sourceDigests).map((file) => `proto/${file}`)],
+      files: [...Object.keys(artifactDigests), ...Object.keys(sourceDigests).map((file) => `proto/${file}`)].sort(),
     },
     "Platform vendor must contain only current v1 inputs",
   )
@@ -89,8 +104,13 @@ async function readSources() {
   return Object.fromEntries(await Promise.all(Object.keys(sourceDigests).map(async (file) => [file, await readFile(path.join(root, vendorProto, file))])))
 }
 
+async function readArtifacts() {
+  return Object.fromEntries(await Promise.all(Object.keys(artifactDigests).map(async (file) => [file, await readFile(path.join(root, vendorRoot, file))])))
+}
+
 async function verifyInputs() {
   assertSourceDigests(await readSources())
+  assertArtifactDigests(await readArtifacts())
   assertVendorLayout(await tree(path.join(root, vendorRoot)))
 }
 
@@ -109,6 +129,15 @@ async function manifestFor(directory) {
       repository_commit: ownerCommit,
       package_name: "kokoro.platform.v1",
       sources: Object.entries(sourceDigests).map(([file, digest]) => ({ path: `contract/proto/${file}`, sha256: digest })),
+      artifacts: [
+        { path: "contract/execution-operations/mcp-private-server-v1.json", sha256: artifactDigests["execution-operations/mcp-private-server-v1.json"] },
+        { path: "contract/descriptor/platform-v1.binpb", sha256: artifactDigests["descriptor/platform-v1.binpb"] },
+      ],
+      provenance: {
+        path: "contract/provenance.json",
+        sha256: artifactDigests["provenance.json"],
+        combined_sha256: provenanceCombinedSha256,
+      },
     },
     generator: {
       packages: { "@bufbuild/buf": "1.72.0", "@bufbuild/protobuf": "2.14.0", "@connectrpc/connect": "2.2.0", "protoc-gen-es": "2.14.0" },
@@ -153,6 +182,15 @@ async function main() {
   }
 }
 
-export { assertGeneratedTree, assertSourceDigests, assertVendorLayout, ownerCommit, sourceDigests }
+export {
+  artifactDigests,
+  assertArtifactDigests,
+  assertGeneratedTree,
+  assertSourceDigests,
+  assertVendorLayout,
+  ownerCommit,
+  provenanceCombinedSha256,
+  sourceDigests,
+}
 
 if (process.argv[1] !== undefined && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) await main()

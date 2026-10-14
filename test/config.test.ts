@@ -12,6 +12,18 @@ const runtimeEnv = {
 }
 
 describe("BFF owner PostgreSQL schema", () => {
+  it("configures direct MCP credentials without a machine IAM URL", () => {
+    const config = loadConfig({
+      ...runtimeEnv,
+      KOKORO_PLATFORM_BASE_URL: "http://platform.invalid",
+      KOKORO_BFF_PLATFORM_MCP_PERSONAL_CREDENTIALS_FILE: "/fixture/personal.json",
+      KOKORO_BFF_PLATFORM_MCP_ADMIN_CREDENTIALS_FILE: "/fixture/admin.json",
+    })
+    assert.equal(config.iamBaseUrl, null)
+    assert.equal(config.mcpPersonal?.credentialFile, "/fixture/personal.json")
+    assert.equal(config.mcpProviderAdmin?.credentialFile, "/fixture/admin.json")
+  })
+
   it("loads an optional independent Admin Web browser-service secret and rejects reuse", () => {
     const absent = loadConfig(runtimeEnv)
     assert.equal(Reflect.get(absent, "adminWebSharedSecret"), null)
@@ -23,10 +35,7 @@ describe("BFF owner PostgreSQL schema", () => {
     assert.equal(Reflect.get(configured, "adminWebSharedSecret"), "admin-test-secret")
     assert.equal(configured.sharedSecret, "test-secret")
 
-    assert.throws(
-      () => loadConfig({ ...runtimeEnv, KOKORO_BFF_ADMIN_WEB_SHARED_SECRET: "test-secret" }),
-      /Admin Web.+secret|secret.+different/iu,
-    )
+    assert.throws(() => loadConfig({ ...runtimeEnv, KOKORO_BFF_ADMIN_WEB_SHARED_SECRET: "test-secret" }), /Admin Web.+secret|secret.+different/iu)
   })
 
   it("requires an explicit fixed owner schema and rejects search_path overrides", () => {

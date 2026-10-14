@@ -336,3 +336,139 @@ test("caller disconnect cancels the personal owner read without late response", 
     await f.close()
   }
 })
+
+test("post-owner fresh checks start together and wait for both before releasing data", async () => {
+  let verifies = 0
+  let checks = 0
+  let ownerDone = false
+  let releaseVerify
+  let releaseCheck
+  let enteredVerify
+  let enteredCheck
+  const verifyStarted = new Promise((resolve) => {
+    enteredVerify = resolve
+  })
+  const checkStarted = new Promise((resolve) => {
+    enteredCheck = resolve
+  })
+  const identity = { ok: true, identity: { namespace: "tenant-server", userId: "human-one" }, platformAdmin: false }
+  const f = await fixture(true, {
+    verify: async () => {
+      if (++verifies === 1) return identity
+      assert.equal(ownerDone, true)
+      enteredVerify()
+      return new Promise((resolve) => {
+        releaseVerify = resolve
+      })
+    },
+    check: async () => {
+      if (++checks === 1) return { ok: true }
+      assert.equal(ownerDone, true)
+      enteredCheck()
+      return new Promise((resolve) => {
+        releaseCheck = resolve
+      })
+    },
+    mcpPersonalClient: {
+      read: async () => {
+        ownerDone = true
+        return { items: [connector], next_cursor: null }
+      },
+    },
+  })
+  let completed = false
+  const pending = fetch(`${f.origin}/browser/v1/mcp/connectors`, { headers }).then((response) => {
+    completed = true
+    return response
+  })
+  let timeout
+  try {
+    await Promise.race([
+      Promise.all([verifyStarted, checkStarted]),
+      new Promise((_, reject) => {
+        timeout = setTimeout(() => reject(new Error("post checks did not start concurrently")), 500)
+      }),
+    ])
+    clearTimeout(timeout)
+    releaseCheck({ ok: true })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    assert.equal(completed, false)
+    releaseVerify(identity)
+    const response = await pending
+    assert.equal(response.status, 200)
+    assert.equal(verifies, 2)
+    assert.equal(checks, 2)
+  } finally {
+    clearTimeout(timeout)
+    releaseVerify?.(identity)
+    await verifyStarted
+    await checkStarted
+    releaseCheck?.({ ok: true })
+    await pending
+    await f.close()
+  }
+})
+
+test("post-owner session failure takes priority over concurrent action denial", async () => {
+  let verifies = 0
+  let checks = 0
+  const f = await fixture(true, {
+    verify: async () =>
+      ++verifies === 1
+        ? { ok: true, identity: { namespace: "tenant-server", userId: "human-one" }, platformAdmin: false }
+        : { ok: false, status: 401, code: "session_invalid" },
+    check: async () => (++checks === 1 ? { ok: true } : { ok: false, status: 403, code: "session_forbidden" }),
+    mcpPersonalClient: { read: async () => ({ items: [connector], next_cursor: null }) },
+  })
+  try {
+    const response = await fetch(`${f.origin}/browser/v1/mcp/connectors`, { headers })
+    assert.equal(response.status, 401)
+    assert.equal((await response.json()).error.code, "session_invalid")
+    assert.equal(verifies, 2)
+    assert.equal(checks, 2)
+  } finally {
+    await f.close()
+  }
+})
+
+test("post-owner action rejection waits for later session denial and preserves 401", async () => {
+  let verifies = 0
+  let checks = 0
+  let releaseSession
+  let actionRejected
+  const rejected = new Promise((resolve) => {
+    actionRejected = resolve
+  })
+  const f = await fixture(true, {
+    verify: async () =>
+      ++verifies === 1
+        ? { ok: true, identity: { namespace: "tenant-server", userId: "human-one" }, platformAdmin: false }
+        : new Promise((resolve) => {
+            releaseSession = resolve
+          }),
+    check: async () => {
+      if (++checks === 1) return { ok: true }
+      actionRejected()
+      throw new Error("action_transport_failure")
+    },
+    mcpPersonalClient: { read: async () => ({ items: [connector], next_cursor: null }) },
+  })
+  let completed = false
+  const pending = fetch(`${f.origin}/browser/v1/mcp/connectors`, { headers }).then((response) => {
+    completed = true
+    return response
+  })
+  try {
+    await rejected
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    assert.equal(completed, false)
+    releaseSession({ ok: false, status: 401, code: "session_invalid" })
+    const response = await pending
+    assert.equal(response.status, 401)
+    assert.equal((await response.json()).error.code, "session_invalid")
+  } finally {
+    releaseSession?.({ ok: false, status: 401, code: "session_invalid" })
+    await pending
+    await f.close()
+  }
+})

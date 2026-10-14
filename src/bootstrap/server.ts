@@ -468,7 +468,7 @@ async function handle(
   }
   const context = admission.context
   if (isMcpPersonalOperation) {
-    await mcpPersonalRoute(request, response, config, composition, context, businessPath)
+    await mcpPersonalRoute(request, response, config, composition, admission, businessPath)
     return
   }
   const readmitSkill = async (signal: AbortSignal): Promise<void> => {

@@ -14,7 +14,7 @@ import {
   SkillSourceRefSchema,
 } from "../../../generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
 import type { CatalogTokenSource } from "./catalog-token.js"
-import type { ProjectionCredentialSource } from "./projection-credential.js"
+import type { PlatformServiceCredentialSource } from "./platform-service-credential.js"
 
 type Common = { requestId: string; tenant: string; subject: string }
 type TokenSource = {
@@ -25,7 +25,7 @@ export class PersonalInstallationConnectClient {
   constructor(
     baseUrl: string,
     private readonly writes: CatalogTokenSource,
-    private readonly reads: ProjectionCredentialSource,
+    private readonly reads: PlatformServiceCredentialSource,
     private readonly timeoutMs: number,
   ) {
     this.#client = createClient(

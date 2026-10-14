@@ -10,7 +10,7 @@ import {
   SkillIdSchema,
   SkillInstallationIdSchema,
 } from "../../../generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
-import { ProjectionCredentialSource } from "./projection-credential.js"
+import { PlatformServiceCredentialSource } from "./platform-service-credential.js"
 
 type Common = Readonly<{ requestId: string; tenant: string; subject: string; filePath?: string }>
 export type SkillPackageInspectionInput =
@@ -31,7 +31,7 @@ export class SkillPackageInspectionDependencyError extends Error {
 export class SkillPackageInspectionConnectClient {
   readonly #managed
   readonly #installation
-  readonly #tokens: ProjectionCredentialSource
+  readonly #tokens: PlatformServiceCredentialSource
 
   constructor(
     baseUrl: string,
@@ -47,7 +47,7 @@ export class SkillPackageInspectionConnectClient {
     })
     this.#managed = createClient(ProductSkillPackageInspectionService, transport)
     this.#installation = createClient(ProductSkillInstallationPackageInspectionService, transport)
-    this.#tokens = new ProjectionCredentialSource(credentialFile)
+    this.#tokens = new PlatformServiceCredentialSource(credentialFile, "projection")
   }
 
   async inspect(input: SkillPackageInspectionInput, signal: AbortSignal, deadlineAt: number) {

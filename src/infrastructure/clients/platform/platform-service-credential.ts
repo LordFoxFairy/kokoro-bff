@@ -33,9 +33,10 @@ async function waitForIo<T>(operation: Promise<T>, signal?: AbortSignal, deadlin
     )
   })
 }
-export class ProjectionCredentialSource {
+export class PlatformServiceCredentialSource {
   constructor(
     private readonly path: string,
+    private readonly purpose: "projection" | "mcp_personal" | "mcp_admin",
     private readonly opener: (path: string, flags: number) => Promise<CredentialHandle> = open,
   ) {}
   async get(tenantId: string, signal?: AbortSignal, deadlineAt?: number): Promise<string> {
@@ -101,7 +102,7 @@ export class ProjectionCredentialSource {
         value.caller !== "kokoro-bff" ||
         !Array.isArray(value.surfaces) ||
         value.surfaces.length !== 1 ||
-        value.surfaces[0] !== "projection" ||
+        value.surfaces[0] !== this.purpose ||
         tenantId.length > 255 ||
         !TENANT.test(tenantId) ||
         ids.has(credentialId) ||

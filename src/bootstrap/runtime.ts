@@ -1,9 +1,5 @@
 import { McpPersonalConnectClient } from "../infrastructure/clients/platform/mcp-personal-connect.js"
-import { McpPersonalCredentialSource } from "../infrastructure/clients/platform/mcp-personal-credential.js"
-import { McpPersonalTokenSource } from "../infrastructure/clients/platform/mcp-personal-token.js"
 import { McpProviderAdminConnectClient } from "../infrastructure/clients/platform/mcp-provider-admin-connect.js"
-import { McpProviderAdminCredentialSource } from "../infrastructure/clients/platform/mcp-provider-admin-credential.js"
-import { McpProviderAdminTokenSource } from "../infrastructure/clients/platform/mcp-provider-admin-token.js"
 import { SkillSpecificationService } from "../application/skill-specification.js"
 import { PlatformSkillSpecificationFacade } from "../infrastructure/clients/platform/skill-specification-facade.js"
 import { PlatformProjectionHttpClient } from "../infrastructure/clients/platform/projection-http.js"
@@ -43,7 +39,7 @@ import { CatalogCredentialSource } from "../infrastructure/clients/platform/cata
 import { CatalogTokenSource } from "../infrastructure/clients/platform/catalog-token.js"
 import { CatalogConnectClient } from "../infrastructure/clients/platform/catalog-connect.js"
 import { PersonalInstallationConnectClient } from "../infrastructure/clients/platform/personal-installation-connect.js"
-import { ProjectionCredentialSource } from "../infrastructure/clients/platform/projection-credential.js"
+import { PlatformServiceCredentialSource } from "../infrastructure/clients/platform/platform-service-credential.js"
 import { ProjectScopeReleaseOutboxDispatcher } from "../application/project-scope-release-outbox-dispatcher.js"
 import { StorageScopeReleaseClient } from "../infrastructure/clients/storage/scope-release-client.js"
 import type { LocalSkillImportClient } from "../http/routes/local-skill-import.js"
@@ -175,7 +171,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
         ? new SkillProductConnectClient(
             config.skillDraft.platformBaseUrl,
             new CatalogTokenSource(config.iamBaseUrl, new CatalogCredentialSource(config.skillDraft.credentialFile), config.skillDraft.timeoutMs),
-            new ProjectionCredentialSource(config.platformProjection.credentialFile),
+            new PlatformServiceCredentialSource(config.platformProjection.credentialFile, "projection"),
             config.skillDraft.timeoutMs,
           )
         : null
@@ -211,7 +207,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
         ? new PersonalInstallationConnectClient(
             config.skillDraft.platformBaseUrl,
             new CatalogTokenSource(config.iamBaseUrl, new CatalogCredentialSource(config.skillDraft.credentialFile), config.skillDraft.timeoutMs),
-            new ProjectionCredentialSource(config.platformProjection.credentialFile),
+            new PlatformServiceCredentialSource(config.platformProjection.credentialFile, "projection"),
             config.skillDraft.timeoutMs,
           )
         : null
@@ -222,7 +218,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
         ? new LocalSkillImportConnectClient(
             config.skillDraft.platformBaseUrl,
             new CatalogTokenSource(config.iamBaseUrl, new CatalogCredentialSource(config.skillDraft.credentialFile), config.skillDraft.timeoutMs),
-            new ProjectionCredentialSource(config.platformProjection.credentialFile),
+            new PlatformServiceCredentialSource(config.platformProjection.credentialFile, "projection"),
           )
         : undefined
   const explicitlySuppliedStore = Object.prototype.hasOwnProperty.call(options, "businessStore")
@@ -349,28 +345,19 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
   const mcpPersonalClient =
     options.mcpPersonalClient !== undefined
       ? options.mcpPersonalClient
-      : config.mcpPersonal && config.iamBaseUrl
+      : config.mcpPersonal
         ? new McpPersonalConnectClient(
             config.mcpPersonal.baseUrl,
-            new McpPersonalTokenSource(
-              config.iamBaseUrl,
-              new McpPersonalCredentialSource(config.mcpPersonal.credentialFile),
-              10_000,
-              config.iamRelay?.webOrigin,
-            ),
+            new PlatformServiceCredentialSource(config.mcpPersonal.credentialFile, "mcp_personal"),
           )
         : null
   const mcpProviderAdminClient =
     options.mcpProviderAdminClient !== undefined
       ? options.mcpProviderAdminClient
-      : config.mcpProviderAdmin && config.iamBaseUrl
+      : config.mcpProviderAdmin
         ? new McpProviderAdminConnectClient(
             config.mcpProviderAdmin.baseUrl,
-            new McpProviderAdminTokenSource(
-              config.iamBaseUrl,
-              new McpProviderAdminCredentialSource(config.mcpProviderAdmin.credentialFile),
-              config.mcpProviderAdmin.timeoutMs,
-            ),
+            new PlatformServiceCredentialSource(config.mcpProviderAdmin.credentialFile, "mcp_admin"),
           )
         : null
   let closePromise: Promise<void> | null = null

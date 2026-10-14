@@ -410,13 +410,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
     mcpPersonal: (() => {
       const credentialFile = env.KOKORO_BFF_PLATFORM_MCP_PERSONAL_CREDENTIALS_FILE?.trim() || null
       if (credentialFile === null) return null
-      if (!skillDraft.platformBaseUrl || !optionalUrl(env.KOKORO_IAM_BASE_URL)) throw new Error("mcp_personal_configuration_incomplete")
+      if (!skillDraft.platformBaseUrl) throw new Error("mcp_personal_configuration_incomplete")
       return { baseUrl: skillDraft.platformBaseUrl, credentialFile }
     })(),
     mcpProviderAdmin: (() => {
       const credentialFile = env.KOKORO_BFF_PLATFORM_MCP_ADMIN_CREDENTIALS_FILE?.trim() || null
       if (credentialFile === null) return null
-      if (!skillDraft.platformBaseUrl || !optionalUrl(env.KOKORO_IAM_BASE_URL)) throw new Error("mcp_provider_admin_configuration_incomplete")
+      if (!skillDraft.platformBaseUrl) throw new Error("mcp_provider_admin_configuration_incomplete")
       return { baseUrl: skillDraft.platformBaseUrl, credentialFile, timeoutMs: upstreamTimeoutMs }
     })(),
     platformProjection: {

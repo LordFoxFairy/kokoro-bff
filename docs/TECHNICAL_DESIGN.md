@@ -1,3 +1,15 @@
+## CV-SVC MCP内部直服务凭据切换（D1，2026-10-13；BFF 源码候选已实现，待配对验收）
+
+本切片只把 BFF→Platform 的 `mcp_personal`、`mcp_admin` workload认证从IAM机器OAuth/token/introspection切换到Platform现本地服务凭据，与已直认证projection保持相同安全I/O规则。BFF用户session、个人权限/catalog管理权限及前后fresh校验不删除；第三方MCP OAuth/PKCE、tenant_execution/proof、Run撤权不在本片。Platform surface白名单/caller/tenant仍是唯一机器准入。
+
+现专用reader `projection-credential.ts`重命名为同目录 `platform-service-credential.ts`，构造时明确固定 `projection | mcp_personal | mcp_admin` 中一个用途；不接受任意caller/surface。选择复用有界受限文件I/O而非新建三份读文件实现，避免复制取消/关闭/权限规则；不是通用Secret服务。每实例文件只允许caller=kokoro-bff、恰好一个指定surface、固定tenant，三用途凭据ID/secret独立。完整快照每次重读，不缓存授权或secret；保O_NOFOLLOW、owner/mode0400或0600、64KiB、严格UTF8/schema、deadline与迟到handle清理。原projection行为保持，不复用其secret给MCP。
+
+两MCP Connect client用 `.get(tenantId, signal, deadlineAt)`直接取得credential；删除token exchange/cache/retire机制与两旧token/credential文件，更新现projection consumer imports。组合删除仅这两client依赖IAM URL的机器认证前置条件，现credential配置入口不改名但内容仅接受新的version1闭集。用户IAM配置不动。出站tenant断言统一 `x-kokoro-tenant`，subject来自已验证BFF上下文，owner权限不信body或浏览器header。原request ID/no-store/response bounds/commands/CAS/digest与在途关闭不变。
+
+这是既有RPC传输认证的原子行为切换；Proto/generated/body/artifact输入无字段变化，当前固定owner wire artifact维持原字节，认证profile以Platform D1设计及实际code/tests配对批准。正常切换须owner/consumer/私有配置三者匹配，失败不回退OAuth；回滚也配对回滚，不同时接受两套凭据。暂不自动启用其他surface或改数据库。
+
+验证：現reader全部安全/rotation/cancel负控迁移不丢；两surface跨purpose/tenant/caller与secret失败关闭、未配置用户资格仍拒绝；机器OAuth/introspection调用为零、其他surface unchanged；Root真实HTTP/Connect与浏览器同条件耗时。纯fixture/type/build不代替正常配对与性能证据。本片 BFF 源码候选已按 D1 实现；私有配置与正常运行尚未切换。
+
 ## App API 修复当前切片（2026-10-13）
 
 - HTTP 业务路径统一 `/v1`，artifact SemVer 不等于路由版本。Billing 唯一消费源为 owner commit `1ceeae550f05857d1e7fa0da1e83af23a552f0ca` 的 `contract/openapi/v1/openapi.yaml`（SHA-256 `35b4a2d1d178f6a548fe67460c8e8cbba9eb247296f9051f6ec23060235baff8`）；现生成器只消费本人 Credit 两读，不回退旧 v2。
