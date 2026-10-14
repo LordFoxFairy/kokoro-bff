@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 15.0.0
+  version: 15.1.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -10660,6 +10660,372 @@ paths:
           schema:
             type: string
             pattern: ^[A-Za-z0-9_-]{43}$
+  /v1/account/sessions:
+    get:
+      tags:
+        - Account Sessions
+      operationId: listAccountSessions
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: stable
+      x-kokoro-idempotency: none
+      x-kokoro-permission: iam:account-session.read
+      summary: Current Product user account sessions
+      responses:
+        '200':
+          description: Owner-confirmed safe account session projection
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSessionsResponse'
+        '400':
+          description: Sanitized account session failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSessionError400'
+        '401':
+          description: Sanitized account session failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSessionError401'
+        '403':
+          description: Sanitized account session failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSessionError403'
+        '404':
+          description: Sanitized account session failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSessionError404'
+        '409':
+          description: Sanitized account session failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSessionError409'
+        '413':
+          description: Sanitized account session failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSessionError413'
+        '429':
+          description: Sanitized account session failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+            Retry-After:
+              schema:
+                type: string
+                pattern: ^[1-9][0-9]{0,4}$
+                description: Validated delta seconds from 1 through 86400.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSessionError429'
+        '502':
+          description: Sanitized account session failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSessionError502'
+        '503':
+          description: Sanitized account session failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSessionError503'
+      security:
+        - serviceHeader: []
+          internalSecret: []
+          userBearer: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 2048
+  /v1/account/sessions/{session_id}:
+    delete:
+      tags:
+        - Account Sessions
+      operationId: revokeAccountSession
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: stable
+      x-kokoro-idempotency: none
+      x-kokoro-permission: iam:account-session.revoke
+      summary: Current Product user account sessions
+      responses:
+        '200':
+          description: Owner-confirmed safe account session projection
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSessionRevokeResponse'
+        '400':
+          description: Sanitized account session failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSessionError400'
+        '401':
+          description: Sanitized account session failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSessionError401'
+        '403':
+          description: Sanitized account session failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSessionError403'
+        '404':
+          description: Sanitized account session failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSessionError404'
+        '409':
+          description: Sanitized account session failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSessionError409'
+        '413':
+          description: Sanitized account session failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSessionError413'
+        '429':
+          description: Sanitized account session failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+            Retry-After:
+              schema:
+                type: string
+                pattern: ^[1-9][0-9]{0,4}$
+                description: Validated delta seconds from 1 through 86400.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSessionError429'
+        '502':
+          description: Sanitized account session failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSessionError502'
+        '503':
+          description: Sanitized account session failure
+          headers:
+            x-request-id:
+              schema:
+                $ref: '#/components/schemas/RequestId'
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSessionError503'
+      security:
+        - serviceHeader: []
+          internalSecret: []
+          userBearer: []
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 255
 components:
   securitySchemes:
     serviceHeader:
@@ -11093,6 +11459,301 @@ components:
         not trim or normalize a non-NFC value.
       schema: { type: string, minLength: 1 }
   schemas:
+    AccountSession:
+      type: object
+      properties:
+        session_id:
+          type: string
+          minLength: 1
+          maxLength: 255
+        created_at:
+          type: string
+          format: date-time
+          pattern: >-
+            ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}(?:Z))$
+        expires_at:
+          type: string
+          format: date-time
+          pattern: >-
+            ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}(?:Z))$
+      required:
+        - session_id
+        - created_at
+        - expires_at
+      additionalProperties: false
+    AccountSessionsResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+        - meta
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required:
+            - current_session
+            - sessions
+          properties:
+            current_session:
+              $ref: '#/components/schemas/AccountSession'
+            sessions:
+              type: array
+              maxItems: 100
+              items:
+                $ref: '#/components/schemas/AccountSession'
+        meta:
+          type: object
+          additionalProperties: false
+          required:
+            - request_id
+            - next_cursor
+          properties:
+            request_id:
+              $ref: '#/components/schemas/RequestId'
+            next_cursor:
+              type:
+                - string
+                - 'null'
+              minLength: 1
+              maxLength: 2048
+    AccountSessionRevokeResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+        - meta
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required:
+            - session_id
+            - revoked
+          properties:
+            session_id:
+              type: string
+              minLength: 1
+              maxLength: 255
+            revoked:
+              type: boolean
+              const: true
+        meta:
+          $ref: '#/components/schemas/RequestMeta'
+    AccountSessionError400:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+        - meta
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              enum:
+                - account_session_input_invalid
+            message:
+              type: string
+              minLength: 1
+        meta:
+          $ref: '#/components/schemas/RequestMeta'
+    AccountSessionError401:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+        - meta
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              enum:
+                - session_invalid
+                - session_authentication_required
+            message:
+              type: string
+              minLength: 1
+        meta:
+          $ref: '#/components/schemas/RequestMeta'
+    AccountSessionError403:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+        - meta
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              enum:
+                - account_session_forbidden
+                - session_forbidden
+                - service_auth_failed
+                - product_tenant_forbidden
+            message:
+              type: string
+              minLength: 1
+        meta:
+          $ref: '#/components/schemas/RequestMeta'
+    AccountSessionError404:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+        - meta
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              enum:
+                - account_session_not_found
+            message:
+              type: string
+              minLength: 1
+        meta:
+          $ref: '#/components/schemas/RequestMeta'
+    AccountSessionError409:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+        - meta
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              enum:
+                - account_session_conflict
+            message:
+              type: string
+              minLength: 1
+        meta:
+          $ref: '#/components/schemas/RequestMeta'
+    AccountSessionError413:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+        - meta
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              enum:
+                - account_session_request_too_large
+            message:
+              type: string
+              minLength: 1
+        meta:
+          $ref: '#/components/schemas/RequestMeta'
+    AccountSessionError429:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+        - meta
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              enum:
+                - account_session_rate_limited
+                - session_rate_limited
+            message:
+              type: string
+              minLength: 1
+        meta:
+          $ref: '#/components/schemas/RequestMeta'
+    AccountSessionError502:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+        - meta
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              enum:
+                - account_session_response_invalid
+            message:
+              type: string
+              minLength: 1
+        meta:
+          $ref: '#/components/schemas/RequestMeta'
+    AccountSessionError503:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+        - meta
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              enum:
+                - account_sessions_unavailable
+                - iam_admission_unavailable
+                - product_tenant_not_configured
+            message:
+              type: string
+              minLength: 1
+        meta:
+          $ref: '#/components/schemas/RequestMeta'
     SpecificationPublicSkill:
       type: object
       properties:

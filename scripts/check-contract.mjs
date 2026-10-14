@@ -1,3 +1,4 @@
+import { restorePublic15AccountSessionContract, accountSessionParentBaseline } from "./account-session-public-contract.mjs"
 import { readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
@@ -90,6 +91,9 @@ function expectedIdempotency(operation) {
 }
 
 export function inspectOpenApiGovernance(source) {
+  if (/^  version: 15\.1\.0$/mu.test(source)) {
+    try { source = restorePublic15AccountSessionContract(source) } catch(error) { return [error.message] }
+  }
   const errors = []
   const operations = parseOpenApiOperations(source)
   if (operations.length === 0) return ["OpenAPI paths must declare at least one HTTP operation"]
@@ -143,6 +147,9 @@ export function inspectOpenApiGovernance(source) {
 }
 
 export function compareOperationBaseline(source, baseline) {
+  if (/^  version: 15\.1\.0$/mu.test(source)) {
+    try { source = restorePublic15AccountSessionContract(source); baseline = accountSessionParentBaseline(baseline) } catch(error) { return [error.message] }
+  }
   const current = new Map(
     parseOpenApiOperations(source).map((operation) => [`${operation.method} ${operation.path}`, operation.fields.get("operationId") ?? ""]),
   )
@@ -194,6 +201,7 @@ async function main() {
       operation.fields.get("operationId") === "getManagedPersonalSkillPackage" || operation.fields.get("operationId") === "getPersonalSkillInstallationPackage",
   )
   const errors = [
+    ...(/^  version: 15\.1\.0$/mu.test(openapi) && parsedBaseline.operations.length === 144 ? [] : ["SET18 current public release must be15.1/144"]),
     ...inspectOpenApiGovernance(openapi),
     ...compareOperationBaseline(openapi, parsedBaseline.operations),
     ...(parsedBaseline.operations.length === currentOperations.length

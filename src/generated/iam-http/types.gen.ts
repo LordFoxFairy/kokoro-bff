@@ -34,6 +34,148 @@ export type ApiErrorResponse = {
   }
 }
 
+export type ListAccountSessionsData = {
+  body?: never
+  headers?: {
+    /**
+     * Caller correlation identifier. Missing or invalid values are replaced by the service.
+     */
+    "x-request-id"?: string
+  }
+  path?: never
+  query?: {
+    limit?: number
+    cursor?: string
+  }
+  url: "/internal/v1/account/sessions"
+}
+
+export type ListAccountSessionsErrors = {
+  /**
+   * Stable internal API error envelope.
+   */
+  400: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  401: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  403: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  409: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  413: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  429: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  500: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  503: ApiErrorResponse
+}
+
+export type ListAccountSessionsError = ListAccountSessionsErrors[keyof ListAccountSessionsErrors]
+
+export type ListAccountSessionsResponses = {
+  200: {
+    data: {
+      current_session: {
+        session_id: string
+        created_at: string
+        expires_at: string
+      }
+      sessions: Array<{
+        session_id: string
+        created_at: string
+        expires_at: string
+      }>
+    }
+    meta: {
+      next_cursor: string | null
+    }
+  }
+}
+
+export type ListAccountSessionsResponse = ListAccountSessionsResponses[keyof ListAccountSessionsResponses]
+
+export type RevokeAccountSessionData = {
+  body?: never
+  headers?: {
+    /**
+     * Caller correlation identifier. Missing or invalid values are replaced by the service.
+     */
+    "x-request-id"?: string
+  }
+  path: {
+    session_id: string
+  }
+  query?: never
+  url: "/internal/v1/account/sessions/{session_id}"
+}
+
+export type RevokeAccountSessionErrors = {
+  /**
+   * Stable internal API error envelope.
+   */
+  400: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  401: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  403: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  404: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  409: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  413: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  429: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  500: ApiErrorResponse
+  /**
+   * Stable internal API error envelope.
+   */
+  503: ApiErrorResponse
+}
+
+export type RevokeAccountSessionError = RevokeAccountSessionErrors[keyof RevokeAccountSessionErrors]
+
+export type RevokeAccountSessionResponses = {
+  200: {
+    data: {
+      session_id: string
+      revoked: true
+    }
+  }
+}
+
+export type RevokeAccountSessionResponse = RevokeAccountSessionResponses[keyof RevokeAccountSessionResponses]
+
 export type GetTenantInvitationContextData = {
   body?: never
   headers?: {

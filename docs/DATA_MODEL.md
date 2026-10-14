@@ -1,12 +1,17 @@
 ## SET-18 登录 Session 的非持久公开投影（D0 独审通过，2026-10-14）
 
+IAM正式错误缓存修补已发行284bfd8fea91d57dae18fa2b7c772d75c7b6dcd9，internal0.12.0 artifact仍为SHA256 f6f3588d0fe52e5b3eed57e117e25b991caabc9e2825d1a0edcf9149f6a3e26b。本仓V2业务已冻审并真实BFF→IAM通过，public15.1.0候选SHA2565972f7be07a0117d8ee036fa4e742da7942b3c864d009c2847e70e69112a747d、canonical/inventory144；正式单pin更新及两新增消费元数据/格式回归修补已完成并接收，源码任务仍沿Root卡。本仓待Root正式发行，尚未正常激活；Skills/连接器业务排除，Root保留docs/Git/资源与最终验收。
+
 BFF无本片持久事实。database/schema.sql保持原字节SHA256 cb1b6810010bbdb9ac8f1c30e42ef0e59ef90670f3742b769d85521d750be421；不加表/索引/Redis/receipt/cache、不查询IAM SQL或跨owner JOIN。现有BFF Conversation/聊天Session不承接登录Session，已有Account身份也不成为设备事实副本。
 
 IAM canonical Session、OAuth token、Audit及无外键/Prisma完整性是唯一owner。BFF仅在一次请求内携带受信Bearer/context和严格安全投影，依其正式cursor保持原顺序/分页，不decode/重签或伪造快照。current单独输出，others本人active且排除current；列表跨IAM账户tenant，不把activeOrganizationId当登录来源，描述未知不补城市、UA或last-active。
 
 撤销成功由IAM同tx结束Session、处理关联凭据并写成功Audit且commit后ACK；BFF不保存永久成功receipt、无恢复/撤销撤销操作。失去ACK/取消先重读，仍可能已提交；本人expired保留重复200、ownercleanup后404，不把404转伪200。删除替代新在线Product准入拒绝；不承诺撤回已准入工作或所有JWT/refresh永不返回。
 
-新scope仅owner正式零入参provisioning演进，需正规新authorize；本仓不改client/resource/member/roles、正常服务或数据。artifact更新只动正式immutable vendor与正常生成，旧单pin删除，无并存数据库或凭据存储；重启不恢复登录/撤销事实。三面未准入源码、未运行integration/正常组合，Skills/连接器排除。
+新scope仅owner正式零入参provisioning演进，需正规新authorize；本仓不改client/resource/member/roles、正常服务或数据。artifact更新只动正式immutable vendor与正常生成，旧单pin删除，无并存数据库或凭据存储；重启不恢复登录/撤销事实。三面已准入源码、尚未运行integration/正常组合，Skills/连接器排除。
+
+
+Root源码复核纠正统计：旧canonical142/旧inventory141漏一个已存在的browser-private操作；本片正规完整inventory144，严格逆恢复旧141清单与完整15.0 API原字节。此清单登记纠偏没有Skills业务/API/权限语义变化，旧Conversation与format失败不冒通过。
 
 ## SET-15 Catalog 零持久化投影（2026-10-13）
 

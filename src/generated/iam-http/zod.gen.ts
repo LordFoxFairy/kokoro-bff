@@ -37,6 +37,74 @@ export const zApiErrorResponse = z
   })
   .strict()
 
+export const zListAccountSessionsHeaders = z.object({
+  "x-request-id": z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{1,128}$/)
+    .optional(),
+})
+
+export const zListAccountSessionsQuery = z.object({
+  limit: z.int().gte(1).lte(100).optional().default(25),
+  cursor: z.string().min(1).max(2048).optional(),
+})
+
+export const zListAccountSessionsResponse = z.object({
+  data: z.object({
+    current_session: z.object({
+      session_id: z.string().min(1).max(255),
+      created_at: z.iso
+        .datetime()
+        .regex(
+          /^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}(?:Z))$/,
+        ),
+      expires_at: z.iso
+        .datetime()
+        .regex(
+          /^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}(?:Z))$/,
+        ),
+    }),
+    sessions: z
+      .array(
+        z.object({
+          session_id: z.string().min(1).max(255),
+          created_at: z.iso
+            .datetime()
+            .regex(
+              /^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}(?:Z))$/,
+            ),
+          expires_at: z.iso
+            .datetime()
+            .regex(
+              /^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}(?:Z))$/,
+            ),
+        }),
+      )
+      .max(100),
+  }),
+  meta: z.object({
+    next_cursor: z.string().min(1).max(2048).nullable(),
+  }),
+})
+
+export const zRevokeAccountSessionHeaders = z.object({
+  "x-request-id": z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{1,128}$/)
+    .optional(),
+})
+
+export const zRevokeAccountSessionPath = z.object({
+  session_id: z.string().min(1).max(255),
+})
+
+export const zRevokeAccountSessionResponse = z.object({
+  data: z.object({
+    session_id: z.string().min(1).max(255),
+    revoked: z.literal(true),
+  }),
+})
+
 export const zGetTenantInvitationContextHeaders = z.object({
   "x-request-id": z
     .string()

@@ -1,3 +1,4 @@
+import { restorePublic15AccountSessionContract, accountSessionParentBaseline } from "./account-session-public-contract.mjs"
 import { inspectSkillProductContract } from "./verify-skill-product-contract.mjs"
 import { inspectSkillExamplePromptsContract, stripSkillExamplePromptsSource } from "./verify-skill-example-prompts-contract.mjs"
 import { createHash } from "node:crypto"
@@ -3131,6 +3132,8 @@ export function restorePublic15TeamPermissionsContract(source: string): string {
 
 export function inspectBffOpenApi(source: string, baseline: readonly BaselineOperation[]): string[] {
   try {
+    source = restorePublic15AccountSessionContract(source)
+    baseline = accountSessionParentBaseline(baseline)
     source = restorePublic15TeamPermissionsContract(source)
   } catch (error) {
     return [error instanceof Error ? error.message : "SET13 inverse failed"]

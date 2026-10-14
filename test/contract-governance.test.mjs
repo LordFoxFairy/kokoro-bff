@@ -1,3 +1,4 @@
+import { restorePublic15AccountSessionContract } from "../scripts/account-session-public-contract.mjs"
 import { inspectSkillProductContract, stripSkillProductSource } from "../scripts/verify-skill-product-contract.mjs"
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
@@ -152,9 +153,9 @@ test("Library publishes explicit personal file 200 and rejects contract drift", 
   assert.ok(inspectLibraryFileContract(mixedPage).some((error) => error.includes("LibraryFilePage")))
 })
 
-test("the IAM consumer pins the complete 0.11.0 owner artifact and generates only approved admission, human qualification, Skill, Team and invitation operations", async () => {
-  const commit = "719225439a3609b540f8d6265939feaef45a2268"
-  const digest = "cb81139cfac5890e43caca2a296e39e777f2488c743cfb931ab0a20e6761b21e"
+test("the IAM consumer pins the complete 0.12.0 owner artifact and generates only approved admission, human qualification, Skill, Team and invitation operations", async () => {
+  const commit = "284bfd8fea91d57dae18fa2b7c772d75c7b6dcd9"
+  const digest = "f6f3588d0fe52e5b3eed57e117e25b991caabc9e2825d1a0edcf9149f6a3e26b"
   const [manifestSource, vendor, config, lockfile, sdk, types] = await Promise.all([
     readFile(new URL("../contract/dependencies/iam-http.json", import.meta.url), "utf8"),
     readFile(new URL(`../contract/vendor/kokoro-iam/${commit}/iam.internal.v1.json`, import.meta.url)),
@@ -167,7 +168,7 @@ test("the IAM consumer pins the complete 0.11.0 owner artifact and generates onl
   const manifest = JSON.parse(manifestSource)
   const owner = JSON.parse(vendor.toString("utf8"))
   assert.equal(sha256(vendor), digest)
-  assert.equal(owner.info.version, "0.11.0")
+  assert.equal(owner.info.version, "0.12.0")
   const admissionSchema = owner.paths["/internal/v1/session-authorizations/verify"].post.responses["200"].content["application/json"].schema.properties.data
   assert.ok(admissionSchema.required.includes("platform_admin"))
   assert.deepEqual(admissionSchema.properties.platform_admin, { type: "boolean" })
@@ -176,7 +177,7 @@ test("the IAM consumer pins the complete 0.11.0 owner artifact and generates onl
   assert.deepEqual(manifest.owner, {
     repository_path: "apps/kokoro-iam",
     repository_commit: commit,
-    contract_version: "0.11.0",
+    contract_version: "0.12.0",
     contract_path: "contract/openapi/iam.internal.v1.json",
     contract_sha256: digest,
   })
@@ -195,6 +196,8 @@ test("the IAM consumer pins the complete 0.11.0 owner artifact and generates onl
   assert.equal(manifest.generated.length, 16)
   assert.match(sdk, /export const verifySessionAuthorization/u)
   for (const operation of [
+    "listAccountSessions",
+    "revokeAccountSession",
     "listTenantMembers",
     "listTenantInvitations",
     "listTenantRoles",
@@ -218,6 +221,7 @@ test("the IAM consumer pins the complete 0.11.0 owner artifact and generates onl
     "createTenantInvitation",
     "getTenantInvitationContext",
     "leaveTenant",
+    "listAccountSessions",
     "listTenantInvitations",
     "listTenantMembers",
     "listTenantRoles",
@@ -226,6 +230,7 @@ test("the IAM consumer pins the complete 0.11.0 owner artifact and generates onl
     "replaceTenantMemberRoles",
     "resendTenantInvitation",
     "resolveTenantPublisherProfiles",
+    "revokeAccountSession",
     "verifySessionAuthorization",
   ])
   assert.doesNotMatch(`${sdk}\n${types}`, /getMetrics|healthz|readyz/u)
@@ -743,7 +748,7 @@ test("SET13 actual builtin permission fields are declared by the public contract
 
 test("SET13 rejects closed permission and non-Team historical drift", async () => {
   const { restorePublic15TeamPermissionsContract } = await import("../scripts/verify-openapi.ts")
-  const source = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
+  const source = restorePublic15AccountSessionContract(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"))
   const parent = restorePublic15TeamPermissionsContract(source)
   assert.match(parent, /^  version: 14\.7\.0$/mu)
   const mutations = [

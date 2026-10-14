@@ -1,11 +1,11 @@
-## SET-18 本人登录 Session 公开投影（D0 独审通过，2026-10-14；owner 未发行，源码未准入）
+## SET-18 本人登录 Session 公开投影（D0 独审通过，2026-10-14；owner 已发行，源码准入）
 
-本段为后继候选，当前运行仍无设备管理 API。IAM SET18 源码未冻结；只有 Root 接收其正式 internal0.12.0 commit/digest 后，才能固定唯一 artifact 并放行本仓源码。Skills 与连接器排除，旧文档版本按历史读取。
+IAM正式错误缓存修补已发行284bfd8fea91d57dae18fa2b7c772d75c7b6dcd9，internal0.12.0 artifact仍为SHA256 f6f3588d0fe52e5b3eed57e117e25b991caabc9e2825d1a0edcf9149f6a3e26b。本仓V2业务已冻审并真实BFF→IAM通过，public15.1.0候选SHA2565972f7be07a0117d8ee036fa4e742da7942b3c864d009c2847e70e69112a747d、canonical/inventory144；正式单pin更新及两新增消费元数据/格式回归修补已完成并接收，源码任务仍沿Root卡。本仓待Root正式发行，尚未正常激活；Skills/连接器业务排除，Root保留docs/Git/资源与最终验收。
 
 | 项 | 决定 |
 | --- | --- |
-| Owner / writer | IAM 唯一拥有 Session、关联凭据、撤销与 Audit；BFF 唯一发布 public projection。Root 三设计/Git/资源与验收，后继 billing_scheduler_audit 唯一源码 writer；本设计不授修改权。 |
-| 当前事实 | 基线571173253ecd247b82c42b5fb8313bce7f3e29e5 clean；public15.0.0/141 operations、全文SHA256 5f6b1178cb878718090ba65d6b0d563185078624af0d3d46a01e568af87264a4；IAM消费0.11.0/7192254，现bootstrap/server在正规admission后分派team，无account/sessions路由。 |
+| Owner / writer | IAM 唯一拥有 Session、关联凭据、撤销与 Audit；BFF 唯一发布 public projection。Root 三设计/Git/资源与验收，后继 billing_scheduler_audit 唯一源码 writer；精确源码权限沿Root SET18-BFF任务卡。 |
+| 当前事实 | 基线571173253ecd247b82c42b5fb8313bce7f3e29e5 clean；public15.0.0旧canonical142/旧inventory141、全文SHA256 5f6b1178cb878718090ba65d6b0d563185078624af0d3d46a01e568af87264a4；IAM消费0.11.0/7192254，现bootstrap/server在正规admission后分派team，无account/sessions路由。 |
 | 位置比较 / 粒度 | A把Session塞入Team/client或聊天sessions：淘汰，账户会话跨tenant且非Conversation。B采用现目录普通account-sessions route/input、iam-account-sessions client及其窄types：采用，无新顶层/一级module、数据库或进程。文件分别拥有HTTP、原始请求校验、owner I/O、内部结果类型，不复制wire DTO。 |
 | 当前 / 目标框架 | 当前仍是单一既有Node HTTP运行时，Nest原生整体迁移由Root统一后继，不把依赖/新功能冒迁移完成。本片只挂现唯一composition/dispatch，不建第二框架/服务/HTTP入口；原技术方案的统一后继边界保持。 |
 | 依赖 / 资格 | Browser→Web同源→BFF既有在线IAM Product admission→同一Bearer的IAM具名account-sessions operation；不自报user/sid/tenant/client、不换machine/admin、不访问owner数据库/Redis，也不relayvendor cookie。scope不替当前membership/部署资格。 |
@@ -15,6 +15,9 @@
 | 门禁 / 顺序 | owner发行→本仓contract RED/机器/独立逆回15.0全文→生成/client/route负控→Root独审+具名pure/check+真实IAM两登录系统验收→本仓发布→Web固定生成→正式浏览器。旧门已失败项保留，contract成功不等于浏览器完成。 |
 
 API/DATA两面同本方案；TENANT_DISABLED固定403 session_forbidden，CONFLICT才映射409 account_session_conflict，与现普通admission一致。owner正式artifact和新scope闭环是源码准入前置，不做旧0.11 fallback。
+
+
+Root源码复核纠正统计：旧canonical142/旧inventory141漏一个已存在的browser-private操作；本片正规完整inventory144，严格逆恢复旧141清单与完整15.0 API原字节。此清单登记纠偏没有Skills业务/API/权限语义变化，旧Conversation与format失败不冒通过。
 
 ## SET-15 正式 Billing Catalog 消费（2026-10-13，候选已实施，真实组合待验）
 

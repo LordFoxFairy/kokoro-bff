@@ -1,6 +1,8 @@
 ## SET-18 本人 Session public 边界（D0 独审通过，2026-10-14；尚未发行）
 
-canonical事实源仍为contract/openapi/v1/openapi.yaml public15.0.0，全文SHA256 5f6b1178cb878718090ba65d6b0d563185078624af0d3d46a01e568af87264a4。候选只追加两operation/安全closed component，public15.1.0同/v1/143 operations；不改原141项字段、权限、错误、metadata或历史摘要。先新最外层门精确剥两路径/components/版本还原完整15.0原字节，再执行原历史门。
+IAM正式错误缓存修补已发行284bfd8fea91d57dae18fa2b7c772d75c7b6dcd9，internal0.12.0 artifact仍为SHA256 f6f3588d0fe52e5b3eed57e117e25b991caabc9e2825d1a0edcf9149f6a3e26b。本仓V2业务已冻审并真实BFF→IAM通过，public15.1.0候选SHA2565972f7be07a0117d8ee036fa4e742da7942b3c864d009c2847e70e69112a747d、canonical/inventory144；正式单pin更新及两新增消费元数据/格式回归修补已完成并接收，源码任务仍沿Root卡。本仓待Root正式发行，尚未正常激活；Skills/连接器业务排除，Root保留docs/Git/资源与最终验收。
+
+canonical事实源仍为contract/openapi/v1/openapi.yaml，当前候选public15.1.0 SHA2565972f7be07a0117d8ee036fa4e742da7942b3c864d009c2847e70e69112a747d；其父public15.0.0全文SHA2565f6b1178cb878718090ba65d6b0d563185078624af0d3d46a01e568af87264a4。候选只追加两operation/安全closed component，public15.1.0同/v1/144 operations；不改原142项字段、权限、错误、metadata或历史摘要。先新最外层门精确剥两路径/components/版本还原完整15.0原字节，再执行原历史门。
 
 | 操作 / operationId | 目标请求与响应 |
 | --- | --- |
@@ -14,6 +16,9 @@ request-id/no-store使用BFF现安全输出。owner错误只按固定generated�
 未知DELETE结果不是失败回滚或成功：无自动retry，Web必须重新list核目标是否仍active；取消也不等于rollback。current撤销409、foreign/不存在同404、保留expired本人重复200、清理后404由IAM唯一裁决。本仓不变更scope/resource或注册图、不用旧refresh增加scope；正式scope演进与新authorize由Root资源阶段完成。
 
 唯一owner consumer生成使用正式0.12.0 source commit/version/SHA256；保持原16具名operation并追加2项，不读取未提交源码/手改generated/保旧pin双轨。Web随后仅消费正式public15.1.0固定artifact；Skills/连接器操作与其contract原字节保持。
+
+
+Root源码复核纠正统计：旧canonical142/旧inventory141漏一个已存在的browser-private操作；本片正规完整inventory144，严格逆恢复旧141清单与完整15.0 API原字节。此清单登记纠偏没有Skills业务/API/权限语义变化，旧Conversation与format失败不冒通过。
 
 ## SET-15 Catalog 固定消费者与未开放 checkout（2026-10-13，候选已实施）
 

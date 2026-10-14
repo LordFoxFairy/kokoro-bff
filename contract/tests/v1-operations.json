@@ -688,6 +688,11 @@
     },
     {
       "method": "POST",
+      "path": "/skill.v1.SkillOptionalService/SetSkillInstallationEnabled",
+      "operation_id": "websiteSetSkillInstallationEnabled"
+    },
+    {
+      "method": "POST",
       "path": "/skill.v1.SkillOptionalService/ListHubSkills",
       "operation_id": "websiteListHubSkills"
     },
@@ -705,6 +710,16 @@
       "method": "GET",
       "path": "/skill-downloads/{handle}",
       "operation_id": "downloadSkillBytes"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/account/sessions",
+      "operation_id": "listAccountSessions"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/account/sessions/{session_id}",
+      "operation_id": "revokeAccountSession"
     }
   ]
 }

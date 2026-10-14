@@ -1,10 +1,13 @@
 ## SET-18 登录设备公开投影准备（2026-10-14；D0 独审通过）
 
-Root已盘点三设计并写入后继候选：IAM为唯一登录Session/凭据/撤销/Audit owner，BFF拟追加public15.1两具名account/sessions接口与安全投影，无SQL/Redis/receipt。当前IAM0.12源码仍实施中；本仓当前HEAD5711732/public15.0/141未改，无新路由可用。只有owner正式发行和三设计独审通过才放行单writer。Skills/连接器排除，旧框架统一迁移仍后继，不把现Node HTTP冒Nest已完成。
+IAM正式错误缓存修补已发行284bfd8fea91d57dae18fa2b7c772d75c7b6dcd9，internal0.12.0 artifact仍为SHA256 f6f3588d0fe52e5b3eed57e117e25b991caabc9e2825d1a0edcf9149f6a3e26b。本仓V2业务已冻审并真实BFF→IAM通过，public15.1.0候选SHA2565972f7be07a0117d8ee036fa4e742da7942b3c864d009c2847e70e69112a747d、canonical/inventory144；正式单pin更新及两新增消费元数据/格式回归修补已完成并接收，源码任务仍沿Root卡。本仓待Root正式发行，尚未正常激活；Skills/连接器业务排除，Root保留docs/Git/资源与最终验收。
 
-本轮本地账户页刷新后真实Owner/owner@example.test/user ID已显示；此前短暂loading不作为持续认证故障。正式runtime仍PID11740/3311，未重启或变更授权/正常数据。候选API细节见三设计当前前缀；源码、机器、真实资源和浏览器均未验收。
+V3二十六实际实现路径（manifest含退休9d9 absent共27记录）经Root逐hash/613其余tracked保护核及独审，无新增确定P1/P2；正式IAM284bfd8 artifact与Git对象原字节一致。十八保护路径含业务/144 inventory/public5972全文及三generated正文与V2完全相同。Root原pnpm check exit1仅停于既有R357两项（contract675总/673PASS）；原pnpm test实际1267总/1261PASS/3既有FAIL/3SKIP，两个新增消费pin失败已消除。原format9降回原七项，两个新增格式问题已消除。正常生成check/lint/type及生产build成功；既有失败与原错误RED证据保留，未冒全check绿。真实IAM/BFF十二请求及direct403通过，测试资源恢复起点；V3无业务/生成正文变化不重复资源。待Root同一功能分支正式发布后Web接线与正常运行/browser；完整设置Goal继续active。
 
-独立审查唯一P2已修：owner409/TENANT_DISABLED固定403 session_forbidden，只有CONFLICT固定409 account_session_conflict；复审无剩余确定P1/P2。三面方案已准入，owner正式0.12 artifact仍未发行，因此源码/机器修改继续未授权。
+独立审查唯一P2已修：owner409/TENANT_DISABLED固定403 session_forbidden，只有CONFLICT固定409 account_session_conflict；复审无剩余确定P1/P2。三面方案已准入，owner正式0.12 artifact已接收，本轮只按Root精确允许集接线，运行与资源不授worker。
+
+
+Root源码复核纠正统计：旧canonical142/旧inventory141漏一个已存在的browser-private操作；本片正规完整inventory144，严格逆恢复旧141清单与完整15.0 API原字节。此清单登记纠偏没有Skills业务/API/权限语义变化，旧Conversation与format失败不冒通过。
 
 ## SET-15 正式 Billing Catalog 消费候选（2026-10-13，未真实配对激活）
 

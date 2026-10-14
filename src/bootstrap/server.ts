@@ -67,6 +67,7 @@ import { configuredUpstream, bffOwnedBusinessPath, isMoriBusinessPath, upstreamK
 import { schedulerDispatch } from "../http/routes/scheduler.js"
 import { runtimeManifest } from "../http/routes/runtime-manifest.js"
 import { iamProtocolRelay } from "../http/routes/iam-protocol-relay.js"
+import { accountSessionsRoute } from "../http/routes/account-sessions.js"
 import { liveTeamRead, liveTeamWrite } from "../http/routes/team.js"
 import { liveModelRoutingAdmin } from "../http/routes/model-routing-admin.js"
 import { liveAdminIdentityRead } from "../http/routes/admin-identity.js"
@@ -741,6 +742,15 @@ async function handle(
         id,
       ),
     )
+    return
+  }
+
+  if (
+    businessPath[0] === "account" &&
+    businessPath[1] === "sessions" &&
+    ((request.method === "GET" && businessPath.length === 2) || (request.method === "DELETE" && businessPath.length === 3))
+  ) {
+    await accountSessionsRoute(request, response, config, context, admission.bearerToken, businessPath)
     return
   }
 
