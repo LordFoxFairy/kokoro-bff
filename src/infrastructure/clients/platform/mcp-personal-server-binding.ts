@@ -1,7 +1,7 @@
 import { sha256Jcs } from "./jcs.js"
 import type { McpPersonalInput } from "./mcp-personal-response.js"
 
-export type McpPersonalServerOperation = "registerServer" | "server" | "prepareServer" | "updateServer"
+export type McpPersonalServerOperation = "registerServer" | "server" | "prepareServer" | "updateServer" | "deleteServer"
 export type McpPersonalServerMutation = Exclude<McpPersonalServerOperation, "server">
 export type McpPersonalServerFields = {
   displayName?: string
@@ -26,6 +26,7 @@ export function bindMcpPersonalServerCommand(
     registerServer: "RegisterPersonalMcpServer",
     prepareServer: "PreparePersonalMcpServer",
     updateServer: "UpdatePersonalMcpServer",
+    deleteServer: "DeletePersonalMcpServer",
   }[operation]
   const body =
     operation === "registerServer"
@@ -37,7 +38,7 @@ export function bindMcpPersonalServerCommand(
           oauth_client_id: input.oauthClient?.clientId ?? null,
           oauth_client_present: input.oauthClient !== undefined,
         }
-      : operation === "prepareServer"
+      : operation === "prepareServer" || operation === "deleteServer"
         ? { server_id: input.id!, expected_state_version: input.expectedStateVersion! }
         : {
             server_id: input.id!,

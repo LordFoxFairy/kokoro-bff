@@ -8,18 +8,22 @@ import { configureBffProtobufTextEncoding } from "../dist/infrastructure/protobu
 configureBffProtobufTextEncoding()
 
 const root = new URL("../", import.meta.url)
-const ownerCommit = "7f10eaad1b737e04358f1725040ccb3bde7bfac8"
+const ownerCommit = "8201c7ce60643ae27a633b3c15b471b0db493c38"
 const sources = {
   "kokoro/common/v1/common.proto": "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08",
-  "kokoro/platform/v1/platform_runtime.proto": "0399dc93a8c97a23213953e1fccc149225f38e165d34dad695baf8e82e4412ee",
+  "kokoro/platform/v1/platform_runtime.proto": "cbbc358da911392dfbb394cdfa08a77b69ce0a470ed253b423abf735ee0e6b1d",
   "kokoro/storage/v3/storage.proto": "1021e603065978871c51519ddba5b23c9b97f16b781a08bd98e019b3342bf5f9",
 }
 const artifacts = {
-  "descriptor/platform-v1.binpb": "fe5354739d45125dad2adf3b7509b8cc77560e5cbef6bfda95d567cd47b59cc9",
-  "execution-operations/mcp-private-server-v1.json": "038758d2007f6f623b2a14d752e89d38082812e7db1bf6e40c4f21aee8ab7f1a",
-  "provenance.json": "402e0948642c4a6c01310097b9949bb75cb7da3da56ec9ffe5a79117c47bdaeb",
+  "descriptor/platform-v1.binpb": "29eb1087c72badc9d8b50a37a875eaff2ade3de7ce947dbaead697178afbac5e",
+  "execution-operations/mcp-private-server-v1.json": "6e5266d4c227f13ccfe61efdcb6b08b6bafab40e855ec12624b9a27f83d3e3ca",
+  "provenance.json": "e732dfd134a82457101442e44901ecbf9db146cc44b339b9cf02a420dad47f8d",
 }
-const combinedSha256 = "5fce7c3bb36c855acc5e3e349eb22ae87cbf63aaf9fcc0892d09c200827a730f"
+const combinedSha256 = "1a1a897aa4e91981a773ef0474d7828da89122cfdb0fa41e682cda44f8030d3c"
+const ownerGenerated = {
+  path: "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts",
+  sha256: "9c30195b8a56f93689ef23beec8dda4c07d3e4b723e074807dfedef9bec7c58a",
+}
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex")
 
 async function requiredFile(relative) {
@@ -52,6 +56,7 @@ test("Platform consumer pins one current v1 owner contract bundle", async () => 
       { path: "contract/descriptor/platform-v1.binpb", sha256: artifacts["descriptor/platform-v1.binpb"] },
     ],
     provenance: { path: "contract/provenance.json", sha256: artifacts["provenance.json"], combined_sha256: combinedSha256 },
+    generated: ownerGenerated,
   })
   assert.equal(manifest.status, "generated")
   assert.equal(manifest.lockfile_sha256, sha256(await requiredFile("pnpm-lock.yaml")))
@@ -123,6 +128,7 @@ test("one generated client exposes Skills, private MCP v1 and provider administr
         "getPersonalMcpServer",
         "preparePersonalMcpServer",
         "updatePersonalMcpServer",
+        "deletePersonalMcpServer",
       ],
     ],
     ["McpProviderAdminService", ["listMcpProviderAdminRecords", "createMcpProviderAdminRecord"]],

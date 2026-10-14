@@ -14,6 +14,7 @@ import {
   PersonalMcpServerSchema,
   GetPersonalMcpServerResponseSchema,
   RegisterPersonalMcpServerResponseSchema,
+  DeletePersonalMcpServerResponseSchema,
 } from "../src/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
 
 const bytes = (value: unknown) => Buffer.from(JSON.stringify(value))
@@ -120,6 +121,8 @@ test("private URL MCP GET projects declarations_available and the full safe decl
 
 test("private URL MCP prepare and update require strict CAS and reject ambiguous or empty changes", () => {
   assert.deepEqual(parseMcpPersonalServer("prepareServer", bytes({ expected_state_version: "1" })), { expectedStateVersion: "1" })
+  assert.deepEqual(parseMcpPersonalServer("deleteServer", bytes({ expected_state_version: "3" })), { expectedStateVersion: "3" })
+  assert.throws(() => parseMcpPersonalServer("deleteServer", bytes({ expected_state_version: "3", extra: true })))
   assert.deepEqual(
     parseMcpPersonalServer(
       "updateServer",
@@ -192,6 +195,26 @@ test("private URL MCP registration binds the owner method, trusted identity, and
     }),
     bindMcpPersonalServerCommand("prepareServer", { ...input, id: "server-one", expectedStateVersion: "2" }),
   )
+  assert.notDeepEqual(
+    bindMcpPersonalServerCommand("deleteServer", { ...input, id: "server-one", expectedStateVersion: "2" }),
+    bindMcpPersonalServerCommand("prepareServer", { ...input, id: "server-one", expectedStateVersion: "2" }),
+  )
+})
+
+test("private URL MCP delete projects only the owner acknowledgement", () => {
+  const raw = create(DeletePersonalMcpServerResponseSchema, { serverId: { value: "server-one" }, deleted: true, replayed: true })
+  assert.deepEqual(projectMcpPersonalServer("deleteServer", raw, { ...input, id: "server-one", expectedStateVersion: "4" }), {
+    server_id: "server-one",
+    deleted: true,
+    replayed: true,
+  })
+  assert.throws(() =>
+    projectMcpPersonalServer("deleteServer", create(DeletePersonalMcpServerResponseSchema, { serverId: { value: "other" }, deleted: true, replayed: false }), {
+      ...input,
+      id: "server-one",
+      expectedStateVersion: "4",
+    }),
+  )
 })
 
 test("private URL MCP projection returns the complete safe descriptor without secret values", () => {
@@ -262,6 +285,8 @@ test("private URL MCP Connect client forwards only the command body plus trusted
   const { ProductMcpPersonalService } = await import("../src/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
   const { McpPersonalConnectClient } = await import("../src/infrastructure/clients/platform/mcp-personal-connect.js")
   let seen: unknown
+  let seenDelete: unknown
+  let deleteCalls = 0
   const wireInput = {
     ...input,
     notes: "Internal only",
@@ -303,6 +328,15 @@ test("private URL MCP Connect client forwards only the command body plus trusted
               },
               replayed: false,
             }
+          },
+          deletePersonalMcpServer: (request, context) => {
+            deleteCalls++
+            seenDelete = request
+            assert.equal(context.requestHeader.get("x-kokoro-tenant"), input.tenant)
+            assert.equal(context.requestHeader.get("x-kokoro-subject"), input.subject)
+            context.responseHeader.set("cache-control", "no-store")
+            context.responseHeader.set("x-kokoro-request-id", input.requestId)
+            return { serverId: request.serverId, deleted: true, replayed: false }
           },
         }),
     }),
@@ -356,6 +390,20 @@ test("private URL MCP Connect client forwards only the command body plus trusted
     })
     assert.equal(JSON.stringify(result).includes("header-secret"), false)
     assert.equal(JSON.stringify(result).includes("client-secret"), false)
+    const deleteInput = { ...input, id: "server-one", expectedStateVersion: "1", commandId: "delete-intent" }
+    assert.deepEqual(await client.server("deleteServer", deleteInput, new AbortController().signal, performance.now() + 1_000), {
+      server_id: "server-one",
+      deleted: true,
+      replayed: false,
+    })
+    assert.equal(deleteCalls, 1)
+    assert.deepEqual(seenDelete, {
+      $typeName: "kokoro.platform.v1.DeletePersonalMcpServerRequest",
+      requestId: input.requestId,
+      command: { ...bindMcpPersonalServerCommand("deleteServer", deleteInput), $typeName: "kokoro.common.v1.CommandIdentity" },
+      serverId: { $typeName: "kokoro.platform.v1.McpServerId", value: "server-one" },
+      expectedStateVersion: 1n,
+    })
   } finally {
     client.close()
     server.closeAllConnections()

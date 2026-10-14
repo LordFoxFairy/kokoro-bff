@@ -43,6 +43,7 @@ export function mcpPersonalOperation(
   if (path.length === 2 && path[1] === "connections" && method === "POST") return "createConnection"
   if (path.length === 2 && path[1] === "servers" && method === "POST") return "registerServer"
   if (path.length === 3 && path[1] === "servers" && method === "PATCH") return "updateServer"
+  if (path.length === 3 && path[1] === "servers" && method === "DELETE") return "deleteServer"
   if (path.length === 4 && path[1] === "servers" && path[3] === "prepare" && method === "POST") return "prepareServer"
   if (method !== "GET") return null
   if (path.length === 2 && path[1] === "providers") return "providers"
@@ -65,7 +66,7 @@ export async function mcpPersonalRoute(
   const context = initialAdmission.context
   const operation = mcpPersonalOperation(path, request.method ?? "GET")!
   const authorization = ["begin", "reconnect", "complete", "createConnection"].includes(operation)
-  const serverOperation = ["registerServer", "server", "prepareServer", "updateServer"].includes(operation)
+  const serverOperation = ["registerServer", "server", "prepareServer", "updateServer", "deleteServer"].includes(operation)
   const mutation = [
     "create",
     "update",
@@ -78,6 +79,7 @@ export async function mcpPersonalRoute(
     "registerServer",
     "prepareServer",
     "updateServer",
+    "deleteServer",
   ].includes(operation)
   const fail = (status: number, code: string, retryable = false, retryAfter?: string): void => {
     if (!response.destroyed && !response.writableEnded)

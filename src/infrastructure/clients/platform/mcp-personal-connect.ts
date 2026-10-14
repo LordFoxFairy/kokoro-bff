@@ -22,6 +22,7 @@ import {
   GetPersonalMcpServerRequestSchema,
   PreparePersonalMcpServerRequestSchema,
   UpdatePersonalMcpServerRequestSchema,
+  DeletePersonalMcpServerRequestSchema,
 } from "../../../generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
 import { projectMcpPersonalResponse, projectMcpPersonalCommand, type McpPersonalOperation, type McpPersonalInput } from "./mcp-personal-response.js"
 import { bindMcpPersonalCommand, type McpPersonalCommandInput, type McpPersonalCommandOperation } from "./mcp-personal-command-binding.js"
@@ -261,7 +262,7 @@ export class McpPersonalConnectClient {
           }),
           options,
         )
-      else
+      else if (operation === "updateServer")
         value = await this.#client.updatePersonalMcpServer(
           create(UpdatePersonalMcpServerRequestSchema, {
             requestId: input.requestId,
@@ -276,6 +277,16 @@ export class McpPersonalConnectClient {
             headerRemovals: input.headerRemovals ?? [],
             ...(input.oauthClient === undefined ? {} : { oauthClient: input.oauthClient }),
             revokeOauthClient: input.revokeOauthClient ?? false,
+          }),
+          options,
+        )
+      else
+        value = await this.#client.deletePersonalMcpServer(
+          create(DeletePersonalMcpServerRequestSchema, {
+            requestId: input.requestId,
+            command: bindMcpPersonalServerCommand(operation, input),
+            serverId: { value: input.id! },
+            expectedStateVersion: BigInt(input.expectedStateVersion!),
           }),
           options,
         )

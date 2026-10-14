@@ -542,13 +542,14 @@ test("private URL MCP follows registration, OAuth, declaration completion, conne
   }
 })
 
-test("private URL MCP prepare/update enforce idempotency, CAS and expose no server DELETE", async () => {
-  let calls = 0
+test("private URL MCP prepare/update/delete enforce idempotency and exact CAS while delete replays through its owner", async () => {
+  const calls = []
   const f = await fixture(true, {
     mcpPersonalClient: {
       read: async () => ({}),
-      server: async () => {
-        calls++
+      server: async (operation, input) => {
+        calls.push({ operation, input })
+        if (operation === "deleteServer") return { server_id: input.id, deleted: true, replayed: calls.length > 1 }
         return { server: privateServer }
       },
     },
@@ -573,6 +574,18 @@ test("private URL MCP prepare/update enforce idempotency, CAS and expose no serv
         headers: { ...headers, "content-type": "application/json", "idempotency-key": "update-key" },
         body: { expected_state_version: "1" },
       },
+      {
+        method: "DELETE",
+        path: "/browser/v1/mcp/servers/server-one",
+        headers: { ...headers, "content-type": "application/json" },
+        body: { expected_state_version: "1" },
+      },
+      {
+        method: "DELETE",
+        path: "/browser/v1/mcp/servers/server-one",
+        headers: { ...headers, "content-type": "application/json", "idempotency-key": "delete-key" },
+        body: { expected_state_version: "1", extra: true },
+      },
     ]) {
       const response = await fetch(f.origin + request.path, {
         method: request.method,
@@ -582,9 +595,29 @@ test("private URL MCP prepare/update enforce idempotency, CAS and expose no serv
       assert.equal(response.status, 400)
       assert.equal((await response.json()).error.code, "invalid_mcp_personal_request")
     }
-    const deletion = await fetch(f.origin + "/browser/v1/mcp/servers/server-one", { method: "DELETE", headers })
-    assert.equal(deletion.status, 404)
-    assert.equal(calls, 0)
+    assert.equal(calls.length, 0)
+    for (const replayed of [false, true]) {
+      const deletion = await fetch(f.origin + "/browser/v1/mcp/servers/server-one", {
+        method: "DELETE",
+        headers: { ...headers, "content-type": "application/json", "idempotency-key": "delete-key" },
+        body: JSON.stringify({ expected_state_version: "4" }),
+      })
+      assert.equal(deletion.status, 200)
+      assert.deepEqual((await deletion.json()).data, { server_id: "server-one", deleted: true, replayed })
+    }
+    assert.equal(calls.length, 2)
+    assert.deepEqual(
+      calls.map(({ operation }) => operation),
+      ["deleteServer", "deleteServer"],
+    )
+    assert.deepEqual(calls[0].input, {
+      tenant: "tenant-server",
+      subject: "human-one",
+      requestId: "mcp-http-1",
+      id: "server-one",
+      expectedStateVersion: "4",
+      commandId: "delete-key",
+    })
   } finally {
     await f.close()
   }

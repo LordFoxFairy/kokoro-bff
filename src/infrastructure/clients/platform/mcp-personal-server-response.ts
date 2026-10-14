@@ -171,6 +171,15 @@ function projectServer(raw: unknown): z.infer<typeof server> {
 export function projectMcpPersonalServer(operation: McpPersonalServerOperation, raw: unknown, input: McpPersonalServerInput): unknown {
   assertMcpPersonalWireKnown(raw)
   const value = object(raw)
+  if (operation === "deleteServer") {
+    const result = {
+      server_id: identity(value.serverId),
+      deleted: value.deleted,
+      replayed: value.replayed,
+    }
+    if (result.server_id !== input.id || result.deleted !== true || typeof result.replayed !== "boolean") throw new Error("mcp_personal_response_invalid")
+    return result
+  }
   const resultServer = projectServer(value.server)
   if ((operation !== "registerServer" && resultServer.server_id !== input.id) || (operation === "registerServer" && input.id !== undefined))
     throw new Error("mcp_personal_response_invalid")

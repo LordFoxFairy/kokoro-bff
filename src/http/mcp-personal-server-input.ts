@@ -121,7 +121,7 @@ export function parseMcpPersonalServer(operation: McpPersonalServerMutation, bod
           : { oauthClient: { clientId: value.oauth_client.client_id, clientSecret: value.oauth_client.client_secret } }),
       }
     }
-    if (operation === "prepareServer") return { expectedStateVersion: prepare.parse(raw).expected_state_version }
+    if (operation === "prepareServer" || operation === "deleteServer") return { expectedStateVersion: prepare.parse(raw).expected_state_version }
     const value = update.parse(raw)
     return {
       expectedStateVersion: value.expected_state_version,

@@ -1233,6 +1233,7 @@ service ProductMcpPersonalService {
   rpc GetPersonalMcpServer(kokoro.platform.v1.GetPersonalMcpServerRequest) returns (kokoro.platform.v1.GetPersonalMcpServerResponse);
   rpc PreparePersonalMcpServer(kokoro.platform.v1.PreparePersonalMcpServerRequest) returns (kokoro.platform.v1.PreparePersonalMcpServerResponse);
   rpc UpdatePersonalMcpServer(kokoro.platform.v1.UpdatePersonalMcpServerRequest) returns (kokoro.platform.v1.UpdatePersonalMcpServerResponse);
+  rpc DeletePersonalMcpServer(kokoro.platform.v1.DeletePersonalMcpServerRequest) returns (kokoro.platform.v1.DeletePersonalMcpServerResponse);
   rpc ListPersonalMcpConnectors(kokoro.platform.v1.ListPersonalMcpConnectorsRequest) returns (kokoro.platform.v1.ListPersonalMcpConnectorsResponse);
   rpc GetPersonalMcpConnector(kokoro.platform.v1.GetPersonalMcpConnectorRequest) returns (kokoro.platform.v1.GetPersonalMcpConnectorResponse);
   rpc ListPersonalMcpConnections(kokoro.platform.v1.ListPersonalMcpConnectionsRequest) returns (kokoro.platform.v1.ListPersonalMcpConnectionsResponse);
@@ -2017,3 +2018,9 @@ message UpdatePersonalMcpServerRequest {
   string request_id = 1; kokoro.common.v1.CommandIdentity command = 2; kokoro.platform.v1.McpServerId server_id = 3; uint64 expected_state_version = 4; optional string display_name = 5; optional string notes = 6; bool clear_notes = 7; optional string server_url = 8; repeated kokoro.platform.v1.PersonalMcpHeaderWrite header_upserts = 9; repeated string header_removals = 10; optional kokoro.platform.v1.PersonalMcpOAuthClientWrite oauth_client = 11; bool revoke_oauth_client = 12;
 }
 message UpdatePersonalMcpServerResponse { kokoro.platform.v1.PersonalMcpServer server = 1; kokoro.platform.v1.PersonalMcpConnector connector = 2; bool replayed = 3; }
+message DeletePersonalMcpServerRequest {
+  reserved 100;
+  reserved "tenant_id", "actor_id", "subject_id", "owner_scope", "target_owner_scope", "product_context", "execution_proof", "attestation";
+  string request_id = 1; kokoro.common.v1.CommandIdentity command = 2; kokoro.platform.v1.McpServerId server_id = 3; uint64 expected_state_version = 4;
+}
+message DeletePersonalMcpServerResponse { kokoro.platform.v1.McpServerId server_id = 1; bool deleted = 2; bool replayed = 3; }
