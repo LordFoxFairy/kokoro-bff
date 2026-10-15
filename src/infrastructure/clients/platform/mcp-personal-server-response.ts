@@ -191,7 +191,15 @@ export function projectMcpPersonalServer(operation: McpPersonalServerOperation, 
     return result
   }
   const resultServer = projectServer(value.server)
-  if ((operation !== "registerServer" && resultServer.server_id !== input.id) || (operation === "registerServer" && input.id !== undefined))
+  // JSON import returns a batch of newly allocated server IDs, so it reuses
+  // this descriptor projector without a caller-supplied server selector.
+  // Selector-bearing reads and mutations still require an exact ID match.
+  if (
+    (operation !== "registerServer" &&
+      input.id !== undefined &&
+      resultServer.server_id !== input.id) ||
+    (operation === "registerServer" && input.id !== undefined)
+  )
     throw new Error("mcp_personal_response_invalid")
   if (operation === "server") return { server: resultServer }
   const connector = projectMcpPersonalConnector(value.connector)

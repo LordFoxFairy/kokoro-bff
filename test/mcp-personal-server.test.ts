@@ -9,6 +9,7 @@ import {
   bindMcpPersonalServerRegistration,
 } from "../src/infrastructure/clients/platform/mcp-personal-server-binding.js"
 import { bindMcpPersonalJsonImport } from "../src/infrastructure/clients/platform/mcp-personal-json-import-binding.js"
+import { projectMcpPersonalJsonImport } from "../src/infrastructure/clients/platform/mcp-personal-json-import-response.js"
 import {
   mcpPersonalServerFault,
   projectMcpPersonalServer,
@@ -22,6 +23,7 @@ import {
   PersonalMcpServerSchema,
   GetPersonalMcpServerResponseSchema,
   RegisterPersonalMcpServerResponseSchema,
+  ImportPersonalMcpJsonResponseSchema,
   DeletePersonalMcpServerResponseSchema,
 } from "../src/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
 
@@ -512,6 +514,75 @@ test("private URL MCP projection returns the complete safe descriptor without se
   assert.equal(JSON.stringify(projected).includes("client-secret"), false)
   connector.serverId = { value: "other" }
   assert.throws(() => projectMcpPersonalServer("registerServer", raw, input))
+})
+
+test("JSON import projects newly allocated server descriptors without inventing a selector", () => {
+  const server = create(PersonalMcpServerSchema, {
+    serverId: { value: "server-imported" },
+    displayName: "Imported MCP",
+    serverUrl: "https://imported.example/mcp",
+    status: "pending",
+    stateVersion: 1n,
+    prepareStatus: PersonalMcpPrepareStatus.PENDING_PREPARE,
+    declarationsAvailable: false,
+  })
+  const connector = create(PersonalMcpConnectorSchema, {
+    connectorId: { value: "connector-imported" },
+    connectorType: 3,
+    providerKey: "private-server-imported",
+    serverId: { value: "server-imported" },
+    status: 1,
+    approvedScopes: [],
+    enabled: false,
+    stateVersion: 1n,
+  })
+  assert.deepEqual(
+    projectMcpPersonalJsonImport(
+      create(ImportPersonalMcpJsonResponseSchema, {
+        imports: [{ server, connector }],
+        replayed: false,
+      }),
+      {
+        ...input,
+        configJson: JSON.stringify({
+          mcpServers: {
+            "Imported MCP": {
+              type: "streamableHttp",
+              url: "https://imported.example/mcp",
+            },
+          },
+        }),
+      },
+    ),
+    {
+      imports: [
+        {
+          server: {
+            server_id: "server-imported",
+            display_name: "Imported MCP",
+            server_url: "https://imported.example/mcp",
+            status: "pending",
+            state_version: "1",
+            headers: [],
+            prepare_status: "pending_prepare",
+            declarations: [],
+            declarations_available: false,
+          },
+          connector: {
+            connector_id: "connector-imported",
+            connector_type: "mcp",
+            provider_key: "private-server-imported",
+            server_id: "server-imported",
+            status: "pending",
+            approved_scopes: [],
+            enabled: false,
+            state_version: "1",
+          },
+        },
+      ],
+      replayed: false,
+    },
+  )
 })
 
 test("private URL MCP Connect client forwards only the command body plus trusted request headers", async () => {
