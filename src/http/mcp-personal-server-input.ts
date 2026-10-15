@@ -16,10 +16,20 @@ const boundedText = (min: number, max: number, lineBreaks = false) =>
   })
 const displayName = boundedText(1, 100).refine((value) => Boolean(value.trim()))
 const notes = boundedText(1, 4000, true)
+function isDevelopmentLoopback(url: URL): boolean {
+  return (
+    process.env.NODE_ENV !== "production" &&
+    url.protocol === "http:" &&
+    (url.hostname === "localhost" ||
+      url.hostname === "127.0.0.1" ||
+      url.hostname === "[::1]")
+  )
+}
+
 const serverUrl = boundedText(1, 255).refine((value) => {
   try {
     const url = new URL(value)
-    return url.protocol === "https:" && url.username === "" && url.password === "" && url.hash === "" && url.toString() === value
+    return (url.protocol === "https:" || isDevelopmentLoopback(url)) && url.username === "" && url.password === "" && url.search === "" && url.hash === "" && url.toString() === value
   } catch {
     return false
   }

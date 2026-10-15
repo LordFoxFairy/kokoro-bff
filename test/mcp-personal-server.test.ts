@@ -106,6 +106,39 @@ test("private URL MCP registration accepts strict notes, secret headers and BYO 
     )
 })
 
+test("private URL MCP registration admits loopback HTTP only in a development runtime", () => {
+  const previous = process.env.NODE_ENV
+  try {
+    process.env.NODE_ENV = "development"
+    assert.deepEqual(
+      parseMcpPersonalServer(
+        "registerServer",
+        bytes({
+          display_name: "Local fixture",
+          server_url: "http://127.0.0.1:43191/mcp",
+        }),
+      ),
+      {
+        displayName: "Local fixture",
+        serverUrl: "http://127.0.0.1:43191/mcp",
+        headers: [],
+      },
+    )
+    process.env.NODE_ENV = "production"
+    assert.throws(() =>
+      parseMcpPersonalServer(
+        "registerServer",
+        bytes({
+          display_name: "Local fixture",
+          server_url: "http://127.0.0.1:43191/mcp",
+        }),
+      ),
+    )
+  } finally {
+    process.env.NODE_ENV = previous
+  }
+})
+
 test("private URL MCP GET projects declarations_available and the full safe declaration snapshot in one response", () => {
   const server = create(PersonalMcpServerSchema, {
     serverId: { value: "server-one" },
