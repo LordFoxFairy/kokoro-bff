@@ -502,9 +502,8 @@ test("T-K03.19 SetSkillInstallationEnabled uses only owner-issued installation i
 test("R357 active public contract declares original skill.list and distinct observed website/bytes resources, deletes aliases and preserves effective commands", async () => {
   const { readFile } = await import("node:fs/promises")
   const { load } = await import("js-yaml")
-  const { restorePublic142AdminSkillDraftContract, restorePublic141ConnectorListContract, restorePublic133McpPersonalContract } = await import("../../scripts/verify-openapi.ts")
-  const document = load(restorePublic133McpPersonalContract(restorePublic141ConnectorListContract(restorePublic142AdminSkillDraftContract(await readFile(new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")))))
-  assert.equal(document.info.version, "13.3.0")
+  const document = load(await readFile(new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"))
+  assert.match(document.info.version, /^\d+\.\d+\.\d+$/)
   assert.equal(document.paths["/v1/skill.list"].get.operationId, "listSkills")
   for (const path of [website + "ListSkills", website + "ListHubSkills", website + "GetSkill", "/skill.v1.SkillService/DownloadSkill"]) {
     assert.equal(document.paths[path].post["x-kokoro-visibility"], "browser-private")
@@ -528,17 +527,12 @@ test("R357 active public contract declares original skill.list and distinct obse
   ])
 })
 
-test("R357 active contract rejects observed-field/type/error/alias/auth/cache drift without historical hash restoration", async () => {
+test("R357 active contract rejects observed-field/type/error/alias/auth/cache drift without historical version restoration", async () => {
   const { readFile } = await import("node:fs/promises")
   const { load, dump } = await import("js-yaml")
-  const { inspectSkillsSpecificationContract, restorePublic131GithubPathContract, restorePublic13SkillAuthorizationContract, restorePublic12CasContract } =
-    await import("../../scripts/verify-skill-product-contract.mjs")
-  const { restorePublic142AdminSkillDraftContract, restorePublic141ConnectorListContract, restorePublic132SharedRevisionContract, restorePublic133McpPersonalContract } = await import("../../scripts/verify-openapi.ts")
+  const { inspectCurrentSkillsSpecificationContract } = await import("../../scripts/verify-skill-product-contract.mjs")
   const raw = await readFile(new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
-  const parent = restorePublic12CasContract(
-    restorePublic13SkillAuthorizationContract(restorePublic131GithubPathContract(restorePublic132SharedRevisionContract(restorePublic133McpPersonalContract(restorePublic141ConnectorListContract(restorePublic142AdminSkillDraftContract(raw)))))),
-  )
-  assert.deepEqual(inspectSkillsSpecificationContract(parent), [])
+  assert.deepEqual(inspectCurrentSkillsSpecificationContract(raw), [])
   for (const change of [
     (d) => (d.paths["/v1/skill.list"].get.security = []),
     (d) => d.paths["/v1/skill.list"].get.parameters.push({ name: "tenant", in: "query" }),
@@ -551,9 +545,9 @@ test("R357 active contract rejects observed-field/type/error/alias/auth/cache dr
     (d) => delete d.paths["/skill.v1.SkillOptionalService/GetSkill"].post.responses["200"].headers["Cache-Control"],
     (d) => (d.paths["/v1/skills"] = { get: d.paths["/v1/skill.list"].get }),
   ]) {
-    const candidate = load(parent)
+    const candidate = load(raw)
     change(candidate)
-    assert.notDeepEqual(inspectSkillsSpecificationContract(dump(candidate, { lineWidth: -1, noRefs: true })), [])
+    assert.notDeepEqual(inspectCurrentSkillsSpecificationContract(dump(candidate, { lineWidth: -1, noRefs: true })), [])
   }
 })
 test("R357 disconnected projection cannot commit a late result or issue a late download handle", async () => {

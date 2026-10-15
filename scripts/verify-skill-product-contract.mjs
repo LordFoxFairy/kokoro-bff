@@ -128,7 +128,7 @@ export function inspectSkillProductContract(source, baseline = OPERATIONS) {
 }
 
 /** Current specification gate; historical Public11 proofs are not the active publication protocol. */
-export function inspectSkillsSpecificationContract(source) {
+function inspectSkillsSpecificationSurface(source, expectedVersion) {
   const errors = []
   let document
   try {
@@ -139,7 +139,8 @@ export function inspectSkillsSpecificationContract(source) {
   const require = (condition, message) => {
     if (!condition) errors.push(message)
   }
-  require(document?.info?.version === "12.0.0", "Public12 version must equal 12.0.0")
+  if (expectedVersion !== null)
+    require(document?.info?.version === expectedVersion, `Public${expectedVersion.split(".")[0]} version must equal ${expectedVersion}`)
   const paths = document?.paths ?? {},
     schemas = document?.components?.schemas ?? {}
   const expected = [
@@ -224,6 +225,16 @@ export function inspectSkillsSpecificationContract(source) {
   ])
     require(paths[path]?.[method] !== undefined, `Effective lifecycle responsibility must remain: ${method} ${path}`)
   return errors
+}
+
+/** Checks the active Skill surface without coupling it to unrelated API version increments. */
+export function inspectCurrentSkillsSpecificationContract(source) {
+  return inspectSkillsSpecificationSurface(source, null)
+}
+
+/** Historical Public12 proof retained for the Public13 inverse contract. */
+export function inspectSkillsSpecificationContract(source) {
+  return inspectSkillsSpecificationSurface(source, "12.0.0")
 }
 
 /** Public13 changes only the three mandatory CAS requirements from the exact Public12 parent. */
