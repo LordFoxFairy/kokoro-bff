@@ -145,6 +145,11 @@ test("A2 provider projection contains only official directory facts, with safe o
   assert.throws(() => projectMcpPersonalResponse("provider", raw(), { ...input, id: "other" }))
 })
 test("A2 typed command errors preserve conflict/precondition/unknown semantics", () => {
+  assert.deepEqual(mcpPersonalFault(new ConnectError("private MCP URL already registered", Code.AlreadyExists), false, true), {
+    status: 409,
+    code: "mcp_personal_server_url_conflict",
+    retryable: false,
+  })
   for (const [code, status, error, retryable] of [
     [Code.AlreadyExists, 409, "mcp_personal_idempotency_conflict", false],
     [Code.Aborted, 409, "mcp_personal_command_in_progress", true],

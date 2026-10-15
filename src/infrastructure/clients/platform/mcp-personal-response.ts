@@ -276,6 +276,11 @@ export function mcpPersonalFault(error: unknown, hasCursor = false, command = fa
   if (error instanceof Error && error.message === "mcp_personal_body_too_large")
     return { status: 413, code: "mcp_personal_request_too_large", retryable: false }
   if (error instanceof ConnectError) {
+    // `AlreadyExists` covers both our idempotency receipt and semantic owner
+    // conflicts. Keep the latter actionable for the form instead of telling a
+    // user that a fresh request reused an idempotency key.
+    if (command && error.code === Code.AlreadyExists && error.rawMessage === "private MCP URL already registered")
+      return { status: 409, code: "mcp_personal_server_url_conflict", retryable: false }
     if (command && error.code === Code.AlreadyExists) return { status: 409, code: "mcp_personal_idempotency_conflict", retryable: false }
     if (command && error.code === Code.Aborted) return { status: 409, code: "mcp_personal_command_in_progress", retryable: true }
     if (command && error.code === Code.FailedPrecondition) return { status: 412, code: "mcp_personal_precondition_failed", retryable: false }

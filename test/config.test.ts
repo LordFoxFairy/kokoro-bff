@@ -24,6 +24,15 @@ describe("BFF owner PostgreSQL schema", () => {
     assert.equal(config.mcpProviderAdmin?.credentialFile, "/fixture/admin.json")
   })
 
+  it("keeps Custom API on its own Platform workload credential", () => {
+    const config = loadConfig({
+      ...runtimeEnv,
+      KOKORO_PLATFORM_BASE_URL: "http://platform.invalid",
+      KOKORO_BFF_PLATFORM_CUSTOM_API_CREDENTIALS_FILE: "/fixture/custom-api.json",
+    })
+    assert.equal(config.customApi?.credentialFile, "/fixture/custom-api.json")
+  })
+
   it("loads an optional independent Admin Web browser-service secret and rejects reuse", () => {
     const absent = loadConfig(runtimeEnv)
     assert.equal(Reflect.get(absent, "adminWebSharedSecret"), null)

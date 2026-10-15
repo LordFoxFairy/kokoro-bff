@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto"
 import type { IncomingMessage, ServerResponse } from "node:http"
 
-import type { AgentConnectionSetup, ChatSessionDetail, ChatSessionSummary, McpTransport, Project, ScheduledTask, Skill, Task } from "../../src/contracts/index.js"
+import type { AgentConnectionSetup, ChatSessionDetail, ChatSessionSummary, Project, ScheduledTask, Skill, Task } from "../../src/contracts/index.js"
 import { queryOf, stableStringify } from "../../dist/http/request.js"
 import type { RequestContext } from "../../src/domain/request-context.js"
 
@@ -13,35 +13,6 @@ export type GithubSkillSource = {
   repository: string
   name: string
   description: string
-}
-
-export function mcpRegisterInput(value: Record<string, unknown>): {
-  name: string
-  transport: McpTransport
-  url: string
-  allowed_tools: string[]
-  secret_ref: string | null
-} | null {
-  const name = typeof value.name === "string" ? value.name.trim() : ""
-  const transport = value.transport
-  const url = typeof value.url === "string" ? value.url.trim() : ""
-  const allowedTools = value.allowed_tools
-  const secretRef = value.secret_ref
-  if (
-    name === ""
-    || (transport !== "http" && transport !== "streamable_http")
-    || url === ""
-    || !Array.isArray(allowedTools)
-    || !allowedTools.every((tool): tool is string => typeof tool === "string")
-    || (secretRef !== undefined && secretRef !== null && typeof secretRef !== "string")
-  ) return null
-  return {
-    name,
-    transport,
-    url,
-    allowed_tools: [...allowedTools],
-    secret_ref: secretRef === undefined ? null : secretRef,
-  }
 }
 
 export function githubSkillSource(value: unknown): GithubSkillSource | null {

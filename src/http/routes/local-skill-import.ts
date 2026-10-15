@@ -69,7 +69,16 @@ export async function localSkillImportRoute(
   requestId: string,
   segments: string[],
 ): Promise<boolean> {
-  if (client === undefined || segments[0] !== "browser" || segments[1] !== "v1" || segments[2] !== "skills" || segments[3] !== "local-imports") return false
+  if (segments[0] !== "browser" || segments[1] !== "v1" || segments[2] !== "skills" || segments[3] !== "local-imports") return false
+  // A recognized browser route must never fall through to the generic 404 when
+  // its owner client is absent: the Web adapter can then preserve a truthful,
+  // retryable dependency state instead of treating the 404 envelope as corrupt.
+  if (client === undefined) {
+    response.setHeader("x-request-id", requestId)
+    response.setHeader("cache-control", "no-store")
+    send(response, 503, error("local_skill_import_dependency_unavailable", "Local Skill import owner is unavailable", true))
+    return true
+  }
   const tail = segments.slice(4),
     method = request.method ?? "GET"
   const kind =
@@ -180,7 +189,20 @@ export async function localSkillImportRoute(
         send(response, 409, error("local_skill_import_idempotency_conflict", "Local Skill import command conflicts"))
       else if (e instanceof ConnectError && e.code === Code.ResourceExhausted)
         send(response, 429, error("local_skill_import_rate_limited", "Local Skill import was rate limited", true))
-      else if (e instanceof ConnectError || controller.signal.aborted)
+      else if (
+        e instanceof ConnectError ||
+        controller.signal.aborted ||
+        (e instanceof Error &&
+          [
+            "catalog_credential_deadline",
+            "catalog_credential_insecure",
+            "catalog_credential_invalid",
+            "catalog_credential_rotated",
+            "catalog_token_deadline",
+            "catalog_token_failed",
+            "catalog_token_invalid",
+          ].includes(e.message))
+      )
         send(response, 503, error("local_skill_import_dependency_unavailable", "Local Skill import owner is unavailable", true))
       else
         send(

@@ -147,10 +147,12 @@ test("A3 authorization admits a loopback callback target in local development", 
     connector,
   })
   assert.equal(
-    (projectMcpPersonalAuthorization("begin", begun, {
-      ...identity,
-      id: "connector",
-    }) as { authorization: { authorization_url: string } }).authorization.authorization_url,
+    (
+      projectMcpPersonalAuthorization("begin", begun, {
+        ...identity,
+        id: "connector",
+      }) as { authorization: { authorization_url: string } }
+    ).authorization.authorization_url,
     "http://127.0.0.1:43193/authorize?state=opaque",
   )
 })

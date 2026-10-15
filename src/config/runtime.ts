@@ -72,7 +72,6 @@ export type BffConfig = {
     webOrigin: string
     callbackUri: string
     postLogoutUri: string
-    adminCallbackUri: string | null
     secureCookies: boolean
   }>
   storage?: Readonly<{ baseUrl: string; secret: string; objectOrigin: string }>
@@ -91,9 +90,17 @@ export type BffConfig = {
   agUi: AgUiConfig
   upstreams: Record<string, string | null>
   mcpPersonal?: Readonly<{ baseUrl: string; credentialFile: string }> | null
-  mcpProviderAdmin?: Readonly<{ baseUrl: string; credentialFile: string; timeoutMs: number }> | null
+  mcpProviderAdmin?: Readonly<{
+    baseUrl: string
+    credentialFile: string
+    timeoutMs: number
+  }> | null
   customApi?: Readonly<{ baseUrl: string; credentialFile: string }> | null
-  platformProjection: Readonly<{ baseUrl: string | null; credentialFile: string | null; timeoutMs: number }>
+  platformProjection: Readonly<{
+    baseUrl: string | null
+    credentialFile: string | null
+    timeoutMs: number
+  }>
   skillAdminCredentialFile?: string | null
   skillDraft: Readonly<{
     platformBaseUrl: string | null
@@ -161,14 +168,11 @@ function iamRelayConfig(env: NodeJS.ProcessEnv): BffConfig["iamRelay"] {
     logout.hash !== ""
   )
     throw new Error("IAM relay URLs must bind the exact Web issuer, callback and post-logout paths")
-  const adminOrigin = optionalOrigin(env.KOKORO_ADMIN_WEB_ORIGIN, "KOKORO_ADMIN_WEB_ORIGIN")
-  const adminCallbackUri = adminOrigin === null ? null : `${adminOrigin}/api/auth/callback/kokoro-iam`
   return {
     publicIssuerUrl: issuer.toString(),
     webOrigin,
     callbackUri: callback.toString(),
     postLogoutUri: logout.toString(),
-    adminCallbackUri,
     secureCookies: env.NODE_ENV === "production",
   }
 }
@@ -388,7 +392,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
     iamBaseUrl: optionalOrigin(env.KOKORO_IAM_BASE_URL),
     ...(relay === undefined ? {} : { iamRelay: relay }),
     ...(storageBase !== null && storageOrigin !== null && storageSecret !== null
-      ? { storage: { baseUrl: storageBase, objectOrigin: storageOrigin, secret: storageSecret } }
+      ? {
+          storage: {
+            baseUrl: storageBase,
+            objectOrigin: storageOrigin,
+            secret: storageSecret,
+          },
+        }
       : {}),
     storageObjectOrigin: storageOrigin,
     sharedSecret,
@@ -418,7 +428,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
       const credentialFile = env.KOKORO_BFF_PLATFORM_MCP_ADMIN_CREDENTIALS_FILE?.trim() || null
       if (credentialFile === null) return null
       if (!skillDraft.platformBaseUrl) throw new Error("mcp_provider_admin_configuration_incomplete")
-      return { baseUrl: skillDraft.platformBaseUrl, credentialFile, timeoutMs: upstreamTimeoutMs }
+      return {
+        baseUrl: skillDraft.platformBaseUrl,
+        credentialFile,
+        timeoutMs: upstreamTimeoutMs,
+      }
     })(),
     customApi: (() => {
       const credentialFile = env.KOKORO_BFF_PLATFORM_CUSTOM_API_CREDENTIALS_FILE?.trim() || null

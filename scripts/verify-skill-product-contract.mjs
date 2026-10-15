@@ -342,7 +342,10 @@ export function restorePublic131GithubPathContract(source) {
     if (name === "GithubSkillResponse") {
       restored = block
         .replace(/(                    path:\n                      type: string\n                      maxLength: )256/gu, "$12048")
-        .replace(/(                paths:\n                  type: array\n                  maxItems: 128\n                  items:\n                    type: string\n                    maxLength: )256/u, "$12048")
+        .replace(
+          /(                paths:\n                  type: array\n                  maxItems: 128\n                  items:\n                    type: string\n                    maxLength: )256/u,
+          "$12048",
+        )
     } else restored = block.replace(/(        path:\n          type: string\n          maxLength: )256/u, "$12048")
     parent = parent.replace(block, restored)
   }

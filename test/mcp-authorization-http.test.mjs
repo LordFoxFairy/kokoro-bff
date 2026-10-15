@@ -19,7 +19,7 @@ const paths = [
   "/browser/v1/mcp/connectors/connector-one/connections",
   "/browser/v1/mcp/connections/connection-one",
 ]
-async function fixture(decision, { realSession = false, check, routeHandler, deadlineMs, sessionDelayMs = 0 } = {}) {
+async function fixture(decision, { realSession = false, check, routeHandler, mcpPersonalClient, deadlineMs, sessionDelayMs = 0 } = {}) {
   const seen = []
   const iam = createServer(async (request, response) => {
     const chunks = []
@@ -101,6 +101,7 @@ async function fixture(decision, { realSession = false, check, routeHandler, dea
         }),
     ...(check ? { mcpAuthorization: { check } } : {}),
     ...(routeHandler ? { routeHandler } : {}),
+    ...(mcpPersonalClient ? { mcpPersonalClient } : {}),
   })
   if (deadlineMs !== undefined) {
     const handler = app.listeners("request")[0]
@@ -122,8 +123,39 @@ async function fixture(decision, { realSession = false, check, routeHandler, dea
     },
   }
 }
-test("R357 HTTP current human false decision denies all six MCP reads before owner IO", async () => {
-  const f = await fixture(false)
+test("R357 HTTP denial blocks legacy MCP before owner and browser-private MCP before release", async () => {
+  let privateReads = 0
+  const f = await fixture(false, {
+    mcpPersonalClient: {
+      async read(operation) {
+        privateReads += 1
+        if (operation === "connectors") return { items: [], next_cursor: null }
+        if (operation === "connector")
+          return {
+            connector: {
+              connector_id: "connector-one",
+              connector_type: "mcp",
+              provider_key: "provider-one",
+              status: "active",
+              approved_scopes: [],
+              enabled: true,
+              state_version: "1",
+            },
+          }
+        if (operation === "connections") return { items: [], next_cursor: null }
+        return {
+          connection: {
+            connection_id: "connection-one",
+            connector_id: "connector-one",
+            server_id: "server-one",
+            allowed_selectors: [],
+            policy_digest: "a".repeat(64),
+            status: "active",
+          },
+        }
+      },
+    },
+  })
   try {
     for (const path of paths) {
       const response = await fetch(f.origin + path, { headers })
@@ -131,6 +163,7 @@ test("R357 HTTP current human false decision denies all six MCP reads before own
       assert.equal(response.headers.get("cache-control"), "no-store")
       assert.equal((await response.json()).error.code, "session_forbidden")
     }
+    assert.equal(privateReads, paths.length - 2)
     assert.equal(f.seen.length, paths.length)
     for (const seen of f.seen)
       assert.deepEqual(seen, {

@@ -324,7 +324,8 @@ test("production composition registers all four local-import owner methods only 
           headers,
           body: JSON.stringify({ filename: "tea.skill", size_bytes: 123, content_sha256: "a".repeat(64) }),
         })
-        assert.equal(response.status, 404, name)
+        assert.equal(response.status, 503, name)
+        assert.equal((await response.json()).error.code, "local_skill_import_dependency_unavailable")
       },
       candidate,
     )
@@ -479,7 +480,7 @@ test("complete production composition dispatches all four private routes through
   }
 })
 
-test("incomplete production composition keeps the private namespace unregistered as 404", async () => {
+test("incomplete production composition reports the owner dependency as unavailable", async () => {
   await withServer(
     {
       sessionAdmission: new SessionAdmissionDouble({ "current-session": { namespace: "123e4567-e89b-42d3-a456-426614174000", userId: "user" } }),
@@ -491,7 +492,8 @@ test("incomplete production composition keeps the private namespace unregistered
         headers,
         body: JSON.stringify({ filename: "tea.skill", size_bytes: 123, content_sha256: "a".repeat(64) }),
       })
-      assert.equal(response.status, 404)
+      assert.equal(response.status, 503)
+      assert.equal((await response.json()).error.code, "local_skill_import_dependency_unavailable")
     },
   )
 })

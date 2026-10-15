@@ -154,20 +154,12 @@ function validProductCallbackLocation(url: URL, config: NonNullable<BffConfig["i
     return false
   const code = query.get("code")
   const error = query.get("error")
-  if (code !== null && error === null)
-    return (
-      values.length === 3 &&
-      /^[A-Za-z0-9._~-]{1,2048}$/u.test(code)
-    )
-  if (code !== null || error === null || !/^[a-z_]{1,64}$/u.test(error))
-    return false
+  if (code !== null && error === null) return values.length === 3 && /^[A-Za-z0-9._~-]{1,2048}$/u.test(code)
+  if (code !== null || error === null || !/^[a-z_]{1,64}$/u.test(error)) return false
   if (values.some(([name]) => !["error", "error_description", "error_uri", "iss", "state"].includes(name))) return false
   for (const name of ["error_description", "error_uri"] as const) {
     const value = query.get(name)
-    if (
-      (value !== null && query.getAll(name).length !== 1) ||
-      (value !== null && (Buffer.byteLength(value) > 1024 || /[\u0000-\u001f\u007f]/u.test(value)))
-    )
+    if ((value !== null && query.getAll(name).length !== 1) || (value !== null && (Buffer.byteLength(value) > 1024 || /[\u0000-\u001f\u007f]/u.test(value))))
       return false
   }
   return true
@@ -525,8 +517,7 @@ export async function iamProtocolRelay(request: IncomingMessage, response: Serve
     // to fetch requests, while browser authorization and logout navigations require
     // its native redirect/cookie semantics. Synthesize this only after fixed route
     // and method admission; it never reflects a caller-provided fetch-metadata header.
-    const browserNavigation = request.method === "GET" &&
-      (staticRoute?.path === "/oauth2/authorize" || staticRoute?.path === "/oauth2/end-session")
+    const browserNavigation = request.method === "GET" && (staticRoute?.path === "/oauth2/authorize" || staticRoute?.path === "/oauth2/end-session")
     if (browserNavigation) headers.set("sec-fetch-mode", "navigate")
     headers.set("x-request-id", id)
     const upstream = await requestIamRelay({

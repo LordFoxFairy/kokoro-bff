@@ -15,12 +15,7 @@ test("published browser-private policy is a deterministic read-only projection o
   const published = JSON.parse(bytes.toString("utf8")) as unknown
   assert.deepEqual(published, IAM_RELAY_POLICY)
   assert.equal(createHash("sha256").update(bytes).digest("hex"), "63e36a79c7448d4b9e47442df4f5467f230ecf0e9ac702a350cbc92a2c77eb46")
-  assert.deepEqual(IAM_RELAY_POLICY.webInteractionPaths, [
-    "/auth/sign-in",
-    "/auth/select-tenant",
-    "/auth/consent",
-    "/iam/interactions/consent",
-  ])
+  assert.deepEqual(IAM_RELAY_POLICY.webInteractionPaths, ["/auth/sign-in", "/auth/select-tenant", "/auth/consent", "/iam/interactions/consent"])
   assert.equal(IAM_RELAY_POLICY.version, "2.1.0")
   assert.equal(IAM_RELAY_POLICY.iamOpenapiVersion, "0.7.0")
   assert.equal(IAM_RELAY_POLICY.iamOwnerCommit, "e3c035b99cf9479ac8357c7d38147f1541dcbcac")
