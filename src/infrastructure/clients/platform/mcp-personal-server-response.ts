@@ -24,9 +24,7 @@ function isDevelopmentLoopback(url: URL): boolean {
   return (
     process.env.NODE_ENV !== "production" &&
     url.protocol === "http:" &&
-    (url.hostname === "localhost" ||
-      url.hostname === "127.0.0.1" ||
-      url.hostname === "[::1]")
+    (url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "[::1]")
   )
 }
 
@@ -36,7 +34,9 @@ const serverUrl = z
   .refine((value) => {
     try {
       const url = new URL(value)
-      return (url.protocol === "https:" || isDevelopmentLoopback(url)) && url.username === "" && url.password === "" && url.hash === "" && url.toString() === value
+      return (
+        (url.protocol === "https:" || isDevelopmentLoopback(url)) && url.username === "" && url.password === "" && url.hash === "" && url.toString() === value
+      )
     } catch {
       return false
     }
@@ -195,9 +195,7 @@ export function projectMcpPersonalServer(operation: McpPersonalServerOperation, 
   // this descriptor projector without a caller-supplied server selector.
   // Selector-bearing reads and mutations still require an exact ID match.
   if (
-    (operation !== "registerServer" &&
-      input.id !== undefined &&
-      resultServer.server_id !== input.id) ||
+    (operation !== "registerServer" && input.id !== undefined && resultServer.server_id !== input.id) ||
     (operation === "registerServer" && input.id !== undefined)
   )
     throw new Error("mcp_personal_response_invalid")

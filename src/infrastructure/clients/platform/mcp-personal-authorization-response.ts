@@ -12,15 +12,8 @@ const authorizationUrl = z
       const developmentLoopback =
         process.env.NODE_ENV !== "production" &&
         url.protocol === "http:" &&
-        (url.hostname === "localhost" ||
-          url.hostname === "127.0.0.1" ||
-          url.hostname === "[::1]")
-      return (
-        (url.protocol === "https:" || developmentLoopback) &&
-        url.username === "" &&
-        url.password === "" &&
-        url.hash === ""
-      )
+        (url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "[::1]")
+      return (url.protocol === "https:" || developmentLoopback) && url.username === "" && url.password === "" && url.hash === ""
     } catch {
       return false
     }

@@ -82,7 +82,11 @@ export async function skillAdminRoute(
       }
       return
     }
-    if (request.method !== "POST" || new URL(request.url!, "http://bff.local").search || request.headers["content-type"]?.split(";", 1)[0] !== "application/json")
+    if (
+      request.method !== "POST" ||
+      new URL(request.url!, "http://bff.local").search ||
+      request.headers["content-type"]?.split(";", 1)[0] !== "application/json"
+    )
       throw new ConnectError("Skills admin route invalid", Code.InvalidArgument)
     if (path.length === 2) {
       const commandId = skillCommandId(request, context, "createAdminSkillDraft")

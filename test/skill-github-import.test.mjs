@@ -460,24 +460,53 @@ test("GitHub archive retains its separate UTF8 relative-file 256-byte ceiling", 
   const body = "---\nname: Actual\ndescription: Actual\n---\n# Actual"
   for (const file of ["a".repeat(256), `${"界".repeat(85)}a`]) {
     assert.equal(Buffer.byteLength(file), 256)
-    const bytes = githubSkillPackage(archive([["root/SKILL.md", body], [`root/${file}`, "actual bytes"]]), "")
+    const bytes = githubSkillPackage(
+      archive([
+        ["root/SKILL.md", body],
+        [`root/${file}`, "actual bytes"],
+      ]),
+      "",
+    )
     assert.ok(bytes.includes(Buffer.from("actual bytes")))
-    assert.throws(() => githubSkillPackage(archive([["root/SKILL.md", body], [`root/${file}a`, "actual bytes"]]), ""), /github_package_invalid/u)
+    assert.throws(
+      () =>
+        githubSkillPackage(
+          archive([
+            ["root/SKILL.md", body],
+            [`root/${file}a`, "actual bytes"],
+          ]),
+          "",
+        ),
+      /github_package_invalid/u,
+    )
   }
 })
 
 test("GitHub preview counts SKILL.md filename bytes and imports the selected immutable multibyte directory", async () => {
   const { GithubSkillImportClient } = await import("../src/infrastructure/clients/github-skill-import.ts")
-  const commit = "b".repeat(40), path = `${"界".repeat(82)}a`, body = "---\nname: Actual\ndescription: Actual\n---\n# Actual"
+  const commit = "b".repeat(40),
+    path = `${"界".repeat(82)}a`,
+    body = "---\nname: Actual\ndescription: Actual\n---\n# Actual"
   assert.equal(Buffer.byteLength(`${path}/SKILL.md`), 256)
-  let zip = archive([[`root/${path}/SKILL.md`, body], ["root/short/SKILL.md", body]])
+  let zip = archive([
+    [`root/${path}/SKILL.md`, body],
+    ["root/short/SKILL.md", body],
+  ])
   const calls = []
   const client = new GithubSkillImportClient(async (url) => {
     calls.push(String(url))
     if (String(url).includes("/commits/")) return Response.json({ sha: commit })
     if (String(url).startsWith("https://codeload.github.com/")) return new Response(zip, { headers: { "content-type": "application/zip" } })
-    return Response.json({ id: 1, private: false, full_name: "owner/repo", html_url: "https://github.com/owner/repo",
-      owner: { login: "owner", html_url: "https://github.com/owner" }, stargazers_count: 1, forks_count: 0, default_branch: "main" })
+    return Response.json({
+      id: 1,
+      private: false,
+      full_name: "owner/repo",
+      html_url: "https://github.com/owner/repo",
+      owner: { login: "owner", html_url: "https://github.com/owner" },
+      stargazers_count: 1,
+      forks_count: 0,
+      default_branch: "main",
+    })
   })
   const result = await client.preview({ repository_url: "https://github.com/owner/repo" }, AbortSignal.timeout(1000))
   assert.deepEqual(result.paths, ["short", path].sort())

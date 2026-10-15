@@ -121,7 +121,7 @@ test("fails a valid credential read when closing the file fails", async () => {
   await assert.rejects(source.get(TENANT), /close_failed/u)
 })
 
-for (const purpose of ["projection", "mcp_personal", "mcp_admin"]) {
+for (const purpose of ["projection", "mcp_personal", "custom_api_personal", "mcp_admin"]) {
   test(`requires exact ${purpose} purpose, caller and current file without OAuth fallback`, async () => {
     const profile = { ...entry(), surfaces: [purpose] }
     const file = await fixture({ version: 1, entries: [profile] })

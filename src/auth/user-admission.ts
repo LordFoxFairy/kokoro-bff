@@ -166,8 +166,13 @@ export async function authorizeMcpCatalogAction(
   signal.throwIfAborted()
   return result
 }
-export function mcpActionForRequest(method: string, path: string[]): import("./mcp-authorization.types.js").McpAuthorizationInput["action"] | null {
+export function mcpActionForRequest(
+  method: string,
+  path: string[],
+  browserPrivate = false,
+): import("./mcp-authorization.types.js").McpAuthorizationInput["action"] | null {
   if (method === "GET" && path.length === 1 && path[0] === "connector.list") return "read"
-  if (path[0] !== "mcp") return null
-  return method === "GET" ? "read" : "manage"
+  if (browserPrivate && path[0] === "mcp") return method === "GET" ? "read" : "manage"
+  if (method === "GET" && path.length === 2 && path[0] === "mcp" && (path[1] === "servers" || path[1] === "connections")) return "read"
+  return null
 }

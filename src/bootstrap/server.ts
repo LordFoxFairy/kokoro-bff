@@ -259,7 +259,7 @@ async function handle(
     (businessPath[0] === "admin" && businessPath[1] === "skills") ||
     (businessPath[0] === "self" && businessPath[1] === "skills")
   if (hasSkillsBudget) startSkillRequestBudget(request)
-  const mcpAction = mcpActionForRequest(request.method ?? "GET", businessPath)
+  const mcpAction = mcpActionForRequest(request.method ?? "GET", businessPath, browserPrivateMcp)
   const isMcpPersonalOperation = browserPrivateMcp && mcpPersonalOperation(businessPath, request.method ?? "GET") !== null
   const isCustomApiOperation = browserPrivateMcp && customApiOperation(businessPath, request.method ?? "GET") !== null
   const defersMcpPersonalReadAction = isMcpPersonalOperation && request.method === "GET"
@@ -762,9 +762,9 @@ async function handle(
     return
   }
 
-  // Retired Skills/MCP mutations must not claim a BFF receipt or touch owner SQL.
+  // Retired Skills mutations must not claim a BFF receipt or touch owner SQL.
   // The named v4 candidate routes above have already returned.
-  if (composition.routeHandler === undefined && (businessPath[0] === "skills" || businessPath[0] === "mcp") && request.method !== "GET") {
+  if (composition.routeHandler === undefined && businessPath[0] === "skills" && request.method !== "GET") {
     send(response, 503, failure("platform_operation_not_available", "This Platform operation is not exposed by the BFF owner adapter", id))
     return
   }

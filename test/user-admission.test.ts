@@ -815,9 +815,9 @@ test("R357 MCP action admission forwards only trusted human tenant/subject and k
     resource: "mcp_personal",
     action: "manage",
   })
-  assert.equal(mcpActionForRequest("GET", ["mcp", "connectors"]), "read")
-  assert.equal(mcpActionForRequest("GET", ["mcp", "connections"]), "read")
-  assert.equal(mcpActionForRequest("POST", ["mcp", "connectors"]), "manage")
+  assert.equal(mcpActionForRequest("GET", ["mcp", "connectors"], true), "read")
+  assert.equal(mcpActionForRequest("GET", ["mcp", "connections"], true), "read")
+  assert.equal(mcpActionForRequest("POST", ["mcp", "connectors"], true), "manage")
   for (const path of [["skills"], ["team"], ["admin", "skills"], ["runtime"]]) assert.equal(mcpActionForRequest("POST", path), null)
 })
 test("R357 MCP action cancellation after a late human permission never returns admission success", async () => {

@@ -50,7 +50,13 @@ import { projectInstallation } from "../infrastructure/clients/platform/personal
 import { projectSkillPackageInspectionResponse } from "../infrastructure/clients/platform/skill-package-inspection-response.js"
 import { assertSkillWireKnown, skillTimestamp } from "../infrastructure/clients/platform/skill-product-response.js"
 
-type ScheduledWorkerErrorEvent = { operation: string; result: "error"; errorCode: string; attempt: number; backoffMs: number }
+type ScheduledWorkerErrorEvent = {
+  operation: string
+  result: "error"
+  errorCode: string
+  attempt: number
+  backoffMs: number
+}
 function scheduledWorkerLog(event: ScheduledWorkerErrorEvent): void {
   process.stderr.write(`${JSON.stringify({ service: "kokoro-bff", ...event })}\n`)
 }
@@ -70,7 +76,8 @@ export type BffRouteInput = {
 export type BffRouteHandler = (input: BffRouteInput) => Promise<boolean | void>
 
 export type BffServerComposition = {
-  mcpPersonalClient: (Pick<McpPersonalConnectClient, "read"> & Partial<Pick<McpPersonalConnectClient, "close" | "command" | "authorization" | "server" | "importJson">>) | null
+  mcpPersonalClient:
+    (Pick<McpPersonalConnectClient, "read"> & Partial<Pick<McpPersonalConnectClient, "close" | "command" | "authorization" | "server" | "importJson">>) | null
   mcpProviderAdminClient: (Pick<McpProviderAdminConnectClient, "execute"> & Partial<Pick<McpProviderAdminConnectClient, "close">>) | null
   customApiClient: (Pick<CustomApiConnectClient, "execute"> & Partial<Pick<CustomApiConnectClient, "close">>) | null
   localSkillImportClient?: LocalSkillImportClient
@@ -164,9 +171,20 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
       timeoutMs: config.upstreamTimeoutMs,
       maxResponseBytes: config.upstreamMaxResponseBytes,
     })
-  const mcpAuthorization = options.mcpAuthorization ?? new McpAuthorizationClient({ baseUrl: config.iamBaseUrl, timeoutMs: 5000, maxResponseBytes: 65_536 })
+  const mcpAuthorization =
+    options.mcpAuthorization ??
+    new McpAuthorizationClient({
+      baseUrl: config.iamBaseUrl,
+      timeoutMs: 5000,
+      maxResponseBytes: 65_536,
+    })
   const skillAuthorization =
-    options.skillAuthorization ?? new SkillAuthorizationClient({ baseUrl: config.iamBaseUrl, timeoutMs: 5000, maxResponseBytes: 65_536 })
+    options.skillAuthorization ??
+    new SkillAuthorizationClient({
+      baseUrl: config.iamBaseUrl,
+      timeoutMs: 5000,
+      maxResponseBytes: 65_536,
+    })
   const skillProductClient =
     options.skillProductClient !== undefined
       ? options.skillProductClient
@@ -320,7 +338,9 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
       : new ProjectScopeReleaseOutboxDispatcher(
           businessStore.projectScopeReleaseOutbox,
           new StorageScopeReleaseClient(config.storage.baseUrl, config.storage.secret),
-          { workerId: `bff-project-scope-release-${process.pid}-${randomUUID()}` },
+          {
+            workerId: `bff-project-scope-release-${process.pid}-${randomUUID()}`,
+          },
         ))
   const closeStore = options.close ?? (ownsStore && businessStore !== null ? (): Promise<void> => businessStore.close() : async (): Promise<void> => undefined)
   let stopWorkersPromise: Promise<void> | null = null
@@ -349,10 +369,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     options.mcpPersonalClient !== undefined
       ? options.mcpPersonalClient
       : config.mcpPersonal
-        ? new McpPersonalConnectClient(
-            config.mcpPersonal.baseUrl,
-            new PlatformServiceCredentialSource(config.mcpPersonal.credentialFile, "mcp_personal"),
-          )
+        ? new McpPersonalConnectClient(config.mcpPersonal.baseUrl, new PlatformServiceCredentialSource(config.mcpPersonal.credentialFile, "mcp_personal"))
         : null
   const mcpProviderAdminClient =
     options.mcpProviderAdminClient !== undefined
@@ -367,10 +384,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     options.customApiClient !== undefined
       ? options.customApiClient
       : config.customApi
-        ? new CustomApiConnectClient(
-            config.customApi.baseUrl,
-            new PlatformServiceCredentialSource(config.customApi.credentialFile, "custom_api_personal"),
-          )
+        ? new CustomApiConnectClient(config.customApi.baseUrl, new PlatformServiceCredentialSource(config.customApi.credentialFile, "custom_api_personal"))
         : null
   let closePromise: Promise<void> | null = null
   const close = (): Promise<void> => {
@@ -420,7 +434,12 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
               objectOrigin: config.storageObjectOrigin ?? config.storage?.objectOrigin ?? null,
               download: async (sourceRef, context, signal, deadlineAt) => {
                 const value = await skillProductClient.download(
-                  { requestId: context.requestId, tenant: context.identity.namespace, subject: context.identity.userId, sourceRef },
+                  {
+                    requestId: context.requestId,
+                    tenant: context.identity.namespace,
+                    subject: context.identity.userId,
+                    sourceRef,
+                  },
                   signal,
                   deadlineAt,
                 )
@@ -443,7 +462,12 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
                 const value = projectInstallation(
                   (
                     await personalInstallationClient.get(
-                      { requestId: context.requestId, tenant: context.identity.namespace, subject: context.identity.userId, installationId: id },
+                      {
+                        requestId: context.requestId,
+                        tenant: context.identity.namespace,
+                        subject: context.identity.userId,
+                        installationId: id,
+                      },
                       signal,
                     )
                   ).installation,
@@ -472,13 +496,23 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
                 if (!share) return null
                 signal.throwIfAborted()
                 const raw = await skillProductClient.inspect(
-                  { requestId: context.requestId, tenant: context.identity.namespace, subject: context.identity.userId, sourceRef: share.sourceRef },
+                  {
+                    requestId: context.requestId,
+                    tenant: context.identity.namespace,
+                    subject: context.identity.userId,
+                    sourceRef: share.sourceRef,
+                  },
                   signal,
                   deadlineAt,
                 )
                 assertSkillWireKnown(raw)
-                const value = projectSkillPackageInspectionResponse(raw, { sourceRef: share.sourceRef })
-                return { sourceRef: value.source_ref, revision: value.revision }
+                const value = projectSkillPackageInspectionResponse(raw, {
+                  sourceRef: share.sourceRef,
+                })
+                return {
+                  sourceRef: value.source_ref,
+                  revision: value.revision,
+                }
               },
             })
           : null,

@@ -15,7 +15,6 @@ import {
   chatSessionDetailData,
   chatSessionsData,
   githubSkillSource,
-  mcpRegisterInput,
   mockControlReceipt,
   PLATFORMS,
   projectData,
@@ -298,36 +297,6 @@ export async function mockBusiness(
         const skill = store.importGithubSkill(source)
         payload = { repository: source.source_url, default_branch: "main", skill: { name: skill.name, description: skill.description } }
       }
-    } else {
-      status = 404
-      payload = failure("bff_route_not_found", "Business route was not found", context.requestId)
-    }
-  } else if (segments[0] === "mcp" && segments[1] === "servers") {
-    const name = segments[2]
-    if (segments.length === 2 && method === "GET") payload = { servers: store.mcpServers }
-    else if (segments.length === 2 && method === "POST") {
-      const input = mcpRegisterInput(json)
-      if (input === null) {
-        status = 400
-        payload = failure("invalid_mcp_server", "A valid MCP server registration is required", context.requestId)
-      } else if (store.findMcpServer(input.name) !== undefined) {
-        status = 409
-        payload = failure("mcp_server_exists", "MCP server already exists", context.requestId)
-      } else {
-        payload = { server: store.registerMcpServer({ ...input, scope: context.identity.namespace }) }
-      }
-    } else if (segments.length === 4 && (segments[3] === "enable" || segments[3] === "disable") && method === "POST") {
-      const changed = store.setMcpEnabled(name || "", segments[3] === "enable")
-      if (!changed) {
-        status = 404
-        payload = failure("mcp_server_not_found", "MCP server was not found", context.requestId)
-      } else payload = { ok: true }
-    } else if (segments.length === 3 && method === "DELETE") {
-      const deleted = store.deleteMcpServer(name || "")
-      if (!deleted) {
-        status = 404
-        payload = failure("mcp_server_not_found", "MCP server was not found", context.requestId)
-      } else payload = { ok: true }
     } else {
       status = 404
       payload = failure("bff_route_not_found", "Business route was not found", context.requestId)

@@ -53,7 +53,7 @@
     "configs": [
       {
         "path": "buf.platform.json",
-        "sha256": "c4ec51a2250d1fa815b3bcde5544f1bd079cd5e0dfc64c89d67f5918c0e6570f"
+        "sha256": "ac29731fbb06993cd2554b666ade3607577a6be5d4634c1b71fa533bcf46f42c"
       },
       {
         "path": "buf.platform.gen.json",

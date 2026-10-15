@@ -139,7 +139,7 @@ export async function liveOwnerBusiness(
     return true
   }
 
-  if (businessPath[0] === "skills" || businessPath[0] === "mcp") {
+  if (businessPath[0] === "skills") {
     await reply(
       response,
       503,

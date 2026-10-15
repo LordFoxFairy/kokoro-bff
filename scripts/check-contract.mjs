@@ -66,11 +66,9 @@ function expectedIdempotency(operation) {
   if (operation.method === "POST" && SPECIFICATION_BROWSER_READS.get(operation.path) === operation.fields.get("operationId")) return "none"
   if (operation.fields.get("operationId") === "previewGithubSkill") return "none"
   if (
-    new Set([
-      "beginPersonalMcpConnectorAuthorization",
-      "reconnectPersonalMcpConnectorAuthorization",
-      "completePersonalMcpConnectorAuthorization",
-    ]).has(operation.fields.get("operationId"))
+    new Set(["beginPersonalMcpConnectorAuthorization", "reconnectPersonalMcpConnectorAuthorization", "completePersonalMcpConnectorAuthorization"]).has(
+      operation.fields.get("operationId"),
+    )
   )
     return "none"
   if (
@@ -196,9 +194,7 @@ async function main() {
   const errors = [
     ...inspectOpenApiGovernance(openapi),
     ...compareOperationBaseline(openapi, parsedBaseline.operations),
-    ...(parsedBaseline.operations.length === currentOperations.length
-      ? []
-      : ["public operation inventory must contain one entry for every current operation"]),
+    ...(parsedBaseline.operations.length === currentOperations.length ? [] : ["public operation inventory must contain one entry for every current operation"]),
     ...(managedPersonalReads.length === 2 && managedPersonalReads.every((operation) => operation.method === "GET")
       ? []
       : ["managed personal Skill inventory must contain exactly the two GET operations"]),
