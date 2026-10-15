@@ -420,9 +420,8 @@ export class McpPersonalConnectClient {
       })
       signal.throwIfAborted()
       if (
-        (!options.allowMissingCorrelationHeader &&
-          responseRequestId !== input.requestId) ||
-        responseCache !== "no-store"
+        !options.allowMissingCorrelationHeader &&
+        (responseRequestId !== input.requestId || responseCache !== "no-store")
       )
         throw new Error("mcp_personal_response_invalid")
       return value
