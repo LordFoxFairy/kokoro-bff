@@ -196,6 +196,24 @@ test("private URL MCP GET projects declarations_available and the full safe decl
       },
     },
   )
+  const previous = process.env.NODE_ENV
+  try {
+    process.env.NODE_ENV = "development"
+    const local = create(PersonalMcpServerSchema, {
+      ...server,
+      serverUrl: "http://127.0.0.1:43191/mcp",
+    })
+    assert.equal(
+      (projectMcpPersonalServer(
+        "server",
+        create(GetPersonalMcpServerResponseSchema, { server: local }),
+        { ...input, id: "server-one" },
+      ) as { server: { server_url: string } }).server.server_url,
+      "http://127.0.0.1:43191/mcp",
+    )
+  } finally {
+    process.env.NODE_ENV = previous
+  }
 })
 
 test("private URL MCP prepare and update require strict CAS and reject ambiguous or empty changes", () => {

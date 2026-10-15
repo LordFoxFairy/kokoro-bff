@@ -20,13 +20,23 @@ const text = (min: number, max: number) =>
         Buffer.byteLength(value, "utf8") <= max &&
         (min === 0 || Boolean(value.trim())),
     )
+function isDevelopmentLoopback(url: URL): boolean {
+  return (
+    process.env.NODE_ENV !== "production" &&
+    url.protocol === "http:" &&
+    (url.hostname === "localhost" ||
+      url.hostname === "127.0.0.1" ||
+      url.hostname === "[::1]")
+  )
+}
+
 const serverUrl = z
   .string()
   .max(255)
   .refine((value) => {
     try {
       const url = new URL(value)
-      return url.protocol === "https:" && url.username === "" && url.password === "" && url.hash === "" && url.toString() === value
+      return (url.protocol === "https:" || isDevelopmentLoopback(url)) && url.username === "" && url.password === "" && url.hash === "" && url.toString() === value
     } catch {
       return false
     }
@@ -186,10 +196,23 @@ export function projectMcpPersonalServer(operation: McpPersonalServerOperation, 
   if (operation === "server") return { server: resultServer }
   const connector = projectMcpPersonalConnector(value.connector)
   const replayed = value.replayed
+  const expectedEnabled =
+    operation === "registerServer"
+      ? false
+      : operation === "prepareServer"
+        ? resultServer.prepare_status === "ready"
+        : operation === "updateServer" &&
+            (input.serverUrl !== undefined ||
+              (input.headerUpserts?.length ?? 0) > 0 ||
+              (input.headerRemovals?.length ?? 0) > 0 ||
+              input.oauthClient !== undefined ||
+              input.revokeOauthClient)
+          ? false
+          : undefined
   if (
     typeof replayed !== "boolean" ||
     connector.server_id !== resultServer.server_id ||
-    connector.enabled ||
+    (expectedEnabled !== undefined && connector.enabled !== expectedEnabled) ||
     (resultServer.status === "pending" && connector.status !== "pending") ||
     (resultServer.status === "registered" && connector.status !== "active")
   )
