@@ -29,8 +29,7 @@ import {
   zListVisibleSkillPoolResponse,
   zListVisibleSkillsResponse,
 } from "../../../generated/platform-http/zod.gen.js"
-import { ProjectionCredentialSource } from "./projection-credential.js"
-import { ProjectionTokenSource } from "./projection-token.js"
+import { PlatformServiceCredentialSource } from "./platform-service-credential.js"
 import type { ListSelfManagedSkillsData } from "../../../generated/platform-http/types.gen.js"
 
 export type ProjectionOperation = "skills" | "skill" | "pool" | "catalog" | "mcp" | "mcpConnections"
@@ -184,15 +183,14 @@ function whileActive<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
 }
 
 export class PlatformProjectionHttpClient {
-  readonly #tokens: ProjectionTokenSource
+  readonly #tokens: PlatformServiceCredentialSource
   constructor(
     private readonly baseUrl: string,
-    iamUrl: string,
     credentialFile: string,
     private readonly timeoutMs = 5000,
     private readonly maxBytes = 1024 * 1024,
   ) {
-    this.#tokens = new ProjectionTokenSource(iamUrl, new ProjectionCredentialSource(credentialFile), timeoutMs)
+    this.#tokens = new PlatformServiceCredentialSource(credentialFile, "projection")
   }
   async read(
     operation: ProjectionOperation,
@@ -531,7 +529,13 @@ export class PlatformProjectionHttpClient {
       return { ok: false, status: 400, code: "invalid_query_parameter", retryable: false }
     if (status === 404 && operation === "skill" && parsed.data.error.code === "capability.route_not_found")
       return { ok: false, status: 404, code: "skill_not_found", retryable: false }
-    if (status === 401 || status === 403 || status === 503) return unavailable()
+    const { code, retryable } = parsed.data.error
+    if (
+      (status === 401 && code === "capability.service_auth_failed" && !retryable) ||
+      (status === 403 && ["capability.permission_denied", "capability.tenant_mismatch"].includes(code) && !retryable) ||
+      (status === 503 && code === "capability.dependencies_unavailable" && retryable)
+    )
+      return unavailable()
     return invalidResponse()
   }
 }

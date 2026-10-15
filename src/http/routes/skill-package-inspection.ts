@@ -173,13 +173,13 @@ export async function skillPackageInspectionRoute(
     }
 
     const projection = config.platformProjection
-    if (projection.baseUrl === null || projection.credentialFile === null || config.iamBaseUrl === null) {
+    if (projection.baseUrl === null || projection.credentialFile === null) {
       failIfActive(503, "skill_package_dependency_unavailable", "Skill package dependency is unavailable", true)
       return
     }
     let client = clients.get(config)
     if (client === undefined) {
-      client = new SkillPackageInspectionConnectClient(projection.baseUrl, config.iamBaseUrl, projection.credentialFile, projection.timeoutMs)
+      client = new SkillPackageInspectionConnectClient(projection.baseUrl, projection.credentialFile, projection.timeoutMs)
       clients.set(config, client)
     }
 

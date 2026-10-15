@@ -1,8 +1,8 @@
-import { createClient, Code, ConnectError, type CallOptions } from "@connectrpc/connect"
+import { createClient, type CallOptions } from "@connectrpc/connect"
 import { createConnectTransport } from "@connectrpc/connect-node"
 import { McpConnectorType, McpProviderAdminService } from "../../../generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
 import { bindMcpProviderAdminCommand, type McpProviderAdminCommandInput } from "./mcp-provider-admin-command-binding.js"
-import { McpProviderAdminTokenSource } from "./mcp-provider-admin-token.js"
+import type { PlatformServiceCredentialSource } from "./platform-service-credential.js"
 
 type ProviderInput = Record<string, unknown>
 export type McpProviderAdminOperation = "list" | "get" | "create" | "update" | "enabled" | "remove"
@@ -113,7 +113,7 @@ export class McpProviderAdminConnectClient {
   #closed = false
   public constructor(
     baseUrl: string,
-    private readonly tokens: McpProviderAdminTokenSource,
+    private readonly credentials: Pick<PlatformServiceCredentialSource, "get">,
   ) {
     this.#client = createClient(
       McpProviderAdminService,
@@ -124,7 +124,6 @@ export class McpProviderAdminConnectClient {
     this.#closed = true
     for (const controller of this.#active) controller.abort()
     this.#active.clear()
-    this.tokens.close()
   }
   public async execute(operation: McpProviderAdminOperation, input: McpProviderAdminInput, outer: AbortSignal, deadlineAt: number): Promise<unknown> {
     return this.#call(input, outer, deadlineAt, async (options) => {
@@ -204,10 +203,9 @@ export class McpProviderAdminConnectClient {
     const remaining = () => Math.max(0, Math.floor(deadlineAt - performance.now()))
     const timer = setTimeout(() => controller.abort(), remaining())
     const signal = AbortSignal.any([outer, controller.signal])
-    let token: string | undefined
     try {
       signal.throwIfAborted()
-      token = await this.tokens.get(input.tenantId, signal, deadlineAt)
+      const token = await this.credentials.get(input.tenantId, signal, deadlineAt)
       let responseRequestId: string | null = null
       let responseCache: string | null = null
       const value = await action({
@@ -219,7 +217,7 @@ export class McpProviderAdminConnectClient {
         timeoutMs: remaining(),
         headers: {
           authorization: `Bearer ${token}`,
-          "x-tenant-ref": input.tenantId,
+          "x-kokoro-tenant": input.tenantId,
           "x-kokoro-subject": input.subjectId,
           "x-kokoro-request-id": input.requestId,
         },
@@ -227,9 +225,6 @@ export class McpProviderAdminConnectClient {
       signal.throwIfAborted()
       if (responseRequestId !== input.requestId || responseCache !== "no-store") throw new Error("mcp_provider_admin_response_invalid")
       return value
-    } catch (error) {
-      if (token !== undefined && error instanceof ConnectError && [Code.Unauthenticated, Code.PermissionDenied].includes(error.code)) this.tokens.retire(token)
-      throw error
     } finally {
       clearTimeout(timer)
       this.#active.delete(controller)

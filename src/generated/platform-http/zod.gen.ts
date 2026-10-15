@@ -230,7 +230,7 @@ export const zPersonalMcpProvider = z.object({
 export const zRequestId = z.string().min(1).max(255)
 
 /**
- * Optional consistency assertion only; tenant authority is IAM introspection.
+ * Optional consistency assertion only; tenant authority comes from authenticated surface admission (local service credential for projection, IAM for delegated surfaces).
  */
 export const zTenantId = z.string().min(1).max(255)
 

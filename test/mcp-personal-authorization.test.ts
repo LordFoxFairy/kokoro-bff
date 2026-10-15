@@ -132,6 +132,29 @@ test("A3 authorization projects only browser-required URL metadata and owner fac
   )
 })
 
+test("A3 authorization admits a loopback callback target in local development", () => {
+  const connector = create(PersonalMcpConnectorSchema, {
+    connectorId: { value: "connector" },
+    connectorType: 3,
+    providerKey: "provider",
+    status: 1,
+    stateVersion: 2n,
+  })
+  const begun = create(BeginPersonalMcpConnectorAuthorizationResponseSchema, {
+    authorizationId: { value: "authorization" },
+    authorizationUrl: "http://127.0.0.1:43193/authorize?state=opaque",
+    expiresAt: { seconds: 1_800_000_000n, nanos: 0 },
+    connector,
+  })
+  assert.equal(
+    (projectMcpPersonalAuthorization("begin", begun, {
+      ...identity,
+      id: "connector",
+    }) as { authorization: { authorization_url: string } }).authorization.authorization_url,
+    "http://127.0.0.1:43193/authorize?state=opaque",
+  )
+})
+
 function inputForConnection() {
   return { ...identity, id: "connector", serverId: "server", allowedSelectors: ["tool.read"], expectedStateVersion: "2", commandId: "idempotency-key" }
 }
@@ -141,7 +164,6 @@ test("A3 real Connect lifecycle forwards opaque callback values and exact connec
   const { connectNodeAdapter } = await import("@connectrpc/connect-node")
   const { ProductMcpPersonalService } = await import("../src/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
   const { McpPersonalConnectClient } = await import("../src/infrastructure/clients/platform/mcp-personal-connect.js")
-  const { McpPersonalTokenSource } = await import("../src/infrastructure/clients/platform/mcp-personal-token.js")
   const seen: unknown[] = []
   const server = createServer(
     connectNodeAdapter({
@@ -149,10 +171,10 @@ test("A3 real Connect lifecycle forwards opaque callback values and exact connec
         router.service(ProductMcpPersonalService, {
           completePersonalMcpConnectorAuthorization: (request, context) => {
             seen.push(request)
-            assert.equal(context.requestHeader.get("x-tenant-ref"), identity.tenant)
+            assert.equal(context.requestHeader.get("x-kokoro-tenant"), identity.tenant)
             assert.equal(context.requestHeader.get("x-kokoro-subject"), identity.subject)
             context.responseHeader.set("cache-control", "no-store")
-            context.responseHeader.set("x-kokoro-request-id", request.requestId)
+            context.responseHeader.set("x-request-id", request.requestId)
             return {
               connector: { connectorId: { value: "connector" }, connectorType: 3, providerKey: "provider", status: 2, enabled: false, stateVersion: 3n },
             }
@@ -160,7 +182,7 @@ test("A3 real Connect lifecycle forwards opaque callback values and exact connec
           createPersonalMcpConnection: (request, context) => {
             seen.push(request)
             context.responseHeader.set("cache-control", "no-store")
-            context.responseHeader.set("x-kokoro-request-id", request.requestId)
+            context.responseHeader.set("x-request-id", request.requestId)
             return {
               connection: {
                 connectionId: { value: "connection" },
@@ -179,7 +201,7 @@ test("A3 real Connect lifecycle forwards opaque callback values and exact connec
   const address = server.address()
   assert.ok(address && typeof address === "object")
   const tokens = { get: async () => "workload", retire: () => undefined, close: () => undefined }
-  const client = new McpPersonalConnectClient(`http://127.0.0.1:${address.port}`, tokens as unknown as InstanceType<typeof McpPersonalTokenSource>)
+  const client = new McpPersonalConnectClient(`http://127.0.0.1:${address.port}`, tokens)
   try {
     await client.authorization("complete", { ...identity, state: "opaque-state", code: "opaque-code" }, new AbortController().signal, performance.now() + 1_000)
     await client.authorization("createConnection", inputForConnection(), new AbortController().signal, performance.now() + 1_000)

@@ -1,3 +1,24 @@
+## CV-SVC MCP workload认证profile（D1，2026-10-13；BFF 源码候选已实现，待配对验收）
+
+现 `/browser/v1/mcp/*` 与 `/v1/admin/mcp/providers*` 的HTTP方法/body/成功错误/CAS/幂等不变，Platform `ProductMcpPersonalService`、`McpProviderAdminService` Proto和固定generated输入不变。只切这两internal-owner caller认证：HTTP/Connect Bearer内容是opaque本地service credential，caller=kokoro-bff、surface严格mcp_personal或mcp_admin、tenant绑定；不再取得IAM机器OAuth token，不包含第三方用户OAuth变化。
+
+BFF每次请求从受限文件读取version1严格闭集 `{version:1,entries:[{credential_id,secret,caller,surfaces:[指定唯一surface],tenant_id}]}`。三用途（含projection）使用独立credential ID/secret和实例，不容错旧OAuth数组schema，不fallback；回显、错误、日志不含secret。tenant出站一致性头为owner实际读取的`x-kokoro-tenant`，subject由已准入BFF代言。human admission/action权限和执行proof均保持既有事实，不把服务直认证当“无授权”。
+
+consumer生成物和body不改，当前owner pin/digest仍保护；认证profile代码/设计/负控先由owner配对批准再切运行配置。不增加public API/v2或兼容路由。真实两surface配对与普通用户/Admin权限负控尚待验。
+
+## CN-07a MCP Provider Admin typed owner errors（2026-10-13）
+
+既有六个 `/v1/admin/mcp/providers*` operation与成功schema不变。Platform Connect `InvalidArgument`统一映射`400 invalid_mcp_provider_admin_request`；`NotFound`仅对get/update/enabled/remove映射`404 mcp_provider_admin_not_found`；mutation的`AlreadyExists`映射`409 mcp_provider_admin_conflict`且不可重试，`Aborted`映射`409 mcp_provider_admin_command_in_progress`且可重试，`FailedPrecondition`映射`412 mcp_provider_admin_precondition_failed`且不可重试。operation不允许的同码、Unauthenticated/PermissionDenied及其他依赖错误仍为`503 mcp_provider_admin_dependency_unavailable`，不得伪装成人类403。映射只读Connect Code，不按owner message猜测；响应不透传owner message、headers或秘密。canonical已声明这些status且error code为string，本片不改OpenAPI版本或生成物。
+
+## App API 修复当前切片（2026-10-13）
+
+- HTTP 业务路径统一 `/v1`，artifact SemVer 不等于路由版本。Billing 唯一消费源为 owner commit `1ceeae550f05857d1e7fa0da1e83af23a552f0ca` 的 `contract/openapi/v1/openapi.yaml`（SHA-256 `35b4a2d1d178f6a548fe67460c8e8cbba9eb247296f9051f6ec23060235baff8`）；现生成器只消费本人 Credit 两读，不回退旧 v2。
+- Platform projection 固定 owner commit `6b4c9db6719d2f5fd37a752921e603f4b0221de6`、HTTP artifact `6.0.0`（SHA-256 `50afde42d7a1564ecb058c78dff68e4ea81bbb3552bd96dbf6203b036ec381ae`）。该 surface 使用 owner profile 的本地 Bearer、caller/surface/tenant 绑定和每次重读，不作机器 OAuth/token 缓存；其他 surface 和外部当前用户 IAM 准入不随此片改动。
+- Billing 只有符合 owner envelope 的 `billing.credit_account_not_found`、非 retryable 404 才投影账户空态；未知路由或其他 404 是依赖协议错误，不冒充账户不存在。传输使用 owner 定义的 `x-request-id`。
+- 不变更公开 BFF wire、数据库或目录边界；仅替换对应 vendor pin 和正规生成物。源码门禁、正常运行切换与浏览器验收分别记录在 `docs/CURRENT.md`，未实施的付款/推理/其他认证切片不计入完成。
+
+以下阶段记录保留原时点，不覆盖本段当前调用方案。
+
 ## T-K03.20 本人 MCP 可连接目标投影（BFF 已实施，待 Web 消费）
 
 canonical public 从 `14.5.0` 递增至 `14.6.0`，不新增 endpoint 或命令。`PersonalMcpProvider` 可选新增 `connection_server_id`：它是 Platform 仅在 Provider 恰有一个 `registered + streamable_http` managed Server 时发出的不透明 ID。它不表示 endpoint、origin、tool selector、credential、OAuth URL 或连接已建成；缺失表示 Browser 不可发起既有授权/建连接命令，不能猜测或替换 ID。所有现有请求、错误 envelope、CAS、`no-store` 与 current-subject admission 保持不变。

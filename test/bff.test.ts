@@ -1018,7 +1018,7 @@ describe("kokoro-bff v1 mock contract", () => {
         subject: request.headers["x-kokoro-subject"]?.toString(),
       })
       response.writeHead(200, { "content-type": "application/json", "cache-control": "no-store", "x-request-id": "billing-owner" })
-      if (request.url === "/v2/billing/me/credit-account") {
+      if (request.url === "/v1/billing/me/credit-account") {
         response.end(
           JSON.stringify({
             data: {
@@ -1057,8 +1057,8 @@ describe("kokoro-bff v1 mock contract", () => {
     assert.equal(ledger.status, 200)
     assert.deepEqual(await ledger.json(), { data: { items: [], page: { next_cursor: null } }, meta: { request_id: "billing-ledger" } })
     assert.deepEqual(received, [
-      { url: "/v2/billing/me/credit-account", authorization: "Bearer billing-service-token", tenant: "u1.bnNfdGVzdA", subject: "u1.dXNlcl90ZXN0" },
-      { url: "/v2/billing/me/credit-ledger?limit=50", authorization: "Bearer billing-service-token", tenant: "u1.bnNfdGVzdA", subject: "u1.dXNlcl90ZXN0" },
+      { url: "/v1/billing/me/credit-account", authorization: "Bearer billing-service-token", tenant: "u1.bnNfdGVzdA", subject: "u1.dXNlcl90ZXN0" },
+      { url: "/v1/billing/me/credit-ledger?limit=50", authorization: "Bearer billing-service-token", tenant: "u1.bnNfdGVzdA", subject: "u1.dXNlcl90ZXN0" },
     ])
   })
 

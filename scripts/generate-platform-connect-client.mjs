@@ -7,7 +7,7 @@ import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-const ownerCommit = "b402b499535a213e1a337924e5dd0090927fbe6f"
+const ownerCommit = "071320924dc006781884242f45b3a001dee59170"
 const vendorRoot = `contract/vendor/kokoro-platform/${ownerCommit}`
 const vendorProto = `${vendorRoot}/proto`
 const output = "src/generated/platform-connect"
@@ -15,8 +15,19 @@ const manifestPath = "contract/dependencies/platform-connect.json"
 
 const sourceDigests = {
   "kokoro/common/v1/common.proto": "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08",
-  "kokoro/platform/v1/platform_runtime.proto": "c7cfca48fcb315cc9657f1bfb8c25528ea07feb32bcd3b07dae2c1e53f88d922",
+  "kokoro/platform/v1/platform_runtime.proto": "c7690b9b054373ae23aabe5840a507780ce5f8c7194213b50139d97cd061d218",
   "kokoro/storage/v3/storage.proto": "1021e603065978871c51519ddba5b23c9b97f16b781a08bd98e019b3342bf5f9",
+}
+const artifactDigests = {
+  "descriptor/platform-v1.binpb": "e510b66fee4df8913b9803bda2796205fc9412c37d952540c3647e4af70a7318",
+  "execution-operations/custom-api-v1.json": "eca45ebd0f3c31d48cc174256dc23bda22de288ded91aa12198b1a2a37516a38",
+  "execution-operations/mcp-private-server-v1.json": "0cdc5a0f44f11efbac5a5304d9e7df8d722f97660c73026c19577764b41471bf",
+  "provenance.json": "5b021102c33eb12b0b4edcf68500d0b474bc8bfe16c339dbf526cbdcdea67d02",
+}
+const provenanceCombinedSha256 = "0c108712a30bf1ff7faf886bae9dd7dd46e776ce9c4ed974f100922d5265f719"
+const ownerGenerated = {
+  path: "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts",
+  sha256: "4da2f518b42a0bec900843e041c6857d42116c752cbe9e8c044889fd7de26813",
 }
 const generatedFiles = ["kokoro/common/v1/common_pb.ts", "kokoro/platform/v1/platform_runtime_pb.ts", "kokoro/storage/v3/storage_pb.ts"]
 const generatedDirectories = ["kokoro", "kokoro/common", "kokoro/common/v1", "kokoro/platform", "kokoro/platform/v1", "kokoro/storage", "kokoro/storage/v3"]
@@ -38,12 +49,21 @@ function assertSourceDigests(sources) {
   }
 }
 
+function assertArtifactDigests(artifacts) {
+  assert.deepEqual(Object.keys(artifacts).sort(), Object.keys(artifactDigests).sort(), "Platform artifact allowlist drifted")
+  for (const [file, digest] of Object.entries(artifactDigests)) {
+    assert.equal(sha256(artifacts[file]), digest, `Platform artifact digest drifted: ${file}`)
+  }
+  assert.equal(JSON.parse(artifacts["provenance.json"].toString("utf8")).combinedSha256, provenanceCombinedSha256, "Platform provenance drifted")
+}
+
 function assertVendorLayout(tree) {
   assert.deepEqual(
     tree,
     {
       directories: [
-        "openapi",
+        "descriptor",
+        "execution-operations",
         "proto",
         "proto/kokoro",
         "proto/kokoro/common",
@@ -53,7 +73,7 @@ function assertVendorLayout(tree) {
         "proto/kokoro/storage",
         "proto/kokoro/storage/v3",
       ],
-      files: ["openapi/platform-http.openapi.json", ...Object.keys(sourceDigests).map((file) => `proto/${file}`)],
+      files: [...Object.keys(artifactDigests), ...Object.keys(sourceDigests).map((file) => `proto/${file}`)].sort(),
     },
     "Platform vendor must contain only current v1 inputs",
   )
@@ -89,8 +109,13 @@ async function readSources() {
   return Object.fromEntries(await Promise.all(Object.keys(sourceDigests).map(async (file) => [file, await readFile(path.join(root, vendorProto, file))])))
 }
 
+async function readArtifacts() {
+  return Object.fromEntries(await Promise.all(Object.keys(artifactDigests).map(async (file) => [file, await readFile(path.join(root, vendorRoot, file))])))
+}
+
 async function verifyInputs() {
   assertSourceDigests(await readSources())
+  assertArtifactDigests(await readArtifacts())
   assertVendorLayout(await tree(path.join(root, vendorRoot)))
 }
 
@@ -109,6 +134,17 @@ async function manifestFor(directory) {
       repository_commit: ownerCommit,
       package_name: "kokoro.platform.v1",
       sources: Object.entries(sourceDigests).map(([file, digest]) => ({ path: `contract/proto/${file}`, sha256: digest })),
+      artifacts: [
+        { path: "contract/execution-operations/custom-api-v1.json", sha256: artifactDigests["execution-operations/custom-api-v1.json"] },
+        { path: "contract/execution-operations/mcp-private-server-v1.json", sha256: artifactDigests["execution-operations/mcp-private-server-v1.json"] },
+        { path: "contract/descriptor/platform-v1.binpb", sha256: artifactDigests["descriptor/platform-v1.binpb"] },
+      ],
+      provenance: {
+        path: "contract/provenance.json",
+        sha256: artifactDigests["provenance.json"],
+        combined_sha256: provenanceCombinedSha256,
+      },
+      generated: ownerGenerated,
     },
     generator: {
       packages: { "@bufbuild/buf": "1.72.0", "@bufbuild/protobuf": "2.14.0", "@connectrpc/connect": "2.2.0", "protoc-gen-es": "2.14.0" },
@@ -153,6 +189,16 @@ async function main() {
   }
 }
 
-export { assertGeneratedTree, assertSourceDigests, assertVendorLayout, ownerCommit, sourceDigests }
+export {
+  artifactDigests,
+  assertArtifactDigests,
+  assertGeneratedTree,
+  assertSourceDigests,
+  assertVendorLayout,
+  ownerCommit,
+  ownerGenerated,
+  provenanceCombinedSha256,
+  sourceDigests,
+}
 
 if (process.argv[1] !== undefined && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) await main()

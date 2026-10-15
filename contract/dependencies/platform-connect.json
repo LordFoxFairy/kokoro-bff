@@ -3,7 +3,7 @@
   "status": "generated",
   "owner": {
     "repository_path": "apps/kokoro-capability",
-    "repository_commit": "b402b499535a213e1a337924e5dd0090927fbe6f",
+    "repository_commit": "071320924dc006781884242f45b3a001dee59170",
     "package_name": "kokoro.platform.v1",
     "sources": [
       {
@@ -12,13 +12,36 @@
       },
       {
         "path": "contract/proto/kokoro/platform/v1/platform_runtime.proto",
-        "sha256": "c7cfca48fcb315cc9657f1bfb8c25528ea07feb32bcd3b07dae2c1e53f88d922"
+        "sha256": "c7690b9b054373ae23aabe5840a507780ce5f8c7194213b50139d97cd061d218"
       },
       {
         "path": "contract/proto/kokoro/storage/v3/storage.proto",
         "sha256": "1021e603065978871c51519ddba5b23c9b97f16b781a08bd98e019b3342bf5f9"
       }
-    ]
+    ],
+    "artifacts": [
+      {
+        "path": "contract/execution-operations/custom-api-v1.json",
+        "sha256": "eca45ebd0f3c31d48cc174256dc23bda22de288ded91aa12198b1a2a37516a38"
+      },
+      {
+        "path": "contract/execution-operations/mcp-private-server-v1.json",
+        "sha256": "0cdc5a0f44f11efbac5a5304d9e7df8d722f97660c73026c19577764b41471bf"
+      },
+      {
+        "path": "contract/descriptor/platform-v1.binpb",
+        "sha256": "e510b66fee4df8913b9803bda2796205fc9412c37d952540c3647e4af70a7318"
+      }
+    ],
+    "provenance": {
+      "path": "contract/provenance.json",
+      "sha256": "5b021102c33eb12b0b4edcf68500d0b474bc8bfe16c339dbf526cbdcdea67d02",
+      "combined_sha256": "0c108712a30bf1ff7faf886bae9dd7dd46e776ce9c4ed974f100922d5265f719"
+    },
+    "generated": {
+      "path": "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts",
+      "sha256": "4da2f518b42a0bec900843e041c6857d42116c752cbe9e8c044889fd7de26813"
+    }
   },
   "generator": {
     "packages": {
@@ -37,7 +60,7 @@
         "sha256": "9888ea0808f6967ebdfb859125eb54430b89ad3f4dbee4418902bfdf6a4540ab"
       }
     ],
-    "script_sha256": "4e9c797f180449f59e55946542530248bdd1f8754b8793ff279ffaaa6b1e2cf3"
+    "script_sha256": "bb1d66dda150f256ec6ec0b6b57e54ca5493ba794577d9446a857ced8c0a48f4"
   },
   "generated": [
     {
@@ -46,7 +69,7 @@
     },
     {
       "path": "kokoro/platform/v1/platform_runtime_pb.ts",
-      "sha256": "adea7c372ba544b0aad2ae914aba32d15ca27e85a0cb7a9403fa165aec88788f"
+      "sha256": "880df718ce9fc2bd87aa5eab6c2863a24c90cb20f3deb92a1b352a727dc026ac"
     },
     {
       "path": "kokoro/storage/v3/storage_pb.ts",

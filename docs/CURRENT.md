@@ -1,3 +1,15 @@
+## App API 修复当前切片（2026-10-13）
+
+BFF 基线 `95fbd894ee01053f6c9cabeca481e50151cd4f15`；Billing owner 固定 `1ceeae550f05857d1e7fa0da1e83af23a552f0ca` 的唯一 v1 artifact，Platform HTTP 固定 `6b4c9db6719d2f5fd37a752921e603f4b0221de6` 的 6.0.0 artifact。生成器实际输入、vendor 字节与 manifest 一致，不仅核对声明 digest；旧 projection OAuth/token source 已删除。独立 Connect 消费保持其固定 Proto bundle，不作为 HTTP fallback。
+
+Root 在停止写入的工作树执行：`pnpm lint`、`pnpm typecheck`、`pnpm build`、对应 Billing/Platform HTTP `contract:check` 与变更文件格式检查全部通过；10 个相关测试文件 165 PASS / 0 FAIL / 0 SKIP。现有 credential 用例同时保护 opaque tenant、UTF-16 长度、取消后迟到 I/O、关闭失败和轮换；现有 Billing 用例保护 typed 404、未知路由和未知字段。
+
+真实运行 owner 与隔离 BFF HTTP/Connect 组合已验证：ListHubSkills、ListSkills 均 200；专用服务凭据错误 401、跨 tenant 403；发送方内部 OAuth 请求为零。本人 Billing summary/ledger 正确接收 `billing.credit_account_not_found` 并返回 `billing_account_not_found` 404，未新增账户或资金。此组合仅人类 SessionAdmission 为测试替身，不冒充浏览器真实登录。
+
+完整 `pnpm check` 的 contract tests 为 629 PASS / 2 FAIL；完整 `pnpm test` 为 1212 PASS / 3 FAIL / 3 SKIP。失败均为已有 public14.7 历史恢复链未接入的问题（两项 R357 加一项 Conversation collection architecture）；受影响原 OpenAPI/恢复器与基线字节一致，architecture 的该断言也未改变。未删测试、改旧 hash 或放宽门禁，不宣称全仓通过。由 public contract owner 后续收敛该历史链。
+
+正常服务激活及当前浏览器验收分别留在 Root 本次任务记录和本地 ignored 运行证据；当前浏览器仍需正常登录。此片不改 Schema、目录边界、付款 worker、模型许可或其他内部认证 surface。下方既有记录按原时点理解。
+
 ## T-K03.14-BFF-SKILL-AUTH-ERROR Public13.1 源码候选收据（2026-10-10；待 Root 独审提交）
 
 基线 `37efd64a81a66b83df2f8d0a678c6e0e8971cb31`；唯一 current public source 为 `contract/openapi/v1/openapi.yaml` **13.1.0**，仍 `/v1` / 136 operations。本片仅补已存在 IAM Skill action denial 的 `403 skill_forbidden` 契约，不改变 runtime、权限、CAS、owner wire 或数据。五个 Draft/Begin/Complete/Validate/Publish base error enum 与四个命令及个人 Version/Withdraw 共用的 narrow 403 精确补码；安装三 mutation 使用同文件新 `SkillInstallationMutationForbidden`，原安装 GET、package-upload GET、managed read、inspection 与 MCP 不扩展。原 Product/Admin/Github/AI error family 已含此码，保持原字节。

@@ -139,6 +139,40 @@ function invitationInteractionLocation(value: string, webOrigin: string): boolea
   return error.startsWith(errorPrefix) && (IAM_RELAY_POLICY.invitationLocation.allowedErrorCodes as readonly string[]).includes(error.slice(errorPrefix.length))
 }
 
+function validProductCallbackLocation(url: URL, config: NonNullable<BffConfig["iamRelay"]>): boolean {
+  const callback = new URL(config.callbackUri)
+  if (url.origin !== callback.origin || url.pathname !== callback.pathname) return false
+  const query = url.searchParams
+  const values = [...query.entries()]
+  if (new Set(values.map(([name]) => name)).size !== values.length) return false
+  if (
+    query.getAll("state").length !== 1 ||
+    query.getAll("iss").length !== 1 ||
+    query.get("iss") !== config.publicIssuerUrl ||
+    !/^[A-Za-z0-9_-]{16,256}$/u.test(query.get("state") ?? "")
+  )
+    return false
+  const code = query.get("code")
+  const error = query.get("error")
+  if (code !== null && error === null)
+    return (
+      values.length === 3 &&
+      /^[A-Za-z0-9._~-]{1,2048}$/u.test(code)
+    )
+  if (code !== null || error === null || !/^[a-z_]{1,64}$/u.test(error))
+    return false
+  if (values.some(([name]) => !["error", "error_description", "error_uri", "iss", "state"].includes(name))) return false
+  for (const name of ["error_description", "error_uri"] as const) {
+    const value = query.get(name)
+    if (
+      (value !== null && query.getAll(name).length !== 1) ||
+      (value !== null && (Buffer.byteLength(value) > 1024 || /[\u0000-\u001f\u007f]/u.test(value)))
+    )
+      return false
+  }
+  return true
+}
+
 function allowedLocation(value: string, config: NonNullable<BffConfig["iamRelay"]>, sourceRoute: string): boolean {
   if (!safeHeaderValue(value, 8192) || value.startsWith("//") || value.includes("\\") || value.includes("#")) return false
   if (!value.startsWith("/") && !/^https?:\/\//u.test(value)) return false
@@ -147,14 +181,11 @@ function allowedLocation(value: string, config: NonNullable<BffConfig["iamRelay"
   try {
     const url = new URL(value, config.webOrigin)
     if (url.username !== "" || url.password !== "" || url.hash !== "" || url.pathname.includes("%")) return false
-    if (config.adminCallbackUri !== null) {
-      const adminCallback = new URL(config.adminCallbackUri)
-      if (url.origin === adminCallback.origin && url.pathname === adminCallback.pathname) return true
-    }
     if (url.origin !== config.webOrigin) return false
+    if (validProductCallbackLocation(url, config)) return true
     if (sourceRoute === IAM_RELAY_POLICY.invitationLocation.sourceRoute && invitationInteractionLocation(value, config.webOrigin)) return true
     if ((IAM_RELAY_POLICY.webInteractionPaths as readonly string[]).includes(url.pathname)) return true
-    if (url.href === config.callbackUri || url.href === config.postLogoutUri) return true
+    if (url.href === config.postLogoutUri) return true
     if (!url.pathname.startsWith("/iam/")) return false
     return iamRelayRoute(`${url.pathname}${url.search}`, "GET") !== null
   } catch {
@@ -490,9 +521,13 @@ export async function iamProtocolRelay(request: IncomingMessage, response: Serve
     if (origin !== null) headers.set("origin", origin)
     if (cookie !== "") headers.set("cookie", cookie)
     if (authorization !== null) headers.set("authorization", authorization)
-    // Node fetch defaults to cors; IAM's native logout confirmation requires a navigation.
-    // Synthesize this only after the fixed route/method admission, never from inbound headers.
-    if (staticRoute?.path === "/oauth2/end-session" && request.method === "GET") headers.set("sec-fetch-mode", "navigate")
+    // Node fetch defaults to cors. The issuer intentionally returns a JSON redirect
+    // to fetch requests, while browser authorization and logout navigations require
+    // its native redirect/cookie semantics. Synthesize this only after fixed route
+    // and method admission; it never reflects a caller-provided fetch-metadata header.
+    const browserNavigation = request.method === "GET" &&
+      (staticRoute?.path === "/oauth2/authorize" || staticRoute?.path === "/oauth2/end-session")
+    if (browserNavigation) headers.set("sec-fetch-mode", "navigate")
     headers.set("x-request-id", id)
     const upstream = await requestIamRelay({
       baseUrl: config.iamBaseUrl,
@@ -503,7 +538,7 @@ export async function iamProtocolRelay(request: IncomingMessage, response: Serve
       timeoutMs: Math.max(1, deadline - Date.now()),
       maxResponseBytes: config.upstreamMaxResponseBytes,
       signal: abort.signal,
-      browserNavigation: staticRoute?.path === "/oauth2/end-session" && request.method === "GET",
+      browserNavigation,
     })
     if (abort.signal.aborted) {
       if (abort.signal.reason === "deadline") {

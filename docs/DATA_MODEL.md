@@ -1,3 +1,9 @@
+## CV-SVC MCP内部服务凭据边界（D1，2026-10-13；无数据库变化）
+
+BFF 源码候选已切换两 MCP service surface 的直读凭据；无数据修改，正常运行配对验收仍待 Root。
+
+本切片不新增/修改BFF或Platform Schema、业务row、receipt、outbox、Redis/cache事实。三用途的本地credential是私有部署配置，不是业务秘密持久化模块；每次有界重读当前完整版本1文件，严格caller/purpose/tenant绑定，各用途独立secret，不存机器token缓存。凭据文件/key内容与机器路径仅留本地ignored/私有区，不进源码、测试receipt、日志或文档。轮换只保证后续service准入，不能代替现用户撤权与Agent Run取消/租约边界，也不声明已在途请求瞬时撤回。canonical数据库原字节保持。
+
 ## T-K03.20 本人 MCP 可连接目标投影数据边界（BFF 已实施，待 Web 消费）
 
 本切片不新增 BFF 表、SQL、Redis、receipt、缓存或 callback state。`connection_server_id` 是 Platform 在一次 Provider 读取中从自身 `mcp_server` 的唯一匹配结果推导的短暂投影；BFF 既不持久化、也不回填、缓存或跨 owner 查询该 ID。进程重启不影响 owner 的 Server/Connection 事实。

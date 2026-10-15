@@ -124,8 +124,9 @@ test("personal Credit summary uses only the admitted subject and the fixed five-
   )
   assert.equal(received.length, 1)
   assert.equal(received[0].method, "GET")
-  assert.equal(received[0].url, "/v2/billing/me/credit-account")
+  assert.equal(received[0].url, "/v1/billing/me/credit-account")
   assert.equal(received[0].headers["x-kokoro-service"], "web-bff")
+  assert.equal(received[0].headers["x-request-id"], "billing-summary")
   assert.equal(received[0].headers["x-kokoro-internal-secret"], "billing-internal-secret")
   assert.equal(received[0].headers.authorization, "Bearer billing-service-token")
   assert.equal(received[0].headers["x-kokoro-tenant-id"], "u1.bnNfdGVzdA")
@@ -151,7 +152,7 @@ test("personal Credit ledger forwards only the bounded owner pagination query an
     },
   )
   assert.equal(received.length, 1)
-  assert.equal(received[0].url, `/v2/billing/me/credit-ledger?limit=25&cursor=${publicCursor}`)
+  assert.equal(received[0].url, `/v1/billing/me/credit-ledger?limit=25&cursor=${publicCursor}`)
 })
 
 test("personal Credit transport preserves the maximum admitted Unicode identities as canonical unpadded u1 headers", async () => {
@@ -266,9 +267,33 @@ test("personal Credit reads map missing accounts, invalid successes and dependen
   for (const ownerCase of [
     {
       status: 404,
-      body: { error: { code: "billing.not_found", message: "private owner detail", retryable: false } },
+      body: { error: { code: "billing.credit_account_not_found", message: "private owner detail", retryable: false } },
       expectedStatus: 404,
       expectedCode: "billing_account_not_found",
+    },
+    {
+      status: 404,
+      body: { extra: true, error: { code: "billing.credit_account_not_found", message: "missing", retryable: false } },
+      expectedStatus: 502,
+      expectedCode: "upstream_response_invalid",
+    },
+    {
+      status: 404,
+      body: { error: { code: "billing.credit_account_not_found", message: "missing", retryable: false, extra: true } },
+      expectedStatus: 502,
+      expectedCode: "upstream_response_invalid",
+    },
+    {
+      status: 404,
+      body: { error: { code: "billing.not_found", message: "Route not found", retryable: false } },
+      expectedStatus: 502,
+      expectedCode: "upstream_response_invalid",
+    },
+    {
+      status: 404,
+      body: { statusCode: 404, error: "Not Found", message: "Route GET:/v2/billing/me/credit-account not found" },
+      expectedStatus: 502,
+      expectedCode: "upstream_response_invalid",
     },
     { status: 200, body: { data: { ...account, available_micros: 42 } }, expectedStatus: 502, expectedCode: "upstream_response_invalid" },
     {
