@@ -401,7 +401,11 @@ export class McpPersonalConnectClient {
       let responseCache: string | null = null
       const value = await action({
         onHeader: (headers) => {
-          responseRequestId = headers.get("x-kokoro-request-id")
+          // Platform Connect RPCs expose the correlation value as
+          // x-request-id; older local fixtures used the HTTP projection name.
+          // Accept either name while still requiring an exact request match.
+          responseRequestId =
+            headers.get("x-kokoro-request-id") ?? headers.get("x-request-id")
           responseCache = headers.get("cache-control")
         },
         signal,

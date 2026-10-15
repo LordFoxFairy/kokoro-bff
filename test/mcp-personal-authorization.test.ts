@@ -174,7 +174,7 @@ test("A3 real Connect lifecycle forwards opaque callback values and exact connec
             assert.equal(context.requestHeader.get("x-kokoro-tenant"), identity.tenant)
             assert.equal(context.requestHeader.get("x-kokoro-subject"), identity.subject)
             context.responseHeader.set("cache-control", "no-store")
-            context.responseHeader.set("x-kokoro-request-id", request.requestId)
+            context.responseHeader.set("x-request-id", request.requestId)
             return {
               connector: { connectorId: { value: "connector" }, connectorType: 3, providerKey: "provider", status: 2, enabled: false, stateVersion: 3n },
             }
@@ -182,7 +182,7 @@ test("A3 real Connect lifecycle forwards opaque callback values and exact connec
           createPersonalMcpConnection: (request, context) => {
             seen.push(request)
             context.responseHeader.set("cache-control", "no-store")
-            context.responseHeader.set("x-kokoro-request-id", request.requestId)
+            context.responseHeader.set("x-request-id", request.requestId)
             return {
               connection: {
                 connectionId: { value: "connection" },
