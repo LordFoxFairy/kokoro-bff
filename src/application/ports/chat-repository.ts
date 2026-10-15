@@ -66,7 +66,20 @@ export type SharedTaskItem = Readonly<{ session_id: string; title: string; share
 export type SharedTasksRead = Readonly<{ items: SharedTaskItem[]; nextPosition: SharedTasksPosition | null }>
 export type SharedTasksPage = Readonly<{ items: SharedTaskItem[]; next_cursor: string | null }>
 
+export type ArchiveIdentity = Readonly<{ tenantId: string; subjectId: string; signal: AbortSignal; deadlineAt: number }>
+export type ArchivedTasksPosition = Readonly<{ archivedAt: string; sessionId: string }>
+export type ArchivedTaskItem = Readonly<{ session_id: string; title: string; archived_at: string; project_ref: string | null }>
+export type ArchivedTasksQuery = ArchiveIdentity & Readonly<{ limit: number; position: ArchivedTasksPosition | null }>
+export type ArchivedTasksRead = Readonly<{ items: ArchivedTaskItem[]; nextPosition: ArchivedTasksPosition | null }>
+export type ArchiveStateQuery = ArchiveIdentity & Readonly<{ conversationId: string }>
+export type ArchiveState = Readonly<{ session_id: string; archived_at: string | null }>
+export type ArchiveStateCommand = ArchiveStateQuery & Readonly<{ action: "archive" | "restore"; scope: string; fingerprint: string }>
+export type ArchiveStateResult = Readonly<{ kind: "changed"; receipt: Readonly<{ data: ArchiveState }> }> | Readonly<{ kind: "not_found" | "conflict" }>
+
 export type ChatRepository = {
+  listOwnedArchivedTasks(query: ArchivedTasksQuery): Promise<ArchivedTasksRead>
+  readArchiveState(query: ArchiveStateQuery): Promise<ArchiveState | null>
+  changeArchiveState(command: ArchiveStateCommand): Promise<ArchiveStateResult>
   listOwnedSharedTasks(
     tenantId: string,
     subjectId: string,

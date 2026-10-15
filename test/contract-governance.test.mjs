@@ -1,3 +1,4 @@
+import { restorePublic153ArchivedTasksContract } from "../scripts/archived-tasks-public-contract.mjs"
 import { restorePublic152SharedTasksContract } from "../scripts/shared-tasks-public-contract.mjs"
 import { restorePublic151AccountProfileContract } from "../scripts/account-profile-public-contract.mjs"
 import { restorePublic15AccountSessionContract } from "../scripts/account-session-public-contract.mjs"
@@ -753,7 +754,9 @@ test("SET13 rejects closed permission and non-Team historical drift", async () =
   const { restorePublic15TeamPermissionsContract } = await import("../scripts/verify-openapi.ts")
   const source = restorePublic15AccountSessionContract(
     restorePublic151AccountProfileContract(
-      restorePublic152SharedTasksContract(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")),
+      restorePublic152SharedTasksContract(
+        restorePublic153ArchivedTasksContract(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")),
+      ),
     ),
   )
   const parent = restorePublic15TeamPermissionsContract(source)

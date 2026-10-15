@@ -1,3 +1,5 @@
+import type { ArchivedTasksQuery, ArchiveStateQuery, ArchiveStateCommand } from "../../application/ports/chat-repository.js"
+import { listOwnedArchivedTasks, readArchiveState, changeArchiveState } from "./archived-tasks.js"
 import { listOwnedSharedTasks } from "./shared-tasks.js"
 import type { SharedTasksPosition, SharedTasksRead } from "../../application/ports/chat-repository.js"
 import { readRunInteraction } from "./agui-interaction-projection.js"
@@ -120,6 +122,16 @@ export class PostgresChatRepository implements ChatRepository {
     return listOwnedSharedTasks(this.database.pool, tenantId, subjectId, limit, position, signal, deadlineAt)
   }
 
+  public listOwnedArchivedTasks(query: ArchivedTasksQuery) {
+    return listOwnedArchivedTasks(this.database.pool, query)
+  }
+  public readArchiveState(query: ArchiveStateQuery) {
+    return readArchiveState(this.database.pool, query)
+  }
+  public changeArchiveState(command: ArchiveStateCommand) {
+    return changeArchiveState(this.database.pool, command)
+  }
+
   public async listConversations(
     tenantId: string,
     subjectId: string,
@@ -137,7 +149,7 @@ export class PostgresChatRepository implements ChatRepository {
          FROM bff_conversation
         WHERE tenant_id = $1
           AND owner_id = $2
-          AND status = 'active'
+          AND status = 'active' AND archived_at IS NULL
           AND (
             project_ref IS NULL
             OR EXISTS (

@@ -1,3 +1,4 @@
+import { restorePublic153ArchivedTasksContract, archivedTasksParentBaseline } from "./archived-tasks-public-contract.mjs"
 import { restorePublic152SharedTasksContract, sharedTasksParentBaseline } from "./shared-tasks-public-contract.mjs"
 import { restorePublic151AccountProfileContract, accountProfileParentBaseline } from "./account-profile-public-contract.mjs"
 import { restorePublic15AccountSessionContract, accountSessionParentBaseline } from "./account-session-public-contract.mjs"
@@ -93,6 +94,9 @@ function expectedIdempotency(operation) {
 }
 
 export function inspectOpenApiGovernance(source) {
+  if (/^  version: 15\.4\.0$/mu.test(source)) {
+    try { source = restorePublic153ArchivedTasksContract(source) } catch(error) { return [error.message] }
+  }
   if (/^  version: 15\.3\.0$/mu.test(source)) {
     try { source = restorePublic152SharedTasksContract(source) } catch(error) { return [error.message] }
   }
@@ -155,6 +159,9 @@ export function inspectOpenApiGovernance(source) {
 }
 
 export function compareOperationBaseline(source, baseline) {
+  if (/^  version: 15\.4\.0$/mu.test(source)) {
+    try { source = restorePublic153ArchivedTasksContract(source); baseline = archivedTasksParentBaseline(baseline) } catch(error) { return [error.message] }
+  }
   if (/^  version: 15\.3\.0$/mu.test(source)) {
     try { source = restorePublic152SharedTasksContract(source); baseline = sharedTasksParentBaseline(baseline) } catch(error) { return [error.message] }
   }
@@ -215,7 +222,7 @@ async function main() {
       operation.fields.get("operationId") === "getManagedPersonalSkillPackage" || operation.fields.get("operationId") === "getPersonalSkillInstallationPackage",
   )
   const errors = [
-    ...(/^  version: 15\.3\.0$/mu.test(openapi) && parsedBaseline.operations.length === 146 ? [] : ["SET21 current public release must be15.3/146"]),
+    ...(/^  version: 15\.4\.0$/mu.test(openapi) && parsedBaseline.operations.length === 150 ? [] : ["SET47 current public release must be15.4/150"]),
     ...inspectOpenApiGovernance(openapi),
     ...compareOperationBaseline(openapi, parsedBaseline.operations),
     ...(parsedBaseline.operations.length === currentOperations.length

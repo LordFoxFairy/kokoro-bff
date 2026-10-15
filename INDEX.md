@@ -1,3 +1,7 @@
+## SET47 Conversation归档实现候选
+
+`src/http/archived-tasks-input.ts`、`routes/archived-tasks.ts`、`src/infrastructure/postgres/archived-tasks.ts`与`archive-sql-lease.ts`沿既有Chat/HTTP入口实现本人归档列表/状态/命令；唯一事实为Conversation.archived_at，当前canonical15.4/150。`scripts/archived-tasks-public-contract.mjs`完整逆恢复15.3后委托原门。纯门/真实PG待验及发行状态以`docs/CURRENT.md`为准，不将归档当删除、取消Run或撤分享。
+
 ## 本人姓名与登录设备
 
 姓名 PATCH：`src/http/account-profile-input.ts` 负责原始输入；`src/http/routes/account-profile.ts` 负责正常准入与单总预算；`src/infrastructure/clients/iam-account-profile.ts` 负责固定IAM generated请求与绑定ACK，`.types.ts`承载结果类型。唯一public事实源是 `contract/openapi/v1/openapi.yaml` 15.2.0；`scripts/account-profile-public-contract.mjs` 精确恢复完整15.1后委托旧治理。BFF不持久化姓名。

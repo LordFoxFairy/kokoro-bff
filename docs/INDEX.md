@@ -1,3 +1,7 @@
+## SET47 当前归档候选入口
+
+本人归档的状态、权限、幂等、Project锁序、canonical fresh-install与未验运行边界见三设计SET47前缀；实现/实际纯门/Root后继真实PG验收见[CURRENT.md](./CURRENT.md)。唯一公开机器事实是public15.4候选，未发行不得提前消费者激活；以下记录是历史。
+
 本人姓名PATCH及登录设备的当前入口与真实验证见 [CURRENT.md](./CURRENT.md) 顶部；public当前canonical15.2.0/145，下面历史候选记录不覆盖当前事实。
 
 ## R277 当前机器候选入口

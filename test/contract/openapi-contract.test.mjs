@@ -1,3 +1,4 @@
+import { restorePublic153ArchivedTasksContract } from "../../scripts/archived-tasks-public-contract.mjs"
 import { restorePublic152SharedTasksContract } from "../../scripts/shared-tasks-public-contract.mjs"
 import { restorePublic151AccountProfileContract } from "../../scripts/account-profile-public-contract.mjs"
 import { restorePublic15AccountSessionContract } from "../../scripts/account-session-public-contract.mjs"
@@ -2691,7 +2692,9 @@ test("SET13 exact inverse preserves the entire committed public14.7 artifact", a
     createHash("sha256")
       .update(
         restorePublic15TeamPermissionsContract(
-          restorePublic15AccountSessionContract(restorePublic151AccountProfileContract(restorePublic152SharedTasksContract(source))),
+          restorePublic15AccountSessionContract(
+            restorePublic151AccountProfileContract(restorePublic152SharedTasksContract(restorePublic153ArchivedTasksContract(source))),
+          ),
         ),
       )
       .digest("hex"),

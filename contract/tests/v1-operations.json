@@ -3,6 +3,26 @@
   "operations": [
     {
       "method": "GET",
+      "path": "/v1/account/archived-tasks",
+      "operation_id": "listOwnedArchivedTasks"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/sessions/{session_id}/archive",
+      "operation_id": "getSessionArchiveState"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/sessions/{session_id}/archive",
+      "operation_id": "archiveSession"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/sessions/{session_id}/restore",
+      "operation_id": "restoreSession"
+    },
+    {
+      "method": "GET",
       "path": "/v1/account/shared-tasks",
       "operation_id": "listOwnedSharedTasks"
     },

@@ -1,3 +1,32 @@
+## SET-47 本人归档任务 Public15.4 D0（2026-10-15；未实现/未发行）
+
+传输边界补充：exact encodeURIComponent wire不变，BFF原生raw HTTP仍可读取历史ID `.`/`..`；WHATWG URL（含fetch）会规范化dot path segments，百分号编码点也不能解决。Web后继须对此两ID在fetch前拒绝并明确禁用归档/恢复说明，不做双重解码/fallback/新API；不能宣所有历史ID浏览器皆可操作。普通conv与Unicode ID不受此限制。
+
+当前阶段更新：四操作实现候选已完成，正常outer gate与正规150清单已接线，原15.3全文/146及全部历史inverse继续；下方“设计阶段未接runtime/门”的描述保留为D0历史。源码纯门证据与未验PG/正常组合见CURRENT，未发行不得消费者固定工作树artifact。旧正常run与DB未改。
+
+GET `/v1/sessions/{session_id}/archive` 为同一归档路径上的正式 chat.read/idem none 本人状态读取，成功同 `{data:{session_id,archived_at}}`，未归档明确返回NULL，foreign/deleted/失效父同404。Web active任务列表合成必须正式读state：confirmed archived不合成；404新draft按原行为；未知失败不能当unarchived。由此新增四operations、三paths，总150，旧Chat响应字段不变。
+
+路径 session_id 接受任意合法非空 UTF8 历史 Conversation ID（包括Unicode/大小写），按 exact encodeURIComponent 后的单segment可逆canonical百分号表示处理，不能抄move的conv_UUID限制；拒非法编码而不trim/归一化ID。分页同毫秒Unicode/BMP/astral与大小写按C UTF8字节序必须实测。后继多primitive query/command沿TS§6.7用具名Readonly对象，不复制旧长位置参数。
+
+运行裁决：保留旧正常run，不重启/ALTER/清事实。后继正式BFF/Web pin由Root用formal launcher现--web-port开启独立新run，复用现PG/Redis服务器但使用自有fixtureDB/namespaces；canonical fresh install即可。不建立在线升级或migration链，本片没有运行资源操作。
+
+唯一 canonical `contract/openapi/v1/openapi.yaml` additive15.4.0/150，旧15.3.0/146完整字节逆恢复 SHA256 `694251d4f4c1bcc9a79ae4fd2d4c050c87a0a8af39bea0a9f0bed3a4dcae5ad5`；原有序146数组 JSON SHA256 `e88eca53ec77f6b05cba05188b1a72445e5c7fad07657930a1d317d5f0cc2658`。不改旧 operation/schema/permission/oracle；独立 outer gate 成功后委托 SET21 门。现正常门入口及清单未升级，runtime 尚未注册，Web 不得提前消费。
+
+| 正式候选 endpoint | 准入 | 请求/成功 |
+| --- | --- | --- |
+| GET `/v1/account/archived-tasks` | 本人 chat.read | 仅 limit（默认20、1..100）、cursor（1..2048）；`{data:{items:[{session_id,title,archived_at,project_ref}],next_cursor}}` |
+| GET `/v1/sessions/{session_id}/archive` | 本人 chat.read | 无query/body；`{data:{session_id,archived_at}}`，NULL为确知未归档；unknown不可冒NULL |
+| POST `/v1/sessions/{session_id}/archive` | 本人 chat.write | strict 空 JSON `{}`、恰一 Idempotency-Key；`{data:{session_id,archived_at}}` |
+| POST `/v1/sessions/{session_id}/restore` | 本人 chat.write | 同上；fresh restore archived_at=null，历史 receipt 可返回历史值，必须随后 read |
+
+成功与 error 均 closed JSON，无 meta；request ID 仅 x-request-id header、Cache-Control:no-store，429 带正整数 Retry-After。错误 `{error:{code,message,retryable}}`：400 输入；401 session_authentication_required/session_invalid；403 service_auth_failed/session_forbidden/product_tenant_forbidden；状态读及写404 session_not_found（foreign、deleted、无合法父均同404）；写409 archive_state_conflict；写413 body超过4096 bytes；写415 MIME/encoding；429 session_rate_limited；500 internal_error；503 product_tenant_not_configured/iam_admission_unavailable/具名 unavailable。具体 code/status/布尔闭集以 canonical schemas 为准；只有429/503 retryable=true，仍不意味着客户端自动重试写。所有状态响应≤1MiB、无 capability/cookie/location、无正文身份自报。
+
+列表只输出四字段，title 原值不 trim/截断，不猜 max200；project_ref 保留原值或 NULL。归档时间为UTC固定毫秒，cursor 严格闭集绑定可信 tenant/subject/limit/archived_at/session_id，非签名且不授权；每 SQL 重验身份及 active Conversation/有效 Project。顺序 archived_at DESC、同刻 session_id COLLATE C ASC（UTF8字节比较），limit+1产生 next_cursor，无跨页快照。归档/恢复/删除/父变化会影响后页，不承诺整个遍历稳定快照。
+
+Idempotency-Key 为恰一个1..128可见ASCII值，不 trim、不逗号合并（排空白/逗号）。两个命令共享 archive-state scope：tenant+subject+key；fingerprint含action/id。相同 key/fingerprint 返回原200 receipt且不再次写；不同 action/id返回409。必须先验当前 owner/status与父，再重放；delete胜出后404。fresh 相同状态不更新时间；fresh相反状态按行锁顺序生效，无 expected-state CAS。归档期间 directread/rename/move/share/Run继续，不撤销公开链接，不用取消副作用模拟归档；Web 禁止宣称“停止任务”。
+
+HTTP 生命周期与超时见 TECHNICAL_DESIGN；空 JSON body拒重复/未知键、坏UTF8/JSON、非对象及query。JSON MIME/identity encoding、合法chunked、父取消、未知COMMIT均需后继真实负控。这里是设计契约，不是运行验证。
+
 ## SET-21 已验证的 public15.3（2026-10-15）
 
 canonical新增GET /v1/account/shared-tasks / listOwnedSharedTasks，public15.3.0/146全文SHA256 694251d4f4c1bcc9a79ae4fd2d4c050c87a0a8af39bea0a9f0bed3a4dcae5ad5。独审/Root纯门与真实HTTP/数据库验证通过；完整15.2/145逆恢复、原操作字段和旧oracle保持。响应只有安全四字段，UTC毫秒符合canonical TIMESTAMPTZ(3)，同刻ID明确C/UTF8字节序。下文既定闭集/预算/权限/错误语义已实现；正常Web页面待正式发行后消费，不能把纯门/PG样本当浏览器验收。

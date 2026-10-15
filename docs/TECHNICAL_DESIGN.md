@@ -1,3 +1,34 @@
+## SET-47 Conversation 归档/恢复 D0（2026-10-15；设计候选，runtime 未实施）
+
+传输边界补充：exact encodeURIComponent wire不变，BFF原生raw HTTP仍可读取历史ID `.`/`..`；WHATWG URL（含fetch）会规范化dot path segments，百分号编码点也不能解决。Web后继须对此两ID在fetch前拒绝并明确禁用归档/恢复说明，不做双重解码/fallback/新API；不能宣所有历史ID浏览器皆可操作。普通conv与Unicode ID不受此限制。
+
+当前阶段更新：四操作实现候选已完成，正常outer gate与正规150清单已接线，原15.3全文/146及全部历史inverse继续；下方“设计阶段未接runtime/门”的描述保留为D0历史。源码纯门证据与未验PG/正常组合见CURRENT，未发行不得消费者固定工作树artifact。旧正常run与DB未改。
+
+GET `/v1/sessions/{session_id}/archive` 为同一归档路径上的正式 chat.read/idem none 本人状态读取，成功同 `{data:{session_id,archived_at}}`，未归档明确返回NULL，foreign/deleted/失效父同404。Web active任务列表合成必须正式读state：confirmed archived不合成；404新draft按原行为；未知失败不能当unarchived。由此新增四operations、三paths，总150，旧Chat响应字段不变。
+
+路径 session_id 接受任意合法非空 UTF8 历史 Conversation ID（包括Unicode/大小写），按 exact encodeURIComponent 后的单segment可逆canonical百分号表示处理，不能抄move的conv_UUID限制；拒非法编码而不trim/归一化ID。分页同毫秒Unicode/BMP/astral与大小写按C UTF8字节序必须实测。后继多primitive query/command沿TS§6.7用具名Readonly对象，不复制旧长位置参数。
+
+运行裁决：保留旧正常run，不重启/ALTER/清事实。后继正式BFF/Web pin由Root用formal launcher现--web-port开启独立新run，复用现PG/Redis服务器但使用自有fixtureDB/namespaces；canonical fresh install即可。不建立在线升级或migration链，本片没有运行资源操作。
+
+Owner 是现 BFF Chat Conversation，调用仍为 Browser → Web 同源 adapter → BFF → 本仓 PG。当前是既有非 Nest HTTP bootstrap/service/port/Postgres 入口，尚未迁移 Nest；本片不建设第二框架、不声称完成框架迁移。当前 Data 归档占位由后继 Web 消费替换，不拿 deleted 冒归档。
+
+| 放置决定 | 本片结论 |
+| --- | --- |
+| 采用 | 现 ChatService/ChatRepository 窄接线；后继普通 `src/http/archived-tasks-input.ts`、`src/http/routes/archived-tasks.ts`、`src/infrastructure/postgres/archived-tasks.ts` 分别拥有输入、HTTP 生命周期、归档查询/事务；现 bootstrap 仅正规 dispatch |
+| 淘汰 | 新 archive owner/module/runner 或以 AG-UI/删除状态承载整理事实；没有新进程、缓存、跨 owner SQL 或模型依赖 |
+| 当前设计切片 | 仅三设计、唯一 canonical OpenAPI/schema、独立具名 outer inverse 与合同负控；不改 runtime/check-contract 入口/旧 inventory，不冒称路由已注册 |
+| 后继验证 | 先源码行为 RED→GREEN，再 Root 自有 PG 事实/竞争/索引计划、消费者正规生成、Web UI/E2E/CUA；未运行不得记通过 |
+
+归档是 `archived_at` 独立整理状态，active/deleted 不扩展。普通本人任务列表（all/direct/project）只取 unarchived；直接读取、rename、move、分享、消息/Run admission、运行和通知继续，均不隐式恢复。归档不撤分享、不暂停/取消 Run、不释放资源、不删消息或 ledger；Project 删除仍遍历并删除全部子 Conversation。Web 应明确归档不停止任务，恢复只恢复列表可见性。
+
+写入使用同一 archive-state scope（tenant、subject、Idempotency-Key），fingerprint 含 action 与 session_id；archive/restore 复用 key 是冲突而非两个独立 scope。当前 active owner 与合法父先验，再读 receipt。相同 key/fingerprint 重放原 receipt、零事实写，允许历史 archived_at；消费者成功及未知结果均先重读，不自动重试写。不同 key 的相反命令按行锁提交次序生效，无 expected-state CAS 承诺。fresh 同状态请求仍可保存 receipt，但不改 archived_at/updated_at。delete 先胜返回404；receipt 不可复活 tombstone。
+
+沿现 move 的 Project（canonical ID 排序）→Conversation 锁序：先解析父，锁 Project，再锁 Conversation，重读 project_ref；若 move 已改变父，rollback 并在同一剩余预算内有限重试（最多4次），不得反向加锁。父引用 NULL 才是无父，其他值含空串必须唯一解析同 tenant/owner/未删除 Project 的 ID 或 slug；歧义属于损坏失败，不修复。archive/delete/share 在 Conversation 锁上串行；Project delete 在相同父锁上串行。receipt scope 竞争必须同事务唯一插入，失败事务回滚后读 winner；不借通用中间件把 auth/父校验绕过。
+
+单入口绝对预算 min(config.upstreamTimeoutMs,10000ms) 覆盖 metadata、现正规 admission、请求体、pool lease、事务和响应准备；父取消/断连、迟到 connect/read 都不得继续写，精确自有 client 超时销毁、迟到 release，不停 pool。COMMIT 后失联是未知，不保证撤销已提交事实；相同 key 支持用户显式重试并重读。列表/响应上限1MiB，输入空 JSON 的读取上限4096 bytes；无新 env/key/provider。拒绝重复/未知 query、重复 header、非法 UTF8/JSON、额外字段，Content-Encoding 只缺省或单 identity；合法 chunked 不误拒。
+
+独立 `scripts/archived-tasks-public-contract.mjs` 精确剥三 paths（四 operations）/本片 schemas/版本，恢复完整15.3 SHA，再委托原 SET21 inverse；150 有序 operations 同样恢复146及原历史门。本阶段不接正常门入口或改既有146清单：其完整门暂时不宣称通过。后继发行必须先补正常 gate/正规150清单，再正式固定 artifact 供 Web，不能消费未发行工作树。
+
 ## SET-21 实现与验证状态（2026-10-15）
 
 已实现既定普通文件/原Chat委托及安全本人分享GET，终态冻结独审与Root83专项/build通过；Root正规HTTP和自有PG事实链、精确lease超时后的pool恢复及EXPLAIN通过，详见CURRENT。canonical Share时间为TIMESTAMPTZ(3)，新wire/cursor保持UTC毫秒；SQL同时间ID C字节排序与wire一致。没有schema/依赖/Secret/旧Chat实现改变。下面源码准入与D0叙述保留设计历史，正式消费者仍须固定当前commit及public15.3全文摘要，正常浏览器待验。

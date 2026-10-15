@@ -1,3 +1,4 @@
+import { archivedTasksRoute } from "../http/routes/archived-tasks.js"
 import { sharedTasksRoute } from "../http/routes/shared-tasks.js"
 import { accountProfileRoute } from "../http/routes/account-profile.js"
 import { mcpPersonalOperation, mcpPersonalRoute } from "../http/routes/mcp-personal.js"
@@ -102,6 +103,13 @@ async function handle(
   response.setHeader("x-request-id", id)
   if (request.method === "PATCH" && (request.url === "/v1/account/profile" || request.url?.startsWith("/v1/account/profile?"))) {
     await accountProfileRoute(request, response, config, composition.sessionAdmission, id)
+    return
+  }
+  if (
+    (request.method === "GET" && (request.url === "/v1/account/archived-tasks" || request.url?.startsWith("/v1/account/archived-tasks?"))) ||
+    ((request.method === "GET" || request.method === "POST") && /^\/v1\/sessions\/[^/]+\/(?:archive|restore)(?:\?|$)/u.test(request.url ?? ""))
+  ) {
+    await archivedTasksRoute(request, response, config, composition.sessionAdmission, composition.businessStore?.services.chat, id)
     return
   }
   if (request.method === "GET" && (request.url === "/v1/account/shared-tasks" || request.url?.startsWith("/v1/account/shared-tasks?"))) {
@@ -1057,6 +1065,18 @@ export function createBffServer(config: BffConfig = loadConfig(), options: BffSe
         if (request.method === "PATCH" && (request.url === "/v1/account/profile" || request.url?.startsWith("/v1/account/profile?"))) {
           response.setHeader("x-request-id", requestId(request))
           send(response, 500, { error: { code: "internal_error", message: "The BFF encountered an internal error", retryable: false } })
+        } else if (
+          (request.method === "GET" && (request.url === "/v1/account/archived-tasks" || request.url?.startsWith("/v1/account/archived-tasks?"))) ||
+          ((request.method === "GET" || request.method === "POST") && /^\/v1\/sessions\/[^/]+\/(?:archive|restore)(?:\?|$)/u.test(request.url ?? ""))
+        ) {
+          response.setHeader("cache-control", "no-store")
+          send(response, 503, {
+            error: {
+              code: request.url?.startsWith("/v1/account/") ? "archived_tasks_unavailable" : "archive_state_unavailable",
+              message: "Archive unavailable",
+              retryable: true,
+            },
+          })
         } else if (request.method === "GET" && (request.url === "/v1/account/shared-tasks" || request.url?.startsWith("/v1/account/shared-tasks?"))) {
           response.setHeader("x-request-id", requestId(request))
           send(response, 503, { error: { code: "shared_tasks_unavailable", message: "shared_tasks_unavailable", retryable: true } })

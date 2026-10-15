@@ -1,3 +1,21 @@
+## SET47 Root隔离验收与消费者发行（2026-10-15）
+
+Root独立核31交付文件及638保护文件对eec3244完全精确，public15.4/150完整逆恢复原15.3全文与146有序操作；终态独审无剩余确定P1/P2。Root正规lint/type/build通过，contract772PASS/2FAIL、architecture36PASS/1FAIL、default1395PASS/3FAIL/3SKIP，format7warn，完整门仍FAILED。上述三合同/架构失败的共同首步在原15.3 Gitblob也实际抛Admin Skill draft version drift；不修改Skills旧oracle来清零。
+
+Root fresh canonical安装及catalog archived_at精度/nullable/三partial indexes检查通过。四项真实HTTP→PG归档专项4PASS/0FAIL（约1.69s含进程）：正规创建/分享/归档/状态/恢复、历史receipt零写、同毫秒Unicode排序、foreign/invalid-parent、并发同key、锁超时后pool恢复、Move与Projectdelete竞争；使用明确admission double和idle workers，不是正常IAM或模型执行证明。正常串行全部integration322PASS/10FAIL/332（约122s），失败保留：Project负控Skills依赖503三subcase与其父case、upload预期503实502、五项原生SQL/search_path/schema边界；未归因修复，不冒全部既有/全绿。测试owned DB与Redis库存精确恢复，旧正常服务/数据未动。
+
+本提交发布不可变consumer artifact供Web继续实现；PR保持draft，无生产合并/完整设置完成声明。后续仅以正式pin配对在独立fresh fixture实例验Web空态和操作；非空正常任务依赖Agent/model准入，不能seed正常数据冒功能完成。
+
+## SET-47 归档/恢复实现候选（2026-10-15；待 Root 资源验收/发行）
+
+BFF唯一Conversation owner已在现非Nest入口实现四个具名操作：本人归档列表、本人archive-state读取、archive、restore；public候选15.4.0/150。普通任务列表仅排除archived；旧Chat wire/直接读/rename/move/分享/Run不变。没有新增owner、框架、依赖、env、cache、迁移runner或跨仓源码。
+
+D0和canonical见三设计SET47前缀。普通文件`src/http/archived-tasks-input.ts`负责strict输入/身份与limit绑定cursor/安全投影；`src/http/routes/archived-tasks.ts`负责单入口总预算与准入/HTTP生命周期；`src/infrastructure/postgres/archived-tasks.ts`负责同库本人查询与Project→Conversation/receipt事务；`archive-sql-lease.ts`只拥有精确有界lease，不停pool。内部调用为具名Readonly query/command。普通Chat service/port/repository与bootstrap仅窄接线，不改旧删除清理和share/Run事实。
+
+已保留真实旧dist HTTP四操作断言失败，再实现GREEN；新输入/HTTP/repository/contract和原三代contract消费者专项50PASS。正规lint/type/build、semantic150、OpenAPI lint通过；正常contract:test为772PASS/2既有R357FAIL，旧oracle不改；format保留原7warn。architecture正常门36PASS/1FAIL，具名旧集合过滤case在原15.3 Gitblob与原测试同样Admin Skill draft version drift，保留不冒新增或已清。完整仓测试/正常组合不在本worker执行范围。 lease另有具名clock前移/timeout尚未触发的真实RED→GREEN，实际SQL微任务派发前重核released/signal/deadline，过期零dispatch并销毁精确client。原生raw HTTP证实dot-only历史ID可达；Web的WHATWG传输限制按三设计保持禁用说明，未新增编码fallback。
+
+`test/archived-tasks.integration.mjs`已写正规HTTP创建→归档→状态/列表→恢复/重放/删除链、queuedRun/share保持、Unicode同毫秒分页、无父/foreign、并发同key、锁超时后pool恢复及Move/Projectdelete竞争；当前仅语法检查，真实PG/Redis由Root独占后验。独立idle-worker fixture不冒正常应用模型执行；无SQL seed正常任务。canonical只新archived_at及partial indexes，未安装schema/ALTER旧库，旧正常run保持。后继Root独立fresh fixture run与Web已发行pin配对后，才可宣正常UI功能完成。
+
 ## SET-21 本人分享列表源码及真实 owner 验证已接收（2026-10-15）
 
 冻结24 writer（16既有/8新）及631原保护路径由Root独立逐SHA/范围核对，四Root设计文另计；终态独审无剩余确定P1/P2。新GET /v1/account/shared-tasks只安全四字段、本人有效Share/Conversation与非NULL Project父校验、单请求预算；public15.3.0/146全文SHA256 694251d4f4c1bcc9a79ae4fd2d4c050c87a0a8af39bea0a9f0bed3a4dcae5ad5，完整15.2/145逆恢复保持。Root专项83PASS、生产build成功。作者lint/type/build与semantic/inventory通过；正常contract764PASS/2既有FAIL，default1354PASS/3既有FAIL/3SKIP，architecture36PASS/1原缺模块失败，format保七旧警告，不冒全门通过。

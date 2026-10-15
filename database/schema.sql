@@ -196,6 +196,7 @@ CREATE TABLE IF NOT EXISTS bff_conversation (
   owner_id TEXT NOT NULL,
   project_ref TEXT,
   title TEXT NOT NULL,
+  archived_at TIMESTAMPTZ(3),
   status TEXT NOT NULL DEFAULT 'active' CONSTRAINT ck_bff_conversation_status CHECK (status IN ('active', 'deleted')),
   created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
@@ -210,6 +211,17 @@ CREATE INDEX IF NOT EXISTS ix_bff_conversation_owner_updated
 CREATE INDEX IF NOT EXISTS ix_bff_conversation_owner_project_updated
   ON bff_conversation (tenant_id, owner_id, project_ref, updated_at DESC, conversation_id ASC)
   WHERE status = 'active';
+
+-- SET47: organization state is orthogonal to active/deleted; no capability or Run state.
+CREATE INDEX IF NOT EXISTS ix_bff_conversation_owner_archived
+  ON bff_conversation (tenant_id, owner_id, archived_at DESC, conversation_id COLLATE "C" ASC)
+  WHERE status = 'active' AND archived_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS ix_bff_conversation_owner_unarchived_updated
+  ON bff_conversation (tenant_id, owner_id, updated_at DESC, conversation_id ASC)
+  WHERE status = 'active' AND archived_at IS NULL;
+CREATE INDEX IF NOT EXISTS ix_bff_conversation_owner_project_unarchived_updated
+  ON bff_conversation (tenant_id, owner_id, project_ref, updated_at DESC, conversation_id ASC)
+  WHERE status = 'active' AND archived_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS bff_message (
   message_id TEXT PRIMARY KEY,

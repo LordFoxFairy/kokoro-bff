@@ -1,3 +1,27 @@
+## SET-47 Conversation 独立整理状态 D0（2026-10-15；仅 canonical 设计）
+
+传输边界补充：exact encodeURIComponent wire不变，BFF原生raw HTTP仍可读取历史ID `.`/`..`；WHATWG URL（含fetch）会规范化dot path segments，百分号编码点也不能解决。Web后继须对此两ID在fetch前拒绝并明确禁用归档/恢复说明，不做双重解码/fallback/新API；不能宣所有历史ID浏览器皆可操作。普通conv与Unicode ID不受此限制。
+
+当前阶段更新：四操作实现候选已完成，正常outer gate与正规150清单已接线，原15.3全文/146及全部历史inverse继续；下方“设计阶段未接runtime/门”的描述保留为D0历史。源码纯门证据与未验PG/正常组合见CURRENT，未发行不得消费者固定工作树artifact。旧正常run与DB未改。
+
+GET `/v1/sessions/{session_id}/archive` 为同一归档路径上的正式 chat.read/idem none 本人状态读取，成功同 `{data:{session_id,archived_at}}`，未归档明确返回NULL，foreign/deleted/失效父同404。Web active任务列表合成必须正式读state：confirmed archived不合成；404新draft按原行为；未知失败不能当unarchived。由此新增四operations、三paths，总150，旧Chat响应字段不变。
+
+路径 session_id 接受任意合法非空 UTF8 历史 Conversation ID（包括Unicode/大小写），按 exact encodeURIComponent 后的单segment可逆canonical百分号表示处理，不能抄move的conv_UUID限制；拒非法编码而不trim/归一化ID。分页同毫秒Unicode/BMP/astral与大小写按C UTF8字节序必须实测。后继多primitive query/command沿TS§6.7用具名Readonly对象，不复制旧长位置参数。
+
+运行裁决：保留旧正常run，不重启/ALTER/清事实。后继正式BFF/Web pin由Root用formal launcher现--web-port开启独立新run，复用现PG/Redis服务器但使用自有fixtureDB/namespaces；canonical fresh install即可。不建立在线升级或migration链，本片没有运行资源操作。
+
+唯一事实 owner 为 BFF，唯一 SQL-first schema 仍 `database/schema.sql`，不新增表/FK/跨owner SQL/Redis/seed。本片仅在 bff_conversation 新增 nullable `archived_at TIMESTAMPTZ(3)`，默认 NULL；原 status active/deleted 和 deleted_at 约束保持原字节。归档不是 tombstone，不借 archived status 改变原执行/分享/删除可见性。
+
+新增 partial indexes：本人 archived_at DESC + conversation_id COLLATE C ASC（active且archived_at非NULL）；本人及本人Project的 updated_at 原排序（active且archived_at NULL）。保留原索引，不在设计阶段擅删旧直接读取/执行可能依赖的访问路径；实际计划/冗余与写成本由 Root 后继自有代表性 PG EXPLAIN ANALYZE BUFFERS 核实，本片未跑。没有精度推断：created/updated/deleted原为毫秒，本字段同精度。
+
+普通列表只 archived_at IS NULL；归档列表只 status=active且archived_at IS NOT NULL，WHERE每次带tenant_id/owner_id。父规则：project_ref IS NULL才无父，其他包括空串必须EXISTS同tenant/owner/未删Project、ID或slug匹配；歧义/损坏不修复、不外泄。SELECT四字段：conversation_id→session_id、title原值、archived_at UTC毫秒、project_ref原值。keyset严格 `(archived_at < cursorTime OR (archived_at = cursorTime AND conversation_id COLLATE "C" > cursorId COLLATE "C"))`，ORDER BY archived_at DESC,conversation_id COLLATE "C" ASC；limit+1。身份/limit绑定cursor只限制遍历，不替代SQL授权，无跨页快照。
+
+事务固定 Project（canonical ID排序）→Conversation，重读移动后的project_ref并在总预算内最多4次重试。active owner及有效父先验，再查现bff_idempotency_receipt；archive-state scope tenant/subject/key，fingerprint action/id。同scope不同fingerprint409，同fingerprint零写返回旧receipt。fresh同状态不改任何Conversation时刻，但可写receipt；fresh archive从NULL设CURRENT_TIMESTAMP(3)，fresh restore从非NULL设NULL，状态变化才更新updated_at。所有相反命令行锁串行，无额外revision列/expected-state CAS。唯一receipt竞争回滚败方事务再读winner，不能留下部分归档。
+
+delete先胜→404，包括历史receipt；archive先胜→delete照常执行原完整清理。Project delete不增加unarchived过滤，继续删除归档子任务；move/rename不清archived_at、不隐式恢复，分享/Run/consumer/Message/Artifact/outbox事实不因归档改变。归档列可以随deleted tombstone保留历史值；status约束仍是唯一删除判断，任何restore不得更改status/deleted_at。现receipt retention沿原规范，不新增永久exactly-once承诺。
+
+V1不维护migration链/runner/ledger。更新canonical仅支持后继fresh install；CREATE TABLE IF NOT EXISTS不会升级现库，新增索引在旧表缺列时也不能直接应用。运行旧库保持原状；Root裁决为后继独立新run自有fixture fresh install，不做在线升级/回退，不以db:apply-schema假装升级旧库完成。当前未安装/改DB/跑PG测试，所有真实SQL、并发与性能门均待后继；普通非Nest入口未迁移，本片不新增第二框架。
+
 ## SET-21 真实 owner 数据验证（2026-10-15）
 
 canonical schema保持原字节；Share.created_at/expires_at/revoked_at为TIMESTAMPTZ(3)，毫秒wire不改变事实。Root正规HTTP创建/分享/读取/撤销、公有访问失效、foreign/expiry/orphan/合法旧title及C字节ID验证通过，读取前后同owner三表事实保持。自有测试库5000合成Share的实际EXPLAIN及锁等待到期后同pool恢复通过，查询样本见CURRENT；当前没有证据要求新增索引，未授DDL。只有Root新建fixture库被清理，共享实例/正常库保持，正常Chat-off未seed数据冒UI正向。

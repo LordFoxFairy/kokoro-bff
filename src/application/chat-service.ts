@@ -1,3 +1,4 @@
+import type { ArchivedTasksQuery, ArchiveStateQuery, ArchiveStateCommand } from "./ports/chat-repository.js"
 import type { ChatMessage, ChatSessionDetail, ChatSessionSummary } from "../contracts/index.js"
 import type { ChatRepository, ConversationCollectionFilter, SharedTasksPosition, SharedTasksRead } from "./ports/chat-repository.js"
 import { createHash } from "node:crypto"
@@ -7,6 +8,16 @@ import { chatMessage, conversationSummary } from "./chat/mappers.js"
 
 export class ChatApplicationService {
   private readonly repository: ChatRepository
+
+  public listOwnedArchivedTasks(query: ArchivedTasksQuery) {
+    return this.repository.listOwnedArchivedTasks(query)
+  }
+  public readArchiveState(query: ArchiveStateQuery) {
+    return this.repository.readArchiveState(query)
+  }
+  public changeArchiveState(command: ArchiveStateCommand) {
+    return this.repository.changeArchiveState(command)
+  }
 
   public constructor(repository: ChatRepository) {
     this.repository = repository
