@@ -132,6 +132,29 @@ test("A3 authorization projects only browser-required URL metadata and owner fac
   )
 })
 
+test("A3 authorization admits a loopback callback target in local development", () => {
+  const connector = create(PersonalMcpConnectorSchema, {
+    connectorId: { value: "connector" },
+    connectorType: 3,
+    providerKey: "provider",
+    status: 1,
+    stateVersion: 2n,
+  })
+  const begun = create(BeginPersonalMcpConnectorAuthorizationResponseSchema, {
+    authorizationId: { value: "authorization" },
+    authorizationUrl: "http://127.0.0.1:43193/authorize?state=opaque",
+    expiresAt: { seconds: 1_800_000_000n, nanos: 0 },
+    connector,
+  })
+  assert.equal(
+    (projectMcpPersonalAuthorization("begin", begun, {
+      ...identity,
+      id: "connector",
+    }) as { authorization: { authorization_url: string } }).authorization.authorization_url,
+    "http://127.0.0.1:43193/authorize?state=opaque",
+  )
+})
+
 function inputForConnection() {
   return { ...identity, id: "connector", serverId: "server", allowedSelectors: ["tool.read"], expectedStateVersion: "2", commandId: "idempotency-key" }
 }
