@@ -1,5 +1,6 @@
 import { McpPersonalConnectClient } from "../infrastructure/clients/platform/mcp-personal-connect.js"
 import { McpProviderAdminConnectClient } from "../infrastructure/clients/platform/mcp-provider-admin-connect.js"
+import { CustomApiConnectClient } from "../infrastructure/clients/platform/custom-api-connect.js"
 import { SkillSpecificationService } from "../application/skill-specification.js"
 import { PlatformSkillSpecificationFacade } from "../infrastructure/clients/platform/skill-specification-facade.js"
 import { PlatformProjectionHttpClient } from "../infrastructure/clients/platform/projection-http.js"
@@ -69,8 +70,9 @@ export type BffRouteInput = {
 export type BffRouteHandler = (input: BffRouteInput) => Promise<boolean | void>
 
 export type BffServerComposition = {
-  mcpPersonalClient: (Pick<McpPersonalConnectClient, "read"> & Partial<Pick<McpPersonalConnectClient, "close" | "command" | "authorization" | "server">>) | null
+  mcpPersonalClient: (Pick<McpPersonalConnectClient, "read"> & Partial<Pick<McpPersonalConnectClient, "close" | "command" | "authorization" | "server" | "importJson">>) | null
   mcpProviderAdminClient: (Pick<McpProviderAdminConnectClient, "execute"> & Partial<Pick<McpProviderAdminConnectClient, "close">>) | null
+  customApiClient: (Pick<CustomApiConnectClient, "execute"> & Partial<Pick<CustomApiConnectClient, "close">>) | null
   localSkillImportClient?: LocalSkillImportClient
   skillSpecificationSource: SkillSpecificationSource | null
   skillDownloadHandles: SkillDownloadHandles
@@ -104,8 +106,9 @@ export type BffServerComposition = {
 
 export type BffCompositionOptions = {
   mcpPersonalClient?:
-    (Pick<McpPersonalConnectClient, "read"> & Partial<Pick<McpPersonalConnectClient, "close" | "command" | "authorization" | "server">>) | null
+    (Pick<McpPersonalConnectClient, "read"> & Partial<Pick<McpPersonalConnectClient, "close" | "command" | "authorization" | "server" | "importJson">>) | null
   mcpProviderAdminClient?: (Pick<McpProviderAdminConnectClient, "execute"> & Partial<Pick<McpProviderAdminConnectClient, "close">>) | null
+  customApiClient?: (Pick<CustomApiConnectClient, "execute"> & Partial<Pick<CustomApiConnectClient, "close">>) | null
   localSkillImportClient?: LocalSkillImportClient
   skillSpecificationSource?: SkillSpecificationSource | null
   exactSkillDownloadSource?: ExactSkillDownloadSource | null
@@ -360,12 +363,22 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
             new PlatformServiceCredentialSource(config.mcpProviderAdmin.credentialFile, "mcp_admin"),
           )
         : null
+  const customApiClient =
+    options.customApiClient !== undefined
+      ? options.customApiClient
+      : config.customApi
+        ? new CustomApiConnectClient(
+            config.customApi.baseUrl,
+            new PlatformServiceCredentialSource(config.customApi.credentialFile, "custom_api_personal"),
+          )
+        : null
   let closePromise: Promise<void> | null = null
   const close = (): Promise<void> => {
     if (closePromise !== null) return closePromise
     closePromise = (async (): Promise<void> => {
       mcpPersonalClient?.close?.()
       mcpProviderAdminClient?.close?.()
+      customApiClient?.close?.()
       await stopWorkers()
       skillDownloadHandles.clear()
       await closeStore()
@@ -375,6 +388,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
   return {
     mcpPersonalClient,
     mcpProviderAdminClient,
+    customApiClient,
     ...(localSkillImportClient === undefined ? {} : { localSkillImportClient }),
     skillSpecificationSource:
       options.skillSpecificationSource !== undefined

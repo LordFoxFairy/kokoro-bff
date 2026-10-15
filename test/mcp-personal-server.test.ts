@@ -3,8 +3,16 @@ import { createHash } from "node:crypto"
 import test from "node:test"
 import { create } from "@bufbuild/protobuf"
 import { parseMcpPersonalServer } from "../src/http/mcp-personal-server-input.js"
-import { bindMcpPersonalServerCommand, bindMcpPersonalServerRegistration } from "../src/infrastructure/clients/platform/mcp-personal-server-binding.js"
-import { mcpPersonalServerFault, projectMcpPersonalServer } from "../src/infrastructure/clients/platform/mcp-personal-server-response.js"
+import { parseMcpPersonalJsonImport } from "../src/http/mcp-personal-json-import-input.js"
+import {
+  bindMcpPersonalServerCommand,
+  bindMcpPersonalServerRegistration,
+} from "../src/infrastructure/clients/platform/mcp-personal-server-binding.js"
+import { bindMcpPersonalJsonImport } from "../src/infrastructure/clients/platform/mcp-personal-json-import-binding.js"
+import {
+  mcpPersonalServerFault,
+  projectMcpPersonalServer,
+} from "../src/infrastructure/clients/platform/mcp-personal-server-response.js"
 import { Code, ConnectError } from "@connectrpc/connect"
 import {
   PersonalMcpErrorDetailSchema,
@@ -36,7 +44,10 @@ test("private URL MCP registration accepts strict notes, secret headers and BYO 
         server_url: input.serverUrl,
         notes: "Internal only",
         headers: [{ name: "X-API-Key", value: "header-secret" }],
-        oauth_client: { client_id: "client-one", client_secret: "client-secret" },
+        oauth_client: {
+          client_id: "client-one",
+          client_secret: "client-secret",
+        },
       }),
     ),
     {
@@ -49,11 +60,33 @@ test("private URL MCP registration accepts strict notes, secret headers and BYO 
   )
   for (const invalid of [
     { display_name: input.displayName, server_url: "http://tools.example/mcp" },
-    { display_name: input.displayName, server_url: "https://user:pass@tools.example/mcp" },
-    { display_name: input.displayName, server_url: "https://tools.example/mcp#fragment" },
-    { display_name: input.displayName, server_url: input.serverUrl, tenant_id: "forged" },
-    { display_name: input.displayName, server_url: input.serverUrl, declaration_digest: "forged" },
-    { display_name: input.displayName, server_url: input.serverUrl, headers: [{ name: "authorization", value: "secret" }] },
+    {
+      display_name: input.displayName,
+      server_url: "https://user:pass@tools.example/mcp",
+    },
+    {
+      display_name: input.displayName,
+      server_url: "https://tools.example/mcp#fragment",
+    },
+    {
+      display_name: input.displayName,
+      server_url: "https://tools.example/mcp?tenant=forged",
+    },
+    {
+      display_name: input.displayName,
+      server_url: input.serverUrl,
+      tenant_id: "forged",
+    },
+    {
+      display_name: input.displayName,
+      server_url: input.serverUrl,
+      declaration_digest: "forged",
+    },
+    {
+      display_name: input.displayName,
+      server_url: input.serverUrl,
+      headers: [{ name: "authorization", value: "secret" }],
+    },
     {
       display_name: input.displayName,
       server_url: input.serverUrl,
@@ -62,9 +95,15 @@ test("private URL MCP registration accepts strict notes, secret headers and BYO 
         { name: "x-key", value: "two" },
       ],
     },
-    { display_name: input.displayName, server_url: input.serverUrl, oauth_client: { client_id: "client" } },
+    {
+      display_name: input.displayName,
+      server_url: input.serverUrl,
+      oauth_client: { client_id: "client" },
+    },
   ])
-    assert.throws(() => parseMcpPersonalServer("registerServer", bytes(invalid)))
+    assert.throws(() =>
+      parseMcpPersonalServer("registerServer", bytes(invalid)),
+    )
 })
 
 test("private URL MCP GET projects declarations_available and the full safe declaration snapshot in one response", () => {
@@ -93,36 +132,60 @@ test("private URL MCP GET projects declarations_available and the full safe decl
       },
     ],
   })
-  assert.deepEqual(projectMcpPersonalServer("server", create(GetPersonalMcpServerResponseSchema, { server }), { ...input, id: "server-one" }), {
-    server: {
-      server_id: "server-one",
-      display_name: input.displayName,
-      server_url: input.serverUrl,
-      status: "registered",
-      state_version: "4",
-      headers: [],
-      prepare_status: "ready",
-      authorization_status: "approved",
-      declarations: [
-        {
-          kind: "tool",
-          selector: "tools/list",
-          display_name: "List tools",
-          input_schema_digest: "b".repeat(64),
-          required_scopes: ["tools.read"],
-        },
-      ],
-      declaration_digest: "a".repeat(64),
-      connection_id: "connection-one",
-      declarations_available: true,
+  assert.deepEqual(
+    projectMcpPersonalServer(
+      "server",
+      create(GetPersonalMcpServerResponseSchema, { server }),
+      { ...input, id: "server-one" },
+    ),
+    {
+      server: {
+        server_id: "server-one",
+        display_name: input.displayName,
+        server_url: input.serverUrl,
+        status: "registered",
+        state_version: "4",
+        headers: [],
+        prepare_status: "ready",
+        authorization_status: "approved",
+        declarations: [
+          {
+            kind: "tool",
+            selector: "tools/list",
+            display_name: "List tools",
+            input_schema_digest: "b".repeat(64),
+            required_scopes: ["tools.read"],
+          },
+        ],
+        declaration_digest: "a".repeat(64),
+        connection_id: "connection-one",
+        declarations_available: true,
+      },
     },
-  })
+  )
 })
 
 test("private URL MCP prepare and update require strict CAS and reject ambiguous or empty changes", () => {
-  assert.deepEqual(parseMcpPersonalServer("prepareServer", bytes({ expected_state_version: "1" })), { expectedStateVersion: "1" })
-  assert.deepEqual(parseMcpPersonalServer("deleteServer", bytes({ expected_state_version: "3" })), { expectedStateVersion: "3" })
-  assert.throws(() => parseMcpPersonalServer("deleteServer", bytes({ expected_state_version: "3", extra: true })))
+  assert.deepEqual(
+    parseMcpPersonalServer(
+      "prepareServer",
+      bytes({ expected_state_version: "1" }),
+    ),
+    { expectedStateVersion: "1" },
+  )
+  assert.deepEqual(
+    parseMcpPersonalServer(
+      "deleteServer",
+      bytes({ expected_state_version: "3" }),
+    ),
+    { expectedStateVersion: "3" },
+  )
+  assert.throws(() =>
+    parseMcpPersonalServer(
+      "deleteServer",
+      bytes({ expected_state_version: "3", extra: true }),
+    ),
+  )
   assert.deepEqual(
     parseMcpPersonalServer(
       "updateServer",
@@ -149,8 +212,16 @@ test("private URL MCP prepare and update require strict CAS and reject ambiguous
     { expected_state_version: "2147483648" },
     { expected_state_version: "1", clear_notes: false },
     { expected_state_version: "1", notes: "new", clear_notes: true },
-    { expected_state_version: "1", oauth_client: { client_id: "one", client_secret: "secret" }, revoke_oauth_client: true },
-    { expected_state_version: "1", header_upserts: [{ name: "x-key", value: "secret" }], header_removals: ["X-Key"] },
+    {
+      expected_state_version: "1",
+      oauth_client: { client_id: "one", client_secret: "secret" },
+      revoke_oauth_client: true,
+    },
+    {
+      expected_state_version: "1",
+      header_upserts: [{ name: "x-key", value: "secret" }],
+      header_removals: ["X-Key"],
+    },
   ])
     assert.throws(() => parseMcpPersonalServer("updateServer", bytes(invalid)))
 })
@@ -164,7 +235,10 @@ test("private URL MCP registration binds the owner method, trusted identity, and
   })
   assert.notEqual(
     bindMcpPersonalServerRegistration(input).requestDigest,
-    bindMcpPersonalServerRegistration({ ...input, serverUrl: "https://tools.example/other" }).requestDigest,
+    bindMcpPersonalServerRegistration({
+      ...input,
+      serverUrl: "https://tools.example/other",
+    }).requestDigest,
   )
   const secretInput = {
     ...input,
@@ -181,7 +255,10 @@ test("private URL MCP registration binds the owner method, trusted identity, and
   )
   assert.notDeepEqual(
     bindMcpPersonalServerCommand("registerServer", secretInput),
-    bindMcpPersonalServerCommand("registerServer", { ...secretInput, oauthClient: { ...secretInput.oauthClient, clientId: "client-two" } }),
+    bindMcpPersonalServerCommand("registerServer", {
+      ...secretInput,
+      oauthClient: { ...secretInput.oauthClient, clientId: "client-two" },
+    }),
   )
   assert.notDeepEqual(
     bindMcpPersonalServerCommand("updateServer", {
@@ -193,27 +270,104 @@ test("private URL MCP registration binds the owner method, trusted identity, and
       headerRemovals: [],
       revokeOauthClient: false,
     }),
-    bindMcpPersonalServerCommand("prepareServer", { ...input, id: "server-one", expectedStateVersion: "2" }),
+    bindMcpPersonalServerCommand("prepareServer", {
+      ...input,
+      id: "server-one",
+      expectedStateVersion: "2",
+    }),
   )
   assert.notDeepEqual(
-    bindMcpPersonalServerCommand("deleteServer", { ...input, id: "server-one", expectedStateVersion: "2" }),
-    bindMcpPersonalServerCommand("prepareServer", { ...input, id: "server-one", expectedStateVersion: "2" }),
+    bindMcpPersonalServerCommand("deleteServer", {
+      ...input,
+      id: "server-one",
+      expectedStateVersion: "2",
+    }),
+    bindMcpPersonalServerCommand("prepareServer", {
+      ...input,
+      id: "server-one",
+      expectedStateVersion: "2",
+    }),
+  )
+})
+
+test("JSON import preserves the Manus-shaped document and binds only the safe HTTP metadata", () => {
+  const configJson = JSON.stringify({
+    mcpServers: {
+      Remote: {
+        type: "streamableHttp",
+        url: "https://tools.example/mcp",
+        headers: { "X-API-Key": "secret" },
+      },
+    },
+  })
+  assert.deepEqual(
+    parseMcpPersonalJsonImport(bytes({ config_json: configJson })),
+    { configJson },
+  )
+  const canonical =
+    '{"input":{"servers":[{"display_name":"Remote","headers":["x-api-key"],"notes":null,"server_url":"https://tools.example/mcp"}]},"method":"kokoro.platform.v1.ProductMcpPersonalService/ImportPersonalMcpJson","subject_id":"subject","tenant_id":"tenant"}'
+  const bound = bindMcpPersonalJsonImport({
+    tenant: "tenant",
+    subject: "subject",
+    requestId: "request",
+    commandId: "intent-import",
+    configJson,
+  })
+  assert.deepEqual(bound, {
+    commandId: "intent-import",
+    requestDigest: createHash("sha256").update(canonical).digest("hex"),
+  })
+  assert.equal(
+    bindMcpPersonalJsonImport({
+      ...bound,
+      tenant: "tenant",
+      subject: "subject",
+      requestId: "request",
+      commandId: "intent-stdio",
+      configJson: JSON.stringify({
+        mcpServers: { Local: { command: "node", args: ["server.js"] } },
+      }),
+    }).requestDigest.length,
+    64,
+  )
+  assert.throws(() => parseMcpPersonalJsonImport(bytes({ config_json: "" })))
+  assert.throws(() =>
+    parseMcpPersonalJsonImport(bytes({ config_json: configJson, extra: true })),
   )
 })
 
 test("private URL MCP delete projects only the owner acknowledgement", () => {
-  const raw = create(DeletePersonalMcpServerResponseSchema, { serverId: { value: "server-one" }, deleted: true, replayed: true })
-  assert.deepEqual(projectMcpPersonalServer("deleteServer", raw, { ...input, id: "server-one", expectedStateVersion: "4" }), {
-    server_id: "server-one",
+  const raw = create(DeletePersonalMcpServerResponseSchema, {
+    serverId: { value: "server-one" },
     deleted: true,
     replayed: true,
   })
-  assert.throws(() =>
-    projectMcpPersonalServer("deleteServer", create(DeletePersonalMcpServerResponseSchema, { serverId: { value: "other" }, deleted: true, replayed: false }), {
+  assert.deepEqual(
+    projectMcpPersonalServer("deleteServer", raw, {
       ...input,
       id: "server-one",
       expectedStateVersion: "4",
     }),
+    {
+      server_id: "server-one",
+      deleted: true,
+      replayed: true,
+    },
+  )
+  assert.throws(() =>
+    projectMcpPersonalServer(
+      "deleteServer",
+      create(DeletePersonalMcpServerResponseSchema, {
+        serverId: { value: "other" },
+        deleted: true,
+        replayed: false,
+      }),
+      {
+        ...input,
+        id: "server-one",
+        expectedStateVersion: "4",
+      },
+    ),
   )
 })
 
@@ -225,8 +379,21 @@ test("private URL MCP projection returns the complete safe descriptor without se
     status: "pending",
     stateVersion: 1n,
     notes: "Internal only",
-    headers: [{ name: "x-api-key", configured: true, stateVersion: 1n, status: "active" }],
-    oauthClient: { clientId: "client-one", configured: true, origin: "byo", status: "configured", stateVersion: 1n },
+    headers: [
+      {
+        name: "x-api-key",
+        configured: true,
+        stateVersion: 1n,
+        status: "active",
+      },
+    ],
+    oauthClient: {
+      clientId: "client-one",
+      configured: true,
+      origin: "byo",
+      status: "configured",
+      stateVersion: 1n,
+    },
     prepareStatus: PersonalMcpPrepareStatus.PENDING_PREPARE,
     declarationsAvailable: false,
   })
@@ -240,7 +407,11 @@ test("private URL MCP projection returns the complete safe descriptor without se
     enabled: false,
     stateVersion: 1n,
   })
-  const raw = create(RegisterPersonalMcpServerResponseSchema, { server, connector, replayed: false })
+  const raw = create(RegisterPersonalMcpServerResponseSchema, {
+    server,
+    connector,
+    replayed: false,
+  })
   const projected = projectMcpPersonalServer("registerServer", raw, {
     ...input,
     notes: "Internal only",
@@ -255,8 +426,21 @@ test("private URL MCP projection returns the complete safe descriptor without se
       status: "pending",
       state_version: "1",
       notes: "Internal only",
-      headers: [{ name: "x-api-key", configured: true, state_version: "1", status: "active" }],
-      oauth_client: { client_id: "client-one", configured: true, origin: "byo", status: "configured", state_version: "1" },
+      headers: [
+        {
+          name: "x-api-key",
+          configured: true,
+          state_version: "1",
+          status: "active",
+        },
+      ],
+      oauth_client: {
+        client_id: "client-one",
+        configured: true,
+        origin: "byo",
+        status: "configured",
+        state_version: "1",
+      },
       prepare_status: "pending_prepare",
       declarations: [],
       declarations_available: false,
@@ -282,8 +466,10 @@ test("private URL MCP projection returns the complete safe descriptor without se
 test("private URL MCP Connect client forwards only the command body plus trusted request headers", async () => {
   const { createServer } = await import("node:http")
   const { connectNodeAdapter } = await import("@connectrpc/connect-node")
-  const { ProductMcpPersonalService } = await import("../src/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
-  const { McpPersonalConnectClient } = await import("../src/infrastructure/clients/platform/mcp-personal-connect.js")
+  const { ProductMcpPersonalService } =
+    await import("../src/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
+  const { McpPersonalConnectClient } =
+    await import("../src/infrastructure/clients/platform/mcp-personal-connect.js")
   let seen: unknown
   let seenDelete: unknown
   let deleteCalls = 0
@@ -299,8 +485,14 @@ test("private URL MCP Connect client forwards only the command body plus trusted
         router.service(ProductMcpPersonalService, {
           registerPersonalMcpServer: (request, context) => {
             seen = request
-            assert.equal(context.requestHeader.get("x-kokoro-tenant"), input.tenant)
-            assert.equal(context.requestHeader.get("x-kokoro-subject"), input.subject)
+            assert.equal(
+              context.requestHeader.get("x-kokoro-tenant"),
+              input.tenant,
+            )
+            assert.equal(
+              context.requestHeader.get("x-kokoro-subject"),
+              input.subject,
+            )
             context.responseHeader.set("cache-control", "no-store")
             context.responseHeader.set("x-kokoro-request-id", input.requestId)
             return {
@@ -311,8 +503,21 @@ test("private URL MCP Connect client forwards only the command body plus trusted
                 status: "registered",
                 stateVersion: 1n,
                 notes: wireInput.notes,
-                headers: [{ name: "x-api-key", configured: true, stateVersion: 1n, status: "active" }],
-                oauthClient: { clientId: "client-one", configured: true, origin: "byo", status: "configured", stateVersion: 1n },
+                headers: [
+                  {
+                    name: "x-api-key",
+                    configured: true,
+                    stateVersion: 1n,
+                    status: "active",
+                  },
+                ],
+                oauthClient: {
+                  clientId: "client-one",
+                  configured: true,
+                  origin: "byo",
+                  status: "configured",
+                  stateVersion: 1n,
+                },
                 prepareStatus: PersonalMcpPrepareStatus.PENDING_PREPARE,
                 declarationsAvailable: false,
               },
@@ -332,11 +537,21 @@ test("private URL MCP Connect client forwards only the command body plus trusted
           deletePersonalMcpServer: (request, context) => {
             deleteCalls++
             seenDelete = request
-            assert.equal(context.requestHeader.get("x-kokoro-tenant"), input.tenant)
-            assert.equal(context.requestHeader.get("x-kokoro-subject"), input.subject)
+            assert.equal(
+              context.requestHeader.get("x-kokoro-tenant"),
+              input.tenant,
+            )
+            assert.equal(
+              context.requestHeader.get("x-kokoro-subject"),
+              input.subject,
+            )
             context.responseHeader.set("cache-control", "no-store")
             context.responseHeader.set("x-kokoro-request-id", input.requestId)
-            return { serverId: request.serverId, deleted: true, replayed: false }
+            return {
+              serverId: request.serverId,
+              deleted: true,
+              replayed: false,
+            }
           },
         }),
     }),
@@ -344,18 +559,37 @@ test("private URL MCP Connect client forwards only the command body plus trusted
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
   const address = server.address()
   assert.ok(address && typeof address === "object")
-  const tokens = { get: async () => "workload", retire: () => undefined, close: () => undefined }
-  const client = new McpPersonalConnectClient(`http://127.0.0.1:${address.port}`, tokens)
+  const tokens = {
+    get: async () => "workload",
+    retire: () => undefined,
+    close: () => undefined,
+  }
+  const client = new McpPersonalConnectClient(
+    `http://127.0.0.1:${address.port}`,
+    tokens,
+  )
   try {
-    const result = await client.server("registerServer", wireInput, new AbortController().signal, performance.now() + 1_000)
-    assert.equal((seen as { displayName: string }).displayName, input.displayName)
+    const result = await client.server(
+      "registerServer",
+      wireInput,
+      new AbortController().signal,
+      performance.now() + 1_000,
+    )
+    assert.equal(
+      (seen as { displayName: string }).displayName,
+      input.displayName,
+    )
     assert.equal((seen as { serverUrl: string }).serverUrl, input.serverUrl)
     assert.deepEqual((seen as { command: unknown }).command, {
       ...bindMcpPersonalServerRegistration(wireInput),
       $typeName: "kokoro.common.v1.CommandIdentity",
     })
     assert.deepEqual((seen as { headers: unknown }).headers, [
-      { $typeName: "kokoro.platform.v1.PersonalMcpHeaderWrite", name: "x-api-key", value: "header-secret" },
+      {
+        $typeName: "kokoro.platform.v1.PersonalMcpHeaderWrite",
+        name: "x-api-key",
+        value: "header-secret",
+      },
     ])
     assert.deepEqual((seen as { oauthClient: unknown }).oauthClient, {
       $typeName: "kokoro.platform.v1.PersonalMcpOAuthClientWrite",
@@ -370,8 +604,21 @@ test("private URL MCP Connect client forwards only the command body plus trusted
         status: "registered",
         state_version: "1",
         notes: "Internal only",
-        headers: [{ name: "x-api-key", configured: true, state_version: "1", status: "active" }],
-        oauth_client: { client_id: "client-one", configured: true, origin: "byo", status: "configured", state_version: "1" },
+        headers: [
+          {
+            name: "x-api-key",
+            configured: true,
+            state_version: "1",
+            status: "active",
+          },
+        ],
+        oauth_client: {
+          client_id: "client-one",
+          configured: true,
+          origin: "byo",
+          status: "configured",
+          state_version: "1",
+        },
         prepare_status: "pending_prepare",
         declarations: [],
         declarations_available: false,
@@ -390,18 +637,37 @@ test("private URL MCP Connect client forwards only the command body plus trusted
     })
     assert.equal(JSON.stringify(result).includes("header-secret"), false)
     assert.equal(JSON.stringify(result).includes("client-secret"), false)
-    const deleteInput = { ...input, id: "server-one", expectedStateVersion: "1", commandId: "delete-intent" }
-    assert.deepEqual(await client.server("deleteServer", deleteInput, new AbortController().signal, performance.now() + 1_000), {
-      server_id: "server-one",
-      deleted: true,
-      replayed: false,
-    })
+    const deleteInput = {
+      ...input,
+      id: "server-one",
+      expectedStateVersion: "1",
+      commandId: "delete-intent",
+    }
+    assert.deepEqual(
+      await client.server(
+        "deleteServer",
+        deleteInput,
+        new AbortController().signal,
+        performance.now() + 1_000,
+      ),
+      {
+        server_id: "server-one",
+        deleted: true,
+        replayed: false,
+      },
+    )
     assert.equal(deleteCalls, 1)
     assert.deepEqual(seenDelete, {
       $typeName: "kokoro.platform.v1.DeletePersonalMcpServerRequest",
       requestId: input.requestId,
-      command: { ...bindMcpPersonalServerCommand("deleteServer", deleteInput), $typeName: "kokoro.common.v1.CommandIdentity" },
-      serverId: { $typeName: "kokoro.platform.v1.McpServerId", value: "server-one" },
+      command: {
+        ...bindMcpPersonalServerCommand("deleteServer", deleteInput),
+        $typeName: "kokoro.common.v1.CommandIdentity",
+      },
+      serverId: {
+        $typeName: "kokoro.platform.v1.McpServerId",
+        value: "server-one",
+      },
       expectedStateVersion: 1n,
     })
   } finally {
@@ -412,17 +678,38 @@ test("private URL MCP Connect client forwards only the command body plus trusted
 })
 
 test("private URL MCP decodes only the typed owner precondition detail to stable 412", () => {
-  for (const reason of [PersonalMcpErrorReason.NOT_PREPARED, PersonalMcpErrorReason.NEEDS_CLIENT, PersonalMcpErrorReason.AUTH_METHOD_UNSUPPORTED])
+  for (const reason of [
+    PersonalMcpErrorReason.NOT_PREPARED,
+    PersonalMcpErrorReason.NEEDS_CLIENT,
+    PersonalMcpErrorReason.AUTH_METHOD_UNSUPPORTED,
+  ])
     assert.deepEqual(
       mcpPersonalServerFault(
-        new ConnectError("private owner detail", Code.FailedPrecondition, undefined, [{ desc: PersonalMcpErrorDetailSchema, value: { reason } }]),
+        new ConnectError(
+          "private owner detail",
+          Code.FailedPrecondition,
+          undefined,
+          [{ desc: PersonalMcpErrorDetailSchema, value: { reason } }],
+        ),
       ),
-      { status: 412, code: "mcp_personal_precondition_failed", retryable: false },
+      {
+        status: 412,
+        code: "mcp_personal_precondition_failed",
+        retryable: false,
+      },
     )
-  assert.deepEqual(mcpPersonalServerFault(new ConnectError("missing detail", Code.FailedPrecondition)), {
-    status: 502,
-    code: "mcp_personal_response_invalid",
-    retryable: false,
-  })
-  assert.equal(mcpPersonalServerFault(new ConnectError("unavailable", Code.Unavailable)), null)
+  assert.deepEqual(
+    mcpPersonalServerFault(
+      new ConnectError("missing detail", Code.FailedPrecondition),
+    ),
+    {
+      status: 502,
+      code: "mcp_personal_response_invalid",
+      retryable: false,
+    },
+  )
+  assert.equal(
+    mcpPersonalServerFault(new ConnectError("unavailable", Code.Unavailable)),
+    null,
+  )
 })
