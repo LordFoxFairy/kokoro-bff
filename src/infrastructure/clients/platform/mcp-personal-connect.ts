@@ -283,7 +283,7 @@ export class McpPersonalConnectClient {
         )
       }
       return projectMcpPersonalAuthorization(operation, value, input)
-    })
+    }, { allowMissingCorrelationHeader: true })
   }
   async server(
     operation: McpPersonalServerOperation,
@@ -385,6 +385,7 @@ export class McpPersonalConnectClient {
     outer: AbortSignal,
     deadlineAt: number,
     action: (options: CallOptions) => Promise<T>,
+    options: Readonly<{ allowMissingCorrelationHeader?: boolean }> = {},
   ): Promise<T> {
     if (this.#closed) throw new Error("mcp_personal_closed")
     const controller = new AbortController()
@@ -418,7 +419,11 @@ export class McpPersonalConnectClient {
         },
       })
       signal.throwIfAborted()
-      if (responseRequestId !== input.requestId || responseCache !== "no-store")
+      if (
+        (!options.allowMissingCorrelationHeader &&
+          responseRequestId !== input.requestId) ||
+        responseCache !== "no-store"
+      )
         throw new Error("mcp_personal_response_invalid")
       return value
     } finally {
