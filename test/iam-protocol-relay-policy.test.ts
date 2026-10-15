@@ -14,20 +14,13 @@ test("published browser-private policy is a deterministic read-only projection o
   const bytes = await readFile(new URL("../contract/iam-relay-policy.json", import.meta.url))
   const published = JSON.parse(bytes.toString("utf8")) as unknown
   assert.deepEqual(published, IAM_RELAY_POLICY)
-  assert.equal(createHash("sha256").update(bytes).digest("hex"), "66515865d56f718ecba1b591cf4b238f050048031444b5e5ab0dac02d1d05ce7")
-  const oldProjection = {
-    ...IAM_RELAY_POLICY,
-    iamOwnerCommit: "b720b6dc095b883237682102ca0a87ed6451a968",
-    iamOpenapiVersion: "0.5.0",
-    iamOpenapiSha256: "cddfec4cd3439d98f399254911232c447582a97e9b1d4c109139e68baaf030b9",
-  }
-  assert.equal(
-    createHash("sha256")
-      .update(`${JSON.stringify(oldProjection, null, 2)}\n`)
-      .digest("hex"),
-    "ed476b63205c0eaf59106dc618c138df6110ef6240ce2be50b417fea8ec800e4",
-    "relay semantics must remain byte-identical after restoring previous owner provenance",
-  )
+  assert.equal(createHash("sha256").update(bytes).digest("hex"), "63e36a79c7448d4b9e47442df4f5467f230ecf0e9ac702a350cbc92a2c77eb46")
+  assert.deepEqual(IAM_RELAY_POLICY.webInteractionPaths, [
+    "/auth/sign-in",
+    "/auth/select-tenant",
+    "/auth/consent",
+    "/iam/interactions/consent",
+  ])
   assert.equal(IAM_RELAY_POLICY.version, "2.1.0")
   assert.equal(IAM_RELAY_POLICY.iamOpenapiVersion, "0.7.0")
   assert.equal(IAM_RELAY_POLICY.iamOwnerCommit, "e3c035b99cf9479ac8357c7d38147f1541dcbcac")

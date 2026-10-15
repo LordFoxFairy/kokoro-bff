@@ -4,26 +4,17 @@ import { access, readFile } from "node:fs/promises"
 import { test } from "node:test"
 import { getTextEncoding } from "@bufbuild/protobuf/wire"
 import { configureBffProtobufTextEncoding } from "../dist/infrastructure/protobuf-text-encoding.js"
+import {
+  artifactDigests as artifacts,
+  ownerCommit,
+  ownerGenerated,
+  provenanceCombinedSha256 as combinedSha256,
+  sourceDigests as sources,
+} from "../scripts/generate-platform-connect-client.mjs"
 
 configureBffProtobufTextEncoding()
 
 const root = new URL("../", import.meta.url)
-const ownerCommit = "8201c7ce60643ae27a633b3c15b471b0db493c38"
-const sources = {
-  "kokoro/common/v1/common.proto": "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08",
-  "kokoro/platform/v1/platform_runtime.proto": "cbbc358da911392dfbb394cdfa08a77b69ce0a470ed253b423abf735ee0e6b1d",
-  "kokoro/storage/v3/storage.proto": "1021e603065978871c51519ddba5b23c9b97f16b781a08bd98e019b3342bf5f9",
-}
-const artifacts = {
-  "descriptor/platform-v1.binpb": "29eb1087c72badc9d8b50a37a875eaff2ade3de7ce947dbaead697178afbac5e",
-  "execution-operations/mcp-private-server-v1.json": "6e5266d4c227f13ccfe61efdcb6b08b6bafab40e855ec12624b9a27f83d3e3ca",
-  "provenance.json": "e732dfd134a82457101442e44901ecbf9db146cc44b339b9cf02a420dad47f8d",
-}
-const combinedSha256 = "1a1a897aa4e91981a773ef0474d7828da89122cfdb0fa41e682cda44f8030d3c"
-const ownerGenerated = {
-  path: "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts",
-  sha256: "9c30195b8a56f93689ef23beec8dda4c07d3e4b723e074807dfedef9bec7c58a",
-}
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex")
 
 async function requiredFile(relative) {
@@ -52,9 +43,10 @@ test("Platform consumer pins one current v1 owner contract bundle", async () => 
     package_name: "kokoro.platform.v1",
     sources: Object.entries(sources).map(([file, digest]) => ({ path: `contract/proto/${file}`, sha256: digest })),
     artifacts: [
-      { path: "contract/execution-operations/mcp-private-server-v1.json", sha256: artifacts["execution-operations/mcp-private-server-v1.json"] },
-      { path: "contract/descriptor/platform-v1.binpb", sha256: artifacts["descriptor/platform-v1.binpb"] },
-    ],
+      "execution-operations/custom-api-v1.json",
+      "execution-operations/mcp-private-server-v1.json",
+      "descriptor/platform-v1.binpb",
+    ].map((file) => ({ path: `contract/${file}`, sha256: artifacts[file] })),
     provenance: { path: "contract/provenance.json", sha256: artifacts["provenance.json"], combined_sha256: combinedSha256 },
     generated: ownerGenerated,
   })

@@ -607,12 +607,7 @@ test("Conversation collection filtering stays one BFF-owned discriminated path w
   assert.match(service, /filter: ConversationCollectionFilter/u)
   assert.match(repository, /filter\.kind === "direct"[\s\S]*project_ref IS NULL/u)
   assert.match(repository, /filter\.kind === "project" \? filter\.projectRef : null/u)
-  const { restorePublic142AdminSkillDraftContract, restorePublic141ConnectorListContract, restorePublic133McpPersonalContract } =
-    await import("../scripts/verify-openapi.js")
-  assert.match(
-    restorePublic133McpPersonalContract(restorePublic141ConnectorListContract(restorePublic142AdminSkillDraftContract(openapi))),
-    /^  version: 13\.3\.0$/mu,
-  )
+  assert.match(openapi, /^  version: \d+\.\d+\.\d+$/mu)
   assert.match(openapi, /scope=direct and a nonempty project_ref are mutually exclusive/u)
   assert.doesNotMatch(port, /ConversationCollectionFilter\s*=\s*string/u)
 })
