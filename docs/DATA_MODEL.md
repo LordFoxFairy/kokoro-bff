@@ -1,3 +1,7 @@
+## AUTH-P3：认证适配不新增业务数据（2026-10-16）
+
+不改本仓 `database/schema.sql`、业务表/索引、receipt、Redis 或其它 owner 数据。删除的内部 OAuth token cache 不迁移为业务记录；专用途径只引用 owner-only 部署文件中的独立固定 tenant/surface 服务凭据。用户 session/action 权限继续由 IAM 权威提供。凭据、配置实值与运行快照仅留本地 ignored，禁止持久化到源码、公共响应或日志。
+
 ## SKILLS-UPDATE U3：无 BFF 数据模型变更（2026-10-16，本地源码已实现）
 
 更新安装的唯一 writer 是 Platform。BFF 不新增表/列、余额/安装副本、command receipt 或可编辑包事实；canonical `database/schema.sql` 保持。可信 tenant/user 与 path installation ID、两个明确 pin 构成 command digest；相同用户/安装/operation/key 生成同 command ID，body 变化由 owner receipt 检测为冲突，不因换 pin 生成第二 command。

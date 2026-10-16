@@ -3,7 +3,7 @@
   "status": "generated",
   "owner": {
     "repository_path": "apps/kokoro-capability",
-    "repository_commit": "11cb7604a5385047fd872cedc8a55273eae59043",
+    "repository_commit": "9be81465d487be2499a68a76664c14b73c16024b",
     "package_name": "kokoro.platform.v1",
     "sources": [
       {
@@ -20,6 +20,10 @@
       }
     ],
     "artifacts": [
+      {
+        "path": "contract/auth/bff-service-auth-v1.json",
+        "sha256": "4a6db18267a2a61e2b3582ece3a8bfae391db58280f06397125332ccaa97f0ef"
+      },
       {
         "path": "contract/execution-operations/skill-installation-update-v1.json",
         "sha256": "9b75d679665f42eb48d89e9c6fe99c39f2f019894db4a54de15e9f97622dd194"
@@ -39,8 +43,8 @@
     ],
     "provenance": {
       "path": "contract/provenance.json",
-      "sha256": "d664d0c900ce3bc1ac8d6ca2a42fc3a1f6b4f78317eba231f6c519db4b1ffeee",
-      "combined_sha256": "40101e4f0b1b3501c7af468076313fd640c52ab49bf730928f06ea36f396cbbf"
+      "sha256": "4cd10e5545b55537e0f132b409872e5fb86ffc7e84903ff3235904d71c3084dc",
+      "combined_sha256": "3a268b62a9835aa503486f98697eb2768fc5f2458d0dd82475d0ba2acd7654e2"
     },
     "generated": {
       "path": "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts",
@@ -57,14 +61,14 @@
     "configs": [
       {
         "path": "buf.platform.json",
-        "sha256": "c44bed4bc61f3c5f8b509cc72b6ad513b78be8153f1b3eff798746d2de12147c"
+        "sha256": "13976a0ffda1995d4515fab1a3956918cdb66a483599302903d8120ff84a857f"
       },
       {
         "path": "buf.platform.gen.json",
         "sha256": "9888ea0808f6967ebdfb859125eb54430b89ad3f4dbee4418902bfdf6a4540ab"
       }
     ],
-    "script_sha256": "0f90f870c446e736dea2c1fc5addbdea549da874b2c42b8ba15363570eac1563"
+    "script_sha256": "be8f62f471bbd4675504a1cc3df5befdb08bcca600d5afbf91b8e368b7abc235"
   },
   "generated": [
     {

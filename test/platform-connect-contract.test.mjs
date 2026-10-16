@@ -36,6 +36,10 @@ async function sourceBytes() {
 }
 
 test("Platform consumer pins one current v1 owner contract bundle", async () => {
+  assert.deepEqual(JSON.parse(await requiredFile("buf.platform.json")), {
+    version: "v2",
+    modules: [{ path: `contract/vendor/kokoro-platform/${ownerCommit}/proto` }],
+  })
   const manifest = JSON.parse(await requiredFile("contract/dependencies/platform-connect.json"))
   assert.deepEqual(manifest.owner, {
     repository_path: "apps/kokoro-capability",
@@ -43,6 +47,7 @@ test("Platform consumer pins one current v1 owner contract bundle", async () => 
     package_name: "kokoro.platform.v1",
     sources: Object.entries(sources).map(([file, digest]) => ({ path: `contract/proto/${file}`, sha256: digest })),
     artifacts: [
+      "auth/bff-service-auth-v1.json",
       "execution-operations/skill-installation-update-v1.json",
       "execution-operations/custom-api-v1.json",
       "execution-operations/mcp-private-server-v1.json",
@@ -85,9 +90,11 @@ test("Platform generator rejects input, artifact, provenance and vendor-layout d
   assert.doesNotThrow(() => assertArtifactDigests(artifactBytes))
   assert.throws(() => assertArtifactDigests({ ...artifactBytes, extra: Buffer.from("") }), /artifact allowlist/u)
   assert.throws(() => assertArtifactDigests({ ...artifactBytes, "execution-operations/mcp-private-server-v1.json": Buffer.from("{}") }), /artifact digest/u)
+  assert.throws(() => assertArtifactDigests({ ...artifactBytes, "auth/bff-service-auth-v1.json": Buffer.from("{}") }), /artifact digest/u)
   assert.doesNotThrow(() =>
     assertVendorLayout({
       directories: [
+        "auth",
         "descriptor",
         "execution-operations",
         "proto",

@@ -1,3 +1,11 @@
+## AUTH-P3：剩余 Platform 机器 OAuth 原子移除（实施设计，2026-10-16）
+
+依据 Root ADR-035，普通 BFF→Platform 的六用途完整切换为现 `PlatformServiceCredentialSource`：catalog、projection、skills_admin、mcp_personal、mcp_admin、custom_api_personal。owner 先发行并验证 breaking auth profile/provenance，本仓再固定 commit/digest；HTTP projection 6.0 的独立 pin 和 public14.8/139 operations 不变。不得仅切 Admin、共享 projection secret 或保留 OAuth fallback。
+
+写区是现 runtime factory、Platform 窄 client、credential purpose 闭集与相关配置/测试/消费 pin。CatalogTokenSource、CatalogCredentialSource、SkillAdminTokenSource、SkillAdminCredentialSource 及 token retire/cache 由直接服务文件 source 替代并删除。配置改为 `KOKORO_BFF_PLATFORM_CATALOG_SERVICE_CREDENTIAL_FILE` 与 `KOKORO_BFF_PLATFORM_SKILLS_ADMIN_SERVICE_CREDENTIAL_FILE`，删除旧 OAuth 变量且不保留 alias；文件内容只接严格 version 1 entries、caller kokoro-bff、独立 surface 和固定 tenant，旧 OAuth JSON 拒绝，不做兼容迁移。读写的 deadline/cancel、subject/tenant、digest/CAS/receipt 和重放保持。
+
+BFF 当前 browser session admission 与每次 fresh install/manage/admin human action 继续经 IAM；服务 credential 仅机器身份，绝不替代业务授权。Agent/System/execution barrier/Billing 不在本片，不降低执行拒绝。零内部 OAuth 的验收仅针对六种 BFF→Platform 用途：正式工厂与真实 loopback HTTP/Connect，独立凭据、错 scope/tenant、轮换/文件损坏/取消，以及 human deny 下零 owner 命令。源码门通过后才考虑配对启用；实际私有凭据和恢复记录仅留本地 ignored，必要时成对回到原代码/配置，无双协议长期运行。
+
 ## SKILLS-UPDATE U3：显式个人安装更新（本地源码已实现，未正常激活；2026-10-16）
 
 既有 U0 决定继续：Browser → Web 同源 adapter → 本仓 `/v1/skill-installations/{installation_id}/update` → Platform `UpdatePersonalSkillInstallation`，不放宽 Install、不由 BFF Remove→Install。先收敛当前连接器组合，再从 owner 精确 commit/digest 生成唯一 Connect client；HTTP projection 6.0 的独立 pin 与 direct service credential 保持，不退回旧 token exchange 或改无关 MCP 消费。

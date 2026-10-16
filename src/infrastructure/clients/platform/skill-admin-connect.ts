@@ -1,8 +1,8 @@
+import type { PlatformServiceCredentialSource } from "./platform-service-credential.js"
 import { createClient, Code, ConnectError } from "@connectrpc/connect"
 import { createConnectTransport } from "@connectrpc/connect-node"
 import { fromJson, type JsonValue } from "@bufbuild/protobuf"
 import { SkillAdminService } from "../../../generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
-import type { SkillAdminTokenSource } from "./skill-admin-token.js"
 import type { SkillProductContext } from "./skill-product-connect.js"
 import { projectSkillProductCommand } from "./create-skill-draft-projector.js"
 
@@ -19,7 +19,7 @@ export class SkillAdminConnectClient {
   readonly #client
   constructor(
     baseUrl: string,
-    private readonly tokens: SkillAdminTokenSource,
+    private readonly credentials: Pick<PlatformServiceCredentialSource, "get">,
     private readonly timeoutMs: number,
   ) {
     this.#client = createClient(
@@ -33,34 +33,29 @@ export class SkillAdminConnectClient {
     deadlineAt: number,
     call: (options: { signal: AbortSignal; timeoutMs: number; headers: Record<string, string>; onHeader: (headers: Headers) => void }) => Promise<T>,
   ) {
-    const token = await this.tokens.get(context.tenant, signal, deadlineAt)
+    const token = await this.credentials.get(context.tenant, signal, deadlineAt)
     signal.throwIfAborted()
     const remaining = Math.min(this.timeoutMs, Math.floor(deadlineAt - performance.now()))
     if (remaining <= 0) throw new ConnectError("Skill admin deadline exceeded", Code.DeadlineExceeded)
     let requestId: string | null = null,
       cache: string | null = null
-    try {
-      const value = await call({
-        signal,
-        timeoutMs: remaining,
-        headers: {
-          authorization: `Bearer ${token}`,
-          "x-kokoro-request-id": context.requestId,
-          "x-kokoro-tenant": context.tenant,
-          "x-kokoro-subject": context.subject,
-        },
-        onHeader: (headers) => {
-          requestId = headers.get("x-kokoro-request-id")
-          cache = headers.get("cache-control")
-        },
-      })
-      if (requestId !== context.requestId || cache !== "no-store") throw new Error("skill_response_invalid")
-      signal.throwIfAborted()
-      return value
-    } catch (error) {
-      if (error instanceof ConnectError && [Code.PermissionDenied, Code.Unauthenticated].includes(error.code)) this.tokens.retire(token)
-      throw error
-    }
+    const value = await call({
+      signal,
+      timeoutMs: remaining,
+      headers: {
+        authorization: `Bearer ${token}`,
+        "x-kokoro-request-id": context.requestId,
+        "x-kokoro-tenant": context.tenant,
+        "x-kokoro-subject": context.subject,
+      },
+      onHeader: (headers) => {
+        requestId = headers.get("x-kokoro-request-id")
+        cache = headers.get("cache-control")
+      },
+    })
+    if (requestId !== context.requestId || cache !== "no-store") throw new Error("skill_response_invalid")
+    signal.throwIfAborted()
+    return value
   }
   async command(
     operation: SkillAdminCommand,

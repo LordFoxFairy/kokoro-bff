@@ -1,3 +1,13 @@
+## AUTH-P3：BFF 全 Platform 用途移除内部机器 OAuth（源码候选，2026-10-16）
+
+沿基线 96089d8，本仓固定 Platform `9be81465d487be2499a68a76664c14b73c16024b` 的独立 auth profile 1.0.0、provenance 与 digest；当前 Buf module 与唯一 Connect vendor 一致。六用途 catalog/projection/skills_admin/mcp_personal/mcp_admin/custom_api_personal 都使用直接服务凭据；删除 Catalog/Skills Admin 四个 OAuth parser/token/cache source 及 retire。旧专属环境变量拒绝且无 alias，新路径见 `.env.local.example`。每次仍做 Product Session/fresh human action 检查；机器身份不替代权限，用户 Bearer 不传 owner。
+
+公开14.8/139 operations、HTTP6 独立 pin、Proto/两套 generated、canonical SQL 与 lockfile 原字节不变；build 先清理候选 dist，避免已删除 OAuth 入口残留。旧 OAuth-only 测试随已删实现退役，其文件权限/轮换/取消/close 风险由现直接凭据套件承接；新增真实 factory loopback 验五 client 精确 purpose/零机器 IAM，本地导入四正式路由亦为 direct/零 mint。session 与 fresh admin action 拒绝时 GET/POST 均零 owner 调用。malformed private JSON 错误原会带入输入片段，实际 RED 后改通用错误、不挂 cause。
+
+最终 Node22 全门：typecheck/lint/build 通过；contract:check 668 PASS/0 SKIP（保留原3 warnings）、默认 test 1247 PASS/0 FAIL/3 原资源 SKIP；相关格式/diff检查通过。只读审查指出失效 Buf 路径 P2，实际 RED→修正 canonical module/生成器输入检查→重生 manifest→5 pin tests PASS，已复核关闭。最初两项 local-import 测试仍断言机器 IAM 配置/旧 OAuth fixture，迁为 direct fixture并保原四路由/取消/10秒预算，不删风险断言。日志仅本地 `/private/tmp/kokoro-authp3-bff-*`。
+
+源码候选不等正常配对。正常 physical 仍保持 96089d8/Platform e157011，未重启或改私有凭据/用户登录配置；新独立服务凭据部署与配对启用已另行请求确认。没有数据库/积分/模型写入，未操作远端 CI/push/PR/merge 或 Root gitlink。真实 Admin 运营生命周期、完整执行链、MC-01/System/Agent/Billing 仍为后继。
+
 ## SKILLS-UPDATE 正常产品组合后补验收（2026-10-16）
 
 业务源码 BFF `615b16a`、Platform `11cb760`、App `d40c839` 已在用户批准的本地源切换后完成正常 Product Session 的自有安装 v1→v2。Web 显式确认前无写，确认后唯一 update 200、同安装 GET/列表 GET 200；独立正常登录回读确认同 installation/series/installed_at/enabled=true、精确原 offered target、更新入口消失且刷新保持。无 Remove/Install、直库写、模型调用或充值，积分/held/流水内容未变。

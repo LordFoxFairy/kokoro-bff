@@ -11,8 +11,6 @@ import { McpAuthorizationClient } from "../auth/mcp-authorization.client.js"
 import { SkillAuthorizationClient } from "../auth/skill-authorization.client.js"
 import { SkillProductConnectClient } from "../infrastructure/clients/platform/skill-product-connect.js"
 import { SkillAdminConnectClient } from "../infrastructure/clients/platform/skill-admin-connect.js"
-import { SkillAdminCredentialSource } from "../infrastructure/clients/platform/skill-admin-credential.js"
-import { SkillAdminTokenSource } from "../infrastructure/clients/platform/skill-admin-token.js"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import { randomUUID } from "node:crypto"
 
@@ -36,8 +34,6 @@ import { PostgresBffRepositories } from "../infrastructure/postgres/repositories
 import type { RequestContext } from "../domain/request-context.js"
 import { SessionAdmissionClient } from "../auth/session-admission.client.js"
 import type { SessionAdmission } from "../auth/session-admission.types.js"
-import { CatalogCredentialSource } from "../infrastructure/clients/platform/catalog-credential.js"
-import { CatalogTokenSource } from "../infrastructure/clients/platform/catalog-token.js"
 import { CatalogConnectClient } from "../infrastructure/clients/platform/catalog-connect.js"
 import { PersonalInstallationConnectClient } from "../infrastructure/clients/platform/personal-installation-connect.js"
 import { PlatformServiceCredentialSource } from "../infrastructure/clients/platform/platform-service-credential.js"
@@ -188,10 +184,10 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
   const skillProductClient =
     options.skillProductClient !== undefined
       ? options.skillProductClient
-      : config.skillDraft?.platformBaseUrl && config.skillDraft.credentialFile && config.platformProjection?.credentialFile && config.iamBaseUrl
+      : config.skillDraft?.platformBaseUrl && config.skillDraft.credentialFile && config.platformProjection?.credentialFile
         ? new SkillProductConnectClient(
             config.skillDraft.platformBaseUrl,
-            new CatalogTokenSource(config.iamBaseUrl, new CatalogCredentialSource(config.skillDraft.credentialFile), config.skillDraft.timeoutMs),
+            new PlatformServiceCredentialSource(config.skillDraft.credentialFile, "catalog"),
             new PlatformServiceCredentialSource(config.platformProjection.credentialFile, "projection"),
             config.skillDraft.timeoutMs,
           )
@@ -199,20 +195,20 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
   const skillAdminClient =
     options.skillAdminClient !== undefined
       ? options.skillAdminClient
-      : config.skillDraft?.platformBaseUrl && config.skillAdminCredentialFile && config.iamBaseUrl
+      : config.skillDraft?.platformBaseUrl && config.skillAdminCredentialFile
         ? new SkillAdminConnectClient(
             config.skillDraft.platformBaseUrl,
-            new SkillAdminTokenSource(config.iamBaseUrl, new SkillAdminCredentialSource(config.skillAdminCredentialFile), config.skillDraft.timeoutMs),
+            new PlatformServiceCredentialSource(config.skillAdminCredentialFile, "skills_admin"),
             config.skillDraft.timeoutMs,
           )
         : null
   const skillDraftClient =
     options.skillDraftClient !== undefined
       ? options.skillDraftClient
-      : config.skillDraft && config.skillDraft.platformBaseUrl !== null && config.skillDraft.credentialFile !== null && config.iamBaseUrl !== null
+      : config.skillDraft && config.skillDraft.platformBaseUrl !== null && config.skillDraft.credentialFile !== null
         ? new CatalogConnectClient(
             config.skillDraft.platformBaseUrl,
-            new CatalogTokenSource(config.iamBaseUrl, new CatalogCredentialSource(config.skillDraft.credentialFile), config.skillDraft.timeoutMs),
+            new PlatformServiceCredentialSource(config.skillDraft.credentialFile, "catalog"),
             config.skillDraft.timeoutMs,
           )
         : null
@@ -223,11 +219,10 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
           config.skillDraft.platformBaseUrl !== null &&
           config.skillDraft.credentialFile !== null &&
           config.platformProjection?.credentialFile !== null &&
-          config.platformProjection?.credentialFile !== undefined &&
-          config.iamBaseUrl !== null
+          config.platformProjection?.credentialFile !== undefined
         ? new PersonalInstallationConnectClient(
             config.skillDraft.platformBaseUrl,
-            new CatalogTokenSource(config.iamBaseUrl, new CatalogCredentialSource(config.skillDraft.credentialFile), config.skillDraft.timeoutMs),
+            new PlatformServiceCredentialSource(config.skillDraft.credentialFile, "catalog"),
             new PlatformServiceCredentialSource(config.platformProjection.credentialFile, "projection"),
             config.skillDraft.timeoutMs,
           )
@@ -235,10 +230,10 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
   const localSkillImportClient =
     options.localSkillImportClient !== undefined
       ? options.localSkillImportClient
-      : config.skillDraft?.platformBaseUrl && config.skillDraft.credentialFile && config.platformProjection?.credentialFile && config.iamBaseUrl
+      : config.skillDraft?.platformBaseUrl && config.skillDraft.credentialFile && config.platformProjection?.credentialFile
         ? new LocalSkillImportConnectClient(
             config.skillDraft.platformBaseUrl,
-            new CatalogTokenSource(config.iamBaseUrl, new CatalogCredentialSource(config.skillDraft.credentialFile), config.skillDraft.timeoutMs),
+            new PlatformServiceCredentialSource(config.skillDraft.credentialFile, "catalog"),
             new PlatformServiceCredentialSource(config.platformProjection.credentialFile, "projection"),
           )
         : undefined

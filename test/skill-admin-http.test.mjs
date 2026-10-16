@@ -1,39 +1,5 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-import { mkdtemp, writeFile, rm } from "node:fs/promises"
-import { tmpdir } from "node:os"
-import { join } from "node:path"
-
-test("dedicated Skills admin credential rejects ordinary catalog/projection scope and rotates secret identity", async () => {
-  const module = await import("../src/infrastructure/clients/platform/skill-admin-credential.ts").catch(() => ({}))
-  assert.equal(typeof module.SkillAdminCredentialSource, "function", "dedicated machine credential missing")
-  const directory = await mkdtemp(join(tmpdir(), "kokoro-skill-admin-"))
-  const file = join(directory, "credential.json")
-  const credential = {
-    tenantId: "tenant",
-    generation: 1,
-    credentialRefVersion: "1",
-    clientId: "bff-admin",
-    clientSecret: "first",
-    resource: "https://kokoro.dev/resources/platform-internal",
-    scope: "platform:skills-admin.manage",
-  }
-  try {
-    const source = new module.SkillAdminCredentialSource(file)
-    await writeFile(file, JSON.stringify([credential]), { mode: 0o600 })
-    const first = await source.read("tenant")
-    for (const scope of ["platform:projection.read", "platform:skill-catalog.manage", "platform:skills-admin.manage platform:projection.read"]) {
-      await writeFile(file, JSON.stringify([{ ...credential, scope }]))
-      await assert.rejects(source.read("tenant"))
-    }
-    await writeFile(file, JSON.stringify([{ ...credential, clientSecret: "second" }]))
-    assert.notEqual((await source.read("tenant")).cacheKey, first.cacheKey)
-    await assert.rejects(source.read("other"))
-  } finally {
-    await rm(directory, { recursive: true, force: true })
-  }
-})
-
 import { createBffServer } from "../src/bootstrap/server.ts"
 import { DEFAULT_AGUI_CONFIG } from "../src/config/runtime.ts"
 import { createServer } from "node:http"
@@ -257,4 +223,59 @@ test("Admin creates one official draft without caller-chosen identity or CAS", a
     server.closeAllConnections()
     await new Promise((resolve) => server.close(resolve))
   }
+})
+
+test("machine credentials never replace the current session and fresh Skills admin action", async (t) => {
+  for (const denied of ["session", "action"])
+    await t.test(denied, async () => {
+      let ownerCalls = 0
+      const actions = []
+      const server = createBffServer(correctionConfig, {
+        businessStore: null,
+        sessionAdmission: {
+          verify: async () =>
+            denied === "session"
+              ? { ok: false, status: 403, code: "session_forbidden" }
+              : { ok: true, identity: { namespace: "tenant", userId: "user" }, platformAdmin: true },
+        },
+        skillAuthorization: {
+          check: async (input) => {
+            actions.push(input.action)
+            return denied === "action" ? { ok: false, status: 403, code: "skill_permission_denied" } : { ok: true }
+          },
+        },
+        skillAdminClient: {
+          list: async () => {
+            ownerCalls++
+            throw new Error("denied read reached owner")
+          },
+          command: async () => {
+            ownerCalls++
+            throw new Error("denied command reached owner")
+          },
+        },
+      })
+      server.listen(0, "127.0.0.1")
+      await once(server, "listening")
+      try {
+        for (const method of ["GET", "POST"]) {
+          const headers = { ...correctionHeaders }
+          if (method === "GET") {
+            delete headers["content-type"]
+            delete headers["idempotency-key"]
+          }
+          const response = await fetch(`http://127.0.0.1:${server.address().port}/v1/admin/skills`, {
+            method,
+            headers,
+            ...(method === "GET" ? {} : { body: JSON.stringify({ metadata: { display_name: "Denied", summary: "", tags: [] } }) }),
+          })
+          assert.equal(response.status, 403)
+        }
+        assert.equal(ownerCalls, 0)
+        assert.deepEqual(actions, denied === "session" ? [] : ["admin_read", "admin_create_draft"])
+      } finally {
+        server.closeAllConnections()
+        await new Promise((resolve) => server.close(resolve))
+      }
+    })
 })

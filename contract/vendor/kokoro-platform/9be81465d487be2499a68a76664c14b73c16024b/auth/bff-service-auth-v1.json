@@ -1,0 +1,39 @@
+{
+  "profile": "platform-bff-service-auth",
+  "version": "1.0.0",
+  "owner": "kokoro-platform",
+  "visibility": "internal-owner",
+  "replaces": {
+    "owner_commit": "11cb7604a5385047fd872cedc8a55273eae59043",
+    "breaking": true,
+    "removed": ["catalog_workload_oauth", "skills_admin_workload_oauth"]
+  },
+  "caller": "kokoro-bff",
+  "surfaces": [
+    "catalog",
+    "projection",
+    "skills_admin",
+    "mcp_personal",
+    "custom_api_personal",
+    "mcp_admin"
+  ],
+  "authentication": {
+    "scheme": "Bearer",
+    "credential": "opaque_owner_only_file",
+    "file_version": 1,
+    "purposes_per_credential": 1,
+    "tenant": "fixed_credential_binding",
+    "freshness": "reread_complete_current_file_per_request",
+    "fallback": "forbidden"
+  },
+  "trusted_context": "subject_after_machine_admission_tenant_header_equality_only",
+  "human_authorization": "bff_current_iam_session_and_fresh_action",
+  "delegated_surfaces": ["tenant_execution", "global_register"],
+  "unchanged": [
+    "business_proto_and_descriptor",
+    "http_projection_6.0.0",
+    "owner_resource_cas_and_receipt",
+    "external_mcp_oauth",
+    "execution_proof_and_billing_authorization"
+  ]
+}

@@ -8,7 +8,7 @@ const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u
 type CredentialHandle = Awaited<ReturnType<typeof open>>
 function active(signal?: AbortSignal, deadlineAt?: number): void {
   signal?.throwIfAborted()
-  if (deadlineAt !== undefined && performance.now() >= deadlineAt) throw new Error("projection_credential_deadline")
+  if (deadlineAt !== undefined && performance.now() >= deadlineAt) throw new Error("platform_service_credential_deadline")
 }
 async function waitForIo<T>(operation: Promise<T>, signal?: AbortSignal, deadlineAt?: number): Promise<T> {
   void operation.catch(() => undefined)
@@ -23,9 +23,9 @@ async function waitForIo<T>(operation: Promise<T>, signal?: AbortSignal, deadlin
       if (timer !== undefined) clearTimeout(timer)
       callback()
     }
-    const aborted = (): void => finish(() => reject(signal?.reason ?? new Error("projection_credential_aborted")))
+    const aborted = (): void => finish(() => reject(signal?.reason ?? new Error("platform_service_credential_aborted")))
     const remaining = deadlineAt === undefined ? undefined : Math.max(0, deadlineAt - performance.now())
-    timer = remaining === undefined ? undefined : setTimeout(() => finish(() => reject(new Error("projection_credential_deadline"))), remaining)
+    timer = remaining === undefined ? undefined : setTimeout(() => finish(() => reject(new Error("platform_service_credential_deadline"))), remaining)
     signal?.addEventListener("abort", aborted, { once: true })
     void operation.then(
       (value) => finish(() => resolve(value)),
@@ -36,7 +36,7 @@ async function waitForIo<T>(operation: Promise<T>, signal?: AbortSignal, deadlin
 export class PlatformServiceCredentialSource {
   constructor(
     private readonly path: string,
-    private readonly purpose: "projection" | "mcp_personal" | "mcp_admin" | "custom_api_personal",
+    private readonly purpose: "catalog" | "skills_admin" | "projection" | "mcp_personal" | "mcp_admin" | "custom_api_personal",
     private readonly opener: (path: string, flags: number) => Promise<CredentialHandle> = open,
   ) {}
   async get(tenantId: string, signal?: AbortSignal, deadlineAt?: number): Promise<string> {
@@ -53,8 +53,9 @@ export class PlatformServiceCredentialSource {
     let primaryFailed = false
     try {
       const info = await waitForIo(handle.stat(), signal, deadlineAt)
-      if (!info.isFile() || info.uid !== process.getuid?.() || ![0o400, 0o600].includes(info.mode & 0o777)) throw new Error("projection_credential_insecure")
-      if (info.size > MAX_CREDENTIAL_BYTES) throw new Error("projection_credential_invalid")
+      if (!info.isFile() || info.uid !== process.getuid?.() || ![0o400, 0o600].includes(info.mode & 0o777))
+        throw new Error("platform_service_credential_insecure")
+      if (info.size > MAX_CREDENTIAL_BYTES) throw new Error("platform_service_credential_invalid")
       const bytes = Buffer.allocUnsafe(MAX_CREDENTIAL_BYTES + 1)
       let size = 0
       while (size <= MAX_CREDENTIAL_BYTES) {
@@ -64,7 +65,7 @@ export class PlatformServiceCredentialSource {
         size += bytesRead
       }
       active(signal, deadlineAt)
-      if (size > MAX_CREDENTIAL_BYTES) throw new Error("projection_credential_invalid")
+      if (size > MAX_CREDENTIAL_BYTES) throw new Error("platform_service_credential_invalid")
       raw = new TextDecoder("utf-8", { fatal: true }).decode(bytes.subarray(0, size))
     } catch (error) {
       primaryFailed = true
@@ -79,15 +80,21 @@ export class PlatformServiceCredentialSource {
       }
     }
     active(signal, deadlineAt)
-    const file: unknown = JSON.parse(raw)
-    if (typeof file !== "object" || file === null || Array.isArray(file)) throw new Error("projection_credential_invalid")
+    let file: unknown
+    try {
+      file = JSON.parse(raw)
+    } catch {
+      // Native JSON parse errors can quote file bytes, including secrets.
+      throw new Error("platform_service_credential_invalid")
+    }
+    if (typeof file !== "object" || file === null || Array.isArray(file)) throw new Error("platform_service_credential_invalid")
     const root = file as Record<string, unknown>
     if (Object.keys(root).sort().join(",") !== "entries,version" || root.version !== 1 || !Array.isArray(root.entries) || root.entries.length < 1)
-      throw new Error("projection_credential_invalid")
+      throw new Error("platform_service_credential_invalid")
     const ids = new Set<string>()
     const secrets = new Set<string>()
     const entries = root.entries.map((entry) => {
-      if (typeof entry !== "object" || entry === null || Array.isArray(entry)) throw new Error("projection_credential_invalid")
+      if (typeof entry !== "object" || entry === null || Array.isArray(entry)) throw new Error("platform_service_credential_invalid")
       const value = entry as Record<string, unknown>
       const credentialId = value.credential_id
       const secret = value.secret
@@ -108,13 +115,13 @@ export class PlatformServiceCredentialSource {
         ids.has(credentialId) ||
         secrets.has(secret)
       )
-        throw new Error("projection_credential_invalid")
+        throw new Error("platform_service_credential_invalid")
       ids.add(credentialId)
       secrets.add(secret)
       return { tenant_id: tenantId, secret }
     })
     const matches = entries.filter((entry) => entry.tenant_id === tenantId)
-    if (matches.length !== 1) throw new Error("projection_credential_invalid")
+    if (matches.length !== 1) throw new Error("platform_service_credential_invalid")
     const value = matches[0]!
     active(signal, deadlineAt)
     return value.secret

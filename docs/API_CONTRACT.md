@@ -1,3 +1,7 @@
+## AUTH-P3：BFF→Platform auth 消费边界（实施设计，2026-10-16）
+
+普通 BFF 全部 Platform surface 固定新 owner auth profile 的 commit/version/digest；catalog 与 skills_admin 从 IAM workload token 切换专用本地服务 Bearer，projection/MCP/Custom API 沿现 direct 模式。此为内部 breaking auth 消费，不改 Public14.8、139 operations、HTTP body/status、OpenAPI 或浏览器认证。人类 IAM session/action、第三方 OAuth、Agent 执行 proof 与 Billing 资金授权不变。只接受新严格凭据文件，不为旧 OAuth 文件加 fallback。机器 profile 与源码/正常配对的证据分别记录。
+
 ## SKILLS-UPDATE U3：个人安装更新 public 契约（本地源码已实现，未正常激活；2026-10-16）
 
 唯一机器源 `contract/openapi/v1/openapi.yaml` 现为 14.8.0 additive：`POST /v1/skill-installations/{installation_id}/update`，operationId `updatePersonalSkillInstallation`，public/beta、owner kokoro-bff、idempotency required、permission `product.skill.install`（复用当前 IAM install action，无新授权词）。body 必有且仅有两个严格 source-ref 字符串 `expected_source_ref`/`source_ref`；path ID、单 Idempotency-Key 沿现安装闭集，禁止 query/重复 JSON keys/未知键/显式 null/非 UTF-8/超 65536 bytes。内容类型仅 application/json，身份与 command digest 不由 body 提供。

@@ -277,7 +277,7 @@ test("all four browser-private routes preserve exact method, body and fresh read
 test("production composition registers all four local-import owner methods only with the complete Platform credential set", async () => {
   const complete = {
     ...config,
-    iamBaseUrl: "https://iam.example",
+    iamBaseUrl: null,
     skillDraft: {
       enabled: true,
       platformBaseUrl: "https://platform.example",
@@ -308,7 +308,6 @@ test("production composition registers all four local-import owner methods only 
     ["platform base URL", { ...complete, skillDraft: { ...complete.skillDraft, platformBaseUrl: null } }],
     ["catalog credential", { ...complete, skillDraft: { ...complete.skillDraft, credentialFile: null } }],
     ["projection credential", { ...complete, platformProjection: { ...complete.platformProjection, credentialFile: null } }],
-    ["IAM URL", { ...complete, iamBaseUrl: null }],
   ]) {
     const inactive = createBffComposition(candidate, options)
     assert.equal(inactive.localSkillImportClient, undefined, name)
@@ -384,37 +383,32 @@ test("complete production composition dispatches all four private routes through
   )
   owner.listen(0, "127.0.0.1")
   await once(owner, "listening")
-  const iam = createServer(async (req, res) => {
-    let body = ""
-    for await (const chunk of req) body += chunk
-    const scope = new URLSearchParams(body).get("scope")
-    res.writeHead(200, { "content-type": "application/json" })
-    res.end(
-      JSON.stringify({
-        access_token: scope === "platform:projection.read" ? "projection-machine" : "catalog-machine",
-        token_type: "Bearer",
-        scope,
-        expires_in: 60,
-      }),
-    )
+  let iamCalls = 0
+  const iam = createServer((req, res) => {
+    iamCalls++
+    req.resume()
+    res.writeHead(503, { "content-type": "application/json" })
+    res.end(JSON.stringify({ error: "unexpected machine OAuth request" }))
   })
   iam.listen(0, "127.0.0.1")
   await once(iam, "listening")
   const dir = await mkdtemp(join(tmpdir(), "kokoro-local-import-"))
-  const credential = (scope) => [
-    {
-      tenantId: "123e4567-e89b-42d3-a456-426614174000",
-      generation: 1,
-      credentialRefVersion: "v1",
-      clientId: scope,
-      clientSecret: "secret",
-      resource: "https://kokoro.dev/resources/platform-internal",
-      scope,
-    },
-  ]
+  const catalogSecret = "bff-catalog-direct-000000000000000"
+  const credential = {
+    version: 1,
+    entries: [
+      {
+        credential_id: "bff-catalog",
+        secret: catalogSecret,
+        caller: "kokoro-bff",
+        surfaces: ["catalog"],
+        tenant_id: "123e4567-e89b-42d3-a456-426614174000",
+      },
+    ],
+  }
   const catalog = join(dir, "catalog.json"),
     projection = join(dir, "projection.json")
-  await writeFile(catalog, JSON.stringify(credential("platform:skill-catalog.manage")))
+  await writeFile(catalog, JSON.stringify(credential))
   await chmod(catalog, 0o600)
   await writeFile(
     projection,
@@ -468,6 +462,7 @@ test("complete production composition dispatches all four private routes through
     await rm(dir, { recursive: true, force: true })
     await Promise.all([new Promise((r) => owner.close(r)), new Promise((r) => iam.close(r))])
   }
+  assert.equal(iamCalls, 0)
   assert.deepEqual(
     calls.map(([name]) => name),
     ["begin", "complete", "finalize", "get"],
@@ -475,7 +470,7 @@ test("complete production composition dispatches all four private routes through
   for (const [name, request, headers] of calls) {
     assert.equal(headers["x-tenant-ref"], "123e4567-e89b-42d3-a456-426614174000")
     assert.equal(headers["x-kokoro-subject"], "user")
-    assert.equal(headers.authorization, name === "get" ? "Bearer bff-projection-secret-000000000000" : "Bearer catalog-machine")
+    assert.equal(headers.authorization, name === "get" ? "Bearer bff-projection-secret-000000000000" : `Bearer ${catalogSecret}`)
     assert.equal(request.productContext.subjectId, "user")
   }
 })

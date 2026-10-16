@@ -1,3 +1,7 @@
+## AUTH-P3 当前 BFF 服务认证消费（2026-10-16；源码候选）
+
+Connect owner 固定 Platform `9be81465d487be2499a68a76664c14b73c16024b`，包含 `auth/bff-service-auth-v1.json` 1.0.0 与精确 provenance/digest。该 breaking auth profile 完整覆盖六种 BFF 用途，替代剩余 catalog/skills_admin 机器 OAuth。HTTP projection 的独立6.0 pin、公开14.8/139、Proto与 generated 均不变；下文 projection-only 摘要属于先前切片，并不保留其它 BFF 用途 OAuth 的稳态例外。人类 IAM action、外部 OAuth、执行/Billing 授权不变；正常配置切换/组合验收另记 CURRENT。
+
 ## App API 修复当前切片（2026-10-13）
 
 - HTTP 业务路径统一 `/v1`，artifact SemVer 不等于路由版本。Billing 唯一消费源为 owner commit `1ceeae550f05857d1e7fa0da1e83af23a552f0ca` 的 `contract/openapi/v1/openapi.yaml`（SHA-256 `35b4a2d1d178f6a548fe67460c8e8cbba9eb247296f9051f6ec23060235baff8`）；现生成器只消费本人 Credit 两读，不回退旧 v2。

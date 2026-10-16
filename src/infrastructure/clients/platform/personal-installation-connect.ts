@@ -14,18 +14,15 @@ import {
   SkillInstallationIdSchema,
   SkillSourceRefSchema,
 } from "../../../generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
-import type { CatalogTokenSource } from "./catalog-token.js"
 import type { PlatformServiceCredentialSource } from "./platform-service-credential.js"
 
 type Common = { requestId: string; tenant: string; subject: string }
-type TokenSource = {
-  get(tenant: string, signal?: AbortSignal): Promise<string>
-}
+type ServiceCredentialSource = Pick<PlatformServiceCredentialSource, "get">
 export class PersonalInstallationConnectClient {
   readonly #client
   constructor(
     baseUrl: string,
-    private readonly writes: CatalogTokenSource,
+    private readonly writes: Pick<PlatformServiceCredentialSource, "get">,
     private readonly reads: PlatformServiceCredentialSource,
     private readonly timeoutMs: number,
   ) {
@@ -53,7 +50,7 @@ export class PersonalInstallationConnectClient {
     }
   }
   async #invoke<T>(
-    source: TokenSource,
+    source: ServiceCredentialSource,
     input: Common,
     callerSignal: AbortSignal | undefined,
     rpc: (token: string, signal: AbortSignal, timeoutMs: number) => Promise<T>,

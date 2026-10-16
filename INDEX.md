@@ -53,7 +53,7 @@ Root完整check第一正确Node22尝试contract 289PASS/9FAIL：六既有test旧
 
 - `src/http/{create-personal-skill-version-input,withdraw-personal-skill-input}.ts`：两个命令的严格原始输入与稳定 command ID。
 - `src/http/routes/{create-personal-skill-version,withdraw-personal-skill,personal-skill-lifecycle}.ts`：具名 public route及仅两命令共用的单10秒/取消/完整错误回复后未完成body退役。
-- `src/infrastructure/clients/platform/{create-personal-skill-version-projector,withdraw-personal-skill-projector}.ts`：正式 owner 3.0 canonical digest；现 `catalog-connect.ts` 两具名调用，现 `catalog-token.ts` 单调deadline/取消fence。
+- `src/infrastructure/clients/platform/{create-personal-skill-version-projector,withdraw-personal-skill-projector}.ts`：正式 owner 3.0 canonical digest；现 `catalog-connect.ts` 两具名调用，现 `platform-service-credential.ts` 逐请求读取直接服务凭据并保持单调 deadline/取消 fence；内部 OAuth token source 已删除。
 - `test/personal-skill-lifecycle-http.test.mjs`：受控 HTTP、真正 generated Connect binary、两固定 owner 向量及错误/资源边界；不冒真实 IAM/PG 或用户 E2E。
 
 当前机器103是候选，正常BFF930028b/101与Web不变；完整验收与后继见 `docs/CURRENT.md`。

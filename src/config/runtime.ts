@@ -377,9 +377,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
     throw new Error("Storage requires base URL, object origin and independent BFF Storage secret")
   if (storageSecret !== null && !/^[\x21-\x7e]+$/u.test(storageSecret)) throw new Error("Storage secret must be a visible ASCII header value")
   const relay = iamRelayConfig(env)
+  for (const retired of ["KOKORO_BFF_PLATFORM_CATALOG_CREDENTIALS_FILE", "KOKORO_BFF_SKILLS_ADMIN_CREDENTIAL_FILE"]) {
+    if (env[retired] !== undefined) throw new Error(`retired OAuth credential configuration: ${retired}; configure the explicit service credential file`)
+  }
   const skillDraft = {
     platformBaseUrl: optionalOrigin(env.KOKORO_PLATFORM_BASE_URL, "KOKORO_PLATFORM_BASE_URL"),
-    credentialFile: env.KOKORO_BFF_PLATFORM_CATALOG_CREDENTIALS_FILE?.trim() || null,
+    credentialFile: env.KOKORO_BFF_PLATFORM_CATALOG_SERVICE_CREDENTIAL_FILE?.trim() || null,
     timeoutMs: positiveInteger(env.KOKORO_PLATFORM_CATALOG_TIMEOUT_MS, "KOKORO_PLATFORM_CATALOG_TIMEOUT_MS", upstreamTimeoutMs),
   }
 
@@ -446,6 +449,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BffConfig {
       timeoutMs: upstreamTimeoutMs,
     },
     skillDraft,
-    skillAdminCredentialFile: env.KOKORO_BFF_SKILLS_ADMIN_CREDENTIAL_FILE?.trim() || null,
+    skillAdminCredentialFile: env.KOKORO_BFF_PLATFORM_SKILLS_ADMIN_SERVICE_CREDENTIAL_FILE?.trim() || null,
   }
 }

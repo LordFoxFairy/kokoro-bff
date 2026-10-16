@@ -121,7 +121,7 @@ test("fails a valid credential read when closing the file fails", async () => {
   await assert.rejects(source.get(TENANT), /close_failed/u)
 })
 
-for (const purpose of ["projection", "mcp_personal", "custom_api_personal", "mcp_admin"]) {
+for (const purpose of ["catalog", "skills_admin", "projection", "mcp_personal", "custom_api_personal", "mcp_admin"]) {
   test(`requires exact ${purpose} purpose, caller and current file without OAuth fallback`, async () => {
     const profile = { ...entry(), surfaces: [purpose] }
     const file = await fixture({ version: 1, entries: [profile] })
@@ -151,4 +151,24 @@ test("canceling one concurrent caller leaves another independent read usable", a
   abort.abort(new Error("caller_cancelled"))
   await rejected
   assert.equal(await second, entry().secret)
+})
+
+for (const purpose of ["catalog", "skills_admin"]) {
+  test(`rejects retired OAuth JSON for ${purpose} without reading a cached credential`, async () => {
+    const file = await fixture({ version: 1, entries: [{ ...entry(), surfaces: [purpose] }] })
+    const source = new PlatformServiceCredentialSource(file, purpose)
+    assert.equal(await source.get(TENANT), entry().secret)
+    await writeFile(file, JSON.stringify([{ tenantId: TENANT, clientId: "old", clientSecret: "old-secret", scope: "platform:skill-catalog.manage" }]))
+    await assert.rejects(source.get(TENANT), /invalid/u)
+  })
+}
+
+test("malformed credential JSON never puts file contents in the error", async () => {
+  const marker = "sensitive-value"
+  const file = await fixture({ version: 1, entries: [entry()] })
+  await writeFile(file, `${marker}-not-json`)
+  await assert.rejects(new PlatformServiceCredentialSource(file, "projection").get(TENANT), (error) => {
+    assert.equal(String(error).includes(marker.slice(0, 8)), false)
+    return true
+  })
 })
