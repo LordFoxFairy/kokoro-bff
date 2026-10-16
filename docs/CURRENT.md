@@ -1,3 +1,7 @@
+## SET49完整隔离资源门终态
+
+正式合并artifact commit 30df0c428c592ed2710d62035ceb5855d20c7506；public16.0.0/146 digest b4e91483e425fdcc9547eac8bcda554273cbee0863ccb0ddfb185fae18e4e267，Billing唯一pin cd92c728d8f658f54b254d5cbfd28156ca426dc1不变。完整fresh canonical integration实际321PASS/11FAIL/332，自有四归档用例全部PASS；完整资源门FAILED。失败包含既往Project拒绝矩阵、upload503/502与原生SQL/schema边界，另terminal/deletion race此次failureClaim为undefined触发tenantId TypeError；该test及outbox repository与合并前源码字节相同，但不将本轮失败冒旧通过或已修复。未修改任何失败oracle，未宣正常IAM/模型旅程。自有fixture精确清理后PG数据库/Redis库存恢复，正常服务未动。证据追加提交不改变已发行public字节或消费者pin。
+
 ## SET49：主线与设置归档合同集成
 
 合并主线已批准的MCP public四写删除及既有设置/归档能力，以16.0.0/146发行（breaking删除，不冒minor）。integration-public-contract.mjs逐字节验证完整当前合同及有序清单，精确恢复原15.4全文/150后委托全部原inverse和oracle；main贡献保留，不修改Skills/MCP业务。Billing唯一pin使用正式experimental.5发行，保三读与严格专用404；正规contract:check791PASS、architecture37PASS、format/lint/type/build0；默认测试终态1417PASS/0FAIL/3SKIP。最初default唯一失败为旧v1 owner fixture，已按唯一正式v2配对更正路径且原余额/身份断言保留。Billing pure1433PASS/492SKIP、真实自有PG本人HTTP25PASS；两仓完整integration将后续串行自有资源执行，当前不宣完整资源门通过。正常服务不变。
