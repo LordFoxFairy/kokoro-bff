@@ -21,7 +21,7 @@ import type {
   McpPersonalServerMutation,
   McpPersonalServerOperation,
 } from "../../infrastructure/clients/platform/mcp-personal-server-binding.js"
-import { mcpPersonalServerFault } from "../../infrastructure/clients/platform/mcp-personal-server-response.js"
+import { connectorCommandFault, mcpPersonalPreconditionFault } from "../../infrastructure/clients/platform/connector-command-fault.js"
 import { parseMcpPersonalServer } from "../mcp-personal-server-input.js"
 import type { McpPersonalJsonImportInput } from "../../infrastructure/clients/platform/mcp-personal-json-import-binding.js"
 import { parseMcpPersonalJsonImport } from "../mcp-personal-json-import-input.js"
@@ -332,9 +332,10 @@ export async function mcpPersonalRoute(
             code: "mcp_personal_dependency_unavailable",
             retryable: true,
           }
-        : serverOperation
-          ? (mcpPersonalServerFault(error) ?? mcpPersonalFault(error, false, mutation))
-          : mcpPersonalFault(error, input.cursor !== undefined, mutation)
+        : (connectorCommandFault(error, "mcp", mutation) ??
+          (serverOperation || authorization
+            ? (mcpPersonalPreconditionFault(error, serverOperation) ?? mcpPersonalFault(error, false, mutation))
+            : mcpPersonalFault(error, input.cursor !== undefined, mutation)))
       fail(fault.status, fault.code, fault.retryable)
     }
   } finally {

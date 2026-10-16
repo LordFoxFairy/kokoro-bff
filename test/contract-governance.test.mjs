@@ -330,9 +330,25 @@ test("the repository exposes executable contract, schema, and strictness gates",
   assert.equal(packageJson.scripts["contract:check:skill-download"], "node --import tsx scripts/generate-skill-download-policy.mjs --check")
   assert.equal(packageJson.scripts["contract:generate:scheduler"], "node scripts/generate-scheduler-contracts.mjs --write")
   assert.equal(packageJson.scripts["contract:check:scheduler"], "node scripts/generate-scheduler-contracts.mjs --check")
-  assert.equal(
-    packageJson.scripts["contract:check"],
-    "pnpm contract:check:agent && pnpm contract:check:billing && pnpm contract:check:platform-http && pnpm contract:check:iam && pnpm contract:check:system && pnpm contract:check:iam-relay && pnpm contract:check:skill-download && pnpm contract:check:scheduler && pnpm contract:check:platform && pnpm contract:check:storage && pnpm contract:lint && pnpm contract:semantic && pnpm contract:test",
+  assert.equal(packageJson.scripts["contract:check:connector-command-errors"], "node --import tsx scripts/generate-connector-command-errors.mjs")
+  assert.deepEqual(
+    packageJson.scripts["contract:check"].split(" && ").sort(),
+    [
+      "pnpm contract:check:connector-command-errors",
+      "pnpm contract:check:agent",
+      "pnpm contract:check:billing",
+      "pnpm contract:check:platform-http",
+      "pnpm contract:check:iam",
+      "pnpm contract:check:system",
+      "pnpm contract:check:iam-relay",
+      "pnpm contract:check:skill-download",
+      "pnpm contract:check:scheduler",
+      "pnpm contract:check:platform",
+      "pnpm contract:check:storage",
+      "pnpm contract:lint",
+      "pnpm contract:semantic",
+      "pnpm contract:test",
+    ].sort(),
   )
   assert.equal(packageJson.devDependencies["@hey-api/openapi-ts"], "0.99.0")
   assert.equal(packageJson.devDependencies.prettier, "3.9.6")

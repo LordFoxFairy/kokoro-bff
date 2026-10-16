@@ -7,7 +7,7 @@ import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-const ownerCommit = "9be81465d487be2499a68a76664c14b73c16024b"
+const ownerCommit = "ac56a1f8e9491e3e8383bff833b0f9f771fae3b1"
 const vendorRoot = `contract/vendor/kokoro-platform/${ownerCommit}`
 const vendorProto = `${vendorRoot}/proto`
 const output = "src/generated/platform-connect"
@@ -19,19 +19,25 @@ const sourceDigests = {
   "kokoro/storage/v3/storage.proto": "1021e603065978871c51519ddba5b23c9b97f16b781a08bd98e019b3342bf5f9",
 }
 const artifactDigests = {
+  "errors/command-receipt-v1.json": "d82a4b30039adc0754fe1bcc43738fc68be2cd3cbef0e710d14089f55bc0ac68",
   "auth/bff-service-auth-v1.json": "4a6db18267a2a61e2b3582ece3a8bfae391db58280f06397125332ccaa97f0ef",
   "execution-operations/skill-installation-update-v1.json": "9b75d679665f42eb48d89e9c6fe99c39f2f019894db4a54de15e9f97622dd194",
   "descriptor/platform-v1.binpb": "9ea1097f3d03fd7a23fe308c2019c7b67ffdb455ce93cc37326126a084757628",
   "execution-operations/custom-api-v1.json": "eca45ebd0f3c31d48cc174256dc23bda22de288ded91aa12198b1a2a37516a38",
   "execution-operations/mcp-private-server-v1.json": "0cdc5a0f44f11efbac5a5304d9e7df8d722f97660c73026c19577764b41471bf",
-  "provenance.json": "4cd10e5545b55537e0f132b409872e5fb86ffc7e84903ff3235904d71c3084dc",
+  "provenance.json": "7cf02809d886fcc3b8ac5791a54e8de2f6d7426aafd25fbbe50a677df13d2a07",
 }
-const provenanceCombinedSha256 = "3a268b62a9835aa503486f98697eb2768fc5f2458d0dd82475d0ba2acd7654e2"
+const provenanceCombinedSha256 = "a9faa98182357640ba44fea8f0a10ac3b6e926901ebf88d378ec22f750da0a1e"
 const ownerGenerated = {
   path: "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts",
   sha256: "dccac7ea3f6a6e447223592f5bf1a0ec864af5f128b8775c15dc9af06169260c",
 }
-const generatedFiles = ["kokoro/common/v1/common_pb.ts", "kokoro/platform/v1/platform_runtime_pb.ts", "kokoro/storage/v3/storage_pb.ts"]
+const generatedFiles = [
+  "command-receipt-errors.ts",
+  "kokoro/common/v1/common_pb.ts",
+  "kokoro/platform/v1/platform_runtime_pb.ts",
+  "kokoro/storage/v3/storage_pb.ts",
+]
 const generatedDirectories = ["kokoro", "kokoro/common", "kokoro/common/v1", "kokoro/platform", "kokoro/platform/v1", "kokoro/storage", "kokoro/storage/v3"]
 const configFiles = ["buf.platform.json", "buf.platform.gen.json"]
 
@@ -66,6 +72,7 @@ function assertVendorLayout(tree) {
       directories: [
         "auth",
         "descriptor",
+        "errors",
         "execution-operations",
         "proto",
         "proto/kokoro",
@@ -132,6 +139,16 @@ async function verifyInputs() {
 
 async function generate(directory) {
   await run(path.join(root, "node_modules/.bin/buf"), ["generate", "--template", "buf.platform.gen.json", "--output", directory, vendorProto])
+  const receipt = JSON.parse(await readFile(path.join(root, vendorRoot, "errors/command-receipt-v1.json"), "utf8"))
+  assert.equal(receipt.profile, "platform-command-receipt-errors")
+  assert.equal(receipt.version, "1.0.0")
+  assert.equal(receipt.header, "x-kokoro-error-code")
+  assert.equal(receipt.automatic_retries, false)
+  assert.equal(receipt.new_command_authorized, false)
+  await writeFile(
+    path.join(directory, "command-receipt-errors.ts"),
+    `// Generated from the pinned Platform receipt error profile; do not edit.\nexport const PLATFORM_COMMAND_RECEIPT_ERRORS = ${JSON.stringify(receipt.failures)} as const;\n`,
+  )
   assertGeneratedTree(await tree(directory))
   await run(process.execPath, [path.join(root, "node_modules/prettier/bin/prettier.cjs"), "--no-semi", "--print-width", "160", "--write", directory])
 }
@@ -146,6 +163,7 @@ async function manifestFor(directory) {
       package_name: "kokoro.platform.v1",
       sources: Object.entries(sourceDigests).map(([file, digest]) => ({ path: `contract/proto/${file}`, sha256: digest })),
       artifacts: [
+        { path: "contract/errors/command-receipt-v1.json", sha256: artifactDigests["errors/command-receipt-v1.json"] },
         { path: "contract/auth/bff-service-auth-v1.json", sha256: artifactDigests["auth/bff-service-auth-v1.json"] },
         {
           path: "contract/execution-operations/skill-installation-update-v1.json",

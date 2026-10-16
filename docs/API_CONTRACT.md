@@ -2767,3 +2767,12 @@ The machine source of truth will be the existing `contract/openapi/v1/openapi.ya
 Audit、全局用户目录、用户生命周期、session revoke、角色 grant 与任何 mutation 不属于本 contract。新增它们前必须先发布相应 IAM owner operation，固定 vendor artifact、再生成 BFF client 和版本化 public schema；不得通过 internal URL、手写 wire type 或 generic relay 绕过 owner。
 
 <!-- R357-ADMIN-IAM-BRIDGE-API-D0-END -->
+
+
+## Connector command browser-private 恢复错误（2026-10-16，候选）
+
+本片修正历史计划“接public OpenAPI”的表述：现/browser/v1/mcp/*、/browser/v1/connectors/custom-apis*不是public139 operations，Public14.8原字节保持。唯一code-first窄错误policy在src/infrastructure/clients/platform/connector-command-fault.ts，正规生成contract/connector-command-errors-v1.json；与local-import private policy一致，不新增外部operation或错误envelope。
+
+只有Platform固定receipt metadata/code组合才能映射本仓恢复错误，RPC的unknown/expired/conflict/ownership-lost不表示未提交。无marker按原领域处理，畸形/未知/重复/错code/混合detail及read上的marker统一response_invalid/502。MCP三项既有PersonalMcpErrorDetail原因独立可辨，不能按message猜。具体HTTP code/status/retryable/recovery以本仓生成profile为准；成功/CAS/key/no-store/x-request-id/human准入不变。所有恢复指引都不授自动执行、新command或新key许可，未消费App前不声称UX闭环。
+
+本片核实 needs_client/auth_method_unsupported 来自原生 OAuth 服务，故共享 typed 前置条件分类也承接 Begin/Reconnect/Complete/CreateConnection，而不限 Prepare。URL server 分支仍要求已有 typed detail；原生 OAuth 无 detail 的合法 CAS 前置失败保持 generic412，未知/混合 detail 则502。原生 OAuth 不添加 Idempotency-Key；只移动错误职责至窄 connector-command-fault 模块，删除旧 server-response 中的错误 export，不留 alias。

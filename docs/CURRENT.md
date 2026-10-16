@@ -1603,3 +1603,10 @@ Skill record 对应值的 `UNSPECIFIED`、`INTENT` 及未知值 fail closed。Fi
 基线`e380066`。BFF现候选保持参考DownloadSkill的series-current语义，并新增三条browser-private exact准备动作；closed qualifier区分catalog current、installation、managed version与share，统一现60秒/128容量opaque handle及字节spool前后资格确认。private policy由`skill-download.policy.ts`唯一生成；public/generated/Platform contract及SQL不变。Node22候选工作树实际门为focused 87 PASS、contract 715 PASS、默认1311 PASS/0 FAIL/3 SKIP，format/typecheck/lint/build均exit 0；基线隔离真HTTP对installation准备动作返回404，证明新行为原先不存在。以上仍待Root独审、正式提交、服务重载与Web消费，不能宣称正常浏览器下载完成。
 
 <!-- R357-BFF-EXACT-SKILL-DOWNLOAD-CURRENT-END -->
+
+
+## Connector command 恢复错误消费候选（2026-10-16，未正常启用）
+
+Platform Connect 固定 ac56a1f8e9491e3e8383bff833b0f9f771fae3b1 receipt error profile/provenance并正规生成，旧vendor删除；Public14.8/139、Proto与HTTP独立pin未变。窄错误mapper/私有恢复policy区分原receipt状态和MCP原生OAuth三项typed原因，拒绝未知/重复/错码/混合/read marker；不按message猜、不自动重放或新key。原server-response错误export删除并移至对应client错误边界，无alias。code-first profile正规发布为只读JSON，App尚未消费，正常服务无watch/未重启。
+
+原unknown被误报generic retryable及原生OAuth typed原因被丢失均实际HTTP RED后修复；真实两个HTTP hop使用production Connect client确认expired不被旧typed-detail guard误报502。HTTP/SDK是真实传输，owner/凭据/IAM仍为受控fixture，不冒真实receipt DB、正常用户或第三方授权。完整门禁、独审与最终commit由Root有效计划收口。

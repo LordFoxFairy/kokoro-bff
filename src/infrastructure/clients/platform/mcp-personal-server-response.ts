@@ -1,6 +1,4 @@
-import { Code, ConnectError } from "@connectrpc/connect"
 import { z } from "zod"
-import { PersonalMcpErrorDetailSchema, PersonalMcpErrorReason } from "../../../generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
 import type { McpPersonalServerInput, McpPersonalServerOperation } from "./mcp-personal-server-binding.js"
 import { assertMcpPersonalWireKnown, projectMcpPersonalConnector } from "./mcp-personal-response.js"
 
@@ -255,22 +253,4 @@ export function projectMcpPersonalServer(operation: McpPersonalServerOperation, 
       throw new Error("mcp_personal_response_invalid")
   }
   return { server: resultServer, connector, replayed }
-}
-
-export function mcpPersonalServerFault(error: unknown): { status: number; code: string; retryable: boolean } | null {
-  if (!(error instanceof ConnectError) || error.code !== Code.FailedPrecondition) return null
-  try {
-    const details = error.findDetails(PersonalMcpErrorDetailSchema)
-    const detail = details[0]
-    if (
-      details.length !== 1 ||
-      detail === undefined ||
-      detail.$unknown?.length ||
-      ![PersonalMcpErrorReason.NOT_PREPARED, PersonalMcpErrorReason.NEEDS_CLIENT, PersonalMcpErrorReason.AUTH_METHOD_UNSUPPORTED].includes(detail.reason)
-    )
-      return { status: 502, code: "mcp_personal_response_invalid", retryable: false }
-    return { status: 412, code: "mcp_personal_precondition_failed", retryable: false }
-  } catch {
-    return { status: 502, code: "mcp_personal_response_invalid", retryable: false }
-  }
 }

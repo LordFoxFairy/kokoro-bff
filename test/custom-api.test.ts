@@ -230,3 +230,41 @@ test("Custom API response projection exposes descriptors only", () => {
   })
   assert.doesNotMatch(JSON.stringify(result), /secret|value/i)
 })
+
+test("Custom API HTTP distinguishes receipt recovery states without replaying or exposing owner metadata", async () => {
+  const { Code, ConnectError } = await import("@connectrpc/connect")
+  let failure: unknown,
+    calls = 0
+  const fixture = await customApiFixture(async () => {
+    calls++
+    throw failure
+  })
+  try {
+    for (const [reason, rpcCode, status, code, retryable] of [
+      ["in_progress", Code.Aborted, 409, "custom_api_command_in_progress", true],
+      ["outcome_unknown", Code.Unavailable, 503, "custom_api_command_outcome_unknown", false],
+      ["replay_expired", Code.FailedPrecondition, 412, "custom_api_command_replay_expired", false],
+      ["identity_conflict", Code.AlreadyExists, 409, "custom_api_conflict", false],
+      ["ownership_lost", Code.Aborted, 409, "custom_api_command_ownership_lost", false],
+      ["invalid", Code.Internal, 502, "custom_api_response_invalid", false],
+    ] as const) {
+      failure = new ConnectError("private-owner-marker", rpcCode, { "x-kokoro-error-code": `command_receipt_${reason}` })
+      const before = calls
+      const response = await fetch(`${fixture.origin}/browser/v1/connectors/custom-apis`, {
+        method: "POST",
+        headers: { ...browserHeaders, "content-type": "application/json", "idempotency-key": "original-custom-api" },
+        body: JSON.stringify({ name: "Error classification only", environment: [] }),
+      })
+      assert.equal(response.status, status)
+      assert.deepEqual((await response.json()).error, { code, message: "Custom API request failed", retryable })
+      assert.equal(response.headers.get("x-kokoro-error-code"), null)
+      assert.equal(response.headers.get("x-request-id"), browserHeaders["x-request-id"])
+      assert.equal(calls, before + 1)
+    }
+    const response = await fetch(`${fixture.origin}/browser/v1/connectors/custom-apis`, { headers: browserHeaders })
+    assert.equal(response.status, 502)
+    assert.equal((await response.json()).error.code, "custom_api_response_invalid")
+  } finally {
+    await fixture.close()
+  }
+})

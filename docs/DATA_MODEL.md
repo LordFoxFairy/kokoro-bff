@@ -2132,3 +2132,8 @@ Therefore `database/schema.sql`, all existing tables/columns/indexes, transactio
 IAM remains the authoritative owner of tenant membership, invitations and roles. The three Admin Identity reads create no BFF table, SQL query, schema change, Redis entry, cache, local audit mirror, outbox or receipt. The only per-request data is the already admitted actor context, fixed request metadata and bounded owner response. Denied, aborted, timed-out, malformed or authorization-failed reads write nothing locally.
 
 <!-- R357-ADMIN-IAM-BRIDGE-DATA-D0-END -->
+
+
+## Connector command 恢复错误消费（2026-10-16，无数据变化）
+
+只消费已发布错误metadata并输出browser-private安全分类；canonical database/schema.sql、所有业务/receipt/AG-UI状态、Redis与权限不改。不存在BFF直读Platform DB、receipt副本或恢复写入；请求原文、secret、owner内部message/details不会进入生成profile、HTTP反馈或日志。所有未知结果继续原owner保障，错误分类不授权重建资源。

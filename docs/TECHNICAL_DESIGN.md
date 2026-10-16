@@ -3647,3 +3647,14 @@ The public read surface preserves the IAM owner’s closed filters, ordering, op
 **Placement.** The selected implementation extends the existing typed IAM Team/Audit client seam and adds one dedicated `admin-identity` route module; it does not place administrator behavior in the ordinary `/v1/team/*` route or create a generic owner relay. It changes no BFF database, Redis fact, cache, receipt or schema. New global-user or lifecycle views require a separate IAM owner contract first.
 
 <!-- R357-ADMIN-IAM-BRIDGE-D0-END -->
+
+
+## Connector command 恢复失败消费（2026-10-16，实施设计）
+
+固定Platform ac56a1f8e9491e3e8383bff833b0f9f771fae3b1 的receipt metadata profile/provenance，通过现唯一Connect vendor/生成器生成窄只读常量；删除旧vendor，不改Proto或HTTP projection的独立pin。现MCP/Custom API管理真实位于browser-private，不在public139 operations中；本片不新增public endpoint或修改Public14.8。
+
+在现Platform client边界新增一个窄connector-command-fault模块，只有MCP与Custom API两个实际消费者。它严格核marker、现Connect code、无混合detail及mutation语义，再按本仓HTTP policy映射；未知/重复/错码marker和read上的receipt marker均502，不降为generic重试。缺marker继续原领域分类，不猜rawMessage。MCP现三种typed前置条件独立给出可辨原因，仍拒绝缺/未知/混合detail。
+
+本仓browser-private错误恢复policy为唯一可编辑事实，按现local-import policy模式生成只读contract/connector-command-errors-v1.json，消费者以后固定BFF commit/digest；不把它塞入public OpenAPI、不复制owner错误class或产生第二API。状态/body/header/身份/CAS/key及取消预算保持；existing conflict/in-progress错误码保留，新增unknown/expired/ownership-lost及三种MCP原因。所有恢复均无自动重放/新key许可，App只在正式消费后提示。先行为RED、pin/生成与code-first publication、两route真实HTTP错误及零额外调用，再全本仓门禁；正常服务仅成对验收时另加载，本片不重启。
+
+本片核实 needs_client/auth_method_unsupported 来自原生 OAuth 服务，故共享 typed 前置条件分类也承接 Begin/Reconnect/Complete/CreateConnection，而不限 Prepare。URL server 分支仍要求已有 typed detail；原生 OAuth 无 detail 的合法 CAS 前置失败保持 generic412，未知/混合 detail 则502。原生 OAuth 不添加 Idempotency-Key；只移动错误职责至窄 connector-command-fault 模块，删除旧 server-response 中的错误 export，不留 alias。

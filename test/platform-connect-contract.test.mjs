@@ -47,6 +47,7 @@ test("Platform consumer pins one current v1 owner contract bundle", async () => 
     package_name: "kokoro.platform.v1",
     sources: Object.entries(sources).map(([file, digest]) => ({ path: `contract/proto/${file}`, sha256: digest })),
     artifacts: [
+      "errors/command-receipt-v1.json",
       "auth/bff-service-auth-v1.json",
       "execution-operations/skill-installation-update-v1.json",
       "execution-operations/custom-api-v1.json",
@@ -91,11 +92,13 @@ test("Platform generator rejects input, artifact, provenance and vendor-layout d
   assert.throws(() => assertArtifactDigests({ ...artifactBytes, extra: Buffer.from("") }), /artifact allowlist/u)
   assert.throws(() => assertArtifactDigests({ ...artifactBytes, "execution-operations/mcp-private-server-v1.json": Buffer.from("{}") }), /artifact digest/u)
   assert.throws(() => assertArtifactDigests({ ...artifactBytes, "auth/bff-service-auth-v1.json": Buffer.from("{}") }), /artifact digest/u)
+  assert.throws(() => assertArtifactDigests({ ...artifactBytes, "errors/command-receipt-v1.json": Buffer.from("{}") }), /artifact digest/u)
   assert.doesNotThrow(() =>
     assertVendorLayout({
       directories: [
         "auth",
         "descriptor",
+        "errors",
         "execution-operations",
         "proto",
         "proto/kokoro",
@@ -113,7 +116,7 @@ test("Platform generator rejects input, artifact, provenance and vendor-layout d
   assert.doesNotThrow(() =>
     assertGeneratedTree({
       directories: ["kokoro", "kokoro/common", "kokoro/common/v1", "kokoro/platform", "kokoro/platform/v1", "kokoro/storage", "kokoro/storage/v3"],
-      files: ["kokoro/common/v1/common_pb.ts", "kokoro/platform/v1/platform_runtime_pb.ts", "kokoro/storage/v3/storage_pb.ts"],
+      files: ["command-receipt-errors.ts", "kokoro/common/v1/common_pb.ts", "kokoro/platform/v1/platform_runtime_pb.ts", "kokoro/storage/v3/storage_pb.ts"],
     }),
   )
 })

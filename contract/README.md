@@ -294,3 +294,8 @@ R257 administrator admission consumes the pinned IAM 0.8.0 current qualification
 identity. Missing or malformed owner fields fail closed; no old-shape fallback or positive authorization cache. Web admin
 server/API gates must obtain a fresh check; the projection does not grant downstream owner commands. Normal activation
 requires coordinated IAM populated-schema evolution and strict BFF/Web consumer switching; no half deployment or startup seed.
+
+
+## Connector command browser-private error profile 1.0.0
+
+当前MCP/Custom API管理使用 `/browser/v1`，不新增public operation或改变Public14.8/139。`src/infrastructure/clients/platform/connector-command-fault.ts` 的code-first窄policy是唯一可编辑事实，正规生成只读 `connector-command-errors-v1.json`；`contract:check:connector-command-errors` 检测drift，恢复语义不授自动执行、新command或新key许可。Platform Connect唯一vendor固定当前receipt profile/provenance，旧vendor移除；Proto与独立HTTP pin原字节保持。App后继必须固定本BFF commit与该profile digest，当前尚未接UI或正常切换。
