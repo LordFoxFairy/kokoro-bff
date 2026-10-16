@@ -68,7 +68,7 @@ const headers = {
   "x-kokoro-service": "web-bff",
   "x-kokoro-internal-secret": "secret",
 }
-async function withServer(client, run) {
+async function withServer(client, run, overrides = {}) {
   const server = createLiveTestBffServer(config, {
     skillAuthorization: { check: async () => ({ ok: true }) },
     sessionAdmission: {
@@ -78,6 +78,7 @@ async function withServer(client, run) {
       }),
     },
     personalInstallationClient: client,
+    ...overrides,
   })
   server.listen(0, "127.0.0.1")
   await once(server, "listening")
@@ -494,4 +495,286 @@ test("R356 owner query-bound cursor rejection stays a browser invalid request", 
     },
   )
   assert.equal(calls, 1)
+})
+
+test("explicit update preserves disabled state and original command identity on replay", async () => {
+  const seen = [],
+    actions = []
+  await withServer(
+    {
+      update: async (input) => {
+        seen.push(input)
+        return {
+          installation: { ...installation(), sourceRef: { value: input.sourceRef }, revision: 2n, enabled: false },
+          change: 2,
+          eventId: "upgrade-event",
+          replayed: seen.length > 1,
+        }
+      },
+    },
+    async (base) => {
+      for (const replayed of [false, true]) {
+        const response = await fetch(`${base}/v1/skill-installations/i/update`, {
+          method: "POST",
+          headers: { ...headers, "content-type": "application/json", "idempotency-key": "same-update" },
+          body: JSON.stringify({ expected_source_ref: "skill:one", source_ref: "skill:two" }),
+        })
+        assert.equal(response.status, 200)
+        assert.equal(response.headers.get("cache-control"), "no-store")
+        const { data } = await response.json()
+        assert.equal(data.installation.enabled, false)
+        assert.equal(data.installation.installation_id, "i")
+        assert.equal(data.installation.source_ref, "skill:two")
+        assert.equal(data.change, "upgraded")
+        assert.equal(data.event_id, "upgrade-event")
+        assert.equal(data.replayed, replayed)
+      }
+    },
+    {
+      skillAuthorization: {
+        check: async (input) => {
+          actions.push(input.action)
+          return { ok: true }
+        },
+      },
+    },
+  )
+  assert.deepEqual(actions, ["install", "install"])
+  assert.equal(seen[0].commandId, seen[1].commandId)
+  assert.equal(seen[0].digest, seen[1].digest)
+  assert.equal(seen[0].expectedSourceRef, "skill:one")
+})
+
+test("explicit update rejects ambiguous input before calling the owner and requires fresh install authorization", async () => {
+  let calls = 0,
+    allowed = true
+  const client = {
+    update: async () => {
+      calls++
+      return { installation: { ...installation(), sourceRef: { value: "skill:two" }, enabled: false }, change: 2, eventId: "upgrade-event", replayed: false }
+    },
+  }
+  await withServer(
+    client,
+    async (base) => {
+      const post = (body, extra = {}) =>
+        fetch(`${base}/v1/skill-installations/i/update`, {
+          method: "POST",
+          headers: { ...headers, "content-type": "application/json", "idempotency-key": "k", ...extra },
+          body,
+        })
+      for (const body of [
+        "{}",
+        '{"expected_source_ref":"skill:one","source_ref":"skill:two","enabled":true}',
+        '{"expected_source_ref":"skill:one","source_ref":"skill:two","source_ref":"skill:three"}',
+        '{"expected_source_ref":"skill:one","source_ref":"skill:two\\n"}',
+        Buffer.from([0xff]),
+      ])
+        assert.equal((await post(body)).status, 400)
+      const body = JSON.stringify({ expected_source_ref: "skill:one", source_ref: "skill:two" })
+      assert.equal((await post(body, { "content-type": "text/plain" })).status, 400)
+      assert.equal((await post(" ".repeat(65_537))).status, 413)
+      assert.equal(calls, 0)
+      assert.equal((await post(body)).status, 200)
+      allowed = false
+      const replay = await post(body)
+      assert.equal(replay.status, 403)
+      assert.equal((await replay.json()).error.code, "skill_forbidden")
+      assert.equal(calls, 1)
+    },
+    {
+      skillAuthorization: {
+        check: async (input) => {
+          assert.equal(input.action, "install")
+          return allowed ? { ok: true } : { ok: false, status: 403, code: "skill_forbidden" }
+        },
+      },
+    },
+  )
+})
+
+test("update ACK rejects the wrong installation, source, lifecycle, change or unknown owner wire", async () => {
+  let mutate = (value) => value
+  await withServer(
+    {
+      update: async () =>
+        mutate({
+          installation: { ...installation(), sourceRef: { value: "skill:two" }, enabled: false },
+          change: 2,
+          eventId: "upgrade-event",
+          replayed: false,
+        }),
+    },
+    async (base) => {
+      for (const change of [
+        (v) => ({ ...v, installation: { ...v.installation, installationId: { value: "other" } } }),
+        (v) => ({ ...v, installation: { ...v.installation, sourceRef: { value: "skill:one" } } }),
+        (v) => ({ ...v, installation: { ...v.installation, installed: false, removedAt: timestamp(2) } }),
+        (v) => ({ ...v, change: 1 }),
+        (v) => ({ ...v, eventId: undefined }),
+        (v) => ({ ...v, $unknown: [{ no: 200, wireType: 0, data: new Uint8Array([1]) }] }),
+      ]) {
+        mutate = change
+        const response = await fetch(`${base}/v1/skill-installations/i/update`, {
+          method: "POST",
+          headers: { ...headers, "content-type": "application/json", "idempotency-key": "k" },
+          body: '{"expected_source_ref":"skill:one","source_ref":"skill:two"}',
+        })
+        assert.equal(response.status, 502)
+        assert.equal((await response.json()).error.code, "skill_installation_response_invalid")
+      }
+    },
+  )
+})
+
+test("official update Connect wire binds original pins and key; no install/remove dispatch is issued", async () => {
+  const { createServer } = await import("node:http"),
+    { fromBinary, toBinary } = await import("@bufbuild/protobuf")
+  const p = await import("../dist/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
+  const seen = [],
+    server = createServer(async (req, res) => {
+      const chunks = []
+      for await (const chunk of req) chunks.push(chunk)
+      seen.push({ path: req.url, headers: req.headers, input: fromBinary(p.UpdatePersonalSkillInstallationRequestSchema, Buffer.concat(chunks)) })
+      if (seen.length > 1 && seen.at(-1).input.command.requestDigest !== seen[0].input.command.requestDigest) {
+        res.writeHead(409, { "content-type": "application/json" })
+        res.end(JSON.stringify({ code: "already_exists", message: "fixture command conflict" }))
+        return
+      }
+      res.writeHead(200, { "content-type": "application/proto" })
+      res.end(
+        toBinary(
+          p.UpdatePersonalSkillInstallationResponseSchema,
+          create(p.UpdatePersonalSkillInstallationResponseSchema, {
+            installation: { ...installation(), sourceRef: { value: "skill:two" }, revision: 2n, enabled: false },
+            change: 2,
+            eventId: "event",
+            replayed: seen.length > 1,
+          }),
+        ),
+      )
+    })
+  server.listen(0, "127.0.0.1")
+  await once(server, "listening")
+  try {
+    const client = new PersonalInstallationConnectClient(
+      `http://127.0.0.1:${server.address().port}`,
+      { get: async () => "catalog-workload" },
+      {
+        get: async () => {
+          throw Error("read credential used")
+        },
+      },
+      1000,
+    )
+    await withServer(client, async (base) => {
+      for (const expected of ["skill:one", "skill:one", "skill:other"]) {
+        const response = await fetch(`${base}/v1/skill-installations/i/update`, {
+          method: "POST",
+          headers: { ...headers, "content-type": "application/json", "idempotency-key": "original" },
+          body: JSON.stringify({ expected_source_ref: expected, source_ref: "skill:two" }),
+        })
+        assert.equal(response.status, expected === "skill:other" ? 409 : 200)
+        if (response.status === 409) assert.equal((await response.json()).error.code, "skill_installation_idempotency_conflict")
+      }
+    })
+    assert.equal(seen.length, 3)
+    for (const item of seen) {
+      assert.equal(item.path, "/kokoro.platform.v1.ProductSkillInstallationService/UpdatePersonalSkillInstallation")
+      assert.equal(item.headers.authorization, "Bearer catalog-workload")
+      assert.equal(item.headers["x-kokoro-subject"], "user-session")
+      assert.equal(item.input.installationId.value, "i")
+      assert.equal(item.input.sourceRef.value, "skill:two")
+      assert.equal(item.input.command.commandId, seen[0].input.command.commandId)
+    }
+    assert.equal(seen[0].input.command.requestDigest, seen[1].input.command.requestDigest)
+    assert.notEqual(seen[0].input.command.requestDigest, seen[2].input.command.requestDigest)
+    assert.deepEqual(
+      seen.map((v) => v.input.expectedSourceRef.value),
+      ["skill:one", "skill:one", "skill:other"],
+    )
+  } finally {
+    server.closeAllConnections()
+    await new Promise((resolve) => server.close(resolve))
+  }
+})
+
+test("public update contract is a closed two-pin command with only upgraded receipts", async () => {
+  const { readFile } = await import("node:fs/promises"),
+    { load } = await import("js-yaml")
+  const doc = load(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"))
+  const path = doc.paths["/v1/skill-installations/{installation_id}/update"]
+  assert.equal(path.post.operationId, "updatePersonalSkillInstallation")
+  assert.equal(path.post["x-kokoro-permission"], "product.skill.install")
+  assert.equal(path.post["x-kokoro-idempotency"], "required")
+  const schema = path.post.requestBody.content["application/json"].schema
+  assert.equal(schema.additionalProperties, false)
+  assert.deepEqual(schema.required.sort(), ["expected_source_ref", "source_ref"])
+  assert.deepEqual(Object.keys(schema.properties).sort(), schema.required)
+  for (const field of Object.values(schema.properties)) {
+    assert.equal(new RegExp(field.pattern, "u").test("skill:one"), true)
+    for (const invalid of ["skill:skill:one", "skill:one\n", "skill:one "]) assert.equal(new RegExp(field.pattern, "u").test(invalid), false)
+  }
+  const component = doc.components.responses.SkillInstallationUpdateSuccess.content["application/json"].schema
+  assert.equal(component.additionalProperties, false)
+  const restriction = component.properties.data.allOf[1]
+  assert.deepEqual(restriction.required, ["event_id"])
+  assert.equal(restriction.properties.change.const, "upgraded")
+  assert.equal(restriction.properties.installation.properties.installed.const, true)
+  assert.equal(restriction.properties.installation.properties.removed_at, false)
+})
+
+test("update body stalled after a partial chunk expires the original request budget with zero owner calls", async () => {
+  const { createServer, request } = await import("node:http")
+  const { skillInstallationRoute } = await import("../dist/http/routes/skill-installations.js")
+  const { startSkillRequestBudget } = await import("../dist/http/routes/skill-drafts.js")
+  let calls = 0
+  const server = createServer((req, res) => {
+    startSkillRequestBudget(req, 50)
+    void skillInstallationRoute(
+      req,
+      res,
+      { requestId: "stalled-input", identity: { namespace: "tenant", userId: "user" } },
+      ["skill-installations", "i", "update"],
+      {
+        update: async () => {
+          calls++
+          throw Error("partial body reached owner")
+        },
+      },
+    ).catch((error) => res.destroy(error))
+  })
+  server.listen(0, "127.0.0.1")
+  await once(server, "listening")
+  try {
+    await new Promise((resolve, reject) => {
+      const req = request(
+        `http://127.0.0.1:${server.address().port}/v1/skill-installations/i/update`,
+        { method: "POST", headers: { "content-type": "application/json", "idempotency-key": "original", "transfer-encoding": "chunked" } },
+        (res) => {
+          void (async () => {
+            try {
+              const chunks = []
+              for await (const chunk of res) chunks.push(chunk)
+              assert.equal(res.statusCode, 504)
+              assert.equal(JSON.parse(Buffer.concat(chunks)).error.code, "skill_installation_dependency_timeout")
+              assert.equal(res.headers.connection, "close")
+              await closed
+              resolve()
+            } catch (error) {
+              reject(error)
+            }
+          })()
+        },
+      )
+      const closed = once(req, "close")
+      req.on("error", reject)
+      req.setTimeout(1000, () => req.destroy(Error("partial body outlived its request budget")))
+      req.write('{"expected_source_ref":')
+    })
+    assert.equal(calls, 0)
+  } finally {
+    server.closeAllConnections()
+    await new Promise((resolve) => server.close(resolve))
+  }
 })

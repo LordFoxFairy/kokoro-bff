@@ -42,7 +42,12 @@ test("Platform consumer pins one current v1 owner contract bundle", async () => 
     repository_commit: ownerCommit,
     package_name: "kokoro.platform.v1",
     sources: Object.entries(sources).map(([file, digest]) => ({ path: `contract/proto/${file}`, sha256: digest })),
-    artifacts: ["execution-operations/custom-api-v1.json", "execution-operations/mcp-private-server-v1.json", "descriptor/platform-v1.binpb"].map((file) => ({
+    artifacts: [
+      "execution-operations/skill-installation-update-v1.json",
+      "execution-operations/custom-api-v1.json",
+      "execution-operations/mcp-private-server-v1.json",
+      "descriptor/platform-v1.binpb",
+    ].map((file) => ({
       path: `contract/${file}`,
       sha256: artifacts[file],
     })),

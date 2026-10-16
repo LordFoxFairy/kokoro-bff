@@ -1,3 +1,9 @@
+## SKILLS-UPDATE U3：无 BFF 数据模型变更（2026-10-16，本地源码已实现）
+
+更新安装的唯一 writer 是 Platform。BFF 不新增表/列、余额/安装副本、command receipt 或可编辑包事实；canonical `database/schema.sql` 保持。可信 tenant/user 与 path installation ID、两个明确 pin 构成 command digest；相同用户/安装/operation/key 生成同 command ID，body 变化由 owner receipt 检测为冲突，不因换 pin 生成第二 command。
+
+结果未知重试复用原 A→B/key，不能从当前回读 B 构造 B→B 或新 command；回读只供恢复展示。owner 在同一 Serializable transaction 保同安装行、installed_at 和事务 enabled，原子提交 pin/receipt/outbox；BFF 不用外部读写编排模拟原子性。已提交消息/Run 的版本引用不被安装更新改写。无 DB 安装、迁移或共享数据操作，本片集成测试采用受控 owner wire，正常产品写验收由后继显式旅程执行。
+
 ## CV-SVC MCP内部服务凭据边界（D1，2026-10-13；无数据库变化）
 
 BFF 源码候选已切换两 MCP service surface 的直读凭据；无数据修改，正常运行配对验收仍待 Root。

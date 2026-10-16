@@ -393,6 +393,11 @@
     },
     {
       "method": "POST",
+      "path": "/v1/skill-installations/{installation_id}/update",
+      "operation_id": "updatePersonalSkillInstallation"
+    },
+    {
+      "method": "POST",
       "path": "/v1/skills/github/preview",
       "operation_id": "previewGithubSkill"
     },

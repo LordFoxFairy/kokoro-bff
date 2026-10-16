@@ -5,6 +5,7 @@ import { CommandIdentitySchema } from "../../../generated/platform-connect/kokor
 import {
   GetPersonalSkillInstallationRequestSchema,
   InstallPersonalSkillRequestSchema,
+  UpdatePersonalSkillInstallationRequestSchema,
   ListPersonalSkillInstallationsRequestSchema,
   ProductSkillInstallationPageRequestSchema,
   ProductSkillInstallationService,
@@ -80,6 +81,23 @@ export class PersonalInstallationConnectClient {
             commandId: input.commandId,
             requestDigest: input.digest,
           }),
+          sourceRef: create(SkillSourceRefSchema, { value: input.sourceRef }),
+        }),
+        this.#options(token, input, operationSignal, timeoutMs),
+      ),
+    )
+  }
+  async update(
+    input: Common & { commandId: string; digest: string; installationId: string; expectedSourceRef: string; sourceRef: string },
+    signal?: AbortSignal,
+  ) {
+    return this.#invoke(this.writes, input, signal, (token, operationSignal, timeoutMs) =>
+      this.#client.updatePersonalSkillInstallation(
+        create(UpdatePersonalSkillInstallationRequestSchema, {
+          requestId: input.requestId,
+          command: create(CommandIdentitySchema, { commandId: input.commandId, requestDigest: input.digest }),
+          installationId: create(SkillInstallationIdSchema, { value: input.installationId }),
+          expectedSourceRef: create(SkillSourceRefSchema, { value: input.expectedSourceRef }),
           sourceRef: create(SkillSourceRefSchema, { value: input.sourceRef }),
         }),
         this.#options(token, input, operationSignal, timeoutMs),

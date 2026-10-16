@@ -7,7 +7,7 @@ import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-const ownerCommit = "5160c4e5b11333fa9a13d2be9b3017a2f21c19c9"
+const ownerCommit = "11cb7604a5385047fd872cedc8a55273eae59043"
 const vendorRoot = `contract/vendor/kokoro-platform/${ownerCommit}`
 const vendorProto = `${vendorRoot}/proto`
 const output = "src/generated/platform-connect"
@@ -15,19 +15,20 @@ const manifestPath = "contract/dependencies/platform-connect.json"
 
 const sourceDigests = {
   "kokoro/common/v1/common.proto": "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08",
-  "kokoro/platform/v1/platform_runtime.proto": "c7690b9b054373ae23aabe5840a507780ce5f8c7194213b50139d97cd061d218",
+  "kokoro/platform/v1/platform_runtime.proto": "ede427f350a0097f18812900b00e423e15fc6e522d9064345b0f033ffd402b1b",
   "kokoro/storage/v3/storage.proto": "1021e603065978871c51519ddba5b23c9b97f16b781a08bd98e019b3342bf5f9",
 }
 const artifactDigests = {
-  "descriptor/platform-v1.binpb": "e510b66fee4df8913b9803bda2796205fc9412c37d952540c3647e4af70a7318",
+  "execution-operations/skill-installation-update-v1.json": "9b75d679665f42eb48d89e9c6fe99c39f2f019894db4a54de15e9f97622dd194",
+  "descriptor/platform-v1.binpb": "9ea1097f3d03fd7a23fe308c2019c7b67ffdb455ce93cc37326126a084757628",
   "execution-operations/custom-api-v1.json": "eca45ebd0f3c31d48cc174256dc23bda22de288ded91aa12198b1a2a37516a38",
   "execution-operations/mcp-private-server-v1.json": "0cdc5a0f44f11efbac5a5304d9e7df8d722f97660c73026c19577764b41471bf",
-  "provenance.json": "5b021102c33eb12b0b4edcf68500d0b474bc8bfe16c339dbf526cbdcdea67d02",
+  "provenance.json": "d664d0c900ce3bc1ac8d6ca2a42fc3a1f6b4f78317eba231f6c519db4b1ffeee",
 }
-const provenanceCombinedSha256 = "0c108712a30bf1ff7faf886bae9dd7dd46e776ce9c4ed974f100922d5265f719"
+const provenanceCombinedSha256 = "40101e4f0b1b3501c7af468076313fd640c52ab49bf730928f06ea36f396cbbf"
 const ownerGenerated = {
   path: "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts",
-  sha256: "4da2f518b42a0bec900843e041c6857d42116c752cbe9e8c044889fd7de26813",
+  sha256: "dccac7ea3f6a6e447223592f5bf1a0ec864af5f128b8775c15dc9af06169260c",
 }
 const generatedFiles = ["kokoro/common/v1/common_pb.ts", "kokoro/platform/v1/platform_runtime_pb.ts", "kokoro/storage/v3/storage_pb.ts"]
 const generatedDirectories = ["kokoro", "kokoro/common", "kokoro/common/v1", "kokoro/platform", "kokoro/platform/v1", "kokoro/storage", "kokoro/storage/v3"]
@@ -135,6 +136,10 @@ async function manifestFor(directory) {
       package_name: "kokoro.platform.v1",
       sources: Object.entries(sourceDigests).map(([file, digest]) => ({ path: `contract/proto/${file}`, sha256: digest })),
       artifacts: [
+        {
+          path: "contract/execution-operations/skill-installation-update-v1.json",
+          sha256: artifactDigests["execution-operations/skill-installation-update-v1.json"],
+        },
         { path: "contract/execution-operations/custom-api-v1.json", sha256: artifactDigests["execution-operations/custom-api-v1.json"] },
         { path: "contract/execution-operations/mcp-private-server-v1.json", sha256: artifactDigests["execution-operations/mcp-private-server-v1.json"] },
         { path: "contract/descriptor/platform-v1.binpb", sha256: artifactDigests["descriptor/platform-v1.binpb"] },

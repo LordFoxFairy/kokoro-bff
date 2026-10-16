@@ -1,0 +1,48 @@
+{
+  "profile": "personal-skill-installation-update-v1",
+  "version": "1.0.0",
+  "visibility": "internal-owner",
+  "owner": "Platform/Skills",
+  "method": "kokoro.platform.v1.ProductSkillInstallationService/UpdatePersonalSkillInstallation",
+  "command_digest_version": "product-personal-installation/1.0.0",
+  "runtime_verified": false,
+  "request": {
+    "request_id": 1,
+    "command": 2,
+    "installation_id": 3,
+    "expected_source_ref": 4,
+    "source_ref": 5
+  },
+  "response": {
+    "installation": 1,
+    "change": 2,
+    "event_id": 3,
+    "replayed": 4
+  },
+  "identity": "fresh catalog BFF workload; current trusted tenant and personal subject; no body identity",
+  "semantics": {
+    "precondition": "exact installed source pin; strictly increasing same-series revision on first write only",
+    "replay": "original command and target with fresh authorization and current receipt binding",
+    "enabled": "preserve transaction-current value",
+    "atomicity": "installation + completed receipt + one upgrade outbox"
+  },
+  "parent": {
+    "contract/proto/kokoro/platform/v1/platform_runtime.proto": {
+      "path": "contract/descriptor/platform-skill-update-parent.proto.snapshot",
+      "sha256": "c7690b9b054373ae23aabe5840a507780ce5f8c7194213b50139d97cd061d218"
+    },
+    "contract/descriptor/platform-v1.binpb": {
+      "path": "contract/descriptor/platform-skill-update-parent.descriptor.snapshot",
+      "sha256": "e510b66fee4df8913b9803bda2796205fc9412c37d952540c3647e4af70a7318"
+    },
+    "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts": {
+      "path": "contract/descriptor/platform-skill-update-parent.generated.snapshot",
+      "sha256": "4da2f518b42a0bec900843e041c6857d42116c752cbe9e8c044889fd7de26813"
+    }
+  },
+  "current": {
+    "contract/proto/kokoro/platform/v1/platform_runtime.proto": "ede427f350a0097f18812900b00e423e15fc6e522d9064345b0f033ffd402b1b",
+    "contract/descriptor/platform-v1.binpb": "9ea1097f3d03fd7a23fe308c2019c7b67ffdb455ce93cc37326126a084757628",
+    "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts": "dccac7ea3f6a6e447223592f5bf1a0ec864af5f128b8775c15dc9af06169260c"
+  }
+}

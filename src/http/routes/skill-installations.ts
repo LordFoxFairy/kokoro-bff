@@ -4,14 +4,25 @@ import type { IncomingMessage, ServerResponse } from "node:http"
 import { Code, ConnectError } from "@connectrpc/connect"
 import type { RequestContext } from "../../domain/request-context.js"
 import type { PersonalInstallationConnectClient } from "../../infrastructure/clients/platform/personal-installation-connect.js"
-import { installPersonalDigest, removePersonalDigest, setPersonalEnabledDigest } from "../../infrastructure/clients/platform/personal-installation-projector.js"
-import { projectInstallation, projectInstallationAck, projectInstallationList } from "../../infrastructure/clients/platform/personal-installation-response.js"
+import {
+  installPersonalDigest,
+  removePersonalDigest,
+  setPersonalEnabledDigest,
+  updatePersonalDigest,
+} from "../../infrastructure/clients/platform/personal-installation-projector.js"
+import {
+  projectInstallation,
+  projectInstallationAck,
+  projectInstallationList,
+  projectInstallationUpdateAck,
+} from "../../infrastructure/clients/platform/personal-installation-response.js"
 import {
   exactIdempotencyKey,
   exactInstallationId,
   installationCommandId,
   parseEnabledInput,
   parseInstallInput,
+  parseUpdateInput,
   parseInstallationList,
 } from "../skill-installation-input.js"
 import { readSkillBody as readBody } from "./skill-drafts.js"
@@ -99,7 +110,10 @@ export async function skillInstallationRoute(
     return true
   }
   const cancellation = new AbortController(),
-    timer = setTimeout(() => cancellation.abort(), skillRequestRemaining(request))
+    timer = setTimeout(
+      () => cancellation.abort(new ConnectError("Skill installation deadline exceeded", Code.DeadlineExceeded)),
+      skillRequestRemaining(request),
+    )
   const cancel = () => {
     if (!response.writableEnded) cancellation.abort()
   }
@@ -169,6 +183,25 @@ export async function skillInstallationRoute(
       send(response, 200, { data: await enrich(projectInstallationAck(result)) })
       return true
     }
+    if (path.length === 3 && path[2] === "update" && request.method === "POST") {
+      if (new URL(request.url ?? "", "http://bff.local").search || request.headers["content-type"]?.split(";", 1)[0] !== "application/json")
+        throw new Error("invalid_skill_installation_request")
+      const key = idempotencyKey(request),
+        input = parseUpdateInput(await readBody(request, 65_536, signal))
+      const result = await client.update(
+        {
+          ...common,
+          ...input,
+          installationId: id,
+          commandId: installationCommandId("update", common.tenant, common.subject, id, key),
+          digest: updatePersonalDigest(common.tenant, common.subject, id, input.expectedSourceRef, input.sourceRef),
+        },
+        signal,
+      )
+      const ack = projectInstallationUpdateAck(result, id, input.sourceRef)
+      send(response, 200, { data: await enrich(ack) })
+      return true
+    }
     if (path.length === 3 && path[2] === "enabled" && request.method === "PUT") {
       if (new URL(request.url ?? "", "http://bff.local").search) throw new Error("invalid_skill_installation_request")
       const key = idempotencyKey(request),
@@ -202,6 +235,10 @@ export async function skillInstallationRoute(
       return true
     }
     const value = mapped(error)
+    if (value.status === 504 && !request.complete) {
+      response.shouldKeepAlive = false
+      response.setHeader("connection", "close")
+    }
     send(response, value.status, value.body, value.retryAfter ?? undefined)
     return true
   } finally {

@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto"
+import { strictParseRawJson } from "../infrastructure/raw-json.js"
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u
 const SOURCE = /^skill:(?!skill:)[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u
 const KEY = /^[\x21-\x2b\x2d-\x7e]{1,128}$/u
 export const exactInstallationId = (value: string): string => {
-  if (!ID.test(value)) throw new Error("invalid_skill_installation_request")
+  if (ID.exec(value)?.[0] !== value) throw new Error("invalid_skill_installation_request")
   return value
 }
 export function exactIdempotencyKey(value: string | string[] | undefined): string {
@@ -31,6 +32,27 @@ export function parseEnabledInput(raw: Buffer): { enabled: boolean } {
   const value = strictObject(raw)
   if (Object.keys(value).join(",") !== "enabled" || typeof value.enabled !== "boolean") throw new Error("invalid_skill_installation_request")
   return { enabled: value.enabled }
+}
+export function parseUpdateInput(raw: Buffer): { expectedSourceRef: string; sourceRef: string } {
+  if (raw.length > 65_536) throw new Error("request_body_too_large")
+  try {
+    const value = strictParseRawJson(new TextDecoder("utf-8", { fatal: true }).decode(raw))
+    if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error()
+    const row = value as Record<string, unknown>
+    if (Object.keys(row).sort().join(",") !== "expected_source_ref,source_ref") throw new Error()
+    const expectedSourceRef = row.expected_source_ref,
+      sourceRef = row.source_ref
+    if (
+      typeof expectedSourceRef !== "string" ||
+      typeof sourceRef !== "string" ||
+      SOURCE.exec(expectedSourceRef)?.[0] !== expectedSourceRef ||
+      SOURCE.exec(sourceRef)?.[0] !== sourceRef
+    )
+      throw new Error()
+    return { expectedSourceRef, sourceRef }
+  } catch {
+    throw new Error("invalid_skill_installation_request")
+  }
 }
 /** The formal installed/owned query is a literal substring, not a LIKE expression. */
 export function parsePersonalSkillQuery(value: unknown): string {

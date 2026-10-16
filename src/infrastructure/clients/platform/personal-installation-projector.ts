@@ -16,6 +16,12 @@ function base(fqMethod: string, tenant: string, subject: string, members: Record
 }
 export const installPersonalDigest = (tenant: string, subject: string, sourceRef: string): string =>
   base("kokoro.platform.v1.ProductSkillInstallationService/InstallPersonalSkill", tenant, subject, { source_ref: { present: true, value: sourceRef } })
+export const updatePersonalDigest = (tenant: string, subject: string, installationId: string, expectedSourceRef: string, sourceRef: string): string =>
+  base("kokoro.platform.v1.ProductSkillInstallationService/UpdatePersonalSkillInstallation", tenant, subject, {
+    installation_id: { present: true, value: installationId },
+    expected_source_ref: { present: true, value: expectedSourceRef },
+    source_ref: { present: true, value: sourceRef },
+  })
 export const setPersonalEnabledDigest = (tenant: string, subject: string, installationId: string, enabled: boolean): string =>
   base("kokoro.platform.v1.ProductSkillInstallationService/SetPersonalSkillInstallationEnabled", tenant, subject, {
     installation_id: { present: true, value: installationId },

@@ -23,20 +23,61 @@ export function skillRequestRemaining(request: IncomingMessage): number {
 }
 
 /** Bounded reader does not destroy the incoming stream before its closed 413 reply. */
-export async function readSkillBody(request: IncomingMessage, maxBytes = 65_536): Promise<Buffer> {
-  const chunks: Buffer[] = []
-  let size = 0
-  for await (const chunk of request.iterator({ destroyOnReturn: false })) {
-    if (skillRequestRemaining(request) <= 0) throw new Error("skill_deadline")
-    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
-    size += buffer.length
-    if (size > maxBytes) {
-      request.resume()
-      throw new Error("request_body_too_large")
+export async function readSkillBody(request: IncomingMessage, maxBytes = 65_536, signal?: AbortSignal): Promise<Buffer> {
+  signal?.throwIfAborted()
+  if (skillRequestRemaining(request) <= 0) throw new ConnectError("Skill input deadline exceeded", Code.DeadlineExceeded)
+  if (request.readableEnded) return Buffer.alloc(0)
+  if (request.destroyed) throw new ConnectError("Skill input cancelled", Code.Canceled)
+  return new Promise<Buffer>((resolve, reject) => {
+    const chunks: Buffer[] = []
+    let size = 0,
+      settled = false
+    const cleanup = () => {
+      clearTimeout(timer)
+      request.off("data", data)
+      request.off("end", end)
+      request.off("aborted", aborted)
+      signal?.removeEventListener("abort", aborted)
     }
-    chunks.push(buffer)
-  }
-  return Buffer.concat(chunks)
+    const fail = (error: unknown) => {
+      if (settled) return
+      settled = true
+      cleanup()
+      chunks.length = 0
+      request.pause()
+      reject(error)
+    }
+    const aborted = () => fail(signal?.reason ?? new ConnectError("Skill input cancelled", Code.Canceled))
+    const data = (chunk: Buffer | string) => {
+      if (skillRequestRemaining(request) <= 0) return fail(new ConnectError("Skill input deadline exceeded", Code.DeadlineExceeded))
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+      size += buffer.length
+      if (size > maxBytes) {
+        fail(new Error("request_body_too_large"))
+        request.resume()
+        return
+      }
+      chunks.push(buffer)
+    }
+    const end = () => {
+      if (settled) return
+      settled = true
+      cleanup()
+      resolve(Buffer.concat(chunks))
+    }
+    const timer = setTimeout(() => fail(new ConnectError("Skill input deadline exceeded", Code.DeadlineExceeded)), skillRequestRemaining(request))
+    // Keep a transport error listener until close: aborted can precede ECONNRESET.
+    request.on("error", fail)
+    request.once("close", () => {
+      if (!settled) fail(new ConnectError("Skill input cancelled", Code.Canceled))
+      request.off("error", fail)
+    })
+    request.once("end", end)
+    request.once("aborted", aborted)
+    signal?.addEventListener("abort", aborted, { once: true })
+    request.on("data", data)
+    if (signal?.aborted) aborted()
+  })
 }
 export function skillCommandId(request: IncomingMessage, context: RequestContext, operation: string): string {
   const values = request.rawHeaders.flatMap((name, index) =>

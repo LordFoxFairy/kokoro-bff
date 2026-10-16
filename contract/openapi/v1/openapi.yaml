@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 14.7.0
+  version: 14.8.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -2981,6 +2981,48 @@ paths:
       responses:
         '200':
           { $ref: '#/components/responses/SkillInstallationMutationSuccess' }
+        '400': { $ref: '#/components/responses/SkillInstallationBadRequest' }
+        '413': { $ref: '#/components/responses/SkillInstallationPayloadTooLarge' }
+        '401': { $ref: '#/components/responses/SkillInstallationUnauthorized' }
+        '403': { $ref: '#/components/responses/SkillInstallationMutationForbidden' }
+        '404': { $ref: '#/components/responses/SkillInstallationNotFound' }
+        '409': { $ref: '#/components/responses/SkillInstallationConflict' }
+        '412':
+          { $ref: '#/components/responses/SkillInstallationPreconditionFailed' }
+        '429': { $ref: '#/components/responses/SkillInstallationRateLimited' }
+        '502': { $ref: '#/components/responses/SkillInstallationBadGateway' }
+        '503': { $ref: '#/components/responses/SkillInstallationUnavailable' }
+        '504': { $ref: '#/components/responses/SkillInstallationTimeout' }
+  /v1/skill-installations/{installation_id}/update:
+    parameters:
+      - name: installation_id
+        in: path
+        required: true
+        schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$(?![\s\S])' }
+    post:
+      tags: [Skills]
+      operationId: updatePersonalSkillInstallation
+      summary: Explicitly update one personal Skill installation pin
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: product.skill.install
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expected_source_ref, source_ref]
+              properties:
+                expected_source_ref: { type: string, pattern: '^skill:(?!skill:)[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$(?![\s\S])' }
+                source_ref: { type: string, pattern: '^skill:(?!skill:)[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$(?![\s\S])' }
+      responses:
+        '200':
+          { $ref: '#/components/responses/SkillInstallationUpdateSuccess' }
         '400': { $ref: '#/components/responses/SkillInstallationBadRequest' }
         '413': { $ref: '#/components/responses/SkillInstallationPayloadTooLarge' }
         '401': { $ref: '#/components/responses/SkillInstallationUnauthorized' }
@@ -17183,6 +17225,31 @@ components:
                 data:
                   { $ref: "#/components/schemas/SkillInstallationMutation" },
               }
+    SkillInstallationUpdateSuccess:
+      description: Explicit update receipt; disabled state is preserved and the exact selected source is installed
+      headers:
+        x-request-id: { required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { required: true, schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [data]
+            properties:
+              data:
+                allOf:
+                  - $ref: '#/components/schemas/SkillInstallationMutation'
+                  - type: object
+                    required: [event_id]
+                    properties:
+                      change: { const: upgraded }
+                      event_id: { type: string, minLength: 1, maxLength: 191 }
+                      installation:
+                        type: object
+                        properties:
+                          installed: { const: true }
+                          removed_at: false
     SkillInstallationBadRequest:
       description: Invalid request
       headers:

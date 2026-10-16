@@ -1,3 +1,15 @@
+## SKILLS-UPDATE U3：显式个人安装更新（本地源码已实现，未正常激活；2026-10-16）
+
+既有 U0 决定继续：Browser → Web 同源 adapter → 本仓 `/v1/skill-installations/{installation_id}/update` → Platform `UpdatePersonalSkillInstallation`，不放宽 Install、不由 BFF Remove→Install。先收敛当前连接器组合，再从 owner 精确 commit/digest 生成唯一 Connect client；HTTP projection 6.0 的独立 pin 与 direct service credential 保持，不退回旧 token exchange 或改无关 MCP 消费。
+
+本片扩展现 Skills bounded body reader（等待下一字节时也响应原预算/取消，并保持 413 先回复）及 `skill-installation-input.ts`、`skill-installations.ts`、personal-installation client/projector/response 和现 IAM action 选择；无新目录、DB/receipt writer、进程或依赖。当前 session/tenant/subject fresh admission 后走既有 `install` action，读写仍分别使用 projection/catalog 服务凭据；不是借 enable 权限更新版本，不新增 IAM scope。错误与取消/绝对 10 秒预算沿现 Skills 管线，自动重试为零。
+
+唯一 public OpenAPI 以 additive minor 14.8.0 增一个 operation：POST、必需单 Idempotency-Key、strict 64 KiB UTF-8 JSON 仅 `expected_source_ref`/`source_ref`，拒未知字段/null/duplicate keys；不接受身份、包、digest、enabled 或版本自报。命令 ID 绑定 operation+可信 tenant/user+installation ID+原 key（不含可变 body）；digest 绑定 FQ method+本人 target+installation ID+两 source pins，因此同 key 改任一 pin 必冲突。未知结果保原 key/body，不读取当前安装后悄悄替换原 pin。
+
+200 是 closed `{data}` 更新 ACK：same installation ID、目标 source、installed=true、change=upgraded、必有 event_id/replayed；enabled 保留 owner 返回 false，不能为了试用自动启用。复用 installation leaf/错误组件，但新增只允许 upgraded 的 update response schema；client 边界同时拒错 ID/source/change/removed ACK。412 表示 owner pin/source/lifecycle/fresh replay 绑定失败，可能发生在已提交后的出口，不能据此断言事务未提交，409 保现 receipt conflict/in-progress，503/504 不是可推断失败或已成功。BFF 不从浏览器输入推断同 series/revision，不读 owner DB、不写第二 receipt，不改已提交消息/Run。
+
+验收在现 installation input/HTTP/contract/Connect 文件补独有风险：重复键与未知身份零调用，fresh install action denial/replay denial，same key/pins wire 与 digest 固定，target ACK 负控，disabled 保持、typed错误、取消/超时与原意图重放。真实 listener+正式 generated Connect loopback 不称真实 PG/IAM 组合；后继 App 与正常当前账号 A→B/刷新/未知恢复才是产品验收。复用原分支/PR，本轮不推远端或切正常服务。
+
 ## CV-SVC MCP内部直服务凭据切换（D1，2026-10-13；BFF 源码候选已实现，待配对验收）
 
 本切片只把 BFF→Platform 的 `mcp_personal`、`mcp_admin` workload认证从IAM机器OAuth/token/introspection切换到Platform现本地服务凭据，与已直认证projection保持相同安全I/O规则。BFF用户session、个人权限/catalog管理权限及前后fresh校验不删除；第三方MCP OAuth/PKCE、tenant_execution/proof、Run撤权不在本片。Platform surface白名单/caller/tenant仍是唯一机器准入。

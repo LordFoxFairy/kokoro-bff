@@ -1017,6 +1017,24 @@ message InstallPersonalSkillResponse {
   bool replayed = 4;
 }
 
+// Explicitly advances one existing personal installation to a selected revision.
+message UpdatePersonalSkillInstallationRequest {
+  reserved 100;
+  reserved "execution_proof", "tenant_id", "actor_id", "subject_id", "owner_scope", "target_owner_scope", "product_context";
+  string request_id = 1;
+  kokoro.common.v1.CommandIdentity command = 2;
+  kokoro.platform.v1.SkillInstallationId installation_id = 3;
+  kokoro.platform.v1.SkillSourceRef expected_source_ref = 4;
+  kokoro.platform.v1.SkillSourceRef source_ref = 5;
+}
+
+message UpdatePersonalSkillInstallationResponse {
+  kokoro.platform.v1.ProductSkillInstallation installation = 1;
+  kokoro.platform.v1.SkillInstallationChange change = 2;
+  optional string event_id = 3;
+  bool replayed = 4;
+}
+
 message SetPersonalSkillInstallationEnabledRequest {
   reserved 100;
   reserved "execution_proof", "tenant_id", "actor_id", "subject_id", "owner_scope", "target_owner_scope", "product_context";
@@ -1076,6 +1094,7 @@ message ListPersonalSkillInstallationsResponse {
 }
 
 service ProductSkillInstallationService {
+  rpc UpdatePersonalSkillInstallation(kokoro.platform.v1.UpdatePersonalSkillInstallationRequest) returns (kokoro.platform.v1.UpdatePersonalSkillInstallationResponse);
   rpc InstallPersonalSkill(kokoro.platform.v1.InstallPersonalSkillRequest) returns (kokoro.platform.v1.InstallPersonalSkillResponse);
   rpc SetPersonalSkillInstallationEnabled(kokoro.platform.v1.SetPersonalSkillInstallationEnabledRequest) returns (kokoro.platform.v1.SetPersonalSkillInstallationEnabledResponse);
   rpc RemovePersonalSkillInstallation(kokoro.platform.v1.RemovePersonalSkillInstallationRequest) returns (kokoro.platform.v1.RemovePersonalSkillInstallationResponse);

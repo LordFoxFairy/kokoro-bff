@@ -137,6 +137,23 @@ export function projectInstallationAck(value: {
     replayed: value.replayed,
   }
 }
+export function projectInstallationUpdateAck(value: Parameters<typeof projectInstallationAck>[0], installationId: string, sourceRef: string) {
+  try {
+    assertSkillWireKnown(value)
+  } catch (cause) {
+    throw new Error("skill_installation_response_invalid", { cause })
+  }
+  const ack = projectInstallationAck(value)
+  if (
+    ack.change !== "upgraded" ||
+    ack.installation.installation_id !== installationId ||
+    ack.installation.source_ref !== sourceRef ||
+    !ack.installation.installed ||
+    ack.installation.removed_at !== undefined
+  )
+    throw new Error("skill_installation_response_invalid")
+  return ack
+}
 export function projectInstallationList(value: { installations: ProductSkillInstallation[]; page?: { nextCursor?: string | undefined } | undefined }) {
   const ids = new Set<string>()
   const data = value.installations.map((item) => projectInstallation(item))

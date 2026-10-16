@@ -88,6 +88,7 @@ export function skillActionForRequest(method: string, path: string[]): import(".
     }
     return method === "POST" && path.length === 4 ? (actions[path[3]!] ?? null) : null
   }
+  if (path.length === 3 && path[0] === "skill-installations" && path[2] === "update" && method === "POST") return "install"
   if (path[0] === "skill-installations" && method !== "GET")
     return method === "DELETE" ? "remove_installation" : path.length === 1 ? "install" : "set_installation_enabled"
   if (path[0] === "self" && path[1] === "skills" && method === "POST")

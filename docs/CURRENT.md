@@ -1,3 +1,15 @@
+## SKILLS-UPDATE U3：显式更新 BFF 源码已接，App/正常产品验收未完成（2026-10-16）
+
+组合基线 `d845164` 保留当前 MCP/Custom API 生命周期与 direct service credential；本地新增 public 14.8.0 的 `POST /v1/skill-installations/{installation_id}/update`（139 operations）。Connect 唯一 current pin 为 Platform `11cb7604a5385047fd872cedc8a55273eae59043`，从精确 Git publication 复制 Proto/descriptor/update profile/provenance 并正规生成；原 current Connect vendor 被替换，不留双读。独立 HTTP projection `6b4c9db`/6.0 pin、SQL/schema、依赖与运行配置保持原字节。
+
+更新每次（含重放）fresh session/tenant + IAM install action；strict UTF-8 两 pin 输入拒重复键/未知身份/尾换行/null。command ID 绑定 operation/可信本人/安装/key，digest 绑定两 pin，未知重放仍用原 A→B/key。同 ID、精确目标、installed=true、upgraded/event_id、无 unknown wire 是 ACK 出口条件，enabled=false 不被自动打开。无 BFF receipt/数据 writer、Remove→Install、自动重试或运行时协议 fallback。
+
+审查补收旧共享 reader 的实际缺口：partial JSON 停住时旧 iterator 不再收到 chunk，超过原绝对预算仍等；新增实际 listener 先 RED（直到客户端 1 秒兜底仍无返回），修为按原单调预算/取消清理 reader，update 到期返回 typed 504/no-store/Connection:close，未完成请求不再 keep-alive。最终用例在回复后等待自然 close、不由客户端主动 destroy，owner 零调用；413 排空/先回复和其它 Skills 正常输入保持。
+
+主方 Node22 本地候选验收：lint/typecheck/build、完整 contract:check 均 exit0（contract 661 PASS/0 SKIP；3 项既存 lint warnings），默认 test **1247 PASS/0 FAIL/3 原资源 SKIP**；具名 input/HTTP/pin 32 PASS。官方 generated binary Connect loopback验证 exact request/credential/FQ method、原 key/pin 重放、改 pin 同 key 409、disabled 保持与错误 ACK 拒绝；owner 独立 digest fixture一致。真实 IAM/Platform/Storage/PG 正常组合、本地当前账号 A→B/刷新和 App 显式更新仍未验；loopback 不是 owner 事务证明，后者见 Platform 的独占 PG 证据。
+
+正常 physical BFF/Platform/App 本轮均未重启、切分支或修改配置，没有模型/资金调用、充值、远端 CI/PR/push/merge 或 Root gitlink；保留原 PR。下一步为 App 固定 BFF contract、同版本更新/试用意图与正常产品旅程。MC-01 的连接版本切换已获用户明确确认，沿原 System/Agent 计划实施；正式资金许可前不发送模型请求。完整 Skills/Admin/MCP 目标仍未完成。
+
 ## App API 修复当前切片（2026-10-13）
 
 BFF 基线 `95fbd894ee01053f6c9cabeca481e50151cd4f15`；Billing owner 固定 `1ceeae550f05857d1e7fa0da1e83af23a552f0ca` 的唯一 v1 artifact，Platform HTTP 固定 `6b4c9db6719d2f5fd37a752921e603f4b0221de6` 的 6.0.0 artifact。生成器实际输入、vendor 字节与 manifest 一致，不仅核对声明 digest；旧 projection OAuth/token source 已删除。独立 Connect 消费保持其固定 Proto bundle，不作为 HTTP fallback。

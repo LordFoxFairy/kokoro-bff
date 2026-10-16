@@ -1,3 +1,11 @@
+## SKILLS-UPDATE U3：个人安装更新 public 契约（本地源码已实现，未正常激活；2026-10-16）
+
+唯一机器源 `contract/openapi/v1/openapi.yaml` 现为 14.8.0 additive：`POST /v1/skill-installations/{installation_id}/update`，operationId `updatePersonalSkillInstallation`，public/beta、owner kokoro-bff、idempotency required、permission `product.skill.install`（复用当前 IAM install action，无新授权词）。body 必有且仅有两个严格 source-ref 字符串 `expected_source_ref`/`source_ref`；path ID、单 Idempotency-Key 沿现安装闭集，禁止 query/重复 JSON keys/未知键/显式 null/非 UTF-8/超 65536 bytes。内容类型仅 application/json，身份与 command digest 不由 body 提供。
+
+成功 200 `{data:{installation,change:"upgraded",event_id,replayed}}`；安装 leaf 沿唯一 SkillInstallation，event_id 必需。实现再核 ID 等于 path、source_ref 等于请求目标、installed=true 且无 removed_at，保 enabled 的 false。错误沿现状态专属组件：400 invalid_skill_installation_request/缺 key，401/403 当前 session/service/action denial，404 不可见，409 idempotency_conflict/command_in_progress，412 precondition_failed，413 body too large，429 rate_limited，502 response_invalid，503 dependency_unavailable，504 dependency_timeout；不暴露内部异常/provider响应。每次含 replay 都重新用户/动作准入，响应 no-store 与 x-request-id。
+
+owner 唯一 Proto 的 Update 请求只含 request_id/command/installation_id/expected_source_ref/source_ref，使用原 `product-personal-installation/1.0.0`。本仓固定 owner `11cb7604a5385047fd872cedc8a55273eae59043` 的 Proto/descriptor/update profile/provenance digest 并正规生成，不导入 sibling 源码；HTTP projection 的独立 pin 不因本 RPC 加法移动。本地 client/route 与机器已接线；正常服务未切换，本节不代表 API 已正常激活；旧 Install/Enable/Remove 各自语义不变。
+
 ## CV-SVC MCP workload认证profile（D1，2026-10-13；BFF 源码候选已实现，待配对验收）
 
 现 `/browser/v1/mcp/*` 与 `/v1/admin/mcp/providers*` 的HTTP方法/body/成功错误/CAS/幂等不变，Platform `ProductMcpPersonalService`、`McpProviderAdminService` Proto和固定generated输入不变。只切这两internal-owner caller认证：HTTP/Connect Bearer内容是opaque本地service credential，caller=kokoro-bff、surface严格mcp_personal或mcp_admin、tenant绑定；不再取得IAM机器OAuth token，不包含第三方用户OAuth变化。

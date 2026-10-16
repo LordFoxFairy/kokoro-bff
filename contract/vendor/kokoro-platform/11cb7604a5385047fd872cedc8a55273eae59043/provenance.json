@@ -25,7 +25,8 @@
     "execution-operations/mcp-private-server-v1.json",
     "execution-operations/custom-api-v1.json",
     "execution-operations/custom-api-request-vectors-v1.json",
+    "execution-operations/skill-installation-update-v1.json",
     "openapi/platform-http.openapi.json"
   ],
-  "combinedSha256": "0c108712a30bf1ff7faf886bae9dd7dd46e776ce9c4ed974f100922d5265f719"
+  "combinedSha256": "40101e4f0b1b3501c7af468076313fd640c52ab49bf730928f06ea36f396cbbf"
 }

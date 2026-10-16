@@ -51,3 +51,30 @@ test("P4 query Unicode scalar and cursor negative boundaries are exact", () => {
     assert.throws(() => parseInstallationList("/v1/skill-installations?" + new URLSearchParams({ cursor })), /invalid_skill_installation_request/u)
   assert.equal(parsePersonalSkillQuery("  😀  "), "😀")
 })
+
+test("explicit update requires two exact pins and rejects ambiguous raw JSON", async () => {
+  const { parseUpdateInput } = await import("../dist/http/skill-installation-input.js")
+  const valid = { expected_source_ref: "skill:one", source_ref: "skill:two" }
+  for (const value of [valid, { source_ref: "skill:two", expected_source_ref: "skill:one" }])
+    assert.deepEqual(parseUpdateInput(Buffer.from(JSON.stringify(value))), { expectedSourceRef: "skill:one", sourceRef: "skill:two" })
+  for (const raw of [
+    "{}",
+    '{"source_ref":"skill:two"}',
+    '{"expected_source_ref":null,"source_ref":"skill:two"}',
+    '{"expected_source_ref":"skill:one","source_ref":"skill:two","tenant_id":"forged"}',
+    '{"expected_source_ref":"skill:one","source_ref":"skill:two","source_ref":"skill:three"}',
+    '{"expected_source_ref":"skill:one","source_ref":"skill:two\\n"}',
+  ])
+    assert.throws(() => parseUpdateInput(Buffer.from(raw)), /invalid_skill_installation_request/u)
+  assert.throws(() => parseUpdateInput(Buffer.from([0xff])), /invalid_skill_installation_request/u)
+  assert.throws(() => parseUpdateInput(Buffer.alloc(65_537, 32)), /request_body_too_large/u)
+})
+
+test("update digest matches the owner vector and binds both pins without changing the key identity", async () => {
+  const { updatePersonalDigest } = await import("../dist/infrastructure/clients/platform/personal-installation-projector.js")
+  const { installationCommandId } = await import("../dist/http/skill-installation-input.js")
+  assert.equal(updatePersonalDigest("t", "u", "i", "skill:one", "skill:two"), "ca0ed33c69bd4fd4d1580cb74934f0aeaa5aa0cb3aaf0e8b6233a5336d7f040a")
+  assert.notEqual(updatePersonalDigest("t", "u", "i", "skill:three", "skill:two"), updatePersonalDigest("t", "u", "i", "skill:one", "skill:two"))
+  assert.notEqual(updatePersonalDigest("t", "u", "i", "skill:one", "skill:three"), updatePersonalDigest("t", "u", "i", "skill:one", "skill:two"))
+  assert.notEqual(installationCommandId("update", "t", "u", "i", "key"), installationCommandId("install", "t", "u", "i", "key"))
+})
