@@ -595,3 +595,17 @@ test("R124 Chat snapshot always exposes nullable anchored process without chargi
   assert.equal(result?.execution_process, null)
   assert.equal(result?.messages[0]?.content.length, longMessage.length)
 })
+
+test("shared tasks service forwards trusted owner, anchor and the original absolute lifetime", async () => {
+  const calls: unknown[][] = []
+  const result = { items: [], nextPosition: null }
+  const service = new ChatApplicationService({
+    async listOwnedSharedTasks(...args: unknown[]) {
+      calls.push(args)
+      return result
+    },
+  } as never)
+  const signal = new AbortController().signal
+  assert.equal(await service.listOwnedSharedTasks("tenant", "owner", 20, null, signal, 12345), result)
+  assert.deepEqual(calls, [["tenant", "owner", 20, null, signal, 12345]])
+})

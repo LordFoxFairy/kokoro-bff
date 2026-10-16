@@ -174,7 +174,74 @@ test("invitations and roles use their distinct generated owner schemas", async (
       ],
       meta: { next_cursor: null },
     },
-    roles: { data: [{ role_id: null, name: "owner", kind: "builtin", permissions: { member: ["read"], tenant: ["read"] } }], meta: { next_cursor: null } },
+    roles: {
+      data: [
+        {
+          role_id: null,
+          name: "owner",
+          kind: "builtin",
+          permissions: {
+            organization: ["update"],
+            member: ["create", "read", "update", "delete"],
+            invitation: ["create", "read", "cancel"],
+            ac: ["create", "read", "update"],
+            tenant: ["read"],
+            audit: ["read"],
+            platform: ["execute"],
+            skill: [
+              "create_draft",
+              "create_version",
+              "begin_upload",
+              "complete_upload",
+              "abort_upload",
+              "validate_draft",
+              "publish",
+              "withdraw",
+              "set_status",
+              "install",
+              "set_installation_enabled",
+              "remove_installation",
+              "update_draft",
+              "discard_draft",
+              "set_publication_audience",
+            ],
+          },
+        },
+        {
+          role_id: null,
+          name: "admin",
+          kind: "builtin",
+          permissions: {
+            organization: ["update"],
+            member: ["create", "read", "update", "delete"],
+            invitation: ["create", "read", "cancel"],
+            ac: ["read"],
+            tenant: ["read"],
+            audit: ["read"],
+            platform: ["execute"],
+            skill: [
+              "create_draft",
+              "create_version",
+              "begin_upload",
+              "complete_upload",
+              "abort_upload",
+              "validate_draft",
+              "publish",
+              "withdraw",
+              "set_status",
+              "install",
+              "set_installation_enabled",
+              "remove_installation",
+              "update_draft",
+              "discard_draft",
+              "set_publication_audience",
+            ],
+          },
+        },
+        { role_id: null, name: "member", kind: "builtin", permissions: { member: ["read"], ac: ["read"], tenant: ["read"], platform: ["execute"] } },
+      ],
+      meta: { next_cursor: null },
+    },
   }
   const owner = await listen(
     createServer((request, response) => {
@@ -265,3 +332,30 @@ test("disconnecting the browser cancels the in-flight IAM Team read", async () =
     if (timeout !== undefined) clearTimeout(timeout)
   }
 })
+
+for (const [label, permissions] of Object.entries({
+  unknownDomain: { platform: ["execute"], unknown: ["read"] },
+  unknownPlatformAction: { platform: ["unknown"] },
+  unknownSkillAction: { skill: ["unknown"] },
+  emptyPlatform: { platform: [] },
+  emptySkill: { skill: [] },
+})) {
+  test(`SET13 Team rejects ${label} in the actual owner response`, async () => {
+    const owner = await listen(
+      createServer((_request, response) => {
+        response.writeHead(200, { "content-type": "application/json", "cache-control": "no-store", "x-request-id": "iam-set13" })
+        response.end(JSON.stringify({ data: [{ role_id: null, name: "member", kind: "builtin", permissions }], meta: { next_cursor: null } }))
+      }),
+    )
+    const bff = await listen(
+      createBffServer(config(owner), {
+        businessStore: null,
+        readiness: async () => undefined,
+        sessionAdmission: new SessionAdmissionDouble({ "team-token": { namespace: "tenant-verified", userId: "user-1" } }),
+      }),
+    )
+    const response = await fetch(`${bff}/v1/team/roles`, { headers: userHeaders() })
+    assert.equal(response.status, 502)
+    assert.equal(((await response.json()) as { error: { code: string } }).error.code, "team_owner_response_invalid")
+  })
+}

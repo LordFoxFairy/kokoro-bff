@@ -1,3 +1,7 @@
+import { restorePublic153ArchivedTasksContract } from "../../scripts/archived-tasks-public-contract.mjs"
+import { restorePublic152SharedTasksContract } from "../../scripts/shared-tasks-public-contract.mjs"
+import { restorePublic151AccountProfileContract } from "../../scripts/account-profile-public-contract.mjs"
+import { restorePublic15AccountSessionContract } from "../../scripts/account-session-public-contract.mjs"
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
 import { readFile } from "node:fs/promises"
@@ -2680,3 +2684,20 @@ for (const [label, path] of [
     assert.equal(constraint.maxLength, 256)
   })
 }
+
+test("SET13 exact inverse preserves the entire committed public14.7 artifact", async () => {
+  const { restorePublic15TeamPermissionsContract } = await import("../../scripts/verify-openapi.ts")
+  const source = await readFile(currentOpenapiUrl, "utf8")
+  assert.equal(
+    createHash("sha256")
+      .update(
+        restorePublic15TeamPermissionsContract(
+          restorePublic15AccountSessionContract(
+            restorePublic151AccountProfileContract(restorePublic152SharedTasksContract(restorePublic153ArchivedTasksContract(source))),
+          ),
+        ),
+      )
+      .digest("hex"),
+    "598407a3dfc17d62eb4fe703837b836ba85f05b7102a018dac160351ad807c19",
+  )
+})

@@ -1,3 +1,7 @@
+import { restorePublic153ArchivedTasksContract, archivedTasksParentBaseline } from "./archived-tasks-public-contract.mjs"
+import { restorePublic152SharedTasksContract, sharedTasksParentBaseline } from "./shared-tasks-public-contract.mjs"
+import { restorePublic151AccountProfileContract, accountProfileParentBaseline } from "./account-profile-public-contract.mjs"
+import { restorePublic15AccountSessionContract, accountSessionParentBaseline } from "./account-session-public-contract.mjs"
 import { readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
@@ -88,6 +92,34 @@ function expectedIdempotency(operation) {
 }
 
 export function inspectOpenApiGovernance(source) {
+  if (/^  version: (?:15\.4|16\.0)\.0$/mu.test(source)) {
+    try {
+      source = restorePublic153ArchivedTasksContract(source)
+    } catch (error) {
+      return [error.message]
+    }
+  }
+  if (/^  version: 15\.3\.0$/mu.test(source)) {
+    try {
+      source = restorePublic152SharedTasksContract(source)
+    } catch (error) {
+      return [error.message]
+    }
+  }
+  if (/^  version: 15\.2\.0$/mu.test(source)) {
+    try {
+      source = restorePublic151AccountProfileContract(source)
+    } catch (error) {
+      return [error.message]
+    }
+  }
+  if (/^  version: 15\.1\.0$/mu.test(source)) {
+    try {
+      source = restorePublic15AccountSessionContract(source)
+    } catch (error) {
+      return [error.message]
+    }
+  }
   const errors = []
   const operations = parseOpenApiOperations(source)
   if (operations.length === 0) return ["OpenAPI paths must declare at least one HTTP operation"]
@@ -141,6 +173,38 @@ export function inspectOpenApiGovernance(source) {
 }
 
 export function compareOperationBaseline(source, baseline) {
+  if (/^  version: (?:15\.4|16\.0)\.0$/mu.test(source)) {
+    try {
+      source = restorePublic153ArchivedTasksContract(source)
+      baseline = archivedTasksParentBaseline(baseline)
+    } catch (error) {
+      return [error.message]
+    }
+  }
+  if (/^  version: 15\.3\.0$/mu.test(source)) {
+    try {
+      source = restorePublic152SharedTasksContract(source)
+      baseline = sharedTasksParentBaseline(baseline)
+    } catch (error) {
+      return [error.message]
+    }
+  }
+  if (/^  version: 15\.2\.0$/mu.test(source)) {
+    try {
+      source = restorePublic151AccountProfileContract(source)
+      baseline = accountProfileParentBaseline(baseline)
+    } catch (error) {
+      return [error.message]
+    }
+  }
+  if (/^  version: 15\.1\.0$/mu.test(source)) {
+    try {
+      source = restorePublic15AccountSessionContract(source)
+      baseline = accountSessionParentBaseline(baseline)
+    } catch (error) {
+      return [error.message]
+    }
+  }
   const current = new Map(
     parseOpenApiOperations(source).map((operation) => [`${operation.method} ${operation.path}`, operation.fields.get("operationId") ?? ""]),
   )
@@ -192,6 +256,7 @@ async function main() {
       operation.fields.get("operationId") === "getManagedPersonalSkillPackage" || operation.fields.get("operationId") === "getPersonalSkillInstallationPackage",
   )
   const errors = [
+    ...(/^  version: (?:15\.4|16\.0)\.0$/mu.test(openapi) && parsedBaseline.operations.length === 146 ? [] : ["SET49 current public release must be16.0/146"]),
     ...inspectOpenApiGovernance(openapi),
     ...compareOperationBaseline(openapi, parsedBaseline.operations),
     ...(parsedBaseline.operations.length === currentOperations.length ? [] : ["public operation inventory must contain one entry for every current operation"]),

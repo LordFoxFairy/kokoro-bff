@@ -11,9 +11,9 @@ const output = path.join(root, "src/generated/billing-http")
 const manifestPath = path.join(root, "contract/dependencies/billing-http.json")
 const configPath = path.join(root, "openapi-ts.billing.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "1ceeae550f05857d1e7fa0da1e83af23a552f0ca"
+const ownerCommit = "cd92c728d8f658f54b254d5cbfd28156ca426dc1"
 const vendorPath = path.join(root, `contract/vendor/kokoro-billing/${ownerCommit}/openapi.yaml`)
-const ownerDigest = "35b4a2d1d178f6a548fe67460c8e8cbba9eb247296f9051f6ec23060235baff8"
+const ownerDigest = "b413db8965ed60683435adb7f2ce8650a7ca7bf7bee0989e8f83afc3d9f846af"
 const generatedFiles = [
   "client.gen.ts",
   "client/client.gen.ts",
@@ -160,11 +160,22 @@ function closeGeneratedObject(source, schemaName) {
 async function closeOwnerResponseSchemas(directory) {
   const file = path.join(directory, "zod.gen.ts")
   let source = await readFile(file, "utf8")
-  for (const schemaName of ["ErrorResponse", "Page", "CreditAccount", "CreditAccountResponse", "LedgerEntry", "CreditLedgerResponse"]) {
+  for (const schemaName of [
+    "ErrorResponse",
+    "CatalogItem",
+    "CatalogResponse",
+    "Page",
+    "CreditAccount",
+    "CreditAccountResponse",
+    "LedgerEntry",
+    "CreditLedgerResponse",
+  ]) {
     source = closeGeneratedObject(source, schemaName)
   }
   const errorResponseStart = source.indexOf("export const zErrorResponse =")
   source = closeObjectExpression(source, "  error: z.object(", "ErrorResponse.error", errorResponseStart)
+  const catalogResponseStart = source.indexOf("export const zCatalogResponse =")
+  source = closeObjectExpression(source, "  data: z.object(", "CatalogResponse.data", catalogResponseStart)
   const ledgerResponseStart = source.indexOf("export const zCreditLedgerResponse =")
   source = closeObjectExpression(source, "  data: z.object(", "CreditLedgerResponse.data", ledgerResponseStart)
   await writeFile(file, source)
@@ -211,7 +222,7 @@ async function generate(directory) {
   const sdk = await readFile(path.join(directory, "sdk.gen.ts"), "utf8")
   assert.deepEqual(
     [...sdk.matchAll(/^export const (\w+) =/gmu)].map((match) => match[1]).sort(),
-    ["getMyCreditAccount", "getMyCreditLedger"],
+    ["getCatalog", "getMyCreditAccount", "getMyCreditLedger"],
     "Billing HTTP generated operation surface drifted",
   )
   const prettier = path.join(root, "node_modules/prettier/bin/prettier.cjs")
@@ -240,8 +251,8 @@ async function manifestFor(directory) {
     owner: {
       repository_path: "apps/kokoro-billing",
       repository_commit: ownerCommit,
-      contract_version: "3.0.0-experimental.3",
-      contract_path: "contract/openapi/v1/openapi.yaml",
+      contract_version: "3.0.0-experimental.5",
+      contract_path: "contract/openapi/v2/openapi.yaml",
       contract_sha256: ownerDigest,
     },
     generator: {

@@ -1,3 +1,83 @@
+## SET49：主线与设置归档合同集成
+
+合并主线已批准的MCP public四写删除及既有设置/归档能力，以16.0.0/146发行（breaking删除，不冒minor）。integration-public-contract.mjs逐字节验证完整当前合同及有序清单，精确恢复原15.4全文/150后委托全部原inverse和oracle；main贡献保留，不修改Skills/MCP业务。Billing唯一pin使用正式experimental.5发行，保三读与严格专用404；当前验证进行中，正常服务不变。
+
+## SET-47 Conversation 独立整理状态 D0（2026-10-15；仅 canonical 设计）
+
+传输边界补充：exact encodeURIComponent wire不变，BFF原生raw HTTP仍可读取历史ID `.`/`..`；WHATWG URL（含fetch）会规范化dot path segments，百分号编码点也不能解决。Web后继须对此两ID在fetch前拒绝并明确禁用归档/恢复说明，不做双重解码/fallback/新API；不能宣所有历史ID浏览器皆可操作。普通conv与Unicode ID不受此限制。
+
+当前阶段更新：四操作实现候选已完成，正常outer gate与正规150清单已接线，原15.3全文/146及全部历史inverse继续；下方“设计阶段未接runtime/门”的描述保留为D0历史。源码纯门证据与未验PG/正常组合见CURRENT，未发行不得消费者固定工作树artifact。旧正常run与DB未改。
+
+GET `/v1/sessions/{session_id}/archive` 为同一归档路径上的正式 chat.read/idem none 本人状态读取，成功同 `{data:{session_id,archived_at}}`，未归档明确返回NULL，foreign/deleted/失效父同404。Web active任务列表合成必须正式读state：confirmed archived不合成；404新draft按原行为；未知失败不能当unarchived。由此新增四operations、三paths，总150，旧Chat响应字段不变。
+
+路径 session_id 接受任意合法非空 UTF8 历史 Conversation ID（包括Unicode/大小写），按 exact encodeURIComponent 后的单segment可逆canonical百分号表示处理，不能抄move的conv_UUID限制；拒非法编码而不trim/归一化ID。分页同毫秒Unicode/BMP/astral与大小写按C UTF8字节序必须实测。后继多primitive query/command沿TS§6.7用具名Readonly对象，不复制旧长位置参数。
+
+运行裁决：保留旧正常run，不重启/ALTER/清事实。后继正式BFF/Web pin由Root用formal launcher现--web-port开启独立新run，复用现PG/Redis服务器但使用自有fixtureDB/namespaces；canonical fresh install即可。不建立在线升级或migration链，本片没有运行资源操作。
+
+唯一事实 owner 为 BFF，唯一 SQL-first schema 仍 `database/schema.sql`，不新增表/FK/跨owner SQL/Redis/seed。本片仅在 bff_conversation 新增 nullable `archived_at TIMESTAMPTZ(3)`，默认 NULL；原 status active/deleted 和 deleted_at 约束保持原字节。归档不是 tombstone，不借 archived status 改变原执行/分享/删除可见性。
+
+新增 partial indexes：本人 archived_at DESC + conversation_id COLLATE C ASC（active且archived_at非NULL）；本人及本人Project的 updated_at 原排序（active且archived_at NULL）。保留原索引，不在设计阶段擅删旧直接读取/执行可能依赖的访问路径；实际计划/冗余与写成本由 Root 后继自有代表性 PG EXPLAIN ANALYZE BUFFERS 核实，本片未跑。没有精度推断：created/updated/deleted原为毫秒，本字段同精度。
+
+普通列表只 archived_at IS NULL；归档列表只 status=active且archived_at IS NOT NULL，WHERE每次带tenant_id/owner_id。父规则：project_ref IS NULL才无父，其他包括空串必须EXISTS同tenant/owner/未删Project、ID或slug匹配；歧义/损坏不修复、不外泄。SELECT四字段：conversation_id→session_id、title原值、archived_at UTC毫秒、project_ref原值。keyset严格 `(archived_at < cursorTime OR (archived_at = cursorTime AND conversation_id COLLATE "C" > cursorId COLLATE "C"))`，ORDER BY archived_at DESC,conversation_id COLLATE "C" ASC；limit+1。身份/limit绑定cursor只限制遍历，不替代SQL授权，无跨页快照。
+
+事务固定 Project（canonical ID排序）→Conversation，重读移动后的project_ref并在总预算内最多4次重试。active owner及有效父先验，再查现bff_idempotency_receipt；archive-state scope tenant/subject/key，fingerprint action/id。同scope不同fingerprint409，同fingerprint零写返回旧receipt。fresh同状态不改任何Conversation时刻，但可写receipt；fresh archive从NULL设CURRENT_TIMESTAMP(3)，fresh restore从非NULL设NULL，状态变化才更新updated_at。所有相反命令行锁串行，无额外revision列/expected-state CAS。唯一receipt竞争回滚败方事务再读winner，不能留下部分归档。
+
+delete先胜→404，包括历史receipt；archive先胜→delete照常执行原完整清理。Project delete不增加unarchived过滤，继续删除归档子任务；move/rename不清archived_at、不隐式恢复，分享/Run/consumer/Message/Artifact/outbox事实不因归档改变。归档列可以随deleted tombstone保留历史值；status约束仍是唯一删除判断，任何restore不得更改status/deleted_at。现receipt retention沿原规范，不新增永久exactly-once承诺。
+
+V1不维护migration链/runner/ledger。更新canonical仅支持后继fresh install；CREATE TABLE IF NOT EXISTS不会升级现库，新增索引在旧表缺列时也不能直接应用。运行旧库保持原状；Root裁决为后继独立新run自有fixture fresh install，不做在线升级/回退，不以db:apply-schema假装升级旧库完成。当前未安装/改DB/跑PG测试，所有真实SQL、并发与性能门均待后继；普通非Nest入口未迁移，本片不新增第二框架。
+
+## SET-21 真实 owner 数据验证（2026-10-15）
+
+canonical schema保持原字节；Share.created_at/expires_at/revoked_at为TIMESTAMPTZ(3)，毫秒wire不改变事实。Root正规HTTP创建/分享/读取/撤销、公有访问失效、foreign/expiry/orphan/合法旧title及C字节ID验证通过，读取前后同owner三表事实保持。自有测试库5000合成Share的实际EXPLAIN及锁等待到期后同pool恢复通过，查询样本见CURRENT；当前没有证据要求新增索引，未授DDL。只有Root新建fixture库被清理，共享实例/正常库保持，正常Chat-off未seed数据冒UI正向。
+
+## SET-21 本人有效任务分享读取（2026-10-15；Root真实RED后具名源码准入）
+
+新列表ID排序和keyset显式COLLATE "C"字节序，避免当前en_US.utf8与wire比较不一致；title合法性以原事实边界为准，btrim只普通空格，不用JS trim或全长200重复猜限制。原值保真、总输出有界，canonical schema不改。
+
+具名读取实现已授，canonical schema/依赖/资源仍禁止worker修改。Root后继实际PG事实和EXPLAIN验证前不宣称数据或性能门通过。
+
+现SQL-first database/schema.sql是唯一canonical，保持原字节；没有新表、column、cache、receipt、DDL或其他owner SQL。事实唯一bff_share/bff_conversation/bff_project，使用原kokoro_bff pool。分享列表不是另一份业务真源，也不拥有文件分享/归档/授权应用。
+
+同一SELECT以可信tenant/subject过滤Conversation owner/status=active，Share同tenant/conversation、resource_kind=conversation、revoked_at NULL且expires_at NULL或>statement_timestamp()。任何非NULL project_ref（含空串）必须EXISTS同tenant/owner/未删除Project，按现ID或slug规则；失效父不返回，读取不顺带修复orphan。只SELECT conversation_id/title/share.created_at/expires_at，不拉capability share_id/url，也无N+1/跨owner JOIN。
+
+ORDER BY share.created_at DESC,conversation_id ASC，严格小于时间或同毫秒更大ID，limit+1判next。safe item shared_at映射真实created_at；无任务完成事实推导。没有跨页快照；新增/撤销/到期/父状态变化影响未来请求，cursor不授权、非签名且每页重核本人过滤。超界或非法表示503，不截断或冒空。
+
+现active share唯一索引和Conversation owner/Project索引可保证事实关系及基本访问，没有shared_at排序覆盖；先Root实跑代表性EXPLAIN ANALYZE BUFFERS，再决定是否另授canonical索引，不为未测性能先加DDL。读只在一个有界只读事务/精确leased client内设置剩余statement/lock预算，取消/超时销毁精确连接、晚connect release，绝不停pool/共享PG/Redis。
+
+Root后验disposable fixture经正式HTTP message创建真实Conversation→share→list→revoke→list/public404；idle worker不执行模型且不冒已完成任务。专项expiry/orphan SQL须明确owner测试数据；不得seed正常应用的任务/分享来冒浏览器正向。正常Chat-off未证已有本人任务，空态可先验，正向保持具体后继。三设计已独审无确定P1/P2；源码/资源/SQL仍待后继准入。
+
+## SET-19 姓名的零持久化 public projection（2026-10-15；真实owner验证通过）
+
+实际HTTP保存及CAS/撤销已由Root在测试自有IAM PostgreSQL/Redis验证并完整清理；BFF canonical schema及其他数据owner字节保持，仍没有本片持久化事实。证据与消费者未决项见CURRENT顶部。
+
+IAMc64faa7992301f31495e163d04049c48a23d0225唯一持有User.name、Session/资格、原值CAS与同事务Audit。本仓只在具名HTTP请求生命周期内转发已准入的本人Bearer/name/expected_name，消费正式internal0.13.0 ACK并严格投影subject/name；无BFF持久化姓名、身份缓存、User schema、SQL/跨库JOIN、Redis/receipt/outbox或scope/resource登记写。database/schema.sql字节保持，不需要db:apply-schema。
+
+name条件写与no-op/updatedAt由IAM裁决。BFF不以本地cache/输入内容制造成功，不使用通用mutation Idempotency-Key/businessStore，也不假定取消意味着未提交；失去ACK必须由Web重新userinfo读取，重新提交仍显式带真实original。成功只保证owner提交点，不保证后续另一个session没有修改或撤销；owner返回不存在/禁用tenant按资格拒绝，不作target姓名404。
+
+唯一跨仓build-time事实为固定commit/version/digest immutable IAM artifact，旧单pin删除；生成类型仅用于wire校验/结果投影，不能import IAM源/ORM/私有SQL。新public15.2只添profile endpoint及closed组件，旧15.1完整逆恢复。所有正常数据和Skills/连接器事实不变；资源测试仅Root自己的正规fixture，未完成正常Web保存/刷新验收。
+
+## SET-18 登录 Session 的非持久公开投影（D0 独审通过，2026-10-14）
+
+IAM正式错误缓存修补已发行284bfd8fea91d57dae18fa2b7c772d75c7b6dcd9，internal0.12.0 artifact仍为SHA256 f6f3588d0fe52e5b3eed57e117e25b991caabc9e2825d1a0edcf9149f6a3e26b。本仓V2业务已冻审并真实BFF→IAM通过，public15.1.0候选SHA2565972f7be07a0117d8ee036fa4e742da7942b3c864d009c2847e70e69112a747d、canonical/inventory144；正式单pin更新及两新增消费元数据/格式回归修补已完成并接收，源码任务仍沿Root卡。本仓待Root正式发行，尚未正常激活；Skills/连接器业务排除，Root保留docs/Git/资源与最终验收。
+
+BFF无本片持久事实。database/schema.sql保持原字节SHA256 cb1b6810010bbdb9ac8f1c30e42ef0e59ef90670f3742b769d85521d750be421；不加表/索引/Redis/receipt/cache、不查询IAM SQL或跨owner JOIN。现有BFF Conversation/聊天Session不承接登录Session，已有Account身份也不成为设备事实副本。
+
+IAM canonical Session、OAuth token、Audit及无外键/Prisma完整性是唯一owner。BFF仅在一次请求内携带受信Bearer/context和严格安全投影，依其正式cursor保持原顺序/分页，不decode/重签或伪造快照。current单独输出，others本人active且排除current；列表跨IAM账户tenant，不把activeOrganizationId当登录来源，描述未知不补城市、UA或last-active。
+
+撤销成功由IAM同tx结束Session、处理关联凭据并写成功Audit且commit后ACK；BFF不保存永久成功receipt、无恢复/撤销撤销操作。失去ACK/取消先重读，仍可能已提交；本人expired保留重复200、ownercleanup后404，不把404转伪200。删除替代新在线Product准入拒绝；不承诺撤回已准入工作或所有JWT/refresh永不返回。
+
+新scope仅owner正式零入参provisioning演进，需正规新authorize；本仓不改client/resource/member/roles、正常服务或数据。artifact更新只动正式immutable vendor与正常生成，旧单pin删除，无并存数据库或凭据存储；重启不恢复登录/撤销事实。三面已准入源码、尚未运行integration/正常组合，Skills/连接器排除。
+
+
+Root源码复核纠正统计：旧canonical142/旧inventory141漏一个已存在的browser-private操作；本片正规完整inventory144，严格逆恢复旧141清单与完整15.0 API原字节。此清单登记纠偏没有Skills业务/API/权限语义变化，旧Conversation与format失败不冒通过。
+
+## SET-15 Catalog 零持久化投影（2026-10-13）
+
+Billing唯一拥有canonical billing_offer与billing_offer_revision；BFF不得查询owner表或复用旧entitlement_*事实。BFF仅在一个已准入请求内严格消费固定exp4 owner HTTP，完整分页临时聚合并投影现public七字段，完成或取消后丢弃；无BFF SQL/Schema、Redis/cache、receipt、outbox或商品seed。offer_key来自正式owner字段，ID来自offer_revision_id；不按积分或ID猜套餐key/当前订阅。目录读取不创建资金账户、不写订单/授权/支付；checkout未开放保持零owner I/O。固定artifact属于build-time依赖而非业务快照。
+
+## SET-13 Team 权限目录零持久化（2026-10-13）
+
+IAM仍唯一保存Role/Permission/Membership及审计，当前在线准入和真实tenant/subject来自IAM。BFF只在请求生命周期内严格验证固定IAM wire，并向public TeamRole完整投影既有权限；Web只作视图提示，IAM写授权继续权威。无新增BFF SQL/Schema/表/列/索引、Redis、缓存、receipt、outbox、事务、权限快照或owner数据读取。database/schema.sql与全部vendor/generated IAM源码保持原字节。本次开发配对public15.0.0裁决见TECH/API；不能由目录字段推导新增权限、执行、团队创建或生产激活。
 ## CV-SVC MCP内部服务凭据边界（D1，2026-10-13；无数据库变化）
 
 BFF 源码候选已切换两 MCP service surface 的直读凭据；无数据修改，正常运行配对验收仍待 Root。

@@ -1026,3 +1026,12 @@ test("R257 named read helpers do not admit other paths runtime loaders or anothe
     /single schema installer/u,
   )
 })
+
+test("shared tasks stays in the existing Chat owner without a new pool or capability projection", async () => {
+  const repository = await readFile(path.join(root, "src/infrastructure/postgres/shared-tasks.ts"), "utf8")
+  const route = await readFile(path.join(root, "src/http/routes/shared-tasks.ts"), "utf8")
+  assert.match(repository, /pool: Pick<Pool, "connect">/u)
+  assert.doesNotMatch(repository, /new Pool|new Redis|share_id|s\.url/u)
+  assert.match(route, /authorizeUserRequest/u)
+  assert.match(route, /Math\.min\(config\.upstreamTimeoutMs, 10000\)/u)
+})

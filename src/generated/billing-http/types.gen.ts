@@ -16,6 +16,8 @@ export type CreditMicros = DecimalInteger
 
 export type NonNegativeCreditMicros = CreditMicros & NonNegativeDecimal
 
+export type CurrencyCode = string
+
 export type ErrorResponse = {
   error: {
     code: string
@@ -29,6 +31,23 @@ export type ErrorResponse = {
 
 export type Page = {
   next_cursor: string | null
+}
+
+export type CatalogItem = {
+  offer_key: string
+  offer_revision_id: Uuid
+  name: string
+  amount_minor: NonNegativeDecimal
+  currency_code: CurrencyCode
+  credit_micros: NonNegativeCreditMicros
+  billing_interval: "once" | "month" | "year"
+}
+
+export type CatalogResponse = {
+  data: {
+    items: Array<CatalogItem>
+    page: Page
+  }
 }
 
 export type CreditAccount = {
@@ -67,6 +86,59 @@ export type Limit = number
 
 export type Cursor = string
 
+export type GetCatalogData = {
+  body?: never
+  headers: {
+    "x-kokoro-tenant-id": string
+    "x-kokoro-subject"?: string
+    "x-kokoro-service"?: "web-bff"
+  }
+  path?: never
+  query?: {
+    limit?: number
+    cursor?: string
+  }
+  url: "/v2/commerce/catalog"
+}
+
+export type GetCatalogErrors = {
+  /**
+   * Request failed
+   */
+  400: ErrorResponse
+  /**
+   * Authentication required
+   */
+  401: ErrorResponse
+  /**
+   * Forbidden
+   */
+  403: ErrorResponse
+  /**
+   * Not found
+   */
+  404: ErrorResponse
+  /**
+   * Internal failure
+   */
+  500: ErrorResponse
+  /**
+   * Dependency unavailable
+   */
+  503: ErrorResponse
+}
+
+export type GetCatalogError = GetCatalogErrors[keyof GetCatalogErrors]
+
+export type GetCatalogResponses = {
+  /**
+   * Success
+   */
+  200: CatalogResponse
+}
+
+export type GetCatalogResponse = GetCatalogResponses[keyof GetCatalogResponses]
+
 export type GetMyCreditAccountData = {
   body?: never
   headers: {
@@ -76,7 +148,7 @@ export type GetMyCreditAccountData = {
   }
   path?: never
   query?: never
-  url: "/v1/billing/me/credit-account"
+  url: "/v2/billing/me/credit-account"
 }
 
 export type GetMyCreditAccountErrors = {
@@ -129,7 +201,7 @@ export type GetMyCreditLedgerData = {
     limit?: number
     cursor?: string
   }
-  url: "/v1/billing/me/credit-ledger"
+  url: "/v2/billing/me/credit-ledger"
 }
 
 export type GetMyCreditLedgerErrors = {

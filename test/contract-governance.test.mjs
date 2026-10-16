@@ -1,3 +1,7 @@
+import { restorePublic153ArchivedTasksContract } from "../scripts/archived-tasks-public-contract.mjs"
+import { restorePublic152SharedTasksContract } from "../scripts/shared-tasks-public-contract.mjs"
+import { restorePublic151AccountProfileContract } from "../scripts/account-profile-public-contract.mjs"
+import { restorePublic15AccountSessionContract } from "../scripts/account-session-public-contract.mjs"
 import { inspectSkillProductContract, stripSkillProductSource } from "../scripts/verify-skill-product-contract.mjs"
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
@@ -152,9 +156,9 @@ test("Library publishes explicit personal file 200 and rejects contract drift", 
   assert.ok(inspectLibraryFileContract(mixedPage).some((error) => error.includes("LibraryFilePage")))
 })
 
-test("the IAM consumer pins the complete 0.11.0 owner artifact and generates only approved admission, human qualification, Skill, Team and invitation operations", async () => {
-  const commit = "719225439a3609b540f8d6265939feaef45a2268"
-  const digest = "cb81139cfac5890e43caca2a296e39e777f2488c743cfb931ab0a20e6761b21e"
+test("the IAM consumer pins the complete 0.13.0 owner artifact and generates only approved admission, human qualification, Skill, Team and invitation operations", async () => {
+  const commit = "c64faa7992301f31495e163d04049c48a23d0225"
+  const digest = "c22c55ef2b963a89ca3e03016138c2da74f5f005edf1b6ee8c5572daaf466262"
   const [manifestSource, vendor, config, lockfile, sdk, types] = await Promise.all([
     readFile(new URL("../contract/dependencies/iam-http.json", import.meta.url), "utf8"),
     readFile(new URL(`../contract/vendor/kokoro-iam/${commit}/iam.internal.v1.json`, import.meta.url)),
@@ -167,7 +171,7 @@ test("the IAM consumer pins the complete 0.11.0 owner artifact and generates onl
   const manifest = JSON.parse(manifestSource)
   const owner = JSON.parse(vendor.toString("utf8"))
   assert.equal(sha256(vendor), digest)
-  assert.equal(owner.info.version, "0.11.0")
+  assert.equal(owner.info.version, "0.13.0")
   const admissionSchema = owner.paths["/internal/v1/session-authorizations/verify"].post.responses["200"].content["application/json"].schema.properties.data
   assert.ok(admissionSchema.required.includes("platform_admin"))
   assert.deepEqual(admissionSchema.properties.platform_admin, { type: "boolean" })
@@ -176,7 +180,7 @@ test("the IAM consumer pins the complete 0.11.0 owner artifact and generates onl
   assert.deepEqual(manifest.owner, {
     repository_path: "apps/kokoro-iam",
     repository_commit: commit,
-    contract_version: "0.11.0",
+    contract_version: "0.13.0",
     contract_path: "contract/openapi/iam.internal.v1.json",
     contract_sha256: digest,
   })
@@ -195,6 +199,8 @@ test("the IAM consumer pins the complete 0.11.0 owner artifact and generates onl
   assert.equal(manifest.generated.length, 16)
   assert.match(sdk, /export const verifySessionAuthorization/u)
   for (const operation of [
+    "listAccountSessions",
+    "revokeAccountSession",
     "listTenantMembers",
     "listTenantInvitations",
     "listTenantRoles",
@@ -218,6 +224,7 @@ test("the IAM consumer pins the complete 0.11.0 owner artifact and generates onl
     "createTenantInvitation",
     "getTenantInvitationContext",
     "leaveTenant",
+    "listAccountSessions",
     "listTenantInvitations",
     "listTenantMembers",
     "listTenantRoles",
@@ -226,6 +233,8 @@ test("the IAM consumer pins the complete 0.11.0 owner artifact and generates onl
     "replaceTenantMemberRoles",
     "resendTenantInvitation",
     "resolveTenantPublisherProfiles",
+    "revokeAccountSession",
+    "updateAccountProfile",
     "verifySessionAuthorization",
   ])
   assert.doesNotMatch(`${sdk}\n${types}`, /getMetrics|healthz|readyz/u)
@@ -730,4 +739,35 @@ test("R350 public examples have strict six profiles and restore complete immutab
     change(changed)
     assert.ok(inspectSkillExamplePromptsDocument(changed).length > 0)
   }
+})
+
+test("SET13 actual builtin permission fields are declared by the public contract", async () => {
+  const { load } = await import("js-yaml")
+  const source = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
+  const permissions = load(source).components.schemas.TeamRole.properties.permissions
+  assert.deepEqual(permissions.properties.platform.items.enum, ["execute"])
+  assert.equal(permissions.properties.skill.items.enum.length, 15)
+  assert.equal(permissions.additionalProperties, false)
+})
+
+test("SET13 rejects closed permission and non-Team historical drift", async () => {
+  const { restorePublic15TeamPermissionsContract } = await import("../scripts/verify-openapi.ts")
+  const source = restorePublic15AccountSessionContract(
+    restorePublic151AccountProfileContract(
+      restorePublic152SharedTasksContract(
+        restorePublic153ArchivedTasksContract(await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")),
+      ),
+    ),
+  )
+  const parent = restorePublic15TeamPermissionsContract(source)
+  assert.match(parent, /^  version: 14\.7\.0$/mu)
+  const mutations = [
+    source.replace("            platform: { type: array, minItems: 1, items: { type: string, enum: [execute] } }\n", ""),
+    source.replace(/(    TeamRole:[\s\S]*?)            skill: \{/u, "$1            unknown_domain: {"),
+    source.replace("enum: [execute]", "enum: [unknown_action]"),
+    source.replace("platform: { type: array, minItems: 1", "platform: { type: array, minItems: 0"),
+    source.replace("title: Kokoro Business API", "title: Changed non-Team API"),
+    source.replace("version: 15.0.0", "version: 14.8.0"),
+  ]
+  for (const mutation of mutations) assert.throws(() => restorePublic15TeamPermissionsContract(mutation), /SET13/u)
 })

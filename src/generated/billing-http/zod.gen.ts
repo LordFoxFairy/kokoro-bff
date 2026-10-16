@@ -14,6 +14,8 @@ export const zCreditMicros = zDecimalInteger
 
 export const zNonNegativeCreditMicros = zCreditMicros.and(zNonNegativeDecimal)
 
+export const zCurrencyCode = z.string().regex(/^[A-Z]{3}$/)
+
 export const zErrorResponse = z
   .object({
     error: z
@@ -30,6 +32,29 @@ export const zErrorResponse = z
 export const zPage = z
   .object({
     next_cursor: z.string().nullable(),
+  })
+  .strict()
+
+export const zCatalogItem = z
+  .object({
+    offer_key: z.string().min(1).max(255),
+    offer_revision_id: zUuid,
+    name: z.string().min(1),
+    amount_minor: zNonNegativeDecimal,
+    currency_code: zCurrencyCode,
+    credit_micros: zNonNegativeCreditMicros,
+    billing_interval: z.enum(["once", "month", "year"]),
+  })
+  .strict()
+
+export const zCatalogResponse = z
+  .object({
+    data: z
+      .object({
+        items: z.array(zCatalogItem),
+        page: zPage,
+      })
+      .strict(),
   })
   .strict()
 
@@ -86,6 +111,31 @@ export const zPersonalSubjectId = z
 export const zLimit = z.int().gte(1).lte(100).default(50)
 
 export const zCursor = z.string().min(1).max(2048)
+
+export const zGetCatalogHeaders = z.object({
+  "x-kokoro-tenant-id": z
+    .string()
+    .min(5)
+    .max(1022)
+    .regex(/^u1\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\s\S])/),
+  "x-kokoro-subject": z
+    .string()
+    .min(5)
+    .max(1363)
+    .regex(/^u1\.(?=[A-Za-z0-9_-])(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]|[A-Za-z0-9_-][AQgw])?$(?![\s\S])/)
+    .optional(),
+  "x-kokoro-service": z.literal("web-bff").optional(),
+})
+
+export const zGetCatalogQuery = z.object({
+  limit: z.int().gte(1).lte(100).optional().default(50),
+  cursor: z.string().min(1).max(2048).optional(),
+})
+
+/**
+ * Success
+ */
+export const zGetCatalogResponse = zCatalogResponse
 
 export const zGetMyCreditAccountHeaders = z.object({
   "x-kokoro-tenant-id": z

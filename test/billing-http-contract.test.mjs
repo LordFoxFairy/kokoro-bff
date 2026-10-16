@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises"
 import { test } from "node:test"
 
 const root = new URL("../", import.meta.url)
-const ownerSourceUrl = new URL("contract/vendor/kokoro-billing/1ceeae550f05857d1e7fa0da1e83af23a552f0ca/openapi.yaml", root)
+const ownerSourceUrl = new URL("contract/vendor/kokoro-billing/cd92c728d8f658f54b254d5cbfd28156ca426dc1/openapi.yaml", root)
 const dependencyManifestUrl = new URL("contract/dependencies/billing-http.json", root)
 const generatedSdkUrl = new URL("src/generated/billing-http/sdk.gen.ts", root)
 const generatedZodUrl = new URL("src/generated/billing-http/zod.gen.ts", root)
@@ -12,7 +12,7 @@ const publicSourceUrl = new URL("contract/openapi/v1/openapi.yaml", root)
 const fakeStoreUrl = new URL("test/doubles/bff-store.ts", root)
 const mockRouteUrl = new URL("test/doubles/mock-route.ts", root)
 
-const ownerSourceSha256 = "35b4a2d1d178f6a548fe67460c8e8cbba9eb247296f9051f6ec23060235baff8"
+const ownerSourceSha256 = "b413db8965ed60683435adb7f2ce8650a7ca7bf7bee0989e8f83afc3d9f846af"
 const creditAccountFields = ["credit_account_id", "status", "available_micros", "held_micros"]
 const ledgerEntryFields = ["journal_id", "sequence", "delta_micros", "balance_after_micros", "source_kind", "source_ref", "created_at"]
 
@@ -44,19 +44,19 @@ function generatedExportBlock(source, name) {
   return match[0]
 }
 
-test("fixed Billing v1 source publishes the two reviewed personal Credit reads", async () => {
+test("fixed Billing v2 source publishes the two reviewed personal Credit reads", async () => {
   const bytes = await readFile(ownerSourceUrl)
   assert.equal(createHash("sha256").update(bytes).digest("hex"), ownerSourceSha256)
   const source = bytes.toString("utf8")
-  const accountOperation = yamlBlock(source, "  /v1/billing/me/credit-account:")
-  const ledgerOperation = yamlBlock(source, "  /v1/billing/me/credit-ledger:")
+  const accountOperation = yamlBlock(source, "  /v2/billing/me/credit-account:")
+  const ledgerOperation = yamlBlock(source, "  /v2/billing/me/credit-ledger:")
   assert.match(accountOperation, /^      operationId: getMyCreditAccount$/mu)
   assert.match(accountOperation, /\$ref: "#\/components\/schemas\/CreditAccountResponse"/u)
   assert.match(ledgerOperation, /^      operationId: getMyCreditLedger$/mu)
   assert.match(ledgerOperation, /\$ref: "#\/components\/schemas\/CreditLedgerResponse"/u)
 })
 
-test("fixed Billing v1 source owns the exact decimal-string account and ledger fields", async () => {
+test("fixed Billing v2 source owns the exact decimal-string account and ledger fields", async () => {
   const source = await readFile(ownerSourceUrl, "utf8")
   const account = yamlBlock(source, "    CreditAccount:")
   const entry = yamlBlock(source, "    LedgerEntry:")
@@ -72,21 +72,31 @@ test("fixed Billing v1 source owns the exact decimal-string account and ledger f
   assert.match(entry, /balance_after_micros:\n          \$ref: "#\/components\/schemas\/NonNegativeCreditMicros"/u)
 })
 
-test("generated Billing dependency is fixed and exposes only the two personal reads", async () => {
+test("generated Billing dependency is fixed and exposes Catalog and the two personal reads", async () => {
   const manifest = JSON.parse(await readFile(dependencyManifestUrl, "utf8"))
   assert.deepEqual(manifest.owner, {
     repository_path: "apps/kokoro-billing",
-    repository_commit: "1ceeae550f05857d1e7fa0da1e83af23a552f0ca",
-    contract_version: "3.0.0-experimental.3",
-    contract_path: "contract/openapi/v1/openapi.yaml",
+    repository_commit: "cd92c728d8f658f54b254d5cbfd28156ca426dc1",
+    contract_version: "3.0.0-experimental.5",
+    contract_path: "contract/openapi/v2/openapi.yaml",
     contract_sha256: ownerSourceSha256,
   })
   const sdk = await readFile(generatedSdkUrl, "utf8")
-  assert.deepEqual([...sdk.matchAll(/^export const (\w+) =/gmu)].map((match) => match[1]).sort(), ["getMyCreditAccount", "getMyCreditLedger"])
+  assert.deepEqual([...sdk.matchAll(/^export const (\w+) =/gmu)].map((match) => match[1]).sort(), ["getCatalog", "getMyCreditAccount", "getMyCreditLedger"])
   const zod = await readFile(generatedZodUrl, "utf8")
-  for (const name of ["zPage", "zCreditAccount", "zCreditAccountResponse", "zLedgerEntry", "zCreditLedgerResponse"]) {
+  for (const name of [
+    "zErrorResponse",
+    "zCatalogItem",
+    "zCatalogResponse",
+    "zPage",
+    "zCreditAccount",
+    "zCreditAccountResponse",
+    "zLedgerEntry",
+    "zCreditLedgerResponse",
+  ]) {
     assert.match(generatedExportBlock(zod, name), /\.strict\(\)$/u)
   }
+  assert.equal([...generatedExportBlock(zod, "zErrorResponse").matchAll(/\.strict\(\)/gu)].length, 2)
   assert.equal([...generatedExportBlock(zod, "zCreditLedgerResponse").matchAll(/\.strict\(\)/gu)].length, 2)
   assert.deepEqual(
     manifest.generated.map((entry) => entry.path).sort(),
@@ -145,4 +155,10 @@ test("BFF test doubles no longer provide the fake 100-Credit summary", async () 
     "the legacy fake balance is still wired",
   )
   assert.doesNotMatch(route, /segments\[1\] === "summary"[\s\S]*store\.billing/u)
+})
+
+test("Catalog generated response is fully closed and key comes only from the owner", async () => {
+  const zod = await readFile(generatedZodUrl, "utf8")
+  assert.equal([...generatedExportBlock(zod, "zCatalogResponse").matchAll(/\.strict\(\)/gu)].length, 2)
+  assert.match(generatedExportBlock(zod, "zCatalogItem"), /offer_key: z\.string\(\)\.min\(1\)\.max\(255\)/u)
 })

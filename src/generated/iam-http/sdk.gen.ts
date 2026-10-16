@@ -24,6 +24,9 @@ import type {
   LeaveTenantData,
   LeaveTenantErrors,
   LeaveTenantResponses,
+  ListAccountSessionsData,
+  ListAccountSessionsErrors,
+  ListAccountSessionsResponses,
   ListTenantInvitationsData,
   ListTenantInvitationsErrors,
   ListTenantInvitationsResponses,
@@ -48,6 +51,12 @@ import type {
   ResolveTenantPublisherProfilesData,
   ResolveTenantPublisherProfilesErrors,
   ResolveTenantPublisherProfilesResponses,
+  RevokeAccountSessionData,
+  RevokeAccountSessionErrors,
+  RevokeAccountSessionResponses,
+  UpdateAccountProfileData,
+  UpdateAccountProfileErrors,
+  UpdateAccountProfileResponses,
   VerifySessionAuthorizationData,
   VerifySessionAuthorizationErrors,
   VerifySessionAuthorizationResponses,
@@ -60,6 +69,7 @@ import {
   zCreateTenantInvitationResponse,
   zGetTenantInvitationContextResponse,
   zLeaveTenantResponse,
+  zListAccountSessionsResponse,
   zListTenantInvitationsResponse,
   zListTenantMembersResponse,
   zListTenantRolesResponse,
@@ -68,6 +78,8 @@ import {
   zReplaceTenantMemberRolesResponse,
   zResendTenantInvitationResponse,
   zResolveTenantPublisherProfilesResponse,
+  zRevokeAccountSessionResponse,
+  zUpdateAccountProfileResponse,
   zVerifySessionAuthorizationResponse,
 } from "./zod.gen.js"
 
@@ -88,6 +100,40 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
    */
   meta?: keyof ClientMeta extends never ? Record<string, unknown> : ClientMeta
 }
+
+export const updateAccountProfile = <ThrowOnError extends boolean = false>(
+  options: Options<UpdateAccountProfileData, ThrowOnError>,
+): RequestResult<UpdateAccountProfileResponses, UpdateAccountProfileErrors, ThrowOnError> =>
+  (options.client ?? client).patch<UpdateAccountProfileResponses, UpdateAccountProfileErrors, ThrowOnError>({
+    responseValidator: async (data) => await zUpdateAccountProfileResponse.parseAsync(data),
+    security: [{ scheme: "bearer", type: "http" }],
+    url: "/internal/v1/account/profile",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  })
+
+export const listAccountSessions = <ThrowOnError extends boolean = false>(
+  options?: Options<ListAccountSessionsData, ThrowOnError>,
+): RequestResult<ListAccountSessionsResponses, ListAccountSessionsErrors, ThrowOnError> =>
+  (options?.client ?? client).get<ListAccountSessionsResponses, ListAccountSessionsErrors, ThrowOnError>({
+    responseValidator: async (data) => await zListAccountSessionsResponse.parseAsync(data),
+    security: [{ scheme: "bearer", type: "http" }],
+    url: "/internal/v1/account/sessions",
+    ...options,
+  })
+
+export const revokeAccountSession = <ThrowOnError extends boolean = false>(
+  options: Options<RevokeAccountSessionData, ThrowOnError>,
+): RequestResult<RevokeAccountSessionResponses, RevokeAccountSessionErrors, ThrowOnError> =>
+  (options.client ?? client).delete<RevokeAccountSessionResponses, RevokeAccountSessionErrors, ThrowOnError>({
+    responseValidator: async (data) => await zRevokeAccountSessionResponse.parseAsync(data),
+    security: [{ scheme: "bearer", type: "http" }],
+    url: "/internal/v1/account/sessions/{session_id}",
+    ...options,
+  })
 
 export const getTenantInvitationContext = <ThrowOnError extends boolean = false>(
   options: Options<GetTenantInvitationContextData, ThrowOnError>,
