@@ -1,3 +1,11 @@
+## SKILLS-UPDATE 正常产品组合后补验收（2026-10-16）
+
+业务源码 BFF `615b16a`、Platform `11cb760`、App `d40c839` 已在用户批准的本地源切换后完成正常 Product Session 的自有安装 v1→v2。Web 显式确认前无写，确认后唯一 update 200、同安装 GET/列表 GET 200；独立正常登录回读确认同 installation/series/installed_at/enabled=true、精确原 offered target、更新入口消失且刷新保持。无 Remove/Install、直库写、模型调用或充值，积分/held/流水内容未变。
+
+认证边界仍有 ADR-035 后继：个人安装写默认 CatalogTokenSource、Skills Admin 默认 SkillAdminTokenSource 仍是内部 IAM OAuth；本次业务成功不证明这两条链已改 direct service credentials。人类 session/action IAM 检查继续保留，后继按 ADR-035 收敛全部 Platform 用途，不新增兼容 fallback。
+
+本轮仅该操作 happy path 和新版示例交接，不把健康检查、受控 RPC loopback、未知 ACK/并发单元或隔离 PG 扩成正常浏览器全故障验收；Admin 消费基线及正式 Agent/Billing 执行仍有后继。未改 canonical/machine pin/SQL/配置/凭据，远程 CI/push/PR/merge 与 Root gitlink 保持暂停。下节“未正常激活”保留为前一源码阶段记录，由本节后补事实续接。
+
 ## SKILLS-UPDATE U3：显式更新 BFF 源码已接，App/正常产品验收未完成（2026-10-16）
 
 组合基线 `d845164` 保留当前 MCP/Custom API 生命周期与 direct service credential；本地新增 public 14.8.0 的 `POST /v1/skill-installations/{installation_id}/update`（139 operations）。Connect 唯一 current pin 为 Platform `11cb7604a5385047fd872cedc8a55273eae59043`，从精确 Git publication 复制 Proto/descriptor/update profile/provenance 并正规生成；原 current Connect vendor 被替换，不留双读。独立 HTTP projection `6b4c9db`/6.0 pin、SQL/schema、依赖与运行配置保持原字节。
