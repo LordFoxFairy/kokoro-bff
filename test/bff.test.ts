@@ -595,45 +595,6 @@ describe("kokoro-bff v1 mock contract", () => {
     assert.equal(enabled.status, 404)
   })
 
-  it("fails closed for fresh-admission MCP mutations before owner I/O", async () => {
-    let ownerCalls = 0
-    const base = await listen(
-      liveServer(config(), {
-        businessStore: null,
-        readiness: async () => undefined,
-        sessionAdmission: new SessionAdmissionDouble({ "test-session": { namespace: "ns_test", userId: "user_test" } }),
-        mcpAuthorization: { check: async () => ({ ok: true }) },
-        routeHandler: async () => {
-          ownerCalls++
-        },
-      }),
-    )
-    const name = "phase-one-mcp"
-    const registration = {
-      name,
-      transport: "streamable_http",
-      url: "https://mcp.example.test/stream",
-      allowed_tools: ["search", "fetch"],
-      secret_ref: "handle:srt_fixture",
-    }
-    const missingKey = await fetch(`${base}/v1/mcp/servers`, {
-      method: "POST",
-      headers: { ...authHeaders(), "content-type": "application/json" },
-      body: JSON.stringify(registration),
-    })
-    assert.equal(missingKey.status, 503)
-    assert.equal(((await missingKey.json()) as { error: { code: string } }).error.code, "platform_operation_not_available")
-
-    const registered = await fetch(`${base}/v1/mcp/servers`, {
-      method: "POST",
-      headers: { ...authHeaders(), "content-type": "application/json", "idempotency-key": "mcp-register-phase-one" },
-      body: JSON.stringify(registration),
-    })
-    assert.equal(registered.status, 503)
-    assert.equal(((await registered.json()) as { error: { code: string } }).error.code, "platform_operation_not_available")
-    assert.equal(ownerCalls, 0)
-  })
-
   it("requires explicit Library kind after admission and does not mistake an HTTP upstream for the Storage Connect adapter", async () => {
     let connections = 0
     let requests = 0
@@ -1018,7 +979,7 @@ describe("kokoro-bff v1 mock contract", () => {
         subject: request.headers["x-kokoro-subject"]?.toString(),
       })
       response.writeHead(200, { "content-type": "application/json", "cache-control": "no-store", "x-request-id": "billing-owner" })
-      if (request.url === "/v2/billing/me/credit-account") {
+      if (request.url === "/v1/billing/me/credit-account") {
         response.end(
           JSON.stringify({
             data: {
@@ -1057,8 +1018,8 @@ describe("kokoro-bff v1 mock contract", () => {
     assert.equal(ledger.status, 200)
     assert.deepEqual(await ledger.json(), { data: { items: [], page: { next_cursor: null } }, meta: { request_id: "billing-ledger" } })
     assert.deepEqual(received, [
-      { url: "/v2/billing/me/credit-account", authorization: "Bearer billing-service-token", tenant: "u1.bnNfdGVzdA", subject: "u1.dXNlcl90ZXN0" },
-      { url: "/v2/billing/me/credit-ledger?limit=50", authorization: "Bearer billing-service-token", tenant: "u1.bnNfdGVzdA", subject: "u1.dXNlcl90ZXN0" },
+      { url: "/v1/billing/me/credit-account", authorization: "Bearer billing-service-token", tenant: "u1.bnNfdGVzdA", subject: "u1.dXNlcl90ZXN0" },
+      { url: "/v1/billing/me/credit-ledger?limit=50", authorization: "Bearer billing-service-token", tenant: "u1.bnNfdGVzdA", subject: "u1.dXNlcl90ZXN0" },
     ])
   })
 
@@ -1138,9 +1099,6 @@ describe("kokoro-bff v1 mock contract", () => {
       "/v1/skills/github/preview",
       "/v1/skills/github/import",
       "/v1/mcp/servers",
-      "/v1/mcp/servers/{name}/enable",
-      "/v1/mcp/servers/{name}/disable",
-      "/v1/mcp/servers/{name}",
       "/v1/scheduled-tasks",
       "/v1/scheduled-tasks/{id}",
       "/v1/scheduled-tasks/{id}/retry",
@@ -1421,15 +1379,28 @@ describe("kokoro-bff v1 mock contract", () => {
       assert.equal(response.status, 404, path)
       assert.equal(((await response.json()) as { error: { code: string } }).error.code, "bff_route_not_found")
     }
-    const guardedRequests: Array<{ path: string; init: RequestInit }> = [
+    for (const { path, init } of [
       { path: "/v1/mcp/servers", init: { method: "POST", headers: { "content-type": "application/json", "idempotency-key": "mcp-register" }, body: "{}" } },
-      { path: "/v1/skills/quota", init: {} },
-    ]
-    for (const { path, init } of guardedRequests) {
+      {
+        path: "/v1/mcp/servers/legacy/enable",
+        init: { method: "POST", headers: { "content-type": "application/json", "idempotency-key": "mcp-enable" }, body: "{}" },
+      },
+      {
+        path: "/v1/mcp/servers/legacy/disable",
+        init: { method: "POST", headers: { "content-type": "application/json", "idempotency-key": "mcp-disable" }, body: "{}" },
+      },
+      {
+        path: "/v1/mcp/servers/legacy",
+        init: { method: "DELETE", headers: { "content-type": "application/json", "idempotency-key": "mcp-delete" }, body: "{}" },
+      },
+    ]) {
       const response = await fetch(`${base}${path}`, { ...init, headers: { ...authHeaders(), ...init.headers } })
-      assert.equal(response.status, 503, path)
-      assert.equal(((await response.json()) as { error: { code: string } }).error.code, "platform_operation_not_available", path)
+      assert.equal(response.status, 404, path)
+      assert.equal(((await response.json()) as { error: { code: string } }).error.code, "bff_route_not_found", path)
     }
+    const guardedSkill = await fetch(`${base}/v1/skills/quota`, { headers: authHeaders() })
+    assert.equal(guardedSkill.status, 503)
+    assert.equal(((await guardedSkill.json()) as { error: { code: string } }).error.code, "platform_operation_not_available")
     assert.equal(ownerCalls, 0)
     assert.equal(receipts.size, 0)
   })

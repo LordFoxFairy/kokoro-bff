@@ -75,7 +75,11 @@ export const IAM_RELAY_POLICY = {
   cookieNames: ["session_token", "session_data", "dont_remember", "session_token.oauth_logout_confirmation"],
   cookieNamePrefixes: ["kokoro-issuer.", "__Secure-kokoro-issuer."],
   cookiePaths: { default: "/iam", logoutConfirmation: "/iam/oauth2/end-session/confirm" },
-  webInteractionPaths: ["/auth/sign-in", "/auth/select-tenant", "/auth/consent"],
+  // The issuer keeps interaction pages under its public `/iam` mount. These
+  // are browser navigation targets, not owner API routes; admitting them
+  // preserves the one outer product-login journey without turning the relay
+  // into an open redirect.
+  webInteractionPaths: ["/auth/sign-in", "/auth/select-tenant", "/auth/consent", "/iam/interactions/consent"],
   maxQueryBytes: 8192,
   maxRequestBodyBytes: 65536,
   maxHeaderBytes: 16384,

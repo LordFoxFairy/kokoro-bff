@@ -37,7 +37,7 @@ const config = {
   port: 0,
   mode: "live",
   domain: "dev.kokoro.localhost",
-  tenantId: "tenant",
+  tenantId: "123e4567-e89b-42d3-a456-426614174000",
   iamBaseUrl: null,
   sharedSecret: "secret",
   upstreamSecret: null,
@@ -133,7 +133,7 @@ test("browser-private local import Begin performs fresh create_draft AND install
   const ownerCalls = []
   await withServer(
     {
-      sessionAdmission: new SessionAdmissionDouble({ "current-session": { namespace: "tenant", userId: "user" } }),
+      sessionAdmission: new SessionAdmissionDouble({ "current-session": { namespace: "123e4567-e89b-42d3-a456-426614174000", userId: "user" } }),
       skillAuthorization: {
         check: async (input) => {
           actions.push({ token: input.token, tenantId: input.tenantId, subjectId: input.subjectId, action: input.action })
@@ -158,8 +158,8 @@ test("browser-private local import Begin performs fresh create_draft AND install
     },
   )
   assert.deepEqual(actions, [
-    { token: "current-session", tenantId: "tenant", subjectId: "user", action: "create_draft" },
-    { token: "current-session", tenantId: "tenant", subjectId: "user", action: "install" },
+    { token: "current-session", tenantId: "123e4567-e89b-42d3-a456-426614174000", subjectId: "user", action: "create_draft" },
+    { token: "current-session", tenantId: "123e4567-e89b-42d3-a456-426614174000", subjectId: "user", action: "install" },
   ])
   assert.equal(ownerCalls.length, 1)
 })
@@ -170,7 +170,7 @@ test("browser-private local import denial at either human action prevents owner 
     let ownerCalls = 0
     await withServer(
       {
-        sessionAdmission: new SessionAdmissionDouble({ "current-session": { namespace: "tenant", userId: "user" } }),
+        sessionAdmission: new SessionAdmissionDouble({ "current-session": { namespace: "123e4567-e89b-42d3-a456-426614174000", userId: "user" } }),
         skillAuthorization: {
           check: async (input) => {
             actions.push(input.action)
@@ -198,7 +198,7 @@ test("same original idempotency key replays the exact owner command after fresh 
   const ownerCalls = []
   await withServer(
     {
-      sessionAdmission: new SessionAdmissionDouble({ "current-session": { namespace: "tenant", userId: "user" } }),
+      sessionAdmission: new SessionAdmissionDouble({ "current-session": { namespace: "123e4567-e89b-42d3-a456-426614174000", userId: "user" } }),
       skillAuthorization: { check: async (input) => (actions.push(input.action), { ok: true }) },
       localSkillImportClient: { begin: async (input) => (ownerCalls.push(input), beginResponse()) },
     },
@@ -217,7 +217,7 @@ test("same original idempotency key replays the exact owner command after fresh 
   assert.equal(ownerCalls.length, 2)
   assert.equal(ownerCalls[0].commandId, ownerCalls[1].commandId)
   assert.equal(ownerCalls[0].digest, ownerCalls[1].digest)
-  assert.equal(ownerCalls[0].tenant, "tenant")
+  assert.equal(ownerCalls[0].tenant, "123e4567-e89b-42d3-a456-426614174000")
   assert.equal(ownerCalls[0].subject, "user")
 })
 
@@ -245,7 +245,7 @@ test("all four browser-private routes preserve exact method, body and fresh read
   }
   await withServer(
     {
-      sessionAdmission: new SessionAdmissionDouble({ "current-session": { namespace: "tenant", userId: "user" } }),
+      sessionAdmission: new SessionAdmissionDouble({ "current-session": { namespace: "123e4567-e89b-42d3-a456-426614174000", userId: "user" } }),
       skillAuthorization: { check: async (i) => (actions.push(i.action), { ok: true }) },
       localSkillImportClient: client,
     },
@@ -315,7 +315,7 @@ test("production composition registers all four local-import owner methods only 
     await inactive.close()
     await withServer(
       {
-        sessionAdmission: new SessionAdmissionDouble({ "current-session": { namespace: "tenant", userId: "user" } }),
+        sessionAdmission: new SessionAdmissionDouble({ "current-session": { namespace: "123e4567-e89b-42d3-a456-426614174000", userId: "user" } }),
         skillAuthorization: { check: async () => ({ ok: true }) },
       },
       async (base) => {
@@ -324,7 +324,8 @@ test("production composition registers all four local-import owner methods only 
           headers,
           body: JSON.stringify({ filename: "tea.skill", size_bytes: 123, content_sha256: "a".repeat(64) }),
         })
-        assert.equal(response.status, 404, name)
+        assert.equal(response.status, 503, name)
+        assert.equal((await response.json()).error.code, "local_skill_import_dependency_unavailable")
       },
       candidate,
     )
@@ -402,7 +403,7 @@ test("complete production composition dispatches all four private routes through
   const dir = await mkdtemp(join(tmpdir(), "kokoro-local-import-"))
   const credential = (scope) => [
     {
-      tenantId: "tenant",
+      tenantId: "123e4567-e89b-42d3-a456-426614174000",
       generation: 1,
       credentialRefVersion: "v1",
       clientId: scope,
@@ -415,7 +416,21 @@ test("complete production composition dispatches all four private routes through
     projection = join(dir, "projection.json")
   await writeFile(catalog, JSON.stringify(credential("platform:skill-catalog.manage")))
   await chmod(catalog, 0o600)
-  await writeFile(projection, JSON.stringify(credential("platform:projection.read")))
+  await writeFile(
+    projection,
+    JSON.stringify({
+      version: 1,
+      entries: [
+        {
+          credential_id: "bff-projection",
+          secret: "bff-projection-secret-000000000000",
+          caller: "kokoro-bff",
+          surfaces: ["projection"],
+          tenant_id: "123e4567-e89b-42d3-a456-426614174000",
+        },
+      ],
+    }),
+  )
   await chmod(projection, 0o600)
   const live = {
     ...config,
@@ -426,7 +441,7 @@ test("complete production composition dispatches all four private routes through
   try {
     await withServer(
       {
-        sessionAdmission: new SessionAdmissionDouble({ "current-session": { namespace: "tenant", userId: "user" } }),
+        sessionAdmission: new SessionAdmissionDouble({ "current-session": { namespace: "123e4567-e89b-42d3-a456-426614174000", userId: "user" } }),
         skillAuthorization: { check: async () => ({ ok: true }) },
       },
       async (base) => {
@@ -458,17 +473,17 @@ test("complete production composition dispatches all four private routes through
     ["begin", "complete", "finalize", "get"],
   )
   for (const [name, request, headers] of calls) {
-    assert.equal(headers["x-tenant-ref"], "tenant")
+    assert.equal(headers["x-tenant-ref"], "123e4567-e89b-42d3-a456-426614174000")
     assert.equal(headers["x-kokoro-subject"], "user")
-    assert.equal(headers.authorization, name === "get" ? "Bearer projection-machine" : "Bearer catalog-machine")
+    assert.equal(headers.authorization, name === "get" ? "Bearer bff-projection-secret-000000000000" : "Bearer catalog-machine")
     assert.equal(request.productContext.subjectId, "user")
   }
 })
 
-test("incomplete production composition keeps the private namespace unregistered as 404", async () => {
+test("incomplete production composition reports the owner dependency as unavailable", async () => {
   await withServer(
     {
-      sessionAdmission: new SessionAdmissionDouble({ "current-session": { namespace: "tenant", userId: "user" } }),
+      sessionAdmission: new SessionAdmissionDouble({ "current-session": { namespace: "123e4567-e89b-42d3-a456-426614174000", userId: "user" } }),
       skillAuthorization: { check: async () => ({ ok: true }) },
     },
     async (base) => {
@@ -477,7 +492,8 @@ test("incomplete production composition keeps the private namespace unregistered
         headers,
         body: JSON.stringify({ filename: "tea.skill", size_bytes: 123, content_sha256: "a".repeat(64) }),
       })
-      assert.equal(response.status, 404)
+      assert.equal(response.status, 503)
+      assert.equal((await response.json()).error.code, "local_skill_import_dependency_unavailable")
     },
   )
 })
@@ -485,7 +501,7 @@ test("incomplete production composition keeps the private namespace unregistered
 test("Complete rejects an owner response bound to another path intent before emitting success", async () => {
   await withServer(
     {
-      sessionAdmission: new SessionAdmissionDouble({ "current-session": { namespace: "tenant", userId: "user" } }),
+      sessionAdmission: new SessionAdmissionDouble({ "current-session": { namespace: "123e4567-e89b-42d3-a456-426614174000", userId: "user" } }),
       skillAuthorization: { check: async () => ({ ok: true }) },
       localSkillImportClient: {
         complete: async () => ({
@@ -574,7 +590,7 @@ test("Finalize rejects independently valid skill and installation snapshots with
     await t.test(field, () =>
       withServer(
         {
-          sessionAdmission: new SessionAdmissionDouble({ "current-session": { namespace: "tenant", userId: "user" } }),
+          sessionAdmission: new SessionAdmissionDouble({ "current-session": { namespace: "123e4567-e89b-42d3-a456-426614174000", userId: "user" } }),
           skillAuthorization: { check: async () => ({ ok: true }) },
           localSkillImportClient: {
             finalize: async () => ({
@@ -634,7 +650,7 @@ test("Get binds completed top-level skill identity and optional installation to 
     await t.test(field, () =>
       withServer(
         {
-          sessionAdmission: new SessionAdmissionDouble({ "current-session": { namespace: "tenant", userId: "user" } }),
+          sessionAdmission: new SessionAdmissionDouble({ "current-session": { namespace: "123e4567-e89b-42d3-a456-426614174000", userId: "user" } }),
           skillAuthorization: { check: async () => ({ ok: true }) },
           localSkillImportClient: {
             get: async () => ({
@@ -667,7 +683,7 @@ test("Get accepts a current revision whose exact skill id changed while the stab
     await t.test(name, () =>
       withServer(
         {
-          sessionAdmission: new SessionAdmissionDouble({ "current-session": { namespace: "tenant", userId: "user" } }),
+          sessionAdmission: new SessionAdmissionDouble({ "current-session": { namespace: "123e4567-e89b-42d3-a456-426614174000", userId: "user" } }),
           skillAuthorization: { check: async () => ({ ok: true }) },
           localSkillImportClient: {
             get: async () => ({
@@ -700,7 +716,7 @@ test("Get accepts a current revision whose exact skill id changed while the stab
 test("Begin body streaming is fenced by the real ten-second absolute request budget", { timeout: 15_000 }, async () => {
   await withServer(
     {
-      sessionAdmission: new SessionAdmissionDouble({ "current-session": { namespace: "tenant", userId: "user" } }),
+      sessionAdmission: new SessionAdmissionDouble({ "current-session": { namespace: "123e4567-e89b-42d3-a456-426614174000", userId: "user" } }),
       skillAuthorization: { check: async () => ({ ok: true }) },
       localSkillImportClient: { begin: async () => beginResponse() },
     },

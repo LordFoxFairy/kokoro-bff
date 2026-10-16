@@ -11,9 +11,9 @@ const output = path.join(root, "src/generated/billing-http")
 const manifestPath = path.join(root, "contract/dependencies/billing-http.json")
 const configPath = path.join(root, "openapi-ts.billing.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "244b2810c0cc043d29fffb2b3301eebf2d390b3d"
+const ownerCommit = "1ceeae550f05857d1e7fa0da1e83af23a552f0ca"
 const vendorPath = path.join(root, `contract/vendor/kokoro-billing/${ownerCommit}/openapi.yaml`)
-const ownerDigest = "ecaceefd3fd09d5106b364593dd513506622ca011bb0436b74f0928ffd8dcf00"
+const ownerDigest = "35b4a2d1d178f6a548fe67460c8e8cbba9eb247296f9051f6ec23060235baff8"
 const generatedFiles = [
   "client.gen.ts",
   "client/client.gen.ts",
@@ -160,9 +160,11 @@ function closeGeneratedObject(source, schemaName) {
 async function closeOwnerResponseSchemas(directory) {
   const file = path.join(directory, "zod.gen.ts")
   let source = await readFile(file, "utf8")
-  for (const schemaName of ["Page", "CreditAccount", "CreditAccountResponse", "LedgerEntry", "CreditLedgerResponse"]) {
+  for (const schemaName of ["ErrorResponse", "Page", "CreditAccount", "CreditAccountResponse", "LedgerEntry", "CreditLedgerResponse"]) {
     source = closeGeneratedObject(source, schemaName)
   }
+  const errorResponseStart = source.indexOf("export const zErrorResponse =")
+  source = closeObjectExpression(source, "  error: z.object(", "ErrorResponse.error", errorResponseStart)
   const ledgerResponseStart = source.indexOf("export const zCreditLedgerResponse =")
   source = closeObjectExpression(source, "  data: z.object(", "CreditLedgerResponse.data", ledgerResponseStart)
   await writeFile(file, source)
@@ -239,7 +241,7 @@ async function manifestFor(directory) {
       repository_path: "apps/kokoro-billing",
       repository_commit: ownerCommit,
       contract_version: "3.0.0-experimental.3",
-      contract_path: "contract/openapi/v2/openapi.yaml",
+      contract_path: "contract/openapi/v1/openapi.yaml",
       contract_sha256: ownerDigest,
     },
     generator: {

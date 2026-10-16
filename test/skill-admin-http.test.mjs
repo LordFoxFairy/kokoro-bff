@@ -210,10 +210,12 @@ test("Admin creates one official draft without caller-chosen identity or CAS", a
   const server = createBffServer(correctionConfig, {
     businessStore: null,
     sessionAdmission: { verify: async () => ({ ok: true, identity: { namespace: "tenant", userId: "admin" }, platformAdmin: true }) },
-    skillAuthorization: { check: async (input) => {
-      authorizations.push(input.action)
-      return { ok: true }
-    } },
+    skillAuthorization: {
+      check: async (input) => {
+        authorizations.push(input.action)
+        return { ok: true }
+      },
+    },
     skillAdminClient: {
       get: async () => ({ skill: received }),
       command: async (operation, context, members) => {

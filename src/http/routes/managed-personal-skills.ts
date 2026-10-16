@@ -154,13 +154,13 @@ export async function managedPersonalSkillsRoute(
       return
     }
     const projection = config.platformProjection
-    if (projection === undefined || projection.baseUrl === null || projection.credentialFile === null || config.iamBaseUrl === null) {
+    if (projection === undefined || projection.baseUrl === null || projection.credentialFile === null) {
       fail(response, requestId, 503, "skill_dependency_unavailable", "Managed Skill dependency is unavailable")
       return
     }
     let client = clients.get(config)
     if (client === undefined) {
-      client = new PlatformProjectionHttpClient(projection.baseUrl, config.iamBaseUrl, projection.credentialFile, projection.timeoutMs)
+      client = new PlatformProjectionHttpClient(projection.baseUrl, projection.credentialFile, projection.timeoutMs)
       clients.set(config, client)
     }
     if (expired()) {

@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Kokoro Platform Business HTTP API",
-    "version": "5.3.0",
-    "description": "Platform read-only projections. IAM projection bearer authentication establishes caller and tenant; authenticated BFF then supplies its Product Session subject."
+    "version": "6.0.0",
+    "description": "Platform read-only projections. A Platform-local fixed-tenant service bearer authenticates BFF; authenticated BFF then supplies its Product Session subject."
   },
   "servers": [
     {
@@ -627,7 +627,7 @@
           "minLength": 1,
           "maxLength": 255
         },
-        "description": "Optional consistency assertion only; tenant authority is IAM introspection."
+        "description": "Optional consistency assertion only; tenant authority comes from authenticated surface admission (local service credential for projection, IAM for delegated surfaces)."
       },
       "SubjectId": {
         "name": "x-kokoro-subject",
@@ -1924,8 +1924,8 @@
       "PlatformWorkload": {
         "type": "http",
         "scheme": "bearer",
-        "bearerFormat": "JWT",
-        "description": "IAM tenant-machine Platform projection token: kokoro-bff / platform:projection.read."
+        "bearerFormat": "opaque-service-credential",
+        "description": "Platform-local fixed-tenant service credential: kokoro-bff / projection."
       }
     }
   },

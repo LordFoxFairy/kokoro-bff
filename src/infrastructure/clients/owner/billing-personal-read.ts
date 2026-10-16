@@ -1,6 +1,7 @@
 import { createClient } from "../../../generated/billing-http/client/client.gen.js"
 import { getMyCreditAccount, getMyCreditLedger } from "../../../generated/billing-http/sdk.gen.js"
 import type { CreditAccount, CreditLedgerResponse } from "../../../generated/billing-http/types.gen.js"
+import { zErrorResponse } from "../../../generated/billing-http/zod.gen.js"
 import type { BffConfig } from "../../../config/runtime.js"
 import type { RequestContext } from "../../../domain/request-context.js"
 
@@ -106,7 +107,7 @@ async function request<T>(
   const headers = {
     authorization: `Bearer ${serviceToken}`,
     "x-kokoro-internal-secret": internalSecret,
-    "x-kokoro-request-id": context.requestId,
+    "x-request-id": context.requestId,
     "x-kokoro-service": "web-bff" as const,
     "x-kokoro-subject": encoded.subject,
     "x-kokoro-tenant-id": encoded.tenant,
@@ -118,7 +119,13 @@ async function request<T>(
         : await getMyCreditLedger({ client, headers, query: query!, signal: outboundSignal })
     const status = result.response?.status
     if (status === 200 && result.data !== undefined) return { ok: true, data: result.data.data as T }
-    if (status === 404) return { ok: false, status: 404, code: "billing_account_not_found" }
+    if (status === 404) {
+      const parsed = zErrorResponse.safeParse(result.error)
+      if (parsed.success && parsed.data.error.code === "billing.credit_account_not_found" && !parsed.data.error.retryable) {
+        return { ok: false, status: 404, code: "billing_account_not_found" }
+      }
+      return invalidResponse()
+    }
     if (status === 200 || (status !== undefined && status < 500 && status !== 401 && status !== 403 && status !== 429)) return invalidResponse()
     return unavailable()
   } catch {

@@ -94,13 +94,13 @@ export async function livePlatformProjectionRead(
     return true
   }
   const projection = config.platformProjection
-  if (projection?.baseUrl === null || projection?.credentialFile === null || config.iamBaseUrl === null || projection === undefined) {
+  if (projection?.baseUrl === null || projection?.credentialFile === null || projection === undefined) {
     strictError(response, 503, dependencyCode, dependencyMessage, true)
     return true
   }
   let client = clients.get(config)
   if (client === undefined) {
-    client = new PlatformProjectionHttpClient(projection.baseUrl, config.iamBaseUrl, projection.credentialFile, projection.timeoutMs)
+    client = new PlatformProjectionHttpClient(projection.baseUrl, projection.credentialFile, projection.timeoutMs)
     clients.set(config, client)
   }
   const controller = new AbortController()

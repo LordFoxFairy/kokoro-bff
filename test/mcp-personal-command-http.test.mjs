@@ -143,6 +143,25 @@ const privateServer = {
   server_url: "https://tools.example/mcp",
   status: "pending",
   state_version: "1",
+  notes: "Internal only",
+  headers: [
+    {
+      name: "x-api-key",
+      configured: true,
+      state_version: "1",
+      status: "active",
+    },
+  ],
+  oauth_client: {
+    client_id: "client-one",
+    configured: true,
+    origin: "byo",
+    status: "configured",
+    state_version: "1",
+  },
+  prepare_status: "pending_prepare",
+  declarations: [],
+  declarations_available: false,
 }
 const provider = {
   provider_key: "test",
@@ -154,7 +173,17 @@ const provider = {
   state_version: "1",
 }
 for (const [method, path, body, status] of [
-  ["POST", "/browser/v1/mcp/connectors", { provider_key: "test", connector_type: "mcp", display_name: "Example", description: "" }, 201],
+  [
+    "POST",
+    "/browser/v1/mcp/connectors",
+    {
+      provider_key: "test",
+      connector_type: "mcp",
+      display_name: "Example",
+      description: "",
+    },
+    201,
+  ],
   ["PATCH", "/browser/v1/mcp/connectors/connector-one", { display_name: "Example", description: "", expected_state_version: "1" }, 200],
   ["PUT", "/browser/v1/mcp/connectors/connector-one/enabled", { enabled: true, expected_state_version: "1" }, 200],
   ["DELETE", "/browser/v1/mcp/connectors/connector-one", { expected_state_version: "1" }, 200],
@@ -184,7 +213,15 @@ for (const [method, path, body, status] of [
     try {
       const response = await fetch(`${f.origin}${path}`, {
         method,
-        headers: { ...headers, ...(body === undefined ? {} : { "content-type": "application/json", "idempotency-key": "original-intent" }) },
+        headers: {
+          ...headers,
+          ...(body === undefined
+            ? {}
+            : {
+                "content-type": "application/json",
+                "idempotency-key": "original-intent",
+              }),
+        },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       })
       assert.equal(response.status, status)
@@ -197,9 +234,40 @@ for (const [method, path, body, status] of [
   })
 for (const [label, request, expected] of [
   ["missing key", { headers: { "content-type": "application/json" }, body: "{}" }, 400],
-  ["space key", { headers: { "content-type": "application/json", "idempotency-key": "bad key" }, body: "{}" }, 400],
-  ["unknown body", { body: JSON.stringify({ display_name: "Example", description: "", expected_state_version: "1", extra: true }) }, 400],
-  ["unsafe CAS", { body: JSON.stringify({ display_name: "Example", description: "", expected_state_version: "9007199254740992" }) }, 400],
+  [
+    "space key",
+    {
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": "bad key",
+      },
+      body: "{}",
+    },
+    400,
+  ],
+  [
+    "unknown body",
+    {
+      body: JSON.stringify({
+        display_name: "Example",
+        description: "",
+        expected_state_version: "1",
+        extra: true,
+      }),
+    },
+    400,
+  ],
+  [
+    "unsafe CAS",
+    {
+      body: JSON.stringify({
+        display_name: "Example",
+        description: "",
+        expected_state_version: "9007199254740992",
+      }),
+    },
+    400,
+  ],
   ["body cap", { body: "x".repeat(65537) }, 413],
   ["query", { suffix: "?extra=1", body: "{}" }, 400],
 ])
@@ -217,7 +285,13 @@ for (const [label, request, expected] of [
     try {
       const response = await fetch(f.origin + "/browser/v1/mcp/connectors/connector-one" + (request.suffix ?? ""), {
         method: "PATCH",
-        headers: { ...headers, ...(request.headers ?? { "content-type": "application/json", "idempotency-key": "original-key" }) },
+        headers: {
+          ...headers,
+          ...(request.headers ?? {
+            "content-type": "application/json",
+            "idempotency-key": "original-key",
+          }),
+        },
         body: request.body,
       })
       assert.equal(response.status, expected)
@@ -245,17 +319,29 @@ for (const [code, status, fault, retryable] of [
         },
       },
     })
-    const body = JSON.stringify({ display_name: "Example", description: "", expected_state_version: "1" })
+    const body = JSON.stringify({
+      display_name: "Example",
+      description: "",
+      expected_state_version: "1",
+    })
     try {
       for (let replay = 0; replay < 2; replay++) {
         const response = await fetch(f.origin + "/browser/v1/mcp/connectors/connector-one", {
           method: "PATCH",
-          headers: { ...headers, "content-type": "application/json", "idempotency-key": "original-intent" },
+          headers: {
+            ...headers,
+            "content-type": "application/json",
+            "idempotency-key": "original-intent",
+          },
           body,
         })
         assert.equal(response.status, status)
         const raw = await response.json()
-        assert.deepEqual(raw.error, { code: fault, message: "Personal MCP request failed", retryable })
+        assert.deepEqual(raw.error, {
+          code: fault,
+          message: "Personal MCP request failed",
+          retryable,
+        })
         assert.equal(seen.length, replay + 1)
       }
       assert.equal(seen[0].input.commandId, "original-intent")
@@ -271,7 +357,11 @@ test("A2 command re-admits after ACK and hides committed result on revoked sessi
   const f = await fixture(true, {
     verify: async () =>
       ++sessions === 1
-        ? { ok: true, identity: { namespace: "tenant-server", userId: "human-one" }, platformAdmin: false }
+        ? {
+            ok: true,
+            identity: { namespace: "tenant-server", userId: "human-one" },
+            platformAdmin: false,
+          }
         : { ok: false, status: 401, code: "session_invalid" },
     mcpPersonalClient: {
       read: async () => ({}),
@@ -284,12 +374,78 @@ test("A2 command re-admits after ACK and hides committed result on revoked sessi
   try {
     const response = await fetch(f.origin + "/browser/v1/mcp/connectors", {
       method: "POST",
-      headers: { ...headers, "content-type": "application/json", "idempotency-key": "original-intent" },
-      body: JSON.stringify({ provider_key: "test", connector_type: "mcp", display_name: "Example", description: "" }),
+      headers: {
+        ...headers,
+        "content-type": "application/json",
+        "idempotency-key": "original-intent",
+      },
+      body: JSON.stringify({
+        provider_key: "test",
+        connector_type: "mcp",
+        display_name: "Example",
+        description: "",
+      }),
     })
     assert.equal(response.status, 401)
     assert.equal((await response.json()).error.code, "session_invalid")
     assert.equal(calls, 1)
+  } finally {
+    await f.close()
+  }
+})
+
+test("JSON MCP import forwards one opaque document once and returns every atomic owner result", async () => {
+  const seen = []
+  const f = await fixture(true, {
+    mcpPersonalClient: {
+      read: async () => ({}),
+      importJson: async (input) => {
+        seen.push(input)
+        return {
+          imports: [
+            {
+              server: {
+                ...privateServer,
+                server_id: "imported-one",
+                display_name: "Imported HTTP",
+              },
+              connector: {
+                ...connector,
+                connector_id: "connector-imported",
+                server_id: "imported-one",
+                enabled: false,
+              },
+            },
+          ],
+          replayed: false,
+        }
+      },
+    },
+  })
+  const config_json = JSON.stringify({
+    mcpServers: {
+      "Imported HTTP": {
+        type: "streamableHttp",
+        url: "https://tools.example/mcp",
+        headers: { "X-API-Key": "secret" },
+      },
+    },
+  })
+  try {
+    const response = await fetch(f.origin + "/browser/v1/mcp/servers/import", {
+      method: "POST",
+      headers: {
+        ...headers,
+        "content-type": "application/json",
+        "idempotency-key": "import-intent",
+      },
+      body: JSON.stringify({ config_json }),
+    })
+    assert.equal(response.status, 201)
+    assert.equal(seen.length, 1)
+    assert.equal(seen[0].commandId, "import-intent")
+    assert.equal(seen[0].configJson, config_json)
+    assert.equal((await response.json()).data.imports[0].server.server_id, "imported-one")
   } finally {
     await f.close()
   }
@@ -313,8 +469,17 @@ test("A2 command total deadline aborts RPC and never publishes late ACK", async 
   try {
     const response = await fetch(f.origin + "/browser/v1/mcp/connectors", {
       method: "POST",
-      headers: { ...headers, "content-type": "application/json", "idempotency-key": "original-intent" },
-      body: JSON.stringify({ provider_key: "test", connector_type: "mcp", display_name: "Example", description: "" }),
+      headers: {
+        ...headers,
+        "content-type": "application/json",
+        "idempotency-key": "original-intent",
+      },
+      body: JSON.stringify({
+        provider_key: "test",
+        connector_type: "mcp",
+        display_name: "Example",
+        description: "",
+      }),
     })
     assert.equal(response.status, 503)
     assert.equal((await response.json()).error.code, "mcp_personal_dependency_unavailable")
@@ -332,7 +497,10 @@ test("A3 OAuth callback and connection lifecycle use a single BFF-admitted perso
       read: async () => ({}),
       authorization: async (operation, input) => {
         calls.push({ operation, input })
-        if (operation === "complete") return { connector: { ...connector, status: "active", state_version: "3" } }
+        if (operation === "complete")
+          return {
+            connector: { ...connector, status: "active", state_version: "3" },
+          }
         if (operation === "createConnection")
           return {
             connection: {
@@ -358,7 +526,11 @@ test("A3 OAuth callback and connection lifecycle use a single BFF-admitted perso
   const invoke = async (path, body, idempotencyKey) => {
     const response = await fetch(f.origin + path, {
       method: "POST",
-      headers: { ...headers, "content-type": "application/json", ...(idempotencyKey === undefined ? {} : { "idempotency-key": idempotencyKey }) },
+      headers: {
+        ...headers,
+        "content-type": "application/json",
+        ...(idempotencyKey === undefined ? {} : { "idempotency-key": idempotencyKey }),
+      },
       body: JSON.stringify(body),
     })
     return [response, await response.json()]
@@ -372,7 +544,12 @@ test("A3 OAuth callback and connection lifecycle use a single BFF-admitted perso
     assert.equal(completed.data.connector.status, "active")
     const [connection, connected] = await invoke(
       "/browser/v1/mcp/connections",
-      { connector_id: "connector-one", server_id: "server-one", allowed_selectors: ["tool.read"], expected_state_version: "3" },
+      {
+        connector_id: "connector-one",
+        server_id: "server-one",
+        allowed_selectors: ["tool.read"],
+        expected_state_version: "3",
+      },
       "connection-command",
     )
     assert.equal(connection.status, 201)
@@ -395,14 +572,85 @@ test("private URL MCP follows registration, OAuth, declaration completion, conne
       read: async () => ({}),
       server: async (operation, input) => {
         calls.push({ operation, input })
-        return operation === "server"
-          ? { server: privateServer }
-          : { server: privateServer, connector: { ...connector, connector_id: "connector-one", server_id: "server-one", enabled: false } }
+        if (operation === "server") return { server: privateServer }
+        if (operation === "updateServer")
+          return {
+            server: {
+              ...privateServer,
+              display_name: "Private tools renamed",
+              notes: undefined,
+              headers: [
+                {
+                  name: "x-api-key",
+                  configured: false,
+                  state_version: "2",
+                  status: "revoked",
+                },
+                {
+                  name: "x-new-key",
+                  configured: true,
+                  state_version: "1",
+                  status: "active",
+                },
+              ],
+              oauth_client: {
+                ...privateServer.oauth_client,
+                configured: false,
+                status: "revoked",
+                state_version: "2",
+              },
+              state_version: "2",
+            },
+            connector: {
+              ...connector,
+              connector_id: "connector-one",
+              server_id: "server-one",
+              enabled: false,
+              state_version: "2",
+            },
+            replayed: false,
+          }
+        if (operation === "prepareServer")
+          return {
+            server: {
+              ...privateServer,
+              state_version: "3",
+              prepare_status: "needs_oauth",
+            },
+            connector: {
+              ...connector,
+              connector_id: "connector-one",
+              server_id: "server-one",
+              enabled: false,
+              state_version: "3",
+            },
+            declarations: [],
+            replayed: false,
+          }
+        return {
+          server: privateServer,
+          connector: {
+            ...connector,
+            connector_id: "connector-one",
+            server_id: "server-one",
+            enabled: false,
+          },
+          replayed: false,
+        }
       },
       authorization: async (operation, input) => {
         calls.push({ operation, input })
         if (operation === "complete")
-          return { connector: { ...connector, connector_id: "connector-one", server_id: "server-one", status: "active", state_version: "2", enabled: false } }
+          return {
+            connector: {
+              ...connector,
+              connector_id: "connector-one",
+              server_id: "server-one",
+              status: "active",
+              state_version: "2",
+              enabled: false,
+            },
+          }
         if (operation === "createConnection")
           return {
             connection: {
@@ -420,19 +668,37 @@ test("private URL MCP follows registration, OAuth, declaration completion, conne
             authorization_url: "https://oauth.example.test/authorize?state=opaque",
             expires_at: "2027-01-15T08:00:00.000Z",
           },
-          connector: { ...connector, connector_id: "connector-one", server_id: "server-one", enabled: false },
+          connector: {
+            ...connector,
+            connector_id: "connector-one",
+            server_id: "server-one",
+            enabled: false,
+          },
         }
       },
       command: async (operation, input) => {
         calls.push({ operation, input })
-        return { connector: { ...connector, connector_id: "connector-one", server_id: "server-one", enabled: true, status: "active", state_version: "3" } }
+        return {
+          connector: {
+            ...connector,
+            connector_id: "connector-one",
+            server_id: "server-one",
+            enabled: true,
+            status: "active",
+            state_version: "3",
+          },
+        }
       },
     },
   })
   const post = async (path, body, idempotencyKey) => {
     const response = await fetch(f.origin + path, {
       method: "POST",
-      headers: { ...headers, "content-type": "application/json", ...(idempotencyKey === undefined ? {} : { "idempotency-key": idempotencyKey }) },
+      headers: {
+        ...headers,
+        "content-type": "application/json",
+        ...(idempotencyKey === undefined ? {} : { "idempotency-key": idempotencyKey }),
+      },
       body: JSON.stringify(body),
     })
     return [response, await response.json()]
@@ -440,34 +706,80 @@ test("private URL MCP follows registration, OAuth, declaration completion, conne
   try {
     const [registered, registration] = await post(
       "/browser/v1/mcp/servers",
-      { display_name: "Private tools", server_url: "https://tools.example/mcp" },
+      {
+        display_name: "Private tools",
+        server_url: "https://tools.example/mcp",
+        notes: "Internal only",
+        headers: [{ name: "X-API-Key", value: "header-secret" }],
+        oauth_client: {
+          client_id: "client-one",
+          client_secret: "client-secret",
+        },
+      },
       "private-url-intent",
     )
     assert.equal(registered.status, 201)
     assert.equal(registration.data.server.server_id, "server-one")
     assert.equal(registration.data.connector.server_id, "server-one")
-    const read = await fetch(f.origin + "/browser/v1/mcp/servers/server-one", { headers })
+    assert.equal(JSON.stringify(registration).includes("header-secret"), false)
+    assert.equal(JSON.stringify(registration).includes("client-secret"), false)
+    const read = await fetch(f.origin + "/browser/v1/mcp/servers/server-one", {
+      headers,
+    })
     assert.equal(read.status, 200)
-    assert.equal((await read.json()).data.server.status, "pending")
-    const [begin] = await post("/browser/v1/mcp/connectors/connector-one/authorization", { server_id: "server-one", expected_state_version: "1" })
+    assert.equal((await read.json()).data.server.declarations_available, false)
+    const updated = await fetch(f.origin + "/browser/v1/mcp/servers/server-one", {
+      method: "PATCH",
+      headers: {
+        ...headers,
+        "content-type": "application/json",
+        "idempotency-key": "private-update-intent",
+      },
+      body: JSON.stringify({
+        expected_state_version: "1",
+        display_name: "Private tools renamed",
+        clear_notes: true,
+        header_upserts: [{ name: "X-New-Key", value: "new-secret" }],
+        header_removals: ["X-API-Key"],
+        revoke_oauth_client: true,
+      }),
+    })
+    assert.equal(updated.status, 200)
+    assert.equal(JSON.stringify(await updated.json()).includes("new-secret"), false)
+    const [prepared, preparation] = await post("/browser/v1/mcp/servers/server-one/prepare", { expected_state_version: "2" }, "private-prepare-intent")
+    assert.equal(prepared.status, 200)
+    assert.equal(preparation.data.server.prepare_status, "needs_oauth")
+    const [begin] = await post("/browser/v1/mcp/connectors/connector-one/authorization", { server_id: "server-one", expected_state_version: "3" })
     assert.equal(begin.status, 200)
-    const [completed] = await post("/browser/v1/mcp/authorization/callback", { state: "opaque-state", code: "opaque-code" })
+    const [completed] = await post("/browser/v1/mcp/authorization/callback", {
+      state: "opaque-state",
+      code: "opaque-code",
+    })
     assert.equal(completed.status, 200)
     const [connected] = await post(
       "/browser/v1/mcp/connections",
-      { connector_id: "connector-one", server_id: "server-one", allowed_selectors: ["tool.read"], expected_state_version: "2" },
+      {
+        connector_id: "connector-one",
+        server_id: "server-one",
+        allowed_selectors: ["tool.read"],
+        expected_state_version: "2",
+      },
       "connection-intent",
     )
     assert.equal(connected.status, 201)
     const enabled = await fetch(f.origin + "/browser/v1/mcp/connectors/connector-one/enabled", {
       method: "PUT",
-      headers: { ...headers, "content-type": "application/json", "idempotency-key": "enable-intent" },
+      headers: {
+        ...headers,
+        "content-type": "application/json",
+        "idempotency-key": "enable-intent",
+      },
       body: JSON.stringify({ enabled: true, expected_state_version: "2" }),
     })
     assert.equal(enabled.status, 200)
     assert.deepEqual(
       calls.map((call) => call.operation),
-      ["registerServer", "server", "begin", "complete", "createConnection", "enabled"],
+      ["registerServer", "server", "updateServer", "prepareServer", "begin", "complete", "createConnection", "enabled"],
     )
     assert.deepEqual(calls[0].input, {
       tenant: "tenant-server",
@@ -475,7 +787,153 @@ test("private URL MCP follows registration, OAuth, declaration completion, conne
       requestId: "mcp-http-1",
       displayName: "Private tools",
       serverUrl: "https://tools.example/mcp",
+      notes: "Internal only",
+      headers: [{ name: "x-api-key", value: "header-secret" }],
+      oauthClient: { clientId: "client-one", clientSecret: "client-secret" },
       commandId: "private-url-intent",
+    })
+  } finally {
+    await f.close()
+  }
+})
+
+test("private URL MCP prepare/update/delete enforce idempotency and exact CAS while delete replays through its owner", async () => {
+  const calls = []
+  const f = await fixture(true, {
+    mcpPersonalClient: {
+      read: async () => ({}),
+      server: async (operation, input) => {
+        calls.push({ operation, input })
+        if (operation === "deleteServer")
+          return {
+            server_id: input.id,
+            deleted: true,
+            replayed: calls.length > 1,
+          }
+        return { server: privateServer }
+      },
+    },
+  })
+  try {
+    for (const request of [
+      {
+        method: "POST",
+        path: "/browser/v1/mcp/servers/server-one/prepare",
+        headers: { ...headers, "content-type": "application/json" },
+        body: { expected_state_version: "1" },
+      },
+      {
+        method: "POST",
+        path: "/browser/v1/mcp/servers/server-one/prepare",
+        headers: {
+          ...headers,
+          "content-type": "application/json",
+          "idempotency-key": "prepare-key",
+        },
+        body: { expected_state_version: "2147483648" },
+      },
+      {
+        method: "PATCH",
+        path: "/browser/v1/mcp/servers/server-one",
+        headers: {
+          ...headers,
+          "content-type": "application/json",
+          "idempotency-key": "update-key",
+        },
+        body: { expected_state_version: "1" },
+      },
+      {
+        method: "DELETE",
+        path: "/browser/v1/mcp/servers/server-one",
+        headers: { ...headers, "content-type": "application/json" },
+        body: { expected_state_version: "1" },
+      },
+      {
+        method: "DELETE",
+        path: "/browser/v1/mcp/servers/server-one",
+        headers: {
+          ...headers,
+          "content-type": "application/json",
+          "idempotency-key": "delete-key",
+        },
+        body: { expected_state_version: "1", extra: true },
+      },
+    ]) {
+      const response = await fetch(f.origin + request.path, {
+        method: request.method,
+        headers: request.headers,
+        body: JSON.stringify(request.body),
+      })
+      assert.equal(response.status, 400)
+      assert.equal((await response.json()).error.code, "invalid_mcp_personal_request")
+    }
+    assert.equal(calls.length, 0)
+    for (const replayed of [false, true]) {
+      const deletion = await fetch(f.origin + "/browser/v1/mcp/servers/server-one", {
+        method: "DELETE",
+        headers: {
+          ...headers,
+          "content-type": "application/json",
+          "idempotency-key": "delete-key",
+        },
+        body: JSON.stringify({ expected_state_version: "4" }),
+      })
+      assert.equal(deletion.status, 200)
+      assert.deepEqual((await deletion.json()).data, {
+        server_id: "server-one",
+        deleted: true,
+        replayed,
+      })
+    }
+    assert.equal(calls.length, 2)
+    assert.deepEqual(
+      calls.map(({ operation }) => operation),
+      ["deleteServer", "deleteServer"],
+    )
+    assert.deepEqual(calls[0].input, {
+      tenant: "tenant-server",
+      subject: "human-one",
+      requestId: "mcp-http-1",
+      id: "server-one",
+      expectedStateVersion: "4",
+      commandId: "delete-key",
+    })
+  } finally {
+    await f.close()
+  }
+})
+
+test("private URL MCP maps typed owner business reasons to stable 412", async () => {
+  const { Code, ConnectError } = await import("@connectrpc/connect")
+  const { PersonalMcpErrorDetailSchema, PersonalMcpErrorReason } = await import("../dist/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
+  const f = await fixture(true, {
+    mcpPersonalClient: {
+      read: async () => ({}),
+      server: async () => {
+        throw new ConnectError("private detail", Code.FailedPrecondition, undefined, [
+          {
+            desc: PersonalMcpErrorDetailSchema,
+            value: { reason: PersonalMcpErrorReason.NEEDS_CLIENT },
+          },
+        ])
+      },
+    },
+  })
+  try {
+    const response = await fetch(f.origin + "/browser/v1/mcp/servers/server-one/prepare", {
+      method: "POST",
+      headers: {
+        ...headers,
+        "content-type": "application/json",
+        "idempotency-key": "prepare-key",
+      },
+      body: JSON.stringify({ expected_state_version: "1" }),
+    })
+    assert.equal(response.status, 412)
+    assert.deepEqual((await response.json()).error, {
+      code: "mcp_personal_precondition_failed",
+      message: "Personal MCP request failed",
+      retryable: false,
     })
   } finally {
     await f.close()
@@ -501,11 +959,24 @@ test("A3 OAuth lifecycle rejects callback ambiguity and command keys before Plat
         { server_id: "server-one", expected_state_version: "1" },
         { "idempotency-key": "not-allowed" },
       ],
-      ["/browser/v1/mcp/connections", { connector_id: "connector-one", server_id: "server-one", allowed_selectors: [], expected_state_version: "1" }, {}],
+      [
+        "/browser/v1/mcp/connections",
+        {
+          connector_id: "connector-one",
+          server_id: "server-one",
+          allowed_selectors: [],
+          expected_state_version: "1",
+        },
+        {},
+      ],
     ]) {
       const response = await fetch(f.origin + path, {
         method: "POST",
-        headers: { ...headers, "content-type": "application/json", ...headersExtra },
+        headers: {
+          ...headers,
+          "content-type": "application/json",
+          ...headersExtra,
+        },
         body: JSON.stringify(body),
       })
       assert.equal(response.status, 400)

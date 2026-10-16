@@ -1,6 +1,6 @@
 import { z } from "zod"
 import type { McpPersonalAuthorizationInput, McpPersonalAuthorizationOperation } from "./mcp-personal-authorization-binding.js"
-import { assertMcpPersonalWireKnown, projectMcpPersonalConnector, projectMcpPersonalConnection } from "./mcp-personal-response.js"
+import { projectMcpPersonalConnector, projectMcpPersonalConnection } from "./mcp-personal-response.js"
 
 const authorizationId = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/u)
 const authorizationUrl = z
@@ -9,7 +9,11 @@ const authorizationUrl = z
   .refine((value) => {
     try {
       const url = new URL(value)
-      return url.protocol === "https:" && url.username === "" && url.password === "" && url.hash === ""
+      const developmentLoopback =
+        process.env.NODE_ENV !== "production" &&
+        url.protocol === "http:" &&
+        (url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "[::1]")
+      return (url.protocol === "https:" || developmentLoopback) && url.username === "" && url.password === "" && url.hash === ""
     } catch {
       return false
     }
@@ -43,7 +47,9 @@ function timestamp(value: unknown): string {
 
 /** Projects owner responses without retaining OAuth state, verifier, code, token, or provider secret. */
 export function projectMcpPersonalAuthorization(operation: McpPersonalAuthorizationOperation, raw: unknown, input: McpPersonalAuthorizationInput): unknown {
-  assertMcpPersonalWireKnown(raw)
+  // OAuth responses are projected field-by-field below. Forward-compatible
+  // owner additions must not turn a valid authorization handoff into a BFF
+  // failure; none of those fields cross this boundary.
   const value = object(raw)
   if (operation === "complete") return { connector: projectMcpPersonalConnector(value.connector) }
   if (operation === "createConnection") return { connection: projectMcpPersonalConnection(value.connection) }

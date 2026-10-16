@@ -1,3 +1,4 @@
+import { Code, ConnectError } from "@connectrpc/connect"
 import type { IncomingMessage, ServerResponse } from "node:http"
 
 import type { BffServerComposition } from "../../bootstrap/runtime.js"
@@ -26,6 +27,17 @@ export function mcpProviderAdminOperation(path: string[], method: string): McpPr
 
 function fail(response: ServerResponse, status: number, code: string, retryable = false): void {
   if (!response.destroyed && !response.writableEnded) send(response, status, { error: { code, message: "MCP provider administration failed", retryable } })
+}
+function ownerFault(error: unknown, operation: McpProviderAdminOperation): { status: number; code: string; retryable: boolean } | null {
+  if (!(error instanceof ConnectError)) return null
+  const mutation = operation === "create" || operation === "update" || operation === "enabled" || operation === "remove"
+  if (error.code === Code.InvalidArgument) return { status: 400, code: "invalid_mcp_provider_admin_request", retryable: false }
+  if (error.code === Code.NotFound && ["get", "update", "enabled", "remove"].includes(operation))
+    return { status: 404, code: "mcp_provider_admin_not_found", retryable: false }
+  if (error.code === Code.AlreadyExists && mutation) return { status: 409, code: "mcp_provider_admin_conflict", retryable: false }
+  if (error.code === Code.Aborted && mutation) return { status: 409, code: "mcp_provider_admin_command_in_progress", retryable: true }
+  if (error.code === Code.FailedPrecondition && mutation) return { status: 412, code: "mcp_provider_admin_precondition_failed", retryable: false }
+  return null
 }
 async function readBody(request: IncomingMessage, signal: AbortSignal): Promise<Buffer> {
   const chunks: Buffer[] = []
@@ -144,8 +156,11 @@ export async function mcpProviderAdminRoute(
     controller.signal.throwIfAborted()
     send(response, operation === "create" ? 201 : 200, { data: result })
   } catch (error) {
+    const owner = ownerFault(error, operation)
     const code = error instanceof Error ? error.message : "mcp_provider_admin_dependency_unavailable"
-    if (code === "invalid_mcp_provider_admin_request" || code === "mcp_provider_admin_body_too_large") fail(response, 400, code)
+    if (owner !== null) fail(response, owner.status, owner.code, owner.retryable)
+    else if (!(error instanceof ConnectError) && (code === "invalid_mcp_provider_admin_request" || code === "mcp_provider_admin_body_too_large"))
+      fail(response, 400, code)
     else fail(response, 503, "mcp_provider_admin_dependency_unavailable", true)
   } finally {
     clearTimeout(timer)

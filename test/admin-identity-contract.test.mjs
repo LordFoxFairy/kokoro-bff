@@ -20,10 +20,7 @@ test("administrator identity reads are three bounded, tenant-scoped read project
     assert.equal(operation?.["x-kokoro-visibility"], "public")
     assert.equal(operation?.["x-kokoro-idempotency"], "none")
     assert.equal(operation?.["x-kokoro-permission"], "admin.identity.read")
-    assert.deepEqual(operation?.parameters, [
-      { $ref: "#/components/parameters/AdminIdentityLimit" },
-      { $ref: "#/components/parameters/AdminIdentityCursor" },
-    ])
+    assert.deepEqual(operation?.parameters, [{ $ref: "#/components/parameters/AdminIdentityLimit" }, { $ref: "#/components/parameters/AdminIdentityCursor" }])
     assert.deepEqual(operation?.responses?.["200"]?.$ref, `#/components/responses/${responseSchema.replace("Response", "Success")}`)
     assert.deepEqual(Object.keys(operation?.responses ?? {}).sort(), ["200", "400", "401", "403", "404", "429", "502", "503"])
   }
