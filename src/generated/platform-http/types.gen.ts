@@ -188,7 +188,7 @@ export type PersonalMcpProvider = {
 export type RequestId = string
 
 /**
- * Optional consistency assertion only; tenant authority is IAM introspection.
+ * Optional consistency assertion only; tenant authority comes from authenticated surface admission (local service credential for projection, IAM for delegated surfaces).
  */
 export type TenantId = string
 
@@ -224,7 +224,7 @@ export type ListVisibleSkillsData = {
   headers: {
     "x-kokoro-request-id"?: string
     /**
-     * Optional consistency assertion only; tenant authority is IAM introspection.
+     * Optional consistency assertion only; tenant authority comes from authenticated surface admission (local service credential for projection, IAM for delegated surfaces).
      */
     "x-kokoro-tenant-id"?: string
     /**
@@ -291,7 +291,7 @@ export type GetPublishedPersonalSkillData = {
   headers: {
     "x-kokoro-request-id"?: string
     /**
-     * Optional consistency assertion only; tenant authority is IAM introspection.
+     * Optional consistency assertion only; tenant authority comes from authenticated surface admission (local service credential for projection, IAM for delegated surfaces).
      */
     "x-kokoro-tenant-id"?: string
     /**
@@ -354,7 +354,7 @@ export type ListVisibleSkillPoolData = {
   headers: {
     "x-kokoro-request-id"?: string
     /**
-     * Optional consistency assertion only; tenant authority is IAM introspection.
+     * Optional consistency assertion only; tenant authority comes from authenticated surface admission (local service credential for projection, IAM for delegated surfaces).
      */
     "x-kokoro-tenant-id"?: string
     /**
@@ -421,7 +421,7 @@ export type ListVisibleSkillCatalogData = {
   headers: {
     "x-kokoro-request-id"?: string
     /**
-     * Optional consistency assertion only; tenant authority is IAM introspection.
+     * Optional consistency assertion only; tenant authority comes from authenticated surface admission (local service credential for projection, IAM for delegated surfaces).
      */
     "x-kokoro-tenant-id"?: string
     /**
@@ -488,7 +488,7 @@ export type ListMcpServersData = {
   headers: {
     "x-kokoro-request-id"?: string
     /**
-     * Optional consistency assertion only; tenant authority is IAM introspection.
+     * Optional consistency assertion only; tenant authority comes from authenticated surface admission (local service credential for projection, IAM for delegated surfaces).
      */
     "x-kokoro-tenant-id"?: string
     /**
@@ -549,7 +549,7 @@ export type ListSelfMcpConnectionsData = {
   headers: {
     "x-kokoro-request-id"?: string
     /**
-     * Optional consistency assertion only; tenant authority is IAM introspection.
+     * Optional consistency assertion only; tenant authority comes from authenticated surface admission (local service credential for projection, IAM for delegated surfaces).
      */
     "x-kokoro-tenant-id"?: string
     /**
@@ -611,7 +611,7 @@ export type ListSelfManagedSkillsData = {
   headers: {
     "x-kokoro-request-id"?: string
     /**
-     * Optional consistency assertion only; tenant authority is IAM introspection.
+     * Optional consistency assertion only; tenant authority comes from authenticated surface admission (local service credential for projection, IAM for delegated surfaces).
      */
     "x-kokoro-tenant-id"?: string
     /**
@@ -677,7 +677,7 @@ export type GetSelfManagedSkillData = {
   headers: {
     "x-kokoro-request-id"?: string
     /**
-     * Optional consistency assertion only; tenant authority is IAM introspection.
+     * Optional consistency assertion only; tenant authority comes from authenticated surface admission (local service credential for projection, IAM for delegated surfaces).
      */
     "x-kokoro-tenant-id"?: string
     /**

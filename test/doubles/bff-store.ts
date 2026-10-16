@@ -7,8 +7,6 @@ import type {
   ChatRun,
   ChatSessionDetail,
   ChatSessionSummary,
-  McpServer,
-  McpTransport,
   Project,
   ProjectInstructionRevision,
   ScheduledTask,
@@ -91,8 +89,6 @@ export class MockBffStore {
       updated_at: 1767225600,
     },
   ]
-
-  readonly mcpServers: McpServer[] = []
 
   readonly projectInstructionHistory = new Map<string, ProjectInstructionRevision[]>([
     [
@@ -241,46 +237,6 @@ export class MockBffStore {
       changed = true
     }
     return changed
-  }
-
-  registerMcpServer(input: {
-    scope: string
-    name: string
-    transport: McpTransport
-    url: string
-    allowed_tools: string[]
-    secret_ref: string | null
-  }): McpServer {
-    const server: McpServer = {
-      scope: input.scope,
-      name: input.name,
-      revision: 1,
-      transport: input.transport,
-      url: input.url,
-      allowed_tools: [...input.allowed_tools],
-      secret_ref: input.secret_ref,
-      enabled: true,
-    }
-    this.mcpServers.push(server)
-    return server
-  }
-
-  findMcpServer(name: string): McpServer | undefined {
-    return this.mcpServers.find((server) => server.name === name)
-  }
-
-  setMcpEnabled(name: string, enabled: boolean): boolean {
-    const server = this.findMcpServer(name)
-    if (server === undefined) return false
-    server.enabled = enabled
-    return true
-  }
-
-  deleteMcpServer(name: string): boolean {
-    const index = this.mcpServers.findIndex((server) => server.name === name)
-    if (index < 0) return false
-    this.mcpServers.splice(index, 1)
-    return true
   }
 
   createProject(input: { name: string; description?: string }): Project {

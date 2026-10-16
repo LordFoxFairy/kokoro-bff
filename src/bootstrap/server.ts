@@ -3,6 +3,7 @@ import { sharedTasksRoute } from "../http/routes/shared-tasks.js"
 import { accountProfileRoute } from "../http/routes/account-profile.js"
 import { mcpPersonalOperation, mcpPersonalRoute } from "../http/routes/mcp-personal.js"
 import { mcpProviderAdminOperation, mcpProviderAdminRoute } from "../http/routes/mcp-provider-admin.js"
+import { customApiOperation, customApiRoute } from "../http/routes/custom-api.js"
 import { connectorListFailure, connectorListRoute, isConnectorListRequest } from "../http/routes/connector-list.js"
 import { skillSpecificationReadRoute } from "../http/routes/platform-projection.js"
 import { skillSpecificationEnabledRoute } from "../http/routes/skill-specification-enabled.js"
@@ -277,14 +278,16 @@ async function handle(
     (businessPath[0] === "admin" && businessPath[1] === "skills") ||
     (businessPath[0] === "self" && businessPath[1] === "skills")
   if (hasSkillsBudget) startSkillRequestBudget(request)
-  const mcpAction = mcpActionForRequest(request.method ?? "GET", businessPath)
+  const mcpAction = mcpActionForRequest(request.method ?? "GET", businessPath, browserPrivateMcp)
   const isMcpPersonalOperation = browserPrivateMcp && mcpPersonalOperation(businessPath, request.method ?? "GET") !== null
+  const isCustomApiOperation = browserPrivateMcp && customApiOperation(businessPath, request.method ?? "GET") !== null
+  const defersMcpPersonalReadAction = isMcpPersonalOperation && request.method === "GET"
   const isMcpProviderAdminOperation = !browserPrivateMcp && mcpProviderAdminOperation(businessPath, request.method ?? "GET") !== null
-  if (browserPrivateMcp && !isMcpPersonalOperation) {
+  if (browserPrivateMcp && !isMcpPersonalOperation && !isCustomApiOperation) {
     send(response, 404, failure("route_not_found", "Route was not found", id))
     return
   }
-  const hasMcpBudget = mcpAction !== null || isMcpPersonalOperation || isMcpProviderAdminOperation
+  const hasMcpBudget = mcpAction !== null || isMcpPersonalOperation || isMcpProviderAdminOperation || isCustomApiOperation
   if (hasMcpBudget) {
     startMcpRequestBudget(request)
     response.setHeader("cache-control", "no-store")
@@ -384,7 +387,7 @@ async function handle(
   const admissionWork = Promise.resolve()
     .then(() => authorizeUserRequest(request, config, composition.sessionAdmission, id, admissionAbort.signal))
     .then(async (result) => {
-      if (result.ok && mcpAction !== null) {
+      if (result.ok && mcpAction !== null && !defersMcpPersonalReadAction) {
         admissionAbort.signal.throwIfAborted()
         if (mcpRequestRemaining(request) <= 0) throw new Error("mcp_admission_deadline")
         const checked = await authorizeMcpAction(composition.mcpAuthorization, result, mcpAction, admissionAbort.signal)
@@ -480,6 +483,10 @@ async function handle(
     await mcpProviderAdminRoute(request, response, config, composition, id, businessPath)
     return
   }
+  if (isCustomApiOperation) {
+    await customApiRoute(request, response, composition, admission.context, id, businessPath)
+    return
+  }
   if (hasMcpBudget && !isMcpPersonalOperation && (request.method !== "GET" || businessPath[0] === "self")) {
     if (!response.destroyed && !response.writableEnded)
       send(response, 503, failure("platform_operation_not_available", "This Platform operation is not exposed by the BFF owner adapter", id))
@@ -487,7 +494,7 @@ async function handle(
   }
   const context = admission.context
   if (isMcpPersonalOperation) {
-    await mcpPersonalRoute(request, response, config, composition, context, businessPath)
+    await mcpPersonalRoute(request, response, config, composition, admission, businessPath)
     return
   }
   const readmitSkill = async (signal: AbortSignal): Promise<void> => {
@@ -783,9 +790,9 @@ async function handle(
     return
   }
 
-  // Retired Skills/MCP mutations must not claim a BFF receipt or touch owner SQL.
+  // Retired Skills mutations must not claim a BFF receipt or touch owner SQL.
   // The named v4 candidate routes above have already returned.
-  if (composition.routeHandler === undefined && (businessPath[0] === "skills" || businessPath[0] === "mcp") && request.method !== "GET") {
+  if (composition.routeHandler === undefined && businessPath[0] === "skills" && request.method !== "GET") {
     send(response, 503, failure("platform_operation_not_available", "This Platform operation is not exposed by the BFF owner adapter", id))
     return
   }

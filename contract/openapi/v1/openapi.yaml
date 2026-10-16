@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 15.4.0
+  version: 16.0.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -37,7 +37,7 @@ tags:
   - name: Skills
     description: Skill catalog, revisions, quotas, and lifecycle operations.
   - name: MCP
-    description: MCP server projections and lifecycle operations.
+    description: MCP discovery projections; browser-private connector lifecycle is separately scoped.
   - name: Scheduled
     description: BFF-owned scheduled task definitions.
   - name: Agents
@@ -4322,149 +4322,6 @@ paths:
         '503': { $ref: '#/components/responses/PlatformProjectionReadUnavailable' }
         '401': { $ref: '#/components/responses/PlatformProjectionReadUnauthorized' }
         '429': { $ref: '#/components/responses/PlatformProjectionReadRateLimited' }
-    post:
-      tags: [MCP]
-      operationId: registerMcpServer
-      x-kokoro-owner: kokoro-bff
-      x-kokoro-visibility: public
-      x-kokoro-stability: beta
-      x-kokoro-idempotency: required
-      x-kokoro-permission: capability.mcp.manage
-      summary: Register an MCP server
-      parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/McpServerRequest'
-      responses:
-        '200':
-          description: MCP server registered
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/McpServerResponse'
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
-        '409': { $ref: '#/components/responses/Conflict' }
-        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
-        '429':
-          description: IAM session admission is rate limited
-          headers:
-            Retry-After:
-              description: Bounded delay in seconds before retrying admission
-              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
-        '503': { $ref: '#/components/responses/ServiceUnavailable' }
-  /v1/mcp/servers/{name}/enable:
-    parameters:
-      - $ref: '#/components/parameters/McpServerName'
-    post:
-      tags: [MCP]
-      operationId: enableMcpServer
-      x-kokoro-owner: kokoro-bff
-      x-kokoro-visibility: public
-      x-kokoro-stability: beta
-      x-kokoro-idempotency: required
-      x-kokoro-permission: capability.mcp.manage
-      summary: Enable an MCP server
-      parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
-      responses:
-        '200':
-          description: MCP server enabled
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/OkResponse'
-        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '409': { $ref: '#/components/responses/Conflict' }
-        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
-        '429':
-          description: IAM session admission is rate limited
-          headers:
-            Retry-After:
-              description: Bounded delay in seconds before retrying admission
-              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
-        '503': { $ref: '#/components/responses/ServiceUnavailable' }
-  /v1/mcp/servers/{name}/disable:
-    parameters:
-      - $ref: '#/components/parameters/McpServerName'
-    post:
-      tags: [MCP]
-      operationId: disableMcpServer
-      x-kokoro-owner: kokoro-bff
-      x-kokoro-visibility: public
-      x-kokoro-stability: beta
-      x-kokoro-idempotency: required
-      x-kokoro-permission: capability.mcp.manage
-      summary: Disable an MCP server
-      parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
-      responses:
-        '200':
-          description: MCP server disabled
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/OkResponse'
-        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '409': { $ref: '#/components/responses/Conflict' }
-        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
-        '429':
-          description: IAM session admission is rate limited
-          headers:
-            Retry-After:
-              description: Bounded delay in seconds before retrying admission
-              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
-        '503': { $ref: '#/components/responses/ServiceUnavailable' }
-  /v1/mcp/servers/{name}:
-    parameters:
-      - $ref: '#/components/parameters/McpServerName'
-    delete:
-      tags: [MCP]
-      operationId: deleteMcpServer
-      x-kokoro-owner: kokoro-bff
-      x-kokoro-visibility: public
-      x-kokoro-stability: beta
-      x-kokoro-idempotency: required
-      x-kokoro-permission: capability.mcp.manage
-      summary: Delete an MCP server
-      parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
-      responses:
-        '200':
-          description: MCP server deleted
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/OkResponse'
-        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '409': { $ref: '#/components/responses/Conflict' }
-        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
-        '429':
-          description: IAM session admission is rate limited
-          headers:
-            Retry-After:
-              description: Bounded delay in seconds before retrying admission
-              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
-        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /v1/scheduled-tasks:
     get:
       tags: [Scheduled]
@@ -12299,12 +12156,6 @@ components:
       required: true
       schema:
         type: string
-    McpServerName:
-      name: name
-      in: path
-      required: true
-      schema:
-        type: string
     ScheduledTaskId:
       name: id
       in: path
@@ -18041,23 +17892,6 @@ components:
                     type: string
                     maxLength: 256
                     description: Empty root or NFC relative POSIX directory; no dot, empty, traversal or backslash segments.
-    McpServer:
-      type: object
-      required: [scope, name, revision, transport, url, allowed_tools, secret_ref, enabled]
-      properties:
-        scope: { type: string }
-        name: { type: string }
-        revision: { type: integer }
-        transport:
-          type: string
-          enum: [http, streamable_http]
-        url: { type: string }
-        allowed_tools:
-          type: array
-          items: { type: string }
-        secret_ref:
-          type: [string, 'null']
-        enabled: { type: boolean }
     McpServerProjection:
       type: object
       required: [server_id, provider_key, server_identity, transport, declaration_digest, status]
@@ -18071,21 +17905,6 @@ components:
           enum: [stdio, streamable_http, sse_compat, unknown]
         declaration_digest: { type: string, pattern: '^[a-f0-9]{64}$' }
         status: { type: string, enum: [registered, disabled, unknown] }
-    McpServerRequest:
-      type: object
-      required: [name, transport, url, allowed_tools]
-      additionalProperties: false
-      properties:
-        name: { type: string }
-        transport:
-          type: string
-          enum: [http, streamable_http]
-        url: { type: string }
-        allowed_tools:
-          type: array
-          items: { type: string }
-        secret_ref:
-          type: [string, 'null']
     McpServerListResponse:
       type: object
       required: [data]
@@ -18101,16 +17920,6 @@ components:
               items: { $ref: '#/components/schemas/McpServerProjection' }
             next_cursor:
               type: string
-    McpServerResponse:
-      type: object
-      required: [data, meta]
-      properties:
-        data:
-          type: object
-          required: [server]
-          properties:
-            server: { $ref: '#/components/schemas/McpServer' }
-        meta: { $ref: '#/components/schemas/RequestMeta' }
     AgentConnectionSetup:
       type: object
       required: [platform, status, qr_value, continue_url, expires_at]

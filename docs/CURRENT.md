@@ -1,3 +1,7 @@
+## SET49：主线与设置归档合同集成
+
+合并主线已批准的MCP public四写删除及既有设置/归档能力，以16.0.0/146发行（breaking删除，不冒minor）。integration-public-contract.mjs逐字节验证完整当前合同及有序清单，精确恢复原15.4全文/150后委托全部原inverse和oracle；main贡献保留，不修改Skills/MCP业务。Billing唯一pin使用正式experimental.5发行，保三读与严格专用404；正规contract:check791PASS、architecture37PASS、format/lint/type/build0；默认测试终态1417PASS/0FAIL/3SKIP。最初default唯一失败为旧v1 owner fixture，已按唯一正式v2配对更正路径且原余额/身份断言保留。Billing pure1433PASS/492SKIP、真实自有PG本人HTTP25PASS；两仓完整integration将后续串行自有资源执行，当前不宣完整资源门通过。正常服务不变。
+
 ## SET47 Root隔离验收与消费者发行（2026-10-15）
 
 Root独立核31交付文件及638保护文件对eec3244完全精确，public15.4/150完整逆恢复原15.3全文与146有序操作；终态独审无剩余确定P1/P2。Root正规lint/type/build通过，contract772PASS/2FAIL、architecture36PASS/1FAIL、default1395PASS/3FAIL/3SKIP，format7warn，完整门仍FAILED。上述三合同/架构失败的共同首步在原15.3 Gitblob也实际抛Admin Skill draft version drift；不修改Skills旧oracle来清零。
@@ -98,6 +102,17 @@ checkout保持现准入、request/幂等校验后明确503 billing_unavailable�
 首次完整check误用brew22.23.2，被Storage精确Node22.22.2门拒绝；随后固定已装22.22.2重跑，lint/typecheck及全部生成check/contractlint/semantic通过（保既有Redocly warnings），contract:test634PASS/2FAIL，完整check非零。两R357既有失败及全test额外architecture collection失败均旧restorePublic142直接收当前artifact而报Admin Skill draft version drift；只读HEAD14.7原字节调用同helper也失败。独立全test1222PASS/3FAIL/3既有SKIP、build0；Team读写17PASS。完整format:check七既有文件失败，四变更TS/test具名格式0，diffcheck0；不格式化范围外旧文件。实际Web固定消费/strict schema与浏览器、Admin消费者、后继正常发布仍待Root，不能称全check或业务闭环通过。
 
 Root独立build、Team读写与contract-governance共48PASS/0FAIL/0SKIP、semantic141个冻结operations通过；另外直接从基线Git blob核对新inverse恢复全文逐字相等，并独立重现原14.7被旧restore142入口拒绝。冻结六路径独审无确定新增P1/P2。此收据仍不改变上述全check/format未通过及consumer待验边界。
+## App API 修复当前切片（2026-10-13）
+
+BFF 基线 `95fbd894ee01053f6c9cabeca481e50151cd4f15`；Billing owner 固定 `1ceeae550f05857d1e7fa0da1e83af23a552f0ca` 的唯一 v1 artifact，Platform HTTP 固定 `6b4c9db6719d2f5fd37a752921e603f4b0221de6` 的 6.0.0 artifact。生成器实际输入、vendor 字节与 manifest 一致，不仅核对声明 digest；旧 projection OAuth/token source 已删除。独立 Connect 消费保持其固定 Proto bundle，不作为 HTTP fallback。
+
+Root 在停止写入的工作树执行：`pnpm lint`、`pnpm typecheck`、`pnpm build`、对应 Billing/Platform HTTP `contract:check` 与变更文件格式检查全部通过；10 个相关测试文件 165 PASS / 0 FAIL / 0 SKIP。现有 credential 用例同时保护 opaque tenant、UTF-16 长度、取消后迟到 I/O、关闭失败和轮换；现有 Billing 用例保护 typed 404、未知路由和未知字段。
+
+真实运行 owner 与隔离 BFF HTTP/Connect 组合已验证：ListHubSkills、ListSkills 均 200；专用服务凭据错误 401、跨 tenant 403；发送方内部 OAuth 请求为零。本人 Billing summary/ledger 正确接收 `billing.credit_account_not_found` 并返回 `billing_account_not_found` 404，未新增账户或资金。此组合仅人类 SessionAdmission 为测试替身，不冒充浏览器真实登录。
+
+完整 `pnpm check` 的 contract tests 为 629 PASS / 2 FAIL；完整 `pnpm test` 为 1212 PASS / 3 FAIL / 3 SKIP。失败均为已有 public14.7 历史恢复链未接入的问题（两项 R357 加一项 Conversation collection architecture）；受影响原 OpenAPI/恢复器与基线字节一致，architecture 的该断言也未改变。未删测试、改旧 hash 或放宽门禁，不宣称全仓通过。由 public contract owner 后续收敛该历史链。
+
+正常服务激活及当前浏览器验收分别留在 Root 本次任务记录和本地 ignored 运行证据；当前浏览器仍需正常登录。此片不改 Schema、目录边界、付款 worker、模型许可或其他内部认证 surface。下方既有记录按原时点理解。
 
 ## T-K03.14-BFF-SKILL-AUTH-ERROR Public13.1 源码候选收据（2026-10-10；待 Root 独审提交）
 

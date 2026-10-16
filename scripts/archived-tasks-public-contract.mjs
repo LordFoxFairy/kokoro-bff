@@ -1,3 +1,4 @@
+import { restorePublic154IntegrationContract, integrationParentBaseline } from "./integration-public-contract.mjs"
 import { createHash } from "node:crypto"
 import { restorePublic152SharedTasksContract, sharedTasksParentBaseline } from "./shared-tasks-public-contract.mjs"
 
@@ -29,6 +30,7 @@ export const ARCHIVED_TASKS_OPERATIONS = [
 ]
 const digest = (value) => createHash("sha256").update(value).digest("hex")
 export function restorePublic153ArchivedTasksContract(source) {
+  if (/^  version: 16\.0\.0$/mu.test(source)) source = restorePublic154IntegrationContract(source)
   if (!/^  version: 15\.4\.0$/mu.test(source)) throw new Error("SET47 current version drift")
   for (const block of [ARCHIVED_TASKS_PATH_SOURCE, ARCHIVED_TASKS_SCHEMA_SOURCE])
     if (source.split(block).length !== 2) throw new Error("SET47 closed archive contract drift")
@@ -38,6 +40,7 @@ export function restorePublic153ArchivedTasksContract(source) {
   return parent
 }
 export function archivedTasksParentBaseline(baseline) {
+  if (Array.isArray(baseline) && baseline.length === 146) baseline = integrationParentBaseline(baseline)
   if (!Array.isArray(baseline) || baseline.length !== 150) throw new Error("SET47 exact150 inventory drift")
   for (let i = 0; i < ARCHIVED_TASKS_OPERATIONS.length; i += 1) {
     const added = ARCHIVED_TASKS_OPERATIONS[i]

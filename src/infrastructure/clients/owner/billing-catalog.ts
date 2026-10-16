@@ -88,7 +88,7 @@ export async function readBillingCatalog(config: BffConfig, context: RequestCont
             authorization: `Bearer ${token}`,
             "x-kokoro-internal-secret": secret,
             "x-kokoro-service": "web-bff",
-            "x-kokoro-request-id": context.requestId,
+            "x-request-id": context.requestId,
             "x-kokoro-tenant-id": tenant,
           },
         }),

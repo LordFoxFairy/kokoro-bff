@@ -3,24 +3,19 @@ import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import test from "node:test"
-import { ProjectionTokenSource } from "../src/infrastructure/clients/platform/projection-token.ts"
+const TENANT = "123e4567-e89b-42d3-a456-426614174000"
 import { PlatformProjectionHttpClient } from "../src/infrastructure/clients/platform/projection-http.ts"
 test("projection client sends tenant/subject bearer and rejects missing no-store", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "projection-")),
     file = path.join(dir, "c.json")
   await writeFile(
     file,
-    JSON.stringify([
-      {
-        tenantId: "t",
-        generation: 1,
-        credentialRefVersion: "v",
-        clientId: "id",
-        clientSecret: "s",
-        resource: "https://kokoro.dev/resources/platform-internal",
-        scope: "platform:projection.read",
-      },
-    ]),
+    JSON.stringify({
+      version: 1,
+      entries: [
+        { credential_id: "bff-projection", secret: "bff-projection-secret-000000000000", caller: "kokoro-bff", surfaces: ["projection"], tenant_id: TENANT },
+      ],
+    }),
   )
   await chmod(file, 0o600)
   const original = globalThis.fetch
@@ -34,9 +29,9 @@ test("projection client sends tenant/subject bearer and rejects missing no-store
       : ((ownerHeaders = new Headers(input instanceof Request ? input.headers : init.headers)),
         new Response(JSON.stringify({ data: { skills: [] } }), { status: 200, headers: { "content-type": "application/json", "x-kokoro-request-id": "r" } }))
   try {
-    const result = await new PlatformProjectionHttpClient("http://platform.test", "http://iam.test", file).read("skills", "t", "u", "r")
+    const result = await new PlatformProjectionHttpClient("http://platform.test", file).read("skills", TENANT, "u", "r")
     assert.deepEqual(result, { ok: false, status: 502, code: "skill_response_invalid", retryable: false })
-    assert.equal(ownerHeaders.get("authorization"), "Bearer token")
+    assert.equal(ownerHeaders.get("authorization"), "Bearer bff-projection-secret-000000000000")
     assert.equal(ownerHeaders.get("x-kokoro-subject"), "u")
   } finally {
     globalThis.fetch = original
@@ -49,17 +44,12 @@ test("projection client rejects an oversized stream before full buffering", asyn
   const file = path.join(dir, "c.json")
   await writeFile(
     file,
-    JSON.stringify([
-      {
-        tenantId: "t",
-        generation: 1,
-        credentialRefVersion: "v",
-        clientId: "id",
-        clientSecret: "s",
-        resource: "https://kokoro.dev/resources/platform-internal",
-        scope: "platform:projection.read",
-      },
-    ]),
+    JSON.stringify({
+      version: 1,
+      entries: [
+        { credential_id: "bff-projection", secret: "bff-projection-secret-000000000000", caller: "kokoro-bff", surfaces: ["projection"], tenant_id: TENANT },
+      ],
+    }),
   )
   await chmod(file, 0o600)
   const original = globalThis.fetch
@@ -84,7 +74,7 @@ test("projection client rejects an oversized stream before full buffering", asyn
     return new Response(body, { status: 200, headers: { "content-type": "application/json", "x-kokoro-request-id": "r", "cache-control": "no-store" } })
   }
   try {
-    const result = await new PlatformProjectionHttpClient("http://platform.test", "http://iam.test", file, 5000, 8).read("skills", "t", "u", "r")
+    const result = await new PlatformProjectionHttpClient("http://platform.test", file, 5000, 8).read("skills", TENANT, "u", "r")
     assert.deepEqual(result, { ok: false, status: 502, code: "skill_response_invalid", retryable: false })
     assert.equal(cancelled, true)
     assert.ok(pulls <= 2)
@@ -99,33 +89,18 @@ async function withProjectionOwner(ownerFetch, run, options = {}) {
   const file = path.join(dir, "c.json")
   await writeFile(
     file,
-    JSON.stringify([
-      {
-        tenantId: "t",
-        generation: 1,
-        credentialRefVersion: "v",
-        clientId: "id",
-        clientSecret: "s",
-        resource: "https://kokoro.dev/resources/platform-internal",
-        scope: "platform:projection.read",
-      },
-    ]),
+    JSON.stringify({
+      version: 1,
+      entries: [
+        { credential_id: "bff-projection", secret: "bff-projection-secret-000000000000", caller: "kokoro-bff", surfaces: ["projection"], tenant_id: TENANT },
+      ],
+    }),
   )
   await chmod(file, 0o600)
   const original = globalThis.fetch
-  globalThis.fetch = async (input, init) =>
-    String(input).includes("/iam/oauth2/token")
-      ? options.tokenFetch
-        ? options.tokenFetch(input, init)
-        : new Response(JSON.stringify({ access_token: "token", token_type: "Bearer", scope: "platform:projection.read", expires_in: 60 }), {
-            status: 200,
-            headers: { "content-type": "application/json" },
-          })
-      : ownerFetch(input, init)
+  globalThis.fetch = ownerFetch
   try {
-    return await run(
-      new PlatformProjectionHttpClient("http://platform.test", "http://iam.test", file, options.timeoutMs ?? 5000, options.maxBytes ?? 1024 * 1024),
-    )
+    return await run(new PlatformProjectionHttpClient("http://platform.test", file, options.timeoutMs ?? 5000, options.maxBytes ?? 1024 * 1024))
   } finally {
     globalThis.fetch = original
     await rm(dir, { recursive: true, force: true })
@@ -135,16 +110,21 @@ async function withProjectionOwner(ownerFetch, run, options = {}) {
 const ownerHeaders = { "content-type": "application/json", "x-kokoro-request-id": "r", "cache-control": "no-store" }
 
 test("projection client does not leak owner auth/error codes to Product API", async () => {
-  for (const [ownerStatus, ownerCode, publicStatus, publicCode] of [
-    [404, "capability.route_not_found", 404, "skill_not_found"],
-    [401, "capability.service_auth_failed", 503, "skill_dependency_unavailable"],
-    [403, "capability.tenant_mismatch", 503, "skill_dependency_unavailable"],
-    [429, "capability.rate_limited", 502, "skill_response_invalid"],
+  for (const [ownerStatus, ownerCode, ownerRetryable, publicStatus, publicCode] of [
+    [404, "capability.route_not_found", false, 404, "skill_not_found"],
+    [401, "capability.service_auth_failed", false, 503, "skill_dependency_unavailable"],
+    [403, "capability.tenant_mismatch", false, 503, "skill_dependency_unavailable"],
+    [503, "capability.dependencies_unavailable", true, 503, "skill_dependency_unavailable"],
+    [503, "capability.service_auth_failed", false, 502, "skill_response_invalid"],
+    [429, "capability.rate_limited", false, 502, "skill_response_invalid"],
   ]) {
     const result = await withProjectionOwner(
       async () =>
-        new Response(JSON.stringify({ error: { code: ownerCode, message: "internal", retryable: false } }), { status: ownerStatus, headers: ownerHeaders }),
-      (client) => client.read("skill", "t", "u", "r", { skillId: "skill-one" }),
+        new Response(JSON.stringify({ error: { code: ownerCode, message: "internal", retryable: ownerRetryable } }), {
+          status: ownerStatus,
+          headers: ownerHeaders,
+        }),
+      (client) => client.read("skill", TENANT, "u", "r", { skillId: "skill-one" }),
     )
     assert.equal(result.status, publicStatus)
     assert.equal(result.code, publicCode)
@@ -153,7 +133,7 @@ test("projection client does not leak owner auth/error codes to Product API", as
     async () => {
       throw new Error("network down")
     },
-    (client) => client.read("skill", "t", "u", "r", { skillId: "skill-one" }),
+    (client) => client.read("skill", TENANT, "u", "r", { skillId: "skill-one" }),
   )
   assert.deepEqual(network, { ok: false, status: 503, code: "skill_dependency_unavailable", retryable: true })
 })
@@ -178,7 +158,7 @@ test("projection by-ID response must bind requested identity and exact public fi
   ]) {
     const result = await withProjectionOwner(
       async () => new Response(JSON.stringify({ data }), { status: 200, headers: ownerHeaders }),
-      (client) => client.read("skill", "t", "u", "r", { skillId: "skill-one" }),
+      (client) => client.read("skill", TENANT, "u", "r", { skillId: "skill-one" }),
     )
     assert.deepEqual(result, { ok: false, status: 502, code: "skill_response_invalid", retryable: false })
   }
@@ -235,7 +215,7 @@ test("R345 all three HTTP Skill shapes require one closed UTC Z update instant a
       label: "visible Skill",
       value: visible,
       response: (value) => ({ data: { skills: [value] } }),
-      read: (client) => client.read("skills", "t", "u", "r"),
+      read: (client) => client.read("skills", TENANT, "u", "r"),
       expected: { ok: true, status: 200, data: { skills: [visible] } },
       invalid: { ok: false, status: 502, code: "skill_response_invalid", retryable: false },
     },
@@ -243,7 +223,7 @@ test("R345 all three HTTP Skill shapes require one closed UTC Z update instant a
       label: "published personal Skill",
       value: published,
       response: (value) => ({ data: value }),
-      read: (client) => client.read("skill", "t", "u", "r", { skillId: "skill-one" }),
+      read: (client) => client.read("skill", TENANT, "u", "r", { skillId: "skill-one" }),
       expected: { ok: true, status: 200, data: published },
       invalid: { ok: false, status: 502, code: "skill_response_invalid", retryable: false },
     },
@@ -252,17 +232,17 @@ test("R345 all three HTTP Skill shapes require one closed UTC Z update instant a
       value: managed,
       response: (value) => ({ data: value }),
       read: (client) =>
-        client.readManagedPersonalSkill("managedSkill", "t", "u", "r", { skillId: "skill-one" }, new AbortController().signal, performance.now() + 5000),
+        client.readManagedPersonalSkill("managedSkill", TENANT, "u", "r", { skillId: "skill-one" }, new AbortController().signal, performance.now() + 5000),
       expected: { ok: true, status: 200, data: managed },
       invalid: { ok: false, status: 502, code: "skill_response_invalid" },
     },
   ]
-  for (const operation of ["pool", "catalog"]) cases.push({ ...cases[0], label: operation, read: (client) => client.read(operation, "t", "u", "r") })
+  for (const operation of ["pool", "catalog"]) cases.push({ ...cases[0], label: operation, read: (client) => client.read(operation, TENANT, "u", "r") })
   cases.push({
     ...cases[2],
     label: "managed list",
     response: (value) => ({ data: { skills: [value] } }),
-    read: (client) => client.readManagedPersonalSkill("managedSkills", "t", "u", "r", {}, new AbortController().signal, performance.now() + 5000),
+    read: (client) => client.readManagedPersonalSkill("managedSkills", TENANT, "u", "r", {}, new AbortController().signal, performance.now() + 5000),
     expected: { ok: true, status: 200, data: { skills: [managed], next_cursor: null } },
   })
   for (const profile of cases) {
@@ -322,7 +302,7 @@ test("projection oversized Content-Length returns without waiting for a stuck ca
   const outcome = await Promise.race([
     withProjectionOwner(
       async () => new Response(stream, { status: 200, headers: { ...ownerHeaders, "content-length": "9999999" } }),
-      (client) => client.read("skills", "t", "u", "r"),
+      (client) => client.read("skills", TENANT, "u", "r"),
     ),
     new Promise((resolve) => setTimeout(() => resolve("timed_out"), 200)),
   ])
@@ -339,7 +319,7 @@ test("projection streamed overflow returns without waiting for a stuck reader ca
   const outcome = await Promise.race([
     withProjectionOwner(
       async () => new Response(stream, { status: 200, headers: ownerHeaders }),
-      (client) => client.read("skills", "t", "u", "r"),
+      (client) => client.read("skills", TENANT, "u", "r"),
     ),
     new Promise((resolve) => setTimeout(() => resolve("timed_out"), 200)),
   ])
@@ -363,13 +343,13 @@ test("R257 self MCP connections client reads six-field current-person projection
       requests.push(input instanceof Request ? input : new Request(input, init))
       return new Response(JSON.stringify({ data }), { status: 200, headers: ownerHeaders })
     },
-    (client) => client.read("mcpConnections", "t", "u", "r", { query }),
+    (client) => client.read("mcpConnections", TENANT, "u", "r", { query }),
   )
   assert.equal(requests.length, 1, "one owner read without fallback or retry")
   const request = requests[0]
   assert.equal(request.method, "GET")
-  assert.equal(request.headers.get("authorization"), "Bearer token")
-  assert.equal(request.headers.get("x-kokoro-tenant-id"), "t")
+  assert.equal(request.headers.get("authorization"), "Bearer bff-projection-secret-000000000000")
+  assert.equal(request.headers.get("x-kokoro-tenant-id"), TENANT)
   assert.equal(request.headers.get("x-kokoro-subject"), "u")
   assert.equal(request.headers.get("x-kokoro-request-id"), "r")
   const url = new URL(request.url)
@@ -411,7 +391,7 @@ test("R257 self connections reject malformed owner shape, media, identity header
   ]) {
     const result = await withProjectionOwner(
       async () => new Response(JSON.stringify(body), { status: 200, headers: ownerHeaders }),
-      (client) => client.read("mcpConnections", "t", "u", "r"),
+      (client) => client.read("mcpConnections", TENANT, "u", "r"),
     )
     assert.deepEqual(result, connectionInvalid)
   }
@@ -424,14 +404,14 @@ test("R257 self connections reject malformed owner shape, media, identity header
   ]) {
     const result = await withProjectionOwner(
       async () => new Response(JSON.stringify(valid), { status: 200, headers }),
-      (client) => client.read("mcpConnections", "t", "u", "r"),
+      (client) => client.read("mcpConnections", TENANT, "u", "r"),
     )
     assert.deepEqual(result, connectionInvalid)
   }
   for (const body of ["{invalid", new Uint8Array([123, 34, 255, 34, 58, 49, 125])]) {
     const result = await withProjectionOwner(
       async () => new Response(body, { status: 200, headers: ownerHeaders }),
-      (client) => client.read("mcpConnections", "t", "u", "r"),
+      (client) => client.read("mcpConnections", TENANT, "u", "r"),
     )
     assert.deepEqual(result, connectionInvalid)
   }
@@ -457,7 +437,7 @@ test("R257 self connections enforce owner status-code-retryable pairs and safe f
         assert.equal(input.redirect, "error")
         return new Response(JSON.stringify({ error: { code, message: "internal secret", retryable } }), { status, headers: ownerHeaders })
       },
-      (client) => client.read("mcpConnections", "t", "u", "r"),
+      (client) => client.read("mcpConnections", TENANT, "u", "r"),
     )
     assert.deepEqual(result, expected, status + " " + code)
   }
@@ -465,12 +445,12 @@ test("R257 self connections enforce owner status-code-retryable pairs and safe f
     async () => {
       throw new Error("private network detail")
     },
-    (client) => client.read("mcpConnections", "t", "u", "r"),
+    (client) => client.read("mcpConnections", TENANT, "u", "r"),
   )
   assert.deepEqual(network, connectionUnavailable)
 })
 
-test("R257 self connections bound token plus owner body by one total deadline", async () => {
+test("R257 self connections bound credential read plus owner body by one total deadline", async () => {
   let ownerSignal
   let cancelled = false
   let calls = 0
@@ -488,74 +468,50 @@ test("R257 self connections bound token plus owner body by one total deadline", 
         { status: 200, headers: ownerHeaders },
       )
     },
-    (client) => client.read("mcpConnections", "t", "u", "r"),
-    {
-      timeoutMs: 200,
-      tokenFetch: async () => {
-        await new Promise((resolve) => setTimeout(resolve, 120))
-        return new Response(JSON.stringify({ access_token: "token", token_type: "Bearer", scope: "platform:projection.read", expires_in: 60 }), {
-          headers: { "content-type": "application/json" },
-        })
-      },
-    },
+    (client) => client.read("mcpConnections", TENANT, "u", "r"),
+    { timeoutMs: 200 },
   )
   assert.deepEqual(result, connectionUnavailable)
   assert.equal(calls, 1)
   assert.equal(ownerSignal.aborted, true)
   assert.equal(cancelled, true)
-  assert.ok(performance.now() - started < 300, "token wait must not reset the owner deadline")
+  assert.ok(performance.now() - started < 300, "credential read must not reset the owner deadline")
 })
 
-test("R257 self connections retire late token and owner headers after caller cancellation", async () => {
-  for (const phase of ["token", "owner"]) {
-    let release
-    let entered
-    const gate = new Promise((resolve) => {
-      release = resolve
-    })
-    const reached = new Promise((resolve) => {
-      entered = resolve
-    })
-    const controller = new AbortController()
-    let ownerCalls = 0
-    let cancelled = false
-    await withProjectionOwner(
-      async () => {
-        ownerCalls += 1
-        entered()
-        await gate
-        return new Response(
-          new ReadableStream({
-            cancel() {
-              cancelled = true
-            },
-          }),
-          { status: 200, headers: ownerHeaders },
-        )
-      },
-      async (client) => {
-        const pending = client.read("mcpConnections", "t", "u", "r", {}, controller.signal)
-        await reached
-        controller.abort()
-        assert.deepEqual(await pending, connectionUnavailable)
-        release()
-        await new Promise((resolve) => setTimeout(resolve, 0))
-        assert.equal(ownerCalls, phase === "token" ? 0 : 1)
-        if (phase === "owner") assert.equal(cancelled, true)
-      },
-      phase === "token"
-        ? {
-            tokenFetch: async () => {
-              entered()
-              await gate
-              return new Response(JSON.stringify({ access_token: "token", token_type: "Bearer", scope: "platform:projection.read", expires_in: 60 }), {
-                headers: { "content-type": "application/json" },
-              })
-            },
-          }
-        : {},
-    )
-  }
+test("R257 self connections discard late owner response after caller cancellation", async () => {
+  let release
+  let entered
+  const gate = new Promise((resolve) => {
+    release = resolve
+  })
+  const reached = new Promise((resolve) => {
+    entered = resolve
+  })
+  const controller = new AbortController()
+  let cancelled = false
+  await withProjectionOwner(
+    async () => {
+      entered()
+      await gate
+      return new Response(
+        new ReadableStream({
+          cancel() {
+            cancelled = true
+          },
+        }),
+        { status: 200, headers: ownerHeaders },
+      )
+    },
+    async (client) => {
+      const pending = client.read("mcpConnections", TENANT, "u", "r", {}, controller.signal)
+      await reached
+      controller.abort()
+      assert.deepEqual(await pending, connectionUnavailable)
+      release()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      assert.equal(cancelled, true)
+    },
+  )
 })
 
 test("R257 self connections retain strict body caps and nonblocking cancellation", async () => {
@@ -575,80 +531,12 @@ test("R257 self connections retain strict body caps and nonblocking cancellation
           }),
           { status: 200, headers: { ...ownerHeaders, ...(declared ? { "content-length": "33" } : {}) } },
         ),
-      (client) => client.read("mcpConnections", "t", "u", "r"),
+      (client) => client.read("mcpConnections", TENANT, "u", "r"),
       { timeoutMs: 200, maxBytes: 32 },
     )
     assert.deepEqual(result, connectionInvalid)
     assert.equal(cancelled, true)
   }
-})
-
-test("R257 cancelled credential wait never starts token HTTP after its late resolution", async () => {
-  let release
-  let entered
-  const pendingCredential = new Promise((resolve) => {
-    release = resolve
-  })
-  const credentialStarted = new Promise((resolve) => {
-    entered = resolve
-  })
-  const credentials = {
-    async read() {
-      entered()
-      return pendingCredential
-    },
-  }
-  const controller = new AbortController()
-  const originalFetch = globalThis.fetch
-  let calls = 0
-  globalThis.fetch = async () => {
-    calls += 1
-    throw new Error("unexpected late token HTTP")
-  }
-  try {
-    const tokens = new ProjectionTokenSource("http://iam.test", credentials, 1000)
-    const pending = tokens.get("t", controller.signal)
-    const rejected = assert.rejects(pending, { name: "AbortError" })
-    await credentialStarted
-    controller.abort()
-    release({
-      cacheKey: "test",
-      clientId: "id",
-      clientSecret: "s",
-      resource: "https://kokoro.dev/resources/platform-internal",
-      scope: "platform:projection.read",
-    })
-    await rejected
-    assert.equal(calls, 0)
-    await assert.rejects(tokens.get("t", controller.signal), { name: "AbortError" })
-    assert.equal(calls, 0)
-  } finally {
-    globalThis.fetch = originalFetch
-  }
-})
-
-test("R257 self connections expire during token HTTP without opening an owner read", async () => {
-  let tokenSignal
-  let ownerCalls = 0
-  const result = await withProjectionOwner(
-    async () => {
-      ownerCalls += 1
-      throw new Error("unexpected owner")
-    },
-    (client) => client.read("mcpConnections", "t", "u", "r"),
-    {
-      timeoutMs: 40,
-      tokenFetch: async (_input, init) => {
-        tokenSignal = init.signal
-        return new Promise((_resolve, reject) => {
-          tokenSignal.addEventListener("abort", () => reject(tokenSignal.reason), { once: true })
-        })
-      },
-    },
-  )
-  assert.deepEqual(result, connectionUnavailable)
-  assert.equal(tokenSignal.aborted, true)
-  assert.equal(ownerCalls, 0)
 })
 
 test("R257 self connection response provider and cursor bounds count Unicode code points", async () => {
@@ -660,7 +548,7 @@ test("R257 self connection response provider and cursor bounds count Unicode cod
     const data = { connections: [{ ...connectionRow, provider_key: "😀".repeat(providerLength) }], next_cursor: "😀".repeat(cursorLength) }
     const result = await withProjectionOwner(
       async () => new Response(JSON.stringify({ data }), { status: 200, headers: ownerHeaders }),
-      (client) => client.read("mcpConnections", "t", "u", "r"),
+      (client) => client.read("mcpConnections", TENANT, "u", "r"),
     )
     assert.deepEqual(result, expected ? { ok: true, status: 200, data } : connectionInvalid)
   }
@@ -672,14 +560,14 @@ test("R357 current catalog preserves owner invalid-cursor400 without leaking own
         status: 400,
         headers: ownerHeaders,
       }),
-    (client) => client.read("catalog", "t", "u", "r", { query: { cursor: "invalid" } }),
+    (client) => client.read("catalog", TENANT, "u", "r", { query: { cursor: "invalid" } }),
   )
   assert.deepEqual(result, { ok: false, status: 400, code: "invalid_query_parameter", retryable: false })
 })
 test("R357 current catalog rejects duplicate raw response keys rather than picking a convenient empty list", async () => {
   const result = await withProjectionOwner(
     async () => new Response('{"data":{"skills":["invalid"],"skills":[]}}', { status: 200, headers: ownerHeaders }),
-    (client) => client.read("catalog", "t", "u", "r"),
+    (client) => client.read("catalog", TENANT, "u", "r"),
   )
   assert.deepEqual(result, { ok: false, status: 502, code: "skill_response_invalid", retryable: false })
 })

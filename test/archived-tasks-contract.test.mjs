@@ -1,3 +1,4 @@
+import { restorePublic154IntegrationContract, integrationParentBaseline } from "../scripts/integration-public-contract.mjs"
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
 import { readFile } from "node:fs/promises"
@@ -10,7 +11,8 @@ import {
   archivedTasksParentBaseline,
   restorePublic153ArchivedTasksContract,
 } from "../scripts/archived-tasks-public-contract.mjs"
-const source = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
+const integratedSource = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
+const source = restorePublic154IntegrationContract(integratedSource)
 const spec = load(source)
 const sha = (value) => createHash("sha256").update(value).digest("hex")
 const inventory = Object.entries(spec.paths).flatMap(([path, item]) =>
@@ -18,7 +20,8 @@ const inventory = Object.entries(spec.paths).flatMap(([path, item]) =>
     .filter(([method]) => ["get", "post", "patch", "put", "delete", "head", "options"].includes(method))
     .map(([method, operation]) => ({ method: method.toUpperCase(), path, operation_id: operation.operationId })),
 )
-const currentInventory = JSON.parse(await readFile(new URL("../contract/tests/v1-operations.json", import.meta.url), "utf8")).operations
+const integratedInventory = JSON.parse(await readFile(new URL("../contract/tests/v1-operations.json", import.meta.url), "utf8")).operations
+const currentInventory = integrationParentBaseline(integratedInventory)
 const oldInventory = archivedTasksParentBaseline(currentInventory)
 const resolve = (schema) => (schema.$ref ? spec.components.schemas[schema.$ref.split("/").at(-1)] : schema)
 
@@ -164,4 +167,19 @@ test("SET47 schema inverse keeps lifecycle and canonical old SQL exactly unchang
     .replace("  archived_at TIMESTAMPTZ(3),\n", "")
     .replace(/-- SET47: organization state[^]*?(?=CREATE TABLE IF NOT EXISTS bff_message \()/u, "")
   assert.equal(sha(restored), "cb1b6810010bbdb9ac8f1c30e42ef0e59ef90670f3742b769d85521d750be421")
+})
+
+test("SET49 complete16.0 preserves approved main deletion and restores exact15.4 history", () => {
+  assert.equal(load(integratedSource).info.version, "16.0.0")
+  assert.equal(integratedInventory.length, 146)
+  assert.equal(sha(source), "87186311e67eeebcd5f27d7974326186e1912de49d18d4d524a0bcbc940a0817")
+  for (const id of ["registerMcpServer", "enableMcpServer", "disableMcpServer", "deleteMcpServer"])
+    assert.equal(
+      integratedInventory.some((operation) => operation.operation_id === id),
+      false,
+    )
+  assert.throws(() => restorePublic154IntegrationContract(integratedSource.replace("MCP discovery projections", "MCP changed projections")))
+  assert.throws(() => restorePublic154IntegrationContract(integratedSource.replace("archived_at DESC", "archived_at ASC")))
+  assert.throws(() => integrationParentBaseline([...integratedInventory, integratedInventory[0]]))
+  assert.throws(() => integrationParentBaseline([...integratedInventory].reverse()))
 })

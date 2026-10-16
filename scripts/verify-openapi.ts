@@ -3135,7 +3135,7 @@ export function restorePublic15TeamPermissionsContract(source: string): string {
 
 export function inspectBffOpenApi(source: string, baseline: readonly BaselineOperation[]): string[] {
   try {
-    if (/^  version: 15\.4\.0$/mu.test(source)) {
+    if (/^  version: (?:15\.4|16\.0)\.0$/mu.test(source)) {
       source = restorePublic153ArchivedTasksContract(source)
       baseline = archivedTasksParentBaseline(baseline)
     }

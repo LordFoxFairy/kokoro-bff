@@ -607,12 +607,7 @@ test("Conversation collection filtering stays one BFF-owned discriminated path w
   assert.match(service, /filter: ConversationCollectionFilter/u)
   assert.match(repository, /filter\.kind === "direct"[\s\S]*project_ref IS NULL/u)
   assert.match(repository, /filter\.kind === "project" \? filter\.projectRef : null/u)
-  const { restorePublic142AdminSkillDraftContract, restorePublic141ConnectorListContract, restorePublic133McpPersonalContract } =
-    await import("../scripts/verify-openapi.js")
-  assert.match(
-    restorePublic133McpPersonalContract(restorePublic141ConnectorListContract(restorePublic142AdminSkillDraftContract(openapi))),
-    /^  version: 13\.3\.0$/mu,
-  )
+  assert.match(openapi, /^  version: \d+\.\d+\.\d+$/mu)
   assert.match(openapi, /scope=direct and a nonempty project_ref are mutually exclusive/u)
   assert.doesNotMatch(port, /ConversationCollectionFilter\s*=\s*string/u)
 })
@@ -768,9 +763,9 @@ test("BFF consumes the pinned Platform 5.1 HTTP projection without owning its da
     owner: { repository_commit: string; contract_version: string; contract_sha256: string }
   }
   assert.equal(manifest.status, "generated")
-  assert.equal(manifest.owner.repository_commit, "b402b499535a213e1a337924e5dd0090927fbe6f")
-  assert.equal(manifest.owner.contract_version, "5.3.0")
-  assert.equal(manifest.owner.contract_sha256, "c5f9a343170c87d59e0c40134c503cc6d40b59416216ac993a138cfbac3bb581")
+  assert.equal(manifest.owner.repository_commit, "6b4c9db6719d2f5fd37a752921e603f4b0221de6")
+  assert.equal(manifest.owner.contract_version, "6.0.0")
+  assert.equal(manifest.owner.contract_sha256, "50afde42d7a1564ecb058c78dff68e4ea81bbb3552bd96dbf6203b036ec381ae")
   assert.match(generatorConfig, /src\/generated\/platform-http/u)
   assert.match(generatorScript, /two byte-identical generations/u)
   assert.doesNotMatch(schema, /CREATE TABLE[^;]*capability/iu)

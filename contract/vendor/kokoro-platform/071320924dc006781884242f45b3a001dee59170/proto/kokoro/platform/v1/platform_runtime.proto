@@ -86,6 +86,9 @@ message McpConnectionId {
 message McpAuthorizationId {
   string value = 1;
 }
+message CustomApiProfileId {
+  string value = 1;
+}
 message McpInvocationGrant {
   string value = 1;
 }
@@ -1230,7 +1233,11 @@ message CreatePersonalMcpConnectionResponse {
 
 service ProductMcpPersonalService {
   rpc RegisterPersonalMcpServer(kokoro.platform.v1.RegisterPersonalMcpServerRequest) returns (kokoro.platform.v1.RegisterPersonalMcpServerResponse);
+  rpc ImportPersonalMcpJson(kokoro.platform.v1.ImportPersonalMcpJsonRequest) returns (kokoro.platform.v1.ImportPersonalMcpJsonResponse);
   rpc GetPersonalMcpServer(kokoro.platform.v1.GetPersonalMcpServerRequest) returns (kokoro.platform.v1.GetPersonalMcpServerResponse);
+  rpc PreparePersonalMcpServer(kokoro.platform.v1.PreparePersonalMcpServerRequest) returns (kokoro.platform.v1.PreparePersonalMcpServerResponse);
+  rpc UpdatePersonalMcpServer(kokoro.platform.v1.UpdatePersonalMcpServerRequest) returns (kokoro.platform.v1.UpdatePersonalMcpServerResponse);
+  rpc DeletePersonalMcpServer(kokoro.platform.v1.DeletePersonalMcpServerRequest) returns (kokoro.platform.v1.DeletePersonalMcpServerResponse);
   rpc ListPersonalMcpConnectors(kokoro.platform.v1.ListPersonalMcpConnectorsRequest) returns (kokoro.platform.v1.ListPersonalMcpConnectorsResponse);
   rpc GetPersonalMcpConnector(kokoro.platform.v1.GetPersonalMcpConnectorRequest) returns (kokoro.platform.v1.GetPersonalMcpConnectorResponse);
   rpc ListPersonalMcpConnections(kokoro.platform.v1.ListPersonalMcpConnectionsRequest) returns (kokoro.platform.v1.ListPersonalMcpConnectionsResponse);
@@ -1245,6 +1252,74 @@ service ProductMcpPersonalService {
   rpc CompletePersonalMcpConnectorAuthorization(kokoro.platform.v1.CompletePersonalMcpConnectorAuthorizationRequest) returns (kokoro.platform.v1.CompletePersonalMcpConnectorAuthorizationResponse);
   rpc ReconnectPersonalMcpConnectorAuthorization(kokoro.platform.v1.ReconnectPersonalMcpConnectorAuthorizationRequest) returns (kokoro.platform.v1.ReconnectPersonalMcpConnectorAuthorizationResponse);
   rpc CreatePersonalMcpConnection(kokoro.platform.v1.CreatePersonalMcpConnectionRequest) returns (kokoro.platform.v1.CreatePersonalMcpConnectionResponse);
+}
+
+// Custom API is a distinct personal configuration aggregate. It deliberately has
+// no URL, provider, OAuth, execution, or MCP transport fields.
+message CustomApiEnvironmentWrite { string name = 1; string value = 2; }
+message CustomApiEnvironmentDescriptor { string name = 1; bool configured = 2; uint64 state_version = 3; string status = 4; }
+message PersonalCustomApi {
+  kokoro.platform.v1.CustomApiProfileId profile_id = 1;
+  string name = 2;
+  optional string instructions = 3;
+  uint64 state_version = 4;
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp updated_at = 6;
+  repeated kokoro.platform.v1.CustomApiEnvironmentDescriptor environment = 7;
+}
+message CreatePersonalCustomApiRequest {
+  reserved 100;
+  reserved "tenant_id", "actor_id", "subject_id", "owner_scope", "target_owner_scope", "product_context", "execution_proof", "attestation";
+  string request_id = 1;
+  kokoro.common.v1.CommandIdentity command = 2;
+  string name = 3;
+  optional string instructions = 4;
+  repeated kokoro.platform.v1.CustomApiEnvironmentWrite environment = 5;
+}
+message CreatePersonalCustomApiResponse { kokoro.platform.v1.PersonalCustomApi profile = 1; bool replayed = 2; }
+message GetPersonalCustomApiRequest {
+  reserved 100;
+  reserved "tenant_id", "actor_id", "subject_id", "owner_scope", "target_owner_scope", "product_context", "execution_proof", "attestation", "command";
+  string request_id = 1;
+  kokoro.platform.v1.CustomApiProfileId profile_id = 2;
+}
+message GetPersonalCustomApiResponse { kokoro.platform.v1.PersonalCustomApi profile = 1; }
+message ListPersonalCustomApisRequest {
+  reserved 100;
+  reserved "tenant_id", "actor_id", "subject_id", "owner_scope", "target_owner_scope", "product_context", "execution_proof", "attestation", "command";
+  string request_id = 1;
+  kokoro.common.v1.PageRequest page = 2;
+}
+message ListPersonalCustomApisResponse { repeated kokoro.platform.v1.PersonalCustomApi profiles = 1; kokoro.common.v1.PageResult page = 2; }
+message UpdatePersonalCustomApiRequest {
+  reserved 100;
+  reserved "tenant_id", "actor_id", "subject_id", "owner_scope", "target_owner_scope", "product_context", "execution_proof", "attestation";
+  string request_id = 1;
+  kokoro.common.v1.CommandIdentity command = 2;
+  kokoro.platform.v1.CustomApiProfileId profile_id = 3;
+  uint64 expected_state_version = 4;
+  optional string name = 5;
+  optional string instructions = 6;
+  bool clear_instructions = 7;
+  repeated kokoro.platform.v1.CustomApiEnvironmentWrite environment_upserts = 8;
+  repeated string environment_removals = 9;
+}
+message UpdatePersonalCustomApiResponse { kokoro.platform.v1.PersonalCustomApi profile = 1; bool replayed = 2; }
+message DeletePersonalCustomApiRequest {
+  reserved 100;
+  reserved "tenant_id", "actor_id", "subject_id", "owner_scope", "target_owner_scope", "product_context", "execution_proof", "attestation";
+  string request_id = 1;
+  kokoro.common.v1.CommandIdentity command = 2;
+  kokoro.platform.v1.CustomApiProfileId profile_id = 3;
+  uint64 expected_state_version = 4;
+}
+message DeletePersonalCustomApiResponse { kokoro.platform.v1.CustomApiProfileId profile_id = 1; bool deleted = 2; bool replayed = 3; }
+service ProductCustomApiService {
+  rpc CreatePersonalCustomApi(kokoro.platform.v1.CreatePersonalCustomApiRequest) returns (kokoro.platform.v1.CreatePersonalCustomApiResponse);
+  rpc GetPersonalCustomApi(kokoro.platform.v1.GetPersonalCustomApiRequest) returns (kokoro.platform.v1.GetPersonalCustomApiResponse);
+  rpc ListPersonalCustomApis(kokoro.platform.v1.ListPersonalCustomApisRequest) returns (kokoro.platform.v1.ListPersonalCustomApisResponse);
+  rpc UpdatePersonalCustomApi(kokoro.platform.v1.UpdatePersonalCustomApiRequest) returns (kokoro.platform.v1.UpdatePersonalCustomApiResponse);
+  rpc DeletePersonalCustomApi(kokoro.platform.v1.DeletePersonalCustomApiRequest) returns (kokoro.platform.v1.DeletePersonalCustomApiResponse);
 }
 
 // Product package inspection: independently admitted personal reads.
@@ -1965,31 +2040,66 @@ service McpProviderAdminService {
 }
 
 // URL registration is owner-scoped; declaration and visibility are not client input.
+enum PersonalMcpErrorReason {
+  PERSONAL_MCP_ERROR_REASON_UNSPECIFIED = 0;
+  PERSONAL_MCP_ERROR_REASON_NOT_PREPARED = 1;
+  PERSONAL_MCP_ERROR_REASON_NEEDS_CLIENT = 2;
+  PERSONAL_MCP_ERROR_REASON_AUTH_METHOD_UNSUPPORTED = 3;
+}
+message PersonalMcpErrorDetail { kokoro.platform.v1.PersonalMcpErrorReason reason = 1; }
+
+enum PersonalMcpPrepareStatus {
+  PERSONAL_MCP_PREPARE_STATUS_UNSPECIFIED = 0;
+  PERSONAL_MCP_PREPARE_STATUS_PENDING_PREPARE = 1;
+  PERSONAL_MCP_PREPARE_STATUS_PREPARE_FAILED = 2;
+  PERSONAL_MCP_PREPARE_STATUS_NEEDS_OAUTH = 3;
+  PERSONAL_MCP_PREPARE_STATUS_READY = 4;
+}
+message PersonalMcpHeaderWrite { string name = 1; string value = 2; }
+message PersonalMcpOAuthClientWrite { string client_id = 1; string client_secret = 2; }
+message PersonalMcpHeaderDescriptor { string name = 1; bool configured = 2; uint64 state_version = 3; string status = 4; }
+message PersonalMcpOAuthClientDescriptor { string client_id = 1; bool configured = 2; string origin = 3; string status = 4; uint64 state_version = 5; }
+message PersonalMcpToolSelector { string selector = 1; string display_name = 2; string input_schema_digest = 3; optional string output_schema_digest = 4; repeated string required_scopes = 5; }
+message PersonalMcpResourceSelector { string selector = 1; string display_name = 2; }
+message PersonalMcpPromptSelector { string selector = 1; string display_name = 2; }
+message PersonalMcpDeclaredSelector { oneof kind { kokoro.platform.v1.PersonalMcpToolSelector tool = 1; kokoro.platform.v1.PersonalMcpResourceSelector resource = 2; kokoro.platform.v1.PersonalMcpPromptSelector prompt = 3; } }
 message RegisterPersonalMcpServerRequest {
   reserved 100;
   reserved "tenant_id", "actor_id", "subject_id", "owner_scope", "target_owner_scope", "product_context", "execution_proof", "attestation";
-  string request_id = 1;
-  kokoro.common.v1.CommandIdentity command = 2;
-  string display_name = 3;
-  string server_url = 4;
+  string request_id = 1; kokoro.common.v1.CommandIdentity command = 2; string display_name = 3; string server_url = 4; optional string notes = 5; repeated kokoro.platform.v1.PersonalMcpHeaderWrite headers = 6; optional kokoro.platform.v1.PersonalMcpOAuthClientWrite oauth_client = 7;
 }
 message GetPersonalMcpServerRequest {
   reserved 100;
   reserved "tenant_id", "actor_id", "subject_id", "owner_scope", "target_owner_scope", "product_context", "execution_proof", "attestation", "command";
-  string request_id = 1;
-  kokoro.platform.v1.McpServerId server_id = 2;
+  string request_id = 1; kokoro.platform.v1.McpServerId server_id = 2;
 }
 message PersonalMcpServer {
-  kokoro.platform.v1.McpServerId server_id = 1;
-  string display_name = 2;
-  string server_url = 3;
-  string status = 4;
-  uint64 state_version = 5;
+  kokoro.platform.v1.McpServerId server_id = 1; string display_name = 2; string server_url = 3; string status = 4; uint64 state_version = 5; optional string notes = 6; repeated kokoro.platform.v1.PersonalMcpHeaderDescriptor headers = 7; optional kokoro.platform.v1.PersonalMcpOAuthClientDescriptor oauth_client = 8; kokoro.platform.v1.PersonalMcpPrepareStatus prepare_status = 9; optional string authorization_status = 10; repeated kokoro.platform.v1.PersonalMcpDeclaredSelector declarations = 11; optional string declaration_digest = 12; optional kokoro.platform.v1.McpConnectionId connection_id = 13; optional bool declarations_available = 14;
 }
-message RegisterPersonalMcpServerResponse {
-  kokoro.platform.v1.PersonalMcpServer server = 1;
-  kokoro.platform.v1.PersonalMcpConnector connector = 2;
+message RegisterPersonalMcpServerResponse { kokoro.platform.v1.PersonalMcpServer server = 1; kokoro.platform.v1.PersonalMcpConnector connector = 2; bool replayed = 3; }
+message ImportPersonalMcpJsonRequest {
+  reserved 100;
+  reserved "tenant_id", "actor_id", "subject_id", "owner_scope", "target_owner_scope", "product_context", "execution_proof", "attestation";
+  string request_id = 1; kokoro.common.v1.CommandIdentity command = 2; string config_json = 3;
 }
-message GetPersonalMcpServerResponse {
-  kokoro.platform.v1.PersonalMcpServer server = 1;
+message PersonalMcpJsonImportResult { kokoro.platform.v1.PersonalMcpServer server = 1; kokoro.platform.v1.PersonalMcpConnector connector = 2; }
+message ImportPersonalMcpJsonResponse { repeated kokoro.platform.v1.PersonalMcpJsonImportResult imports = 1; bool replayed = 2; }
+message GetPersonalMcpServerResponse { kokoro.platform.v1.PersonalMcpServer server = 1; }
+message PreparePersonalMcpServerRequest {
+  reserved 100;
+  reserved "tenant_id", "actor_id", "subject_id", "owner_scope", "target_owner_scope", "product_context", "execution_proof", "attestation";
+  string request_id = 1; kokoro.common.v1.CommandIdentity command = 2; kokoro.platform.v1.McpServerId server_id = 3; uint64 expected_state_version = 4;
 }
+message PreparePersonalMcpServerResponse { kokoro.platform.v1.PersonalMcpServer server = 1; kokoro.platform.v1.PersonalMcpConnector connector = 2; repeated kokoro.platform.v1.PersonalMcpDeclaredSelector declarations = 3; bool replayed = 4; }
+message UpdatePersonalMcpServerRequest {
+  reserved 100;
+  reserved "tenant_id", "actor_id", "subject_id", "owner_scope", "target_owner_scope", "product_context", "execution_proof", "attestation";
+  string request_id = 1; kokoro.common.v1.CommandIdentity command = 2; kokoro.platform.v1.McpServerId server_id = 3; uint64 expected_state_version = 4; optional string display_name = 5; optional string notes = 6; bool clear_notes = 7; optional string server_url = 8; repeated kokoro.platform.v1.PersonalMcpHeaderWrite header_upserts = 9; repeated string header_removals = 10; optional kokoro.platform.v1.PersonalMcpOAuthClientWrite oauth_client = 11; bool revoke_oauth_client = 12;
+}
+message UpdatePersonalMcpServerResponse { kokoro.platform.v1.PersonalMcpServer server = 1; kokoro.platform.v1.PersonalMcpConnector connector = 2; bool replayed = 3; }
+message DeletePersonalMcpServerRequest {
+  reserved 100;
+  reserved "tenant_id", "actor_id", "subject_id", "owner_scope", "target_owner_scope", "product_context", "execution_proof", "attestation";
+  string request_id = 1; kokoro.common.v1.CommandIdentity command = 2; kokoro.platform.v1.McpServerId server_id = 3; uint64 expected_state_version = 4;
+}
+message DeletePersonalMcpServerResponse { kokoro.platform.v1.McpServerId server_id = 1; bool deleted = 2; bool replayed = 3; }

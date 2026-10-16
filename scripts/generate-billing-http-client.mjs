@@ -11,9 +11,9 @@ const output = path.join(root, "src/generated/billing-http")
 const manifestPath = path.join(root, "contract/dependencies/billing-http.json")
 const configPath = path.join(root, "openapi-ts.billing.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "ba98badab9445ae676a8f48faa55912d42ce5d2e"
+const ownerCommit = "cd92c728d8f658f54b254d5cbfd28156ca426dc1"
 const vendorPath = path.join(root, `contract/vendor/kokoro-billing/${ownerCommit}/openapi.yaml`)
-const ownerDigest = "8a3d12cf7517e7ee6cb2958b740bb69ab4831d38a383e61aca383b5fd1e8b27a"
+const ownerDigest = "b413db8965ed60683435adb7f2ce8650a7ca7bf7bee0989e8f83afc3d9f846af"
 const generatedFiles = [
   "client.gen.ts",
   "client/client.gen.ts",
@@ -160,9 +160,20 @@ function closeGeneratedObject(source, schemaName) {
 async function closeOwnerResponseSchemas(directory) {
   const file = path.join(directory, "zod.gen.ts")
   let source = await readFile(file, "utf8")
-  for (const schemaName of ["CatalogItem", "CatalogResponse", "Page", "CreditAccount", "CreditAccountResponse", "LedgerEntry", "CreditLedgerResponse"]) {
+  for (const schemaName of [
+    "ErrorResponse",
+    "CatalogItem",
+    "CatalogResponse",
+    "Page",
+    "CreditAccount",
+    "CreditAccountResponse",
+    "LedgerEntry",
+    "CreditLedgerResponse",
+  ]) {
     source = closeGeneratedObject(source, schemaName)
   }
+  const errorResponseStart = source.indexOf("export const zErrorResponse =")
+  source = closeObjectExpression(source, "  error: z.object(", "ErrorResponse.error", errorResponseStart)
   const catalogResponseStart = source.indexOf("export const zCatalogResponse =")
   source = closeObjectExpression(source, "  data: z.object(", "CatalogResponse.data", catalogResponseStart)
   const ledgerResponseStart = source.indexOf("export const zCreditLedgerResponse =")
@@ -240,7 +251,7 @@ async function manifestFor(directory) {
     owner: {
       repository_path: "apps/kokoro-billing",
       repository_commit: ownerCommit,
-      contract_version: "3.0.0-experimental.4",
+      contract_version: "3.0.0-experimental.5",
       contract_path: "contract/openapi/v2/openapi.yaml",
       contract_sha256: ownerDigest,
     },

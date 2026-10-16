@@ -16,14 +16,18 @@ export const zNonNegativeCreditMicros = zCreditMicros.and(zNonNegativeDecimal)
 
 export const zCurrencyCode = z.string().regex(/^[A-Z]{3}$/)
 
-export const zErrorResponse = z.object({
-  error: z.object({
-    code: z.string().regex(/^billing\.[a-z0-9_]+$/),
-    message: z.string().min(1),
-    retryable: z.boolean(),
-    details: z.record(z.string(), z.string().max(512)).optional(),
-  }),
-})
+export const zErrorResponse = z
+  .object({
+    error: z
+      .object({
+        code: z.string().regex(/^billing\.[a-z0-9_]+$/),
+        message: z.string().min(1),
+        retryable: z.boolean(),
+        details: z.record(z.string(), z.string().max(512)).optional(),
+      })
+      .strict(),
+  })
+  .strict()
 
 export const zPage = z
   .object({

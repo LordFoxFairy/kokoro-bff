@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises"
 import { test } from "node:test"
 
 const root = new URL("../", import.meta.url)
-const ownerSourceUrl = new URL("contract/vendor/kokoro-billing/ba98badab9445ae676a8f48faa55912d42ce5d2e/openapi.yaml", root)
+const ownerSourceUrl = new URL("contract/vendor/kokoro-billing/cd92c728d8f658f54b254d5cbfd28156ca426dc1/openapi.yaml", root)
 const dependencyManifestUrl = new URL("contract/dependencies/billing-http.json", root)
 const generatedSdkUrl = new URL("src/generated/billing-http/sdk.gen.ts", root)
 const generatedZodUrl = new URL("src/generated/billing-http/zod.gen.ts", root)
@@ -12,7 +12,7 @@ const publicSourceUrl = new URL("contract/openapi/v1/openapi.yaml", root)
 const fakeStoreUrl = new URL("test/doubles/bff-store.ts", root)
 const mockRouteUrl = new URL("test/doubles/mock-route.ts", root)
 
-const ownerSourceSha256 = "8a3d12cf7517e7ee6cb2958b740bb69ab4831d38a383e61aca383b5fd1e8b27a"
+const ownerSourceSha256 = "b413db8965ed60683435adb7f2ce8650a7ca7bf7bee0989e8f83afc3d9f846af"
 const creditAccountFields = ["credit_account_id", "status", "available_micros", "held_micros"]
 const ledgerEntryFields = ["journal_id", "sequence", "delta_micros", "balance_after_micros", "source_kind", "source_ref", "created_at"]
 
@@ -76,17 +76,27 @@ test("generated Billing dependency is fixed and exposes Catalog and the two pers
   const manifest = JSON.parse(await readFile(dependencyManifestUrl, "utf8"))
   assert.deepEqual(manifest.owner, {
     repository_path: "apps/kokoro-billing",
-    repository_commit: "ba98badab9445ae676a8f48faa55912d42ce5d2e",
-    contract_version: "3.0.0-experimental.4",
+    repository_commit: "cd92c728d8f658f54b254d5cbfd28156ca426dc1",
+    contract_version: "3.0.0-experimental.5",
     contract_path: "contract/openapi/v2/openapi.yaml",
     contract_sha256: ownerSourceSha256,
   })
   const sdk = await readFile(generatedSdkUrl, "utf8")
   assert.deepEqual([...sdk.matchAll(/^export const (\w+) =/gmu)].map((match) => match[1]).sort(), ["getCatalog", "getMyCreditAccount", "getMyCreditLedger"])
   const zod = await readFile(generatedZodUrl, "utf8")
-  for (const name of ["zCatalogItem", "zCatalogResponse", "zPage", "zCreditAccount", "zCreditAccountResponse", "zLedgerEntry", "zCreditLedgerResponse"]) {
+  for (const name of [
+    "zErrorResponse",
+    "zCatalogItem",
+    "zCatalogResponse",
+    "zPage",
+    "zCreditAccount",
+    "zCreditAccountResponse",
+    "zLedgerEntry",
+    "zCreditLedgerResponse",
+  ]) {
     assert.match(generatedExportBlock(zod, name), /\.strict\(\)$/u)
   }
+  assert.equal([...generatedExportBlock(zod, "zErrorResponse").matchAll(/\.strict\(\)/gu)].length, 2)
   assert.equal([...generatedExportBlock(zod, "zCreditLedgerResponse").matchAll(/\.strict\(\)/gu)].length, 2)
   assert.deepEqual(
     manifest.generated.map((entry) => entry.path).sort(),

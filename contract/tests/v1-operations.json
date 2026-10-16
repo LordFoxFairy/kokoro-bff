@@ -442,26 +442,6 @@
       "operation_id": "listMcpServers"
     },
     {
-      "method": "POST",
-      "path": "/v1/mcp/servers",
-      "operation_id": "registerMcpServer"
-    },
-    {
-      "method": "POST",
-      "path": "/v1/mcp/servers/{name}/enable",
-      "operation_id": "enableMcpServer"
-    },
-    {
-      "method": "POST",
-      "path": "/v1/mcp/servers/{name}/disable",
-      "operation_id": "disableMcpServer"
-    },
-    {
-      "method": "DELETE",
-      "path": "/v1/mcp/servers/{name}",
-      "operation_id": "deleteMcpServer"
-    },
-    {
       "method": "GET",
       "path": "/v1/scheduled-tasks",
       "operation_id": "listScheduledTasks"

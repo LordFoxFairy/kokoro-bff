@@ -77,7 +77,11 @@ export async function requestIamRelay(
     const target = new URL(input.rawTarget, `${input.baseUrl}/`)
     if (target.origin !== input.baseUrl) throw new IamRelayTransportError()
     if (input.browserNavigation) {
-      if (input.method !== "GET" || target.pathname !== "/iam/oauth2/end-session" || input.headers.get("sec-fetch-mode") !== "navigate") {
+      if (
+        input.method !== "GET" ||
+        !["/iam/oauth2/authorize", "/iam/oauth2/end-session"].includes(target.pathname) ||
+        input.headers.get("sec-fetch-mode") !== "navigate"
+      ) {
         throw new IamRelayTransportError()
       }
       return await requestBrowserNavigation(target, input.headers, controller.signal, Math.min(input.maxResponseBytes, IAM_RELAY_POLICY.maxResponseBytes))

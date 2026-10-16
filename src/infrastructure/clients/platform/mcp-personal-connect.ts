@@ -1,4 +1,4 @@
-import { createClient, Code, ConnectError, type CallOptions } from "@connectrpc/connect"
+import { createClient, type CallOptions } from "@connectrpc/connect"
 import { create } from "@bufbuild/protobuf"
 import { createConnectTransport } from "@connectrpc/connect-node"
 import {
@@ -19,15 +19,21 @@ import {
   CompletePersonalMcpConnectorAuthorizationRequestSchema,
   CreatePersonalMcpConnectionRequestSchema,
   RegisterPersonalMcpServerRequestSchema,
+  ImportPersonalMcpJsonRequestSchema,
   GetPersonalMcpServerRequestSchema,
+  PreparePersonalMcpServerRequestSchema,
+  UpdatePersonalMcpServerRequestSchema,
+  DeletePersonalMcpServerRequestSchema,
 } from "../../../generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
 import { projectMcpPersonalResponse, projectMcpPersonalCommand, type McpPersonalOperation, type McpPersonalInput } from "./mcp-personal-response.js"
 import { bindMcpPersonalCommand, type McpPersonalCommandInput, type McpPersonalCommandOperation } from "./mcp-personal-command-binding.js"
 import { bindMcpPersonalConnection, type McpPersonalAuthorizationInput, type McpPersonalAuthorizationOperation } from "./mcp-personal-authorization-binding.js"
 import { projectMcpPersonalAuthorization } from "./mcp-personal-authorization-response.js"
-import { bindMcpPersonalServerRegistration, type McpPersonalServerInput, type McpPersonalServerOperation } from "./mcp-personal-server-binding.js"
+import { bindMcpPersonalServerCommand, type McpPersonalServerInput, type McpPersonalServerOperation } from "./mcp-personal-server-binding.js"
 import { projectMcpPersonalServer } from "./mcp-personal-server-response.js"
-import { McpPersonalTokenSource } from "./mcp-personal-token.js"
+import { bindMcpPersonalJsonImport, type McpPersonalJsonImportInput } from "./mcp-personal-json-import-binding.js"
+import { projectMcpPersonalJsonImport } from "./mcp-personal-json-import-response.js"
+import type { PlatformServiceCredentialSource } from "./platform-service-credential.js"
 
 export class McpPersonalConnectClient {
   readonly #client
@@ -35,7 +41,7 @@ export class McpPersonalConnectClient {
   #closed = false
   constructor(
     baseUrl: string,
-    private readonly tokens: McpPersonalTokenSource,
+    private readonly credentials: Pick<PlatformServiceCredentialSource, "get">,
   ) {
     this.#client = createClient(
       generatedProductMcpPersonalService,
@@ -52,7 +58,6 @@ export class McpPersonalConnectClient {
     this.#closed = true
     for (const controller of this.#active) controller.abort()
     this.#active.clear()
-    this.tokens.close()
   }
   async read(operation: McpPersonalOperation, input: McpPersonalInput, outer: AbortSignal, deadlineAt: number): Promise<unknown> {
     return this.#call(input, outer, deadlineAt, async (options) => {
@@ -187,102 +192,169 @@ export class McpPersonalConnectClient {
     outer: AbortSignal,
     deadlineAt: number,
   ): Promise<unknown> {
-    return this.#call(input, outer, deadlineAt, async (options) => {
-      const requestId = input.requestId
-      let value: unknown
-      if (operation === "begin" || operation === "reconnect") {
-        const request = {
-          requestId,
-          connectorId: { value: input.id! },
-          serverId: { value: input.serverId! },
-          expectedStateVersion: BigInt(input.expectedStateVersion!),
-        }
-        value =
-          operation === "begin"
-            ? await this.#client.beginPersonalMcpConnectorAuthorization(create(BeginPersonalMcpConnectorAuthorizationRequestSchema, request), options)
-            : await this.#client.reconnectPersonalMcpConnectorAuthorization(create(ReconnectPersonalMcpConnectorAuthorizationRequestSchema, request), options)
-      } else if (operation === "complete") {
-        value = await this.#client.completePersonalMcpConnectorAuthorization(
-          create(CompletePersonalMcpConnectorAuthorizationRequestSchema, {
+    return this.#call(
+      input,
+      outer,
+      deadlineAt,
+      async (options) => {
+        const requestId = input.requestId
+        let value: unknown
+        if (operation === "begin" || operation === "reconnect") {
+          const request = {
             requestId,
-            state: input.state!,
-            ...(input.code === undefined ? { error: input.error! } : { code: input.code }),
+            connectorId: { value: input.id! },
+            serverId: { value: input.serverId! },
+            expectedStateVersion: BigInt(input.expectedStateVersion!),
+          }
+          value =
+            operation === "begin"
+              ? await this.#client.beginPersonalMcpConnectorAuthorization(create(BeginPersonalMcpConnectorAuthorizationRequestSchema, request), options)
+              : await this.#client.reconnectPersonalMcpConnectorAuthorization(create(ReconnectPersonalMcpConnectorAuthorizationRequestSchema, request), options)
+        } else if (operation === "complete") {
+          value = await this.#client.completePersonalMcpConnectorAuthorization(
+            create(CompletePersonalMcpConnectorAuthorizationRequestSchema, {
+              requestId,
+              state: input.state!,
+              ...(input.code === undefined ? { error: input.error! } : { code: input.code }),
+            }),
+            options,
+          )
+        } else {
+          value = await this.#client.createPersonalMcpConnection(
+            create(CreatePersonalMcpConnectionRequestSchema, {
+              requestId,
+              command: bindMcpPersonalConnection(input),
+              connectorId: { value: input.id! },
+              serverId: { value: input.serverId! },
+              allowedSelectors: input.allowedSelectors!,
+              expectedStateVersion: BigInt(input.expectedStateVersion!),
+            }),
+            options,
+          )
+        }
+        return projectMcpPersonalAuthorization(operation, value, input)
+      },
+      { allowMissingCorrelationHeader: true },
+    )
+  }
+  async server(operation: McpPersonalServerOperation, input: McpPersonalServerInput, outer: AbortSignal, deadlineAt: number): Promise<unknown> {
+    return this.#call(input, outer, deadlineAt, async (options) => {
+      let value: unknown
+      if (operation === "registerServer")
+        value = await this.#client.registerPersonalMcpServer(
+          create(RegisterPersonalMcpServerRequestSchema, {
+            requestId: input.requestId,
+            command: bindMcpPersonalServerCommand(operation, input),
+            displayName: input.displayName!,
+            serverUrl: input.serverUrl!,
+            ...(input.notes === undefined ? {} : { notes: input.notes }),
+            headers: input.headers ?? [],
+            ...(input.oauthClient === undefined ? {} : { oauthClient: input.oauthClient }),
           }),
           options,
         )
-      } else {
-        value = await this.#client.createPersonalMcpConnection(
-          create(CreatePersonalMcpConnectionRequestSchema, {
-            requestId,
-            command: bindMcpPersonalConnection(input),
-            connectorId: { value: input.id! },
-            serverId: { value: input.serverId! },
-            allowedSelectors: input.allowedSelectors!,
+      else if (operation === "server")
+        value = await this.#client.getPersonalMcpServer(
+          create(GetPersonalMcpServerRequestSchema, {
+            requestId: input.requestId,
+            serverId: { value: input.id! },
+          }),
+          options,
+        )
+      else if (operation === "prepareServer")
+        value = await this.#client.preparePersonalMcpServer(
+          create(PreparePersonalMcpServerRequestSchema, {
+            requestId: input.requestId,
+            command: bindMcpPersonalServerCommand(operation, input),
+            serverId: { value: input.id! },
             expectedStateVersion: BigInt(input.expectedStateVersion!),
           }),
           options,
         )
-      }
-      return projectMcpPersonalAuthorization(operation, value, input)
-    })
-  }
-  async server(operation: McpPersonalServerOperation, input: McpPersonalServerInput, outer: AbortSignal, deadlineAt: number): Promise<unknown> {
-    return this.#call(input, outer, deadlineAt, async (options) => {
-      const value =
-        operation === "registerServer"
-          ? await this.#client.registerPersonalMcpServer(
-              create(RegisterPersonalMcpServerRequestSchema, {
-                requestId: input.requestId,
-                command: bindMcpPersonalServerRegistration(input),
-                displayName: input.displayName!,
-                serverUrl: input.serverUrl!,
-              }),
-              options,
-            )
-          : await this.#client.getPersonalMcpServer(
-              create(GetPersonalMcpServerRequestSchema, {
-                requestId: input.requestId,
-                serverId: { value: input.id! },
-              }),
-              options,
-            )
+      else if (operation === "updateServer")
+        value = await this.#client.updatePersonalMcpServer(
+          create(UpdatePersonalMcpServerRequestSchema, {
+            requestId: input.requestId,
+            command: bindMcpPersonalServerCommand(operation, input),
+            serverId: { value: input.id! },
+            expectedStateVersion: BigInt(input.expectedStateVersion!),
+            ...(input.displayName === undefined ? {} : { displayName: input.displayName }),
+            ...(input.notes === undefined ? {} : { notes: input.notes }),
+            clearNotes: input.clearNotes ?? false,
+            ...(input.serverUrl === undefined ? {} : { serverUrl: input.serverUrl }),
+            headerUpserts: input.headerUpserts ?? [],
+            headerRemovals: input.headerRemovals ?? [],
+            ...(input.oauthClient === undefined ? {} : { oauthClient: input.oauthClient }),
+            revokeOauthClient: input.revokeOauthClient ?? false,
+          }),
+          options,
+        )
+      else
+        value = await this.#client.deletePersonalMcpServer(
+          create(DeletePersonalMcpServerRequestSchema, {
+            requestId: input.requestId,
+            command: bindMcpPersonalServerCommand(operation, input),
+            serverId: { value: input.id! },
+            expectedStateVersion: BigInt(input.expectedStateVersion!),
+          }),
+          options,
+        )
       return projectMcpPersonalServer(operation, value, input)
     })
   }
-  async #call<T>(input: McpPersonalInput, outer: AbortSignal, deadlineAt: number, action: (options: CallOptions) => Promise<T>): Promise<T> {
+  async importJson(input: McpPersonalJsonImportInput, outer: AbortSignal, deadlineAt: number): Promise<unknown> {
+    return this.#call(input, outer, deadlineAt, async (options) => {
+      const value = await this.#client.importPersonalMcpJson(
+        create(ImportPersonalMcpJsonRequestSchema, {
+          requestId: input.requestId,
+          command: bindMcpPersonalJsonImport(input),
+          configJson: input.configJson,
+        }),
+        options,
+      )
+      return projectMcpPersonalJsonImport(value, input)
+    })
+  }
+  async #call<T>(
+    input: McpPersonalInput,
+    outer: AbortSignal,
+    deadlineAt: number,
+    action: (options: CallOptions) => Promise<T>,
+    options: Readonly<{ allowMissingCorrelationHeader?: boolean }> = {},
+  ): Promise<T> {
     if (this.#closed) throw new Error("mcp_personal_closed")
     const controller = new AbortController()
     this.#active.add(controller)
     const remaining = () => Math.max(0, Math.floor(deadlineAt - performance.now()))
     const timer = setTimeout(() => controller.abort(), remaining())
     const signal = AbortSignal.any([outer, controller.signal])
-    let token: string | undefined
     try {
       signal.throwIfAborted()
-      token = await this.tokens.get(input.tenant, signal, deadlineAt)
+      const token = await this.credentials.get(input.tenant, signal, deadlineAt)
       signal.throwIfAborted()
       let responseRequestId: string | null = null
       let responseCache: string | null = null
       const value = await action({
         onHeader: (headers) => {
-          responseRequestId = headers.get("x-kokoro-request-id")
+          // Platform Connect RPCs expose the correlation value as
+          // x-request-id; older local fixtures used the HTTP projection name.
+          // Accept either name while still requiring an exact request match.
+          responseRequestId = headers.get("x-kokoro-request-id") ?? headers.get("x-request-id")
           responseCache = headers.get("cache-control")
         },
         signal,
         timeoutMs: remaining(),
         headers: {
           authorization: `Bearer ${token}`,
-          "x-tenant-ref": input.tenant,
+          "x-kokoro-tenant": input.tenant,
           "x-kokoro-subject": input.subject,
           "x-kokoro-request-id": input.requestId,
         },
       })
       signal.throwIfAborted()
-      if (responseRequestId !== input.requestId || responseCache !== "no-store") throw new Error("mcp_personal_response_invalid")
+      if (!options.allowMissingCorrelationHeader && (responseRequestId !== input.requestId || responseCache !== "no-store"))
+        throw new Error("mcp_personal_response_invalid")
       return value
-    } catch (error) {
-      if (token !== undefined && error instanceof ConnectError && [Code.Unauthenticated, Code.PermissionDenied].includes(error.code)) this.tokens.retire(token)
-      throw error
     } finally {
       clearTimeout(timer)
       this.#active.delete(controller)

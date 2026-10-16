@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Billing Internal Owner API
-  version: 3.0.0-experimental.4
+  version: 3.0.0-experimental.5
   description: Experimental clean-slate target contract; not deployed.
 servers:
   - url: https://billing.internal
@@ -286,7 +286,7 @@ paths:
             cache-control:
               $ref: "#/components/headers/CacheControlNoStore"
           x-kokoro-errors:
-            - code: billing.not_found
+            - code: billing.credit_account_not_found
               retryable: false
           content:
             application/json:
@@ -418,7 +418,7 @@ paths:
             cache-control:
               $ref: "#/components/headers/CacheControlNoStore"
           x-kokoro-errors:
-            - code: billing.not_found
+            - code: billing.credit_account_not_found
               retryable: false
           content:
             application/json:

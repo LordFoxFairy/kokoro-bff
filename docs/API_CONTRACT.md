@@ -1,3 +1,7 @@
+## SET49：主线与设置归档合同集成
+
+合并主线已批准的MCP public四写删除及既有设置/归档能力，以16.0.0/146发行（breaking删除，不冒minor）。integration-public-contract.mjs逐字节验证完整当前合同及有序清单，精确恢复原15.4全文/150后委托全部原inverse和oracle；main贡献保留，不修改Skills/MCP业务。Billing唯一pin使用正式experimental.5发行，保三读与严格专用404；当前验证进行中，正常服务不变。
+
 ## SET-47 本人归档任务 Public15.4 D0（2026-10-15；未实现/未发行）
 
 传输边界补充：exact encodeURIComponent wire不变，BFF原生raw HTTP仍可读取历史ID `.`/`..`；WHATWG URL（含fetch）会规范化dot path segments，百分号编码点也不能解决。Web后继须对此两ID在fetch前拒绝并明确禁用归档/恢复说明，不做双重解码/fallback/新API；不能宣所有历史ID浏览器皆可操作。普通conv与Unicode ID不受此限制。
@@ -110,6 +114,26 @@ plans失败统一现public允许503 billing_unavailable，不新增未声明502�
 唯一可编辑事实源仍为contract/openapi/v1/openapi.yaml。目标public15.0.0在TeamRole.permissions增加可选platform（仅execute）与skill（IAM当前15动作），每数组仍非空，未知域/动作拒绝；既有六域、Role字段、所有operation路径/metadata、错误与分页保持。动作来自当前固定IAM机器契约，不建第二权限事实源，字段查看不授予执行或Skills能力。
 
 这是strict consumer的breaking，不作为minor；本次Root仅批准自有开发隔离BFF/Web在/v1配对切换，先完成owner和历史逆门，再发布不可变SHA/digest并由Web正常生成，最后Root实际登录；禁止原14.7消费者与新响应混跑、alias或fallback。尚未批准main/日常/生产激活，无法核验的Admin consumer须在后继激活前补齐；未来稳定breaking仍按contract README/v2政策。本片最外层验证新两域精确闭集后仅撤销这两字段与version，必须恢复完整public14.7摘要，再运行原14.6及全部历史门，不改旧fixture/摘要。
+## CV-SVC MCP workload认证profile（D1，2026-10-13；BFF 源码候选已实现，待配对验收）
+
+现 `/browser/v1/mcp/*` 与 `/v1/admin/mcp/providers*` 的HTTP方法/body/成功错误/CAS/幂等不变，Platform `ProductMcpPersonalService`、`McpProviderAdminService` Proto和固定generated输入不变。只切这两internal-owner caller认证：HTTP/Connect Bearer内容是opaque本地service credential，caller=kokoro-bff、surface严格mcp_personal或mcp_admin、tenant绑定；不再取得IAM机器OAuth token，不包含第三方用户OAuth变化。
+
+BFF每次请求从受限文件读取version1严格闭集 `{version:1,entries:[{credential_id,secret,caller,surfaces:[指定唯一surface],tenant_id}]}`。三用途（含projection）使用独立credential ID/secret和实例，不容错旧OAuth数组schema，不fallback；回显、错误、日志不含secret。tenant出站一致性头为owner实际读取的`x-kokoro-tenant`，subject由已准入BFF代言。human admission/action权限和执行proof均保持既有事实，不把服务直认证当“无授权”。
+
+consumer生成物和body不改，当前owner pin/digest仍保护；认证profile代码/设计/负控先由owner配对批准再切运行配置。不增加public API/v2或兼容路由。真实两surface配对与普通用户/Admin权限负控尚待验。
+
+## CN-07a MCP Provider Admin typed owner errors（2026-10-13）
+
+既有六个 `/v1/admin/mcp/providers*` operation与成功schema不变。Platform Connect `InvalidArgument`统一映射`400 invalid_mcp_provider_admin_request`；`NotFound`仅对get/update/enabled/remove映射`404 mcp_provider_admin_not_found`；mutation的`AlreadyExists`映射`409 mcp_provider_admin_conflict`且不可重试，`Aborted`映射`409 mcp_provider_admin_command_in_progress`且可重试，`FailedPrecondition`映射`412 mcp_provider_admin_precondition_failed`且不可重试。operation不允许的同码、Unauthenticated/PermissionDenied及其他依赖错误仍为`503 mcp_provider_admin_dependency_unavailable`，不得伪装成人类403。映射只读Connect Code，不按owner message猜测；响应不透传owner message、headers或秘密。canonical已声明这些status且error code为string，本片不改OpenAPI版本或生成物。
+
+## App API 修复当前切片（2026-10-13）
+
+- HTTP 业务路径统一 `/v1`，artifact SemVer 不等于路由版本。Billing 唯一消费源为 owner commit `1ceeae550f05857d1e7fa0da1e83af23a552f0ca` 的 `contract/openapi/v1/openapi.yaml`（SHA-256 `35b4a2d1d178f6a548fe67460c8e8cbba9eb247296f9051f6ec23060235baff8`）；现生成器只消费本人 Credit 两读，不回退旧 v2。
+- Platform projection 固定 owner commit `6b4c9db6719d2f5fd37a752921e603f4b0221de6`、HTTP artifact `6.0.0`（SHA-256 `50afde42d7a1564ecb058c78dff68e4ea81bbb3552bd96dbf6203b036ec381ae`）。该 surface 使用 owner profile 的本地 Bearer、caller/surface/tenant 绑定和每次重读，不作机器 OAuth/token 缓存；其他 surface 和外部当前用户 IAM 准入不随此片改动。
+- Billing 只有符合 owner envelope 的 `billing.credit_account_not_found`、非 retryable 404 才投影账户空态；未知路由或其他 404 是依赖协议错误，不冒充账户不存在。传输使用 owner 定义的 `x-request-id`。
+- 不变更公开 BFF wire、数据库或目录边界；仅替换对应 vendor pin 和正规生成物。源码门禁、正常运行切换与浏览器验收分别记录在 `docs/CURRENT.md`，未实施的付款/推理/其他认证切片不计入完成。
+
+以下阶段记录保留原时点，不覆盖本段当前调用方案。
 
 ## T-K03.20 本人 MCP 可连接目标投影（BFF 已实施，待 Web 消费）
 

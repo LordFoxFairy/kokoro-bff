@@ -1,3 +1,7 @@
+## SET49：主线与设置归档合同集成
+
+合并主线已批准的MCP public四写删除及既有设置/归档能力，以16.0.0/146发行（breaking删除，不冒minor）。integration-public-contract.mjs逐字节验证完整当前合同及有序清单，精确恢复原15.4全文/150后委托全部原inverse和oracle；main贡献保留，不修改Skills/MCP业务。Billing唯一pin使用正式experimental.5发行，保三读与严格专用404；当前验证进行中，正常服务不变。
+
 ## SET-47 Conversation 归档/恢复 D0（2026-10-15；设计候选，runtime 未实施）
 
 传输边界补充：exact encodeURIComponent wire不变，BFF原生raw HTTP仍可读取历史ID `.`/`..`；WHATWG URL（含fetch）会规范化dot path segments，百分号编码点也不能解决。Web后继须对此两ID在fetch前拒绝并明确禁用归档/恢复说明，不做双重解码/fallback/新API；不能宣所有历史ID浏览器皆可操作。普通conv与Unicode ID不受此限制。
@@ -126,6 +130,26 @@ Root明确checkout目前owner未实现正式操作：保持现public入站身份
 | 验证 | 真实内置角色HTTP fixture、闭集负控、完整14.7逆摘要与全部历史门；lint/typecheck/contract/test/build；固定Web再生成及真实登录读取。 |
 
 Root本次实施裁决：这是strict response集合改变，发布public15.0.0 breaking候选，不能称可选minor。此次仅在Root自有开发隔离组合维持既有/v1，并要求BFF不可变候选→Web唯一pin/generated/strict schema→Root精确组合验收串行完成；尚未授权切main、共享日常站点、生产或未知消费者。Admin源码当前不可访问，不能声称Admin已适配；后继日常/公开激活前必须逐一核其固定consumer。此局部开发配对裁决不借历史beta例外，也不改变以后稳定公开breaking的/v2政策；新旧响应不并行服务。原14.7机器字节和全部非Team语义由最外层精确inverse保护。
+## CV-SVC MCP内部直服务凭据切换（D1，2026-10-13；BFF 源码候选已实现，待配对验收）
+
+本切片只把 BFF→Platform 的 `mcp_personal`、`mcp_admin` workload认证从IAM机器OAuth/token/introspection切换到Platform现本地服务凭据，与已直认证projection保持相同安全I/O规则。BFF用户session、个人权限/catalog管理权限及前后fresh校验不删除；第三方MCP OAuth/PKCE、tenant_execution/proof、Run撤权不在本片。Platform surface白名单/caller/tenant仍是唯一机器准入。
+
+现专用reader `projection-credential.ts`重命名为同目录 `platform-service-credential.ts`，构造时明确固定 `projection | mcp_personal | mcp_admin` 中一个用途；不接受任意caller/surface。选择复用有界受限文件I/O而非新建三份读文件实现，避免复制取消/关闭/权限规则；不是通用Secret服务。每实例文件只允许caller=kokoro-bff、恰好一个指定surface、固定tenant，三用途凭据ID/secret独立。完整快照每次重读，不缓存授权或secret；保O_NOFOLLOW、owner/mode0400或0600、64KiB、严格UTF8/schema、deadline与迟到handle清理。原projection行为保持，不复用其secret给MCP。
+
+两MCP Connect client用 `.get(tenantId, signal, deadlineAt)`直接取得credential；删除token exchange/cache/retire机制与两旧token/credential文件，更新现projection consumer imports。组合删除仅这两client依赖IAM URL的机器认证前置条件，现credential配置入口不改名但内容仅接受新的version1闭集。用户IAM配置不动。出站tenant断言统一 `x-kokoro-tenant`，subject来自已验证BFF上下文，owner权限不信body或浏览器header。原request ID/no-store/response bounds/commands/CAS/digest与在途关闭不变。
+
+这是既有RPC传输认证的原子行为切换；Proto/generated/body/artifact输入无字段变化，当前固定owner wire artifact维持原字节，认证profile以Platform D1设计及实际code/tests配对批准。正常切换须owner/consumer/私有配置三者匹配，失败不回退OAuth；回滚也配对回滚，不同时接受两套凭据。暂不自动启用其他surface或改数据库。
+
+验证：現reader全部安全/rotation/cancel负控迁移不丢；两surface跨purpose/tenant/caller与secret失败关闭、未配置用户资格仍拒绝；机器OAuth/introspection调用为零、其他surface unchanged；Root真实HTTP/Connect与浏览器同条件耗时。纯fixture/type/build不代替正常配对与性能证据。本片 BFF 源码候选已按 D1 实现；私有配置与正常运行尚未切换。
+
+## App API 修复当前切片（2026-10-13）
+
+- HTTP 业务路径统一 `/v1`，artifact SemVer 不等于路由版本。Billing 唯一消费源为 owner commit `1ceeae550f05857d1e7fa0da1e83af23a552f0ca` 的 `contract/openapi/v1/openapi.yaml`（SHA-256 `35b4a2d1d178f6a548fe67460c8e8cbba9eb247296f9051f6ec23060235baff8`）；现生成器只消费本人 Credit 两读，不回退旧 v2。
+- Platform projection 固定 owner commit `6b4c9db6719d2f5fd37a752921e603f4b0221de6`、HTTP artifact `6.0.0`（SHA-256 `50afde42d7a1564ecb058c78dff68e4ea81bbb3552bd96dbf6203b036ec381ae`）。该 surface 使用 owner profile 的本地 Bearer、caller/surface/tenant 绑定和每次重读，不作机器 OAuth/token 缓存；其他 surface 和外部当前用户 IAM 准入不随此片改动。
+- Billing 只有符合 owner envelope 的 `billing.credit_account_not_found`、非 retryable 404 才投影账户空态；未知路由或其他 404 是依赖协议错误，不冒充账户不存在。传输使用 owner 定义的 `x-request-id`。
+- 不变更公开 BFF wire、数据库或目录边界；仅替换对应 vendor pin 和正规生成物。源码门禁、正常运行切换与浏览器验收分别记录在 `docs/CURRENT.md`，未实施的付款/推理/其他认证切片不计入完成。
+
+以下阶段记录保留原时点，不覆盖本段当前调用方案。
 
 ## T-K03.20 本人 MCP 可连接目标投影（BFF 已实施，待 Web 消费）
 

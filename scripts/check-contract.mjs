@@ -70,11 +70,9 @@ function expectedIdempotency(operation) {
   if (operation.method === "POST" && SPECIFICATION_BROWSER_READS.get(operation.path) === operation.fields.get("operationId")) return "none"
   if (operation.fields.get("operationId") === "previewGithubSkill") return "none"
   if (
-    new Set([
-      "beginPersonalMcpConnectorAuthorization",
-      "reconnectPersonalMcpConnectorAuthorization",
-      "completePersonalMcpConnectorAuthorization",
-    ]).has(operation.fields.get("operationId"))
+    new Set(["beginPersonalMcpConnectorAuthorization", "reconnectPersonalMcpConnectorAuthorization", "completePersonalMcpConnectorAuthorization"]).has(
+      operation.fields.get("operationId"),
+    )
   )
     return "none"
   if (
@@ -94,17 +92,33 @@ function expectedIdempotency(operation) {
 }
 
 export function inspectOpenApiGovernance(source) {
-  if (/^  version: 15\.4\.0$/mu.test(source)) {
-    try { source = restorePublic153ArchivedTasksContract(source) } catch(error) { return [error.message] }
+  if (/^  version: (?:15\.4|16\.0)\.0$/mu.test(source)) {
+    try {
+      source = restorePublic153ArchivedTasksContract(source)
+    } catch (error) {
+      return [error.message]
+    }
   }
   if (/^  version: 15\.3\.0$/mu.test(source)) {
-    try { source = restorePublic152SharedTasksContract(source) } catch(error) { return [error.message] }
+    try {
+      source = restorePublic152SharedTasksContract(source)
+    } catch (error) {
+      return [error.message]
+    }
   }
   if (/^  version: 15\.2\.0$/mu.test(source)) {
-    try { source = restorePublic151AccountProfileContract(source) } catch(error) { return [error.message] }
+    try {
+      source = restorePublic151AccountProfileContract(source)
+    } catch (error) {
+      return [error.message]
+    }
   }
   if (/^  version: 15\.1\.0$/mu.test(source)) {
-    try { source = restorePublic15AccountSessionContract(source) } catch(error) { return [error.message] }
+    try {
+      source = restorePublic15AccountSessionContract(source)
+    } catch (error) {
+      return [error.message]
+    }
   }
   const errors = []
   const operations = parseOpenApiOperations(source)
@@ -159,17 +173,37 @@ export function inspectOpenApiGovernance(source) {
 }
 
 export function compareOperationBaseline(source, baseline) {
-  if (/^  version: 15\.4\.0$/mu.test(source)) {
-    try { source = restorePublic153ArchivedTasksContract(source); baseline = archivedTasksParentBaseline(baseline) } catch(error) { return [error.message] }
+  if (/^  version: (?:15\.4|16\.0)\.0$/mu.test(source)) {
+    try {
+      source = restorePublic153ArchivedTasksContract(source)
+      baseline = archivedTasksParentBaseline(baseline)
+    } catch (error) {
+      return [error.message]
+    }
   }
   if (/^  version: 15\.3\.0$/mu.test(source)) {
-    try { source = restorePublic152SharedTasksContract(source); baseline = sharedTasksParentBaseline(baseline) } catch(error) { return [error.message] }
+    try {
+      source = restorePublic152SharedTasksContract(source)
+      baseline = sharedTasksParentBaseline(baseline)
+    } catch (error) {
+      return [error.message]
+    }
   }
   if (/^  version: 15\.2\.0$/mu.test(source)) {
-    try { source = restorePublic151AccountProfileContract(source); baseline = accountProfileParentBaseline(baseline) } catch(error) { return [error.message] }
+    try {
+      source = restorePublic151AccountProfileContract(source)
+      baseline = accountProfileParentBaseline(baseline)
+    } catch (error) {
+      return [error.message]
+    }
   }
   if (/^  version: 15\.1\.0$/mu.test(source)) {
-    try { source = restorePublic15AccountSessionContract(source); baseline = accountSessionParentBaseline(baseline) } catch(error) { return [error.message] }
+    try {
+      source = restorePublic15AccountSessionContract(source)
+      baseline = accountSessionParentBaseline(baseline)
+    } catch (error) {
+      return [error.message]
+    }
   }
   const current = new Map(
     parseOpenApiOperations(source).map((operation) => [`${operation.method} ${operation.path}`, operation.fields.get("operationId") ?? ""]),
@@ -222,12 +256,10 @@ async function main() {
       operation.fields.get("operationId") === "getManagedPersonalSkillPackage" || operation.fields.get("operationId") === "getPersonalSkillInstallationPackage",
   )
   const errors = [
-    ...(/^  version: 15\.4\.0$/mu.test(openapi) && parsedBaseline.operations.length === 150 ? [] : ["SET47 current public release must be15.4/150"]),
+    ...(/^  version: (?:15\.4|16\.0)\.0$/mu.test(openapi) && parsedBaseline.operations.length === 146 ? [] : ["SET49 current public release must be16.0/146"]),
     ...inspectOpenApiGovernance(openapi),
     ...compareOperationBaseline(openapi, parsedBaseline.operations),
-    ...(parsedBaseline.operations.length === currentOperations.length
-      ? []
-      : ["public operation inventory must contain one entry for every current operation"]),
+    ...(parsedBaseline.operations.length === currentOperations.length ? [] : ["public operation inventory must contain one entry for every current operation"]),
     ...(managedPersonalReads.length === 2 && managedPersonalReads.every((operation) => operation.method === "GET")
       ? []
       : ["managed personal Skill inventory must contain exactly the two GET operations"]),

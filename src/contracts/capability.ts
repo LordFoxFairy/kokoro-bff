@@ -27,16 +27,3 @@ export type SkillRevision = {
   source: string
   created_at: number
 }
-
-export type McpTransport = "http" | "streamable_http"
-
-export type McpServer = {
-  scope: string
-  name: string
-  revision: number
-  transport: McpTransport
-  url: string
-  allowed_tools: string[]
-  secret_ref: string | null
-  enabled: boolean
-}

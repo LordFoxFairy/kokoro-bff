@@ -1,9 +1,6 @@
 import { McpPersonalConnectClient } from "../infrastructure/clients/platform/mcp-personal-connect.js"
-import { McpPersonalCredentialSource } from "../infrastructure/clients/platform/mcp-personal-credential.js"
-import { McpPersonalTokenSource } from "../infrastructure/clients/platform/mcp-personal-token.js"
 import { McpProviderAdminConnectClient } from "../infrastructure/clients/platform/mcp-provider-admin-connect.js"
-import { McpProviderAdminCredentialSource } from "../infrastructure/clients/platform/mcp-provider-admin-credential.js"
-import { McpProviderAdminTokenSource } from "../infrastructure/clients/platform/mcp-provider-admin-token.js"
+import { CustomApiConnectClient } from "../infrastructure/clients/platform/custom-api-connect.js"
 import { SkillSpecificationService } from "../application/skill-specification.js"
 import { PlatformSkillSpecificationFacade } from "../infrastructure/clients/platform/skill-specification-facade.js"
 import { PlatformProjectionHttpClient } from "../infrastructure/clients/platform/projection-http.js"
@@ -43,8 +40,7 @@ import { CatalogCredentialSource } from "../infrastructure/clients/platform/cata
 import { CatalogTokenSource } from "../infrastructure/clients/platform/catalog-token.js"
 import { CatalogConnectClient } from "../infrastructure/clients/platform/catalog-connect.js"
 import { PersonalInstallationConnectClient } from "../infrastructure/clients/platform/personal-installation-connect.js"
-import { ProjectionCredentialSource } from "../infrastructure/clients/platform/projection-credential.js"
-import { ProjectionTokenSource } from "../infrastructure/clients/platform/projection-token.js"
+import { PlatformServiceCredentialSource } from "../infrastructure/clients/platform/platform-service-credential.js"
 import { ProjectScopeReleaseOutboxDispatcher } from "../application/project-scope-release-outbox-dispatcher.js"
 import { StorageScopeReleaseClient } from "../infrastructure/clients/storage/scope-release-client.js"
 import type { LocalSkillImportClient } from "../http/routes/local-skill-import.js"
@@ -54,7 +50,13 @@ import { projectInstallation } from "../infrastructure/clients/platform/personal
 import { projectSkillPackageInspectionResponse } from "../infrastructure/clients/platform/skill-package-inspection-response.js"
 import { assertSkillWireKnown, skillTimestamp } from "../infrastructure/clients/platform/skill-product-response.js"
 
-type ScheduledWorkerErrorEvent = { operation: string; result: "error"; errorCode: string; attempt: number; backoffMs: number }
+type ScheduledWorkerErrorEvent = {
+  operation: string
+  result: "error"
+  errorCode: string
+  attempt: number
+  backoffMs: number
+}
 function scheduledWorkerLog(event: ScheduledWorkerErrorEvent): void {
   process.stderr.write(`${JSON.stringify({ service: "kokoro-bff", ...event })}\n`)
 }
@@ -74,8 +76,10 @@ export type BffRouteInput = {
 export type BffRouteHandler = (input: BffRouteInput) => Promise<boolean | void>
 
 export type BffServerComposition = {
-  mcpPersonalClient: (Pick<McpPersonalConnectClient, "read"> & Partial<Pick<McpPersonalConnectClient, "close" | "command" | "authorization" | "server">>) | null
+  mcpPersonalClient:
+    (Pick<McpPersonalConnectClient, "read"> & Partial<Pick<McpPersonalConnectClient, "close" | "command" | "authorization" | "server" | "importJson">>) | null
   mcpProviderAdminClient: (Pick<McpProviderAdminConnectClient, "execute"> & Partial<Pick<McpProviderAdminConnectClient, "close">>) | null
+  customApiClient: (Pick<CustomApiConnectClient, "execute"> & Partial<Pick<CustomApiConnectClient, "close">>) | null
   localSkillImportClient?: LocalSkillImportClient
   skillSpecificationSource: SkillSpecificationSource | null
   skillDownloadHandles: SkillDownloadHandles
@@ -109,8 +113,9 @@ export type BffServerComposition = {
 
 export type BffCompositionOptions = {
   mcpPersonalClient?:
-    (Pick<McpPersonalConnectClient, "read"> & Partial<Pick<McpPersonalConnectClient, "close" | "command" | "authorization" | "server">>) | null
+    (Pick<McpPersonalConnectClient, "read"> & Partial<Pick<McpPersonalConnectClient, "close" | "command" | "authorization" | "server" | "importJson">>) | null
   mcpProviderAdminClient?: (Pick<McpProviderAdminConnectClient, "execute"> & Partial<Pick<McpProviderAdminConnectClient, "close">>) | null
+  customApiClient?: (Pick<CustomApiConnectClient, "execute"> & Partial<Pick<CustomApiConnectClient, "close">>) | null
   localSkillImportClient?: LocalSkillImportClient
   skillSpecificationSource?: SkillSpecificationSource | null
   exactSkillDownloadSource?: ExactSkillDownloadSource | null
@@ -166,9 +171,20 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
       timeoutMs: config.upstreamTimeoutMs,
       maxResponseBytes: config.upstreamMaxResponseBytes,
     })
-  const mcpAuthorization = options.mcpAuthorization ?? new McpAuthorizationClient({ baseUrl: config.iamBaseUrl, timeoutMs: 5000, maxResponseBytes: 65_536 })
+  const mcpAuthorization =
+    options.mcpAuthorization ??
+    new McpAuthorizationClient({
+      baseUrl: config.iamBaseUrl,
+      timeoutMs: 5000,
+      maxResponseBytes: 65_536,
+    })
   const skillAuthorization =
-    options.skillAuthorization ?? new SkillAuthorizationClient({ baseUrl: config.iamBaseUrl, timeoutMs: 5000, maxResponseBytes: 65_536 })
+    options.skillAuthorization ??
+    new SkillAuthorizationClient({
+      baseUrl: config.iamBaseUrl,
+      timeoutMs: 5000,
+      maxResponseBytes: 65_536,
+    })
   const skillProductClient =
     options.skillProductClient !== undefined
       ? options.skillProductClient
@@ -176,11 +192,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
         ? new SkillProductConnectClient(
             config.skillDraft.platformBaseUrl,
             new CatalogTokenSource(config.iamBaseUrl, new CatalogCredentialSource(config.skillDraft.credentialFile), config.skillDraft.timeoutMs),
-            new ProjectionTokenSource(
-              config.iamBaseUrl,
-              new ProjectionCredentialSource(config.platformProjection.credentialFile),
-              config.platformProjection.timeoutMs,
-            ),
+            new PlatformServiceCredentialSource(config.platformProjection.credentialFile, "projection"),
             config.skillDraft.timeoutMs,
           )
         : null
@@ -216,11 +228,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
         ? new PersonalInstallationConnectClient(
             config.skillDraft.platformBaseUrl,
             new CatalogTokenSource(config.iamBaseUrl, new CatalogCredentialSource(config.skillDraft.credentialFile), config.skillDraft.timeoutMs),
-            new ProjectionTokenSource(
-              config.iamBaseUrl,
-              new ProjectionCredentialSource(config.platformProjection.credentialFile),
-              config.platformProjection.timeoutMs,
-            ),
+            new PlatformServiceCredentialSource(config.platformProjection.credentialFile, "projection"),
             config.skillDraft.timeoutMs,
           )
         : null
@@ -231,11 +239,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
         ? new LocalSkillImportConnectClient(
             config.skillDraft.platformBaseUrl,
             new CatalogTokenSource(config.iamBaseUrl, new CatalogCredentialSource(config.skillDraft.credentialFile), config.skillDraft.timeoutMs),
-            new ProjectionTokenSource(
-              config.iamBaseUrl,
-              new ProjectionCredentialSource(config.platformProjection.credentialFile),
-              config.platformProjection.timeoutMs,
-            ),
+            new PlatformServiceCredentialSource(config.platformProjection.credentialFile, "projection"),
           )
         : undefined
   const explicitlySuppliedStore = Object.prototype.hasOwnProperty.call(options, "businessStore")
@@ -334,7 +338,9 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
       : new ProjectScopeReleaseOutboxDispatcher(
           businessStore.projectScopeReleaseOutbox,
           new StorageScopeReleaseClient(config.storage.baseUrl, config.storage.secret),
-          { workerId: `bff-project-scope-release-${process.pid}-${randomUUID()}` },
+          {
+            workerId: `bff-project-scope-release-${process.pid}-${randomUUID()}`,
+          },
         ))
   const closeStore = options.close ?? (ownsStore && businessStore !== null ? (): Promise<void> => businessStore.close() : async (): Promise<void> => undefined)
   let stopWorkersPromise: Promise<void> | null = null
@@ -356,40 +362,29 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
   }
   const skillDownloadHandles = new SkillDownloadHandles()
   const projectionClient =
-    config.platformProjection?.baseUrl && config.platformProjection.credentialFile && config.iamBaseUrl
-      ? new PlatformProjectionHttpClient(
-          config.platformProjection.baseUrl,
-          config.iamBaseUrl,
-          config.platformProjection.credentialFile,
-          config.platformProjection.timeoutMs,
-        )
+    config.platformProjection?.baseUrl && config.platformProjection.credentialFile
+      ? new PlatformProjectionHttpClient(config.platformProjection.baseUrl, config.platformProjection.credentialFile, config.platformProjection.timeoutMs)
       : null
   const mcpPersonalClient =
     options.mcpPersonalClient !== undefined
       ? options.mcpPersonalClient
-      : config.mcpPersonal && config.iamBaseUrl
-        ? new McpPersonalConnectClient(
-            config.mcpPersonal.baseUrl,
-            new McpPersonalTokenSource(
-              config.iamBaseUrl,
-              new McpPersonalCredentialSource(config.mcpPersonal.credentialFile),
-              10_000,
-              config.iamRelay?.webOrigin,
-            ),
-          )
+      : config.mcpPersonal
+        ? new McpPersonalConnectClient(config.mcpPersonal.baseUrl, new PlatformServiceCredentialSource(config.mcpPersonal.credentialFile, "mcp_personal"))
         : null
   const mcpProviderAdminClient =
     options.mcpProviderAdminClient !== undefined
       ? options.mcpProviderAdminClient
-      : config.mcpProviderAdmin && config.iamBaseUrl
+      : config.mcpProviderAdmin
         ? new McpProviderAdminConnectClient(
             config.mcpProviderAdmin.baseUrl,
-            new McpProviderAdminTokenSource(
-              config.iamBaseUrl,
-              new McpProviderAdminCredentialSource(config.mcpProviderAdmin.credentialFile),
-              config.mcpProviderAdmin.timeoutMs,
-            ),
+            new PlatformServiceCredentialSource(config.mcpProviderAdmin.credentialFile, "mcp_admin"),
           )
+        : null
+  const customApiClient =
+    options.customApiClient !== undefined
+      ? options.customApiClient
+      : config.customApi
+        ? new CustomApiConnectClient(config.customApi.baseUrl, new PlatformServiceCredentialSource(config.customApi.credentialFile, "custom_api_personal"))
         : null
   let closePromise: Promise<void> | null = null
   const close = (): Promise<void> => {
@@ -397,6 +392,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     closePromise = (async (): Promise<void> => {
       mcpPersonalClient?.close?.()
       mcpProviderAdminClient?.close?.()
+      customApiClient?.close?.()
       await stopWorkers()
       skillDownloadHandles.clear()
       await closeStore()
@@ -406,6 +402,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
   return {
     mcpPersonalClient,
     mcpProviderAdminClient,
+    customApiClient,
     ...(localSkillImportClient === undefined ? {} : { localSkillImportClient }),
     skillSpecificationSource:
       options.skillSpecificationSource !== undefined
@@ -437,7 +434,12 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
               objectOrigin: config.storageObjectOrigin ?? config.storage?.objectOrigin ?? null,
               download: async (sourceRef, context, signal, deadlineAt) => {
                 const value = await skillProductClient.download(
-                  { requestId: context.requestId, tenant: context.identity.namespace, subject: context.identity.userId, sourceRef },
+                  {
+                    requestId: context.requestId,
+                    tenant: context.identity.namespace,
+                    subject: context.identity.userId,
+                    sourceRef,
+                  },
                   signal,
                   deadlineAt,
                 )
@@ -460,7 +462,12 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
                 const value = projectInstallation(
                   (
                     await personalInstallationClient.get(
-                      { requestId: context.requestId, tenant: context.identity.namespace, subject: context.identity.userId, installationId: id },
+                      {
+                        requestId: context.requestId,
+                        tenant: context.identity.namespace,
+                        subject: context.identity.userId,
+                        installationId: id,
+                      },
                       signal,
                     )
                   ).installation,
@@ -489,13 +496,23 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
                 if (!share) return null
                 signal.throwIfAborted()
                 const raw = await skillProductClient.inspect(
-                  { requestId: context.requestId, tenant: context.identity.namespace, subject: context.identity.userId, sourceRef: share.sourceRef },
+                  {
+                    requestId: context.requestId,
+                    tenant: context.identity.namespace,
+                    subject: context.identity.userId,
+                    sourceRef: share.sourceRef,
+                  },
                   signal,
                   deadlineAt,
                 )
                 assertSkillWireKnown(raw)
-                const value = projectSkillPackageInspectionResponse(raw, { sourceRef: share.sourceRef })
-                return { sourceRef: value.source_ref, revision: value.revision }
+                const value = projectSkillPackageInspectionResponse(raw, {
+                  sourceRef: share.sourceRef,
+                })
+                return {
+                  sourceRef: value.source_ref,
+                  revision: value.revision,
+                }
               },
             })
           : null,

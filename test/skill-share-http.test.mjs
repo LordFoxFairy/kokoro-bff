@@ -86,7 +86,6 @@ test("Skill Share HTTP preserves creator revoke, same-tenant login and fresh wit
   }
 })
 
-
 test("Skill Share composition uses the validated browser origin, not an invented HTTPS domain", async () => {
   const { readFile } = await import("node:fs/promises")
   const source = await readFile(new URL("../src/bootstrap/server.ts", import.meta.url), "utf8")
@@ -95,19 +94,35 @@ test("Skill Share composition uses the validated browser origin, not an invented
 
 test("Skill Share POST without a trusted public origin fails before owner inspection or share creation", async () => {
   let effects = 0
-  const server = createServer((request, response) => void skillShareRoute(
-    request, response,
-    { requestId: "origin-negative", identity: { namespace: "tenant", userId: "creator" } },
-    ["skill-shares"],
-    { create: async () => { effects++; throw new Error("unexpected write") } },
-    { inspect: async () => { effects++; throw new Error("unexpected inspection") } },
-    undefined,
-  ))
+  const server = createServer(
+    (request, response) =>
+      void skillShareRoute(
+        request,
+        response,
+        { requestId: "origin-negative", identity: { namespace: "tenant", userId: "creator" } },
+        ["skill-shares"],
+        {
+          create: async () => {
+            effects++
+            throw new Error("unexpected write")
+          },
+        },
+        {
+          inspect: async () => {
+            effects++
+            throw new Error("unexpected inspection")
+          },
+        },
+        undefined,
+      ),
+  )
   server.listen(0, "127.0.0.1")
   await once(server, "listening")
   try {
     const response = await fetch(`http://127.0.0.1:${server.address().port}/v1/skill-shares`, {
-      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ source_ref: "skill:one" }),
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ source_ref: "skill:one" }),
     })
     assert.equal(response.status, 503)
     assert.equal(effects, 0)

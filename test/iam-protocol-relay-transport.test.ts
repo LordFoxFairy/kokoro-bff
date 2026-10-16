@@ -177,6 +177,44 @@ test("BFF preserves IAM signed interaction query and filters Product Session coo
   assert.equal(forwardedCookie, "kokoro-issuer.session_token=issuer-token")
 })
 
+test("BFF relays a strictly admitted native authorization callback for an existing issuer session", async () => {
+  let location = `${webOrigin}/api/auth/callback/kokoro-iam?code=authorization-code_1&state=state-token-with-at-least-16&iss=${encodeURIComponent(`${webOrigin}/iam`)}`
+  const iam = await listen(
+    createServer((_request, response) => {
+      response.writeHead(302, { location, "cache-control": "no-store" })
+      response.end()
+    }),
+  )
+  const base = await listen(bff(iam))
+  const request = () =>
+    fetch(`${base}/iam/oauth2/authorize?client_id=client-1`, {
+      headers: { ...webServiceHeaders, cookie: "kokoro-issuer.session_token=issuer-session" },
+      redirect: "manual",
+    })
+
+  const accepted = await request()
+  assert.equal(accepted.status, 302)
+  assert.equal(accepted.headers.get("location"), location)
+
+  location = `${webOrigin}/api/auth/callback/kokoro-iam?error=invalid_scope&error_description=${encodeURIComponent("requested scope is unavailable")}&iss=${encodeURIComponent(`${webOrigin}/iam`)}&state=state-token-with-at-least-16`
+  const rejectedAuthorization = await request()
+  assert.equal(rejectedAuthorization.status, 302)
+  assert.equal(rejectedAuthorization.headers.get("location"), location)
+
+  for (const rejected of [
+    `${webOrigin}/api/auth/callback/kokoro-iam?code=authorization-code_1&state=state-token-with-at-least-16`,
+    `${webOrigin}/api/auth/callback/kokoro-iam?code=authorization-code_1&state=state-token-with-at-least-16&iss=${encodeURIComponent(`${webOrigin}/issuer-other`)}`,
+    `${webOrigin}/api/auth/callback/kokoro-iam?error=invalid_scope&state=state-token-with-at-least-16&iss=${encodeURIComponent(`${webOrigin}/iam`)}&next=outside`,
+    `${webOrigin}/api/auth/callback/kokoro-iam?code=authorization-code_1&state=state-token-with-at-least-16&iss=${encodeURIComponent(`${webOrigin}/iam`)}&next=outside`,
+    `${webOrigin}/manage/api/auth/callback/kokoro-iam?code=authorization-code_1&state=state-token-with-at-least-16&iss=${encodeURIComponent(`${webOrigin}/iam`)}`,
+  ]) {
+    location = rejected
+    const response = await request()
+    assert.equal(response.status, 502, rejected)
+    assert.equal(response.headers.get("location"), null, rejected)
+  }
+})
+
 test("email verification keeps the raw token query and native same-origin 302 without Product credentials", async () => {
   const upstreamCalls: Array<{ url: string | undefined; authorization: string | undefined; cookie: string | undefined }> = []
   const iam = await listen(
@@ -843,7 +881,7 @@ test("native 429 and logout security headers survive, while hostile redirect and
   assert.equal(hostile.headers.getSetCookie().length, 0)
 })
 
-test("only native logout GET presents trusted browser navigation semantics to IAM", async () => {
+test("native authorization and logout GETs present trusted browser navigation semantics to IAM", async () => {
   const calls: Array<{ path: string | undefined; method: string | undefined; mode: string | undefined; accept: string | undefined }> = []
   const iam = await listen(
     createServer((request, response) => {
@@ -864,6 +902,11 @@ test("only native logout GET presents trusted browser navigation semantics to IA
   })
   assert.equal(ordinary.status, 200)
 
+  const authorize = await fetch(`${base}/iam/oauth2/authorize?client_id=client-1`, {
+    headers: { ...webServiceHeaders, "sec-fetch-mode": "cors" },
+  })
+  assert.equal(authorize.status, 200)
+
   const logoutPost = await fetch(`${base}/iam/oauth2/end-session`, {
     method: "POST",
     headers: { ...webServiceHeaders, origin: webOrigin, "sec-fetch-mode": "navigate" },
@@ -873,6 +916,7 @@ test("only native logout GET presents trusted browser navigation semantics to IA
   assert.deepEqual(calls, [
     { path: "/iam/oauth2/end-session", method: "GET", mode: "navigate", accept: "text/html" },
     { path: "/iam/get-session", method: "GET", mode: "cors", accept: "*/*" },
+    { path: "/iam/oauth2/authorize?client_id=client-1", method: "GET", mode: "navigate", accept: "*/*" },
     { path: "/iam/oauth2/end-session", method: "POST", mode: "cors", accept: "*/*" },
   ])
 })

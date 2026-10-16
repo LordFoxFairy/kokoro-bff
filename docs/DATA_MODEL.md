@@ -1,3 +1,7 @@
+## SET49：主线与设置归档合同集成
+
+合并主线已批准的MCP public四写删除及既有设置/归档能力，以16.0.0/146发行（breaking删除，不冒minor）。integration-public-contract.mjs逐字节验证完整当前合同及有序清单，精确恢复原15.4全文/150后委托全部原inverse和oracle；main贡献保留，不修改Skills/MCP业务。Billing唯一pin使用正式experimental.5发行，保三读与严格专用404；当前验证进行中，正常服务不变。
+
 ## SET-47 Conversation 独立整理状态 D0（2026-10-15；仅 canonical 设计）
 
 传输边界补充：exact encodeURIComponent wire不变，BFF原生raw HTTP仍可读取历史ID `.`/`..`；WHATWG URL（含fetch）会规范化dot path segments，百分号编码点也不能解决。Web后继须对此两ID在fetch前拒绝并明确禁用归档/恢复说明，不做双重解码/fallback/新API；不能宣所有历史ID浏览器皆可操作。普通conv与Unicode ID不受此限制。
@@ -74,6 +78,11 @@ Billing唯一拥有canonical billing_offer与billing_offer_revision；BFF不得�
 ## SET-13 Team 权限目录零持久化（2026-10-13）
 
 IAM仍唯一保存Role/Permission/Membership及审计，当前在线准入和真实tenant/subject来自IAM。BFF只在请求生命周期内严格验证固定IAM wire，并向public TeamRole完整投影既有权限；Web只作视图提示，IAM写授权继续权威。无新增BFF SQL/Schema/表/列/索引、Redis、缓存、receipt、outbox、事务、权限快照或owner数据读取。database/schema.sql与全部vendor/generated IAM源码保持原字节。本次开发配对public15.0.0裁决见TECH/API；不能由目录字段推导新增权限、执行、团队创建或生产激活。
+## CV-SVC MCP内部服务凭据边界（D1，2026-10-13；无数据库变化）
+
+BFF 源码候选已切换两 MCP service surface 的直读凭据；无数据修改，正常运行配对验收仍待 Root。
+
+本切片不新增/修改BFF或Platform Schema、业务row、receipt、outbox、Redis/cache事实。三用途的本地credential是私有部署配置，不是业务秘密持久化模块；每次有界重读当前完整版本1文件，严格caller/purpose/tenant绑定，各用途独立secret，不存机器token缓存。凭据文件/key内容与机器路径仅留本地ignored/私有区，不进源码、测试receipt、日志或文档。轮换只保证后续service准入，不能代替现用户撤权与Agent Run取消/租约边界，也不声明已在途请求瞬时撤回。canonical数据库原字节保持。
 
 ## T-K03.20 本人 MCP 可连接目标投影数据边界（BFF 已实施，待 Web 消费）
 
