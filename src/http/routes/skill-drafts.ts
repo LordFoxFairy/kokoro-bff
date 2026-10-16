@@ -111,7 +111,7 @@ export async function runSkillRoute(
   response: ServerResponse,
   context: RequestContext,
   handler: (signal: AbortSignal, deadlineAt: number) => Promise<void>,
-  errorPolicy: "default" | "exact-download" = "default",
+  errorPolicy: "default" | "exact-download" | "admin" = "default",
 ): Promise<void> {
   response.setHeader("x-request-id", context.requestId)
   response.setHeader("cache-control", "no-store")
@@ -173,6 +173,10 @@ export async function runSkillRoute(
         status = 429
         code = "skill_rate_limited"
       }
+    } else if (errorPolicy === "admin" && error instanceof ConnectError && [Code.Unauthenticated, Code.PermissionDenied].includes(error.code)) {
+      status = 403
+      code = "service_auth_failed"
+      retryable = false
     } else if (error instanceof Error && error.message === "request_body_too_large") {
       status = 413
       code = "request_body_too_large"

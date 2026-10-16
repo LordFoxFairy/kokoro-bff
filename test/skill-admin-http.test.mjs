@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import test from "node:test"
+import { Code, ConnectError } from "@connectrpc/connect"
 import { createBffServer } from "../src/bootstrap/server.ts"
 import { DEFAULT_AGUI_CONFIG } from "../src/config/runtime.ts"
 import { createServer } from "node:http"
@@ -40,6 +41,44 @@ const correctionHeaders = {
 
 import { create, toBinary, fromBinary } from "@bufbuild/protobuf"
 import * as wire from "../src/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.ts"
+test("Admin owner machine admission rejection is terminal service authentication failure", async (t) => {
+  for (const ownerCode of [Code.Unauthenticated, Code.PermissionDenied]) {
+    await t.test(Code[ownerCode], async () => {
+      let calls = 0
+      const server = createBffServer(correctionConfig, {
+        businessStore: null,
+        sessionAdmission: {
+          verify: async () => ({ ok: true, identity: { namespace: "tenant", userId: "user" }, platformAdmin: true }),
+        },
+        skillAuthorization: { check: async () => ({ ok: true }) },
+        skillAdminClient: {
+          list: async () => {
+            calls++
+            throw new ConnectError("private owner admission detail", ownerCode)
+          },
+        },
+      })
+      server.listen(0, "127.0.0.1")
+      await once(server, "listening")
+      try {
+        const headers = { ...correctionHeaders }
+        delete headers["idempotency-key"]
+        delete headers["content-type"]
+        const response = await fetch(`http://127.0.0.1:${server.address().port}/v1/admin/skills`, { headers })
+        assert.equal(response.status, 403)
+        const body = await response.json()
+        assert.equal(body.error.code, "service_auth_failed")
+        assert.equal(body.error.retryable, false)
+        assert.equal(JSON.stringify(body).includes("private owner admission detail"), false)
+        assert.equal(calls, 1)
+      } finally {
+        server.closeAllConnections()
+        await new Promise((resolve) => server.close(resolve))
+      }
+    })
+  }
+})
+
 test("Admin real HTTP distinguishes bad protobuf owner facts and ACK from browser input", async (t) => {
   for (const fault of ["audience", "category", "ack", "input", "valid"])
     await t.test(fault, async () => {

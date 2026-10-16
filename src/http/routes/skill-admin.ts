@@ -39,82 +39,88 @@ export async function skillAdminRoute(
   client: SkillAdminConnectClient | null,
   iamBaseUrl?: string | null,
 ) {
-  await runSkillRoute(request, response, context, async (signal, deadlineAt) => {
-    if (!client) throw new ConnectError("Skills admin dependency missing", Code.Unavailable)
-    const enrich = <T>(value: T) =>
-      new IamPublisherProfileClient(iamBaseUrl ?? "", 5000).enrich(
-        context.identity.namespace,
-        /^Bearer ([^\s,]+)$/iu.exec(request.headers.authorization ?? "")?.[1] ?? "",
-        context.requestId,
-        value,
-        signal,
+  await runSkillRoute(
+    request,
+    response,
+    context,
+    async (signal, deadlineAt) => {
+      if (!client) throw new ConnectError("Skills admin dependency missing", Code.Unavailable)
+      const enrich = <T>(value: T) =>
+        new IamPublisherProfileClient(iamBaseUrl ?? "", 5000).enrich(
+          context.identity.namespace,
+          /^Bearer ([^\s,]+)$/iu.exec(request.headers.authorization ?? "")?.[1] ?? "",
+          context.requestId,
+          value,
+          signal,
+        )
+      const common = { requestId: context.requestId, tenant: context.identity.namespace, subject: context.identity.userId }
+      if (request.method === "GET") {
+        if (path.length === 2) {
+          const query = querySchema.parse(Object.fromEntries(assertSkillReadRequest(request, Object.keys(querySchema.shape))))
+          const status =
+            query.status === undefined ? undefined : ["", "draft", "active", "withdrawn", "quarantined", "disabled", "discarded"].indexOf(query.status)
+          const { limit, cursor, ...filters } = query
+          const result = await client.list(
+            common,
+            {
+              ...filters,
+              ...(status === undefined ? {} : { status }),
+              page: { ...(limit === undefined ? {} : { limit }), ...(cursor === undefined ? {} : { cursor }) },
+            } as Record<string, JsonValue>,
+            signal,
+            deadlineAt,
+          )
+          assertSkillWireKnown(result)
+          if (result.skills.length > (limit ?? 50) || !result.page || (result.page.nextCursor !== undefined && result.page.nextCursor.length > 2048))
+            throw new Error("skill_response_invalid")
+          signal.throwIfAborted()
+          send(response, 200, {
+            data: await enrich({ skills: result.skills.map((skill) => projectSkillProductRecord(skill)), next_cursor: result.page.nextCursor ?? null }),
+          })
+        } else {
+          assertSkillReadRequest(request)
+          const skillId = skillIdSchema.parse(path[2])
+          const result = await client.get({ ...common, skillId }, signal, deadlineAt)
+          signal.throwIfAborted()
+          send(response, 200, { data: await enrich(projectSkillProductRecord(result.skill, skillId)) })
+        }
+        return
+      }
+      if (
+        request.method !== "POST" ||
+        new URL(request.url!, "http://bff.local").search ||
+        request.headers["content-type"]?.split(";", 1)[0] !== "application/json"
       )
-    const common = { requestId: context.requestId, tenant: context.identity.namespace, subject: context.identity.userId }
-    if (request.method === "GET") {
+        throw new ConnectError("Skills admin route invalid", Code.InvalidArgument)
       if (path.length === 2) {
-        const query = querySchema.parse(Object.fromEntries(assertSkillReadRequest(request, Object.keys(querySchema.shape))))
-        const status =
-          query.status === undefined ? undefined : ["", "draft", "active", "withdrawn", "quarantined", "disabled", "discarded"].indexOf(query.status)
-        const { limit, cursor, ...filters } = query
-        const result = await client.list(
-          common,
-          {
-            ...filters,
-            ...(status === undefined ? {} : { status }),
-            page: { ...(limit === undefined ? {} : { limit }), ...(cursor === undefined ? {} : { cursor }) },
-          } as Record<string, JsonValue>,
+        const commandId = skillCommandId(request, context, "createAdminSkillDraft")
+        const input = parseSkillProductInput("adminDraft", await readBody(request, 65_536))
+        const result = await client.command(
+          "createAdminSkillDraft",
+          { ...common, commandId },
+          { metadata: skillMetadataWire(input.metadata) },
           signal,
           deadlineAt,
         )
-        assertSkillWireKnown(result)
-        if (result.skills.length > (limit ?? 50) || !result.page || (result.page.nextCursor !== undefined && result.page.nextCursor.length > 2048))
-          throw new Error("skill_response_invalid")
         signal.throwIfAborted()
-        send(response, 200, {
-          data: await enrich({ skills: result.skills.map((skill) => projectSkillProductRecord(skill)), next_cursor: result.page.nextCursor ?? null }),
-        })
-      } else {
-        assertSkillReadRequest(request)
-        const skillId = skillIdSchema.parse(path[2])
-        const result = await client.get({ ...common, skillId }, signal, deadlineAt)
-        signal.throwIfAborted()
-        send(response, 200, { data: await enrich(projectSkillProductRecord(result.skill, skillId)) })
+        send(response, 201, { data: await enrich(projectSkillProductAck(result)) })
+        return
       }
-      return
-    }
-    if (
-      request.method !== "POST" ||
-      new URL(request.url!, "http://bff.local").search ||
-      request.headers["content-type"]?.split(";", 1)[0] !== "application/json"
-    )
-      throw new ConnectError("Skills admin route invalid", Code.InvalidArgument)
-    if (path.length === 2) {
-      const commandId = skillCommandId(request, context, "createAdminSkillDraft")
-      const input = parseSkillProductInput("adminDraft", await readBody(request, 65_536))
-      const result = await client.command(
-        "createAdminSkillDraft",
-        { ...common, commandId },
-        { metadata: skillMetadataWire(input.metadata) },
-        signal,
-        deadlineAt,
-      )
+      if (path.length !== 4 || !Object.hasOwn(operations, path[3]!)) throw new ConnectError("Skills admin route invalid", Code.InvalidArgument)
+      const operation = operations[path[3] as keyof typeof operations]
+      const skillId = skillIdSchema.parse(path[2]),
+        commandId = skillCommandId(request, context, operation[0])
+      const input = parseSkillProductInput(operation[1], await readBody(request, 65_536))
+      const members = { ...input, skill_id: { value: skillId }, ...("metadata" in input ? { metadata: skillMetadataWire(input.metadata) } : {}) } as Record<
+        string,
+        JsonValue
+      >
+      const result = await client.command(operation[0] as SkillAdminCommand, { ...common, commandId }, members, signal, deadlineAt)
       signal.throwIfAborted()
-      send(response, 201, { data: await enrich(projectSkillProductAck(result)) })
-      return
-    }
-    if (path.length !== 4 || !Object.hasOwn(operations, path[3]!)) throw new ConnectError("Skills admin route invalid", Code.InvalidArgument)
-    const operation = operations[path[3] as keyof typeof operations]
-    const skillId = skillIdSchema.parse(path[2]),
-      commandId = skillCommandId(request, context, operation[0])
-    const input = parseSkillProductInput(operation[1], await readBody(request, 65_536))
-    const members = { ...input, skill_id: { value: skillId }, ...("metadata" in input ? { metadata: skillMetadataWire(input.metadata) } : {}) } as Record<
-      string,
-      JsonValue
-    >
-    const result = await client.command(operation[0] as SkillAdminCommand, { ...common, commandId }, members, signal, deadlineAt)
-    signal.throwIfAborted()
-    send(response, operation[0] === "createAdminSkillVersion" ? 201 : 200, {
-      data: await enrich(projectSkillProductAck(result, operation[0] === "createAdminSkillVersion" ? undefined : skillId)),
-    })
-  })
+      send(response, operation[0] === "createAdminSkillVersion" ? 201 : 200, {
+        data: await enrich(projectSkillProductAck(result, operation[0] === "createAdminSkillVersion" ? undefined : skillId)),
+      })
+    },
+    "admin",
+  )
 }
