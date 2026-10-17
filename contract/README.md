@@ -1,3 +1,7 @@
+## Agent HTTP6 consumer（2026-10-17，当前本地候选）
+
+`contract/dependencies/agent-http.json`固定Agent `7ed07f987e50ef1c1a8188ba12aa9c23ab0d03d1` /6.0.0；`contract/vendor/kokoro-agent/<commit>/`仅该current完整OpenAPI/provenance，旧current已退休。现生成器继续精确摘要、18-file allowlist及两轮一致性校验，只生成原三操作与原投影。新增第二同形security scheme使原生SDK明确AgentServiceBearer key，不代表BFF消费Billing evidence或新增网络调用。公开Public16/146原字节保持；正常激活、资金准入与完整Skills验收仍待后继。
+
 ## S2 current Skill 来源投影（2026-10-17，正常配对待续）
 
 当前 canonical 为 Public15.0.0，保持 /v1/139 operations；仅 SpecificationPublicSkill.owner_type 扩 hub/device/unknown，网站/分享归属字段不变。严格完整 inverse 复原原14.8字节；历史 proof 不是 runtime 兼容层。唯一 current Platform RPC/HTTP 都固定 e172838，HTTP6.1.0 和 acquisition profile 同 bundle；生成器精确补齐 pinned SDK 漏掉的 installed/acquisition if/then。读取投影验证原始嵌套 product 后再应用 generated validator，不剥离非法字段后假成功。具体语义、实际验证与未激活范围见 docs/CURRENT 和三设计面；无正式发现/身份 producer 不宣称 Device/OpenApp 能力完成。

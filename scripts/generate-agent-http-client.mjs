@@ -11,12 +11,12 @@ const output = path.join(root, "src/generated/agent-http")
 const manifestPath = path.join(root, "contract/dependencies/agent-http.json")
 const configPath = path.join(root, "openapi-ts.agent.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "79bf98c5aa63b9bace207afdf42d8c7aefee4fe8"
+const ownerCommit = "7ed07f987e50ef1c1a8188ba12aa9c23ab0d03d1"
 const vendorPath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/openapi.json`)
 const provenancePath = path.join(root, `contract/vendor/kokoro-agent/${ownerCommit}/provenance.json`)
-const ownerDigest = "bca8e4f4fd613e4325f594266893d5b089168cf14f2ad7a7df03f3f116af85f2"
-const provenanceDigest = "12c0f7ad3e6f7de6ff2183410fdae986119e99bd6975e9f07ee71f23dc2d22ca"
-const ownerContractVersion = "5.0.0"
+const ownerDigest = "e4d30178f2330744b374788abf7e6d23bbf8d7841dcd01537063c705dc18a8db"
+const provenanceDigest = "c636fdbe1f9b6a873f85bb4d74ef9a360d90cafa2f8df4c6ed2b1522f61df715"
+const ownerContractVersion = "6.0.0"
 const failureCodes = [
   "token_budget_exceeded",
   "recursion_limit_exceeded",

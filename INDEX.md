@@ -1,3 +1,7 @@
+## Agent HTTP6 消费切片（2026-10-17）
+
+既有Agent vendor/config/generator/manifest为唯一固定来源，`src/generated/agent-http/`只正规生成；runtime仍在`src/infrastructure/clients/agent/`原职责内。当前候选固定7ed07f9/6.0.0，三操作wire不变；原wire与public interaction contract tests只更新current pin，不新增API/数据/身份框架。严格Billing evidence与正常执行不是本片完成范围，验证状态见docs/CURRENT。
+
 ### 项目安装当前入口（2026-10-17）
 
 Platform5ec8538／Public15.1.0项目六operation复用 `src/http/routes/skill-installations.ts` 与 `src/infrastructure/clients/platform/skill-installation-{connect,projector,response}.ts`；原 personal-installation-* 已重命名，无alias。server核当前项目资格，skill-specification-facade项目读取使用正式Project RPC；实际验证与未接的选择/执行见docs/CURRENT.md。

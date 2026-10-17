@@ -3,18 +3,18 @@
   "status": "generated",
   "owner": {
     "repository_path": "apps/kokoro-agent",
-    "repository_commit": "79bf98c5aa63b9bace207afdf42d8c7aefee4fe8",
-    "contract_version": "5.0.0",
+    "repository_commit": "7ed07f987e50ef1c1a8188ba12aa9c23ab0d03d1",
+    "contract_version": "6.0.0",
     "contract_path": "contract/openapi/v1/openapi.json",
-    "contract_sha256": "bca8e4f4fd613e4325f594266893d5b089168cf14f2ad7a7df03f3f116af85f2",
+    "contract_sha256": "e4d30178f2330744b374788abf7e6d23bbf8d7841dcd01537063c705dc18a8db",
     "provenance_path": "contract/provenance.json",
-    "provenance_sha256": "12c0f7ad3e6f7de6ff2183410fdae986119e99bd6975e9f07ee71f23dc2d22ca"
+    "provenance_sha256": "c636fdbe1f9b6a873f85bb4d74ef9a360d90cafa2f8df4c6ed2b1522f61df715"
   },
   "generator": {
     "package": "@hey-api/openapi-ts",
     "version": "0.99.0",
     "config_path": "openapi-ts.agent.config.ts",
-    "config_sha256": "432092e886a4f99a31bc7888dc8fc02b6ef910ebfd0e304867f288cea8401888"
+    "config_sha256": "b518e5756333ea77fc66dee4083645a0a601dcc77fab60f830e6fe2594652a2e"
   },
   "runtime": {
     "node": "22.22.2",
@@ -77,17 +77,17 @@
     },
     {
       "path": "failure-profile.gen.ts",
-      "source_sha256": "bca8e4f4fd613e4325f594266893d5b089168cf14f2ad7a7df03f3f116af85f2",
+      "source_sha256": "e4d30178f2330744b374788abf7e6d23bbf8d7841dcd01537063c705dc18a8db",
       "sha256": "7109099419791e05c418f217c733abb4c7aa64c76165587550c96b8da7506454"
     },
     {
       "path": "process-profile.gen.ts",
-      "source_sha256": "bca8e4f4fd613e4325f594266893d5b089168cf14f2ad7a7df03f3f116af85f2",
+      "source_sha256": "e4d30178f2330744b374788abf7e6d23bbf8d7841dcd01537063c705dc18a8db",
       "sha256": "3515c8cd25a1b6ed489bf7ec847b2b3ade7b224617b9d2cf69f4aa55ea7c6493"
     },
     {
       "path": "sdk.gen.ts",
-      "sha256": "1a41e09ce6ccee93148d21667f14004e1f4f3c49ba3ab287acebea1973145ac2"
+      "sha256": "e19766b9c02a1323c814dc74052258bd57203c5403c57e58cc8788239a17727f"
     },
     {
       "path": "types.gen.ts",

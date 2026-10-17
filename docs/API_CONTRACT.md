@@ -1,3 +1,7 @@
+## Agent HTTP6 固定消费（2026-10-17，本地候选）
+
+唯一Agent publication固定 `7ed07f987e50ef1c1a8188ba12aa9c23ab0d03d1` /6.0.0，完整OpenAPI SHA256 `e4d30178f2330744b374788abf7e6d23bbf8d7841dcd01537063c705dc18a8db`，provenance SHA256 `c636fdbe1f9b6a873f85bb4d74ef9a360d90cafa2f8df4c6ed2b1522f61df715`。原三个执行操作wire及已消费Schema保持；HTTP6变更的usage-evidence reader由Billing独立消费，BFF不新增该操作。Generated security明确AgentServiceBearer，无新凭据/权限或转发入口。公开canonical仍Public16/146，AG-UI和现数据模型不变；仅候选接线，正常进程与模型派发未激活。
+
 ## S4c 项目选择本地契约候选（2026-10-17，尚未发行）
 
 当前预激活Public15.1替换为单一Public16，路径仍/v1：移除旧PATCH /projects/{projectId}/skills/{skill}，增加GET/PUT /projects/{projectId}/skill-selection。表示为data.project_id与data.installation_ids；PUT closed body {installation_ids:[...]}，最多16个、唯一、精确installation ID，[]清空，必需原Idempotency-Key，响应no-store。身份只取受信tenant/subject与当前BFF项目；PUT在写前核正式Project安装，错误/不可用不部分保存。替换事实和完成receipt同事务，原key重放不恢复已被后续修改的旧默认。

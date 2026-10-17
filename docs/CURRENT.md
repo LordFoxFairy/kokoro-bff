@@ -1,3 +1,11 @@
+## Agent HTTP6 消费候选已验（2026-10-17，未激活）
+
+基线a804b0f，复用原codex/skill-api-closure独立工作树，正常BFF未改。固定Agent已验证组合7ed07f9/HTTP6，完整blob/provenance经正规生成替换唯一current HTTP5 vendor；三执行operation完整对象及递归15个Schema相等，原AgentServiceBearer不变。公开canonical、SQL、package和lockfile原字节保持。原生生成SDK只增加AgentServiceBearer消歧key，因为owner新增独立Billing reader bearer；不手改generated、不加fallback或运行时兼容层。现adapter不消费usage-evidence reader。
+
+原pin回归真实RED后，正规generate/build与wire12项通过；Agent generator独立两轮18文件byte-identical校验通过。冻结653文件后主方Node22完整format/lint/typecheck/contract:check/architecture/默认manifest全部文件/build七门全exit0；contract686 PASS/0 SKIP、architecture35 PASS、default1265 PASS/0 FAIL/3原资源SKIP（58.23秒）。仅默认worker显式限2，不省略文件或改manifest。全部653冻结字节在门后匹配；最后仅更新本文验收事实，runtime/test/contract不变。独立只读复核无确定P0–P2；不把静态复核算测试。无新case/suite，无SQL变化，本片未重跑真实PG/Redis完整integration；原3资源SKIP不是通过。
+
+正常模型/Tool/Billing、配置/服务/库/角色/积分未动，正常BFF仍a804b0f、Agent仍887aabc；本片不快进激活。后继Billing仍须独立HTTP6原bytes读取、strict usage2/sealed与完整可信快照绑定，再接正式bound/资金准入/单派发/结算。远端CI/push/PR/merge及Root index/gitlink继续暂停；本片不是正式资金许可、正常执行或完整Skills/MCP验收。
+
 ## 项目 Skills 安装 API 已接线（2026-10-17，本地源码）
 
 BFF 固定 Platform `5ec8538`，Public15.1.0／145 operations 接入项目安装、显式更新、启停、移除、详情与列表。复用现安装 route/client/digest/mapper（统一命名 skill-installation-*），无新表、依赖或兼容入口。项目身份取当前 BFF 项目资格，调用前后复核；owner 回包绑定项目、请求资源与操作状态，错资源/错操作/未知 wire 不作为成功或可重试依赖故障。public skill.list 的项目读取已切正式 Project RPC。

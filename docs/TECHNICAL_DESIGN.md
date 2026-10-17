@@ -1,3 +1,9 @@
+## Agent HTTP6 消费接线（2026-10-17，本地候选）
+
+沿已批准Skills/MC-01，唯一Agent HTTP consumer由HTTP5切到已验证组合commit `7ed07f987e50ef1c1a8188ba12aa9c23ab0d03d1` /6.0.0；使用owner Git blob、完整provenance与现hey-api生成流程，退休旧current vendor，不留fallback。BFF仍仅消费createRun/controlRun/replaySessionEvents三操作及原failure/process/interaction投影；这三操作和递归Schema未变，无新owner、公开API、SQL或执行配置。
+
+完整owner新增BillingModelCallReaderBearer，现生成器因此给原三个SDK操作明确AgentServiceBearer key；这是多同形security scheme的原生消歧，不加手工normalizer，也不借BFF服务身份读取Billing证据。实际派发/控制/replay仍由现窄adapter与upstream服务身份构造，未知结果、取消、幂等和预算保持。Billing严格usage2读取及资金准入为后继，不以更新consumer pin冒启用执行或正常组合验收。
+
 ## S4c 项目默认与消息选择（本地源码候选，2026-10-17）
 
 沿已批准模型替换名称开关，不新增服务/依赖或通用选择框架。BFF以现Project保存有序、最多16个不重复installation ID作为默认；Platform仍单写安装/启停/精确版本。GET/PUT项目skill-selection读取/整体替换默认，空数组清空；PUT逐项通过正式Project Get核当前安装与启用，不代替Agent执行授权，删除失效默认允许直接提交空列表。旧按名称PATCH与bff_project_skill同步退休，不做name/ID双轨。

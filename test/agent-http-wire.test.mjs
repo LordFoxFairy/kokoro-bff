@@ -29,40 +29,40 @@ describe("Agent event-protocol provenance", () => {
         provenance_sha256: manifest.owner.provenance_sha256,
       },
       {
-        repository_commit: "79bf98c5aa63b9bace207afdf42d8c7aefee4fe8",
-        contract_version: "5.0.0",
+        repository_commit: "7ed07f987e50ef1c1a8188ba12aa9c23ab0d03d1",
+        contract_version: "6.0.0",
         contract_path: "contract/openapi/v1/openapi.json",
-        contract_sha256: "bca8e4f4fd613e4325f594266893d5b089168cf14f2ad7a7df03f3f116af85f2",
+        contract_sha256: "e4d30178f2330744b374788abf7e6d23bbf8d7841dcd01537063c705dc18a8db",
         provenance_path: "contract/provenance.json",
-        provenance_sha256: "12c0f7ad3e6f7de6ff2183410fdae986119e99bd6975e9f07ee71f23dc2d22ca",
+        provenance_sha256: "c636fdbe1f9b6a873f85bb4d74ef9a360d90cafa2f8df4c6ed2b1522f61df715",
       },
     )
     assert.deepEqual(
       manifest.generated.find(({ path }) => path === "failure-profile.gen.ts"),
       {
         path: "failure-profile.gen.ts",
-        source_sha256: "bca8e4f4fd613e4325f594266893d5b089168cf14f2ad7a7df03f3f116af85f2",
+        source_sha256: "e4d30178f2330744b374788abf7e6d23bbf8d7841dcd01537063c705dc18a8db",
         sha256: manifest.generated.find(({ path }) => path === "failure-profile.gen.ts")?.sha256,
       },
     )
     assert.match(manifest.generated.find(({ path }) => path === "failure-profile.gen.ts")?.sha256 ?? "", /^[0-9a-f]{64}$/u)
   })
 
-  it("uses one HTTP5 publication for process, delivery and interaction with no split source pin", async () => {
+  it("uses one HTTP6 publication for process, delivery and interaction with no split source pin", async () => {
     const manifest = JSON.parse(await readFile(new URL("../contract/dependencies/agent-http.json", import.meta.url), "utf8"))
     assert.equal(Object.hasOwn(manifest, "event_protocol"), false)
-    assert.equal(manifest.owner.repository_commit, "79bf98c5aa63b9bace207afdf42d8c7aefee4fe8")
+    assert.equal(manifest.owner.repository_commit, "7ed07f987e50ef1c1a8188ba12aa9c23ab0d03d1")
     assert.equal(manifest.generated.length, 18)
     assert.equal(
       manifest.generated.find(({ path }) => path === "process-profile.gen.ts")?.source_sha256,
-      "bca8e4f4fd613e4325f594266893d5b089168cf14f2ad7a7df03f3f116af85f2",
+      "e4d30178f2330744b374788abf7e6d23bbf8d7841dcd01537063c705dc18a8db",
     )
   })
 
   it("verifies the published full-state graph and rejects weakened required, closed, enum and decision schemas", async () => {
     const { assertInteractionContractSchema } = await import("../scripts/generate-agent-http-client.mjs")
     const owner = JSON.parse(
-      await readFile(new URL("../contract/vendor/kokoro-agent/79bf98c5aa63b9bace207afdf42d8c7aefee4fe8/openapi.json", import.meta.url), "utf8"),
+      await readFile(new URL("../contract/vendor/kokoro-agent/7ed07f987e50ef1c1a8188ba12aa9c23ab0d03d1/openapi.json", import.meta.url), "utf8"),
     )
     assert.doesNotThrow(() => assertInteractionContractSchema(owner))
     for (const change of [
