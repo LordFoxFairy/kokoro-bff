@@ -136,27 +136,33 @@ export const zSkillProductFacts = z.object({
   presentation_kind: z.enum(["first_party", "github_repository"]).optional(),
 })
 
-export const zSkill = z.object({
-  series_id: z.string(),
-  source_ref: z.string(),
-  name: z.string(),
-  description: z.string(),
-  content_hash: z.string(),
-  scope: z.enum(["personal", "project", "organization", "session", "unknown"]),
-  revision: z.string().regex(/^[1-9][0-9]*$/),
-  enabled: z.boolean(),
-  installed: z.boolean().optional(),
-  skill_updated_at: z.iso.datetime(),
-  example_prompts: z.array(z.string().min(1).max(1000).regex(/\S/)).max(10),
-  category_keys: z.array(z.enum(["programming", "data", "automation", "business", "design", "media", "content", "apps"])).max(8),
-  product: zSkillProductFacts,
-  created_at: z.iso.datetime(),
-  updated_at: z.iso.datetime(),
-  owner_scope: z.object({
-    kind: z.string(),
-    id: z.string(),
-  }),
-})
+export const zSkill = z
+  .object({
+    series_id: z.string(),
+    source_ref: z.string(),
+    name: z.string(),
+    description: z.string(),
+    content_hash: z.string(),
+    scope: z.enum(["personal", "project", "organization", "session", "unknown"]),
+    revision: z.string().regex(/^[1-9][0-9]*$/),
+    enabled: z.boolean(),
+    acquisition_kind: z.enum(["unknown", "direct", "hub"]).optional(),
+    installed: z.boolean().optional(),
+    skill_updated_at: z.iso.datetime(),
+    example_prompts: z.array(z.string().min(1).max(1000).regex(/\S/)).max(10),
+    category_keys: z.array(z.enum(["programming", "data", "automation", "business", "design", "media", "content", "apps"])).max(8),
+    product: zSkillProductFacts,
+    created_at: z.iso.datetime(),
+    updated_at: z.iso.datetime(),
+    owner_scope: z.object({
+      kind: z.string(),
+      id: z.string(),
+    }),
+  })
+  .superRefine((value, context) => {
+    if (value.installed === true && value.acquisition_kind === undefined)
+      context.addIssue({ code: "custom", path: ["acquisition_kind"], message: "Installed Skill acquisition is required" })
+  })
 
 export const zPublishedPersonalSkill = z.object({
   skill_id: z.string().min(1),

@@ -1,3 +1,7 @@
+### S2 来源事实与公开 skill.list 当前入口（2026-10-17）
+
+Public15.0.0/139 operations 与 Platform e172838 的 RPC/HTTP6.1.0 使用唯一当前固定 bundle；窄安装事实由 personal-installation-response 解码，skill-specification 仅对公开列表投影八类。网站及分享保原归属词表，真实数据 owner、精确版本与鉴权不变。SDK if/then 补全在既有 generate-platform-http-client 流程，projection-http 在 generated strip 前检验原始 product；测试仍复用现有 suite。实际验证、正常未激活及项目/Agent 后继见 docs/CURRENT，不以当前枚举代替 Device/App producer 或完整执行。
+
 ### 2026-10-16 Skill Share 活动版本资格
 
 `src/http/routes/skill-share.ts` 复用 `SkillSpecificationSource.revisionSummary` 的精确 active/valid 元数据资格、strict schema 与 source_ref/UID 绑定；POST 持久化前/返回前及 Resolve 重新检查。本人可预览已撤回/草稿包不代表可生成分享，原包检查仍保留。DELETE 只沿原 creator/tenant，不因撤回阻断；没有新协议或 SQL。`test/skill-share-http.test.mjs` 原用例承接拒绝零创建、已有链接重核、迟到取消与提交后撤回，不假称跨 owner 原子回滚。

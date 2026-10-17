@@ -1,3 +1,13 @@
+## S2 来源事实消费（源码候选，2026-10-17）
+
+沿 a7dd8e7 精确固定 Platform e172838 的 acquisition/RPC/HTTP6.1.0/profile，当前公开 artifact15.0.0（仍/v1/139 operations）仅将 skill.list 的 owner_type 扩为八类；网站与分享维持真实归属五类。hub/unknown/direct 据正式安装事实投影，坏 enum/绑定拒绝；没有 Device 发现或 OpenApp 身份 producer。只替换原 current RPC/HTTP vendor，其他仍用政策 pin 保留；acquisition 不进入全部个人 ACK/详情字段。
+
+固定 hey-api 0.99 将 owner if/then 生成 unknown intersection并遗漏条件，实际 RED 后由原生成流程精确补齐 installed=true 必须带 acquisition_kind；没有手改 generated 或放宽 owner 条件。随后独审 P2 指出 generated 会先剥离嵌套未知 product 字段，原 HTTP 负控复现；改为 preprocess 原始严格 product，再走 generated acquisition/顶层 strict，实际 RED→GREEN。原 R345 源码字符串断言随重构退役，其风险由同一既有真实 HTTP shape/UTC/examples/额外字段矩阵承接，不为了消除失败删行为负控。86 相关测试、typecheck/build 通过。首完整 contract 为678 PASS/4 FAIL，均回溯到 local-import 成功 fixture 缺新 acquisition 字段；显式补 DIRECT 后该文件与原 HTTP 矩阵46 PASS，不改业务或删拒绝断言。publisher 负控细化为合法 personal/first_party/iam 正向基线，仅加嵌套未知字段，避免同时依赖配对错误。最终48/48非文档冻结匹配，增量只读复核确认 P2 闭环、无新增确定 P0–P2。
+
+停写后主方 Node22 完整 format:check/lint/typecheck、contract:check 全链、默认 test、test:architecture 和 build 均 exit0。contract **682 PASS / 0 SKIP / 55.33s**，默认 **1259 PASS / 0 FAIL / 3 既有资源 SKIP / 57.45s**，architecture **35 PASS / 0 SKIP**；contract/default 使用原 manifest 全部文件，仅显式限2workers，没有省略文件或永久改 package脚本。两生成器 --check 包含两轮 byte-identical，公开139 operations、14.8完整inverse保持；原3项lint warnings仍在。不新建suite，不重复3k项Web测试。canonical SQL、lockfile与六文档原基线suffix逐字保留；未运行真实PG/Redis完整组合，无Schema变化不冒真实事务证明。
+
+本片无 SQL/Schema/lockfile、配置/登录/权限/积分、正常进程或模型/Tool/Billing 变化；HTTP/Connect 为真实 loopback、owner/IAM 受控，不冒正常应用数据库配对或完整用户验收。App/Admin 固定消费与项目选择/exact installation/Agent Run冻结仍未交，正常 BFF 行为仍 b4292b6，正常 Platform 仍行为0581429。远端 CI/push/PR/merge 与 Root index/gitlink继续暂停，完整目标保持进行中。
+
 ## 2026-10-16 skill.list 核心能力复核（文档纠正）
 
 沿b4292b6重新核官方v2文档/机器源与当前公开canonical及聚合/路由；没有更改生产源码。七个字段及双方均未声明item required已相等；来源词表尚缺hub/device/unknown，不能用旧五类记录宣称完整对齐。包含停用安装且GET不启用、项目资格返回前重核、真实creator/时间与stable series ID已有现实现和受控证据；任务选择/项目默认与Agent pin端到端仍未闭环。

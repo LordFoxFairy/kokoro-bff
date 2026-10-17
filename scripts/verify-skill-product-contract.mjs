@@ -183,8 +183,9 @@ function inspectSkillsSpecificationSurface(source, expectedVersion) {
       canonicalManifestPattern, `${schemaName}.manifest_identity must accept only exact lowercase canonical skill-md-v1 or legacy zip-v2 identities`)
   const skill = schemas.SpecificationPublicSkill?.properties ?? {}
   for (const key of ["id", "name", "description"]) require(skill[key]?.type === "string", `Public Skill ${key} must be string`)
-  require(JSON.stringify(skill.owner_type?.enum) ===
-    JSON.stringify(["personal", "official", "team", "project", "app"]), "Public owner_type must retain original enum")
+  const ownership = ["personal", "official", "team", "project", "app"]
+  const ownerTypes = expectedVersion === null ? [...ownership, "hub", "device", "unknown"] : ownership
+  require(JSON.stringify(skill.owner_type?.enum) === JSON.stringify(ownerTypes), "Public owner_type must match its current or historical vocabulary")
   for (const key of ["created_at", "updated_at"])
     require(skill[key]?.type === "integer" && skill[key]?.format === "int64", `Public ${key} must be int64 Unix seconds`)
   require(skill.creator_info?.properties?.user_id?.type === "string" &&
@@ -228,8 +229,25 @@ function inspectSkillsSpecificationSurface(source, expectedVersion) {
 }
 
 /** Checks the active Skill surface without coupling it to unrelated API version increments. */
+/** Only the public item vocabulary and artifact version differ from Public14.8. */
+export function restorePublic148SkillOwnerTypesContract(source) {
+  if (!/^  version: 15\.0\.0$/mu.test(source)) throw new Error("Skill owner-type major version drift")
+  const block = namedBlock(source, "schema", "SpecificationPublicSkill")
+  const delta = "            - hub\n            - device\n            - unknown\n"
+  if (block === null || block.split(delta).length !== 2) throw new Error("Skill owner-type exact delta missing")
+  const parent = source.replace(block, () => block.replace(delta, "")).replace("  version: 15.0.0", "  version: 14.8.0")
+  if (hash(parent) !== "a9729722383de5571821961357051499612d12c76aa835b8774828adea82a577")
+    throw new Error("Skill owner-type complete Public14.8 parent inverse drift")
+  return parent
+}
 export function inspectCurrentSkillsSpecificationContract(source) {
-  return inspectSkillsSpecificationSurface(source, null)
+  const errors = inspectSkillsSpecificationSurface(source, null)
+  try {
+    restorePublic148SkillOwnerTypesContract(source)
+  } catch (error) {
+    errors.push(error.message)
+  }
+  return errors
 }
 
 /** Historical Public12 proof retained for the Public13 inverse contract. */

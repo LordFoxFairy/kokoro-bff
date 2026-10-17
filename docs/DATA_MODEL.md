@@ -1,3 +1,9 @@
+## S2 来源消费无 BFF 数据变化（2026-10-17）
+
+真实取得事实由 Platform SkillInstallation 单写；BFF只从固定RPC enum解码为窄安装事实，再计算公开owner_type，不存第二份来源/作者/Hub引用，不读Platform DB/Redis。该值不进入Browser请求、Project表、Message或receipt；本片唯一database/schema.sql和所有索引/事务保持原字节。
+
+项目选择归BFF、项目安装及exact pin归Platform、Run冻结归Agent的后继边界保持；此次读取投影不实现这些写入能力，不造空字段或假Device发现行。正常应用数据/余额/角色/凭据与服务不改。完整实施/验收顺序复用现Root计划S2与本仓TECHNICAL_DESIGN，不新增任务中心。
+
 ## AUTH-P3：认证适配不新增业务数据（2026-10-16）
 
 不改本仓 `database/schema.sql`、业务表/索引、receipt、Redis 或其它 owner 数据。删除的内部 OAuth token cache 不迁移为业务记录；专用途径只引用 owner-only 部署文件中的独立固定 tenant/surface 服务凭据。用户 session/action 权限继续由 IAM 权威提供。凭据、配置实值与运行快照仅留本地 ignored，禁止持久化到源码、公共响应或日志。

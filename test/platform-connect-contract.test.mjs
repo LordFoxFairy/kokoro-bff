@@ -53,6 +53,8 @@ test("Platform consumer pins one current v1 owner contract bundle", async () => 
       "execution-operations/custom-api-v1.json",
       "execution-operations/mcp-private-server-v1.json",
       "descriptor/platform-v1.binpb",
+      "execution-operations/skill-acquisition-v1.json",
+      "openapi/platform-http.openapi.json",
     ].map((file) => ({
       path: `contract/${file}`,
       sha256: artifacts[file],
@@ -93,6 +95,7 @@ test("Platform generator rejects input, artifact, provenance and vendor-layout d
   assert.throws(() => assertArtifactDigests({ ...artifactBytes, "execution-operations/mcp-private-server-v1.json": Buffer.from("{}") }), /artifact digest/u)
   assert.throws(() => assertArtifactDigests({ ...artifactBytes, "auth/bff-service-auth-v1.json": Buffer.from("{}") }), /artifact digest/u)
   assert.throws(() => assertArtifactDigests({ ...artifactBytes, "errors/command-receipt-v1.json": Buffer.from("{}") }), /artifact digest/u)
+  assert.throws(() => assertArtifactDigests({ ...artifactBytes, "execution-operations/skill-acquisition-v1.json": Buffer.from("{}") }), /artifact digest/u)
   assert.doesNotThrow(() =>
     assertVendorLayout({
       directories: [
@@ -100,6 +103,7 @@ test("Platform generator rejects input, artifact, provenance and vendor-layout d
         "descriptor",
         "errors",
         "execution-operations",
+        "openapi",
         "proto",
         "proto/kokoro",
         "proto/kokoro/common",

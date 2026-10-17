@@ -102,7 +102,7 @@ export const publicSkillListSchema = z.array(
     id: string,
     name: string,
     description: string,
-    owner_type: z.enum(["personal", "official", "team", "project", "app"]),
+    owner_type: z.enum(["personal", "official", "team", "project", "app", "hub", "device", "unknown"]),
     creator_info: optional({ user_id: string, name: string }),
     created_at: z.number().int().safe(),
     updated_at: z.number().int().safe(),

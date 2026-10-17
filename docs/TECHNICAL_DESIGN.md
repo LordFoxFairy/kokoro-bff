@@ -1,3 +1,15 @@
+## S2 来源消费与公开八类（已确认模型源码候选，2026-10-17）
+
+基线 a7dd8e7。上游 Platform `e17283888ae1a8cf10365dfc8dd670115d6d187c` 已发行安装 acquisition_kind，用户已确认归属/取得分离及 BFF 八类投影。本片沿原 Skills aggregation/窄 client，不重开方案审批，不新建服务、进程、数据表或通用来源框架。公开资料核验于2026-10-17：[skill.list](https://open.manus.ai/docs/v2/skill.list)列八值及含停用安装；官方没有公布冲突优先级，下面是 Kokoro 明确实现规则，不冒内部逆向证据。
+
+固定该 commit 的唯一 RPC/HTTP6.1.0 输入、acquisition profile、descriptor/provenance/generated digest，再由本仓正规生成。退休本仓旧 current Connect/HTTP 两份 vendor，仍在使用的其他具名政策 pin 保持；同 commit 两协议共享一份只读 vendor，不导入 sibling 源码，不手改 generated。命令 digest、direct service credential/human IAM、取消/10秒预算/精确版本及权限保持。
+
+公开 skill.list 分类：owner 正式安装的 hub 事实优先，返回 hub，不抹作者；显式 unknown 取得事实返回 unknown，不靠当前目录或 GitHub/ZIP猜补；direct 取得按真实 source owner 映射 user→personal、organization→team、project→project、app→app，官方 source_kind 优先为 official。direct 的语法合法但未识别 owner kind 返回 unknown；缺失/非法 acquisition enum、坏绑定/身份/源数据是依赖错误，不降级 unknown。Device 只有正式发现事实才可生产；本片没有该 producer，不造 device 安装。App 值只承接 owner 真实身份，不新增或冒充 APIKey/Open App authentication。
+
+网站 ListSkills/GetSkill 的 ownerType 保真实归属与现五类语义，分享精确 revision owner_type 也保持其现五类；仅公开 SpecificationPublicSkill 扩为八值，presence、Unix秒、stable series id、creator 与 publisher分离不变。acquisition 只进入窄安装事实 port，不额外扩所有个人 ACK/详情字段。该响应词表扩展按配对切换 public artifact15.0.0（路径仍/v1），没有双 schema/fallback/alias；当前 App/Admin 未消费，不先正常激活。
+
+写区：现 Platform生成器/config/vendor/manifest/generated；personal-installation-response、skill-specification types/service/schema；唯一public OpenAPI/当前contract checker与原相关 tests。Data owner不变，database/schema.sql、lockfile、权限/配置不改。既有相关文件补：current schema八值及完整14.8 inverse、真实 Connect enum/来源边界、分类矩阵与网站/分享不混淆、未来合法owner为unknown、坏enum拒绝/零泄露、停用/分页/project准入保留。聚焦RED→实现→生成与完整相关owner门，资源证据不冒正常用户组合；本片不调用模型/Tool/Billing、不重启正常服务、远端和Root index/gitlink保持暂停。后继项目选择/精确安装/Run冻结沿同一有效计划，不用S2读取投影代替完成。
+
 ## AUTH-P3：剩余 Platform 机器 OAuth 原子移除（实施设计，2026-10-16）
 
 依据 Root ADR-035，普通 BFF→Platform 的六用途完整切换为现 `PlatformServiceCredentialSource`：catalog、projection、skills_admin、mcp_personal、mcp_admin、custom_api_personal。owner 先发行并验证 breaking auth profile/provenance，本仓再固定 commit/digest；HTTP projection 6.0 的独立 pin 和 public14.8/139 operations 不变。不得仅切 Admin、共享 projection secret 或保留 OAuth fallback。

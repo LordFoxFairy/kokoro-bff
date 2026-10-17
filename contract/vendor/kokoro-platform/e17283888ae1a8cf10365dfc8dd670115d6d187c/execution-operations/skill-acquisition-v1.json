@@ -1,0 +1,50 @@
+{
+  "profile": "skill-installation-acquisition-v1",
+  "version": "1.0.0",
+  "owner": "Platform/Skills",
+  "visibility": "internal-owner",
+  "runtime_verified": false,
+  "enum": {
+    "UNSPECIFIED": 0,
+    "UNKNOWN": 1,
+    "DIRECT": 2,
+    "HUB": 3
+  },
+  "fields": {
+    "SkillInstallation": 13,
+    "ProductSkillInstallation": 21
+  },
+  "http_version": "6.1.0",
+  "semantics": {
+    "owner": "installation, never Skill author or creation provenance",
+    "producer": "first install or removed reinstall in the original Serializable transaction",
+    "hub": "current catalog exact source/series/tenant/owner/package",
+    "preservation": "no-change, receipt replay, update, enable, disable and remove keep the committed acquisition",
+    "unspecified": "invalid; unknown is explicit",
+    "device_app": "not produced without real discovery or formal IAM Open App facts"
+  },
+  "parent": {
+    "contract/proto/kokoro/platform/v1/platform_runtime.proto": {
+      "path": "contract/descriptor/platform-skill-acquisition-parent.proto.snapshot",
+      "sha256": "ede427f350a0097f18812900b00e423e15fc6e522d9064345b0f033ffd402b1b"
+    },
+    "contract/descriptor/platform-v1.binpb": {
+      "path": "contract/descriptor/platform-skill-acquisition-parent.descriptor.snapshot",
+      "sha256": "9ea1097f3d03fd7a23fe308c2019c7b67ffdb455ce93cc37326126a084757628"
+    },
+    "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts": {
+      "path": "contract/descriptor/platform-skill-acquisition-parent.generated.snapshot",
+      "sha256": "dccac7ea3f6a6e447223592f5bf1a0ec864af5f128b8775c15dc9af06169260c"
+    },
+    "contract/openapi/platform-http.openapi.json": {
+      "path": "contract/descriptor/platform-skill-acquisition-parent.http.snapshot",
+      "sha256": "50afde42d7a1564ecb058c78dff68e4ea81bbb3552bd96dbf6203b036ec381ae"
+    }
+  },
+  "current": {
+    "contract/proto/kokoro/platform/v1/platform_runtime.proto": "5e7ec8cc568367eb79b75bacac4468c9a0433562d0a1dc2991547a437d850501",
+    "contract/descriptor/platform-v1.binpb": "07f69877db9b6e9c7e4f8d4deb9c756cbde5e926b4ad608cd7c33d23591e7eb0",
+    "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts": "6a1687b484389324fc3aacffaeb8e13ed86d5d471057b01b65b7b48b8e5fd3d8",
+    "contract/openapi/platform-http.openapi.json": "18699985514e5b75bb48dc1fbaad638f6184e88032ed5e6d242ef89e6144b0fd"
+  }
+}

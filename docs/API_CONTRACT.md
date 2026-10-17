@@ -1,3 +1,11 @@
+## S2 skill.list 八类当前源码契约（2026-10-17，正常激活待续）
+
+固定 Platform `e17283888ae1a8cf10365dfc8dd670115d6d187c`：RPC enum1 UNKNOWN/2 DIRECT/3 HUB；0/缺失/非法值拒绝。HTTP6.1.0及acquisition profile/provenance同commit。公开唯一/v1/skill.list的SpecificationPublicSkill.owner_type为personal/official/team/project/app/hub/device/unknown；仅此公开item改词表，不新增字段、required、alias或mutation输入。artifact15.0.0表示响应枚举配对切换，不是HTTP/v15。原14.8完整SHA `a9729722383de5571821961357051499612d12c76aa835b8774828adea82a577` 通过严格去三枚举值/还原version逆回，不改任何其它operation/schema/metadata。
+
+hub来自已提交安装取得事实；unknown来自显式未知取得或合法但未识别的ownership；direct才按真实owner/官方分类映射。内部非法enum/绑定不转unknown。网站ownerType、共享revision owner_type与source_kind各保原语义，不复用公开八类替换所有字段。无正式Device发现/OpenApp准入不宣称这些入口已可用；不改变现人类身份范围来模仿Manus APIKey/OAuth。
+
+项目query保原BFF项目当前资格和前后复核，返回安装exact revision但id仍稳定series，停用安装照常列出，列出不启用。creator_info仍仅真实IAM creator，不借publisher替代。生成、实际wire与产品组合分层验收；尚未执行的消费者/正常数据库和服务切换不算完成。
+
 ## 2026-10-16 skill.list 官方参考复核（当前差距，不发行新契约）
 
 当前业务源码b4292b6及唯一canonical `contract/openapi/v1/openapi.yaml`不变。重新读取[官方skill.list](https://open.manus.ai/docs/v2/skill.list)及[官方v2 OpenAPI](https://open.manus.ai/docs/v2/openapi_v2.json)，解析其Skill组件而非只看示例：七个字段名与当前SpecificationPublicSkill相同，双方item均未声明required；现有presence不应因示例全出现就改成全部必填。官方owner_type现为personal/official/team/project/app/hub/device/unknown，当前canonical/runtime仍五类；下文2026-10-09五类是历史快照，不再代表当前完整官方词表。hub/device真实来源生产及unknown语义仍待现有设计确认，不只扩枚举、不从ZIP/GitHub/audience推导来源，也不把损坏owner响应降级成unknown。

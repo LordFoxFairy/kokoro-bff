@@ -166,6 +166,13 @@ test("projection by-ID response must bind requested identity and exact public fi
 
 test("R345 all three HTTP Skill shapes require one closed UTC Z update instant and preserve nanoseconds", async () => {
   const instant = "2026-10-08T12:34:56.123456789Z"
+  const product = {
+    publication_audience: "owner",
+    state_version: "1",
+    source_kind: "personal",
+    presentation_kind: "first_party",
+    publisher: { kind: "iam", iam: { kind: "user", id: "publisher" } },
+  }
   const visible = {
     series_id: "series-one",
     created_at: instant,
@@ -181,7 +188,7 @@ test("R345 all three HTTP Skill shapes require one closed UTC Z update instant a
     example_prompts: [],
     skill_updated_at: instant,
     category_keys: [],
-    product: { publication_audience: "owner", state_version: "1" },
+    product: structuredClone(product),
   }
   const published = {
     skill_id: "skill-one",
@@ -194,7 +201,7 @@ test("R345 all three HTTP Skill shapes require one closed UTC Z update instant a
     example_prompts: [],
     skill_updated_at: instant,
     category_keys: [],
-    product: { publication_audience: "owner", state_version: "1" },
+    product: structuredClone(product),
   }
   const managed = {
     skill_id: "skill-one",
@@ -208,7 +215,7 @@ test("R345 all three HTTP Skill shapes require one closed UTC Z update instant a
     example_prompts: [],
     skill_updated_at: instant,
     category_keys: [],
-    product: { publication_audience: "owner", state_version: "1" },
+    product: structuredClone(product),
   }
   const cases = [
     {
@@ -283,6 +290,9 @@ test("R345 all three HTTP Skill shapes require one closed UTC Z update instant a
       ].map((prompts) => ["bad examples", (value) => (value.example_prompts = prompts)]),
       ["missing", (value) => delete value.skill_updated_at],
       ["extra", (value) => (value.unreviewed = true)],
+      ["extra product field", (value) => (value.product.unreviewed = true)],
+      ["extra nested publisher field", (value) => (value.product.publisher.iam.unreviewed = true)],
+      ["extra creation provenance field", (value) => (value.product.creation_provenance = { kind: "local", unreviewed: true })],
       ["invalid", (value) => (value.skill_updated_at = "not-an-instant")],
       ["non-Z", (value) => (value.skill_updated_at = "2026-10-08T12:34:56+00:00")],
     ]) {

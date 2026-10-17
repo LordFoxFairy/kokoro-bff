@@ -25,6 +25,7 @@ const installation = () => ({
   sourceRef: { value: "skill:one" },
   seriesId: { value: "s" },
   revision: 18446744073709551615n,
+  acquisitionKind: 1,
   installed: true,
   enabled: true,
   installedAt: timestamp(1),

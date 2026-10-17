@@ -489,6 +489,13 @@ message SetSkillStatusResponse {
   uint64 state_version = 5;
 }
 
+enum SkillAcquisitionKind {
+  SKILL_ACQUISITION_KIND_UNSPECIFIED = 0;
+  SKILL_ACQUISITION_KIND_UNKNOWN = 1;
+  SKILL_ACQUISITION_KIND_DIRECT = 2;
+  SKILL_ACQUISITION_KIND_HUB = 3;
+}
+
 enum SkillInstallationChange {
   SKILL_INSTALLATION_CHANGE_UNSPECIFIED = 0;
   SKILL_INSTALLATION_CHANGE_INSTALLED = 1;
@@ -513,6 +520,7 @@ message SkillInstallation {
   google.protobuf.Timestamp updated_at = 10;
   google.protobuf.Timestamp removed_at = 11;
   kokoro.platform.v1.SkillSeriesId series_id = 12;
+  kokoro.platform.v1.SkillAcquisitionKind acquisition_kind = 13;
 }
 
 message InstallSkillRequest {
@@ -1000,6 +1008,7 @@ message ProductSkillInstallation {
   kokoro.platform.v1.SkillAvailableUpdate available_update = 18;
   google.protobuf.Timestamp skill_created_at = 19;
   kokoro.platform.v1.OwnerScope source_owner_scope = 20;
+  kokoro.platform.v1.SkillAcquisitionKind acquisition_kind = 21;
 }
 
 message InstallPersonalSkillRequest {

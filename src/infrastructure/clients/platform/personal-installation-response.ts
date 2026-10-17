@@ -4,6 +4,7 @@ import { skillCategoryKeysSchema, skillSourceRefSchema, skillMetadataInputSchema
 import { parseSkillExamplePrompts } from "./skill-example-prompts.js"
 import type { Timestamp } from "@bufbuild/protobuf/wkt"
 import {
+  SkillAcquisitionKind,
   SkillInstallationChange,
   SkillStatus,
   type ProductSkillInstallation,
@@ -26,6 +27,18 @@ const sourceStatuses: Partial<Record<SkillStatus, string>> = {
   [SkillStatus.DISABLED]: "disabled",
   [SkillStatus.WITHDRAWN]: "withdrawn",
   [SkillStatus.QUARANTINED]: "quarantined",
+}
+function installationAcquisition(value: SkillAcquisitionKind | undefined): "unknown" | "direct" | "hub" {
+  switch (value) {
+    case SkillAcquisitionKind.UNKNOWN:
+      return "unknown"
+    case SkillAcquisitionKind.DIRECT:
+      return "direct"
+    case SkillAcquisitionKind.HUB:
+      return "hub"
+    default:
+      throw new Error("skill_installation_response_invalid")
+  }
 }
 function instant(value: Timestamp | undefined, required: boolean): string | undefined {
   if (!value) {
@@ -58,6 +71,7 @@ export function projectInstallation(value: ProductSkillInstallation | undefined)
     )
       throw new Error("skill_installation_response_invalid")
     assertSkillWireKnown(value)
+    installationAcquisition(value.acquisitionKind)
     if (value.categoryKeys === undefined || value.product === undefined) throw new Error("skill_installation_response_invalid")
     skillMetadataInputSchema.parse({
       display_name: value.displayName,
@@ -177,5 +191,5 @@ export function projectInstallationSourceFacts(value: ProductSkillInstallation) 
   const created = instant(value.skillCreatedAt, true)!
   const updated = instant(value.skillUpdatedAt, true)!
   if (Date.parse(created) > Date.parse(updated)) throw new Error("skill_installation_response_invalid")
-  return { skill_created_at: created, source_owner_scope: { kind: owner.kind, id: owner.id } }
+  return { acquisition_kind: installationAcquisition(value.acquisitionKind), skill_created_at: created, source_owner_scope: { kind: owner.kind, id: owner.id } }
 }

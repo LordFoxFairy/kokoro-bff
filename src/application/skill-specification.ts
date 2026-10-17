@@ -185,6 +185,13 @@ export class SkillSpecificationService implements SkillSpecificationSource {
       }),
     }
   }
+  private publicOwnerType(item: import("./skill-specification.types.js").SkillInstallationFact): string {
+    // Acquisition is an installation fact, not the website author vocabulary.
+    if (item.acquisition_kind === "hub") return "hub"
+    if (item.acquisition_kind === "unknown") return "unknown"
+    if (item.acquisition_kind !== "direct") throw new Error("skill_response_invalid")
+    return this.ownerType(item.product.source_kind, item.source_owner_scope.kind) ?? "unknown"
+  }
   private ownerType(sourceKind: string | undefined, kind: string): string | undefined {
     return sourceKind === "official" ? "official" : ({ user: "personal", organization: "team", project: "project", app: "app" } as Record<string, string>)[kind]
   }
@@ -238,9 +245,7 @@ export class SkillSpecificationService implements SkillSpecificationSource {
             id: item.series_id,
             name: item.display_name,
             description: item.summary,
-            ...(this.ownerType(item.product.source_kind, item.source_owner_scope.kind) === undefined
-              ? {}
-              : { owner_type: this.ownerType(item.product.source_kind, item.source_owner_scope.kind) }),
+            owner_type: this.publicOwnerType(item),
             created_at: Math.floor(Date.parse(item.skill_created_at) / 1000),
             ...(profile?.status === "found" && creator !== undefined ? { creator_info: { user_id: creator.id, name: profile.display_name } } : {}),
             updated_at: Math.floor(Date.parse(item.skill_updated_at!) / 1000),

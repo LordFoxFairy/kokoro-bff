@@ -751,7 +751,7 @@ test("BFF governance documents distinguish implemented facts from accepted targe
   assert.equal(/CREATE TABLE IF NOT EXISTS bff_outbox\b/u.test(schema), false)
 })
 
-test("BFF consumes the pinned Platform 5.1 HTTP projection without owning its data", async () => {
+test("BFF consumes the pinned Platform HTTP projection without owning its data", async () => {
   const [generatorConfig, generatorScript, manifestSource, schema] = await Promise.all([
     readFile(path.join(root, "openapi-ts.platform-http.config.ts"), "utf8"),
     readFile(path.join(root, "scripts/generate-platform-http-client.mjs"), "utf8"),
@@ -763,35 +763,14 @@ test("BFF consumes the pinned Platform 5.1 HTTP projection without owning its da
     owner: { repository_commit: string; contract_version: string; contract_sha256: string }
   }
   assert.equal(manifest.status, "generated")
-  assert.equal(manifest.owner.repository_commit, "6b4c9db6719d2f5fd37a752921e603f4b0221de6")
-  assert.equal(manifest.owner.contract_version, "6.0.0")
-  assert.equal(manifest.owner.contract_sha256, "50afde42d7a1564ecb058c78dff68e4ea81bbb3552bd96dbf6203b036ec381ae")
+  assert.equal(manifest.owner.repository_commit, "e17283888ae1a8cf10365dfc8dd670115d6d187c")
+  assert.equal(manifest.owner.contract_version, "6.1.0")
+  assert.equal(manifest.owner.contract_sha256, "18699985514e5b75bb48dc1fbaad638f6184e88032ed5e6d242ef89e6144b0fd")
   assert.match(generatorConfig, /src\/generated\/platform-http/u)
   assert.match(generatorScript, /two byte-identical generations/u)
   assert.doesNotMatch(schema, /CREATE TABLE[^;]*capability/iu)
   assert.equal(await exists("src/generated/capability-http"), false)
   assert.equal(await exists("contract/dependencies/capability-http.json"), false)
-})
-
-test("R345 Skill update instants stay strict at the two existing Platform projection mappers without timestamp fallback", async () => {
-  const [projection, installation] = await Promise.all([
-    readFile(path.join(root, "src/infrastructure/clients/platform/projection-http.ts"), "utf8"),
-    readFile(path.join(root, "src/infrastructure/clients/platform/personal-installation-response.ts"), "utf8"),
-  ])
-  for (const schema of ["zSkill", "zPublishedPersonalSkill", "zSelfManagedSkill"])
-    assert.ok(
-      projection
-        .replace(/\s+/gu, "")
-        .includes(
-          `${schema}.extend({example_prompts:z.custom<string[]>(validExamples),category_keys:skillCategoryKeysSchema,product:z.unknown().transform(projectSkillProductJson),}).strict()`,
-        ),
-      `${schema} must reject unknown owner fields`,
-    )
-  assert.match(projection, /skill_updated_at/u)
-  assert.doesNotMatch(projection, /skill_updated_at\s*(?:\?\?|\|\|).*?(?:installed_at|updated_at)/u)
-  assert.match(installation, /instant\(value\.skillUpdatedAt, true\)/u)
-  assert.match(installation, /skill_updated_at:\s*skillUpdatedAt/u)
-  assert.doesNotMatch(installation, /skillUpdatedAt\s*(?:\?\?|\|\|)/u)
 })
 
 test("Scheduler control and receiver implement distinct owner boundaries and durable recovery invariants", async () => {

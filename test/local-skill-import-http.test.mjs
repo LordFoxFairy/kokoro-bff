@@ -10,6 +10,7 @@ import { join } from "node:path"
 
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 import {
+  SkillAcquisitionKind,
   SkillCategoryKeysSchema,
   SkillExamplePromptsSchema,
   SkillIdSchema,
@@ -88,6 +89,7 @@ const skill = () =>
     product: product(),
   })
 const installation = () => ({
+  acquisitionKind: SkillAcquisitionKind.DIRECT,
   installationId: { value: "installation-1" },
   sourceRef: { value: "skill:skill-1" },
   seriesId: { value: "series-1" },

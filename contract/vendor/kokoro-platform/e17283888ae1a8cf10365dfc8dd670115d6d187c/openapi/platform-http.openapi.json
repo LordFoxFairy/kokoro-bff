@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Kokoro Platform Business HTTP API",
-    "version": "6.0.0",
+    "version": "6.1.0",
     "description": "Platform read-only projections. A Platform-local fixed-tenant service bearer authenticates BFF; authenticated BFF then supplies its Product Session subject."
   },
   "servers": [
@@ -767,6 +767,25 @@
           "owner_scope"
         ],
         "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "required": [
+                "installed"
+              ],
+              "properties": {
+                "installed": {
+                  "const": true
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "acquisition_kind"
+              ]
+            }
+          }
+        ],
         "properties": {
           "series_id": {
             "type": "string"
@@ -799,6 +818,15 @@
           },
           "enabled": {
             "type": "boolean"
+          },
+          "acquisition_kind": {
+            "type": "string",
+            "enum": [
+              "unknown",
+              "direct",
+              "hub"
+            ],
+            "description": "Persisted installation acquisition, not creation method or current catalog visibility. Omitted when no installation was selected."
           },
           "installed": {
             "type": "boolean"
