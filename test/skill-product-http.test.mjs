@@ -316,7 +316,7 @@ test("Installation real HTTP preserves owner response502 and browser input400", 
           session: { namespace: "tenant", userId: "user" },
         }),
         skillAuthorization: { check: async () => ({ ok: true }) },
-        personalInstallationClient: {
+        installationClient: {
           list: async () => {
             calls++
             return { installations: [item], page: {} }

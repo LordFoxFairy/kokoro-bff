@@ -1,9 +1,9 @@
 import { Code, ConnectError } from "@connectrpc/connect"
 import type { CurrentSkillFact, SkillDownloadFact, SkillSpecificationContext, SkillSpecificationOwner } from "../../../application/skill-specification.types.js"
 import type { SkillProductConnectClient } from "./skill-product-connect.js"
-import type { PersonalInstallationConnectClient } from "./personal-installation-connect.js"
+import type { SkillInstallationConnectClient } from "./skill-installation-connect.js"
 import type { PlatformProjectionHttpClient } from "./projection-http.js"
-import { projectInstallationList, projectInstallationSourceFacts } from "./personal-installation-response.js"
+import { projectInstallationList, projectInstallationSourceFacts } from "./skill-installation-response.js"
 import { assertSkillWireKnown, projectSkillProductRecord, skillTimestamp } from "./skill-product-response.js"
 import { zListVisibleSkillCatalogResponse, zSkill } from "../../../generated/platform-http/zod.gen.js"
 import { z } from "zod"
@@ -13,7 +13,7 @@ export class PlatformSkillSpecificationFacade implements SkillSpecificationOwner
   public constructor(
     private readonly dependencies: {
       product: Pick<SkillProductConnectClient, "current" | "download" | "revision">
-      installations: Pick<PersonalInstallationConnectClient, "list">
+      installations: Pick<SkillInstallationConnectClient, "list">
       projection: Pick<PlatformProjectionHttpClient, "read">
     },
   ) {}
@@ -21,7 +21,7 @@ export class PlatformSkillSpecificationFacade implements SkillSpecificationOwner
     return { requestId: context.requestId, tenant: context.identity.namespace, subject: context.identity.userId }
   }
   public async listInstallations(input: Readonly<Record<string, unknown>>, signal: AbortSignal) {
-    const raw = await this.dependencies.installations.list(input as Parameters<PersonalInstallationConnectClient["list"]>[0], signal)
+    const raw = await this.dependencies.installations.list(input as Parameters<SkillInstallationConnectClient["list"]>[0], signal)
     const projected = projectInstallationList(raw)
     return {
       items: projected.data.map((item, index) => ({

@@ -5,7 +5,7 @@ import { test } from "node:test"
 import { fileURLToPath } from "node:url"
 
 const root = new URL("../", import.meta.url)
-const ownerCommit = "e17283888ae1a8cf10365dfc8dd670115d6d187c"
+const ownerCommit = "5ec85387068a94f7b63e20c4a4ce5a18e5133714"
 const ownerDigest = "18699985514e5b75bb48dc1fbaad638f6184e88032ed5e6d242ef89e6144b0fd"
 const ownerUrl = new URL(`contract/vendor/kokoro-platform/${ownerCommit}/openapi/platform-http.openapi.json`, root)
 

@@ -229,8 +229,30 @@ function inspectSkillsSpecificationSurface(source, expectedVersion) {
 }
 
 /** Checks the active Skill surface without coupling it to unrelated API version increments. */
+/** Additive project paths reuse the exact personal wire rules, not an installation alias. */
+export function restorePublic15ProjectInstallationsContract(source) {
+  if (!/^  version: 15\.1\.0$/mu.test(source)) throw new Error("Project installations version drift")
+  let parent = source
+  for (const suffix of ["", "/{installation_id}", "/{installation_id}/enabled", "/{installation_id}/update"]) {
+    const personalPath = `/v1/skill-installations${suffix}`
+    const projectPath = `/v1/projects/{projectId}/skill-installations${suffix}`
+    const original = namedBlock(source, "path", personalPath)
+    const current = namedBlock(source, "path", projectPath)
+    let expected = original?.replace(personalPath, projectPath).replaceAll("Personal", "Project").replaceAll("personal", "project")
+    expected = expected?.startsWith(`  ${projectPath}:\n    parameters:\n`)
+      ? expected.replace("    parameters:\n", '    parameters:\n      - $ref: "#/components/parameters/ProjectId"\n')
+      : expected?.replace(`${projectPath}:\n`, `${projectPath}:\n    parameters:\n      - $ref: "#/components/parameters/ProjectId"\n`)
+    if (current === null || current !== expected) throw new Error("Project installations exact path delta drift")
+    parent = parent.replace(current, "")
+  }
+  parent = parent.replace("  version: 15.1.0", "  version: 15.0.0")
+  if (hash(parent) !== "e3f70ab1111295d1df10775853ff9c20bf85ea466da32996a73d37a8b16d54c0")
+    throw new Error("Project installations complete Public15.0 parent inverse drift")
+  return parent
+}
 /** Only the public item vocabulary and artifact version differ from Public14.8. */
 export function restorePublic148SkillOwnerTypesContract(source) {
+  if (/^  version: 15\.1\.0$/mu.test(source)) source = restorePublic15ProjectInstallationsContract(source)
   if (!/^  version: 15\.0\.0$/mu.test(source)) throw new Error("Skill owner-type major version drift")
   const block = namedBlock(source, "schema", "SpecificationPublicSkill")
   const delta = "            - hub\n            - device\n            - unknown\n"

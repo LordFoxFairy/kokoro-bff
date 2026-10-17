@@ -57,7 +57,7 @@ test("production Skills factories use independent direct catalog/admin credentia
   t.after(() => runtime.close())
   assert.ok(runtime.skillDraftClient, "catalog factory is configured without OAuth")
   assert.ok(runtime.skillProductClient)
-  assert.ok(runtime.personalInstallationClient)
+  assert.ok(runtime.installationClient)
   assert.ok(runtime.localSkillImportClient)
   assert.ok(runtime.skillAdminClient, "admin factory is configured without OAuth")
   const context = { requestId: "fixture-request", tenant: TENANT, subject: "user" }
@@ -67,7 +67,7 @@ test("production Skills factories use independent direct catalog/admin credentia
     () => runtime.skillDraftClient.getPackageUpload({ ...context, user: "user", skillId: "skill" }, signal, deadline),
     () => runtime.skillProductClient.getPackageUpload({ ...context, skillId: "skill" }, signal, deadline),
     () =>
-      runtime.personalInstallationClient.setEnabled(
+      runtime.installationClient.setEnabled(
         { ...context, installationId: "installation", enabled: false, commandId: "command", digest: "a".repeat(64) },
         signal,
       ),

@@ -1,3 +1,4 @@
+import { Code, ConnectError } from "@connectrpc/connect"
 import { mcpPersonalOperation, mcpPersonalRoute } from "../http/routes/mcp-personal.js"
 import { mcpProviderAdminOperation, mcpProviderAdminRoute } from "../http/routes/mcp-provider-admin.js"
 import { customApiOperation, customApiRoute } from "../http/routes/custom-api.js"
@@ -253,7 +254,9 @@ async function handle(
   }
   const isConnectorList = !browserPrivateMcp && isConnectorListRequest(businessPath, request.method ?? "GET")
   const isProjectSkillAssociation = businessPath.length === 4 && businessPath[0] === "projects" && businessPath[2] === "skills" && request.method === "PATCH"
+  const isProjectInstallationPath = businessPath[0] === "projects" && businessPath[2] === "skill-installations"
   const hasSkillsBudget =
+    isProjectInstallationPath ||
     isProjectSkillAssociation ||
     ["skills", "skill-installations", "skill-shares"].includes(businessPath[0] ?? "") ||
     (businessPath[0] === "admin" && businessPath[1] === "skills") ||
@@ -345,7 +348,7 @@ async function handle(
   const isSkillPackageCompletePath = segments.length === 5 && segments[1] === "skills" && segments[3] === "package-upload" && segments[4] === "complete"
   const isSkillValidatePath = segments.length === 4 && segments[1] === "skills" && segments[3] === "validate"
   const isSkillPublishPath = segments.length === 4 && segments[1] === "skills" && segments[3] === "publish"
-  const isSkillInstallationPath = businessPath[0] === "skill-installations"
+  const isSkillInstallationPath = businessPath[0] === "skill-installations" || isProjectInstallationPath
   const isPlatformProjectionRead =
     request.method === "GET" && businessPath.length === 2 && businessPath[0] === "mcp" && ["servers", "connections"].includes(businessPath[1]!)
   if (request.method === "GET" && businessPath.length === 3 && businessPath[0] === "projects" && businessPath[2] === "resources")
@@ -629,10 +632,32 @@ async function handle(
       request,
       response,
       context,
-      businessPath,
-      composition.personalInstallationClient,
+      isProjectInstallationPath ? businessPath.slice(2) : businessPath,
+      composition.installationClient,
       routeAbort.signal,
       config.iamBaseUrl,
+      isProjectInstallationPath
+        ? async (signal) => {
+            const fresh = await authorizeUserRequest(request, config, composition.sessionAdmission, id, signal)
+            if (!fresh.ok) throw new ConnectError("Project admission failed", fresh.status >= 500 ? Code.Unavailable : Code.PermissionDenied)
+            if (fresh.context.identity.namespace !== context.identity.namespace || fresh.context.identity.userId !== context.identity.userId)
+              throw new ConnectError("Project not found", Code.NotFound)
+            const action = skillActionForRequest(request.method ?? "GET", businessPath)
+            if (action !== null) {
+              const checked = await authorizeSkillAction(composition.skillAuthorization, fresh, action, signal)
+              if (!checked.ok) throw new ConnectError("Project Skill action denied", checked.status >= 500 ? Code.Unavailable : Code.PermissionDenied)
+            }
+            signal.throwIfAborted()
+            if (!composition.businessStore) throw new ConnectError("Project owner unavailable", Code.Unavailable)
+            const project = await composition.businessStore.services.projects.find(
+              { tenantId: context.identity.namespace, subjectId: context.identity.userId },
+              businessPath[1] ?? "",
+            )
+            signal.throwIfAborted()
+            if (!project) throw new ConnectError("Project not found", Code.NotFound)
+            return project.id
+          }
+        : undefined,
     ).finally(() => {
       request.removeListener("aborted", abortRoute)
       response.removeListener("close", abortRoute)

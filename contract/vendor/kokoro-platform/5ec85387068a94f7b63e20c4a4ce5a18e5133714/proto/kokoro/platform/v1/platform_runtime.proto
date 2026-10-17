@@ -2131,3 +2131,109 @@ message DeletePersonalMcpServerRequest {
   string request_id = 1; kokoro.common.v1.CommandIdentity command = 2; kokoro.platform.v1.McpServerId server_id = 3; uint64 expected_state_version = 4;
 }
 message DeletePersonalMcpServerResponse { kokoro.platform.v1.McpServerId server_id = 1; bool deleted = 2; bool replayed = 3; }
+
+// Project Product installation: target identity is trusted metadata, never request body.
+message InstallProjectSkillRequest {
+  reserved 100;
+  reserved "execution_proof", "tenant_id", "actor_id", "subject_id", "owner_scope", "target_owner_scope", "product_context", "project_ref";
+  string request_id = 1;
+  kokoro.common.v1.CommandIdentity command = 2;
+  kokoro.platform.v1.SkillSourceRef source_ref = 3;
+}
+
+message InstallProjectSkillResponse {
+  kokoro.platform.v1.ProductSkillInstallation installation = 1;
+  kokoro.platform.v1.SkillInstallationChange change = 2;
+  optional string event_id = 3;
+  bool replayed = 4;
+  string project_ref = 5;
+}
+
+message UpdateProjectSkillInstallationRequest {
+  reserved 100;
+  reserved "execution_proof", "tenant_id", "actor_id", "subject_id", "owner_scope", "target_owner_scope", "product_context", "project_ref";
+  string request_id = 1;
+  kokoro.common.v1.CommandIdentity command = 2;
+  kokoro.platform.v1.SkillInstallationId installation_id = 3;
+  kokoro.platform.v1.SkillSourceRef expected_source_ref = 4;
+  kokoro.platform.v1.SkillSourceRef source_ref = 5;
+}
+
+message UpdateProjectSkillInstallationResponse {
+  kokoro.platform.v1.ProductSkillInstallation installation = 1;
+  kokoro.platform.v1.SkillInstallationChange change = 2;
+  optional string event_id = 3;
+  bool replayed = 4;
+  string project_ref = 5;
+}
+
+message SetProjectSkillInstallationEnabledRequest {
+  reserved 100;
+  reserved "execution_proof", "tenant_id", "actor_id", "subject_id", "owner_scope", "target_owner_scope", "product_context", "project_ref";
+  string request_id = 1;
+  kokoro.common.v1.CommandIdentity command = 2;
+  kokoro.platform.v1.SkillInstallationId installation_id = 3;
+  optional bool enabled = 4;
+}
+
+message SetProjectSkillInstallationEnabledResponse {
+  kokoro.platform.v1.ProductSkillInstallation installation = 1;
+  kokoro.platform.v1.SkillInstallationChange change = 2;
+  optional string event_id = 3;
+  bool replayed = 4;
+  string project_ref = 5;
+}
+
+message RemoveProjectSkillInstallationRequest {
+  reserved 100;
+  reserved "execution_proof", "tenant_id", "actor_id", "subject_id", "owner_scope", "target_owner_scope", "product_context", "project_ref";
+  string request_id = 1;
+  kokoro.common.v1.CommandIdentity command = 2;
+  kokoro.platform.v1.SkillInstallationId installation_id = 3;
+}
+
+message RemoveProjectSkillInstallationResponse {
+  kokoro.platform.v1.ProductSkillInstallation installation = 1;
+  kokoro.platform.v1.SkillInstallationChange change = 2;
+  optional string event_id = 3;
+  bool replayed = 4;
+  string project_ref = 5;
+}
+
+message GetProjectSkillInstallationRequest {
+  reserved 100;
+  reserved "execution_proof", "tenant_id", "actor_id", "subject_id", "owner_scope", "target_owner_scope", "product_context", "project_ref";
+  string request_id = 1;
+  kokoro.platform.v1.SkillInstallationId installation_id = 2;
+}
+
+message GetProjectSkillInstallationResponse {
+  kokoro.platform.v1.ProductSkillInstallation installation = 1;
+  string project_ref = 2;
+}
+
+message ListProjectSkillInstallationsRequest {
+  reserved 100;
+  reserved "execution_proof", "tenant_id", "actor_id", "subject_id", "owner_scope", "target_owner_scope", "product_context", "project_ref";
+  string request_id = 1;
+  optional bool enabled = 2;
+  optional bool installed = 3;
+  kokoro.platform.v1.ProductSkillInstallationPageRequest page = 4;
+  optional string source_kind = 5;
+  optional string query = 6;
+}
+
+message ListProjectSkillInstallationsResponse {
+  repeated kokoro.platform.v1.ProductSkillInstallation installations = 1;
+  kokoro.common.v1.PageResult page = 2;
+  string project_ref = 3;
+}
+
+service ProductProjectSkillInstallationService {
+  rpc InstallProjectSkill(kokoro.platform.v1.InstallProjectSkillRequest) returns (kokoro.platform.v1.InstallProjectSkillResponse);
+  rpc UpdateProjectSkillInstallation(kokoro.platform.v1.UpdateProjectSkillInstallationRequest) returns (kokoro.platform.v1.UpdateProjectSkillInstallationResponse);
+  rpc SetProjectSkillInstallationEnabled(kokoro.platform.v1.SetProjectSkillInstallationEnabledRequest) returns (kokoro.platform.v1.SetProjectSkillInstallationEnabledResponse);
+  rpc RemoveProjectSkillInstallation(kokoro.platform.v1.RemoveProjectSkillInstallationRequest) returns (kokoro.platform.v1.RemoveProjectSkillInstallationResponse);
+  rpc GetProjectSkillInstallation(kokoro.platform.v1.GetProjectSkillInstallationRequest) returns (kokoro.platform.v1.GetProjectSkillInstallationResponse);
+  rpc ListProjectSkillInstallations(kokoro.platform.v1.ListProjectSkillInstallationsRequest) returns (kokoro.platform.v1.ListProjectSkillInstallationsResponse);
+}

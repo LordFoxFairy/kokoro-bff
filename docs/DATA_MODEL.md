@@ -1,3 +1,7 @@
+## 项目安装接线无Schema变更（2026-10-17）
+
+真实安装/精确pin/获取来源/receipt仍归Platform，BFF只验证自己Project归属并传可信metadata，不存第二份安装表或从owner SQL读取。当前bff_project_skill名称开关没有因此变成安装事实；后继选择模型在本仓单独替换，不以本次API接线冒默认选择/Agent冻结完成。
+
 ## S2 来源消费无 BFF 数据变化（2026-10-17）
 
 真实取得事实由 Platform SkillInstallation 单写；BFF只从固定RPC enum解码为窄安装事实，再计算公开owner_type，不存第二份来源/作者/Hub引用，不读Platform DB/Redis。该值不进入Browser请求、Project表、Message或receipt；本片唯一database/schema.sql和所有索引/事务保持原字节。

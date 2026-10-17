@@ -8,13 +8,9 @@ import { Code, ConnectError } from "@connectrpc/connect"
 import { DEFAULT_AGUI_CONFIG } from "../dist/config/runtime.js"
 import { createLiveTestBffServer } from "./doubles/server.ts"
 import { SkillInstallationChange } from "../dist/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js"
-import { projectInstallation, projectInstallationAck, projectInstallationList } from "../dist/infrastructure/clients/platform/personal-installation-response.js"
-import {
-  installPersonalDigest,
-  removePersonalDigest,
-  setPersonalEnabledDigest,
-} from "../dist/infrastructure/clients/platform/personal-installation-projector.js"
-import { PersonalInstallationConnectClient } from "../dist/infrastructure/clients/platform/personal-installation-connect.js"
+import { projectInstallation, projectInstallationAck, projectInstallationList } from "../dist/infrastructure/clients/platform/skill-installation-response.js"
+import { installSkillDigest, removeSkillDigest, setSkillEnabledDigest } from "../dist/infrastructure/clients/platform/skill-installation-projector.js"
+import { SkillInstallationConnectClient } from "../dist/infrastructure/clients/platform/skill-installation-connect.js"
 const timestamp = (seconds, nanos = 0) => ({
   $typeName: "google.protobuf.Timestamp",
   seconds: BigInt(seconds),
@@ -78,7 +74,7 @@ async function withServer(client, run, overrides = {}) {
         identity: { namespace: "tenant", userId: "user-session" },
       }),
     },
-    personalInstallationClient: client,
+    installationClient: client,
     ...overrides,
   })
   server.listen(0, "127.0.0.1")
@@ -300,7 +296,7 @@ test("one absolute deadline and caller cancellation cover token acquisition befo
       await new Promise((_, reject) => signal.addEventListener("abort", () => reject(signal.reason), { once: true }))
     },
   }
-  const client = new PersonalInstallationConnectClient("http://127.0.0.1:1", blocked, blocked, 10)
+  const client = new SkillInstallationConnectClient("http://127.0.0.1:1", blocked, blocked, 10)
   const keepAlive = setTimeout(() => undefined, 50)
   await assert.rejects(client.get({ requestId: "request-1", tenant: "tenant", subject: "user", installationId: "i" }))
   clearTimeout(keepAlive)
@@ -315,7 +311,7 @@ test("HTTP maps token-stage budget exhaustion to 504 without relabeling caller c
   const blocked = {
     get: async (_tenant, signal) => new Promise((_, reject) => signal.addEventListener("abort", () => reject(signal.reason), { once: true })),
   }
-  await withServer(new PersonalInstallationConnectClient("http://127.0.0.1:1", blocked, blocked, 10), async (base) => {
+  await withServer(new SkillInstallationConnectClient("http://127.0.0.1:1", blocked, blocked, 10), async (base) => {
     const keepAlive = setTimeout(() => undefined, 50)
     const timeout = await fetch(`${base}/v1/skill-installations/i`, { headers })
     clearTimeout(keepAlive)
@@ -337,7 +333,7 @@ test("HTTP maps token-stage budget exhaustion to 504 without relabeling caller c
         ),
       ),
   }
-  await withServer(new PersonalInstallationConnectClient("http://127.0.0.1:1", cancellationBlocked, cancellationBlocked, 1_000), async (base) => {
+  await withServer(new SkillInstallationConnectClient("http://127.0.0.1:1", cancellationBlocked, cancellationBlocked, 1_000), async (base) => {
     const caller = new AbortController()
     const pending = fetch(`${base}/v1/skill-installations/i`, { headers, signal: caller.signal })
     caller.abort(new Error("browser_cancelled"))
@@ -371,7 +367,7 @@ test("installation source filter reaches the owner protobuf request with cursor 
   await once(server, "listening")
   try {
     const token = { get: async () => "workload" }
-    const client = new PersonalInstallationConnectClient(`http://127.0.0.1:${server.address().port}`, token, token, 1000)
+    const client = new SkillInstallationConnectClient(`http://127.0.0.1:${server.address().port}`, token, token, 1000)
     for (const sourceKind of [undefined, "personal", "official", "third_party"]) {
       await client.list({ requestId: "request-source", tenant: "tenant", subject: "user", sourceKind, cursor: "owner-bound-cursor", limit: 1 })
     }
@@ -456,7 +452,7 @@ test("P4 installation Connect preserves optional query6 and exact source_kind5 p
   await once(server, "listening")
   try {
     const token = { get: async () => "token" },
-      client = new PersonalInstallationConnectClient(`http://127.0.0.1:${server.address().port}`, token, token, 1000)
+      client = new SkillInstallationConnectClient(`http://127.0.0.1:${server.address().port}`, token, token, 1000)
     for (const query of [undefined, "%_\\😀 exact"])
       await client.list({ requestId: "query-request", tenant: "tenant", subject: "user", query, sourceKind: "personal", cursor: "opaque_owner", limit: 1 })
     assert.deepEqual(
@@ -658,7 +654,7 @@ test("official update Connect wire binds original pins and key; no install/remov
   server.listen(0, "127.0.0.1")
   await once(server, "listening")
   try {
-    const client = new PersonalInstallationConnectClient(
+    const client = new SkillInstallationConnectClient(
       `http://127.0.0.1:${server.address().port}`,
       { get: async () => "catalog-workload" },
       {
@@ -774,6 +770,217 @@ test("update body stalled after a partial chunk expires the original request bud
       req.write('{"expected_source_ref":')
     })
     assert.equal(calls, 0)
+  } finally {
+    server.closeAllConnections()
+    await new Promise((resolve) => server.close(resolve))
+  }
+})
+
+test("Project installation six routes use the current owned project, distinct command binding and exit rechecks", async () => {
+  const { createBffServer } = await import("../dist/bootstrap/server.js")
+  const calls = []
+  let visible = true
+  let wrongResponse = null
+  const project = { id: "project-canonical" }
+  const client = Object.fromEntries(
+    ["install", "update", "setEnabled", "remove", "get", "list"].map((method) => [
+      method,
+      async (input) => {
+        calls.push({ method, input })
+        assert.equal(input.projectRef, project.id)
+        const view = {
+          ...installation(),
+          revision: 2n,
+          sourceRef: { value: method === "update" ? "skill:b" : "skill:a" },
+          ...(method === "remove" ? { installed: false, enabled: false, removedAt: timestamp(2) } : {}),
+          ...(method === "setEnabled" ? { enabled: false } : {}),
+        }
+        if (wrongResponse) return wrongResponse(method, view)
+        if (method === "list") return { projectRef: project.id, installations: [view] }
+        if (method === "get") return { projectRef: project.id, installation: view }
+        return {
+          projectRef: project.id,
+          installation: view,
+          change: { install: 1, update: 2, setEnabled: 5, remove: 6 }[method],
+          eventId: "event",
+          replayed: false,
+        }
+      },
+    ]),
+  )
+  const server = createBffServer(config, {
+    sessionAdmission: { verify: async () => ({ ok: true, identity: { namespace: "tenant", userId: "user-session" } }) },
+    skillAuthorization: { check: async () => ({ ok: true }) },
+    installationClient: client,
+    businessStore: {
+      ready: async () => {},
+      services: {
+        projects: {
+          find: async (scope, ref) => {
+            assert.deepEqual(scope, { tenantId: "tenant", subjectId: "user-session" })
+            return visible && ref === "project-alias" ? project : null
+          },
+        },
+      },
+    },
+    readiness: async () => {},
+  })
+  server.listen(0, "127.0.0.1")
+  await once(server, "listening")
+  const base = `http://127.0.0.1:${server.address().port}/v1/projects/project-alias/skill-installations`
+  try {
+    for (const [method, suffix, body, expected] of [
+      ["POST", "", { source_ref: "skill:a" }, "install"],
+      ["GET", "", undefined, "list"],
+      ["GET", "/i", undefined, "get"],
+      ["PUT", "/i/enabled", { enabled: false }, "setEnabled"],
+      ["POST", "/i/update", { expected_source_ref: "skill:a", source_ref: "skill:b" }, "update"],
+      ["DELETE", "/i", undefined, "remove"],
+    ]) {
+      const r = await fetch(base + suffix, {
+        method,
+        headers: { ...headers, ...(body ? { "content-type": "application/json" } : {}), ...(method !== "GET" ? { "idempotency-key": "project-key" } : {}) },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      })
+      assert.equal(r.status, 200, JSON.stringify(await r.clone().json()))
+      assert.equal(calls.at(-1).method, expected)
+    }
+    // A valid response for another resource or operation must never acknowledge this request.
+    const invalidResults = [
+      ["GET", "/i", undefined, "get", { installationId: { value: "other" } }, undefined],
+      ["POST", "", { source_ref: "skill:a" }, "install", { sourceRef: { value: "skill:other" } }, 1],
+      ["POST", "", { source_ref: "skill:a" }, "install", {}, 2],
+      ["DELETE", "/i", undefined, "remove", { installationId: { value: "other" } }, 6],
+      ["DELETE", "/i", undefined, "remove", { installed: true, enabled: true, removedAt: undefined }, 4],
+      ["PUT", "/i/enabled", { enabled: false }, "setEnabled", { installationId: { value: "other" } }, 5],
+      ["PUT", "/i/enabled", { enabled: false }, "setEnabled", { enabled: true }, 4],
+      ["PUT", "/i/enabled", { enabled: false }, "setEnabled", {}, 6],
+    ]
+    for (const [method, suffix, body, operation, patch, change] of invalidResults) {
+      wrongResponse = (actual, view) => {
+        assert.equal(actual, operation)
+        return { projectRef: project.id, installation: { ...view, ...patch }, ...(change === undefined ? {} : { change, eventId: "event", replayed: false }) }
+      }
+      const result = await fetch(base + suffix, {
+        method,
+        headers: { ...headers, "content-type": "application/json", ...(method === "GET" ? {} : { "idempotency-key": "project-key" }) },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      })
+      assert.equal(result.status, 502, `${method} ${suffix} must reject the wrong owner result`)
+      assert.equal((await result.json()).error.code, "skill_installation_response_invalid")
+    }
+    wrongResponse = null
+    const command = calls[0].input
+    assert.notEqual(command.digest, installSkillDigest("tenant", "user-session", "skill:a"))
+    const before = calls.length
+    visible = false
+    const denied = await fetch(base, { headers })
+    assert.equal(denied.status, 404)
+    assert.equal(calls.length, before)
+    visible = true
+    client.list = async (input) => {
+      visible = false
+      return { projectRef: input.projectRef, installations: [] }
+    }
+    const revoked = await fetch(base, { headers })
+    assert.equal(revoked.status, 404)
+  } finally {
+    server.closeAllConnections()
+    await new Promise((resolve) => server.close(resolve))
+  }
+})
+
+test("Project Connect calls the six formal methods and rejects mismatched or unknown project response identity", async () => {
+  const { createServer } = await import("node:http"),
+    { fromBinary, toBinary } = await import("@bufbuild/protobuf")
+  const p = await import("../dist/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.js")
+  const methods = {
+    install: "InstallProjectSkill",
+    update: "UpdateProjectSkillInstallation",
+    setEnabled: "SetProjectSkillInstallationEnabled",
+    remove: "RemoveProjectSkillInstallation",
+    get: "GetProjectSkillInstallation",
+    list: "ListProjectSkillInstallations",
+  }
+  const seen = []
+  let bad = false
+  let unknown = false
+  const owner = createServer(async (req, res) => {
+    const name = req.url.split("/").at(-1)
+    assert.equal(req.url, `/kokoro.platform.v1.ProductProjectSkillInstallationService/${name}`)
+    const chunks = []
+    for await (const chunk of req) chunks.push(chunk)
+    const input = fromBinary(p[`${name}RequestSchema`], Buffer.concat(chunks))
+    seen.push({ name, input, headers: req.headers })
+    assert.equal(req.headers["x-kokoro-project-ref"], "project-1")
+    assert.equal(req.headers["x-kokoro-tenant"], "tenant")
+    const response = {
+      projectRef: bad ? "other" : "project-1",
+      ...(name.startsWith("List") ? { installations: [] } : { installation: installation() }),
+      ...(name.startsWith("Get") || name.startsWith("List") ? {} : { change: 7, replayed: false }),
+    }
+    res.writeHead(200, { "content-type": "application/proto" })
+    const message = create(p[`${name}ResponseSchema`], response)
+    if (unknown) message.$unknown = [{ no: 200, wireType: 0, data: new Uint8Array([1]) }]
+    res.end(toBinary(p[`${name}ResponseSchema`], message))
+  })
+  owner.listen(0, "127.0.0.1")
+  await once(owner, "listening")
+  try {
+    const credential = { get: async () => "workload" },
+      client = new SkillInstallationConnectClient(`http://127.0.0.1:${owner.address().port}`, credential, credential, 1000)
+    const common = {
+      requestId: "r",
+      tenant: "tenant",
+      subject: "user-session",
+      projectRef: "project-1",
+      commandId: "c",
+      digest: "a".repeat(64),
+      sourceRef: "skill:a",
+      installationId: "i",
+      expectedSourceRef: "skill:b",
+      enabled: false,
+    }
+    for (const [method, name] of Object.entries(methods)) {
+      await client[method](common)
+      assert.equal(seen.at(-1).name, name)
+    }
+    assert.equal(seen[1].input.expectedSourceRef.value, "skill:b")
+    assert.equal(seen[2].input.enabled, false)
+    bad = true
+    await assert.rejects(client.list(common), /skill_installation_response_invalid/u)
+    bad = false
+    unknown = true
+    await assert.rejects(client.list(common), /skill_installation_response_invalid/u)
+  } finally {
+    owner.closeAllConnections()
+    await new Promise((resolve) => owner.close(resolve))
+  }
+})
+
+test("project qualification that ignores cancellation cannot hold the public installation deadline open", async () => {
+  const { createServer } = await import("node:http"),
+    { skillInstallationRoute } = await import("../dist/http/routes/skill-installations.js"),
+    { startSkillRequestBudget } = await import("../dist/http/routes/skill-drafts.js")
+  const server = createServer((req, res) => {
+    startSkillRequestBudget(req, 40)
+    void skillInstallationRoute(
+      req,
+      res,
+      { requestId: "deadline", identity: { namespace: "tenant", userId: "user" } },
+      ["skill-installations"],
+      {},
+      undefined,
+      null,
+      () => new Promise(() => {}),
+    )
+  })
+  server.listen(0, "127.0.0.1")
+  await once(server, "listening")
+  try {
+    const r = await fetch(`http://127.0.0.1:${server.address().port}/v1/projects/p/skill-installations`, { signal: AbortSignal.timeout(1000) })
+    assert.equal(r.status, 504)
+    assert.equal((await r.json()).error.code, "skill_installation_dependency_timeout")
   } finally {
     server.closeAllConnections()
     await new Promise((resolve) => server.close(resolve))

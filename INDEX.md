@@ -1,3 +1,7 @@
+### 项目安装当前入口（2026-10-17）
+
+Platform5ec8538／Public15.1.0项目六operation复用 `src/http/routes/skill-installations.ts` 与 `src/infrastructure/clients/platform/skill-installation-{connect,projector,response}.ts`；原 personal-installation-* 已重命名，无alias。server核当前项目资格，skill-specification-facade项目读取使用正式Project RPC；实际验证与未接的选择/执行见docs/CURRENT.md。
+
 ### S2 来源事实与公开 skill.list 当前入口（2026-10-17）
 
 Public15.0.0/139 operations 与 Platform e172838 的 RPC/HTTP6.1.0 使用唯一当前固定 bundle；窄安装事实由 personal-installation-response 解码，skill-specification 仅对公开列表投影八类。网站及分享保原归属词表，真实数据 owner、精确版本与鉴权不变。SDK if/then 补全在既有 generate-platform-http-client 流程，projection-http 在 generated strip 前检验原始 product；测试仍复用现有 suite。实际验证、正常未激活及项目/Agent 后继见 docs/CURRENT，不以当前枚举代替 Device/App producer 或完整执行。

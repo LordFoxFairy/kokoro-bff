@@ -1,3 +1,9 @@
+## 项目安装 Public15.1（2026-10-17）
+
+新增六operation：POST/GET /v1/projects/{projectId}/skill-installations、GET/DELETE同集合/{installation_id}、PUT同ID/enabled、POST同ID/update。input/ACK/错误/Idempotency-Key/10秒预算沿个人安装，项目身份只来自已校验pathname与当前BFF项目事实；body不接project/tenant/subject，响应沿原安装组件。write每次fresh当前Skill action，项目资格及身份在owner调用前后复核；跨tenant/user/project不转owner。正式Project response project_ref严格回绑canonical ID，拒个人ACK/错误project/未知wire，不能以URL或旧receipt代替权限。
+
+public artifact15.1.0为additive145 operations，先精确移除四新增path并逆回完整Public15.0，再运行原历史检查；网站Skill ownerType和公开八类不变。没有新BFF资金/模型许可或正常环境激活。
+
 ## S2 skill.list 八类当前源码契约（2026-10-17，正常激活待续）
 
 固定 Platform `e17283888ae1a8cf10365dfc8dd670115d6d187c`：RPC enum1 UNKNOWN/2 DIRECT/3 HUB；0/缺失/非法值拒绝。HTTP6.1.0及acquisition profile/provenance同commit。公开唯一/v1/skill.list的SpecificationPublicSkill.owner_type为personal/official/team/project/app/hub/device/unknown；仅此公开item改词表，不新增字段、required、alias或mutation输入。artifact15.0.0表示响应枚举配对切换，不是HTTP/v15。原14.8完整SHA `a9729722383de5571821961357051499612d12c76aa835b8774828adea82a577` 通过严格去三枚举值/还原version逆回，不改任何其它operation/schema/metadata。

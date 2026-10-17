@@ -695,6 +695,36 @@
       "method": "GET",
       "path": "/skill-downloads/{handle}",
       "operation_id": "downloadSkillBytes"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/{projectId}/skill-installations",
+      "operation_id": "installProjectSkill"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/{projectId}/skill-installations",
+      "operation_id": "listProjectSkillInstallations"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/{projectId}/skill-installations/{installation_id}",
+      "operation_id": "getProjectSkillInstallation"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/projects/{projectId}/skill-installations/{installation_id}",
+      "operation_id": "removeProjectSkillInstallation"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/projects/{projectId}/skill-installations/{installation_id}/enabled",
+      "operation_id": "setProjectSkillInstallationEnabled"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/{projectId}/skill-installations/{installation_id}/update",
+      "operation_id": "updateProjectSkillInstallation"
     }
   ]
 }

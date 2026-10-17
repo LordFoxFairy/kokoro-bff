@@ -15,7 +15,7 @@ export function exactIdempotencyKey(value: string | string[] | undefined): strin
 function strictObject(raw: Buffer): Record<string, unknown> {
   if (raw.length > 65_536) throw new Error("request_body_too_large")
   try {
-    const value: unknown = JSON.parse(raw.toString("utf8"))
+    const value: unknown = strictParseRawJson(new TextDecoder("utf-8", { fatal: true }).decode(raw))
     if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error()
     return value as Record<string, unknown>
   } catch {
@@ -107,8 +107,8 @@ export function parseInstallationList(url: string): {
   }
   return result
 }
-export function installationCommandId(operation: string, tenant: string, user: string, target: string, key: string): string {
+export function installationCommandId(operation: string, tenant: string, user: string, target: string, key: string, projectRef?: string): string {
   return `bff.skill-installation.v1.${createHash("sha256")
-    .update(JSON.stringify([operation, tenant, user, target, key]))
+    .update(JSON.stringify([operation, tenant, user, projectRef === undefined ? target : [projectRef, target], key]))
     .digest("hex")}`
 }

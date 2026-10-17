@@ -29,9 +29,10 @@
     "execution-operations/custom-api-request-vectors-v1.json",
     "execution-operations/skill-installation-update-v1.json",
     "execution-operations/skill-acquisition-v1.json",
+    "execution-operations/project-skill-installation-v1.json",
     "auth/bff-service-auth-v1.json",
     "errors/command-receipt-v1.json",
     "openapi/platform-http.openapi.json"
   ],
-  "combinedSha256": "1a98ae34d931dc8af86bcebaab47a9df3a1320a33ea9e40dedab8be0cba66d84"
+  "combinedSha256": "024e7d132b1b7936d5ab29dcb11abc19305abe475c863136dc704df76af32c53"
 }

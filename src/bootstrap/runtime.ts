@@ -35,14 +35,14 @@ import type { RequestContext } from "../domain/request-context.js"
 import { SessionAdmissionClient } from "../auth/session-admission.client.js"
 import type { SessionAdmission } from "../auth/session-admission.types.js"
 import { CatalogConnectClient } from "../infrastructure/clients/platform/catalog-connect.js"
-import { PersonalInstallationConnectClient } from "../infrastructure/clients/platform/personal-installation-connect.js"
+import { SkillInstallationConnectClient } from "../infrastructure/clients/platform/skill-installation-connect.js"
 import { PlatformServiceCredentialSource } from "../infrastructure/clients/platform/platform-service-credential.js"
 import { ProjectScopeReleaseOutboxDispatcher } from "../application/project-scope-release-outbox-dispatcher.js"
 import { StorageScopeReleaseClient } from "../infrastructure/clients/storage/scope-release-client.js"
 import type { LocalSkillImportClient } from "../http/routes/local-skill-import.js"
 import { LocalSkillImportConnectClient } from "../infrastructure/clients/platform/local-skill-import-connect.js"
 import { ExactSkillDownloadService, exactInstallationRecord, exactManagedRecord, type ExactSkillDownloadSource } from "../application/exact-skill-download.js"
-import { projectInstallation } from "../infrastructure/clients/platform/personal-installation-response.js"
+import { projectInstallation } from "../infrastructure/clients/platform/skill-installation-response.js"
 import { projectSkillPackageInspectionResponse } from "../infrastructure/clients/platform/skill-package-inspection-response.js"
 import { assertSkillWireKnown, skillTimestamp } from "../infrastructure/clients/platform/skill-product-response.js"
 
@@ -85,7 +85,7 @@ export type BffServerComposition = {
   skillProductClient: SkillProductConnectClient | null
   skillAdminClient: SkillAdminConnectClient | null
   skillDraftClient: CatalogConnectClient | null
-  personalInstallationClient: PersonalInstallationConnectClient | null
+  installationClient: SkillInstallationConnectClient | null
   businessStore: BffBusinessStore | null
   sessionAdmission: SessionAdmission
   idempotency: Map<string, IdempotencyEntry>
@@ -120,7 +120,7 @@ export type BffCompositionOptions = {
   skillProductClient?: SkillProductConnectClient | null
   skillAdminClient?: SkillAdminConnectClient | null
   skillDraftClient?: CatalogConnectClient | null
-  personalInstallationClient?: PersonalInstallationConnectClient | null
+  installationClient?: SkillInstallationConnectClient | null
   /** Supplying null is an explicit test composition; omitted means real persistence. */
   businessStore?: BffBusinessStore | null
   sessionAdmission?: SessionAdmission
@@ -212,15 +212,15 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
             config.skillDraft.timeoutMs,
           )
         : null
-  const personalInstallationClient =
-    options.personalInstallationClient !== undefined
-      ? options.personalInstallationClient
+  const installationClient =
+    options.installationClient !== undefined
+      ? options.installationClient
       : config.skillDraft &&
           config.skillDraft.platformBaseUrl !== null &&
           config.skillDraft.credentialFile !== null &&
           config.platformProjection?.credentialFile !== null &&
           config.platformProjection?.credentialFile !== undefined
-        ? new PersonalInstallationConnectClient(
+        ? new SkillInstallationConnectClient(
             config.skillDraft.platformBaseUrl,
             new PlatformServiceCredentialSource(config.skillDraft.credentialFile, "catalog"),
             new PlatformServiceCredentialSource(config.platformProjection.credentialFile, "projection"),
@@ -402,15 +402,11 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     skillSpecificationSource:
       options.skillSpecificationSource !== undefined
         ? options.skillSpecificationSource
-        : skillProductClient &&
-            personalInstallationClient &&
-            config.platformProjection?.baseUrl &&
-            config.platformProjection.credentialFile &&
-            config.iamBaseUrl
+        : skillProductClient && installationClient && config.platformProjection?.baseUrl && config.platformProjection.credentialFile && config.iamBaseUrl
           ? new SkillSpecificationService({
               owner: new PlatformSkillSpecificationFacade({
                 product: skillProductClient,
-                installations: personalInstallationClient,
+                installations: installationClient,
                 projection: projectionClient!,
               }),
               ...(businessStore?.services.projects === undefined ? {} : { projects: businessStore.services.projects }),
@@ -423,7 +419,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     exactSkillDownloadSource:
       options.exactSkillDownloadSource !== undefined
         ? options.exactSkillDownloadSource
-        : skillProductClient && personalInstallationClient && projectionClient && businessStore?.services.skillShares
+        : skillProductClient && installationClient && projectionClient && businessStore?.services.skillShares
           ? new ExactSkillDownloadService({
               handles: skillDownloadHandles,
               objectOrigin: config.storageObjectOrigin ?? config.storage?.objectOrigin ?? null,
@@ -456,7 +452,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
               installation: async (id, context, signal) => {
                 const value = projectInstallation(
                   (
-                    await personalInstallationClient.get(
+                    await installationClient.get(
                       {
                         requestId: context.requestId,
                         tenant: context.identity.namespace,
@@ -516,7 +512,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     skillAuthorization,
     skillProductClient,
     skillAdminClient,
-    personalInstallationClient,
+    installationClient,
     businessStore,
     sessionAdmission,
     idempotency: options.idempotency ?? new Map<string, IdempotencyEntry>(),

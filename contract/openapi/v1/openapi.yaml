@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 15.0.0
+  version: 15.1.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -2755,6 +2755,263 @@ paths:
         '429': { $ref: '#/components/responses/SkillPublishRateLimited' }
         '502': { $ref: '#/components/responses/SkillPublishBadGateway' }
         '503': { $ref: '#/components/responses/SkillPublishUnavailable' }
+  /v1/projects/{projectId}/skill-installations:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+    post:
+      tags:
+        - Skills
+      operationId: installProjectSkill
+      summary: Install a project Skill
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: product.skill.install
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - source_ref
+              properties:
+                source_ref:
+                  type: string
+                  pattern: ^skill:(?!skill:)[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$
+      responses:
+        "200":
+          $ref: "#/components/responses/SkillInstallationMutationSuccess"
+        "400":
+          $ref: "#/components/responses/SkillInstallationBadRequest"
+        "401":
+          $ref: "#/components/responses/SkillInstallationUnauthorized"
+        "403":
+          $ref: "#/components/responses/SkillInstallationMutationForbidden"
+        "404":
+          $ref: "#/components/responses/SkillInstallationNotFound"
+        "409":
+          $ref: "#/components/responses/SkillInstallationConflict"
+        "412":
+          $ref: "#/components/responses/SkillInstallationPreconditionFailed"
+        "413":
+          $ref: "#/components/responses/SkillInstallationPayloadTooLarge"
+        "429":
+          $ref: "#/components/responses/SkillInstallationRateLimited"
+        "502":
+          $ref: "#/components/responses/SkillInstallationBadGateway"
+        "503":
+          $ref: "#/components/responses/SkillInstallationUnavailable"
+        "504":
+          $ref: "#/components/responses/SkillInstallationTimeout"
+    get:
+      tags:
+        - Skills
+      operationId: listProjectSkillInstallations
+      summary: List project Skill installations
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: product.skill.installation.read
+      parameters:
+        - name: enabled
+          in: query
+          schema:
+            type: boolean
+        - name: installed
+          in: query
+          schema:
+            type: boolean
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: cursor
+          in: query
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 4096
+        - name: source_kind
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - project
+              - official
+              - third_party
+        - name: query
+          in: query
+          required: false
+          description: Trimmed literal substring of name or summary, 1 to 1024 Unicode scalars; bound to the owner cursor before pagination
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 1024
+      responses:
+        "200":
+          $ref: "#/components/responses/SkillInstallationListSuccess"
+        "400":
+          $ref: "#/components/responses/SkillInstallationBadRequest"
+        "401":
+          $ref: "#/components/responses/SkillInstallationUnauthorized"
+        "403":
+          $ref: "#/components/responses/SkillInstallationForbidden"
+        "413":
+          $ref: "#/components/responses/SkillInstallationPayloadTooLarge"
+        "429":
+          $ref: "#/components/responses/SkillInstallationRateLimited"
+        "502":
+          $ref: "#/components/responses/SkillInstallationBadGateway"
+        "503":
+          $ref: "#/components/responses/SkillInstallationUnavailable"
+        "504":
+          $ref: "#/components/responses/SkillInstallationTimeout"
+  /v1/projects/{projectId}/skill-installations/{installation_id}:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+      - name: installation_id
+        in: path
+        required: true
+        schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+    get:
+      tags: [Skills]
+      operationId: getProjectSkillInstallation
+      summary: Get a project Skill installation
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: product.skill.installation.read
+      responses:
+        '200': { $ref: '#/components/responses/SkillInstallationReadSuccess' }
+        '400': { $ref: '#/components/responses/SkillInstallationBadRequest' }
+        '413': { $ref: '#/components/responses/SkillInstallationPayloadTooLarge' }
+        '401': { $ref: '#/components/responses/SkillInstallationUnauthorized' }
+        '403': { $ref: '#/components/responses/SkillInstallationForbidden' }
+        '404': { $ref: '#/components/responses/SkillInstallationNotFound' }
+        '429': { $ref: '#/components/responses/SkillInstallationRateLimited' }
+        '502': { $ref: '#/components/responses/SkillInstallationBadGateway' }
+        '503': { $ref: '#/components/responses/SkillInstallationUnavailable' }
+        '504': { $ref: '#/components/responses/SkillInstallationTimeout' }
+    delete:
+      tags: [Skills]
+      operationId: removeProjectSkillInstallation
+      summary: Remove a project Skill installation
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: product.skill.installation.remove
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      responses:
+        '200':
+          { $ref: '#/components/responses/SkillInstallationMutationSuccess' }
+        '400': { $ref: '#/components/responses/SkillInstallationBadRequest' }
+        '413': { $ref: '#/components/responses/SkillInstallationPayloadTooLarge' }
+        '401': { $ref: '#/components/responses/SkillInstallationUnauthorized' }
+        '403': { $ref: '#/components/responses/SkillInstallationMutationForbidden' }
+        '404': { $ref: '#/components/responses/SkillInstallationNotFound' }
+        '409': { $ref: '#/components/responses/SkillInstallationConflict' }
+        '412':
+          { $ref: '#/components/responses/SkillInstallationPreconditionFailed' }
+        '429': { $ref: '#/components/responses/SkillInstallationRateLimited' }
+        '502': { $ref: '#/components/responses/SkillInstallationBadGateway' }
+        '503': { $ref: '#/components/responses/SkillInstallationUnavailable' }
+        '504': { $ref: '#/components/responses/SkillInstallationTimeout' }
+  /v1/projects/{projectId}/skill-installations/{installation_id}/enabled:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+      - name: installation_id
+        in: path
+        required: true
+        schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$' }
+    put:
+      tags: [Skills]
+      operationId: setProjectSkillInstallationEnabled
+      summary: Set project Skill installation enabled state
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: product.skill.installation.enable
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [enabled]
+              properties: { enabled: { type: boolean } }
+      responses:
+        '200':
+          { $ref: '#/components/responses/SkillInstallationMutationSuccess' }
+        '400': { $ref: '#/components/responses/SkillInstallationBadRequest' }
+        '413': { $ref: '#/components/responses/SkillInstallationPayloadTooLarge' }
+        '401': { $ref: '#/components/responses/SkillInstallationUnauthorized' }
+        '403': { $ref: '#/components/responses/SkillInstallationMutationForbidden' }
+        '404': { $ref: '#/components/responses/SkillInstallationNotFound' }
+        '409': { $ref: '#/components/responses/SkillInstallationConflict' }
+        '412':
+          { $ref: '#/components/responses/SkillInstallationPreconditionFailed' }
+        '429': { $ref: '#/components/responses/SkillInstallationRateLimited' }
+        '502': { $ref: '#/components/responses/SkillInstallationBadGateway' }
+        '503': { $ref: '#/components/responses/SkillInstallationUnavailable' }
+        '504': { $ref: '#/components/responses/SkillInstallationTimeout' }
+  /v1/projects/{projectId}/skill-installations/{installation_id}/update:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+      - name: installation_id
+        in: path
+        required: true
+        schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$(?![\s\S])' }
+    post:
+      tags: [Skills]
+      operationId: updateProjectSkillInstallation
+      summary: Explicitly update one project Skill installation pin
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: product.skill.install
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expected_source_ref, source_ref]
+              properties:
+                expected_source_ref: { type: string, pattern: '^skill:(?!skill:)[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$(?![\s\S])' }
+                source_ref: { type: string, pattern: '^skill:(?!skill:)[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$(?![\s\S])' }
+      responses:
+        '200':
+          { $ref: '#/components/responses/SkillInstallationUpdateSuccess' }
+        '400': { $ref: '#/components/responses/SkillInstallationBadRequest' }
+        '413': { $ref: '#/components/responses/SkillInstallationPayloadTooLarge' }
+        '401': { $ref: '#/components/responses/SkillInstallationUnauthorized' }
+        '403': { $ref: '#/components/responses/SkillInstallationMutationForbidden' }
+        '404': { $ref: '#/components/responses/SkillInstallationNotFound' }
+        '409': { $ref: '#/components/responses/SkillInstallationConflict' }
+        '412':
+          { $ref: '#/components/responses/SkillInstallationPreconditionFailed' }
+        '429': { $ref: '#/components/responses/SkillInstallationRateLimited' }
+        '502': { $ref: '#/components/responses/SkillInstallationBadGateway' }
+        '503': { $ref: '#/components/responses/SkillInstallationUnavailable' }
+        '504': { $ref: '#/components/responses/SkillInstallationTimeout' }
   /v1/skill-installations:
     post:
       tags:

@@ -1,3 +1,11 @@
+## 项目 Skills 安装 API 已接线（2026-10-17，本地源码）
+
+BFF 固定 Platform `5ec8538`，Public15.1.0／145 operations 接入项目安装、显式更新、启停、移除、详情与列表。复用现安装 route/client/digest/mapper（统一命名 skill-installation-*），无新表、依赖或兼容入口。项目身份取当前 BFF 项目资格，调用前后复核；owner 回包绑定项目、请求资源与操作状态，错资源/错操作/未知 wire 不作为成功或可重试依赖故障。public skill.list 的项目读取已切正式 Project RPC。
+
+原 HTTP 旅程内补回归，错资源实测 RED→GREEN；Node22 完整 lint/typecheck/contract:check/test:architecture/test/build/format:check 通过，contract686 PASS、default1263 PASS／3 原资源 SKIP、architecture35 PASS，测试仅限2 workers但未缩文件列表。首次旧 HTTP pin fixture 两失败已更新当前 commit 字面，原摘要/断言保留；最终源61/61冻结一致，独立只读复核无确定P0–P2。未跑真实PG/Redis或正常浏览器，此片无SQL变化；正常服务/配置/权限/积分及模型/Tool/Billing未动。
+
+下一步配对退休 Platform Personal 项目读取，再替换项目名称开关和会话缺省／显式[]选择，接App/Agent精确版本冻结。本次只交API接线，不代表项目功能、正常组合或整体目标完成；远端CI/push/PR/merge及Root index/gitlink继续暂停。
+
 ## S2 来源事实消费（源码候选，2026-10-17）
 
 沿 a7dd8e7 精确固定 Platform e172838 的 acquisition/RPC/HTTP6.1.0/profile，当前公开 artifact15.0.0（仍/v1/139 operations）仅将 skill.list 的 owner_type 扩为八类；网站与分享维持真实归属五类。hub/unknown/direct 据正式安装事实投影，坏 enum/绑定拒绝；没有 Device 发现或 OpenApp 身份 producer。只替换原 current RPC/HTTP vendor，其他仍用政策 pin 保留；acquisition 不进入全部个人 ACK/详情字段。

@@ -1,3 +1,11 @@
+## 项目安装接线（2026-10-17）
+
+沿已批准模型固定Platform5ec8538的Project六方法。现安装client/route/digest/mapper统一支持personal与project，不复制生命周期或新建抽象框架；项目使用/v1/projects/{projectId}/skill-installations及同ID/update、enabled操作（六operation），public15.1.0，复用现body/ACK/错误组件。项目pathname不是权限：当前session/human skill action后，BFF本仓ProjectService.find核本人当前项目并解析canonical ID；owner调用前后重新核session/action/项目，owner响应project_ref必须相同。命令ID/digest独立绑定project，不从body或浏览器header授信。
+
+所有项目读取（含公开skill.list project_id）改用正式Project RPC，不再对Personal RPC发送project header；新client只调用owner固定artifact，不跨仓源码或SQL。无Schema/配置/凭据/进程变化；旧bff_project_skill名称开关尚未替换，作为下一片选择事实清理，不充当安装或建立兼容alias。后继默认选择与显式[]区分、durable exact refs、App/Agent沿原计划继续。
+
+写区为现安装client/projector/response及引用、server/准入/route/input、唯一OpenAPI/现checker及固定consumer生成链，现有测试补项目六方法/权限/错误目标/同key绑定与正常个人不变。仅受控HTTP/Connect证据不冒实际IAM/PG/正常产品；测试复用现文件，资源与远端保持不动。
+
 ## S2 来源消费与公开八类（已确认模型源码候选，2026-10-17）
 
 基线 a7dd8e7。上游 Platform `e17283888ae1a8cf10365dfc8dd670115d6d187c` 已发行安装 acquisition_kind，用户已确认归属/取得分离及 BFF 八类投影。本片沿原 Skills aggregation/窄 client，不重开方案审批，不新建服务、进程、数据表或通用来源框架。公开资料核验于2026-10-17：[skill.list](https://open.manus.ai/docs/v2/skill.list)列八值及含停用安装；官方没有公布冲突优先级，下面是 Kokoro 明确实现规则，不冒内部逆向证据。

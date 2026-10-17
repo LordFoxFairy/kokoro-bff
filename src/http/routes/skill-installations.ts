@@ -3,19 +3,19 @@ import { IamPublisherProfileClient } from "../../infrastructure/clients/iam-publ
 import type { IncomingMessage, ServerResponse } from "node:http"
 import { Code, ConnectError } from "@connectrpc/connect"
 import type { RequestContext } from "../../domain/request-context.js"
-import type { PersonalInstallationConnectClient } from "../../infrastructure/clients/platform/personal-installation-connect.js"
+import type { SkillInstallationConnectClient } from "../../infrastructure/clients/platform/skill-installation-connect.js"
 import {
-  installPersonalDigest,
-  removePersonalDigest,
-  setPersonalEnabledDigest,
-  updatePersonalDigest,
-} from "../../infrastructure/clients/platform/personal-installation-projector.js"
+  installSkillDigest,
+  removeSkillDigest,
+  setSkillEnabledDigest,
+  updateSkillDigest,
+} from "../../infrastructure/clients/platform/skill-installation-projector.js"
 import {
   projectInstallation,
   projectInstallationAck,
   projectInstallationList,
   projectInstallationUpdateAck,
-} from "../../infrastructure/clients/platform/personal-installation-response.js"
+} from "../../infrastructure/clients/platform/skill-installation-response.js"
 import {
   exactIdempotencyKey,
   exactInstallationId,
@@ -98,9 +98,10 @@ export async function skillInstallationRoute(
   response: ServerResponse,
   context: RequestContext,
   path: string[],
-  client: PersonalInstallationConnectClient | null,
+  client: SkillInstallationConnectClient | null,
   signal?: AbortSignal,
   iamBaseUrl?: string | null,
+  projectAccess?: (signal: AbortSignal) => Promise<string>,
 ): Promise<boolean> {
   if (path[0] !== "skill-installations") return false
   response.setHeader("x-request-id", context.requestId)
@@ -120,35 +121,60 @@ export async function skillInstallationRoute(
   request.once("aborted", cancel)
   response.once("close", cancel)
   signal = signal ? AbortSignal.any([signal, cancellation.signal]) : cancellation.signal
-  const enrich = <T>(value: T) =>
-    new IamPublisherProfileClient(iamBaseUrl ?? "", 5000).enrich(
+  let projectRef: string | undefined
+  const currentProject = async () => {
+    if (!projectAccess) return undefined
+    const activeSignal = signal!
+    activeSignal.throwIfAborted()
+    let aborted: () => void = () => undefined
+    const canceled = new Promise<never>((_resolve, reject) => {
+      aborted = () => reject(activeSignal.reason)
+      activeSignal.addEventListener("abort", aborted, { once: true })
+      if (activeSignal.aborted) aborted()
+    })
+    try {
+      return await Promise.race([projectAccess(activeSignal), canceled])
+    } finally {
+      activeSignal.removeEventListener("abort", aborted)
+    }
+  }
+  const enrich = async <T>(value: T) => {
+    const result = await new IamPublisherProfileClient(iamBaseUrl ?? "", 5000).enrich(
       context.identity.namespace,
       /^Bearer ([^\s,]+)$/iu.exec(request.headers.authorization ?? "")?.[1] ?? "",
       context.requestId,
       value,
       signal!,
     )
+    if (projectAccess && (await currentProject()) !== projectRef) throw new ConnectError("Project not found", Code.NotFound)
+    return result
+  }
   try {
+    projectRef = await currentProject()
     const common = {
       requestId: context.requestId,
       tenant: context.identity.namespace,
       subject: context.identity.userId,
+      ...(projectRef === undefined ? {} : { projectRef }),
     }
     if (path.length === 1 && request.method === "POST") {
       if (new URL(request.url ?? "", "http://bff.local").search) throw new Error("invalid_skill_installation_request")
       const input = parseInstallInput(await readBody(request, 65_536)),
         key = idempotencyKey(request)
-      const commandId = installationCommandId("install", common.tenant, common.subject, input.sourceRef, key)
+      const commandId = installationCommandId("install", common.tenant, common.subject, input.sourceRef, key, projectRef)
       const result = await client.install(
         {
           ...common,
           ...input,
           commandId,
-          digest: installPersonalDigest(common.tenant, common.subject, input.sourceRef),
+          digest: installSkillDigest(common.tenant, common.subject, input.sourceRef, projectRef),
         },
         signal,
       )
-      send(response, 200, { data: await enrich(projectInstallationAck(result)) })
+      const ack = projectInstallationAck(result)
+      if (ack.installation.source_ref !== input.sourceRef || !ack.installation.installed || !["installed", "reinstalled", "unchanged"].includes(ack.change))
+        throw new Error("skill_installation_response_invalid")
+      send(response, 200, { data: await enrich(ack) })
       return true
     }
     if (path.length === 1 && request.method === "GET") {
@@ -163,24 +189,29 @@ export async function skillInstallationRoute(
       if (new URL(request.url ?? "", "http://bff.local").search || request.headers["idempotency-key"] !== undefined || (await readBody(request, 1)).length)
         throw new Error("invalid_skill_installation_request")
       const result = await client.get({ ...common, installationId: id }, signal)
-      send(response, 200, { data: await enrich(projectInstallation(result.installation)) })
+      const view = projectInstallation(result.installation)
+      if (view.installation_id !== id) throw new Error("skill_installation_response_invalid")
+      send(response, 200, { data: await enrich(view) })
       return true
     }
     if (path.length === 2 && request.method === "DELETE") {
       if (new URL(request.url ?? "", "http://bff.local").search) throw new Error("invalid_skill_installation_request")
       const key = idempotencyKey(request)
       if ((await readBody(request, 1)).length) throw new Error("invalid_skill_installation_request")
-      const commandId = installationCommandId("remove", common.tenant, common.subject, id, key)
+      const commandId = installationCommandId("remove", common.tenant, common.subject, id, key, projectRef)
       const result = await client.remove(
         {
           ...common,
           installationId: id,
           commandId,
-          digest: removePersonalDigest(common.tenant, common.subject, id),
+          digest: removeSkillDigest(common.tenant, common.subject, id, projectRef),
         },
         signal,
       )
-      send(response, 200, { data: await enrich(projectInstallationAck(result)) })
+      const ack = projectInstallationAck(result)
+      if (ack.installation.installation_id !== id || ack.installation.installed || ack.installation.enabled || !["removed", "unchanged"].includes(ack.change))
+        throw new Error("skill_installation_response_invalid")
+      send(response, 200, { data: await enrich(ack) })
       return true
     }
     if (path.length === 3 && path[2] === "update" && request.method === "POST") {
@@ -193,8 +224,8 @@ export async function skillInstallationRoute(
           ...common,
           ...input,
           installationId: id,
-          commandId: installationCommandId("update", common.tenant, common.subject, id, key),
-          digest: updatePersonalDigest(common.tenant, common.subject, id, input.expectedSourceRef, input.sourceRef),
+          commandId: installationCommandId("update", common.tenant, common.subject, id, key, projectRef),
+          digest: updateSkillDigest(common.tenant, common.subject, id, input.expectedSourceRef, input.sourceRef, projectRef),
         },
         signal,
       )
@@ -206,18 +237,26 @@ export async function skillInstallationRoute(
       if (new URL(request.url ?? "", "http://bff.local").search) throw new Error("invalid_skill_installation_request")
       const key = idempotencyKey(request),
         input = parseEnabledInput(await readBody(request, 65_536))
-      const commandId = installationCommandId("set-enabled", common.tenant, common.subject, id, key)
+      const commandId = installationCommandId("set-enabled", common.tenant, common.subject, id, key, projectRef)
       const result = await client.setEnabled(
         {
           ...common,
           installationId: id,
           ...input,
           commandId,
-          digest: setPersonalEnabledDigest(common.tenant, common.subject, id, input.enabled),
+          digest: setSkillEnabledDigest(common.tenant, common.subject, id, input.enabled, projectRef),
         },
         signal,
       )
-      send(response, 200, { data: await enrich(projectInstallationAck(result)) })
+      const ack = projectInstallationAck(result)
+      if (
+        ack.installation.installation_id !== id ||
+        !ack.installation.installed ||
+        ack.installation.enabled !== input.enabled ||
+        ![input.enabled ? "enabled" : "disabled", "unchanged"].includes(ack.change)
+      )
+        throw new Error("skill_installation_response_invalid")
+      send(response, 200, { data: await enrich(ack) })
       return true
     }
     send(response, 404, failure("bff_route_not_found", "Business route was not found"))

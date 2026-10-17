@@ -472,7 +472,7 @@ test("T-K03.19 SetSkillInstallationEnabled uses only owner-issued installation i
     },
     undefined,
     {},
-    { personalInstallationClient: client },
+    { installationClient: client },
   )
   try {
     const command = website + "SetSkillInstallationEnabled"
@@ -508,7 +508,7 @@ test("R357 active public contract declares original skill.list and distinct obse
   const { readFile } = await import("node:fs/promises")
   const { load } = await import("js-yaml")
   const document = load(await readFile(new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8"))
-  assert.equal(document.info.version, "15.0.0")
+  assert.equal(document.info.version, "15.1.0")
   assert.equal(document.paths["/v1/skill.list"].get.operationId, "listSkills")
   for (const path of [website + "ListSkills", website + "ListHubSkills", website + "GetSkill", "/skill.v1.SkillService/DownloadSkill"]) {
     assert.equal(document.paths[path].post["x-kokoro-visibility"], "browser-private")
@@ -1116,7 +1116,7 @@ test("R357 production composition uses the formal Skills aggregation rather than
     businessStore: null,
     sessionAdmission: { async verify() {} },
     skillProductClient: {},
-    personalInstallationClient: {},
+    installationClient: {},
   })
   try {
     assert.ok(composition.skillSpecificationSource instanceof SkillSpecificationService)
@@ -1213,7 +1213,7 @@ test("R357 successor Hub sends official exclusion and initial shuffle to owner, 
 })
 
 test("R357 successor native binary installation client sends canonical project only as trusted metadata, never request body or write headers", async () => {
-  const { PersonalInstallationConnectClient } = await import("../../src/infrastructure/clients/platform/personal-installation-connect.ts")
+  const { SkillInstallationConnectClient } = await import("../../src/infrastructure/clients/platform/skill-installation-connect.ts")
   const p = await import("../../src/generated/platform-connect/kokoro/platform/v1/platform_runtime_pb.ts")
   const { create, fromBinary, toBinary } = await import("@bufbuild/protobuf")
   const sample = await specificationServiceFixture()
@@ -1222,18 +1222,19 @@ test("R357 successor native binary installation client sends canonical project o
   const owner = createServer(async (req, res) => {
     const chunks = []
     for await (const b of req) chunks.push(b)
-    requests.push({ headers: req.headers, body: fromBinary(p.ListPersonalSkillInstallationsRequestSchema, Buffer.concat(chunks)) })
+    const project = req.url === "/kokoro.platform.v1.ProductProjectSkillInstallationService/ListProjectSkillInstallations"
+    requests.push({
+      headers: req.headers,
+      body: fromBinary(project ? p.ListProjectSkillInstallationsRequestSchema : p.ListPersonalSkillInstallationsRequestSchema, Buffer.concat(chunks)),
+      project,
+    })
     res.writeHead(200, { "content-type": "application/proto", "cache-control": "no-store" })
-    res.end(
-      toBinary(
-        p.ListPersonalSkillInstallationsResponseSchema,
-        create(p.ListPersonalSkillInstallationsResponseSchema, { installations: [sample.installation] }),
-      ),
-    )
+    const schema = project ? p.ListProjectSkillInstallationsResponseSchema : p.ListPersonalSkillInstallationsResponseSchema
+    res.end(toBinary(schema, create(schema, { installations: [sample.installation], ...(project ? { projectRef: "canonical-project" } : {}) })))
   })
   await new Promise((r) => owner.listen(0, "127.0.0.1", r))
   try {
-    const client = new PersonalInstallationConnectClient(
+    const client = new SkillInstallationConnectClient(
       `http://127.0.0.1:${owner.address().port}`,
       { get: async () => "write-token" },
       { get: async () => "projection-token" },
@@ -1245,6 +1246,8 @@ test("R357 successor native binary installation client sends canonical project o
     const page = await facade.listInstallations({ ...input, projectRef: "canonical-project" }, new AbortController().signal)
     assert.equal(page.items[0].acquisition_kind, "hub")
     await client.list(input)
+    assert.equal(requests[0].project, true)
+    assert.equal(requests[1].project, false)
     assert.equal(requests[0].headers["x-kokoro-project-ref"], "canonical-project")
     assert.equal(requests[0].headers["x-kokoro-subject"], "human")
     assert.equal(requests[0].headers.authorization, "Bearer projection-token")

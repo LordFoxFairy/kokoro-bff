@@ -54,6 +54,7 @@ test("Platform consumer pins one current v1 owner contract bundle", async () => 
       "execution-operations/mcp-private-server-v1.json",
       "descriptor/platform-v1.binpb",
       "execution-operations/skill-acquisition-v1.json",
+      "execution-operations/project-skill-installation-v1.json",
       "openapi/platform-http.openapi.json",
     ].map((file) => ({
       path: `contract/${file}`,
