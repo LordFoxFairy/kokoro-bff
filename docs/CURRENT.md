@@ -1,3 +1,11 @@
+## 2026-10-16 skill.list 核心能力复核（文档纠正）
+
+沿b4292b6重新核官方v2文档/机器源与当前公开canonical及聚合/路由；没有更改生产源码。七个字段及双方均未声明item required已相等；来源词表尚缺hub/device/unknown，不能用旧五类记录宣称完整对齐。包含停用安装且GET不启用、项目资格返回前重核、真实creator/时间与stable series ID已有现实现和受控证据；任务选择/项目默认与Agent pin端到端仍未闭环。
+
+重点区分官方caller矩阵与现有Kokoro fresh human admission：原APIKey/OAuth资格OPEN并未因网页可登录而关闭，后继应由IAM可信caller事实与owner资格正式承接，禁止body/header自报或服务凭据替代人类。网站RPC与公开skill.list是不同现行契约，不按名称任意删别名。详见API_CONTRACT本日前缀；它修正参考/current/target的边界，不发行新的枚举或临时认证入口。
+
+现有 `node --import tsx --test --test-concurrency=2 test/contract/skill-specification-http.test.mjs`：**64 PASS / 0 FAIL / 0 SKIP / 1.710s**，无新增测试；HTTP为真实loopback但owner/IAM受控，不冒真实资源/普通账号完整验收。第一次本地元数据比较未解析官方items.$ref而停止，未收集产品测试/改源码；改为显式解析官方Skill组件后字段比较完成，不把脚本启动错误当产品缺陷。此为文档任务，仅diff及新增链接检查，不重复构建/完整业务门。无新服务、数据库/权限/资金/模型/远端/Rootgitlink变动，完整目标保持未完成。
+
 ## 2026-10-16 Skill Share 创建/Resolve 活动版本资格（本地交付）
 
 基线c6bb5d3。正常产品已证明本人withdrawn revision2仍Inspect200，原Create201/Resolve200却Summary404；不是Web需停认证或允许撤回摘要。创建是BFF-owned locator，不新增资源ACL，每次owner仍按当前调用者判断。原route只用允许本人预览的inspect作share资格，遗漏已存在的exact active/valid metadata约束。

@@ -1,3 +1,13 @@
+## 2026-10-16 skill.list 官方参考复核（当前差距，不发行新契约）
+
+当前业务源码b4292b6及唯一canonical `contract/openapi/v1/openapi.yaml`不变。重新读取[官方skill.list](https://open.manus.ai/docs/v2/skill.list)及[官方v2 OpenAPI](https://open.manus.ai/docs/v2/openapi_v2.json)，解析其Skill组件而非只看示例：七个字段名与当前SpecificationPublicSkill相同，双方item均未声明required；现有presence不应因示例全出现就改成全部必填。官方owner_type现为personal/official/team/project/app/hub/device/unknown，当前canonical/runtime仍五类；下文2026-10-09五类是历史快照，不再代表当前完整官方词表。hub/device真实来源生产及unknown语义仍待现有设计确认，不只扩枚举、不从ZIP/GitHub/audience推导来源，也不把损坏owner响应降级成unknown。
+
+公开读取职责仍是已安装可供任务选择，包含停用项，读取不启用；当前聚合只传installed=true而不传enabled过滤，按精确安装source事实组装稳定series ID、真实作者和Unix秒，project_id先后两次按同tenant/subject核项目资格。稳定ID是既定Kokoro裁决，不改成revision UID；但列表回包不证明所返ID已通过项目默认/显式空选择与Agent pin继承端到端执行。正式个人更新保持精确pin，不能让新来源分类顺带改变更新/执行选择。
+
+官方按API Key、standard OAuth Open App、trusted client区分返回范围与project_id资格；当前/v1/skill.list明确只调用既有fresh human Product Session admission、无第二API-key/Open-App主体入口。该差异须沿IAM可信caller与owner能力设计裁决，不能在BFF按header/body自报client类别、把机器身份当人类，或为对齐页面临时放权。既有网站私有RPC另有camelCase视图，既不是公开skill.list的替代，也不是应凭名称删除的兼容alias。
+
+本轮没有改Schema、公开机器源或生成物，没有调用Manus业务API/取得凭据，也未发送模型/Tool/计费请求。现有skill-specification-http文件在Node22以concurrency2重验64PASS/0SKIP；真实loopback HTTP、受控owner/IAM及纯聚合层的证据不冒正常API Key/OAuth、真实项目安装或Agent执行验收。原始官方摘要SHA和逐字段比较只留本地ignored收据，非Root可编辑机器契约。
+
 ## 2026-10-16 Skill Share 创建与 Resolve 的活动版本校验（既有协议内修复）
 
 Create 与 Resolve 使用和既有 Shared Summary 相同的精确 revision active/valid 资格，严格核 `source_ref` 与 owner UID，继续原包检查。POST 在持久化前和回执前读取；已有活动 locator 复用也必须重新核资格。withdrawn/disabled/draft/quarantined 或不可见仍为既有404，缺元数据依赖503，非法 owner 表示502；不新增 status/code/字段或放宽本人包预览，也不借 share 赋予权限。DELETE 继续原 creator/tenant 边界，不要求源仍 active，才能撤销失效链接。
