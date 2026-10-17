@@ -1,3 +1,4 @@
+import { projectExecutionBindingRoute } from "../http/routes/project-execution-binding.js"
 import { projectSkillSelectionRoute } from "../http/routes/project-skill-selection.js"
 import { Code, ConnectError } from "@connectrpc/connect"
 import { mcpPersonalOperation, mcpPersonalRoute } from "../http/routes/mcp-personal.js"
@@ -98,6 +99,15 @@ async function handle(
   }
   const id = requestId(request)
   response.setHeader("x-request-id", id)
+  if ((request.url ?? "").split("?", 1)[0] === "/internal/v1/project-execution-bindings/verify") {
+    await projectExecutionBindingRoute(
+      request,
+      response,
+      config.projectExecutionCredentialFile ?? null,
+      composition.businessStore?.projectExecutionBindings ?? null,
+    )
+    return
+  }
   const rawPathname = new URL(request.url || "/", "http://bff.local").pathname
   const isRawSkillPackageInspection =
     request.method === "GET" && (/^\/v1\/self\/skills\/[^/]+\/package$/u.test(rawPathname) || /^\/v1\/skill-installations\/[^/]+\/package$/u.test(rawPathname))

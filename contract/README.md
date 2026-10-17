@@ -1,3 +1,7 @@
+## Internal project binding 1.0.0（2026-10-17）
+
+公开OpenAPI仍独立146 operations。内部binding以src/http/project-execution-binding.contract.ts为唯一code-first源；`pnpm contract:generate:project-execution`正规生成contract/openapi/internal/v1/openapi.yaml，`pnpm contract:check:project-execution`验证漂移。IAM消费固定commit/version/SHA的只读artifact，不以本目录源直接跨仓import；专用机器身份不复用Web。三面语义与未激活范围见本仓设计/当前事实。
+
 ## Agent HTTP6 consumer（2026-10-17，当前本地候选）
 
 `contract/dependencies/agent-http.json`固定Agent `7ed07f987e50ef1c1a8188ba12aa9c23ab0d03d1` /6.0.0；`contract/vendor/kokoro-agent/<commit>/`仅该current完整OpenAPI/provenance，旧current已退休。现生成器继续精确摘要、18-file allowlist及两轮一致性校验，只生成原三操作与原投影。新增第二同形security scheme使原生SDK明确AgentServiceBearer key，不代表BFF消费Billing evidence或新增网络调用。公开Public16/146原字节保持；正常激活、资金准入与完整Skills验收仍待后继。

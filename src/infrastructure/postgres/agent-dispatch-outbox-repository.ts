@@ -22,6 +22,8 @@ import type { PostgresBffDatabase } from "./client.js"
 import { commitChatTurn, prepareChatTurnSelection } from "./chat-turn-commit.js"
 import { agUiConsumerRegistration } from "./agui-consumer-registration.js"
 import { instant } from "./chat-repository-mappers.js"
+import type { ProjectExecutionBindingInput, ProjectExecutionBindingReader } from "../../application/ports/project-execution-binding-reader.js"
+import { readProjectExecutionBinding } from "./project-execution-binding.js"
 
 type AgentDispatchRow = {
   outbox_id: string
@@ -154,8 +156,12 @@ function claimedAgentDispatch(row: AgentDispatchRow): AgentDispatchCommand {
 }
 
 /** PostgreSQL transaction boundary for Chat admission and Agent delivery. */
-export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutboxRepository {
+export class PostgresAgentDispatchOutboxRepository implements AgentDispatchOutboxRepository, ProjectExecutionBindingReader {
   public constructor(private readonly database: PostgresBffDatabase) {}
+
+  public readProjectExecutionBinding(input: ProjectExecutionBindingInput) {
+    return readProjectExecutionBinding(this.database, input)
+  }
 
   /** Every batch locks all parent Conversations before entering any stream/tail. */
   public static async lockConversationsInTransaction(

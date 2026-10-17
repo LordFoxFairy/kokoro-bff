@@ -1,3 +1,19 @@
+## 项目binding internal1候选已接线（2026-10-17）
+
+在原owner基础上，同进程新增精确internal POST；IAM专用文件凭据fresh读、tenant绑定、无Web fallback。code-first Zod生成internal1.0.0，public146原字节保持。HTTP3秒/PG2秒，池等待、迟到checkout、在途abort/socket失败均清理精确连接；typed reader不再只有前后signal检查。原Scheduler callback保持。尚未配置正常IAM/BFF或激活执行。
+
+新HTTP凭据/轮换/坏配置/越租户/闭集/迟到读取回归通过；原chat-facts完整真实PG32 PASS/0SKIP（36.47s），含实际锁等待后取消、终止backend及2秒上限，池恢复。定向59 PASS；原默认清单1267 PASS/1新gate inventory FAIL/3原资源SKIP，已显式登记新增contract check，原governance+HTTP重跑31 PASS，不删除或放宽门。生成drift/编译/lint通过，独审两个P1（误拦Scheduler、缺client error listener）已修并回归；临时DB删除、Redis14起终0。整体Agent/IAM/Platform仍后继，不把本次局部证据称全产品验收。
+
+## 项目可信执行：BFF owner 基础已验证（2026-10-17，未激活）
+
+沿用户确认方案及候选基线e1360108，原outbox新增独立canonical project与永久retired时间；Chat在原锁内冻结，Move仅canonical跨scope同事务退役。原receipt重放不伤后来Run，P→Q→P不复活，slug归一与同scope不退役。窄typed reader单statement核当前父资源、租户/本人、完整Run/session/request/message/assertion及原有序exact refs摘要，拒绝ID/slug歧义；不从trace授项目权，不改变queue/unknown/lease/fence/历史payload。
+
+停写后主方Node22 lint/typecheck、完整format:check、全部contract checks/semantic（146 operations）与clean build均exit0；原manifest默认测试仅限2workers，1266 PASS/3原资源SKIP；原contract清单687 PASS/0SKIP。相关最低层99 PASS/2资源SKIP不冒真实；完整chat-facts真实PG/Redis原文件32 PASS/0SKIP（34.4秒），含Move/Message并发、ABA、同key、删除/错身份/篡改、receipt SQL fault及恢复。仅扩原4个case，无新增suite/case。每轮自有DB删除、数据库清单保持、Redis14起终0，无flush；11路径冻结字节匹配，独立只读复核无新增确定P0–P2。
+
+真实RED先复现未捕获canonical、未退役及缺reader；独审两P2（项目歧义、payload request/message lineage）同原case RED→GREEN。扩大并发回归后两旧全行oracle因新增退休事实失败，现仅排除该字段并独立正断言退休与原canonical，其余历史字段仍严格相等。R148新增reader触发原connect observer不支持callback的夹具失败，只恢复observer后读取，原真实SQL fault/回滚断言保持；失败记录及清理收据留Root ignored，不把首次运行写为全绿。
+
+本片尚无internal HTTP/机器credential/新Agent proof；reader仅前后abort检查，在途PG取消及总预算须在暴露前补齐。fresh schema不代表正常库旧行可信捕获，禁止trace回填；正常服务/配置/账号/权限/积分未动，模型/Tool/Billing零调用。后继为BFF专用IAM读验契约、Agent正式冻结/proof、IAM当前事实及Platform project-only安装/source ACL；ADR-035即时撤权barrier仍未交。未跑其余owner真实integration或正常用户整链，完整目标未完成；远端CI/push/PR/merge与Root index/gitlink继续暂停。
+
 ## Agent／Provider 当前本地组合（2026-10-17，未正常激活）
 
 复用原 codex/skill-api-closure 工作树，组合 e65f144 的 Agent HTTP6 与正常源码分支24dcf7d的Provider示例校验。唯一CURRENT冲突保双方新增前缀及共同历史原字节；Provider两源码/测试与24dc逐字相同，其余源码与e65逐字相同。Agent7ed07f9的contract/provenance与真实Git blob和vendor/pin相等，公开canonical/SQL/package/lock不变，无新增wire或兼容路径。

@@ -1,3 +1,13 @@
+## 项目执行 internal v1 接线（2026-10-17，候选）
+
+沿已批准BFF owner事实，同进程仅POST /internal/v1/project-execution-bindings/verify；IAM专用受限文件凭据每次重读，固定caller/surface/tenant，禁止Web凭据fallback。请求平铺tenant/actor/subject/Run/session/assertion/project_ref nullable/selection_digest；成功data仅原project_ref、ordered selected_skill_source_refs及digest。body闭集8KiB；HTTP3秒、PG2秒，checkout迟到归还且在途取消销毁精确连接。无新表/服务、无IAM回调或allow缓存。runtime Zod schema为唯一code-first源，正规生成只读internal OpenAPI1.0.0；public146原字节不变。正常配置/库未激活，不冒ADR035许可barrier或完整整链。
+
+## 项目执行绑定 owner 门（2026-10-17，待发行）
+
+public v1及既有Agent HTTP pin本片不变。内部目标为同进程POST /internal/v1/project-execution-bindings/verify，由IAM专用服务身份调用，不复用Web凭据、不走公开人类admission、不再回调IAM。唯一机器源后继放contract/openapi/internal/v1/openapi.yaml；首次发行后IAM固定commit/version/digest消费，不将文档声明当已发布。
+
+稳定输入绑定tenant/actor/subject/Run/session/identity_assertion_ref、显式nullable canonical project和有序exact refs摘要；成功仅返回相同project与BFF冻结的≤16条原refs及摘要。未知/错身份/已退役/当前父资源不可见均拒绝，错误与超时fail closed。当前实施先交内部typed reader与持久事实，没有新增可调用HTTP入口、机器credential或许可。
+
 ## Agent HTTP6 固定消费（2026-10-17，本地候选）
 
 唯一Agent publication固定 `7ed07f987e50ef1c1a8188ba12aa9c23ab0d03d1` /6.0.0，完整OpenAPI SHA256 `e4d30178f2330744b374788abf7e6d23bbf8d7841dcd01537063c705dc18a8db`，provenance SHA256 `c636fdbe1f9b6a873f85bb4d74ef9a360d90cafa2f8df4c6ed2b1522f61df715`。原三个执行操作wire及已消费Schema保持；HTTP6变更的usage-evidence reader由Billing独立消费，BFF不新增该操作。Generated security明确AgentServiceBearer，无新凭据/权限或转发入口。公开canonical仍Public16/146，AG-UI和现数据模型不变；仅候选接线，正常进程与模型派发未激活。

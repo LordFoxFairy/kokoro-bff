@@ -1,0 +1,193 @@
+# Generated from src/http/project-execution-binding.contract.ts; do not edit.
+openapi: 3.1.0
+info:
+  title: Kokoro BFF internal project execution binding
+  version: 1.0.0
+paths:
+  /internal/v1/project-execution-bindings/verify:
+    post:
+      operationId: verifyProjectExecutionBinding
+      summary: Read current BFF-owned execution intent; not an execution permit
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: internal
+      x-kokoro-stability: stable
+      x-kokoro-idempotency: read-only-no-receipt
+      x-kokoro-permission: iam.project_execution_binding
+      security:
+        - IamBindingReaderBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectExecutionBindingRequest'
+      responses:
+        '200':
+          description: Current exact binding
+          headers:
+            x-request-id:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectExecutionBindingResponse'
+        '400':
+          description: Invalid closed request
+          headers:
+            x-request-id:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectExecutionBindingError'
+        '403':
+          description: Dedicated service or tenant denied
+          headers:
+            x-request-id:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectExecutionBindingError'
+        '404':
+          description: Binding is not current or not visible
+          headers:
+            x-request-id:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectExecutionBindingError'
+        '503':
+          description: Dependency, credential or deadline unavailable
+          headers:
+            x-request-id:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectExecutionBindingError'
+components:
+  securitySchemes:
+    IamBindingReaderBearer:
+      type: http
+      scheme: bearer
+      description: 'Fresh receiver-owned secret file: fixed kokoro-iam/project_execution_binding/tenant; never a Web or user token'
+  schemas:
+    ProjectExecutionBindingRequest:
+      $schema: https://json-schema.org/draft/2020-12/schema
+      type: object
+      properties:
+        tenant_id:
+          type: string
+          minLength: 1
+          maxLength: 255
+          pattern: ^[^\s\x00-\x1f\x7f]+$
+        actor_id:
+          type: string
+          minLength: 1
+          maxLength: 255
+          pattern: ^[^\s\x00-\x1f\x7f]+$
+        subject_id:
+          type: string
+          minLength: 1
+          maxLength: 255
+          pattern: ^[^\s\x00-\x1f\x7f]+$
+        run_id:
+          type: string
+          minLength: 1
+          maxLength: 255
+          pattern: ^[^\s\x00-\x1f\x7f]+$
+        session_id:
+          type: string
+          minLength: 1
+          maxLength: 255
+          pattern: ^[^\s\x00-\x1f\x7f]+$
+        identity_assertion_ref:
+          type: string
+          minLength: 1
+          maxLength: 255
+          pattern: ^[^\s\x00-\x1f\x7f]+$
+        project_ref:
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 255
+              pattern: ^[^\s\x00-\x1f\x7f]+$
+            - type: 'null'
+        selection_digest:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+      required:
+        - tenant_id
+        - actor_id
+        - subject_id
+        - run_id
+        - session_id
+        - identity_assertion_ref
+        - project_ref
+        - selection_digest
+      additionalProperties: false
+    ProjectExecutionBindingResponse:
+      $schema: https://json-schema.org/draft/2020-12/schema
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            project_ref:
+              anyOf:
+                - type: string
+                  minLength: 1
+                  maxLength: 255
+                  pattern: ^[^\s\x00-\x1f\x7f]+$
+                - type: 'null'
+            selected_skill_source_refs:
+              maxItems: 16
+              type: array
+              items:
+                type: string
+                pattern: ^skill:(?!skill:)[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])
+              uniqueItems: true
+            selection_digest:
+              type: string
+              pattern: ^[0-9a-f]{64}$
+          required:
+            - project_ref
+            - selected_skill_source_refs
+            - selection_digest
+          additionalProperties: false
+      required:
+        - data
+      additionalProperties: false
+    ProjectExecutionBindingError:
+      $schema: https://json-schema.org/draft/2020-12/schema
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              enum:
+                - binding_request_invalid
+                - binding_service_denied
+                - binding_not_found
+                - binding_unavailable
+            message:
+              type: string
+            retryable:
+              type: boolean
+          required:
+            - code
+            - message
+            - retryable
+          additionalProperties: false
+      required:
+        - error
+      additionalProperties: false

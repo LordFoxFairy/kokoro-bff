@@ -1,3 +1,15 @@
+## 项目执行 internal v1 接线（2026-10-17，候选）
+
+沿已批准BFF owner事实，同进程仅POST /internal/v1/project-execution-bindings/verify；IAM专用受限文件凭据每次重读，固定caller/surface/tenant，禁止Web凭据fallback。请求平铺tenant/actor/subject/Run/session/assertion/project_ref nullable/selection_digest；成功data仅原project_ref、ordered selected_skill_source_refs及digest。body闭集8KiB；HTTP3秒、PG2秒，checkout迟到归还且在途取消销毁精确连接。无新表/服务、无IAM回调或allow缓存。runtime Zod schema为唯一code-first源，正规生成只读internal OpenAPI1.0.0；public146原字节不变。正常配置/库未激活，不冒ADR035许可barrier或完整整链。
+
+## 项目可信执行绑定（2026-10-17，已批准实施，尚未激活）
+
+BFF仍唯一拥有Project/Conversation/Message/outbox；Agent拥有Run与lease，IAM保留DIRECT_USER_CURRENT在线人类权限，Platform核当前项目安装。禁止trace、普通请求header或项目冒组织成为authority。按当前用户确认先实现BFF owner事实，再发行独立internal v1读验（同进程、IAM专用服务认证，不进public Web API），接Agent正式nullable项目/稳定binding及proof，再接IAM/Platform；不启用模型/扣费，不替代ADR-035即时撤权barrier或冒其已完成。
+
+提交锁内将canonical project独立写入原dispatch行execution_project_ref；有序exact refs继续与Message同事务冻结。窄ProjectExecutionBindingReader单statement核tenant、actor=subject、Run/session/assertion、当前active Conversation与同租户本人未删除Project、冻结project及refs digest；返回原有序refs，不用trace推导权限，不调用IAM形成环。source ACL仍由Platform单独判断，project执行target仅该project，不混user/org安装。
+
+Move在原Project→Conversation→outbox锁序内，只有canonical source≠target时将旧dispatch的execution_context_retired_at首次置位；P→Q→P也不复活，slug归一与同project no-op不退役。payload、历史Run/Message/refs、queue admission/unknown/fence及取消对账不改；读取失败/移走/删除拒绝，没有个人fallback。该检查是读取时当前事实，不等同已批准的严格撤权许可barrier；正常执行不激活。失败沿原事务回滚，重放不重写已退役时间。
+
 ## Agent HTTP6 消费接线（2026-10-17，本地候选）
 
 沿已批准Skills/MC-01，唯一Agent HTTP consumer由HTTP5切到已验证组合commit `7ed07f987e50ef1c1a8188ba12aa9c23ab0d03d1` /6.0.0；使用owner Git blob、完整provenance与现hey-api生成流程，退休旧current vendor，不留fallback。BFF仍仅消费createRun/controlRun/replaySessionEvents三操作及原failure/process/interaction投影；这三操作和递归Schema未变，无新owner、公开API、SQL或执行配置。

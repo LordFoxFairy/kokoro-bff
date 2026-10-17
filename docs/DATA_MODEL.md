@@ -1,3 +1,13 @@
+## 项目执行 internal v1 接线（2026-10-17，候选）
+
+沿已批准BFF owner事实，同进程仅POST /internal/v1/project-execution-bindings/verify；IAM专用受限文件凭据每次重读，固定caller/surface/tenant，禁止Web凭据fallback。请求平铺tenant/actor/subject/Run/session/assertion/project_ref nullable/selection_digest；成功data仅原project_ref、ordered selected_skill_source_refs及digest。body闭集8KiB；HTTP3秒、PG2秒，checkout迟到归还且在途取消销毁精确连接。无新表/服务、无IAM回调或allow缓存。runtime Zod schema为唯一code-first源，正规生成只读internal OpenAPI1.0.0；public146原字节不变。正常配置/库未激活，不冒ADR035许可barrier或完整整链。
+
+## 项目执行绑定（2026-10-17，fresh schema目标）
+
+只扩原bff_agent_dispatch_outbox：execution_project_ref TEXT nullable，提交事务从已锁定canonical Project写入，NULL明确direct；execution_context_retired_at TIMESTAMPTZ(3) nullable，canonical跨scope Move同事务首次置位。无新ACL/角色/Run表，无额外id或跨ownerSQL，不把payload.trace回填为authority。
+
+payload/exact refs仍原不可变消息事实；标记只退役后续执行授权，不重标历史admission为未执行。fresh installer更新canonical SQL；正常数据库未修改，旧正常行不得依trace自动授项目权，激活前独立处理配对与历史安全边界。本片新read不写任何权限事实；IAM/BFF在线读取不冒ADR-035撤权barrier。
+
 ## S4c 选择数据候选（2026-10-17，正常库未切换）
 
 用现bff_project的selected_skill_installation_ids TEXT[] NOT NULL DEFAULT '{}'保存有序默认（最多16、无空/重复ID），删除仅存名称开关的bff_project_skill。只存opaque安装ID，不复制Platform的pin/来源/启停状态；不加独立配置表、版本表或跨owner外键。默认变更沿Project行锁及现bff_idempotency_receipt原子提交，暂不新增不需要的CAS revision列。

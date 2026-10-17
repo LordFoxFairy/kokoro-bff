@@ -264,6 +264,8 @@ CREATE TABLE IF NOT EXISTS bff_agent_dispatch_outbox (
   user_message_id TEXT NOT NULL,
   assistant_message_id TEXT NOT NULL,
   identity_assertion_ref TEXT NOT NULL,
+  execution_project_ref TEXT,
+  execution_context_retired_at TIMESTAMPTZ(3),
   payload JSONB NOT NULL,
   status TEXT NOT NULL DEFAULT 'pending',
   admission_unknown_seen BOOLEAN NOT NULL DEFAULT FALSE,
