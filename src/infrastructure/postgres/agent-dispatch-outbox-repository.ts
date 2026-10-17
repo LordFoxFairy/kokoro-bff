@@ -39,6 +39,7 @@ type AgentDispatchRow = {
   user_message_id: string
   assistant_message_id: string
   identity_assertion_ref: string
+  execution_project_ref: string | null
   payload: unknown
   status: AgentDispatchStatus
   attempt_count: string | number
@@ -80,6 +81,7 @@ const AGENT_DISPATCH_COLUMN_NAMES = [
   "user_message_id",
   "assistant_message_id",
   "identity_assertion_ref",
+  "execution_project_ref",
   "payload",
   "status",
   "attempt_count",
@@ -123,6 +125,7 @@ function claimedAgentDispatch(row: AgentDispatchRow): AgentDispatchCommand {
   if (leaseRemainingMs < 1) throw new Error("AGENT_DISPATCH_LEASE_BUDGET_EXHAUSTED")
   const payload = parseAgentDispatchPayload(row.payload)
   if (
+    payload.launch.project_ref !== row.execution_project_ref ||
     payload.launch.request_id !== row.request_id ||
     payload.launch.run_id !== row.run_id ||
     payload.launch.session_id !== row.conversation_id ||
@@ -143,6 +146,7 @@ function claimedAgentDispatch(row: AgentDispatchRow): AgentDispatchCommand {
     userMessageId: row.user_message_id,
     assistantMessageId: row.assistant_message_id,
     identityAssertionRef: row.identity_assertion_ref,
+    executionProjectRef: row.execution_project_ref,
     payload,
     status: "leased",
     attemptCount: safeInteger(row.attempt_count, "AGENT_DISPATCH_ATTEMPT_INVALID"),

@@ -41,6 +41,7 @@ export const zLaunchRequest = z.object({
   content: z.string().min(1),
   requested_model_label: z.string().min(1).optional(),
   trace: z.record(z.string(), z.unknown()).optional(),
+  project_ref: z.string().min(1).max(255).nullable(),
 })
 
 export const zLaunchReceipt = z

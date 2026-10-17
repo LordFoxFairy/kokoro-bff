@@ -101,6 +101,7 @@ export async function readProjectExecutionBinding(database: PostgresBffDatabase,
     return null
   }
   if (
+    payload.launch.project_ref !== row.execution_project_ref ||
     payload.launch.run_id !== input.runId ||
     payload.launch.session_id !== input.sessionId ||
     payload.launch.request_id !== row.request_id ||

@@ -1,7 +1,7 @@
 import { isRecord } from "../json.js"
 import { parseSkillSourceSelection } from "./skill-source-selection.js"
 
-export const AGENT_DISPATCH_SCHEMA_VERSION = 2 as const
+export const AGENT_DISPATCH_SCHEMA_VERSION = 3 as const
 
 export type AgentLaunchBody = {
   request_id: string
@@ -10,6 +10,7 @@ export type AgentLaunchBody = {
   feature_key: "chat"
   message_id: string
   content: string
+  project_ref: string | null
   selected_skill_source_refs: string[]
   requested_model_label?: string
   trace: {
@@ -55,6 +56,7 @@ export type AgentDispatchCommand = AgentDispatchLease & {
   userMessageId: string
   assistantMessageId: string
   identityAssertionRef: string
+  executionProjectRef: string | null
   payload: AgentDispatchPayload
   status: "leased"
   attemptCount: number
@@ -155,6 +157,7 @@ export function buildAgentDispatchPayload(input: AgentDispatchInput, ids: { runI
       feature_key: "chat",
       message_id: ids.userMessageId,
       content: input.content,
+      project_ref: input.projectRef ?? null,
       selected_skill_source_refs: [...(input.selectedSkillSourceRefs ?? [])],
       ...(input.model === undefined ? {} : { requested_model_label: input.model }),
       trace,
@@ -170,6 +173,7 @@ export function bindAgentDispatchPayloadProjectScope(value: AgentDispatchPayload
     ...payload,
     launch: {
       ...payload.launch,
+      project_ref: canonicalProjectId,
       trace: canonicalProjectId === null ? trace : { ...trace, project_ref: canonicalProjectId },
     },
   }
@@ -192,6 +196,7 @@ export function parseAgentDispatchPayload(value: unknown): AgentDispatchPayload 
           "feature_key",
           "message_id",
           "content",
+          "project_ref",
           "selected_skill_source_refs",
           "requested_model_label",
           "trace",
@@ -200,6 +205,8 @@ export function parseAgentDispatchPayload(value: unknown): AgentDispatchPayload 
   )
     throw new Error("AGENT_DISPATCH_PAYLOAD_INVALID")
   if (!isRecord(launchValue.trace) || launchValue.feature_key !== "chat") throw new Error("AGENT_DISPATCH_PAYLOAD_INVALID")
+  const executionProject = launchValue.project_ref
+  if (executionProject !== null && (typeof executionProject !== "string" || !/^[^\s\x00-\x1f\x7f]{1,255}$/u.test(executionProject))) throw new Error("AGENT_DISPATCH_PAYLOAD_INVALID")
   const traceValue = launchValue.trace
   if (Object.keys(traceValue).some((key) => !["source", "project_ref", "agent", "thinking", "mcp_servers"].includes(key)))
     throw new Error("AGENT_DISPATCH_PAYLOAD_INVALID")
@@ -221,6 +228,7 @@ export function parseAgentDispatchPayload(value: unknown): AgentDispatchPayload 
       feature_key: "chat",
       message_id: requiredString(launchValue.message_id, "AGENT_DISPATCH_PAYLOAD_INVALID"),
       content: requiredString(launchValue.content, "AGENT_DISPATCH_PAYLOAD_INVALID"),
+      project_ref: executionProject,
       selected_skill_source_refs: selectedSkillSourceRefs,
       ...(requestedModel === undefined ? {} : { requested_model_label: requestedModel }),
       trace: {

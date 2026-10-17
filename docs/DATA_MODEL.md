@@ -1,3 +1,7 @@
+## Chat outbox payload schema3（2026-10-17）
+
+project_ref为Launch必需nullable字段，与execution_project_ref独立列相同；reader/claim/delivery交叉校验。不用trace或当前项目反写历史消息。未引入第二绑定表、额外主键或普通库迁移，本轮fresh隔离schema验收。
+
 ## 项目执行 internal v1 接线（2026-10-17，候选）
 
 沿已批准BFF owner事实，同进程仅POST /internal/v1/project-execution-bindings/verify；IAM专用受限文件凭据每次重读，固定caller/surface/tenant，禁止Web凭据fallback。请求平铺tenant/actor/subject/Run/session/assertion/project_ref nullable/selection_digest；成功data仅原project_ref、ordered selected_skill_source_refs及digest。body闭集8KiB；HTTP3秒、PG2秒，checkout迟到归还且在途取消销毁精确连接。无新表/服务、无IAM回调或allow缓存。runtime Zod schema为唯一code-first源，正规生成只读internal OpenAPI1.0.0；public146原字节不变。正常配置/库未激活，不冒ADR035许可barrier或完整整链。

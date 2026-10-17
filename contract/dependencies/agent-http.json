@@ -3,18 +3,18 @@
   "status": "generated",
   "owner": {
     "repository_path": "apps/kokoro-agent",
-    "repository_commit": "7ed07f987e50ef1c1a8188ba12aa9c23ab0d03d1",
-    "contract_version": "6.0.0",
+    "repository_commit": "e8fbd8f0e75534472ecef33f82b192ee6abb3414",
+    "contract_version": "7.0.0",
     "contract_path": "contract/openapi/v1/openapi.json",
-    "contract_sha256": "e4d30178f2330744b374788abf7e6d23bbf8d7841dcd01537063c705dc18a8db",
+    "contract_sha256": "ed0f5fc400f3307a4c50213a39859f2d5aacf8b4eecd11c1e50f53032d0fffd3",
     "provenance_path": "contract/provenance.json",
-    "provenance_sha256": "c636fdbe1f9b6a873f85bb4d74ef9a360d90cafa2f8df4c6ed2b1522f61df715"
+    "provenance_sha256": "e87d077af7729317f8e20ad8423d6c96ac14ad46f002f410274401486a8bf8ec"
   },
   "generator": {
     "package": "@hey-api/openapi-ts",
     "version": "0.99.0",
     "config_path": "openapi-ts.agent.config.ts",
-    "config_sha256": "b518e5756333ea77fc66dee4083645a0a601dcc77fab60f830e6fe2594652a2e"
+    "config_sha256": "fd9f06c35e8cc442fff2aa3221afcdfcd8448caaac26add29b6706bdba7276c0"
   },
   "runtime": {
     "node": "22.22.2",
@@ -77,12 +77,12 @@
     },
     {
       "path": "failure-profile.gen.ts",
-      "source_sha256": "e4d30178f2330744b374788abf7e6d23bbf8d7841dcd01537063c705dc18a8db",
+      "source_sha256": "ed0f5fc400f3307a4c50213a39859f2d5aacf8b4eecd11c1e50f53032d0fffd3",
       "sha256": "7109099419791e05c418f217c733abb4c7aa64c76165587550c96b8da7506454"
     },
     {
       "path": "process-profile.gen.ts",
-      "source_sha256": "e4d30178f2330744b374788abf7e6d23bbf8d7841dcd01537063c705dc18a8db",
+      "source_sha256": "ed0f5fc400f3307a4c50213a39859f2d5aacf8b4eecd11c1e50f53032d0fffd3",
       "sha256": "3515c8cd25a1b6ed489bf7ec847b2b3ade7b224617b9d2cf69f4aa55ea7c6493"
     },
     {
@@ -91,11 +91,11 @@
     },
     {
       "path": "types.gen.ts",
-      "sha256": "4008addc05a29fc091b97d9adeb833b2211a388fdcd18022f8f72a451837792b"
+      "sha256": "544b53c82e08f558bbf64968f831dccc37eb9a0e5a1b05ebed92c661c33d388c"
     },
     {
       "path": "zod.gen.ts",
-      "sha256": "0e417702048a42398c73240bf83b8f07264dc1331febca92cba5fdeb80a7ce10"
+      "sha256": "b47d10ab7ea3daae47b995f67ea5da32a2681a71545f800872da88b91f530710"
     }
   ]
 }

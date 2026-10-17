@@ -21,6 +21,7 @@ export function buildScheduledAgentLaunch(input: {
       feature_key: "chat",
       message_id: userMessageId,
       content: input.content,
+      project_ref: null,
       selected_skill_source_refs: [],
       trace: {
         source: "kokoro-bff-scheduler",

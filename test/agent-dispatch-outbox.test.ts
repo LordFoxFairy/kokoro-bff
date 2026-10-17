@@ -80,8 +80,9 @@ function command(attemptCount = 1, suffix = "fixture", leaseRemainingMs = 30_000
     userMessageId: "message_user_fixture",
     assistantMessageId: "message_assistant_fixture",
     identityAssertionRef: "bff:fixture",
+    executionProjectRef: null,
     payload: {
-      schema_version: 2,
+      schema_version: 3,
       launch: {
         request_id: "request_fixture",
         run_id: "run_fixture",
@@ -89,6 +90,7 @@ function command(attemptCount = 1, suffix = "fixture", leaseRemainingMs = 30_000
         feature_key: "chat",
         message_id: "message_user_fixture",
         content: "hello",
+        project_ref: null,
         selected_skill_source_refs: [],
         trace: { source: "kokoro-bff" },
       },
@@ -341,7 +343,7 @@ describe("Agent dispatch HTTP classification", () => {
   })
 })
 
-it("freezes ordered Skill selection in v2 payload and digest, rejecting old durable payloads", async () => {
+it("freezes ordered Skill selection in v3 payload and digest, rejecting old durable payloads", async () => {
   const { bindAgentDispatchPayloadProjectScope, buildAgentDispatchPayload, parseAgentDispatchPayload, agentDispatchRequestMaterial } =
     await import("../dist/domain/chat/agent-dispatch.js")
   const input = {
@@ -355,8 +357,10 @@ it("freezes ordered Skill selection in v2 payload and digest, rejecting old dura
   }
   const ids = { runId: "run", userMessageId: "message" }
   const empty = buildAgentDispatchPayload(input, ids)
-  assert.equal(empty.schema_version, 2)
+  assert.equal(empty.schema_version, 3)
   assert.deepEqual(empty.launch.selected_skill_source_refs, [])
+  assert.equal(empty.launch.project_ref, null)
+  assert.equal(bindAgentDispatchPayloadProjectScope(empty, "project-canonical").launch.project_ref, "project-canonical")
   assert.notEqual(agentDispatchRequestMaterial(input), agentDispatchRequestMaterial({ ...input, selectedSkillSourceRefs: [] }))
   assert.equal(bindAgentDispatchPayloadProjectScope(empty, "project-canonical").launch.trace.project_ref, "project-canonical")
   assert.equal(
@@ -371,7 +375,7 @@ it("freezes ordered Skill selection in v2 payload and digest, rejecting old dura
   const payload = buildAgentDispatchPayload(selected, ids)
   assert.deepEqual(parseAgentDispatchPayload(JSON.parse(JSON.stringify(payload))), payload)
   assert.notEqual(agentDispatchRequestMaterial(selected), agentDispatchRequestMaterial({ ...selected, selectedSkillSourceRefs: ["skill:a", "skill:b"] }))
-  assert.throws(() => parseAgentDispatchPayload({ ...payload, schema_version: 1 }), /PAYLOAD_INVALID/)
+  for (const oldVersion of [1, 2]) assert.throws(() => parseAgentDispatchPayload({ ...payload, schema_version: oldVersion }), /PAYLOAD_INVALID/)
   for (const bad of [undefined, ["skill:a\n"], ["skill:a", "skill:a"]]) {
     assert.throws(() => parseAgentDispatchPayload({ ...payload, launch: { ...payload.launch, selected_skill_source_refs: bad } }), /PAYLOAD_INVALID/)
   }

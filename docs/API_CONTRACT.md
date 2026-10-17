@@ -1,3 +1,7 @@
+## Agent HTTP7消费（2026-10-17）
+
+Agent Launch增加必需nullable project_ref，固定e8fbd8f owner OpenAPI7/provenance；generated client由原脚本产生。Chat正式字段来自锁内canonical项目，Scheduler传null；不增加Browser公共字段，公开16/146 operations不变。项目binding独立内部合同1.0.0不变。
+
 ## 项目执行 internal v1 接线（2026-10-17，候选）
 
 沿已批准BFF owner事实，同进程仅POST /internal/v1/project-execution-bindings/verify；IAM专用受限文件凭据每次重读，固定caller/surface/tenant，禁止Web凭据fallback。请求平铺tenant/actor/subject/Run/session/assertion/project_ref nullable/selection_digest；成功data仅原project_ref、ordered selected_skill_source_refs及digest。body闭集8KiB；HTTP3秒、PG2秒，checkout迟到归还且在途取消销毁精确连接。无新表/服务、无IAM回调或allow缓存。runtime Zod schema为唯一code-first源，正规生成只读internal OpenAPI1.0.0；public146原字节不变。正常配置/库未激活，不冒ADR035许可barrier或完整整链。

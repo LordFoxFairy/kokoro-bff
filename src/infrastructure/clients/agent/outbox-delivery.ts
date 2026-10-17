@@ -50,7 +50,9 @@ export class AgentOutboxDelivery implements AgentDispatchDeliveryPort {
       "idempotency-key": command.idempotencyKey,
     })
     try {
-      const launch: CreateRunData["body"] = command.payload.launch
+      if (command.payload.launch.project_ref !== command.executionProjectRef) throw new Error("AGENT_DISPATCH_LINEAGE_MISMATCH")
+      const frozen = { ...command.payload.launch, project_ref: command.executionProjectRef }
+      const launch: CreateRunData["body"] = frozen
       const upstream = await proxyUpstream(
         this.config,
         baseUrl,

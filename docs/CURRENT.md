@@ -1,3 +1,7 @@
+## 项目可信执行当前接线（2026-10-17，本地候选）
+
+内部binding foundation d623f76已固定发行，Agent e8fbd8f HTTP7/proof2已固定；本片正式消费并贯穿Chat project_ref/schema3，Scheduler为null。定向wire/outbox/Scheduler40 PASS，当前真实隔离chat-facts32 PASS/0 SKIP（36.83秒）；Agent真实HTTP/Run/lease三文件159 PASS/0 SKIP（24.57秒），自有临时库清理、Redis14起终0且未flush。IAM/Platform正在消费闭环，尚未证明真实全链。正常环境/模型/Tool/Billing/远端和Root gitlink继续暂停。
+
 ## 项目binding internal1候选已接线（2026-10-17）
 
 在原owner基础上，同进程新增精确internal POST；IAM专用文件凭据fresh读、tenant绑定、无Web fallback。code-first Zod生成internal1.0.0，public146原字节保持。HTTP3秒/PG2秒，池等待、迟到checkout、在途abort/socket失败均清理精确连接；typed reader不再只有前后signal检查。原Scheduler callback保持。尚未配置正常IAM/BFF或激活执行。

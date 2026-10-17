@@ -1961,7 +1961,7 @@ integrationTest("creates a Web-local first Conversation with its turn and Agent 
       tenant,
       selectedId,
     ])
-    assert.equal(persistedSelection.rows[0].payload.schema_version, 2)
+    assert.equal(persistedSelection.rows[0].payload.schema_version, 3)
     assert.deepEqual(persistedSelection.rows[0].payload.launch.selected_skill_source_refs, selectedBody.selected_skill_source_refs)
     const explicitEmptyReplay = await send("first-turn", titleSource, conversationId, { selected_skill_source_refs: [] })
     assert.equal(explicitEmptyReplay.status, 409)
@@ -1985,7 +1985,7 @@ integrationTest("creates a Web-local first Conversation with its turn and Agent 
         identityAssertionRef: "bff:rollback",
         content: "Rollback this first turn",
         payload: {
-          schema_version: 2,
+          schema_version: 3,
           launch: {
             request_id: "rollback-request",
             run_id: rollbackRunId,
@@ -1993,6 +1993,7 @@ integrationTest("creates a Web-local first Conversation with its turn and Agent 
             feature_key: "chat",
             message_id: receipt.user_message_id,
             content: "Rollback this first turn",
+            project_ref: null,
             selected_skill_source_refs: [],
             trace: { source: "kokoro-bff" },
           },

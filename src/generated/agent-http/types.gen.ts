@@ -36,6 +36,7 @@ export type LaunchRequest = {
   trace?: {
     [key: string]: unknown
   }
+  project_ref: string | null
 }
 
 export type LaunchReceipt = {
