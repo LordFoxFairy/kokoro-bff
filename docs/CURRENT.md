@@ -1,3 +1,11 @@
+## SKILLS-ADMIN：discard 当前准入与重放负控（2026-10-16；测试增量）
+
+基线 `d176e3d`，仅扩现有 `test/skill-admin-http.test.mjs` 的 machine-credential 拒绝用例，无生产源码、公开契约、Schema、依赖或凭据变化。保留原 root GET/POST，加入 discard 和 admitted tenant 错配；session/tenant 拒绝均零 owner 调用。action 用例先成功 discard，再撤销 fresh action，以相同 key/body/CAS 再请求，得到 403 且 owner 调用仍只有首次一次，确认服务身份与已成功命令都不替代当前人类 action。授权成功路径另核 native discard operation、可信 tenant/subject 与原请求成员。
+
+主方 Node22：focused 文件 **15 PASS / 0 SKIP**；正常完整默认入口以相同 manifest 文件清单、显式 test-concurrency=2 执行，**1257 PASS / 0 FAIL / 3 既有资源 SKIP / 57.77s**，lint/typecheck/format:check/build 均 exit 0。未新增 suite，只增加一个 tenant 参数风险；未重新生成/发行 contract 或宣称实际 IAM 撤权、真实 owner 数据事务及正常 Admin 页面全部通过。该 HTTP 为真实 loopback listener，session/action/owner 为受控替身；真实事务由 Platform 独占 PostgreSQL receipt 文件 47 PASS 独立证明，各层证据不互相冒充。
+
+本片无正常服务重启、账号/角色/积分/模型请求或共享库写入。后台新样本的终态删除仍待单独确认；远端 CI/push/PR/merge 与 Root gitlink 不变。
+
 ## AUTH-P3：BFF 全 Platform 用途移除内部机器 OAuth（源码候选，2026-10-16）
 
 沿基线 96089d8，本仓固定 Platform `9be81465d487be2499a68a76664c14b73c16024b` 的独立 auth profile 1.0.0、provenance 与 digest；当前 Buf module 与唯一 Connect vendor 一致。六用途 catalog/projection/skills_admin/mcp_personal/mcp_admin/custom_api_personal 都使用直接服务凭据；删除 Catalog/Skills Admin 四个 OAuth parser/token/cache source 及 retire。旧专属环境变量拒绝且无 alias，新路径见 `.env.local.example`。每次仍做 Product Session/fresh human action 检查；机器身份不替代权限，用户 Bearer 不传 owner。

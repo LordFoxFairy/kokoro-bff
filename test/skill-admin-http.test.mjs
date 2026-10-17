@@ -265,9 +265,10 @@ test("Admin creates one official draft without caller-chosen identity or CAS", a
 })
 
 test("machine credentials never replace the current session and fresh Skills admin action", async (t) => {
-  for (const denied of ["session", "action"])
+  for (const denied of ["session", "action", "tenant"])
     await t.test(denied, async () => {
       let ownerCalls = 0
+      let actionGranted = denied === "action"
       const actions = []
       const server = createBffServer(correctionConfig, {
         businessStore: null,
@@ -275,12 +276,12 @@ test("machine credentials never replace the current session and fresh Skills adm
           verify: async () =>
             denied === "session"
               ? { ok: false, status: 403, code: "session_forbidden" }
-              : { ok: true, identity: { namespace: "tenant", userId: "user" }, platformAdmin: true },
+              : { ok: true, identity: { namespace: denied === "tenant" ? "other-tenant" : "tenant", userId: "user" }, platformAdmin: true },
         },
         skillAuthorization: {
           check: async (input) => {
             actions.push(input.action)
-            return denied === "action" ? { ok: false, status: 403, code: "skill_permission_denied" } : { ok: true }
+            return denied === "action" && !actionGranted ? { ok: false, status: 403, code: "skill_permission_denied" } : { ok: true }
           },
         },
         skillAdminClient: {
@@ -288,30 +289,67 @@ test("machine credentials never replace the current session and fresh Skills adm
             ownerCalls++
             throw new Error("denied read reached owner")
           },
-          command: async () => {
+          command: async (operation, context, members) => {
             ownerCalls++
-            throw new Error("denied command reached owner")
+            assert.equal(actionGranted, true, "denied command reached owner")
+            assert.equal(operation, "discardAdminSkillDraft")
+            assert.equal(context.tenant, "tenant")
+            assert.equal(context.subject, "user")
+            assert.deepEqual(members, { skill_id: { value: "disposable-draft" }, expected_state_version: "1", reason: "Denied discard" })
+            return {
+              skill: create(wire.SkillProductRecordSchema, {
+                skillId: { value: "disposable-draft" },
+                sourceRef: { value: "skill:disposable-draft" },
+                seriesId: { value: "series" },
+                revision: 2n,
+                status: wire.SkillStatus.DISCARDED,
+                packagePhase: wire.SkillPackagePhase.NONE,
+                skillUpdatedAt: { seconds: 1n, nanos: 0 },
+                metadata: { displayName: "Disposable", summary: "", categoryKeys: { keys: [] } },
+                product: { publicationAudience: "owner", stateVersion: 2n },
+              }),
+              eventId: "discard-event",
+              replayed: false,
+            }
           },
         },
       })
       server.listen(0, "127.0.0.1")
       await once(server, "listening")
       try {
-        for (const method of ["GET", "POST"]) {
+        if (denied === "action") {
+          const first = await fetch(`http://127.0.0.1:${server.address().port}/v1/admin/skills/disposable-draft/discard`, {
+            method: "POST",
+            headers: correctionHeaders,
+            body: JSON.stringify({ expected_state_version: "1", reason: "Denied discard" }),
+          })
+          assert.equal(first.status, 200)
+          assert.equal((await first.json()).data.skill.status, "discarded")
+          actionGranted = false
+        }
+        for (const [method, path, body] of [
+          ["GET", "/v1/admin/skills"],
+          ["POST", "/v1/admin/skills", { metadata: { display_name: "Denied", summary: "", tags: [] } }],
+          ["POST", "/v1/admin/skills/disposable-draft/discard", { expected_state_version: "1", reason: "Denied discard" }],
+        ]) {
           const headers = { ...correctionHeaders }
           if (method === "GET") {
             delete headers["content-type"]
             delete headers["idempotency-key"]
           }
-          const response = await fetch(`http://127.0.0.1:${server.address().port}/v1/admin/skills`, {
+          const response = await fetch(`http://127.0.0.1:${server.address().port}${path}`, {
             method,
             headers,
-            ...(method === "GET" ? {} : { body: JSON.stringify({ metadata: { display_name: "Denied", summary: "", tags: [] } }) }),
+            ...(body === undefined ? {} : { body: JSON.stringify(body) }),
           })
           assert.equal(response.status, 403)
+          assert.equal(
+            (await response.json()).error.code,
+            denied === "session" ? "session_forbidden" : denied === "action" ? "skill_permission_denied" : "product_tenant_forbidden",
+          )
         }
-        assert.equal(ownerCalls, 0)
-        assert.deepEqual(actions, denied === "session" ? [] : ["admin_read", "admin_create_draft"])
+        assert.equal(ownerCalls, denied === "action" ? 1 : 0)
+        assert.deepEqual(actions, denied === "action" ? ["admin_discard_draft", "admin_read", "admin_create_draft", "admin_discard_draft"] : [])
       } finally {
         server.closeAllConnections()
         await new Promise((resolve) => server.close(resolve))
