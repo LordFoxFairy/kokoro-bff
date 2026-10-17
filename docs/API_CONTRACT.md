@@ -1,3 +1,9 @@
+## S4c 项目选择本地契约候选（2026-10-17，尚未发行）
+
+当前预激活Public15.1替换为单一Public16，路径仍/v1：移除旧PATCH /projects/{projectId}/skills/{skill}，增加GET/PUT /projects/{projectId}/skill-selection。表示为data.project_id与data.installation_ids；PUT closed body {installation_ids:[...]}，最多16个、唯一、精确installation ID，[]清空，必需原Idempotency-Key，响应no-store。身份只取受信tenant/subject与当前BFF项目；PUT在写前核正式Project安装，错误/不可用不部分保存。替换事实和完成receipt同事务，原key重放不恢复已被后续修改的旧默认。
+
+MessageCreateRequest字段名与Agent wire保持；只纠正省略继承项目默认、显式[]不继承。消息历史返回其已冻结selected_skill_source_refs。新消息选择快照与项目/Conversation移动冲突返回409，原意图可明确重试；已提交命令重放先取原receipt、不重新解析现默认。唯一OpenAPI已更新为Public16.0.0／146 operations，新增Message坏owner响应502，并以完整Public15.1父契约逆证保留未受影响字段；本地源码已接线，消费者固定版本与正常运行切换尚未完成。
+
 ## 项目安装 Public15.1（2026-10-17）
 
 新增六operation：POST/GET /v1/projects/{projectId}/skill-installations、GET/DELETE同集合/{installation_id}、PUT同ID/enabled、POST同ID/update。input/ACK/错误/Idempotency-Key/10秒预算沿个人安装，项目身份只来自已校验pathname与当前BFF项目事实；body不接project/tenant/subject，响应沿原安装组件。write每次fresh当前Skill action，项目资格及身份在owner调用前后复核；跨tenant/user/project不转owner。正式Project response project_ref严格回绑canonical ID，拒个人ACK/错误project/未知wire，不能以URL或旧receipt代替权限。

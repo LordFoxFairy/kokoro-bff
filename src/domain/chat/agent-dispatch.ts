@@ -132,7 +132,7 @@ export function agentDispatchRequestMaterial(input: AgentDispatchInput): string 
     input.model ?? null,
     input.agent ?? null,
     input.thinking ?? null,
-    input.selectedSkillSourceRefs ?? [],
+    input.selectedSkillSourceRefs ?? null,
     input.mcpServers ?? null,
   ])
 }

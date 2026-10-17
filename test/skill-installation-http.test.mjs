@@ -778,6 +778,10 @@ test("update body stalled after a partial chunk expires the original request bud
 
 test("Project installation six routes use the current owned project, distinct command binding and exit rechecks", async () => {
   const { createBffServer } = await import("../dist/bootstrap/server.js")
+  let selection = [],
+    writes = 0,
+    commits = 0,
+    admitted = true
   const calls = []
   let visible = true
   let wrongResponse = null
@@ -808,23 +812,54 @@ test("Project installation six routes use the current owned project, distinct co
       },
     ]),
   )
-  const server = createBffServer(config, {
-    sessionAdmission: { verify: async () => ({ ok: true, identity: { namespace: "tenant", userId: "user-session" } }) },
-    skillAuthorization: { check: async () => ({ ok: true }) },
-    installationClient: client,
-    businessStore: {
-      ready: async () => {},
-      services: {
-        projects: {
-          find: async (scope, ref) => {
-            assert.deepEqual(scope, { tenantId: "tenant", subjectId: "user-session" })
-            return visible && ref === "project-alias" ? project : null
+  const idle = { start() {}, async stop() {} }
+  const server = createBffServer(
+    { ...config, agentEnabled: true, upstreams: { ...config.upstreams, agents: "http://127.0.0.1:9" } },
+    {
+      agentDispatchDispatcher: idle,
+      agentCancellationDispatcher: idle,
+      agUiProjector: idle,
+      scheduledTaskDispatcher: idle,
+      scheduledAgentDispatcher: idle,
+      scheduledAgentTerminalConsumer: idle,
+      sessionAdmission: {
+        verify: async () =>
+          admitted
+            ? { ok: true, identity: { namespace: "tenant", userId: "user-session" } }
+            : { ok: false, status: 403, code: "permission_denied", message: "Denied" },
+      },
+      skillAuthorization: { check: async () => ({ ok: true }) },
+      installationClient: client,
+      businessStore: {
+        ready: async () => {},
+        getReceipt: async () => null,
+        services: {
+          chat: {},
+          chatTurns: {
+            submit: async (_input, resolve) => {
+              await resolve(project.id, ["i"])
+              commits++
+              throw Error("unexpected commit")
+            },
+          },
+          projects: {
+            skillSelection: async () => ({ project_id: project.id, installation_ids: [...selection] }),
+            replaceSkillSelection: async (_scope, id, ids) => {
+              assert.equal(id, project.id)
+              writes++
+              selection = [...ids]
+              return { kind: "replaced", receipt: { data: { project_id: id, installation_ids: [...ids] } } }
+            },
+            find: async (scope, ref) => {
+              assert.deepEqual(scope, { tenantId: "tenant", subjectId: "user-session" })
+              return visible && ["project-alias", project.id].includes(ref) ? project : null
+            },
           },
         },
       },
+      readiness: async () => {},
     },
-    readiness: async () => {},
-  })
+  )
   server.listen(0, "127.0.0.1")
   await once(server, "listening")
   const base = `http://127.0.0.1:${server.address().port}/v1/projects/project-alias/skill-installations`
@@ -870,6 +905,75 @@ test("Project installation six routes use the current owned project, distinct co
       assert.equal((await result.json()).error.code, "skill_installation_response_invalid")
     }
     wrongResponse = null
+    const selectionUrl = base.replace("skill-installations", "skill-selection")
+    const select = async (body) =>
+      fetch(selectionUrl, {
+        method: "PUT",
+        headers: { ...headers, "content-type": "application/json", "idempotency-key": "selection" },
+        body: JSON.stringify(body),
+      })
+    assert.deepEqual((await (await fetch(selectionUrl, { headers })).json()).data, { project_id: project.id, installation_ids: [] })
+    assert.equal((await select({ installation_ids: ["i"] })).status, 200)
+    assert.deepEqual((await (await fetch(selectionUrl, { headers })).json()).data.installation_ids, ["i"])
+    for (const invalid of [{ installation_ids: ["i", "i"] }, { installation_ids: ["i"], extra: true }, { installation_ids: ["bad\n"] }]) {
+      const beforeWrites = writes,
+        beforeCalls = calls.length
+      assert.equal((await select(invalid)).status, 400)
+      assert.equal(writes, beforeWrites)
+      assert.equal(calls.length, beforeCalls)
+    }
+    for (const patch of [{ installationId: { value: "other" } }, { enabled: false }]) {
+      wrongResponse = (_method, view) => ({ projectRef: project.id, installation: { ...view, ...patch } })
+      const beforeWrites = writes
+      assert.equal((await select({ installation_ids: ["i"] })).status, patch.enabled === false ? 412 : 502)
+      assert.equal(writes, beforeWrites)
+    }
+    wrongResponse = null
+    const originalGet = client.get
+    const originalWrites = writes
+    client.get = async (input) => {
+      const result = await originalGet(input)
+      admitted = false
+      return result
+    }
+    assert.equal((await select({ installation_ids: ["i"] })).status, 403)
+    assert.equal(writes, originalWrites)
+    admitted = true
+    client.get = originalGet
+    client.get = async () => {
+      throw Error("skill_installation_response_invalid")
+    }
+    const badMessage = await fetch(base.replace("/projects/project-alias/skill-installations", "/sessions/conv_x/messages"), {
+      method: "POST",
+      headers: { ...headers, "content-type": "application/json", "idempotency-key": "bad-owner" },
+      body: '{"content":"hello"}',
+    })
+    assert.equal(badMessage.status, 502, JSON.stringify(await badMessage.clone().json()))
+    assert.equal((await badMessage.json()).error.code, "skill_installation_response_invalid")
+    assert.equal(commits, 0)
+    client.get = originalGet
+    client.get = async (input) => {
+      const result = await originalGet(input)
+      visible = false
+      return result
+    }
+    const beforeWrites = writes
+    assert.equal((await select({ installation_ids: ["i"] })).status, 404)
+    assert.equal(writes, beforeWrites)
+    visible = true
+    client.get = originalGet
+    assert.equal((await select({ installation_ids: [] })).status, 200)
+    assert.deepEqual(selection, [])
+    assert.equal(
+      (
+        await fetch(base.replace("skill-installations", "skills/skill-builder"), {
+          method: "PATCH",
+          headers: { ...headers, "content-type": "application/json", "idempotency-key": "retired" },
+          body: '{"enabled":false}',
+        })
+      ).status,
+      404,
+    )
     const command = calls[0].input
     assert.notEqual(command.digest, installSkillDigest("tenant", "user-session", "skill:a"))
     const before = calls.length

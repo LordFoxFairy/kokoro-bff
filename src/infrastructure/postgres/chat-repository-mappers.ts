@@ -1,3 +1,4 @@
+import { parseSkillSourceSelection } from "../../domain/chat/skill-source-selection.js"
 import type { MoveConversationReceipt, MoveConversationResult } from "../../application/ports/chat-repository.js"
 import type { Conversation } from "../../domain/chat/conversation.js"
 import type { AgentFailureCode, Message, MessageRole, MessageStatus } from "../../domain/chat/message.js"
@@ -22,6 +23,7 @@ export type MessageRow = {
   run_id: string | null
   role: MessageRole
   content: string
+  selected_skill_source_refs: unknown
   status: MessageStatus
   agent_failure_code: AgentFailureCode | null
   agent_failure_retryable: boolean | null
@@ -112,6 +114,8 @@ export function conversationFromRow(row: ConversationRow): Conversation {
 }
 
 export function messageFromRow(row: MessageRow): Message {
+  const selectedSkillSourceRefs = parseSkillSourceSelection(row.selected_skill_source_refs)
+  if (selectedSkillSourceRefs === null) throw new Error("CHAT_SKILL_SELECTION_INVALID")
   const sequence = String(row.message_seq)
   if (!/^[1-9][0-9]*$/u.test(sequence)) throw new Error("CHAT_MESSAGE_SEQUENCE_INVALID")
   if ((row.agent_failure_code === null) !== (row.agent_failure_retryable === null)) throw new Error("CHAT_MESSAGE_FAILURE_INVALID")
@@ -122,6 +126,7 @@ export function messageFromRow(row: MessageRow): Message {
     runId: row.run_id,
     role: row.role,
     content: row.content,
+    selectedSkillSourceRefs,
     status: row.status,
     failure: row.agent_failure_code === null ? null : { source: "agent", code: row.agent_failure_code, retryable: row.agent_failure_retryable as boolean },
     messageSeq: sequence,

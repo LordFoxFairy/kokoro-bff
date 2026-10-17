@@ -338,7 +338,7 @@ test("outer receipt release/reclaim cannot erase a terminal upload checkpoint", 
 
 test("public project resource contract is a bounded single file with explicit asset information", async () => {
   const source = await readFile(new URL("../contract/openapi/v1/openapi.yaml", import.meta.url), "utf8")
-  const operation = source.split("  /v1/projects/{projectId}/resources:")[1].split("  /v1/projects/{projectId}/skills/")[0]
+  const operation = source.split("  /v1/projects/{projectId}/resources:")[1].split("  /v1/projects/{projectId}/skill-selection:")[0]
   assert.match(operation, /minItems: 1/)
   assert.match(operation, /maxItems: 1/)
   assert.match(operation, /1048576/)

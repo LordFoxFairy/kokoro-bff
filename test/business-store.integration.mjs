@@ -1,3 +1,4 @@
+import { ProjectService } from "../dist/application/project-service.js"
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { createServer } from "node:http"
@@ -123,7 +124,7 @@ integrationTest("keeps Project and ScheduledTask facts private to the trusted su
   let bff
   try {
     await pool.query(
-      "DROP TABLE IF EXISTS bff_scheduled_agent_source_event, bff_scheduled_agent_dispatch, bff_scheduled_agent_scope, bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_scheduled_task_outbox, bff_scheduled_task, bff_project_task, bff_idempotency_receipt, bff_project_instruction_revision, bff_project_skill, bff_project CASCADE",
+      "DROP TABLE IF EXISTS bff_scheduled_agent_source_event, bff_scheduled_agent_dispatch, bff_scheduled_agent_scope, bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_scheduled_task_outbox, bff_scheduled_task, bff_project_task, bff_idempotency_receipt, bff_project_instruction_revision, bff_project CASCADE",
     )
     await pool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await redis.connect()
@@ -264,7 +265,7 @@ integrationTest("persists BFF facts, registers Scheduler, and replays Agent disp
   let bff
   try {
     await schemaPool.query(
-      "DROP TABLE IF EXISTS bff_scheduled_agent_source_event, bff_scheduled_agent_dispatch, bff_scheduled_agent_scope, bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_scheduled_task_outbox, bff_scheduled_task, bff_project_task, bff_idempotency_receipt, bff_project_instruction_revision, bff_project_skill, bff_project CASCADE",
+      "DROP TABLE IF EXISTS bff_scheduled_agent_source_event, bff_scheduled_agent_dispatch, bff_scheduled_agent_scope, bff_agui_cursor_tombstone, bff_agui_event, bff_agui_source_event, bff_conversation_artifact, bff_agui_stream, bff_agent_cancellation_outbox, bff_agent_dispatch_outbox, bff_share, bff_message, bff_conversation, bff_scheduled_task_outbox, bff_scheduled_task, bff_project_task, bff_idempotency_receipt, bff_project_instruction_revision, bff_project CASCADE",
     )
     await schemaPool.query(await readFile(new URL("../database/schema.sql", import.meta.url), "utf8"))
     await redis.connect()
@@ -1062,7 +1063,7 @@ integrationTest("R237 HTTP Project active and denied ID-slug matrix leaves compl
       for (const ref of [hidden.id, hidden.slug]) {
         for (const suffix of ["", "/instruction-revisions", "/tasks"]) await f.deny(() => f.request(`projects/${ref}${suffix}`), 404, "project_not_found")
         await f.deny(() => f.request(`projects/${ref}`, "PATCH", { instruction: "Denied" }), 404, "project_not_found")
-        await f.deny(() => f.request(`projects/${ref}/skills/r237`, "PATCH", { enabled: true }), 404, "project_not_found")
+        await f.deny(() => f.request(`projects/${ref}/skill-selection`, "PUT", { installation_ids: [] }), 404, "project_not_found")
         await f.deny(() => f.request("scheduled-tasks", "POST", r237Schedule(ref)), 404, "project_not_found")
         await f.deny(() => f.request(`projects/${ref}/scheduled-tasks`, "POST", r237Schedule(ref)), 404, "project_not_found")
       }
@@ -1074,7 +1075,7 @@ integrationTest("R237 HTTP Project active and denied ID-slug matrix leaves compl
       for (const ref of [active.id, active.slug]) {
         assert.equal((await f.request(`projects/${ref}`)).status, 200)
         assert.equal((await f.request(`projects/${ref}`, "PATCH", { instruction: `Allowed ${ref}` })).status, 200)
-        assert.equal((await f.request(`projects/${ref}/skills/r237`, "PATCH", { enabled: true })).status, 200)
+        assert.equal((await f.request(`projects/${ref}/skill-selection`, "PUT", { installation_ids: [] })).status, 200)
         assert.equal((await f.request(`projects/${ref}/instruction-revisions`)).status, 200)
         assert.equal((await f.request(`projects/${ref}/tasks`)).status, 200)
         assert.equal((await f.request("scheduled-tasks", "POST", r237Schedule(ref))).status, 200)
@@ -1198,7 +1199,9 @@ integrationTest("R237 real PG inner Project and Conversation predicates are not 
     const before = await f.facts()
     for (const ref of [project.id, project.slug]) {
       assert.equal(await repository.updateProjectInstruction(f.scope, ref, "Denied"), null)
-      assert.equal(await repository.setProjectSkill(f.scope, ref, "r237", true), false)
+      assert.deepEqual(await new ProjectService(repository).replaceSkillSelection(f.scope, ref, ["installation_r237"], "r237", new AbortController().signal), {
+        kind: "not_found",
+      })
     }
     assert.deepEqual(await f.facts(), before)
   })
@@ -1382,7 +1385,14 @@ integrationTest("R237 real Project row-lock races revalidate active before Messa
           pending = f.request(`sessions/${id}/messages`, "POST", { content: "Must lose to tombstone", project_ref: project.slug })
         else if (operation.startsWith("move"))
           pending = f.request(`sessions/${id}/move`, "POST", { target_project_id: operation === "move-target" ? project.id : null })
-        else if (operation === "skill") pending = new PostgresProjectRepository({ pool: f.pool }).setProjectSkill(f.scope, project.id, "r237", true)
+        else if (operation === "skill")
+          pending = new ProjectService(new PostgresProjectRepository({ pool: f.pool })).replaceSkillSelection(
+            f.scope,
+            project.id,
+            ["installation_r237"],
+            "r237",
+            new AbortController().signal,
+          )
         else
           pending = new PostgresScheduledTaskRepository({ pool: f.pool }).createScheduledTask(
             f.scope,
@@ -1415,7 +1425,7 @@ integrationTest("R237 real Project row-lock races revalidate active before Messa
         await blocker.query("COMMIT")
         const result = await pending
         if (operation === "scheduled-task") assert.match(result.error?.message ?? "accepted", /PROJECT_NOT_FOUND/u)
-        else if (operation === "skill") assert.equal(result.value, false)
+        else if (operation === "skill") assert.deepEqual(result.value, { kind: "not_found" })
         else {
           assert.equal(result.value?.status, 404, JSON.stringify(result.value ?? result.error))
           assert.equal(result.value.body.error.code, "session_not_found")

@@ -307,11 +307,6 @@
       "operation_id": "uploadProjectResources"
     },
     {
-      "method": "PATCH",
-      "path": "/v1/projects/{projectId}/skills/{skill}",
-      "operation_id": "updateProjectSkill"
-    },
-    {
       "method": "POST",
       "path": "/v1/projects/{projectId}/scheduled-tasks",
       "operation_id": "createProjectScheduledTask"
@@ -725,6 +720,16 @@
       "method": "POST",
       "path": "/v1/projects/{projectId}/skill-installations/{installation_id}/update",
       "operation_id": "updateProjectSkillInstallation"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/{projectId}/skill-selection",
+      "operation_id": "getProjectSkillSelection"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/projects/{projectId}/skill-selection",
+      "operation_id": "replaceProjectSkillSelection"
     }
   ]
 }

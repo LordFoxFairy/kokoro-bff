@@ -1,3 +1,4 @@
+import { projectSkillSelectionRoute } from "../http/routes/project-skill-selection.js"
 import { Code, ConnectError } from "@connectrpc/connect"
 import { mcpPersonalOperation, mcpPersonalRoute } from "../http/routes/mcp-personal.js"
 import { mcpProviderAdminOperation, mcpProviderAdminRoute } from "../http/routes/mcp-provider-admin.js"
@@ -8,14 +9,12 @@ import { skillSpecificationEnabledRoute } from "../http/routes/skill-specificati
 import { exactSkillDownloadRoute, skillDownloadHandleRoute } from "../http/routes/skill-download.js"
 import { startMcpRequestBudget, mcpRequestRemaining } from "../http/mcp-request-budget.js"
 import { skillGithubImportRoute, skillGithubPreviewRoute } from "../http/routes/skill-github-import.js"
-import { assertSkillWireKnown } from "../infrastructure/clients/platform/skill-product-response.js"
-import { projectSkillPackageInspectionResponse } from "../infrastructure/clients/platform/skill-package-inspection-response.js"
 import { skillAiImportRoute } from "../http/routes/skill-ai-import.js"
 import { skillShareRoute } from "../http/routes/skill-share.js"
 import { skillUsageRoute } from "../http/routes/skill-usage.js"
 import { skillCoverRoute } from "../http/routes/skill-cover.js"
 import { publishedSkillPackageInspectionRoute } from "../http/routes/skill-download.js"
-import { runSkillRoute, startSkillRequestBudget, skillRequestRemaining, skillDraftsRoute } from "../http/routes/skill-drafts.js"
+import { startSkillRequestBudget, skillRequestRemaining, skillDraftsRoute } from "../http/routes/skill-drafts.js"
 import { skillAdminRoute } from "../http/routes/skill-admin.js"
 import { personalizationRoute } from "../http/routes/personalization.js"
 import { projectRenameRoute } from "../http/routes/project-rename.js"
@@ -253,11 +252,12 @@ async function handle(
     return
   }
   const isConnectorList = !browserPrivateMcp && isConnectorListRequest(businessPath, request.method ?? "GET")
-  const isProjectSkillAssociation = businessPath.length === 4 && businessPath[0] === "projects" && businessPath[2] === "skills" && request.method === "PATCH"
+  const isProjectSkillSelectionPath =
+    composition.routeHandler === undefined && businessPath.length === 3 && businessPath[0] === "projects" && businessPath[2] === "skill-selection"
   const isProjectInstallationPath = businessPath[0] === "projects" && businessPath[2] === "skill-installations"
   const hasSkillsBudget =
     isProjectInstallationPath ||
-    isProjectSkillAssociation ||
+    isProjectSkillSelectionPath ||
     ["skills", "skill-installations", "skill-shares"].includes(businessPath[0] ?? "") ||
     (businessPath[0] === "admin" && businessPath[1] === "skills") ||
     (businessPath[0] === "self" && businessPath[1] === "skills")
@@ -477,6 +477,26 @@ async function handle(
     return
   }
   const context = admission.context
+  const currentProjectAccess = async (projectRef: string, signal: AbortSignal): Promise<string> => {
+    const fresh = await authorizeUserRequest(request, config, composition.sessionAdmission, id, signal)
+    if (!fresh.ok) throw new ConnectError("Project admission failed", fresh.status >= 500 ? Code.Unavailable : Code.PermissionDenied)
+    if (fresh.context.identity.namespace !== context.identity.namespace || fresh.context.identity.userId !== context.identity.userId)
+      throw new ConnectError("Project not found", Code.NotFound)
+    const action = skillActionForRequest(request.method ?? "GET", businessPath)
+    if (action !== null) {
+      const checked = await authorizeSkillAction(composition.skillAuthorization, fresh, action, signal)
+      if (!checked.ok) throw new ConnectError("Project Skill action denied", checked.status >= 500 ? Code.Unavailable : Code.PermissionDenied)
+    }
+    signal.throwIfAborted()
+    if (!composition.businessStore) throw new ConnectError("Project owner unavailable", Code.Unavailable)
+    const project = await composition.businessStore.services.projects.find(
+      { tenantId: context.identity.namespace, subjectId: context.identity.userId },
+      projectRef,
+    )
+    signal.throwIfAborted()
+    if (!project) throw new ConnectError("Project not found", Code.NotFound)
+    return project.id
+  }
   if (isMcpPersonalOperation) {
     await mcpPersonalRoute(request, response, config, composition, admission, businessPath)
     return
@@ -574,28 +594,11 @@ async function handle(
     return
   }
 
-  if (isProjectSkillAssociation) {
-    await runSkillRoute(request, response, context, async (signal, deadlineAt) => {
-      const client = composition.skillProductClient
-      if (!client) throw new Error("skill_dependency_unavailable")
-      const sourceRef = `skill:${businessPath[3]}`
-      const current = await client.inspect(
-        {
-          requestId: id,
-          tenant: context.identity.namespace,
-          subject: context.identity.userId,
-          sourceRef,
-        },
-        signal,
-        deadlineAt,
-      )
-      assertSkillWireKnown(current)
-      projectSkillPackageInspectionResponse(current, { sourceRef })
-      signal.throwIfAborted()
-    })
-    if (response.destroyed || response.writableEnded) return
-    // Admission and the local BFF association are not a cross-owner transaction.
-    // Runtime resolution remains responsible for current use-time eligibility.
+  if (isProjectSkillSelectionPath) {
+    await projectSkillSelectionRoute(request, response, context, composition.businessStore, composition.installationClient, (signal) =>
+      currentProjectAccess(businessPath[1] ?? "", signal),
+    )
+    return
   }
 
   if (isPersonalizationPath) {
@@ -636,28 +639,7 @@ async function handle(
       composition.installationClient,
       routeAbort.signal,
       config.iamBaseUrl,
-      isProjectInstallationPath
-        ? async (signal) => {
-            const fresh = await authorizeUserRequest(request, config, composition.sessionAdmission, id, signal)
-            if (!fresh.ok) throw new ConnectError("Project admission failed", fresh.status >= 500 ? Code.Unavailable : Code.PermissionDenied)
-            if (fresh.context.identity.namespace !== context.identity.namespace || fresh.context.identity.userId !== context.identity.userId)
-              throw new ConnectError("Project not found", Code.NotFound)
-            const action = skillActionForRequest(request.method ?? "GET", businessPath)
-            if (action !== null) {
-              const checked = await authorizeSkillAction(composition.skillAuthorization, fresh, action, signal)
-              if (!checked.ok) throw new ConnectError("Project Skill action denied", checked.status >= 500 ? Code.Unavailable : Code.PermissionDenied)
-            }
-            signal.throwIfAborted()
-            if (!composition.businessStore) throw new ConnectError("Project owner unavailable", Code.Unavailable)
-            const project = await composition.businessStore.services.projects.find(
-              { tenantId: context.identity.namespace, subjectId: context.identity.userId },
-              businessPath[1] ?? "",
-            )
-            signal.throwIfAborted()
-            if (!project) throw new ConnectError("Project not found", Code.NotFound)
-            return project.id
-          }
-        : undefined,
+      isProjectInstallationPath ? (signal) => currentProjectAccess(businessPath[1] ?? "", signal) : undefined,
     ).finally(() => {
       request.removeListener("aborted", abortRoute)
       response.removeListener("close", abortRoute)
@@ -784,6 +766,11 @@ async function handle(
 
   if (composition.routeHandler === undefined && businessPath[0] === "admin") {
     await liveModelRoutingAdmin(request, response, config, context, businessPath)
+    return
+  }
+
+  if (composition.routeHandler === undefined && businessPath[0] === "projects" && businessPath.length === 4 && businessPath[2] === "skills") {
+    send(response, 404, failure("bff_route_not_found", "Business route was not found", id))
     return
   }
 
@@ -1007,6 +994,8 @@ async function handle(
         composition.idempotency,
         composition.businessStore,
         chatAuthorization,
+        composition.installationClient,
+        currentProjectAccess,
       ))
     )
       return

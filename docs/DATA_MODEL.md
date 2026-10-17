@@ -1,3 +1,9 @@
+## S4c 选择数据候选（2026-10-17，正常库未切换）
+
+用现bff_project的selected_skill_installation_ids TEXT[] NOT NULL DEFAULT '{}'保存有序默认（最多16、无空/重复ID），删除仅存名称开关的bff_project_skill。只存opaque安装ID，不复制Platform的pin/来源/启停状态；不加独立配置表、版本表或跨owner外键。默认变更沿Project行锁及现bff_idempotency_receipt原子提交，暂不新增不需要的CAS revision列。
+
+bff_message增加selected_skill_source_refs JSONB NOT NULL DEFAULT '[]'保存消息发出时exact版本，和原outbox payload同事务写；后续默认/安装修改不回写历史。消息选择预读快照由现BFF owner事实构成；外部解析在事务外，提交持原项目/会话锁逐项比对canonical项目及有序默认，不匹配不提交。旧历史消息默认[]，不猜补曾选技能；正常库不自动ALTER或从name推断ID，fresh canonical与正常切换分别验收。canonical schema已按本段修改并在自有隔离数据库安装；正常数据库仍保持原样，待消费者和运行配对后单独切换。
+
 ## 项目安装接线无Schema变更（2026-10-17）
 
 真实安装/精确pin/获取来源/receipt仍归Platform，BFF只验证自己Project归属并传可信metadata，不存第二份安装表或从owner SQL读取。当前bff_project_skill名称开关没有因此变成安装事实；后继选择模型在本仓单独替换，不以本次API接线冒默认选择/Agent冻结完成。

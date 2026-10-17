@@ -1,9 +1,4 @@
-import type {
-  AgentDispatchCommand,
-  AgentDispatchLease,
-  AgentDispatchPayload,
-  AgentDispatchReceipt,
-} from "../../domain/chat/agent-dispatch.js"
+import type { AgentDispatchCommand, AgentDispatchLease, AgentDispatchPayload, AgentDispatchReceipt } from "../../domain/chat/agent-dispatch.js"
 
 export type CommitChatTurn = {
   outboxId: string
@@ -20,8 +15,12 @@ export type CommitChatTurn = {
   assistantMessageId: string
   identityAssertionRef: string
   content: string
+  skillSelection?: Readonly<{ projectId: string | null; installationIds: string[] }>
   payload: AgentDispatchPayload
 }
+
+export type ChatTurnSelectionInput = Pick<CommitChatTurn, "tenantId" | "conversationId" | "subjectId" | "projectRef" | "idempotencyKey" | "requestDigest">
+export type ChatTurnSelection = { kind: "new"; projectId: string | null; installationIds: string[] } | { kind: "replay"; receipt: AgentDispatchReceipt }
 
 export type AgentDispatchOutboxClaimInput = {
   workerId: string
@@ -32,6 +31,7 @@ export type AgentDispatchOutboxClaimInput = {
 
 /** Atomic Chat turn admission plus the durable Agent command queue. */
 export interface AgentDispatchOutboxRepository {
+  prepareChatTurnSelection(input: ChatTurnSelectionInput): Promise<ChatTurnSelection | null>
   commitChatTurn(command: CommitChatTurn): Promise<AgentDispatchReceipt | null>
   claimAgentDispatchOutbox(input: AgentDispatchOutboxClaimInput): Promise<AgentDispatchCommand[]>
   markAgentDispatchAdmitted(lease: AgentDispatchLease): Promise<boolean>

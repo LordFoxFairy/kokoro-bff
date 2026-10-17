@@ -1,3 +1,6 @@
+import { Code, ConnectError } from "@connectrpc/connect"
+import type { SkillInstallationConnectClient } from "../../infrastructure/clients/platform/skill-installation-connect.js"
+import { projectInstallation } from "../../infrastructure/clients/platform/skill-installation-response.js"
 import type { IncomingMessage, ServerResponse } from "node:http"
 
 import type { BffConfig } from "../../config/runtime.js"
@@ -26,9 +29,18 @@ function isInvalidCursor(error: unknown): boolean {
 
 function chatError(error: unknown): { status: number; code: string; message: string } | null {
   if (!(error instanceof Error)) return null
+  if (error.message === "skill_installation_response_invalid")
+    return { status: 502, code: "skill_installation_response_invalid", message: "Installation owner returned an invalid response" }
+  if (error instanceof ConnectError && error.code === Code.PermissionDenied)
+    return { status: 403, code: "permission_denied", message: "Current Project access is required" }
+  if (error instanceof ConnectError && error.code === Code.NotFound) return { status: 404, code: "project_not_found", message: "Project was not found" }
+  if (error.message === "CHAT_SKILL_SELECTION_INVALID")
+    return { status: 400, code: "invalid_skill_selection", message: "Project Skill selection is no longer usable; update the selection" }
   if (error.message === "CHAT_TURN_IDEMPOTENCY_CONFLICT") {
     return { status: 409, code: "idempotency_conflict", message: "Idempotency key was already used with different Chat input" }
   }
+  if (error.message === "CHAT_SKILL_SELECTION_CHANGED")
+    return { status: 409, code: "skill_selection_changed", message: "Project Skill selection changed before submission; retry the original intent" }
   if (error.message === "CHAT_TURN_PROJECT_NOT_FOUND") {
     return { status: 404, code: "project_not_found", message: "Project was not found" }
   }
@@ -95,6 +107,8 @@ export async function liveChatBusiness(
   idempotency: Map<string, IdempotencyEntry>,
   store: BffBusinessStore,
   authorization: AuthorizedChatRequest,
+  installationClient?: SkillInstallationConnectClient | null,
+  projectAccess?: (projectId: string, signal: AbortSignal) => Promise<string>,
 ): Promise<boolean> {
   if (businessPath[0] !== "sessions") return false
   const method = request.method || "GET"
@@ -222,15 +236,53 @@ export async function liveChatBusiness(
         )
         return true
       }
-      const receipt = await store.services.chatTurns.submit({
-        tenantId,
-        conversationId,
-        ...input,
-        subjectId,
-        actorId: subjectId,
-        requestId: context.requestId,
-        idempotencyKey: key,
-      })
+      const selectionAbort = new AbortController()
+      const cancelSelection = () => {
+        if (!response.writableEnded) selectionAbort.abort()
+      }
+      request.once("aborted", cancelSelection)
+      response.once("close", cancelSelection)
+      if (request.aborted || response.destroyed) selectionAbort.abort()
+      const selectionSignal = AbortSignal.any([selectionAbort.signal, AbortSignal.timeout(10000)])
+      let receipt
+      try {
+        receipt = await store.services.chatTurns.submit(
+          {
+            tenantId,
+            conversationId,
+            ...input,
+            subjectId,
+            actorId: subjectId,
+            requestId: context.requestId,
+            idempotencyKey: key,
+          },
+          async (projectId, installationIds) => {
+            if (!installationClient || !projectAccess || (await projectAccess(projectId, selectionSignal)) !== projectId)
+              throw new Error("CHAT_SKILL_SELECTION_UNAVAILABLE")
+            const refs: string[] = []
+            for (const installationId of installationIds) {
+              const result = await installationClient
+                .get({ requestId: context.requestId, tenant: tenantId, subject: subjectId, projectRef: projectId, installationId }, selectionSignal)
+                .catch((error: unknown) => {
+                  if (error instanceof ConnectError && [Code.NotFound, Code.FailedPrecondition].includes(error.code))
+                    throw new Error("CHAT_SKILL_SELECTION_INVALID")
+                  throw error
+                })
+              const view = projectInstallation(result.installation)
+              if (view.installation_id !== installationId || !view.installed || !view.enabled || view.source_status !== "active")
+                throw new Error("CHAT_SKILL_SELECTION_INVALID")
+              refs.push(view.source_ref)
+            }
+            if ((await projectAccess(projectId, selectionSignal)) !== projectId) throw new Error("CHAT_SKILL_SELECTION_CHANGED")
+            selectionSignal.throwIfAborted()
+            return refs
+          },
+          selectionSignal,
+        )
+      } finally {
+        request.removeListener("aborted", cancelSelection)
+        response.removeListener("close", cancelSelection)
+      }
       if (receipt === null) {
         await reply(response, 404, failure("session_not_found", "Session was not found", context.requestId), context, idempotency, mutation)
         return true

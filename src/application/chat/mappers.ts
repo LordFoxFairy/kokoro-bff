@@ -19,6 +19,7 @@ export function chatMessage(message: Message): ChatMessage {
     message_id: message.messageId,
     role: message.role,
     content: message.content,
+    ...(message.role === "user" ? { selected_skill_source_refs: message.selectedSkillSourceRefs } : {}),
     status: message.status,
     created_at: iso(message.createdAt),
     ...(message.runId === null ? {} : { run_id: message.runId }),

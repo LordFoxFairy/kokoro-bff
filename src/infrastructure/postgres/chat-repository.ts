@@ -220,10 +220,10 @@ export class PostgresChatRepository implements ChatRepository {
       const messages = includeHistory
         ? await client.query<MessageRow>(
             `SELECT latest.message_id, latest.tenant_id, latest.conversation_id, latest.run_id,
-                latest.role, latest.content, latest.status, latest.agent_failure_code, latest.agent_failure_retryable, latest.message_seq,
+                latest.role, latest.selected_skill_source_refs, latest.content, latest.status, latest.agent_failure_code, latest.agent_failure_retryable, latest.message_seq,
                 latest.created_at, latest.updated_at
            FROM (
-             SELECT message_id, tenant_id, conversation_id, run_id, role, content, status, agent_failure_code, agent_failure_retryable,
+             SELECT message_id, tenant_id, conversation_id, run_id, role, selected_skill_source_refs, content, status, agent_failure_code, agent_failure_retryable,
                     message_seq, created_at, updated_at
                FROM bff_message
               WHERE tenant_id = $1 AND conversation_id = $2
@@ -388,7 +388,7 @@ export class PostgresChatRepository implements ChatRepository {
     if (exists.rows[0] === undefined) return null
     const result = await this.database.pool.query<MessageRow>(
       `SELECT message.message_id, message.tenant_id, message.conversation_id, message.run_id,
-              message.role, message.content, message.status, message.agent_failure_code, message.agent_failure_retryable, message.message_seq,
+              message.role, message.selected_skill_source_refs, message.content, message.status, message.agent_failure_code, message.agent_failure_retryable, message.message_seq,
               message.created_at, message.updated_at
          FROM bff_message AS message
         WHERE message.tenant_id = $1 AND message.conversation_id = $3

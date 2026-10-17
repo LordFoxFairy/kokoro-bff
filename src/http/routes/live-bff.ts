@@ -128,22 +128,7 @@ export async function liveBffBusiness(
         }
         return true
       }
-      if (businessPath.length === 4 && projectId !== undefined && businessPath[2] === "skills" && businessPath[3] !== undefined && method === "PATCH") {
-        if (typeof json.enabled !== "boolean") {
-          await reply(response, 400, failure("invalid_project_skill", "Skill enabled must be a boolean", context.requestId), context, idempotency, mutation)
-          return true
-        }
-        const project = await store.services.projects.find(ownerScope, projectId)
-        if (project === null) {
-          await reply(response, 404, failure("project_not_found", "Project was not found", context.requestId), context, idempotency, mutation)
-        } else {
-          const updated = await store.services.projects.setSkill(ownerScope, project.id, businessPath[3], json.enabled)
-          await reply(response, updated ? 200 : 404, updated
-            ? ok({ skill: { project_id: project.id, name: businessPath[3], enabled: json.enabled } }, context.requestId)
-            : failure("project_not_found", "Project was not found", context.requestId), context, idempotency, mutation)
-        }
-        return true
-      }
+
       if (businessPath.length === 3 && projectId !== undefined && businessPath[2] === "scheduled-tasks" && method === "POST") {
         const input = scheduledCreateInput(json, projectId)
         if (input === null) {

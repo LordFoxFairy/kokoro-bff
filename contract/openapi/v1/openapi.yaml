@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 15.1.0
+  version: 16.0.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -1041,6 +1041,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '502': { $ref: '#/components/responses/BadGateway' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
     post:
       tags: [Chat]
@@ -1084,6 +1085,7 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
         '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '502': { $ref: '#/components/responses/BadGateway' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
         '429':
           description: IAM session admission is rate limited
@@ -2303,49 +2305,162 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
-  /v1/projects/{projectId}/skills/{skill}:
+  /v1/projects/{projectId}/skill-selection:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
-      - $ref: '#/components/parameters/SkillName'
-    patch:
+    get:
       tags: [Projects]
-      operationId: updateProjectSkill
+      operationId: getProjectSkillSelection
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: project.read
+      summary: Read current project default Skill installations
+      responses:
+        '200':
+          description: Current selection, or the original committed selection on exact replay
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+            X-Request-Id: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelection' }
+        '400':
+          description: Invalid closed request or headers
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelectionError' }
+        '401':
+          description: Session authentication required
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelectionError' }
+        '403':
+          description: Current subject is forbidden
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelectionError' }
+        '404':
+          description: Current project was not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelectionError' }
+        '405':
+          description: Method not allowed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelectionError' }
+        '409':
+          description: Idempotency key conflicts
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelectionError' }
+        '412':
+          description: Selected installation is not currently usable
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelectionError' }
+        '429':
+          description: Admission rate limited
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelectionError' }
+        '502':
+          description: Invalid owner response
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelectionError' }
+        '503':
+          description: Dependency unavailable or commit result unknown
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelectionError' }
+        '504':
+          description: Request deadline exceeded
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelectionError' }
+    put:
+      tags: [Projects]
+      operationId: replaceProjectSkillSelection
       x-kokoro-owner: kokoro-bff
       x-kokoro-visibility: public
       x-kokoro-stability: beta
       x-kokoro-idempotency: required
       x-kokoro-permission: project.update
-      summary: Update project skill state
+      summary: Replace project default Skill installations
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              $ref: '#/components/schemas/ProjectSkillRequest'
+            schema: { $ref: '#/components/schemas/ReplaceProjectSkillSelectionRequest' }
       responses:
         '200':
-          description: Project skill state
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProjectSkillResponse'
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '403': { $ref: '#/components/responses/ServiceAuthFailed' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '409': { $ref: '#/components/responses/Conflict' }
-        '401': { $ref: '#/components/responses/ServiceAuthFailed' }
-        '429':
-          description: IAM session admission is rate limited
+          description: Current selection, or the original committed selection on exact replay
           headers:
-            Retry-After:
-              description: Bounded delay in seconds before retrying admission
-              schema: { type: string, pattern: '^[1-9][0-9]{0,4}$' }
+            Cache-Control: { schema: { type: string, const: no-store } }
+            X-Request-Id: { schema: { type: string } }
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
-        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+              schema: { $ref: '#/components/schemas/ProjectSkillSelection' }
+        '400':
+          description: Invalid closed request or headers
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelectionError' }
+        '401':
+          description: Session authentication required
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelectionError' }
+        '403':
+          description: Current subject is forbidden
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelectionError' }
+        '404':
+          description: Current project was not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelectionError' }
+        '405':
+          description: Method not allowed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelectionError' }
+        '409':
+          description: Idempotency key conflicts
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelectionError' }
+        '412':
+          description: Selected installation is not currently usable
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelectionError' }
+        '429':
+          description: Admission rate limited
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelectionError' }
+        '502':
+          description: Invalid owner response
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelectionError' }
+        '503':
+          description: Dependency unavailable or commit result unknown
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelectionError' }
+        '504':
+          description: Request deadline exceeded
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectSkillSelectionError' }
   /v1/projects/{projectId}/scheduled-tasks:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -11088,12 +11203,6 @@ components:
         type: string
         minLength: 1
       example: export_mori_1
-    SkillName:
-      name: skill
-      in: path
-      required: true
-      schema:
-        type: string
     ScheduledTaskId:
       name: id
       in: path
@@ -14287,6 +14396,11 @@ components:
       required: [message_id, role, content, status, created_at]
       additionalProperties: false
       properties:
+        selected_skill_source_refs:
+          type: array
+          maxItems: 16
+          uniqueItems: true
+          items: { type: string, pattern: '^skill:(?!skill:)[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])' }
         message_id: { type: string, minLength: 1 }
         role:
           type: string
@@ -14944,7 +15058,7 @@ components:
           maxItems: 16
           uniqueItems: true
           x-kokoro-json-byte-limit: 4096
-          description: Exact ordered Skill source references; omission means []. Compact UTF-8 JSON must not exceed 4096 bytes.
+          description: Exact ordered Skill source references. Omission inherits current project defaults; explicit [] selects none. Compact UTF-8 JSON must not exceed 4096 bytes.
           items:
             type: string
             minLength: 7
@@ -15585,28 +15699,46 @@ components:
       additionalProperties: false
       properties:
         instruction: { type: string }
-    ProjectSkillRequest:
+    ProjectSkillSelectionError:
       type: object
-      required: [enabled]
+      required: [error]
       additionalProperties: false
       properties:
-        enabled: { type: boolean }
-    ProjectSkillResponse:
+        error:
+          type: object
+          required: [code, message, retryable]
+          additionalProperties: false
+          properties:
+            code: { type: string, minLength: 1 }
+            message: { type: string, minLength: 1 }
+            retryable: { type: boolean }
+    ProjectSkillSelection:
       type: object
-      required: [data, meta]
+      required: [data]
+      additionalProperties: false
       properties:
         data:
           type: object
-          required: [skill]
+          required: [project_id, installation_ids]
+          additionalProperties: false
           properties:
-            skill:
-              type: object
-              required: [project_id, name, enabled]
-              properties:
-                project_id: { type: string }
-                name: { type: string }
-                enabled: { type: boolean }
-        meta: { $ref: '#/components/schemas/RequestMeta' }
+            project_id: { type: string, minLength: 1 }
+            installation_ids: { $ref: '#/components/schemas/ProjectSkillInstallationIds' }
+    ProjectSkillInstallationIds:
+      type: array
+      maxItems: 16
+      uniqueItems: true
+      items:
+        type: string
+        minLength: 1
+        maxLength: 191
+        pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}(?![\s\S])'
+    ReplaceProjectSkillSelectionRequest:
+      type: object
+      required: [installation_ids]
+      additionalProperties: false
+      properties:
+        installation_ids: { $ref: '#/components/schemas/ProjectSkillInstallationIds' }
     ScheduledTask:
       type: object
       required: [id, title, prompt, frequency, time, timezone, next_run_at, auto_approve, enabled, status]

@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS bff_project (
   slug TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
   instruction TEXT,
+  selected_skill_installation_ids TEXT[] NOT NULL DEFAULT '{}' CONSTRAINT ck_bff_project_skill_selection CHECK (cardinality(selected_skill_installation_ids) <= 16 AND array_position(selected_skill_installation_ids, NULL) IS NULL),
   deleted_at TIMESTAMPTZ(3),
   created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
@@ -84,15 +85,6 @@ CREATE TABLE IF NOT EXISTS bff_project_instruction_revision (
 );
 CREATE INDEX IF NOT EXISTS ix_bff_project_instruction_revision
   ON bff_project_instruction_revision (tenant_id, project_id, updated_at DESC);
-
-CREATE TABLE IF NOT EXISTS bff_project_skill (
-  tenant_id TEXT NOT NULL,
-  project_id TEXT NOT NULL,
-  skill_name TEXT NOT NULL,
-  enabled BOOLEAN NOT NULL,
-  updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  PRIMARY KEY (tenant_id, project_id, skill_name)
-);
 
 CREATE TABLE IF NOT EXISTS bff_project_task (
   task_id TEXT PRIMARY KEY,
@@ -218,6 +210,7 @@ CREATE TABLE IF NOT EXISTS bff_message (
   run_id TEXT,
   role TEXT NOT NULL CONSTRAINT ck_bff_message_role CHECK (role IN ('user', 'assistant')),
   content TEXT NOT NULL,
+  selected_skill_source_refs JSONB NOT NULL DEFAULT '[]'::jsonb CONSTRAINT ck_bff_message_skill_selection CHECK (jsonb_typeof(selected_skill_source_refs) = 'array' AND jsonb_array_length(selected_skill_source_refs) <= 16),
   status TEXT NOT NULL CONSTRAINT ck_bff_message_status CHECK (status IN ('pending', 'streaming', 'completed', 'failed')),
   agent_failure_code TEXT,
   agent_failure_retryable BOOLEAN,

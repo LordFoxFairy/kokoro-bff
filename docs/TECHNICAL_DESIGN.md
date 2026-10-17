@@ -1,3 +1,11 @@
+## S4c 项目默认与消息选择（本地源码候选，2026-10-17）
+
+沿已批准模型替换名称开关，不新增服务/依赖或通用选择框架。BFF以现Project保存有序、最多16个不重复installation ID作为默认；Platform仍单写安装/启停/精确版本。GET/PUT项目skill-selection读取/整体替换默认，空数组清空；PUT逐项通过正式Project Get核当前安装与启用，不代替Agent执行授权，删除失效默认允许直接提交空列表。旧按名称PATCH与bff_project_skill同步退休，不做name/ID双轨。
+
+消息selected_skill_source_refs存在时沿原显式路径，[]明确不用；省略时按当前Conversation的可信项目继承默认，direct为[]。ChatTurnApplicationService先通过现outbox repository读取当前项目/默认快照与已提交receipt，再在SQL事务外从正式Project RPC解析exact refs。原提交事务先锁项目/Conversation并核receipt：精确重放直接返回原消息；新命令核当前项目和默认列表仍与快照一致，否则409、零新消息/outbox，不在持锁时调用外部服务。没有通用prepare/commit编排层，只扩现Chat turn业务端口。
+
+消息与outbox在同一PG事务保存解析后的exact refs；请求摘要保原始选择意图（省略与[]不同），不因默认/安装后来变化重写原消息或自动重试成新选择。Agent ingress不新增第二协议，继续收现有exact selected_skill_source_refs并执行自己的当前准入/版本冻结；Scheduler显式[]不继承。测试复用现project/Chat/PG文件，核持久回读、隔离/幂等/回滚、默认变化/移动竞争及重放不重解析；正常数据库变更和浏览器验收另按原流程配对，不先改正常库。
+
 ## 项目安装接线（2026-10-17）
 
 沿已批准模型固定Platform5ec8538的Project六方法。现安装client/route/digest/mapper统一支持personal与project，不复制生命周期或新建抽象框架；项目使用/v1/projects/{projectId}/skill-installations及同ID/update、enabled操作（六operation），public15.1.0，复用现body/ACK/错误组件。项目pathname不是权限：当前session/human skill action后，BFF本仓ProjectService.find核本人当前项目并解析canonical ID；owner调用前后重新核session/action/项目，owner响应project_ref必须相同。命令ID/digest独立绑定project，不从body或浏览器header授信。
