@@ -12,6 +12,13 @@ const text = (minimum: number, maximum: number) =>
         [...value].length <= maximum &&
         !/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(value),
     )
+// Examples are user-authored content, not normalized identifiers. Match the
+// metadata owner without trimming, splitting, or deduplicating their strings.
+const examplePrompt = z
+  .string()
+  .refine(
+    (value) => value.trim().length > 0 && [...value].length <= 1000 && !/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(value),
+  )
 const key = z.string().regex(/^[a-z0-9][a-z0-9._-]{0,63}$/u)
 const version = z
   .string()
@@ -52,7 +59,7 @@ const provider = z
       .array(z.enum(["efficiency", "creation", "business", "development", "finance", "travel", "health"]))
       .max(16)
       .refine((value) => new Set(value).size === value.length),
-    example_prompts: z.array(text(1, 1000)).max(10),
+    example_prompts: z.array(examplePrompt).max(10),
     author: text(1, 100).optional(),
     // Zod matches the URL protocol without the trailing colon. Keep this
     // parser aligned with Platform's metadata owner so valid HTTPS links do

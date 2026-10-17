@@ -1,3 +1,19 @@
+## Agent／Provider 当前本地组合（2026-10-17，未正常激活）
+
+复用原 codex/skill-api-closure 工作树，组合 e65f144 的 Agent HTTP6 与正常源码分支24dcf7d的Provider示例校验。唯一CURRENT冲突保双方新增前缀及共同历史原字节；Provider两源码/测试与24dc逐字相同，其余源码与e65逐字相同。Agent7ed07f9的contract/provenance与真实Git blob和vendor/pin相等，公开canonical/SQL/package/lock不变，无新增wire或兼容路径。
+
+停写653份tracked文件后Node22七门format/lint/type/contract/architecture/default/build全0；contract687 PASS、architecture35 PASS、default1266 PASS/3既有资源SKIP。默认为manifest原全文件，仅限2workers，门后653/653字节保持；之后只增加本段交付记录。静态独立复核未见误丢覆盖或新增确定P0–P2。未重跑真实PG/Redis集成，跳过不算通过。
+
+这是同一需求候选的本地两父集成，不是main/远端PR合并。正常物理BFF仍24dcf7d、其进程仍加载a804b0f；Platform源e907a08但进程尚未重载，Agent候选仍未激活。无模型/Tool/Billing/配置/角色/积分/共享库写，Root index/gitlink及远端CI/push/PR/merge继续暂停，完整Skills/MCP/执行及正式资金许可仍OPEN。
+
+## Provider 示例内容校验（2026-10-17，局部源码修复）
+
+基线 a804b0f。`mcp-provider-admin-input.ts` 原将示例套入 trim-equality 标识校验，拒绝 owner/canonical 已允许的首尾空白；仅改 example_prompts 的专用校验，保持非空白、1000 codepoints、合法 Unicode 和最多10项，保原字符串及顺序/重复。其他身份、URL、scope、CAS/权限/命令恢复不变；无 wire、pin、SQL 或依赖变化。
+
+现 HTTP suite 的合法更新真实 RED400→GREEN200，回包/owner入参保 LF/CRLF/首尾空白/重复和1000😀；非法空白、孤立 surrogate、1001😀、11项均400且零 owner 调用。focused7通过；Node22 lint/typecheck/build/format:check/contract:check/architecture/default均0，contract687 PASS、architecture35 PASS、default1266 PASS/3既有资源SKIP（原 manifest 全文件，仅限2workers）。未跑真实 PG/Redis集成，未涉及事务或 Schema。
+
+正常后台沿旧 BFF 已验 LF/重复创建/改名/回读/停用；新首尾空白 parser 尚未重启正常 BFF，不冒正常已激活。Skills F/6仅草稿，E/5与已安装版本未修改；无模型/Tool/Billing调用、配置/角色/积分或远端/Root gitlink变化。完整Skills/MCP、来源caller、真实执行/资金与PR聚合仍 OPEN。
+
 ## Agent HTTP6 消费候选已验（2026-10-17，未激活）
 
 基线a804b0f，复用原codex/skill-api-closure独立工作树，正常BFF未改。固定Agent已验证组合7ed07f9/HTTP6，完整blob/provenance经正规生成替换唯一current HTTP5 vendor；三执行operation完整对象及递归15个Schema相等，原AgentServiceBearer不变。公开canonical、SQL、package和lockfile原字节保持。原生生成SDK只增加AgentServiceBearer消歧key，因为owner新增独立Billing reader bearer；不手改generated、不加fallback或运行时兼容层。现adapter不消费usage-evidence reader。
