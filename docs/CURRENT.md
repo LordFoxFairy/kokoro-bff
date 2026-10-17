@@ -1,3 +1,17 @@
+## 2026-10-16 Skill Share 创建/Resolve 活动版本资格（本地交付）
+
+基线c6bb5d3。正常产品已证明本人withdrawn revision2仍Inspect200，原Create201/Resolve200却Summary404；不是Web需停认证或允许撤回摘要。创建是BFF-owned locator，不新增资源ACL，每次owner仍按当前调用者判断。原route只用允许本人预览的inspect作share资格，遗漏已存在的exact active/valid metadata约束。
+
+主方唯一writer沿原route抽取同文件readSummary（既有strict schema/source绑定/取消），Create在持久化前及回执前、Resolve重新读取，保原inspect与creator DELETE。不换current/不fallback、不改Schema/wire/owner/鉴权或增加依赖。原HTTP同一用例改为inspect可成功但summary拒绝nonactive，实际RED为withdrawn resolve200!=404；扩四种inactive/已有locator/缺依赖/坏UID或额外字段/迟到取消/提交后撤回，仍原4case。三相关HTTP文件73PASS，manifest lint/type通过；该仓没有eslint，误调用未启动检查，随后使用正式manifest入口，无安装或降门。
+
+独立只读复核无确定新增P0–P2。曾推演inspect忽略取消导致后续create，但追到正式Connect client后确认await后已有abort guard，撤销该生产P2判断，不用缺保障的double冒真实缺陷。取消回归覆盖summary的延迟返回；原caller identity、返回前准入与正式client预算保持。预检失败零create；创建已提交后撤回只阻止误导201，不能声称BFF locator回滚或自动revoke。SQL/真实PG未改，本片先按最低充分层HTTP资格与现repo事务证据分工，不把mock当真实资源集成。
+
+停写冻结五路径后，主方 Node22 完整 format:check、lint、typecheck、contract:check、test:architecture、默认 test 和 build 均 exit 0：contract 678 PASS / 0 SKIP、architecture 36 PASS / 0 SKIP，默认 test 原 manifest 清单以 concurrency=2 执行，1257 PASS / 0 FAIL / 3 既有资源 SKIP（61.40s，测试本体57.46s）。独立复核冻结5/5 SHA一致、无新增确定P0–P2。没有新增 suite/case，也未运行全量真实 PostgreSQL/Redis 集成；HTTP double 不冒充真实 owner 事务。
+
+正常受管 BFF 通过原管理器 SIGTERM 后加载同字节源码，旧三进程退出，管理器参数/环境与已指纹配置文件原字节不变；App/Platform 未重启，三服务健康200。正常3310产品会话实测：原 withdrawn revision2 的 Share POST404 skill_not_found，UI显示失败；原旧链接 Resolve404。active 样本 Share201并复用既有同一 locator，随后 Resolve/Summary/package 全200，source_ref/decimal revision 精确一致，真实 SKILL.md 可读、原已安装状态保留。未调用启用/安装/撤销，未对正常库计数或声称正常零写；拒绝零create来自HTTP回归证据，clipboard桥仍未证明。
+
+前端cd78cb9另已真实验 active 分享在390×480中实际 scrollTop324，自然120s重核后仍324、同Dialog；非默认嵌套文件仍仅受控证据。临时tab49关闭，Network关闭，无新增常驻服务，测试/临时预览端口已释放。完整Skills/MCP/Admin/手册及远端聚合继续OPEN，远端CI/push/PR/merge与Rootindex/gitlink保持暂停。
+
 ## SKILLS-ADMIN：discard 当前准入与重放负控（2026-10-16；测试增量）
 
 基线 `d176e3d`，仅扩现有 `test/skill-admin-http.test.mjs` 的 machine-credential 拒绝用例，无生产源码、公开契约、Schema、依赖或凭据变化。保留原 root GET/POST，加入 discard 和 admitted tenant 错配；session/tenant 拒绝均零 owner 调用。action 用例先成功 discard，再撤销 fresh action，以相同 key/body/CAS 再请求，得到 403 且 owner 调用仍只有首次一次，确认服务身份与已成功命令都不替代当前人类 action。授权成功路径另核 native discard operation、可信 tenant/subject 与原请求成员。

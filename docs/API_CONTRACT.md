@@ -1,3 +1,9 @@
+## 2026-10-16 Skill Share 创建与 Resolve 的活动版本校验（既有协议内修复）
+
+Create 与 Resolve 使用和既有 Shared Summary 相同的精确 revision active/valid 资格，严格核 `source_ref` 与 owner UID，继续原包检查。POST 在持久化前和回执前读取；已有活动 locator 复用也必须重新核资格。withdrawn/disabled/draft/quarantined 或不可见仍为既有404，缺元数据依赖503，非法 owner 表示502；不新增 status/code/字段或放宽本人包预览，也不借 share 赋予权限。DELETE 继续原 creator/tenant 边界，不要求源仍 active，才能撤销失效链接。
+
+预检查拒绝不调用 create；若预检后、BFF create 已提交才发生 owner 撤回，后检拒绝误导201，但已保存 locator 可能仍在。GET 不隐式删除或撤销它，不构造跨 owner 原子事务/回滚承诺；后续读取仍实时拒绝。原机器契约闭集、幂等身份/expiry、public 当前14.8/139与独立 browser-private profile 不变。
+
 ## AUTH-P3：BFF→Platform auth 消费边界（实施设计，2026-10-16）
 
 普通 BFF 全部 Platform surface 固定新 owner auth profile 的 commit/version/digest；catalog 与 skills_admin 从 IAM workload token 切换专用本地服务 Bearer，projection/MCP/Custom API 沿现 direct 模式。此为内部 breaking auth 消费，不改 Public14.8、139 operations、HTTP body/status、OpenAPI 或浏览器认证。人类 IAM session/action、第三方 OAuth、Agent 执行 proof 与 Billing 资金授权不变。只接受新严格凭据文件，不为旧 OAuth 文件加 fallback。机器 profile 与源码/正常配对的证据分别记录。

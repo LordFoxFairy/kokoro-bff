@@ -1,3 +1,7 @@
+### 2026-10-16 Skill Share 活动版本资格
+
+`src/http/routes/skill-share.ts` 复用 `SkillSpecificationSource.revisionSummary` 的精确 active/valid 元数据资格、strict schema 与 source_ref/UID 绑定；POST 持久化前/返回前及 Resolve 重新检查。本人可预览已撤回/草稿包不代表可生成分享，原包检查仍保留。DELETE 只沿原 creator/tenant，不因撤回阻断；没有新协议或 SQL。`test/skill-share-http.test.mjs` 原用例承接拒绝零创建、已有链接重核、迟到取消与提交后撤回，不假称跨 owner 原子回滚。
+
 <!-- T-K03.13-BFF-MCP-PERSONAL-CRUD -->
 本人 MCP：`src/http/mcp-personal-command-input.ts` 解析四命令，`src/infrastructure/clients/platform/mcp-personal-command-binding.ts` 冻结正式 owner JCS/key/CAS；现 `mcp-personal` route/client 承接六读取与四命令，Provider 目录不代表连接授权。
 
