@@ -1,3 +1,11 @@
+## Provider 示例内容校验（2026-10-17，局部源码修复）
+
+基线 a804b0f。`mcp-provider-admin-input.ts` 原将示例套入 trim-equality 标识校验，拒绝 owner/canonical 已允许的首尾空白；仅改 example_prompts 的专用校验，保持非空白、1000 codepoints、合法 Unicode 和最多10项，保原字符串及顺序/重复。其他身份、URL、scope、CAS/权限/命令恢复不变；无 wire、pin、SQL 或依赖变化。
+
+现 HTTP suite 的合法更新真实 RED400→GREEN200，回包/owner入参保 LF/CRLF/首尾空白/重复和1000😀；非法空白、孤立 surrogate、1001😀、11项均400且零 owner 调用。focused7通过；Node22 lint/typecheck/build/format:check/contract:check/architecture/default均0，contract687 PASS、architecture35 PASS、default1266 PASS/3既有资源SKIP（原 manifest 全文件，仅限2workers）。未跑真实 PG/Redis集成，未涉及事务或 Schema。
+
+正常后台沿旧 BFF 已验 LF/重复创建/改名/回读/停用；新首尾空白 parser 尚未重启正常 BFF，不冒正常已激活。Skills F/6仅草稿，E/5与已安装版本未修改；无模型/Tool/Billing调用、配置/角色/积分或远端/Root gitlink变化。完整Skills/MCP、来源caller、真实执行/资金与PR聚合仍 OPEN。
+
 ## 项目 Skills 安装 API 已接线（2026-10-17，本地源码）
 
 BFF 固定 Platform `5ec8538`，Public15.1.0／145 operations 接入项目安装、显式更新、启停、移除、详情与列表。复用现安装 route/client/digest/mapper（统一命名 skill-installation-*），无新表、依赖或兼容入口。项目身份取当前 BFF 项目资格，调用前后复核；owner 回包绑定项目、请求资源与操作状态，错资源/错操作/未知 wire 不作为成功或可重试依赖故障。public skill.list 的项目读取已切正式 Project RPC。
