@@ -1,3 +1,4 @@
+import { PostgresPersonalKnowledgeRepository } from "./personal-knowledge-repository.js"
 import { readSkillUsage } from "./skill-usage-projection.js"
 import { PostgresPersonalizationRepository } from "./personalization-repository.js"
 import { PostgresBffDatabase } from "./client.js"
@@ -95,6 +96,7 @@ export class PostgresBffRepositories {
         }
       },
       (tenant, subject, conversation, artifact) => artifactLibrary.findSkillHandoff(tenant, subject, conversation, artifact),
+      new PostgresPersonalKnowledgeRepository(this.database),
     )
     this.agUi = new AgUiProjectionService(new PostgresAgUiProjectionRepository(this.database))
     this.agUiConsumers = new PostgresAgUiConsumerRepository(this.database)

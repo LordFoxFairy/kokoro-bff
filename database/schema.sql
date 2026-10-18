@@ -920,3 +920,36 @@ CREATE TABLE IF NOT EXISTS bff_personalization (
   CONSTRAINT ck_bff_personalization_instructions CHECK (char_length(instructions) <= 8000),
   CONSTRAINT ck_bff_personalization_revision CHECK (revision >= 1 AND revision <= 9007199254740991)
 );
+
+-- Caller-owned bounded knowledge; tombstones retain identity but erase deleted text.
+CREATE TABLE IF NOT EXISTS bff_personal_knowledge (
+  tenant_id TEXT NOT NULL,
+  owner_id TEXT NOT NULL,
+  knowledge_id UUID NOT NULL,
+  name TEXT NOT NULL,
+  when_to_use TEXT NOT NULL,
+  content TEXT NOT NULL,
+  revision BIGINT NOT NULL CONSTRAINT ck_bff_knowledge_revision CHECK (revision BETWEEN 1 AND 9007199254740991),
+  created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  deleted_at TIMESTAMPTZ(3),
+  CONSTRAINT pk_bff_personal_knowledge PRIMARY KEY (tenant_id, owner_id, knowledge_id),
+  CONSTRAINT ck_bff_knowledge_scope CHECK (tenant_id <> '' AND owner_id <> ''),
+  CONSTRAINT ck_bff_knowledge_content CHECK (
+    (deleted_at IS NOT NULL AND name = '' AND when_to_use = '' AND content = '') OR
+    (deleted_at IS NULL AND char_length(name) BETWEEN 1 AND 500 AND name ~ '[^[:space:]]'
+     AND char_length(when_to_use) BETWEEN 1 AND 500 AND when_to_use ~ '[^[:space:]]'
+     AND char_length(content) BETWEEN 1 AND 2000 AND content ~ '[^[:space:]]')
+  )
+);
+CREATE INDEX IF NOT EXISTS ix_bff_knowledge_owner_list
+  ON bff_personal_knowledge (tenant_id, owner_id, created_at DESC, knowledge_id ASC) WHERE deleted_at IS NULL;
+CREATE TABLE IF NOT EXISTS bff_personal_knowledge_usage (
+  tenant_id TEXT NOT NULL,
+  owner_id TEXT NOT NULL,
+  enabled BOOLEAN NOT NULL,
+  revision BIGINT NOT NULL CONSTRAINT ck_bff_knowledge_usage_revision CHECK (revision BETWEEN 1 AND 9007199254740991),
+  updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT pk_bff_personal_knowledge_usage PRIMARY KEY (tenant_id, owner_id),
+  CONSTRAINT ck_bff_knowledge_usage_scope CHECK (tenant_id <> '' AND owner_id <> '')
+);

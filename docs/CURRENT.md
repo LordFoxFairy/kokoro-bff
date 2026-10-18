@@ -1,3 +1,27 @@
+## 2026-10-18 本人知识后端（候选已验；Web/正常库未激活）
+
+沿基线24dcf7d与前轮调度mixed继续，主方唯一writer，未提交/发布。本人知识与独立usage新增六正式候选operation：Public16.1.0/152，完整剥离新增块后逐字节恢复原Public16.0 SHA e15758fa…；旧Skills/MCP/个人资料wire、外部owner pin/generated、角色/凭据/依赖不变。正文500/500/2000，最多100有效项、全量字面查询；固定UUID＋CAS，删除清正文留tombstone防ABA，关闭不删知识，未知COMMIT只读核实。
+
+三设计面、canonical两表与readiness/原服务装配同步；input/HTTP/port/PG按职责拆分，无新服务/转发service/receipt/cursor/向量或模型。新功能初始真实HTTP404与预期列表不符RED后实现。独审发现并实测修复三项：chunked mutation被误拒、已退休请求仍有I/O、新operation未绑定正确wire schema；对应RED→GREEN和正式semantic变异复核关闭，无剩余确定P0/P1/P2反馈。不以静态审查替代测试。
+
+最终607源码/测试/契约/配置输入停写hash一致：正式format:check、lint、typecheck、contract:check、architecture、build均exit0；contract690 PASS/0SKIP（保原3warnings），architecture35 PASS，原default全清单仅限并发2：1271 PASS/0FAIL/3原资源SKIP。首完整门的新CHECK未具名和active版本断言仍16.0两类失败已分别改为具名约束、明确16.1 current断言，82项定向80PASS/2原SKIP后重跑完整门通过；旧版本及完整父逆未放宽。
+
+final fresh canonical PG/HTTP知识整文件6 PASS/0SKIP：可信主体隔离/输入拒绝零写、原文/字面查询、CAS竞争、删除不可复活、独立开关、99项时并发限额、真实chunkedPUT/DELETE及413、实际COMMIT后Proxy抛错的unknown恢复、INSERT ACK后abort回滚、真实advisory锁等待取消。unknown不是TCP ACK丢失；未冒正常IAM或进程重启矩阵。另以独立fresh库回归原Scheduler receipt/outbox两文件37 PASS/0SKIP。自有库均删除、残留0；无正常业务库、服务主动重载、模型/Agent/Tool/Billing、CI、远端或Rootgitlink操作。精确证据只在Root ignored var/dev/knowledge-20261018。
+
+后继：具名正常库additive演进/备份恢复、固定producer提交后Web正规消费及真实用户界面验收、可信Agent消费与记忆导入仍OPEN；不把后端候选称已应用到所有任务。完整真实integration没有重跑/宣称通过，前轮广组合两项时序/fixture失败仍保留，不以本次43个定向PASS抹掉。调度旧v2处置与monthly/once/持续next继续推进，聊天/项目后置；模型/扣费/CI继续暂停，PR等本轮功能收尾后再推进。
+
+## 2026-10-18 调度 callback 版本围栏（源码候选；正常激活未验）
+
+基线 `24dcf7d99a85ae620d279c2a6147e9237377c2e6`，主方唯一 writer，未提交。沿原 BFF ScheduledTask→Scheduler opaque callback→receipt→锁内 accept 接线：outgoing 带 frozen task_revision，缺失/非法 revision 在 receipt claim 前拒绝，首次及恢复 snapshot 均核原版本；现 accept 行锁/CAS继续承接读取后竞态。outbox schema_version2→3，不复用旧 key 改造 payload；无 public16/SQL/vendor/generated/依赖变化，无新服务/模型/扣费或正常进程主动重载。
+
+原回归真实 RED 四项（旧回调错误接纳、非法值进入claim、outbound缺版本、旧outbox版本）→focused23 PASS；恢复snapshot错版本追加实际 RED→GREEN。独立只读审查抓到业务集成暂停fixture错用旧revision，主方独占 fresh PG 复现1 FAIL后更新为当前revision暂停正控，并保旧revision拒绝断言，最终1 PASS。不为过旧fixture调换生产校验顺序。
+
+停写生产后完整 format:check/lint/typecheck/contract:check/test:architecture/build exit0，contract687 PASS、architecture35 PASS；原默认清单 concurrency2：1268 PASS/0 FAIL/3既有资源 SKIP，598 tracked验证输入hash稳定。之后唯一测试变动是 business-store.integration.mjs，该文件不在默认test/contract清单；补做其格式检查与真实PG新旧revision主路径1 PASS。最终真实PG按独占库再验原 Scheduler receipt/outbox两文件37 PASS/0 SKIP，未启动真实Agent/模型；自有库全部删除、余量0。证据仅Root ignored var/dev/schedule-revision-20261018。
+
+扩大到业务集成整文件的组合尝试为210 PASS/2 FAIL，**不称完整 integration 通过**：R280 Project status取消清理用例在组合中失败；在原HEAD独立候选与当前源码各自fresh隔离均1 PASS，尚未定位组合/时序原因，不定性为历史产品缺陷。另一receiver Agent调用计数2!=1，按文件fresh隔离重跑37 PASS；跨文件共享fixture的干扰原因仍须核实，不能以重跑抹掉失败。项目业务按用户顺序后置，完整owner/PR验收仍OPEN。
+
+激活停止线：未核正常库旧v2 command/已登记schedule。旧未终态v2 claim后解析失败可阻挡同task后继并影响同批投递，仅正式mutation产生新revision不足以迁移；先具名owner处置到终态再重新登记/核回执，未完成不激活本候选、不改共享行、不清receipt。monthly/once、anchor回投/持续next、知识CRUD/记忆导入及完整功能页仍未完成。本片不冒整链或正常调度闭环；模型/扣费/CI持续暂停，现PR仅在本轮完整收尾后推进。
+
 ## Provider 示例内容校验（2026-10-17，局部源码修复）
 
 基线 a804b0f。`mcp-provider-admin-input.ts` 原将示例套入 trim-equality 标识校验，拒绝 owner/canonical 已允许的首尾空白；仅改 example_prompts 的专用校验，保持非空白、1000 codepoints、合法 Unicode 和最多10项，保原字符串及顺序/重复。其他身份、URL、scope、CAS/权限/命令恢复不变；无 wire、pin、SQL 或依赖变化。

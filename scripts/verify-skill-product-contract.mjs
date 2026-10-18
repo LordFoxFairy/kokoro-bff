@@ -1,3 +1,4 @@
+import { restorePublic16KnowledgeContract } from "./verify-personal-knowledge-contract.mjs"
 import { readFileSync } from "node:fs"
 import { createHash } from "node:crypto"
 import { createRequire } from "node:module"
@@ -232,6 +233,7 @@ function inspectSkillsSpecificationSurface(source, expectedVersion) {
 /** Checks the active Skill surface without coupling it to unrelated API version increments. */
 /** Public16 replaces only name associations and selection presence; offline parent proof, never a runtime alias. */
 export function restorePublic151ProjectSelectionContract(source) {
+  source = restorePublic16KnowledgeContract(source)
   if (!/^  version: 16\.0\.0$/mu.test(source)) throw new Error("Project selection version drift")
   const raw = readFileSync(new URL("../contract/tests/project-skill-selection-parent-v15.1.json", import.meta.url))
   if (hash(raw) !== "a90cf26b4c2855f113730bee6e9791ed579de95e0001ad82cb17521ab814d221") throw new Error("Project selection parent fixture drift")
@@ -286,6 +288,7 @@ export function restorePublic15ProjectInstallationsContract(source) {
 }
 /** Only the public item vocabulary and artifact version differ from Public14.8. */
 export function restorePublic148SkillOwnerTypesContract(source) {
+  source = restorePublic16KnowledgeContract(source)
   if (/^  version: 16\.0\.0$/mu.test(source)) source = restorePublic151ProjectSelectionContract(source)
   if (/^  version: 15\.1\.0$/mu.test(source)) source = restorePublic15ProjectInstallationsContract(source)
   if (!/^  version: 15\.0\.0$/mu.test(source)) throw new Error("Skill owner-type major version drift")

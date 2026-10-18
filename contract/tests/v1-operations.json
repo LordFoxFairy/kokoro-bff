@@ -3,6 +3,36 @@
   "operations": [
     {
       "method": "GET",
+      "path": "/v1/preferences/knowledge",
+      "operation_id": "listSelfKnowledge"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/preferences/knowledge/{knowledge_id}",
+      "operation_id": "getSelfKnowledge"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/preferences/knowledge/{knowledge_id}",
+      "operation_id": "replaceSelfKnowledge"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/preferences/knowledge/{knowledge_id}",
+      "operation_id": "deleteSelfKnowledge"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/preferences/knowledge-usage",
+      "operation_id": "getSelfKnowledgeUsage"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/preferences/knowledge-usage",
+      "operation_id": "replaceSelfKnowledgeUsage"
+    },
+    {
+      "method": "GET",
       "path": "/v1/preferences/personalization",
       "operation_id": "getSelfPersonalization"
     },
@@ -307,6 +337,16 @@
       "operation_id": "uploadProjectResources"
     },
     {
+      "method": "GET",
+      "path": "/v1/projects/{projectId}/skill-selection",
+      "operation_id": "getProjectSkillSelection"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/projects/{projectId}/skill-selection",
+      "operation_id": "replaceProjectSkillSelection"
+    },
+    {
       "method": "POST",
       "path": "/v1/projects/{projectId}/scheduled-tasks",
       "operation_id": "createProjectScheduledTask"
@@ -355,6 +395,36 @@
       "method": "POST",
       "path": "/v1/skills/{skill_id}/publish",
       "operation_id": "publishSkill"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/{projectId}/skill-installations",
+      "operation_id": "installProjectSkill"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/{projectId}/skill-installations",
+      "operation_id": "listProjectSkillInstallations"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/{projectId}/skill-installations/{installation_id}",
+      "operation_id": "getProjectSkillInstallation"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/projects/{projectId}/skill-installations/{installation_id}",
+      "operation_id": "removeProjectSkillInstallation"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/projects/{projectId}/skill-installations/{installation_id}/enabled",
+      "operation_id": "setProjectSkillInstallationEnabled"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/{projectId}/skill-installations/{installation_id}/update",
+      "operation_id": "updateProjectSkillInstallation"
     },
     {
       "method": "POST",
@@ -690,46 +760,6 @@
       "method": "GET",
       "path": "/skill-downloads/{handle}",
       "operation_id": "downloadSkillBytes"
-    },
-    {
-      "method": "POST",
-      "path": "/v1/projects/{projectId}/skill-installations",
-      "operation_id": "installProjectSkill"
-    },
-    {
-      "method": "GET",
-      "path": "/v1/projects/{projectId}/skill-installations",
-      "operation_id": "listProjectSkillInstallations"
-    },
-    {
-      "method": "GET",
-      "path": "/v1/projects/{projectId}/skill-installations/{installation_id}",
-      "operation_id": "getProjectSkillInstallation"
-    },
-    {
-      "method": "DELETE",
-      "path": "/v1/projects/{projectId}/skill-installations/{installation_id}",
-      "operation_id": "removeProjectSkillInstallation"
-    },
-    {
-      "method": "PUT",
-      "path": "/v1/projects/{projectId}/skill-installations/{installation_id}/enabled",
-      "operation_id": "setProjectSkillInstallationEnabled"
-    },
-    {
-      "method": "POST",
-      "path": "/v1/projects/{projectId}/skill-installations/{installation_id}/update",
-      "operation_id": "updateProjectSkillInstallation"
-    },
-    {
-      "method": "GET",
-      "path": "/v1/projects/{projectId}/skill-selection",
-      "operation_id": "getProjectSkillSelection"
-    },
-    {
-      "method": "PUT",
-      "path": "/v1/projects/{projectId}/skill-selection",
-      "operation_id": "replaceProjectSkillSelection"
     }
   ]
 }

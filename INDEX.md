@@ -1,3 +1,10 @@
+### 2026-10-18 本人知识（源码候选，尚未正常激活）
+
+- `src/http/personal-knowledge-input.ts`：固定UUIDv4、严格JSON/Unicode/正文界限与CAS输入。
+- `src/http/routes/personal-knowledge.ts`：本人六operation、查询/请求生命周期和安全结果映射。
+- `src/application/ports/personal-knowledge-repository.ts` 与 `src/infrastructure/postgres/personal-knowledge-repository.ts`：本人知识/独立usage、同client事务、限额锁、删除tombstone及未知COMMIT；不增加转发service。
+- `database/schema.sql`：本owner两事实表；`scripts/verify-personal-knowledge-contract.mjs`：Public16.1新增面与完整16.0父逆。fresh资源测试不等于正常库演进。
+
 ### 项目安装当前入口（2026-10-17）
 
 Platform5ec8538／Public15.1.0项目六operation复用 `src/http/routes/skill-installations.ts` 与 `src/infrastructure/clients/platform/skill-installation-{connect,projector,response}.ts`；原 personal-installation-* 已重命名，无alias。server核当前项目资格，skill-specification-facade项目读取使用正式Project RPC；实际验证与未接的选择/执行见docs/CURRENT.md。

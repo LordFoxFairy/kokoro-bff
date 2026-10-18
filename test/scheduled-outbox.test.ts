@@ -2,7 +2,12 @@ import assert from "node:assert/strict"
 import { createServer } from "node:http"
 import { describe, it } from "node:test"
 
-import { buildScheduledTaskOutboxPayload, scheduledTaskOutboxTaskFromPayload, scheduledTaskRetryDelayMs } from "../dist/domain/scheduled-task/outbox.js"
+import {
+  buildScheduledTaskOutboxPayload,
+  parseScheduledTaskOutboxPayload,
+  scheduledTaskOutboxTaskFromPayload,
+  scheduledTaskRetryDelayMs,
+} from "../dist/domain/scheduled-task/outbox.js"
 import { scheduledTaskOutboxId } from "../dist/infrastructure/identifiers/scheduled-task-outbox-id.js"
 import { ScheduledTaskOutboxDispatcher } from "../dist/application/scheduled-task-outbox-dispatcher.js"
 import type { ScheduledTaskNextProjection, ScheduledTaskOutboxRepository } from "../dist/application/ports/scheduled-task-outbox-repository.js"
@@ -111,7 +116,7 @@ describe("ScheduledTask durable outbox", () => {
   it("builds a versioned scheduler command with complete lineage and stable identity", () => {
     const payload = buildScheduledTaskOutboxPayload("replace", lineage, task)
     assert.deepEqual(payload, {
-      schema_version: 2,
+      schema_version: 3,
       command_type: "scheduler.replace",
       lineage: {
         tenant_id: "tenant_fixture",
@@ -135,6 +140,7 @@ describe("ScheduledTask durable outbox", () => {
         revision: 3,
       },
     })
+    assert.throws(() => parseScheduledTaskOutboxPayload({ ...payload, schema_version: 2 }), /SCHEMA_VERSION_UNSUPPORTED/u)
     const internal = scheduledTaskOutboxTaskFromPayload(payload.task)
     assert.ok(internal.recurrenceAnchorAt instanceof Date)
     assert.equal(internal.recurrenceAnchorAt.toISOString(), "2026-09-01T08:00:00.000Z")

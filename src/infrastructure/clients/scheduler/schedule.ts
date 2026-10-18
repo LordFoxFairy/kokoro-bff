@@ -9,6 +9,7 @@ export type SchedulerScheduleInput = {
   body: {
     tenant_id: string
     task_id: string
+    task_revision: number
     project_id?: string
     owner_id: string
     prompt: string
@@ -54,6 +55,7 @@ export function buildSchedulerSchedule(task: ScheduledTaskFact, tenantId: string
     body: {
       tenant_id: tenantId,
       task_id: task.id,
+      task_revision: task.revision,
       ...(task.projectId === undefined ? {} : { project_id: task.projectId }),
       owner_id: ownerId,
       prompt: task.prompt,

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 16.0.0
+  version: 16.1.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -49,6 +49,1002 @@ tags:
   - name: Administration
     description: Platform-administrator projections backed by their owning services.
 paths:
+  /v1/preferences/knowledge:
+    get:
+      tags:
+        - Personalization
+      operationId: listSelfKnowledge
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: knowledge.self.read
+      summary: listSelfKnowledge
+      description: >-
+        Current IAM caller only. No identity selectors, Idempotency-Key, or conditional headers. Writes require a safe integer CAS. Unknown commit requires a
+        fresh read, never blind retry.
+      responses:
+        '200':
+          description: Current caller facts
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeListResponse'
+        '400':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '401':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '403':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '405':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '429':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '503':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+      parameters:
+        - in: query
+          name: query
+          required: false
+          schema:
+            type: string
+            maxLength: 500
+            pattern: ^[^\u0000]*$
+          description: Literal case-insensitive substring in name, when_to_use, or content. Complete bounded list; no cursor.
+  /v1/preferences/knowledge/{knowledge_id}:
+    parameters:
+      - in: path
+        name: knowledge_id
+        required: true
+        schema:
+          type: string
+          format: uuid
+          pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+    get:
+      tags:
+        - Personalization
+      operationId: getSelfKnowledge
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: knowledge.self.read
+      summary: getSelfKnowledge
+      description: >-
+        Current IAM caller only. No identity selectors, Idempotency-Key, or conditional headers. Writes require a safe integer CAS. Unknown commit requires a
+        fresh read, never blind retry.
+      responses:
+        '200':
+          description: Current caller facts
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeItemResponse'
+        '400':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '401':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '403':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '404':
+          description: Knowledge not visible
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '405':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '429':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '503':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+    put:
+      tags:
+        - Personalization
+      operationId: replaceSelfKnowledge
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: knowledge.self.write
+      summary: replaceSelfKnowledge
+      description: >-
+        Current IAM caller only. No identity selectors, Idempotency-Key, or conditional headers. Writes require a safe integer CAS. Unknown commit requires a
+        fresh read, never blind retry.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReplacePersonalKnowledgeRequest'
+      responses:
+        '200':
+          description: Current caller facts
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeItemResponse'
+        '201':
+          description: Created at the requested immutable identity
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+            Location:
+              required: true
+              schema:
+                type: string
+                pattern: ^/v1/preferences/knowledge/[0-9a-f-]+$
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeItemResponse'
+        '400':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '401':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '403':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '405':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '404':
+          description: Knowledge not visible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '409':
+          description: Revision conflict, exhausted revision or knowledge capacity
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '413':
+          description: Raw body exceeds 65536 bytes
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '429':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '503':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+    delete:
+      tags:
+        - Personalization
+      operationId: deleteSelfKnowledge
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: knowledge.self.write
+      summary: deleteSelfKnowledge
+      description: >-
+        Current IAM caller only. No identity selectors, Idempotency-Key, or conditional headers. Writes require a safe integer CAS. Unknown commit requires a
+        fresh read, never blind retry.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeletePersonalKnowledgeRequest'
+      responses:
+        '204':
+          description: Deleted or replay of the same deletion
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+        '400':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '401':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '403':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '404':
+          description: Knowledge not visible
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '405':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '409':
+          description: Revision conflict, exhausted revision or knowledge capacity
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '413':
+          description: Raw body exceeds 65536 bytes
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '429':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '503':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+  /v1/preferences/knowledge-usage:
+    get:
+      tags:
+        - Personalization
+      operationId: getSelfKnowledgeUsage
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: knowledge.self.read
+      summary: getSelfKnowledgeUsage
+      description: >-
+        Current IAM caller only. No identity selectors, Idempotency-Key, or conditional headers. Writes require a safe integer CAS. Unknown commit requires a
+        fresh read, never blind retry.
+      responses:
+        '200':
+          description: Current caller facts
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeUsageResponse'
+        '400':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '401':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '403':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '405':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '429':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '503':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+    put:
+      tags:
+        - Personalization
+      operationId: replaceSelfKnowledgeUsage
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: knowledge.self.write
+      summary: replaceSelfKnowledgeUsage
+      description: >-
+        Current IAM caller only. No identity selectors, Idempotency-Key, or conditional headers. Writes require a safe integer CAS. Unknown commit requires a
+        fresh read, never blind retry.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReplacePersonalKnowledgeUsageRequest'
+      responses:
+        '200':
+          description: Current caller facts
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeUsageResponse'
+        '400':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '401':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '403':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '405':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '409':
+          description: Revision conflict, exhausted revision or knowledge capacity
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '413':
+          description: Raw body exceeds 65536 bytes
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '429':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
+        '503':
+          description: Request rejected or dependency unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+            x-request-id:
+              required: true
+              schema:
+                type: string
+                minLength: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalKnowledgeErrorResponse'
   /v1/preferences/personalization:
     get:
       tags: [Personalization]
@@ -11352,6 +12348,186 @@ components:
         not trim or normalize a non-NFC value.
       schema: { type: string, minLength: 1 }
   schemas:
+    PersonalKnowledgeItem:
+      type: object
+      additionalProperties: false
+      required:
+        - knowledge_id
+        - name
+        - when_to_use
+        - content
+        - revision
+        - created_at
+        - updated_at
+      properties:
+        knowledge_id:
+          type: string
+          format: uuid
+          pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+        name:
+          type: string
+          minLength: 1
+          maxLength: 500
+          pattern: ^(?=[\s\S]*\S)[^\u0000]+$
+        when_to_use:
+          type: string
+          minLength: 1
+          maxLength: 500
+          pattern: ^(?=[\s\S]*\S)[^\u0000]+$
+        content:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          pattern: ^(?=[\s\S]*\S)[^\u0000]+$
+        revision:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ReplacePersonalKnowledgeRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - expected_revision
+        - name
+        - when_to_use
+        - content
+      properties:
+        expected_revision:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        name:
+          type: string
+          minLength: 1
+          maxLength: 500
+          pattern: ^(?=[\s\S]*\S)[^\u0000]+$
+        when_to_use:
+          type: string
+          minLength: 1
+          maxLength: 500
+          pattern: ^(?=[\s\S]*\S)[^\u0000]+$
+        content:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          pattern: ^(?=[\s\S]*\S)[^\u0000]+$
+    DeletePersonalKnowledgeRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - expected_revision
+      properties:
+        expected_revision:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+    PersonalKnowledgeUsage:
+      type: object
+      additionalProperties: false
+      required:
+        - enabled
+        - revision
+      properties:
+        enabled:
+          type: boolean
+        revision:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+    ReplacePersonalKnowledgeUsageRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - expected_revision
+        - enabled
+      properties:
+        expected_revision:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        enabled:
+          type: boolean
+    PersonalKnowledgeItemResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          $ref: '#/components/schemas/PersonalKnowledgeItem'
+    PersonalKnowledgeListResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required:
+            - items
+            - max_items
+          properties:
+            items:
+              type: array
+              maxItems: 100
+              items:
+                $ref: '#/components/schemas/PersonalKnowledgeItem'
+            max_items:
+              type: integer
+              const: 100
+    PersonalKnowledgeUsageResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          $ref: '#/components/schemas/PersonalKnowledgeUsage'
+    PersonalKnowledgeErrorResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required:
+            - code
+            - message
+            - retryable
+          properties:
+            code:
+              type: string
+              enum:
+                - invalid_knowledge_request
+                - knowledge_not_found
+                - knowledge_revision_conflict
+                - knowledge_revision_exhausted
+                - knowledge_limit_exceeded
+                - knowledge_unavailable
+                - knowledge_save_unknown
+                - request_body_too_large
+                - method_not_allowed
+                - service_auth_failed
+                - session_authentication_required
+                - session_invalid
+                - session_forbidden
+                - session_rate_limited
+                - product_tenant_not_configured
+                - product_tenant_forbidden
+                - iam_admission_unavailable
+            message:
+              type: string
+            retryable:
+              type: boolean
     SpecificationPublicSkill:
       type: object
       properties:

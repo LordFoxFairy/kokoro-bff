@@ -402,7 +402,7 @@ integrationTest("Scheduler-confirmed next is nullable, revision-fenced, and atom
           WHERE tenant_id = $1 AND status = 'pending'`,
         [tenants.explicit],
       )
-      assert.equal(pending.rows[0].payload.schema_version, 2)
+      assert.equal(pending.rows[0].payload.schema_version, 3)
       assert.equal(pending.rows[0].payload.task.recurrence_anchor_at, explicitAnchor.toISOString())
       assert.equal(Object.hasOwn(pending.rows[0].payload.task, "next_run_at"), false)
     })
@@ -428,7 +428,7 @@ integrationTest("Scheduler-confirmed next is nullable, revision-fenced, and atom
           WHERE tenant_id = $1 AND status = 'pending'`,
         [tenants.omitted],
       )
-      assert.equal(pending.rows[0].payload.schema_version, 2)
+      assert.equal(pending.rows[0].payload.schema_version, 3)
       assert.equal(pending.rows[0].payload.task.recurrence_anchor_at, omitted.created.recurrenceAnchorAt.toISOString())
       assert.equal(Object.hasOwn(pending.rows[0].payload.task, "next_run_at"), false)
     })

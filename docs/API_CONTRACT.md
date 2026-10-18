@@ -1,3 +1,21 @@
+## Public16.1 本人知识（2026-10-18，目标机器与源码候选）
+
+唯一机器源新增六operation：GET /v1/preferences/knowledge（可选单一query，≤500 Unicode scalar值，字面case-insensitive子串）；GET/PUT/DELETE /v1/preferences/knowledge/{knowledge_id}（lowercase UUIDv4）；GET/PUT /v1/preferences/knowledge-usage。身份只取IAM准入context。无身份selector、Idempotency-Key或ETag条件头。当前四字段profile原样保持，知识不等于记忆导入。
+
+列表data为{items,max_items:100}，全部有效项至多100，created_at DESC/knowledge_id ASC；不返回cursor或宣称跨请求快照。item为knowledge_id/name/when_to_use/content/revision/created_at/updated_at；原文保留，三个required字段须非空白且各≤500/500/2000。PUT body恰为expected_revision/name/when_to_use/content；expected0创建201+Location，正revision替换200。DELETE body恰为正expected_revision，成功204无正文；删除后ID永不复用，相同删除前revision重试204，其他409；缺失/foreign404。
+
+usage data为enabled/revision，缺省false/0且读不写；PUT body恰为expected_revision/enabled，CAS成功200。关闭不删知识，不暗示已应用到Agent。所有写拒绝重复/未知JSON key、非fatal UTF8、NUL/孤立surrogate、非安全整数及超65536原始bytes；GET无body。错误为closed {error:{code,message,retryable}}，no-store/x-request-id；409知识版本冲突/耗尽/上限，503 unavailable或save_unknown。未知COMMIT仅GET核实，不自动重复命令。
+
+六operation为public/beta、owner kokoro-bff、knowledge.self.read/write、idempotency=none（明确CAS/固定资源ID而非无幂等保护）。正常库/consumer激活未发生；完整父逆保证原16.0所有surface字节不变，禁止第二public契约或假发布commit。
+
+## 调度 callback 的任务版本（2026-10-18，内部语义切片）
+
+`POST /internal/bff/scheduled-tasks/dispatch` 继续使用固定 Scheduler generated webhook 的服务认证、header、occurrence 与幂等身份。该 owner 契约将 body 定义为 opaque JSON；BFF 自己注册的 body 新增 required `task_revision`：JSON number、正安全整数，精确等于对应 BFF command 的 frozen task revision；不是 Scheduler schedule.version。缺失、字符串、null、非正、非整数或溢出在零 receipt claim 前返回 400 invalid_scheduler_dispatch。其余既有身份/正文校验保持。
+
+首次接纳的 body revision 与当前 task 不符返回 durable 409 invalid_scheduler_dispatch，不准备新 launch；相同 key/body 复现原终态，不按新规则重试，异 body 仍 409 idempotency_conflict。匹配时原 revision 进入 frozen snapshot；恢复已有 snapshot 也须与 body revision 相等，并由已有锁内 accept 再核当前 task revision；在途规则变更拒绝而不派发。原 snapshot 已接受后重放不表示当前规则再次执行。
+
+本片不改变 public16.0.0 OpenAPI、不新增 public 字段或路由，不修改 Scheduler opaque schema/vendor/generated。配对激活要求及 v2 command 退休见 TECHNICAL_DESIGN；未盘点和更新的旧 schedule 不能冒称可继续运行。
+
 ## S4c 项目选择本地契约候选（2026-10-17，尚未发行）
 
 当前预激活Public15.1替换为单一Public16，路径仍/v1：移除旧PATCH /projects/{projectId}/skills/{skill}，增加GET/PUT /projects/{projectId}/skill-selection。表示为data.project_id与data.installation_ids；PUT closed body {installation_ids:[...]}，最多16个、唯一、精确installation ID，[]清空，必需原Idempotency-Key，响应no-store。身份只取受信tenant/subject与当前BFF项目；PUT在写前核正式Project安装，错误/不可用不部分保存。替换事实和完成receipt同事务，原key重放不恢复已被后续修改的旧默认。

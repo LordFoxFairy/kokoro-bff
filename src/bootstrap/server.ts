@@ -1,3 +1,4 @@
+import { personalKnowledgeRoute } from "../http/routes/personal-knowledge.js"
 import { projectSkillSelectionRoute } from "../http/routes/project-skill-selection.js"
 import { Code, ConnectError } from "@connectrpc/connect"
 import { mcpPersonalOperation, mcpPersonalRoute } from "../http/routes/mcp-personal.js"
@@ -322,6 +323,10 @@ async function handle(
     return
   }
 
+  const isPersonalKnowledgePath =
+    businessPath[0] === "preferences" &&
+    ((businessPath.length === 2 && ["knowledge", "knowledge-usage"].includes(businessPath[1]!)) ||
+      (businessPath.length === 3 && businessPath[1] === "knowledge"))
   const isPersonalizationPath = businessPath.length === 2 && businessPath[0] === "preferences" && businessPath[1] === "personalization"
   const isProjectRenamePath =
     composition.routeHandler === undefined &&
@@ -429,7 +434,8 @@ async function handle(
         isProjectRenamePath ||
         isProjectDeletePath ||
         isProjectDeletionStatusPath ||
-        isPersonalizationPath
+        isPersonalizationPath ||
+        isPersonalKnowledgePath
       ) {
         response.setHeader("cache-control", "no-store")
         send(
@@ -598,6 +604,11 @@ async function handle(
     await projectSkillSelectionRoute(request, response, context, composition.businessStore, composition.installationClient, (signal) =>
       currentProjectAccess(businessPath[1] ?? "", signal),
     )
+    return
+  }
+
+  if (isPersonalKnowledgePath) {
+    await personalKnowledgeRoute(request, response, context, composition.businessStore)
     return
   }
 

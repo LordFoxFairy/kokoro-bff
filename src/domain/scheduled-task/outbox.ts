@@ -1,7 +1,7 @@
 import { isRecord } from "../json.js"
 import { isIanaTimezone, parseUtcTimestamp, utcDate, type ScheduledTaskFrequency, type ScheduledTaskStatus } from "./task.js"
 
-export const SCHEDULED_TASK_OUTBOX_SCHEMA_VERSION = 2 as const
+export const SCHEDULED_TASK_OUTBOX_SCHEMA_VERSION = 3 as const
 
 export type ScheduledTaskOutboxOperation = "register" | "replace" | "delete"
 export type ScheduledTaskOutboxCommandType = `scheduler.${ScheduledTaskOutboxOperation}`

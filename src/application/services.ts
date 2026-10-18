@@ -1,3 +1,4 @@
+import type { PersonalKnowledgeRepository } from "./ports/personal-knowledge-repository.js"
 import type { SkillAiAssociation } from "./skill-ai-handoff.js"
 import type { SkillShareRepository } from "./ports/skill-share-repository.js"
 import type { SkillUsageResult } from "./agui/skill-usage.js"
@@ -33,6 +34,7 @@ export class BffApplicationServices {
     public readonly skillShares?: SkillShareRepository,
     public readonly skillUsage?: (tenant: string, refs: readonly string[]) => Promise<Map<string, SkillUsageResult>>,
     public readonly skillAiAssociation?: (tenant: string, subject: string, conversation: string, artifact: string) => Promise<SkillAiAssociation | null>,
+    public readonly personalKnowledge?: PersonalKnowledgeRepository,
   ) {
     this.projects = new ProjectService(projects)
     this.scheduledTasks = new ScheduledTaskService(scheduledTasks)

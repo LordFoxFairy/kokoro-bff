@@ -81,7 +81,15 @@ export async function schedulerDispatch(
   }
   const taskId = typeof wire.body.task_id === "string" ? wire.body.task_id : ""
   const ownerId = typeof wire.body.owner_id === "string" ? wire.body.owner_id : ""
-  if (taskId === "" || ownerId === "" || wire.schedule !== schedulerScheduleName(taskId)) {
+  const taskRevision = wire.body.task_revision
+  if (
+    taskId === "" ||
+    ownerId === "" ||
+    typeof taskRevision !== "number" ||
+    !Number.isSafeInteger(taskRevision) ||
+    taskRevision < 1 ||
+    wire.schedule !== schedulerScheduleName(taskId)
+  ) {
     send(response, 400, failure("invalid_scheduler_dispatch", "Scheduler dispatch payload or headers are invalid", responseRequestId))
     return true
   }
@@ -129,6 +137,7 @@ export async function schedulerDispatch(
       return true
     }
     if (
+      taskRevision !== record.task.revision ||
       wire.body.prompt !== record.task.prompt ||
       wire.body.auto_approve !== record.task.autoApprove ||
       wire.body.timezone !== record.task.timezone ||
@@ -179,7 +188,7 @@ export async function schedulerDispatch(
       idempotencyKey: wire.idempotencyKey,
       actorId: record.ownerId,
       taskId,
-      taskRevision: record.task.revision,
+      taskRevision,
       launch: { requestId: wire.requestId, ...launch },
     }
     const prepared = await receipts.prepareSnapshot(claim, snapshot)
@@ -188,6 +197,17 @@ export async function schedulerDispatch(
       return true
     }
     claim = { ...claim, ...prepared, snapshot }
+  }
+
+  if (snapshot.taskRevision !== taskRevision) {
+    await settle(
+      response,
+      receipts,
+      claim,
+      { status: 409, body: failure("invalid_scheduler_dispatch", "Scheduler dispatch does not match the frozen task revision", responseRequestId) },
+      responseRequestId,
+    )
+    return true
   }
 
   const dispatch = businessStore.scheduledAgentDispatch

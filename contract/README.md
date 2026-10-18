@@ -1,3 +1,7 @@
+## 2026-10-18 当前候选 Public16.1
+
+唯一可编辑OpenAPI在原路径新增本人知识六operation，固定资源UUID＋CAS代替新建通用receipt；独立知识使用开关不改四字段profile。新增面的request/success/query绑定和完整16.0字节父逆由verify-personal-knowledge-contract校验，操作inventory正规更新。当前是未提交源码候选，不伪造固定commit，不更新Web vendor/生成物或冒正常激活；owner真实验证见docs/CURRENT。
+
 ## S2 current Skill 来源投影（2026-10-17，正常配对待续）
 
 当前 canonical 为 Public15.0.0，保持 /v1/139 operations；仅 SpecificationPublicSkill.owner_type 扩 hub/device/unknown，网站/分享归属字段不变。严格完整 inverse 复原原14.8字节；历史 proof 不是 runtime 兼容层。唯一 current Platform RPC/HTTP 都固定 e172838，HTTP6.1.0 和 acquisition profile 同 bundle；生成器精确补齐 pinned SDK 漏掉的 installed/acquisition if/then。读取投影验证原始嵌套 product 后再应用 generated validator，不剥离非法字段后假成功。具体语义、实际验证与未激活范围见 docs/CURRENT 和三设计面；无正式发现/身份 producer 不宣称 Device/OpenApp 能力完成。

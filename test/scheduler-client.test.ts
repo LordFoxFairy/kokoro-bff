@@ -42,6 +42,7 @@ describe("BFF Scheduler control mapping", () => {
       body: {
         tenant_id: "tenant_fixture",
         task_id: "scheduled_fixture",
+        task_revision: 1,
         project_id: "project_fixture",
         owner_id: "user_fixture",
         prompt: "Review the project.",

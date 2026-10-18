@@ -1,3 +1,4 @@
+import { inspectPersonalKnowledgeContract } from "./verify-personal-knowledge-contract.mjs"
 import { inspectSkillProductContract, inspectCurrentSkillsSpecificationContract } from "./verify-skill-product-contract.mjs"
 import { inspectSkillExamplePromptsContract, stripSkillExamplePromptsSource } from "./verify-skill-example-prompts-contract.mjs"
 import { createHash } from "node:crypto"
@@ -3116,7 +3117,12 @@ export function restorePublic132SharedRevisionContract(source: string): string {
 }
 
 export function inspectBffOpenApi(source: string, baseline: readonly BaselineOperation[]): string[] {
-  const errors = [...inspectOpenApiGovernance(source), ...compareOperationBaseline(source, baseline), ...inspectCurrentSkillsSpecificationContract(source)]
+  const errors = [
+    ...inspectOpenApiGovernance(source),
+    ...compareOperationBaseline(source, baseline),
+    ...inspectCurrentSkillsSpecificationContract(source),
+    ...inspectPersonalKnowledgeContract(source),
+  ]
   if (/^  \/v1\/self\/mcp\//mu.test(source)) errors.push("public OpenAPI must not expose browser-private MCP lifecycle routes")
   const connectorList = /^  \/v1\/connector\.list:[\s\S]*?^      operationId: listConnectors$/mu.test(source)
   if (!connectorList) errors.push("public OpenAPI must expose GET /v1/connector.list with operationId listConnectors")

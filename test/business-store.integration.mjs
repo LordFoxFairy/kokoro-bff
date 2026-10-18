@@ -431,10 +431,23 @@ integrationTest("persists BFF facts, registers Scheduler, and replays Agent disp
         "x-request-id": "sched_integration_delivery_paused",
         "idempotency-key": "paused-scheduler-key",
       },
-      body: JSON.stringify(dispatchBody),
+      body: JSON.stringify(schedulerCalls.at(-1).schedule.body),
     })
     assert.equal(pausedDispatch.status, 409)
     assert.equal((await pausedDispatch.json()).error.code, "scheduled_task_not_active")
+    assert.equal(agentCalls.length, 1)
+
+    const staleDispatch = await fetch(`${base}/internal/bff/scheduled-tasks/dispatch`, {
+      method: "POST",
+      headers: {
+        ...dispatchHeaders,
+        "x-kokoro-scheduler-occurrence": "2026-09-01T12:00:02.000000000Z",
+        "idempotency-key": "stale-scheduler-key",
+      },
+      body: JSON.stringify(dispatchBody),
+    })
+    assert.equal(staleDispatch.status, 409)
+    assert.equal((await staleDispatch.json()).error.code, "invalid_scheduler_dispatch")
     assert.equal(agentCalls.length, 1)
 
     const reactivated = await fetch(`${base}/v1/scheduled-tasks/${taskId}`, {

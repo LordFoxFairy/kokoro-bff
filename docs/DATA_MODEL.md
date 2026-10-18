@@ -1,3 +1,19 @@
+## 本人知识（2026-10-18，canonical fresh候选）
+
+BFF同owner schema新增bff_personal_knowledge（tenant_id/owner_id/knowledge_id复合PK，三正文、正安全revision、UTC created/updated/deleted_at）与bff_personal_knowledge_usage（本人scope PK、enabled、正安全revision/updated_at）。不加FK、跨owner JOIN或模型记忆表。列表仅deleted_at IS NULL，scope索引按created_at DESC/knowledge_id ASC；最大100由同scope advisory xact lock下count+insert保证，数据库约束正文上限与active非空白。
+
+删除不再保存原正文：原子清name/when_to_use/content、revision+1、deleted_at写UTC；tombstone保ID和删除版本，阻止ABA/重建并支持同原expected_revision的自然204重放。tombstone不计有效额度；当前保留至账号数据清理，未新增自动物理purge。普通GET无ID不建行，开关缺省false/revision0；知识写不创建/改动独立usage或原个人资料。
+
+全部写与读取在本owner单client有限事务，未知COMMIT不报确定失败；权限来自受信tenant/subject，不信body。canonical唯一database/schema.sql，fresh installer/readiness同步；不自动改变正常库、不将fresh安装当有数据升级。具名additive演进和恢复须在正常激活前独立验收，本片保留原共享数据、角色、积分与登录配置。
+
+## ScheduledTask outbox v3：callback revision（2026-10-18，源码候选）
+
+canonical SQL 原样保持。`bff_scheduled_task_outbox.payload` 仍为原闭合 envelope/lineage/task；`task.revision` 已保存。本片 schema_version 2→3，仅明确以该 immutable revision 构造 Scheduler callback 的 task_revision；不从当前 task 重新生成旧 command，也不把 Scheduler version 当本地 revision。旧 v2 payload 解析失败并停止投递，不原地补写或自动重置 receipt。
+
+callback body 的 revision 已进入既有完整 semantic digest；首次 snapshot 的 taskRevision 固定为同一值，沿原 Scheduler receipt JSONB 与 accept task lock/CAS。持久表、锁序、主键、retention 与幂等 key scope 不变。周期修改前已物化但尚未接纳的旧 occurrence 不能以当前 revision 产生新 dispatch；已原子接纳的原 receipt/dispatch 不因本片撤销或重新执行。
+
+fresh 隔离资源用于本片真实 PG/HTTP 验证。正常库旧 command/已登记 schedule 必须在正式切换前盘点，先经具名 owner 处置将旧 v2 command 收敛到终态，再以正式任务 mutation 产生新 revision/command 并核 Scheduler 回执；不能仅产生新 revision：旧 pending/retryable/leased command 会阻挡同 task 后继，解析异常也可能拖住同批其他 command；该激活不在本片自动执行，禁止 canonical installer 覆盖非空库或批量改 payload。未观察共享数据不能宣称零旧行或迁移完成。
+
 ## S4c 选择数据候选（2026-10-17，正常库未切换）
 
 用现bff_project的selected_skill_installation_ids TEXT[] NOT NULL DEFAULT '{}'保存有序默认（最多16、无空/重复ID），删除仅存名称开关的bff_project_skill。只存opaque安装ID，不复制Platform的pin/来源/启停状态；不加独立配置表、版本表或跨owner外键。默认变更沿Project行锁及现bff_idempotency_receipt原子提交，暂不新增不需要的CAS revision列。

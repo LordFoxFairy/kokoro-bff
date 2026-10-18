@@ -1,3 +1,25 @@
+## 本人知识 CRUD 与使用偏好（2026-10-18，实施门）
+
+沿既定本人产品偏好 owner：BFF 唯一保存本人知识；不借 Agent tenant memory，不新增服务/网关/模型/向量/队列。Manus 已观察名称500、使用时机500、内容2000及上限100；本片按相同上限实现。当前参考账号开关关闭不证明默认；Kokoro明确默认false，保存开关不宣称Agent已消费。
+
+资源为本人范围内客户端生成的 canonical UUIDv4，PUT expected_revision=0创建、正revision替换；不再造POST receipt。未知ACK仅同主体GET核实原ID/字段，不自动换ID或重发。DELETE带正expected_revision，匹配删除时revision+1并清正文、留不复用ID的tombstone；相同旧revision重复删除204，其他版本409。更新不能复活删除项。开关独立singleton CAS，不绑个人资料四字段或删除知识。
+
+每人至多100有效项，GET返回全部至多100项（created_at DESC/ID ASC），可选query按三个字段的PostgreSQL lower+字面子串匹配；不是分页快照、BM25或embedding。小且有界的集合不造cursor/全文索引。所有写在同一checked-out PG client事务取得本人scope advisory xact lock（哈希碰撞仅额外串行），锁内限额/行CAS；只访问本owner SQL，GET不建行。5s绝对预算、取消时销毁不确定client，COMMIT派出后失败报unknown，不盲重试。
+
+落点：独立personal-knowledge port、input、HTTP route、Postgres repository；装配沿现服务，不增加转发service层。Public16.1 additive六operations先冻结机器、治理例外及完整16.0父逆；新表只进canonical SQL/fresh隔离安装。正常非空库的具名演进/备份、版本产物发布与Web配对待本owner候选验收，不自动套旧personalization演进例外或覆盖共享库。未激活不冒正常功能完成。
+
+验收：严格JSON/Unicode/闭集/限长，可信tenant/subject隔离，增改查删/开关，100项并发上限、CAS竞争、删除不可复活、原ID未知恢复、锁超时/取消/回滚/未知COMMIT与重启；HTTP沿真实准入测试替身，不称真实IAM。模型、扣费、CI不运行，记忆自由文本导入单独处理。
+
+## 调度周期版本围栏（2026-10-18，实施门）
+
+BFF 保有 ScheduledTask 产品规则；Scheduler 仍只保存、物化并透传其 opaque callback body。当前回调对比 prompt/timezone 等正文后才以收到时的 task revision 创建 snapshot，导致仅周期变更的旧 occurrence 可能被新 revision 接纳。本片不增加 owner、进程、表或 Scheduler API，不扩模型/扣费范围。
+
+register/replace 的 callback body 必带 BFF 正安全整数 `task_revision`，值来自原 outbox 冻结 revision，不取此时数据库或 Scheduler version。receiver 在 receipt claim 前拒绝缺失/非法值；无 snapshot 时对比当前 task revision，再将原值冻结到 snapshot。现 accept 的 receipt→task 同事务锁与 revision CAS 承接读取后发生修改的竞态；已接受的同 key/body 只重放原终态，不再派发。
+
+调度 command outbox schema_version 2→3，冻结此 outbound 语义；旧 v2 不以相同 key 改造后重送。旧无 revision callback 拒绝，无默认、推断或双协议 fallback。正常进程不在本片自动重载：激活前须盘点旧 command/已登记 schedule，先将旧 pending/retryable/leased v2 command 经具名 owner 处置收敛到终态，再对需继续的任务经正式新 revision mutation 重新登记并核回执；未收敛前保持原进程，不激活候选；不直接重写共享行或清 receipt。仅源码候选和独占 fresh fixture 验证，不冒正常组合已切换。回滚代码须与对应 fixture/部署版本成对，不让旧代码接收新 revision 语义后静默退回旧规则。
+
+验证覆盖 outbound exact revision、非法 revision 零 receipt/派发、仅周期变更的迟到 callback、当前 revision 正控、同 key/body 重放和原锁内 CAS；真实 PG/HTTP 隔离测试不启动派发 worker。anchor 回投、monthly/once 与持续 next 另续，不能以本片代替全部周期能力。
+
 ## S4c 项目默认与消息选择（本地源码候选，2026-10-17）
 
 沿已批准模型替换名称开关，不新增服务/依赖或通用选择框架。BFF以现Project保存有序、最多16个不重复installation ID作为默认；Platform仍单写安装/启停/精确版本。GET/PUT项目skill-selection读取/整体替换默认，空数组清空；PUT逐项通过正式Project Get核当前安装与启用，不代替Agent执行授权，删除失效默认允许直接提交空列表。旧按名称PATCH与bff_project_skill同步退休，不做name/ID双轨。

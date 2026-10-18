@@ -62,6 +62,15 @@ export function parseOpenApiOperations(source) {
 }
 
 function expectedIdempotency(operation) {
+  if (
+    new Set([
+      "PUT /v1/preferences/knowledge/{knowledge_id} replaceSelfKnowledge",
+      "DELETE /v1/preferences/knowledge/{knowledge_id} deleteSelfKnowledge",
+      "PUT /v1/preferences/knowledge-usage replaceSelfKnowledgeUsage",
+    ]).has(`${operation.method} ${operation.path} ${operation.fields.get("operationId")}`)
+  )
+    return "none"
+
   if (["GET", "HEAD", "OPTIONS"].includes(operation.method)) return "none"
   if (operation.method === "POST" && SPECIFICATION_BROWSER_READS.get(operation.path) === operation.fields.get("operationId")) return "none"
   if (operation.fields.get("operationId") === "previewGithubSkill") return "none"
