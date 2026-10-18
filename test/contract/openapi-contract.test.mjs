@@ -1320,6 +1320,34 @@ test("R75 creation schema requires exactly the five production-required properti
   }
 })
 
+test("current ScheduledTask reads return a required stored anchor without changing mutation snapshots", async () => {
+  const { load } = await import("js-yaml")
+  const document = load(await readFile(currentOpenapiUrl, "utf8"))
+  assert.equal(Object.hasOwn(document.components.schemas.ScheduledTask.properties, "recurrence_anchor_at"), false)
+  const task = document.components.schemas.ScheduledTaskDetails
+  assert.deepEqual(task.allOf, [{ $ref: "#/components/schemas/ScheduledTask" }])
+  assert.ok(task.required.includes("recurrence_anchor_at"))
+  assert.deepEqual(task.properties.recurrence_anchor_at, { type: "string", format: "date-time" })
+  assert.deepEqual(document.components.schemas.ScheduledTask.properties.next_run_at, { type: ["string", "null"], format: "date-time" })
+  assert.equal(document.info.version, "16.2.0")
+  const { restorePublic161ScheduledAnchorContract } = await import("../../scripts/verify-scheduled-anchor-contract.mjs")
+  const source = await readFile(currentOpenapiUrl, "utf8")
+  assert.equal(
+    createHash("sha256").update(restorePublic161ScheduledAnchorContract(source)).digest("hex"),
+    "930ba94677ce83655ab6ee73c6bb18404e0c84a29de602a128a77d6a7fb87ad5",
+  )
+  const start = source.indexOf("    ScheduledTaskDetails:\n")
+  const end = source.indexOf("    ScheduledTaskDetailResponse:\n", start)
+  const block = source.slice(start, end)
+  for (const changed of [
+    block.replace("required: [recurrence_anchor_at]", "required: []"),
+    block.replace("recurrence_anchor_at: { type: string, format: date-time }", "recurrence_anchor_at: { type: [string, 'null'], format: date-time }"),
+  ]) {
+    assert.notEqual(changed, block)
+    assert.throws(() => restorePublic161ScheduledAnchorContract(source.slice(0, start) + changed + source.slice(end)), /Scheduled anchor/)
+  }
+})
+
 test("R255 ScheduledTask publishes an anchor-only input and a required nullable Scheduler-confirmed next instant", async () => {
   const document = await r73ScheduledContract()
   const create = document.components.schemas.CreateScheduledTaskRequest

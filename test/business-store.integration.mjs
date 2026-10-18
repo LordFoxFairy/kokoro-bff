@@ -356,6 +356,7 @@ integrationTest("persists BFF facts, registers Scheduler, and replays Agent disp
     const createdBody = await created.json()
     const taskId = createdBody.data.task.id
     assert.match(taskId, /^scheduled_[0-9a-f]{32}$/)
+    assert.equal(Object.hasOwn(createdBody.data.task, "recurrence_anchor_at"), false)
     await waitFor(() => schedulerCalls.length === 1)
     assert.equal(schedulerCalls[0].method, "POST")
     assert.equal(schedulerCalls[0].authorization, "Bearer scheduler-secret")
@@ -374,6 +375,14 @@ integrationTest("persists BFF facts, registers Scheduler, and replays Agent disp
     assert.equal(patched.status, 200)
     const patchedTask = (await patched.json()).data.task
     assert.equal(patchedTask.prompt, "Review the project and report blockers.")
+    assert.equal(Object.hasOwn(patchedTask, "recurrence_anchor_at"), false)
+    for (const path of ["/v1/scheduled-tasks", `/v1/scheduled-tasks/${taskId}`]) {
+      const read = await fetch(`${base}${path}`, { headers: auth(namespace) })
+      assert.equal(read.status, 200)
+      const data = (await read.json()).data
+      const stored = data.task ?? data.tasks.find((task) => task.id === taskId)
+      assert.equal(stored.recurrence_anchor_at, createPayload.recurrence_anchor_at)
+    }
     await waitFor(() => schedulerCalls.length === 2)
     assert.equal(schedulerCalls.at(-1).method, "PUT")
 
@@ -491,10 +500,12 @@ integrationTest("persists BFF facts, registers Scheduler, and replays Agent disp
     const restartedBase = await listen(bff)
     await new Promise((resolve) => setTimeout(resolve, 100))
     const listed = await fetch(`${restartedBase}/v1/scheduled-tasks`, { headers: auth(namespace) })
+    const currentTasks = (await listed.json()).data.tasks
     assert.deepEqual(
-      (await listed.json()).data.tasks.map((task) => task.id),
+      currentTasks.map((task) => task.id),
       [taskId],
     )
+    assert.equal(currentTasks[0].recurrence_anchor_at, createPayload.recurrence_anchor_at)
     const replayedCreate = await fetch(`${restartedBase}/v1/scheduled-tasks`, { method: "POST", headers: createHeaders, body: JSON.stringify(createPayload) })
     assert.equal(replayedCreate.status, 200)
     assert.deepEqual((await replayedCreate.json()).data.task, createdBody.data.task)

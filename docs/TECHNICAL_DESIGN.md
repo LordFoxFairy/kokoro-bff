@@ -1,3 +1,11 @@
+## 自动化周期锚点回投（2026-10-18，既定周期补齐切片）
+
+BFF 继续拥有 ScheduledTask 规则；Scheduler 继续拥有 occurrence/next_due。当前 GET 列表/详情用 ScheduledTaskDetails 返回已存 recurrenceAnchorAt 为必需 UTC recurrence_anchor_at，与 nullable next_run_at 独立，不按下次执行、创建日或服务器日期猜星期。输入可选 anchor、时区和数据库均不变。
+
+写回执与当前读取有不同生命周期：原 ScheduledTask 写快照/schema/mapper保持原字节，创建、PATCH、retry及项目内创建继续保存/重放原 ACK；GET Details 在原字段上增加锚点。已存终态在通用幂等层直接原样返回，不能把新 required 字段强加到旧 ACK，也不以当前任务覆盖历史。不是双读、fallback、历史数据改写或新服务。
+
+Public16.2 只增加当前读表示和两处 GET schema绑定，完整逆回16.1保护其他surface。消费者固定producer后分别解码读表示/写ACK，再接星期编辑器；正常激活、monthly/once和持续next投影仍待完成。本片不启用正常任务、模型或扣费。
+
 ## 本人知识 CRUD 与使用偏好（2026-10-18，实施门）
 
 沿既定本人产品偏好 owner：BFF 唯一保存本人知识；不借 Agent tenant memory，不新增服务/网关/模型/向量/队列。Manus 已观察名称500、使用时机500、内容2000及上限100；本片按相同上限实现。当前参考账号开关关闭不证明默认；Kokoro明确默认false，保存开关不宣称Agent已消费。

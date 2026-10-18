@@ -1,3 +1,7 @@
+## 2026-10-18 当前候选 Public16.2
+
+GET列表/详情的 ScheduledTaskDetails 公开已存 required recurrence_anchor_at，与 nullable next_run_at 独立；152 operations 不变。写操作的原 ScheduledTask/ACK完整保持，历史终态不改写；不是运行时兼容分支。唯一机器源和mapper同步，新增读表示/绑定完整逆回Public16.1。候选未正常激活，Web固定producer/星期编辑和其他周期尚待后继。
+
 ## 2026-10-18 当前候选 Public16.1
 
 唯一可编辑OpenAPI在原路径新增本人知识六operation，固定资源UUID＋CAS代替新建通用receipt；独立知识使用开关不改四字段profile。新增面的request/success/query绑定和完整16.0字节父逆由verify-personal-knowledge-contract校验，操作inventory正规更新。当前是未提交源码候选，不伪造固定commit，不更新Web vendor/生成物或冒正常激活；owner真实验证见docs/CURRENT。

@@ -1,4 +1,4 @@
-import type { ScheduledTask } from "../../contracts/index.js"
+import type { ScheduledTask, ScheduledTaskDetails } from "../../contracts/index.js"
 import type { ScheduledTaskFact } from "../../domain/scheduled-task/task.js"
 
 /** Map the internal UTC Date aggregate to the public RFC 3339 wire contract. */
@@ -17,4 +17,9 @@ export function scheduledTaskResponse(task: ScheduledTaskFact): ScheduledTask {
     enabled: task.enabled,
     status: task.status,
   }
+}
+
+/** A current read must not alter the representation saved in mutation receipts. */
+export function scheduledTaskDetails(task: ScheduledTaskFact): ScheduledTaskDetails {
+  return { ...scheduledTaskResponse(task), recurrence_anchor_at: task.recurrenceAnchorAt.toISOString() }
 }

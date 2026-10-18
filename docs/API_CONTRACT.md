@@ -1,3 +1,9 @@
+## Public16.2：当前 ScheduledTask 读取返回周期锚点（2026-10-18，源码候选）
+
+GET /v1/scheduled-tasks 列表项与 GET /v1/scheduled-tasks/{id} 详情使用 ScheduledTaskDetails：复用原 ScheduledTask 字段，增加 required recurrence_anchor_at:string/date-time。它是 BFF 保存的规则 UTC instant；next_run_at 仍必需 nullable，只代表 Scheduler 确认的下次时间，不能互代。
+
+写操作 ScheduledTaskResponse/原 ScheduledTask 快照不变，新写入和历史终态均保持相同 ACK 格式；不为新增读字段改历史回执或用当前事实补齐旧结果。创建/PATCH输入、身份/幂等、callback与数据库不变。消费者需固定16.2并区分当前读取与不可变ACK，不加缺字段fallback；正常旧实例未配对激活前不宣称返回新读字段。
+
 ## Public16.1 本人知识（2026-10-18，目标机器与源码候选）
 
 唯一机器源新增六operation：GET /v1/preferences/knowledge（可选单一query，≤500 Unicode scalar值，字面case-insensitive子串）；GET/PUT/DELETE /v1/preferences/knowledge/{knowledge_id}（lowercase UUIDv4）；GET/PUT /v1/preferences/knowledge-usage。身份只取IAM准入context。无身份selector、Idempotency-Key或ETag条件头。当前四字段profile原样保持，知识不等于记忆导入。

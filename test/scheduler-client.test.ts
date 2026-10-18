@@ -57,7 +57,7 @@ describe("BFF Scheduler control mapping", () => {
     })
   })
 
-  it("maps weekly weekday in the configured local timezone and pauses inactive tasks", () => {
+  it("maps the saved weekly anchor in its timezone, returns it to readers, and pauses inactive tasks", async () => {
     const weekly = {
       ...daily,
       id: "scheduled_weekly",
@@ -72,6 +72,18 @@ describe("BFF Scheduler control mapping", () => {
     assert.equal(result.schedule, "30 23 * * 0")
     assert.equal(result.timezone, "America/Los_Angeles")
     assert.equal(result.paused, true)
+    const { tsImport } = await import("tsx/esm/api")
+    const { scheduledTaskResponse } = await tsImport("../src/application/scheduled/mappers.ts", import.meta.url)
+    const snapshot = scheduledTaskResponse({ ...weekly, nextRunAt: null })
+    assert.equal(Object.hasOwn(snapshot, "recurrence_anchor_at"), false, "immutable mutation snapshots retain their original shape")
+    const { scheduledTaskDetails } = await tsImport("../src/application/scheduled/mappers.ts", import.meta.url)
+    for (const nextRunAt of [null, new Date("2026-09-14T06:30:00.000Z")]) {
+      const response = scheduledTaskDetails({ ...weekly, nextRunAt })
+      assert.equal(response.recurrence_anchor_at, "2026-09-07T06:30:00.000Z")
+      assert.equal(response.next_run_at, nextRunAt?.toISOString() ?? null)
+      assert.equal(response.timezone, "America/Los_Angeles")
+      assert.equal(weekly.recurrenceAnchorAt.toISOString(), response.recurrence_anchor_at)
+    }
   })
 
   it("uses generated control operations with exact path, credentials, and owner envelope", async () => {

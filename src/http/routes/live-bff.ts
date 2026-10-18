@@ -9,7 +9,7 @@ import { reply } from "../response.js"
 import type { IdempotencyEntry, MutationTicket } from "../../application/idempotency.js"
 import { projectData, scheduledData } from "./helpers.js"
 import { scheduledCreateInput, scheduledPatchInput } from "../../application/scheduled/input.js"
-import { scheduledTaskResponse } from "../../application/scheduled/mappers.js"
+import { scheduledTaskDetails, scheduledTaskResponse } from "../../application/scheduled/mappers.js"
 import { scheduledTaskId } from "./scheduler.js"
 import { projectName } from "../../domain/project/name.js"
 
@@ -151,7 +151,7 @@ export async function liveBffBusiness(
       const taskId = businessPath[1]
       if (businessPath.length === 1 && method === "GET") {
         const tasks = await store.services.scheduledTasks.list(ownerScope)
-        await reply(response, 200, ok(scheduledData(tasks.map(scheduledTaskResponse)), context.requestId), context, idempotency, mutation)
+        await reply(response, 200, ok(scheduledData(tasks.map(scheduledTaskDetails)), context.requestId), context, idempotency, mutation)
         return true
       }
       if (businessPath.length === 1 && method === "POST") {
@@ -172,7 +172,7 @@ export async function liveBffBusiness(
       }
       if (businessPath.length === 2 && taskId !== undefined && method === "GET") {
         const task = await store.services.scheduledTasks.find(ownerScope, taskId)
-        await reply(response, task === null ? 404 : 200, task === null ? failure("scheduled_task_not_found", "Scheduled task was not found", context.requestId) : ok({ task: scheduledTaskResponse(task) }, context.requestId), context, idempotency, mutation)
+        await reply(response, task === null ? 404 : 200, task === null ? failure("scheduled_task_not_found", "Scheduled task was not found", context.requestId) : ok({ task: scheduledTaskDetails(task) }, context.requestId), context, idempotency, mutation)
         return true
       }
       if (businessPath.length === 2 && taskId !== undefined && method === "PATCH") {

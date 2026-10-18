@@ -1,3 +1,7 @@
+## 周期锚点公开投影（2026-10-18）
+
+本片复用 bff_scheduled_task.recurrence_anchor_at 非空 UTC instant 和现有 repository 内部 Date，当前读取 mapper 返回相同值；写回执保持原 JSON 快照，不改 canonical schema、既有行/回执、next_run_at 投影或 Scheduler 存储。响应字段增加不构成正常数据库演进授权。
+
 ## 本人知识（2026-10-18，canonical fresh候选）
 
 BFF同owner schema新增bff_personal_knowledge（tenant_id/owner_id/knowledge_id复合PK，三正文、正安全revision、UTC created/updated/deleted_at）与bff_personal_knowledge_usage（本人scope PK、enabled、正安全revision/updated_at）。不加FK、跨owner JOIN或模型记忆表。列表仅deleted_at IS NULL，scope索引按created_at DESC/knowledge_id ASC；最大100由同scope advisory xact lock下count+insert保证，数据库约束正文上限与active非空白。

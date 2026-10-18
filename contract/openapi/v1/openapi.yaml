@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 16.1.0
+  version: 16.2.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -5005,7 +5005,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ScheduledTaskResponse'
+                $ref: '#/components/schemas/ScheduledTaskDetailResponse'
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
         '401': { $ref: '#/components/responses/ServiceAuthFailed' }
@@ -16935,6 +16935,23 @@ components:
         status:
           type: string
           enum: [active, paused, failed]
+    ScheduledTaskDetails:
+      allOf:
+        - $ref: '#/components/schemas/ScheduledTask'
+      type: object
+      required: [recurrence_anchor_at]
+      properties:
+        recurrence_anchor_at: { type: string, format: date-time }
+    ScheduledTaskDetailResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [task]
+          properties:
+            task: { $ref: '#/components/schemas/ScheduledTaskDetails' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
     ScheduledTaskResponse:
       type: object
       required: [data, meta]
@@ -16955,7 +16972,7 @@ components:
           properties:
             tasks:
               type: array
-              items: { $ref: '#/components/schemas/ScheduledTask' }
+              items: { $ref: '#/components/schemas/ScheduledTaskDetails' }
         meta: { $ref: '#/components/schemas/RequestMeta' }
     CreateScheduledTaskRequest:
       type: object

@@ -12,3 +12,6 @@ export type ScheduledTask = {
   enabled: boolean
   status: "active" | "paused" | "failed"
 }
+
+/** Current rule read, separate from the immutable mutation response snapshot. */
+export type ScheduledTaskDetails = ScheduledTask & { recurrence_anchor_at: string }

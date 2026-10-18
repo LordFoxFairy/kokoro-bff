@@ -1,3 +1,4 @@
+import { restorePublic161ScheduledAnchorContract } from "./verify-scheduled-anchor-contract.mjs"
 import { createHash } from "node:crypto"
 import { load } from "js-yaml"
 const paths = ["/v1/preferences/knowledge", "/v1/preferences/knowledge/{knowledge_id}", "/v1/preferences/knowledge-usage"]
@@ -13,6 +14,7 @@ const schemas = [
   "PersonalKnowledgeErrorResponse",
 ]
 export function restorePublic16KnowledgeContract(source) {
+  source = restorePublic161ScheduledAnchorContract(source)
   if (!/^  version: 16\.1\.0$/mu.test(source)) return source
   for (const [names, indent] of [
     [paths, 2],
@@ -34,6 +36,7 @@ export function restorePublic16KnowledgeContract(source) {
 export function inspectPersonalKnowledgeContract(source) {
   const errors = []
   try {
+    source = restorePublic161ScheduledAnchorContract(source)
     restorePublic16KnowledgeContract(source)
   } catch (e) {
     errors.push(e.message)

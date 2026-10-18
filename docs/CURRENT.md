@@ -1,3 +1,13 @@
+## 2026-10-18 自动化权威锚点当前读取（本地候选，未正常激活）
+
+沿56c262c补当前GET列表/详情的ScheduledTaskDetails，返回已存UTC recurrence_anchor_at，与nullable next_run_at独立；原写快照/schema/mapper完整保持，历史终态原样重放，不改通用幂等、数据库或回执。Public16.2／152 operations，SHA-256 `e4c1b3b1d327994dd5e903bfb3b3a075ded24446c0173a0f1c15a75cab92ae80`，新增读表示完整逆回16.1；Web固定消费/星期编辑尚未接，不冒正常页面完成。
+
+初版共用响应required字段虽测试通过，复核确认旧终态绕过mapper的P2；正常库仅只读计数15条成功旧ACK均缺anchor，未读出正文或修改。先改三面裁决，再用原weekly case及当前契约case复现RED2→GREEN2，收敛当前读/不可变ACK两个真实生命周期。独审13个停写非文档SHA匹配、复核P2关闭且无新增确定P0–P2。只新增一个契约case，原weekly/PG用例扩断言，没有新suite。
+
+最终Node22配置format/lint/type/build、contract691 PASS、architecture35 PASS、focused62 PASS均通过；默认原manifest全清单仅限2workers，1272 PASS／0 FAIL／3原资源SKIP。独占fresh canonical PG/HTTP原用例1 PASS／0 SKIP，覆盖原格式写ACK、当前列表/详情anchor、重启读及原样创建重放；Scheduler/Agent仅受控loopback，不冒正常调度或模型执行，自有库已清理。首完整contract一项旧版本字面已精确16.1→16.2；首默认与contract内部清dist/build重叠导致模块缺失，未改断言或缩范围，最终全部串行复验。13源码输入停写前后保持；原始收据仅Root ignored运行目录。
+
+没有改正常数据库/配置/登录/权限/积分或重载正常进程；模型/实际工具执行、扣费、CI、远端PR与Root gitlink均未操作。完整真实integration本片未跑，此前组合两失败仍OPEN；知识正常激活、记忆导入、其他周期及全产品/正常浏览器验收继续待办，不以本局部候选满足合并条件。
+
 ## 2026-10-18 本人知识后端（候选已验；Web/正常库未激活）
 
 沿基线24dcf7d与前轮调度mixed继续，主方唯一writer，未提交/发布。本人知识与独立usage新增六正式候选operation：Public16.1.0/152，完整剥离新增块后逐字节恢复原Public16.0 SHA e15758fa…；旧Skills/MCP/个人资料wire、外部owner pin/generated、角色/凭据/依赖不变。正文500/500/2000，最多100有效项、全量字面查询；固定UUID＋CAS，删除清正文留tombstone防ABA，关闭不删知识，未知COMMIT只读核实。
