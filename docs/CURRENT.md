@@ -1,3 +1,23 @@
+## 2026-10-18 Public18 Artifact 服务端筛选候选（未加载正常环境）
+
+沿 a577625 同需求分支，新增 artifact-only q/type：在既有 BFF 授权关系候选窗口内，通过 Storage 固定 v3 FINAL 读取后的 title/filename/MIME 匹配，不用未验证 source claims、不新建 metadata 副本/索引/worker。原 min(500,limit*5)/30秒预算保持，游标记录最后扫描而非最后命中位置；空items+next可继续，只有next=null是穷尽，不宣称索引/相关性搜索。file严格拒绝新参数。单一art2将规范化查询、type、kind、tenant、subject、limit和keyset一并绑定；Public18明确退休旧Artifact游标，无旧版本fallback或路径alias。
+
+原query/真实HTTP-Connect案例3 FAIL后实现8 PASS；同一新增案例补owner迟到返回的取消，先实际误200 RED，await后再核signal后GREEN。Unicode200码点/控制字符、八类、FINAL filename而非旧source、跨窗口后页命中、query/type/limit/actor/tenant互换零owner读、旧cursor拒绝、503不假空均覆盖；原HTTP入口真实走正式准入/最终解码，Storage与对象网络为controlled peers，不称真实Provider/工具执行。另独占PG原R237 Artifact关系权限案例1 PASS/0SKIP，临时库已清理；它证明Postgres身份/项目关系边界，不冒充整个新筛选HTTP与真实Storage完整组合。
+
+Public18完整逆变精确还原Public17 SHA ffc655e893b6ac90ee553acd368abbd68c7a3e77ed3a33a872643bf0d5a2a21f，原period等历史门继续保留。首次完整contract门遗漏原Skills current版本断言（17→18），已精确更新唯一版本值，不削弱Skills字段/权限/路由断言；原失败日志保留。独立只读审未发现确定P0–P2。最终641个工程输入停写一致：format/lint/typecheck/contract/architecture/build及默认原manifest均0，contract694 PASS、architecture35 PASS、默认1292 PASS/3原资源SKIP；源码验证范围与原始收据只留Root ignored var/dev/library-filter-20261018。此为后端候选交付，不代替前端或正常环境验收。
+
+当前App仍对已加载页做本地过滤，尚未固定此候选或展示稀疏页继续状态；后继必须接服务端query/reset/abort/cursor与UI实测后再称资料库筛选完成。正常BFF/App/Scheduler未为本片重载，正常Schema/账号/登录/权限/积分/任务不动；模型、实际工具、扣费、CI及远端PR继续暂停。原知识/正常配对文档余diff保留，不夹入本候选写区。
+
+## 2026-10-18 Public17／Scheduler3 正常本地配对已验收（覆盖下文未激活记录）
+
+用户明确授权备份恢复演练后更新正常环境。本轮先导出 BFF/Scheduler 两 owner schema，在独占临时库恢复并精确比较全部行及列；再演进 BFF 显式日历字段、退役 anchor/重复 next 列，Scheduler 增加 once/current 所需列与约束。演进目标与各 owner canonical 指定表的列和约束精确一致；两条原任务的内容、revision、暂停状态及历史 outbox/receipt 保留。演练失败尝试保留，只有最终成功证据用于切换；自有临时库均清理。
+
+停止并确认旧进程终止后，正常环境按同一受检操作演进、加载 BFF a577625 与 Scheduler 3bb7ff6。另定位一条历史 daily 登记缺 task_revision：通过正式 Scheduler replace 管理接口以当前 BFF 完整定义/当前 revision/paused=true 配对，追加一个新 receipt；相同 key/body 实际重放 ACK 相同，原 receipt 逐行精确保留。不直接 SQL 修 Scheduler payload，不重写历史 BFF 命令。
+
+最终复用正式 SchedulerTaskStateReader 核完整 trigger/body/tenant/subject/revision/target/policy，两个当前状态均 paused、next=null；BFF 全部事实与演练后的摘要精确一致，Scheduler occurrence/dispatch 仍零。正常 Web 同源页面真实回读两条任务，周三保留；多选菜单保持展开、Escape 返回触发器、取消草稿不落库，刷新后侧栏及任务正常。此次不是新建/启用任务、Agent/MCP 执行或模型验收。
+
+本轮实际 BFF build 通过；本次生产源码与已完成本地 producer a577625 精确一致，沿用其完整门禁证据。正常配对原始收据仅 Root ignored var/dev/scheduled-normal17-20261018；无账号、权限、登录、积分、模型配置变化，无其他服务重启。模型/工具/扣费、CI及远端 PR 继续暂停，Agent 定时 MCP 管理及其他开放项不因此完成。
+
 ## 2026-10-18 Scheduler 3.0 配对与同一次触发管理（未正常激活）
 
 基于d31455e同需求工作树固定Scheduler `3bb7ff61b0d72418aa048ca35b8c3f144a33f13e`／3.0.0，canonical SHA256 `d349eae8bba207074b1edf91acd9f08e94f39a27363441f45186c1799159c999`；唯一vendor/生成SDK配对，不双读。Public17／152 operations候选保持，当前3.0增量不再改SQL。锁内比较同一冻结once instant，允许到期后普通/完整规则编辑及启停，新建或改变instant仍须未来；不复制Scheduler耗尽事实或旧revision来源链。

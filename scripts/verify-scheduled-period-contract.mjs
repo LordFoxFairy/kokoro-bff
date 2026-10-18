@@ -1,3 +1,4 @@
+import { restorePublic17LibraryFilterContract } from "./verify-library-filter-contract.mjs"
 import { createHash } from "node:crypto"
 import { load } from "js-yaml"
 // Release inverse only; this frozen old block is never a runtime schema or decoder.
@@ -7,6 +8,7 @@ const blockDigest = "a4fbfdc00adbec0fb782cd1ae8956b5beb4964455f160fdc0cb4d559b7c
 const parentDigest = "e4c1b3b1d327994dd5e903bfb3b3a075ded24446c0173a0f1c15a75cab92ae80"
 const digest = (value) => createHash("sha256").update(value).digest("hex")
 export function restorePublic162ScheduledPeriodContract(source) {
+  source = restorePublic17LibraryFilterContract(source)
   if (!/^  version: 17\.0\.0$/mu.test(source)) return source
   const start = source.indexOf("    ScheduledTaskWeekdays:\n")
   const end = source.indexOf("    McpConnectionProjection:\n", start)
@@ -18,6 +20,7 @@ export function restorePublic162ScheduledPeriodContract(source) {
 export function inspectScheduledPeriodContract(source) {
   const errors = []
   try {
+    source = restorePublic17LibraryFilterContract(source)
     if (load(source).info.version !== "17.0.0") throw Error("Scheduled period current version drift")
     restorePublic162ScheduledPeriodContract(source)
   } catch (error) {

@@ -1,3 +1,4 @@
+import { inspectLibraryFilterContract } from "./verify-library-filter-contract.mjs"
 import { inspectScheduledPeriodContract } from "./verify-scheduled-period-contract.mjs"
 import { inspectPersonalKnowledgeContract } from "./verify-personal-knowledge-contract.mjs"
 import { inspectSkillProductContract, inspectCurrentSkillsSpecificationContract } from "./verify-skill-product-contract.mjs"
@@ -3124,8 +3125,9 @@ export function inspectBffOpenApi(source: string, baseline: readonly BaselineOpe
     ...inspectCurrentSkillsSpecificationContract(source),
     ...inspectPersonalKnowledgeContract(source),
     ...inspectScheduledPeriodContract(source),
+    ...inspectLibraryFilterContract(source),
   ]
-  if (!/^  version: 17\.0\.0$/mu.test(source)) errors.push("current public artifact version must be 17.0.0")
+  if (!/^  version: 18\.0\.0$/mu.test(source)) errors.push("current public artifact version must be 18.0.0")
   if (/^  \/v1\/self\/mcp\//mu.test(source)) errors.push("public OpenAPI must not expose browser-private MCP lifecycle routes")
   const connectorList = /^  \/v1\/connector\.list:[\s\S]*?^      operationId: listConnectors$/mu.test(source)
   if (!connectorList) errors.push("public OpenAPI must expose GET /v1/connector.list with operationId listConnectors")

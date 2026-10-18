@@ -137,12 +137,13 @@ Conversation/Message/Share canonical facts，以及 durable AG-UI stream/source-
 - 资源说明：[`docs/api/README.md`](./docs/api/README.md)
 - AG-UI：[`docs/api/v1/agui-chat.md`](./docs/api/v1/agui-chat.md)
 - System / Model / Billing / Capability：当前由 `src/http/routes/owner.ts` 投影
-- Library：IAM admission 后由 `src/http/routes/library-file-list.ts`、`src/http/library-file-list-input.ts` 与
-  `src/infrastructure/clients/storage/personal-file-list.ts` 消费 Storage personal Connect 列表；`kind=file` 必填，
-  只投影 CLEAN ASSET。个人上传由 `src/http/routes/personal-file-upload.ts`、
-  `src/application/personal-file-upload.ts` 与 `src/infrastructure/clients/storage/personal-file-upload.ts`
-  调 Storage personal Create/Complete/GetAsset；当前已真链验可见 CLEAN 上传，跨进程未知结果恢复仍待放行。
-  Agent Artifact 与个人下载仍待独立切片。
+- Library：`src/http/routes/library-file-list.ts` 与 `src/http/library-file-list-input.ts` 在 IAM admission 后按 file/artifact 分流。
+  personal 列表/上传/下载消费既有 Storage personal scope；Artifact 通过 BFF 自有 Conversation/Project 关系
+  和 `src/infrastructure/clients/storage/final-artifact.ts` 的 conversation-scoped FINAL/CLEAN 读取保持可见性。
+  Public18 搜索候选由 `src/application/library-artifact-filter.ts` 规范化 q/type 并匹配当前最终元数据，
+  `src/http/routes/library-artifact-list.ts` 保存有界候选窗口/完整 query cursor，稀疏页可继续而不误报穷尽。
+  canonical 发布及前版逆变门为 `scripts/verify-library-filter-contract.mjs`；语义/边界见 `docs/api/v1/library.md`。
+  当前正常环境仍 Public17；未完成消费者固定/配对前不重载候选或宣称页面搜索已完成。
 - Chat facts：`src/http/routes/chat.ts` 读取/写入 BFF PostgreSQL；已发布 `src/infrastructure/postgres/chat-repository.ts` 维护 tenant、锁和 cursor。在已发布的 R155 Move 职责拆分中，该 Repository 只委派 Move；`conversation-move.ts` 持单一 Move 事务/赢家 receipt 重放，`conversation-move-lease.ts` 持有界 PoolClient 生命周期，既有 `chat-repository-mappers.ts` 做纯 receipt Row 校验；本仓 SQL、public `7.1.0`、port 与行为不变。`chat-turn-service.ts` 与 `agent-dispatch-outbox-repository.ts` 原子提交 Message/Agent command；
 - Agent Chat：`src/http/routes/agent.ts` 只承接 durable AG-UI 读取和 run control；Agent launch 由后台 outbox dispatcher 投递；`src/application/agui/` 投影；
   `src/application/agui/projector.ts` 独立消费 Agent source；`agui-projection-repository.ts` 在公开发送前持久化并分配 cursor，

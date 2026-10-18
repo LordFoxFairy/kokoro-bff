@@ -1,3 +1,11 @@
+## 2026-10-18 Artifact 服务端检索实施边界（候选，未正常加载）
+
+延续 BFF Library 关系与 Storage FINAL 元数据现有边界，在唯一 GET /v1/library 的 artifact 查询新增 q/type；分页按 Storage 当前经授权验证的 title/filename/mime 匹配，不用未核实的 BFF source claims 代替，也不建立第二份 Final metadata 表、索引、worker 或跨 owner SQL。复用原 min(500,limit*5) 候选上限与30秒取消预算，每次查询只走一个受界候选窗口；可能返回空 items 且仍有 next_cursor，消费者必须显式区分“当前窗口未匹配、可继续”与已穷尽的无结果，不自动扫完整库。
+
+BFF 拥有产品分类/查询规范化和分页位置，Storage 保持原17 RPC与唯一 FINAL+CLEAN真值。查询为不区分大小写的 NFC 子串，匹配最终 title/filename；类型使用既有八类 UI taxonomy（all加七个结果类型），mime/title规则在 API 文档明确，后续消费者不再对已加载页二次决定搜索结果。结果按原 delivery keyset 排序，不宣称 BM25、向量、相关性排名或索引全量搜索性能。
+
+因为 cursor 从旧无filter形状收敛为单一完整 filter tuple，唯一 Public18 正式声明该失效边界；退休旧cursor解码，不双读旧协议。file 查询拒绝 q/type，非默认/默认 artifact 均由同一个严格规范化 tuple 绑定 kind/tenant/subject/limit/query/type，改查询不可复用游标；每页身份和 Storage 当前资格重验。无模型/工具/扣费。先改 canonical/query/行为测试并隔离验收，producer和App固定消费及正常配对前不重载正常 BFF，也不修改正常App使其提前发送新query。
+
 ## 2026-10-18 Scheduler 3.0 同触发源消费（实施门）
 
 用户已确认同一次once编辑不复活。固定owner3bb7ff61b0d72418aa048ca35b8c3f144a33f13e／3.0.0及其canonical完整摘要，替换2.0唯一vendor/SDK，不双读。BFF仍拥有产品规则：update在现Project→task锁内比较原once runAt与规范化后新值；精确同instant允许past内容/完整规则/启停管理，新建/改变触发时间仍future。无需查询Scheduler决定本地更新，也不保存旧callback来源链。

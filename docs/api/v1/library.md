@@ -1,27 +1,56 @@
 # Library API v1
 
-Library path 由 BFF 保留；Storage 继续拥有资源、产物、文件与对象生命周期事实。当前尚未接入批准的 Storage v2
-contract，因此该入口不发布假成功投影。
+BFF owns Product visibility, Conversation/Project associations and pagination; Storage owns files,
+Artifacts, FINAL/CLEAN metadata and object bytes. The canonical wire schema is
+[OpenAPI](../../../contract/openapi/v1/openapi.yaml). Browser requests use the Web same-origin adapter
+and current IAM admission; self-reported tenant, subject or scope never grants access.
 
 ## GET `/v1/library`
 
-### Response `503`
+Required `kind=file|artifact`; `limit` is 1–100 (default 50), and `cursor` is opaque. Repeated or
+unknown parameters are rejected. Success is the existing private no-store `data.items/next_cursor`
+page; 400 is invalid query/cursor, 401/403 admission denial, 502 invalid owner response and 503 an
+unavailable owner. Errors are not successful empty pages.
 
-```json
-{
-  "error": {
-    "code": "storage_integration_unavailable",
-    "message": "Storage integration is unavailable"
-  },
-  "meta": { "request_id": "req_library_1" }
-}
-```
+- `file`: CLEAN personal assets in the admitted subject's personal scope. `q` and `type` are rejected.
+- `artifact`: FINAL/CLEAN Artifacts linked to current active Conversations and valid Projects.
+  Optional `q` is at most 200 Unicode code points **before** normalization, with C0 controls and DEL
+  rejected. Trim, NFC and locale-independent lowercase are applied; matching is substring search
+  over the current Storage title or filename. It is not full-text content search or relevance ranking.
+  Optional `type` is `all` (default), `slides`, `documents`, `spreadsheets`, `images`, `video`, `audio`
+  or `other`. An empty/whitespace-only `q` removes the text filter.
 
-未经 service-envelope admission 的请求仍返回 `403 service_auth_failed`。认证通过后的 503 由 BFF 本地生成，不建立
-Storage 连接，不创建 PostgreSQL 事务、Redis cache、receipt 或 outbox。
+Type taxonomy retains the existing Product display precedence over final MIME/title: presentation,
+powerpoint or a whole-word slides/deck token → slides; spreadsheet/excel/csv or 试算表/試算表 →
+spreadsheets; then image, audio or video MIME/known title suffix; then text/pdf/document MIME or
+`.doc[x]/pdf/txt/md` title suffix; otherwise other. MIME comparisons are case-insensitive. This
+classification is Product metadata, not the Storage Artifact kind enum.
 
-## Future Storage v2 contract
+### Bounded federated pagination
 
-未来成功响应只通过 Storage Proto v2 over ConnectRPC 接入，并在 caller × operation × scope、Capability scope mapping、
-trusted Run/ExecutionIdentity、W1 IAM admission 与 per-kind 或 BFF composite pagination 完成后重新设计和发布。旧
-`/internal/bff/library` HTTP path 与环境变量已删除，不提供 fallback。
+Every request reads at most `min(500, limit*5)` currently authorized relationship candidates, then
+revalidates each through the existing conversation-scoped Storage FINAL read. Only verified final
+metadata participates in filtering; unverified Agent delivery claims do not decide matches. The
+existing 30-second request deadline/cancellation and candidate upper bound remain. This does not
+introduce a duplicate metadata index, a background search worker, or cross-owner SQL.
+
+Results keep delivery-time/Conversation/Artifact keyset order. The cursor records the last **scanned**
+candidate, not merely the last matched result, and binds the normalized query/type, tenant, subject,
+kind and limit. Changing any bound value requires starting a new query. Visibility is rechecked on
+each page; a cursor is not authorization or snapshot isolation. Public18 retires previous Artifact
+cursor shapes; start a new query instead of retrying an old cursor.
+
+An empty `items` array with non-null `next_cursor` is a **sparse candidate window**, not proof of no
+matches. Consumers must retain an explicit continue action, and only show a definitive no-match
+state after `next_cursor=null`. Do not auto-scan all pages or pretend a single window is exhaustive.
+
+## Artifact detail and content
+
+`GET /v1/library/artifacts/{conversation_id}/{artifact_id}` revalidates the current BFF association
+and Storage FINAL metadata. Its `/content` child streams the authorized original bytes with the
+existing hash, expiry, byte limit and cancellation checks; it does not redirect to an owner URL.
+Personal upload/content commands retain their canonical admission, scope, idempotency and scan
+requirements. Search does not read object bytes, invoke a model/tool, or change resources.
+
+This Public18 slice is a source candidate until the fixed consumers and normal runtime are paired.
+No normal database or process change is implied by updating this document.

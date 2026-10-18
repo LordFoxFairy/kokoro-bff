@@ -12,8 +12,36 @@ test("Library requires explicit file or artifact kind and bounded single-valued 
     kind: "artifact",
     limit: 100,
     cursor: "opaque.token",
+    query: "",
+    type: "all",
   })
+  assert.deepEqual(libraryFileListInput(new URLSearchParams("kind=artifact&q=%20Re%CC%81SUME%CC%81%20&type=documents")), {
+    kind: "artifact",
+    limit: 50,
+    cursor: "",
+    query: "résumé",
+    type: "documents",
+  })
+  assert.equal(libraryFileListInput(new URLSearchParams({ kind: "artifact", q: "😀".repeat(200) })).query.length, 400)
+  const { libraryArtifactType } = await import("../dist/application/library-artifact-filter.js")
+  for (const [mime, title, type] of [
+    ["application/vnd.presentation", "x", "slides"],
+    ["text/csv", "x", "spreadsheets"],
+    ["IMAGE/PNG", "x", "images"],
+    ["audio/mpeg", "x", "audio"],
+    ["video/mp4", "x", "video"],
+    ["application/pdf", "x", "documents"],
+    ["application/zip", "x", "other"],
+  ])
+    assert.equal(libraryArtifactType(mime, title), type)
   for (const query of [
+    "kind=file&q=x",
+    "kind=file&type=all",
+    "kind=artifact&q=x&q=y",
+    "kind=artifact&type=all&type=all",
+    "kind=artifact&type=unknown",
+    "kind=artifact&q=%00",
+    `kind=artifact&q=${"😀".repeat(201)}`,
     "",
     "kind=",
     "kind=all",
@@ -440,7 +468,7 @@ test("Artifact Library scans only bounded authorized candidates and binds keyset
       response,
       { storage },
       { requestId: "req-1", identity: { namespace: "tenant-1", userId: subjectId } },
-      { kind: "artifact", limit: 1, cursor },
+      { kind: "artifact", limit: 1, cursor, query: "", type: "all" },
       repo,
       (_storage, scope) => ({
         async get(item) {
@@ -605,6 +633,12 @@ test("private Artifact Product HTTP list, item and download keep original bytes 
     const page = await get("/v1/library?kind=artifact")
     assert.equal(page.status, 200)
     assert.equal((await page.json()).data.items[0].artifact_id, "artifact-1")
+    const filtered = await get("/v1/library?kind=artifact&q=REPORT.TXT&type=documents")
+    assert.equal(filtered.status, 200)
+    assert.equal((await filtered.json()).data.items[0].artifact_id, "artifact-1")
+    const excluded = await get("/v1/library?kind=artifact&q=report&type=images")
+    assert.equal(excluded.status, 200)
+    assert.deepEqual((await excluded.json()).data, { items: [], next_cursor: null })
     const item = await get("/v1/library/artifacts/conversation-1/artifact-1")
     assert.equal(item.status, 200)
     assert.equal((await item.json()).data.source_run_id, "run-1")
@@ -628,8 +662,110 @@ test("private Artifact Product HTTP list, item and download keep original bytes 
     assert.equal(crossed.status, 403)
     assert.equal((await crossed.json()).error.code, "product_tenant_forbidden")
     assert.equal(repoCalls, beforeCrossTenant)
-    assert.equal(admissions, 6)
+    assert.equal(admissions, 8)
   } finally {
     await Promise.all(servers.map((server) => new Promise((resolve) => server.close(resolve))))
   }
+})
+
+test("Artifact filters use current FINAL metadata across bounded candidate windows and bind every normalized query", async () => {
+  const { libraryArtifactListRoute } = await import("../dist/http/routes/library-artifact-list.js")
+  const { ProjectResourceError } = await import("../dist/application/project-resource.error.js")
+  const associations = Array.from({ length: 7 }, (_, i) => ({
+    conversationId: "c",
+    artifactId: `a${i}`,
+    runId: "r",
+    sourceAssetId: `s${i}`,
+    sourceArtifactKind: "document",
+    sourceContentSha256: "a".repeat(64),
+    deliveredAt: new Date(Date.UTC(2026, 0, 1, 0, 0, 20 - i)).toISOString(),
+  }))
+  const calls = [],
+    positions = []
+  let ownerFailure = false,
+    cancelAfterOwner = false
+  const repo = {
+    async listCandidates(tenant, subject, position, limit) {
+      positions.push({ tenant, subject, position, limit })
+      return associations.filter((a) => !position || a.deliveredAt < position.deliveredAt).slice(0, limit)
+    },
+  }
+  const invoke = async (cursor = "", query = "résumé", type = "documents", userId = "subject-1", limit = 1, namespace = "tenant-1") => {
+    const req = new EventEmitter()
+    req.headers = {}
+    const res = new EventEmitter()
+    res.setHeader = () => {}
+    res.writeHead = (status) => {
+      res.status = status
+    }
+    res.end = (bytes) => {
+      res.body = JSON.parse(bytes)
+      res.writableEnded = true
+    }
+    await libraryArtifactListRoute(
+      req,
+      res,
+      { storage },
+      { requestId: "filter", identity: { namespace, userId } },
+      { kind: "artifact", limit, cursor, query, type },
+      repo,
+      () => ({
+        async get(a) {
+          calls.push(a.artifactId)
+          if (cancelAfterOwner) req.emit("aborted")
+          if (ownerFailure) throw new ProjectResourceError("storage_unavailable", 503, true)
+          return {
+            kind: "artifact",
+            artifact_id: a.artifactId,
+            title: "Current owner title",
+            filename: a.artifactId === "a5" ? "RÉSUMÉ.txt" : "other.txt",
+            mime_type: "TEXT/PLAIN",
+          }
+        },
+      }),
+    )
+    return res
+  }
+  const first = await invoke()
+  assert.equal(first.status, 200)
+  assert.deepEqual(first.body.data.items, [])
+  assert.ok(first.body.data.next_cursor)
+  assert.equal(calls.length, 5)
+  assert.equal(positions[0].limit, 6)
+  const cursor = first.body.data.next_cursor
+  const beforeInvalid = calls.length
+  for (const input of [
+    ["other", "documents", "subject-1"],
+    ["résumé", "images", "subject-1"],
+    ["résumé", "documents", "other-user"],
+    ["résumé", "documents", "subject-1", 2],
+    ["résumé", "documents", "subject-1", 1, "other-tenant"],
+  ]) {
+    const r = await invoke(cursor, ...input)
+    assert.equal(r.status, 400)
+    assert.equal(r.body.error.code, "invalid_library_page")
+  }
+  const retired = await invoke(cursor.replace("art2_", "art1_"))
+  assert.equal(retired.status, 400)
+  assert.equal(calls.length, beforeInvalid)
+  assert.equal(positions.length, 1)
+  const second = await invoke(cursor)
+  assert.equal(second.status, 200)
+  assert.deepEqual(
+    second.body.data.items.map((i) => i.artifact_id),
+    ["a5"],
+  )
+  assert.ok(second.body.data.next_cursor)
+  const last = await invoke(second.body.data.next_cursor)
+  assert.deepEqual(last.body.data, { items: [], next_cursor: null })
+  assert.equal(positions[1].position.artifactId, "a4")
+  ownerFailure = true
+  const failed = await invoke()
+  assert.equal(failed.status, 503)
+  assert.equal(failed.body.data, undefined)
+  ownerFailure = false
+  cancelAfterOwner = true
+  const cancelled = await invoke("", "", "all")
+  assert.equal(cancelled.status, 503)
+  assert.equal(cancelled.body.data, undefined)
 })

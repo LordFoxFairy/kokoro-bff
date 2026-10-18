@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 17.0.0
+  version: 18.0.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -5166,7 +5166,7 @@ paths:
       x-kokoro-idempotency: none
       x-kokoro-permission: storage.library.read
       summary: List private library files or delivered Artifacts
-      description: A required kind selects either the admitted subject's CLEAN personal ASSET files or FINAL CLEAN Artifacts linked to their active Conversations. Artifact pages revalidate Storage metadata and bind the opaque cursor to kind, tenant, subject and limit; a cursor never grants access.
+      description: A required kind selects either the admitted subject's CLEAN personal ASSET files or FINAL CLEAN Artifacts linked to their active Conversations. Artifact search matches current authorized FINAL metadata, not unverified delivery claims. Artifact-only q is a case-insensitive NFC substring over title or filename; type uses the documented product taxonomy. Cursors bind kind, tenant, subject, limit and the normalized complete filter tuple. Each request scans at most min(500, limit * 5) authorized candidates within the existing 30-second deadline; a sparse page may be empty and still have next_cursor. Only next_cursor=null means exhausted. Delivery keyset order is preserved, without relevance ranking or snapshot isolation. Public18 invalidates prior Artifact cursors; clients must restart the query. A cursor never grants access.
       parameters:
         - name: kind
           in: query
@@ -5178,6 +5178,14 @@ paths:
         - name: cursor
           in: query
           schema: { type: string, minLength: 1, maxLength: 4096 }
+        - name: q
+          in: query
+          description: Artifact-only search, at most 200 Unicode code points before normalization; trim, NFC and locale-independent lowercase are applied. C0 control characters and DEL are rejected. Empty means no text filter; file queries reject this parameter.
+          schema: { type: string, maxLength: 200, pattern: '^[^\x00-\x1f\x7f]*$', default: '' }
+        - name: type
+          in: query
+          description: Artifact-only product type, matched against current FINAL MIME/title according to the Library API taxonomy; file queries reject this parameter.
+          schema: { type: string, enum: [all, slides, documents, spreadsheets, images, video, audio, other], default: all }
       responses:
         '200':
           description: Bounded private file or Artifact page, selected by kind
@@ -5194,7 +5202,7 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '403': { $ref: '#/components/responses/ServiceAuthFailed' }
         '502':
-          description: Storage owner page did not match the pinned v2 contract
+          description: Storage owner page did not match the fixed v3 contract
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }

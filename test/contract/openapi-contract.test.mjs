@@ -1,3 +1,4 @@
+import { restorePublic17LibraryFilterContract, inspectLibraryFilterContract } from "../../scripts/verify-library-filter-contract.mjs"
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
 import { readFile } from "node:fs/promises"
@@ -23,7 +24,7 @@ const currentOpenapiUrl = new URL("../../contract/openapi/v1/openapi.yaml", impo
 
 test("Public17 publishes explicit calendar selections and preserves the complete Public16.2 parent", async () => {
   const { load } = await import("js-yaml")
-  const source = await readFile(currentOpenapiUrl, "utf8")
+  const source = restorePublic17LibraryFilterContract(await readFile(currentOpenapiUrl, "utf8"))
   const document = load(source)
   assert.equal(document.info.version, "17.0.0")
   assert.deepEqual(document.components.schemas.ScheduledTask.properties.frequency.enum, ["daily", "weekly", "monthly", "once"])
@@ -2737,3 +2738,27 @@ for (const [label, path] of [
     assert.equal(constraint.maxLength, 256)
   })
 }
+
+test("Public18 publishes bounded FINAL-metadata search and preserves the complete Public17 parent", async () => {
+  const { load } = await import("js-yaml")
+  const source = await readFile(currentOpenapiUrl, "utf8"),
+    document = load(source)
+  assert.equal(document.info.version, "18.0.0")
+  const parameters = document.paths["/v1/library"].get.parameters
+  assert.equal(parameters.find((p) => p.name === "q").schema.maxLength, 200)
+  assert.deepEqual(parameters.find((p) => p.name === "type").schema.enum, ["all", "slides", "documents", "spreadsheets", "images", "video", "audio", "other"])
+  assert.deepEqual(inspectLibraryFilterContract(source), [])
+  assert.equal(
+    createHash("sha256").update(restorePublic17LibraryFilterContract(source)).digest("hex"),
+    "ffc655e893b6ac90ee553acd368abbd68c7a3e77ed3a33a872643bf0d5a2a21f",
+  )
+  for (const mutated of [
+    source.replace("maxLength: 200, pattern", "maxLength: 201, pattern"),
+    source.replace("enum: [all, slides, documents, spreadsheets, images, video, audio, other]", "enum: [all]"),
+    source.replace("Current IAM-admitted Product identity projections.", "unrelated drift"),
+  ]) {
+    assert.notEqual(mutated, source)
+    assert.ok(inspectLibraryFilterContract(mutated).length > 0)
+    assert.throws(() => restorePublic17LibraryFilterContract(mutated), /Library filter.*drift/u)
+  }
+})
