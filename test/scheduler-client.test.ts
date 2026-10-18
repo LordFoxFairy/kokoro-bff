@@ -5,6 +5,32 @@ import { describe, it } from "node:test"
 import { buildSchedulerSchedule, schedulerScheduleName } from "../dist/infrastructure/clients/scheduler/schedule.js"
 import { SchedulerControlClient } from "../dist/infrastructure/clients/scheduler/control-client.js"
 
+it("maps explicit calendars to generic recurring rules or a frozen once instant", async () => {
+  const { tsImport } = await import("tsx/esm/api")
+  const { buildSchedulerSchedule: build } = await tsImport("../src/infrastructure/clients/scheduler/schedule.ts", import.meta.url)
+  const base = {
+    id: "scheduled_calendar",
+    title: "Calendar",
+    prompt: "Review",
+    time: "08:15",
+    timezone: "UTC",
+    autoApprove: false,
+    enabled: true,
+    status: "active",
+    revision: 1,
+  }
+  assert.equal(build({ ...base, frequency: "weekly", weekdays: [0, 2, 6] }, "tenant", "owner", "http://bff.test/dispatch").schedule, "15 8 * * 0,2,6")
+  assert.equal(build({ ...base, frequency: "monthly", monthDays: [18, 31] }, "tenant", "owner", "http://bff.test/dispatch").schedule, "15 8 18,31 * *")
+  const once = build(
+    { ...base, frequency: "once", localDate: "2030-01-01", runAt: new Date("2030-01-01T08:15:00Z") },
+    "tenant",
+    "owner",
+    "http://bff.test/dispatch",
+  )
+  assert.equal(Object.hasOwn(once, "schedule"), false)
+  assert.equal(once.run_at, "2030-01-01T08:15:00.000Z")
+})
+
 async function listen(server: ReturnType<typeof createServer>): Promise<string> {
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject)
@@ -24,7 +50,6 @@ describe("BFF Scheduler control mapping", () => {
     frequency: "daily" as const,
     time: "08:15",
     timezone: "America/New_York",
-    recurrenceAnchorAt: new Date("2026-09-01T12:15:00.000Z"),
     autoApprove: true,
     enabled: true,
     status: "active" as const,
@@ -57,32 +82,32 @@ describe("BFF Scheduler control mapping", () => {
     })
   })
 
-  it("maps the saved weekly anchor in its timezone, returns it to readers, and pauses inactive tasks", async () => {
+  it("maps selected weekdays without an anchor, returns them to readers, and pauses inactive tasks", async () => {
     const weekly = {
       ...daily,
       id: "scheduled_weekly",
       frequency: "weekly" as const,
       time: "23:30",
       timezone: "America/Los_Angeles",
-      recurrenceAnchorAt: new Date("2026-09-07T06:30:00.000Z"), // Sunday 23:30 local.
+      weekdays: [0, 3],
       enabled: false,
       status: "paused" as const,
     }
     const result = buildSchedulerSchedule(weekly, "tenant", "owner", "http://bff.test/dispatch")
-    assert.equal(result.schedule, "30 23 * * 0")
+    assert.equal(result.schedule, "30 23 * * 0,3")
     assert.equal(result.timezone, "America/Los_Angeles")
     assert.equal(result.paused, true)
     const { tsImport } = await import("tsx/esm/api")
     const { scheduledTaskResponse } = await tsImport("../src/application/scheduled/mappers.ts", import.meta.url)
-    const snapshot = scheduledTaskResponse({ ...weekly, nextRunAt: null })
+    const snapshot = scheduledTaskResponse(weekly)
     assert.equal(Object.hasOwn(snapshot, "recurrence_anchor_at"), false, "immutable mutation snapshots retain their original shape")
     const { scheduledTaskDetails } = await tsImport("../src/application/scheduled/mappers.ts", import.meta.url)
     for (const nextRunAt of [null, new Date("2026-09-14T06:30:00.000Z")]) {
-      const response = scheduledTaskDetails({ ...weekly, nextRunAt })
-      assert.equal(response.recurrence_anchor_at, "2026-09-07T06:30:00.000Z")
+      const response = scheduledTaskDetails({ task: weekly, state: nextRunAt === null ? "pending" : "active", nextRunAt })
+      assert.deepEqual(response.weekdays, [0, 3])
       assert.equal(response.next_run_at, nextRunAt?.toISOString() ?? null)
       assert.equal(response.timezone, "America/Los_Angeles")
-      assert.equal(weekly.recurrenceAnchorAt.toISOString(), response.recurrence_anchor_at)
+      assert.equal(Object.hasOwn(response, "recurrence_anchor_at"), false)
     }
   })
 
@@ -158,7 +183,7 @@ it("consumes exclusive recurring or absolute once triggers from the fixed Schedu
 })
 
 it("keeps current Scheduler lifecycle conditions when generating Zod validators", async () => {
-  const { zCurrentScheduleResponse } = await import("../dist/generated/scheduler/zod.gen.js")
+  const { zCurrentScheduleResponse, zSchedule } = await import("../dist/generated/scheduler/zod.gen.js")
   const common = {
     id: "00000000-0000-4000-8000-000000000001",
     name: "kokoro.scheduled.fixture",
@@ -176,6 +201,17 @@ it("keeps current Scheduler lifecycle conditions when generating Zod validators"
   const current = { ...common, schedule: "@daily", status: "active", next_due_at: "2026-11-01T05:30:00Z" }
   const exhausted = { ...common, run_at: "2026-11-01T05:30:00Z", status: "exhausted", next_due_at: null }
   for (const schedule of [current, exhausted]) assert.equal(zCurrentScheduleResponse.safeParse({ data: { schedule } }).success, true)
+  const consumedAck = { ...common, run_at: exhausted.run_at, next_due_at: null }
+  assert.equal(zSchedule.safeParse(consumedAck).success, true, "consumed once mutation ACK is valid")
+  const missingNext: Record<string, unknown> = { ...consumedAck }
+  delete missingNext.next_due_at
+  for (const schedule of [
+    { ...common, schedule: "@daily", next_due_at: null },
+    { ...consumedAck, paused: true },
+    { ...consumedAck, schedule: "@daily" },
+    missingNext,
+  ])
+    assert.equal(zSchedule.safeParse(schedule).success, false, JSON.stringify(schedule))
   const neither: Record<string, unknown> = { ...current }
   delete neither.schedule
   const missing: Record<string, unknown> = { ...current }
@@ -307,4 +343,234 @@ it("cancels an in-flight current query before headers and during the response st
       await new Promise<void>((resolve) => owner.close(() => resolve()))
     }
   }
+})
+
+it("binds current task state to the complete delivered definition, not a frozen mutation next", async () => {
+  const { tsImport } = await import("tsx/esm/api")
+  const { SchedulerTaskStateReader } = await tsImport("../src/infrastructure/clients/scheduler/task-state-reader.ts", import.meta.url)
+  const task = {
+    id: "scheduled_current",
+    title: "Once",
+    prompt: "Review",
+    frequency: "once",
+    time: "08:15",
+    timezone: "UTC",
+    localDate: "2030-01-01",
+    runAt: new Date("2030-01-01T08:15:00Z"),
+    autoApprove: false,
+    enabled: true,
+    status: "active",
+    revision: 3,
+  }
+  const scope = { tenantId: "tenant", subjectId: "owner" }
+  const target = "http://bff.test/dispatch"
+  const expected = buildSchedulerSchedule(task, scope.tenantId, scope.subjectId, target)
+  let current = { ...expected, id: "00000000-0000-4000-8000-000000000001", version: 9, status: "exhausted", next_due_at: null }
+  const reader = new SchedulerTaskStateReader(
+    {
+      async current() {
+        return { kind: "response", status: 200, body: { data: { schedule: current } } }
+      },
+    },
+    target,
+  )
+  assert.deepEqual(await reader.read(task, scope, "req", new AbortController().signal), { state: "exhausted", nextRunAt: null })
+  const pausedOnce = { ...task, enabled: false, status: "paused" }
+  assert.deepEqual(await reader.read(pausedOnce, scope, "req", new AbortController().signal), { state: "exhausted", nextRunAt: null })
+  for (const mutate of [
+    () => ({ ...current, body: { ...expected.body, task_revision: 2 } }),
+    () => ({ ...current, body: { ...expected.body, owner_id: "other" } }),
+    () => ({ ...current, url: "http://foreign.test/dispatch" }),
+    () => ({ ...current, run_at: "2030-01-01T08:15:00.000000001Z" }),
+    () => ({ ...current, schedule: "15 8 * * *" }),
+  ]) {
+    const valid = current
+    current = mutate()
+    await assert.rejects(reader.read(task, scope, "req", new AbortController().signal), /scheduler_current_unavailable/u)
+    await assert.rejects(reader.read(pausedOnce, scope, "req", new AbortController().signal), /scheduler_current_unavailable/u)
+    current = valid
+  }
+  const recurring = { ...task, frequency: "weekly", weekdays: [0, 2], localDate: undefined, runAt: undefined }
+  current = {
+    ...buildSchedulerSchedule(recurring, "tenant", "owner", target),
+    id: current.id,
+    version: 10,
+    status: "active",
+    next_due_at: "2030-01-08T08:15:00Z",
+  }
+  assert.deepEqual(await reader.read(recurring, scope, "req", new AbortController().signal), { state: "active", nextRunAt: new Date("2030-01-08T08:15:00Z") })
+  current = { ...current, paused: true, status: "paused" }
+  await assert.rejects(reader.read(recurring, scope, "req", new AbortController().signal), /scheduler_current_unavailable/u)
+  assert.deepEqual(await reader.read({ ...recurring, enabled: false, status: "paused" }, scope, "req", new AbortController().signal), {
+    state: "paused",
+    nextRunAt: null,
+  })
+})
+
+it("reads only settled exact-revision schedules and rejects a changed task after the owner query", async () => {
+  const { tsImport } = await import("tsx/esm/api")
+  const { ScheduledTaskReadService } = await tsImport("../src/application/scheduled-task-read-service.ts", import.meta.url)
+  const task = {
+    id: "scheduled_current",
+    title: "Review",
+    prompt: "Review",
+    frequency: "daily",
+    time: "08:15",
+    timezone: "UTC",
+    autoApprove: false,
+    enabled: true,
+    status: "active",
+    revision: 3,
+  }
+  let snapshot = { task, deliveryStatus: "pending" }
+  let calls = 0
+  const scope = { tenantId: "tenant", subjectId: "owner" }
+  const service = new ScheduledTaskReadService(
+    {
+      async snapshots() {
+        return [snapshot]
+      },
+    },
+    {
+      async read() {
+        calls++
+        return { state: "active", nextRunAt: new Date("2030-01-01T08:15:00Z") }
+      },
+    },
+  )
+  assert.deepEqual(await service.read(scope, "req", new AbortController().signal), [{ task, state: "pending", nextRunAt: null }])
+  assert.equal(calls, 0)
+  snapshot = { task, deliveryStatus: "succeeded" }
+  assert.equal((await service.read(scope, "req", new AbortController().signal))[0].nextRunAt.toISOString(), "2030-01-01T08:15:00.000Z")
+  assert.equal(calls, 1)
+  const racing = new ScheduledTaskReadService(
+    {
+      async snapshots() {
+        return [snapshot]
+      },
+    },
+    {
+      async read() {
+        snapshot = { task: { ...task, revision: 4 }, deliveryStatus: "pending" }
+        return { state: "active", nextRunAt: new Date("2030-01-01T08:15:00Z") }
+      },
+    },
+  )
+  await assert.rejects(racing.read(scope, "req", new AbortController().signal), /scheduled_task_read_changed/u)
+  snapshot = { task, deliveryStatus: null }
+  await assert.rejects(service.read(scope, "req", new AbortController().signal), /scheduled_task_delivery_missing/u)
+})
+
+it("bounds current list fanout and cancels in-flight queries before starting queued tasks", async () => {
+  const { tsImport } = await import("tsx/esm/api")
+  const { ScheduledTaskReadService } = await tsImport("../src/application/scheduled-task-read-service.ts", import.meta.url)
+  const task = {
+    id: "scheduled",
+    title: "Review",
+    prompt: "Review",
+    frequency: "daily",
+    time: "08:15",
+    timezone: "UTC",
+    autoApprove: false,
+    enabled: true,
+    status: "active",
+    revision: 1,
+  }
+  const rows = Array.from({ length: 20 }, (_, i) => ({ task: { ...task, id: `scheduled_${i}` }, deliveryStatus: "succeeded" }))
+  let calls = 0,
+    running = 0,
+    max = 0
+  let started!: () => void
+  const firstFour = new Promise<void>((resolve) => {
+    started = resolve
+  })
+  const source = {
+    async snapshots() {
+      return rows
+    },
+  }
+  const owner = {
+    async read(_task, _scope, _id, signal: AbortSignal) {
+      calls++
+      running++
+      max = Math.max(max, running)
+      if (calls === 4) started()
+      try {
+        await new Promise<never>((_resolve, reject) => {
+          signal.addEventListener("abort", () => reject(Error("cancelled")), { once: true })
+        })
+      } finally {
+        running--
+      }
+    },
+  }
+  const service = new ScheduledTaskReadService(source, owner)
+  const controller = new AbortController()
+  const pending = service.read({ tenantId: "tenant", subjectId: "owner" }, "req", controller.signal)
+  await firstFour
+  controller.abort()
+  await assert.rejects(pending)
+  assert.equal(max, 4)
+  assert.equal(calls, 4)
+  assert.equal(running, 0)
+  let failStarted = 0,
+    failClosed = 0
+  const failOne = new ScheduledTaskReadService(source, {
+    async read(_task, _scope, _id, signal: AbortSignal) {
+      const i = failStarted++
+      if (i === 0) {
+        await new Promise<void>((resolve) => setImmediate(resolve))
+        throw Error("owner-down")
+      }
+      try {
+        await new Promise<never>((_resolve, reject) => signal.addEventListener("abort", () => reject(Error("cancelled")), { once: true }))
+      } finally {
+        failClosed++
+      }
+    },
+  })
+  await assert.rejects(failOne.read({ tenantId: "tenant", subjectId: "owner" }, "req", new AbortController().signal), /owner-down/u)
+  assert.equal(failStarted, 4)
+  assert.equal(failClosed, 3)
+})
+
+it("enforces one monotonic current-read deadline even before the abort timer can run", async () => {
+  const { tsImport } = await import("tsx/esm/api")
+  const { ScheduledTaskReadService } = await tsImport("../src/application/scheduled-task-read-service.ts", import.meta.url)
+  const task = {
+    id: "scheduled",
+    title: "Review",
+    prompt: "Review",
+    frequency: "daily",
+    time: "08:15",
+    timezone: "UTC",
+    autoApprove: false,
+    enabled: true,
+    status: "active",
+    revision: 1,
+  }
+  let reads = 0
+  const deadline = performance.now() + 30
+  const service = new ScheduledTaskReadService(
+    {
+      async snapshots() {
+        reads++
+        return [{ task, deliveryStatus: "succeeded" }]
+      },
+    },
+    {
+      async read() {
+        // An event-loop-delayed timer is not a deadline. Simulate completion before its callback runs.
+        while (performance.now() <= deadline + 5) {
+          /* bounded CPU delay in this test process only */
+        }
+        return { state: "active", nextRunAt: new Date("2030-01-01T08:15:00Z") }
+      },
+    },
+  )
+  await assert.rejects(
+    service.read({ tenantId: "tenant", subjectId: "owner" }, "req", new AbortController().signal, { deadline }),
+    /scheduled_task_read_deadline/u,
+  )
+  assert.equal(reads, 1, "do not start more I/O after the page budget is exhausted")
 })

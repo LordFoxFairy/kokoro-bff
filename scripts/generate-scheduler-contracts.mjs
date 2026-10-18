@@ -11,9 +11,9 @@ const output = path.join(root, "src/generated/scheduler")
 const manifestPath = path.join(root, "contract/dependencies/scheduler.json")
 const configPath = path.join(root, "openapi-ts.scheduler.config.ts")
 const lockfilePath = path.join(root, "pnpm-lock.yaml")
-const ownerCommit = "8a26c91aa24d1f48a760b6234ab1ed5855d20936"
+const ownerCommit = "3bb7ff61b0d72418aa048ca35b8c3f144a33f13e"
 const vendorPath = path.join(root, `contract/vendor/kokoro-scheduler/${ownerCommit}/openapi.yaml`)
-const ownerDigest = "b38891d30c55fa1cae3de0f6a25ea014ea309713dcd0f6a8e1ce9cb1eeba502f"
+const ownerDigest = "d349eae8bba207074b1edf91acd9f08e94f39a27363441f45186c1799159c999"
 const generatedFiles = [
   "client.gen.ts",
   "client/client.gen.ts",
@@ -172,7 +172,7 @@ export function assertGeneratedAllowlist(files, directories, label) {
 }
 
 // openapi-ts 0.99 erases required-only oneOf branches and if/then. Derive
-// these three known owner constraints from the pinned document, never a second schema.
+// the known trigger/lifecycle constraints from the pinned document, never a second schema.
 async function normalizeSchedulerConditions(directory) {
   const owner = JSON.parse(await readFile(vendorPath, "utf8"))
   const schemas = owner.components.schemas
@@ -202,7 +202,23 @@ async function normalizeSchedulerConditions(directory) {
       }
       return ${JSON.stringify(required)}.filter((field) => Object.hasOwn(value, field)).length === 1
     }, { message: "exactly one trigger is required" })`
-    if (name === "CurrentSchedule") {
+    if (name === "Schedule") {
+      assert.equal(schema.allOf.length, 1, "unsupported mutation lifecycle conditions")
+      const condition = schema.allOf[0]
+      const [nextField] = Object.keys(condition.if.properties)
+      assert.equal(condition.if.properties[nextField].type, "null")
+      assert.deepEqual(condition.if.required, [nextField])
+      assert.ok(Array.isArray(condition.then.required) && condition.then.required.length === 1)
+      const [pausedField] = Object.keys(condition.then.properties)
+      const consumedPaused = condition.then.properties[pausedField].const
+      assert.equal(consumedPaused, false)
+      guard += `.refine((value) => {
+        if (typeof value !== "object" || value === null || Array.isArray(value)) return false
+        const row = value as Record<string, unknown>
+        return row[${JSON.stringify(nextField)}] !== null ||
+          (${JSON.stringify(condition.then.required)}.every((field) => Object.hasOwn(row, field)) && row[${JSON.stringify(pausedField)}] === ${JSON.stringify(consumedPaused)})
+      }, { message: "consumed mutation must be once and not paused" })`
+    } else if (name === "CurrentSchedule") {
       assert.equal(schema.allOf.length, 1, "unsupported current lifecycle conditions")
       const condition = schema.allOf[0]
       const [statusField] = Object.keys(condition.if.properties)
@@ -268,7 +284,7 @@ async function manifestFor(directory) {
     owner: {
       repository_path: "apps/kokoro-scheduler",
       repository_commit: ownerCommit,
-      contract_version: "2.0.0",
+      contract_version: "3.0.0",
       contract_path: "contract/openapi/v1/openapi.yaml",
       contract_sha256: ownerDigest,
     },

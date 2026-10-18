@@ -20,6 +20,36 @@ const openapiUrl = new URL("../../contract/tests/public11-historical.openapi.yam
 const baselineUrl = new URL("../../contract/tests/v1-operations.json", import.meta.url)
 const agentControlSnapshotUrl = new URL("../../contract/external/kokoro-agent/control-receipt.v1.json", import.meta.url)
 const currentOpenapiUrl = new URL("../../contract/openapi/v1/openapi.yaml", import.meta.url)
+
+test("Public17 publishes explicit calendar selections and preserves the complete Public16.2 parent", async () => {
+  const { load } = await import("js-yaml")
+  const source = await readFile(currentOpenapiUrl, "utf8")
+  const document = load(source)
+  assert.equal(document.info.version, "17.0.0")
+  assert.deepEqual(document.components.schemas.ScheduledTask.properties.frequency.enum, ["daily", "weekly", "monthly", "once"])
+  for (const name of ["ScheduledTask", "CreateScheduledTaskRequest", "ScheduledTaskPatchRequest"]) {
+    const schema = document.components.schemas[name]
+    assert.equal(Object.hasOwn(schema.properties, "recurrence_anchor_at"), false)
+    assert.equal(schema.additionalProperties, false)
+  }
+  assert.deepEqual(document.components.schemas.ScheduledTaskDetails.required, ["scheduling_state"])
+  assert.deepEqual(document.components.schemas.ScheduledTask.properties.scheduling_state.enum, ["pending", "active", "paused", "exhausted", "failed"])
+  const { restorePublic162ScheduledPeriodContract, inspectScheduledPeriodContract } = await import("../../scripts/verify-scheduled-period-contract.mjs")
+  assert.deepEqual(inspectScheduledPeriodContract(source), [])
+  const parent = restorePublic162ScheduledPeriodContract(source)
+  assert.equal(createHash("sha256").update(parent).digest("hex"), "e4c1b3b1d327994dd5e903bfb3b3a075ded24446c0173a0f1c15a75cab92ae80")
+  for (const mutation of [
+    source.replace("uniqueItems: true", "uniqueItems: false"),
+    source.replace("required: [scheduling_state]", "required: []"),
+    source.replace("maximum: 31", "maximum: 32"),
+    source.replace("required: [weekdays]", "required: []"),
+    source.replace("Current IAM-admitted Product identity projections.", "tampered unrelated identity"),
+  ]) {
+    assert.notEqual(mutation, source)
+    assert.ok(inspectScheduledPeriodContract(mutation).length > 0)
+    assert.throws(() => restorePublic162ScheduledPeriodContract(mutation), /period.*drift/u)
+  }
+})
 const SAFE_FAILURE_CODES = [
   "token_budget_exceeded",
   "recursion_limit_exceeded",
@@ -1118,7 +1148,6 @@ function r71ScheduledCreatePayload() {
     frequency: "daily",
     time: "08:00",
     timezone: "UTC",
-    recurrence_anchor_at: "2026-10-03T08:00:00.000Z",
     expires_at: "2026-11-03T08:00:00.000Z",
     auto_approve: false,
   }
@@ -1128,7 +1157,7 @@ async function r71ScheduledCreateSchema() {
   const { createRequire } = await import("node:module")
   // Reuse the installed YAML loader already used by this file's public4 assertions.
   const { load } = createRequire(import.meta.resolve("@redocly/cli/package.json"))("js-yaml")
-  const { openapi } = await readContract()
+  const openapi = await readFile(currentOpenapiUrl, "utf8")
   const schema = load(openapi).components.schemas.CreateScheduledTaskRequest
   assert.ok(schema !== undefined, "the canonical ScheduledTask creation schema must exist")
   return schema
@@ -1141,7 +1170,7 @@ function r71AssertScheduledInput(input, payload) {
   assert.equal(input.frequency, payload.frequency)
   assert.equal(input.time, payload.time)
   assert.equal(input.timezone, payload.timezone)
-  assert.equal(input.recurrenceAnchorAt.toISOString(), payload.recurrence_anchor_at)
+  assert.equal(Object.hasOwn(input, "recurrenceAnchorAt"), false)
   assert.equal(input.expiresAt.toISOString(), payload.expires_at)
   assert.equal(input.autoApprove, payload.auto_approve)
   assert.equal(Object.hasOwn(input, "conversationId"), false)
@@ -1190,7 +1219,7 @@ test("R71 closed ScheduledTask creation schema declares optional nonempty projec
   const properties = Object.keys(schema.properties).sort()
   assert.deepEqual(
     properties,
-    ["title", "prompt", "frequency", "time", "timezone", "recurrence_anchor_at", "expires_at", "auto_approve", "project_id"].sort(),
+    ["title", "prompt", "frequency", "time", "timezone", "weekdays", "month_days", "local_date", "expires_at", "auto_approve", "project_id"].sort(),
     "closed public6 creation schema retains optional project_id while excluding create-only state controls and Conversation linkage",
   )
   const project = schema.properties.project_id
@@ -1320,9 +1349,11 @@ test("R75 creation schema requires exactly the five production-required properti
   }
 })
 
-test("current ScheduledTask reads return a required stored anchor without changing mutation snapshots", async () => {
+test("Public16.2 historical current-read and immutable ACK inverse remains exact", async () => {
   const { load } = await import("js-yaml")
-  const document = load(await readFile(currentOpenapiUrl, "utf8"))
+  const { restorePublic162ScheduledPeriodContract } = await import("../../scripts/verify-scheduled-period-contract.mjs")
+  const source = restorePublic162ScheduledPeriodContract(await readFile(currentOpenapiUrl, "utf8"))
+  const document = load(source)
   assert.equal(Object.hasOwn(document.components.schemas.ScheduledTask.properties, "recurrence_anchor_at"), false)
   const task = document.components.schemas.ScheduledTaskDetails
   assert.deepEqual(task.allOf, [{ $ref: "#/components/schemas/ScheduledTask" }])
@@ -1331,7 +1362,6 @@ test("current ScheduledTask reads return a required stored anchor without changi
   assert.deepEqual(document.components.schemas.ScheduledTask.properties.next_run_at, { type: ["string", "null"], format: "date-time" })
   assert.equal(document.info.version, "16.2.0")
   const { restorePublic161ScheduledAnchorContract } = await import("../../scripts/verify-scheduled-anchor-contract.mjs")
-  const source = await readFile(currentOpenapiUrl, "utf8")
   assert.equal(
     createHash("sha256").update(restorePublic161ScheduledAnchorContract(source)).digest("hex"),
     "930ba94677ce83655ab6ee73c6bb18404e0c84a29de602a128a77d6a7fb87ad5",
@@ -1395,8 +1425,7 @@ test("R75 production accepts an independent task with only the five required pro
   assert.ok(input !== null)
   for (const field of ["title", "prompt", "frequency", "time", "timezone"]) assert.equal(input[field], payload[field])
   assert.equal(input.autoApprove, false)
-  assert.ok(input.recurrenceAnchorAt instanceof Date)
-  assert.ok(Number.isFinite(input.recurrenceAnchorAt.getTime()))
+  assert.equal(Object.hasOwn(input, "recurrenceAnchorAt"), false)
   for (const field of ["projectId", "expiresAt", "conversationId", "sessionId"]) assert.equal(Object.hasOwn(input, field), false)
 })
 

@@ -104,15 +104,27 @@ CREATE TABLE IF NOT EXISTS bff_scheduled_task (
   owner_id TEXT NOT NULL,
   title TEXT NOT NULL,
   prompt TEXT NOT NULL,
-  frequency TEXT NOT NULL CONSTRAINT ck_bff_scheduled_task_frequency CHECK (frequency IN ('daily', 'weekly')),
+  frequency TEXT NOT NULL CONSTRAINT ck_bff_scheduled_task_frequency CHECK (frequency IN ('daily', 'weekly', 'monthly', 'once')),
   task_time TEXT NOT NULL,
   timezone TEXT NOT NULL,
-  recurrence_anchor_at TIMESTAMPTZ(3) NOT NULL,
-  next_run_at TIMESTAMPTZ(3),
+  weekdays SMALLINT[],
+  month_days SMALLINT[],
+  local_date DATE,
+  run_at TIMESTAMPTZ(3),
   expires_at TIMESTAMPTZ(3),
   auto_approve BOOLEAN NOT NULL DEFAULT false,
   enabled BOOLEAN NOT NULL DEFAULT true,
   status TEXT NOT NULL CONSTRAINT ck_bff_scheduled_task_status CHECK (status IN ('active', 'paused', 'failed')),
+  CONSTRAINT ck_bff_scheduled_task_calendar CHECK (
+    (frequency='daily' AND weekdays IS NULL AND month_days IS NULL AND local_date IS NULL AND run_at IS NULL)
+    OR (frequency='weekly' AND weekdays IS NOT NULL AND month_days IS NULL AND local_date IS NULL AND run_at IS NULL
+      AND array_ndims(weekdays)=1 AND array_lower(weekdays,1)=1 AND cardinality(weekdays) BETWEEN 1 AND 7
+      AND weekdays <@ ARRAY[0,1,2,3,4,5,6]::smallint[] AND array_position(weekdays,NULL) IS NULL)
+    OR (frequency='monthly' AND month_days IS NOT NULL AND weekdays IS NULL AND local_date IS NULL AND run_at IS NULL
+      AND array_ndims(month_days)=1 AND array_lower(month_days,1)=1 AND cardinality(month_days) BETWEEN 1 AND 31
+      AND month_days <@ ARRAY[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31]::smallint[] AND array_position(month_days,NULL) IS NULL)
+    OR (frequency='once' AND weekdays IS NULL AND month_days IS NULL AND local_date IS NOT NULL AND run_at IS NOT NULL)
+  ),
   revision BIGINT NOT NULL DEFAULT 1 CONSTRAINT ck_bff_scheduled_task_revision CHECK (revision >= 1),
   created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)

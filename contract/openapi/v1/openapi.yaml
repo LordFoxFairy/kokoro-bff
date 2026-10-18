@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 16.2.0
+  version: 17.0.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -16915,33 +16915,82 @@ components:
       additionalProperties: false
       properties:
         installation_ids: { $ref: '#/components/schemas/ProjectSkillInstallationIds' }
+    ScheduledTaskWeekdays:
+      type: array
+      minItems: 1
+      maxItems: 7
+      uniqueItems: true
+      items: { type: integer, minimum: 0, maximum: 6 }
+      description: Selected weekdays, Sunday=0 through Saturday=6; persisted in ascending order.
+    ScheduledTaskMonthDays:
+      type: array
+      minItems: 1
+      maxItems: 31
+      uniqueItems: true
+      items: { type: integer, minimum: 1, maximum: 31 }
+      description: Selected days of month; missing dates are skipped, not moved to month end.
+    ScheduledTaskLocalDate:
+      type: string
+      format: date
+      pattern: '^\d{4}-\d{2}-\d{2}$'
+      description: Calendar date in the selected IANA timezone. Gaps are rejected and repeated times use the earlier instant.
     ScheduledTask:
       type: object
       required: [id, title, prompt, frequency, time, timezone, next_run_at, auto_approve, enabled, status]
+      additionalProperties: false
+      description: Immutable mutation snapshot. Original snapshots remain unchanged; only requests valid under this contract replay them. Retired request shapes are rejected before receipt claim; read current details before editing.
       properties:
         id: { type: string }
         project_id: { type: string }
         title: { type: string }
         prompt: { type: string }
-        frequency:
-          type: string
-          enum: [daily, weekly]
-        time: { type: string }
-        timezone: { type: string }
+        frequency: { type: string, enum: [daily, weekly, monthly, once] }
+        time: { type: string, pattern: '^([01]\d|2[0-3]):[0-5]\d$' }
+        timezone: { type: string, minLength: 1 }
+        weekdays: { $ref: '#/components/schemas/ScheduledTaskWeekdays' }
+        month_days: { $ref: '#/components/schemas/ScheduledTaskMonthDays' }
+        local_date: { $ref: '#/components/schemas/ScheduledTaskLocalDate' }
         next_run_at: { type: [string, 'null'], format: date-time }
+        scheduling_state: { type: string, enum: [pending, active, paused, exhausted, failed] }
         expires_at: { type: string, format: date-time }
         auto_approve: { type: boolean }
         enabled: { type: boolean }
-        status:
-          type: string
-          enum: [active, paused, failed]
+        status: { type: string, enum: [active, paused, failed] }
     ScheduledTaskDetails:
+      type: object
+      required: [scheduling_state]
+      description: Current scheduling lifecycle, distinct from immutable mutation ACKs and Agent execution outcomes. next_run_at is authoritative only for active scheduling; dependency failure returns 503.
       allOf:
         - $ref: '#/components/schemas/ScheduledTask'
-      type: object
-      required: [recurrence_anchor_at]
-      properties:
-        recurrence_anchor_at: { type: string, format: date-time }
+      oneOf:
+      - properties:
+          frequency: { const: daily }
+        not:
+          anyOf:
+            - required: [weekdays]
+            - required: [month_days]
+            - required: [local_date]
+      - properties:
+          frequency: { const: weekly }
+        required: [weekdays]
+        not:
+          anyOf:
+            - required: [month_days]
+            - required: [local_date]
+      - properties:
+          frequency: { const: monthly }
+        required: [month_days]
+        not:
+          anyOf:
+            - required: [weekdays]
+            - required: [local_date]
+      - properties:
+          frequency: { const: once }
+        required: [local_date]
+        not:
+          anyOf:
+            - required: [weekdays]
+            - required: [month_days]
     ScheduledTaskDetailResponse:
       type: object
       required: [data, meta]
@@ -16986,32 +17035,99 @@ components:
           description: Exact nonempty visible Project ID or slug; leading and trailing whitespace are rejected, not trimmed.
         title: { type: string }
         prompt: { type: string }
-        frequency:
-          type: string
-          enum: [daily, weekly]
-        time: { type: string }
-        timezone: { type: string }
-        recurrence_anchor_at: { type: string, format: date-time }
+        frequency: { type: string, enum: [daily, weekly, monthly, once] }
+        time: { type: string, pattern: '^([01]\d|2[0-3]):[0-5]\d$' }
+        timezone: { type: string, minLength: 1 }
+        weekdays: { $ref: '#/components/schemas/ScheduledTaskWeekdays' }
+        month_days: { $ref: '#/components/schemas/ScheduledTaskMonthDays' }
+        local_date: { $ref: '#/components/schemas/ScheduledTaskLocalDate' }
         expires_at: { type: string, format: date-time }
         auto_approve: { type: boolean }
+      oneOf:
+      - properties:
+          frequency: { const: daily }
+        not:
+          anyOf:
+            - required: [weekdays]
+            - required: [month_days]
+            - required: [local_date]
+      - properties:
+          frequency: { const: weekly }
+        required: [weekdays]
+        not:
+          anyOf:
+            - required: [month_days]
+            - required: [local_date]
+      - properties:
+          frequency: { const: monthly }
+        required: [month_days]
+        not:
+          anyOf:
+            - required: [weekdays]
+            - required: [local_date]
+      - properties:
+          frequency: { const: once }
+        required: [local_date]
+        not:
+          anyOf:
+            - required: [weekdays]
+            - required: [month_days]
     ScheduledTaskPatchRequest:
       type: object
       additionalProperties: false
       properties:
         title: { type: string }
         prompt: { type: string }
-        frequency:
-          type: string
-          enum: [daily, weekly]
-        time: { type: string }
-        timezone: { type: string }
-        recurrence_anchor_at: { type: string, format: date-time }
+        frequency: { type: string, enum: [daily, weekly, monthly, once] }
+        time: { type: string, pattern: '^([01]\d|2[0-3]):[0-5]\d$' }
+        timezone: { type: string, minLength: 1 }
+        weekdays: { $ref: '#/components/schemas/ScheduledTaskWeekdays' }
+        month_days: { $ref: '#/components/schemas/ScheduledTaskMonthDays' }
+        local_date: { $ref: '#/components/schemas/ScheduledTaskLocalDate' }
         expires_at: { type: [string, 'null'], format: date-time }
         auto_approve: { type: boolean }
         enabled: { type: boolean }
-        status:
-          type: string
-          enum: [active, paused, failed]
+        status: { type: string, enum: [active, paused, failed] }
+      allOf:
+        - if:
+            anyOf:
+              - required: [frequency]
+              - required: [time]
+              - required: [timezone]
+              - required: [weekdays]
+              - required: [month_days]
+              - required: [local_date]
+          then:
+            required: [frequency, time, timezone]
+            oneOf:
+              - properties:
+                  frequency: { const: daily }
+                not:
+                  anyOf:
+                    - required: [weekdays]
+                    - required: [month_days]
+                    - required: [local_date]
+              - properties:
+                  frequency: { const: weekly }
+                required: [weekdays]
+                not:
+                  anyOf:
+                    - required: [month_days]
+                    - required: [local_date]
+              - properties:
+                  frequency: { const: monthly }
+                required: [month_days]
+                not:
+                  anyOf:
+                    - required: [weekdays]
+                    - required: [local_date]
+              - properties:
+                  frequency: { const: once }
+                required: [local_date]
+                not:
+                  anyOf:
+                    - required: [weekdays]
+                    - required: [month_days]
     McpConnectionProjection:
       type: object
       required: [connection_id, connector_id, server_id, provider_key, transport, status]

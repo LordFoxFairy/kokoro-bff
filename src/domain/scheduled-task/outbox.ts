@@ -1,7 +1,8 @@
+import { calendarFromWire, calendarWire, type ScheduledCalendar } from "./calendar.js"
 import { isRecord } from "../json.js"
-import { isIanaTimezone, parseUtcTimestamp, utcDate, type ScheduledTaskFrequency, type ScheduledTaskStatus } from "./task.js"
+import { parseUtcTimestamp, utcDate, type ScheduledTaskFrequency, type ScheduledTaskStatus } from "./task.js"
 
-export const SCHEDULED_TASK_OUTBOX_SCHEMA_VERSION = 3 as const
+export const SCHEDULED_TASK_OUTBOX_SCHEMA_VERSION = 4 as const
 
 export type ScheduledTaskOutboxOperation = "register" | "replace" | "delete"
 export type ScheduledTaskOutboxCommandType = `scheduler.${ScheduledTaskOutboxOperation}`
@@ -15,16 +16,12 @@ export type ScheduledTaskOutboxLineage = {
 }
 
 /** Internal command snapshot. Instants are aware UTC Date values. */
-export type ScheduledTaskOutboxTask = {
+export type ScheduledTaskOutboxTask = ScheduledCalendar & {
   taskId: string
   projectId?: string
   ownerId: string
   title: string
   prompt: string
-  frequency: ScheduledTaskFrequency
-  time: string
-  timezone: string
-  recurrenceAnchorAt: Date
   expiresAt?: Date
   autoApprove: boolean
   enabled: boolean
@@ -42,7 +39,10 @@ export type ScheduledTaskOutboxTaskWire = {
   frequency: ScheduledTaskFrequency
   time: string
   timezone: string
-  recurrence_anchor_at: string
+  weekdays?: number[]
+  month_days?: number[]
+  local_date?: string
+  run_at?: string
   expires_at?: string
   auto_approve: boolean
   enabled: boolean
@@ -119,17 +119,22 @@ function requiredChoice<T extends string>(record: Record<string, unknown>, key: 
 
 function requiredTimestamp(record: Record<string, unknown>, key: string): string {
   const value = requiredString(record, key)
-  return parseUtcTimestamp(value, `SCHEDULED_TASK_OUTBOX_${key.toUpperCase()}_INVALID`).toISOString()
+  const canonical = parseUtcTimestamp(value, `SCHEDULED_TASK_OUTBOX_${key.toUpperCase()}_INVALID`).toISOString()
+  if (record[key] !== canonical) throw new Error(`SCHEDULED_TASK_OUTBOX_${key.toUpperCase()}_INVALID`)
+  return canonical
 }
 
 function validateTask(task: ScheduledTaskOutboxTask): void {
   if (task.taskId.trim() === "" || task.ownerId.trim() === "" || task.title.trim() === "" || task.prompt.trim() === "") {
     throw new Error("SCHEDULED_TASK_OUTBOX_TASK_INVALID")
   }
-  if (!/^([01]\d|2[0-3]):[0-5]\d$/u.test(task.time) || !isIanaTimezone(task.timezone)) {
+  if (calendarFromWire(calendarWire(task)) === null) {
     throw new Error("SCHEDULED_TASK_OUTBOX_TASK_TIME_INVALID")
   }
-  utcDate(task.recurrenceAnchorAt, "SCHEDULED_TASK_OUTBOX_RECURRENCE_ANCHOR_INVALID")
+  if (task.frequency === "once") {
+    if (task.runAt === undefined) throw new Error("SCHEDULED_TASK_OUTBOX_RUN_AT_INVALID")
+    utcDate(task.runAt, "SCHEDULED_TASK_OUTBOX_RUN_AT_INVALID")
+  } else if (task.runAt !== undefined) throw new Error("SCHEDULED_TASK_OUTBOX_RUN_AT_INVALID")
   if (task.expiresAt !== undefined) utcDate(task.expiresAt, "SCHEDULED_TASK_OUTBOX_EXPIRES_INVALID")
   if (!Number.isSafeInteger(task.revision) || task.revision < 1) throw new Error("SCHEDULED_TASK_OUTBOX_REVISION_INVALID")
 }
@@ -145,7 +150,10 @@ function wireTask(task: ScheduledTaskOutboxTask): ScheduledTaskOutboxTaskWire {
     frequency: task.frequency,
     time: task.time,
     timezone: task.timezone,
-    recurrence_anchor_at: utcDate(task.recurrenceAnchorAt, "SCHEDULED_TASK_OUTBOX_RECURRENCE_ANCHOR_INVALID").toISOString(),
+    ...(task.weekdays === undefined ? {} : { weekdays: task.weekdays.slice() }),
+    ...(task.monthDays === undefined ? {} : { month_days: task.monthDays.slice() }),
+    ...(task.localDate === undefined ? {} : { local_date: task.localDate }),
+    ...(task.runAt === undefined ? {} : { run_at: utcDate(task.runAt, "SCHEDULED_TASK_OUTBOX_RUN_AT_INVALID").toISOString() }),
     ...(task.expiresAt === undefined ? {} : { expires_at: utcDate(task.expiresAt, "SCHEDULED_TASK_OUTBOX_EXPIRES_INVALID").toISOString() }),
     auto_approve: task.autoApprove,
     enabled: task.enabled,
@@ -221,7 +229,10 @@ export function parseScheduledTaskOutboxPayload(value: unknown): ScheduledTaskOu
           "frequency",
           "time",
           "timezone",
-          "recurrence_anchor_at",
+          "weekdays",
+          "month_days",
+          "local_date",
+          "run_at",
           "expires_at",
           "auto_approve",
           "enabled",
@@ -233,29 +244,32 @@ export function parseScheduledTaskOutboxPayload(value: unknown): ScheduledTaskOu
     throw new Error("SCHEDULED_TASK_OUTBOX_TASK_INVALID")
   const projectId = optionalString(taskValue, "project_id")
   const expiresAt = optionalString(taskValue, "expires_at")
+  const calendar = calendarFromWire(taskValue)
+  if (calendar === null || (calendar.frequency !== "once" && Object.hasOwn(taskValue, "run_at"))) throw new Error("SCHEDULED_TASK_OUTBOX_CALENDAR_INVALID")
   const task: ScheduledTaskOutboxTaskWire = {
     task_id: requiredString(taskValue, "task_id"),
     ...(projectId === undefined ? {} : { project_id: projectId }),
     owner_id: requiredString(taskValue, "owner_id"),
     title: requiredString(taskValue, "title"),
     prompt: requiredString(taskValue, "prompt"),
-    frequency: requiredChoice(taskValue, "frequency", ["daily", "weekly"] as const),
-    time: requiredString(taskValue, "time"),
-    timezone: requiredString(taskValue, "timezone"),
-    recurrence_anchor_at: requiredTimestamp(taskValue, "recurrence_anchor_at"),
+    frequency: calendar.frequency,
+    time: calendar.time,
+    timezone: calendar.timezone,
+    ...(calendar.weekdays === undefined ? {} : { weekdays: calendar.weekdays }),
+    ...(calendar.monthDays === undefined ? {} : { month_days: calendar.monthDays }),
+    ...(calendar.localDate === undefined ? {} : { local_date: calendar.localDate }),
+    ...(calendar.frequency !== "once" ? {} : { run_at: requiredTimestamp(taskValue, "run_at") }),
     ...(expiresAt === undefined ? {} : { expires_at: parseUtcTimestamp(expiresAt, "SCHEDULED_TASK_OUTBOX_EXPIRES_AT_INVALID").toISOString() }),
     auto_approve: requiredBoolean(taskValue, "auto_approve"),
     enabled: requiredBoolean(taskValue, "enabled"),
     status: requiredChoice(taskValue, "status", ["active", "paused", "failed"] as const),
     revision: requiredRevision(taskValue, "revision"),
   }
-  if (!/^([01]\d|2[0-3]):[0-5]\d$/u.test(task.time) || !isIanaTimezone(task.timezone)) throw new Error("SCHEDULED_TASK_OUTBOX_TASK_TIME_INVALID")
   return { schema_version: SCHEDULED_TASK_OUTBOX_SCHEMA_VERSION, command_type: command, lineage, task }
 }
 
 /** Convert the persisted JSON representation back to an internal UTC model. */
 export function scheduledTaskOutboxTaskFromPayload(task: ScheduledTaskOutboxTaskWire): ScheduledTaskOutboxTask {
-  const recurrenceAnchorAt = parseUtcTimestamp(task.recurrence_anchor_at, "SCHEDULED_TASK_OUTBOX_RECURRENCE_ANCHOR_INVALID")
   const expiresAt = task.expires_at === undefined ? undefined : parseUtcTimestamp(task.expires_at, "SCHEDULED_TASK_OUTBOX_EXPIRES_INVALID")
   const internal: ScheduledTaskOutboxTask = {
     taskId: task.task_id,
@@ -266,7 +280,10 @@ export function scheduledTaskOutboxTaskFromPayload(task: ScheduledTaskOutboxTask
     frequency: task.frequency,
     time: task.time,
     timezone: task.timezone,
-    recurrenceAnchorAt,
+    ...(task.weekdays === undefined ? {} : { weekdays: task.weekdays.slice() }),
+    ...(task.month_days === undefined ? {} : { monthDays: task.month_days.slice() }),
+    ...(task.local_date === undefined ? {} : { localDate: task.local_date }),
+    ...(task.run_at === undefined ? {} : { runAt: parseUtcTimestamp(task.run_at, "SCHEDULED_TASK_OUTBOX_RUN_AT_INVALID") }),
     ...(expiresAt === undefined ? {} : { expiresAt }),
     autoApprove: task.auto_approve,
     enabled: task.enabled,

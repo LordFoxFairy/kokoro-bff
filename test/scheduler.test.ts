@@ -432,7 +432,6 @@ describe("Scheduler receiver admission", () => {
         time: "08:00",
         timezone: "UTC",
         recurrenceAnchorAt: new Date("2026-09-01T08:00:00.000Z"),
-        nextRunAt: null,
         autoApprove: false,
         enabled: true,
         status: "active",

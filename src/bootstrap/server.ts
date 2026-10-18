@@ -1,3 +1,4 @@
+import { scheduledTaskReadRoute } from "../http/routes/scheduled-task-read.js"
 import { personalKnowledgeRoute } from "../http/routes/personal-knowledge.js"
 import { projectSkillSelectionRoute } from "../http/routes/project-skill-selection.js"
 import { Code, ConnectError } from "@connectrpc/connect"
@@ -483,6 +484,18 @@ async function handle(
     return
   }
   const context = admission.context
+  if (composition.routeHandler === undefined && request.method === "GET" && businessPath[0] === "scheduled-tasks" && businessPath.length <= 2) {
+    await scheduledTaskReadRoute(
+      request,
+      response,
+      context,
+      composition.scheduledTaskReader,
+      businessPath[1],
+      (signal) => authorizeUserRequest(request, config, composition.sessionAdmission, id, signal),
+      config.upstreamTimeoutMs,
+    )
+    return
+  }
   const currentProjectAccess = async (projectRef: string, signal: AbortSignal): Promise<string> => {
     const fresh = await authorizeUserRequest(request, config, composition.sessionAdmission, id, signal)
     if (!fresh.ok) throw new ConnectError("Project admission failed", fresh.status >= 500 ? Code.Unavailable : Code.PermissionDenied)

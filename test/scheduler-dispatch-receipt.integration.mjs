@@ -415,8 +415,7 @@ receiverIntegrationTest("Scheduler HTTP receiver replays the frozen launch after
         frequency: "daily",
         time: "08:00",
         timezone: "UTC",
-        recurrenceAnchorAt: new Date("2026-09-01T08:00:00.000Z"),
-        nextRunAt: null,
+
         autoApprove: false,
       },
       taskId,
@@ -520,8 +519,7 @@ receiverIntegrationTest("Scheduler enqueue conflict rolls back receipt finalizat
         frequency: "daily",
         time: "08:00",
         timezone: "UTC",
-        recurrenceAnchorAt: new Date("2026-09-01T08:00:00.000Z"),
-        nextRunAt: null,
+
         autoApprove: false,
       },
       taskId,
@@ -624,8 +622,7 @@ receiverIntegrationTest("Scheduler callback and physical task delete serialize w
           frequency: "daily",
           time: "08:00",
           timezone: "UTC",
-          recurrenceAnchorAt: new Date("2026-09-01T08:00:00.000Z"),
-          nextRunAt: null,
+
           autoApprove: false,
         },
         taskId,
@@ -832,8 +829,7 @@ async function r66LifecycleFixture(context) {
       frequency: "daily",
       time: "08:00",
       timezone: "UTC",
-      recurrenceAnchorAt: new Date("2026-09-01T08:00:00.000Z"),
-      nextRunAt: null,
+
       autoApprove: false,
     },
     taskId,
@@ -946,7 +942,7 @@ receiverIntegrationTest("cadence-only change rejects unprepared old callbacks an
   const changed = await fixture.store.services.scheduledTasks.update(
     { tenantId: fixture.tenant, subjectId: fixture.owner },
     fixture.taskId,
-    { frequency: "weekly", recurrenceAnchorAt: new Date("2026-09-07T08:00:00.000Z") },
+    { frequency: "weekly", time: "08:00", timezone: "UTC", weekdays: [1] },
     { tenantId: fixture.tenant, actorId: fixture.owner, requestId: `${fixture.key}-change`, idempotencyKey: `${fixture.key}-change` },
   )
   assert.equal(changed.revision, 2)

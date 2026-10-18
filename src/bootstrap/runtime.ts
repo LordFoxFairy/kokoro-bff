@@ -1,3 +1,6 @@
+import { ScheduledTaskReadService } from "../application/scheduled-task-read-service.js"
+import { SchedulerTaskStateReader } from "../infrastructure/clients/scheduler/task-state-reader.js"
+import { SchedulerControlClient } from "../infrastructure/clients/scheduler/control-client.js"
 import { McpPersonalConnectClient } from "../infrastructure/clients/platform/mcp-personal-connect.js"
 import { McpProviderAdminConnectClient } from "../infrastructure/clients/platform/mcp-provider-admin-connect.js"
 import { CustomApiConnectClient } from "../infrastructure/clients/platform/custom-api-connect.js"
@@ -87,6 +90,7 @@ export type BffServerComposition = {
   skillDraftClient: CatalogConnectClient | null
   installationClient: SkillInstallationConnectClient | null
   businessStore: BffBusinessStore | null
+  scheduledTaskReader: ScheduledTaskReadService | null
   sessionAdmission: SessionAdmission
   idempotency: Map<string, IdempotencyEntry>
   agUiRuntime: AgUiSessionRuntime
@@ -245,6 +249,18 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
       : (() => {
           throw new Error("KOKORO_BFF_POSTGRES_URL and KOKORO_BFF_REDIS_URL are required for the live BFF runtime")
         })()
+  const scheduledTaskReader =
+    businessStore === null
+      ? null
+      : new ScheduledTaskReadService(
+          { snapshots: (scope, signal, taskId) => businessStore.services.scheduledTasks.snapshots(scope, signal, taskId) },
+          new SchedulerTaskStateReader(
+            config.upstreams.scheduler == null || config.schedulerServiceToken === null
+              ? null
+              : new SchedulerControlClient(config.upstreams.scheduler, config.schedulerServiceToken, config.upstreamTimeoutMs, config.upstreamMaxResponseBytes),
+            config.schedulerTargetUrl,
+          ),
+        )
   const storeReadiness =
     options.readiness ??
     (businessStore === null
@@ -514,6 +530,7 @@ export function createBffComposition(config: BffConfig, options: BffCompositionO
     skillAdminClient,
     installationClient,
     businessStore,
+    scheduledTaskReader,
     sessionAdmission,
     idempotency: options.idempotency ?? new Map<string, IdempotencyEntry>(),
     agUiRuntime: options.agUiRuntime ?? createAgUiRuntime(config),

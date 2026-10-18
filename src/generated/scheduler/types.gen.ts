@@ -43,7 +43,7 @@ export type ScheduleInput = unknown & {
   overlap_policy?: "allow" | "forbid"
   paused?: boolean
   /**
-   * Absolute one-time UTC instant at millisecond precision. Must be future for a new create/replace; an original durable receipt replays unchanged after due.
+   * Absolute one-time UTC instant at millisecond precision. Create or changing the trigger requires a future instant; replace with the exact same nonzero run_at preserves its due/consumed position. An original durable receipt replays unchanged after due.
    */
   run_at?: string
 }
@@ -76,12 +76,12 @@ export type Schedule = unknown & {
   paused: boolean
   id: string
   /**
-   * RFC 3339 UTC instant.
+   * Original command result next instant; null only for a consumed once trigger. Not current state or target execution success.
    */
-  next_due_at: string
+  next_due_at: string | null
   version: number
   /**
-   * Absolute one-time UTC instant at millisecond precision. Must be future for a new create/replace; an original durable receipt replays unchanged after due.
+   * Absolute one-time UTC instant at millisecond precision. Create or changing the trigger requires a future instant; replace with the exact same nonzero run_at preserves its due/consumed position. An original durable receipt replays unchanged after due.
    */
   run_at?: string
 }
@@ -185,7 +185,7 @@ export type CurrentSchedule = unknown & {
    */
   status: "active" | "paused" | "exhausted"
   /**
-   * Absolute one-time UTC instant at millisecond precision. Must be future for a new create/replace; an original durable receipt replays unchanged after due.
+   * Absolute one-time UTC instant at millisecond precision. Create or changing the trigger requires a future instant; replace with the exact same nonzero run_at preserves its due/consumed position. An original durable receipt replays unchanged after due.
    */
   run_at?: string
 }

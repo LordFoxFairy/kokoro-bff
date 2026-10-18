@@ -362,8 +362,8 @@ test("the repository exposes executable contract, schema, and strictness gates",
 })
 
 test("the Scheduler consumer pins immutable producer-owned control and webhook contracts", async () => {
-  const ownerCommit = "8a26c91aa24d1f48a760b6234ab1ed5855d20936"
-  const ownerDigest = "b38891d30c55fa1cae3de0f6a25ea014ea309713dcd0f6a8e1ce9cb1eeba502f"
+  const ownerCommit = "3bb7ff61b0d72418aa048ca35b8c3f144a33f13e"
+  const ownerDigest = "d349eae8bba207074b1edf91acd9f08e94f39a27363441f45186c1799159c999"
   const [manifestDocument, vendor, config, lockfile, packageDocument] = await Promise.all([
     readFile(new URL("../contract/dependencies/scheduler.json", import.meta.url), "utf8"),
     readFile(new URL(`../contract/vendor/kokoro-scheduler/${ownerCommit}/openapi.yaml`, import.meta.url)),
@@ -402,7 +402,7 @@ test("the Scheduler consumer pins immutable producer-owned control and webhook c
     owner: {
       repository_path: "apps/kokoro-scheduler",
       repository_commit: ownerCommit,
-      contract_version: "2.0.0",
+      contract_version: "3.0.0",
       contract_path: "contract/openapi/v1/openapi.yaml",
       contract_sha256: ownerDigest,
     },
@@ -419,7 +419,7 @@ test("the Scheduler consumer pins immutable producer-owned control and webhook c
   assert.equal(sha256(vendor), ownerDigest)
   // The owner publishes JSON bytes as valid YAML; preserve them without reserialization.
   const owner = JSON.parse(vendor.toString("utf8"))
-  assert.equal(owner.info.version, "2.0.0")
+  assert.equal(owner.info.version, "3.0.0")
   const control = owner.paths["/internal/scheduler/v1/schedules/{name}"]
   assert.equal(control.get.operationId, "getCurrentSchedule")
   assert.equal(control.post.operationId, "createSchedule")
@@ -430,6 +430,7 @@ test("the Scheduler consumer pins immutable producer-owned control and webhook c
   })
   assert.deepEqual(control.put["x-kokoro-control-error-codes"], {
     404: ["schedule_not_found"],
+    409: ["schedule_changed"],
   })
   assert.deepEqual(control.delete["x-kokoro-control-error-codes"], {
     404: ["schedule_not_found"],

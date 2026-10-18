@@ -136,6 +136,9 @@ export const createSchedule = <ThrowOnError extends boolean = false>(
     },
   })
 
+/**
+ * Replace with the exact same nonzero run_at preserves the original due and exhaustion. Exhausted overrides requested paused; changing the trigger requires a future instant. A concurrent identity/version change returns durable 409 schedule_changed; old occurrences and receipts are not rewritten.
+ */
 export const replaceSchedule = <ThrowOnError extends boolean = false>(
   options: Options<ReplaceScheduleData, ThrowOnError>,
 ): RequestResult<ReplaceScheduleResponses, ReplaceScheduleErrors, ThrowOnError> =>

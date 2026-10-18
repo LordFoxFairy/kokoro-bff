@@ -1,3 +1,4 @@
+import type { ScheduledTaskCurrentView } from "../scheduled-task-read-service.js"
 import type { ScheduledTask, ScheduledTaskDetails } from "../../contracts/index.js"
 import type { ScheduledTaskFact } from "../../domain/scheduled-task/task.js"
 
@@ -11,7 +12,10 @@ export function scheduledTaskResponse(task: ScheduledTaskFact): ScheduledTask {
     frequency: task.frequency,
     time: task.time,
     timezone: task.timezone,
-    next_run_at: task.nextRunAt?.toISOString() ?? null,
+    ...(task.weekdays === undefined ? {} : { weekdays: task.weekdays.slice() }),
+    ...(task.monthDays === undefined ? {} : { month_days: task.monthDays.slice() }),
+    ...(task.localDate === undefined ? {} : { local_date: task.localDate }),
+    next_run_at: null,
     ...(task.expiresAt === undefined ? {} : { expires_at: task.expiresAt.toISOString() }),
     auto_approve: task.autoApprove,
     enabled: task.enabled,
@@ -20,6 +24,6 @@ export function scheduledTaskResponse(task: ScheduledTaskFact): ScheduledTask {
 }
 
 /** A current read must not alter the representation saved in mutation receipts. */
-export function scheduledTaskDetails(task: ScheduledTaskFact): ScheduledTaskDetails {
-  return { ...scheduledTaskResponse(task), recurrence_anchor_at: task.recurrenceAnchorAt.toISOString() }
+export function scheduledTaskDetails({ task, state, nextRunAt }: ScheduledTaskCurrentView): ScheduledTaskDetails {
+  return { ...scheduledTaskResponse(task), scheduling_state: state, next_run_at: nextRunAt?.toISOString() ?? null }
 }

@@ -7,9 +7,9 @@ import { idempotencyKey } from "../request.js"
 import type { RequestContext } from "../../domain/request-context.js"
 import { reply } from "../response.js"
 import type { IdempotencyEntry, MutationTicket } from "../../application/idempotency.js"
-import { projectData, scheduledData } from "./helpers.js"
+import { projectData } from "./helpers.js"
 import { scheduledCreateInput, scheduledPatchInput } from "../../application/scheduled/input.js"
-import { scheduledTaskDetails, scheduledTaskResponse } from "../../application/scheduled/mappers.js"
+import { scheduledTaskResponse } from "../../application/scheduled/mappers.js"
 import { scheduledTaskId } from "./scheduler.js"
 import { projectName } from "../../domain/project/name.js"
 
@@ -149,11 +149,6 @@ export async function liveBffBusiness(
 
     if (businessPath[0] === "scheduled-tasks") {
       const taskId = businessPath[1]
-      if (businessPath.length === 1 && method === "GET") {
-        const tasks = await store.services.scheduledTasks.list(ownerScope)
-        await reply(response, 200, ok(scheduledData(tasks.map(scheduledTaskDetails)), context.requestId), context, idempotency, mutation)
-        return true
-      }
       if (businessPath.length === 1 && method === "POST") {
         const input = scheduledCreate
         if (input === null) {
@@ -168,11 +163,6 @@ export async function liveBffBusiness(
           lineage,
         )
         await reply(response, 200, ok({ task: scheduledTaskResponse(task) }, context.requestId), context, idempotency, mutation)
-        return true
-      }
-      if (businessPath.length === 2 && taskId !== undefined && method === "GET") {
-        const task = await store.services.scheduledTasks.find(ownerScope, taskId)
-        await reply(response, task === null ? 404 : 200, task === null ? failure("scheduled_task_not_found", "Scheduled task was not found", context.requestId) : ok({ task: scheduledTaskDetails(task) }, context.requestId), context, idempotency, mutation)
         return true
       }
       if (businessPath.length === 2 && taskId !== undefined && method === "PATCH") {
@@ -206,7 +196,9 @@ export async function liveBffBusiness(
     }
     return false
   } catch (error) {
-    if (error instanceof Error && error.message === "PROJECT_SLUG_CONFLICT") {
+    if (error instanceof Error && ["SCHEDULED_TASK_CALENDAR_INVALID", "SCHEDULED_TASK_LOCAL_TIME_GAP", "SCHEDULED_TASK_ONCE_NOT_FUTURE"].includes(error.message)) {
+      await reply(response, 400, failure("invalid_scheduled_task", "Scheduled task calendar must be valid and new one-time dates must be in the future", context.requestId), context, idempotency, mutation)
+    } else if (error instanceof Error && error.message === "PROJECT_SLUG_CONFLICT") {
       await reply(response, 409, failure("project_exists", "A project with this slug already exists", context.requestId), context, idempotency, mutation)
     } else if (error instanceof Error && error.message === "PROJECT_NOT_FOUND") {
       await reply(response, 404, failure("project_not_found", "Project was not found", context.requestId), context, idempotency, mutation)

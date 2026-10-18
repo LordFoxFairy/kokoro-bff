@@ -1,3 +1,23 @@
+## 2026-10-18 固定 Scheduler 3.0（实施门）
+
+owner固定3bb7ff61b0d72418aa048ca35b8c3f144a33f13e／3.0.0／d349eae8bba207074b1edf91acd9f08e94f39a27363441f45186c1799159c999。mutation Schedule.next_due_at条件nullable，null必须once run_at且paused=false；data.status仍命令结果，BFF只把updated的该形状当同触发源耗尽，不拿旧ACK充current。新canonical条件在唯一生成器正规补全，拒非法cron/null、错误paused/缺字段或绑定漂移。
+
+Public17与现业务字段不变；同一冻结once instant的普通/完整规则编辑和启停允许past，不代表重新调度或执行；不同instant、新建/recurring转once仍future。next_run_at由当前owner读，exhausted返回null；仅该已证终态允许与产品paused意图不同，完整正文/revision仍匹配。后继正常切换仍需旧未知命令退休与消费者配对，不提前重载。
+
+## 2026-10-18 退休重复调度 next 事实（周期候选续接）
+
+不改 Public17 当前读/写形状和固定 Scheduler2 wire；新 mutation snapshot 的 next_run_at 总为 null（登记异步且未知），旧已持久 ACK 原 JSON 不改写。Details 仅用权威 current reader 的 next 与 scheduling_state，不从写回执或旧 BFF 列恢复。内部 outbox success port 只结算 command，不返回/接受 next projection。
+
+## 2026-10-18 权威调度当前读取（周期候选续接）
+
+Public17 未发行候选补当前 Details 必需 scheduling_state=pending|active|paused|exhausted|failed；next_run_at 只在已核验 active owner current 时返回，否则为 null。业务 status 与调度状态分开，exhausted 不表示 Agent 成功。登记已成功却读到404、绑定不符或依赖失败返回503，不伪装 pending/空列表。写回执保持原不可变表示，不增加 current 字段，不改旧 ACK。完整16.2逆回保护原契约字节；消费者配对与正常激活另验。
+
+## 2026-10-18 Public17 多周期目标（隔离候选）
+
+frequency扩为daily/weekly/monthly/once；保time/timezone，weekly必需weekdays唯一0..6，monthly必需month_days唯一1..31，once必需local_date真实ISO日期，其他频率不接受这些字段。recurrence_anchor_at退出输入和当前读，无别名；next_run_at仍必需nullable且只来自Scheduler。PATCH触碰规则须携带完整frequency/time/timezone与对应选择，其他字段保持部分更新。写ACK仍不可变；仍符合当前请求形状的同key/body重放原JSON，退休anchor/缺少周选择等旧请求在claim前拒绝，不新增双parser或alias。历史回执保留原样，正常切换前必须先收敛未知ACK；新当前详情/列表严格执行规则条件，不用历史ACK回填编辑器。到点后的同key回放不再执行未来校验；新建/改期只接受未来once。
+
+公开版本17.0.0，operation不新增；机器变更完整逆回16.2精确SHA，再接原16.1/16.0保护。内部Scheduler保持固定2.0，BFF将本地规则转成cron或run_at，冻结command使用outbox4，无任意callback URL或凭据输入。正常消费者未配对前不重载。
+
 ## 2026-10-18 Scheduler 2.0固定消费
 
 内部Scheduler source固定8a26c91aa24d1f48a760b6234ab1ed5855d20936与完整digest；公开BFF仍16.2/152 operations不变。旧1.0 vendor替换，SDK正规生成并校验drift。新增owner current GET消费，输入path name与可信tenant/request ID，不传Idempotency-Key/body/query；响应是data.schedule，request ID只在header，不套旧mutation meta。

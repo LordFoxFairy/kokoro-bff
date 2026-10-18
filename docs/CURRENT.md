@@ -1,3 +1,49 @@
+## 2026-10-18 Scheduler 3.0 配对与同一次触发管理（未正常激活）
+
+基于d31455e同需求工作树固定Scheduler `3bb7ff61b0d72418aa048ca35b8c3f144a33f13e`／3.0.0，canonical SHA256 `d349eae8bba207074b1edf91acd9f08e94f39a27363441f45186c1799159c999`；唯一vendor/生成SDK配对，不双读。Public17／152 operations候选保持，当前3.0增量不再改SQL。锁内比较同一冻结once instant，允许到期后普通/完整规则编辑及启停，新建或改变instant仍须未来；不复制Scheduler耗尽事实或旧revision来源链。
+
+ACK仅updated＋once/null next/paused=false承接耗尽，完整trigger、正文/revision、目标与策略仍核验；当前GET只有已证exhausted的once允许耗尽盖过产品paused，next为null。历史receipt不改写，当前读不从旧ACK恢复next。原定向规则与真实PG/HTTP先RED后GREEN，暂停/重新启用不复活同一次触发。
+
+最终639非文档/README工程输入停写逐项一致：Node22 format/lint/typecheck/contract/architecture/build及默认原manifest全清单通过，contract692 PASS、architecture35 PASS、默认1290 PASS／3原资源SKIP；另独占fresh PG四个完整相关资源文件231 PASS／0 FAIL／0 SKIP，自有库清理。首contract门遗漏固定owner新增409目录的消费断言，已精确配对schedule_changed；首资源门230 PASS/1 FAIL定位为当前读fixture抢取R73保留的其他tenant pending command，两个原案例联跑实际RED复现tenant身份后，以独立事务锁住其他fixture行供真实SKIP LOCKED隔离，原权限/回执/耗尽断言保持，finally回滚释放。最终完整门全部重跑，原失败证据保留；独立只读审未发现确定P0–P2。
+
+真实源码Scheduler3＋固定SDK/正式Delivery隔离HTTP已验同触发源past与consumed replace、当前读取/tenant404/错误凭据401和原ACK重放；实际等待planner以skip耗尽一次，4定义/7receipt/1 skipped occurrence/0dispatch，自有进程退出0、库清理。不是实际Agent/MCP执行或全产品浏览器验收。原始收据仅Root ignored `var/dev/bff-scheduler3-20261018/`。
+
+正常库、进程与任务未加载候选；App17及Manus页面对照、旧非终态命令/未知ACK的正式收敛、Agent定时MCP管理与生产resolver仍OPEN。不得单独重载新owner或称自动化/MCP全链完成；模型/实际工具、扣费、CI和远端PR继续暂停，原正常知识演进文档/ADR及其他工作保留。
+
+## 2026-10-18 调度 next 重复事实退休与取消观察修正（未正常激活）
+
+沿同一 `d31455e568ca80f9d332bc9d3ab69a48409d7de9` 基线未提交周期候选，从 canonical fresh SQL、Fact/row/全部 task SQL 删除私有 next_run_at；不新增替代缓存、alias 或可选旧参数。Scheduler ACK 仍核完整定义/trigger/精度，但成功只用原 outbox ID＋owner/token/fence 原子结算 command，不写 task；失败同事务 task.status/revision 围栏保持。新 mutation ACK 的 next 为 null，历史 receipt JSON 不改；Details 继续读 Scheduler current。仅保原围栏语义，不冒称仅 lease_until 到时但未被接管也拒绝结算。
+
+R280 已定位为测试观察竞态，而非改写 Project 生产取消流程：原客户端 abort 后，服务端可能尚未收到断线，先派出 ROLLBACK，再在 ACK 仍被 gate 阻挡时收到取消并销毁连接。私有两次时序记录分别复现通过与原断言失败；正式原案例改为同步真实服务端 signal，分别覆盖取消先于 ROLLBACK、ROLLBACK ACK 已在途两个窗口，两者均保未释放 gate 时恰好一次 destroy 及随后 GET200。没有删除断言、放宽 timeout 或改 Project 生产代码。12 个独立真实 PG/HTTP 定向子进程均通过双窗口；最终四资源文件完整 229 PASS/0 FAIL/0 SKIP，含本片六个替换缓存风险的原案例及原失败/revision/rollback保障。隔离 fresh installer 成功，自有库已清理；旧失败日志保留，不能以旧一次独立重跑替代本次定位。
+
+直接固定 Scheduler8a 源码 smoke 再验 weekly/monthly/once ACK 和 current：4 definitions/4 receipts/0 occurrences/0 dispatches；无 next projection，严格 paused/null 读取，原 receipt 到点后重放与401/跨tenant404保持。自有子进程正常 exit0、测试库清理。只读复核未见本片新增确定 P0–P2，不替代主方验证。
+
+主方最终冻结639个非文档输入，Node22按原配置串行执行 format:check、lint、typecheck、contract:check、test:architecture、build 及默认 test 原文件清单（只限制并发2）全部 exit0；contract692 PASS、architecture35 PASS、默认1290 PASS/0 FAIL/3原资源SKIP，验证前后输入无漂移。BFF git diff --check通过；Root有效计划原557–558两处历史尾空格保留，未因本片顺手整理。未把默认资源SKIP或229项相关PG组合冒全部集成套件通过。
+
+正常库/源码进程、App Public16.2、正常任务均未变；未做本片浏览器对照，Public17仍未发行。过去 once 的普通编辑/暂停/重新排期、消费者和 Agent 定时 MCP 的可信管理/生产 resolver 仍待闭合。未提交、未更 Root index/gitlink；模型、实际 MCP 工具执行、扣费、CI 和远端 PR 继续暂停。原正常知识文档及其他未交接工作保留。证据仅 Root ignored `var/dev/bff-next-retirement-20261018/` 及 `var/dev/bff-periods-20261018/next-*`。
+
+## 2026-10-18 ScheduledTask 权威当前读取（本地候选，正常环境未切换）
+
+在 `d31455e568ca80f9d332bc9d3ab69a48409d7de9` 及原多周期未提交候选上接通正式列表/详情 GET：同 owner 单 SQL 读取任务及精确 revision 的登记状态；pending 不读 Scheduler，失败独立表示，成功才读固定 Scheduler2 current 并核完整冻结定义。4 路并发、当前读取阶段共享5s monotonic deadline、断线/超时取消贯穿；owner 返回后先重新准入，再核本地事实及项目可用性。本人删除后已暂停任务保留读取语义，active 且项目失效拒绝。Public17 未发行候选 Details 新增必需 `scheduling_state`，与业务 status 和 Agent 结果分开；旧 mutation ACK 原样，GET 不写 receipt/outbox，也不取旧 next 缓存。
+
+主方冻结639个非文档输入，实际 format/lint/typecheck/contract/architecture/build/default manifest 全过且无输入漂移：contract 692 PASS，architecture 35 PASS，默认1290 PASS/3原资源SKIP。新 current 行为有真实 owner PG/HTTP 证据：next 推进、原 ACK 重放、错误主体/在途身份变化、任务改动、deadline/断线、SQL锁等待取消和耗尽连接池晚到归还。受控 SessionAdmission 与 Scheduler HTTP fixture 不冒真实 IAM；另直接对固定 Scheduler `8a26c91aa24d1f48a760b6234ab1ed5855d20936` 源码验 paused weekly/monthly/once，4 schedules/4 receipts、0 occurrences/0 dispatches，子进程正常退出且自有测试库均清理。
+
+保留实际失败而不以重跑抹去：首轮完整 contract 690 PASS/2 FAIL 源于 runtime 过早解析无关测试 store 的 scheduled service，改为窄闭包延迟解析后原18 focused通过。下一轮 architecture 暴露 reader 越过唯一 generated 边界；decoder归回 control-client，未放宽 allowlist，72 focused通过。只依赖 timer 的预算路径有真实1项 RED，补同一 monotonic deadline 后4相关用例通过。四文件真实 PG/HTTP 曾229 PASS；最终源码重跑为228 PASS/1 FAIL：原 R280 post-SELECT-ACK cancellation 的 ROLLBACK 观察断言失败。该用例独立再跑1 PASS，不能据此称修复或确定为既存问题；原 Project 生产路径和该用例断言未改，取消时序仍待具名定位。R278 fixture仅将孤立 task UPDATE改为真实同事务暂停 helper，承接 task revision 与 command，原历史读取/回执断言保留。
+
+本片未提交，正常库/运行进程未加载候选，Web仍待固定 Public17 和页面配对；未做本片浏览器验收或宣称 Manus 布局已对齐。旧 BFF next 列/ACK成功投影退休、once 到期后的编辑/暂停/重新排期、Agent 定时 MCP 可信管理入口与完整执行链均未完成，沿原需求继续。模型、实际工具调用、扣费、CI与远端 PR 暂停；Root index/gitlink未改，既有无关修改保留。
+
+## 2026-10-18 多周期规则、存储和调度命令候选（未正常激活）
+
+沿d31455e工作树继续，未提交/发布。Public17.0.0／152 operations，canonical SHA256 `927061352ba9a257b59b86a2be1a744a013bbc3d5758137fe6e53a162654a18a`，局部旧block完整逆回16.2再串原历史链。新增独立calendar边界：weekly多星期、monthly多日期、once本地日期/IANA→冻结UTC；完整规则PATCH清旧选择，不再推断或接受anchor。canonical arrays/date/run_at、repo事务、outbox4及cron/run_at映射同步，锁序和revision/lease/fence保持。Temporal0.5.1及jsbi4.3.2固定；八份依赖manifest只由既有generator更新lock摘要，generated源码无差异。
+
+新输入6项、映射/冻结2项及契约先实际RED后实现；fresh真实PG从23514约束失败到规则切换、时区无关DATE、once未来检查/回放通过；原outbox资源文件已配对23 PASS。新增真实HTTP/PG验证周/月选择、跨subject404、服务重启后once原ACK回放；只控制Date时钟，不把它冒实际等待到点。退休请求在claim前400/零写，仍有效请求保持原终态；旧unknown ACK必须在正常切换前收敛。
+
+两次完整相关格式/lint/type/contract/architecture/build与默认原manifest通过，最后一次完整门为contract692 PASS、default1285 PASS/3原资源SKIP，635非文档输入停写一致。随后发现owner一次性timestamp去零序列化差异：loopback正控RED，改为完整instant身份比较，并保纳秒不同due拒绝；outbox4另拒绝会被Date归一化/截断的非canonical instant。最后两文件增量后，fresh build、正式格式/lint/type与151 focused PASS/0SKIP，636非文档/README输入停写一致；未把此前完整默认门冒增量后的再次全量门。
+
+真实源码Scheduler 8a26c91＋固定SDK/正式Delivery接通三类规则与原回执验证：4个paused定义、4receipt、0occurrence/dispatch，进程退出0且自有库清理。四个真实PG/HTTP相关资源文件首轮226 PASS/1 FAIL（R280 Project取消ACK时序）；未修改该生产逻辑或断言，基线d31455e同组合225 PASS，当前完整重跑227 PASS/0SKIP，不宣称已修复这项间歇问题。最后timestamp两文件修复单独通过上述151及真实Scheduler，不冒所有资源的最终停写全量重跑。完整资源证据仅Root ignored var/dev/bff-periods-20261018，自有基线归档/库/进程已回收。
+
+未改正常数据库、进程、任务开关或App消费者；SQL/API候选与正常16.2/旧anchor仍须正式配对。持续权威next投影、once耗尽后的暂停/普通编辑/重启用语义、App/Manus对照和Agent定时MCP可信管理/实际resolver仍OPEN，不因基础规则通过称完整自动化完成。模型/实际工具执行、扣费、CI及远端PR仍暂停；原正常知识文档dirty与ADR保留。
+
 ## 2026-10-18 Scheduler 2.0 固定消费前置已验（未正常激活）
 
 沿基线1dbfd826固定Scheduler producer 8a26c91aa24d1f48a760b6234ab1ed5855d20936／2.0.0及完整digest，替换旧vendor并正规生成。当前GET与不可变写ACK分离；生成流程从唯一固定owner文档派生互斥trigger、required/closed与耗尽条件，不手改generated。current client保可信tenant/request ID、专用service token、no-store及资源绑定；caller取消贯穿Request/stream，完整纳秒instant比较不截断。

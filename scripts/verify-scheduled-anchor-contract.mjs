@@ -1,7 +1,9 @@
+import { restorePublic162ScheduledPeriodContract } from "./verify-scheduled-period-contract.mjs"
 import { createHash } from "node:crypto"
 
 // Release proof only. Runtime reads and immutable ACKs each have one current schema.
 export function restorePublic161ScheduledAnchorContract(source) {
+  source = restorePublic162ScheduledPeriodContract(source)
   if (!/^  version: 16\.2\.0$/mu.test(source)) return source
   const digest = (value) => createHash("sha256").update(value).digest("hex")
   const start = source.indexOf("    ScheduledTaskDetails:\n")

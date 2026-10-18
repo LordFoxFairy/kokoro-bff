@@ -1,11 +1,18 @@
 import { createClient } from "../../../generated/scheduler/client/client.gen.js"
 import { createSchedule, deleteSchedule, getCurrentSchedule, replaceSchedule } from "../../../generated/scheduler/sdk.gen.js"
-import { zErrorResponse } from "../../../generated/scheduler/zod.gen.js"
+import { zCurrentScheduleResponse, zErrorResponse } from "../../../generated/scheduler/zod.gen.js"
 import type { SchedulerScheduleInput } from "./schedule.js"
 import { isRecord } from "../../../domain/json.js"
 import { canonicalSchedulerOccurrence } from "./dispatch-identity.js"
 
 export type SchedulerControlAttempt = { kind: "response"; status: number; body: unknown } | { kind: "transport"; errorCode: string }
+
+/** Keep owner wire decoding in this single fixed-artifact boundary. */
+export function decodeSchedulerCurrent(attempt: SchedulerControlAttempt) {
+  if (attempt.kind !== "response" || attempt.status !== 200) return null
+  const parsed = zCurrentScheduleResponse.safeParse(attempt.body)
+  return parsed.success ? parsed.data.data.schedule : null
+}
 
 export type SchedulerControlLineage = {
   tenantId: string

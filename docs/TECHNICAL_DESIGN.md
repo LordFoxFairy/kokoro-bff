@@ -1,3 +1,27 @@
+## 2026-10-18 Scheduler 3.0 同触发源消费（实施门）
+
+用户已确认同一次once编辑不复活。固定owner3bb7ff61b0d72418aa048ca35b8c3f144a33f13e／3.0.0及其canonical完整摘要，替换2.0唯一vendor/SDK，不双读。BFF仍拥有产品规则：update在现Project→task锁内比较原once runAt与规范化后新值；精确同instant允许past内容/完整规则/启停管理，新建/改变触发时间仍future。无需查询Scheduler决定本地更新，也不保存旧callback来源链。
+
+ACK条件从固定owner canonical生成；耗尽只认once、null next和paused=false，完整trigger/body/revision/目标/重试等定义仍严格相同，旧不可变receipt不改。当前GET仅在已证明exhausted的once下接受owner耗尽优先于产品paused，其他paused/active匹配不放宽。复用现事务、outbox4、权威当前读，不加Schema/缓存/层或public operation。受控HTTP/自有PG与真实源码owner隔离验收；正常库、任务及服务不激活，模型/实际工具、扣费、CI和远端仍暂停。
+
+## 2026-10-18 退休重复调度 next 事实（周期候选续接）
+
+沿已接通权威 current 的同一周期需求，删除 BFF next 缓存及 mutation ACK→task 回投，不保留 alias/可选第三参数。成功结算只用 outbox ID＋lease owner/token/fence 原子更新 command，不能改 task 或其 revision；被接管后旧 lease 的 owner/token/fence 拒绝，已完成不再结算；延续原围栏语义，不新增仅按 lease_until 时刻拒绝的行为。失败仍保同事务 command＋当前 revision 的 task.status 更新。Scheduler ACK 的完整 schema/trigger/正文/精度核验继续保留，成功不再携带 next projection。单条成功 UPDATE 即原子边界，不为已无第二写入的结算保空事务。
+
+## 2026-10-18 权威调度当前读取（周期候选续接）
+
+当前 GET 以同 owner 单条 SQL 读取任务与精确 revision 的登记 command 状态；pending/leased/retryable 不请求 Scheduler，failed 单独表示。succeeded 才通过现固定 Scheduler2 current 查询核完整冻结定义/可信主体/目标 URL；查询后再核本地快照，变化返回可重试依赖错误。并发上限4、当前读取阶段共享5s总预算与断线取消贯穿，无锁跨 HTTP、无 GET 写入。runtime 装配窄 reader，不在 PostgreSQL repository 内构建网络 client。旧 next 缓存不参与当前读；本地缓存/ACK projection 的删除和 once 已过期编辑结算仍为同一周期需求后继，未完成前不激活正常组合。
+
+## 2026-10-18 多周期业务切片（沿已确认方案，隔离实施）
+
+BFF沿现ScheduledTask owner替换单anchor，不新增服务：daily仅time/timezone，weekly另有weekdays（0=周日至6=周六，非空唯一整数组），monthly另有month_days（1..31，非空唯一），once另有local_date（YYYY-MM-DD）；跨类型字段拒绝。PATCH涉及任一规则字段时须提交完整规则，普通title/prompt/开关仍可独立修改；切换时移除原类型字段，不保留anchor或alias。日历月不存在日期由Scheduler cron跳过。
+
+一次性本地时间由BFF解析并冻结UTC runAt，不能由服务本地时区或派发重试时钟推算。DST缺口拒绝、重复时间选较早instant；创建/新规则未来校验放在既有幂等回放之后，历史成功回执不因到点过期而失效。用固定@js-temporal/polyfill 0.5.1完成日历/zone解析（ISC；唯一直接依赖jsbi 4.3.2／Apache-2.0由lock与完整性摘要固定，安装不运行scripts），不手写offset扫描；只在日历边界导入，不patch全局Temporal，Node原生支持且通过同边界测试后可移除。相较自写Intl候选扫描，维护和DST风险更低；不带入通用工作流或额外日期框架。参考[上游package](https://github.com/js-temporal/temporal-polyfill/blob/main/package.json)、[许可证](https://github.com/js-temporal/temporal-polyfill/blob/main/LICENSE)及[TC39时区语义](https://tc39.es/proposal-temporal/docs/timezone.html)，这不是Manus后端实现的观察证据。
+
+Public17为配对切换，当前读严格带所选规则；不可变mutation ACK的公共快照字段允许新频率和可选规则字段，以承接仍有效形状请求的原终态原样返回；退休请求形状直接拒绝，不新增历史请求parser/alias或历史解码分支，切换前收敛未知ACK。17→16.2精确逆证只保存变更旧block，再接既有完整历史链，不当运行时fallback。新outbox4严格冻结选定规则/runAt，保原command身份/revision/lease/fence与事务；旧payload/receipt不原地改写。
+
+本切片先canonical/机器门、domain/input、repo/outbox和真实隔离PG/HTTP，消费者及持续next后继配对；不改正常库/进程、旧任务或未知ACK。激活前停worker竞争，核旧非终态command/登记schedule/租约并具名收敛，再以新key/revision正式重建，不让旧command阻塞新批次。模型、实际MCP执行、扣费、CI和远端仍暂停。
+
 ## 2026-10-18 Scheduler 2.0 consumer前置切片
 
 固定producer 8a26c91aa24d1f48a760b6234ab1ed5855d20936 / canonical SHA256 b38891d30c55fa1cae3de0f6a25ea014ea309713dcd0f6a8e1ce9cb1eeba502f；正规vendor/generated替换旧1.0，不回退。当前SchedulerControlClient沿同一有界fetch提供current GET，与mutation receipt独立；GET仅可信tenant/request ID和专用service token，无用户token、幂等键、body或query。typed consumer必须承接exclusive trigger及exhausted/null next，不只让生成器类型通过。

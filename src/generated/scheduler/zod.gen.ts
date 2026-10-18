@@ -128,62 +128,73 @@ export const zResolvedRetryPolicy = z.object({
 })
 
 export const zSchedule = z.intersection(
-  z.unknown().refine(
-    (value) => {
-      if (typeof value !== "object" || value === null || Array.isArray(value)) return false
-      if (
-        Object.keys(value).some(
-          (field) =>
-            ![
-              "name",
-              "schedule",
-              "timezone",
-              "url",
-              "method",
-              "body",
-              "retry",
-              "misfire_policy",
-              "catch_up_limit",
-              "overlap_policy",
-              "paused",
-              "id",
-              "next_due_at",
-              "version",
-              "run_at",
-            ].includes(field),
+  z
+    .unknown()
+    .refine(
+      (value) => {
+        if (typeof value !== "object" || value === null || Array.isArray(value)) return false
+        if (
+          Object.keys(value).some(
+            (field) =>
+              ![
+                "name",
+                "schedule",
+                "timezone",
+                "url",
+                "method",
+                "body",
+                "retry",
+                "misfire_policy",
+                "catch_up_limit",
+                "overlap_policy",
+                "paused",
+                "id",
+                "next_due_at",
+                "version",
+                "run_at",
+              ].includes(field),
+          )
         )
-      )
-        return false
-      if (
-        ![
-          "id",
-          "name",
-          "timezone",
-          "url",
-          "method",
-          "body",
-          "retry",
-          "misfire_policy",
-          "catch_up_limit",
-          "overlap_policy",
-          "paused",
-          "next_due_at",
-          "version",
-        ].every((field) => Object.hasOwn(value, field))
-      )
-        return false
-      const row = value as Record<string, unknown>
-      const retry = row["retry"]
-      if (retry !== undefined) {
-        if (typeof retry !== "object" || retry === null || Array.isArray(retry)) return false
-        if (Object.keys(retry).some((field) => !["max_attempts", "backoff_seconds", "max_backoff_seconds", "max_retry_window_seconds"].includes(field)))
           return false
-        if (!["max_attempts", "backoff_seconds", "max_backoff_seconds", "max_retry_window_seconds"].every((field) => Object.hasOwn(retry, field))) return false
-      }
-      return ["schedule", "run_at"].filter((field) => Object.hasOwn(value, field)).length === 1
-    },
-    { message: "exactly one trigger is required" },
-  ),
+        if (
+          ![
+            "id",
+            "name",
+            "timezone",
+            "url",
+            "method",
+            "body",
+            "retry",
+            "misfire_policy",
+            "catch_up_limit",
+            "overlap_policy",
+            "paused",
+            "next_due_at",
+            "version",
+          ].every((field) => Object.hasOwn(value, field))
+        )
+          return false
+        const row = value as Record<string, unknown>
+        const retry = row["retry"]
+        if (retry !== undefined) {
+          if (typeof retry !== "object" || retry === null || Array.isArray(retry)) return false
+          if (Object.keys(retry).some((field) => !["max_attempts", "backoff_seconds", "max_backoff_seconds", "max_retry_window_seconds"].includes(field)))
+            return false
+          if (!["max_attempts", "backoff_seconds", "max_backoff_seconds", "max_retry_window_seconds"].every((field) => Object.hasOwn(retry, field)))
+            return false
+        }
+        return ["schedule", "run_at"].filter((field) => Object.hasOwn(value, field)).length === 1
+      },
+      { message: "exactly one trigger is required" },
+    )
+    .refine(
+      (value) => {
+        if (typeof value !== "object" || value === null || Array.isArray(value)) return false
+        const row = value as Record<string, unknown>
+        return row["next_due_at"] !== null || (["run_at"].every((field) => Object.hasOwn(row, field)) && row["paused"] === false)
+      },
+      { message: "consumed mutation must be once and not paused" },
+    ),
   z.strictObject({
     name: z
       .string()
@@ -205,7 +216,7 @@ export const zSchedule = z.intersection(
     overlap_policy: z.enum(["allow", "forbid"]).default("forbid"),
     paused: z.boolean().default(false),
     id: z.uuid(),
-    next_due_at: z.iso.datetime().regex(/Z$/),
+    next_due_at: z.iso.datetime().regex(/Z$/).nullable(),
     version: z.int().gte(1),
     run_at: z.iso
       .datetime()

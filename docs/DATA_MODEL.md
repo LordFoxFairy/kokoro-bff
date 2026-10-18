@@ -1,3 +1,21 @@
+## 2026-10-18 同触发源更新沿现事实与事务
+
+不改本轮canonical Schema或新增持久字段。update锁内以当前storedCalendar与新冻结runAt精确比较，只有同once触发源免future校验；其余新建/改期保持原限制。规则、revision与outbox4仍同事务，旧receipt/execution不重写；next/lifecycle仍由Scheduler唯一持有，不在BFF复制耗尽开关或旧revision来源链。仅自有fresh资源验收，不演进正常库。
+
+## 2026-10-18 退休重复调度 next 事实（周期候选续接）
+
+从唯一 canonical fresh schema 删除 bff_scheduled_task.next_run_at，Fact/row/列投影及全部 INSERT/UPDATE 一并删除；不新增替代缓存或表。task 保规则/UTC run_at、业务 status、revision，实际 next 归 Scheduler。成功只原子结算 command，不写 task；失败的 revision/lease/fence 事务保护仍保留。历史 public receipt JSONB 与执行记录不改，仅隔离 fresh 库安装/验收；不执行正常库 DROP COLUMN、迁移或服务重载，正常演进另需备份/具名操作。
+
+## 2026-10-18 权威调度当前读取（周期候选续接）
+
+本读取片不新增表/字段/缓存。task 与其同 tenant/task/aggregate_revision 的 register/replace outbox 状态从同一个本地 SQL 快照读取；项目同主体且未删除的可用性进入前后比对；既有删除后暂停任务仍由任务本人读取，active 且项目失效则拒绝当前成功。Scheduler 当前 next/lifecycle 经正式 API 读取，不落 BFF SQL；读取后重核相同本地事实防止在途修改或删除返回旧配置。旧 next_run_at 与成功 ACK 写投影仍待后继原子退休，本片 GET 明确忽略该缓存，不将暂存列当权威。仅自有隔离资源验收，不改正常库。
+
+## 2026-10-18 ScheduledTask 多周期目标（仅fresh隔离）
+
+canonical以weekdays SMALLINT[]、month_days SMALLINT[]、local_date DATE和run_at TIMESTAMPTZ(3)替换recurrence_anchor_at；每种frequency只保存适用字段，其余NULL。数组非空/一维/范围/元素非NULL由CHECK保护，唯一排序由同owner写边界验证并规范化；once本地date与UTC runAt一同冻结，读取DATE不受驱动/宿主时区影响。next仍nullable，与规则和不可变receipt分离；旧账/历史execution不改。
+
+新命令版本4只接受新规则快照，不双解旧3或重用旧key；所有事实与新outbox保持同事务，Project→task锁序和投影revision/lease/fence不变。本切片只安装自有fresh schema；正常库字段转换、旧非终态命令退休/已登记schedule核对需单独具名操作，不能直接重载或用fresh installer覆盖正常库。
+
 ## 2026-10-18 Scheduler 2.0 consumer前置
 
 本切片不改canonical schema、ScheduledTask/单anchor模型、outbox3或receipt行。当前GET仅HTTP consumer，不读取Scheduler数据库；无查询缓存、read receipt或新队列。原outbox仍以同一revision＋lease/token/fence投影原ACK，不冒完整权威next生命周期已闭合；后继业务模型切换与新current投影必须一起明确时间预算及nullable/current状态。
