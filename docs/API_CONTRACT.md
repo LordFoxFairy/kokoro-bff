@@ -1,3 +1,9 @@
+## 2026-10-18 Public18.1 MCP 包管理目标
+
+新增POST /v1/admin/mcp/packages/{package_id}/uploads、GET同路径/{upload_id}、POST同路径/{upload_id}/complete与/abort、POST /v1/admin/mcp/packages/{package_id}/publish。四写单Idempotency-Key≤191 ASCII，命令摘要仅可信主体与固定意义由SDK生成；路径package/upload保持精确绑定。Complete/Publish size_bytes为1..33554432十进制字符串，SHA lowercase64；staging source版本不是运行版本。Publish body含provider_key和精确上传/asset事实，无任意command/env/URL。
+
+所有操作当前人类平台管理员＋mcp_catalog.manage、固定租户、no-store/x-request-id。Begin/Complete/Abort/Status/Publish统一200，表示当前owner结果而非虚构新BFF资源；Begin的PUT引用只短时返回。Pending/Unknown扫描如实返回；发布不是启用/执行许可。公开错误稳定脱敏：400输入、401/403身份、404资源、409回执冲突/处理中、412资格、413包预算、429准入限流、502坏owner响应、503依赖/超时/未知。四写未知保原key/body，GET状态不证明发布未提交；Publish只能原命令恢复。Public18.1是新增五操作/157，现18其余内容用完整逆证精确保留，不加运行时旧版本fallback。
+
 ## 2026-10-18 MCP package admin 内部消费者
 
 公开API继续Public18/原operation集合，本片不增路由。固定Platform fa5c5e5新独立五方法及mcp-package-admin-v1/profile、vectors和descriptor；沿现direct owner-only BFF mcp_admin凭据/固定tenant，不新增IAM scope。SDK本地command摘要绑定tenant/subject/package/source/provider完整业务意义，四命令保留原commandId，status无command。输出严格校验后投影，不返回生成message、身份header或依赖错误详情；pending/unknown scan不转clean，发布ACK不当执行许可。

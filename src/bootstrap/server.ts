@@ -1,3 +1,4 @@
+import { mcpPackageAdminOperation, mcpPackageAdminRoute } from "../http/routes/mcp-package-admin.js"
 import { scheduledTaskReadRoute } from "../http/routes/scheduled-task-read.js"
 import { personalKnowledgeRoute } from "../http/routes/personal-knowledge.js"
 import { projectSkillSelectionRoute } from "../http/routes/project-skill-selection.js"
@@ -268,14 +269,15 @@ async function handle(
   const isMcpPersonalOperation = browserPrivateMcp && mcpPersonalOperation(businessPath, request.method ?? "GET") !== null
   const isCustomApiOperation = browserPrivateMcp && customApiOperation(businessPath, request.method ?? "GET") !== null
   const defersMcpPersonalReadAction = isMcpPersonalOperation && request.method === "GET"
+  const isMcpPackageAdminOperation = !browserPrivateMcp && mcpPackageAdminOperation(businessPath, request.method ?? "GET") !== null
   const isMcpProviderAdminOperation = !browserPrivateMcp && mcpProviderAdminOperation(businessPath, request.method ?? "GET") !== null
   if (browserPrivateMcp && !isMcpPersonalOperation && !isCustomApiOperation) {
     send(response, 404, failure("route_not_found", "Route was not found", id))
     return
   }
-  const hasMcpBudget = mcpAction !== null || isMcpPersonalOperation || isMcpProviderAdminOperation || isCustomApiOperation
+  const hasMcpBudget = mcpAction !== null || isMcpPersonalOperation || isMcpProviderAdminOperation || isMcpPackageAdminOperation || isCustomApiOperation
   if (hasMcpBudget) {
-    startMcpRequestBudget(request)
+    startMcpRequestBudget(request, isMcpPackageAdminOperation ? 20_000 : 10_000)
     response.setHeader("cache-control", "no-store")
     response.setHeader("x-request-id", id)
   }
@@ -468,6 +470,10 @@ async function handle(
   }
   if (isConnectorList) {
     await connectorListRoute(request, response, config, composition, admission.context)
+    return
+  }
+  if (isMcpPackageAdminOperation) {
+    await mcpPackageAdminRoute(request, response, config, composition, id, businessPath)
     return
   }
   if (isMcpProviderAdminOperation) {

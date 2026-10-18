@@ -1,3 +1,7 @@
+### 2026-10-18 MCP 管理HTTP入口
+
+`src/http/mcp-package-admin-input.ts` 负责严格wire→SDK输入与受界正文；`src/http/routes/mcp-package-admin.ts` 负责五HTTP操作、当前管理员准入和公开错误/结果。现 `bootstrap/server.ts` 共用20秒请求预算、`runtime.ts` 沿原配置装配/关闭 SDK，`auth/browser-service-credential.policy.ts` 只给 Admin 浏览服务精确新增五入口。唯一公开契约18.1及 `scripts/verify-mcp-package-admin-contract.mjs` 保留完整Public18历史逆证；`test/mcp-package-admin-http.test.ts` 覆盖端到端route行为而非源码/CSS字符串。
+
 ### 2026-10-18 MCP 受管包内部消费者
 
 `src/infrastructure/clients/platform/mcp-package-admin-{input,response,connect}.ts` 分担严格输入/固定摘要、安全投影和 Native Connect 生命周期。单一 `scripts/generate-platform-connect-client.mjs` 从固定 Platform fa5c5e5 增独立 Proto/descriptor/profile/vectors；原 HTTP 发行物随同一 bundle 固定，旧生成业务字节不变。`test/mcp-package-admin-client.test.ts` 覆盖五操作、凭据鲜读、精确回执/两种预算错误、取消与坏响应；没有第二套上传实体、公开路由或正常装配。

@@ -1,3 +1,4 @@
+import { restorePublic18McpPackageContract } from "./verify-mcp-package-admin-contract.mjs"
 import { createHash } from "node:crypto"
 import { load } from "js-yaml"
 // Historical release inverse, never a second runtime query schema or cursor decoder.
@@ -7,6 +8,7 @@ const currentBlockDigest = "8de33573293e13bf5e29b9ee7cbdf1b218c433fc87c472e51296
 const parentDigest = "ffc655e893b6ac90ee553acd368abbd68c7a3e77ed3a33a872643bf0d5a2a21f"
 const digest = (value) => createHash("sha256").update(value).digest("hex")
 export function restorePublic17LibraryFilterContract(source) {
+  source = restorePublic18McpPackageContract(source)
   if (!/^  version: 18\.0\.0$/mu.test(source)) return source
   const start = source.indexOf("  /v1/library:\n"),
     end = source.indexOf("  /v1/library/files:\n", start)
@@ -17,6 +19,7 @@ export function restorePublic17LibraryFilterContract(source) {
 }
 export function inspectLibraryFilterContract(source) {
   try {
+    source = restorePublic18McpPackageContract(source)
     if (load(source).info.version !== "18.0.0") throw Error("Library filter current version drift")
     restorePublic17LibraryFilterContract(source)
     return []

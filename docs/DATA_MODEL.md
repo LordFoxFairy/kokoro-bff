@@ -1,3 +1,7 @@
+## 2026-10-18 MCP 管理HTTP无新增事实
+
+公开五操作仅从当前session/权限获得可信主体并调用固定Platform SDK，不新增数据库、Upload/Package实体、receipt/outbox/cache。Storage仍拥有上传与前三项命令回执；Platform仍拥有发布及不可变版本/Server绑定。状态GET和短时PUT仅投影，签名材料不持久化。未知命令沿原owner恢复，不本地写失败覆盖未知结果。
+
 ## 2026-10-18 MCP package admin 无BFF新事实
 
 本片不改canonical schema、业务表、receipt/outbox或缓存。Storage是上传/字节/scan及前三项命令回执唯一owner；Platform是不可变包发布及发布receipt唯一owner。BFF窄client只接收trusted context、生成摘要并验证owner结果，不建立本地Package/Upload实体，不持久化短时签名URL/headers。

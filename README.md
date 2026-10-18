@@ -1,3 +1,7 @@
+### 2026-10-18 MCP 管理HTTP接线（未正常加载）
+
+Public18.1 新增受管包 Begin/Complete/Abort/Status/Publish 五操作；沿现 mcpProviderAdmin 配置与正式 SDK、当前人类平台管理员及 mcp_catalog.manage 准入。只有元数据与短时 PUT 引用经 BFF，字节仍直接传 Storage；无新表、配置、自动重试或模型/工具执行。Admin 上传/发布恢复页面待后继，完整验证与未验边界见 docs/CURRENT.md。
+
 ### 2026-10-18 MCP 受管包内部消费者
 
 Platform 固定发行物统一至 fa5c5e53151b3c72145b680a3ee4a45d92c17ec7，新增 MCP 包管理五方法窄 client；沿现 mcp_admin direct 服务凭据、固定摘要与总预算，不执行对象上传/工具，不新增公开路由或正常配置。人类管理员 HTTP 准入及 Admin 上传页面仍待接线；发布回执不是运行授权。实际验证与剩余项见 docs/CURRENT.md。

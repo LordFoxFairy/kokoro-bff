@@ -1,3 +1,9 @@
+## 2026-10-18 MCP 包管理公开接线实施门
+
+沿既定D6-B/feb42f4窄SDK，不新建owner/上传实体：BFF发布五个管理员HTTP操作，复用现mcpProviderAdmin地址/凭据及Nest内部协议adapter；每次当前session＋platformAdmin＋mcp_catalog.manage后调用owner。20秒总预算从BFF入口含准入/正文开始，32KiB raw正文、严格无未知/重复JSON、canonical路径/单Idempotency-Key、请求断开取消，未知写只原key/body显式恢复，不自动重试。body/URL不授信tenant、subject、digest；status不接受正文/key/query。
+
+写区限定canonical OpenAPI/原baseline与检查链、feature-local HTTP input/route、现server/runtime composition和相关原测试/必要风险案例；不重构既有其他路由或新建通用命令框架。先机器契约与RED→GREEN，再隔离完整门和真实Native owner/自有PG，正常环境不激活。随后Admin同源页面另切片。无需数据库变化、IAM新scope、依赖或配置项；继承已批准权限/Storage与Platform回执/扫描/不可变版本事实。
+
 ## 2026-10-18 MCP 受管包 BFF 固定消费者门
 
 复用现 Platform Connect 唯一生成器和当前 vendor 位置，把单一组合固定到 Platform fa5c5e53151b3c72145b680a3ee4a45d92c17ec7；旧三个 Proto、既有九 artifact 和原四 generated 字节不变，新增独立 package-admin Proto/descriptor/profile/vectors，不添加兼容 pin/fallback。

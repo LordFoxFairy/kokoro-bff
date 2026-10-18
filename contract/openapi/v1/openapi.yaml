@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kokoro Business API
-  version: 18.0.0
+  version: 18.1.0
   description: Kokoro BFF 面向 Web 的业务契约；阶段 1 仅通过 PostgreSQL + Redis 及显式 HTTP upstream/adapter 契约协作，不新增 MySQL/Mongo 依赖。
   license:
     name: Proprietary Kokoro contract
@@ -7287,6 +7287,154 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SkillProductErrorResponse"
+  /v1/admin/mcp/packages/{package_id}/uploads:
+    parameters:
+      - { $ref: '#/components/parameters/AdminMcpPackageId' }
+    post:
+      tags: [Connectors]
+      operationId: beginAdminMcpPackageUpload
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: mcp_catalog.manage
+      summary: beginAdminMcpPackageUpload
+      description: Current session platform administrator and mcp_catalog.manage required. One 20-second budget includes body and admission. Storage owns uploads and scanning; Platform owns publication. No tool execution. Unknown writes require the original key and body, never a replacement command. Status does not prove that publication was not committed.
+      parameters: [{ $ref: '#/components/parameters/AdminMcpPackageIdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/BeginAdminMcpPackageUploadRequest' } }
+      responses:
+        '200': { $ref: '#/components/responses/AdminMcpPackageBeginOk' }
+        '400': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '401': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '403': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '404': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '409': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '412': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '413': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '429': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '502': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '503': { $ref: '#/components/responses/AdminMcpPackageError' }
+  /v1/admin/mcp/packages/{package_id}/uploads/{upload_id}:
+    parameters:
+      - { $ref: '#/components/parameters/AdminMcpPackageId' }
+      - { $ref: '#/components/parameters/AdminMcpPackageUploadId' }
+    get:
+      tags: [Connectors]
+      operationId: getAdminMcpPackageUploadStatus
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: none
+      x-kokoro-permission: mcp_catalog.manage
+      summary: getAdminMcpPackageUploadStatus
+      description: Current session platform administrator and mcp_catalog.manage required. One 20-second budget includes body and admission. Storage owns uploads and scanning; Platform owns publication. No tool execution. Unknown writes require the original key and body, never a replacement command. Status does not prove that publication was not committed.
+      responses:
+        '200': { $ref: '#/components/responses/AdminMcpPackageUploadOk' }
+        '400': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '401': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '403': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '404': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '409': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '412': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '413': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '429': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '502': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '503': { $ref: '#/components/responses/AdminMcpPackageError' }
+  /v1/admin/mcp/packages/{package_id}/uploads/{upload_id}/complete:
+    parameters:
+      - { $ref: '#/components/parameters/AdminMcpPackageId' }
+      - { $ref: '#/components/parameters/AdminMcpPackageUploadId' }
+    post:
+      tags: [Connectors]
+      operationId: completeAdminMcpPackageUpload
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: mcp_catalog.manage
+      summary: completeAdminMcpPackageUpload
+      description: Current session platform administrator and mcp_catalog.manage required. One 20-second budget includes body and admission. Storage owns uploads and scanning; Platform owns publication. No tool execution. Unknown writes require the original key and body, never a replacement command. Status does not prove that publication was not committed.
+      parameters: [{ $ref: '#/components/parameters/AdminMcpPackageIdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/CompleteAdminMcpPackageUploadRequest' } }
+      responses:
+        '200': { $ref: '#/components/responses/AdminMcpPackageUploadOk' }
+        '400': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '401': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '403': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '404': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '409': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '412': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '413': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '429': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '502': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '503': { $ref: '#/components/responses/AdminMcpPackageError' }
+  /v1/admin/mcp/packages/{package_id}/uploads/{upload_id}/abort:
+    parameters:
+      - { $ref: '#/components/parameters/AdminMcpPackageId' }
+      - { $ref: '#/components/parameters/AdminMcpPackageUploadId' }
+    post:
+      tags: [Connectors]
+      operationId: abortAdminMcpPackageUpload
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: mcp_catalog.manage
+      summary: abortAdminMcpPackageUpload
+      description: Current session platform administrator and mcp_catalog.manage required. One 20-second budget includes body and admission. Storage owns uploads and scanning; Platform owns publication. No tool execution. Unknown writes require the original key and body, never a replacement command. Status does not prove that publication was not committed.
+      parameters: [{ $ref: '#/components/parameters/AdminMcpPackageIdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/AbortAdminMcpPackageUploadRequest' } }
+      responses:
+        '200': { $ref: '#/components/responses/AdminMcpPackageAbortOk' }
+        '400': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '401': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '403': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '404': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '409': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '412': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '413': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '429': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '502': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '503': { $ref: '#/components/responses/AdminMcpPackageError' }
+  /v1/admin/mcp/packages/{package_id}/publish:
+    parameters:
+      - { $ref: '#/components/parameters/AdminMcpPackageId' }
+    post:
+      tags: [Connectors]
+      operationId: publishAdminMcpPackage
+      x-kokoro-owner: kokoro-bff
+      x-kokoro-visibility: public
+      x-kokoro-stability: beta
+      x-kokoro-idempotency: required
+      x-kokoro-permission: mcp_catalog.manage
+      summary: publishAdminMcpPackage
+      description: Current session platform administrator and mcp_catalog.manage required. One 20-second budget includes body and admission. Storage owns uploads and scanning; Platform owns publication. No tool execution. Unknown writes require the original key and body, never a replacement command. Status does not prove that publication was not committed.
+      parameters: [{ $ref: '#/components/parameters/AdminMcpPackageIdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/PublishAdminMcpPackageRequest' } }
+      responses:
+        '200': { $ref: '#/components/responses/AdminMcpPackagePublishOk' }
+        '400': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '401': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '403': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '404': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '409': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '412': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '413': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '429': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '502': { $ref: '#/components/responses/AdminMcpPackageError' }
+        '503': { $ref: '#/components/responses/AdminMcpPackageError' }
   /v1/admin/mcp/providers:
     get:
       tags: [Connectors]
@@ -11950,6 +12098,24 @@ components:
       scheme: bearer
       bearerFormat: opaque-session-token
   parameters:
+    AdminMcpPackageId:
+      name: package_id
+      in: path
+      required: true
+      description: Client-chosen exact package scope, not an installed or runnable version
+      schema: { type: string, minLength: 1, maxLength: 191, pattern: '^[\x21-\x7e]+$' }
+    AdminMcpPackageUploadId:
+      name: upload_id
+      in: path
+      required: true
+      description: Exact Storage upload identifier
+      schema: { type: string, minLength: 1, maxLength: 191, pattern: '^[\x21-\x7e]+$' }
+    AdminMcpPackageIdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Exactly one command key, reused only with the original body and identity
+      schema: { type: string, minLength: 1, maxLength: 191, pattern: '^[\x21-\x7e]+$' }
     McpProviderAdminKey:
       name: provider_key
       in: path
@@ -12356,6 +12522,126 @@ components:
         not trim or normalize a non-NFC value.
       schema: { type: string, minLength: 1 }
   schemas:
+    BeginAdminMcpPackageUploadRequest:
+      type: object
+      required: [filename, content_sha256, size_bytes]
+      additionalProperties: false
+      properties:
+        filename: { type: string, minLength: 1, maxLength: 255, description: 'Trimmed ZIP filename, at most 255 UTF-8 bytes, no path separators, controls or unpaired surrogates' }
+        content_sha256: { type: string, minLength: 64, maxLength: 64, pattern: '^[a-f0-9]{64}$' }
+        size_bytes: { type: string, pattern: '^(?:[1-9][0-9]{0,6}|[12][0-9]{7}|3[0-2][0-9]{6}|33[0-4][0-9]{5}|335[0-4][0-9]{4}|3355[0-3][0-9]{3}|33554[0-3][0-9]{2}|335544[0-2][0-9]|3355443[0-2])$' }
+    CompleteAdminMcpPackageUploadRequest:
+      type: object
+      required: [upload_source_version_id, content_sha256, size_bytes]
+      additionalProperties: false
+      properties:
+        upload_source_version_id: { type: string, minLength: 1, maxLength: 512, pattern: '^[\x21-\x7e]+$' }
+        content_sha256: { type: string, minLength: 64, maxLength: 64, pattern: '^[a-f0-9]{64}$' }
+        size_bytes: { type: string, pattern: '^(?:[1-9][0-9]{0,6}|[12][0-9]{7}|3[0-2][0-9]{6}|33[0-4][0-9]{5}|335[0-4][0-9]{4}|3355[0-3][0-9]{3}|33554[0-3][0-9]{2}|335544[0-2][0-9]|3355443[0-2])$' }
+    AbortAdminMcpPackageUploadRequest:
+      type: object
+      required: [reason]
+      additionalProperties: false
+      properties:
+        reason: { type: string, minLength: 1, maxLength: 512, description: 'Trimmed cancellation reason, at most 512 UTF-8 bytes, no controls or unpaired surrogates' }
+    PublishAdminMcpPackageRequest:
+      type: object
+      required: [provider_key, upload_id, upload_source_version_id, asset_id, content_sha256, size_bytes]
+      additionalProperties: false
+      properties:
+        provider_key: { type: string, minLength: 1, maxLength: 64, pattern: '^[a-z0-9][a-z0-9._-]{0,63}$' }
+        upload_id: { type: string, minLength: 1, maxLength: 191, pattern: '^[\x21-\x7e]+$' }
+        upload_source_version_id: { type: string, minLength: 1, maxLength: 512, pattern: '^[\x21-\x7e]+$' }
+        asset_id: { type: string, minLength: 1, maxLength: 191, pattern: '^[\x21-\x7e]+$' }
+        content_sha256: { type: string, minLength: 64, maxLength: 64, pattern: '^[a-f0-9]{64}$' }
+        size_bytes: { type: string, pattern: '^(?:[1-9][0-9]{0,6}|[12][0-9]{7}|3[0-2][0-9]{6}|33[0-4][0-9]{5}|335[0-4][0-9]{4}|3355[0-3][0-9]{3}|33554[0-3][0-9]{2}|335544[0-2][0-9]|3355443[0-2])$' }
+    AdminMcpPackageUpload:
+      type: object
+      required: [upload_id, state, content_sha256, size_bytes, scan_state]
+      additionalProperties: false
+      properties:
+        upload_id: { type: string, minLength: 1, maxLength: 191, pattern: '^[\x21-\x7e]+$' }
+        state: { type: string, enum: [pending, completed, aborted] }
+        content_sha256: { type: string, minLength: 64, maxLength: 64, pattern: '^[a-f0-9]{64}$' }
+        size_bytes: { type: string, pattern: '^(?:[1-9][0-9]{0,6}|[12][0-9]{7}|3[0-2][0-9]{6}|33[0-4][0-9]{5}|335[0-4][0-9]{4}|3355[0-3][0-9]{3}|33554[0-3][0-9]{2}|335544[0-2][0-9]|3355443[0-2])$' }
+        upload_source_version_id: { type: string, minLength: 1, maxLength: 512, pattern: '^[\x21-\x7e]+$' }
+        asset_id: { type: string, minLength: 1, maxLength: 191, pattern: '^[\x21-\x7e]+$' }
+        scan_state: { type: [string, 'null'], enum: [clean, pending, infected, unknown, null] }
+      allOf:
+        - if: { properties: { state: { const: completed } } }
+          then: { required: [asset_id, upload_source_version_id] }
+        - if: { required: [asset_id] }
+          then: { properties: { scan_state: { type: string } } }
+          else: { properties: { scan_state: { type: 'null' } } }
+    AdminMcpPackageBeginResponse:
+      type: object
+      required: [data]
+      additionalProperties: false
+      properties:
+        data:
+          type: object
+          required: [package_id, upload_id, transfer_reference]
+          additionalProperties: false
+          properties:
+            package_id: { type: string, minLength: 1, maxLength: 191, pattern: '^[\x21-\x7e]+$' }
+            upload_id: { type: string, minLength: 1, maxLength: 191, pattern: '^[\x21-\x7e]+$' }
+            transfer_reference:
+              type: object
+              required: [url, method, required_headers, expires_at]
+              additionalProperties: false
+              description: Transient no-store PUT; never persist in receipts or send BFF credentials to its URL.
+              properties:
+                url: { type: string, format: uri, maxLength: 32768 }
+                method: { type: string, const: PUT }
+                expires_at: { type: string, format: date-time }
+                required_headers:
+                  type: object
+                  maxProperties: 32
+                  additionalProperties: { type: string, minLength: 1, maxLength: 1024 }
+    AdminMcpPackageUploadResponse:
+      type: object
+      required: [data]
+      additionalProperties: false
+      properties:
+        data: { $ref: '#/components/schemas/AdminMcpPackageUpload' }
+    AdminMcpPackageAbortResponse:
+      type: object
+      required: [data]
+      additionalProperties: false
+      properties:
+        data:
+          type: object
+          required: [upload_id, state]
+          additionalProperties: false
+          properties:
+            upload_id: { type: string, minLength: 1, maxLength: 191, pattern: '^[\x21-\x7e]+$' }
+            state: { type: string, const: aborted }
+    AdminMcpPackagePublishResponse:
+      type: object
+      required: [data]
+      additionalProperties: false
+      properties:
+        data:
+          type: object
+          required: [package_version_id, server_id, replayed]
+          additionalProperties: false
+          properties:
+            package_version_id: { type: string, format: uuid }
+            server_id: { type: string, format: uuid }
+            replayed: { type: boolean }
+    AdminMcpPackageErrorResponse:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error:
+          type: object
+          required: [code, message, retryable]
+          additionalProperties: false
+          properties:
+            code: { type: string, minLength: 1, maxLength: 128 }
+            message: { type: string, minLength: 1, maxLength: 256 }
+            retryable: { type: boolean }
     PersonalKnowledgeItem:
       type: object
       additionalProperties: false
@@ -18189,6 +18475,41 @@ components:
             retryable: { type: boolean }
 
   responses:
+    AdminMcpPackageBeginOk:
+      description: Current owner result, not tool execution permission
+      headers:
+        x-request-id: { schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { schema: { type: string, const: no-store } }
+      content:
+        application/json: { schema: { $ref: '#/components/schemas/AdminMcpPackageBeginResponse' } }
+    AdminMcpPackageUploadOk:
+      description: Current owner result, not tool execution permission
+      headers:
+        x-request-id: { schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { schema: { type: string, const: no-store } }
+      content:
+        application/json: { schema: { $ref: '#/components/schemas/AdminMcpPackageUploadResponse' } }
+    AdminMcpPackageAbortOk:
+      description: Current owner result, not tool execution permission
+      headers:
+        x-request-id: { schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { schema: { type: string, const: no-store } }
+      content:
+        application/json: { schema: { $ref: '#/components/schemas/AdminMcpPackageAbortResponse' } }
+    AdminMcpPackagePublishOk:
+      description: Current owner result, not tool execution permission
+      headers:
+        x-request-id: { schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { schema: { type: string, const: no-store } }
+      content:
+        application/json: { schema: { $ref: '#/components/schemas/AdminMcpPackagePublishResponse' } }
+    AdminMcpPackageError:
+      description: Closed sanitized package administration failure; retry unknown writes only with original command
+      headers:
+        x-request-id: { schema: { type: string, minLength: 1, maxLength: 128 } }
+        Cache-Control: { schema: { type: string, const: no-store } }
+      content:
+        application/json: { schema: { $ref: '#/components/schemas/AdminMcpPackageErrorResponse' } }
     McpProviderAdminListOk:
       description: Current platform administrator provider directory
       headers: { x-request-id: { required: true, schema: { type: string } }, Cache-Control: { required: true, schema: { type: string, const: no-store } } }

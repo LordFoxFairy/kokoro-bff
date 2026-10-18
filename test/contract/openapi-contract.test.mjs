@@ -2743,7 +2743,7 @@ test("Public18 publishes bounded FINAL-metadata search and preserves the complet
   const { load } = await import("js-yaml")
   const source = await readFile(currentOpenapiUrl, "utf8"),
     document = load(source)
-  assert.equal(document.info.version, "18.0.0")
+  assert.equal(document.info.version, "18.1.0")
   const parameters = document.paths["/v1/library"].get.parameters
   assert.equal(parameters.find((p) => p.name === "q").schema.maxLength, 200)
   assert.deepEqual(parameters.find((p) => p.name === "type").schema.enum, ["all", "slides", "documents", "spreadsheets", "images", "video", "audio", "other"])
@@ -2759,6 +2759,50 @@ test("Public18 publishes bounded FINAL-metadata search and preserves the complet
   ]) {
     assert.notEqual(mutated, source)
     assert.ok(inspectLibraryFilterContract(mutated).length > 0)
-    assert.throws(() => restorePublic17LibraryFilterContract(mutated), /Library filter.*drift/u)
+    assert.throws(() => restorePublic17LibraryFilterContract(mutated), /(?:MCP package|Library filter).*drift/u)
+  }
+})
+
+test("Public18.1 exposes exactly five admin-only MCP package operations and preserves the full Public18 parent", async () => {
+  const { load } = await import("js-yaml")
+  const source = await readFile(currentOpenapiUrl, "utf8"),
+    document = load(source)
+  assert.equal(document.info.version, "18.1.0")
+  const expected = [
+    ["/v1/admin/mcp/packages/{package_id}/uploads", "post", "beginAdminMcpPackageUpload"],
+    ["/v1/admin/mcp/packages/{package_id}/uploads/{upload_id}", "get", "getAdminMcpPackageUploadStatus"],
+    ["/v1/admin/mcp/packages/{package_id}/uploads/{upload_id}/complete", "post", "completeAdminMcpPackageUpload"],
+    ["/v1/admin/mcp/packages/{package_id}/uploads/{upload_id}/abort", "post", "abortAdminMcpPackageUpload"],
+    ["/v1/admin/mcp/packages/{package_id}/publish", "post", "publishAdminMcpPackage"],
+  ]
+  for (const [path, method, id] of expected) {
+    const operation = document.paths[path][method]
+    assert.equal(operation.operationId, id)
+    assert.equal(operation["x-kokoro-permission"], "mcp_catalog.manage")
+    assert.equal(operation["x-kokoro-idempotency"], method === "get" ? "none" : "required")
+    for (const status of ["200", "400", "401", "403", "429", "502", "503"]) assert.ok(operation.responses[status])
+  }
+  const { restorePublic18McpPackageContract } = await import("../../scripts/verify-mcp-package-admin-contract.mjs")
+  assert.equal(
+    createHash("sha256").update(restorePublic18McpPackageContract(source)).digest("hex"),
+    "beaf5441b20d769455990b1707e6b553ebf16c6dba4855cbee68a03a2b1d371a",
+  )
+  for (const name of [
+    "BeginAdminMcpPackageUploadRequest",
+    "CompleteAdminMcpPackageUploadRequest",
+    "AbortAdminMcpPackageUploadRequest",
+    "PublishAdminMcpPackageRequest",
+    "AdminMcpPackageUpload",
+    "AdminMcpPackagePublishResponse",
+  ]) {
+    assert.equal(document.components.schemas[name].additionalProperties, false)
+  }
+  assert.deepEqual(document.components.schemas.AdminMcpPackageUpload.properties.scan_state.enum, ["clean", "pending", "infected", "unknown", null])
+  for (const [before, after] of [
+    ["operationId: beginAdminMcpPackageUpload", "operationId: wrong"],
+    ["Current IAM-admitted Product identity projections.", "unrelated drift"],
+  ]) {
+    assert.notEqual(source.replace(before, after), source)
+    assert.throws(() => restorePublic18McpPackageContract(source.replace(before, after)), /MCP package.*drift/u)
   }
 })

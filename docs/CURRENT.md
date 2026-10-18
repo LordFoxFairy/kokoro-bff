@@ -1,3 +1,13 @@
+## 2026-10-18 Public18.1 MCP 受管包管理接线（未正常加载）
+
+沿feb42f4窄SDK/Platform fa5c5e5，唯一canonical Public18.1新增五个管理员包操作，157 operations；其余152 operation及完整Public18原字节经逆证保留。feature-local HTTP input/body与route、现server/runtime/Nest协议adapter接线及Admin浏览服务精确allowlist已实现；复用现mcpProviderAdmin配置/原direct凭据，无新Schema、身份、scope、依赖或上传/receipt/cache事实。当前session＋platformAdmin＋mcp_catalog.manage、可信tenant/subject与原命令key，正文前共同20秒/32KiB、严格重复/未知JSON/路径/查询/头、取消/关闭和公开安全错误保持。
+
+主方650工程输入停写无漂移，独占源码候选完整format/lint/typecheck/build/contract/architecture/原默认manifest均exit0；contract699 PASS、architecture35 PASS、default1301 PASS/3既有资源SKIP。原契约新增1例和四HTTP独有风险案例，未加UI测试；新公开case真实版本RED→GREEN，HTTP4FAIL→4PASS。首次root运行tsx解析失败属设置问题，随后正确owner入口真实RED；首TS字段联合收窄失败改显式四kind/map及switch投影，无放宽类型规则。首逆证夹具误用非行首anchor已校正到实际唯一块边界，完整Public18 SHA beaf5441...及旧152精确保留，未改旧原始事实来凑绿。
+
+私有源码实测公开HTTP→真实BFF配置装配/SDK→真实Platform fa5 Native Nest＋正式服务准入＋自有fresh PG：Begin/实际对象PUT/Complete/Status、Pending拒发布、CLEAN发布、原命令回放和独立Pending取消，1 PASS/2未选，版本/receipt各1。人类IAM准入与Storage为受控peer、对象真实loopback PUT/GET；不是实际IAM/Storage/正常账号/Admin UI整链。自有库回收/catalog92→92 exact、Platform副本回收。最终静态独审无确定剩余P0–P2；原始日志与验证器仅Root ignored var/dev/bff-mcp-package-http-20261018。
+
+后继仍需Admin同源包上传/扫描/发布恢复页面、Runtime stdio不可变材料/Agent受控链及产品对照/手册；不以HTTP完成冒整体闭环。正常dist/服务/库/配置/账号/权限/积分/任务未动，模型/实际工具/扣费/CI/远端继续暂停。原mixed知识文档/ADR、资料库Unicode断言保留不夹入提交，Root index/gitlink不动。
+
 ## 2026-10-18 MCP 受管包固定内部消费者（未正常装配）
 
 本地源码固定 Platform fa5c5e53151b3c72145b680a3ee4a45d92c17ec7 的独立五方法 Proto/descriptor/profile/摘要向量，沿唯一生成链升级现 Connect 与 HTTP bundle，原20个 generated 文件逐字保持。新增三职责窄 client：严格输入/固定摘要、安全结果投影、Native Connect 与原 mcp_admin direct 服务凭据鲜读；继承 caller 绝对预算且最多20秒/32KiB，取消与 close 贯穿。不新增公开路由、Schema、配置、上传实体、服务身份或正常装配；Storage 上传事实与 Platform 发布回执仍各归原 owner。
