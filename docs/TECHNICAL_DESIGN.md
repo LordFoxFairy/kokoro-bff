@@ -1,3 +1,11 @@
+## 2026-10-18 Scheduler 2.0 consumer前置切片
+
+固定producer 8a26c91aa24d1f48a760b6234ab1ed5855d20936 / canonical SHA256 b38891d30c55fa1cae3de0f6a25ea014ea309713dcd0f6a8e1ce9cb1eeba502f；正规vendor/generated替换旧1.0，不回退。当前SchedulerControlClient沿同一有界fetch提供current GET，与mutation receipt独立；GET仅可信tenant/request ID和专用service token，无用户token、幂等键、body或query。typed consumer必须承接exclusive trigger及exhausted/null next，不只让生成器类型通过。
+
+写区限现Scheduler配置/pin/generator、client与原相关测试和三设计面。Public16.2/SQL/任务模型/原mutation幂等与outbox投影不在此前置切片改变；特别不在现30s lease链上直接叠加另一段30s GET，也不把旧ACK伪作current。业务多周期、实时next投影、正常演进及Agent定时MCP入口仍按现计划后继；不新增服务或未使用抽象层。
+
+条件schema已经实际SDK负控验证：固定生成器漏oneOf/if-then，现由唯一固定owner文档派生required/closed、互斥trigger和current条件guard，不手改generated或维护第二schema。旧mutation wire不加current字段，strict当前读取不把active/null、exhausted/non-null或recurring/exhausted当成功。正常Scheduler仍旧binary，当前候选不重载BFF、不调用正常服务。
+
 ## 自动化周期锚点回投（2026-10-18，既定周期补齐切片）
 
 BFF 继续拥有 ScheduledTask 规则；Scheduler 继续拥有 occurrence/next_due。当前 GET 列表/详情用 ScheduledTaskDetails 返回已存 recurrenceAnchorAt 为必需 UTC recurrence_anchor_at，与 nullable next_run_at 独立，不按下次执行、创建日或服务器日期猜星期。输入可选 anchor、时区和数据库均不变。

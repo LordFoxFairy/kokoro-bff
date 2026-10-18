@@ -1,3 +1,13 @@
+## 2026-10-18 Scheduler 2.0 固定消费前置已验（未正常激活）
+
+沿基线1dbfd826固定Scheduler producer 8a26c91aa24d1f48a760b6234ab1ed5855d20936／2.0.0及完整digest，替换旧vendor并正规生成。当前GET与不可变写ACK分离；生成流程从唯一固定owner文档派生互斥trigger、required/closed与耗尽条件，不手改generated。current client保可信tenant/request ID、专用service token、no-store及资源绑定；caller取消贯穿Request/stream，完整纳秒instant比较不截断。
+
+原条件缺口与独审两项P2均实际RED→GREEN：两个trigger/缺trigger、非法current；请求发出后的取消及亚毫秒不等值。最终633非文档输入停写hash一致；Node22 format/lint/typecheck/contract/architecture/build均通过，contract691 PASS/0SKIP、默认原manifest仅限2workers为1276 PASS/3既有资源SKIP。首全门失败来自私有runner的umask077将测试0644文件收紧为0600，已实测077→600、022→644，恢复子进程正常mask后原18例及完整门通过；未改该测试或产品鉴权。
+
+固定SDK→独占fresh PG/源码Scheduler真实HTTP通过：current读取、tenant404隔离、错误服务凭据401、暂停once跨due后原ACK精确重放；1定义/1receipt/0occurrence/0dispatch。自有进程退出0且临时库已删除，不冒实际MCP/模型执行。独审P2关闭；完整BFF资源integration未运行，此前组合缺口不变。
+
+本片Public16.2/SQL/任务模型/outbox3不变，未在30s lease链盲加GET，未改正常库/重载正常服务或启任务。多星期/月内多日期/一次性本地日期、持续next投影、App配对与Agent定时MCP管理/可信执行仍待后继；模型、工具执行、扣费、CI及远端PR继续暂停。
+
 ## 2026-10-18 自动化权威锚点当前读取（本地候选，未正常激活）
 
 沿56c262c补当前GET列表/详情的ScheduledTaskDetails，返回已存UTC recurrence_anchor_at，与nullable next_run_at独立；原写快照/schema/mapper完整保持，历史终态原样重放，不改通用幂等、数据库或回执。Public16.2／152 operations，SHA-256 `e4c1b3b1d327994dd5e903bfb3b3a075ded24446c0173a0f1c15a75cab92ae80`，新增读表示完整逆回16.1；Web固定消费/星期编辑尚未接，不冒正常页面完成。

@@ -146,3 +146,165 @@ describe("BFF Scheduler control mapping", () => {
     }
   })
 })
+
+it("consumes exclusive recurring or absolute once triggers from the fixed Scheduler contract", async () => {
+  const { zScheduleInput } = await import("../dist/generated/scheduler/zod.gen.js")
+  const common = { url: "http://bff.test/dispatch" }
+  assert.equal(zScheduleInput.safeParse({ ...common, run_at: "2026-11-01T05:30:00.123Z" }).success, true)
+  assert.equal(zScheduleInput.safeParse({ ...common, schedule: "30 8 * * 1,3,5" }).success, true)
+  for (const invalid of [common, { ...common, schedule: "@daily", run_at: "2026-11-01T05:30:00Z" }]) {
+    assert.equal(zScheduleInput.safeParse(invalid).success, false)
+  }
+})
+
+it("keeps current Scheduler lifecycle conditions when generating Zod validators", async () => {
+  const { zCurrentScheduleResponse } = await import("../dist/generated/scheduler/zod.gen.js")
+  const common = {
+    id: "00000000-0000-4000-8000-000000000001",
+    name: "kokoro.scheduled.fixture",
+    timezone: "UTC",
+    url: "http://bff.test/dispatch",
+    method: "POST",
+    body: {},
+    retry: { max_attempts: 3, backoff_seconds: 30, max_backoff_seconds: 300, max_retry_window_seconds: 3600 },
+    misfire_policy: "fire_once",
+    catch_up_limit: 1,
+    overlap_policy: "forbid",
+    paused: false,
+    version: 2,
+  }
+  const current = { ...common, schedule: "@daily", status: "active", next_due_at: "2026-11-01T05:30:00Z" }
+  const exhausted = { ...common, run_at: "2026-11-01T05:30:00Z", status: "exhausted", next_due_at: null }
+  for (const schedule of [current, exhausted]) assert.equal(zCurrentScheduleResponse.safeParse({ data: { schedule } }).success, true)
+  const neither: Record<string, unknown> = { ...current }
+  delete neither.schedule
+  const missing: Record<string, unknown> = { ...current }
+  delete missing.timezone
+  for (const schedule of [
+    missing,
+    { ...current, retry: { max_attempts: 3 } },
+    { ...current, retry: { ...common.retry, extra: true } },
+    neither,
+    { ...current, run_at: "2026-11-01T05:30:00Z" },
+    { ...current, next_due_at: null },
+    { ...exhausted, next_due_at: "2026-11-01T05:31:00Z" },
+    { ...current, status: "exhausted", next_due_at: null },
+    { ...current, unexpected: true },
+  ])
+    assert.equal(zCurrentScheduleResponse.safeParse({ data: { schedule } }).success, false, JSON.stringify(schedule))
+})
+
+it("reads current owner state with trusted scope but without a command identity or body", async () => {
+  const calls: Array<{ method?: string; url?: string; headers: typeof import("node:http").IncomingHttpHeaders; body: string }> = []
+  const current = {
+    id: "00000000-0000-4000-8000-000000000001",
+    name: "kokoro.scheduled.fixture",
+    timezone: "UTC",
+    url: "http://bff.test/dispatch",
+    method: "POST",
+    body: { task_revision: 3 },
+    retry: { max_attempts: 3, backoff_seconds: 30, max_backoff_seconds: 300, max_retry_window_seconds: 3600 },
+    misfire_policy: "fire_once",
+    catch_up_limit: 1,
+    overlap_policy: "forbid",
+    paused: false,
+    version: 4,
+    run_at: "2026-11-01T05:30:00Z",
+    status: "exhausted",
+    next_due_at: null,
+  }
+  let snapshot: Record<string, unknown> = current
+  const owner = createServer((request, response) => {
+    let body = ""
+    request.setEncoding("utf8")
+    request.on("data", (chunk: string) => {
+      body += chunk
+    })
+    request.on("end", () => {
+      calls.push({ method: request.method, url: request.url, headers: request.headers, body })
+      response.setHeader("content-type", "application/json")
+      response.setHeader("x-request-id", "req-current")
+      response.setHeader("cache-control", "no-store")
+      response.end(JSON.stringify({ data: { schedule: snapshot } }))
+    })
+  })
+  const baseUrl = await listen(owner)
+  try {
+    const client = new SchedulerControlClient(baseUrl, "scheduler-token", 1000, 1024 * 1024)
+    const read = Reflect.get(client, "current")
+    assert.equal(typeof read, "function")
+    const result = await read.call(client, current.name, { tenantId: "tenant-a", requestId: "req-current" })
+    assert.deepEqual(result, { kind: "response", status: 200, body: { data: { schedule: current } } })
+    assert.equal(calls[0]?.method, "GET")
+    assert.equal(calls[0]?.url, `/internal/scheduler/v1/schedules/${current.name}`)
+    assert.equal(calls[0]?.headers.authorization, "Bearer scheduler-token")
+    assert.equal(calls[0]?.headers["x-kokoro-tenant-id"], "tenant-a")
+    assert.equal(calls[0]?.headers["idempotency-key"], undefined)
+    assert.equal(calls[0]?.body, "")
+    for (const invalid of [
+      { ...current, name: "other" },
+      { ...current, paused: true },
+      { ...current, status: "active" },
+      { ...current, next_due_at: "2026-11-01T05:31:00Z" },
+      { ...current, status: "active", run_at: "2026-11-01T05:30:00.123Z", next_due_at: "2026-11-01T05:30:00.1234Z" },
+    ]) {
+      snapshot = invalid
+      const rejected = await read.call(client, current.name, { tenantId: "tenant-a", requestId: "req-current" })
+      assert.equal(rejected.kind, "transport", "invalid current state must never become success")
+    }
+    snapshot = { ...current, status: "active", run_at: "2026-11-01T05:30:00.1Z", next_due_at: "2026-11-01T05:30:00.100Z" }
+    const equivalent = await read.call(client, current.name, { tenantId: "tenant-a", requestId: "req-current" })
+    assert.equal(equivalent.kind, "response", "equivalent instants with different trailing zeros remain valid")
+    const before = calls.length
+    const controller = new AbortController()
+    controller.abort()
+    const cancelled = await read.call(client, current.name, { tenantId: "tenant-a", requestId: "req-current" }, controller.signal)
+    assert.equal(cancelled.kind, "transport")
+    assert.equal(calls.length, before, "cancelled reads must not reach the owner")
+  } finally {
+    await new Promise<void>((resolve) => owner.close(() => resolve()))
+  }
+})
+
+it("cancels an in-flight current query before headers and during the response stream", async () => {
+  for (const phase of ["headers", "body"]) {
+    let seen!: () => void
+    let closed!: () => void
+    const received = new Promise<void>((resolve) => {
+      seen = resolve
+    })
+    const disconnected = new Promise<void>((resolve) => {
+      closed = resolve
+    })
+    const owner = createServer((_request, response) => {
+      response.once("close", closed)
+      if (phase === "body") {
+        response.writeHead(200, { "content-type": "application/json" })
+        response.write('{"data":')
+      }
+      seen()
+    })
+    const baseUrl = await listen(owner)
+    const client = new SchedulerControlClient(baseUrl, "scheduler-token", 5000, 1024 * 1024)
+    const controller = new AbortController()
+    const pending = client.current("kokoro.scheduled.fixture", { tenantId: "tenant-a", requestId: "req-current" }, controller.signal)
+    let watchdog: ReturnType<typeof setTimeout> | undefined
+    try {
+      await received
+      controller.abort()
+      await Promise.race([
+        disconnected,
+        new Promise<never>((_resolve, reject) => {
+          watchdog = setTimeout(() => reject(new Error(`${phase}: caller abort did not close the owner response`)), 1000)
+        }),
+      ])
+      const result = await pending
+      assert.deepEqual(result, { kind: "transport", errorCode: "scheduler_request_cancelled" })
+    } finally {
+      clearTimeout(watchdog)
+      owner.closeAllConnections()
+      await pending
+      await new Promise<void>((resolve) => owner.close(() => resolve()))
+    }
+  }
+})

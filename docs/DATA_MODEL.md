@@ -1,3 +1,7 @@
+## 2026-10-18 Scheduler 2.0 consumer前置
+
+本切片不改canonical schema、ScheduledTask/单anchor模型、outbox3或receipt行。当前GET仅HTTP consumer，不读取Scheduler数据库；无查询缓存、read receipt或新队列。原outbox仍以同一revision＋lease/token/fence投影原ACK，不冒完整权威next生命周期已闭合；后继业务模型切换与新current投影必须一起明确时间预算及nullable/current状态。
+
 ## 周期锚点公开投影（2026-10-18）
 
 本片复用 bff_scheduled_task.recurrence_anchor_at 非空 UTC instant 和现有 repository 内部 Date，当前读取 mapper 返回相同值；写回执保持原 JSON 快照，不改 canonical schema、既有行/回执、next_run_at 投影或 Scheduler 存储。响应字段增加不构成正常数据库演进授权。

@@ -9,6 +9,9 @@ import type {
   DeleteScheduleData,
   DeleteScheduleErrors,
   DeleteScheduleResponses,
+  GetCurrentScheduleData,
+  GetCurrentScheduleErrors,
+  GetCurrentScheduleResponses,
   HealthData,
   HealthErrors,
   HealthResponses,
@@ -28,6 +31,7 @@ import type {
 import {
   zCreateScheduleResponse,
   zDeleteScheduleResponse,
+  zGetCurrentScheduleResponse,
   zHealthResponse,
   zPauseScheduleResponse,
   zReadinessResponse,
@@ -91,6 +95,27 @@ export const deleteSchedule = <ThrowOnError extends boolean = false>(
     },
   })
 
+/**
+ * Read the current tenant-scoped schedule, not its original command receipt.
+ *
+ * No query parameters or request body. No Idempotency-Key required. Current state may change after the read; all responses are no-store. X-Request-Id refers to this read, never the prior mutation.
+ */
+export const getCurrentSchedule = <ThrowOnError extends boolean = false>(
+  options: Options<GetCurrentScheduleData, ThrowOnError>,
+): RequestResult<GetCurrentScheduleResponses, GetCurrentScheduleErrors, ThrowOnError> =>
+  (options.client ?? client).get<GetCurrentScheduleResponses, GetCurrentScheduleErrors, ThrowOnError>({
+    responseValidator: async (data) => await zGetCurrentScheduleResponse.parseAsync(data),
+    security: [
+      {
+        key: "serviceBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
+    url: "/internal/scheduler/v1/schedules/{name}",
+    ...options,
+  })
+
 export const createSchedule = <ThrowOnError extends boolean = false>(
   options: Options<CreateScheduleData, ThrowOnError>,
 ): RequestResult<CreateScheduleResponses, CreateScheduleErrors, ThrowOnError> =>
@@ -131,6 +156,9 @@ export const replaceSchedule = <ThrowOnError extends boolean = false>(
     },
   })
 
+/**
+ * Exhausted schedules are not revived; return durable 409 schedule_exhausted. A concurrent resource/version change returns durable 409 schedule_changed. Resume a paused once schedule at its original run_at, applying its misfire policy when late.
+ */
 export const pauseSchedule = <ThrowOnError extends boolean = false>(
   options: Options<PauseScheduleData, ThrowOnError>,
 ): RequestResult<PauseScheduleResponses, PauseScheduleErrors, ThrowOnError> =>
@@ -151,6 +179,9 @@ export const pauseSchedule = <ThrowOnError extends boolean = false>(
     },
   })
 
+/**
+ * Exhausted schedules are not revived; return durable 409 schedule_exhausted. A concurrent resource/version change returns durable 409 schedule_changed. Resume a paused once schedule at its original run_at, applying its misfire policy when late.
+ */
 export const resumeSchedule = <ThrowOnError extends boolean = false>(
   options: Options<ResumeScheduleData, ThrowOnError>,
 ): RequestResult<ResumeScheduleResponses, ResumeScheduleErrors, ThrowOnError> =>

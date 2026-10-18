@@ -9,29 +9,72 @@ export const zRetryPolicy = z.object({
   max_retry_window_seconds: z.int().gte(1).lte(86400).optional().default(3600),
 })
 
-export const zScheduleInput = z.object({
-  name: z
-    .string()
-    .max(64)
-    .regex(/^[a-z0-9][a-z0-9._-]{0,63}$/)
-    .optional(),
-  schedule: z.string().min(1).max(256),
-  timezone: z
-    .string()
-    .min(1)
-    .max(128)
-    .regex(/^(UTC|[^\/]+\/.+)$/)
-    .optional()
-    .default("UTC"),
-  url: z.url(),
-  method: z.enum(["POST", "PUT"]).optional().default("POST"),
-  body: z.record(z.string(), z.unknown()).optional().default({}),
-  retry: zRetryPolicy.optional(),
-  misfire_policy: z.enum(["skip", "fire_once", "catch_up_bounded"]).optional().default("fire_once"),
-  catch_up_limit: z.int().gte(1).lte(100).optional().default(1),
-  overlap_policy: z.enum(["allow", "forbid"]).optional().default("forbid"),
-  paused: z.boolean().optional().default(false),
-})
+export const zScheduleInput = z.intersection(
+  z.unknown().refine(
+    (value) => {
+      if (typeof value !== "object" || value === null || Array.isArray(value)) return false
+      if (
+        Object.keys(value).some(
+          (field) =>
+            ![
+              "name",
+              "schedule",
+              "timezone",
+              "url",
+              "method",
+              "body",
+              "retry",
+              "misfire_policy",
+              "catch_up_limit",
+              "overlap_policy",
+              "paused",
+              "run_at",
+            ].includes(field),
+        )
+      )
+        return false
+      if (!["url"].every((field) => Object.hasOwn(value, field))) return false
+      const row = value as Record<string, unknown>
+      const retry = row["retry"]
+      if (retry !== undefined) {
+        if (typeof retry !== "object" || retry === null || Array.isArray(retry)) return false
+        if (Object.keys(retry).some((field) => !["max_attempts", "backoff_seconds", "max_backoff_seconds", "max_retry_window_seconds"].includes(field)))
+          return false
+        if (![].every((field) => Object.hasOwn(retry, field))) return false
+      }
+      return ["schedule", "run_at"].filter((field) => Object.hasOwn(value, field)).length === 1
+    },
+    { message: "exactly one trigger is required" },
+  ),
+  z.strictObject({
+    name: z
+      .string()
+      .max(64)
+      .regex(/^[a-z0-9][a-z0-9._-]{0,63}$/)
+      .optional(),
+    schedule: z.string().min(1).max(256).optional(),
+    timezone: z
+      .string()
+      .min(1)
+      .max(128)
+      .regex(/^(UTC|[^\/]+\/.+)$/)
+      .optional()
+      .default("UTC"),
+    url: z.url(),
+    method: z.enum(["POST", "PUT"]).optional().default("POST"),
+    body: z.record(z.string(), z.unknown()).optional().default({}),
+    retry: zRetryPolicy.optional(),
+    misfire_policy: z.enum(["skip", "fire_once", "catch_up_bounded"]).optional().default("fire_once"),
+    catch_up_limit: z.int().gte(1).lte(100).optional().default(1),
+    overlap_policy: z.enum(["allow", "forbid"]).optional().default("forbid"),
+    paused: z.boolean().optional().default(false),
+    run_at: z.iso
+      .datetime()
+      .max(24)
+      .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/)
+      .optional(),
+  }),
+)
 
 export const zEmptyCommand = z.record(z.string(), z.never())
 
@@ -84,30 +127,93 @@ export const zResolvedRetryPolicy = z.object({
   max_retry_window_seconds: z.int().gte(1).lte(86400).default(3600),
 })
 
-export const zSchedule = z.object({
-  name: z
-    .string()
-    .max(64)
-    .regex(/^[a-z0-9][a-z0-9._-]{0,63}$/),
-  schedule: z.string().min(1).max(256),
-  timezone: z
-    .string()
-    .min(1)
-    .max(128)
-    .regex(/^(UTC|[^\/]+\/.+)$/)
-    .default("UTC"),
-  url: z.url(),
-  method: z.enum(["POST", "PUT"]).default("POST"),
-  body: z.record(z.string(), z.unknown()).default({}),
-  retry: zResolvedRetryPolicy,
-  misfire_policy: z.enum(["skip", "fire_once", "catch_up_bounded"]).default("fire_once"),
-  catch_up_limit: z.int().gte(1).lte(100).default(1),
-  overlap_policy: z.enum(["allow", "forbid"]).default("forbid"),
-  paused: z.boolean().default(false),
-  id: z.uuid(),
-  next_due_at: z.iso.datetime().regex(/Z$/),
-  version: z.int().gte(1),
-})
+export const zSchedule = z.intersection(
+  z.unknown().refine(
+    (value) => {
+      if (typeof value !== "object" || value === null || Array.isArray(value)) return false
+      if (
+        Object.keys(value).some(
+          (field) =>
+            ![
+              "name",
+              "schedule",
+              "timezone",
+              "url",
+              "method",
+              "body",
+              "retry",
+              "misfire_policy",
+              "catch_up_limit",
+              "overlap_policy",
+              "paused",
+              "id",
+              "next_due_at",
+              "version",
+              "run_at",
+            ].includes(field),
+        )
+      )
+        return false
+      if (
+        ![
+          "id",
+          "name",
+          "timezone",
+          "url",
+          "method",
+          "body",
+          "retry",
+          "misfire_policy",
+          "catch_up_limit",
+          "overlap_policy",
+          "paused",
+          "next_due_at",
+          "version",
+        ].every((field) => Object.hasOwn(value, field))
+      )
+        return false
+      const row = value as Record<string, unknown>
+      const retry = row["retry"]
+      if (retry !== undefined) {
+        if (typeof retry !== "object" || retry === null || Array.isArray(retry)) return false
+        if (Object.keys(retry).some((field) => !["max_attempts", "backoff_seconds", "max_backoff_seconds", "max_retry_window_seconds"].includes(field)))
+          return false
+        if (!["max_attempts", "backoff_seconds", "max_backoff_seconds", "max_retry_window_seconds"].every((field) => Object.hasOwn(retry, field))) return false
+      }
+      return ["schedule", "run_at"].filter((field) => Object.hasOwn(value, field)).length === 1
+    },
+    { message: "exactly one trigger is required" },
+  ),
+  z.strictObject({
+    name: z
+      .string()
+      .max(64)
+      .regex(/^[a-z0-9][a-z0-9._-]{0,63}$/),
+    schedule: z.string().min(1).max(256).optional(),
+    timezone: z
+      .string()
+      .min(1)
+      .max(128)
+      .regex(/^(UTC|[^\/]+\/.+)$/)
+      .default("UTC"),
+    url: z.url(),
+    method: z.enum(["POST", "PUT"]).default("POST"),
+    body: z.record(z.string(), z.unknown()).default({}),
+    retry: zResolvedRetryPolicy,
+    misfire_policy: z.enum(["skip", "fire_once", "catch_up_bounded"]).default("fire_once"),
+    catch_up_limit: z.int().gte(1).lte(100).default(1),
+    overlap_policy: z.enum(["allow", "forbid"]).default("forbid"),
+    paused: z.boolean().default(false),
+    id: z.uuid(),
+    next_due_at: z.iso.datetime().regex(/Z$/),
+    version: z.int().gte(1),
+    run_at: z.iso
+      .datetime()
+      .max(24)
+      .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/)
+      .optional(),
+  }),
+)
 
 export const zScheduleCommandResponse = z.object({
   data: z.object({
@@ -116,6 +222,116 @@ export const zScheduleCommandResponse = z.object({
     schedule: zSchedule.optional(),
   }),
   meta: zMeta,
+})
+
+export const zCurrentSchedule = z.intersection(
+  z
+    .unknown()
+    .refine(
+      (value) => {
+        if (typeof value !== "object" || value === null || Array.isArray(value)) return false
+        if (
+          Object.keys(value).some(
+            (field) =>
+              ![
+                "name",
+                "schedule",
+                "timezone",
+                "url",
+                "method",
+                "body",
+                "retry",
+                "misfire_policy",
+                "catch_up_limit",
+                "overlap_policy",
+                "paused",
+                "id",
+                "next_due_at",
+                "version",
+                "status",
+                "run_at",
+              ].includes(field),
+          )
+        )
+          return false
+        if (
+          ![
+            "id",
+            "name",
+            "timezone",
+            "url",
+            "method",
+            "body",
+            "retry",
+            "misfire_policy",
+            "catch_up_limit",
+            "overlap_policy",
+            "paused",
+            "next_due_at",
+            "version",
+            "status",
+          ].every((field) => Object.hasOwn(value, field))
+        )
+          return false
+        const row = value as Record<string, unknown>
+        const retry = row["retry"]
+        if (retry !== undefined) {
+          if (typeof retry !== "object" || retry === null || Array.isArray(retry)) return false
+          if (Object.keys(retry).some((field) => !["max_attempts", "backoff_seconds", "max_backoff_seconds", "max_retry_window_seconds"].includes(field)))
+            return false
+          if (!["max_attempts", "backoff_seconds", "max_backoff_seconds", "max_retry_window_seconds"].every((field) => Object.hasOwn(retry, field)))
+            return false
+        }
+        return ["schedule", "run_at"].filter((field) => Object.hasOwn(value, field)).length === 1
+      },
+      { message: "exactly one trigger is required" },
+    )
+    .refine(
+      (value) => {
+        if (typeof value !== "object" || value === null || Array.isArray(value)) return false
+        const row = value as Record<string, unknown>
+        return row["status"] === "exhausted"
+          ? row["next_due_at"] === null && ["run_at"].every((field) => Object.hasOwn(row, field))
+          : typeof row["next_due_at"] === "string"
+      },
+      { message: "current status and next instant must agree" },
+    ),
+  z.strictObject({
+    name: z
+      .string()
+      .max(64)
+      .regex(/^[a-z0-9][a-z0-9._-]{0,63}$/),
+    schedule: z.string().min(1).max(256).optional(),
+    timezone: z
+      .string()
+      .min(1)
+      .max(128)
+      .regex(/^(UTC|[^\/]+\/.+)$/)
+      .default("UTC"),
+    url: z.url(),
+    method: z.enum(["POST", "PUT"]).default("POST"),
+    body: z.record(z.string(), z.unknown()).default({}),
+    retry: zResolvedRetryPolicy,
+    misfire_policy: z.enum(["skip", "fire_once", "catch_up_bounded"]).default("fire_once"),
+    catch_up_limit: z.int().gte(1).lte(100).default(1),
+    overlap_policy: z.enum(["allow", "forbid"]).default("forbid"),
+    paused: z.boolean().default(false),
+    id: z.uuid(),
+    next_due_at: z.iso.datetime().regex(/Z$/).nullable(),
+    version: z.int().gte(1),
+    status: z.enum(["active", "paused", "exhausted"]),
+    run_at: z.iso
+      .datetime()
+      .max(24)
+      .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/)
+      .optional(),
+  }),
+)
+
+export const zCurrentScheduleResponse = z.strictObject({
+  data: z.strictObject({
+    schedule: zCurrentSchedule,
+  }),
 })
 
 export const zScheduleName = z.string().regex(/^[a-z0-9][a-z0-9._-]{0,63}$/)
@@ -164,6 +380,20 @@ export const zDeleteSchedulePath = z.object({
  * Durably recorded schedule command result.
  */
 export const zDeleteScheduleResponse = zScheduleCommandResponse
+
+export const zGetCurrentScheduleHeaders = z.object({
+  "X-Kokoro-Tenant-Id": z.string().min(1).max(128),
+  "X-Request-Id": z.string().min(1).max(128),
+})
+
+export const zGetCurrentSchedulePath = z.object({
+  name: z.string().regex(/^[a-z0-9][a-z0-9._-]{0,63}$/),
+})
+
+/**
+ * Current tenant-scoped row. Active/paused retain a non-null next_due_at; exhausted once schedules have null next. Exhausted is not dispatch/Agent success.
+ */
+export const zGetCurrentScheduleResponse = zCurrentScheduleResponse
 
 export const zCreateScheduleBody = zScheduleInput
 

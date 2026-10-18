@@ -1,7 +1,9 @@
 import { createClient } from "../../../generated/scheduler/client/client.gen.js"
-import { createSchedule, deleteSchedule, replaceSchedule } from "../../../generated/scheduler/sdk.gen.js"
+import { createSchedule, deleteSchedule, getCurrentSchedule, replaceSchedule } from "../../../generated/scheduler/sdk.gen.js"
 import { zErrorResponse } from "../../../generated/scheduler/zod.gen.js"
 import type { SchedulerScheduleInput } from "./schedule.js"
+import { isRecord } from "../../../domain/json.js"
+import { canonicalSchedulerOccurrence } from "./dispatch-identity.js"
 
 export type SchedulerControlAttempt = { kind: "response"; status: number; body: unknown } | { kind: "transport"; errorCode: string }
 
@@ -31,11 +33,52 @@ export class SchedulerControlClient {
     return this.request("delete", name, undefined, lineage)
   }
 
+  /** Current state is a query, never the frozen result of an old mutation. */
+  public async current(name: string, lineage: Pick<SchedulerControlLineage, "tenantId" | "requestId">, signal?: AbortSignal): Promise<SchedulerControlAttempt> {
+    if (signal?.aborted) return { kind: "transport", errorCode: "scheduler_request_cancelled" }
+    const client = createClient({ baseUrl: this.baseUrl, auth: this.serviceToken, fetch: this.boundedFetch.bind(this) })
+    try {
+      const result = await getCurrentSchedule({
+        client,
+        headers: { "X-Kokoro-Tenant-Id": lineage.tenantId, "X-Request-Id": lineage.requestId, "x-kokoro-service": "web-bff" },
+        path: { name },
+        ...(signal === undefined ? {} : { signal }),
+      })
+      if (signal?.aborted) return { kind: "transport", errorCode: "scheduler_request_cancelled" }
+      const response = result.response
+      if (response === undefined) return { kind: "transport", errorCode: "scheduler_response_invalid" }
+      const status = response.status
+      if (status === 200 && result.data !== undefined) {
+        const schedule = result.data.data.schedule
+        if (
+          response.headers.get("cache-control") !== "no-store" ||
+          response.headers.get("x-request-id") !== lineage.requestId ||
+          schedule.name !== name ||
+          schedule.paused !== (schedule.status === "paused") ||
+          (schedule.run_at !== undefined &&
+            schedule.next_due_at !== null &&
+            canonicalSchedulerOccurrence(schedule.run_at) !== canonicalSchedulerOccurrence(schedule.next_due_at))
+        )
+          return { kind: "transport", errorCode: "scheduler_response_invalid" }
+        return { kind: "response", status, body: result.data }
+      }
+      if (!zErrorResponse.safeParse(result.error).success || !isRecord(result.error)) {
+        return { kind: "transport", errorCode: "scheduler_response_invalid" }
+      }
+      return { kind: "response", status, body: result.error }
+    } catch {
+      return { kind: "transport", errorCode: signal?.aborted ? "scheduler_request_cancelled" : "scheduler_transport_error" }
+    }
+  }
+
   private async boundedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), this.timeoutMs)
     try {
-      const response = await fetch(input, { ...init, signal: controller.signal, redirect: "error" })
+      const signals = [controller.signal]
+      if (input instanceof Request) signals.push(input.signal)
+      if (init?.signal != null) signals.push(init.signal)
+      const response = await fetch(input, { ...init, signal: AbortSignal.any(signals), redirect: "error" })
       const declaredLength = Number(response.headers.get("content-length"))
       if (Number.isFinite(declaredLength) && declaredLength > this.maxResponseBytes) {
         controller.abort()

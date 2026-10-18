@@ -1,3 +1,9 @@
+## 2026-10-18 Scheduler 2.0固定消费
+
+内部Scheduler source固定8a26c91aa24d1f48a760b6234ab1ed5855d20936与完整digest；公开BFF仍16.2/152 operations不变。旧1.0 vendor替换，SDK正规生成并校验drift。新增owner current GET消费，输入path name与可信tenant/request ID，不传Idempotency-Key/body/query；响应是data.schedule，request ID只在header，不套旧mutation meta。
+
+当前读取保持owner的schedule/run_at恰一和status/next联合约束；跨资源name错配、非法calendar/精度、错误条件或超限响应不投影成成功。业务写ACK/current读取生命周期仍分开；本切片不放宽mutation next，暂不把新的once形状塞入旧daily/weekly产品input。历史回执不改写，body与key保持原语义。
+
 ## Public16.2：当前 ScheduledTask 读取返回周期锚点（2026-10-18，源码候选）
 
 GET /v1/scheduled-tasks 列表项与 GET /v1/scheduled-tasks/{id} 详情使用 ScheduledTaskDetails：复用原 ScheduledTask 字段，增加 required recurrence_anchor_at:string/date-time。它是 BFF 保存的规则 UTC instant；next_run_at 仍必需 nullable，只代表 Scheduler 确认的下次时间，不能互代。

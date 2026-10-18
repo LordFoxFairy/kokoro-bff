@@ -3,16 +3,16 @@
   "status": "generated",
   "owner": {
     "repository_path": "apps/kokoro-scheduler",
-    "repository_commit": "92bf9e7e6724c591bab4b7fa27f08d694b59a67e",
-    "contract_version": "1.0.0",
+    "repository_commit": "8a26c91aa24d1f48a760b6234ab1ed5855d20936",
+    "contract_version": "2.0.0",
     "contract_path": "contract/openapi/v1/openapi.yaml",
-    "contract_sha256": "6ec2f6d5d71efa60b92bba1eb2dd0c81b7439734e2bc4450caa221e952e24183"
+    "contract_sha256": "b38891d30c55fa1cae3de0f6a25ea014ea309713dcd0f6a8e1ce9cb1eeba502f"
   },
   "generator": {
     "package": "@hey-api/openapi-ts",
     "version": "0.99.0",
     "config_path": "openapi-ts.scheduler.config.ts",
-    "config_sha256": "c49de22f14cd1c682eb23dbb502258325067e157c91fe01a5bcf7676efa76dcc"
+    "config_sha256": "3c5b8e0960c902dcc241e3a7be1579aaaff07f5204c83375d43008b02a910328"
   },
   "runtime": {
     "node": "22.22.2",
@@ -75,15 +75,15 @@
     },
     {
       "path": "sdk.gen.ts",
-      "sha256": "b67838f4a9c5539243486881b8f659d6b25bdc29439742d2c46c1a8acfd0cc88"
+      "sha256": "cf8da88b928f72a03945f4a740f4f54c226cd3a030f027a7b2a788c39236733c"
     },
     {
       "path": "types.gen.ts",
-      "sha256": "52c283528ca6091dd2dfb1852ee30f880071d8934e4ec5d81c06a43951e0cfec"
+      "sha256": "5d157086d66e4cc266a6717f45d35f986ecc2570f79c72aaed075c4df1f0d273"
     },
     {
       "path": "zod.gen.ts",
-      "sha256": "3f8fa68142d746c3a1231d5b394bcc9b7310634b26e9f71c196b86a479446f5c"
+      "sha256": "78ae0dbf3961a9dcb2a3d8d7cb6c00b499a0b0a7a7a53c427a321fea6fb2e209"
     }
   ]
 }

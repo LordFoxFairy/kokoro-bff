@@ -13,7 +13,7 @@ export type RetryPolicy = {
   max_retry_window_seconds?: number
 }
 
-export type ScheduleInput = {
+export type ScheduleInput = unknown & {
   /**
    * Optional duplicate of the path name; when present it must match.
    */
@@ -21,7 +21,7 @@ export type ScheduleInput = {
   /**
    * Five-field minute/hour/day-of-month/month/day-of-week cron, a supported descriptor, or @every duration. DOM and DOW use standard cron OR semantics when both are restricted.
    */
-  schedule: string
+  schedule?: string
   /**
    * UTC or an IANA area/location name.
    */
@@ -42,14 +42,18 @@ export type ScheduleInput = {
   catch_up_limit?: number
   overlap_policy?: "allow" | "forbid"
   paused?: boolean
+  /**
+   * Absolute one-time UTC instant at millisecond precision. Must be future for a new create/replace; an original durable receipt replays unchanged after due.
+   */
+  run_at?: string
 }
 
-export type Schedule = {
+export type Schedule = unknown & {
   name: string
   /**
    * Five-field minute/hour/day-of-month/month/day-of-week cron, a supported descriptor, or @every duration. DOM and DOW use standard cron OR semantics when both are restricted.
    */
-  schedule: string
+  schedule?: string
   /**
    * UTC or an IANA area/location name.
    */
@@ -76,6 +80,10 @@ export type Schedule = {
    */
   next_due_at: string
   version: number
+  /**
+   * Absolute one-time UTC instant at millisecond precision. Must be future for a new create/replace; an original durable receipt replays unchanged after due.
+   */
+  run_at?: string
 }
 
 export type ScheduleCommandResponse = {
@@ -138,6 +146,54 @@ export type ResolvedRetryPolicy = {
   backoff_seconds: number
   max_backoff_seconds: number
   max_retry_window_seconds: number
+}
+
+export type CurrentSchedule = unknown & {
+  name: string
+  /**
+   * Five-field minute/hour/day-of-month/month/day-of-week cron, a supported descriptor, or @every duration. DOM and DOW use standard cron OR semantics when both are restricted.
+   */
+  schedule?: string
+  /**
+   * UTC or an IANA area/location name.
+   */
+  timezone: string
+  /**
+   * Absolute HTTP(S) target URL; runtime egress policy also validates the resolved address.
+   */
+  url: string
+  method: "POST" | "PUT"
+  body: {
+    [key: string]: unknown
+  }
+  retry: ResolvedRetryPolicy
+  misfire_policy: "skip" | "fire_once" | "catch_up_bounded"
+  /**
+   * Must equal 1 unless misfire_policy is catch_up_bounded.
+   */
+  catch_up_limit: number
+  overlap_policy: "allow" | "forbid"
+  paused: boolean
+  id: string
+  /**
+   * Current next UTC instant; null exactly when a once schedule is exhausted. Not the target execution outcome.
+   */
+  next_due_at: string | null
+  version: number
+  /**
+   * Current planner eligibility; not a target execution outcome.
+   */
+  status: "active" | "paused" | "exhausted"
+  /**
+   * Absolute one-time UTC instant at millisecond precision. Must be future for a new create/replace; an original durable receipt replays unchanged after due.
+   */
+  run_at?: string
+}
+
+export type CurrentScheduleResponse = {
+  data: {
+    schedule: CurrentSchedule
+  }
 }
 
 export type ScheduleName = string
@@ -272,6 +328,52 @@ export type DeleteScheduleResponses = {
 }
 
 export type DeleteScheduleResponse = DeleteScheduleResponses[keyof DeleteScheduleResponses]
+
+export type GetCurrentScheduleData = {
+  body?: never
+  headers: {
+    /**
+     * Trusted tenant context supplied by the authenticated service caller.
+     */
+    "X-Kokoro-Tenant-Id": string
+    "X-Request-Id": string
+  }
+  path: {
+    name: string
+  }
+  query?: never
+  url: "/internal/scheduler/v1/schedules/{name}"
+}
+
+export type GetCurrentScheduleErrors = {
+  /**
+   * Stable error envelope.
+   */
+  400: ErrorResponse
+  /**
+   * Stable error envelope.
+   */
+  401: ErrorResponse
+  /**
+   * Stable error envelope.
+   */
+  404: ErrorResponse
+  /**
+   * Stable error envelope.
+   */
+  500: ErrorResponse
+}
+
+export type GetCurrentScheduleError = GetCurrentScheduleErrors[keyof GetCurrentScheduleErrors]
+
+export type GetCurrentScheduleResponses = {
+  /**
+   * Current tenant-scoped row. Active/paused retain a non-null next_due_at; exhausted once schedules have null next. Exhausted is not dispatch/Agent success.
+   */
+  200: CurrentScheduleResponse
+}
+
+export type GetCurrentScheduleResponse = GetCurrentScheduleResponses[keyof GetCurrentScheduleResponses]
 
 export type CreateScheduleData = {
   body: ScheduleInput
