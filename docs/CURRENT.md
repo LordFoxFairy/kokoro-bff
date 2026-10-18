@@ -1,3 +1,13 @@
+## 2026-10-18 MCP 受管包固定内部消费者（未正常装配）
+
+本地源码固定 Platform fa5c5e53151b3c72145b680a3ee4a45d92c17ec7 的独立五方法 Proto/descriptor/profile/摘要向量，沿唯一生成链升级现 Connect 与 HTTP bundle，原20个 generated 文件逐字保持。新增三职责窄 client：严格输入/固定摘要、安全结果投影、Native Connect 与原 mcp_admin direct 服务凭据鲜读；继承 caller 绝对预算且最多20秒/32KiB，取消与 close 贯穿。不新增公开路由、Schema、配置、上传实体、服务身份或正常装配；Storage 上传事实与 Platform 发布回执仍各归原 owner。
+
+主方最终646工程输入停写无漂移，格式/lint/typecheck/build/contract/architecture/原默认manifest全exit0：contract694 PASS、architecture35 PASS、default1296 PASS/3既有资源SKIP；四个新风险案例覆盖五操作/严格拒绝/凭据与未知命令恢复/取消。独审发现 package_limit_exceeded 合法 FailedPrecondition 被剥除，原Native案例真实3PASS1FAIL→4PASS，保原 ResourceExhausted 并仅加已发布组合，最终静态审查无确定剩余P0–P2。未增加UI测试或放宽原断言。
+
+私有源码副本中真实BFF Node22 SDK→Platform fa5 Node24 Native Nest＋正式本地服务准入＋自有fresh PG实测：Begin→实际对象PUT→Complete→Pending拒发布→CLEAN后发布→同命令回放→另一Pending取消，1 PASS/2未选，不把未选当通过。不可变版本与发布receipt各1；Storage为受控Native peer、Redis为受控资源，尚非真实Storage/人类HTTP/Admin产品整链。首私有夹具误把8次调用写成至少9次，纠正为精确8后重跑；原失败留证，生产实现未为该夹具改动。自有库清理/catalog92→92 exact、Platform私有副本回收。
+
+工程门在独占候选运行，不覆盖正常dist；其他mixed知识文档/ADR、资料库Unicode断言保持不纳入本片提交。原始材料只在Root ignored var/dev/bff-mcp-package-20261018。后继仍须公开五操作/当前人类管理员准入、同源Admin页面、Runtime stdio不可变材料与Agent受控整链及产品手册；完整goal仍OPEN。正常服务/库/账号/权限/积分/任务开关、模型/实际工具/扣费/CI/远端及Root index/gitlink未动。
+
 ## 2026-10-18 Public18 Artifact 服务端筛选候选（未加载正常环境）
 
 沿 a577625 同需求分支，新增 artifact-only q/type：在既有 BFF 授权关系候选窗口内，通过 Storage 固定 v3 FINAL 读取后的 title/filename/MIME 匹配，不用未验证 source claims、不新建 metadata 副本/索引/worker。原 min(500,limit*5)/30秒预算保持，游标记录最后扫描而非最后命中位置；空items+next可继续，只有next=null是穷尽，不宣称索引/相关性搜索。file严格拒绝新参数。单一art2将规范化查询、type、kind、tenant、subject、limit和keyset一并绑定；Public18明确退休旧Artifact游标，无旧版本fallback或路径alias。

@@ -1,0 +1,114 @@
+syntax = "proto3";
+
+package kokoro.platform.v1;
+
+import "google/protobuf/timestamp.proto";
+import "kokoro/common/v1/common.proto";
+
+// MCP control-plane management only. Never a tool invocation or runtime launch.
+service McpPackageAdminService {
+  rpc BeginMcpPackageUpload(BeginMcpPackageUploadRequest) returns (BeginMcpPackageUploadResponse);
+  rpc CompleteMcpPackageUpload(CompleteMcpPackageUploadRequest) returns (CompleteMcpPackageUploadResponse);
+  rpc AbortMcpPackageUpload(AbortMcpPackageUploadRequest) returns (AbortMcpPackageUploadResponse);
+  rpc GetMcpPackageUploadStatus(GetMcpPackageUploadStatusRequest) returns (GetMcpPackageUploadStatusResponse);
+  rpc PublishMcpPackage(PublishMcpPackageRequest) returns (PublishMcpPackageResponse);
+}
+
+enum McpPackageUploadState {
+  MCP_PACKAGE_UPLOAD_STATE_UNSPECIFIED = 0;
+  MCP_PACKAGE_UPLOAD_STATE_PENDING = 1;
+  MCP_PACKAGE_UPLOAD_STATE_COMPLETED = 2;
+  MCP_PACKAGE_UPLOAD_STATE_ABORTED = 3;
+}
+enum McpPackageScanState {
+  MCP_PACKAGE_SCAN_STATE_UNSPECIFIED = 0;
+  MCP_PACKAGE_SCAN_STATE_CLEAN = 1;
+  MCP_PACKAGE_SCAN_STATE_PENDING = 2;
+  MCP_PACKAGE_SCAN_STATE_INFECTED = 3;
+  MCP_PACKAGE_SCAN_STATE_UNKNOWN = 4;
+}
+message McpPackageUploadTransfer {
+  string url = 1;
+  string method = 2;
+  map<string, string> required_headers = 3;
+  google.protobuf.Timestamp expires_at = 4;
+}
+message McpPackageUploadSnapshot {
+  string upload_id = 1;
+  McpPackageUploadState state = 2;
+  string content_sha256 = 3;
+  uint64 size_bytes = 4;
+  optional string upload_source_version_id = 5;
+  optional string asset_id = 6;
+  McpPackageScanState scan_state = 7;
+}
+message BeginMcpPackageUploadRequest {
+  reserved 100;
+  reserved "tenant_id", "subject_id", "owner_scope", "execution_proof", "actor_id";
+  string request_id = 1;
+  kokoro.common.v1.CommandIdentity command = 2;
+  string package_id = 3;
+  string filename = 4;
+  string content_sha256 = 5;
+  uint64 size_bytes = 6;
+}
+message BeginMcpPackageUploadResponse {
+  string package_id = 1;
+  string upload_id = 2;
+  McpPackageUploadTransfer transfer_reference = 3;
+}
+message CompleteMcpPackageUploadRequest {
+  reserved 100;
+  reserved "tenant_id", "subject_id", "owner_scope", "execution_proof", "actor_id";
+  string request_id = 1;
+  kokoro.common.v1.CommandIdentity command = 2;
+  string package_id = 3;
+  string upload_id = 4;
+  string upload_source_version_id = 5;
+  string content_sha256 = 6;
+  uint64 size_bytes = 7;
+}
+message CompleteMcpPackageUploadResponse {
+  McpPackageUploadSnapshot upload = 1;
+}
+message AbortMcpPackageUploadRequest {
+  reserved 100;
+  reserved "tenant_id", "subject_id", "owner_scope", "execution_proof", "actor_id";
+  string request_id = 1;
+  kokoro.common.v1.CommandIdentity command = 2;
+  string package_id = 3;
+  string upload_id = 4;
+  string reason = 5;
+}
+message AbortMcpPackageUploadResponse {
+  string upload_id = 1;
+  McpPackageUploadState state = 2;
+}
+message GetMcpPackageUploadStatusRequest {
+  reserved 100;
+  reserved "tenant_id", "subject_id", "owner_scope", "execution_proof", "actor_id";
+  string request_id = 1;
+  string package_id = 2;
+  string upload_id = 3;
+}
+message GetMcpPackageUploadStatusResponse {
+  McpPackageUploadSnapshot upload = 1;
+}
+message PublishMcpPackageRequest {
+  reserved 100;
+  reserved "tenant_id", "subject_id", "owner_scope", "execution_proof", "actor_id";
+  string request_id = 1;
+  kokoro.common.v1.CommandIdentity command = 2;
+  string provider_key = 3;
+  string package_id = 4;
+  string upload_id = 5;
+  string upload_source_version_id = 6;
+  string asset_id = 7;
+  string content_sha256 = 8;
+  uint64 size_bytes = 9;
+}
+message PublishMcpPackageResponse {
+  string package_version_id = 1;
+  string server_id = 2;
+  bool replayed = 3;
+}

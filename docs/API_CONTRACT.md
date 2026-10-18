@@ -1,3 +1,7 @@
+## 2026-10-18 MCP package admin 内部消费者
+
+公开API继续Public18/原operation集合，本片不增路由。固定Platform fa5c5e5新独立五方法及mcp-package-admin-v1/profile、vectors和descriptor；沿现direct owner-only BFF mcp_admin凭据/固定tenant，不新增IAM scope。SDK本地command摘要绑定tenant/subject/package/source/provider完整业务意义，四命令保留原commandId，status无command。输出严格校验后投影，不返回生成message、身份header或依赖错误详情；pending/unknown scan不转clean，发布ACK不当执行许可。
+
 ## 2026-10-18 Artifact 服务端检索实施边界（候选，未正常加载）
 
 延续 BFF Library 关系与 Storage FINAL 元数据现有边界，在唯一 GET /v1/library 的 artifact 查询新增 q/type；分页按 Storage 当前经授权验证的 title/filename/mime 匹配，不用未核实的 BFF source claims 代替，也不建立第二份 Final metadata 表、索引、worker 或跨 owner SQL。复用原 min(500,limit*5) 候选上限与30秒取消预算，每次查询只走一个受界候选窗口；可能返回空 items 且仍有 next_cursor，消费者必须显式区分“当前窗口未匹配、可继续”与已穷尽的无结果，不自动扫完整库。

@@ -7,7 +7,7 @@ import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-const ownerCommit = "5ec85387068a94f7b63e20c4a4ce5a18e5133714"
+const ownerCommit = "fa5c5e53151b3c72145b680a3ee4a45d92c17ec7"
 const vendorRoot = `contract/vendor/kokoro-platform/${ownerCommit}`
 const vendorProto = `${vendorRoot}/proto`
 const output = "src/generated/platform-connect"
@@ -17,6 +17,7 @@ const sourceDigests = {
   "kokoro/common/v1/common.proto": "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08",
   "kokoro/platform/v1/platform_runtime.proto": "e6ae73055a6e03a6a3c188fbede2e35480977f9cd50eae994e7bdb8ace982503",
   "kokoro/storage/v3/storage.proto": "1021e603065978871c51519ddba5b23c9b97f16b781a08bd98e019b3342bf5f9",
+  "kokoro/platform/v1/mcp_package_admin.proto": "60b6778cbb3024f09184bbfc1e06e124191a6583ad892e48e0bcb3c4d0667b31",
 }
 const artifactDigests = {
   "execution-operations/project-skill-installation-v1.json": "1a0716883ad0c9136af002671afd9319872af8c93c3b7873d1d2149dc564a416",
@@ -26,11 +27,14 @@ const artifactDigests = {
   "descriptor/platform-v1.binpb": "7c0d0873a82ad55637cd7a6faca1b0e55db2ac6c5536900581ba0fd3972ee637",
   "execution-operations/custom-api-v1.json": "eca45ebd0f3c31d48cc174256dc23bda22de288ded91aa12198b1a2a37516a38",
   "execution-operations/mcp-private-server-v1.json": "0cdc5a0f44f11efbac5a5304d9e7df8d722f97660c73026c19577764b41471bf",
-  "provenance.json": "3e22a0b419906973e82665836006464a2416431c01cf58a6a43732c60d6a6b48",
+  "provenance.json": "b7a05b41fe2b6ceb5059e6e0a6f1816adaf5ac1582946778f93fe8649125c558",
   "execution-operations/skill-acquisition-v1.json": "7c9cf9ed456199d4acd3d25f29154c8f098ed8866554476d37f058add0d78028",
   "openapi/platform-http.openapi.json": "18699985514e5b75bb48dc1fbaad638f6184e88032ed5e6d242ef89e6144b0fd",
+  "mcp-package-admin/v1/profile.json": "d4b29dba0a5a6df8a0f36a654fcb81d5e95381568c0f5afd0bd104984366be75",
+  "mcp-package-admin/v1/request-vectors.json": "2b12df83a21bec6c033d6a2a6a6db0931c47aa34af2c35abbc9eb7c7d159d62e",
+  "descriptor/mcp-package-admin-v1.binpb": "847caf55170d2a0779e78c19a5d4bd61e6de397e6c873794c3e2811ddc4467f5",
 }
-const provenanceCombinedSha256 = "024e7d132b1b7936d5ab29dcb11abc19305abe475c863136dc704df76af32c53"
+const provenanceCombinedSha256 = "9c04c3e0a440a6d1bbabbd24045fcdc39d76ec3ea9c93b8042d4f5b2ae5c965f"
 const ownerGenerated = {
   path: "src/generated/proto/kokoro/platform/v1/platform_runtime_pb.ts",
   sha256: "df9db350b03627fb9e0195c3277b368eda72155f1a4eaa781346333486e58884",
@@ -38,6 +42,7 @@ const ownerGenerated = {
 const generatedFiles = [
   "command-receipt-errors.ts",
   "kokoro/common/v1/common_pb.ts",
+  "kokoro/platform/v1/mcp_package_admin_pb.ts",
   "kokoro/platform/v1/platform_runtime_pb.ts",
   "kokoro/storage/v3/storage_pb.ts",
 ]
@@ -77,6 +82,8 @@ function assertVendorLayout(tree) {
         "descriptor",
         "errors",
         "execution-operations",
+        "mcp-package-admin",
+        "mcp-package-admin/v1",
         "openapi",
         "proto",
         "proto/kokoro",
@@ -182,6 +189,9 @@ async function manifestFor(directory) {
           sha256: artifactDigests["execution-operations/project-skill-installation-v1.json"],
         },
         { path: "contract/openapi/platform-http.openapi.json", sha256: artifactDigests["openapi/platform-http.openapi.json"] },
+        { path: "contract/mcp-package-admin/v1/profile.json", sha256: artifactDigests["mcp-package-admin/v1/profile.json"] },
+        { path: "contract/mcp-package-admin/v1/request-vectors.json", sha256: artifactDigests["mcp-package-admin/v1/request-vectors.json"] },
+        { path: "contract/descriptor/mcp-package-admin-v1.binpb", sha256: artifactDigests["descriptor/mcp-package-admin-v1.binpb"] },
       ],
       provenance: {
         path: "contract/provenance.json",

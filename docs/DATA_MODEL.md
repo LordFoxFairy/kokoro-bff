@@ -1,3 +1,7 @@
+## 2026-10-18 MCP package admin 无BFF新事实
+
+本片不改canonical schema、业务表、receipt/outbox或缓存。Storage是上传/字节/scan及前三项命令回执唯一owner；Platform是不可变包发布及发布receipt唯一owner。BFF窄client只接收trusted context、生成摘要并验证owner结果，不建立本地Package/Upload实体，不持久化短时签名URL/headers。
+
 ## 2026-10-18 同触发源更新沿现事实与事务
 
 不改本轮canonical Schema或新增持久字段。update锁内以当前storedCalendar与新冻结runAt精确比较，只有同once触发源免future校验；其余新建/改期保持原限制。规则、revision与outbox4仍同事务，旧receipt/execution不重写；next/lifecycle仍由Scheduler唯一持有，不在BFF复制耗尽开关或旧revision来源链。仅自有fresh资源验收，不演进正常库。

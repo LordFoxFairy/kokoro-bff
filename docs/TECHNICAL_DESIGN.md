@@ -1,3 +1,11 @@
+## 2026-10-18 MCP 受管包 BFF 固定消费者门
+
+复用现 Platform Connect 唯一生成器和当前 vendor 位置，把单一组合固定到 Platform fa5c5e53151b3c72145b680a3ee4a45d92c17ec7；旧三个 Proto、既有九 artifact 和原四 generated 字节不变，新增独立 package-admin Proto/descriptor/profile/vectors，不添加兼容 pin/fallback。
+
+本片只交付窄内部消费者：五操作的本地 typed input/安全投影、published固定摘要、原mcp_admin direct服务凭据鲜读、32KiB/最多20秒且继承caller绝对预算、取消/close及错误脱敏。Storage上传/扫描/回执不在BFF复制，Publish原命令透传；不缓存签名PUT、不代执行上传或启动工具。人类管理员权限仍由后继正式HTTP入口逐请求核验，client本身不是人类授权。
+
+本片不新增公开HTTP操作/Schema/配置或正常装配，不把内部SDK称页面可用。随后沿现管理员路由配对公开五操作及同源Admin页面，再验完整链；现已有mcpProviderAdmin配置/凭据可以由该后继复用，不新增OAuth或服务身份。隔离Native owner peer覆盖五方法/精确摘要和响应、未知结果原命令恢复、错误主体/坏响应、超时取消及关闭；真实owner源码链沿既有授权自有PG验收，不碰正常服务/库/模型/工具/扣费/CI/远端。
+
 ## 2026-10-18 Artifact 服务端检索实施边界（候选，未正常加载）
 
 延续 BFF Library 关系与 Storage FINAL 元数据现有边界，在唯一 GET /v1/library 的 artifact 查询新增 q/type；分页按 Storage 当前经授权验证的 title/filename/mime 匹配，不用未核实的 BFF source claims 代替，也不建立第二份 Final metadata 表、索引、worker 或跨 owner SQL。复用原 min(500,limit*5) 候选上限与30秒取消预算，每次查询只走一个受界候选窗口；可能返回空 items 且仍有 next_cursor，消费者必须显式区分“当前窗口未匹配、可继续”与已穷尽的无结果，不自动扫完整库。

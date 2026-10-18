@@ -1,0 +1,124 @@
+{
+  "profile": "mcp-package-admin-v1",
+  "version": "1.0.0",
+  "owner": "Platform/MCP",
+  "visibility": "internal-owner",
+  "service": "kokoro.platform.v1.McpPackageAdminService",
+  "default_enabled": false,
+  "authentication": {
+    "profile": "platform-bff-service-auth",
+    "path": "contract/auth/bff-service-auth-v1.json",
+    "sha256": "4a6db18267a2a61e2b3582ece3a8bfae391db58280f06397125332ccaa97f0ef",
+    "credential": "opaque_owner_only_file",
+    "tenant": "fixed_credential_binding",
+    "iam_workload_oauth": false
+  },
+  "normal_environment_activated": false,
+  "methods": [
+    {
+      "method": "BeginMcpPackageUpload",
+      "caller": "kokoro-bff",
+      "workload_surface": "mcp_admin",
+      "credential_purpose": "mcp_admin",
+      "command": true
+    },
+    {
+      "method": "CompleteMcpPackageUpload",
+      "caller": "kokoro-bff",
+      "workload_surface": "mcp_admin",
+      "credential_purpose": "mcp_admin",
+      "command": true
+    },
+    {
+      "method": "AbortMcpPackageUpload",
+      "caller": "kokoro-bff",
+      "workload_surface": "mcp_admin",
+      "credential_purpose": "mcp_admin",
+      "command": true
+    },
+    {
+      "method": "GetMcpPackageUploadStatus",
+      "caller": "kokoro-bff",
+      "workload_surface": "mcp_admin",
+      "credential_purpose": "mcp_admin",
+      "command": false
+    },
+    {
+      "method": "PublishMcpPackage",
+      "caller": "kokoro-bff",
+      "workload_surface": "mcp_admin",
+      "credential_purpose": "mcp_admin",
+      "command": true
+    }
+  ],
+  "semantics": {
+    "identity": "tenant from current workload admission; subject from trusted BFF metadata; BFF separately requires current human platform-admin",
+    "body_identity": "forbidden",
+    "upload_owner": "Storage mcp_package scope; capability_package purpose; independent Platform service credential",
+    "upload_command_identity": "derived from operation/tenant/subject/package/raw-command-key; same raw key in another scope is a different Storage command",
+    "upload_receipt": "Storage only; same-command retry or status read after unknown result; Begin replay rechecks eligibility and re-signs PUT",
+    "publish_receipt": "Platform tenant/command identity, full trusted subject/provider/source digest; atomic profile/Server/outbox/completed receipt",
+    "source_version": "Storage staging source object version, not runtime version",
+    "digest": "SHA256 UTF8 JSON.stringify fixed string tuple; exact vectors; request_id and command_id excluded",
+    "input": "reject unknown/duplicate/alias JSON and protobuf unknown fields before IAM or Storage",
+    "qualification": "fresh exact completed metadata and current scan; upload completed is not CLEAN, published is not runtime admission",
+    "signed_material": "transient no-store PUT only; no URL/headers in receipt/outbox; never launch command/env",
+    "transports": ["native-connect-json", "native-connect-proto"],
+    "grpc": false,
+    "grpc_web": false
+  },
+  "limits": {
+    "body_bytes": 32768,
+    "total_timeout_ms": 20000,
+    "package_bytes": 33554432,
+    "filename_utf8_bytes": 255,
+    "abort_reason_utf8_bytes": 512
+  },
+  "inputs": [
+    {
+      "path": "contract/proto/kokoro/platform/v1/mcp_package_admin.proto",
+      "bytes": 3712,
+      "sha256": "60b6778cbb3024f09184bbfc1e06e124191a6583ad892e48e0bcb3c4d0667b31"
+    },
+    {
+      "path": "contract/descriptor/mcp-package-admin-v1.binpb",
+      "bytes": 6668,
+      "sha256": "847caf55170d2a0779e78c19a5d4bd61e6de397e6c873794c3e2811ddc4467f5"
+    },
+    {
+      "path": "src/generated/proto/kokoro/platform/v1/mcp_package_admin_pb.ts",
+      "bytes": 20140,
+      "sha256": "5d80ec9d848c4e15c4edd9290ff0d221e9aff90a1d525c48d89959fc96129f75"
+    },
+    {
+      "path": "contract/proto/kokoro/common/v1/common.proto",
+      "bytes": 2271,
+      "sha256": "65025b86a89119954bfbc7ad8eb89d59109ae7f390db5ee1a68f016eefa7da08"
+    },
+    {
+      "path": "src/generated/proto/kokoro/common/v1/common_pb.ts",
+      "bytes": 12757,
+      "sha256": "f5d901991bb4146c23c38f1a1219aa702655e783e664a7a55dd156ebfc93e4ef"
+    },
+    {
+      "path": "src/modules/mcp/package/mcp-package-admin.binding.ts",
+      "bytes": 6198,
+      "sha256": "2e354041ee061c32c7489f1b42349f5fcfaa76c9e7365aa8196116dfefbc05d7"
+    },
+    {
+      "path": "src/modules/mcp/package/mcp-package-publication-command.ts",
+      "bytes": 1851,
+      "sha256": "61de48f9adfa3ca58483764a8faaef320706c0f56f0f8c15b04f22372477dacb"
+    },
+    {
+      "path": "contract/auth/bff-service-auth-v1.json",
+      "bytes": 1175,
+      "sha256": "4a6db18267a2a61e2b3582ece3a8bfae391db58280f06397125332ccaa97f0ef"
+    },
+    {
+      "path": "contract/mcp-package-admin/v1/request-vectors.json",
+      "bytes": 3339,
+      "sha256": "2b12df83a21bec6c033d6a2a6a6db0931c47aa34af2c35abbc9eb7c7d159d62e"
+    }
+  ]
+}

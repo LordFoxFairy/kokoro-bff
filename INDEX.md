@@ -1,3 +1,7 @@
+### 2026-10-18 MCP 受管包内部消费者
+
+`src/infrastructure/clients/platform/mcp-package-admin-{input,response,connect}.ts` 分担严格输入/固定摘要、安全投影和 Native Connect 生命周期。单一 `scripts/generate-platform-connect-client.mjs` 从固定 Platform fa5c5e5 增独立 Proto/descriptor/profile/vectors；原 HTTP 发行物随同一 bundle 固定，旧生成业务字节不变。`test/mcp-package-admin-client.test.ts` 覆盖五操作、凭据鲜读、精确回执/两种预算错误、取消与坏响应；没有第二套上传实体、公开路由或正常装配。
+
 ### 2026-10-18 自动化规则当前读取
 
 `src/application/scheduled/mappers.ts` 分别维护原不可变写快照与 `scheduledTaskDetails` 当前规则读取；`live-bff.ts` 仅 GET 列表/详情使用后者，`helpers.ts` 列表类型相应收敛。`contracts/scheduled.ts` 的 Details 复用原字段并要求保存的 UTC anchor，不猜下次时间。`scripts/verify-scheduled-anchor-contract.mjs` 仅验证 Public16.2 新读表示与完整16.1逆证，不是 runtime fallback。正常激活/Web星期编辑仍待后继。
